@@ -684,6 +684,10 @@
                             <Trigger Property="IsPressed" Value="True">
                                 <Setter TargetName="Wash" Property="themes:FluidMotion.FadeTo" Value="0.6" />
                             </Trigger>
+                            <DataTrigger Binding="{Binding IsSelected}" Value="True">
+                                <Setter TargetName="Chrome" Property="Fill" Value="{DynamicResource Accent.Subtle}" />
+                                <Setter TargetName="FocusRing" Property="Opacity" Value="1" />
+                            </DataTrigger>
                             <!-- While captures are dragged, every folder that can take them shows a dashed edge. -->
                             <DataTrigger Binding="{Binding IsDropAvailable}" Value="True">
                                 <Setter TargetName="DropRing" Property="Opacity" Value="1" />
@@ -1527,22 +1531,13 @@
                 <Border Style="{StaticResource LibraryUx.CommandSeparator}" />
                 <Button x:Name="ArchiveExportButton" Content="{loc:Text Library.Archive.Action}" Style="{StaticResource LibraryUx.CommandButton}"
                         Click="OnExportArchiveClick" ToolTip="{loc:Text Library.Archive.Hint}" />
-                <Button x:Name="ContactSheetButton" Content="{loc:Text ContactSheet.Action}" Style="{StaticResource LibraryUx.CommandButton}"
-                        Click="OnContactSheetClick" />
-                <Button Content="{loc:Text Gallery.Compare}" Style="{StaticResource LibraryUx.CommandButton}"
+                <Button x:Name="CompareSelectedButton" Content="{loc:Text Gallery.Compare}" Style="{StaticResource LibraryUx.CommandButton}"
+                        Visibility="{Binding CanCompareSelected, Converter={StaticResource BoolToVisibility}}"
                         Command="{x:Static gallery:GalleryWindow.CompareCommand}" />
                 <Button x:Name="MoveCapturesButton" Content="{loc:Text Folder410.MoveCaptures}" Style="{StaticResource LibraryUx.CommandButton}"
                         Click="OnMoveCapturesClick" ToolTip="{loc:Text LibraryUx_MoveHint}" />
-                <Button Content="{loc:Text Library.Tags.Edit}" Style="{StaticResource LibraryUx.CommandButton}"
-                        Click="OnBatchTagsClick" />
                 <Button x:Name="DeleteSelectedButton" Content="{loc:Text LibrarySelection_Delete}" Style="{StaticResource LibraryUx.CommandButton}"
                         Click="OnDeleteSelectedClick" ToolTip="{loc:Text LibraryUx_DeleteHint}" />
-                <Button Content="{loc:Text LibrarySelection_Reduce}" Style="{StaticResource LibraryUx.CommandButton}" Margin="0"
-                        DataContext="{Binding SingleSelectedTile}" Click="OnReducedExportClick"
-                        Visibility="{Binding DataContext.CanReduceSelected, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource BoolToVisibility}}" />
-                <Button Content="{loc:Text LibrarySelection_Gif}" Style="{StaticResource LibraryUx.CommandButton}" Margin="0"
-                        DataContext="{Binding SingleSelectedTile}" Click="OnGifMenuClick"
-                        Visibility="{Binding DataContext.CanGifSelected, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource BoolToVisibility}}" />
             </StackPanel>
             <Button x:Name="MoreCommandsButton" Style="{StaticResource LibraryUx.CommandIcon}" Margin="2,0,0,0"
                     ToolTip="{loc:Text Text_5E8959D18390}" AutomationProperties.Name="{loc:Text Text_5E8959D18390}"
@@ -1550,10 +1545,20 @@
                 <themes:SymbolIcon Size="20" Data="{StaticResource Icon.More}" Style="{StaticResource LibraryUx.CommandGlyph}"
                       Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
                 <Button.ContextMenu>
-                    <ContextMenu>
+                    <ContextMenu DataContext="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}">
+                        <MenuItem x:Name="ContactSheetMenu" Header="{loc:Text ContactSheet.Action}" Click="OnContactSheetClick"
+                                  Visibility="{Binding HasSelection, Converter={StaticResource BoolToVisibility}}" />
+                        <MenuItem x:Name="BatchTagsMenu" Header="{loc:Text Library.Tags.Edit}" Click="OnBatchTagsClick"
+                                  Visibility="{Binding HasSelection, Converter={StaticResource BoolToVisibility}}" />
+                        <MenuItem x:Name="ReduceSelectedMenu" Header="{loc:Text LibrarySelection_Reduce}" Click="OnReducedExportClick"
+                                  CommandParameter="{Binding SingleSelectedTile}"
+                                  Visibility="{Binding CanReduceSelected, Converter={StaticResource BoolToVisibility}}" />
+                        <MenuItem x:Name="GifSelectedMenu" Header="{loc:Text LibrarySelection_Gif}" Click="OnGifMenuClick"
+                                  CommandParameter="{Binding SingleSelectedTile}"
+                                  Visibility="{Binding CanGifSelected, Converter={StaticResource BoolToVisibility}}" />
+                        <Separator Visibility="{Binding HasSelection, Converter={StaticResource BoolToVisibility}}" />
                         <MenuItem x:Name="ImportMenu" Header="{loc:Text Library.Import.Command}" Click="OnImportClick" />
                         <MenuItem x:Name="RestoreDeletedMenu" Header="{loc:Text LibraryRecovery_Recent}" />
-                        <MenuItem x:Name="ContactSheetMenu" Header="{loc:Text ContactSheet.Action}" Click="OnContactSheetClick" />
                         <MenuItem x:Name="OpenLibraryFolderMenu" Header="{loc:Text LibraryFolder_OpenLibrary}" Click="OnOpenLibraryFolderClick" />
                         <Separator />
                         <MenuItem Header="{loc:Text LibrarySelection_ClearHint}" Click="OnClearLibraryClick"

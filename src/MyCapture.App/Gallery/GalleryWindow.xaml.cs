@@ -107,8 +107,7 @@ internal sealed partial class GalleryWindow : Window
         InitializeComponent();
         CommandBindings.Add(new CommandBinding(CompareCommand, OnCompareExecuted, (_, e) =>
         {
-            IReadOnlyList<GalleryItemViewModel> selected = _viewModel.SelectedTiles;
-            e.CanExecute = !_imagePreparationInProgress && selected.Count == 2 && selected.All(tile => tile.IsImage);
+            e.CanExecute = !_imagePreparationInProgress && _viewModel.CanCompareSelected;
             e.Handled = true;
         }));
         Loaded += (_, _) => UpdateCommandShortcuts();

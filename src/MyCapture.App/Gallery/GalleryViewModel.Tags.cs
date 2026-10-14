@@ -23,11 +23,8 @@ public sealed partial class GalleryViewModel
     public void ShowTag(string tag)
     {
         if (IsRefreshingFolderTree) return;
-        _selectedTag = string.Equals(_selectedTag, tag, StringComparison.OrdinalIgnoreCase) ? null : tag;
-        _filter = GalleryFilter.All;
-        Raise(nameof(Filter));
-        if (!_scope.IsAll) SelectScope(CaptureFolderScope.All);
-        else Refresh();
+        ChangeLocation(new(CaptureFolderScope.All, GalleryFilter.All,
+            string.Equals(_selectedTag, tag, StringComparison.OrdinalIgnoreCase) ? null : tag));
     }
 
     public void ShowAllTags()

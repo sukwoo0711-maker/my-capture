@@ -2,6 +2,7 @@ using System.IO;
 using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Controls;
+using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
@@ -141,11 +142,24 @@ public sealed partial class SettingsThemePreviewTests
             var selection = (Panel)window.FindName("SelectionCommands");
             Button[] visibleActions = selection.Children.OfType<Button>().Where(button => button.IsVisible).ToArray();
             SaveLibraryUxEvidence(window, AppTheme.Midnight, $"minimum-window-selection-{language}.png");
-            Assert.Equal(8, visibleActions.Length); // clear, ZIP, PDF, compare, move, tags, delete, reduce (GIF is video only)
-            Assert.Same(window.FindName("ContactSheetButton"), visibleActions[2]);
-            Assert.Same(GalleryWindow.CompareCommand, visibleActions[3].Command);
-            Assert.False(GalleryWindow.CompareCommand.CanExecute(null, visibleActions[3]));
-            Assert.Equal(UiText.Get("Library.Tags.Edit"), visibleActions[5].Content);
+            Assert.Equal(4, visibleActions.Length); // clear, ZIP, move, delete
+            var compare = (Button)window.FindName("CompareSelectedButton");
+            Assert.Equal(Visibility.Collapsed, compare.Visibility);
+            Assert.Same(window.FindName("MoveCapturesButton"), visibleActions[2]);
+            window.Dispatcher.Invoke(() => more.RaiseEvent(new RoutedEventArgs(Button.ClickEvent)));
+            SettleGalleryLayout(window);
+            var overflow = more.ContextMenu!;
+            Assert.True(overflow.IsOpen);
+            Assert.Same(vm, overflow.DataContext);
+            foreach (string name in new[] { "ContactSheetMenu", "BatchTagsMenu", "ReduceSelectedMenu" })
+            {
+                var item = (MenuItem)window.FindName(name);
+                Assert.True(item.IsVisible, name);
+                Assert.True(item.Focusable, name);
+            }
+            Assert.Same(vm.SingleSelectedTile, ((MenuItem)window.FindName("ReduceSelectedMenu")).CommandParameter);
+            Assert.Equal(Visibility.Collapsed, ((MenuItem)window.FindName("GifSelectedMenu")).Visibility);
+            overflow.IsOpen = false;
             Assert.Equal(UiText.Get("Text_4B8D541EBE6D"), placeholder.Text);
             // More stays after them, so restoring deleted captures is reachable with a selection.
             foreach (FrameworkElement element in visibleActions.Append<FrameworkElement>(placeholder).Append(more))
@@ -165,12 +179,15 @@ public sealed partial class SettingsThemePreviewTests
             GalleryItemViewModel second = vm.Groups.SelectMany(group => group.Items).Skip(1).First();
             vm.Select(second.Id, control: true);
             SettleGalleryLayout(window);
-            Assert.True(GalleryWindow.CompareCommand.CanExecute(null, visibleActions[3]));
+            Assert.True(compare.IsVisible);
+            Assert.True(GalleryWindow.CompareCommand.CanExecute(null, compare));
+            Assert.Equal(5, selection.Children.OfType<Button>().Count(button => button.IsVisible));
             foreach (Button button in selection.Children.OfType<Button>().Where(button => button.IsVisible))
                 AssertInsideClient(button, client, language);
             vm.Select(second.Id, control: true);
             SettleGalleryLayout(window);
-            Assert.False(GalleryWindow.CompareCommand.CanExecute(null, visibleActions[3]));
+            Assert.Equal(Visibility.Collapsed, compare.Visibility);
+            Assert.False(GalleryWindow.CompareCommand.CanExecute(null, compare));
 
             ListBox rows = (ListBox)window.FindName("RowsList");
             ScrollViewer scroll = Descendants(rows).OfType<ScrollViewer>().First();
@@ -217,6 +234,57 @@ public sealed partial class SettingsThemePreviewTests
             Assert.True(folderCardsInView > rootCardsInView,
                 $"{language}: {folderCardsInView} compact cards in view must exceed {rootCardsInView} full cards ({vm.ColumnCount} columns)");
             SaveLibraryUxEvidence(window, AppTheme.Glass, $"after-narrow-folder-glass-{language}.png");
+
+            Assert.True(GalleryWindow.IsNavigationTextInput(searchBox));
+            Assert.True(GalleryWindow.IsNavigationTextInput(new RichTextBox()));
+            Assert.True(GalleryWindow.IsNavigationTextInput(new PasswordBox()));
+            Assert.True(GalleryWindow.IsNavigationTextInput(new ComboBox { IsEditable = true }));
+            Assert.False(GalleryWindow.IsNavigationTextInput(more));
+
+            foreach (CaptureFolderScope location in new[] { CaptureFolderScope.All, CaptureFolderScope.ForFolder(review.Id) })
+            {
+                vm.NavigateTo(location);
+                Guid? destination = vm.NewCaptureFolderId;
+                Task<CaptureFolder> creation = window.Dispatcher.Invoke(() => vm.CreateFolderAsync("New folder", location));
+                PumpLibraryUntil(window, () => creation.IsCompleted, language + ": folder created");
+                CaptureFolder created = creation.GetAwaiter().GetResult();
+                window.RevealCreatedFolder(created.Id);
+                SettleGalleryLayout(window);
+                Assert.Equal(location, vm.SelectedScope);
+                Assert.Equal(destination, vm.NewCaptureFolderId);
+                var tree = (TreeView)window.FindName("FolderTree");
+                Assert.Equal(created.Id, Assert.IsType<GalleryFolderNode>(tree.SelectedItem).FolderId);
+                Button card = Descendants(rows).OfType<Button>().Single(button =>
+                    button.DataContext is GalleryFolderCardViewModel folder && folder.FolderId == created.Id);
+                Assert.True(card.IsKeyboardFocused);
+                AssertInsideClient(card, client, language);
+                Assert.True(vm.FindFolderCard(created.Id)!.IsSelected);
+                SaveLibraryUxEvidence(window, AppTheme.Glass,
+                    $"after-create-{(location.IsAll ? "root" : "child")}-{language}.png");
+                if (location.IsAll) continue;
+
+                vm.NavigateTo(CaptureFolderScope.ForFolder(created.Id));
+                SettleGalleryLayout(window);
+                searchBox.Focus();
+                searchBox.RaiseEvent(new KeyEventArgs(Keyboard.PrimaryDevice, PresentationSource.FromVisual(window), 0, Key.Back)
+                    { RoutedEvent = Keyboard.PreviewKeyDownEvent });
+                Assert.Equal(created.Id, vm.SelectedScope.FolderId);
+                rows.Focus();
+                rows.RaiseEvent(new KeyEventArgs(Keyboard.PrimaryDevice, PresentationSource.FromVisual(window), 0, Key.Back)
+                    { RoutedEvent = Keyboard.PreviewKeyDownEvent });
+                Assert.Equal(review.Id, vm.SelectedScope.FolderId);
+                window.RaiseEvent(new MouseButtonEventArgs(Mouse.PrimaryDevice, 0, MouseButton.XButton2)
+                    { RoutedEvent = Mouse.PreviewMouseDownEvent });
+                Assert.Equal(created.Id, vm.SelectedScope.FolderId);
+                var rightClick = new MouseButtonEventArgs(Mouse.PrimaryDevice, 0, MouseButton.Right)
+                    { RoutedEvent = Mouse.PreviewMouseDownEvent };
+                window.RaiseEvent(rightClick);
+                Assert.False(rightClick.Handled);
+                Assert.Equal(created.Id, vm.SelectedScope.FolderId);
+                window.RaiseEvent(new MouseButtonEventArgs(Mouse.PrimaryDevice, 0, MouseButton.XButton1)
+                    { RoutedEvent = Mouse.PreviewMouseDownEvent });
+                Assert.Equal(review.Id, vm.SelectedScope.FolderId);
+            }
         }
         finally
         {

@@ -1,6 +1,7 @@
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
@@ -31,6 +32,8 @@ internal sealed partial class GalleryWindow
             new KeyGesture(Key.N, ModifierKeys.Control | ModifierKeys.Shift)));
         PreviewMouseLeftButtonUp += OnFolderPointerUp;
         PreviewMouseMove += OnFolderPointerMove;
+        PreviewKeyDown += OnNavigationKeyDown;
+        PreviewMouseDown += OnNavigationMouseDown;
         IsVisibleChanged += (_, _) => { if (!IsVisible) CancelFolderDragPreparation(); };
         PreviewKeyDown += (_, e) => { if (e.Key == Key.Escape) CancelFolderDragPreparation(); };
     }
@@ -39,15 +42,67 @@ internal sealed partial class GalleryWindow
     {
         if (FolderTree.IsKeyboardFocusWithin)
         {
-            if (_viewModel.HasFolderScope) OnRenameFolderClick(this, new RoutedEventArgs());
+            OnRenameFolderClick(this, new RoutedEventArgs());
         }
+        else if (Keyboard.FocusedElement is FrameworkElement { DataContext: GalleryFolderCardViewModel card })
+            OnRenameFolderClick(card, new RoutedEventArgs());
         else OnOrganizeClick(this, new RoutedEventArgs());
+    }
+
+    internal static bool IsNavigationTextInput(DependencyObject? source)
+    {
+        for (DependencyObject? current = source; current is not null; current = GetParent(current))
+            if (current is TextBoxBase or PasswordBox or ComboBox { IsEditable: true }) return true;
+        return false;
+    }
+
+    internal static bool? NavigationKeyDirection(Key key, ModifierKeys modifiers, bool textInput) =>
+        (key, modifiers, textInput) switch
+        {
+            (Key.Back, ModifierKeys.None, false) => false,
+            (Key.Left, ModifierKeys.Alt, _) => false,
+            (Key.Right, ModifierKeys.Alt, _) => true,
+            _ => null,
+        };
+
+    private async void OnNavigationKeyDown(object sender, KeyEventArgs e)
+    {
+        Key key = e.Key == Key.System ? e.SystemKey : e.Key;
+        if (e.Handled || _foldersBusy || NavigationKeyDirection(key, Keyboard.Modifiers,
+            IsNavigationTextInput(Keyboard.FocusedElement as DependencyObject)) is not { } forward) return;
+        if (!(forward ? _viewModel.CanNavigateForward : _viewModel.CanNavigateParent)) return;
+        e.Handled = true;
+        await NavigateLibraryAsync(forward);
+    }
+
+    private async void OnNavigationMouseDown(object sender, MouseButtonEventArgs e)
+    {
+        if (e.Handled || _foldersBusy || e.ChangedButton is not (MouseButton.XButton1 or MouseButton.XButton2)) return;
+        bool forward = e.ChangedButton == MouseButton.XButton2;
+        if (!(forward ? _viewModel.CanNavigateForward : _viewModel.CanNavigateParent)) return;
+        e.Handled = true;
+        await NavigateLibraryAsync(forward);
+    }
+
+    private async Task<bool> NavigateLibraryAsync(bool forward)
+    {
+        bool navigated;
+        _folderNavigationUpdating = true;
+        try
+        {
+            navigated = forward ? _viewModel.NavigateForward() : _viewModel.NavigateParent();
+            if (navigated) CloseInlinePlayer();
+        }
+        finally { _folderNavigationUpdating = false; }
+        if (navigated) await FollowSavedDestinationAsync(_viewModel.SelectedScope);
+        return navigated;
     }
 
     private async void OnFolderSelected(object sender, RoutedPropertyChangedEventArgs<object> e)
     {
         if (_folderNavigationUpdating || _viewModel.IsRefreshingFolderTree
-            || e.NewValue is not GalleryFolderNode node) return;
+            || e.NewValue is not GalleryFolderNode node
+            || node.FolderId is { } id && id == _viewModel.RevealedFolderId) return;
         await SelectFolderScopeAsync(node.Scope);
     }
 
@@ -66,7 +121,7 @@ internal sealed partial class GalleryWindow
 
     private async Task SelectFolderScopeAsync(CaptureFolderScope scope)
     {
-        if (_viewModel.SelectedScope == scope) return;
+        if (_viewModel.SelectedScope == scope && _viewModel.RevealedFolderId is null) return;
         ShowScope(scope);
         await FollowSavedDestinationAsync(scope);
     }
@@ -100,7 +155,7 @@ internal sealed partial class GalleryWindow
     private void ShowScope(CaptureFolderScope scope)
     {
         if (_viewModel.SelectedScope == scope && _viewModel.SelectedTag is null
-            && (scope.IsAll || _viewModel.Filter == GalleryFilter.All)) return;
+            && _viewModel.RevealedFolderId is null && (scope.IsAll || _viewModel.Filter == GalleryFilter.All)) return;
         _folderNavigationUpdating = true;
         try { CloseInlinePlayer(); _viewModel.NavigateTo(scope); }
         finally { _folderNavigationUpdating = false; }
@@ -190,30 +245,54 @@ internal sealed partial class GalleryWindow
     }
 
     private CaptureFolderScope FolderScopeFromSender(object sender) =>
-        sender is MenuItem { CommandParameter: GalleryFolderNode menuNode } ? menuNode.Scope
+        sender is GalleryFolderCardViewModel card ? card.Scope
+        : sender is MenuItem { CommandParameter: GalleryFolderNode menuNode } ? menuNode.Scope
         : sender is FrameworkElement { DataContext: GalleryFolderNode node } ? node.Scope
+        : FolderTree.IsKeyboardFocusWithin && FolderTree.SelectedItem is GalleryFolderNode selected ? selected.Scope
         : _viewModel.SelectedScope;
 
-    private async void OnNewFolderClick(object sender, RoutedEventArgs e)
+    private void OnNewFolderClick(object sender, RoutedEventArgs e)
     {
         if (_foldersBusy) return;
-        CaptureFolderScope scope = FolderScopeFromSender(sender);
+        CaptureFolderScope scope = sender is MenuItem or FrameworkElement { DataContext: GalleryFolderNode }
+            ? FolderScopeFromSender(sender) : _viewModel.SelectedScope;
         CaptureFolder? created = null;
         _foldersBusy = true;
         bool saved;
         try
         {
             var dialog = GalleryFolderEditDialog.ForName(string.Empty, true, async name =>
-            { created = await _queue.CreateFolderInScopeAsync(name, scope); });
+            { created = await _viewModel.CreateFolderAsync(name, scope); });
             dialog.Owner = this;
             saved = dialog.ShowDialog() == true;
         }
         finally { _foldersBusy = false; _viewModel.Refresh(); }
         if (saved && created is not null)
         {
-            await SelectFolderScopeAsync(CaptureFolderScope.ForFolder(created.Id));
             RaiseCaptureChanged();
+            RevealCreatedFolder(created.Id);
         }
+    }
+
+    internal void RevealCreatedFolder(Guid id)
+    {
+        _ = Dispatcher.BeginInvoke(DispatcherPriority.Loaded, new Action(() =>
+        {
+            RevealFolderNode(FolderTree, id);
+            if (_viewModel.FindFolderCard(id) is { } card) FocusFolderCard(card);
+        }));
+    }
+
+    private static bool RevealFolderNode(ItemsControl parent, Guid id)
+    {
+        parent.UpdateLayout();
+        foreach (GalleryFolderNode node in parent.Items.OfType<GalleryFolderNode>())
+        {
+            if (parent.ItemContainerGenerator.ContainerFromItem(node) is not TreeViewItem item) continue;
+            if (node.FolderId == id) { item.BringIntoView(); item.Focus(); return true; }
+            if (node.IsExpanded && RevealFolderNode(item, id)) return true;
+        }
+        return false;
     }
 
     private void OnRenameFolderClick(object sender, RoutedEventArgs e)
@@ -327,10 +406,12 @@ internal sealed partial class GalleryWindow
         }
     }
 
-    private void OnFolderTreeKeyDown(object sender, KeyEventArgs e)
+    private async void OnFolderTreeKeyDown(object sender, KeyEventArgs e)
     {
         if (Keyboard.Modifiers != ModifierKeys.None) return;
-        if (e.Key == Key.Delete) { OnDeleteFolderClick(this, new RoutedEventArgs()); e.Handled = true; }
+        if (e.Key == Key.Enter && FolderTree.SelectedItem is GalleryFolderNode selected)
+        { e.Handled = true; await SelectFolderScopeAsync(selected.Scope); }
+        else if (e.Key == Key.Delete) { OnDeleteFolderClick(this, new RoutedEventArgs()); e.Handled = true; }
         else if (e.Key == Key.M && _viewModel.HasFolderScope)
         { OnMoveFolderClick(this, new RoutedEventArgs()); e.Handled = true; }
     }
@@ -449,13 +530,15 @@ internal sealed partial class GalleryWindow
         return null;
     }
 
-    private void OnFolderPointerDown(object sender, MouseButtonEventArgs e)
+    private async void OnFolderPointerDown(object sender, MouseButtonEventArgs e)
     {
         if (_folderDragCancellation is not null || IsInsideButton(e.OriginalSource)) return;
         if (_foldersBusy) return;
         _folderDragging = false;
         _folderDragNode = NodeAt(e.OriginalSource);
         _folderDragStart = e.GetPosition(this);
+        if (_folderDragNode?.FolderId is { } id && id == _viewModel.RevealedFolderId)
+            await SelectFolderScopeAsync(CaptureFolderScope.ForFolder(id));
     }
 
     private async void OnFolderPointerMove(object sender, MouseEventArgs e)
