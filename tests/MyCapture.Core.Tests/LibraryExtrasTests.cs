@@ -212,7 +212,51 @@ public sealed class LibraryExtrasTests
         Assert.Null(await queue.LibraryUndo.UndoAsync());
         Assert.Equal("batch", first.Tags);
         Assert.Equal("external change", second.Tags);
-        Assert.Equal(1, queue.LibraryUndo.Count);
+        Assert.Equal(0, queue.LibraryUndo.Count);
+    }
+
+    [Fact]
+    public async Task Organization_PersistentWriteFailurePreservesBothErrorsAndRollsBackMetadata()
+    {
+        var (queue, paths) = Queue();
+        CaptureRecord record = Add(queue);
+        DateTimeOffset updated = record.UpdatedAt;
+        var failures = new List<IOException>();
+        queue.BeforePublicationWriteForTest = (_, _) =>
+        {
+            var failure = new IOException($"Injected persistent failure {failures.Count}");
+            failures.Add(failure);
+            throw failure;
+        };
+        AggregateException error = await Assert.ThrowsAsync<AggregateException>(() =>
+            queue.UpdateOrganizationAsync(record.Id, "Draft title", "draft tags"));
+        Assert.True(failures.Count >= 2);
+        Assert.Equal(failures, error.Flatten().InnerExceptions);
+        Assert.Equal("Original", record.Title);
+        Assert.Equal(string.Empty, record.Tags);
+        Assert.Equal(updated, record.UpdatedAt);
+        Assert.Equal("Original", Reload(paths).Find(record.Id)!.Title);
+        Assert.Equal(0, queue.LibraryUndo.Count);
+    }
+
+    [Fact]
+    public async Task History_SkipsInvalidEntries_ButRetainsRetryableFailures()
+    {
+        var history = new LibraryUndoHistory();
+        history.Record(LibraryUndoKind.Title, () => Task.FromResult(LibraryUndoResult.Restored));
+        bool retry = true;
+        history.Record(LibraryUndoKind.Pin, () => Task.FromResult(retry
+            ? LibraryUndoResult.RetryableFailure : LibraryUndoResult.Invalidated));
+        history.Record(LibraryUndoKind.Move, () => Task.FromResult(LibraryUndoResult.Invalidated));
+        Assert.Null(await history.UndoAsync());
+        Assert.Equal(2, history.Count);
+        Assert.Equal(LibraryUndoKind.Pin, history.NextKind);
+        Assert.True(history.CanUndo);
+        retry = false;
+        Assert.Equal(LibraryUndoKind.Title, await history.UndoAsync());
+        Assert.Equal(0, history.Count);
+        Assert.Null(history.NextKind);
+        Assert.False(history.CanUndo);
     }
 
     [Fact]

@@ -21,15 +21,16 @@ public sealed partial class CaptureQueue
         }
     }
 
-    private async Task<bool> RestoreMetadataAsync(MetadataState[] before, MetadataState[] after)
+    private async Task<LibraryUndoResult> RestoreMetadataAsync(MetadataState[] before, MetadataState[] after)
     {
         await _batchTagMutationGate.WaitAsync();
         var leases = new List<IDisposable>();
         try
         {
             using CaptureWriteReservation reservation = await ReservePublicationAsync();
-            if (after.Any(state => Find(state.Id) is not { } record || IsRemovalPending(state.Id) || !state.Matches(record)))
-                return false;
+            if (after.Any(state => IsRemovalPending(state.Id))) return LibraryUndoResult.RetryableFailure;
+            if (after.Any(state => Find(state.Id) is not { } record || !state.Matches(record)))
+                return LibraryUndoResult.Invalidated;
             CaptureRecord[] records = before.Select(state => Find(state.Id)!).ToArray();
             DateTimeOffset[] times = records.Select(record => record.UpdatedAt).ToArray();
             DateTimeOffset now = DateTimeOffset.Now;
@@ -51,7 +52,7 @@ public sealed partial class CaptureQueue
                 throw;
             }
             UpdatePinPressureFlag();
-            return true;
+            return LibraryUndoResult.Restored;
         }
         finally
         {
@@ -80,11 +81,16 @@ public sealed partial class CaptureQueue
             DateTimeOffset now = DateTimeOffset.Now;
             after.Apply(record); record.UpdatedAt = now;
             try { await PublishTagsAsync([record], reservation); }
-            catch
+            catch (Exception originalFailure)
             {
                 before.Apply(record);
                 if (record.UpdatedAt == now) record.UpdatedAt = time;
-                await CorrectTagsAsync([record]);
+                try { await CorrectTagsAsync([record]); }
+                catch (Exception correctionFailure)
+                {
+                    throw new AggregateException("Organization publication and its corrective write failed.",
+                        originalFailure, correctionFailure);
+                }
                 throw;
             }
             LibraryUndo.Record(before.Title is null ? LibraryUndoKind.Tags : LibraryUndoKind.Title,

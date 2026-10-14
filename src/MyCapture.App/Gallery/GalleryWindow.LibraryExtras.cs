@@ -91,7 +91,7 @@ internal sealed partial class GalleryWindow
             LibraryUndoKind? kind = await _queue.LibraryUndo.UndoAsync();
             _viewModel.Refresh();
             RaiseCaptureChanged();
-            if (requested == LibraryUndoKind.Delete)
+            if (requested == LibraryUndoKind.Delete || kind == LibraryUndoKind.Delete)
             {
                 // Recovery reports exact restored/failed counts, including partial restores.
                 if (_queue.LibraryUndo.CanUndo)

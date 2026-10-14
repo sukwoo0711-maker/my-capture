@@ -1,11 +1,12 @@
 namespace MyCapture.Core.Queue;
 
 public enum LibraryUndoKind { Move, Tags, Pin, Title, Delete }
+public enum LibraryUndoResult { Restored, Invalidated, RetryableFailure }
 
-/// <summary>Session-only, bounded history. Failed restores remain available for retry.</summary>
+/// <summary>Session-only, bounded history. Invalid entries are skipped; failed writes remain retryable.</summary>
 public sealed class LibraryUndoHistory
 {
-    private sealed record Entry(LibraryUndoKind Kind, Func<Task<bool>> Restore);
+    private sealed record Entry(LibraryUndoKind Kind, Func<Task<LibraryUndoResult>> Restore);
     private readonly List<Entry> _entries = [];
     public bool IsUndoing { get; private set; }
     public bool CanUndo => !IsUndoing && _entries.Count > 0;
@@ -17,6 +18,12 @@ public sealed class LibraryUndoHistory
     public void Record(LibraryUndoKind kind, Func<Task<bool>> restore)
     {
         ArgumentNullException.ThrowIfNull(restore);
+        Record(kind, async () => await restore() ? LibraryUndoResult.Restored : LibraryUndoResult.RetryableFailure);
+    }
+
+    public void Record(LibraryUndoKind kind, Func<Task<LibraryUndoResult>> restore)
+    {
+        ArgumentNullException.ThrowIfNull(restore);
         _entries.Add(new(kind, restore));
         if (_entries.Count > 50) _entries.RemoveAt(0);
         Changed?.Invoke(this, EventArgs.Empty);
@@ -26,13 +33,18 @@ public sealed class LibraryUndoHistory
     public async Task<LibraryUndoKind?> UndoAsync()
     {
         if (!CanUndo) return null;
-        Entry entry = _entries[^1];
         IsUndoing = true;
         try
         {
-            if (!await entry.Restore()) return null;
-            _entries.Remove(entry);
-            return entry.Kind;
+            while (_entries.Count > 0)
+            {
+                Entry entry = _entries[^1];
+                LibraryUndoResult result = await entry.Restore();
+                if (result == LibraryUndoResult.RetryableFailure) return null;
+                _entries.Remove(entry);
+                if (result == LibraryUndoResult.Restored) return entry.Kind;
+            }
+            return null;
         }
         finally { IsUndoing = false; Changed?.Invoke(this, EventArgs.Empty); }
     }

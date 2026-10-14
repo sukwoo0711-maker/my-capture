@@ -183,9 +183,13 @@ public sealed partial class CaptureQueue
             LibraryUndo.Record(LibraryUndoKind.Move, async () =>
             {
                 if (FindFolder(id) is not { } current || current.ParentId != parentId
-                    || previousParent is { } previous && FindFolder(previous) is null) return false;
-                try { return await MoveFolderCoreAsync(id, previousParent, recordUndo: false, CancellationToken.None); }
-                catch (ArgumentException) { return false; }
+                    || previousParent is { } previous && FindFolder(previous) is null) return LibraryUndoResult.Invalidated;
+                try
+                {
+                    return await MoveFolderCoreAsync(id, previousParent, recordUndo: false, CancellationToken.None)
+                        ? LibraryUndoResult.Restored : LibraryUndoResult.Invalidated;
+                }
+                catch (ArgumentException) { return LibraryUndoResult.Invalidated; }
             });
         return result;
     }
@@ -225,12 +229,20 @@ public sealed partial class CaptureQueue
         if (result > 0)
             LibraryUndo.Record(LibraryUndoKind.Move, () => MutateFolderStateAsync(() =>
             {
+                if (after.Keys.Any(IsRemovalPending)) return LibraryUndoResult.RetryableFailure;
                 if (before.Any(pair => pair.Value.FolderId is { } destination && FindFolder(destination) is null)
-                    || after.Any(pair => Find(pair.Key) is not { } record || IsRemovalPending(pair.Key)
-                        || !pair.Value.Matches(record))) return false;
-                foreach (var pair in before) pair.Value.Restore(Find(pair.Key)!);
+                    || after.Any(pair => Find(pair.Key) is not { } record
+                        || !pair.Value.MatchesAssignment(record))) return LibraryUndoResult.Invalidated;
+                foreach (var pair in before)
+                {
+                    CaptureRecord record = Find(pair.Key)!;
+                    DateTimeOffset? retention = record.RetentionStartedAt;
+                    pair.Value.Restore(record);
+                    // Delete recovery starts a new retention period independently of the move.
+                    if (retention != after[pair.Key].RetentionStartedAt) record.RetentionStartedAt = retention;
+                }
                 ReconcileFolderSequences();
-                return true;
+                return LibraryUndoResult.Restored;
             }, CancellationToken.None));
         return result;
     }
@@ -446,9 +458,10 @@ public sealed partial class CaptureQueue
             : this(record.FolderId, record.FolderSequence, record.FolderPinBeforeAssignment, record.IsPinned,
                 record.RetentionStartedAt) { }
         internal bool ManualPin => FolderId is not null ? WasPinned ?? IsPinned : IsPinned;
-        internal bool Matches(CaptureRecord record) => FolderId == record.FolderId
-            && Sequence == record.FolderSequence && WasPinned == record.FolderPinBeforeAssignment && IsPinned == record.IsPinned
+        internal bool Matches(CaptureRecord record) => MatchesAssignment(record)
             && RetentionStartedAt == record.RetentionStartedAt;
+        internal bool MatchesAssignment(CaptureRecord record) => FolderId == record.FolderId
+            && Sequence == record.FolderSequence && WasPinned == record.FolderPinBeforeAssignment && IsPinned == record.IsPinned;
         internal void Restore(CaptureRecord record)
         {
             record.FolderId = FolderId; record.FolderSequence = Sequence;

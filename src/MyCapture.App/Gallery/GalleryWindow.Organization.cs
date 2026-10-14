@@ -4,6 +4,7 @@ using System.Windows.Automation;
 using System.Windows.Controls;
 using System.Windows.Input;
 using Microsoft.Win32;
+using Microsoft.Extensions.Logging;
 using MyCapture.App.Themes;
 using MyCapture.Core.Queue;
 
@@ -19,7 +20,7 @@ internal sealed partial class GalleryWindow
             ?? _viewModel.SingleSelectedTile;
         if (tile is null) return;
         var dialog = new GalleryOrganizationDialog(tile.Record, (title, tags) =>
-            _controller.UpdateOrganizationAsync(tile.Id, title, tags)) { Owner = this };
+            _controller.UpdateOrganizationAsync(tile.Id, title, tags), _log) { Owner = this };
         if (dialog.ShowDialog() != true) return;
         tile.RaiseMetaChanged();
         _viewModel.Refresh();
@@ -96,7 +97,7 @@ internal sealed class GalleryOrganizationDialog : Window
     internal Button CancelButton { get; }
     private bool _saving;
 
-    internal GalleryOrganizationDialog(CaptureRecord record, Func<string, string, Task<bool>> save)
+    internal GalleryOrganizationDialog(CaptureRecord record, Func<string, string, Task<bool>> save, ILogger? log = null)
     {
         Title = UiText.Get("Library.Organize.Title");
         Width = 500; Height = 500; MinWidth = 400; MinHeight = 360;
@@ -147,8 +148,11 @@ internal sealed class GalleryOrganizationDialog : Window
                 if (!saved) error.Text = UiText.Get("Library.Organize.Missing");
             }
             catch (ArgumentException) { error.Text = UiText.Get("Library.Organize.Invalid"); }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException)
-            { error.Text = UiText.Get("Library.Organize.Failed"); }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException or AggregateException)
+            {
+                log?.LogWarning(ex, "Could not save library organization");
+                error.Text = UiText.Get("Library.Organize.Failed");
+            }
             finally
             {
                 _saving = false; apply.IsEnabled = true; cancel.IsEnabled = true;
