@@ -51,9 +51,9 @@ OCR로 이미지 속 글자를 텍스트로 복사하고, 표를 CSV·Markdown·
 - 키보드 조작과 스크린 리더 접근성
 - 계정, 광고, 캡처 횟수 제한 없음
 
-### 이 버전의 새로운 기능 (4.1.3)
+### 이 버전의 새로운 기능 (4.1.4)
 
-- 캡처 영역을 고를 때 마우스 포인터와 안내선이 지연 없이 따라옵니다.
+- 캡처 영역을 고르거나 드래그할 때 마우스 포인터와 안내선이 지연 없이 따라옵니다.
 - 캡처 단축키를 누르면 브라우저 주소나 폴더 정보를 기다리지 않고 바로 선택 화면을 표시합니다.
 - 라이브러리에서 삭제한 항목은 휴지통으로 이동하고, 삭제 직후 Ctrl+Z로 되돌릴 수 있습니다.
 - 동영상 편집기와 재생 창에서 녹화가 흐리게 보이던 문제를 수정했습니다.
@@ -99,9 +99,9 @@ MyCapture supports global shortcuts, a tray menu, Korean and English interfaces,
 - Keyboard and screen reader accessibility
 - No account, ads or capture limits
 
-### What's new in this version (4.1.3)
+### What's new in this version (4.1.4)
 
-- The pointer and guide lines follow the mouse without lag while you select a capture region.
+- The pointer and guide lines follow the mouse without lag while you select or drag a capture region.
 - The capture shortcut shows the selection screen right away instead of waiting for the browser address or folder.
 - Deleted library items go to the Recycle Bin, and Ctrl+Z restores them right after deleting.
 - Fixed recordings looking washed out in the video editor and player.

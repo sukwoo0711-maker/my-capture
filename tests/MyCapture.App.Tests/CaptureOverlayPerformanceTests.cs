@@ -8,6 +8,7 @@ using System.Windows.Threading;
 using MyCapture.App.Capture;
 using MyCapture.Core.Primitives;
 using MyCapture.Platform.Capture;
+using MyCapture.Platform.Display;
 using Xunit;
 
 namespace MyCapture.App.Tests;
@@ -235,6 +236,133 @@ public sealed class CaptureOverlayPerformanceTests
         // is re-rasterised on every pointer frame; the selector shows focus through its own cues.
         var view = new CaptureOverlayView(Frame());
         try { Assert.Null(view.FocusVisualStyle); }
+        finally { view.ReleaseResources(); }
+    });
+
+    [Fact]
+    public void Dragging_MovesOnlyTheRevealClip_WithoutRedrawingTheDimmerOrDesktop() => StaTestHost.Run(() =>
+    {
+        PointD pointer = new(100, 80);
+        var view = new CaptureOverlayView(Frame()) { SimulatedPointerInside = true };
+        view.ReadCursor = () => pointer;
+        try
+        {
+            view.InitializePointer();
+            Render(view, 640, 360);
+            int dimmer = view.DimmerRenderCount;
+            int desktop = view.StaticRenderCount;
+            Geometry clip = Visual(view, "_revealVisual").Clip;
+            view.SimulatePointerDown();
+            foreach (PointD next in new[] { new PointD(300, 200), new PointD(420, 260), new PointD(60, 30), new PointD(101, 81) })
+            {
+                pointer = next;
+                view.SimulatePointerMove();
+                Render(view, 640, 360);
+                // A viewport-sized redraw on every drag frame made WPF re-render the whole desktop.
+                Assert.Equal(dimmer, view.DimmerRenderCount);
+                Assert.Equal(desktop, view.StaticRenderCount);
+                Assert.Same(clip, Visual(view, "_revealVisual").Clip);
+                RectD selection = view.Selection!.Value;
+                Assert.Equal(new Rect(selection.Left, selection.Top, selection.Width, selection.Height), ((RectangleGeometry)clip).Rect);
+            }
+        }
+        finally { view.ReleaseResources(); }
+    });
+
+    [Fact]
+    public void PointerMoves_OverDetectedWindows_AllocateNothing() => StaTestHost.Run(() =>
+    {
+        var view = new CaptureOverlayView(Frame()) { DetectWindows = true };
+        var host = Host(view);
+        PointD pointer = new(100, 80);
+        view.ReadCursor = () => pointer;
+        try
+        {
+            host.Show();
+            PumpUntil(() => view.IsLoaded && view.StaticRenderCount > 0);
+            view.WindowCandidates =
+            [
+                new WindowCandidate(new IntPtr(31), new RectD(40, 40, 200, 150), "Front"),
+                new WindowCandidate(new IntPtr(32), new RectD(0, 0, 640, 360), "Back"),
+            ];
+            view.UpdatePointer(false, false);
+            view.FlushFeedbackForTest();
+            // Leave one frame pending, as during a real burst of moves between two frames.
+            pointer = new PointD(101, 81);
+            view.UpdatePointer(false, false);
+            Assert.True(view.HasPendingFeedback);
+            long before = GC.GetAllocatedBytesForCurrentThread();
+            for (int i = 0; i < 400; i++)
+            {
+                // Crossing between the two windows changes the highlight on many of these moves.
+                pointer = new PointD(30 + (i % 300), 30 + (i % 200));
+                view.UpdatePointer(false, false);
+            }
+            long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+            Assert.True(allocated == 0, $"400 pointer moves allocated {allocated} bytes.");
+
+            // Over the desktop shell (Progman, or a WorkerW of the same process) the highlight is the
+            // monitor under the pointer; the moves below cross from one monitor to the other.
+            IReadOnlyList<MonitorInfo> monitors =
+            [
+                new MonitorInfo("DISPLAY1", new RectD(0, 0, 320, 360), new RectD(0, 0, 320, 340), 96, true),
+                new MonitorInfo("DISPLAY2", new RectD(320, 0, 320, 360), new RectD(320, 0, 320, 340), 96, false),
+            ];
+            view.ReadMonitors = () => monitors;
+            foreach (IReadOnlyList<WindowCandidate> shell in new IReadOnlyList<WindowCandidate>[]
+            {
+                [new WindowCandidate(new IntPtr(41), new RectD(0, 0, 640, 360), "", ProcessId: 77, ClassName: "Progman")],
+                [
+                    new WindowCandidate(new IntPtr(42), new RectD(0, 0, 640, 360), "", ProcessId: 77, ClassName: "WorkerW"),
+                    new WindowCandidate(new IntPtr(41), new RectD(0, 0, 640, 360), "", ProcessId: 77, ClassName: "Progman"),
+                ],
+            })
+            {
+                view.WindowCandidates = shell;
+                // Warm: the first move over the desktop reads the monitor layout once.
+                for (int i = 0; i < 2; i++)
+                {
+                    pointer = new PointD(100 + (i * 300), 80);
+                    view.UpdatePointer(false, false);
+                }
+                Assert.True(view.HoverWholeMonitorForTest);
+                before = GC.GetAllocatedBytesForCurrentThread();
+                for (int i = 0; i < 400; i++)
+                {
+                    pointer = new PointD(30 + (i * 7 % 580), 30 + (i % 300));
+                    view.UpdatePointer(false, false);
+                }
+                allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+                Assert.True(allocated == 0, $"400 pointer moves over {shell[0].ClassName} allocated {allocated} bytes.");
+            }
+        }
+        finally { view.ReleaseResources(); host.Close(); }
+    });
+
+    [Fact]
+    public void RepeatedMagnifierLabels_KeepTheirTextLayout() => StaTestHost.Run(() =>
+    {
+        var view = new CaptureOverlayView(Frame());
+        PointD pointer = new(120, 100);
+        view.ReadCursor = () => pointer;
+        try
+        {
+            SetMouseOver(view, true);
+            view.InitializePointer();
+            Render(view, 640, 360);
+            FormattedText sample = Field<FormattedText>(view, "_sampleText");
+            FormattedText coordinate = Field<FormattedText>(view, "_coordinateText");
+            // Same colour, new position: the colour label is reused and the coordinate is new.
+            pointer = new PointD(121, 100);
+            view.UpdatePointer(false, false);
+            Render(view, 640, 360);
+            Assert.Same(sample, Field<FormattedText>(view, "_sampleText"));
+            Assert.NotSame(coordinate, Field<FormattedText>(view, "_coordinateText"));
+            // A palette change rebuilds the static layers, and the labels with their brushes.
+            Invoke(view, "OnGuidePaletteChanged");
+            Render(view, 640, 360);
+            Assert.NotSame(sample, Field<FormattedText>(view, "_sampleText"));
+        }
         finally { view.ReleaseResources(); }
     });
 

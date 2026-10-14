@@ -1,6 +1,7 @@
 using System.Windows;
 using System.Diagnostics;
 using System.Windows.Threading;
+using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using MyCapture.App.Capture;
@@ -106,6 +107,70 @@ public sealed class CaptureOverlayRenderingTests
             Assert.False(view.HasPendingFeedback);
         }
         finally { window.Close(); }
+    });
+
+    [Fact]
+    public void KeysBeforeTheSelectorHasFocus_ReachItThroughTheWindow_Once() => StaTestHost.Run(() =>
+    {
+        var window = new CaptureOverlayWindow(Frame(PixelFormats.Bgr32), false, true) { ShowActivated = false };
+        window.IsForeground = () => true;
+        var view = Assert.IsType<CaptureOverlayView>(window.Content);
+        int cursorReads = 0;
+        view.ReadCursor = () => { cursorReads++; return new PointD(20, 30); };
+        bool cancelled = false;
+        window.SelectionCancelled += (_, _) => cancelled = true;
+        try
+        {
+            window.Show();
+            PresentationSource source = PresentationSource.FromVisual(window)!;
+            KeyEventArgs Key(System.Windows.Input.Key key) =>
+                new(System.Windows.Input.Keyboard.PrimaryDevice, source, 0, key) { RoutedEvent = System.Windows.Input.Keyboard.KeyDownEvent };
+
+            // A key the selector itself receives bubbles to the window unhandled and is not
+            // handled a second time there.
+            cursorReads = 0;
+            view.RaiseEvent(Key(System.Windows.Input.Key.LeftShift));
+            Assert.Equal(1, cursorReads);
+
+            // Before the first frame nothing inside the window holds focus and keys target the window.
+            cursorReads = 0;
+            window.RaiseEvent(Key(System.Windows.Input.Key.LeftShift));
+            Assert.Equal(1, cursorReads);
+            KeyEventArgs escape = Key(System.Windows.Input.Key.Escape);
+            window.RaiseEvent(escape);
+            Assert.True(escape.Handled);
+            Assert.True(cancelled);
+        }
+        finally { window.Close(); }
+    });
+
+    [Fact]
+    public void Activation_AsksForTheForeground_OnlyWhileAnotherProgramHasIt() => StaTestHost.Run(() =>
+    {
+        var window = new CaptureOverlayWindow(Frame(PixelFormats.Bgr32), false, true) { ShowActivated = false };
+        int requests = 0;
+        bool foreground = false;
+        window.IsForeground = () => foreground;
+        // The test never takes the real foreground from whatever the user is doing.
+        window.TakeForeground = () => { };
+        try
+        {
+            window.Show();
+            // A re-entrant activation while the request is still being made asks only once.
+            window.TakeForeground = () => { requests++; ActivateNow(window); foreground = true; };
+            requests = 0;
+            foreground = false;
+            ActivateNow(window);
+            Assert.Equal(1, requests);
+            // Already in the foreground (an Alt+Tab back, the coordinator's own Activate): nothing to ask.
+            ActivateNow(window);
+            Assert.Equal(1, requests);
+        }
+        finally { window.Close(); }
+
+        static void ActivateNow(CaptureOverlayWindow window) => typeof(CaptureOverlayWindow)
+            .GetMethod("OnActivated", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic,
+                [typeof(object), typeof(EventArgs)])!.Invoke(window, [window, EventArgs.Empty]);
     });
 
     private static Window Host(CaptureOverlayView view) => new()

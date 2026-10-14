@@ -33,8 +33,10 @@ internal static class WindowDetectHitTest
         IntPtr excludedHandle = default)
     {
         ArgumentNullException.ThrowIfNull(candidates);
-        foreach (WindowCandidate candidate in candidates)
+        // Runs on every pointer move: index the list instead of boxing an enumerator each time.
+        for (int index = 0; index < candidates.Count; index++)
         {
+            WindowCandidate candidate = candidates[index];
             if (excludedHandle != IntPtr.Zero && candidate.Handle == excludedHandle) continue;
             RectD bounds = candidate.ScreenBounds.Normalized();
             if (bounds.Width < MinimumRegionPixels || bounds.Height < MinimumRegionPixels) continue;
@@ -96,9 +98,10 @@ internal static class WindowDetectHitTest
         ArgumentNullException.ThrowIfNull(monitors);
         RectD? nearest = null;
         double nearestDistance = double.PositiveInfinity;
-        foreach (MonitorInfo monitor in monitors)
+        // Runs on every pointer move over the desktop: index the list instead of boxing an enumerator.
+        for (int index = 0; index < monitors.Count; index++)
         {
-            RectD bounds = monitor.Bounds.Normalized();
+            RectD bounds = monitors[index].Bounds.Normalized();
             if (bounds.IsEmpty) continue;
             if (screenPoint.X >= bounds.Left && screenPoint.X < bounds.Right &&
                 screenPoint.Y >= bounds.Top && screenPoint.Y < bounds.Bottom)

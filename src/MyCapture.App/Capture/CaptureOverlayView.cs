@@ -43,6 +43,7 @@ internal sealed class CaptureOverlayView : FrameworkElement
     private const double MinimumSelectionPixels = 2;
     private const int MagnifierSourcePixels = 15;
     private const double MagnifierDestinationPixels = 150;
+    private const double CrosshairReach = 11;
 
     internal static string InstructionText => UiText.Get("Text_798E080A9262");
 
@@ -90,7 +91,7 @@ internal sealed class CaptureOverlayView : FrameworkElement
     private readonly DrawingVisual _desktopVisual = new();
     private readonly DrawingVisual _dimmerVisual = new();
     private readonly DrawingVisual _revealVisual = new();
-    private bool _dimmerOutsideSelection;
+    private readonly RectangleGeometry _revealClip = new(new Rect(0, 0, 0, 0));
     private readonly DrawingVisual _horizontalGuideVisual = new();
     private readonly DrawingVisual _verticalGuideVisual = new();
     private readonly RectangleGeometry _horizontalGuideClip = new();
@@ -109,6 +110,7 @@ internal sealed class CaptureOverlayView : FrameworkElement
     private RectD? _drawnHover;
     private bool _drawnHoverWholeMonitor;
     private IReadOnlyList<MonitorInfo>? _monitors;
+    private readonly Func<IReadOnlyList<MonitorInfo>> _readMonitorsOnce;
     private WindowCandidate? _selectedWindow;
     private bool _dragBeyondClick;
     private bool _textCaptureMode;
@@ -164,6 +166,10 @@ internal sealed class CaptureOverlayView : FrameworkElement
     private FormattedText? _instructionText;
     private FormattedText? _anchorText;
     private FormattedText? _precisionText;
+    private FormattedText? _sampleText;
+    private string? _sampleTextLabel;
+    private FormattedText? _coordinateText;
+    private (int X, int Y) _coordinateTextPixel;
     private Pen _pointerOuterPen = null!;
     private Pen _pointerInnerPen = null!;
     private Pen _anchorPen = null!;
@@ -174,9 +180,22 @@ internal sealed class CaptureOverlayView : FrameworkElement
     private Pen _chipBorderPen = null!;
     private Pen _magnifierBorderPen = null!;
     private Pen _magnifierGridPen = null!;
+    private Brush? _magnifierGridQuarterBrush;
+    private Brush? _pointerOuterHalfBrush;
+    private Brush? _pointerInnerHalfBrush;
     internal int StaticRenderCount { get; private set; }
+    internal int DimmerRenderCount { get; private set; }
     internal int FeedbackRenderCount { get; private set; }
     internal int MagnifierUpdateCount { get; private set; }
+    internal int MagnifierGridFillCount { get; private set; }
+
+    internal int CrosshairFillCount { get; private set; }
+
+    /// <summary>Tests turn these off to draw the strokes that the pixel fills stand in for.</summary>
+    internal bool MagnifierGridFills { get; set; } = true;
+
+    /// <inheritdoc cref="MagnifierGridFills"/>
+    internal bool CrosshairFills { get; set; } = true;
     internal bool HasPendingFeedback => _feedbackScheduler.IsPending;
     internal BitmapSource? MagnifierBitmapForTest => _magnifierCrop;
     internal string SampleLabelForTest => _sampleLabel;
@@ -603,7 +622,7 @@ internal sealed class CaptureOverlayView : FrameworkElement
         {
             window = WindowDetectHitTest.FindTopmost(_windowCandidates, screenPoint, OwnWindowHandle);
             region = window is null ? null : WindowDetectHitTest.ResolveRegion(window, _windowCandidates, screenPoint,
-                _screenBounds, () => _monitors ??= ReadMonitors(), out wholeMonitor);
+                _screenBounds, _readMonitorsOnce, out wholeMonitor);
             if (region is null) window = null;
         }
         else if (_interaction == InteractionMode.Create && !_dragBeyondClick)
@@ -655,6 +674,9 @@ internal sealed class CaptureOverlayView : FrameworkElement
             _instructionVisual, _anchorVisual, _pointerVisual, _magnifierVisual, _toastVisual,
         };
         _feedbackScheduler = new CompositionFrameScheduler(Dispatcher, RenderLayers);
+        // Hover runs on every pointer move; a lambda written there would be allocated each time.
+        _readMonitorsOnce = () => _monitors ??= ReadMonitors();
+        _revealVisual.Clip = _revealClip;
         _horizontalGuideVisual.Clip = _horizontalGuideClip;
         _verticalGuideVisual.Clip = _verticalGuideClip;
         _horizontalGuideVisual.Opacity = _verticalGuideVisual.Opacity = 0;
@@ -959,12 +981,12 @@ internal sealed class CaptureOverlayView : FrameworkElement
             _staticSize = RenderSize;
             StaticRenderCount++;
             BuildGuidePens();
-            _instructionText = _anchorText = _precisionText = null;
+            _instructionText = _anchorText = _precisionText = _sampleText = _coordinateText = null;
             using (DrawingContext dc = _desktopVisual.RenderOpen())
                 if (_frame?.Bitmap is { } bitmap) dc.DrawImage(bitmap, new Rect(RenderSize));
             using (DrawingContext dc = _dimmerVisual.RenderOpen())
                 dc.DrawRectangle(_dimmerBrush, null, new Rect(RenderSize));
-            _dimmerOutsideSelection = false;
+            DimmerRenderCount++;
             // Both image visuals share exactly one source; there is no rasterized cache.
             using (DrawingContext dc = _revealVisual.RenderOpen())
                 if (_frame?.Bitmap is { } revealBitmap) dc.DrawImage(revealBitmap, new Rect(RenderSize));
@@ -1049,50 +1071,23 @@ internal sealed class CaptureOverlayView : FrameworkElement
         }
     }
 
+    /// <summary>
+    /// Uncovers the selected or highlighted region: the full-screen dimmer never changes after the
+    /// static build, and only the clip of the desktop drawn over it moves.
+    /// </summary>
+    /// <remarks>
+    /// WPF redraws every visual that meets a changed visual's old or new bounds. A dimmer redrawn
+    /// around each new selection changed a viewport-sized visual, so every drag frame and every new
+    /// highlighted window re-rendered the whole desktop, including the mode bar and the instruction
+    /// chips. Moving only this clip limits the redraw to the old and new region. Inside the clip
+    /// the opaque desktop covers the dimmer, so the pixels match the dimmer drawn outside the
+    /// region; fractional physical edges keep the clip's own antialiasing as they always had.
+    /// </remarks>
     private void UpdateRevealedRegion(RectD? revealed)
     {
         Rect visible = revealed is { } selected
             ? ToDipRect(selected.ClampTo(FrameBounds)) : new Rect(0, 0, 0, 0);
-        Rect viewport = new(RenderSize);
-        // Desktop capture is opaque Bgr32. Leave its selected pixels uncovered instead of
-        // painting the same desktop a second time over a full-screen dimmer. Fractional
-        // physical edges retain the original clip composition: antialias coverage at a
-        // corner is not equivalent to independently blended outside rectangles.
-        bool outside = _frame?.Bitmap.Format == PixelFormats.Bgr32
-            && PixelAligned(viewport) && PixelAligned(visible);
-        _revealVisual.Opacity = outside ? 0 : 1;
-        if (outside)
-        {
-            using DrawingContext dc = _dimmerVisual.RenderOpen();
-            if (visible.Width <= 0 || visible.Height <= 0)
-                dc.DrawRectangle(_dimmerBrush, null, viewport);
-            else
-            {
-                Dim(new Rect(0, 0, viewport.Width, visible.Top));
-                Dim(new Rect(0, visible.Bottom, viewport.Width, Math.Max(0, viewport.Height - visible.Bottom)));
-                Dim(new Rect(0, visible.Top, visible.Left, visible.Height));
-                Dim(new Rect(visible.Right, visible.Top, Math.Max(0, viewport.Width - visible.Right), visible.Height));
-            }
-            void Dim(Rect rect)
-            {
-                if (rect.Width > 0 && rect.Height > 0) dc.DrawRectangle(_dimmerBrush, null, rect);
-            }
-        }
-        else
-        {
-            if (_dimmerOutsideSelection)
-            {
-                using DrawingContext dc = _dimmerVisual.RenderOpen();
-                dc.DrawRectangle(_dimmerBrush, null, viewport);
-            }
-            _revealVisual.Clip = new RectangleGeometry(visible);
-        }
-        _dimmerOutsideSelection = outside;
-
-        bool PixelAligned(Rect rect) => Integer(rect.Left * _guideDpi.DpiScaleX)
-            && Integer(rect.Right * _guideDpi.DpiScaleX)
-            && Integer(rect.Top * _guideDpi.DpiScaleY) && Integer(rect.Bottom * _guideDpi.DpiScaleY);
-        static bool Integer(double value) => Math.Abs(value - Math.Round(value)) <= 0.000001;
+        if (_revealClip.Rect != visible) _revealClip.Rect = visible;
     }
 
     /// <summary>Short confirmation chip above and to the right of the pointer, clear of the magnifier.</summary>
@@ -1118,10 +1113,18 @@ internal sealed class CaptureOverlayView : FrameworkElement
         void Target(PointD pixel)
         {
             Point p = ToDipPoint(pixel);
+            if (!anchor && CrosshairFills && _pointerOuterHalfBrush is { } outerHalf && _pointerInnerHalfBrush is { } innerHalf
+                && CrosshairOnDevicePixels(p))
+            {
+                CrosshairFillCount++;
+                CrossFills(p, _pointerOuterPen, outerHalf, 3);
+                CrossFills(p, _pointerInnerPen, innerHalf, 1);
+                return;
+            }
             void Cross(Pen pen)
             {
-                dc.DrawLine(pen, new Point(p.X - 11, p.Y), new Point(p.X + 11, p.Y));
-                dc.DrawLine(pen, new Point(p.X, p.Y - 11), new Point(p.X, p.Y + 11));
+                dc.DrawLine(pen, new Point(p.X - CrosshairReach, p.Y), new Point(p.X + CrosshairReach, p.Y));
+                dc.DrawLine(pen, new Point(p.X, p.Y - CrosshairReach), new Point(p.X, p.Y + CrosshairReach));
                 if (anchor) dc.DrawEllipse(null, pen, p, 5, 5);
             }
             Cross(_pointerOuterPen);
@@ -1136,6 +1139,39 @@ internal sealed class CaptureOverlayView : FrameworkElement
             }
         }
         Target(anchor ? _dragAnchor : _cursorPixel);
+
+        // A stroke centred on a device-pixel edge and an odd number of pixels wide covers whole
+        // pixels in its middle and exactly half of the one pixel row or column on each side of
+        // them. Those pixels are filled with the stroke colour and half its alpha, horizontal
+        // stroke first, as the two strokes were drawn.
+        void CrossFills(Point p, Pen pen, Brush half, int width)
+        {
+            double px = GuidePixelSizeX, py = GuidePixelSizeY, inner = (width - 1) / 2.0;
+            if (inner > 0)
+                dc.DrawRectangle(pen.Brush, null, new Rect(p.X - CrosshairReach, p.Y - (inner * py), 2 * CrosshairReach, 2 * inner * py));
+            dc.DrawRectangle(half, null, new Rect(p.X - CrosshairReach, p.Y - ((inner + 1) * py), 2 * CrosshairReach, py));
+            dc.DrawRectangle(half, null, new Rect(p.X - CrosshairReach, p.Y + (inner * py), 2 * CrosshairReach, py));
+            if (inner > 0)
+                dc.DrawRectangle(pen.Brush, null, new Rect(p.X - (inner * px), p.Y - CrosshairReach, 2 * inner * px, 2 * CrosshairReach));
+            dc.DrawRectangle(half, null, new Rect(p.X - ((inner + 1) * px), p.Y - CrosshairReach, px, 2 * CrosshairReach));
+            dc.DrawRectangle(half, null, new Rect(p.X + (inner * px), p.Y - CrosshairReach, px, 2 * CrosshairReach));
+        }
+    }
+
+    /// <summary>
+    /// Whether the pointer crosshair's strokes lie on device pixels: centred on a pixel corner (the
+    /// real cursor always is), ending on pixel edges, and one and three device pixels wide. The
+    /// crosshair is redrawn on every pointer frame; as antialiased strokes it took about a fifth of
+    /// the render thread while moving.
+    /// </summary>
+    private bool CrosshairOnDevicePixels(Point p)
+    {
+        double scaleX = _guideDpi.DpiScaleX, scaleY = _guideDpi.DpiScaleY;
+        return Math.Abs(scaleX - scaleY) <= 0.000001
+            && IsWhole(p.X * scaleX) && IsWhole(p.Y * scaleY)
+            && IsWhole(CrosshairReach * scaleX) && IsWhole(CrosshairReach * scaleY)
+            && Math.Abs((_pointerOuterPen.Thickness * scaleX) - 3) <= 0.000001
+            && Math.Abs((_pointerInnerPen.Thickness * scaleX) - 1) <= 0.000001;
     }
 
     private void DrawSelection(DrawingContext dc, RectD pixelRect)
@@ -1591,27 +1627,86 @@ internal sealed class CaptureOverlayView : FrameworkElement
 
         double cellWidth = width / _magnifierCrop.PixelWidth;
         double cellHeight = imageHeight / _magnifierCrop.PixelHeight;
-        Pen gridPen = _magnifierGridPen;
-        for (int index = 1; index < _magnifierCrop.PixelWidth; index++)
-        {
-            dc.DrawLine(gridPen, new Point(x + (index * cellWidth), y), new Point(x + (index * cellWidth), y + imageHeight));
-        }
-        for (int index = 1; index < _magnifierCrop.PixelHeight; index++)
-        {
-            dc.DrawLine(gridPen, new Point(x, y + (index * cellHeight)), new Point(x + width, y + (index * cellHeight)));
-        }
+        DrawMagnifierGrid(dc, new Rect(x, y, width, imageHeight), _magnifierCrop.PixelWidth, _magnifierCrop.PixelHeight);
 
         int cursorX = Math.Clamp((int)Math.Floor(_cursorPixel.X) - _magnifierCropX, 0, _magnifierCrop.PixelWidth - 1);
         int cursorY = Math.Clamp((int)Math.Floor(_cursorPixel.Y) - _magnifierCropY, 0, _magnifierCrop.PixelHeight - 1);
         var cell = new Rect(x + (cursorX * cellWidth), y + (cursorY * cellHeight), cellWidth, cellHeight);
         dc.DrawRectangle(null, _magnifierBorderPen, cell);
 
-        string coordinate = $"{(int)_cursorPixel.X}, {(int)_cursorPixel.Y}";
-        FormattedText color = CreateText(_sampleLabel, _monoTypeface, 12, _primaryTextBrush);
-        FormattedText location = CreateText(coordinate, _monoTypeface, 10, _mutedTextBrush);
+        // A label that reads the same as on the last frame keeps its text layout.
+        if (_sampleText is null || !string.Equals(_sampleTextLabel, _sampleLabel, StringComparison.Ordinal))
+        {
+            _sampleText = CreateText(_sampleLabel, _monoTypeface, 12, _primaryTextBrush);
+            _sampleTextLabel = _sampleLabel;
+        }
+        (int X, int Y) coordinate = ((int)_cursorPixel.X, (int)_cursorPixel.Y);
+        if (_coordinateText is null || _coordinateTextPixel != coordinate)
+        {
+            _coordinateText = CreateText($"{coordinate.X}, {coordinate.Y}", _monoTypeface, 10, _mutedTextBrush);
+            _coordinateTextPixel = coordinate;
+        }
+        FormattedText color = _sampleText;
+        FormattedText location = _coordinateText;
         double footerTop = y + imageHeight;
         dc.DrawText(color, new Point(x + 8, footerTop + 5));
         dc.DrawText(location, new Point(x + width - location.Width - 8, footerTop + 6));
+    }
+
+    /// <summary>
+    /// The magnifier's cell lines: half-pixel strokes centred on the cell edges, vertical ones first.
+    /// </summary>
+    /// <remarks>
+    /// The magnifier follows the pointer, so its grid is rasterised again on every pointer frame.
+    /// As 28 antialiased strokes that took about 40% of the render thread, nearly all of it scan
+    /// converting the tall vertical lines. When a cell edge falls on a device-pixel edge, which is
+    /// always so for the real cursor at any standard scale, a half-pixel stroke covers exactly a
+    /// quarter of the pixel on each side of it. The selector then fills those two whole pixels with
+    /// the grid colour at a quarter of its alpha: the same colour, alpha and blending order reach
+    /// the screen, and the pixel-aligned fills need no scan conversion. Any other alignment draws
+    /// the strokes themselves.
+    /// </remarks>
+    private void DrawMagnifierGrid(DrawingContext dc, Rect image, int columns, int rows)
+    {
+        double cellWidth = image.Width / columns;
+        double cellHeight = image.Height / rows;
+        if (MagnifierGridFills && _magnifierGridQuarterBrush is { } quarter && MagnifierGridOnDevicePixels(image, cellWidth, cellHeight))
+        {
+            MagnifierGridFillCount++;
+            double px = GuidePixelSizeX, py = GuidePixelSizeY;
+            for (int index = 1; index < columns; index++)
+                dc.DrawRectangle(quarter, null, new Rect(image.X + (index * cellWidth) - px, image.Y, 2 * px, image.Height));
+            for (int index = 1; index < rows; index++)
+                dc.DrawRectangle(quarter, null, new Rect(image.X, image.Y + (index * cellHeight) - py, image.Width, 2 * py));
+            return;
+        }
+        Pen gridPen = _magnifierGridPen;
+        for (int index = 1; index < columns; index++)
+        {
+            double lineX = image.X + (index * cellWidth);
+            dc.DrawLine(gridPen, new Point(lineX, image.Y), new Point(lineX, image.Bottom));
+        }
+        for (int index = 1; index < rows; index++)
+        {
+            double lineY = image.Y + (index * cellHeight);
+            dc.DrawLine(gridPen, new Point(image.X, lineY), new Point(image.Right, lineY));
+        }
+    }
+
+    /// <summary>
+    /// Whether every grid stroke is half a device pixel wide and centred on a device-pixel edge, with
+    /// its ends on device-pixel edges: one frame pixel is one device pixel and the magnifier and its
+    /// cells sit on whole device pixels.
+    /// </summary>
+    private bool MagnifierGridOnDevicePixels(Rect image, double cellWidth, double cellHeight)
+    {
+        double scaleX = _guideDpi.DpiScaleX, scaleY = _guideDpi.DpiScaleY;
+        return Math.Abs(scaleX - scaleY) <= 0.000001
+            && Math.Abs((_magnifierGridPen.Thickness * scaleX) - 0.5) <= 0.000001
+            && Math.Abs((DipPerPixelX * scaleX) - 1) <= 0.0001 && Math.Abs((DipPerPixelY * scaleY) - 1) <= 0.0001
+            && IsWhole(image.X * scaleX) && IsWhole(image.Y * scaleY)
+            && IsWhole(image.Width * scaleX) && IsWhole(image.Height * scaleY)
+            && IsWhole(cellWidth * scaleX) && IsWhole(cellHeight * scaleY);
     }
 
     protected override void OnMouseMove(MouseEventArgs e)
@@ -1771,7 +1866,15 @@ internal sealed class CaptureOverlayView : FrameworkElement
     protected override void OnKeyDown(KeyEventArgs e)
     {
         base.OnKeyDown(e);
+        HandleKeyDown(e);
+    }
 
+    /// <summary>
+    /// The selector's keys. Also called by its window for keys that reach the window before the
+    /// selector holds keyboard focus.
+    /// </summary>
+    internal void HandleKeyDown(KeyEventArgs e)
+    {
         // A Korean IME in Hangul mode reports letters as ImeProcessed; C and T must still work.
         Key key = e.Key == Key.ImeProcessed ? e.ImeProcessedKey : e.Key;
         if (key is not (Key.LeftShift or Key.RightShift or Key.LeftCtrl or Key.RightCtrl or Key.LeftAlt
@@ -1838,6 +1941,12 @@ internal sealed class CaptureOverlayView : FrameworkElement
     protected override void OnKeyUp(KeyEventArgs e)
     {
         base.OnKeyUp(e);
+        HandleKeyUp(e);
+    }
+
+    /// <inheritdoc cref="HandleKeyDown"/>
+    internal void HandleKeyUp(KeyEventArgs e)
+    {
         if (!_ended && e.Key is Key.LeftShift or Key.RightShift) UpdatePointer();
     }
 
@@ -2140,10 +2249,36 @@ internal sealed class CaptureOverlayView : FrameworkElement
         _chipBorderPen = Create("CaptureGuide.ChipBorder", 1);
         _magnifierBorderPen = Create("CaptureGuide.MagnifierBorder", 1);
         _magnifierGridPen = Create("CaptureGuide.MagnifierGrid", 0.5);
+        _magnifierGridQuarterBrush = CoverageBrush(_guidePalette["CaptureGuide.MagnifierGrid"], 0.25f);
+        _pointerOuterHalfBrush = CoverageBrush(_pointerOuterPen.Brush, 0.5f);
+        _pointerInnerHalfBrush = CoverageBrush(_pointerInnerPen.Brush, 0.5f);
         _recordingPen = new Pen(_recordingBrush, 2 * pixel);
         _recordingPen.Freeze();
         _recordingEdgePen = new Pen(_recordingBrush, 3 * pixel);
         _recordingEdgePen.Freeze();
+    }
+
+    /// <summary>
+    /// A stroke colour with its alpha scaled by the <paramref name="coverage"/> (a quarter or a half)
+    /// with which a stroke on device-pixel edges covers whole pixels. Only the alpha changes: brushes
+    /// reach the hardware renderer as scRGB floats, where scaling by a power of two is exact, so the
+    /// fill carries what the stroke's coverage would. The software renderer premultiplies in bytes,
+    /// where the two orders round alike only for an opaque colour or one whose channels are all 0 or
+    /// 255; that covers the theme grid, crosshair and high-contrast colours. Anything else returns
+    /// null and keeps the strokes.
+    /// </summary>
+    internal static Brush? CoverageBrush(Brush brush, float coverage)
+    {
+        if (coverage is not (0.25f or 0.5f)) throw new ArgumentOutOfRangeException(nameof(coverage));
+        if (brush is not SolidColorBrush { Opacity: 1 } solid) return null;
+        Color color = solid.Color;
+        if (color.A != 255 && !(Extreme(color.R) && Extreme(color.G) && Extreme(color.B))) return null;
+        color.ScA = solid.Color.ScA * coverage;
+        var scaled = new SolidColorBrush(color);
+        scaled.Freeze();
+        return scaled;
+
+        static bool Extreme(byte channel) => channel is 0 or 255;
     }
 
     private FormattedText CreateText(string text, Typeface typeface, double size, Brush brush) =>

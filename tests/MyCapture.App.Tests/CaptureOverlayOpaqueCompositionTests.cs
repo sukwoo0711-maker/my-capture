@@ -17,7 +17,7 @@ public sealed class CaptureOverlayOpaqueCompositionTests
     [InlineData(1.0)]
     [InlineData(1.5)]
     [InlineData(2.0)]
-    public void OpaqueDesktopMatchesOriginalCompositionAcrossRegionTransitions(double scale) => StaTestHost.Run(() =>
+    public void RegionTransitions_MoveOnlyTheRevealClip_AndMatchTheOriginalComposition(double scale) => StaTestHost.Run(() =>
     {
         FrozenFrame frame = Frame(PixelFormats.Bgr32);
         var actual = new CaptureOverlayView(frame, showMagnifier: false, showSelectionGrid: false);
@@ -29,6 +29,8 @@ public sealed class CaptureOverlayOpaqueCompositionTests
         try
         {
             SetDpi(actual, scale); SetDpi(reference, scale);
+            int dimmerRenders = -1;
+            Geometry? clip = null;
             for (int i = 0; i < regions.Length; i++)
             {
                 // The same region may be a detected window or a drag. Selection wins when both exist.
@@ -36,7 +38,12 @@ public sealed class CaptureOverlayOpaqueCompositionTests
                 Set(reference, "_selection", i % 2 == 0 ? regions[i] : null);
                 Set(actual, "_hoverRegion", regions[i]); Set(reference, "_hoverRegion", regions[i]);
                 Compare(actual, reference, legacy, frame, 64, 40, scale);
-                Assert.Equal(0, Visual(actual, "_revealVisual").Opacity);
+                // The viewport-sized dimmer is drawn once; a new region only moves one retained clip,
+                // so WPF redraws the old and new region instead of the whole desktop.
+                if (dimmerRenders < 0) { dimmerRenders = actual.DimmerRenderCount; clip = Visual(actual, "_revealVisual").Clip; }
+                Assert.Equal(dimmerRenders, actual.DimmerRenderCount);
+                Assert.Same(clip, Visual(actual, "_revealVisual").Clip);
+                Assert.Equal(1, Visual(actual, "_revealVisual").Opacity);
             }
             Set(actual, "_selection", new RectD(5, 7, 20, 15));
             Set(reference, "_selection", new RectD(5, 7, 20, 15));
@@ -56,7 +63,7 @@ public sealed class CaptureOverlayOpaqueCompositionTests
     [InlineData(1.0)]
     [InlineData(1.5)]
     [InlineData(2.0)]
-    public void FractionalEdgesReturnToOriginalCompositionAndBackWithoutStaleDimmer(double scale) => StaTestHost.Run(() =>
+    public void FractionalEdges_MatchTheOriginalComposition_WithoutRedrawingTheDimmer(double scale) => StaTestHost.Run(() =>
     {
         FrozenFrame frame = Frame(PixelFormats.Bgr32);
         var actual = new CaptureOverlayView(frame, false, false);
@@ -65,12 +72,14 @@ public sealed class CaptureOverlayOpaqueCompositionTests
         try
         {
             SetDpi(actual, scale); SetDpi(reference, scale);
+            int dimmerRenders = -1;
             foreach (RectD region in new[] { new RectD(5, 7, 20, 15), new RectD(5.25, 7.5, 20.75, 15.25),
                 new RectD(0.5, 0.25, 1.5, 2.75), new RectD(5, 7, 20, 15) })
             {
                 Set(actual, "_selection", region); Set(reference, "_selection", region);
                 Compare(actual, reference, legacy, frame, 64, 40, scale);
-                Assert.Equal(region.Left == Math.Floor(region.Left) ? 0 : 1, Visual(actual, "_revealVisual").Opacity);
+                if (dimmerRenders < 0) dimmerRenders = actual.DimmerRenderCount;
+                Assert.Equal(dimmerRenders, actual.DimmerRenderCount);
             }
         }
         finally { actual.ReleaseResources(); reference.ReleaseResources(); }
@@ -100,17 +109,24 @@ public sealed class CaptureOverlayOpaqueCompositionTests
     });
 
     [Fact]
-    public void MissingFrameThenOpaqueAndAlphaAttachmentSelectsCorrectComposition() => StaTestHost.Run(() =>
+    public void MissingFrameThenOpaqueAndAlphaAttachment_KeepTheRevealClipOnTheSelection() => StaTestHost.Run(() =>
     {
         var actual = new CaptureOverlayView(new RectD(0, 0, 64, 40), showMagnifier: false, showSelectionGrid: false);
         try
         {
             Set(actual, "_selection", new RectD(5, 7, 20, 15)); Layout(actual, 64, 40, 1);
-            Assert.Equal(1, Visual(actual, "_revealVisual").Opacity);
-            actual.AttachFrame(Frame(PixelFormats.Bgr32)); RenderLayers(actual);
-            Assert.Equal(0, Visual(actual, "_revealVisual").Opacity);
-            actual.AttachFrame(Frame(PixelFormats.Bgra32)); RenderLayers(actual);
-            Assert.Equal(1, Visual(actual, "_revealVisual").Opacity);
+            Geometry clip = Visual(actual, "_revealVisual").Clip;
+            Assert.Equal(new Rect(5, 7, 20, 15), ((RectangleGeometry)clip).Rect);
+            foreach (PixelFormat format in new[] { PixelFormats.Bgr32, PixelFormats.Bgra32 })
+            {
+                int dimmerRenders = actual.DimmerRenderCount;
+                actual.AttachFrame(Frame(format)); RenderLayers(actual);
+                // A new frame rebuilds the static layers once; the clip stays on the selection.
+                Assert.Equal(dimmerRenders + 1, actual.DimmerRenderCount);
+                Assert.Same(clip, Visual(actual, "_revealVisual").Clip);
+                Assert.Equal(new Rect(5, 7, 20, 15), ((RectangleGeometry)clip).Rect);
+                Assert.Equal(1, Visual(actual, "_revealVisual").Opacity);
+            }
         }
         finally { actual.ReleaseResources(); }
     });
