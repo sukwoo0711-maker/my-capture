@@ -240,7 +240,17 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
     /// next capture waits out its dismissal instead of photographing it.</summary>
     internal void NoteForegroundDismissal() => _lastPresentationDismissedTick = Environment.TickCount64;
 
-    private async Task AcquireAndShowAsync(CapturePreparation preparation, bool includeCursor, bool settlePresentation)
+    private Task AcquireAndShowAsync(CapturePreparation preparation, bool includeCursor, bool settlePresentation) =>
+        AcquirePreparedFrameAsync(preparation, includeCursor, settlePresentation).ContinueWith(acquired =>
+        {
+            var (frame, failure, confirmedWindows) = acquired.GetAwaiter().GetResult();
+            // Complete on the same dispatcher turn that shows the selector. Extra asynchronous
+            // continuations here leave a visible selector with its preparation still pending.
+            return DispatchAsync(() => ShowPreparedFrame(preparation, frame, failure, confirmedWindows));
+        }, CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default).Unwrap();
+
+    private async Task<(FrozenFrame? Frame, Exception? Failure, Task<IReadOnlyList<WindowCandidate>>? Windows)>
+        AcquirePreparedFrameAsync(CapturePreparation preparation, bool includeCursor, bool settlePresentation)
     {
         FrozenFrame? frame = null;
         Task<IReadOnlyList<WindowCandidate>>? confirmedWindows = null;
@@ -277,7 +287,7 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
         // The selector appears as soon as its frozen pixels exist. A browser walk on any monitor
         // costs up to ten screen grabs, so the page and application details never hold it back:
         // the selector and every selection made on it receive them when the reads finish.
-        await DispatchAsync(() => ShowPreparedFrame(preparation, frame, failure, confirmedWindows)).ConfigureAwait(false);
+        return (frame, failure, confirmedWindows);
     }
 
     private async Task LogSourceDetailsConfirmedAsync(Task<IReadOnlyList<WindowCandidate>> confirmed, Stopwatch elapsed)
@@ -307,25 +317,28 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
     /// hotkey callbacks without SynchronizationContext. An aborted dispatcher operation is
     /// observed; shutdown never waits for native BitBlt or accessibility reads.
     /// </summary>
-    private async Task<bool> DispatchAsync(Func<bool> step)
+    private Task<bool> DispatchAsync(Func<bool> step)
     {
-        if (_dispatcher.HasShutdownStarted || _dispatcher.HasShutdownFinished) return false;
-        try
+        if (_dispatcher.HasShutdownStarted || _dispatcher.HasShutdownFinished) return Task.FromResult(false);
+        return _dispatcher.InvokeAsync(step).Task.ContinueWith(completed =>
         {
-            return await _dispatcher.InvokeAsync(step).Task.ConfigureAwait(false);
-        }
-        catch (TaskCanceledException) when (_dispatcher.HasShutdownStarted || _dispatcher.HasShutdownFinished)
-        {
-            // Shutdown invalidates the preparation before any late window can be shown.
-            return false;
-        }
-        catch (Exception ex)
-        {
-            // A feedback subscriber must not turn a fire-and-observed transition into an
-            // unobserved task failure. Session cleanup runs in each step's finally.
-            _log.LogError(ex, "Capture preparation dispatcher transition failed");
-            return false;
-        }
+            try
+            {
+                return completed.GetAwaiter().GetResult();
+            }
+            catch (TaskCanceledException) when (_dispatcher.HasShutdownStarted || _dispatcher.HasShutdownFinished)
+            {
+                // Shutdown invalidates the preparation before any late window can be shown.
+                return false;
+            }
+            catch (Exception ex)
+            {
+                // A feedback subscriber must not turn a fire-and-observed transition into an
+                // unobserved task failure. Session cleanup runs in each step's finally.
+                _log.LogError(ex, "Capture preparation dispatcher transition failed");
+                return false;
+            }
+        }, CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
     }
 
     /// <summary>

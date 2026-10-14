@@ -37,6 +37,7 @@ public sealed class ColorCopyFeedbackTests
     {
         var feedback = new ColorCopyFeedback("#FFFFFF", 255, 255, 255);
         var content = Assert.IsType<DockPanel>(ThemedShellPresenter.CreateColorCopyContent(feedback));
+        content.Resources = SystemHighContrastThemeTests.LoadTheme();
         ThemeService.ApplyResources(theme, content.Resources, systemHighContrast: systemHighContrast);
         content.SetResourceReference(System.Windows.Documents.TextElement.ForegroundProperty, "Text.Primary");
         Assert.Same(feedback, content.DataContext);

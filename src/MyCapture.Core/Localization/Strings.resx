@@ -3559,13 +3559,12 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="TextCapture_TutorialStep2" xml:space="preserve"><value>2. 복사할 글자 영역을 드래그합니다. 선택한 글자를 자동으로 인식해 복사합니다.</value></data>
   <data name="TextCapture_TutorialStep3" xml:space="preserve"><value>3. 텍스트 복사됨 알림을 확인한 다음, 원하는 곳에서 Ctrl+V를 누릅니다.</value></data>
   <data name="ColorPick_CopyFailed" xml:space="preserve"><value>색상을 복사하지 못했습니다.</value></data>
-  <data name="ColorPick_EndCaptureHint" xml:space="preserve"><value>C: 색상 복사 후 캡처 종료</value></data>
   <data name="ColorPick_FormatLabel" xml:space="preserve"><value>색상 복사 형식</value></data>
   <data name="ColorPick_FormatHint" xml:space="preserve"><value>캡처 영역을 선택하는 중 C 키를 누르면 포인터 아래 색상을 이 형식으로 복사한 후 캡처를 종료합니다.</value></data>
   <data name="ColorPick_FormatHex" xml:space="preserve"><value>HEX (#RRGGBB)</value></data>
   <data name="ColorPick_FormatRgb" xml:space="preserve"><value>RGB (rgb(r, g, b))</value></data>
   <data name="ColorPick_FormatHsl" xml:space="preserve"><value>HSL (hsl(h, s%, l%))</value></data>
-  <data name="ColorPick_HelpLabel" xml:space="preserve"><value>선택 중 색상 복사</value></data>
+  <data name="ColorPick_HelpLabel" xml:space="preserve"><value>선택 중 색상 복사 후 캡처 종료</value></data>
   <data name="WindowDetect_OverlayHint" xml:space="preserve"><value>클릭 창 선택</value></data>
   <data name="WindowDetect_Setting" xml:space="preserve"><value>포인터 아래 창 강조 · 클릭으로 창 영역 선택</value></data>
   <data name="RecordingPauseHotkey_Command" xml:space="preserve"><value>녹화 일시 정지/재개</value></data>

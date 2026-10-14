@@ -119,23 +119,26 @@ public sealed class ColorPickOverlayTests
     });
 
     [Theory]
-    [InlineData("ko-KR", "C: 색상 복사 후 캡처 종료")]
-    [InlineData("en-US", "C: Copy color and end capture")]
-    public void HintExplainsCopyAndEndCapture(string language, string expected) => StaTestHost.Run(() =>
+    [InlineData("ko-KR", "선택 중 색상 복사 후 캡처 종료")]
+    [InlineData("en-US", "Copy color and end capture while selecting")]
+    public void ExistingShortcutHelpExplainsCopyAndEndCapture(string language, string expected) => StaTestHost.Run(() =>
     {
         using var scope = UiText.UseLanguage(language);
         var view = new CaptureOverlayView(Frame(), showMagnifier: true)
         {
             CopyColorText = _ => Task.FromResult(true),
+            ShowModeBar = true,
         };
         try
         {
-            Assert.Equal(expected, view.ColorCopyHint);
+            Assert.Equal(expected, UiText.Get("ColorPick_HelpLabel"));
+            var button = view.ModeBarForTest!.ColorButton;
+            string tooltip = UiText.Get("CaptureGuide2_Color") + "\n" + UiText.Get("CaptureGuide2_ColorHelp") + " (C)";
+            Assert.Equal(tooltip, button.ToolTip);
+            Assert.Equal(UiText.Get("CaptureGuide2_ColorHelp"),
+                System.Windows.Automation.AutomationProperties.GetHelpText(button));
             view.ShowShortcutHints = false;
-            Assert.Null(view.ColorCopyHint);
-            view.ShowShortcutHints = true;
-            view.CopyColorText = null;
-            Assert.Null(view.ColorCopyHint);
+            Assert.Equal(tooltip, button.ToolTip);
         }
         finally { view.ReleaseResources(); }
     });

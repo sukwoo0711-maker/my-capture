@@ -3559,13 +3559,12 @@ Delete {1} {1:plural:subfolder|subfolders}, {2} {2:plural:image|images}, and {3}
   <data name="TextCapture_TutorialStep2" xml:space="preserve"><value>2. Drag over the words you want to copy. The selected words are recognized and copied automatically.</value></data>
   <data name="TextCapture_TutorialStep3" xml:space="preserve"><value>3. After the Text copied notification appears, press Ctrl+V where you want to paste.</value></data>
   <data name="ColorPick_CopyFailed" xml:space="preserve"><value>Could not copy the color.</value></data>
-  <data name="ColorPick_EndCaptureHint" xml:space="preserve"><value>C: Copy color and end capture</value></data>
   <data name="ColorPick_FormatLabel" xml:space="preserve"><value>Color copy format</value></data>
   <data name="ColorPick_FormatHint" xml:space="preserve"><value>Press C while selecting a capture region to copy the color under the pointer in this format and end the capture.</value></data>
   <data name="ColorPick_FormatHex" xml:space="preserve"><value>HEX (#RRGGBB)</value></data>
   <data name="ColorPick_FormatRgb" xml:space="preserve"><value>RGB (rgb(r, g, b))</value></data>
   <data name="ColorPick_FormatHsl" xml:space="preserve"><value>HSL (hsl(h, s%, l%))</value></data>
-  <data name="ColorPick_HelpLabel" xml:space="preserve"><value>Copy color while selecting</value></data>
+  <data name="ColorPick_HelpLabel" xml:space="preserve"><value>Copy color and end capture while selecting</value></data>
   <data name="WindowDetect_OverlayHint" xml:space="preserve"><value>Click: select window</value></data>
   <data name="WindowDetect_Setting" xml:space="preserve"><value>Highlight the window under the pointer · Click to select it</value></data>
   <data name="RecordingPauseHotkey_Command" xml:space="preserve"><value>Pause/resume recording</value></data>
