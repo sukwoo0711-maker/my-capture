@@ -3935,7 +3935,7 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="LibraryUx_KeptAccessible" xml:space="preserve"><value>, 보관됨</value></data>
   <data name="LibraryUx_InFolderAccessible" xml:space="preserve"><value>, {0} 폴더</value></data>
   <data name="LibraryUx_TileMoreHint" xml:space="preserve"><value>더 보기 — 보관, 내보내기, 텍스트 인식</value></data>
-  <data name="LibraryUx_SearchPlaceholder" xml:space="preserve"><value>제목, 창 이름, 이미지 속 글자 검색</value></data>
+  <data name="LibraryUx_SearchPlaceholder" xml:space="preserve"><value>제목, 앱, 태그, 이미지 속 글자 검색 · 앱:Edge 태그:회의</value></data>
   <data name="LibraryUx_CommandShortcut" xml:space="preserve"><value>{0} ({1})</value></data>
   <data name="LibraryUx_NavImages" xml:space="preserve"><value>이미지</value></data>
   <data name="LibraryUx_NavVideos" xml:space="preserve"><value>동영상</value></data>
@@ -4168,4 +4168,35 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="Tutorial.pin-save.Step2" xml:space="preserve"><value>2. Ctrl+S를 눌러 저장합니다.</value></data>
   <data name="Tutorial.pin-save.Step3" xml:space="preserve"><value>3. 다른 파일로 저장하려면 Ctrl+Shift+S로 저장 위치를 선택합니다.</value></data>
   <data name="Tutorial.Unavailable" xml:space="preserve"><value>사용법 동영상을 불러오지 못했습니다. 아래 단계에서 사용 방법을 확인합니다.</value></data>
+  <data name="Library.Search.ClearAll" xml:space="preserve"><value>모두 지우기</value></data>
+  <data name="Library.Search.ClearConditions" xml:space="preserve"><value>조건 지우기</value></data>
+  <data name="Library.Search.RemoveCondition" xml:space="preserve"><value>조건 삭제: {0}</value></data>
+  <data name="Library.Search.Condition" xml:space="preserve"><value>{0}: {1}</value></data>
+  <data name="Library.Search.Excluded" xml:space="preserve"><value>제외 · {0}</value></data>
+  <data name="Library.Search.HiddenCount" xml:space="preserve"><value>검색 조건 때문에 {0}개가 숨겨져 있습니다.</value></data>
+  <data name="Library.Search.Matched" xml:space="preserve"><value>일치: {0}</value></data>
+  <data name="Library.Search.ExclusionsMatched" xml:space="preserve"><value>일치: 제외 조건</value></data>
+  <data name="Library.Search.FieldSeparator" xml:space="preserve"><value> · </value></data>
+  <data name="Library.Search.Syntax" xml:space="preserve"><value>앱:Edge 태그:회의 글자:"월 매출" · -태그:임시 · 종류:이미지 보관:yes 날짜:2026-10</value></data>
+  <data name="Library.Search.Field.App" xml:space="preserve"><value>앱</value></data>
+  <data name="Library.Search.Field.Title" xml:space="preserve"><value>제목</value></data>
+  <data name="Library.Search.Field.Tag" xml:space="preserve"><value>태그</value></data>
+  <data name="Library.Search.Field.Text" xml:space="preserve"><value>글자</value></data>
+  <data name="Library.Search.Field.Url" xml:space="preserve"><value>주소</value></data>
+  <data name="Library.Search.Field.Folder" xml:space="preserve"><value>폴더</value></data>
+  <data name="Library.Search.Field.Type" xml:space="preserve"><value>종류</value></data>
+  <data name="Library.Search.Field.Pinned" xml:space="preserve"><value>보관</value></data>
+  <data name="Library.Search.Field.Date" xml:space="preserve"><value>날짜</value></data>
+  <data name="Library.Search.MatchField.Title" xml:space="preserve"><value>제목</value></data>
+  <data name="Library.Search.MatchField.WindowTitle" xml:space="preserve"><value>창 제목</value></data>
+  <data name="Library.Search.MatchField.OcrText" xml:space="preserve"><value>이미지 속 글자</value></data>
+  <data name="Library.Search.MatchField.MediaType" xml:space="preserve"><value>종류</value></data>
+  <data name="Library.Search.MatchField.Tags" xml:space="preserve"><value>태그</value></data>
+  <data name="Library.Search.MatchField.SourcePageUrl" xml:space="preserve"><value>주소</value></data>
+  <data name="Library.Search.MatchField.SourceApp" xml:space="preserve"><value>앱</value></data>
+  <data name="Library.Search.MatchField.SourceDocumentPath" xml:space="preserve"><value>출처 폴더</value></data>
+  <data name="Library.Search.MatchField.Folder" xml:space="preserve"><value>폴더</value></data>
+  <data name="Library.Search.MatchField.Pinned" xml:space="preserve"><value>보관</value></data>
+  <data name="Library.Search.MatchField.Date" xml:space="preserve"><value>날짜</value></data>
+  <data name="Library.Search.MatchField.ExportFileName" xml:space="preserve"><value>파일명</value></data>
 </root>
