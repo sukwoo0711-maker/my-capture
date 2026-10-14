@@ -326,8 +326,10 @@ internal sealed class AnnotationRenderer
         if (text.HasOutline)
         {
             Geometry geometry = formatted.BuildGeometry(origin);
-            ColorRgba outline = Contrasting(text.Foreground);
-            var outlinePen = new Pen(outline.ToBrush(), Math.Max(1, text.FontSize / 12))
+            bool consistent = text.OutlineStyle == TextOutlineStyle.Consistent;
+            ColorRgba outline = Contrasting(text.Foreground, consistent);
+            double thickness = consistent ? text.FontSize / 18 : Math.Max(1, text.FontSize / 12);
+            var outlinePen = new Pen(outline.ToBrush(), thickness)
             {
                 LineJoin = PenLineJoin.Round,
             };
@@ -426,12 +428,12 @@ internal sealed class AnnotationRenderer
     /// <summary>
     /// A near-black or near-white outline that contrasts with the fill colour.
     /// </summary>
-    private static ColorRgba Contrasting(ColorRgba c)
+    private static ColorRgba Contrasting(ColorRgba c, bool consistent)
     {
-        // Rec. 601 luma; the same rule the eye uses to judge whether text needs a dark or
-        // light halo against its own colour.
+        // Red and other mid-tone captions share the dark edge of light captions. Only
+        // very dark text needs a light edge; old layers retain their original threshold.
         double luma = (0.299 * c.R) + (0.587 * c.G) + (0.114 * c.B);
-        return luma > 140
+        return luma > (consistent ? 45 : 140)
             ? new ColorRgba(c.A, 0, 0, 0)
             : new ColorRgba(c.A, 255, 255, 255);
     }

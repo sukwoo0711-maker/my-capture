@@ -302,7 +302,7 @@ public sealed class EditorTextFitRenderingTests
                 Point origin = text.IsStepNumber
                     ? new Point(box.Left + Math.Max(0, (box.Width - formatted.Width) / 2), box.Top + Math.Max(0, (box.Height - formatted.Height) / 2))
                     : new Point(box.Left, box.Top);
-                DrawGlyphs(dc, text, formatted, origin);
+                DrawGlyphs(dc, text, formatted, origin, legacy: true);
                 if (rotated) dc.Pop();
             }
         });
@@ -317,14 +317,15 @@ public sealed class EditorTextFitRenderingTests
         text.Foreground.ToBrush(),
         pixelsPerDip);
 
-    private static void DrawGlyphs(DrawingContext dc, TextAnnotation text, FormattedText formatted, Point origin)
+    private static void DrawGlyphs(DrawingContext dc, TextAnnotation text, FormattedText formatted, Point origin, bool legacy = false)
     {
         if (text.HasOutline)
         {
             ColorRgba c = text.Foreground;
+            bool consistent = !legacy && text.OutlineStyle == TextOutlineStyle.Consistent;
             double luma = (0.299 * c.R) + (0.587 * c.G) + (0.114 * c.B);
-            ColorRgba outline = luma > 140 ? new ColorRgba(c.A, 0, 0, 0) : new ColorRgba(c.A, 255, 255, 255);
-            var pen = new Pen(outline.ToBrush(), Math.Max(1, text.FontSize / 12)) { LineJoin = PenLineJoin.Round };
+            ColorRgba outline = luma > (consistent ? 45 : 140) ? new ColorRgba(c.A, 0, 0, 0) : new ColorRgba(c.A, 255, 255, 255);
+            var pen = new Pen(outline.ToBrush(), consistent ? text.FontSize / 18 : Math.Max(1, text.FontSize / 12)) { LineJoin = PenLineJoin.Round };
             pen.Freeze();
             dc.DrawGeometry(null, pen, formatted.BuildGeometry(origin));
         }

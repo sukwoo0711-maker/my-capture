@@ -353,6 +353,13 @@ public sealed class SettingsStore
             s.Annotation.FontFamily = "Malgun Gothic";
         }
 
+        s.Annotation.RecentFontFamilies = s.Annotation.RecentFontFamilies
+            .Where(family => !string.IsNullOrWhiteSpace(family))
+            .Select(family => family.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Take(5)
+            .ToList();
+
         // Trim the recent-colour list so a long-lived settings file cannot grow
         // without bound.
         const int recentColorLimit = 12;

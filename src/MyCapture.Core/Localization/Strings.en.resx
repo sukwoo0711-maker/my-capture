@@ -4251,6 +4251,8 @@ Delete {1} {1:plural:subfolder|subfolders}, {2} {2:plural:image|images}, and {3}
   <data name="EditorText_Updated" xml:space="preserve"><value>Text updated</value></data>
   <data name="EditorText_Bold" xml:space="preserve"><value>Bold</value></data>
   <data name="EditorText_Background" xml:space="preserve"><value>Background plate</value></data>
+  <data name="EditorText_FontFamily" xml:space="preserve"><value>Font family</value></data>
+  <data name="EditorText_Outline" xml:space="preserve"><value>Outline</value></data>
   <data name="VideoEditorUx_LibrarySaving" xml:space="preserve"><value>Saving to library</value></data>
   <data name="VideoEditorUx_DragStart" xml:space="preserve"><value>Drag to adjust the start</value></data>
   <data name="VideoEditorUx_DragEnd" xml:space="preserve"><value>Drag to adjust the end</value></data>
