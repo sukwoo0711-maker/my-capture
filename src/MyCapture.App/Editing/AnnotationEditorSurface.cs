@@ -216,7 +216,7 @@ internal sealed class AnnotationEditorSurface : FrameworkElement
             origin.Y + (_cropRegion.Top * scale)));
         dc.PushTransform(new ScaleTransform(scale, scale));
 
-        AnnotationItem? suppress = _controller.IsCreatingText ? _controller.Selected : null;
+        AnnotationItem? suppress = _controller.EditingText;
         // The editor's frame always starts at the selection origin, so the frame bitmap is the
         // base capture in annotation pixel space that blur layers sample.
         _renderer.Render(dc, _controller.Document, pixelsPerDip, suppress, _frame.Bitmap);
@@ -301,7 +301,7 @@ internal sealed class AnnotationEditorSurface : FrameworkElement
     private void DrawSelectionAdorner(DrawingContext dc)
     {
         AnnotationItem? selected = _controller.Selected;
-        if (selected is null || _controller.IsCreatingText)
+        if (selected is null || _controller.EditingText is not null)
         {
             return;
         }

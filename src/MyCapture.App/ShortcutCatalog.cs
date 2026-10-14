@@ -18,6 +18,8 @@ internal static class ShortcutCatalog
             ("Arrow", Key.A), ("Pen", Key.P), ("Highlighter", Key.H), ("Text", Key.T), ("StepNumber", Key.N), ("Image", Key.I), ("Mosaic", Key.M), ("Blur", Key.B) })
             Add(ShortcutScope.Annotation, command, key, key.ToString());
         Add(ShortcutScope.Annotation, "Done", Key.Enter, "Ctrl+Enter", ModifierKeys.Control);
+        Add(ShortcutScope.Annotation, "EditText", Key.Enter, "Enter");
+        Add(ShortcutScope.Annotation, "EditText", Key.F2, "F2");
         Add(ShortcutScope.Annotation, "Copy", Key.C, "Ctrl+C", ModifierKeys.Control);
         Add(ShortcutScope.Annotation, "Save", Key.S, "Ctrl+S", ModifierKeys.Control);
         Add(ShortcutScope.Annotation, "SaveAs", Key.S, "Ctrl+Shift+S", ModifierKeys.Control | ModifierKeys.Shift);
