@@ -19,6 +19,7 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
     private readonly Dispatcher _dispatcher;
     private readonly Func<bool, FrozenFrame> _acquireFrame;
     private readonly Func<RectD> _desktopBounds;
+    private readonly Func<RectD, IReadOnlyList<WindowCandidate>> _readWindowCandidates;
     // Nothing on screen waits for these reads, so a read that finds the previous capture's probe
     // still running waits for it within its own deadline instead of giving up at once.
     private readonly BrowserPageUrlService _pageUrls = new(waitForBusyProbe: true);
@@ -46,13 +47,15 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
         WindowCandidateService windowCandidates,
         ILogger<CaptureOverlayCoordinator> log,
         Func<bool, FrozenFrame>? acquireFrame = null,
-        Func<RectD>? desktopBounds = null)
+        Func<RectD>? desktopBounds = null,
+        Func<RectD, IReadOnlyList<WindowCandidate>>? readWindowCandidates = null)
     {
         _captureEngine = captureEngine ?? throw new ArgumentNullException(nameof(captureEngine));
         _windowCandidates = windowCandidates ?? throw new ArgumentNullException(nameof(windowCandidates));
         _log = log ?? throw new ArgumentNullException(nameof(log));
         _acquireFrame = acquireFrame ?? captureEngine.CaptureVirtualDesktop;
         _desktopBounds = desktopBounds ?? MonitorEnumerator.GetVirtualDesktopBounds;
+        _readWindowCandidates = readWindowCandidates ?? windowCandidates.GetCandidates;
         _dispatcher = Application.Current?.Dispatcher ?? Dispatcher.CurrentDispatcher;
         _dispatcher.ShutdownStarted += OnDispatcherShutdownStarted;
         ReadWindowSources = _windowSources.ReadAsync;
@@ -212,7 +215,7 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
             // The windows as they are at the hotkey: handle, process, title, bounds and z-order. Every
             // page and application read is tied to these identities, and the selection's source is
             // chosen from them.
-            preparation.SourceWindows = _windowCandidates.GetCandidates(desktop);
+            preparation.SourceWindows = _readWindowCandidates(desktop);
             bool settle = NeedsPresentationSettle(Environment.TickCount64, _lastPresentationDismissedTick);
             // The reads and the grab start before the selector window is built, so building it
             // overlaps the grab instead of preceding it. The window stays hidden until its frame exists.
@@ -269,7 +272,7 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
                     throw new InvalidOperationException("Capture acquisition must return a frozen bitmap.");
                 return acquired;
             }, ReadPageUrls,
-                () => _windowCandidates.GetCandidates(preparation.DesktopBounds),
+                () => _readWindowCandidates(preparation.DesktopBounds),
                 ReadWindowSources,
                 settlePresentation ? Task.Delay(100) : null).ConfigureAwait(false);
             frame = capturedFrame;

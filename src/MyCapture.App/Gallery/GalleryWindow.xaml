@@ -652,6 +652,9 @@
                             <Path x:Name="Chrome" Data="{StaticResource LibraryUx.FolderCardShape}" Stretch="Fill"
                                   Fill="{TemplateBinding Background}" Stroke="Transparent"
                                   StrokeThickness="1" SnapsToDevicePixels="True" />
+                            <Path x:Name="SelectedLayer" Data="{StaticResource LibraryUx.FolderCardShape}" Stretch="Fill"
+                                  Style="{StaticResource StatePart.Normal}"
+                                  Fill="{DynamicResource Accent.Subtle}" Opacity="0" IsHitTestVisible="False" />
                             <Path x:Name="Edge" Data="{StaticResource LibraryUx.FolderCardShape}" Stretch="Fill"
                                   Style="{StaticResource LibraryUx.RestEdge}"
                                   Stroke="{TemplateBinding BorderBrush}" StrokeThickness="1" SnapsToDevicePixels="True" />
@@ -685,7 +688,7 @@
                                 <Setter TargetName="Wash" Property="themes:FluidMotion.FadeTo" Value="0.6" />
                             </Trigger>
                             <DataTrigger Binding="{Binding IsSelected}" Value="True">
-                                <Setter TargetName="Chrome" Property="Fill" Value="{DynamicResource Accent.Subtle}" />
+                                <Setter TargetName="SelectedLayer" Property="themes:FluidMotion.FadeTo" Value="1" />
                                 <Setter TargetName="FocusRing" Property="Opacity" Value="1" />
                             </DataTrigger>
                             <!-- While captures are dragged, every folder that can take them shows a dashed edge. -->
@@ -694,7 +697,7 @@
                             </DataTrigger>
                             <!-- The folder under the pointer: accent edge and wash, like Explorer's drop highlight. -->
                             <DataTrigger Binding="{Binding IsDropTarget}" Value="True">
-                                <Setter TargetName="Chrome" Property="Fill" Value="{DynamicResource Accent.Subtle}" />
+                                <Setter TargetName="SelectedLayer" Property="themes:FluidMotion.FadeTo" Value="1" />
                                 <Setter TargetName="DropRing" Property="Stroke" Value="{DynamicResource Border.Accent}" />
                                 <Setter TargetName="DropRing" Property="StrokeThickness" Value="3" />
                                 <Setter TargetName="DropRing" Property="StrokeDashArray" Value="{x:Null}" />

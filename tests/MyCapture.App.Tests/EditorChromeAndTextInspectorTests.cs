@@ -151,13 +151,13 @@ public sealed class EditorChromeAndTextInspectorTests : KoreanCaptionTest
     [Theory]
     [InlineData(1000, 640)]
     [InlineData(680, 460)]
-    public void RailKeepsEveryHintAndHitTargetInsideItsBoundsEvenWhenGeneralHintsAreOff(int width, int height) => StaTestHost.Run(() =>
+    public void RailKeepsEveryHintAndHitTargetInsideItsBoundsWhenHintsAreEnabled(int width, int height) => StaTestHost.Run(() =>
     {
         using var preferences = new PreferencesScope(new AnnotationDefaults());
         Func<bool>? previous = ShortcutPresentation.ReadEnabled;
         try
         {
-            ShortcutPresentation.ReadEnabled = () => false;
+            ShortcutPresentation.ReadEnabled = () => true;
             ShortcutPresentation.Refresh();
             using var host = EditorHost.Create(width, height);
             Border rail = Tree<Border>(host.Editor).Single(border => border.Name == "AnnotationToolRail");
@@ -184,6 +184,47 @@ public sealed class EditorChromeAndTextInspectorTests : KoreanCaptionTest
             Assert.True(VisibleBrush(tile.Background));
             Assert.Equal(1, tile.Opacity);
             AssertInside(rail, host.Editor);
+        }
+        finally
+        {
+            ShortcutPresentation.ReadEnabled = previous;
+            ShortcutPresentation.Refresh();
+        }
+    });
+
+    [Fact]
+    public void RailAndCommandBarHintsFollowPreferenceChanges() => StaTestHost.Run(() =>
+    {
+        using var preferences = new PreferencesScope(new AnnotationDefaults());
+        Func<bool>? previous = ShortcutPresentation.ReadEnabled;
+        bool enabled = true;
+        try
+        {
+            ShortcutPresentation.ReadEnabled = () => enabled;
+            using var host = EditorHost.Create();
+            var hints = new List<TextBlock>();
+            foreach (string name in new[] { "AnnotationToolRail", "AnnotationCommandBar" })
+            {
+                Border container = Tree<Border>(host.Editor).Single(border => border.Name == name);
+                int previousCount = hints.Count;
+                foreach (ButtonBase button in Tree<ButtonBase>(container).Where(button => button.IsVisible))
+                {
+                    string key = AutomationProperties.GetAcceleratorKey(button);
+                    if (string.IsNullOrEmpty(key)) continue;
+                    ShortcutDefinition definition = ShortcutCatalog.All.First(entry =>
+                        entry.Scope == ShortcutScope.Annotation && entry.Hint == key);
+                    if (!ShortcutPresentation.ShowsCaption(definition)) continue;
+                    hints.Add(Assert.Single(Tree<TextBlock>(button), text => text.Text == key));
+                }
+                Assert.True(hints.Count > previousCount, $"{name} has no captioned commands.");
+            }
+            Assert.True(hints.Count > Enum.GetValues<EditorTool>().Length);
+            foreach (bool show in new[] { true, false, true })
+            {
+                enabled = show;
+                ShortcutPresentation.Refresh();
+                Assert.All(hints, hint => Assert.Equal(show ? Visibility.Visible : Visibility.Collapsed, hint.Visibility));
+            }
         }
         finally
         {

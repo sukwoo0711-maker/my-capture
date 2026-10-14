@@ -483,7 +483,8 @@ public sealed class CaptureOverlayCoordinatorTests
         new WindowCandidateService(NullLogger<WindowCandidateService>.Instance),
         NullLogger<CaptureOverlayCoordinator>.Instance,
         acquire,
-        static () => new RectD(0, 0, 32, 20));
+        static () => new RectD(0, 0, 32, 20),
+        static bounds => [new WindowCandidate(new IntPtr(1), bounds, "Synthetic browser", ProcessId: 42)]);
 
     private static FrozenFrame Frame() => new(Solid(32, 20), new RectD(0, 0, 32, 20), null, 0);
 

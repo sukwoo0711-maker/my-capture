@@ -18,6 +18,36 @@ namespace MyCapture.App.Tests;
 public sealed class GalleryLibraryExtrasTests
 {
     [Theory]
+    [InlineData(LibraryUndoKind.Move, "Library.Undo.Move")]
+    [InlineData(LibraryUndoKind.Tags, "Library.Undo.Tags")]
+    [InlineData(LibraryUndoKind.Pin, "Library.Undo.Pin")]
+    [InlineData(LibraryUndoKind.Title, "Library.Undo.Title")]
+    [InlineData(null, "Library.Undo.Unavailable")]
+    public void UndoStatusResolvesTheCompleteResourceKeyInBothLanguages(LibraryUndoKind? kind, string key)
+    {
+        foreach (string language in new[] { "ko-KR", "en-US" })
+        {
+            using var scope = UiText.UseLanguage(language);
+            Assert.Equal(UiText.Get(key), GalleryWindow.LibraryUndoStatus(kind));
+        }
+    }
+
+    [Theory]
+    [InlineData(LibraryActivityKind.Import, "Library.Activity.Import")]
+    [InlineData(LibraryActivityKind.ZipExport, "Library.Activity.ZipExport")]
+    [InlineData(LibraryActivityKind.FolderExport, "Library.Activity.FolderExport")]
+    [InlineData(LibraryActivityKind.Pdf, "Library.Activity.Pdf")]
+    [InlineData(LibraryActivityKind.Ocr, "Library.Activity.Ocr")]
+    public void ActivityLabelResolvesTheCompleteResourceKeyInBothLanguages(LibraryActivityKind kind, string key)
+    {
+        foreach (string language in new[] { "ko-KR", "en-US" })
+        {
+            using var scope = UiText.UseLanguage(language);
+            Assert.Equal(UiText.Get(key), GalleryWindow.LibraryActivityLabel(kind));
+        }
+    }
+
+    [Theory]
     [InlineData("ko-KR")]
     [InlineData("en-US")]
     public void OrganizationDialog_PersistentWriteFailureKeepsDraftAndShowsLocalizedError(string language) => StaTestHost.Run(() =>

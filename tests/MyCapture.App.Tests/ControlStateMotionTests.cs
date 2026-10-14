@@ -95,8 +95,9 @@ public sealed class ControlStateMotionTests
             (typeof(Button), "Button.Ghost", "IsMouseOver", "HoverLayer"),
             (typeof(ToggleButton), "", "IsMouseOver", "HoverLayer"),
             (typeof(ToggleButton), "", "IsChecked", "CheckedLayer"),
+            (typeof(ToggleButton), "Rail.ToolButton", "IsMouseOver", "HoverLayer"),
+            (typeof(ToggleButton), "Rail.ToolButton", "IsPressed", "PressedLayer"),
             (typeof(ToggleButton), "Rail.ToolButton", "IsChecked", "CheckedLayer"),
-            (typeof(ToggleButton), "Rail.ToolButton", "IsChecked", "Indicator"),
             (typeof(CheckBox), "", "IsMouseOver", "HoverLayer"),
             (typeof(CheckBox), "", "IsChecked", "CheckedLayer"),
             (typeof(RadioButton), "", "IsMouseOver", "HoverRing"),
@@ -148,10 +149,47 @@ public sealed class ControlStateMotionTests
             Assert.Equal(MotionSpeed.Normal, FluidMotion.GetTransition(layer));
         }
 
-        Assert.Equal(MotionSpeed.Normal, FluidMotion.GetTransition((DependencyObject)rail.Template.FindName("Indicator", rail)));
+        // The selected tool is its filled tile; the owner asked to remove the detached bar.
+        Assert.Null(rail.Template.FindName("Indicator", rail));
+        var railSelection = Assert.IsType<Border>(rail.Template.FindName("CheckedLayer", rail));
+        Assert.Equal(1, railSelection.Opacity);
+        Assert.Same(window.FindResource("Accent.Default"), railSelection.Background);
+        Assert.Same(window.FindResource("Text.OnAccent"), rail.Foreground);
         Assert.Equal(1, FluidMotion.GetScaleTo((DependencyObject)check.Template.FindName("Check", check)));
         Assert.Equal(0.5, FluidMotion.GetScaleTo((DependencyObject)cleared.Template.FindName("Check", cleared)));
         Assert.IsType<Track>(slider.Template.FindName("PART_Track", slider));
+    });
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void RailSelectionFadesItsFilledTileWithoutChangingSharedBrushes(bool motion) => Run(motion, (theme, host) =>
+    {
+        var rail = new ToggleButton { Content = "Tool", Style = (Style)theme["Rail.ToolButton"] };
+        host.Children.Add(rail);
+        Drain(host);
+        var layer = Assert.IsType<Border>(rail.Template.FindName("CheckedLayer", rail));
+        var accent = Assert.IsType<SolidColorBrush>(theme["Accent.Default"]);
+        var ink = Assert.IsType<SolidColorBrush>(theme["Text.OnAccent"]);
+        Color accentColor = accent.Color;
+        Color inkColor = ink.Color;
+        Assert.Null(rail.Template.FindName("Indicator", rail));
+        Assert.Same(accent, layer.Background);
+        Assert.Equal(MotionSpeed.Normal, FluidMotion.GetTransition(layer));
+
+        foreach (bool selected in new[] { true, false })
+        {
+            rail.IsChecked = selected;
+
+            Assert.Equal(selected ? 1d : 0d, (double)layer.GetAnimationBaseValue(UIElement.OpacityProperty));
+            Assert.Equal(motion, layer.HasAnimatedProperties);
+            Assert.Same(accent, layer.Background);
+            Assert.Equal(accentColor, accent.Color);
+            Assert.Equal(inkColor, ink.Color);
+            Assert.False(accent.HasAnimatedProperties);
+            Assert.False(ink.HasAnimatedProperties);
+            Assert.Same(selected ? ink : theme["Text.Muted"], rail.Foreground);
+        }
     });
 
     [Theory]

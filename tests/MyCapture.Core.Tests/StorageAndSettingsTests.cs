@@ -251,7 +251,7 @@ public sealed class SettingsStoreTests
         // A new installation assigns only capture and recording; see SettingsUxDefaultsTests.
         Assert.Equal(Hotkey.None, settings.Hotkeys.OpenLibrary);
         Assert.Equal(Hotkey.None, settings.Hotkeys.PasteToScreen);
-        Assert.False(settings.General.ShowShortcutHints);
+        Assert.True(settings.General.ShowShortcutHints);
         Assert.True(settings.Export.CopyToClipboardOnQuickSave);
         Assert.Equal(RecordingFrameRate.Fps30, settings.Recording.FrameRate);
     }

@@ -39,6 +39,7 @@ public sealed class GalleryItemViewModel : INotifyPropertyChanged
     private Dispatcher? _dispatcher;
     private CancellationTokenSource? _loadCancellation;
     private int _generation;
+    private (bool IsFile, bool IsUnsaved, string Action) _publishedSourceLocation;
     internal Task PendingThumbnailLoad { get; private set; } = Task.CompletedTask;
 
     internal void ConfigureAsyncLoading(GalleryThumbnailLoader loader, Dispatcher dispatcher)
@@ -78,6 +79,7 @@ public sealed class GalleryItemViewModel : INotifyPropertyChanged
         Record = record ?? throw new ArgumentNullException(nameof(record));
         _thumbnailPathResolver = thumbnailPathResolver ?? throw new ArgumentNullException(nameof(thumbnailPathResolver));
         _decodePixelWidth = Math.Max(1, decodePixelWidth);
+        _publishedSourceLocation = (IsSourceDocumentFile, HasUnsavedSourceDocument, SourceLocationAction);
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;
@@ -335,9 +337,11 @@ public sealed class GalleryItemViewModel : INotifyPropertyChanged
         Raise(nameof(SourceWindowTitleAutomationName));
         Raise(nameof(SourceDocumentPath));
         Raise(nameof(HasSourceDocumentPath));
-        Raise(nameof(IsSourceDocumentFile));
-        Raise(nameof(HasUnsavedSourceDocument));
-        Raise(nameof(SourceLocationAction));
+        var sourceLocation = (IsFile: IsSourceDocumentFile, IsUnsaved: HasUnsavedSourceDocument, Action: SourceLocationAction);
+        if (_publishedSourceLocation.IsFile != sourceLocation.IsFile) Raise(nameof(IsSourceDocumentFile));
+        if (_publishedSourceLocation.IsUnsaved != sourceLocation.IsUnsaved) Raise(nameof(HasUnsavedSourceDocument));
+        if (_publishedSourceLocation.Action != sourceLocation.Action) Raise(nameof(SourceLocationAction));
+        _publishedSourceLocation = sourceLocation;
         Raise(nameof(SourceDocumentPathAutomationName));
         Raise(nameof(IsPinned));
         Raise(nameof(AccessibleName));

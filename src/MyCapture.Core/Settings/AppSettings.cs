@@ -354,7 +354,7 @@ public sealed class OcrSettings
 
 public enum AfterCaptureAction { Editor, QuickAccess, ClipboardOnly }
 
-public sealed class GeneralSettings
+public sealed class GeneralSettings : IJsonOnDeserializing
 {
     // 4.0.x wrote both values without an explicit post-capture choice. Consume the
     // legacy field without changing the new default or writing it back out.
@@ -363,11 +363,14 @@ public sealed class GeneralSettings
     public AfterCaptureAction AfterCapture { get; set; } = AfterCaptureAction.Editor;
 
     /// <summary>Shows key captions under editor buttons. Tooltips always name the key.</summary>
-    /// <remarks>
-    /// True is the legacy value an older settings file reads back; a new installation starts
-    /// with false (<see cref="NewInstallDefaults"/>).
-    /// </remarks>
     public bool ShowShortcutHints { get; set; } = true;
+
+    /// <summary>One preserves hint choices made after hints became visible by default.</summary>
+    public int ShortcutHintsRevision { get; set; } = 1;
+
+    // A missing marker identifies a legacy file; new settings and explicit choices start at one.
+    void IJsonOnDeserializing.OnDeserializing() => ShortcutHintsRevision = 0;
+
     public bool LaunchAtLogin { get; set; } = true;
 
     /// <summary>

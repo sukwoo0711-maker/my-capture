@@ -151,6 +151,7 @@ public static class AppSettingsClone
     {
         AfterCapture = s.AfterCapture,
         ShowShortcutHints = s.ShowShortcutHints,
+        ShortcutHintsRevision = s.ShortcutHintsRevision,
         LaunchAtLogin = s.LaunchAtLogin,
         NotifyOnQuickSave = s.NotifyOnQuickSave,
         PlayCaptureSound = s.PlayCaptureSound,

@@ -79,6 +79,7 @@ public sealed partial class GalleryViewModel : INotifyPropertyChanged
     private int _columnCount = GalleryRowBuilder.MinColumns;
     private double _availableWidth = double.NaN;
     private bool _rowsCompact;
+    private bool _publishedCanCompareSelected;
 
     public GallerySelection Selection { get; } = new();
     public IReadOnlyList<GalleryItemViewModel> SelectedTiles => Selection.SelectedIds
@@ -143,7 +144,12 @@ public sealed partial class GalleryViewModel : INotifyPropertyChanged
         foreach (GalleryItemViewModel tile in _tileCache.Values) tile.IsSelected = Selection.Contains(tile.Id);
         Raise(nameof(SelectedTiles)); Raise(nameof(HasSelection)); Raise(nameof(SelectionText));
         Raise(nameof(SingleSelectedTile)); Raise(nameof(CanReduceSelected)); Raise(nameof(CanGifSelected));
-        Raise(nameof(CanCompareSelected));
+        bool canCompare = CanCompareSelected;
+        if (_publishedCanCompareSelected != canCompare)
+        {
+            _publishedCanCompareSelected = canCompare;
+            Raise(nameof(CanCompareSelected));
+        }
     }
 
     public GalleryViewModel(

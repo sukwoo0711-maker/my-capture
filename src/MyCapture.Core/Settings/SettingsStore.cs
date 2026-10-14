@@ -447,6 +447,13 @@ public sealed class SettingsStore
         }
 
         if (!Enum.IsDefined(s.General.AfterCapture)) s.General.AfterCapture = AfterCaptureAction.Editor;
+        if (s.General.ShortcutHintsRevision < 1)
+        {
+            // Legacy false did not distinguish an opt-out from the former new-install default.
+            // Show hints once on upgrade, then preserve choices stored with the new marker.
+            s.General.ShowShortcutHints = true;
+            s.General.ShortcutHintsRevision = 1;
+        }
         if (!Enum.IsDefined(s.Capture.ColorFormat)) s.Capture.ColorFormat = ColorFormat.Hex;
         if (s.General.ThemeRevision < 1)
         {

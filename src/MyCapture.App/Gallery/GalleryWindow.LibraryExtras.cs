@@ -69,6 +69,11 @@ internal sealed partial class GalleryWindow
 
     private void OnLibraryUndoRecorded(object? sender, EventArgs e)
     {
+        if (!Dispatcher.CheckAccess())
+        {
+            Dispatcher.BeginInvoke(new Action(() => OnLibraryUndoRecorded(sender, e)));
+            return;
+        }
         if (!_queue.LibraryUndo.CanUndo
             || _queue.LibraryUndo.NextKind == LibraryUndoKind.Delete) return;
         string previousStatus = LibraryActionStatus.Text;
@@ -99,7 +104,7 @@ internal sealed partial class GalleryWindow
                         UiText.Get("LibraryUndo_ActionName"), UndoLibraryAsync);
                 return;
             }
-            string status = kind is { } restored ? UiText.Get("Library.Undo." + restored) : UiText.Get("Library.Undo.Unavailable");
+            string status = LibraryUndoStatus(kind);
             ShowActionStatus(status, UiText.Get("LibraryUndo_Action"), UiText.Get("LibraryUndo_ActionName"),
                 _queue.LibraryUndo.CanUndo ? UndoLibraryAsync : null);
         }
@@ -109,6 +114,25 @@ internal sealed partial class GalleryWindow
                 UiText.Get("LibraryUndo_ActionName"), UndoLibraryAsync);
         }
     }
+
+    internal static string LibraryUndoStatus(LibraryUndoKind? kind) => kind switch
+    {
+        LibraryUndoKind.Move => UiText.Get("Library.Undo.Move"),
+        LibraryUndoKind.Tags => UiText.Get("Library.Undo.Tags"),
+        LibraryUndoKind.Pin => UiText.Get("Library.Undo.Pin"),
+        LibraryUndoKind.Title => UiText.Get("Library.Undo.Title"),
+        _ => UiText.Get("Library.Undo.Unavailable"),
+    };
+
+    internal static string LibraryActivityLabel(LibraryActivityKind kind) => kind switch
+    {
+        LibraryActivityKind.Import => UiText.Get("Library.Activity.Import"),
+        LibraryActivityKind.ZipExport => UiText.Get("Library.Activity.ZipExport"),
+        LibraryActivityKind.FolderExport => UiText.Get("Library.Activity.FolderExport"),
+        LibraryActivityKind.Pdf => UiText.Get("Library.Activity.Pdf"),
+        LibraryActivityKind.Ocr => UiText.Get("Library.Activity.Ocr"),
+        _ => throw new ArgumentOutOfRangeException(nameof(kind)),
+    };
 
     private void OnLibraryActivitiesChanged(object? sender, EventArgs e)
     {
@@ -154,7 +178,7 @@ internal sealed partial class GalleryWindow
             DockPanel.SetDock(cancel, Dock.Right);
             row.Children.Add(cancel);
             var details = new StackPanel { MinWidth = 200, Margin = new Thickness(0, 0, 12, 0) };
-            string label = UiText.Get("Library.Activity." + activity.Kind);
+            string label = LibraryActivityLabel(activity.Kind);
             var text = new TextBlock { Text = activity.Total is { } total
                 ? UiText.Format("Library.Activity.Progress", label, activity.Completed, total) : label };
             text.SetResourceReference(TextBlock.ForegroundProperty, "Text.Primary");

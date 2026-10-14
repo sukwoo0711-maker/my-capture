@@ -126,13 +126,7 @@ internal sealed partial class AnnotationEditorControl
     {
         UIElement content = (UIElement)button.Content;
         button.Content = null;
-        var hint = new TextBlock
-        {
-            Text = ShortcutCatalog.Get(scope, command).Hint,
-            FontSize = ShortcutPresentation.CaptionFontSize,
-            FontWeight = FontWeights.Normal,
-            HorizontalAlignment = HorizontalAlignment.Center,
-        };
+        var hint = ShortcutPresentation.Hint(scope, command);
         hint.SetBinding(TextBlock.ForegroundProperty, new Binding(nameof(Control.Foreground)) { Source = button });
         if (corner)
         {

@@ -124,7 +124,11 @@ public sealed class Ux402InteractionTests
                 Assert.Equal(entry.Command, ShortcutCatalog.Match(entry.Scope, entry.Key, entry.Modifiers));
             }
             Assert.Null(ShortcutCatalog.Match(ShortcutScope.QuickAccess, Key.C, ModifierKeys.Control));
-            Assert.Null(ShortcutCatalog.Match(ShortcutScope.Annotation, Key.A, ModifierKeys.Control));
+            // Ctrl+A selects all annotations; bare A still selects the Arrow tool.
+            Assert.Equal("SelectAll", ShortcutCatalog.Match(ShortcutScope.Annotation, Key.A, ModifierKeys.Control));
+            Assert.Equal("Arrow", ShortcutCatalog.Match(ShortcutScope.Annotation, Key.A, ModifierKeys.None));
+            Assert.Null(ShortcutCatalog.Match(ShortcutScope.Annotation, Key.R, ModifierKeys.Control));
+            Assert.Null(ShortcutCatalog.Match(ShortcutScope.Annotation, Key.A, ModifierKeys.Control | ModifierKeys.Shift));
         }
         finally { card.Close(); ocr.CloseForExit(); video.Close(); }
     });
