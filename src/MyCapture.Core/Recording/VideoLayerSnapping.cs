@@ -42,11 +42,22 @@ public static class VideoLayerSnapping
         }
 
         double best = threshold * viewport.VisibleSpanMs / width;
-        foreach (VideoSnapCandidate candidate in candidates)
+        if (candidates is IReadOnlyList<VideoSnapCandidate> indexed)
+        {
+            for (int i = 0; i < indexed.Count; i++) TryCandidate(indexed[i]);
+        }
+        else
+        {
+            foreach (VideoSnapCandidate candidate in candidates) TryCandidate(candidate);
+        }
+
+        return result;
+
+        void TryCandidate(VideoSnapCandidate candidate)
         {
             if (!double.IsFinite(candidate.TimeMs) || candidate.TimeMs < viewport.ViewStartMs || candidate.TimeMs > viewport.ViewEndMs)
             {
-                continue;
+                return;
             }
 
             // Stable ties respect candidate order (playhead, kept boundaries, then other layers).
@@ -65,7 +76,5 @@ public static class VideoLayerSnapping
                 result = new VideoLayerSnapResult(snappedStart, snappedEnd, candidate);
             }
         }
-
-        return result;
     }
 }

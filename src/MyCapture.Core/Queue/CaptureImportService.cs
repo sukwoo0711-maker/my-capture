@@ -117,6 +117,12 @@ public sealed class CaptureImportService(CaptureQueue queue,
                     try
                     {
                         string original = queue.GetFilePath(record, OriginalFileName(record));
+                        if (record.IsImage && record.ImportedFileName is null)
+                        {
+                            // An older app can discard provenance while retaining the imported JPEG.
+                            string importedJpeg = queue.GetFilePath(record, CaptureFileNames.ImportedJpeg);
+                            if (File.Exists(importedJpeg)) original = importedJpeg;
+                        }
                         await using var stream = new FileStream(original, FileMode.Open, FileAccess.Read,
                             FileShare.Read, 128 * 1024, FileOptions.Asynchronous | FileOptions.SequentialScan);
                         return stream.Length == length ? await HashAsync(stream, cancellationToken) : null;

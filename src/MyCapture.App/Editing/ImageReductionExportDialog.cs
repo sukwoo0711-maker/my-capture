@@ -44,12 +44,13 @@ internal sealed class ImageReductionExportDialog : Window
     private readonly Action<ImageExportOptions>? _remember;
     private Task<byte[]>? _original;
     private ImageExportResult? _result;
-    private OwnedImageExportStage? _stage;
+    private IImageExportStage? _stage;
     private CancellationTokenSource? _previewCancellation;
     private IDisposable? _pendingRecalculation;
     private string? _resultSizes;
     private int _generation;
     private bool _closed;
+    private bool _saving;
     private Point? _dragStart;
 
     internal ImageReductionExportDialog(BitmapSource image, string suggestedPngPath, string? sourcePageUrl = null,
@@ -159,6 +160,9 @@ internal sealed class ImageReductionExportDialog : Window
     /// <summary>The size encoder; tests replace it to control when a calculation finishes.</summary>
     internal Func<BitmapSource, byte[], int, CancellationToken, ImageExportResult>? Encoder { get; set; }
 
+    /// <summary>Prepares a drag file on the preview worker before dragging is enabled.</summary>
+    internal Func<ImageExportResult, IImageExportStage> CreateStage { get; set; } = result => OwnedImageExportStage.Create(result);
+
     private static IDisposable ScheduleOnDispatcher(TimeSpan delay, Action action)
     {
         var timer = new System.Windows.Threading.DispatcherTimer(System.Windows.Threading.DispatcherPriority.Background) { Interval = delay };
@@ -215,6 +219,8 @@ internal sealed class ImageReductionExportDialog : Window
     }
 
     internal bool CanExport => _save.IsEnabled && _drag.IsEnabled;
+    internal bool CanSaveForTest => _save.IsEnabled;
+    internal bool CanDragForTest => _drag.IsEnabled;
     internal ImageExportOptionsPanel OptionsForTest => _options;
 
     /// <summary>Bytes the save button would write. Tests use this to see the prepared PNG.</summary>
@@ -249,8 +255,10 @@ internal sealed class ImageReductionExportDialog : Window
         int target = (int)_target.Value;
         var encode = Encoder;
         ImageExportOptions options = _options.Read(target);
+        var createStage = CreateStage;
         Color accent = (TryFindResource("Accent.Default") as SolidColorBrush)?.Color ?? Colors.SteelBlue;
         bool Current() => !_closed && generation == _generation && !cancellation.IsCancellationRequested;
+        IImageExportStage? stage = null;
         try
         {
             // The PNG baseline is encoded once and shared by every later calculation.
@@ -283,7 +291,16 @@ internal sealed class ImageReductionExportDialog : Window
                 + Environment.NewLine + (result.PreservedTransparency ? UiText.Get("ExportReduction_Transparent")
                     : !result.TargetReached ? UiText.Get("ExportReduction_Unmet") : UiText.Get("ExportReduction_Ready"));
             ShowCurrent();
-            _save.IsEnabled = _drag.IsEnabled = true;
+            _save.IsEnabled = !_saving;
+            stage = await Task.Run(() =>
+            {
+                cancellation.Token.ThrowIfCancellationRequested();
+                return createStage(result);
+            });
+            if (!Current()) return;
+            _stage = stage;
+            stage = null;
+            _drag.IsEnabled = !_saving;
         }
         catch (OperationCanceledException) { }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or NotSupportedException or ArgumentException or InvalidOperationException)
@@ -299,6 +316,9 @@ internal sealed class ImageReductionExportDialog : Window
         }
         finally
         {
+            // A stage can finish after cancellation or close. It was never published, so
+            // only this calculation owns it and its cleanup stays off the dispatcher.
+            if (stage is not null) await Task.Run(stage.Dispose);
             if (ReferenceEquals(_previewCancellation, cancellation)) _previewCancellation = null;
             cancellation.Dispose();
         }
@@ -323,6 +343,7 @@ internal sealed class ImageReductionExportDialog : Window
     {
         ImageExportResult? result = _result;
         if (result is null) return;
+        _saving = true;
         _save.IsEnabled = _drag.IsEnabled = _target.IsEnabled = _options.IsEnabled = false;
         try
         {
@@ -359,29 +380,30 @@ internal sealed class ImageReductionExportDialog : Window
         }
         finally
         {
-            if (!_closed) _save.IsEnabled = _drag.IsEnabled = _target.IsEnabled = _options.IsEnabled = true;
+            _saving = false;
+            if (!_closed)
+            {
+                _target.IsEnabled = _options.IsEnabled = true;
+                _save.IsEnabled = _result is not null;
+                _drag.IsEnabled = _stage is not null;
+            }
         }
     }
 
     private void OnDragMove(object sender, MouseEventArgs e)
     {
-        if (_dragStart is not Point start || e.LeftButton != MouseButtonState.Pressed || _result is null) return;
+        if (_dragStart is not Point start || e.LeftButton != MouseButtonState.Pressed || _result is null || _stage is null) return;
         Point current = e.GetPosition(_drag);
         if (Math.Abs(current.X - start.X) < SystemParameters.MinimumHorizontalDragDistance
             && Math.Abs(current.Y - start.Y) < SystemParameters.MinimumVerticalDragDistance) return;
         _dragStart = null;
-        OwnedImageExportStage stage;
-        try { stage = _stage ?? OwnedImageExportStage.Create(_result); }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-        {
-            _status.Text = UiText.Format("ExportReduction_Error", MyCapture.App.Themes.ThemedDialog.RecoveryMessage(ex));
-            return;
-        }
+        IImageExportStage stage = _stage;
         ImageExportResult? result = _result;
         ImageExportOptions exportedOptions = _options.Read((int)_target.Value);
         // OLE pumps dispatcher messages. Hold ownership locally so a close/target change
         // cannot dispose the file while the shell is reading it or null the post-drop handle.
         _stage = null;
+        _drag.IsEnabled = false;
         bool copied = false;
         try
         {
@@ -407,6 +429,7 @@ internal sealed class ImageReductionExportDialog : Window
                 if (!_closed && ReferenceEquals(_result, result) && _stage is null) _stage = stage;
                 else stage.Dispose();
             }
+            if (!_closed) _drag.IsEnabled = _stage is not null;
         }
     }
 

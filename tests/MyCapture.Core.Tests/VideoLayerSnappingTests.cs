@@ -5,6 +5,37 @@ namespace MyCapture.Core.Tests;
 
 public sealed class VideoLayerSnappingTests
 {
+    [Fact]
+    public void IndexedAndStreamingCandidatesPreserveTheSameStableTies()
+    {
+        VideoSnapCandidate[] candidates =
+        [new(1070, VideoSnapKind.KeptStart), new(1040, VideoSnapKind.Playhead), new(960, VideoSnapKind.LayerEdge)];
+        var viewport = new TimelineViewport(10000, 30);
+        VideoLayerSnapResult indexed = VideoLayerSnapping.Apply(1000, 2000, 0, 10000, VideoLayerDrag.TrimStart,
+            viewport, 1000, candidates);
+        VideoLayerSnapResult streaming = VideoLayerSnapping.Apply(1000, 2000, 0, 10000, VideoLayerDrag.TrimStart,
+            viewport, 1000, candidates.Where(static _ => true));
+        Assert.Equal(indexed, streaming);
+        Assert.Equal(candidates[1], indexed.Snap);
+    }
+
+    [Fact]
+    public void IndexedCandidatesDoNotAllocateOnRepeatedDragUpdates()
+    {
+        var candidates = new List<VideoSnapCandidate>
+        {
+            new(3000, VideoSnapKind.Playhead), new(0, VideoSnapKind.KeptStart), new(10000, VideoSnapKind.KeptEnd),
+        };
+        var viewport = new TimelineViewport(10000, 30);
+        for (int i = 0; i < 100; i++) Apply();
+        long before = GC.GetAllocatedBytesForCurrentThread();
+        for (int i = 0; i < 400; i++) Apply();
+        Assert.Equal(0, GC.GetAllocatedBytesForCurrentThread() - before);
+
+        void Apply() => VideoLayerSnapping.Apply(1000, 2000, 990, 10000, VideoLayerDrag.Move,
+            viewport, 400, candidates);
+    }
+
     [Theory]
     [InlineData(VideoSnapKind.Playhead)]
     [InlineData(VideoSnapKind.KeptStart)]

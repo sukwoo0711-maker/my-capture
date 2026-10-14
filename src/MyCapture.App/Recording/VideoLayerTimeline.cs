@@ -56,7 +56,10 @@ internal sealed class VideoLayerTimeline : FrameworkElement
     private IReadOnlyList<VideoTimeRange> _removedRanges = [];
     private double _dragPlayheadMs;
     private double _dragSpanMs;
+    private readonly List<VideoSnapCandidate> _dragSnapCandidates = [];
     private double? _hoverMs;
+    private string _hoverText = string.Empty;
+    private readonly TimelineVisuals.Marker _marker = new();
     private bool _hoverLocal;
     private double _markerLabelTop = 1;
     private VideoSnapCandidate? _snapGuide;
@@ -64,7 +67,7 @@ internal sealed class VideoLayerTimeline : FrameworkElement
     internal event EventHandler<double?>? HoverChanged;
     internal event EventHandler<VideoSnapCandidate?>? SnapChanged;
     internal TimelineViewport Viewport => _viewport;
-    internal string HoverText => _hoverMs.HasValue ? VideoTimecode.Format(_hoverMs.Value) : string.Empty;
+    internal string HoverText => _hoverText;
 
     internal void SetViewport(TimelineViewport viewport)
     {
@@ -87,6 +90,8 @@ internal sealed class VideoLayerTimeline : FrameworkElement
 
     internal void SetHover(double? timeMs)
     {
+        if (_hoverMs != timeMs)
+            _hoverText = timeMs.HasValue ? VideoTimecode.Format(timeMs.Value) : string.Empty;
         _hoverMs = timeMs;
         InvalidateVisual();
     }
@@ -408,7 +413,7 @@ internal sealed class VideoLayerTimeline : FrameworkElement
         if (marker.HasValue && marker >= _viewport.ViewStartMs && marker <= _viewport.ViewEndMs)
         {
             string? label = _snapGuide is { } snap ? TimelineVisuals.SnapLabel(snap.Kind) : _hoverLocal ? HoverText : null;
-            TimelineVisuals.DrawMarker(this, dc, LabelWidth + _viewport.MsToPx(marker.Value, timelineWidth), height,
+            _marker.Draw(this, dc, LabelWidth + _viewport.MsToPx(marker.Value, timelineWidth), height,
                 LabelWidth, width, _textSecondary, _background, _textSecondary, label, _markerLabelTop);
         }
     }
@@ -689,6 +694,7 @@ internal sealed class VideoLayerTimeline : FrameworkElement
             _dragStartMouseX = point.X;
             _dragTargetId = layerId;
             _dragTargetIsText = isText;
+            PrepareSnapCandidates();
             _dragging = CaptureMouse();
             if (!_dragging)
             {
@@ -800,26 +806,28 @@ internal sealed class VideoLayerTimeline : FrameworkElement
         }
     }
 
-    private void ApplyDrag(out double newStart, out double newEnd, double deltaMs)
+    private void PrepareSnapCandidates()
     {
-        var candidates = new List<VideoSnapCandidate>
-        {
-            new(_dragPlayheadMs, VideoSnapKind.Playhead),
-            new(_keptStartMs, VideoSnapKind.KeptStart),
-            new(_keptEndMs, VideoSnapKind.KeptEnd),
-        };
+        _dragSnapCandidates.Clear();
+        _dragSnapCandidates.Add(new(_dragPlayheadMs, VideoSnapKind.Playhead));
+        _dragSnapCandidates.Add(new(_keptStartMs, VideoSnapKind.KeptStart));
+        _dragSnapCandidates.Add(new(_keptEndMs, VideoSnapKind.KeptEnd));
         foreach (TimedTextOverlay layer in _textLayers)
         {
             if (layer.Id == _dragTargetId) continue;
-            candidates.Add(new(layer.StartMs, VideoSnapKind.LayerEdge));
-            candidates.Add(new(layer.EndMs, VideoSnapKind.LayerEdge));
+            _dragSnapCandidates.Add(new(layer.StartMs, VideoSnapKind.LayerEdge));
+            _dragSnapCandidates.Add(new(layer.EndMs, VideoSnapKind.LayerEdge));
         }
         foreach (FrameEditLayer layer in _frameLayers)
         {
             if (layer.Id == _dragTargetId) continue;
-            candidates.Add(new(layer.StartMs, VideoSnapKind.LayerEdge));
-            candidates.Add(new(layer.EndMs, VideoSnapKind.LayerEdge));
+            _dragSnapCandidates.Add(new(layer.StartMs, VideoSnapKind.LayerEdge));
+            _dragSnapCandidates.Add(new(layer.EndMs, VideoSnapKind.LayerEdge));
         }
+    }
+
+    private void ApplyDrag(out double newStart, out double newEnd, double deltaMs)
+    {
         VideoLayerDrag action = _dragAction switch
         {
             DragAction.TrimStart => VideoLayerDrag.TrimStart,
@@ -827,8 +835,8 @@ internal sealed class VideoLayerTimeline : FrameworkElement
             _ => VideoLayerDrag.Move,
         };
         VideoLayerSnapResult result = VideoLayerSnapping.Apply(_dragInitialStartMs, _dragInitialEndMs,
-            deltaMs, _durationMs, action, _viewport, ActualWidth - LabelWidth, candidates,
-            Keyboard.Modifiers.HasFlag(ModifierKeys.Alt));
+            deltaMs, _durationMs, action, _viewport, ActualWidth - LabelWidth, _dragSnapCandidates,
+            (Keyboard.Modifiers & ModifierKeys.Alt) != 0);
         newStart = result.StartMs;
         newEnd = result.EndMs;
         _snapGuide = result.Snap;

@@ -78,7 +78,7 @@ public sealed class CaptureImportTests
         var service = new CaptureImportService(queue, Fixture.Prepare);
         Assert.Equal(1, (await service.ImportAsync([source])).Duplicates);
         Assert.NotNull(Assert.Single(queue.Records).OriginalContentHash);
-        Assert.Equal(3, JsonNode.Parse(File.ReadAllText(fixture.Paths.IndexFile))!["schemaVersion"]!.GetValue<int>());
+        Assert.Equal(2, JsonNode.Parse(File.ReadAllText(fixture.Paths.IndexFile))!["schemaVersion"]!.GetValue<int>());
     }
 
     [Fact]

@@ -11,6 +11,8 @@ namespace MyCapture.App.Gallery;
 
 internal sealed class GalleryCompareWindow : Window
 {
+    internal static readonly RoutedCommand SwapSidesCommand = new();
+
     internal GalleryCompareWindow(BitmapSource first, BitmapSource second,
         string firstTitle, DateTimeOffset firstTime, string secondTitle, DateTimeOffset secondTime)
     {
@@ -63,16 +65,17 @@ internal sealed class GalleryCompareWindow : Window
         root.Children.Add(viewer);
         Content = root;
         Loaded += (_, _) => viewer.Focus();
+        InputBindings.Add(new KeyBinding(SwapSidesCommand, Key.S, ModifierKeys.Control | ModifierKeys.Shift));
+        CommandBindings.Add(new CommandBinding(SwapSidesCommand, (_, e) =>
+        {
+            viewer.Swap();
+            Grid.SetColumn(left, 1 - Grid.GetColumn(left));
+            Grid.SetColumn(right, 1 - Grid.GetColumn(right));
+            e.Handled = true;
+        }));
         PreviewKeyDown += (_, e) =>
         {
             if (e.Key == Key.Escape) { Close(); e.Handled = true; }
-            else if (e.Key == Key.Tab && Keyboard.Modifiers == ModifierKeys.None)
-            {
-                viewer.Swap();
-                Grid.SetColumn(left, 1 - Grid.GetColumn(left));
-                Grid.SetColumn(right, 1 - Grid.GetColumn(right));
-                e.Handled = true;
-            }
         };
     }
 

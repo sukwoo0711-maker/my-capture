@@ -2,8 +2,14 @@ using System.IO;
 
 namespace MyCapture.App.Editing;
 
+internal interface IImageExportStage : IDisposable
+{
+    string FilePath { get; }
+    void RetainForShell();
+}
+
 /// <summary>A single export in a fresh directory owned by this process, never an arbitrary path.</summary>
-internal sealed class OwnedImageExportStage : IDisposable
+internal sealed class OwnedImageExportStage : IImageExportStage
 {
     private static readonly List<OwnedImageExportStage> Retained = [];
     private readonly DirectoryInfo _directory;
@@ -19,6 +25,8 @@ internal sealed class OwnedImageExportStage : IDisposable
     }
 
     internal string FilePath => _file.FullName;
+    string IImageExportStage.FilePath => FilePath;
+    void IImageExportStage.RetainForShell() => RetainForShell();
 
     internal static OwnedImageExportStage Create(ImageExportResult result, DateTimeOffset? createdAt = null)
     {

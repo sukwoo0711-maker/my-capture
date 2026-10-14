@@ -47,20 +47,56 @@ internal static class TimelineVisuals
         _ => "VideoEditorUx_SnapLayer",
     });
 
-    internal static void DrawMarker(FrameworkElement owner, DrawingContext dc, double x, double height,
-        double left, double right, Brush line, Brush background, Brush foreground, string? label, double labelTop = 1)
+    internal sealed class Marker
     {
-        dc.DrawLine(new Pen(line, 1), new Point(x, 0), new Point(x, height));
-        if (label is null || right <= left + 12) return;
-        var text = new FormattedText(label, CultureInfo.CurrentUICulture, FlowDirection.LeftToRight,
-            new Typeface("Segoe UI"), 10, foreground, VisualTreeHelper.GetDpi(owner).PixelsPerDip)
+        private static readonly Typeface Typeface = new("Segoe UI");
+        private Brush? _line;
+        private Pen? _pen;
+        private Brush? _foreground;
+        private CultureInfo? _culture;
+        private string? _label;
+        private FormattedText? _text;
+        private double _pixelsPerDip;
+        private double _maxWidth;
+
+        internal void Draw(FrameworkElement owner, DrawingContext dc, double x, double height,
+            double left, double right, Brush line, Brush background, Brush foreground, string? label, double labelTop = 1)
         {
-            MaxTextWidth = Math.Max(1, right - left - 12), MaxLineCount = 1,
-            Trimming = TextTrimming.CharacterEllipsis,
-        };
-        double width = text.Width + 10;
-        double chipX = Math.Clamp(x + 5, left, Math.Max(left, right - width));
-        dc.DrawRoundedRectangle(background, new Pen(line, 1), new Rect(chipX, labelTop, width, text.Height + 4), 3, 3);
-        dc.DrawText(text, new Point(chipX + 5, labelTop + 2));
+            if (!ReferenceEquals(_line, line))
+            {
+                _line = line;
+                _pen = new Pen(line.IsFrozen ? line : line.CloneCurrentValue(), 1);
+                _pen.Freeze();
+            }
+            dc.DrawLine(_pen, new Point(x, 0), new Point(x, height));
+            if (label is null || right <= left + 12) return;
+            FormattedText text = GetLabel(label, foreground, VisualTreeHelper.GetDpi(owner).PixelsPerDip,
+                Math.Max(1, right - left - 12));
+            double width = text.Width + 10;
+            double chipX = Math.Clamp(x + 5, left, Math.Max(left, right - width));
+            dc.DrawRoundedRectangle(background, _pen, new Rect(chipX, labelTop, width, text.Height + 4), 3, 3);
+            dc.DrawText(text, new Point(chipX + 5, labelTop + 2));
+        }
+
+        internal FormattedText GetLabel(string label, Brush foreground, double pixelsPerDip, double maxWidth)
+        {
+            CultureInfo culture = CultureInfo.CurrentUICulture;
+            if (_text is null || _label != label || !ReferenceEquals(_foreground, foreground)
+                || !Equals(_culture, culture) || _pixelsPerDip != pixelsPerDip || _maxWidth != maxWidth)
+            {
+                _label = label;
+                _foreground = foreground;
+                _culture = culture;
+                _pixelsPerDip = pixelsPerDip;
+                _maxWidth = maxWidth;
+                _text = new FormattedText(label, culture, FlowDirection.LeftToRight,
+                    Typeface, 10, foreground, pixelsPerDip)
+                {
+                    MaxTextWidth = maxWidth, MaxLineCount = 1,
+                    Trimming = TextTrimming.CharacterEllipsis,
+                };
+            }
+            return _text;
+        }
     }
 }

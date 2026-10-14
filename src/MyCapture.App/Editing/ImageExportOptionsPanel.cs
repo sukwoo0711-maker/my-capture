@@ -1,6 +1,7 @@
 using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Controls;
+using MyCapture.App.Themes;
 using MyCapture.Core.Settings;
 
 namespace MyCapture.App.Editing;
@@ -111,15 +112,24 @@ internal sealed class ImageExportOptionsPanel : StackPanel
     internal static ImageExportOptions? ShowCopyOptions(Window? owner, ImageExportOptions initial)
     {
         var panel = new ImageExportOptionsPanel(initial, full: false) { Margin = new Thickness(20) };
+        Window dialog = CreateCopyOptionsDialog(owner, panel);
+        return dialog.ShowDialog() == true ? initial with { IncludeSourceUrl = panel.Read().IncludeSourceUrl, LongEdge = panel.Read().LongEdge } : null;
+    }
+
+    internal static Window CreateCopyOptionsDialog(Window? owner, ImageExportOptionsPanel panel)
+    {
         var dialog = new Window { Title = UiText.Get("ExportOptions.Title"), Width = 360, SizeToContent = SizeToContent.Height,
             ResizeMode = ResizeMode.NoResize, WindowStartupLocation = WindowStartupLocation.CenterOwner, Content = panel };
-        MyCapture.App.Themes.StandardWindowTheme.Apply(dialog);
+        StandardWindowTheme.Apply(dialog);
         if (owner?.IsVisible == true) dialog.Owner = owner;
-        var actions = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(0, 16, 0, 0) };
-        var accept = new Button { Content = UiText.Get("ExportOptions.Continue"), IsDefault = true, Padding = new Thickness(14, 6, 14, 6) };
-        var cancel = new Button { Content = UiText.Get("ExportReduction_Cancel"), IsCancel = true, Margin = new Thickness(8, 0, 0, 0), Padding = new Thickness(14, 6, 14, 6) };
+        Button accept = ThemedDialog.CreateActionButton(UiText.Get("ExportOptions.Continue"), primary: true);
+        Button cancel = ThemedDialog.CreateActionButton(UiText.Get("Dialog.Cancel"), primary: false);
+        accept.IsDefault = true;
+        cancel.IsCancel = true;
         accept.Click += (_, _) => dialog.DialogResult = true;
-        actions.Children.Add(accept); actions.Children.Add(cancel); panel.Children.Add(actions);
-        return dialog.ShowDialog() == true ? initial with { IncludeSourceUrl = panel.Read().IncludeSourceUrl, LongEdge = panel.Read().LongEdge } : null;
+        WrapPanel actions = ThemedDialog.CreateActionRow(accept, cancel);
+        actions.Margin = new Thickness(0, 16, 0, 0);
+        panel.Children.Add(actions);
+        return dialog;
     }
 }

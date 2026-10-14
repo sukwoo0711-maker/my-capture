@@ -59,6 +59,8 @@ internal sealed class CaptureCommitService
     /// </summary>
     internal Func<string, string?>? SaveAsPrompt { get; set; }
 
+    internal Func<ImageExportOptions, ImageExportOptions?>? ExportOptionsPrompt { get; set; }
+
     internal Func<BitmapSource, string, bool>? ReducedExportPrompt { get; set; }
     internal Action? PersistExportSettings { get; set; }
     internal ImageExportOptions LastExportOptions => _settings().Export.LastImageExport;
@@ -175,20 +177,23 @@ internal sealed class CaptureCommitService
                     ? ShowReducedExport(flattened, exportRecord)
                     : await ImageExportTransaction.RunAsync(async () =>
                 {
-                    string? chosen = ResolveSaveAsPath(exportRecord);
-                    if (chosen is null)
+                    var destination = ResolveSaveAsDestination(exportRecord);
+                    if (destination is null)
                     {
                         _log.LogInformation("Save As cancelled; keeping editor open");
                         return false;
                     }
 
+                    (string chosen, ImageExportOptions options) = destination.Value;
                     if (!HasPngExtension(chosen))
                     {
                         _log.LogWarning("Rejected Save As path with a non-PNG extension: {Path}", chosen);
                         return false;
                     }
 
-                    return await TrySavePngAsync(flattened, chosen, exportRecord?.SourcePageUrl);
+                    if (!await TrySavePngAsync(flattened, chosen, options, exportRecord?.SourcePageUrl)) return false;
+                    RememberExportOptions(options);
+                    return true;
                 });
                 if (!exported)
                 {
@@ -333,11 +338,10 @@ internal sealed class CaptureCommitService
         }
     }
 
-    private async Task<bool> TrySavePngAsync(BitmapSource flattened, string path, string? sourcePageUrl = null)
+    private async Task<bool> TrySavePngAsync(BitmapSource flattened, string path, ImageExportOptions options, string? sourcePageUrl = null)
     {
         try
         {
-            ImageExportOptions options = LastExportOptions;
             long bytes = await Task.Run(() =>
             {
                 byte[] bytes = ImageExportEncoder.EncodePngCopy(flattened, options, sourcePageUrl);
@@ -374,20 +378,23 @@ internal sealed class CaptureCommitService
     private string BuildExportStem(CaptureRecord? record) => QuickSaveNaming.BuildStem(
         _settings().Export.FileNamePattern, record?.CreatedAt ?? DateTimeOffset.Now, record?.SourceWindowTitle);
 
-    private string? ResolveSaveAsPath(CaptureRecord? record)
+    private (string Path, ImageExportOptions Options)? ResolveSaveAsDestination(CaptureRecord? record)
     {
         string directory = ResolveQuickSaveDirectory();
         string stem = BuildExportStem(record);
         string suggested = QuickSaveNaming.ResolvePath(directory, stem, ".png");
 
+        ImageExportOptions? options = ExportOptionsPrompt is not null
+            ? ExportOptionsPrompt(LastExportOptions)
+            : SaveAsPrompt is not null ? LastExportOptions : ImageExportOptionsPanel.ShowCopyOptions(
+                System.Windows.Application.Current?.Windows.OfType<System.Windows.Window>().FirstOrDefault(window => window.IsActive), LastExportOptions);
+        if (options is null) return null;
+
         if (SaveAsPrompt is not null)
         {
-            return SaveAsPrompt(suggested);
+            string? chosen = SaveAsPrompt(suggested);
+            return chosen is null ? null : (chosen, options);
         }
-
-        ImageExportOptions? options = ImageExportOptionsPanel.ShowCopyOptions(
-            System.Windows.Application.Current?.Windows.OfType<System.Windows.Window>().FirstOrDefault(window => window.IsActive), LastExportOptions);
-        if (options is null) return null;
 
         var dialog = new SaveFileDialog
         {
@@ -417,8 +424,7 @@ internal sealed class CaptureCommitService
         };
 
         if (dialog.ShowDialog() != true) return null;
-        RememberExportOptions(options);
-        return dialog.FileName;
+        return (dialog.FileName, options);
     }
 
     private static bool HasPngExtension(string path)

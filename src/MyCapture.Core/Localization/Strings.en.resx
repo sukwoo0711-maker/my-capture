@@ -4352,7 +4352,7 @@ Delete {1} {1:plural:subfolder|subfolders}, {2} {2:plural:image|images}, and {3}
     <value>A file with this name already exists. Choose another name.</value>
   </data>
   <data name="ContactSheet.StageRetained" xml:space="preserve">
-    <value>Could not move the temporary file to the Recycle Bin. File location: {0}</value>
+    <value>Could not delete the temporary file. Retained file location: {0}</value>
   </data>
   <data name="ContactSheet.NoImages" xml:space="preserve">
     <value>Select images for the PDF. Videos are skipped.</value>
@@ -4363,7 +4363,7 @@ Delete {1} {1:plural:subfolder|subfolders}, {2} {2:plural:image|images}, and {3}
   <data name="Gallery.Compare.Sync" xml:space="preserve"><value>Sync zoom and pan</value></data>
   <data name="Gallery.Compare.Mode" xml:space="preserve"><value>Compare mode</value></data>
   <data name="Gallery.Compare.View" xml:space="preserve"><value>Capture comparison</value></data>
-  <data name="Gallery.Compare.Controls" xml:space="preserve"><value>Mouse wheel: zoom · Drag: pan · Tab: swap sides · Esc: close · Arrow keys in overlay: move divider</value></data>
+  <data name="Gallery.Compare.Controls" xml:space="preserve"><value>Mouse wheel: zoom · Drag: pan · Ctrl+Shift+S: swap sides · Esc: close · Arrow keys in overlay: move divider</value></data>
   <data name="Gallery.Compare.LoadFailed" xml:space="preserve"><value>The images could not be loaded for comparison.</value></data>
   <data name="VideoMulticut_Split" xml:space="preserve">
     <value>Split</value>

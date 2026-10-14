@@ -98,6 +98,13 @@ public sealed class ImageExportEncoderTests
         return true;
     });
 
+    private sealed class TestStage : IImageExportStage
+    {
+        public string FilePath => "prepared.png";
+        public void RetainForShell() { }
+        public void Dispose() { }
+    }
+
     private static BitmapSource CreateImage(int width, int height, bool noisy, byte alpha = 255)
     {
         byte[] pixels = new byte[width * height * 4];
@@ -142,7 +149,7 @@ public sealed class ImageExportEncoderTests
     {
         Dispatcher dispatcher = Dispatcher.CurrentDispatcher;
         SynchronizationContext.SetSynchronizationContext(new DispatcherSynchronizationContext(dispatcher));
-        var dialog = new ImageReductionExportDialog(CreateImage(17, 13, noisy: true), "capture.png");
+        var dialog = new ImageReductionExportDialog(CreateImage(17, 13, noisy: true), "capture.png") { CreateStage = _ => new TestStage() };
         try
         {
             Assert.Equal(0, dialog.TargetReductionPercent);
@@ -166,7 +173,7 @@ public sealed class ImageExportEncoderTests
         const string origin = "https://example.com/docs/page";
         Dispatcher dispatcher = Dispatcher.CurrentDispatcher;
         SynchronizationContext.SetSynchronizationContext(new DispatcherSynchronizationContext(dispatcher));
-        var dialog = new ImageReductionExportDialog(CreateImage(17, 13, noisy: true), "capture.png", origin);
+        var dialog = new ImageReductionExportDialog(CreateImage(17, 13, noisy: true), "capture.png", origin) { CreateStage = _ => new TestStage() };
         try
         {
             Task pending = dialog.UpdatePreviewAsync();

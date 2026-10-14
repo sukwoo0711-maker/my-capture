@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.IO;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
@@ -23,7 +24,7 @@ public sealed class ImageReductionDialogTests
     {
         SynchronizationContext.SetSynchronizationContext(new DispatcherSynchronizationContext(Dispatcher.CurrentDispatcher));
         const string url = "https://example.com/export";
-        var dialog = new ImageReductionExportDialog(CreateImage(1600, 800), "capture.png", url);
+        var dialog = new ImageReductionExportDialog(CreateImage(1600, 800), "capture.png", url) { CreateStage = _ => new TestStage() };
         var scheduler = new ManualScheduler();
         dialog.ScheduleRecalculation = scheduler.Schedule;
         try
@@ -50,7 +51,7 @@ public sealed class ImageReductionDialogTests
     {
         using var language = UiText.UseLanguage("ko-KR");
         SynchronizationContext.SetSynchronizationContext(new DispatcherSynchronizationContext(Dispatcher.CurrentDispatcher));
-        var dialog = new ImageReductionExportDialog(CreateImage(96, 64), "capture.png");
+        var dialog = new ImageReductionExportDialog(CreateImage(96, 64), "capture.png") { CreateStage = _ => new TestStage() };
         var scheduler = new ManualScheduler();
         dialog.ScheduleRecalculation = scheduler.Schedule;
         try
@@ -105,7 +106,7 @@ public sealed class ImageReductionDialogTests
     public async Task AnOlderCalculationThatFinishesLateNeverReplacesTheNewerResult() => await StaThreadTask.RunAsync(() =>
     {
         SynchronizationContext.SetSynchronizationContext(new DispatcherSynchronizationContext(Dispatcher.CurrentDispatcher));
-        var dialog = new ImageReductionExportDialog(CreateImage(96, 64), "capture.png");
+        var dialog = new ImageReductionExportDialog(CreateImage(96, 64), "capture.png") { CreateStage = _ => new TestStage() };
         var scheduler = new ManualScheduler();
         dialog.ScheduleRecalculation = scheduler.Schedule;
         using var slowGate = new ManualResetEventSlim();
@@ -146,7 +147,7 @@ public sealed class ImageReductionDialogTests
     public async Task ClosingDropsAPendingRecalculation() => await StaThreadTask.RunAsync(() =>
     {
         SynchronizationContext.SetSynchronizationContext(new DispatcherSynchronizationContext(Dispatcher.CurrentDispatcher));
-        var dialog = new ImageReductionExportDialog(CreateImage(32, 24), "capture.png");
+        var dialog = new ImageReductionExportDialog(CreateImage(32, 24), "capture.png") { CreateStage = _ => new TestStage() };
         var scheduler = new ManualScheduler();
         dialog.ScheduleRecalculation = scheduler.Schedule;
         dialog.TargetReductionPercent = 30;
@@ -155,6 +156,155 @@ public sealed class ImageReductionDialogTests
         Assert.All(scheduler.Requests, request => Assert.True(request.Cancelled));
         return true;
     });
+
+    [Fact]
+    public async Task DragStageIsPreparedOffTheDispatcherBeforeExportIsEnabled() => await StaThreadTask.RunAsync(() =>
+    {
+        SynchronizationContext.SetSynchronizationContext(new DispatcherSynchronizationContext(Dispatcher.CurrentDispatcher));
+        var dialog = new ImageReductionExportDialog(CreateImage(32, 24), "capture.png");
+        var stage = new TestStage();
+        using var entered = new ManualResetEventSlim();
+        using var release = new ManualResetEventSlim();
+        int dispatcherThread = Environment.CurrentManagedThreadId;
+        int stageThread = dispatcherThread;
+        dialog.CreateStage = _ =>
+        {
+            stageThread = Environment.CurrentManagedThreadId;
+            entered.Set();
+            if (!release.Wait(TimeSpan.FromSeconds(15))) throw new TimeoutException();
+            return stage;
+        };
+        Task? preview = null;
+        try
+        {
+            preview = dialog.UpdatePreviewAsync();
+            PumpUntil(() => entered.IsSet);
+            Assert.NotEqual(dispatcherThread, stageThread);
+            Assert.False(dialog.CanExport);
+            Assert.True(dialog.CanSaveForTest);
+            Assert.False(dialog.CanDragForTest);
+            Assert.NotNull(dialog.PreparedExportBytesForTest);
+            release.Set();
+            Wait(preview);
+            Assert.True(dialog.CanExport);
+            Assert.False(stage.Disposed);
+        }
+        finally
+        {
+            release.Set();
+            if (preview is not null) Wait(preview);
+            dialog.Close();
+        }
+        Assert.True(stage.Disposed);
+        return true;
+    });
+
+    [Fact]
+    public async Task LateDragStageIsDiscardedWhenANewerPreviewOwnsTheDialog() => await StaThreadTask.RunAsync(() =>
+    {
+        SynchronizationContext.SetSynchronizationContext(new DispatcherSynchronizationContext(Dispatcher.CurrentDispatcher));
+        var dialog = new ImageReductionExportDialog(CreateImage(32, 24), "capture.png");
+        dialog.ScheduleRecalculation = new ManualScheduler().Schedule;
+        var oldStage = new TestStage();
+        var newStage = new TestStage();
+        using var entered = new ManualResetEventSlim();
+        using var release = new ManualResetEventSlim();
+        dialog.CreateStage = result =>
+        {
+            if (result.TargetReductionPercent != 0) return newStage;
+            entered.Set();
+            if (!release.Wait(TimeSpan.FromSeconds(15))) throw new TimeoutException();
+            return oldStage;
+        };
+        Task? oldPreview = null;
+        try
+        {
+            oldPreview = dialog.UpdatePreviewAsync();
+            PumpUntil(() => entered.IsSet);
+            dialog.TargetReductionPercent = 40;
+            Wait(dialog.UpdatePreviewAsync());
+            Assert.True(dialog.CanExport);
+            Assert.Equal(40, dialog.PreparedTargetForTest);
+            release.Set();
+            Wait(oldPreview);
+            Assert.True(oldStage.Disposed);
+            Assert.False(newStage.Disposed);
+            Assert.True(dialog.CanExport);
+            Assert.Equal(40, dialog.PreparedTargetForTest);
+        }
+        finally
+        {
+            release.Set();
+            if (oldPreview is not null) Wait(oldPreview);
+            dialog.Close();
+        }
+        Assert.True(newStage.Disposed);
+        return true;
+    });
+
+    [Fact]
+    public async Task ClosingDuringStagePreparationDisposesTheUnpublishedStage() => await StaThreadTask.RunAsync(() =>
+    {
+        SynchronizationContext.SetSynchronizationContext(new DispatcherSynchronizationContext(Dispatcher.CurrentDispatcher));
+        var dialog = new ImageReductionExportDialog(CreateImage(32, 24), "capture.png");
+        var stage = new TestStage();
+        using var entered = new ManualResetEventSlim();
+        using var release = new ManualResetEventSlim();
+        dialog.CreateStage = _ =>
+        {
+            entered.Set();
+            if (!release.Wait(TimeSpan.FromSeconds(15))) throw new TimeoutException();
+            return stage;
+        };
+        Task preview = dialog.UpdatePreviewAsync();
+        try
+        {
+            PumpUntil(() => entered.IsSet);
+            dialog.Close();
+        }
+        finally
+        {
+            release.Set();
+            Wait(preview);
+            dialog.Close();
+        }
+        Assert.True(stage.Disposed);
+        Assert.False(dialog.CanExport);
+        Assert.Null(dialog.PreparedExportBytesForTest);
+        return true;
+    });
+
+    [Fact]
+    public async Task StageFailureKeepsSaveAvailableAndAllowsAPreviewRetry() => await StaThreadTask.RunAsync(() =>
+    {
+        SynchronizationContext.SetSynchronizationContext(new DispatcherSynchronizationContext(Dispatcher.CurrentDispatcher));
+        var dialog = new ImageReductionExportDialog(CreateImage(32, 24), "capture.png")
+        {
+            CreateStage = _ => throw new IOException("Stage creation failed."),
+        };
+        try
+        {
+            Wait(dialog.UpdatePreviewAsync());
+            Assert.False(dialog.CanExport);
+            Assert.True(dialog.CanSaveForTest);
+            Assert.False(dialog.CanDragForTest);
+            Assert.NotNull(dialog.PreparedExportBytesForTest);
+            Assert.NotEmpty(dialog.ResultTextForTest);
+            dialog.CreateStage = _ => new TestStage();
+            Wait(dialog.UpdatePreviewAsync());
+            Assert.True(dialog.CanExport);
+        }
+        finally { dialog.Close(); }
+        return true;
+    });
+
+    private sealed class TestStage : IImageExportStage
+    {
+        public string FilePath => "prepared.png";
+        internal bool Disposed { get; private set; }
+        public void RetainForShell() { }
+        public void Dispose() => Disposed = true;
+    }
 
     private static void Wait(Task task)
     {

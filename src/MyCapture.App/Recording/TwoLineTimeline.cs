@@ -161,6 +161,9 @@ internal sealed class TwoLineTimeline : ContentControl, IDisposable
     /// </summary>
     private bool _handleArmed;
     private double? _hoverMs;
+    private string _hoverText = string.Empty;
+    private readonly TimelineVisuals.Marker _overviewMarker = new();
+    private readonly TimelineVisuals.Marker _detailMarker = new();
     private TimelineRenderSurface? _hoverStrip;
     private TrimHandle? _hoverHandle;
     private VideoSnapCandidate? _snapGuide;
@@ -168,10 +171,12 @@ internal sealed class TwoLineTimeline : ContentControl, IDisposable
     internal event EventHandler? ViewportUpdated;
     internal event EventHandler<double?>? HoverChanged;
     internal TimelineViewport Viewport => _viewport;
-    internal string HoverText => _hoverMs.HasValue ? VideoTimecode.Format(_hoverMs.Value) : string.Empty;
+    internal string HoverText => _hoverText;
 
     internal void SetHover(double? timeMs)
     {
+        if (_hoverMs != timeMs)
+            _hoverText = timeMs.HasValue ? VideoTimecode.Format(timeMs.Value) : string.Empty;
         _hoverMs = timeMs;
         InvalidatePlayhead();
     }
@@ -234,7 +239,8 @@ internal sealed class TwoLineTimeline : ContentControl, IDisposable
         double x = overview ? OverviewMsToPx(time.Value, width) : _viewport.MsToPx(time.Value, width);
         string? label = _snapGuide is { } snap ? TimelineVisuals.SnapLabel(snap.Kind)
             : ReferenceEquals(_hoverStrip, strip) ? HoverText : null;
-        TimelineVisuals.DrawMarker(this, dc, x, height, 0, width, _textSecondary, _surfaceBase, _textPrimary, label);
+        (overview ? _overviewMarker : _detailMarker).Draw(this, dc, x, height, 0, width,
+            _textSecondary, _surfaceBase, _textPrimary, label);
     }
 
     /// <summary>Half the width of the handle itself; a press here drags at once.</summary>

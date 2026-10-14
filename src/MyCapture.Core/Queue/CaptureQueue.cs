@@ -13,7 +13,8 @@ namespace MyCapture.Core.Queue;
 /// </summary>
 internal sealed class CaptureIndexFile
 {
-    public int SchemaVersion { get; set; } = 3;
+    // Import provenance is additive: 4.1.5 can read schema 2 and ignore these optional fields.
+    public int SchemaVersion { get; set; } = 2;
 
     public List<CaptureRecord> Records { get; set; } = [];
 
@@ -929,17 +930,10 @@ public sealed partial class CaptureQueue
                     index = null;
                     return false;
                 }
-
-                // v1/v2 had no import fields. Keep their null defaults and compute hashes only
-                // on the first size-matched import comparison; never scan originals at startup.
-                if (index.SchemaVersion < 3)
-                {
-                    record.OriginalContentHash = null;
-                    record.ImportedFileName = null;
-                }
             }
 
-
+            // Missing optional import fields retain their null defaults, including after an
+            // older app saves the index. Hash those records lazily on a matching-size import.
             return true;
         }
         catch (JsonException)
