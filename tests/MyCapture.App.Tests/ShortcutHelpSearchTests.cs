@@ -17,6 +17,19 @@ namespace MyCapture.App.Tests;
 public sealed class ShortcutHelpSearchTests
 {
     [Fact]
+    public void VideoHelpKeepsStartAndEndShortcuts() => WithHelp((help, view) =>
+    {
+        view.Search.Text = UiText.Get("Help.Video");
+        help.UpdateLayout();
+        foreach (var (label, shortcut) in new[] { ("Video.TrimIn", "I"), ("Video.TrimOut", "O") })
+        {
+            Border row = Assert.Single(view.VisibleResults(), result => Texts(result)[0].Text == UiText.Get(label));
+            Assert.Contains(FirstRunWelcomeTests.Descendants(row).OfType<WrapPanel>(),
+                keys => AutomationProperties.GetName(keys) == shortcut);
+        }
+    });
+
+    [Fact]
     public void SearchListsMatchesFromEveryTab_TaggedWithTheirCategory_AndCountsThem() => WithHelp((help, view) =>
     {
         view.Tabs.SelectedIndex = 0;

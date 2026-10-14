@@ -1043,26 +1043,20 @@ internal sealed partial class VideoEditorWindow : Window
     private Grid _timelineCache = null!;
 
     /// <summary>
-    /// The trim bar under the trim timeline: set the start or end at the playhead, read how
-    /// long the result is, type a precise time, or go back to the full length.
+    /// The trim bar under the trim timeline: type precise times, restore the full length,
+    /// and read how long the result is. The handles and I/O set the range directly.
     /// </summary>
     /// <remarks>
     /// Dragging the handles stays the primary path, so a committed value applies immediately
     /// and there is no separate "apply" gate to forget. Enter is kept for typed values. In a
-    /// narrow window the bar becomes two deliberate rows, the actions with their result over
-    /// the typed range, rather than wrapping whichever control no longer fits.
+    /// narrow window the range and summary stay in deliberate groups instead of wrapping
+    /// whichever control no longer fits.
     /// </remarks>
     private FrameworkElement BuildTrimBar()
     {
         var bar = new TrimBarPanel { Name = "VideoTrimBar", Margin = new Thickness(0, 4, 0, 0) };
         AutomationProperties.SetName(bar, UiText.Get("VideoEditorUx_TrimBarName"));
         _trimBar = bar;
-        var row = new StackPanel { Name = "VideoTrimActions", Orientation = Orientation.Horizontal };
-        row.Children.Add(MakeMarkButton(UiText.Get("VideoEditorUx_MarkInHere"), UiText.Get("VideoEditorUx_MarkInHelp"),
-            "M9.5,3.5 H5.5 V16.5 H9.5 M8,10 H16", "In"));
-        row.Children.Add(MakeMarkButton(UiText.Get("VideoEditorUx_MarkOutHere"), UiText.Get("VideoEditorUx_MarkOutHelp"),
-            "M10.5,3.5 H14.5 V16.5 H10.5 M12,10 H4", "Out"));
-
         _keptLengthLabel = new TextBlock { FontSize = 15, FontWeight = FontWeights.SemiBold };
         _keptLengthLabel.SetResourceReference(TextBlock.ForegroundProperty, "Text.Primary");
         _removedLengthLabel = new TextBlock { FontSize = 12 };
@@ -1071,14 +1065,11 @@ internal sealed partial class VideoEditorWindow : Window
         {
             Name = "VideoTrimSummary",
             VerticalAlignment = VerticalAlignment.Center,
-            Margin = new Thickness(6, 0, 8, 0),
+            Margin = new Thickness(0, 0, 8, 0),
             MinWidth = 120,
         };
         summary.Children.Add(_keptLengthLabel);
         summary.Children.Add(_removedLengthLabel);
-        row.Children.Add(summary);
-        bar.Children.Add(row);
-
         // The range: the exact start and end, and the way back to the whole recording.
         var range = new StackPanel { Name = "VideoTrimRange", Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
         TextBox Input(string name)
@@ -1107,6 +1098,7 @@ internal sealed partial class VideoEditorWindow : Window
         AutomationProperties.SetHelpText(_resetTrimButton, UiText.Get("VideoEditorUx_ResetTrimHelp"));
         range.Children.Add(_resetTrimButton);
         bar.Children.Add(range);
+        bar.Children.Add(summary);
         RefreshTrimInputs();
         return bar;
     }
@@ -1131,7 +1123,7 @@ internal sealed partial class VideoEditorWindow : Window
             right - TwoLineTimeline.TrackInset, 0);
     }
 
-    /// <summary>Whether the trim bar currently puts the typed range on a second row.</summary>
+    /// <summary>Whether the trim bar currently puts the summary on a second row.</summary>
     internal bool TrimBarHasTwoRowsForTest => _trimBar?.IsTwoRows == true;
 
     private Grid BuildTimeline()
@@ -3260,33 +3252,6 @@ internal sealed partial class VideoEditorWindow : Window
         AutomationProperties.SetName(button, automationName);
         button.Click += (_, _) => onClick();
         _editControls.Add(button);
-        return button;
-    }
-
-    /// <summary>
-    /// A large "start here" / "end here" button. Its bracket glyph matches the trim handle
-    /// it moves, and its shortcut (I or O) is printed under the label.
-    /// </summary>
-    private Button MakeMarkButton(string label, string help, string bracketFigures, string command)
-    {
-        var glyph = new SymbolIcon
-        {
-            Size = 20,
-            Data = Geometry.Parse(bracketFigures),
-            VerticalAlignment = VerticalAlignment.Center,
-        };
-        glyph.SetResourceReference(SymbolIcon.StrokeProperty, "Accent.Default");
-        var content = new StackPanel { Orientation = Orientation.Horizontal };
-        content.Children.Add(glyph);
-        content.Children.Add(new TextBlock { Text = label, Margin = new Thickness(6, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center });
-        Button button = MakeButton(content, label, "Button.Secondary", _shortcutActions[command]);
-        button.ToolTip = help;
-        AutomationProperties.SetHelpText(button, help);
-        ShortcutPresentation.Attach(button, ShortcutScope.Video, command);
-        button.MinWidth = 96;
-        button.MinHeight = 44;
-        button.Padding = new Thickness(10, 3, 12, 3);
-        button.Margin = new Thickness(0, 2, 6, 2);
         return button;
     }
 
