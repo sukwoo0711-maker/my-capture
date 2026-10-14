@@ -576,6 +576,7 @@ internal sealed partial class GalleryWindow
 
     private void OnLibraryDragOver(object sender, DragEventArgs e)
     {
+        if (PreviewExternalImport(e)) return;
         GalleryDropPlan plan = PreviewFolderDrop(e.OriginalSource as DependencyObject, ReadDragPayload(e.Data),
             e.GetPosition(DragHintLayer));
         e.Effects = plan.CanDrop ? DragDropEffects.Copy : DragDropEffects.None;
@@ -586,6 +587,7 @@ internal sealed partial class GalleryWindow
     // leaving the window clears the highlight and hint.
     private void OnLibraryDragLeave(object sender, DragEventArgs e)
     {
+        if (_importCancellation is null) ImportOverlay.Visibility = Visibility.Collapsed;
         Point point = e.GetPosition(LibraryRoot);
         if (point.X < 0 || point.Y < 0 || point.X >= LibraryRoot.ActualWidth || point.Y >= LibraryRoot.ActualHeight)
             ClearDropHighlight();
@@ -595,6 +597,16 @@ internal sealed partial class GalleryWindow
     {
         e.Handled = true;
         GalleryFolderDragPayload? payload = ReadDragPayload(e.Data);
+        if (!e.Data.GetDataPresent(GalleryFolderDragPayload.Format, false))
+        {
+            string[] paths = ExternalImportPaths(e.Data);
+            bool import = paths.Length > 0 && IsOverImportArea(e) && _importCancellation is null
+                && e.AllowedEffects.HasFlag(DragDropEffects.Copy);
+            if (_importCancellation is null) ImportOverlay.Visibility = Visibility.Collapsed;
+            e.Effects = import ? DragDropEffects.Copy : DragDropEffects.None;
+            if (import) await ImportFilesAsync(paths);
+            return;
+        }
         bool dropped = await DropAsync(e.OriginalSource as DependencyObject, payload);
         e.Effects = dropped ? DragDropEffects.Copy : DragDropEffects.None;
     }

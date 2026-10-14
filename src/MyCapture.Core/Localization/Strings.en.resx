@@ -4207,4 +4207,15 @@ Delete {1} {1:plural:subfolder|subfolders}, {2} {2:plural:image|images}, and {3}
   <data name="Library.Tags.Apply" xml:space="preserve"><value>Apply</value></data>
   <data name="Library.Tags.Invalid" xml:space="preserve"><value>Enter one tag of up to 32 characters without separators or control characters.</value></data>
   <data name="Library.Tags.Saved" xml:space="preserve"><value>Tags saved for {0} captures · Tag limit reached for {1} · {2} captures not found</value></data>
+  <data name="Library.Import.Command" xml:space="preserve"><value>Import…</value></data>
+  <data name="Library.Import.Filter" xml:space="preserve"><value>Images and videos (*.png;*.jpg;*.jpeg;*.mp4)|*.png;*.jpg;*.jpeg;*.mp4</value></data>
+  <data name="Library.Import.DropTitle" xml:space="preserve"><value>Drop to import into the library</value></data>
+  <data name="Library.Import.DropDetail" xml:space="preserve"><value>PNG · JPEG · MP4 · Duplicate files are skipped</value></data>
+  <data name="Library.Import.Preparing" xml:space="preserve"><value>Preparing import</value></data>
+  <data name="Library.Import.Progress" xml:space="preserve"><value>Importing · {0}/{1}</value></data>
+  <data name="Library.Import.Summary" xml:space="preserve"><value>{0} imported · {1} duplicates skipped · {2} failed</value></data>
+  <data name="Library.Import.Cancelled" xml:space="preserve"><value>Import cancelled</value></data>
+  <data name="Library.Import.TooLarge" xml:space="preserve"><value>Files larger than 2 GiB cannot be imported.</value></data>
+  <data name="Library.Import.Failed" xml:space="preserve"><value>Could not import the files.</value></data>
+  <data name="Library.Import.Source" xml:space="preserve"><value>Imported file</value></data>
 </root>
