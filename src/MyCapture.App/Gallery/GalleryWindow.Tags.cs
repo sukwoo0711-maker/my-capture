@@ -7,7 +7,7 @@ internal sealed partial class GalleryWindow
 {
     private void OnTagNavigationSizeChanged(object sender, SizeChangedEventArgs e)
     {
-        if (TagSection is not null) TagSection.MaxHeight = Math.Max(72, e.NewSize.Height - 320);
+        if (TagSection is not null) TagSection.MaxHeight = Math.Max(72, e.NewSize.Height - 500);
     }
 
     private async void OnTagClick(object sender, RoutedEventArgs e)

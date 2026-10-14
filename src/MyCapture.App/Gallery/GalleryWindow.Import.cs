@@ -58,22 +58,18 @@ internal sealed partial class GalleryWindow
         if (_importCancellation is not null) return;
         using var cancellation = new CancellationTokenSource();
         _importCancellation = cancellation;
+        using var activity = _queue.Activities.Start(LibraryActivityKind.Import, cancellation.Cancel, paths.Length);
         Guid? folder = _viewModel.SelectedScope.FolderId;
         ImportMenu.IsEnabled = false;
-        ImportOverlay.IsHitTestVisible = true;
-        ImportOverlay.Visibility = Visibility.Visible;
-        ImportProgress.Visibility = Visibility.Visible;
-        ImportCancelButton.Visibility = Visibility.Visible;
-        ImportOverlayTitle.Text = UiText.Get("Library.Import.Preparing");
+        ImportOverlay.IsHitTestVisible = false;
+        ImportOverlay.Visibility = Visibility.Collapsed;
         try
         {
             _importService ??= GalleryImportService.Create(_queue, _log);
             var progress = new Progress<CaptureImportProgress>(value =>
             {
                 if (!ReferenceEquals(_importCancellation, cancellation)) return;
-                ImportOverlayTitle.Text = UiText.Format("Library.Import.Progress", value.Completed, value.Total);
-                ImportProgress.Maximum = Math.Max(1, value.Total);
-                ImportProgress.Value = value.Completed;
+                activity.Report(value.Completed, value.Total);
             });
             CaptureImportResult result = await _importService.ImportAsync(paths, folder, progress, cancellation.Token);
             LibraryActionStatus.Text = UiText.Format("Library.Import.Summary", result.Imported, result.Duplicates, result.Failed)

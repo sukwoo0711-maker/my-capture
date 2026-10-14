@@ -4,6 +4,7 @@ using System.Windows.Automation;
 using System.Windows.Controls;
 using System.Windows.Input;
 using Microsoft.Win32;
+using Microsoft.Extensions.Logging;
 using MyCapture.App.Themes;
 using MyCapture.Core.Queue;
 
@@ -19,7 +20,7 @@ internal sealed partial class GalleryWindow
             ?? _viewModel.SingleSelectedTile;
         if (tile is null) return;
         var dialog = new GalleryOrganizationDialog(tile.Record, (title, tags) =>
-            _controller.UpdateOrganizationAsync(tile.Id, title, tags)) { Owner = this };
+            _controller.UpdateOrganizationAsync(tile.Id, title, tags), _log) { Owner = this };
         if (dialog.ShowDialog() != true) return;
         tile.RaiseMetaChanged();
         _viewModel.Refresh();
@@ -43,9 +44,10 @@ internal sealed partial class GalleryWindow
         if (dialog.ShowDialog(this) != true) return;
         using var cancellation = new CancellationTokenSource();
         _archiveCancellation = cancellation;
+        using var activity = _queue.Activities.Start(LibraryActivityKind.ZipExport, cancellation.Cancel);
         ArchiveExportButton.IsEnabled = false;
-        ArchiveCancelButton.Visibility = Visibility.Visible;
-        LibraryActionStatus.Text = UiText.Get("Library.Archive.Preparing");
+        ArchiveCancelButton.Visibility = Visibility.Collapsed;
+        ShowActionStatus(string.Empty);
         try
         {
             var exporter = new GalleryFolderExportService(_queue);
@@ -54,7 +56,7 @@ internal sealed partial class GalleryWindow
             {
                 // Ignore dispatcher callbacks queued by a completed or cancelled export.
                 if (ReferenceEquals(_archiveCancellation, cancellation))
-                    LibraryActionStatus.Text = UiText.Format("Library.Archive.Progress", done, records.Length);
+                    activity.Report(done, records.Length);
             });
             await GalleryFolderExportService.ExportZipAsync(prepared, dialog.FileName, progress, cancellation.Token, options);
             _commitService.RememberExportOptions(options);
@@ -95,7 +97,7 @@ internal sealed class GalleryOrganizationDialog : Window
     internal Button CancelButton { get; }
     private bool _saving;
 
-    internal GalleryOrganizationDialog(CaptureRecord record, Func<string, string, Task<bool>> save)
+    internal GalleryOrganizationDialog(CaptureRecord record, Func<string, string, Task<bool>> save, ILogger? log = null)
     {
         Title = UiText.Get("Library.Organize.Title");
         Width = 500; Height = 500; MinWidth = 400; MinHeight = 360;
@@ -146,8 +148,11 @@ internal sealed class GalleryOrganizationDialog : Window
                 if (!saved) error.Text = UiText.Get("Library.Organize.Missing");
             }
             catch (ArgumentException) { error.Text = UiText.Get("Library.Organize.Invalid"); }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException)
-            { error.Text = UiText.Get("Library.Organize.Failed"); }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException or AggregateException)
+            {
+                log?.LogWarning(ex, "Could not save library organization");
+                error.Text = UiText.Get("Library.Organize.Failed");
+            }
             finally
             {
                 _saving = false; apply.IsEnabled = true; cancel.IsEnabled = true;

@@ -155,9 +155,15 @@ public sealed partial class CaptureQueue
     }
 
     public Task<bool> MoveFolderAsync(Guid id, Guid? parentId, CancellationToken cancellationToken = default) =>
-        MutateFolderStateAsync(() =>
+        MoveFolderCoreAsync(id, parentId, recordUndo: true, cancellationToken);
+
+    private async Task<bool> MoveFolderCoreAsync(Guid id, Guid? parentId, bool recordUndo, CancellationToken cancellationToken)
+    {
+        Guid? previousParent = null;
+        bool result = await MutateFolderStateAsync(() =>
         {
             CaptureFolder folder = FindFolder(id) ?? throw new ArgumentException("The folder no longer exists.");
+            previousParent = folder.ParentId;
             if (parentId is { } parent)
             {
                 if (FindFolder(parent) is null) throw new ArgumentException("The parent folder no longer exists.");
@@ -173,6 +179,20 @@ public sealed partial class CaptureQueue
             folder.ParentId = parentId;
             return changed;
         }, cancellationToken);
+        if (result && recordUndo)
+            LibraryUndo.Record(LibraryUndoKind.Move, async () =>
+            {
+                if (FindFolder(id) is not { } current || current.ParentId != parentId
+                    || previousParent is { } previous && FindFolder(previous) is null) return LibraryUndoResult.Invalidated;
+                try
+                {
+                    return await MoveFolderCoreAsync(id, previousParent, recordUndo: false, CancellationToken.None)
+                        ? LibraryUndoResult.Restored : LibraryUndoResult.Invalidated;
+                }
+                catch (ArgumentException) { return LibraryUndoResult.Invalidated; }
+            });
+        return result;
+    }
 
     private void EnsureUniqueFolderName(CaptureFolder folder, string name, Guid? parentId)
     {
@@ -182,11 +202,13 @@ public sealed partial class CaptureQueue
             throw new ArgumentException("A folder with this name already exists in that location.");
     }
 
-    public Task<int> MoveCapturesAsync(IEnumerable<Guid> ids, Guid? folderId,
+    public async Task<int> MoveCapturesAsync(IEnumerable<Guid> ids, Guid? folderId,
         CancellationToken cancellationToken = default)
     {
         Guid[] requested = ids.Distinct().ToArray();
-        return MutateFolderStateAsync(() =>
+        var before = new Dictionary<Guid, FolderRecordSnapshot>();
+        var after = new Dictionary<Guid, FolderRecordSnapshot>();
+        int result = await MutateFolderStateAsync(() =>
         {
             CaptureFolder? folder = folderId is { } destinationId
                 ? FindFolder(destinationId) ?? throw new ArgumentException("The destination folder no longer exists.")
@@ -196,12 +218,33 @@ public sealed partial class CaptureQueue
             {
                 CaptureRecord? record = Find(id);
                 if (record is null || IsRemovalPending(id) || record.FolderId == folderId) continue;
+                before[id] = new FolderRecordSnapshot(record);
                 if (folder is null) ClearFolderAssignment(record);
                 else AssignToFolder(record, folder);
+                after[id] = new FolderRecordSnapshot(record);
                 moved++;
             }
             return moved;
         }, cancellationToken);
+        if (result > 0)
+            LibraryUndo.Record(LibraryUndoKind.Move, () => MutateFolderStateAsync(() =>
+            {
+                if (after.Keys.Any(IsRemovalPending)) return LibraryUndoResult.RetryableFailure;
+                if (before.Any(pair => pair.Value.FolderId is { } destination && FindFolder(destination) is null)
+                    || after.Any(pair => Find(pair.Key) is not { } record
+                        || !pair.Value.MatchesAssignment(record))) return LibraryUndoResult.Invalidated;
+                foreach (var pair in before)
+                {
+                    CaptureRecord record = Find(pair.Key)!;
+                    DateTimeOffset? retention = record.RetentionStartedAt;
+                    pair.Value.Restore(record);
+                    // Delete recovery starts a new retention period independently of the move.
+                    if (retention != after[pair.Key].RetentionStartedAt) record.RetentionStartedAt = retention;
+                }
+                ReconcileFolderSequences();
+                return LibraryUndoResult.Restored;
+            }, CancellationToken.None));
+        return result;
     }
 
     public Task<bool> SetNewCaptureFolderAsync(Guid? folderId, bool enabled,
@@ -415,9 +458,10 @@ public sealed partial class CaptureQueue
             : this(record.FolderId, record.FolderSequence, record.FolderPinBeforeAssignment, record.IsPinned,
                 record.RetentionStartedAt) { }
         internal bool ManualPin => FolderId is not null ? WasPinned ?? IsPinned : IsPinned;
-        internal bool Matches(CaptureRecord record) => FolderId == record.FolderId
-            && Sequence == record.FolderSequence && WasPinned == record.FolderPinBeforeAssignment && IsPinned == record.IsPinned
+        internal bool Matches(CaptureRecord record) => MatchesAssignment(record)
             && RetentionStartedAt == record.RetentionStartedAt;
+        internal bool MatchesAssignment(CaptureRecord record) => FolderId == record.FolderId
+            && Sequence == record.FolderSequence && WasPinned == record.FolderPinBeforeAssignment && IsPinned == record.IsPinned;
         internal void Restore(CaptureRecord record)
         {
             record.FolderId = FolderId; record.FolderSequence = Sequence;
@@ -429,6 +473,7 @@ public sealed partial class CaptureQueue
     private CaptureIndexFile CreateIndexSnapshot() => new()
     {
         Records = [.. _records], FolderState = _folderStateActivated ? CreateFolderState() : null,
+        SavedSearches = _savedSearches.Count == 0 ? null : JsonSerializer.SerializeToElement(_savedSearches, SerializerOptions),
     };
 
     private CaptureFolderState CreateFolderState() => new()

@@ -33,7 +33,7 @@ internal sealed partial class GalleryWindow
                 record.SourceDetails.AppName, record.SourceWindowTitle)).ToArray();
             var dialog = new GalleryContactSheetDialog(items, selected.Length - images.Length,
                 () => images.Select((record, index) => _queue.Find(record.Id) == record
-                    && record.ContentRevision == revisions[index]).All(current => current)) { Owner = this };
+                    && record.ContentRevision == revisions[index]).All(current => current), _queue.Activities) { Owner = this };
             dialog.ShowDialog();
             await dialog.PendingPreview;
         }

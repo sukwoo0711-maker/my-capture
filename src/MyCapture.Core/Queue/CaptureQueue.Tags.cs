@@ -57,6 +57,9 @@ public sealed partial class CaptureQueue
                 }
                 throw;
             }
+            MetadataState[] before = updates.Select(update => new MetadataState(update.Record.Id, Tags: update.Before)).ToArray();
+            MetadataState[] after = updates.Select(update => new MetadataState(update.Record.Id, Tags: update.After)).ToArray();
+            LibraryUndo.Record(LibraryUndoKind.Tags, () => RestoreMetadataAsync(before, after));
             return new CaptureBatchTagResult(updates.Count, limited, missing);
         }
         finally
