@@ -8,7 +8,7 @@ using Xunit;
 
 namespace MyCapture.App.Tests;
 
-public sealed class AccentColorThemeTests
+public sealed partial class AccentColorThemeTests
 {
     [Fact]
     public void LiveAccentSwitchSwapsFrozenBrushesAndRestoresVioletPixels() => StaTestHost.Run(() =>

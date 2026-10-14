@@ -15,6 +15,8 @@
 
   <ItemGroup>
     <None Update="Fixtures\video-shorter-than-audio.mp4" CopyToOutputDirectory="PreserveNewest" />
+    <Page Remove="Fixtures\VioletIntegrationBaseline.xaml" />
+    <EmbeddedResource Include="Fixtures\VioletIntegrationBaseline.xaml" LogicalName="AccentFixture.VioletIntegrationBaseline.xaml" />
     <!-- Use the exact product markup in isolated theme fixtures, with its static
          dependencies present at parse time and without a process-wide Application. -->
     <EmbeddedResource Include="..\..\src\MyCapture.App\Themes\Tokens.xaml" LogicalName="ThemeFixture.Tokens.xaml" />
