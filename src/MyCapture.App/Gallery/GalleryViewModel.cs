@@ -108,7 +108,7 @@ public sealed partial class GalleryViewModel : INotifyPropertyChanged
     public GalleryFilter Filter
     {
         get => _filter;
-        set { if (_filter != value) { _filter = value; Raise(); Refresh(); } }
+        set { if (_filter != value || _selectedTag is not null) { _selectedTag = null; _filter = value; Raise(); Refresh(); } }
     }
 
     public bool CanReduceSelected => SingleSelectedTile?.IsImage == true;
@@ -269,7 +269,7 @@ public sealed partial class GalleryViewModel : INotifyPropertyChanged
         // Browsing shows a location like File Explorer: its folder cards and only the captures
         // directly in it. A search or media filter cuts across folders instead and shows matching
         // captures only, each naming the folder it lives in (see GalleryController.RecordsInView).
-        bool showFolders = string.IsNullOrWhiteSpace(_searchQuery) && _filter == GalleryFilter.All;
+        bool showFolders = string.IsNullOrWhiteSpace(_searchQuery) && _filter == GalleryFilter.All && _selectedTag is null;
         IReadOnlyList<GalleryGroupedRecords> grouped = _controller.BuildGroups(_searchQuery, _clock(), _scope, _sortOrder,
             showFolders);
 
@@ -287,6 +287,8 @@ public sealed partial class GalleryViewModel : INotifyPropertyChanged
                 if (_filter == GalleryFilter.Images && !record.IsImage
                     || _filter == GalleryFilter.Videos && !record.IsVideo
                     || _filter == GalleryFilter.Pinned && !record.IsManuallyPinned) continue;
+                if (_selectedTag is not null && !CaptureOrganization.SplitTags(record.Tags)
+                    .Contains(_selectedTag, StringComparer.OrdinalIgnoreCase)) continue;
                 GalleryItemViewModel tile = GetOrCreateTile(record);
                 // Only a capture listed outside its own folder carries the badge; while browsing
                 // every listed capture is in the location shown, so none does.
@@ -343,6 +345,7 @@ public sealed partial class GalleryViewModel : INotifyPropertyChanged
         Raise(nameof(ResultCountText));
         Raise(nameof(SummaryText));
         RefreshNavigation();
+        RefreshTags();
     }
 
     /// <summary>

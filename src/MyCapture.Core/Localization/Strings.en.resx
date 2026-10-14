@@ -4168,4 +4168,12 @@ Delete {1} {1:plural:subfolder|subfolders}, {2} {2:plural:image|images}, and {3}
   <data name="Tutorial.pin-save.Step2" xml:space="preserve"><value>2. Press Ctrl+S to save.</value></data>
   <data name="Tutorial.pin-save.Step3" xml:space="preserve"><value>3. To save another file, press Ctrl+Shift+S and choose the destination.</value></data>
   <data name="Tutorial.Unavailable" xml:space="preserve"><value>The tutorial video could not be loaded. Follow the steps below to use this feature.</value></data>
+  <data name="Library.Tags.Title" xml:space="preserve"><value>Tags</value></data>
+  <data name="Library.Tags.Edit" xml:space="preserve"><value>Edit tags</value></data>
+  <data name="Library.Tags.More" xml:space="preserve"><value>Show more</value></data>
+  <data name="Library.Tags.DialogTitle" xml:space="preserve"><value>Tags for {0} selected captures</value></data>
+  <data name="Library.Tags.New" xml:space="preserve"><value>Add a new tag</value></data>
+  <data name="Library.Tags.Apply" xml:space="preserve"><value>Apply</value></data>
+  <data name="Library.Tags.Invalid" xml:space="preserve"><value>Enter one tag of up to 32 characters without separators or control characters.</value></data>
+  <data name="Library.Tags.Saved" xml:space="preserve"><value>Tags saved for {0} captures · Tag limit reached for {1} · {2} captures not found</value></data>
 </root>

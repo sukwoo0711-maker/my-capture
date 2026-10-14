@@ -4168,4 +4168,12 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="Tutorial.pin-save.Step2" xml:space="preserve"><value>2. Ctrl+S를 눌러 저장합니다.</value></data>
   <data name="Tutorial.pin-save.Step3" xml:space="preserve"><value>3. 다른 파일로 저장하려면 Ctrl+Shift+S로 저장 위치를 선택합니다.</value></data>
   <data name="Tutorial.Unavailable" xml:space="preserve"><value>사용법 동영상을 불러오지 못했습니다. 아래 단계에서 사용 방법을 확인합니다.</value></data>
+  <data name="Library.Tags.Title" xml:space="preserve"><value>태그</value></data>
+  <data name="Library.Tags.Edit" xml:space="preserve"><value>태그 편집</value></data>
+  <data name="Library.Tags.More" xml:space="preserve"><value>더 보기</value></data>
+  <data name="Library.Tags.DialogTitle" xml:space="preserve"><value>선택한 {0}개 캡처의 태그</value></data>
+  <data name="Library.Tags.New" xml:space="preserve"><value>새 태그 추가</value></data>
+  <data name="Library.Tags.Apply" xml:space="preserve"><value>적용</value></data>
+  <data name="Library.Tags.Invalid" xml:space="preserve"><value>구분 기호와 제어 문자 없이 32자 이내의 태그 하나를 입력하십시오.</value></data>
+  <data name="Library.Tags.Saved" xml:space="preserve"><value>{0}개 캡처의 태그 저장됨 · 태그 한도 도달 {1}개 · 찾을 수 없는 캡처 {2}개</value></data>
 </root>
