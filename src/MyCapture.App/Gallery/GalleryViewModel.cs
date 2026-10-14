@@ -108,7 +108,7 @@ public sealed partial class GalleryViewModel : INotifyPropertyChanged
     public GalleryFilter Filter
     {
         get => _filter;
-        set { if (_filter != value) { _filter = value; Raise(); Refresh(); } }
+        set { if (_filter != value || _selectedTag is not null) { _selectedTag = null; _filter = value; Raise(); Refresh(); } }
     }
 
     public bool CanReduceSelected => SingleSelectedTile?.IsImage == true;
@@ -191,6 +191,7 @@ public sealed partial class GalleryViewModel : INotifyPropertyChanged
             }
 
             _searchQuery = next;
+            PrepareSearch();
             Raise();
             Refresh();
         }
@@ -212,7 +213,7 @@ public sealed partial class GalleryViewModel : INotifyPropertyChanged
     internal int ReachableCount => VisibleCount + _groups.Sum(group => group.Folders.Sum(card => card.CaptureCount));
 
     public string ResultCountText => UiText.Format("Library.Search.Count", ReachableCount, _controller.Count);
-    public string EmptyStateTitle => UiText.Get(IsBrowsingFolderWithoutQuery
+    public string EmptyStateTitle => UiText.Get(IsBrowsingFolderWithoutQuery || _folderIsEmpty
         ? "Folder410.EmptyFolder" : QueueIsEmpty ? "Library.Empty.NoCaptures" : "Library.Empty.NoResults");
 
     /// <summary>The region capture shortcut as the empty library names it; empty while none is assigned.</summary>
@@ -222,18 +223,20 @@ public sealed partial class GalleryViewModel : INotifyPropertyChanged
     /// True when the empty state comes from a search or filter that resetting can clear; an
     /// empty folder viewed without either has nothing to reset.
     /// </summary>
-    public bool CanResetEmptySearch => !QueueIsEmpty && !IsBrowsingFolderWithoutQuery;
+    public bool CanResetEmptySearch => !QueueIsEmpty && !IsBrowsingFolderWithoutQuery && !_folderIsEmpty;
 
     private bool IsBrowsingFolderWithoutQuery =>
         HasFolderScope && string.IsNullOrWhiteSpace(SearchQuery) && Filter == GalleryFilter.All;
 
     /// <summary>Empty-state message, tailored to whether a search is active.</summary>
     public string EmptyStateText =>
-        IsBrowsingFolderWithoutQuery
+        IsBrowsingFolderWithoutQuery || _folderIsEmpty
             ? UiText.Get(NewCaptureFolderId is { } destination && destination == _scope.FolderId
                 ? "LibraryFolder_EmptyFolderSavesHere" : "Folder410.EmptyFolderHint")
             : QueueIsEmpty
             ? EmptyLibraryText()
+            : HasSearchQuery && SearchHiddenCount > 0
+            ? UiText.Format("Library.Search.HiddenCount", SearchHiddenCount)
             : UiText.Get("Text_58726BF27E70");
 
     /// <summary>"Ctrl+Shift+C로 캡처하면 여기에 표시됩니다." with the shortcut that is set now.</summary>
@@ -266,12 +269,16 @@ public sealed partial class GalleryViewModel : INotifyPropertyChanged
         IsRefreshingFolderTree = true;
         try { RefreshFolderTree(); }
         finally { IsRefreshingFolderTree = false; }
+        CaptureRecord[] candidates = _controller.RecordsInView(_scope, browsing: false).ToArray();
+        _folderIsEmpty = HasFolderScope && candidates.Length == 0;
+        _searchCandidateCount = candidates.Count(record => MatchesMediaFilter(record) && MatchesTagFilter(record));
         // Browsing shows a location like File Explorer: its folder cards and only the captures
         // directly in it. A search or media filter cuts across folders instead and shows matching
         // captures only, each naming the folder it lives in (see GalleryController.RecordsInView).
-        bool showFolders = string.IsNullOrWhiteSpace(_searchQuery) && _filter == GalleryFilter.All;
+        bool showFolders = string.IsNullOrWhiteSpace(_searchQuery) && _filter == GalleryFilter.All && _selectedTag is null;
+        var searchMatchFields = new Dictionary<Guid, CaptureMatchField>();
         IReadOnlyList<GalleryGroupedRecords> grouped = _controller.BuildGroups(_searchQuery, _clock(), _scope, _sortOrder,
-            showFolders);
+            showFolders, searchMatchFields);
 
         var seenTiles = new HashSet<Guid>();
         var seenFolders = new HashSet<Guid>();
@@ -284,10 +291,9 @@ public sealed partial class GalleryViewModel : INotifyPropertyChanged
             var tiles = new List<GalleryItemViewModel>(group.Records.Count);
             foreach (CaptureRecord record in group.Records)
             {
-                if (_filter == GalleryFilter.Images && !record.IsImage
-                    || _filter == GalleryFilter.Videos && !record.IsVideo
-                    || _filter == GalleryFilter.Pinned && !record.IsManuallyPinned) continue;
+                if (!MatchesMediaFilter(record) || !MatchesTagFilter(record)) continue;
                 GalleryItemViewModel tile = GetOrCreateTile(record);
+                tile.SetSearchMatch(HasSearchQuery, searchMatchFields.GetValueOrDefault(record.Id));
                 // Only a capture listed outside its own folder carries the badge; while browsing
                 // every listed capture is in the location shown, so none does.
                 tile.SetFolderBadge(record.FolderId is { } folderId && folderId != _scope.FolderId
@@ -341,8 +347,10 @@ public sealed partial class GalleryViewModel : INotifyPropertyChanged
         Raise(nameof(CanResetEmptySearch));
         Raise(nameof(VisibleCount));
         Raise(nameof(ResultCountText));
+        Raise(nameof(SearchHiddenCount));
         Raise(nameof(SummaryText));
         RefreshNavigation();
+        RefreshTags();
     }
 
     /// <summary>

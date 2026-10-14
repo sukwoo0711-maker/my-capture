@@ -379,7 +379,7 @@
     <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
   </data>
   <data name="Text_230D26DEB9AE" xml:space="preserve">
-    <value>텍스트를 입력한 뒤 Esc 또는 다른 곳을 클릭해 확정하십시오</value>
+    <value>텍스트 입력 중 · Ctrl+Enter 완료 · Enter 줄바꿈 · Esc 취소</value>
     <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
   </data>
   <data name="Text_23A30AD1434C" xml:space="preserve">
@@ -2998,11 +2998,11 @@
   <data name="GalleryImageChanged" xml:space="preserve"><value>이미지가 로딩 중 변경되었습니다. 다시 여십시오.</value></data>
   <data name="CapturePrecisionActive" xml:space="preserve"><value>Shift · 픽셀 정밀 이동</value></data>
   <data name="CaptureSelectionStart" xml:space="preserve"><value>시작점</value></data>
-  <data name="ExportReduction_Title" xml:space="preserve"><value>파일 크기 줄여 내보내기…</value></data>
+  <data name="ExportReduction_Title" xml:space="preserve"><value>이미지 내보내기</value></data>
   <data name="ExportReduction_Save" xml:space="preserve"><value>다른 이름으로 저장…</value></data>
   <data name="ExportReduction_Drag" xml:space="preserve"><value>폴더로 드래그</value></data>
   <data name="ExportReduction_Cancel" xml:space="preserve"><value>닫기</value></data>
-  <data name="ExportReduction_Description" xml:space="preserve"><value>기준 크기는 지금 편집한 이미지를 PNG로 저장한 크기이며, 원래 파일 크기와 다를 수 있습니다. 목표를 바꾸면 결과를 자동으로 다시 계산합니다. 불투명 이미지는 JPEG로 바꿀 수 있으며 픽셀 크기는 그대로입니다.</value></data>
+  <data name="ExportReduction_Description" xml:space="preserve"><value>기준 용량은 현재 편집한 이미지의 PNG 용량입니다. 자동 형식은 투명도를 유지하고, JPEG는 투명 영역을 흰색으로 저장합니다.</value></data>
   <data name="ExportReduction_TargetLabel" xml:space="preserve"><value>파일 크기 감소 목표</value></data>
   <data name="ExportReduction_Original" xml:space="preserve"><value>원본 품질 · 줄이지 않음</value></data>
   <data name="ExportReduction_Target" xml:space="preserve"><value>목표: 원본 PNG보다 {0}% 작게</value></data>
@@ -3250,7 +3250,7 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="Library.Action.Save" xml:space="preserve"><value>저장</value></data>
   <data name="Library.Archive.Title" xml:space="preserve"><value>선택한 캡처를 새 ZIP으로 내보내기</value></data>
   <data name="Library.Archive.Action" xml:space="preserve"><value>ZIP 내보내기</value></data>
-  <data name="Library.Archive.Hint" xml:space="preserve"><value>편집한 PNG·현재 MP4만 포함합니다. 원본 이미지·인식한 텍스트·제목·태그·설정은 제외합니다. 새 파일명을 선택하십시오.</value></data>
+  <data name="Library.Archive.Hint" xml:space="preserve"><value>편집한 PNG·현재 MP4와 폴더 구조를 포함하며, 파일명에는 캡처 제목이 사용됩니다. PNG의 출처 URL은 '출처 URL 포함' 선택 시 포함됩니다. 별도 원본 이미지·인식 텍스트·태그·설정 파일은 제외합니다. 이미지에 보이는 내용은 유지됩니다.</value></data>
   <data name="Library.Archive.Preparing" xml:space="preserve"><value>선택한 캡처의 안전한 복사본을 준비하고 있습니다…</value></data>
   <data name="Library.Archive.Progress" xml:space="preserve"><value>{1}개 중 {0}개 내보내는 중…</value></data>
   <data name="Library.Archive.Done" xml:space="preserve"><value>{0}개 파일을 내보냈습니다. 라이브러리 원본은 그대로 유지됩니다.</value></data>
@@ -3935,7 +3935,7 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="LibraryUx_KeptAccessible" xml:space="preserve"><value>, 보관됨</value></data>
   <data name="LibraryUx_InFolderAccessible" xml:space="preserve"><value>, {0} 폴더</value></data>
   <data name="LibraryUx_TileMoreHint" xml:space="preserve"><value>더 보기 — 보관, 내보내기, 텍스트 인식</value></data>
-  <data name="LibraryUx_SearchPlaceholder" xml:space="preserve"><value>제목, 창 이름, 이미지 속 글자 검색</value></data>
+  <data name="LibraryUx_SearchPlaceholder" xml:space="preserve"><value>제목, 앱, 태그, 이미지 속 글자 검색 · 앱:Edge 태그:회의</value></data>
   <data name="LibraryUx_CommandShortcut" xml:space="preserve"><value>{0} ({1})</value></data>
   <data name="LibraryUx_NavImages" xml:space="preserve"><value>이미지</value></data>
   <data name="LibraryUx_NavVideos" xml:space="preserve"><value>동영상</value></data>
@@ -4168,4 +4168,228 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="Tutorial.pin-save.Step2" xml:space="preserve"><value>2. Ctrl+S를 눌러 저장합니다.</value></data>
   <data name="Tutorial.pin-save.Step3" xml:space="preserve"><value>3. 다른 파일로 저장하려면 Ctrl+Shift+S로 저장 위치를 선택합니다.</value></data>
   <data name="Tutorial.Unavailable" xml:space="preserve"><value>사용법 동영상을 불러오지 못했습니다. 아래 단계에서 사용 방법을 확인합니다.</value></data>
+  <data name="Library.Search.ClearAll" xml:space="preserve"><value>모두 지우기</value></data>
+  <data name="Library.Search.ClearConditions" xml:space="preserve"><value>조건 지우기</value></data>
+  <data name="Library.Search.RemoveCondition" xml:space="preserve"><value>조건 삭제: {0}</value></data>
+  <data name="Library.Search.Condition" xml:space="preserve"><value>{0}: {1}</value></data>
+  <data name="Library.Search.Excluded" xml:space="preserve"><value>제외 · {0}</value></data>
+  <data name="Library.Search.HiddenCount" xml:space="preserve"><value>검색 조건 때문에 {0}개가 숨겨져 있습니다.</value></data>
+  <data name="Library.Search.Matched" xml:space="preserve"><value>일치: {0}</value></data>
+  <data name="Library.Search.ExclusionsMatched" xml:space="preserve"><value>일치: 제외 조건</value></data>
+  <data name="Library.Search.FieldSeparator" xml:space="preserve"><value> · </value></data>
+  <data name="Library.Search.Syntax" xml:space="preserve"><value>앱:Edge 태그:회의 글자:"월 매출" · -태그:임시 · 종류:이미지 보관:yes 날짜:2026-10</value></data>
+  <data name="Library.Search.Field.App" xml:space="preserve"><value>앱</value></data>
+  <data name="Library.Search.Field.Title" xml:space="preserve"><value>제목</value></data>
+  <data name="Library.Search.Field.Tag" xml:space="preserve"><value>태그</value></data>
+  <data name="Library.Search.Field.Text" xml:space="preserve"><value>글자</value></data>
+  <data name="Library.Search.Field.Url" xml:space="preserve"><value>주소</value></data>
+  <data name="Library.Search.Field.Folder" xml:space="preserve"><value>폴더</value></data>
+  <data name="Library.Search.Field.Type" xml:space="preserve"><value>종류</value></data>
+  <data name="Library.Search.Field.Pinned" xml:space="preserve"><value>보관</value></data>
+  <data name="Library.Search.Field.Date" xml:space="preserve"><value>날짜</value></data>
+  <data name="Library.Search.MatchField.Title" xml:space="preserve"><value>제목</value></data>
+  <data name="Library.Search.MatchField.WindowTitle" xml:space="preserve"><value>창 제목</value></data>
+  <data name="Library.Search.MatchField.OcrText" xml:space="preserve"><value>이미지 속 글자</value></data>
+  <data name="Library.Search.MatchField.MediaType" xml:space="preserve"><value>종류</value></data>
+  <data name="Library.Search.MatchField.Tags" xml:space="preserve"><value>태그</value></data>
+  <data name="Library.Search.MatchField.SourcePageUrl" xml:space="preserve"><value>주소</value></data>
+  <data name="Library.Search.MatchField.SourceApp" xml:space="preserve"><value>앱</value></data>
+  <data name="Library.Search.MatchField.SourceDocumentPath" xml:space="preserve"><value>출처 폴더</value></data>
+  <data name="Library.Search.MatchField.Folder" xml:space="preserve"><value>폴더</value></data>
+  <data name="Library.Search.MatchField.Pinned" xml:space="preserve"><value>보관</value></data>
+  <data name="Library.Search.MatchField.Date" xml:space="preserve"><value>날짜</value></data>
+  <data name="Library.Search.MatchField.ExportFileName" xml:space="preserve"><value>파일명</value></data>
+  <data name="Library.Tags.Title" xml:space="preserve"><value>태그</value></data>
+  <data name="Library.Tags.Edit" xml:space="preserve"><value>태그 편집</value></data>
+  <data name="Library.Tags.More" xml:space="preserve"><value>더 보기</value></data>
+  <data name="Library.Tags.DialogTitle" xml:space="preserve"><value>선택한 {0}개 캡처의 태그</value></data>
+  <data name="Library.Tags.New" xml:space="preserve"><value>새 태그 추가</value></data>
+  <data name="Library.Tags.Apply" xml:space="preserve"><value>적용</value></data>
+  <data name="Library.Tags.Invalid" xml:space="preserve"><value>구분 기호와 제어 문자 없이 32자 이내의 태그 하나를 입력하십시오.</value></data>
+  <data name="Library.Tags.Saved" xml:space="preserve"><value>{0}개 캡처의 태그 저장됨 · 태그 한도 도달 {1}개 · 찾을 수 없는 캡처 {2}개</value></data>
+  <data name="Library.Import.Command" xml:space="preserve"><value>가져오기…</value></data>
+  <data name="Library.Import.Filter" xml:space="preserve"><value>이미지 및 동영상 (*.png;*.jpg;*.jpeg;*.mp4)|*.png;*.jpg;*.jpeg;*.mp4</value></data>
+  <data name="Library.Import.DropTitle" xml:space="preserve"><value>놓으면 라이브러리로 가져옵니다</value></data>
+  <data name="Library.Import.DropDetail" xml:space="preserve"><value>PNG · JPEG · MP4 · 같은 파일은 건너뜁니다</value></data>
+  <data name="Library.Import.Preparing" xml:space="preserve"><value>가져오기 준비 중</value></data>
+  <data name="Library.Import.Progress" xml:space="preserve"><value>가져오는 중 · {0}/{1}</value></data>
+  <data name="Library.Import.Summary" xml:space="preserve"><value>{0}개 가져옴 · 중복 {1}개 건너뜀 · 실패 {2}개</value></data>
+  <data name="Library.Import.Cancelled" xml:space="preserve"><value>가져오기 취소됨</value></data>
+  <data name="Library.Import.TooLarge" xml:space="preserve"><value>2 GiB를 초과하는 파일은 가져올 수 없습니다.</value></data>
+  <data name="Library.Import.Failed" xml:space="preserve"><value>파일을 가져오지 못했습니다.</value></data>
+  <data name="Library.Import.Source" xml:space="preserve"><value>가져온 파일</value></data>
+  <data name="ExportOptions.Title" xml:space="preserve"><value>내보내기 옵션</value></data>
+  <data name="ExportOptions.Continue" xml:space="preserve"><value>다음</value></data>
+  <data name="ExportOptions.SourceUrl" xml:space="preserve"><value>출처 URL 포함</value></data>
+  <data name="ExportOptions.Preset" xml:space="preserve"><value>프리셋</value></data>
+  <data name="ExportOptions.Preset.Last" xml:space="preserve"><value>마지막 설정</value></data>
+  <data name="ExportOptions.Preset.Original" xml:space="preserve"><value>원본</value></data>
+  <data name="ExportOptions.Preset.Messenger" xml:space="preserve"><value>메신저용 · 1280px · JPEG</value></data>
+  <data name="ExportOptions.Preset.Document" xml:space="preserve"><value>문서용 · 1920px · PNG</value></data>
+  <data name="ExportOptions.Format" xml:space="preserve"><value>형식</value></data>
+  <data name="ExportOptions.Format.Automatic" xml:space="preserve"><value>자동 · PNG/JPEG</value></data>
+  <data name="ExportOptions.Format.Png" xml:space="preserve"><value>PNG</value></data>
+  <data name="ExportOptions.Format.Jpeg" xml:space="preserve"><value>JPEG</value></data>
+  <data name="ExportOptions.LongEdge" xml:space="preserve"><value>이미지 긴 변</value></data>
+  <data name="ExportOptions.OriginalSize" xml:space="preserve"><value>원본 크기</value></data>
+  <data name="ExportOptions.Pixels" xml:space="preserve"><value>{0}px</value></data>
+  <data name="ExportOptions.Dimensions" xml:space="preserve"><value>결과 크기 {0} × {1}px</value></data>
+  <data name="ExportOptions.Style" xml:space="preserve"><value>꾸미기</value></data>
+  <data name="ExportOptions.Margin" xml:space="preserve"><value>여백</value></data>
+  <data name="ExportOptions.Radius" xml:space="preserve"><value>모서리 반경</value></data>
+  <data name="ExportOptions.Shadow" xml:space="preserve"><value>부드러운 그림자</value></data>
+  <data name="ExportOptions.Background" xml:space="preserve"><value>배경</value></data>
+  <data name="ExportOptions.Background.Transparent" xml:space="preserve"><value>투명</value></data>
+  <data name="ExportOptions.Background.White" xml:space="preserve"><value>흰색</value></data>
+  <data name="ExportOptions.Background.LightGray" xml:space="preserve"><value>밝은 회색</value></data>
+  <data name="ExportOptions.Background.DarkGray" xml:space="preserve"><value>어두운 회색</value></data>
+  <data name="ExportOptions.Background.Accent" xml:space="preserve"><value>강조색</value></data>
+  <data name="ExportOptions.JpegFilter" xml:space="preserve"><value>JPEG 이미지 (*.jpg)|*.jpg</value></data>
+  <data name="EditorText_Entering" xml:space="preserve"><value>텍스트 입력 중 · Ctrl+Enter 완료 · Enter 줄바꿈 · Esc 취소</value></data>
+  <data name="EditorText_Editing" xml:space="preserve"><value>텍스트 수정 중 · Ctrl+Enter 완료 · Enter 줄바꿈 · Esc 취소</value></data>
+  <data name="EditorText_Cancelled" xml:space="preserve"><value>텍스트 편집 취소됨</value></data>
+  <data name="EditorText_Updated" xml:space="preserve"><value>텍스트 수정됨</value></data>
+  <data name="EditorText_Bold" xml:space="preserve"><value>굵게</value></data>
+  <data name="EditorText_Background" xml:space="preserve"><value>배경 판</value></data>
+  <data name="VideoEditorUx_LibrarySaving" xml:space="preserve"><value>라이브러리에 저장하는 중</value></data>
+  <data name="VideoEditorUx_DragStart" xml:space="preserve"><value>끌면 시작 위치 조정</value></data>
+  <data name="VideoEditorUx_DragEnd" xml:space="preserve"><value>끌면 끝 위치 조정</value></data>
+  <data name="VideoEditorUx_SnapPlayhead" xml:space="preserve"><value>재생 헤드에 맞춤</value></data>
+  <data name="VideoEditorUx_SnapLayer" xml:space="preserve"><value>다른 레이어에 맞춤</value></data>
+  <data name="VideoEditorUx_SnapStart" xml:space="preserve"><value>시작에 맞춤</value></data>
+  <data name="VideoEditorUx_SnapEnd" xml:space="preserve"><value>끝에 맞춤</value></data>
+  <data name="ContactSheet.Action" xml:space="preserve">
+    <value>PDF로 묶기</value>
+  </data>
+  <data name="ContactSheet.Save" xml:space="preserve">
+    <value>PDF 저장</value>
+  </data>
+  <data name="ContactSheet.PageSize" xml:space="preserve">
+    <value>용지 크기</value>
+  </data>
+  <data name="ContactSheet.A4Portrait" xml:space="preserve">
+    <value>A4 세로</value>
+  </data>
+  <data name="ContactSheet.A4Landscape" xml:space="preserve">
+    <value>A4 가로</value>
+  </data>
+  <data name="ContactSheet.LetterPortrait" xml:space="preserve">
+    <value>Letter 세로</value>
+  </data>
+  <data name="ContactSheet.Layout" xml:space="preserve">
+    <value>배치</value>
+  </data>
+  <data name="ContactSheet.OneByOne" xml:space="preserve">
+    <value>1×1</value>
+  </data>
+  <data name="ContactSheet.OneByTwo" xml:space="preserve">
+    <value>1×2</value>
+  </data>
+  <data name="ContactSheet.TwoByTwo" xml:space="preserve">
+    <value>2×2</value>
+  </data>
+  <data name="ContactSheet.TwoByThree" xml:space="preserve">
+    <value>2×3</value>
+  </data>
+  <data name="ContactSheet.ThreeByFour" xml:space="preserve">
+    <value>3×4</value>
+  </data>
+  <data name="ContactSheet.Caption" xml:space="preserve">
+    <value>캡션</value>
+  </data>
+  <data name="ContactSheet.Title" xml:space="preserve">
+    <value>제목</value>
+  </data>
+  <data name="ContactSheet.CaptureTime" xml:space="preserve">
+    <value>촬영 시각</value>
+  </data>
+  <data name="ContactSheet.TitleAndCaptureTime" xml:space="preserve">
+    <value>제목과 촬영 시각</value>
+  </data>
+  <data name="ContactSheet.None" xml:space="preserve">
+    <value>없음</value>
+  </data>
+  <data name="ContactSheet.Source" xml:space="preserve">
+    <value>출처 표시</value>
+  </data>
+  <data name="ContactSheet.SkippedVideos" xml:space="preserve">
+    <value>동영상 {0}개 제외</value>
+  </data>
+  <data name="ContactSheet.Preview" xml:space="preserve">
+    <value>1페이지 미리보기</value>
+  </data>
+  <data name="ContactSheet.PageCount" xml:space="preserve">
+    <value>이미지 {0}개 · {1}페이지</value>
+  </data>
+  <data name="ContactSheet.Limit" xml:space="preserve">
+    <value>최대 500개 항목과 100페이지까지 저장할 수 있습니다. 선택 항목을 줄이거나 페이지당 이미지 수를 늘리십시오.</value>
+  </data>
+  <data name="ContactSheet.Preparing" xml:space="preserve">
+    <value>미리보기 준비 중</value>
+  </data>
+  <data name="ContactSheet.PreviewFailed" xml:space="preserve">
+    <value>미리보기를 만들지 못했습니다. 이미지 파일을 확인하거나 배치 옵션을 다시 선택하십시오.</value>
+  </data>
+  <data name="ContactSheet.Saving" xml:space="preserve">
+    <value>PDF 저장 중</value>
+  </data>
+  <data name="ContactSheet.Progress" xml:space="preserve">
+    <value>PDF 저장 중 · {0}/{1}</value>
+  </data>
+  <data name="ContactSheet.Saved" xml:space="preserve">
+    <value>PDF 저장됨</value>
+  </data>
+  <data name="ContactSheet.Cancelled" xml:space="preserve">
+    <value>PDF 저장 취소됨</value>
+  </data>
+  <data name="ContactSheet.Failed" xml:space="preserve">
+    <value>PDF를 저장하지 못했습니다. 이미지 파일과 저장 위치를 확인하십시오.</value>
+  </data>
+  <data name="ContactSheet.Filter" xml:space="preserve">
+    <value>PDF 문서 (*.pdf)|*.pdf</value>
+  </data>
+  <data name="ContactSheet.Exists" xml:space="preserve">
+    <value>같은 이름의 파일이 있습니다. 다른 이름을 선택하십시오.</value>
+  </data>
+  <data name="ContactSheet.StageRetained" xml:space="preserve">
+    <value>임시 파일을 휴지통으로 이동하지 못했습니다. 파일 위치: {0}</value>
+  </data>
+  <data name="ContactSheet.NoImages" xml:space="preserve">
+    <value>PDF에 포함할 이미지를 선택하십시오. 동영상은 제외됩니다.</value>
+  </data>
+  <data name="Gallery.Compare" xml:space="preserve"><value>비교</value></data>
+  <data name="Gallery.Compare.SideBySide" xml:space="preserve"><value>나란히</value></data>
+  <data name="Gallery.Compare.Overlay" xml:space="preserve"><value>겹쳐 보기</value></data>
+  <data name="Gallery.Compare.Sync" xml:space="preserve"><value>확대·이동 함께</value></data>
+  <data name="Gallery.Compare.Mode" xml:space="preserve"><value>비교 방식</value></data>
+  <data name="Gallery.Compare.View" xml:space="preserve"><value>캡처 비교 화면</value></data>
+  <data name="Gallery.Compare.Controls" xml:space="preserve"><value>마우스 휠: 확대·축소 · 드래그: 이동 · Tab: 좌우 교환 · Esc: 닫기 · 겹쳐 보기에서 방향키: 구분선 이동</value></data>
+  <data name="Gallery.Compare.LoadFailed" xml:space="preserve"><value>비교할 이미지를 불러올 수 없습니다.</value></data>
+  <data name="VideoMulticut_Split" xml:space="preserve">
+    <value>분할</value>
+  </data>
+  <data name="VideoMulticut_OutputPosition" xml:space="preserve">
+    <value>출력 {0} / {1}</value>
+  </data>
+  <data name="VideoMulticut_SplitHelp" xml:space="preserve">
+    <value>재생 위치에서 구간을 분할합니다. Ctrl+K</value>
+  </data>
+  <data name="VideoMulticut_Restore" xml:space="preserve">
+    <value>되돌리기 구간</value>
+  </data>
+  <data name="VideoMulticut_RestoreHelp" xml:space="preserve">
+    <value>선택한 잘린 구간을 복원합니다.</value>
+  </data>
+  <data name="VideoMulticut_RemovedCount" xml:space="preserve">
+    <value>잘린 구간 {0}개 · 잘림 {1}</value>
+  </data>
+  <data name="VideoMulticut_SegmentRange" xml:space="preserve">
+    <value>구간 {0}–{1}</value>
+  </data>
+  <data name="VideoMulticut_TimelineHelp" xml:space="preserve">
+    <value>Ctrl+K로 분할한 뒤 구간을 클릭하거나 재생 위치에서 Enter로 선택합니다. Delete로 선택한 구간을 제거하고 Ctrl+Z로 되돌립니다.</value>
+  </data>
+  <data name="VideoMulticut_PreviewSeekFailed" xml:space="preserve">
+    <value>미리보기 탐색을 완료하지 못했습니다. 재생을 다시 시작하십시오.</value>
+  </data>
 </root>

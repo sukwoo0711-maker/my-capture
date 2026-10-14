@@ -97,6 +97,71 @@ public sealed class SettingsApplyAndWindowTests : KoreanCaptionTest
         return root;
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Apply_ResetOrImport_ReplacesExportOptionsAndPersists(bool reset)
+    {
+        RunSta(() =>
+        {
+            string root = ExportTestDirectory.Create();
+            var store = new SettingsStore(AppPaths.CreateForRoot(root), NullLogger<SettingsStore>.Instance);
+            AppSettings live = NewInstallDefaults.Create();
+            live.Export.LastImageExport = ImageExportOptions.FromPreset(ImageExportPreset.Messenger) with { IncludeSourceUrl = true };
+            var draft = new SettingsDraft(live);
+            AppSettings imported = live.DeepClone();
+            imported.Export.LastImageExport = ImageExportOptions.FromPreset(ImageExportPreset.Document);
+            ImageExportOptions expected = reset ? new() : imported.Export.LastImageExport;
+            if (reset) draft.ResetToDefaults();
+            else draft.ReplaceValues(imported);
+            Assert.True(draft.HasUnappliedChanges);
+            Assert.True(draft.ExportOptionsReplaced);
+
+            // A later export must not override this explicit replacement.
+            live.Export.LastImageExport = live.Export.LastImageExport with { LongEdge = 800 };
+            using var window = new NativeMessageWindow();
+            using var hotkeys = new GlobalHotkeyService(window, new FakeRegistrar(), NullLogger<GlobalHotkeyService>.Instance);
+            hotkeys.Initialize(live.Hotkeys);
+            var startup = new StartupRegistrationService(new FakeRunKeyStore(), @"C:\Apps\MyCapture.exe");
+            var apply = new SettingsApplyService(store, () => live, updated => live = updated,
+                null, hotkeys, startup, NullLogger.Instance);
+
+            SettingsApplyResult result = apply.Apply(draft.ToAppSettings(), draft.FolderDestinationEdited, draft.ExportOptionsReplaced);
+
+            Assert.True(result.Saved);
+            Assert.Equal(expected, live.Export.LastImageExport);
+            Assert.Equal(expected, store.Load().Export.LastImageExport);
+            draft.LoadFrom(live);
+            Assert.False(draft.ExportOptionsReplaced);
+            Assert.False(draft.HasUnappliedChanges);
+        });
+    }
+
+    [Fact]
+    public void Apply_OrdinaryDraft_PreservesExportOptionsChangedWhileOpen()
+    {
+        RunSta(() =>
+        {
+            string root = ExportTestDirectory.Create();
+            var store = new SettingsStore(AppPaths.CreateForRoot(root), NullLogger<SettingsStore>.Instance);
+            AppSettings live = NewInstallDefaults.Create();
+            var draft = new SettingsDraft(live) { MaxItems = "450" };
+            ImageExportOptions expected = ImageExportOptions.FromPreset(ImageExportPreset.Messenger) with { IncludeSourceUrl = true };
+            live.Export.LastImageExport = expected;
+            using var window = new NativeMessageWindow();
+            using var hotkeys = new GlobalHotkeyService(window, new FakeRegistrar(), NullLogger<GlobalHotkeyService>.Instance);
+            hotkeys.Initialize(live.Hotkeys);
+            var startup = new StartupRegistrationService(new FakeRunKeyStore(), @"C:\Apps\MyCapture.exe");
+            var apply = new SettingsApplyService(store, () => live, updated => live = updated,
+                null, hotkeys, startup, NullLogger.Instance);
+
+            Assert.False(draft.ExportOptionsReplaced);
+            Assert.True(apply.Apply(draft.ToAppSettings(), draft.FolderDestinationEdited, draft.ExportOptionsReplaced).Saved);
+            Assert.Equal(expected, store.Load().Export.LastImageExport);
+            Assert.Equal(450, live.Queue.MaxItems);
+        });
+    }
+
     [Fact]
     public void Apply_SavesPublishesAndReconfigures()
     {

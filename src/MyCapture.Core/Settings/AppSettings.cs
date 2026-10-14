@@ -183,6 +183,9 @@ public sealed class QueueSettings
 
 public sealed class ExportSettings
 {
+    // Additive migration: older settings deserialize to URL excluded and original size.
+    public ImageExportOptions LastImageExport { get; set => field = (value ?? new()).Normalize(); } = new();
+
     /// <summary>
     /// Destination for quick save. Empty means the default location.
     /// </summary>

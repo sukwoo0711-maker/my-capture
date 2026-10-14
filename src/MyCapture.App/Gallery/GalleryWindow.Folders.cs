@@ -99,7 +99,8 @@ internal sealed partial class GalleryWindow
     /// </summary>
     private void ShowScope(CaptureFolderScope scope)
     {
-        if (_viewModel.SelectedScope == scope && (scope.IsAll || _viewModel.Filter == GalleryFilter.All)) return;
+        if (_viewModel.SelectedScope == scope && _viewModel.SelectedTag is null
+            && (scope.IsAll || _viewModel.Filter == GalleryFilter.All)) return;
         _folderNavigationUpdating = true;
         try { CloseInlinePlayer(); _viewModel.NavigateTo(scope); }
         finally { _folderNavigationUpdating = false; }
@@ -354,6 +355,8 @@ internal sealed partial class GalleryWindow
             return;
         }
         if (plan.RootNames.Count == 0 || plan.Entries.Any(entry => !EnsureRecordReady(entry.Record.Id))) return;
+        var options = MyCapture.App.Editing.ImageExportOptionsPanel.ShowCopyOptions(this, _commitService.LastExportOptions);
+        if (options is null) return;
         string destination;
         if (zip)
         {
@@ -384,8 +387,9 @@ internal sealed partial class GalleryWindow
                 if (ReferenceEquals(_archiveCancellation, cancellation))
                     LibraryActionStatus.Text = UiText.Format("Folder410.ExportProgress", done, plan.Entries.Count);
             });
-            if (zip) await GalleryFolderExportService.ExportZipAsync(prepared, destination, progress, cancellation.Token);
-            else await GalleryFolderExportService.ExportDirectoryAsync(prepared, destination, progress, cancellation.Token);
+            if (zip) await GalleryFolderExportService.ExportZipAsync(prepared, destination, progress, cancellation.Token, options);
+            else await GalleryFolderExportService.ExportDirectoryAsync(prepared, destination, progress, cancellation.Token, options);
+            _commitService.RememberExportOptions(options);
             LibraryActionStatus.Text = UiText.Format("Folder410.ExportDone", plan.Entries.Count)
                 + (zip ? " · " + Path.GetFileName(destination) : string.Empty);
         }
@@ -576,6 +580,7 @@ internal sealed partial class GalleryWindow
 
     private void OnLibraryDragOver(object sender, DragEventArgs e)
     {
+        if (PreviewExternalImport(e)) return;
         GalleryDropPlan plan = PreviewFolderDrop(e.OriginalSource as DependencyObject, ReadDragPayload(e.Data),
             e.GetPosition(DragHintLayer));
         e.Effects = plan.CanDrop ? DragDropEffects.Copy : DragDropEffects.None;
@@ -586,6 +591,7 @@ internal sealed partial class GalleryWindow
     // leaving the window clears the highlight and hint.
     private void OnLibraryDragLeave(object sender, DragEventArgs e)
     {
+        if (_importCancellation is null) ImportOverlay.Visibility = Visibility.Collapsed;
         Point point = e.GetPosition(LibraryRoot);
         if (point.X < 0 || point.Y < 0 || point.X >= LibraryRoot.ActualWidth || point.Y >= LibraryRoot.ActualHeight)
             ClearDropHighlight();
@@ -595,6 +601,16 @@ internal sealed partial class GalleryWindow
     {
         e.Handled = true;
         GalleryFolderDragPayload? payload = ReadDragPayload(e.Data);
+        if (!e.Data.GetDataPresent(GalleryFolderDragPayload.Format, false))
+        {
+            string[] paths = ExternalImportPaths(e.Data);
+            bool import = paths.Length > 0 && IsOverImportArea(e) && _importCancellation is null
+                && e.AllowedEffects.HasFlag(DragDropEffects.Copy);
+            if (_importCancellation is null) ImportOverlay.Visibility = Visibility.Collapsed;
+            e.Effects = import ? DragDropEffects.Copy : DragDropEffects.None;
+            if (import) await ImportFilesAsync(paths);
+            return;
+        }
         bool dropped = await DropAsync(e.OriginalSource as DependencyObject, payload);
         e.Effects = dropped ? DragDropEffects.Copy : DragDropEffects.None;
     }

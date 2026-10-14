@@ -5,6 +5,8 @@ using System.Windows.Threading;
 using MyCapture.App.Editing;
 using MyCapture.App.Threading;
 using MyCapture.Core.Localization;
+using MyCapture.Core.Settings;
+using MyCapture.Platform.Imaging;
 using Xunit;
 
 namespace MyCapture.App.Tests;
@@ -16,6 +18,33 @@ namespace MyCapture.App.Tests;
 /// </summary>
 public sealed class ImageReductionDialogTests
 {
+    [Fact]
+    public async Task StylingAndUrlChangesInvalidateAndDebounceThePixelPreview() => await StaThreadTask.RunAsync(() =>
+    {
+        SynchronizationContext.SetSynchronizationContext(new DispatcherSynchronizationContext(Dispatcher.CurrentDispatcher));
+        const string url = "https://example.com/export";
+        var dialog = new ImageReductionExportDialog(CreateImage(1600, 800), "capture.png", url);
+        var scheduler = new ManualScheduler();
+        dialog.ScheduleRecalculation = scheduler.Schedule;
+        try
+        {
+            Wait(dialog.UpdatePreviewAsync());
+            Assert.Equal(string.Empty, PngSourceUrlMetadata.TryReadSourceUrl(dialog.PreparedExportBytesForTest!));
+            dialog.OptionsForTest.Apply(new() { Format = ImageExportFormat.Png, LongEdge = 800, Margin = 24, CornerRadius = 12, IncludeSourceUrl = true });
+            Assert.False(dialog.CanExport);
+            Assert.True(dialog.ShowsPreviousResultForTest);
+            ManualScheduler.Request request = Assert.Single(scheduler.Requests, item => !item.Cancelled);
+            Assert.Equal(TimeSpan.FromMilliseconds(250), request.Delay);
+            request.Action();
+            PumpUntil(() => dialog.CanExport);
+            Assert.Contains("848", dialog.ResultTextForTest);
+            Assert.Contains("448", dialog.ResultTextForTest);
+            Assert.Equal(url, PngSourceUrlMetadata.TryReadSourceUrl(dialog.PreparedExportBytesForTest!));
+        }
+        finally { dialog.Close(); }
+        return true;
+    });
+
     [Fact]
     public async Task TargetChangesKeepThePreviousResultAndRecalculateOnceAfterTheyStop() => await StaThreadTask.RunAsync(() =>
     {

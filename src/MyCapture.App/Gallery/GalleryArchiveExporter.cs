@@ -1,5 +1,6 @@
 using System.IO;
 using System.IO.Compression;
+using MyCapture.Core.Settings;
 
 namespace MyCapture.App.Gallery;
 
@@ -7,7 +8,7 @@ namespace MyCapture.App.Gallery;
 internal static class GalleryArchiveExporter
 {
     internal static async Task ExportNewAsync(IReadOnlyList<string> stagedMedia, string destination,
-        IProgress<int>? progress = null, CancellationToken cancellationToken = default)
+        IProgress<int>? progress = null, CancellationToken cancellationToken = default, ImageExportOptions? options = null)
     {
         ArgumentNullException.ThrowIfNull(stagedMedia);
         ArgumentException.ThrowIfNullOrWhiteSpace(destination);
@@ -33,13 +34,12 @@ internal static class GalleryArchiveExporter
                     for (int index = 0; index < sources.Length; index++)
                     {
                         cancellationToken.ThrowIfCancellationRequested();
+                        if (!File.Exists(sources[index])) throw new FileNotFoundException("The source media is missing.", sources[index]);
                         // Generic filenames deliberately omit private window titles, OCR and tags.
                         string name = $"MyCapture-{index + 1:000}{Path.GetExtension(sources[index]).ToLowerInvariant()}";
                         ZipArchiveEntry entry = zip.CreateEntry(name, CompressionLevel.NoCompression);
                         await using Stream output = entry.Open();
-                        await using var input = new FileStream(sources[index], FileMode.Open, FileAccess.Read,
-                            FileShare.Read, 81920, FileOptions.Asynchronous | FileOptions.SequentialScan);
-                        await input.CopyToAsync(output, cancellationToken);
+                        GalleryImageExport.CopyTo(sources[index], output, options ?? new(), cancellationToken);
                         progress?.Report(index + 1);
                     }
                 }

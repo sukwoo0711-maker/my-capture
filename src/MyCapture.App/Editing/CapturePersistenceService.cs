@@ -231,6 +231,8 @@ internal sealed class CapturePersistenceService
             using CaptureWriteReservation reservation = await _queue.ReservePublicationAsync();
             if (!ReferenceEquals(_queue.Find(record.Id), record)) return false;
             ApplySourceFields(record, url, details, webpageTag);
+            if (url.Length > 0 && CaptureImportService.OriginalFileName(record) == CaptureFileNames.Original)
+                record.OriginalContentHash = null;
             if (addedBytes != 0) _queue.UpdateByteCount(record.Id, record.TotalBytes + addedBytes);
             applied = true;
             await _queue.PublishRecordAsync(record, reservation);
@@ -627,6 +629,7 @@ internal sealed class CapturePersistenceService
 
             // original.png is unchanged; re-measure it so the byte total stays accurate.
             bytes += SafeFileLength(Path.Combine(directory, CaptureFileNames.Original));
+            bytes += SafeFileLength(Path.Combine(directory, CaptureFileNames.ImportedJpeg));
 
             // Encode and flush every new generation into a private same-volume directory. The
             // UI thread later swaps these staged files as one non-interleavable commit window.

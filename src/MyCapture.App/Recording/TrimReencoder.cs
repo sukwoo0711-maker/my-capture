@@ -24,7 +24,8 @@ internal static class TrimReencoder
         IProgress<VideoFrameRenderProgress>? progress = null,
         CancellationToken cancellationToken = default,
         int? bitrateBitsPerSecond = null,
-        Mp4RenderOptions? renderOptions = null) =>
+        Mp4RenderOptions? renderOptions = null,
+        IReadOnlyList<VideoTimeRange>? removedRanges = null) =>
         ReencodeWithStatistics(
             sourcePath,
             outputPath,
@@ -38,7 +39,8 @@ internal static class TrimReencoder
             progress,
             cancellationToken,
             bitrateBitsPerSecond,
-            renderOptions).Frames;
+            renderOptions,
+            removedRanges).Frames;
 
     /// <summary>
     /// <see cref="Reencode"/> that also reports which decode path produced the frames. A hardware
@@ -58,7 +60,8 @@ internal static class TrimReencoder
         IProgress<VideoFrameRenderProgress>? progress = null,
         CancellationToken cancellationToken = default,
         int? bitrateBitsPerSecond = null,
-        Mp4RenderOptions? renderOptions = null)
+        Mp4RenderOptions? renderOptions = null,
+        IReadOnlyList<VideoTimeRange>? removedRanges = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(sourcePath);
         ArgumentException.ThrowIfNullOrWhiteSpace(outputPath);
@@ -84,7 +87,8 @@ internal static class TrimReencoder
             recording.Width,
             recording.Height,
             textOverlays ?? [],
-            frameEditLayers ?? []);
+            frameEditLayers ?? [],
+            removedRanges);
         Mp4RenderOptions attempt = renderOptions ?? Mp4RenderOptions.Default;
         while (true)
         {

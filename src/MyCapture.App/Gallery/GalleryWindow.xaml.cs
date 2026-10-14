@@ -38,6 +38,7 @@ namespace MyCapture.App.Gallery;
 /// </remarks>
 internal sealed partial class GalleryWindow : Window
 {
+    public static RoutedCommand CompareCommand { get; } = new();
     private readonly GalleryViewModel _viewModel;
     private readonly GalleryController _controller;
     private readonly GalleryReeditLoader _reeditLoader;
@@ -104,6 +105,12 @@ internal sealed partial class GalleryWindow : Window
         _log = log ?? throw new ArgumentNullException(nameof(log));
 
         InitializeComponent();
+        CommandBindings.Add(new CommandBinding(CompareCommand, OnCompareExecuted, (_, e) =>
+        {
+            IReadOnlyList<GalleryItemViewModel> selected = _viewModel.SelectedTiles;
+            e.CanExecute = !_imagePreparationInProgress && selected.Count == 2 && selected.All(tile => tile.IsImage);
+            e.Handled = true;
+        }));
         Loaded += (_, _) => UpdateCommandShortcuts();
         MyCapture.App.Themes.WorkspaceTheme.Attach(this, MyCapture.App.Themes.WorkspaceRole.Gallery, resourcesLoaded: true);
         _viewModel.EnableAsyncThumbnailLoading(Dispatcher);
@@ -122,7 +129,7 @@ internal sealed partial class GalleryWindow : Window
         IsVisibleChanged += (_, _) =>
         {
             _visibilityGeneration++;
-            if (!IsVisible) ResetDragGesture();
+            if (!IsVisible) { ResetDragGesture(); _importCancellation?.Cancel(); }
             else _hiddenForCapture = false;
             _viewModel.SetThumbnailLoadingEnabled(IsVisible);
             _viewModel.SetLibraryOpen(IsVisible || _hiddenForCapture);
@@ -239,6 +246,21 @@ internal sealed partial class GalleryWindow : Window
 
     private void OnSearchTextChanged(object sender, TextChangedEventArgs e) =>
         _viewModel.SearchQuery = SearchBox.Text;
+
+    private void OnRemoveSearchConditionClick(object sender, RoutedEventArgs e)
+    {
+        if (sender is not FrameworkElement { DataContext: GallerySearchCondition condition }) return;
+        _viewModel.RemoveSearchCondition(condition.Index);
+        SearchBox.Text = _viewModel.SearchQuery;
+        SearchBox.Focus();
+        SearchBox.CaretIndex = SearchBox.Text.Length;
+    }
+
+    private void OnClearSearchConditionsClick(object sender, RoutedEventArgs e)
+    {
+        SearchBox.Clear();
+        SearchBox.Focus();
+    }
 
     // ---- OCR full-text search coverage -------------------------------------------------
 
@@ -645,7 +667,7 @@ internal sealed partial class GalleryWindow : Window
     {
         if (_viewModel is null || sender is not RadioButton { Tag: string filter }) return;
         GalleryFilter next = Enum.Parse<GalleryFilter>(filter);
-        if (_viewModel.Filter == next && _viewModel.SelectedScope.IsAll) return;
+        if (_viewModel.Filter == next && _viewModel.SelectedScope.IsAll && _viewModel.SelectedTag is null) return;
         await ShowLibraryViewAsync(next);
     }
 
@@ -817,6 +839,7 @@ internal sealed partial class GalleryWindow : Window
 
     private async void OnMoreCommandsClick(object sender, RoutedEventArgs e)
     {
+        ContactSheetMenu.IsEnabled = _viewModel.HasSelection;
         if (sender is Button { ContextMenu: { } menu } button)
         {
             menu.PlacementTarget = button;
@@ -1095,6 +1118,54 @@ internal sealed partial class GalleryWindow : Window
         _ocrPresenter.ShowRecognized(RequestFactory, context, OnFresh);
     }
 
+    private async void OnCompareExecuted(object sender, ExecutedRoutedEventArgs e)
+    {
+        e.Handled = true;
+        GalleryItemViewModel[] selected = _viewModel.SelectedTiles.ToArray();
+        if (_imagePreparationInProgress || selected.Length != 2 || selected.Any(tile => !tile.IsImage)) return;
+        CaptureRecord? first = _controller.Find(selected[0].Id);
+        CaptureRecord? second = _controller.Find(selected[1].Id);
+        if (first is null || second is null || !EnsureRecordReady(first.Id) || !EnsureRecordReady(second.Id)) return;
+        _imagePreparationInProgress = true;
+        CommandManager.InvalidateRequerySuggested();
+        int generation = _visibilityGeneration;
+        long firstRevision = first.ContentRevision;
+        long secondRevision = second.ContentRevision;
+        string firstTitle = selected[0].ContextLabel;
+        string secondTitle = selected[1].ContextLabel;
+        try
+        {
+            string firstPath = _queue.GetFilePath(first, CaptureFileNames.Rendered);
+            string secondPath = _queue.GetFilePath(second, CaptureFileNames.Rendered);
+            var images = await Task.Run(() => (First: ImageCodec.TryLoad(firstPath), Second: ImageCodec.TryLoad(secondPath)));
+            if (!IsVisible || generation != _visibilityGeneration) return;
+            if (!ReferenceEquals(_controller.Find(first.Id), first) || !ReferenceEquals(_controller.Find(second.Id), second)
+                || first.ContentRevision != firstRevision || second.ContentRevision != secondRevision
+                || _commitService.IsRecordBeingWritten(first.Id) || _commitService.IsRecordBeingWritten(second.Id))
+            {
+                ShowStatus(UiText.Get("GalleryImageChanged"));
+                return;
+            }
+            if (images.First is null || images.Second is null)
+            {
+                ShowStatus(UiText.Get("Gallery.Compare.LoadFailed"));
+                return;
+            }
+            new GalleryCompareWindow(images.First, images.Second, firstTitle, first.CreatedAt, secondTitle, second.CreatedAt)
+                { Owner = this }.Show();
+        }
+        catch (Exception ex)
+        {
+            _log.LogWarning(ex, "Could not prepare capture comparison");
+            if (IsVisible && generation == _visibilityGeneration) ShowStatus(UiText.Get("Gallery.Compare.LoadFailed"));
+        }
+        finally
+        {
+            _imagePreparationInProgress = false;
+            CommandManager.InvalidateRequerySuggested();
+        }
+    }
+
     private async void OnReducedExportClick(object sender, RoutedEventArgs e)
     {
         GalleryItemViewModel? tile = ResolveTileFromCommand(sender);
@@ -1122,7 +1193,7 @@ internal sealed partial class GalleryWindow : Window
             }
             _ = ImageReductionExportDialog.Show(this, image,
                 Path.Combine(_paths.QuickSaveRoot, GalleryDragExportService.BuildBaseFileName(DateTimeOffset.Now)),
-                record.SourcePageUrl);
+                record.SourcePageUrl, _commitService.LastExportOptions, _commitService.RememberExportOptions);
         }
         catch (Exception ex)
         {

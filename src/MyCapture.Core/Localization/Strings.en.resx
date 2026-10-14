@@ -379,7 +379,7 @@
     <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
   </data>
   <data name="Text_230D26DEB9AE" xml:space="preserve">
-    <value>Type your text, then press Esc or click elsewhere to finish</value>
+    <value>Entering text · Ctrl+Enter finish · Enter new line · Esc cancel</value>
     <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
   </data>
   <data name="Text_23A30AD1434C" xml:space="preserve">
@@ -2998,11 +2998,11 @@ This cannot be undone.</value>
   <data name="GalleryImageChanged" xml:space="preserve"><value>The image changed while loading. Please open it again.</value></data>
   <data name="CapturePrecisionActive" xml:space="preserve"><value>Shift · Pixel precision</value></data>
   <data name="CaptureSelectionStart" xml:space="preserve"><value>Start</value></data>
-  <data name="ExportReduction_Title" xml:space="preserve"><value>Export a smaller file…</value></data>
+  <data name="ExportReduction_Title" xml:space="preserve"><value>Export image</value></data>
   <data name="ExportReduction_Save" xml:space="preserve"><value>Save as…</value></data>
   <data name="ExportReduction_Drag" xml:space="preserve"><value>Drag to a folder</value></data>
   <data name="ExportReduction_Cancel" xml:space="preserve"><value>Close</value></data>
-  <data name="ExportReduction_Description" xml:space="preserve"><value>The baseline is the current edited image saved as PNG, which may differ from the original file size. Changing the target recalculates the result automatically. Opaque images may use JPEG; pixel dimensions stay the same.</value></data>
+  <data name="ExportReduction_Description" xml:space="preserve"><value>The size baseline is the current edited image encoded as PNG. Automatic format preserves transparency; JPEG saves transparent areas on white.</value></data>
   <data name="ExportReduction_TargetLabel" xml:space="preserve"><value>File size reduction target</value></data>
   <data name="ExportReduction_Original" xml:space="preserve"><value>Original quality · No reduction</value></data>
   <data name="ExportReduction_Target" xml:space="preserve"><value>Target: {0}% smaller than the original PNG</value></data>
@@ -3250,7 +3250,7 @@ Open the library or Settings from the tray menu.</value></data>
   <data name="Library.Action.Save" xml:space="preserve"><value>Save</value></data>
   <data name="Library.Archive.Title" xml:space="preserve"><value>Export selected captures to a new ZIP</value></data>
   <data name="Library.Archive.Action" xml:space="preserve"><value>Export ZIP</value></data>
-  <data name="Library.Archive.Hint" xml:space="preserve"><value>Edited PNG and current MP4 only. No original images, recognized text, titles, tags or settings. Choose a new filename.</value></data>
+  <data name="Library.Archive.Hint" xml:space="preserve"><value>Includes edited PNGs, current MP4s and folder structure. Filenames use capture titles. PNG source URLs are included when Include source URL is selected. Separate original images, recognized text, tags and settings files are excluded. Content visible in the images remains.</value></data>
   <data name="Library.Archive.Preparing" xml:space="preserve"><value>Preparing protected copies of the selected captures…</value></data>
   <data name="Library.Archive.Progress" xml:space="preserve"><value>Exporting {0} of {1} {1:plural:file|files}…</value></data>
   <data name="Library.Archive.Done" xml:space="preserve"><value>Exported {0} {0:plural:file|files}. Original captures remain in your library.</value></data>
@@ -3935,7 +3935,7 @@ Delete {1} {1:plural:subfolder|subfolders}, {2} {2:plural:image|images}, and {3}
   <data name="LibraryUx_KeptAccessible" xml:space="preserve"><value>, kept</value></data>
   <data name="LibraryUx_InFolderAccessible" xml:space="preserve"><value>, in folder {0}</value></data>
   <data name="LibraryUx_TileMoreHint" xml:space="preserve"><value>More — keep, export and recognize text</value></data>
-  <data name="LibraryUx_SearchPlaceholder" xml:space="preserve"><value>Search titles, windows, image text</value></data>
+  <data name="LibraryUx_SearchPlaceholder" xml:space="preserve"><value>Search titles, apps, tags, image text · app:Edge tag:meeting</value></data>
   <data name="LibraryUx_CommandShortcut" xml:space="preserve"><value>{0} ({1})</value></data>
   <data name="LibraryUx_NavImages" xml:space="preserve"><value>Images</value></data>
   <data name="LibraryUx_NavVideos" xml:space="preserve"><value>Videos</value></data>
@@ -4168,4 +4168,228 @@ Delete {1} {1:plural:subfolder|subfolders}, {2} {2:plural:image|images}, and {3}
   <data name="Tutorial.pin-save.Step2" xml:space="preserve"><value>2. Press Ctrl+S to save.</value></data>
   <data name="Tutorial.pin-save.Step3" xml:space="preserve"><value>3. To save another file, press Ctrl+Shift+S and choose the destination.</value></data>
   <data name="Tutorial.Unavailable" xml:space="preserve"><value>The tutorial video could not be loaded. Follow the steps below to use this feature.</value></data>
+  <data name="Library.Search.ClearAll" xml:space="preserve"><value>Clear all</value></data>
+  <data name="Library.Search.ClearConditions" xml:space="preserve"><value>Clear conditions</value></data>
+  <data name="Library.Search.RemoveCondition" xml:space="preserve"><value>Remove condition: {0}</value></data>
+  <data name="Library.Search.Condition" xml:space="preserve"><value>{0}: {1}</value></data>
+  <data name="Library.Search.Excluded" xml:space="preserve"><value>Exclude · {0}</value></data>
+  <data name="Library.Search.HiddenCount" xml:space="preserve"><value>Search conditions hide {0} {0:plural:capture|captures}.</value></data>
+  <data name="Library.Search.Matched" xml:space="preserve"><value>Matched: {0}</value></data>
+  <data name="Library.Search.ExclusionsMatched" xml:space="preserve"><value>Matched: exclusions</value></data>
+  <data name="Library.Search.FieldSeparator" xml:space="preserve"><value> · </value></data>
+  <data name="Library.Search.Syntax" xml:space="preserve"><value>app:Edge tag:meeting text:"monthly sales" · -tag:draft · type:image pinned:yes date:2026-10</value></data>
+  <data name="Library.Search.Field.App" xml:space="preserve"><value>App</value></data>
+  <data name="Library.Search.Field.Title" xml:space="preserve"><value>Title</value></data>
+  <data name="Library.Search.Field.Tag" xml:space="preserve"><value>Tag</value></data>
+  <data name="Library.Search.Field.Text" xml:space="preserve"><value>Text</value></data>
+  <data name="Library.Search.Field.Url" xml:space="preserve"><value>URL</value></data>
+  <data name="Library.Search.Field.Folder" xml:space="preserve"><value>Folder</value></data>
+  <data name="Library.Search.Field.Type" xml:space="preserve"><value>Type</value></data>
+  <data name="Library.Search.Field.Pinned" xml:space="preserve"><value>Kept</value></data>
+  <data name="Library.Search.Field.Date" xml:space="preserve"><value>Date</value></data>
+  <data name="Library.Search.MatchField.Title" xml:space="preserve"><value>Title</value></data>
+  <data name="Library.Search.MatchField.WindowTitle" xml:space="preserve"><value>Window title</value></data>
+  <data name="Library.Search.MatchField.OcrText" xml:space="preserve"><value>Image text</value></data>
+  <data name="Library.Search.MatchField.MediaType" xml:space="preserve"><value>Type</value></data>
+  <data name="Library.Search.MatchField.Tags" xml:space="preserve"><value>Tags</value></data>
+  <data name="Library.Search.MatchField.SourcePageUrl" xml:space="preserve"><value>URL</value></data>
+  <data name="Library.Search.MatchField.SourceApp" xml:space="preserve"><value>App</value></data>
+  <data name="Library.Search.MatchField.SourceDocumentPath" xml:space="preserve"><value>Source folder</value></data>
+  <data name="Library.Search.MatchField.Folder" xml:space="preserve"><value>Folder</value></data>
+  <data name="Library.Search.MatchField.Pinned" xml:space="preserve"><value>Kept</value></data>
+  <data name="Library.Search.MatchField.Date" xml:space="preserve"><value>Date</value></data>
+  <data name="Library.Search.MatchField.ExportFileName" xml:space="preserve"><value>File name</value></data>
+  <data name="Library.Tags.Title" xml:space="preserve"><value>Tags</value></data>
+  <data name="Library.Tags.Edit" xml:space="preserve"><value>Edit tags</value></data>
+  <data name="Library.Tags.More" xml:space="preserve"><value>Show more</value></data>
+  <data name="Library.Tags.DialogTitle" xml:space="preserve"><value>Tags for {0} selected captures</value></data>
+  <data name="Library.Tags.New" xml:space="preserve"><value>Add a new tag</value></data>
+  <data name="Library.Tags.Apply" xml:space="preserve"><value>Apply</value></data>
+  <data name="Library.Tags.Invalid" xml:space="preserve"><value>Enter one tag of up to 32 characters without separators or control characters.</value></data>
+  <data name="Library.Tags.Saved" xml:space="preserve"><value>Tags saved for {0} captures · Tag limit reached for {1} · {2} captures not found</value></data>
+  <data name="Library.Import.Command" xml:space="preserve"><value>Import…</value></data>
+  <data name="Library.Import.Filter" xml:space="preserve"><value>Images and videos (*.png;*.jpg;*.jpeg;*.mp4)|*.png;*.jpg;*.jpeg;*.mp4</value></data>
+  <data name="Library.Import.DropTitle" xml:space="preserve"><value>Drop to import into the library</value></data>
+  <data name="Library.Import.DropDetail" xml:space="preserve"><value>PNG · JPEG · MP4 · Duplicate files are skipped</value></data>
+  <data name="Library.Import.Preparing" xml:space="preserve"><value>Preparing import</value></data>
+  <data name="Library.Import.Progress" xml:space="preserve"><value>Importing · {0}/{1}</value></data>
+  <data name="Library.Import.Summary" xml:space="preserve"><value>{0} imported · {1} duplicates skipped · {2} failed</value></data>
+  <data name="Library.Import.Cancelled" xml:space="preserve"><value>Import cancelled</value></data>
+  <data name="Library.Import.TooLarge" xml:space="preserve"><value>Files larger than 2 GiB cannot be imported.</value></data>
+  <data name="Library.Import.Failed" xml:space="preserve"><value>Could not import the files.</value></data>
+  <data name="Library.Import.Source" xml:space="preserve"><value>Imported file</value></data>
+  <data name="ExportOptions.Title" xml:space="preserve"><value>Export options</value></data>
+  <data name="ExportOptions.Continue" xml:space="preserve"><value>Next</value></data>
+  <data name="ExportOptions.SourceUrl" xml:space="preserve"><value>Include source URL</value></data>
+  <data name="ExportOptions.Preset" xml:space="preserve"><value>Preset</value></data>
+  <data name="ExportOptions.Preset.Last" xml:space="preserve"><value>Last used settings</value></data>
+  <data name="ExportOptions.Preset.Original" xml:space="preserve"><value>Original</value></data>
+  <data name="ExportOptions.Preset.Messenger" xml:space="preserve"><value>Messenger · 1280 px · JPEG</value></data>
+  <data name="ExportOptions.Preset.Document" xml:space="preserve"><value>Document · 1920 px · PNG</value></data>
+  <data name="ExportOptions.Format" xml:space="preserve"><value>Format</value></data>
+  <data name="ExportOptions.Format.Automatic" xml:space="preserve"><value>Automatic · PNG/JPEG</value></data>
+  <data name="ExportOptions.Format.Png" xml:space="preserve"><value>PNG</value></data>
+  <data name="ExportOptions.Format.Jpeg" xml:space="preserve"><value>JPEG</value></data>
+  <data name="ExportOptions.LongEdge" xml:space="preserve"><value>Image long edge</value></data>
+  <data name="ExportOptions.OriginalSize" xml:space="preserve"><value>Original size</value></data>
+  <data name="ExportOptions.Pixels" xml:space="preserve"><value>{0} px</value></data>
+  <data name="ExportOptions.Dimensions" xml:space="preserve"><value>Output size {0} × {1} px</value></data>
+  <data name="ExportOptions.Style" xml:space="preserve"><value>Styling</value></data>
+  <data name="ExportOptions.Margin" xml:space="preserve"><value>Margin</value></data>
+  <data name="ExportOptions.Radius" xml:space="preserve"><value>Corner radius</value></data>
+  <data name="ExportOptions.Shadow" xml:space="preserve"><value>Soft shadow</value></data>
+  <data name="ExportOptions.Background" xml:space="preserve"><value>Background</value></data>
+  <data name="ExportOptions.Background.Transparent" xml:space="preserve"><value>Transparent</value></data>
+  <data name="ExportOptions.Background.White" xml:space="preserve"><value>White</value></data>
+  <data name="ExportOptions.Background.LightGray" xml:space="preserve"><value>Light gray</value></data>
+  <data name="ExportOptions.Background.DarkGray" xml:space="preserve"><value>Dark gray</value></data>
+  <data name="ExportOptions.Background.Accent" xml:space="preserve"><value>Accent</value></data>
+  <data name="ExportOptions.JpegFilter" xml:space="preserve"><value>JPEG image (*.jpg)|*.jpg</value></data>
+  <data name="EditorText_Entering" xml:space="preserve"><value>Entering text · Ctrl+Enter finish · Enter new line · Esc cancel</value></data>
+  <data name="EditorText_Editing" xml:space="preserve"><value>Editing text · Ctrl+Enter finish · Enter new line · Esc cancel</value></data>
+  <data name="EditorText_Cancelled" xml:space="preserve"><value>Text editing cancelled</value></data>
+  <data name="EditorText_Updated" xml:space="preserve"><value>Text updated</value></data>
+  <data name="EditorText_Bold" xml:space="preserve"><value>Bold</value></data>
+  <data name="EditorText_Background" xml:space="preserve"><value>Background plate</value></data>
+  <data name="VideoEditorUx_LibrarySaving" xml:space="preserve"><value>Saving to library</value></data>
+  <data name="VideoEditorUx_DragStart" xml:space="preserve"><value>Drag to adjust the start</value></data>
+  <data name="VideoEditorUx_DragEnd" xml:space="preserve"><value>Drag to adjust the end</value></data>
+  <data name="VideoEditorUx_SnapPlayhead" xml:space="preserve"><value>Snap to playhead</value></data>
+  <data name="VideoEditorUx_SnapLayer" xml:space="preserve"><value>Snap to another layer</value></data>
+  <data name="VideoEditorUx_SnapStart" xml:space="preserve"><value>Snap to start</value></data>
+  <data name="VideoEditorUx_SnapEnd" xml:space="preserve"><value>Snap to end</value></data>
+  <data name="ContactSheet.Action" xml:space="preserve">
+    <value>Create PDF</value>
+  </data>
+  <data name="ContactSheet.Save" xml:space="preserve">
+    <value>Save PDF</value>
+  </data>
+  <data name="ContactSheet.PageSize" xml:space="preserve">
+    <value>Page size</value>
+  </data>
+  <data name="ContactSheet.A4Portrait" xml:space="preserve">
+    <value>A4 portrait</value>
+  </data>
+  <data name="ContactSheet.A4Landscape" xml:space="preserve">
+    <value>A4 landscape</value>
+  </data>
+  <data name="ContactSheet.LetterPortrait" xml:space="preserve">
+    <value>Letter portrait</value>
+  </data>
+  <data name="ContactSheet.Layout" xml:space="preserve">
+    <value>Layout</value>
+  </data>
+  <data name="ContactSheet.OneByOne" xml:space="preserve">
+    <value>1×1</value>
+  </data>
+  <data name="ContactSheet.OneByTwo" xml:space="preserve">
+    <value>1×2</value>
+  </data>
+  <data name="ContactSheet.TwoByTwo" xml:space="preserve">
+    <value>2×2</value>
+  </data>
+  <data name="ContactSheet.TwoByThree" xml:space="preserve">
+    <value>2×3</value>
+  </data>
+  <data name="ContactSheet.ThreeByFour" xml:space="preserve">
+    <value>3×4</value>
+  </data>
+  <data name="ContactSheet.Caption" xml:space="preserve">
+    <value>Caption</value>
+  </data>
+  <data name="ContactSheet.Title" xml:space="preserve">
+    <value>Title</value>
+  </data>
+  <data name="ContactSheet.CaptureTime" xml:space="preserve">
+    <value>Capture time</value>
+  </data>
+  <data name="ContactSheet.TitleAndCaptureTime" xml:space="preserve">
+    <value>Title and capture time</value>
+  </data>
+  <data name="ContactSheet.None" xml:space="preserve">
+    <value>None</value>
+  </data>
+  <data name="ContactSheet.Source" xml:space="preserve">
+    <value>Show source</value>
+  </data>
+  <data name="ContactSheet.SkippedVideos" xml:space="preserve">
+    <value>{0} {0:plural:video|videos} skipped</value>
+  </data>
+  <data name="ContactSheet.Preview" xml:space="preserve">
+    <value>Page 1 preview</value>
+  </data>
+  <data name="ContactSheet.PageCount" xml:space="preserve">
+    <value>{0} {0:plural:image|images} · {1} {1:plural:page|pages}</value>
+  </data>
+  <data name="ContactSheet.Limit" xml:space="preserve">
+    <value>Select up to 500 items and a layout with at most 100 pages. Reduce the selection or increase the images per page.</value>
+  </data>
+  <data name="ContactSheet.Preparing" xml:space="preserve">
+    <value>Preparing preview</value>
+  </data>
+  <data name="ContactSheet.PreviewFailed" xml:space="preserve">
+    <value>Could not create the preview. Check the image files or select a layout again.</value>
+  </data>
+  <data name="ContactSheet.Saving" xml:space="preserve">
+    <value>Saving PDF</value>
+  </data>
+  <data name="ContactSheet.Progress" xml:space="preserve">
+    <value>Saving PDF · {0}/{1}</value>
+  </data>
+  <data name="ContactSheet.Saved" xml:space="preserve">
+    <value>PDF saved</value>
+  </data>
+  <data name="ContactSheet.Cancelled" xml:space="preserve">
+    <value>PDF save cancelled</value>
+  </data>
+  <data name="ContactSheet.Failed" xml:space="preserve">
+    <value>Could not save the PDF. Check the image files and destination.</value>
+  </data>
+  <data name="ContactSheet.Filter" xml:space="preserve">
+    <value>PDF document (*.pdf)|*.pdf</value>
+  </data>
+  <data name="ContactSheet.Exists" xml:space="preserve">
+    <value>A file with this name already exists. Choose another name.</value>
+  </data>
+  <data name="ContactSheet.StageRetained" xml:space="preserve">
+    <value>Could not move the temporary file to the Recycle Bin. File location: {0}</value>
+  </data>
+  <data name="ContactSheet.NoImages" xml:space="preserve">
+    <value>Select images for the PDF. Videos are skipped.</value>
+  </data>
+  <data name="Gallery.Compare" xml:space="preserve"><value>Compare</value></data>
+  <data name="Gallery.Compare.SideBySide" xml:space="preserve"><value>Side by side</value></data>
+  <data name="Gallery.Compare.Overlay" xml:space="preserve"><value>Overlay</value></data>
+  <data name="Gallery.Compare.Sync" xml:space="preserve"><value>Sync zoom and pan</value></data>
+  <data name="Gallery.Compare.Mode" xml:space="preserve"><value>Compare mode</value></data>
+  <data name="Gallery.Compare.View" xml:space="preserve"><value>Capture comparison</value></data>
+  <data name="Gallery.Compare.Controls" xml:space="preserve"><value>Mouse wheel: zoom · Drag: pan · Tab: swap sides · Esc: close · Arrow keys in overlay: move divider</value></data>
+  <data name="Gallery.Compare.LoadFailed" xml:space="preserve"><value>The images could not be loaded for comparison.</value></data>
+  <data name="VideoMulticut_Split" xml:space="preserve">
+    <value>Split</value>
+  </data>
+  <data name="VideoMulticut_OutputPosition" xml:space="preserve">
+    <value>Output {0} / {1}</value>
+  </data>
+  <data name="VideoMulticut_SplitHelp" xml:space="preserve">
+    <value>Split the segment at the playhead. Ctrl+K</value>
+  </data>
+  <data name="VideoMulticut_Restore" xml:space="preserve">
+    <value>Restore segment</value>
+  </data>
+  <data name="VideoMulticut_RestoreHelp" xml:space="preserve">
+    <value>Restore the selected removed segment.</value>
+  </data>
+  <data name="VideoMulticut_RemovedCount" xml:space="preserve">
+    <value>Removed segments: {0} · Cut {1}</value>
+  </data>
+  <data name="VideoMulticut_SegmentRange" xml:space="preserve">
+    <value>Segment {0}–{1}</value>
+  </data>
+  <data name="VideoMulticut_TimelineHelp" xml:space="preserve">
+    <value>Split with Ctrl+K, then click a segment or press Enter at the playhead to select it. Delete removes the selected segment. Ctrl+Z undoes the edit.</value>
+  </data>
+  <data name="VideoMulticut_PreviewSeekFailed" xml:space="preserve">
+    <value>The preview could not seek. Start playback again.</value>
+  </data>
 </root>

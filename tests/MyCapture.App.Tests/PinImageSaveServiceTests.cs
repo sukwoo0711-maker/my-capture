@@ -18,6 +18,81 @@ namespace MyCapture.App.Tests;
 
 public sealed class PinImageSaveServiceTests
 {
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task SaveAs_RemembersExportOptionsOnDiskOnlyAfterPublication(bool includeUrl)
+    {
+        string root = ExportTestDirectory.Create();
+        AppPaths paths = AppPaths.CreateForRoot(root);
+        var store = new SettingsStore(paths, NullLogger<SettingsStore>.Instance);
+        AppSettings settings = NewInstallDefaults.Create();
+        settings.Export.LastImageExport = new() { IncludeSourceUrl = !includeUrl };
+        store.Save(settings);
+        ImageExportOptions selected = new() { LongEdge = 800, IncludeSourceUrl = includeUrl };
+        settings.Export.LastImageExport = selected;
+        string target = Path.Combine(root, "remembered.png");
+        var queue = new CaptureQueue(paths, settings.Queue, NullLogger<CaptureQueue>.Instance);
+        var persistence = new CapturePersistenceService(queue, paths, () => settings.Queue, NullLogger<CapturePersistenceService>.Instance);
+        var commit = new CaptureCommitService(persistence, () => settings, () => paths, NullLogger<CaptureCommitService>.Instance);
+        int saves = 0;
+        commit.PersistExportSettings = () =>
+        {
+            Assert.True(File.Exists(target));
+            store.Save(settings);
+            saves++;
+        };
+        var service = new PinImageSaveService(() => settings, () => paths,
+            NullLogger<PinImageSaveService>.Instance, commit.RememberExportOptions);
+        service.SaveAsPrompt = (_, _) => target;
+
+        PinSaveResult result = await service.SaveAsAsync(SolidImage(1000, 500, Colors.Red), null, "https://example.com/page");
+
+        Assert.Equal(PinSaveStatus.Saved, result.Status);
+        Assert.Equal(1, saves);
+        Assert.Equal(selected, store.Load().Export.LastImageExport);
+        Assert.Equal(800, LoadPng(target).PixelWidth);
+        Assert.Equal(includeUrl ? "https://example.com/page" : string.Empty, PngSourceUrlMetadata.TryReadSourceUrl(target));
+
+        service.SaveAsPrompt = (_, _) => null;
+        Assert.Equal(PinSaveStatus.Cancelled, (await service.SaveAsAsync(AlphaImage(), null)).Status);
+        service.SaveAsPrompt = (_, _) => root + ".jpg";
+        Assert.Equal(PinSaveStatus.Failed, (await service.SaveAsAsync(AlphaImage(), null)).Status);
+        service.SaveAsPrompt = (_, _) => Path.Combine(target, "blocked.png");
+        Assert.Equal(PinSaveStatus.Failed, (await service.SaveAsAsync(AlphaImage(), null)).Status);
+        Assert.Equal(1, saves);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task SaveAs_SettingsWriteFailure_DoesNotFailPublishedImage(bool unauthorized)
+    {
+        string root = ExportTestDirectory.Create();
+        AppPaths paths = AppPaths.CreateForRoot(root);
+        AppSettings settings = NewInstallDefaults.Create();
+        var queue = new CaptureQueue(paths, settings.Queue, NullLogger<CaptureQueue>.Instance);
+        var persistence = new CapturePersistenceService(queue, paths, () => settings.Queue, NullLogger<CapturePersistenceService>.Instance);
+        var commit = new CaptureCommitService(persistence, () => settings, () => paths, NullLogger<CaptureCommitService>.Instance);
+        bool attempted = false;
+        commit.PersistExportSettings = () =>
+        {
+            attempted = true;
+            if (unauthorized) throw new UnauthorizedAccessException("Settings are read-only.");
+            throw new IOException("Settings write failed.");
+        };
+        string target = Path.Combine(root, "saved.png");
+        var service = new PinImageSaveService(() => settings, () => paths,
+            NullLogger<PinImageSaveService>.Instance, commit.RememberExportOptions)
+        { SaveAsPrompt = (_, _) => target };
+
+        PinSaveResult result = await service.SaveAsAsync(AlphaImage(), null);
+
+        Assert.True(attempted);
+        Assert.Equal(PinSaveStatus.Saved, result.Status);
+        Assert.Equal(2, LoadPng(target).PixelWidth);
+    }
+
     [Fact]
     public async Task SaveAs_Cancelled_DoesNotCreateAFile()
     {
@@ -91,7 +166,7 @@ public sealed class PinImageSaveServiceTests
     }
 
     [Fact]
-    public async Task QuickSaveAndSaveAs_KeepTheSourcePageUrlInThePng()
+    public async Task QuickSaveKeepsSourceUrlWhileSaveAsExcludesItByDefault()
     {
         const string page = "https://example.com/docs/page";
         using var temp = new TempDirectory();
@@ -105,7 +180,7 @@ public sealed class PinImageSaveServiceTests
         Assert.Equal(PinSaveStatus.Saved, quick.Status);
         Assert.Equal(PinSaveStatus.Saved, saveAs.Status);
         Assert.Equal(page, PngSourceUrlMetadata.TryReadSourceUrl(quick.Path!));
-        Assert.Equal(page, PngSourceUrlMetadata.TryReadSourceUrl(saveAsPath));
+        Assert.Equal(string.Empty, PngSourceUrlMetadata.TryReadSourceUrl(saveAsPath));
     }
 
     [Fact]

@@ -475,6 +475,42 @@
     </Style>
     <Style x:Key="ToggleButton.Tool" TargetType="ToggleButton" BasedOn="{StaticResource {x:Type ToggleButton}}" />
 
+    <!-- Optional dialog settings use the same toggle chrome and live palette as the controls below. -->
+    <Style x:Key="Expander.Options" TargetType="Expander">
+        <Setter Property="Foreground" Value="{DynamicResource Text.Primary}" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Expander">
+                    <StackPanel>
+                        <ToggleButton x:Name="HeaderToggle" HorizontalAlignment="Left" Padding="6"
+                                      IsChecked="{Binding IsExpanded, RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay}"
+                                      AutomationProperties.Name="{Binding Header, RelativeSource={RelativeSource TemplatedParent}}">
+                            <StackPanel Orientation="Horizontal">
+                                <themes:SymbolIcon x:Name="Chevron" Size="16" Data="{StaticResource Icon.ChevronDown}"
+                                                   Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ToggleButton}}"
+                                                   VerticalAlignment="Center" RenderTransformOrigin="0.5,0.5">
+                                    <themes:SymbolIcon.RenderTransform>
+                                        <RotateTransform Angle="-90" />
+                                    </themes:SymbolIcon.RenderTransform>
+                                </themes:SymbolIcon>
+                                <ContentPresenter ContentSource="Header" Margin="6,0,0,0" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </ToggleButton>
+                        <ContentPresenter x:Name="Options" Visibility="Collapsed" />
+                    </StackPanel>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsExpanded" Value="True">
+                            <Setter TargetName="Options" Property="Visibility" Value="Visible" />
+                            <Setter TargetName="Chevron" Property="UIElement.RenderTransform">
+                                <Setter.Value><RotateTransform Angle="0" /></Setter.Value>
+                            </Setter>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
     <!-- ============================================================= -->
     <!-- TextBox -->
     <!-- ============================================================= -->
@@ -607,6 +643,11 @@
                         </Trigger>
                         <Trigger Property="IsChecked" Value="True">
                             <Setter TargetName="CheckedLayer" Property="themes:FluidMotion.FadeTo" Value="1" />
+                            <Setter TargetName="Check" Property="themes:FluidMotion.ScaleTo" Value="1" />
+                        </Trigger>
+                        <Trigger Property="IsChecked" Value="{x:Null}">
+                            <Setter TargetName="CheckedLayer" Property="themes:FluidMotion.FadeTo" Value="1" />
+                            <Setter TargetName="Check" Property="Path.Data" Value="M 4,8 L 14,8" />
                             <Setter TargetName="Check" Property="themes:FluidMotion.ScaleTo" Value="1" />
                         </Trigger>
                         <Trigger Property="IsKeyboardFocused" Value="True">

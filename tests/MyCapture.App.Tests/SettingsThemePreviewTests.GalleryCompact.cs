@@ -123,7 +123,9 @@ public sealed partial class SettingsThemePreviewTests
             foreach (FrameworkElement element in new FrameworkElement[] { capture, record, searchBox, placeholder, newFolder, sort, more })
                 AssertInsideClient(element, client, language);
             AssertSameRow(bar, capture, record, searchField, newFolder, sort, more);
-            AssertNotTrimmed(placeholder, language);
+            // Field-search examples may abbreviate at minimum width; the full syntax stays in the tooltip.
+            Assert.Equal(TextTrimming.CharacterEllipsis, placeholder.TextTrimming);
+            Assert.Equal(vm.SearchToolTip, searchBox.ToolTip);
             foreach (TextBlock label in new[] { capture, record, newFolder }.SelectMany(button => Descendants(button).OfType<TextBlock>()))
                 AssertNotTrimmed(label, language);
             // Tab order follows the visual order: capture, search, then the library commands.
@@ -138,7 +140,13 @@ public sealed partial class SettingsThemePreviewTests
             SettleGalleryLayout(window);
             var selection = (Panel)window.FindName("SelectionCommands");
             Button[] visibleActions = selection.Children.OfType<Button>().Where(button => button.IsVisible).ToArray();
-            Assert.Equal(5, visibleActions.Length); // clear, ZIP, move, delete, reduce (GIF is video only)
+            SaveLibraryUxEvidence(window, AppTheme.Midnight, $"minimum-window-selection-{language}.png");
+            Assert.Equal(8, visibleActions.Length); // clear, ZIP, PDF, compare, move, tags, delete, reduce (GIF is video only)
+            Assert.Same(window.FindName("ContactSheetButton"), visibleActions[2]);
+            Assert.Same(GalleryWindow.CompareCommand, visibleActions[3].Command);
+            Assert.False(GalleryWindow.CompareCommand.CanExecute(null, visibleActions[3]));
+            Assert.Equal(UiText.Get("Library.Tags.Edit"), visibleActions[5].Content);
+            Assert.Equal(UiText.Get("Text_4B8D541EBE6D"), placeholder.Text);
             // More stays after them, so restoring deleted captures is reachable with a selection.
             foreach (FrameworkElement element in visibleActions.Append<FrameworkElement>(placeholder).Append(more))
                 AssertInsideClient(element, client, language);
@@ -153,6 +161,17 @@ public sealed partial class SettingsThemePreviewTests
             Assert.Equal(barHeight, bar.ActualHeight, 1);
             Assert.Equal(workspaceTop, workspace.TranslatePoint(new Point(), client).Y, 1);
 
+            // Comparing two images shares the selection with PDF export and the earlier lanes.
+            GalleryItemViewModel second = vm.Groups.SelectMany(group => group.Items).Skip(1).First();
+            vm.Select(second.Id, control: true);
+            SettleGalleryLayout(window);
+            Assert.True(GalleryWindow.CompareCommand.CanExecute(null, visibleActions[3]));
+            foreach (Button button in selection.Children.OfType<Button>().Where(button => button.IsVisible))
+                AssertInsideClient(button, client, language);
+            vm.Select(second.Id, control: true);
+            SettleGalleryLayout(window);
+            Assert.False(GalleryWindow.CompareCommand.CanExecute(null, visibleActions[3]));
+
             ListBox rows = (ListBox)window.FindName("RowsList");
             ScrollViewer scroll = Descendants(rows).OfType<ScrollViewer>().First();
             foreach (AppTheme theme in Enum.GetValues<AppTheme>())
@@ -166,6 +185,7 @@ public sealed partial class SettingsThemePreviewTests
             SaveLibraryUxEvidence(window, AppTheme.Glass, $"after-narrow-selection-glass-{language}.png");
             vm.ClearSelection();
             SettleGalleryLayout(window);
+            Assert.Equal(vm.SearchPlaceholder, placeholder.Text);
             int rootCardsInView = CardsFullyInView(rows, scroll);
 
             // Inside a folder the location header joins the content column. A date shows the same

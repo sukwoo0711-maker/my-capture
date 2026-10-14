@@ -33,7 +33,7 @@ public sealed partial class GalleryViewModel
     public int VideoCount => _controller.Records.Count(record => record.IsVideo);
     public int KeptCount => _controller.Records.Count(record => record.IsManuallyPinned);
 
-    public bool IsAllItemsView => _scope.IsAll && _filter == GalleryFilter.All;
+    public bool IsAllItemsView => _scope.IsAll && _filter == GalleryFilter.All && _selectedTag is null;
     public bool IsImagesView => _scope.IsAll && _filter == GalleryFilter.Images;
     public bool IsVideosView => _scope.IsAll && _filter == GalleryFilter.Videos;
     public bool IsKeptView => _scope.IsAll && _filter == GalleryFilter.Pinned;
@@ -78,9 +78,14 @@ public sealed partial class GalleryViewModel
     /// True when the view would list <paramref name="record"/> without a search term: browsing,
     /// only where it is filed; a media or kept view, anywhere under the location.
     /// </summary>
-    internal bool ListsLocation(CaptureRecord record) => _filter == GalleryFilter.All
-        ? GalleryController.IsDirectlyIn(record, _scope)
-        : _controller.RecordsInView(_scope, browsing: false).Contains(record);
+    internal bool ListsLocation(CaptureRecord record)
+    {
+        if (_selectedTag is not null && !CaptureOrganization.SplitTags(record.Tags)
+            .Contains(_selectedTag, StringComparer.OrdinalIgnoreCase)) return false;
+        return _filter == GalleryFilter.All && _selectedTag is null
+            ? GalleryController.IsDirectlyIn(record, _scope)
+            : _controller.RecordsInView(_scope, browsing: false).Contains(record);
+    }
 
     /// <summary>Highlights the library root while captures dragged over it would leave their folder.</summary>
     public bool IsAllItemsDropTarget
@@ -92,7 +97,8 @@ public sealed partial class GalleryViewModel
     /// <summary>Shows the library root, or one of the image, video and kept views over the whole library.</summary>
     public void ShowView(GalleryFilter filter)
     {
-        if (IsRefreshingFolderTree || (_scope.IsAll && _filter == filter)) return;
+        if (IsRefreshingFolderTree || (_scope.IsAll && _filter == filter && _selectedTag is null)) return;
+        _selectedTag = null;
         bool filterChanged = _filter != filter;
         _filter = filter;
         if (filterChanged) Raise(nameof(Filter));
@@ -104,13 +110,16 @@ public sealed partial class GalleryViewModel
     public void NavigateTo(CaptureFolderScope scope)
     {
         if (IsRefreshingFolderTree) return;
+        bool hadTag = _selectedTag is not null;
+        _selectedTag = null;
         if (!scope.IsAll && _filter != GalleryFilter.All)
         {
             _filter = GalleryFilter.All;
             Raise(nameof(Filter));
             if (scope == _scope) { Refresh(); return; }
         }
-        SelectScope(scope);
+        if (hadTag && scope == _scope) Refresh();
+        else SelectScope(scope);
     }
 
     public void ClearSelection()

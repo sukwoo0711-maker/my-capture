@@ -117,6 +117,9 @@ internal sealed partial class AnnotationEditorControl : Grid
     private FrameworkElement _shapeStyleSection = null!;
     private Slider _fontSizeSlider = null!;
     private FrameworkElement _fontSizeSection = null!;
+    private FrameworkElement _textStyleSection = null!;
+    private CheckBox _textBold = null!;
+    private CheckBox _textBackground = null!;
     private Slider _blurSlider = null!;
     private FrameworkElement _blurSection = null!;
     private bool _syncingInspector;
@@ -327,7 +330,11 @@ internal sealed partial class AnnotationEditorControl : Grid
             if (_completed) return false;
             int steps = _controller.Undo.UndoCount;
             // An empty caption is about to vanish on its own; only its placeholder add is recorded.
-            if (_activeTextBox is { } box && _editingText is not null && string.IsNullOrEmpty(box.Text)) steps--;
+            if (_activeTextBox is { } box && _editingText is { } text)
+            {
+                if (_controller.IsCreatingText && string.IsNullOrEmpty(box.Text)) steps--;
+                else if (!string.Equals(box.Text, text.Text, StringComparison.Ordinal)) return true;
+            }
             return steps > 0 || _crop is { } crop && crop.Region != crop.Bounds;
         }
     }
@@ -460,7 +467,7 @@ internal sealed partial class AnnotationEditorControl : Grid
         if (_activeTextBox is not null)
         {
             string? command = ShortcutCatalog.Match(ShortcutScope.Annotation, key, modifiers);
-            if (command == "Cancel") { CommitActiveText(); return true; }
+            if (command == "Cancel") { FinishActiveText(cancel: true); return true; }
             if (command == "Done") { CommitActiveText(); Commit(EditorCommitAction.Done); return true; }
             return false;
         }
@@ -496,6 +503,10 @@ internal sealed partial class AnnotationEditorControl : Grid
         _shortcutActions["Undo"] = () => { if (_controller.PerformUndo()) SetStatus(UiText.Get("Text_DAF93C3AA95D")); };
         _shortcutActions["Redo"] = () => { if (_controller.PerformRedo()) SetStatus(UiText.Get("Text_8B22B7BBB0CD")); };
         _shortcutActions["Delete"] = DeleteSelected;
+        _shortcutActions["EditText"] = () =>
+        {
+            if (_controller.BeginSelectedTextEdit() is { } text) OpenTextBox(text);
+        };
         _shortcutActions["RotateLeft"] = () => RotateCapture(-1);
         _shortcutActions["RotateRight"] = () => RotateCapture(1);
         _cropActions["Apply"] = ApplyPendingCrop;
@@ -601,7 +612,7 @@ internal sealed partial class AnnotationEditorControl : Grid
 
     private void OnSurfaceMouseDown(object sender, MouseButtonEventArgs e)
     {
-        if (SurfacePointerDown(e.GetPosition(_surface), e.ClickCount)) e.Handled = true;
+        if (SurfacePointerDown(e.GetPosition(_surface), e.ClickCount, Keyboard.Modifiers.HasFlag(ModifierKeys.Shift))) e.Handled = true;
     }
 
     /// <summary>
@@ -609,8 +620,8 @@ internal sealed partial class AnnotationEditorControl : Grid
     /// <see cref="PointerInputElement"/> coordinates, through the same handling as the mouse.
     /// The tutorial clip generator uses it; the real mouse is never captured meanwhile.
     /// </summary>
-    internal void SimulatePointerDown(Point viewportPoint, int clickCount = 1) =>
-        Simulate(() => SurfacePointerDown(_viewport.TranslatePoint(viewportPoint, _surface), clickCount));
+    internal void SimulatePointerDown(Point viewportPoint, int clickCount = 1, bool shift = false) =>
+        Simulate(() => SurfacePointerDown(_viewport.TranslatePoint(viewportPoint, _surface), clickCount, shift));
 
     /// <inheritdoc cref="SimulatePointerDown"/>
     internal void SimulatePointerMove(Point viewportPoint, bool leftPressed) =>
@@ -636,7 +647,7 @@ internal sealed partial class AnnotationEditorControl : Grid
     private bool _simulatingPointer;
 
     /// <summary>A left press on the canvas at <paramref name="dip"/> (surface coordinates); true when handled.</summary>
-    private bool SurfacePointerDown(Point dip, int clickCount)
+    private bool SurfacePointerDown(Point dip, int clickCount, bool shift)
     {
         if (_completed || _commitInProgress) return false;
         _autoTrimCts?.Cancel();
@@ -649,6 +660,12 @@ internal sealed partial class AnnotationEditorControl : Grid
         Focus();
         PointD image = _surface.ToImagePoint(dip);
 
+        if (_controller.BeginTextAtPointer(image, clickCount, shift) is { } text)
+        {
+            OpenTextBox(text);
+            return true;
+        }
+
         if (TryBeginEdgeCrop(image))
         {
             CapturePointer();
@@ -657,9 +674,6 @@ internal sealed partial class AnnotationEditorControl : Grid
 
         switch (_controller.Tool)
         {
-            case EditorTool.Text:
-                PlaceTextBox(image);
-                return true;
             case EditorTool.Image:
                 InsertImage(image);
                 return true;
@@ -1054,15 +1068,20 @@ internal sealed partial class AnnotationEditorControl : Grid
 
     private void PlaceTextBox(PointD image)
     {
-        // The controller sizes the caption to its (still empty) text; the live box follows
-        // the same fit as the user types.
         double em = _controller.DefaultFontSize;
-        TextAnnotation annotation = _controller.BeginTextAnnotation(image, em, em * 1.4);
+        OpenTextBox(_controller.BeginTextAnnotation(image, em, em * 1.4));
+    }
+
+    private void OpenTextBox(TextAnnotation annotation)
+    {
         _editingText = annotation;
 
         double dipPerPixel = Math.Max(double.Epsilon, _surface.DipPerPixel);
+        ColorRgba foreground = annotation.Foreground;
+        double luma = 0.299 * foreground.R + 0.587 * foreground.G + 0.114 * foreground.B;
         var textBox = new TextBox
         {
+            Text = annotation.Text,
             MinWidth = 0,
             MinHeight = 0,
             FontFamily = new FontFamily(annotation.FontFamily),
@@ -1070,7 +1089,10 @@ internal sealed partial class AnnotationEditorControl : Grid
             FontWeight = annotation.Bold ? FontWeights.Bold : FontWeights.Normal,
             FontStyle = annotation.Italic ? FontStyles.Italic : FontStyles.Normal,
             Foreground = annotation.Foreground.ToBrush(),
-            Background = Brush("Surface.Floating", Color.FromArgb(0xF2, 0x15, 0x1E, 0x2B)),
+            // TextBox does not draw the caption's outline; keep unplated text readable while editing.
+            Background = annotation.Background.A > 0 ? annotation.Background.ToBrush()
+                : luma > 140 ? Brushes.Black : Brushes.White,
+            Opacity = annotation.Opacity,
             BorderBrush = Brush("Accent.Default", Color.FromRgb(0x7C, 0x6C, 0xFF)),
             BorderThickness = new Thickness(1),
             AcceptsReturn = true,
@@ -1128,7 +1150,8 @@ internal sealed partial class AnnotationEditorControl : Grid
         LayoutLiveTextBox(textBox);
         ConnectViewport();
         MeasureLiveTextInset(textBox);
-        SetStatus(UiText.Get("Text_230D26DEB9AE"));
+        SyncToolButtons();
+        SetStatus(UiText.Get(_controller.IsCreatingText ? "EditorText_Entering" : "EditorText_Editing"));
 
         textBox.TextChanged += OnLiveTextBoxTextChanged;
         // A box placed by a simulated gesture lives in a window that never takes keyboard focus;
@@ -1136,6 +1159,7 @@ internal sealed partial class AnnotationEditorControl : Grid
         bool simulated = _simulatingPointer;
         textBox.LostKeyboardFocus += (_, _) => { if (!simulated) CommitActiveText(); };
         _ = textBox.Focus();
+        textBox.CaretIndex = textBox.Text.Length;
     }
 
     /// <summary>
@@ -1182,7 +1206,7 @@ internal sealed partial class AnnotationEditorControl : Grid
         }
 
         double dipPerPixel = Math.Max(double.Epsilon, _surface.DipPerPixel);
-        TextLayout fit = _controller.FitText(editing, box.Text ?? string.Empty, editing.FontSize, editing.AutoSize, editing.Rect);
+        TextLayout fit = LiveTextLayout(editing, box.Text ?? string.Empty);
         Rect target = _surface.ToSurfaceRect(fit.Rect);
         double chrome = 2 * _liveTextInset.X;
         box.MinWidth = chrome + Math.Max(1, editing.FontSize * dipPerPixel);
@@ -1201,8 +1225,15 @@ internal sealed partial class AnnotationEditorControl : Grid
         // UpdateLiveTextViewport places the box horizontally, once the bar's side is known.
         _liveTextLeft = target.Left - _liveTextInset.X;
         Canvas.SetTop(box, target.Top - _liveTextInset.Y);
+        box.RenderTransform = new RotateTransform(editing.RotationDegrees,
+            target.Width / 2 + _liveTextInset.X, target.Height / 2 + _liveTextInset.Y);
         UpdateLiveTextViewport(box);
     }
+
+    private TextLayout LiveTextLayout(TextAnnotation text, string content) =>
+        string.Equals(text.Text, content, StringComparison.Ordinal)
+            ? TextLayout.Of(text)
+            : _controller.FitText(text, content, text.FontSize, text.AutoSize, text.Rect);
 
     internal enum CaptionScrollBarSide { Right, Left, Overlay }
 
@@ -1307,14 +1338,16 @@ internal sealed partial class AnnotationEditorControl : Grid
             {
                 // Exactly what committing now would store.
                 text.Text = box.Text;
-                TextLayout.Apply(text, _controller.FitText(editing, box.Text, editing.FontSize, editing.AutoSize, editing.Rect));
+                TextLayout.Apply(text, LiveTextLayout(editing, box.Text));
             }
         }
         snapshot.NormalizeZIndices();
         return snapshot;
     }
 
-    private void CommitActiveText()
+    private void CommitActiveText() => FinishActiveText(cancel: false);
+
+    private void FinishActiveText(bool cancel)
     {
         if (_activeTextBox is null || _editingText is null)
         {
@@ -1325,7 +1358,7 @@ internal sealed partial class AnnotationEditorControl : Grid
         TextAnnotation annotation = _editingText;
         _activeTextBox = null;
         _editingText = null;
-        // Esc, Ctrl+Enter and a canvas click commit from inside the box; give the keyboard back
+        // Esc, Ctrl+Enter and a canvas click finish inside the box; give the keyboard back
         // to the canvas so the next letter is a shortcut. A commit caused by focus moving
         // elsewhere (a slider, a swatch) leaves that new focus alone.
         bool hadKeyboardFocus = box.IsKeyboardFocusWithin;
@@ -1334,8 +1367,14 @@ internal sealed partial class AnnotationEditorControl : Grid
         _overlayCanvas.Children.Remove(box);
 
         bool hadText = !string.IsNullOrEmpty(box.Text);
-        _controller.CommitTextEdit(annotation, box.Text ?? string.Empty);
-        SetStatus(hadText ? UiText.Format("EditorFlow_Added", UiText.Get("Text_258AD4B095A1")) : UiText.Get("Text_8BDB6F46B7FF"));
+        bool creating = _controller.IsCreatingText;
+        if (cancel) _controller.CancelTextEdit(annotation);
+        else _controller.CommitTextEdit(annotation, box.Text ?? string.Empty);
+        SetStatus(cancel ? UiText.Get("EditorText_Cancelled")
+            : !hadText ? UiText.Get("Text_8BDB6F46B7FF")
+            : creating ? UiText.Format("EditorFlow_Added", UiText.Get("Text_258AD4B095A1"))
+            : UiText.Get("EditorText_Updated"));
+        DraftChanged?.Invoke(this, EventArgs.Empty);
         UpdateInspector();
         if (hadKeyboardFocus)
         {
@@ -1941,6 +1980,8 @@ internal sealed partial class AnnotationEditorControl : Grid
         stack.Children.Add(_shapeStyleSection);
         _fontSizeSection = BuildFontSizeSection();
         stack.Children.Add(_fontSizeSection);
+        _textStyleSection = BuildTextStyleSection();
+        stack.Children.Add(_textStyleSection);
         _blurSection = BuildBlurSection();
         stack.Children.Add(_blurSection);
         _cropSection = BuildCropSection();
@@ -2382,6 +2423,29 @@ internal sealed partial class AnnotationEditorControl : Grid
             }
         };
         panel.Children.Add(_fontSizeSlider);
+        return panel;
+    }
+
+    private FrameworkElement BuildTextStyleSection()
+    {
+        var panel = new StackPanel { Margin = new Thickness(0, 8, 0, 0) };
+        CheckBox Toggle(string key, Action<bool> apply)
+        {
+            var toggle = new CheckBox { Content = UiText.Get(key), MinHeight = 32 };
+            AutomationName(toggle, UiText.Get(key));
+            toggle.Click += (_, _) =>
+            {
+                if (_syncingInspector) return;
+                bool enabled = toggle.IsChecked == true;
+                CommitActiveText();
+                apply(enabled);
+                UpdateInspector();
+            };
+            panel.Children.Add(toggle);
+            return toggle;
+        }
+        _textBold = Toggle("EditorText_Bold", _controller.ApplyTextBold);
+        _textBackground = Toggle("EditorText_Background", _controller.ApplyTextBackground);
         return panel;
     }
 
@@ -2947,6 +3011,8 @@ internal sealed partial class AnnotationEditorControl : Grid
         _thicknessSection.Visibility = thicknessApplies ? Visibility.Visible : Visibility.Collapsed;
         _shapeStyleSection.Visibility = shapeApplies ? Visibility.Visible : Visibility.Collapsed;
         _fontSizeSection.Visibility = fontSizeApplies ? Visibility.Visible : Visibility.Collapsed;
+        _textStyleSection.Visibility = selected is TextAnnotation { IsStepNumber: false } && !cropping
+            ? Visibility.Visible : Visibility.Collapsed;
         _blurSection.Visibility = blurApplies ? Visibility.Visible : Visibility.Collapsed;
         _stepSection.Visibility = stepTool && !cropping ? Visibility.Visible : Visibility.Collapsed;
         if (stepTool) UpdateStepPreview();
@@ -2954,6 +3020,11 @@ internal sealed partial class AnnotationEditorControl : Grid
         _syncingInspector = true;
         try
         {
+            if (selected is TextAnnotation text)
+            {
+                _textBold.IsChecked = text.Bold;
+                _textBackground.IsChecked = text.Background.A > 0;
+            }
             if (thicknessApplies)
             {
                 AnnotationStrokeStyle style = (selected as ShapeAnnotation)?.StrokeStyle ?? _controller.StrokeStyle;
@@ -3046,6 +3117,8 @@ internal sealed partial class AnnotationEditorControl : Grid
 
     private void SetStatus(string message)
     {
+        if (_activeTextBox is not null)
+            message = UiText.Get(_controller.IsCreatingText ? "EditorText_Entering" : "EditorText_Editing");
         if (_statusText is null)
         {
             return;
@@ -3313,7 +3386,7 @@ internal sealed partial class AnnotationEditorControl : Grid
     }
 
     /// <summary>
-    /// Esc: finish typing (handled before this runs), else clear the selection, else go back
+    /// Esc: cancel typing (handled before this runs), else clear the selection, else go back
     /// to the select tool. Crop mode has its own Esc (cancel the frame). It never closes.
     /// </summary>
     private void StepBack()

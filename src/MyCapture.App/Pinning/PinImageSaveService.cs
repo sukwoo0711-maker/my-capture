@@ -58,15 +58,18 @@ internal sealed class PinImageSaveService
     private readonly Func<AppSettings> _settings;
     private readonly Func<AppPaths> _paths;
     private readonly ILogger<PinImageSaveService> _log;
+    private readonly Action<ImageExportOptions> _rememberExportOptions;
 
     internal PinImageSaveService(
         Func<AppSettings> settings,
         Func<AppPaths> paths,
-        ILogger<PinImageSaveService> log)
+        ILogger<PinImageSaveService> log,
+        Action<ImageExportOptions>? rememberExportOptions = null)
     {
         _settings = settings ?? throw new ArgumentNullException(nameof(settings));
         _paths = paths ?? throw new ArgumentNullException(nameof(paths));
         _log = log ?? throw new ArgumentNullException(nameof(log));
+        _rememberExportOptions = rememberExportOptions ?? (options => _settings().Export.LastImageExport = options);
     }
 
     /// <summary>
@@ -86,9 +89,16 @@ internal sealed class PinImageSaveService
         {
             string suggested;
             string? chosen;
+            ImageExportOptions options = _settings().Export.LastImageExport;
             try
             {
                 suggested = BuildSuggestedPath();
+                if (SaveAsPrompt is null)
+                {
+                    ImageExportOptions? selected = ImageExportOptionsPanel.ShowCopyOptions(owner, options);
+                    if (selected is null) return new PinSaveResult(PinSaveStatus.Cancelled);
+                    options = selected;
+                }
                 chosen = SaveAsPrompt is null
                     ? ShowSaveDialog(owner, suggested)
                     : SaveAsPrompt(owner, suggested);
@@ -112,7 +122,9 @@ string message = UiText.Get("Text_932DB1A4ED7F");
                 return new PinSaveResult(PinSaveStatus.Failed, ErrorMessage: message);
             }
 
-            return await SaveToPathAsync(image, chosen, sourcePageUrl);
+            PinSaveResult result = await SaveToPathAsync(image, chosen, sourcePageUrl, options);
+            if (result.Status == PinSaveStatus.Saved) _rememberExportOptions(options);
+            return result;
         });
     }
 
@@ -155,13 +167,18 @@ string message = UiText.Get("Text_932DB1A4ED7F");
         });
     }
 
-    private async Task<PinSaveResult> SaveToPathAsync(BitmapSource image, string path, string sourcePageUrl = "")
+    private async Task<PinSaveResult> SaveToPathAsync(BitmapSource image, string path, string sourcePageUrl, ImageExportOptions options)
     {
         BitmapSource frozen = Freeze(image);
 
         try
         {
-            long bytes = await Task.Run(() => ImageCodec.SavePngExport(frozen, path, sourcePageUrl))
+            long bytes = await Task.Run(() =>
+            {
+                byte[] encoded = ImageExportEncoder.EncodePngCopy(frozen, options, sourcePageUrl);
+                AtomicFile.WriteExportBytes(path, encoded);
+                return encoded.LongLength;
+            })
                 .ConfigureAwait(false);
             _log.LogInformation("Saved pinned image ({Bytes} bytes) to {Path}", bytes, LogText.SingleLine(path));
             return new PinSaveResult(PinSaveStatus.Saved, path);

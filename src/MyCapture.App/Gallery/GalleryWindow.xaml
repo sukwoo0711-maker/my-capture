@@ -75,6 +75,9 @@
              even though menu items are outside the visual tree. -->
         <ContextMenu x:Key="Gallery.TileContextMenu" x:Shared="False"
                      DataContext="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}">
+            <MenuItem Header="{loc:Text Gallery.Compare}"
+                      Command="{x:Static gallery:GalleryWindow.CompareCommand}"
+                      CommandTarget="{Binding PlacementTarget, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
             <MenuItem Header="{Binding IsPinned, Converter={StaticResource PinLabel}}"
                       CommandParameter="{Binding}"
                       AutomationProperties.Name="{loc:Text LibraryUx_KeepToggleName}"
@@ -99,6 +102,7 @@
                       Click="OnGifMenuClick" />
             <MenuItem Header="{loc:Text Folder410.MoveCaptures}" CommandParameter="{Binding}"
                       InputGestureText="M" Click="OnMoveCapturesClick" />
+            <MenuItem Header="{loc:Text Library.Tags.Edit}" CommandParameter="{Binding}" Click="OnBatchTagsClick" />
             <Separator />
             <MenuItem Header="{loc:Text ExportReduction_Title}"
                       CommandParameter="{Binding}"
@@ -274,14 +278,19 @@
                             <ColumnDefinition Width="*" />
                             <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
-                        <TextBlock Text="{Binding Caption}"
-                                   Visibility="{Binding HasCaption, Converter={StaticResource BoolToVisibility}}"
-                                   Foreground="{DynamicResource Text.Primary}"
-                                   FontWeight="SemiBold"
-                                   FontSize="{StaticResource FontSize.Body}"
-                                   TextTrimming="CharacterEllipsis"
-                                   VerticalAlignment="Center" />
-
+                        <StackPanel>
+                            <TextBlock Text="{Binding Caption}"
+                                       Visibility="{Binding HasCaption, Converter={StaticResource BoolToVisibility}}"
+                                       Foreground="{DynamicResource Text.Primary}"
+                                       FontWeight="SemiBold"
+                                       FontSize="{StaticResource FontSize.Body}"
+                                       TextTrimming="CharacterEllipsis"
+                                       VerticalAlignment="Center" />
+                            <TextBlock Text="{Binding SearchMatchText}" Margin="0,3,0,0"
+                                       FontSize="{StaticResource FontSize.Caption}" Foreground="{DynamicResource Text.Secondary}"
+                                       TextTrimming="CharacterEllipsis" ToolTip="{Binding SearchMatchText}"
+                                       Visibility="{Binding HasSearchMatch, Converter={StaticResource BoolToVisibility}}" />
+                        </StackPanel>
                     </Grid>
 
                     <!-- Visible Float / Copy / Edit, then delete and overflow. -->
@@ -549,12 +558,18 @@
                             <ColumnDefinition Width="*" />
                             <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
-                        <TextBlock Text="{Binding CompactCaption}"
-                                   Foreground="{DynamicResource Text.Primary}"
-                                   FontWeight="SemiBold"
-                                   FontSize="{StaticResource FontSize.Caption}"
-                                   TextTrimming="CharacterEllipsis"
-                                   VerticalAlignment="Center" />
+                        <StackPanel VerticalAlignment="Center">
+                            <TextBlock Text="{Binding CompactCaption}"
+                                       Foreground="{DynamicResource Text.Primary}"
+                                       FontWeight="SemiBold"
+                                       FontSize="{StaticResource FontSize.Caption}"
+                                       TextTrimming="CharacterEllipsis"
+                                       VerticalAlignment="Center" />
+                            <TextBlock Text="{Binding SearchMatchText}" Margin="0,2,0,0"
+                                       FontSize="{StaticResource FontSize.Caption}" Foreground="{DynamicResource Text.Secondary}"
+                                       TextTrimming="CharacterEllipsis" ToolTip="{Binding SearchMatchText}"
+                                       Visibility="{Binding HasSearchMatch, Converter={StaticResource BoolToVisibility}}" />
+                        </StackPanel>
                         <Button Grid.Column="1"
                                 Style="{StaticResource Gallery.IconButton}"
                                 Width="30" Height="30" MinWidth="30" MinHeight="30" Padding="4"
@@ -1203,6 +1218,12 @@
             <Setter Property="Padding" Value="12,6" />
             <Setter Property="Margin" Value="0,0,6,0" />
             <Setter Property="VerticalAlignment" Value="Center" />
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding DataContext.HasSelection, RelativeSource={RelativeSource AncestorType=Window}}" Value="True">
+                    <Setter Property="Padding" Value="4,6" />
+                    <Setter Property="Margin" Value="0,0,4,0" />
+                </DataTrigger>
+            </Style.Triggers>
         </Style>
         <Style x:Key="LibraryUx.CommandGhost" TargetType="Button" BasedOn="{StaticResource Button.Ghost}">
             <Setter Property="Padding" Value="10,6" />
@@ -1439,15 +1460,18 @@
                              AutomationProperties.Name="{loc:Text Text_4B8D541EBE6D}"
                              TextChanged="OnSearchTextChanged" />
                     <TextBlock Grid.Column="1" IsHitTestVisible="False"
-                               Text="{Binding SearchPlaceholder}"
                                Foreground="{DynamicResource Text.Muted}"
                                Margin="10,0"
                                TextTrimming="CharacterEllipsis"
                                VerticalAlignment="Center">
                         <TextBlock.Style>
                             <Style TargetType="TextBlock">
+                                <Setter Property="Text" Value="{Binding SearchPlaceholder}" />
                                 <Setter Property="Visibility" Value="Collapsed" />
                                 <Style.Triggers>
+                                    <DataTrigger Binding="{Binding HasSelection}" Value="True">
+                                        <Setter Property="Text" Value="{loc:Text Text_4B8D541EBE6D}" />
+                                    </DataTrigger>
                                     <DataTrigger Binding="{Binding Text, ElementName=SearchBox}" Value="">
                                         <Setter Property="Visibility" Value="Visible" />
                                     </DataTrigger>
@@ -1503,8 +1527,14 @@
                 <Border Style="{StaticResource LibraryUx.CommandSeparator}" />
                 <Button x:Name="ArchiveExportButton" Content="{loc:Text Library.Archive.Action}" Style="{StaticResource LibraryUx.CommandButton}"
                         Click="OnExportArchiveClick" ToolTip="{loc:Text Library.Archive.Hint}" />
+                <Button x:Name="ContactSheetButton" Content="{loc:Text ContactSheet.Action}" Style="{StaticResource LibraryUx.CommandButton}"
+                        Click="OnContactSheetClick" />
+                <Button Content="{loc:Text Gallery.Compare}" Style="{StaticResource LibraryUx.CommandButton}"
+                        Command="{x:Static gallery:GalleryWindow.CompareCommand}" />
                 <Button x:Name="MoveCapturesButton" Content="{loc:Text Folder410.MoveCaptures}" Style="{StaticResource LibraryUx.CommandButton}"
                         Click="OnMoveCapturesClick" ToolTip="{loc:Text LibraryUx_MoveHint}" />
+                <Button Content="{loc:Text Library.Tags.Edit}" Style="{StaticResource LibraryUx.CommandButton}"
+                        Click="OnBatchTagsClick" />
                 <Button x:Name="DeleteSelectedButton" Content="{loc:Text LibrarySelection_Delete}" Style="{StaticResource LibraryUx.CommandButton}"
                         Click="OnDeleteSelectedClick" ToolTip="{loc:Text LibraryUx_DeleteHint}" />
                 <Button Content="{loc:Text LibrarySelection_Reduce}" Style="{StaticResource LibraryUx.CommandButton}" Margin="0"
@@ -1521,7 +1551,9 @@
                       Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
                 <Button.ContextMenu>
                     <ContextMenu>
+                        <MenuItem x:Name="ImportMenu" Header="{loc:Text Library.Import.Command}" Click="OnImportClick" />
                         <MenuItem x:Name="RestoreDeletedMenu" Header="{loc:Text LibraryRecovery_Recent}" />
+                        <MenuItem x:Name="ContactSheetMenu" Header="{loc:Text ContactSheet.Action}" Click="OnContactSheetClick" />
                         <MenuItem x:Name="OpenLibraryFolderMenu" Header="{loc:Text LibraryFolder_OpenLibrary}" Click="OnOpenLibraryFolderClick" />
                         <Separator />
                         <MenuItem Header="{loc:Text LibrarySelection_ClearHint}" Click="OnClearLibraryClick"
@@ -1531,6 +1563,32 @@
             </Button>
             </StackPanel>
         </Grid>
+
+        <StackPanel Grid.Row="1">
+            <DockPanel Margin="6,0,6,8" LastChildFill="True"
+                       Visibility="{Binding HasSearchQuery, Converter={StaticResource BoolToVisibility}}">
+                <Button DockPanel.Dock="Right" Content="{loc:Text Library.Search.ClearAll}"
+                        Style="{StaticResource Button.Secondary}" Background="Transparent" BorderThickness="0"
+                        VerticalAlignment="Top" Margin="8,0,0,0" Click="OnClearSearchConditionsClick" />
+                <ItemsControl ItemsSource="{Binding SearchConditions}">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Button Style="{StaticResource Button.Secondary}" Margin="0,0,6,4" Padding="9,4"
+                                    MaxWidth="360" ToolTip="{Binding RemoveToolTip}"
+                                    AutomationProperties.Name="{Binding RemoveToolTip}" Click="OnRemoveSearchConditionClick">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="{Binding Label}" MaxWidth="300" TextTrimming="CharacterEllipsis" />
+                                    <themes:SymbolIcon Size="12" Data="{StaticResource Icon.Close}" Margin="6,0,0,0"
+                                                       Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
+                                </StackPanel>
+                            </Button>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </DockPanel>
 
         <!-- OCR full-text search coverage banner (Row 1). Shown only when part of the
              library is not yet searchable by the text inside the images, or when no OCR
@@ -1566,6 +1624,7 @@
                         Click="OnOcrIndexClick" />
             </Grid>
         </Border>
+        </StackPanel>
 
         <Grid Grid.Row="2" x:Name="GalleryWorkspace">
             <Grid.ColumnDefinitions>
@@ -1576,8 +1635,10 @@
             </Grid.ColumnDefinitions>
 
             <!-- Navigation pane on the window base, like the title bar above it. -->
-            <Grid x:Name="GalleryFilterRail" Margin="0,0,10,0" AutomationProperties.Name="{loc:Text LibraryUx_NavName}">
+            <Grid x:Name="GalleryFilterRail" Margin="0,0,10,0" AutomationProperties.Name="{loc:Text LibraryUx_NavName}"
+                  SizeChanged="OnTagNavigationSizeChanged">
                 <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="*" MinHeight="96" />
@@ -1658,8 +1719,36 @@
                     </RadioButton>
                 </StackPanel>
 
+                <Expander x:Name="TagSection" Grid.Row="1" Style="{StaticResource LibraryUx.Section}"
+                          Header="{loc:Text Library.Tags.Title}" IsExpanded="True" Margin="0,0,0,4">
+                    <DockPanel>
+                        <Button DockPanel.Dock="Bottom" Content="{loc:Text Library.Tags.More}" Style="{StaticResource LibraryUx.CommandButton}" HorizontalAlignment="Left"
+                                Click="OnMoreTagsClick" Visibility="{Binding HasMoreTags, Converter={StaticResource BoolToVisibility}}" />
+                        <ScrollViewer MaxHeight="304" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                            <ItemsControl ItemsSource="{Binding VisibleTags}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <RadioButton Style="{StaticResource LibraryUx.NavItem}"
+                                                     IsChecked="{Binding IsSelected, Mode=OneWay}" Click="OnTagClick"
+                                                     ToolTip="{Binding Name}" AutomationProperties.Name="{Binding AccessibleName}">
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="Auto" />
+                                                </Grid.ColumnDefinitions>
+                                                <TextBlock Text="{Binding Name}" Margin="0,0,8,0" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                                                <TextBlock Grid.Column="1" Text="{Binding Count}" Style="{StaticResource LibraryUx.NavCount}" />
+                                            </Grid>
+                                        </RadioButton>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </ScrollViewer>
+                    </DockPanel>
+                </Expander>
+
                 <!-- "폴더" section head: the retention rule is a tooltip, [+] creates a folder here. -->
-                <Grid Grid.Row="1" Margin="0,0,0,2">
+                <Grid Grid.Row="2" Margin="0,0,0,2">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="Auto" />
@@ -1677,7 +1766,7 @@
                     </Button>
                 </Grid>
 
-                <TreeView x:Name="FolderTree" Grid.Row="2" ItemsSource="{Binding FolderRoots}" Background="Transparent" BorderThickness="0"
+                <TreeView x:Name="FolderTree" Grid.Row="3" ItemsSource="{Binding FolderRoots}" Background="Transparent" BorderThickness="0"
                           Foreground="{DynamicResource Text.Primary}"
                           AutomationProperties.Name="{loc:Text Folder410.Title}"
                           AutomationProperties.HelpText="{loc:Text LibraryUx_FoldersHint}"
@@ -1688,7 +1777,7 @@
                           SelectedItemChanged="OnFolderSelected" PreviewKeyDown="OnFolderTreeKeyDown"
                           PreviewMouseLeftButtonDown="OnFolderPointerDown" />
 
-                <Expander x:Name="DateSection" Grid.Row="3" Style="{StaticResource LibraryUx.Section}" Margin="0,6,0,0"
+                <Expander x:Name="DateSection" Grid.Row="4" Style="{StaticResource LibraryUx.Section}" Margin="0,6,0,0"
                           Header="{loc:Text LibraryUx_DatesHeader}" IsExpanded="False">
                     <ListBox x:Name="DateList" ItemsSource="{Binding FolderNodes}" MaxHeight="220"
                              ItemTemplate="{StaticResource LibraryUx.DateItemTemplate}"
@@ -1733,6 +1822,22 @@
                               Visibility="{Binding ShowSaveHere, Converter={StaticResource BoolToVisibility}}" />
                 </Grid>
 
+                <Border x:Name="ImportOverlay" Grid.Row="1" Panel.ZIndex="10" Visibility="Collapsed"
+                        IsHitTestVisible="False" Background="{DynamicResource Surface.Raised}"
+                        BorderBrush="{DynamicResource Text.Secondary}" BorderThickness="1"
+                        CornerRadius="{StaticResource Radius.Lg}" Padding="24">
+                    <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" MaxWidth="460">
+                        <TextBlock x:Name="ImportOverlayTitle" Text="{loc:Text Library.Import.DropTitle}"
+                                   Style="{DynamicResource Text.Title}" TextWrapping="Wrap" TextAlignment="Center" />
+                        <TextBlock Text="{loc:Text Library.Import.DropDetail}" Margin="0,8,0,0"
+                                   Style="{DynamicResource Text.MutedBlock}" TextWrapping="Wrap" TextAlignment="Center" />
+                        <ProgressBar x:Name="ImportProgress" Visibility="Collapsed" Height="6" Margin="0,16,0,0"
+                                     Foreground="{DynamicResource Accent.Default}" Background="{DynamicResource Surface.Sunken}" />
+                        <Button x:Name="ImportCancelButton" Content="{loc:Text Library.Action.Cancel}"
+                                Visibility="Collapsed" Click="OnCancelImportClick" Margin="0,16,0,0"
+                                Style="{StaticResource Button.Secondary}" />
+                    </StackPanel>
+                </Border>
                 <ListBox x:Name="RowsList" Grid.Row="1"
                          Style="{StaticResource Gallery.RowsList}"
                          ItemsSource="{Binding Rows}"
@@ -1753,7 +1858,7 @@
                                    AutomationProperties.Name="{Binding EmptyStateText}" TextWrapping="Wrap" />
                         <!-- Outlined: the command bar's capture is this screen's filled button. -->
                         <Button Content="{loc:Text Text_2C20ADDA2018}" Style="{StaticResource Button.Secondary}" Click="OnCaptureRegionClick" Margin="0,16,0,0" Visibility="{Binding QueueIsEmpty, Converter={StaticResource BoolToVisibility}}" />
-                        <Button Content="{loc:Text Library.Search.Reset}" Click="OnClearLibrarySearchClick" Margin="0,16,0,0"
+                        <Button Content="{loc:Text Library.Search.ClearConditions}" Click="OnClearLibrarySearchClick" Margin="0,16,0,0"
                                 Style="{StaticResource Button.Secondary}"
                                 Visibility="{Binding CanResetEmptySearch, Converter={StaticResource BoolToVisibility}}" />
                     </StackPanel>
