@@ -4175,4 +4175,31 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="VideoEditorUx_SnapLayer" xml:space="preserve"><value>다른 레이어에 맞춤</value></data>
   <data name="VideoEditorUx_SnapStart" xml:space="preserve"><value>시작에 맞춤</value></data>
   <data name="VideoEditorUx_SnapEnd" xml:space="preserve"><value>끝에 맞춤</value></data>
+  <data name="VideoMulticut_Split" xml:space="preserve">
+    <value>분할</value>
+  </data>
+  <data name="VideoMulticut_OutputPosition" xml:space="preserve">
+    <value>출력 {0} / {1}</value>
+  </data>
+  <data name="VideoMulticut_SplitHelp" xml:space="preserve">
+    <value>재생 위치에서 구간을 분할합니다. Ctrl+K</value>
+  </data>
+  <data name="VideoMulticut_Restore" xml:space="preserve">
+    <value>되돌리기 구간</value>
+  </data>
+  <data name="VideoMulticut_RestoreHelp" xml:space="preserve">
+    <value>선택한 잘린 구간을 복원합니다.</value>
+  </data>
+  <data name="VideoMulticut_RemovedCount" xml:space="preserve">
+    <value>잘린 구간 {0}개 · 잘림 {1}</value>
+  </data>
+  <data name="VideoMulticut_SegmentRange" xml:space="preserve">
+    <value>구간 {0}–{1}</value>
+  </data>
+  <data name="VideoMulticut_TimelineHelp" xml:space="preserve">
+    <value>Ctrl+K로 분할한 뒤 구간을 클릭하거나 재생 위치에서 Enter로 선택합니다. Delete로 선택한 구간을 제거하고 Ctrl+Z로 되돌립니다.</value>
+  </data>
+  <data name="VideoMulticut_PreviewSeekFailed" xml:space="preserve">
+    <value>미리보기 탐색을 완료하지 못했습니다. 재생을 다시 시작하십시오.</value>
+  </data>
 </root>

@@ -53,6 +53,7 @@ internal sealed class VideoLayerTimeline : FrameworkElement
     private TimelineViewport _viewport = new(1, 15);
     private double _keptStartMs;
     private double _keptEndMs = 1;
+    private IReadOnlyList<VideoTimeRange> _removedRanges = [];
     private double _dragPlayheadMs;
     private double _dragSpanMs;
     private double? _hoverMs;
@@ -74,6 +75,13 @@ internal sealed class VideoLayerTimeline : FrameworkElement
     {
         _keptStartMs = startMs;
         _keptEndMs = endMs;
+        InvalidateVisual();
+    }
+
+    internal void SetRemovedRanges(IReadOnlyList<VideoTimeRange> removedRanges)
+    {
+        _removedRanges = removedRanges;
+        InvalidateVisual();
     }
 
     internal void SetHover(double? timeMs)
@@ -264,6 +272,25 @@ internal sealed class VideoLayerTimeline : FrameworkElement
         InvalidateVisual();
     }
 
+    private void DrawRemovedRange(DrawingContext dc, double startMs, double endMs, double width, double height)
+    {
+        double start = Math.Max(startMs, _viewport.ViewStartMs);
+        double end = Math.Min(endMs, _viewport.ViewEndMs);
+        if (end <= start) return;
+        double left = LabelWidth + _viewport.MsToPx(start, width);
+        double right = LabelWidth + _viewport.MsToPx(end, width);
+        var bounds = new Rect(left, 0, right - left, height);
+        dc.PushClip(new RectangleGeometry(bounds));
+        dc.PushOpacity(0.65);
+        dc.DrawRectangle(_background, null, bounds);
+        dc.Pop();
+        for (double x = left - height; x < right; x += 9)
+        {
+            dc.DrawLine(_gridPen, new Point(x, height), new Point(x + height, 0));
+        }
+        dc.Pop();
+    }
+
     protected override Size MeasureOverride(Size availableSize)
     {
         double height = ComputeDesiredHeight();
@@ -353,6 +380,15 @@ internal sealed class VideoLayerTimeline : FrameworkElement
                     timelineWidth);
                 currentTop += LayerTrackHeight + Gap;
             }
+        }
+
+        // Layers keep their source times. Shade excluded time across every row, including
+        // the bars, without moving or resizing a layer when the video is cut.
+        DrawRemovedRange(dc, 0, _keptStartMs, timelineWidth, height);
+        DrawRemovedRange(dc, _keptEndMs, _durationMs, timelineWidth, height);
+        foreach (VideoTimeRange cut in _removedRanges)
+        {
+            DrawRemovedRange(dc, cut.StartMs, cut.EndMs, timelineWidth, height);
         }
 
         // Playhead

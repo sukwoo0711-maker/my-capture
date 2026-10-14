@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace MyCapture.Core.Recording;
 
 /// <summary>Position and size relative to the source canvas; null retains legacy layout.</summary>
@@ -99,7 +101,7 @@ public sealed class FrameEditLayer
 /// </summary>
 public sealed class VideoEditDocument
 {
-    public const int CurrentSchemaVersion = 3;
+    public const int CurrentSchemaVersion = 4;
     public const int MaximumOverlayCount = 100;
     public const int MaximumFrameLayerCount = 100;
     public const int MaximumTextLength = 500;
@@ -118,6 +120,10 @@ public sealed class VideoEditDocument
 
     public double TrimOutMs { get; set; }
 
+    public List<VideoTimeRange> RemovedRanges { get; set; } = [];
+
+    public List<double> SplitPoints { get; set; } = [];
+
     public List<TimedTextOverlay> TextOverlays { get; set; } = [];
 
     public List<FrameEditLayer> FrameEditLayers { get; set; } = [];
@@ -125,8 +131,19 @@ public sealed class VideoEditDocument
     public bool HasEdits =>
         TrimInMs > 0.5
         || TrimOutMs < SourceDurationMs - 0.5
+        || RemovedRanges.Count > 0
+        || SplitPoints.Count > 0
         || TextOverlays.Count > 0
         || FrameEditLayers.Count > 0;
+
+    [JsonIgnore]
+    public double OutputDurationMs => CreateTimeline().OutputDurationMs;
+
+    public VideoCutTimeline CreateTimeline() => VideoCutTimeline.Create(
+        TrimInMs,
+        TrimOutMs,
+        SchemaVersion >= 4 ? RemovedRanges : null,
+        SchemaVersion >= 4 ? SplitPoints : null);
 
     public static VideoEditDocument CreateFor(
         int width,
@@ -171,6 +188,14 @@ public sealed class VideoEditDocument
         {
             normalized.TrimInMs = trimIn;
             normalized.TrimOutMs = trimOut;
+        }
+
+        if (SchemaVersion >= 4)
+        {
+            VideoCutTimeline timeline = VideoCutTimeline.Create(
+                normalized.TrimInMs, normalized.TrimOutMs, RemovedRanges, SplitPoints);
+            normalized.RemovedRanges = timeline.RemovedRanges.ToList();
+            normalized.SplitPoints = timeline.SplitPoints.ToList();
         }
 
         var ids = new HashSet<Guid>();
@@ -275,6 +300,8 @@ public sealed class VideoEditDocument
         SourceDurationMs = SourceDurationMs,
         TrimInMs = TrimInMs,
         TrimOutMs = TrimOutMs,
+        RemovedRanges = RemovedRanges.ToList(),
+        SplitPoints = SplitPoints.ToList(),
         TextOverlays = TextOverlays.Select(overlay => overlay.Clone()).ToList(),
         FrameEditLayers = FrameEditLayers.Select(layer => layer.Clone()).ToList(),
     };

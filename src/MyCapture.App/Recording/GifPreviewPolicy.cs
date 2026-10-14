@@ -6,7 +6,9 @@ namespace MyCapture.App.Recording;
 /// <summary>The source interval rendered as the GIF preview sample.</summary>
 internal readonly record struct GifSampleWindow(double StartMs, double EndMs, bool CoversWholeRange)
 {
-    internal double DurationMs => EndMs - StartMs;
+    internal double? KeptDurationMs { get; init; }
+
+    internal double DurationMs => KeptDurationMs ?? EndMs - StartMs;
 }
 
 /// <summary>
@@ -83,6 +85,45 @@ internal static class GifPreviewSampling
         return new GifSampleWindow(start, Math.Min(trimOutMs, start + sample), false);
     }
 
+    internal static GifSampleWindow Plan(VideoEditDocument document, double playbackSpeed, double position = CentrePosition)
+    {
+        ArgumentNullException.ThrowIfNull(document);
+        VideoCutTimeline timeline = document.CreateTimeline();
+        if (timeline.RemovedRanges.Count == 0)
+        {
+            return Plan(timeline.StartMs, timeline.EndMs, playbackSpeed, position);
+        }
+
+        return MapWindow(timeline, Plan(0, timeline.OutputDurationMs, playbackSpeed, position));
+    }
+
+    private static GifSampleWindow MapWindow(VideoCutTimeline timeline, GifSampleWindow output)
+    {
+        double sourceStart = timeline.ToSourceTime(output.StartMs);
+        double sourceEnd = timeline.ToSourceTime(output.EndMs);
+        // Sampling must not turn a valid kept segment into a sub-minimum edge fragment:
+        // normalizing that sample would otherwise remove the fragment and skew its measurement.
+        foreach (VideoTimeRange range in timeline.KeptRanges)
+        {
+            if (sourceStart >= range.StartMs && sourceStart < range.EndMs
+                && range.EndMs - sourceStart < TrimSelection.MinimumSpanMs)
+            {
+                sourceStart = Math.Max(range.StartMs, range.EndMs - TrimSelection.MinimumSpanMs);
+            }
+
+            if (sourceEnd > range.StartMs && sourceEnd <= range.EndMs
+                && sourceEnd - range.StartMs < TrimSelection.MinimumSpanMs)
+            {
+                sourceEnd = Math.Min(range.EndMs, range.StartMs + TrimSelection.MinimumSpanMs);
+            }
+        }
+
+        return new GifSampleWindow(sourceStart, sourceEnd, output.CoversWholeRange)
+        {
+            KeptDurationMs = timeline.ToOutputTime(sourceEnd) - timeline.ToOutputTime(sourceStart),
+        };
+    }
+
     /// <summary>
     /// Start and end segments rendered only for the size estimate, skipping any part already
     /// covered by the visual sample.
@@ -108,6 +149,24 @@ internal static class GifPreviewSampling
         return segments;
     }
 
+    internal static IReadOnlyList<GifSampleWindow> PlanRefinement(VideoEditDocument document, GifSampleWindow visual)
+    {
+        ArgumentNullException.ThrowIfNull(document);
+        VideoCutTimeline timeline = document.CreateTimeline();
+        if (timeline.RemovedRanges.Count == 0)
+        {
+            return PlanRefinement(timeline.StartMs, timeline.EndMs, visual);
+        }
+
+        var output = new GifSampleWindow(
+            timeline.ToOutputTime(visual.StartMs),
+            timeline.ToOutputTime(visual.EndMs),
+            visual.CoversWholeRange);
+        return PlanRefinement(0, timeline.OutputDurationMs, output)
+            .Select(window => MapWindow(timeline, window))
+            .ToArray();
+    }
+
     /// <summary>
     /// Returns a detached copy of <paramref name="document"/> trimmed to the sample. Layers wholly
     /// inside the sample are kept unchanged, so a layer the full export would reject still fails
@@ -120,8 +179,9 @@ internal static class GifPreviewSampling
         VideoEditDocument sample = document.Clone();
         sample.TrimInMs = window.StartMs;
         sample.TrimOutMs = window.EndMs;
-        sample.TextOverlays = sample.TextOverlays.Where(overlay => Keep(overlay.StartMs, overlay.EndMs, window)).ToList();
-        sample.FrameEditLayers = sample.FrameEditLayers.Where(layer => Keep(layer.StartMs, layer.EndMs, window)).ToList();
+        VideoCutTimeline timeline = sample.CreateTimeline();
+        sample.TextOverlays = sample.TextOverlays.Where(overlay => Keep(overlay.StartMs, overlay.EndMs, window, timeline)).ToList();
+        sample.FrameEditLayers = sample.FrameEditLayers.Where(layer => Keep(layer.StartMs, layer.EndMs, window, timeline)).ToList();
         return sample;
     }
 
@@ -155,17 +215,18 @@ internal static class GifPreviewSampling
         return frames + extra.Count;
     }
 
-    private static bool Keep(double startMs, double endMs, GifSampleWindow window)
+    private static bool Keep(double startMs, double endMs, GifSampleWindow window, VideoCutTimeline timeline)
     {
         double visibleStart = Math.Max(startMs, window.StartMs);
         double visibleEnd = Math.Min(endMs, window.EndMs);
-        if (!(visibleEnd > visibleStart))
+        double keptDuration = timeline.ToOutputTime(visibleEnd) - timeline.ToOutputTime(visibleStart);
+        if (!(visibleEnd > visibleStart) || keptDuration <= 0)
         {
             return false;
         }
 
         bool cut = startMs < window.StartMs || endMs > window.EndMs;
-        return !cut || visibleEnd - visibleStart >= MinimumClippedLayerMs;
+        return !cut || keptDuration >= MinimumClippedLayerMs;
     }
 }
 

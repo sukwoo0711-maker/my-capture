@@ -110,6 +110,39 @@ internal sealed class TwoLineTimeline : ContentControl, IDisposable
     private double _playheadMs;
     private TimelineViewport _viewport = new(1, 15);
     private TrimSelection _trim = new(1);
+    private VideoCutTimeline _cuts = VideoCutTimeline.Create(0, 1);
+    internal VideoTimeRange? SelectedSegment { get; private set; }
+    internal event EventHandler? SegmentSelected;
+
+    internal void SetCuts(VideoCutTimeline cuts)
+    {
+        _cuts = cuts;
+        if (SelectedSegment is { } selected
+            && !cuts.Segments.Contains(selected) && !cuts.RemovedRanges.Contains(selected))
+        {
+            ClearSegmentSelection();
+        }
+        UpdateTrimStatus();
+        InvalidateRange();
+    }
+
+    internal void ClearSegmentSelection()
+    {
+        if (SelectedSegment is null) return;
+        SelectedSegment = null;
+        InvalidateRange();
+        SegmentSelected?.Invoke(this, EventArgs.Empty);
+    }
+
+    internal void SelectSegmentAt(double sourceMs)
+    {
+        SelectedSegment = _cuts.SplitPoints.Count > 0 || _cuts.RemovedRanges.Count > 0
+            ? _cuts.GetSegmentAt(sourceMs) : null;
+        SetHandleArmed(false);
+        UpdateTrimStatus();
+        InvalidateRange();
+        SegmentSelected?.Invoke(this, EventArgs.Empty);
+    }
     private bool _trimModeEnabled;
     private bool _detailVisible = true;
     private TrimHandle _activeTrimHandle = TrimHandle.In;
@@ -402,6 +435,8 @@ internal sealed class TwoLineTimeline : ContentControl, IDisposable
         _fps = Math.Max(1, fps);
         _viewport = new TimelineViewport(_durationMs, _fps);
         _trim = new TrimSelection(_durationMs);
+        _cuts = VideoCutTimeline.Create(0, _durationMs);
+        SelectedSegment = null;
         _playheadMs = 0;
         _trimModeEnabled = true;
         _activeTrimHandle = TrimHandle.In;
@@ -591,6 +626,7 @@ internal sealed class TwoLineTimeline : ContentControl, IDisposable
     /// </summary>
     internal void ActivateTrimHandle(bool end)
     {
+        ClearSegmentSelection();
         if (!_trimModeEnabled)
         {
             SetTrimMode(true);
@@ -954,6 +990,7 @@ internal sealed class TwoLineTimeline : ContentControl, IDisposable
 
             if (completed == DragMode.Playhead || coarseClick || pendingClick)
             {
+                if (!_dragMoved) SelectSegmentAt(_playheadMs);
                 PlayheadInteractionCompleted?.Invoke(this, _playheadMs);
             }
         }
@@ -980,6 +1017,7 @@ internal sealed class TwoLineTimeline : ContentControl, IDisposable
 
     private void BeginTrimDrag(TrimHandle handle)
     {
+        ClearSegmentSelection();
         _activeTrimHandle = handle;
         _drag = handle == TrimHandle.In ? DragMode.TrimIn : DragMode.TrimOut;
         InvalidateRange();
@@ -1090,6 +1128,18 @@ internal sealed class TwoLineTimeline : ContentControl, IDisposable
     /// </summary>
     private void OnPreviewKeyDown(object sender, KeyEventArgs e)
     {
+        if (e.Key == Key.Enter && Keyboard.Modifiers == ModifierKeys.None && !_handleArmed)
+        {
+            SelectSegmentAt(_playheadMs);
+            e.Handled = true;
+            return;
+        }
+        if (e.Key == Key.Escape && SelectedSegment is not null)
+        {
+            ClearSegmentSelection();
+            e.Handled = true;
+            return;
+        }
         // Tunnelling key events only reach this control while focus is within it.
         if (!_trimModeEnabled || !_handleArmed)
         {
@@ -1484,8 +1534,15 @@ internal sealed class TwoLineTimeline : ContentControl, IDisposable
         AutomationProperties.SetName(_detail, _detailCaption.Text);
     }
 
-    private void UpdateTrimStatus() =>
-        AutomationProperties.SetItemStatus(_overview, TrimPresentation.TimelineStatus(_trim.InMs, _trim.OutMs));
+    private void UpdateTrimStatus()
+    {
+        string status = _cuts.RemovedRanges.Count == 0
+            ? TrimPresentation.TimelineStatus(_trim.InMs, _trim.OutMs)
+            : TrimPresentation.KeptLength(_cuts) + ", " + TrimPresentation.RemovedLength(_durationMs, _cuts);
+        if (SelectedSegment is { } selected) status += ", " + TrimPresentation.SegmentLabel(selected);
+        AutomationProperties.SetItemStatus(_overview, status);
+        AutomationProperties.SetItemStatus(_detail, status);
+    }
 
     private void UpdateOverviewHelp()
     {
@@ -1496,6 +1553,8 @@ internal sealed class TwoLineTimeline : ContentControl, IDisposable
         {
             help += " " + UiText.Get("VideoEditorUx_ZoomLaneHelp");
         }
+
+        help += " " + UiText.Get("VideoMulticut_TimelineHelp");
 
         AutomationProperties.SetHelpText(_overview, help);
         AutomationProperties.SetHelpText(this, help);
@@ -1557,6 +1616,7 @@ internal sealed class TwoLineTimeline : ContentControl, IDisposable
                 // The kept range reads as one bracket: accent bars along its top and bottom.
                 DrawRect(dc, trimInX, trackTop, trimOutX - trimInX, 3, _handleFill, null);
                 DrawRect(dc, trimInX, trackBottom - 3, trimOutX - trimInX, 3, _handleFill, null);
+                DrawSegments(dc, width, trackTop, trackBottom, overview: true);
                 if (_trimModeEnabled)
                 {
                     ChipLayout chips = LayoutChips(width);
@@ -1683,6 +1743,7 @@ internal sealed class TwoLineTimeline : ContentControl, IDisposable
                     DrawCutRange(dc, cutLeft, width, 0, height);
                 }
 
+                DrawSegments(dc, width, 0, height, overview: false);
                 if (_trimModeEnabled && IsVisibleInDetail(_trim.InMs))
                 {
                     DrawTrimHandle(dc, _viewport.MsToPx(_trim.InMs, width), 0, height, TrimHandle.In);
@@ -1702,6 +1763,35 @@ internal sealed class TwoLineTimeline : ContentControl, IDisposable
                 DrawPointerFeedback(dc, _detail, width, height, overview: false);
                 break;
         }
+    }
+
+    private void DrawSegments(DrawingContext dc, double width, double top, double bottom, bool overview)
+    {
+        double start = overview ? 0 : _viewport.ViewStartMs;
+        double end = overview ? _durationMs : _viewport.ViewEndMs;
+        double Px(double ms) => overview ? OverviewMsToPx(ms, width) : _viewport.MsToPx(ms, width);
+        foreach (VideoTimeRange cut in _cuts.RemovedRanges)
+        {
+            if (cut.EndMs <= start || cut.StartMs >= end) continue;
+            DrawCutRange(dc, Px(Math.Max(start, cut.StartMs)), Px(Math.Min(end, cut.EndMs)), top, bottom);
+        }
+        foreach (double split in _cuts.SplitPoints)
+        {
+            if (split < start || split > end) continue;
+            double x = Px(split);
+            DrawLine(dc, _accentOutlinePen, x, top, x, bottom);
+            DrawRect(dc, x - 3, top, 6, 5, _accent, null);
+        }
+        if (SelectedSegment is not { } selected || selected.EndMs <= start || selected.StartMs >= end) return;
+        double left = Px(Math.Max(start, selected.StartMs));
+        double right = Px(Math.Min(end, selected.EndMs));
+        DrawRect(dc, left, top + 1, right - left, bottom - top - 2, null, _focusPen);
+        // The chip can extend beyond a short segment, but stays inside the strip.
+        string label = TrimPresentation.SegmentLabel(selected);
+        FormattedText text = Format(label, 10, semiBold: true, _textPrimary);
+        double labelLeft = Math.Clamp((left + right - text.Width) / 2, 4, Math.Max(4, width - text.Width - 4));
+        DrawText(dc, label, labelLeft, bottom - text.Height - 4, _textPrimary, 10,
+            semiBold: true, _surfaceBase, centered: false);
     }
 
     private void DrawPlayhead(DrawingContext dc, double x, double top, double height)
