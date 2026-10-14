@@ -43,7 +43,7 @@ internal sealed partial class SettingsWindow : Window
 {
     private readonly Func<AppSettings> _currentSettings;
     private readonly Func<AppSettings, SettingsApplyResult> _apply;
-    private readonly Func<AppSettings, bool, SettingsApplyResult>? _applyDraft;
+    private readonly Func<AppSettings, bool, bool, SettingsApplyResult>? _applyDraft;
     private readonly Func<SettingsStore>? _settingsStore;
     private readonly ILogger _log;
     private readonly Action<string> _showSaveFailureMessage;
@@ -57,7 +57,7 @@ internal sealed partial class SettingsWindow : Window
         ILogger log,
         Func<SettingsStore>? settingsStore = null,
         Action<string>? showSaveFailureMessage = null,
-        Func<AppSettings, bool, SettingsApplyResult>? applyDraft = null)
+        Func<AppSettings, bool, bool, SettingsApplyResult>? applyDraft = null)
     {
         _currentSettings = currentSettings ?? throw new ArgumentNullException(nameof(currentSettings));
         _apply = apply ?? throw new ArgumentNullException(nameof(apply));
@@ -367,7 +367,7 @@ internal sealed partial class SettingsWindow : Window
         }
 
         AppSettings next = LegacyApplyCandidate(_draft.ToAppSettings());
-        SettingsApplyResult result = _applyDraft?.Invoke(next, _draft.FolderDestinationEdited) ?? _apply(next);
+        SettingsApplyResult result = _applyDraft?.Invoke(next, _draft.FolderDestinationEdited, _draft.ExportOptionsReplaced) ?? _apply(next);
 
         if (!result.Saved)
         {

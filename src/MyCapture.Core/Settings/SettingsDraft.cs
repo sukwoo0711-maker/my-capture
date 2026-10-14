@@ -458,6 +458,8 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
     // ================= Export =================
     private ImageExportOptions _lastImageExport = new();
 
+    public bool ExportOptionsReplaced { get; private set; }
+
     public string QuickSaveDirectoryOverride
     {
         get => _quickSaveDirectoryOverride;
@@ -604,6 +606,7 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
     /// </summary>
     public void LoadFrom(AppSettings settings)
     {
+        ExportOptionsReplaced = false;
         LoadValues(settings);
         _baseline = CaptureState();
     }
@@ -612,7 +615,11 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
     /// Replaces every field with <paramref name="settings"/> but keeps the values the draft was
     /// loaded with as its baseline, so an imported file still counts as an unapplied change.
     /// </summary>
-    public void ReplaceValues(AppSettings settings) => LoadValues(settings);
+    public void ReplaceValues(AppSettings settings)
+    {
+        ExportOptionsReplaced = true;
+        LoadValues(settings);
+    }
 
     /// <summary>
     /// True when any value differs from the settings this draft was loaded from. Typing a value
@@ -742,7 +749,7 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
     /// to disk until Apply, so a subsequent Cancel or a re-<see cref="LoadFrom"/> restores the
     /// previous values. The baseline is kept, so the reset counts as an unapplied change.
     /// </summary>
-    public void ResetToDefaults() => LoadValues(NewInstallDefaults.Create());
+    public void ResetToDefaults() => ReplaceValues(NewInstallDefaults.Create());
 
     /// <summary>
     /// Every value <see cref="ToAppSettings"/> writes, in a fixed order, as invariant text.
@@ -766,6 +773,9 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
         _gitHubIssueUrl, _gitHubToken,
         _quickSaveDirectoryOverride, B(_copyToClipboardOnQuickSave), B(_showSourceWindowTitle), _fileNamePattern,
         B(_preservedPreserveTransparency),
+        _lastImageExport.Format.ToString(), Int(_lastImageExport.LongEdge), Int(_lastImageExport.ReductionPercent),
+        B(_lastImageExport.IncludeSourceUrl), Int(_lastImageExport.Margin), Int(_lastImageExport.CornerRadius),
+        _lastImageExport.Background.ToString(), B(_lastImageExport.Shadow),
         B(_closeOnDoubleClick), _initialOpacity, _zoomStep, _ctrlClickDebounceMs, _closedWindowRestoreLimit,
         _preferredLanguages, _ocrQuality, B(_cacheResults),
         _lastAnnotationTool, _annotationStrokeStyle.ToString(), Dbl(_annotationFillTransparency), _strokeThickness,

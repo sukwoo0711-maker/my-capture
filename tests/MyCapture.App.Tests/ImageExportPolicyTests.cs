@@ -177,6 +177,50 @@ public sealed class ImageExportPolicyTests
         return true;
     });
 
+    [Fact]
+    public async Task AutomaticReduction_IncludesUrlInJpegQualitySearch() => await StaThreadTask.RunAsync(() =>
+    {
+        BitmapSource source = Image(257, 193);
+        byte[] png = ImageCodec.EncodePng(source);
+        var options = new ImageExportOptions { ReductionPercent = 50 };
+        ImageExportResult withoutUrl = ImageExportEncoder.Encode(source, png, options, Colors.Blue, null);
+        long target = png.LongLength / 2;
+        Assert.Equal(".jpg", withoutUrl.Extension);
+        Assert.True(withoutUrl.TargetReached);
+        string url = "https://example.com/" + new string('x', checked((int)(target - withoutUrl.Bytes.Length + 64)));
+        Assert.True(withoutUrl.Bytes.Length + Encoding.UTF8.GetByteCount("SourceURL=" + url) + 4 > target);
+
+        ImageExportResult result = ImageExportEncoder.Encode(source, png, options with { IncludeSourceUrl = true }, Colors.Blue, url);
+
+        Assert.Equal(".jpg", result.Extension);
+        Assert.True(result.TargetReached);
+        Assert.True(result.JpegQuality < withoutUrl.JpegQuality);
+        Assert.Contains(url, Encoding.UTF8.GetString(result.Bytes));
+        Assert.Equal((257, 193), Size(result.Bytes));
+        return true;
+    });
+
+    [Fact]
+    public async Task AutomaticReduction_IncludesUrlBeforeAcceptingPng() => await StaThreadTask.RunAsync(() =>
+    {
+        BitmapSource source = Image(64, 48);
+        byte[] plain = ImageCodec.EncodePng(source);
+        string url = "https://example.com/" + new string('x', plain.Length / 2);
+        byte[] original = PngSourceUrlMetadata.WithSourceUrl(plain, url);
+        var options = new ImageExportOptions { ReductionPercent = 25 };
+        ImageExportResult withoutUrl = ImageExportEncoder.Encode(source, original, options, Colors.Blue, null);
+        Assert.Equal(".png", withoutUrl.Extension);
+        Assert.True(withoutUrl.TargetReached);
+
+        ImageExportResult result = ImageExportEncoder.Encode(source, original, options with { IncludeSourceUrl = true }, Colors.Blue, null);
+
+        Assert.Equal(".jpg", result.Extension);
+        Assert.True(result.TargetReached);
+        Assert.Contains(url, Encoding.UTF8.GetString(result.Bytes));
+        Assert.Equal((64, 48), Size(result.Bytes));
+        return true;
+    });
+
     private static BitmapSource Image(int width, int height)
     {
         byte[] pixels = new byte[width * height * 4]; new Random(97).NextBytes(pixels);
