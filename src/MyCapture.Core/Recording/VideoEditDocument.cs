@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace MyCapture.Core.Recording;
 
 /// <summary>Position and size relative to the source canvas; null retains legacy layout.</summary>
@@ -99,7 +101,7 @@ public sealed class FrameEditLayer
 /// </summary>
 public sealed class VideoEditDocument
 {
-    public const int CurrentSchemaVersion = 3;
+    public const int CurrentSchemaVersion = 4;
     public const int MaximumOverlayCount = 100;
     public const int MaximumFrameLayerCount = 100;
     public const int MaximumTextLength = 500;
@@ -118,6 +120,10 @@ public sealed class VideoEditDocument
 
     public double TrimOutMs { get; set; }
 
+    public List<VideoTimeRange> RemovedRanges { get; set; } = [];
+
+    public List<double> SplitPoints { get; set; } = [];
+
     public List<TimedTextOverlay> TextOverlays { get; set; } = [];
 
     public List<FrameEditLayer> FrameEditLayers { get; set; } = [];
@@ -125,8 +131,59 @@ public sealed class VideoEditDocument
     public bool HasEdits =>
         TrimInMs > 0.5
         || TrimOutMs < SourceDurationMs - 0.5
+        || RemovedRanges.Count > 0
+        || SplitPoints.Count > 0
         || TextOverlays.Count > 0
         || FrameEditLayers.Count > 0;
+
+    [JsonIgnore]
+    public double OutputDurationMs => CreateTimeline().OutputDurationMs;
+
+    public VideoCutTimeline CreateTimeline() => VideoCutTimeline.Create(
+        TrimInMs,
+        TrimOutMs,
+        SchemaVersion >= 4 ? RemovedRanges : null,
+        SchemaVersion >= 4 ? SplitPoints : null);
+
+    /// <summary>Applies changes in the trimmed view without replacing hidden source edits.</summary>
+    public void ApplyTimelineEdit(VideoCutTimeline next)
+    {
+        VideoCutTimeline before = CreateTimeline();
+        if (next.StartMs != before.StartMs || next.EndMs != before.EndMs)
+        {
+            throw new ArgumentException("The edit must use the current outer trim.", nameof(next));
+        }
+
+        List<VideoTimeRange> ranges = [.. RemovedRanges];
+        foreach (VideoTimeRange restored in before.RemovedRanges.Except(next.RemovedRanges))
+        {
+            List<VideoTimeRange> remaining = [];
+            foreach (VideoTimeRange range in ranges)
+            {
+                if (range.EndMs <= restored.StartMs || range.StartMs >= restored.EndMs)
+                {
+                    remaining.Add(range);
+                    continue;
+                }
+
+                if (range.StartMs < restored.StartMs) remaining.Add(new(range.StartMs, restored.StartMs));
+                if (range.EndMs > restored.EndMs) remaining.Add(new(restored.EndMs, range.EndMs));
+            }
+            ranges = remaining;
+        }
+
+        ranges.AddRange(next.RemovedRanges.Except(before.RemovedRanges));
+        VideoCutTimeline source = VideoCutTimeline.Create(0, SourceDurationMs, ranges);
+        RemovedRanges = source.RemovedRanges.ToList();
+        SplitPoints = NormalizeSourceSplitPoints(
+            SplitPoints.Except(before.SplitPoints.Except(next.SplitPoints)).Concat(next.SplitPoints), SourceDurationMs);
+    }
+
+    // A marker can become too close to a cut/trim edge to draw a valid segment and become
+    // usable again after restoration. Keep it in the document while the view filters it.
+    private static List<double> NormalizeSourceSplitPoints(IEnumerable<double>? points, double durationMs) =>
+        (points ?? []).Where(point => double.IsFinite(point) && point > 0 && point < durationMs)
+            .Distinct().Order().ToList();
 
     public static VideoEditDocument CreateFor(
         int width,
@@ -171,6 +228,16 @@ public sealed class VideoEditDocument
         {
             normalized.TrimInMs = trimIn;
             normalized.TrimOutMs = trimOut;
+        }
+
+        if (SchemaVersion >= 4)
+        {
+            // Edits belong to the source, just like layers. Only CreateTimeline clips them
+            // to the active trim; draft snapshots must retain edits that are currently hidden.
+            VideoCutTimeline timeline = VideoCutTimeline.Create(
+                0, duration, RemovedRanges);
+            normalized.RemovedRanges = timeline.RemovedRanges.ToList();
+            normalized.SplitPoints = NormalizeSourceSplitPoints(SplitPoints, duration);
         }
 
         var ids = new HashSet<Guid>();
@@ -275,6 +342,8 @@ public sealed class VideoEditDocument
         SourceDurationMs = SourceDurationMs,
         TrimInMs = TrimInMs,
         TrimOutMs = TrimOutMs,
+        RemovedRanges = RemovedRanges.ToList(),
+        SplitPoints = SplitPoints.ToList(),
         TextOverlays = TextOverlays.Select(overlay => overlay.Clone()).ToList(),
         FrameEditLayers = FrameEditLayers.Select(layer => layer.Clone()).ToList(),
     };

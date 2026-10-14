@@ -8,6 +8,209 @@ namespace MyCapture.Core.Tests;
 
 public sealed class VideoEditDocumentTests
 {
+    [Theory]
+    [InlineData(1)]
+    [InlineData(2)]
+    [InlineData(3)]
+    public void NormalizeFor_LegacySchemasMigrateWithNoCutsOrSplits(int schema)
+    {
+        var document = VideoEditDocument.CreateFor(640, 360, 2_000);
+        document.SchemaVersion = schema;
+        document.TrimInMs = 200;
+        document.TrimOutMs = 1_800;
+        document.RemovedRanges = [new(500, 900)];
+        document.SplitPoints = [500, 900];
+
+        VideoEditDocument normalized = document.NormalizeFor(640, 360, 2_000);
+
+        Assert.Equal(4, normalized.SchemaVersion);
+        Assert.Equal(200, normalized.TrimInMs);
+        Assert.Equal(1_800, normalized.TrimOutMs);
+        Assert.Empty(normalized.RemovedRanges);
+        Assert.Empty(normalized.SplitPoints);
+        Assert.Equal(1_600, normalized.OutputDurationMs);
+        Assert.Equal(1_600, document.CreateTimeline().OutputDurationMs);
+    }
+
+    [Fact]
+    public void NormalizeFor_MulticutNormalizesCutsAndKeepsLayersOnSourceTime()
+    {
+        var document = VideoEditDocument.CreateFor(640, 360, 2_000);
+        document.TrimInMs = 100;
+        document.TrimOutMs = 1_900;
+        document.RemovedRanges = [new(500, 800), new(800, 1_000), new(1_800, 2_100)];
+        document.SplitPoints = [250, 500, 800, 1_000];
+        document.TextOverlays.Add(new TimedTextOverlay { Text = "caption", StartMs = 600, EndMs = 1_200 });
+        document.FrameEditLayers.Add(new FrameEditLayer { StartMs = 700, EndMs = 1_400, OverlayPngBase64 = "AA==" });
+
+        VideoEditDocument normalized = document.NormalizeFor(640, 360, 2_000);
+
+        Assert.Equal([new VideoTimeRange(500, 1_000), new(1_800, 2_000)], normalized.RemovedRanges);
+        Assert.Equal([new VideoTimeRange(500, 1_000), new(1_800, 1_900)], normalized.CreateTimeline().RemovedRanges);
+        Assert.Equal([250d, 500d, 800d, 1_000d], normalized.SplitPoints);
+        Assert.Equal(1_200, normalized.OutputDurationMs);
+        Assert.Equal(600, normalized.TextOverlays[0].StartMs);
+        Assert.Equal(1_200, normalized.TextOverlays[0].EndMs);
+        Assert.Equal(700, normalized.FrameEditLayers[0].StartMs);
+        Assert.Equal(1_400, normalized.FrameEditLayers[0].EndMs);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void NarrowTrimSplitAndDraftRoundTrip_PreserveHiddenSourceEdits(bool split)
+    {
+        var document = VideoEditDocument.CreateFor(640, 360, 10_000);
+        document.RemovedRanges = [new(2_000, 4_000), new(8_000, 9_000)];
+        document.SplitPoints = [2_000, 3_000, 4_000, 8_000, 9_000];
+        document.TrimInMs = 5_000;
+        document.TrimOutMs = 7_500;
+        Assert.Empty(document.CreateTimeline().RemovedRanges);
+        Assert.Empty(document.CreateTimeline().SplitPoints);
+        if (split)
+        {
+            Assert.True(document.CreateTimeline().TrySplit(7_000, out VideoCutTimeline next));
+            document.ApplyTimelineEdit(next);
+        }
+
+        VideoEditDocument snapshot = document.NormalizeFor(640, 360, 10_000);
+        VideoEditDocument recovered = JsonSerializer.Deserialize<VideoEditDocument>(
+            JsonSerializer.Serialize(snapshot, JsonDefaults.Compact), JsonDefaults.Compact)!;
+        recovered = recovered.NormalizeFor(640, 360, 10_000);
+        recovered.TrimInMs = 0;
+        recovered.TrimOutMs = 10_000;
+
+        Assert.Equal([new VideoTimeRange(2_000, 4_000), new(8_000, 9_000)], recovered.CreateTimeline().RemovedRanges);
+        Assert.Equal(split ? [2_000d, 3_000d, 4_000d, 7_000d, 8_000d, 9_000d] :
+            new[] { 2_000d, 3_000d, 4_000d, 8_000d, 9_000d }, recovered.SplitPoints);
+        Assert.Equal(7_000, recovered.OutputDurationMs);
+    }
+
+    [Fact]
+    public void ApplyTimelineEdit_RestoresOnlyTheVisiblePartOfACutCrossingTheTrim()
+    {
+        var document = VideoEditDocument.CreateFor(640, 360, 10_000);
+        document.RemovedRanges = [new(2_000, 4_000), new(8_000, 9_000)];
+        document.SplitPoints = [2_000, 4_000, 7_000, 8_000, 9_000];
+        document.TrimInMs = 3_000;
+        document.TrimOutMs = 8_500;
+        Assert.True(document.CreateTimeline().TryRestoreSegment(new(3_000, 4_000), out VideoCutTimeline next));
+
+        document.ApplyTimelineEdit(next);
+
+        Assert.Equal([new VideoTimeRange(2_000, 3_000), new(8_000, 9_000)], document.RemovedRanges);
+        Assert.Equal([2_000d, 4_000d, 7_000d, 8_000d, 9_000d], document.SplitPoints);
+        Assert.True(document.CreateTimeline().TryRemoveSegment(new(7_000, 8_000), out next));
+        document.ApplyTimelineEdit(next);
+        Assert.Equal([new VideoTimeRange(2_000, 3_000), new(7_000, 9_000)], document.RemovedRanges);
+    }
+
+    [Fact]
+    public void RestoreAcrossTrimAndDraftRoundTrip_PreserveTemporarilyHiddenSplitMarkers()
+    {
+        var document = VideoEditDocument.CreateFor(640, 360, 10_000);
+        document.RemovedRanges = [new(1_800, 4_000)];
+        document.SplitPoints = [1_800, 1_950, 4_000];
+        document.TrimInMs = 2_000;
+        Assert.True(document.CreateTimeline().TryRestoreSegment(new(2_000, 4_000), out VideoCutTimeline next));
+        document.ApplyTimelineEdit(next);
+
+        VideoEditDocument snapshot = document.NormalizeFor(640, 360, 10_000);
+        VideoEditDocument recovered = JsonSerializer.Deserialize<VideoEditDocument>(
+            JsonSerializer.Serialize(snapshot))!.NormalizeFor(640, 360, 10_000);
+        Assert.Equal([1_800d, 1_950d, 4_000d], recovered.SplitPoints);
+        recovered.TrimInMs = 0;
+        Assert.Equal(new VideoTimeRange(1_800, 2_000), Assert.Single(recovered.RemovedRanges));
+        Assert.DoesNotContain(1_950d, recovered.CreateTimeline().SplitPoints);
+        Assert.True(recovered.CreateTimeline().TryRestoreSegment(new(1_800, 2_000), out next));
+        recovered.ApplyTimelineEdit(next);
+        Assert.Equal([1_800d, 1_950d, 4_000d], recovered.CreateTimeline().SplitPoints);
+    }
+
+    [Fact]
+    public void ApplyTimelineEdit_SplitDoesNotPersistViewOnlyMinimumSpanExpansion()
+    {
+        var document = VideoEditDocument.CreateFor(640, 360, 10_000);
+        document.RemovedRanges = [new(2_000, 4_000)];
+        document.SplitPoints = [2_000, 4_000];
+        document.TrimInMs = 1_950;
+        Assert.Equal(new VideoTimeRange(1_950, 4_000), Assert.Single(document.CreateTimeline().RemovedRanges));
+        Assert.True(document.CreateTimeline().TrySplit(7_000, out VideoCutTimeline next));
+
+        document.ApplyTimelineEdit(next);
+
+        Assert.Equal(new VideoTimeRange(2_000, 4_000), Assert.Single(document.RemovedRanges));
+        Assert.Equal([2_000d, 4_000d, 7_000d], document.SplitPoints);
+    }
+
+    [Fact]
+    public void Clone_MulticutListsAreDetached()
+    {
+        var document = VideoEditDocument.CreateFor(640, 360, 2_000);
+        document.RemovedRanges = [new(500, 900)];
+        document.SplitPoints = [500, 900];
+
+        VideoEditDocument clone = document.Clone();
+        clone.RemovedRanges.Clear();
+        clone.SplitPoints.Add(1_200);
+
+        Assert.Single(document.RemovedRanges);
+        Assert.Equal([500d, 900d], document.SplitPoints);
+        Assert.Equal(1_600, document.OutputDurationMs);
+    }
+
+    [Fact]
+    public void HasEdits_SplitOnlyDocumentsRemainDraftEdits()
+    {
+        var document = VideoEditDocument.CreateFor(640, 360, 2_000);
+        Assert.False(document.HasEdits);
+
+        document.SplitPoints.Add(500);
+        Assert.True(document.HasEdits);
+        Assert.Equal(2_000, document.OutputDurationMs);
+
+        document.SplitPoints.Clear();
+        document.RemovedRanges.Add(new(500, 900));
+        Assert.True(document.HasEdits);
+        Assert.Equal(1_600, document.OutputDurationMs);
+    }
+
+    [Fact]
+    public void JsonRoundTrip_PreservesMulticutRecoveryDataWithoutComputedDuration()
+    {
+        var document = VideoEditDocument.CreateFor(640, 360, 2_000);
+        document.TrimInMs = 200;
+        document.TrimOutMs = 1_800;
+        document.RemovedRanges = [new(500, 900), new(1_200, 1_400)];
+        document.SplitPoints = [500, 700, 900, 1_200, 1_400];
+
+        string json = JsonSerializer.Serialize(document, JsonDefaults.Compact);
+        VideoEditDocument? restored = JsonSerializer.Deserialize<VideoEditDocument>(json, JsonDefaults.Compact);
+
+        Assert.NotNull(restored);
+        VideoEditDocument normalized = restored.NormalizeFor(640, 360, 2_000);
+        Assert.Equal(document.RemovedRanges, normalized.RemovedRanges);
+        Assert.Equal(document.SplitPoints, normalized.SplitPoints);
+        Assert.Equal(document.OutputDurationMs, normalized.OutputDurationMs);
+        Assert.DoesNotContain("outputDurationMs", json, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("\"durationMs\"", json, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void NormalizeFor_NullMulticutCollectionsRecoverToAnUncutTimeline()
+    {
+        var document = VideoEditDocument.CreateFor(640, 360, 1_000);
+        document.RemovedRanges = null!;
+        document.SplitPoints = null!;
+
+        VideoEditDocument normalized = document.NormalizeFor(640, 360, 1_000);
+
+        Assert.Empty(normalized.RemovedRanges);
+        Assert.Empty(normalized.SplitPoints);
+        Assert.False(normalized.HasEdits);
+        Assert.Equal(1_000, normalized.OutputDurationMs);
+    }
+
     [Fact]
     public void SpatialBounds_NormalizeRejectsNonfiniteAndPreservesLegacyAndClone()
     {

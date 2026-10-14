@@ -59,6 +59,7 @@ internal static class ShortcutCatalog
         Add(ShortcutScope.Video, "PreviousFrame", Key.Left, "Ctrl+Shift+←", ModifierKeys.Control | ModifierKeys.Shift);
         Add(ShortcutScope.Video, "NextFrame", Key.Right, "Ctrl+Shift+→", ModifierKeys.Control | ModifierKeys.Shift);
         Add(ShortcutScope.Video, "AddText", Key.T, "Ctrl+T", ModifierKeys.Control);
+        Add(ShortcutScope.Video, "Split", Key.K, "Ctrl+K", ModifierKeys.Control);
         Add(ShortcutScope.Video, "Undo", Key.Z, "Ctrl+Z", ModifierKeys.Control);
         Add(ShortcutScope.Video, "Redo", Key.Y, "Ctrl+Y", ModifierKeys.Control);
         Add(ShortcutScope.Video, "Redo", Key.Z, "Ctrl+Shift+Z", ModifierKeys.Control | ModifierKeys.Shift);

@@ -4365,4 +4365,31 @@ Delete {1} {1:plural:subfolder|subfolders}, {2} {2:plural:image|images}, and {3}
   <data name="Gallery.Compare.View" xml:space="preserve"><value>Capture comparison</value></data>
   <data name="Gallery.Compare.Controls" xml:space="preserve"><value>Mouse wheel: zoom · Drag: pan · Tab: swap sides · Esc: close · Arrow keys in overlay: move divider</value></data>
   <data name="Gallery.Compare.LoadFailed" xml:space="preserve"><value>The images could not be loaded for comparison.</value></data>
+  <data name="VideoMulticut_Split" xml:space="preserve">
+    <value>Split</value>
+  </data>
+  <data name="VideoMulticut_OutputPosition" xml:space="preserve">
+    <value>Output {0} / {1}</value>
+  </data>
+  <data name="VideoMulticut_SplitHelp" xml:space="preserve">
+    <value>Split the segment at the playhead. Ctrl+K</value>
+  </data>
+  <data name="VideoMulticut_Restore" xml:space="preserve">
+    <value>Restore segment</value>
+  </data>
+  <data name="VideoMulticut_RestoreHelp" xml:space="preserve">
+    <value>Restore the selected removed segment.</value>
+  </data>
+  <data name="VideoMulticut_RemovedCount" xml:space="preserve">
+    <value>Removed segments: {0} · Cut {1}</value>
+  </data>
+  <data name="VideoMulticut_SegmentRange" xml:space="preserve">
+    <value>Segment {0}–{1}</value>
+  </data>
+  <data name="VideoMulticut_TimelineHelp" xml:space="preserve">
+    <value>Split with Ctrl+K, then click a segment or press Enter at the playhead to select it. Delete removes the selected segment. Ctrl+Z undoes the edit.</value>
+  </data>
+  <data name="VideoMulticut_PreviewSeekFailed" xml:space="preserve">
+    <value>The preview could not seek. Start playback again.</value>
+  </data>
 </root>

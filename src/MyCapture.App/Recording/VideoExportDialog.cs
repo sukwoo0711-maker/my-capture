@@ -88,7 +88,8 @@ internal sealed class VideoExportDialog : Window
     {
         _recording = recording;
         // The owner is modal/paused; take a detached document so all worker inputs stay stable.
-        _document = document.Clone();
+        _document = document.NormalizeFor(recording.Width, recording.Height,
+            document.SourceDurationMs is > 0 and < double.PositiveInfinity ? document.SourceDurationMs : recording.DurationMs);
         _logs = logs;
         _gifSession = new GifExportSession(recording, _document, logs.CreateLogger("GifExport"));
         StandardWindowTheme.Apply(this);
@@ -316,19 +317,10 @@ internal sealed class VideoExportDialog : Window
 
     private GifShareTarget SelectedShareTarget => (GifShareTarget)((OptionItem)_shareTarget.SelectedItem).Value;
 
-    private double SpanMs => KeptRange.OutMs - KeptRange.InMs;
+    private double SpanMs => _document.OutputDurationMs;
 
-    /// <summary>The trim clamped to the recording, as the exporter normalizes it.</summary>
-    private (double InMs, double OutMs) KeptRange
-    {
-        get
-        {
-            double duration = Math.Max(1, _recording.DurationMs);
-            double trimIn = Math.Clamp(_document.TrimInMs, 0, duration);
-            double trimOut = Math.Clamp(_document.TrimOutMs, 0, duration);
-            return trimOut > trimIn ? (trimIn, trimOut) : (0, duration);
-        }
-    }
+    /// <summary>The normalized source trim; its output duration excludes removed ranges.</summary>
+    private (double InMs, double OutMs) KeptRange => (_document.TrimInMs, _document.TrimOutMs);
 
     private void Changed()
     {
@@ -428,7 +420,7 @@ internal sealed class VideoExportDialog : Window
 
     private void UpdateSamplePositionLabel()
     {
-        GifSampleWindow window = GifPreviewSampling.Plan(KeptRange.InMs, KeptRange.OutMs, SelectedSpeed, _samplePosition.Value / 100);
+        GifSampleWindow window = GifPreviewSampling.Plan(_document, SelectedSpeed, _samplePosition.Value / 100);
         _samplePositionLabel.Text = UiText.Format("GifPreview_SamplePositionValue", window.StartMs / 1000);
     }
 
@@ -454,8 +446,8 @@ internal sealed class VideoExportDialog : Window
             // One render worker at a time: the cancelled one exits at its next frame.
             await previous;
             cancellation.Token.ThrowIfCancellationRequested();
-            (double trimIn, double trimOut) = KeptRange;
-            GifSampleWindow window = GifPreviewSampling.Plan(trimIn, trimOut, speed, position);
+            double firstSourceTime = _document.CreateTimeline().ToSourceTime(0);
+            GifSampleWindow window = GifPreviewSampling.Plan(_document, speed, position);
             VideoEditDocument sampleDocument = GifPreviewSampling.CreateSampleDocument(_document, window);
             CancellationToken token = cancellation.Token;
             sample = await StaThreadTask.RunAsync(
@@ -465,7 +457,7 @@ internal sealed class VideoExportDialog : Window
             _sample = sample;
             sample = null;
             _sampleMotion = _sample.MotionFraction;
-            GifPresetMeasurement measurement = _sample.MeasurementFrom(trimIn);
+            GifPresetMeasurement measurement = _sample.MeasurementFrom(firstSourceTime);
             Remember(measurement);
             // A sample of the whole kept range is the exact export: 내보내기 copies it.
             VideoExportCalculation? whole = _working || _result is not null ? null : _sample.TakeWholeRangeResult();
@@ -475,7 +467,7 @@ internal sealed class VideoExportDialog : Window
             UpdateGuidance();
 
             // Estimate-only start and end segments refine the size once the preview is visible.
-            foreach (GifSampleWindow segment in GifPreviewSampling.PlanRefinement(trimIn, trimOut, window))
+            foreach (GifSampleWindow segment in GifPreviewSampling.PlanRefinement(_document, window))
             {
                 VideoEditDocument segmentDocument = GifPreviewSampling.CreateSampleDocument(_document, segment);
                 GifSegmentSize segmentSize = await StaThreadTask.RunAsync(
@@ -488,7 +480,7 @@ internal sealed class VideoExportDialog : Window
                     return; // Superseded, or replaced by an exact full calculation.
                 }
 
-                measurement = measurement.Including(segmentSize, segment.DurationMs, Math.Abs(segment.StartMs - trimIn) < 0.5);
+                measurement = measurement.Including(segmentSize, segment.DurationMs, Math.Abs(segment.StartMs - firstSourceTime) < 0.5);
                 _measurements[quality] = measurement;
                 UpdateGuidance();
             }
@@ -543,8 +535,8 @@ internal sealed class VideoExportDialog : Window
     {
         try
         {
-            (double trimIn, double trimOut) = KeptRange;
-            double sourceTime = trimIn + ((trimOut - trimIn) / 2);
+            VideoCutTimeline timeline = _document.CreateTimeline();
+            double sourceTime = timeline.ToSourceTime(timeline.OutputDurationMs / 2);
             string path = _recording.OutputPath;
             int width = _recording.Width, height = _recording.Height;
             List<TimedTextOverlay> overlays = _document.TextOverlays.Select(overlay => overlay.Clone()).ToList();
@@ -576,16 +568,18 @@ internal sealed class VideoExportDialog : Window
         }
     }
 
-    /// <summary>Text and image layer intervals inside the kept range, relative to its start.</summary>
+    /// <summary>Layer intervals and cut boundaries on the output clock used by the GIF schedule.</summary>
     private List<(double StartMs, double EndMs)> LayerIntervals
     {
         get
         {
-            (double trimIn, double trimOut) = KeptRange;
+            VideoCutTimeline timeline = _document.CreateTimeline();
             return _document.TextOverlays.Select(overlay => (overlay.StartMs, overlay.EndMs))
                 .Concat(_document.FrameEditLayers.Select(layer => (layer.StartMs, layer.EndMs)))
-                .Where(interval => interval.EndMs > trimIn && interval.StartMs < trimOut)
-                .Select(interval => (Math.Max(interval.StartMs, trimIn) - trimIn, Math.Min(interval.EndMs, trimOut) - trimIn))
+                .Select(interval => (StartMs: timeline.ToOutputTime(interval.StartMs), EndMs: timeline.ToOutputTime(interval.EndMs)))
+                .Where(interval => interval.EndMs > interval.StartMs)
+                .Concat(timeline.KeptRanges.Skip(1).Select(segment =>
+                    (timeline.ToOutputTime(segment.StartMs), timeline.ToOutputTime(segment.StartMs))))
                 .ToList();
         }
     }
@@ -821,7 +815,8 @@ internal sealed class VideoExportDialog : Window
                 {
                     TrimReencoder.Reencode(source, temp, trimIn, trimOut, _recording,
                         options => new MediaFoundationVideoEncoder(options, _logs.CreateLogger<MediaFoundationVideoEncoder>()),
-                        _logs.CreateLogger("VideoExport"), overlays, layers, progress, token, bitrate);
+                        _logs.CreateLogger("VideoExport"), overlays, layers, progress, token, bitrate,
+                        removedRanges: _document.RemovedRanges);
                 }
 
                 token.ThrowIfCancellationRequested();

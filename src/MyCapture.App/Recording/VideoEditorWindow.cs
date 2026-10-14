@@ -77,6 +77,11 @@ internal sealed partial class VideoEditorWindow : Window
     private readonly List<TextBlock> _toolLabels = [];
     private Button _trimToolButton = null!;
     private Button _addTextToolButton = null!;
+    private Button _restoreSegmentButton = null!;
+    private VideoCutTimeline _cutTimeline = VideoCutTimeline.Create(0, 1);
+    private readonly PreviewCutPlayback _cutPlayback = new();
+    private bool _cutSeekInFlight;
+    private bool _settlingCutPlaybackEnd;
     private int _commandBarLevel = -1;
     private bool _fittingCommandBar;
     private ScrollViewer? _layerTracksScroll;
@@ -90,6 +95,7 @@ internal sealed partial class VideoEditorWindow : Window
     private readonly TextBlock _trimPreviewBadgeText;
     private readonly MediaElementPreviewEngine _previewEngine;
     private readonly PreviewSeekCoordinator _previewSeeks;
+    private readonly Action _playMedia;
     private readonly TwoLineTimeline _timeline;
     private readonly VideoLayerTimeline _layerTimeline;
     private readonly TextBlock _positionLabel;
@@ -163,7 +169,9 @@ internal sealed partial class VideoEditorWindow : Window
         RecordingResult recording,
         AppPaths paths,
         ILoggerFactory loggerFactory,
-        VideoEditDocument? editDocument = null)
+        VideoEditDocument? editDocument = null,
+        IVideoPreviewEngine? previewEngine = null,
+        Action? playMedia = null)
     {
         _recording = recording ?? throw new ArgumentNullException(nameof(recording));
         _paths = paths ?? throw new ArgumentNullException(nameof(paths));
@@ -232,7 +240,8 @@ internal sealed partial class VideoEditorWindow : Window
         _layerCanvas.LayerActivated += (_, _) => EditSelectedOverlay();
         _layerCanvas.SelectionViewBoundsChanged += (_, _) => PlacePositionChip();
         _previewEngine = new MediaElementPreviewEngine(_media);
-        _previewSeeks = new PreviewSeekCoordinator(_previewEngine, recording.Fps);
+        _previewSeeks = new PreviewSeekCoordinator(previewEngine ?? _previewEngine, recording.Fps);
+        _playMedia = playMedia ?? _media.Play;
         _previewSeeks.PreviewPresented += OnPreviewPresented;
         _previewSeeks.SeekFailed += OnPreviewSeekFailed;
 
@@ -244,6 +253,16 @@ internal sealed partial class VideoEditorWindow : Window
         _layerTimeline.HoverChanged += (_, time) => _timeline.SetHover(time);
         _layerTimeline.SnapChanged += (_, snap) => _timeline.SetSnapGuide(snap);
         _timeline.TrimChanged += (_, _) => _layerTimeline.SetKeptRange(_timeline.InMs, _timeline.OutMs);
+        _timeline.SegmentSelected += (_, _) =>
+        {
+            if (_timeline.SelectedSegment is not null)
+            {
+                if (_overlayList is not null) _overlayList.SelectedItem = null;
+                _layerTimeline.SelectLayer(null);
+                _layerCanvas.Select(null);
+            }
+            UpdateCutActionStates();
+        };
         _layerTimeline.LayerSelected += (_, _) =>
         {
             if (_mediaReady && !_operationRunning)
@@ -779,6 +798,11 @@ internal sealed partial class VideoEditorWindow : Window
         _addTextToolButton = ToolButton("Icon.Text", UiText.Get("VideoEditorUx_AddText"), UiText.Get("VideoEditorUx_AddTextHelp"), AddTextOverlay, "AddText");
         Button frameEdit = ToolButton("Icon.Image", UiText.Get("VideoEditorUx_FrameImageEdit"), UiText.Get("Text_A79A9F93D479"), EditCurrentFrame, "FrameEdit");
         editing.Children.Add(_trimToolButton);
+        editing.Children.Add(ToolButton("Icon.Trim", UiText.Get("VideoMulticut_Split"),
+            UiText.Get("VideoMulticut_SplitHelp"), SplitHere, "Split"));
+        _restoreSegmentButton = ToolButton("Icon.Undo", UiText.Get("VideoMulticut_Restore"),
+            UiText.Get("VideoMulticut_RestoreHelp"), RestoreSelectedSegment);
+        editing.Children.Add(_restoreSegmentButton);
         editing.Children.Add(_addTextToolButton);
         editing.Children.Add(frameEdit);
         _layerPanelToggle = LayerPanelToggle();
@@ -807,7 +831,7 @@ internal sealed partial class VideoEditorWindow : Window
         return bar;
     }
 
-    private Button ToolButton(string iconKey, string label, string help, Action onClick, string command)
+    private Button ToolButton(string iconKey, string label, string help, Action onClick, string? command = null)
     {
         StackPanel content = BuildIconLabel(iconKey, label);
         // Same height with or without the caption, so compacting never moves the preview.
@@ -816,7 +840,7 @@ internal sealed partial class VideoEditorWindow : Window
         Button button = MakeButton(content, label, "Button.Secondary", onClick);
         button.ToolTip = help;
         AutomationProperties.SetHelpText(button, help);
-        ShortcutPresentation.Attach(button, ShortcutScope.Video, command);
+        if (command is not null) ShortcutPresentation.Attach(button, ShortcutScope.Video, command);
         button.MinWidth = 44;
         button.Margin = new Thickness(0, 0, 6, 0);
         return button;
@@ -1480,7 +1504,8 @@ internal sealed partial class VideoEditorWindow : Window
             // for a 2133ms clip), so MediaElement.Position cannot place the playhead here. The
             // stream ended, so playback reached the selection end: settle there exactly, as the
             // Last button does, and the next Play restarts at In.
-            Seek(_timeline.OutMs);
+            if (_cutTimeline.RemovedRanges.Count > 0) SettleCutPlaybackEnd();
+            else Seek(_timeline.OutMs);
             UpdateStatusForMode();
         }
     }
@@ -1489,6 +1514,9 @@ internal sealed partial class VideoEditorWindow : Window
 
     private void PausePlayback()
     {
+        _cutPlayback.Reset();
+        _cutSeekInFlight = false;
+        _settlingCutPlaybackEnd = false;
         _playRequestVersion++;
         _playRequested = false;
         _isPlaying = false;
@@ -1511,7 +1539,10 @@ internal sealed partial class VideoEditorWindow : Window
         UpdatePlayButton();
         long version = ++_playRequestVersion;
         double position = CurrentMs();
-        if (position < _timeline.InMs || position >= _timeline.OutMs - 0.5) { position = _timeline.InMs; }
+        double outputEnd = _cutTimeline.ToSourceTime(_cutTimeline.OutputDurationMs);
+        if (position < _timeline.InMs || position >= outputEnd - 0.5) { position = _timeline.InMs; }
+        position = _cutTimeline.ToSourceTime(_cutTimeline.ToOutputTime(position));
+        _cutPlayback.Reset();
         try
         {
             // Reconcile queued seeks before starting playback; their engine pauses the media.
@@ -1520,7 +1551,7 @@ internal sealed partial class VideoEditorWindow : Window
             {
                 if (version != _playRequestVersion || !_playRequested || !IsLoaded) { return; }
                 _playRequested = false;
-                _media.Play();
+                _playMedia();
                 _isPlaying = true;
                 _playbackTimer.Start();
                 UpdatePlayButton();
@@ -1623,7 +1654,7 @@ internal sealed partial class VideoEditorWindow : Window
             return;
         }
 
-        if (IsLoaded)
+        if (IsLoaded && !_cutSeekInFlight)
         {
             double presented = Math.Clamp(
                 frame.PresentedPositionMs,
@@ -1631,7 +1662,7 @@ internal sealed partial class VideoEditorWindow : Window
                 _durationMs);
             _overlayPreview.SetSourceTime(presented);
             _layerCanvas.SetSourceTime(presented);
-            _layerTimeline.SetPlayhead(presented);
+            _layerTimeline.SetPlayhead(_settlingCutPlaybackEnd ? _timeline.PlayheadMs : presented);
         }
     }
 
@@ -1660,22 +1691,80 @@ internal sealed partial class VideoEditorWindow : Window
         }
 
         double position = _media.Position.TotalMilliseconds;
-        if (position >= _timeline.OutMs - 0.5)
+        PreviewCutDecision decision = _cutPlayback.Observe(_cutTimeline, position, PlaybackClock());
+        if (decision.Action == PreviewCutAction.TimedOut)
         {
-            _media.Pause();
-            _isPlaying = false;
-            _playbackTimer.Stop();
-            position = _timeline.OutMs;
-            UpdatePlayButton();
+            PausePlayback();
+            _statusLabel.Text = UiText.Get("VideoMulticut_PreviewSeekFailed");
+            return;
+        }
+        if (_cutSeekInFlight || decision.Action == PreviewCutAction.Wait) return;
+        if (decision.Action == PreviewCutAction.Seek)
+        {
+            _ = SkipRemovedRange(decision.SourceTimeMs);
+            return;
+        }
+        if (decision.Action == PreviewCutAction.Stop)
+        {
+            if (_cutTimeline.RemovedRanges.Count > 0)
+            {
+                SettleCutPlaybackEnd();
+                return;
+            }
+            PausePlayback();
+            position = decision.SourceTimeMs;
             UpdateStatusForMode();
         }
 
-        double clamped = Math.Clamp(position, _timeline.InMs, _timeline.OutMs);
+        double clamped = Math.Clamp(decision.SourceTimeMs, _timeline.InMs, _timeline.OutMs);
         _timeline.SetPlayhead(clamped, ensureVisible: false);
         _overlayPreview.SetSourceTime(clamped);
         _layerCanvas.SetSourceTime(clamped);
         _layerTimeline.SetPlayhead(clamped);
         UpdatePositionLabel(clamped);
+    }
+
+    private static TimeSpan PlaybackClock() => Stopwatch.GetElapsedTime(0, Stopwatch.GetTimestamp());
+
+    private void SettleCutPlaybackEnd()
+    {
+        PausePlayback();
+        _settlingCutPlaybackEnd = true;
+        double frameMs = PreviewCutPlayback.LastKeptFrame(_cutTimeline, _recording.Fps);
+        double endMs = _cutTimeline.ToSourceTime(_cutTimeline.OutputDurationMs);
+        _previewSeeks.RequestExact(frameMs);
+        _timeline.SetPlayhead(endMs, ensureVisible: false);
+        _layerTimeline.SetPlayhead(endMs);
+        _overlayPreview.SetSourceTime(frameMs);
+        _layerCanvas.SetSourceTime(frameMs);
+        UpdatePositionLabel(endMs);
+        UpdateStatusForMode();
+    }
+
+    private async Task SkipRemovedRange(double targetMs)
+    {
+        _cutSeekInFlight = true;
+        long version = _playRequestVersion;
+        try
+        {
+            // The coordinator serializes decoder access. Its completion is best-effort;
+            // subsequent ticks observe the actual landing before publishing new overlays.
+            await _previewSeeks.RequestExactAsync(targetMs);
+            if (version != _playRequestVersion || !_isPlaying || _closing) return;
+            _playMedia();
+        }
+        catch (OperationCanceledException)
+        {
+            if (version == _playRequestVersion) PausePlayback();
+        }
+        catch (Exception error)
+        {
+            if (version == _playRequestVersion) { PausePlayback(); OnPreviewSeekFailed(error); }
+        }
+        finally
+        {
+            if (version == _playRequestVersion) _cutSeekInFlight = false;
+        }
     }
 
     // ---- trim ----
@@ -1706,7 +1795,7 @@ internal sealed partial class VideoEditorWindow : Window
         _timeline.SetTrimMode(true);
         _timeline.SetIn(CurrentMs());
         _statusLabel.Text = UiText.Format("VideoEditorUx_TrimStartSet",
-            TrimPresentation.Clock(_timeline.InMs), TrimPresentation.Clock(_timeline.SelectedDurationMs));
+            TrimPresentation.Clock(_timeline.InMs), TrimPresentation.Clock(_cutTimeline.OutputDurationMs));
     }
 
     private void SetOutHere()
@@ -1714,18 +1803,26 @@ internal sealed partial class VideoEditorWindow : Window
         _timeline.SetTrimMode(true);
         _timeline.SetOut(CurrentMs());
         _statusLabel.Text = UiText.Format("VideoEditorUx_TrimEndSet",
-            TrimPresentation.Clock(_timeline.OutMs), TrimPresentation.Clock(_timeline.SelectedDurationMs));
+            TrimPresentation.Clock(_timeline.OutMs), TrimPresentation.Clock(_cutTimeline.OutputDurationMs));
     }
 
     /// <summary>Removes the trim: the whole recording is kept again (one undo step).</summary>
     private void ResetTrim()
     {
-        if (!_mediaReady || _operationRunning || _timeline.IsFullClip)
+        if (!_mediaReady || _operationRunning
+            || (_timeline.IsFullClip && _editDocument.RemovedRanges.Count == 0 && _editDocument.SplitPoints.Count == 0))
         {
             return;
         }
 
-        _ = _timeline.SetTrimRange(0, _durationMs);
+        PausePlayback();
+        RememberEdit();
+        _editDocument.TrimInMs = 0;
+        _editDocument.TrimOutMs = _durationMs;
+        _editDocument.RemovedRanges.Clear();
+        _editDocument.SplitPoints.Clear();
+        SynchronizeTrim();
+        UpdateStatusForMode();
         _statusLabel.Text = UiText.Get("VideoEditorUx_TrimResetDone");
     }
 
@@ -1762,10 +1859,73 @@ internal sealed partial class VideoEditorWindow : Window
     private void RefreshTrimSummary()
     {
         if (_keptLengthLabel is null) return;
-        _keptLengthLabel.Text = TrimPresentation.KeptLength(_timeline.InMs, _timeline.OutMs);
-        _removedLengthLabel.Text = TrimPresentation.RemovedLength(_timeline.DurationMs, _timeline.InMs, _timeline.OutMs);
+        _keptLengthLabel.Text = TrimPresentation.KeptLength(_cutTimeline);
+        _removedLengthLabel.Text = TrimPresentation.RemovedLength(_timeline.DurationMs, _cutTimeline);
         AutomationProperties.SetName(_keptLengthLabel, _keptLengthLabel.Text + ", " + _removedLengthLabel.Text);
-        _resetTrimButton.IsEnabled = _mediaReady && !_operationRunning && !_timeline.IsFullClip;
+        _resetTrimButton.IsEnabled = _mediaReady && !_operationRunning
+            && (!_timeline.IsFullClip || _editDocument.RemovedRanges.Count > 0 || _editDocument.SplitPoints.Count > 0);
+        UpdateCutActionStates();
+    }
+
+    private void UpdateCutActionStates()
+    {
+        if (_restoreSegmentButton is null) return;
+        _restoreSegmentButton.IsEnabled = _mediaReady && !_operationRunning
+            && _timeline.SelectedSegment is { } selected && _cutTimeline.RemovedRanges.Contains(selected);
+    }
+
+    private void SynchronizeCuts()
+    {
+        _cutTimeline = _editDocument.CreateTimeline();
+        _timeline.SetCuts(_cutTimeline);
+        _layerTimeline.SetKeptRange(_editDocument.TrimInMs, _editDocument.TrimOutMs);
+        _layerTimeline.SetRemovedRanges(_cutTimeline.RemovedRanges);
+        UpdateCutActionStates();
+        if (_mediaReady) UpdatePositionLabel(CurrentMs());
+    }
+
+    private void ApplyCutEdit(VideoCutTimeline next)
+    {
+        PausePlayback();
+        RememberEdit();
+        _editDocument.ApplyTimelineEdit(next);
+        SynchronizeCuts();
+        RefreshTrimSummary();
+        UpdatePositionLabel(CurrentMs());
+        UpdateStatusForMode();
+    }
+
+    private void SplitHere()
+    {
+        if (!_mediaReady || _operationRunning) return;
+        double position = FrameStepCalculator.SnapToFrame(CurrentMs(), _recording.Fps, _durationMs);
+        if (!_cutTimeline.TrySplit(position, out VideoCutTimeline next)) return;
+        ApplyCutEdit(next);
+        _timeline.ClearSegmentSelection();
+        _ = _timeline.Focus();
+    }
+
+    private void DeleteSelection()
+    {
+        if (!_mediaReady || _operationRunning) return;
+        if (_timeline.SelectedSegment is { } selected)
+        {
+            if (_cutTimeline.TryRemoveSegment(selected, out VideoCutTimeline next))
+            {
+                ApplyCutEdit(next);
+                _timeline.SelectSegmentAt(selected.StartMs);
+            }
+            return;
+        }
+        DeleteSelectedOverlay();
+    }
+
+    private void RestoreSelectedSegment()
+    {
+        if (!_mediaReady || _operationRunning || _timeline.SelectedSegment is not { } selected) return;
+        if (!_cutTimeline.TryRestoreSegment(selected, out VideoCutTimeline next)) return;
+        ApplyCutEdit(next);
+        _timeline.SelectSegmentAt(selected.StartMs);
     }
 
     // ---- timed text notes ----
@@ -1794,10 +1954,25 @@ internal sealed partial class VideoEditorWindow : Window
     {
         _draftSession?.Changed();
         if (_syncingTrim) return;
+        if (_editDocument.RemovedRanges.Count > 0)
+        {
+            VideoCutTimeline source = VideoCutTimeline.Create(0, _durationMs, _editDocument.RemovedRanges);
+            double minimum = Math.Min(TrimSelection.MinimumSpanMs, _timeline.OutMs - _timeline.InMs);
+            if (!source.KeptRanges.Any(range => Math.Min(range.EndMs, _timeline.OutMs)
+                - Math.Max(range.StartMs, _timeline.InMs) >= minimum - 1e-7))
+            {
+                // Recovery's all-cut fallback is for malformed files, never an implicit
+                // restoration of a user's deleted content during a handle/keyboard edit.
+                SynchronizeTrim();
+                UpdateStatusForMode();
+                return;
+            }
+        }
         bool changed = _editDocument.TrimInMs != _timeline.InMs || _editDocument.TrimOutMs != _timeline.OutMs;
         if (changed && _trimInteractionBefore is null) RememberEdit();
         _editDocument.TrimInMs = _timeline.InMs;
         _editDocument.TrimOutMs = _timeline.OutMs;
+        SynchronizeCuts();
         RefreshTrimInputs();
         UpdateStatusForMode();
         UpdateTrimPreviewBadge();
@@ -1817,6 +1992,7 @@ internal sealed partial class VideoEditorWindow : Window
         _syncingTrim = true;
         try { _timeline.SetTrimRange(_editDocument.TrimInMs, _editDocument.TrimOutMs); }
         finally { _syncingTrim = false; }
+        SynchronizeCuts();
         RefreshTrimInputs();
     }
 
@@ -1872,9 +2048,12 @@ internal sealed partial class VideoEditorWindow : Window
 
     private void RestoreEdit(bool redo)
     {
+        if (_operationRunning) return;
         List<VideoEditDocument> source = redo ? _redo : _undo;
         List<VideoEditDocument> target = redo ? _undo : _redo;
         if (source.Count == 0) { return; }
+        PausePlayback();
+        _timeline.ClearSegmentSelection();
         Guid? selected = SelectedLayerId();
         target.Add(_editDocument.Clone());
         _editDocument = source[^1];
@@ -2130,6 +2309,7 @@ internal sealed partial class VideoEditorWindow : Window
 
         _layerTimeline.SelectLayer(SelectedLayerId());
         _layerCanvas.Select(SelectedLayerId());
+        if (SelectedLayerId() is not null) _timeline.ClearSegmentSelection();
         UpdateOverlayActionStates();
         if (!_mediaReady)
         {
@@ -2231,6 +2411,7 @@ internal sealed partial class VideoEditorWindow : Window
             _layerTimeline.SetLayers(_editDocument.TextOverlays, _editDocument.FrameEditLayers);
             _layerTimeline.SelectLayer(SelectedLayerId());
             _layerCanvas.Select(SelectedLayerId());
+            if (SelectedLayerId() is not null) _timeline.ClearSegmentSelection();
             // Layer tracks appear once there is a layer; empty "no layer" lanes are noise
             // under the trim tools. Add text / Add layer remain the entry points.
             int layerCount = _editDocument.TextOverlays.Count + _editDocument.FrameEditLayers.Count;
@@ -2552,7 +2733,8 @@ internal sealed partial class VideoEditorWindow : Window
                     document.TextOverlays,
                     document.FrameEditLayers,
                     progress,
-                    cancellationToken),
+                    cancellationToken,
+                    removedRanges: document.RemovedRanges),
                 "MyCapture video compositor");
 
             finalizing = true;
@@ -2654,6 +2836,8 @@ internal sealed partial class VideoEditorWindow : Window
         const double tolerance = 0.001;
         if (Math.Abs(left.TrimInMs - right.TrimInMs) > tolerance
             || Math.Abs(left.TrimOutMs - right.TrimOutMs) > tolerance
+            || !left.RemovedRanges.SequenceEqual(right.RemovedRanges)
+            || !left.SplitPoints.SequenceEqual(right.SplitPoints)
             || left.TextOverlays.Count != right.TextOverlays.Count
             || left.FrameEditLayers.Count != right.FrameEditLayers.Count)
         {
@@ -2737,6 +2921,7 @@ internal sealed partial class VideoEditorWindow : Window
         _shortcutActions["Play"] = TogglePlay;
         _shortcutActions["In"] = SetInHere; _shortcutActions["Out"] = SetOutHere;
         _shortcutActions["Trim"] = SelectTrimHandle;
+        _shortcutActions["Split"] = SplitHere;
         _shortcutActions["FrameEdit"] = EditCurrentFrame;
         _shortcutActions["First"] = () => Seek(_timeline.InMs);
         _shortcutActions["Last"] = () => Seek(_timeline.OutMs);
@@ -2751,7 +2936,7 @@ internal sealed partial class VideoEditorWindow : Window
         _shortcutActions["Gif"] = ExportGif;
         _shortcutActions["AddText"] = AddTextOverlay;
         _shortcutActions["EditLayer"] = () => { if (_overlayList.SelectedItem is not null) EditSelectedOverlay(); };
-        _shortcutActions["DeleteLayer"] = () => { if (SelectedLayerId() is not null) DeleteSelectedOverlay(); };
+        _shortcutActions["DeleteLayer"] = DeleteSelection;
         _shortcutActions["Cancel"] = () => { try { _operationCts?.Cancel(); } catch (ObjectDisposedException) { } };
     }
 
@@ -2811,7 +2996,7 @@ internal sealed partial class VideoEditorWindow : Window
         if (_undoButton is not null) _undoButton.IsEnabled = _undo.Count > 0;
         if (_redoButton is not null) _redoButton.IsEnabled = _redo.Count > 0;
         _statusLabel.Foreground = TryBrush("Text.Secondary", Colors.LightGray);
-        string kept = TrimPresentation.Clock(_timeline.SelectedDurationMs);
+        string kept = TrimPresentation.Clock(_cutTimeline.OutputDurationMs);
         if (_timeline.IsTrimDragging)
         {
             // While a handle moves, the status names the end being adjusted and the result.
@@ -2827,7 +3012,8 @@ internal sealed partial class VideoEditorWindow : Window
         // here. Dropped frames appear only when there is something to report.
         var parts = new List<string>(2)
         {
-            UiText.Get(_timeline.IsFullClip ? "VideoEditorUx_StatusUntrimmed" : "VideoEditorUx_StatusTrimmed"),
+            UiText.Get(_timeline.IsFullClip && _cutTimeline.RemovedRanges.Count == 0
+                ? "VideoEditorUx_StatusUntrimmed" : "VideoEditorUx_StatusTrimmed"),
         };
         if (_recording.DroppedFrames > 0)
         {
@@ -2839,6 +3025,17 @@ internal sealed partial class VideoEditorWindow : Window
 
     private void UpdatePositionLabel(double positionMs)
     {
+        if (_cutTimeline.RemovedRanges.Count > 0)
+        {
+            double outputMs = _cutTimeline.ToOutputTime(positionMs);
+            double durationMs = _cutTimeline.OutputDurationMs;
+            int outputTotal = FrameStepCalculator.LastFrameIndex(_recording.Fps, durationMs) + 1;
+            int outputFrame = Math.Min(outputTotal, FrameStepCalculator.FrameIndexAt(outputMs, _recording.Fps, durationMs) + 1);
+            _positionLabel.Text = UiText.Format("VideoMulticut_OutputPosition", FormatMs(outputMs), FormatMs(durationMs));
+            _positionFrameLabel.Text = UiText.Format("VideoEditorUx_PositionFrame", outputFrame, outputTotal);
+            AutomationProperties.SetName(_positionChip, _positionLabel.Text + ", " + _positionFrameLabel.Text);
+            return;
+        }
         int total = TotalFrameCount();
         int frame = Math.Min(total, FrameStepCalculator.FrameIndexAt(positionMs, _recording.Fps, _durationMs) + 1);
         _positionLabel.Text = UiText.Format("VideoEditorUx_PositionTime", FormatMs(positionMs), FormatMs(_durationMs));
