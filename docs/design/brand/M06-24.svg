@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" role="img" aria-labelledby="title">
+<title id="title">M06 dedicated 24 px</title>
+<path fill="#38424D" fill-rule="nonzero" d="M7 1 H17 Q23 1 23 7 V17 Q23 23 17 23 H7 Q1 23 1 17 V7 Q1 1 7 1 Z"/>
+<path fill="#FFF8F4" fill-rule="evenodd" d="M5 13 L7 13 L7 16 L10 16 L10 18 L5 18 L5 13 Z M13 5 L18 5 L18 10 L16 10 L16 7 L13 7 L13 5 Z M5 5 L10 5 L10 7 L7 7 L7 10 L5 10 L5 5 Z"/>
+<path fill="#E0453C" fill-rule="nonzero" d="M13.12 13.12 L16.24 14.91 L17.22 13.94 C17.46 13.7 17.71 13.71 17.99 13.99 L17.99 16.24 L18.5 16.76 L19.32 15.94 C19.8 15.46 20.28 15.46 20.76 15.94 L21.37 16.55 C21.85 17.03 21.85 17.51 21.37 17.99 L17.99 21.37 C17.51 21.85 17.03 21.85 16.55 21.37 L15.94 20.76 C15.46 20.28 15.46 19.8 15.94 19.32 L16.76 18.5 L16.24 17.99 L13.99 17.99 C13.71 17.71 13.7 17.46 13.94 17.22 L14.91 16.24 L13.12 13.12 Z"/>
+</svg>

@@ -293,11 +293,10 @@ internal sealed class WelcomeWindow : Window
         Canvas.SetLeft(ring, 58);
         Canvas.SetTop(ring, 47);
         canvas.Children.Add(ring);
-        var icon = new SymbolIcon { Size = 12 };
-        icon.SetResourceReference(SymbolIcon.DataProperty, "Icon.Capture");
-        icon.SetResourceReference(SymbolIcon.StrokeProperty, "Accent.Cool");
-        Canvas.SetLeft(icon, 62);
-        Canvas.SetTop(icon, 51);
+        var icon = new Image { Width = 16, Height = 16, IsHitTestVisible = false };
+        icon.SetResourceReference(Image.SourceProperty, "Brand.Mark16");
+        Canvas.SetLeft(icon, 60);
+        Canvas.SetTop(icon, 49);
         canvas.Children.Add(icon);
         for (int i = 0; i < 2; i++)
         {
