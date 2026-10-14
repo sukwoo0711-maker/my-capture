@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [string]$Version = '4.1.3',
+    [string]$Version = '4.1.4',
     [switch]$StoreOnly
 )
 
