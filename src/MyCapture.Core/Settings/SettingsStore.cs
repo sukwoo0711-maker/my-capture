@@ -463,6 +463,8 @@ public sealed class SettingsStore
         }
         s.General.Theme = MyCapture.Core.Themes.AppThemeNames.ToSetting(
             MyCapture.Core.Themes.AppThemeNames.Parse(s.General.Theme));
+        s.General.AccentColor = MyCapture.Core.Themes.AppAccentNames.ToSetting(
+            MyCapture.Core.Themes.AppAccentNames.Parse(s.General.AccentColor));
         return migratedUnsafeHotkeys;
     }
 

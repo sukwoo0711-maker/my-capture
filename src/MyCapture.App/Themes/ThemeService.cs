@@ -24,6 +24,7 @@ internal static class ThemeService
     private static readonly DropShadowEffect NoShadow = CreateNoShadow();
 
     internal static AppTheme Current { get; private set; } = AppTheme.Workspace;
+    internal static AppAccent CurrentAccent { get; private set; } = AppAccent.Violet;
 
     /// <summary>Null until the first Apply; lets diagnostics restore the pre-fixture state.</summary>
     internal static AppTheme? IsAppliedForTest => _applied ? Current : null;
@@ -86,7 +87,7 @@ internal static class ThemeService
         dispatcher.BeginInvoke(DispatcherPriority.ContextIdle,
             new Action(() =>
             {
-                ApplyResources(Current, resources, CaptureGuideColor, readHighContrast());
+                ApplyResources(Current, resources, CaptureGuideColor, readHighContrast(), CurrentAccent);
                 if (ReferenceEquals(resources, Application.Current?.Resources))
                 {
                     WorkspaceTheme.Refresh(Current);
@@ -105,17 +106,18 @@ internal static class ThemeService
             return;
         }
 
-        ApplyResources(theme, resources, CaptureGuideColor);
+        ApplyResources(theme, resources, CaptureGuideColor, accent: CurrentAccent);
         WorkspaceTheme.Refresh(theme);
         ModernWindowChrome.RefreshAll();
         CaptureGuideChanged?.Invoke();
     }
 
     internal static void ApplyResources(AppTheme theme, ResourceDictionary resources, string? captureGuideColor = null,
-        bool? systemHighContrast = null)
+        bool? systemHighContrast = null, AppAccent accent = AppAccent.Violet)
     {
         bool contrast = systemHighContrast ?? IsSystemHighContrast;
-        foreach ((string key, ThemeColor color) in ThemeCatalog.ColorsFor(theme))
+        IReadOnlyDictionary<string, ThemeColor> colors = ThemeCatalog.ColorsFor(theme, accent);
+        foreach ((string key, ThemeColor color) in colors)
         {
             if (resources[key] is SolidColorBrush brush)
             {
@@ -126,6 +128,10 @@ internal static class ThemeService
                     : Color.FromArgb(color.A, color.R, color.G, color.B));
             }
         }
+
+        ThemeColor foreground = colors[accent == AppAccent.Red ? "Accent.Cool" : "Accent.Default"];
+        SetBrush(resources, "Accent.Foreground", contrast ? SystemColor(SystemColorRole.Highlight)
+            : Color.FromArgb(foreground.A, foreground.R, foreground.G, foreground.B));
 
         SetBrush(resources, "Text.Disabled", contrast
             ? SystemColor(SystemColorRole.GrayText)
@@ -148,7 +154,7 @@ internal static class ThemeService
         // Crop masks always darken discarded pixels, including in light themes.
         // High contrast follows the user's system palette without a translucent wash.
         ApplyCropResources(resources, contrast);
-        CaptureGuidePalette.Apply(resources, theme, captureGuideColor, contrast);
+        CaptureGuidePalette.Apply(resources, theme, captureGuideColor, contrast, accent);
         ThemeBrushes.Refresh(resources);
     }
 
@@ -226,12 +232,13 @@ internal static class ThemeService
         resources["Crop.FrameShadow"] = highContrast ? SystemColors.WindowBrush : Brushes.Black;
     }
 
-    internal static void ApplyFromSettings(string? themeId, string? captureGuideColor = null)
+    internal static void ApplyFromSettings(string? themeId, string? captureGuideColor = null, string? accentColor = null)
     {
+        CurrentAccent = AppAccentNames.Parse(accentColor);
         CaptureGuideColor = CaptureGuideColorValue.TryNormalize(captureGuideColor, out string color) ? color : string.Empty;
         Apply(AppThemeNames.Parse(themeId));
     }
 
     internal static void ApplyFromSettings(GeneralSettings settings) =>
-        ApplyFromSettings(settings.Theme, settings.CaptureGuideColor);
+        ApplyFromSettings(settings.Theme, settings.CaptureGuideColor, settings.AccentColor);
 }

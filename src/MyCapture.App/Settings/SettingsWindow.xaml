@@ -516,6 +516,12 @@
                             <ComboBoxItem Tag="high-contrast" Content="{loc:Text Settings.ThemeHighContrast}" />
                         </ComboBox>
                         <TextBlock Style="{StaticResource Settings.Description}" Text="{loc:Text Settings.ThemeHint}" />
+                        <TextBlock Style="{StaticResource Settings.Label}" Text="{loc:Text Settings.AccentColor}" Margin="0,12,0,0" />
+                        <ComboBox x:Name="AccentColorSelector" SelectedValue="{Binding AccentColor}" SelectedValuePath="Tag"
+                                  AutomationProperties.Name="{loc:Text Settings.AccentColor}" MinWidth="320" HorizontalAlignment="Left" Margin="0,4,0,4">
+                            <ComboBoxItem Tag="violet" Content="{loc:Text Settings.AccentViolet}" />
+                            <ComboBoxItem Tag="red" Content="{loc:Text Settings.AccentRed}" />
+                        </ComboBox>
 
                         <CheckBox x:Name="LaunchAtLoginCheck"
                                   Style="{StaticResource Settings.CheckBox}"

@@ -3135,6 +3135,9 @@ Select Done or Save to add the capture to the library. Canceled or replaced draf
 Hold Shift for precise pixel selection.
 Open the library or Settings from the tray menu.</value></data>
   <data name="Settings.Theme" xml:space="preserve"><value>Theme</value></data>
+  <data name="Settings.AccentColor" xml:space="preserve"><value>Accent color</value></data>
+  <data name="Settings.AccentViolet" xml:space="preserve"><value>Violet</value></data>
+  <data name="Settings.AccentRed" xml:space="preserve"><value>Red</value></data>
   <data name="Settings.ThemeHint" xml:space="preserve"><value>Select a theme to preview it. Apply to save your choice.</value></data>
   <data name="Settings.ShowSourceWindowTitle" xml:space="preserve"><value>Show document/window title at the top right of images</value></data>
   <data name="Settings.ShowSourceWindowTitleHint" xml:space="preserve"><value>Applies to new captures and reopened editors.</value></data>

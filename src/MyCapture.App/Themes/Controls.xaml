@@ -4,7 +4,7 @@
   Direction (Focus Portal, with Windows-native glass palettes):
     * Quiet graphite hierarchy with one iris action/focus accent. Glass themes keep
       the same keys and let DWM Mica show through translucent Surface brushes.
-    * Accent fills always pair with Text.OnAccent dark ink, including checks and glyphs.
+    * Accent fills pair with Text.OnAccent from the chosen palette, including checks and glyphs.
     * Focus visuals are STABLE: templates never change BorderThickness on focus. Focus is
       shown by recolouring the fixed chrome border and revealing an inset ring with no layout
       footprint, so keyboard navigation never shifts neighbouring content.
@@ -761,7 +761,7 @@
                         <Border x:Name="HoverLayer" Style="{StaticResource StateLayer.Hover}"
                                 BorderThickness="1" CornerRadius="8" />
                         <Border x:Name="SelectedLayer" Style="{StaticResource StateLayer.Selected}"
-                                BorderBrush="{DynamicResource Accent.Default}" BorderThickness="1" CornerRadius="8" />
+                                BorderBrush="{DynamicResource Accent.Foreground}" BorderThickness="1" CornerRadius="8" />
                         <Border BorderThickness="1" Padding="{TemplateBinding Padding}">
                             <ContentPresenter ContentSource="Header" RecognizesAccessKey="True" />
                         </Border>
@@ -775,7 +775,7 @@
                             <Setter Property="FontWeight" Value="SemiBold" />
                         </Trigger>
                         <Trigger Property="IsKeyboardFocused" Value="True">
-                            <Setter TargetName="TabBorder" Property="BorderBrush" Value="{DynamicResource Accent.Default}" />
+                            <Setter TargetName="TabBorder" Property="BorderBrush" Value="{DynamicResource Accent.Foreground}" />
                         </Trigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>
@@ -1239,7 +1239,7 @@
         </ControlTemplate.Triggers>
     </ControlTemplate>
     <Style TargetType="{x:Type Slider}">
-        <Setter Property="Foreground" Value="{DynamicResource Accent.Default}" />
+        <Setter Property="Foreground" Value="{DynamicResource Accent.Foreground}" />
         <Setter Property="Background" Value="Transparent" />
         <!-- The track is 4px, but the whole 32px row takes pointer input. -->
         <Setter Property="MinHeight" Value="{DynamicResource Size.HitTarget.Compact}" />
@@ -1274,7 +1274,7 @@
         <Setter Property="Stroke" Value="{DynamicResource Text.Muted}" />
     </Style>
     <Style x:Key="Icon.Symbol.Accent" TargetType="themes:SymbolIcon" BasedOn="{StaticResource Icon.Symbol}">
-        <Setter Property="Stroke" Value="{DynamicResource Accent.Default}" />
+        <Setter Property="Stroke" Value="{DynamicResource Accent.Foreground}" />
     </Style>
     <Style x:Key="Icon.Symbol.OnAccent" TargetType="themes:SymbolIcon" BasedOn="{StaticResource Icon.Symbol}">
         <Setter Property="Stroke" Value="{DynamicResource Text.OnAccent}" />
@@ -1484,7 +1484,7 @@
                             <Setter TargetName="Grip" Property="Background" Value="{DynamicResource Text.Muted}" />
                         </Trigger>
                         <Trigger Property="IsDragging" Value="True">
-                            <Setter TargetName="Grip" Property="Background" Value="{DynamicResource Accent.Default}" />
+                            <Setter TargetName="Grip" Property="Background" Value="{DynamicResource Accent.Foreground}" />
                         </Trigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>

@@ -764,8 +764,8 @@ internal sealed partial class VideoEditorWindow : Window
             HorizontalAlignment = HorizontalAlignment.Center,
             VerticalAlignment = VerticalAlignment.Center,
         };
-        mark.SetResourceReference(SymbolIcon.StrokeProperty, "Accent.Default");
-        mark.SetResourceReference(SymbolIcon.FillProperty, "Accent.Default");
+        mark.SetResourceReference(SymbolIcon.StrokeProperty, "Accent.Foreground");
+        mark.SetResourceReference(SymbolIcon.FillProperty, "Accent.Foreground");
         var tile = new Border { Width = 30, Height = 30, CornerRadius = new CornerRadius(6), VerticalAlignment = VerticalAlignment.Center, Child = mark };
         tile.SetResourceReference(Border.BackgroundProperty, "Accent.Subtle");
         tile.SetResourceReference(Border.BorderBrushProperty, "Border.Accent");
@@ -2349,7 +2349,7 @@ internal sealed partial class VideoEditorWindow : Window
         {
             Size = 16,
             Data = TryGeometry(icon), Margin = new Thickness(0, 0, 10, 0),
-            Stroke = TryBrush("Accent.Default", Colors.Teal),
+            Stroke = TryBrush("Accent.Foreground", Colors.Teal),
             VerticalAlignment = VerticalAlignment.Center,
         };
         DockPanel.SetDock(symbol, Dock.Left); row.Children.Add(symbol);

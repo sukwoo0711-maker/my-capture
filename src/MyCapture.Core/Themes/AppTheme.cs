@@ -77,6 +77,16 @@ public readonly record struct ThemeColor(byte A, byte R, byte G, byte B)
 
 public static class ThemeCatalog
 {
+    public static IReadOnlyDictionary<string, ThemeColor> ColorsFor(AppTheme theme, AppAccent accent)
+    {
+        IReadOnlyDictionary<string, ThemeColor> colors = ColorsFor(theme);
+        if (accent != AppAccent.Red || theme == AppTheme.HighContrast) return colors;
+        var accented = new Dictionary<string, ThemeColor>(colors, StringComparer.Ordinal);
+        foreach ((string key, ThemeColor color) in AccentPalette.RedOverrides(AppThemeNames.IsLight(theme)))
+            accented[key] = color;
+        return accented;
+    }
+
     public static IReadOnlyDictionary<string, ThemeColor> ColorsFor(AppTheme theme) => theme switch
     {
         AppTheme.Workspace => WorkspaceColors,

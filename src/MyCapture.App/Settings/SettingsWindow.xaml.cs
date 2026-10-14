@@ -191,7 +191,7 @@ internal sealed partial class SettingsWindow : Window
         _draft = new SettingsDraft(settings);
         AttachDraftEvents();
         DataContext = _draft;
-        ThemeService.ApplyFromSettings(_draft.Theme, _draft.CaptureGuideColorSetting);
+        ThemeService.ApplyFromSettings(_draft.Theme, _draft.CaptureGuideColorSetting, _draft.AccentColor);
         SetStatusMessage(string.Empty);
         _loadedRetentionHours = _draft.ImageRetentionHours;
         RefreshErrorSummary();
@@ -220,9 +220,9 @@ internal sealed partial class SettingsWindow : Window
     {
         // ResetToDefaults raises a whole-draft notification instead of one for Theme.
         bool all = string.IsNullOrEmpty(e.PropertyName);
-        if (all || e.PropertyName is nameof(SettingsDraft.Theme)
+        if (all || e.PropertyName is nameof(SettingsDraft.Theme) or nameof(SettingsDraft.AccentColor)
             or nameof(SettingsDraft.CaptureGuideColorMode) or nameof(SettingsDraft.CaptureGuideColorHex))
-            ThemeService.ApplyFromSettings(_draft.Theme, _draft.CaptureGuideColorSetting);
+            ThemeService.ApplyFromSettings(_draft.Theme, _draft.CaptureGuideColorSetting, _draft.AccentColor);
         if (all || e.PropertyName == nameof(SettingsDraft.GitHubToken)) SyncGitHubTokenBox();
         if (all || e.PropertyName == nameof(SettingsDraft.ImageRetentionHours)) RefreshRetention();
         if (all || e.PropertyName == nameof(SettingsDraft.FontFamily)) SyncFontFamilyBox();
@@ -376,7 +376,7 @@ internal sealed partial class SettingsWindow : Window
             // so they can fix the underlying problem (read-only folder, full disk, path
             // conflict) and retry without re-entering everything. Its theme remains a
             // reversible preview; the shell is not notified of a saved apply.
-            ThemeService.ApplyFromSettings(_draft.Theme, _draft.CaptureGuideColorSetting);
+            ThemeService.ApplyFromSettings(_draft.Theme, _draft.CaptureGuideColorSetting, _draft.AccentColor);
             _showSaveFailureMessage(string.Join(Environment.NewLine, result.Messages));
             return;
         }

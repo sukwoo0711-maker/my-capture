@@ -2,6 +2,7 @@ using System.Reflection;
 using Microsoft.Extensions.Logging.Abstractions;
 using MyCapture.Core.Settings;
 using MyCapture.Core.Storage;
+using MyCapture.Core.Themes;
 using Xunit;
 
 namespace MyCapture.Core.Tests;
@@ -217,7 +218,7 @@ public sealed class SettingsUxDefaultsTests
             }
             string text = original as string ?? string.Empty;
             foreach (string candidate in new[] { text + "1", "7", "custom", "theme", "gdi", "accurate", "daylight",
-                         "ko-KR", "Ctrl+Alt+F7", "#445566", "en-US" })
+                         "ko-KR", "Ctrl+Alt+F7", "#445566", "en-US", AppAccentNames.Violet, AppAccentNames.Red })
                 yield return candidate;
         }
     }
