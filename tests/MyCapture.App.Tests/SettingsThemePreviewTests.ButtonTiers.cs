@@ -42,10 +42,10 @@ public sealed partial class SettingsThemePreviewTests
         {
             ShortcutPresentation.ReadEnabled = () => settings.General.ShowShortcutHints;
             ShortcutPresentation.Refresh();
-            // A single-key command: key combinations such as Ctrl+Z are never printed, only shown in the tooltip.
+            // Every command reserves the same hint row, including key combinations.
             var button = new Button { Content = "Rotate", ToolTip = "Rotate left" };
             ShortcutPresentation.Attach(button, ShortcutScope.Annotation, "RotateLeft");
-            TextBlock caption = Assert.IsType<StackPanel>(button.Content).Children.OfType<TextBlock>().Last();
+            TextBlock caption = Assert.IsType<Grid>(button.Content).Children.OfType<TextBlock>().Last();
             Assert.Equal("Q", caption.Text);
             Assert.Equal(expected, caption.Visibility);
             // The key stays discoverable either way: tooltip and accelerator property.

@@ -227,7 +227,7 @@ public sealed class Ux402RevisionTests
             panel.Measure(new Size(width, 200)); panel.Arrange(new Rect(0, 0, width, panel.DesiredSize.Height));
             Point position = right.TranslatePoint(default, panel);
             Assert.Equal(width - right.ActualWidth, position.X);
-            Assert.Equal(width == 900 ? 0 : 40, position.Y);
+            Assert.Equal(width == 900 ? 0 : 40 + CommandGroupsPanel.GroupGap, position.Y);
         }
     });
 

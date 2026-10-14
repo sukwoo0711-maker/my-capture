@@ -227,24 +227,18 @@ internal sealed class PinHoverBar : Window
     {
         var button = new Button
         {
-            MinWidth = 30,
-            MinHeight = 30,
-            Height = 30,
-            Padding = new Thickness(showLabel ? 7 : 6, 0, showLabel ? 9 : 6, 0),
-            Margin = new Thickness(1, 0, 1, 0),
             Focusable = false,
-            FontSize = 12,
             Cursor = Cursors.Hand,
         };
-        button.SetResourceReference(StyleProperty, "Button.Ghost");
+        button.SetResourceReference(StyleProperty, "Button.GhostCompact");
+        CommandButtonPresentation.Apply(button, compact: true);
         var content = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
-        SymbolIcon icon = Glyph(glyph, SymbolIcon.CommandSize);
+        SymbolIcon icon = Glyph(glyph, CommandButtonPresentation.IconSize);
         icon.SetBinding(SymbolIcon.StrokeProperty, new Binding(nameof(Control.Foreground)) { Source = button });
         content.Children.Add(icon);
         if (showLabel)
         {
-            // The glyph's inset on its 20x20 grid is part of the gap to the name.
-            var label = new TextBlock { Text = name, Margin = new Thickness(4, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center };
+            var label = new TextBlock { Text = name, Margin = new Thickness(CommandButtonPresentation.IconLabelGap, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center };
             _labels.Add(label);
             content.Children.Add(label);
         }

@@ -203,6 +203,12 @@ public sealed partial class SettingsThemePreviewTests
                     window.Show();
                     Drain(window);
                     var tabs = Assert.IsType<TabControl>(window.FindName("CategoryTabs"));
+                    foreach (string name in new[] { "DefaultsButton", "ApplyButton", "CancelButton" })
+                    {
+                        Button action = Assert.IsType<Button>(window.FindName(name));
+                        Assert.Equal(44, action.ActualHeight, 1);
+                        Assert.Equal(new Thickness(10, 4, 10, 4), action.Padding);
+                    }
                     TabItem[] items = tabs.Items.OfType<TabItem>().ToArray();
                     string[] expected = ["SettingsUx_TabGeneral", "SettingsUx_TabCapture", "SettingsUx_TabRecording",
                         "SettingsUx_TabEditing", "SettingsUx_TabShortcuts", "SettingsUx_TabStorage", "SettingsUx_TabAbout"];

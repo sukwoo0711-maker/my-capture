@@ -148,9 +148,10 @@ internal sealed class ThemedShellPresenter(Func<bool> suppressNotification, Func
         Dismiss();
         if (suppressNotification()) return;
         var action = new Button { Content = KoreanWordWrap.Show(new TextBlock { TextWrapping = TextWrapping.Wrap }, message),
-            Padding = new Thickness(12), ToolTip = UiText.Get("QuickAccess.Library") };
+            Height = double.NaN, Padding = new Thickness(12), ToolTip = UiText.Get("QuickAccess.Library") };
         System.Windows.Automation.AutomationProperties.SetName(action, message);
         action.SetResourceReference(FrameworkElement.StyleProperty, "Button.Ghost");
+        action.SetResourceReference(Control.FontSizeProperty, "FontSize.Body");
         action.Click += (_, _) => { Dismiss(); openLibrary(); };
         Window window = CreateNotificationWindow(action, UiText.Get("QuickAccess.Title"), new Thickness(8), width: 320);
         window.SourceInitialized += (_, _) =>

@@ -293,7 +293,8 @@ public sealed class EditorFlowTests
         Button rotateLeft = Field<Button>(editor, "_rotateLeftButton");
         Button crop = Command(editor, "Capture410Crop");
         Assert.True(crop.IsVisible);
-        Assert.True(rotateLeft.IsVisible);
+        Assert.False(rotateLeft.IsVisible);
+        Assert.True(Command(editor, "EditorMore").IsVisible);
         Assert.False(editor.IsCropCommandBarVisible);
 
         // Q and W rotate from anywhere, crop mode or not.
@@ -334,7 +335,7 @@ public sealed class EditorFlowTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void VisibleRotationRunsWithoutCropAndUndoKeepsTheSelectedTool(bool pen) => StaTestHost.Run(() =>
+    public void OverflowRotationRunsWithoutCropAndUndoKeepsTheSelectedTool(bool pen) => StaTestHost.Run(() =>
     {
         using EditorWindowHost host = EditorWindowHost.Create();
         AnnotationEditorControl editor = host.Editor;
@@ -343,11 +344,11 @@ public sealed class EditorFlowTests
         Invoke(editor, "SelectTool", tool);
         host.Window.UpdateLayout();
         int width = editor.DisplayedBitmap.PixelWidth, height = editor.DisplayedBitmap.PixelHeight;
-        Button left = Field<Button>(editor, "_rotateLeftButton");
-        Button right = Field<Button>(editor, "_rotateRightButton");
-        Assert.True(left.IsVisible && right.IsVisible);
+        ContextMenu menu = Assert.IsType<ContextMenu>(Command(editor, "EditorMore").ContextMenu);
+        MenuItem left = Assert.IsType<MenuItem>(menu.Items[0]);
+        MenuItem right = Assert.IsType<MenuItem>(menu.Items[1]);
         Assert.False(editor.IsCropCommandBarVisible);
-        left.RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));
+        left.RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
         Assert.Equal(3, controller.RotationTurns);
         Assert.Equal(tool, controller.Tool);
         Assert.Null(editor.PendingCrop);
@@ -362,22 +363,21 @@ public sealed class EditorFlowTests
         Field<Button>(editor, "_redoButton").RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));
         Assert.Equal(3, controller.RotationTurns);
         Assert.Equal(tool, controller.Tool);
-        right.RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));
+        right.RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
         Assert.Equal(0, controller.RotationTurns);
         Assert.Equal(tool, controller.Tool);
         Assert.Null(editor.PendingCrop);
     });
 
     [Fact]
-    public void MovingTheRotationPairBetweenModesRestoresFocusAndKeepsOneTabOrder() => StaTestHost.Run(() =>
+    public void CropRotationHasOneTabOrderAndReturnsFocusWhenItsBarCloses() => StaTestHost.Run(() =>
     {
         using EditorWindowHost host = EditorWindowHost.Create();
         AnnotationEditorControl editor = host.Editor;
         Button left = Field<Button>(editor, "_rotateLeftButton");
         Button right = Field<Button>(editor, "_rotateRightButton");
-        Assert.True(left.Focus());
-        Assert.True(left.MoveFocus(new TraversalRequest(FocusNavigationDirection.Next)));
-        Assert.Same(right, Keyboard.FocusedElement);
+        Assert.False(left.IsVisible || right.IsVisible);
+        Assert.True(Command(editor, "EditorMore").Focus());
         Assert.True(editor.HandleShortcut(Key.X, ModifierKeys.None));
         host.Window.UpdateLayout();
         Assert.True(editor.IsCropCommandBarVisible);
@@ -392,9 +392,39 @@ public sealed class EditorFlowTests
         host.Window.UpdateLayout();
         Assert.False(editor.IsCropCommandBarVisible);
         Assert.Same(editor, Keyboard.FocusedElement);
-        Assert.True(left.IsVisible && right.IsVisible);
+        Assert.False(left.IsVisible || right.IsVisible);
+        Assert.True(Command(editor, "EditorMore").IsVisible);
         Assert.Single(Descendants(editor).OfType<Button>(), button => ReferenceEquals(button, left));
         Assert.Single(Descendants(editor).OfType<Button>(), button => ReferenceEquals(button, right));
+    });
+
+    [Theory]
+    [InlineData("ko-KR")]
+    [InlineData("en-US")]
+    public void EditOverflowContainsOnlyTheNamedRotationCommandsAndTheirKeys(string language) => StaTestHost.Run(() =>
+    {
+        using var culture = UiText.UseLanguage(language);
+        using EditorWindowHost host = EditorWindowHost.Create();
+        Button more = Command(host.Editor, "EditorMore");
+        Assert.Equal(UiText.Get("Common_More"), AutomationProperties.GetName(more));
+        Assert.Contains(Descendants(more).OfType<TextBlock>(), text => text.Text == UiText.Get("Common_More"));
+        ContextMenu menu = Assert.IsType<ContextMenu>(more.ContextMenu);
+        MenuItem[] items = menu.Items.Cast<object>().Select(item => Assert.IsType<MenuItem>(item)).ToArray();
+        Assert.Equal(new[] { UiText.Get("EditorUx_RotateLeft"), UiText.Get("EditorUx_RotateRight") },
+            items.Select(item => Assert.IsType<string>(item.Header)));
+        Assert.Equal(new[] { "Q", "W" }, items.Select(item => item.InputGestureText));
+        Assert.Equal(new[] { "Q", "W" }, items.Select(AutomationProperties.GetAcceleratorKey));
+
+        more.RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));
+        Assert.True(menu.IsOpen);
+        Assert.Same(more, menu.PlacementTarget);
+        menu.IsOpen = false;
+
+        Assert.True(Press(host.Editor, Key.Q, ime: false));
+        Assert.Equal(3, Controller(host.Editor).RotationTurns);
+        Assert.True(Press(host.Editor, Key.W, ime: false));
+        Assert.Equal(0, Controller(host.Editor).RotationTurns);
+        Assert.Null(host.Editor.PendingCrop);
     });
 
     // ---- Tool rail ----------------------------------------------------------------------

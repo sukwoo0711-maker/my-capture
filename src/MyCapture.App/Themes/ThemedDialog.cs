@@ -131,8 +131,8 @@ internal sealed class ThemedDialog : Window
     /// <summary>Smallest width of a dialog action, so short captions keep a steady target.</summary>
     internal const double ActionMinWidth = 88;
 
-    /// <summary>Height of a dialog action: the regular 36-DIP hit target.</summary>
-    internal const double ActionHeight = 36;
+    /// <summary>Height of a dialog action: the shared standard command tier.</summary>
+    internal const double ActionHeight = 44;
 
     /// <summary>
     /// The action row every ordinary dialog ends with: right-aligned, the confirming action
@@ -157,10 +157,12 @@ internal sealed class ThemedDialog : Window
     {
         var button = new Button
         {
-            Content = label, MinWidth = ActionMinWidth, MinHeight = ActionHeight,
-            // The leading gap of the first button falls outside the right-aligned row.
-            Margin = new Thickness(ActionSpacing, 4, 0, 0),
+            Content = label,
         };
+        CommandButtonPresentation.Apply(button);
+        button.MinWidth = ActionMinWidth;
+        // The leading gap of the first button falls outside the right-aligned row.
+        button.Margin = new Thickness(ActionSpacing, 4, 0, 0);
         button.SetResourceReference(StyleProperty, primary ? "Button.Primary" : "Button.Secondary");
         return button;
     }

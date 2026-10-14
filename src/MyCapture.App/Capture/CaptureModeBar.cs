@@ -349,7 +349,6 @@ internal sealed class CaptureModeBar : Border
     {
         var button = new RadioButton { Template = template };
         Decorate(button);
-        button.Padding = new Thickness(9, 0, 10, 0);
         button.Content = ButtonContent(button, icon, new TextBlock { Text = label });
         AutomationProperties.SetName(button, label);
         return button;
@@ -360,16 +359,12 @@ internal sealed class CaptureModeBar : Border
         var button = new Button { Template = template };
         Decorate(button);
         button.Content = ButtonContent(button, icon, label is null ? null : new TextBlock { Text = label });
-        if (label is null) button.Padding = new Thickness(8, 0, 8, 0);
         return button;
     }
 
     private static void Decorate(ButtonBase button)
     {
-        button.Height = 36;
-        button.MinWidth = 36;
-        button.Margin = new Thickness(1, 0, 1, 0);
-        button.Padding = new Thickness(10, 0, 11, 0);
+        CommandButtonPresentation.Apply(button, compact: true);
         button.Cursor = Cursors.Hand;
         button.FocusVisualStyle = null;
         button.Background = Brushes.Transparent;
@@ -385,7 +380,7 @@ internal sealed class CaptureModeBar : Border
         var panel = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
         var glyph = new SymbolIcon
         {
-            Size = 20,
+            Size = CommandButtonPresentation.IconSize,
             Data = icon,
             VerticalAlignment = VerticalAlignment.Center,
         };
@@ -395,7 +390,7 @@ internal sealed class CaptureModeBar : Border
         {
             label.FontSize = 13;
             label.FontWeight = FontWeights.SemiBold;
-            label.Margin = new Thickness(7, 0, 0, 1);
+            label.Margin = new Thickness(CommandButtonPresentation.IconLabelGap, 0, 0, 0);
             label.VerticalAlignment = VerticalAlignment.Center;
             panel.Children.Add(label);
         }

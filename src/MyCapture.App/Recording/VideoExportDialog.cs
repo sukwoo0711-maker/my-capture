@@ -937,6 +937,8 @@ internal sealed class VideoExportDialog : Window
             {
                 int index = _buttons.Count;
                 var button = new ToggleButton { Content = caption, MinHeight = 36, MinWidth = 112, Margin = new Thickness(2), ToolTip = help };
+                CommandButtonPresentation.Apply(button, compact: true);
+                button.MinWidth = 112;
                 AutomationProperties.SetName(button, caption);
                 if (help is not null) AutomationProperties.SetHelpText(button, help);
                 // Click runs after the toggle flipped itself; re-assert the single choice.

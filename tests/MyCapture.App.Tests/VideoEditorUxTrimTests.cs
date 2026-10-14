@@ -337,6 +337,12 @@ public sealed class VideoEditorUxTrimTests
             foreach (string key in new[] { "MediaExport_SaveEdits", "MediaExport_ExportFormats", "Text_9A9C87658130" })
             {
                 Button button = Assert.Single(Descendants(layout).OfType<Button>(), b => AutomationProperties.GetName(b) == UiText.Get(key));
+                if (!button.IsVisible && key == "MediaExport_ExportFormats")
+                {
+                    button = Field<Button>(editor, "_moreToolsButton");
+                    Assert.Contains(button.ContextMenu!.Items.OfType<MenuItem>(), item =>
+                        item.Visibility == Visibility.Visible && (string)item.Header == UiText.Get(key));
+                }
                 AssertInside(button, client, client.ActualHeight);
             }
 

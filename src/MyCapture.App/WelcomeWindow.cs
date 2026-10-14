@@ -59,8 +59,10 @@ internal sealed class WelcomeWindow : Window
         SetResourceReference(ForegroundProperty, "Text.Primary");
         WindowStartupLocation = WindowStartupLocation.CenterScreen;
 
-        TryNowButton = new Button { Content = UiText.Get("Onboard_TryNow"), MinWidth = 120, VerticalAlignment = VerticalAlignment.Center };
+        TryNowButton = new Button { Content = UiText.Get("Onboard_TryNow") };
         TryNowButton.SetResourceReference(StyleProperty, "Button.Primary");
+        CommandButtonPresentation.Apply(TryNowButton);
+        TryNowButton.MinWidth = 120;
         TryNowButton.ToolTip = UiText.Get("Onboard_TryNowHelp");
         AutomationProperties.SetHelpText(TryNowButton, UiText.Get("Onboard_TryNowHelp"));
         TryNowButton.Click += (_, _) => CloseWith(WelcomeOutcome.TryCapture);
@@ -101,8 +103,10 @@ internal sealed class WelcomeWindow : Window
         ShortcutsLink = link;
         var linkText = new TextBlock(link) { VerticalAlignment = VerticalAlignment.Center, FontSize = 13 };
 
-        LibraryButton = new Button { Content = UiText.Get("Text_66BA5DCDA810"), MinWidth = 120, IsCancel = true };
+        LibraryButton = new Button { Content = UiText.Get("Text_66BA5DCDA810"), IsCancel = true };
         LibraryButton.SetResourceReference(StyleProperty, "Button.Secondary");
+        CommandButtonPresentation.Apply(LibraryButton);
+        LibraryButton.MinWidth = 120;
         LibraryButton.Click += (_, _) => CloseWith(WelcomeOutcome.Closed);
 
         var footer = new DockPanel { Margin = new Thickness(0, 20, 0, 0), LastChildFill = false };

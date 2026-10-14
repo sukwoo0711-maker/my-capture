@@ -393,9 +393,9 @@ public sealed class EditorUxTests
         host.Window.UpdateLayout();
         Button left = Field<Button>(host.Editor, "_rotateLeftButton");
         Button right = Field<Button>(host.Editor, "_rotateRightButton");
-        // Image rotation is discoverable before entering crop mode and uses the same buttons there.
-        Assert.True(left.IsVisible);
-        Assert.True(right.IsVisible);
+        // Rotation is in the everyday overflow and has labelled buttons while cropping.
+        Assert.False(left.IsVisible);
+        Assert.False(right.IsVisible);
         Assert.True(Press(host.Editor, Key.X, ime: false));
         host.Window.UpdateLayout();
         Assert.True(left.IsVisible && right.IsVisible);
