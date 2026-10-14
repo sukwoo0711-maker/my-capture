@@ -39,14 +39,18 @@ internal sealed partial class GalleryWindow
     {
         string path = SourcePathForAction(sender);
         if (path.Length == 0) return;
+        bool document = (sender as FrameworkElement)?.DataContext is GalleryItemViewModel { IsSourceDocumentFile: true };
         // A disconnected network share can take seconds to answer; never ask on the UI thread.
-        SourceFolderTarget target = await Task.Run(() => ResolveFolderTarget(path));
+        SourceFolderTarget target = await Task.Run(() => document
+            ? new SourceFolderTarget(SourceDocument.FileExists(path) ? SourceFolderTargetKind.File : SourceFolderTargetKind.Missing, path)
+            : ResolveFolderTarget(path));
         // The recorded path came from another application's window. Only an existing, fully
         // qualified path is handed to Explorer: it cannot contain quotes or start with '/', so it
         // can never become a switch beyond the fixed "/select," prefix.
         if (target.Kind == SourceFolderTargetKind.Missing || !Path.IsPathFullyQualified(target.Path))
         {
-            LibraryActionStatus.Text = UiText.Get("Library.Source.FolderMissing");
+            LibraryActionStatus.Text = UiText.Get(document
+                ? "Library.Source.FileMissing" : "Library.Source.FolderMissing");
             return;
         }
 
@@ -61,6 +65,20 @@ internal sealed partial class GalleryWindow
         }
         catch (Exception ex) when (ex is Win32Exception or InvalidOperationException)
         { LibraryActionStatus.Text = UiText.Get("Library.Source.OpenFolderFailed"); }
+    }
+
+    private async void OnOpenSourceFileClick(object sender, RoutedEventArgs e)
+    {
+        string path = SourcePathForAction(sender);
+        if (path.Length == 0) return;
+        if (!await Task.Run(() => SourceDocument.FileExists(path)))
+        {
+            LibraryActionStatus.Text = UiText.Get("Library.Source.FileMissing");
+            return;
+        }
+        try { Process.Start(new ProcessStartInfo(path) { UseShellExecute = true })?.Dispose(); }
+        catch (Exception ex) when (ex is Win32Exception or InvalidOperationException or IOException or UnauthorizedAccessException)
+        { LibraryActionStatus.Text = UiText.Get("Library.Source.OpenFileFailed"); }
     }
 
     private void OnCopySourcePathClick(object sender, RoutedEventArgs e)

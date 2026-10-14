@@ -32,7 +32,9 @@ public sealed class ImageExportPolicyTests
         byte[] png = await StaThreadTask.RunAsync(() => ImageCodec.EncodePng(Image(1600, 4), Url));
         const string name = "Capture title.png";
         string source = Path.Combine(stage, name); await File.WriteAllBytesAsync(source, png);
-        var record = new CaptureRecord { Title = "Capture title" };
+        const string localDocument = @"C:\Private\Finance\Budget.xlsx";
+        var record = new CaptureRecord { Title = "Capture title", SourceDocumentPath = localDocument,
+            SourceAppName = "Excel", SourceAppPath = @"C:\Office\EXCEL.EXE" };
         var plan = new GalleryFolderExportPlan([new(record, 0, source, name)], [], [name]);
         // Retain owned fixtures; this test never invokes staging cleanup or file deletion.
         var prepared = new GalleryFolderExportService.PreparedFolderExport(stage, plan, []);
@@ -47,6 +49,8 @@ public sealed class ImageExportPolicyTests
         using var zipBytes = new MemoryStream();
         await using (Stream content = entry.Open()) await content.CopyToAsync(zipBytes);
         Assert.Equal(folderBytes, zipBytes.ToArray());
+        Assert.DoesNotContain(localDocument, Encoding.UTF8.GetString(folderBytes), StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("sourceDocumentPath", Encoding.UTF8.GetString(folderBytes), StringComparison.OrdinalIgnoreCase);
         Assert.Equal(include ? Url : string.Empty, PngSourceUrlMetadata.TryReadSourceUrl(folderBytes));
         Assert.Equal((800, 2), await StaThreadTask.RunAsync(() => Size(folderBytes)));
         Assert.Equal(png, await File.ReadAllBytesAsync(source));

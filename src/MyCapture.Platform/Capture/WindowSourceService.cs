@@ -6,7 +6,7 @@ namespace MyCapture.Platform.Capture;
 
 /// <summary>
 /// Source metadata of one window observed at one moment: the owning process, its application and,
-/// for File Explorer, the current folder. Two observations around the pixel grab are compared with
+/// its document or current Explorer folder. Two observations around the pixel grab are compared with
 /// <see cref="WindowSourceService.StableDetails"/>; only what stayed the same is kept.
 /// </summary>
 public sealed record WindowSourceSnapshot(uint ProcessId, string AppName, string AppPath, string DocumentPath);
@@ -14,7 +14,8 @@ public sealed record WindowSourceSnapshot(uint ProcessId, string AppName, string
 /// <summary>
 /// Reads where a window's content comes from without blocking capture. The application is resolved
 /// from the window's process (cheap kernel and file-version queries); the Explorer folder needs the
-/// shell's cross-process objects and only runs for Explorer windows. Each part has its own deadline
+/// shell's cross-process objects and only runs for Explorer windows. Document apps use a separate,
+/// read-only accessibility probe. Each part has its own deadline
 /// and in-flight limit, and either part failing leaves the other intact.
 /// </summary>
 public sealed class WindowSourceService
@@ -30,6 +31,7 @@ public sealed class WindowSourceService
 
     private readonly Func<IReadOnlyList<WindowCandidate>, Task<IReadOnlyDictionary<IntPtr, AppObservation>>> _readApps;
     private readonly Func<IReadOnlyList<IntPtr>, Task<IReadOnlyDictionary<IntPtr, string>>> _readFolders;
+    private readonly DocumentPathService? _documents;
 
     public WindowSourceService() : this(new SourceAppResolver(), new ExplorerFolderService()) { }
 
@@ -42,14 +44,17 @@ public sealed class WindowSourceService
 
     internal WindowSourceService(SourceAppResolver apps, ExplorerFolderService folders, bool waitForBusyProbe = false)
         : this(CreateAppReader(apps ?? throw new ArgumentNullException(nameof(apps)), waitForBusyProbe),
-            (folders ?? throw new ArgumentNullException(nameof(folders))).ReadAsync) { }
+            (folders ?? throw new ArgumentNullException(nameof(folders))).ReadAsync,
+            new DocumentPathService(waitForBusyProbe)) { }
 
     internal WindowSourceService(
         Func<IReadOnlyList<WindowCandidate>, Task<IReadOnlyDictionary<IntPtr, AppObservation>>> readApps,
-        Func<IReadOnlyList<IntPtr>, Task<IReadOnlyDictionary<IntPtr, string>>> readFolders)
+        Func<IReadOnlyList<IntPtr>, Task<IReadOnlyDictionary<IntPtr, string>>> readFolders,
+        DocumentPathService? documents = null)
     {
         _readApps = readApps ?? throw new ArgumentNullException(nameof(readApps));
         _readFolders = readFolders ?? throw new ArgumentNullException(nameof(readFolders));
+        _documents = documents;
     }
 
     /// <summary>Application observed for one window; ProcessId is the window's own process.</summary>
@@ -70,13 +75,19 @@ public sealed class WindowSourceService
         Task<IReadOnlyDictionary<IntPtr, string>> folders = explorers.Length == 0
             ? Task.FromResult<IReadOnlyDictionary<IntPtr, string>>(new Dictionary<IntPtr, string>())
             : SafeAsync(() => _readFolders(explorers), new Dictionary<IntPtr, string>());
-        await Task.WhenAll(apps, folders).ConfigureAwait(false);
+        IReadOnlyDictionary<IntPtr, AppObservation> appResults = await apps.ConfigureAwait(false);
+        Task<IReadOnlyDictionary<IntPtr, string>> documents = _documents is null
+            ? Task.FromResult<IReadOnlyDictionary<IntPtr, string>>(new Dictionary<IntPtr, string>())
+            : _documents.ReadAsync(targets, appResults);
+        await Task.WhenAll(documents, folders).ConfigureAwait(false);
         IReadOnlyDictionary<IntPtr, string> folderPaths = await folders.ConfigureAwait(false);
         // Only the windows recognised as Explorer were asked; nothing else can carry a folder.
         var explorerFolders = explorers
             .Where(folderPaths.ContainsKey)
             .ToDictionary(handle => handle, handle => folderPaths[handle]);
-        return Combine(targets, await apps.ConfigureAwait(false), explorerFolders);
+        foreach (var document in await documents.ConfigureAwait(false))
+            explorerFolders.TryAdd(document.Key, document.Value);
+        return Combine(targets, appResults, explorerFolders);
     }
 
     internal static IReadOnlyDictionary<IntPtr, WindowSourceSnapshot> Combine(IReadOnlyList<WindowCandidate> candidates,

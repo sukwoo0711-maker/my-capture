@@ -206,6 +206,15 @@ public sealed class GalleryItemViewModel : INotifyPropertyChanged
 
     public bool HasSourceDocumentPath => SourceDocumentPath.Length > 0;
 
+    public bool IsSourceDocumentFile => HasSourceDocumentPath
+        && MyCapture.Core.Capture.SourceDocument.IsSupportedApp(SourceAppPath);
+
+    public bool HasUnsavedSourceDocument => IsImage && !HasSourceDocumentPath && !HasSourcePageUrl
+        && MyCapture.Core.Capture.SourceDocument.IsUnsaved(SourceAppPath, SourceWindowTitle);
+
+    public string SourceLocationAction => UiText.Get(IsSourceDocumentFile
+        ? "Library.Source.OpenFileLocation" : "Library.Source.OpenFolder");
+
     /// <summary>The whole path with its label, read by screen readers whatever the summary shows.</summary>
     public string SourceDocumentPathAutomationName =>
         HasSourceDocumentPath ? UiText.Format("Library.Source.LocationAccessible", SourceDocumentPath) : string.Empty;
@@ -326,6 +335,9 @@ public sealed class GalleryItemViewModel : INotifyPropertyChanged
         Raise(nameof(SourceWindowTitleAutomationName));
         Raise(nameof(SourceDocumentPath));
         Raise(nameof(HasSourceDocumentPath));
+        Raise(nameof(IsSourceDocumentFile));
+        Raise(nameof(HasUnsavedSourceDocument));
+        Raise(nameof(SourceLocationAction));
         Raise(nameof(SourceDocumentPathAutomationName));
         Raise(nameof(IsPinned));
         Raise(nameof(AccessibleName));

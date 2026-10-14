@@ -2074,6 +2074,10 @@
                                             <Button Content="{loc:Text Library.SourcePage.Copy}" Style="{StaticResource Button.Secondary}" Click="OnCopySourcePageClick" Margin="0,0,0,8" />
                                         </WrapPanel>
                                     </StackPanel>
+                                    <TextBlock AutomationProperties.AutomationId="LibrarySourceUnsaved" Margin="0,12,0,0"
+                                               Text="{loc:Text Library.Source.UnsavedDocument}" TextWrapping="Wrap"
+                                               Foreground="{DynamicResource Text.Secondary}"
+                                               Visibility="{Binding HasUnsavedSourceDocument, Converter={StaticResource BoolToVisibility}}" />
                                     <StackPanel AutomationProperties.AutomationId="LibrarySourceLocation" Margin="0,12,0,0"
                                                 Visibility="{Binding HasSourceDocumentPath, Converter={StaticResource BoolToVisibility}}">
                                         <Grid>
@@ -2091,9 +2095,12 @@
                                         <TextBlock x:Name="SourcePathValue" AutomationProperties.AutomationId="LibrarySourcePathValue" Margin="0,2,0,0"
                                                    FontSize="{StaticResource FontSize.Control}" ToolTip="{Binding SourceDocumentPath}"
                                                    AutomationProperties.Name="{Binding SourceDocumentPathAutomationName}"
+                                                   gallery:GalleryTextClamp.MiddleEllipsis="{Binding IsSourceDocumentFile}"
                                                    gallery:GalleryTextClamp.MaxLines="2" gallery:GalleryTextClamp.Text="{Binding SourceDocumentPath}" />
                                         <WrapPanel Margin="0,8,0,0">
-                                            <Button Content="{loc:Text Library.Source.OpenFolder}" Style="{StaticResource Button.Secondary}" Click="OnOpenSourceFolderClick" Margin="0,0,8,8" />
+                                            <Button Content="{loc:Text Library.Source.OpenFile}" Style="{StaticResource Button.Secondary}" Click="OnOpenSourceFileClick" Margin="0,0,8,8"
+                                                    Visibility="{Binding IsSourceDocumentFile, Converter={StaticResource BoolToVisibility}}" />
+                                            <Button Content="{Binding SourceLocationAction}" Style="{StaticResource Button.Secondary}" Click="OnOpenSourceFolderClick" Margin="0,0,8,8" />
                                             <Button Content="{loc:Text Library.Source.CopyPath}" Style="{StaticResource Button.Secondary}" Click="OnCopySourcePathClick" Margin="0,0,0,8" />
                                         </WrapPanel>
                                     </StackPanel>
