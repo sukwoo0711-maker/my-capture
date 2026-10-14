@@ -73,8 +73,10 @@ public sealed class EditorChromeAndTextInspectorTests : KoreanCaptionTest
         Assert.Equal(TextOutlineStyle.Consistent, caption.OutlineStyle);
     });
 
-    [Fact]
-    public void FontPickerKeepsCurrentAndRecentFamiliesFirstAndPreviewsInstalledFonts() => StaTestHost.Run(() =>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void FontPickerKeepsCurrentAndRecentFamiliesFirstAndPreviewsInstalledFonts(bool reusePreview) => StaTestHost.Run(() =>
     {
         string[] installed = Fonts.SystemFontFamilies.Select(font => font.Source)
             .Distinct(StringComparer.OrdinalIgnoreCase).Order(StringComparer.OrdinalIgnoreCase).ToArray();
@@ -95,10 +97,13 @@ public sealed class EditorChromeAndTextInspectorTests : KoreanCaptionTest
         Assert.All(installed, name => Assert.Contains(choices, font => font.Source.Equals(name, StringComparison.OrdinalIgnoreCase)));
 
         Assert.NotNull(picker.ItemTemplate);
+        ContentPresenter? preview = null;
         foreach (FontFamily family in choices.Take(3))
         {
-            FrameworkElement preview = Assert.IsAssignableFrom<FrameworkElement>(picker.ItemTemplate.LoadContent());
-            preview.DataContext = family;
+            // Apply the template through WPF so its factory is sealed before instantiation.
+            if (preview is null || !reusePreview)
+                preview = new ContentPresenter { ContentTemplate = picker.ItemTemplate };
+            preview.Content = family;
             preview.Measure(new Size(240, 100));
             preview.Arrange(new Rect(preview.DesiredSize));
             TextBlock label = Assert.Single(Tree<TextBlock>(preview), text => text.Text.Contains(family.Source, StringComparison.Ordinal));
