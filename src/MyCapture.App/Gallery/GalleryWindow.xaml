@@ -274,14 +274,19 @@
                             <ColumnDefinition Width="*" />
                             <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
-                        <TextBlock Text="{Binding Caption}"
-                                   Visibility="{Binding HasCaption, Converter={StaticResource BoolToVisibility}}"
-                                   Foreground="{DynamicResource Text.Primary}"
-                                   FontWeight="SemiBold"
-                                   FontSize="{StaticResource FontSize.Body}"
-                                   TextTrimming="CharacterEllipsis"
-                                   VerticalAlignment="Center" />
-
+                        <StackPanel>
+                            <TextBlock Text="{Binding Caption}"
+                                       Visibility="{Binding HasCaption, Converter={StaticResource BoolToVisibility}}"
+                                       Foreground="{DynamicResource Text.Primary}"
+                                       FontWeight="SemiBold"
+                                       FontSize="{StaticResource FontSize.Body}"
+                                       TextTrimming="CharacterEllipsis"
+                                       VerticalAlignment="Center" />
+                            <TextBlock Text="{Binding SearchMatchText}" Margin="0,3,0,0"
+                                       FontSize="{StaticResource FontSize.Caption}" Foreground="{DynamicResource Text.Secondary}"
+                                       TextTrimming="CharacterEllipsis" ToolTip="{Binding SearchMatchText}"
+                                       Visibility="{Binding HasSearchMatch, Converter={StaticResource BoolToVisibility}}" />
+                        </StackPanel>
                     </Grid>
 
                     <!-- Visible Float / Copy / Edit, then delete and overflow. -->
@@ -549,12 +554,18 @@
                             <ColumnDefinition Width="*" />
                             <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
-                        <TextBlock Text="{Binding CompactCaption}"
-                                   Foreground="{DynamicResource Text.Primary}"
-                                   FontWeight="SemiBold"
-                                   FontSize="{StaticResource FontSize.Caption}"
-                                   TextTrimming="CharacterEllipsis"
-                                   VerticalAlignment="Center" />
+                        <StackPanel VerticalAlignment="Center">
+                            <TextBlock Text="{Binding CompactCaption}"
+                                       Foreground="{DynamicResource Text.Primary}"
+                                       FontWeight="SemiBold"
+                                       FontSize="{StaticResource FontSize.Caption}"
+                                       TextTrimming="CharacterEllipsis"
+                                       VerticalAlignment="Center" />
+                            <TextBlock Text="{Binding SearchMatchText}" Margin="0,2,0,0"
+                                       FontSize="{StaticResource FontSize.Caption}" Foreground="{DynamicResource Text.Secondary}"
+                                       TextTrimming="CharacterEllipsis" ToolTip="{Binding SearchMatchText}"
+                                       Visibility="{Binding HasSearchMatch, Converter={StaticResource BoolToVisibility}}" />
+                        </StackPanel>
                         <Button Grid.Column="1"
                                 Style="{StaticResource Gallery.IconButton}"
                                 Width="30" Height="30" MinWidth="30" MinHeight="30" Padding="4"
@@ -1532,6 +1543,32 @@
             </StackPanel>
         </Grid>
 
+        <StackPanel Grid.Row="1">
+            <DockPanel Margin="6,0,6,8" LastChildFill="True"
+                       Visibility="{Binding HasSearchQuery, Converter={StaticResource BoolToVisibility}}">
+                <Button DockPanel.Dock="Right" Content="{loc:Text Library.Search.ClearAll}"
+                        Style="{StaticResource Button.Secondary}" Background="Transparent" BorderThickness="0"
+                        VerticalAlignment="Top" Margin="8,0,0,0" Click="OnClearSearchConditionsClick" />
+                <ItemsControl ItemsSource="{Binding SearchConditions}">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Button Style="{StaticResource Button.Secondary}" Margin="0,0,6,4" Padding="9,4"
+                                    MaxWidth="360" ToolTip="{Binding RemoveToolTip}"
+                                    AutomationProperties.Name="{Binding RemoveToolTip}" Click="OnRemoveSearchConditionClick">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="{Binding Label}" MaxWidth="300" TextTrimming="CharacterEllipsis" />
+                                    <themes:SymbolIcon Size="12" Data="{StaticResource Icon.Close}" Margin="6,0,0,0"
+                                                       Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
+                                </StackPanel>
+                            </Button>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </DockPanel>
+
         <!-- OCR full-text search coverage banner (Row 1). Shown only when part of the
              library is not yet searchable by the text inside the images, or when no OCR
              language pack is installed. Collapsed by default; the code-behind sets its
@@ -1566,6 +1603,7 @@
                         Click="OnOcrIndexClick" />
             </Grid>
         </Border>
+        </StackPanel>
 
         <Grid Grid.Row="2" x:Name="GalleryWorkspace">
             <Grid.ColumnDefinitions>
@@ -1753,7 +1791,7 @@
                                    AutomationProperties.Name="{Binding EmptyStateText}" TextWrapping="Wrap" />
                         <!-- Outlined: the command bar's capture is this screen's filled button. -->
                         <Button Content="{loc:Text Text_2C20ADDA2018}" Style="{StaticResource Button.Secondary}" Click="OnCaptureRegionClick" Margin="0,16,0,0" Visibility="{Binding QueueIsEmpty, Converter={StaticResource BoolToVisibility}}" />
-                        <Button Content="{loc:Text Library.Search.Reset}" Click="OnClearLibrarySearchClick" Margin="0,16,0,0"
+                        <Button Content="{loc:Text Library.Search.ClearConditions}" Click="OnClearLibrarySearchClick" Margin="0,16,0,0"
                                 Style="{StaticResource Button.Secondary}"
                                 Visibility="{Binding CanResetEmptySearch, Converter={StaticResource BoolToVisibility}}" />
                     </StackPanel>

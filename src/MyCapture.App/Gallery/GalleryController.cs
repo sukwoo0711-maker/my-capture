@@ -70,16 +70,21 @@ public sealed class GalleryController
     /// </remarks>
     public IReadOnlyList<GalleryGroupedRecords> BuildGroups(string? query, DateTimeOffset now,
         CaptureFolderScope scope = default, GallerySortOrder sort = GallerySortOrder.Newest,
-        bool includeFolders = false)
+        bool includeFolders = false, IDictionary<Guid, CaptureMatchField>? searchMatchFields = null)
     {
         CaptureFolder[] folders = includeFolders ? FolderCardsInScope(scope) : [];
         IEnumerable<CaptureRecord> matches = RecordsInView(scope, browsing: includeFolders);
         string? trimmed = query?.Trim();
         if (!string.IsNullOrEmpty(trimmed))
         {
-            Func<CaptureRecord, bool> matcher = CaptureTextSearch.CreateMatcher(trimmed);
-            matches = matches.Where(record => matcher(record)
-                || _queue.GetExportFileName(record).Contains(trimmed, StringComparison.CurrentCultureIgnoreCase));
+            CaptureSearchQuery prepared = CaptureSearchQuery.Parse(trimmed);
+            matches = matches.Where(record =>
+            {
+                bool matched = MatchesSearch(record, prepared, out CaptureMatchField fields,
+                    collectFields: searchMatchFields is not null);
+                if (matched && searchMatchFields is not null) searchMatchFields[record.Id] = fields;
+                return matched;
+            });
         }
         CaptureRecord[] ordered = (sort switch
         {
@@ -105,6 +110,19 @@ public sealed class GalleryController
             .OrderByDescending(day => day.SortKey)
             .Select(day => new GalleryGroupedRecords(day, recordsByDay[day].ToArray()) { Folders = foldersByDay[day].ToArray() })
             .ToArray();
+    }
+
+    private bool MatchesSearch(CaptureRecord record, CaptureSearchQuery query, out CaptureMatchField fields,
+        bool collectFields)
+    {
+        string? folder = record.FolderId is { } id && query.Tokens.Any(token => token.Field == CaptureSearchField.Folder)
+            ? _queue.GetFolderDisplayPath(id) : null;
+        fields = CaptureMatchField.None;
+        if (collectFields ? query.TryMatch(record, out fields, folder) : query.IsMatch(record, folder)) return true;
+        if (!query.AllowsFileNameFallback
+            || !_queue.GetExportFileName(record).Contains(query.Text.Trim(), StringComparison.CurrentCultureIgnoreCase)) return false;
+        fields = CaptureMatchField.ExportFileName;
+        return true;
     }
 
     /// <summary>

@@ -94,6 +94,18 @@ public sealed class GalleryItemViewModel : INotifyPropertyChanged
     }
 
     public bool IsPinned => Record.IsManuallyPinned;
+    public string SearchMatchText { get; private set; } = string.Empty;
+    public bool HasSearchMatch => SearchMatchText.Length > 0;
+
+    internal void SetSearchMatch(bool active, CaptureMatchField fields)
+    {
+        string text = active ? GallerySearchMatchText.Describe(fields) : string.Empty;
+        if (SearchMatchText == text) return;
+        SearchMatchText = text;
+        Raise(nameof(SearchMatchText));
+        Raise(nameof(HasSearchMatch));
+    }
+
     internal Func<CaptureRecord, string>? FolderFileName { get; set; }
 
     private string _folderBadge = string.Empty;

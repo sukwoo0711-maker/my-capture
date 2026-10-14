@@ -3935,7 +3935,7 @@ Delete {1} {1:plural:subfolder|subfolders}, {2} {2:plural:image|images}, and {3}
   <data name="LibraryUx_KeptAccessible" xml:space="preserve"><value>, kept</value></data>
   <data name="LibraryUx_InFolderAccessible" xml:space="preserve"><value>, in folder {0}</value></data>
   <data name="LibraryUx_TileMoreHint" xml:space="preserve"><value>More — keep, export and recognize text</value></data>
-  <data name="LibraryUx_SearchPlaceholder" xml:space="preserve"><value>Search titles, windows, image text</value></data>
+  <data name="LibraryUx_SearchPlaceholder" xml:space="preserve"><value>Search titles, apps, tags, image text · app:Edge tag:meeting</value></data>
   <data name="LibraryUx_CommandShortcut" xml:space="preserve"><value>{0} ({1})</value></data>
   <data name="LibraryUx_NavImages" xml:space="preserve"><value>Images</value></data>
   <data name="LibraryUx_NavVideos" xml:space="preserve"><value>Videos</value></data>
@@ -4168,4 +4168,35 @@ Delete {1} {1:plural:subfolder|subfolders}, {2} {2:plural:image|images}, and {3}
   <data name="Tutorial.pin-save.Step2" xml:space="preserve"><value>2. Press Ctrl+S to save.</value></data>
   <data name="Tutorial.pin-save.Step3" xml:space="preserve"><value>3. To save another file, press Ctrl+Shift+S and choose the destination.</value></data>
   <data name="Tutorial.Unavailable" xml:space="preserve"><value>The tutorial video could not be loaded. Follow the steps below to use this feature.</value></data>
+  <data name="Library.Search.ClearAll" xml:space="preserve"><value>Clear all</value></data>
+  <data name="Library.Search.ClearConditions" xml:space="preserve"><value>Clear conditions</value></data>
+  <data name="Library.Search.RemoveCondition" xml:space="preserve"><value>Remove condition: {0}</value></data>
+  <data name="Library.Search.Condition" xml:space="preserve"><value>{0}: {1}</value></data>
+  <data name="Library.Search.Excluded" xml:space="preserve"><value>Exclude · {0}</value></data>
+  <data name="Library.Search.HiddenCount" xml:space="preserve"><value>Search conditions hide {0} {0:plural:capture|captures}.</value></data>
+  <data name="Library.Search.Matched" xml:space="preserve"><value>Matched: {0}</value></data>
+  <data name="Library.Search.ExclusionsMatched" xml:space="preserve"><value>Matched: exclusions</value></data>
+  <data name="Library.Search.FieldSeparator" xml:space="preserve"><value> · </value></data>
+  <data name="Library.Search.Syntax" xml:space="preserve"><value>app:Edge tag:meeting text:"monthly sales" · -tag:draft · type:image pinned:yes date:2026-10</value></data>
+  <data name="Library.Search.Field.App" xml:space="preserve"><value>App</value></data>
+  <data name="Library.Search.Field.Title" xml:space="preserve"><value>Title</value></data>
+  <data name="Library.Search.Field.Tag" xml:space="preserve"><value>Tag</value></data>
+  <data name="Library.Search.Field.Text" xml:space="preserve"><value>Text</value></data>
+  <data name="Library.Search.Field.Url" xml:space="preserve"><value>URL</value></data>
+  <data name="Library.Search.Field.Folder" xml:space="preserve"><value>Folder</value></data>
+  <data name="Library.Search.Field.Type" xml:space="preserve"><value>Type</value></data>
+  <data name="Library.Search.Field.Pinned" xml:space="preserve"><value>Kept</value></data>
+  <data name="Library.Search.Field.Date" xml:space="preserve"><value>Date</value></data>
+  <data name="Library.Search.MatchField.Title" xml:space="preserve"><value>Title</value></data>
+  <data name="Library.Search.MatchField.WindowTitle" xml:space="preserve"><value>Window title</value></data>
+  <data name="Library.Search.MatchField.OcrText" xml:space="preserve"><value>Image text</value></data>
+  <data name="Library.Search.MatchField.MediaType" xml:space="preserve"><value>Type</value></data>
+  <data name="Library.Search.MatchField.Tags" xml:space="preserve"><value>Tags</value></data>
+  <data name="Library.Search.MatchField.SourcePageUrl" xml:space="preserve"><value>URL</value></data>
+  <data name="Library.Search.MatchField.SourceApp" xml:space="preserve"><value>App</value></data>
+  <data name="Library.Search.MatchField.SourceDocumentPath" xml:space="preserve"><value>Source folder</value></data>
+  <data name="Library.Search.MatchField.Folder" xml:space="preserve"><value>Folder</value></data>
+  <data name="Library.Search.MatchField.Pinned" xml:space="preserve"><value>Kept</value></data>
+  <data name="Library.Search.MatchField.Date" xml:space="preserve"><value>Date</value></data>
+  <data name="Library.Search.MatchField.ExportFileName" xml:space="preserve"><value>File name</value></data>
 </root>

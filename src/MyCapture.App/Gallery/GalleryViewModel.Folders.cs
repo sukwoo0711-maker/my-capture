@@ -173,7 +173,7 @@ public sealed partial class GalleryViewModel
         : UiText.Get("LibraryUx_SearchPlaceholder");
 
     /// <summary>The search shortcut lives in the tooltip, not in the placeholder.</summary>
-    public string SearchToolTip => UiText.Format("LibraryUx_CommandShortcut", UiText.Get("Text_4B8D541EBE6D"), "Ctrl+F");
+    public string SearchToolTip => UiText.Format("LibraryUx_CommandShortcut", UiText.Get("Library.Search.Syntax"), "Ctrl+F");
 
     private GallerySortOrder _sortOrder;
     public int SortIndex

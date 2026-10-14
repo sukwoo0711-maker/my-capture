@@ -240,6 +240,21 @@ internal sealed partial class GalleryWindow : Window
     private void OnSearchTextChanged(object sender, TextChangedEventArgs e) =>
         _viewModel.SearchQuery = SearchBox.Text;
 
+    private void OnRemoveSearchConditionClick(object sender, RoutedEventArgs e)
+    {
+        if (sender is not FrameworkElement { DataContext: GallerySearchCondition condition }) return;
+        _viewModel.RemoveSearchCondition(condition.Index);
+        SearchBox.Text = _viewModel.SearchQuery;
+        SearchBox.Focus();
+        SearchBox.CaretIndex = SearchBox.Text.Length;
+    }
+
+    private void OnClearSearchConditionsClick(object sender, RoutedEventArgs e)
+    {
+        SearchBox.Clear();
+        SearchBox.Focus();
+    }
+
     // ---- OCR full-text search coverage -------------------------------------------------
 
     /// <summary>
