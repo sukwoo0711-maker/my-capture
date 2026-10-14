@@ -31,6 +31,9 @@ public static class GalleryTextClamp
     public static readonly DependencyProperty MaxLinesProperty = DependencyProperty.RegisterAttached(
         "MaxLines", typeof(int), typeof(GalleryTextClamp), new PropertyMetadata(0, OnLayoutInputChanged));
 
+    public static readonly DependencyProperty MiddleEllipsisProperty = DependencyProperty.RegisterAttached(
+        "MiddleEllipsis", typeof(bool), typeof(GalleryTextClamp), new PropertyMetadata(false, OnLayoutInputChanged));
+
     /// <summary>True shows the whole value instead of the summary.</summary>
     public static readonly DependencyProperty IsExpandedProperty = DependencyProperty.RegisterAttached(
         "IsExpanded", typeof(bool), typeof(GalleryTextClamp), new PropertyMetadata(false, OnLayoutInputChanged));
@@ -58,6 +61,8 @@ public static class GalleryTextClamp
     public static void SetText(DependencyObject owner, string value) => owner.SetValue(TextProperty, value);
     public static int GetMaxLines(DependencyObject owner) => (int)owner.GetValue(MaxLinesProperty);
     public static void SetMaxLines(DependencyObject owner, int value) => owner.SetValue(MaxLinesProperty, value);
+    public static bool GetMiddleEllipsis(DependencyObject owner) => (bool)owner.GetValue(MiddleEllipsisProperty);
+    public static void SetMiddleEllipsis(DependencyObject owner, bool value) => owner.SetValue(MiddleEllipsisProperty, value);
     public static bool GetIsExpanded(DependencyObject owner) => (bool)owner.GetValue(IsExpandedProperty);
     public static void SetIsExpanded(DependencyObject owner, bool value) => owner.SetValue(IsExpandedProperty, value);
     public static bool GetIsOverflowing(DependencyObject owner) => (bool)owner.GetValue(IsOverflowingProperty);
@@ -98,6 +103,7 @@ public static class GalleryTextClamp
 
     private static void Apply(TextBlock text)
     {
+        text.Text = GetText(text);
         int lines = GetMaxLines(text);
         bool overflowing = false;
         if (lines <= 0)
@@ -112,6 +118,20 @@ public static class GalleryTextClamp
             double summary = lines * text.LineHeight;
             // Before the first layout the width is unknown; SizeChanged measures again then.
             overflowing = text.ActualWidth > 0 && FullHeight(text) > summary + 0.5;
+            if (overflowing && GetMiddleEllipsis(text) && !GetIsExpanded(text))
+            {
+                string full = GetText(text);
+                int low = 5, high = full.Length - 1;
+                string shortened = MyCapture.Core.Capture.SourceDocument.ShortenPath(full, 5);
+                while (low <= high)
+                {
+                    int middle = low + (high - low) / 2;
+                    text.Text = MyCapture.Core.Capture.SourceDocument.ShortenPath(full, middle);
+                    if (FullHeight(text) <= summary + 0.5) { shortened = text.Text; low = middle + 1; }
+                    else high = middle - 1;
+                }
+                text.Text = shortened;
+            }
             text.MaxHeight = GetIsExpanded(text) ? double.PositiveInfinity : summary;
         }
 
