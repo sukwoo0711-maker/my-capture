@@ -4249,8 +4249,10 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="EditorText_Editing" xml:space="preserve"><value>텍스트 수정 중 · Ctrl+Enter 완료 · Enter 줄바꿈 · Esc 취소</value></data>
   <data name="EditorText_Cancelled" xml:space="preserve"><value>텍스트 편집 취소됨</value></data>
   <data name="EditorText_Updated" xml:space="preserve"><value>텍스트 수정됨</value></data>
-  <data name="EditorText_Bold" xml:space="preserve"><value>굵게</value></data>
+  <data name="EditorText_Bold" xml:space="preserve"><value>굵은 글꼴</value></data>
   <data name="EditorText_Background" xml:space="preserve"><value>배경 판</value></data>
+  <data name="EditorText_FontFamily" xml:space="preserve"><value>글꼴</value></data>
+  <data name="EditorText_Outline" xml:space="preserve"><value>외곽선</value></data>
   <data name="VideoEditorUx_LibrarySaving" xml:space="preserve"><value>라이브러리에 저장하는 중</value></data>
   <data name="VideoEditorUx_DragStart" xml:space="preserve"><value>끌면 시작 위치 조정 · I: 재생 위치를 시작으로 설정</value></data>
   <data name="VideoEditorUx_DragEnd" xml:space="preserve"><value>끌면 끝 위치 조정 · O: 재생 위치를 끝으로 설정</value></data>

@@ -38,8 +38,8 @@ namespace MyCapture.App.Editing;
 /// inspector that shows values rather than instructions, and a bottom status line that
 /// reports results. Crop is a mode: while it is active the command bar becomes
 /// rotate / ratio / auto trim / Apply / Cancel, as in Photos, where rotation lives inside
-/// crop. There is no horizontal toolbar scrolling and no command shrinks to its shortcut
-/// letter. Every icon control carries a label, tooltip, automation name, and keyboard
+/// crop. There is no horizontal toolbar scrolling; compact commands retain their icon and
+/// shortcut. Every icon control carries a tooltip, automation name, and keyboard
 /// route, and the status region is an automation live region so screen readers hear each
 /// gesture result.
 /// </para>
@@ -120,6 +120,14 @@ internal sealed partial class AnnotationEditorControl : Grid
     private FrameworkElement _textStyleSection = null!;
     private CheckBox _textBold = null!;
     private CheckBox _textBackground = null!;
+    private CheckBox _textOutline = null!;
+    private ComboBox _textFontFamily = null!;
+    private FrameworkElement _fontFamilySection = null!;
+    private bool _defaultTextBold;
+    private bool _defaultTextBackground;
+    private bool _defaultTextOutline = true;
+    private readonly List<string> _recentFontFamilies = [];
+    private readonly List<TextBlock> _commandLabels = [];
     private Slider _blurSlider = null!;
     private FrameworkElement _blurSection = null!;
     private bool _syncingInspector;
@@ -232,6 +240,10 @@ internal sealed partial class AnnotationEditorControl : Grid
         _controller.DefaultFontSize = double.IsFinite(defaults.FontSize)
             ? Math.Clamp(defaults.FontSize, SettingsRanges.FontSize.Min, SettingsRanges.FontSize.Max) : 18;
         _controller.DefaultFontFamily = string.IsNullOrWhiteSpace(defaults.FontFamily) ? "Malgun Gothic" : defaults.FontFamily;
+        _defaultTextBold = defaults.TextBold;
+        _defaultTextBackground = defaults.TextBackground;
+        _defaultTextOutline = defaults.TextOutline;
+        _recentFontFamilies.AddRange(defaults.RecentFontFamilies ?? []);
         _controller.ApplyBlurRadius(defaults.BlurRadius);
         _mosaicBlockSize = defaults.MosaicBlockSize;
         if (Enum.TryParse(defaults.LastTool, out EditorTool lastTool) && Enum.IsDefined(lastTool)) _preferredTool = lastTool == EditorTool.Crop ? EditorTool.Select : lastTool;
@@ -1074,6 +1086,15 @@ internal sealed partial class AnnotationEditorControl : Grid
 
     private void OpenTextBox(TextAnnotation annotation)
     {
+        if (_controller.IsCreatingText)
+        {
+            annotation.Bold = _defaultTextBold;
+            annotation.Background = _defaultTextBackground ? ColorRgba.Black : ColorRgba.Transparent;
+            annotation.HasOutline = _defaultTextOutline;
+            annotation.OutlineStyle = TextOutlineStyle.Consistent;
+            TextLayout.Apply(annotation, _controller.FitText(annotation, annotation.Text,
+                annotation.FontSize, annotation.AutoSize, annotation.Rect));
+        }
         _editingText = annotation;
 
         double dipPerPixel = Math.Max(double.Epsilon, _surface.DipPerPixel);
@@ -1152,6 +1173,7 @@ internal sealed partial class AnnotationEditorControl : Grid
         MeasureLiveTextInset(textBox);
         SyncToolButtons();
         SetStatus(UiText.Get(_controller.IsCreatingText ? "EditorText_Entering" : "EditorText_Editing"));
+        UpdateInspector();
 
         textBox.TextChanged += OnLiveTextBoxTextChanged;
         // A box placed by a simulated gesture lives in a window that never takes keyboard focus;
@@ -1529,14 +1551,14 @@ internal sealed partial class AnnotationEditorControl : Grid
     private CommandGroupsPanel BuildEditCommands()
     {
         var left = CommandRow();
-        _undoButton = IconButton(UiText.Get("Text_CE706412FA75"), UiText.Get("Text_C61A081610C9"), "Icon.Undo", FallbackUndo, () =>
+        _undoButton = IconTextButton(UiText.Get("Text_CE706412FA75"), UiText.Get("Text_C61A081610C9"), "Icon.Undo", FallbackUndo, () =>
         {
             if (_controller.PerformUndo())
             {
                 SetStatus(UiText.Get("Text_DAF93C3AA95D"));
             }
         });
-        _redoButton = IconButton(UiText.Get("Text_078C44D5A66E"), UiText.Get("Text_F457141C336A"), "Icon.Redo", FallbackRedo, () =>
+        _redoButton = IconTextButton(UiText.Get("Text_078C44D5A66E"), UiText.Get("Text_F457141C336A"), "Icon.Redo", FallbackRedo, () =>
         {
             if (_controller.PerformRedo())
             {
@@ -1560,10 +1582,10 @@ internal sealed partial class AnnotationEditorControl : Grid
         AutomationProperties.SetAutomationId(crop, "Capture410Crop");
         left.Children.Add(crop);
 
-        _redactButton = TextButton(
+        _redactButton = IconTextButton(
             UiText.Get("Text_E395E2567985"),
             UiText.Get("Text_A31A72A338DD"),
-            "Button.GhostCompact",
+            "Icon.Mosaic", FallbackMosaic,
             () => _ = ApplyPrivacyRedactionsAsync());
         _redactButton.IsEnabled = _privacyRedactionService?.IsAvailable == true;
         AutomationProperties.SetHelpText(
@@ -1574,10 +1596,10 @@ internal sealed partial class AnnotationEditorControl : Grid
         left.Children.Add(_redactButton);
 
         // Text recognition of what the editor shows now, beside the other text-reading command.
-        _copyTextButton = TextButton(
+        _copyTextButton = IconTextButton(
             UiText.Get("EditorFlow_CopyText"),
             UiText.Get("EditorFlow_CopyTextHint"),
-            "Button.GhostCompact",
+            "Icon.Text", FallbackText,
             () => _ = RecognizeCurrentTextAsync());
         AutomationProperties.SetAutomationId(_copyTextButton, "EditorFlowCopyText");
         RefreshCopyTextAvailability();
@@ -1594,7 +1616,7 @@ internal sealed partial class AnnotationEditorControl : Grid
             () => Commit(EditorCommitAction.Done));
         done.SetResourceReference(FrameworkElement.StyleProperty, "Button.Primary");
         // Esc no longer closes, so Cancel carries no shortcut; it closes like the title bar does.
-        Button cancel = TextButton(UiText.Get("Text_BE876433993A"), UiText.Get("EditorFlow_CancelHint"), "Button.GhostCompact", RequestClose);
+        Button cancel = IconTextButton(UiText.Get("Text_BE876433993A"), UiText.Get("EditorFlow_CancelHint"), "Icon.Close", FallbackClose, RequestClose);
         AutomationProperties.SetAutomationId(cancel, "EditorFlowCancel");
         AutomationProperties.SetAutomationId(done, "EditorFlowDone");
         AutomationProperties.SetAutomationId(copy, "EditorFlowCopy");
@@ -1651,14 +1673,15 @@ internal sealed partial class AnnotationEditorControl : Grid
         ReturnFocusAfterMousePick(_cropRatio);
         left.Children.Add(_cropRatio);
 
-        _autoTrimButton = TextButton(UiText.Get("Capture410.AutoTrim"), UiText.Get("Capture410.AutoTrimHint"),
-            "Button.GhostCompact", () => _ = PreviewAutomaticTrimAsync());
+        _autoTrimButton = IconTextButton(UiText.Get("Capture410.AutoTrim"), UiText.Get("Capture410.AutoTrimHint"),
+            "Icon.Crop", FallbackCrop, () => _ = PreviewAutomaticTrimAsync());
         AutomationProperties.SetAutomationId(_autoTrimButton, "Capture410AutoTrim");
         left.Children.Add(_autoTrimButton);
 
         var right = CommandRow();
-        Button apply = TextButton(UiText.Get("Crop.Apply"), UiText.Get("EditorFlow_CropApplyHint"), "Button.Primary", ApplyPendingCrop);
-        Button cancel = TextButton(UiText.Get("Text_BE876433993A"), UiText.Get("EditorFlow_CropCancelHint"), "Button.GhostCompact", () =>
+        Button apply = IconTextButton(UiText.Get("Crop.Apply"), UiText.Get("EditorFlow_CropApplyHint"), "Icon.Check", FallbackCheck, ApplyPendingCrop);
+        apply.SetResourceReference(StyleProperty, "Button.Primary");
+        Button cancel = IconTextButton(UiText.Get("Text_BE876433993A"), UiText.Get("EditorFlow_CropCancelHint"), "Icon.Close", FallbackClose, () =>
         {
             CancelPendingCrop();
             Focus();
@@ -1700,27 +1723,25 @@ internal sealed partial class AnnotationEditorControl : Grid
     };
 
     /// <summary>
-    /// Gives a command bar button its shortcut (tooltip, accelerator key and the optional key
+    /// Gives a command bar button its shortcut (tooltip, accelerator key and the visible key
     /// line beneath it) and the bar's common padding, type size and height.
     /// </summary>
     /// <remarks>
     /// The disabled look comes from the shared button styles: each button level keeps its shape
-    /// and only dims. <paramref name="borderless"/> marks a tool-level command, which keeps the
-    /// compact padding of its borderless style.
+    /// and only dims. <paramref name="borderless"/> identifies former ghost commands, which now
+    /// use the secondary button surface so they remain recognisable before hover.
     /// </remarks>
-    private static void CommandButton(Button button, bool borderless, ShortcutScope? scope = null, string? command = null)
+    private void CommandButton(Button button, bool borderless, ShortcutScope? scope = null, string? command = null)
     {
+        if (button.Content is StackPanel row)
+            _commandLabels.AddRange(row.Children.OfType<TextBlock>());
         if (scope is { } shortcutScope && command is not null)
         {
-            ShortcutPresentation.Attach(button, shortcutScope, command);
+            AttachEditorShortcut(button, shortcutScope, command);
         }
 
-        if (!borderless)
-        {
-            // The shared control padding is sized for dialogs; in the one-row bar it pushed the
-            // finishing buttons onto a second row at the 680 DIP minimum width.
-            button.Padding = new Thickness(10, 4, 10, 4);
-        }
+        if (borderless) button.SetResourceReference(StyleProperty, "Button.Secondary");
+        button.Padding = new Thickness(8, 4, 8, 4);
 
         // One type size and height for every command, so the bar keeps its height when crop
         // mode swaps the commands.
@@ -1728,6 +1749,7 @@ internal sealed partial class AnnotationEditorControl : Grid
         button.Width = double.NaN;
         button.Height = double.NaN;
         button.MinHeight = 42;
+        button.MinWidth = 40;
     }
 
     private void ApplyCropRatio() =>
@@ -1890,7 +1912,7 @@ internal sealed partial class AnnotationEditorControl : Grid
             var compact = panel.ActualHeight < regularHeight;
             foreach (var button in _toolButtons.Values)
             {
-                button.Margin = new Thickness(1, compact ? 0 : 1, 1, compact ? 0 : 1);
+                button.Margin = new Thickness(0, compact ? 0 : 1, 0, compact ? 0 : 1);
             }
 
             foreach (var separator in groups.Children.OfType<Border>())
@@ -1908,7 +1930,7 @@ internal sealed partial class AnnotationEditorControl : Grid
             groups.Children.Add(RailSeparator());
         }
 
-        var grid = new UniformGrid { Columns = 2, Margin = new Thickness(2, 0, 2, 0) };
+        var grid = new UniformGrid { Columns = 2 };
         foreach (var (tool, label, toolTip, icon, fallback) in tools)
         {
             AddToolButton(grid, tool, label, toolTip, icon, fallback);
@@ -1971,6 +1993,13 @@ internal sealed partial class AnnotationEditorControl : Grid
         _stepSection = BuildStepNumberSection();
         stack.Children.Add(_stepSection);
 
+        _fontFamilySection = BuildFontFamilySection();
+        stack.Children.Add(_fontFamilySection);
+        _fontSizeSection = BuildFontSizeSection();
+        stack.Children.Add(_fontSizeSection);
+        _textStyleSection = BuildTextStyleSection();
+        stack.Children.Add(_textStyleSection);
+
         _colorSection = BuildColorSection();
         stack.Children.Add(_colorSection);
 
@@ -1978,10 +2007,6 @@ internal sealed partial class AnnotationEditorControl : Grid
         stack.Children.Add(_thicknessSection);
         _shapeStyleSection = BuildShapeStyleSection();
         stack.Children.Add(_shapeStyleSection);
-        _fontSizeSection = BuildFontSizeSection();
-        stack.Children.Add(_fontSizeSection);
-        _textStyleSection = BuildTextStyleSection();
-        stack.Children.Add(_textStyleSection);
         _blurSection = BuildBlurSection();
         stack.Children.Add(_blurSection);
         _cropSection = BuildCropSection();
@@ -2439,13 +2464,23 @@ internal sealed partial class AnnotationEditorControl : Grid
                 bool enabled = toggle.IsChecked == true;
                 CommitActiveText();
                 apply(enabled);
+                RememberPreferences();
                 UpdateInspector();
             };
             panel.Children.Add(toggle);
             return toggle;
         }
-        _textBold = Toggle("EditorText_Bold", _controller.ApplyTextBold);
-        _textBackground = Toggle("EditorText_Background", _controller.ApplyTextBackground);
+        _textBold = Toggle("EditorText_Bold", enabled =>
+        {
+            if (_controller.Selected is TextAnnotation) _controller.ApplyTextBold(enabled);
+            else _defaultTextBold = enabled;
+        });
+        _textBackground = Toggle("EditorText_Background", enabled =>
+        {
+            if (_controller.Selected is TextAnnotation) _controller.ApplyTextBackground(enabled);
+            else _defaultTextBackground = enabled;
+        });
+        _textOutline = Toggle("EditorText_Outline", ApplyTextOutline);
         return panel;
     }
 
@@ -2545,11 +2580,12 @@ internal sealed partial class AnnotationEditorControl : Grid
         var button = new ToggleButton
         {
             Content = BuildIcon(iconResourceKey, fallbackGeometry, 20),
-            ToolTip = tooltip, Width = 40, Height = 38, MinHeight = 0, MinWidth = 0, Padding = new Thickness(2), Margin = new Thickness(1),
+            ToolTip = tooltip, Width = 40, Height = 38, MinHeight = 0, MinWidth = 0, Padding = new Thickness(2), Margin = new Thickness(0, 1, 0, 1),
         };
         button.SetResourceReference(FrameworkElement.StyleProperty, "Rail.ToolButton");
         AutomationName(button, UiText.Format("Text_1BA9F7001237", label, ShortcutCatalog.Get(ShortcutScope.Annotation, tool.ToString()).Hint));
-        ShortcutPresentation.Attach(button, ShortcutScope.Annotation, tool.ToString(), corner: true);
+        button.ToolTip = label;
+        AttachEditorShortcut(button, ShortcutScope.Annotation, tool.ToString(), corner: true);
         PreserveEditorMouseFocus(button);
         button.Click += (_, _) => SelectTool(tool);
         _toolButtons[tool] = button;
@@ -2816,6 +2852,8 @@ internal sealed partial class AnnotationEditorControl : Grid
             StrokeThickness = _controller.StrokeThickness, StrokeStyle = _controller.StrokeStyle,
             FillTransparency = _controller.FillTransparency, FontSize = _controller.DefaultFontSize,
             FontFamily = _controller.DefaultFontFamily, TextColor = previous.TextColor,
+            TextBold = _defaultTextBold, TextBackground = _defaultTextBackground, TextOutline = _defaultTextOutline,
+            RecentFontFamilies = [.. _recentFontFamilies],
             MosaicBlockSize = previous.MosaicBlockSize, HighlighterAlpha = previous.HighlighterAlpha,
             RecentColors = [.. previous.RecentColors], BlurRadius = _controller.BlurRadius,
         });
@@ -3011,7 +3049,10 @@ internal sealed partial class AnnotationEditorControl : Grid
         _thicknessSection.Visibility = thicknessApplies ? Visibility.Visible : Visibility.Collapsed;
         _shapeStyleSection.Visibility = shapeApplies ? Visibility.Visible : Visibility.Collapsed;
         _fontSizeSection.Visibility = fontSizeApplies ? Visibility.Visible : Visibility.Collapsed;
-        _textStyleSection.Visibility = selected is TextAnnotation { IsStepNumber: false } && !cropping
+        bool textStyleApplies = selected is TextAnnotation { IsStepNumber: false }
+            || (selected is null && _controller.Tool == EditorTool.Text);
+        _fontFamilySection.Visibility = textStyleApplies && !cropping ? Visibility.Visible : Visibility.Collapsed;
+        _textStyleSection.Visibility = textStyleApplies && !cropping
             ? Visibility.Visible : Visibility.Collapsed;
         _blurSection.Visibility = blurApplies ? Visibility.Visible : Visibility.Collapsed;
         _stepSection.Visibility = stepTool && !cropping ? Visibility.Visible : Visibility.Collapsed;
@@ -3020,10 +3061,13 @@ internal sealed partial class AnnotationEditorControl : Grid
         _syncingInspector = true;
         try
         {
-            if (selected is TextAnnotation text)
+            if (textStyleApplies)
             {
-                _textBold.IsChecked = text.Bold;
-                _textBackground.IsChecked = text.Background.A > 0;
+                TextAnnotation? text = selected as TextAnnotation;
+                _textBold.IsChecked = text?.Bold ?? _defaultTextBold;
+                _textBackground.IsChecked = text is null ? _defaultTextBackground : text.Background.A > 0;
+                _textOutline.IsChecked = text?.HasOutline ?? _defaultTextOutline;
+                SelectFontFamily(text?.FontFamily ?? _controller.DefaultFontFamily);
             }
             if (thicknessApplies)
             {
@@ -3267,11 +3311,10 @@ internal sealed partial class AnnotationEditorControl : Grid
         }
 
         // Keep styling reachable in compact windows; vertical scrolling handles short heights.
-        // No command label is ever folded away here: a button reduced to its shortcut letter
-        // (the old narrow-window rotate buttons showed only Q and W) tells a beginner nothing.
-        // The command groups wrap at the 680 DIP minimum width so the image command names and
-        // finishing actions stay visible.
+        // Compact commands retain both glyph and key, with the full name in the tooltip.
         bool compact = ActualWidth > 0 && ActualWidth < InspectorCompactWidth;
+        foreach (TextBlock label in _commandLabels)
+            label.Visibility = compact ? Visibility.Collapsed : Visibility.Visible;
 
         if (compact == _inspectorCompact)
         {

@@ -300,6 +300,15 @@ public sealed class AnnotationDefaults
 
     public string FontFamily { get; set; } = "Malgun Gothic";
 
+    public bool TextBold { get; set; }
+
+    public bool TextBackground { get; set; }
+
+    public bool TextOutline { get; set; } = true;
+
+    /// <summary>Recently used text font families, most recent first.</summary>
+    public List<string> RecentFontFamilies { get; set => field = value ?? []; } = [];
+
     /// <summary>Block size used by the mosaic tool, in image pixels.</summary>
     public int MosaicBlockSize { get; set; } = 12;
 

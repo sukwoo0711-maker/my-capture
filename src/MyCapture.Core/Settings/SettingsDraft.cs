@@ -731,6 +731,10 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
         _preservedSchemaVersion = s.SchemaVersion;
         _preservedStrokeColor = s.Annotation.StrokeColor;
         _preservedTextColor = s.Annotation.TextColor;
+        _preservedTextBold = s.Annotation.TextBold;
+        _preservedTextBackground = s.Annotation.TextBackground;
+        _preservedTextOutline = s.Annotation.TextOutline;
+        _preservedRecentFontFamilies = [.. s.Annotation.RecentFontFamilies];
         _preservedRecentColors = [.. s.Annotation.RecentColors];
         _preservedColorFormat = s.Capture.ColorFormat;
         _preservedPreserveTransparency = s.Export.PreserveTransparency;
@@ -781,6 +785,8 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
         _lastAnnotationTool, _annotationStrokeStyle.ToString(), Dbl(_annotationFillTransparency), _strokeThickness,
         _fontSize, _fontFamily, _mosaicBlockSize, _highlighterAlpha, _highlighterOpacityPercent, _blurRadius,
         _preservedStrokeColor.ToString(), _preservedTextColor.ToString(),
+        B(_preservedTextBold), B(_preservedTextBackground), B(_preservedTextOutline),
+        string.Join(";", _preservedRecentFontFamilies),
         string.Join(";", _preservedRecentColors.Select(color => color.ToString())),
     ];
 
@@ -912,6 +918,10 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
                 TextColor = _preservedTextColor,
                 FontSize = ParseDouble(_fontSize),
                 FontFamily = _fontFamily.Trim(),
+                TextBold = _preservedTextBold,
+                TextBackground = _preservedTextBackground,
+                TextOutline = _preservedTextOutline,
+                RecentFontFamilies = [.. _preservedRecentFontFamilies],
                 MosaicBlockSize = ParseInt(_mosaicBlockSize),
                 HighlighterAlpha = (byte)ParseInt(_highlighterAlpha),
                 RecentColors = [.. _preservedRecentColors],
@@ -1395,6 +1405,10 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
     private int _preservedSchemaVersion = 1;
     private Primitives.ColorRgba _preservedStrokeColor;
     private Primitives.ColorRgba _preservedTextColor;
+    private bool _preservedTextBold;
+    private bool _preservedTextBackground;
+    private bool _preservedTextOutline = true;
+    private List<string> _preservedRecentFontFamilies = [];
     private List<Primitives.ColorRgba> _preservedRecentColors = [];
     private ColorFormat _preservedColorFormat;
     private bool _preservedPreserveTransparency;

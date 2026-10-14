@@ -1355,21 +1355,14 @@
                                 CornerRadius="{DynamicResource Radius.Md}" />
                         <Border x:Name="HoverLayer" Style="{StaticResource StateLayer.Hover}" BorderThickness="1" />
                         <Border x:Name="PressedLayer" Style="{StaticResource StateLayer.Pressed}" BorderThickness="1" />
-                        <!-- The selected tool shows its wash, accent glyph and edge indicator. -->
+                        <!-- Selection fills the tool's own tile. -->
                         <Border x:Name="CheckedLayer" Style="{StaticResource StateLayer.Selected}"
+                                Background="{DynamicResource Accent.Default}"
                                 BorderBrush="Transparent" BorderThickness="1" />
                         <Border BorderThickness="1">
                             <ContentPresenter HorizontalAlignment="Center"
                                               VerticalAlignment="Center" />
                         </Border>
-                        <Border x:Name="Indicator"
-                                Width="2" Height="18"
-                                HorizontalAlignment="Left" VerticalAlignment="Center"
-                                Background="{DynamicResource Accent.Cool}"
-                                CornerRadius="{DynamicResource Radius.Pill}"
-                                Style="{StaticResource StatePart.Normal}"
-                                IsHitTestVisible="False"
-                                Opacity="0" />
                         <Border x:Name="FocusRing"
                                 Margin="1"
                                 BorderBrush="{DynamicResource Border.Focus}"
@@ -1388,8 +1381,7 @@
                         </Trigger>
                         <Trigger Property="IsChecked" Value="True">
                             <Setter TargetName="CheckedLayer" Property="themes:FluidMotion.FadeTo" Value="1" />
-                            <Setter Property="Foreground" Value="{DynamicResource Accent.Cool}" />
-                            <Setter TargetName="Indicator" Property="themes:FluidMotion.FadeTo" Value="1" />
+                            <Setter Property="Foreground" Value="{DynamicResource Text.OnAccent}" />
                         </Trigger>
                         <Trigger Property="IsKeyboardFocused" Value="True">
                             <Setter TargetName="Chrome" Property="BorderBrush" Value="{DynamicResource Border.Focus}" />
