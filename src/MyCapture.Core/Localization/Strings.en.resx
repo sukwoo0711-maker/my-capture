@@ -379,7 +379,7 @@
     <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
   </data>
   <data name="Text_230D26DEB9AE" xml:space="preserve">
-    <value>Type your text, then press Esc or click elsewhere to finish</value>
+    <value>Entering text · Ctrl+Enter finish · Enter new line · Esc cancel</value>
     <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
   </data>
   <data name="Text_23A30AD1434C" xml:space="preserve">
@@ -4245,4 +4245,10 @@ Delete {1} {1:plural:subfolder|subfolders}, {2} {2:plural:image|images}, and {3}
   <data name="ExportOptions.Background.DarkGray" xml:space="preserve"><value>Dark gray</value></data>
   <data name="ExportOptions.Background.Accent" xml:space="preserve"><value>Accent</value></data>
   <data name="ExportOptions.JpegFilter" xml:space="preserve"><value>JPEG image (*.jpg)|*.jpg</value></data>
+  <data name="EditorText_Entering" xml:space="preserve"><value>Entering text · Ctrl+Enter finish · Enter new line · Esc cancel</value></data>
+  <data name="EditorText_Editing" xml:space="preserve"><value>Editing text · Ctrl+Enter finish · Enter new line · Esc cancel</value></data>
+  <data name="EditorText_Cancelled" xml:space="preserve"><value>Text editing cancelled</value></data>
+  <data name="EditorText_Updated" xml:space="preserve"><value>Text updated</value></data>
+  <data name="EditorText_Bold" xml:space="preserve"><value>Bold</value></data>
+  <data name="EditorText_Background" xml:space="preserve"><value>Background plate</value></data>
 </root>

@@ -100,6 +100,46 @@ internal sealed class AnnotationEditorController
 
     internal bool IsCreatingText { get; private set; }
 
+    internal TextAnnotation? EditingText { get; private set; }
+
+    internal TextAnnotation? BeginSelectedTextEdit() =>
+        _selected is TextAnnotation text && BeginTextEdit(text) ? text : null;
+
+    internal bool BeginTextEdit(TextAnnotation text)
+    {
+        ArgumentNullException.ThrowIfNull(text);
+        if (EditingText is not null || text.IsStepNumber
+            || !_document.Items.Contains(text)) return false;
+        EditingText = text;
+        Tool = EditorTool.Select;
+        SetSelected(text);
+        RaiseVisual();
+        return true;
+    }
+
+    internal TextAnnotation? BeginTextAtPointer(PointD point, int clickCount, bool shift)
+    {
+        if (EditingText is not null) return null;
+        if (_tool == EditorTool.Text)
+        {
+            if (!shift && HitTest(point) is TextAnnotation text && BeginTextEdit(text)) return text;
+            return BeginTextAnnotation(point, DefaultFontSize, DefaultFontSize * 1.4);
+        }
+        return _tool == EditorTool.Select && clickCount == 2
+            && HitTest(point) is TextAnnotation hit && BeginTextEdit(hit) ? hit : null;
+    }
+
+    internal void CancelTextEdit(TextAnnotation text)
+    {
+        if (!ReferenceEquals(EditingText, text)) return;
+        if (IsCreatingText) CommitTextEdit(text, string.Empty);
+        else
+        {
+            EditingText = null;
+            RaiseVisual();
+        }
+    }
+
     /// <summary>
     /// Measures the box a caption needs for its text, size and wrapping mode, keeping its
     /// top-left corner (see <see cref="TextAnnotationLayout.Measure"/>). Without one, boxes keep
@@ -488,28 +528,33 @@ internal sealed class AnnotationEditorController
         _undo.Execute(new AddAnnotationCommand(_document, text));
         IsCreatingText = true;
         _creatingText = text;
+        EditingText = text;
         Tool = EditorTool.Select;
         SetSelected(text);
         return text;
     }
 
     /// <summary>
-    /// Finishes a live text edit. An empty box is removed (its add is undone) so a stray
-    /// click that types nothing does not litter the document. Otherwise the box is fitted to
-    /// the final text and the text and box change as one undo step.
+    /// Finishes a live text edit. An empty new box undoes its add; clearing an existing
+    /// caption records a removal. Otherwise the final text and fitted box change as one step.
     /// </summary>
     internal void CommitTextEdit(TextAnnotation text, string finalText)
     {
         ArgumentNullException.ThrowIfNull(text);
+        bool creating = ReferenceEquals(_creatingText, text);
         IsCreatingText = false;
         _creatingText = null;
+        EditingText = null;
 
         if (string.IsNullOrEmpty(finalText))
         {
-            // Undo the add so the empty box leaves no trace and no undo entry. Changes made
-            // while typing applied without undo entries, so the add is the top entry.
-            if (_undo.CanUndo && ReferenceEquals(_document.Items.LastOrDefault(), text))
+            if (!creating)
             {
+                _undo.Execute(new RemoveAnnotationCommand(_document, text));
+            }
+            else if (_undo.CanUndo && ReferenceEquals(_document.Items.LastOrDefault(), text))
+            {
+                // New-box style changes do not add history, so its add is still on top.
                 _undo.Undo();
             }
             else
@@ -523,11 +568,15 @@ internal sealed class AnnotationEditorController
         {
             string label = UiText.Get("Text_258AD4B095A1");
             TextLayout fitted = FitText(text, finalText, text.FontSize, text.AutoSize, text.Rect);
-            using (_undo.BeginBatch(label))
-            {
-                PushProperty(text, label, static (t, v) => t.Text = v, text.Text, finalText);
-                PushProperty(text, label, TextLayout.Apply, TextLayout.Of(text), fitted);
-            }
+            // An explicit composite keeps separate editing sessions separate, even when
+            // the measured box stays unchanged and edits finish within the merge window.
+            _undo.Execute(new CompositeCommand(label,
+            [
+                new PropertyChangeCommand<TextAnnotation, string>(text, label,
+                    static (t, v) => t.Text = v, text.Text, finalText),
+                new PropertyChangeCommand<TextAnnotation, TextLayout>(text, label,
+                    TextLayout.Apply, TextLayout.Of(text), fitted),
+            ]));
         }
 
         RaiseVisual();
@@ -979,6 +1028,32 @@ internal sealed class AnnotationEditorController
     {
         RectD b = item.Bounds;
         return b.Width < 2 && b.Height < 2;
+    }
+
+    internal void ApplyTextBold(bool bold)
+    {
+        if (_selected is not TextAnnotation { IsStepNumber: false } text || text.Bold == bold) return;
+        string label = UiText.Get("EditorText_Bold");
+        var probe = (TextAnnotation)text.Clone();
+        probe.Bold = bold;
+        TextLayout fitted = FitText(probe, text.Text, text.FontSize, text.AutoSize, text.Rect);
+        using (_undo.BeginBatch(label))
+        {
+            PushProperty(text, label, static (t, v) => t.Bold = v, text.Bold, bold);
+            PushProperty(text, label, TextLayout.Apply, TextLayout.Of(text), fitted);
+        }
+        RaiseVisual();
+    }
+
+    internal void ApplyTextBackground(bool enabled)
+    {
+        if (_selected is not TextAnnotation { IsStepNumber: false } text || (text.Background.A > 0) == enabled) return;
+        ColorRgba background = enabled
+            ? (text.Background == ColorRgba.Transparent ? ColorRgba.Black : text.Background.WithAlpha(255))
+            : text.Background.WithAlpha(0);
+        PushProperty(text, UiText.Get("EditorText_Background"), static (t, v) => t.Background = v,
+            text.Background, background);
+        RaiseVisual();
     }
 
     private void PushProperty<TItem, TValue>(

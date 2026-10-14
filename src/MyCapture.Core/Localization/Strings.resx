@@ -379,7 +379,7 @@
     <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
   </data>
   <data name="Text_230D26DEB9AE" xml:space="preserve">
-    <value>텍스트를 입력한 뒤 Esc 또는 다른 곳을 클릭해 확정하십시오</value>
+    <value>텍스트 입력 중 · Ctrl+Enter 완료 · Enter 줄바꿈 · Esc 취소</value>
     <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
   </data>
   <data name="Text_23A30AD1434C" xml:space="preserve">
@@ -4245,4 +4245,10 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="ExportOptions.Background.DarkGray" xml:space="preserve"><value>어두운 회색</value></data>
   <data name="ExportOptions.Background.Accent" xml:space="preserve"><value>강조색</value></data>
   <data name="ExportOptions.JpegFilter" xml:space="preserve"><value>JPEG 이미지 (*.jpg)|*.jpg</value></data>
+  <data name="EditorText_Entering" xml:space="preserve"><value>텍스트 입력 중 · Ctrl+Enter 완료 · Enter 줄바꿈 · Esc 취소</value></data>
+  <data name="EditorText_Editing" xml:space="preserve"><value>텍스트 수정 중 · Ctrl+Enter 완료 · Enter 줄바꿈 · Esc 취소</value></data>
+  <data name="EditorText_Cancelled" xml:space="preserve"><value>텍스트 편집 취소됨</value></data>
+  <data name="EditorText_Updated" xml:space="preserve"><value>텍스트 수정됨</value></data>
+  <data name="EditorText_Bold" xml:space="preserve"><value>굵게</value></data>
+  <data name="EditorText_Background" xml:space="preserve"><value>배경 판</value></data>
 </root>

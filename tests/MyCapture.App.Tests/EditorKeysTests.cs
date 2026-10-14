@@ -116,7 +116,7 @@ public sealed class EditorKeysTests
     });
 
     [Fact]
-    public void LiveTextKeepsCompositionKeysAndPlainEscapeCommitsThenShortcutsWork() => StaTestHost.Run(() =>
+    public void LiveTextKeepsCompositionKeysAndPlainEscapeCancelsThenShortcutsWork() => StaTestHost.Run(() =>
     {
         using EditorWindowHost host = EditorWindowHost.Create();
         AnnotationEditorController controller = Controller(host.Editor);
@@ -133,7 +133,7 @@ public sealed class EditorKeysTests
         box.Text = "확인";
         Assert.True(Press(box, Key.Escape, ime: false));
         Assert.Null(Field<TextBox?>(host.Editor, "_activeTextBox"));
-        Assert.Equal("확인", Assert.IsType<TextAnnotation>(Assert.Single(controller.Document.Items)).Text);
+        Assert.Empty(controller.Document.Items);
         Assert.Same(host.Editor, Keyboard.FocusedElement);
 
         Assert.True(Press(host.Editor, Key.R, ime: true));
