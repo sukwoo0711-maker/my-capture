@@ -124,6 +124,7 @@ internal sealed class CaptureOverlayView : FrameworkElement
     private Pen _recordingPen = null!;
     private Pen _recordingEdgePen = null!;
     private Func<string, Task<bool>>? _copyColorText;
+    private bool _copyingColor;
     private CaptureSelectorMode _drawnMode;
     private CaptureSelectorMode _drawnSelectionMode;
     private bool _drawnCueMonitor;
@@ -164,6 +165,7 @@ internal sealed class CaptureOverlayView : FrameworkElement
     private bool _guideStripsArePixels;
     private bool _guidesVisible;
     private FormattedText? _instructionText;
+    private FormattedText? _colorHintText;
     private FormattedText? _anchorText;
     private FormattedText? _precisionText;
     private FormattedText? _sampleText;
@@ -342,6 +344,7 @@ internal sealed class CaptureOverlayView : FrameworkElement
     }
 
     internal Func<ColorFormat> ReadColorFormat { get; set; } = () => ColorFormat.Hex;
+    internal Action<ColorCopyFeedback>? ColorCopied { get; set; }
 
     /// <summary>Lets T and the text button switch between image capture and text capture.</summary>
     internal bool TextCaptureAvailable
@@ -356,7 +359,7 @@ internal sealed class CaptureOverlayView : FrameworkElement
 
     /// <summary>
     /// General.ShowShortcutHints, read per selector. The mode bar no longer draws key badges: its keys
-    /// are in the tooltips and accelerator keys whatever this says, like the target tab and the names.
+    /// are in the tooltips and accelerator keys whatever this says. This also controls the colour hint.
     /// </summary>
     internal bool ShowShortcutHints
     {
@@ -512,6 +515,7 @@ internal sealed class CaptureOverlayView : FrameworkElement
         _hoverWholeMonitor = false;
         _monitors = null;
         _copyColorText = null;
+        ColorCopied = null;
         _startGuideTimer?.Stop();
         _startGuideTimer = null;
         _startGuideShown = false;
@@ -981,7 +985,7 @@ internal sealed class CaptureOverlayView : FrameworkElement
             _staticSize = RenderSize;
             StaticRenderCount++;
             BuildGuidePens();
-            _instructionText = _anchorText = _precisionText = _sampleText = _coordinateText = null;
+            _instructionText = _colorHintText = _anchorText = _precisionText = _sampleText = _coordinateText = null;
             using (DrawingContext dc = _desktopVisual.RenderOpen())
                 if (_frame?.Bitmap is { } bitmap) dc.DrawImage(bitmap, new Rect(RenderSize));
             using (DrawingContext dc = _dimmerVisual.RenderOpen())
@@ -1388,9 +1392,8 @@ internal sealed class CaptureOverlayView : FrameworkElement
     }
 
     /// <summary>
-    /// Draws the top instruction (none under the mode bar: the bar's buttons and the label beside the
-    /// highlighted window already say what a click and a drag do) and the precision chip, and records
-    /// them after the bar in <paramref name="chrome"/>.
+    /// Draws the top instruction, colour shortcut hint and precision chip, and records them after
+    /// the bar in <paramref name="chrome"/>. The bar already names the click and drag capture actions.
     /// </summary>
     private void DrawInstructions(DrawingContext dc, CaptureCueState cue, List<Rect> chrome)
     {
@@ -1412,6 +1415,21 @@ internal sealed class CaptureOverlayView : FrameworkElement
             chrome.Add(primary.Value);
         }
 
+        double hintBottom = bar?.Bottom ?? primary?.Bottom ?? 18;
+        if (ColorCopyHint is { } colorHint)
+        {
+            FormattedText hint = _colorHintText ??= CreateText(colorHint, _uiTypeface, 12, _primaryTextBrush);
+            var size = new Size(hint.Width + 20, hint.Height + 12);
+            var chip = new Rect(centerX - (size.Width * scale / 2), hintBottom + (8 * scale),
+                size.Width * scale, size.Height * scale);
+            dc.PushTransform(new MatrixTransform(scale, 0, 0, scale, chip.Left, chip.Top));
+            dc.DrawRoundedRectangle(_chromeBrush, _chipBorderPen, new Rect(size), 6, 6);
+            dc.DrawText(hint, new Point(10, 6));
+            dc.Pop();
+            chrome.Add(chip);
+            hintBottom = chip.Bottom;
+        }
+
         if (RecordingSelection)
         {
             // The monitor edge in the recording colour: this selector records, it does not capture.
@@ -1425,8 +1443,8 @@ internal sealed class CaptureOverlayView : FrameworkElement
             FormattedText precision = _precisionText ??= CreateText(UiText.Get("CapturePrecisionActive"), _uiTypeface, 12, _primaryTextBrush);
             var size = new Size(precision.Width + 20, precision.Height + 12);
             // Under the bar when it is shown; at the old top-left spot otherwise.
-            Rect chip = bar is { } under
-                ? new Rect(centerX - (size.Width * scale / 2), under.Bottom + (8 * scale), size.Width * scale, size.Height * scale)
+            Rect chip = bar.HasValue
+                ? new Rect(centerX - (size.Width * scale / 2), hintBottom + (8 * scale), size.Width * scale, size.Height * scale)
                 : new Rect(new Point(16, 64), size);
             dc.PushTransform(new MatrixTransform(scale, 0, 0, scale, chip.Left, chip.Top));
             dc.DrawRoundedRectangle(_chromeBrush, _chipBorderPen, new Rect(size), 6, 6);
@@ -1435,6 +1453,9 @@ internal sealed class CaptureOverlayView : FrameworkElement
             chrome.Add(chip);
         }
     }
+
+    internal string? ColorCopyHint => !RecordingSelection && !_startGuideShown && ShowShortcutHints && CopyColorText is not null
+        ? UiText.Get("ColorPick_EndCaptureHint") : null;
 
     /// <summary>The drag-only sentence used when window detection and the mode bar are off.</summary>
     private Rect DrawPlainInstruction(DrawingContext dc)
@@ -2047,17 +2068,18 @@ internal sealed class CaptureOverlayView : FrameworkElement
 
     /// <summary>
     /// Copies the frozen pixel under the pointer (the one the magnifier centres on) in the
-    /// configured format and shows a short confirmation inside the overlay. The overlay stays
-    /// open. Returns the copied value, or null when nothing was copied.
+    /// configured format, then ends the selector and hands confirmation to its owner.
+    /// A failed copy leaves the selector open. Returns the copied value, or null on failure.
     /// </summary>
     internal async Task<string?> CopyColorAtPointerAsync()
     {
-        if (_ended || _released || CopyColorText is not { } copy || !TrySampleColor(_cursorPixel, out byte red, out byte green, out byte blue))
+        if (_ended || _released || _copyingColor || CopyColorText is not { } copy || !TrySampleColor(_cursorPixel, out byte red, out byte green, out byte blue))
         {
             return null;
         }
 
         string value = ColorSampleFormatter.Format(red, green, blue, ReadColorFormat());
+        _copyingColor = true;
         bool copied;
         try
         {
@@ -2067,10 +2089,28 @@ internal sealed class CaptureOverlayView : FrameworkElement
         {
             copied = false;
         }
+        finally
+        {
+            _copyingColor = false;
+        }
 
-        string message = copied ? UiText.Format("Tools_ColorCopied", value) : UiText.Get("ColorPick_CopyFailed");
-        if (Dispatcher.CheckAccess()) ShowToast(message, copied);
-        else _ = Dispatcher.BeginInvoke(new Action(() => ShowToast(message, copied)));
+        void Complete()
+        {
+            if (_released || _ended) return;
+            if (!copied)
+            {
+                ShowToast(UiText.Get("ColorPick_CopyFailed"), copied: false);
+                return;
+            }
+
+            var feedback = new ColorCopyFeedback(value, red, green, blue);
+            Action<ColorCopyFeedback>? notify = ColorCopied;
+            RequestCancel();
+            notify?.Invoke(feedback);
+        }
+
+        if (Dispatcher.CheckAccess()) Complete();
+        else await Dispatcher.InvokeAsync(Complete);
         return copied ? value : null;
     }
 

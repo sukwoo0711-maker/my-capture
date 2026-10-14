@@ -16,6 +16,61 @@ namespace MyCapture.App.Tests;
 public sealed class CaptureOverlayCoordinatorTests
 {
     [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void ColorCopyEndsOnlyOnSuccessAndNeverRecordsACapture(bool succeeds) => RunSta(() =>
+    {
+        CaptureOverlayWindow? overlay = null;
+        int closed = 0;
+        int persisted = 0;
+        int edited = 0;
+        ColorCopyFeedback? feedback = null;
+        using var coordinator = Coordinator(_ => Frame());
+        coordinator.ReadPageUrls = _ => Task.FromResult<IReadOnlyDictionary<IntPtr, BrowserDocumentSnapshot>>(
+            new Dictionary<IntPtr, BrowserDocumentSnapshot>());
+        coordinator.ReadWindowSources = null;
+        coordinator.ApplyCaptureExclusion = window => { overlay = (CaptureOverlayWindow)window; return true; };
+        coordinator.CopyColorText = _ => Task.FromResult(succeeds);
+        coordinator.SelectionPersistRequested = _ => { persisted++; return Task.CompletedTask; };
+        coordinator.EditingCompleted += (_, _) => edited++;
+        coordinator.OverlayClosed += (_, _) => closed++;
+        coordinator.ColorCopied = result =>
+        {
+            Assert.False(coordinator.IsActive);
+            Assert.False(overlay!.IsVisible);
+            Assert.Equal(1, closed);
+            feedback = result;
+        };
+
+        coordinator.Start(false, false, true);
+        PumpUntil(() => coordinator.LastPreparationForTest.IsCompleted);
+        Assert.NotNull(overlay);
+        var view = Assert.IsType<CaptureOverlayView>(overlay.Content);
+        view.ReadCursor = () => new PointD(5, 5);
+        view.InitializePointer();
+        Task<string?> copy = view.CopyColorAtPointerAsync();
+        PumpUntil(() => copy.IsCompleted);
+        Assert.True(copy.IsCompletedSuccessfully);
+        Assert.Equal(succeeds ? "#7A7A7A" : null, copy.Result);
+        Assert.Equal(!succeeds, coordinator.IsActive);
+        Assert.Equal(!succeeds, overlay.IsVisible);
+        Assert.Equal(succeeds ? 1 : 0, closed);
+        Assert.Equal(0, persisted);
+        Assert.Equal(0, edited);
+        Assert.Null(coordinator.CurrentEditor);
+        if (succeeds)
+        {
+            Assert.NotNull(feedback);
+            Assert.Equal(Color.FromRgb(0x7A, 0x7A, 0x7A), feedback.ChipColor);
+        }
+        else
+        {
+            Assert.Null(feedback);
+            Assert.Equal(MyCapture.Core.Localization.UiText.Get("ColorPick_CopyFailed"), view.ToastMessageForTest);
+        }
+    });
+
+    [Theory]
     [InlineData(0L, long.MinValue, false)]
     [InlineData(12345678L, long.MinValue, false)]
     [InlineData(long.MaxValue, long.MinValue, false)]

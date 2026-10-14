@@ -102,6 +102,7 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
 
     /// <summary>Copies the overlay's sampled colour (C key). Null leaves the key unbound.</summary>
     internal Func<string, Task<bool>>? CopyColorText { get; set; }
+    internal Action<ColorCopyFeedback>? ColorCopied { get; set; }
 
     internal Func<MyCapture.Core.Settings.ColorFormat> ReadColorFormat { get; set; } =
         () => MyCapture.Core.Settings.ColorFormat.Hex;
@@ -393,6 +394,10 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
         overlay.DetectWindows = AutoDetectWindows();
         overlay.ShowShortcutHints = ShowShortcutHints();
         overlay.CopyColorText = CopyColorText;
+        overlay.ColorCopied = feedback =>
+        {
+            if (!_disposed) ColorCopied?.Invoke(feedback);
+        };
         overlay.ReadColorFormat = ReadColorFormat;
         overlay.TextCaptureAvailable = TextCaptureRequested is not null;
         overlay.TextCaptureMode = _preparation?.TextCapture == true;
