@@ -40,6 +40,16 @@ public sealed class SourceDocumentTests
     [InlineData("powerpnt.exe", "Presentation1 - PowerPoint", true)]
     [InlineData("notepad.exe", "*제목 없음 - 메모장", true)]
     [InlineData("code.exe", "Untitled-1 - Visual Studio Code", true)]
+    [InlineData("code.exe", "Untitled-1 - MyProject - Visual Studio Code", true)]
+    [InlineData("code.exe", "● Untitled-1 - MyProject - Visual Studio Code", true)]
+    [InlineData("code.exe", "제목 없음-2 - 프로젝트 - Visual Studio Code", true)]
+    [InlineData("code.exe", "● 제목 없음-2 - 프로젝트 - Visual Studio Code", true)]
+    [InlineData("code.exe", "*Untitled-3 — MyProject — Visual Studio Code", true)]
+    [InlineData("code.exe", "• 제목 없음-3 – 프로젝트 – Visual Studio Code", true)]
+    [InlineData("code.exe", "Untitled-1.txt - MyProject - Visual Studio Code", false)]
+    [InlineData("code.exe", "● 제목 없음-2.cs - 프로젝트 - Visual Studio Code", false)]
+    [InlineData("code.exe", "Untitled-1-notes - MyProject - Visual Studio Code", false)]
+    [InlineData("code.exe", "main.cs - Untitled-1 - Visual Studio Code", false)]
     [InlineData("excel.exe", "Book1.xlsx - Excel", false)]
     [InlineData("excel.exe", "Budget.xlsx - Excel", false)]
     [InlineData("other.exe", "Book1 - Excel", false)]
@@ -98,4 +108,63 @@ public sealed class SourceDocumentTests
         Assert.False(SourceDocument.FileExists(@"C:\Work\Budget.xlsx", _ => throw new UnauthorizedAccessException()));
         Assert.False(SourceDocument.FileExists(@"C:\Work\Budget.xlsx", _ => throw new IOException()));
     }
+
+    [Theory]
+    [InlineData("cleanup.cmd")]
+    [InlineData("cleanup.bat")]
+    [InlineData("cleanup.CMD")]
+    [InlineData("cleanup.ps1")]
+    [InlineData("cleanup.vbs")]
+    [InlineData("cleanup.js")]
+    [InlineData("cleanup.exe")]
+    [InlineData("cleanup.lnk")]
+    [InlineData("cleanup.unknown")]
+    [InlineData("cleanup")]
+    [InlineData("notes.txt")]
+    public void LaunchPlanUsesAnExplicitEditorForNonDocumentTypes(string name)
+    {
+        const string editor = @"C:\Windows\System32\notepad.exe";
+        string path = @"C:\Work & notes\" + name;
+        var start = SourceDocument.CreateOpenStartInfo(path, editor, candidate => candidate == editor);
+        Assert.NotNull(start);
+        Assert.Equal(editor, start.FileName);
+        Assert.False(start.UseShellExecute);
+        Assert.Equal(path, Assert.Single(start.ArgumentList));
+        Assert.Empty(start.Arguments);
+    }
+
+    [Theory]
+    [InlineData("Budget.xlsx")]
+    [InlineData("Plan.docx")]
+    [InlineData("Slides.pptx")]
+    [InlineData("Report.PDF")]
+    public void LaunchPlanUsesTheOpenVerbForOrdinaryDocuments(string name)
+    {
+        string path = @"C:\Work\" + name;
+        var start = SourceDocument.CreateOpenStartInfo(path, string.Empty, _ => throw new InvalidOperationException());
+        Assert.NotNull(start);
+        Assert.Equal(path, start.FileName);
+        Assert.True(start.UseShellExecute);
+        Assert.Equal("open", start.Verb);
+        Assert.Empty(start.ArgumentList);
+    }
+
+    [Theory]
+    [InlineData("cleanup.cmd")]
+    [InlineData("cleanup.bat")]
+    public void LaunchPlanDeclinesScriptsWhenTheEditorIsMissing(string name)
+    {
+        Assert.Null(SourceDocument.CreateOpenStartInfo(@"C:\Work\" + name,
+            @"C:\Windows\System32\notepad.exe", _ => false));
+        Assert.Null(SourceDocument.CreateOpenStartInfo(@"C:\Work\" + name,
+            "notepad.exe", _ => throw new InvalidOperationException()));
+    }
+
+    [Theory]
+    [InlineData("relative.cmd")]
+    [InlineData("file:///C:/Work/cleanup.cmd")]
+    [InlineData("/open cleanup.cmd")]
+    public void LaunchPlanRejectsInvalidSourcePaths(string path) =>
+        Assert.Null(SourceDocument.CreateOpenStartInfo(path, @"C:\Windows\System32\notepad.exe",
+            _ => throw new InvalidOperationException()));
 }

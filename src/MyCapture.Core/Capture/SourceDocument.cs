@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Text.RegularExpressions;
 
 namespace MyCapture.Core.Capture;
@@ -40,7 +41,7 @@ public static class SourceDocument
             "winword" => @"^(Document\d+|문서\s*\d+)$",
             "powerpnt" => @"^(Presentation\d+|프레젠테이션\s*\d+)$",
             "notepad" => @"^(Untitled|제목 없음)$",
-            "code" => @"^(Untitled-\d+|제목 없음-\d+)$",
+            "code" => @"^(Untitled-\d+|제목 없음-\d+)(?: [—–-] .+)?$",
             _ => string.Empty,
         };
         return pattern.Length > 0 && Regex.IsMatch(RemoveAppSuffix(title ?? string.Empty), pattern,
@@ -81,5 +82,25 @@ public static class SourceDocument
         try { return (exists ?? File.Exists)(normalized); }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Security.SecurityException)
         { return false; }
+    }
+
+    /// <summary>Builds a launch plan for an existing source file; the caller checks its existence before opening.</summary>
+    public static ProcessStartInfo? CreateOpenStartInfo(string path, string textEditorPath, Func<string, bool>? exists = null)
+    {
+        string normalized = CaptureSourceText.NormalizeLocalPath(path);
+        if (normalized.Length == 0) return null;
+        // Only known document formats use file associations. Scripts, executables, shortcuts,
+        // and unknown extensions go to an explicit editor, never their default shell action.
+        if (Path.GetExtension(normalized).ToLowerInvariant() is
+            ".doc" or ".docx" or ".docm" or ".odt" or ".rtf"
+            or ".xls" or ".xlsx" or ".xlsm" or ".xlsb" or ".ods" or ".csv"
+            or ".ppt" or ".pptx" or ".pptm" or ".odp" or ".pdf")
+            return new ProcessStartInfo(normalized) { UseShellExecute = true, Verb = "open" };
+
+        string editor = CaptureSourceText.NormalizeLocalPath(textEditorPath);
+        if (!FileExists(editor, exists)) return null;
+        var start = new ProcessStartInfo(editor) { UseShellExecute = false };
+        start.ArgumentList.Add(normalized);
+        return start;
     }
 }

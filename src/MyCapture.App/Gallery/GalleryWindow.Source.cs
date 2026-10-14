@@ -76,7 +76,14 @@ internal sealed partial class GalleryWindow
             LibraryActionStatus.Text = UiText.Get("Library.Source.FileMissing");
             return;
         }
-        try { Process.Start(new ProcessStartInfo(path) { UseShellExecute = true })?.Dispose(); }
+        string editor = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "System32", "notepad.exe");
+        ProcessStartInfo? start = await Task.Run(() => SourceDocument.CreateOpenStartInfo(path, editor));
+        if (start is null)
+        {
+            LibraryActionStatus.Text = UiText.Get("Library.Source.OpenFileFailed");
+            return;
+        }
+        try { Process.Start(start)?.Dispose(); }
         catch (Exception ex) when (ex is Win32Exception or InvalidOperationException or IOException or UnauthorizedAccessException)
         { LibraryActionStatus.Text = UiText.Get("Library.Source.OpenFileFailed"); }
     }
