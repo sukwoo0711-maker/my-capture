@@ -75,7 +75,7 @@ public sealed class CaptureFolderTests
         await f.Queue.MoveCapturesAsync([capture.Id], folder.Id);
         await f.Queue.SetNewCaptureFolderAsync(folder.Id, true);
         JsonObject legacy = JsonNode.Parse(File.ReadAllText(f.IndexFile))!.AsObject();
-        Assert.Equal(3, legacy["schemaVersion"]!.GetValue<int>());
+        Assert.Equal(2, legacy["schemaVersion"]!.GetValue<int>());
         legacy.Remove("folderState");
         foreach (JsonObject record in legacy["records"]!.AsArray().OfType<JsonObject>())
         {
