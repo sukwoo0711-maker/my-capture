@@ -147,9 +147,11 @@ public sealed class VideoEditorUxLayoutTests
 
             void AssertToolsFit()
             {
-                Assert.InRange(editor.CommandBarLevelForTest, 0, 3);
+                Assert.InRange(editor.CommandBarLevelForTest, 0, 5);
                 Assert.True(Field<Button>(editor, "_trimToolButton").IsVisible);
-                Assert.True(Field<Button>(editor, "_addTextToolButton").IsVisible);
+                Button addText = Field<Button>(editor, "_addTextToolButton");
+                Assert.True(addText.IsVisible || Field<Button>(editor, "_moreToolsButton").ContextMenu!.Items.OfType<MenuItem>().Any(
+                    item => item.Visibility == Visibility.Visible && (string)item.Header == UiText.Get("VideoEditorUx_AddText")));
                 foreach (Button button in Descendants(bar).OfType<Button>().Where(button => button.IsVisible))
                 {
                     AssertInside(button, layout, layout.ActualHeight);
@@ -188,10 +190,16 @@ public sealed class VideoEditorUxLayoutTests
                         $"clipped '{text.Text}' at {width}x{height}");
             }
 
-            // Frame image edit, save and export never leave; trim and add text keep X, Ctrl+T,
-            // the trim bar and the layer menu when the narrowest bar drops them.
-            foreach (string key in new[] { "VideoEditorUx_FrameImageEdit", "MediaExport_SaveEdits", "MediaExport_ExportFormats" })
+            // Primary edit tools and the finishing action keep full labels and hit targets.
+            // Secondary actions remain reachable from More when space is tight.
+            foreach (string key in new[] { "VideoEditorUx_Trim", "VideoMulticut_Split", "MediaExport_SaveEdits" })
                 Assert.True(Assert.Single(Descendants(bar).OfType<Button>(), b => AutomationProperties.GetName(b) == UiText.Get(key)).IsVisible, key);
+            foreach (string key in new[] { "VideoEditorUx_AddText", "VideoEditorUx_FrameImageEdit", "MediaExport_ExportFormats" })
+            {
+                Button action = Assert.Single(Descendants(bar).OfType<Button>(), b => AutomationProperties.GetName(b) == UiText.Get(key));
+                Assert.True(action.IsVisible || Field<Button>(editor, "_moreToolsButton").ContextMenu!.Items.OfType<MenuItem>().Any(
+                    item => item.Visibility == Visibility.Visible && (string)item.Header == UiText.Get(key)), key);
+            }
             if (width <= 760) Assert.True(editor.CommandBarLevelForTest >= 3, $"level {editor.CommandBarLevelForTest} at {width}");
         }
         finally

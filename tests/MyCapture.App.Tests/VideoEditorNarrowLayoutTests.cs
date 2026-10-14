@@ -128,7 +128,8 @@ public sealed class VideoEditorNarrowLayoutTests
             Border panel = Assert.Single(Descendants(layout).OfType<Border>(), border => border.Name == "VideoLayersPanel");
             Assert.DoesNotContain(Descendants(panel).OfType<TextBlock>(), text => text.IsVisible && text.Text == UiText.Get("Workspace.Properties"));
             Assert.Equal(new[] { UiText.Get("Video.AddLayer") },
-                Descendants(panel).OfType<Button>().Where(button => button.IsVisible && button.Content is string).Select(button => (string)button.Content));
+                Descendants(panel).OfType<Button>().Where(button => button.IsVisible && Descendants(button).OfType<TextBlock>().Any(
+                    text => text.Text == UiText.Get("Video.AddLayer"))).Select(AutomationProperties.GetName));
             ListBox list = Assert.Single(Descendants(panel).OfType<ListBox>());
             var item = Assert.IsType<ListBoxItem>(list.Items[0]);
             TextBlock[] lines = Descendants(item).OfType<TextBlock>().Where(text => text.IsVisible).ToArray();
@@ -173,8 +174,14 @@ public sealed class VideoEditorNarrowLayoutTests
             double expected = height switch { <= 560 => 145, _ => 290 };
             Assert.True(viewport.ActualHeight >= expected, $"preview {viewport.ActualHeight:0.#} DIP at {width}x{height}");
             // The commands that finish the edit stay inside the window.
-            foreach (string key in new[] { "MediaExport_SaveEdits", "MediaExport_ExportFormats", "Text_9A9C87658130" })
+            foreach (string key in new[] { "MediaExport_SaveEdits", "Text_9A9C87658130" })
                 AssertInside(Button(layout, key), (FrameworkElement)VisualTreeHelper.GetParent(layout), ((FrameworkElement)VisualTreeHelper.GetParent(layout)).ActualHeight);
+            Button export = Button(layout, "MediaExport_ExportFormats");
+            if (export.IsVisible)
+                AssertInside(export, (FrameworkElement)VisualTreeHelper.GetParent(layout), ((FrameworkElement)VisualTreeHelper.GetParent(layout)).ActualHeight);
+            else
+                Assert.Contains(Field<Button>(editor, "_moreToolsButton").ContextMenu!.Items.OfType<MenuItem>(), item =>
+                    item.Visibility == Visibility.Visible && (string)item.Header == UiText.Get("MediaExport_ExportFormats"));
         }
         finally
         {
@@ -194,13 +201,14 @@ public sealed class VideoEditorNarrowLayoutTests
             editor = OpenReadyEditor(root, 10_000, show: true);
             var layout = (Grid)editor.Content;
             object primary = editor.FindResource("Button.Primary");
-            // Save to library finishes the edit; play is the largest transport target but not
+            // Save to library finishes the edit; play is a wider transport target but not
             // a second filled accent button competing with it.
             Button filled = Assert.Single(Descendants(layout).OfType<Button>(), button => ReferenceEquals(button.Style, primary));
             Assert.Equal(UiText.Get("MediaExport_SaveEdits"), AutomationProperties.GetName(filled));
             Button play = Button(layout, "Text_9A9C87658130");
             Assert.Same(editor.FindResource("Button.Secondary"), play.Style);
-            Assert.True(play.ActualWidth >= 56 && play.ActualHeight >= 48);
+            Assert.True(play.ActualWidth >= 56);
+            Assert.Equal(44, play.ActualHeight);
             Assert.Same(editor.FindResource("Button.Secondary"), Button(layout, "MediaExport_ExportFormats").Style);
         }
         finally

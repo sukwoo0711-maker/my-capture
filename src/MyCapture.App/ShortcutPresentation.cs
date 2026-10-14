@@ -23,15 +23,12 @@ internal sealed class ShortcutPresentation : INotifyPropertyChanged
     internal static void Refresh() => Current.PropertyChanged?.Invoke(Current, new(nameof(HintVisibility)));
 
     /// <summary>
-    /// Whether a key is printed under its command at all times: only a single key (V, X,
-    /// Space, Home). Key combinations stay in the tooltip and the accelerator key. Ctrl+Z or
-    /// Ctrl+C are the same in every program, and at a readable 12 px even the short ones
-    /// widened the video editor's bar until its trim and text tools no longer fit at 760 DIP.
+    /// Every assigned shortcut follows the same caption rule, including key combinations.
     /// </summary>
     internal static bool ShowsCaption(ShortcutDefinition definition)
     {
         ArgumentNullException.ThrowIfNull(definition);
-        return definition.Modifiers == ModifierKeys.None;
+        return true;
     }
 
     internal static TextBlock Hint(ShortcutScope scope, string command)
@@ -44,6 +41,9 @@ internal sealed class ShortcutPresentation : INotifyPropertyChanged
             FontSize = CaptionFontSize,
             FontWeight = FontWeights.Normal,
             HorizontalAlignment = HorizontalAlignment.Center,
+            Height = CommandButtonPresentation.HintHeight,
+            LineHeight = CommandButtonPresentation.HintHeight,
+            LineStackingStrategy = LineStackingStrategy.BlockLineHeight,
         };
         hint.SetResourceReference(TextBlock.ForegroundProperty, "Text.Secondary");
         hint.SetBinding(UIElement.VisibilityProperty, new Binding(nameof(HintVisibility)) { Source = Current });
@@ -52,16 +52,7 @@ internal sealed class ShortcutPresentation : INotifyPropertyChanged
 
     internal static void Attach(ButtonBase button, ShortcutScope scope, string command, bool corner = false)
     {
-        ShortcutDefinition definition = ShortcutCatalog.Get(scope, command);
-        if (!ShowsCaption(definition))
-        {
-            Describe(button, scope, command);
-            return;
-        }
-
         object? previous = button.Content;
-        button.Content = null;
-        UIElement content = previous as UIElement ?? new TextBlock { Text = previous?.ToString() ?? string.Empty, HorizontalAlignment = HorizontalAlignment.Center };
         var hint = Hint(scope, command);
         hint.SetBinding(TextBlock.ForegroundProperty, new Binding(nameof(Control.Foreground)) { Source = button });
         // A disabled button keeps its tier's shape: the shared template only fades it by
@@ -69,20 +60,22 @@ internal sealed class ShortcutPresentation : INotifyPropertyChanged
         // borderless tool button into a bordered one the moment it was disabled.
         if (corner)
         {
+            button.Content = null;
+            UIElement content = previous as UIElement ?? new TextBlock { Text = previous?.ToString() ?? string.Empty };
             var grid = new Grid { Width = 32, Height = 32 };
             if (content is FrameworkElement glyph) { glyph.HorizontalAlignment = HorizontalAlignment.Center; glyph.VerticalAlignment = VerticalAlignment.Top; }
             grid.Children.Add(content);
             // The letter sits in the corner; its line box hangs below the glyph, not over it.
             hint.HorizontalAlignment = HorizontalAlignment.Right; hint.VerticalAlignment = VerticalAlignment.Bottom;
+            hint.Height = 12;
             hint.LineHeight = 12;
             hint.LineStackingStrategy = LineStackingStrategy.BlockLineHeight;
             grid.Children.Add(hint); button.Content = grid;
         }
         else
         {
-            var stack = new StackPanel { HorizontalAlignment = HorizontalAlignment.Center };
-            stack.Children.Add(content);
-            stack.Children.Add(hint); button.Content = stack;
+            CommandButtonPresentation.Apply(button);
+            CommandButtonPresentation.ReserveHint(button, hint);
         }
 
         Describe(button, scope, command, previous as string);

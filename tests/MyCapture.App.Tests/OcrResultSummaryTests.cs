@@ -65,7 +65,7 @@ public sealed class OcrResultSummaryTests
 
             Button copy = Descendants(window).OfType<Button>().Single(button => AutomationProperties.GetName(button) == UiText.Get("Text_20CF6A996B4D"));
             var footer = (WrapPanel)copy.Parent;
-            string[] order = [.. footer.Children.OfType<Button>().Select(button => (string)button.Content)];
+            string[] order = [.. footer.Children.OfType<Button>().Select(FaceLabel)];
             Assert.Equal(["복사", "텍스트 내보내기", "다시 인식"], order);
             Assert.Equal(0, footer.Children.IndexOf(copy));
             // One primary in the group; export is the secondary, rerun the quiet one.
@@ -76,7 +76,7 @@ public sealed class OcrResultSummaryTests
 
             // Table mode keeps the order: its primary copy leads, rerun stays last.
             var table = footer.Children.OfType<WrapPanel>().Single();
-            Assert.Equal(UiText.Get("OCR410_CopyTsv"), ((Button)table.Children[0]).Content);
+            Assert.Equal(UiText.Get("OCR410_CopyTsv"), FaceLabel((Button)table.Children[0]));
             Assert.Same(window.FindResource("Button.Primary"), ((Button)table.Children[0]).Style);
             Assert.True(footer.Children.IndexOf(table) < footer.Children.IndexOf(buttons[2]));
 
@@ -86,6 +86,9 @@ public sealed class OcrResultSummaryTests
         }
         finally { window.CloseForExit(); }
     });
+
+    private static string FaceLabel(Button button) =>
+        Assert.IsType<TextBlock>(Assert.IsType<Grid>(button.Content).Children[0]).Text;
 
     private static IEnumerable<DependencyObject> Descendants(DependencyObject root)
     {

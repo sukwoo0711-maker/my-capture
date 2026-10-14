@@ -111,6 +111,13 @@
     <!--   Focus: recolour border to accent + fade in inset focus ring. Thickness fixed.   -->
     <!-- ============================================================= -->
     <sys:Double x:Key="Button.DisabledOpacity">0.46</sys:Double>
+    <sys:Double x:Key="CommandButton.Height.Standard">44</sys:Double>
+    <sys:Double x:Key="CommandButton.Height.Compact">36</sys:Double>
+    <sys:Double x:Key="CommandButton.FontSize">12</sys:Double>
+    <sys:Double x:Key="CommandButton.IconSize">16</sys:Double>
+    <Thickness x:Key="CommandButton.Padding.Standard">10,4</Thickness>
+    <Thickness x:Key="CommandButton.Padding.Compact">10,2</Thickness>
+    <Thickness x:Key="CommandButton.IconLabelGap">6,0,0,0</Thickness>
 
     <!-- Interaction state layers. A template stacks them over its rest chrome, with the same
          corner radius and BorderThickness so the fill sits inside the chrome border. Triggers
@@ -145,11 +152,13 @@
     </Style>
 
     <Style TargetType="{x:Type Button}">
+        <Setter Property="Height" Value="{DynamicResource CommandButton.Height.Standard}" />
+        <Setter Property="FontSize" Value="{DynamicResource CommandButton.FontSize}" />
         <Setter Property="Foreground" Value="{DynamicResource Text.Primary}" />
         <Setter Property="Background" Value="{DynamicResource Surface.Overlay}" />
         <Setter Property="BorderBrush" Value="{DynamicResource Border.Control}" />
         <Setter Property="BorderThickness" Value="1" />
-        <Setter Property="Padding" Value="{DynamicResource Padding.Control}" />
+        <Setter Property="Padding" Value="{DynamicResource CommandButton.Padding.Standard}" />
         <Setter Property="MinHeight" Value="{DynamicResource Size.HitTarget}" />
         <Setter Property="MinWidth" Value="40" />
         <Setter Property="Cursor" Value="Hand" />
@@ -398,14 +407,31 @@
         </Setter>
     </Style>
     <Style x:Key="Button.Compact" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+        <Setter Property="Height" Value="{DynamicResource CommandButton.Height.Compact}" />
         <Setter Property="MinHeight" Value="{DynamicResource Size.HitTarget.Compact}" />
-        <Setter Property="Padding" Value="10,5" />
+        <Setter Property="Padding" Value="{DynamicResource CommandButton.Padding.Compact}" />
         <Setter Property="FontSize" Value="{DynamicResource FontSize.Caption}" />
     </Style>
     <Style x:Key="Button.GhostCompact" TargetType="Button" BasedOn="{StaticResource Button.Ghost}">
+        <Setter Property="Height" Value="{DynamicResource CommandButton.Height.Compact}" />
         <Setter Property="MinHeight" Value="{DynamicResource Size.HitTarget.Compact}" />
-        <Setter Property="Padding" Value="8,4" />
+        <Setter Property="Padding" Value="{DynamicResource CommandButton.Padding.Compact}" />
         <Setter Property="FontSize" Value="{DynamicResource FontSize.Caption}" />
+    </Style>
+
+    <!-- Command bars share sizing with action rows; the content helper reserves the hint line. -->
+    <Style x:Key="Button.Command" TargetType="Button" BasedOn="{StaticResource Button.Secondary}">
+        <Setter Property="Height" Value="{DynamicResource CommandButton.Height.Standard}" />
+        <Setter Property="MinHeight" Value="{DynamicResource CommandButton.Height.Standard}" />
+        <Setter Property="Padding" Value="{DynamicResource CommandButton.Padding.Standard}" />
+        <Setter Property="FontSize" Value="{DynamicResource CommandButton.FontSize}" />
+        <Setter Property="Margin" Value="3,0" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style x:Key="Button.Command.Compact" TargetType="Button" BasedOn="{StaticResource Button.Command}">
+        <Setter Property="Height" Value="{DynamicResource CommandButton.Height.Compact}" />
+        <Setter Property="MinHeight" Value="{DynamicResource CommandButton.Height.Compact}" />
+        <Setter Property="Padding" Value="{DynamicResource CommandButton.Padding.Compact}" />
     </Style>
 
     <!-- ============================================================= -->
@@ -1316,10 +1342,10 @@
         <Setter Property="Padding" Value="6" />
     </Style>
     <Style x:Key="Button.Icon.Compact" TargetType="Button" BasedOn="{StaticResource Button.Icon}">
-        <Setter Property="MinWidth" Value="34" />
-        <Setter Property="MinHeight" Value="34" />
-        <Setter Property="Width" Value="34" />
-        <Setter Property="Height" Value="34" />
+        <Setter Property="MinWidth" Value="{DynamicResource CommandButton.Height.Compact}" />
+        <Setter Property="MinHeight" Value="{DynamicResource CommandButton.Height.Compact}" />
+        <Setter Property="Width" Value="{DynamicResource CommandButton.Height.Compact}" />
+        <Setter Property="Height" Value="{DynamicResource CommandButton.Height.Compact}" />
         <Setter Property="Padding" Value="5" />
     </Style>
 

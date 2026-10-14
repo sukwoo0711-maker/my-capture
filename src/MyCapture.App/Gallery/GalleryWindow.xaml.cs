@@ -127,6 +127,7 @@ internal sealed partial class GalleryWindow : Window
         InitializeRecovery();
         InitializeLibraryExtras();
         InitializeEmptyLibrary();
+        InitializeCommandBarLayout();
         IsVisibleChanged += (_, _) =>
         {
             _visibilityGeneration++;

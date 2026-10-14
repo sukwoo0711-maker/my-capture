@@ -26,7 +26,7 @@ public sealed class ThemeResourceAvailabilityTests : KoreanCaptionTest
         "Icon.Save", "Icon.SaveAs", "Icon.ChevronDown", "Icon.More", "Icon.Settings", "Icon.Capture",
         "Icon.Shortcuts", "Icon.Storage", "Icon.Export", "Icon.Pin", "Icon.Edit", "Icon.Ocr", "Icon.Search",
         "Icon.ZoomIn", "Icon.ZoomOut", "Icon.Play", "Icon.Pause", "Icon.First", "Icon.Last",
-        "Icon.Rewind", "Icon.FastForward", "Icon.StepBack", "Icon.StepForward", "Icon.FitAll", "Icon.Trim",
+        "Icon.Rewind", "Icon.FastForward", "Icon.StepBack", "Icon.StepForward", "Icon.FitAll", "Icon.Trim", "Icon.Split",
     ];
 
     private static readonly string[] BrushKeys =
@@ -46,6 +46,7 @@ public sealed class ThemeResourceAvailabilityTests : KoreanCaptionTest
     [
         "Button.Primary", "Button.Secondary", "Button.Ghost", "Button.Danger", "Button.GhostCompact",
         "ToggleButton.Tool", "Rail.ToolButton", "Button.Icon", "Button.Icon.Compact", "Brand.AppIcon",
+        "Button.Command", "Button.Command.Compact",
     ];
 
     [Fact]

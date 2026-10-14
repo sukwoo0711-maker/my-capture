@@ -64,8 +64,7 @@ public sealed class VideoEditorViewportTests
                 SaveEvidence(editor, client, 3840, (int)monitor.WorkArea.Width, (int)monitor.WorkArea.Height);
                 foreach (string name in new[] { "MediaExport_SaveEdits", "MediaExport_ExportFormats", "Text_9A9C87658130" })
                 {
-                    Button button = Assert.Single(Descendants(editor).OfType<Button>(),
-                        b => AutomationProperties.GetName(b) == UiText.Get(name));
+                    Button button = VisibleCommand(editor, name);
                     Point top = button.PointToScreen(new Point());
                     Point bottom = button.PointToScreen(new Point(button.ActualWidth, button.ActualHeight));
                     Assert.True(top.X >= monitor.WorkArea.Left - 1 && top.Y >= monitor.WorkArea.Top - 1
@@ -120,8 +119,7 @@ public sealed class VideoEditorViewportTests
             SaveEvidence(editor, client, sourceWidth, windowWidth, windowHeight);
             foreach (string name in new[] { "MediaExport_SaveEdits", "MediaExport_ExportFormats", "Text_9A9C87658130" })
             {
-                Button button = Assert.Single(Descendants(editor).OfType<Button>(),
-                    b => AutomationProperties.GetName(b) == UiText.Get(name));
+                Button button = VisibleCommand(editor, name);
                 Assert.True(button.IsVisible && button.IsEnabled && button.IsTabStop && button.Focusable, name);
                 AssertWithinClient(button, client);
                 FocusManager.SetFocusedElement(editor, button);
@@ -144,6 +142,18 @@ public sealed class VideoEditorViewportTests
         }
         finally { editor.Close(); }
     });
+
+    private static Button VisibleCommand(VideoEditorWindow editor, string key)
+    {
+        Button button = Assert.Single(Descendants(editor).OfType<Button>(), candidate => AutomationProperties.GetName(candidate) == UiText.Get(key));
+        if (button.IsVisible) return button;
+        Assert.Equal("MediaExport_ExportFormats", key);
+        Button more = Assert.Single(Descendants(editor).OfType<Button>(), candidate => candidate.Name == "VideoMoreTools");
+        MenuItem export = Assert.Single(more.ContextMenu!.Items.OfType<MenuItem>(), item => (string)item.Header == UiText.Get(key));
+        Assert.Equal(Visibility.Visible, export.Visibility);
+        Assert.True(export.IsEnabled);
+        return more;
+    }
 
     private static void AssertWithinClient(FrameworkElement element, FrameworkElement client)
     {

@@ -190,6 +190,12 @@ internal sealed partial class OcrResultWindow : Window
         _shortcutActions["Close"] = Close;
         ShortcutPresentation.Attach(_copyButton, ShortcutScope.Ocr, "Copy");
         ShortcutPresentation.Attach(exportButton, ShortcutScope.Ocr, "Export");
+        foreach (Button button in buttons.Children.OfType<Button>().Concat(_tableActions.Children.OfType<Button>()))
+        {
+            CommandButtonPresentation.Apply(button);
+            button.MinWidth = 96;
+            CommandButtonPresentation.ReserveHint(button);
+        }
         PreviewKeyDown += OnPreviewKeyDown;
         CompleteAdvancedSetup(exportButton);
     }
@@ -449,10 +455,9 @@ internal sealed partial class OcrResultWindow : Window
         var button = new Button
         {
             Content = text,
-            MinWidth = 96,
-            MinHeight = 32,
-            Padding = new Thickness(12, 6, 12, 6),
         };
+        CommandButtonPresentation.Apply(button);
+        button.MinWidth = 96;
         AutomationProperties.SetName(button, automationName);
         return button;
     }

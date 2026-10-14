@@ -60,8 +60,8 @@ internal class FeatureTutorialWindow : Window
     internal static Action<string>? OpenShortcutSetting { get; set; }
 
     /// <summary>"Set shortcut", offered only while the selected feature's global shortcut is unassigned.</summary>
-    internal Button SetShortcutButton { get; } = new() { MinHeight = 32, HorizontalAlignment = HorizontalAlignment.Left,
-        Margin = new Thickness(0, 0, 0, 8), Padding = new Thickness(12, 4, 12, 4) };
+    internal Button SetShortcutButton { get; } = new() { HorizontalAlignment = HorizontalAlignment.Left,
+        Margin = new Thickness(0, 0, 0, 8) };
 
     internal FeatureTutorialWindow(HotkeySettings hotkeys, string featureId = "text-copy", Func<ITutorialMedia>? mediaFactory = null)
     {
@@ -111,17 +111,17 @@ internal class FeatureTutorialWindow : Window
         frame.SetResourceReference(Border.BorderBrushProperty, "Border.Subtle");
         frame.SetResourceReference(Border.BackgroundProperty, "Surface.Raised");
 
-        _play.SetResourceReference(StyleProperty, "Button.Secondary");
+        _play.SetResourceReference(StyleProperty, "Button.Compact");
         _play.Click += (_, _) => TogglePlayback();
         _replay.Content = UiText.Get("TextCapture_TutorialReplay");
         AutomationProperties.SetName(_replay, UiText.Get("TextCapture_TutorialReplay"));
-        _replay.SetResourceReference(StyleProperty, "Button.Secondary");
+        _replay.SetResourceReference(StyleProperty, "Button.Compact");
         _replay.Click += (_, _) => Replay();
         var controls = new WrapPanel { Margin = new Thickness(0, 4, 0, 8) };
         controls.Children.Add(_play); controls.Children.Add(_replay);
 
         SetShortcutButton.Content = UiText.Get("Tutorial.SetShortcut");
-        SetShortcutButton.SetResourceReference(StyleProperty, "Button.Secondary");
+        SetShortcutButton.SetResourceReference(StyleProperty, "Button.Compact");
         AutomationProperties.SetName(SetShortcutButton, UiText.Get("Tutorial.SetShortcut"));
         AutomationProperties.SetHelpText(SetShortcutButton, UiText.Get("Tutorial.SetShortcutHelp"));
         SetShortcutButton.ToolTip = UiText.Get("Tutorial.SetShortcutHelp");

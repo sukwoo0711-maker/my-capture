@@ -87,7 +87,7 @@ internal sealed class QuickAccessWindow : Window
         RectD? capturedRegion = null, MonitorInfo? targetMonitor = null, Func<Task<TextCaptureOutcome>>? copyText = null)
     {
         Title = UiText.Get("QuickAccess.Title");
-        // Wide enough for an icon with its short name on each of the five actions.
+        // Keep the compact card width; labelled commands wrap without shrinking their targets.
         Width = 344;
         _capturedRegion = capturedRegion; _targetMonitor = targetMonitor;
         SizeToContent = SizeToContent.Height;
@@ -103,8 +103,8 @@ internal sealed class QuickAccessWindow : Window
         var panel = new StackPanel { Margin = new Thickness(8) };
         var close = Button("Dialog.Close", Close);
         close.Content = Glyph("Icon.Close");
-        close.Width = 26; close.Height = 26; close.MinHeight = 0; close.MinWidth = 0;
-        close.Padding = new Thickness(3); close.HorizontalAlignment = HorizontalAlignment.Right;
+        CommandButtonPresentation.Apply(close, compact: true);
+        close.HorizontalAlignment = HorizontalAlignment.Right;
         close.VerticalAlignment = VerticalAlignment.Top;
         close.SetResourceReference(StyleProperty, "Button.Ghost");
         // The status shares the close button's row, so a one-line message never moves the actions.
@@ -122,11 +122,10 @@ internal sealed class QuickAccessWindow : Window
         // A word says what the toggle does; a padlock read as a lock on the capture itself.
         _keep = new ToggleButton
         {
-            Content = UiText.Get("QuickAccess.KeepLabel"), Height = 26, MinWidth = 0, MinHeight = 0,
-            Padding = new Thickness(8, 0, 8, 0), Margin = new Thickness(0, 0, 2, 0), Focusable = false,
+            Content = UiText.Get("QuickAccess.KeepLabel"), Focusable = false,
             VerticalAlignment = VerticalAlignment.Top, ToolTip = UiText.Get("Onboard_QuickKeep"),
         };
-        _keep.SetResourceReference(FontSizeProperty, "FontSize.Caption");
+        CommandButtonPresentation.Apply(_keep, compact: true);
         _keyboardTargets.Add(_keep);
         AutomationProperties.SetName(_keep, UiText.Get("QuickAccess.KeepName"));
         AutomationProperties.SetHelpText(_keep, UiText.Get("Onboard_QuickKeep"));
@@ -180,41 +179,31 @@ internal sealed class QuickAccessWindow : Window
             "QuickAccess.CopyingText");
         _actions["Close"] = Close;
         _actions["Activate"] = () => ActivateForKeyboard();
-        // Four equal tiles and a wider one for the two-word name, so no name is cut at 12 px.
-        var actions = new Grid { VerticalAlignment = VerticalAlignment.Center };
+        // Each command keeps its label and the same reserved shortcut row.
+        var actions = new WrapPanel { ItemHeight = 50, VerticalAlignment = VerticalAlignment.Center };
         foreach (string action in ActionOrder)
         {
-            actions.ColumnDefinitions.Add(new ColumnDefinition
-            {
-                Width = action == "CopyText" ? GridLength.Auto : new GridLength(1, GridUnitType.Star),
-            });
             Button button = Button("QuickAccess." + action, _actions[action]);
-            // An icon over its short name; the key stays in the tooltip and the accelerator key.
-            var face = new StackPanel { HorizontalAlignment = HorizontalAlignment.Center };
+            var face = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Center };
             face.Children.Add(Glyph(action == "CopyText" ? "Icon.Ocr" : "Icon." + action));
             // Names use the caption size, so the always-visible key letter is never larger than the name.
             var name = new TextBlock
             {
-                // The 20 grid already leaves room under the glyph; the face keeps its old height.
-                Text = AutomationProperties.GetName(button), Margin = new Thickness(0, 1, 0, 0),
-                HorizontalAlignment = HorizontalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis,
+                Text = AutomationProperties.GetName(button), Margin = new Thickness(CommandButtonPresentation.IconLabelGap, 0, 0, 0),
+                VerticalAlignment = VerticalAlignment.Center,
             };
             name.SetResourceReference(TextBlock.FontSizeProperty, "FontSize.Caption");
             face.Children.Add(name);
             button.Content = face;
-            button.MinWidth = 0; button.MinHeight = 46; button.Margin = new Thickness(1);
-            button.Padding = action == "CopyText" ? new Thickness(6, 4, 6, 3) : new Thickness(1, 4, 1, 3);
             ShortcutPresentation.Attach(button, ShortcutScope.QuickAccess, action);
             ShortToolTip(button);
             _actionButtons[action] = button;
-            Grid.SetColumn(button, actions.Children.Count);
             actions.Children.Add(button);
         }
         row.Children.Add(actions); panel.Children.Add(row);
         var footer = new DockPanel { Margin = new Thickness(0, 3, 0, 3) };
         var libraryButton = Button("QuickAccess.Library", () => { library(); Close(); });
-        libraryButton.MinHeight = 0; libraryButton.Padding = new Thickness(2);
-        libraryButton.SetResourceReference(FontSizeProperty, "FontSize.Caption");
+        CommandButtonPresentation.Apply(libraryButton, compact: true);
         libraryButton.SetResourceReference(StyleProperty, "Button.Ghost");
         DockPanel.SetDock(libraryButton, Dock.Right); footer.Children.Add(libraryButton);
         _dimensions.Text = $"{bitmap.PixelWidth} × {bitmap.PixelHeight}";
@@ -342,7 +331,8 @@ internal sealed class QuickAccessWindow : Window
     private SymbolIcon Glyph(string key)
     {
         Geometry geometry = TryFindResource(key) as Geometry ?? Geometry.Parse("M4,4 H16 V16 H4 Z");
-        SymbolIcon icon = SymbolIcon.Create(geometry, SymbolIcon.CommandSize);
+        SymbolIcon icon = SymbolIcon.Create(geometry, CommandButtonPresentation.IconSize);
+        icon.VerticalAlignment = VerticalAlignment.Center;
         icon.SetResourceReference(SymbolIcon.StrokeProperty, "Text.Primary");
         return icon;
     }
@@ -438,7 +428,8 @@ internal sealed class QuickAccessWindow : Window
 
     private Button Button(string key, Action action)
     {
-        var button = new Button { Content = UiText.Get(key), MinHeight = 36, Padding = new Thickness(6), Margin = new Thickness(2), Focusable = false };
+        var button = new Button { Content = UiText.Get(key), Focusable = false };
+        CommandButtonPresentation.Apply(button);
         _keyboardTargets.Add(button);
         AutomationProperties.SetName(button, UiText.Get(key));
         button.Click += (_, _) => action();

@@ -12,6 +12,9 @@
   <resheader name="writer">
     <value>System.Resources.ResXResourceWriter, System.Windows.Forms</value>
   </resheader>
+  <data name="Common_More" xml:space="preserve">
+    <value>More</value>
+  </data>
   <data name="Settings.Language" xml:space="preserve">
     <value>Display language</value>
     <comment>Language selection</comment>

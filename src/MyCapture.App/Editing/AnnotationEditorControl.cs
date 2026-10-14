@@ -104,7 +104,6 @@ internal sealed partial class AnnotationEditorControl : Grid
     private Button _rotateLeftButton = null!;
     private Button _rotateRightButton = null!;
     private StackPanel _rotationCommands = null!;
-    private Border _editRotationHost = null!;
     private Border _cropRotationHost = null!;
     private Button _deleteButton = null!;
     private Button _redactButton = null!;
@@ -127,7 +126,6 @@ internal sealed partial class AnnotationEditorControl : Grid
     private bool _defaultTextBackground;
     private bool _defaultTextOutline = true;
     private readonly List<string> _recentFontFamilies = [];
-    private readonly List<TextBlock> _commandLabels = [];
     private Slider _blurSlider = null!;
     private FrameworkElement _blurSection = null!;
     private bool _syncingInspector;
@@ -1588,12 +1586,8 @@ internal sealed partial class AnnotationEditorControl : Grid
         left.Children.Add(_redoButton);
         left.Children.Add(Separator());
 
-        // Rotation changes the whole image independently of cropping. Keep its names next to
-        // the image commands, separated from the history arrows.
+        // Rotation remains directly available in crop mode and in the everyday overflow.
         _rotationCommands = BuildRotationCommands();
-        _editRotationHost = new Border { Child = _rotationCommands };
-        left.Children.Add(_editRotationHost);
-        left.Children.Add(Separator());
 
         // The single way into crop; the ratio and automatic margin finder live in that mode.
         Button crop = IconTextButton(UiText.Get("Tools_Crop"), UiText.Get("EditorFlow_CropHint"), "Icon.Crop", FallbackCrop,
@@ -1623,8 +1617,11 @@ internal sealed partial class AnnotationEditorControl : Grid
         AutomationProperties.SetAutomationId(_copyTextButton, "EditorFlowCopyText");
         RefreshCopyTextAvailability();
         left.Children.Add(_copyTextButton);
+        Button more = BuildEditOverflowMenu();
+        left.Children.Add(more);
 
         var right = CommandRow();
+        right.Children.Add(Separator());
         Button save = BuildSaveOverflowMenu();
         Button copy = IconTextButton(
             UiText.Get("Text_37B3D3B11B26"), UiText.Get("Text_74EEFE6E43AE"), "Icon.Copy", FallbackCopy,
@@ -1653,6 +1650,7 @@ internal sealed partial class AnnotationEditorControl : Grid
 
         CommandButton(cancel, borderless: true);
         CommandButton(_copyTextButton, borderless: true);
+        CommandButton(more, borderless: true);
         var panel = new CommandGroupsPanel { Children = { left, right } };
         AutomationProperties.SetName(panel, UiText.Get("EditorFlow_CommandBarName"));
         return panel;
@@ -1665,9 +1663,7 @@ internal sealed partial class AnnotationEditorControl : Grid
     private CommandGroupsPanel BuildCropCommands()
     {
         var left = CommandRow();
-        // The same controls move here while a crop frame is open, keeping rotation's existing
-        // crop-frame reset and ratio behavior without making crop the entry point for rotation.
-        _cropRotationHost = new Border();
+        _cropRotationHost = new Border { Child = _rotationCommands };
         left.Children.Add(_cropRotationHost);
         left.Children.Add(Separator());
 
@@ -1752,23 +1748,15 @@ internal sealed partial class AnnotationEditorControl : Grid
     /// </remarks>
     private void CommandButton(Button button, bool borderless, ShortcutScope? scope = null, string? command = null)
     {
-        if (button.Content is StackPanel row)
-            _commandLabels.AddRange(row.Children.OfType<TextBlock>());
         if (scope is { } shortcutScope && command is not null)
         {
             AttachEditorShortcut(button, shortcutScope, command);
         }
 
         if (borderless) button.SetResourceReference(StyleProperty, "Button.Secondary");
-        button.Padding = new Thickness(8, 4, 8, 4);
-
-        // One type size and height for every command, so the bar keeps its height when crop
-        // mode swaps the commands.
-        button.FontSize = 12;
         button.Width = double.NaN;
-        button.Height = double.NaN;
-        button.MinHeight = 42;
-        button.MinWidth = 40;
+        CommandButtonPresentation.Apply(button);
+        CommandButtonPresentation.ReserveHint(button);
     }
 
     private void ApplyCropRatio() =>
@@ -1781,12 +1769,6 @@ internal sealed partial class AnnotationEditorControl : Grid
         bool cropping = _crop is not null;
         bool hidingFocus = (cropping ? _editCommands : _cropCommands).IsKeyboardFocusWithin;
         if (hidingFocus) Focus();
-        Border rotationHost = cropping ? _cropRotationHost : _editRotationHost;
-        if (!ReferenceEquals(_rotationCommands.Parent, rotationHost))
-        {
-            if (_rotationCommands.Parent is Border previousHost) previousHost.Child = null;
-            rotationHost.Child = _rotationCommands;
-        }
         _editCommands.Visibility = cropping ? Visibility.Collapsed : Visibility.Visible;
         _cropCommands.Visibility = cropping ? Visibility.Visible : Visibility.Collapsed;
     }
@@ -1796,6 +1778,40 @@ internal sealed partial class AnnotationEditorControl : Grid
 
     /// <summary>The tool rail's groups, top to bottom, for tests.</summary>
     internal IReadOnlyList<IReadOnlyList<EditorTool>> ToolGroups => _toolGroups;
+
+    private Button BuildEditOverflowMenu()
+    {
+        var menu = new ContextMenu();
+        foreach (var (command, key, source) in new[]
+        {
+            ("RotateLeft", "EditorUx_RotateLeft", _rotateLeftButton),
+            ("RotateRight", "EditorUx_RotateRight", _rotateRightButton),
+        })
+        {
+            var item = new MenuItem
+            {
+                Header = UiText.Get(key),
+                InputGestureText = ShortcutCatalog.Get(ShortcutScope.Annotation, command).Hint,
+            };
+            item.SetBinding(IsEnabledProperty, new Binding(nameof(IsEnabled)) { Source = source });
+            AutomationName(item, UiText.Get(key));
+            AutomationProperties.SetAcceleratorKey(item, item.InputGestureText);
+            item.Click += (_, _) => _shortcutActions[command]();
+            menu.Items.Add(item);
+        }
+
+        Button button = IconTextButton(UiText.Get("Common_More"), UiText.Get("Common_More"),
+            "Icon.More", () => Geometry.Parse("M4,10 L4.1,10 M10,10 L10.1,10 M16,10 L16.1,10"), () => { });
+        AutomationProperties.SetAutomationId(button, "EditorMore");
+        button.ContextMenu = menu;
+        button.Click += (_, _) =>
+        {
+            menu.PlacementTarget = button;
+            menu.Placement = PlacementMode.Bottom;
+            menu.IsOpen = true;
+        };
+        return button;
+    }
 
     private Button BuildSaveOverflowMenu()
     {
@@ -1936,7 +1952,7 @@ internal sealed partial class AnnotationEditorControl : Grid
 
             foreach (var separator in groups.Children.OfType<Border>())
             {
-                separator.Margin = new Thickness(8, compact ? 1 : 4, 8, compact ? 1 : 4);
+                separator.Margin = new Thickness(8, compact ? 0 : 4, 8, compact ? 0 : 4);
             }
         };
         return panel;
@@ -2620,14 +2636,11 @@ internal sealed partial class AnnotationEditorControl : Grid
     {
         var button = new Button
         {
-            Content = BuildIcon(iconResourceKey, fallback, 16),
+            Content = BuildIcon(iconResourceKey, fallback, CommandButtonPresentation.IconSize),
             ToolTip = tooltip,
-            Width = 32,
-            Height = 32,
-            Padding = new Thickness(6, 4, 6, 4),
-            Margin = new Thickness(2, 0, 2, 0),
         };
         button.SetResourceReference(FrameworkElement.StyleProperty, "Button.GhostCompact");
+        CommandButtonPresentation.Apply(button, compact: true);
         AutomationName(button, automationName);
         PreserveEditorMouseFocus(button);
         button.Click += (_, _) => onClick();
@@ -2637,13 +2650,13 @@ internal sealed partial class AnnotationEditorControl : Grid
     private Button IconTextButton(string label, string tooltip, string iconResourceKey, Func<Geometry> fallback, Action onClick)
     {
         var content = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
-        content.Children.Add(BuildIcon(iconResourceKey, fallback, 16));
+        content.Children.Add(BuildIcon(iconResourceKey, fallback, CommandButtonPresentation.IconSize));
         content.Children.Add(new TextBlock
         {
             Text = label,
             FontSize = 12,
             VerticalAlignment = VerticalAlignment.Center,
-            Margin = new Thickness(6, 0, 0, 0),
+            Margin = new Thickness(CommandButtonPresentation.IconLabelGap, 0, 0, 0),
         });
 
         var button = new Button
@@ -2693,7 +2706,9 @@ internal sealed partial class AnnotationEditorControl : Grid
     private Border Separator() => new()
     {
         Width = 1,
-        Margin = new Thickness(4, 4, 4, 4),
+        Height = 28,
+        VerticalAlignment = VerticalAlignment.Center,
+        Margin = new Thickness(6, 4, 6, 4),
         Background = Brush("Border.Subtle", Colors.Gray),
     };
 
@@ -3346,10 +3361,7 @@ internal sealed partial class AnnotationEditorControl : Grid
         }
 
         // Keep styling reachable in compact windows; vertical scrolling handles short heights.
-        // Compact commands retain both glyph and key, with the full name in the tooltip.
         bool compact = ActualWidth > 0 && ActualWidth < InspectorCompactWidth;
-        foreach (TextBlock label in _commandLabels)
-            label.Visibility = compact ? Visibility.Collapsed : Visibility.Visible;
 
         if (compact == _inspectorCompact)
         {

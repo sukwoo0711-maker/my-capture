@@ -12,12 +12,14 @@ internal static class MediaExportVisuals
 {
     internal static Button Button(FrameworkElement scope, string caption, string? icon = null, bool primary = false)
     {
-        var button = new Button { MinHeight = 36, Padding = new Thickness(12, 5, 12, 5), Margin = new Thickness(4, 0, 0, 0) };
+        var button = new Button();
+        CommandButtonPresentation.Apply(button);
         button.SetResourceReference(FrameworkElement.StyleProperty, primary ? "Button.Primary" : "Button.Secondary");
         var panel = new StackPanel { Orientation = Orientation.Horizontal };
         if (icon is not null)
         {
-            var path = new SymbolIcon { Size = 20, StrokeThickness = 0, Margin = new Thickness(0, 0, 6, 0) };
+            var path = new SymbolIcon { Size = CommandButtonPresentation.IconSize, StrokeThickness = 0,
+                Margin = new Thickness(0, 0, CommandButtonPresentation.IconLabelGap, 0), VerticalAlignment = VerticalAlignment.Center };
             path.SetResourceReference(SymbolIcon.DataProperty, icon);
             path.SetBinding(SymbolIcon.FillProperty, new Binding(nameof(Control.Foreground)) { Source = button });
             panel.Children.Add(path);

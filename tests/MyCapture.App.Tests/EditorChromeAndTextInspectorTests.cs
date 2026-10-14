@@ -9,6 +9,7 @@ using System.Windows.Media.Imaging;
 using MyCapture.App.Editing;
 using MyCapture.App.Themes;
 using MyCapture.Core.Annotations;
+using MyCapture.Core.Localization;
 using MyCapture.Core.Primitives;
 using MyCapture.Core.Settings;
 using MyCapture.Core.Themes;
@@ -262,6 +263,90 @@ public sealed class EditorChromeAndTextInspectorTests : KoreanCaptionTest
             {
                 Assert.Contains(Tree<TextBlock>(command), text => text.IsVisible && !string.IsNullOrWhiteSpace(text.Text) && text.Text != key);
             }
+        }
+    });
+
+    [Theory]
+    [InlineData("ko-KR", 1000, 640)]
+    [InlineData("ko-KR", 680, 460)]
+    [InlineData("en-US", 1000, 640)]
+    [InlineData("en-US", 680, 460)]
+    public void EveryCommandKeepsItsHeightAndGapWithOrWithoutShortcutHints(string language, int width, int height) => StaTestHost.Run(() =>
+    {
+        using var culture = UiText.UseLanguage(language);
+        using var preferences = new PreferencesScope(new AnnotationDefaults());
+        Func<bool>? previous = ShortcutPresentation.ReadEnabled;
+        bool enabled = true;
+        try
+        {
+            ShortcutPresentation.ReadEnabled = () => enabled;
+            using var host = EditorHost.Create(width, height);
+            Border bar = Tree<Border>(host.Editor).Single(border => border.Name == "AnnotationCommandBar");
+            foreach (bool crop in new[] { false, true })
+            {
+                if (crop) Assert.True(host.Editor.HandleShortcut(System.Windows.Input.Key.X, System.Windows.Input.ModifierKeys.None));
+                foreach (bool show in new[] { true, false, true })
+                {
+                    enabled = show;
+                    ShortcutPresentation.Refresh();
+                    host.Window.UpdateLayout();
+                    Button[] commands = Tree<Button>(bar).Where(button => button.IsVisible).ToArray();
+                    Assert.Equal(crop ? 5 : 10, commands.Length);
+                    Assert.Contains(commands, button => !string.IsNullOrEmpty(AutomationProperties.GetAcceleratorKey(button)));
+                    Assert.Contains(commands, button => string.IsNullOrEmpty(AutomationProperties.GetAcceleratorKey(button)));
+                    foreach (Button button in commands)
+                    {
+                        Assert.Equal(44, button.ActualHeight, 2);
+                        AssertInside(button, bar);
+                        Grid face = Assert.IsType<Grid>(button.Content);
+                        Assert.Equal("CommandButtonFace", face.Name);
+                        Assert.Equal(14, face.RowDefinitions[1].ActualHeight, 2);
+                        string key = AutomationProperties.GetAcceleratorKey(button);
+                        if (!string.IsNullOrEmpty(key))
+                        {
+                            TextBlock hint = Assert.Single(Tree<TextBlock>(button), text => text.Text == key);
+                            Assert.Equal(show ? Visibility.Visible : Visibility.Collapsed, hint.Visibility);
+                            if (show) AssertInside(hint, button);
+                        }
+                    }
+
+                    for (int first = 0; first < commands.Length; first++)
+                    {
+                        Rect firstBounds = commands[first].TransformToAncestor(bar).TransformBounds(new Rect(commands[first].RenderSize));
+                        for (int second = first + 1; second < commands.Length; second++)
+                        {
+                            Rect secondBounds = commands[second].TransformToAncestor(bar).TransformBounds(new Rect(commands[second].RenderSize));
+                            Assert.False(firstBounds.IntersectsWith(secondBounds), $"Commands overlap: {firstBounds}, {secondBounds}.");
+                            if (Math.Abs(firstBounds.Top - secondBounds.Top) < 0.5)
+                            {
+                                double gap = Math.Max(firstBounds.Left, secondBounds.Left) - Math.Min(firstBounds.Right, secondBounds.Right);
+                                Assert.True(gap >= 5.5, $"Command gap is {gap} at {language} {width}.");
+                            }
+                        }
+                    }
+
+                    if (!crop)
+                    {
+                        foreach (Button primaryTool in new[]
+                        {
+                            commands.Single(button => AutomationProperties.GetAutomationId(button) == "Capture410Crop"),
+                            Field<Button>(host.Editor, "_redactButton"),
+                            Field<Button>(host.Editor, "_copyTextButton"),
+                        })
+                        {
+                            Assert.True(primaryTool.IsVisible);
+                            string key = AutomationProperties.GetAcceleratorKey(primaryTool);
+                            Assert.Contains(Tree<TextBlock>(primaryTool), text => text.IsVisible
+                                && !string.IsNullOrWhiteSpace(text.Text) && text.Text != key);
+                        }
+                    }
+                }
+            }
+        }
+        finally
+        {
+            ShortcutPresentation.ReadEnabled = previous;
+            ShortcutPresentation.Refresh();
         }
     });
 

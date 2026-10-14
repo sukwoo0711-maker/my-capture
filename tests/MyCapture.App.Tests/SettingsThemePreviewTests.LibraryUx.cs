@@ -145,6 +145,7 @@ public sealed partial class SettingsThemePreviewTests
                 AssertInsideClient(element, client, label);
             AssertNotTrimmed(placeholder, label);
             AssertSameRow(commandBar, capture, search, (FrameworkElement)window.FindName("SortBox"));
+            AssertLibraryCommandHeights(commandBar);
 
             // Navigation pane: icon items with counts instead of radio buttons and sentences.
             RadioButton[] views = Descendants(window).OfType<RadioButton>().Where(button => button.IsVisible).ToArray();
@@ -198,6 +199,7 @@ public sealed partial class SettingsThemePreviewTests
             Assert.Equal(viewport, scroll.ViewportHeight, 1);
             var selection = (FrameworkElement)window.FindName("SelectionCommands");
             Assert.True(selection.IsVisible);
+            AssertLibraryCommandHeights(commandBar);
             Assert.False(((FrameworkElement)window.FindName("LibraryCommands")).IsVisible);
             // Capture stays one click away as an icon while the selection owns the bar.
             Assert.Equal("CaptureRegionIconButton", VisibleButtonNamed(window, UiText.Get("Text_2C20ADDA2018")).Name);
@@ -398,6 +400,17 @@ public sealed partial class SettingsThemePreviewTests
 
     private static Button VisibleButtonNamed(DependencyObject root, string name) =>
         Descendants(root).OfType<Button>().Single(button => button.IsVisible && AutomationProperties.GetName(button) == name);
+
+    private static void AssertLibraryCommandHeights(FrameworkElement bar)
+    {
+        Button[] buttons = Descendants(bar).OfType<Button>().Where(button => button.IsVisible).ToArray();
+        Assert.NotEmpty(buttons);
+        foreach (Button button in buttons)
+        {
+            Assert.Equal(44, button.ActualHeight, 1);
+            Assert.Equal(new Thickness(10, 4, 10, 4), button.Padding);
+        }
+    }
 
     private static void AssertSameRow(FrameworkElement bar, params FrameworkElement[] elements)
     {

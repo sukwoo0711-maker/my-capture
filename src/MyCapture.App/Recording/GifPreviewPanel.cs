@@ -31,8 +31,8 @@ internal sealed class GifPreviewPanel : Border
     private readonly TextBlock _gifCaption = new() { Margin = new Thickness(0, 0, 0, 4), Text = "GIF" };
     private readonly TextBlock _originalCaption = new() { Margin = new Thickness(0, 0, 0, 4) };
     private readonly FrameworkElement _originalColumn;
-    private readonly Button _play = new() { MinHeight = 36, Padding = new Thickness(10, 5, 12, 5) };
-    private readonly Path _playIcon = new() { Width = 20, Height = 20, Stretch = Stretch.None, Margin = new Thickness(0, 0, 6, 0) };
+    private readonly Button _play = new();
+    private readonly Path _playIcon = new() { Width = 16, Height = 16, Stretch = Stretch.Uniform, Margin = new Thickness(0, 0, 6, 0) };
     private readonly TextBlock _playText = new() { VerticalAlignment = VerticalAlignment.Center };
     private readonly Slider _position = new() { Minimum = 0, Maximum = 0, SmallChange = 1, LargeChange = 5, IsSnapToTickEnabled = true, TickFrequency = 1, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(10, 0, 10, 0) };
     private readonly TextBlock _frameLabel = new() { VerticalAlignment = VerticalAlignment.Center, MinWidth = 64 };
@@ -95,6 +95,9 @@ internal sealed class GifPreviewPanel : Border
         }
 
         _play.SetResourceReference(StyleProperty, "Button.Secondary");
+        CommandButtonPresentation.Apply(_play, compact: true);
+        CommandButtonPresentation.Apply(_compare, compact: true);
+        CommandButtonPresentation.Apply(_actualSize, compact: true);
         _playIcon.SetBinding(Shape.FillProperty, new Binding(nameof(Control.Foreground)) { Source = _play });
         var playContent = new StackPanel { Orientation = Orientation.Horizontal };
         playContent.Children.Add(_playIcon);

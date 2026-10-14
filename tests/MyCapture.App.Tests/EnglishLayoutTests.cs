@@ -32,7 +32,7 @@ public sealed class EnglishLayoutTests
         Assert.NotNull(path.Data);
         Assert.NotNull(path.Fill);
         Assert.Null(path.Stroke);
-        Assert.Equal(20, path.Size);
+        Assert.Equal(CommandButtonPresentation.IconSize, path.Size);
         Assert.Equal(0, path.StrokeThickness);
         Assert.Same(window.FindResource("Button.Primary"), button.Style);
     });
@@ -137,7 +137,7 @@ public sealed class EnglishLayoutTests
                 foreach (TextBlock text in Descendants(button).OfType<TextBlock>())
                     Assert.True(text.ActualWidth + text.Margin.Left + text.Margin.Right + 0.5 >= text.DesiredSize.Width, $"Clipped {caption}");
             }
-            Button addLayer = Assert.Single(buttons, b => Equals(b.Content, "Add layer"));
+            Button addLayer = Assert.Single(buttons, b => AutomationProperties.GetName(b) == "Add layer");
             Assert.Equal(new[] { "Text", "Rectangle", "Circle", "Image" },
                 addLayer.ContextMenu.Items.OfType<MenuItem>().Select(item => (string)item.Header));
             foreach (string key in new[]
@@ -149,6 +149,17 @@ public sealed class EnglishLayoutTests
             {
                 Button action = Assert.Single(buttons, button => AutomationProperties.GetName(button) == UiText.Get(key));
                 Assert.NotNull(action.ToolTip);
+                if (!action.IsVisible)
+                {
+                    Assert.Contains(key, new[] { "Text_48D137437347", "Text_C5176D8C3041", "Text_6CA53DEDFF4A" });
+                    Button more = Assert.Single(buttons, button => button.Name == "VideoTimelineMoreTools");
+                    MenuItem item = Assert.Single(more.ContextMenu!.Items.OfType<MenuItem>(), candidate =>
+                        AutomationProperties.GetName(candidate) == UiText.Get(key));
+                    Assert.Equal(Visibility.Visible, item.Visibility);
+                    Assert.NotNull(item.ToolTip);
+                    Assert.Equal(action.IsEnabled, item.IsEnabled);
+                    action = more;
+                }
                 Assert.True(action.IsVisible && action.ActualWidth >= 36 && action.ActualHeight >= 36);
                 AssertReachableInScrollViewport(action, window);
                 Point bottom = action.TranslatePoint(new Point(action.ActualWidth, action.ActualHeight), layout);

@@ -12,6 +12,9 @@
   <resheader name="writer">
     <value>System.Resources.ResXResourceWriter, System.Windows.Forms</value>
   </resheader>
+  <data name="Common_More" xml:space="preserve">
+    <value>더보기</value>
+  </data>
   <data name="Settings.Language" xml:space="preserve">
     <value>표시 언어</value>
     <comment>Language selection</comment>

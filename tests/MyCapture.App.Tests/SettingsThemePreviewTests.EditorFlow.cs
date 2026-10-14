@@ -163,13 +163,14 @@ public sealed partial class SettingsThemePreviewTests
                             $"{scene}: a command group exceeds the available width.");
                         Rect leftBounds = left.TransformToAncestor(bar).TransformBounds(new Rect(left.RenderSize));
                         Rect rightBounds = right.TransformToAncestor(bar).TransformBounds(new Rect(right.RenderSize));
-                        bool wraps = left.ActualWidth + right.ActualWidth > bar.ActualWidth;
+                        bool wraps = left.ActualWidth + 8 + right.ActualWidth > bar.ActualWidth;
                         Assert.Equal(wraps, rightBounds.Top >= leftBounds.Bottom - 0.5);
                         Rect overlap = Rect.Intersect(leftBounds, rightBounds);
                         Assert.True(overlap.IsEmpty || overlap.Width <= 0.5 || overlap.Height <= 0.5,
                             $"{scene}: the command groups overlap.");
-                        Assert.InRange(bar.ActualHeight, (wraps ? left.ActualHeight + right.ActualHeight : Math.Max(left.ActualHeight, right.ActualHeight)) - 0.5,
-                            (wraps ? left.ActualHeight + right.ActualHeight : Math.Max(left.ActualHeight, right.ActualHeight)) + 0.5);
+                        Assert.InRange(bar.ActualHeight, (wraps ? left.ActualHeight + 8 + right.ActualHeight : Math.Max(left.ActualHeight, right.ActualHeight)) - 0.5,
+                            (wraps ? left.ActualHeight + 8 + right.ActualHeight : Math.Max(left.ActualHeight, right.ActualHeight)) + 0.5);
+                        if (wraps) Assert.Equal(8, rightBounds.Top - leftBounds.Bottom, 1);
 
                         Rect client = new(0, 0, window.Editor.ActualWidth, window.Editor.ActualHeight);
                         foreach (System.Windows.Controls.Primitives.ButtonBase button in EditorKeysTests.Descendants(bar)

@@ -163,7 +163,7 @@ public sealed class VideoEditorWindowTests : KoreanCaptionTest
                 Assert.InRange(strip.TranslatePoint(new Point(0, 0), timelineTools).Y, -coordinateEpsilon, timelineTools.ViewportHeight + coordinateEpsilon);
                 Assert.InRange(strip.TranslatePoint(new Point(0, strip.ActualHeight), timelineTools).Y, -coordinateEpsilon, timelineTools.ViewportHeight + coordinateEpsilon);
             }
-            Button addLayer = Descendants(layout).OfType<Button>().Single(button => Equals(button.Content, UiText.Get("Video.AddLayer")));
+            Button addLayer = Descendants(layout).OfType<Button>().Single(button => System.Windows.Automation.AutomationProperties.GetName(button) == UiText.Get("Video.AddLayer"));
             Point addBottom = addLayer.TranslatePoint(new Point(0, addLayer.ActualHeight), layout);
             Assert.True(addLayer.IsVisible && addBottom.Y <= layout.ActualHeight);
             addLayer.ContextMenu.IsOpen = true;
