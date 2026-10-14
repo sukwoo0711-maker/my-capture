@@ -4199,4 +4199,12 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="Library.Search.MatchField.Pinned" xml:space="preserve"><value>보관</value></data>
   <data name="Library.Search.MatchField.Date" xml:space="preserve"><value>날짜</value></data>
   <data name="Library.Search.MatchField.ExportFileName" xml:space="preserve"><value>파일명</value></data>
+  <data name="Library.Tags.Title" xml:space="preserve"><value>태그</value></data>
+  <data name="Library.Tags.Edit" xml:space="preserve"><value>태그 편집</value></data>
+  <data name="Library.Tags.More" xml:space="preserve"><value>더 보기</value></data>
+  <data name="Library.Tags.DialogTitle" xml:space="preserve"><value>선택한 {0}개 캡처의 태그</value></data>
+  <data name="Library.Tags.New" xml:space="preserve"><value>새 태그 추가</value></data>
+  <data name="Library.Tags.Apply" xml:space="preserve"><value>적용</value></data>
+  <data name="Library.Tags.Invalid" xml:space="preserve"><value>구분 기호와 제어 문자 없이 32자 이내의 태그 하나를 입력하십시오.</value></data>
+  <data name="Library.Tags.Saved" xml:space="preserve"><value>{0}개 캡처의 태그 저장됨 · 태그 한도 도달 {1}개 · 찾을 수 없는 캡처 {2}개</value></data>
 </root>

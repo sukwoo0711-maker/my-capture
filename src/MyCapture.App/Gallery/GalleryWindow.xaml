@@ -99,6 +99,7 @@
                       Click="OnGifMenuClick" />
             <MenuItem Header="{loc:Text Folder410.MoveCaptures}" CommandParameter="{Binding}"
                       InputGestureText="M" Click="OnMoveCapturesClick" />
+            <MenuItem Header="{loc:Text Library.Tags.Edit}" CommandParameter="{Binding}" Click="OnBatchTagsClick" />
             <Separator />
             <MenuItem Header="{loc:Text ExportReduction_Title}"
                       CommandParameter="{Binding}"
@@ -1516,6 +1517,8 @@
                         Click="OnExportArchiveClick" ToolTip="{loc:Text Library.Archive.Hint}" />
                 <Button x:Name="MoveCapturesButton" Content="{loc:Text Folder410.MoveCaptures}" Style="{StaticResource LibraryUx.CommandButton}"
                         Click="OnMoveCapturesClick" ToolTip="{loc:Text LibraryUx_MoveHint}" />
+                <Button Content="{loc:Text Library.Tags.Edit}" Style="{StaticResource LibraryUx.CommandButton}"
+                        Click="OnBatchTagsClick" />
                 <Button x:Name="DeleteSelectedButton" Content="{loc:Text LibrarySelection_Delete}" Style="{StaticResource LibraryUx.CommandButton}"
                         Click="OnDeleteSelectedClick" ToolTip="{loc:Text LibraryUx_DeleteHint}" />
                 <Button Content="{loc:Text LibrarySelection_Reduce}" Style="{StaticResource LibraryUx.CommandButton}" Margin="0"
@@ -1614,8 +1617,10 @@
             </Grid.ColumnDefinitions>
 
             <!-- Navigation pane on the window base, like the title bar above it. -->
-            <Grid x:Name="GalleryFilterRail" Margin="0,0,10,0" AutomationProperties.Name="{loc:Text LibraryUx_NavName}">
+            <Grid x:Name="GalleryFilterRail" Margin="0,0,10,0" AutomationProperties.Name="{loc:Text LibraryUx_NavName}"
+                  SizeChanged="OnTagNavigationSizeChanged">
                 <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="*" MinHeight="96" />
@@ -1696,8 +1701,36 @@
                     </RadioButton>
                 </StackPanel>
 
+                <Expander x:Name="TagSection" Grid.Row="1" Style="{StaticResource LibraryUx.Section}"
+                          Header="{loc:Text Library.Tags.Title}" IsExpanded="True" Margin="0,0,0,4">
+                    <DockPanel>
+                        <Button DockPanel.Dock="Bottom" Content="{loc:Text Library.Tags.More}" Style="{StaticResource LibraryUx.CommandButton}" HorizontalAlignment="Left"
+                                Click="OnMoreTagsClick" Visibility="{Binding HasMoreTags, Converter={StaticResource BoolToVisibility}}" />
+                        <ScrollViewer MaxHeight="304" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                            <ItemsControl ItemsSource="{Binding VisibleTags}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <RadioButton Style="{StaticResource LibraryUx.NavItem}"
+                                                     IsChecked="{Binding IsSelected, Mode=OneWay}" Click="OnTagClick"
+                                                     ToolTip="{Binding Name}" AutomationProperties.Name="{Binding AccessibleName}">
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="Auto" />
+                                                </Grid.ColumnDefinitions>
+                                                <TextBlock Text="{Binding Name}" Margin="0,0,8,0" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                                                <TextBlock Grid.Column="1" Text="{Binding Count}" Style="{StaticResource LibraryUx.NavCount}" />
+                                            </Grid>
+                                        </RadioButton>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </ScrollViewer>
+                    </DockPanel>
+                </Expander>
+
                 <!-- "폴더" section head: the retention rule is a tooltip, [+] creates a folder here. -->
-                <Grid Grid.Row="1" Margin="0,0,0,2">
+                <Grid Grid.Row="2" Margin="0,0,0,2">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="Auto" />
@@ -1715,7 +1748,7 @@
                     </Button>
                 </Grid>
 
-                <TreeView x:Name="FolderTree" Grid.Row="2" ItemsSource="{Binding FolderRoots}" Background="Transparent" BorderThickness="0"
+                <TreeView x:Name="FolderTree" Grid.Row="3" ItemsSource="{Binding FolderRoots}" Background="Transparent" BorderThickness="0"
                           Foreground="{DynamicResource Text.Primary}"
                           AutomationProperties.Name="{loc:Text Folder410.Title}"
                           AutomationProperties.HelpText="{loc:Text LibraryUx_FoldersHint}"
@@ -1726,7 +1759,7 @@
                           SelectedItemChanged="OnFolderSelected" PreviewKeyDown="OnFolderTreeKeyDown"
                           PreviewMouseLeftButtonDown="OnFolderPointerDown" />
 
-                <Expander x:Name="DateSection" Grid.Row="3" Style="{StaticResource LibraryUx.Section}" Margin="0,6,0,0"
+                <Expander x:Name="DateSection" Grid.Row="4" Style="{StaticResource LibraryUx.Section}" Margin="0,6,0,0"
                           Header="{loc:Text LibraryUx_DatesHeader}" IsExpanded="False">
                     <ListBox x:Name="DateList" ItemsSource="{Binding FolderNodes}" MaxHeight="220"
                              ItemTemplate="{StaticResource LibraryUx.DateItemTemplate}"

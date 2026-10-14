@@ -660,7 +660,7 @@ internal sealed partial class GalleryWindow : Window
     {
         if (_viewModel is null || sender is not RadioButton { Tag: string filter }) return;
         GalleryFilter next = Enum.Parse<GalleryFilter>(filter);
-        if (_viewModel.Filter == next && _viewModel.SelectedScope.IsAll) return;
+        if (_viewModel.Filter == next && _viewModel.SelectedScope.IsAll && _viewModel.SelectedTag is null) return;
         await ShowLibraryViewAsync(next);
     }
 

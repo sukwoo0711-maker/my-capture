@@ -108,7 +108,7 @@ public sealed partial class GalleryViewModel : INotifyPropertyChanged
     public GalleryFilter Filter
     {
         get => _filter;
-        set { if (_filter != value) { _filter = value; Raise(); Refresh(); } }
+        set { if (_filter != value || _selectedTag is not null) { _selectedTag = null; _filter = value; Raise(); Refresh(); } }
     }
 
     public bool CanReduceSelected => SingleSelectedTile?.IsImage == true;
@@ -271,11 +271,11 @@ public sealed partial class GalleryViewModel : INotifyPropertyChanged
         finally { IsRefreshingFolderTree = false; }
         CaptureRecord[] candidates = _controller.RecordsInView(_scope, browsing: false).ToArray();
         _folderIsEmpty = HasFolderScope && candidates.Length == 0;
-        _searchCandidateCount = candidates.Count(MatchesMediaFilter);
+        _searchCandidateCount = candidates.Count(record => MatchesMediaFilter(record) && MatchesTagFilter(record));
         // Browsing shows a location like File Explorer: its folder cards and only the captures
         // directly in it. A search or media filter cuts across folders instead and shows matching
         // captures only, each naming the folder it lives in (see GalleryController.RecordsInView).
-        bool showFolders = string.IsNullOrWhiteSpace(_searchQuery) && _filter == GalleryFilter.All;
+        bool showFolders = string.IsNullOrWhiteSpace(_searchQuery) && _filter == GalleryFilter.All && _selectedTag is null;
         var searchMatchFields = new Dictionary<Guid, CaptureMatchField>();
         IReadOnlyList<GalleryGroupedRecords> grouped = _controller.BuildGroups(_searchQuery, _clock(), _scope, _sortOrder,
             showFolders, searchMatchFields);
@@ -291,7 +291,7 @@ public sealed partial class GalleryViewModel : INotifyPropertyChanged
             var tiles = new List<GalleryItemViewModel>(group.Records.Count);
             foreach (CaptureRecord record in group.Records)
             {
-                if (!MatchesMediaFilter(record)) continue;
+                if (!MatchesMediaFilter(record) || !MatchesTagFilter(record)) continue;
                 GalleryItemViewModel tile = GetOrCreateTile(record);
                 tile.SetSearchMatch(HasSearchQuery, searchMatchFields.GetValueOrDefault(record.Id));
                 // Only a capture listed outside its own folder carries the badge; while browsing
@@ -350,6 +350,7 @@ public sealed partial class GalleryViewModel : INotifyPropertyChanged
         Raise(nameof(SearchHiddenCount));
         Raise(nameof(SummaryText));
         RefreshNavigation();
+        RefreshTags();
     }
 
     /// <summary>

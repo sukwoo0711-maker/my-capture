@@ -200,6 +200,10 @@ public sealed class GalleryController
 
     public CaptureRecord? Find(Guid id) => _queue.IsRemovalPending(id) ? null : _queue.Find(id);
 
+    public Task<CaptureBatchTagResult> UpdateTagsAsync(IEnumerable<Guid> ids,
+        IEnumerable<CaptureTagChange> changes, CancellationToken cancellationToken = default) =>
+        _queue.UpdateTagsAsync(ids, changes, cancellationToken);
+
     /// <summary>Edits only user metadata; serializes publication with OCR and image edits.</summary>
     public async Task<bool> UpdateOrganizationAsync(Guid id, string? title, string? tags,
         CancellationToken cancellationToken = default)
