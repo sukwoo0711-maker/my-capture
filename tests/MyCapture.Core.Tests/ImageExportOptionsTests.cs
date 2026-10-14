@@ -8,6 +8,36 @@ namespace MyCapture.Core.Tests;
 public sealed class ImageExportOptionsTests
 {
     [Theory]
+    [InlineData(0)] [InlineData(1)] [InlineData(2)] [InlineData(3)]
+    [InlineData(4)] [InlineData(5)] [InlineData(6)] [InlineData(7)]
+    public void ImportChangingOnlyOneExportOptionIsAnUnappliedChange(int field)
+    {
+        AppSettings settings = NewInstallDefaults.Create();
+        var draft = new SettingsDraft(settings);
+        ImageExportOptions options = settings.Export.LastImageExport;
+        settings.Export.LastImageExport = field switch
+        {
+            0 => options with { Format = ImageExportFormat.Jpeg },
+            1 => options with { LongEdge = 800 },
+            2 => options with { ReductionPercent = 50 },
+            3 => options with { IncludeSourceUrl = true },
+            4 => options with { Margin = 24 },
+            5 => options with { CornerRadius = 12 },
+            6 => options with { Background = ImageExportBackground.White },
+            _ => options with { Shadow = true },
+        };
+
+        draft.ReplaceValues(settings);
+
+        Assert.True(draft.HasUnappliedChanges);
+        Assert.True(draft.ExportOptionsReplaced);
+        Assert.Equal(settings.Export.LastImageExport, draft.ToAppSettings().Export.LastImageExport);
+        draft.LoadFrom(settings);
+        Assert.False(draft.HasUnappliedChanges);
+        Assert.False(draft.ExportOptionsReplaced);
+    }
+
+    [Theory]
     [InlineData(4000, 2000, 1280, 1280, 640)]
     [InlineData(2000, 4000, 1920, 960, 1920)]
     [InlineData(640, 480, 800, 640, 480)]

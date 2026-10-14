@@ -215,7 +215,8 @@ public partial class App : Application
         var pinSaveService = new PinImageSaveService(
             () => _settings!,
             () => _capturePaths ?? _services.GetRequiredService<AppPaths>(),
-            _services.GetRequiredService<ILogger<PinImageSaveService>>());
+            _services.GetRequiredService<ILogger<PinImageSaveService>>(),
+            _commit!.RememberExportOptions);
         _pins = new PinManager(
             () => _settings!.Pin,
             pinSaveService,
@@ -1350,7 +1351,7 @@ public partial class App : Application
         try
         {
             var saver = new PinImageSaveService(() => _settings!, () => _capturePaths!,
-                _services.GetRequiredService<ILogger<PinImageSaveService>>());
+                _services.GetRequiredService<ILogger<PinImageSaveService>>(), _commit.RememberExportOptions);
             QuickAccessWindow? card = null;
             async Task<System.Windows.Media.Imaging.BitmapSource> Render()
             {
@@ -1860,7 +1861,7 @@ public partial class App : Application
             next => _settingsApply!.Apply(next),
             _services.GetRequiredService<ILogger<SettingsWindow>>(),
             () => _services.GetRequiredService<SettingsStore>(),
-            applyDraft: (next, edited) => _settingsApply!.Apply(next, edited));
+            applyDraft: (next, folderEdited, exportReplaced) => _settingsApply!.Apply(next, folderEdited, exportReplaced));
 
         ConfigureEngagementWindow(window);
         ConfigureLegacyImportWindow(window);

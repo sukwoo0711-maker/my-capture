@@ -34,6 +34,7 @@ internal static class ImageExportEncoder
         BitmapSource rendered = ImageExportRenderer.Render(image, options, accent);
         byte[] png = ReferenceEquals(rendered, image) ? PngSourceUrlMetadata.StripSourceUrl(originalPng)
             : ImageCodec.EncodePng(rendered);
+        if (options.IncludeSourceUrl) png = PngSourceUrlMetadata.WithSourceUrl(png, sourceUrl);
         ImageExportResult result;
         if (options.Format == ImageExportFormat.Png)
             result = new(png, ".png", originalPng.LongLength, options.ReductionPercent, null, false);
@@ -61,12 +62,9 @@ internal static class ImageExportEncoder
         else
         {
             // Keep the existing automatic reduction/alpha-preservation policy.
-            result = EncodeAutomatic(rendered, png, options.ReductionPercent, originalPng.LongLength, cancellationToken);
-            if (result.Extension == ".jpg" && options.IncludeSourceUrl)
-                result = result with { Bytes = EncodeJpeg(rendered, result.JpegQuality!.Value, sourceUrl) };
+            result = EncodeAutomatic(rendered, png, options.ReductionPercent, originalPng.LongLength, cancellationToken,
+                options.IncludeSourceUrl ? sourceUrl : null);
         }
-        if (result.Extension == ".png" && options.IncludeSourceUrl)
-            result = result with { Bytes = PngSourceUrlMetadata.WithSourceUrl(result.Bytes, sourceUrl) };
         cancellationToken.ThrowIfCancellationRequested();
         return result with { PixelWidth = rendered.PixelWidth, PixelHeight = rendered.PixelHeight };
     }
@@ -95,7 +93,7 @@ internal static class ImageExportEncoder
     }
 
     private static ImageExportResult EncodeAutomatic(BitmapSource image, byte[] originalPng, int reduction,
-        long baselineBytes, CancellationToken cancellationToken)
+        long baselineBytes, CancellationToken cancellationToken, string? sourceUrl = null)
     {
         ArgumentNullException.ThrowIfNull(image);
         ArgumentNullException.ThrowIfNull(originalPng);
@@ -131,7 +129,7 @@ internal static class ImageExportEncoder
         {
             cancellationToken.ThrowIfCancellationRequested();
             int quality = lower + (upper - lower) / 2;
-            byte[] candidate = ImageCodec.EncodeJpeg(opaque, quality);
+            byte[] candidate = EncodeJpeg(opaque, quality, sourceUrl);
             if (candidate.LongLength <= target)
             {
                 best = candidate;

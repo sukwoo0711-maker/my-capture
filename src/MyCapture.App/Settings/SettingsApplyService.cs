@@ -101,7 +101,7 @@ public sealed class SettingsApplyService
     /// <see cref="SettingsApplyResult.Saved"/> is <see langword="false"/> so the window
     /// stays open with the user's draft intact.
     /// </remarks>
-    public SettingsApplyResult Apply(AppSettings next, bool applyFolderDestination = true)
+    public SettingsApplyResult Apply(AppSettings next, bool applyFolderDestination = true, bool applyExportOptions = false)
     {
         ArgumentNullException.ThrowIfNull(next);
 
@@ -109,8 +109,8 @@ public sealed class SettingsApplyService
         // The window never edits the Store rating state; keep what captures recorded meanwhile.
         next.StoreRating = previous.StoreRating;
         next.StoreUpdate = previous.StoreUpdate;
-        // Export dialogs may have remembered a new preset while this draft was open.
-        next.Export.LastImageExport = previous.Export.LastImageExport;
+        // Preserve concurrent exports unless the draft explicitly resets or imports options.
+        if (!applyExportOptions) next.Export.LastImageExport = previous.Export.LastImageExport;
         // Nor the capture start-guide count; a selector opened meanwhile may have advanced it.
         next.Capture.StartGuideShownCount = previous.Capture.StartGuideShownCount;
         ReconcileFolderDestination(next.Queue, _queue, applyFolderDestination);

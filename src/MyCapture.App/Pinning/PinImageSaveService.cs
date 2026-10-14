@@ -58,15 +58,18 @@ internal sealed class PinImageSaveService
     private readonly Func<AppSettings> _settings;
     private readonly Func<AppPaths> _paths;
     private readonly ILogger<PinImageSaveService> _log;
+    private readonly Action<ImageExportOptions> _rememberExportOptions;
 
     internal PinImageSaveService(
         Func<AppSettings> settings,
         Func<AppPaths> paths,
-        ILogger<PinImageSaveService> log)
+        ILogger<PinImageSaveService> log,
+        Action<ImageExportOptions>? rememberExportOptions = null)
     {
         _settings = settings ?? throw new ArgumentNullException(nameof(settings));
         _paths = paths ?? throw new ArgumentNullException(nameof(paths));
         _log = log ?? throw new ArgumentNullException(nameof(log));
+        _rememberExportOptions = rememberExportOptions ?? (options => _settings().Export.LastImageExport = options);
     }
 
     /// <summary>
@@ -120,7 +123,7 @@ string message = UiText.Get("Text_932DB1A4ED7F");
             }
 
             PinSaveResult result = await SaveToPathAsync(image, chosen, sourcePageUrl, options);
-            if (result.Status == PinSaveStatus.Saved) _settings().Export.LastImageExport = options;
+            if (result.Status == PinSaveStatus.Saved) _rememberExportOptions(options);
             return result;
         });
     }
