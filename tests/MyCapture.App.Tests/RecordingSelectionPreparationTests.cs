@@ -5,6 +5,7 @@ using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using Microsoft.Extensions.Logging.Abstractions;
 using MyCapture.App.Recording;
+using MyCapture.App.Gallery;
 using MyCapture.Core.Primitives;
 using MyCapture.Core.Queue;
 using MyCapture.Core.Recording;
@@ -17,6 +18,63 @@ namespace MyCapture.App.Tests;
 
 public sealed class RecordingSelectionPreparationTests
 {
+    [Fact]
+    public void LibraryHideConfirmationPrecedesOverlayCreationAndFrozenFrameAcquisition() => StaTestHost.Run(() =>
+    {
+        string root = OwnedTestDirectory.Create("mc-library-record-selection-");
+        RegionRecordingCoordinator recorder = Create(root);
+        var confirmed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        bool hidden = false;
+        bool hideConfirmed = false;
+        int overlays = 0;
+        int acquired = 0;
+        var start = new LibraryCaptureStartCoordinator(async () =>
+        {
+            hidden = true;
+            await confirmed.Task;
+            hideConfirmed = true;
+        }, () => hidden = false);
+        recorder.ExcludeSelectionWindow = window =>
+        {
+            Assert.True(hidden && hideConfirmed);
+            Assert.False(window.IsVisible);
+            overlays++;
+            return false;
+        };
+        recorder.AcquireSelectionFrame = () =>
+        {
+            Assert.True(hidden && hideConfirmed);
+            Interlocked.Increment(ref acquired);
+            return Frame();
+        };
+        Task? pending = null;
+        try
+        {
+            _ = Dispatcher.CurrentDispatcher.InvokeAsync(() => pending = start.StartAsync(recorder.Toggle));
+            PumpUntil(() => pending is not null);
+            Assert.True(hidden);
+            Assert.False(recorder.IsActive);
+            Assert.Equal(0, overlays);
+            Assert.Equal(0, acquired);
+            confirmed.SetResult();
+            PumpUntil(() => pending!.IsCompleted);
+            pending!.GetAwaiter().GetResult();
+            PumpUntil(() => recorder.LastSelectionPreparation.IsCompleted);
+            Assert.Equal(1, overlays);
+            Assert.Equal(1, acquired);
+            Assert.True(recorder.IsActive);
+            Assert.True(hidden);
+        }
+        finally
+        {
+            confirmed.TrySetResult();
+            if (pending is not null) PumpUntil(() => pending.IsCompleted);
+            recorder.CancelRegionSelection();
+            PumpUntil(() => recorder.LastSelectionPreparation.IsCompleted);
+            OwnedTestDirectory.Delete(root);
+        }
+    });
+
     [Theory]
     [InlineData(true)]
     [InlineData(false)]

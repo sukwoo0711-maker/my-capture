@@ -70,19 +70,23 @@ public sealed class VideoTimelineFeedbackTests
         Assert.Equal(string.Empty, layers.HoverText);
     });
 
-    [Fact]
-    public void GrabZoneShowsTheLocalizedTrimHint() => StaTestHost.Run(() =>
+    [Theory]
+    [InlineData("ko-KR")]
+    [InlineData("en-US")]
+    public void GrabZoneShowsTheLocalizedTrimHintAndShortcut(string language) => StaTestHost.Run(() =>
     {
-        using var scope = UiText.UseLanguage("ko-KR");
+        using var scope = UiText.UseLanguage(language);
         using var timeline = new TwoLineTimeline();
         timeline.Initialize(10000, 30);
         timeline.SetIn(2000);
         timeline.SetOut(8000);
         Arrange(timeline, 400);
         timeline.HoverForTest(90, 30);
-        Assert.Equal("끌면 시작 위치 조정", timeline.TrimStripForTest.ToolTip);
+        Assert.Equal(UiText.Get("VideoEditorUx_DragStart"), timeline.TrimStripForTest.ToolTip);
+        Assert.Contains("I:", Assert.IsType<string>(timeline.TrimStripForTest.ToolTip));
         timeline.HoverForTest(310, 30);
-        Assert.Equal("끌면 끝 위치 조정", timeline.TrimStripForTest.ToolTip);
+        Assert.Equal(UiText.Get("VideoEditorUx_DragEnd"), timeline.TrimStripForTest.ToolTip);
+        Assert.Contains("O:", Assert.IsType<string>(timeline.TrimStripForTest.ToolTip));
         timeline.ClearHoverForTest();
         Assert.Null(timeline.TrimStripForTest.ToolTip);
     });

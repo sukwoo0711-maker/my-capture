@@ -58,6 +58,7 @@ internal sealed partial class GalleryWindow : Window
     // Header capture buttons hide the library without closing it, so the shown folder stays
     // the destination of the capture they start.
     private bool _hiddenForCapture;
+    private LibraryCaptureStartCoordinator? _captureStart;
     private int _visibilityGeneration;
     private bool _imagePreparationInProgress;
     private Point _dragStart;
@@ -995,19 +996,31 @@ internal sealed partial class GalleryWindow : Window
     }
 
     /// <summary>Header toolbar: start a region capture, mirroring the tray command.</summary>
-    private void OnCaptureRegionClick(object sender, RoutedEventArgs e)
-    {
-        _hiddenForCapture = true;
-        Window.GetWindow(this)?.Hide();
-        CaptureRegionRequested?.Invoke();
-    }
+    private async void OnCaptureRegionClick(object sender, RoutedEventArgs e) =>
+        await StartLibraryCaptureAsync(CaptureRegionRequested);
 
     /// <summary>Header toolbar: start (or stop) a region recording, mirroring the tray command.</summary>
-    private void OnRecordRegionClick(object sender, RoutedEventArgs e)
+    private async void OnRecordRegionClick(object sender, RoutedEventArgs e) =>
+        await StartLibraryCaptureAsync(RecordRegionRequested);
+
+    private async Task StartLibraryCaptureAsync(Action? start)
     {
-        _hiddenForCapture = true;
-        Window.GetWindow(this)?.Hide();
-        RecordRegionRequested?.Invoke();
+        if (start is null) return;
+        _captureStart ??= new LibraryCaptureStartCoordinator(
+            () =>
+            {
+                _hiddenForCapture = true;
+                return MyCapture.App.Capture.CaptureWindowVisibility.HideAndConfirmAsync(this);
+            }, ShowGallery);
+        try
+        {
+            await _captureStart.StartAsync(start);
+        }
+        catch (Exception ex)
+        {
+            _log.LogError(ex, "Could not hide the library before capture");
+            ThemedDialog.Error(this, UiText.Get("Dialog.AppFailure"), ex);
+        }
     }
 
     private async Task CopyRenderedAsync(GalleryItemViewModel tile)

@@ -276,13 +276,8 @@ public sealed class VideoEditorUxTrimTests
             editor = OpenReadyEditor(root, 10_000, show: true);
             var layout = (Grid)editor.Content;
             Button[] buttons = Descendants(layout).OfType<Button>().ToArray();
-            foreach (var (key, command) in new[] { ("VideoEditorUx_MarkInHere", "I"), ("VideoEditorUx_MarkOutHere", "O") })
-            {
-                Button mark = Assert.Single(buttons, b => AutomationProperties.GetName(b) == UiText.Get(key));
-                Assert.Equal(command, AutomationProperties.GetAcceleratorKey(mark));
-                Assert.False(string.IsNullOrWhiteSpace(AutomationProperties.GetHelpText(mark)));
-                Assert.True(mark.ActualHeight >= 40 && mark.ActualWidth >= 40, $"{key}: {mark.ActualWidth}x{mark.ActualHeight}");
-            }
+            Assert.Equal("In", ShortcutCatalog.Match(ShortcutScope.Video, Key.I, ModifierKeys.None));
+            Assert.Equal("Out", ShortcutCatalog.Match(ShortcutScope.Video, Key.O, ModifierKeys.None));
 
             Button reset = Assert.Single(buttons, b => AutomationProperties.GetName(b) == UiText.Get("VideoEditorUx_ResetTrim"));
             Assert.False(string.IsNullOrWhiteSpace(AutomationProperties.GetHelpText(reset)));
@@ -296,6 +291,7 @@ public sealed class VideoEditorUxTrimTests
             FrameworkElement strip = TrimStrip(editor.TimelineForTest);
             Assert.Equal(UiText.Get("VideoEditorUx_TrimTimelineName"), AutomationProperties.GetName(strip));
             Assert.Contains("I", AutomationProperties.GetHelpText(strip), StringComparison.Ordinal);
+            Assert.Contains("O", AutomationProperties.GetHelpText(strip), StringComparison.Ordinal);
             Assert.False(string.IsNullOrWhiteSpace(AutomationProperties.GetItemStatus(strip)));
             Assert.True(strip.ActualHeight >= 44);
 
