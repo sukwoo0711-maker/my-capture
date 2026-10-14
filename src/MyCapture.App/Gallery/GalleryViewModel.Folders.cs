@@ -39,6 +39,8 @@ public sealed partial class GalleryViewModel
     public bool ShowFolderStorageInfo => _controller.Queue.IsFolderStorageLarge;
     public ObservableCollection<GalleryFolderNode> FolderNodes { get; } = [];
     private CaptureFolderScope _scope;
+    private Guid? _revealedFolderId;
+    internal Guid? RevealedFolderId => _revealedFolderId;
     public CaptureFolderScope SelectedScope => _scope;
     public bool HasFolderScope => _scope.FolderId is not null;
     public bool CanSetNewCaptureFolder => _scope.FolderId is { } id && _controller.Queue.FindFolder(id) is not null;
@@ -118,6 +120,7 @@ public sealed partial class GalleryViewModel
         seen.Add(folder.Id);
         (int captures, CaptureRecord? newest) = index.Subtree(folder.Id);
         card.Update(folder.Name, captures, index.ChildCount(folder.Id), newest is null ? null : GetOrCreateTile(newest));
+        card.IsSelected = folder.Id == _revealedFolderId;
         return card;
     }
 
@@ -189,20 +192,31 @@ public sealed partial class GalleryViewModel
 
     public void SelectScope(CaptureFolderScope scope)
     {
-        if (IsRefreshingFolderTree || scope == _scope) return;
-        _scope = scope;
+        ChangeLocation(new(scope, _filter, _selectedTag));
+    }
+
+    internal async Task<CaptureFolder> CreateFolderAsync(string name, CaptureFolderScope scope)
+    {
+        CaptureFolder folder = await _controller.Queue.CreateFolderInScopeAsync(name, scope);
+        _revealedFolderId = folder.Id;
         Refresh();
+        foreach (CaptureFolder ancestor in _controller.Queue.GetFolderPath(folder.Id))
+            if (Flatten(FolderRoots).FirstOrDefault(node => node.FolderId == ancestor.Id) is { } node)
+                node.IsExpanded = true;
+        return folder;
     }
 
     private void RefreshFolderTree()
     {
         CaptureQueue queue = _controller.Queue;
+        if (_revealedFolderId is { } revealed && queue.FindFolder(revealed) is null) _revealedFolderId = null;
         if (_scope.FolderId is { } selected && queue.FindFolder(selected) is null) _scope = CaptureFolderScope.All;
         var previous = Flatten(FolderNodes).ToDictionary(node => node.Scope);
         GalleryFolderNode Node(CaptureFolderScope scope, string name)
         {
             if (!previous.TryGetValue(scope, out var node)) node = new GalleryFolderNode(scope);
-            node.Name = name; node.IsSelected = scope == _scope;
+            node.Name = name;
+            node.IsSelected = _revealedFolderId is { } id ? scope.FolderId == id : scope == _scope;
             return node;
         }
         var children = queue.Folders.ToLookup(folder => folder.ParentId);
@@ -238,6 +252,8 @@ public sealed partial class GalleryViewModel
         // The navigation pane lists folders on their own, by name across dates; newer first on a tie.
         Replace(FolderRoots, rootFolders.OrderBy(root => root.Node.Name, StringComparer.CurrentCultureIgnoreCase)
             .ThenByDescending(root => root.Date).Select(root => root.Node));
+        foreach (GalleryFolderCardViewModel card in _folderCards.Values)
+            card.IsSelected = card.FolderId == _revealedFolderId;
         SyncBrowsingCaptureFolder();
         Raise(nameof(FolderStorageText)); Raise(nameof(ShowFolderStorageInfo));
         Raise(nameof(SelectedScope)); Raise(nameof(HasFolderScope)); Raise(nameof(CanSetNewCaptureFolder));

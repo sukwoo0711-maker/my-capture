@@ -57,6 +57,12 @@ public sealed class GalleryFolderCardViewModel : INotifyPropertyChanged
 
     private bool _isDropAvailable;
     private bool _isDropTarget;
+    private bool _isSelected;
+    public bool IsSelected
+    {
+        get => _isSelected;
+        internal set { if (_isSelected != value) { _isSelected = value; Raise(); } }
+    }
 
     /// <summary>True while a capture drag is in progress and this folder could receive it.</summary>
     public bool IsDropAvailable

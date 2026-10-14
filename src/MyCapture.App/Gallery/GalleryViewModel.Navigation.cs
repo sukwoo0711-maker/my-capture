@@ -20,6 +20,66 @@ public sealed partial class GalleryViewModel
 {
     private IReadOnlyList<GalleryBreadcrumb> _breadcrumb = [];
     private bool _isAllItemsDropTarget;
+    private sealed record NavigationLocation(CaptureFolderScope Scope, GalleryFilter Filter, string? Tag);
+    private readonly Stack<NavigationLocation> _backHistory = new();
+    private readonly Stack<NavigationLocation> _forwardHistory = new();
+    private NavigationLocation CurrentLocation => new(_scope, _filter, _selectedTag);
+
+    public bool CanNavigateBack => _backHistory.Any(IsValidLocation);
+    public bool CanNavigateForward => _forwardHistory.Any(IsValidLocation);
+    public bool CanNavigateParent => !_scope.IsAll;
+
+    private bool IsValidLocation(NavigationLocation location) =>
+        location.Scope.FolderId is not { } id || _controller.Queue.FindFolder(id) is not null;
+
+    private void ChangeLocation(NavigationLocation location, bool remember = true)
+    {
+        if (IsRefreshingFolderTree || !IsValidLocation(location)) return;
+        if (location == CurrentLocation && _revealedFolderId is null) return;
+        if (remember && location != CurrentLocation)
+        {
+            _backHistory.Push(CurrentLocation);
+            _forwardHistory.Clear();
+        }
+        _revealedFolderId = null;
+        _scope = location.Scope;
+        _filter = location.Filter;
+        _selectedTag = location.Tag;
+        Raise(nameof(Filter));
+        Refresh();
+    }
+
+    public bool NavigateBack() => NavigateHistory(_backHistory, _forwardHistory);
+    public bool NavigateForward() => NavigateHistory(_forwardHistory, _backHistory);
+
+    private bool NavigateHistory(Stack<NavigationLocation> source, Stack<NavigationLocation> destination)
+    {
+        if (IsRefreshingFolderTree) return false;
+        while (source.TryPop(out NavigationLocation? location))
+        {
+            if (!IsValidLocation(location) || location == CurrentLocation) continue;
+            destination.Push(CurrentLocation);
+            ChangeLocation(location, remember: false);
+            return true;
+        }
+        RefreshNavigation();
+        return false;
+    }
+
+    /// <summary>Back gestures go up the folder tree, retaining the location for Forward.</summary>
+    public bool NavigateParent()
+    {
+        if (IsRefreshingFolderTree || !CanNavigateParent) return false;
+        CaptureFolderScope parent = _scope.FolderId is { } id
+            && _controller.Queue.FindFolder(id)?.ParentId is { } parentId
+            ? CaptureFolderScope.ForFolder(parentId) : CaptureFolderScope.All;
+        var destination = new NavigationLocation(parent, GalleryFilter.All, null);
+        _forwardHistory.Push(CurrentLocation);
+        if (_backHistory.TryPeek(out NavigationLocation? previous) && previous == destination)
+            _backHistory.Pop();
+        ChangeLocation(destination, remember: false);
+        return true;
+    }
 
     /// <summary>Root folders of every date, in the tree's name order. Subfolders hang off each node.</summary>
     public ObservableCollection<GalleryFolderNode> FolderRoots { get; } = [];
@@ -97,29 +157,13 @@ public sealed partial class GalleryViewModel
     /// <summary>Shows the library root, or one of the image, video and kept views over the whole library.</summary>
     public void ShowView(GalleryFilter filter)
     {
-        if (IsRefreshingFolderTree || (_scope.IsAll && _filter == filter && _selectedTag is null)) return;
-        _selectedTag = null;
-        bool filterChanged = _filter != filter;
-        _filter = filter;
-        if (filterChanged) Raise(nameof(Filter));
-        if (!_scope.IsAll) SelectScope(CaptureFolderScope.All);
-        else Refresh();
+        ChangeLocation(new(CaptureFolderScope.All, filter, null));
     }
 
     /// <summary>Opens a folder or date as a location, without a media view; those apply to the whole library.</summary>
     public void NavigateTo(CaptureFolderScope scope)
     {
-        if (IsRefreshingFolderTree) return;
-        bool hadTag = _selectedTag is not null;
-        _selectedTag = null;
-        if (!scope.IsAll && _filter != GalleryFilter.All)
-        {
-            _filter = GalleryFilter.All;
-            Raise(nameof(Filter));
-            if (scope == _scope) { Refresh(); return; }
-        }
-        if (hadTag && scope == _scope) Refresh();
-        else SelectScope(scope);
+        ChangeLocation(new(scope, GalleryFilter.All, null));
     }
 
     public void ClearSelection()
@@ -188,5 +232,6 @@ public sealed partial class GalleryViewModel
         nameof(AllItemsAccessibleName), nameof(ImagesAccessibleName), nameof(VideosAccessibleName),
         nameof(KeptAccessibleName), nameof(FolderSectionToolTip), nameof(ShowLocationHeader), nameof(ShowSaveHere),
         nameof(SavesNewCapturesHere), nameof(SaveHereToolTip), nameof(ShowNewCaptureDestination), nameof(ShowResultCount),
+        nameof(CanNavigateBack), nameof(CanNavigateForward), nameof(CanNavigateParent),
     ];
 }
