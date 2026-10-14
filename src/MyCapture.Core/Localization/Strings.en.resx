@@ -3953,6 +3953,14 @@ Delete {1} {1:plural:subfolder|subfolders}, {2} {2:plural:image|images}, and {3}
   <data name="EditorFlow_CropBarName" xml:space="preserve"><value>Crop commands</value></data>
   <data name="EditorFlow_SelectionCleared" xml:space="preserve"><value>Selection cleared</value></data>
   <data name="EditorFlow_Selected" xml:space="preserve"><value>Selected: {0}</value></data>
+  <data name="EditorSelection_Count" xml:space="preserve"><value>{0} annotations selected</value></data>
+  <data name="EditorSelection_Move" xml:space="preserve"><value>Move selection</value></data>
+  <data name="EditorSelection_Delete" xml:space="preserve"><value>Delete selection</value></data>
+  <data name="EditorSelection_Duplicate" xml:space="preserve"><value>Duplicate selection</value></data>
+  <data name="EditorSelection_Forward" xml:space="preserve"><value>Bring selection forward</value></data>
+  <data name="EditorSelection_Backward" xml:space="preserve"><value>Send selection backward</value></data>
+  <data name="EditorSelection_UndoHint" xml:space="preserve"><value>Undo: {0} (Ctrl+Z)</value></data>
+  <data name="EditorSelection_RedoHint" xml:space="preserve"><value>Redo: {0} (Ctrl+Y / Ctrl+Shift+Z)</value></data>
   <data name="EditorFlow_Added" xml:space="preserve"><value>Added {0} · Ctrl+Z to undo</value></data>
   <data name="EditorFlow_StepNumberAdded" xml:space="preserve"><value>Added number {0} · Ctrl+Z to undo</value></data>
   <data name="EditorFlow_CloseTitle" xml:space="preserve"><value>Save your edits?</value></data>
