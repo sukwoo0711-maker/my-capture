@@ -47,7 +47,10 @@ internal sealed partial class GalleryWindow
         // The recorded path came from another application's window. Only an existing, fully
         // qualified path is handed to Explorer: it cannot contain quotes or start with '/', so it
         // can never become a switch beyond the fixed "/select," prefix.
-        if (target.Kind == SourceFolderTargetKind.Missing || !Path.IsPathFullyQualified(target.Path))
+        string explorer = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "explorer.exe");
+        ProcessStartInfo? start = SourceDocument.CreateOpenFolderStartInfo(target.Path, explorer,
+            target.Kind == SourceFolderTargetKind.File);
+        if (target.Kind == SourceFolderTargetKind.Missing || start is null)
         {
             LibraryActionStatus.Text = UiText.Get(document
                 ? "Library.Source.FileMissing" : "Library.Source.FolderMissing");
@@ -58,9 +61,6 @@ internal sealed partial class GalleryWindow
         {
             // Always hand the path to Explorer as an argument. Shell-executing the path itself would
             // run it if it ever named a program instead of a folder.
-            string explorer = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "explorer.exe");
-            var start = new ProcessStartInfo(explorer) { UseShellExecute = false };
-            start.ArgumentList.Add(target.Kind == SourceFolderTargetKind.File ? "/select," + target.Path : target.Path);
             Process.Start(start)?.Dispose();
         }
         catch (Exception ex) when (ex is Win32Exception or InvalidOperationException)
