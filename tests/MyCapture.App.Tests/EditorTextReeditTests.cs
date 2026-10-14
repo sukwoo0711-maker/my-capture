@@ -245,6 +245,8 @@ public sealed class EditorTextReeditTests
     public void LibraryLayersReopenPrefilledAndEscRestoresOriginalWithoutHistory() => StaTestHost.Run(() =>
     {
         var source = Controller(out var original);
+        original.Text = "Caption";
+        original.Rect = new RectD(80, 100, 240, 180);
         // Retain this isolated fixture under the test output directory; never use the real library.
         string root = Path.Combine(AppContext.BaseDirectory, "text-reedit-fixtures", Guid.NewGuid().ToString("N"));
         AppPaths paths = AppPaths.CreateForRoot(root);
@@ -264,21 +266,44 @@ public sealed class EditorTextReeditTests
         Assert.Equal(GalleryReeditLoader.LoadFailure.None, failure);
         var restored = Assert.IsType<TextAnnotation>(Assert.Single(context.Document.Items));
         Assert.Equal(original.Id, restored.Id);
-        var editor = new AnnotationEditorControl(context.Frame, context.CropRegion, context.OriginalBitmap,
-            context.Document, context.AssetBitmaps);
+        using var host = EditorKeysTests.EditorWindowHost.Create(context.OriginalBitmap, context.Document);
+        var editor = host.Editor;
+        var surface = Field<AnnotationEditorSurface>(editor, "_surface");
+        Assert.Equal(original.Rect, restored.Rect);
+        Assert.True(TextAnnotationLayout.Measure(restored).Height < restored.Rect.Height / 2);
+        Rect stored = surface.ToSurfaceRect(restored.Rect);
+        Point expectedGlyph = new RotateTransform(restored.RotationDegrees,
+            stored.Left + stored.Width / 2, stored.Top + stored.Height / 2).Transform(stored.TopLeft);
         var controller = Field<AnnotationEditorController>(editor, "_controller");
         controller.SetSelected(restored);
         Assert.True(editor.HandleShortcut(Key.F2, ModifierKeys.None));
+        host.Window.UpdateLayout();
         var box = Field<TextBox>(editor, "_activeTextBox");
+        Point glyph = box.TranslatePoint(box.GetRectFromCharacterIndex(0).TopLeft, surface);
+        Assert.True((glyph - expectedGlyph).Length <= 0.75,
+            $"First glyph at {glyph}, committed rotated caption at {expectedGlyph}.");
+        Assert.Equal(restored.Rect, Assert.IsType<TextAnnotation>(Assert.Single(editor.CreateCurrentImageSnapshot().Items)).Rect);
         Assert.Equal(original.Text, box.Text);
         Assert.Equal(box.Text.Length, box.CaretIndex);
         Assert.Equal(FontWeights.Bold, box.FontWeight);
         Assert.Equal(FontStyles.Italic, box.FontStyle);
         Assert.Equal(original.FontFamily, box.FontFamily.Source);
-        Assert.Equal(original.FontSize, box.FontSize);
+        Assert.Equal(original.FontSize * surface.DipPerPixel, box.FontSize);
         Assert.Equal(original.RotationDegrees, Assert.IsType<RotateTransform>(box.RenderTransform).Angle);
         Assert.Equal(UiText.Get("EditorText_Editing"), editor.StatusText);
+        EditorKeysTests.Invoke(editor, "CommitActiveText");
+        Assert.Equal(original.Rect, restored.Rect);
+        Assert.Equal(0, controller.Undo.UndoCount);
+        Assert.True(editor.HandleShortcut(Key.F2, ModifierKeys.None));
+        box = Field<TextBox>(editor, "_activeTextBox");
         box.Text = "Uncommitted replacement";
+        host.Window.UpdateLayout();
+        Rect fitted = surface.ToSurfaceRect(controller.FitText(restored, box.Text,
+            restored.FontSize, restored.AutoSize, restored.Rect).Rect);
+        Point editedExpected = new RotateTransform(restored.RotationDegrees,
+            fitted.Left + fitted.Width / 2, fitted.Top + fitted.Height / 2).Transform(fitted.TopLeft);
+        Point editedGlyph = box.TranslatePoint(box.GetRectFromCharacterIndex(0).TopLeft, surface);
+        Assert.True((editedGlyph - editedExpected).Length <= 0.75);
         Assert.True(editor.HasUnsavedChanges);
         Assert.True(editor.HandleShortcut(Key.Escape, ModifierKeys.None));
         Assert.Equal(original.Text, restored.Text);

@@ -1077,6 +1077,8 @@ internal sealed partial class AnnotationEditorControl : Grid
         _editingText = annotation;
 
         double dipPerPixel = Math.Max(double.Epsilon, _surface.DipPerPixel);
+        ColorRgba foreground = annotation.Foreground;
+        double luma = 0.299 * foreground.R + 0.587 * foreground.G + 0.114 * foreground.B;
         var textBox = new TextBox
         {
             Text = annotation.Text,
@@ -1087,7 +1089,9 @@ internal sealed partial class AnnotationEditorControl : Grid
             FontWeight = annotation.Bold ? FontWeights.Bold : FontWeights.Normal,
             FontStyle = annotation.Italic ? FontStyles.Italic : FontStyles.Normal,
             Foreground = annotation.Foreground.ToBrush(),
-            Background = annotation.Background.A > 0 ? annotation.Background.ToBrush() : Brushes.Transparent,
+            // TextBox does not draw the caption's outline; keep unplated text readable while editing.
+            Background = annotation.Background.A > 0 ? annotation.Background.ToBrush()
+                : luma > 140 ? Brushes.Black : Brushes.White,
             Opacity = annotation.Opacity,
             BorderBrush = Brush("Accent.Default", Color.FromRgb(0x7C, 0x6C, 0xFF)),
             BorderThickness = new Thickness(1),
@@ -1202,7 +1206,7 @@ internal sealed partial class AnnotationEditorControl : Grid
         }
 
         double dipPerPixel = Math.Max(double.Epsilon, _surface.DipPerPixel);
-        TextLayout fit = _controller.FitText(editing, box.Text ?? string.Empty, editing.FontSize, editing.AutoSize, editing.Rect);
+        TextLayout fit = LiveTextLayout(editing, box.Text ?? string.Empty);
         Rect target = _surface.ToSurfaceRect(fit.Rect);
         double chrome = 2 * _liveTextInset.X;
         box.MinWidth = chrome + Math.Max(1, editing.FontSize * dipPerPixel);
@@ -1225,6 +1229,11 @@ internal sealed partial class AnnotationEditorControl : Grid
             target.Width / 2 + _liveTextInset.X, target.Height / 2 + _liveTextInset.Y);
         UpdateLiveTextViewport(box);
     }
+
+    private TextLayout LiveTextLayout(TextAnnotation text, string content) =>
+        string.Equals(text.Text, content, StringComparison.Ordinal)
+            ? TextLayout.Of(text)
+            : _controller.FitText(text, content, text.FontSize, text.AutoSize, text.Rect);
 
     internal enum CaptionScrollBarSide { Right, Left, Overlay }
 
@@ -1329,7 +1338,7 @@ internal sealed partial class AnnotationEditorControl : Grid
             {
                 // Exactly what committing now would store.
                 text.Text = box.Text;
-                TextLayout.Apply(text, _controller.FitText(editing, box.Text, editing.FontSize, editing.AutoSize, editing.Rect));
+                TextLayout.Apply(text, LiveTextLayout(editing, box.Text));
             }
         }
         snapshot.NormalizeZIndices();

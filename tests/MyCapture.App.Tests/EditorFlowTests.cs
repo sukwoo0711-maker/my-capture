@@ -25,17 +25,25 @@ public sealed class EditorFlowTests
     // ---- Esc ---------------------------------------------------------------------------
 
     [Fact]
-    public void EscapeFinishesTypingThenClearsTheSelectionThenReturnsToSelectAndNeverCloses() => StaTestHost.Run(() =>
+    public void EscapeCancelsTypingThenClearsTheSelectionThenReturnsToSelectAndNeverCloses() => StaTestHost.Run(() =>
     {
         using EditorWindowHost host = EditorWindowHost.Create();
         AnnotationEditorControl editor = host.Editor;
         AnnotationEditorController controller = Controller(editor);
 
-        // 1. Typing: Esc keeps the caption and ends the typing.
+        // 1. Typing: Esc cancels the new caption and ends the typing.
         Invoke(editor, "PlaceTextBox", new PointD(40, 40));
         Field<TextBox>(editor, "_activeTextBox").Text = "메모";
         Assert.True(Press(Field<TextBox>(editor, "_activeTextBox"), Key.Escape, ime: false));
         Assert.Null(Field<TextBox?>(editor, "_activeTextBox"));
+        Assert.Empty(controller.Document.Items);
+        Assert.Same(editor, Keyboard.FocusedElement);
+        Assert.True(host.Window.IsVisible);
+
+        // Commit a separate caption for the remaining selection and tool checks.
+        Invoke(editor, "PlaceTextBox", new PointD(40, 40));
+        Field<TextBox>(editor, "_activeTextBox").Text = "메모";
+        Invoke(editor, "CommitActiveText");
         Assert.Equal("메모", Assert.IsType<TextAnnotation>(Assert.Single(controller.Document.Items)).Text);
 
         // 2. A selection: Esc clears it and keeps the tool.

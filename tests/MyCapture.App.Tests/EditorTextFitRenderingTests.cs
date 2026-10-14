@@ -17,6 +17,56 @@ namespace MyCapture.App.Tests;
 /// </summary>
 public sealed class EditorTextFitRenderingTests
 {
+    [Theory]
+    [InlineData(false, (byte)255)]
+    [InlineData(true, (byte)255)]
+    [InlineData(false, (byte)0)]
+    [InlineData(true, (byte)0)]
+    public void UnplatedLiveCaptionRemainsReadableOnMatchingScreenshot(bool reopen, byte shade) => StaTestHost.Run(() =>
+    {
+        using EditorWindowHost host = EditorWindowHost.Create(Solid(640, 360, shade));
+        AnnotationEditorController controller = Controller(host.Editor);
+        controller.StrokeColor = ColorRgba.FromRgb(shade, shade, shade);
+        Invoke(host.Editor, "PlaceTextBox", new PointD(60, 50));
+        TextBox box = Field<TextBox>(host.Editor, "_activeTextBox");
+        box.Text = "HHH";
+        if (reopen)
+        {
+            Invoke(host.Editor, "CommitActiveText");
+            controller.SetSelected(Assert.Single(controller.Document.Items));
+            Assert.True(host.Editor.HandleShortcut(System.Windows.Input.Key.F2, System.Windows.Input.ModifierKeys.None));
+            box = Field<TextBox>(host.Editor, "_activeTextBox");
+        }
+        host.Window.UpdateLayout();
+        var caption = Assert.IsType<TextAnnotation>(Assert.Single(controller.Document.Items));
+        Assert.True(caption.HasOutline);
+        Assert.Equal(ColorRgba.Transparent, caption.Background);
+        Assert.Equal(ColorRgba.FromRgb(shade, shade, shade), caption.Foreground);
+
+        // Render the actual live control and inspect the first glyph, excluding border and caret.
+        var rendered = new RenderTargetBitmap((int)Math.Ceiling(box.ActualWidth),
+            (int)Math.Ceiling(box.ActualHeight), 96, 96, PixelFormats.Pbgra32);
+        var visual = new DrawingVisual();
+        using (DrawingContext dc = visual.RenderOpen())
+        {
+            dc.DrawRectangle(new SolidColorBrush(Color.FromRgb(shade, shade, shade)), null,
+                new Rect(0, 0, box.ActualWidth, box.ActualHeight));
+            dc.DrawRectangle(new VisualBrush(box), null, new Rect(0, 0, box.ActualWidth, box.ActualHeight));
+        }
+        rendered.Render(visual);
+        Rect first = box.GetRectFromCharacterIndex(0);
+        Rect next = box.GetRectFromCharacterIndex(1);
+        var region = new Int32Rect((int)Math.Ceiling(first.Left), (int)Math.Ceiling(first.Top),
+            (int)Math.Floor(next.Left - first.Left), (int)Math.Floor(first.Height));
+        byte[] pixels = new byte[region.Width * region.Height * 4];
+        rendered.CopyPixels(region, pixels, region.Width * 4, 0);
+        byte[] intensities = Enumerable.Range(0, pixels.Length / 4).Select(index => pixels[index * 4]).ToArray();
+        Assert.Contains(intensities, value => value < 40);
+        Assert.Contains(intensities, value => value > 215);
+        Invoke(host.Editor, "CommitActiveText");
+        Assert.Equal(ColorRgba.Transparent, caption.Background);
+    });
+
     [Fact]
     public void LegacyCaptionsThatFitTheirBoxKeepTheirExactPixels() => StaTestHost.Run(() =>
     {
