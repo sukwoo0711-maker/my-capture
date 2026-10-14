@@ -3953,6 +3953,14 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="EditorFlow_CropBarName" xml:space="preserve"><value>자르기 명령</value></data>
   <data name="EditorFlow_SelectionCleared" xml:space="preserve"><value>선택 해제됨</value></data>
   <data name="EditorFlow_Selected" xml:space="preserve"><value>선택: {0}</value></data>
+  <data name="EditorSelection_Count" xml:space="preserve"><value>주석 {0}개 선택</value></data>
+  <data name="EditorSelection_Move" xml:space="preserve"><value>선택 항목 이동</value></data>
+  <data name="EditorSelection_Delete" xml:space="preserve"><value>선택 항목 삭제</value></data>
+  <data name="EditorSelection_Duplicate" xml:space="preserve"><value>선택 항목 복제</value></data>
+  <data name="EditorSelection_Forward" xml:space="preserve"><value>선택 항목 앞으로</value></data>
+  <data name="EditorSelection_Backward" xml:space="preserve"><value>선택 항목 뒤로</value></data>
+  <data name="EditorSelection_UndoHint" xml:space="preserve"><value>실행 취소: {0} (Ctrl+Z)</value></data>
+  <data name="EditorSelection_RedoHint" xml:space="preserve"><value>다시 실행: {0} (Ctrl+Y / Ctrl+Shift+Z)</value></data>
   <data name="EditorFlow_Added" xml:space="preserve"><value>{0} 추가 · Ctrl+Z로 취소</value></data>
   <data name="EditorFlow_StepNumberAdded" xml:space="preserve"><value>{0}번 추가 · Ctrl+Z로 취소</value></data>
   <data name="EditorFlow_CloseTitle" xml:space="preserve"><value>편집한 내용을 저장하시겠습니까?</value></data>

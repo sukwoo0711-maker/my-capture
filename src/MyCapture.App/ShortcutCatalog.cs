@@ -27,6 +27,11 @@ internal static class ShortcutCatalog
         Add(ShortcutScope.Annotation, "Cancel", Key.Escape, "Esc");
         Add(ShortcutScope.Annotation, "Undo", Key.Z, "Ctrl+Z", ModifierKeys.Control);
         Add(ShortcutScope.Annotation, "Redo", Key.Y, "Ctrl+Y", ModifierKeys.Control);
+        Add(ShortcutScope.Annotation, "Redo", Key.Z, "Ctrl+Shift+Z", ModifierKeys.Control | ModifierKeys.Shift);
+        Add(ShortcutScope.Annotation, "SelectAll", Key.A, "Ctrl+A", ModifierKeys.Control);
+        Add(ShortcutScope.Annotation, "Duplicate", Key.D, "Ctrl+D", ModifierKeys.Control);
+        Add(ShortcutScope.Annotation, "BringForward", Key.OemCloseBrackets, "Ctrl+]", ModifierKeys.Control);
+        Add(ShortcutScope.Annotation, "SendBackward", Key.OemOpenBrackets, "Ctrl+[", ModifierKeys.Control);
         Add(ShortcutScope.Annotation, "Delete", Key.Delete, "Del");
         Add(ShortcutScope.Annotation, "Delete", Key.Back, "Backspace");
         Add(ShortcutScope.Annotation, "RotateLeft", Key.Q, "Q");
@@ -37,6 +42,8 @@ internal static class ShortcutCatalog
         {
             Add(ShortcutScope.Crop, command, key, hint);
             Add(ShortcutScope.Crop, command + "Fast", key, "Shift+" + hint, ModifierKeys.Shift);
+            Add(ShortcutScope.Annotation, command, key, hint);
+            Add(ShortcutScope.Annotation, command + "Fast", key, "Shift+" + hint, ModifierKeys.Shift);
         }
         foreach (var (command, key) in new[] { ("Copy", Key.C), ("Edit", Key.E), ("Pin", Key.P), ("Save", Key.S), ("CopyText", Key.T) })
             Add(ShortcutScope.QuickAccess, command, key, key.ToString());
