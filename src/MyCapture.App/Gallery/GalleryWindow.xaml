@@ -75,6 +75,9 @@
              even though menu items are outside the visual tree. -->
         <ContextMenu x:Key="Gallery.TileContextMenu" x:Shared="False"
                      DataContext="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}">
+            <MenuItem Header="{loc:Text Gallery.Compare}"
+                      Command="{x:Static gallery:GalleryWindow.CompareCommand}"
+                      CommandTarget="{Binding PlacementTarget, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
             <MenuItem Header="{Binding IsPinned, Converter={StaticResource PinLabel}}"
                       CommandParameter="{Binding}"
                       AutomationProperties.Name="{loc:Text LibraryUx_KeepToggleName}"
@@ -1217,7 +1220,8 @@
             <Setter Property="VerticalAlignment" Value="Center" />
             <Style.Triggers>
                 <DataTrigger Binding="{Binding DataContext.HasSelection, RelativeSource={RelativeSource AncestorType=Window}}" Value="True">
-                    <Setter Property="Padding" Value="10,6" />
+                    <Setter Property="Padding" Value="4,6" />
+                    <Setter Property="Margin" Value="0,0,4,0" />
                 </DataTrigger>
             </Style.Triggers>
         </Style>
@@ -1525,6 +1529,8 @@
                         Click="OnExportArchiveClick" ToolTip="{loc:Text Library.Archive.Hint}" />
                 <Button x:Name="ContactSheetButton" Content="{loc:Text ContactSheet.Action}" Style="{StaticResource LibraryUx.CommandButton}"
                         Click="OnContactSheetClick" />
+                <Button Content="{loc:Text Gallery.Compare}" Style="{StaticResource LibraryUx.CommandButton}"
+                        Command="{x:Static gallery:GalleryWindow.CompareCommand}" />
                 <Button x:Name="MoveCapturesButton" Content="{loc:Text Folder410.MoveCaptures}" Style="{StaticResource LibraryUx.CommandButton}"
                         Click="OnMoveCapturesClick" ToolTip="{loc:Text LibraryUx_MoveHint}" />
                 <Button Content="{loc:Text Library.Tags.Edit}" Style="{StaticResource LibraryUx.CommandButton}"

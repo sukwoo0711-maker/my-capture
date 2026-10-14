@@ -141,9 +141,11 @@ public sealed partial class SettingsThemePreviewTests
             var selection = (Panel)window.FindName("SelectionCommands");
             Button[] visibleActions = selection.Children.OfType<Button>().Where(button => button.IsVisible).ToArray();
             SaveLibraryUxEvidence(window, AppTheme.Midnight, $"minimum-window-selection-{language}.png");
-            Assert.Equal(7, visibleActions.Length); // clear, ZIP, PDF, move, tags, delete, reduce (GIF is video only)
+            Assert.Equal(8, visibleActions.Length); // clear, ZIP, PDF, compare, move, tags, delete, reduce (GIF is video only)
             Assert.Same(window.FindName("ContactSheetButton"), visibleActions[2]);
-            Assert.Equal(UiText.Get("Library.Tags.Edit"), visibleActions[4].Content);
+            Assert.Same(GalleryWindow.CompareCommand, visibleActions[3].Command);
+            Assert.False(GalleryWindow.CompareCommand.CanExecute(null, visibleActions[3]));
+            Assert.Equal(UiText.Get("Library.Tags.Edit"), visibleActions[5].Content);
             Assert.Equal(UiText.Get("Text_4B8D541EBE6D"), placeholder.Text);
             // More stays after them, so restoring deleted captures is reachable with a selection.
             foreach (FrameworkElement element in visibleActions.Append<FrameworkElement>(placeholder).Append(more))
@@ -158,6 +160,17 @@ public sealed partial class SettingsThemePreviewTests
                 AssertNotTrimmed(Descendants(button).OfType<TextBlock>().Single(), language);
             Assert.Equal(barHeight, bar.ActualHeight, 1);
             Assert.Equal(workspaceTop, workspace.TranslatePoint(new Point(), client).Y, 1);
+
+            // Comparing two images shares the selection with PDF export and the earlier lanes.
+            GalleryItemViewModel second = vm.Groups.SelectMany(group => group.Items).Skip(1).First();
+            vm.Select(second.Id, control: true);
+            SettleGalleryLayout(window);
+            Assert.True(GalleryWindow.CompareCommand.CanExecute(null, visibleActions[3]));
+            foreach (Button button in selection.Children.OfType<Button>().Where(button => button.IsVisible))
+                AssertInsideClient(button, client, language);
+            vm.Select(second.Id, control: true);
+            SettleGalleryLayout(window);
+            Assert.False(GalleryWindow.CompareCommand.CanExecute(null, visibleActions[3]));
 
             ListBox rows = (ListBox)window.FindName("RowsList");
             ScrollViewer scroll = Descendants(rows).OfType<ScrollViewer>().First();

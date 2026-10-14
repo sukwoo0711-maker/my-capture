@@ -4357,4 +4357,12 @@ Delete {1} {1:plural:subfolder|subfolders}, {2} {2:plural:image|images}, and {3}
   <data name="ContactSheet.NoImages" xml:space="preserve">
     <value>Select images for the PDF. Videos are skipped.</value>
   </data>
+  <data name="Gallery.Compare" xml:space="preserve"><value>Compare</value></data>
+  <data name="Gallery.Compare.SideBySide" xml:space="preserve"><value>Side by side</value></data>
+  <data name="Gallery.Compare.Overlay" xml:space="preserve"><value>Overlay</value></data>
+  <data name="Gallery.Compare.Sync" xml:space="preserve"><value>Sync zoom and pan</value></data>
+  <data name="Gallery.Compare.Mode" xml:space="preserve"><value>Compare mode</value></data>
+  <data name="Gallery.Compare.View" xml:space="preserve"><value>Capture comparison</value></data>
+  <data name="Gallery.Compare.Controls" xml:space="preserve"><value>Mouse wheel: zoom · Drag: pan · Tab: swap sides · Esc: close · Arrow keys in overlay: move divider</value></data>
+  <data name="Gallery.Compare.LoadFailed" xml:space="preserve"><value>The images could not be loaded for comparison.</value></data>
 </root>
