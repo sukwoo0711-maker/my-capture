@@ -99,7 +99,8 @@ internal sealed partial class GalleryWindow
     /// </summary>
     private void ShowScope(CaptureFolderScope scope)
     {
-        if (_viewModel.SelectedScope == scope && (scope.IsAll || _viewModel.Filter == GalleryFilter.All)) return;
+        if (_viewModel.SelectedScope == scope && _viewModel.SelectedTag is null
+            && (scope.IsAll || _viewModel.Filter == GalleryFilter.All)) return;
         _folderNavigationUpdating = true;
         try { CloseInlinePlayer(); _viewModel.NavigateTo(scope); }
         finally { _folderNavigationUpdating = false; }
