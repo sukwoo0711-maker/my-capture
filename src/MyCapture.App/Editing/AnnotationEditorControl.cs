@@ -1115,6 +1115,8 @@ internal sealed partial class AnnotationEditorControl : Grid
         var textBox = new TextBox
         {
             Text = annotation.Text,
+            // Preserve fractional image-scaled widths so live wrapping matches FormattedText.
+            UseLayoutRounding = false,
             MinWidth = 0,
             MinHeight = 0,
             FontFamily = new FontFamily(annotation.FontFamily),
@@ -1214,7 +1216,12 @@ internal sealed partial class AnnotationEditorControl : Grid
             return;
         }
 
-        _liveTextInset = new Point(first.X, first.Y);
+        var host = box.Template?.FindName("PART_ContentHost", box) as ScrollViewer;
+        var bar = host?.Template?.FindName("PART_VerticalScrollBar", host) as ScrollBar;
+        // Reopened captions may already overflow when measured. The left scrollbar is
+        // a separate slot, not text padding, and UpdateLiveTextViewport adds it once.
+        double leftBar = bar is { Visibility: Visibility.Visible } && Grid.GetColumn(bar) == 0 ? bar.ActualWidth : 0;
+        _liveTextInset = new Point(first.X - leftBar, first.Y);
         LayoutLiveTextBox(box);
     }
 
@@ -2592,11 +2599,11 @@ internal sealed partial class AnnotationEditorControl : Grid
         var button = new ToggleButton
         {
             Content = BuildIcon(iconResourceKey, fallbackGeometry, 20),
-            ToolTip = tooltip, Width = 40, Height = 38, MinHeight = 0, MinWidth = 0, Padding = new Thickness(2), Margin = new Thickness(0, 1, 0, 1),
+            ToolTip = tool is EditorTool.StepNumber or EditorTool.Blur ? tooltip : label,
+            Width = 40, Height = 38, MinHeight = 0, MinWidth = 0, Padding = new Thickness(2), Margin = new Thickness(0, 1, 0, 1),
         };
         button.SetResourceReference(FrameworkElement.StyleProperty, "Rail.ToolButton");
         AutomationName(button, UiText.Format("Text_1BA9F7001237", label, ShortcutCatalog.Get(ShortcutScope.Annotation, tool.ToString()).Hint));
-        button.ToolTip = label;
         AttachEditorShortcut(button, ShortcutScope.Annotation, tool.ToString(), corner: true);
         PreserveEditorMouseFocus(button);
         button.Click += (_, _) => SelectTool(tool);
