@@ -12,6 +12,7 @@ public sealed class CaptureImportService(CaptureQueue queue,
 {
     public const long MaximumFileBytes = 2L * 1024 * 1024 * 1024;
     private readonly SemaphoreSlim _gate = new(1, 1);
+    internal Func<CaptureRecord, Task>? BeforeDuplicateReadForTest { get; set; }
 
     public static bool IsSupported(string path) => Path.GetExtension(path).ToLowerInvariant()
         is ".png" or ".jpg" or ".jpeg" or ".mp4";
@@ -112,6 +113,7 @@ public sealed class CaptureImportService(CaptureQueue queue,
             {
                 string? computed = await Task.Run(async () =>
                 {
+                    if (BeforeDuplicateReadForTest is not null) await BeforeDuplicateReadForTest(record);
                     try
                     {
                         string original = queue.GetFilePath(record, OriginalFileName(record));
@@ -130,7 +132,8 @@ public sealed class CaptureImportService(CaptureQueue queue,
                     await queue.PublishRecordAsync(record, reservation);
                 }
             }
-            if (string.Equals(record.OriginalContentHash, hash, StringComparison.OrdinalIgnoreCase)) return true;
+            if (string.Equals(record.OriginalContentHash, hash, StringComparison.OrdinalIgnoreCase)
+                && ReferenceEquals(queue.Find(record.Id), record) && !queue.IsRemovalPending(record.Id)) return true;
         }
         return false;
     }

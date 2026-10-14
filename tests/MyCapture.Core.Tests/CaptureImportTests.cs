@@ -82,6 +82,94 @@ public sealed class CaptureImportTests
     }
 
     [Fact]
+    public async Task CachedDuplicateRemovedWhileEarlierRecordIsBeingReadDoesNotSkipImport()
+    {
+        var fixture = new Fixture();
+        string incoming = fixture.Source("matching.png", [1, 2, 3]);
+        await fixture.Service.ImportAsync([incoming]);
+        CaptureRecord cached = Assert.Single(fixture.Queue.Records);
+        await fixture.Service.ImportAsync([fixture.Source("earlier.png", [4, 5, 6])]);
+        CaptureRecord earlier = fixture.Queue.Records[0];
+        earlier.OriginalContentHash = null;
+        var reading = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var resume = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        fixture.Service.BeforeDuplicateReadForTest = async record =>
+        {
+            Assert.Same(earlier, record);
+            reading.SetResult();
+            await resume.Task;
+        };
+        Task<CaptureImportResult> import = fixture.Service.ImportAsync([incoming]);
+        try
+        {
+            await reading.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            Assert.True(fixture.Queue.Remove(cached.Id)); // Standalone index removal preserves fixture files.
+        }
+        finally { resume.TrySetResult(); }
+        CaptureImportResult result = await import.WaitAsync(TimeSpan.FromSeconds(10));
+        Assert.Equal(new CaptureImportResult(1, 0, 0, 0, false), result);
+        Assert.Null(fixture.Queue.Find(cached.Id));
+        Assert.Contains(fixture.Queue.Records, record => record.Id != cached.Id
+            && record.OriginalContentHash == cached.OriginalContentHash);
+    }
+
+    [Fact]
+    public async Task CachedDuplicatePendingRemovalDoesNotSkipImport()
+    {
+        var fixture = new Fixture();
+        string incoming = fixture.Source("matching.png", [1, 2, 3]);
+        await fixture.Service.ImportAsync([incoming]);
+        CaptureRecord cached = Assert.Single(fixture.Queue.Records);
+        await fixture.Service.ImportAsync([fixture.Source("earlier.png", [4, 5])]);
+        CaptureRecord earlier = fixture.Queue.Records[0];
+        earlier.OriginalContentHash = null;
+        var reading = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var resumeRead = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var removalStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var prepared = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var resumeRemoval = new ManualResetEventSlim();
+        fixture.Queue.PrepareRemoval = (_, _) =>
+        {
+            removalStarted.SetResult();
+            if (!resumeRemoval.Wait(TimeSpan.FromSeconds(10))) throw new TimeoutException();
+            return new IndexOnlyRemoval();
+        };
+        var service = new CaptureImportService(fixture.Queue, async (record, directory, token) =>
+        {
+            await Fixture.Prepare(record, directory, token);
+            prepared.SetResult();
+        })
+        {
+            BeforeDuplicateReadForTest = async _ => { reading.SetResult(); await resumeRead.Task; },
+        };
+        Task<CaptureImportResult> import = service.ImportAsync([incoming]);
+        Task<CaptureBatchRemovalResult>? removal = null;
+        try
+        {
+            await reading.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            cached.RetentionStartedAt = DateTimeOffset.Now.AddDays(-8);
+            removal = fixture.Queue.RemoveAutomaticallyAsync([cached.Id], "retention-age");
+            await removalStarted.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            Assert.Same(cached, fixture.Queue.Find(cached.Id));
+            Assert.True(fixture.Queue.IsRemovalPending(cached.Id));
+            resumeRead.SetResult();
+            await prepared.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        }
+        finally
+        {
+            resumeRead.TrySetResult();
+            resumeRemoval.Set();
+            if (removal is not null) await removal.WaitAsync(TimeSpan.FromSeconds(10));
+        }
+        Assert.Equal(new CaptureImportResult(1, 0, 0, 0, false), await import.WaitAsync(TimeSpan.FromSeconds(10)));
+    }
+
+    private sealed class IndexOnlyRemoval : ICaptureRemovalTransaction
+    {
+        public bool Rollback() => true;
+    }
+
+    [Fact]
     public async Task ExplicitFolderWinsAndLibraryRootDoesNotUseCaptureDefault()
     {
         var fixture = new Fixture();
