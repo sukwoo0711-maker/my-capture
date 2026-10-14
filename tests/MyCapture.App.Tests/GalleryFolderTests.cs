@@ -435,7 +435,8 @@ public sealed class GalleryFolderTests
             new GalleryController(Queue, NullLogger<GalleryController>.Instance),
             record => Queue.GetFilePath(record, CaptureFileNames.Thumbnail), 96);
         internal GalleryFolderExportService Exporter() => new(Queue, Staging);
-        internal byte[] RenderedBytes(CaptureRecord record) => Encoding.UTF8.GetBytes("rendered-" + record.Id);
+        internal byte[] RenderedBytes(CaptureRecord record) => record.IsVideo
+            ? Encoding.UTF8.GetBytes("rendered-" + record.Id) : ExportPngFixture.Create(record.Id);
         internal byte[] SourceBytes(CaptureRecord record) => Encoding.UTF8.GetBytes("original-" + record.Id);
         internal CaptureRecord Add(DateTimeOffset created, string title = "", bool video = false, bool hasRendered = true)
         {

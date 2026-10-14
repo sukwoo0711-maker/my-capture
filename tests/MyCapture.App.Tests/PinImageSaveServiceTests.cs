@@ -91,7 +91,7 @@ public sealed class PinImageSaveServiceTests
     }
 
     [Fact]
-    public async Task QuickSaveAndSaveAs_KeepTheSourcePageUrlInThePng()
+    public async Task QuickSaveKeepsSourceUrlWhileSaveAsExcludesItByDefault()
     {
         const string page = "https://example.com/docs/page";
         using var temp = new TempDirectory();
@@ -105,7 +105,7 @@ public sealed class PinImageSaveServiceTests
         Assert.Equal(PinSaveStatus.Saved, quick.Status);
         Assert.Equal(PinSaveStatus.Saved, saveAs.Status);
         Assert.Equal(page, PngSourceUrlMetadata.TryReadSourceUrl(quick.Path!));
-        Assert.Equal(page, PngSourceUrlMetadata.TryReadSourceUrl(saveAsPath));
+        Assert.Equal(string.Empty, PngSourceUrlMetadata.TryReadSourceUrl(saveAsPath));
     }
 
     [Fact]

@@ -2998,11 +2998,11 @@
   <data name="GalleryImageChanged" xml:space="preserve"><value>이미지가 로딩 중 변경되었습니다. 다시 여십시오.</value></data>
   <data name="CapturePrecisionActive" xml:space="preserve"><value>Shift · 픽셀 정밀 이동</value></data>
   <data name="CaptureSelectionStart" xml:space="preserve"><value>시작점</value></data>
-  <data name="ExportReduction_Title" xml:space="preserve"><value>파일 크기 줄여 내보내기…</value></data>
+  <data name="ExportReduction_Title" xml:space="preserve"><value>이미지 내보내기</value></data>
   <data name="ExportReduction_Save" xml:space="preserve"><value>다른 이름으로 저장…</value></data>
   <data name="ExportReduction_Drag" xml:space="preserve"><value>폴더로 드래그</value></data>
   <data name="ExportReduction_Cancel" xml:space="preserve"><value>닫기</value></data>
-  <data name="ExportReduction_Description" xml:space="preserve"><value>기준 크기는 지금 편집한 이미지를 PNG로 저장한 크기이며, 원래 파일 크기와 다를 수 있습니다. 목표를 바꾸면 결과를 자동으로 다시 계산합니다. 불투명 이미지는 JPEG로 바꿀 수 있으며 픽셀 크기는 그대로입니다.</value></data>
+  <data name="ExportReduction_Description" xml:space="preserve"><value>기준 용량은 현재 편집한 이미지의 PNG 용량입니다. 자동 형식은 투명도를 유지하고, JPEG는 투명 영역을 흰색으로 저장합니다.</value></data>
   <data name="ExportReduction_TargetLabel" xml:space="preserve"><value>파일 크기 감소 목표</value></data>
   <data name="ExportReduction_Original" xml:space="preserve"><value>원본 품질 · 줄이지 않음</value></data>
   <data name="ExportReduction_Target" xml:space="preserve"><value>목표: 원본 PNG보다 {0}% 작게</value></data>
@@ -3250,7 +3250,7 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="Library.Action.Save" xml:space="preserve"><value>저장</value></data>
   <data name="Library.Archive.Title" xml:space="preserve"><value>선택한 캡처를 새 ZIP으로 내보내기</value></data>
   <data name="Library.Archive.Action" xml:space="preserve"><value>ZIP 내보내기</value></data>
-  <data name="Library.Archive.Hint" xml:space="preserve"><value>편집한 PNG·현재 MP4만 포함합니다. 원본 이미지·인식한 텍스트·제목·태그·설정은 제외합니다. 새 파일명을 선택하십시오.</value></data>
+  <data name="Library.Archive.Hint" xml:space="preserve"><value>편집한 PNG·현재 MP4와 폴더 구조를 포함하며, 파일명에는 캡처 제목이 사용됩니다. PNG의 출처 URL은 '출처 URL 포함' 선택 시 포함됩니다. 별도 원본 이미지·인식 텍스트·태그·설정 파일은 제외합니다. 이미지에 보이는 내용은 유지됩니다.</value></data>
   <data name="Library.Archive.Preparing" xml:space="preserve"><value>선택한 캡처의 안전한 복사본을 준비하고 있습니다…</value></data>
   <data name="Library.Archive.Progress" xml:space="preserve"><value>{1}개 중 {0}개 내보내는 중…</value></data>
   <data name="Library.Archive.Done" xml:space="preserve"><value>{0}개 파일을 내보냈습니다. 라이브러리 원본은 그대로 유지됩니다.</value></data>
@@ -4168,4 +4168,31 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="Tutorial.pin-save.Step2" xml:space="preserve"><value>2. Ctrl+S를 눌러 저장합니다.</value></data>
   <data name="Tutorial.pin-save.Step3" xml:space="preserve"><value>3. 다른 파일로 저장하려면 Ctrl+Shift+S로 저장 위치를 선택합니다.</value></data>
   <data name="Tutorial.Unavailable" xml:space="preserve"><value>사용법 동영상을 불러오지 못했습니다. 아래 단계에서 사용 방법을 확인합니다.</value></data>
+  <data name="ExportOptions.Title" xml:space="preserve"><value>내보내기 옵션</value></data>
+  <data name="ExportOptions.Continue" xml:space="preserve"><value>다음</value></data>
+  <data name="ExportOptions.SourceUrl" xml:space="preserve"><value>출처 URL 포함</value></data>
+  <data name="ExportOptions.Preset" xml:space="preserve"><value>프리셋</value></data>
+  <data name="ExportOptions.Preset.Last" xml:space="preserve"><value>마지막 설정</value></data>
+  <data name="ExportOptions.Preset.Original" xml:space="preserve"><value>원본</value></data>
+  <data name="ExportOptions.Preset.Messenger" xml:space="preserve"><value>메신저용 · 1280px · JPEG</value></data>
+  <data name="ExportOptions.Preset.Document" xml:space="preserve"><value>문서용 · 1920px · PNG</value></data>
+  <data name="ExportOptions.Format" xml:space="preserve"><value>형식</value></data>
+  <data name="ExportOptions.Format.Automatic" xml:space="preserve"><value>자동 · PNG/JPEG</value></data>
+  <data name="ExportOptions.Format.Png" xml:space="preserve"><value>PNG</value></data>
+  <data name="ExportOptions.Format.Jpeg" xml:space="preserve"><value>JPEG</value></data>
+  <data name="ExportOptions.LongEdge" xml:space="preserve"><value>이미지 긴 변</value></data>
+  <data name="ExportOptions.OriginalSize" xml:space="preserve"><value>원본 크기</value></data>
+  <data name="ExportOptions.Pixels" xml:space="preserve"><value>{0}px</value></data>
+  <data name="ExportOptions.Dimensions" xml:space="preserve"><value>결과 크기 {0} × {1}px</value></data>
+  <data name="ExportOptions.Style" xml:space="preserve"><value>꾸미기</value></data>
+  <data name="ExportOptions.Margin" xml:space="preserve"><value>여백</value></data>
+  <data name="ExportOptions.Radius" xml:space="preserve"><value>모서리 반경</value></data>
+  <data name="ExportOptions.Shadow" xml:space="preserve"><value>부드러운 그림자</value></data>
+  <data name="ExportOptions.Background" xml:space="preserve"><value>배경</value></data>
+  <data name="ExportOptions.Background.Transparent" xml:space="preserve"><value>투명</value></data>
+  <data name="ExportOptions.Background.White" xml:space="preserve"><value>흰색</value></data>
+  <data name="ExportOptions.Background.LightGray" xml:space="preserve"><value>밝은 회색</value></data>
+  <data name="ExportOptions.Background.DarkGray" xml:space="preserve"><value>어두운 회색</value></data>
+  <data name="ExportOptions.Background.Accent" xml:space="preserve"><value>강조색</value></data>
+  <data name="ExportOptions.JpegFilter" xml:space="preserve"><value>JPEG 이미지 (*.jpg)|*.jpg</value></data>
 </root>

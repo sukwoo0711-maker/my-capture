@@ -75,6 +75,7 @@ public static class AppSettingsClone
 
     private static ExportSettings Clone(ExportSettings s) => new()
     {
+        LastImageExport = s.LastImageExport with { },
         QuickSaveDirectoryOverride = s.QuickSaveDirectoryOverride,
         CopyToClipboardOnQuickSave = s.CopyToClipboardOnQuickSave,
         FileNamePattern = s.FileNamePattern,

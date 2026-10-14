@@ -152,6 +152,12 @@ public sealed class SourcePagePngMetadataTests
                 null,
                 Result(bitmap, EditorCommitAction.SaveAs),
                 namingRecord: record).GetAwaiter().GetResult());
+            Assert.Equal(string.Empty, PngSourceUrlMetadata.TryReadSourceUrl(saveAsPath));
+            Assert.Equal(expected, copiedUrl);
+            Assert.Equal(expected, PngSourceUrlMetadata.TryReadSourceUrl(queue.GetFilePath(record, CaptureFileNames.Rendered)));
+            settings.Export.LastImageExport = new() { IncludeSourceUrl = true };
+            saveAsPath = Path.Combine(root, "named-with-url.png");
+            Assert.True(commit.CommitAsync(null, Result(bitmap, EditorCommitAction.SaveAs), namingRecord: record).GetAwaiter().GetResult());
             Assert.Equal(expected, PngSourceUrlMetadata.TryReadSourceUrl(saveAsPath));
             Assert.Equal(expected, copiedUrl);
         }

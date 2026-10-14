@@ -1616,6 +1616,7 @@ public partial class App : Application
             () => _settings!,
             () => paths,
             _services.GetRequiredService<ILogger<CaptureCommitService>>());
+        _commit.PersistExportSettings = () => _services.GetRequiredService<SettingsStore>().Save(_settings!);
         _videoLibrary = new MyCapture.App.Recording.VideoLibraryService(
             queue,
             paths,

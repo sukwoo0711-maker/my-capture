@@ -109,6 +109,8 @@ public sealed class SettingsApplyService
         // The window never edits the Store rating state; keep what captures recorded meanwhile.
         next.StoreRating = previous.StoreRating;
         next.StoreUpdate = previous.StoreUpdate;
+        // Export dialogs may have remembered a new preset while this draft was open.
+        next.Export.LastImageExport = previous.Export.LastImageExport;
         // Nor the capture start-guide count; a selector opened meanwhile may have advanced it.
         next.Capture.StartGuideShownCount = previous.Capture.StartGuideShownCount;
         ReconcileFolderDestination(next.Queue, _queue, applyFolderDestination);

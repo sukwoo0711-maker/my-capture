@@ -2,6 +2,7 @@ using System.Globalization;
 using System.IO;
 using System.IO.Compression;
 using MyCapture.Core.Queue;
+using MyCapture.Core.Settings;
 
 namespace MyCapture.App.Gallery;
 
@@ -66,7 +67,7 @@ internal sealed class GalleryFolderExportService
                 string name = CaptureFolderNaming.WithCollisionSuffix(fileName, suffix++);
                 relative = parent.Length == 0 ? name : parent + "/" + name;
             } while (!used.Add(relative));
-            // The plan carries only rendered PNG/MP4 paths, never original images or metadata.
+            // The plan carries rendered PNG/MP4 paths, never separate originals or metadata files.
             entries.Add(new(record, record.ContentRevision, ResolveSource(record), relative));
         }
         string[] orderedDirectories = directories.OrderBy(path => path.Count(c => c == '/'))
@@ -174,7 +175,8 @@ internal sealed class GalleryFolderExportService
     }
 
     internal static Task ExportZipAsync(PreparedFolderExport prepared, string destination,
-        IProgress<int>? progress = null, CancellationToken cancellationToken = default) => Task.Run(() =>
+        IProgress<int>? progress = null, CancellationToken cancellationToken = default,
+        ImageExportOptions? options = null) => Task.Run(() =>
     {
         cancellationToken.ThrowIfCancellationRequested();
         if (Path.GetFullPath(destination).Length > GalleryExportPathBudget.MaximumPathLength)
@@ -196,7 +198,7 @@ internal sealed class GalleryFolderExportService
                 cancellationToken.ThrowIfCancellationRequested();
                 string source = GalleryExportFiles.RelativeChild(prepared.BatchRoot, sources[entry.Record.Id]);
                 using Stream output = archive.CreateEntry(entry.RelativePath, CompressionLevel.NoCompression).Open();
-                GalleryExportFiles.CopyToStream(source, output, cancellationToken);
+                GalleryImageExport.CopyTo(source, output, options ?? new(), cancellationToken);
                 progress?.Report(++done);
             }
             cancellationToken.ThrowIfCancellationRequested();
@@ -204,7 +206,8 @@ internal sealed class GalleryFolderExportService
     }, cancellationToken);
 
     internal static Task<IReadOnlyList<string>> ExportDirectoryAsync(PreparedFolderExport prepared, string destination,
-        IProgress<int>? progress = null, CancellationToken cancellationToken = default) => Task.Run<IReadOnlyList<string>>(() =>
+        IProgress<int>? progress = null, CancellationToken cancellationToken = default,
+        ImageExportOptions? options = null) => Task.Run<IReadOnlyList<string>>(() =>
     {
         cancellationToken.ThrowIfCancellationRequested();
         using GalleryExportFiles.DirectoryLease destinationLease = GalleryExportFiles.DirectoryLease.Open(destination, create: false);
@@ -237,7 +240,7 @@ internal sealed class GalleryFolderExportService
             cancellationToken.ThrowIfCancellationRequested();
             string source = GalleryExportFiles.RelativeChild(prepared.BatchRoot, sources[entry.Record.Id]);
             if (entry.RelativePath.Contains('/'))
-                GalleryExportFiles.Copy(source, Target(entry.RelativePath), cancellationToken);
+                GalleryImageExport.Copy(source, Target(entry.RelativePath), options ?? new(), cancellationToken);
             else
             {
                 string? allocated = null;
@@ -246,7 +249,7 @@ internal sealed class GalleryFolderExportService
                     cancellationToken.ThrowIfCancellationRequested();
                     string target = GalleryExportFiles.Child(destination,
                         CaptureFolderNaming.WithCollisionSuffix(entry.RelativePath, suffix));
-                    try { GalleryExportFiles.Copy(source, target, cancellationToken); allocated = target; break; }
+                    try { GalleryImageExport.Copy(source, target, options ?? new(), cancellationToken); allocated = target; break; }
                     catch (IOException) when (File.Exists(target) || Directory.Exists(target)) { }
                 }
                 if (allocated is null) throw new IOException("No available export file name.");

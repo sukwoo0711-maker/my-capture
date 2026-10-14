@@ -456,6 +456,7 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
         UiText.Get("Capture410.GuideColorInvalid"));
 
     // ================= Export =================
+    private ImageExportOptions _lastImageExport = new();
 
     public string QuickSaveDirectoryOverride
     {
@@ -694,6 +695,7 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
         _captureGuideColorHex = customGuide ? guideColor : CaptureGuideColorValue.DefaultCustomColor;
         _copyToClipboardOnQuickSave = s.Export.CopyToClipboardOnQuickSave;
         _showSourceWindowTitle = s.Export.ShowSourceWindowTitle;
+        _lastImageExport = s.Export.LastImageExport with { };
         _fileNamePattern = s.Export.FileNamePattern;
 
         _closeOnDoubleClick = s.Pin.CloseOnDoubleClick;
@@ -871,6 +873,7 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
                     AppPaths.CreateDefault().QuickSaveRoot),
                 CopyToClipboardOnQuickSave = _copyToClipboardOnQuickSave,
                 ShowSourceWindowTitle = _showSourceWindowTitle,
+                LastImageExport = _lastImageExport with { },
                 FileNamePattern = _fileNamePattern.Trim(),
                 PreserveTransparency = _preservedPreserveTransparency,
             },
