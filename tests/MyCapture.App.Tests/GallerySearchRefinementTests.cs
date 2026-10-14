@@ -76,7 +76,7 @@ public sealed class GallerySearchRefinementTests
     }
 
     [Fact]
-    public void FilenameFallbackIsAttributedAndCannotBypassFieldOrNegationConditions()
+    public void FilenameMatchIsAttributedAndCannotBypassFieldOrNegationConditions()
     {
         var (queue, controller, vm) = Create();
         var record = new CaptureRecord { CreatedAt = new DateTimeOffset(2026, 10, 14, 12, 0, 0, TimeSpan.Zero) };
@@ -89,6 +89,36 @@ public sealed class GallerySearchRefinementTests
         record.Title = "-text:forbidden";
         record.OcrText = "forbidden";
         Assert.Empty(controller.BuildGroups("-text:forbidden", DateTimeOffset.Now));
+    }
+
+    [Theory]
+    [InlineData("mycapture_20261014_120000.PNG", true, CaptureMatchField.ExportFileName)]
+    [InlineData("mycapture_20261014_120000.PNG type:image", true, CaptureMatchField.ExportFileName | CaptureMatchField.MediaType)]
+    [InlineData("\"mycapture_20261014_120000.PNG\"", true, CaptureMatchField.ExportFileName)]
+    [InlineData("-mycapture_20261014_120000.PNG", false, CaptureMatchField.None)]
+    [InlineData("-\"mycapture_20261014_120000.PNG\" type:image", false, CaptureMatchField.None)]
+    [InlineData("mycapture_20261014_120000.PNG type:video", false, CaptureMatchField.None)]
+    [InlineData("mycapture_20261014_120000.PNG absent", false, CaptureMatchField.None)]
+    [InlineData("mycapture_ 20261014_120000.PNG", true, CaptureMatchField.ExportFileName)]
+    [InlineData("title:mycapture_20261014_120000.PNG", false, CaptureMatchField.None)]
+    [InlineData("-title:mycapture_20261014_120000.PNG", true, CaptureMatchField.None)]
+    public void FilenameTokensRespectRefinementNegationAndQuotes(string query, bool expected, CaptureMatchField expectedFields)
+    {
+        var (queue, controller, _) = Create();
+        var now = new DateTimeOffset(2026, 10, 14, 12, 0, 0, TimeSpan.Zero);
+        var record = new CaptureRecord { CreatedAt = now };
+        queue.Add(record);
+
+        foreach (bool collectFields in new[] { false, true })
+        {
+            var fields = new Dictionary<Guid, CaptureMatchField>();
+            CaptureRecord[] matches = controller.BuildGroups(query, now,
+                searchMatchFields: collectFields ? fields : null).SelectMany(group => group.Records).ToArray();
+            if (expected) Assert.Same(record, Assert.Single(matches));
+            else Assert.Empty(matches);
+            if (expected && collectFields) Assert.Equal(expectedFields, fields[record.Id]);
+            else Assert.Empty(fields);
+        }
     }
 
     [Fact]
