@@ -129,6 +129,7 @@ internal sealed partial class VideoEditorWindow : Window
 
     private double _durationMs;
     private bool _mediaReady;
+    private bool _mediaOpened;
     private bool _mediaFailed;
     private bool _closing;
     private string _mediaFailure = string.Empty;
@@ -145,6 +146,15 @@ internal sealed partial class VideoEditorWindow : Window
     internal bool IsMediaReadyForTest => _mediaReady;
 
     internal bool HasMediaFailedForTest => _mediaFailed;
+
+    /// <summary>MediaOpened arrived. The open fallback can make the editor ready before it does.</summary>
+    internal bool HasMediaOpenedForTest => _mediaOpened;
+
+    /// <summary>The source probe finished and its range is applied to the preview.</summary>
+    internal bool IsSourceRangeKnownForTest => _sourceInfo is { IsCompleted: true };
+
+    /// <summary>How long the editor waits for MediaOpened before it opens with a fallback duration.</summary>
+    internal TimeSpan OpenTimeoutForTest { get; set; } = TimeSpan.FromSeconds(5);
 
     internal string MediaFailureForTest => _mediaFailure;
 
@@ -484,7 +494,7 @@ internal sealed partial class VideoEditorWindow : Window
         // never raise MediaOpened for a short clip — the reported "2s video won't load" case.
         // The exact container duration is read in parallel: MediaElement's NaturalDuration
         // comes from Windows Media Player and is truncated to whole seconds.
-        _sourceInfo = VideoSourceProbe.ReadAsync(_recording.OutputPath, _log);
+        _sourceInfo = ReadSourceAsync();
         try
         {
             _media.Source = new Uri(_recording.OutputPath, UriKind.Absolute);
@@ -498,6 +508,22 @@ internal sealed partial class VideoEditorWindow : Window
         }
 
         StartLoadProgress();
+    }
+
+    /// <summary>
+    /// Probes the clip and applies its range as soon as it is known, without waiting for
+    /// MediaOpened. When MediaOpened is late the open fallback makes the editor ready first, and
+    /// when it never arrives a full-range clip would otherwise keep the studio-range expansion.
+    /// </summary>
+    private async Task<VideoSourceInfo> ReadSourceAsync()
+    {
+        VideoSourceInfo source = await VideoSourceProbe.ReadAsync(_recording.OutputPath, _log);
+        if (!_closing)
+        {
+            StudioRangeVideoEffect.Apply(_media, source.StudioRange);
+        }
+
+        return source;
     }
 
     private void StartLoadProgress()
@@ -529,13 +555,15 @@ internal sealed partial class VideoEditorWindow : Window
         };
         _loadProgressTimer.Start();
 
-        _openTimeoutTimer = new DispatcherTimer(DispatcherPriority.Normal) { Interval = TimeSpan.FromSeconds(5) };
+        _openTimeoutTimer = new DispatcherTimer(DispatcherPriority.Normal) { Interval = OpenTimeoutForTest };
         _openTimeoutTimer.Tick += (_, _) =>
         {
             _openTimeoutTimer?.Stop();
             if (!_mediaReady && !_mediaFailed)
             {
-                _log.LogWarning("MediaOpened did not fire within 5s; opening with the container or recorded duration");
+                _log.LogWarning(
+                    "MediaOpened did not fire within {Timeout:0.#}s; opening with the container or recorded duration",
+                    OpenTimeoutForTest.TotalSeconds);
                 double containerMs = _sourceInfo is { IsCompletedSuccessfully: true } probe ? probe.Result.DurationMs : 0;
                 CompleteOpen(VideoDurationResolver.Resolve(containerMs, null, _recording.DurationMs), fromFallback: true);
             }
@@ -1493,14 +1521,20 @@ internal sealed partial class VideoEditorWindow : Window
         double? playerMs = _media.NaturalDuration.HasTimeSpan
             ? _media.NaturalDuration.TimeSpan.TotalMilliseconds
             : null;
-        // The probe never faults and normally finishes before MediaOpened.
+        // The probe never faults and normally finishes before MediaOpened; its range is applied
+        // by the time it completes.
         VideoSourceInfo source = _sourceInfo is null ? new VideoSourceInfo(0, StudioRange: true) : await _sourceInfo;
         if (_closing)
         {
             return;
         }
 
-        StudioRangeVideoEffect.Apply(_media, source.StudioRange);
+        _mediaOpened = true;
+        if (_mediaReady)
+        {
+            _log.LogInformation("MediaOpened arrived after the editor opened via the duration fallback");
+        }
+
         double containerMs = source.DurationMs;
 
         double durationMs = VideoDurationResolver.Resolve(containerMs, playerMs, _recording.DurationMs);
