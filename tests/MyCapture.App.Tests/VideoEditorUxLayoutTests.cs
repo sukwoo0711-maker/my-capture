@@ -223,7 +223,12 @@ public sealed class VideoEditorUxLayoutTests
             // A runner screen smaller than 1400x820 clamps the window, so the widest level is
             // whatever that screen allows; the bar must compact when narrowed and return to it.
             int wide = editor.CommandBarLevelForTest;
-            Assert.InRange(wide, 0, 2);
+            if (editor.ActualWidth >= 1399)
+            {
+                // At the full width the editing tools stay inline; only a clamped window may need More.
+                Assert.InRange(wide, 0, 2);
+            }
+
             int narrowest = wide;
             foreach (var (width, height) in new[] { (760, 555), (960, 516), (1180, 760), (760, 555), (1400, 820) })
             {
