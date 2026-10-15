@@ -71,7 +71,8 @@ public sealed partial class SettingsThemePreviewTests
             Drain(window);
             var tutorialButton = Assert.IsType<Button>(window.FindName("TextCopyTutorialButton"));
             Assert.True(tutorialButton.IsVisible && tutorialButton.IsEnabled && tutorialButton.IsTabStop);
-            Assert.Equal(UiText.Get("TextCapture_TutorialOpen"), tutorialButton.Content);
+            Assert.Null(tutorialButton.Content);
+            Assert.Equal(AutomationProperties.GetName(tutorialButton), tutorialButton.ToolTip);
             Assert.Equal("텍스트 복사 사용법 보기", AutomationProperties.GetName(tutorialButton));
             // Every other "View tutorial" button names the feature it teaches, as the shortcut help does.
             Button[] featureTutorials = Descendants(window).OfType<Button>().Where(button => button.Tag is string id
@@ -80,7 +81,8 @@ public sealed partial class SettingsThemePreviewTests
             Assert.All(featureTutorials, button =>
             {
                 FeatureTutorial feature = TutorialCatalog.Get((string)button.Tag);
-                Assert.Equal(UiText.Get("TextCapture_TutorialOpen"), button.Content);
+                Assert.Null(button.Content);
+                Assert.Equal(AutomationProperties.GetName(button), button.ToolTip);
                 Assert.Equal(FeatureTutorialWindow.OpenButtonName(feature), AutomationProperties.GetName(button));
                 Assert.EndsWith(" 사용법 보기", AutomationProperties.GetName(button), StringComparison.Ordinal);
             });

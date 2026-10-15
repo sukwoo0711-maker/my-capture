@@ -35,6 +35,7 @@
     <!-- Media transport and timeline controls. These replace font-dependent Unicode
          symbols so every Windows locale and fallback font renders the same silhouette. -->
     <PathGeometry x:Key="Icon.Play" Figures="M6.5,4.25 L15.5,10 L6.5,15.75 Z" />
+    <PathGeometry x:Key="Icon.PlayCircle" Figures="M10,2.5 A7.5,7.5 0 1 1 10,17.5 A7.5,7.5 0 1 1 10,2.5 M8,6.5 L13,10 L8,13.5 Z" />
     <GeometryGroup x:Key="Icon.Pause">
         <RectangleGeometry Rect="5.25,4.25 3.25,11.5" RadiusX="0.75" RadiusY="0.75" />
         <RectangleGeometry Rect="11.5,4.25 3.25,11.5" RadiusX="0.75" RadiusY="0.75" />

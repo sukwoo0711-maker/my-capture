@@ -240,8 +240,11 @@ public sealed partial class SettingsThemePreviewTests
             Assert.True(recorder.IsAncestorOf(focused!), $"Focus is on {focused}");
             SaveShellEvidence(window, "settings-shortcut-focus");
 
-            // The settings tutorials' accessible names contain their visible label.
-            foreach (Button button in Descendants(window).OfType<Button>().Where(button => Equals(button.Content, UiText.Get("TextCapture_TutorialOpen"))))
+            // Icon-only guides retain their feature-specific accessible names.
+            Button[] tutorialButtons = Descendants(window).OfType<Button>()
+                .Where(button => ReferenceEquals(button.Style, window.FindResource("Button.Tutorial"))).ToArray();
+            Assert.Equal(13, tutorialButtons.Length);
+            foreach (Button button in tutorialButtons)
                 Assert.EndsWith(" 사용법 보기", System.Windows.Automation.AutomationProperties.GetName(button), StringComparison.Ordinal);
         }
         finally
