@@ -10,6 +10,7 @@ using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Threading;
 using Microsoft.Extensions.Logging;
+using MyCapture.App.Capture;
 using MyCapture.App.Themes;
 using MyCapture.Core.Primitives;
 using MyCapture.Core.Recording;
@@ -108,6 +109,8 @@ internal sealed class RecordingControlWindow : Window
     private bool _stopping;
     private bool _finished;
     private bool _applyingPhysicalLayout;
+    private bool _dpiChangedDuringPhysicalLayout;
+    private DispatcherOperation? _dpiLayoutOperation;
     private bool _captureExclusionApplied;
     private bool _paletteOverlapsRegion;
     private bool _paused;
@@ -133,8 +136,9 @@ internal sealed class RecordingControlWindow : Window
         Title = UiText.Get("Text_C750845B7AA3");
         WindowStyle = WindowStyle.None;
         ResizeMode = ResizeMode.NoResize;
-        AllowsTransparency = true;
-        Background = Brushes.Transparent;
+        AllowsTransparency = CaptureWindowExclusion.SupportsLayeredWindows;
+        Background = AllowsTransparency ? Brushes.Transparent : CaptureWindowExclusion.OpaqueBackground();
+        if (!AllowsTransparency) ModernWindowChrome.SetEnabled(this, false);
         ShowInTaskbar = false;
         Topmost = true;
         WindowStartupLocation = WindowStartupLocation.Manual;
@@ -168,6 +172,8 @@ internal sealed class RecordingControlWindow : Window
 
     /// <summary>Raised the moment a stop begins, before the deferred finalise runs.</summary>
     internal event EventHandler? Stopping;
+
+    internal bool IsCaptureExcluded => _captureExclusionApplied;
 
     internal bool IsRecording => _recorder is { IsRecording: true };
     internal bool CanCaptureStill => _recorder is { IsReady: true } && !_stopping && !_completionPending && !_finished;
@@ -248,7 +254,10 @@ internal sealed class RecordingControlWindow : Window
     /// </summary>
     internal ContextMenu CreateMoreMenu()
     {
-        var menu = new ContextMenu { PlacementTarget = _moreButton, Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom, VerticalOffset = 4 };
+        ContextMenu menu = CaptureWindowExclusion.CreateContextMenu();
+        menu.PlacementTarget = _moreButton;
+        menu.Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom;
+        menu.VerticalOffset = 4;
         AutomationProperties.SetName(menu, UiText.Get("Onboard_RecordMore"));
         var time = new MenuItem
         {
@@ -272,8 +281,7 @@ internal sealed class RecordingControlWindow : Window
         menu.Opened += (_, _) =>
         {
             // The popup is its own window; exclude it from capture like this bar.
-            if (PresentationSource.FromVisual(menu) is HwndSource popup)
-                _ = SetWindowDisplayAffinity(popup.Handle, WdaExcludeFromCapture);
+            CaptureWindowExclusion.ExcludeMenuPopup(menu);
         };
         return menu;
     }
@@ -394,7 +402,7 @@ internal sealed class RecordingControlWindow : Window
             BorderBrush = TryBrush("Border.Accent", Color.FromRgb(0x7C, 0x6C, 0xFF)),
             BorderThickness = new Thickness(BorderThicknessPx),
             Background = Brushes.Transparent,
-            CornerRadius = new CornerRadius(2),
+            CornerRadius = new CornerRadius(AllowsTransparency ? 2 : 0),
             Cursor = Cursors.SizeAll,
             Focusable = true,
         };
@@ -543,11 +551,13 @@ internal sealed class RecordingControlWindow : Window
 
         return new Border
         {
-            Background = TryBrush("Surface.Floating", Color.FromArgb(0xF2, 0x15, 0x1E, 0x2B)),
+            Background = AllowsTransparency
+                ? TryBrush("Surface.Floating", Color.FromArgb(0xF2, 0x15, 0x1E, 0x2B))
+                : Background,
             BorderBrush = TryBrush("Border.Subtle", Color.FromRgb(0x2B, 0x3A, 0x50)),
             BorderThickness = new Thickness(1),
-            CornerRadius = new CornerRadius(10),
-            Effect = Application.Current?.TryFindResource("Shadow.Floating") as System.Windows.Media.Effects.Effect,
+            CornerRadius = new CornerRadius(AllowsTransparency ? 10 : 0),
+            Effect = AllowsTransparency ? Application.Current?.TryFindResource("Shadow.Floating") as System.Windows.Media.Effects.Effect : null,
             Child = new Viewbox
             {
                 Stretch = Stretch.Uniform,
@@ -577,12 +587,32 @@ internal sealed class RecordingControlWindow : Window
 
     private void OnDpiChanged(object? sender, DpiChangedEventArgs e)
     {
-        if (!_applyingPhysicalLayout)
+        if (_applyingPhysicalLayout)
+        {
+            // Moving the HWND can change DPI before this pass installs its region.
+            // Opaque controls need another pass using the final composition scale.
+            if (!AllowsTransparency) _dpiChangedDuringPhysicalLayout = true;
+            return;
+        }
+
+        if (!AllowsTransparency)
+        {
+            QueueDpiLayout();
+        }
+        else
         {
             _ = Dispatcher.BeginInvoke(
                 DispatcherPriority.Loaded,
                 new Action(() => ApplyPhysicalLayout(positionHwnd: true)));
         }
+    }
+
+    private void QueueDpiLayout()
+    {
+        if (_dpiLayoutOperation is { Status: DispatcherOperationStatus.Pending }) return;
+        _dpiLayoutOperation = Dispatcher.BeginInvoke(
+            DispatcherPriority.Loaded,
+            new Action(() => ApplyPhysicalLayout(positionHwnd: true)));
     }
 
     /// <summary>
@@ -616,6 +646,13 @@ internal sealed class RecordingControlWindow : Window
             RectD stripBox = layout.PaletteBounds;
             RectD windowPixels = layout.WindowBounds;
             _paletteOverlapsRegion = layout.PaletteOverlapsRegion;
+            if (!AllowsTransparency)
+            {
+                // Match the HWND's outward-rounded physical bounds and WPF layout rounding.
+                frameBox = frameBox.ToPixelBounds();
+                stripBox = stripBox.ToPixelBounds();
+                windowPixels = windowPixels.ToPixelBounds();
+            }
 
             Width = Math.Max(1, windowPixels.Width / scale);
             Height = Math.Max(1, windowPixels.Height / scale);
@@ -641,6 +678,11 @@ internal sealed class RecordingControlWindow : Window
                 IntPtr hwnd = new WindowInteropHelper(this).Handle;
                 if (hwnd != IntPtr.Zero)
                 {
+                    if (!AllowsTransparency)
+                    {
+                        RecordingControlWindowRegion.Apply(hwnd, windowPixels, frameBox, stripBox,
+                            Math.Max(1, Math.Round(BorderThicknessPx * scale)));
+                    }
                     PhysicalWindowPositioner.PlaceTopmost(hwnd, windowPixels);
                 }
             }
@@ -650,6 +692,11 @@ internal sealed class RecordingControlWindow : Window
         finally
         {
             _applyingPhysicalLayout = false;
+            if (_dpiChangedDuringPhysicalLayout)
+            {
+                _dpiChangedDuringPhysicalLayout = false;
+                QueueDpiLayout();
+            }
         }
     }
 
@@ -1185,7 +1232,8 @@ internal sealed class RecordingControlWindow : Window
         // we keep the strip usable by leaving the whole window hit-testable and instead
         // rely on the transparent interior: transparent pixels in an AllowsTransparency
         // window already pass mouse events to the window beneath. No extended style change
-        // is needed, so this is a no-op kept for clarity and future tuning.
+        // is needed. In opaque mode SetWindowRgn removes that interior from the HWND;
+        // the hole passes clicks through while the frame ring and palette remain interactive.
         _ = enabled;
     }
 
@@ -1233,6 +1281,7 @@ internal sealed class RecordingControlWindow : Window
         SourceInitialized -= OnSourceInitialized;
         ContentRendered -= OnContentRendered;
         DpiChanged -= OnDpiChanged;
+        _dpiLayoutOperation?.Abort();
         _countdownTimer?.Stop();
         _elapsedTimer?.Stop();
 

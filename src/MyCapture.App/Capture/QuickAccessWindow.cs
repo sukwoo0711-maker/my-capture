@@ -97,8 +97,13 @@ internal sealed class QuickAccessWindow : Window
         Topmost = true;
         WindowStartupLocation = WindowStartupLocation.Manual;
         WindowStyle = WindowStyle.None;
-        AllowsTransparency = true;
-        Background = Brushes.Transparent;
+        AllowsTransparency = !excludeFromCapture || CaptureWindowExclusion.SupportsLayeredWindows;
+        Background = AllowsTransparency ? Brushes.Transparent : CaptureWindowExclusion.OpaqueBackground();
+        if (!AllowsTransparency)
+        {
+            ModernWindowChrome.SetEnabled(this, false);
+            Width -= 16; // Remove only the two 8-DIP shadow margins; keep the content width.
+        }
         SetResourceReference(ForegroundProperty, "Text.Primary");
         var panel = new StackPanel { Margin = new Thickness(8) };
         var close = Button("Dialog.Close", Close);
@@ -216,10 +221,11 @@ internal sealed class QuickAccessWindow : Window
         _remaining.SetResourceReference(ForegroundProperty, "Border.Strong");
         _progressReveal.Tick += (_, _) => RevealProgress();
         panel.Children.Add(_remaining);
-        var surface = new Border { Child = panel, Margin = new Thickness(8), CornerRadius = new CornerRadius(12), BorderThickness = new Thickness(1) };
+        var surface = new Border { Child = panel, Margin = new Thickness(AllowsTransparency ? 8 : 0),
+            CornerRadius = new CornerRadius(AllowsTransparency ? 12 : 0), BorderThickness = new Thickness(1) };
         surface.SetResourceReference(Border.BackgroundProperty, "Surface.Floating");
         surface.SetResourceReference(Border.BorderBrushProperty, "Border.Subtle");
-        surface.SetResourceReference(EffectProperty, "Shadow.Card");
+        if (AllowsTransparency) surface.SetResourceReference(EffectProperty, "Shadow.Card");
         Content = surface;
         ToolTip = UiText.Get("Onboard_QuickCardTip");
         SourceInitialized += (_, _) =>

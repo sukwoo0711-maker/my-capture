@@ -142,6 +142,7 @@ public partial class App : Application
         {
             _services = BuildServiceProvider();
             _log = _services.GetRequiredService<ILogger<App>>();
+            CaptureWindowExclusion.Logger = _log;
             _log.LogInformation("MyCapture starting up");
             await RecoverLegacyImportBeforeLoadAsync();
             InitializeShell();

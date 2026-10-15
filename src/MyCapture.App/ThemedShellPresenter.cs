@@ -284,16 +284,19 @@ internal sealed class ThemedShellPresenter(Func<bool> suppressNotification, Func
     /// </summary>
     internal static Window CreateNotificationWindow(UIElement child, string title, Thickness padding, double width = CardWidth)
     {
+        bool layered = CaptureWindowExclusion.SupportsLayeredWindows;
+        CornerRadius corner = layered ? CardCorner : new CornerRadius(0);
+        double margin = layered ? ShadowMargin : 0;
         // The shadow sits on its own layer behind the card, so the card's text is not drawn
         // through the shadow effect and keeps its normal rendering.
-        var shadow = new Border { CornerRadius = CardCorner, IsHitTestVisible = false };
+        var shadow = new Border { CornerRadius = corner, IsHitTestVisible = false };
         shadow.SetResourceReference(Border.BackgroundProperty, "Surface.Floating");
-        shadow.SetResourceReference(UIElement.EffectProperty, "Shadow.Card");
-        var card = new Border { CornerRadius = CardCorner, BorderThickness = new Thickness(1), Padding = padding, Child = child };
+        if (layered) shadow.SetResourceReference(UIElement.EffectProperty, "Shadow.Card");
+        var card = new Border { CornerRadius = corner, BorderThickness = new Thickness(1), Padding = padding, Child = child };
         card.SetResourceReference(Border.BackgroundProperty, "Surface.Floating");
         card.SetResourceReference(Border.BorderBrushProperty, "Border.Subtle");
         AutomationProperties.SetAutomationId(card, "MyCapture.Shell.NotificationCard");
-        var surface = new Grid { Margin = new Thickness(ShadowMargin) };
+        var surface = new Grid { Margin = new Thickness(margin) };
         surface.Children.Add(shadow);
         surface.Children.Add(card);
         var window = new Window
@@ -302,9 +305,9 @@ internal sealed class ThemedShellPresenter(Func<bool> suppressNotification, Func
             ShowInTaskbar = false,
             ResizeMode = ResizeMode.NoResize,
             WindowStyle = WindowStyle.None,
-            AllowsTransparency = true,
-            Background = Brushes.Transparent,
-            Width = width + (2 * ShadowMargin),
+            AllowsTransparency = layered,
+            Background = layered ? Brushes.Transparent : CaptureWindowExclusion.OpaqueBackground(),
+            Width = width + (2 * margin),
             SizeToContent = SizeToContent.Height,
             ShowActivated = false,
             Topmost = true,
@@ -326,13 +329,13 @@ internal sealed class ThemedShellPresenter(Func<bool> suppressNotification, Func
     /// goes on a monitor: its visible card <see cref="EdgeGap"/> inside the bottom-right corner of
     /// the work area, with the transparent shadow band around it.
     /// </summary>
-    internal static Rect NotificationBounds(RectD workArea, double scale, double width, double height)
+    internal static Rect NotificationBounds(RectD workArea, double scale, double width, double height, double shadowMargin = ShadowMargin)
     {
         double left = workArea.Left / scale, top = workArea.Top / scale;
         double right = workArea.Right / scale, bottom = workArea.Bottom / scale;
-        double x = right - EdgeGap - width + ShadowMargin;
-        double y = bottom - EdgeGap - height + ShadowMargin;
-        return new Rect(Math.Max(left - ShadowMargin, x), Math.Max(top - ShadowMargin, y), width, height);
+        double x = right - EdgeGap - width + shadowMargin;
+        double y = bottom - EdgeGap - height + shadowMargin;
+        return new Rect(Math.Max(left - shadowMargin, x), Math.Max(top - shadowMargin, y), width, height);
     }
 
     /// <summary>Puts the window on the pointer's monitor once laid out, and again if a DPI change resizes it.</summary>
@@ -342,7 +345,8 @@ internal sealed class ThemedShellPresenter(Func<bool> suppressNotification, Func
         void Place()
         {
             monitor ??= NotificationMonitor();
-            Rect bounds = NotificationBounds(monitor.WorkArea, monitor.ScaleFactor, window.ActualWidth, window.ActualHeight);
+            Rect bounds = NotificationBounds(monitor.WorkArea, monitor.ScaleFactor, window.ActualWidth, window.ActualHeight,
+                window.AllowsTransparency ? ShadowMargin : 0);
             double scale = monitor.ScaleFactor;
             PhysicalWindowPositioner.PlaceTopmostWithoutActivation(new WindowInteropHelper(window).Handle,
                 new RectD(bounds.X * scale, bounds.Y * scale, bounds.Width * scale, bounds.Height * scale));

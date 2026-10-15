@@ -28,6 +28,15 @@ Windows 10의 일반 지원은 2025-10-14에 종료됐으며 소비자 ESU도 20
 | Glass 테마 | `Surface.Base`를 WPF 배경 위에 그립니다. 시스템 Mica에 의존하지 않으며 지원되는 호스트에서도 backdrop을 none으로 유지합니다. |
 | Print Screen | 레지스트리 값이 없으면 19045에서 꺼짐, 22621부터 켜짐으로 판단합니다. 안내 문구의 설정 경로는 빌드로 고릅니다. 영어는 Windows 10에서 `Ease of Access > Keyboard`, Windows 11에서 `Accessibility > Keyboard`이고, 한국어는 두 OS 모두 `접근성 > 키보드`입니다. Windows 10의 옵션 이름은 "PrtScn"을 쓰므로 설정 검색 안내는 쓰지 않습니다. |
 
+Windows 10에서는 WPF의 픽셀별 알파 레이어드 창(`AllowsTransparency=true`)에
+`SetWindowDisplayAffinity(WDA_EXCLUDEFROMCAPTURE)`를 적용하면 오류 8이 반환됩니다.
+[Microsoft의 제한 설명](https://learn.microsoft.com/en-us/archive/msdn-technet-forums/7ce400f0-ebda-4b95-869c-85b5b93f972d)에 따라
+빌드 번호 대신 UI 스레드에서 화면 밖의 숨겨진 1×1 레이어드 창을 만들어 실제 API 성공 여부를 한 번 검사하고 캐시합니다.
+미지원 환경에서는 녹화 제어창을 불투명 창으로 만들고, 물리 픽셀 기준 프레임 링과 팔레트의 합집합을
+`SetWindowRgn`으로 적용하여 내부 클릭 통과를 유지합니다. 카운트다운·셸 알림·빠른 작업창·핀 도구막대도
+불투명 배경과 사각 모서리를 사용하며 그림자 여백만 제거합니다. 녹화 옵션·핀 투명도 메뉴는 HWND 생성 전에
+팝업 투명도를 끄고 별도로 캡처 제외를 적용합니다. 지원 환경의 레이어드 표시와 녹화에 포함되는 시각 표시는 유지합니다.
+
 ## 나머지 의존성
 
 - WGC `CreateFreeThreaded`는 17763, `CreateForMonitor` interop은 18362, 커서 속성은 19041부터입니다.
@@ -77,6 +86,8 @@ Store 서명본에서도 같은 스위치로 검증합니다. Windows 10의 진�
 ## 실기 수용 조건
 
 Windows 10 22H2 x64에서 Store 설치·업데이트와 zip 실행, 기본 WGC 녹화와 GDI 폴백, 커서 포함·제외,
-캡처 제외 창, 모든 테마의 제목 표시줄·핀 모서리, 100/150% DPI, PrtSc 설정 열기, Explorer 경로,
+캡처 제외 창, 영역 모드 녹화 제어창의 작은 영역·전체 화면 녹화 시작과 프레임 내부 클릭 통과,
+팔레트 위아래 전환·녹화 시작·DPI 변경 후 영역 갱신, 녹화 중 카운트다운·알림·메뉴의 프레임 제외,
+모든 테마의 제목 표시줄·핀 모서리, 100/150% DPI, PrtSc 설정 열기, Explorer 경로,
 Windows OCR·향상 OCR, MP4/GIF 편집을 확인합니다. Windows 11에서는 테두리 제거·둥근 모서리·Store 동작 회귀를 확인합니다.
 실기 확인 전에는 Windows 10에서 노란 테두리의 프레임 제외와 각 GPU/코덱 조합을 검증 대기 상태로 유지합니다.
