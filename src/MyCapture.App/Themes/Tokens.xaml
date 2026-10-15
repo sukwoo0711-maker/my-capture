@@ -115,6 +115,8 @@
     <SolidColorBrush x:Key="Accent.Default" Color="{StaticResource Primitive.Yellow400}" />
     <!-- Bare text and glyphs retain the original violet; red uses the readable foreground ramp. -->
     <SolidColorBrush x:Key="Accent.Foreground" Color="{StaticResource Primitive.Yellow400}" />
+    <SolidColorBrush x:Key="Accent.Indicator" Color="{StaticResource Primitive.Yellow400}" />
+    <SolidColorBrush x:Key="Border.SelectedTool" Color="Transparent" />
     <SolidColorBrush x:Key="Accent.Hover" Color="{StaticResource Primitive.Yellow300}" />
     <SolidColorBrush x:Key="Accent.Pressed" Color="{StaticResource Primitive.Yellow600}" />
     <SolidColorBrush x:Key="Accent.Subtle" Color="{StaticResource Primitive.Yellow900}" />

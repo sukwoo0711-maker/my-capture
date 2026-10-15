@@ -105,11 +105,19 @@ internal static class WorkspaceTheme
         }
         if (selectedAccent == AppAccent.Red)
         {
-            foreach ((string key, ThemeColor color) in AccentPalette.RedOverrides(role == WorkspaceRole.Gallery))
+            var surfaces = ThemeCatalog.ColorsFor(palette).ToDictionary(pair => pair.Key, pair =>
+            {
+                Color c = ((SolidColorBrush)resources[pair.Key]).Color;
+                return new ThemeColor(c.A, c.R, c.G, c.B);
+            });
+            var red = AccentPalette.RedOverrides(role == WorkspaceRole.Gallery, surfaces);
+            foreach ((string key, ThemeColor color) in red)
             {
                 if (resources[key] is SolidColorBrush brush)
                     resources[key] = ThemeBrushes.Recolored(brush, Color.FromArgb(color.A, color.R, color.G, color.B));
             }
+            resources["Accent.Foreground"] = resources["Accent.Cool"];
+            resources["Border.SelectedTool"] = resources["Accent.Indicator"];
         }
         // Surface.Hover was just replaced; the folder card's wash aliases the new brush.
         ThemeService.ApplyFolderHoverResources(resources, contrast: false);

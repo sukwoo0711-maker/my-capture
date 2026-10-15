@@ -26,6 +26,7 @@ public sealed partial class SettingsThemePreviewTests
             string root = TestRecycleBin.CreateTempSubdirectory("mc-accent-preview-").FullName;
             var store = new SettingsStore(AppPaths.CreateForRoot(root), NullLogger<SettingsStore>.Instance);
             AppSettings saved = NewInstallDefaults.Create();
+            saved.General.AccentColor = AppAccentNames.Violet; // Existing explicit choice must survive the new default.
             bool failSave = false;
             int saves = 0;
             int failures = 0;
@@ -115,7 +116,7 @@ public sealed partial class SettingsThemePreviewTests
                 window.ShowSettings();
                 SettingsDraft draft = Assert.IsType<SettingsDraft>(window.DataContext);
                 draft.ResetToDefaults();
-                AssertAccent(AppAccent.Violet);
+                AssertAccent(AppAccent.Red);
                 Assert.Equal(AppAccentNames.Red, saved.General.AccentColor);
                 string exported = Path.Combine(root, "red-export.json");
                 store.ExportTo(saved, exported);

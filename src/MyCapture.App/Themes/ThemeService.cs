@@ -24,7 +24,7 @@ internal static class ThemeService
     private static readonly DropShadowEffect NoShadow = CreateNoShadow();
 
     internal static AppTheme Current { get; private set; } = AppTheme.Workspace;
-    internal static AppAccent CurrentAccent { get; private set; } = AppAccent.Violet;
+    internal static AppAccent CurrentAccent { get; private set; } = AppAccent.Red;
 
     /// <summary>Null until the first Apply; lets diagnostics restore the pre-fixture state.</summary>
     internal static AppTheme? IsAppliedForTest => _applied ? Current : null;
@@ -132,6 +132,12 @@ internal static class ThemeService
         ThemeColor foreground = colors[accent == AppAccent.Red ? "Accent.Cool" : "Accent.Default"];
         SetBrush(resources, "Accent.Foreground", contrast ? SystemColor(SystemColorRole.Highlight)
             : Color.FromArgb(foreground.A, foreground.R, foreground.G, foreground.B));
+        ThemeColor indicator = colors.TryGetValue("Accent.Indicator", out ThemeColor value) ? value : foreground;
+        SetBrush(resources, "Accent.Indicator", contrast ? SystemColor(SystemColorRole.Highlight)
+            : Color.FromArgb(indicator.A, indicator.R, indicator.G, indicator.B));
+        SetBrush(resources, "Border.SelectedTool", contrast ? SystemColor(SystemColorRole.Highlight)
+            : accent == AppAccent.Red && theme != AppTheme.HighContrast
+                ? Color.FromArgb(indicator.A, indicator.R, indicator.G, indicator.B) : Colors.Transparent);
 
         SetBrush(resources, "Text.Disabled", contrast
             ? SystemColor(SystemColorRole.GrayText)

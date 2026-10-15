@@ -60,7 +60,7 @@ internal sealed class MediaExportProgressRow : Grid
         Visibility = Visibility.Collapsed;
         ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         for (int i = 0; i < 3; i++) ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        _bar.SetResourceReference(Control.ForegroundProperty, "Accent.Default");
+        _bar.SetResourceReference(Control.ForegroundProperty, "Accent.Indicator");
         _bar.SetResourceReference(Control.BackgroundProperty, "Surface.Sunken");
         _percent.SetResourceReference(TextBlock.ForegroundProperty, "Text.Primary");
         _remaining.SetResourceReference(TextBlock.ForegroundProperty, "Text.Secondary");

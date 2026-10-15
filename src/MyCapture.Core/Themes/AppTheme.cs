@@ -77,14 +77,19 @@ public readonly record struct ThemeColor(byte A, byte R, byte G, byte B)
 
 public static class ThemeCatalog
 {
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<AppTheme, IReadOnlyDictionary<string, ThemeColor>> RedPalettes = new();
+
     public static IReadOnlyDictionary<string, ThemeColor> ColorsFor(AppTheme theme, AppAccent accent)
     {
         IReadOnlyDictionary<string, ThemeColor> colors = ColorsFor(theme);
         if (accent != AppAccent.Red || theme == AppTheme.HighContrast) return colors;
-        var accented = new Dictionary<string, ThemeColor>(colors, StringComparer.Ordinal);
-        foreach ((string key, ThemeColor color) in AccentPalette.RedOverrides(AppThemeNames.IsLight(theme)))
-            accented[key] = color;
-        return accented;
+        return RedPalettes.GetOrAdd(theme, value =>
+        {
+            var accented = new Dictionary<string, ThemeColor>(colors, StringComparer.Ordinal);
+            foreach ((string key, ThemeColor color) in AccentPalette.RedOverrides(AppThemeNames.IsLight(value), colors))
+                accented[key] = color;
+            return accented.AsReadOnly();
+        });
     }
 
     public static IReadOnlyDictionary<string, ThemeColor> ColorsFor(AppTheme theme) => theme switch
