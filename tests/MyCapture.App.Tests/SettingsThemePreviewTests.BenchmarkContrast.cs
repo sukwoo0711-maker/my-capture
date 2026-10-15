@@ -85,6 +85,7 @@ public sealed partial class SettingsThemePreviewTests
             progress.Start("Test export");
             var progressWindow = new Window { Content = progress, Width = 500, Height = 120 };
             var failures = new List<string>();
+            AppAccent previousAccent = ThemeService.CurrentAccent;
             try
             {
                 foreach (Window window in new Window[] { tags, contact, gallery.Window, progressWindow })
@@ -96,8 +97,10 @@ public sealed partial class SettingsThemePreviewTests
                 }
                 // The empty contact-sheet fixture completes before starting a renderer or opening a file.
                 Assert.True(contact.PendingPreview.IsCompleted);
+                foreach (AppAccent accent in Enum.GetValues<AppAccent>())
                 foreach ((AppTheme theme, bool system) in BenchmarkPalettes())
                 {
+                    ThemeService.ApplyFromSettings(AppThemeNames.ToSetting(theme), accentColor: AppAccentNames.ToSetting(accent));
                     ApplyBenchmarkPalette(theme, system);
                     Drain(gallery.Window);
                     foreach (Window dialog in new Window[] { tags, contact })
@@ -128,10 +131,12 @@ public sealed partial class SettingsThemePreviewTests
                     ProgressBar exportProgress = progress.Children.OfType<ProgressBar>().Single();
                     foreach (ProgressBar bar in new[] { contactProgress, importProgress, exportProgress })
                     {
-                        Assert.Equal(Assert.IsType<SolidColorBrush>(bar.FindResource("Accent.Default")).Color,
+                        Assert.Equal(Assert.IsType<SolidColorBrush>(bar.FindResource("Accent.Indicator")).Color,
                             Assert.IsType<SolidColorBrush>(bar.Foreground).Color);
                         Assert.Equal(Assert.IsType<SolidColorBrush>(bar.FindResource("Surface.Sunken")).Color,
                             Assert.IsType<SolidColorBrush>(bar.Background).Color);
+                        CheckBenchmarkContrast(bar.Foreground, bar.Background,
+                            $"{theme}/{accent}: progress", failures, minimum: 3);
                     }
                 }
                 Assert.True(failures.Count == 0, string.Join(Environment.NewLine, failures));
@@ -145,6 +150,8 @@ public sealed partial class SettingsThemePreviewTests
                 ThemeService.SystemHighContrastOverrideForTest = null;
                 ThemeService.SystemColorsOverrideForTest = null;
                 FluidMotion.AnimationsEnabledOverrideForTest = null;
+                ThemeService.ApplyFromSettings(AppThemeNames.ToSetting(ThemeService.Current),
+                    accentColor: AppAccentNames.ToSetting(previousAccent));
                 application.Shutdown();
             }
         });
@@ -169,11 +176,12 @@ public sealed partial class SettingsThemePreviewTests
         }
     }
 
-    private static void CheckBenchmarkContrast(Brush foreground, Brush background, string label, List<string> failures)
+    private static void CheckBenchmarkContrast(Brush foreground, Brush background, string label, List<string> failures,
+        double minimum = 4.5)
     {
         Color front = Assert.IsType<SolidColorBrush>(foreground).Color;
         Color back = Assert.IsType<SolidColorBrush>(background).Color;
         double ratio = ThemeContrast.Ratio(ThemeColor.Rgb(front.R, front.G, front.B), ThemeColor.Rgb(back.R, back.G, back.B));
-        if (ratio < 4.5) failures.Add($"{label}: {ratio:F2}:1 (expected 4.5:1)");
+        if (ratio < minimum) failures.Add($"{label}: {ratio:F2}:1 (expected {minimum}:1)");
     }
 }

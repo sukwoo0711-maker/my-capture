@@ -381,7 +381,7 @@
                                         Style="{StaticResource StatePart.Normal}"
                                         Opacity="0"
                                         Width="3"
-                                        Background="{DynamicResource Accent.Default}"
+                                        Background="{DynamicResource Accent.Indicator}"
                                         CornerRadius="2" />
                                 <Grid Grid.Column="1"
                                          Margin="10,0,0,0" VerticalAlignment="Center">
@@ -518,8 +518,8 @@
                         <TextBlock Style="{StaticResource Settings.Label}" Text="{loc:Text Settings.AccentColor}" Margin="0,12,0,0" />
                         <ComboBox x:Name="AccentColorSelector" SelectedValue="{Binding AccentColor}" SelectedValuePath="Tag"
                                   AutomationProperties.Name="{loc:Text Settings.AccentColor}" MinWidth="320" HorizontalAlignment="Left" Margin="0,4,0,4">
-                            <ComboBoxItem Tag="violet" Content="{loc:Text Settings.AccentViolet}" />
                             <ComboBoxItem Tag="red" Content="{loc:Text Settings.AccentRed}" />
+                            <ComboBoxItem Tag="violet" Content="{loc:Text Settings.AccentViolet}" />
                         </ComboBox>
 
                         <CheckBox x:Name="LaunchAtLoginCheck"
@@ -903,19 +903,19 @@
                         </Border>
 
                         <StackPanel Style="{StaticResource Settings.Field}">
-                            <DockPanel LastChildFill="True">
-                                <Button Content="{loc:Text TextCapture_TutorialOpen}" AutomationProperties.Name="{loc:TutorialName capture-region}"
-                                        DockPanel.Dock="Right" Style="{StaticResource Button.Compact}" HorizontalAlignment="Right" Margin="12,0,0,4" Tag="capture-region" Click="OnFeatureTutorial" />
-                                <TextBlock Style="{StaticResource Settings.Label}" Text="{loc:Text Text_096A13A757DB}" VerticalAlignment="Center" />
+                            <DockPanel LastChildFill="True" HorizontalAlignment="Left">
+                                <Button AutomationProperties.Name="{loc:TutorialName capture-region}"
+                                        DockPanel.Dock="Right" Style="{StaticResource Button.Tutorial}" HorizontalAlignment="Right" Margin="8,0,0,2" Tag="capture-region" Click="OnFeatureTutorial" />
+                                <TextBlock Style="{StaticResource Settings.Label}" Text="{loc:Text Text_096A13A757DB}" VerticalAlignment="Center" TextWrapping="Wrap" />
                             </DockPanel>
                             <settings:HotkeyRecorder HorizontalAlignment="Left" AutomationProperties.Name="{loc:Text Text_AF588C59EB7B}" DefaultText="Ctrl+Shift+C" Text="{Binding CaptureHotkey, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
                         </StackPanel>
 
                         <StackPanel Style="{StaticResource Settings.Field}">
-                            <DockPanel LastChildFill="True">
-                                <Button Content="{loc:Text TextCapture_TutorialOpen}" AutomationProperties.Name="{loc:TutorialName record-region}"
-                                        DockPanel.Dock="Right" Style="{StaticResource Button.Compact}" HorizontalAlignment="Right" Margin="12,0,0,4" Tag="record-region" Click="OnFeatureTutorial" />
-                                <TextBlock Style="{StaticResource Settings.Label}" Text="{loc:Text Text_75306DAE2E60}" VerticalAlignment="Center" />
+                            <DockPanel LastChildFill="True" HorizontalAlignment="Left">
+                                <Button AutomationProperties.Name="{loc:TutorialName record-region}"
+                                        DockPanel.Dock="Right" Style="{StaticResource Button.Tutorial}" HorizontalAlignment="Right" Margin="8,0,0,2" Tag="record-region" Click="OnFeatureTutorial" />
+                                <TextBlock Style="{StaticResource Settings.Label}" Text="{loc:Text Text_75306DAE2E60}" VerticalAlignment="Center" TextWrapping="Wrap" />
                             </DockPanel>
                             <settings:HotkeyRecorder HorizontalAlignment="Left" AutomationProperties.Name="{loc:Text Text_6FF5C7B32202}" DefaultText="Ctrl+Shift+X" Text="{Binding RecordRegionHotkey, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
                         </StackPanel>
@@ -925,29 +925,29 @@
                                    Text="{loc:Text SettingsUx_OtherShortcutsHint}" />
 
                         <StackPanel Style="{StaticResource Settings.Field}">
-                            <DockPanel LastChildFill="True">
-                                <Button x:Name="TextCopyTutorialButton" Content="{loc:Text TextCapture_TutorialOpen}" AutomationProperties.Name="{loc:TutorialName text-copy}"
-                                        DockPanel.Dock="Right" Style="{StaticResource Button.Compact}" HorizontalAlignment="Right" Margin="12,0,0,4" Click="OnTextCopyTutorial" />
-                                <TextBlock Style="{StaticResource Settings.Label}" Text="{loc:Text TextCapture_Title}" VerticalAlignment="Center" />
+                            <DockPanel LastChildFill="True" HorizontalAlignment="Left">
+                                <Button x:Name="TextCopyTutorialButton" AutomationProperties.Name="{loc:TutorialName text-copy}"
+                                        DockPanel.Dock="Right" Style="{StaticResource Button.Tutorial}" HorizontalAlignment="Right" Margin="8,0,0,2" Click="OnTextCopyTutorial" />
+                                <TextBlock Style="{StaticResource Settings.Label}" Text="{loc:Text TextCapture_Title}" VerticalAlignment="Center" TextWrapping="Wrap" />
                             </DockPanel>
                             <TextBlock Style="{StaticResource Settings.Description}" Text="{loc:Text TextCapture_HotkeyHint}" />
                             <settings:HotkeyRecorder x:Name="CaptureTextHotkeyRecorder" HorizontalAlignment="Left" AutomationProperties.Name="{loc:Text TextCapture_Title}" DefaultText="" Text="{Binding CaptureTextHotkey, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
                         </StackPanel>
 
                         <StackPanel Style="{StaticResource Settings.Field}">
-                            <DockPanel LastChildFill="True">
-                                <Button Content="{loc:Text TextCapture_TutorialOpen}" AutomationProperties.Name="{loc:TutorialName capture-window}"
-                                        DockPanel.Dock="Right" Style="{StaticResource Button.Compact}" HorizontalAlignment="Right" Margin="12,0,0,4" Tag="capture-window" Click="OnFeatureTutorial" />
-                                <TextBlock Style="{StaticResource Settings.Label}" Text="{loc:Text Text_36458FABBDBB}" VerticalAlignment="Center" />
+                            <DockPanel LastChildFill="True" HorizontalAlignment="Left">
+                                <Button AutomationProperties.Name="{loc:TutorialName capture-window}"
+                                        DockPanel.Dock="Right" Style="{StaticResource Button.Tutorial}" HorizontalAlignment="Right" Margin="8,0,0,2" Tag="capture-window" Click="OnFeatureTutorial" />
+                                <TextBlock Style="{StaticResource Settings.Label}" Text="{loc:Text Text_36458FABBDBB}" VerticalAlignment="Center" TextWrapping="Wrap" />
                             </DockPanel>
                             <settings:HotkeyRecorder HorizontalAlignment="Left" AutomationProperties.Name="{loc:Text Text_C2A254402263}" DefaultText="" Text="{Binding CaptureWindowHotkey, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
                         </StackPanel>
 
                         <StackPanel Style="{StaticResource Settings.Field}">
-                            <DockPanel LastChildFill="True">
-                                <Button Content="{loc:Text TextCapture_TutorialOpen}" AutomationProperties.Name="{loc:TutorialName capture-fullscreen}"
-                                        DockPanel.Dock="Right" Style="{StaticResource Button.Compact}" HorizontalAlignment="Right" Margin="12,0,0,4" Tag="capture-fullscreen" Click="OnFeatureTutorial" />
-                                <TextBlock Style="{StaticResource Settings.Label}" Text="{loc:Text Text_254C836B9ED2}" VerticalAlignment="Center" />
+                            <DockPanel LastChildFill="True" HorizontalAlignment="Left">
+                                <Button AutomationProperties.Name="{loc:TutorialName capture-fullscreen}"
+                                        DockPanel.Dock="Right" Style="{StaticResource Button.Tutorial}" HorizontalAlignment="Right" Margin="8,0,0,2" Tag="capture-fullscreen" Click="OnFeatureTutorial" />
+                                <TextBlock Style="{StaticResource Settings.Label}" Text="{loc:Text Text_254C836B9ED2}" VerticalAlignment="Center" TextWrapping="Wrap" />
                             </DockPanel>
                             <settings:HotkeyRecorder HorizontalAlignment="Left" AutomationProperties.Name="{loc:Text Text_E7770F293C4C}" DefaultText="" Text="{Binding CaptureFullScreenHotkey, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
                         </StackPanel>
@@ -958,74 +958,74 @@
                         </StackPanel>
 
                         <StackPanel Style="{StaticResource Settings.Field}">
-                            <DockPanel LastChildFill="True">
-                                <Button Content="{loc:Text TextCapture_TutorialOpen}" AutomationProperties.Name="{loc:TutorialName capture-scroll}"
-                                        DockPanel.Dock="Right" Style="{StaticResource Button.Compact}" HorizontalAlignment="Right" Margin="12,0,0,4" Tag="capture-scroll" Click="OnFeatureTutorial" />
-                                <TextBlock Style="{StaticResource Settings.Label}" Text="{loc:Text Hotkey.Scroll}" VerticalAlignment="Center" />
+                            <DockPanel LastChildFill="True" HorizontalAlignment="Left">
+                                <Button AutomationProperties.Name="{loc:TutorialName capture-scroll}"
+                                        DockPanel.Dock="Right" Style="{StaticResource Button.Tutorial}" HorizontalAlignment="Right" Margin="8,0,0,2" Tag="capture-scroll" Click="OnFeatureTutorial" />
+                                <TextBlock Style="{StaticResource Settings.Label}" Text="{loc:Text Hotkey.Scroll}" VerticalAlignment="Center" TextWrapping="Wrap" />
                             </DockPanel>
                             <settings:HotkeyRecorder HorizontalAlignment="Left" AutomationProperties.Name="{loc:Text Hotkey.Scroll}" DefaultText="" Text="{Binding ScrollingCaptureHotkey, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
                         </StackPanel>
 
                         <StackPanel Style="{StaticResource Settings.Field}">
-                            <DockPanel LastChildFill="True">
-                                <Button Content="{loc:Text TextCapture_TutorialOpen}" AutomationProperties.Name="{loc:TutorialName capture-delay}"
-                                        DockPanel.Dock="Right" Style="{StaticResource Button.Compact}" HorizontalAlignment="Right" Margin="12,0,0,4" Tag="capture-delay" Click="OnFeatureTutorial" />
-                                <TextBlock Style="{StaticResource Settings.Label}" Text="{loc:Text Hotkey.Delay}" VerticalAlignment="Center" />
+                            <DockPanel LastChildFill="True" HorizontalAlignment="Left">
+                                <Button AutomationProperties.Name="{loc:TutorialName capture-delay}"
+                                        DockPanel.Dock="Right" Style="{StaticResource Button.Tutorial}" HorizontalAlignment="Right" Margin="8,0,0,2" Tag="capture-delay" Click="OnFeatureTutorial" />
+                                <TextBlock Style="{StaticResource Settings.Label}" Text="{loc:Text Hotkey.Delay}" VerticalAlignment="Center" TextWrapping="Wrap" />
                             </DockPanel>
                             <settings:HotkeyRecorder HorizontalAlignment="Left" AutomationProperties.Name="{loc:Text Hotkey.Delay}" DefaultText="" Text="{Binding DelayedCaptureHotkey, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
                         </StackPanel>
 
                         <StackPanel Style="{StaticResource Settings.Field}">
-                            <DockPanel LastChildFill="True">
-                                <Button Content="{loc:Text TextCapture_TutorialOpen}" AutomationProperties.Name="{loc:TutorialName record-pause}"
-                                        DockPanel.Dock="Right" Style="{StaticResource Button.Compact}" HorizontalAlignment="Right" Margin="12,0,0,4" Tag="record-pause" Click="OnFeatureTutorial" />
-                                <TextBlock Style="{StaticResource Settings.Label}" Text="{loc:Text RecordingPauseHotkey_Command}" VerticalAlignment="Center" />
+                            <DockPanel LastChildFill="True" HorizontalAlignment="Left">
+                                <Button AutomationProperties.Name="{loc:TutorialName record-pause}"
+                                        DockPanel.Dock="Right" Style="{StaticResource Button.Tutorial}" HorizontalAlignment="Right" Margin="8,0,0,2" Tag="record-pause" Click="OnFeatureTutorial" />
+                                <TextBlock Style="{StaticResource Settings.Label}" Text="{loc:Text RecordingPauseHotkey_Command}" VerticalAlignment="Center" TextWrapping="Wrap" />
                             </DockPanel>
                             <TextBlock Style="{StaticResource Settings.Description}" Text="{loc:Text RecordingPauseHotkey_Description}" />
                             <settings:HotkeyRecorder HorizontalAlignment="Left" AutomationProperties.Name="{loc:Text RecordingPauseHotkey_HotkeyName}" AutomationProperties.HelpText="{loc:Text RecordingPauseHotkey_Description}" DefaultText="" Text="{Binding PauseRecordingHotkey, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
                         </StackPanel>
 
                         <StackPanel Style="{StaticResource Settings.Field}">
-                            <DockPanel LastChildFill="True">
-                                <Button Content="{loc:Text TextCapture_TutorialOpen}" AutomationProperties.Name="{loc:TutorialName library-open}"
-                                        DockPanel.Dock="Right" Style="{StaticResource Button.Compact}" HorizontalAlignment="Right" Margin="12,0,0,4" Tag="library-open" Click="OnFeatureTutorial" />
-                                <TextBlock Style="{StaticResource Settings.Label}" Text="{loc:Text Text_66BA5DCDA810}" VerticalAlignment="Center" />
+                            <DockPanel LastChildFill="True" HorizontalAlignment="Left">
+                                <Button AutomationProperties.Name="{loc:TutorialName library-open}"
+                                        DockPanel.Dock="Right" Style="{StaticResource Button.Tutorial}" HorizontalAlignment="Right" Margin="8,0,0,2" Tag="library-open" Click="OnFeatureTutorial" />
+                                <TextBlock Style="{StaticResource Settings.Label}" Text="{loc:Text Text_66BA5DCDA810}" VerticalAlignment="Center" TextWrapping="Wrap" />
                             </DockPanel>
                             <settings:HotkeyRecorder HorizontalAlignment="Left" AutomationProperties.Name="{loc:Text Text_6F1D1FE90E37}" DefaultText="" Text="{Binding OpenLibraryHotkey, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
                         </StackPanel>
 
                         <StackPanel Style="{StaticResource Settings.Field}">
-                            <DockPanel LastChildFill="True">
-                                <Button Content="{loc:Text TextCapture_TutorialOpen}" AutomationProperties.Name="{loc:TutorialName pin-clipboard}"
-                                        DockPanel.Dock="Right" Style="{StaticResource Button.Compact}" HorizontalAlignment="Right" Margin="12,0,0,4" Tag="pin-clipboard" Click="OnFeatureTutorial" />
-                                <TextBlock Style="{StaticResource Settings.Label}" Text="{loc:Text Text_1FBCF51E2FF5}" VerticalAlignment="Center" />
+                            <DockPanel LastChildFill="True" HorizontalAlignment="Left">
+                                <Button AutomationProperties.Name="{loc:TutorialName pin-clipboard}"
+                                        DockPanel.Dock="Right" Style="{StaticResource Button.Tutorial}" HorizontalAlignment="Right" Margin="8,0,0,2" Tag="pin-clipboard" Click="OnFeatureTutorial" />
+                                <TextBlock Style="{StaticResource Settings.Label}" Text="{loc:Text Text_1FBCF51E2FF5}" VerticalAlignment="Center" TextWrapping="Wrap" />
                             </DockPanel>
                             <settings:HotkeyRecorder HorizontalAlignment="Left" AutomationProperties.Name="{loc:Text Text_B53D43740F41}" DefaultText="" Text="{Binding PasteToScreenHotkey, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
                         </StackPanel>
 
                         <StackPanel Style="{StaticResource Settings.Field}">
-                            <DockPanel LastChildFill="True">
-                                <Button Content="{loc:Text TextCapture_TutorialOpen}" AutomationProperties.Name="{loc:TutorialName pin-hide-all}"
-                                        DockPanel.Dock="Right" Style="{StaticResource Button.Compact}" HorizontalAlignment="Right" Margin="12,0,0,4" Tag="pin-hide-all" Click="OnFeatureTutorial" />
-                                <TextBlock Style="{StaticResource Settings.Label}" Text="{loc:Text Text_4FED89116C1F}" VerticalAlignment="Center" />
+                            <DockPanel LastChildFill="True" HorizontalAlignment="Left">
+                                <Button AutomationProperties.Name="{loc:TutorialName pin-hide-all}"
+                                        DockPanel.Dock="Right" Style="{StaticResource Button.Tutorial}" HorizontalAlignment="Right" Margin="8,0,0,2" Tag="pin-hide-all" Click="OnFeatureTutorial" />
+                                <TextBlock Style="{StaticResource Settings.Label}" Text="{loc:Text Text_4FED89116C1F}" VerticalAlignment="Center" TextWrapping="Wrap" />
                             </DockPanel>
                             <settings:HotkeyRecorder HorizontalAlignment="Left" AutomationProperties.Name="{loc:Text Text_D6E142D9293C}" DefaultText="" Text="{Binding HideAllPinsHotkey, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
                         </StackPanel>
 
                         <StackPanel Style="{StaticResource Settings.Field}">
-                            <DockPanel LastChildFill="True">
-                                <Button Content="{loc:Text TextCapture_TutorialOpen}" AutomationProperties.Name="{loc:TutorialName pin-click-through}"
-                                        DockPanel.Dock="Right" Style="{StaticResource Button.Compact}" HorizontalAlignment="Right" Margin="12,0,0,4" Tag="pin-click-through" Click="OnFeatureTutorial" />
-                                <TextBlock Style="{StaticResource Settings.Label}" Text="{loc:Text Text_67FE4AF7D334}" VerticalAlignment="Center" />
+                            <DockPanel LastChildFill="True" HorizontalAlignment="Left">
+                                <Button AutomationProperties.Name="{loc:TutorialName pin-click-through}"
+                                        DockPanel.Dock="Right" Style="{StaticResource Button.Tutorial}" HorizontalAlignment="Right" Margin="8,0,0,2" Tag="pin-click-through" Click="OnFeatureTutorial" />
+                                <TextBlock Style="{StaticResource Settings.Label}" Text="{loc:Text Text_67FE4AF7D334}" VerticalAlignment="Center" TextWrapping="Wrap" />
                             </DockPanel>
                             <settings:HotkeyRecorder HorizontalAlignment="Left" AutomationProperties.Name="{loc:Text Text_7116B7156511}" DefaultText="" Text="{Binding ToggleClickThroughHotkey, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
                         </StackPanel>
 
                         <StackPanel Style="{StaticResource Settings.Field}">
-                            <DockPanel LastChildFill="True">
-                                <Button Content="{loc:Text TextCapture_TutorialOpen}" AutomationProperties.Name="{loc:TutorialName pin-restore}"
-                                        DockPanel.Dock="Right" Style="{StaticResource Button.Compact}" HorizontalAlignment="Right" Margin="12,0,0,4" Tag="pin-restore" Click="OnFeatureTutorial" />
-                                <TextBlock Style="{StaticResource Settings.Label}" Text="{loc:Text PinRestore_Command}" VerticalAlignment="Center" />
+                            <DockPanel LastChildFill="True" HorizontalAlignment="Left">
+                                <Button AutomationProperties.Name="{loc:TutorialName pin-restore}"
+                                        DockPanel.Dock="Right" Style="{StaticResource Button.Tutorial}" HorizontalAlignment="Right" Margin="8,0,0,2" Tag="pin-restore" Click="OnFeatureTutorial" />
+                                <TextBlock Style="{StaticResource Settings.Label}" Text="{loc:Text PinRestore_Command}" VerticalAlignment="Center" TextWrapping="Wrap" />
                             </DockPanel>
                             <settings:HotkeyRecorder HorizontalAlignment="Left" AutomationProperties.Name="{loc:Text PinRestore_HotkeyName}" DefaultText="" Text="{Binding RestoreClosedPinHotkey, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
                         </StackPanel>

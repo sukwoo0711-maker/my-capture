@@ -2,6 +2,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
+using System.Windows.Documents;
 using System.Windows.Media;
 using System.Windows.Automation;
 using System.Windows.Automation.Peers;
@@ -116,12 +117,9 @@ internal sealed class ShortcutHelpWindow : Window
                 {
                     string label = UiText.Get(entry.Action);
                     var row = new UniformGrid { Columns = 2, Margin = new Thickness(0, 6, 0, 6) };
-                    var action = new TextBlock { Text = label, TextWrapping = TextWrapping.Wrap, VerticalAlignment = VerticalAlignment.Center };
-                    row.Children.Add(action);
-                    var keycaps = (WrapPanel)Keycaps(entry.Keys);
                     FeatureTutorial? tutorial = TutorialCatalog.FindHelp(section.Tab, entry.Action);
-                    if (tutorial is not null) keycaps.Children.Add(TutorialButton(tutorial.Id));
-                    row.Children.Add(keycaps);
+                    row.Children.Add(TitleLine(label, tutorial?.Id));
+                    row.Children.Add(Keycaps(entry.Keys));
                     panel.Children.Add(row);
                     FrameworkElement result = ResultRow(label, category, entry.Keys, tutorial?.Id);
                     results.Children.Add(result);
@@ -178,11 +176,12 @@ internal sealed class ShortcutHelpWindow : Window
         grid.ColumnDefinitions.Add(new ColumnDefinition());
         var text = new StackPanel { VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 12, 0) };
         // Semibold like a tab row, whose text takes the selected tab's weight.
-        text.Children.Add(new TextBlock { Text = label, TextWrapping = TextWrapping.Wrap, FontWeight = FontWeights.SemiBold });
+        FrameworkElement title = TitleLine(label, tutorialId);
+        TextElement.SetFontWeight(title, FontWeights.SemiBold);
+        text.Children.Add(title);
         var tag = new TextBlock { Text = category, FontSize = 12, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 1, 0, 0) };
         tag.SetResourceReference(TextBlock.ForegroundProperty, "Text.Secondary");
         text.Children.Add(tag);
-        if (tutorialId is not null) text.Children.Add(TutorialButton(tutorialId));
         grid.Children.Add(text);
         FrameworkElement keycaps = Keycaps(chord);
         Grid.SetColumn(keycaps, 1);
@@ -230,14 +229,28 @@ internal sealed class ShortcutHelpWindow : Window
 
     private Button TutorialButton(string featureId)
     {
-        var button = new Button { Content = UiText.Get("TextCapture_TutorialOpen"), HorizontalAlignment = HorizontalAlignment.Left,
+        var button = new Button { HorizontalAlignment = HorizontalAlignment.Left,
             Tag = featureId };
-        button.SetResourceReference(StyleProperty, "Button.Compact");
-        CommandButtonPresentation.Apply(button, compact: true);
-        button.Margin = new Thickness(8, 2, 0, 2);
+        button.SetResourceReference(StyleProperty, "Button.Tutorial");
+        button.Margin = new Thickness(8, 0, 0, 0);
         AutomationProperties.SetName(button, FeatureTutorialWindow.OpenButtonName(TutorialCatalog.Get(featureId)));
         button.Click += (_, _) => FeatureTutorialWindow.ShowTutorial(this, ReadHotkeys, featureId);
         return button;
+    }
+
+    private FrameworkElement TitleLine(string label, string? tutorialId)
+    {
+        var line = new DockPanel { HorizontalAlignment = HorizontalAlignment.Left,
+            VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 12, 0) };
+        if (tutorialId is not null)
+        {
+            Button tutorial = TutorialButton(tutorialId);
+            DockPanel.SetDock(tutorial, Dock.Right);
+            line.Children.Add(tutorial);
+        }
+        line.Children.Add(new TextBlock { Text = label, TextWrapping = TextWrapping.Wrap,
+            VerticalAlignment = VerticalAlignment.Center });
+        return line;
     }
 
     private static string Display(Hotkey key) => key.IsAssigned ? key.ToString() : UiText.Get("Hotkey.Unassigned");

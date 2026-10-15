@@ -262,11 +262,11 @@ public sealed class RecordingPauseHotkeyTests : KoreanCaptionTest
                     TabControl tabs = ((DockPanel)help.Content).Children.OfType<TabControl>().Single();
                     TabItem capture = tabs.Items.OfType<TabItem>().Single(tab => Equals(tab.Header, UiText.Get("Help.Capture")));
                     List<UniformGrid> rows = ((StackPanel)((ScrollViewer)capture.Content).Content).Children.OfType<UniformGrid>().ToList();
-                    int record = rows.FindIndex(row => Label(row) == "영역 녹화 시작/중지");
+                    int record = rows.FindIndex(row => ShortcutHelpRowAssertions.Title(row) == "영역 녹화 시작/중지");
                     Assert.True(record >= 0);
                     UniformGrid pauseRow = rows[record + 1];
-                    Assert.Equal("녹화 일시 정지/재개", Label(pauseRow));
-                    Assert.Equal(expected, AutomationProperties.GetName(pauseRow.Children[1]));
+                    Assert.Equal("녹화 일시 정지/재개", ShortcutHelpRowAssertions.Title(pauseRow));
+                    Assert.Equal(expected, ShortcutHelpRowAssertions.Keys(pauseRow));
                 }
                 finally
                 {
@@ -279,8 +279,6 @@ public sealed class RecordingPauseHotkeyTests : KoreanCaptionTest
             ShortcutHelpWindow.ReadHotkeys = previous;
         }
     });
-
-    private static string? Label(UniformGrid row) => row.Children.OfType<TextBlock>().FirstOrDefault()?.Text;
 
     private static RegionRecordingCoordinator NewCoordinator(SyntheticCaptureFixture fixture, string root)
     {

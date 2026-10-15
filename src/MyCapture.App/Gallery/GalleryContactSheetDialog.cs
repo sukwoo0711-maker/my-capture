@@ -53,7 +53,7 @@ internal sealed class GalleryContactSheetDialog : Window
         _cancel = ThemedDialog.CreateActionButton(UiText.Get("Library.Action.Cancel"), primary: false);
         _cancel.IsCancel = true;
         var footer = new StackPanel();
-        _progress.SetResourceReference(Control.ForegroundProperty, "Accent.Default");
+        _progress.SetResourceReference(Control.ForegroundProperty, "Accent.Indicator");
         _progress.SetResourceReference(Control.BackgroundProperty, "Surface.Sunken");
         footer.Children.Add(_progress);
         footer.Children.Add(_status);

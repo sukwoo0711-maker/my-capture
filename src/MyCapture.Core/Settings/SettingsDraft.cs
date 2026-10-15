@@ -93,7 +93,7 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
     private string _gitHubIssueUrl = GitHubIssueImageUrl.DefaultIssueUrl;
     private string _gitHubToken = string.Empty;
     private string _theme = AppThemeNames.Midnight;
-    private string _accentColor = AppAccentNames.Violet;
+    private string _accentColor = AppAccentNames.Red;
     private string _captureGuideColorMode = "theme";
     private string _captureGuideColorHex = CaptureGuideColorValue.DefaultCustomColor;
 
