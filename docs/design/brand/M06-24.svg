@@ -1,7 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" role="img" aria-labelledby="title">
-<!-- Pin factor 1.40 relative to installed round-9 M06 (base 0.96). Source: artifacts/brand-pin/renderer/PinStudy.cs. -->
-<title id="title">M06 L2 / 1.40x current</title>
+<!-- Pin factor 1.60 relative to installed round-9 M06 (base 0.96). Source: artifacts/brand-pin/renderer/PinStudy.cs. -->
+<title id="title">M06 L3 / 1.60x current</title>
 <path fill="#38424D" fill-rule="nonzero" d="M7 1 H17 Q23 1 23 7 V17 Q23 23 17 23 H7 Q1 23 1 17 V7 Q1 1 7 1 Z"/>
 <path fill="#FFF8F4" fill-rule="evenodd" d="M5 13 L7 13 L7 16 L10 16 L10 18 L5 18 L5 13 Z M13 5 L18 5 L18 10 L16 10 L16 7 L13 7 L13 5 Z M5 5 L10 5 L10 7 L7 7 L7 10 L5 10 L5 5 Z"/>
-<path fill="#E0453C" fill-rule="nonzero" d="M11.5 11.5 L14 12.5 L15.5 11 C16 10.5 16 10.5 16.5 11 L16.5 14 L17.5 15 L18.5 13.5 C19 13 20 13 20.5 13.5 L21.5 14.5 C22 15 22 16 21.5 16.5 L16.5 21.5 C16 22 15 22 14.5 21.5 L13.5 20.5 C13 20 13 19 13.5 18.5 L15 17.5 L14 16.5 L11 16.5 C10.5 16 10.5 16 11 15.5 L12.5 14 L11.5 11.5 Z"/>
+<path fill="#E0453C" fill-rule="nonzero" d="M11.5 11.5 L13 11 L14.5 9.5 C15 9 15.5 9 16 9.5 L16 13 L16.5 14 L18 12.5 C19 12 19.5 12 20.5 12.5 L21.5 13.5 C22 14.5 22 15 21.5 16 L16 21.5 C15 22 14.5 22 13.5 21.5 L12.5 20.5 C12 19.5 12 19 12.5 18 L14 16.5 L13 16 L9.5 16 C9 15.5 9 15 9.5 14.5 L11 13 L11.5 11.5 Z"/>
 </svg>
