@@ -366,8 +366,8 @@ public sealed class EditorBlurAppTests : KoreanCaptionTest
             TabItem annotation = tabs.Items.OfType<TabItem>().Single(tab => (string)tab.Header == "이미지 편집기");
             var rows = (StackPanel)((ScrollViewer)annotation.Content).Content;
             UniformGrid row = rows.Children.OfType<UniformGrid>()
-                .Single(candidate => candidate.Children.OfType<TextBlock>().FirstOrDefault()?.Text == "블러");
-            Assert.Equal("B", AutomationProperties.GetName(row.Children[1]));
+                .Single(candidate => ShortcutHelpRowAssertions.Title(candidate) == "블러");
+            Assert.Equal("B", ShortcutHelpRowAssertions.Keys(row));
         }
         finally
         {
