@@ -1360,6 +1360,18 @@
         <Setter Property="Padding" Value="5" />
     </Style>
 
+    <!-- A video-and-steps guide beside its feature title. Each template owns its glyph. -->
+    <Style x:Key="Button.Tutorial" TargetType="Button" BasedOn="{StaticResource Button.Icon.Compact}">
+        <Setter Property="ToolTip" Value="{Binding RelativeSource={RelativeSource Self}, Path=(AutomationProperties.Name)}" />
+        <Setter Property="ContentTemplate">
+            <Setter.Value>
+                <DataTemplate>
+                    <themes:SymbolIcon Data="{DynamicResource Icon.PlayCircle}" Size="20" IsHitTestVisible="False" />
+                </DataTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
     <!-- ============================================================= -->
     <!-- Left tool rail: compact desktop activity rail                  -->
     <!--   Fixed 40px icon targets; meaning is carried by tooltip,      -->

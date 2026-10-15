@@ -100,6 +100,7 @@ public sealed class FeatureTutorialTests
     {
         using var locale = UiText.UseLanguage(language);
         var help = new ShortcutHelpWindow();
+        help.Resources.MergedDictionaries.Add(SystemHighContrastThemeTests.LoadTheme());
         try
         {
             TabControl tabs = ((DockPanel)help.Content).Children.OfType<TabControl>().Single();
@@ -108,15 +109,18 @@ public sealed class FeatureTutorialTests
             Assert.Equal(42, rows.Length);
             foreach (UniformGrid row in rows)
             {
-                Assert.Single(row.Children.OfType<TextBlock>());
+                DockPanel title = Assert.Single(row.Children.OfType<DockPanel>());
+                Assert.Single(title.Children.OfType<TextBlock>());
                 WrapPanel keycaps = Assert.Single(row.Children.OfType<WrapPanel>());
-                Button tutorial = Assert.Single(keycaps.Children.OfType<Button>());
+                Assert.Empty(keycaps.Children.OfType<Button>());
+                Button tutorial = Assert.Single(title.Children.OfType<Button>());
                 FeatureTutorial feature = TutorialCatalog.Get(Assert.IsType<string>(tutorial.Tag));
                 Assert.True(tutorial.IsTabStop && tutorial.Focusable);
-                Assert.Equal(UiText.Get("TextCapture_TutorialOpen"), tutorial.Content);
-                // The name names the feature and contains the visible label.
+                Assert.Null(tutorial.Content);
+                Assert.Same(help.FindResource("Button.Tutorial"), tutorial.Style);
+                // The icon keeps the complete feature-specific name in accessibility and hover help.
                 Assert.Equal(FeatureTutorialWindow.OpenButtonName(feature), AutomationProperties.GetName(tutorial));
-                Assert.Contains(UiText.Get("TextCapture_TutorialOpen"), AutomationProperties.GetName(tutorial), StringComparison.Ordinal);
+                Assert.Equal(AutomationProperties.GetName(tutorial), tutorial.ToolTip);
                 Assert.NotEqual(UiText.Get(feature.TitleKey), AutomationProperties.GetName(tutorial));
             }
             // The search results carry their own copy of every tutorial button.
