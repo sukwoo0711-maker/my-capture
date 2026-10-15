@@ -18,7 +18,7 @@ namespace MyCapture.App;
 /// <c>Shadow.Card</c>) and appear at the bottom right of the monitor the pointer is on, so they
 /// show up where the user is working rather than on the primary monitor.
 /// </remarks>
-internal sealed class ThemedShellPresenter(Func<bool> suppressNotification) : IDisposable
+internal sealed class ThemedShellPresenter(Func<bool> suppressNotification, Func<bool>? suppressColorCopy = null) : IDisposable
 {
     /// <summary>The transparent band around a notification card that its shadow draws into.</summary>
     internal const double ShadowMargin = 12;
@@ -72,6 +72,44 @@ internal sealed class ThemedShellPresenter(Func<bool> suppressNotification) : ID
         Present(window, KindOf(kind), title + " " + message);
     }
 
+    internal void ShowColorCopy(ColorCopyFeedback feedback)
+    {
+        Dismiss();
+        if ((suppressColorCopy ?? suppressNotification)()) return;
+        Window window = CreateNotificationWindow(CreateColorCopyContent(feedback),
+            UiText.Get("Tools_ColorPicker"), new Thickness(20));
+        window.SourceInitialized += (_, _) => CaptureWindowExclusion.TryApply(window);
+        PlaceOnPointerMonitor(window);
+        Present(window, FeedbackKind.Confirmation, feedback.Message);
+    }
+
+    internal static FrameworkElement CreateColorCopyContent(ColorCopyFeedback feedback)
+    {
+        var brush = new SolidColorBrush(feedback.ChipColor);
+        brush.Freeze();
+        // Two contrasting edges keep even white and black samples distinct in every palette.
+        var chip = new Border
+        {
+            Width = 28, Height = 28, Background = brush,
+            BorderBrush = Brushes.White, BorderThickness = new Thickness(1),
+        };
+        var outline = new Border
+        {
+            BorderBrush = Brushes.Black, BorderThickness = new Thickness(1), Child = chip,
+            Margin = new Thickness(0, 0, 12, 0), VerticalAlignment = VerticalAlignment.Center,
+        };
+        AutomationProperties.SetAutomationId(chip, "MyCapture.ColorCopy.Chip");
+        AutomationProperties.SetName(chip, feedback.HexValue);
+        var content = new DockPanel { DataContext = feedback };
+        DockPanel.SetDock(outline, Dock.Left);
+        content.Children.Add(outline);
+        var text = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
+        text.Children.Add(Heading(feedback.Message));
+        if (feedback.Value != feedback.HexValue) text.Children.Add(Body(feedback.HexValue));
+        content.Children.Add(text);
+        return content;
+    }
+
     /// <summary>
     /// Shows a notification window for its kind's display time from <see cref="FeedbackTiming"/>.
     /// Pointing at it or keyboard focus inside it pauses the countdown, and Esc closes it.
@@ -110,9 +148,10 @@ internal sealed class ThemedShellPresenter(Func<bool> suppressNotification) : ID
         Dismiss();
         if (suppressNotification()) return;
         var action = new Button { Content = KoreanWordWrap.Show(new TextBlock { TextWrapping = TextWrapping.Wrap }, message),
-            Padding = new Thickness(12), ToolTip = UiText.Get("QuickAccess.Library") };
+            Height = double.NaN, Padding = new Thickness(12), ToolTip = UiText.Get("QuickAccess.Library") };
         System.Windows.Automation.AutomationProperties.SetName(action, message);
         action.SetResourceReference(FrameworkElement.StyleProperty, "Button.Ghost");
+        action.SetResourceReference(Control.FontSizeProperty, "FontSize.Body");
         action.Click += (_, _) => { Dismiss(); openLibrary(); };
         Window window = CreateNotificationWindow(action, UiText.Get("QuickAccess.Title"), new Thickness(8), width: 320);
         window.SourceInitialized += (_, _) =>

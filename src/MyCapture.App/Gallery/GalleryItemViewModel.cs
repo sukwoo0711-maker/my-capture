@@ -39,6 +39,7 @@ public sealed class GalleryItemViewModel : INotifyPropertyChanged
     private Dispatcher? _dispatcher;
     private CancellationTokenSource? _loadCancellation;
     private int _generation;
+    private (bool IsFile, bool IsUnsaved, string Action) _publishedSourceLocation;
     internal Task PendingThumbnailLoad { get; private set; } = Task.CompletedTask;
 
     internal void ConfigureAsyncLoading(GalleryThumbnailLoader loader, Dispatcher dispatcher)
@@ -78,6 +79,7 @@ public sealed class GalleryItemViewModel : INotifyPropertyChanged
         Record = record ?? throw new ArgumentNullException(nameof(record));
         _thumbnailPathResolver = thumbnailPathResolver ?? throw new ArgumentNullException(nameof(thumbnailPathResolver));
         _decodePixelWidth = Math.Max(1, decodePixelWidth);
+        _publishedSourceLocation = (IsSourceDocumentFile, HasUnsavedSourceDocument, SourceLocationAction);
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;
@@ -94,6 +96,18 @@ public sealed class GalleryItemViewModel : INotifyPropertyChanged
     }
 
     public bool IsPinned => Record.IsManuallyPinned;
+    public string SearchMatchText { get; private set; } = string.Empty;
+    public bool HasSearchMatch => SearchMatchText.Length > 0;
+
+    internal void SetSearchMatch(bool active, CaptureMatchField fields)
+    {
+        string text = active ? GallerySearchMatchText.Describe(fields) : string.Empty;
+        if (SearchMatchText == text) return;
+        SearchMatchText = text;
+        Raise(nameof(SearchMatchText));
+        Raise(nameof(HasSearchMatch));
+    }
+
     internal Func<CaptureRecord, string>? FolderFileName { get; set; }
 
     private string _folderBadge = string.Empty;
@@ -165,9 +179,11 @@ public sealed class GalleryItemViewModel : INotifyPropertyChanged
     /// Whether the details panel shows a source section. Videos have no capture-time source; their
     /// stored window title is the generic recording label, not a window.
     /// </summary>
-    public bool HasSource => IsImage && (HasSourceApp || HasSourceWindowTitle || HasSourcePageUrl || HasSourceDocumentPath);
+    public bool HasSource => Record.ImportedFileName is not null
+        || IsImage && (HasSourceApp || HasSourceWindowTitle || HasSourcePageUrl || HasSourceDocumentPath);
 
-    public string SourceAppName => IsImage ? Record.SourceDetails.AppName : string.Empty;
+    public string SourceAppName => Record.ImportedFileName is not null ? UiText.Get("Library.Import.Source")
+        : IsImage ? Record.SourceDetails.AppName : string.Empty;
 
     public bool HasSourceApp => SourceAppName.Length > 0;
 
@@ -179,7 +195,8 @@ public sealed class GalleryItemViewModel : INotifyPropertyChanged
 
     public string SourceAppAutomationName => HasSourceApp ? UiText.Format("Library.Source.AppAccessible", SourceAppName) : string.Empty;
 
-    public string SourceWindowTitle => IsImage ? (Record.SourceWindowTitle ?? string.Empty).Trim() : string.Empty;
+    public string SourceWindowTitle => Record.ImportedFileName
+        ?? (IsImage ? (Record.SourceWindowTitle ?? string.Empty).Trim() : string.Empty);
 
     public bool HasSourceWindowTitle => SourceWindowTitle.Length > 0;
 
@@ -190,6 +207,15 @@ public sealed class GalleryItemViewModel : INotifyPropertyChanged
     public string SourceDocumentPath => IsImage && !HasSourcePageUrl ? Record.SourceDetails.DocumentPath : string.Empty;
 
     public bool HasSourceDocumentPath => SourceDocumentPath.Length > 0;
+
+    public bool IsSourceDocumentFile => HasSourceDocumentPath
+        && MyCapture.Core.Capture.SourceDocument.IsSupportedApp(SourceAppPath);
+
+    public bool HasUnsavedSourceDocument => IsImage && !HasSourceDocumentPath && !HasSourcePageUrl
+        && MyCapture.Core.Capture.SourceDocument.IsUnsaved(SourceAppPath, SourceWindowTitle);
+
+    public string SourceLocationAction => UiText.Get(IsSourceDocumentFile
+        ? "Library.Source.OpenFileLocation" : "Library.Source.OpenFolder");
 
     /// <summary>The whole path with its label, read by screen readers whatever the summary shows.</summary>
     public string SourceDocumentPathAutomationName =>
@@ -311,6 +337,11 @@ public sealed class GalleryItemViewModel : INotifyPropertyChanged
         Raise(nameof(SourceWindowTitleAutomationName));
         Raise(nameof(SourceDocumentPath));
         Raise(nameof(HasSourceDocumentPath));
+        var sourceLocation = (IsFile: IsSourceDocumentFile, IsUnsaved: HasUnsavedSourceDocument, Action: SourceLocationAction);
+        if (_publishedSourceLocation.IsFile != sourceLocation.IsFile) Raise(nameof(IsSourceDocumentFile));
+        if (_publishedSourceLocation.IsUnsaved != sourceLocation.IsUnsaved) Raise(nameof(HasUnsavedSourceDocument));
+        if (_publishedSourceLocation.Action != sourceLocation.Action) Raise(nameof(SourceLocationAction));
+        _publishedSourceLocation = sourceLocation;
         Raise(nameof(SourceDocumentPathAutomationName));
         Raise(nameof(IsPinned));
         Raise(nameof(AccessibleName));

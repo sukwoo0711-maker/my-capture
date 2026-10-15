@@ -17,8 +17,8 @@ namespace MyCapture.App.Editing;
 /// </para>
 /// <para>
 /// Every mutation goes through the undo stack. A continuous gesture (drag to create,
-/// drag to move) records exactly one command on release, using the stack's own merge
-/// rules to collapse the intermediate mouse moves.
+/// drag to move) records exactly one command on release. Inspector changes use the
+/// stack's merge window to keep continuous slider adjustments together.
 /// </para>
 /// </remarks>
 internal sealed class AnnotationEditorController
@@ -28,13 +28,17 @@ internal sealed class AnnotationEditorController
 
     private EditorTool _tool = EditorTool.Rectangle;
     private AnnotationItem? _selected;
+    private readonly List<AnnotationItem> _selection = [];
+    private AnnotationItem[] _gestureSelection = [];
+    private PointD _moveOffset;
+    private List<IUndoableCommand>? _selectionStyleChanges;
 
     // Live-gesture state.
     private Gesture _gesture = Gesture.None;
     private PointD _gestureStart;
-    private PointD _gestureLast;
     private RectD _transformBefore;
     private ResizeHandle _resizeHandle = ResizeHandle.None;
+    private bool _resizeStarted;
     private TextLayout _textLayoutBefore;
     private AnnotationItem? _draftItem;
     private List<PointD>? _draftPoints;
@@ -69,6 +73,7 @@ internal sealed class AnnotationEditorController
                 return;
             }
 
+            CancelGesture();
             _tool = value;
             if (value != EditorTool.Select)
             {
@@ -80,6 +85,12 @@ internal sealed class AnnotationEditorController
     }
 
     internal AnnotationItem? Selected => _selected;
+    internal IReadOnlyList<AnnotationItem> SelectedItems => _selection;
+    internal RectD? MarqueeBounds { get; private set; }
+    internal RectD? SelectionBounds => _selection.Count == 0 ? null : new RectD(
+        _selection.Min(item => item.Bounds.Left), _selection.Min(item => item.Bounds.Top),
+        _selection.Max(item => item.Bounds.Right) - _selection.Min(item => item.Bounds.Left),
+        _selection.Max(item => item.Bounds.Bottom) - _selection.Min(item => item.Bounds.Top));
 
     /// <summary>Current stroke/foreground colour applied to new items.</summary>
     internal ColorRgba StrokeColor { get; set; } = ColorRgba.FromRgb(0xEF, 0x44, 0x44);
@@ -100,6 +111,46 @@ internal sealed class AnnotationEditorController
 
     internal bool IsCreatingText { get; private set; }
 
+    internal TextAnnotation? EditingText { get; private set; }
+
+    internal TextAnnotation? BeginSelectedTextEdit() =>
+        _selection.Count == 1 && _selected is TextAnnotation text && BeginTextEdit(text) ? text : null;
+
+    internal bool BeginTextEdit(TextAnnotation text)
+    {
+        ArgumentNullException.ThrowIfNull(text);
+        if (EditingText is not null || text.IsStepNumber
+            || !_document.Items.Contains(text)) return false;
+        EditingText = text;
+        Tool = EditorTool.Select;
+        SetSelected(text);
+        RaiseVisual();
+        return true;
+    }
+
+    internal TextAnnotation? BeginTextAtPointer(PointD point, int clickCount, bool shift)
+    {
+        if (EditingText is not null) return null;
+        if (_tool == EditorTool.Text)
+        {
+            if (!shift && HitTest(point) is TextAnnotation text && BeginTextEdit(text)) return text;
+            return BeginTextAnnotation(point, DefaultFontSize, DefaultFontSize * 1.4);
+        }
+        return _tool == EditorTool.Select && clickCount == 2
+            && HitTest(point) is TextAnnotation hit && BeginTextEdit(hit) ? hit : null;
+    }
+
+    internal void CancelTextEdit(TextAnnotation text)
+    {
+        if (!ReferenceEquals(EditingText, text)) return;
+        if (IsCreatingText) CommitTextEdit(text, string.Empty);
+        else
+        {
+            EditingText = null;
+            RaiseVisual();
+        }
+    }
+
     /// <summary>
     /// Measures the box a caption needs for its text, size and wrapping mode, keeping its
     /// top-left corner (see <see cref="TextAnnotationLayout.Measure"/>). Without one, boxes keep
@@ -115,18 +166,36 @@ internal sealed class AnnotationEditorController
 
     internal void SetSelected(AnnotationItem? item)
     {
-        if (ReferenceEquals(_selected, item))
-        {
-            return;
-        }
+        SetSelection(item is null ? [] : [item]);
+    }
 
-        _selected = item;
+    private void SetSelection(IEnumerable<AnnotationItem> items)
+    {
+        AnnotationItem[] selection = items.Distinct().ToArray();
+        if (_selection.SequenceEqual(selection)) return;
+        _selection.Clear();
+        _selection.AddRange(selection);
+        _selected = _selection.LastOrDefault();
         SelectionChanged?.Invoke(this, EventArgs.Empty);
         RaiseVisual();
     }
 
+    internal void ToggleSelected(AnnotationItem item)
+    {
+        if (!_document.Items.Contains(item)) return;
+        SetSelection(_selection.Contains(item) ? _selection.Where(selected => selected != item) : _selection.Append(item));
+    }
+
+    internal void SelectAll()
+    {
+        CancelGesture();
+        Tool = EditorTool.Select;
+        SetSelection(_document.Items);
+    }
+
     internal bool PerformUndo()
     {
+        CancelGesture();
         if (!_undo.Undo())
         {
             return false;
@@ -139,6 +208,7 @@ internal sealed class AnnotationEditorController
 
     internal bool PerformRedo()
     {
+        CancelGesture();
         if (!_undo.Redo())
         {
             return false;
@@ -151,14 +221,54 @@ internal sealed class AnnotationEditorController
 
     internal void DeleteSelected()
     {
-        if (_selected is null)
-        {
-            return;
-        }
-
-        AnnotationItem victim = _selected;
+        CancelGesture();
+        if (_selection.Count == 0) return;
+        AnnotationItem[] victims = _selection.ToArray();
         SetSelected(null);
-        _undo.Execute(new RemoveAnnotationCommand(_document, victim));
+        _undo.Execute(new CompositeCommand(UiText.Get("EditorSelection_Delete"),
+            victims.Select(item => new RemoveAnnotationCommand(_document, item))));
+        RaiseVisual();
+    }
+
+    internal void NudgeSelected(double dx, double dy)
+    {
+        CancelGesture();
+        if (_selection.Count == 0 || (dx == 0 && dy == 0)) return;
+        _undo.Execute(new TranslateAnnotationsCommand(_selection, dx, dy));
+        RaiseVisual();
+    }
+
+    internal void DuplicateSelected()
+    {
+        CancelGesture();
+        if (_selection.Count == 0) return;
+        AnnotationItem[] copies = _document.Items.Where(_selection.Contains).Select(item => item.Clone()).ToArray();
+        foreach (AnnotationItem copy in copies) copy.Translate(10, 10);
+        _undo.Execute(new CompositeCommand(UiText.Get("EditorSelection_Duplicate"),
+            copies.Select(item => new AddAnnotationCommand(_document, item))));
+        SetSelection(copies);
+        RaiseVisual();
+    }
+
+    internal void ReorderSelected(bool forward)
+    {
+        CancelGesture();
+        var commands = new List<IUndoableCommand>();
+        var selected = _selection.ToHashSet();
+        // Walk from the leading edge so selected neighbours keep their relative order.
+        AnnotationItem[] ordered = _document.Items.Where(selected.Contains).ToArray();
+        if (forward) Array.Reverse(ordered);
+        foreach (AnnotationItem item in ordered)
+        {
+            int index = _document.IndexOf(item);
+            int target = index + (forward ? 1 : -1);
+            if (target < 0 || target >= _document.Items.Count || selected.Contains(_document.Items[target])) continue;
+            var command = new ReorderAnnotationCommand(_document, item, target);
+            command.Execute();
+            commands.Add(command);
+        }
+        if (commands.Count > 0)
+            _undo.Push(new CompositeCommand(UiText.Get(forward ? "EditorSelection_Forward" : "EditorSelection_Backward"), commands));
         RaiseVisual();
     }
 
@@ -352,12 +462,13 @@ internal sealed class AnnotationEditorController
 
     // ---- Pointer gestures (image-pixel coordinates) ---------------------------------
 
-    internal void PointerDown(PointD point)
+    internal void PointerDown(PointD point, bool shift = false, bool control = false)
     {
+        CancelGesture();
         switch (_tool)
         {
             case EditorTool.Select:
-                BeginSelectGesture(point);
+                BeginSelectGesture(point, shift || control);
                 break;
             case EditorTool.Rectangle:
             case EditorTool.Ellipse:
@@ -377,25 +488,41 @@ internal sealed class AnnotationEditorController
         }
     }
 
-    internal void PointerMove(PointD point)
+    internal void PointerMove(PointD point, bool shift = false)
     {
         switch (_gesture)
         {
+            case Gesture.ModifiedSelect:
+                if (Math.Abs(point.X - _gestureStart.X) <= HitTolerance
+                    && Math.Abs(point.Y - _gestureStart.Y) <= HitTolerance) break;
+                SetSelection(_gestureSelection);
+                _gesture = Gesture.Move;
+                PointerMove(point, shift);
+                break;
             case Gesture.Create:
-                UpdateDraft(point);
+                UpdateDraft(point, shift);
                 break;
             case Gesture.Move:
-                if (_selected is not null)
-                {
-                    double dx = point.X - _gestureLast.X;
-                    double dy = point.Y - _gestureLast.Y;
-                    _selected.Translate(dx, dy);
-                    _gestureLast = point;
-                    RaiseVisual();
-                }
-
+                PointD constrained = shift ? AnnotationGestureConstraints.Axis(_gestureStart, point) : point;
+                PointD offset = new(constrained.X - _gestureStart.X, constrained.Y - _gestureStart.Y);
+                foreach (AnnotationItem item in _gestureSelection)
+                    item.Translate(offset.X - _moveOffset.X, offset.Y - _moveOffset.Y);
+                _moveOffset = offset;
+                RaiseVisual();
+                break;
+            case Gesture.Marquee:
+                MarqueeBounds = RectD.FromCorners(_gestureStart, point);
+                // Explorer-style intersection selection, including touching bounds. A click
+                // has no area and only clears selection (or preserves it with a modifier).
+                SetSelection(MarqueeBounds.Value.IsEmpty ? _gestureSelection
+                    : _gestureSelection.Concat(_document.HitTestRegion(MarqueeBounds.Value)));
+                RaiseVisual();
                 break;
             case Gesture.Resize:
+                // Handles extend beyond the bounds; a stationary click must not snap the
+                // annotation to the press point, including a same-position move event.
+                if (!_resizeStarted && point == _gestureStart) break;
+                _resizeStarted = true;
                 if (_selected is TextAnnotation text)
                 {
                     ResizeText(text, point);
@@ -420,12 +547,13 @@ internal sealed class AnnotationEditorController
         }
     }
 
-    internal void PointerUp(PointD point)
+    internal void PointerUp(PointD point, bool shift = false)
     {
+        if (_gesture is Gesture.Move or Gesture.ModifiedSelect or Gesture.Marquee or Gesture.Resize) PointerMove(point, shift);
         switch (_gesture)
         {
             case Gesture.Create:
-                CommitDraftShape(point);
+                CommitDraftShape(point, shift);
                 break;
             case Gesture.PenDraw:
                 CommitPen();
@@ -442,6 +570,9 @@ internal sealed class AnnotationEditorController
 
                 break;
             case Gesture.Move:
+                if (_moveOffset != default)
+                    _undo.Push(new TranslateAnnotationsCommand(_gestureSelection, _moveOffset.X, _moveOffset.Y));
+                break;
             case Gesture.Resize:
                 if (_selected is not null)
                 {
@@ -457,11 +588,47 @@ internal sealed class AnnotationEditorController
                 break;
         }
 
+        ResetGesture();
+        RaiseVisual();
+    }
+
+    internal void CancelGesture()
+    {
+        switch (_gesture)
+        {
+            case Gesture.Move:
+                foreach (AnnotationItem item in _gestureSelection) item.Translate(-_moveOffset.X, -_moveOffset.Y);
+                break;
+            case Gesture.Resize when _selected is TextAnnotation text:
+                TextLayout.Apply(text, _textLayoutBefore);
+                break;
+            case Gesture.Resize:
+                _selected?.SetBounds(_transformBefore);
+                break;
+            case Gesture.Create:
+            case Gesture.PenDraw:
+                if (_draftItem is not null) _document.Remove(_draftItem);
+                break;
+            case Gesture.Marquee:
+                SetSelection(_gestureSelection);
+                break;
+            case Gesture.None:
+                return;
+        }
+        ResetGesture();
+        RaiseVisual();
+    }
+
+    private void ResetGesture()
+    {
         _gesture = Gesture.None;
+        _gestureSelection = [];
+        _moveOffset = default;
+        MarqueeBounds = null;
         _resizeHandle = ResizeHandle.None;
+        _resizeStarted = false;
         _draftItem = null;
         _draftPoints = null;
-        RaiseVisual();
     }
 
     // ---- Single-click placement (text / image) --------------------------------------
@@ -488,28 +655,33 @@ internal sealed class AnnotationEditorController
         _undo.Execute(new AddAnnotationCommand(_document, text));
         IsCreatingText = true;
         _creatingText = text;
+        EditingText = text;
         Tool = EditorTool.Select;
         SetSelected(text);
         return text;
     }
 
     /// <summary>
-    /// Finishes a live text edit. An empty box is removed (its add is undone) so a stray
-    /// click that types nothing does not litter the document. Otherwise the box is fitted to
-    /// the final text and the text and box change as one undo step.
+    /// Finishes a live text edit. An empty new box undoes its add; clearing an existing
+    /// caption records a removal. Otherwise the final text and fitted box change as one step.
     /// </summary>
     internal void CommitTextEdit(TextAnnotation text, string finalText)
     {
         ArgumentNullException.ThrowIfNull(text);
+        bool creating = ReferenceEquals(_creatingText, text);
         IsCreatingText = false;
         _creatingText = null;
+        EditingText = null;
 
         if (string.IsNullOrEmpty(finalText))
         {
-            // Undo the add so the empty box leaves no trace and no undo entry. Changes made
-            // while typing applied without undo entries, so the add is the top entry.
-            if (_undo.CanUndo && ReferenceEquals(_document.Items.LastOrDefault(), text))
+            if (!creating)
             {
+                _undo.Execute(new RemoveAnnotationCommand(_document, text));
+            }
+            else if (_undo.CanUndo && ReferenceEquals(_document.Items.LastOrDefault(), text))
+            {
+                // New-box style changes do not add history, so its add is still on top.
                 _undo.Undo();
             }
             else
@@ -523,11 +695,15 @@ internal sealed class AnnotationEditorController
         {
             string label = UiText.Get("Text_258AD4B095A1");
             TextLayout fitted = FitText(text, finalText, text.FontSize, text.AutoSize, text.Rect);
-            using (_undo.BeginBatch(label))
-            {
-                PushProperty(text, label, static (t, v) => t.Text = v, text.Text, finalText);
-                PushProperty(text, label, TextLayout.Apply, TextLayout.Of(text), fitted);
-            }
+            // An explicit composite keeps separate editing sessions separate, even when
+            // the measured box stays unchanged and edits finish within the merge window.
+            _undo.Execute(new CompositeCommand(label,
+            [
+                new PropertyChangeCommand<TextAnnotation, string>(text, label,
+                    static (t, v) => t.Text = v, text.Text, finalText),
+                new PropertyChangeCommand<TextAnnotation, TextLayout>(text, label,
+                    TextLayout.Apply, TextLayout.Of(text), fitted),
+            ]));
         }
 
         RaiseVisual();
@@ -627,12 +803,12 @@ internal sealed class AnnotationEditorController
     internal void ApplyStrokeColor(ColorRgba color)
     {
         StrokeColor = color;
-        if (_selected is null)
-        {
-            return;
-        }
+        ApplySelectionStyle(UiText.Get("Text_D1B87ACB2D22"), item => ApplyStrokeColor(item, color));
+    }
 
-        switch (_selected)
+    private void ApplyStrokeColor(AnnotationItem item, ColorRgba color)
+    {
+        switch (item)
         {
             case ShapeAnnotation shape:
                 PushProperty(shape, UiText.Get("Text_D1B87ACB2D22"), static (s, v) =>
@@ -656,8 +832,6 @@ internal sealed class AnnotationEditorController
                 PushProperty(text, UiText.Get("Text_D1B87ACB2D22"), static (s, v) => s.Foreground = v, text.Foreground, color);
                 break;
         }
-
-        RaiseVisual();
     }
 
     internal void ApplyStrokeThickness(double thickness)
@@ -666,21 +840,22 @@ internal sealed class AnnotationEditorController
         thickness = double.IsFinite(thickness)
             ? Math.Clamp(thickness, SettingsRanges.StrokeThickness.Min, SettingsRanges.StrokeThickness.Max)
             : StrokeThickness;
-        if ((_selected is ShapeAnnotation { StrokeStyle: AnnotationStrokeStyle.ThickDashed })
+        if ((_selection.Count == 1 && _selected is ShapeAnnotation { StrokeStyle: AnnotationStrokeStyle.ThickDashed })
             || (_selected is null && Tool == EditorTool.Rectangle && StrokeStyle == AnnotationStrokeStyle.ThickDashed))
         {
             thickness = Math.Max(6, thickness);
         }
         StrokeThickness = thickness;
-        if (_selected is null)
-        {
-            return;
-        }
+        ApplySelectionStyle(UiText.Get("Text_6953A4195620"), item => ApplyStrokeThickness(item, thickness));
+    }
 
-        switch (_selected)
+    private void ApplyStrokeThickness(AnnotationItem item, double thickness)
+    {
+        switch (item)
         {
             case ShapeAnnotation shape:
-                PushProperty(shape, UiText.Get("Text_6953A4195620"), static (s, v) => s.StrokeThickness = v, shape.StrokeThickness, thickness);
+                PushProperty(shape, UiText.Get("Text_6953A4195620"), static (s, v) => s.StrokeThickness = v, shape.StrokeThickness,
+                    shape.StrokeStyle == AnnotationStrokeStyle.ThickDashed ? Math.Max(6, thickness) : thickness);
                 break;
             case PolylineAnnotation line:
                 PushProperty(line, UiText.Get("Text_6953A4195620"), static (s, v) => s.StrokeThickness = v, line.StrokeThickness, thickness);
@@ -689,8 +864,6 @@ internal sealed class AnnotationEditorController
                 PushProperty(pen, UiText.Get("Text_6953A4195620"), static (s, v) => s.StrokeThickness = v, pen.StrokeThickness, thickness);
                 break;
         }
-
-        RaiseVisual();
     }
 
     internal void ApplyStrokeStyle(AnnotationStrokeStyle style)
@@ -701,35 +874,54 @@ internal sealed class AnnotationEditorController
             StrokeThickness = Math.Max(6, StrokeThickness);
         }
 
-        if (_selected is ShapeAnnotation shape)
+        ApplySelectionStyle(UiText.Get("Text_E0B58D1CFED1"), item =>
         {
-            PushProperty(shape, UiText.Get("Text_E0B58D1CFED1"), static (s, v) =>
-                {
-                    s.StrokeStyle = v.Style;
-                    s.StrokeThickness = v.Thickness;
-                },
-                (Style: shape.StrokeStyle, Thickness: shape.StrokeThickness),
-                (Style: StrokeStyle, Thickness: StrokeStyle == AnnotationStrokeStyle.ThickDashed
-                    ? Math.Max(6, shape.StrokeThickness) : shape.StrokeThickness));
-        }
-
-        RaiseVisual();
+            if (item is ShapeAnnotation shape)
+            {
+                PushProperty(shape, UiText.Get("Text_E0B58D1CFED1"), static (s, v) =>
+                    {
+                        s.StrokeStyle = v.Style;
+                        s.StrokeThickness = v.Thickness;
+                    },
+                    (Style: shape.StrokeStyle, Thickness: shape.StrokeThickness),
+                    (Style: StrokeStyle, Thickness: StrokeStyle == AnnotationStrokeStyle.ThickDashed
+                        ? Math.Max(6, shape.StrokeThickness) : shape.StrokeThickness));
+            }
+        });
     }
 
     internal void ApplyFillTransparency(double transparency)
     {
         FillTransparency = double.IsFinite(transparency) ? Math.Clamp(transparency, 0, 100) : 100;
-        if (_selected is ShapeAnnotation shape)
+        ApplySelectionStyle(UiText.Get("Text_5321CB80BCA3"), item =>
         {
-            PushProperty(shape, UiText.Get("Text_5321CB80BCA3"), static (s, v) =>
-                {
-                    s.Fill = v.Fill;
-                    s.FillMatchesStroke = v.Matches;
-                },
-                (Fill: shape.Fill, Matches: shape.FillMatchesStroke),
-                (Fill: ShapeAnnotation.FillForTransparency(shape.Stroke, FillTransparency), Matches: true));
-        }
+            if (item is ShapeAnnotation shape)
+            {
+                PushProperty(shape, UiText.Get("Text_5321CB80BCA3"), static (s, v) =>
+                    {
+                        s.Fill = v.Fill;
+                        s.FillMatchesStroke = v.Matches;
+                    },
+                    (Fill: shape.Fill, Matches: shape.FillMatchesStroke),
+                    (Fill: ShapeAnnotation.FillForTransparency(shape.Stroke, FillTransparency), Matches: true));
+            }
+        });
+    }
 
+    private void ApplySelectionStyle(string label, Action<AnnotationItem> apply)
+    {
+        var changes = new List<IUndoableCommand>();
+        _selectionStyleChanges = changes;
+        try
+        {
+            foreach (AnnotationItem item in _selection) apply(item);
+        }
+        finally
+        {
+            _selectionStyleChanges = null;
+        }
+        if (changes.Count > 0)
+            _undo.Push(_selection.Count == 1 ? changes[0] : new SelectionStyleCommand(label, _selection, changes));
         RaiseVisual();
     }
 
@@ -790,7 +982,7 @@ internal sealed class AnnotationEditorController
     /// </summary>
     internal ResizeHandle HandleAt(PointD point, double handlePixels)
     {
-        if (_selected is null || !_selected.SupportsResize)
+        if (_selection.Count != 1 || _selected is null || !_selected.SupportsResize)
         {
             return ResizeHandle.None;
         }
@@ -810,9 +1002,10 @@ internal sealed class AnnotationEditorController
 
     internal AnnotationItem? HitTest(PointD point) => _document.HitTest(point, HitTolerance);
 
-    private void BeginSelectGesture(PointD point)
+    private void BeginSelectGesture(PointD point, bool toggle)
     {
-        if (_selected is not null && _selected.SupportsResize)
+        _gestureStart = point;
+        if (!toggle && _selection.Count == 1 && _selected is not null && _selected.SupportsResize)
         {
             ResizeHandle handle = UsableHandle(_selected, HitTestHandle(_selected.Bounds, point, HitTolerance * 1.5));
             if (handle != ResizeHandle.None)
@@ -826,21 +1019,36 @@ internal sealed class AnnotationEditorController
         }
 
         AnnotationItem? hit = _document.HitTest(point, HitTolerance);
-        SetSelected(hit);
-
         if (hit is not null)
         {
+            if (toggle)
+            {
+                AnnotationItem[] before = _selection.ToArray();
+                ToggleSelected(hit);
+                // A modifier click toggles, but a drag moves the group that was picked.
+                // This also permits holding Shift before starting an axis-locked drag.
+                _gestureSelection = before.Contains(hit) ? before : _selection.ToArray();
+                _gesture = Gesture.ModifiedSelect;
+                return;
+            }
+            if (!_selection.Contains(hit)) SetSelected(hit);
             _gesture = Gesture.Move;
-            _gestureStart = point;
-            _gestureLast = point;
-            _transformBefore = hit.Bounds;
+            _gestureSelection = _selection.ToArray();
+            _moveOffset = default;
+        }
+        else
+        {
+            _gestureSelection = toggle ? _selection.ToArray() : [];
+            if (!toggle) SetSelected(null);
+            _gesture = Gesture.Marquee;
+            MarqueeBounds = new RectD(point.X, point.Y, 0, 0);
+            RaiseVisual();
         }
     }
 
     private void BeginDraftGesture(PointD point)
     {
         _gestureStart = point;
-        _gestureLast = point;
 
         if (_tool is EditorTool.Pen or EditorTool.Highlighter)
         {
@@ -887,8 +1095,13 @@ internal sealed class AnnotationEditorController
         SetSelected(null);
     }
 
-    private void UpdateDraft(PointD point)
+    private void UpdateDraft(PointD point, bool shift = false)
     {
+        if (shift)
+        {
+            if (_draftItem is ShapeAnnotation) point = AnnotationGestureConstraints.Square(_gestureStart, point);
+            else if (_draftItem is PolylineAnnotation) point = AnnotationGestureConstraints.Line(_gestureStart, point);
+        }
         switch (_draftItem)
         {
             case ShapeAnnotation rect:
@@ -902,13 +1115,12 @@ internal sealed class AnnotationEditorController
                 break;
         }
 
-        _gestureLast = point;
         RaiseVisual();
     }
 
-    private void CommitDraftShape(PointD point)
+    private void CommitDraftShape(PointD point, bool shift)
     {
-        UpdateDraft(point);
+        UpdateDraft(point, shift);
 
         AnnotationItem? draft = _draftItem;
         if (draft is null)
@@ -981,6 +1193,32 @@ internal sealed class AnnotationEditorController
         return b.Width < 2 && b.Height < 2;
     }
 
+    internal void ApplyTextBold(bool bold)
+    {
+        if (_selected is not TextAnnotation { IsStepNumber: false } text || text.Bold == bold) return;
+        string label = UiText.Get("EditorText_Bold");
+        var probe = (TextAnnotation)text.Clone();
+        probe.Bold = bold;
+        TextLayout fitted = FitText(probe, text.Text, text.FontSize, text.AutoSize, text.Rect);
+        using (_undo.BeginBatch(label))
+        {
+            PushProperty(text, label, static (t, v) => t.Bold = v, text.Bold, bold);
+            PushProperty(text, label, TextLayout.Apply, TextLayout.Of(text), fitted);
+        }
+        RaiseVisual();
+    }
+
+    internal void ApplyTextBackground(bool enabled)
+    {
+        if (_selected is not TextAnnotation { IsStepNumber: false } text || (text.Background.A > 0) == enabled) return;
+        ColorRgba background = enabled
+            ? (text.Background == ColorRgba.Transparent ? ColorRgba.Black : text.Background.WithAlpha(255))
+            : text.Background.WithAlpha(0);
+        PushProperty(text, UiText.Get("EditorText_Background"), static (t, v) => t.Background = v,
+            text.Background, background);
+        RaiseVisual();
+    }
+
     private void PushProperty<TItem, TValue>(
         TItem item, string label, Action<TItem, TValue> setter, TValue before, TValue after)
         where TItem : AnnotationItem
@@ -999,7 +1237,9 @@ internal sealed class AnnotationEditorController
             return;
         }
 
-        _undo.Push(new PropertyChangeCommand<TItem, TValue>(item, label, setter, before, after));
+        var command = new PropertyChangeCommand<TItem, TValue>(item, label, setter, before, after);
+        if (_selectionStyleChanges is { } changes) changes.Add(command);
+        else _undo.Push(command);
     }
 
     /// <summary>
@@ -1068,10 +1308,7 @@ internal sealed class AnnotationEditorController
 
     private void EnsureSelectionValid()
     {
-        if (_selected is not null && !_document.Items.Contains(_selected))
-        {
-            SetSelected(null);
-        }
+        SetSelection(_selection.Where(_document.Items.Contains));
     }
 
     private void RaiseVisual() => VisualInvalidated?.Invoke(this, EventArgs.Empty);
@@ -1149,6 +1386,8 @@ internal sealed class AnnotationEditorController
         Move,
         Resize,
         PenDraw,
+        Marquee,
+        ModifiedSelect,
     }
 }
 

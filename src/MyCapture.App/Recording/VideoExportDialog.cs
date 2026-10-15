@@ -60,11 +60,7 @@ internal sealed class VideoExportDialog : Window
     private readonly StackPanel _mp4 = new();
     private readonly StackPanel _gif = new();
     private readonly StackPanel _settings = new();
-    private readonly Grid _progressRow = new() { Margin = new Thickness(0, 12, 0, 0), Visibility = Visibility.Collapsed };
-    private readonly ProgressBar _progressBar = new() { Minimum = 0, Maximum = 100, Height = 6, BorderThickness = new Thickness(0), VerticalAlignment = VerticalAlignment.Center };
-    private readonly TextBlock _percent = new() { Margin = new Thickness(12, 0, 0, 0), MinWidth = 40, TextAlignment = TextAlignment.Right, VerticalAlignment = VerticalAlignment.Center };
-    private readonly TextBlock _remaining = new() { Margin = new Thickness(12, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center };
-    private readonly Button _cancelExport;
+    private readonly MediaExportProgressRow _progressRow = new();
     private readonly TextBlock _status = new() { TextWrapping = TextWrapping.Wrap, VerticalAlignment = VerticalAlignment.Center };
     private readonly Button _openFolder;
     private readonly Button _export;
@@ -92,7 +88,8 @@ internal sealed class VideoExportDialog : Window
     {
         _recording = recording;
         // The owner is modal/paused; take a detached document so all worker inputs stay stable.
-        _document = document.Clone();
+        _document = document.NormalizeFor(recording.Width, recording.Height,
+            document.SourceDurationMs is > 0 and < double.PositiveInfinity ? document.SourceDurationMs : recording.DurationMs);
         _logs = logs;
         _gifSession = new GifExportSession(recording, _document, logs.CreateLogger("GifExport"));
         StandardWindowTheme.Apply(this);
@@ -187,23 +184,6 @@ internal sealed class VideoExportDialog : Window
         AutomationProperties.SetName(_preview, UiText.Get("MediaExport_SourcePreview"));
         _settings.Children.Add(_preview);
 
-        _progressRow.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        _progressRow.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        _progressRow.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        _progressRow.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        _progressBar.SetResourceReference(ForegroundProperty, "Accent.Default");
-        _progressBar.SetResourceReference(BackgroundProperty, "Surface.Sunken");
-        AutomationProperties.SetName(_progressBar, UiText.Get("MediaExport_Exporting"));
-        _progressRow.Children.Add(_progressBar);
-        Grid.SetColumn(_percent, 1);
-        _progressRow.Children.Add(_percent);
-        _remaining.SetResourceReference(TextBlock.ForegroundProperty, "Text.Secondary");
-        Grid.SetColumn(_remaining, 2);
-        _progressRow.Children.Add(_remaining);
-        _cancelExport = MediaExportVisuals.Button(this, UiText.Get("MediaExport_Cancel"));
-        _cancelExport.Margin = new Thickness(12, 0, 0, 0);
-        Grid.SetColumn(_cancelExport, 3);
-        _progressRow.Children.Add(_cancelExport);
         Grid.SetRow(_progressRow, 1);
         root.Children.Add(_progressRow);
 
@@ -244,7 +224,7 @@ internal sealed class VideoExportDialog : Window
         UpdateSamplePositionLabel();
         _applyAdvice.Click += (_, _) => ApplyRecommendation();
         _export.Click += async (_, _) => await ExportAsync();
-        _cancelExport.Click += (_, _) => CancelExport();
+        _progressRow.CancelButton.Click += (_, _) => CancelExport();
         _openFolder.Click += (_, _) => OpenFolder();
         _close.Click += (_, _) => Close();
         PreviewKeyDown += (_, e) =>
@@ -337,19 +317,10 @@ internal sealed class VideoExportDialog : Window
 
     private GifShareTarget SelectedShareTarget => (GifShareTarget)((OptionItem)_shareTarget.SelectedItem).Value;
 
-    private double SpanMs => KeptRange.OutMs - KeptRange.InMs;
+    private double SpanMs => _document.OutputDurationMs;
 
-    /// <summary>The trim clamped to the recording, as the exporter normalizes it.</summary>
-    private (double InMs, double OutMs) KeptRange
-    {
-        get
-        {
-            double duration = Math.Max(1, _recording.DurationMs);
-            double trimIn = Math.Clamp(_document.TrimInMs, 0, duration);
-            double trimOut = Math.Clamp(_document.TrimOutMs, 0, duration);
-            return trimOut > trimIn ? (trimIn, trimOut) : (0, duration);
-        }
-    }
+    /// <summary>The normalized source trim; its output duration excludes removed ranges.</summary>
+    private (double InMs, double OutMs) KeptRange => (_document.TrimInMs, _document.TrimOutMs);
 
     private void Changed()
     {
@@ -449,7 +420,7 @@ internal sealed class VideoExportDialog : Window
 
     private void UpdateSamplePositionLabel()
     {
-        GifSampleWindow window = GifPreviewSampling.Plan(KeptRange.InMs, KeptRange.OutMs, SelectedSpeed, _samplePosition.Value / 100);
+        GifSampleWindow window = GifPreviewSampling.Plan(_document, SelectedSpeed, _samplePosition.Value / 100);
         _samplePositionLabel.Text = UiText.Format("GifPreview_SamplePositionValue", window.StartMs / 1000);
     }
 
@@ -475,8 +446,8 @@ internal sealed class VideoExportDialog : Window
             // One render worker at a time: the cancelled one exits at its next frame.
             await previous;
             cancellation.Token.ThrowIfCancellationRequested();
-            (double trimIn, double trimOut) = KeptRange;
-            GifSampleWindow window = GifPreviewSampling.Plan(trimIn, trimOut, speed, position);
+            double firstSourceTime = _document.CreateTimeline().ToSourceTime(0);
+            GifSampleWindow window = GifPreviewSampling.Plan(_document, speed, position);
             VideoEditDocument sampleDocument = GifPreviewSampling.CreateSampleDocument(_document, window);
             CancellationToken token = cancellation.Token;
             sample = await StaThreadTask.RunAsync(
@@ -486,7 +457,7 @@ internal sealed class VideoExportDialog : Window
             _sample = sample;
             sample = null;
             _sampleMotion = _sample.MotionFraction;
-            GifPresetMeasurement measurement = _sample.MeasurementFrom(trimIn);
+            GifPresetMeasurement measurement = _sample.MeasurementFrom(firstSourceTime);
             Remember(measurement);
             // A sample of the whole kept range is the exact export: 내보내기 copies it.
             VideoExportCalculation? whole = _working || _result is not null ? null : _sample.TakeWholeRangeResult();
@@ -496,7 +467,7 @@ internal sealed class VideoExportDialog : Window
             UpdateGuidance();
 
             // Estimate-only start and end segments refine the size once the preview is visible.
-            foreach (GifSampleWindow segment in GifPreviewSampling.PlanRefinement(trimIn, trimOut, window))
+            foreach (GifSampleWindow segment in GifPreviewSampling.PlanRefinement(_document, window))
             {
                 VideoEditDocument segmentDocument = GifPreviewSampling.CreateSampleDocument(_document, segment);
                 GifSegmentSize segmentSize = await StaThreadTask.RunAsync(
@@ -509,7 +480,7 @@ internal sealed class VideoExportDialog : Window
                     return; // Superseded, or replaced by an exact full calculation.
                 }
 
-                measurement = measurement.Including(segmentSize, segment.DurationMs, Math.Abs(segment.StartMs - trimIn) < 0.5);
+                measurement = measurement.Including(segmentSize, segment.DurationMs, Math.Abs(segment.StartMs - firstSourceTime) < 0.5);
                 _measurements[quality] = measurement;
                 UpdateGuidance();
             }
@@ -564,8 +535,8 @@ internal sealed class VideoExportDialog : Window
     {
         try
         {
-            (double trimIn, double trimOut) = KeptRange;
-            double sourceTime = trimIn + ((trimOut - trimIn) / 2);
+            VideoCutTimeline timeline = _document.CreateTimeline();
+            double sourceTime = timeline.ToSourceTime(timeline.OutputDurationMs / 2);
             string path = _recording.OutputPath;
             int width = _recording.Width, height = _recording.Height;
             List<TimedTextOverlay> overlays = _document.TextOverlays.Select(overlay => overlay.Clone()).ToList();
@@ -597,16 +568,18 @@ internal sealed class VideoExportDialog : Window
         }
     }
 
-    /// <summary>Text and image layer intervals inside the kept range, relative to its start.</summary>
+    /// <summary>Layer intervals and cut boundaries on the output clock used by the GIF schedule.</summary>
     private List<(double StartMs, double EndMs)> LayerIntervals
     {
         get
         {
-            (double trimIn, double trimOut) = KeptRange;
+            VideoCutTimeline timeline = _document.CreateTimeline();
             return _document.TextOverlays.Select(overlay => (overlay.StartMs, overlay.EndMs))
                 .Concat(_document.FrameEditLayers.Select(layer => (layer.StartMs, layer.EndMs)))
-                .Where(interval => interval.EndMs > trimIn && interval.StartMs < trimOut)
-                .Select(interval => (Math.Max(interval.StartMs, trimIn) - trimIn, Math.Min(interval.EndMs, trimOut) - trimIn))
+                .Select(interval => (StartMs: timeline.ToOutputTime(interval.StartMs), EndMs: timeline.ToOutputTime(interval.EndMs)))
+                .Where(interval => interval.EndMs > interval.StartMs)
+                .Concat(timeline.KeptRanges.Skip(1).Select(segment =>
+                    (timeline.ToOutputTime(segment.StartMs), timeline.ToOutputTime(segment.StartMs))))
                 .ToList();
         }
     }
@@ -842,7 +815,8 @@ internal sealed class VideoExportDialog : Window
                 {
                     TrimReencoder.Reencode(source, temp, trimIn, trimOut, _recording,
                         options => new MediaFoundationVideoEncoder(options, _logs.CreateLogger<MediaFoundationVideoEncoder>()),
-                        _logs.CreateLogger("VideoExport"), overlays, layers, progress, token, bitrate);
+                        _logs.CreateLogger("VideoExport"), overlays, layers, progress, token, bitrate,
+                        removedRanges: _document.RemovedRanges);
                 }
 
                 token.ThrowIfCancellationRequested();
@@ -897,18 +871,11 @@ internal sealed class VideoExportDialog : Window
         if (_closed || !_working || !ReferenceEquals(_cancellation, cancellation)) return;
         int total = Math.Max(1, progress.TotalFrames);
         int completed = Math.Clamp(progress.CompletedFrames, 0, total);
-        double fraction = (double)completed / total;
-        _progressBar.Value = fraction * 100;
-        _percent.Text = UiText.Format("MediaExport_Percent", (int)(fraction * 100));
+        _progressRow.Report(progress, stopwatch.Elapsed);
         _status.Text = UiText.Format("MediaExport_Progress", UiText.Get("MediaExport_Exporting"), completed, total);
-        // A few frames settle the per-frame pace before the remaining time is worth showing.
-        double elapsed = stopwatch.Elapsed.TotalSeconds;
-        _remaining.Text = completed >= 5 && completed < total && elapsed >= 0.4
-            ? UiText.Format("MediaExport_Remaining", Math.Max(1, Math.Ceiling(elapsed / completed * (total - completed))))
-            : string.Empty;
     }
 
-    internal string RemainingText => _remaining.Text;
+    internal string RemainingText => _progressRow.RemainingText;
 
     private void OpenFolder()
     {
@@ -928,12 +895,10 @@ internal sealed class VideoExportDialog : Window
         _working = working;
         _settings.IsEnabled = !working;
         _export.IsEnabled = !working;
-        _progressRow.Visibility = working ? Visibility.Visible : Visibility.Collapsed;
+        if (!working) _progressRow.Stop();
         if (working)
         {
-            _progressBar.Value = 0;
-            _percent.Text = UiText.Format("MediaExport_Percent", 0);
-            _remaining.Text = string.Empty;
+            _progressRow.Start(UiText.Get("MediaExport_Exporting"));
             _status.Text = UiText.Get("MediaExport_Exporting");
             _openFolder.Visibility = Visibility.Collapsed;
             _savedPath = null;
@@ -972,6 +937,8 @@ internal sealed class VideoExportDialog : Window
             {
                 int index = _buttons.Count;
                 var button = new ToggleButton { Content = caption, MinHeight = 36, MinWidth = 112, Margin = new Thickness(2), ToolTip = help };
+                CommandButtonPresentation.Apply(button, compact: true);
+                button.MinWidth = 112;
                 AutomationProperties.SetName(button, caption);
                 if (help is not null) AutomationProperties.SetHelpText(button, help);
                 // Click runs after the toggle flipped itself; re-assert the single choice.

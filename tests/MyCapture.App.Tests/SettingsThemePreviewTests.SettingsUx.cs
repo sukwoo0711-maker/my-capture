@@ -203,6 +203,12 @@ public sealed partial class SettingsThemePreviewTests
                     window.Show();
                     Drain(window);
                     var tabs = Assert.IsType<TabControl>(window.FindName("CategoryTabs"));
+                    foreach (string name in new[] { "DefaultsButton", "ApplyButton", "CancelButton" })
+                    {
+                        Button action = Assert.IsType<Button>(window.FindName(name));
+                        Assert.Equal(44, action.ActualHeight, 1);
+                        Assert.Equal(new Thickness(10, 4, 10, 4), action.Padding);
+                    }
                     TabItem[] items = tabs.Items.OfType<TabItem>().ToArray();
                     string[] expected = ["SettingsUx_TabGeneral", "SettingsUx_TabCapture", "SettingsUx_TabRecording",
                         "SettingsUx_TabEditing", "SettingsUx_TabShortcuts", "SettingsUx_TabStorage", "SettingsUx_TabAbout"];
@@ -348,10 +354,11 @@ public sealed partial class SettingsThemePreviewTests
         Application application = CreateThemedApplication();
         try
         {
-            foreach ((string name, AppSettings settings) in new[]
+            foreach ((string name, AppSettings settings, bool expectedHints) in new[]
             {
-                ("new", NewInstallDefaults.Create()),
-                ("existing", new AppSettings()),
+                ("new", NewInstallDefaults.Create(), true),
+                ("existing", new AppSettings(), true),
+                ("explicit-hints-off", new AppSettings { General = { ShowShortcutHints = false } }, false),
             })
             {
                 SettingsWindow window = CreateSettingsUxWindow(settings).Window;
@@ -403,7 +410,7 @@ public sealed partial class SettingsThemePreviewTests
                     Assert.True(Draft(window).HasUnappliedChanges);
 
                     var hints = Assert.IsType<CheckBox>(window.FindName("ShowShortcutHintsCheck"));
-                    Assert.Equal(name == "existing", hints.IsChecked);
+                    Assert.Equal(expectedHints, hints.IsChecked);
                     Assert.True(hints.IsVisible);
                     SaveSettingsUxEvidence(RenderEditorWindow(window), $"settings-shortcuts-{name}-install-glass-after.png");
                     SettingsWindow.CancelCommand.Execute(null, window);

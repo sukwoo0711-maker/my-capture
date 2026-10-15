@@ -11,6 +11,51 @@ internal sealed partial class GalleryWindow
 {
     private bool _detailsPaneOpen = true;
 
+    private void InitializeCommandBarLayout()
+    {
+        ArchiveOverflowMenu.SetBinding(IsEnabledProperty, new System.Windows.Data.Binding(nameof(IsEnabled)) { Source = ArchiveExportButton });
+        MoveOverflowMenu.SetBinding(IsEnabledProperty, new System.Windows.Data.Binding(nameof(IsEnabled)) { Source = MoveCapturesButton });
+        LibraryCommandBar.SizeChanged += (_, _) => FitSelectionCommands();
+        Loaded += (_, _) => FitSelectionCommands();
+        _viewModel.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName is null or "" or nameof(GalleryViewModel.HasSelection)
+                or nameof(GalleryViewModel.CanCompareSelected) or nameof(GalleryViewModel.SelectionText))
+                Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Loaded, new Action(FitSelectionCommands));
+        };
+    }
+
+    private void FitSelectionCommands()
+    {
+        ArchiveExportButton.Visibility = Visibility.Visible;
+        MoveCapturesButton.Visibility = Visibility.Visible;
+        ArchiveOverflowMenu.Visibility = Visibility.Collapsed;
+        MoveOverflowMenu.Visibility = Visibility.Collapsed;
+        if (!_viewModel.HasSelection || LibraryCommandBar.ActualWidth <= 0) return;
+
+        double WidthOf(FrameworkElement element)
+        {
+            element.InvalidateMeasure();
+            element.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+            return element.DesiredSize.Width;
+        }
+
+        // Keep a useful search field while secondary commands move into the existing menu.
+        double available = LibraryCommandBar.ActualWidth - WidthOf(CompactCaptureCommands)
+            - WidthOf(MoreCommandsButton) - SearchField.Margin.Left - SearchField.Margin.Right - 160;
+        foreach ((Button button, MenuItem menu) in new[]
+        {
+            (ArchiveExportButton, ArchiveOverflowMenu),
+            (MoveCapturesButton, MoveOverflowMenu),
+        })
+        {
+            if (WidthOf(SelectionCommands) <= available) break;
+            if (button.IsKeyboardFocusWithin) MoreCommandsButton.Focus();
+            button.Visibility = Visibility.Collapsed;
+            menu.Visibility = Visibility.Visible;
+        }
+    }
+
     /// <summary>
     /// Whether the details pane is shown. Hiding it leaves a narrow rail with the button that
     /// brings it back, and the library takes the width, so a narrow window fits another column.

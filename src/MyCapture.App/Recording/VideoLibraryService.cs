@@ -355,7 +355,7 @@ internal sealed class VideoLibraryService
             _ = await ValidateCompletedRenderAsync(
                 stagePath,
                 record,
-                normalized.TrimOutMs - normalized.TrimInMs,
+                normalized.OutputDurationMs,
                 cancellationToken);
             BitmapSource thumbnail = await CreateThumbnailAsync(
                 stagePath,
@@ -374,7 +374,7 @@ internal sealed class VideoLibraryService
             var previous = VideoRecordSnapshot.From(record);
             var next = VideoRecordSnapshot.CreateCommitted(
                 record,
-                Math.Max(1, normalized.TrimOutMs - normalized.TrimInMs),
+                Math.Max(1, normalized.OutputDurationMs),
                 normalized.HasEdits,
                 MeasureProspectiveMediaBytes(directory, stagePath, thumbnailStage, editsStage),
                 DateTimeOffset.Now);

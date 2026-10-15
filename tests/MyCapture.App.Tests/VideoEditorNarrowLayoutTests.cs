@@ -12,19 +12,19 @@ using static MyCapture.App.Tests.VideoEditorUxTrimTests;
 namespace MyCapture.App.Tests;
 
 /// <summary>
-/// In a small video editor window the preview keeps its space: the trim bar is two
-/// deliberate rows, lengths and layer facts are shown once, and the layer panel is the
+/// In a small video editor window the preview keeps its space: the trim bar fits its
+/// range and summary, lengths and layer facts are shown once, and the layer panel is the
 /// list of layers with commands for the selected one.
 /// </summary>
 public sealed class VideoEditorNarrowLayoutTests
 {
     [Theory]
-    [InlineData("ko-KR", 760, 555, true)]
-    [InlineData("ko-KR", 780, 560, true)]
-    [InlineData("en-US", 760, 555, true)]
+    [InlineData("ko-KR", 760, 555, false)]
+    [InlineData("ko-KR", 780, 560, false)]
+    [InlineData("en-US", 760, 555, false)]
     [InlineData("ko-KR", 1180, 760, false)]
     [InlineData("en-US", 1400, 900, false)]
-    public void TrimBarIsActionsAndSummaryOverStartEndAndReset(string language, int width, int height, bool twoRows) => StaTestHost.Run(() =>
+    public void TrimBarFitsStartEndResetAndSummaryWithoutMarkButtons(string language, int width, int height, bool twoRows) => StaTestHost.Run(() =>
     {
         using var culture = UiText.UseLanguage(language);
         string root = OwnedTestDirectory.Create("mc-video-trim-rows-");
@@ -37,8 +37,9 @@ public sealed class VideoEditorNarrowLayoutTests
             if (editor.ActualWidth < width - 1) return; // A runner screen smaller than the window clamps it.
             Assert.Equal(twoRows, editor.TrimBarHasTwoRowsForTest);
 
-            Button markIn = Button(layout, "VideoEditorUx_MarkInHere");
-            Button markOut = Button(layout, "VideoEditorUx_MarkOutHere");
+            Assert.DoesNotContain(Descendants(bar).OfType<Button>(), button =>
+                AutomationProperties.GetName(button) == UiText.Get("VideoEditorUx_MarkInHere")
+                || AutomationProperties.GetName(button) == UiText.Get("VideoEditorUx_MarkOutHere"));
             Button reset = Button(layout, "VideoEditorUx_ResetTrim");
             StackPanel summary = Assert.Single(Descendants(bar).OfType<StackPanel>(), panel => panel.Name == "VideoTrimSummary");
             TextBox start = Assert.Single(Descendants(bar).OfType<TextBox>(), box => AutomationProperties.GetName(box) == UiText.Get("Video.TrimIn"));
@@ -47,32 +48,50 @@ public sealed class VideoEditorNarrowLayoutTests
             double Left(FrameworkElement element) => element.TranslatePoint(default, bar).X;
             double Right(FrameworkElement element) => element.TranslatePoint(new Point(element.ActualWidth, 0), bar).X;
 
-            // Row 1: start here, end here and the kept length, in that order.
-            Assert.Equal(Middle(markIn), Middle(markOut), precision: 0);
-            Assert.True(Left(markOut) > Right(markIn) - 0.5 && Left(summary) > Right(markOut) - 0.5);
             // The typed range and the reset button always share one row: reset is never left alone.
             Assert.Equal(Middle(start), Middle(end), precision: 0);
             Assert.Equal(Middle(start), Middle(reset), precision: 0);
             Assert.True(Left(end) > Right(start) - 0.5 && Left(reset) > Right(end) - 0.5);
             if (twoRows)
             {
-                Assert.True(start.TranslatePoint(default, bar).Y >= markIn.TranslatePoint(new Point(0, markIn.ActualHeight), bar).Y - 0.5,
-                    "the range sits under the actions");
+                Assert.True(summary.TranslatePoint(default, bar).Y >= start.TranslatePoint(new Point(0, start.ActualHeight), bar).Y - 0.5,
+                    "the summary sits under the range");
                 // Both rows start at the same left edge.
-                Assert.Equal(Left(markIn), Left((FrameworkElement)VisualTreeHelper.GetParent(start)), precision: 0);
+                Assert.Equal(Left(summary), Left((FrameworkElement)VisualTreeHelper.GetParent(start)), precision: 0);
             }
             else
             {
-                Assert.Equal(Middle(markIn), Middle(start), precision: 0);
+                Assert.Equal(Middle(summary), Middle(start), precision: 0);
+                Assert.True(Left(summary) >= Right(reset) + TrimBarPanel.GroupGap - 0.5);
             }
 
-            foreach (FrameworkElement control in new FrameworkElement[] { markIn, markOut, reset, start, end })
+            foreach (FrameworkElement control in new FrameworkElement[] { summary, reset, start, end })
                 Assert.True(Right(control) <= bar.ActualWidth + 0.5, $"{AutomationProperties.GetName(control)} leaves the bar at {width}");
         }
         finally
         {
             editor?.Close();
             OwnedTestDirectory.Delete(root);
+        }
+    });
+
+    [Fact]
+    public void TrimBarKeepsGroupsTogetherWhenNarrowedAndRefitsWhenWidened() => StaTestHost.Run(() =>
+    {
+        var range = new Border { Width = 410, Height = 36 };
+        var summary = new Border { Width = 180, Height = 40 };
+        var bar = new TrimBarPanel();
+        bar.Children.Add(range);
+        bar.Children.Add(summary);
+        foreach (double width in new[] { 700d, 500d, 700d })
+        {
+            bar.Measure(new Size(width, double.PositiveInfinity));
+            bar.Arrange(new Rect(0, 0, width, bar.DesiredSize.Height));
+            Assert.Equal(width == 500, bar.IsTwoRows);
+            Point summaryOrigin = summary.TranslatePoint(default, bar);
+            Assert.Equal(width == 500 ? 0 : width - 180, summaryOrigin.X);
+            Assert.Equal(width == 500 ? 36 + TrimBarPanel.RowGap : 0, summaryOrigin.Y);
+            Assert.True(summaryOrigin.X + summary.ActualWidth <= width);
         }
     });
 
@@ -109,7 +128,8 @@ public sealed class VideoEditorNarrowLayoutTests
             Border panel = Assert.Single(Descendants(layout).OfType<Border>(), border => border.Name == "VideoLayersPanel");
             Assert.DoesNotContain(Descendants(panel).OfType<TextBlock>(), text => text.IsVisible && text.Text == UiText.Get("Workspace.Properties"));
             Assert.Equal(new[] { UiText.Get("Video.AddLayer") },
-                Descendants(panel).OfType<Button>().Where(button => button.IsVisible && button.Content is string).Select(button => (string)button.Content));
+                Descendants(panel).OfType<Button>().Where(button => button.IsVisible && Descendants(button).OfType<TextBlock>().Any(
+                    text => text.Text == UiText.Get("Video.AddLayer"))).Select(AutomationProperties.GetName));
             ListBox list = Assert.Single(Descendants(panel).OfType<ListBox>());
             var item = Assert.IsType<ListBoxItem>(list.Items[0]);
             TextBlock[] lines = Descendants(item).OfType<TextBlock>().Where(text => text.IsVisible).ToArray();
@@ -154,8 +174,14 @@ public sealed class VideoEditorNarrowLayoutTests
             double expected = height switch { <= 560 => 145, _ => 290 };
             Assert.True(viewport.ActualHeight >= expected, $"preview {viewport.ActualHeight:0.#} DIP at {width}x{height}");
             // The commands that finish the edit stay inside the window.
-            foreach (string key in new[] { "MediaExport_SaveEdits", "MediaExport_ExportFormats", "Text_9A9C87658130" })
+            foreach (string key in new[] { "MediaExport_SaveEdits", "Text_9A9C87658130" })
                 AssertInside(Button(layout, key), (FrameworkElement)VisualTreeHelper.GetParent(layout), ((FrameworkElement)VisualTreeHelper.GetParent(layout)).ActualHeight);
+            Button export = Button(layout, "MediaExport_ExportFormats");
+            if (export.IsVisible)
+                AssertInside(export, (FrameworkElement)VisualTreeHelper.GetParent(layout), ((FrameworkElement)VisualTreeHelper.GetParent(layout)).ActualHeight);
+            else
+                Assert.Contains(Field<Button>(editor, "_moreToolsButton").ContextMenu!.Items.OfType<MenuItem>(), item =>
+                    item.Visibility == Visibility.Visible && (string)item.Header == UiText.Get("MediaExport_ExportFormats"));
         }
         finally
         {
@@ -175,13 +201,14 @@ public sealed class VideoEditorNarrowLayoutTests
             editor = OpenReadyEditor(root, 10_000, show: true);
             var layout = (Grid)editor.Content;
             object primary = editor.FindResource("Button.Primary");
-            // Save to library finishes the edit; play is the largest transport target but not
+            // Save to library finishes the edit; play is a wider transport target but not
             // a second filled accent button competing with it.
             Button filled = Assert.Single(Descendants(layout).OfType<Button>(), button => ReferenceEquals(button.Style, primary));
             Assert.Equal(UiText.Get("MediaExport_SaveEdits"), AutomationProperties.GetName(filled));
             Button play = Button(layout, "Text_9A9C87658130");
             Assert.Same(editor.FindResource("Button.Secondary"), play.Style);
-            Assert.True(play.ActualWidth >= 56 && play.ActualHeight >= 48);
+            Assert.True(play.ActualWidth >= 56);
+            Assert.Equal(44, play.ActualHeight);
             Assert.Same(editor.FindResource("Button.Secondary"), Button(layout, "MediaExport_ExportFormats").Style);
         }
         finally

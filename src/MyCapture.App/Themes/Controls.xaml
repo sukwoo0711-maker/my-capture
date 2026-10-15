@@ -1,10 +1,10 @@
 <!--
   MyCapture shared control styles.
 
-  Direction (Focus Portal, with Windows-native glass palettes):
+  Direction (M06 mark, with Windows-native glass palettes):
     * Quiet graphite hierarchy with one iris action/focus accent. Glass themes keep
       the same keys and let DWM Mica show through translucent Surface brushes.
-    * Accent fills always pair with Text.OnAccent dark ink, including checks and glyphs.
+    * Accent fills pair with Text.OnAccent from the chosen palette, including checks and glyphs.
     * Focus visuals are STABLE: templates never change BorderThickness on focus. Focus is
       shown by recolouring the fixed chrome border and revealing an inset ring with no layout
       footprint, so keyboard navigation never shifts neighbouring content.
@@ -111,6 +111,13 @@
     <!--   Focus: recolour border to accent + fade in inset focus ring. Thickness fixed.   -->
     <!-- ============================================================= -->
     <sys:Double x:Key="Button.DisabledOpacity">0.46</sys:Double>
+    <sys:Double x:Key="CommandButton.Height.Standard">44</sys:Double>
+    <sys:Double x:Key="CommandButton.Height.Compact">36</sys:Double>
+    <sys:Double x:Key="CommandButton.FontSize">12</sys:Double>
+    <sys:Double x:Key="CommandButton.IconSize">16</sys:Double>
+    <Thickness x:Key="CommandButton.Padding.Standard">10,4</Thickness>
+    <Thickness x:Key="CommandButton.Padding.Compact">10,2</Thickness>
+    <Thickness x:Key="CommandButton.IconLabelGap">6,0,0,0</Thickness>
 
     <!-- Interaction state layers. A template stacks them over its rest chrome, with the same
          corner radius and BorderThickness so the fill sits inside the chrome border. Triggers
@@ -145,11 +152,13 @@
     </Style>
 
     <Style TargetType="{x:Type Button}">
+        <Setter Property="Height" Value="{DynamicResource CommandButton.Height.Standard}" />
+        <Setter Property="FontSize" Value="{DynamicResource CommandButton.FontSize}" />
         <Setter Property="Foreground" Value="{DynamicResource Text.Primary}" />
         <Setter Property="Background" Value="{DynamicResource Surface.Overlay}" />
         <Setter Property="BorderBrush" Value="{DynamicResource Border.Control}" />
         <Setter Property="BorderThickness" Value="1" />
-        <Setter Property="Padding" Value="{DynamicResource Padding.Control}" />
+        <Setter Property="Padding" Value="{DynamicResource CommandButton.Padding.Standard}" />
         <Setter Property="MinHeight" Value="{DynamicResource Size.HitTarget}" />
         <Setter Property="MinWidth" Value="40" />
         <Setter Property="Cursor" Value="Hand" />
@@ -398,14 +407,31 @@
         </Setter>
     </Style>
     <Style x:Key="Button.Compact" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+        <Setter Property="Height" Value="{DynamicResource CommandButton.Height.Compact}" />
         <Setter Property="MinHeight" Value="{DynamicResource Size.HitTarget.Compact}" />
-        <Setter Property="Padding" Value="10,5" />
+        <Setter Property="Padding" Value="{DynamicResource CommandButton.Padding.Compact}" />
         <Setter Property="FontSize" Value="{DynamicResource FontSize.Caption}" />
     </Style>
     <Style x:Key="Button.GhostCompact" TargetType="Button" BasedOn="{StaticResource Button.Ghost}">
+        <Setter Property="Height" Value="{DynamicResource CommandButton.Height.Compact}" />
         <Setter Property="MinHeight" Value="{DynamicResource Size.HitTarget.Compact}" />
-        <Setter Property="Padding" Value="8,4" />
+        <Setter Property="Padding" Value="{DynamicResource CommandButton.Padding.Compact}" />
         <Setter Property="FontSize" Value="{DynamicResource FontSize.Caption}" />
+    </Style>
+
+    <!-- Command bars share sizing with action rows; the content helper reserves the hint line. -->
+    <Style x:Key="Button.Command" TargetType="Button" BasedOn="{StaticResource Button.Secondary}">
+        <Setter Property="Height" Value="{DynamicResource CommandButton.Height.Standard}" />
+        <Setter Property="MinHeight" Value="{DynamicResource CommandButton.Height.Standard}" />
+        <Setter Property="Padding" Value="{DynamicResource CommandButton.Padding.Standard}" />
+        <Setter Property="FontSize" Value="{DynamicResource CommandButton.FontSize}" />
+        <Setter Property="Margin" Value="3,0" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style x:Key="Button.Command.Compact" TargetType="Button" BasedOn="{StaticResource Button.Command}">
+        <Setter Property="Height" Value="{DynamicResource CommandButton.Height.Compact}" />
+        <Setter Property="MinHeight" Value="{DynamicResource CommandButton.Height.Compact}" />
+        <Setter Property="Padding" Value="{DynamicResource CommandButton.Padding.Compact}" />
     </Style>
 
     <!-- ============================================================= -->
@@ -474,6 +500,42 @@
         </Setter>
     </Style>
     <Style x:Key="ToggleButton.Tool" TargetType="ToggleButton" BasedOn="{StaticResource {x:Type ToggleButton}}" />
+
+    <!-- Optional dialog settings use the same toggle chrome and live palette as the controls below. -->
+    <Style x:Key="Expander.Options" TargetType="Expander">
+        <Setter Property="Foreground" Value="{DynamicResource Text.Primary}" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Expander">
+                    <StackPanel>
+                        <ToggleButton x:Name="HeaderToggle" HorizontalAlignment="Left" Padding="6"
+                                      IsChecked="{Binding IsExpanded, RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay}"
+                                      AutomationProperties.Name="{Binding Header, RelativeSource={RelativeSource TemplatedParent}}">
+                            <StackPanel Orientation="Horizontal">
+                                <themes:SymbolIcon x:Name="Chevron" Size="16" Data="{StaticResource Icon.ChevronDown}"
+                                                   Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ToggleButton}}"
+                                                   VerticalAlignment="Center" RenderTransformOrigin="0.5,0.5">
+                                    <themes:SymbolIcon.RenderTransform>
+                                        <RotateTransform Angle="-90" />
+                                    </themes:SymbolIcon.RenderTransform>
+                                </themes:SymbolIcon>
+                                <ContentPresenter ContentSource="Header" Margin="6,0,0,0" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </ToggleButton>
+                        <ContentPresenter x:Name="Options" Visibility="Collapsed" />
+                    </StackPanel>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsExpanded" Value="True">
+                            <Setter TargetName="Options" Property="Visibility" Value="Visible" />
+                            <Setter TargetName="Chevron" Property="UIElement.RenderTransform">
+                                <Setter.Value><RotateTransform Angle="0" /></Setter.Value>
+                            </Setter>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
 
     <!-- ============================================================= -->
     <!-- TextBox -->
@@ -609,6 +671,11 @@
                             <Setter TargetName="CheckedLayer" Property="themes:FluidMotion.FadeTo" Value="1" />
                             <Setter TargetName="Check" Property="themes:FluidMotion.ScaleTo" Value="1" />
                         </Trigger>
+                        <Trigger Property="IsChecked" Value="{x:Null}">
+                            <Setter TargetName="CheckedLayer" Property="themes:FluidMotion.FadeTo" Value="1" />
+                            <Setter TargetName="Check" Property="Path.Data" Value="M 4,8 L 14,8" />
+                            <Setter TargetName="Check" Property="themes:FluidMotion.ScaleTo" Value="1" />
+                        </Trigger>
                         <Trigger Property="IsKeyboardFocused" Value="True">
                             <Setter TargetName="Box" Property="BorderBrush" Value="{DynamicResource Border.Focus}" />
                             <Setter TargetName="FocusRing" Property="Opacity" Value="1" />
@@ -720,7 +787,7 @@
                         <Border x:Name="HoverLayer" Style="{StaticResource StateLayer.Hover}"
                                 BorderThickness="1" CornerRadius="8" />
                         <Border x:Name="SelectedLayer" Style="{StaticResource StateLayer.Selected}"
-                                BorderBrush="{DynamicResource Accent.Default}" BorderThickness="1" CornerRadius="8" />
+                                BorderBrush="{DynamicResource Accent.Foreground}" BorderThickness="1" CornerRadius="8" />
                         <Border BorderThickness="1" Padding="{TemplateBinding Padding}">
                             <ContentPresenter ContentSource="Header" RecognizesAccessKey="True" />
                         </Border>
@@ -734,7 +801,7 @@
                             <Setter Property="FontWeight" Value="SemiBold" />
                         </Trigger>
                         <Trigger Property="IsKeyboardFocused" Value="True">
-                            <Setter TargetName="TabBorder" Property="BorderBrush" Value="{DynamicResource Accent.Default}" />
+                            <Setter TargetName="TabBorder" Property="BorderBrush" Value="{DynamicResource Accent.Foreground}" />
                         </Trigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>
@@ -1198,7 +1265,7 @@
         </ControlTemplate.Triggers>
     </ControlTemplate>
     <Style TargetType="{x:Type Slider}">
-        <Setter Property="Foreground" Value="{DynamicResource Accent.Default}" />
+        <Setter Property="Foreground" Value="{DynamicResource Accent.Foreground}" />
         <Setter Property="Background" Value="Transparent" />
         <!-- The track is 4px, but the whole 32px row takes pointer input. -->
         <Setter Property="MinHeight" Value="{DynamicResource Size.HitTarget.Compact}" />
@@ -1233,7 +1300,7 @@
         <Setter Property="Stroke" Value="{DynamicResource Text.Muted}" />
     </Style>
     <Style x:Key="Icon.Symbol.Accent" TargetType="themes:SymbolIcon" BasedOn="{StaticResource Icon.Symbol}">
-        <Setter Property="Stroke" Value="{DynamicResource Accent.Default}" />
+        <Setter Property="Stroke" Value="{DynamicResource Accent.Foreground}" />
     </Style>
     <Style x:Key="Icon.Symbol.OnAccent" TargetType="themes:SymbolIcon" BasedOn="{StaticResource Icon.Symbol}">
         <Setter Property="Stroke" Value="{DynamicResource Text.OnAccent}" />
@@ -1255,10 +1322,21 @@
     <Style x:Key="Icon.Glyph.Danger" TargetType="themes:SymbolIcon" BasedOn="{StaticResource Icon.Symbol.Danger}" />
     <Style x:Key="Icon.Glyph.Filled" TargetType="themes:SymbolIcon" BasedOn="{StaticResource Icon.Symbol.Filled}" />
 
-    <!-- The embedded multi-resolution ICO is used consistently in window chrome and
-         top-level product headers. It remains decorative beside the visible product name. -->
+    <!-- M06 vector masters (docs/design/brand); window chrome uses the multi-resolution ICO. -->
+    <DrawingImage x:Key="Brand.Mark"><DrawingImage.Drawing><DrawingGroup><GeometryDrawing Brush="Transparent" Geometry="M0 0 H256 V256 H0 Z"/>
+<GeometryDrawing Geometry="F1 M76 12 H172 C218 12 236 30 236 76 V172 C236 218 218 236 172 236 H76 C30 236 12 218 12 172 V76 C12 30 30 12 76 12 Z"><GeometryDrawing.Brush><LinearGradientBrush MappingMode="Absolute" StartPoint="28,12" EndPoint="218,244"><GradientStop Color="#5B6571" Offset="0"/><GradientStop Color="#222933" Offset="1"/></LinearGradientBrush></GeometryDrawing.Brush></GeometryDrawing>
+<GeometryDrawing Geometry="F0 M56 138 L74 138 L74 172 C74 173.33 74.67 174 76 174 L110 174 L110 192 L56 192 L56 138 Z M138 56 L192 56 L192 110 L174 110 L174 76 C174 74.67 173.33 74 172 74 L138 74 L138 56 Z M56 56 L110 56 L110 74 L76 74 C74.67 74 74 74.67 74 76 L74 110 L56 110 L56 56 Z" Brush="#FFF8F4"/>
+<GeometryDrawing Geometry="F1 M125.41 125.41 L161.25 154.74 L175.38 140.62 C178.27 137.73 181.17 137.73 184.06 140.62 C185.5 142.06 185.87 145.33 185.15 150.38 L182.98 163.42 L196.02 176.46 L203.62 168.85 C207.95 164.51 212.3 164.51 216.64 168.85 L223.17 175.38 C227.5 179.71 227.5 184.06 223.17 188.4 L188.4 223.17 C184.06 227.5 179.71 227.5 175.38 223.17 L168.85 216.64 C164.51 212.3 164.51 207.95 168.85 203.62 L176.46 196.02 L163.42 182.98 L150.38 185.15 C145.33 185.87 142.06 185.5 140.62 184.06 C137.73 181.17 137.73 178.27 140.62 175.38 L154.74 161.25 L125.41 125.41 Z"><GeometryDrawing.Brush><LinearGradientBrush MappingMode="Absolute" StartPoint="170,161" EndPoint="223,226"><GradientStop Color="#F35B4D" Offset="0"/><GradientStop Color="#BB252D" Offset="1"/></LinearGradientBrush></GeometryDrawing.Brush></GeometryDrawing>
+<GeometryDrawing Geometry="F1 M208.22 170.75 C209.86 170.58 211.58 171.02 213.39 172.11 L177.55 207.95 C174.66 210.85 173.92 213.74 175.38 216.64 L172.11 213.39 C169.22 210.5 168.85 207.95 171.02 205.78 L203.62 173.2 C205.06 171.74 206.59 170.94 208.22 170.75 Z" Brush="#F87667"/>
+</DrawingGroup></DrawingImage.Drawing></DrawingImage>
+
+    <DrawingImage x:Key="Brand.Mark16"><DrawingImage.Drawing><DrawingGroup><GeometryDrawing Brush="Transparent" Geometry="M0 0 H16 V16 H0 Z"/>
+<GeometryDrawing Geometry="F1 M5 1 H11 Q15 1 15 5 V11 Q15 15 11 15 H5 Q1 15 1 11 V5 Q1 1 5 1 Z" Brush="#38424D"/>
+<GeometryDrawing Geometry="F0 M3 9 L5 9 L5 11 L7 11 L7 13 L3 13 L3 9 Z M9 3 L13 3 L13 7 L11 7 L11 5 L9 5 L9 3 Z M3 3 L7 3 L7 5 L5 5 L5 7 L3 7 L3 3 Z" Brush="#FFF8F4"/>
+<GeometryDrawing Geometry="F1 M7.5 7.5 L8.5 7 L9.5 6 C10 5.5 10 5.5 10.5 6 L10.5 8.5 L11 9 L12 8 C12.5 7.5 13 7.5 13.5 8 L14 9 C14.5 9.5 14.5 10 14 10.5 L10.5 14 C10 14.5 9.5 14.5 9 14 L8 13.5 C7.5 13 7.5 12.5 8 12 L9 11 L8.5 10.5 L6 10.5 C5.5 10 5.5 10 6 9.5 L7 8.5 L7.5 7.5 Z" Brush="#E0453C"/>
+</DrawingGroup></DrawingImage.Drawing></DrawingImage>
     <Style x:Key="Brand.AppIcon" TargetType="Image">
-        <Setter Property="Source" Value="/MyCapture;component/Assets/app.ico" />
+        <Setter Property="Source" Value="{StaticResource Brand.Mark}" />
         <Setter Property="Width" Value="40" />
         <Setter Property="Height" Value="40" />
         <Setter Property="Stretch" Value="Uniform" />
@@ -1275,10 +1353,10 @@
         <Setter Property="Padding" Value="6" />
     </Style>
     <Style x:Key="Button.Icon.Compact" TargetType="Button" BasedOn="{StaticResource Button.Icon}">
-        <Setter Property="MinWidth" Value="34" />
-        <Setter Property="MinHeight" Value="34" />
-        <Setter Property="Width" Value="34" />
-        <Setter Property="Height" Value="34" />
+        <Setter Property="MinWidth" Value="{DynamicResource CommandButton.Height.Compact}" />
+        <Setter Property="MinHeight" Value="{DynamicResource CommandButton.Height.Compact}" />
+        <Setter Property="Width" Value="{DynamicResource CommandButton.Height.Compact}" />
+        <Setter Property="Height" Value="{DynamicResource CommandButton.Height.Compact}" />
         <Setter Property="Padding" Value="5" />
     </Style>
 
@@ -1314,21 +1392,14 @@
                                 CornerRadius="{DynamicResource Radius.Md}" />
                         <Border x:Name="HoverLayer" Style="{StaticResource StateLayer.Hover}" BorderThickness="1" />
                         <Border x:Name="PressedLayer" Style="{StaticResource StateLayer.Pressed}" BorderThickness="1" />
-                        <!-- The selected tool shows its wash, accent glyph and edge indicator. -->
+                        <!-- Selection fills the tool's own tile. -->
                         <Border x:Name="CheckedLayer" Style="{StaticResource StateLayer.Selected}"
+                                Background="{DynamicResource Accent.Default}"
                                 BorderBrush="Transparent" BorderThickness="1" />
                         <Border BorderThickness="1">
                             <ContentPresenter HorizontalAlignment="Center"
                                               VerticalAlignment="Center" />
                         </Border>
-                        <Border x:Name="Indicator"
-                                Width="2" Height="18"
-                                HorizontalAlignment="Left" VerticalAlignment="Center"
-                                Background="{DynamicResource Accent.Cool}"
-                                CornerRadius="{DynamicResource Radius.Pill}"
-                                Style="{StaticResource StatePart.Normal}"
-                                IsHitTestVisible="False"
-                                Opacity="0" />
                         <Border x:Name="FocusRing"
                                 Margin="1"
                                 BorderBrush="{DynamicResource Border.Focus}"
@@ -1347,8 +1418,7 @@
                         </Trigger>
                         <Trigger Property="IsChecked" Value="True">
                             <Setter TargetName="CheckedLayer" Property="themes:FluidMotion.FadeTo" Value="1" />
-                            <Setter Property="Foreground" Value="{DynamicResource Accent.Cool}" />
-                            <Setter TargetName="Indicator" Property="themes:FluidMotion.FadeTo" Value="1" />
+                            <Setter Property="Foreground" Value="{DynamicResource Text.OnAccent}" />
                         </Trigger>
                         <Trigger Property="IsKeyboardFocused" Value="True">
                             <Setter TargetName="Chrome" Property="BorderBrush" Value="{DynamicResource Border.Focus}" />
@@ -1451,7 +1521,7 @@
                             <Setter TargetName="Grip" Property="Background" Value="{DynamicResource Text.Muted}" />
                         </Trigger>
                         <Trigger Property="IsDragging" Value="True">
-                            <Setter TargetName="Grip" Property="Background" Value="{DynamicResource Accent.Default}" />
+                            <Setter TargetName="Grip" Property="Background" Value="{DynamicResource Accent.Foreground}" />
                         </Trigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>

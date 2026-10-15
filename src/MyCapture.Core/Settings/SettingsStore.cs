@@ -353,6 +353,13 @@ public sealed class SettingsStore
             s.Annotation.FontFamily = "Malgun Gothic";
         }
 
+        s.Annotation.RecentFontFamilies = s.Annotation.RecentFontFamilies
+            .Where(family => !string.IsNullOrWhiteSpace(family))
+            .Select(family => family.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Take(5)
+            .ToList();
+
         // Trim the recent-colour list so a long-lived settings file cannot grow
         // without bound.
         const int recentColorLimit = 12;
@@ -440,6 +447,13 @@ public sealed class SettingsStore
         }
 
         if (!Enum.IsDefined(s.General.AfterCapture)) s.General.AfterCapture = AfterCaptureAction.Editor;
+        if (s.General.ShortcutHintsRevision < 1)
+        {
+            // Legacy false did not distinguish an opt-out from the former new-install default.
+            // Show hints once on upgrade, then preserve choices stored with the new marker.
+            s.General.ShowShortcutHints = true;
+            s.General.ShortcutHintsRevision = 1;
+        }
         if (!Enum.IsDefined(s.Capture.ColorFormat)) s.Capture.ColorFormat = ColorFormat.Hex;
         if (s.General.ThemeRevision < 1)
         {
@@ -449,6 +463,8 @@ public sealed class SettingsStore
         }
         s.General.Theme = MyCapture.Core.Themes.AppThemeNames.ToSetting(
             MyCapture.Core.Themes.AppThemeNames.Parse(s.General.Theme));
+        s.General.AccentColor = MyCapture.Core.Themes.AppAccentNames.ToSetting(
+            MyCapture.Core.Themes.AppAccentNames.Parse(s.General.AccentColor));
         return migratedUnsafeHotkeys;
     }
 

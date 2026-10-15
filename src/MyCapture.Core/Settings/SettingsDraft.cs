@@ -93,6 +93,7 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
     private string _gitHubIssueUrl = GitHubIssueImageUrl.DefaultIssueUrl;
     private string _gitHubToken = string.Empty;
     private string _theme = AppThemeNames.Midnight;
+    private string _accentColor = AppAccentNames.Violet;
     private string _captureGuideColorMode = "theme";
     private string _captureGuideColorHex = CaptureGuideColorValue.DefaultCustomColor;
 
@@ -426,6 +427,12 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
         set => Set(ref _theme, AppThemeNames.ToSetting(AppThemeNames.Parse(value)));
     }
 
+    public string AccentColor
+    {
+        get => _accentColor;
+        set => Set(ref _accentColor, AppAccentNames.ToSetting(AppAccentNames.Parse(value)));
+    }
+
     public string CaptureGuideColorMode
     {
         get => _captureGuideColorMode;
@@ -456,6 +463,9 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
         UiText.Get("Capture410.GuideColorInvalid"));
 
     // ================= Export =================
+    private ImageExportOptions _lastImageExport = new();
+
+    public bool ExportOptionsReplaced { get; private set; }
 
     public string QuickSaveDirectoryOverride
     {
@@ -603,6 +613,7 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
     /// </summary>
     public void LoadFrom(AppSettings settings)
     {
+        ExportOptionsReplaced = false;
         LoadValues(settings);
         _baseline = CaptureState();
     }
@@ -611,7 +622,11 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
     /// Replaces every field with <paramref name="settings"/> but keeps the values the draft was
     /// loaded with as its baseline, so an imported file still counts as an unapplied change.
     /// </summary>
-    public void ReplaceValues(AppSettings settings) => LoadValues(settings);
+    public void ReplaceValues(AppSettings settings)
+    {
+        ExportOptionsReplaced = true;
+        LoadValues(settings);
+    }
 
     /// <summary>
     /// True when any value differs from the settings this draft was loaded from. Typing a value
@@ -689,11 +704,13 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
             : GitHubIssueImageUrl.DefaultIssueUrl;
         _gitHubToken = s.GitHub.Token ?? string.Empty;
         _theme = AppThemeNames.ToSetting(AppThemeNames.Parse(s.General.Theme));
+        _accentColor = AppAccentNames.ToSetting(AppAccentNames.Parse(s.General.AccentColor));
         bool customGuide = CaptureGuideColorValue.TryNormalize(s.General.CaptureGuideColor, out string guideColor);
         _captureGuideColorMode = customGuide ? "custom" : "theme";
         _captureGuideColorHex = customGuide ? guideColor : CaptureGuideColorValue.DefaultCustomColor;
         _copyToClipboardOnQuickSave = s.Export.CopyToClipboardOnQuickSave;
         _showSourceWindowTitle = s.Export.ShowSourceWindowTitle;
+        _lastImageExport = s.Export.LastImageExport with { };
         _fileNamePattern = s.Export.FileNamePattern;
 
         _closeOnDoubleClick = s.Pin.CloseOnDoubleClick;
@@ -722,6 +739,10 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
         _preservedSchemaVersion = s.SchemaVersion;
         _preservedStrokeColor = s.Annotation.StrokeColor;
         _preservedTextColor = s.Annotation.TextColor;
+        _preservedTextBold = s.Annotation.TextBold;
+        _preservedTextBackground = s.Annotation.TextBackground;
+        _preservedTextOutline = s.Annotation.TextOutline;
+        _preservedRecentFontFamilies = [.. s.Annotation.RecentFontFamilies];
         _preservedRecentColors = [.. s.Annotation.RecentColors];
         _preservedColorFormat = s.Capture.ColorFormat;
         _preservedPreserveTransparency = s.Export.PreserveTransparency;
@@ -740,7 +761,7 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
     /// to disk until Apply, so a subsequent Cancel or a re-<see cref="LoadFrom"/> restores the
     /// previous values. The baseline is kept, so the reset counts as an unapplied change.
     /// </summary>
-    public void ResetToDefaults() => LoadValues(NewInstallDefaults.Create());
+    public void ResetToDefaults() => ReplaceValues(NewInstallDefaults.Create());
 
     /// <summary>
     /// Every value <see cref="ToAppSettings"/> writes, in a fixed order, as invariant text.
@@ -749,7 +770,7 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
     private string[] CaptureState() =>
     [
         B(_launchAtLogin), B(_notifyOnQuickSave), B(_playCaptureSound), _afterCapture.ToString(), B(_showShortcutHints),
-        _language, _theme, _captureGuideColorMode, IsCustomCaptureGuideColor ? _captureGuideColorHex : string.Empty,
+        _language, _theme, _accentColor, _captureGuideColorMode, IsCustomCaptureGuideColor ? _captureGuideColorHex : string.Empty,
         B(_includeCursor), B(_autoDetectWindows), B(_showMagnifier), B(_showSelectionGrid), B(_abortOnFocusLoss),
         _preservedColorFormat.ToString(), _delaySeconds, _regionHistoryLimit,
         _recordingFrameRate, B(_useRecordingStartDelay), _recordingStartDelaySeconds, B(_recordingIncludeCursor),
@@ -764,11 +785,16 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
         _gitHubIssueUrl, _gitHubToken,
         _quickSaveDirectoryOverride, B(_copyToClipboardOnQuickSave), B(_showSourceWindowTitle), _fileNamePattern,
         B(_preservedPreserveTransparency),
+        _lastImageExport.Format.ToString(), Int(_lastImageExport.LongEdge), Int(_lastImageExport.ReductionPercent),
+        B(_lastImageExport.IncludeSourceUrl), Int(_lastImageExport.Margin), Int(_lastImageExport.CornerRadius),
+        _lastImageExport.Background.ToString(), B(_lastImageExport.Shadow),
         B(_closeOnDoubleClick), _initialOpacity, _zoomStep, _ctrlClickDebounceMs, _closedWindowRestoreLimit,
         _preferredLanguages, _ocrQuality, B(_cacheResults),
         _lastAnnotationTool, _annotationStrokeStyle.ToString(), Dbl(_annotationFillTransparency), _strokeThickness,
         _fontSize, _fontFamily, _mosaicBlockSize, _highlighterAlpha, _highlighterOpacityPercent, _blurRadius,
         _preservedStrokeColor.ToString(), _preservedTextColor.ToString(),
+        B(_preservedTextBold), B(_preservedTextBackground), B(_preservedTextOutline),
+        string.Join(";", _preservedRecentFontFamilies),
         string.Join(";", _preservedRecentColors.Select(color => color.ToString())),
     ];
 
@@ -797,6 +823,7 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
                 ShowShortcutHints = _showShortcutHints,
                 Language = _language,
                 Theme = AppThemeNames.ToSetting(AppThemeNames.Parse(_theme)),
+                AccentColor = AppAccentNames.ToSetting(AppAccentNames.Parse(_accentColor)),
                 CaptureGuideColor = CaptureGuideColorSetting,
                 ThemeRevision = 1,
                 IsFirstRun = _preservedIsFirstRun,
@@ -871,6 +898,7 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
                     AppPaths.CreateDefault().QuickSaveRoot),
                 CopyToClipboardOnQuickSave = _copyToClipboardOnQuickSave,
                 ShowSourceWindowTitle = _showSourceWindowTitle,
+                LastImageExport = _lastImageExport with { },
                 FileNamePattern = _fileNamePattern.Trim(),
                 PreserveTransparency = _preservedPreserveTransparency,
             },
@@ -899,6 +927,10 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
                 TextColor = _preservedTextColor,
                 FontSize = ParseDouble(_fontSize),
                 FontFamily = _fontFamily.Trim(),
+                TextBold = _preservedTextBold,
+                TextBackground = _preservedTextBackground,
+                TextOutline = _preservedTextOutline,
+                RecentFontFamilies = [.. _preservedRecentFontFamilies],
                 MosaicBlockSize = ParseInt(_mosaicBlockSize),
                 HighlighterAlpha = (byte)ParseInt(_highlighterAlpha),
                 RecentColors = [.. _preservedRecentColors],
@@ -1382,6 +1414,10 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
     private int _preservedSchemaVersion = 1;
     private Primitives.ColorRgba _preservedStrokeColor;
     private Primitives.ColorRgba _preservedTextColor;
+    private bool _preservedTextBold;
+    private bool _preservedTextBackground;
+    private bool _preservedTextOutline = true;
+    private List<string> _preservedRecentFontFamilies = [];
     private List<Primitives.ColorRgba> _preservedRecentColors = [];
     private ColorFormat _preservedColorFormat;
     private bool _preservedPreserveTransparency;

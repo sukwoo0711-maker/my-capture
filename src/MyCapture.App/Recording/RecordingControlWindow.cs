@@ -310,7 +310,7 @@ internal sealed class RecordingControlWindow : Window
         var panel = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
         var path = new SymbolIcon
         {
-            Size = 20,
+            Size = CommandButtonPresentation.IconSize,
             StrokeThickness = 0,
             Data = glyph,
             VerticalAlignment = VerticalAlignment.Center,
@@ -318,7 +318,7 @@ internal sealed class RecordingControlWindow : Window
         path.SetBinding(SymbolIcon.FillProperty,
             new System.Windows.Data.Binding(nameof(Control.Foreground)) { Source = button });
         panel.Children.Add(path);
-        panel.Children.Add(new TextBlock { Text = label, Margin = new Thickness(8, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center });
+        panel.Children.Add(new TextBlock { Text = label, Margin = new Thickness(CommandButtonPresentation.IconLabelGap, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center });
         button.Content = panel;
     }
 
@@ -528,6 +528,12 @@ internal sealed class RecordingControlWindow : Window
             Style = TryStyle("Button.Ghost"),
         };
         cancel.Click += (_, _) => CancelSession();
+        foreach (Button command in new[] { primary, pause, more, cancel })
+        {
+            double minimumWidth = command.MinWidth;
+            CommandButtonPresentation.Apply(command, compact: true);
+            command.MinWidth = minimumWidth;
+        }
         AutomationProperties.SetName(cancel, UiText.Get("Text_E1C96EF1EA0F"));
         Grid.SetColumn(cancel, 5);
         panel.Children.Add(cancel);

@@ -1,15 +1,9 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" role="img" aria-labelledby="title desc">
-  <title id="title">MyCapture</title>
-  <desc id="desc">Two offset rounded panes on a Windows 11 glass plate, representing a captured region becoming a floating object.</desc>
-  <defs>
-    <linearGradient id="sheen" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.22"/>
-      <stop offset="1" stop-color="#FFFFFF" stop-opacity="0"/>
-    </linearGradient>
-  </defs>
-  <rect x="1" y="1" width="22" height="22" rx="5.2" fill="#1C2028"/>
-  <rect x="1" y="1" width="22" height="22" rx="5.2" fill="url(#sheen)"/>
-  <rect x="1" y="1" width="22" height="22" rx="5.2" fill="none" stroke="#F6F8FC" stroke-opacity="0.28" stroke-width="0.6"/>
-  <rect x="9" y="8" width="11" height="11" rx="2.25" fill="none" stroke="#7C6CFF" stroke-width="2.25"/>
-  <rect x="4" y="4" width="11" height="11" rx="2.25" fill="none" stroke="#F6F8FC" stroke-width="2.25"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256" role="img" aria-labelledby="title">
+<!-- Pin factor 1.60 relative to installed round-9 M06 (base 0.96). Source: artifacts/brand-pin/renderer/PinStudy.cs. -->
+<title id="title">M06 L3 / 1.60x current</title>
+<defs><linearGradient id="graphite" gradientUnits="userSpaceOnUse" x1="28" y1="12" x2="218" y2="244"><stop offset="0" stop-color="#5B6571"/><stop offset="1" stop-color="#222933"/></linearGradient><linearGradient id="signal" gradientUnits="userSpaceOnUse" x1="170" y1="161" x2="223" y2="226"><stop offset="0" stop-color="#F35B4D"/><stop offset="1" stop-color="#BB252D"/></linearGradient></defs>
+<path fill="url(#graphite)" fill-rule="nonzero" d="M76 12 H172 C218 12 236 30 236 76 V172 C236 218 218 236 172 236 H76 C30 236 12 218 12 172 V76 C12 30 30 12 76 12 Z"/>
+<path fill="#FFF8F4" fill-rule="evenodd" d="M56 138 L74 138 L74 172 C74 173.33 74.67 174 76 174 L110 174 L110 192 L56 192 L56 138 Z M138 56 L192 56 L192 110 L174 110 L174 76 C174 74.67 173.33 74 172 74 L138 74 L138 56 Z M56 56 L110 56 L110 74 L76 74 C74.67 74 74 74.67 74 76 L74 110 L56 110 L56 56 Z"/>
+<path fill="url(#signal)" fill-rule="nonzero" d="M125.41 125.41 L161.25 154.74 L175.38 140.62 C178.27 137.73 181.17 137.73 184.06 140.62 C185.5 142.06 185.87 145.33 185.15 150.38 L182.98 163.42 L196.02 176.46 L203.62 168.85 C207.95 164.51 212.3 164.51 216.64 168.85 L223.17 175.38 C227.5 179.71 227.5 184.06 223.17 188.4 L188.4 223.17 C184.06 227.5 179.71 227.5 175.38 223.17 L168.85 216.64 C164.51 212.3 164.51 207.95 168.85 203.62 L176.46 196.02 L163.42 182.98 L150.38 185.15 C145.33 185.87 142.06 185.5 140.62 184.06 C137.73 181.17 137.73 178.27 140.62 175.38 L154.74 161.25 L125.41 125.41 Z"/>
+<path fill="#F87667" fill-rule="nonzero" d="M208.22 170.75 C209.86 170.58 211.58 171.02 213.39 172.11 L177.55 207.95 C174.66 210.85 173.92 213.74 175.38 216.64 L172.11 213.39 C169.22 210.5 168.85 207.95 171.02 205.78 L203.62 173.2 C205.06 171.74 206.59 170.94 208.22 170.75 Z"/>
 </svg>

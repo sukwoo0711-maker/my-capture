@@ -161,6 +161,54 @@ public sealed class EditorLargeTextViewportTests
     }
 
     [Theory]
+    [InlineData(1000, 0)]
+    [InlineData(1000, 600)]
+    [InlineData(850, 0)]
+    [InlineData(850, 600)]
+    public void ReopenedCaptionKeepsFractionalWrappingWidthInRoundedWindows(int windowWidth, int left) => StaTestHost.Run(() =>
+    {
+        var caption = new TextAnnotation
+        {
+            Text = string.Concat(Enumerable.Repeat("한글 줄바꿈과 소수 폭을 유지합니다 abcXYZ😀 ", 100)),
+            Rect = new RectD(left, 40, 800 - left - 0.5, 40),
+            FontSize = 18,
+            AutoSize = false,
+        };
+        caption.Rect = TextAnnotationLayout.Measure(caption);
+        var document = AnnotationDocument.CreateFor(800, 600);
+        document.Add(caption);
+        using EditorWindowHost host = EditorWindowHost.Create(Solid(800, 600, 240), document);
+        host.Window.Width = windowWidth;
+        host.Window.UpdateLayout();
+        Assert.True(host.Window.UseLayoutRounding);
+        AnnotationEditorController controller = Controller(host.Editor);
+        controller.SetSelected(caption);
+        string before = controller.Document.ToJson();
+        host.Editor.ShortcutActions["EditText"]();
+        host.Window.UpdateLayout();
+
+        TextBox box = Field<TextBox>(host.Editor, "_activeTextBox");
+        var scroll = (ScrollViewer)box.Template.FindName("PART_ContentHost", box);
+        var bar = (System.Windows.Controls.Primitives.ScrollBar)scroll.Template.FindName("PART_VerticalScrollBar", scroll);
+        Assert.Equal(Visibility.Visible, scroll.ComputedVerticalScrollBarVisibility);
+        AssertBarInside(bar, Field<Canvas>(host.Editor, "_overlayCanvas"));
+        double expectedWidth = Field<AnnotationEditorSurface>(host.Editor, "_surface").ToSurfaceRect(caption.Rect).Width;
+        Assert.True(Math.Abs(expectedWidth - Math.Round(expectedWidth)) > 0.05,
+            $"The fixture must exercise a fractional wrapping width: {expectedWidth}.");
+        var inset = Field<Point>(host.Editor, "_liveTextInset");
+        double barSlot = Grid.GetColumn(bar) == 1 ? 0 : bar.ActualWidth;
+        Assert.Equal(expectedWidth, box.ActualWidth - 2 * inset.X - barSlot, 1);
+        var singleLine = (TextAnnotation)caption.Clone();
+        singleLine.Text = "가";
+        singleLine.AutoSize = true;
+        Assert.Equal((int)Math.Round(TextAnnotationLayout.Format(caption, 1).Height / TextAnnotationLayout.Format(singleLine, 1).Height), box.LineCount);
+
+        Invoke(host.Editor, "CommitActiveText");
+        Assert.Equal(before, controller.Document.ToJson());
+        Assert.False(controller.CanUndo);
+    });
+
+    [Theory]
     [InlineData(false)]
     [InlineData(true)]
     public void OverflowScrollbarKeepsTheCommittedWrappingWidth(bool paragraphs) => StaTestHost.Run(() =>

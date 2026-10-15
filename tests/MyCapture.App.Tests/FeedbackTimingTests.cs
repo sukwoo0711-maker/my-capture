@@ -47,9 +47,9 @@ public sealed class FeedbackTimingTests : KoreanCaptionTest
     }
 
     [Fact]
-    public void CaptureOverlayColorChipUsesTheOverContentTimes() => StaTestHost.Run(() =>
+    public void FailedColorCopyUsesTheWarningTimeAndSuccessfulRetryEndsTheSelector() => StaTestHost.Run(() =>
     {
-        bool copies = true;
+        bool copies = false;
         var view = new CaptureOverlayView(WindowDetectOverlayTests.Frame(), showMagnifier: false)
         {
             ReadCursor = () => new MyCapture.Core.Primitives.PointD(5, 5),
@@ -58,12 +58,14 @@ public sealed class FeedbackTimingTests : KoreanCaptionTest
         try
         {
             view.InitializePointer();
-            Assert.NotNull(view.CopyColorAtPointerAsync().Result);
-            Assert.Equal(FeedbackTiming.ConfirmationOverContent, view.ToastIntervalForTest);
-            copies = false;
             Assert.Null(view.CopyColorAtPointerAsync().Result);
             Assert.Equal(UiText.Get("ColorPick_CopyFailed"), view.ToastMessageForTest);
             Assert.Equal(FeedbackTiming.Result, view.ToastIntervalForTest);
+            int cancelled = 0;
+            view.CancelRequested += (_, _) => cancelled++;
+            copies = true;
+            Assert.NotNull(view.CopyColorAtPointerAsync().Result);
+            Assert.Equal(1, cancelled);
         }
         finally { view.ReleaseResources(); }
     });

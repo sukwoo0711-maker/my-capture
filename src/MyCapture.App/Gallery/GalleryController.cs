@@ -70,16 +70,21 @@ public sealed class GalleryController
     /// </remarks>
     public IReadOnlyList<GalleryGroupedRecords> BuildGroups(string? query, DateTimeOffset now,
         CaptureFolderScope scope = default, GallerySortOrder sort = GallerySortOrder.Newest,
-        bool includeFolders = false)
+        bool includeFolders = false, IDictionary<Guid, CaptureMatchField>? searchMatchFields = null)
     {
         CaptureFolder[] folders = includeFolders ? FolderCardsInScope(scope) : [];
         IEnumerable<CaptureRecord> matches = RecordsInView(scope, browsing: includeFolders);
         string? trimmed = query?.Trim();
         if (!string.IsNullOrEmpty(trimmed))
         {
-            Func<CaptureRecord, bool> matcher = CaptureTextSearch.CreateMatcher(trimmed);
-            matches = matches.Where(record => matcher(record)
-                || _queue.GetExportFileName(record).Contains(trimmed, StringComparison.CurrentCultureIgnoreCase));
+            CaptureSearchQuery prepared = CaptureSearchQuery.Parse(trimmed);
+            matches = matches.Where(record =>
+            {
+                bool matched = MatchesSearch(record, prepared, out CaptureMatchField fields,
+                    collectFields: searchMatchFields is not null);
+                if (matched && searchMatchFields is not null) searchMatchFields[record.Id] = fields;
+                return matched;
+            });
         }
         CaptureRecord[] ordered = (sort switch
         {
@@ -105,6 +110,16 @@ public sealed class GalleryController
             .OrderByDescending(day => day.SortKey)
             .Select(day => new GalleryGroupedRecords(day, recordsByDay[day].ToArray()) { Folders = foldersByDay[day].ToArray() })
             .ToArray();
+    }
+
+    private bool MatchesSearch(CaptureRecord record, CaptureSearchQuery query, out CaptureMatchField fields,
+        bool collectFields)
+    {
+        string? folder = record.FolderId is { } id && query.Tokens.Any(token => token.Field == CaptureSearchField.Folder)
+            ? _queue.GetFolderDisplayPath(id) : null;
+        string fileName = _queue.GetExportFileName(record);
+        fields = CaptureMatchField.None;
+        return collectFields ? query.TryMatch(record, out fields, folder, fileName) : query.IsMatch(record, folder, fileName);
     }
 
     /// <summary>
@@ -182,38 +197,14 @@ public sealed class GalleryController
 
     public CaptureRecord? Find(Guid id) => _queue.IsRemovalPending(id) ? null : _queue.Find(id);
 
+    public Task<CaptureBatchTagResult> UpdateTagsAsync(IEnumerable<Guid> ids,
+        IEnumerable<CaptureTagChange> changes, CancellationToken cancellationToken = default) =>
+        _queue.UpdateTagsAsync(ids, changes, cancellationToken);
+
     /// <summary>Edits only user metadata; serializes publication with OCR and image edits.</summary>
-    public async Task<bool> UpdateOrganizationAsync(Guid id, string? title, string? tags,
-        CancellationToken cancellationToken = default)
-    {
-        string normalizedTitle = CaptureOrganization.NormalizeTitle(title);
-        string normalizedTags = CaptureOrganization.NormalizeTags(tags);
-        using CaptureWriteReservation reservation = await _queue.ReservePublicationAsync(cancellationToken);
-        cancellationToken.ThrowIfCancellationRequested();
-        CaptureRecord? record = _queue.Find(id);
-        if (record is null) return false;
-        using IDisposable lease = _queue.AcquireEvictionLease(id);
-        string previousTitle = record.Title;
-        string previousTags = record.Tags;
-        DateTimeOffset previousUpdatedAt = record.UpdatedAt;
-        record.Title = normalizedTitle;
-        record.Tags = normalizedTags;
-        record.UpdatedAt = DateTimeOffset.Now;
-        try
-        {
-            await _queue.PublishRecordAsync(record, reservation);
-        }
-        catch
-        {
-            record.Title = previousTitle;
-            record.Tags = previousTags;
-            record.UpdatedAt = previousUpdatedAt;
-            throw;
-        }
-        // Do not log user-authored labels, which can contain private project names.
-        _log.LogInformation("Updated organization metadata for capture {Id}", id);
-        return true;
-    }
+    public Task<bool> UpdateOrganizationAsync(Guid id, string? title, string? tags,
+        CancellationToken cancellationToken = default) =>
+        _queue.UpdateOrganizationAsync(id, title, tags, cancellationToken);
 
     /// <summary>
     /// How much of the queue is full-text searchable right now (i.e. carries OCR text).

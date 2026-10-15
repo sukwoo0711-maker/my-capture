@@ -231,8 +231,10 @@ internal sealed class ShortcutHelpWindow : Window
     private Button TutorialButton(string featureId)
     {
         var button = new Button { Content = UiText.Get("TextCapture_TutorialOpen"), HorizontalAlignment = HorizontalAlignment.Left,
-            Margin = new Thickness(8, 2, 0, 2), MinHeight = 32, Padding = new Thickness(10, 4, 10, 4), Tag = featureId };
-        button.SetResourceReference(StyleProperty, "Button.Secondary");
+            Tag = featureId };
+        button.SetResourceReference(StyleProperty, "Button.Compact");
+        CommandButtonPresentation.Apply(button, compact: true);
+        button.Margin = new Thickness(8, 2, 0, 2);
         AutomationProperties.SetName(button, FeatureTutorialWindow.OpenButtonName(TutorialCatalog.Get(featureId)));
         button.Click += (_, _) => FeatureTutorialWindow.ShowTutorial(this, ReadHotkeys, featureId);
         return button;

@@ -28,6 +28,18 @@ internal static class TrimPresentation
     internal static string KeptLength(double inMs, double outMs) =>
         UiText.Format("VideoEditorUx_KeptLength", Clock(KeptMs(inMs, outMs)));
 
+    internal static string KeptLength(VideoCutTimeline timeline) =>
+        UiText.Format("VideoEditorUx_KeptLength", Clock(timeline.OutputDurationMs));
+
+    internal static string RemovedLength(double durationMs, VideoCutTimeline timeline) =>
+        timeline.RemovedRanges.Count == 0
+            ? RemovedLength(durationMs, timeline.StartMs, timeline.EndMs)
+            : UiText.Format("VideoMulticut_RemovedCount", timeline.RemovedRanges.Count,
+                Clock(Math.Max(0, durationMs - timeline.OutputDurationMs)));
+
+    internal static string SegmentLabel(VideoTimeRange range) =>
+        UiText.Format("VideoMulticut_SegmentRange", Clock(range.StartMs), Clock(range.EndMs));
+
     /// <summary>Secondary line under the kept length: how much is cut, or that nothing is.</summary>
     internal static string RemovedLength(double durationMs, double inMs, double outMs)
     {

@@ -80,7 +80,8 @@ public sealed class FolderR2Tests
         var record = new CaptureRecord { Width = 1, Height = 1, Title = new string('n', 80) };
         queue.Add(record);
         Directory.CreateDirectory(queue.GetDirectory(record));
-        File.WriteAllBytes(queue.GetFilePath(record, CaptureFileNames.Rendered), [1, 2, 3]);
+        byte[] png = ExportPngFixture.Create();
+        File.WriteAllBytes(queue.GetFilePath(record, CaptureFileNames.Rendered), png);
         await queue.MoveCapturesAsync([record.Id], parent!.Id);
         var exporter = new GalleryFolderExportService(queue, Path.Combine(root, "stage"));
         using var prepared = await exporter.PrepareAsync(exporter.BuildPlan(CaptureFolderScope.All));
@@ -89,7 +90,7 @@ public sealed class FolderR2Tests
         await GalleryFolderExportService.ExportDirectoryAsync(prepared, destination);
         string exported = ValidatedFilePaths.FileWithinRoot(destination,
             Assert.Single(Directory.GetFiles(destination, "*.png", SearchOption.AllDirectories)), ".png");
-        Assert.True(exported.Length <= 240); Assert.Equal(new byte[] { 1, 2, 3 }, File.ReadAllBytes(exported));
+        Assert.True(exported.Length <= 240); Assert.Equal(png, File.ReadAllBytes(exported));
         string existing = ValidatedFilePaths.FileWithinRoot(root, "export.zip", ".zip"); File.WriteAllText(existing, "keep");
         string archivePath = GalleryWindow.UniqueArchivePath(existing);
         Assert.EndsWith("export~2.zip", archivePath);
@@ -99,6 +100,6 @@ public sealed class FolderR2Tests
         ZipFile.ExtractToDirectory(archivePath, extract);
         string extracted = ValidatedFilePaths.FileWithinRoot(extract,
             Assert.Single(Directory.GetFiles(extract, "*.png", SearchOption.AllDirectories)), ".png");
-        Assert.True(extracted.Length <= 240); Assert.Equal(new byte[] { 1, 2, 3 }, File.ReadAllBytes(extracted));
+        Assert.True(extracted.Length <= 240); Assert.Equal(png, File.ReadAllBytes(extracted));
     }
 }

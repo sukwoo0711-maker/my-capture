@@ -216,7 +216,7 @@ internal sealed class AnnotationEditorSurface : FrameworkElement
             origin.Y + (_cropRegion.Top * scale)));
         dc.PushTransform(new ScaleTransform(scale, scale));
 
-        AnnotationItem? suppress = _controller.IsCreatingText ? _controller.Selected : null;
+        AnnotationItem? suppress = _controller.EditingText;
         // The editor's frame always starts at the selection origin, so the frame bitmap is the
         // base capture in annotation pixel space that blur layers sample.
         _renderer.Render(dc, _controller.Document, pixelsPerDip, suppress, _frame.Bitmap);
@@ -300,17 +300,25 @@ internal sealed class AnnotationEditorSurface : FrameworkElement
 
     private void DrawSelectionAdorner(DrawingContext dc)
     {
+        if (_controller.MarqueeBounds is { } marquee)
+        {
+            dc.PushOpacity(0.12);
+            dc.DrawRectangle(_selectionBrush, null, ToSurfaceRect(marquee));
+            dc.Pop();
+            dc.DrawRectangle(null, _selectionOutlinePen, ToSurfaceRect(marquee));
+        }
         AnnotationItem? selected = _controller.Selected;
-        if (selected is null || _controller.IsCreatingText)
+        if (selected is null || _controller.EditingText is not null)
         {
             return;
         }
 
-        Rect bounds = ToSurfaceRect(selected.Bounds);
+        bool multiple = _controller.SelectedItems.Count > 1;
+        Rect bounds = ToSurfaceRect(_controller.SelectionBounds ?? selected.Bounds);
         Rect inflated = Rect.Inflate(bounds, 2, 2);
         dc.DrawRectangle(null, _selectionOutlinePen, inflated);
 
-        if (!selected.SupportsResize)
+        if (!multiple && !selected.SupportsResize)
         {
             return;
         }
@@ -319,7 +327,7 @@ internal sealed class AnnotationEditorSurface : FrameworkElement
         foreach (Point center in HandleCenters(inflated))
         {
             // Same order as HandleCenters; a caption offers no top/bottom handles.
-            if (AnnotationEditorController.UsableHandle(selected, HandleOrder[index++]) == ResizeHandle.None)
+            if (!multiple && AnnotationEditorController.UsableHandle(selected, HandleOrder[index++]) == ResizeHandle.None)
             {
                 continue;
             }

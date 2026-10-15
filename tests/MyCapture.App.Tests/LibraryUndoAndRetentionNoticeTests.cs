@@ -19,6 +19,65 @@ namespace MyCapture.App.Tests;
 /// </summary>
 public sealed class LibraryUndoAndRetentionNoticeTests
 {
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
+    public async Task MoveDeleteUndoDeleteUndoMove_PreservesRecoveredRetention(bool sourceFolder, bool pinned)
+    {
+        var fixture = new UndoFixture(1);
+        CaptureRecord record = fixture.Records[0];
+        record.IsPinned = pinned;
+        CaptureFolder? source = sourceFolder ? await fixture.Queue.CreateFolderAsync("Source") : null;
+        if (source is not null) await fixture.Queue.MoveCapturesAsync([record.Id], source.Id);
+        long sequence = record.FolderSequence;
+        CaptureFolder target = await fixture.Queue.CreateFolderAsync("Target");
+        await fixture.Queue.MoveCapturesAsync([record.Id], target.Id);
+        Guid batch = Guid.NewGuid();
+        using (fixture.Service.BeginBatch(batch))
+            Assert.Equal(1, (await fixture.Queue.RemoveManyAsync([record.Id])).RemovedCount);
+        Assert.Null(fixture.Queue.Find(record.Id));
+        fixture.Queue.LibraryUndo.Record(LibraryUndoKind.Delete, async () =>
+        {
+            Assert.Equal(new LibraryBatchRestoreResult(1, 0), await fixture.Service.RestoreBatchAsync(batch));
+            return true;
+        });
+
+        Assert.Equal(LibraryUndoKind.Delete, await fixture.Queue.LibraryUndo.UndoAsync());
+        CaptureRecord restored = fixture.Queue.Find(record.Id)!;
+        Assert.Equal(target.Id, restored.FolderId);
+        DateTimeOffset? retention = restored.RetentionStartedAt;
+        Assert.NotNull(retention);
+        Assert.Equal(LibraryUndoKind.Move, await fixture.Queue.LibraryUndo.UndoAsync());
+        Assert.Equal(source?.Id, restored.FolderId);
+        Assert.Equal(sequence, restored.FolderSequence);
+        Assert.Equal(pinned, restored.IsManuallyPinned);
+        Assert.Equal(sourceFolder || pinned, restored.IsPinned);
+        Assert.Equal(retention, restored.RetentionStartedAt);
+        var reloaded = new CaptureQueue(fixture.Paths, new QueueSettings(), NullLogger<CaptureQueue>.Instance);
+        reloaded.Load();
+        Assert.Equal(source?.Id, reloaded.Find(record.Id)!.FolderId);
+        Assert.Equal(retention, reloaded.Find(record.Id)!.RetentionStartedAt);
+    }
+
+    [Fact]
+    public async Task Undo_SkipsTitleOfExpiredCapture_AndRestoresOlderTitle()
+    {
+        var fixture = new UndoFixture(1);
+        CaptureRecord first = fixture.Records[0];
+        CaptureRecord expired = fixture.Add(DateTimeOffset.Now.AddDays(-10));
+        await fixture.Queue.UpdateOrganizationAsync(first.Id, "First renamed", "");
+        await fixture.Queue.UpdateOrganizationAsync(expired.Id, "Expired renamed", "");
+        fixture.Service.ConnectAutomaticMaintenance();
+        fixture.Queue.ExpireHistory(DateTimeOffset.Now);
+        await fixture.Service.MaintenanceCompletion.WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.Null(fixture.Queue.Find(expired.Id));
+        Assert.Equal(LibraryUndoKind.Title, await fixture.Queue.LibraryUndo.UndoAsync());
+        Assert.Equal(string.Empty, first.Title);
+        Assert.Equal(0, fixture.Queue.LibraryUndo.Count);
+    }
+
     [Fact]
     public async Task DeleteBatch_IsTaggedAndRestoredTogether_WithOneIndexWrite()
     {

@@ -113,6 +113,31 @@ public sealed class GallerySelectAllTests(ITestOutputHelper output)
     }
 
     [Fact]
+    public void CompareAvailabilityNotifiesOnlyWhenTwoImageEligibilityChanges()
+    {
+        using var fixture = new Fixture(6);
+        GalleryViewModel vm = fixture.Model();
+        Guid[] images = fixture.Queue.Records.Where(record => !record.IsVideo).Select(record => record.Id).ToArray();
+        var availability = new List<bool>();
+        vm.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(GalleryViewModel.CanCompareSelected)) availability.Add(vm.CanCompareSelected);
+        };
+
+        vm.Select(images[0]);
+        Assert.Empty(availability);
+        vm.Select(images[1], control: true);
+        Assert.Equal([true], availability);
+        vm.Refresh();
+        Assert.Equal([true], availability);
+        vm.SelectAllVisible();
+        Assert.Equal(new[] { true, false }, availability);
+        vm.SelectAllVisible();
+        vm.ClearSelection();
+        Assert.Equal(new[] { true, false }, availability);
+    }
+
+    [Fact]
     public async Task FolderBrowsingSelectsDirectCapturesWhileSearchIncludesNestedMatches()
     {
         using var fixture = new Fixture(6);
@@ -221,7 +246,7 @@ public sealed class GallerySelectAllTests(ITestOutputHelper output)
         vm.Refresh();
     }
 
-    private sealed record Measurement(long Bytes, double Milliseconds, int ClockCalls,
+    private sealed record Measurement(long Bytes, double Milliseconds, double MedianMilliseconds, double WorstMilliseconds, int ClockCalls,
         long MetadataNotifications, long SelectionNotifications, long GroupChanges, long RowChanges);
 
     private static Measurement Measure(Action action, Fixture fixture, Observer observer, int iterations)
@@ -229,11 +254,20 @@ public sealed class GallerySelectAllTests(ITestOutputHelper output)
         observer.Reset();
         fixture.ClockCalls = 0;
         var stopwatch = new Stopwatch();
+        var timings = new double[iterations];
         long allocated = GC.GetAllocatedBytesForCurrentThread();
         stopwatch.Start();
-        for (int iteration = 0; iteration < iterations; iteration++) action();
+        for (int iteration = 0; iteration < iterations; iteration++)
+        {
+            long started = Stopwatch.GetTimestamp();
+            action();
+            timings[iteration] = Stopwatch.GetElapsedTime(started).TotalMilliseconds;
+        }
         stopwatch.Stop();
-        return new Measurement(GC.GetAllocatedBytesForCurrentThread() - allocated, stopwatch.Elapsed.TotalMilliseconds,
+        long bytes = GC.GetAllocatedBytesForCurrentThread() - allocated;
+        Array.Sort(timings);
+        double median = (timings[(iterations - 1) / 2] + timings[iterations / 2]) / 2;
+        return new Measurement(bytes, stopwatch.Elapsed.TotalMilliseconds, median, timings[^1],
             fixture.ClockCalls, observer.MetadataNotifications, observer.SelectionNotifications,
             observer.GroupChanges, observer.RowChanges);
     }

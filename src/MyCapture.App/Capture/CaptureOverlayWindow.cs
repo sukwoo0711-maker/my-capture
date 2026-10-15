@@ -197,6 +197,12 @@ internal sealed class CaptureOverlayWindow : Window
         set => _view.CopyColorText = value;
     }
 
+    internal Action<ColorCopyFeedback>? ColorCopied
+    {
+        get => _view.ColorCopied;
+        set => _view.ColorCopied = value;
+    }
+
     internal Func<MyCapture.Core.Settings.ColorFormat> ReadColorFormat
     {
         get => _view.ReadColorFormat;

@@ -183,6 +183,9 @@ public sealed class QueueSettings
 
 public sealed class ExportSettings
 {
+    // Additive migration: older settings deserialize to URL excluded and original size.
+    public ImageExportOptions LastImageExport { get; set => field = (value ?? new()).Normalize(); } = new();
+
     /// <summary>
     /// Destination for quick save. Empty means the default location.
     /// </summary>
@@ -297,6 +300,15 @@ public sealed class AnnotationDefaults
 
     public string FontFamily { get; set; } = "Malgun Gothic";
 
+    public bool TextBold { get; set; }
+
+    public bool TextBackground { get; set; }
+
+    public bool TextOutline { get; set; } = true;
+
+    /// <summary>Recently used text font families, most recent first.</summary>
+    public List<string> RecentFontFamilies { get; set => field = value ?? []; } = [];
+
     /// <summary>Block size used by the mosaic tool, in image pixels.</summary>
     public int MosaicBlockSize { get; set; } = 12;
 
@@ -342,7 +354,7 @@ public sealed class OcrSettings
 
 public enum AfterCaptureAction { Editor, QuickAccess, ClipboardOnly }
 
-public sealed class GeneralSettings
+public sealed class GeneralSettings : IJsonOnDeserializing
 {
     // 4.0.x wrote both values without an explicit post-capture choice. Consume the
     // legacy field without changing the new default or writing it back out.
@@ -351,11 +363,14 @@ public sealed class GeneralSettings
     public AfterCaptureAction AfterCapture { get; set; } = AfterCaptureAction.Editor;
 
     /// <summary>Shows key captions under editor buttons. Tooltips always name the key.</summary>
-    /// <remarks>
-    /// True is the legacy value an older settings file reads back; a new installation starts
-    /// with false (<see cref="NewInstallDefaults"/>).
-    /// </remarks>
     public bool ShowShortcutHints { get; set; } = true;
+
+    /// <summary>One preserves hint choices made after hints became visible by default.</summary>
+    public int ShortcutHintsRevision { get; set; } = 1;
+
+    // A missing marker identifies a legacy file; new settings and explicit choices start at one.
+    void IJsonOnDeserializing.OnDeserializing() => ShortcutHintsRevision = 0;
+
     public bool LaunchAtLogin { get; set; } = true;
 
     /// <summary>
@@ -373,6 +388,9 @@ public sealed class GeneralSettings
 
     /// <summary>Chrome palette id: glass, glass-light, workspace, midnight, daylight, or high-contrast.</summary>
     public string Theme { get; set; } = MyCapture.Core.Themes.AppThemeNames.Glass;
+
+    /// <summary>Absent in older files: preserve the original violet accent.</summary>
+    public string AccentColor { get; set; } = MyCapture.Core.Themes.AppAccentNames.Violet;
 
     /// <summary>Independent capture-guide brand override. Empty follows the theme; otherwise #RRGGBB.</summary>
     public string CaptureGuideColor { get; set; } = string.Empty;

@@ -23,7 +23,8 @@ internal sealed record VideoFrameRenderRequest(
     int CanvasWidth,
     int CanvasHeight,
     IReadOnlyList<TimedTextOverlay> TextOverlays,
-    IReadOnlyList<FrameEditLayer> FrameEditLayers);
+    IReadOnlyList<FrameEditLayer> FrameEditLayers,
+    IReadOnlyList<VideoTimeRange>? RemovedRanges = null);
 
 internal sealed record VideoFrameRenderProgress(int CompletedFrames, int TotalFrames, double SourceTimeMs);
 
@@ -103,16 +104,17 @@ internal static class VideoFrameRenderPipeline
             acceptRawFrame);
     }
 
-    /// <summary>Output frame <c>i</c> shows source time <c>StartMs + i / fps</c>; the interval end is exclusive.</summary>
-    private static double[] BuildSchedule(VideoFrameRenderRequest request)
+    /// <summary>Maps the output cadence onto kept source segments; each segment end is exclusive.</summary>
+    internal static double[] BuildSchedule(VideoFrameRenderRequest request)
     {
+        VideoCutTimeline timeline = VideoCutTimeline.Create(request.StartMs, request.EndMs, request.RemovedRanges);
         double frameMs = 1000.0 / request.FramesPerSecond;
-        double span = request.EndMs - request.StartMs;
+        double span = timeline.OutputDurationMs;
         int totalFrames = Math.Max(1, checked((int)Math.Ceiling((span / frameMs) - 1e-9)));
         var sourceTimes = new double[totalFrames];
         for (int index = 0; index < totalFrames; index++)
         {
-            sourceTimes[index] = request.StartMs + (index * frameMs);
+            sourceTimes[index] = timeline.ToSourceTime(index * frameMs);
         }
 
         return sourceTimes;
@@ -535,6 +537,7 @@ internal static class VideoFrameRenderPipeline
             throw new ArgumentException("At least one source frame time is required.", nameof(sourceTimes));
         }
 
+        VideoCutTimeline timeline = VideoCutTimeline.Create(request.StartMs, request.EndMs, request.RemovedRanges);
         double previous = double.NegativeInfinity;
         for (int index = 0; index < sourceTimes.Count; index++)
         {
@@ -542,6 +545,7 @@ internal static class VideoFrameRenderPipeline
             if (!double.IsFinite(sourceTime)
                 || sourceTime < request.StartMs
                 || sourceTime >= request.EndMs
+                || timeline.IsRemoved(sourceTime)
                 || sourceTime + 1e-9 < previous)
             {
                 throw new ArgumentException(

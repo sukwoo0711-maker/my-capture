@@ -14,7 +14,7 @@ namespace MyCapture.App.Recording;
 /// </summary>
 internal sealed class VideoLayerTimeline : FrameworkElement
 {
-    private const double LabelWidth = 82;
+    internal const double LabelWidth = 82;
     private const double LayerTrackHeight = 28;
     private const double EmptyTrackHeight = 22;
     private const double BarHeight = 20;
@@ -24,15 +24,15 @@ internal sealed class VideoLayerTimeline : FrameworkElement
     private const double HandleZoneWidth = 10;
     private const double MinBarWidth = 24;
 
-    private readonly Brush _background;
-    private readonly Brush _track;
-    private readonly Brush _textLayer;
-    private readonly Brush _frameLayer;
-    private readonly Brush _foreground;
-    private readonly Brush _textSecondary;
-    private readonly Brush _muted;
-    private readonly Pen _gridPen;
-    private readonly Pen _playheadPen;
+    private Brush _background = null!;
+    private Brush _track = null!;
+    private Brush _textLayer = null!;
+    private Brush _frameLayer = null!;
+    private Brush _foreground = null!;
+    private Brush _textSecondary = null!;
+    private Brush _muted = null!;
+    private Pen _gridPen = null!;
+    private Pen _playheadPen = null!;
     private readonly Typeface _typeface;
 
     private IReadOnlyList<TimedTextOverlay> _textLayers = [];
@@ -50,6 +50,75 @@ internal sealed class VideoLayerTimeline : FrameworkElement
     private double _dragStartMouseX;
     private Guid _dragTargetId;
     private bool _dragTargetIsText;
+    private TimelineViewport _viewport = new(1, 15);
+    private double _keptStartMs;
+    private double _keptEndMs = 1;
+    private IReadOnlyList<VideoTimeRange> _removedRanges = [];
+    private double _dragPlayheadMs;
+    private double _dragSpanMs;
+    private readonly List<VideoSnapCandidate> _dragSnapCandidates = [];
+    private double? _hoverMs;
+    private string _hoverText = string.Empty;
+    private readonly TimelineVisuals.Marker _marker = new();
+    private bool _hoverLocal;
+    private double _markerLabelTop = 1;
+    private VideoSnapCandidate? _snapGuide;
+
+    internal event EventHandler<double?>? HoverChanged;
+    internal event EventHandler<VideoSnapCandidate?>? SnapChanged;
+    internal TimelineViewport Viewport => _viewport;
+    internal string HoverText => _hoverText;
+
+    internal void SetViewport(TimelineViewport viewport)
+    {
+        _viewport = viewport;
+        InvalidateVisual();
+    }
+
+    internal void SetKeptRange(double startMs, double endMs)
+    {
+        _keptStartMs = startMs;
+        _keptEndMs = endMs;
+        InvalidateVisual();
+    }
+
+    internal void SetRemovedRanges(IReadOnlyList<VideoTimeRange> removedRanges)
+    {
+        _removedRanges = removedRanges;
+        InvalidateVisual();
+    }
+
+    internal void SetHover(double? timeMs)
+    {
+        if (_hoverMs != timeMs)
+            _hoverText = timeMs.HasValue ? VideoTimecode.Format(timeMs.Value) : string.Empty;
+        _hoverMs = timeMs;
+        InvalidateVisual();
+    }
+
+    internal void HoverForTest(double x) => UpdateHover(x);
+
+    internal void SetVerticalOffset(double offset)
+    {
+        _markerLabelTop = offset + 1;
+        InvalidateVisual();
+    }
+
+    private void UpdateHover(double x)
+    {
+        _hoverLocal = x >= LabelWidth && x <= ActualWidth;
+        SetHover(_hoverLocal ? _viewport.PxToMs(x - LabelWidth, ActualWidth - LabelWidth) : null);
+        HoverChanged?.Invoke(this, _hoverMs);
+    }
+
+    private void ClearFeedback()
+    {
+        _hoverLocal = false;
+        SetHover(null);
+        HoverChanged?.Invoke(this, null);
+        _snapGuide = null;
+        SnapChanged?.Invoke(this, null);
+    }
 
     internal event EventHandler? LayerSelected;
     internal event EventHandler? LayerTimingChanged;
@@ -91,20 +160,13 @@ internal sealed class VideoLayerTimeline : FrameworkElement
 
     internal VideoLayerTimeline()
     {
-        _background = ResolveBrush("Timeline.Background", Color.FromRgb(0x0B, 0x0F, 0x17));
-        _track = ResolveBrush("Timeline.Track", Color.FromRgb(0x15, 0x1E, 0x2B));
-        _textLayer = ResolveBrush("Timeline.TextLayer", Color.FromRgb(0x3B, 0x82, 0xF6));
-        _frameLayer = ResolveBrush("Timeline.FrameLayer", Color.FromRgb(0x9B, 0x7E, 0xDE));
-        _foreground = ResolveBrush("Text.Badge", Colors.White);
-        _textSecondary = ResolveBrush("Text.Secondary", Color.FromRgb(0xC4, 0xCF, 0xDC));
-        _muted = ResolveBrush("Text.Secondary", Color.FromRgb(0x8E, 0x9C, 0xAF));
-        _gridPen = FrozenPen(ResolveBrush("Timeline.Grid", Color.FromRgb(0x2B, 0x3A, 0x50)), 1);
-        _playheadPen = FrozenPen(ResolveBrush("Timeline.Playhead", Color.FromRgb(0x97, 0x89, 0xFF)), 2);
+        RefreshPalette();
 
         FontFamily uiFont = Application.Current?.TryFindResource("Font.Ui") as FontFamily
             ?? new FontFamily("Segoe UI");
         _typeface = new Typeface(uiFont, FontStyles.Normal, FontWeights.SemiBold, FontStretches.Normal);
 
+        TimelineVisuals.ObservePalette(this, () => { RefreshPalette(); InvalidateVisual(); });
         Height = ComputeDesiredHeight();
         MinWidth = 240;
         SnapsToDevicePixels = true;
@@ -115,9 +177,25 @@ internal sealed class VideoLayerTimeline : FrameworkElement
         AutomationProperties.SetHelpText(this, (string)ToolTip);
     }
 
+    private void RefreshPalette()
+    {
+        _background = ResolveBrush("Timeline.Background", Color.FromRgb(0x0B, 0x0F, 0x17));
+        _track = ResolveBrush("Timeline.Track", Color.FromRgb(0x15, 0x1E, 0x2B));
+        _textLayer = ResolveBrush("Timeline.TextLayer", Color.FromRgb(0x3B, 0x82, 0xF6));
+        _frameLayer = ResolveBrush("Timeline.FrameLayer", Color.FromRgb(0x9B, 0x7E, 0xDE));
+        _foreground = ResolveBrush("Text.Badge", Colors.White);
+        _textSecondary = ResolveBrush("Text.Secondary", Color.FromRgb(0xC4, 0xCF, 0xDC));
+        _muted = ResolveBrush("Text.Secondary", Color.FromRgb(0x8E, 0x9C, 0xAF));
+        _gridPen = FrozenPen(ResolveBrush("Timeline.Grid", Color.FromRgb(0x2B, 0x3A, 0x50)), 1);
+        _playheadPen = FrozenPen(ResolveBrush("Timeline.Playhead", Color.FromRgb(0x97, 0x89, 0xFF)), 2);
+
+    }
+
     internal void Initialize(double durationMs)
     {
         _durationMs = Math.Max(1, durationMs);
+        _viewport = new TimelineViewport(_durationMs, 15);
+        _keptEndMs = _durationMs;
         _playheadMs = 0;
         InvalidateVisual();
     }
@@ -204,6 +282,25 @@ internal sealed class VideoLayerTimeline : FrameworkElement
 
         _playheadMs = next;
         InvalidateVisual();
+    }
+
+    private void DrawRemovedRange(DrawingContext dc, double startMs, double endMs, double width, double height)
+    {
+        double start = Math.Max(startMs, _viewport.ViewStartMs);
+        double end = Math.Min(endMs, _viewport.ViewEndMs);
+        if (end <= start) return;
+        double left = LabelWidth + _viewport.MsToPx(start, width);
+        double right = LabelWidth + _viewport.MsToPx(end, width);
+        var bounds = new Rect(left, 0, right - left, height);
+        dc.PushClip(new RectangleGeometry(bounds));
+        dc.PushOpacity(0.65);
+        dc.DrawRectangle(_background, null, bounds);
+        dc.Pop();
+        for (double x = left - height; x < right; x += 9)
+        {
+            dc.DrawLine(_gridPen, new Point(x, height), new Point(x + height, 0));
+        }
+        dc.Pop();
     }
 
     protected override Size MeasureOverride(Size availableSize)
@@ -297,9 +394,28 @@ internal sealed class VideoLayerTimeline : FrameworkElement
             }
         }
 
+        // Layers keep their source times. Shade excluded time across every row, including
+        // the bars, without moving or resizing a layer when the video is cut.
+        DrawRemovedRange(dc, 0, _keptStartMs, timelineWidth, height);
+        DrawRemovedRange(dc, _keptEndMs, _durationMs, timelineWidth, height);
+        foreach (VideoTimeRange cut in _removedRanges)
+        {
+            DrawRemovedRange(dc, cut.StartMs, cut.EndMs, timelineWidth, height);
+        }
+
         // Playhead
-        double playheadX = LabelWidth + ((_playheadMs / _durationMs) * timelineWidth);
-        dc.DrawLine(_playheadPen, new Point(playheadX, 0), new Point(playheadX, height));
+        if (_playheadMs >= _viewport.ViewStartMs && _playheadMs <= _viewport.ViewEndMs)
+        {
+            double playheadX = LabelWidth + _viewport.MsToPx(_playheadMs, timelineWidth);
+            dc.DrawLine(_playheadPen, new Point(playheadX, 0), new Point(playheadX, height));
+        }
+        double? marker = _snapGuide?.TimeMs ?? _hoverMs;
+        if (marker.HasValue && marker >= _viewport.ViewStartMs && marker <= _viewport.ViewEndMs)
+        {
+            string? label = _snapGuide is { } snap ? TimelineVisuals.SnapLabel(snap.Kind) : _hoverLocal ? HoverText : null;
+            _marker.Draw(this, dc, LabelWidth + _viewport.MsToPx(marker.Value, timelineWidth), height,
+                LabelWidth, width, _textSecondary, _background, _textSecondary, label, _markerLabelTop);
+        }
     }
 
     private void DrawEmptyTrack(
@@ -334,6 +450,7 @@ internal sealed class VideoLayerTimeline : FrameworkElement
         DrawText(dc, rowLabel, 8, top + ((height - 14) / 2.0), _textSecondary, 10.5, LabelWidth - 12);
 
         var bar = GetBarRect(startMs, endMs, top + ((height - BarHeight) / 2.0), LabelWidth + timelineWidth);
+        if (bar.IsEmpty) return;
 
         dc.DrawRoundedRectangle(layerBrush, null, bar, 3, 3);
         if (hatch && bar.Width >= 8)
@@ -359,8 +476,10 @@ internal sealed class VideoLayerTimeline : FrameworkElement
         double handleWidth = Math.Min(4, bar.Width / 3.0);
         if (handleWidth >= 2)
         {
-            dc.DrawRectangle(_foreground, null, new Rect(bar.Left, bar.Top + 3, handleWidth, bar.Height - 6));
-            dc.DrawRectangle(_foreground, null, new Rect(bar.Right - handleWidth, bar.Top + 3, handleWidth, bar.Height - 6));
+            if (startMs >= _viewport.ViewStartMs)
+                dc.DrawRectangle(_foreground, null, new Rect(bar.Left, bar.Top + 3, handleWidth, bar.Height - 6));
+            if (endMs <= _viewport.ViewEndMs)
+                dc.DrawRectangle(_foreground, null, new Rect(bar.Right - handleWidth, bar.Top + 3, handleWidth, bar.Height - 6));
         }
     }
 
@@ -419,10 +538,12 @@ internal sealed class VideoLayerTimeline : FrameworkElement
 
     private Rect GetBarRect(double startMs, double endMs, double top, double width)
     {
+        if (endMs <= _viewport.ViewStartMs || startMs >= _viewport.ViewEndMs) return Rect.Empty;
         double trackWidth = Math.Max(1, width - LabelWidth);
-        double left = LabelWidth + Math.Clamp(startMs / _durationMs, 0, 1) * trackWidth;
-        double right = LabelWidth + Math.Clamp(endMs / _durationMs, 0, 1) * trackWidth;
-        double barWidth = Math.Min(trackWidth, Math.Max(MinBarWidth, right - left));
+        double left = LabelWidth + _viewport.MsToPx(startMs, trackWidth);
+        double right = LabelWidth + _viewport.MsToPx(endMs, trackWidth);
+        bool clipped = startMs < _viewport.ViewStartMs || endMs > _viewport.ViewEndMs;
+        double barWidth = Math.Min(trackWidth, Math.Max(clipped ? 0 : MinBarWidth, right - left));
         // Even a single frame at the end of the video keeps both handles inside the viewport.
         left = Math.Clamp(left, LabelWidth, LabelWidth + trackWidth - barWidth);
         return new Rect(left, top, barWidth, BarHeight);
@@ -455,6 +576,7 @@ internal sealed class VideoLayerTimeline : FrameworkElement
         for (int i = _frameLayers.Count - 1; i >= 0; i--)
         {
             Rect bar = GetFrameBarRect(i, width);
+            if (bar.IsEmpty) continue;
             Rect hit = bar;
             hit.Inflate(4, 3);
             if (hit.Contains(point))
@@ -469,6 +591,7 @@ internal sealed class VideoLayerTimeline : FrameworkElement
         for (int i = _textLayers.Count - 1; i >= 0; i--)
         {
             Rect bar = GetTextBarRect(i, width);
+            if (bar.IsEmpty) continue;
             Rect hit = bar;
             hit.Inflate(4, 3);
             if (hit.Contains(point))
@@ -533,6 +656,7 @@ internal sealed class VideoLayerTimeline : FrameworkElement
     protected override void OnMouseLeftButtonDown(MouseButtonEventArgs e)
     {
         base.OnMouseLeftButtonDown(e);
+        ClearFeedback();
         Point point = e.GetPosition(this);
 
         if (HitTestBar(point, out bool isText, out int index, out Rect bar))
@@ -546,12 +670,12 @@ internal sealed class VideoLayerTimeline : FrameworkElement
             NotifyLayerSelected();
 
             double handleZone = Math.Min(HandleZoneWidth, bar.Width / 3.0);
-            if (point.X <= bar.Left + handleZone)
+            if (startMs >= _viewport.ViewStartMs && point.X <= bar.Left + handleZone)
             {
                 _dragAction = DragAction.TrimStart;
                 Cursor = Cursors.SizeWE;
             }
-            else if (point.X >= bar.Right - handleZone)
+            else if (endMs <= _viewport.ViewEndMs && point.X >= bar.Right - handleZone)
             {
                 _dragAction = DragAction.TrimEnd;
                 Cursor = Cursors.SizeWE;
@@ -563,11 +687,14 @@ internal sealed class VideoLayerTimeline : FrameworkElement
             }
 
             _dragInitialStartMs = startMs;
+            _dragPlayheadMs = _playheadMs;
+            _dragSpanMs = _viewport.VisibleSpanMs;
             LayerTimingInteractionStarted?.Invoke(this, EventArgs.Empty);
             _dragInitialEndMs = endMs;
             _dragStartMouseX = point.X;
             _dragTargetId = layerId;
             _dragTargetIsText = isText;
+            PrepareSnapCandidates();
             _dragging = CaptureMouse();
             if (!_dragging)
             {
@@ -600,8 +727,7 @@ internal sealed class VideoLayerTimeline : FrameworkElement
         {
             double timelineWidth = Math.Max(1, ActualWidth - LabelWidth);
             double deltaX = point.X - _dragStartMouseX;
-            double deltaMs = (deltaX / timelineWidth) * _durationMs;
-            double currentMouseTimeMs = Math.Clamp(((point.X - LabelWidth) / timelineWidth) * _durationMs, 0, _durationMs);
+            double deltaMs = (deltaX / timelineWidth) * _dragSpanMs;
 
             if (_dragTargetIsText)
             {
@@ -617,7 +743,7 @@ internal sealed class VideoLayerTimeline : FrameworkElement
 
                 if (target is not null)
                 {
-                    ApplyDrag(target.StartMs, target.EndMs, out double newStart, out double newEnd, deltaMs, currentMouseTimeMs);
+                    ApplyDrag(out double newStart, out double newEnd, deltaMs);
                     if (Math.Abs(target.StartMs - newStart) > 0.01 || Math.Abs(target.EndMs - newEnd) > 0.01)
                     {
                         target.StartMs = newStart;
@@ -642,7 +768,7 @@ internal sealed class VideoLayerTimeline : FrameworkElement
 
                 if (target is not null)
                 {
-                    ApplyDrag(target.StartMs, target.EndMs, out double newStart, out double newEnd, deltaMs, currentMouseTimeMs);
+                    ApplyDrag(out double newStart, out double newEnd, deltaMs);
                     if (Math.Abs(target.StartMs - newStart) > 0.01 || Math.Abs(target.EndMs - newEnd) > 0.01)
                     {
                         target.StartMs = newStart;
@@ -658,10 +784,14 @@ internal sealed class VideoLayerTimeline : FrameworkElement
             return;
         }
 
-        if (HitTestBar(point, out _, out _, out Rect hoverBar))
+        UpdateHover(point.X);
+        if (HitTestBar(point, out bool hoverIsText, out int hoverIndex, out Rect hoverBar))
         {
             double handleZone = Math.Min(HandleZoneWidth, hoverBar.Width / 3.0);
-            if (point.X <= hoverBar.Left + handleZone || point.X >= hoverBar.Right - handleZone)
+            double start = hoverIsText ? _textLayers[hoverIndex].StartMs : _frameLayers[hoverIndex].StartMs;
+            double end = hoverIsText ? _textLayers[hoverIndex].EndMs : _frameLayers[hoverIndex].EndMs;
+            if ((start >= _viewport.ViewStartMs && point.X <= hoverBar.Left + handleZone)
+                || (end <= _viewport.ViewEndMs && point.X >= hoverBar.Right - handleZone))
             {
                 Cursor = Cursors.SizeWE;
             }
@@ -676,38 +806,42 @@ internal sealed class VideoLayerTimeline : FrameworkElement
         }
     }
 
-    private void ApplyDrag(
-        double currentStart,
-        double currentEnd,
-        out double newStart,
-        out double newEnd,
-        double deltaMs,
-        double mouseTimeMs)
+    private void PrepareSnapCandidates()
     {
-        switch (_dragAction)
+        _dragSnapCandidates.Clear();
+        _dragSnapCandidates.Add(new(_dragPlayheadMs, VideoSnapKind.Playhead));
+        _dragSnapCandidates.Add(new(_keptStartMs, VideoSnapKind.KeptStart));
+        _dragSnapCandidates.Add(new(_keptEndMs, VideoSnapKind.KeptEnd));
+        foreach (TimedTextOverlay layer in _textLayers)
         {
-            case DragAction.TrimStart:
-                (newStart, newEnd) = TextLayerTiming.Resize(
-                    _dragInitialStartMs, _dragInitialEndMs, _durationMs, startHandle: true, targetMs: _dragInitialStartMs + deltaMs);
-                break;
-
-            case DragAction.TrimEnd:
-                (newStart, newEnd) = TextLayerTiming.Resize(
-                    _dragInitialStartMs, _dragInitialEndMs, _durationMs, startHandle: false, targetMs: _dragInitialEndMs + deltaMs);
-                break;
-
-            case DragAction.MoveBody:
-                double duration = _dragInitialEndMs - _dragInitialStartMs;
-                double maxStart = Math.Max(0, _durationMs - duration);
-                newStart = Math.Clamp(_dragInitialStartMs + deltaMs, 0, maxStart);
-                newEnd = Math.Min(_durationMs, newStart + duration);
-                break;
-
-            default:
-                newStart = currentStart;
-                newEnd = currentEnd;
-                break;
+            if (layer.Id == _dragTargetId) continue;
+            _dragSnapCandidates.Add(new(layer.StartMs, VideoSnapKind.LayerEdge));
+            _dragSnapCandidates.Add(new(layer.EndMs, VideoSnapKind.LayerEdge));
         }
+        foreach (FrameEditLayer layer in _frameLayers)
+        {
+            if (layer.Id == _dragTargetId) continue;
+            _dragSnapCandidates.Add(new(layer.StartMs, VideoSnapKind.LayerEdge));
+            _dragSnapCandidates.Add(new(layer.EndMs, VideoSnapKind.LayerEdge));
+        }
+    }
+
+    private void ApplyDrag(out double newStart, out double newEnd, double deltaMs)
+    {
+        VideoLayerDrag action = _dragAction switch
+        {
+            DragAction.TrimStart => VideoLayerDrag.TrimStart,
+            DragAction.TrimEnd => VideoLayerDrag.TrimEnd,
+            _ => VideoLayerDrag.Move,
+        };
+        VideoLayerSnapResult result = VideoLayerSnapping.Apply(_dragInitialStartMs, _dragInitialEndMs,
+            deltaMs, _durationMs, action, _viewport, ActualWidth - LabelWidth, _dragSnapCandidates,
+            (Keyboard.Modifiers & ModifierKeys.Alt) != 0);
+        newStart = result.StartMs;
+        newEnd = result.EndMs;
+        _snapGuide = result.Snap;
+        SnapChanged?.Invoke(this, _snapGuide);
+        InvalidateVisual();
     }
 
     protected override void OnMouseLeftButtonUp(MouseButtonEventArgs e)
@@ -716,6 +850,7 @@ internal sealed class VideoLayerTimeline : FrameworkElement
         if (_dragging)
         {
             _dragging = false;
+            ClearFeedback();
             _dragAction = DragAction.None;
             ReleaseMouseCapture();
             Cursor = Cursors.Hand;
@@ -729,6 +864,7 @@ internal sealed class VideoLayerTimeline : FrameworkElement
         if (_dragging)
         {
             _dragging = false;
+            ClearFeedback();
             _dragAction = DragAction.None;
             Cursor = Cursors.Hand;
             NotifyTimingGestureCompleted();
@@ -742,6 +878,7 @@ internal sealed class VideoLayerTimeline : FrameworkElement
         base.OnMouseLeave(e);
         if (!_dragging)
         {
+            ClearFeedback();
             Cursor = Cursors.Hand;
         }
     }
@@ -778,6 +915,7 @@ internal sealed class VideoLayerTimeline : FrameworkElement
             }
 
             _dragging = false;
+            ClearFeedback();
             _dragAction = DragAction.None;
             ReleaseMouseCapture();
             Cursor = Cursors.Hand;
@@ -944,8 +1082,8 @@ internal sealed class VideoLayerTimeline : FrameworkElement
         return brush;
     }
 
-    private static Brush ResolveBrush(string key, Color fallback) =>
-        Application.Current?.TryFindResource(key) as Brush ?? Frozen(fallback);
+    private Brush ResolveBrush(string key, Color fallback) =>
+        TryFindResource(key) as Brush ?? Frozen(fallback);
 
     private static Pen FrozenPen(Brush brush, double thickness)
     {

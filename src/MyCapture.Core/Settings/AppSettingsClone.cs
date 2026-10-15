@@ -75,6 +75,7 @@ public static class AppSettingsClone
 
     private static ExportSettings Clone(ExportSettings s) => new()
     {
+        LastImageExport = s.LastImageExport with { },
         QuickSaveDirectoryOverride = s.QuickSaveDirectoryOverride,
         CopyToClipboardOnQuickSave = s.CopyToClipboardOnQuickSave,
         FileNamePattern = s.FileNamePattern,
@@ -128,6 +129,10 @@ public static class AppSettingsClone
         TextColor = s.TextColor,
         FontSize = s.FontSize,
         FontFamily = s.FontFamily,
+        TextBold = s.TextBold,
+        TextBackground = s.TextBackground,
+        TextOutline = s.TextOutline,
+        RecentFontFamilies = [.. s.RecentFontFamilies],
         MosaicBlockSize = s.MosaicBlockSize,
         HighlighterAlpha = s.HighlighterAlpha,
         RecentColors = [.. s.RecentColors],
@@ -146,11 +151,13 @@ public static class AppSettingsClone
     {
         AfterCapture = s.AfterCapture,
         ShowShortcutHints = s.ShowShortcutHints,
+        ShortcutHintsRevision = s.ShortcutHintsRevision,
         LaunchAtLogin = s.LaunchAtLogin,
         NotifyOnQuickSave = s.NotifyOnQuickSave,
         PlayCaptureSound = s.PlayCaptureSound,
         Language = s.Language,
         Theme = s.Theme,
+        AccentColor = s.AccentColor,
         CaptureGuideColor = s.CaptureGuideColor,
         ThemeRevision = s.ThemeRevision,
         IsFirstRun = s.IsFirstRun,

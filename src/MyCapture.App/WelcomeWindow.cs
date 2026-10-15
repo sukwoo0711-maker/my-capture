@@ -59,8 +59,10 @@ internal sealed class WelcomeWindow : Window
         SetResourceReference(ForegroundProperty, "Text.Primary");
         WindowStartupLocation = WindowStartupLocation.CenterScreen;
 
-        TryNowButton = new Button { Content = UiText.Get("Onboard_TryNow"), MinWidth = 120, VerticalAlignment = VerticalAlignment.Center };
+        TryNowButton = new Button { Content = UiText.Get("Onboard_TryNow") };
         TryNowButton.SetResourceReference(StyleProperty, "Button.Primary");
+        CommandButtonPresentation.Apply(TryNowButton);
+        TryNowButton.MinWidth = 120;
         TryNowButton.ToolTip = UiText.Get("Onboard_TryNowHelp");
         AutomationProperties.SetHelpText(TryNowButton, UiText.Get("Onboard_TryNowHelp"));
         TryNowButton.Click += (_, _) => CloseWith(WelcomeOutcome.TryCapture);
@@ -101,8 +103,10 @@ internal sealed class WelcomeWindow : Window
         ShortcutsLink = link;
         var linkText = new TextBlock(link) { VerticalAlignment = VerticalAlignment.Center, FontSize = 13 };
 
-        LibraryButton = new Button { Content = UiText.Get("Text_66BA5DCDA810"), MinWidth = 120, IsCancel = true };
+        LibraryButton = new Button { Content = UiText.Get("Text_66BA5DCDA810"), IsCancel = true };
         LibraryButton.SetResourceReference(StyleProperty, "Button.Secondary");
+        CommandButtonPresentation.Apply(LibraryButton);
+        LibraryButton.MinWidth = 120;
         LibraryButton.Click += (_, _) => CloseWith(WelcomeOutcome.Closed);
 
         var footer = new DockPanel { Margin = new Thickness(0, 20, 0, 0), LastChildFill = false };
@@ -293,11 +297,10 @@ internal sealed class WelcomeWindow : Window
         Canvas.SetLeft(ring, 58);
         Canvas.SetTop(ring, 47);
         canvas.Children.Add(ring);
-        var icon = new SymbolIcon { Size = 12 };
-        icon.SetResourceReference(SymbolIcon.DataProperty, "Icon.Capture");
-        icon.SetResourceReference(SymbolIcon.StrokeProperty, "Accent.Cool");
-        Canvas.SetLeft(icon, 62);
-        Canvas.SetTop(icon, 51);
+        var icon = new Image { Width = 16, Height = 16, IsHitTestVisible = false };
+        icon.SetResourceReference(Image.SourceProperty, "Brand.Mark16");
+        Canvas.SetLeft(icon, 60);
+        Canvas.SetTop(icon, 49);
         canvas.Children.Add(icon);
         for (int i = 0; i < 2; i++)
         {

@@ -11,7 +11,7 @@ namespace MyCapture.App.Tests;
 public sealed class GalleryPreparedSearchTests
 {
     [Fact]
-    public void PreparedGalleryQueryKeepsExportFilenameFallbackAndDeterministicOrder()
+    public void PreparedGalleryQueryKeepsExportFilenameMatchingAndDeterministicOrder()
     {
         string unused = Path.Combine(Path.GetTempPath(), "mc-prepared-search-" + Guid.NewGuid().ToString("N"));
         var queue = new CaptureQueue(AppPaths.CreateForRoot(unused), new QueueSettings(), NullLogger<CaptureQueue>.Instance);
@@ -28,7 +28,7 @@ public sealed class GalleryPreparedSearchTests
             controller.BuildGroups(query, now, sort: order).SelectMany(group => group.Records).Select(record => record.Id).ToArray();
         Assert.Equal([first.Id, third.Id], Search(" developer\tneedle "));
         Assert.Equal([third.Id, first.Id], Search("developer needle", GallerySortOrder.Oldest));
-        // Timestamp filename is outside searchable metadata; its culture-aware fallback remains.
+        // Timestamp filename is outside searchable metadata and remains searchable.
         Assert.Equal([second.Id], Search("mycapture_20261012_120000.PNG"));
         Assert.Empty(Search("developer absent"));
         first.OcrText = "changed";

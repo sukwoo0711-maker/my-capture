@@ -215,7 +215,8 @@ public partial class App : Application
         var pinSaveService = new PinImageSaveService(
             () => _settings!,
             () => _capturePaths ?? _services.GetRequiredService<AppPaths>(),
-            _services.GetRequiredService<ILogger<PinImageSaveService>>());
+            _services.GetRequiredService<ILogger<PinImageSaveService>>(),
+            _commit!.RememberExportOptions);
         _pins = new PinManager(
             () => _settings!.Pin,
             pinSaveService,
@@ -265,7 +266,9 @@ public partial class App : Application
         // window, but never cache the text — a pin has no backing capture record.
         _pins.OcrRequested += OnPinOcrRequested;
 
-        _shellPresenter = new ThemedShellPresenter(() => _overlay?.IsActive == true || _recorder?.IsActive == true);
+        _shellPresenter = new ThemedShellPresenter(
+            () => _overlay?.IsActive == true || _recorder?.IsActive == true,
+            () => _overlay?.IsActive == true || (_recorder?.IsActive == true && !_recorder.CanCaptureStill));
         _tray.NotificationPresenter = _shellPresenter.ShowNotification;
         // Rebuilt on every open: the reopen-pin entry appears exactly while a closed pin can return,
         // and Pin clipboard is enabled only while the clipboard announces an image or text.
@@ -1350,7 +1353,7 @@ public partial class App : Application
         try
         {
             var saver = new PinImageSaveService(() => _settings!, () => _capturePaths!,
-                _services.GetRequiredService<ILogger<PinImageSaveService>>());
+                _services.GetRequiredService<ILogger<PinImageSaveService>>(), _commit.RememberExportOptions);
             QuickAccessWindow? card = null;
             async Task<System.Windows.Media.Imaging.BitmapSource> Render()
             {
@@ -1616,6 +1619,7 @@ public partial class App : Application
             () => _settings!,
             () => paths,
             _services.GetRequiredService<ILogger<CaptureCommitService>>());
+        _commit.PersistExportSettings = () => _services.GetRequiredService<SettingsStore>().Save(_settings!);
         _videoLibrary = new MyCapture.App.Recording.VideoLibraryService(
             queue,
             paths,
@@ -1859,7 +1863,7 @@ public partial class App : Application
             next => _settingsApply!.Apply(next),
             _services.GetRequiredService<ILogger<SettingsWindow>>(),
             () => _services.GetRequiredService<SettingsStore>(),
-            applyDraft: (next, edited) => _settingsApply!.Apply(next, edited));
+            applyDraft: (next, folderEdited, exportReplaced) => _settingsApply!.Apply(next, folderEdited, exportReplaced));
 
         ConfigureEngagementWindow(window);
         ConfigureLegacyImportWindow(window);

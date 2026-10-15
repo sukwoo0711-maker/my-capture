@@ -2,15 +2,14 @@ namespace MyCapture.Core.Settings;
 
 /// <summary>
 /// The settings a new installation starts with: only region capture and screen recording own a
-/// global shortcut, and the small key captions under buttons are off.
+/// global shortcut, and the small key captions under buttons are visible.
 /// </summary>
 /// <remarks>
 /// <para>
 /// The property initialisers on <see cref="AppSettings"/> keep the values earlier versions
 /// shipped with. They are what a settings file written before a property existed reads back, so
-/// an existing user keeps every chord (F3, Shift+F3, F9, Ctrl+Shift+Z) and caption they already
-/// had. A saved value cannot tell whether the user chose it or inherited it, so nothing already
-/// on disk is rewritten.
+/// an existing user keeps every chord (F3, Shift+F3, F9, Ctrl+Shift+Z). The settings store
+/// separately migrates the former hidden-caption default.
 /// </para>
 /// <para>
 /// Only a launch with no settings file at all, and the "reset to defaults" command, use these
@@ -37,6 +36,7 @@ public static class NewInstallDefaults
         settings.Hotkeys.PasteToScreen = Hotkey.None;
         settings.Hotkeys.HideAllPins = Hotkey.None;
         settings.Hotkeys.UploadGitHubImage = Hotkey.None;
-        settings.General.ShowShortcutHints = false;
+        settings.General.ShowShortcutHints = true;
+        settings.General.ShortcutHintsRevision = 1;
     }
 }

@@ -18,6 +18,40 @@ public sealed class FeatureTutorialTests
     [Theory]
     [InlineData("ko-KR")]
     [InlineData("en-US")]
+    public void InContentActionsStayCompactAndPlaybackButtonsHaveEqualHeights(string language) => StaTestHost.Run(() =>
+    {
+        using var locale = UiText.UseLanguage(language);
+        Action<string>? previous = FeatureTutorialWindow.OpenShortcutSetting;
+        FeatureTutorialWindow.OpenShortcutSetting = _ => { };
+        var window = new FeatureTutorialWindow(new HotkeySettings { ToggleClickThrough = Hotkey.None },
+            "pin-click-through", () => new FakeTutorialMedia());
+        try
+        {
+            window.Resources.MergedDictionaries.Add(SystemHighContrastThemeTests.LoadTheme());
+            var root = (FrameworkElement)window.Content;
+            root.Measure(new Size(672, 800));
+            root.Arrange(new Rect(0, 0, 672, 800));
+            Button[] buttons = FirstRunWelcomeTests.Descendants(root).OfType<Button>().ToArray();
+            Button play = buttons.Single(button => Equals(button.Content, UiText.Get("GifPreview_Play")));
+            Button replay = buttons.Single(button => Equals(button.Content, UiText.Get("TextCapture_TutorialReplay")));
+            Button close = buttons.Single(button => Equals(button.Content, UiText.Get("Dialog.Close")));
+            Assert.Contains(window.SetShortcutButton, buttons);
+            Assert.Equal(36, window.SetShortcutButton.ActualHeight);
+            Assert.Equal(36, play.ActualHeight);
+            Assert.Equal(play.ActualHeight, replay.ActualHeight);
+            Assert.Equal(play.TranslatePoint(default, root).Y, replay.TranslatePoint(default, root).Y);
+            Assert.Equal(44, close.ActualHeight);
+        }
+        finally
+        {
+            window.Close();
+            FeatureTutorialWindow.OpenShortcutSetting = previous;
+        }
+    });
+
+    [Theory]
+    [InlineData("ko-KR")]
+    [InlineData("en-US")]
     public void CatalogHas38SeparateLocalizedWorkflowsAnd42CategoryQualifiedHelpMappings(string language) => StaTestHost.Run(() =>
     {
         using var locale = UiText.UseLanguage(language);

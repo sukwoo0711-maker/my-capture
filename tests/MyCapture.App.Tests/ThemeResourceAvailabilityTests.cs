@@ -26,7 +26,7 @@ public sealed class ThemeResourceAvailabilityTests : KoreanCaptionTest
         "Icon.Save", "Icon.SaveAs", "Icon.ChevronDown", "Icon.More", "Icon.Settings", "Icon.Capture",
         "Icon.Shortcuts", "Icon.Storage", "Icon.Export", "Icon.Pin", "Icon.Edit", "Icon.Ocr", "Icon.Search",
         "Icon.ZoomIn", "Icon.ZoomOut", "Icon.Play", "Icon.Pause", "Icon.First", "Icon.Last",
-        "Icon.Rewind", "Icon.FastForward", "Icon.StepBack", "Icon.StepForward", "Icon.FitAll", "Icon.Trim",
+        "Icon.Rewind", "Icon.FastForward", "Icon.StepBack", "Icon.StepForward", "Icon.FitAll", "Icon.Trim", "Icon.Split",
     ];
 
     private static readonly string[] BrushKeys =
@@ -46,6 +46,7 @@ public sealed class ThemeResourceAvailabilityTests : KoreanCaptionTest
     [
         "Button.Primary", "Button.Secondary", "Button.Ghost", "Button.Danger", "Button.GhostCompact",
         "ToggleButton.Tool", "Rail.ToolButton", "Button.Icon", "Button.Icon.Compact", "Brand.AppIcon",
+        "Button.Command", "Button.Command.Compact",
     ];
 
     [Fact]
@@ -77,6 +78,26 @@ public sealed class ThemeResourceAvailabilityTests : KoreanCaptionTest
             }
         });
     }
+
+    [Fact]
+    public void BrandImagesUseTheM06VectorAndDedicatedSmallDrawing() => StaTestHost.Run(() =>
+    {
+        ResourceDictionary theme = LoadMergedTheme();
+        var mark = Assert.IsType<DrawingImage>(theme["Brand.Mark"]);
+        var small = Assert.IsType<DrawingImage>(theme["Brand.Mark16"]);
+        var fullDrawing = Assert.IsType<DrawingGroup>(mark.Drawing);
+        var smallDrawing = Assert.IsType<DrawingGroup>(small.Drawing);
+        Assert.Equal(new Rect(0, 0, 256, 256), fullDrawing.Bounds);
+        Assert.Equal(new Rect(0, 0, 16, 16), smallDrawing.Bounds);
+        Assert.Equal(5, fullDrawing.Children.Count);
+        Assert.Equal(4, smallDrawing.Children.Count);
+        var frame = Assert.IsType<GeometryDrawing>(smallDrawing.Children[2]);
+        Assert.Equal(Color.FromRgb(255, 248, 244), Assert.IsType<SolidColorBrush>(frame.Brush).Color);
+        Assert.True(frame.Geometry.FillContains(new Point(3.5, 3.5)));
+        Assert.False(frame.Geometry.FillContains(new Point(7.5, 7.5)));
+        var style = Assert.IsType<Style>(theme["Brand.AppIcon"]);
+        Assert.Same(mark, style.Setters.OfType<Setter>().Single(setter => setter.Property == Image.SourceProperty).Value);
+    });
 
     [Fact]
     public void AccentGradientIsFlatSolidBrushNotDecorativeGradient()

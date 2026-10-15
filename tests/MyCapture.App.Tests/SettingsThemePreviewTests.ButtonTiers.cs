@@ -27,24 +27,25 @@ public sealed partial class SettingsThemePreviewTests
         RunIsolated(nameof(SettingsUx_ButtonTiersKeepTheirShapeWhenDisabledInEveryTheme), VerifyButtonTiers);
 
     [Fact]
-    public Task SettingsUx_NewInstallHidesKeyCaptionsButTooltipsKeepTheKey() =>
-        RunIsolated(nameof(SettingsUx_NewInstallHidesKeyCaptionsButTooltipsKeepTheKey), VerifyKeyCaptionDefaults);
+    public Task SettingsUx_NewInstallShowsKeyCaptionsAndTooltipsKeepTheKey() =>
+        RunIsolated(nameof(SettingsUx_NewInstallShowsKeyCaptionsAndTooltipsKeepTheKey), VerifyKeyCaptionDefaults);
 
     private static void VerifyKeyCaptionDefaults()
     {
         using var language = MyCapture.Core.Localization.UiText.UseLanguage("ko-KR");
         foreach ((MyCapture.Core.Settings.AppSettings settings, Visibility expected) in new[]
         {
-            (MyCapture.Core.Settings.NewInstallDefaults.Create(), Visibility.Collapsed),
+            (MyCapture.Core.Settings.NewInstallDefaults.Create(), Visibility.Visible),
             (new MyCapture.Core.Settings.AppSettings(), Visibility.Visible),
+            (new MyCapture.Core.Settings.AppSettings { General = { ShowShortcutHints = false } }, Visibility.Collapsed),
         })
         {
             ShortcutPresentation.ReadEnabled = () => settings.General.ShowShortcutHints;
             ShortcutPresentation.Refresh();
-            // A single-key command: key combinations such as Ctrl+Z are never printed, only shown in the tooltip.
+            // Every command reserves the same hint row, including key combinations.
             var button = new Button { Content = "Rotate", ToolTip = "Rotate left" };
             ShortcutPresentation.Attach(button, ShortcutScope.Annotation, "RotateLeft");
-            TextBlock caption = Assert.IsType<StackPanel>(button.Content).Children.OfType<TextBlock>().Last();
+            TextBlock caption = Assert.IsType<Grid>(button.Content).Children.OfType<TextBlock>().Last();
             Assert.Equal("Q", caption.Text);
             Assert.Equal(expected, caption.Visibility);
             // The key stays discoverable either way: tooltip and accelerator property.

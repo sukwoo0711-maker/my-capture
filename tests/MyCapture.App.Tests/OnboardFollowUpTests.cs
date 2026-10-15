@@ -60,6 +60,7 @@ public sealed class QuickAccessCardLabelTests
             () => Task.FromResult(true), () => { }, () => Task.FromResult("unused.png"));
         try
         {
+            card.IsKept = true;
             Ocr410Fixture.LoadTheme(card);
             card.Show();
             card.UpdateLayout();

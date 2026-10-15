@@ -128,6 +128,14 @@ public sealed class CaptureRecord
     /// </summary>
     public string Title { get; set; } = string.Empty;
 
+    /// <summary>SHA-256 of the immutable original bytes; filled lazily for older captures.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? OriginalContentHash { get; set; }
+
+    /// <summary>Imported basename only, never the external source directory.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? ImportedFileName { get; set; }
+
     /// <summary>User-managed, comma-separated local search tags; empty for legacy indexes.</summary>
     public string Tags { get; set; } = string.Empty;
 
@@ -263,6 +271,9 @@ public static class CaptureFileNames
 {
     /// <summary>The unmodified capture.</summary>
     public const string Original = "original.png";
+
+    /// <summary>Byte-exact imported JPEG, alongside its editable PNG working image.</summary>
+    public const string ImportedJpeg = "imported-source.jpg";
 
     /// <summary>The capture with annotations flattened onto it.</summary>
     public const string Rendered = "rendered.png";

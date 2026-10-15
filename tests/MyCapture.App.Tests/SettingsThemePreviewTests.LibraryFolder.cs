@@ -163,8 +163,15 @@ public sealed partial class SettingsThemePreviewTests
             // The labelled or, with a selection, the icon form of capture: whichever is visible.
             Button captureButton = Descendants(window).OfType<Button>()
                 .Single(button => button.IsVisible && AutomationProperties.GetName(button) == UiText.Get("Text_2C20ADDA2018"));
+            bool captureRequested = false;
+            window.CaptureRegionRequested += () =>
+            {
+                Assert.False(window.IsVisible);
+                captureRequested = true;
+            };
             captureButton.RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent, captureButton));
             PumpLibraryUntil(window, () => !window.IsVisible, label + ": hidden for capture");
+            PumpLibraryUntil(window, () => captureRequested, label + ": capture requested after hiding");
             Assert.Equal(empty.Id, queue.BrowsingCaptureFolderId);
             Assert.Equal(empty.Id, AddLibraryFolderCapture(queue, today, "Inside folder", colors[0]).FolderId);
 

@@ -27,6 +27,7 @@ public sealed class TextAnnotation : AnnotationItem
     private bool _italic;
     private double _rotationDegrees;
     private bool _hasOutline = true;
+    private TextOutlineStyle _outlineStyle;
 
     public RectD Rect
     {
@@ -83,6 +84,17 @@ public sealed class TextAnnotation : AnnotationItem
     {
         get => _hasOutline;
         set => SetProperty(ref _hasOutline, value);
+    }
+
+    /// <summary>The outline appearance, independent of whether it is currently enabled.</summary>
+    /// <remarks>
+    /// Missing fields retain the legacy renderer. New editor captions explicitly select
+    /// <see cref="TextOutlineStyle.Consistent"/>; opening or cloning a saved layer never changes it.
+    /// </remarks>
+    public TextOutlineStyle OutlineStyle
+    {
+        get => _outlineStyle;
+        set => SetProperty(ref _outlineStyle, value);
     }
 
     public double FontSize
@@ -171,6 +183,7 @@ public sealed class TextAnnotation : AnnotationItem
             Foreground = Foreground,
             Background = Background,
             HasOutline = HasOutline,
+            OutlineStyle = OutlineStyle,
             FontSize = FontSize,
             FontFamily = FontFamily,
             Bold = Bold,

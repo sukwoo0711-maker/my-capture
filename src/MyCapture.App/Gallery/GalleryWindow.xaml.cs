@@ -38,6 +38,7 @@ namespace MyCapture.App.Gallery;
 /// </remarks>
 internal sealed partial class GalleryWindow : Window
 {
+    public static RoutedCommand CompareCommand { get; } = new();
     private readonly GalleryViewModel _viewModel;
     private readonly GalleryController _controller;
     private readonly GalleryReeditLoader _reeditLoader;
@@ -57,6 +58,7 @@ internal sealed partial class GalleryWindow : Window
     // Header capture buttons hide the library without closing it, so the shown folder stays
     // the destination of the capture they start.
     private bool _hiddenForCapture;
+    private LibraryCaptureStartCoordinator? _captureStart;
     private int _visibilityGeneration;
     private bool _imagePreparationInProgress;
     private Point _dragStart;
@@ -104,6 +106,11 @@ internal sealed partial class GalleryWindow : Window
         _log = log ?? throw new ArgumentNullException(nameof(log));
 
         InitializeComponent();
+        CommandBindings.Add(new CommandBinding(CompareCommand, OnCompareExecuted, (_, e) =>
+        {
+            e.CanExecute = !_imagePreparationInProgress && _viewModel.CanCompareSelected;
+            e.Handled = true;
+        }));
         Loaded += (_, _) => UpdateCommandShortcuts();
         MyCapture.App.Themes.WorkspaceTheme.Attach(this, MyCapture.App.Themes.WorkspaceRole.Gallery, resourcesLoaded: true);
         _viewModel.EnableAsyncThumbnailLoading(Dispatcher);
@@ -118,11 +125,13 @@ internal sealed partial class GalleryWindow : Window
         KeyDown += OnLibraryKeyDown;
         InitializeActionStatus();
         InitializeRecovery();
+        InitializeLibraryExtras();
         InitializeEmptyLibrary();
+        InitializeCommandBarLayout();
         IsVisibleChanged += (_, _) =>
         {
             _visibilityGeneration++;
-            if (!IsVisible) ResetDragGesture();
+            if (!IsVisible) { ResetDragGesture(); _importCancellation?.Cancel(); }
             else _hiddenForCapture = false;
             _viewModel.SetThumbnailLoadingEnabled(IsVisible);
             _viewModel.SetLibraryOpen(IsVisible || _hiddenForCapture);
@@ -240,6 +249,21 @@ internal sealed partial class GalleryWindow : Window
     private void OnSearchTextChanged(object sender, TextChangedEventArgs e) =>
         _viewModel.SearchQuery = SearchBox.Text;
 
+    private void OnRemoveSearchConditionClick(object sender, RoutedEventArgs e)
+    {
+        if (sender is not FrameworkElement { DataContext: GallerySearchCondition condition }) return;
+        _viewModel.RemoveSearchCondition(condition.Index);
+        SearchBox.Text = _viewModel.SearchQuery;
+        SearchBox.Focus();
+        SearchBox.CaretIndex = SearchBox.Text.Length;
+    }
+
+    private void OnClearSearchConditionsClick(object sender, RoutedEventArgs e)
+    {
+        SearchBox.Clear();
+        SearchBox.Focus();
+    }
+
     // ---- OCR full-text search coverage -------------------------------------------------
 
     /// <summary>
@@ -298,19 +322,12 @@ internal sealed partial class GalleryWindow : Window
 
         _ocrIndexingRunning = true;
         _ocrIndexingCts = new System.Threading.CancellationTokenSource();
-        OcrIndexButton.Content = UiText.Get("Text_92CDEF3C5BC0");
-        OcrCoverageBanner.Visibility = Visibility.Visible;
-
-        var progress = new System.Progress<MyCapture.App.Ocr.OcrIndexingProgress>(p =>
-        {
-            OcrCoverageHeadline.Text = UiText.Format("Text_C51C3FDBF019", p.Processed, p.Total);
-            OcrCoverageDetail.Text = UiText.Format("Text_AAED78A6EA00", p.Indexed);
-        });
+        OcrCoverageBanner.Visibility = Visibility.Collapsed;
 
         MyCapture.App.Ocr.OcrIndexingOutcome outcome;
         try
         {
-            outcome = await _ocrIndexing.IndexMissingAsync(progress, _ocrIndexingCts.Token);
+            outcome = await _ocrIndexing.IndexMissingAsync(cancellationToken: _ocrIndexingCts.Token);
         }
         catch (System.Exception ex)
         {
@@ -645,7 +662,7 @@ internal sealed partial class GalleryWindow : Window
     {
         if (_viewModel is null || sender is not RadioButton { Tag: string filter }) return;
         GalleryFilter next = Enum.Parse<GalleryFilter>(filter);
-        if (_viewModel.Filter == next && _viewModel.SelectedScope.IsAll) return;
+        if (_viewModel.Filter == next && _viewModel.SelectedScope.IsAll && _viewModel.SelectedTag is null) return;
         await ShowLibraryViewAsync(next);
     }
 
@@ -761,14 +778,17 @@ internal sealed partial class GalleryWindow : Window
 
     // ---- Actions -------------------------------------------------------------------
 
-    private void TogglePin(GalleryItemViewModel tile)
+    private async void TogglePin(GalleryItemViewModel tile)
     {
         if (!EnsureRecordReady(tile.Id))
         {
             return;
         }
 
-        bool? pinned = _controller.TogglePin(tile.Id);
+        bool? pinned;
+        try { pinned = await _queue.ToggleLibraryPinAsync(tile.Id); }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException or AggregateException)
+        { ShowActionStatus(UiText.Get("Library.Organize.Failed")); return; }
         if (pinned is null)
         {
             return;
@@ -817,6 +837,7 @@ internal sealed partial class GalleryWindow : Window
 
     private async void OnMoreCommandsClick(object sender, RoutedEventArgs e)
     {
+        ContactSheetMenu.IsEnabled = _viewModel.HasSelection;
         if (sender is Button { ContextMenu: { } menu } button)
         {
             menu.PlacementTarget = button;
@@ -972,19 +993,31 @@ internal sealed partial class GalleryWindow : Window
     }
 
     /// <summary>Header toolbar: start a region capture, mirroring the tray command.</summary>
-    private void OnCaptureRegionClick(object sender, RoutedEventArgs e)
-    {
-        _hiddenForCapture = true;
-        Window.GetWindow(this)?.Hide();
-        CaptureRegionRequested?.Invoke();
-    }
+    private async void OnCaptureRegionClick(object sender, RoutedEventArgs e) =>
+        await StartLibraryCaptureAsync(CaptureRegionRequested);
 
     /// <summary>Header toolbar: start (or stop) a region recording, mirroring the tray command.</summary>
-    private void OnRecordRegionClick(object sender, RoutedEventArgs e)
+    private async void OnRecordRegionClick(object sender, RoutedEventArgs e) =>
+        await StartLibraryCaptureAsync(RecordRegionRequested);
+
+    private async Task StartLibraryCaptureAsync(Action? start)
     {
-        _hiddenForCapture = true;
-        Window.GetWindow(this)?.Hide();
-        RecordRegionRequested?.Invoke();
+        if (start is null) return;
+        _captureStart ??= new LibraryCaptureStartCoordinator(
+            () =>
+            {
+                _hiddenForCapture = true;
+                return MyCapture.App.Capture.CaptureWindowVisibility.HideAndConfirmAsync(this);
+            }, ShowGallery);
+        try
+        {
+            await _captureStart.StartAsync(start);
+        }
+        catch (Exception ex)
+        {
+            _log.LogError(ex, "Could not hide the library before capture");
+            ThemedDialog.Error(this, UiText.Get("Dialog.AppFailure"), ex);
+        }
     }
 
     private async Task CopyRenderedAsync(GalleryItemViewModel tile)
@@ -1095,6 +1128,54 @@ internal sealed partial class GalleryWindow : Window
         _ocrPresenter.ShowRecognized(RequestFactory, context, OnFresh);
     }
 
+    private async void OnCompareExecuted(object sender, ExecutedRoutedEventArgs e)
+    {
+        e.Handled = true;
+        GalleryItemViewModel[] selected = _viewModel.SelectedTiles.ToArray();
+        if (_imagePreparationInProgress || selected.Length != 2 || selected.Any(tile => !tile.IsImage)) return;
+        CaptureRecord? first = _controller.Find(selected[0].Id);
+        CaptureRecord? second = _controller.Find(selected[1].Id);
+        if (first is null || second is null || !EnsureRecordReady(first.Id) || !EnsureRecordReady(second.Id)) return;
+        _imagePreparationInProgress = true;
+        CommandManager.InvalidateRequerySuggested();
+        int generation = _visibilityGeneration;
+        long firstRevision = first.ContentRevision;
+        long secondRevision = second.ContentRevision;
+        string firstTitle = selected[0].ContextLabel;
+        string secondTitle = selected[1].ContextLabel;
+        try
+        {
+            string firstPath = _queue.GetFilePath(first, CaptureFileNames.Rendered);
+            string secondPath = _queue.GetFilePath(second, CaptureFileNames.Rendered);
+            var images = await Task.Run(() => (First: ImageCodec.TryLoad(firstPath), Second: ImageCodec.TryLoad(secondPath)));
+            if (!IsVisible || generation != _visibilityGeneration) return;
+            if (!ReferenceEquals(_controller.Find(first.Id), first) || !ReferenceEquals(_controller.Find(second.Id), second)
+                || first.ContentRevision != firstRevision || second.ContentRevision != secondRevision
+                || _commitService.IsRecordBeingWritten(first.Id) || _commitService.IsRecordBeingWritten(second.Id))
+            {
+                ShowStatus(UiText.Get("GalleryImageChanged"));
+                return;
+            }
+            if (images.First is null || images.Second is null)
+            {
+                ShowStatus(UiText.Get("Gallery.Compare.LoadFailed"));
+                return;
+            }
+            new GalleryCompareWindow(images.First, images.Second, firstTitle, first.CreatedAt, secondTitle, second.CreatedAt)
+                { Owner = this }.Show();
+        }
+        catch (Exception ex)
+        {
+            _log.LogWarning(ex, "Could not prepare capture comparison");
+            if (IsVisible && generation == _visibilityGeneration) ShowStatus(UiText.Get("Gallery.Compare.LoadFailed"));
+        }
+        finally
+        {
+            _imagePreparationInProgress = false;
+            CommandManager.InvalidateRequerySuggested();
+        }
+    }
+
     private async void OnReducedExportClick(object sender, RoutedEventArgs e)
     {
         GalleryItemViewModel? tile = ResolveTileFromCommand(sender);
@@ -1122,7 +1203,7 @@ internal sealed partial class GalleryWindow : Window
             }
             _ = ImageReductionExportDialog.Show(this, image,
                 Path.Combine(_paths.QuickSaveRoot, GalleryDragExportService.BuildBaseFileName(DateTimeOffset.Now)),
-                record.SourcePageUrl);
+                record.SourcePageUrl, _commitService.LastExportOptions, _commitService.RememberExportOptions);
         }
         catch (Exception ex)
         {

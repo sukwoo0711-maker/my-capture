@@ -17,7 +17,7 @@ namespace MyCapture.App.Tests;
 
 /// <summary>
 /// Every ordinary dialog ends with the same action row: the confirming action first and the
-/// dismissal last, 8 DIPs apart, each at least 88 x 36. Enter picks the filled default, which is
+/// dismissal last, 8 DIPs apart, each at least 88 wide and exactly 44 high. Enter picks the filled default, which is
 /// never a destructive command; Esc always cancels.
 /// </summary>
 public sealed class DialogActionOrderTests
@@ -117,7 +117,8 @@ public sealed class DialogActionOrderTests
             {
                 Button button = buttons[index];
                 Assert.True(button.ActualWidth >= ThemedDialog.ActionMinWidth - 0.5, $"{label}: '{button.Content}' is {button.ActualWidth:0.#} wide");
-                Assert.InRange(button.ActualHeight, ThemedDialog.ActionHeight - 0.5, ThemedDialog.ActionHeight + 2.5);
+                Assert.Equal(ThemedDialog.ActionHeight, button.ActualHeight, 1);
+                Assert.Equal(buttons[0].ActualHeight, button.ActualHeight, 1);
                 Rect bounds = button.TransformToAncestor(dialog).TransformBounds(new Rect(button.RenderSize));
                 var client = (FrameworkElement)VisualTreeHelper.GetChild(dialog, 0);
                 Assert.True(bounds.Left >= 0 && bounds.Right <= client.ActualWidth + 0.5, $"{label}: '{button.Content}' leaves the dialog at {bounds}");

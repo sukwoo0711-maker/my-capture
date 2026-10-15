@@ -41,6 +41,7 @@ public partial class App
         _overlay.AutoDetectWindows = () => _settings?.Capture.AutoDetectWindows == true;
         _overlay.ShowShortcutHints = () => _settings?.General.ShowShortcutHints != false;
         _overlay.CopyColorText = ClipboardImageService.CopyTextAsync;
+        _overlay.ColorCopied = feedback => _shellPresenter?.ShowColorCopy(feedback);
         _overlay.ReadColorFormat = () => _settings?.Capture.ColorFormat ?? MyCapture.Core.Settings.ColorFormat.Hex;
         _overlay.TextCaptureRequested = OnTextCaptureSelected;
         ServiceProvider services = _services;

@@ -17,7 +17,26 @@ internal sealed record GifFrameSchedule(
     IReadOnlyList<double> SourceTimesMs,
     IReadOnlyList<int> FrameDelaysCentiseconds,
     IReadOnlyList<TimedTextOverlay> QuantizedTextOverlays,
-    IReadOnlyList<FrameEditLayer> QuantizedFrameEditLayers);
+    IReadOnlyList<FrameEditLayer> QuantizedFrameEditLayers)
+{
+    internal double SourceTimeAtOutput(double outputTimeMs)
+    {
+        double nextBoundary = 0;
+        int index = 0;
+        while (index + 1 < SourceTimesMs.Count)
+        {
+            nextBoundary += FrameDelaysCentiseconds[index] * 10.0;
+            if (outputTimeMs < nextBoundary)
+            {
+                break;
+            }
+
+            index++;
+        }
+
+        return SourceTimesMs[index];
+    }
+}
 
 /// <summary>
 /// Streams a trimmed, text-composited recording to animated GIF using only Windows/WPF codecs.
@@ -113,7 +132,8 @@ internal static class AnimatedGifExporter
                 recording.Width,
                 recording.Height,
                 schedule.QuantizedTextOverlays,
-                schedule.QuantizedFrameEditLayers),
+                schedule.QuantizedFrameEditLayers,
+                document.RemovedRanges),
             baseWidth,
             baseHeight,
             schedule.SourceTimesMs,
@@ -289,7 +309,8 @@ internal static class AnimatedGifExporter
                 "GIF playback speed must be between 0.25x and 4x.");
         }
 
-        double durationMs = document.TrimOutMs - document.TrimInMs;
+        VideoCutTimeline timeline = document.CreateTimeline();
+        double durationMs = timeline.OutputDurationMs;
         int totalCentiseconds = Math.Max(
             1,
             checked((int)Math.Round(
@@ -304,25 +325,42 @@ internal static class AnimatedGifExporter
             _ = boundaries.Add(boundary);
         }
 
+        var seamSourceTimes = new Dictionary<int, double>();
+        foreach (VideoTimeRange segment in timeline.KeptRanges)
+        {
+            int boundary = Math.Clamp(
+                checked((int)Math.Round(timeline.ToOutputTime(segment.StartMs) / 10.0, MidpointRounding.AwayFromZero)),
+                0,
+                totalCentiseconds);
+            _ = boundaries.Add(boundary);
+            seamSourceTimes[boundary] = segment.StartMs;
+        }
+
+        // GIF stores output timing on a 10 ms grid, but the first frame after a cut must
+        // come from the exact next source segment even when its output seam rounds down.
+        double SourceAtBoundary(int boundary) => seamSourceTimes.TryGetValue(boundary, out double sourceTime)
+            ? sourceTime
+            : timeline.ToSourceTime(boundary * 10.0);
+
         var quantizedOverlays = new List<TimedTextOverlay>();
         foreach (TimedTextOverlay overlay in document.TextOverlays)
         {
             double start = Math.Max(document.TrimInMs, overlay.StartMs);
             double end = Math.Min(document.TrimOutMs, overlay.EndMs);
-            if (end <= start)
+            if (end <= start || timeline.ToOutputTime(end) <= timeline.ToOutputTime(start))
             {
                 continue;
             }
 
             int startCs = Math.Clamp(
                 checked((int)Math.Round(
-                    (start - document.TrimInMs) / 10.0,
+                    timeline.ToOutputTime(start) / 10.0,
                     MidpointRounding.AwayFromZero)),
                 0,
                 totalCentiseconds);
             int endCs = Math.Clamp(
                 checked((int)Math.Round(
-                    (end - document.TrimInMs) / 10.0,
+                    timeline.ToOutputTime(end) / 10.0,
                     MidpointRounding.AwayFromZero)),
                 0,
                 totalCentiseconds);
@@ -335,8 +373,8 @@ internal static class AnimatedGifExporter
             _ = boundaries.Add(startCs);
             _ = boundaries.Add(endCs);
             TimedTextOverlay adjusted = overlay.Clone();
-            adjusted.StartMs = document.TrimInMs + (startCs * 10.0);
-            adjusted.EndMs = document.TrimInMs + (endCs * 10.0);
+            adjusted.StartMs = SourceAtBoundary(startCs);
+            adjusted.EndMs = SourceAtBoundary(endCs);
             quantizedOverlays.Add(adjusted);
         }
 
@@ -345,20 +383,20 @@ internal static class AnimatedGifExporter
         {
             double start = Math.Max(document.TrimInMs, layer.StartMs);
             double end = Math.Min(document.TrimOutMs, layer.EndMs);
-            if (end <= start)
+            if (end <= start || timeline.ToOutputTime(end) <= timeline.ToOutputTime(start))
             {
                 continue;
             }
 
             int startCs = Math.Clamp(
                 checked((int)Math.Round(
-                    (start - document.TrimInMs) / 10.0,
+                    timeline.ToOutputTime(start) / 10.0,
                     MidpointRounding.AwayFromZero)),
                 0,
                 totalCentiseconds);
             int endCs = Math.Clamp(
                 checked((int)Math.Round(
-                    (end - document.TrimInMs) / 10.0,
+                    timeline.ToOutputTime(end) / 10.0,
                     MidpointRounding.AwayFromZero)),
                 0,
                 totalCentiseconds);
@@ -371,8 +409,8 @@ internal static class AnimatedGifExporter
             _ = boundaries.Add(startCs);
             _ = boundaries.Add(endCs);
             FrameEditLayer adjusted = layer.Clone();
-            adjusted.StartMs = document.TrimInMs + (startCs * 10.0);
-            adjusted.EndMs = document.TrimInMs + (endCs * 10.0);
+            adjusted.StartMs = SourceAtBoundary(startCs);
+            adjusted.EndMs = SourceAtBoundary(endCs);
             quantizedFrameLayers.Add(adjusted);
         }
 
@@ -384,7 +422,7 @@ internal static class AnimatedGifExporter
         int previousOutputBoundary = 0;
         for (int index = 0; index < frameCount; index++)
         {
-            sourceTimes[index] = document.TrimInMs + (ordered[index] * 10.0);
+            sourceTimes[index] = SourceAtBoundary(ordered[index]);
             int outputBoundary = Math.Max(
                 previousOutputBoundary + 1,
                 checked((int)Math.Round(

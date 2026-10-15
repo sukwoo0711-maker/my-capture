@@ -20,6 +20,10 @@ public enum CaptureMatchField
 
     /// <summary>The folder or file path the source window showed.</summary>
     SourceDocumentPath = 128,
+    Folder = 256,
+    Pinned = 512,
+    Date = 1024,
+    ExportFileName = 2048,
 }
 
 /// <summary>
@@ -61,8 +65,9 @@ public readonly record struct OcrCoverage(int Total, int Indexed, int WithOcrTex
 /// unit-tested directly, without a gallery window or the OCR engine.
 /// </para>
 /// <para>
-/// Matching is multi-term AND: every whitespace-separated term must be found somewhere in
-/// the record (any field). A term matches by case-insensitive substring, which is the right
+/// Matching is multi-term AND: bare terms search every existing text field, quoted phrases
+/// stay together, and field prefixes or negation refine individual terms. Text matches by
+/// case-insensitive substring, which is the right
 /// default for mixed Korean/English UI text where stemming would do more harm than good.
 /// A record only becomes findable by its picture's words once its OCR text has been indexed
 /// (see the app's OCR indexing service); this class reports that coverage so the UI can tell
@@ -71,8 +76,6 @@ public readonly record struct OcrCoverage(int Total, int Indexed, int WithOcrTex
 /// </remarks>
 public static class CaptureTextSearch
 {
-    private static readonly char[] TermSeparators = [' ', '\t', '\r', '\n'];
-
     /// <summary>
     /// Returns the records matching <paramref name="query"/>, newest first, each with the
     /// fields that matched. An empty query returns every record (newest first) with no field
@@ -84,18 +87,18 @@ public static class CaptureTextSearch
     {
         ArgumentNullException.ThrowIfNull(records);
 
-        string[] terms = SplitTerms(query);
+        CaptureSearchQuery prepared = CaptureSearchQuery.Parse(query);
         var hits = new List<CaptureSearchHit>();
 
         foreach (CaptureRecord record in records)
         {
-            if (terms.Length == 0)
+            if (prepared.Tokens.Count == 0)
             {
                 hits.Add(new CaptureSearchHit(record, CaptureMatchField.None));
                 continue;
             }
 
-            if (TryMatch(record, terms, out CaptureMatchField fields))
+            if (prepared.TryMatch(record, out CaptureMatchField fields))
             {
                 hits.Add(new CaptureSearchHit(record, fields));
             }
@@ -112,8 +115,8 @@ public static class CaptureTextSearch
     public static bool IsMatch(CaptureRecord record, string? query)
     {
         ArgumentNullException.ThrowIfNull(record);
-        string[] terms = SplitTerms(query);
-        return MatchesTerms(record, terms);
+        CaptureSearchQuery prepared = CaptureSearchQuery.Parse(query);
+        return prepared.IsMatch(record);
     }
 
     /// <summary>
@@ -122,35 +125,12 @@ public static class CaptureTextSearch
     /// </summary>
     public static Func<CaptureRecord, bool> CreateMatcher(string? query)
     {
-        string[] terms = SplitTerms(query);
+        CaptureSearchQuery prepared = CaptureSearchQuery.Parse(query);
         return record =>
         {
             ArgumentNullException.ThrowIfNull(record);
-            return MatchesTerms(record, terms);
+            return prepared.IsMatch(record);
         };
-    }
-
-    private static bool MatchesTerms(CaptureRecord record, string[] terms)
-    {
-        // Boolean filters need no field attribution. A title/tag hit can avoid scanning
-        // the entire OCR document; Search still collects every matching field below.
-        string media = record.IsVideo
-            ? "동영상 비디오 video recording mp4"
-            : "이미지 사진 스크린샷 image screenshot png";
-        string? sourceApp = null;
-        foreach (string term in terms)
-        {
-            if (Contains(record.Title ?? string.Empty, term)
-                || Contains(record.SourceWindowTitle ?? string.Empty, term)
-                || Contains(media, term)
-                || Contains(record.Tags ?? string.Empty, term)
-                || Contains(record.SourcePageUrl ?? string.Empty, term)
-                || Contains(record.SourceDocumentPath ?? string.Empty, term)
-                || Contains(sourceApp ??= SourceAppText(record), term)
-                || Contains(record.OcrText ?? string.Empty, term)) continue;
-            return false;
-        }
-        return true;
     }
 
     /// <summary>Reports how much of <paramref name="records"/> carries recognised OCR text.</summary>
@@ -183,74 +163,6 @@ public static class CaptureTextSearch
         return new OcrCoverage(total, indexed, withText);
     }
 
-    private static string[] SplitTerms(string? query) =>
-        string.IsNullOrWhiteSpace(query)
-            ? []
-            : query.Split(TermSeparators, StringSplitOptions.RemoveEmptyEntries);
-
-    private static bool TryMatch(CaptureRecord record, string[] terms, out CaptureMatchField fields)
-    {
-        fields = CaptureMatchField.None;
-
-        string title = record.Title ?? string.Empty;
-        string window = record.SourceWindowTitle ?? string.Empty;
-        string ocr = record.OcrText ?? string.Empty;
-        string sourceApp = SourceAppText(record);
-        string media = record.IsVideo
-            ? "동영상 비디오 video recording mp4"
-            : "이미지 사진 스크린샷 image screenshot png";
-
-        foreach (string term in terms)
-        {
-            CaptureMatchField termFields = CaptureMatchField.None;
-
-            if (Contains(title, term))
-            {
-                termFields |= CaptureMatchField.Title;
-            }
-
-            if (Contains(window, term))
-            {
-                termFields |= CaptureMatchField.WindowTitle;
-            }
-
-            if (Contains(ocr, term))
-            {
-                termFields |= CaptureMatchField.OcrText;
-            }
-
-            if (Contains(media, term))
-            {
-                termFields |= CaptureMatchField.MediaType;
-            }
-
-            if (Contains(record.Tags ?? string.Empty, term))
-            {
-                termFields |= CaptureMatchField.Tags;
-            }
-
-            if (Contains(record.SourcePageUrl ?? string.Empty, term))
-                termFields |= CaptureMatchField.SourcePageUrl;
-
-            if (Contains(sourceApp, term))
-                termFields |= CaptureMatchField.SourceApp;
-
-            if (Contains(record.SourceDocumentPath ?? string.Empty, term))
-                termFields |= CaptureMatchField.SourceDocumentPath;
-
-            // AND semantics: a term found in no field fails the whole record.
-            if (termFields == CaptureMatchField.None)
-            {
-                fields = CaptureMatchField.None;
-                return false;
-            }
-
-            fields |= termFields;
-        }
-
-        return true;
-    }
-
     /// <summary>
     /// Searchable text for the source application: its friendly name and executable file name. The
     /// executable's folder is left out, because "Program Files" or "Windows" would match nearly every
@@ -264,6 +176,4 @@ public static class CaptureTextSearch
         return name.Length == 0 ? file : file.Length == 0 ? name : name + " " + file;
     }
 
-    private static bool Contains(string haystack, string term) =>
-        haystack.Length > 0 && haystack.Contains(term, StringComparison.OrdinalIgnoreCase);
 }

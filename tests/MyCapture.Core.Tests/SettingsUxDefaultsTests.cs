@@ -2,13 +2,14 @@ using System.Reflection;
 using Microsoft.Extensions.Logging.Abstractions;
 using MyCapture.Core.Settings;
 using MyCapture.Core.Storage;
+using MyCapture.Core.Themes;
 using Xunit;
 
 namespace MyCapture.Core.Tests;
 
 /// <summary>
-/// New installations register only region capture and recording and hide key captions; files
-/// written by earlier versions keep every chord and caption choice they already had.
+/// New installations register only region capture and recording and show key captions; files
+/// written by earlier versions keep every chord, and current caption choices persist.
 /// </summary>
 public sealed class SettingsUxDefaultsTests
 {
@@ -22,7 +23,7 @@ public sealed class SettingsUxDefaultsTests
     ];
 
     [Fact]
-    public void NewInstall_RegistersOnlyRegionCaptureAndRecording_AndHidesKeyCaptions()
+    public void NewInstall_RegistersOnlyRegionCaptureAndRecording_AndShowsKeyCaptions()
     {
         using var workspace = new TempWorkspace();
 
@@ -32,7 +33,7 @@ public sealed class SettingsUxDefaultsTests
         Assert.Equal("Ctrl+Shift+C", fresh.Hotkeys.Capture.ToString());
         Assert.Equal("Ctrl+Shift+X", fresh.Hotkeys.RecordRegion.ToString());
         Assert.All(OptionalHotkeys(fresh.Hotkeys), key => Assert.Equal(Hotkey.None, key));
-        Assert.False(fresh.General.ShowShortcutHints);
+        Assert.True(fresh.General.ShowShortcutHints);
         Assert.False(File.Exists(workspace.Paths.SettingsFile));
     }
 
@@ -50,7 +51,7 @@ public sealed class SettingsUxDefaultsTests
         Assert.Equal("Ctrl+Shift+C", reloaded.Hotkeys.Capture.ToString());
         Assert.Equal("Ctrl+Shift+X", reloaded.Hotkeys.RecordRegion.ToString());
         Assert.All(OptionalHotkeys(reloaded.Hotkeys), key => Assert.Equal(Hotkey.None, key));
-        Assert.False(reloaded.General.ShowShortcutHints);
+        Assert.True(reloaded.General.ShowShortcutHints);
     }
 
     [Fact]
@@ -137,9 +138,9 @@ public sealed class SettingsUxDefaultsTests
     [Fact]
     public void ResetToDefaults_UsesTheNewInstallDefaults()
     {
-        var draft = new SettingsDraft(new AppSettings());
+        var draft = new SettingsDraft(new AppSettings { General = { ShowShortcutHints = false } });
         Assert.Equal("F3", draft.PasteToScreenHotkey);
-        Assert.True(draft.ShowShortcutHints);
+        Assert.False(draft.ShowShortcutHints);
 
         draft.ResetToDefaults();
 
@@ -149,7 +150,7 @@ public sealed class SettingsUxDefaultsTests
         Assert.Equal(string.Empty, draft.PasteToScreenHotkey);
         Assert.Equal(string.Empty, draft.HideAllPinsHotkey);
         Assert.Equal(string.Empty, draft.UploadGitHubImageHotkey);
-        Assert.False(draft.ShowShortcutHints);
+        Assert.True(draft.ShowShortcutHints);
         Assert.False(draft.HasErrors);
         AppSettings mapped = draft.ToAppSettings();
         Assert.All(OptionalHotkeys(mapped.Hotkeys), key => Assert.Equal(Hotkey.None, key));
@@ -217,7 +218,7 @@ public sealed class SettingsUxDefaultsTests
             }
             string text = original as string ?? string.Empty;
             foreach (string candidate in new[] { text + "1", "7", "custom", "theme", "gdi", "accurate", "daylight",
-                         "ko-KR", "Ctrl+Alt+F7", "#445566", "en-US" })
+                         "ko-KR", "Ctrl+Alt+F7", "#445566", "en-US", AppAccentNames.Violet, AppAccentNames.Red })
                 yield return candidate;
         }
     }

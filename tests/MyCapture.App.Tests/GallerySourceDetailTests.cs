@@ -35,6 +35,43 @@ public sealed class GallerySourceDetailTests
         select new object[] { language, width };
 
     [Theory]
+    [InlineData("ko-KR")]
+    [InlineData("en-US")]
+    public void SourceLocationNotificationsTrackChangesWithoutRepeatingUnchangedMetadata(string language)
+    {
+        using var scope = UiText.UseLanguage(language);
+        CaptureRecord record = Image(new CaptureSourceDetails("Excel", @"C:\Office\EXCEL.EXE"), "통합 문서1 - Excel");
+        GalleryItemViewModel tile = Tile(record);
+        string[] properties = [nameof(GalleryItemViewModel.IsSourceDocumentFile),
+            nameof(GalleryItemViewModel.HasUnsavedSourceDocument), nameof(GalleryItemViewModel.SourceLocationAction)];
+        var raised = new List<string>();
+        tile.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName is { } name && properties.Contains(name)) raised.Add(name);
+        };
+
+        Assert.True(tile.HasUnsavedSourceDocument);
+        tile.RaiseMetaChanged();
+        Assert.Empty(raised);
+        record.SourceDocumentPath = @"C:\Work\Budget.xlsx";
+        tile.RaiseMetaChanged();
+        Assert.Equal(properties, raised);
+        Assert.True(tile.IsSourceDocumentFile);
+        Assert.False(tile.HasUnsavedSourceDocument);
+        Assert.Equal(UiText.Get("Library.Source.OpenFileLocation"), tile.SourceLocationAction);
+
+        raised.Clear();
+        tile.RaiseMetaChanged();
+        Assert.Empty(raised);
+        record.SourcePageUrl = Url;
+        tile.RaiseMetaChanged();
+        Assert.Equal(new[] { properties[0], properties[2] }, raised);
+        Assert.False(tile.IsSourceDocumentFile);
+        Assert.False(tile.HasUnsavedSourceDocument);
+        Assert.Equal(UiText.Get("Library.Source.OpenFolder"), tile.SourceLocationAction);
+    }
+
+    [Theory]
     [MemberData(nameof(Layouts))]
     public void WebPageSourceShowsAppWindowAndReachableLinkActions(string language, double width) =>
         Render(language, width, Image(EdgeSource(), LongTitle, Url), (window, panel, tile) =>
@@ -116,7 +153,7 @@ public sealed class GallerySourceDetailTests
             Assert.Equal(UiText.Format("Library.Source.LocationAccessible", Folder), new TextBlockAutomationPeer(path).GetName());
             ToggleButton showAll = Named<ToggleButton>(location, "LibrarySourcePathToggle");
             AssertTwoLineSummary(path, showAll, UiText.Get("Library.Source.ShowFullPath"), language);
-            Button[] actions = Descendants(location).OfType<Button>().ToArray();
+            Button[] actions = Descendants(location).OfType<Button>().Where(button => button.IsVisible).ToArray();
             Assert.Equal(new[] { UiText.Get("Library.Source.OpenFolder"), UiText.Get("Library.Source.CopyPath") },
                 actions.Select(action => action.Content?.ToString() ?? string.Empty));
             // At the widest panel the path fits its two lines and offers no toggle.
@@ -131,6 +168,52 @@ public sealed class GallerySourceDetailTests
             showAll.IsChecked = false;
             Drain(window);
             AssertTwoLineSummary(path, showAll, UiText.Get("Library.Source.ShowFullPath"), language);
+        });
+
+    [Fact]
+    public void DocumentSourceKeepsTheFilenameAndFullTooltipWithBothOpenActions() =>
+        Render("ko-KR", 204, Image(new CaptureSourceDetails("Excel", @"C:\Office\EXCEL.EXE",
+            Folder + @"\2026년 하반기 예산.xlsx"), "2026년 하반기 예산.xlsx - Excel"), (window, panel, tile) =>
+        {
+            TextBlock path = Named<TextBlock>(panel, "LibrarySourcePathValue");
+            Assert.Contains("…", path.Text);
+            Assert.EndsWith("2026년 하반기 예산.xlsx", path.Text);
+            Assert.Equal(tile.SourceDocumentPath, path.ToolTip);
+            Assert.Equal(tile.SourceDocumentPathAutomationName, AutomationProperties.GetName(path));
+            StackPanel location = Named<StackPanel>(panel, "LibrarySourceLocation");
+            Button[] actions = Descendants(location).OfType<Button>().Where(button => button.IsVisible).ToArray();
+            Assert.Equal(new[] { UiText.Get("Library.Source.OpenFile"), UiText.Get("Library.Source.OpenFileLocation"),
+                UiText.Get("Library.Source.CopyPath") }, actions.Select(button => button.Content));
+            AssertReachable(panel, actions, "ko-KR");
+            ToggleButton showAll = Named<ToggleButton>(panel, "LibrarySourcePathToggle");
+            Assert.True(showAll.IsVisible);
+            showAll.IsChecked = true;
+            Drain(window);
+            Assert.Equal(tile.SourceDocumentPath, path.Text);
+            showAll.IsChecked = false;
+            Drain(window);
+            Assert.Contains("…", path.Text);
+            SaveEvidence(window, "gallery-source-document-ko-KR-204.png");
+        });
+
+    [Fact]
+    public void UnsavedDocumentIsDistinctFromAnUnknownPathAndUpdatesWhenSaved() =>
+        Render("ko-KR", 204, Image(new CaptureSourceDetails("Excel", @"C:\Office\EXCEL.EXE"), "통합 문서1 - Excel"),
+            (window, panel, tile) =>
+        {
+            AssertShown(panel, "LibrarySourceUnsaved");
+            AssertHidden(panel, "LibrarySourceLocation");
+            Assert.Equal("저장되지 않은 문서", Named<TextBlock>(panel, "LibrarySourceUnsaved").Text);
+            tile.Record.SourceDocumentPath = @"C:\Work\Budget.xlsx";
+            tile.RaiseMetaChanged();
+            Drain(window);
+            AssertHidden(panel, "LibrarySourceUnsaved");
+            AssertShown(panel, "LibrarySourceLocation");
+            tile.Record.SourceDocumentPath = null;
+            tile.Record.SourceWindowTitle = "Budget.xlsx - Excel";
+            tile.RaiseMetaChanged();
+            Drain(window);
+            AssertHidden(panel, "LibrarySourceUnsaved", "LibrarySourceLocation");
         });
 
     [Fact]
@@ -365,7 +448,7 @@ public sealed class GallerySourceDetailTests
         XElement sourcePanel = Assert.Single(product.Descendants(p + "StackPanel"), element =>
             (string?)element.Attribute(XName.Get("AutomationProperties.AutomationId")) == "LibrarySourceSection");
         XElement[] actionMarkup = sourcePanel.Descendants(p + "Button").ToArray();
-        string[] handlers = ["OnOpenSourcePageClick", "OnCopySourcePageClick", "OnOpenSourceFolderClick", "OnCopySourcePathClick"];
+        string[] handlers = ["OnOpenSourcePageClick", "OnCopySourcePageClick", "OnOpenSourceFileClick", "OnOpenSourceFolderClick", "OnCopySourcePathClick"];
         Assert.Equal(handlers, actionMarkup.Select(button => (string?)button.Attribute("Click") ?? string.Empty));
         foreach (string name in handlers)
         {

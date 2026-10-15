@@ -108,11 +108,23 @@ public sealed class OcrIndexingService
         }
         try
         {
-            return await IndexMissingCoreAsync(progress, cancellationToken);
+            using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            using var activity = _gallery.Queue.Activities.Start(LibraryActivityKind.Ocr, cancellation.Cancel);
+            return await IndexMissingCoreAsync(new ActivityProgress(activity, progress), cancellation.Token);
         }
         finally
         {
             _indexingGate.Release();
+        }
+    }
+
+    private sealed class ActivityProgress(LibraryActivityScope activity, IProgress<OcrIndexingProgress>? downstream)
+        : IProgress<OcrIndexingProgress>
+    {
+        public void Report(OcrIndexingProgress value)
+        {
+            activity.Report(value.Processed, value.Total);
+            downstream?.Report(value);
         }
     }
 
@@ -148,6 +160,7 @@ public sealed class OcrIndexingService
             return OcrIndexingOutcome.NothingToDo;
         }
 
+        progress?.Report(new OcrIndexingProgress(0, work.Count, 0));
         OcrSettings settings = _settings();
         int processed = 0;
         int indexed = 0;

@@ -2,6 +2,7 @@ using System.IO;
 using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
@@ -50,10 +51,10 @@ internal sealed partial class GalleryWindow
 
     private void InitializeRecovery()
     {
-        // Ctrl+Z undoes this session's last delete; a focused text box keeps its own undo.
+        // Text inputs keep their own editing undo; the library uses a shared chronological history.
         InputBindings.Add(new KeyBinding(new RelayCommand(() =>
         {
-            if (_undoBatch is { } batch) _ = UndoDeleteAsync(batch);
+            if (Keyboard.FocusedElement is not TextBoxBase) _ = UndoLibraryAsync();
         }), new KeyGesture(Key.Z, ModifierKeys.Control)));
     }
 
@@ -154,8 +155,8 @@ internal sealed partial class GalleryWindow
         if (undo is { } restorable)
         {
             _undoBatch = restorable;
-            ShowActionStatus(status, UiText.Get("LibraryUndo_Action"), UiText.Get("LibraryUndo_ActionName"),
-                () => UndoDeleteAsync(restorable));
+            _queue.LibraryUndo.Record(LibraryUndoKind.Delete, () => UndoDeleteAsync(restorable));
+            ShowActionStatus(status, UiText.Get("LibraryUndo_Action"), UiText.Get("LibraryUndo_ActionName"), UndoLibraryAsync);
         }
         else
         {
@@ -185,16 +186,18 @@ internal sealed partial class GalleryWindow
     }
 
     /// <summary>Restores one delete command's captures together and reports how many came back.</summary>
-    internal async Task UndoDeleteAsync(Guid batch)
+    internal async Task<bool> UndoDeleteAsync(Guid batch)
     {
-        if (_deleteInProgress || _controller.Recovery is not { } recovery) return;
+        if (_deleteInProgress || _controller.Recovery is not { } recovery) return false;
         _deleteInProgress = true;
         if (_undoBatch == batch) _undoBatch = null;
         string status;
+        bool restored = false;
         try
         {
             ShowActionStatus(UiText.Get("LibraryUndo_Restoring"));
             LibraryBatchRestoreResult result = await recovery.RestoreBatchAsync(batch);
+            restored = result.Failed == 0;
             status = result switch
             {
                 { Restored: 0, Failed: > 0 } => UiText.Get("LibraryRecovery_Failed"),
@@ -215,6 +218,7 @@ internal sealed partial class GalleryWindow
         }
 
         ShowActionStatus(status);
+        return restored;
     }
 
     // ---- Restore menu ---------------------------------------------------------------------

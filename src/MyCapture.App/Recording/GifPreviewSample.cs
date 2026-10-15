@@ -11,6 +11,7 @@ namespace MyCapture.App.Recording;
 internal sealed class GifPreviewSample : IDisposable
 {
     private VideoExportCalculation? _wholeRange;
+    private readonly GifFrameSchedule _schedule;
 
     private GifPreviewSample(
         GifSampleWindow window,
@@ -20,7 +21,8 @@ internal sealed class GifPreviewSample : IDisposable
         double elapsedMs,
         GifSampleFrames frames,
         double motionFraction,
-        VideoExportCalculation? wholeRange)
+        VideoExportCalculation? wholeRange,
+        GifFrameSchedule schedule)
     {
         Window = window;
         Quality = quality;
@@ -30,6 +32,7 @@ internal sealed class GifPreviewSample : IDisposable
         Frames = frames;
         MotionFraction = motionFraction;
         _wholeRange = wholeRange;
+        _schedule = schedule;
     }
 
     internal GifSampleWindow Window { get; }
@@ -55,9 +58,9 @@ internal sealed class GifPreviewSample : IDisposable
     internal GifPresetMeasurement MeasurementFrom(double rangeStartMs) =>
         GifPresetMeasurement.Of(Quality, Size, Window.DurationMs, ElapsedMs / Window.DurationMs, Math.Abs(Window.StartMs - rangeStartMs) < 0.5);
 
-    /// <summary>Source time of a sample frame, from its output start time and the speed.</summary>
+    /// <summary>Source time of a sample frame, including quantized cut seams and speed changes.</summary>
     internal double SourceTimeOf(int frameIndex) =>
-        Math.Min(Window.EndMs - 1, Window.StartMs + (Frames.Timeline.StartOf(frameIndex) * Speed));
+        _schedule.SourceTimeAtOutput(Frames.Timeline.StartOf(frameIndex));
 
     /// <summary>Transfers the whole-range result to the caller, or returns null.</summary>
     internal VideoExportCalculation? TakeWholeRangeResult()
@@ -97,7 +100,8 @@ internal sealed class GifPreviewSample : IDisposable
                 calculation = null;
             }
 
-            var sample = new GifPreviewSample(window, quality, speed, size, elapsed, frames, motion, calculation);
+            GifFrameSchedule schedule = AnimatedGifExporter.BuildFrameSchedule(sampleDocument, speed, quality.FramesPerSecond);
+            var sample = new GifPreviewSample(window, quality, speed, size, elapsed, frames, motion, calculation, schedule);
             calculation = null;
             return sample;
         }

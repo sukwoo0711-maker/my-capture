@@ -13,12 +13,16 @@ namespace MyCapture.Core.Queue;
 /// </summary>
 internal sealed class CaptureIndexFile
 {
+    // Import provenance is additive: 4.1.5 can read schema 2 and ignore these optional fields.
     public int SchemaVersion { get; set; } = 2;
 
     public List<CaptureRecord> Records { get; set; } = [];
 
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public CaptureFolderState? FolderState { get; set; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public JsonElement? SavedSearches { get; set; }
 }
 
 /// <summary>
@@ -213,11 +217,13 @@ public sealed partial class CaptureQueue
 
         List<CaptureRecord> records;
         CaptureFolderState? loadedFolderState = null;
+        RestoreSavedSearches(null);
 
         if (text is not null && TryParseIndex(text, out CaptureIndexFile? index) && index is not null)
         {
             records = index.Records;
             loadedFolderState = index.FolderState;
+            RestoreSavedSearches(index.SavedSearches);
             HashSet<Guid> indexedIds = records.Select(record => record.Id).ToHashSet();
             // A v1 build did not understand video records and could rewrite index.json without
             // them. On the first v2 load, merge every durable meta sidecar once; later v2 loads
@@ -914,7 +920,7 @@ public sealed partial class CaptureQueue
         {
             index = JsonSerializer.Deserialize<CaptureIndexFile>(text, SerializerOptions);
             if (index is null
-                || index.SchemaVersion is not (1 or 2)
+                || index.SchemaVersion is not (1 or 2 or 3)
                 || index.Records is null)
             {
                 index = null;
@@ -931,6 +937,8 @@ public sealed partial class CaptureQueue
                 }
             }
 
+            // Missing optional import fields retain their null defaults, including after an
+            // older app saves the index. Hash those records lazily on a matching-size import.
             return true;
         }
         catch (JsonException)

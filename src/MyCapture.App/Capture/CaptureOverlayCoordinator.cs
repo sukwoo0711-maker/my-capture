@@ -19,6 +19,7 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
     private readonly Dispatcher _dispatcher;
     private readonly Func<bool, FrozenFrame> _acquireFrame;
     private readonly Func<RectD> _desktopBounds;
+    private readonly Func<RectD, IReadOnlyList<WindowCandidate>> _readWindowCandidates;
     // Nothing on screen waits for these reads, so a read that finds the previous capture's probe
     // still running waits for it within its own deadline instead of giving up at once.
     private readonly BrowserPageUrlService _pageUrls = new(waitForBusyProbe: true);
@@ -46,13 +47,15 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
         WindowCandidateService windowCandidates,
         ILogger<CaptureOverlayCoordinator> log,
         Func<bool, FrozenFrame>? acquireFrame = null,
-        Func<RectD>? desktopBounds = null)
+        Func<RectD>? desktopBounds = null,
+        Func<RectD, IReadOnlyList<WindowCandidate>>? readWindowCandidates = null)
     {
         _captureEngine = captureEngine ?? throw new ArgumentNullException(nameof(captureEngine));
         _windowCandidates = windowCandidates ?? throw new ArgumentNullException(nameof(windowCandidates));
         _log = log ?? throw new ArgumentNullException(nameof(log));
         _acquireFrame = acquireFrame ?? captureEngine.CaptureVirtualDesktop;
         _desktopBounds = desktopBounds ?? MonitorEnumerator.GetVirtualDesktopBounds;
+        _readWindowCandidates = readWindowCandidates ?? windowCandidates.GetCandidates;
         _dispatcher = Application.Current?.Dispatcher ?? Dispatcher.CurrentDispatcher;
         _dispatcher.ShutdownStarted += OnDispatcherShutdownStarted;
         ReadWindowSources = _windowSources.ReadAsync;
@@ -102,6 +105,7 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
 
     /// <summary>Copies the overlay's sampled colour (C key). Null leaves the key unbound.</summary>
     internal Func<string, Task<bool>>? CopyColorText { get; set; }
+    internal Action<ColorCopyFeedback>? ColorCopied { get; set; }
 
     internal Func<MyCapture.Core.Settings.ColorFormat> ReadColorFormat { get; set; } =
         () => MyCapture.Core.Settings.ColorFormat.Hex;
@@ -211,7 +215,7 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
             // The windows as they are at the hotkey: handle, process, title, bounds and z-order. Every
             // page and application read is tied to these identities, and the selection's source is
             // chosen from them.
-            preparation.SourceWindows = _windowCandidates.GetCandidates(desktop);
+            preparation.SourceWindows = _readWindowCandidates(desktop);
             bool settle = NeedsPresentationSettle(Environment.TickCount64, _lastPresentationDismissedTick);
             // The reads and the grab start before the selector window is built, so building it
             // overlaps the grab instead of preceding it. The window stays hidden until its frame exists.
@@ -239,7 +243,17 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
     /// next capture waits out its dismissal instead of photographing it.</summary>
     internal void NoteForegroundDismissal() => _lastPresentationDismissedTick = Environment.TickCount64;
 
-    private async Task AcquireAndShowAsync(CapturePreparation preparation, bool includeCursor, bool settlePresentation)
+    private Task AcquireAndShowAsync(CapturePreparation preparation, bool includeCursor, bool settlePresentation) =>
+        AcquirePreparedFrameAsync(preparation, includeCursor, settlePresentation).ContinueWith(acquired =>
+        {
+            var (frame, failure, confirmedWindows) = acquired.GetAwaiter().GetResult();
+            // Complete on the same dispatcher turn that shows the selector. Extra asynchronous
+            // continuations here leave a visible selector with its preparation still pending.
+            return DispatchAsync(() => ShowPreparedFrame(preparation, frame, failure, confirmedWindows));
+        }, CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default).Unwrap();
+
+    private async Task<(FrozenFrame? Frame, Exception? Failure, Task<IReadOnlyList<WindowCandidate>>? Windows)>
+        AcquirePreparedFrameAsync(CapturePreparation preparation, bool includeCursor, bool settlePresentation)
     {
         FrozenFrame? frame = null;
         Task<IReadOnlyList<WindowCandidate>>? confirmedWindows = null;
@@ -258,7 +272,7 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
                     throw new InvalidOperationException("Capture acquisition must return a frozen bitmap.");
                 return acquired;
             }, ReadPageUrls,
-                () => _windowCandidates.GetCandidates(preparation.DesktopBounds),
+                () => _readWindowCandidates(preparation.DesktopBounds),
                 ReadWindowSources,
                 settlePresentation ? Task.Delay(100) : null).ConfigureAwait(false);
             frame = capturedFrame;
@@ -276,7 +290,7 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
         // The selector appears as soon as its frozen pixels exist. A browser walk on any monitor
         // costs up to ten screen grabs, so the page and application details never hold it back:
         // the selector and every selection made on it receive them when the reads finish.
-        await DispatchAsync(() => ShowPreparedFrame(preparation, frame, failure, confirmedWindows)).ConfigureAwait(false);
+        return (frame, failure, confirmedWindows);
     }
 
     private async Task LogSourceDetailsConfirmedAsync(Task<IReadOnlyList<WindowCandidate>> confirmed, Stopwatch elapsed)
@@ -306,25 +320,28 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
     /// hotkey callbacks without SynchronizationContext. An aborted dispatcher operation is
     /// observed; shutdown never waits for native BitBlt or accessibility reads.
     /// </summary>
-    private async Task<bool> DispatchAsync(Func<bool> step)
+    private Task<bool> DispatchAsync(Func<bool> step)
     {
-        if (_dispatcher.HasShutdownStarted || _dispatcher.HasShutdownFinished) return false;
-        try
+        if (_dispatcher.HasShutdownStarted || _dispatcher.HasShutdownFinished) return Task.FromResult(false);
+        return _dispatcher.InvokeAsync(step).Task.ContinueWith(completed =>
         {
-            return await _dispatcher.InvokeAsync(step).Task.ConfigureAwait(false);
-        }
-        catch (TaskCanceledException) when (_dispatcher.HasShutdownStarted || _dispatcher.HasShutdownFinished)
-        {
-            // Shutdown invalidates the preparation before any late window can be shown.
-            return false;
-        }
-        catch (Exception ex)
-        {
-            // A feedback subscriber must not turn a fire-and-observed transition into an
-            // unobserved task failure. Session cleanup runs in each step's finally.
-            _log.LogError(ex, "Capture preparation dispatcher transition failed");
-            return false;
-        }
+            try
+            {
+                return completed.GetAwaiter().GetResult();
+            }
+            catch (TaskCanceledException) when (_dispatcher.HasShutdownStarted || _dispatcher.HasShutdownFinished)
+            {
+                // Shutdown invalidates the preparation before any late window can be shown.
+                return false;
+            }
+            catch (Exception ex)
+            {
+                // A feedback subscriber must not turn a fire-and-observed transition into an
+                // unobserved task failure. Session cleanup runs in each step's finally.
+                _log.LogError(ex, "Capture preparation dispatcher transition failed");
+                return false;
+            }
+        }, CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
     }
 
     /// <summary>
@@ -393,6 +410,10 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
         overlay.DetectWindows = AutoDetectWindows();
         overlay.ShowShortcutHints = ShowShortcutHints();
         overlay.CopyColorText = CopyColorText;
+        overlay.ColorCopied = feedback =>
+        {
+            if (!_disposed) ColorCopied?.Invoke(feedback);
+        };
         overlay.ReadColorFormat = ReadColorFormat;
         overlay.TextCaptureAvailable = TextCaptureRequested is not null;
         overlay.TextCaptureMode = _preparation?.TextCapture == true;

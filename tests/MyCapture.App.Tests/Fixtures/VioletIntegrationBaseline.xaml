@@ -1,0 +1,376 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ResourceDictionary xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:themes="clr-namespace:MyCapture.App.Themes;assembly=MyCapture" xmlns:sys="clr-namespace:System;assembly=System.Runtime" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation">
+  <!-- Fixed baseline from qa/integration d2440d5bdc4aa5eea3f5aeebd11f2c33ceb5ee89. Selected styles and transitive tokens from Tokens.xaml/Controls.xaml; fixed palettes from AppTheme.cs/WorkspaceTheme.cs. Do not regenerate from the implementation under test. -->
+  <Color x:Key="Primitive.Warm900">#FF101722</Color>
+  <Color x:Key="Primitive.Warm800">#FF1B2636</Color>
+  <Color x:Key="Primitive.Warm600">#FF6A7B94</Color>
+  <Color x:Key="Primitive.Warm550">#FF56677F</Color>
+  <Color x:Key="Primitive.Warm500">#FF2B3A50</Color>
+  <Color x:Key="Primitive.Warm400">#FF8E9CAF</Color>
+  <Color x:Key="Primitive.Warm300">#FFC6D0DF</Color>
+  <Color x:Key="Primitive.Warm100">#FFF6F8FC</Color>
+  <Color x:Key="Primitive.Yellow300">#FF9789FF</Color>
+  <Color x:Key="Primitive.Yellow400">#FF7C6CFF</Color>
+  <Color x:Key="Primitive.Yellow500">#FF7C6CFF</Color>
+  <Color x:Key="Primitive.Yellow900">#FF1A1733</Color>
+  <SolidColorBrush x:Key="Surface.Raised" Color="{StaticResource Primitive.Warm900}" />
+  <SolidColorBrush x:Key="Surface.Hover" Color="{StaticResource Primitive.Warm800}" />
+  <SolidColorBrush x:Key="Text.Primary" Color="{StaticResource Primitive.Warm100}" />
+  <SolidColorBrush x:Key="Text.Secondary" Color="{StaticResource Primitive.Warm300}" />
+  <SolidColorBrush x:Key="Text.Muted" Color="{StaticResource Primitive.Warm400}" />
+  <SolidColorBrush x:Key="Accent.Default" Color="{StaticResource Primitive.Yellow400}" />
+  <SolidColorBrush x:Key="Accent.Subtle" Color="{StaticResource Primitive.Yellow900}" />
+  <SolidColorBrush x:Key="Border.Subtle" Color="{StaticResource Primitive.Warm500}" />
+  <SolidColorBrush x:Key="Border.Control" Color="{StaticResource Primitive.Warm550}" />
+  <SolidColorBrush x:Key="Border.Strong" Color="{StaticResource Primitive.Warm600}" />
+  <SolidColorBrush x:Key="Border.Hover" Color="Transparent" />
+  <SolidColorBrush x:Key="Border.Focus" Color="{StaticResource Primitive.Yellow300}" />
+  <Thickness x:Key="Focus.RingThickness">1</Thickness>
+  <SolidColorBrush x:Key="Border.Accent" Color="{StaticResource Primitive.Yellow500}" />
+  <CornerRadius x:Key="Radius.Sm">6</CornerRadius>
+  <CornerRadius x:Key="Radius.Md">8</CornerRadius>
+  <sys:Double x:Key="Size.HitTarget.Compact">32</sys:Double>
+  <Style x:Key="StateLayer" TargetType="Border">
+    <Setter Property="IsHitTestVisible" Value="False" />
+    <Setter Property="Opacity" Value="0" />
+    <Setter Property="SnapsToDevicePixels" Value="True" />
+    <Setter Property="CornerRadius" Value="{DynamicResource Radius.Md}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource Border.Hover}" />
+  </Style>
+  <Style x:Key="StateLayer.Hover" TargetType="Border" BasedOn="{StaticResource StateLayer}">
+    <Setter Property="Background" Value="{DynamicResource Surface.Hover}" />
+  </Style>
+  <Style x:Key="StateLayer.Selected" TargetType="Border" BasedOn="{StaticResource StateLayer}">
+    <Setter Property="Background" Value="{DynamicResource Accent.Subtle}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource Border.Accent}" />
+    <Setter Property="themes:FluidMotion.Transition" Value="Normal" />
+  </Style>
+  <Style x:Key="Tab.Help" TargetType="{x:Type TabItem}">
+    <Setter Property="Foreground" Value="{DynamicResource Text.Primary}" />
+    <Setter Property="Padding" Value="12,9" />
+    <Setter Property="Margin" Value="0" />
+    <Setter Property="Template">
+      <Setter.Value>
+        <ControlTemplate TargetType="{x:Type TabItem}">
+          <Grid Margin="0,0,6,4">
+            <Border x:Name="TabBorder" Background="{DynamicResource Surface.Raised}" BorderBrush="{DynamicResource Border.Subtle}" BorderThickness="1" CornerRadius="8" />
+            <Border x:Name="HoverLayer" Style="{StaticResource StateLayer.Hover}" BorderThickness="1" CornerRadius="8" />
+            <Border x:Name="SelectedLayer" Style="{StaticResource StateLayer.Selected}" BorderBrush="{DynamicResource Accent.Default}" BorderThickness="1" CornerRadius="8" />
+            <Border BorderThickness="1" Padding="{TemplateBinding Padding}">
+              <ContentPresenter ContentSource="Header" RecognizesAccessKey="True" />
+            </Border>
+          </Grid>
+          <ControlTemplate.Triggers>
+            <Trigger Property="IsMouseOver" Value="True">
+              <Setter TargetName="HoverLayer" Property="themes:FluidMotion.FadeTo" Value="1" />
+            </Trigger>
+            <Trigger Property="IsSelected" Value="True">
+              <Setter TargetName="SelectedLayer" Property="themes:FluidMotion.FadeTo" Value="1" />
+              <Setter Property="FontWeight" Value="SemiBold" />
+            </Trigger>
+            <Trigger Property="IsKeyboardFocused" Value="True">
+              <Setter TargetName="TabBorder" Property="BorderBrush" Value="{DynamicResource Accent.Default}" />
+            </Trigger>
+          </ControlTemplate.Triggers>
+        </ControlTemplate>
+      </Setter.Value>
+    </Setter>
+  </Style>
+  <Style x:Key="Slider.TrackButton" TargetType="RepeatButton">
+    <Setter Property="OverridesDefaultStyle" Value="True" />
+    <Setter Property="Focusable" Value="False" />
+    <Setter Property="IsTabStop" Value="False" />
+    <Setter Property="Template">
+      <Setter.Value>
+        <ControlTemplate TargetType="RepeatButton">
+          <!-- The full control height pages the value; only the 4px bar is drawn. -->
+          <Grid Background="Transparent">
+            <Border Height="4" CornerRadius="2" VerticalAlignment="Center" Background="{TemplateBinding Background}" SnapsToDevicePixels="True" />
+          </Grid>
+        </ControlTemplate>
+      </Setter.Value>
+    </Setter>
+  </Style>
+  <Style x:Key="Slider.TrackButton.Vertical" TargetType="RepeatButton" BasedOn="{StaticResource Slider.TrackButton}">
+    <Setter Property="Template">
+      <Setter.Value>
+        <ControlTemplate TargetType="RepeatButton">
+          <Grid Background="Transparent">
+            <Border Width="4" CornerRadius="2" HorizontalAlignment="Center" Background="{TemplateBinding Background}" SnapsToDevicePixels="True" />
+          </Grid>
+        </ControlTemplate>
+      </Setter.Value>
+    </Setter>
+  </Style>
+  <Style x:Key="Slider.Thumb" TargetType="Thumb">
+    <Setter Property="OverridesDefaultStyle" Value="True" />
+    <Setter Property="Focusable" Value="False" />
+    <Setter Property="Width" Value="16" />
+    <Setter Property="Template">
+      <Setter.Value>
+        <ControlTemplate TargetType="Thumb">
+          <!-- Transparent across the track height, so the grab area is taller than the disc. -->
+          <Grid Background="Transparent">
+            <Ellipse Width="16" Height="16" Fill="{DynamicResource Surface.Raised}" Stroke="{DynamicResource Border.Control}" StrokeThickness="1" />
+            <Ellipse x:Name="Centre" Width="10" Height="10" Fill="{TemplateBinding Foreground}" />
+          </Grid>
+          <ControlTemplate.Triggers>
+            <Trigger Property="IsMouseOver" Value="True">
+              <Setter TargetName="Centre" Property="themes:FluidMotion.ScaleTo" Value="1.2" />
+            </Trigger>
+            <Trigger Property="IsDragging" Value="True">
+              <Setter TargetName="Centre" Property="themes:FluidMotion.ScaleTo" Value="0.8" />
+            </Trigger>
+          </ControlTemplate.Triggers>
+        </ControlTemplate>
+      </Setter.Value>
+    </Setter>
+  </Style>
+  <Style x:Key="Slider.Thumb.Vertical" TargetType="Thumb" BasedOn="{StaticResource Slider.Thumb}">
+    <Setter Property="Width" Value="Auto" />
+    <Setter Property="Height" Value="16" />
+  </Style>
+  <ControlTemplate x:Key="Slider.HorizontalTemplate" TargetType="Slider">
+    <Grid Background="{TemplateBinding Background}" SnapsToDevicePixels="True">
+      <Grid.RowDefinitions>
+        <RowDefinition Height="Auto" />
+        <RowDefinition Height="*" />
+        <RowDefinition Height="Auto" />
+      </Grid.RowDefinitions>
+      <TickBar x:Name="TopTick" Grid.Row="0" Height="4" Placement="Top" Fill="{DynamicResource Text.Muted}" Visibility="Collapsed" />
+      <Track x:Name="PART_Track" Grid.Row="1">
+        <Track.DecreaseRepeatButton>
+          <RepeatButton Style="{StaticResource Slider.TrackButton}" Background="{TemplateBinding Foreground}" Command="{x:Static Slider.DecreaseLarge}" />
+        </Track.DecreaseRepeatButton>
+        <Track.Thumb>
+          <Thumb x:Name="Thumb" Style="{StaticResource Slider.Thumb}" Foreground="{TemplateBinding Foreground}" />
+        </Track.Thumb>
+        <Track.IncreaseRepeatButton>
+          <RepeatButton Style="{StaticResource Slider.TrackButton}" Background="{DynamicResource Border.Control}" Command="{x:Static Slider.IncreaseLarge}" />
+        </Track.IncreaseRepeatButton>
+      </Track>
+      <TickBar x:Name="BottomTick" Grid.Row="2" Height="4" Placement="Bottom" Fill="{DynamicResource Text.Muted}" Visibility="Collapsed" />
+      <!-- Outset ring: the thumb reaches both ends of the control at its limits. -->
+      <Border x:Name="FocusRing" Grid.RowSpan="3" Margin="-4,0" BorderBrush="{DynamicResource Border.Focus}" BorderThickness="{DynamicResource Focus.RingThickness}" CornerRadius="{DynamicResource Radius.Sm}" IsHitTestVisible="False" Opacity="0" />
+    </Grid>
+    <ControlTemplate.Triggers>
+      <Trigger Property="TickPlacement" Value="TopLeft">
+        <Setter TargetName="TopTick" Property="Visibility" Value="Visible" />
+      </Trigger>
+      <Trigger Property="TickPlacement" Value="BottomRight">
+        <Setter TargetName="BottomTick" Property="Visibility" Value="Visible" />
+      </Trigger>
+      <Trigger Property="TickPlacement" Value="Both">
+        <Setter TargetName="TopTick" Property="Visibility" Value="Visible" />
+        <Setter TargetName="BottomTick" Property="Visibility" Value="Visible" />
+      </Trigger>
+      <Trigger Property="IsKeyboardFocused" Value="True">
+        <Setter TargetName="FocusRing" Property="Opacity" Value="1" />
+      </Trigger>
+      <Trigger Property="IsEnabled" Value="False">
+        <Setter Property="Opacity" Value="0.46" />
+      </Trigger>
+    </ControlTemplate.Triggers>
+  </ControlTemplate>
+  <ControlTemplate x:Key="Slider.VerticalTemplate" TargetType="Slider">
+    <Grid Background="{TemplateBinding Background}" SnapsToDevicePixels="True">
+      <Grid.ColumnDefinitions>
+        <ColumnDefinition Width="Auto" />
+        <ColumnDefinition Width="*" />
+        <ColumnDefinition Width="Auto" />
+      </Grid.ColumnDefinitions>
+      <TickBar x:Name="TopTick" Grid.Column="0" Width="4" Placement="Left" Fill="{DynamicResource Text.Muted}" Visibility="Collapsed" />
+      <Track x:Name="PART_Track" Grid.Column="1">
+        <Track.DecreaseRepeatButton>
+          <RepeatButton Style="{StaticResource Slider.TrackButton.Vertical}" Background="{TemplateBinding Foreground}" Command="{x:Static Slider.DecreaseLarge}" />
+        </Track.DecreaseRepeatButton>
+        <Track.Thumb>
+          <Thumb x:Name="Thumb" Style="{StaticResource Slider.Thumb.Vertical}" Foreground="{TemplateBinding Foreground}" />
+        </Track.Thumb>
+        <Track.IncreaseRepeatButton>
+          <RepeatButton Style="{StaticResource Slider.TrackButton.Vertical}" Background="{DynamicResource Border.Control}" Command="{x:Static Slider.IncreaseLarge}" />
+        </Track.IncreaseRepeatButton>
+      </Track>
+      <TickBar x:Name="BottomTick" Grid.Column="2" Width="4" Placement="Right" Fill="{DynamicResource Text.Muted}" Visibility="Collapsed" />
+      <Border x:Name="FocusRing" Grid.ColumnSpan="3" Margin="0,-4" BorderBrush="{DynamicResource Border.Focus}" BorderThickness="{DynamicResource Focus.RingThickness}" CornerRadius="{DynamicResource Radius.Sm}" IsHitTestVisible="False" Opacity="0" />
+    </Grid>
+    <ControlTemplate.Triggers>
+      <Trigger Property="TickPlacement" Value="TopLeft">
+        <Setter TargetName="TopTick" Property="Visibility" Value="Visible" />
+      </Trigger>
+      <Trigger Property="TickPlacement" Value="BottomRight">
+        <Setter TargetName="BottomTick" Property="Visibility" Value="Visible" />
+      </Trigger>
+      <Trigger Property="TickPlacement" Value="Both">
+        <Setter TargetName="TopTick" Property="Visibility" Value="Visible" />
+        <Setter TargetName="BottomTick" Property="Visibility" Value="Visible" />
+      </Trigger>
+      <Trigger Property="IsKeyboardFocused" Value="True">
+        <Setter TargetName="FocusRing" Property="Opacity" Value="1" />
+      </Trigger>
+      <Trigger Property="IsEnabled" Value="False">
+        <Setter Property="Opacity" Value="0.46" />
+      </Trigger>
+    </ControlTemplate.Triggers>
+  </ControlTemplate>
+  <Style TargetType="{x:Type Slider}">
+    <Setter Property="Foreground" Value="{DynamicResource Accent.Default}" />
+    <Setter Property="Background" Value="Transparent" />
+    <!-- The track is 4px, but the whole 32px row takes pointer input. -->
+    <Setter Property="MinHeight" Value="{DynamicResource Size.HitTarget.Compact}" />
+    <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+    <Setter Property="Template" Value="{StaticResource Slider.HorizontalTemplate}" />
+    <Style.Triggers>
+      <Trigger Property="Orientation" Value="Vertical">
+        <Setter Property="MinHeight" Value="0" />
+        <Setter Property="MinWidth" Value="{DynamicResource Size.HitTarget.Compact}" />
+        <Setter Property="Template" Value="{StaticResource Slider.VerticalTemplate}" />
+      </Trigger>
+    </Style.Triggers>
+  </Style>
+  <Style x:Key="Icon.Symbol" TargetType="themes:SymbolIcon">
+    <Setter Property="Size" Value="20" />
+    <Setter Property="Stroke" Value="{DynamicResource Text.Secondary}" />
+  </Style>
+  <Style x:Key="Icon.Symbol.Accent" TargetType="themes:SymbolIcon" BasedOn="{StaticResource Icon.Symbol}">
+    <Setter Property="Stroke" Value="{DynamicResource Accent.Default}" />
+  </Style>
+  <Style x:Key="ScrollBar.Thumb" TargetType="Thumb">
+    <Setter Property="Background" Value="{DynamicResource Border.Strong}" />
+    <Setter Property="Template">
+      <Setter.Value>
+        <ControlTemplate TargetType="Thumb">
+          <Border x:Name="Grip" Background="{TemplateBinding Background}" CornerRadius="4" Margin="3" MinWidth="8" MinHeight="8" />
+          <ControlTemplate.Triggers>
+            <Trigger Property="IsMouseOver" Value="True">
+              <Setter TargetName="Grip" Property="Background" Value="{DynamicResource Text.Muted}" />
+            </Trigger>
+            <Trigger Property="IsDragging" Value="True">
+              <Setter TargetName="Grip" Property="Background" Value="{DynamicResource Accent.Default}" />
+            </Trigger>
+          </ControlTemplate.Triggers>
+        </ControlTemplate>
+      </Setter.Value>
+    </Setter>
+  </Style>
+  <ResourceDictionary x:Key="Midnight">
+    <SolidColorBrush x:Key="Surface.Base" Color="#FF0B0F17" />
+    <SolidColorBrush x:Key="Surface.Raised" Color="#FF101722" />
+    <SolidColorBrush x:Key="Surface.Hover" Color="#FF1B2636" />
+    <SolidColorBrush x:Key="Text.Primary" Color="#FFFFFFFF" />
+    <SolidColorBrush x:Key="Text.Secondary" Color="#FFECF1F9" />
+    <SolidColorBrush x:Key="Text.Muted" Color="#FFD5DEEA" />
+    <SolidColorBrush x:Key="Accent.Default" Color="#FF7C6CFF" />
+    <SolidColorBrush x:Key="Accent.Subtle" Color="#FF1A1733" />
+    <SolidColorBrush x:Key="Border.Subtle" Color="#FF2B3A50" />
+    <SolidColorBrush x:Key="Border.Control" Color="#FF56677F" />
+    <SolidColorBrush x:Key="Border.Strong" Color="#FF6A7B94" />
+    <SolidColorBrush x:Key="Border.Focus" Color="#FF9789FF" />
+    <SolidColorBrush x:Key="Border.Accent" Color="#FF7C6CFF" />
+  </ResourceDictionary>
+  <ResourceDictionary x:Key="Daylight">
+    <SolidColorBrush x:Key="Surface.Base" Color="#FFF7F8FB" />
+    <SolidColorBrush x:Key="Surface.Raised" Color="#FFFFFFFF" />
+    <SolidColorBrush x:Key="Surface.Hover" Color="#FFE2E8F0" />
+    <SolidColorBrush x:Key="Text.Primary" Color="#FF0B121C" />
+    <SolidColorBrush x:Key="Text.Secondary" Color="#FF162334" />
+    <SolidColorBrush x:Key="Text.Muted" Color="#FF2A394E" />
+    <SolidColorBrush x:Key="Accent.Default" Color="#FF7C6CFF" />
+    <SolidColorBrush x:Key="Accent.Subtle" Color="#FFECE9FF" />
+    <SolidColorBrush x:Key="Border.Subtle" Color="#FFC5D0DE" />
+    <SolidColorBrush x:Key="Border.Control" Color="#FF7F8C9E" />
+    <SolidColorBrush x:Key="Border.Strong" Color="#FF68768A" />
+    <SolidColorBrush x:Key="Border.Focus" Color="#FF5A48E0" />
+    <SolidColorBrush x:Key="Border.Accent" Color="#FF7C6CFF" />
+  </ResourceDictionary>
+  <ResourceDictionary x:Key="HighContrast">
+    <SolidColorBrush x:Key="Surface.Base" Color="#FF000000" />
+    <SolidColorBrush x:Key="Surface.Raised" Color="#FF121212" />
+    <SolidColorBrush x:Key="Surface.Hover" Color="#FF2A2A2A" />
+    <SolidColorBrush x:Key="Text.Primary" Color="#FFFFFFFF" />
+    <SolidColorBrush x:Key="Text.Secondary" Color="#FFFFFFFF" />
+    <SolidColorBrush x:Key="Text.Muted" Color="#FFDCDCDC" />
+    <SolidColorBrush x:Key="Accent.Default" Color="#FFFFD000" />
+    <SolidColorBrush x:Key="Accent.Subtle" Color="#FF3A3000" />
+    <SolidColorBrush x:Key="Border.Subtle" Color="#FFFFFFFF" />
+    <SolidColorBrush x:Key="Border.Control" Color="#FFFFFFFF" />
+    <SolidColorBrush x:Key="Border.Strong" Color="#FFFFFFFF" />
+    <SolidColorBrush x:Key="Border.Focus" Color="#FFFFD000" />
+    <SolidColorBrush x:Key="Border.Accent" Color="#FFFFD000" />
+  </ResourceDictionary>
+  <ResourceDictionary x:Key="Workspace">
+    <SolidColorBrush x:Key="Surface.Base" Color="#FF141B22" />
+    <SolidColorBrush x:Key="Surface.Raised" Color="#FF202B34" />
+    <SolidColorBrush x:Key="Surface.Hover" Color="#FF2A3C43" />
+    <SolidColorBrush x:Key="Text.Primary" Color="#FFFFFFFF" />
+    <SolidColorBrush x:Key="Text.Secondary" Color="#FFEAF2F7" />
+    <SolidColorBrush x:Key="Text.Muted" Color="#FFDCE6EC" />
+    <SolidColorBrush x:Key="Accent.Default" Color="#FF7C6CFF" />
+    <SolidColorBrush x:Key="Accent.Subtle" Color="#FF1A1733" />
+    <SolidColorBrush x:Key="Border.Subtle" Color="#FF354650" />
+    <SolidColorBrush x:Key="Border.Control" Color="#FF627784" />
+    <SolidColorBrush x:Key="Border.Strong" Color="#FF6A7B94" />
+    <SolidColorBrush x:Key="Border.Focus" Color="#FF9789FF" />
+    <SolidColorBrush x:Key="Border.Accent" Color="#FF7C6CFF" />
+  </ResourceDictionary>
+  <ResourceDictionary x:Key="Glass">
+    <SolidColorBrush x:Key="Surface.Base" Color="#F6161820" />
+    <SolidColorBrush x:Key="Surface.Raised" Color="#F2242832" />
+    <SolidColorBrush x:Key="Surface.Hover" Color="#F4323A48" />
+    <SolidColorBrush x:Key="Text.Primary" Color="#FFFFFFFF" />
+    <SolidColorBrush x:Key="Text.Secondary" Color="#FFF2F6FC" />
+    <SolidColorBrush x:Key="Text.Muted" Color="#FFDDE4EF" />
+    <SolidColorBrush x:Key="Accent.Default" Color="#FF7C6CFF" />
+    <SolidColorBrush x:Key="Accent.Subtle" Color="#FF1A1733" />
+    <SolidColorBrush x:Key="Border.Subtle" Color="#38F6F8FC" />
+    <SolidColorBrush x:Key="Border.Control" Color="#60F6F8FC" />
+    <SolidColorBrush x:Key="Border.Strong" Color="#CCC6D0DF" />
+    <SolidColorBrush x:Key="Border.Focus" Color="#FF9789FF" />
+    <SolidColorBrush x:Key="Border.Accent" Color="#FF7C6CFF" />
+  </ResourceDictionary>
+  <ResourceDictionary x:Key="GlassLight">
+    <SolidColorBrush x:Key="Surface.Base" Color="#F8F7F8FB" />
+    <SolidColorBrush x:Key="Surface.Raised" Color="#F6FFFFFF" />
+    <SolidColorBrush x:Key="Surface.Hover" Color="#F6DCE4EE" />
+    <SolidColorBrush x:Key="Text.Primary" Color="#FF080E16" />
+    <SolidColorBrush x:Key="Text.Secondary" Color="#FF142030" />
+    <SolidColorBrush x:Key="Text.Muted" Color="#FF263448" />
+    <SolidColorBrush x:Key="Accent.Default" Color="#FF7C6CFF" />
+    <SolidColorBrush x:Key="Accent.Subtle" Color="#FFECE9FF" />
+    <SolidColorBrush x:Key="Border.Subtle" Color="#808A98AA" />
+    <SolidColorBrush x:Key="Border.Control" Color="#FF7F8C9E" />
+    <SolidColorBrush x:Key="Border.Strong" Color="#FF68768A" />
+    <SolidColorBrush x:Key="Border.Focus" Color="#FF5A48E0" />
+    <SolidColorBrush x:Key="Border.Accent" Color="#FF7C6CFF" />
+  </ResourceDictionary>
+  <ResourceDictionary x:Key="WorkspaceGallery">
+    <SolidColorBrush x:Key="Surface.Base" Color="#edf3f2" />
+    <SolidColorBrush x:Key="Surface.Raised" Color="#ffffff" />
+    <SolidColorBrush x:Key="Surface.Hover" Color="#e0eeea" />
+    <SolidColorBrush x:Key="Text.Primary" Color="#10211e" />
+    <SolidColorBrush x:Key="Text.Secondary" Color="#20342e" />
+    <SolidColorBrush x:Key="Text.Muted" Color="#2f443b" />
+    <SolidColorBrush x:Key="Accent.Default" Color="#7C6CFF" />
+    <SolidColorBrush x:Key="Accent.Subtle" Color="#ECE9FF" />
+    <SolidColorBrush x:Key="Border.Subtle" Color="#ccdcd6" />
+    <SolidColorBrush x:Key="Border.Control" Color="#7a8d86" />
+    <SolidColorBrush x:Key="Border.Strong" Color="#FF68768A" />
+    <SolidColorBrush x:Key="Border.Focus" Color="#5A48E0" />
+    <SolidColorBrush x:Key="Border.Accent" Color="#7C6CFF" />
+  </ResourceDictionary>
+  <ResourceDictionary x:Key="WorkspaceVideoEditor">
+    <SolidColorBrush x:Key="Surface.Base" Color="#141b22" />
+    <SolidColorBrush x:Key="Surface.Raised" Color="#202b34" />
+    <SolidColorBrush x:Key="Surface.Hover" Color="#2a3c43" />
+    <SolidColorBrush x:Key="Text.Primary" Color="#ffffff" />
+    <SolidColorBrush x:Key="Text.Secondary" Color="#eaf2f7" />
+    <SolidColorBrush x:Key="Text.Muted" Color="#dce6ec" />
+    <SolidColorBrush x:Key="Accent.Default" Color="#7C6CFF" />
+    <SolidColorBrush x:Key="Accent.Subtle" Color="#1A1733" />
+    <SolidColorBrush x:Key="Border.Subtle" Color="#354650" />
+    <SolidColorBrush x:Key="Border.Control" Color="#627784" />
+    <SolidColorBrush x:Key="Border.Strong" Color="#FF6A7B94" />
+    <SolidColorBrush x:Key="Border.Focus" Color="#9789FF" />
+    <SolidColorBrush x:Key="Border.Accent" Color="#7C6CFF" />
+  </ResourceDictionary>
+</ResourceDictionary>

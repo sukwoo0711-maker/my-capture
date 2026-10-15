@@ -88,12 +88,13 @@ internal static class WorkspaceTheme
     }
 
     internal static void Apply(ResourceDictionary resources, WorkspaceRole role, AppTheme theme,
-        bool? systemHighContrast = null)
+        bool? systemHighContrast = null, AppAccent? accent = null)
     {
         bool contrast = systemHighContrast ?? ThemeService.IsSystemHighContrast;
+        AppAccent selectedAccent = accent ?? ThemeService.CurrentAccent;
         AppTheme palette = theme == AppTheme.Workspace
             ? role == WorkspaceRole.Gallery ? AppTheme.Daylight : AppTheme.Midnight : theme;
-        ThemeService.ApplyResources(palette, resources, systemHighContrast: contrast);
+        ThemeService.ApplyResources(palette, resources, ThemeService.CaptureGuideColor, contrast, selectedAccent);
         // The inline role colours are a palette of their own; a Windows contrast theme replaces them too.
         if (theme != AppTheme.Workspace || contrast) return;
         var values = WorkspaceOverrides(role);
@@ -101,6 +102,14 @@ internal static class WorkspaceTheme
         {
             if (resources[key] is SolidColorBrush brush)
                 resources[key] = ThemeBrushes.Recolored(brush, (Color)ColorConverter.ConvertFromString(value));
+        }
+        if (selectedAccent == AppAccent.Red)
+        {
+            foreach ((string key, ThemeColor color) in AccentPalette.RedOverrides(role == WorkspaceRole.Gallery))
+            {
+                if (resources[key] is SolidColorBrush brush)
+                    resources[key] = ThemeBrushes.Recolored(brush, Color.FromArgb(color.A, color.R, color.G, color.B));
+            }
         }
         // Surface.Hover was just replaced; the folder card's wash aliases the new brush.
         ThemeService.ApplyFolderHoverResources(resources, contrast: false);
