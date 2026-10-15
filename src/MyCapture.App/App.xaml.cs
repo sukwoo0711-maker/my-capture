@@ -88,9 +88,9 @@ public partial class App : Application
         base.OnStartup(e);
         UiText.Configure(null);
 
-        // Windows 11 is the supported baseline. The installer refuses older hosts, but the
+        // Windows 10 22H2 is the supported x64 baseline. The installer refuses older hosts, but the
         // portable ZIP does not run the installer, so the process enforces the floor itself
-        // before any capture or diagnostics code touches Windows 11-era APIs.
+        // before capture or diagnostics starts; optional Windows 11 APIs have their own guards.
         if (HostRequirementGate.BlockUnsupportedHost(
             Environment.OSVersion.Version,
             message => MyCapture.App.Themes.ThemedDialog.Show(message, "MyCapture", MessageBoxButton.OK, MessageBoxImage.Error),
@@ -2048,6 +2048,14 @@ public partial class App : Application
             return RunSelfTest(outputDirectory, "recording-performance-report.txt", RecordingPerformanceSelfTest.Run);
         }
 
+        int wgcBorderIndex = FindSwitch(args, WgcBorderSelfTest.CommandLineSwitch);
+        if (wgcBorderIndex >= 0)
+        {
+            string outputDirectory = wgcBorderIndex + 1 < args.Length && !args[wgcBorderIndex + 1].StartsWith("--", StringComparison.Ordinal)
+                ? args[wgcBorderIndex + 1] : string.Empty;
+            return RunSelfTest(outputDirectory, WgcBorderSelfTest.ReportName, WgcBorderSelfTest.Run);
+        }
+
         int recordingBackendsIndex = FindSwitch(args, RecordingBackendBenchmarkSelfTest.CommandLineSwitch);
         if (recordingBackendsIndex >= 0)
         {
@@ -2130,29 +2138,39 @@ public partial class App : Application
         string reportFileName,
         Func<string, int> test)
     {
-        int exitCode;
+        Shutdown(ExecuteSelfTest(outputDirectory, reportFileName, test));
+        return true;
+    }
+
+    internal static int ExecuteSelfTest(
+        string outputDirectory,
+        string reportFileName,
+        Func<string, int> test)
+    {
+        string? validatedRoot = null;
         try
         {
-            exitCode = test(outputDirectory);
+            validatedRoot = DiagnosticOutputPaths.Create(outputDirectory);
+            return test(validatedRoot);
         }
         catch (Exception ex)
         {
-            try
+            if (validatedRoot is not null)
             {
-                Directory.CreateDirectory(outputDirectory);
-                File.WriteAllText(
-                    Path.Combine(outputDirectory, reportFileName),
-                    $"RESULT: FAIL (unhandled exception)\n\n{ex}");
-            }
-            catch (IOException)
-            {
+                try
+                {
+                    File.WriteAllText(
+                        DiagnosticOutputPaths.Child(validatedRoot, reportFileName),
+                        $"RESULT: FAIL (unhandled exception)\n\n{ex}");
+                }
+                catch (Exception reportError) when (reportError is IOException or UnauthorizedAccessException
+                    or ArgumentException or NotSupportedException or System.Security.SecurityException)
+                {
+                }
             }
 
-            exitCode = 2;
+            return 2;
         }
-
-        Shutdown(exitCode);
-        return true;
     }
 
     private static int FindSwitch(string[] args, string commandLineSwitch) =>

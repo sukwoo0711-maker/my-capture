@@ -78,7 +78,7 @@ internal static class RecordingPerformanceSelfTest
 
     /// <summary>
     /// Plain opaque fixture. The app-wide implicit Window style enables ModernWindowChrome,
-    /// which replaces Background with Surface.Base (Transparent plus Mica on glass themes) once
+    /// which replaces Background with Surface.Base (translucent over the WPF client background on glass themes) once
     /// the HWND exists. The fixture opts out so the capture path sees <see cref="FixtureColor"/>
     /// and not the theme surface the overlay checks cannot tell apart from overlay pixels.
     /// </summary>

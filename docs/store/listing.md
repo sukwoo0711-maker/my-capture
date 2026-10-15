@@ -13,17 +13,17 @@ Partner Center의 Store 목록과 제출 옵션에 붙여 넣을 문구입니다
 - **저작권**: `Copyright (c) 2026 MyCapture contributors`
 - **앱 타일 아이콘(선택)**: 패키징 결과물 `StoreListingIcon-300.png`
 - **스크린샷**: `--selftest-store-shots`로 만든 언어별 10장 (만드는 방법은 [`README.md`](README.md#store-스크린샷-만들기))
-- **시스템 요구 사항**: Windows 11 버전 21H2(빌드 22000) 이상, x64
+- **시스템 요구 사항**: Windows 10 버전 22H2(빌드 19045) 이상, x64. ARM64 x64 에뮬레이션은 Windows 11(빌드 22000) 이상
 
 ## 한국어 (ko-KR)
 
 ### 짧은 소개
 
-개발자를 위한 무료 Windows 11 캡처·핀 도구. 오류 화면에 주석을 달고, 참고할 코드와 이미지를 다른 창 위에 띄울 수 있습니다.
+개발자를 위한 무료 Windows 캡처·핀 도구. 오류 화면에 주석을 달고, 참고할 코드와 이미지를 다른 창 위에 띄울 수 있습니다.
 
 ### 설명
 
-MyCapture는 개발자를 위한 무료 Windows 11 캡처·핀 도구입니다. 코드와 참고 화면을 곁에 두고 작업하거나, 오류가 발생한 화면을 캡처해 설명할 때 사용합니다.
+MyCapture는 개발자를 위한 무료 Windows 캡처·핀 도구입니다. 코드와 참고 화면을 곁에 두고 작업하거나, 오류가 발생한 화면을 캡처해 설명할 때 사용합니다.
 
 원하는 영역, 창, 전체 화면을 캡처하고 화살표·단계 번호·텍스트로 필요한 부분을 표시할 수 있습니다. 이미지를 자르거나 회전하고, 블러와 모자이크로 일부를 가릴 수 있습니다. 오류 재현 절차나 코드 리뷰에서 설명할 내용을 이미지로 정리할 때 유용합니다.
 
@@ -68,11 +68,11 @@ OCR로 이미지 속 글자를 텍스트로 복사하고, 표를 CSV·Markdown·
 
 ### Short description
 
-A free screenshot and pinning tool for developers on Windows 11. Annotate error screenshots and keep reference code or images above other windows.
+A free screenshot and pinning tool for developers on Windows 10 version 22H2 or later. Annotate error screenshots and keep reference code or images above other windows.
 
 ### Description
 
-MyCapture is a free screenshot and pinning tool for developers on Windows 11. Use it to keep code and reference images in view, or capture an error screen when explaining a problem.
+MyCapture is a free screenshot and pinning tool for developers on Windows 10 version 22H2 or later. Use it to keep code and reference images in view, or capture an error screen when explaining a problem.
 
 Capture a region, a window or the full screen, then mark the details with arrows, step numbers and text. Crop or rotate images, and cover parts with blur or mosaic when preparing a bug report or showing changes in a review.
 

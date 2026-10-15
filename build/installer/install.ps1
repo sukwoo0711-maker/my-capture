@@ -157,7 +157,7 @@ function Assert-SupportedHost {
     $build = Get-WindowsBuildNumber
     $minimumBuild = [int]$Manifest.MinimumWindowsBuild
     if ([Environment]::OSVersion.Version.Major -lt 10 -or $build -lt $minimumBuild) {
-        Throw-InstallerError $ExitUnsupportedOs "Windows 11 version 21H2 (build $minimumBuild) or later is required; detected build $build."
+        Throw-InstallerError $ExitUnsupportedOs "Windows 10 version 22H2 (build $minimumBuild) or later is required; detected build $build."
     }
 
     try {
@@ -178,7 +178,7 @@ function Assert-SupportedHost {
         Throw-InstallerError $ExitUnsupportedArchitecture "Unsupported Windows architecture: $architectureText"
     }
     if ($architectureText -match 'ARM64' -and $build -lt 22000) {
-        Throw-InstallerError $ExitUnsupportedArchitecture 'The x64 package requires Windows 11 when running on ARM64 emulation.'
+        Throw-InstallerError $ExitUnsupportedArchitecture 'The x64 package requires Windows 11 (build 22000) or later for ARM64 x64 emulation; Windows 10 on ARM cannot run x64 apps.'
     }
 
     Write-InstallLog 'INFO' "Host preflight passed: Windows build $build; architecture $architectureText; PowerShell $($PSVersionTable.PSVersion)."

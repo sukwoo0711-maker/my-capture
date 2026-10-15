@@ -6,6 +6,7 @@ using System.Windows.Interop;
 using System.Windows.Media;
 using MyCapture.App.Capture;
 using MyCapture.App.Themes;
+using MyCapture.Core.Platform;
 using MyCapture.Core.Primitives;
 using MyCapture.Platform.Display;
 using MyCapture.Platform.Shell;
@@ -14,7 +15,7 @@ namespace MyCapture.App;
 
 /// <summary>One bounded, nonactivating app notification and a themed tray command menu.</summary>
 /// <remarks>
-/// Notifications share the floating-card chrome (1px <c>Border.Subtle</c>, 8px corners,
+/// Notifications share the floating-card chrome (1px <c>Border.Subtle</c>, host window corners,
 /// <c>Shadow.Card</c>) and appear at the bottom right of the monitor the pointer is on, so they
 /// show up where the user is working rather than on the primary monitor.
 /// </remarks>
@@ -29,8 +30,9 @@ internal sealed class ThemedShellPresenter(Func<bool> suppressNotification, Func
     /// <summary>Width of a notification card, without its shadow band.</summary>
     internal const double CardWidth = 360;
 
-    /// <summary>The 8px corner Windows 11 gives rounded windows (DWMWCP_ROUND).</summary>
-    internal static readonly CornerRadius CardCorner = new(8);
+    /// <summary>Card corners follow the host's window frame.</summary>
+    internal static readonly CornerRadius CardCorner =
+        new(WindowsFeatureSupport.WindowCornerRadiusDip(Environment.OSVersion.Version.Build));
 
     private Window? _toast;
 
@@ -277,7 +279,7 @@ internal sealed class ThemedShellPresenter(Func<bool> suppressNotification, Func
 
     /// <summary>
     /// A borderless, transparent notification window around one floating card: the card has the
-    /// shared 1px subtle border, 8px corners and card shadow, and the shadow draws into the
+    /// shared 1px subtle border, host window corners and card shadow, and the shadow draws into the
     /// transparent band around it.
     /// </summary>
     internal static Window CreateNotificationWindow(UIElement child, string title, Thickness padding, double width = CardWidth)

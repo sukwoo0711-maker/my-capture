@@ -322,7 +322,7 @@ public sealed class StoreRatingAndPrtScGuideApplyTests : KoreanCaptionTest
             Assert.True(result.Saved);
             Assert.False(result.HotkeysApplied);
             Assert.Equal(Hotkey.None, live().Hotkeys.CaptureFullScreen);
-            string notice = UiText.Get("PrtScGuide_FailureNotice");
+            string notice = PrintScreenKeyGuide.FailureNotice([new Hotkey(HotkeyModifiers.None, PrintScreenKeyGuide.VkSnapshot)], true);
             if (windowsClaimsKey) Assert.Contains(notice, result.Messages);
             else Assert.DoesNotContain(notice, result.Messages);
         });
@@ -336,7 +336,7 @@ public sealed class StoreRatingAndPrtScGuideApplyTests : KoreanCaptionTest
         {
             var draft = new SettingsDraft(live()) { CaptureFullScreenHotkey = "PrintScreen" };
             SettingsApplyResult result = apply.Apply(draft.ToAppSettings());
-            Assert.DoesNotContain(UiText.Get("PrtScGuide_FailureNotice"), result.Messages);
+            Assert.DoesNotContain(PrintScreenKeyGuide.FailureNotice([new Hotkey(HotkeyModifiers.None, PrintScreenKeyGuide.VkSnapshot)], true), result.Messages);
             Assert.Equal(PrintScreenKeyGuide.VkSnapshot, printScreen.VirtualKey);
         });
     }

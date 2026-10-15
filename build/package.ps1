@@ -373,7 +373,7 @@ try {
         Version = $Version
         Runtime = 'win-x64'
         Architecture = 'x64'
-        MinimumWindowsBuild = 22000
+        MinimumWindowsBuild = 19045
         SelfContained = $true
         Offline = $true
         Payload = [pscustomobject][ordered]@{
@@ -484,9 +484,10 @@ FILE6=uninstall-cleanup.ps1
         Unsigned = $true
         GeneratedUtc = [DateTime]::UtcNow.ToString('O')
         Compatibility = [pscustomobject][ordered]@{
-            MinimumWindowsBuild = 22000
-            MinimumWindowsRelease = 'Windows 11 version 21H2'
+            MinimumWindowsBuild = 19045
+            MinimumWindowsRelease = 'Windows 10 version 22H2'
             NativeArchitecture = 'x64'
+            MinimumArm64EmulationBuild = 22000
             Arm64Support = 'Windows 11 ARM64 via x64 emulation'
             RequiresInternet = $false
             RequiresPreinstalledDotNet = $false
@@ -536,9 +537,9 @@ CONTENTS
 OFFLINE / RUNTIME
 - No Internet connection is required.
 - No preinstalled .NET runtime is required; CoreCLR and WPF are included.
-- Supported baseline: Windows 11 version 21H2 (build 22000) or later, x64. Earlier Windows
+- Supported baseline: Windows 10 version 22H2 (build 19045) or later, x64. Earlier Windows
   releases are not supported and the installer refuses to run on them.
-- Windows 11 ARM64 can use Windows x64 emulation.
+- ARM64 requires Windows 11 (build 22000) or later for x64 emulation.
 - Setup needs Windows PowerShell 5.1 FullLanguage and permission to execute IExpress/
   PowerShell scripts. If enterprise AppLocker or WDAC policy blocks that path, use the
   portable ZIP; the setup cannot and does not bypass local security policy.

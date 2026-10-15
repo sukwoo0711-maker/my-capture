@@ -246,7 +246,8 @@ public sealed class StoreManifestContractTests
         string prefix = package.GetPrefixOfNamespace(Uap11)!;
         Assert.Equal("uap11", prefix);
         Assert.Contains(prefix, ((string)package.Attribute("IgnorableNamespaces")!).Split(' '));
-        Assert.InRange(WindowsSupportPolicy.MinimumBuild, 19645, int.MaxValue);
+        // The supported Windows 10 host predates uap11 and must ignore this optional capability.
+        Assert.True(WindowsSupportPolicy.MinimumBuild < 19645);
         Assert.Same(
             manifest.Descendants().Single(element => element.Name.LocalName == "Capabilities"),
             borderless.Parent);

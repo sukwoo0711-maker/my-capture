@@ -1,5 +1,7 @@
 # Microsoft Store 배포
 
+지원 하한은 Windows 10 버전 22H2(빌드 19045), x64입니다. ARM64에서 x64 에뮬레이션으로 실행하려면 Windows 11(빌드 22000) 이상이 필요합니다. MSIX `MinVersion`은 `10.0.19045.0`이며, `MaxVersionTested`는 실제 검증한 상위 버전으로 유지합니다. Windows 10에서는 선택적 `uap11` capability를 무시하므로 WGC 녹화 중 노란 캡처 테두리가 표시됩니다.
+
 MyCapture의 공식 배포 경로는 Microsoft Store 하나입니다. 이 문서는 `package.ps1`이 만든 self-contained 게시본을 MSIX로 묶어 Microsoft Store에 제출하는 절차입니다. Store는 인증을 통과한 패키지를 Microsoft 인증서로 다시 서명합니다. 그래서 Store에서 설치하면 SmartScreen과 "알 수 없는 게시자" 경고가 표시되지 않습니다. GitHub 릴리스에는 4.1.2부터 포터블 zip을 함께 게시하지만, 앱 안 업데이트는 Store 설치본만 받습니다. 사용자 지원과 개인정보처리방침은 공개 [지원 저장소](https://github.com/sukwoo0711-maker/mycapture-support)에서 관리합니다.
 
 ## Store 빌드에서 달라지는 동작
@@ -87,6 +89,8 @@ GitHub ZIP/설치 프로그램이 필요 없는 다음 Store 배포에는 `packa
 ```
 
 관리자 권한 PowerShell에서 설치합니다. Windows 11은 서명 없는 패키지를 `-AllowUnsigned`로 설치할 수 있지만, 실행 파일이 든 패키지는 관리자 권한이 필요합니다.
+
+Windows 10에서는 `-AllowUnsigned` 설치 경로를 사용하지 않습니다. Microsoft Store 서명본 또는 리드가 별도로 준비한 신뢰된 테스트 인증서 서명본으로 설치·업데이트를 검증합니다. `-LocalTest`는 Windows 11의 로컬 검증 경로로 유지합니다.
 
 ```powershell
 Add-AppxPackage -Path .\artifacts\store\4.1.1-localtest\MyCapture.LocalTest_4.1.1.0_x64.msix -AllowUnsigned

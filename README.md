@@ -2,7 +2,7 @@
 
 MyCapture는 캡처, 이미지 편집, 핀으로 띄우기, 텍스트 인식, 라이브러리, 영역 녹화를 한곳에 모은 Windows용 데스크톱 도구입니다. 캡처와 인식 결과는 기본적으로 사용자 PC 안에서 처리하며, 반복 작업은 전역 단축키와 트레이 메뉴로 빠르게 이어집니다.
 
-> 현재 지원 하한은 **Windows 11 21H2(build 22000), x64**입니다. Windows 11 ARM64에서는 x64 에뮬레이션으로 실행할 수 있습니다. Windows 10은 지원하지 않습니다.
+> 현재 지원 하한은 **Windows 10 버전 22H2(build 19045), x64**입니다. ARM64의 x64 에뮬레이션은 Windows 11(build 22000) 이상에서 지원합니다.
 
 ## 주요 기능
 
@@ -95,7 +95,7 @@ MyCapture는 [Microsoft Store](https://apps.microsoft.com/detail/9PB33MC095VR)�
 
 필수 조건:
 
-- Windows 11
+- Windows 10 버전 22H2(build 19045) 이상, x64. ARM64 x64 에뮬레이션은 Windows 11(build 22000) 이상
 - .NET 10 SDK `10.0.400` 이상
 - Windows PowerShell 5.1 이상
 
@@ -155,4 +155,4 @@ MyCapture 자체 코드에는 [MIT License](LICENSE)가 적용됩니다. 배포 
 
 ---
 
-**English summary:** MyCapture is a Windows 11 screenshot, pin, enhanced local OCR, OCR-assisted privacy-redaction, unified image/video library, image editing, cross-monitor region-recording, timed-text video editing, and GIF-export app. MyCapture is distributed only through the [Microsoft Store](https://apps.microsoft.com/detail/9PB33MC095VR), which signs the package and delivers updates; the app never checks for or downloads updates itself, and Settings > Update opens the MyCapture page in the Store; this private repository is for development, and support lives in the public [support repository](https://github.com/sukwoo0711-maker/mycapture-support). Packages are self-contained and work without a preinstalled .NET runtime. Capture, editing, recording and OCR run on the PC; the only automatic network access is downloading missing OCR model files (see the [privacy policy](https://github.com/sukwoo0711-maker/mycapture-support/blob/main/PRIVACY.md)). The included bootstrap script can install the repository-pinned .NET 10 SDK for source builds without admin rights. Choose Korean, English, or the Windows display language in Settings; the saved choice applies on the next app start. Recording intentionally has no audio.
+**English summary:** MyCapture is a Windows 10 version 22H2 or later (x64; ARM64 x64 emulation requires Windows 11) screenshot, pin, enhanced local OCR, OCR-assisted privacy-redaction, unified image/video library, image editing, cross-monitor region-recording, timed-text video editing, and GIF-export app. MyCapture is distributed only through the [Microsoft Store](https://apps.microsoft.com/detail/9PB33MC095VR), which signs the package and delivers updates; the app never checks for or downloads updates itself, and Settings > Update opens the MyCapture page in the Store; this private repository is for development, and support lives in the public [support repository](https://github.com/sukwoo0711-maker/mycapture-support). Packages are self-contained and work without a preinstalled .NET runtime. Capture, editing, recording and OCR run on the PC; the only automatic network access is downloading missing OCR model files (see the [privacy policy](https://github.com/sukwoo0711-maker/mycapture-support/blob/main/PRIVACY.md)). The included bootstrap script can install the repository-pinned .NET 10 SDK for source builds without admin rights. Choose Korean, English, or the Windows display language in Settings; the saved choice applies on the next app start. Recording intentionally has no audio.

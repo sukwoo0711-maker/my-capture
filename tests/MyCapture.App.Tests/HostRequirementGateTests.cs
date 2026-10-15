@@ -11,9 +11,10 @@ public sealed class HostRequirementGateTests
 {
     [Theory]
     [InlineData(10, 0, 17763)] // Windows 10 1809
-    [InlineData(10, 0, 19045)] // Windows 10 22H2
+    [InlineData(10, 0, 19041)] // Shared API contract, below the supported host floor
+    [InlineData(10, 0, 19044)] // Windows 10 21H2
     [InlineData(6, 3, 9600)]   // Windows 8.1
-    public void BlockUnsupportedHost_StopsStartupBelowTheWindows11Floor(int major, int minor, int build)
+    public void BlockUnsupportedHost_StopsStartupBelowTheWindows10Version22H2Floor(int major, int minor, int build)
     {
         string? shown = null;
         int? exitCode = null;
@@ -26,15 +27,16 @@ public sealed class HostRequirementGateTests
         Assert.True(blocked);
         Assert.Equal(HostRequirementGate.UnsupportedHostExitCode, exitCode);
         Assert.NotNull(shown);
-        Assert.Contains("Windows 11", shown, StringComparison.Ordinal);
+        Assert.Contains("Windows 10", shown, StringComparison.Ordinal);
         Assert.Contains(build.ToString(), shown, StringComparison.Ordinal);
     }
 
     [Theory]
+    [InlineData(19045)] // Windows 10 22H2
     [InlineData(22000)] // Windows 11 21H2
     [InlineData(26100)] // Windows 11 24H2
     [InlineData(26200)] // Windows 11 25H2
-    public void BlockUnsupportedHost_AllowsWindows11(int build)
+    public void BlockUnsupportedHost_AllowsWindows10Version22H2AndLater(int build)
     {
         bool shownCalled = false;
         bool shutdownCalled = false;

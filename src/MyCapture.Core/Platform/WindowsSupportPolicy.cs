@@ -6,32 +6,35 @@ namespace MyCapture.Core.Platform;
 /// The single source of truth for the host operating system MyCapture supports.
 /// </summary>
 /// <remarks>
-/// MyCapture 1.7.1 ships for Windows 11 only. Older Windows releases are out of support, so the
-/// gate is expressed as a build-number floor: build 22000 is the first Windows 11 release, and
-/// every earlier build is rejected regardless of its marketing name. The floor is duplicated in
-/// three places that cannot reference this assembly - the MSBuild
-/// <c>SupportedOSPlatformVersion</c>, the installer preflight and the release manifest - so the
-/// constants below are asserted against those artefacts by the contract tests.
+/// Windows 10 version 22H2 is the x64 floor. Its API contract is shared with build 19041,
+/// while the host gate and package manifests enforce build 19045. ARM64 x64 emulation needs
+/// Windows 11. Contract tests keep MSBuild, installer and Store metadata aligned with this
+/// policy; optional API availability is handled separately by WindowsFeatureSupport.
 /// </remarks>
 public static class WindowsSupportPolicy
 {
-    /// <summary>First Windows 11 build (21H2). Anything lower is unsupported.</summary>
-    public const int MinimumBuild = 22000;
+    /// <summary>Windows 10 version 22H2. Anything lower is unsupported.</summary>
+    public const int MinimumBuild = 19045;
+
+    /// <summary>Windows 11 introduced x64 emulation on ARM64.</summary>
+    public const int MinimumArm64EmulationBuild = 22000;
 
     /// <summary>Human-readable name of the minimum supported release.</summary>
-    public const string MinimumReleaseName = "Windows 11 version 21H2";
+    public const string MinimumReleaseName = "Windows 10 version 22H2";
 
     /// <summary>Value mirrored by the MSBuild <c>SupportedOSPlatformVersion</c> property.</summary>
-    public const string SupportedOSPlatformVersion = "10.0.22000.0";
+    public const string SupportedOSPlatformVersion = "10.0.19041.0";
 
-    /// <summary>Major version reported by every Windows 11 build.</summary>
+    /// <summary>Major version reported by Windows 10 and Windows 11.</summary>
     private const int WindowsMajorVersion = 10;
 
-    /// <summary>True when <paramref name="build"/> is at or above the Windows 11 floor.</summary>
+    /// <summary>True when <paramref name="build"/> is at or above the x64 floor.</summary>
     public static bool IsSupportedBuild(int build) => build >= MinimumBuild;
 
+    public static bool IsArm64EmulationSupportedBuild(int build) => build >= MinimumArm64EmulationBuild;
+
     /// <summary>
-    /// True when <paramref name="osVersion"/> describes a supported Windows 11 host. The major
+    /// True when <paramref name="osVersion"/> describes a supported x64 Windows host. The major
     /// version is checked as well, because pre-Windows-10 releases report major 6 with build
     /// numbers that would otherwise look plausible.
     /// </summary>

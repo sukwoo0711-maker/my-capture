@@ -30,7 +30,7 @@
   </Properties>
 
   <Dependencies>
-    <TargetDeviceFamily Name="Windows.Desktop" MinVersion="10.0.22000.0" MaxVersionTested="{MaxVersionTested}" />
+    <TargetDeviceFamily Name="Windows.Desktop" MinVersion="10.0.19045.0" MaxVersionTested="{MaxVersionTested}" />
   </Dependencies>
 
   <Resources>
@@ -67,7 +67,8 @@
     <rescap:Capability Name="runFullTrust" />
     <!-- General-use (no Store approval). Required for GraphicsCaptureAccess.RequestAccessAsync(Borderless)
          and GraphicsCaptureSession.IsBorderRequired = false, so Windows Graphics Capture recordings run
-         without the yellow capture border. graphicsCaptureProgrammatic is not declared: it is only
+         without the yellow capture border on Windows 11. Windows 10 ignores uap11 (listed in
+         IgnorableNamespaces) and shows the yellow capture border. graphicsCaptureProgrammatic is only
          required to create a capture item from a WindowId or DisplayId, and recordings use
          IGraphicsCaptureItemInterop.CreateForMonitor. -->
     <uap11:Capability Name="graphicsCaptureWithoutBorder" />

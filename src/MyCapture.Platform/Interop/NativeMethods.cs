@@ -535,7 +535,7 @@ internal static partial class NativeMethods
 
     // ----- Recording frame pacing -----
 
-    /// <summary>CREATE_WAITABLE_TIMER_HIGH_RESOLUTION; available on every supported Windows 11 build.</summary>
+    /// <summary>CREATE_WAITABLE_TIMER_HIGH_RESOLUTION; available since Windows 10 1803, before the supported host floor.</summary>
     internal const uint CREATE_WAITABLE_TIMER_HIGH_RESOLUTION = 0x00000002;
 
     internal const uint TIMER_MODIFY_STATE = 0x0002;

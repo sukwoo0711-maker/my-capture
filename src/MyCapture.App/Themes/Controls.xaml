@@ -3,7 +3,7 @@
 
   Direction (M06 mark, with Windows-native glass palettes):
     * Quiet graphite hierarchy with one iris action/focus accent. Glass themes keep
-      the same keys and let DWM Mica show through translucent Surface brushes.
+      the same keys and paint translucent Surface brushes over the WPF client background.
     * Accent fills pair with Text.OnAccent from the chosen palette, including checks and glyphs.
     * Focus visuals are STABLE: templates never change BorderThickness on focus. Focus is
       shown by recolouring the fixed chrome border and revealing an inset ring with no layout

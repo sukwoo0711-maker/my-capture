@@ -166,8 +166,8 @@ public sealed class ShellFirstRunTests
             Assert.Equal(new Thickness(ThemedShellPresenter.ShadowMargin), surface.Margin);
             Border shadow = surface.Children.OfType<Border>().First();
             Border card = surface.Children.OfType<Border>().Last();
-            Assert.Equal(new CornerRadius(8), card.CornerRadius);
-            Assert.Equal(new CornerRadius(8), shadow.CornerRadius);
+            Assert.Equal(ThemedShellPresenter.CardCorner, card.CornerRadius);
+            Assert.Equal(ThemedShellPresenter.CardCorner, shadow.CornerRadius);
             Assert.Equal(new Thickness(1), card.BorderThickness);
             Assert.Equal("Border.Subtle", ResourceKey(card, Border.BorderBrushProperty));
             Assert.Equal("Surface.Floating", ResourceKey(card, Border.BackgroundProperty));
