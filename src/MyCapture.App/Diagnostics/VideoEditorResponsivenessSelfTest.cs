@@ -194,6 +194,8 @@ internal static class VideoEditorResponsivenessSelfTest
             Line();
 
             RecordingResult recording = sharedRecording ?? RecordClip(clipPath);
+            double containerMs = MediaFoundationVideoFrameReader.ReadContainerDurationMs(clipPath);
+            ValidateSourceClip(recording, containerMs);
             Line(string.Create(
                 CultureInfo.InvariantCulture,
                 $"Real clip: {recording.Width}x{recording.Height} @ {recording.Fps}fps, " +
@@ -234,7 +236,6 @@ internal static class VideoEditorResponsivenessSelfTest
 
             // WPF's NaturalDuration is Windows Media Player's whole-second value; the editor must
             // use the container duration so the final fraction can be trimmed and exported.
-            double containerMs = MediaFoundationVideoFrameReader.ReadContainerDurationMs(clipPath);
             double clipMs = editor.DurationMsForTest;
             Line(string.Create(
                 CultureInfo.InvariantCulture,
@@ -490,16 +491,47 @@ internal static class VideoEditorResponsivenessSelfTest
     {
         var engine = new ScreenCaptureEngine(NullLogger<ScreenCaptureEngine>.Instance);
         var grabber = new RegionFrameGrabber(engine, includeCursor: false);
+        using var firstFrame = new ManualResetEventSlim();
         using var recorder = new RegionRecorder(
             grabber,
-            options => new MediaFoundationVideoEncoder(options, NullLogger<MediaFoundationVideoEncoder>.Instance),
+            options => new SourceEncoder(
+                new MediaFoundationVideoEncoder(options, NullLogger<MediaFoundationVideoEncoder>.Instance), firstFrame),
             NullLogger.Instance);
         recorder.Start(
             new RectD(0, 0, 320, 240),
             path,
             new RecordingSettings { FrameRate = RecordingFrameRate.Fps15, IncludeCursor = false });
+        var startup = Stopwatch.StartNew();
+        while (!firstFrame.Wait(50) && recorder.IsRecording && startup.Elapsed < TimeSpan.FromSeconds(15)) { }
+        if (!firstFrame.IsSet)
+        {
+            _ = recorder.Stop();
+            throw new TimeoutException("Video-editor source produced no encoded frame within 15 seconds.");
+        }
+        // Sample real recording time after startup, so a slow WGC/codec cannot consume
+        // the whole fixture interval and leave a single timestamp-zero frame.
         Thread.Sleep(2500);
-        return recorder.Stop();
+        RecordingResult recording = recorder.Stop();
+        ValidateSourceClip(recording, MediaFoundationVideoFrameReader.ReadContainerDurationMs(path));
+        return recording;
+    }
+
+    internal static void ValidateSourceClip(RecordingResult recording, double containerDurationMs)
+    {
+        if (recording.EmittedFrames < 2 || !double.IsFinite(containerDurationMs) || containerDurationMs < 2000)
+            throw new InvalidOperationException(
+                $"Video-editor source needs multiple frames and at least 2000ms of media; " +
+                $"got {recording.EmittedFrames} frame(s), container {containerDurationMs:0.###}ms, " +
+                $"recorder {recording.DurationMs:0.###}ms.");
+    }
+
+    private sealed class SourceEncoder(IVideoEncoder inner, ManualResetEventSlim firstFrame) : IVideoEncoder
+    {
+        public int Width => inner.Width;
+        public int Height => inner.Height;
+        public void WriteFrame(in EncoderFrame frame) { inner.WriteFrame(frame); firstFrame.Set(); }
+        public void Complete() => inner.Complete();
+        public void Dispose() => inner.Dispose();
     }
 
     private static bool PumpUntil(Func<bool> condition, TimeSpan timeout)
