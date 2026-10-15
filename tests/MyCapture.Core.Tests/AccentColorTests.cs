@@ -10,6 +10,56 @@ namespace MyCapture.Core.Tests;
 
 public sealed class AccentColorTests(ITestOutputHelper output)
 {
+    [Fact]
+    public void NewSettingsAndResetUseRedAndExplicitVioletRemainsViolet()
+    {
+        Assert.Equal(AppAccentNames.Red, new GeneralSettings().AccentColor);
+        Assert.Equal(AppAccentNames.Red, NewInstallDefaults.Create().General.AccentColor);
+        var draft = new SettingsDraft(new AppSettings { General = { AccentColor = AppAccentNames.Violet } });
+        draft.ResetToDefaults();
+        Assert.Equal(AppAccentNames.Red, draft.AccentColor);
+        Assert.True(draft.HasUnappliedChanges);
+        Assert.Equal(AppAccent.Red, AppAccentNames.Parse(null));
+        Assert.Equal(AppAccent.Red, AppAccentNames.Parse("unknown"));
+        Assert.Equal(AppAccent.Violet, AppAccentNames.Parse("Violet"));
+        Assert.Equal(AppAccentNames.Red, AppAccentNames.ToSetting((AppAccent)99));
+    }
+
+    [Fact]
+    public void PinFillAndEveryNonTextRoleMeetContrastOnActualThemeSurfaces()
+    {
+        foreach (AppTheme theme in Enum.GetValues<AppTheme>().Where(theme => theme != AppTheme.HighContrast))
+        {
+            var colors = ThemeCatalog.ColorsFor(theme, AppAccent.Red);
+            output.WriteLine($"{theme}: foreground {colors["Accent.Cool"]}, indicator {colors["Accent.Indicator"]}");
+            Assert.Equal(ThemeColor.Rgb(0xE0, 0x45, 0x3C), colors["Accent.Default"]);
+            Assert.Equal(ThemeColor.Rgb(0xF3, 0x5B, 0x4D), colors["Accent.Hover"]);
+            Check(colors["Overlay.HandleStroke"], colors["Overlay.HandleFill"], 3, $"{theme} handle");
+            foreach (string surface in new[] { "Surface.Canvas", "Surface.Base", "Surface.Raised", "Surface.Overlay",
+                         "Surface.Floating", "Surface.Sunken", "Surface.Hover", "Surface.Pressed", "Accent.Subtle" })
+            foreach (ThemeColor backdrop in new[] { ThemeColor.Rgb(0, 0, 0), ThemeColor.Rgb(255, 255, 255) })
+            foreach (string role in new[] { "Accent.Indicator", "Border.Focus", "Border.Accent", "Overlay.SelectionBorder" })
+                Check(colors[role], ThemeContrast.Composite(colors[surface], backdrop), 3, $"{theme}/{role}/{surface}");
+        }
+    }
+
+    [Theory]
+    [InlineData(null, "red")]
+    [InlineData("unknown", "red")]
+    [InlineData("Violet", "violet")]
+    [InlineData("Red", "red")]
+    public void LoadPreservesExplicitChoiceAndUsesRedForAbsentOrUnknown(string? accent, string expected)
+    {
+        string root = TestRecycleBin.CreateTempSubdirectory("mc-accent-load-").FullName;
+        var paths = AppPaths.CreateForRoot(root);
+        paths.EnsureCreated();
+        string field = accent is null ? string.Empty : $",\"accentColor\":\"{accent}\"";
+        File.WriteAllText(paths.SettingsFile, "{\"general\":{\"isFirstRun\":false,\"themeRevision\":1" + field + "}}");
+        var store = new SettingsStore(paths, NullLogger<SettingsStore>.Instance);
+        Assert.Equal(expected, store.Load().General.AccentColor);
+        Assert.Equal(expected, store.Load().General.AccentColor);
+    }
+
     [Theory]
     [InlineData("ko-KR", "포인트 색", "바이올렛", "레드")]
     [InlineData("en-US", "Accent color", "Violet", "Red")]
@@ -85,8 +135,8 @@ public sealed class AccentColorTests(ITestOutputHelper output)
     }
 
     [Theory]
-    [InlineData(null, "violet")]
-    [InlineData("unknown", "violet")]
+    [InlineData(null, "red")]
+    [InlineData("unknown", "red")]
     [InlineData("RED", "red")]
     [InlineData("violet", "violet")]
     public void ImportNormalizesMissingOrUnknownAccentWithoutChangingTheme(string? accent, string expected)
@@ -106,7 +156,7 @@ public sealed class AccentColorTests(ITestOutputHelper output)
     }
 
     [Fact]
-    public void AccentSurvivesCloneDraftSaveExportImportAndResetsToViolet()
+    public void AccentSurvivesCloneDraftSaveExportImportAndResetsToRed()
     {
         string root = TestRecycleBin.CreateTempSubdirectory("mc-accent-settings-").FullName;
         var store = new SettingsStore(AppPaths.CreateForRoot(root), NullLogger<SettingsStore>.Instance);
@@ -124,8 +174,8 @@ public sealed class AccentColorTests(ITestOutputHelper output)
         store.ExportTo(draft.ToAppSettings(), export);
         Assert.Equal(AppAccentNames.Red, store.ImportFrom(export).General.AccentColor);
         draft.ResetToDefaults();
-        Assert.Equal(AppAccentNames.Violet, draft.AccentColor);
-        Assert.Equal(AppAccentNames.Violet, draft.ToAppSettings().General.AccentColor);
+        Assert.Equal(AppAccentNames.Red, draft.AccentColor);
+        Assert.Equal(AppAccentNames.Red, draft.ToAppSettings().General.AccentColor);
         Assert.True(draft.HasUnappliedChanges);
     }
 

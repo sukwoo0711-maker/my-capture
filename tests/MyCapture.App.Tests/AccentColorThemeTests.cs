@@ -11,6 +11,30 @@ namespace MyCapture.App.Tests;
 public sealed partial class AccentColorThemeTests
 {
     [Fact]
+    public void RedRoleBrushesMeetContrastOnEveryThemeAndWorkspaceSurface() => StaTestHost.Run(() =>
+    {
+        foreach ((AppTheme theme, WorkspaceRole? role) in ControlPalettes())
+        {
+            if (theme == AppTheme.HighContrast) continue;
+            ResourceDictionary resources = LoadTokens();
+            ApplyPalette(resources, theme, role, AppAccent.Red);
+            foreach (string surface in new[] { "Surface.Canvas", "Surface.Base", "Surface.Raised", "Surface.Overlay",
+                         "Surface.Floating", "Surface.Sunken", "Surface.Hover", "Surface.Pressed", "Accent.Subtle" })
+            foreach (Color backdrop in new[] { Colors.Black, Colors.White })
+            {
+                ThemeColor background = ThemeContrast.Composite(BrushColor((Brush)resources[surface]), ToThemeColor(backdrop));
+                foreach (string token in new[] { "Accent.Foreground", "Accent.Cool", "Accent.Indicator", "Border.Focus",
+                             "Border.Accent", "Border.SelectedTool", "Overlay.SelectionBorder" })
+                {
+                    double minimum = token is "Accent.Foreground" or "Accent.Cool" ? 4.5 : 3;
+                    double ratio = ThemeContrast.Ratio(BrushColor((Brush)resources[token]), background);
+                    Assert.True(ratio >= minimum, $"{theme}/{role}/{token}/{surface}/{backdrop}: {ratio:F3}");
+                }
+            }
+        }
+    });
+
+    [Fact]
     public void LiveAccentSwitchSwapsFrozenBrushesAndRestoresVioletPixels() => StaTestHost.Run(() =>
     {
         foreach (AppTheme theme in Enum.GetValues<AppTheme>())
@@ -37,7 +61,7 @@ public sealed partial class AccentColorThemeTests
     });
 
     [Fact]
-    public void WorkspaceRoleSurfacesKeepRedForegroundFocusAndWhiteFillTextReadable() => StaTestHost.Run(() =>
+    public void WorkspaceRoleSurfacesKeepRedForegroundFocusAndFillTextReadable() => StaTestHost.Run(() =>
     {
         foreach (WorkspaceRole role in Enum.GetValues<WorkspaceRole>())
         {
@@ -52,7 +76,7 @@ public sealed partial class AccentColorThemeTests
                 Assert.True(Ratio(resources, "Border.Focus", surface) >= 3, $"{role} focus on {surface}");
             }
             foreach (string fill in new[] { "Accent.Default", "Accent.Hover", "Accent.Pressed" })
-                Assert.True(Ratio(resources, "Text.OnAccent", fill) >= 4.5, $"{role} white text on {fill}");
+                Assert.True(Ratio(resources, "Text.OnAccent", fill) >= 4.5, $"{role} text on {fill}");
             WorkspaceTheme.Apply(resources, role, AppTheme.Workspace, false, AppAccent.Violet);
             Assert.Equal(original, RenderTokens(resources));
         }

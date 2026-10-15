@@ -17,6 +17,46 @@ namespace MyCapture.App.Tests;
 public sealed partial class AccentColorThemeTests
 {
     [Fact]
+    public void SelectedToolAndCheckUseAccessibleRedAndRestoreTheirOriginalVioletPixels() => WithMotionDisabled(() =>
+    {
+        foreach ((AppTheme theme, WorkspaceRole? role) in ControlPalettes())
+        {
+            ResourceDictionary resources = LoadControlResources();
+            ApplyPalette(resources, theme, role, AppAccent.Violet);
+            var tool = new ToggleButton { IsChecked = true, Style = (Style)resources["Rail.ToolButton"], Content = "R" };
+            var check = new CheckBox { IsChecked = true, Content = "Check", Style = (Style)resources[typeof(CheckBox)] };
+            var panel = new StackPanel();
+            panel.Children.Add(tool);
+            panel.Children.Add(check);
+            var root = new Border { Width = 260, Height = 280, Resources = resources, Child = panel };
+            root.SetResourceReference(Border.BackgroundProperty, "Surface.Raised");
+            Layout(root);
+            byte[] violet = RenderTokens(resources);
+            var original = Assert.IsType<SolidColorBrush>(resources["Accent.Indicator"]);
+            Color originalColor = original.Color;
+            ApplyPalette(resources, theme, role, AppAccent.Red);
+            Layout(root);
+            Assert.True(original.IsFrozen);
+            Assert.Equal(originalColor, original.Color);
+            Assert.NotSame(original, resources["Accent.Indicator"]);
+            foreach (Control control in new Control[] { tool, check })
+            {
+                Border selected = Part<Border>(control, "CheckedLayer");
+                Brush ink = control is CheckBox ? Part<System.Windows.Shapes.Path>(control, "Check").Stroke : control.Foreground;
+                Assert.True(ThemeContrast.Ratio(BrushColor(ink), BrushColor(selected.Background)) >= 4.5);
+                if (theme == AppTheme.HighContrast) continue;
+                foreach (Color backdrop in new[] { Colors.Black, Colors.White })
+                    AssertContrast(selected.BorderBrush, ThemeContrast.Composite(BrushColor(root.Background), ToThemeColor(backdrop)),
+                        $"{theme}/{role}/{control.GetType().Name} selection edge");
+            }
+            ApplyPalette(resources, theme, role, AppAccent.Violet);
+            Layout(root);
+            Assert.Equal(violet, RenderTokens(resources));
+            Assert.Equal(Colors.Transparent, ((SolidColorBrush)resources["Border.SelectedTool"]).Color);
+        }
+    });
+
+    [Fact]
     public void ResolvedAccentIndicatorsMeetContrastOnTheirCompositedBackgrounds() => WithMotionDisabled(() =>
     {
         foreach ((AppTheme theme, WorkspaceRole? role) in ControlPalettes())
