@@ -225,6 +225,7 @@ public sealed class CaptureCueOverlayTests
 
     [Theory]
     [InlineData(1.0)]
+    [InlineData(1.25)]
     [InlineData(1.5)]
     [InlineData(2.0)]
     public void BandKeylineAndTabLandOnPhysicalPixelsAtEveryScale(double scale) => StaTestHost.Run(() =>
@@ -234,7 +235,6 @@ public sealed class CaptureCueOverlayTests
         CaptureOverlayView view = EvidenceView(frame, AppTheme.Glass, "window-hover");
         try
         {
-            SimulateDpi(view, scale);
             RenderTargetBitmap rendered = Render(view, scale);
             Assert.Equal(3, Field<Pen>(view, "_detectedBorderPen").Thickness * scale, 6);
             Assert.Equal(1, Field<Pen>(view, "_keylinePen").Thickness * scale, 6);
@@ -310,13 +310,6 @@ public sealed class CaptureCueOverlayTests
 
     private static void Move(CaptureOverlayView view) =>
         Overlay.Invoke(view, "OnMouseMove", new MouseEventArgs(Mouse.PrimaryDevice, 0) { RoutedEvent = Mouse.MouseMoveEvent });
-
-    private static void SimulateDpi(CaptureOverlayView view, double scale)
-    {
-        if (Math.Abs(view.GuidePixelSizeX - (1 / scale)) < 0.000001) return;
-        typeof(CaptureOverlayView).GetMethod("OnDpiChanged", BindingFlags.Instance | BindingFlags.NonPublic)!
-            .Invoke(view, [new DpiScale(1 / view.GuidePixelSizeX, 1 / view.GuidePixelSizeY), new DpiScale(scale, scale)]);
-    }
 
     private static T Field<T>(object target, string name) =>
         (T)target.GetType().GetField(name, BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(target)!;

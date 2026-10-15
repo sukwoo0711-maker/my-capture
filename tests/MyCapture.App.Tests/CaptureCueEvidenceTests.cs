@@ -118,6 +118,10 @@ public sealed class CaptureCueEvidenceTests
 
     internal static RenderTargetBitmap Render(CaptureOverlayView view, double scale = 1)
     {
+        VisualTreeHelper.SetRootDpi(view, new DpiScale(scale, scale));
+        if (Math.Abs(view.GuidePixelSizeX - (1 / scale)) > 0.000001)
+            typeof(CaptureOverlayView).GetMethod("OnDpiChanged", BindingFlags.Instance | BindingFlags.NonPublic)!
+                .Invoke(view, [new DpiScale(1 / view.GuidePixelSizeX, 1 / view.GuidePixelSizeY), new DpiScale(scale, scale)]);
         view.InvalidateVisual();
         view.Measure(new Size(Width / scale, Height / scale));
         view.Arrange(new Rect(0, 0, Width / scale, Height / scale));

@@ -193,7 +193,8 @@ public sealed class EditorLargeTextViewportTests
         Assert.Equal(Visibility.Visible, scroll.ComputedVerticalScrollBarVisibility);
         AssertBarInside(bar, Field<Canvas>(host.Editor, "_overlayCanvas"));
         double expectedWidth = Field<AnnotationEditorSurface>(host.Editor, "_surface").ToSurfaceRect(caption.Rect).Width;
-        Assert.True(Math.Abs(expectedWidth - Math.Round(expectedWidth)) > 0.05,
+        double scale = VisualTreeHelper.GetDpi(box).DpiScaleX;
+        Assert.True(Math.Abs(expectedWidth - Math.Round(expectedWidth * scale) / scale) > 0.05,
             $"The fixture must exercise a fractional wrapping width: {expectedWidth}.");
         var inset = Field<Point>(host.Editor, "_liveTextInset");
         double barSlot = Grid.GetColumn(bar) == 1 ? 0 : bar.ActualWidth;

@@ -300,7 +300,10 @@ public sealed class EditorChromeAndTextInspectorTests : KoreanCaptionTest
                         AssertInside(button, bar);
                         Grid face = Assert.IsType<Grid>(button.Content);
                         Assert.Equal("CommandButtonFace", face.Name);
-                        Assert.Equal(14, face.RowDefinitions[1].ActualHeight, 2);
+                        RowDefinition hintRow = face.RowDefinitions[1];
+                        Assert.Equal(new GridLength(14), hintRow.Height);
+                        double scale = VisualTreeHelper.GetDpi(face).DpiScaleY;
+                        Assert.Equal(Math.Round(14 * scale), hintRow.ActualHeight * scale, 6);
                         string key = AutomationProperties.GetAcceleratorKey(button);
                         if (!string.IsNullOrEmpty(key))
                         {

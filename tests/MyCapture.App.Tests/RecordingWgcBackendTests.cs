@@ -141,6 +141,32 @@ public sealed class RecordingWgcBackendTests
     });
 
     [Fact]
+    public void WgcSession_DirectStaCreateCaptureAndRepeatedDispose_UseTheSharedMta() => StaTestHost.Run(() =>
+    {
+        Assert.Equal(ApartmentState.STA, Thread.CurrentThread.GetApartmentState());
+        using var fixture = new PatternFixture();
+        if (!WgcRegionCaptureSession.IsSupported())
+        {
+            Assert.Throws<NotSupportedException>(() => WgcRegionCaptureSession.Create(fixture.Region, includeCursor: false));
+            return;
+        }
+
+        using var session = WgcRegionCaptureSession.Create(fixture.Region, includeCursor: false);
+        int stride = session.Width * 4;
+        var pixels = new byte[stride * session.Height];
+        session.CaptureInto(pixels, stride);
+        Assert.Equal(1, session.GetDiagnostics().FramesCopied);
+        session.Dispose();
+        session.Dispose();
+        Assert.Throws<ObjectDisposedException>(() => session.CaptureInto(pixels, stride));
+
+        using var reopened = WgcRegionCaptureSession.Create(fixture.Region, includeCursor: false);
+        reopened.CaptureInto(pixels, stride);
+        Assert.Equal(1, reopened.GetDiagnostics().FramesCopied);
+        reopened.Dispose();
+    });
+
+    [Fact]
     public void WgcRecorder_EncodesFramesAndReleasesTheSessionOnTheCaptureThread() => StaTestHost.Run(() =>
     {
         using var fixture = new PatternFixture();
@@ -148,6 +174,8 @@ public sealed class RecordingWgcBackendTests
         var encoder = new CountingEncoder();
         using var recorder = new RegionRecorder(grabber, _ => encoder, NullLogger.Instance);
         recorder.Start(fixture.Region, "unused.mp4", new RecordingSettings { FrameRate = RecordingFrameRate.Fps30, IncludeCursor = false });
+        Assert.True(PatternFixture.PumpUntil(() => encoder.Frames > 0, TimeSpan.FromSeconds(15)),
+            "WGC did not deliver its first encoded frame within 15 seconds.");
         PatternFixture.Pump(1200);
 
         RecordingResult result = recorder.Stop();
@@ -289,11 +317,13 @@ public sealed class RecordingWgcBackendTests
 
     private sealed class CountingEncoder : IVideoEncoder
     {
+        private long _frames;
+
         public int Width => 0;
 
         public int Height => 0;
 
-        internal long Frames { get; private set; }
+        internal long Frames => Interlocked.Read(ref _frames);
 
         internal int WrongSizedFrames { get; private set; }
 
@@ -301,11 +331,11 @@ public sealed class RecordingWgcBackendTests
 
         public void WriteFrame(in EncoderFrame frame)
         {
-            Frames++;
             if (frame.Pixels.Length < frame.Stride * frame.Height || frame.Stride != frame.Width * 4)
             {
                 WrongSizedFrames++;
             }
+            Interlocked.Increment(ref _frames);
         }
 
         public void Complete() => Completed = true;

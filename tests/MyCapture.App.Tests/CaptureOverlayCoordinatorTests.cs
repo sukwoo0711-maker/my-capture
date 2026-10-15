@@ -1,11 +1,15 @@
 using System.Diagnostics;
 using System.IO;
 using System.Threading;
+using System.Windows;
+using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using Microsoft.Extensions.Logging.Abstractions;
 using MyCapture.App.Capture;
+using MyCapture.App.Editing;
+using MyCapture.App.Themes;
 using MyCapture.Core.Primitives;
 using MyCapture.Platform.Capture;
 using MyCapture.Platform.Display;
@@ -450,8 +454,15 @@ public sealed class CaptureOverlayCoordinatorTests
         // The reported layout, moved far off the real desktop so the window never shows on screen:
         // an ultrawide primary with a 768 x 1366 portrait display on its right.
         const double x = -30000, y = -20000;
-        var primary = new MonitorInfo(@"\\.\DISPLAY1", new RectD(x, y, 3440, 1440), new RectD(x, y, 3440, 1392), 96, true);
-        var portrait = new MonitorInfo(@"\\.\DISPLAY2", new RectD(x + 3440, y, 768, 1366), new RectD(x + 3440, y, 768, 1318), 96, false);
+        using var dpiProbe = new HwndSource(new HwndSourceParameters("Capture editor DPI probe")
+        {
+            PositionX = (int)(x + 3440), PositionY = (int)y, Width = 1, Height = 1,
+            WindowStyle = unchecked((int)0x80000000), // hidden WS_POPUP on the same offscreen host
+        });
+        uint dpi = GetDpiForWindow(dpiProbe.Handle);
+        Assert.True(dpi > 0);
+        var primary = new MonitorInfo(@"\\.\DISPLAY1", new RectD(x, y, 3440, 1440), new RectD(x, y, 3440, 1392), dpi, true);
+        var portrait = new MonitorInfo(@"\\.\DISPLAY2", new RectD(x + 3440, y, 768, 1366), new RectD(x + 3440, y, 768, 1318), dpi, false);
         using var coordinator = Coordinator(_ => Frame());
         coordinator.ReadMonitors = () => [primary, portrait];
         var frame = new FrozenFrame(Solid(32, 20), new RectD(x + 3500, y + 100, 32, 20), null, 0);
@@ -462,8 +473,13 @@ public sealed class CaptureOverlayCoordinatorTests
         Assert.True(GetWindowRect(new System.Windows.Interop.WindowInteropHelper(editor).Handle, out NativeRect rect));
         try
         {
-            // Before: 980 wide from the primary work area, spilling onto the primary and off the right edge.
-            Assert.Equal((x + 3472, y + 349, x + 4176, y + 969), ((double)rect.Left, (double)rect.Top, (double)rect.Right, (double)rect.Bottom));
+            Assert.Equal(dpi, GetDpiForWindow(new WindowInteropHelper(editor).Handle));
+            MonitorWindowPlacement.WindowFit expected = MonitorWindowPlacement.Fit(portrait.WorkArea, dpi / 96.0,
+                new Size(980, 620), AnnotationEditorWindow.MinimumSize, AnnotationEditorWindow.WorkAreaMargin);
+            var actual = new RectD(rect.Left, rect.Top, rect.Right - rect.Left, rect.Bottom - rect.Top);
+            Assert.Equal(expected.Bounds, actual);
+            Assert.True(actual.Left >= portrait.WorkArea.Left && actual.Top >= portrait.WorkArea.Top);
+            Assert.True(actual.Right <= portrait.WorkArea.Right && actual.Bottom <= portrait.WorkArea.Bottom);
         }
         finally
         {
@@ -477,6 +493,9 @@ public sealed class CaptureOverlayCoordinatorTests
     [System.Runtime.InteropServices.DllImport("user32.dll")]
     [return: System.Runtime.InteropServices.MarshalAs(System.Runtime.InteropServices.UnmanagedType.Bool)]
     private static extern bool GetWindowRect(IntPtr window, out NativeRect rect);
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern uint GetDpiForWindow(IntPtr window);
 
     private static CaptureOverlayCoordinator Coordinator(Func<bool, FrozenFrame> acquire) => new(
         new ScreenCaptureEngine(NullLogger<ScreenCaptureEngine>.Instance),

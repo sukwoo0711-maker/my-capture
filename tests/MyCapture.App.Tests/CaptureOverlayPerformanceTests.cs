@@ -102,8 +102,8 @@ public sealed class CaptureOverlayPerformanceTests
             DrawingVisual vertical = Visual(view, "_verticalGuideVisual");
             Assert.Equal(1, horizontal.Opacity);
             Assert.Equal(1, vertical.Opacity);
-            Assert.Equal(view.ActualWidth, horizontal.ContentBounds.Width, 5);
-            Assert.Equal(view.ActualHeight, vertical.ContentBounds.Height, 5);
+            Assert.Equal((double)(float)view.ActualWidth, horizontal.ContentBounds.Width);
+            Assert.Equal((double)(float)view.ActualHeight, vertical.ContentBounds.Height);
             Assert.InRange(horizontal.ContentBounds.Height, 0, 3.001);
             Assert.InRange(vertical.ContentBounds.Width, 0, 3.001);
         }
@@ -445,6 +445,7 @@ public sealed class CaptureOverlayPerformanceTests
 
     private static RenderTargetBitmap Render(CaptureOverlayView view, int width, int height, double scale = 1)
     {
+        VisualTreeHelper.SetRootDpi(view, new DpiScale(scale, scale));
         if (Math.Abs(view.GuidePixelSizeX - 1 / scale) > 0.000001)
             Invoke(view, "OnDpiChanged", new DpiScale(1 / view.GuidePixelSizeX, 1 / view.GuidePixelSizeY),
                 new DpiScale(scale, scale));

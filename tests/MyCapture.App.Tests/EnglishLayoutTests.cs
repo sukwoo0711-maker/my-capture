@@ -119,7 +119,19 @@ public sealed class EnglishLayoutTests
             window.UpdateLayout();
             var connector = Assert.Single(Descendants(layout).OfType<TimelineRenderSurface>(), surface => !surface.IsHitTestVisible);
             Assert.True(connector.IsVisible, "Opening the detailed timeline must show its connector hint");
-            Assert.True(connector.ActualHeight >= 18, "Connector hint must reserve a complete text line");
+            Assert.Equal(18, connector.Height);
+            double connectorScale = VisualTreeHelper.GetDpi(connector).DpiScaleY;
+            Assert.Equal(Math.Round(18 * connectorScale), connector.ActualHeight * connectorScale, 6);
+            connector.RenderDirtyLayers();
+            var rangeVisual = Assert.IsType<DrawingVisual>(VisualTreeHelper.GetChild(connector, 1));
+            Drawing[] drawings = DrawingLeaves(rangeVisual.Drawing).ToArray();
+            GeometryDrawing hintBackground = Assert.Single(drawings.OfType<GeometryDrawing>(), drawing => drawing.Pen is null && drawing.Brush is not null);
+            Assert.True(hintBackground.Bounds.Top >= 0 && hintBackground.Bounds.Bottom <= connector.ActualHeight,
+                $"Connector text and padding {hintBackground.Bounds} must fit its {connector.ActualHeight} DIP height at {connectorScale}x.");
+            GlyphRunDrawing[] glyphs = drawings.OfType<GlyphRunDrawing>().ToArray();
+            Assert.NotEmpty(glyphs);
+            Assert.All(glyphs, glyph => Assert.True(hintBackground.Bounds.Contains(glyph.Bounds),
+                $"Connector glyphs {glyph.Bounds} must fit their padded background {hintBackground.Bounds}."));
             detailToggle.IsChecked = false;
             window.UpdateLayout();
             Button[] buttons = Descendants(layout).OfType<Button>().ToArray();
@@ -133,7 +145,8 @@ public sealed class EnglishLayoutTests
                 AssertReachableInScrollViewport(button, window);
                 Point top = button.TranslatePoint(new Point(0, 0), layout);
                 Point bottom = button.TranslatePoint(new Point(button.ActualWidth, button.ActualHeight), layout);
-                Assert.True(button.IsVisible && top.X >= 0 && bottom.X <= layout.ActualWidth + 0.5 && bottom.Y <= layout.ActualHeight + 0.5, caption);
+                Assert.True(button.IsVisible && top.X >= 0 && bottom.X <= layout.ActualWidth + 0.5 && bottom.Y <= layout.ActualHeight + 0.5,
+                    $"{caption}: visible={button.IsVisible}, bounds={top}..{bottom}, viewport={layout.ActualWidth}x{layout.ActualHeight}");
                 foreach (TextBlock text in Descendants(button).OfType<TextBlock>())
                     Assert.True(text.ActualWidth + text.Margin.Left + text.Margin.Right + 0.5 >= text.DesiredSize.Width, $"Clipped {caption}");
             }
@@ -235,6 +248,16 @@ public sealed class EnglishLayoutTests
             foreach (XElement entry in dictionary.Elements()) combined.Add(new XElement(entry));
         }
         window.Resources.MergedDictionaries.Add((ResourceDictionary)XamlReader.Parse(combined!.ToString(SaveOptions.DisableFormatting)));
+    }
+
+    private static IEnumerable<Drawing> DrawingLeaves(Drawing drawing)
+    {
+        if (drawing is DrawingGroup group)
+        {
+            foreach (Drawing child in group.Children)
+                foreach (Drawing leaf in DrawingLeaves(child)) yield return leaf;
+        }
+        else yield return drawing;
     }
 
     private static IEnumerable<DependencyObject> Descendants(DependencyObject parent)

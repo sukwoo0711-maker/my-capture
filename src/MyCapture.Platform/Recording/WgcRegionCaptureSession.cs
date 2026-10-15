@@ -164,6 +164,15 @@ public sealed unsafe class WgcRegionCaptureSession : IDisposable
     /// </param>
     public static WgcRegionCaptureSession Create(RectD screenRegion, bool includeCursor, bool requestBorderless = true)
     {
+        // Windows 10 can require Close on the creating apartment despite the session's
+        // agile metadata. Keep creation and disposal in the shared MTA, including STA callers.
+        return Thread.CurrentThread.GetApartmentState() == ApartmentState.MTA
+            ? CreateOnMta(screenRegion, includeCursor, requestBorderless)
+            : Task.Run(() => CreateOnMta(screenRegion, includeCursor, requestBorderless)).GetAwaiter().GetResult();
+    }
+
+    private static WgcRegionCaptureSession CreateOnMta(RectD screenRegion, bool includeCursor, bool requestBorderless)
+    {
         RectD pixels = screenRegion.Normalized().ToPixelBounds();
         if (!IsSupported())
         {
@@ -621,6 +630,19 @@ public sealed unsafe class WgcRegionCaptureSession : IDisposable
 
     /// <summary>Stops the capture and releases GPU resources. Safe from any thread, once or more.</summary>
     public void Dispose()
+    {
+        if (Thread.CurrentThread.GetApartmentState() == ApartmentState.MTA)
+        {
+            DisposeOnMta();
+        }
+        else
+        {
+            // Dispatch before taking _frameGate: closing the pool may wait for FrameArrived.
+            Task.Run(DisposeOnMta).GetAwaiter().GetResult();
+        }
+    }
+
+    private void DisposeOnMta()
     {
         Direct3D11CaptureFrame? latest;
         lock (_frameGate)

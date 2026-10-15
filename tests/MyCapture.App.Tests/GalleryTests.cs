@@ -1199,6 +1199,7 @@ public sealed class GalleryTests : KoreanCaptionTest
             // Wider than the source aspect ratio: the old width-only scale made the crop
             // extend below this 800x250 viewport and WPF threw "Width and Height must be
             // non-negative" while drawing the bottom dimmer rectangle.
+            VisualTreeHelper.SetRootDpi(surface, new DpiScale(1, 1));
             surface.Measure(new Size(800, 250));
             surface.Arrange(new Rect(0, 0, 800, 250));
             surface.UpdateLayout();
