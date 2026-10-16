@@ -5,13 +5,21 @@ internal sealed record RangeModelErrors(double Identity, double StudioRetained, 
 internal sealed record RangeVerificationResult(VideoRangePresentation? Model, RangeModelErrors Errors,
     RangeModelErrors[] ChannelErrors, int Points, int DynamicRange, int Attempts, double PositionMs, string Status, string? Failure = null)
 {
-    public VideoRangeCorrection? Correction => Model switch
+    public MeasuredRangeCurve? Mapping { get; init; }
+    public RangeMappingDiagnostics? MappingDiagnostics { get; init; }
+    public bool IsFallback { get; init; }
+    public string Kind => IsFallback ? "fallback" : Model.HasValue ? "model" : Mapping is not null ? "measured" : "pending";
+    public VideoRangeCorrection? Correction => IsFallback ? VideoRangeCorrection.None
+        : Mapping is not null ? VideoRangeCorrection.Measured : Model switch
     {
         VideoRangePresentation.Correct => VideoRangeCorrection.None,
         VideoRangePresentation.StudioRetained => VideoRangeCorrection.Expand,
         VideoRangePresentation.ExpandedAsStudio => VideoRangeCorrection.Compress,
         _ => null,
     };
+    public string Details => $"kind={Kind}, status={Status}, model={Model}, identity={Errors.Identity:F3}, "
+        + $"retained={Errors.StudioRetained:F3}, expanded={Errors.ExpandedAsStudio:F3}, "
+        + $"mapping=({MappingDiagnostics?.Summary ?? "not-fitted"}), curves={Mapping?.Compact ?? "none"}";
 }
 
 /// <summary>Compares uncorrected presentation to decoded RGB; input range is deliberately absent.</summary>
@@ -20,10 +28,12 @@ internal static class PresentedFrameRangeModel
     internal const int MinimumPoints = 64;
     internal const int MinimumDynamicRange = 96;
     internal const int FlatRange = 6;
-    internal const double MaximumError = 6;
-    internal const double WinnerRatio = 0.5;
+    // Win11 retained error 0.211; allow codec/area sampling noise, but reject the Win10
+    // gallery minima 4.494 and 3.154. Final screen tolerances remain independent (8/12).
+    internal const double MaximumError = 2.5;
 
-    internal static RangeVerificationResult Compare(RangeVerificationFrame shown, RangeVerificationFrame reference)
+    internal static RangeVerificationResult Compare(RangeVerificationFrame shown, RangeVerificationFrame reference,
+        bool forceMeasured = false)
     {
         if (shown.Width != reference.Width || shown.Height != reference.Height
             || shown.Pixels.Length != reference.Pixels.Length
@@ -37,6 +47,7 @@ internal static class PresentedFrameRangeModel
         for (int b = 0; b < 8; b++) errors[m, c, b] = [];
         int[] minimum = [255, 255, 255], maximum = [0, 0, 0];
         int points = 0, width = shown.Width, height = shown.Height;
+        List<RangeValuePair>[] pairs = [[], [], []];
         byte[] source = reference.Pixels, pixels = shown.Pixels;
         for (int y = 2; y < height - 2; y += 4)
         for (int x = 2; x < width - 2; x += 4)
@@ -60,6 +71,7 @@ internal static class PresentedFrameRangeModel
             for (int c = 0; c < 3; c++)
             {
                 int value = source[offset + c], actual = pixels[offset + c], band = value / 32;
+                pairs[c].Add(new((byte)actual, (byte)value, ((y - 2) / 4) % 2));
                 minimum[c] = Math.Min(minimum[c], value); maximum[c] = Math.Max(maximum[c], value);
                 errors[0, c, band].Add(Math.Abs(actual - value));
                 errors[1, c, band].Add(Math.Abs(actual - (16 + value * 219.0 / 255)));
@@ -89,18 +101,25 @@ internal static class PresentedFrameRangeModel
         string status = points < MinimumPoints ? "too-few-flat-points"
             : range < MinimumDynamicRange ? "low-dynamic-range"
             : Enumerable.Range(0, 3).Any(c => scores[best, c] > MaximumError) ? "model-mismatch"
-            : totals[best] > totals[second] * WinnerRatio || totals[second] - totals[best] < 1 ? "ambiguous"
+            : !ClearlyFits(totals[best], totals[second]) ? "ambiguous"
             : "verified";
-        VideoRangePresentation? model = status != "verified" ? null : best switch
+        VideoRangePresentation? model = status != "verified" || forceMeasured ? null : best switch
         {
             0 => VideoRangePresentation.Correct,
             1 => VideoRangePresentation.StudioRetained,
             _ => VideoRangePresentation.ExpandedAsStudio,
         };
-        return new(model, new(totals[0], totals[1], totals[2]),
+        var result = new RangeVerificationResult(model, new(totals[0], totals[1], totals[2]),
             Enumerable.Range(0, 3).Select(c => new RangeModelErrors(scores[0, c], scores[1, c], scores[2, c])).ToArray(),
             points, range, 0, shown.PositionMs, status);
+        if (model.HasValue || points < MinimumPoints || range < MinimumDynamicRange) return result;
+        var fit = MeasuredRangeCurveFitter.Fit(pairs);
+        return result with { Mapping = fit.Curve, MappingDiagnostics = fit.Diagnostics,
+            Status = fit.Curve is not null ? "verified" : fit.Diagnostics.Status };
     }
+
+    internal static bool ClearlyFits(double best, double second) => double.IsFinite(best)
+        && double.IsFinite(second) && best <= MaximumError && second >= 2 * best + 1;
 
     // Exact box coverage, including fractional boundary pixels; no point/bilinear resampling.
     internal static RangeVerificationFrame AreaDownscale(byte[] pixels, int width, int height, int stride,

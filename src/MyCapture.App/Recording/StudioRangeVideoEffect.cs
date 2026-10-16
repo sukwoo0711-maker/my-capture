@@ -13,7 +13,7 @@ namespace MyCapture.App.Recording;
 /// <para>
 /// Each real player compares its uncorrected presented frame to a range-aware decoded frame
 /// after 300 ms without a seek request. Verified decisions seed a session cache by host, range
-/// and coarse presentation scale. Unknown results keep studio Expand / full None (or the cache).
+/// and coarse presentation scale. Unknown results fit a measured curve, then fall back to None.
 /// No probe, encoding or child process runs in the product path. Software rendering uses no effect.
 /// </para>
 /// <para>
@@ -167,11 +167,19 @@ internal sealed class StudioRangeVideoEffect : ShaderEffect
     }
 
     private static void ApplyDecision(MediaElement media, VideoRangeCorrection correction)
+        => ApplyDecision(media, new RangeCorrectionDecision(correction));
+
+    private static void ApplyDecision(MediaElement media, RangeCorrectionDecision decision)
     {
+        VideoRangeCorrection correction = decision.Correction;
         // Software shader emulation slows every frame and seek. Keep the hardware-only policy.
         if (!HardwareShaderAvailable()) correction = VideoRangeCorrection.None;
         switch (correction)
         {
+            case VideoRangeCorrection.Measured when decision.Mapping is { } mapping:
+                if (media.Effect is not MeasuredRangeVideoEffect measured || measured.Mapping != mapping)
+                    media.Effect = new MeasuredRangeVideoEffect(mapping);
+                break;
             case VideoRangeCorrection.Expand:
                 if (media.Effect is not StudioRangeVideoEffect)
                     media.Effect = new StudioRangeVideoEffect();
@@ -181,7 +189,7 @@ internal sealed class StudioRangeVideoEffect : ShaderEffect
                     media.Effect = new FullRangeVideoEffect();
                 break;
             default:
-                if (media.Effect is StudioRangeVideoEffect or FullRangeVideoEffect)
+                if (media.Effect is StudioRangeVideoEffect or FullRangeVideoEffect or MeasuredRangeVideoEffect)
                     media.ClearValue(UIElement.EffectProperty);
                 break;
         }

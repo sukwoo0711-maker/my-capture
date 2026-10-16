@@ -270,6 +270,30 @@ public sealed class VideoRangeDiagnosticTests
         Assert.Equal("StudioRetained", restored.Samples[0].Classification);
     }
 
+    [Fact]
+    public void MeasuredVerificationRoundTripsCurvesResidualAndCoverageBesideRawSamples()
+    {
+        string curve = Convert.ToBase64String(Enumerable.Range(0, 256).Select(i => (byte)i).ToArray());
+        var decision = new RangeVerificationResult(null, new(4.494, 6.843, 10.119), [], 3096, 255, 1, 123, "verified")
+        {
+            Mapping = new(curve, curve, curve),
+            MappingDiagnostics = new("verified", [new(12, 12, 255, 7, 50), new(12, 12, 255, 7, 50), new(12, 12, 255, 7, 50)], 0.7, 0.8, 1),
+        };
+        var result = Result("matrix-studio-1280x720-gallery", "unknown");
+        result = result with { Samples = [result.Samples[0] with { Verification = decision }] };
+        string json = System.Text.Json.JsonSerializer.Serialize(result);
+        var restored = System.Text.Json.JsonSerializer.Deserialize<VideoRangeCellResult>(json)!;
+        var actual = Assert.IsType<RangeVerificationResult>(restored.Samples[0].Verification);
+        Assert.Equal("measured", actual.Kind); Assert.Equal(VideoRangeCorrection.Measured, actual.Correction);
+        Assert.Equal(decision.Mapping, actual.Mapping); Assert.Equal(decision.Errors, actual.Errors);
+        Assert.Equal(decision.MappingDiagnostics.Coverage, actual.MappingDiagnostics!.Coverage);
+        Assert.Equal(0.7, actual.MappingDiagnostics.Residual); Assert.Equal(0.8, actual.MappingDiagnostics.HeldOutResidual);
+        Assert.Equal(1, actual.MappingDiagnostics.SplitDisagreement);
+        Assert.Contains("kind=measured", actual.Details); Assert.Contains("residual=0.700", actual.Details);
+        Assert.Contains(curve, actual.Details);
+        Assert.Equal("fallback", (actual with { Mapping = null, IsFallback = true }).Kind);
+    }
+
     private static VideoRangeCellResult Result(string id, params string[] classifications)
     {
         VideoRangeCell cell = VideoRangeDiagnosticPlan.Cells.Single(c => c.Id == id);

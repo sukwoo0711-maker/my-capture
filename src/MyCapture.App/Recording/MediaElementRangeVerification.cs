@@ -18,7 +18,7 @@ internal sealed class MediaElementRangeVerification : IDisposable
     private readonly bool _studioRange;
     private readonly VideoPlayerKind _kind;
     private readonly ILogger? _log;
-    private readonly Action<VideoRangeCorrection> _apply;
+    private readonly Action<RangeCorrectionDecision> _apply;
     private readonly DispatcherTimer _timer;
     private PresentedFrameVerification _session;
     private bool _disposed;
@@ -27,9 +27,12 @@ internal sealed class MediaElementRangeVerification : IDisposable
     internal static RangeVerificationCache Cache { get; set; } = new();
     internal static Func<MediaElement, RangeVerificationFrame?> Sampler { get; set; } = Sample;
     internal static Func<string, RangeVerificationFrame, CancellationToken, Task<RangeVerificationResult>> Decoder { get; set; } = DecodeAsync;
+    // Test-only selection hook: sampling, reference decoding, fit validation and the real shader
+    // are unchanged. No product setting or command-line switch enables it.
+    internal static bool ForceMeasuredForTest { get; set; }
 
     internal MediaElementRangeVerification(MediaElement media, bool studioRange, VideoPlayerKind kind,
-        Action<VideoRangeCorrection> apply, ILogger? log)
+        Action<RangeCorrectionDecision> apply, ILogger? log)
     {
         _media = media; _source = media.Source; _studioRange = studioRange; _kind = kind;
         _apply = apply; _log = log;
@@ -54,13 +57,13 @@ internal sealed class MediaElementRangeVerification : IDisposable
         result =>
         {
             if (_log is not null)
-                _log.LogInformation("Video range verified: player={Player}, studio={Studio}, scale={Scale}, model={Model}, "
+                _log.LogInformation("Video range decision: player={Player}, studio={Studio}, scale={Scale}, model={Model}, "
                     + "identity={Identity:F2}, retained={Retained:F2}, expanded={Expanded:F2}, points={Points}, "
-                    + "range={Range}, attempts={Attempts}, position={Position:F2}ms",
+                    + "range={Range}, attempts={Attempts}, position={Position:F2}ms, decision={Decision}",
                     _kind, _studioRange, _bucket, result.Model, result.Errors.Identity, result.Errors.StudioRetained,
-                    result.Errors.ExpandedAsStudio, result.Points, result.DynamicRange, result.Attempts, result.PositionMs);
+                    result.Errors.ExpandedAsStudio, result.Points, result.DynamicRange, result.Attempts, result.PositionMs, result.Details);
             else Trace.TraceInformation("Video range verified: player={0}, studio={1}, scale={2}, result={3}",
-                _kind, _studioRange, _bucket, result);
+                _kind, _studioRange, _bucket, result.Details);
         });
 
     internal void PositionRequested()
@@ -175,7 +178,7 @@ internal sealed class MediaElementRangeVerification : IDisposable
                 var reference = PresentedFrameRangeModel.AreaDownscale(decoded.Pixels, decoded.Width, decoded.Height,
                     decoded.Stride, sample.Width, sample.Height, sample.PositionMs, token);
                 token.ThrowIfCancellationRequested();
-                return PresentedFrameRangeModel.Compare(sample, reference);
+                return PresentedFrameRangeModel.Compare(sample, reference, ForceMeasuredForTest);
             }
             finally { DecodeSlot.Release(); }
         }, token);

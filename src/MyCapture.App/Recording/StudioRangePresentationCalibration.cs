@@ -13,7 +13,7 @@ using MyCapture.Platform.Recording;
 
 namespace MyCapture.App.Recording;
 
-internal enum VideoRangeCorrection { None, Expand, Compress }
+internal enum VideoRangeCorrection { None, Expand, Compress, Measured }
 internal enum VideoRangePresentation { Correct, ExpandedAsStudio, StudioRetained }
 
 /// <summary>Both input ranges measured against the original RGB, before any preview effect.</summary>

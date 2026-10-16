@@ -20,7 +20,15 @@ public sealed partial class SettingsThemePreviewTests
     public Task GalleryVideoPlayer_ShowsFullRangeRecordingAtFullRange() =>
         RunIsolated(nameof(GalleryVideoPlayer_ShowsFullRangeRecordingAtFullRange), () => VerifyGalleryVideoRange(fullRange: true));
 
-    private static void VerifyGalleryVideoRange(bool fullRange)
+    [Fact]
+    public Task GalleryVideoPlayer_MeasuredShaderReproducesStudioSource() =>
+        RunIsolated(nameof(GalleryVideoPlayer_MeasuredShaderReproducesStudioSource), () => VerifyGalleryVideoRange(false, true));
+
+    [Fact]
+    public Task GalleryVideoPlayer_MeasuredShaderReproducesFullSource() =>
+        RunIsolated(nameof(GalleryVideoPlayer_MeasuredShaderReproducesFullSource), () => VerifyGalleryVideoRange(true, true));
+
+    private static void VerifyGalleryVideoRange(bool fullRange, bool forceMeasured = false)
     {
         // The player window reads styles from Application resources.
         var application = new Application { ShutdownMode = ShutdownMode.OnExplicitShutdown };
@@ -29,6 +37,8 @@ public sealed partial class SettingsThemePreviewTests
             { Source = new Uri($"pack://application:,,,/MyCapture;component/Themes/{name}.xaml") });
         string root = OwnedTestDirectory.Create("mc-gallery-video-range-");
         GalleryVideoPlayerWindow? player = null;
+        bool previousForce = MediaElementRangeVerification.ForceMeasuredForTest;
+        MediaElementRangeVerification.ForceMeasuredForTest = forceMeasured;
         try
         {
             const int width = 1280, height = 720;
@@ -48,6 +58,12 @@ public sealed partial class SettingsThemePreviewTests
             // The real player must verify successfully with the shared implicit Window style.
             // Falling back silently would hide a presenter/reference mismatch.
             VideoRangeCorrection correction = RangePatternClip.AssertVerifiedEffect(video, !fullRange);
+            if (forceMeasured)
+            {
+                Assert.True(StudioRangeVideoEffect.HardwareShaderAvailable(), "Real measured shader test requires hardware PS 2.0.");
+                Assert.Equal("measured", StudioRangeVideoEffect.VerificationFor(video)!.LastResult!.Kind);
+                Assert.IsType<MeasuredRangeVideoEffect>(video.Effect);
+            }
             if (!StudioRangeVideoEffect.HardwareShaderAvailable()
                 && !fullRange)
                 return;
@@ -57,7 +73,8 @@ public sealed partial class SettingsThemePreviewTests
                 context.DrawRectangle(new VisualBrush(video) { Stretch = Stretch.Fill }, null, new Rect(0, 0, width, height));
             var shown = new RenderTargetBitmap(width, height, 96, 96, PixelFormats.Pbgra32);
             shown.Render(visual);
-            RangePatternClip.AssertMatchesSource(shown, width, height, tolerance: fullRange ? 12 : 8, correction: correction);
+            RangePatternClip.AssertMatchesSource(shown, width, height, tolerance: fullRange ? 12 : 8, correction: correction,
+                verification: StudioRangeVideoEffect.VerificationFor(video)?.LastResult);
         }
         catch (Exception ex)
         {
@@ -74,12 +91,13 @@ public sealed partial class SettingsThemePreviewTests
                 catch (Exception sampleError) { patches = "sampling failed: " + sampleError; }
             }
             var measured = player is null ? null : StudioRangeVideoEffect.VerificationFor(player.MediaForDiagnostic)?.LastResult;
-            throw new Xunit.Sdk.XunitException($"{ex}\nPlayer verification: {measured}; "
+            throw new Xunit.Sdk.XunitException($"{ex}\nPlayer verification: {measured?.Details}; "
                 + $"hardware={StudioRangeVideoEffect.HardwareShaderAvailable()}; effect={effect}; patches: {patches}");
         }
         finally
         {
             player?.Close();
+            MediaElementRangeVerification.ForceMeasuredForTest = previousForce;
             application.Shutdown();
             OwnedTestDirectory.Delete(root);
         }

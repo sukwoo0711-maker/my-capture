@@ -49,7 +49,8 @@ public sealed class PresentedFrameVerificationTests
         for (int c = 0; c < 3; c++) midpoint[i + c] = (byte)Math.Round((midpoint[i + c] + Transform(midpoint[i + c], 2)) / 2);
         var result = PresentedFrameRangeModel.Compare(reference with { Pixels = midpoint }, reference);
         Assert.Null(result.Model);
-        Assert.Equal("ambiguous", result.Status);
+        Assert.Equal("measured", result.Kind);
+        Assert.Equal("verified", result.Status);
     }
 
     [Fact]
@@ -115,7 +116,7 @@ public sealed class PresentedFrameVerificationTests
     }
 
     [Fact]
-    public async Task RetriesAtGrowingDelaysThenKeepsCurrentCorrectionAndDoesNotCache()
+    public async Task RetriesAtGrowingDelaysThenRemovesUnverifiedCorrectionAndLogsOnce()
     {
         var fake = new Harness { Presented = true, Result = Inconclusive() };
         using var session = fake.Create();
@@ -127,8 +128,9 @@ public sealed class PresentedFrameVerificationTests
         }
         Assert.Equal(4, (await session.Completion).Attempts);
         Assert.Null(session.LastResult!.Model);
-        Assert.Equal(VideoRangeCorrection.Expand, fake.Correction);
-        Assert.Equal(0, fake.Logs);
+        Assert.Equal(VideoRangeCorrection.None, fake.Correction);
+        Assert.Equal("fallback", session.LastResult.Kind);
+        Assert.Equal(1, fake.Logs);
         fake.Now += 10000; await session.TickAsync(); Assert.Equal(4, fake.SampleCalls);
         using var next = fake.Create(); Assert.Equal(VideoRangeCorrection.Expand, fake.Correction);
     }
@@ -286,6 +288,6 @@ public sealed class PresentedFrameVerificationTests
             {
                 DecodeCalls++; Token = token;
                 return Pending ?? Task.FromResult(Result ?? PresentedFrameRangeModel.Compare(sample, Pattern()));
-            }, correction => Correction = correction, _ => Logs++);
+            }, decision => Correction = decision.Correction, _ => Logs++);
     }
 }

@@ -4,12 +4,15 @@ namespace MyCapture.App.Recording;
 
 internal enum VideoPlayerKind { Gallery, Editor }
 internal readonly record struct RangeVerificationCacheKey(VideoPlayerKind Player, bool StudioRange, int ScaleBucket);
+internal sealed record RangeCorrectionDecision(VideoRangeCorrection Correction, MeasuredRangeCurve? Mapping = null);
 internal sealed class RangeVerificationCache
 {
-    private readonly ConcurrentDictionary<RangeVerificationCacheKey, VideoRangeCorrection> _values = new();
-    internal VideoRangeCorrection Guess(RangeVerificationCacheKey key) => _values.TryGetValue(key, out var value)
-        ? value : key.StudioRange ? VideoRangeCorrection.Expand : VideoRangeCorrection.None;
-    internal void Store(RangeVerificationCacheKey key, VideoRangeCorrection correction) => _values[key] = correction;
+    private readonly ConcurrentDictionary<RangeVerificationCacheKey, RangeCorrectionDecision> _values = new();
+    internal VideoRangeCorrection Guess(RangeVerificationCacheKey key) => GuessDecision(key).Correction;
+    internal RangeCorrectionDecision GuessDecision(RangeVerificationCacheKey key) => _values.TryGetValue(key, out var value)
+        ? value : new(key.StudioRange ? VideoRangeCorrection.Expand : VideoRangeCorrection.None);
+    internal void Store(RangeVerificationCacheKey key, RangeCorrectionDecision decision) => _values[key] = decision;
+    internal void Invalidate(RangeVerificationCacheKey key) => _values.TryRemove(key, out _);
 }
 
 /// <summary>Dispatcher-owned state machine. Clock, presentation signal, sampler and decoder are injectable.</summary>
@@ -20,7 +23,7 @@ internal sealed class PresentedFrameVerification : IDisposable
     private readonly Func<bool> _hasPresented;
     private readonly Func<RangeVerificationFrame?> _sample;
     private readonly Func<RangeVerificationFrame, CancellationToken, Task<RangeVerificationResult>> _decode;
-    private readonly Action<VideoRangeCorrection> _apply;
+    private readonly Action<RangeCorrectionDecision> _apply;
     private readonly Action<RangeVerificationResult> _log;
     private readonly RangeVerificationCache _cache;
     private readonly RangeVerificationCacheKey _key;
@@ -35,12 +38,12 @@ internal sealed class PresentedFrameVerification : IDisposable
     internal PresentedFrameVerification(RangeVerificationCacheKey key, RangeVerificationCache cache,
         Func<double> clock, Func<bool> hasPresented, Func<RangeVerificationFrame?> sample,
         Func<RangeVerificationFrame, CancellationToken, Task<RangeVerificationResult>> decode,
-        Action<VideoRangeCorrection> apply, Action<RangeVerificationResult> log)
+        Action<RangeCorrectionDecision> apply, Action<RangeVerificationResult> log)
     {
         _key = key; _cache = cache; _clock = clock; _hasPresented = hasPresented;
         _sample = sample; _decode = decode; _apply = apply; _log = log;
         _due = clock() + DelaysMs[0];
-        apply(cache.Guess(key));
+        apply(cache.GuessDecision(key));
     }
 
     internal Task<RangeVerificationResult> Completion => _completion.Task;
@@ -95,12 +98,20 @@ internal sealed class PresentedFrameVerification : IDisposable
         LastResult = result = result with { Attempts = _attempts };
         if (result.Correction is { } correction)
         {
-            _cache.Store(_key, correction);
-            _apply(correction);
+            var decision = new RangeCorrectionDecision(correction, result.Mapping);
+            _cache.Store(_key, decision);
+            _apply(decision);
             _log(result);
             _completion.TrySetResult(result);
         }
-        else if (_attempts >= DelaysMs.Length) _completion.TrySetResult(result);
+        else if (_attempts >= DelaysMs.Length)
+        {
+            LastResult = result = result with { IsFallback = true };
+            _cache.Invalidate(_key);
+            _apply(new(VideoRangeCorrection.None));
+            _log(result);
+            _completion.TrySetResult(result);
+        }
         else _due = _clock() + DelaysMs[_attempts];
     }
 

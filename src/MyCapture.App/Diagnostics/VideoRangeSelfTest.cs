@@ -282,7 +282,7 @@ internal static class VideoRangeSelfTest
                     }
                     if (cell.Host != "probe" && verification is null)
                         verification = new(null, new(255, 255, 255), [], 0, 0, 0, media.Position.TotalMilliseconds,
-                            "hardware-shaders-unavailable");
+                            "hardware-shaders-unavailable") { IsFallback = true };
                     var observations = new List<VideoRangeObservation>();
                     for (int index = 0; index < 5; index++)
                     {
@@ -378,8 +378,7 @@ internal static class VideoRangeSelfTest
     }
 
     private static string FormatVerification(RangeVerificationResult? result) => result is null ? "unavailable"
-        : $"{result.Status}: model={result.Model}, identity={result.Errors.Identity:F2}, retained={result.Errors.StudioRetained:F2}, "
-            + $"expanded={result.Errors.ExpandedAsStudio:F2}, points={result.Points}, dynamic-range={result.DynamicRange}, "
+        : $"{result.Details}, points={result.Points}, dynamic-range={result.DynamicRange}, "
             + $"attempts={result.Attempts}, position={result.PositionMs:F2}ms";
 
     private static void Pump()

@@ -115,10 +115,20 @@ public sealed class MediaPlaybackRangeTests
     [InlineData(true, false)]
     [InlineData(false, true)]
     [InlineData(true, true)]
-    public void EditorPreviewShowsTheDecodedColoursOfStudioAndFullRangeClips(bool fullRange, bool lateOpen) => StaTestHost.Run(() =>
+    public void EditorPreviewShowsTheDecodedColoursOfStudioAndFullRangeClips(bool fullRange, bool lateOpen) =>
+        VerifyEditorPreview(fullRange, lateOpen, false);
+
+    [Theory]
+    [InlineData(false)] [InlineData(true)]
+    public void EditorMeasuredShaderReproducesSourceThroughRealPlayer(bool fullRange) =>
+        VerifyEditorPreview(fullRange, false, true);
+
+    private static void VerifyEditorPreview(bool fullRange, bool lateOpen, bool forceMeasured) => StaTestHost.Run(() =>
     {
         string dir = OwnedTestDirectory.Create("mc-range-editor-");
         VideoEditorWindow? editor = null;
+        bool previousForce = MediaElementRangeVerification.ForceMeasuredForTest;
+        MediaElementRangeVerification.ForceMeasuredForTest = forceMeasured;
         try
         {
             const int width = 1280, height = 720;
@@ -139,6 +149,12 @@ public sealed class MediaPlaybackRangeTests
             RangePatternClip.WaitForVerification(editor.MediaForTest);
             VideoRangeCorrection correction = RangePatternClip.AssertVerifiedEffect(editor.MediaForTest, !fullRange);
             bool hardware = StudioRangeVideoEffect.HardwareShaderAvailable();
+            if (forceMeasured)
+            {
+                Assert.True(hardware, "Real measured shader test requires hardware PS 2.0.");
+                Assert.Equal("measured", StudioRangeVideoEffect.VerificationFor(editor.MediaForTest)!.LastResult!.Kind);
+                Assert.IsType<MeasuredRangeVideoEffect>(editor.MediaForTest.Effect);
+            }
             // Without hardware shaders (hosted CI, Remote Desktop) a needed correction is skipped by
             // design, so only the effect decision is checked there.
             if (!hardware && !fullRange) return;
@@ -150,11 +166,13 @@ public sealed class MediaPlaybackRangeTests
             // H.264 decoder on hosts without hardware decoding (GitHub-hosted runners) lifts
             // full-range zero by up to 10 steps (cyan read (10,254,254)). Studio-range recordings keep
             // the strict 8. Compression only accounts for irrecoverably clipped endpoints.
-            RangePatternClip.AssertMatchesSource(frame, width, height, tolerance: fullRange ? 12 : 8, correction: correction);
+            RangePatternClip.AssertMatchesSource(frame, width, height, tolerance: fullRange ? 12 : 8, correction: correction,
+                verification: StudioRangeVideoEffect.VerificationFor(editor.MediaForTest)?.LastResult);
         }
         finally
         {
             editor?.Close();
+            MediaElementRangeVerification.ForceMeasuredForTest = previousForce;
             OwnedTestDirectory.Delete(dir);
         }
     });
@@ -181,8 +199,8 @@ internal static class RangePatternClip
         Assert.True(PumpUntil(() => StudioRangeVideoEffect.VerificationFor(media)?.Completion.IsCompleted == true,
             TimeSpan.FromSeconds(20)), "Player verification did not complete after presenting a frame.");
         var result = StudioRangeVideoEffect.VerificationFor(media)!.Completion.GetAwaiter().GetResult();
-        string details = result.ToString();
-        if (result.Model is null)
+        string details = result.Details;
+        if (result.Correction is null || result.IsFallback)
         {
             var sample = MediaElementRangeVerification.Sample(media);
             var original = MediaElementRangeVerification.WithoutEffect(media, () => VideoRangeColourPattern.Observe(media));
@@ -196,7 +214,7 @@ internal static class RangePatternClip
                 return $"{sample.Pixels[o+2]},{sample.Pixels[o+1]},{sample.Pixels[o]}";
             }));
         }
-        Assert.True(result.Model.HasValue, details);
+        Assert.True(result.Correction.HasValue && !result.IsFallback, details);
         Pump(TimeSpan.FromMilliseconds(80));
     }
 
@@ -207,8 +225,7 @@ internal static class RangePatternClip
         if (hardware)
         {
             Assert.NotNull(result);
-            Assert.Equal("verified", result.Status);
-            Assert.NotNull(result.Model);
+            Assert.True(result.Status == "verified" && !result.IsFallback && result.Correction.HasValue, result.Details);
         }
         VideoRangeCorrection correction = hardware ? result!.Correction!.Value : VideoRangeCorrection.None;
         AssertEffect(media, correction);
@@ -221,6 +238,7 @@ internal static class RangePatternClip
         {
             case VideoRangeCorrection.Expand: Assert.IsType<StudioRangeVideoEffect>(media.Effect); break;
             case VideoRangeCorrection.Compress: Assert.IsType<FullRangeVideoEffect>(media.Effect); break;
+            case VideoRangeCorrection.Measured: Assert.IsType<MeasuredRangeVideoEffect>(media.Effect); break;
             default: Assert.Null(media.Effect); break;
         }
     }
@@ -248,7 +266,8 @@ internal static class RangePatternClip
     /// range is 16 or more steps off at black, white and every saturated primary. If a presenter
     /// expanded and clipped the source, only its recoverable 16-235 channels can be compared.
     /// </summary>
-    internal static void AssertMatchesSource(BitmapSource shown, int width, int height, int tolerance = 8, VideoRangeCorrection correction = VideoRangeCorrection.None)
+    internal static void AssertMatchesSource(BitmapSource shown, int width, int height, int tolerance = 8,
+        VideoRangeCorrection correction = VideoRangeCorrection.None, RangeVerificationResult? verification = null)
     {
         var failures = new List<string>();
         for (int i = 0; i < Patches.Length; i++)
@@ -272,7 +291,7 @@ internal static class RangePatternClip
         }
 
         Assert.True(failures.Count == 0, string.Join("; ", failures)
-            + $"; correction={correction}");
+            + $"; correction={correction}; {verification?.Details}");
     }
 
     /// <summary>Pumps the dispatcher until <paramref name="condition"/> holds; false when <paramref name="timeout"/> passes first.</summary>
