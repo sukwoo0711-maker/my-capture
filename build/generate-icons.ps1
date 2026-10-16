@@ -27,6 +27,7 @@ param(
     [string]$StoreListingIconPath
 )
 
+Set-StrictMode -Version 2.0
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName System.Drawing
 
@@ -58,32 +59,35 @@ function Get-BrandDrawing {
 
     # These approved masters contain only filled paths and absolute linear gradients.
     # WPF parses the original path data directly, preserving curves and fill rules.
+    # Read through the DOM so flat masters without <defs> or optional attributes also
+    # work under strict mode (package-store.ps1 calls this script with Set-StrictMode 2.0).
     [xml]$svg = [IO.File]::ReadAllText((Join-Path $brandRoot $name))
+    $root = $svg.DocumentElement
     $brushes = @{}
-    foreach ($gradient in $svg.svg.defs.linearGradient) {
-        if ($null -eq $gradient) { continue }
+    foreach ($gradient in $root.GetElementsByTagName('linearGradient')) {
         $brush = [System.Windows.Media.LinearGradientBrush]::new()
         $brush.MappingMode = [System.Windows.Media.BrushMappingMode]::Absolute
-        $brush.StartPoint = [System.Windows.Point]::new([double]$gradient.x1, [double]$gradient.y1)
-        $brush.EndPoint = [System.Windows.Point]::new([double]$gradient.x2, [double]$gradient.y2)
-        foreach ($stop in $gradient.stop) {
+        $brush.StartPoint = [System.Windows.Point]::new([double]$gradient.GetAttribute('x1'), [double]$gradient.GetAttribute('y1'))
+        $brush.EndPoint = [System.Windows.Point]::new([double]$gradient.GetAttribute('x2'), [double]$gradient.GetAttribute('y2'))
+        foreach ($stop in $gradient.GetElementsByTagName('stop')) {
             $brush.GradientStops.Add([System.Windows.Media.GradientStop]::new(
-                [System.Windows.Media.ColorConverter]::ConvertFromString($stop.'stop-color'), [double]$stop.offset))
+                [System.Windows.Media.ColorConverter]::ConvertFromString($stop.GetAttribute('stop-color')), [double]$stop.GetAttribute('offset')))
         }
         $brush.Freeze()
-        $brushes[$gradient.id] = $brush
+        $brushes[$gradient.GetAttribute('id')] = $brush
     }
     $paths = @()
-    foreach ($path in $svg.svg.path) {
-        $rule = if ($path.'fill-rule' -eq 'evenodd') { 'F0' } else { 'F1' }
-        $geometry = [System.Windows.Media.Geometry]::Parse("$rule $($path.d)")
+    foreach ($path in @($root.ChildNodes | Where-Object { $_.LocalName -eq 'path' })) {
+        $rule = if ($path.GetAttribute('fill-rule') -eq 'evenodd') { 'F0' } else { 'F1' }
+        $geometry = [System.Windows.Media.Geometry]::Parse("$rule $($path.GetAttribute('d'))")
         $geometry.Freeze()
-        $brush = if ($path.fill.StartsWith('url(#')) {
-            $brushes[$path.fill.Substring(5, $path.fill.Length - 6)]
-        } else { [System.Windows.Media.BrushConverter]::new().ConvertFromString($path.fill) }
+        $fill = $path.GetAttribute('fill')
+        $brush = if ($fill.StartsWith('url(#')) {
+            $brushes[$fill.Substring(5, $fill.Length - 6)]
+        } else { [System.Windows.Media.BrushConverter]::new().ConvertFromString($fill) }
         $paths += @{ Geometry = $geometry; Brush = $brush }
     }
-    $drawing = @{ Canvas = [double]$svg.svg.width; Paths = $paths }
+    $drawing = @{ Canvas = [double]$root.GetAttribute('width'); Paths = $paths }
     $brandDrawings[$name] = $drawing
     return $drawing
 }
