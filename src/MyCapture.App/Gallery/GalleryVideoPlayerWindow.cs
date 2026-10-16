@@ -96,8 +96,6 @@ internal sealed class GalleryVideoPlayerWindow : Window
         SetResourceReference(Window.BackgroundProperty, "Surface.Base");
         SetResourceReference(Window.ForegroundProperty, "Text.Primary");
 
-        // Library videos are recordings, which are studio range; the probe corrects a full-range clip.
-        StudioRangeVideoEffect.Apply(_video, studioRange: true);
         _video.MediaOpened += OnMediaOpened;
         _video.MediaEnded += OnMediaEnded;
         _video.MediaFailed += OnMediaFailed;
@@ -132,6 +130,7 @@ internal sealed class GalleryVideoPlayerWindow : Window
         _mediaReady = false;
         _playing = false;
         _video.Stop();
+        StudioRangeVideoEffect.Clear(_video);
         _sourceProbe = VideoSourceProbe.ReadAsync(path);
         _video.Source = new Uri(path);
         _video.Play();

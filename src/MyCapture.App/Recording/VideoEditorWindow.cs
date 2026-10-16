@@ -226,8 +226,6 @@ internal sealed partial class VideoEditorWindow : Window
             ScrubbingEnabled = true,
             Stretch = Stretch.Uniform,
         };
-        // Recordings are studio range; the source probe removes the expansion for a full-range clip.
-        StudioRangeVideoEffect.Apply(_media, studioRange: true);
         _media.MediaOpened += OnMediaOpened;
         _media.MediaFailed += OnMediaFailed;
         _media.MediaEnded += OnMediaEnded;

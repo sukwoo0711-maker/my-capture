@@ -7,25 +7,26 @@ using System.Windows.Media.Effects;
 
 namespace MyCapture.App.Recording;
 
-/// <summary>
-/// Expands studio-range video to full range where WPF presents it.
-/// </summary>
+/// <summary>Corrects video range at WPF presentation; this shader expands retained studio RGB.</summary>
 /// <remarks>
 /// <para>
-/// MediaElement's studio-range Y'CbCr to RGB presentation depends on the video processor and
-/// driver. Some presenters retain RGB 16-235; others already expand it to RGB 0-255. Expanding
-/// the latter again clips dark/light colours. At the first studio-range preview a lazy calibration
-/// encodes a known pattern with the recording encoder and samples an off-screen MediaElement,
-/// without this effect. The result is shared for the process and updates existing previews.
-/// Unknown, failed or timed-out calibration retains the previous correction policy. Neither OS
-/// build nor GPU vendor predicts the decision. Full-range files and exported files are untouched.
+/// MediaElement's Y'CbCr to RGB presentation depends on the video processor and driver.
+/// Some presenters retain studio RGB 16-235, others expand it correctly, and some also expand
+/// full-range clips as if they were studio range. At the first preview with known source range,
+/// a lazy calibration encodes both ranges with the recording encoder and samples them sequentially
+/// in one off-screen window on its own STA thread, without an effect. One eight-second budget
+/// covers encoding and presentation. The process-wide result updates open previews for either range.
+/// Correct output needs no effect; retained studio RGB needs expansion; expanded-as-studio RGB
+/// needs <see cref="FullRangeVideoEffect"/> compression. The latter cannot recover clipped source
+/// values below 16 or above 235: those display as 16/235. Unknown, failed or timed-out calibration
+/// retains studio Expand / full None. Neither OS build nor GPU vendor predicts the decision.
+/// Software rendering uses no effect. Exported files are untouched.
 /// </para>
 /// <para>
-/// The shader runs on the GPU as part of composition (WPF emulates <c>ps_2_0</c> when it renders
-/// in software), so playback keeps MediaElement's hardware decode, its frame pacing and its seek
-/// path. <see cref="Source"/> is the HLSL the bytecode below was compiled from with
-/// <c>D3DCompile(..., "main", "ps_2_0", D3DCOMPILE_OPTIMIZATION_LEVEL3)</c>; a test recompiles it
-/// and compares the instructions.
+/// The shader runs on the GPU as part of composition, preserving MediaElement's hardware decode,
+/// frame pacing and seek path. <see cref="Source"/> is the HLSL the bytecode below was compiled from
+/// with <c>D3DCompile(..., "main", "ps_2_0", D3DCOMPILE_OPTIMIZATION_LEVEL3)</c>;
+/// a test recompiles it and compares the instructions.
 /// </para>
 /// </remarks>
 internal sealed class StudioRangeVideoEffect : ShaderEffect
@@ -87,9 +88,8 @@ internal sealed class StudioRangeVideoEffect : ShaderEffect
     }
 
     /// <summary>
-    /// Shows <paramref name="media"/> at full range when its clip is studio range, and as decoded
-    /// otherwise. Players call this before the first frame with the recording default (studio)
-    /// and again once the clip's declaration is known.
+    /// Applies the correction for a clip whose range is known. Both ranges start the same lazy
+    /// calibration; callers leave empty players alone until the source metadata is available.
     /// </summary>
     internal static void Apply(MediaElement media, bool studioRange)
     {
@@ -98,12 +98,21 @@ internal sealed class StudioRangeVideoEffect : ShaderEffect
         PreviewState state = Previews.GetOrCreateValue(media);
         state.StudioRange = studioRange;
         StudioRangePresentationCalibration calibration = Calibration;
-        ApplyDecision(media, studioRange, calibration.NeedsExpansion);
-        if (studioRange && !ReferenceEquals(state.Calibration, calibration))
+        ApplyDecision(media, calibration.CorrectionFor(studioRange));
+        if (!ReferenceEquals(state.Calibration, calibration))
         {
             state.Calibration = calibration;
             _ = RefreshWhenReadyAsync(new WeakReference<MediaElement>(media), calibration);
         }
+    }
+
+    // A reused player may open another clip before its metadata arrives. Detach the old range
+    // so a pending calibration cannot reapply that clip's correction in the meantime.
+    internal static void Clear(MediaElement media)
+    {
+        media.VerifyAccess();
+        Previews.Remove(media);
+        ApplyDecision(media, VideoRangeCorrection.None);
     }
 
     private static readonly ConditionalWeakTable<MediaElement, PreviewState> Previews = new();
@@ -114,7 +123,7 @@ internal sealed class StudioRangeVideoEffect : ShaderEffect
     private static async Task RefreshWhenReadyAsync(
         WeakReference<MediaElement> target, StudioRangePresentationCalibration calibration)
     {
-        bool needsExpansion = await calibration.GetResultAsync().ConfigureAwait(false);
+        VideoRangeCalibrationResult result = await calibration.GetResultAsync().ConfigureAwait(false);
         if (!target.TryGetTarget(out MediaElement? media) || media.Dispatcher.HasShutdownStarted) return;
         try
         {
@@ -122,26 +131,31 @@ internal sealed class StudioRangeVideoEffect : ShaderEffect
             {
                 if (Previews.TryGetValue(media, out PreviewState? state)
                     && ReferenceEquals(state.Calibration, calibration))
-                    ApplyDecision(media, state.StudioRange, needsExpansion);
+                    ApplyDecision(media, result.CorrectionFor(state.StudioRange));
             });
         }
         catch (TaskCanceledException) { } // The preview's dispatcher ended during calibration.
         catch (InvalidOperationException) when (media.Dispatcher.HasShutdownStarted) { }
     }
 
-    private static void ApplyDecision(MediaElement media, bool studioRange, bool needsExpansion)
+    private static void ApplyDecision(MediaElement media, VideoRangeCorrection correction)
     {
         // Software shader emulation slows every frame and seek. Keep the hardware-only policy.
-        if (studioRange && needsExpansion && HardwareShaderAvailable())
+        if (!HardwareShaderAvailable()) correction = VideoRangeCorrection.None;
+        switch (correction)
         {
-            if (media.Effect is not StudioRangeVideoEffect)
-            {
-                media.Effect = new StudioRangeVideoEffect();
-            }
-        }
-        else if (media.Effect is StudioRangeVideoEffect)
-        {
-            media.ClearValue(UIElement.EffectProperty);
+            case VideoRangeCorrection.Expand:
+                if (media.Effect is not StudioRangeVideoEffect)
+                    media.Effect = new StudioRangeVideoEffect();
+                break;
+            case VideoRangeCorrection.Compress:
+                if (media.Effect is not FullRangeVideoEffect)
+                    media.Effect = new FullRangeVideoEffect();
+                break;
+            default:
+                if (media.Effect is StudioRangeVideoEffect or FullRangeVideoEffect)
+                    media.ClearValue(UIElement.EffectProperty);
+                break;
         }
     }
 

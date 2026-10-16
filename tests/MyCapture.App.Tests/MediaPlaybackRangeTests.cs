@@ -12,8 +12,8 @@ using Xunit;
 namespace MyCapture.App.Tests;
 
 /// <summary>
-/// Recordings are studio-range H.264. Depending on the presenter, WPF may retain studio RGB
-/// or expand it already. In-app players calibrate that decision and show the source colours.
+/// WPF may retain studio RGB or expand either input range. In-app players calibrate both
+/// ranges and show the source colours within the limits of presenter clipping.
 /// </summary>
 public sealed class MediaPlaybackRangeTests
 {
@@ -24,7 +24,7 @@ public sealed class MediaPlaybackRangeTests
     {
         Func<bool> previous = StudioRangeVideoEffect.HardwareShaderAvailable;
         StudioRangePresentationCalibration previousCalibration = StudioRangeVideoEffect.Calibration;
-        StudioRangeVideoEffect.Calibration = new(_ => Task.FromResult(true));
+        StudioRangeVideoEffect.Calibration = new(_ => Task.FromResult(default(VideoRangeCalibrationResult)));
         StudioRangeVideoEffect.HardwareShaderAvailable = () => hardware;
         try
         {
@@ -50,6 +50,41 @@ public sealed class MediaPlaybackRangeTests
             ShaderCompiler.Disassemble(StudioRangeVideoEffect.BytecodeForTest.ToArray()));
     }
 
+    [Fact]
+    public void FullRangeShaderBytecodeIsItsCheckedInSource()
+    {
+        byte[] compiled = ShaderCompiler.Compile(FullRangeVideoEffect.Source, "main", "ps_2_0");
+        Assert.Equal(
+            ShaderCompiler.Disassemble(compiled),
+            ShaderCompiler.Disassemble(FullRangeVideoEffect.BytecodeForTest.ToArray()));
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(128)]
+    [InlineData(255)]
+    public void FullRangeCompressionPreservesPremultipliedAlpha(byte alpha) => StaTestHost.Run(() =>
+    {
+        byte[] pixels = [0, (byte)(56 * alpha / 255), (byte)(205 * alpha / 255), alpha];
+        var bitmap = BitmapSource.Create(1, 1, 96, 96, PixelFormats.Pbgra32, null, pixels, 4);
+        var image = new System.Windows.Controls.Image
+        {
+            Width = 16, Height = 16, Source = bitmap, Effect = new FullRangeVideoEffect(),
+        };
+        image.Measure(new Size(16, 16));
+        image.Arrange(new Rect(0, 0, 16, 16));
+        var shown = new RenderTargetBitmap(16, 16, 96, 96, PixelFormats.Pbgra32);
+        shown.Render(image);
+        byte[] actual = new byte[4];
+        shown.CopyPixels(new Int32Rect(8, 8, 1, 1), actual, 4, 0);
+        Assert.Equal(alpha, actual[3]);
+        for (int channel = 0; channel < 3; channel++)
+        {
+            double expected = pixels[channel] * (219.0 / 255.0) + alpha * (16.0 / 255.0);
+            Assert.InRange(Math.Abs(actual[channel] - expected), 0, 2);
+        }
+    });
+
     [Theory]
     [InlineData(640, 360, false)]
     [InlineData(1280, 720, false)]
@@ -58,11 +93,17 @@ public sealed class MediaPlaybackRangeTests
     public void SourceInfoTellsStudioFromFullRangeAndKeepsTheContainerDuration(int width, int height, bool fullRange)
     {
         string dir = OwnedTestDirectory.Create("mc-range-info-");
-        // Retain the temporary fixture for device diagnostics; no permanent cleanup.
-        string clip = RangePatternClip.Encode(Path.Combine(dir, "clip.mp4"), width, height, fullRange);
-        VideoSourceInfo info = MediaFoundationVideoFrameReader.ReadSourceInfo(clip);
-        Assert.Equal(!fullRange, info.StudioRange);
-        Assert.Equal(MediaFoundationVideoFrameReader.ReadContainerDurationMs(clip), info.DurationMs);
+        try
+        {
+            string clip = RangePatternClip.Encode(Path.Combine(dir, "clip.mp4"), width, height, fullRange);
+            VideoSourceInfo info = MediaFoundationVideoFrameReader.ReadSourceInfo(clip);
+            Assert.Equal(!fullRange, info.StudioRange);
+            Assert.Equal(MediaFoundationVideoFrameReader.ReadContainerDurationMs(clip), info.DurationMs);
+        }
+        finally
+        {
+            OwnedTestDirectory.Delete(dir);
+        }
     }
 
     [Theory]
@@ -88,26 +129,22 @@ public sealed class MediaPlaybackRangeTests
             while (!editor.IsMediaReadyForTest && !editor.HasMediaFailedForTest && DateTime.UtcNow < deadline)
                 RangePatternClip.Pump(TimeSpan.FromMilliseconds(20));
             Assert.True(editor.IsMediaReadyForTest, editor.MediaFailureForTest);
-            if (!fullRange) RangePatternClip.WaitForCalibration();
+            RangePatternClip.WaitForCalibration();
+            VideoRangeCorrection correction = RangePatternClip.AssertCalibratedEffect(editor.MediaForTest, !fullRange);
             bool hardware = StudioRangeVideoEffect.HardwareShaderAvailable();
-            bool needsExpansion = StudioRangeVideoEffect.Calibration.NeedsExpansion;
-            Assert.Equal(!fullRange && hardware && needsExpansion, editor.MediaForTest.Effect is StudioRangeVideoEffect);
-            // Without hardware shaders (hosted CI, Remote Desktop) studio range stays uncorrected by
-            // design, so only the effect decision is checked there.
-            if (!fullRange && !hardware && needsExpansion) return;
+            // Software rendering keeps the existing no-effect policy.
+            if (!hardware && StudioRangeVideoEffect.Calibration.CorrectionFor(!fullRange) != VideoRangeCorrection.None) return;
             RangePatternClip.Pump(TimeSpan.FromMilliseconds(500));
 
             BitmapSource frame = editor.RenderCurrentFrameForTest() ?? throw new Xunit.Sdk.XunitException("no preview frame");
-            // A full-range clip is shown without the effect, so its accuracy is the platform
-            // decoder's: the software H.264 decoder on hosts without hardware decoding (GitHub-hosted
-            // runners) lifts full-range zero by up to 10 steps (cyan read (10,254,254)). Studio-range
-            // recordings keep the strict 8: unexpanded studio range is 16 or more steps off.
-            RangePatternClip.AssertMatchesSource(frame, width, height, tolerance: fullRange ? 12 : 8);
+            // Keep the existing tolerances: full-range decoding may differ by up to 12 steps
+            // on software decoders. Compression only accounts for irrecoverably clipped endpoints.
+            RangePatternClip.AssertMatchesSource(frame, width, height, tolerance: fullRange ? 12 : 8, correction: correction);
         }
         finally
         {
             editor?.Close();
-            // Retain the temporary fixture for device diagnostics; no permanent cleanup.
+            OwnedTestDirectory.Delete(dir);
         }
     });
 }
@@ -117,12 +154,39 @@ internal static class RangePatternClip
 {
     internal static void WaitForCalibration()
     {
-        Task<bool> result = StudioRangeVideoEffect.Calibration.GetResultAsync();
-        DateTime deadline = DateTime.UtcNow.AddSeconds(7);
+        Assert.True(StudioRangeVideoEffect.Calibration.IsStarted, "Opening a clip with known range must start calibration.");
+        Task<VideoRangeCalibrationResult> result = StudioRangeVideoEffect.Calibration.GetResultAsync();
+        DateTime deadline = DateTime.UtcNow.AddSeconds(10);
         while (!result.IsCompleted && DateTime.UtcNow < deadline) Pump(TimeSpan.FromMilliseconds(20));
         Assert.True(result.IsCompletedSuccessfully, "MediaElement range calibration did not finish within its bound.");
         // Let the completion update the player on its dispatcher before inspecting the effect.
         Pump(TimeSpan.FromMilliseconds(80));
+    }
+
+    internal static VideoRangeCorrection AssertCalibratedEffect(System.Windows.Controls.MediaElement media, bool studioRange)
+    {
+        StudioRangePresentationCalibration calibration = StudioRangeVideoEffect.Calibration;
+        bool hardware = StudioRangeVideoEffect.HardwareShaderAvailable();
+        if (hardware)
+        {
+            Assert.Null(calibration.Failure);
+            VideoRangeCalibrationResult result = calibration.GetResultAsync().GetAwaiter().GetResult();
+            Assert.NotNull(result.Studio);
+            Assert.NotNull(result.Full);
+        }
+        VideoRangeCorrection correction = hardware ? calibration.CorrectionFor(studioRange) : VideoRangeCorrection.None;
+        AssertEffect(media, correction);
+        return correction;
+    }
+
+    internal static void AssertEffect(System.Windows.Controls.MediaElement media, VideoRangeCorrection correction)
+    {
+        switch (correction)
+        {
+            case VideoRangeCorrection.Expand: Assert.IsType<StudioRangeVideoEffect>(media.Effect); break;
+            case VideoRangeCorrection.Compress: Assert.IsType<FullRangeVideoEffect>(media.Effect); break;
+            default: Assert.Null(media.Effect); break;
+        }
     }
 
     internal static readonly (string Name, byte R, byte G, byte B)[] Patches =
@@ -179,9 +243,10 @@ internal static class RangePatternClip
     /// <summary>
     /// Every patch shows within a few steps of its source colour. Studio range shows within 3 steps;
     /// WPF's own full-range conversion leaves saturated blue up to 7 steps short. Unexpanded studio
-    /// range is 16 or more steps off at black, white and every saturated primary.
+    /// range is 16 or more steps off at black, white and every saturated primary. If a presenter
+    /// expanded and clipped the source, only its recoverable 16-235 channels can be compared.
     /// </summary>
-    internal static void AssertMatchesSource(BitmapSource shown, int width, int height, int tolerance = 8)
+    internal static void AssertMatchesSource(BitmapSource shown, int width, int height, int tolerance = 8, VideoRangeCorrection correction = VideoRangeCorrection.None)
     {
         var failures = new List<string>();
         for (int i = 0; i < Patches.Length; i++)
@@ -189,14 +254,23 @@ internal static class RangePatternClip
             (int x, int y) = Centre(i, width, height);
             (byte r, byte g, byte b) = Sample(shown, x, y);
             (string name, byte er, byte eg, byte eb) = Patches[i];
+            (byte sourceR, byte sourceG, byte sourceB) = (er, eg, eb);
+            // Erroneous studio expansion clips source channels outside 16-235 before the effect.
+            // Compare against the recoverable source for that measured path, with unchanged tolerance.
+            if (correction == VideoRangeCorrection.Compress)
+            {
+                er = Math.Clamp(er, (byte)16, (byte)235);
+                eg = Math.Clamp(eg, (byte)16, (byte)235);
+                eb = Math.Clamp(eb, (byte)16, (byte)235);
+            }
             if (Math.Abs(r - er) > tolerance || Math.Abs(g - eg) > tolerance || Math.Abs(b - eb) > tolerance)
             {
-                failures.Add($"{name} shows ({r},{g},{b}), source ({er},{eg},{eb})");
+                failures.Add($"{name} shows ({r},{g},{b}), source ({sourceR},{sourceG},{sourceB}), recoverable ({er},{eg},{eb})");
             }
         }
 
         Assert.True(failures.Count == 0, string.Join("; ", failures)
-            + $"; needsExpansion={StudioRangeVideoEffect.Calibration.NeedsExpansion}, calibrationFailure={StudioRangeVideoEffect.Calibration.Failure}");
+            + $"; studio={StudioRangeVideoEffect.Calibration.CorrectionFor(true)}, full={StudioRangeVideoEffect.Calibration.CorrectionFor(false)}, calibrationFailure={StudioRangeVideoEffect.Calibration.Failure}");
     }
 
     internal static void Pump(TimeSpan duration)
