@@ -40,6 +40,11 @@ public sealed class MeasuredRangeCurveTests(ITestOutputHelper output)
         Assert.True(result.Mapping is not null, result.Details);
         Assert.InRange(result.MappingDiagnostics!.Residual!.Value, 0, 2.5);
         Assert.InRange(result.MappingDiagnostics.HeldOutResidual!.Value, 0, 2.5);
+        // Baseline at 4769935: evidence must not alter the gate's scores or decision.
+        Assert.Equal("verified", result.Status);
+        Assert.Equal(full ? 2.225 : 0.366, result.MappingDiagnostics.Residual.Value, 3);
+        Assert.Equal(full ? 2.254 : 0.392, result.MappingDiagnostics.HeldOutResidual.Value, 3);
+        Assert.Equal(full ? 1 : 2, result.MappingDiagnostics.SplitDisagreement);
         Assert.All(result.MappingDiagnostics.Coverage, c => Assert.True(c.Sufficient));
         byte[][] curves = result.Mapping.Channels();
         foreach (byte level in Levels)
@@ -116,9 +121,8 @@ public sealed class MeasuredRangeCurveTests(ITestOutputHelper output)
         byte[][] curves = Enumerable.Range(0, 3).Select(c => Enumerable.Range(0, 256)
             .Select(i => (byte)Math.Clamp(Math.Round(Math.Pow(i / 255.0, 0.7 + c * 0.5) * 255), 0, 255)).ToArray()).ToArray();
         var mapping = new MeasuredRangeCurve(Convert.ToBase64String(curves[0]), Convert.ToBase64String(curves[1]), Convert.ToBase64String(curves[2]));
-        // One physical pixel per LUT entry isolates addressing/alpha from WPF's separate
-        // ImageBrush resampling when the effect surface is smaller than the 256-entry table.
-        // The gallery/editor tests cover the actual scaled player surfaces and final pixels.
+        // Alpha/addressing regression; MeasuredRangeSmallDisplayTests additionally checks
+        // every entry and all colour patches across small/non-integral presentation sizes.
         byte[] source = Enumerable.Range(0, 256).Select(i => (byte)i).ToArray();
         byte[] pixels = new byte[source.Length * 4];
         for (int i = 0; i < source.Length; i++)

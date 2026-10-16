@@ -92,7 +92,7 @@ public sealed partial class SettingsThemePreviewTests
             }
             var measured = player is null ? null : StudioRangeVideoEffect.VerificationFor(player.MediaForDiagnostic)?.LastResult;
             throw new Xunit.Sdk.XunitException($"{ex}\nPlayer verification: {measured?.Details}; "
-                + $"hardware={StudioRangeVideoEffect.HardwareShaderAvailable()}; effect={effect}; patches: {patches}");
+                + $"hardware={StudioRangeVideoEffect.HardwareShaderAvailable()}; effect={effect}; patches: {patches}\n{measured?.Evidence}");
         }
         finally
         {

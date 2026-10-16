@@ -84,10 +84,17 @@ internal sealed class MeasuredRangeVideoEffect : ShaderEffect
         {
             var bitmap = BitmapSource.Create(256, 1, 96, 96, PixelFormats.Bgra32, null, mapping.Texture(), 256 * 4);
             bitmap.Freeze();
-            var brush = new ImageBrush(bitmap) { Stretch = Stretch.Fill, TileMode = TileMode.None };
-            RenderOptions.SetBitmapScalingMode(brush, BitmapScalingMode.NearestNeighbor);
-            brush.Freeze();
-            Lookup = brush;
+            // ImageBrush/VisualBrush shader inputs are rasterised at the effect's size,
+            // losing LUT entries below 256px (and shifting texels at non-integral scales).
+            // BitmapCacheBrush supplies its own cache texture to the sampler instead:
+            // WPF ShaderEffect.cpp PrepareCacheBrushSamplerSw/Hw, rather than
+            // PrepareTileBrushSamplerSw/Hw -> DrawIntoIntermediate.
+            // Keep this detached visual at exactly 256x1 and its cache at scale 1.
+            var visual = new DrawingVisual();
+            RenderOptions.SetBitmapScalingMode(visual, BitmapScalingMode.NearestNeighbor);
+            using (DrawingContext drawing = visual.RenderOpen())
+                drawing.DrawImage(bitmap, new Rect(0, 0, 256, 1));
+            Lookup = new BitmapCacheBrush(visual) { BitmapCache = new BitmapCache(1) };
         }
         UpdateShaderValue(InputProperty);
         UpdateShaderValue(LookupProperty);

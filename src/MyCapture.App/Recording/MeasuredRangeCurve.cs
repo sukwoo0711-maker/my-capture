@@ -30,29 +30,44 @@ internal sealed record RangeMappingCoverage(int Levels, int Minimum, int Maximum
 internal sealed record RangeMappingDiagnostics(string Status, RangeMappingCoverage[] Coverage,
     double? Residual = null, double? HeldOutResidual = null, double? SplitDisagreement = null)
 {
+    public RangeChannelEvidence[] Channels { get; init; } = [];
+    public RangeSplitLocation? MaximumSplit { get; init; }
+    public double? SupportedSplit { get; init; }
+    public double? GapSplit { get; init; }
+    public double? AlignedSplit { get; init; }
     public string Summary => $"{Status}, residual={Residual:F3}, held-out={HeldOutResidual:F3}, split={SplitDisagreement:F3}, "
-        + "coverage=" + string.Join("/", Coverage.Select(c => $"{c.Levels}@{c.Minimum}-{c.Maximum}:{c.Bands}bands:gap{c.LargestGap}"));
+        + "coverage=" + string.Join("/", Coverage.Select(c => $"{c.Levels}@{c.Minimum}-{c.Maximum}:{c.Bands}bands:gap{c.LargestGap}"))
+        + $", peak={MaximumSplit?.Channel}@{MaximumSplit?.Level}:{MaximumSplit?.Classification}, "
+        + $"supported/gap/aligned={SupportedSplit:F3}/{GapSplit:F3}/{AlignedSplit:F3}, worst="
+        + string.Join("/", Channels.Select(c => $"{c.Channel}:{c.WorstBand?.Band}@{c.WorstBand?.Error:F3}"))
+        + $", merged={Channels.Sum(c => c.MultiClusterBins.Length)}";
+
+    internal string Evidence => RangeMappingEvidence.Format(this);
 }
 
 /// <summary>Robust inverse of the observed presenter, fitted only to flat decoded/presented pairs.</summary>
-internal static class MeasuredRangeCurveFitter
+internal static partial class MeasuredRangeCurveFitter
 {
-    private sealed record Anchor(double X, double Y);
-    private sealed record FitChannel(byte[] Curve, RangeMappingCoverage Coverage);
+    private sealed record Anchor(double X, double Y, int Bin, int Count);
+    private sealed record FitChannel(byte[] Curve, RangeMappingCoverage Coverage, RangeAnchorEvidence[] Anchors);
     internal static (MeasuredRangeCurve? Curve, RangeMappingDiagnostics Diagnostics) Fit(List<RangeValuePair>[] channels)
     {
         if (channels.Length != 3) throw new ArgumentException("B/G/R pairs are required.");
         var full = channels.Select(FitChannelCurve).ToArray();
         var coverage = full.Select(f => f.Coverage).ToArray();
         if (coverage.Any(c => !c.Sufficient)) return (null, new("mapping-low-coverage", coverage));
+        var firstHalves = channels.Select(p => p.Where(v => v.Split == 0).ToList()).ToArray();
+        var secondHalves = channels.Select(p => p.Where(v => v.Split != 0).ToList()).ToArray();
+        var firstFits = firstHalves.Select(FitChannelCurve).ToArray();
+        var secondFits = secondHalves.Select(FitChannelCurve).ToArray();
+        var evidence = BuildEvidence(channels, full, firstHalves, secondHalves, firstFits, secondFits);
         double residual = 0, heldOut = 0, disagreement = 0;
         for (int c = 0; c < 3; c++)
         {
-            var first = channels[c].Where(p => p.Split == 0).ToList();
-            var second = channels[c].Where(p => p.Split != 0).ToList();
-            var a = FitChannelCurve(first); var b = FitChannelCurve(second);
+            var first = firstHalves[c]; var second = secondHalves[c];
+            var a = firstFits[c]; var b = secondFits[c];
             if (!a.Coverage.Sufficient || !b.Coverage.Sufficient)
-                return (null, new("mapping-split-low-coverage", coverage));
+                return (null, evidence with { Status = "mapping-split-low-coverage" });
             residual = Math.Max(residual, Residual(channels[c], full[c].Curve));
             heldOut = Math.Max(heldOut, Math.Max(Residual(second, a.Curve), Residual(first, b.Curve)));
             int low = Math.Max(a.Coverage.Minimum, b.Coverage.Minimum);
@@ -63,7 +78,8 @@ internal static class MeasuredRangeCurveFitter
         string status = residual > PresentedFrameRangeModel.MaximumError ? "mapping-residual"
             : heldOut > PresentedFrameRangeModel.MaximumError ? "mapping-held-out"
             : disagreement > 4 ? "mapping-split-disagreement" : "verified";
-        var diagnostics = new RangeMappingDiagnostics(status, coverage, residual, heldOut, disagreement);
+        var diagnostics = evidence with { Status = status, Residual = residual,
+            HeldOutResidual = heldOut, SplitDisagreement = disagreement };
         return (status == "verified" ? new(Convert.ToBase64String(full[0].Curve),
             Convert.ToBase64String(full[1].Curve), Convert.ToBase64String(full[2].Curve)) : null, diagnostics);
     }
@@ -74,15 +90,32 @@ internal static class MeasuredRangeCurveFitter
         // look like coverage. Both independent halves must support the entire usable range.
         int support = Math.Max(4, (int)Math.Ceiling(pairs.Count * 0.01));
         var anchors = pairs.GroupBy(p => p.Shown / 4).Where(g => g.Count() >= support)
-            .Select(g => new Anchor(Median(g.Select(p => (double)p.Shown)), ReferenceMedian(g.ToArray())))
+            .Select(g => new Anchor(Median(g.Select(p => (double)p.Shown)), ReferenceMedian(g.ToArray()), g.Key, g.Count()))
             .OrderBy(p => p.X).ToArray();
         int minimum = anchors.Length == 0 ? 0 : (int)anchors[0].X;
         int maximum = anchors.Length == 0 ? 0 : (int)anchors[^1].X;
         int gap = anchors.Length < 2 ? 255 : (int)Math.Ceiling(anchors.Zip(anchors.Skip(1), (a, b) => b.X - a.X).Max());
         var coverage = new RangeMappingCoverage(anchors.Length, minimum, maximum,
             anchors.Select(a => (int)a.X / 32).Distinct().Count(), gap);
-        if (!coverage.Sufficient) return new(new byte[256], coverage);
+        if (!coverage.Sufficient) return new(new byte[256], coverage,
+            anchors.Select(a => new RangeAnchorEvidence(a.Bin, a.X, a.Y, null, a.Count)).ToArray());
 
+        double[] fitted = FitMonotone(anchors);
+        byte[] curve = new byte[256];
+        for (int value = 0, segment = 0; value < 256; value++)
+        {
+            while (segment < anchors.Length - 2 && value > anchors[segment + 1].X) segment++;
+            // The first/last supported secant extends to the endpoints; never invent (0,0)
+            // or (255,255) anchors. Saturation clamps the extrapolation, preserving monotonicity.
+            double slope = (fitted[segment + 1] - fitted[segment]) / (anchors[segment + 1].X - anchors[segment].X);
+            curve[value] = (byte)Math.Clamp(Math.Round(fitted[segment] + (value - anchors[segment].X) * slope), 0, 255);
+        }
+        return new(curve, coverage, anchors.Select((a, i) =>
+            new RangeAnchorEvidence(a.Bin, a.X, a.Y, fitted[i], a.Count)).ToArray());
+    }
+
+    private static double[] FitMonotone(Anchor[] anchors)
+    {
         // Pool adjacent violators, equal weight per supported bin (not per pixel area).
         var blocks = new List<(int Start, int End, double Sum, int Count)>();
         for (int i = 0; i < anchors.Length; i++)
@@ -98,16 +131,7 @@ internal static class MeasuredRangeCurveFitter
         double[] fitted = new double[anchors.Length];
         foreach (var block in blocks)
             for (int i = block.Start; i <= block.End; i++) fitted[i] = block.Sum / block.Count;
-        byte[] curve = new byte[256];
-        for (int value = 0, segment = 0; value < 256; value++)
-        {
-            while (segment < anchors.Length - 2 && value > anchors[segment + 1].X) segment++;
-            // The first/last supported secant extends to the endpoints; never invent (0,0)
-            // or (255,255) anchors. Saturation clamps the extrapolation, preserving monotonicity.
-            double slope = (fitted[segment + 1] - fitted[segment]) / (anchors[segment + 1].X - anchors[segment].X);
-            curve[value] = (byte)Math.Clamp(Math.Round(fitted[segment] + (value - anchors[segment].X) * slope), 0, 255);
-        }
-        return new(curve, coverage);
+        return fitted;
     }
 
     private static double ReferenceMedian(RangeValuePair[] bin)

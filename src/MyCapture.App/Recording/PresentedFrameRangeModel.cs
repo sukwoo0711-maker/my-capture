@@ -7,6 +7,7 @@ internal sealed record RangeVerificationResult(VideoRangePresentation? Model, Ra
 {
     public MeasuredRangeCurve? Mapping { get; init; }
     public RangeMappingDiagnostics? MappingDiagnostics { get; init; }
+    public string Evidence => MappingDiagnostics?.Evidence ?? "mapping not fitted";
     public bool IsFallback { get; init; }
     public string Kind => IsFallback ? "fallback" : Model.HasValue ? "model" : Mapping is not null ? "measured" : "pending";
     public VideoRangeCorrection? Correction => IsFallback ? VideoRangeCorrection.None

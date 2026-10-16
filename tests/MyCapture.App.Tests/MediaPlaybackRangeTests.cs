@@ -169,6 +169,11 @@ public sealed class MediaPlaybackRangeTests
             RangePatternClip.AssertMatchesSource(frame, width, height, tolerance: fullRange ? 12 : 8, correction: correction,
                 verification: StudioRangeVideoEffect.VerificationFor(editor.MediaForTest)?.LastResult);
         }
+        catch (Exception ex)
+        {
+            var measured = editor is null ? null : StudioRangeVideoEffect.VerificationFor(editor.MediaForTest)?.LastResult;
+            throw new Xunit.Sdk.XunitException($"{ex}\nPlayer verification: {measured?.Details}\n{measured?.Evidence}");
+        }
         finally
         {
             editor?.Close();
@@ -199,7 +204,7 @@ internal static class RangePatternClip
         Assert.True(PumpUntil(() => StudioRangeVideoEffect.VerificationFor(media)?.Completion.IsCompleted == true,
             TimeSpan.FromSeconds(20)), "Player verification did not complete after presenting a frame.");
         var result = StudioRangeVideoEffect.VerificationFor(media)!.Completion.GetAwaiter().GetResult();
-        string details = result.Details;
+        string details = result.Details + Environment.NewLine + result.Evidence;
         if (result.Correction is null || result.IsFallback)
         {
             var sample = MediaElementRangeVerification.Sample(media);
@@ -225,7 +230,8 @@ internal static class RangePatternClip
         if (hardware)
         {
             Assert.NotNull(result);
-            Assert.True(result.Status == "verified" && !result.IsFallback && result.Correction.HasValue, result.Details);
+            Assert.True(result.Status == "verified" && !result.IsFallback && result.Correction.HasValue,
+                result.Details + Environment.NewLine + result.Evidence);
         }
         VideoRangeCorrection correction = hardware ? result!.Correction!.Value : VideoRangeCorrection.None;
         AssertEffect(media, correction);
@@ -291,7 +297,7 @@ internal static class RangePatternClip
         }
 
         Assert.True(failures.Count == 0, string.Join("; ", failures)
-            + $"; correction={correction}; {verification?.Details}");
+            + $"; correction={correction}; {verification?.Details}\n{verification?.Evidence}");
     }
 
     /// <summary>Pumps the dispatcher until <paramref name="condition"/> holds; false when <paramref name="timeout"/> passes first.</summary>
