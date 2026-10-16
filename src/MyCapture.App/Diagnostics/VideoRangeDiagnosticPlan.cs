@@ -1,24 +1,30 @@
 using System.Diagnostics;
 using System.IO;
+using MyCapture.App.Gallery;
 using MyCapture.App.Recording;
 using MyCapture.Core.Storage;
 
 namespace MyCapture.App.Diagnostics;
 
 internal sealed record VideoRangeCell(string Id, string Host, int Width, int Height, bool[] FullRangeSteps,
-    string Kind = "matrix", string CalibrationMode = "in-process", string Pattern = "grey-bars");
+    string Kind = "matrix", string CalibrationMode = "in-process", string Pattern = "grey-bars", string? PathVariant = null);
 internal sealed record VideoRangeArguments(string OutputDirectory, VideoRangeCell? Cell);
 internal sealed record VideoRangePatch(byte R, byte G, byte B, byte A);
 internal sealed record VideoRangeObservation(VideoRangePatch[] Patches, string Classification);
+internal sealed record VideoRangeTimePoint(string Phase, double TargetMs, double ElapsedSinceReadyMs,
+    double PositionMs, bool Playing, VideoRangeObservation Observation);
+internal sealed record VideoRangePathOptions(string Variant, GalleryPlayerDiagnosticOptions? Gallery,
+    double? TargetScale = null);
 internal sealed record VideoRangeSample(int Step, string InputRange, string Classification,
     VideoRangeObservation[] Observations, double WindowWidthDip, double WindowHeightDip,
     double ContentWidthDip, double ContentHeightDip, double PresentedWidthPixels, double PresentedHeightPixels,
     double ScaleX, double ScaleY, double DpiX, double DpiY, int RenderTier, bool PixelShader20,
-    bool CalibrationStartedBeforeSample, string Phase = "before-calibration", double ElapsedMs = 0, RangeVerificationResult? Verification = null);
+    bool CalibrationStartedBeforeSample, string Phase = "before-calibration", double ElapsedMs = 0, RangeVerificationResult? Verification = null,
+    VideoRangeTimePoint[]? TimeSeries = null);
 internal sealed record VideoRangeTiming(double? OpeningMs, double? CalibrationStartMs, double? CalibrationEndMs);
 internal sealed record VideoRangeCellResult(VideoRangeCell Cell, int ProcessId, VideoRangeSample[] Samples,
     VideoRangeCalibrationResult Calibration, string? CalibrationFailure, string[] Adapters,
-    string? AdapterQueryFailure, string? Failure, VideoRangeTiming? Timing = null);
+    string? AdapterQueryFailure, string? Failure, VideoRangeTiming? Timing = null, VideoRangePathOptions? PathOptions = null);
 
 /// <summary>Pure matrix, command-line and observation-summary contracts for the device diagnostic.</summary>
 internal static class VideoRangeDiagnosticPlan
@@ -28,7 +34,11 @@ internal static class VideoRangeDiagnosticPlan
     internal const string ReportName = "video-range-report.txt";
     internal const string JsonName = "video-range.json";
     internal static readonly TimeSpan CellTimeout = TimeSpan.FromSeconds(20);
-    internal static readonly TimeSpan RunTimeout = TimeSpan.FromMinutes(5);
+    // Preserve the original 300s budget and add 24 path cells * 20s = 480s (780s total).
+    // Path cells overlap the 5s series with product verification, omit H5 calibration,
+    // and fit the existing 20s process / 19s collection limits, including the 500ms cycle.
+    internal static readonly TimeSpan RunTimeout = TimeSpan.FromSeconds(300 + 24 * 20);
+    internal static IReadOnlyList<double> PathSampleTimesMs { get; } = Array.AsReadOnly<double>([300, 1000, 2500, 5000]);
 
     internal static IReadOnlyList<VideoRangeCell> Cells { get; } = BuildCells();
 
@@ -52,6 +62,19 @@ internal static class VideoRangeDiagnosticPlan
             cells.Add(new($"concurrent-{mode}-studio-{width}x{height}-{host}", host, width, height,
                 [false], "concurrent", mode));
         cells.Add(new("colour-studio-1280x720-gallery", "gallery", 1280, 720, [false], "content", Pattern: "colour-patches"));
+        // Append only: child directories and the original H1-H7 ids/order remain stable.
+        foreach (bool full in new[] { false, true })
+        {
+            foreach (string variant in new[] { "gallery-product", "gallery-pause-immediately", "gallery-playing",
+                "gallery-large", "gallery-no-exclusion", "gallery-no-clip", "gallery-plain-window",
+                "editor-product", "editor-small", "gallery-all-editor-like" })
+                cells.Add(new($"path-{(full ? "full" : "studio")}-colour-patches-{variant}",
+                    variant.StartsWith("editor-", StringComparison.Ordinal) ? "editor" : "gallery",
+                    1280, 720, [full], "path", "none", "colour-patches", variant));
+            foreach (string variant in new[] { "gallery-product", "editor-small" })
+                cells.Add(new($"path-{(full ? "full" : "studio")}-grey-bars-{variant}",
+                    variant == "editor-small" ? "editor" : "gallery", 1280, 720, [full], "path", "none", "grey-bars", variant));
+        }
         return cells.AsReadOnly();
     }
 
@@ -201,6 +224,7 @@ internal static class VideoRangeDiagnosticPlan
         }
         if (!facts.Any(f => f.StartsWith('H')))
             facts.Add("No classification difference observed in the collected H1-H7 comparisons.");
+        facts.AddRange(VideoRangePathDiagnostic.Summarize(allResults));
         facts.Add($"Collected {allResults.Count(r => r.Failure is null)}/{Cells.Count} cells; "
             + $"unknown samples={allResults.Sum(r => r.Samples.Count(s => s.Classification == "unknown"))}. "
             + "Unknown is an observation; consult raw RGBA. Missing cells are infrastructure failures.");

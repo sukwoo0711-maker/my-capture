@@ -1,6 +1,11 @@
 using System.IO;
+using System.Text.Json;
+using System.Text.Json.Serialization;
+using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Threading;
 using MyCapture.App.Diagnostics;
+using MyCapture.App.Gallery;
 using MyCapture.App.Recording;
 using Xunit;
 
@@ -12,8 +17,8 @@ public sealed class VideoRangeDiagnosticTests
     public void MatrixHasAllSizesRangesHostsSequencesAndThreeFreshRepeats()
     {
         var cells = VideoRangeDiagnosticPlan.Cells;
-        Assert.Equal(36, cells.Count);
-        Assert.Equal(42, cells.Sum(c => c.FullRangeSteps.Length));
+        Assert.Equal(60, cells.Count);
+        Assert.Equal(66, cells.Sum(c => c.FullRangeSteps.Length));
         Assert.Equal(cells.Count, cells.Select(c => c.Id).Distinct().Count());
         Assert.Equal(24, cells.Count(c => c.Kind == "matrix"));
         foreach (string host in new[] { "probe", "gallery", "editor" })
@@ -34,7 +39,7 @@ public sealed class VideoRangeDiagnosticTests
                 && c.CalibrationMode == mode && c.FullRangeSteps.SequenceEqual(new[] { false }));
         Assert.Single(cells, c => c.Kind == "content" && c.Pattern == "colour-patches" && c.Width == 1280 && c.Host == "gallery");
         Assert.Equal(TimeSpan.FromSeconds(20), VideoRangeDiagnosticPlan.CellTimeout);
-        Assert.Equal(TimeSpan.FromMinutes(5), VideoRangeDiagnosticPlan.RunTimeout);
+        Assert.Equal(TimeSpan.FromMinutes(13), VideoRangeDiagnosticPlan.RunTimeout);
     }
 
     [Theory]
@@ -73,7 +78,7 @@ public sealed class VideoRangeDiagnosticTests
         Assert.Contains(facts, f => f.StartsWith("H3:") && f.Contains("different processes"));
         Assert.Contains(facts, f => f.StartsWith("H4:") && f.Contains("identical fresh-process"));
         Assert.Contains(facts, f => f.StartsWith("Calibration differs:"));
-        Assert.Contains(facts, f => f.Contains("Collected 6/36"));
+        Assert.Contains(facts, f => f.Contains("Collected 6/60"));
     }
 
     [Fact]
@@ -88,7 +93,7 @@ public sealed class VideoRangeDiagnosticTests
         };
         string[] facts = VideoRangeDiagnosticPlan.Summarize(results);
         Assert.DoesNotContain(facts, f => f.StartsWith('H'));
-        Assert.Contains(facts, f => f.Contains("Collected 3/36") && f.Contains("unknown samples=1"));
+        Assert.Contains(facts, f => f.Contains("Collected 3/60") && f.Contains("unknown samples=1"));
     }
 
     [Fact]
@@ -292,6 +297,269 @@ public sealed class VideoRangeDiagnosticTests
         Assert.Contains("kind=measured", actual.Details); Assert.Contains("residual=0.700", actual.Details);
         Assert.Contains(curve, actual.Details);
         Assert.Equal("fallback", (actual with { Mapping = null, IsFallback = true }).Kind);
+    }
+
+    [Fact]
+    public void PathCellsAppendAllVariantsWithoutChangingTheOriginalOrder()
+    {
+        var original = new List<string>();
+        foreach (string range in new[] { "studio", "full" })
+        foreach (string size in new[] { "320x180", "640x360", "1280x720", "1920x1080" })
+        foreach (string host in new[] { "probe", "gallery", "editor" }) original.Add($"matrix-{range}-{size}-{host}");
+        original.AddRange(["sequence-studio-full-studio-gallery", "sequence-full-studio-gallery",
+            "sequence-studio-full-studio-probe", "sequence-full-studio-probe",
+            "repeat-studio-1280x720-gallery-1", "repeat-studio-1280x720-gallery-2", "repeat-studio-1280x720-gallery-3",
+            "concurrent-in-process-studio-1280x720-gallery", "concurrent-in-process-studio-1280x720-editor",
+            "concurrent-in-process-studio-1920x1080-gallery", "concurrent-in-process-studio-1920x1080-editor",
+            "colour-studio-1280x720-gallery"]);
+        Assert.Equal(original, VideoRangeDiagnosticPlan.Cells.Take(36).Select(c => c.Id));
+        var expected = new List<string>();
+        foreach (string range in new[] { "studio", "full" })
+        {
+            foreach (string variant in new[] { "gallery-product", "gallery-pause-immediately", "gallery-playing",
+                "gallery-large", "gallery-no-exclusion", "gallery-no-clip", "gallery-plain-window", "editor-product",
+                "editor-small", "gallery-all-editor-like" }) expected.Add($"path-{range}-colour-patches-{variant}");
+            foreach (string variant in new[] { "gallery-product", "editor-small" }) expected.Add($"path-{range}-grey-bars-{variant}");
+        }
+        Assert.Equal(expected, VideoRangeDiagnosticPlan.Cells.Skip(36).Select(c => c.Id));
+        Assert.All(VideoRangeDiagnosticPlan.Cells.Skip(36), cell =>
+        {
+            Assert.Equal("path", cell.Kind); Assert.Equal(1280, cell.Width); Assert.Equal(720, cell.Height);
+            Assert.Single(cell.FullRangeSteps); Assert.Equal("none", cell.CalibrationMode);
+            Assert.Equal(cell.PathVariant!.StartsWith("editor-", StringComparison.Ordinal) ? "editor" : "gallery", cell.Host);
+        });
+        Assert.Equal(new double[] { 300, 1000, 2500, 5000 }, VideoRangeDiagnosticPlan.PathSampleTimesMs);
+    }
+
+    [Fact]
+    public void PathArgumentsRoundTripUsingTheShortChildDirectory()
+    {
+        string root = OwnedTestDirectory.Create("mc-path-args-");
+        try
+        {
+            var cell = VideoRangeDiagnosticPlan.Cells.Single(c => c.Id == "path-full-colour-patches-gallery-pause-immediately");
+            string output = Path.Combine(root, "c-12345678", "49");
+            var start = VideoRangeDiagnosticPlan.BuildChildStartInfo(Path.Combine(root, "MyCapture.exe"), output, Path.Combine(output, "data"), cell);
+            var parsed = VideoRangeDiagnosticPlan.ParseArguments(start.ArgumentList.ToArray());
+            Assert.Same(cell, parsed.Cell); Assert.Equal(output, parsed.OutputDirectory);
+            Assert.DoesNotContain(cell.Id, output);
+            Assert.Equal(Path.Combine(output, "data"), start.Environment["TEMP"]);
+        }
+        finally { OwnedTestDirectory.Delete(root); }
+    }
+
+    [Fact]
+    public void PathOptionsChangeOnlyTheirNamedConditionAtTheActualDpi()
+    {
+        var defaults = new GalleryPlayerDiagnosticOptions();
+        foreach (var cell in VideoRangeDiagnosticPlan.Cells.Where(c => c.Kind == "path"))
+        {
+            var options = VideoRangePathDiagnostic.OptionsFor(cell, 1.25);
+            Assert.Equal(cell.PathVariant, options.Variant);
+            GalleryPlayerDiagnosticOptions? expected = cell.PathVariant switch
+            {
+                "gallery-product" => defaults,
+                "gallery-pause-immediately" => defaults with { OpenMode = GalleryPlayerOpenMode.PauseImmediately },
+                "gallery-playing" => defaults with { OpenMode = GalleryPlayerOpenMode.Playing },
+                "gallery-large" => defaults with { FrameHeightDip = 547.2 },
+                "gallery-no-exclusion" => defaults with { CaptureExclusion = false },
+                "gallery-no-clip" => defaults with { RoundedClip = false },
+                "gallery-plain-window" => defaults with { ProductWindowStyle = false },
+                "gallery-all-editor-like" => new(GalleryPlayerOpenMode.PauseImmediately, 547.2, false, false, false),
+                "editor-product" or "editor-small" => null,
+                _ => throw new InvalidOperationException(),
+            };
+            Assert.Equal(expected, options.Gallery);
+            Assert.Null(options.TargetScale);
+        }
+        foreach (double dpi in new[] { 1.0, 1.25, 1.5, 2.0 })
+        {
+            var large = VideoRangeDiagnosticPlan.Cells.Single(c => c.Id == "path-studio-colour-patches-gallery-large");
+            Assert.InRange(VideoRangePathDiagnostic.OptionsFor(large, dpi).Gallery!.FrameHeightDip!.Value * dpi / 720, 0.9, 1);
+        }
+    }
+
+    [Fact]
+    public void PathSummarySeparatesModelAndGreyDifferencesAndKeepsH1ThroughH7()
+    {
+        var original = new[] { Result("matrix-studio-1280x720-gallery", "Correct"),
+            Result("colour-studio-1280x720-gallery", "StudioRetained") };
+        var paths = new[]
+        {
+            PathResult("studio", "gallery-product", VideoRangePresentation.StudioRetained, 10),
+            PathResult("studio", "editor-product", VideoRangePresentation.Correct, 0),
+            PathResult("studio", "gallery-pause-immediately", VideoRangePresentation.Correct, 0),
+            PathResult("studio", "gallery-no-clip", VideoRangePresentation.StudioRetained, 6), // exactly 4: match
+            PathResult("studio", "gallery-playing", VideoRangePresentation.StudioRetained, 5), // 5: differs
+            PathResult("studio", "gallery-product", VideoRangePresentation.Correct, 0, "grey-bars"),
+            PathResult("studio", "editor-small", VideoRangePresentation.Correct, 0),
+            PathResult("studio", "editor-small", VideoRangePresentation.Correct, 0, "grey-bars"),
+            PathResult("full", "gallery-product", VideoRangePresentation.ExpandedAsStudio, 12),
+            PathResult("full", "editor-product", VideoRangePresentation.Correct, 0),
+        };
+        string[] facts = VideoRangeDiagnosticPlan.Summarize(original.Concat(paths).ToArray());
+        Assert.Equal(VideoRangeDiagnosticPlan.Summarize(original).Where(f => f.StartsWith('H')),
+            facts.Where(f => f.StartsWith('H') && !f.StartsWith("H8:") && !f.StartsWith("H9:")));
+        Assert.Contains(facts, f => f.StartsWith("H8: studio gallery-product colour-patches:")
+            && f.Contains("kind=model, model=StudioRetained, status=verified") && f.Contains("errors(identity/retained/expanded)")
+            && f.Contains("first=300ms [16=26/26/26") && f.Contains("last=5000ms") && f.Contains("channel-0=black.R=10"));
+        Assert.Contains(facts, f => f.StartsWith("H8: studio single-variable gallery-pause-immediately:")
+            && f.Contains("kind/model: differs from gallery-product") && f.Contains("grey first/last: differs from gallery-product")
+            && f.Contains("kind/model: matches editor-product") && f.Contains("grey first/last: matches editor-product"));
+        Assert.Contains(facts, f => f.StartsWith("H8: studio single-variable gallery-no-clip:") && f.Contains("grey first/last: matches gallery-product"));
+        Assert.Contains(facts, f => f.StartsWith("H8: studio single-variable gallery-playing:")
+            && f.Contains("kind/model: matches gallery-product") && f.Contains("grey first/last: differs from gallery-product"));
+        Assert.Contains(facts, f => f.StartsWith("H8: full gallery-product") && f.Contains("ExpandedAsStudio"));
+        Assert.Contains(facts, f => f.StartsWith("H9: studio gallery-product") && f.Contains("same host/scale")
+            && f.Contains("differs from grey-bars") && f.Contains("shared greys=0/64/192/255"));
+        Assert.Contains(facts, f => f.StartsWith("H9: studio editor-small") && f.Contains("matches grey-bars"));
+        string table = string.Join(Environment.NewLine, VideoRangePathDiagnostic.ReportTable(paths));
+        Assert.Contains("PATH CELLS:", table); Assert.Contains("open=Product", table);
+        Assert.Contains("300/300.0ms", table); Assert.Contains("1000/1000.0ms", table);
+        Assert.Contains("2500/2500.0ms", table); Assert.Contains("5000/5000.0ms", table);
+        Assert.Contains("16=n/a", table); Assert.Contains("235=n/a", table);
+    }
+
+    [Fact]
+    public void PathSummaryDoesNotTreatMissingTransparentOrMismatchedScaleEvidenceAsAMatch()
+    {
+        var gallery = PathResult("studio", "gallery-product", VideoRangePresentation.Correct, 0);
+        var editor = PathResult("studio", "editor-product", VideoRangePresentation.Correct, 0);
+        var partial = PathResult("studio", "gallery-pause-immediately", VideoRangePresentation.Correct, 0);
+        var transparent = partial.Samples[0].TimeSeries!.Select(t => t with
+        { Observation = t.Observation with { Patches = t.Observation.Patches.Select(p => p with { A = 0 }).ToArray() } }).ToArray();
+        partial = partial with { Samples = [partial.Samples[0] with { TimeSeries = transparent }] };
+        var bars = PathResult("studio", "gallery-product", VideoRangePresentation.Correct, 0, "grey-bars");
+        bars = bars with { Samples = [bars.Samples[0] with { ScaleX = 0.6 }] };
+        string[] facts = VideoRangeDiagnosticPlan.Summarize([gallery, editor, partial, bars]);
+        Assert.Contains(facts, f => f.StartsWith("H8: studio single-variable gallery-pause-immediately") && f.Contains("grey first/last: unavailable"));
+        Assert.Contains(facts, f => f.StartsWith("H9: studio gallery-product") && f.Contains("scale mismatch"));
+        facts = VideoRangeDiagnosticPlan.Summarize([partial with { Failure = "timeout" }, gallery, editor]);
+        Assert.Contains(facts, f => f.Contains("comparison with editor-product=unavailable"));
+    }
+
+    [Fact]
+    public void PathTimeSeriesAndOptionsRoundTripWithTheWholeVerificationResult()
+    {
+        var result = PathResult("full", "gallery-pause-immediately", VideoRangePresentation.Correct, 0);
+        var sample = result.Samples[0];
+        result = result with { Samples = [sample with { TimeSeries = [.. sample.TimeSeries!,
+            sample.TimeSeries![^1] with { Phase = "after-play-pause", TargetMs = 5800, ElapsedSinceReadyMs = 5820, PositionMs = 500 }] }] };
+        var actual = JsonSerializer.Deserialize<VideoRangeCellResult>(JsonSerializer.Serialize(result))!;
+        Assert.Equal(result.PathOptions, actual.PathOptions);
+        Assert.Equal(result.Samples[0].Verification!.Errors, actual.Samples[0].Verification!.Errors);
+        Assert.Equal(5, actual.Samples[0].TimeSeries!.Length);
+        Assert.Equal("after-play-pause", actual.Samples[0].TimeSeries![^1].Phase);
+        Assert.Equal(5820, actual.Samples[0].TimeSeries![^1].ElapsedSinceReadyMs);
+        Assert.Equal(500, actual.Samples[0].TimeSeries![^1].PositionMs);
+        Assert.All(actual.Samples[0].TimeSeries!, p => Assert.Equal(16, p.Observation.Patches.Length));
+        Assert.Contains(VideoRangePathDiagnostic.ReportTable([actual]), line => line.Contains("after-play-pause 5800/5820.0ms"));
+    }
+
+    [Fact]
+    public Task GalleryProductConstructorRetainsProductDefaults() =>
+        SettingsThemePreviewTests.RunIsolated(nameof(GalleryProductConstructorRetainsProductDefaults), () =>
+        {
+            CreateApplication();
+            var player = new GalleryVideoPlayerWindow();
+            try
+            {
+                Assert.Null(player.DiagnosticOptions); Assert.Equal(420, player.Width);
+                Assert.True(player.Topmost); Assert.Equal(WindowStyle.ToolWindow, player.WindowStyle);
+                Assert.False(player.ShowInTaskbar); Assert.False(player.ShowActivated);
+                Assert.Equal(SizeToContent.Height, player.SizeToContent);
+                var frame = Assert.IsType<Border>(player.MediaForDiagnostic.Parent);
+                Assert.Equal(220, frame.Height); Assert.Equal(new CornerRadius(8), frame.CornerRadius); Assert.True(frame.ClipToBounds);
+                Assert.True(new GalleryPlayerDiagnosticOptions().CaptureExclusion);
+                Assert.False(player.IsMediaReadyForDiagnostic); Assert.False(player.IsPlayingForDiagnostic);
+                Assert.Null(player.MediaForDiagnostic.Source); Assert.Null(StudioRangeVideoEffect.VerificationFor(player.MediaForDiagnostic));
+            }
+            finally { player.Close(); }
+        }, typeof(VideoRangeDiagnosticTests));
+
+    [Fact]
+    public Task GalleryPauseImmediatelyPathSmoke() => PathSmoke(nameof(GalleryPauseImmediatelyPathSmoke), "gallery-pause-immediately");
+
+    [Fact]
+    public Task GalleryProductPathSmoke() => PathSmoke(nameof(GalleryProductPathSmoke), "gallery-product");
+
+    [Fact]
+    public Task GalleryLargePathSmoke() => PathSmoke(nameof(GalleryLargePathSmoke), "gallery-large");
+
+    [Fact]
+    public Task GalleryPlayingPathSmoke() => PathSmoke(nameof(GalleryPlayingPathSmoke), "gallery-playing");
+
+    [Fact]
+    public Task EditorSmallPathSmoke() => PathSmoke(nameof(EditorSmallPathSmoke), "editor-small");
+
+    private static Task PathSmoke(string testName, string variant) => SettingsThemePreviewTests.RunIsolated(testName, () =>
+    {
+        CreateApplication();
+        string root = OwnedTestDirectory.Create("mc-path-smoke-");
+        string? previousData = Environment.GetEnvironmentVariable("MYCAPTURE_DATA_ROOT");
+        string? previousTemp = Environment.GetEnvironmentVariable("TEMP"), previousTmp = Environment.GetEnvironmentVariable("TMP");
+        SynchronizationContext? previousContext = SynchronizationContext.Current;
+        try
+        {
+            // App.OnStartup supplies this context in the executable; the isolated bare STA does not.
+            SynchronizationContext.SetSynchronizationContext(new DispatcherSynchronizationContext(Dispatcher.CurrentDispatcher));
+            Environment.SetEnvironmentVariable("MYCAPTURE_DATA_ROOT", Path.Combine(root, "data"));
+            var cell = VideoRangeDiagnosticPlan.Cells.Single(c => c.Id == $"path-studio-colour-patches-{variant}");
+            string output = Path.Combine(root, "out");
+            int exitCode = VideoRangeSelfTest.RunChild(output, cell);
+            string json = File.ReadAllText(Path.Combine(output, VideoRangeDiagnosticPlan.JsonName));
+            Assert.True(exitCode == 0, json);
+            var options = new JsonSerializerOptions { Converters = { new JsonStringEnumConverter() } };
+            var result = JsonSerializer.Deserialize<VideoRangeCellResult>(json, options)!;
+            var sample = Assert.Single(result.Samples);
+            Assert.NotNull(sample.Verification); Assert.False(sample.CalibrationStartedBeforeSample);
+            Assert.Equal(variant == "gallery-pause-immediately" ? 5 : 4, sample.TimeSeries!.Length);
+            Assert.All(sample.TimeSeries!, point =>
+            {
+                Assert.Equal(16, point.Observation.Patches.Length);
+                Assert.Contains(point.Observation.Patches, patch => patch.A >= 250);
+                Assert.Equal(variant == "gallery-playing", point.Playing);
+                Assert.True(point.ElapsedSinceReadyMs >= point.TargetMs - 30);
+            });
+            if (variant == "gallery-large") Assert.True(Math.Min(sample.ScaleX, sample.ScaleY) >= 0.9);
+            if (variant == "editor-small") Assert.InRange(Math.Abs(sample.ScaleX - result.PathOptions!.TargetScale!.Value), 0, 0.05);
+            if (variant == "gallery-pause-immediately") Assert.InRange(sample.TimeSeries![^1].PositionMs, 200, 900);
+            if (variant == "gallery-playing") Assert.True(sample.TimeSeries![^1].PositionMs > sample.TimeSeries[0].PositionMs + 4000);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("MYCAPTURE_DATA_ROOT", previousData);
+            Environment.SetEnvironmentVariable("TEMP", previousTemp); Environment.SetEnvironmentVariable("TMP", previousTmp);
+            SynchronizationContext.SetSynchronizationContext(previousContext);
+            OwnedTestDirectory.Delete(root);
+        }
+    }, typeof(VideoRangeDiagnosticTests));
+
+    private static void CreateApplication()
+    {
+        var application = new Application { ShutdownMode = ShutdownMode.OnExplicitShutdown };
+        foreach (string name in new[] { "Tokens", "Symbols", "Controls" })
+            application.Resources.MergedDictionaries.Add(new ResourceDictionary
+            { Source = new Uri($"pack://application:,,,/MyCapture;component/Themes/{name}.xaml") });
+    }
+
+    private static VideoRangeCellResult PathResult(string range, string variant, VideoRangePresentation model, int greyOffset,
+        string pattern = "colour-patches")
+    {
+        var result = Result($"path-{range}-{pattern}-{variant}", model.ToString());
+        var patches = VideoRangeColourPattern.Patches.Select(p => new VideoRangePatch(
+            (byte)Math.Clamp(p.R + greyOffset, 0, 255), (byte)Math.Clamp(p.G + greyOffset, 0, 255),
+            (byte)Math.Clamp(p.B + greyOffset, 0, 255), 255)).ToArray();
+        var observation = new VideoRangeObservation(patches, model.ToString());
+        return result with
+        {
+            PathOptions = VideoRangePathDiagnostic.OptionsFor(result.Cell),
+            Samples = [result.Samples[0] with
+            {
+                Verification = new(model, new(1, 2, 3), [], 100, 255, 1, 0, "verified"),
+                TimeSeries = VideoRangeDiagnosticPlan.PathSampleTimesMs.Select(ms => new VideoRangeTimePoint("ready", ms, ms, 0, false, observation)).ToArray(),
+            }],
+        };
     }
 
     private static VideoRangeCellResult Result(string id, params string[] classifications)

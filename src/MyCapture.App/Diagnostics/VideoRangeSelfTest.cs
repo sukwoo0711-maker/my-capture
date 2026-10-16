@@ -43,7 +43,7 @@ internal static class VideoRangeSelfTest
                 VideoRangeCell cell = VideoRangeDiagnosticPlan.Cells[index];
                 if (cancellation.IsCancellationRequested)
                 {
-                    results.Add(Failed(cell, "Whole-run five-minute budget exhausted before this cell."));
+                    results.Add(Failed(cell, $"Whole-run {VideoRangeDiagnosticPlan.RunTimeout.TotalSeconds:F0}s budget exhausted before this cell."));
                     continue;
                 }
                 string cellRoot = DiagnosticOutputPaths.Create(DiagnosticOutputPaths.Child(runDirectory,
@@ -64,7 +64,7 @@ internal static class VideoRangeSelfTest
         }, JsonOptions));
         var report = new StringBuilder().AppendLine(pass ? "RESULT: PASS" : "RESULT: FAIL")
             .AppendLine(command).AppendLine($"Artifacts: {runDirectory}")
-            .AppendLine($"Elapsed: {elapsed.Elapsed.TotalSeconds:F1}s; per cell 20s; whole run 300s.")
+            .AppendLine($"Elapsed: {elapsed.Elapsed.TotalSeconds:F1}s; per cell 20s; whole run {VideoRangeDiagnosticPlan.RunTimeout.TotalSeconds:F0}s.")
             .AppendLine("PASS means all observations were collected, regardless of colour classification.")
             .AppendLine("All windows are off-screen. Probe uses source-sized DIP content; gallery/editor retain product layout.")
             .AppendLine("H1-H5 samples precede explicit in-process calibration. H6 starts calibration with opening; H7 uses the test colour pattern. Sequence steps reuse the host window; the diagnostic probe uses a fresh MediaElement per step. Gallery/editor include product verification outcomes.")
@@ -72,6 +72,8 @@ internal static class VideoRangeSelfTest
             .AppendLine("H7 patch order: " + string.Join(", ", VideoRangeColourPattern.Patches.Select(p => $"{p.Name}=({p.R},{p.G},{p.B})")))
             .AppendLine("GPU descriptions enumerate available adapters; they do not identify the adapter/decoder selected by MediaElement.")
             .AppendLine("H1-H7 lines report classification differences, not causal conclusions. Scale is physical presented pixels / source pixels.")
+            .AppendLine("H8/H9 path cells change only the named condition. Raw effect-free 16-point observations target 300/1000/2500/5000ms since ready; product verification runs concurrently. Pause-immediately adds one Play/500ms/Pause observation after 300ms settling.")
+            .AppendLine("Path colour clips last 10s so Playing remains active through 5s. Grey-bars samples use the same 8x2 positions: [0,0,64,64,192,192,255,255] repeated twice; grey 16/235 are n/a. Path cells do not start the diagnostic calibration probe.")
             .AppendLine().AppendLine(string.Join(Environment.NewLine, summary)).AppendLine()
             .AppendLine("cell | pid | step | input | classification | RGBA | scale | DPI | tier | PS2 | diagnostic studio/full | player verification")
             .AppendLine("A step marked 'after calibration' re-samples the same player once the selected calibration has presented its studio and full clips.");
@@ -89,6 +91,7 @@ internal static class VideoRangeSelfTest
             if (result.Failure is not null) report.AppendLine($"INFRASTRUCTURE: {result.Cell.Id}: {result.Failure}");
             if (result.CalibrationFailure is not null) report.AppendLine($"CALIBRATION: {result.Cell.Id}: {result.CalibrationFailure}");
         }
+        report.AppendLine().AppendLine(string.Join(Environment.NewLine, VideoRangePathDiagnostic.ReportTable(results)));
         File.WriteAllText(DiagnosticOutputPaths.Child(root, VideoRangeDiagnosticPlan.ReportName), report.ToString());
         return pass ? 0 : 1;
     }
@@ -118,6 +121,12 @@ internal static class VideoRangeSelfTest
                 return result with { Failure = result.Failure ?? $"Child exit {child.ExitCode}; incomplete sample count." };
             if (cell.Kind == "concurrent" && !result.Samples.Any(s => s.Phase == "after-calibration"))
                 return result with { Failure = "Concurrent cell is missing the completed-calibration sample." };
+            if (cell.Kind == "path" && (result.PathOptions is null
+                || result.Samples[0].TimeSeries is not { } series
+                || series.Count(p => p.Phase == "ready") != VideoRangeDiagnosticPlan.PathSampleTimesMs.Count
+                || series.Any(p => p.Observation.Patches.Length != 16)
+                || (cell.PathVariant == "gallery-pause-immediately" && !series.Any(p => p.Phase == "after-play-pause"))))
+                return result with { Failure = "Path cell is missing options or time-series observations." };
             return result;
         }
         catch (Exception ex)
@@ -163,6 +172,7 @@ internal static class VideoRangeSelfTest
         VideoRangeCalibrationResult calibration = default;
         string? calibrationFailure = null, adapterFailure = null, failure = null;
         string[] adapters = [];
+        VideoRangePathOptions? pathOptions = cell.Kind == "path" ? VideoRangePathDiagnostic.OptionsFor(cell) : null;
         Task task = CollectAsync();
         try
         {
@@ -177,10 +187,12 @@ internal static class VideoRangeSelfTest
             foreach (Window window in windows) window.Close();
         }
         var result = new VideoRangeCellResult(cell, Environment.ProcessId, samples.ToArray(), calibration,
-            calibrationFailure, adapters, adapterFailure, failure, new(openingMs, calibrationStartMs, calibrationEndMs));
+            calibrationFailure, adapters, adapterFailure, failure, new(openingMs, calibrationStartMs, calibrationEndMs), pathOptions);
         File.WriteAllText(DiagnosticOutputPaths.Child(root, VideoRangeDiagnosticPlan.JsonName), JsonSerializer.Serialize(result, JsonOptions));
         File.WriteAllText(DiagnosticOutputPaths.Child(root, VideoRangeDiagnosticPlan.ReportName),
-            (failure is null ? "RESULT: PASS" : "RESULT: FAIL") + Environment.NewLine + failure);
+            (failure is null ? "RESULT: PASS" : "RESULT: FAIL") + Environment.NewLine + failure
+            + (cell.Kind == "path" ? Environment.NewLine + string.Join(Environment.NewLine,
+                VideoRangeDiagnosticPlan.Summarize([result]).Concat(VideoRangePathDiagnostic.ReportTable([result]))) : string.Empty));
         return failure is null ? 0 : 1;
 
         async Task<VideoRangeCalibrationResult> StartCalibrationAsync()
@@ -207,16 +219,37 @@ internal static class VideoRangeSelfTest
                 string clip = DiagnosticOutputPaths.Child(root, full ? "full.mp4" : "studio.mp4");
                 await Task.Run(() =>
                 {
-                    if (cell.Pattern == "colour-patches") VideoRangeColourPattern.Encode(clip, cell.Width, cell.Height, full);
+                    if (cell.Kind == "path") VideoRangeColourPattern.Encode(clip, cell.Width, cell.Height, full,
+                        durationSeconds: 10, greyBars: cell.Pattern == "grey-bars", cancellationToken: token);
+                    else if (cell.Pattern == "colour-patches") VideoRangeColourPattern.Encode(clip, cell.Width, cell.Height, full);
                     else StudioRangeCalibrationProbe.Encode(clip, full, token, cell.Width, cell.Height);
                 }, token);
                 paths.Add(full, clip);
             }
             StudioRangeVideoEffect.SuppressForDiagnostic = cell.Host == "probe";
+            if (cell.PathVariant == "editor-small")
+            {
+                // An empty product gallery measures the actual non-client width/DPI without opening
+                // any media or verification session. Close it before opening the editor's clip.
+                var reference = new GalleryVideoPlayerWindow();
+                windows.Add(reference);
+                reference.Left = -10000; reference.Top = -10000;
+                reference.Show(); reference.UpdateLayout();
+                // An empty MediaElement has zero desired size. Its containing frame still lays out
+                // exactly the same viewport as a loaded product clip with Stretch.Uniform.
+                var referenceFrame = (Border)reference.MediaForDiagnostic.Parent;
+                DpiScale referenceDpi = VisualTreeHelper.GetDpi(referenceFrame);
+                double targetScale = Math.Min(referenceFrame.ActualWidth * referenceDpi.DpiScaleX / cell.Width,
+                    referenceFrame.ActualHeight * referenceDpi.DpiScaleY / cell.Height);
+                if (targetScale <= 0) throw new InvalidOperationException("Product gallery reference frame was not laid out.");
+                pathOptions = pathOptions! with { TargetScale = targetScale };
+                reference.Close(); windows.Remove(reference);
+            }
             Window host = cell.Host switch
             {
                 "probe" => StudioRangeCalibrationProbe.CreateWindow(cell.Width, cell.Height),
-                "gallery" => new GalleryVideoPlayerWindow(),
+                "gallery" => pathOptions is null || cell.PathVariant == "gallery-product"
+                    ? new GalleryVideoPlayerWindow() : new GalleryVideoPlayerWindow(null, pathOptions.Gallery),
                 "editor" => new VideoEditorWindow(new RecordingResult(paths[cell.FullRangeSteps[0]], 1000, 30, 30, cell.Width, cell.Height),
                     AppPaths.CreateForRoot(dataRoot), NullLoggerFactory.Instance),
                 _ => throw new InvalidOperationException("Unknown host."),
@@ -225,6 +258,15 @@ internal static class VideoRangeSelfTest
             host.WindowStartupLocation = WindowStartupLocation.Manual;
             host.Left = -10000; host.Top = -10000; host.ShowActivated = false; host.ShowInTaskbar = false;
             if (host is VideoEditorWindow) { host.Width = 1100; host.Height = 760; }
+            if (host is GalleryVideoPlayerWindow sizedGallery && pathOptions?.Gallery?.FrameHeightDip is not null)
+                host.SourceInitialized += (_, _) =>
+                {
+                    DpiScale dpi = VisualTreeHelper.GetDpi(host);
+                    pathOptions = VideoRangePathDiagnostic.OptionsFor(cell, Math.Min(dpi.DpiScaleX, dpi.DpiScaleY));
+                    double height = pathOptions.Gallery!.FrameHeightDip!.Value;
+                    ((Border)sizedGallery.MediaForDiagnostic.Parent).Height = height;
+                    host.Width = height * 16 / 9 + 44;
+                };
             for (int step = 0; step < cell.FullRangeSteps.Length; step++)
             {
                 bool full = cell.FullRangeSteps[step];
@@ -257,7 +299,7 @@ internal static class VideoRangeSelfTest
                     }
                     if (host is GalleryVideoPlayerWindow gallery)
                     {
-                        if (!gallery.Open(Guid.NewGuid(), "Video range fixture", paths[full], autoPlay: false))
+                        if (!gallery.Open(Guid.NewGuid(), "Video range fixture", paths[full], autoPlay: cell.PathVariant == "gallery-playing"))
                             throw new IOException("Gallery could not open the generated fixture.");
                     }
                     else if (cell.Host == "probe")
@@ -272,17 +314,55 @@ internal static class VideoRangeSelfTest
                         if (mediaFailure is not null) throw mediaFailure;
                         await Task.Delay(20, token);
                     }
-                    await Task.Delay(250, token);
-                    RangeVerificationResult? verification = null;
-                    while (StudioRangeVideoEffect.VerificationFor(media) is { } session)
+                    if (cell.Kind == "path")
                     {
-                        try { verification = await session.Completion.WaitAsync(token); break; }
-                        catch (OperationCanceledException) when (!token.IsCancellationRequested
-                            && !ReferenceEquals(session, StudioRangeVideoEffect.VerificationFor(media))) { }
+                        var readyClock = Stopwatch.StartNew();
+                        if (pathOptions?.TargetScale is { } target)
+                            VideoRangePathDiagnostic.FitSmallEditor(host, media, cell, target);
+                        host.UpdateLayout();
+                        if (pathOptions?.Gallery?.FrameHeightDip is not null
+                            && VideoRangePathDiagnostic.PhysicalScale(media, cell) < 0.9)
+                            throw new InvalidOperationException("Large gallery did not reach 0.9 physical scale.");
+                        var series = new List<VideoRangeTimePoint>();
+                        foreach (double targetMs in VideoRangeDiagnosticPlan.PathSampleTimesMs)
+                        {
+                            double remaining = targetMs - readyClock.Elapsed.TotalMilliseconds;
+                            if (remaining > 0) await Task.Delay(TimeSpan.FromMilliseconds(remaining), token);
+                            Capture("ready", targetMs);
+                        }
+                        if (cell.PathVariant == "gallery-pause-immediately")
+                        {
+                            media.Play();
+                            await Task.Delay(500, token);
+                            media.Pause();
+                            await Task.Delay(300, token); // Let the paused frame be presented, without a seek.
+                            Capture("after-play-pause", 5800);
+                        }
+                        // Preserve collected observations even if a slow/failed product verification
+                        // exhausts the remaining budget. It must not delay the 0.3s raw observation.
+                        samples.Add(DescribeSample(host, media, cell, step, full,
+                            series.Where(p => p.Phase == "ready").Select(p => p.Observation).ToArray()) with
+                        {
+                            Phase = "path", ElapsedMs = clock.Elapsed.TotalMilliseconds, TimeSeries = series.ToArray(),
+                        });
+                        RangeVerificationResult? pathVerification = await VerificationAsync(media, token);
+                        samples[^1] = samples[^1] with { Verification = pathVerification };
+                        continue;
+
+                        void Capture(string phase, double targetMs)
+                        {
+                            if (mediaFailure is not null) throw mediaFailure;
+                            bool playing = host is GalleryVideoPlayerWindow player && player.IsPlayingForDiagnostic;
+                            if (cell.PathVariant == "gallery-playing" && !playing)
+                                throw new InvalidOperationException("Playing path ended before its time-series observation.");
+                            double position = media.Position.TotalMilliseconds;
+                            double sinceReady = readyClock.Elapsed.TotalMilliseconds;
+                            var raw = MediaElementRangeVerification.WithoutEffect(media, () => VideoRangeColourPattern.Observe(media));
+                            series.Add(new(phase, targetMs, sinceReady, position, playing, raw));
+                        }
                     }
-                    if (cell.Host != "probe" && verification is null)
-                        verification = new(null, new(255, 255, 255), [], 0, 0, 0, media.Position.TotalMilliseconds,
-                            "hardware-shaders-unavailable") { IsFallback = true };
+                    await Task.Delay(250, token);
+                    RangeVerificationResult? verification = await VerificationAsync(media, token);
                     var observations = new List<VideoRangeObservation>();
                     for (int index = 0; index < 5; index++)
                     {
@@ -315,6 +395,7 @@ internal static class VideoRangeSelfTest
                     if (cell.Host == "probe") { media.Close(); media.Source = null; host.Content = null; }
                 }
             }
+            if (cell.Kind == "path") return;
             // All sequence observations finish first: calibration itself presents studio then
             // full in this process, and would otherwise destroy the fresh/sticky distinction.
             // A product player stays open through calibration and is sampled once more, which
@@ -352,6 +433,21 @@ internal static class VideoRangeSelfTest
                 host.Close();
                 windows.Remove(host);
             }
+        }
+
+        async Task<RangeVerificationResult?> VerificationAsync(MediaElement media, CancellationToken token)
+        {
+            RangeVerificationResult? verification = null;
+            while (StudioRangeVideoEffect.VerificationFor(media) is { } session)
+            {
+                try { verification = await session.Completion.WaitAsync(token); break; }
+                catch (OperationCanceledException) when (!token.IsCancellationRequested
+                    && !ReferenceEquals(session, StudioRangeVideoEffect.VerificationFor(media))) { }
+            }
+            if (cell.Host != "probe" && verification is null)
+                verification = new(null, new(255, 255, 255), [], 0, 0, 0, media.Position.TotalMilliseconds,
+                    "hardware-shaders-unavailable") { IsFallback = true };
+            return verification;
         }
     }
 

@@ -19,8 +19,10 @@ internal static class VideoRangeColourPattern
         ("magenta", 255, 0, 255), ("orange", 0xF2, 0xB1, 0x34), ("navy", 0x1D, 0x2A, 0x3C), ("accent", 0x2E, 0x6F, 0xD8),
     ];
 
-    internal static string Encode(string path, int width, int height, bool fullRange)
+    internal static string Encode(string path, int width, int height, bool fullRange, int durationSeconds = 1,
+        bool greyBars = false, CancellationToken cancellationToken = default)
     {
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(durationSeconds);
         int stride = width * 4;
         byte[] frame = new byte[stride * height];
         for (int y = 0; y < height; y++)
@@ -28,6 +30,9 @@ internal static class VideoRangeColourPattern
             for (int x = 0; x < width; x++)
             {
                 (_, byte r, byte g, byte b) = Patches[(y * 2 / height * 8) + (x * 8 / width)];
+                // H9 changes only content: match the original probe's four equal-width bars,
+                // retaining the colour cells' duration, encoder, source size and frame rate.
+                if (greyBars) r = g = b = (x * 4 / width) switch { 0 => 0, 1 => 64, 2 => 192, _ => 255 };
                 int o = (y * stride) + (x * 4);
                 frame[o] = b;
                 frame[o + 1] = g;
@@ -41,8 +46,9 @@ internal static class VideoRangeColourPattern
             FullRange = fullRange,
         };
         using var encoder = new MediaFoundationVideoEncoder(options, NullLogger.Instance);
-        for (int i = 0; i < 30; i++)
+        for (int i = 0; i < 30 * durationSeconds; i++)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             encoder.WriteFrame(new EncoderFrame(frame, width, height, stride, i * 1000.0 / 30));
         }
 

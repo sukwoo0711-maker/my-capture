@@ -48,9 +48,12 @@ internal sealed class GalleryVideoPlayerWindow : Window
 
     internal event EventHandler? PlayerClosed;
 
-    internal GalleryVideoPlayerWindow(ILogger? log = null)
+    internal GalleryVideoPlayerWindow(ILogger? log = null) : this(log, null) { }
+
+    internal GalleryVideoPlayerWindow(ILogger? log, GalleryPlayerDiagnosticOptions? diagnosticOptions)
     {
         _log = log;
+        DiagnosticOptions = diagnosticOptions;
         Title = "MyCapture";
         Width = 420;
         SizeToContent = SizeToContent.Height;
@@ -60,6 +63,11 @@ internal sealed class GalleryVideoPlayerWindow : Window
         WindowStyle = WindowStyle.ToolWindow;
         ResizeMode = ResizeMode.CanResize;
         WindowStartupLocation = WindowStartupLocation.Manual;
+        if (diagnosticOptions?.ProductWindowStyle == false)
+        {
+            Topmost = false;
+            WindowStyle = WindowStyle.SingleBorderWindow;
+        }
 
         var close = new Button { Content = UiText.Get("Text_1E8C10206F5B"), Style = (Style)Application.Current.Resources["Button.Ghost"] };
         close.Click += (_, _) => Close();
@@ -89,6 +97,16 @@ internal sealed class GalleryVideoPlayerWindow : Window
 
         var root = new StackPanel();
         var frame = new Border { Height = 220, Background = System.Windows.Media.Brushes.Black, CornerRadius = new CornerRadius(8), ClipToBounds = true, Child = _video };
+        if (diagnosticOptions?.FrameHeightDip is { } height)
+        {
+            frame.Height = height;
+            Width = height * 16 / 9 + 44; // Padding and non-client width; diagnostic clips are 16:9.
+        }
+        if (diagnosticOptions?.RoundedClip == false)
+        {
+            frame.CornerRadius = new CornerRadius(0);
+            frame.ClipToBounds = false;
+        }
         root.Children.Add(header);
         root.Children.Add(frame);
         root.Children.Add(_seek);
@@ -105,7 +123,8 @@ internal sealed class GalleryVideoPlayerWindow : Window
         _playButton.Click += (_, _) => { if (_mediaReady) SetPlayback(!_playing); };
         _seek.ValueChanged += OnSeekChanged;
         _timer.Tick += (_, _) => UpdatePosition();
-        SourceInitialized += (_, _) => CaptureWindowExclusion.TryApply(this);
+        if (diagnosticOptions?.CaptureExclusion != false)
+            SourceInitialized += (_, _) => CaptureWindowExclusion.TryApply(this);
         // Clearing the probe also tells a MediaOpened still awaiting it that the window is gone.
         Closed += (_, _) => { _sourceProbe = null; _timer.Stop(); StudioRangeVideoEffect.Clear(_video); _video.Close(); PlayerClosed?.Invoke(this, EventArgs.Empty); };
     }
@@ -114,6 +133,8 @@ internal sealed class GalleryVideoPlayerWindow : Window
 
     internal MediaElement MediaForDiagnostic => _video;
     internal bool IsMediaReadyForDiagnostic => _mediaReady;
+    internal bool IsPlayingForDiagnostic => _playing;
+    internal GalleryPlayerDiagnosticOptions? DiagnosticOptions { get; }
 
     /// <summary>Loads a video; returns false when the file is missing or cannot be opened.</summary>
     internal bool Open(Guid id, string title, string path, bool autoPlay)
@@ -132,7 +153,12 @@ internal sealed class GalleryVideoPlayerWindow : Window
 
         _videoId = id;
         _title.Text = title;
-        _autoPlayPending = autoPlay;
+        _autoPlayPending = DiagnosticOptions?.OpenMode switch
+        {
+            GalleryPlayerOpenMode.Playing => true,
+            GalleryPlayerOpenMode.PauseImmediately => false,
+            _ => autoPlay,
+        };
         _mediaReady = false;
         _playing = false;
         _video.Stop();
@@ -144,6 +170,8 @@ internal sealed class GalleryVideoPlayerWindow : Window
         _sourceProbe = VideoSourceProbe.ReadAsync(path);
         _video.Source = new Uri(path);
         _video.Play();
+        // Mirror the editor's open in the same dispatcher turn. Never seek before MediaOpened.
+        if (DiagnosticOptions?.OpenMode == GalleryPlayerOpenMode.PauseImmediately) _video.Pause();
         SetStatusPlaying(false);
         _seek.Value = 0;
         UpdateTime();
