@@ -53,7 +53,7 @@ public sealed class ReleaseVersionContractTests
     public void PackageAndInstaller_DefaultToTheGaVersion_AndStillAcceptAPrerelease()
     {
         string package = Read("build/package.ps1");
-        string installer = Read("build/installer/install.ps1");
+        string installer = Read("src/MyCapture.Setup/Contracts.cs");
         string hostile = Read("build/tests/installer-hostile-tests.ps1");
 
         // The shipping default is the GA version. A release candidate must never be the default
@@ -72,7 +72,7 @@ public sealed class ReleaseVersionContractTests
         Assert.Contains("SemVer core", package, StringComparison.Ordinal);
         Assert.DoesNotContain("numeric SemVer", package, StringComparison.Ordinal);
 
-        Assert.Contains("$semVerPattern", installer, StringComparison.Ordinal);
+        Assert.Contains("SemVerPattern", installer, StringComparison.Ordinal);
         Assert.Contains("$versionMatch", hostile, StringComparison.Ordinal);
         Assert.Contains("$baseVersion", hostile, StringComparison.Ordinal);
         Assert.Contains("$binaryVersion", hostile, StringComparison.Ordinal);
@@ -153,9 +153,9 @@ public sealed class ReleaseVersionContractTests
         }
 
         string package = Read("build/package.ps1");
-        string installer = Read("build/installer/install.ps1");
+        string installer = Read("src/MyCapture.Setup/Payload.cs");
         Assert.Contains("'tray-error.ico'", package, StringComparison.Ordinal);
-        Assert.Contains("'tray-error.ico'", installer, StringComparison.Ordinal);
+        Assert.Contains("\"tray-error.ico\"", installer, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -215,38 +215,48 @@ public sealed class ReleaseVersionContractTests
     public void InstallerPayload_HashesAndShipsTheBilingualStartupHelp()
     {
         string package = Read("build/package.ps1");
-        string installer = Read("build/installer/install.ps1");
+        string installer = Read("src/MyCapture.Setup/Contracts.cs");
         string[] names =
         [
-            "install.ps1", "install.cmd", "uninstall.ps1", "uninstall.cmd",
-            "uninstall-cleanup.ps1", "SETUP-HELP.txt",
+            "MyCaptureSetup.exe", "MyCaptureSetup.exe.config", "SETUP-HELP.txt",
         ];
         string packagedNames = package.Split("$bootstrapNames = @(", StringSplitOptions.None)[1]
             .Split(')')[0];
-        string verifiedNames = installer.Split("function Assert-BootstrapIntegrity", StringSplitOptions.None)[1]
-            .Split("foreach ($name in @(", StringSplitOptions.None)[1].Split(')')[0];
         foreach (string name in names)
         {
             Assert.Contains($"'{name}'", packagedNames, StringComparison.Ordinal);
-            Assert.Contains($"'{name}'", verifiedNames, StringComparison.Ordinal);
+            Assert.Contains($"\"{name}\"", installer, StringComparison.Ordinal);
         }
 
-        Assert.Contains("%FILE7%=", package, StringComparison.Ordinal);
-        Assert.Contains("FILE7=SETUP-HELP.txt", package, StringComparison.Ordinal);
+        Assert.Contains("%FILE4%=", package, StringComparison.Ordinal);
+        Assert.Contains("FILE4=SETUP-HELP.txt", package, StringComparison.Ordinal);
         byte[] helpBytes = File.ReadAllBytes(Path.Combine(
             RepositoryRoot(), "build", "installer", "SETUP-HELP.txt"));
         Assert.True(helpBytes.AsSpan().StartsWith(new byte[] { 0xEF, 0xBB, 0xBF }));
         string help = Read("build/installer/SETUP-HELP.txt");
-        Assert.StartsWith("MyCapture 설치를 시작하지 못했습니다", help, StringComparison.Ordinal);
-        Assert.Contains("MyCapture Setup could not start", help, StringComparison.Ordinal);
+        Assert.StartsWith("MyCapture 설치 도움말", help, StringComparison.Ordinal);
+        Assert.Contains("MyCapture Setup help", help, StringComparison.Ordinal);
         Assert.Contains("MyCapture-<version>-win-x64-portable.zip", help, StringComparison.Ordinal);
         Assert.Contains("https://apps.microsoft.com/detail/9PB33MC095VR", help, StringComparison.Ordinal);
-        Assert.Contains("%TEMP%\\MyCapture-Setup-bootstrap.log", help, StringComparison.Ordinal);
-        Assert.Contains("PowerShell execution policy (including Group Policy)", package, StringComparison.Ordinal);
+        Assert.Contains("%TEMP%\\MyCapture-Install-", help, StringComparison.Ordinal);
+        Assert.Contains(".NET Framework 4.8", package, StringComparison.Ordinal);
         Assert.Contains("AppLocker or WDAC", package, StringComparison.Ordinal);
-        Assert.Contains("install.cmd returns exit code 22", package, StringComparison.Ordinal);
+        Assert.Contains("Exit 22 is retired", package, StringComparison.Ordinal);
         Assert.Contains("%TEMP%\\MyCapture-Setup-Help.txt", package, StringComparison.Ordinal);
-        Assert.Contains("not bypass local security policy.", package, StringComparison.Ordinal);
+        Assert.Contains("AppLaunched=MyCaptureSetup.exe", package, StringComparison.Ordinal);
+        Assert.Contains("AdminQuietInstCmd=MyCaptureSetup.exe /quiet", package, StringComparison.Ordinal);
+        Assert.Contains("UserQuietInstCmd=MyCaptureSetup.exe /quiet", package, StringComparison.Ordinal);
+        Assert.DoesNotContain("install.cmd", package, StringComparison.Ordinal);
+        Assert.DoesNotContain("install.ps1", package, StringComparison.Ordinal);
+        string setupRoot = Path.Combine(RepositoryRoot(), "src", "MyCapture.Setup");
+        foreach (string source in Directory.EnumerateFiles(setupRoot, "*.cs", SearchOption.TopDirectoryOnly))
+        {
+            string text = File.ReadAllText(source);
+            foreach (string forbidden in new[] { "powershell.exe", "pwsh", "cmd.exe", "-EncodedCommand", "-Command", "WScript.Shell" })
+                Assert.DoesNotContain(forbidden, text, StringComparison.OrdinalIgnoreCase);
+        }
+        foreach (string forbidden in new[] { "install.ps1", "install.cmd", "uninstall.ps1", "uninstall.cmd", "uninstall-cleanup.ps1" })
+            Assert.DoesNotContain(forbidden, packagedNames, StringComparison.Ordinal);
     }
 
     [Fact]

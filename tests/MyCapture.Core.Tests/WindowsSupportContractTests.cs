@@ -123,11 +123,12 @@ public sealed class WindowsSupportContractTests
     [Fact]
     public void InstallerPreflight_UsesManifestFloorAndKeepsTheArm64Exception()
     {
-        string install = ReadRepositoryFile("build/installer/install.ps1");
+        string install = ReadRepositoryFile("src/MyCapture.Setup/Native.cs");
         Assert.Contains(WindowsSupportPolicy.MinimumReleaseName, install, StringComparison.Ordinal);
-        Assert.Contains("$minimumBuild = [int]$Manifest.MinimumWindowsBuild", install, StringComparison.Ordinal);
-        Assert.Contains("$build -lt $minimumBuild", install, StringComparison.Ordinal);
-        Assert.Contains($"$architectureText -match 'ARM64' -and $build -lt {WindowsSupportPolicy.MinimumArm64EmulationBuild}", install, StringComparison.Ordinal);
+        Assert.Contains("manifest.MinimumWindowsBuild", install, StringComparison.Ordinal);
+        Assert.Contains("build < Math.Max(19045, minimum)", install, StringComparison.Ordinal);
+        Assert.Contains($"native == 0xAA64 && build < {WindowsSupportPolicy.MinimumArm64EmulationBuild}", install, StringComparison.Ordinal);
+        Assert.Contains("IsWow64Process2", install, StringComparison.Ordinal);
     }
 
     [Fact]

@@ -351,17 +351,14 @@ try {
     $payload = Join-Path $stage 'payload.zip'
     Copy-Item -LiteralPath $portable -Destination $payload -Force
 
-    $bootstrapNames = @(
-        'install.ps1',
-        'install.cmd',
-        'uninstall.ps1',
-        'uninstall.cmd',
-        'uninstall-cleanup.ps1',
-        'SETUP-HELP.txt'
-    )
+    $setupProject = Join-Path $repo 'src\MyCapture.Setup\MyCapture.Setup.csproj'
+    & dotnet build $setupProject -c Release --no-restore -m:1 -nr:false -p:UseSharedCompilation=false -p:Deterministic=true
+    if ($LASTEXITCODE -ne 0) { throw "Setup build failed: $LASTEXITCODE" }
+    $setupOutput = Join-Path $repo 'src\MyCapture.Setup\bin\Release\net48'
+    $bootstrapNames = @('MyCaptureSetup.exe', 'MyCaptureSetup.exe.config', 'SETUP-HELP.txt')
     $bootstrapInventory = @()
     foreach ($name in $bootstrapNames) {
-        $sourcePath = Join-Path $PSScriptRoot "installer\$name"
+        $sourcePath = if ($name -eq 'SETUP-HELP.txt') { Join-Path $PSScriptRoot "installer\$name" } else { Join-Path $setupOutput $name }
         if (-not (Test-Path -LiteralPath $sourcePath -PathType Leaf)) { throw "Installer bootstrap file is missing: $name" }
         Copy-Item -LiteralPath $sourcePath -Destination (Join-Path $stage $name) -Force
         $bootstrapInventory += New-FileRecord $sourcePath $name
@@ -423,10 +420,10 @@ DisplayLicense=
 FinishMessage=
 TargetName=$setup
 FriendlyName=MyCapture $Version Offline Setup
-AppLaunched=install.cmd
+AppLaunched=MyCaptureSetup.exe
 PostInstallCmd=<None>
-AdminQuietInstCmd=install.cmd /quiet
-UserQuietInstCmd=install.cmd /quiet
+AdminQuietInstCmd=MyCaptureSetup.exe /quiet
+UserQuietInstCmd=MyCaptureSetup.exe /quiet
 SourceFiles=SourceFiles
 [SourceFiles]
 SourceFiles0=$source
@@ -436,18 +433,12 @@ SourceFiles0=$source
 %FILE2%=
 %FILE3%=
 %FILE4%=
-%FILE5%=
-%FILE6%=
-%FILE7%=
 [Strings]
 FILE0=payload.zip
 FILE1=installer-manifest.json
-FILE2=install.ps1
-FILE3=install.cmd
-FILE4=uninstall.ps1
-FILE5=uninstall.cmd
-FILE6=uninstall-cleanup.ps1
-FILE7=SETUP-HELP.txt
+FILE2=MyCaptureSetup.exe
+FILE3=MyCaptureSetup.exe.config
+FILE4=SETUP-HELP.txt
 "@ | Set-Content -LiteralPath $sed -Encoding ASCII
 
     $iexpressPath = Join-Path $env:SystemRoot 'System32\iexpress.exe'
@@ -494,7 +485,7 @@ FILE7=SETUP-HELP.txt
             Arm64Support = 'Windows 11 ARM64 via x64 emulation'
             RequiresInternet = $false
             RequiresPreinstalledDotNet = $false
-            SetupRequires = 'Windows PowerShell 5.1 FullLanguage and IExpress execution permitted by local policy'
+            SetupRequires = 'In-box .NET Framework 4.8 and IExpress'
             PortableFallback = $true
         }
         Installer = [pscustomobject][ordered]@{
@@ -539,26 +530,30 @@ CONTENTS
 
 OFFLINE / RUNTIME
 - No Internet connection is required.
-- No preinstalled .NET runtime is required; CoreCLR and WPF are included.
+- The application includes CoreCLR and WPF; no separate .NET 10 runtime is required.
 - Supported baseline: Windows 10 version 22H2 (build 19045) or later, x64. Earlier Windows
   releases are not supported and the installer refuses to run on them.
 - ARM64 requires Windows 11 (build 22000) or later for x64 emulation.
-- Setup needs Windows PowerShell 5.1 FullLanguage and permission to execute IExpress/
-  PowerShell scripts. If the PowerShell execution policy (including Group Policy),
-  AppLocker or WDAC blocks that path, use the portable ZIP; the setup cannot and does
-  not bypass local security policy.
-- If install.ps1 never starts, install.cmd returns exit code 22 and copies SETUP-HELP.txt
-  to %TEMP%\MyCapture-Setup-Help.txt beside MyCapture-Setup-bootstrap.log. The bilingual
-  help opens in Notepad unless /quiet was used. If TEMP is unset, these files use the
-  user profile folder, then the Setup extraction folder as a last fallback.
-  IExpress/Explorer may not surface the child exit code. Exit code 19 still means
-  Windows PowerShell was not found (or the script detected a restricted host).
+- Setup and uninstall use .NET Framework 4.8, included in Windows 10 22H2 and Windows 11.
+  IExpress directly launches MyCaptureSetup.exe; setup, update-install and uninstall
+  do not run PowerShell or cmd.exe. No administrator rights are required.
+- Exit 19 means a required Windows component is unavailable. Setup checks the .NET
+  Framework release and System.IO.Compression, logs the failure, copies bilingual
+  help to %TEMP%\MyCapture-Setup-Help.txt, and shows a result dialog unless /quiet.
+  If CLR 4 itself cannot load, Windows shows its own loader dialog.
+  Exit 22 is retired. Logs: %TEMP%\MyCapture-Install-yyyyMMdd-HHmmss-PID.log and
+  %TEMP%\MyCapture-Uninstall-yyyyMMdd-HHmmss-PID.log. IExpress/Explorer may not
+  surface the child exit code. AppLocker or WDAC can still restrict executable files.
 - Download MyCapture-$Version-win-x64-portable.zip from the same release, extract to a
   normal local folder and run MyCapture.exe. No administrator rights are required.
   Microsoft Store edition: https://apps.microsoft.com/detail/9PB33MC095VR
 
 INTEGRITY AND SIGNATURE NOTICE
 - This release is NOT Authenticode-signed. Windows may show an unknown-publisher warning.
+- The downloaded setup.exe is an IExpress package. SmartScreen may warn before it
+  extracts and launches the unsigned MyCaptureSetup.exe. If you trust the source and
+  have verified the hash, More info / Run anyway may be available. If your organization
+  blocks execution, use its approved installation channel. Setup does not request UAC.
 - Verify the SHA-256 values in SHA256SUMS.txt through a trusted distribution channel.
 - SHA-256 detects accidental or malicious file changes, but without a signing certificate
   it does not independently prove publisher authenticity.

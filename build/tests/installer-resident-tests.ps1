@@ -1,24 +1,12 @@
-# Exercise resident-copy detection without stopping any real application.
+# Exercise the built setup executable's process selector through its net48 tests.
+# No application process is started or stopped by this test.
 $ErrorActionPreference = 'Stop'
-$tokens = $null; $parseErrors = $null
-$source = Join-Path (Split-Path -Parent $PSScriptRoot) 'installer/install.ps1'
-$ast = [Management.Automation.Language.Parser]::ParseFile($source, [ref]$tokens, [ref]$parseErrors)
-if ($parseErrors.Count) { throw 'Installer parse failed.' }
-$function = $ast.FindAll({ param($node) $node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq 'Stop-InstalledApplication' }, $true)
-if (@($function).Count -ne 1) { throw 'Resident preflight function missing.' }
-. ([scriptblock]::Create($function.Extent.Text))
-$ExitProcessStop = 15
-$script:UpdateSession = $null
-function Throw-InstallerError($Code, $Message) { throw "$Code`: $Message" }
-$portable = [pscustomobject]@{ MainModule = [pscustomobject]@{ FileName = 'C:\portable\MyCapture.exe' }; Disposed = $false }
-$portable | Add-Member ScriptMethod Dispose { $this.Disposed = $true }
+$repo = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..'))
+$previousData = $env:MYCAPTURE_DATA_ROOT
+$env:MYCAPTURE_DATA_ROOT = Join-Path ([IO.Path]::GetTempPath()) ('MyCapture-resident-data-' + [guid]::NewGuid().ToString('N'))
 try {
-    Stop-InstalledApplication 'C:\installed\MyCapture.exe' @($portable)
-    throw 'Preflight did not reject the other resident copy.'
+    & dotnet test (Join-Path $repo 'tests\MyCapture.Setup.Tests') -c Release --no-build --no-restore -m:1 -nr:false -p:UseSharedCompilation=false --filter 'FullyQualifiedName~ExactProcessPathIsTheOnlyTerminationCandidate'
+    if ($LASTEXITCODE -ne 0) { throw "Resident preflight test failed: $LASTEXITCODE" }
+    Write-Output 'INSTALLER_RESIDENT_TESTS=PASS'
 }
-catch {
-    if ($_.Exception.Message -notlike '15: Another copy*') { throw }
-}
-if (-not $portable.Disposed) { throw 'Process handle was retained.' }
-Stop-InstalledApplication 'C:\installed\MyCapture.exe' @()
-Write-Output 'INSTALLER_RESIDENT_TESTS=PASS'
+finally { $env:MYCAPTURE_DATA_ROOT = $previousData }

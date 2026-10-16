@@ -10,8 +10,9 @@ param(
 
 Set-StrictMode -Version 2.0
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'setup-test-common.ps1')
 $repository = [IO.Path]::GetFullPath((Split-Path -Parent (Split-Path -Parent $PSScriptRoot))).TrimEnd('\')
-$evidenceBase = Join-Path $repository 'artifacts\validation\update-restart'
+$evidenceBase = Join-Path ([IO.Path]::GetTempPath()) 'MyCapture-update-restart'
 $powerShell = Join-Path ([Environment]::SystemDirectory) 'WindowsPowerShell\v1.0\powershell.exe'
 
 function Assert-True([bool]$Condition, [string]$Message) { if (-not $Condition) { throw $Message } }
@@ -161,8 +162,8 @@ Assert-True ((Get-FileHash -LiteralPath $payload -Algorithm SHA256).Hash -eq $ma
     (Get-Item -LiteralPath $payload).Length -eq [long]$manifest.Payload.Bytes) 'Installer manifest payload mismatch.'
 Assert-Inventory $publish $manifest
 foreach ($bootstrap in $manifest.BootstrapFiles) {
-    Assert-True ([string]$bootstrap.Path -in @('install.ps1', 'install.cmd', 'uninstall.ps1', 'uninstall.cmd', 'uninstall-cleanup.ps1', 'SETUP-HELP.txt')) 'Unexpected installer bootstrap name.'
-    $bootstrapPath = Join-Path (Join-Path $repository 'build\installer') ([string]$bootstrap.Path)
+    Assert-True ([string]$bootstrap.Path -in @('MyCaptureSetup.exe', 'MyCaptureSetup.exe.config', 'SETUP-HELP.txt')) 'Unexpected installer bootstrap name.'
+    $bootstrapPath = Get-SetupBootstrapSource ([string]$bootstrap.Path)
     Assert-True ((Get-FileHash -LiteralPath $bootstrapPath -Algorithm SHA256).Hash -eq [string]$bootstrap.Sha256) 'Seed installer source does not match the candidate bootstrap inventory.'
 }
 if (-not $Execute) {
@@ -171,7 +172,7 @@ if (-not $Execute) {
 }
 if (-not $DotNetPath) { $DotNetPath = (Get-Command dotnet -CommandType Application -ErrorAction Stop).Source }
 $toolProject = Join-Path $repository 'build\tools\UpdateHelperResourceReader\UpdateHelperResourceReader.csproj'
-& $DotNetPath build $toolProject -c Release --nologo
+& $DotNetPath build $toolProject -c Release --no-restore -m:1 -nr:false -p:UseSharedCompilation=false
 Assert-True ($LASTEXITCODE -eq 0) 'Embedded helper reader build failed.'
 $tool = Join-Path (Split-Path -Parent $toolProject) 'bin\Release\net10.0-windows10.0.22000.0\UpdateHelperResourceReader.dll'
 $readerInfo = New-Object Diagnostics.ProcessStartInfo
@@ -198,7 +199,8 @@ Assert-NoOutputLinks $run
 $install = Join-Path $run 'installed'
 [IO.Directory]::CreateDirectory((Join-Path $run 'temporary')) | Out-Null
 $seedLog = Join-Path $run 'seed-install.log'
-& $powerShell -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File (Join-Path $repository 'build\installer\install.ps1') -Quiet -NoShellIntegration -InstallRoot $install -PayloadPath $payload -ManifestPath (Join-Path $artifacts 'installer-manifest.json') -LogPath $seedLog
+$env:MYCAPTURE_DATA_ROOT = Join-Path $run 'isolated-data'
+& (Join-Path $artifacts 'installer-stage\MyCaptureSetup.exe') /quiet --no-shell-integration --install-root $install --payload $payload --manifest (Join-Path $artifacts 'installer-manifest.json') --log $seedLog
 Assert-True ($LASTEXITCODE -eq 0) "Isolated seed installation failed; see $seedLog"
 $installedManifest = Get-Content -LiteralPath (Join-Path $install 'install-manifest.json') -Raw -Encoding UTF8 | ConvertFrom-Json
 Assert-Inventory $install $installedManifest
@@ -226,12 +228,13 @@ Write-Json (Join-Path $run 'acceptance-owner.json') @{
 }
 $workerInfo = New-Object Diagnostics.ProcessStartInfo
 $workerInfo.FileName = $powerShell
-$workerInfo.Arguments = '-NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File ' + (Quote-Argument $PSCommandPath) + ' -WorkerRoot ' + (Quote-Argument $run) + ' -WorkerSession ' + (Quote-Argument $session)
+$workerInfo.Arguments = '-NoLogo -NoProfile -NonInteractive -File ' + (Quote-Argument $PSCommandPath) + ' -WorkerRoot ' + (Quote-Argument $run) + ' -WorkerSession ' + (Quote-Argument $session)
 $workerInfo.UseShellExecute = $false
 $workerInfo.CreateNoWindow = $true
 $workerInfo.WindowStyle = [Diagnostics.ProcessWindowStyle]::Hidden
 $workerInfo.EnvironmentVariables['TEMP'] = Join-Path $run 'temporary'
 $workerInfo.EnvironmentVariables['TMP'] = Join-Path $run 'temporary'
+$workerInfo.EnvironmentVariables['MYCAPTURE_DATA_ROOT'] = Join-Path $run 'isolated-data'
 $worker = [Diagnostics.Process]::Start($workerInfo)
 try {
     Write-Output "ACCEPTANCE_OUTPUT=$run"
