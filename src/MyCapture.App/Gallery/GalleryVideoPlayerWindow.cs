@@ -3,6 +3,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Threading;
+using Microsoft.Extensions.Logging;
 using MyCapture.App.Capture;
 using MyCapture.App.Recording;
 using MyCapture.App.Themes;
@@ -17,6 +18,7 @@ namespace MyCapture.App.Gallery;
 /// </summary>
 internal sealed class GalleryVideoPlayerWindow : Window
 {
+    private readonly ILogger? _log;
     private readonly MediaElement _video = new()
     {
         LoadedBehavior = MediaState.Manual,
@@ -46,8 +48,9 @@ internal sealed class GalleryVideoPlayerWindow : Window
 
     internal event EventHandler? PlayerClosed;
 
-    internal GalleryVideoPlayerWindow()
+    internal GalleryVideoPlayerWindow(ILogger? log = null)
     {
+        _log = log;
         Title = "MyCapture";
         Width = 420;
         SizeToContent = SizeToContent.Height;
@@ -104,7 +107,7 @@ internal sealed class GalleryVideoPlayerWindow : Window
         _timer.Tick += (_, _) => UpdatePosition();
         SourceInitialized += (_, _) => CaptureWindowExclusion.TryApply(this);
         // Clearing the probe also tells a MediaOpened still awaiting it that the window is gone.
-        Closed += (_, _) => { _sourceProbe = null; _timer.Stop(); _video.Close(); PlayerClosed?.Invoke(this, EventArgs.Empty); };
+        Closed += (_, _) => { _sourceProbe = null; _timer.Stop(); StudioRangeVideoEffect.Clear(_video); _video.Close(); PlayerClosed?.Invoke(this, EventArgs.Empty); };
     }
 
     internal Guid VideoId => _videoId;
@@ -170,7 +173,7 @@ internal sealed class GalleryVideoPlayerWindow : Window
             return; // Another video was opened, or the window closed, while the probe ran.
         }
 
-        StudioRangeVideoEffect.Apply(_video, source.StudioRange);
+        StudioRangeVideoEffect.Apply(_video, source.StudioRange, VideoPlayerKind.Gallery, _log);
         double containerMs = source.DurationMs;
 
         _mediaReady = true;
@@ -184,6 +187,7 @@ internal sealed class GalleryVideoPlayerWindow : Window
         {
             // Open plays to make MediaOpened arrive; a selected (not played) video waits on its
             // first frame instead of running unseen to its end and showing nothing.
+            StudioRangeVideoEffect.PositionRequested(_video);
             _video.Position = TimeSpan.Zero;
             SetPlayback(false);
         }
@@ -193,6 +197,7 @@ internal sealed class GalleryVideoPlayerWindow : Window
     {
         _playing = false;
         _timer.Stop();
+        StudioRangeVideoEffect.PositionRequested(_video);
         _video.Position = TimeSpan.Zero;
         SetStatusPlaying(false);
     }
@@ -211,7 +216,11 @@ internal sealed class GalleryVideoPlayerWindow : Window
         if (!_mediaReady) return;
         if (playing)
         {
-            if (_video.Position.TotalMilliseconds >= _seek.Maximum - 1) _video.Position = TimeSpan.Zero;
+            if (_video.Position.TotalMilliseconds >= _seek.Maximum - 1)
+            {
+                StudioRangeVideoEffect.PositionRequested(_video);
+                _video.Position = TimeSpan.Zero;
+            }
             _video.Play();
             _playing = true;
             _timer.Start();
@@ -232,6 +241,7 @@ internal sealed class GalleryVideoPlayerWindow : Window
     private void OnSeekChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
     {
         if (_seekUpdating || !_mediaReady) return;
+        StudioRangeVideoEffect.PositionRequested(_video);
         _video.Position = TimeSpan.FromMilliseconds(Math.Clamp(e.NewValue, 0, _seek.Maximum));
         UpdateTime();
     }

@@ -29,7 +29,6 @@ public sealed partial class SettingsThemePreviewTests
             { Source = new Uri($"pack://application:,,,/MyCapture;component/Themes/{name}.xaml") });
         string root = OwnedTestDirectory.Create("mc-gallery-video-range-");
         GalleryVideoPlayerWindow? player = null;
-        StudioRangeVideoEffect.Calibration = new(StudioRangeCalibrationProcess.MeasureAsync);
         try
         {
             const int width = 1280, height = 720;
@@ -42,15 +41,15 @@ public sealed partial class SettingsThemePreviewTests
             while (!(bool)ready.GetValue(player)! && DateTime.UtcNow < deadline)
                 RangePatternClip.Pump(TimeSpan.FromMilliseconds(20));
             Assert.True((bool)ready.GetValue(player)!, "the gallery player did not open the clip");
-            RangePatternClip.WaitForCalibration();
+            RangePatternClip.WaitForVerification(player.MediaForDiagnostic);
             RangePatternClip.Pump(TimeSpan.FromMilliseconds(500));
 
             var video = (MediaElement)typeof(GalleryVideoPlayerWindow).GetField("_video", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(player)!;
-            // Both actual measurements must succeed inside an app with the shared implicit Window
-            // style. Falling back silently would otherwise hide a full-range probe failure.
-            VideoRangeCorrection correction = RangePatternClip.AssertCalibratedEffect(video, !fullRange);
+            // The real player must verify successfully with the shared implicit Window style.
+            // Falling back silently would hide a presenter/reference mismatch.
+            VideoRangeCorrection correction = RangePatternClip.AssertVerifiedEffect(video, !fullRange);
             if (!StudioRangeVideoEffect.HardwareShaderAvailable()
-                && StudioRangeVideoEffect.Calibration.CorrectionFor(!fullRange) != VideoRangeCorrection.None)
+                && !fullRange)
                 return;
 
             var visual = new DrawingVisual();
@@ -74,11 +73,9 @@ public sealed partial class SettingsThemePreviewTests
                 }
                 catch (Exception sampleError) { patches = "sampling failed: " + sampleError; }
             }
-            StudioRangePresentationCalibration calibration = StudioRangeVideoEffect.Calibration;
-            var measured = calibration.IsStarted && calibration.GetResultAsync().IsCompletedSuccessfully
-                ? calibration.GetResultAsync().Result : default;
-            throw new Xunit.Sdk.XunitException($"{ex}\nOut-of-process calibration: studio={measured.Studio}, full={measured.Full}, "
-                + $"failure={calibration.Failure}; hardware={StudioRangeVideoEffect.HardwareShaderAvailable()}; effect={effect}; patches: {patches}");
+            var measured = player is null ? null : StudioRangeVideoEffect.VerificationFor(player.MediaForDiagnostic)?.LastResult;
+            throw new Xunit.Sdk.XunitException($"{ex}\nPlayer verification: {measured}; "
+                + $"hardware={StudioRangeVideoEffect.HardwareShaderAvailable()}; effect={effect}; patches: {patches}");
         }
         finally
         {

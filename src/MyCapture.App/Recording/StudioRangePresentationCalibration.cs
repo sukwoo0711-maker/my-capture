@@ -29,7 +29,7 @@ internal readonly record struct VideoRangeCalibrationResult(
     };
 }
 
-/// <summary>A lazy, process-wide measurement of both input ranges with one bounded, cached fallback.</summary>
+/// <summary>Explicit diagnostic probe and injected legacy test result; never started by normal previews.</summary>
 internal sealed class StudioRangePresentationCalibration
 {
     private readonly Lazy<Task<VideoRangeCalibrationResult>> _result;
@@ -40,11 +40,11 @@ internal sealed class StudioRangePresentationCalibration
         Action<Exception>? logFailure = null)
     {
         _result = new Lazy<Task<VideoRangeCalibrationResult>>(() => MeasureOnceAsync(
-            measure, timeout ?? StudioRangeCalibrationProcess.Timeout, logFailure ?? (ex =>
+            measure, timeout ?? TimeSpan.FromSeconds(8), logFailure ?? (ex =>
                 Trace.TraceWarning("MediaElement range calibration failed; retaining studio Expand / full None: {0}", ex))));
     }
 
-    // Explicit opt-in for H5/H6 and responsiveness diagnostics only. Product previews use the child.
+    // Explicit opt-in for the video-range diagnostic only.
     internal static StudioRangePresentationCalibration CreateInProcessForDiagnostic() =>
         new(token => StudioRangeCalibrationProbe.MeasureAsync(token), TimeSpan.FromSeconds(8));
 

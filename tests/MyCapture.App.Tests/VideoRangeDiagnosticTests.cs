@@ -12,8 +12,8 @@ public sealed class VideoRangeDiagnosticTests
     public void MatrixHasAllSizesRangesHostsSequencesAndThreeFreshRepeats()
     {
         var cells = VideoRangeDiagnosticPlan.Cells;
-        Assert.Equal(40, cells.Count);
-        Assert.Equal(46, cells.Sum(c => c.FullRangeSteps.Length));
+        Assert.Equal(36, cells.Count);
+        Assert.Equal(42, cells.Sum(c => c.FullRangeSteps.Length));
         Assert.Equal(cells.Count, cells.Select(c => c.Id).Distinct().Count());
         Assert.Equal(24, cells.Count(c => c.Kind == "matrix"));
         foreach (string host in new[] { "probe", "gallery", "editor" })
@@ -29,7 +29,7 @@ public sealed class VideoRangeDiagnosticTests
         Assert.Equal(3, cells.Count(c => c.Kind == "repeat" && c.Host == "gallery" && c.Width == 1280 && !c.FullRangeSteps[0]));
         foreach (int width in new[] { 1280, 1920 })
         foreach (string host in new[] { "gallery", "editor" })
-        foreach (string mode in new[] { "in-process", "out-of-process" })
+        foreach (string mode in new[] { "in-process" })
             Assert.Single(cells, c => c.Kind == "concurrent" && c.Host == host && c.Width == width
                 && c.CalibrationMode == mode && c.FullRangeSteps.SequenceEqual(new[] { false }));
         Assert.Single(cells, c => c.Kind == "content" && c.Pattern == "colour-patches" && c.Width == 1280 && c.Host == "gallery");
@@ -73,7 +73,7 @@ public sealed class VideoRangeDiagnosticTests
         Assert.Contains(facts, f => f.StartsWith("H3:") && f.Contains("different processes"));
         Assert.Contains(facts, f => f.StartsWith("H4:") && f.Contains("identical fresh-process"));
         Assert.Contains(facts, f => f.StartsWith("Calibration differs:"));
-        Assert.Contains(facts, f => f.Contains("Collected 6/40"));
+        Assert.Contains(facts, f => f.Contains("Collected 6/36"));
     }
 
     [Fact]
@@ -88,7 +88,7 @@ public sealed class VideoRangeDiagnosticTests
         };
         string[] facts = VideoRangeDiagnosticPlan.Summarize(results);
         Assert.DoesNotContain(facts, f => f.StartsWith('H'));
-        Assert.Contains(facts, f => f.Contains("Collected 3/40") && f.Contains("unknown samples=1"));
+        Assert.Contains(facts, f => f.Contains("Collected 3/36") && f.Contains("unknown samples=1"));
     }
 
     [Fact]
@@ -245,14 +245,29 @@ public sealed class VideoRangeDiagnosticTests
     }
 
     [Theory]
-    [InlineData(null, "out-of-process")]
-    [InlineData("known", "known")]
-    [InlineData("in-process", "in-process")]
-    [InlineData("out-of-process", "out-of-process")]
+    [InlineData(null, "default")]
+    [InlineData("none", "none")]
+    [InlineData("default", "default")]
     public void ResponsivenessCalibrationModesAreExplicitAndDefaultToProduct(string? value, string expected)
     {
         Assert.Equal(expected, VideoEditorResponsivenessSelfTest.ReadCalibrationMode(value));
         Assert.Throws<ArgumentException>(() => VideoEditorResponsivenessSelfTest.ReadCalibrationMode("disabled-typo"));
+    }
+
+    [Fact]
+    public void PlayerVerificationRoundTripsBesideRawSamples()
+    {
+        var result = Result("matrix-studio-1280x720-gallery", "StudioRetained");
+        var decision = new RangeVerificationResult(VideoRangePresentation.StudioRetained,
+            new(12, 1, 20), [new(12, 1, 20), new(13, 2, 21), new(11, 1, 19)], 1200, 255, 2, 123, "verified");
+        result = result with { Samples = [result.Samples[0] with { Verification = decision }] };
+        string json = System.Text.Json.JsonSerializer.Serialize(result);
+        var restored = System.Text.Json.JsonSerializer.Deserialize<VideoRangeCellResult>(json)!;
+        var actual = Assert.IsType<RangeVerificationResult>(restored.Samples[0].Verification);
+        Assert.Equal(decision.Model, actual.Model); Assert.Equal(decision.Errors, actual.Errors);
+        Assert.Equal(decision.ChannelErrors, actual.ChannelErrors); Assert.Equal(1200, actual.Points);
+        Assert.Equal(255, actual.DynamicRange); Assert.Equal(2, actual.Attempts); Assert.Equal(123, actual.PositionMs);
+        Assert.Equal("StudioRetained", restored.Samples[0].Classification);
     }
 
     private static VideoRangeCellResult Result(string id, params string[] classifications)

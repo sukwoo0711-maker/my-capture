@@ -14,7 +14,7 @@ internal sealed record VideoRangeSample(int Step, string InputRange, string Clas
     VideoRangeObservation[] Observations, double WindowWidthDip, double WindowHeightDip,
     double ContentWidthDip, double ContentHeightDip, double PresentedWidthPixels, double PresentedHeightPixels,
     double ScaleX, double ScaleY, double DpiX, double DpiY, int RenderTier, bool PixelShader20,
-    bool CalibrationStartedBeforeSample, string Phase = "before-calibration", double ElapsedMs = 0);
+    bool CalibrationStartedBeforeSample, string Phase = "before-calibration", double ElapsedMs = 0, RangeVerificationResult? Verification = null);
 internal sealed record VideoRangeTiming(double? OpeningMs, double? CalibrationStartMs, double? CalibrationEndMs);
 internal sealed record VideoRangeCellResult(VideoRangeCell Cell, int ProcessId, VideoRangeSample[] Samples,
     VideoRangeCalibrationResult Calibration, string? CalibrationFailure, string[] Adapters,
@@ -48,7 +48,7 @@ internal static class VideoRangeDiagnosticPlan
             cells.Add(new($"repeat-studio-1280x720-gallery-{repeat}", "gallery", 1280, 720, [false], "repeat"));
         foreach ((int width, int height) in new[] { (1280, 720), (1920, 1080) })
         foreach (string host in new[] { "gallery", "editor" })
-        foreach (string mode in new[] { "in-process", "out-of-process" })
+        foreach (string mode in new[] { "in-process" })
             cells.Add(new($"concurrent-{mode}-studio-{width}x{height}-{host}", host, width, height,
                 [false], "concurrent", mode));
         cells.Add(new("colour-studio-1280x720-gallery", "gallery", 1280, 720, [false], "content", Pattern: "colour-patches"));
@@ -146,7 +146,7 @@ internal static class VideoRangeDiagnosticPlan
                 + $"cell failure={result.Failure ?? "none"}. Classification uses the same four greys; inspect all 16 named RGBA patches.");
         }
         results = results.Where(r => r.Cell.Kind is "matrix" or "sequence" or "repeat").ToArray();
-        // H1-H4 compare only samples taken before the product calibration presented its clips;
+        // H1-H4 compare only samples taken before the diagnostic probe presented its clips;
         // a re-sample of the same player after calibration is reported separately as H5.
         var beforeCalibration = new List<VideoRangeCellResult>();
         foreach (VideoRangeCellResult result in results)
@@ -156,7 +156,7 @@ internal static class VideoRangeDiagnosticPlan
             {
                 VideoRangeSample? earlier = before.LastOrDefault(s => s.Step == after.Step);
                 if (earlier is not null && earlier.Classification != after.Classification)
-                    facts.Add($"H5: {result.Cell.Id} presentation changed after the product calibration: "
+                    facts.Add($"H5: {result.Cell.Id} presentation changed after the diagnostic probe: "
                         + $"{earlier.Classification} -> {after.Classification}.");
             }
             beforeCalibration.Add(result with { Samples = before });
@@ -197,7 +197,7 @@ internal static class VideoRangeDiagnosticPlan
             var calibrated = sample.InputRange == "studio" ? result.Calibration.Studio : result.Calibration.Full;
             if (calibrated.HasValue && sample.Classification != calibrated.Value.ToString())
                 facts.Add($"Calibration differs: {result.Cell.Id} step {sample.Step}={sample.Classification}, "
-                    + $"subsequent product {sample.InputRange} calibration={calibrated.Value}.");
+                    + $"subsequent diagnostic {sample.InputRange} calibration={calibrated.Value}.");
         }
         if (!facts.Any(f => f.StartsWith('H')))
             facts.Add("No classification difference observed in the collected H1-H7 comparisons.");

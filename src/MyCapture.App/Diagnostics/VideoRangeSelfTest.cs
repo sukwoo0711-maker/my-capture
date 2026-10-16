@@ -67,13 +67,13 @@ internal static class VideoRangeSelfTest
             .AppendLine($"Elapsed: {elapsed.Elapsed.TotalSeconds:F1}s; per cell 20s; whole run 300s.")
             .AppendLine("PASS means all observations were collected, regardless of colour classification.")
             .AppendLine("All windows are off-screen. Probe uses source-sized DIP content; gallery/editor retain product layout.")
-            .AppendLine("H1-H5 samples precede explicit in-process calibration. H6 starts calibration with opening; H7 uses the test colour pattern. Sequence steps reuse the host window; probe uses a fresh MediaElement per step, as in product calibration.")
+            .AppendLine("H1-H5 samples precede explicit in-process calibration. H6 starts calibration with opening; H7 uses the test colour pattern. Sequence steps reuse the host window; the diagnostic probe uses a fresh MediaElement per step. Gallery/editor include product verification outcomes.")
             .AppendLine("RGBA patches: source greys [0,64,192,255]; five raw observations per step. Classification requires the last two to agree.")
             .AppendLine("H7 patch order: " + string.Join(", ", VideoRangeColourPattern.Patches.Select(p => $"{p.Name}=({p.R},{p.G},{p.B})")))
             .AppendLine("GPU descriptions enumerate available adapters; they do not identify the adapter/decoder selected by MediaElement.")
             .AppendLine("H1-H7 lines report classification differences, not causal conclusions. Scale is physical presented pixels / source pixels.")
             .AppendLine().AppendLine(string.Join(Environment.NewLine, summary)).AppendLine()
-            .AppendLine("cell | pid | step | input | classification | RGBA | scale | DPI | tier | PS2 | calibration studio/full")
+            .AppendLine("cell | pid | step | input | classification | RGBA | scale | DPI | tier | PS2 | diagnostic studio/full | player verification")
             .AppendLine("A step marked 'after calibration' re-samples the same player once the selected calibration has presented its studio and full clips.");
         foreach (VideoRangeCellResult result in results)
         {
@@ -82,7 +82,7 @@ internal static class VideoRangeSelfTest
                     + (sample.Observations.Length == 0 ? "-"
                         : string.Join(";", sample.Observations[^1].Patches.Select(p => $"({p.R},{p.G},{p.B},{p.A})")))
                     + $" | {sample.ScaleX:F3}/{sample.ScaleY:F3} | {sample.DpiX:F0}/{sample.DpiY:F0} | {sample.RenderTier} | {sample.PixelShader20}"
-                    + $" | {result.Calibration.Studio}/{result.Calibration.Full}");
+                    + $" | {result.Calibration.Studio}/{result.Calibration.Full} | {FormatVerification(sample.Verification)}");
             if (result.Timing is { } timing)
                 report.AppendLine($"TIMING: {result.Cell.Id}: opening={timing.OpeningMs:F1}ms; "
                     + $"calibration={timing.CalibrationStartMs:F1}..{timing.CalibrationEndMs:F1}ms ({result.Cell.CalibrationMode}).");
@@ -153,10 +153,7 @@ internal static class VideoRangeSelfTest
         Environment.SetEnvironmentVariable("TEMP", dataRoot);
         Environment.SetEnvironmentVariable("TMP", dataRoot);
         StudioRangeVideoEffect.SuppressForDiagnostic = true;
-        // Preserve H5's original same-process experiment even after the product switches to a child.
-        StudioRangeVideoEffect.Calibration = cell.CalibrationMode == "out-of-process"
-            ? new(StudioRangeCalibrationProcess.MeasureAsync)
-            : StudioRangePresentationCalibration.CreateInProcessForDiagnostic();
+        var diagnosticCalibration = StudioRangePresentationCalibration.CreateInProcessForDiagnostic();
         var clock = Stopwatch.StartNew();
         double? openingMs = null, calibrationStartMs = null, calibrationEndMs = null;
         Task<VideoRangeCalibrationResult>? calibrationTask = null;
@@ -189,13 +186,13 @@ internal static class VideoRangeSelfTest
         async Task<VideoRangeCalibrationResult> StartCalibrationAsync()
         {
             calibrationStartMs = clock.Elapsed.TotalMilliseconds;
-            try { return await StudioRangeVideoEffect.Calibration.GetResultAsync(); }
+            try { return await diagnosticCalibration.GetResultAsync(); }
             finally { calibrationEndMs = clock.Elapsed.TotalMilliseconds; }
         }
 
-        VideoRangeObservation Observe(MediaElement media) => cell.Pattern == "colour-patches"
-            ? VideoRangeColourPattern.Observe(media)
-            : VideoRangeDiagnosticPlan.Observe(StudioRangeCalibrationProbe.Sample(media));
+        VideoRangeObservation Observe(MediaElement media) => MediaElementRangeVerification.WithoutEffect(media,
+            () => cell.Pattern == "colour-patches" ? VideoRangeColourPattern.Observe(media)
+                : VideoRangeDiagnosticPlan.Observe(StudioRangeCalibrationProbe.Sample(media)));
 
         async Task CollectAsync()
         {
@@ -203,7 +200,7 @@ internal static class VideoRangeSelfTest
             try { adapters = await Task.Run(() => DisplayAdapterProbe.Describe().ToArray(), token); }
             catch (Exception ex) { adapterFailure = ex.ToString(); }
             // Generate only synthetic fixture clips. Encoding precedes presentation and uses
-            // the same pattern, encoder and range flags as the product calibration.
+            // the same pattern, encoder and range flags as the diagnostic probe.
             var paths = new Dictionary<bool, string>();
             foreach (bool full in cell.FullRangeSteps.Distinct())
             {
@@ -215,6 +212,7 @@ internal static class VideoRangeSelfTest
                 }, token);
                 paths.Add(full, clip);
             }
+            StudioRangeVideoEffect.SuppressForDiagnostic = cell.Host == "probe";
             Window host = cell.Host switch
             {
                 "probe" => StudioRangeCalibrationProbe.CreateWindow(cell.Width, cell.Height),
@@ -275,12 +273,22 @@ internal static class VideoRangeSelfTest
                         await Task.Delay(20, token);
                     }
                     await Task.Delay(250, token);
+                    RangeVerificationResult? verification = null;
+                    while (StudioRangeVideoEffect.VerificationFor(media) is { } session)
+                    {
+                        try { verification = await session.Completion.WaitAsync(token); break; }
+                        catch (OperationCanceledException) when (!token.IsCancellationRequested
+                            && !ReferenceEquals(session, StudioRangeVideoEffect.VerificationFor(media))) { }
+                    }
+                    if (cell.Host != "probe" && verification is null)
+                        verification = new(null, new(255, 255, 255), [], 0, 0, 0, media.Position.TotalMilliseconds,
+                            "hardware-shaders-unavailable");
                     var observations = new List<VideoRangeObservation>();
                     for (int index = 0; index < 5; index++)
                     {
                         await Task.Delay(80, token);
                         if (mediaFailure is not null) throw mediaFailure;
-                        if (media.Effect is not null || (cell.Kind != "concurrent" && StudioRangeVideoEffect.Calibration.IsStarted))
+                        if (cell.Kind != "concurrent" && diagnosticCalibration.IsStarted)
                             throw new InvalidOperationException("Correction/calibration contaminated the raw sample.");
                         host.UpdateLayout();
                         observations.Add(Observe(media));
@@ -288,7 +296,8 @@ internal static class VideoRangeSelfTest
                     samples.Add(DescribeSample(host, media, cell, step, full, observations.ToArray()) with
                     {
                         Phase = cell.Kind == "concurrent" ? "opening-with-calibration" : "before-calibration",
-                        ElapsedMs = clock.Elapsed.TotalMilliseconds,
+                        ElapsedMs = clock.Elapsed.TotalMilliseconds, Verification = verification,
+                        CalibrationStartedBeforeSample = diagnosticCalibration.IsStarted,
                     });
                 }
                 catch (Exception) when (mediaFailure is not null && !token.IsCancellationRequested
@@ -323,7 +332,7 @@ internal static class VideoRangeSelfTest
             }
             calibrationTask ??= StartCalibrationAsync();
             calibration = await calibrationTask.WaitAsync(token);
-            calibrationFailure = StudioRangeVideoEffect.Calibration.Failure?.ToString();
+            calibrationFailure = diagnosticCalibration.Failure?.ToString();
             if (openPlayer is not null)
             {
                 int last = cell.FullRangeSteps.Length - 1;
@@ -332,14 +341,13 @@ internal static class VideoRangeSelfTest
                 for (int index = 0; index < 5; index++)
                 {
                     await Task.Delay(80, token);
-                    if (openPlayer.Effect is not null)
-                        throw new InvalidOperationException("Correction contaminated the post-calibration sample.");
                     host.UpdateLayout();
                     after.Add(Observe(openPlayer));
                 }
                 samples.Add(DescribeSample(host, openPlayer, cell, last, cell.FullRangeSteps[last], after.ToArray()) with
                 {
                     Phase = "after-calibration", ElapsedMs = clock.Elapsed.TotalMilliseconds,
+                    CalibrationStartedBeforeSample = true, Verification = StudioRangeVideoEffect.VerificationFor(openPlayer)?.LastResult,
                 });
                 host.Close();
                 windows.Remove(host);
@@ -350,7 +358,7 @@ internal static class VideoRangeSelfTest
     private static VideoRangeSample FailedSample(int step, bool full, Exception failure) =>
         new(step, full ? "full" : "studio", $"media-failed 0x{failure.HResult:X8}", [], 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
             RenderCapability.Tier >> 16, RenderCapability.IsPixelShaderVersionSupported(2, 0),
-            StudioRangeVideoEffect.Calibration.IsStarted);
+            false);
 
     private static VideoRangeSample DescribeSample(Window host, MediaElement media, VideoRangeCell cell,
         int step, bool full, VideoRangeObservation[] observations)
@@ -366,8 +374,13 @@ internal static class VideoRangeSelfTest
             host.ActualWidth, host.ActualHeight, media.ActualWidth, media.ActualHeight,
             pixelsX, pixelsY, pixelsX / cell.Width, pixelsY / cell.Height, dpi.PixelsPerInchX, dpi.PixelsPerInchY,
             RenderCapability.Tier >> 16, RenderCapability.IsPixelShaderVersionSupported(2, 0),
-            StudioRangeVideoEffect.Calibration.IsStarted);
+            false);
     }
+
+    private static string FormatVerification(RangeVerificationResult? result) => result is null ? "unavailable"
+        : $"{result.Status}: model={result.Model}, identity={result.Errors.Identity:F2}, retained={result.Errors.StudioRetained:F2}, "
+            + $"expanded={result.Errors.ExpandedAsStudio:F2}, points={result.Points}, dynamic-range={result.DynamicRange}, "
+            + $"attempts={result.Attempts}, position={result.PositionMs:F2}ms";
 
     private static void Pump()
     {

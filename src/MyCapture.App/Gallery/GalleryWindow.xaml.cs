@@ -622,7 +622,7 @@ internal sealed partial class GalleryWindow : Window
             }
 
             CloseInlinePlayer();
-            _videoPlayer = new GalleryVideoPlayerWindow();
+            _videoPlayer = new GalleryVideoPlayerWindow(_log);
             _videoPlayer.Closed += (_, _) => _videoPlayer = null;
             if (!_videoPlayer.Open(tile.Id, tile.ContextLabel, path, autoPlay))
             {

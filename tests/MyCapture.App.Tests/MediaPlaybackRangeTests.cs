@@ -13,8 +13,8 @@ using Xunit;
 namespace MyCapture.App.Tests;
 
 /// <summary>
-/// WPF may retain studio RGB or expand either input range. In-app players calibrate both
-/// ranges and show the source colours within the limits of presenter clipping.
+/// WPF may retain studio RGB or expand either input range. In-app previews verify each player
+/// and show the source colours within the limits of presenter clipping.
 /// </summary>
 public sealed class MediaPlaybackRangeTests
 {
@@ -134,14 +134,14 @@ public sealed class MediaPlaybackRangeTests
             editor.Show();
             Assert.True(RangePatternClip.PumpUntil(() => editor.IsMediaReadyForTest || editor.HasMediaFailedForTest, TimeSpan.FromSeconds(15))
                 && editor.IsMediaReadyForTest, editor.MediaFailureForTest);
-            // The range follows the source probe, with or without MediaOpened, and starts calibration.
+            // The range follows the source probe, with or without MediaOpened, and enables per-player verification.
             Assert.True(RangePatternClip.PumpUntil(() => editor.IsSourceRangeKnownForTest, TimeSpan.FromSeconds(15)), "the source probe did not finish");
-            RangePatternClip.WaitForCalibration();
-            VideoRangeCorrection correction = RangePatternClip.AssertCalibratedEffect(editor.MediaForTest, !fullRange);
+            RangePatternClip.WaitForVerification(editor.MediaForTest);
+            VideoRangeCorrection correction = RangePatternClip.AssertVerifiedEffect(editor.MediaForTest, !fullRange);
             bool hardware = StudioRangeVideoEffect.HardwareShaderAvailable();
             // Without hardware shaders (hosted CI, Remote Desktop) a needed correction is skipped by
             // design, so only the effect decision is checked there.
-            if (!hardware && StudioRangeVideoEffect.Calibration.CorrectionFor(!fullRange) != VideoRangeCorrection.None) return;
+            if (!hardware && !fullRange) return;
             Assert.True(RangePatternClip.PumpUntil(() => editor.HasMediaOpenedForTest || editor.HasMediaFailedForTest, TimeSpan.FromSeconds(30))
                 && editor.HasMediaOpenedForTest, editor.HasMediaFailedForTest ? editor.MediaFailureForTest : "MediaOpened did not arrive");
 
@@ -163,6 +163,7 @@ public sealed class MediaPlaybackRangeTests
 /// <summary>A clip of flat grey steps and colour patches with known source RGB.</summary>
 internal static class RangePatternClip
 {
+    // Legacy injection helper for the separately owned frame-save tests only.
     internal static void WaitForCalibration()
     {
         Assert.True(StudioRangeVideoEffect.Calibration.IsStarted, "Opening a clip with known range must start calibration.");
@@ -174,18 +175,42 @@ internal static class RangePatternClip
         Pump(TimeSpan.FromMilliseconds(80));
     }
 
-    internal static VideoRangeCorrection AssertCalibratedEffect(System.Windows.Controls.MediaElement media, bool studioRange)
+    internal static void WaitForVerification(System.Windows.Controls.MediaElement media)
     {
-        StudioRangePresentationCalibration calibration = StudioRangeVideoEffect.Calibration;
+        if (!StudioRangeVideoEffect.HardwareShaderAvailable()) return;
+        Assert.True(PumpUntil(() => StudioRangeVideoEffect.VerificationFor(media)?.Completion.IsCompleted == true,
+            TimeSpan.FromSeconds(20)), "Player verification did not complete after presenting a frame.");
+        var result = StudioRangeVideoEffect.VerificationFor(media)!.Completion.GetAwaiter().GetResult();
+        string details = result.ToString();
+        if (result.Model is null)
+        {
+            var sample = MediaElementRangeVerification.Sample(media);
+            var original = MediaElementRangeVerification.WithoutEffect(media, () => VideoRangeColourPattern.Observe(media));
+            details += $" actual={media.ActualWidth}x{media.ActualHeight}; natural={media.NaturalVideoWidth}x{media.NaturalVideoHeight}; "
+                + $"bounds={VisualTreeHelper.GetContentBounds(media)}; raw="
+                + string.Join(";", original.Patches.Select(p => $"{p.R},{p.G},{p.B}"));
+            if (sample is not null) details += "; sampled=" + string.Join(";", Enumerable.Range(0, 16).Select(i =>
+            {
+                var (x, y) = Centre(i, sample.Width, sample.Height);
+                int o = (y * sample.Width + x) * 4;
+                return $"{sample.Pixels[o+2]},{sample.Pixels[o+1]},{sample.Pixels[o]}";
+            }));
+        }
+        Assert.True(result.Model.HasValue, details);
+        Pump(TimeSpan.FromMilliseconds(80));
+    }
+
+    internal static VideoRangeCorrection AssertVerifiedEffect(System.Windows.Controls.MediaElement media, bool studioRange)
+    {
         bool hardware = StudioRangeVideoEffect.HardwareShaderAvailable();
+        var result = StudioRangeVideoEffect.VerificationFor(media)?.LastResult;
         if (hardware)
         {
-            Assert.Null(calibration.Failure);
-            VideoRangeCalibrationResult result = calibration.GetResultAsync().GetAwaiter().GetResult();
-            Assert.NotNull(result.Studio);
-            Assert.NotNull(result.Full);
+            Assert.NotNull(result);
+            Assert.Equal("verified", result.Status);
+            Assert.NotNull(result.Model);
         }
-        VideoRangeCorrection correction = hardware ? calibration.CorrectionFor(studioRange) : VideoRangeCorrection.None;
+        VideoRangeCorrection correction = hardware ? result!.Correction!.Value : VideoRangeCorrection.None;
         AssertEffect(media, correction);
         return correction;
     }
@@ -247,7 +272,7 @@ internal static class RangePatternClip
         }
 
         Assert.True(failures.Count == 0, string.Join("; ", failures)
-            + $"; studio={StudioRangeVideoEffect.Calibration.CorrectionFor(true)}, full={StudioRangeVideoEffect.Calibration.CorrectionFor(false)}, calibrationFailure={StudioRangeVideoEffect.Calibration.Failure}");
+            + $"; correction={correction}");
     }
 
     /// <summary>Pumps the dispatcher until <paramref name="condition"/> holds; false when <paramref name="timeout"/> passes first.</summary>

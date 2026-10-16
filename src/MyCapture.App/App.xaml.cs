@@ -1953,18 +1953,6 @@ public partial class App : Application
 
     private bool TryRunSelfTest(string[] args)
     {
-        if (FindSwitch(args, StudioRangeCalibrationProcess.CommandLineSwitch) >= 0)
-        {
-            int exitCode;
-            try { exitCode = StudioRangeCalibrationProcess.RunChild(StudioRangeCalibrationProcess.ParseArguments(args)); }
-            catch (Exception ex) when (ex is ArgumentException or IOException or UnauthorizedAccessException)
-            {
-                exitCode = 2;
-            }
-            Shutdown(exitCode);
-            return true;
-        }
-
         if (FindSwitch(args, VideoRangeDiagnosticPlan.CommandLineSwitch) >= 0
             || FindSwitch(args, VideoRangeDiagnosticPlan.ChildSwitch) >= 0)
         {

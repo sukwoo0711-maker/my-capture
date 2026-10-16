@@ -286,6 +286,7 @@ internal sealed partial class VideoEditorWindow : Window
         _previewEngine = new MediaElementPreviewEngine(_media);
         _previewSeeks = new PreviewSeekCoordinator(previewEngine ?? _previewEngine, recording.Fps);
         _playMedia = playMedia ?? _media.Play;
+        _previewSeeks.PositionRequested += OnPreviewPositionRequested;
         _previewSeeks.PreviewPresented += OnPreviewPresented;
         _previewSeeks.SeekFailed += OnPreviewSeekFailed;
 
@@ -546,7 +547,7 @@ internal sealed partial class VideoEditorWindow : Window
         VideoSourceInfo source = await VideoSourceProbe.ReadAsync(_recording.OutputPath, _log);
         if (!_closing)
         {
-            StudioRangeVideoEffect.Apply(_media, source.StudioRange);
+            StudioRangeVideoEffect.Apply(_media, source.StudioRange, VideoPlayerKind.Editor, _log);
         }
 
         return source;
@@ -1542,6 +1543,8 @@ internal sealed partial class VideoEditorWindow : Window
 
     // ---- media lifecycle ----
 
+    private void OnPreviewPositionRequested() => StudioRangeVideoEffect.PositionRequested(_media);
+
     private async void OnMediaOpened(object? sender, RoutedEventArgs e)
     {
         double? playerMs = _media.NaturalDuration.HasTimeSpan
@@ -1613,6 +1616,7 @@ internal sealed partial class VideoEditorWindow : Window
 
         try
         {
+            StudioRangeVideoEffect.PositionRequested(_media);
             _media.Position = TimeSpan.FromMilliseconds(_previewEngine.PresentationPositionMs(_editDocument.TrimInMs));
             _media.Pause();
         }
@@ -3388,6 +3392,8 @@ internal sealed partial class VideoEditorWindow : Window
         _timeline.PlayheadInteractionCompleted -= OnTimelinePlayheadInteractionCompleted;
         _layerTimeline.LayerTimingChanged -= OnLayerTimingChanged;
         _layerTimeline.LayerTimingInteractionCompleted -= OnLayerTimingInteractionCompleted;
+        StudioRangeVideoEffect.Clear(_media);
+        _previewSeeks.PositionRequested -= OnPreviewPositionRequested;
         _previewSeeks.PreviewPresented -= OnPreviewPresented;
         _previewSeeks.SeekFailed -= OnPreviewSeekFailed;
         _previewSeeks.Dispose();
