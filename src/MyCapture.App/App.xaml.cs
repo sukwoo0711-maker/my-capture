@@ -1952,6 +1952,20 @@ public partial class App : Application
 
     private bool TryRunSelfTest(string[] args)
     {
+        if (FindSwitch(args, VideoRangeDiagnosticPlan.CommandLineSwitch) >= 0
+            || FindSwitch(args, VideoRangeDiagnosticPlan.ChildSwitch) >= 0)
+        {
+            VideoRangeArguments request;
+            try { request = VideoRangeDiagnosticPlan.ParseArguments(args); }
+            catch (Exception ex) when (ex is ArgumentException or IOException or UnauthorizedAccessException)
+            {
+                Shutdown(2);
+                return true;
+            }
+            return RunSelfTest(request.OutputDirectory, VideoRangeDiagnosticPlan.ReportName,
+                root => request.Cell is { } cell ? VideoRangeSelfTest.RunChild(root, cell) : VideoRangeSelfTest.Run(root));
+        }
+
         int hotfixIndex = FindSwitch(args, HotfixUxSelfTest.CommandLineSwitch);
         if (hotfixIndex >= 0)
         {

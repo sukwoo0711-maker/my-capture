@@ -109,6 +109,9 @@ internal sealed class GalleryVideoPlayerWindow : Window
 
     internal Guid VideoId => _videoId;
 
+    internal MediaElement MediaForDiagnostic => _video;
+    internal bool IsMediaReadyForDiagnostic => _mediaReady;
+
     /// <summary>Loads a video; returns false when the file is missing or cannot be opened.</summary>
     internal bool Open(Guid id, string title, string path, bool autoPlay)
     {
@@ -130,6 +133,10 @@ internal sealed class GalleryVideoPlayerWindow : Window
         _mediaReady = false;
         _playing = false;
         _video.Stop();
+        // Tear the previous media down completely: switching one player between clips with a
+        // different range in place has failed with MILAVERR_UNEXPECTEDWMPFAILURE.
+        _video.Close();
+        _video.Source = null;
         StudioRangeVideoEffect.Clear(_video);
         _sourceProbe = VideoSourceProbe.ReadAsync(path);
         _video.Source = new Uri(path);

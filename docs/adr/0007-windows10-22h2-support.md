@@ -87,6 +87,13 @@ Windows 10에서는 WPF의 픽셀별 알파 레이어드 창(`AllowsTransparency
 성공 시 두 판정을 한 번 기록하고 실패 시 원인을 한 번 기록합니다. 보정 영상은 측정 뒤 기존 재시도
 정리 경로로 지웁니다.
 
+프레임 편집에 전달하는 픽셀은 정확 탐색 요청 시각을 고정한 뒤 별도 STA 스레드에서
+`VideoFrameRenderPipeline.RenderSingleFrame`으로 디코드하고 기존 프레임·텍스트 레이어를 합성합니다.
+`MediaElement`의 표시 픽셀은 프레임 저장에 사용하지 않습니다. 따라서 미리보기의 Expand/Compress와
+presenter의 범위 오류는 회전·블러·모자이크 레이어 PNG에 포함되지 않습니다. 회전만 한 편집도 레이어로 저장합니다.
+썸네일·포스터·filmstrip·GIF·MP4는 기존 Media Foundation 디코드 경로를 유지합니다.
+`RenderCurrentFrameForTest`는 실제 미리보기의 색상과 탐색을 검사하는 시각 전용 훅입니다.
+
 
 ## 노란 테두리 검증
 
@@ -116,6 +123,61 @@ Get-Content -LiteralPath (Join-Path $output 'wgc-border.json')
 Store 서명본에서도 같은 스위치로 검증합니다. Windows 10의 진단에는 border API가 `unavailable (pre-Windows 11)`로 표시됩니다.
 
 ## 실기 수용 조건
+
+### MediaElement 색상 범위 관측
+
+일반 데스크톱 세션에서 다음 명령으로 장비의 범위 동작을 수집합니다. 설치본은 `$exe`만 해당
+`MyCapture.exe`의 절대 경로로 바꿉니다. 기존 MyCapture 프로세스를 종료하지 않습니다.
+
+```powershell
+$run = Join-Path $env:TEMP ('MyCapture-video-range-' + [guid]::NewGuid().ToString('N'))
+$env:MYCAPTURE_DATA_ROOT = Join-Path $run 'data'
+$exe = 'C:\GitRepositories\my-capture\.claude\worktrees\admiring-greider-0655a6\src\MyCapture.App\bin\Release\net10.0-windows10.0.22000.0\MyCapture.exe'
+$output = Join-Path $run 'range'
+& $exe --selftest-video-range $output | Out-Null
+$LASTEXITCODE
+Get-Content -LiteralPath (Join-Path $output 'video-range-report.txt')
+Get-Content -LiteralPath (Join-Path $output 'video-range.json')
+```
+
+공개 인수 형식은 `--selftest-video-range <절대 출력 디렉터리>`입니다. 상대 경로·드라이브 루트·UNC·
+링크/junction·모호한 경로는 거부합니다. 자체 실행 파일의 내부 스위치로 셀마다 새 자식 프로세스를
+시작합니다. studio/full × 320×180/640×360/1280×720/1920×1080 × probe/gallery/editor의 24개 셀,
+gallery와 probe 각각의 studio→full→studio 및 full→studio 순서 셀 4개, 1280×720 studio gallery의
+추가 독립 반복 3개로 총 31개 프로세스·37개 관측 단계를 수집합니다. 자식은 직렬로 실행하며 셀당
+20초, 전체 5분 제한을 적용합니다. 시간 초과 시 해당 진단이 시작한 자식만 종료합니다.
+
+각 단계에서는 효과와 자동 보정 시작을 억제하고 제품 보정의 동일한 패턴·인코더·샘플러·분류기를
+사용합니다. probe는 제품 측정과 같은 창·MediaElement 구성을 재사용합니다. 모든 창은 화면 밖에
+배치하고, probe는 원본 크기의 DIP, gallery는 제품 기본 크기, editor는 1100×760 DIP로 측정합니다.
+순서 셀은 같은 창을 유지하며 gallery는 같은 MediaElement를 재사용하고 probe는 제품 보정처럼
+단계마다 새 MediaElement를 만듭니다. 다섯 표본의 원시 RGBA를 모두 저장하고 마지막 두 판정이
+일치하면 확정합니다. 불일치·알 수 없는 패턴은 `unknown` 관측으로 보존합니다.
+
+모든 단계가 끝난 뒤 같은 프로세스에서 제품 보정을 한 번 실행합니다. 보정의 full-range 영상이
+최초 studio 관측이나 순서 실험에 앞서 재생되지 않도록 순서를 고정합니다. 갤러리·편집기 셀은 창을 연 채로
+보정을 실행하고 같은 재생기를 한 번 더 측정합니다(`after calibration`). 보정 영상이 재생된 뒤 이미 열린
+미리보기의 표시가 바뀌는지는 H5로 요약합니다. 순서 단계에서 재생기가 실패하면 `media-failed <HRESULT>`
+관측으로 기록하고 다음 단계를 계속합니다. 같은 갤러리 재생기에서 studio→full로 영상을 바꿀 때
+`MILAVERR_UNEXPECTEDWMPFAILURE`가 나던 문제는 영상을 바꾸기 전에 이전 미디어를 닫도록 고쳤습니다. JSON에는 보정 결과·실패,
+창/콘텐츠 DIP 크기, 실제 제시 픽셀 크기와 원본 대비 배율, DPI, WPF tier·PS 2.0 지원,
+DXGI 어댑터 목록(또는 조회 실패)을 포함합니다. 어댑터 목록은 MediaElement가 실제 선택한 GPU나
+하드웨어/소프트웨어 디코더를 확정하지 않습니다.
+
+`video-range-report.txt`에는 재실행 명령·관측 표·H1 크기별/H2 호스트별/H3 순서별/H4 동일 조건 반복별/
+H5 보정 전후 판정 차이를 기록합니다. `Calibration differs`는 먼저 관측한 결과와 이후 제품 보정의 차이입니다.
+차이는 인과관계의 확정이 아니므로 JSON의 원시 표본과 배율도 함께 비교합니다. `cells-<GUID>` 아래
+셀별 `video-range.json`, `video-range-report.txt`, 합성 `studio.mp4`/`full.mp4`를 보존합니다.
+자식의 `MYCAPTURE_DATA_ROOT`와 TEMP/TMP는 셀의 `data` 하위에 격리하며, 제품 보정용 임시 클립의
+기존 삭제·재시도 호출은 유지합니다. 실제 사용자 영상·설정·클립보드는 사용하지 않습니다.
+
+완료 조건은 exit code 0 및 `RESULT: PASS`, 31개 셀·37개 관측 수집입니다. 색상 판정이 비정상이거나
+`unknown`이어도 관측을 완료하면 PASS입니다. 열기·인코딩·자식 실행·시간 초과 등 수집 인프라 오류는
+FAIL이며 누락 셀을 성공으로 처리하지 않습니다. 제품 보정의 실패/폴백도 관측 필드로 기록합니다.
+
+프레임 저장 수용 검사에서는 Expand와 Compress 각각에서 검정 0·흰색 255가 디코드 허용 오차 내로
+프레임 편집 PNG와 MP4 재디코드 결과에 남는지 확인합니다. 미리보기 Compress의 16/235 클리핑 허용을
+저장 결과에 적용하지 않습니다.
 
 Windows 10 22H2 x64에서 Store 설치·업데이트와 zip 실행, 기본 WGC 녹화와 GDI 폴백, 커서 포함·제외,
 캡처 제외 창, 영역 모드 녹화 제어창의 작은 영역·전체 화면 녹화 시작과 프레임 내부 클릭 통과,

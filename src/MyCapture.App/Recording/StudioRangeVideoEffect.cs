@@ -95,6 +95,11 @@ internal sealed class StudioRangeVideoEffect : ShaderEffect
     {
         ArgumentNullException.ThrowIfNull(media);
         media.VerifyAccess();
+        if (SuppressForDiagnostic)
+        {
+            Clear(media);
+            return;
+        }
         PreviewState state = Previews.GetOrCreateValue(media);
         state.StudioRange = studioRange;
         StudioRangePresentationCalibration calibration = Calibration;
@@ -119,6 +124,10 @@ internal sealed class StudioRangeVideoEffect : ShaderEffect
 
     internal static StudioRangePresentationCalibration Calibration { get; set; } =
         new(StudioRangeCalibrationProbe.MeasureAsync);
+
+    // Only the isolated range diagnostic sets this before creating any player. In particular,
+    // do not start calibration (which presents a full-range clip) before its sequence samples.
+    internal static bool SuppressForDiagnostic { get; set; }
 
     private static async Task RefreshWhenReadyAsync(
         WeakReference<MediaElement> target, StudioRangePresentationCalibration calibration)

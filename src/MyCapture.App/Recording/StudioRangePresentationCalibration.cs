@@ -153,43 +153,47 @@ internal static class StudioRangeCalibrationProbe
             await Task.Delay(500).ConfigureAwait(false);
     }
 
-    private static void Encode(string path, bool fullRange, CancellationToken cancellationToken)
+    internal static void Encode(string path, bool fullRange, CancellationToken cancellationToken,
+        int width = Width, int height = Height)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        int stride = Width * 4;
-        byte[] pixels = new byte[stride * Height];
-        for (int y = 0; y < Height; y++)
-        for (int x = 0; x < Width; x++)
+        int stride = checked(width * 4);
+        byte[] pixels = new byte[checked(stride * height)];
+        for (int y = 0; y < height; y++)
+        for (int x = 0; x < width; x++)
         {
             int offset = y * stride + x * 4;
-            pixels[offset] = pixels[offset + 1] = pixels[offset + 2] = SourceLevels[x * 4 / Width];
+            pixels[offset] = pixels[offset + 1] = pixels[offset + 2] = SourceLevels[x * 4 / width];
             pixels[offset + 3] = 255;
         }
-        var options = new VideoEncoderOptions(path, Width, Height, 30,
-            VideoEncoderOptions.DeriveBitrate(Width, Height, 30)) { FullRange = fullRange };
+        var options = new VideoEncoderOptions(path, width, height, 30,
+            VideoEncoderOptions.DeriveBitrate(width, height, 30)) { FullRange = fullRange };
         using var encoder = new MediaFoundationVideoEncoder(options, NullLogger.Instance);
         for (int i = 0; i < 30; i++)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            encoder.WriteFrame(new EncoderFrame(pixels, Width, Height, stride, i * 1000.0 / 30));
+            encoder.WriteFrame(new EncoderFrame(pixels, width, height, stride, i * 1000.0 / 30));
         }
         encoder.Complete();
     }
 
-    private static async Task<VideoRangeCalibrationResult> MeasureWindowAsync(
-        string studioPath, string fullPath, CancellationToken cancellationToken)
-    {
-        cancellationToken.ThrowIfCancellationRequested();
-        var window = new Window
+    internal static Window CreateWindow(int width = Width, int height = Height) =>
+        new Window
         {
             // This window lives on its own UI thread. The app's implicit Window style carries
             // resources (the icon) owned by the main UI thread, so it must not apply here.
             Style = null,
             WindowStartupLocation = WindowStartupLocation.Manual,
-            Left = -10000, Top = -10000, Width = Width, Height = Height,
+            Left = -10000, Top = -10000, Width = width, Height = height,
             WindowStyle = WindowStyle.None, ResizeMode = ResizeMode.NoResize,
             ShowActivated = false, ShowInTaskbar = false,
         };
+
+    private static async Task<VideoRangeCalibrationResult> MeasureWindowAsync(
+        string studioPath, string fullPath, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var window = CreateWindow();
         try
         {
             window.Show();
@@ -210,11 +214,7 @@ internal static class StudioRangeCalibrationProbe
         var opened = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         // A fresh element in the same window avoids sampling the previous clip's retained frame
         // while the next clip is opening. Both clips deliberately use the same source pattern.
-        var media = new MediaElement
-        {
-            LoadedBehavior = MediaState.Manual, UnloadedBehavior = MediaState.Manual,
-            Stretch = Stretch.Fill, IsMuted = true, Volume = 0, ScrubbingEnabled = true,
-        };
+        var media = CreateMediaElement();
         Exception? failure = null;
         media.MediaOpened += (_, _) => opened.TrySetResult();
         media.MediaFailed += (_, e) =>
@@ -246,7 +246,15 @@ internal static class StudioRangeCalibrationProbe
         }
     }
 
-    private static byte[] Sample(MediaElement media)
+    internal static MediaElement CreateMediaElement() => new()
+    {
+        LoadedBehavior = MediaState.Manual, UnloadedBehavior = MediaState.Manual,
+        Stretch = Stretch.Fill, IsMuted = true, Volume = 0, ScrubbingEnabled = true,
+    };
+
+    // Shared by calibration and the device diagnostic. This samples the visual presenter only;
+    // it must never supply saved frames, layers, posters, or export inputs.
+    internal static byte[] Sample(MediaElement media)
     {
         var visual = new DrawingVisual();
         using (DrawingContext dc = visual.RenderOpen())
