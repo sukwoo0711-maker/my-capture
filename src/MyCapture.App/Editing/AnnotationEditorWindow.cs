@@ -104,11 +104,15 @@ internal partial class AnnotationEditorWindow : Window
         get => _editor.CommitRequested;
         set => _editor.CommitRequested = value is null ? null : async result =>
         {
-            bool saved = await value(result);
+            AnnotationEditingResult still = FrameStillImage is null ? result : await FrameStillImage.CreateResultAsync(result);
+            bool saved = await value(still);
             if (!saved || result.Action == EditorCommitAction.CopyToClipboard) return saved;
             return await RetireDraftBeforeCloseAsync();
         };
     }
+
+    // Only the persistence/export consumer sees timed text; Committed retains the text-free video layer input.
+    internal MyCapture.App.Recording.VideoFrameStillImage? FrameStillImage { get; set; }
 
     internal event EventHandler<AnnotationEditingResult>? Committed;
 

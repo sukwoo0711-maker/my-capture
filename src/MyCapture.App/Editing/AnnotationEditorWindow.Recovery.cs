@@ -5,6 +5,7 @@ namespace MyCapture.App.Editing;
 
 internal partial class AnnotationEditorWindow
 {
+    internal const string DraftFrameStillImageKey = "frameStillImage";
     internal const string DraftRecordIdKey = "recordId";
     internal const string DraftRecordRevisionKey = "recordRevision";
     private EditDraftSession? _draftSession;
@@ -31,7 +32,10 @@ internal partial class AnnotationEditorWindow
     {
         (Guid Id, long ContentRevision)? record = DraftRecordSource?.Invoke();
         DraftSnapshot? snapshot = await _editor.CaptureDraftAsync();
-        if (snapshot is null || record is not { } target) return snapshot;
+        if (snapshot is null) return null;
+        if (FrameStillImage is not null)
+            snapshot.Metadata[DraftFrameStillImageKey] = System.Text.Json.JsonSerializer.Serialize(FrameStillImage);
+        if (record is not { } target) return snapshot;
         snapshot.Metadata[DraftRecordIdKey] = target.Id.ToString("N");
         snapshot.Metadata[DraftRecordRevisionKey] =
             target.ContentRevision.ToString(System.Globalization.CultureInfo.InvariantCulture);

@@ -187,10 +187,10 @@ public sealed class VideoFrameRangeRegressionTests
             using (var stream = File.OpenRead(gifPath))
             {
                 var gif = new GifBitmapDecoder(stream, BitmapCreateOptions.PreservePixelFormat, BitmapCacheOption.OnLoad);
-                // Static input can coalesce into a single image; its 16 flat colours fit a palette.
+                // WIC palettes/dithering differ by OS, even for these flat source colours.
                 BitmapSource gifFrame = gif.Frames[0];
-                AssertPatches(gifFrame, width, height, reference, false, 3, 3);
-                AssertPatches(gifFrame, width, height, null, false, 4, 6);
+                AssertGifPatches(gifFrame, width, height, reference, 3, 3);
+                AssertGifPatches(gifFrame, width, height, null, 4, 6);
             }
 
             FilmstripLayout layout = FilmstripLayout.Create(1000, width, height, 800, 90, 30);
@@ -373,6 +373,81 @@ public sealed class VideoFrameRangeRegressionTests
         double g = (luma - kr * r - kb * b) / (1 - kr - kb);
         static byte Round(double value) => (byte)Math.Clamp((int)Math.Floor(value + 0.5), 0, 255);
         return (Round(r), Round(g), Round(b));
+    }
+
+    [Theory]
+    [InlineData(16, 0)]
+    [InlineData(64, 56)]
+    [InlineData(192, 204)]
+    [InlineData(235, 254)]
+    public void GifPatchMean_RejectsRangeExpansion(int source, int expanded) => StaTestHost.Run(() =>
+    {
+        BitmapSource gif = SyntheticGreyGif((byte)expanded, dither: false);
+        // Even the looser source-colour allowance (4 codes) must reject each expansion.
+        Assert.Throws<Xunit.Sdk.TrueException>(() => AssertGifPatchMean(
+            gif, 16, 16, ((byte)source, (byte)source, (byte)source), 4, "range counterexample"));
+    });
+
+    [Fact]
+    public void GifPatchMean_AcceptsCorrectDitherDespiteBlackPixels() => StaTestHost.Run(() =>
+    {
+        BitmapSource gif = SyntheticGreyGif(16, dither: true);
+        Assert.Equal((byte)0, RangePatternClip.Sample(gif, 16, 18).R);
+        Assert.Equal((byte)17, RangePatternClip.Sample(gif, 16, 17).R);
+        // One black pixel per 17, the remainder grey 17: the 17x17 mean is exactly 16.
+        AssertGifPatchMean(gif, 16, 16, (16, 16, 16), 0, "correct dither");
+    });
+
+    private static BitmapSource SyntheticGreyGif(byte grey, bool dither)
+    {
+        byte[] values = dither ? [0, 17] : [0, grey];
+        var palette = new BitmapPalette(values.Select(value => Color.FromRgb(value, value, value)).ToArray());
+        byte[] indices = new byte[32 * 32];
+        for (int y = 0; y < 32; y++)
+        for (int x = 0; x < 32; x++)
+            indices[y * 32 + x] = (byte)(dither && (x + y) % 17 == 0 ? 0 : 1);
+        BitmapSource indexed = BitmapSource.Create(32, 32, 96, 96, PixelFormats.Indexed8, palette, indices, 32);
+        var encoder = new GifBitmapEncoder();
+        encoder.Frames.Add(BitmapFrame.Create(indexed));
+        using var stream = new MemoryStream();
+        encoder.Save(stream);
+        stream.Position = 0;
+        return new GifBitmapDecoder(stream, BitmapCreateOptions.PreservePixelFormat, BitmapCacheOption.OnLoad).Frames[0];
+    }
+
+    private static void AssertGifPatches(BitmapSource actual, int sourceWidth, int sourceHeight,
+        BitmapSource? reference, int greyTolerance, int colourTolerance)
+    {
+        for (int i = 0; i < RangePatternClip.Patches.Length; i++)
+        {
+            (int sourceX, int sourceY) = RangePatternClip.Centre(i, sourceWidth, sourceHeight);
+            (int x, int y) = RangePatternClip.Centre(i, actual.PixelWidth, actual.PixelHeight);
+            var patch = RangePatternClip.Patches[i];
+            var expected = reference is null ? (patch.R, patch.G, patch.B) : RangePatternClip.Sample(reference, sourceX, sourceY);
+            AssertGifPatchMean(actual, x, y, expected, i < 7 ? greyTolerance : colourTolerance, patch.Name);
+        }
+    }
+
+    private static void AssertGifPatchMean(BitmapSource actual, int x, int y,
+        (byte R, byte G, byte B) expected, int tolerance, string label)
+    {
+        // Palette quantisation redistributes error spatially: Win10 can use 0 beside 17
+        // for source grey 16. A 17x17 flat interior averages complete dither patterns, away
+        // from patch/chroma boundaries. Retain the old 3-code decoder / 4-code source grey
+        // budgets on each channel's MEAN, both below the smallest range error (64->56 = 8).
+        // Non-GIF paths continue using their original per-pixel assertions above/below.
+        long r = 0, g = 0, b = 0;
+        const int radius = 8, count = (2 * radius + 1) * (2 * radius + 1);
+        for (int dy = -radius; dy <= radius; dy++)
+        for (int dx = -radius; dx <= radius; dx++)
+        {
+            var pixel = RangePatternClip.Sample(actual, x + dx, y + dy);
+            r += pixel.R; g += pixel.G; b += pixel.B;
+        }
+        double meanR = (double)r / count, meanG = (double)g / count, meanB = (double)b / count;
+        Assert.True(Math.Abs(meanR - expected.R) <= tolerance
+            && Math.Abs(meanG - expected.G) <= tolerance && Math.Abs(meanB - expected.B) <= tolerance,
+            $"{label} GIF patch mean at ({x},{y}): actual=({meanR:F3},{meanG:F3},{meanB:F3}), expected={expected}, tolerance={tolerance}");
     }
 
     private static void AssertPatches(BitmapSource actual, int sourceWidth, int sourceHeight,

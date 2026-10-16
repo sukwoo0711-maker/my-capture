@@ -2657,6 +2657,7 @@ internal sealed partial class VideoEditorWindow : Window
         }
 
         double layerTimeMs = CurrentMs();
+        VideoEditDocument frameDocument = _editDocument.Clone();
         BitmapSource? frame;
         _extractingFrame = true;
 
@@ -2665,7 +2666,7 @@ internal sealed partial class VideoEditorWindow : Window
             _statusLabel.Text = UiText.Get("Text_571C8E331C15");
             await _previewSeeks.RequestExactAsync(layerTimeMs);
             if (!IsLoaded) return;
-            frame = await DecodeFrameForEditAsync(layerTimeMs);
+            frame = await TryDecodeFrameForEditAsync(layerTimeMs, frameDocument);
         }
         catch (OperationCanceledException)
         {
@@ -2695,8 +2696,16 @@ internal sealed partial class VideoEditorWindow : Window
             return;
         }
 
-        // Wrap the extracted frame as a FrozenFrame so the existing capture editor opens
-        // unchanged — image editing from a video frame is identical to editing a capture.
+        AnnotationEditorWindow editor = CreateFrameEditor(frame, layerTimeMs, frameDocument);
+        editor.Owner = this;
+        editor.Show();
+        _ = editor.Activate();
+    }
+
+    internal AnnotationEditorWindow CreateFrameEditor(BitmapSource frame, double layerTimeMs, VideoEditDocument frameDocument)
+    {
+        // Timed text is intentionally absent while annotating. It is added only to still
+        // commits, after rotation/crop/annotations, and remains live above the video layer.
         var region = new RectD(0, 0, frame.PixelWidth, frame.PixelHeight);
         var frozen = new FrozenFrame(frame, region, null, 0);
 
@@ -2705,7 +2714,10 @@ internal sealed partial class VideoEditorWindow : Window
             region,
             frame,
             title: UiText.Get("Text_2A0C70A93334"),
-            privacyRedactionService: PrivacyRedactionService);
+            privacyRedactionService: PrivacyRedactionService)
+        {
+            FrameStillImage = VideoFrameStillImage.Capture(frameDocument, layerTimeMs),
+        };
         FrameImageCommitSession? commitSession = FrameImageCommitHandlerFactory?.Invoke();
         editor.CommitRequested = commitSession?.CommitAsync ?? (_ => Task.FromResult(false));
         editor.Committed += (_, result) =>
@@ -2714,9 +2726,7 @@ internal sealed partial class VideoEditorWindow : Window
             AddFrameEditLayer(result, layerTimeMs);
         };
         editor.Closed += (_, _) => commitSession?.Dispose();
-        editor.Owner = this;
-        editor.Show();
-        _ = editor.Activate();
+        return editor;
     }
 
     private void AddFrameEditLayer(AnnotationEditingResult result, double sourceTimeMs)

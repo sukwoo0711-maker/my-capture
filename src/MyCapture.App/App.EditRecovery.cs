@@ -172,6 +172,8 @@ public partial class App
         var region = new RectD(0, 0, bitmap.PixelWidth, bitmap.PixelHeight);
         var window = new AnnotationEditorWindow(new FrozenFrame(bitmap, region, null, 0), region, original,
             initialDocument: document, initialAssets: assets, sourceWindowTitle: draft.Metadata.GetValueOrDefault("title"));
+        if (draft.Metadata.TryGetValue(AnnotationEditorWindow.DraftFrameStillImageKey, out string? frameStillImage))
+            window.FrameStillImage = System.Text.Json.JsonSerializer.Deserialize<VideoFrameStillImage>(frameStillImage);
         window.Editor.RestoreDraftGeometry(bitmap, int.Parse(draft.Metadata.GetValueOrDefault("turns", "0"),
             System.Globalization.CultureInfo.InvariantCulture), draft.Metadata.GetValueOrDefault("origin", "{\"x\":0,\"y\":0}"));
         if (FindDraftRecord(draft) is { } record && _commit is { } commitService)
