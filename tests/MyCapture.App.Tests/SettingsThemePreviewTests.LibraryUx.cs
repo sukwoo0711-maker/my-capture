@@ -55,6 +55,7 @@ public sealed partial class SettingsThemePreviewTests
                 {
                     using var scope = UiText.UseLanguage(language);
                     VerifyLibraryUx(language, theme);
+                    VerifyLibraryUx(language, theme, 1.25);
                 }
             }
             finally
@@ -111,10 +112,10 @@ public sealed partial class SettingsThemePreviewTests
         return new LibraryUxFixture(window, vm, queue, empty, design, records);
     }
 
-    private static void VerifyLibraryUx(string language, AppTheme theme)
+    private static void VerifyLibraryUx(string language, AppTheme theme, double scale = 0)
     {
-        string label = $"{language}/{theme}";
-        string file = $"{AppThemeNames.ToSetting(theme)}-{language}";
+        string label = $"{language}/{theme}/{scale}";
+        string file = $"{AppThemeNames.ToSetting(theme)}-{language}-dpi{scale}";
         ThemeService.Apply(theme);
         LibraryUxFixture f = CreateLibraryUxFixture("mc-library-ux-");
         GalleryWindow window = f.Window;
@@ -122,6 +123,15 @@ public sealed partial class SettingsThemePreviewTests
         try
         {
             window.Show();
+            if (scale > 0)
+            {
+                VisualTreeHelper.SetRootDpi(window, new DpiScale(scale, scale));
+                foreach (UIElement element in Descendants(window).Prepend(window).OfType<UIElement>())
+                {
+                    element.InvalidateMeasure();
+                    element.InvalidateArrange();
+                }
+            }
             var rowsList = (ListBox)window.FindName("RowsList");
             Button[] cards = PumpLibraryUntil(window, () => FolderCardButtons(rowsList).Length == 2
                 && FolderCardButtons(rowsList).All(card => !((GalleryFolderCardViewModel)card.DataContext).HasPreview
@@ -172,6 +182,8 @@ public sealed partial class SettingsThemePreviewTests
             ListBoxItem firstTile = Descendants(rowsList).OfType<ListBoxItem>()
                 .First(item => item.DataContext is GalleryItemViewModel tile && tile.Id == f.Records[0].Id);
             Border tileCard = Descendants(firstTile).OfType<Border>().Single(border => border.Name == "TileCard");
+            SaveLibraryUxEvidence(window, theme, $"after-library-{file}.png");
+            if (scale > 0) Assert.Equal(scale, VisualTreeHelper.GetDpi(tileCard).DpiScaleX);
             double fullCardWidth = tileCard.ActualWidth;
             Assert.Equal(tileCard.ActualWidth, designCard.ActualWidth, 1);
             Assert.Equal(tileCard.ActualHeight, designCard.ActualHeight, 1);
@@ -185,7 +197,6 @@ public sealed partial class SettingsThemePreviewTests
                     AssertNotTrimmed(text, label);
             Assert.Equal(language == "ko-KR" ? "폴더 디자인 시안, 캡처 2개" : "Folder 디자인 시안, Captures: 2",
                 AutomationProperties.GetName(designCard));
-            SaveLibraryUxEvidence(window, theme, $"after-library-{file}.png");
 
             // Selecting swaps the right side of the same bar; nothing below moves.
             var workspace = (FrameworkElement)window.FindName("GalleryWorkspace");
@@ -306,7 +317,10 @@ public sealed partial class SettingsThemePreviewTests
             Border compactCard = Descendants(compactTile).OfType<Border>().Single(border => border.Name == "CompactTileCard");
             // Smaller than the full card, at the compact card's own proportion.
             Assert.True(compactCard.ActualWidth < fullCardWidth, $"{label}: compact {compactCard.ActualWidth:0.#} DIP, full {fullCardWidth:0.#} DIP");
-            Assert.Equal(GalleryCardRowPanel.CardHeightFor(compactCard.ActualWidth, 148, 180, 1), compactCard.ActualHeight, 1);
+            double cardScale = VisualTreeHelper.GetDpi(compactCard).DpiScaleY;
+            double expectedHeight = GalleryCardRowPanel.CardHeightFor(compactCard.ActualWidth, 148, 180, 1);
+            // The row's proportional height is authored in DIPs, then WPF rounds it to pixels.
+            Assert.Equal(Math.Round(expectedHeight * cardScale) / cardScale, compactCard.ActualHeight, 3);
             Assert.True(vm.ColumnCount > rootColumns, $"{label}: {vm.ColumnCount} compact columns, {rootColumns} at the root");
             Assert.All(vm.Rows.Skip(1), row => Assert.True(row.IsCompact));
             AssertInsideClient(compactTile, client, label);

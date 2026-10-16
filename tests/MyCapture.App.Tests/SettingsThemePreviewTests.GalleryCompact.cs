@@ -412,6 +412,7 @@ public sealed partial class SettingsThemePreviewTests
         };
         // Window.Standard uses Display formatting, which measures narrower than the default.
         TextOptions.SetTextFormattingMode(probe, TextOptions.GetTextFormattingMode(text));
+        VisualTreeHelper.SetRootDpi(probe, VisualTreeHelper.GetDpi(text));
         probe.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
         Assert.True(text.ActualWidth + 0.5 >= probe.DesiredSize.Width,
             $"{language}: '{text.Text}' needs {probe.DesiredSize.Width:0.#} DIP but has {text.ActualWidth:0.#} DIP");

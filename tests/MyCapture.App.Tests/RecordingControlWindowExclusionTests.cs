@@ -141,6 +141,35 @@ public sealed class RecordingControlWindowExclusionTests
         }
     });
 
+    [Theory]
+    [InlineData(1.0, false)]
+    [InlineData(1.25, false)]
+    [InlineData(1.5, false)]
+    [InlineData(2.0, false)]
+    [InlineData(1.0, true)]
+    [InlineData(1.25, true)]
+    [InlineData(1.5, true)]
+    [InlineData(2.0, true)]
+    public void OpaquePixelBoundsPreservePaletteSideAtEveryDpi(double scale, bool above)
+    {
+        var work = new RectD(0, 0, 1920, 1040);
+        var capture = new RectD(880, above ? work.Bottom - 120 : 100, 160, 100);
+        RecordingControlLayout planned = RecordingControlLayoutPlanner.Plan(capture, work, scale, 6, 56, 560);
+        Assert.False(planned.PaletteOverlapsRegion);
+        Assert.True(above ? planned.PaletteBounds.Bottom <= planned.FrameBounds.Top
+            : planned.PaletteBounds.Top >= planned.FrameBounds.Bottom);
+        RecordingControlLayout rounded = RecordingControlLayoutPlanner.RoundOpaqueBounds(planned);
+        double gap = above ? rounded.FrameBounds.Top - rounded.PaletteBounds.Bottom
+            : rounded.PaletteBounds.Top - rounded.FrameBounds.Bottom;
+        Assert.True(gap >= 0, $"DPI {scale}, above={above}, frame={rounded.FrameBounds}, palette={rounded.PaletteBounds}, gap={gap}px");
+        Assert.Equal(planned.FrameBounds.ToPixelBounds(), rounded.FrameBounds);
+        Assert.Equal(rounded.WindowBounds, rounded.WindowBounds.ToPixelBounds());
+        Assert.Equal(Math.Min(rounded.FrameBounds.Left, rounded.PaletteBounds.Left), rounded.WindowBounds.Left);
+        Assert.Equal(Math.Min(rounded.FrameBounds.Top, rounded.PaletteBounds.Top), rounded.WindowBounds.Top);
+        Assert.Equal(Math.Max(rounded.FrameBounds.Right, rounded.PaletteBounds.Right), rounded.WindowBounds.Right);
+        Assert.Equal(Math.Max(rounded.FrameBounds.Bottom, rounded.PaletteBounds.Bottom), rounded.WindowBounds.Bottom);
+    }
+
     [Fact]
     public void RegionIsRecomputedWhenThePaletteFlipsAndTheRegionMoves() => StaTestHost.Run(() =>
     {
@@ -276,8 +305,8 @@ public sealed class RecordingControlWindowExclusionTests
             double scale = VisualTreeHelper.GetDpi(window).DpiScaleX;
             RectD capture = NativeExclusion.Field<RectD>(window, "_screenRegion");
             RectD work = MonitorEnumerator.GetFromPoint(capture.Center).WorkArea;
-            RectD palette = RecordingControlLayoutPlanner.Plan(capture, work, scale, 6, 56, 560).PaletteBounds;
-            if (!supported) palette = palette.ToPixelBounds();
+            RecordingControlLayout layout = RecordingControlLayoutPlanner.Plan(capture, work, scale, 6, 56, 560);
+            RectD palette = (supported ? layout : RecordingControlLayoutPlanner.RoundOpaqueBounds(layout)).PaletteBounds;
             Assert.Equal(palette.Width / scale, strip.Width, 3);
             Assert.Equal(palette.Height / scale, strip.Height, 3);
             var content = Assert.IsType<Border>(Assert.IsType<Viewbox>(strip.Child).Child);

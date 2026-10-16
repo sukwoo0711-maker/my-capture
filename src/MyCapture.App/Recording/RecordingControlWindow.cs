@@ -649,9 +649,11 @@ internal sealed class RecordingControlWindow : Window
             if (!AllowsTransparency)
             {
                 // Match the HWND's outward-rounded physical bounds and WPF layout rounding.
-                frameBox = frameBox.ToPixelBounds();
-                stripBox = stripBox.ToPixelBounds();
-                windowPixels = windowPixels.ToPixelBounds();
+                RecordingControlLayout rounded = RecordingControlLayoutPlanner.RoundOpaqueBounds(
+                    layout with { FrameBounds = frameBox });
+                frameBox = rounded.FrameBounds;
+                stripBox = rounded.PaletteBounds;
+                windowPixels = rounded.WindowBounds;
             }
 
             Width = Math.Max(1, windowPixels.Width / scale);
@@ -1469,6 +1471,27 @@ internal static class RecordingControlLayoutPlanner
             frame,
             palette,
             RectanglesOverlap(palette, region));
+    }
+
+    internal static RecordingControlLayout RoundOpaqueBounds(RecordingControlLayout layout)
+    {
+        RectD frame = layout.FrameBounds.ToPixelBounds();
+        RectD palette = layout.PaletteBounds.ToPixelBounds();
+        // Outward rounding of a shared fractional edge otherwise puts both shapes in the
+        // same pixel. Give that pixel to the frame, retaining the planner's side and the
+        // palette's far edge (including its work-area constraint).
+        if (layout.PaletteBounds.Top >= layout.FrameBounds.Bottom)
+        {
+            double top = Math.Max(palette.Top, frame.Bottom);
+            palette = new RectD(palette.Left, top, palette.Width, palette.Bottom - top);
+        }
+        else if (layout.PaletteBounds.Bottom <= layout.FrameBounds.Top)
+        {
+            double bottom = Math.Min(palette.Bottom, frame.Top);
+            palette = new RectD(palette.Left, palette.Top, palette.Width, bottom - palette.Top);
+        }
+
+        return layout with { FrameBounds = frame, PaletteBounds = palette, WindowBounds = Union(frame, palette) };
     }
 
     private static RectD Union(RectD left, RectD right) => new(

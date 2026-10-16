@@ -346,9 +346,13 @@ internal static class NativeExclusion
     // Independent of ExclusionMode, shared by both test classes for this test process.
     private static readonly Lazy<bool> RealLayeredSupport = new(() =>
     {
+        // Initialize WPF infrastructure before taking the leak baseline, even when a
+        // notification test is the first caller on this STA thread.
+        var anchor = new Window { ShowActivated = false, ShowInTaskbar = false };
         Func<bool> previous = CaptureWindowExclusion.LayeredWindowProbe;
         try
         {
+            _ = new WindowInteropHelper(anchor).EnsureHandle();
             CaptureWindowExclusion.LayeredWindowProbe = typeof(CaptureWindowExclusion)
                 .GetMethod("ProbeLayeredWindow", BindingFlags.Static | BindingFlags.NonPublic)!
                 .CreateDelegate<Func<bool>>();
@@ -359,7 +363,7 @@ internal static class NativeExclusion
             Assert.Equal(foreground, GetForegroundWindow());
             return supported;
         }
-        finally { CaptureWindowExclusion.LayeredWindowProbe = previous; }
+        finally { CaptureWindowExclusion.LayeredWindowProbe = previous; anchor.Close(); }
     });
 
     internal static bool SupportsLayeredWindows => RealLayeredSupport.Value;

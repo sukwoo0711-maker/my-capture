@@ -3,6 +3,7 @@ using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
+using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
@@ -150,28 +151,46 @@ public sealed class ShellFirstRunTests
         }
     }
 
-    [Fact]
-    public void NotificationCardsShareTheFloatingCardChrome() => StaTestHost.Run(() =>
+    [Theory]
+    [InlineData(null)]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void NotificationCardsShareTheFloatingCardChrome(bool? supported) => StaTestHost.Run(() =>
     {
-        Window window = ThemedShellPresenter.CreateNotificationWindow(new TextBlock { Text = "MyCapture" }, "MyCapture", new Thickness(20));
+        bool layered = supported ?? NativeExclusion.SupportsLayeredWindows;
+        using var mode = supported.HasValue ? new ExclusionMode(supported.Value) : null;
+        using var presenter = new ThemedShellPresenter(() => false);
+        Window window = presenter.CreateActionNotification("MyCapture", "Message", "Open", () => { });
         try
         {
-            Assert.True(window.AllowsTransparency);
+            new WindowInteropHelper(window).EnsureHandle();
+            NativeExclusion.AssertWindow(window, layered);
             Assert.Equal(WindowStyle.None, window.WindowStyle);
             Assert.False(window.ShowActivated);
             Assert.False(window.ShowInTaskbar);
             Assert.True(window.Topmost);
-            Assert.Equal(ThemedShellPresenter.CardWidth + (2 * ThemedShellPresenter.ShadowMargin), window.Width);
+            double margin = layered ? ThemedShellPresenter.ShadowMargin : 0;
+            Assert.Equal(ThemedShellPresenter.CardWidth + (2 * margin), window.Width);
             var surface = Assert.IsType<Grid>(window.Content);
-            Assert.Equal(new Thickness(ThemedShellPresenter.ShadowMargin), surface.Margin);
+            Assert.Equal(new Thickness(margin), surface.Margin);
             Border shadow = surface.Children.OfType<Border>().First();
             Border card = surface.Children.OfType<Border>().Last();
-            Assert.Equal(ThemedShellPresenter.CardCorner, card.CornerRadius);
-            Assert.Equal(ThemedShellPresenter.CardCorner, shadow.CornerRadius);
+            Assert.Equal(layered ? ThemedShellPresenter.CardCorner : new CornerRadius(0), card.CornerRadius);
+            Assert.Equal(card.CornerRadius, shadow.CornerRadius);
             Assert.Equal(new Thickness(1), card.BorderThickness);
             Assert.Equal("Border.Subtle", ResourceKey(card, Border.BorderBrushProperty));
             Assert.Equal("Surface.Floating", ResourceKey(card, Border.BackgroundProperty));
-            Assert.Equal("Shadow.Card", ResourceKey(shadow, UIElement.EffectProperty));
+            if (layered)
+            {
+                Assert.Same(Brushes.Transparent, window.Background);
+                Assert.Equal("Shadow.Card", ResourceKey(shadow, UIElement.EffectProperty));
+            }
+            else
+            {
+                Assert.Null(shadow.Effect);
+                Assert.Null(card.Effect);
+                Assert.Equal(DependencyProperty.UnsetValue, shadow.ReadLocalValue(UIElement.EffectProperty));
+            }
             // The text is not drawn through the shadow effect.
             Assert.Equal(DependencyProperty.UnsetValue, card.ReadLocalValue(UIElement.EffectProperty));
             Assert.False(shadow.IsHitTestVisible);
