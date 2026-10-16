@@ -356,7 +356,8 @@ try {
         'install.cmd',
         'uninstall.ps1',
         'uninstall.cmd',
-        'uninstall-cleanup.ps1'
+        'uninstall-cleanup.ps1',
+        'SETUP-HELP.txt'
     )
     $bootstrapInventory = @()
     foreach ($name in $bootstrapNames) {
@@ -437,6 +438,7 @@ SourceFiles0=$source
 %FILE4%=
 %FILE5%=
 %FILE6%=
+%FILE7%=
 [Strings]
 FILE0=payload.zip
 FILE1=installer-manifest.json
@@ -445,6 +447,7 @@ FILE3=install.cmd
 FILE4=uninstall.ps1
 FILE5=uninstall.cmd
 FILE6=uninstall-cleanup.ps1
+FILE7=SETUP-HELP.txt
 "@ | Set-Content -LiteralPath $sed -Encoding ASCII
 
     $iexpressPath = Join-Path $env:SystemRoot 'System32\iexpress.exe'
@@ -541,8 +544,18 @@ OFFLINE / RUNTIME
   releases are not supported and the installer refuses to run on them.
 - ARM64 requires Windows 11 (build 22000) or later for x64 emulation.
 - Setup needs Windows PowerShell 5.1 FullLanguage and permission to execute IExpress/
-  PowerShell scripts. If enterprise AppLocker or WDAC policy blocks that path, use the
-  portable ZIP; the setup cannot and does not bypass local security policy.
+  PowerShell scripts. If the PowerShell execution policy (including Group Policy),
+  AppLocker or WDAC blocks that path, use the portable ZIP; the setup cannot and does
+  not bypass local security policy.
+- If install.ps1 never starts, install.cmd returns exit code 22 and copies SETUP-HELP.txt
+  to %TEMP%\MyCapture-Setup-Help.txt beside MyCapture-Setup-bootstrap.log. The bilingual
+  help opens in Notepad unless /quiet was used. If TEMP is unset, these files use the
+  user profile folder, then the Setup extraction folder as a last fallback.
+  IExpress/Explorer may not surface the child exit code. Exit code 19 still means
+  Windows PowerShell was not found (or the script detected a restricted host).
+- Download MyCapture-$Version-win-x64-portable.zip from the same release, extract to a
+  normal local folder and run MyCapture.exe. No administrator rights are required.
+  Microsoft Store edition: https://apps.microsoft.com/detail/9PB33MC095VR
 
 INTEGRITY AND SIGNATURE NOTICE
 - This release is NOT Authenticode-signed. Windows may show an unknown-publisher warning.

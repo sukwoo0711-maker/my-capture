@@ -212,6 +212,55 @@ public sealed class ReleaseVersionContractTests
     }
 
     [Fact]
+    public void InstallerPayload_HashesAndShipsTheBilingualStartupHelp()
+    {
+        string package = Read("build/package.ps1");
+        string installer = Read("build/installer/install.ps1");
+        string[] names =
+        [
+            "install.ps1", "install.cmd", "uninstall.ps1", "uninstall.cmd",
+            "uninstall-cleanup.ps1", "SETUP-HELP.txt",
+        ];
+        string packagedNames = package.Split("$bootstrapNames = @(", StringSplitOptions.None)[1]
+            .Split(')')[0];
+        string verifiedNames = installer.Split("function Assert-BootstrapIntegrity", StringSplitOptions.None)[1]
+            .Split("foreach ($name in @(", StringSplitOptions.None)[1].Split(')')[0];
+        foreach (string name in names)
+        {
+            Assert.Contains($"'{name}'", packagedNames, StringComparison.Ordinal);
+            Assert.Contains($"'{name}'", verifiedNames, StringComparison.Ordinal);
+        }
+
+        Assert.Contains("%FILE7%=", package, StringComparison.Ordinal);
+        Assert.Contains("FILE7=SETUP-HELP.txt", package, StringComparison.Ordinal);
+        byte[] helpBytes = File.ReadAllBytes(Path.Combine(
+            RepositoryRoot(), "build", "installer", "SETUP-HELP.txt"));
+        Assert.True(helpBytes.AsSpan().StartsWith(new byte[] { 0xEF, 0xBB, 0xBF }));
+        string help = Read("build/installer/SETUP-HELP.txt");
+        Assert.StartsWith("MyCapture 설치를 시작하지 못했습니다", help, StringComparison.Ordinal);
+        Assert.Contains("MyCapture Setup could not start", help, StringComparison.Ordinal);
+        Assert.Contains("MyCapture-<version>-win-x64-portable.zip", help, StringComparison.Ordinal);
+        Assert.Contains("https://apps.microsoft.com/detail/9PB33MC095VR", help, StringComparison.Ordinal);
+        Assert.Contains("%TEMP%\\MyCapture-Setup-bootstrap.log", help, StringComparison.Ordinal);
+        Assert.Contains("PowerShell execution policy (including Group Policy)", package, StringComparison.Ordinal);
+        Assert.Contains("AppLocker or WDAC", package, StringComparison.Ordinal);
+        Assert.Contains("install.cmd returns exit code 22", package, StringComparison.Ordinal);
+        Assert.Contains("%TEMP%\\MyCapture-Setup-Help.txt", package, StringComparison.Ordinal);
+        Assert.Contains("not bypass local security policy.", package, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void InstallerBootstrapSimulation_RunsThroughTheCheckedWorkflowHelper()
+    {
+        string workflow = Read(".github/workflows/packaged-validation.yml");
+        Assert.True(File.Exists(Path.Combine(
+            RepositoryRoot(), "build", "tests", "installer-bootstrap-tests.ps1")));
+        Assert.Contains(
+            @"Invoke-CheckedTest .\build\tests\installer-bootstrap-tests.ps1",
+            workflow, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void PublishedGitHubReleases_MustIncludeTheSixRequiredAssets()
     {
         string required = Read("build/required-release-assets.ps1");

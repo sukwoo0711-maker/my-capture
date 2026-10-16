@@ -12,6 +12,29 @@ param(
     [string]$TestFault = ''
 )
 
+# The bootstrap start handshake must be the first executable statement after parameter binding.
+# Refuse invalid/unwritable markers before any installation work; direct script runs are unchanged.
+if (-not [string]::IsNullOrWhiteSpace($env:MYCAPTURE_SETUP_STARTED)) {
+    try {
+        $markerRoot = $env:TEMP
+        if ([string]::IsNullOrWhiteSpace($markerRoot)) { $markerRoot = $env:USERPROFILE }
+        if ([string]::IsNullOrWhiteSpace($markerRoot)) { $markerRoot = $PSScriptRoot }
+        $markerRoot = [IO.Path]::GetFullPath($markerRoot).TrimEnd('\')
+        $markerPath = $env:MYCAPTURE_SETUP_STARTED
+        if (-not [IO.Path]::IsPathRooted($markerPath)) { throw 'Start marker must be absolute.' }
+        $markerPath = [IO.Path]::GetFullPath($markerPath)
+        if (-not [string]::Equals([IO.Path]::GetDirectoryName($markerPath).TrimEnd('\'), $markerRoot, [StringComparison]::OrdinalIgnoreCase) -or
+            [IO.Path]::GetFileName($markerPath) -cnotmatch '\AMyCapture-Setup-[0-9]+-[0-9]+-[0-9]+\.started\z') {
+            throw 'Start marker must be an immediate child of the log root with the bootstrap name.'
+        }
+        # CreateNew also refuses a pre-existing file or link instead of overwriting it.
+        $markerStream = [IO.File]::Open($markerPath, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write, [IO.FileShare]::None)
+        try { $markerStream.WriteByte(1) }
+        finally { $markerStream.Dispose() }
+    }
+    catch { throw "Unable to record installer start; installation was not attempted: $_" }
+}
+
 Set-StrictMode -Version 2.0
 $ErrorActionPreference = 'Stop'
 
@@ -31,6 +54,7 @@ $ExitConcurrent = 18
 $ExitRestrictedPowerShell = 19
 $ExitExistingInstall = 20
 $ExitUnexpected = 21
+# Exit 22 is reserved for install.cmd: the installer script did not start.
 
 $script:QuietMode = [bool]$Quiet
 $script:Warnings = New-Object System.Collections.Generic.List[string]
@@ -245,7 +269,7 @@ function Get-BootstrapEntry {
 
 function Assert-BootstrapIntegrity {
     param($Manifest)
-    foreach ($name in @('install.ps1', 'install.cmd', 'uninstall.ps1', 'uninstall.cmd', 'uninstall-cleanup.ps1')) {
+    foreach ($name in @('install.ps1', 'install.cmd', 'uninstall.ps1', 'uninstall.cmd', 'uninstall-cleanup.ps1', 'SETUP-HELP.txt')) {
         $entry = Get-BootstrapEntry $Manifest $name
         $path = Resolve-ExistingFile (Join-Path $PSScriptRoot $name) "Bootstrap file '$name'"
         if ((Get-Item -LiteralPath $path).Length -ne [long]$entry.Bytes -or -not (Test-HashEquals $path ([string]$entry.Sha256))) {

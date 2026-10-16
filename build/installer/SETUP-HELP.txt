@@ -1,0 +1,38 @@
+﻿MyCapture 설치를 시작하지 못했습니다
+
+PowerShell 실행 정책(그룹 정책) 또는 응용 프로그램 제어와 같은 Windows 보안 설정으로 설치 스크립트 실행이 차단되었을 수 있습니다.
+설치 스크립트가 시작되지 않아 MyCapture는 설치되지 않았으며, 기존 MyCapture 설치와 사용자 데이터는 변경되지 않았습니다.
+
+포터블 ZIP 사용
+1. 같은 릴리스에서 MyCapture-<version>-win-x64-portable.zip을 다운로드하십시오.
+   <version>은 해당 릴리스 버전입니다.
+2. 일반 로컬 폴더에 압축을 해제하십시오.
+3. MyCapture.exe를 실행하십시오. 관리자 권한은 필요하지 않습니다.
+
+Microsoft Store 버전
+https://apps.microsoft.com/detail/9PB33MC095VR
+
+설치 시작 로그
+%TEMP%\MyCapture-Setup-bootstrap.log
+TEMP가 설정되지 않았다면 사용자 프로필 폴더, 그 경로도 없다면 Setup 압축 해제 폴더에 저장합니다.
+복사된 MyCapture-Setup-Help.txt와 같은 폴더에서 로그를 확인하십시오.
+
+
+MyCapture Setup could not start
+
+Windows security settings, such as the PowerShell execution policy (Group Policy) or application control, may have prevented the installer script from running.
+The installer script did not start. MyCapture was not installed, and your existing MyCapture installation and user data were not changed.
+
+Use the portable ZIP
+1. Download MyCapture-<version>-win-x64-portable.zip from the same release.
+   Replace <version> with that release's version.
+2. Extract it to a normal local folder.
+3. Run MyCapture.exe. No administrator rights are required.
+
+Microsoft Store edition
+https://apps.microsoft.com/detail/9PB33MC095VR
+
+Bootstrap log
+%TEMP%\MyCapture-Setup-bootstrap.log
+If TEMP is not set, the log is in your user profile folder, or the Setup extraction folder if neither location is available.
+Look for the log next to the copied MyCapture-Setup-Help.txt.

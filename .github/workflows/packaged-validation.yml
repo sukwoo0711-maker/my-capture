@@ -99,6 +99,7 @@ jobs:
             if ($LASTEXITCODE -ne 0) { throw "Validation failed ($LASTEXITCODE): $Path" }
           }
           try {
+            Invoke-CheckedTest .\build\tests\installer-bootstrap-tests.ps1
             Invoke-CheckedTest .\build\tests\installer-resident-tests.ps1
             Invoke-CheckedTest .\build\tests\installer-hostile-tests.ps1 @('-Version', $env:PACKAGE_VERSION, '-ArtifactRoot', "artifacts/release/$env:PACKAGE_VERSION")
             Invoke-CheckedTest .\build\tests\update-helper-tests.ps1

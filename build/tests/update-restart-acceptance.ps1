@@ -161,7 +161,7 @@ Assert-True ((Get-FileHash -LiteralPath $payload -Algorithm SHA256).Hash -eq $ma
     (Get-Item -LiteralPath $payload).Length -eq [long]$manifest.Payload.Bytes) 'Installer manifest payload mismatch.'
 Assert-Inventory $publish $manifest
 foreach ($bootstrap in $manifest.BootstrapFiles) {
-    Assert-True ([string]$bootstrap.Path -in @('install.ps1', 'install.cmd', 'uninstall.ps1', 'uninstall.cmd', 'uninstall-cleanup.ps1')) 'Unexpected installer bootstrap name.'
+    Assert-True ([string]$bootstrap.Path -in @('install.ps1', 'install.cmd', 'uninstall.ps1', 'uninstall.cmd', 'uninstall-cleanup.ps1', 'SETUP-HELP.txt')) 'Unexpected installer bootstrap name.'
     $bootstrapPath = Join-Path (Join-Path $repository 'build\installer') ([string]$bootstrap.Path)
     Assert-True ((Get-FileHash -LiteralPath $bootstrapPath -Algorithm SHA256).Hash -eq [string]$bootstrap.Sha256) 'Seed installer source does not match the candidate bootstrap inventory.'
 }

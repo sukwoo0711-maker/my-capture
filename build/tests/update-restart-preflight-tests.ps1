@@ -41,7 +41,7 @@ try {
     foreach ($name in @('MyCapture-1.8.0-win-x64-setup.exe', 'MyCapture-1.8.0-win-x64-portable.zip')) {
         [IO.File]::WriteAllText((Join-Path $root $name), 'synthetic package, never executed')
     }
-    $bootstrap = @('install.ps1', 'install.cmd', 'uninstall.ps1', 'uninstall.cmd', 'uninstall-cleanup.ps1') | ForEach-Object {
+    $bootstrap = @('install.ps1', 'install.cmd', 'uninstall.ps1', 'uninstall.cmd', 'uninstall-cleanup.ps1', 'SETUP-HELP.txt') | ForEach-Object {
         Record (Join-Path (Join-Path $repository 'build\installer') $_) $_
     }
     $manifest = @{ Product = 'MyCapture'; Version = '1.8.0'; Files = $files; BootstrapFiles = @($bootstrap)

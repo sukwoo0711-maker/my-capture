@@ -227,7 +227,7 @@ try {
         Assert-Equal ([long]$bootstrap.Bytes) (Get-Item -LiteralPath $source).Length "Bootstrap size mismatch: $($bootstrap.Path)"
         Assert-Equal ([string]$bootstrap.Sha256) (Get-Sha256 $source) "Bootstrap hash mismatch: $($bootstrap.Path)"
     }
-    Assert-Equal 5 @($manifest.BootstrapFiles).Count 'Bootstrap file count mismatch.'
+    Assert-Equal 6 @($manifest.BootstrapFiles).Count 'Bootstrap file count mismatch.'
 
     [xml]$props = Get-Content -LiteralPath (Join-Path $repo 'Directory.Build.props') -Raw
     $sourceVersion = [string]$props.SelectSingleNode('//Version').InnerText
