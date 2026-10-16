@@ -248,10 +248,12 @@ internal static class VideoRangeSelfTest
                     }
                     samples.Add(DescribeSample(host, media, cell, step, full, observations.ToArray()));
                 }
-                catch (Exception) when (mediaFailure is not null && !token.IsCancellationRequested)
+                catch (Exception) when (mediaFailure is not null && !token.IsCancellationRequested
+                    && VideoRangeDiagnosticPlan.RecordsSwitchFailureAsObservation(cell, step))
                 {
-                    // A player that fails while switching clips (for example
+                    // A player that fails while switching clips within a sequence (for example
                     // MILAVERR_UNEXPECTEDWMPFAILURE) is itself an observation; keep collecting.
+                    // Any other open failure leaves the cell without a raw sample: an infrastructure FAIL.
                     samples.Add(FailedSample(step, full, mediaFailure));
                 }
                 finally

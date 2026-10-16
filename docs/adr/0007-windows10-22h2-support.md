@@ -157,8 +157,9 @@ gallery와 probe 각각의 studio→full→studio 및 full→studio 순서 셀 4
 모든 단계가 끝난 뒤 같은 프로세스에서 제품 보정을 한 번 실행합니다. 보정의 full-range 영상이
 최초 studio 관측이나 순서 실험에 앞서 재생되지 않도록 순서를 고정합니다. 갤러리·편집기 셀은 창을 연 채로
 보정을 실행하고 같은 재생기를 한 번 더 측정합니다(`after calibration`). 보정 영상이 재생된 뒤 이미 열린
-미리보기의 표시가 바뀌는지는 H5로 요약합니다. 순서 단계에서 재생기가 실패하면 `media-failed <HRESULT>`
-관측으로 기록하고 다음 단계를 계속합니다. 같은 갤러리 재생기에서 studio→full로 영상을 바꿀 때
+미리보기의 표시가 바뀌는지는 H5로 요약합니다. 순서 셀의 두 번째 이후 단계에서 영상을 바꾸다 재생기가
+실패하면 `media-failed <HRESULT>` 관측으로 기록하고 다음 단계를 계속합니다. 그 밖의 열기 실패는 원시
+표본이 없으므로 셀 실패(FAIL)로 처리합니다. 같은 갤러리 재생기에서 studio→full로 영상을 바꿀 때
 `MILAVERR_UNEXPECTEDWMPFAILURE`가 나던 문제는 영상을 바꾸기 전에 이전 미디어를 닫도록 고쳤습니다. JSON에는 보정 결과·실패,
 창/콘텐츠 DIP 크기, 실제 제시 픽셀 크기와 원본 대비 배율, DPI, WPF tier·PS 2.0 지원,
 DXGI 어댑터 목록(또는 조회 실패)을 포함합니다. 어댑터 목록은 MediaElement가 실제 선택한 GPU나

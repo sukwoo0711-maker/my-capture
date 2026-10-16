@@ -110,6 +110,10 @@ internal static class VideoRangeDiagnosticPlan
         return new(patches, StudioRangeCalibrationProbe.Classify(bgra)?.ToString() ?? "unknown");
     }
 
+    /// <summary>Only a later step of a sequence switches an open player; every other open must succeed.</summary>
+    internal static bool RecordsSwitchFailureAsObservation(VideoRangeCell cell, int step) =>
+        cell.Kind == "sequence" && step > 0;
+
     internal static string[] Summarize(IReadOnlyList<VideoRangeCellResult> results)
     {
         var facts = new List<string>();

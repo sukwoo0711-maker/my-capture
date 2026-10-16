@@ -86,6 +86,18 @@ public sealed class VideoRangeDiagnosticTests
     }
 
     [Fact]
+    public void OnlySequenceSwitchFailuresAreObservations()
+    {
+        VideoRangeCell matrix = VideoRangeDiagnosticPlan.Cells.Single(c => c.Id == "matrix-studio-1280x720-gallery");
+        VideoRangeCell sequence = VideoRangeDiagnosticPlan.Cells.Single(c => c.Id == "sequence-studio-full-studio-gallery");
+        VideoRangeCell repeat = VideoRangeDiagnosticPlan.Cells.Single(c => c.Id == "repeat-studio-1280x720-gallery-1");
+        Assert.False(VideoRangeDiagnosticPlan.RecordsSwitchFailureAsObservation(matrix, 0));
+        Assert.False(VideoRangeDiagnosticPlan.RecordsSwitchFailureAsObservation(repeat, 0));
+        Assert.False(VideoRangeDiagnosticPlan.RecordsSwitchFailureAsObservation(sequence, 0));
+        Assert.True(VideoRangeDiagnosticPlan.RecordsSwitchFailureAsObservation(sequence, 1));
+    }
+
+    [Fact]
     public void PostCalibrationResampleIsReportedSeparatelyFromTheMatrixComparisons()
     {
         VideoRangeCellResult gallery = Result("matrix-studio-1280x720-gallery", "Correct");
