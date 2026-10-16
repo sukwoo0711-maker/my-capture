@@ -1,0 +1,129 @@
+name: Media cold-open probe
+
+# Diagnostic only, for the diag/media-cold-open-probe branch. Measures why the first WPF media
+# open in a test process is slow on hosted runners: each job runs the probe in a fresh test
+# process twice (the first media open on this runner, then again on a warm runner) and uploads
+# the phase times, module and service timelines, and native stacks of any open left pending.
+# See tests/MyCapture.App.Tests/MediaColdOpenProbe.cs for the variants.
+
+on:
+  push:
+    branches:
+      - diag/media-cold-open-probe
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+  DOTNET_NOLOGO: '1'
+  DOTNET_CLI_UI_LANGUAGE: en
+
+jobs:
+  probe:
+    name: Probe ${{ matrix.variant }} ${{ matrix.sample }}
+    runs-on: windows-latest
+    timeout-minutes: 50
+    strategy:
+      fail-fast: false
+      matrix:
+        # plain: one player; rescue: a fresh player while the first is pending at 3 s;
+        # reopen: Close and Open the pending first player at 6 s; editor: the real video editor;
+        # audio: plain, with Windows Audio started before the first open.
+        variant: [plain, rescue, reopen, editor, audio]
+        sample: [1, 2, 3]
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Prepare probe folders
+        shell: powershell
+        run: |
+          $out = Join-Path $env:RUNNER_TEMP 'media-probe'
+          $data = Join-Path $env:RUNNER_TEMP 'mycapture-data'
+          New-Item -ItemType Directory -Force -Path $out, $data | Out-Null
+          [IO.File]::AppendAllText($env:GITHUB_ENV, "MYCAPTURE_MEDIA_PROBE_OUT=$out`nMYCAPTURE_DATA_ROOT=$data`n")
+
+      - name: Record runner state at job start
+        shell: powershell
+        run: .\build\diagnostics\Get-MediaProbeRunnerState.ps1 -Path "$env:MYCAPTURE_MEDIA_PROBE_OUT\runner-start.json"
+
+      - name: Set up .NET from global.json
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+
+      - name: Build the app tests
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Continue'
+          dotnet build tests\MyCapture.App.Tests\MyCapture.App.Tests.csproj -c Release *> "$env:MYCAPTURE_MEDIA_PROBE_OUT\build.log"
+          if ($LASTEXITCODE -ne 0) { Get-Content "$env:MYCAPTURE_MEDIA_PROBE_OUT\build.log" -Tail 60; exit 1 }
+
+      - name: Start Windows Audio before the first open
+        if: matrix.variant == 'audio'
+        shell: powershell
+        run: |
+          Get-Service Audiosrv, AudioEndpointBuilder | Format-Table Name, Status, StartType -AutoSize
+          $clock = [Diagnostics.Stopwatch]::StartNew()
+          try { Start-Service Audiosrv -ErrorAction Stop } catch { Write-Host "Start-Service Audiosrv failed: $($_.Exception.Message)" }
+          Write-Host "Start-Service took $($clock.ElapsedMilliseconds) ms"
+          Get-Service Audiosrv, AudioEndpointBuilder | Format-Table Name, Status, StartType -AutoSize
+
+      - name: Probe run 1 (first media open on this runner)
+        continue-on-error: true
+        timeout-minutes: 15
+        shell: powershell
+        env:
+          MYCAPTURE_MEDIA_PROBE_LABEL: run1
+          MYCAPTURE_MEDIA_PROBE_VARIANT: ${{ matrix.variant == 'audio' && 'plain' || matrix.variant }}
+          MYCAPTURE_MEDIA_PROBE_DUMP_SCRIPT: ${{ github.workspace }}\build\diagnostics\MediaProbeDumper.ps1
+        run: |
+          $ErrorActionPreference = 'Continue'
+          dotnet test tests\MyCapture.App.Tests\MyCapture.App.Tests.csproj -c Release --no-build --filter "FullyQualifiedName~MyCapture.App.Tests.MediaColdOpenProbe" *> "$env:MYCAPTURE_MEDIA_PROBE_OUT\run1-test.log"
+          Get-Content "$env:MYCAPTURE_MEDIA_PROBE_OUT\run1.log" -ErrorAction SilentlyContinue
+          Get-Content "$env:MYCAPTURE_MEDIA_PROBE_OUT\run1-test.log" -Tail 5
+
+      - name: Probe run 2 (new process, warm runner)
+        continue-on-error: true
+        timeout-minutes: 15
+        shell: powershell
+        env:
+          MYCAPTURE_MEDIA_PROBE_LABEL: run2
+          MYCAPTURE_MEDIA_PROBE_VARIANT: ${{ matrix.variant == 'audio' && 'plain' || matrix.variant }}
+          MYCAPTURE_MEDIA_PROBE_DUMP_SCRIPT: ${{ github.workspace }}\build\diagnostics\MediaProbeDumper.ps1
+        run: |
+          $ErrorActionPreference = 'Continue'
+          dotnet test tests\MyCapture.App.Tests\MyCapture.App.Tests.csproj -c Release --no-build --filter "FullyQualifiedName~MyCapture.App.Tests.MediaColdOpenProbe" *> "$env:MYCAPTURE_MEDIA_PROBE_OUT\run2-test.log"
+          Get-Content "$env:MYCAPTURE_MEDIA_PROBE_OUT\run2.log" -ErrorAction SilentlyContinue
+          Get-Content "$env:MYCAPTURE_MEDIA_PROBE_OUT\run2-test.log" -Tail 5
+
+      - name: Record runner state at job end
+        if: always()
+        shell: powershell
+        run: .\build\diagnostics\Get-MediaProbeRunnerState.ps1 -Path "$env:MYCAPTURE_MEDIA_PROBE_OUT\runner-end.json" | Out-Null
+
+      - name: Native stacks of pending opens
+        if: always()
+        continue-on-error: true
+        timeout-minutes: 25
+        shell: powershell
+        run: .\build\diagnostics\Get-MediaProbeStacks.ps1 -Path $env:MYCAPTURE_MEDIA_PROBE_OUT
+
+      - name: Summary
+        if: always()
+        shell: powershell
+        run: |
+          $summary = .\build\diagnostics\Write-MediaProbeSummary.ps1 -Path $env:MYCAPTURE_MEDIA_PROBE_OUT -Title "${{ matrix.variant }} ${{ matrix.sample }}"
+          [IO.File]::AppendAllText($env:GITHUB_STEP_SUMMARY, ($summary -join "`n") + "`n")
+
+      - name: Upload probe records
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: media-probe-${{ matrix.variant }}-${{ matrix.sample }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}\media-probe
+          if-no-files-found: warn
+          retention-days: 14
