@@ -53,24 +53,34 @@ public sealed class MediaColdOpenProbe
     }
 }
 
-internal sealed record ProbeSettings(string OutDir, string Label, string Variant, string? DumpScript, double LimitMs, double FirstDumpMs, double? ActMs)
+internal sealed record ProbeSettings(
+    string OutDir, string Label, string Variant, bool DiskLoad, string? DumpScript, double LimitMs, double FirstDumpMs, double? ActMs, double LoadCapS)
 {
     internal static readonly string[] Variants = ["plain", "rescue", "reopen", "editor"];
+
+    /// <summary>The variant as given, such as <c>rescue+diskload</c>.</summary>
+    internal string Name => DiskLoad ? Variant + "+diskload" : Variant;
 
     internal static ProbeSettings FromEnvironment()
     {
         string outDir = Path.GetFullPath(Environment.GetEnvironmentVariable(MediaColdOpenProbe.OutVariable)!);
         Directory.CreateDirectory(outDir);
         string label = Environment.GetEnvironmentVariable("MYCAPTURE_MEDIA_PROBE_LABEL") is { Length: > 0 } l ? l : "run";
-        string variant = Environment.GetEnvironmentVariable("MYCAPTURE_MEDIA_PROBE_VARIANT") is { Length: > 0 } v ? v : "plain";
-        if (!Variants.Contains(variant)) throw new ArgumentException($"Unknown probe variant '{variant}'.");
+        // "<kind>" or "<kind>+diskload", where diskload keeps the system drive busy with writes.
+        string[] tokens = (Environment.GetEnvironmentVariable("MYCAPTURE_MEDIA_PROBE_VARIANT") is { Length: > 0 } v ? v : "plain").Split('+');
+        string variant = tokens[0];
+        bool diskLoad = tokens.Skip(1).Contains("diskload");
+        if (!Variants.Contains(variant) || tokens.Skip(1).Any(token => token != "diskload"))
+            throw new ArgumentException($"Unknown probe variant '{string.Join('+', tokens)}'.");
         string? dumpScript = Environment.GetEnvironmentVariable("MYCAPTURE_MEDIA_PROBE_DUMP_SCRIPT") is { Length: > 0 } d ? Path.GetFullPath(d) : null;
         double limitS = double.TryParse(Environment.GetEnvironmentVariable("MYCAPTURE_MEDIA_PROBE_LIMIT_S"), out double s) && s > 0 ? s : 300;
         // When the first open is still pending this long, the first dump is written (5 s by default).
         double firstDumpMs = double.TryParse(Environment.GetEnvironmentVariable("MYCAPTURE_MEDIA_PROBE_FIRST_DUMP_MS"), out double ms) && ms >= 0 ? ms : 5000;
         // Overrides when the rescue and reopen variants act, so their paths can be tried locally.
         double? actMs = double.TryParse(Environment.GetEnvironmentVariable("MYCAPTURE_MEDIA_PROBE_ACT_MS"), out double act) && act >= 0 ? act : null;
-        return new ProbeSettings(outDir, label, variant, dumpScript, limitS * 1000, firstDumpMs, actMs);
+        // How long the disk load may run at most (150 s by default).
+        double loadCapS = double.TryParse(Environment.GetEnvironmentVariable("MYCAPTURE_MEDIA_PROBE_LOAD_S"), out double cap) && cap > 0 ? cap : 150;
+        return new ProbeSettings(outDir, label, variant, diskLoad, dumpScript, limitS * 1000, firstDumpMs, actMs, loadCapS);
     }
 }
 
@@ -108,15 +118,18 @@ internal sealed class ColdOpenRun
 
     internal void Execute()
     {
-        _rec.Event($"probe {_settings.Label} variant {_settings.Variant} pid {Environment.ProcessId}");
+        _rec.Event($"probe {_settings.Label} variant {_settings.Name} pid {Environment.ProcessId}");
         ModuleTracker? modules = null;
         SystemSampler? system = null;
+        FlushLatencyProbe? flushes = null;
+        DiskLoad? load = null;
         string? dir = null;
         Window? host = null;
         try
         {
             modules = ModuleTracker.Start(_rec);
             system = SystemSampler.Start(_rec);
+            flushes = FlushLatencyProbe.Start(_rec);
             if (_settings.DumpScript is not null)
             {
                 _dumper = ProbeDumper.TryStart(_settings.DumpScript, _rec, _dumps);
@@ -126,6 +139,14 @@ internal sealed class ColdOpenRun
             dir = OwnedTestDirectory.Create("mc-media-probe-");
             string[] clips = PrepareClips(dir);
             host = _settings.Variant == "editor" ? null : ShowHost();
+            if (_settings.DiskLoad)
+            {
+                // Like the build and the Core tests writing beside the App tests on CI. The load
+                // starts early enough to fill the disk queue and ends by itself after its cap.
+                load = DiskLoad.Start(_rec, Path.Combine(dir, "load"), TimeSpan.FromSeconds(_settings.LoadCapS));
+                Pump(TimeSpan.FromSeconds(3));
+            }
+
             Pump(TimeSpan.FromMilliseconds(500));
 
             ProbeTarget first = CreateTarget("P1-first", clips[0], host, dir);
@@ -157,6 +178,7 @@ internal sealed class ColdOpenRun
             }
 
             system.Mark("end");
+            load?.Dispose();
             RecordMachine(before: false);
         }
         catch (Exception ex)
@@ -174,9 +196,11 @@ internal sealed class ColdOpenRun
             host?.Close();
             Pump(TimeSpan.FromMilliseconds(300));
             _dumper?.Dispose();
+            load?.Dispose();
+            flushes?.Dispose();
             modules?.Dispose();
             system?.Dispose();
-            WriteReport(modules, system);
+            WriteReport(modules, system, flushes, load);
             _rec.Dispose();
             if (dir is not null)
             {
@@ -330,6 +354,9 @@ internal sealed class ColdOpenRun
     {
         string suffix = before ? "Before" : "After";
         _machine["mediaPlayerUserKey" + suffix] = DescribeKey(Registry.CurrentUser, @"Software\Microsoft\MediaPlayer");
+        _machine["mediaPlayerPreferences" + suffix] = DescribeValues(Registry.CurrentUser, @"Software\Microsoft\MediaPlayer\Preferences");
+        _machine["mediaPlayerFiles" + suffix] = DescribeFiles(Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Microsoft", "Media Player"));
         if (!before) return;
 
         _machine["os"] = RuntimeInformation.OSDescription;
@@ -360,6 +387,22 @@ internal sealed class ColdOpenRun
         }
     }
 
+    /// <summary>Windows Media Player's per-user library database and caches.</summary>
+    private static List<string> DescribeFiles(string folder)
+    {
+        if (!Directory.Exists(folder)) return ["absent: " + folder];
+        return [.. new DirectoryInfo(folder).EnumerateFiles("*", SearchOption.AllDirectories)
+            .Where(file => !file.FullName.Contains("Sync Playlists", StringComparison.OrdinalIgnoreCase))
+            .Select(file => $"{Path.GetRelativePath(folder, file.FullName)}: {file.Length} bytes, created {file.CreationTimeUtc:HH:mm:ss.fff}, written {file.LastWriteTimeUtc:HH:mm:ss.fff} UTC")];
+    }
+
+    private static List<string> DescribeValues(RegistryKey root, string path)
+    {
+        using RegistryKey? key = root.OpenSubKey(path);
+        if (key is null) return ["absent"];
+        return [.. key.GetValueNames().Select(name => $"{name} = {key.GetValue(name)}")];
+    }
+
     private static string DescribeKey(RegistryKey root, string path)
     {
         using RegistryKey? key = root.OpenSubKey(path);
@@ -367,7 +410,7 @@ internal sealed class ColdOpenRun
         return $"present; subkeys [{string.Join(", ", key.GetSubKeyNames())}]; values {key.ValueCount}";
     }
 
-    private void WriteReport(ModuleTracker? modules, SystemSampler? system)
+    private void WriteReport(ModuleTracker? modules, SystemSampler? system, FlushLatencyProbe? flushes, DiskLoad? load)
     {
         try
         {
@@ -375,7 +418,7 @@ internal sealed class ColdOpenRun
             var report = new Dictionary<string, object?>
             {
                 ["label"] = _settings.Label,
-                ["variant"] = _settings.Variant,
+                ["variant"] = _settings.Name,
                 ["limitS"] = _settings.LimitMs / 1000,
                 ["outcome"] = _outcome,
                 ["timeBase"] = "ms since the first player's construction started (t0); negative is before",
@@ -388,6 +431,8 @@ internal sealed class ColdOpenRun
                 ["processesExited"] = system?.ProcessExits(zero),
                 ["cpuByProcessT0ToFirstSettled"] = system?.Delta("t0", "first-settled"),
                 ["ownProcessSamples"] = system?.OwnSamples(zero),
+                ["flushLatency"] = flushes?.Samples(zero),
+                ["diskLoad"] = load?.Summary(zero),
                 ["modulesLoaded"] = modules?.Loaded(zero),
                 ["modulesUnloaded"] = modules?.Unloaded(zero),
                 ["modulesAtStart"] = modules?.BaselineCount,

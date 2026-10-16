@@ -22,16 +22,24 @@ env:
 
 jobs:
   probe:
-    name: Probe ${{ matrix.variant }} ${{ matrix.sample }}
+    name: Probe ${{ matrix.case.name }} ${{ matrix.sample }}
     runs-on: windows-latest
     timeout-minutes: 50
     strategy:
       fail-fast: false
       matrix:
-        # plain: one player; rescue: a fresh player while the first is pending at 3 s;
-        # reopen: Close and Open the pending first player at 6 s; editor: the real video editor;
-        # audio: plain, with Windows Audio started before the first open.
-        variant: [plain, rescue, reopen, editor, audio]
+        # The first round (run 38923098902) opened in 1 to 4 s on idle runners, once over 6 s while
+        # TiWorker started, with the media state thread inside Windows Media Player's
+        # FlushFileBuffers. This round keeps the profile drive busy (+diskload) as the build and
+        # the Core tests do on CI. plain: one player; rescue: a fresh player while the first is
+        # pending at 3 s; reopen: Close and Open the pending first player at 6 s; editor: the real
+        # video editor; autoadd off: Windows Media Player does not add played files to its library.
+        case:
+          - { name: diskload, variant: plain+diskload, autoadd: default }
+          - { name: diskload-autoadd-off, variant: plain+diskload, autoadd: 'off' }
+          - { name: rescue-diskload, variant: rescue+diskload, autoadd: default }
+          - { name: reopen-diskload, variant: reopen+diskload, autoadd: default }
+          - { name: editor-diskload, variant: editor+diskload, autoadd: default }
         sample: [1, 2, 3]
 
     steps:
@@ -62,15 +70,16 @@ jobs:
           dotnet build tests\MyCapture.App.Tests\MyCapture.App.Tests.csproj -c Release *> "$env:MYCAPTURE_MEDIA_PROBE_OUT\build.log"
           if ($LASTEXITCODE -ne 0) { Get-Content "$env:MYCAPTURE_MEDIA_PROBE_OUT\build.log" -Tail 60; exit 1 }
 
-      - name: Start Windows Audio before the first open
-        if: matrix.variant == 'audio'
+      - name: Stop Windows Media Player adding played files to its library
+        if: matrix.case.autoadd == 'off'
         shell: powershell
         run: |
-          Get-Service Audiosrv, AudioEndpointBuilder | Format-Table Name, Status, StartType -AutoSize
-          $clock = [Diagnostics.Stopwatch]::StartNew()
-          try { Start-Service Audiosrv -ErrorAction Stop } catch { Write-Host "Start-Service Audiosrv failed: $($_.Exception.Message)" }
-          Write-Host "Start-Service took $($clock.ElapsedMilliseconds) ms"
-          Get-Service Audiosrv, AudioEndpointBuilder | Format-Table Name, Status, StartType -AutoSize
+          $key = 'HKCU:\Software\Microsoft\MediaPlayer\Preferences'
+          if (-not (Test-Path $key)) { New-Item -Path $key | Out-Null }   # -Force would wipe an existing key
+          foreach ($name in 'AutoAddMusicToLibrary', 'AutoAddUNC') {
+              New-ItemProperty -Path $key -Name $name -PropertyType DWord -Value 0 -Force | Out-Null
+          }
+          Get-ItemProperty -Path $key | Format-List AutoAdd*
 
       - name: Probe run 1 (first media open on this runner)
         continue-on-error: true
@@ -78,7 +87,7 @@ jobs:
         shell: powershell
         env:
           MYCAPTURE_MEDIA_PROBE_LABEL: run1
-          MYCAPTURE_MEDIA_PROBE_VARIANT: ${{ matrix.variant == 'audio' && 'plain' || matrix.variant }}
+          MYCAPTURE_MEDIA_PROBE_VARIANT: ${{ matrix.case.variant }}
           MYCAPTURE_MEDIA_PROBE_DUMP_SCRIPT: ${{ github.workspace }}\build\diagnostics\MediaProbeDumper.ps1
         run: |
           $ErrorActionPreference = 'Continue'
@@ -92,7 +101,7 @@ jobs:
         shell: powershell
         env:
           MYCAPTURE_MEDIA_PROBE_LABEL: run2
-          MYCAPTURE_MEDIA_PROBE_VARIANT: ${{ matrix.variant == 'audio' && 'plain' || matrix.variant }}
+          MYCAPTURE_MEDIA_PROBE_VARIANT: ${{ matrix.case.variant }}
           MYCAPTURE_MEDIA_PROBE_DUMP_SCRIPT: ${{ github.workspace }}\build\diagnostics\MediaProbeDumper.ps1
         run: |
           $ErrorActionPreference = 'Continue'
@@ -116,14 +125,14 @@ jobs:
         if: always()
         shell: powershell
         run: |
-          $summary = .\build\diagnostics\Write-MediaProbeSummary.ps1 -Path $env:MYCAPTURE_MEDIA_PROBE_OUT -Title "${{ matrix.variant }} ${{ matrix.sample }}"
+          $summary = .\build\diagnostics\Write-MediaProbeSummary.ps1 -Path $env:MYCAPTURE_MEDIA_PROBE_OUT -Title "${{ matrix.case.name }} ${{ matrix.sample }}"
           [IO.File]::AppendAllText($env:GITHUB_STEP_SUMMARY, ($summary -join "`n") + "`n")
 
       - name: Upload probe records
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
-          name: media-probe-${{ matrix.variant }}-${{ matrix.sample }}-${{ github.run_attempt }}
+          name: media-probe-${{ matrix.case.name }}-${{ matrix.sample }}-${{ github.run_attempt }}
           path: ${{ runner.temp }}\media-probe
           if-no-files-found: warn
           retention-days: 14

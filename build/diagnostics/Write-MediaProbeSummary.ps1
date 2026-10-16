@@ -42,6 +42,19 @@ foreach ($file in Get-ChildItem -Path $Path -Filter 'run*.json' | Sort-Object Na
         $lines += "- reads t0 to first settled: $(@($run.cpuByProcessT0ToFirstSettled.topRead | Select-Object -First 4) -join '; ')"
     }
 
+    if ($run.diskLoad) {
+        $lines += "- disk load: $($run.diskLoad.writtenMb) MB written from $(Ms $run.diskLoad.started) to $(Ms $run.diskLoad.stopped) ms, flush avg $($run.diskLoad.flushAvgMs) ms, max $(Ms $run.diskLoad.flushMaxMs) ms"
+    }
+
+    $flushes = @($run.flushLatency | Where-Object { $_ } | ForEach-Object { $parts = $_.Trim() -split '\s+'; [pscustomobject]@{ At = [double]$parts[0]; Ms = [double]$parts[1] } })
+    $during = @($flushes | Where-Object { $_.At -ge 0 -and $_.At -le 30000 })
+    if ($during.Count) {
+        $lines += "- 4 KB flush on the profile drive, first 30 s after t0: max $(Ms ($during | Measure-Object Ms -Maximum).Maximum) ms, median $(Ms (@($during | Sort-Object Ms)[[int]($during.Count / 2)]).Ms) ms"
+    }
+
+    $lines += "- Media Player files before: $(@($run.machine.mediaPlayerFilesBefore) -join '; ')"
+    $lines += "- Media Player files after: $(@($run.machine.mediaPlayerFilesAfter) -join '; ')"
+
     $first = $run.opens | Select-Object -First 1
     if ($null -ne $first.openCall) {
         $end = if ($null -ne $first.openedMs) { $first.openCall + $first.openedMs } else { [double]::MaxValue }

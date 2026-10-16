@@ -1,3 +1,4 @@
+using System.IO;
 using System.Runtime.InteropServices;
 
 namespace MyCapture.App.Tests;
@@ -387,6 +388,213 @@ internal sealed class SystemSampler : IDisposable
     private sealed record ProcessDelta(string Process, double CpuMs, long ReadKb, long OtherKb)
     {
         public override string ToString() => $"{Process}: cpu {CpuMs:F0} ms, read {ReadKb} KB, other io {OtherKb} KB";
+    }
+}
+
+/// <summary>
+/// Every 500 ms writes 4 KB to a file in the temp folder and flushes it to disk, timing the flush.
+/// The temp folder is on the drive of the user profile, where Windows Media Player keeps its
+/// library database, so this shows what a flush there costs while an open is pending.
+/// </summary>
+internal sealed class FlushLatencyProbe : IDisposable
+{
+    private readonly ProbeRecorder _rec;
+    private readonly object _gate = new();
+    private readonly List<(double At, double Ms)> _samples = [];
+    private readonly Thread _thread;
+    private volatile bool _stop;
+
+    private FlushLatencyProbe(ProbeRecorder rec)
+    {
+        _rec = rec;
+        _thread = new Thread(Run) { IsBackground = true, Name = "probe flush latency" };
+    }
+
+    internal static FlushLatencyProbe Start(ProbeRecorder rec)
+    {
+        var probe = new FlushLatencyProbe(rec);
+        probe._thread.Start();
+        return probe;
+    }
+
+    internal List<string> Samples(double zero)
+    {
+        lock (_gate) return [.. _samples.Select(sample => $"{sample.At - zero,9:F0}  {sample.Ms:F1} ms")];
+    }
+
+    public void Dispose()
+    {
+        _stop = true;
+        _thread.Join(TimeSpan.FromSeconds(30));
+    }
+
+    private void Run()
+    {
+        try
+        {
+            string path = Path.Combine(Path.GetTempPath(), $"mc-flush-probe-{Environment.ProcessId}.bin");
+            using var file = new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.None, 1, FileOptions.DeleteOnClose);
+            byte[] block = new byte[4096];
+            while (!_stop)
+            {
+                file.Position = 0;
+                file.Write(block);
+                double start = _rec.Now;
+                file.Flush(flushToDisk: true);
+                double took = _rec.Now - start;
+                lock (_gate) _samples.Add((start, took));
+                if (took > 1000) _rec.Event($"a 4 KB flush on the temp drive took {took:F0} ms");
+                Thread.Sleep(500);
+            }
+        }
+        catch (Exception ex)
+        {
+            _rec.Event("flush latency probe failed: " + ex.Message);
+        }
+    }
+}
+
+/// <summary>
+/// Keeps the temp folder's drive busy, as the build and the Core test process do beside the App
+/// tests on CI: one thread writes 4 MB blocks write-through, another rewrites 64 KB and flushes.
+/// It stops when disposed or after its cap, and removes its files.
+/// </summary>
+internal sealed class DiskLoad : IDisposable
+{
+    private const long SequentialBytes = 512L << 20;
+    private const double MaxBytesPerMs = 200.0 * (1 << 20) / 1000;
+
+    private readonly ProbeRecorder _rec;
+    private readonly string _dir;
+    private readonly double _until;
+    private readonly double _started;
+    private readonly Thread[] _threads;
+    private readonly object _gate = new();
+    private int _running;
+    private long _bytes;
+    private long _flushes;
+    private double _flushTotalMs;
+    private double _flushMaxMs;
+    private double? _stopped;
+    private string? _error;
+    private volatile bool _stop;
+
+    private DiskLoad(ProbeRecorder rec, string dir, TimeSpan cap)
+    {
+        _rec = rec;
+        _dir = dir;
+        _started = rec.Now;
+        _until = _started + cap.TotalMilliseconds;
+        _threads =
+        [
+            new Thread(() => Guard(Sequential)) { IsBackground = true, Name = "probe disk load writes" },
+            new Thread(() => Guard(Flushes)) { IsBackground = true, Name = "probe disk load flushes" },
+        ];
+    }
+
+    internal static DiskLoad Start(ProbeRecorder rec, string dir, TimeSpan cap)
+    {
+        Directory.CreateDirectory(dir);
+        var load = new DiskLoad(rec, dir, cap);
+        load._running = load._threads.Length;
+        foreach (Thread thread in load._threads) thread.Start();
+        rec.Event($"disk load started in {dir}, cap {cap.TotalSeconds:F0} s");
+        return load;
+    }
+
+    internal Dictionary<string, object?> Summary(double zero)
+    {
+        lock (_gate)
+        {
+            return new Dictionary<string, object?>
+            {
+                ["started"] = Math.Round(_started - zero, 0),
+                ["stopped"] = _stopped is double stopped ? Math.Round(stopped - zero, 0) : null,
+                ["writtenMb"] = Interlocked.Read(ref _bytes) >> 20,
+                ["flushes"] = _flushes,
+                ["flushAvgMs"] = _flushes > 0 ? Math.Round(_flushTotalMs / _flushes, 1) : null,
+                ["flushMaxMs"] = Math.Round(_flushMaxMs, 1),
+                ["error"] = _error,
+            };
+        }
+    }
+
+    public void Dispose()
+    {
+        _stop = true;
+        foreach (Thread thread in _threads) thread.Join(TimeSpan.FromSeconds(60));
+        foreach (string file in Directory.Exists(_dir) ? Directory.GetFiles(_dir) : [])
+        {
+            try { File.Delete(file); } catch (IOException) { } catch (UnauthorizedAccessException) { }
+        }
+    }
+
+    private bool Running => !_stop && _rec.Now < _until;
+
+    private void Guard(Action body)
+    {
+        try
+        {
+            body();
+        }
+        catch (Exception ex)
+        {
+            lock (_gate) _error = ex.Message;
+        }
+        finally
+        {
+            if (Interlocked.Decrement(ref _running) == 0)
+            {
+                lock (_gate) _stopped = _rec.Now;
+                _rec.Event($"disk load stopped: {Interlocked.Read(ref _bytes) >> 20} MB written, {_flushes} flushes, max flush {_flushMaxMs:F0} ms");
+            }
+        }
+    }
+
+    private void Sequential()
+    {
+        byte[] block = new byte[4 << 20];
+        Random.Shared.NextBytes(block);
+        using var file = new FileStream(Path.Combine(_dir, "sequential.bin"), FileMode.Create, FileAccess.Write, FileShare.None, 1, FileOptions.WriteThrough);
+        long written = 0;
+        while (Running)
+        {
+            // At most about 200 MB/s: enough to queue behind on a hosted runner's disk.
+            if (written > (_rec.Now - _started) * MaxBytesPerMs)
+            {
+                Thread.Sleep(5);
+                continue;
+            }
+
+            written += block.Length;
+            if (file.Position >= SequentialBytes) file.Position = 0;
+            file.Write(block);
+            Interlocked.Add(ref _bytes, block.Length);
+        }
+    }
+
+    private void Flushes()
+    {
+        byte[] chunk = new byte[64 << 10];
+        Random.Shared.NextBytes(chunk);
+        using var file = new FileStream(Path.Combine(_dir, "flushes.bin"), FileMode.Create, FileAccess.Write, FileShare.None, 1);
+        while (Running)
+        {
+            file.Position = (long)Random.Shared.Next(0, 1024) * chunk.Length;
+            file.Write(chunk);
+            Interlocked.Add(ref _bytes, chunk.Length);
+            double start = _rec.Now;
+            file.Flush(flushToDisk: true);
+            double took = _rec.Now - start;
+            lock (_gate)
+            {
+                _flushes++;
+                _flushTotalMs += took;
+                _flushMaxMs = Math.Max(_flushMaxMs, took);
+            }
+
+            Thread.Sleep(10);
+        }
     }
 }
 
