@@ -28,18 +28,17 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # The first round (run 38923098902) opened in 1 to 4 s on idle runners, once over 6 s while
-        # TiWorker started, with the media state thread inside Windows Media Player's
-        # FlushFileBuffers. This round keeps the profile drive busy (+diskload) as the build and
-        # the Core tests do on CI. plain: one player; rescue: a fresh player while the first is
-        # pending at 3 s; reopen: Close and Open the pending first player at 6 s; editor: the real
-        # video editor; autoadd off: Windows Media Player does not add played files to its library.
+        # Round 1 (run 38923098902): idle runners open in 1 to 4 s. Round 2 (run 38924839579):
+        # with the profile drive busy the first open on a runner takes 11 to 24 s, a second
+        # process 0.1 s, and a fresh player or a reopen opens no sooner than the first player.
+        # This round: diskload records hard page faults; prewarm maps and touches the DLLs a first
+        # open loads before the load starts (cold code paging or first-use set-up?); editorstep is
+        # the frame-step test as it ran before the readiness fix (5 s open fallback, then steps):
+        # does the preview come back once a late MediaOpened arrives?
         case:
           - { name: diskload, variant: plain+diskload, autoadd: default }
-          - { name: diskload-autoadd-off, variant: plain+diskload, autoadd: 'off' }
-          - { name: rescue-diskload, variant: rescue+diskload, autoadd: default }
-          - { name: reopen-diskload, variant: reopen+diskload, autoadd: default }
-          - { name: editor-diskload, variant: editor+diskload, autoadd: default }
+          - { name: prewarm-diskload, variant: prewarm+diskload, autoadd: default }
+          - { name: editorstep-diskload, variant: editorstep+diskload, autoadd: default }
         sample: [1, 2, 3]
 
     steps:

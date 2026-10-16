@@ -9,6 +9,7 @@ using System.Windows.Media.Imaging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Win32;
 using MyCapture.App.Recording;
+using MyCapture.Core.Recording;
 using MyCapture.Core.Storage;
 using MyCapture.Platform.Recording;
 using Xunit;
@@ -56,7 +57,10 @@ public sealed class MediaColdOpenProbe
 internal sealed record ProbeSettings(
     string OutDir, string Label, string Variant, bool DiskLoad, string? DumpScript, double LimitMs, double FirstDumpMs, double? ActMs, double LoadCapS)
 {
-    internal static readonly string[] Variants = ["plain", "rescue", "reopen", "editor"];
+    internal static readonly string[] Variants = ["plain", "rescue", "reopen", "editor", "editorstep", "prewarm"];
+
+    /// <summary>The real editor opens the clip: editor waits for MediaOpened, editorstep keeps its 5 s fallback.</summary>
+    internal bool IsEditor => Variant is "editor" or "editorstep";
 
     /// <summary>The variant as given, such as <c>rescue+diskload</c>.</summary>
     internal string Name => DiskLoad ? Variant + "+diskload" : Variant;
@@ -107,6 +111,7 @@ internal sealed class ColdOpenRun
     private readonly List<DumpRecord> _dumps = [];
     private readonly Dictionary<string, object?> _machine = [];
     private readonly Dictionary<string, double> _pre = [];
+    private readonly List<string> _steps = [];
     private ProbeDumper? _dumper;
     private string _outcome = "not-started";
 
@@ -138,7 +143,12 @@ internal sealed class ColdOpenRun
             RecordMachine(before: true);
             dir = OwnedTestDirectory.Create("mc-media-probe-");
             string[] clips = PrepareClips(dir);
-            host = _settings.Variant == "editor" ? null : ShowHost();
+            host = _settings.IsEditor ? null : ShowHost();
+            if (_settings.Variant == "prewarm")
+            {
+                Prewarm();
+            }
+
             if (_settings.DiskLoad)
             {
                 // Like the build and the Core tests writing beside the App tests on CI. The load
@@ -153,7 +163,9 @@ internal sealed class ColdOpenRun
             _rec.MarkZero();
             system.Mark("t0");
             first.Start();
-            _outcome = WatchFirstOpen(first, clips, host, dir);
+            _outcome = _settings.Variant == "editorstep"
+                ? WatchEditorSteps((EditorTarget)first)
+                : WatchFirstOpen(first, clips, host, dir);
             system.Mark("first-settled");
             _rec.Event($"first open outcome: {_outcome}");
 
@@ -249,8 +261,8 @@ internal sealed class ColdOpenRun
 
     private ProbeTarget CreateTarget(string name, string clip, Window? host, string dir)
     {
-        ProbeTarget target = _settings.Variant == "editor"
-            ? new EditorTarget(name, clip, _rec, Path.Combine(dir, "data-" + _targets.Count), ClipWidth, ClipHeight, ClipFps, ClipFrames, _pre["containerDurationMs"])
+        ProbeTarget target = _settings.IsEditor
+            ? new EditorTarget(name, clip, _rec, Path.Combine(dir, "data-" + _targets.Count), ClipWidth, ClipHeight, ClipFps, ClipFrames, _pre["containerDurationMs"], keepFallback: _settings.Variant == "editorstep")
             : new PlayerTarget(name, clip, _rec, (Panel)host!.Content, ClipWidth, ClipHeight);
         _targets.Add(target);
         return target;
@@ -305,6 +317,128 @@ internal sealed class ColdOpenRun
 
         return first.Current.Failed is not null ? "failed" : "opened-and-presented";
     }
+
+    /// <summary>
+    /// The frame-step test as it ran before the readiness fix: the editor's 5 s open fallback makes
+    /// it ready without MediaOpened, then the test steps frame by frame and waits for each frame.
+    /// Records every step, so a late MediaOpened shows whether the preview comes back after it.
+    /// </summary>
+    private string WatchEditorSteps(EditorTarget first)
+    {
+        VideoEditorWindow editor = first.Editor!;
+        double? readyAt = null;
+        double? stopAt = null;
+        int stepCount = 0;
+        int presentedAfterOpen = 0;
+        int stepsAfterOpen = 0;
+        while (_rec.SinceZero < _settings.LimitMs && (stopAt is null || _rec.SinceZero < stopAt))
+        {
+            first.Poll();
+            if (readyAt is null && editor.IsMediaReadyForTest)
+            {
+                readyAt = _rec.Now;
+                _rec.Event($"{first.Name}: editor ready via {(editor.HasMediaOpenedForTest ? "MediaOpened" : "the 5 s open fallback")}");
+            }
+
+            if (stopAt is null && first.Current.Opened is not null)
+            {
+                stopAt = _rec.SinceZero + 20000;   // twenty more seconds of steps after MediaOpened
+            }
+
+            if (readyAt is null)
+            {
+                Pump(TimeSpan.FromMilliseconds(20));
+                continue;
+            }
+
+            double duration = editor.DurationMsForTest;
+            if (FrameStepCalculator.FrameIndexAt(editor.TimelineForTest.PlayheadMs, ClipFps, duration) >= ClipFrames - 3)
+            {
+                editor.ShortcutActions["First"]();
+            }
+
+            editor.ShortcutActions["NextFrame"]();
+            stepCount++;
+            double playhead = editor.TimelineForTest.PlayheadMs;
+            int expected = FrameStepCalculator.FrameIndexAt(playhead, ClipFps, duration);
+            int shown;
+            double deadline = _rec.Now + 2000;
+            do
+            {
+                Pump(TimeSpan.FromMilliseconds(20));
+                BitmapSource? rendering = editor.RenderCurrentFrameForTest();
+                shown = rendering is null ? -2 : ProbeTarget.IsPresented(rendering) ? FrameIndexClip.Read(rendering) : -1;
+            }
+            while (shown != expected && _rec.Now < deadline);
+
+            bool opened = editor.HasMediaOpenedForTest;
+            if (opened)
+            {
+                stepsAfterOpen++;
+                if (shown == expected) presentedAfterOpen++;
+            }
+
+            if (!opened || stepsAfterOpen <= 60) _steps.Add($"{_rec.SinceZero,9:F0}  step {stepCount}: playhead {playhead:F1} ms, expected frame {expected}, shows {(shown == -1 ? "no frame" : shown == -2 ? "no rendering" : "frame " + shown)}, MediaOpened {opened}");
+        }
+
+        _rec.Event($"{first.Name}: {stepCount} steps, {stepsAfterOpen} after MediaOpened, {presentedAfterOpen} of those showed the expected frame");
+        return first.Current.Opened is null ? "editor-never-opened-at-limit"
+            : readyAt < first.Current.Opened ? $"editor-late-open-after-fallback: {presentedAfterOpen}/{stepsAfterOpen} steps right after MediaOpened"
+            : $"editor-opened-before-ready: {presentedAfterOpen}/{stepsAfterOpen} steps right";
+    }
+
+    /// <summary>
+    /// Maps every DLL a first open loads as an image, touches each page and unmaps it again, so the
+    /// open finds their code in memory. Separates cold code paging from first-use initialisation.
+    /// </summary>
+    private void Prewarm()
+    {
+        string system = Environment.GetFolderPath(Environment.SpecialFolder.System);
+        double start = _rec.Now;
+        long pages = 0;
+        var missing = new List<string>();
+        foreach (string name in PrewarmModules)
+        {
+            string path = Path.Combine(system, name);
+            IntPtr module = NativeProbe.LoadLibraryExW(path, IntPtr.Zero, 0x20);   // LOAD_LIBRARY_AS_IMAGE_RESOURCE
+            if (module == IntPtr.Zero)
+            {
+                missing.Add(name);
+                continue;
+            }
+
+            try
+            {
+                IntPtr image = (IntPtr)(module.ToInt64() & ~3L);
+                int ntHeaders = Marshal.ReadInt32(image, 0x3C);
+                int size = Marshal.ReadInt32(image, ntHeaders + 0x50);   // OptionalHeader.SizeOfImage
+                for (int offset = 0; offset < size; offset += 4096)
+                {
+                    _ = Marshal.ReadByte(image, offset);
+                    pages++;
+                }
+            }
+            finally
+            {
+                NativeProbe.FreeLibrary(module);
+            }
+        }
+
+        _pre["prewarmMs"] = _rec.Now - start;
+        _rec.Event($"prewarm: {PrewarmModules.Length - missing.Count} modules, {pages} pages in {_pre["prewarmMs"]:F0} ms{(missing.Count > 0 ? "; missing " + string.Join(", ", missing) : "")}");
+    }
+
+    /// <summary>The System32 DLLs every player's first open loaded in the first two rounds, and the Media Foundation core.</summary>
+    private static readonly string[] PrewarmModules =
+    [
+        "apphelp.dll", "atlthunk.dll", "avrt.dll", "colorcnv.dll", "cryptbase.dll", "cryptsp.dll", "devobj.dll", "dxva2.dll",
+        "evr.dll", "iertutil.dll", "iphlpapi.dll", "mf.dll", "mfasfsrcsnk.dll", "mfperfhelper.dll", "mfps.dll", "mftranscode.dll",
+        "mlang.dll", "mmdevapi.dll", "msdmo.dll", "msmpeg2vdec.dll", "msv1_0.dll", "netutils.dll", "networkexplorer.dll", "nsi.dll",
+        "ntlmshared.dll", "ondemandconnroutehelper.dll", "profapi.dll", "rsaenh.dll", "secur32.dll", "srvcli.dll", "sxs.dll", "urlmon.dll",
+        "userenv.dll", "virtdisk.dll", "wdigest.dll", "winhttp.dll", "wininet.dll", "winmm.dll", "winnsi.dll", "wmasf.dll",
+        "wmnetmgr.dll", "wmp.dll", "wmpeffects.dll", "wmploc.dll", "wmvcore.dll", "msxml3.dll", "shlwapi.dll", "windowscodecs.dll",
+        "mfcore.dll", "mfplat.dll", "audioses.dll",
+    ];
 
     private void WatchUntilSettled(IReadOnlyList<ProbeTarget> targets, double limitMs)
     {
@@ -426,6 +560,7 @@ internal sealed class ColdOpenRun
                 ["pre"] = _pre,
                 ["opens"] = _targets.SelectMany(target => target.Traces).Select(trace => trace.ToReport(zero)).ToList(),
                 ["dumps"] = _dumps.Select(dump => dump.ToReport(zero)).ToList(),
+                ["editorSteps"] = _steps.Count > 0 ? _steps : null,
                 ["services"] = system?.ServiceTransitions(zero),
                 ["processesStarted"] = system?.ProcessStarts(zero),
                 ["processesExited"] = system?.ProcessExits(zero),
@@ -544,7 +679,7 @@ internal abstract class ProbeTarget(string name, ProbeRecorder rec)
     }
 
     /// <summary>A player draws nothing until it presents a frame; a video frame is opaque.</summary>
-    private static bool IsPresented(BitmapSource rendering)
+    internal static bool IsPresented(BitmapSource rendering)
     {
         var bgra = new FormatConvertedBitmap(rendering, PixelFormats.Bgra32, null, 0);
         byte[] pixel = new byte[4];
@@ -623,10 +758,12 @@ internal sealed class PlayerTarget(string name, string clip, ProbeRecorder rec, 
 
 /// <summary>The real video editor window, as the frame-step tests open it.</summary>
 internal sealed class EditorTarget(
-    string name, string clip, ProbeRecorder rec, string dataRoot, int width, int height, int fps, int frames, double containerMs)
+    string name, string clip, ProbeRecorder rec, string dataRoot, int width, int height, int fps, int frames, double containerMs, bool keepFallback)
     : ProbeTarget(name, rec)
 {
     private VideoEditorWindow? _editor;
+
+    internal VideoEditorWindow? Editor => _editor;
 
     internal override void Start()
     {
@@ -645,9 +782,18 @@ internal sealed class EditorTarget(
             WindowStartupLocation = WindowStartupLocation.Manual,
             Left = -10000, Top = -10000, Width = 1000, Height = 700,
             ShowActivated = false, ShowInTaskbar = false,
-            // Long enough that the fallback never makes the editor ready before MediaOpened here.
-            OpenTimeoutForTest = TimeSpan.FromMinutes(30),
         };
+        if (!keepFallback)
+        {
+            // Long enough that the fallback never makes the editor ready before MediaOpened here.
+            _editor.OpenTimeoutForTest = TimeSpan.FromMinutes(30);
+        }
+        else if (double.TryParse(Environment.GetEnvironmentVariable("MYCAPTURE_MEDIA_PROBE_FALLBACK_MS"), out double fallbackMs) && fallbackMs > 0)
+        {
+            // A shorter fallback lets a fast machine reach the late-MediaOpened path too.
+            _editor.OpenTimeoutForTest = TimeSpan.FromMilliseconds(fallbackMs);
+        }
+
         trace.CtorEnd = Rec.Now;
         MediaElement media = _editor.MediaForTest;
         media.MediaOpened += (_, _) =>

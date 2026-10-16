@@ -52,6 +52,16 @@ foreach ($file in Get-ChildItem -Path $Path -Filter 'run*.json' | Sort-Object Na
         $lines += "- 4 KB flush on the profile drive, first 30 s after t0: max $(Ms ($during | Measure-Object Ms -Maximum).Maximum) ms, median $(Ms (@($during | Sort-Object Ms)[[int]($during.Count / 2)]).Ms) ms"
     }
 
+    if ($run.pre.prewarmMs) { $lines += "- prewarm: $(Ms $run.pre.prewarmMs) ms" }
+    if ($run.cpuByProcessT0ToFirstSettled.topHardFaults) {
+        $lines += "- hard faults t0 to first settled: $(@($run.cpuByProcessT0ToFirstSettled.topHardFaults | Select-Object -First 4) -join '; ')"
+    }
+
+    if ($run.editorSteps) {
+        $lines += "- editor steps (first 12):"
+        $lines += @($run.editorSteps | Select-Object -First 12 | ForEach-Object { "  - $($_.Trim())" })
+    }
+
     $lines += "- Media Player files before: $(@($run.machine.mediaPlayerFilesBefore) -join '; ')"
     $lines += "- Media Player files after: $(@($run.machine.mediaPlayerFilesAfter) -join '; ')"
 

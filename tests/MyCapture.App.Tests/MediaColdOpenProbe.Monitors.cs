@@ -238,13 +238,15 @@ internal sealed class SystemSampler : IDisposable
                     $"{pair.Value.Name} ({pair.Key.Pid}{(isNew ? ", new" : "")})",
                     (pair.Value.Cpu - before.Cpu) / 10_000.0,
                     (pair.Value.ReadBytes - before.ReadBytes) / 1024,
-                    (pair.Value.OtherBytes - before.OtherBytes) / 1024);
+                    (pair.Value.OtherBytes - before.OtherBytes) / 1024,
+                    pair.Value.HardFaults - before.HardFaults);
             })];
             return new Dictionary<string, object?>
             {
                 ["windowMs"] = Math.Round(b.At - a.At, 0),
                 ["topCpu"] = rows.OrderByDescending(r => r.CpuMs).Take(15).Select(r => r.ToString()).ToList(),
                 ["topRead"] = rows.OrderByDescending(r => r.ReadKb).Take(10).Select(r => r.ToString()).ToList(),
+                ["topHardFaults"] = rows.OrderByDescending(r => r.HardFaults).Take(8).Select(r => r.ToString()).ToList(),
             };
         }
     }
@@ -320,6 +322,7 @@ internal sealed class SystemSampler : IDisposable
                 ["readOps"] = (long)io.ReadOperationCount,
                 ["otherKb"] = (long)(io.OtherTransferCount / 1024),
                 ["threads"] = _processes.FirstOrDefault(pair => pair.Key.Pid == Environment.ProcessId).Value.Threads,
+                ["hardFaults"] = _processes.FirstOrDefault(pair => pair.Key.Pid == Environment.ProcessId).Value.HardFaults,
                 ["machineBusyPct"] = Math.Round(busy, 0),
             });
         }
@@ -366,6 +369,7 @@ internal sealed class SystemSampler : IDisposable
                 IntPtr entry = _processBuffer + offset;
                 int next = Marshal.ReadInt32(entry, 0x00);
                 int threads = Marshal.ReadInt32(entry, 0x04);
+                int hardFaults = Marshal.ReadInt32(entry, 0x10);
                 long created = Marshal.ReadInt64(entry, 0x20);
                 long cpu = Marshal.ReadInt64(entry, 0x28) + Marshal.ReadInt64(entry, 0x30);
                 int nameBytes = (ushort)Marshal.ReadInt16(entry, 0x38);
@@ -374,7 +378,7 @@ internal sealed class SystemSampler : IDisposable
                 long read = Marshal.ReadInt64(entry, 0xE8);
                 long other = Marshal.ReadInt64(entry, 0xF8);
                 string name = nameBuffer == IntPtr.Zero ? (pid == 0 ? "Idle" : "?") : Marshal.PtrToStringUni(nameBuffer, nameBytes / 2);
-                result[(pid, created)] = new ProcessSample(name, cpu, read, other, threads);
+                result[(pid, created)] = new ProcessSample(name, cpu, read, other, threads, hardFaults);
                 if (next == 0) break;
                 offset += next;
             }
@@ -383,11 +387,11 @@ internal sealed class SystemSampler : IDisposable
         }
     }
 
-    private readonly record struct ProcessSample(string Name, long Cpu, long ReadBytes, long OtherBytes, int Threads);
+    private readonly record struct ProcessSample(string Name, long Cpu, long ReadBytes, long OtherBytes, int Threads, int HardFaults);
 
-    private sealed record ProcessDelta(string Process, double CpuMs, long ReadKb, long OtherKb)
+    private sealed record ProcessDelta(string Process, double CpuMs, long ReadKb, long OtherKb, int HardFaults)
     {
-        public override string ToString() => $"{Process}: cpu {CpuMs:F0} ms, read {ReadKb} KB, other io {OtherKb} KB";
+        public override string ToString() => $"{Process}: cpu {CpuMs:F0} ms, read {ReadKb} KB, other io {OtherKb} KB, hard faults {HardFaults}";
     }
 }
 
@@ -658,6 +662,13 @@ internal static class NativeProbe
     [DllImport("kernel32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     internal static extern bool GetProcessIoCounters(IntPtr process, out IoCounters counters);
+
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    internal static extern IntPtr LoadLibraryExW(string path, IntPtr file, uint flags);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static extern bool FreeLibrary(IntPtr module);
 
     [DllImport("ntdll.dll")]
     internal static extern int NtQuerySystemInformation(int infoClass, IntPtr buffer, int length, out int returnLength);
