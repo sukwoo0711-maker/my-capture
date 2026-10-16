@@ -178,12 +178,12 @@ jobs:
             artifacts/validation/hosted/*.log
             artifacts/validation/hosted/packaged-self-tests/**/*report.txt
             artifacts/validation/hosted/packaged-self-tests/**/result.json
-            ${{ runner.temp }}/MyCapture-update-restart/*/acceptance-result.json
-            ${{ runner.temp }}/MyCapture-update-restart/*/verified-install-result.json
-            ${{ runner.temp }}/MyCapture-update-restart/*/restart-process.json
-            ${{ runner.temp }}/MyCapture-update-restart/*/seed-install.log
-            ${{ runner.temp }}/MyCapture-update-restart/*/restart.stdout.txt
-            ${{ runner.temp }}/MyCapture-update-restart/*/restart.stderr.txt
-            ${{ runner.temp }}/MyCapture-update-restart/*/temporary/**/ux-review-selftest-report.txt
+            artifacts/validation/update-restart/*/acceptance-result.json
+            artifacts/validation/update-restart/*/verified-install-result.json
+            artifacts/validation/update-restart/*/restart-process.json
+            artifacts/validation/update-restart/*/seed-install.log
+            artifacts/validation/update-restart/*/restart.stdout.txt
+            artifacts/validation/update-restart/*/restart.stderr.txt
+            artifacts/validation/update-restart/*/temporary/**/ux-review-selftest-report.txt
           if-no-files-found: warn
           retention-days: 14

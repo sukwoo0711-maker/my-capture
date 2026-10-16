@@ -12,7 +12,7 @@ Set-StrictMode -Version 2.0
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'setup-test-common.ps1')
 $repository = [IO.Path]::GetFullPath((Split-Path -Parent (Split-Path -Parent $PSScriptRoot))).TrimEnd('\')
-$evidenceBase = Join-Path ([IO.Path]::GetTempPath()) 'MyCapture-update-restart'
+$evidenceBase = Join-Path $repository 'artifacts\validation\update-restart'
 $powerShell = Join-Path ([Environment]::SystemDirectory) 'WindowsPowerShell\v1.0\powershell.exe'
 
 function Assert-True([bool]$Condition, [string]$Message) { if (-not $Condition) { throw $Message } }
@@ -172,7 +172,7 @@ if (-not $Execute) {
 }
 if (-not $DotNetPath) { $DotNetPath = (Get-Command dotnet -CommandType Application -ErrorAction Stop).Source }
 $toolProject = Join-Path $repository 'build\tools\UpdateHelperResourceReader\UpdateHelperResourceReader.csproj'
-& $DotNetPath build $toolProject -c Release --no-restore -m:1 -nr:false -p:UseSharedCompilation=false
+& $DotNetPath build $toolProject -c Release --nologo
 Assert-True ($LASTEXITCODE -eq 0) 'Embedded helper reader build failed.'
 $tool = Join-Path (Split-Path -Parent $toolProject) 'bin\Release\net10.0-windows10.0.22000.0\UpdateHelperResourceReader.dll'
 $readerInfo = New-Object Diagnostics.ProcessStartInfo
