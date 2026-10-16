@@ -12,8 +12,8 @@ public sealed class VideoRangeDiagnosticTests
     public void MatrixHasAllSizesRangesHostsSequencesAndThreeFreshRepeats()
     {
         var cells = VideoRangeDiagnosticPlan.Cells;
-        Assert.Equal(31, cells.Count);
-        Assert.Equal(37, cells.Sum(c => c.FullRangeSteps.Length));
+        Assert.Equal(40, cells.Count);
+        Assert.Equal(46, cells.Sum(c => c.FullRangeSteps.Length));
         Assert.Equal(cells.Count, cells.Select(c => c.Id).Distinct().Count());
         Assert.Equal(24, cells.Count(c => c.Kind == "matrix"));
         foreach (string host in new[] { "probe", "gallery", "editor" })
@@ -27,6 +27,12 @@ public sealed class VideoRangeDiagnosticTests
             Assert.Single(cells, c => c.Host == host && c.FullRangeSteps.SequenceEqual(new[] { true, false }));
         }
         Assert.Equal(3, cells.Count(c => c.Kind == "repeat" && c.Host == "gallery" && c.Width == 1280 && !c.FullRangeSteps[0]));
+        foreach (int width in new[] { 1280, 1920 })
+        foreach (string host in new[] { "gallery", "editor" })
+        foreach (string mode in new[] { "in-process", "out-of-process" })
+            Assert.Single(cells, c => c.Kind == "concurrent" && c.Host == host && c.Width == width
+                && c.CalibrationMode == mode && c.FullRangeSteps.SequenceEqual(new[] { false }));
+        Assert.Single(cells, c => c.Kind == "content" && c.Pattern == "colour-patches" && c.Width == 1280 && c.Host == "gallery");
         Assert.Equal(TimeSpan.FromSeconds(20), VideoRangeDiagnosticPlan.CellTimeout);
         Assert.Equal(TimeSpan.FromMinutes(5), VideoRangeDiagnosticPlan.RunTimeout);
     }
@@ -67,7 +73,7 @@ public sealed class VideoRangeDiagnosticTests
         Assert.Contains(facts, f => f.StartsWith("H3:") && f.Contains("different processes"));
         Assert.Contains(facts, f => f.StartsWith("H4:") && f.Contains("identical fresh-process"));
         Assert.Contains(facts, f => f.StartsWith("Calibration differs:"));
-        Assert.Contains(facts, f => f.Contains("Collected 6/31"));
+        Assert.Contains(facts, f => f.Contains("Collected 6/40"));
     }
 
     [Fact]
@@ -82,7 +88,7 @@ public sealed class VideoRangeDiagnosticTests
         };
         string[] facts = VideoRangeDiagnosticPlan.Summarize(results);
         Assert.DoesNotContain(facts, f => f.StartsWith('H'));
-        Assert.Contains(facts, f => f.Contains("Collected 3/31") && f.Contains("unknown samples=1"));
+        Assert.Contains(facts, f => f.Contains("Collected 3/40") && f.Contains("unknown samples=1"));
     }
 
     [Fact]
@@ -205,6 +211,49 @@ public sealed class VideoRangeDiagnosticTests
             StudioRangeVideoEffect.Calibration = previous;
         }
     });
+
+    [Fact]
+    public void ConcurrentAndContentComparisonsDoNotContaminateH1ThroughH5()
+    {
+        var concurrent = Result("concurrent-in-process-studio-1280x720-gallery", "StudioRetained");
+        concurrent = concurrent with
+        {
+            Samples = [concurrent.Samples[0] with { Phase = "opening-with-calibration", CalibrationStartedBeforeSample = true },
+                concurrent.Samples[0] with { Phase = "after-calibration", CalibrationStartedBeforeSample = true }],
+        };
+        string[] summary = VideoRangeDiagnosticPlan.Summarize([
+            Result("matrix-studio-1280x720-gallery", "Correct"), concurrent,
+            Result("colour-studio-1280x720-gallery", "ExpandedAsStudio")]);
+        Assert.Contains(summary, f => f.StartsWith("H6:") && f.Contains("fresh=Correct, concurrent opening=StudioRetained, completed=StudioRetained"));
+        Assert.Contains(summary, f => f.StartsWith("H7:") && f.Contains("grey bars=Correct, colour patches=ExpandedAsStudio"));
+        Assert.DoesNotContain(summary, f => f.StartsWith("H4:") || f.StartsWith("H5:"));
+    }
+
+    [Fact]
+    public void ColourPatternPreservesAllTestPatchesAndClassifiesTheComparableGreys()
+    {
+        Assert.Equal(16, VideoRangeColourPattern.Patches.Length);
+        byte[] bgra = RangePatternClip.Patches.SelectMany(p => new byte[] { p.B, p.G, p.R, 255 }).ToArray();
+        var observation = VideoRangeColourPattern.Observe(bgra);
+        Assert.Equal("Correct", observation.Classification);
+        Assert.Equal(new VideoRangePatch(0, 0, 255, 255), observation.Patches[9]);
+        Assert.Equal(new VideoRangePatch(0xF2, 0xB1, 0x34, 255), observation.Patches[13]);
+        Assert.Equal(new VideoRangePatch(0x1D, 0x2A, 0x3C, 255), observation.Patches[14]);
+        Assert.Equal(new VideoRangePatch(0x2E, 0x6F, 0xD8, 255), observation.Patches[15]);
+        bgra[4 * 4 + 1] = 150;
+        Assert.Equal("unknown", VideoRangeColourPattern.Observe(bgra).Classification);
+    }
+
+    [Theory]
+    [InlineData(null, "out-of-process")]
+    [InlineData("known", "known")]
+    [InlineData("in-process", "in-process")]
+    [InlineData("out-of-process", "out-of-process")]
+    public void ResponsivenessCalibrationModesAreExplicitAndDefaultToProduct(string? value, string expected)
+    {
+        Assert.Equal(expected, VideoEditorResponsivenessSelfTest.ReadCalibrationMode(value));
+        Assert.Throws<ArgumentException>(() => VideoEditorResponsivenessSelfTest.ReadCalibrationMode("disabled-typo"));
+    }
 
     private static VideoRangeCellResult Result(string id, params string[] classifications)
     {

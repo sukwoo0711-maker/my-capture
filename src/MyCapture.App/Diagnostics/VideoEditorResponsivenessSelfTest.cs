@@ -26,6 +26,55 @@ internal static class VideoEditorResponsivenessSelfTest
 {
     internal const string CommandLineSwitch = "--selftest-video-editor";
 
+    internal const string CalibrationEnvironmentVariable = "MYCAPTURE_VIDEO_EDITOR_SELFTEST_CALIBRATION";
+    private static CalibrationMeasurement? _calibrationMeasurement;
+
+    private sealed class CalibrationMeasurement(string mode)
+    {
+        internal string Mode { get; } = mode;
+        internal long Started;
+        internal long Completed;
+
+        internal async Task<VideoRangeCalibrationResult> MeasureAsync(CancellationToken token)
+        {
+            Interlocked.Exchange(ref Started, Stopwatch.GetTimestamp());
+            try
+            {
+                return await (Mode == "in-process" ? StudioRangeCalibrationProbe.MeasureAsync(token)
+                    : StudioRangeCalibrationProcess.MeasureAsync(token)).ConfigureAwait(false);
+            }
+            finally { Interlocked.Exchange(ref Completed, Stopwatch.GetTimestamp()); }
+        }
+    }
+
+    internal static string ReadCalibrationMode(string? value) => value switch
+    {
+        null or "" or "out-of-process" => "out-of-process",
+        "known" or "in-process" => value,
+        _ => throw new ArgumentException("Calibration mode must be known, in-process, or out-of-process."),
+    };
+
+    private static void ConfigureCalibration()
+    {
+        string mode = ReadCalibrationMode(Environment.GetEnvironmentVariable(CalibrationEnvironmentVariable));
+        _calibrationMeasurement = new(mode);
+        if (mode == "known")
+        {
+            // Establish the device's real correction before opening, then inject the cached result.
+            // This disables calibration work during the editor run without changing its shader policy.
+            var known = new StudioRangePresentationCalibration(StudioRangeCalibrationProcess.MeasureAsync);
+            VideoRangeCalibrationResult result = known.GetResultAsync().GetAwaiter().GetResult();
+            if (known.Failure is not null) throw new IOException("Cannot establish known calibration.", known.Failure);
+            StudioRangeVideoEffect.Calibration = new(_ => Task.FromResult(result));
+            _ = StudioRangeVideoEffect.Calibration.GetResultAsync().GetAwaiter().GetResult();
+        }
+        else
+        {
+            StudioRangeVideoEffect.Calibration = new(_calibrationMeasurement.MeasureAsync,
+                mode == "in-process" ? TimeSpan.FromSeconds(8) : StudioRangeCalibrationProcess.Timeout);
+        }
+    }
+
     private const int DragSamples = 300;
     private const int AllocationSamples = 6000;
     private const int ExactSamples = 20;
@@ -36,6 +85,7 @@ internal static class VideoEditorResponsivenessSelfTest
 
     internal static int Run(string outputDirectory)
     {
+        ConfigureCalibration();
         int iterations = ReadSoakIterations();
         return iterations == 1
             ? RunSingle(outputDirectory)
@@ -191,6 +241,7 @@ internal static class VideoEditorResponsivenessSelfTest
             Line($"UTC: {DateTimeOffset.UtcNow:O}");
             Line($"OS: {Environment.OSVersion}");
             Line($"Process: {Environment.ProcessPath}");
+            Line($"Calibration mode: {_calibrationMeasurement?.Mode}");
             Line();
 
             RecordingResult recording = sharedRecording ?? RecordClip(clipPath);
@@ -333,12 +384,17 @@ internal static class VideoEditorResponsivenessSelfTest
             var cycleTimes = new double[DragSamples - 1];
             long framesBefore = timeline.RenderFrameCountForTest;
             long seeksBefore = coordinator.IssuedSeekCountForTest;
+            long scrubStarted = Stopwatch.GetTimestamp();
+            var cycleStarts = new long[DragSamples - 1];
+            var cycleEnds = new long[DragSamples - 1];
             long previousCycle = Stopwatch.GetTimestamp();
             for (int i = 0; i < DragSamples; i++)
             {
                 if (i > 0)
                 {
-                    cycleTimes[i - 1] = Stopwatch.GetElapsedTime(previousCycle).TotalMilliseconds;
+                    cycleStarts[i - 1] = previousCycle;
+                    cycleEnds[i - 1] = Stopwatch.GetTimestamp();
+                    cycleTimes[i - 1] = Stopwatch.GetElapsedTime(previousCycle, cycleEnds[i - 1]).TotalMilliseconds;
                 }
                 previousCycle = Stopwatch.GetTimestamp();
 
@@ -350,6 +406,7 @@ internal static class VideoEditorResponsivenessSelfTest
                 PumpFor(TimeSpan.FromMilliseconds(16));
             }
 
+            long scrubEnded = Stopwatch.GetTimestamp();
             long framesAfterInput = timeline.RenderFrameCountForTest;
             var releaseWatch = Stopwatch.StartNew();
             long finalGeneration = coordinator.RequestExact(clipMs * 0.75);
@@ -359,6 +416,7 @@ internal static class VideoEditorResponsivenessSelfTest
             releaseWatch.Stop();
             double pointerP95 = Percentile(pointerLatencies, 0.95);
             double pointerP99 = Percentile(pointerLatencies, 0.99);
+            double cycleP50 = Percentile(cycleTimes, 0.50);
             double cycleP95 = Percentile(cycleTimes, 0.95);
             double cycleP99 = Percentile(cycleTimes, 0.99);
             double maxCycle = cycleTimes.Max();
@@ -374,10 +432,32 @@ internal static class VideoEditorResponsivenessSelfTest
             Line(string.Create(
                 CultureInfo.InvariantCulture,
                 $"5s real scrub: samples={DragSamples}, pointer p95={pointerP95:0.000}ms, " +
-                $"p99={pointerP99:0.000}ms, cycle p95={cycleP95:0.000}ms, " +
+                $"p99={pointerP99:0.000}ms, cycle p50={cycleP50:0.000}ms, p95={cycleP95:0.000}ms, " +
                 $"p99={cycleP99:0.000}ms, max={maxCycle:0.000}ms, " +
                 $"render-frames={renderedFrames}, decoder-seeks={issuedSeeks}, " +
                 $"dropped={coordinator.DroppedRequestCountForTest}, stale={coordinator.StaleResultCountForTest}"));
+            if (_calibrationMeasurement is { } measurement)
+            {
+                long start = Interlocked.Read(ref measurement.Started);
+                long end = Interlocked.Read(ref measurement.Completed);
+                long boundedEnd = end == 0 ? scrubEnded : end;
+                double overlap = start == 0 ? 0 : Math.Max(0,
+                    Stopwatch.GetElapsedTime(Math.Max(start, scrubStarted), Math.Min(boundedEnd, scrubEnded)).TotalMilliseconds);
+                Line(string.Create(CultureInfo.InvariantCulture,
+                    $"Calibration/scrub: mode={measurement.Mode}; started={start != 0}; completed={end != 0}; " +
+                    $"start-relative-to-scrub={(start == 0 ? double.NaN : Stopwatch.GetElapsedTime(scrubStarted, start).TotalMilliseconds):0.000}ms; " +
+                    $"end-relative-to-scrub={(end == 0 ? double.NaN : Stopwatch.GetElapsedTime(scrubStarted, end).TotalMilliseconds):0.000}ms; overlap={overlap:0.000}ms; " +
+                    $"effect={editor.MediaForTest.Effect?.GetType().Name ?? "None"}; failure={StudioRangeVideoEffect.Calibration.Failure}"));
+                foreach (bool overlapping in new[] { true, false })
+                {
+                    double[] values = cycleTimes.Where((_, i) =>
+                        (start != 0 && cycleEnds[i] >= start && cycleStarts[i] <= boundedEnd) == overlapping).ToArray();
+                    if (values.Length > 0)
+                        Line(string.Create(CultureInfo.InvariantCulture,
+                            $"UI cycles calibration-overlap={overlapping}: n={values.Length}, p50={Percentile(values, 0.50):0.000}ms, " +
+                            $"p99={Percentile(values, 0.99):0.000}ms, max={values.Max():0.000}ms"));
+                }
+            }
             Gate(pointerP95 <= 16.7,
                 $"real scrub pointer p95 {pointerP95:0.000}ms <= 16.7ms",
                 $"real scrub pointer p95 {pointerP95:0.000}ms exceeded 16.7ms");

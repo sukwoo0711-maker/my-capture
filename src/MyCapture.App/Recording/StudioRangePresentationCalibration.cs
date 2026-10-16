@@ -7,6 +7,7 @@ using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using Microsoft.Extensions.Logging.Abstractions;
+using MyCapture.App.Diagnostics;
 using MyCapture.Core.Storage;
 using MyCapture.Platform.Recording;
 
@@ -39,9 +40,13 @@ internal sealed class StudioRangePresentationCalibration
         Action<Exception>? logFailure = null)
     {
         _result = new Lazy<Task<VideoRangeCalibrationResult>>(() => MeasureOnceAsync(
-            measure, timeout ?? TimeSpan.FromSeconds(8), logFailure ?? (ex =>
+            measure, timeout ?? StudioRangeCalibrationProcess.Timeout, logFailure ?? (ex =>
                 Trace.TraceWarning("MediaElement range calibration failed; retaining studio Expand / full None: {0}", ex))));
     }
+
+    // Explicit opt-in for H5/H6 and responsiveness diagnostics only. Product previews use the child.
+    internal static StudioRangePresentationCalibration CreateInProcessForDiagnostic() =>
+        new(token => StudioRangeCalibrationProbe.MeasureAsync(token), TimeSpan.FromSeconds(8));
 
     // Reading a decision does not start work. Unknown/failed measurements retain the old policy.
     internal VideoRangeCorrection CorrectionFor(bool studioRange) =>
@@ -58,7 +63,7 @@ internal sealed class StudioRangePresentationCalibration
         CancellationToken token = cancellation.Token;
         try
         {
-            // One budget covers both encodes and both presentations. Even a synchronously blocking
+            // One budget covers child startup, both encodes and presentations. Even a synchronously blocking
             // encoder/driver must not block Apply or its UI thread.
             VideoRangeCalibrationResult result = await Task.Run(() => measure(token))
                 .WaitAsync(timeout).ConfigureAwait(false);
@@ -87,12 +92,17 @@ internal static class StudioRangeCalibrationProbe
     private static readonly byte[] StudioLevels = [16, 71, 181, 235];
     private static readonly byte[] ExpandedLevels = [0, 56, 205, 255];
 
-    internal static Task<VideoRangeCalibrationResult> MeasureAsync(CancellationToken cancellationToken)
+    internal static Task<VideoRangeCalibrationResult> MeasureAsync(CancellationToken cancellationToken,
+        string? parentDirectory = null)
     {
         // The caller runs this on the pool. Keep MF encoding off every WPF dispatcher. The tiny
         // clips live in the app's OS-temp diagnostic root, never in the user's capture library,
-        // and are removed once the presenter has been measured.
-        string directory = ValidatedFilePaths.CreateTemporaryDirectory();
+        // and are removed once the presenter has been measured. A measurement child writes into
+        // the directory its parent created instead of nesting another temp tree: the Media
+        // Foundation sink writer does not accept paths beyond MAX_PATH.
+        string directory = parentDirectory is null
+            ? ValidatedFilePaths.CreateTemporaryDirectory()
+            : DiagnosticOutputPaths.Create(DiagnosticOutputPaths.Child(parentDirectory, "clips"));
         string studioPath = Path.Combine(directory, "studio-range-calibration.mp4");
         string fullPath = Path.Combine(directory, "full-range-calibration.mp4");
         try
@@ -147,7 +157,7 @@ internal static class StudioRangeCalibrationProbe
         }
     }
 
-    private static async Task DeleteClipWithRetriesAsync(string directory)
+    internal static async Task DeleteClipWithRetriesAsync(string directory)
     {
         for (int attempt = 0; attempt < 10 && !DeleteClip(directory); attempt++)
             await Task.Delay(500).ConfigureAwait(false);

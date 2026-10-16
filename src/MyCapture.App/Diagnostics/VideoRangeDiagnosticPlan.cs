@@ -6,7 +6,7 @@ using MyCapture.Core.Storage;
 namespace MyCapture.App.Diagnostics;
 
 internal sealed record VideoRangeCell(string Id, string Host, int Width, int Height, bool[] FullRangeSteps,
-    string Kind = "matrix");
+    string Kind = "matrix", string CalibrationMode = "in-process", string Pattern = "grey-bars");
 internal sealed record VideoRangeArguments(string OutputDirectory, VideoRangeCell? Cell);
 internal sealed record VideoRangePatch(byte R, byte G, byte B, byte A);
 internal sealed record VideoRangeObservation(VideoRangePatch[] Patches, string Classification);
@@ -14,10 +14,11 @@ internal sealed record VideoRangeSample(int Step, string InputRange, string Clas
     VideoRangeObservation[] Observations, double WindowWidthDip, double WindowHeightDip,
     double ContentWidthDip, double ContentHeightDip, double PresentedWidthPixels, double PresentedHeightPixels,
     double ScaleX, double ScaleY, double DpiX, double DpiY, int RenderTier, bool PixelShader20,
-    bool CalibrationStartedBeforeSample);
+    bool CalibrationStartedBeforeSample, string Phase = "before-calibration", double ElapsedMs = 0);
+internal sealed record VideoRangeTiming(double? OpeningMs, double? CalibrationStartMs, double? CalibrationEndMs);
 internal sealed record VideoRangeCellResult(VideoRangeCell Cell, int ProcessId, VideoRangeSample[] Samples,
     VideoRangeCalibrationResult Calibration, string? CalibrationFailure, string[] Adapters,
-    string? AdapterQueryFailure, string? Failure);
+    string? AdapterQueryFailure, string? Failure, VideoRangeTiming? Timing = null);
 
 /// <summary>Pure matrix, command-line and observation-summary contracts for the device diagnostic.</summary>
 internal static class VideoRangeDiagnosticPlan
@@ -45,6 +46,12 @@ internal static class VideoRangeDiagnosticPlan
         }
         for (int repeat = 1; repeat <= 3; repeat++)
             cells.Add(new($"repeat-studio-1280x720-gallery-{repeat}", "gallery", 1280, 720, [false], "repeat"));
+        foreach ((int width, int height) in new[] { (1280, 720), (1920, 1080) })
+        foreach (string host in new[] { "gallery", "editor" })
+        foreach (string mode in new[] { "in-process", "out-of-process" })
+            cells.Add(new($"concurrent-{mode}-studio-{width}x{height}-{host}", host, width, height,
+                [false], "concurrent", mode));
+        cells.Add(new("colour-studio-1280x720-gallery", "gallery", 1280, 720, [false], "content", Pattern: "colour-patches"));
         return cells.AsReadOnly();
     }
 
@@ -117,6 +124,28 @@ internal static class VideoRangeDiagnosticPlan
     internal static string[] Summarize(IReadOnlyList<VideoRangeCellResult> results)
     {
         var facts = new List<string>();
+        var allResults = results;
+        foreach (var result in results.Where(r => r.Cell.Kind == "concurrent"))
+        {
+            var baseline = results.SingleOrDefault(r => r.Cell.Kind == "matrix" && r.Cell.Host == result.Cell.Host
+                && r.Cell.Width == result.Cell.Width && !r.Cell.FullRangeSteps[0] && r.Failure is null);
+            string before = baseline?.Samples.FirstOrDefault()?.Classification ?? "missing";
+            string opening = result.Samples.FirstOrDefault(s => s.Phase == "opening-with-calibration")?.Classification ?? "missing";
+            string after = result.Samples.FirstOrDefault(s => s.Phase == "after-calibration")?.Classification ?? "missing";
+            facts.Add($"H6: {result.Cell.Width}x{result.Cell.Height} {result.Cell.Host} {result.Cell.CalibrationMode}: "
+                + $"fresh={before}, concurrent opening={opening}, completed={after}; "
+                + $"calibration failure={result.CalibrationFailure ?? "none"}; cell failure={result.Failure ?? "none"}. "
+                + "Different processes; inspect timing and raw RGBA before attributing a cause.");
+        }
+        foreach (var result in results.Where(r => r.Cell.Kind == "content"))
+        {
+            string bars = results.SingleOrDefault(r => r.Cell.Id == "matrix-studio-1280x720-gallery" && r.Failure is null)
+                ?.Samples.FirstOrDefault()?.Classification ?? "missing";
+            string colour = result.Samples.FirstOrDefault()?.Classification ?? "missing";
+            facts.Add($"H7: 1280x720 studio gallery grey bars={bars}, colour patches={colour}; "
+                + $"cell failure={result.Failure ?? "none"}. Classification uses the same four greys; inspect all 16 named RGBA patches.");
+        }
+        results = results.Where(r => r.Cell.Kind is "matrix" or "sequence" or "repeat").ToArray();
         // H1-H4 compare only samples taken before the product calibration presented its clips;
         // a re-sample of the same player after calibration is reported separately as H5.
         var beforeCalibration = new List<VideoRangeCellResult>();
@@ -171,9 +200,9 @@ internal static class VideoRangeDiagnosticPlan
                     + $"subsequent product {sample.InputRange} calibration={calibrated.Value}.");
         }
         if (!facts.Any(f => f.StartsWith('H')))
-            facts.Add("No classification difference observed in the collected H1-H5 comparisons.");
-        facts.Add($"Collected {results.Count(r => r.Failure is null)}/{Cells.Count} cells; "
-            + $"unknown samples={results.Sum(r => r.Samples.Count(s => s.Classification == "unknown"))}. "
+            facts.Add("No classification difference observed in the collected H1-H7 comparisons.");
+        facts.Add($"Collected {allResults.Count(r => r.Failure is null)}/{Cells.Count} cells; "
+            + $"unknown samples={allResults.Sum(r => r.Samples.Count(s => s.Classification == "unknown"))}. "
             + "Unknown is an observation; consult raw RGBA. Missing cells are infrastructure failures.");
         return facts.ToArray();
     }

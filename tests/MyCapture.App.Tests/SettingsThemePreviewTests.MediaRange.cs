@@ -29,6 +29,7 @@ public sealed partial class SettingsThemePreviewTests
             { Source = new Uri($"pack://application:,,,/MyCapture;component/Themes/{name}.xaml") });
         string root = OwnedTestDirectory.Create("mc-gallery-video-range-");
         GalleryVideoPlayerWindow? player = null;
+        StudioRangeVideoEffect.Calibration = new(StudioRangeCalibrationProcess.MeasureAsync);
         try
         {
             const int width = 1280, height = 720;
@@ -58,6 +59,26 @@ public sealed partial class SettingsThemePreviewTests
             var shown = new RenderTargetBitmap(width, height, 96, 96, PixelFormats.Pbgra32);
             shown.Render(visual);
             RangePatternClip.AssertMatchesSource(shown, width, height, tolerance: fullRange ? 12 : 8, correction: correction);
+        }
+        catch (Exception ex)
+        {
+            string patches = "unavailable (player did not open)";
+            string effect = player?.MediaForDiagnostic.Effect?.GetType().Name ?? "None";
+            if (player is not null)
+            {
+                try
+                {
+                    var observation = MyCapture.App.Diagnostics.VideoRangeColourPattern.Observe(player.MediaForDiagnostic);
+                    patches = string.Join("; ", observation.Patches.Select((p, i) =>
+                        $"{RangePatternClip.Patches[i].Name}=({p.R},{p.G},{p.B},{p.A})"));
+                }
+                catch (Exception sampleError) { patches = "sampling failed: " + sampleError; }
+            }
+            StudioRangePresentationCalibration calibration = StudioRangeVideoEffect.Calibration;
+            var measured = calibration.IsStarted && calibration.GetResultAsync().IsCompletedSuccessfully
+                ? calibration.GetResultAsync().Result : default;
+            throw new Xunit.Sdk.XunitException($"{ex}\nOut-of-process calibration: studio={measured.Studio}, full={measured.Full}, "
+                + $"failure={calibration.Failure}; hardware={StudioRangeVideoEffect.HardwareShaderAvailable()}; effect={effect}; patches: {patches}");
         }
         finally
         {

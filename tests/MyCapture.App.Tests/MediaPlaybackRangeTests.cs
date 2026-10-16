@@ -5,6 +5,7 @@ using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using Microsoft.Extensions.Logging.Abstractions;
 using MyCapture.App.Recording;
+using MyCapture.App.Diagnostics;
 using MyCapture.Core.Storage;
 using MyCapture.Platform.Recording;
 using Xunit;
@@ -166,7 +167,7 @@ internal static class RangePatternClip
     {
         Assert.True(StudioRangeVideoEffect.Calibration.IsStarted, "Opening a clip with known range must start calibration.");
         Task<VideoRangeCalibrationResult> result = StudioRangeVideoEffect.Calibration.GetResultAsync();
-        DateTime deadline = DateTime.UtcNow.AddSeconds(10);
+        DateTime deadline = DateTime.UtcNow.AddSeconds(12);
         while (!result.IsCompleted && DateTime.UtcNow < deadline) Pump(TimeSpan.FromMilliseconds(20));
         Assert.True(result.IsCompletedSuccessfully, "MediaElement range calibration did not finish within its bound.");
         // Let the completion update the player on its dispatcher before inspecting the effect.
@@ -199,44 +200,10 @@ internal static class RangePatternClip
         }
     }
 
-    internal static readonly (string Name, byte R, byte G, byte B)[] Patches =
-    [
-        ("black", 0, 0, 0), ("grey 16", 16, 16, 16), ("grey 64", 64, 64, 64), ("grey 128", 128, 128, 128),
-        ("grey 192", 192, 192, 192), ("grey 235", 235, 235, 235), ("white", 255, 255, 255), ("red", 255, 0, 0),
-        ("green", 0, 255, 0), ("blue", 0, 0, 255), ("yellow", 255, 255, 0), ("cyan", 0, 255, 255),
-        ("magenta", 255, 0, 255), ("orange", 0xF2, 0xB1, 0x34), ("navy", 0x1D, 0x2A, 0x3C), ("accent", 0x2E, 0x6F, 0xD8),
-    ];
+    internal static readonly (string Name, byte R, byte G, byte B)[] Patches = VideoRangeColourPattern.Patches;
 
-    internal static string Encode(string path, int width, int height, bool fullRange)
-    {
-        int stride = width * 4;
-        byte[] frame = new byte[stride * height];
-        for (int y = 0; y < height; y++)
-        {
-            for (int x = 0; x < width; x++)
-            {
-                (_, byte r, byte g, byte b) = Patches[(y * 2 / height * 8) + (x * 8 / width)];
-                int o = (y * stride) + (x * 4);
-                frame[o] = b;
-                frame[o + 1] = g;
-                frame[o + 2] = r;
-                frame[o + 3] = 255;
-            }
-        }
-
-        var options = new VideoEncoderOptions(path, width, height, 30, VideoEncoderOptions.DeriveBitrate(width, height, 30))
-        {
-            FullRange = fullRange,
-        };
-        using var encoder = new MediaFoundationVideoEncoder(options, NullLogger.Instance);
-        for (int i = 0; i < 30; i++)
-        {
-            encoder.WriteFrame(new EncoderFrame(frame, width, height, stride, i * 1000.0 / 30));
-        }
-
-        encoder.Complete();
-        return path;
-    }
+    internal static string Encode(string path, int width, int height, bool fullRange) =>
+        VideoRangeColourPattern.Encode(path, width, height, fullRange);
 
     /// <summary>Patch centres in a rendering of the whole frame at <paramref name="width"/> x <paramref name="height"/>.</summary>
     internal static (int X, int Y) Centre(int index, int width, int height) =>

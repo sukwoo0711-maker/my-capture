@@ -66,10 +66,20 @@ Windows 10에서는 WPF의 픽셀별 알파 레이어드 창(`AllowsTransparency
 전체 범위 입력이 보정 없이 정상 표시됩니다. OS 빌드나 GPU 제조사로 분기하지 않고 실제 출력을 측정합니다.
 
 범위를 확인한 첫 클립을 열면 녹화와 같은 인코더로 스튜디오 범위와 전체 범위(`FullRange = true`)의
-1초짜리 보정 영상을 각각 만듭니다. 두 영상은 별도 STA 스레드의 같은 화면 밖 창에서 순서대로 측정합니다.
+1초짜리 보정 영상을 각각 만듭니다. 인코딩과 표시는 같은 실행 파일의 단기 자식 프로세스에서만 수행합니다.
+부모는 먼저 `AppContext.BaseDirectory/MyCapture.exe`를 찾고, 없을 때만 현재 프로세스 경로가
+`MyCapture.exe`인지 확인하여 사용합니다. 테스트 출력·zip·full-trust Store 패키지에서도 같은 경로입니다.
+내부 `--measure-video-range <절대 JSON 경로>`는 소유권 게이트보다 먼저 처리하며 트레이·단축키·라이브러리를
+시작하지 않습니다. 출력은 `DiagnosticOutputPaths`로 검증하고 자식의 `MYCAPTURE_DATA_ROOT`, TEMP/TMP를
+고유 임시 디렉터리에 격리합니다. 셸 실행·창 활성화·작업 표시줄 표시를 사용하지 않습니다.
+두 영상은 자식의 별도 STA 스레드에서 같은 화면 밖 창으로 순서대로 측정합니다.
 창은 주 UI 스레드의 리소스를 참조하는 암시적 스타일을 피하도록 `Style = null`을 유지합니다.
 입력마다 새 `MediaElement`를 사용하여 이전 영상의 잔류 프레임을 제외합니다. 생성자와 빈 플레이어는
-측정을 시작하지 않습니다. 인코딩과 두 측정은 UI 스레드를 막지 않으며 전체 예산은 8초입니다.
+측정을 시작하지 않습니다. 부모의 전체 예산은 프로세스 시작을 포함하여 10초이며 자식의 측정 예산은 8초입니다.
+JSON 버전·자식 PID·종료 코드·두 범위의 유효한 판정을 모두 확인합니다. 실패·시간 초과 시 부모가 직접
+시작한 자식만 종료하고 기존 폴백과 일회성 로그를 유지합니다. 자식과 부모 모두 기존 임시 클립 재시도
+정리 경로를 사용합니다. 부모의 WPF dispatcher/render thread에서는 보정 영상을 제시하거나 샘플링하지 않습니다.
+인프로세스 프로브는 자식과 명시적인 진단 경로에 보존합니다.
 
 원본 회색 패턴 `[0, 64, 192, 255]`과 표시 패턴을 비교하여 정상(`Correct`), 잘못 확장됨
 (`ExpandedAsStudio`: 약 `[0, 56, 205, 255]`), 스튜디오 범위 유지(`StudioRetained`:
@@ -144,7 +154,10 @@ Get-Content -LiteralPath (Join-Path $output 'video-range.json')
 링크/junction·모호한 경로는 거부합니다. 자체 실행 파일의 내부 스위치로 셀마다 새 자식 프로세스를
 시작합니다. studio/full × 320×180/640×360/1280×720/1920×1080 × probe/gallery/editor의 24개 셀,
 gallery와 probe 각각의 studio→full→studio 및 full→studio 순서 셀 4개, 1280×720 studio gallery의
-추가 독립 반복 3개로 총 31개 프로세스·37개 관측 단계를 수집합니다. 자식은 직렬로 실행하며 셀당
+추가 독립 반복 3개를 유지합니다. H6의 studio 1280×720/1920×1080 × gallery/editor ×
+in-process/out-of-process 동시 보정 8개 셀과 H7의 1280×720 studio gallery 색상 패턴 1개 셀을
+추가하여 총 40개 셀 프로세스·46개 최초 관측 단계를 수집합니다. H6 out-of-process 셀 4개는
+제품 보정용 단기 자식도 하나씩 실행합니다. 자식은 직렬로 실행하며 셀당
 20초, 전체 5분 제한을 적용합니다. 시간 초과 시 해당 진단이 시작한 자식만 종료합니다.
 
 각 단계에서는 효과와 자동 보정 시작을 억제하고 제품 보정의 동일한 패턴·인코더·샘플러·분류기를
@@ -154,7 +167,8 @@ gallery와 probe 각각의 studio→full→studio 및 full→studio 순서 셀 4
 단계마다 새 MediaElement를 만듭니다. 다섯 표본의 원시 RGBA를 모두 저장하고 마지막 두 판정이
 일치하면 확정합니다. 불일치·알 수 없는 패턴은 `unknown` 관측으로 보존합니다.
 
-모든 단계가 끝난 뒤 같은 프로세스에서 제품 보정을 한 번 실행합니다. 보정의 full-range 영상이
+기존 H1–H5 셀은 모든 단계가 끝난 뒤 같은 프로세스에서 명시적인 진단용 인프로세스 보정을 한 번 실행합니다.
+제품 경로가 자식 프로세스로 바뀌어도 이전 H5 실험의 의미를 유지합니다. 보정의 full-range 영상이
 최초 studio 관측이나 순서 실험에 앞서 재생되지 않도록 순서를 고정합니다. 갤러리·편집기 셀은 창을 연 채로
 보정을 실행하고 같은 재생기를 한 번 더 측정합니다(`after calibration`). 보정 영상이 재생된 뒤 이미 열린
 미리보기의 표시가 바뀌는지는 H5로 요약합니다. 순서 셀의 두 번째 이후 단계에서 영상을 바꾸다 재생기가
@@ -166,15 +180,60 @@ DXGI 어댑터 목록(또는 조회 실패)을 포함합니다. 어댑터 목록
 하드웨어/소프트웨어 디코더를 확정하지 않습니다.
 
 `video-range-report.txt`에는 재실행 명령·관측 표·H1 크기별/H2 호스트별/H3 순서별/H4 동일 조건 반복별/
-H5 보정 전후 판정 차이를 기록합니다. `Calibration differs`는 먼저 관측한 결과와 이후 제품 보정의 차이입니다.
-차이는 인과관계의 확정이 아니므로 JSON의 원시 표본과 배율도 함께 비교합니다. `cells-<GUID>` 아래
-셀별 `video-range.json`, `video-range-report.txt`, 합성 `studio.mp4`/`full.mp4`를 보존합니다.
+H5 보정 전후 판정 차이를 기록합니다. H6/H7 요약은 별도로 기록하며 기존 H1–H5 집계에는 넣지 않습니다.
+`Calibration differs`는 먼저 관측한 결과와 이후 인프로세스 보정의 차이입니다.
+차이는 인과관계의 확정이 아니므로 JSON의 원시 표본과 배율도 함께 비교합니다. `c-<8자>` 아래
+계획 순서의 두 자리 번호 폴더(`00`, `01`, …)에 셀별 `video-range.json`, `video-range-report.txt`,
+합성 `studio.mp4`/`full.mp4`를 보존하며, 각 셀의 id는 JSON에 있습니다. Media Foundation의 sink writer가
+MAX_PATH를 넘는 경로를 받지 않으므로 폴더 이름을 짧게 유지하고, 측정 자식은 부모가 만든 임시 폴더의
+`clips` 아래에 보정 영상을 씁니다.
 자식의 `MYCAPTURE_DATA_ROOT`와 TEMP/TMP는 셀의 `data` 하위에 격리하며, 제품 보정용 임시 클립의
 기존 삭제·재시도 호출은 유지합니다. 실제 사용자 영상·설정·클립보드는 사용하지 않습니다.
 
-완료 조건은 exit code 0 및 `RESULT: PASS`, 31개 셀·37개 관측 수집입니다. 색상 판정이 비정상이거나
+H6는 플레이어를 여는 동일 dispatcher 작업에서 보정을 시작하고 기다리지 않은 채 열기를 진행합니다.
+효과는 계속 억제합니다. `opening-with-calibration` 표본과 보정 완료 후 `after-calibration` 표본을
+각각 수집하며 열기·보정 시작/종료·표본 시각(ms)을 JSON에 기록합니다. 이미 열린 플레이어에 보정을
+실행하던 H5와 구분합니다. 같은 크기/호스트의 새 프로세스 기준 표본과 두 보정 방식을 비교합니다.
+실기 #84의 2026-10-16 관측은 두 클립 보정과 gallery 열기가 겹칠 때만 studio 범위가 유지될
+가능성을 남겼습니다. H6에서 인프로세스만 달라지고 프로세스 분리에서 기준값으로 돌아오면 이 가설을
+지지합니다. 자식 분리도 CPU/GPU 자원 경쟁을 없애지는 않으므로 시각과 응답성은 각각 확인합니다.
+
+H7은 회귀 테스트 `RangePatternClip`과 동일한 공유 인코더·8×2 패턴을 사용합니다. 검정,
+grey 16/64/128/192/235, 흰색, 빨강, 초록, 파랑, 노랑, 청록, 자홍, orange (242,177,52),
+navy (29,42,60), accent (46,111,216)의 중심 RGBA 16개를 모두 보존합니다. 분류에는 기존 회색 바와
+동일한 0/64/192/255 네 패치를 사용하며 나머지 색도 원시 값으로 비교합니다. 최초 H7 표본은 보정 전에
+수집하므로 콘텐츠 가설을 동시 보정 가설과 구분할 수 있습니다. 두 가설의 상호작용은 이 단일 셀로 확정하지 않습니다.
+
+완료 조건은 exit code 0 및 `RESULT: PASS`, 40개 셀·46개 최초 관측 수집입니다.
+열린 gallery/editor의 보정 후 재표본 30개를 합치면 정상 실행의 표본 묶음은 76개입니다. 색상 판정이 비정상이거나
 `unknown`이어도 관측을 완료하면 PASS입니다. 열기·인코딩·자식 실행·시간 초과 등 수집 인프라 오류는
 FAIL이며 누락 셀을 성공으로 처리하지 않습니다. 제품 보정의 실패/폴백도 관측 필드로 기록합니다.
+
+### 편집기 응답성 보정 비교
+
+`--selftest-video-editor <절대 출력 디렉터리>`에서만 환경 변수
+`MYCAPTURE_VIDEO_EDITOR_SELFTEST_CALIBRATION`을 읽습니다. `known`은 플레이어 열기 전에 실제
+out-of-process 보정으로 장비 결과를 구하고 캐시된 값으로 주입합니다. `in-process`는 이전 방식,
+`out-of-process`(기본값)는 제품 방식을 사용합니다. 잘못된 값은 실행 오류입니다. 일반 앱 실행에는
+이 환경 변수가 적용되지 않습니다. 세 방식 모두 같은 효과 정책과 기존 게이트를 사용합니다.
+
+각 모드를 새 프로세스에서 3회 이상 실행합니다. 매번 새 TEMP 하위 출력 및 데이터 디렉터리를 사용합니다.
+보고서의 cycle p50/p99/max, 보정 시작/종료의 scrub 상대 시각, 겹친 시간, 겹친/겹치지 않은 cycle 분포,
+실제 효과와 보정 실패를 함께 비교합니다. filmstrip 준비 대기나 프레임 편집·탐색 게이트를 변경하지 않습니다.
+
+```powershell
+$run = Join-Path $env:TEMP ('MyCapture-editor-calibration-' + [guid]::NewGuid().ToString('N'))
+foreach ($mode in 'known', 'in-process', 'out-of-process') {
+    foreach ($iteration in 1..3) {
+        $output = Join-Path $run ($mode + '-' + $iteration)
+        $env:MYCAPTURE_DATA_ROOT = Join-Path $output 'data'
+        $env:MYCAPTURE_VIDEO_EDITOR_SELFTEST_CALIBRATION = $mode
+        & $exe --selftest-video-editor $output | Out-Null
+        $LASTEXITCODE
+        Get-Content -LiteralPath (Join-Path $output 'video-editor-selftest-report.txt')
+    }
+}
+```
 
 프레임 저장 수용 검사에서는 Expand와 Compress 각각에서 검정 0·흰색 255가 디코드 허용 오차 내로
 프레임 편집 PNG와 MP4 재디코드 결과에 남는지 확인합니다. 미리보기 Compress의 16/235 클리핑 허용을

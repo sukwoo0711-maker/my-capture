@@ -14,8 +14,8 @@ namespace MyCapture.App.Recording;
 /// Some presenters retain studio RGB 16-235, others expand it correctly, and some also expand
 /// full-range clips as if they were studio range. At the first preview with known source range,
 /// a lazy calibration encodes both ranges with the recording encoder and samples them sequentially
-/// in one off-screen window on its own STA thread, without an effect. One eight-second budget
-/// covers encoding and presentation. The process-wide result updates open previews for either range.
+/// in one off-screen window in an isolated child process, without an effect. One ten-second budget
+/// covers startup, encoding and presentation. The process-wide result updates open previews for either range.
 /// Correct output needs no effect; retained studio RGB needs expansion; expanded-as-studio RGB
 /// needs <see cref="FullRangeVideoEffect"/> compression. The latter cannot recover clipped source
 /// values below 16 or above 235: those display as 16/235. Unknown, failed or timed-out calibration
@@ -123,7 +123,7 @@ internal sealed class StudioRangeVideoEffect : ShaderEffect
     private static readonly ConditionalWeakTable<MediaElement, PreviewState> Previews = new();
 
     internal static StudioRangePresentationCalibration Calibration { get; set; } =
-        new(StudioRangeCalibrationProbe.MeasureAsync);
+        new(StudioRangeCalibrationProcess.MeasureAsync);
 
     // Only the isolated range diagnostic sets this before creating any player. In particular,
     // do not start calibration (which presents a full-range clip) before its sequence samples.
