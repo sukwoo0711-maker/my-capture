@@ -113,8 +113,10 @@ public sealed class CaptureImportTests
             && record.OriginalContentHash == cached.OriginalContentHash);
     }
 
+    // The import and the removal overlap, so both must resume on one owner as they do in the app;
+    // on thread-pool continuations the import's publication raced the removal's record update.
     [Fact]
-    public async Task CachedDuplicatePendingRemovalDoesNotSkipImport()
+    public Task CachedDuplicatePendingRemovalDoesNotSkipImport() => QueueOwnerThread.RunAsync(async () =>
     {
         var fixture = new Fixture();
         string incoming = fixture.Source("matching.png", [1, 2, 3]);
@@ -162,7 +164,7 @@ public sealed class CaptureImportTests
             if (removal is not null) await removal.WaitAsync(TimeSpan.FromSeconds(10));
         }
         Assert.Equal(new CaptureImportResult(1, 0, 0, 0, false), await import.WaitAsync(TimeSpan.FromSeconds(10)));
-    }
+    });
 
     private sealed class IndexOnlyRemoval : ICaptureRemovalTransaction
     {

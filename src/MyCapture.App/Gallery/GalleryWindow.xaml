@@ -942,7 +942,7 @@
                             <Border x:Name="SelectedLayer" Style="{StaticResource LibraryUx.SelectedWash}" BorderThickness="1" />
                             <Border x:Name="Indicator" Style="{StaticResource StatePart.Normal}" Width="3" Height="16" Margin="1,0,0,0"
                                     HorizontalAlignment="Left" VerticalAlignment="Center"
-                                    Background="{DynamicResource Accent.Default}" CornerRadius="{DynamicResource Radius.Pill}"
+                                    Background="{DynamicResource Accent.Indicator}" CornerRadius="{DynamicResource Radius.Pill}"
                                     Opacity="0" IsHitTestVisible="False" />
                             <ContentPresenter Margin="12,0,10,0" VerticalAlignment="Center" HorizontalAlignment="Stretch" />
                             <Border x:Name="FocusRing" Margin="1" BorderBrush="{DynamicResource Border.Focus}" BorderThickness="1"
@@ -1029,7 +1029,7 @@
                                 <Border x:Name="SelectedLayer" Style="{StaticResource LibraryUx.SelectedWash}" BorderThickness="1" />
                                 <Border x:Name="Indicator" Style="{StaticResource StatePart.Normal}" Width="3" Height="16" Margin="1,0,0,0"
                                         HorizontalAlignment="Left" VerticalAlignment="Center"
-                                        Background="{DynamicResource Accent.Default}" CornerRadius="{DynamicResource Radius.Pill}"
+                                        Background="{DynamicResource Accent.Indicator}" CornerRadius="{DynamicResource Radius.Pill}"
                                         Opacity="0" IsHitTestVisible="False" />
                                 <DockPanel Margin="4,0,10,0">
                                     <ToggleButton x:Name="Expander" DockPanel.Dock="Left" Style="{StaticResource LibraryUx.TreeExpander}"
@@ -1126,7 +1126,7 @@
                             <Border x:Name="SelectedLayer" Style="{StaticResource LibraryUx.SelectedWash}" BorderThickness="1" />
                             <Border x:Name="Indicator" Style="{StaticResource StatePart.Normal}" Width="3" Height="16" Margin="1,0,0,0"
                                     HorizontalAlignment="Left" VerticalAlignment="Center"
-                                    Background="{DynamicResource Accent.Default}" CornerRadius="{DynamicResource Radius.Pill}"
+                                    Background="{DynamicResource Accent.Indicator}" CornerRadius="{DynamicResource Radius.Pill}"
                                     Opacity="0" IsHitTestVisible="False" />
                             <ContentPresenter Margin="12,0,10,0" VerticalAlignment="Center" />
                             <Border x:Name="FocusRing" Margin="1" BorderBrush="{DynamicResource Border.Focus}" BorderThickness="1"
@@ -1292,7 +1292,7 @@
                             </Trigger>
                             <!-- On, the track keeps its accent edge whether or not the pointer is over it. -->
                             <Trigger Property="IsChecked" Value="True">
-                                <Setter TargetName="Track" Property="BorderBrush" Value="{DynamicResource Accent.Default}" />
+                                <Setter TargetName="Track" Property="BorderBrush" Value="{DynamicResource Accent.Indicator}" />
                                 <Setter TargetName="Track" Property="themes:FluidMotion.FadeTo" Value="1" />
                                 <Setter TargetName="TrackHover" Property="themes:FluidMotion.FadeTo" Value="0" />
                             </Trigger>
@@ -1861,7 +1861,7 @@
                         <TextBlock Text="{loc:Text Library.Import.DropDetail}" Margin="0,8,0,0"
                                    Style="{DynamicResource Text.MutedBlock}" TextWrapping="Wrap" TextAlignment="Center" />
                         <ProgressBar x:Name="ImportProgress" Visibility="Collapsed" Height="6" Margin="0,16,0,0"
-                                     Foreground="{DynamicResource Accent.Default}" Background="{DynamicResource Surface.Sunken}" />
+                                     Foreground="{DynamicResource Accent.Indicator}" Background="{DynamicResource Surface.Sunken}" />
                         <Button x:Name="ImportCancelButton" Content="{loc:Text Library.Action.Cancel}"
                                 Visibility="Collapsed" Click="OnCancelImportClick" Margin="0,16,0,0"
                                 Style="{StaticResource Button.Secondary}" />

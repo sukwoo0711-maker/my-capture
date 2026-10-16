@@ -640,7 +640,7 @@
                             <Border x:Name="CheckedLayer"
                                     Style="{StaticResource StateLayer.Selected}"
                                     Background="{DynamicResource Accent.Default}"
-                                    BorderBrush="{DynamicResource Accent.Default}"
+                                    BorderBrush="{DynamicResource Accent.Indicator}"
                                     BorderThickness="1"
                                     CornerRadius="5">
                                 <Path x:Name="Check"
@@ -722,7 +722,7 @@
                                   Style="{StaticResource StatePart.Normal}"
                                   IsHitTestVisible="False"
                                   Opacity="0">
-                                <Ellipse Fill="{DynamicResource Accent.Default}" />
+                                <Ellipse Fill="{DynamicResource Accent.Indicator}" />
                                 <Ellipse x:Name="Check" Width="8" Height="8"
                                          Style="{StaticResource StatePart.SettlingGlyph}"
                                          Fill="{DynamicResource Text.OnAccent}" />
@@ -787,7 +787,7 @@
                         <Border x:Name="HoverLayer" Style="{StaticResource StateLayer.Hover}"
                                 BorderThickness="1" CornerRadius="8" />
                         <Border x:Name="SelectedLayer" Style="{StaticResource StateLayer.Selected}"
-                                BorderBrush="{DynamicResource Accent.Foreground}" BorderThickness="1" CornerRadius="8" />
+                                BorderBrush="{DynamicResource Accent.Indicator}" BorderThickness="1" CornerRadius="8" />
                         <Border BorderThickness="1" Padding="{TemplateBinding Padding}">
                             <ContentPresenter ContentSource="Header" RecognizesAccessKey="True" />
                         </Border>
@@ -801,7 +801,7 @@
                             <Setter Property="FontWeight" Value="SemiBold" />
                         </Trigger>
                         <Trigger Property="IsKeyboardFocused" Value="True">
-                            <Setter TargetName="TabBorder" Property="BorderBrush" Value="{DynamicResource Accent.Foreground}" />
+                            <Setter TargetName="TabBorder" Property="BorderBrush" Value="{DynamicResource Accent.Indicator}" />
                         </Trigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>
@@ -1265,7 +1265,7 @@
         </ControlTemplate.Triggers>
     </ControlTemplate>
     <Style TargetType="{x:Type Slider}">
-        <Setter Property="Foreground" Value="{DynamicResource Accent.Foreground}" />
+        <Setter Property="Foreground" Value="{DynamicResource Accent.Indicator}" />
         <Setter Property="Background" Value="Transparent" />
         <!-- The track is 4px, but the whole 32px row takes pointer input. -->
         <Setter Property="MinHeight" Value="{DynamicResource Size.HitTarget.Compact}" />
@@ -1360,6 +1360,18 @@
         <Setter Property="Padding" Value="5" />
     </Style>
 
+    <!-- A video-and-steps guide beside its feature title. Each template owns its glyph. -->
+    <Style x:Key="Button.Tutorial" TargetType="Button" BasedOn="{StaticResource Button.Icon.Compact}">
+        <Setter Property="ToolTip" Value="{Binding RelativeSource={RelativeSource Self}, Path=(AutomationProperties.Name)}" />
+        <Setter Property="ContentTemplate">
+            <Setter.Value>
+                <DataTemplate>
+                    <themes:SymbolIcon Data="{DynamicResource Icon.PlayCircle}" Size="20" IsHitTestVisible="False" />
+                </DataTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
     <!-- ============================================================= -->
     <!-- Left tool rail: compact desktop activity rail                  -->
     <!--   Fixed 40px icon targets; meaning is carried by tooltip,      -->
@@ -1395,7 +1407,7 @@
                         <!-- Selection fills the tool's own tile. -->
                         <Border x:Name="CheckedLayer" Style="{StaticResource StateLayer.Selected}"
                                 Background="{DynamicResource Accent.Default}"
-                                BorderBrush="Transparent" BorderThickness="1" />
+                                BorderBrush="{DynamicResource Border.SelectedTool}" BorderThickness="1" />
                         <Border BorderThickness="1">
                             <ContentPresenter HorizontalAlignment="Center"
                                               VerticalAlignment="Center" />
@@ -1521,7 +1533,7 @@
                             <Setter TargetName="Grip" Property="Background" Value="{DynamicResource Text.Muted}" />
                         </Trigger>
                         <Trigger Property="IsDragging" Value="True">
-                            <Setter TargetName="Grip" Property="Background" Value="{DynamicResource Accent.Foreground}" />
+                            <Setter TargetName="Grip" Property="Background" Value="{DynamicResource Accent.Indicator}" />
                         </Trigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>

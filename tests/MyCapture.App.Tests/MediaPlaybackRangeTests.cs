@@ -106,10 +106,15 @@ public sealed class MediaPlaybackRangeTests
         }
     }
 
+    // lateOpen: MediaOpened arrives after the open fallback has made the editor ready, as on a
+    // loaded CI host where it took over 5 s. The fallback marks the editor ready before the range
+    // is known or a frame is decoded, so readiness alone is not the signal for either.
     [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public void EditorPreviewShowsTheDecodedColoursOfStudioAndFullRangeClips(bool fullRange) => StaTestHost.Run(() =>
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    [InlineData(true, true)]
+    public void EditorPreviewShowsTheDecodedColoursOfStudioAndFullRangeClips(bool fullRange, bool lateOpen) => StaTestHost.Run(() =>
     {
         string dir = OwnedTestDirectory.Create("mc-range-editor-");
         VideoEditorWindow? editor = null;
@@ -124,21 +129,26 @@ public sealed class MediaPlaybackRangeTests
                 Left = -10000, Top = -10000, Width = 1100, Height = 760,
                 ShowActivated = false, ShowInTaskbar = false,
             };
+            if (lateOpen) editor.OpenTimeoutForTest = TimeSpan.Zero;
             editor.Show();
-            DateTime deadline = DateTime.UtcNow.AddSeconds(15);
-            while (!editor.IsMediaReadyForTest && !editor.HasMediaFailedForTest && DateTime.UtcNow < deadline)
-                RangePatternClip.Pump(TimeSpan.FromMilliseconds(20));
-            Assert.True(editor.IsMediaReadyForTest, editor.MediaFailureForTest);
+            Assert.True(RangePatternClip.PumpUntil(() => editor.IsMediaReadyForTest || editor.HasMediaFailedForTest, TimeSpan.FromSeconds(15))
+                && editor.IsMediaReadyForTest, editor.MediaFailureForTest);
+            // The range follows the source probe, with or without MediaOpened, and starts calibration.
+            Assert.True(RangePatternClip.PumpUntil(() => editor.IsSourceRangeKnownForTest, TimeSpan.FromSeconds(15)), "the source probe did not finish");
             RangePatternClip.WaitForCalibration();
             VideoRangeCorrection correction = RangePatternClip.AssertCalibratedEffect(editor.MediaForTest, !fullRange);
             bool hardware = StudioRangeVideoEffect.HardwareShaderAvailable();
-            // Software rendering keeps the existing no-effect policy.
+            // Without hardware shaders (hosted CI, Remote Desktop) a needed correction is skipped by
+            // design, so only the effect decision is checked there.
             if (!hardware && StudioRangeVideoEffect.Calibration.CorrectionFor(!fullRange) != VideoRangeCorrection.None) return;
-            RangePatternClip.Pump(TimeSpan.FromMilliseconds(500));
+            Assert.True(RangePatternClip.PumpUntil(() => editor.HasMediaOpenedForTest || editor.HasMediaFailedForTest, TimeSpan.FromSeconds(30))
+                && editor.HasMediaOpenedForTest, editor.HasMediaFailedForTest ? editor.MediaFailureForTest : "MediaOpened did not arrive");
 
-            BitmapSource frame = editor.RenderCurrentFrameForTest() ?? throw new Xunit.Sdk.XunitException("no preview frame");
-            // Keep the existing tolerances: full-range decoding may differ by up to 12 steps
-            // on software decoders. Compression only accounts for irrecoverably clipped endpoints.
+            BitmapSource frame = RangePatternClip.WaitForPresentedFrame(editor.RenderCurrentFrameForTest, width, height, TimeSpan.FromSeconds(10));
+            // A full-range clip shown without an effect relies on the platform decoder: the software
+            // H.264 decoder on hosts without hardware decoding (GitHub-hosted runners) lifts
+            // full-range zero by up to 10 steps (cyan read (10,254,254)). Studio-range recordings keep
+            // the strict 8. Compression only accounts for irrecoverably clipped endpoints.
             RangePatternClip.AssertMatchesSource(frame, width, height, tolerance: fullRange ? 12 : 8, correction: correction);
         }
         finally
@@ -271,6 +281,43 @@ internal static class RangePatternClip
 
         Assert.True(failures.Count == 0, string.Join("; ", failures)
             + $"; studio={StudioRangeVideoEffect.Calibration.CorrectionFor(true)}, full={StudioRangeVideoEffect.Calibration.CorrectionFor(false)}, calibrationFailure={StudioRangeVideoEffect.Calibration.Failure}");
+    }
+
+    /// <summary>Pumps the dispatcher until <paramref name="condition"/> holds; false when <paramref name="timeout"/> passes first.</summary>
+    internal static bool PumpUntil(Func<bool> condition, TimeSpan timeout)
+    {
+        DateTime deadline = DateTime.UtcNow + timeout;
+        while (!condition())
+        {
+            if (DateTime.UtcNow >= deadline) return false;
+            Pump(TimeSpan.FromMilliseconds(20));
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// The first frame the preview presents. MediaElement raises nothing when a paused frame
+    /// reaches the screen, and until one does the preview renders empty, every patch black, so
+    /// the rendering is polled until a patch shows anything else. The frame is returned as
+    /// rendered, still empty when <paramref name="timeout"/> passes.
+    /// </summary>
+    internal static BitmapSource WaitForPresentedFrame(Func<BitmapSource?> render, int width, int height, TimeSpan timeout)
+    {
+        BitmapSource? frame = null;
+        PumpUntil(() => (frame = render()) is not null && !IsEmpty(frame, width, height), timeout);
+        return frame ?? throw new Xunit.Sdk.XunitException("no preview frame");
+    }
+
+    private static bool IsEmpty(BitmapSource frame, int width, int height)
+    {
+        for (int i = 0; i < Patches.Length; i++)
+        {
+            (int x, int y) = Centre(i, width, height);
+            if (Sample(frame, x, y) != (0, 0, 0)) return false;
+        }
+
+        return true;
     }
 
     internal static void Pump(TimeSpan duration)

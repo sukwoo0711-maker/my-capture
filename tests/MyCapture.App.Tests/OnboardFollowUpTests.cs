@@ -118,8 +118,8 @@ public sealed class ShortcutHelpFrameKeysTests
             var tabs = ((DockPanel)help.Content).Children.OfType<TabControl>().Single();
             TabItem video = tabs.Items.OfType<TabItem>().Single(tab => Equals(tab.Header, UiText.Get("Help.Video")));
             var rows = ((StackPanel)((ScrollViewer)video.Content).Content).Children.OfType<UniformGrid>();
-            UniformGrid frame = rows.Single(row => row.Children.OfType<TextBlock>().First().Text == UiText.Get("Help.Frame"));
-            Assert.Equal(", / .", AutomationProperties.GetName(frame.Children.OfType<WrapPanel>().Single()));
+            UniformGrid frame = rows.Single(row => ShortcutHelpRowAssertions.Title(row) == UiText.Get("Help.Frame"));
+            Assert.Equal(", / .", ShortcutHelpRowAssertions.Keys(frame));
             // The window title is in the title bar only.
             Assert.DoesNotContain(((DockPanel)help.Content).Children.OfType<TextBlock>(), text => text.Text == help.Title);
         }
@@ -140,7 +140,7 @@ public sealed class ShortcutHelpFrameKeysTests
                 var tabs = ((DockPanel)help.Content).Children.OfType<TabControl>().Single();
                 TabItem pins = tabs.Items.OfType<TabItem>().Single(item => Equals(item.Header, tab));
                 var rows = ((StackPanel)((ScrollViewer)pins.Content).Content).Children.OfType<UniformGrid>();
-                Assert.Equal(pasteToScreen, rows.First().Children.OfType<TextBlock>().First().Text);
+                Assert.Equal(pasteToScreen, ShortcutHelpRowAssertions.Title(rows.First()));
             }
             finally { help.Close(); }
         });

@@ -568,7 +568,7 @@ internal sealed class QuickAccessWindow : Window
         // Reduced motion keeps a steady accent bar; the status text already says what is running.
         _progressShown = true;
         _remaining.Visibility = Visibility.Visible;
-        _remaining.SetResourceReference(ForegroundProperty, "Accent.Default");
+        _remaining.SetResourceReference(ForegroundProperty, "Accent.Foreground");
         _remaining.IsIndeterminate = FluidMotion.AnimationsEnabled;
         if (!FluidMotion.AnimationsEnabled) _remaining.Value = 100;
     }
