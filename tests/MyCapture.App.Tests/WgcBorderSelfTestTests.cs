@@ -3,12 +3,56 @@ using System.IO;
 using System.Windows;
 using System.Windows.Threading;
 using MyCapture.App.Diagnostics;
+using MyCapture.Core.Primitives;
+using MyCapture.Platform.Display;
 using Xunit;
 
 namespace MyCapture.App.Tests;
 
 public sealed class WgcBorderSelfTestTests
 {
+    [Theory]
+    [InlineData(0, 0, 1920, 1040)] // Bottom taskbar.
+    [InlineData(0, 40, 1920, 1040)] // Top taskbar.
+    [InlineData(40, 0, 1880, 1080)] // Left taskbar.
+    [InlineData(0, 0, 1880, 1080)] // Right taskbar.
+    public void FixtureRegion_ExcludesAppbarsOnEveryEdge(int x, int y, int width, int height)
+    {
+        var work = new RectD(x, y, width, height);
+        var monitor = new MonitorInfo("primary", new RectD(0, 0, 1920, 1080), work, 96, true);
+        Assert.Equal(work, WgcBorderSelfTest.ComputeFixtureRegion(monitor));
+    }
+
+    [Theory]
+    [InlineData(96)]
+    [InlineData(144)]
+    [InlineData(192)]
+    public void FixtureRegion_UsesSelectedMonitorPhysicalPixelsInMixedDpiLayout(int dpi)
+    {
+        MonitorInfo[] layout =
+        [
+            new("primary", new RectD(0, 0, 1920, 1080), new RectD(0, 0, 1920, 1040), 96, true),
+            new("left-above", new RectD(-2560, -720, 2560, 1440),
+                new RectD(-2500, -680, 2500, 1400), (uint)dpi, false),
+        ];
+        Assert.Equal(new RectD(-2500, -680, 2500, 1400), WgcBorderSelfTest.ComputeFixtureRegion(layout[1]));
+    }
+
+    [Fact]
+    public void FixtureRegion_RoundsInwardAndAlignsEncoderDimensionsInsideWorkArea()
+    {
+        var monitor = new MonitorInfo("fractional", new RectD(-1600, -900, 1600, 900),
+            new RectD(-1599.5, -899.5, 1579, 859), 144, false);
+        Assert.Equal(new RectD(-1599, -899, 1578, 858), WgcBorderSelfTest.ComputeFixtureRegion(monitor));
+    }
+
+    [Fact]
+    public void FixtureRegion_RejectsWorkAreaWithoutEnoughPixelsForEdgeInspection()
+    {
+        var monitor = new MonitorInfo("tiny", new RectD(0, 0, 1920, 1080), new RectD(0, 0, 20, 20), 96, true);
+        Assert.Throws<InvalidOperationException>(() => WgcBorderSelfTest.ComputeFixtureRegion(monitor));
+    }
+
     [Fact]
     public void YellowEdgeScan_CoversEveryEdgeAndIgnoresTheInteriorAndRowPadding()
     {

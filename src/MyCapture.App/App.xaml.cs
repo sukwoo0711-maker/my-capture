@@ -1538,7 +1538,9 @@ public partial class App : Application
 
             try
             {
-                bool shouldClose = await _commit.CommitAsync(record, result, editSession);
+                // A retry can rotate/crop the frame again. Commit its base with its layers and
+                // render in the same transaction, even when the first action already persisted.
+                bool shouldClose = await _commit.CommitAsync(record, result, editSession, replaceOriginal: true);
                 if (shouldClose)
                 {
                     _tray?.SetCaptureCount(_queue?.Count ?? 0);

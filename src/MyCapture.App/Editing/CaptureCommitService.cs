@@ -145,7 +145,8 @@ internal sealed class CaptureCommitService
         AnnotationEditingResult result,
         CaptureEditSession? editSession = null,
         Func<Task<(CaptureRecord Record, CaptureEditSession? Session)>>? createRecordAsync = null,
-        CaptureRecord? namingRecord = null)
+        CaptureRecord? namingRecord = null,
+        bool replaceOriginal = false)
     {
         ArgumentNullException.ThrowIfNull(result);
         if (record is not null && editSession is not null && editSession.RecordId != record.Id)
@@ -201,12 +202,14 @@ internal sealed class CaptureCommitService
                 }
 
                 await PersistFinalIfAvailableAsync(
-                    record, result.Action, flattened, snapshot, result.ImageAssetBitmaps, editSession, createRecordAsync);
+                    record, result.Action, flattened, snapshot, result.ImageAssetBitmaps, editSession, createRecordAsync,
+                    replaceOriginal ? result.SelectedBitmap : null);
                 return await CopyEditedImageAsync(flattened, "Save As", exportRecord?.SourcePageUrl);
 
             case EditorCommitAction.QuickSave:
                 record = await PersistFinalIfAvailableAsync(
-                    record, result.Action, flattened, snapshot, result.ImageAssetBitmaps, editSession, createRecordAsync);
+                    record, result.Action, flattened, snapshot, result.ImageAssetBitmaps, editSession, createRecordAsync,
+                    replaceOriginal ? result.SelectedBitmap : null);
                 bool quickSaved = await ImageExportTransaction.RunAsync(() => QuickSaveAsync(flattened, record ?? exportRecord));
                 if (!quickSaved)
                 {
@@ -241,7 +244,8 @@ internal sealed class CaptureCommitService
                 }
 
                 await PersistFinalIfAvailableAsync(
-                    record, result.Action, flattened, snapshot, result.ImageAssetBitmaps, editSession, createRecordAsync);
+                    record, result.Action, flattened, snapshot, result.ImageAssetBitmaps, editSession, createRecordAsync,
+                    replaceOriginal ? result.SelectedBitmap : null);
                 return await CopyEditedImageAsync(flattened, "Done", exportRecord?.SourcePageUrl);
         }
     }
@@ -289,7 +293,8 @@ internal sealed class CaptureCommitService
         AnnotationDocument snapshot,
         IReadOnlyDictionary<string, BitmapSource> imageAssetBitmaps,
         CaptureEditSession? editSession,
-        Func<Task<(CaptureRecord Record, CaptureEditSession? Session)>>? createRecordAsync)
+        Func<Task<(CaptureRecord Record, CaptureEditSession? Session)>>? createRecordAsync,
+        BitmapSource? replacementOriginal)
     {
         if (record is null && createRecordAsync is not null) (record, editSession) = await createRecordAsync();
         if (record is null)
@@ -303,7 +308,8 @@ internal sealed class CaptureCommitService
             flattened,
             snapshot,
             imageAssetBitmaps,
-            editSession?.ExpectedContentRevision);
+            editSession?.ExpectedContentRevision,
+            replacementOriginal);
         editSession?.AdvanceTo(record.ContentRevision);
         return record;
     }

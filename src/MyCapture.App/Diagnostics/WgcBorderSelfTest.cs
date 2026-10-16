@@ -14,7 +14,7 @@ using MyCapture.Platform.Recording;
 
 namespace MyCapture.App.Diagnostics;
 
-/// <summary>Records an owned full-monitor fixture with the WGC border forced on, then checks its edges.</summary>
+/// <summary>Records an owned monitor-work-area fixture with the WGC border forced on, then checks its edges.</summary>
 internal static class WgcBorderSelfTest
 {
     internal const string CommandLineSwitch = "--selftest-wgc-border";
@@ -27,9 +27,11 @@ internal static class WgcBorderSelfTest
         Window? fixture = null;
         DispatcherTimer? pulse = null;
         MonitorInfo? monitor = null;
+        RectD region = RectD.Empty;
         return RunDiagnostic(outputDirectory, (root, cancellationToken) =>
         {
             monitor = MonitorEnumerator.GetPrimary();
+            region = ComputeFixtureRegion(monitor);
             var marker = new Border
             {
                 Width = 100, Height = 100, Background = Brushes.White,
@@ -44,12 +46,12 @@ internal static class WgcBorderSelfTest
             pulse = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(100) };
             pulse.Tick += (_, _) => marker.Background = ReferenceEquals(marker.Background, Brushes.White) ? Brushes.Black : Brushes.White;
             fixture.Show();
-            PhysicalWindowPositioner.PlaceTopmost(new WindowInteropHelper(fixture).Handle, monitor.Bounds);
+            PhysicalWindowPositioner.PlaceTopmost(new WindowInteropHelper(fixture).Handle, region);
             fixture.UpdateLayout();
             pulse.Start();
             Pump(500);
             string videoPath = DiagnosticOutputPaths.Child(root, "wgc-border.mp4");
-            return Task.Run(() => Record(monitor.Bounds, videoPath, cancellationToken), cancellationToken);
+            return Task.Run(() => Record(region, videoPath, cancellationToken), cancellationToken);
         }, () =>
         {
             pulse?.Stop();
@@ -71,11 +73,27 @@ internal static class WgcBorderSelfTest
 
             File.WriteAllText(DiagnosticOutputPaths.Child(root, "wgc-border.json"), JsonSerializer.Serialize(new
             {
-                Os = Environment.OSVersion.ToString(), Monitor = monitor?.Bounds, Result = result, Failures = failures,
+                Os = Environment.OSVersion.ToString(), Monitor = monitor?.Bounds, WorkArea = monitor?.WorkArea, Region = region, Result = result, Failures = failures,
             }, new JsonSerializerOptions { WriteIndented = true }));
             if (failures.Count != 0)
                 throw new InvalidOperationException(string.Join(Environment.NewLine, failures));
         }, TimeSpan.FromSeconds(30));
+    }
+
+    /// <summary>Uses Win32 monitor work-area pixels without any WPF/DPI conversion.</summary>
+    internal static RectD ComputeFixtureRegion(MonitorInfo monitor)
+    {
+        ArgumentNullException.ThrowIfNull(monitor);
+        // Round inward and keep H.264 dimensions even without extending into an appbar.
+        double left = Math.Ceiling(Math.Max(monitor.Bounds.Left, monitor.WorkArea.Left));
+        double top = Math.Ceiling(Math.Max(monitor.Bounds.Top, monitor.WorkArea.Top));
+        double right = Math.Floor(Math.Min(monitor.Bounds.Right, monitor.WorkArea.Right));
+        double bottom = Math.Floor(Math.Min(monitor.Bounds.Bottom, monitor.WorkArea.Bottom));
+        double width = Math.Floor((right - left) / 2) * 2;
+        double height = Math.Floor((bottom - top) / 2) * 2;
+        if (width <= 2 * EdgeThickness || height <= 2 * EdgeThickness)
+            throw new InvalidOperationException("The monitor work area is too small for the border fixture.");
+        return new RectD(left, top, width, height);
     }
 
     // All capture, encoding, decoding and native disposal stay on the worker. After a timeout
@@ -153,7 +171,7 @@ internal static class WgcBorderSelfTest
                 cancellationToken.ThrowIfCancellationRequested();
                 DecodedVideoFrame frame = reader.ReadFrameAt(index * 1000.0 / Fps, cancellationToken);
                 if (frame.Width != width || frame.Height != height)
-                    throw new InvalidOperationException("Decoded frame does not cover the full monitor.");
+                    throw new InvalidOperationException("Decoded frame does not cover the fixture region.");
                 decoded.Observe(frame.Pixels, frame.Width, frame.Height, frame.Stride);
             }
         }
