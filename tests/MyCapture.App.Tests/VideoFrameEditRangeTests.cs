@@ -70,9 +70,9 @@ public sealed class VideoFrameEditRangeTests
             Assert.True(extracted.IsFrozen);
             BitmapSource decoded = VideoFrameRenderPipeline.RenderSingleFrame(clip, time, width, height);
             Assert.Equal(Pixels(decoded), Pixels(extracted));
-            // The pixel-for-pixel oracle above is the export decoder, including its own
-            // full-range conversion. Do not substitute the presenter's clipped 16/235 oracle.
-            if (!fullRange) RangePatternClip.AssertMatchesSource(extracted, width, height);
+            // Also compare against source colours; an export-decoder-only oracle can share
+            // the very same range error. The independent NV12 regressions cover tighter bounds.
+            RangePatternClip.AssertMatchesSource(extracted, width, height);
 
             var region = new RectD(0, 0, width, height);
             var document = AnnotationDocument.CreateFor(width, height);
@@ -175,7 +175,7 @@ public sealed class VideoFrameEditRangeTests
             Wait(() => task.IsCompleted);
             BitmapSource frame = Assert.IsAssignableFrom<BitmapSource>(task.GetAwaiter().GetResult());
             BitmapSource expected = VideoFrameRenderPipeline.RenderSingleFrame(clip, 500, 320, 180,
-                document.TextOverlays, document.FrameEditLayers);
+                overlays: null, frameEditLayers: document.FrameEditLayers);
             Assert.Equal(Pixels(expected), Pixels(frame));
             live.FrameEditLayers.AddRange(document.FrameEditLayers);
             live.TextOverlays.AddRange(document.TextOverlays);

@@ -184,9 +184,11 @@ internal sealed partial class VideoEditorWindow : Window
     {
         try
         {
+            // Text remains a live, upright overlay in preview/export. Baking it here would
+            // rotate one copy into the PNG and draw another copy over the resulting layer.
             return await StaThreadTask.RunAsync(() => VideoFrameRenderPipeline.RenderSingleFrame(
                 _recording.OutputPath, sourceTimeMs, _recording.Width, _recording.Height,
-                document.TextOverlays, document.FrameEditLayers), "MyCapture frame edit decode");
+                overlays: null, frameEditLayers: document.FrameEditLayers), "MyCapture frame edit decode");
         }
         catch (Exception ex)
         {
@@ -2737,7 +2739,9 @@ internal sealed partial class VideoEditorWindow : Window
             // transparent. A rotated document has no transparent mapping onto the frame,
             // so the committed image — rotated base pixels included — is flattened and
             // letterboxed onto the frame (a 180° turn keeps the canvas dimensions, which
-            // is why the turn count, not the size, decides).
+            // is why the turn count, not the size, decides). Keep the entire PNG opaque:
+            // earlier frame layers were visible in the edit input and are already rotated
+            // into this image; black letterboxing prevents them showing through a second time.
             if (result.RotationTurns != 0)
             {
                 int canvasWidth = Math.Max(1, result.Document.CanvasWidth);

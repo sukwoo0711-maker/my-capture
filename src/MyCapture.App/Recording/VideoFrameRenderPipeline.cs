@@ -137,7 +137,7 @@ internal static class VideoFrameRenderPipeline
     /// frames ahead, so it overlaps encoder submission; WPF and the encoder stay on this thread.
     /// </para>
     /// <para>
-    /// The original RGB path remains for sources that cannot pass through unchanged: no NV12
+    /// The range-aware RGB path remains for sources that cannot pass through unchanged: no NV12
     /// decoder output, an odd or rescaled frame size, a colour description the encoder would
     /// not reproduce, or an encoder that rejects NV12 input. The caller owns the encoder it
     /// opens: completion, disposal and, for <see cref="Mp4HardwareDecodeException"/>, a software
@@ -198,7 +198,7 @@ internal static class VideoFrameRenderPipeline
         MediaFoundationVideoFrameReader? reader = null;
         try
         {
-            reader = new MediaFoundationVideoFrameReader(request.SourcePath);
+            reader = RangeAwareVideoFrameDecoder.Open(request.SourcePath);
             if (reader.Width <= 0 || reader.Height <= 0)
             {
                 throw new InvalidDataException("The source video reported invalid dimensions.");
@@ -394,7 +394,7 @@ internal static class VideoFrameRenderPipeline
 
         ValidateSchedule(request, sourceTimes);
 
-        using var reader = new MediaFoundationVideoFrameReader(request.SourcePath);
+        using var reader = RangeAwareVideoFrameDecoder.Open(request.SourcePath);
         if (reader.Width <= 0 || reader.Height <= 0)
         {
             throw new InvalidDataException("The source video reported invalid dimensions.");
@@ -411,7 +411,7 @@ internal static class VideoFrameRenderPipeline
             acceptRawFrame);
     }
 
-    /// <summary>The <see cref="RenderScheduled"/> loop over an open BGR32 reader.</summary>
+    /// <summary>The <see cref="RenderScheduled"/> loop, converting native samples to range-aware BGR32.</summary>
     private static int RenderFrames(
         VideoFrameRenderRequest request,
         IReadOnlyList<double> sourceTimes,
@@ -429,7 +429,7 @@ internal static class VideoFrameRenderPipeline
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 double sourceTime = sourceTimes[index];
-                DecodedVideoFrame decoded = reader.ReadFrameAt(sourceTime, cancellationToken);
+                DecodedVideoFrame decoded = RangeAwareVideoFrameDecoder.ReadBgr32(reader, sourceTime, cancellationToken);
                 if (decoded.Width != request.Width || decoded.Height != request.Height)
                 {
                     // A mid-stream media-type change resized the decoder output; the raw
@@ -452,7 +452,7 @@ internal static class VideoFrameRenderPipeline
             cancellationToken.ThrowIfCancellationRequested();
             double sourceTime = sourceTimes[index];
 
-            DecodedVideoFrame decoded = reader.ReadFrameAt(sourceTime, cancellationToken);
+            DecodedVideoFrame decoded = RangeAwareVideoFrameDecoder.ReadBgr32(reader, sourceTime, cancellationToken);
             if (acceptRawFrame is not null
                 && CanBypassComposition(request, frameLayerBitmaps, decoded.Width, decoded.Height, sourceTime))
             {
