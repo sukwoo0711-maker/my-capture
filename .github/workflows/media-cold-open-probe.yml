@@ -103,7 +103,7 @@ jobs:
       - name: Record runner state at job end
         if: always()
         shell: powershell
-        run: .\build\diagnostics\Get-MediaProbeRunnerState.ps1 -Path "$env:MYCAPTURE_MEDIA_PROBE_OUT\runner-end.json" | Out-Null
+        run: .\build\diagnostics\Get-MediaProbeRunnerState.ps1 -Path "$env:MYCAPTURE_MEDIA_PROBE_OUT\runner-end.json" -Features | Out-Null
 
       - name: Native stacks of pending opens
         if: always()

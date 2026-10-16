@@ -3,7 +3,10 @@
 # feature and per-user state, and what else is busy. Writes JSON to -Path.
 
 param(
-    [Parameter(Mandatory = $true)][string]$Path
+    [Parameter(Mandatory = $true)][string]$Path,
+    # Also query the optional features; this takes about a minute of servicing-stack work, so the
+    # probe workflow asks for it only after the probe runs.
+    [switch]$Features
 )
 
 $ErrorActionPreference = 'Continue'
@@ -51,8 +54,10 @@ $state.defenderPreference = Try-Get {
 $state.videoControllers = @(Get-CimInstance Win32_VideoController | ForEach-Object { "$($_.Name), driver $($_.DriverVersion), $($_.CurrentHorizontalResolution)x$($_.CurrentVerticalResolution)" })
 $state.soundDevices = @(Get-CimInstance Win32_SoundDevice | ForEach-Object { "$($_.Name) ($($_.Status))" })
 $state.audioEndpoints = @(Try-Get { Get-PnpDevice -Class AudioEndpoint -ErrorAction Stop | ForEach-Object { "$($_.FriendlyName) ($($_.Status))" } })
-$state.windowsMediaPlayerFeature = Try-Get { (Get-WindowsOptionalFeature -Online -FeatureName WindowsMediaPlayer -ErrorAction Stop).State.ToString() }
-$state.mediaFoundationFeature = Try-Get { (Get-WindowsFeature Server-Media-Foundation -ErrorAction Stop).InstallState.ToString() }
+if ($Features) {
+    $state.windowsMediaPlayerFeature = Try-Get { (Get-WindowsOptionalFeature -Online -FeatureName WindowsMediaPlayer -ErrorAction Stop).State.ToString() }
+    $state.mediaFoundationFeature = Try-Get { (Get-WindowsFeature Server-Media-Foundation -ErrorAction Stop).InstallState.ToString() }
+}
 $state.wmpDll = Try-Get { (Get-Item "$env:WINDIR\System32\wmp.dll" -ErrorAction Stop).VersionInfo.FileVersion }
 $state.mediaPlayerUserKey = if (Test-Path 'HKCU:\Software\Microsoft\MediaPlayer') {
     @(Get-ChildItem 'HKCU:\Software\Microsoft\MediaPlayer' -Recurse -ErrorAction SilentlyContinue | ForEach-Object { $_.Name })
@@ -71,3 +76,6 @@ $state.systemDrive = Try-Get {
 
 $state | ConvertTo-Json -Depth 6 | Set-Content -Path $Path -Encoding utf8
 Get-Content -Path $Path
+
+# Native queries above (query session) leave a non-zero exit code even when they answered.
+exit 0
