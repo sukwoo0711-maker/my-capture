@@ -361,10 +361,13 @@ public sealed class GalleryImportTests(ITestOutputHelper output)
                 + FormattableString.Invariant($", readerDuration={reader.DurationMs:F3} ms, videoTrack={track:F3} ms, firstPts={first.TimestampMs:F3} ms");
             output.WriteLine(measured);
             Assert.True(container is >= 1090 and <= 1130, measured);
-            // Generated recordings retain their original stricter container-tail requirement.
-            Exception? failure = Record.Exception(() => VideoFrameRenderPipeline.Probe(source));
-            Assert.True(failure is InvalidDataException,
-                $"Strict Probe should reject the audio-only tail; actual={failure?.ToString() ?? "accepted"}; {measured}");
+            // Import measures this file by its MP4 video track, so it never reaches the strict
+            // container-tail Probe that generated recordings use. Whether that Probe rejects this
+            // B-frame/edit-list file depends on how the OS's Media Foundation offsets its sample
+            // times (Windows 10 reports them two frames later and the decoded end then reaches the
+            // audio tail). Strictness itself is covered by Probe_StillRejectsAHeaderThatAdvertises-
+            // MoreThanItsSamples and ProbeTailValidation_RejectsAnOldSampleReturnedForTheAdvertisedEnd.
+            Assert.True(track is >= 999 and <= 1001, measured);
             return true;
         });
         var queue = new CaptureQueue(AppPaths.CreateForRoot(Path.Combine(NewRoot(), "library")),
