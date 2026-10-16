@@ -12,9 +12,8 @@ using Xunit;
 namespace MyCapture.App.Tests;
 
 /// <summary>
-/// Recordings are studio-range (16–235) H.264, which WPF's MediaElement presents as studio-range
-/// RGB: white at 235, black at 16. The in-app players expand it back to full range on the GPU
-/// while the files stay standard studio range.
+/// Recordings are studio-range H.264. Depending on the presenter, WPF may retain studio RGB
+/// or expand it already. In-app players calibrate that decision and show the source colours.
 /// </summary>
 public sealed class MediaPlaybackRangeTests
 {
@@ -24,6 +23,8 @@ public sealed class MediaPlaybackRangeTests
     public void StudioRangeCorrectionRunsOnlyWithHardwareShaders(bool hardware) => StaTestHost.Run(() =>
     {
         Func<bool> previous = StudioRangeVideoEffect.HardwareShaderAvailable;
+        StudioRangePresentationCalibration previousCalibration = StudioRangeVideoEffect.Calibration;
+        StudioRangeVideoEffect.Calibration = new(_ => Task.FromResult(true));
         StudioRangeVideoEffect.HardwareShaderAvailable = () => hardware;
         try
         {
@@ -36,6 +37,7 @@ public sealed class MediaPlaybackRangeTests
         finally
         {
             StudioRangeVideoEffect.HardwareShaderAvailable = previous;
+            StudioRangeVideoEffect.Calibration = previousCalibration;
         }
     });
 
@@ -56,17 +58,11 @@ public sealed class MediaPlaybackRangeTests
     public void SourceInfoTellsStudioFromFullRangeAndKeepsTheContainerDuration(int width, int height, bool fullRange)
     {
         string dir = OwnedTestDirectory.Create("mc-range-info-");
-        try
-        {
-            string clip = RangePatternClip.Encode(Path.Combine(dir, "clip.mp4"), width, height, fullRange);
-            VideoSourceInfo info = MediaFoundationVideoFrameReader.ReadSourceInfo(clip);
-            Assert.Equal(!fullRange, info.StudioRange);
-            Assert.Equal(MediaFoundationVideoFrameReader.ReadContainerDurationMs(clip), info.DurationMs);
-        }
-        finally
-        {
-            OwnedTestDirectory.Delete(dir);
-        }
+        // Retain the temporary fixture for device diagnostics; no permanent cleanup.
+        string clip = RangePatternClip.Encode(Path.Combine(dir, "clip.mp4"), width, height, fullRange);
+        VideoSourceInfo info = MediaFoundationVideoFrameReader.ReadSourceInfo(clip);
+        Assert.Equal(!fullRange, info.StudioRange);
+        Assert.Equal(MediaFoundationVideoFrameReader.ReadContainerDurationMs(clip), info.DurationMs);
     }
 
     [Theory]
@@ -92,11 +88,13 @@ public sealed class MediaPlaybackRangeTests
             while (!editor.IsMediaReadyForTest && !editor.HasMediaFailedForTest && DateTime.UtcNow < deadline)
                 RangePatternClip.Pump(TimeSpan.FromMilliseconds(20));
             Assert.True(editor.IsMediaReadyForTest, editor.MediaFailureForTest);
+            if (!fullRange) RangePatternClip.WaitForCalibration();
             bool hardware = StudioRangeVideoEffect.HardwareShaderAvailable();
-            Assert.Equal(!fullRange && hardware, editor.MediaForTest.Effect is StudioRangeVideoEffect);
+            bool needsExpansion = StudioRangeVideoEffect.Calibration.NeedsExpansion;
+            Assert.Equal(!fullRange && hardware && needsExpansion, editor.MediaForTest.Effect is StudioRangeVideoEffect);
             // Without hardware shaders (hosted CI, Remote Desktop) studio range stays uncorrected by
             // design, so only the effect decision is checked there.
-            if (!fullRange && !hardware) return;
+            if (!fullRange && !hardware && needsExpansion) return;
             RangePatternClip.Pump(TimeSpan.FromMilliseconds(500));
 
             BitmapSource frame = editor.RenderCurrentFrameForTest() ?? throw new Xunit.Sdk.XunitException("no preview frame");
@@ -109,7 +107,7 @@ public sealed class MediaPlaybackRangeTests
         finally
         {
             editor?.Close();
-            OwnedTestDirectory.Delete(dir);
+            // Retain the temporary fixture for device diagnostics; no permanent cleanup.
         }
     });
 }
@@ -117,6 +115,16 @@ public sealed class MediaPlaybackRangeTests
 /// <summary>A clip of flat grey steps and colour patches with known source RGB.</summary>
 internal static class RangePatternClip
 {
+    internal static void WaitForCalibration()
+    {
+        Task<bool> result = StudioRangeVideoEffect.Calibration.GetResultAsync();
+        DateTime deadline = DateTime.UtcNow.AddSeconds(7);
+        while (!result.IsCompleted && DateTime.UtcNow < deadline) Pump(TimeSpan.FromMilliseconds(20));
+        Assert.True(result.IsCompletedSuccessfully, "MediaElement range calibration did not finish within its bound.");
+        // Let the completion update the player on its dispatcher before inspecting the effect.
+        Pump(TimeSpan.FromMilliseconds(80));
+    }
+
     internal static readonly (string Name, byte R, byte G, byte B)[] Patches =
     [
         ("black", 0, 0, 0), ("grey 16", 16, 16, 16), ("grey 64", 64, 64, 64), ("grey 128", 128, 128, 128),
@@ -187,7 +195,8 @@ internal static class RangePatternClip
             }
         }
 
-        Assert.True(failures.Count == 0, string.Join("; ", failures));
+        Assert.True(failures.Count == 0, string.Join("; ", failures)
+            + $"; needsExpansion={StudioRangeVideoEffect.Calibration.NeedsExpansion}, calibrationFailure={StudioRangeVideoEffect.Calibration.Failure}");
     }
 
     internal static void Pump(TimeSpan duration)

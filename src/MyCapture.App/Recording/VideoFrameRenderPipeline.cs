@@ -664,7 +664,8 @@ internal static class VideoFrameRenderPipeline
             || !double.IsFinite(finalFrame.EndTimestampMs))
         {
             throw new InvalidDataException(
-                "The final decoded video sample did not report a usable timeline duration.");
+                "The final decoded video sample did not report a usable timeline duration. "
+                + DescribeDecodedTail(containerDurationMs, finalFrame));
         }
 
         double toleranceMs = Math.Clamp(finalFrame.SampleDurationMs * 0.25, 2.0, 50.0);
@@ -672,9 +673,13 @@ internal static class VideoFrameRenderPipeline
         {
             throw new InvalidDataException(
                 $"The decoded video ends at {finalFrame.EndTimestampMs:F3} ms, before the "
-                + $"container duration of {containerDurationMs:F3} ms.");
+                + $"container duration of {containerDurationMs:F3} ms. "
+                + DescribeDecodedTail(containerDurationMs, finalFrame));
         }
     }
+
+    internal static string DescribeDecodedTail(double containerDurationMs, DecodedVideoFrame finalFrame) =>
+        FormattableString.Invariant($"container={containerDurationMs:F3} ms, lastPts={finalFrame.TimestampMs:F3} ms, sampleDuration={finalFrame.SampleDurationMs:F3} ms, inferredDuration={finalFrame.SampleDurationInferred}, decodedEnd={finalFrame.EndTimestampMs:F3} ms, tolerance={Math.Clamp(finalFrame.SampleDurationMs * 0.25, 2.0, 50.0):F3} ms");
 
     internal static byte[] ToBgra32(BitmapSource source, int width, int height, out int stride, byte[]? destination = null)
     {

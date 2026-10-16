@@ -56,6 +56,16 @@ Windows 10에서는 WPF의 픽셀별 알파 레이어드 창(`AllowsTransparency
 - MSIX `uap10:RuntimeBehavior`/`TrustLevel`은 19041에서 지원합니다. 이후 `uap11`은 IgnorableNamespaces에 포함되어
   Windows 10에서 무시됩니다. 서명 없는 `-LocalTest`/`-AllowUnsigned` 설치는 Windows 11 검증용으로 유지합니다.
 
+## 영상 미리보기 색상 범위
+
+`StudioRangeVideoEffect`는 WPF `MediaElement`가 스튜디오 범위(16–235) 영상을 스튜디오 범위 RGB로
+넘긴다고 보고 셰이더로 넓혔습니다. Windows 10 실기(Intel HD 630/GTX 1050)에서는 재생기가 이미 전체 범위로
+넓혀 셰이더가 한 번 더 적용되었고, 원본 회색 16이 0으로 표시되었습니다. 이 동작은 OS보다 GPU 드라이버의
+비디오 처리에 달려 있으므로 빌드나 제조사로 분기하지 않습니다. 첫 스튜디오 범위 미리보기에서 녹화와 같은
+인코더로 1초짜리 보정 영상을 만들고, 별도 UI 스레드의 화면 밖 `MediaElement` 출력을 읽어 셰이더 필요 여부를
+프로세스마다 한 번 판정합니다. 측정은 5초로 제한하며, 실패하거나 시간을 넘기면 기존 정책을 유지합니다.
+보정 영상은 측정 뒤 지웁니다.
+
 ## 노란 테두리 검증
 
 기존 `--selftest-recording-backends`의 테두리 프로브는 GDI로 읽은 화면 가장자리만 관찰했습니다.
@@ -89,5 +99,5 @@ Windows 10 22H2 x64에서 Store 설치·업데이트와 zip 실행, 기본 WGC �
 캡처 제외 창, 영역 모드 녹화 제어창의 작은 영역·전체 화면 녹화 시작과 프레임 내부 클릭 통과,
 팔레트 위아래 전환·녹화 시작·DPI 변경 후 영역 갱신, 녹화 중 카운트다운·알림·메뉴의 프레임 제외,
 모든 테마의 제목 표시줄·핀 모서리, 100/150% DPI, PrtSc 설정 열기, Explorer 경로,
-Windows OCR·향상 OCR, MP4/GIF 편집을 확인합니다. Windows 11에서는 테두리 제거·둥근 모서리·Store 동작 회귀를 확인합니다.
+Windows OCR·향상 OCR, MP4/GIF 편집, 스튜디오 범위 녹화의 갤러리·편집기 미리보기 색상(보정 판정 포함)을 확인합니다. Windows 11에서는 테두리 제거·둥근 모서리·Store 동작 회귀를 확인합니다.
 실기 확인 전에는 Windows 10에서 노란 테두리의 프레임 제외와 각 GPU/코덱 조합을 검증 대기 상태로 유지합니다.

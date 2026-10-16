@@ -1,4 +1,5 @@
 using System.IO;
+using System.Runtime.CompilerServices;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
@@ -11,18 +12,19 @@ namespace MyCapture.App.Recording;
 /// </summary>
 /// <remarks>
 /// <para>
-/// WPF's MediaElement converts studio-range (16??35) Y'CbCr with the right matrix but hands the
-/// result over as studio-range RGB: measured on hardware and software rendering alike, a recorded
-/// white shows as 235, black as 16 and pure red as (235, 16, 16), so recordings look flat. Every
-/// channel is off by the same affine map, so stretching 16??35 back to 0??55 restores the decoded
-/// colours to within a step. The file is untouched, so exports stay standard studio-range BT.709
-/// for every other player.
+/// MediaElement's studio-range Y'CbCr to RGB presentation depends on the video processor and
+/// driver. Some presenters retain RGB 16-235; others already expand it to RGB 0-255. Expanding
+/// the latter again clips dark/light colours. At the first studio-range preview a lazy calibration
+/// encodes a known pattern with the recording encoder and samples an off-screen MediaElement,
+/// without this effect. The result is shared for the process and updates existing previews.
+/// Unknown, failed or timed-out calibration retains the previous correction policy. Neither OS
+/// build nor GPU vendor predicts the decision. Full-range files and exported files are untouched.
 /// </para>
 /// <para>
 /// The shader runs on the GPU as part of composition (WPF emulates <c>ps_2_0</c> when it renders
 /// in software), so playback keeps MediaElement's hardware decode, its frame pacing and its seek
 /// path. <see cref="Source"/> is the HLSL the bytecode below was compiled from with
-/// <c>D3DCompile(?? "main", "ps_2_0", D3DCOMPILE_OPTIMIZATION_LEVEL3)</c>; a test recompiles it
+/// <c>D3DCompile(..., "main", "ps_2_0", D3DCOMPILE_OPTIMIZATION_LEVEL3)</c>; a test recompiles it
 /// and compares the instructions.
 /// </para>
 /// </remarks>
@@ -92,10 +94,45 @@ internal sealed class StudioRangeVideoEffect : ShaderEffect
     internal static void Apply(MediaElement media, bool studioRange)
     {
         ArgumentNullException.ThrowIfNull(media);
-        // Without a GPU (Remote Desktop, virtual machines, hosted CI) WPF runs pixel shaders on the
-        // CPU for every video frame, which slows playback and seeking far more than the slightly
-        // flat colours cost. The correction is applied only where the shader runs in hardware.
-        if (studioRange && HardwareShaderAvailable())
+        media.VerifyAccess();
+        PreviewState state = Previews.GetOrCreateValue(media);
+        state.StudioRange = studioRange;
+        StudioRangePresentationCalibration calibration = Calibration;
+        ApplyDecision(media, studioRange, calibration.NeedsExpansion);
+        if (studioRange && !ReferenceEquals(state.Calibration, calibration))
+        {
+            state.Calibration = calibration;
+            _ = RefreshWhenReadyAsync(new WeakReference<MediaElement>(media), calibration);
+        }
+    }
+
+    private static readonly ConditionalWeakTable<MediaElement, PreviewState> Previews = new();
+
+    internal static StudioRangePresentationCalibration Calibration { get; set; } =
+        new(StudioRangeCalibrationProbe.MeasureAsync);
+
+    private static async Task RefreshWhenReadyAsync(
+        WeakReference<MediaElement> target, StudioRangePresentationCalibration calibration)
+    {
+        bool needsExpansion = await calibration.GetResultAsync().ConfigureAwait(false);
+        if (!target.TryGetTarget(out MediaElement? media) || media.Dispatcher.HasShutdownStarted) return;
+        try
+        {
+            await media.Dispatcher.InvokeAsync(() =>
+            {
+                if (Previews.TryGetValue(media, out PreviewState? state)
+                    && ReferenceEquals(state.Calibration, calibration))
+                    ApplyDecision(media, state.StudioRange, needsExpansion);
+            });
+        }
+        catch (TaskCanceledException) { } // The preview's dispatcher ended during calibration.
+        catch (InvalidOperationException) when (media.Dispatcher.HasShutdownStarted) { }
+    }
+
+    private static void ApplyDecision(MediaElement media, bool studioRange, bool needsExpansion)
+    {
+        // Software shader emulation slows every frame and seek. Keep the hardware-only policy.
+        if (studioRange && needsExpansion && HardwareShaderAvailable())
         {
             if (media.Effect is not StudioRangeVideoEffect)
             {
@@ -106,6 +143,12 @@ internal sealed class StudioRangeVideoEffect : ShaderEffect
         {
             media.ClearValue(UIElement.EffectProperty);
         }
+    }
+
+    private sealed class PreviewState
+    {
+        internal bool StudioRange { get; set; }
+        internal StudioRangePresentationCalibration? Calibration { get; set; }
     }
 
     /// <summary>

@@ -36,17 +36,24 @@ public sealed partial class SettingsThemePreviewTests
                 while (!(bool)ready.GetValue(player)! && DateTime.UtcNow < deadline)
                     RangePatternClip.Pump(TimeSpan.FromMilliseconds(20));
                 Assert.True((bool)ready.GetValue(player)!, "the gallery player did not open the clip");
+                RangePatternClip.WaitForCalibration();
                 RangePatternClip.Pump(TimeSpan.FromMilliseconds(500));
 
                 var video = (MediaElement)typeof(GalleryVideoPlayerWindow).GetField("_video", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(player)!;
-                if (!StudioRangeVideoEffect.HardwareShaderAvailable())
+                bool needsExpansion = StudioRangeVideoEffect.Calibration.NeedsExpansion;
+                bool hardware = StudioRangeVideoEffect.HardwareShaderAvailable();
+                // The real presenter measurement runs on its own UI thread inside an app with the
+                // shared implicit Window style; a failure would silently keep the old policy.
+                if (hardware)
+                    Assert.Null(StudioRangeVideoEffect.Calibration.Failure);
+                Assert.Equal(needsExpansion && hardware, video.Effect is StudioRangeVideoEffect);
+                if (!hardware && needsExpansion)
                 {
                     // Software rendering keeps playback fast instead of correcting the range.
                     Assert.Null(video.Effect);
                     return;
                 }
 
-                Assert.IsType<StudioRangeVideoEffect>(video.Effect);
                 var visual = new DrawingVisual();
                 using (DrawingContext context = visual.RenderOpen())
                     context.DrawRectangle(new VisualBrush(video) { Stretch = Stretch.Fill }, null, new Rect(0, 0, width, height));
@@ -58,7 +65,7 @@ public sealed partial class SettingsThemePreviewTests
             {
                 player?.Close();
                 application.Shutdown();
-                OwnedTestDirectory.Delete(root);
+                // Retain the temporary fixture for device diagnostics; no permanent cleanup.
             }
         });
 }

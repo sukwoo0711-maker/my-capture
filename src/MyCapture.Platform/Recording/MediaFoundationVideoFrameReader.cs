@@ -17,6 +17,9 @@ public sealed record DecodedVideoFrame(
     /// <summary>The source-timeline position covered by the end of this decoded sample.</summary>
     public double EndTimestampMs => TimestampMs + SampleDurationMs;
 
+    /// <summary>True when the reader supplied timing missing from the MF sample (diagnostics).</summary>
+    public bool SampleDurationInferred { get; init; }
+
     /// <summary>Layout of <see cref="Pixels"/>; BGR32 unless NV12 output was requested.</summary>
     public DecodedVideoPixelFormat Format { get; init; }
 }
@@ -661,7 +664,7 @@ public sealed partial class MediaFoundationVideoFrameReader : IDisposable
                 _lastResolvedSampleDurationMs = resolvedDuration;
             }
 
-            return pending with { SampleDurationMs = resolvedDuration };
+            return pending with { SampleDurationMs = resolvedDuration, SampleDurationInferred = true };
         }
     }
 
