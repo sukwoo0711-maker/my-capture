@@ -60,7 +60,10 @@ public sealed class CaptureTransactionRecoveryTests
         AssertRecordEqual(previousRecord, record, queue);
         Assert.Equal(48, record.Width);
         Assert.Equal(32, record.Height);
-        Assert.Equal("previous-base-hash", record.OriginalContentHash);
+        // The hash is cleared durably before the original is rewritten. A rollback restores
+        // the previous bytes but keeps the hash null; duplicate checks recompute it from the file.
+        Assert.Null(record.OriginalContentHash);
+        Assert.Null(ReadMeta(queue.GetFilePath(record, CaptureFileNames.Meta)).OriginalContentHash);
         Assert.False(persistence.IsBusy(record.Id));
 
         // A subsequent attempt can replace all three files, including the changed base.
@@ -99,7 +102,8 @@ public sealed class CaptureTransactionRecoveryTests
         startupQueue.Load();
         CaptureRecord recovered = Assert.Single(startupQueue.Records);
         Assert.Equal(48, recovered.Width);
-        Assert.Equal("previous-base-hash", recovered.OriginalContentHash);
+        // The null hash was persisted before the original was rewritten.
+        Assert.Null(recovered.OriginalContentHash);
         CapturePersistenceService restarted = NewPersistence(startupQueue, workspace.Paths, settings);
         AssertFilesEqual(directory, committed);
         Assert.Equal(32, recovered.Width);

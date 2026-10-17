@@ -13,6 +13,7 @@ public sealed class CaptureImportService(CaptureQueue queue,
     public const long MaximumFileBytes = 2L * 1024 * 1024 * 1024;
     private readonly SemaphoreSlim _gate = new(1, 1);
     internal Func<CaptureRecord, Task>? BeforeDuplicateReadForTest { get; set; }
+    internal Func<CaptureRecord, Task>? AfterDuplicateReadForTest { get; set; }
 
     public static bool IsSupported(string path) => Path.GetExtension(path).ToLowerInvariant()
         is ".png" or ".jpg" or ".jpeg" or ".mp4";
@@ -109,6 +110,7 @@ public sealed class CaptureImportService(CaptureQueue queue,
         foreach (CaptureRecord record in queue.Records.ToArray())
         {
             cancellationToken.ThrowIfCancellationRequested();
+            if (!queue.TryGetOriginalGeneration(record, out long generation)) continue;
             if (record.OriginalContentHash is null)
             {
                 string? computed = await Task.Run(async () =>
@@ -129,16 +131,24 @@ public sealed class CaptureImportService(CaptureQueue queue,
                     }
                     catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { return null; }
                 }, cancellationToken);
+                if (AfterDuplicateReadForTest is not null) await AfterDuplicateReadForTest(record);
                 if (computed is not null && queue.Find(record.Id) == record && !queue.IsRemovalPending(record.Id))
                 {
                     using CaptureWriteReservation reservation = await queue.ReservePublicationAsync(cancellationToken);
-                    if (queue.Find(record.Id) != record || queue.IsRemovalPending(record.Id)) continue;
+                    if (queue.Find(record.Id) != record || queue.IsRemovalPending(record.Id)
+                        || !queue.TryGetOriginalGeneration(record, out long currentGeneration)
+                        || currentGeneration != generation) continue;
                     using IDisposable lease = queue.AcquireEvictionLease(record.Id);
-                    record.OriginalContentHash = computed;
-                    await queue.PublishRecordAsync(record, reservation);
+                    if (record.OriginalContentHash is null)
+                    {
+                        record.OriginalContentHash = computed;
+                        await queue.PublishRecordAsync(record, reservation);
+                    }
                 }
             }
-            if (string.Equals(record.OriginalContentHash, hash, StringComparison.OrdinalIgnoreCase)
+            if (queue.TryGetOriginalGeneration(record, out long comparedGeneration)
+                && comparedGeneration == generation
+                && string.Equals(record.OriginalContentHash, hash, StringComparison.OrdinalIgnoreCase)
                 && ReferenceEquals(queue.Find(record.Id), record) && !queue.IsRemovalPending(record.Id)) return true;
         }
         return false;

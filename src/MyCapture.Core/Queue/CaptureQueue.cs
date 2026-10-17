@@ -542,8 +542,13 @@ public sealed partial class CaptureQueue
     /// </summary>
     public Task PublishRecordAsync(CaptureRecord record, CaptureWriteReservation reservation)
     {
-        ArgumentNullException.ThrowIfNull(record);
         ArgumentNullException.ThrowIfNull(reservation);
+        return PublishRecord(record, reservation);
+    }
+
+    private Task PublishRecord(CaptureRecord record, CaptureWriteReservation? reservation)
+    {
+        ArgumentNullException.ThrowIfNull(record);
         lock (_writeGate)
         {
             string path = GetFilePath(record, CaptureFileNames.Meta);

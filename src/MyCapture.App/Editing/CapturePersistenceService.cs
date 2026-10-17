@@ -66,6 +66,8 @@ internal sealed class CapturePersistenceService
     /// </summary>
     internal Action<Guid>? BeforeRecordMetadataCommit { get; set; }
 
+    internal Func<CaptureRecord, Task>? BeforeOriginalRewriteForTest { get; set; }
+
     internal CapturePersistenceService(
         CaptureQueue queue,
         AppPaths paths,
@@ -135,6 +137,10 @@ internal sealed class CapturePersistenceService
         if (!_busyRecords.TryAdd(record.Id, 0)) throw new InvalidOperationException("The capture is already being written.");
         try
         {
+            // A pending-original retry may already have reached the live queue before a
+            // metadata/index failure. Invalidate that existing original before writing again.
+            using IDisposable? originalChange = _queue.Find(record.Id) is not null
+                ? await _queue.BeginOriginalChangeAsync(record) : null;
             long bytes = await StaThreadTask.RunAsync(
                 () => WriteOriginalFiles(record, original, initialRendered: initialRendered),
                 "MyCapture original persistence");
@@ -219,11 +225,14 @@ internal sealed class CapturePersistenceService
 
         _sourceBackfills[record.Id] = completion.Task;
         bool applied = false;
+        IDisposable? originalChange = null;
         try
         {
             long addedBytes = 0;
             if (url.Length > 0)
             {
+                originalChange = await _queue.BeginOriginalChangeAsync(record);
+                if (BeforeOriginalRewriteForTest is not null) await BeforeOriginalRewriteForTest(record);
                 string directory = _queue.GetDirectory(record);
                 addedBytes = await Task.Run(() => AddSourceUrlToImages(directory, url));
             }
@@ -231,8 +240,6 @@ internal sealed class CapturePersistenceService
             using CaptureWriteReservation reservation = await _queue.ReservePublicationAsync();
             if (!ReferenceEquals(_queue.Find(record.Id), record)) return false;
             ApplySourceFields(record, url, details, webpageTag);
-            if (url.Length > 0 && CaptureImportService.OriginalFileName(record) == CaptureFileNames.Original)
-                record.OriginalContentHash = null;
             if (addedBytes != 0) _queue.UpdateByteCount(record.Id, record.TotalBytes + addedBytes);
             applied = true;
             await _queue.PublishRecordAsync(record, reservation);
@@ -246,6 +253,7 @@ internal sealed class CapturePersistenceService
         }
         finally
         {
+            originalChange?.Dispose();
             _busyRecords.TryRemove(record.Id, out _);
             _sourceBackfills.TryRemove(record.Id, out _);
             lease.Dispose();
@@ -545,6 +553,8 @@ internal sealed class CapturePersistenceService
             RecoverRecordTransactions(record);
             ThrowIfPendingTransactionRemains(record);
             EnsureExpectedGeneration(record, expectedContentRevision);
+            using IDisposable? originalChange = replacementOriginal is not null
+                ? _queue.BeginOriginalChange(record) : null;
             FinalizeFiles files = WriteFinalizeFiles(record, flattened, document, assetBitmaps, replacementOriginal);
             CompleteFinalize(record, files);
             ImagePersisted?.Invoke(this, record);
@@ -586,6 +596,10 @@ internal sealed class CapturePersistenceService
             RecoverRecordTransactions(record);
             ThrowIfPendingTransactionRemains(record);
             EnsureExpectedGeneration(record, expectedContentRevision);
+            using IDisposable? originalChange = replacementOriginal is not null
+                ? await _queue.BeginOriginalChangeAsync(record) : null;
+            if (replacementOriginal is not null && BeforeOriginalRewriteForTest is not null)
+                await BeforeOriginalRewriteForTest(record);
             FinalizeFiles files = await StaThreadTask.RunAsync(
                 () => WriteFinalizeFiles(record, flattened, document, assetBitmaps, replacementOriginal),
                 "MyCapture capture persistence");
@@ -1342,6 +1356,21 @@ internal sealed class CapturePersistenceService
 
             return;
         }
+
+        // Recovery can replace original.png too. An earlier failed rollback may have let
+        // an import hash the interim file; invalidate it before choosing the recovered files.
+        IDisposable? originalChange;
+        try
+        {
+            originalChange = journal.Files.Any(entry => entry.FileName == CaptureFileNames.Original)
+                ? _queue.BeginOriginalChange(record) : null;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            _log.LogError(ex, "Could not invalidate original hash for {Id}; preserving its recovery files", record.Id);
+            return;
+        }
+        using IDisposable? originalChangeScope = originalChange;
 
         if (File.Exists(markerPath))
         {
