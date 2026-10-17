@@ -7,15 +7,18 @@ internal sealed record MeasuredRangeCurve(string Blue, string Green, string Red)
 {
     public string Compact => $"B:{Blue};G:{Green};R:{Red}";
     internal byte[][] Channels() => [Convert.FromBase64String(Blue), Convert.FromBase64String(Green), Convert.FromBase64String(Red)];
+    internal const int TextureWidth = 1024, TextureHeight = 256;
     internal byte[] Texture()
     {
         byte[][] channels = Channels();
         if (channels.Any(c => c.Length != 256)) throw new ArgumentException("A range curve must have 256 entries per channel.");
-        byte[] pixels = new byte[256 * 4];
-        for (int i = 0; i < 256; i++)
+        byte[] pixels = new byte[TextureWidth * TextureHeight * 4];
+        for (int y = 0; y < TextureHeight; y++)
+        for (int x = 0; x < TextureWidth; x++)
         {
-            for (int c = 0; c < 3; c++) pixels[i * 4 + c] = channels[c][i];
-            pixels[i * 4 + 3] = 255;
+            int offset = (y * TextureWidth + x) * 4;
+            for (int c = 0; c < 3; c++) pixels[offset + c] = channels[c][x / 4];
+            pixels[offset + 3] = 255;
         }
         return pixels;
     }
@@ -35,12 +38,13 @@ internal sealed record RangeMappingDiagnostics(string Status, RangeMappingCovera
     public double? SupportedSplit { get; init; }
     public double? GapSplit { get; init; }
     public double? AlignedSplit { get; init; }
+    public double? MaximumPatchError { get; init; }
     public string Summary => $"{Status}, residual={Residual:F3}, held-out={HeldOutResidual:F3}, split={SplitDisagreement:F3}, "
         + "coverage=" + string.Join("/", Coverage.Select(c => $"{c.Levels}@{c.Minimum}-{c.Maximum}:{c.Bands}bands:gap{c.LargestGap}"))
         + $", peak={MaximumSplit?.Channel}@{MaximumSplit?.Level}:{MaximumSplit?.Classification}, "
         + $"supported/gap/aligned={SupportedSplit:F3}/{GapSplit:F3}/{AlignedSplit:F3}, worst="
         + string.Join("/", Channels.Select(c => $"{c.Channel}:{c.WorstBand?.Band}@{c.WorstBand?.Error:F3}"))
-        + $", merged={Channels.Sum(c => c.MultiClusterBins.Length)}";
+        + $", merged={Channels.Sum(c => c.MultiClusterBins.Length)}, patch={MaximumPatchError:F3}";
 
     internal string Evidence => RangeMappingEvidence.Format(this);
 }
@@ -49,18 +53,25 @@ internal sealed record RangeMappingDiagnostics(string Status, RangeMappingCovera
 internal static partial class MeasuredRangeCurveFitter
 {
     private sealed record Anchor(double X, double Y, int Bin, int Count);
-    private sealed record FitChannel(byte[] Curve, RangeMappingCoverage Coverage, RangeAnchorEvidence[] Anchors);
+    private sealed record FitChannel(byte[] Curve, RangeMappingCoverage Coverage, RangeAnchorEvidence[] Anchors, bool HasCurve);
     internal static (MeasuredRangeCurve? Curve, RangeMappingDiagnostics Diagnostics) Fit(List<RangeValuePair>[] channels)
     {
         if (channels.Length != 3) throw new ArgumentException("B/G/R pairs are required.");
-        var full = channels.Select(FitChannelCurve).ToArray();
-        var coverage = full.Select(f => f.Coverage).ToArray();
-        if (coverage.Any(c => !c.Sufficient)) return (null, new("mapping-low-coverage", coverage));
         var firstHalves = channels.Select(p => p.Where(v => v.Split == 0).ToList()).ToArray();
         var secondHalves = channels.Select(p => p.Where(v => v.Split != 0).ToList()).ToArray();
-        var firstFits = firstHalves.Select(FitChannelCurve).ToArray();
-        var secondFits = secondHalves.Select(FitChannelCurve).ToArray();
-        var evidence = BuildEvidence(channels, full, firstHalves, secondHalves, firstFits, secondFits);
+        var plans = channels.Select(PlanAnchors).ToArray();
+        var full = plans.Select((p, c) => FitChannelCurve(p.Groups.Select(g => g.At(null)).ToArray(), SupportedCoverage(channels[c]))).ToArray();
+        var firstFits = plans.Select((p, c) => FitChannelCurve(p.Groups.Select(g => g.At(0)).ToArray(), SupportedCoverage(firstHalves[c]))).ToArray();
+        var secondFits = plans.Select((p, c) => FitChannelCurve(p.Groups.Select(g => g.At(1)).ToArray(), SupportedCoverage(secondHalves[c]))).ToArray();
+        var evidence = BuildEvidence(channels, full, firstHalves, secondHalves, firstFits, secondFits, plans);
+        // Preserve the original coverage rule, including each half's supported range. A
+        // second anchor in one plateau bin does not count as another covered shown bin.
+        if (full.Any(f => !f.Coverage.Sufficient))
+            return (null, evidence with { Status = "mapping-low-coverage" });
+        if (firstFits.Concat(secondFits).Any(f => !f.Coverage.Sufficient))
+            return (null, evidence with { Status = "mapping-split-low-coverage" });
+        if (full.Concat(firstFits).Concat(secondFits).Any(f => !f.HasCurve))
+            return (null, evidence with { Status = "mapping-low-coverage" });
         double residual = 0, heldOut = 0, disagreement = 0;
         for (int c = 0; c < 3; c++)
         {
@@ -77,28 +88,32 @@ internal static partial class MeasuredRangeCurveFitter
         }
         string status = residual > PresentedFrameRangeModel.MaximumError ? "mapping-residual"
             : heldOut > PresentedFrameRangeModel.MaximumError ? "mapping-held-out"
-            : disagreement > 4 ? "mapping-split-disagreement" : "verified";
+            : disagreement > 4 ? "mapping-split-disagreement"
+            : evidence.MaximumPatchError > 12 ? "mapping-patch-error" : "verified";
         var diagnostics = evidence with { Status = status, Residual = residual,
             HeldOutResidual = heldOut, SplitDisagreement = disagreement };
         return (status == "verified" ? new(Convert.ToBase64String(full[0].Curve),
             Convert.ToBase64String(full[1].Curve), Convert.ToBase64String(full[2].Curve)) : null, diagnostics);
     }
 
-    private static FitChannel FitChannelCurve(List<RangeValuePair> pairs)
+    private static RangeMappingCoverage SupportedCoverage(List<RangeValuePair> pairs) => CoverageOf(pairs
+        .GroupBy(p => p.Shown / 4).Where(g => g.Count() >= Support(pairs.Count))
+        .Select(g => new Anchor(Median(g.Select(p => (double)p.Shown)), 0, g.Key, g.Count())).OrderBy(a => a.X).ToArray());
+
+    private static RangeMappingCoverage CoverageOf(Anchor[] anchors)
     {
-        // Four-step bins absorb H.264/8-bit rounding. Sparse bins cannot make random outliers
-        // look like coverage. Both independent halves must support the entire usable range.
-        int support = Math.Max(4, (int)Math.Ceiling(pairs.Count * 0.01));
-        var anchors = pairs.GroupBy(p => p.Shown / 4).Where(g => g.Count() >= support)
-            .Select(g => new Anchor(Median(g.Select(p => (double)p.Shown)), ReferenceMedian(g.ToArray()), g.Key, g.Count()))
-            .OrderBy(p => p.X).ToArray();
         int minimum = anchors.Length == 0 ? 0 : (int)anchors[0].X;
         int maximum = anchors.Length == 0 ? 0 : (int)anchors[^1].X;
         int gap = anchors.Length < 2 ? 255 : (int)Math.Ceiling(anchors.Zip(anchors.Skip(1), (a, b) => b.X - a.X).Max());
-        var coverage = new RangeMappingCoverage(anchors.Length, minimum, maximum,
+        return new(anchors.Select(a => a.Bin).Distinct().Count(), minimum, maximum,
             anchors.Select(a => (int)a.X / 32).Distinct().Count(), gap);
-        if (!coverage.Sufficient) return new(new byte[256], coverage,
-            anchors.Select(a => new RangeAnchorEvidence(a.Bin, a.X, a.Y, null, a.Count)).ToArray());
+    }
+
+    private static FitChannel FitChannelCurve(Anchor[] anchors, RangeMappingCoverage coverage)
+    {
+        if (!CoverageOf(anchors).Sufficient || !anchors.Zip(anchors.Skip(1), (a, b) => a.X < b.X).All(v => v))
+            return new(new byte[256], coverage,
+                anchors.Select(a => new RangeAnchorEvidence(a.Bin, a.X, a.Y, null, a.Count)).ToArray(), false);
 
         double[] fitted = FitMonotone(anchors);
         byte[] curve = new byte[256];
@@ -111,7 +126,7 @@ internal static partial class MeasuredRangeCurveFitter
             curve[value] = (byte)Math.Clamp(Math.Round(fitted[segment] + (value - anchors[segment].X) * slope), 0, 255);
         }
         return new(curve, coverage, anchors.Select((a, i) =>
-            new RangeAnchorEvidence(a.Bin, a.X, a.Y, fitted[i], a.Count)).ToArray());
+            new RangeAnchorEvidence(a.Bin, a.X, a.Y, fitted[i], a.Count)).ToArray(), true);
     }
 
     private static double[] FitMonotone(Anchor[] anchors)
@@ -132,23 +147,6 @@ internal static partial class MeasuredRangeCurveFitter
         foreach (var block in blocks)
             for (int i = block.Start; i <= block.End; i++) fitted[i] = block.Sum / block.Count;
         return fitted;
-    }
-
-    private static double ReferenceMedian(RangeValuePair[] bin)
-    {
-        // At a clipped endpoint several decoded levels can share one shown level. Balance
-        // supported reference clusters so a large black patch cannot erase a smaller grey16
-        // patch. Median within each cluster rejects codec noise; sparse outliers are excluded.
-        double[] sorted = bin.Select(p => (double)p.Reference).Order().ToArray();
-        var clusters = new List<List<double>> { new() { sorted[0] } };
-        foreach (double value in sorted.Skip(1))
-        {
-            if (value - clusters[^1][^1] > 6) clusters.Add([]);
-            clusters[^1].Add(value);
-        }
-        var supported = clusters.Where(c => c.Count >= Math.Max(3, (int)Math.Ceiling(bin.Length * 0.1)))
-            .Select(Median).ToArray();
-        return supported.Length == 0 ? Median(sorted) : Median(supported);
     }
 
     private static double Median(IEnumerable<double> values)

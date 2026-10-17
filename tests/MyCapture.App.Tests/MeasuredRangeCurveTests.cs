@@ -40,11 +40,13 @@ public sealed class MeasuredRangeCurveTests(ITestOutputHelper output)
         Assert.True(result.Mapping is not null, result.Details);
         Assert.InRange(result.MappingDiagnostics!.Residual!.Value, 0, 2.5);
         Assert.InRange(result.MappingDiagnostics.HeldOutResidual!.Value, 0, 2.5);
-        // Baseline at 4769935: evidence must not alter the gate's scores or decision.
+        // W9-A deliberately changes the recorded scores: repeated clusters use one shared
+        // anchor plan and distinct high-plateau medians no longer average 235 with 255.
+        // Acceptance and all residual/held-out/split/screen limits stay unchanged.
         Assert.Equal("verified", result.Status);
-        Assert.Equal(full ? 2.225 : 0.366, result.MappingDiagnostics.Residual.Value, 3);
-        Assert.Equal(full ? 2.254 : 0.392, result.MappingDiagnostics.HeldOutResidual.Value, 3);
-        Assert.Equal(full ? 1 : 2, result.MappingDiagnostics.SplitDisagreement);
+        Assert.Equal(full ? 1.713 : 0.540, result.MappingDiagnostics.Residual.Value, 3);
+        Assert.Equal(full ? 1.742 : 0.545, result.MappingDiagnostics.HeldOutResidual.Value, 3);
+        Assert.Equal(0, result.MappingDiagnostics.SplitDisagreement);
         Assert.All(result.MappingDiagnostics.Coverage, c => Assert.True(c.Sufficient));
         byte[][] curves = result.Mapping.Channels();
         foreach (byte level in Levels)
@@ -110,9 +112,13 @@ public sealed class MeasuredRangeCurveTests(ITestOutputHelper output)
     }
 
     [Fact]
-    public void MeasuredRangeShaderBytecodeIsItsCheckedInSource() => Assert.Equal(
-        ShaderCompiler.Disassemble(ShaderCompiler.Compile(MeasuredRangeVideoEffect.Source, "main", "ps_2_0")),
-        ShaderCompiler.Disassemble(MeasuredRangeVideoEffect.BytecodeForTest.ToArray()));
+    public void MeasuredRangeShaderBytecodeIsItsCheckedInSource()
+    {
+        byte[] bytecode = MeasuredRangeVideoEffect.BytecodeForTest.ToArray();
+        Assert.Equal(new byte[] { 0, 2, 255, 255 }, bytecode.Take(4)); // ps_2_0
+        Assert.Equal(ShaderCompiler.Disassemble(ShaderCompiler.Compile(MeasuredRangeVideoEffect.Source, "main", "ps_2_0")),
+            ShaderCompiler.Disassemble(bytecode));
+    }
 
     [Theory]
     [InlineData(0)] [InlineData(128)] [InlineData(255)]

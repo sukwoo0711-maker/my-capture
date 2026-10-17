@@ -1,6 +1,8 @@
 using System.IO;
 using System.Reflection;
 using System.Windows;
+using System.Windows.Automation.Peers;
+using System.Windows.Automation.Provider;
 using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
@@ -28,7 +30,23 @@ public sealed partial class SettingsThemePreviewTests
     public Task GalleryVideoPlayer_MeasuredShaderReproducesFullSource() =>
         RunIsolated(nameof(GalleryVideoPlayer_MeasuredShaderReproducesFullSource), () => VerifyGalleryVideoRange(true, true));
 
-    private static void VerifyGalleryVideoRange(bool fullRange, bool forceMeasured = false)
+    [Fact]
+    public Task GalleryVideoPlayer_StudioUserPlayPausePath() =>
+        RunIsolated(nameof(GalleryVideoPlayer_StudioUserPlayPausePath), () => VerifyGalleryVideoRange(false, userPath: true));
+
+    [Fact]
+    public Task GalleryVideoPlayer_FullUserPlayPausePath() =>
+        RunIsolated(nameof(GalleryVideoPlayer_FullUserPlayPausePath), () => VerifyGalleryVideoRange(true, userPath: true));
+
+    [Fact]
+    public Task GalleryVideoPlayer_StudioMeasuredUserPlayPausePath() =>
+        RunIsolated(nameof(GalleryVideoPlayer_StudioMeasuredUserPlayPausePath), () => VerifyGalleryVideoRange(false, true, true));
+
+    [Fact]
+    public Task GalleryVideoPlayer_FullMeasuredUserPlayPausePath() =>
+        RunIsolated(nameof(GalleryVideoPlayer_FullMeasuredUserPlayPausePath), () => VerifyGalleryVideoRange(true, true, true));
+
+    private static void VerifyGalleryVideoRange(bool fullRange, bool forceMeasured = false, bool userPath = false)
     {
         // The player window reads styles from Application resources.
         var application = new Application { ShutdownMode = ShutdownMode.OnExplicitShutdown };
@@ -42,10 +60,13 @@ public sealed partial class SettingsThemePreviewTests
         try
         {
             const int width = 1280, height = 720;
-            string clip = RangePatternClip.Encode(Path.Combine(root, "clip.mp4"), width, height, fullRange);
+            string clip = userPath
+                ? MyCapture.App.Diagnostics.VideoRangeColourPattern.Encode(Path.Combine(root, "clip.mp4"), width, height, fullRange, durationSeconds: 10)
+                : RangePatternClip.Encode(Path.Combine(root, "clip.mp4"), width, height, fullRange);
             player = new GalleryVideoPlayerWindow { Left = -10000, Top = -10000 };
-            player.Show();
+            if (!userPath) player.Show();
             Assert.True(player.Open(Guid.NewGuid(), "clip", clip, autoPlay: false));
+            if (userPath) player.Show();
             FieldInfo ready = typeof(GalleryVideoPlayerWindow).GetField("_mediaReady", BindingFlags.Instance | BindingFlags.NonPublic)!;
             DateTime deadline = DateTime.UtcNow.AddSeconds(15);
             while (!(bool)ready.GetValue(player)! && DateTime.UtcNow < deadline)
@@ -64,6 +85,8 @@ public sealed partial class SettingsThemePreviewTests
                 Assert.Equal("measured", StudioRangeVideoEffect.VerificationFor(video)!.LastResult!.Kind);
                 Assert.IsType<MeasuredRangeVideoEffect>(video.Effect);
             }
+            if (userPath)
+                Assert.True(StudioRangeVideoEffect.HardwareShaderAvailable(), "Real user-path colour tests require hardware PS 2.0.");
             if (!StudioRangeVideoEffect.HardwareShaderAvailable()
                 && !fullRange)
                 return;
@@ -75,6 +98,58 @@ public sealed partial class SettingsThemePreviewTests
             shown.Render(visual);
             RangePatternClip.AssertMatchesSource(shown, width, height, tolerance: fullRange ? 12 : 8, correction: correction,
                 verification: StudioRangeVideoEffect.VerificationFor(video)?.LastResult);
+            if (userPath)
+            {
+                Assert.False(player.IsPlayingForDiagnostic);
+                SampleUserPath("after verification");
+                var button = (Button)typeof(GalleryVideoPlayerWindow).GetField("_playButton", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(player)!;
+                var invoke = (IInvokeProvider)new ButtonAutomationPeer(button).GetPattern(PatternInterface.Invoke);
+                Press(true);
+                SampleUserPath("during playback");
+                Press(false);
+                SampleUserPath("after pause");
+                Press(true);
+                Press(false);
+                SampleUserPath("after second play/pause");
+
+                void Press(bool playing)
+                {
+                    double before = video.Position.TotalMilliseconds;
+                    invoke.Invoke();
+                    Assert.True(RangePatternClip.PumpUntil(() => player.IsPlayingForDiagnostic == playing,
+                        TimeSpan.FromSeconds(2)), $"play button did not change state to {playing}");
+                    if (playing)
+                        Assert.True(RangePatternClip.PumpUntil(() => video.Position.TotalMilliseconds >= before + 150,
+                            TimeSpan.FromSeconds(3)), "the play button did not advance the real MediaElement");
+                    RangePatternClip.Pump(TimeSpan.FromMilliseconds(300));
+                }
+
+                void SampleUserPath(string stage)
+                {
+                    var verification = StudioRangeVideoEffect.VerificationFor(video)?.LastResult;
+                    try
+                    {
+                        RangePatternClip.AssertVerifiedEffect(video, !fullRange);
+                        var frame = new RenderTargetBitmap(width, height, 96, 96, PixelFormats.Pbgra32);
+                        frame.Render(visual); // Effect stays applied at all four observations.
+                        int maximum = 0;
+                        for (int patch = 0; patch < RangePatternClip.Patches.Length; patch++)
+                        {
+                            var (x, y) = RangePatternClip.Centre(patch, width, height);
+                            var actual = RangePatternClip.Sample(frame, x, y);
+                            var expected = RangePatternClip.Patches[patch];
+                            maximum = Math.Max(maximum, Math.Max(Math.Abs(actual.R - expected.R),
+                                Math.Max(Math.Abs(actual.G - expected.G), Math.Abs(actual.B - expected.B))));
+                        }
+                        Console.WriteLine($"gallery full={fullRange}, forced={forceMeasured}, {stage}, source max error={maximum}; {verification?.Details}");
+                        Assert.True(maximum <= (fullRange ? 12 : 8), $"{stage}: source max error={maximum}");
+                    }
+                    catch (Exception ex)
+                    {
+                        throw new Xunit.Sdk.XunitException($"{stage}: {ex}\n{verification?.Details}\n{verification?.Evidence}");
+                    }
+                }
+            }
         }
         catch (Exception ex)
         {

@@ -10,32 +10,28 @@ public sealed class RangeMappingEvidenceTests
     [Theory]
     [InlineData(10, 8)]
     [InlineData(20, 2)]
-    public void UnequalAnchorSupportExposesAnInterpolationGapWithoutChangingRejection(int firstCount, int secondCount)
+    public void AnchorSupportedInOnlyOneHalfIsExcludedFromEveryFit(int firstCount, int secondCount)
     {
+        // Before repeated support, this one-half anchor alone produced split 7 (a "gap" artefact,
+        // supported/aligned split < 4). A cluster now contributes only when both halves support it,
+        // so the full fit and both half fits share one anchor set and the artefact disappears.
         var pairs = IdentityPairs(include128: false);
         Add(pairs, 128, 135, firstCount, 0); Add(pairs, 128, 135, secondCount, 1);
         var (curve, d) = MeasuredRangeCurveFitter.Fit(pairs);
-        Assert.Null(curve);
-        Assert.Equal("mapping-split-disagreement", d.Status);
-        Assert.Equal(7, d.SplitDisagreement);
+        Assert.NotNull(curve);
+        Assert.Equal("verified", d.Status);
+        Assert.True(d.SplitDisagreement < 4, d.Evidence);
         Assert.True(d.Residual <= 2.5 && d.HeldOutResidual <= 2.5, d.Evidence);
-        Assert.Equal("gap", d.MaximumSplit!.Classification);
-        Assert.Equal("B", d.MaximumSplit.Channel);
-        Assert.InRange(d.MaximumSplit.Level, 124, 132);
-        Assert.True(d.SupportedSplit < 4 && d.AlignedSplit < 4, d.Evidence);
-        Assert.Equal(7, d.GapSplit);
-        Assert.True(d.MaximumSplit.Second.NearestAnchorDistance > 4);
-        Assert.Equal(96, d.MaximumSplit.Second.Left!.X);
-        Assert.Equal(160, d.MaximumSplit.Second.Right!.X);
         Assert.All(d.Channels, c =>
         {
-            Assert.Contains(c.FullAnchors, a => a.Bin == 32 && a.Count == firstCount + secondCount);
-            Assert.Contains(c.FirstAnchors, a => a.Bin == 32 && a.Count == firstCount);
+            Assert.DoesNotContain(c.FullAnchors, a => a.Bin == 32);
+            Assert.DoesNotContain(c.FirstAnchors, a => a.Bin == 32);
             Assert.DoesNotContain(c.SecondAnchors, a => a.Bin == 32);
-            var aligned = Assert.Single(c.AlignedSecondAnchors, a => a.Bin == 32);
-            Assert.Equal(secondCount, aligned.Count);
-            if (secondCount < 3) { Assert.Null(aligned.BeforePav); Assert.Null(aligned.AfterPav); }
-            else { Assert.Equal(135, aligned.BeforePav); Assert.Equal(135, aligned.AfterPav); }
+            var excluded = Assert.Single(c.Clusters, p => p.Reference == 135);
+            Assert.False(excluded.Repeated);
+            Assert.Equal("insufficient-repeat", excluded.Decision);
+            Assert.Equal(firstCount, excluded.FirstCount);
+            Assert.Equal(secondCount, excluded.SecondCount);
         });
     }
 
@@ -141,6 +137,9 @@ public sealed class RangeMappingEvidenceTests
         Assert.Equal(result.Evidence, restored.Evidence);
         Assert.Equal(3, restored.MappingDiagnostics!.Channels.Length);
         Assert.Contains("\"BeforePav\"", json); Assert.Contains("\"NearestAnchorDistance\"", json);
+        Assert.Contains("\"CorrectedError\"", json); Assert.Contains("\"AnchorDecisions\"", json);
+        Assert.Contains("insufficient-repeat", restored.Evidence);
+        Assert.Equal(fit.Diagnostics.MaximumPatchError, restored.MappingDiagnostics.MaximumPatchError);
         Assert.Contains("\"Evidence\"", json); Assert.Contains("aligned-second", result.Evidence);
         Assert.DoesNotContain("\n", fit.Diagnostics.Summary);
         Assert.DoesNotContain("full (bin", result.Details);
