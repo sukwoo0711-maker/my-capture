@@ -32,6 +32,8 @@ internal static class RangeMappingEvidence
     {
         var text = new StringBuilder();
         text.AppendLine(diagnostics.Summary);
+        if (diagnostics.SelectedPlan is { } selected) text.AppendLine("selected plan: " + selected);
+        if (diagnostics.RejectedPrimary is { } primary) text.AppendLine("rejected primary: " + primary.Summary);
         if (diagnostics.MaximumSplit is { } peak)
         {
             text.AppendLine(FormattableString.Invariant($"maximum split {peak.Channel}@{peak.Level} {peak.Classification}"));

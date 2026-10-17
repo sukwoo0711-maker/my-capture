@@ -15,6 +15,10 @@ $previousSession = $env:MYCAPTURE_UPDATE_SESSION
 $env:MYCAPTURE_DATA_ROOT = Join-Path $root 'isolated-data'
 $env:MYCAPTURE_UPDATE_SESSION = $null
 $keys = New-Object 'System.Collections.Generic.List[string]'
+$testKeyParent = 'Software\MyCapture.SetupTests'
+$parentKey = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey($testKeyParent)
+$testKeyParentExisted = $null -ne $parentKey
+if ($null -ne $parentKey) { $parentKey.Dispose() }
 [IO.Directory]::CreateDirectory($legacy) | Out-Null
 function Assert-True([bool]$Value, [string]$Message) { if (-not $Value) { throw $Message } }
 function Invoke-Legacy([string]$Script, [string[]]$Arguments) {
@@ -158,11 +162,13 @@ finally {
     $env:MYCAPTURE_DATA_ROOT = $previousData
     $env:MYCAPTURE_UPDATE_SESSION = $previousSession
     foreach ($key in $keys) { [Microsoft.Win32.Registry]::CurrentUser.DeleteSubKeyTree($key, $false) }
-    $parentKey = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey('Software\MyCapture.SetupTests')
-    if ($null -ne $parentKey) {
-        $empty = $parentKey.SubKeyCount -eq 0 -and $parentKey.ValueCount -eq 0
-        $parentKey.Dispose()
-        if ($empty) { [Microsoft.Win32.Registry]::CurrentUser.DeleteSubKey('Software\MyCapture.SetupTests', $false) }
+    if (-not $testKeyParentExisted) {
+        $parentKey = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey($testKeyParent)
+        if ($null -ne $parentKey) {
+            $empty = $parentKey.SubKeyCount -eq 0 -and $parentKey.ValueCount -eq 0
+            $parentKey.Dispose()
+            if ($empty) { [Microsoft.Win32.Registry]::CurrentUser.DeleteSubKey($testKeyParent, $false) }
+        }
     }
     Remove-TestItem $root
 }

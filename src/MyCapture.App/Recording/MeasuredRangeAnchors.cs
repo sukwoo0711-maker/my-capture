@@ -75,6 +75,31 @@ internal static partial class MeasuredRangeCurveFitter
             while (end < groups.Count && groups[end].At(null).Bin <= bin + 1) end++;
             var nearby = groups.GetRange(i, end - i);
             bool sameReference = nearby.Select(g => g.ReferenceId).Distinct().Count() == 1;
+            // Equal shown medians can clip only part of this neighbouring group. Keep
+            // every distinguishable level if balancing exact collisions first leaves a
+            // valid ordering in all three independent fits. Never invent distinct Xs.
+            if (nearby.Count > 1 && !sameReference && nearby.All(g => g.ReferenceId >= 0))
+            {
+                var distinct = nearby.GroupBy(g => (Full: g.At(null).X, First: g.At(0).X, Second: g.At(1).X))
+                    .Select(g => g.Count() == 1 ? g.Single()
+                        : new AnchorGroup(g.SelectMany(v => v.Clusters).ToArray(), "balanced-plateau"))
+                    .ToList();
+                bool partialPlateau = distinct.Count > 1 && distinct.Count < nearby.Count
+                    && new int?[] { null, 0, 1 }.All(split =>
+                    {
+                        var anchors = distinct.Select(g => g.At(split)).ToArray();
+                        return anchors.Zip(anchors.Skip(1), (a, b) => a.X < b.X && a.Y < b.Y).All(v => v)
+                            && (i == 0 || groups[i - 1].At(split).Y <= anchors[0].Y)
+                            && (end == groups.Count || anchors[^1].Y <= groups[end].At(split).Y);
+                    });
+                if (partialPlateau)
+                {
+                    result.AddRange(distinct.Select(g => g with
+                        { Decision = g.Clusters.Length > 1 ? "balanced-plateau" : "adjacent-plateau" }));
+                    i = end;
+                    continue;
+                }
+            }
             bool separate = nearby.Count > 1 && !sameReference && nearby.All(g => g.ReferenceId >= 0)
                 && new int?[] { null, 0, 1 }.All(split =>
                 {

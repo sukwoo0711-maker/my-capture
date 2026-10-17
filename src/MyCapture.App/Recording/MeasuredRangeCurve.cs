@@ -34,6 +34,8 @@ internal sealed record RangeMappingDiagnostics(string Status, RangeMappingCovera
     double? Residual = null, double? HeldOutResidual = null, double? SplitDisagreement = null)
 {
     public RangeChannelEvidence[] Channels { get; init; } = [];
+    public string? SelectedPlan { get; init; }
+    public RangeMappingDiagnostics? RejectedPrimary { get; init; }
     public RangeSplitLocation? MaximumSplit { get; init; }
     public double? SupportedSplit { get; init; }
     public double? GapSplit { get; init; }
@@ -54,12 +56,34 @@ internal static partial class MeasuredRangeCurveFitter
 {
     private sealed record Anchor(double X, double Y, int Bin, int Count);
     private sealed record FitChannel(byte[] Curve, RangeMappingCoverage Coverage, RangeAnchorEvidence[] Anchors, bool HasCurve);
-    internal static (MeasuredRangeCurve? Curve, RangeMappingDiagnostics Diagnostics) Fit(List<RangeValuePair>[] channels)
+    internal static (MeasuredRangeCurve? Curve, RangeMappingDiagnostics Diagnostics) Fit(List<RangeValuePair>[] channels) =>
+        Fit(channels, allowWideFlatFallback: true);
+
+    internal static (MeasuredRangeCurve? Curve, RangeMappingDiagnostics Diagnostics) Fit(
+        List<RangeValuePair>[] channels, bool allowWideFlatFallback)
     {
         if (channels.Length != 3) throw new ArgumentException("B/G/R pairs are required.");
+        var plans = channels.Select(PlanAnchors).ToArray();
+        var primary = FitPlan(channels, plans);
+        // A verified primary, coverage failure or structural rejection is never replaced.
+        if (!allowWideFlatFallback || primary.Diagnostics.Status is not ("mapping-residual" or "mapping-held-out"))
+            return primary;
+        var widePlans = channels.Select((p, c) => PlanWideFlatEndpoints(p, plans[c])).ToArray();
+        if (widePlans.Zip(plans, (a, b) => ReferenceEquals(a, b)).All(same => same)) return primary;
+        var candidate = FitPlan(channels, widePlans);
+        // Keep the complete primary diagnostics if any unchanged gate rejects the candidate.
+        return candidate.Curve is null ? primary : (candidate.Curve, candidate.Diagnostics with
+        {
+            SelectedPlan = "wide-flat-endpoints",
+            RejectedPrimary = primary.Diagnostics,
+        });
+    }
+
+    private static (MeasuredRangeCurve? Curve, RangeMappingDiagnostics Diagnostics) FitPlan(
+        List<RangeValuePair>[] channels, AnchorPlan[] plans)
+    {
         var firstHalves = channels.Select(p => p.Where(v => v.Split == 0).ToList()).ToArray();
         var secondHalves = channels.Select(p => p.Where(v => v.Split != 0).ToList()).ToArray();
-        var plans = channels.Select(PlanAnchors).ToArray();
         var full = plans.Select((p, c) => FitChannelCurve(p.Groups.Select(g => g.At(null)).ToArray(), SupportedCoverage(channels[c]))).ToArray();
         var firstFits = plans.Select((p, c) => FitChannelCurve(p.Groups.Select(g => g.At(0)).ToArray(), SupportedCoverage(firstHalves[c]))).ToArray();
         var secondFits = plans.Select((p, c) => FitChannelCurve(p.Groups.Select(g => g.At(1)).ToArray(), SupportedCoverage(secondHalves[c]))).ToArray();

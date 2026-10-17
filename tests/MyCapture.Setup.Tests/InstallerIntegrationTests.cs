@@ -35,6 +35,7 @@ public sealed class Fixture : IDisposable
     public string Menu => Path.Combine(Temp, "Start Menu");
     public PackageManifest Manifest { get; private set; } = new PackageManifest();
     private readonly string? previousData = Environment.GetEnvironmentVariable("MYCAPTURE_DATA_ROOT");
+    private readonly bool testKeyParentExisted = TestKeyParentExists();
     public Fixture()
     {
         Install = Path.Combine(Root, "installed 한글 & (test)");
@@ -140,9 +141,14 @@ public sealed class Fixture : IDisposable
     {
         using (var key = Registry.CurrentUser.OpenSubKey(ShellIntegration.RunKey)) return Convert.ToString(key?.GetValue("MyCapture"));
     }
-    public static void DeleteEmptyTestKeyParent()
+    public static bool TestKeyParentExists(string parent = @"Software\MyCapture.SetupTests")
     {
-        const string parent = @"Software\MyCapture.SetupTests";
+        using (var key = Registry.CurrentUser.OpenSubKey(parent)) return key != null;
+    }
+    public static void DeleteEmptyTestKeyParent(bool existedBefore, string parent = @"Software\MyCapture.SetupTests")
+    {
+        // An empty key that predates this fixture is not owned by its cleanup.
+        if (existedBefore) return;
         using (var key = Registry.CurrentUser.OpenSubKey(parent))
             if (key == null || key.SubKeyCount != 0 || key.ValueCount != 0) return;
         try { Registry.CurrentUser.DeleteSubKey(parent, false); } catch (InvalidOperationException) { }
@@ -151,7 +157,7 @@ public sealed class Fixture : IDisposable
     {
         Environment.SetEnvironmentVariable("MYCAPTURE_DATA_ROOT", previousData);
         Registry.CurrentUser.DeleteSubKeyTree(Key, false);
-        DeleteEmptyTestKeyParent();
+        DeleteEmptyTestKeyParent(testKeyParentExisted);
         // Permanent deletion of this fixture's own TEMP root. A failure fails the test.
         try { FileRemoval.DeleteDirectoryWithRetry(Root); }
         catch (Exception e) { throw new IOException("Cleanup failed; test fixture retained at " + Root, e); }
@@ -160,6 +166,29 @@ public sealed class Fixture : IDisposable
 
 public sealed class InstallerIntegrationTests
 {
+    [Theory]
+    [InlineData(true, false, false, true)]
+    [InlineData(false, false, false, false)]
+    [InlineData(false, true, false, true)]
+    [InlineData(false, false, true, true)]
+    public void TestRegistryCleanupPreservesExistingParentsAndNonemptyKeys(bool existedBefore, bool hasChild, bool hasValue, bool retained)
+    {
+        using (var f = new Fixture())
+        {
+            string parent = f.Key + @"\cleanup-parent";
+            if (existedBefore) using (Registry.CurrentUser.CreateSubKey(parent)) { }
+            bool parentExisted = Fixture.TestKeyParentExists(parent);
+            Assert.Equal(existedBefore, parentExisted);
+            using (var key = Registry.CurrentUser.CreateSubKey(parent))
+            {
+                if (hasChild) using (key.CreateSubKey("child")) { }
+                if (hasValue) key.SetValue("sentinel", "keep");
+            }
+            Fixture.DeleteEmptyTestKeyParent(parentExisted, parent);
+            Assert.Equal(retained, Fixture.TestKeyParentExists(parent));
+        }
+    }
+
     [Theory]
     [InlineData("missing-exe")][InlineData("missing-dll")][InlineData("not-pe")][InlineData("x86")][InlineData("version")]
     [InlineData("tray-idle.ico")][InlineData("tray-capturing.ico")][InlineData("tray-busy.ico")][InlineData("tray-error.ico")]

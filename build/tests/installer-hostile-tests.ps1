@@ -82,7 +82,7 @@ function Invoke-Installer(
 
 function Invoke-UpdaterInstaller([string]$TargetRoot, [string[]]$ExtraArguments) {
     $sessions = Join-Path (Split-Path -Parent $TargetRoot) '.MyCapture.updates'
-    $sessionDirectory = Join-Path $sessions ('update-' + $Version + '-' + [guid]::NewGuid().ToString('N'))
+    $sessionDirectory = Join-Path $sessions ('update-' + $baseVersion + '-' + [guid]::NewGuid().ToString('N'))
     [IO.Directory]::CreateDirectory($sessionDirectory) | Out-Null
     $sessionFile = Join-Path $sessionDirectory 'update-session.json'
     $token = [guid]::NewGuid().ToString('N')

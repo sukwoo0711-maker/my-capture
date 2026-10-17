@@ -124,8 +124,17 @@ public sealed class GalleryFolderTests
         var other = f.Add(date.AddDays(1));
         await f.Queue.MoveCapturesAsync([first.Id, duplicate.Id], root.Id);
         await f.Queue.MoveCapturesAsync([video.Id], child.Id);
-        var exporter = f.Exporter();
+        // This test checks unchanged names. A deep data-root path can legitimately
+        // trigger the separate 240-character shortening policy, so stage this fixture
+        // under the runner's isolated TEMP and require room for every original name.
+        string staging = ValidatedFilePaths.CreateTemporaryDirectory();
+        var exporter = new GalleryFolderExportService(f.Queue, staging);
         GalleryFolderExportPlan plan = exporter.BuildPlan(CaptureFolderScope.ForDate(root.CreatedDate));
+        int batchPrefixLength = Path.Combine(staging,
+            GalleryExportFiles.FolderBatchPrefix + new string('0', 32)).Length;
+        Assert.All(plan.Directories.Concat(plan.Entries.Select(entry => entry.RelativePath)), relative =>
+            Assert.True(batchPrefixLength + 1 + relative.Length <= GalleryExportPathBudget.MaximumPathLength,
+                $"The name-preserving fixture needs a shorter isolated TEMP: {staging}; entry: {relative}"));
         using var prepared = await exporter.PrepareAsync(plan);
         string top = Assert.Single(prepared.Paths);
         Assert.Equal("2026-10-08", Path.GetFileName(top));
