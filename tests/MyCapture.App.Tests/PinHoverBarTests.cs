@@ -5,6 +5,7 @@ using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using MyCapture.App.Capture;
 using MyCapture.App.Pinning;
 using MyCapture.App.Themes;
 using MyCapture.Core.Localization;
@@ -102,9 +103,12 @@ public sealed class PinHoverBarTests
         _ = image;
     });
 
-    [Fact]
-    public void BarButtonsRunThePinsOwnCopySaveOpacityAndClose() => StaTestHost.Run(() =>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void BarButtonsRunThePinsOwnCopySaveOpacityAndClose(bool supported) => StaTestHost.Run(() =>
     {
+        using var mode = new ExclusionMode(supported);
         using var language = UiText.UseLanguage("ko-KR");
         bool? motion = FluidMotion.AnimationsEnabledOverrideForTest;
         Func<Window, bool> exclusion = PinHoverBar.ApplyCaptureExclusion;
@@ -120,8 +124,10 @@ public sealed class PinHoverBarTests
             pin.Show();
             Enter(pin);
             PinHoverBar bar = pin.HoverBarForTest!;
-            // With Windows animations on, the bar fades in instead of popping.
-            Assert.True(bar.HasAnimatedProperties);
+            // Only layered windows fade; the opaque capture-excluded surface appears at once.
+            Assert.Equal(supported, bar.AllowsTransparency);
+            Assert.Equal(supported, bar.HasAnimatedProperties);
+            if (!supported) Assert.Equal(1, bar.Opacity);
 
             Click(bar.CopyButton);
             Click(bar.SaveButton);
@@ -129,6 +135,7 @@ public sealed class PinHoverBarTests
             Assert.Equal([PinSaveMode.QuickSave], saves);
 
             ContextMenu opacity = bar.CreateOpacityMenu();
+            Assert.Equal(supported ? typeof(ContextMenu) : typeof(OpaqueCaptureContextMenu), opacity.GetType());
             Assert.Equal(["100%", "80%", "60%", "40%"], opacity.Items.OfType<MenuItem>().Select(item => (string)item.Header));
             Assert.True(((MenuItem)opacity.Items[0]).IsChecked);
             ((MenuItem)opacity.Items[2]).RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
@@ -184,9 +191,12 @@ public sealed class PinHoverBarTests
         }
     });
 
-    [Fact]
-    public void ANarrowPinGetsTheCompactBarAndAWideOneKeepsTheNames() => StaTestHost.Run(() =>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void ANarrowPinGetsTheCompactBarAndAWideOneKeepsTheNames(bool supported) => StaTestHost.Run(() =>
     {
+        using var mode = new ExclusionMode(supported);
         using var language = UiText.UseLanguage("ko-KR");
         bool? motion = FluidMotion.AnimationsEnabledOverrideForTest;
         Func<Window, bool> exclusion = PinHoverBar.ApplyCaptureExclusion;

@@ -16,12 +16,38 @@ namespace MyCapture.App.Tests;
 /// </summary>
 public sealed class GitHubUpdateServiceTests
 {
+    // Leave room for the numeric version twice, session GUID and .downloading suffix.
+    private const string StagingPrefix = "u-";
+
+    [Fact]
+    public void StagingPathsFitMaxPathUnderLongDeviceTemp()
+    {
+        // A 20-character profile plus a runner-owned TEMP subdirectory. Include the
+        // random fixture suffix and the longest intermediate download filename.
+        string temp = Path.Combine(@"C:\Users", new string('u', 20), @"AppData\Local\Temp", "test-results-" + new string('x', 16));
+        string root = Path.Combine(temp, StagingPrefix + Path.GetRandomFileName(), ".MyCapture.updates");
+        foreach (var version in new[] { new UpdateVersion(1, 8, 0), new UpdateVersion(21, 10, 345),
+            new UpdateVersion(int.MaxValue, int.MaxValue, int.MaxValue) })
+        {
+            string session = Path.Combine(root, UpdatePaths.SessionName(version));
+            foreach (string name in new[] { UpdatePaths.InstallerName(version) + ".downloading",
+                "update-session.json", "install-result.json.tmp", "update-helper.ps1", "SHA256SUMS.txt" })
+            {
+                string path = Path.Combine(session, name);
+                Assert.True(path.Length < 260, $"{path.Length} characters: {path}");
+            }
+            Assert.True(session.Length < 248, $"Directory creation needs MAX_PATH headroom: {session}");
+        }
+    }
+
     [Theory]
     [InlineData(1, 8, 0)]
     [InlineData(21, 10, 345)]
+    [InlineData(int.MaxValue, int.MaxValue, int.MaxValue)]
     public async Task DownloadedSessionPassesActualInstallerPathGuard(int major, int minor, int patch)
     {
         string root = CreateTempStagingDir();
+        string stagingRoot = Path.Combine(root, ".MyCapture.updates");
         try
         {
             var version = new UpdateVersion(major, minor, patch);
@@ -31,10 +57,10 @@ public sealed class GitHubUpdateServiceTests
                 ? CreateStringResponse(HttpStatusCode.OK, $"{ComputeSha256(bytes)}  {name}\n")
                 : new HttpResponseMessage(HttpStatusCode.OK) { Content = new ByteArrayContent(bytes) });
             using var service = new GitHubUpdateService(client);
-            var result = await service.DownloadAndStageAsync(CreateValidPackage(version, bytes.Length), root);
+            var result = await service.DownloadAndStageAsync(CreateValidPackage(version, bytes.Length), stagingRoot);
             Assert.True(result.Succeeded, result.ErrorMessage);
             var package = Assert.IsType<VerifiedUpdatePackage>(result.VerifiedPackage);
-            await InstallerSessionContract.AssertAcceptedAsync(root, Path.Combine(package.StagingDirectory, "update-session.json"));
+            await InstallerSessionContract.AssertAcceptedAsync(stagingRoot, Path.Combine(package.StagingDirectory, "update-session.json"), version);
             package.Cleanup();
             Assert.True(Directory.Exists(root));
             Assert.False(Directory.Exists(package.StagingDirectory));
@@ -858,7 +884,7 @@ public sealed class GitHubUpdateServiceTests
         return Convert.ToHexString(hash).ToLowerInvariant();
     }
 
-    private static string CreateTempStagingDir() => OwnedTestDirectory.Create("mycapture-updater-tests-");
+    private static string CreateTempStagingDir() => OwnedTestDirectory.Create(StagingPrefix);
 
     private static void DeleteDirectory(string path) => OwnedTestDirectory.Delete(path);
     [Fact]

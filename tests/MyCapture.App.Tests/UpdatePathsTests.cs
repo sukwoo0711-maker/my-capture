@@ -40,6 +40,21 @@ public sealed class UpdatePathsTests
         Assert.Throws<IOException>(() => UpdatePaths.InstallerName(new UpdateVersion(1, 8, 0, "../../other")));
     }
 
+    [Theory]
+    [InlineData("4.2.1-win10.8")]
+    [InlineData("4.2.1-win10.8+0123456789abcdef0123456789abcdef01234567")]
+    public void PrereleasePackageIdentityDoesNotBecomeAStableUpdateTarget(string informationalVersion)
+    {
+        UpdateVersion package = UpdateVersion.Parse(informationalVersion.Split('+')[0]);
+        Assert.True(package.IsPrerelease);
+        Assert.Throws<IOException>(() => UpdatePaths.InstallerName(package));
+        Assert.Throws<IOException>(() => UpdatePaths.SessionName(package));
+        // SettingsWindow uses the numeric assembly version for the running application.
+        var running = UpdateVersion.FromVersion(new Version(4, 2, 1, 0));
+        Assert.Equal("MyCapture-4.2.1-win-x64-setup.exe", UpdatePaths.InstallerName(running));
+        Assert.Matches(@"\Aupdate-4\.2\.1-[a-f0-9]{32}\z", UpdatePaths.SessionName(running));
+    }
+
     [Fact]
     public void CanonicalChildRemainsWithinItsParent()
     {

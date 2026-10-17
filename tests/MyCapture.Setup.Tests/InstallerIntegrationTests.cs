@@ -19,9 +19,13 @@ public sealed class Fixture : IDisposable
         {
             for (var dir = new DirectoryInfo(AppDomain.CurrentDomain.BaseDirectory); dir != null; dir = dir.Parent)
                 if (File.Exists(Path.Combine(dir.FullName, "MyCapture.slnx"))) return dir.FullName;
+            string sourceRoot = RepositoryFromSource();
+            if (File.Exists(Path.Combine(sourceRoot, "MyCapture.slnx"))) return sourceRoot;
             throw new InvalidOperationException("Repository not found.");
         }
     }
+    private static string RepositoryFromSource([System.Runtime.CompilerServices.CallerFilePath] string source = "") =>
+        Path.GetFullPath(Path.Combine(Path.GetDirectoryName(source)!, "../.."));
     public string Root { get; } = Path.Combine(Path.GetTempPath(), "MyCapture-SetupTests-" + Guid.NewGuid().ToString("N"));
     public string Package => Path.Combine(Root, "package");
     // Settable so a test can install below a junction; the default has Unicode and shell metacharacters.
@@ -36,7 +40,8 @@ public sealed class Fixture : IDisposable
         Install = Path.Combine(Root, "installed 한글 & (test)");
         Directory.CreateDirectory(Root); Directory.CreateDirectory(Package);
         Environment.SetEnvironmentVariable("MYCAPTURE_DATA_ROOT", Path.Combine(Root, "data"));
-        string source = Path.Combine(Repository, "src", "MyCapture.Setup", "bin", "Release", "net48");
+        // Use this test run's actual setup build, including prerelease/isolated outputs.
+        string source = AppDomain.CurrentDomain.BaseDirectory;
         foreach (string name in PackageManifest.BootstrapNames)
             File.Copy(name == "SETUP-HELP.txt" ? Path.Combine(Repository, "build", "installer", name) : Path.Combine(source, name), Path.Combine(Package, name));
         string publish = Path.Combine(Root, "publish"); Directory.CreateDirectory(Path.Combine(publish, "Assets"));
@@ -82,7 +87,9 @@ public sealed class Fixture : IDisposable
     }
     public string Session(int parent = int.MaxValue)
     {
-        string session = Path.Combine(Path.GetDirectoryName(Install)!, ".MyCapture.updates", "update-" + Manifest.Version + "-" + Guid.NewGuid().ToString("N"));
+        // UpdatePaths and the installer require a numeric directory core; the JSON identity
+        // still carries the package's complete prerelease version.
+        string session = Path.Combine(Path.GetDirectoryName(Install)!, ".MyCapture.updates", "update-" + Manifest.Version.Split('-')[0] + "-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(session);
         Json.Write(Path.Combine(session, "update-session.json"), new UpdaterSession
         { Token = Guid.NewGuid().ToString("N"), Version = Manifest.Version, ParentId = parent, InstallRoot = Install, SourceRoot = Install, TargetMode = "OwnedInstall" });
@@ -257,7 +264,7 @@ public sealed class InstallerIntegrationTests
             { File.WriteAllText(path, text); SetupContractsTests.Code(14, () => PackageManifest.Read(path)); }
         }
     }
-    [Theory][InlineData("path")][InlineData("token")][InlineData("version")][InlineData("receipt")][InlineData("source")][InlineData("target-mode")][InlineData("parent")][InlineData("owned-hash")]
+    [Theory][InlineData("path")][InlineData("versionless-path")][InlineData("prerelease-path")][InlineData("token")][InlineData("version")][InlineData("receipt")][InlineData("source")][InlineData("target-mode")][InlineData("parent")][InlineData("owned-hash")]
     public void UpdateSessionRefusesForgedOrStaleBoundary(string fault)
     {
         using (var f = new Fixture())
@@ -266,6 +273,12 @@ public sealed class InstallerIntegrationTests
             switch (fault)
             {
                 case "path": session = Path.Combine(f.Root, "update-session.json"); expected = 12; break;
+                case "versionless-path":
+                case "prerelease-path":
+                    string name = fault == "versionless-path" ? "update-" : "update-4.2.1-win10.8-";
+                    string invalidDirectory = Path.Combine(Path.GetDirectoryName(Path.GetDirectoryName(session))!, name + Guid.NewGuid().ToString("N"));
+                    Directory.CreateDirectory(invalidDirectory);
+                    session = Path.Combine(invalidDirectory, "update-session.json"); expected = 12; break;
                 case "token": metadata.Token = "bad"; break; case "version": metadata.Version = "0.0.0"; break;
                 case "receipt": File.WriteAllText(Path.Combine(Path.GetDirectoryName(session)!, "install-result.json"), "existing"); expected = 12; break;
                 case "source": metadata.SourceRoot = f.Install + "-other"; expected = 12; break;
@@ -412,7 +425,10 @@ public sealed class InstallerIntegrationTests
     {
         using (var f = new Fixture())
         {
-            Assert.Equal(0, f.Run()); string session = f.Session(); string? previous = Environment.GetEnvironmentVariable("MYCAPTURE_UPDATE_SESSION");
+            Assert.Equal(0, f.Run()); string session = f.Session();
+            Assert.Matches(@"\Aupdate-\d+\.\d+\.\d+-[a-f0-9]{32}\z", Path.GetFileName(Path.GetDirectoryName(session)));
+            Assert.Equal(f.Manifest.Version, Json.Read<UpdaterSession>(session).Version);
+            string? previous = Environment.GetEnvironmentVariable("MYCAPTURE_UPDATE_SESSION");
             string user = Path.Combine(f.Install, "user folder", "notes.txt"); Directory.CreateDirectory(Path.GetDirectoryName(user)!); File.WriteAllText(user, "user content");
             try
             {

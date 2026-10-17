@@ -18,7 +18,14 @@ public sealed partial class SettingsThemePreviewTests
     public Task FeatureTutorial_FitsA1080pScreenAt150PercentWithA16By9PreviewReadableStepsAndClose() =>
         RunIsolated(nameof(FeatureTutorial_FitsA1080pScreenAt150PercentWithA16By9PreviewReadableStepsAndClose), VerifyFeatureTutorialLayout);
 
-    private static void VerifyFeatureTutorialLayout()
+    [Fact]
+    public Task FeatureTutorial_EnglishDefaultAt125PercentHasFullPreviewAndSmallWorkAreaClamps() =>
+        RunIsolated(nameof(FeatureTutorial_EnglishDefaultAt125PercentHasFullPreviewAndSmallWorkAreaClamps),
+            () => VerifyFeatureTutorialLayout(englishDefault: true));
+
+    private static void VerifyFeatureTutorialLayout() => VerifyFeatureTutorialLayout(englishDefault: false);
+
+    private static void VerifyFeatureTutorialLayout(bool englishDefault)
     {
         var application = new Application { ShutdownMode = ShutdownMode.OnExplicitShutdown };
         foreach (string name in new[] { "Tokens", "Symbols", "Controls" })
@@ -31,6 +38,22 @@ public sealed partial class SettingsThemePreviewTests
         var keys = new HotkeySettings { CaptureText = new Hotkey(HotkeyModifiers.Control | HotkeyModifiers.Alt, 0x54) };
         try
         {
+            if (englishDefault)
+            {
+                using var locale = UiText.UseLanguage("en-US");
+                // 1920x1040 physical work area at the device's 125% scale.
+                VerifyTutorialFits(keys, "text-copy", new Size(1536, 832), fullPreview: true, "tutorial-en-default-125.png");
+                VerifyTutorialFits(keys, "text-copy", new Size(1280, 688), fullPreview: false, "tutorial-en-small-125.png");
+                var small = new FeatureTutorialWindow(keys, mediaFactory: () => new FakeTutorialMedia());
+                try
+                {
+                    small.FitToWorkArea(new Size(500, 440));
+                    Assert.Equal(500, small.Width); Assert.Equal(440, small.Height);
+                    Assert.Equal(500, small.MinWidth); Assert.Equal(440, small.MinHeight);
+                }
+                finally { small.Close(); }
+                return;
+            }
             foreach (string language in new[] { "ko-KR", "en-US" })
             {
                 using var locale = UiText.UseLanguage(language);
@@ -55,6 +78,9 @@ public sealed partial class SettingsThemePreviewTests
         };
         FluidMotion.SetWindowEntrance(window, false);
         window.FitToWorkArea(workArea);
+        Assert.Equal(720, window.Width);
+        Assert.Equal(Math.Min(800, workArea.Height), window.Height);
+        Assert.Equal(520, window.MinWidth); Assert.Equal(480, window.MinHeight);
         try
         {
             window.Show();
@@ -69,6 +95,8 @@ public sealed partial class SettingsThemePreviewTests
             Assert.InRange(frame.ActualHeight, 160, FeatureTutorialWindow.PreviewMaxHeight + 0.5);
             if (fullPreview)
             {
+                Assert.True(frame.ActualWidth >= 640, $"Preview width: {frame.ActualWidth} DIP");
+                Assert.True(frame.ActualHeight >= 360, $"Preview height: {frame.ActualHeight} DIP");
                 Assert.Equal(FeatureTutorialWindow.PreviewMaxWidth, frame.ActualWidth, 0.5);
                 Assert.Equal(FeatureTutorialWindow.PreviewMaxHeight, frame.ActualHeight, 0.5);
             }
