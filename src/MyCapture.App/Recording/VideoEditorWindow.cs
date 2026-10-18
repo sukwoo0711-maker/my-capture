@@ -130,6 +130,7 @@ internal sealed partial class VideoEditorWindow : Window
     private double _durationMs;
     private bool _mediaReady;
     private bool _mediaOpened;
+    private bool _reopenedAfterLateOpen;
     private bool _mediaFailed;
     private bool _closing;
     private string _mediaFailure = string.Empty;
@@ -149,6 +150,9 @@ internal sealed partial class VideoEditorWindow : Window
 
     /// <summary>MediaOpened arrived. The open fallback can make the editor ready before it does.</summary>
     internal bool HasMediaOpenedForTest => _mediaOpened;
+
+    /// <summary>MediaOpened came after the open fallback, so the source was opened once more.</summary>
+    internal bool ReopenedAfterLateOpenForTest => _reopenedAfterLateOpen;
 
     /// <summary>The source probe finished and its range is applied to the preview.</summary>
     internal bool IsSourceRangeKnownForTest => _sourceInfo is { IsCompleted: true };
@@ -498,6 +502,12 @@ internal sealed partial class VideoEditorWindow : Window
         // The exact container duration is read in parallel: MediaElement's NaturalDuration
         // comes from Windows Media Player and is truncated to whole seconds.
         _sourceInfo = ReadSourceAsync();
+        OpenSource();
+        StartLoadProgress();
+    }
+
+    private void OpenSource()
+    {
         try
         {
             _media.Source = new Uri(_recording.OutputPath, UriKind.Absolute);
@@ -509,8 +519,38 @@ internal sealed partial class VideoEditorWindow : Window
             OnMediaFailed(this, null!);
             _log.LogError(ex, "Could not set the media source");
         }
+    }
 
-        StartLoadProgress();
+    /// <summary>
+    /// MediaOpened arrived after the open fallback made the editor ready. Such a slow first open
+    /// can leave the element showing its first frame for every later seek: on loaded hosted runners
+    /// (24 probe runs) an open whose first frame came 306 ms or more after MediaOpened showed frame
+    /// 0 for every step, while every open whose first frame came within 41 ms showed every step.
+    /// A second open in the same process takes tens of milliseconds and presents normally, so the
+    /// source is opened once more; seeks keep their target until it has opened.
+    /// </summary>
+    private void ReopenAfterLateOpen()
+    {
+        _reopenedAfterLateOpen = true;
+        _log.LogInformation("MediaOpened arrived after the editor opened via the duration fallback; opening the source once more");
+        _ = Dispatcher.BeginInvoke(DispatcherPriority.Normal, new Action(() =>
+        {
+            if (_closing)
+            {
+                return;
+            }
+
+            try
+            {
+                _media.Source = null;
+            }
+            catch (InvalidOperationException ex)
+            {
+                _log.LogWarning(ex, "Could not close the media before opening it again");
+            }
+
+            OpenSource();
+        }));
     }
 
     /// <summary>
@@ -1523,6 +1563,12 @@ internal sealed partial class VideoEditorWindow : Window
     {
         if (!_closing)
         {
+            if (_mediaReady && !_mediaOpened && !_reopenedAfterLateOpen)
+            {
+                ReopenAfterLateOpen();
+                return;
+            }
+
             try
             {
                 // After the open fallback, seeks only kept their target until now; show the
