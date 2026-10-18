@@ -148,12 +148,13 @@ public sealed partial class SettingsThemePreviewTests
             Assert.Same(window.FindResource("Button.Primary"), capture.Style);
             Assert.Contains("Ctrl+Shift", Assert.IsType<string>(capture.ToolTip), StringComparison.Ordinal);
             var search = (TextBox)window.FindName("SearchBox");
-            TextBlock placeholder = Descendants(window).OfType<TextBlock>().Single(text => text.Text == vm.SearchPlaceholder);
+            var placeholder = (TextBlock)window.FindName("SearchPlaceholderText");
             foreach (FrameworkElement element in new FrameworkElement[]
                      { capture, search, placeholder, (FrameworkElement)window.FindName("NewFolderButton"),
                        (FrameworkElement)window.FindName("SortBox"), (FrameworkElement)window.FindName("MoreCommandsButton") })
                 AssertInsideClient(element, client, label);
             AssertNotTrimmed(placeholder, label);
+            AssertDefaultSearchPlaceholder(window, label);
             AssertSameRow(commandBar, capture, search, (FrameworkElement)window.FindName("SortBox"));
             AssertLibraryCommandHeights(commandBar);
 

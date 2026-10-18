@@ -1457,14 +1457,15 @@
                              ToolTip="{Binding SearchToolTip}"
                              AutomationProperties.Name="{loc:Text Text_4B8D541EBE6D}"
                              TextChanged="OnSearchTextChanged" />
-                    <TextBlock Grid.Column="1" IsHitTestVisible="False"
+                    <gallery:LibrarySearchPlaceholder x:Name="SearchPlaceholderText" Grid.Column="1" IsHitTestVisible="False"
+                               FullText="{Binding SearchPlaceholder}" CompactText="{Binding CompactSearchPlaceholder}"
                                Foreground="{DynamicResource Text.Muted}"
                                Margin="10,0"
                                TextTrimming="CharacterEllipsis"
                                VerticalAlignment="Center">
                         <TextBlock.Style>
                             <Style TargetType="TextBlock">
-                                <Setter Property="Text" Value="{Binding SearchPlaceholder}" />
+                                <Setter Property="Text" Value="{Binding FittedText, RelativeSource={RelativeSource Self}}" />
                                 <Setter Property="Visibility" Value="Collapsed" />
                                 <Style.Triggers>
                                     <DataTrigger Binding="{Binding HasSelection}" Value="True">
@@ -1476,7 +1477,7 @@
                                 </Style.Triggers>
                             </Style>
                         </TextBlock.Style>
-                    </TextBlock>
+                    </gallery:LibrarySearchPlaceholder>
                 </Grid>
             </Grid>
 
