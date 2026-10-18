@@ -136,7 +136,7 @@ public sealed partial class SettingsThemePreviewTests
                 .Single(box => AutomationProperties.GetName(box) == UiText.Get("Folder410.Sort"));
             var searchBox = (TextBox)window.FindName("SearchBox");
             var searchField = (FrameworkElement)window.FindName("SearchField");
-            TextBlock placeholder = Descendants(window).OfType<TextBlock>().Single(text => text.Text == vm.SearchPlaceholder);
+            var placeholder = (TextBlock)window.FindName("SearchPlaceholderText");
             var capture = (Button)window.FindName("CaptureRegionButton");
             var record = (Button)window.FindName("RecordRegionButton");
             var newFolder = (Button)window.FindName("NewFolderButton");
@@ -144,8 +144,9 @@ public sealed partial class SettingsThemePreviewTests
             foreach (FrameworkElement element in new FrameworkElement[] { capture, record, searchBox, placeholder, newFolder, sort, more })
                 AssertInsideClient(element, client, language);
             AssertSameRow(bar, capture, record, searchField, newFolder, sort, more);
-            // Field-search examples may abbreviate at minimum width; the full syntax stays in the tooltip.
+            // The root hint switches to compact text at minimum width; folder hints may still ellipsize.
             Assert.Equal(TextTrimming.CharacterEllipsis, placeholder.TextTrimming);
+            AssertNotTrimmed(placeholder, language);
             Assert.Equal(vm.SearchToolTip, searchBox.ToolTip);
             foreach (TextBlock label in new[] { capture, record, newFolder }.SelectMany(button => Descendants(button).OfType<TextBlock>()))
                 AssertNotTrimmed(label, language);
@@ -222,7 +223,15 @@ public sealed partial class SettingsThemePreviewTests
             SaveLibraryUxEvidence(window, AppTheme.Glass, $"after-narrow-selection-glass-{language}.png");
             vm.ClearSelection();
             SettleGalleryLayout(window);
-            Assert.Equal(vm.SearchPlaceholder, placeholder.Text);
+            AssertSearchPlaceholderFit(window, language);
+            // Clearing selection restores the root hint; enough space restores its full form.
+            WithHostedSearchCommandBar(window, host =>
+            {
+                ArrangeSearchHost(host, 1280 - 40 - 24);
+                Assert.Equal(vm.SearchPlaceholder, placeholder.Text);
+                AssertNotTrimmed(placeholder, language);
+            });
+            AssertSearchPlaceholderFit(window, language);
             int rootCardsInView = CardsFullyInView(rows, scroll);
 
             // Inside a folder the location header joins the content column. A date shows the same

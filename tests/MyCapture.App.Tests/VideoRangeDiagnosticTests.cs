@@ -492,6 +492,14 @@ public sealed class VideoRangeDiagnosticTests
     [Fact]
     public Task EditorSmallPathSmoke() => PathSmoke(nameof(EditorSmallPathSmoke), "editor-small");
 
+    // The large cell shows 1280×720 at ≥0.9 physical scale: about 1216 px of video plus window
+    // chrome. Smaller virtual screens (hosted CI) cannot hold that window.
+    private static bool ScreenHoldsLargeGallery() =>
+        GetSystemMetrics(78) >= 1300 && GetSystemMetrics(79) >= 900;
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern int GetSystemMetrics(int index);
+
     private static Task PathSmoke(string testName, string variant) => SettingsThemePreviewTests.RunIsolated(testName, () =>
     {
         CreateApplication();
@@ -508,6 +516,13 @@ public sealed class VideoRangeDiagnosticTests
             string output = Path.Combine(root, "out");
             int exitCode = VideoRangeSelfTest.RunChild(output, cell);
             string json = File.ReadAllText(Path.Combine(output, VideoRangeDiagnosticPlan.JsonName));
+            if (variant == "gallery-large" && exitCode != 0 && !ScreenHoldsLargeGallery())
+            {
+                // Windows caps a top-level window at the virtual screen (hosted CI VMs run at
+                // about 1024×768). The cell must then refuse instead of reporting a smaller scale.
+                Assert.Contains("Large gallery did not reach 0.9 physical scale.", json);
+                return;
+            }
             Assert.True(exitCode == 0, json);
             var options = new JsonSerializerOptions { Converters = { new JsonStringEnumConverter() } };
             var result = JsonSerializer.Deserialize<VideoRangeCellResult>(json, options)!;
