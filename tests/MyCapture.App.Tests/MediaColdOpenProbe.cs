@@ -381,9 +381,9 @@ internal sealed class ColdOpenRun
             if (!opened || stepsAfterOpen <= 60) _steps.Add($"{_rec.SinceZero,9:F0}  step {stepCount}: playhead {playhead:F1} ms, expected frame {expected}, shows {(shown == -1 ? "no frame" : shown == -2 ? "no rendering" : "frame " + shown)}, MediaOpened {opened}");
         }
 
-        _rec.Event($"{first.Name}: {stepCount} steps, {stepsAfterOpen} after MediaOpened, {presentedAfterOpen} of those showed the expected frame");
+        _rec.Event($"{first.Name}: {stepCount} steps, {stepsAfterOpen} after MediaOpened, {presentedAfterOpen} of those showed the expected frame, reopened {editor.ReopenedAfterLateOpenForTest}");
         return first.Current.Opened is null ? "editor-never-opened-at-limit"
-            : readyAt < first.Current.Opened ? $"editor-late-open-after-fallback: {presentedAfterOpen}/{stepsAfterOpen} steps right after MediaOpened"
+            : readyAt < first.Current.Opened ? $"editor-late-open-after-fallback: {presentedAfterOpen}/{stepsAfterOpen} steps right after MediaOpened, reopened {editor.ReopenedAfterLateOpenForTest}"
             : $"editor-opened-before-ready: {presentedAfterOpen}/{stepsAfterOpen} steps right";
     }
 
@@ -801,6 +801,11 @@ internal sealed class EditorTarget(
             if (Current.Opened is null)
             {
                 RecordOpened(Current, $"video {media.HasVideo} {media.NaturalVideoWidth}x{media.NaturalVideoHeight}, audio {media.HasAudio}");
+            }
+            else
+            {
+                // The editor opens the source once more after a MediaOpened that came after its fallback.
+                Rec.Event($"{Name}: MediaOpened again {Rec.Now - (Current.OpenCall ?? 0):F0} ms after the open call");
             }
         };
         media.MediaFailed += (_, e) => RecordFailed(Current, e.ErrorException);

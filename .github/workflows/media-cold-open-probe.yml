@@ -40,6 +40,9 @@ jobs:
         # 1 showed real frame 0 for every step after MediaOpened.)
         # Fix check: fix runs this branch (the probe plus the editor fix); before checks out
         # diag/media-cold-open-probe, the same probe on the code before the fix, in the same run.
+        # Run 39087876341: keeping seeks until MediaOpened alone still left 4 of 16 stuck, each an
+        # open whose first frame came 306 ms or more after MediaOpened; the fix now also opens the
+        # source once more after a MediaOpened that came after the fallback.
         # fb1500 makes the editor ready after 1.5 s, so more steps go out before MediaOpened.
         case:
           - { name: fix-editorstep, variant: editorstep+diskload, autoadd: default, ref: '', fallback: '' }
