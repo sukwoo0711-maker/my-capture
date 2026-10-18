@@ -164,6 +164,9 @@ internal sealed partial class VideoEditorWindow : Window
 
     internal PreviewSeekCoordinator PreviewSeekCoordinatorForTest => _previewSeeks;
 
+    /// <summary>Preview seeks that arrived before MediaOpened and were kept instead of sent to the element.</summary>
+    internal int SeeksKeptBeforeOpenForTest => _previewEngine.KeptSeekCountForTest;
+
     internal MediaElement MediaForTest => _media;
 
     /// <summary>The frame the preview shows, as a frame edit captures it.</summary>
@@ -1518,6 +1521,23 @@ internal sealed partial class VideoEditorWindow : Window
 
     private async void OnMediaOpened(object? sender, RoutedEventArgs e)
     {
+        if (!_closing)
+        {
+            try
+            {
+                // After the open fallback, seeks only kept their target until now; show the
+                // latest one. Playback started in that time resumes from it.
+                if (_previewEngine.MarkOpened() && _isPlaying)
+                {
+                    _playMedia();
+                }
+            }
+            catch (InvalidOperationException ex)
+            {
+                _log.LogWarning(ex, "Could not show the playhead frame when MediaOpened arrived");
+            }
+        }
+
         double? playerMs = _media.NaturalDuration.HasTimeSpan
             ? _media.NaturalDuration.TimeSpan.TotalMilliseconds
             : null;
@@ -1587,8 +1607,8 @@ internal sealed partial class VideoEditorWindow : Window
 
         try
         {
-            _media.Position = TimeSpan.FromMilliseconds(_previewEngine.PresentationPositionMs(_editDocument.TrimInMs));
-            _media.Pause();
+            // From the open fallback this only keeps the position until MediaOpened.
+            _previewEngine.ShowPaused(_editDocument.TrimInMs);
         }
         catch (InvalidOperationException)
         {

@@ -25,6 +25,13 @@ internal sealed class MediaElementPreviewEngine : IVideoPreviewEngine
     private readonly Dispatcher _dispatcher;
     private bool _disposed;
 
+    // UI thread only. Until MediaOpened the element is not positioned: the open fallback can make
+    // the editor ready seconds before a slow first open completes, and on a loaded hosted runner
+    // seeks sent in that time left the preview on frame 0 for every later step. Only the latest
+    // target is kept, and MediaOpened shows it once.
+    private bool _opened;
+    private double? _keptTargetMs;
+
     internal MediaElementPreviewEngine(MediaElement media)
     {
         _media = media ?? throw new ArgumentNullException(nameof(media));
@@ -34,11 +41,53 @@ internal sealed class MediaElementPreviewEngine : IVideoPreviewEngine
     /// <summary>Clip length; a seek at the very end is not moved past it.</summary>
     internal double DurationMs { get; set; } = double.PositiveInfinity;
 
+    /// <summary>Seeks that arrived before MediaOpened and only kept their target.</summary>
+    internal int KeptSeekCountForTest { get; private set; }
+
     /// <summary>The element position that presents the frame shown at <paramref name="targetMs"/>.</summary>
     internal double PresentationPositionMs(double targetMs)
     {
         double target = Math.Max(0, targetMs);
         return target + PresentationToleranceMs < DurationMs ? target + PresentationToleranceMs : target;
+    }
+
+    /// <summary>
+    /// Pauses the element on the frame at <paramref name="targetMs"/>; before MediaOpened the
+    /// target is kept for <see cref="MarkOpened"/> instead. UI thread.
+    /// </summary>
+    internal void ShowPaused(double targetMs)
+    {
+        if (!_opened)
+        {
+            _keptTargetMs = targetMs;
+            return;
+        }
+
+        _media.Position = TimeSpan.FromMilliseconds(PresentationPositionMs(targetMs));
+        _media.Pause();
+    }
+
+    /// <summary>
+    /// MediaOpened arrived: from now on seeks reach the element, and the latest target kept while
+    /// it opened is shown, paused. Returns whether one was kept, which happens only after the open
+    /// fallback made the editor ready first. UI thread.
+    /// </summary>
+    internal bool MarkOpened()
+    {
+        if (_disposed || _opened)
+        {
+            return false;
+        }
+
+        _opened = true;
+        if (_keptTargetMs is not double target)
+        {
+            return false;
+        }
+
+        _keptTargetMs = null;
+        ShowPaused(target);
+        return true;
     }
 
     public async ValueTask<PresentedPreviewFrame> SeekAsync(
@@ -52,15 +101,36 @@ internal sealed class MediaElementPreviewEngine : IVideoPreviewEngine
         // run in the MouseMove call stack that produced the visual intent.
         double position = PresentationPositionMs(request.TargetPositionMs);
         double bias = position - Math.Max(0, request.TargetPositionMs);
+        bool kept = false;
         await _dispatcher.InvokeAsync(
             () =>
             {
                 ObjectDisposedException.ThrowIf(_disposed, this);
+                if (!_opened)
+                {
+                    _keptTargetMs = request.TargetPositionMs;
+                    KeptSeekCountForTest++;
+                    kept = true;
+                    return;
+                }
+
                 _media.Pause();
                 _media.Position = TimeSpan.FromMilliseconds(position);
             },
             DispatcherPriority.Background,
             cancellationToken).Task.ConfigureAwait(false);
+
+        if (kept)
+        {
+            // Reported at its target so overlays and the layer playhead follow the step; the
+            // frame itself appears when MediaOpened shows the kept target.
+            return new PresentedPreviewFrame(
+                request.Generation,
+                request.TargetPositionMs,
+                request.TargetPositionMs,
+                request.TargetFrameIndex,
+                request.Mode);
+        }
 
         double presentedMs = request.TargetPositionMs;
         DispatcherPriority observedPriority = request.Mode == PreviewSeekMode.Exact
