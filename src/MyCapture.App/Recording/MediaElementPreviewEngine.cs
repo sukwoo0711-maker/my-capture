@@ -26,9 +26,8 @@ internal sealed class MediaElementPreviewEngine : IVideoPreviewEngine
     private bool _disposed;
 
     // UI thread only. Until MediaOpened the element is not positioned: the open fallback can make
-    // the editor ready seconds before a slow first open completes, and on a loaded hosted runner
-    // seeks sent in that time left the preview on frame 0 for every later step. Only the latest
-    // target is kept, and MediaOpened shows it once.
+    // the editor ready seconds before a slow first open completes, and the editor then opens the
+    // source once more. Only the latest target is kept, and MediaOpened shows it once.
     private bool _opened;
     private double? _keptTargetMs;
 
