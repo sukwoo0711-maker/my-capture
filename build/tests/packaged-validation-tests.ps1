@@ -2,10 +2,14 @@
 param()
 Set-StrictMode -Version 2.0
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'setup-test-common.ps1')
 $repo = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 . (Join-Path $repo 'build\packaged-validation.ps1')
-$fixture = Join-Path $repo ('artifacts\pct-' + [guid]::NewGuid().ToString('N').Substring(0, 8))
+$fixture = Join-Path ([IO.Path]::GetTempPath()) ('MyCapture-pct-' + [guid]::NewGuid().ToString('N'))
 [IO.Directory]::CreateDirectory($fixture) | Out-Null
+$previousData = $env:MYCAPTURE_DATA_ROOT
+$env:MYCAPTURE_DATA_ROOT = Join-Path $fixture 'isolated-data'
+try {
 $runName = '20261012T000000Z-' + [guid]::NewGuid().ToString('N')
 $publish = Join-Path $fixture 'artifacts\publish-win-x64'
 $run = Join-Path $fixture "artifacts\packaged-self-tests\$runName"
@@ -56,15 +60,17 @@ Expect-Rejection 'duplicate RESULT lines' { Assert-PackagedSelfTestResult $run }
 Expect-Rejection 'changed report' { Assert-PackagedSelfTestResult $run }
 'RESULT: PASS' | Set-Content -LiteralPath $report -Encoding UTF8
 
-# Isolated synthetic repository; no user app, credentials, or external operations.
-'artifacts/' | Set-Content -LiteralPath (Join-Path $fixture '.gitignore') -Encoding ASCII
-& git -C $fixture init --quiet
-if ($LASTEXITCODE -ne 0) { throw 'Fixture git init failed.' }
-& git -C $fixture add .gitignore
-if ($LASTEXITCODE -ne 0) { throw 'Fixture git add failed.' }
-& git -C $fixture -c user.name=PackagingTests -c user.email=packaging-tests@example.invalid commit --quiet -m fixture
-if ($LASTEXITCODE -ne 0) { throw 'Fixture git commit failed.' }
-$head = (& git -C $fixture rev-parse HEAD | Out-String).Trim()
+# A local sparse clone provides real clean-source Git checks without staging or committing.
+# Its object database reads the existing local repository; no network or source mutation occurs.
+$sourceRepo = Join-Path $fixture 'source'
+& git clone --quiet --shared --no-checkout $repo $sourceRepo
+if ($LASTEXITCODE -ne 0) { throw 'Fixture local clone failed.' }
+& git -C $sourceRepo config core.sparseCheckout true
+if ($LASTEXITCODE -ne 0) { throw 'Fixture sparse configuration failed.' }
+[IO.File]::WriteAllText((Join-Path $sourceRepo '.git\info\sparse-checkout'), "/README.md`n", [Text.Encoding]::ASCII)
+& git -C $sourceRepo read-tree -mu HEAD
+if ($LASTEXITCODE -ne 0) { throw 'Fixture sparse checkout failed.' }
+$head = (& git -C $sourceRepo rev-parse HEAD | Out-String).Trim()
 'synthetic payload' | Set-Content -LiteralPath (Join-Path $publish 'MyCapture.exe') -Encoding ASCII
 $payload = Get-Item -LiteralPath (Join-Path $publish 'MyCapture.exe')
 $manifest = [pscustomobject]@{
@@ -75,35 +81,47 @@ $manifest = [pscustomobject]@{
 }
 function Write-Manifest { $manifest | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath (Join-Path $fixture 'artifacts\release-manifest.json') -Encoding UTF8 }
 Write-Manifest
-$null = Assert-StorePublishProvenance $fixture $publish '4.1.0'
+$null = Assert-StorePublishProvenance $sourceRepo $publish '4.1.0'
 $checks++
 $manifest.PackagedSelfTestResultSha256 = '0' * 64
 Write-Manifest
-Expect-Rejection 'changed self-test JSON' { Assert-StorePublishProvenance $fixture $publish '4.1.0' }
+Expect-Rejection 'changed self-test JSON' { Assert-StorePublishProvenance $sourceRepo $publish '4.1.0' }
 $manifest.PackagedSelfTestResultSha256 = (Get-FileHash -LiteralPath (Join-Path $run 'result.json')).Hash
 $singleRecord = $manifest.PublishInventory[0]
 $manifest.PublishInventory = @($singleRecord, $singleRecord)
 Write-Manifest
-Expect-Rejection 'duplicate publish inventory' { Assert-StorePublishProvenance $fixture $publish '4.1.0' }
+Expect-Rejection 'duplicate publish inventory' { Assert-StorePublishProvenance $sourceRepo $publish '4.1.0' }
 $manifest.PublishInventory = @($singleRecord)
 $manifest.SourceCommit = '0' * 40
 Write-Manifest
-Expect-Rejection 'same version stale source SHA' { Assert-StorePublishProvenance $fixture $publish '4.1.0' }
+Expect-Rejection 'same version stale source SHA' { Assert-StorePublishProvenance $sourceRepo $publish '4.1.0' }
 $manifest.SourceCommit = $head
 $manifest.SourceTreeClean = $false
 Write-Manifest
-Expect-Rejection 'dirty provenance' { Assert-StorePublishProvenance $fixture $publish '4.1.0' }
+Expect-Rejection 'dirty provenance' { Assert-StorePublishProvenance $sourceRepo $publish '4.1.0' }
 $manifest.SourceTreeClean = $true
 $manifest.Architecture = 'arm64'
 Write-Manifest
-Expect-Rejection 'wrong architecture' { Assert-StorePublishProvenance $fixture $publish '4.1.0' }
+Expect-Rejection 'wrong architecture' { Assert-StorePublishProvenance $sourceRepo $publish '4.1.0' }
 $manifest.Architecture = 'x64'
 Write-Manifest
-Expect-Rejection 'wrong version' { Assert-StorePublishProvenance $fixture $publish '4.2.0' }
+Expect-Rejection 'wrong version' { Assert-StorePublishProvenance $sourceRepo $publish '4.2.0' }
 'changed payload' | Set-Content -LiteralPath $payload.FullName -Encoding ASCII
-Expect-Rejection 'mutated payload hash' { Assert-StorePublishProvenance $fixture $publish '4.1.0' }
+Expect-Rejection 'mutated payload hash' { Assert-StorePublishProvenance $sourceRepo $publish '4.1.0' }
 'synthetic payload' | Set-Content -LiteralPath $payload.FullName -Encoding ASCII
 'extra' | Set-Content -LiteralPath (Join-Path $publish 'extra.txt') -Encoding ASCII
-Expect-Rejection 'unmanifested extra file' { Assert-StorePublishProvenance $fixture $publish '4.1.0' }
-# Preserve every fixture rather than cleaning up, including deliberate invalid inputs.
-Write-Host "CONTRACT_TESTS=PASS CHECKS=$checks FIXTURE_RETAINED=$fixture"
+Expect-Rejection 'unmanifested extra file' { Assert-StorePublishProvenance $sourceRepo $publish '4.1.0' }
+$setupConfig = [IO.File]::ReadAllText((Get-SetupBootstrapSource 'MyCaptureSetup.exe.config'))
+if ($setupConfig.Contains('sku=') -or -not $setupConfig.Contains('version="v4.0"')) { throw 'Setup CLR config contract changed.' }
+if (@([MyCapture.Setup.PackageManifest]::BootstrapNames).Count -ne 3) { throw 'Unexpected setup executable bootstrap count.' }
+foreach ($name in [MyCapture.Setup.PackageManifest]::BootstrapNames) {
+    if (-not [IO.File]::Exists((Get-SetupBootstrapSource $name))) { throw "Missing setup bootstrap: $name" }
+}
+$checks += 2
+Write-Host "CONTRACT_TESTS=PASS CHECKS=$checks"
+}
+catch { Write-Output ('TEST_FAILURE=' + $_.Exception.Message); throw }
+finally {
+    $env:MYCAPTURE_DATA_ROOT = $previousData
+    Remove-TestItem $fixture
+}

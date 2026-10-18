@@ -51,8 +51,9 @@ internal sealed class PinHoverBar : Window
         Title = UiText.Get("Onboard_PinBarName");
         WindowStyle = WindowStyle.None;
         ResizeMode = ResizeMode.NoResize;
-        AllowsTransparency = true;
-        Background = Brushes.Transparent;
+        AllowsTransparency = CaptureWindowExclusion.SupportsLayeredWindows;
+        Background = AllowsTransparency ? Brushes.Transparent : CaptureWindowExclusion.OpaqueBackground();
+        if (!AllowsTransparency) ModernWindowChrome.SetEnabled(this, false);
         ShowInTaskbar = false;
         ShowActivated = false;
         Topmost = true;
@@ -78,7 +79,7 @@ internal sealed class PinHoverBar : Window
         {
             Child = row,
             Padding = new Thickness(3),
-            CornerRadius = new CornerRadius(8),
+            CornerRadius = new CornerRadius(AllowsTransparency ? 8 : 0),
             BorderThickness = new Thickness(1),
             Margin = new Thickness(0),
         };
@@ -151,7 +152,10 @@ internal sealed class PinHoverBar : Window
     /// <summary>The opacity menu without opening it.</summary>
     internal ContextMenu CreateOpacityMenu()
     {
-        var menu = new ContextMenu { PlacementTarget = OpacityButton, Placement = PlacementMode.Bottom, VerticalOffset = 2 };
+        ContextMenu menu = CaptureWindowExclusion.CreateContextMenu();
+        menu.PlacementTarget = OpacityButton;
+        menu.Placement = PlacementMode.Bottom;
+        menu.VerticalOffset = 2;
         AutomationProperties.SetName(menu, UiText.Get("Onboard_PinOpacity"));
         foreach (double choice in OpacityChoices)
         {
@@ -170,7 +174,7 @@ internal sealed class PinHoverBar : Window
 
         menu.Opened += (_, _) =>
         {
-            if (PresentationSource.FromVisual(menu) is HwndSource popup) _ = ApplyPopupExclusion(popup.Handle);
+            CaptureWindowExclusion.ExcludeMenuPopup(menu);
         };
         return menu;
     }
@@ -197,7 +201,7 @@ internal sealed class PinHoverBar : Window
     internal void Reveal()
     {
         BeginAnimation(OpacityProperty, null);
-        if (!FluidMotion.AnimationsEnabled)
+        if (!AllowsTransparency || !FluidMotion.AnimationsEnabled)
         {
             Opacity = 1;
             return;
@@ -270,9 +274,4 @@ internal sealed class PinHoverBar : Window
         return new IntPtr(3); // MA_NOACTIVATE
     }
 
-    private static bool ApplyPopupExclusion(IntPtr hwnd) => SetWindowDisplayAffinity(hwnd, 0x11);
-
-    [System.Runtime.InteropServices.DllImport("user32.dll", SetLastError = true)]
-    [return: System.Runtime.InteropServices.MarshalAs(System.Runtime.InteropServices.UnmanagedType.Bool)]
-    private static extern bool SetWindowDisplayAffinity(IntPtr window, uint affinity);
 }

@@ -51,7 +51,10 @@ public sealed class VideoEditorCommandButtonTests
                         Assert.Equal(new Thickness(3, 0, 3, 0), button.Margin);
                         Grid face = Assert.IsType<Grid>(button.Content);
                         Assert.Equal("CommandButtonFace", face.Name);
-                        Assert.Equal(14, face.RowDefinitions[1].ActualHeight);
+                        RowDefinition hintRow = face.RowDefinitions[1];
+                        Assert.Equal(new GridLength(14), hintRow.Height);
+                        double scale = VisualTreeHelper.GetDpi(face).DpiScaleY;
+                        Assert.Equal(Math.Round(14 * scale), hintRow.ActualHeight * scale, 6);
                         AssertInside(button, layout, layout.ActualHeight);
                     }
                 }

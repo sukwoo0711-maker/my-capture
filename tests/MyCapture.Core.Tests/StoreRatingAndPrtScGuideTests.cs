@@ -304,6 +304,9 @@ public sealed class PrtScGuideTests
     [InlineData(0, 26200, false)]
     [InlineData(null, 26200, true)]
     [InlineData(null, 22621, true)]
+    [InlineData(null, 19045, false)]
+    [InlineData(1, 19045, true)]
+    [InlineData(0, 19045, false)]
     [InlineData(null, 22000, false)]
     [InlineData(2, 22000, true)]
     [InlineData(0, 22000, false)]
@@ -320,6 +323,38 @@ public sealed class PrtScGuideTests
             new FakeSetting(() => throw new SecurityException("denied")), 26200));
         Assert.False(PrintScreenKeyGuide.IsWindowsCaptureKeyEnabled(
             new FakeSetting(() => throw new UnauthorizedAccessException("denied")), 26200));
+    }
+
+    [Theory]
+    [InlineData(19045, "en-US", "Windows Settings > Ease of Access > Keyboard")]
+    [InlineData(21999, "en-US", "Windows Settings > Ease of Access > Keyboard")]
+    [InlineData(22000, "en-US", "Windows Settings > Accessibility > Keyboard")]
+    [InlineData(22621, "en-US", "Windows Settings > Accessibility > Keyboard")]
+    [InlineData(19045, "ko-KR", "Windows 설정 > 접근성 > 키보드")]
+    [InlineData(22621, "ko-KR", "Windows 설정 > 접근성 > 키보드")]
+    public void GuideCopy_UsesTheSettingsPathForTheWindowsBuild(int build, string language, string path)
+    {
+        using IDisposable scope = UiText.UseLanguage(language);
+        Assert.Equal(path, PrintScreenKeyGuide.SettingsPath(build));
+        foreach ((string key, string text) in new[]
+        {
+            ("PrtScGuide_Message", PrintScreenKeyGuide.Message(build)),
+            ("PrtScGuide_OpenSettingsFailed", PrintScreenKeyGuide.OpenSettingsFailed(build)),
+            ("PrtScGuide_FailureNotice", PrintScreenKeyGuide.FailureNotice([Parse("PrintScreen")], true, build)),
+        })
+        {
+            Assert.Equal(UiText.Format(key, path), text);
+            Assert.Contains(path, text, StringComparison.Ordinal);
+            Assert.DoesNotContain("{0}", text, StringComparison.Ordinal);
+            Assert.DoesNotContain("search", text, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("검색", text, StringComparison.Ordinal);
+            Assert.DoesNotContain("Snipping Tool", text, StringComparison.Ordinal);
+            if (language == "ko-KR") Assert.EndsWith("십시오.", text, StringComparison.Ordinal);
+        }
+        Assert.Contains(language == "en-US" ? "screen capture" : "화면 캡처",
+            PrintScreenKeyGuide.Message(build), StringComparison.Ordinal);
+        Assert.Equal(UiText.Format("PrtScGuide_FailureNotice", path), PrintScreenKeyGuide.FailureNotice(
+            [Parse("PrintScreen")], PrintScreenKeyGuide.IsWindowsCaptureKeyEnabled(1, build), build));
     }
 
     [Fact]
@@ -358,22 +393,25 @@ public sealed class PrtScGuideTests
     public void FailureNotice_OnlyForAPrintScreenFailureWhileWindowsClaimsTheKey()
     {
         Hotkey[] withPrintScreen = [Parse("Ctrl+Shift+C"), Parse("Shift+PrintScreen")];
-        Assert.Equal(UiText.Get("PrtScGuide_FailureNotice"), PrintScreenKeyGuide.FailureNotice(withPrintScreen, true));
+        Assert.Equal(UiText.Format("PrtScGuide_FailureNotice", PrintScreenKeyGuide.SettingsPath(Environment.OSVersion.Version.Build)),
+            PrintScreenKeyGuide.FailureNotice(withPrintScreen, true));
         Assert.Empty(PrintScreenKeyGuide.FailureNotice(withPrintScreen, false));
         Assert.Empty(PrintScreenKeyGuide.FailureNotice([Parse("Ctrl+Shift+C"), Parse("Ctrl+PrintScreen")], true));
         Assert.Empty(PrintScreenKeyGuide.FailureNotice([], true));
     }
 
     [Theory]
-    [InlineData("ko-KR")]
-    [InlineData("en-US")]
-    public void StartupNoticeWithThePrintScreenReason_FitsTheNativeBalloon(string language)
+    [InlineData("ko-KR", 19045)]
+    [InlineData("ko-KR", 22621)]
+    [InlineData("en-US", 19045)]
+    [InlineData("en-US", 22621)]
+    public void StartupNoticeWithThePrintScreenReason_FitsTheNativeBalloon(string language, int build)
     {
         using IDisposable scope = UiText.UseLanguage(language);
         var longestChord = new Hotkey(HotkeyModifiers.Control | HotkeyModifiers.Alt | HotkeyModifiers.Shift | HotkeyModifiers.Windows, 0xFE);
         string suffix = UiText.Format("Text_646F2DBF1852", int.MaxValue);
         string message = UiText.Format("Text_114E1105C3EE", longestChord, suffix)
-            + "\n" + PrintScreenKeyGuide.FailureNotice([Parse("PrintScreen")], true);
+            + "\n" + PrintScreenKeyGuide.FailureNotice([Parse("PrintScreen")], true, build);
         Assert.InRange(message.Length, 1, 255);
     }
 

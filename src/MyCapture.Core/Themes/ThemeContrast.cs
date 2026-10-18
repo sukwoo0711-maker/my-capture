@@ -12,7 +12,7 @@ public static class ThemeContrast
 
     /// <summary>
     /// Composites a possibly translucent surface over an opaque backdrop, then measures
-    /// text contrast. Glass themes must stay readable on both light and dark Mica.
+    /// text contrast. Glass themes must stay readable over both light and dark backgrounds.
     /// </summary>
     public static double RatioOverBackdrop(ThemeColor foreground, ThemeColor surface, ThemeColor backdrop)
     {

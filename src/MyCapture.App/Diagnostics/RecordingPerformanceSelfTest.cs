@@ -78,7 +78,7 @@ internal static class RecordingPerformanceSelfTest
 
     /// <summary>
     /// Plain opaque fixture. The app-wide implicit Window style enables ModernWindowChrome,
-    /// which replaces Background with Surface.Base (Transparent plus Mica on glass themes) once
+    /// which replaces Background with Surface.Base (translucent over the WPF client background on glass themes) once
     /// the HWND exists. The fixture opts out so the capture path sees <see cref="FixtureColor"/>
     /// and not the theme surface the overlay checks cannot tell apart from overlay pixels.
     /// </summary>
@@ -283,8 +283,14 @@ internal static class RecordingPerformanceSelfTest
         {
             if (!CaptureWindowExclusion.TryApply(editor)) throw new InvalidOperationException("Editor exclusion failed.");
             editor.Show();
+            // The editor never shrinks below its minimum DIP size (680×460 → 850×575 px at 125%).
+            // Request at least that physical size so the positioner's size check can succeed;
+            // the window still covers the 320×240 recorded region from its top-left corner.
+            DpiScale dpi = VisualTreeHelper.GetDpi(editor);
             PhysicalWindowPositioner.PlaceTopmost(new System.Windows.Interop.WindowInteropHelper(editor).Handle,
-                new RectD(region.Left, region.Top, 700, 500));
+                new RectD(region.Left, region.Top,
+                    Math.Max(700, Math.Ceiling(editor.MinWidth * dpi.DpiScaleX)),
+                    Math.Max(500, Math.Ceiling(editor.MinHeight * dpi.DpiScaleY))));
             Sample("excluded-editor", false);
         }
         finally { editor.Close(); }

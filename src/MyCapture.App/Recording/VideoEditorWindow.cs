@@ -140,6 +140,7 @@ internal sealed partial class VideoEditorWindow : Window
     private bool _operationRunning;
     private bool _closeRequested;
     private bool _updatingOverlayList;
+    private bool _extractingFrame;
 
     // Test hooks so a headless self-test can confirm the editor actually reaches the ready
     // state for a real clip (the field report: a ~2s video failed to load).
@@ -166,8 +167,35 @@ internal sealed partial class VideoEditorWindow : Window
 
     internal MediaElement MediaForTest => _media;
 
-    /// <summary>The frame the preview shows, as a frame edit captures it.</summary>
-    internal BitmapSource? RenderCurrentFrameForTest() => TryRenderCurrentFrame();
+    /// <summary>Visual-only test hook: includes presenter errors and the preview effect.</summary>
+    internal BitmapSource? RenderCurrentFrameForTest() => TryRenderPreviewForTest();
+
+    /// <summary>The exact decoded/composited pixels handed to the frame annotation editor.</summary>
+    internal Task<BitmapSource?> DecodeFrameForEditAsync(double sourceTimeMs)
+    {
+        VerifyAccess();
+        // Snapshot before leaving the dispatcher: later playhead/layer changes must not alter
+        // the frame being edited or the time at which its PNG layer will be stored.
+        VideoEditDocument document = _editDocument.Clone();
+        return TryDecodeFrameForEditAsync(sourceTimeMs, document);
+    }
+
+    private async Task<BitmapSource?> TryDecodeFrameForEditAsync(double sourceTimeMs, VideoEditDocument document)
+    {
+        try
+        {
+            // Text remains a live, upright overlay in preview/export. Baking it here would
+            // rotate one copy into the PNG and draw another copy over the resulting layer.
+            return await StaThreadTask.RunAsync(() => VideoFrameRenderPipeline.RenderSingleFrame(
+                _recording.OutputPath, sourceTimeMs, _recording.Width, _recording.Height,
+                overlays: null, frameEditLayers: document.FrameEditLayers), "MyCapture frame edit decode");
+        }
+        catch (Exception ex)
+        {
+            _log.LogWarning(ex, "Rendering the current video frame failed");
+            return null;
+        }
+    }
 
     internal int ControlRowCountForTest => _controlRows.RowDefinitions.Count;
 
@@ -236,8 +264,6 @@ internal sealed partial class VideoEditorWindow : Window
             ScrubbingEnabled = true,
             Stretch = Stretch.Uniform,
         };
-        // Recordings are studio range; the source probe removes the expansion for a full-range clip.
-        StudioRangeVideoEffect.Apply(_media, studioRange: true);
         _media.MediaOpened += OnMediaOpened;
         _media.MediaFailed += OnMediaFailed;
         _media.MediaEnded += OnMediaEnded;
@@ -260,6 +286,7 @@ internal sealed partial class VideoEditorWindow : Window
         _previewEngine = new MediaElementPreviewEngine(_media);
         _previewSeeks = new PreviewSeekCoordinator(previewEngine ?? _previewEngine, recording.Fps);
         _playMedia = playMedia ?? _media.Play;
+        _previewSeeks.PositionRequested += OnPreviewPositionRequested;
         _previewSeeks.PreviewPresented += OnPreviewPresented;
         _previewSeeks.SeekFailed += OnPreviewSeekFailed;
 
@@ -520,7 +547,7 @@ internal sealed partial class VideoEditorWindow : Window
         VideoSourceInfo source = await VideoSourceProbe.ReadAsync(_recording.OutputPath, _log);
         if (!_closing)
         {
-            StudioRangeVideoEffect.Apply(_media, source.StudioRange);
+            StudioRangeVideoEffect.Apply(_media, source.StudioRange, VideoPlayerKind.Editor, _log);
         }
 
         return source;
@@ -1516,6 +1543,8 @@ internal sealed partial class VideoEditorWindow : Window
 
     // ---- media lifecycle ----
 
+    private void OnPreviewPositionRequested() => StudioRangeVideoEffect.PositionRequested(_media);
+
     private async void OnMediaOpened(object? sender, RoutedEventArgs e)
     {
         double? playerMs = _media.NaturalDuration.HasTimeSpan
@@ -1587,6 +1616,7 @@ internal sealed partial class VideoEditorWindow : Window
 
         try
         {
+            StudioRangeVideoEffect.PositionRequested(_media);
             _media.Position = TimeSpan.FromMilliseconds(_previewEngine.PresentationPositionMs(_editDocument.TrimInMs));
             _media.Pause();
         }
@@ -2618,7 +2648,7 @@ internal sealed partial class VideoEditorWindow : Window
 
     private async void EditCurrentFrame()
     {
-        if (!_mediaReady)
+        if (!_mediaReady || _extractingFrame)
         {
             return;
         }
@@ -2631,11 +2661,16 @@ internal sealed partial class VideoEditorWindow : Window
         }
 
         double layerTimeMs = CurrentMs();
+        VideoEditDocument frameDocument = _editDocument.Clone();
+        BitmapSource? frame;
+        _extractingFrame = true;
 
         try
         {
             _statusLabel.Text = UiText.Get("Text_571C8E331C15");
-            await _previewSeeks.RequestExactAsync(CurrentMs());
+            await _previewSeeks.RequestExactAsync(layerTimeMs);
+            if (!IsLoaded) return;
+            frame = await TryDecodeFrameForEditAsync(layerTimeMs, frameDocument);
         }
         catch (OperationCanceledException)
         {
@@ -2648,13 +2683,16 @@ internal sealed partial class VideoEditorWindow : Window
             _statusLabel.Foreground = TryBrush("State.Danger", Colors.OrangeRed);
             return;
         }
+        finally
+        {
+            _extractingFrame = false;
+        }
 
         if (!IsLoaded)
         {
             return;
         }
 
-        BitmapSource? frame = TryRenderCurrentFrame();
         if (frame is null)
         {
             _statusLabel.Text = UiText.Get("Text_33F7635FDE36");
@@ -2662,8 +2700,16 @@ internal sealed partial class VideoEditorWindow : Window
             return;
         }
 
-        // Wrap the extracted frame as a FrozenFrame so the existing capture editor opens
-        // unchanged — image editing from a video frame is identical to editing a capture.
+        AnnotationEditorWindow editor = CreateFrameEditor(frame, layerTimeMs, frameDocument);
+        editor.Owner = this;
+        editor.Show();
+        _ = editor.Activate();
+    }
+
+    internal AnnotationEditorWindow CreateFrameEditor(BitmapSource frame, double layerTimeMs, VideoEditDocument frameDocument)
+    {
+        // Timed text is intentionally absent while annotating. It is added only to still
+        // commits, after rotation/crop/annotations, and remains live above the video layer.
         var region = new RectD(0, 0, frame.PixelWidth, frame.PixelHeight);
         var frozen = new FrozenFrame(frame, region, null, 0);
 
@@ -2672,7 +2718,10 @@ internal sealed partial class VideoEditorWindow : Window
             region,
             frame,
             title: UiText.Get("Text_2A0C70A93334"),
-            privacyRedactionService: PrivacyRedactionService);
+            privacyRedactionService: PrivacyRedactionService)
+        {
+            FrameStillImage = VideoFrameStillImage.Capture(frameDocument, layerTimeMs),
+        };
         FrameImageCommitSession? commitSession = FrameImageCommitHandlerFactory?.Invoke();
         editor.CommitRequested = commitSession?.CommitAsync ?? (_ => Task.FromResult(false));
         editor.Committed += (_, result) =>
@@ -2681,16 +2730,14 @@ internal sealed partial class VideoEditorWindow : Window
             AddFrameEditLayer(result, layerTimeMs);
         };
         editor.Closed += (_, _) => commitSession?.Dispose();
-        editor.Owner = this;
-        editor.Show();
-        _ = editor.Activate();
+        return editor;
     }
 
     private void AddFrameEditLayer(AnnotationEditingResult result, double sourceTimeMs)
     {
         try
         {
-            if (result.Document.Items.Count == 0)
+            if (result.Document.Items.Count == 0 && result.RotationTurns == 0)
             {
                 _statusLabel.Text = UiText.Get("Text_1AEC9153DD98");
                 return;
@@ -2706,7 +2753,9 @@ internal sealed partial class VideoEditorWindow : Window
             // transparent. A rotated document has no transparent mapping onto the frame,
             // so the committed image — rotated base pixels included — is flattened and
             // letterboxed onto the frame (a 180° turn keeps the canvas dimensions, which
-            // is why the turn count, not the size, decides).
+            // is why the turn count, not the size, decides). Keep the entire PNG opaque:
+            // earlier frame layers were visible in the edit input and are already rotated
+            // into this image; black letterboxing prevents them showing through a second time.
             if (result.RotationTurns != 0)
             {
                 int canvasWidth = Math.Max(1, result.Document.CanvasWidth);
@@ -2782,7 +2831,7 @@ internal sealed partial class VideoEditorWindow : Window
         }
     }
 
-    private BitmapSource? TryRenderCurrentFrame()
+    private BitmapSource? TryRenderPreviewForTest()
     {
         try
         {
@@ -2796,9 +2845,8 @@ internal sealed partial class VideoEditorWindow : Window
             var visual = new DrawingVisual();
             using (DrawingContext dc = visual.RenderOpen())
             {
-                // A VisualBrush of the MediaElement captures the frame currently shown. The
-                // element is in manual/scrubbing mode, so whatever Position it is parked at
-                // is the frame we paint into the render target.
+                // This visual-only hook tests the actual preview. Persisted frames must use
+                // DecodeFrameForEditAsync, never the presenter or its correction effect.
                 var brush = new VisualBrush(_media) { Stretch = Stretch.Fill };
                 dc.DrawRectangle(brush, null, new Rect(0, 0, w, h));
                 FrameEditLayerRenderer.Draw(
@@ -3344,6 +3392,8 @@ internal sealed partial class VideoEditorWindow : Window
         _timeline.PlayheadInteractionCompleted -= OnTimelinePlayheadInteractionCompleted;
         _layerTimeline.LayerTimingChanged -= OnLayerTimingChanged;
         _layerTimeline.LayerTimingInteractionCompleted -= OnLayerTimingInteractionCompleted;
+        StudioRangeVideoEffect.Clear(_media);
+        _previewSeeks.PositionRequested -= OnPreviewPositionRequested;
         _previewSeeks.PreviewPresented -= OnPreviewPresented;
         _previewSeeks.SeekFailed -= OnPreviewSeekFailed;
         _previewSeeks.Dispose();

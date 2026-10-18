@@ -3,7 +3,7 @@ using MyCapture.Core.Platform;
 namespace MyCapture.App.Diagnostics;
 
 /// <summary>
-/// Startup gate that stops MyCapture on hosts below the supported Windows baseline.
+/// Startup gate that stops MyCapture on hosts below Windows 10 22H2 (build 19045).
 /// </summary>
 /// <remarks>
 /// The installer refuses unsupported hosts, but the portable ZIP has no installer, so the process

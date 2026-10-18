@@ -25,7 +25,7 @@ internal class FeatureTutorialWindow : Window
 {
     /// <summary>The 960×540 videos map 1:1 to this preview at 150% scaling.</summary>
     internal const double PreviewMaxWidth = 640, PreviewMaxHeight = 360;
-    private const double PreferredWidth = 720, PreferredHeight = 780, MinimumWidth = 520, MinimumHeight = 480;
+    private const double PreferredWidth = 720, PreferredHeight = 800, MinimumWidth = 520, MinimumHeight = 480;
 
     private static FeatureTutorialWindow? _open;
     private readonly ITutorialMedia _media;

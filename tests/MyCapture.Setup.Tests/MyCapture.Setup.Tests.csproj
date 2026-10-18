@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!-- Tests run on the same in-box .NET Framework runtime as the shipped setup. -->
+    <TargetFramework>net48</TargetFramework>
+    <OutputType>Library</OutputType>
+    <IsPackable>false</IsPackable>
+    <RootNamespace>MyCapture.Setup.Tests</RootNamespace>
+    <ImplicitUsings>disable</ImplicitUsings>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Reference Include="System.IO.Compression" />
+    <Reference Include="System.IO.Compression.FileSystem" />
+    <ProjectReference Include="..\..\src\MyCapture.Setup\MyCapture.Setup.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+  </ItemGroup>
+
+</Project>

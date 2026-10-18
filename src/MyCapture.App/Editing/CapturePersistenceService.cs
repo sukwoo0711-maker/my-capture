@@ -66,6 +66,8 @@ internal sealed class CapturePersistenceService
     /// </summary>
     internal Action<Guid>? BeforeRecordMetadataCommit { get; set; }
 
+    internal Func<CaptureRecord, Task>? BeforeOriginalRewriteForTest { get; set; }
+
     internal CapturePersistenceService(
         CaptureQueue queue,
         AppPaths paths,
@@ -135,6 +137,10 @@ internal sealed class CapturePersistenceService
         if (!_busyRecords.TryAdd(record.Id, 0)) throw new InvalidOperationException("The capture is already being written.");
         try
         {
+            // A pending-original retry may already have reached the live queue before a
+            // metadata/index failure. Invalidate that existing original before writing again.
+            using IDisposable? originalChange = _queue.Find(record.Id) is not null
+                ? await _queue.BeginOriginalChangeAsync(record) : null;
             long bytes = await StaThreadTask.RunAsync(
                 () => WriteOriginalFiles(record, original, initialRendered: initialRendered),
                 "MyCapture original persistence");
@@ -219,11 +225,14 @@ internal sealed class CapturePersistenceService
 
         _sourceBackfills[record.Id] = completion.Task;
         bool applied = false;
+        IDisposable? originalChange = null;
         try
         {
             long addedBytes = 0;
             if (url.Length > 0)
             {
+                originalChange = await _queue.BeginOriginalChangeAsync(record);
+                if (BeforeOriginalRewriteForTest is not null) await BeforeOriginalRewriteForTest(record);
                 string directory = _queue.GetDirectory(record);
                 addedBytes = await Task.Run(() => AddSourceUrlToImages(directory, url));
             }
@@ -231,8 +240,6 @@ internal sealed class CapturePersistenceService
             using CaptureWriteReservation reservation = await _queue.ReservePublicationAsync();
             if (!ReferenceEquals(_queue.Find(record.Id), record)) return false;
             ApplySourceFields(record, url, details, webpageTag);
-            if (url.Length > 0 && CaptureImportService.OriginalFileName(record) == CaptureFileNames.Original)
-                record.OriginalContentHash = null;
             if (addedBytes != 0) _queue.UpdateByteCount(record.Id, record.TotalBytes + addedBytes);
             applied = true;
             await _queue.PublishRecordAsync(record, reservation);
@@ -246,6 +253,7 @@ internal sealed class CapturePersistenceService
         }
         finally
         {
+            originalChange?.Dispose();
             _busyRecords.TryRemove(record.Id, out _);
             _sourceBackfills.TryRemove(record.Id, out _);
             lease.Dispose();
@@ -525,7 +533,8 @@ internal sealed class CapturePersistenceService
         BitmapSource flattened,
         AnnotationDocument document,
         IReadOnlyDictionary<string, BitmapSource> assetBitmaps,
-        long? expectedContentRevision = null)
+        long? expectedContentRevision = null,
+        BitmapSource? replacementOriginal = null)
     {
         ArgumentNullException.ThrowIfNull(record);
         ArgumentNullException.ThrowIfNull(flattened);
@@ -544,7 +553,9 @@ internal sealed class CapturePersistenceService
             RecoverRecordTransactions(record);
             ThrowIfPendingTransactionRemains(record);
             EnsureExpectedGeneration(record, expectedContentRevision);
-            FinalizeFiles files = WriteFinalizeFiles(record, flattened, document, assetBitmaps);
+            using IDisposable? originalChange = replacementOriginal is not null
+                ? _queue.BeginOriginalChange(record) : null;
+            FinalizeFiles files = WriteFinalizeFiles(record, flattened, document, assetBitmaps, replacementOriginal);
             CompleteFinalize(record, files);
             ImagePersisted?.Invoke(this, record);
         }
@@ -563,7 +574,8 @@ internal sealed class CapturePersistenceService
         BitmapSource flattened,
         AnnotationDocument document,
         IReadOnlyDictionary<string, BitmapSource> assetBitmaps,
-        long? expectedContentRevision = null)
+        long? expectedContentRevision = null,
+        BitmapSource? replacementOriginal = null)
     {
         ArgumentNullException.ThrowIfNull(record);
         ArgumentNullException.ThrowIfNull(flattened);
@@ -584,8 +596,12 @@ internal sealed class CapturePersistenceService
             RecoverRecordTransactions(record);
             ThrowIfPendingTransactionRemains(record);
             EnsureExpectedGeneration(record, expectedContentRevision);
+            using IDisposable? originalChange = replacementOriginal is not null
+                ? await _queue.BeginOriginalChangeAsync(record) : null;
+            if (replacementOriginal is not null && BeforeOriginalRewriteForTest is not null)
+                await BeforeOriginalRewriteForTest(record);
             FinalizeFiles files = await StaThreadTask.RunAsync(
-                () => WriteFinalizeFiles(record, flattened, document, assetBitmaps),
+                () => WriteFinalizeFiles(record, flattened, document, assetBitmaps, replacementOriginal),
                 "MyCapture capture persistence");
             CompleteFinalize(record, files);
             ImagePersisted?.Invoke(this, record);
@@ -616,7 +632,8 @@ internal sealed class CapturePersistenceService
         CaptureRecord record,
         BitmapSource flattened,
         AnnotationDocument document,
-        IReadOnlyDictionary<string, BitmapSource> assetBitmaps)
+        IReadOnlyDictionary<string, BitmapSource> assetBitmaps,
+        BitmapSource? replacementOriginal)
     {
         string directory = _queue.GetDirectory(record);
         Directory.CreateDirectory(directory);
@@ -627,8 +644,12 @@ internal sealed class CapturePersistenceService
         {
             long bytes = 0;
 
-            // original.png is unchanged; re-measure it so the byte total stays accurate.
-            bytes += SafeFileLength(Path.Combine(directory, CaptureFileNames.Original));
+            // Frame stills can change base geometry between attempts. Stage the original
+            // with the render/layers so rollback and startup recovery select one generation.
+            bytes += replacementOriginal is null
+                ? SafeFileLength(Path.Combine(directory, CaptureFileNames.Original))
+                : ImageCodec.SavePng(replacementOriginal,
+                    Path.Combine(stageDirectory, CaptureFileNames.Original), record.SourcePageUrl);
             bytes += SafeFileLength(Path.Combine(directory, CaptureFileNames.ImportedJpeg));
 
             // Encode and flush every new generation into a private same-volume directory. The
@@ -651,7 +672,9 @@ internal sealed class CapturePersistenceService
                 stageDirectory,
                 bytes,
                 !document.IsEmpty,
-                document.Items.Count);
+                document.Items.Count,
+                replacementOriginal?.PixelWidth,
+                replacementOriginal?.PixelHeight);
         }
         catch
         {
@@ -716,6 +739,8 @@ internal sealed class CapturePersistenceService
                 ItemCount = files.ItemCount,
                 UpdatedAt = committedAt,
                 ContentRevision = committedContentRevision,
+                OriginalWidth = files.OriginalWidth,
+                OriginalHeight = files.OriginalHeight,
                 Files = journalEntries,
             };
 
@@ -749,6 +774,7 @@ internal sealed class CapturePersistenceService
                 [0x4D, 0x43, 0x46, 0x31]); // "MCF1"
             commitMarked = true;
 
+            ApplyOriginalMetadata(record, files.OriginalWidth, files.OriginalHeight);
             record.HasAnnotations = files.HasAnnotations;
             record.UpdatedAt = committedAt;
             record.ContentRevision = committedContentRevision;
@@ -1331,6 +1357,21 @@ internal sealed class CapturePersistenceService
             return;
         }
 
+        // Recovery can replace original.png too. An earlier failed rollback may have let
+        // an import hash the interim file; invalidate it before choosing the recovered files.
+        IDisposable? originalChange;
+        try
+        {
+            originalChange = journal.Files.Any(entry => entry.FileName == CaptureFileNames.Original)
+                ? _queue.BeginOriginalChange(record) : null;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            _log.LogError(ex, "Could not invalidate original hash for {Id}; preserving its recovery files", record.Id);
+            return;
+        }
+        using IDisposable? originalChangeScope = originalChange;
+
         if (File.Exists(markerPath))
         {
             // A marker is written only after every swap. Validate that invariant before making
@@ -1346,6 +1387,7 @@ internal sealed class CapturePersistenceService
 
             try
             {
+                ApplyOriginalMetadata(record, journal.OriginalWidth, journal.OriginalHeight);
                 record.HasAnnotations = journal.HasAnnotations;
                 record.UpdatedAt = journal.UpdatedAt;
                 record.ContentRevision = journal.ContentRevision;
@@ -1584,7 +1626,7 @@ internal sealed class CapturePersistenceService
             return false;
         }
 
-        if (fileName is CaptureFileNames.Rendered or CaptureFileNames.Layers or CaptureFileNames.Thumbnail)
+        if (fileName is CaptureFileNames.Original or CaptureFileNames.Rendered or CaptureFileNames.Layers or CaptureFileNames.Thumbnail)
         {
             return true;
         }
@@ -1713,12 +1755,22 @@ internal sealed class CapturePersistenceService
         }
     }
 
+    private static void ApplyOriginalMetadata(CaptureRecord record, int? width, int? height)
+    {
+        if (width is not > 0 || height is not > 0) return;
+        record.Width = width.Value;
+        record.Height = height.Value;
+        record.OriginalContentHash = null;
+    }
+
     private readonly record struct FinalizeFiles(
         string TargetDirectory,
         string StageDirectory,
         long Bytes,
         bool HasAnnotations,
-        int ItemCount);
+        int ItemCount,
+        int? OriginalWidth,
+        int? OriginalHeight);
 
     private readonly record struct CommittedFile(
         string TargetPath,
@@ -1738,6 +1790,10 @@ internal sealed class CapturePersistenceService
         public DateTimeOffset UpdatedAt { get; set; }
 
         public long ContentRevision { get; set; }
+
+        // Nullable for journals from versions that only replaced rendered/layers.
+        public int? OriginalWidth { get; set; }
+        public int? OriginalHeight { get; set; }
 
         public List<FinalizeJournalEntry> Files { get; set; } = [];
     }

@@ -447,7 +447,7 @@ public sealed class CaptureCommitServiceTests
             () => settings,
             () => paths,
             NullLogger<CaptureCommitService>.Instance,
-            copyImageAsync);
+            copyImageAsync ?? ((_, _) => Task.FromResult(true)));
 
         BitmapSource original = Solid(48, 32);
         CaptureRecord record = persistence.PersistOriginal(original, 1.0, string.Empty, string.Empty);
@@ -467,7 +467,7 @@ public sealed class CaptureCommitServiceTests
             () => settings,
             () => paths,
             NullLogger<CaptureCommitService>.Instance,
-            copyImageAsync);
+            copyImageAsync ?? ((_, _) => Task.FromResult(true)));
         return (commit, queue, settings, paths);
     }
 

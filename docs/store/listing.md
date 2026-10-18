@@ -13,17 +13,17 @@ Partner Center의 Store 목록과 제출 옵션에 붙여 넣을 문구입니다
 - **저작권**: `Copyright (c) 2026 MyCapture contributors`
 - **앱 타일 아이콘(선택)**: 패키징 결과물 `StoreListingIcon-300.png`
 - **스크린샷**: `--selftest-store-shots`로 만든 언어별 10장 (만드는 방법은 [`README.md`](README.md#store-스크린샷-만들기))
-- **시스템 요구 사항**: Windows 11 버전 21H2(빌드 22000) 이상, x64
+- **시스템 요구 사항**: Windows 10 버전 22H2(빌드 19045) 이상, x64. ARM64 x64 에뮬레이션은 Windows 11(빌드 22000) 이상
 
 ## 한국어 (ko-KR)
 
 ### 짧은 소개
 
-개발자를 위한 무료 Windows 11 캡처·핀 도구. 오류 화면에 주석을 달고, 참고할 코드와 이미지를 다른 창 위에 띄울 수 있습니다.
+개발자를 위한 무료 Windows 캡처·핀 도구. 오류 화면에 주석을 달고, 참고할 코드와 이미지를 다른 창 위에 띄울 수 있습니다.
 
 ### 설명
 
-MyCapture는 개발자를 위한 무료 Windows 11 캡처·핀 도구입니다. 코드와 참고 화면을 곁에 두고 작업하거나, 오류가 발생한 화면을 캡처해 설명할 때 사용합니다.
+MyCapture는 개발자를 위한 무료 Windows 캡처·핀 도구입니다. 코드와 참고 화면을 곁에 두고 작업하거나, 오류가 발생한 화면을 캡처해 설명할 때 사용합니다.
 
 원하는 영역, 창, 전체 화면을 캡처하고 화살표·단계 번호·텍스트로 필요한 부분을 표시할 수 있습니다. 이미지를 자르거나 회전하고, 블러와 모자이크로 일부를 가릴 수 있습니다. 오류 재현 절차나 코드 리뷰에서 설명할 내용을 이미지로 정리할 때 유용합니다.
 
@@ -51,14 +51,13 @@ OCR로 이미지 속 글자를 텍스트로 복사하고, 표를 CSV·Markdown·
 - 키보드 조작과 스크린 리더 접근성
 - 계정, 광고, 캡처 횟수 제한 없음
 
-### 이 버전의 새로운 기능 (4.2.1)
+### 이 버전의 새로운 기능 (4.3.0)
 
-- 필드별 검색과 조건 칩으로 캡처를 찾고, 여러 캡처의 태그를 한 번에 편집할 수 있습니다.
-- PNG·JPEG·MP4를 끌어 놓아 가져오며 중복은 건너뜁니다. 이미지를 PDF로 묶거나 두 장을 비교할 수 있습니다.
-- 확정한 텍스트를 다시 수정하고 굵기와 배경 판을 바꿀 수 있습니다. 편집기에서 여러 주석을 드래그로 함께 선택해 편집할 수 있습니다.
-- 새 앱 아이콘을 적용하고, 기본 포인트 색을 아이콘의 빨강으로 맞췄습니다. 바이올렛도 고를 수 있습니다.
-- 이미지 내보내기에 형식·크기 프리셋과 꾸미기를 추가했습니다. 출처 URL 포함은 기본적으로 꺼져 있습니다.
-- 녹화의 여러 구간을 잘라 MP4·GIF로 내보낼 수 있습니다. 저장 진행률·예상 남은 시간·취소와 타임라인 자동 맞춤을 지원합니다.
+- Windows 10 버전 22H2(빌드 19045) x64에서도 설치하고 사용할 수 있습니다.
+- Windows 10에서도 녹화 중 컨트롤 창과 메뉴가 녹화 결과에 찍히지 않습니다.
+- 갤러리와 편집기가 화면에 표시되는 영상을 원본과 비교해 밝기와 색 범위를 맞춥니다.
+- 프레임 편집과 MP4·GIF 내보내기가 전체 범위 영상의 색을 원본대로 유지합니다.
+- 자막이 있는 영상 프레임을 정지 이미지로 편집해도 주석을 나중에 수정할 수 있습니다.
 
 ### 검색어
 
@@ -68,11 +67,11 @@ OCR로 이미지 속 글자를 텍스트로 복사하고, 표를 CSV·Markdown·
 
 ### Short description
 
-A free screenshot and pinning tool for developers on Windows 11. Annotate error screenshots and keep reference code or images above other windows.
+A free screenshot and pinning tool for developers on Windows 10 version 22H2 or later. Annotate error screenshots and keep reference code or images above other windows.
 
 ### Description
 
-MyCapture is a free screenshot and pinning tool for developers on Windows 11. Use it to keep code and reference images in view, or capture an error screen when explaining a problem.
+MyCapture is a free screenshot and pinning tool for developers on Windows 10 version 22H2 or later. Use it to keep code and reference images in view, or capture an error screen when explaining a problem.
 
 Capture a region, a window or the full screen, then mark the details with arrows, step numbers and text. Crop or rotate images, and cover parts with blur or mosaic when preparing a bug report or showing changes in a review.
 
@@ -100,14 +99,13 @@ MyCapture supports global shortcuts, a tray menu, Korean and English interfaces,
 - Keyboard and screen reader accessibility
 - No account, ads or capture limits
 
-### What's new in this version (4.2.1)
+### What's new in this version (4.3.0)
 
-- Find captures with field search and filter chips. Edit tags for multiple captures at once.
-- Drag in PNG, JPEG and MP4 files, skipping duplicates. Arrange images in a PDF or compare two images.
-- Reopen text annotations to edit them, and toggle bold text and background plates. Drag to select several annotations and edit them together.
-- A new app icon, with the accent color now matching its red pin by default. Violet remains available.
-- Export images with format and size presets, margins, rounded corners, backgrounds and shadows. Source URL metadata is off by default.
-- Remove multiple recording segments and export MP4 or GIF. Library saving shows progress, estimated time remaining and cancel. Timeline layers snap to nearby boundaries.
+- Install and use MyCapture on Windows 10 version 22H2 (build 19045) x64.
+- On Windows 10, the recording controls and menus stay out of the recording.
+- The gallery and editor compare the displayed video with the source and match its brightness and color range.
+- Frame edits and MP4 or GIF exports keep the colors of full-range videos.
+- Annotations on still images made from video frames with captions stay editable.
 
 ### Search terms
 

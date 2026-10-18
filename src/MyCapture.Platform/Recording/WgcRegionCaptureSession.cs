@@ -1,9 +1,12 @@
 using System.Diagnostics;
 using System.Runtime.InteropServices;
+using System.Runtime.Versioning;
 using System.Threading;
+using MyCapture.Core.Platform;
 using MyCapture.Core.Primitives;
 using MyCapture.Core.Recording;
 using MyCapture.Platform.Interop;
+using Windows.Foundation.Metadata;
 using Windows.Graphics;
 using Windows.Graphics.Capture;
 using Windows.Graphics.DirectX;
@@ -33,7 +36,7 @@ public sealed record WgcCaptureDiagnostics(
     string? BorderlessAccess,
     bool? BorderRequired,
     string? BorderSetError,
-    bool CursorCaptureEnabled,
+    bool? CursorCaptureEnabled,
     double CreateMs,
     double FirstFrameWaitMs,
     long FramesArrived,
@@ -77,6 +80,17 @@ public sealed unsafe class WgcRegionCaptureSession : IDisposable
     private static readonly TimeSpan BorderlessRequestTimeout = TimeSpan.FromSeconds(3);
     private static readonly object BorderlessGate = new();
     private static string? s_borderlessAccess;
+    private static readonly bool BorderPropertyPresent = ApiInformation.IsPropertyPresent(
+        "Windows.Graphics.Capture.GraphicsCaptureSession", "IsBorderRequired");
+    private static readonly bool BorderlessAccessPresent = ApiInformation.IsTypePresent(
+        "Windows.Graphics.Capture.GraphicsCaptureAccess") && ApiInformation.IsMethodPresent(
+        "Windows.Graphics.Capture.GraphicsCaptureAccess", "RequestAccessAsync");
+    private static readonly bool CursorPropertyPresent = ApiInformation.IsPropertyPresent(
+        "Windows.Graphics.Capture.GraphicsCaptureSession", "IsCursorCaptureEnabled");
+
+    [SupportedOSPlatformGuard("windows10.0.22000.0")]
+    private static bool HasBorderProperty => OperatingSystem.IsWindowsVersionAtLeast(10, 0, 22000)
+        && WindowsFeatureSupport.HasBorderlessCapture(Environment.OSVersion.Version.Build) && BorderPropertyPresent;
 
     private readonly object _frameGate = new();
     private readonly ManualResetEventSlim _frameArrived = new(false);
@@ -102,7 +116,7 @@ public sealed unsafe class WgcRegionCaptureSession : IDisposable
     private string? _borderlessAccess;
     private bool? _borderRequired;
     private string? _borderSetError;
-    private bool _cursorCaptureEnabled;
+    private bool? _cursorCaptureEnabled;
     private double _createMs;
     private double _firstFrameWaitMs;
     private long _framesArrived;
@@ -149,6 +163,15 @@ public sealed unsafe class WgcRegionCaptureSession : IDisposable
     /// <see langword="false"/> to observe the default yellow border.
     /// </param>
     public static WgcRegionCaptureSession Create(RectD screenRegion, bool includeCursor, bool requestBorderless = true)
+    {
+        // Windows 10 can require Close on the creating apartment despite the session's
+        // agile metadata. Keep creation and disposal in the shared MTA, including STA callers.
+        return Thread.CurrentThread.GetApartmentState() == ApartmentState.MTA
+            ? CreateOnMta(screenRegion, includeCursor, requestBorderless)
+            : Task.Run(() => CreateOnMta(screenRegion, includeCursor, requestBorderless)).GetAwaiter().GetResult();
+    }
+
+    private static WgcRegionCaptureSession CreateOnMta(RectD screenRegion, bool includeCursor, bool requestBorderless)
     {
         RectD pixels = screenRegion.Normalized().ToPixelBounds();
         if (!IsSupported())
@@ -281,28 +304,45 @@ public sealed unsafe class WgcRegionCaptureSession : IDisposable
             _winrtDevice, DirectXPixelFormat.B8G8R8A8UIntNormalized, PoolBuffers, _poolSize);
         _pool.FrameArrived += OnFrameArrived;
         _session = _pool.CreateCaptureSession(item);
-        _session.IsCursorCaptureEnabled = includeCursor;
-        _cursorCaptureEnabled = _session.IsCursorCaptureEnabled;
-        if (requestBorderless)
+        if (CursorPropertyPresent)
         {
-            _borderlessAccess = RequestBorderlessAccess();
             try
             {
-                _session.IsBorderRequired = false;
+                _session.IsCursorCaptureEnabled = includeCursor;
+                _cursorCaptureEnabled = _session.IsCursorCaptureEnabled;
             }
-            catch (Exception ex) when (ex is COMException or UnauthorizedAccessException or InvalidOperationException)
+            catch (Exception ex) when (ex is COMException or InvalidCastException or InvalidOperationException)
             {
-                _borderSetError = $"{ex.GetType().Name} 0x{ex.HResult:X8}";
+                // The default cursor remains when the projected interface is unavailable.
             }
         }
 
-        try
+        WgcBorderPlan border = WgcBorderPolicy.Resolve(HasBorderProperty, BorderlessAccessPresent, requestBorderless);
+        _borderlessAccess = border.Diagnostic;
+        if (HasBorderProperty)
         {
-            _borderRequired = _session.IsBorderRequired;
+            if (border.RequestAccess) _borderlessAccess = RequestBorderlessAccess();
+            try
+            {
+                if (border.SetProperty) _session.IsBorderRequired = border.BorderRequired;
+            }
+            catch (Exception ex) when (ex is COMException or UnauthorizedAccessException or InvalidOperationException or InvalidCastException)
+            {
+                _borderSetError = $"{ex.GetType().Name} 0x{ex.HResult:X8}";
+            }
+
+            try
+            {
+                if (border.ReadProperty) _borderRequired = _session.IsBorderRequired;
+            }
+            catch (Exception ex) when (ex is COMException or InvalidOperationException or InvalidCastException)
+            {
+                _borderSetError ??= $"read {ex.GetType().Name} 0x{ex.HResult:X8}";
+            }
         }
-        catch (Exception ex) when (ex is COMException or InvalidOperationException)
+        else
         {
-            _borderSetError ??= $"read {ex.GetType().Name} 0x{ex.HResult:X8}";
+            _borderSetError = border.Diagnostic;
         }
 
         _session.StartCapture();
@@ -534,6 +574,7 @@ public sealed unsafe class WgcRegionCaptureSession : IDisposable
         }
     }
 
+    [SupportedOSPlatform("windows10.0.22000.0")]
     private static string RequestBorderlessAccess()
     {
         lock (BorderlessGate)
@@ -551,7 +592,7 @@ public sealed unsafe class WgcRegionCaptureSession : IDisposable
                 s_borderlessAccess = request.Wait(BorderlessRequestTimeout) ? request.Result.ToString() : "Timeout";
             }
             catch (Exception ex) when (ex is COMException or UnauthorizedAccessException or AggregateException
-                or InvalidOperationException or TypeLoadException)
+                or InvalidOperationException or TypeLoadException or InvalidCastException)
             {
                 Exception root = ex is AggregateException aggregate ? aggregate.GetBaseException() : ex;
                 s_borderlessAccess = $"{root.GetType().Name} 0x{root.HResult:X8}";
@@ -589,6 +630,19 @@ public sealed unsafe class WgcRegionCaptureSession : IDisposable
 
     /// <summary>Stops the capture and releases GPU resources. Safe from any thread, once or more.</summary>
     public void Dispose()
+    {
+        if (Thread.CurrentThread.GetApartmentState() == ApartmentState.MTA)
+        {
+            DisposeOnMta();
+        }
+        else
+        {
+            // Dispatch before taking _frameGate: closing the pool may wait for FrameArrived.
+            Task.Run(DisposeOnMta).GetAwaiter().GetResult();
+        }
+    }
+
+    private void DisposeOnMta()
     {
         Direct3D11CaptureFrame? latest;
         lock (_frameGate)

@@ -123,11 +123,11 @@ internal sealed class TimelineFilmstrip : IDisposable
         int decoded = 0;
         try
         {
-            reader = new MediaFoundationVideoFrameReader(_sourcePath);
+            reader = RangeAwareVideoFrameDecoder.Open(_sourcePath);
             for (int index = 0; index < Layout.TileCount; index++)
             {
                 token.ThrowIfCancellationRequested();
-                DecodedVideoFrame frame = reader.ReadFrameAt(Layout.SampleTimeMs(index), token);
+                DecodedVideoFrame frame = RangeAwareVideoFrameDecoder.ReadBgr32(reader, Layout.SampleTimeMs(index), token);
                 if (frame.Format != DecodedVideoPixelFormat.Bgr32)
                 {
                     throw new InvalidOperationException(

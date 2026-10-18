@@ -19,8 +19,8 @@ internal readonly record struct WindowChromePlan(bool DarkMode, int? CaptionColo
 /// Opt-in attached behavior for native captions and Windows 11 rounded corners. The caption is
 /// painted with the colour the client area actually shows, so the system title bar and the
 /// window body read as one surface while Windows keeps dragging, snapping, caption buttons
-/// and accessibility. Unsupported DWM attributes (before Windows 11 build 22000, remote or
-/// non-DWM sessions) fail silently and leave normal chrome.
+/// and accessibility. Optional attributes are selected by build; DWM failures in remote or
+/// non-DWM sessions silently leave normal chrome.
 /// </summary>
 public static class ModernWindowChrome
 {
@@ -221,7 +221,7 @@ public static class ModernWindowChrome
         WindowChromePlan plan = ResolveChrome(theme, role, ThemeService.IsSystemHighContrast);
 
         // Every palette paints its base surface, glass included. A transparent window would
-        // show WPF's black clear colour, which no longer matched the Mica caption above it.
+        // show WPF's black clear colour instead of the selected palette.
         if (window.TryFindResource("Surface.Base") is Brush surface)
         {
             window.Background = surface;
@@ -256,23 +256,31 @@ public static class ModernWindowChrome
         }
 
         // The client is opaque, so no system backdrop or extended frame can show through it.
-        // Build 22621 is the first to accept the backdrop attribute; earlier builds ignore it.
-        int backdrop = DwmsbtNone;
-        _ = DwmSetWindowAttribute(handle, DwmwaSystemBackdropType, ref backdrop, sizeof(int));
+        int build = Environment.OSVersion.Version.Build;
+        if (WindowsFeatureSupport.HasSystemBackdrop(build))
+        {
+            int backdrop = DwmsbtNone;
+            _ = DwmSetWindowAttribute(handle, DwmwaSystemBackdropType, ref backdrop, sizeof(int));
+        }
         Margins margins = default;
         _ = DwmExtendFrameIntoClientArea(handle, ref margins);
 
-        // Caption colours exist from build 22000. High Contrast hands the caption back to the
-        // user's system palette instead of keeping a colour from an earlier theme.
-        int border = plan.BorderColor ?? DwmColorDefault;
-        int caption = plan.CaptionColor ?? DwmColorDefault;
-        int text = plan.TextColor ?? DwmColorDefault;
-        _ = DwmSetWindowAttribute(handle, DwmwaBorderColor, ref border, sizeof(int));
-        _ = DwmSetWindowAttribute(handle, DwmwaCaptionColor, ref caption, sizeof(int));
-        _ = DwmSetWindowAttribute(handle, DwmwaTextColor, ref text, sizeof(int));
+        // High Contrast hands the caption back to the user's system palette.
+        if (WindowsFeatureSupport.HasDwmCaptionColors(build))
+        {
+            int border = plan.BorderColor ?? DwmColorDefault;
+            int caption = plan.CaptionColor ?? DwmColorDefault;
+            int text = plan.TextColor ?? DwmColorDefault;
+            _ = DwmSetWindowAttribute(handle, DwmwaBorderColor, ref border, sizeof(int));
+            _ = DwmSetWindowAttribute(handle, DwmwaCaptionColor, ref caption, sizeof(int));
+            _ = DwmSetWindowAttribute(handle, DwmwaTextColor, ref text, sizeof(int));
+        }
 
-        int rounded = DwmWcpRound;
-        _ = DwmSetWindowAttribute(handle, DwmwaWindowCornerPreference, ref rounded, sizeof(int));
+        if (WindowsFeatureSupport.HasRoundedWindowCorners(build))
+        {
+            int rounded = DwmWcpRound;
+            _ = DwmSetWindowAttribute(handle, DwmwaWindowCornerPreference, ref rounded, sizeof(int));
+        }
     }
 
     private static IntPtr OnWindowMessage(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)

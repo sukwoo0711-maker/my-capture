@@ -152,10 +152,10 @@
         </DataTemplate>
 
         <DataTemplate x:Key="Gallery.TileTemplate" DataType="{x:Type gallery:GalleryItemViewModel}">
-            <!-- The card fills its cell of the row (GalleryCardRowPanel) inside 6px margins and the
-                 item's 2px selection outline: 208 to 320 wide, 244 x 292 being the reference size.
+            <!-- The card fills its cell of the row (GalleryCardRowPanel) inside the item's
+                 8-DIP content inset: 208 to 320 wide, 244 x 292 being the reference size.
                  Only the preview area grows with it; the image keeps its own proportions. -->
-            <Border x:Name="TileCard" Margin="6"
+            <Border x:Name="TileCard"
                     Background="{DynamicResource Surface.Raised}"
                     BorderBrush="{DynamicResource Border.Subtle}"
                     BorderThickness="1"
@@ -429,9 +429,7 @@
                                                 Style="{StaticResource StateLayer.Selected}"
                                                 BorderThickness="2"
                                                 CornerRadius="{StaticResource Radius.Lg}" />
-                                        <Border BorderThickness="2">
-                                            <ContentPresenter />
-                                        </Border>
+                                        <ContentPresenter Margin="8" />
                                     </Grid>
                                     <ControlTemplate.Triggers>
                                         <Trigger Property="IsMouseOver" Value="True">
@@ -483,7 +481,7 @@
              stay on the card; float, copy and edit remain on the keyboard, double-click and the
              details panel. Selection, dragging and the automation name are the full card's. -->
         <DataTemplate x:Key="Gallery.CompactTileTemplate" DataType="{x:Type gallery:GalleryItemViewModel}">
-            <Border x:Name="CompactTileCard" Margin="6"
+            <Border x:Name="CompactTileCard"
                     Background="{DynamicResource Surface.Raised}"
                     BorderBrush="{DynamicResource Border.Subtle}"
                     BorderThickness="1"
@@ -627,8 +625,8 @@
                       Figures="M0,10 A10,10 0 0 1 10,0 L84,0 C90,0 92,3 95,7 L97,10 C99,13 101,14 106,14 L232,14 A12,12 0 0 1 244,26 L244,280 A12,12 0 0 1 232,292 L12,292 A12,12 0 0 1 0,280 Z" />
 
         <!-- Folder cards fill the same cells as capture cards (GalleryCardRowPanel), so they share
-             the capture card's size. Their 8-DIP margins match a tile's 6-DIP margins plus its 2-DIP
-             selection outline, so folder and capture rows share one column grid for arrow keys. The
+             the capture card's size. Both apply their 8-DIP inset in one layout step, avoiding
+             separate rounding of 6-DIP margins and a 2-DIP outline at fractional DPI. The
              folder tab, warm Surface.Folder fill, Border.Folder outline and a large folder glyph
              keep them apart from captures in every palette. -->
         <Style x:Key="Gallery.FolderCardButton" TargetType="Button">
@@ -1459,14 +1457,15 @@
                              ToolTip="{Binding SearchToolTip}"
                              AutomationProperties.Name="{loc:Text Text_4B8D541EBE6D}"
                              TextChanged="OnSearchTextChanged" />
-                    <TextBlock Grid.Column="1" IsHitTestVisible="False"
+                    <gallery:LibrarySearchPlaceholder x:Name="SearchPlaceholderText" Grid.Column="1" IsHitTestVisible="False"
+                               FullText="{Binding SearchPlaceholder}" CompactText="{Binding CompactSearchPlaceholder}"
                                Foreground="{DynamicResource Text.Muted}"
                                Margin="10,0"
                                TextTrimming="CharacterEllipsis"
                                VerticalAlignment="Center">
                         <TextBlock.Style>
                             <Style TargetType="TextBlock">
-                                <Setter Property="Text" Value="{Binding SearchPlaceholder}" />
+                                <Setter Property="Text" Value="{Binding FittedText, RelativeSource={RelativeSource Self}}" />
                                 <Setter Property="Visibility" Value="Collapsed" />
                                 <Style.Triggers>
                                     <DataTrigger Binding="{Binding HasSelection}" Value="True">
@@ -1478,7 +1477,7 @@
                                 </Style.Triggers>
                             </Style>
                         </TextBlock.Style>
-                    </TextBlock>
+                    </gallery:LibrarySearchPlaceholder>
                 </Grid>
             </Grid>
 

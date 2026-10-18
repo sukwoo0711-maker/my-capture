@@ -153,8 +153,8 @@ internal static class RecordingSelfTest
                 return null;
             }
 
-            // Start() returns before encoder initialization, and IsReady becomes true before
-            // the first capture/WriteSample. Cold codec work can exceed this entire sample.
+            // Start() returns before initialization, and IsReady becomes true before the
+            // first WriteSample. Cold codec work can exceed this entire sample.
             // Start the measured interval only after a real frame was successfully written.
             var startup = Stopwatch.StartNew();
             while (!firstWrittenFrame.Wait(50) && recorder.IsRecording
@@ -185,8 +185,7 @@ internal static class RecordingSelfTest
             report.AppendLine(string.Create(
                 CultureInfo.InvariantCulture,
                 $"{label}: {result.EmittedFrames} frame(s), {result.DurationMs:0}ms, {result.Width}x{result.Height} -> {Path.GetFileName(outputPath)}"));
-            report.AppendLine($"{label}: capture backend requested={grabber.RequestedBackend} active={grabber.ActiveBackend}" +
-                (grabber.FallbackReason is null ? string.Empty : $" fallback={grabber.FallbackReason}"));
+            AppendCaptureDiagnostics(report, label, grabber, result);
             CheckContainerEndsAtLastFrame(outputPath, observer?.LastTimestampMs, result.Fps, report, failures, label);
 
             return result;
@@ -231,8 +230,9 @@ internal static class RecordingSelfTest
         string label)
     {
         var frames = new TimestampObserver();
+        var grabber = new RegionFrameGrabber(engine, settings.IncludeCursor);
         var recorder = new RegionRecorder(
-            new RegionFrameGrabber(engine, settings.IncludeCursor),
+            grabber,
             options => frames.Wrap(new MediaFoundationVideoEncoder(options, NullLogger<MediaFoundationVideoEncoder>.Instance)),
             NullLogger.Instance);
         try
@@ -251,7 +251,8 @@ internal static class RecordingSelfTest
                 return;
             }
 
-            // Recorded time already includes the first frame's encoder warm-up.
+            report.AppendLine($"{label}: first encoded frame after {startup.Elapsed.TotalMilliseconds:0}ms");
+            // Any first WriteSample cost after pixel readiness is already on the clock.
             double recordedBeforeSample = recorder.RecordedElapsed.TotalMilliseconds;
             var wall = Stopwatch.StartNew();
             Thread.Sleep(beforePauseMs);
@@ -293,6 +294,7 @@ internal static class RecordingSelfTest
             double expectedMs = recordedBeforeSample + beforePauseMs + (stopWhilePaused ? 0 : afterResumeMs);
             IReadOnlyList<double> timestamps = frames.Timestamps;
             double maxGap = 0;
+            int maxGapEndIndex = -1;
             for (int i = 1; i < timestamps.Count; i++)
             {
                 if (timestamps[i] <= timestamps[i - 1])
@@ -301,7 +303,12 @@ internal static class RecordingSelfTest
                     break;
                 }
 
-                maxGap = Math.Max(maxGap, timestamps[i] - timestamps[i - 1]);
+                double gap = timestamps[i] - timestamps[i - 1];
+                if (gap > maxGap)
+                {
+                    maxGap = gap;
+                    maxGapEndIndex = i;
+                }
             }
 
             (bool opened, int w, int h, double decodedMs, double? playerMs) = Probe(outputPath);
@@ -311,6 +318,12 @@ internal static class RecordingSelfTest
                 $"paused {result.PausedMs:0}ms x{result.PauseCount}, wall {wallMs:0}ms, max gap {maxGap:0}ms, " +
                 $"dropped {result.DroppedFrames}, effective {result.EffectiveFps:0.0}fps; " +
                 $"decode opened={opened} {w}x{h} container {decodedMs:0.###}ms, WPF {FormatPlayer(playerMs)} -> {Path.GetFileName(outputPath)}"));
+            AppendCaptureDiagnostics(report, label, grabber, result);
+            if (maxGapEndIndex >= 1)
+            {
+                report.AppendLine($"{label}: largest timestamp gap: " +
+                    DescribeTimestampGap(timestamps, maxGapEndIndex, framesAtPause, !stopWhilePaused));
+            }
             CheckContainerEndsAtLastFrame(
                 outputPath,
                 timestamps.Count > 0 ? timestamps[^1] : null,
@@ -334,10 +347,11 @@ internal static class RecordingSelfTest
                 failures.Add($"{label}: recorded duration {result.DurationMs:0}ms is not ~{expectedMs:0}ms");
             }
 
-            // The pause must not leave a hole in the timeline.
+            // Reject holes anywhere, but distinguish startup and resume from other stalls.
             if (maxGap > 500)
             {
-                failures.Add($"{label}: {maxGap:0}ms timestamp gap — the paused span leaked into the timeline");
+                failures.Add($"{label}: timestamp gap exceeds 500ms: " +
+                    DescribeTimestampGap(timestamps, maxGapEndIndex, framesAtPause, !stopWhilePaused));
             }
 
             if (!opened)
@@ -372,6 +386,31 @@ internal static class RecordingSelfTest
         {
             recorder.Dispose();
         }
+    }
+
+    internal static string DescribeTimestampGap(IReadOnlyList<double> timestamps, int endIndex,
+        int framesAtPause, bool resumed)
+    {
+        string phase = endIndex == 1 ? "first-frame boundary"
+            : resumed && endIndex == framesAtPause ? "resume boundary" : "active recording";
+        return string.Create(CultureInfo.InvariantCulture,
+            $"{timestamps[endIndex] - timestamps[endIndex - 1]:0.###}ms between frames {endIndex} and {endIndex + 1} " +
+            $"({timestamps[endIndex - 1]:0.###} -> {timestamps[endIndex]:0.###}ms), {phase}");
+    }
+
+    private static void AppendCaptureDiagnostics(StringBuilder report, string label,
+        RegionFrameGrabber grabber, RecordingResult result)
+    {
+        report.AppendLine($"{label}: capture backend requested={grabber.RequestedBackend} active={grabber.ActiveBackend}" +
+            (grabber.FallbackReason is null ? string.Empty : $" fallback={grabber.FallbackReason}"));
+        if (result.Performance is { } timing)
+            report.AppendLine(string.Create(CultureInfo.InvariantCulture,
+                $"{label}: initialization={timing.InitializationMs:0.###}ms, capture max={timing.CaptureMaxMs:0.###}ms, " +
+                $"encode max={timing.EncodeMaxMs:0.###}ms, session open wait={grabber.SessionOpenMs:0.###}ms"));
+        if (grabber.WgcDiagnostics is { } wgc)
+            report.AppendLine(string.Create(CultureInfo.InvariantCulture,
+                $"{label}: WGC create={wgc.CreateMs:0.###}ms, first frame wait={wgc.FirstFrameWaitMs:0.###}ms, " +
+                $"copied={wgc.FramesCopied}, reused={wgc.ReusedCalls}"));
     }
 
     private sealed class TimestampObserver

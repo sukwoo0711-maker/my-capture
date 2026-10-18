@@ -56,6 +56,7 @@ internal sealed class MediaElementPreviewEngine : IVideoPreviewEngine
             () =>
             {
                 ObjectDisposedException.ThrowIf(_disposed, this);
+                StudioRangeVideoEffect.PositionRequested(_media);
                 _media.Pause();
                 _media.Position = TimeSpan.FromMilliseconds(position);
             },

@@ -1,11 +1,12 @@
 ﻿[CmdletBinding()]
 param(
-    [string]$Version = '4.2.1',
+    [string]$Version = '4.3.0',
     [string]$ArtifactRoot = ''
 )
 
 Set-StrictMode -Version 2.0
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'setup-test-common.ps1')
 
 $semVerPattern = '^(?<major>0|[1-9]\d*)\.(?<minor>0|[1-9]\d*)\.(?<patch>0|[1-9]\d*)(?:-(?<prerelease>(?:0|[1-9]\d*|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*)(?:\.(?:0|[1-9]\d*|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*))*))?$'
 $versionMatch = [regex]::Match($Version, $semVerPattern)
@@ -17,11 +18,12 @@ $binaryVersion = "$baseVersion.0"
 
 $repo = [IO.Path]::GetFullPath((Split-Path -Parent (Split-Path -Parent $PSScriptRoot))).TrimEnd('\')
 if ([string]::IsNullOrWhiteSpace($ArtifactRoot)) {
-    $ArtifactRoot = Join-Path $repo "artifacts\release\$Version"
+    $ArtifactRoot = Join-Path ([IO.Path]::GetTempPath()) ('MyCapture-synthetic-package-' + [guid]::NewGuid().ToString('N'))
+    $syntheticRoot = $ArtifactRoot
 }
+else { $syntheticRoot = $null }
 $ArtifactRoot = [IO.Path]::GetFullPath($ArtifactRoot).TrimEnd('\')
-$installerScript = Join-Path $repo 'build\installer\install.ps1'
-$powerShellExe = Join-Path $PSHOME 'powershell.exe'
+$installerExe = Join-Path $ArtifactRoot 'installer-stage\MyCaptureSetup.exe'
 $payload = Join-Path $ArtifactRoot "MyCapture-$Version-win-x64-portable.zip"
 $manifestPath = Join-Path $ArtifactRoot 'installer-manifest.json'
 $releaseManifestPath = Join-Path $ArtifactRoot 'release-manifest.json'
@@ -29,6 +31,8 @@ $publish = Join-Path $ArtifactRoot 'publish-win-x64'
 $tempRoot = Join-Path ([IO.Path]::GetTempPath()) ('MyCapture-installer-tests-' + [guid]::NewGuid().ToString('N'))
 $script:PassCount = 0
 $script:InvocationCount = 0
+$previousDataRoot = $env:MYCAPTURE_DATA_ROOT
+$env:MYCAPTURE_DATA_ROOT = Join-Path $tempRoot 'isolated-data'
 
 function Assert-True([bool]$Condition, [string]$Message) {
     if (-not $Condition) { throw $Message }
@@ -65,22 +69,20 @@ function Invoke-Installer(
     $script:InvocationCount++
     $log = Join-Path $tempRoot ("install-{0:00}.log" -f $script:InvocationCount)
     $arguments = @(
-        '-NoLogo', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass',
-        '-File', $installerScript,
-        '-Quiet', '-NoShellIntegration',
-        '-InstallRoot', $InstallRoot,
-        '-PayloadPath', $PayloadPath,
-        '-ManifestPath', $ManifestFile,
-        '-LogPath', $log
+        '/quiet', '--no-shell-integration',
+        '--install-root', $InstallRoot,
+        '--payload', $PayloadPath,
+        '--manifest', $ManifestFile,
+        '--log', $log
     )
     $arguments += $ExtraArguments
-    $null = & $powerShellExe @arguments 2>&1
+    $null = & $installerExe @arguments 2>&1
     return [int]$LASTEXITCODE
 }
 
 function Invoke-UpdaterInstaller([string]$TargetRoot, [string[]]$ExtraArguments) {
     $sessions = Join-Path (Split-Path -Parent $TargetRoot) '.MyCapture.updates'
-    $sessionDirectory = Join-Path $sessions ('update-' + $Version + '-' + [guid]::NewGuid().ToString('N'))
+    $sessionDirectory = Join-Path $sessions ('update-' + $baseVersion + '-' + [guid]::NewGuid().ToString('N'))
     [IO.Directory]::CreateDirectory($sessionDirectory) | Out-Null
     $sessionFile = Join-Path $sessionDirectory 'update-session.json'
     $token = [guid]::NewGuid().ToString('N')
@@ -105,12 +107,11 @@ function Invoke-UpdaterInstaller([string]$TargetRoot, [string[]]$ExtraArguments)
     Write-Pass 'updater-receipt' "exit=$code with exact session, version, and isolated custom target" | Out-Host
     return $code
 }
-function Invoke-Uninstaller([string]$ScriptPath, [string]$LogPath) {
+function Invoke-Uninstaller([string]$ExecutablePath, [string]$LogPath) {
     $arguments = @(
-        '-NoLogo', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass',
-        '-File', $ScriptPath, '-Quiet', '-LogPath', $LogPath
+        '/uninstall', '/quiet', '--log', $LogPath
     )
-    $null = & $powerShellExe @arguments 2>&1
+    $null = & $ExecutablePath @arguments 2>&1
     return [int]$LASTEXITCODE
 }
 
@@ -141,6 +142,13 @@ function New-ManifestForPayload([string]$PayloadPath, [string]$Destination) {
     $copy | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $Destination -Encoding UTF8
 }
 
+function Read-SharedText([string]$Path) {
+    # Share write access so polling never blocks the deferred worker's appended log lines.
+    $stream = New-Object IO.FileStream($Path, [IO.FileMode]::Open, [IO.FileAccess]::Read, ([IO.FileShare]::ReadWrite -bor [IO.FileShare]::Delete))
+    try { $reader = New-Object IO.StreamReader($stream, [Text.Encoding]::UTF8); return $reader.ReadToEnd() }
+    finally { $stream.Dispose() }
+}
+
 function Get-RunValue {
     try {
         $value = (Get-ItemProperty -Path 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run' -Name MyCapture -ErrorAction Stop).MyCapture
@@ -158,9 +166,6 @@ function Assert-NoTransactionArtifacts {
 Add-Type -AssemblyName System.IO.Compression -ErrorAction Stop
 Add-Type -AssemblyName System.IO.Compression.FileSystem -ErrorAction Stop
 
-foreach ($required in @($installerScript, $powerShellExe, $payload, $manifestPath, $publish)) {
-    if (-not (Test-Path -LiteralPath $required)) { throw "Required test input is missing: $required" }
-}
 [IO.Directory]::CreateDirectory($tempRoot) | Out-Null
 
 $initialRunValue = Get-RunValue
@@ -176,6 +181,10 @@ $userDataSentinel = Join-Path $userDataRoot 'preserve-me.bin'
 $userDataHash = Get-Sha256 $userDataSentinel
 
 try {
+    if ($syntheticRoot) { New-SyntheticSetupPackage $syntheticRoot $Version }
+    foreach ($required in @($installerExe, $payload, $manifestPath, $publish)) {
+        if (-not (Test-Path -LiteralPath $required)) { throw "Required test input is missing: $required" }
+    }
     # Contract: emitted manifest, publish tree, ZIP, bootstrap files, and source versions agree.
     $manifest = Get-Content -LiteralPath $manifestPath -Raw -Encoding UTF8 | ConvertFrom-Json
     Assert-Equal 1 ([int]$manifest.SchemaVersion) 'Unexpected installer manifest schema.'
@@ -222,12 +231,12 @@ try {
     Assert-Equal (Get-Item -LiteralPath $payload).Length ([long]$manifest.Payload.Bytes) 'Payload bytes mismatch.'
     Assert-Equal (Get-Sha256 $payload) ([string]$manifest.Payload.Sha256) 'Payload hash mismatch.'
     foreach ($bootstrap in @($manifest.BootstrapFiles)) {
-        $source = Join-Path $repo "build\installer\$($bootstrap.Path)"
+        $source = Join-Path (Split-Path -Parent $installerExe) ([string]$bootstrap.Path)
         Assert-True (Test-Path -LiteralPath $source -PathType Leaf) "Bootstrap file missing: $($bootstrap.Path)"
         Assert-Equal ([long]$bootstrap.Bytes) (Get-Item -LiteralPath $source).Length "Bootstrap size mismatch: $($bootstrap.Path)"
         Assert-Equal ([string]$bootstrap.Sha256) (Get-Sha256 $source) "Bootstrap hash mismatch: $($bootstrap.Path)"
     }
-    Assert-Equal 5 @($manifest.BootstrapFiles).Count 'Bootstrap file count mismatch.'
+    Assert-Equal 3 @($manifest.BootstrapFiles).Count 'Bootstrap file count mismatch.'
 
     [xml]$props = Get-Content -LiteralPath (Join-Path $repo 'Directory.Build.props') -Raw
     $sourceVersion = [string]$props.SelectSingleNode('//Version').InnerText
@@ -246,11 +255,11 @@ try {
     Assert-True ($sourceCommit -cmatch '^(?:[0-9a-f]{40}|[0-9a-f]{64})$') 'Release source commit is not canonical lowercase hex.'
     Assert-Equal $true ([bool]$releaseManifest.SourceTreeClean) 'Release source tree was not clean.'
     Assert-Equal "$Version+$sourceCommit" $dllVersionInfo.ProductVersion 'Binary informational version does not match release source commit.'
-    Write-Pass 'package-contract' "files=$($actualFiles.Count), bootstrap=5, forward-slash ZIP, version=$Version, commit=$sourceCommit"
+    Write-Pass 'package-contract' "files=$($actualFiles.Count), bootstrap=3, forward-slash ZIP, version=$Version, commit=$sourceCommit"
 
     # VerifyOnly must fully hash/extract/validate while leaving no installation root.
     $verifyRoot = Join-Path $tempRoot 'verify-only'
-    $code = Invoke-Installer $verifyRoot $payload $manifestPath @('-VerifyOnly')
+    $code = Invoke-Installer $verifyRoot $payload $manifestPath @('--verify-only')
     Assert-Equal 0 $code 'VerifyOnly should succeed.'
     Assert-True (-not (Test-Path -LiteralPath $verifyRoot)) 'VerifyOnly created an install root.'
     Assert-NoTransactionArtifacts
@@ -267,7 +276,7 @@ try {
         $corruptStream.WriteByte([byte](($original -bxor 0x5A) -band 0xFF))
     }
     finally { $corruptStream.Dispose() }
-    $code = Invoke-Installer (Join-Path $tempRoot 'corrupt-root') $corruptPayload $manifestPath @('-VerifyOnly')
+    $code = Invoke-Installer (Join-Path $tempRoot 'corrupt-root') $corruptPayload $manifestPath @('--verify-only')
     Assert-Equal 14 $code 'Corrupt payload should use integrity exit 14.'
     Write-Pass 'corrupt-payload' 'exit=14'
 
@@ -276,7 +285,7 @@ try {
     $traversalManifest = Join-Path $tempRoot 'traversal-manifest.json'
     New-ZipWithEntries $traversalZip @('../outside.txt')
     New-ManifestForPayload $traversalZip $traversalManifest
-    $code = Invoke-Installer (Join-Path $tempRoot 'traversal-root') $traversalZip $traversalManifest @('-VerifyOnly')
+    $code = Invoke-Installer (Join-Path $tempRoot 'traversal-root') $traversalZip $traversalManifest @('--verify-only')
     Assert-Equal 14 $code 'Traversal ZIP should use integrity exit 14.'
     Assert-True (-not (Test-Path -LiteralPath (Join-Path $tempRoot 'outside.txt'))) 'Traversal wrote outside staging.'
     Write-Pass 'zip-traversal' 'exit=14 and no escaped file'
@@ -286,7 +295,7 @@ try {
     $duplicateManifest = Join-Path $tempRoot 'duplicate-manifest.json'
     New-ZipWithEntries $duplicateZip @('MyCapture.dll', 'mycapture.dll')
     New-ManifestForPayload $duplicateZip $duplicateManifest
-    $code = Invoke-Installer (Join-Path $tempRoot 'duplicate-root') $duplicateZip $duplicateManifest @('-VerifyOnly')
+    $code = Invoke-Installer (Join-Path $tempRoot 'duplicate-root') $duplicateZip $duplicateManifest @('--verify-only')
     Assert-Equal 14 $code 'Duplicate ZIP should use integrity exit 14.'
     Write-Pass 'zip-duplicate' 'case-insensitive duplicate rejected with exit=14'
 
@@ -295,13 +304,13 @@ try {
     [IO.Directory]::CreateDirectory($unownedRoot) | Out-Null
     $unownedSentinel = Join-Path $unownedRoot 'keep.txt'
     [IO.File]::WriteAllText($unownedSentinel, 'do-not-touch')
-    $code = Invoke-Installer $unownedRoot $payload $manifestPath @('-VerifyOnly')
+    $code = Invoke-Installer $unownedRoot $payload $manifestPath @('--verify-only')
     Assert-Equal 20 $code 'Unowned populated root should use exit 20.'
     Assert-Equal 'do-not-touch' ([IO.File]::ReadAllText($unownedSentinel)) 'Unowned root was modified.'
     Write-Pass 'unowned-root' 'exit=20 and sentinel preserved'
 
     # MinimumFreeBytes provides a deterministic insufficient-space path without filling a disk.
-    $code = Invoke-Installer (Join-Path $tempRoot 'disk-root') $payload $manifestPath @('-VerifyOnly', '-MinimumFreeBytes', '9223372036854775807')
+    $code = Invoke-Installer (Join-Path $tempRoot 'disk-root') $payload $manifestPath @('--verify-only', '--minimum-free-bytes', '9223372036854775807')
     Assert-Equal 13 $code 'Insufficient disk preflight should use exit 13.'
     Write-Pass 'disk-preflight' 'exit=13'
 
@@ -312,7 +321,7 @@ try {
         try { $mutexHeld = $mutex.WaitOne(0, $false) }
         catch [Threading.AbandonedMutexException] { $mutexHeld = $true }
         Assert-True $mutexHeld 'Test could not acquire installer mutex.'
-        $code = Invoke-Installer (Join-Path $tempRoot 'mutex-root') $payload $manifestPath @('-VerifyOnly')
+        $code = Invoke-Installer (Join-Path $tempRoot 'mutex-root') $payload $manifestPath @('--verify-only')
         Assert-Equal 18 $code 'Concurrent installer should use exit 18.'
     }
     finally {
@@ -335,7 +344,7 @@ try {
     Assert-Equal $rollbackHash (Get-Sha256 $rollbackSentinel) 'Owned update did not preserve an extra user file.'
     Write-Pass 'updater-user-files' 'owned custom update preserved unmanifested file and its exact hash'
     foreach ($fault in @('AfterBackup', 'AfterCommit')) {
-        $code = Invoke-UpdaterInstaller $installRoot @('-TestFault', $fault)
+        $code = Invoke-UpdaterInstaller $installRoot @('--test-fault', $fault)
         Assert-Equal 17 $code "$fault should use commit/rollback exit 17."
         Assert-True (Test-Path -LiteralPath $rollbackSentinel -PathType Leaf) "$fault did not restore the previous installation."
         Assert-Equal $rollbackHash (Get-Sha256 $rollbackSentinel) "$fault changed the previous installation sentinel."
@@ -346,7 +355,7 @@ try {
 
     # Uninstaller mutex taxonomy is separate (31), then the normal deferred cleanup removes only
     # the verified install root while preserving external captures/settings data and Run state.
-    $installedUninstaller = Join-Path $installRoot 'uninstall.ps1'
+    $installedUninstaller = Join-Path $installRoot 'MyCaptureUninstall.exe'
     $mutex = New-Object Threading.Mutex($false, 'Local\MyCapture.InstallOrUninstall')
     $mutexHeld = $false
     try {
@@ -362,13 +371,16 @@ try {
     }
     Write-Pass 'uninstaller-mutex' 'exit=31'
 
-    $code = Invoke-Uninstaller $installedUninstaller (Join-Path $tempRoot 'uninstall.log')
+    $uninstallLog = Join-Path $tempRoot 'uninstall.log'
+    $code = Invoke-Uninstaller $installedUninstaller $uninstallLog
     Assert-Equal 0 $code 'Verified uninstall launch failed.'
     $deadline = [DateTime]::UtcNow.AddSeconds(60)
-    while ((Test-Path -LiteralPath $installRoot) -and [DateTime]::UtcNow -lt $deadline) {
+    # Startup and shell records are evaluated after the root is gone; wait for the final log line.
+    while (((Test-Path -LiteralPath $installRoot) -or -not ((Read-SharedText $uninstallLog).Contains('MyCapture removal completed'))) -and [DateTime]::UtcNow -lt $deadline) {
         Start-Sleep -Milliseconds 250
     }
     Assert-True (-not (Test-Path -LiteralPath $installRoot)) 'Deferred cleanup did not remove the install root.'
+    Assert-True ((Read-SharedText $uninstallLog).Contains('MyCapture removal completed')) 'Deferred cleanup did not complete.'
     Assert-True (Test-Path -LiteralPath $userDataSentinel -PathType Leaf) 'External captures/settings sentinel was removed.'
     Assert-Equal $userDataHash (Get-Sha256 $userDataSentinel) 'External captures/settings sentinel changed.'
     Assert-Equal $initialRunValue (Get-RunValue) 'Run-key state changed during NoShellIntegration lifecycle.'
@@ -377,9 +389,14 @@ try {
 
     Write-Output "INSTALLER_HOSTILE_TESTS=PASS PASSES=$($script:PassCount) INVOCATIONS=$($script:InvocationCount)"
 }
+catch { Write-Output ('TEST_FAILURE=' + $_.Exception.Message); throw }
 finally {
+    $env:MYCAPTURE_DATA_ROOT = $previousDataRoot
     if (Test-Path -LiteralPath $tempRoot) {
         Remove-Item -LiteralPath $tempRoot -Recurse -Force -ErrorAction SilentlyContinue
+    }
+    if ($syntheticRoot -and (Test-Path -LiteralPath $syntheticRoot)) {
+        Remove-Item -LiteralPath $syntheticRoot -Recurse -Force -ErrorAction SilentlyContinue
     }
 }
 

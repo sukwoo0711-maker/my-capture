@@ -4,24 +4,30 @@ using MyCapture.Platform.Recording;
 namespace MyCapture.App.Recording;
 
 /// <summary>
-/// Deterministic opaque BGRA to packed NV12 conversion for MP4 frames that had to be composed
-/// in RGB (timed text, frame layers) while the rest of the clip passes decoded NV12 through.
+/// Deterministic top-down BGRA to packed NV12 conversion for RGB MP4 exports and for frames
+/// composed in RGB (timed text, frame layers) on the NV12 pass-through path.
 /// </summary>
 /// <remarks>
 /// <para>
-/// This is the inverse of <see cref="Nv12FrameConverter"/> for the same
-/// <see cref="VideoYuvEncoding"/>, with the matrix, range and chroma siting of the Media
-/// Foundation colour converter behind an RGB32 encoder input: each chroma pair is the mean of its
-/// 2x2 block (a 1080p red/blue column grid encodes to the same averaged chroma through either
-/// path). Every sample is rounded to the nearest code, where the system converter's 8-bit integer
-/// formula floors, so a few colours land one level higher (B=40, G=80, R=200 at BT.601: Cr 184,
-/// exactly 183.6, instead of 183); re-encoded text frames measured a higher PSNR this way.
+/// For 8-bit R', G', B', let L = Kr*R + (1-Kr-Kb)*G + Kb*B, with (Kr,Kb) =
+/// (0.2126,0.0722) for BT.709 or (0.299,0.114) for BT.601. Studio codes are
+/// Y = 16 + 219*L/255, Cb = 128 + 224*(B-L)/(255*2*(1-Kb)), and
+/// Cr = 128 + 224*(R-L)/(255*2*(1-Kr)). Full range uses Y=L and 255 instead of 224.
+/// Alpha is ignored: opaque channels are used directly, and premultiplied channels represent
+/// their already flattened result over black. There is no unpremultiplication here.
 /// </para>
 /// <para>
-/// Integer arithmetic with 16 fractional bits keeps the result independent of the processor,
-/// and the coefficient sums are exact so grey stays neutral and white maps to 235. Bands of
-/// row pairs are converted in parallel on plain arrays; every band writes disjoint bytes, so the
-/// output never depends on the thread count.
+/// Coefficients are quantised to 16 fractional bits with nearest/ties-to-even rounding; one
+/// coefficient per row is derived from the others so chroma coefficients sum to zero and the
+/// luma coefficients sum to the quantised scale. Each output code rounds half up (add half a
+/// fixed-point unit, then shift) and clamps to [0,255]. Greys therefore have Cb=Cr=128 exactly,
+/// and studio black/white map to 16/235. This is independent of the OS colour converter.
+/// </para>
+/// <para>
+/// Chroma uses the mean RGB of each 2x2 block before conversion. Summing RGB then shifting by
+/// 18 bits retains the fractional mean and rounds only once, avoiding four per-pixel chroma
+/// roundings. The linear transform makes this equivalent to averaging unrounded chroma.
+/// Bands of row pairs write disjoint bytes in parallel; output is independent of thread count.
 /// </para>
 /// </remarks>
 internal static class BgraToNv12Converter

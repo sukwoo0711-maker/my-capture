@@ -39,6 +39,9 @@ internal sealed partial class SettingsWindow
 
     private void InitializePrintScreenGuide()
     {
+        string message = PrintScreenKeyGuide.Message();
+        Themes.KoreanWordWrap.Show(PrtScGuideMessage, message);
+        System.Windows.Automation.AutomationProperties.SetHelpText(PrtScGuideOpenSettings, message);
         DataContextChanged += (_, _) =>
         {
             if (_printScreenGuideDraft is not null) _printScreenGuideDraft.PropertyChanged -= OnPrintScreenGuideDraftChanged;
@@ -88,7 +91,7 @@ internal sealed partial class SettingsWindow
         catch (Exception ex) when (ex is Win32Exception or InvalidOperationException)
         {
             _log.LogWarning(ex, "Could not open Windows keyboard settings");
-            SetStatusMessage(UiText.Get("PrtScGuide_OpenSettingsFailed"));
+            SetStatusMessage(PrintScreenKeyGuide.OpenSettingsFailed());
         }
     }
 }

@@ -1,0 +1,102 @@
+﻿MyCapture 설치 도움말
+
+설치와 제거는 Windows 10 22H2 및 Windows 11에 포함된 .NET Framework 4.8을 사용합니다.
+관리자 권한은 필요하지 않습니다. 설치 결과 창과 로그에서 오류 원인을 확인합니다.
+
+로그 위치
+%TEMP%\MyCapture-Install-yyyyMMdd-HHmmss-PID.log
+%TEMP%\MyCapture-Uninstall-yyyyMMdd-HHmmss-PID.log
+TEMP를 사용할 수 없으면 설치 실행 파일 폴더에 설치 로그 저장을 시도합니다.
+필수 Windows 구성 요소 오류가 발생하면 이 도움말을 %TEMP%\MyCapture-Setup-Help.txt에 복사합니다.
+
+설치 종료 코드
+0: 완료
+10: 지원하지 않는 Windows 버전 또는 Desktop Experience 없음
+11: 지원하지 않는 아키텍처. x64 Windows 10 22H2 이상 또는 ARM64 Windows 11 이상이 필요합니다.
+12: 안전하지 않거나 쓸 수 없는 설치 경로
+13: 디스크 공간 부족
+14: manifest, ZIP, 크기, SHA-256 또는 앱 파일 검증 실패
+15: 실행 중인 MyCapture를 종료하지 못했거나 다른 위치의 MyCapture가 실행 중
+16: 임시 폴더 압축 해제 실패
+17: 설치 파일 교체 또는 롤백 실패. 로그에 표시된 백업 폴더를 확인합니다.
+18: 다른 설치 또는 제거 작업 진행 중
+19: 필수 Windows 구성 요소(.NET Framework 4.8 또는 System.IO.Compression) 사용 불가
+20: 기존 폴더의 소유권을 확인하지 못했거나 사용자 파일과 충돌
+21: 알 수 없는 옵션 또는 예상하지 못한 오류
+22: 사용 종료. 이전 스크립트 시작 실패 코드이며 새 설치기는 반환하지 않습니다.
+
+제거 종료 코드
+30: 설치 소유권 또는 제거 실행 파일 검증 실패
+31: 다른 설치 또는 제거 작업 진행 중
+32: 이전 제거기의 호스트 오류 코드. 새 제거기의 구성 요소 오류는 19입니다.
+33: 해당 설치 경로의 MyCapture 종료 실패
+34: 임시 제거 작업 실행 실패
+35: 예상하지 못한 제거 오류
+제거 시작의 0은 후속 정리 작업이 예약되었음을 뜻합니다. 완료 여부는 제거 로그에서 확인합니다.
+업데이트 설치는 사용자가 설치 폴더에 추가한 파일을 보존합니다. 직접 재설치는 설치 폴더를 새 패키지로 교체합니다.
+제거는 설치 폴더를 삭제합니다. 설치 폴더 밖의 캡처와 설정은 보존합니다.
+
+필수 구성 요소 사용 불가
+종료 코드 19이면 아래 포터블 ZIP 또는 Microsoft Store 버전을 사용할 수 있습니다.
+CLR 4 자체를 불러오지 못하면 Windows가 자체 오류 창을 표시합니다.
+
+포터블 ZIP 사용
+1. 같은 릴리스에서 MyCapture-<version>-win-x64-portable.zip을 다운로드합니다.
+   <version>은 해당 릴리스 버전입니다.
+2. 일반 로컬 폴더에 전체 압축을 해제합니다.
+3. MyCapture.exe를 실행합니다. 관리자 권한은 필요하지 않습니다.
+
+Microsoft Store 버전
+https://apps.microsoft.com/detail/9PB33MC095VR
+
+
+MyCapture Setup help
+
+Setup and uninstall use .NET Framework 4.8, included in Windows 10 22H2 and Windows 11.
+No administrator rights are required. Read the result dialog and log for failure details.
+
+Logs
+%TEMP%\MyCapture-Install-yyyyMMdd-HHmmss-PID.log
+%TEMP%\MyCapture-Uninstall-yyyyMMdd-HHmmss-PID.log
+If TEMP is unavailable, setup attempts to save its log beside the setup executable.
+For a missing Windows component, help is copied to %TEMP%\MyCapture-Setup-Help.txt.
+
+Install exit codes
+0: Success
+10: Unsupported Windows version or missing Desktop Experience
+11: Unsupported architecture; x64 Windows 10 22H2+, or ARM64 Windows 11+ is required
+12: Unsafe or unwritable install path
+13: Insufficient disk space
+14: Manifest, ZIP, size, SHA-256 or application verification failed
+15: Unable to stop the installed app, or a different MyCapture copy is running
+16: Staged extraction failed
+17: Transaction or rollback failed; inspect the backup path in the log
+18: Another install or uninstall is running
+19: A required Windows component (.NET Framework 4.8 or System.IO.Compression) is unavailable
+20: Unowned existing directory or a user-file conflict
+21: Unknown option or unexpected error
+22: Retired script-start failure code; the new setup never returns it
+
+Uninstall exit codes
+30: Invalid installation ownership or uninstaller integrity
+31: Another install or uninstall is running
+32: Retained legacy host-error code; new component failures use 19
+33: Unable to stop the app running from this installation
+34: Deferred cleanup could not start
+35: Unexpected uninstall error
+Uninstall exit 0 schedules deferred cleanup; the uninstall log records completion.
+An update install preserves extra files in the install root. A direct reinstall replaces the
+install root, and uninstall deletes it. Captures and settings outside that root are preserved.
+
+Missing Windows component
+For exit 19, use the portable ZIP or Microsoft Store version below.
+If CLR 4 itself cannot load, Windows displays its own loader dialog.
+
+Use the portable ZIP
+1. Download MyCapture-<version>-win-x64-portable.zip from the same release.
+   Replace <version> with that release's version.
+2. Extract the entire archive to a normal local folder.
+3. Run MyCapture.exe. No administrator rights are required.
+
+Microsoft Store edition
+https://apps.microsoft.com/detail/9PB33MC095VR

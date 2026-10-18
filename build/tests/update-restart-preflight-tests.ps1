@@ -1,10 +1,11 @@
 # Runs only the harness's preflight against synthetic files; never installs or starts MyCapture.
 Set-StrictMode -Version 2.0
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'setup-test-common.ps1')
 $repository = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 $harness = Join-Path $PSScriptRoot 'update-restart-acceptance.ps1'
 $powerShell = Join-Path ([Environment]::SystemDirectory) 'WindowsPowerShell\v1.0\powershell.exe'
-$parent = [IO.Path]::GetFullPath((Join-Path $repository 'artifacts\validation\restart-preflight-tests')).TrimEnd('\')
+$parent = [IO.Path]::GetFullPath((Join-Path ([IO.Path]::GetTempPath()) 'MyCapture-restart-preflight-tests')).TrimEnd('\')
 $root = [IO.Path]::GetFullPath((Join-Path $parent ([guid]::NewGuid().ToString('N'))))
 if (-not $root.StartsWith($parent + '\', [StringComparison]::OrdinalIgnoreCase)) { throw 'Unsafe fixture root.' }
 [IO.Directory]::CreateDirectory((Join-Path $root 'publish-win-x64')) | Out-Null
@@ -41,8 +42,8 @@ try {
     foreach ($name in @('MyCapture-1.8.0-win-x64-setup.exe', 'MyCapture-1.8.0-win-x64-portable.zip')) {
         [IO.File]::WriteAllText((Join-Path $root $name), 'synthetic package, never executed')
     }
-    $bootstrap = @('install.ps1', 'install.cmd', 'uninstall.ps1', 'uninstall.cmd', 'uninstall-cleanup.ps1') | ForEach-Object {
-        Record (Join-Path (Join-Path $repository 'build\installer') $_) $_
+    $bootstrap = @('MyCaptureSetup.exe', 'MyCaptureSetup.exe.config', 'SETUP-HELP.txt') | ForEach-Object {
+        Record (Get-SetupBootstrapSource $_) $_
     }
     $manifest = @{ Product = 'MyCapture'; Version = '1.8.0'; Files = $files; BootstrapFiles = @($bootstrap)
         Payload = Record (Join-Path $root 'MyCapture-1.8.0-win-x64-portable.zip') 'payload.zip' }

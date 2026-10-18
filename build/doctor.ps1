@@ -126,8 +126,8 @@ if (-not $Quiet) {
     Write-Host "  OS:      $([Environment]::OSVersion.VersionString)"
     Write-Host "  CPU:     $env:PROCESSOR_ARCHITECTURE (target: win-x64)"
 
-    if ($env:OS -eq 'Windows_NT' -and [Environment]::OSVersion.Version.Build -lt 22000) {
-        Write-Warning 'The build may succeed, but MyCapture requires Windows 11 21H2 (build 22000) or newer at runtime.'
+    if ($env:OS -eq 'Windows_NT' -and [Environment]::OSVersion.Version.Build -lt 19045) {
+        Write-Warning 'The build may succeed, but MyCapture requires Windows 10 22H2 (build 19045) or newer at runtime.'
     }
 
     Write-Host 'RESULT: READY' -ForegroundColor Green

@@ -47,8 +47,9 @@ internal sealed class CountdownWindow : Window
         ResizeMode = ResizeMode.NoResize;
         ShowInTaskbar = false;
         Topmost = true;
-        AllowsTransparency = true;
-        Background = Brushes.Transparent;
+        AllowsTransparency = CaptureWindowExclusion.SupportsLayeredWindows;
+        Background = AllowsTransparency ? Brushes.Transparent : CaptureWindowExclusion.OpaqueBackground();
+        if (!AllowsTransparency) ModernWindowChrome.SetEnabled(this, false);
         WindowStartupLocation = WindowStartupLocation.CenterScreen;
         SizeToContent = SizeToContent.WidthAndHeight;
 
@@ -98,8 +99,8 @@ internal sealed class CountdownWindow : Window
                 ?? new SolidColorBrush(Color.FromArgb(0xEE, 0x15, 0x1E, 0x2B)),
             BorderBrush = Application.Current?.TryFindResource("Border.Subtle") as Brush ?? Brushes.DimGray,
             BorderThickness = new Thickness(1),
-            CornerRadius = new CornerRadius(18),
-            Effect = Application.Current?.TryFindResource("Shadow.Floating") as System.Windows.Media.Effects.Effect,
+            CornerRadius = new CornerRadius(AllowsTransparency ? 18 : 0),
+            Effect = AllowsTransparency ? Application.Current?.TryFindResource("Shadow.Floating") as System.Windows.Media.Effects.Effect : null,
             Child = content,
         };
 

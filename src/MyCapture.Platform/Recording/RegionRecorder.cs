@@ -331,8 +331,7 @@ public sealed class RegionRecorder : IDisposable
             // Create the encoder here, on this MTA capture thread, so the MF Sink Writer's
             // COM objects live in the same apartment that will write every frame.
             _encoder = _encoderFactory(options);
-            double initializationMs = Stopwatch.GetElapsedTime(initializationStarted).TotalMilliseconds;
-            Interlocked.Exchange(ref _recordingStarted, _time.GetTimestamp());
+            double initializationMs = 0;
 
             // Always execute one capture iteration after encoder initialisation. H.264 MFT
             // startup can occasionally take longer than a very short recording; if Stop was
@@ -363,6 +362,19 @@ public sealed class RegionRecorder : IDisposable
                     double captureMs = Stopwatch.GetElapsedTime(phaseStarted).TotalMilliseconds;
                     captureTotal += captureMs;
                     captureMax = Math.Max(captureMax, captureMs);
+                    if (clock.EmittedFrames == 1)
+                    {
+                        // WGC opens asynchronously and the first grab may still wait seconds
+                        // for its session/frame. Start the clip only once those pixels exist:
+                        // otherwise the next timestamp includes that wait after the zero frame.
+                        // A pause requested during startup still starts at zero and parks after
+                        // this required first frame; Stop during startup still finalizes it.
+                        lock (_pauseGate)
+                        {
+                            Interlocked.Exchange(ref _recordingStarted, _time.GetTimestamp());
+                        }
+                        initializationMs = Stopwatch.GetElapsedTime(initializationStarted).TotalMilliseconds;
+                    }
                     phaseStarted = Stopwatch.GetTimestamp();
                     _encoder!.WriteFrame(new EncoderFrame(
                         pixels,
@@ -508,7 +520,7 @@ public sealed class RegionRecorder : IDisposable
         }
     }
 
-    /// <summary>Capture-session time since the encoder became ready; zero before that.</summary>
+    /// <summary>Capture-session time since the first pixels became ready; zero before that.</summary>
     private double RawElapsedMs(long timestamp)
     {
         long started = Interlocked.Read(ref _recordingStarted);

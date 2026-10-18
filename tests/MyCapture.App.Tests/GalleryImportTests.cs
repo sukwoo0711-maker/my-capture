@@ -8,15 +8,17 @@ using MyCapture.App.Recording;
 using MyCapture.App.Threading;
 using MyCapture.Core.Localization;
 using MyCapture.Core.Queue;
+using MyCapture.Core.Recording;
 using MyCapture.Core.Settings;
 using MyCapture.Core.Storage;
 using MyCapture.Platform.Imaging;
 using MyCapture.Platform.Recording;
 using Xunit;
+using Xunit.Abstractions;
 
 namespace MyCapture.App.Tests;
 
-public sealed class GalleryImportTests
+public sealed class GalleryImportTests(ITestOutputHelper output)
 {
     [Fact]
     public async Task ExternalDropAcceptsOnlySupportedFileBatchesAndNeverPrivatePayloads()
@@ -349,9 +351,23 @@ public sealed class GalleryImportTests
         byte[] original = File.ReadAllBytes(source);
         await StaThreadTask.RunAsync(() =>
         {
-            Assert.InRange(MediaFoundationVideoFrameReader.ReadContainerDurationMs(source), 1090, 1130);
-            // Generated recordings retain their original stricter container-tail requirement.
-            Assert.Throws<InvalidDataException>(() => VideoFrameRenderPipeline.Probe(source));
+            double container = MediaFoundationVideoFrameReader.ReadContainerDurationMs(source);
+            using var stream = File.OpenRead(source);
+            double? track = Mp4VideoTrackDuration.ReadMilliseconds(stream);
+            using var reader = new MediaFoundationVideoFrameReader(source);
+            DecodedVideoFrame first = reader.ReadFrameAt(0);
+            DecodedVideoFrame last = reader.ReadFrameAt(Math.Max(0, reader.DurationMs - 1));
+            string measured = VideoFrameRenderPipeline.DescribeDecodedTail(container, last)
+                + FormattableString.Invariant($", readerDuration={reader.DurationMs:F3} ms, videoTrack={track:F3} ms, firstPts={first.TimestampMs:F3} ms");
+            output.WriteLine(measured);
+            Assert.True(container is >= 1090 and <= 1130, measured);
+            // Import measures this file by its MP4 video track, so it never reaches the strict
+            // container-tail Probe that generated recordings use. Whether that Probe rejects this
+            // B-frame/edit-list file depends on how the OS's Media Foundation offsets its sample
+            // times (Windows 10 reports them two frames later and the decoded end then reaches the
+            // audio tail). Strictness itself is covered by Probe_StillRejectsAHeaderThatAdvertises-
+            // MoreThanItsSamples and ProbeTailValidation_RejectsAnOldSampleReturnedForTheAdvertisedEnd.
+            Assert.True(track is >= 999 and <= 1001, measured);
             return true;
         });
         var queue = new CaptureQueue(AppPaths.CreateForRoot(Path.Combine(NewRoot(), "library")),
@@ -371,10 +387,6 @@ public sealed class GalleryImportTests
 
     private static string NewRoot()
     {
-        DirectoryInfo? root = new(AppContext.BaseDirectory);
-        while (root is not null && !File.Exists(Path.Combine(root.FullName, "MyCapture.slnx"))) root = root.Parent;
-        string result = Path.Combine(root!.FullName, "artifacts", "import-tests", Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(result);
-        return result;
+        return Directory.CreateTempSubdirectory("mc-gallery-import-").FullName;
     }
 }

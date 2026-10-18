@@ -11,6 +11,7 @@ using System.Windows.Shapes;
 using System.Windows.Threading;
 using MyCapture.App.Themes;
 using MyCapture.Core.Pin;
+using MyCapture.Core.Platform;
 using MyCapture.Core.Primitives;
 using MyCapture.Core.Settings;
 using MyCapture.Platform.Display;
@@ -42,8 +43,9 @@ internal sealed class PinWindow : Window
     private const double ArrowNudgeDip = 1.0;
     private const double ArrowNudgeShiftDip = 10.0;
 
-    /// <summary>Outer corner radius of the pin frame; Windows 11 rounds top-level windows by 8.</summary>
-    internal const double FrameCornerRadiusDip = 8.0;
+    /// <summary>Outer corner radius matching the host's top-level window frame.</summary>
+    internal static readonly double FrameCornerRadiusDip =
+        WindowsFeatureSupport.WindowCornerRadiusDip(Environment.OSVersion.Version.Build);
 
     private const double FrameThicknessDip = 1.0;
 
@@ -184,7 +186,7 @@ internal sealed class PinWindow : Window
             Visibility = Visibility.Collapsed,
         };
 
-        // Image-first chrome: one continuous one-DIP outline with Windows 11 rounded corners
+        // Image-first chrome: one continuous one-DIP outline matching the host's window corners
         // rests quietly and takes the accent colour on hover. The image fills the whole pin
         // and is clipped to the rounded rectangle the outline follows, and the outline is drawn
         // over the image's outermost edge. A Border's CornerRadius does not clip its child and
@@ -194,8 +196,8 @@ internal sealed class PinWindow : Window
         _pinScale = new ScaleTransform(1, 1);
         _imageClip = new RectangleGeometry(
             ImageClipBounds(new Size(_state.WidthDip, _state.HeightDip)),
-            FrameCornerRadiusDip - FrameClipInsetDip,
-            FrameCornerRadiusDip - FrameClipInsetDip);
+            Math.Max(0, FrameCornerRadiusDip - FrameClipInsetDip),
+            Math.Max(0, FrameCornerRadiusDip - FrameClipInsetDip));
         _imageElement.Clip = _imageClip;
         _imageElement.SizeChanged += (_, args) => _imageClip.Rect = ImageClipBounds(args.NewSize);
         var outline = new Border

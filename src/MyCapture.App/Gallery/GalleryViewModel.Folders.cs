@@ -175,6 +175,8 @@ public sealed partial class GalleryViewModel
         ? UiText.Format("Folder410.SearchInFolder", _controller.Queue.GetFolderDisplayPath(id))
         : UiText.Get("LibraryUx_SearchPlaceholder");
 
+    public string CompactSearchPlaceholder => HasFolderScope ? string.Empty : UiText.Get("LibraryUx_SearchPlaceholderCompact");
+
     /// <summary>The search shortcut lives in the tooltip, not in the placeholder.</summary>
     public string SearchToolTip => UiText.Format("LibraryUx_CommandShortcut", UiText.Get("Library.Search.Syntax"), "Ctrl+F");
 
@@ -257,7 +259,7 @@ public sealed partial class GalleryViewModel
         SyncBrowsingCaptureFolder();
         Raise(nameof(FolderStorageText)); Raise(nameof(ShowFolderStorageInfo));
         Raise(nameof(SelectedScope)); Raise(nameof(HasFolderScope)); Raise(nameof(CanSetNewCaptureFolder));
-        RaiseNewCaptureDestination(); Raise(nameof(SearchPlaceholder));
+        RaiseNewCaptureDestination(); Raise(nameof(SearchPlaceholder)); Raise(nameof(CompactSearchPlaceholder));
     }
 
     private static IEnumerable<GalleryFolderNode> Flatten(IEnumerable<GalleryFolderNode> nodes)

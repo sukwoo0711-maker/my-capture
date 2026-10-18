@@ -1,4 +1,5 @@
 using System.IO;
+using System.Reflection;
 using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Controls;
@@ -61,6 +62,10 @@ public sealed class EnglishLayoutTests
             window.ShowActivated = false;
             window.ShowInTaskbar = false;
             window.Show();
+            // Match OpenReadyEditor: this layout-only clip has no media file, so use the
+            // production completion path to exercise enabled commands without creating one.
+            typeof(VideoEditorWindow).GetMethod("CompleteOpen", BindingFlags.Instance | BindingFlags.NonPublic)!
+                .Invoke(window, [recording.DurationMs, true]);
             window.UpdateLayout();
             Grid layout = Assert.IsType<Grid>(window.Content);
             Assert.DoesNotMatch("[가-힣]", window.Title);
@@ -119,7 +124,19 @@ public sealed class EnglishLayoutTests
             window.UpdateLayout();
             var connector = Assert.Single(Descendants(layout).OfType<TimelineRenderSurface>(), surface => !surface.IsHitTestVisible);
             Assert.True(connector.IsVisible, "Opening the detailed timeline must show its connector hint");
-            Assert.True(connector.ActualHeight >= 18, "Connector hint must reserve a complete text line");
+            Assert.Equal(18, connector.Height);
+            double connectorScale = VisualTreeHelper.GetDpi(connector).DpiScaleY;
+            Assert.Equal(Math.Round(18 * connectorScale), connector.ActualHeight * connectorScale, 6);
+            connector.RenderDirtyLayers();
+            var rangeVisual = Assert.IsType<DrawingVisual>(VisualTreeHelper.GetChild(connector, 1));
+            Drawing[] drawings = DrawingLeaves(rangeVisual.Drawing).ToArray();
+            GeometryDrawing hintBackground = Assert.Single(drawings.OfType<GeometryDrawing>(), drawing => drawing.Pen is null && drawing.Brush is not null);
+            Assert.True(hintBackground.Bounds.Top >= 0 && hintBackground.Bounds.Bottom <= connector.ActualHeight,
+                $"Connector text and padding {hintBackground.Bounds} must fit its {connector.ActualHeight} DIP height at {connectorScale}x.");
+            GlyphRunDrawing[] glyphs = drawings.OfType<GlyphRunDrawing>().ToArray();
+            Assert.NotEmpty(glyphs);
+            Assert.All(glyphs, glyph => Assert.True(hintBackground.Bounds.Contains(glyph.Bounds),
+                $"Connector glyphs {glyph.Bounds} must fit their padded background {hintBackground.Bounds}."));
             detailToggle.IsChecked = false;
             window.UpdateLayout();
             Button[] buttons = Descendants(layout).OfType<Button>().ToArray();
@@ -130,10 +147,13 @@ public sealed class EnglishLayoutTests
                 Button button = Assert.Single(buttons, b => Equals(b.Content, caption) || Descendants(b).OfType<TextBlock>().Any(t => t.Text == caption));
                 Assert.False(string.IsNullOrWhiteSpace(AutomationProperties.GetName(button)), caption);
                 Assert.NotNull(button.ToolTip);
+                if (!button.IsVisible && caption == UiText.Get("MediaExport_ExportFormats"))
+                    button = AssertOverflowExport(window, buttons, caption);
                 AssertReachableInScrollViewport(button, window);
                 Point top = button.TranslatePoint(new Point(0, 0), layout);
                 Point bottom = button.TranslatePoint(new Point(button.ActualWidth, button.ActualHeight), layout);
-                Assert.True(button.IsVisible && top.X >= 0 && bottom.X <= layout.ActualWidth + 0.5 && bottom.Y <= layout.ActualHeight + 0.5, caption);
+                Assert.True(button.IsVisible && top.X >= 0 && bottom.X <= layout.ActualWidth + 0.5 && bottom.Y <= layout.ActualHeight + 0.5,
+                    $"{caption}: visible={button.IsVisible}, bounds={top}..{bottom}, viewport={layout.ActualWidth}x{layout.ActualHeight}");
                 foreach (TextBlock text in Descendants(button).OfType<TextBlock>())
                     Assert.True(text.ActualWidth + text.Margin.Left + text.Margin.Right + 0.5 >= text.DesiredSize.Width, $"Clipped {caption}");
             }
@@ -185,6 +205,44 @@ public sealed class EnglishLayoutTests
         }
     });
 
+    private static Button AssertOverflowExport(VideoEditorWindow window, Button[] buttons, string caption)
+    {
+        Button more = Assert.Single(buttons, button => button.Name == "VideoMoreTools");
+        Assert.True(more.IsVisible && more.IsEnabled);
+        Assert.True(more.ActualWidth >= 36 && more.ActualHeight >= 36);
+        Assert.Equal(UiText.Get("Common_More"), AutomationProperties.GetName(more));
+        ContextMenu menu = Assert.IsType<ContextMenu>(more.ContextMenu);
+        Assert.Same(more, menu.PlacementTarget);
+        MenuItem export = Assert.Single(menu.Items.OfType<MenuItem>(), item => Equals(item.Header, caption));
+        Assert.Equal(caption, AutomationProperties.GetName(export));
+        Assert.NotNull(export.ToolTip);
+        Assert.Equal(Visibility.Visible, export.Visibility);
+        Assert.True(export.IsEnabled);
+
+        VideoExportDialog? hosted = null;
+        window.ExportDialogHostForTest = dialog => hosted = dialog;
+        try
+        {
+            more.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            window.Dispatcher.Invoke(() => { }, System.Windows.Threading.DispatcherPriority.ContextIdle);
+            menu.UpdateLayout();
+            Assert.True(menu.IsOpen && menu.IsVisible);
+            Assert.True(export.IsVisible && export.ActualWidth > 0 && export.ActualHeight > 0);
+            export.RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
+            Assert.NotNull(hosted);
+            Assert.False(hosted.IsGif);
+            Assert.Same(window, hosted.Owner);
+        }
+        finally
+        {
+            menu.IsOpen = false;
+            hosted?.Close();
+            window.ExportDialogHostForTest = null;
+        }
+
+        return more;
+    }
+
     private static void AssertReachableInScrollViewport(Button button, Window window)
     {
         ScrollViewer? scroll = null;
@@ -235,6 +293,16 @@ public sealed class EnglishLayoutTests
             foreach (XElement entry in dictionary.Elements()) combined.Add(new XElement(entry));
         }
         window.Resources.MergedDictionaries.Add((ResourceDictionary)XamlReader.Parse(combined!.ToString(SaveOptions.DisableFormatting)));
+    }
+
+    private static IEnumerable<Drawing> DrawingLeaves(Drawing drawing)
+    {
+        if (drawing is DrawingGroup group)
+        {
+            foreach (Drawing child in group.Children)
+                foreach (Drawing leaf in DrawingLeaves(child)) yield return leaf;
+        }
+        else yield return drawing;
     }
 
     private static IEnumerable<DependencyObject> Descendants(DependencyObject parent)

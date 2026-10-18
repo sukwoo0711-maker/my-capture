@@ -67,6 +67,9 @@ public sealed class MediaFoundationVideoEncoder : IVideoEncoder
     private bool _finalized;
     private bool _disposed;
 
+    /// <summary>Test-only: emulate a GPU-less host by refusing hardware encoder MFTs.</summary>
+    internal static bool ForceSoftwareForTest { get; set; }
+
     public MediaFoundationVideoEncoder(VideoEncoderOptions options, ILogger log)
     {
         _options = options ?? throw new ArgumentNullException(nameof(options));
@@ -108,7 +111,7 @@ public sealed class MediaFoundationVideoEncoder : IVideoEncoder
         {
             Guid hwKey = MF_READWRITE_ENABLE_HARDWARE_TRANSFORMS;
             Check(
-                attributes.SetUINT32(ref hwKey, _options.AllowHardwareEncoder ? 1u : 0u),
+                attributes.SetUINT32(ref hwKey, _options.AllowHardwareEncoder && !ForceSoftwareForTest ? 1u : 0u),
                 "IMFAttributes.SetUINT32(hardware transforms)");
 
             Check(
@@ -136,10 +139,11 @@ public sealed class MediaFoundationVideoEncoder : IVideoEncoder
                 SetU32(outType, MF_MT_MPEG2_PROFILE, (uint)profile);
             }
 
-            if (_options.FullRange && _options.InputFormat == VideoEncoderInputFormat.Bgra32)
+            if (_options.FullRange)
             {
                 // The Sink Writer's RGB to NV12 converter follows the encoder's range, and the
                 // file declares it, so decoders that honour the declaration show true black and white.
+                // Full-range NV12 input declares the same range below, so no converter is inserted.
                 SetU32(outType, MF_MT_VIDEO_NOMINAL_RANGE, MFNominalRange_0_255);
             }
 
@@ -164,6 +168,10 @@ public sealed class MediaFoundationVideoEncoder : IVideoEncoder
             SetFrameSize(inType, (uint)_options.Width, (uint)_options.Height);
             SetRatio(inType, MF_MT_FRAME_RATE, (uint)fps, 1);
             SetRatio(inType, MF_MT_PIXEL_ASPECT_RATIO, 1, 1);
+            if (_options.FullRange && _options.InputFormat == VideoEncoderInputFormat.Nv12)
+            {
+                SetU32(inType, MF_MT_VIDEO_NOMINAL_RANGE, MFNominalRange_0_255);
+            }
 
             SetInputMediaType(inType);
         }

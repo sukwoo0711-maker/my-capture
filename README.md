@@ -2,7 +2,7 @@
 
 MyCapture는 캡처, 이미지 편집, 핀으로 띄우기, 텍스트 인식, 라이브러리, 영역 녹화를 한곳에 모은 Windows용 데스크톱 도구입니다. 캡처와 인식 결과는 기본적으로 사용자 PC 안에서 처리하며, 반복 작업은 전역 단축키와 트레이 메뉴로 빠르게 이어집니다.
 
-> 현재 지원 하한은 **Windows 11 21H2(build 22000), x64**입니다. Windows 11 ARM64에서는 x64 에뮬레이션으로 실행할 수 있습니다. Windows 10은 지원하지 않습니다.
+> 현재 지원 하한은 **Windows 10 버전 22H2(build 19045), x64**입니다. ARM64의 x64 에뮬레이션은 Windows 11(build 22000) 이상에서 지원합니다.
 
 ## 주요 기능
 
@@ -70,6 +70,12 @@ MyCapture는 [Microsoft Store](https://apps.microsoft.com/detail/9PB33MC095VR)�
 
 `build\package.ps1`이 만드는 설치 파일과 포터블 ZIP은 Store 패키지의 원본 게시 폴더와 내부 확인용이며 서명되지 않습니다. 외부에 배포하지 마십시오.
 
+내부 확인용 `MyCapture-<version>-win-x64-setup.exe`는 IExpress 패키지이며, 압축 해제 후 `MyCaptureSetup.exe`를 직접 실행합니다. 설치·업데이트 설치·제거에는 PowerShell을 사용하지 않습니다. 설치기는 Windows 10 22H2와 Windows 11에 기본 포함된 .NET Framework 4.8을 사용하며, 관리자 권한을 요청하지 않습니다. 시작 메뉴와 사용자별 제거 등록을 만들고, 같은 실행 파일의 복사본인 `MyCaptureUninstall.exe /uninstall`로 제거합니다.
+
+두 실행 파일은 서명되지 않았으므로 SmartScreen이 다운로드한 IExpress 파일 또는 압축 해제된 실행 파일을 경고할 수 있습니다. 배포 경로와 `SHA256SUMS.txt`의 해시를 확인하고 신뢰하는 경우에만 Windows가 제공하는 **추가 정보 → 실행**을 사용합니다. 조직에서 실행을 차단한 경우 해당 조직의 허용된 설치 경로를 사용합니다. SHA-256은 파일 변경 검증이며 게시자 서명을 대신하지 않습니다.
+
+설치 로그는 `%TEMP%\MyCapture-Install-yyyyMMdd-HHmmss-PID.log`, 제거 로그는 `%TEMP%\MyCapture-Uninstall-yyyyMMdd-HHmmss-PID.log`입니다. 종료 코드 19는 필수 Windows 구성 요소를 사용할 수 없다는 뜻이며, 설치기는 `%TEMP%\MyCapture-Setup-Help.txt`에 도움말을 복사합니다. 포터블 ZIP 또는 Microsoft Store 버전을 대안으로 사용할 수 있습니다. 이전 스크립트 시작 실패 코드 22는 사용하지 않습니다. CLR 4 자체가 손상되어 로드되지 않는 경우에는 Windows의 오류 창이 표시됩니다. 상세 계약은 [ADR 0008](docs/adr/0008-powershell-free-installer.md)에 기록합니다.
+
 기본 사용자 데이터 위치는 다음과 같습니다.
 
 - Store 설치본의 설정, 인덱스, 라이브러리: 앱 전용 폴더 `%LOCALAPPDATA%\Packages\<패키지 패밀리 이름>\LocalState` (앱을 제거하면 함께 삭제)
@@ -78,7 +84,7 @@ MyCapture는 [Microsoft Store](https://apps.microsoft.com/detail/9PB33MC095VR)�
 
 캡처 저장 폴더와 빠른 저장 폴더는 설정에서 변경할 수 있습니다. 라이브러리 이미지는 생성 후 기본 7일(168시간, 설정에서 변경 가능)이 지나면 오래된 순서대로 자동 삭제하며, 보관한 이미지와 편집 중인 이미지는 지우지 않습니다. 동영상에는 7일 만료를 적용하지 않습니다. 따로 내보낸 파일은 관리 큐 정리 대상이 아닙니다. 개수·용량 제한은 별도로 적용됩니다.
 
-4.2.1의 변경 사항은 [릴리스 노트](docs/releases/4.2.1-release-notes.md)에서 확인할 수 있습니다. 이전 [4.2.0](docs/releases/4.2.0-release-notes.md), [4.1.5](docs/releases/4.1.5-release-notes.md), [4.1.4](docs/releases/4.1.4-release-notes.md), [4.1.3](docs/releases/4.1.3-release-notes.md), [4.1.2](docs/releases/4.1.2-release-notes.md), [4.1.1](docs/releases/4.1.1-release-notes.md), [4.1.0](docs/releases/4.1.0-release-notes.md), [4.0.2](docs/releases/4.0.2-release-notes.md), [4.0.1](docs/releases/4.0.1-release-notes.md), [4.0.0](docs/releases/4.0.0-release-notes.md), [3.4.0](docs/releases/3.4.0-release-notes.md), [3.2.1](docs/releases/3.2.1-release-notes.md), [3.2.0](docs/releases/3.2.0-release-notes.md), [3.1.7](docs/releases/3.1.7-release-notes.md), [3.1.5](docs/releases/3.1.5-release-notes.md), [3.1.4](docs/releases/3.1.4-release-notes.md), [3.1.3](docs/releases/3.1.3-release-notes.md), [3.1.2](docs/releases/3.1.2-release-notes.md), [3.1.1](docs/releases/3.1.1-release-notes.md), [3.1.0](docs/releases/3.1.0-release-notes.md), [3.0.0](docs/releases/3.0.0-release-notes.md), [2.4.1](docs/releases/2.4.1-release-notes.md), [2.4.0](docs/releases/2.4.0-release-notes.md), [2.3.10](docs/releases/2.3.10-release-notes.md), [2.3.9](docs/releases/2.3.9-release-notes.md), [2.3.8](docs/releases/2.3.8-release-notes.md), [2.3.7](docs/releases/2.3.7-release-notes.md), [2.3.6](docs/releases/2.3.6-release-notes.md), [2.3.5](docs/releases/2.3.5-release-notes.md), [2.3.4](docs/releases/2.3.4-release-notes.md), [2.3.3](docs/releases/2.3.3-release-notes.md), [2.3.2](docs/releases/2.3.2-release-notes.md), [2.3.1](docs/releases/2.3.1-release-notes.md), [2.3.0](docs/releases/2.3.0-release-notes.md), [2.2.2](docs/releases/2.2.2-release-notes.md), [2.2.1](docs/releases/2.2.1-release-notes.md), [2.1.1](docs/releases/2.1.1-release-notes.md), [2.1.0](docs/releases/2.1.0-release-notes.md), [2.0.0](docs/releases/2.0.0-release-notes.md), [1.9.2](docs/releases/1.9.2-release-notes.md), [1.9.0](docs/releases/1.9.0-release-notes.md) 기록도 보존합니다.
+4.3.0의 변경 사항은 [릴리스 노트](docs/releases/4.3.0-release-notes.md)에서 확인할 수 있습니다. 이전 [4.2.1](docs/releases/4.2.1-release-notes.md), [4.2.0](docs/releases/4.2.0-release-notes.md), [4.1.5](docs/releases/4.1.5-release-notes.md), [4.1.4](docs/releases/4.1.4-release-notes.md), [4.1.3](docs/releases/4.1.3-release-notes.md), [4.1.2](docs/releases/4.1.2-release-notes.md), [4.1.1](docs/releases/4.1.1-release-notes.md), [4.1.0](docs/releases/4.1.0-release-notes.md), [4.0.2](docs/releases/4.0.2-release-notes.md), [4.0.1](docs/releases/4.0.1-release-notes.md), [4.0.0](docs/releases/4.0.0-release-notes.md), [3.4.0](docs/releases/3.4.0-release-notes.md), [3.2.1](docs/releases/3.2.1-release-notes.md), [3.2.0](docs/releases/3.2.0-release-notes.md), [3.1.7](docs/releases/3.1.7-release-notes.md), [3.1.5](docs/releases/3.1.5-release-notes.md), [3.1.4](docs/releases/3.1.4-release-notes.md), [3.1.3](docs/releases/3.1.3-release-notes.md), [3.1.2](docs/releases/3.1.2-release-notes.md), [3.1.1](docs/releases/3.1.1-release-notes.md), [3.1.0](docs/releases/3.1.0-release-notes.md), [3.0.0](docs/releases/3.0.0-release-notes.md), [2.4.1](docs/releases/2.4.1-release-notes.md), [2.4.0](docs/releases/2.4.0-release-notes.md), [2.3.10](docs/releases/2.3.10-release-notes.md), [2.3.9](docs/releases/2.3.9-release-notes.md), [2.3.8](docs/releases/2.3.8-release-notes.md), [2.3.7](docs/releases/2.3.7-release-notes.md), [2.3.6](docs/releases/2.3.6-release-notes.md), [2.3.5](docs/releases/2.3.5-release-notes.md), [2.3.4](docs/releases/2.3.4-release-notes.md), [2.3.3](docs/releases/2.3.3-release-notes.md), [2.3.2](docs/releases/2.3.2-release-notes.md), [2.3.1](docs/releases/2.3.1-release-notes.md), [2.3.0](docs/releases/2.3.0-release-notes.md), [2.2.2](docs/releases/2.2.2-release-notes.md), [2.2.1](docs/releases/2.2.1-release-notes.md), [2.1.1](docs/releases/2.1.1-release-notes.md), [2.1.0](docs/releases/2.1.0-release-notes.md), [2.0.0](docs/releases/2.0.0-release-notes.md), [1.9.2](docs/releases/1.9.2-release-notes.md), [1.9.0](docs/releases/1.9.0-release-notes.md) 기록도 보존합니다.
 
 ### 1.8.3 실행 및 배포 형식 안내
 
@@ -95,7 +101,7 @@ MyCapture는 [Microsoft Store](https://apps.microsoft.com/detail/9PB33MC095VR)�
 
 필수 조건:
 
-- Windows 11
+- Windows 10 버전 22H2(build 19045) 이상, x64. ARM64 x64 에뮬레이션은 Windows 11(build 22000) 이상
 - .NET 10 SDK `10.0.400` 이상
 - Windows PowerShell 5.1 이상
 
@@ -155,4 +161,4 @@ MyCapture 자체 코드에는 [MIT License](LICENSE)가 적용됩니다. 배포 
 
 ---
 
-**English summary:** MyCapture is a Windows 11 screenshot, pin, enhanced local OCR, OCR-assisted privacy-redaction, unified image/video library, image editing, cross-monitor region-recording, timed-text video editing, and GIF-export app. MyCapture is distributed only through the [Microsoft Store](https://apps.microsoft.com/detail/9PB33MC095VR), which signs the package and delivers updates; the app never checks for or downloads updates itself, and Settings > Update opens the MyCapture page in the Store; this private repository is for development, and support lives in the public [support repository](https://github.com/sukwoo0711-maker/mycapture-support). Packages are self-contained and work without a preinstalled .NET runtime. Capture, editing, recording and OCR run on the PC; the only automatic network access is downloading missing OCR model files (see the [privacy policy](https://github.com/sukwoo0711-maker/mycapture-support/blob/main/PRIVACY.md)). The included bootstrap script can install the repository-pinned .NET 10 SDK for source builds without admin rights. Choose Korean, English, or the Windows display language in Settings; the saved choice applies on the next app start. Recording intentionally has no audio.
+**English summary:** MyCapture is a Windows 10 version 22H2 or later (x64; ARM64 x64 emulation requires Windows 11) screenshot, pin, enhanced local OCR, OCR-assisted privacy-redaction, unified image/video library, image editing, cross-monitor region-recording, timed-text video editing, and GIF-export app. MyCapture is distributed only through the [Microsoft Store](https://apps.microsoft.com/detail/9PB33MC095VR), which signs the package and delivers updates; the app never checks for or downloads updates itself, and Settings > Update opens the MyCapture page in the Store; this private repository is for development, and support lives in the public [support repository](https://github.com/sukwoo0711-maker/mycapture-support). Packages are self-contained and work without a preinstalled .NET runtime. Capture, editing, recording and OCR run on the PC; the only automatic network access is downloading missing OCR model files (see the [privacy policy](https://github.com/sukwoo0711-maker/mycapture-support/blob/main/PRIVACY.md)). The included bootstrap script can install the repository-pinned .NET 10 SDK for source builds without admin rights. Choose Korean, English, or the Windows display language in Settings; the saved choice applies on the next app start. Recording intentionally has no audio.

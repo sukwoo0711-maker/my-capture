@@ -24,12 +24,22 @@ namespace MyCapture.App.Diagnostics;
 internal static class CapturePerformanceSelfTest
 {
     internal const string CommandLineSwitch = "--selftest-capture-performance";
-    private const int Width = 3840, Height = 2160;
-    private static readonly RectD Bounds = new(0, 0, Width, Height);
+    private const int RequestedWidth = 3840, RequestedHeight = 2160;
+    // Windows caps a top-level window at the virtual screen plus its frame (default
+    // WM_GETMINMAXINFO track size). On a desktop with only a 1920×1080 monitor the 4K
+    // overlay became 1942×1102 and the lifecycle timed out (Windows 10 device, #84).
+    // Use 4K when the virtual screen holds it, otherwise the largest size it holds.
+    private static int Width = RequestedWidth, Height = RequestedHeight;
+    private static RectD Bounds => new(0, 0, Width, Height);
     private static readonly RectD Selection = new(120, 120, 640, 480);
+
+    internal static (int Width, int Height) SyntheticSize(int virtualWidth, int virtualHeight) =>
+        virtualWidth <= 0 || virtualHeight <= 0 ? (RequestedWidth, RequestedHeight)
+            : (Math.Min(RequestedWidth, virtualWidth), Math.Min(RequestedHeight, virtualHeight));
 
     internal static int Run(string outputDirectory)
     {
+        (Width, Height) = SyntheticSize(GetSystemMetrics(SmCxVirtualScreen), GetSystemMetrics(SmCyVirtualScreen));
         string output = DiagnosticOutputPaths.Create(outputDirectory);
         var failures = new List<string>();
         var iterations = new List<object>();
@@ -128,7 +138,10 @@ internal static class CapturePerformanceSelfTest
             RenderingTier = RenderCapability.Tier >> 16,
             MaxHardwareTextureSize = typeof(RenderCapability).GetProperty("MaxHardwareTextureSize",
                 BindingFlags.Public | BindingFlags.Static)?.GetValue(null)?.ToString(),
-            Width, Height, Selection, WarmupRounds = 2, MeasuredRounds = 20,
+            Width, Height, RequestedSize = $"{RequestedWidth}x{RequestedHeight}",
+            SyntheticSizeNote = Width == RequestedWidth && Height == RequestedHeight ? "requested 4K"
+                : "clamped to the virtual screen; compare only with runs of the same size",
+            Selection, WarmupRounds = 2, MeasuredRounds = 20,
             Limits = "Fresh synthetic desktop bitmap per round; real visible selector/editor, crop and isolated PNG persistence. Done every fifth round, otherwise editor close. Clipboard sink acknowledges Done without publishing bytes. No native desktop capture, screenshots, clipboard, OCR, user queue, or resident App field wiring. Pointer stream calls actual UpdatePointer/magnifier with injected coordinates; 8ms timer bursts of eight updates for 300ms with no native warp in the measured stream; one initial cursor placement and conditional restoration exercise IsMouseOver. Hardware/OS input latency is excluded. Render gaps are WPF observations, not DWM presentation proof. MaxHardwareTextureSize is null if not publicly exposed. No forced GC during natural soak. Same fixture/settings/session required for baseline comparison. No performance or memory threshold is silently treated as a pass.",
             Iterations = iterations, NaturalMemory = natural, PeriodicMemory = metrics.Samples,
             ResidentWeakReferenceAudit = residentAudit, DisposedWeakReferenceAudit = disposedAudit,
@@ -425,4 +438,8 @@ internal static class CapturePerformanceSelfTest
 
     [DllImport("user32.dll")]
     private static extern uint GetGuiResources(IntPtr process, uint flags);
+
+    private const int SmCxVirtualScreen = 78, SmCyVirtualScreen = 79;
+    [DllImport("user32.dll")]
+    private static extern int GetSystemMetrics(int index);
 }

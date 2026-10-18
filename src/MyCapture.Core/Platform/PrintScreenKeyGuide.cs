@@ -40,7 +40,7 @@ public static class PrintScreenKeyGuide
     /// <summary>Win32 <c>VK_SNAPSHOT</c>.</summary>
     public const uint VkSnapshot = 0x2C;
 
-    /// <summary>Windows Settings > Accessibility > Keyboard, where the option is turned off.</summary>
+    /// <summary>Windows keyboard accessibility settings on both Windows 10 and Windows 11.</summary>
     public const string WindowsSettingsUri = "ms-settings:easeofaccess-keyboard";
 
     /// <summary>
@@ -53,6 +53,17 @@ public static class PrintScreenKeyGuide
         .GetProperties(BindingFlags.Public | BindingFlags.Instance)
         .Where(property => property.PropertyType == typeof(Hotkey) && property.CanRead)
         .ToArray();
+
+    /// <summary>Localized Settings breadcrumb for the specified Windows build.</summary>
+    public static string SettingsPath(int osBuild) =>
+        UiText.Get(WindowsFeatureSupport.HasAccessibilitySettingsName(osBuild) ? "PrtScGuide_SettingsPath" : "PrtScGuide_SettingsPath_Windows10");
+
+    public static string Message(int? osBuild = null) => FormatGuide("PrtScGuide_Message", osBuild);
+
+    public static string OpenSettingsFailed(int? osBuild = null) => FormatGuide("PrtScGuide_OpenSettingsFailed", osBuild);
+
+    private static string FormatGuide(string key, int? osBuild) =>
+        UiText.Format(key, SettingsPath(osBuild ?? Environment.OSVersion.Version.Build));
 
     /// <summary>PrintScreen alone or with Shift: the chords Windows claims for its capture tool.</summary>
     public static bool UsesPrintScreen(Hotkey? hotkey) =>
@@ -100,11 +111,11 @@ public static class PrintScreenKeyGuide
     /// The reason and fix to add to a registration failure notice, or an empty string when no
     /// failed shortcut uses Print Screen or Windows does not claim the key.
     /// </summary>
-    public static string FailureNotice(IEnumerable<Hotkey> failedHotkeys, bool windowsCaptureKeyEnabled)
+    public static string FailureNotice(IEnumerable<Hotkey> failedHotkeys, bool windowsCaptureKeyEnabled, int? osBuild = null)
     {
         ArgumentNullException.ThrowIfNull(failedHotkeys);
         return windowsCaptureKeyEnabled && failedHotkeys.Any(UsesPrintScreen)
-            ? UiText.Get("PrtScGuide_FailureNotice")
+            ? FormatGuide("PrtScGuide_FailureNotice", osBuild)
             : string.Empty;
     }
 }

@@ -26,6 +26,22 @@ internal static class VideoEditorResponsivenessSelfTest
 {
     internal const string CommandLineSwitch = "--selftest-video-editor";
 
+    internal const string CalibrationEnvironmentVariable = "MYCAPTURE_VIDEO_EDITOR_SELFTEST_CALIBRATION";
+    private static string _verificationMode = "default";
+
+    internal static string ReadCalibrationMode(string? value) => value switch
+    {
+        null or "" or "default" => "default",
+        "none" => value,
+        _ => throw new ArgumentException("Verification mode must be none or default."),
+    };
+
+    private static void ConfigureCalibration()
+    {
+        _verificationMode = ReadCalibrationMode(Environment.GetEnvironmentVariable(CalibrationEnvironmentVariable));
+        StudioRangeVideoEffect.VerificationEnabled = _verificationMode == "default";
+    }
+
     private const int DragSamples = 300;
     private const int AllocationSamples = 6000;
     private const int ExactSamples = 20;
@@ -36,6 +52,7 @@ internal static class VideoEditorResponsivenessSelfTest
 
     internal static int Run(string outputDirectory)
     {
+        ConfigureCalibration();
         int iterations = ReadSoakIterations();
         return iterations == 1
             ? RunSingle(outputDirectory)
@@ -191,9 +208,12 @@ internal static class VideoEditorResponsivenessSelfTest
             Line($"UTC: {DateTimeOffset.UtcNow:O}");
             Line($"OS: {Environment.OSVersion}");
             Line($"Process: {Environment.ProcessPath}");
+            Line($"Verification mode: {_verificationMode}");
             Line();
 
             RecordingResult recording = sharedRecording ?? RecordClip(clipPath);
+            double containerMs = MediaFoundationVideoFrameReader.ReadContainerDurationMs(clipPath);
+            ValidateSourceClip(recording, containerMs);
             Line(string.Create(
                 CultureInfo.InvariantCulture,
                 $"Real clip: {recording.Width}x{recording.Height} @ {recording.Fps}fps, " +
@@ -234,7 +254,6 @@ internal static class VideoEditorResponsivenessSelfTest
 
             // WPF's NaturalDuration is Windows Media Player's whole-second value; the editor must
             // use the container duration so the final fraction can be trimmed and exported.
-            double containerMs = MediaFoundationVideoFrameReader.ReadContainerDurationMs(clipPath);
             double clipMs = editor.DurationMsForTest;
             Line(string.Create(
                 CultureInfo.InvariantCulture,
@@ -332,6 +351,10 @@ internal static class VideoEditorResponsivenessSelfTest
             var cycleTimes = new double[DragSamples - 1];
             long framesBefore = timeline.RenderFrameCountForTest;
             long seeksBefore = coordinator.IssuedSeekCountForTest;
+            PresentedFrameVerification? verification = StudioRangeVideoEffect.VerificationFor(editor.MediaForTest);
+            int samplesBeforeScrub = verification?.Samples ?? 0;
+            int decodesBeforeScrub = verification?.Decodes ?? 0;
+            bool verificationOverlappedScrub = verification?.IsRunning == true;
             long previousCycle = Stopwatch.GetTimestamp();
             for (int i = 0; i < DragSamples; i++)
             {
@@ -345,10 +368,13 @@ internal static class VideoEditorResponsivenessSelfTest
                 double target = clipMs * fraction;
                 long started = Stopwatch.GetTimestamp();
                 timeline.SeekFromOverview(target);
+                verificationOverlappedScrub |= verification?.IsRunning == true;
                 pointerLatencies[i] = Stopwatch.GetElapsedTime(started).TotalMilliseconds;
                 PumpFor(TimeSpan.FromMilliseconds(16));
             }
 
+            int scrubSamples = (verification?.Samples ?? 0) - samplesBeforeScrub;
+            int scrubDecodes = (verification?.Decodes ?? 0) - decodesBeforeScrub;
             long framesAfterInput = timeline.RenderFrameCountForTest;
             var releaseWatch = Stopwatch.StartNew();
             long finalGeneration = coordinator.RequestExact(clipMs * 0.75);
@@ -358,6 +384,7 @@ internal static class VideoEditorResponsivenessSelfTest
             releaseWatch.Stop();
             double pointerP95 = Percentile(pointerLatencies, 0.95);
             double pointerP99 = Percentile(pointerLatencies, 0.99);
+            double cycleP50 = Percentile(cycleTimes, 0.50);
             double cycleP95 = Percentile(cycleTimes, 0.95);
             double cycleP99 = Percentile(cycleTimes, 0.99);
             double maxCycle = cycleTimes.Max();
@@ -373,10 +400,15 @@ internal static class VideoEditorResponsivenessSelfTest
             Line(string.Create(
                 CultureInfo.InvariantCulture,
                 $"5s real scrub: samples={DragSamples}, pointer p95={pointerP95:0.000}ms, " +
-                $"p99={pointerP99:0.000}ms, cycle p95={cycleP95:0.000}ms, " +
+                $"p99={pointerP99:0.000}ms, cycle p50={cycleP50:0.000}ms, p95={cycleP95:0.000}ms, " +
                 $"p99={cycleP99:0.000}ms, max={maxCycle:0.000}ms, " +
                 $"render-frames={renderedFrames}, decoder-seeks={issuedSeeks}, " +
                 $"dropped={coordinator.DroppedRequestCountForTest}, stale={coordinator.StaleResultCountForTest}"));
+            Line($"Verification/scrub: mode={_verificationMode}; samples={scrubSamples}; decodes={scrubDecodes}; "
+                + $"overlap={verificationOverlappedScrub}; outcome={verification?.LastResult}; effect={editor.MediaForTest.Effect?.GetType().Name ?? "None"}");
+            Gate(scrubSamples == 0 && scrubDecodes == 0 && !verificationOverlappedScrub,
+                "no range verification sampling or decoding during scrub",
+                $"range verification overlapped scrub: samples={scrubSamples}, decodes={scrubDecodes}, active={verificationOverlappedScrub}");
             Gate(pointerP95 <= 16.7,
                 $"real scrub pointer p95 {pointerP95:0.000}ms <= 16.7ms",
                 $"real scrub pointer p95 {pointerP95:0.000}ms exceeded 16.7ms");
@@ -490,16 +522,47 @@ internal static class VideoEditorResponsivenessSelfTest
     {
         var engine = new ScreenCaptureEngine(NullLogger<ScreenCaptureEngine>.Instance);
         var grabber = new RegionFrameGrabber(engine, includeCursor: false);
+        using var firstFrame = new ManualResetEventSlim();
         using var recorder = new RegionRecorder(
             grabber,
-            options => new MediaFoundationVideoEncoder(options, NullLogger<MediaFoundationVideoEncoder>.Instance),
+            options => new SourceEncoder(
+                new MediaFoundationVideoEncoder(options, NullLogger<MediaFoundationVideoEncoder>.Instance), firstFrame),
             NullLogger.Instance);
         recorder.Start(
             new RectD(0, 0, 320, 240),
             path,
             new RecordingSettings { FrameRate = RecordingFrameRate.Fps15, IncludeCursor = false });
+        var startup = Stopwatch.StartNew();
+        while (!firstFrame.Wait(50) && recorder.IsRecording && startup.Elapsed < TimeSpan.FromSeconds(15)) { }
+        if (!firstFrame.IsSet)
+        {
+            _ = recorder.Stop();
+            throw new TimeoutException("Video-editor source produced no encoded frame within 15 seconds.");
+        }
+        // Sample real recording time after startup, so a slow WGC/codec cannot consume
+        // the whole fixture interval and leave a single timestamp-zero frame.
         Thread.Sleep(2500);
-        return recorder.Stop();
+        RecordingResult recording = recorder.Stop();
+        ValidateSourceClip(recording, MediaFoundationVideoFrameReader.ReadContainerDurationMs(path));
+        return recording;
+    }
+
+    internal static void ValidateSourceClip(RecordingResult recording, double containerDurationMs)
+    {
+        if (recording.EmittedFrames < 2 || !double.IsFinite(containerDurationMs) || containerDurationMs < 2000)
+            throw new InvalidOperationException(
+                $"Video-editor source needs multiple frames and at least 2000ms of media; " +
+                $"got {recording.EmittedFrames} frame(s), container {containerDurationMs:0.###}ms, " +
+                $"recorder {recording.DurationMs:0.###}ms.");
+    }
+
+    private sealed class SourceEncoder(IVideoEncoder inner, ManualResetEventSlim firstFrame) : IVideoEncoder
+    {
+        public int Width => inner.Width;
+        public int Height => inner.Height;
+        public void WriteFrame(in EncoderFrame frame) { inner.WriteFrame(frame); firstFrame.Set(); }
+        public void Complete() => inner.Complete();
+        public void Dispose() => inner.Dispose();
     }
 
     private static bool PumpUntil(Func<bool> condition, TimeSpan timeout)

@@ -2603,7 +2603,7 @@ This cannot be undone.</value>
     <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
   </data>
   <data name="Text_E04C819FB554" xml:space="preserve">
-    <value>MyCapture requires Windows 11 or later.</value>
+    <value>MyCapture requires Windows 10 version 22H2 or later.</value>
     <comment>src\MyCapture.App\Diagnostics\HostRequirementGate.cs</comment>
   </data>
   <data name="Text_E0B58D1CFED1" xml:space="preserve">
@@ -3532,11 +3532,13 @@ Delete {1} {1:plural:subfolder|subfolders}, {2} {2:plural:image|images}, and {3}
   <data name="StoreRating_OpenFailed" xml:space="preserve"><value>Could not open Microsoft Store. Check that the Microsoft Store app is installed.</value></data>
   <data name="StoreRating_InviteMessage" xml:space="preserve"><value>Would you like to rate MyCapture in Microsoft Store?</value></data>
   <data name="StoreRating_InviteAction" xml:space="preserve"><value>Rate</value></data>
+  <data name="PrtScGuide_SettingsPath" xml:space="preserve"><value>Windows Settings &gt; Accessibility &gt; Keyboard</value></data>
+  <data name="PrtScGuide_SettingsPath_Windows10" xml:space="preserve"><value>Windows Settings &gt; Ease of Access &gt; Keyboard</value></data>
   <data name="PrtScGuide_Heading" xml:space="preserve"><value>PrintScreen key conflict</value></data>
-  <data name="PrtScGuide_Message" xml:space="preserve"><value>Windows is set to open its capture tool with the Print Screen key, so the MyCapture shortcut may not work. Turn the option off in Windows Settings &gt; Accessibility &gt; Keyboard.</value></data>
+  <data name="PrtScGuide_Message" xml:space="preserve"><value>Windows is set to open screen capture with the Print Screen key, so the MyCapture shortcut may not work. Turn this option off in {0}.</value></data>
   <data name="PrtScGuide_OpenSettings" xml:space="preserve"><value>Open Windows Settings</value></data>
-  <data name="PrtScGuide_OpenSettingsFailed" xml:space="preserve"><value>Could not open Windows Settings. Open Settings &gt; Accessibility &gt; Keyboard manually.</value></data>
-  <data name="PrtScGuide_FailureNotice" xml:space="preserve"><value>Windows is set to open screen capture with the Print Screen key. Turn the option off in Windows Settings &gt; Accessibility &gt; Keyboard.</value></data>
+  <data name="PrtScGuide_OpenSettingsFailed" xml:space="preserve"><value>Could not open Windows Settings. Open {0} manually to turn this option off.</value></data>
+  <data name="PrtScGuide_FailureNotice" xml:space="preserve"><value>Windows is set to open screen capture with the Print Screen key. Turn this option off in {0}.</value></data>
   <data name="EditorBlur_Name" xml:space="preserve"><value>Blur</value></data>
   <data name="EditorBlur_ToolTip" xml:space="preserve"><value>Drag over the area to blur (B)</value></data>
   <data name="EditorBlur_ToolTitle" xml:space="preserve"><value>Blur tool</value></data>
@@ -3947,6 +3949,7 @@ Delete {1} {1:plural:subfolder|subfolders}, {2} {2:plural:image|images}, and {3}
   <data name="LibraryUx_InFolderAccessible" xml:space="preserve"><value>, in folder {0}</value></data>
   <data name="LibraryUx_TileMoreHint" xml:space="preserve"><value>More — keep, export and recognize text</value></data>
   <data name="LibraryUx_SearchPlaceholder" xml:space="preserve"><value>Search titles, apps, tags, image text · app:Edge tag:meeting</value></data>
+  <data name="LibraryUx_SearchPlaceholderCompact" xml:space="preserve"><value>Search titles, apps, tags, image text</value></data>
   <data name="LibraryUx_CommandShortcut" xml:space="preserve"><value>{0} ({1})</value></data>
   <data name="LibraryUx_NavImages" xml:space="preserve"><value>Images</value></data>
   <data name="LibraryUx_NavVideos" xml:space="preserve"><value>Videos</value></data>

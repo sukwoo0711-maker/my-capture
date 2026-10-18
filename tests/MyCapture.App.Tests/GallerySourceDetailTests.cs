@@ -358,7 +358,9 @@ public sealed class GallerySourceDetailTests
         bool longer = FullValueHeight(value) > 2 * value.LineHeight + .5;
         Assert.Equal(longer, GalleryTextClamp.GetIsOverflowing(value));
         Assert.Equal(longer, showAll.IsVisible);
-        Assert.Equal(Math.Min(FullValueHeight(value), 2 * value.LineHeight), value.ActualHeight, 1);
+        double scale = VisualTreeHelper.GetDpi(value).DpiScaleY;
+        double expectedPixels = Math.Round(Math.Min(FullValueHeight(value), 2 * value.LineHeight) * scale);
+        Assert.Equal(expectedPixels, value.ActualHeight * scale, 6);
         Assert.False(showAll.IsChecked);
         Assert.Equal(UiText.Get("Library.Source.ShowAll"), showAll.Content);
         Assert.Equal(toggleName, AutomationProperties.GetName(showAll));

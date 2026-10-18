@@ -7,6 +7,7 @@ using System.Windows.Media.Imaging;
 using MyCapture.App.Pinning;
 using MyCapture.App.Themes;
 using MyCapture.Core.Pin;
+using MyCapture.Core.Platform;
 using MyCapture.Core.Settings;
 using Xunit;
 
@@ -19,6 +20,14 @@ namespace MyCapture.App.Tests;
 /// </summary>
 public sealed class PinFrameTests
 {
+    [Fact]
+    public void PinAndNotificationCorners_FollowTheCurrentHost()
+    {
+        double radius = WindowsFeatureSupport.WindowCornerRadiusDip(Environment.OSVersion.Version.Build);
+        Assert.Equal(radius, PinWindow.FrameCornerRadiusDip);
+        Assert.Equal(new CornerRadius(radius), MyCapture.App.ThemedShellPresenter.CardCorner);
+    }
+
     private const string CodeSource = "public void Capture()\r\n{\r\n\tSave();\r\n}";
 
     private const string CodeHtml =

@@ -15,7 +15,7 @@ namespace MyCapture.Platform.Recording;
 /// </para>
 /// <para>
 /// A waitable timer created with <c>CREATE_WAITABLE_TIMER_HIGH_RESOLUTION</c>, which every
-/// build from the Windows 11 22000 support floor provides, wakes close to the requested time
+/// supported host provides (available since Windows 10 1803), wakes close to the requested time
 /// for this handle only. It deliberately avoids <c>timeBeginPeriod</c>, which
 /// raises the timer resolution for the whole system and its power use. If the timer cannot be
 /// created or armed, the delay falls back to the previous whole-millisecond sleep.

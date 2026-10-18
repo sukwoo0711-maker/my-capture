@@ -16,25 +16,33 @@ namespace MyCapture.App.Tests;
 
 public sealed class MenuItemSubmenuTests
 {
-    [Fact]
-    public void LooseMenuTemplateHostsSubmenuAndPreservesLeafGesture() => StaTestHost.Run(() =>
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1.25)]
+    public void LooseMenuTemplateHostsSubmenuAndPreservesLeafGesture(double scale) => StaTestHost.Run(() =>
     {
         // Keep the existing source-XAML loader contract and the same fixed symbol grid.
         var window = new Window();
         Ocr410Fixture.LoadTheme(window);
         var restore = new MenuItem
         {
-            Header = "Restore", Resources = window.Resources,
+            Header = "Restore", Resources = window.Resources, UseLayoutRounding = true,
             Style = (Style)window.Resources[typeof(MenuItem)],
         };
         var child = new MenuItem { Header = "Empty", IsEnabled = false };
         restore.Items.Add(child);
+        SetDpi(restore, scale);
         restore.ApplyTemplate();
         Layout(restore);
         Popup popup = Assert.IsType<Popup>(restore.Template.FindName("PART_Popup", restore));
-        Layout(Assert.IsAssignableFrom<FrameworkElement>(popup.Child));
+        FrameworkElement body = Assert.IsAssignableFrom<FrameworkElement>(popup.Child);
+        body.UseLayoutRounding = true;
+        Layout(body);
+        SetDpi(body, scale);
+        Layout(body);
         Assert.Same(child, restore.ItemContainerGenerator.ContainerFromIndex(0));
-        Assert.True(child.ActualWidth > 0 && child.ActualHeight >= 34);
+        if (scale > 0) Assert.Equal(scale, VisualTreeHelper.GetDpi(child).DpiScaleY);
+        AssertItemSize(child);
         Border arrow = Assert.IsType<Border>(restore.Template.FindName("SubmenuArrow", restore));
         Assert.Equal(Visibility.Visible, arrow.Visibility);
         AssertArrowGrid(arrow);
@@ -48,8 +56,10 @@ public sealed class MenuItemSubmenuTests
         Assert.False(popup.IsOpen);
     });
 
-    [Fact]
-    public void RealMenuTemplateHostsLoadingEmptyAndRestorableItemsWithoutChangingLeafChrome() => StaTestHost.Run(() =>
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1.25)]
+    public void RealMenuTemplateHostsLoadingEmptyAndRestorableItemsWithoutChangingLeafChrome(double scale) => StaTestHost.Run(() =>
     {
         using var language = UiText.UseLanguage("ko-KR");
         foreach (AppTheme theme in new[] { AppTheme.Glass, AppTheme.HighContrast })
@@ -64,7 +74,7 @@ public sealed class MenuItemSubmenuTests
             var button = new Button { Content = "More", ContextMenu = menu };
             var window = new Window
             {
-                Content = button, Resources = resources, Width = 300, Height = 120,
+                Content = button, Resources = resources, Width = 300, Height = 120, UseLayoutRounding = true,
                 Left = -32000, Top = -32000, ShowInTaskbar = false, ShowActivated = false,
             };
             try
@@ -74,6 +84,7 @@ public sealed class MenuItemSubmenuTests
                 menu.Placement = PlacementMode.Bottom;
                 menu.IsOpen = true;
                 PumpUntil(() => menu.IsLoaded);
+                SetDpi(menu, scale);
                 menu.ApplyTemplate();
                 Layout(menu);
                 restore.ApplyTemplate();
@@ -99,11 +110,15 @@ public sealed class MenuItemSubmenuTests
                     restore.Items.Add(item);
                     Layout(menu);
                     FrameworkElement popupBody = Assert.IsAssignableFrom<FrameworkElement>(popup.Child);
+                    popupBody.UseLayoutRounding = true;
+                    Layout(popupBody);
+                    SetDpi(popupBody, scale);
                     Layout(popupBody);
                     var presenter = Assert.Single(Descendants(popupBody).OfType<ItemsPresenter>());
                     Assert.Equal(KeyboardNavigationMode.Cycle, System.Windows.Input.KeyboardNavigation.GetDirectionalNavigation(presenter));
                     Assert.Same(item, restore.ItemContainerGenerator.ContainerFromIndex(0));
-                    Assert.True(item.ActualWidth > 0 && item.ActualHeight >= 34);
+                    if (scale > 0) Assert.Equal(scale, VisualTreeHelper.GetDpi(item).DpiScaleY);
+                    AssertItemSize(item);
                     Assert.Equal(header, item.Header);
                     Assert.Equal(enabled, item.IsEnabled);
                     var arrow = Assert.IsType<Border>(restore.Template.FindName("SubmenuArrow", restore));
@@ -143,6 +158,29 @@ public sealed class MenuItemSubmenuTests
             finally { menu.IsOpen = false; window.Close(); }
         }
     });
+
+    private static void AssertItemSize(MenuItem item)
+    {
+        Assert.True(item.ActualWidth > 0);
+        Assert.Equal(34, item.MinHeight);
+        double scale = VisualTreeHelper.GetDpi(item).DpiScaleY;
+        double minimum = item.UseLayoutRounding ? Math.Round(34 * scale) / scale : 34;
+        Assert.True(item.ActualHeight >= minimum,
+            $"DPI={scale}: expected at least {minimum * scale}px, actual {item.ActualHeight * scale}px");
+    }
+
+    private static void SetDpi(Visual visual, double scale)
+    {
+        if (scale <= 0) return; // Exercise the real monitor DPI as well.
+        while (VisualTreeHelper.GetParent(visual) is Visual parent) visual = parent;
+        VisualTreeHelper.SetRootDpi(visual, new DpiScale(scale, scale));
+        // SetRootDpi updates DPI flags; previously measured elements must lay out again.
+        foreach (UIElement element in Descendants(visual).Prepend(visual).OfType<UIElement>())
+        {
+            element.InvalidateMeasure();
+            element.InvalidateArrange();
+        }
+    }
 
     private static void AssertArrowGrid(Border arrow)
     {

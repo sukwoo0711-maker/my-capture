@@ -64,8 +64,8 @@ public sealed class QuickAccessCardLabelTests
             Ocr410Fixture.LoadTheme(card);
             card.Show();
             card.UpdateLayout();
-            // The card keeps its width with five actions.
-            Assert.Equal(344, card.ActualWidth);
+            // Opaque capture-excluded cards omit the two 8-DIP shadow margins.
+            Assert.Equal(card.AllowsTransparency ? 344 : 328, card.ActualWidth);
             foreach (Button button in card.ActionButtonsForTest)
             {
                 TextBlock name = FaceName(button)!;

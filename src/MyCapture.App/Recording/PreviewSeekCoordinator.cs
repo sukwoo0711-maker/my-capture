@@ -56,6 +56,8 @@ internal sealed class PreviewSeekCoordinator : IDisposable, IAsyncDisposable
         }
     }
 
+    internal event Action? PositionRequested;
+
     internal event Action<PresentedPreviewFrame>? PreviewPresented;
 
     internal event Action<Exception>? SeekFailed;
@@ -90,6 +92,7 @@ internal sealed class PreviewSeekCoordinator : IDisposable, IAsyncDisposable
 
     internal long RequestPreview(double targetPositionMs)
     {
+        PositionRequested?.Invoke();
         double target = Math.Max(0, targetPositionMs);
         int frame = FrameIndex(target);
         lock (_gate)
@@ -136,6 +139,7 @@ internal sealed class PreviewSeekCoordinator : IDisposable, IAsyncDisposable
 
     internal long RequestExact(double targetPositionMs)
     {
+        PositionRequested?.Invoke();
         lock (_gate)
         {
             return QueueExactLocked(Math.Max(0, targetPositionMs), completion: null);
@@ -144,6 +148,7 @@ internal sealed class PreviewSeekCoordinator : IDisposable, IAsyncDisposable
 
     internal Task<PresentedPreviewFrame> RequestExactAsync(double targetPositionMs)
     {
+        PositionRequested?.Invoke();
         var completion = new TaskCompletionSource<PresentedPreviewFrame>(
             TaskCreationOptions.RunContinuationsAsynchronously);
         lock (_gate)

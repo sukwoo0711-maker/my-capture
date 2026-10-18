@@ -71,6 +71,11 @@ foreach ($text in @($PublisherDisplayName, $DisplayName)) {
 if ($MaxVersionTested -cnotmatch '\A10\.0\.[0-9]{5}\.0\z') {
     throw "MaxVersionTested must look like 10.0.26200.0: $MaxVersionTested"
 }
+[xml]$manifestTemplate = Get-Content -LiteralPath (Join-Path $repo 'build/store/AppxManifest.xml') -Raw -Encoding UTF8
+$minimumVersion = [Version]$manifestTemplate.Package.Dependencies.TargetDeviceFamily.MinVersion
+if ([Version]$MaxVersionTested -lt $minimumVersion) {
+    throw "MaxVersionTested must be at least the package MinVersion ($minimumVersion)."
+}
 
 if ([string]::IsNullOrWhiteSpace($PublishDir)) {
     $PublishDir = Join-Path $repo "artifacts\release\$Version\publish-win-x64"

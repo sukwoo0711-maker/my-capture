@@ -9,6 +9,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\MyCapture.App\MyCapture.App.csproj" />
+    <ProjectReference Include="..\..\src\MyCapture.Setup\MyCapture.Setup.csproj" ReferenceOutputAssembly="false" SkipGetTargetFrameworkProperties="true" />
     <Compile Include="..\Shared\TestRecycleBin.cs" Link="TestRecycleBin.cs" />
     <Using Include="MyCapture.Tests" />
   </ItemGroup>

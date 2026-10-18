@@ -17,6 +17,9 @@ public sealed record DecodedVideoFrame(
     /// <summary>The source-timeline position covered by the end of this decoded sample.</summary>
     public double EndTimestampMs => TimestampMs + SampleDurationMs;
 
+    /// <summary>True when the reader supplied timing missing from the MF sample (diagnostics).</summary>
+    public bool SampleDurationInferred { get; init; }
+
     /// <summary>Layout of <see cref="Pixels"/>; BGR32 unless NV12 output was requested.</summary>
     public DecodedVideoPixelFormat Format { get; init; }
 }
@@ -387,9 +390,12 @@ public sealed partial class MediaFoundationVideoFrameReader : IDisposable
         return frame;
     }
 
+    /// <summary>Test-only: emulate a GPU-less host (no DXVA decode, no hardware transforms).</summary>
+    internal static bool ForceSoftwareForTest { get; set; }
+
     private void Initialize(string fullPath, MediaFoundationVideoFrameReaderOptions options)
     {
-        if (options.PreferHardwareDecode)
+        if (options.PreferHardwareDecode && !ForceSoftwareForTest)
         {
             string? failure = TryInitializeHardware(fullPath, options);
             if (failure is null)
@@ -409,7 +415,7 @@ public sealed partial class MediaFoundationVideoFrameReader : IDisposable
             Guid processing = SourceReaderEnableVideoProcessing;
             Guid hardware = ReadWriteEnableHardwareTransforms;
             Check(attributes.SetUINT32(ref processing, 1), "IMFAttributes.SetUINT32(video processing)");
-            Check(attributes.SetUINT32(ref hardware, 1), "IMFAttributes.SetUINT32(hardware transforms)");
+            Check(attributes.SetUINT32(ref hardware, ForceSoftwareForTest ? 0u : 1u), "IMFAttributes.SetUINT32(hardware transforms)");
             Check(
                 MFCreateSourceReaderFromURL(fullPath, attributes, out _reader),
                 nameof(MFCreateSourceReaderFromURL));
@@ -661,7 +667,7 @@ public sealed partial class MediaFoundationVideoFrameReader : IDisposable
                 _lastResolvedSampleDurationMs = resolvedDuration;
             }
 
-            return pending with { SampleDurationMs = resolvedDuration };
+            return pending with { SampleDurationMs = resolvedDuration, SampleDurationInferred = true };
         }
     }
 

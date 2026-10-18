@@ -891,13 +891,11 @@
                             <StackPanel>
                                 <TextBlock Style="{StaticResource Settings.Label}" Text="{loc:Text PrtScGuide_Heading}" />
                                 <TextBlock x:Name="PrtScGuideMessage" TextWrapping="Wrap" Margin="0,2,0,8"
-                                           Foreground="{DynamicResource Text.Primary}" FontSize="{StaticResource FontSize.Caption}"
-                                           Text="{loc:Text PrtScGuide_Message}" />
+                                           Foreground="{DynamicResource Text.Primary}" FontSize="{StaticResource FontSize.Caption}" />
                                 <Button x:Name="PrtScGuideOpenSettings" Style="{StaticResource Button.Secondary}"
                                         HorizontalAlignment="Left" MinWidth="140"
                                         Content="{loc:Text PrtScGuide_OpenSettings}"
                                         AutomationProperties.Name="{loc:Text PrtScGuide_OpenSettings}"
-                                        AutomationProperties.HelpText="{loc:Text PrtScGuide_Message}"
                                         Click="OnPrtScGuideOpenSettings" />
                             </StackPanel>
                         </Border>

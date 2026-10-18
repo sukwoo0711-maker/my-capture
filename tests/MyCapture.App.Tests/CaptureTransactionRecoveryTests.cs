@@ -28,6 +28,129 @@ public sealed class CaptureTransactionRecoveryTests
     private const string JournalFileName = ".finalize-journal.json";
     private const string CommitMarkerFileName = ".finalize-commit-ready";
 
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    [InlineData(2)]
+    [InlineData(3)]
+    public void Finalize_ReplacementOriginalSwapFailure_RestoresWholeGeneration(int failingSwap) => RunSta(() =>
+    {
+        using var workspace = new TestWorkspace();
+        var settings = new QueueSettings();
+        CaptureQueue queue = NewQueue(workspace.Paths, settings);
+        CapturePersistenceService persistence = NewPersistence(queue, workspace.Paths, settings);
+        CaptureRecord record = persistence.PersistOriginal(SolidBitmap(48, 32, 20, 40, 60), 1, "", "");
+        record.OriginalContentHash = "previous-base-hash";
+        queue.SaveRecordMeta(record);
+        queue.Save();
+        string directory = queue.GetDirectory(record);
+        string[] names = [CaptureFileNames.Original, CaptureFileNames.Rendered,
+            CaptureFileNames.Layers, CaptureFileNames.Thumbnail];
+        Dictionary<string, byte[]> previous = SnapshotFiles(directory, names);
+        RecordSnapshot previousRecord = SnapshotRecord(record, queue);
+        BitmapSource replacement = SolidBitmap(32, 48, 80, 100, 120);
+        AnnotationDocument document = AnnotatedDocument(32, 48);
+        persistence.BeforeStagedFileCommit = (index, _) =>
+        {
+            if (index == failingSwap) throw new IOException("injected original-generation swap failure");
+        };
+        Assert.Throws<IOException>(() => persistence.Finalize(record, replacement, document,
+            new Dictionary<string, BitmapSource>(), replacementOriginal: replacement));
+        AssertFilesEqual(directory, previous);
+        AssertRecordEqual(previousRecord, record, queue);
+        Assert.Equal(48, record.Width);
+        Assert.Equal(32, record.Height);
+        // The hash is cleared durably before the original is rewritten. A rollback restores
+        // the previous bytes but keeps the hash null; duplicate checks recompute it from the file.
+        Assert.Null(record.OriginalContentHash);
+        Assert.Null(ReadMeta(queue.GetFilePath(record, CaptureFileNames.Meta)).OriginalContentHash);
+        Assert.False(persistence.IsBusy(record.Id));
+
+        // A subsequent attempt can replace all three files, including the changed base.
+        persistence.BeforeStagedFileCommit = null;
+        persistence.Finalize(record, replacement, document, new Dictionary<string, BitmapSource>(),
+            replacementOriginal: replacement);
+        Assert.Equal(32, record.Width);
+        Assert.Equal(48, record.Height);
+        Assert.Null(record.OriginalContentHash);
+        Assert.Equal(previousRecord.ContentRevision + 1, record.ContentRevision);
+        Assert.Equal(ImageCodec.EncodePng(replacement), File.ReadAllBytes(queue.GetFilePath(record, CaptureFileNames.Original)));
+    });
+
+    [Fact]
+    public void Constructor_ReplacementOriginalMarkedCommit_RecoversDimensionsAndInvalidatesHash() => RunSta(() =>
+    {
+        using var workspace = new TestWorkspace();
+        var settings = new QueueSettings();
+        CaptureQueue queue = NewQueue(workspace.Paths, settings);
+        CapturePersistenceService persistence = NewPersistence(queue, workspace.Paths, settings);
+        CaptureRecord record = persistence.PersistOriginal(SolidBitmap(48, 32, 20, 40, 60), 1, "", "");
+        record.OriginalContentHash = "previous-base-hash";
+        queue.SaveRecordMeta(record);
+        queue.Save();
+        BitmapSource replacement = SolidBitmap(32, 48, 80, 100, 120);
+        persistence.BeforeRecordMetadataCommit = _ => throw new IOException("injected metadata failure");
+        persistence.Finalize(record, replacement, AnnotatedDocument(32, 48),
+            new Dictionary<string, BitmapSource>(), replacementOriginal: replacement);
+        Assert.True(persistence.IsBusy(record.Id));
+        string directory = queue.GetDirectory(record);
+        string[] names = [CaptureFileNames.Original, CaptureFileNames.Rendered,
+            CaptureFileNames.Layers, CaptureFileNames.Thumbnail];
+        Dictionary<string, byte[]> committed = SnapshotFiles(directory, names);
+
+        CaptureQueue startupQueue = NewQueue(workspace.Paths, settings);
+        startupQueue.Load();
+        CaptureRecord recovered = Assert.Single(startupQueue.Records);
+        Assert.Equal(48, recovered.Width);
+        // The null hash was persisted before the original was rewritten.
+        Assert.Null(recovered.OriginalContentHash);
+        CapturePersistenceService restarted = NewPersistence(startupQueue, workspace.Paths, settings);
+        AssertFilesEqual(directory, committed);
+        Assert.Equal(32, recovered.Width);
+        Assert.Equal(48, recovered.Height);
+        Assert.Null(recovered.OriginalContentHash);
+        Assert.Equal(1, recovered.ContentRevision);
+        Assert.False(restarted.IsBusy(recovered.Id));
+        CaptureRecord meta = ReadMeta(startupQueue.GetFilePath(recovered, CaptureFileNames.Meta));
+        Assert.Equal(32, meta.Width);
+        Assert.Equal(48, meta.Height);
+        Assert.Null(meta.OriginalContentHash);
+        Assert.Equal(names.Sum(name => new FileInfo(Path.Combine(directory, name)).Length), recovered.TotalBytes);
+        CaptureQueue durableQueue = NewQueue(workspace.Paths, settings);
+        durableQueue.Load();
+        Assert.Equal(32, Assert.Single(durableQueue.Records).Width);
+    });
+
+    [Fact]
+    public void Constructor_ReplacementOriginalWithoutCommitMarker_RestoresPreviousBaseAndLayers() => RunSta(() =>
+    {
+        using var workspace = new TestWorkspace();
+        var settings = new QueueSettings();
+        CaptureQueue queue = NewQueue(workspace.Paths, settings);
+        CapturePersistenceService persistence = NewPersistence(queue, workspace.Paths, settings);
+        CaptureRecord record = persistence.PersistOriginal(SolidBitmap(40, 28, 20, 40, 60), 1, "", "");
+        string directory = queue.GetDirectory(record);
+        string[] names = [CaptureFileNames.Original, CaptureFileNames.Rendered,
+            CaptureFileNames.Layers, CaptureFileNames.Thumbnail];
+        Dictionary<string, byte[]> previous = SnapshotFiles(directory, names);
+        string stage = NewStageDirectory(directory);
+        string rollback = Path.Combine(stage, ".rollback");
+        Directory.CreateDirectory(rollback);
+        WriteGenerationFiles(stage, 28, 40, 80, 100, 120);
+        ImageCodec.SavePng(SolidBitmap(28, 40, 80, 100, 120), Path.Combine(stage, CaptureFileNames.Original));
+        WriteJournal(stage, record, record.TotalBytes + 100, true, record.UpdatedAt.AddMinutes(1),
+            names.Select(name => new JournalEntry(name, HadPreviousFile: true)).ToArray());
+        foreach (string name in new[] { CaptureFileNames.Original, CaptureFileNames.Layers })
+            File.Replace(Path.Combine(stage, name), Path.Combine(directory, name),
+                Path.Combine(rollback, name), ignoreMetadataErrors: true);
+        CapturePersistenceService restarted = NewPersistence(queue, workspace.Paths, settings);
+        AssertFilesEqual(directory, previous);
+        Assert.Equal(40, record.Width);
+        Assert.Equal(28, record.Height);
+        Assert.Equal(0, record.ContentRevision);
+        Assert.False(restarted.IsBusy(record.Id));
+    });
+
     [Fact]
     public void Finalize_WhenAStagedSwapFails_RestoresEveryPreviousGenerationAndRecordField() => RunSta(() =>
     {
