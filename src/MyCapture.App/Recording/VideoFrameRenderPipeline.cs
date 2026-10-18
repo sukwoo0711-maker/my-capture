@@ -39,7 +39,7 @@ internal sealed record Mp4RenderOptions
     /// Decode to NV12 and give every frame with nothing drawn over it to an NV12 encoder input
     /// unchanged; only frames with an active layer get those layers drawn onto their samples.
     /// When false, or when the source cannot take that path, every frame is decoded to RGB and
-    /// the encoder converts it back, as before. Kept for comparison.
+    /// converted back to the output's studio NV12 by our converter. Kept for comparison.
     /// </summary>
     internal bool PassThroughNv12 { get; init; } = true;
 
@@ -129,8 +129,8 @@ internal static class VideoFrameRenderPipeline
     /// <para>
     /// The default path reads the decoder's own NV12 and hands every frame with nothing drawn over
     /// it to an NV12 encoder input untouched, so a plain trim is decode plus encode with no colour
-    /// conversion at all (the RGB path converted every frame to RGB and the Sink Writer converted
-    /// it straight back). A frame with an active text or frame layer gets those layers, rendered
+    /// conversion at all (the RGB path converts every frame to RGB and back to NV12).
+    /// A frame with an active text or frame layer gets those layers, rendered
     /// by the shared WPF layer code on this STA thread once per distinct active set, blended onto
     /// the 2x2 blocks they cover by <see cref="Nv12LayerCompositor"/>; the rest of the frame keeps
     /// the decoder's samples. Decoding runs on <see cref="Mp4FrameDecoder"/>'s thread a few
@@ -139,7 +139,9 @@ internal static class VideoFrameRenderPipeline
     /// <para>
     /// The range-aware RGB path remains for sources that cannot pass through unchanged: no NV12
     /// decoder output, an odd or rescaled frame size, a colour description the encoder would
-    /// not reproduce, or an encoder that rejects NV12 input. The caller owns the encoder it
+    /// not reproduce. RGB frames of an even size are converted to the output's default studio
+    /// NV12 in our code; an odd size or an encoder that rejects NV12 input keeps RGB32 input and
+    /// the Sink Writer's converter. The caller owns the encoder it
     /// opens: completion, disposal and, for <see cref="Mp4HardwareDecodeException"/>, a software
     /// retry into a fresh encoder.
     /// </para>
@@ -204,9 +206,37 @@ internal static class VideoFrameRenderPipeline
                 throw new InvalidDataException("The source video reported invalid dimensions.");
             }
 
-            IVideoEncoder encoder = openEncoder(VideoEncoderInputFormat.Bgra32);
+            // NV12 needs an even frame size. An odd size, or an encoder that rejects NV12 input,
+            // keeps the previous RGB32 input and the Sink Writer's converter.
+            IVideoEncoder? nv12 = (request.Width & 1) == 0 && (request.Height & 1) == 0
+                ? TryOpenEncoder(openEncoder, VideoEncoderInputFormat.Nv12, log)
+                : null;
+            IVideoEncoder encoder = nv12 ?? openEncoder(VideoEncoderInputFormat.Bgra32);
             double frameMs = 1000.0 / request.FramesPerSecond;
+            VideoYuvEncoding encoding = DefaultYuvEncoding(request.Height);
             byte[]? pixelBuffer = null;
+            byte[]? nv12Buffer = nv12 is null ? null
+                : new byte[BgraToNv12Converter.RequiredLength(request.Width, request.Height)];
+
+            void WriteNv12(byte[] bgra, int stride, int index)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                if (nv12Buffer is null)
+                {
+                    encoder.WriteFrame(new EncoderFrame(bgra, request.Width, request.Height, stride, index * frameMs));
+                    return;
+                }
+                // Reuse one packed output buffer for both callbacks. The encoder consumes it
+                // synchronously; no OS RGB-to-Y'CbCr converter can change its matrix or rounding.
+                BgraToNv12Converter.Convert(bgra, stride, request.Width, request.Height, encoding, nv12Buffer);
+                cancellationToken.ThrowIfCancellationRequested();
+                encoder.WriteFrame(new EncoderFrame(
+                    nv12Buffer, request.Width, request.Height, request.Width, index * frameMs)
+                {
+                    Format = VideoEncoderInputFormat.Nv12,
+                });
+            }
+
             int composed = 0;
             int emitted = RenderFrames(
                 request,
@@ -217,7 +247,7 @@ internal static class VideoFrameRenderPipeline
                 {
                     cancellationToken.ThrowIfCancellationRequested();
                     pixelBuffer = ToBgra32(frame, request.Width, request.Height, out int stride, pixelBuffer);
-                    encoder.WriteFrame(new EncoderFrame(pixelBuffer, request.Width, request.Height, stride, index * frameMs));
+                    WriteNv12(pixelBuffer, stride, index);
                     composed++;
                 },
                 progress,
@@ -226,13 +256,8 @@ internal static class VideoFrameRenderPipeline
                 {
                     cancellationToken.ThrowIfCancellationRequested();
                     // Nothing is drawn over this frame and it has the output size: decoded
-                    // BGRA pixels go straight to the encoder, skipping WPF composition.
-                    encoder.WriteFrame(new EncoderFrame(
-                        decoded.Pixels,
-                        decoded.Width,
-                        decoded.Height,
-                        decoded.Stride,
-                        index * frameMs));
+                    // BGRA pixels skip WPF composition but use the same explicit NV12 conversion.
+                    WriteNv12(decoded.Pixels, decoded.Stride, index);
                 });
             return new Mp4RenderStatistics("rgb-software", emitted, composed);
         }
@@ -262,8 +287,7 @@ internal static class VideoFrameRenderPipeline
     /// <summary>
     /// The Media Foundation convention for a stream without a colour description: studio range,
     /// BT.709 from 720 coded lines (H.264 codes whole 16-line macroblock rows) and BT.601 below.
-    /// The Sink Writer's RGB to Y'CbCr converter follows it too: 1080p RGB input encodes as
-    /// BT.709 and 320x240 as BT.601.
+    /// RGB exports explicitly convert to this encoding before submitting NV12 to the Sink Writer.
     /// </summary>
     internal static VideoYuvEncoding DefaultYuvEncoding(int height) =>
         new(Bt709: checked((height + 15) & ~15) >= 720, FullRange: false);
@@ -279,7 +303,7 @@ internal static class VideoFrameRenderPipeline
         }
         catch (Exception ex) when (ex is InvalidOperationException or COMException)
         {
-            log.LogWarning(ex, "The video encoder rejected {Format} input; using RGB input instead.", format);
+            log.LogWarning(ex, "The video encoder rejected {Format} input; retrying after range-aware RGB decode.", format);
             return null;
         }
     }

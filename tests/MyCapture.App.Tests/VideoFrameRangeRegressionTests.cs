@@ -124,19 +124,25 @@ public sealed class VideoFrameRangeRegressionTests
             Assert.Equal(Pixels(expected),
                 Pixels(VideoFrameRenderPipeline.RenderSingleFrame(source, Time, width, height, overlays, layers)));
 
-            // Compare actual encoded output pixels as well: the legacy RGB32 reader feeds
-            // the product encoder directly; the new non-passthrough export must yield the
-            // very same NV12 samples, with zero tolerance.
+            // Compare actual encoded output pixels as well: the legacy RGB32 reader's frames,
+            // converted by the export's own studio NV12 converter, feed the product encoder; the
+            // new non-passthrough export must yield the very same NV12 samples, with zero
+            // tolerance. (The export no longer uses the OS RGB-to-Y'CbCr converter, whose
+            // rounding differs between machines.)
             string legacyPath = Path.Combine(root, "legacy.mp4");
             using (var encoder = new MediaFoundationVideoEncoder(
                 new VideoEncoderOptions(legacyPath, width, height, 30,
-                    VideoEncoderOptions.DeriveBitrate(width, height, 30)), NullLogger.Instance))
+                    VideoEncoderOptions.DeriveBitrate(width, height, 30)) { InputFormat = VideoEncoderInputFormat.Nv12 },
+                NullLogger.Instance))
             {
+                byte[] nv12 = new byte[BgraToNv12Converter.RequiredLength(width, height)];
                 for (int i = 0; i < 30; i++)
                 {
                     double time = i * (1000.0 / 30);
                     DecodedVideoFrame frame = legacy.ReadFrameAt(time);
-                    encoder.WriteFrame(new EncoderFrame(frame.Pixels, width, height, frame.Stride, time));
+                    BgraToNv12Converter.Convert(frame.Pixels, frame.Stride, width, height,
+                        VideoFrameRenderPipeline.DefaultYuvEncoding(height), nv12);
+                    encoder.WriteFrame(new EncoderFrame(nv12, width, height, width, time) { Format = VideoEncoderInputFormat.Nv12 });
                 }
                 encoder.Complete();
             }
