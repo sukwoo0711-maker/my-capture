@@ -62,6 +62,10 @@ internal static class StoreScreenshotSelfTest
         bool? oldMotion = FluidMotion.AnimationsEnabledOverrideForTest;
         FluidMotion.AnimationsEnabledOverrideForTest = false;
         int failures = 0;
+        // The video editor refreshes its status line and trim labels from dispatcher callbacks
+        // that do not carry the async-local scope below, so the process language is switched too.
+        // This diagnostic runs in its own process and restores the system language afterwards.
+        UiText.Configure(lang);
         try
         {
             using (UiText.UseLanguage(lang == "en" ? "en-US" : "ko-KR"))
@@ -72,6 +76,7 @@ internal static class StoreScreenshotSelfTest
         finally
         {
             FluidMotion.AnimationsEnabledOverrideForTest = oldMotion;
+            UiText.Configure(null);
         }
 
         report.AppendLine(failures == 0 ? "RESULT: PASS" : $"RESULT: FAIL ({failures})");
