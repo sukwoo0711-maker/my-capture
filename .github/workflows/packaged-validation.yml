@@ -153,7 +153,7 @@ jobs:
           "Packaged validation: PASS ($($selfTests.PassCount)/$($reports.Count)), source $head, version $env:PACKAGE_VERSION" | Out-File $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
 
       - name: Upload six validated release assets
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: MyCapture-${{ env.PACKAGE_VERSION }}-${{ github.sha }}-${{ github.run_attempt }}
           path: |
@@ -169,7 +169,7 @@ jobs:
 
       - name: Upload synthetic validation logs and reports
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: packaged-validation-evidence-${{ github.sha }}-${{ github.run_attempt }}
           path: |
