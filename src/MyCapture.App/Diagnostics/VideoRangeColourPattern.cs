@@ -41,15 +41,22 @@ internal static class VideoRangeColourPattern
             }
         }
 
+        // Convert with the app's own studio/full NV12 converter rather than the OS RGB converter,
+        // whose rounding differs between machines (a GPU-less runner biased Cb/Cr by +1 to +2),
+        // so every machine encodes the same fixture samples.
+        var encoding = new VideoYuvEncoding(VideoFrameRenderPipeline.DefaultYuvEncoding(height).Bt709, fullRange);
+        byte[] nv12 = new byte[BgraToNv12Converter.RequiredLength(width, height)];
+        BgraToNv12Converter.Convert(frame, stride, width, height, encoding, nv12);
         var options = new VideoEncoderOptions(path, width, height, 30, VideoEncoderOptions.DeriveBitrate(width, height, 30))
         {
             FullRange = fullRange,
+            InputFormat = VideoEncoderInputFormat.Nv12,
         };
         using var encoder = new MediaFoundationVideoEncoder(options, NullLogger.Instance);
         for (int i = 0; i < 30 * durationSeconds; i++)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            encoder.WriteFrame(new EncoderFrame(frame, width, height, stride, i * 1000.0 / 30));
+            encoder.WriteFrame(new EncoderFrame(nv12, width, height, width, i * 1000.0 / 30) { Format = VideoEncoderInputFormat.Nv12 });
         }
 
         encoder.Complete();

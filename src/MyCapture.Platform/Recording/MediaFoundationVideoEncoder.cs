@@ -136,10 +136,11 @@ public sealed class MediaFoundationVideoEncoder : IVideoEncoder
                 SetU32(outType, MF_MT_MPEG2_PROFILE, (uint)profile);
             }
 
-            if (_options.FullRange && _options.InputFormat == VideoEncoderInputFormat.Bgra32)
+            if (_options.FullRange)
             {
                 // The Sink Writer's RGB to NV12 converter follows the encoder's range, and the
                 // file declares it, so decoders that honour the declaration show true black and white.
+                // Full-range NV12 input declares the same range below, so no converter is inserted.
                 SetU32(outType, MF_MT_VIDEO_NOMINAL_RANGE, MFNominalRange_0_255);
             }
 
@@ -164,6 +165,10 @@ public sealed class MediaFoundationVideoEncoder : IVideoEncoder
             SetFrameSize(inType, (uint)_options.Width, (uint)_options.Height);
             SetRatio(inType, MF_MT_FRAME_RATE, (uint)fps, 1);
             SetRatio(inType, MF_MT_PIXEL_ASPECT_RATIO, 1, 1);
+            if (_options.FullRange && _options.InputFormat == VideoEncoderInputFormat.Nv12)
+            {
+                SetU32(inType, MF_MT_VIDEO_NOMINAL_RANGE, MFNominalRange_0_255);
+            }
 
             SetInputMediaType(inType);
         }
