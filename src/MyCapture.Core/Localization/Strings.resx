@@ -3904,6 +3904,7 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="SettingsUx_RecordingMethodAuto" xml:space="preserve"><value>자동(권장)</value></data>
   <data name="SettingsUx_RecordingMethodCompatible" xml:space="preserve"><value>호환 모드</value></data>
   <data name="SettingsUx_RecordingMethodHint" xml:space="preserve"><value>자동은 대부분의 화면을 가장 부드럽게 녹화합니다. 녹화한 화면이 깨지거나 멈추면 호환 모드를 선택하십시오.</value></data>
+  <data name="SettingsUx_RecordingBorderNoteWindows10" xml:space="preserve"><value>Windows 10에서는 자동 방식으로 녹화하는 동안 화면 가장자리에 노란 테두리가 보일 수 있습니다. 이 테두리는 녹화 결과에 포함되지 않습니다.</value></data>
   <data name="SettingsUx_BackupHeading" xml:space="preserve"><value>설정 백업</value></data>
   <data name="SettingsUx_BackupHint" xml:space="preserve"><value>설정을 파일로 내보내거나 가져옵니다. 가져온 설정은 적용을 눌러야 저장합니다. GitHub 토큰은 내보내지 않습니다.</value></data>
   <data name="SettingsUx_CancelTip" xml:space="preserve"><value>변경 사항을 버리고 닫습니다.</value></data>

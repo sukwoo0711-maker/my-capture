@@ -744,6 +744,10 @@
                                 <ComboBoxItem Tag="auto" Content="{loc:Text SettingsUx_RecordingMethodAuto}" />
                                 <ComboBoxItem Tag="gdi" Content="{loc:Text SettingsUx_RecordingMethodCompatible}" />
                             </ComboBox>
+                            <!-- Windows 10 has no borderless capture API, so the automatic method shows the
+                                 system's yellow capture border (ADR 0007). Shown only there; see code-behind. -->
+                            <TextBlock x:Name="RecordingBorderNote" Style="{StaticResource Settings.Description}" Margin="0,8,0,0"
+                                       Text="{loc:Text SettingsUx_RecordingBorderNoteWindows10}" Visibility="Collapsed" />
                         </StackPanel>
                     </StackPanel>
                 </ScrollViewer>
