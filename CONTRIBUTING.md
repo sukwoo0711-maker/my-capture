@@ -4,7 +4,7 @@
 
 ## 개발 환경
 
-- Windows 11
+- Windows 10 버전 22H2(빌드 19045) 이상 또는 Windows 11, x64
 - .NET 10 SDK `10.0.400` 이상
 - Windows PowerShell 5.1 이상
 - Git

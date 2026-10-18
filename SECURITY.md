@@ -28,4 +28,4 @@ MyCapture의 보안 문제를 책임 있게 알려 주셔서 감사합니다. �
 
 ## 배포 파일 무결성
 
-MyCapture는 Microsoft Store로만 배포하며, Store가 인증을 통과한 패키지를 Microsoft 인증서로 서명합니다. Store 밖에서 받은 MyCapture 설치 파일은 공식 배포본이 아닙니다.
+MyCapture의 공식 배포 경로는 Microsoft Store와 이 저장소의 GitHub 릴리스입니다. Store는 인증을 통과한 패키지를 Microsoft 인증서로 서명합니다. GitHub 릴리스의 설치 파일과 포터블 ZIP은 서명이 없으므로 같은 릴리스의 `SHA256SUMS.txt`로 확인하십시오. 그 밖의 경로로 받은 MyCapture 파일은 공식 배포본이 아닙니다.

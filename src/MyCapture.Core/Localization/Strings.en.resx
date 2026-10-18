@@ -3904,6 +3904,7 @@ Delete {1} {1:plural:subfolder|subfolders}, {2} {2:plural:image|images}, and {3}
   <data name="SettingsUx_RecordingMethodAuto" xml:space="preserve"><value>Automatic (recommended)</value></data>
   <data name="SettingsUx_RecordingMethodCompatible" xml:space="preserve"><value>Compatibility mode</value></data>
   <data name="SettingsUx_RecordingMethodHint" xml:space="preserve"><value>Automatic records most screens most smoothly. If recordings look broken or freeze, choose compatibility mode.</value></data>
+  <data name="SettingsUx_RecordingBorderNoteWindows10" xml:space="preserve"><value>On Windows 10, a yellow border may appear around the screen while recording with the automatic method. It is not included in the recording.</value></data>
   <data name="SettingsUx_BackupHeading" xml:space="preserve"><value>Settings backup</value></data>
   <data name="SettingsUx_BackupHint" xml:space="preserve"><value>Export your settings to a file or import them. Imported settings are saved when you select Apply. The GitHub token is never exported.</value></data>
   <data name="SettingsUx_CancelTip" xml:space="preserve"><value>Discards your changes and closes.</value></data>
