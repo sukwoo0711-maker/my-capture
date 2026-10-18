@@ -67,6 +67,9 @@ public sealed class MediaFoundationVideoEncoder : IVideoEncoder
     private bool _finalized;
     private bool _disposed;
 
+    /// <summary>Test-only: emulate a GPU-less host by refusing hardware encoder MFTs.</summary>
+    internal static bool ForceSoftwareForTest { get; set; }
+
     public MediaFoundationVideoEncoder(VideoEncoderOptions options, ILogger log)
     {
         _options = options ?? throw new ArgumentNullException(nameof(options));
@@ -108,7 +111,7 @@ public sealed class MediaFoundationVideoEncoder : IVideoEncoder
         {
             Guid hwKey = MF_READWRITE_ENABLE_HARDWARE_TRANSFORMS;
             Check(
-                attributes.SetUINT32(ref hwKey, _options.AllowHardwareEncoder ? 1u : 0u),
+                attributes.SetUINT32(ref hwKey, _options.AllowHardwareEncoder && !ForceSoftwareForTest ? 1u : 0u),
                 "IMFAttributes.SetUINT32(hardware transforms)");
 
             Check(
