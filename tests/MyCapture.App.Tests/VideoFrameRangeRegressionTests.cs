@@ -164,7 +164,25 @@ public sealed class VideoFrameRangeRegressionTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void PlainTrim_Gif_Poster_AndFilmstripKeepRange(bool fullRange) => StaTestHost.Run(() =>
+    public void PlainTrim_Gif_Poster_AndFilmstripKeepRange(bool fullRange) => StaTestHost.Run(() => RunPlainTrim(fullRange));
+
+    // Hosted CI runners have no GPU. Emulate them: software H.264 encoder and decoder only.
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void PlainTrim_Gif_Poster_AndFilmstripKeepRange_SoftwareMedia(bool fullRange) => StaTestHost.Run(() =>
+    {
+        MediaFoundationVideoFrameReader.ForceSoftwareForTest = true;
+        MediaFoundationVideoEncoder.ForceSoftwareForTest = true;
+        try { RunPlainTrim(fullRange); }
+        finally
+        {
+            MediaFoundationVideoFrameReader.ForceSoftwareForTest = false;
+            MediaFoundationVideoEncoder.ForceSoftwareForTest = false;
+        }
+    });
+
+    private static void RunPlainTrim(bool fullRange)
     {
         string root = OwnedTestDirectory.Create("mc-range-consumers-");
         try
@@ -185,7 +203,7 @@ public sealed class VideoFrameRangeRegressionTests
             AssertPatches(trim, width, height, reference, false, 4, 6);
 
             BitmapSource poster = VideoFrameRenderPipeline.RenderSingleFrame(source, Time, 320, 180);
-            AssertPatches(poster, width, height, reference, false, 1, 1);
+            AssertPatchMeans(poster, reference, 1);
             AssertPatches(poster, width, height, null, false, 3, 5);
 
             string gifPath = Path.Combine(root, "export.gif");
@@ -207,12 +225,14 @@ public sealed class VideoFrameRangeRegressionTests
             for (int i = 0; i < strip.PublishedCount; i++)
             {
                 BitmapSource tile = Assert.IsAssignableFrom<BitmapSource>(strip.Tile(i));
-                AssertPatches(tile, width, height, reference, false, 1, 1);
+                // Each tile is a different frame. The software encoder quantises frames differently,
+                // so compare with the reference decoded at the tile's own sample time.
+                AssertPatchMeans(tile, DecodeReference(source, layout.SampleTimeMs(i), fullRange, bt709: true), 1);
                 AssertPatches(tile, width, height, null, false, 3, 5);
             }
         }
         finally { OwnedTestDirectory.Delete(root); }
-    });
+    }
 
     [Theory]
     [InlineData(1, false)]
@@ -454,6 +474,90 @@ public sealed class VideoFrameRangeRegressionTests
         Assert.True(Math.Abs(meanR - expected.R) <= tolerance
             && Math.Abs(meanG - expected.G) <= tolerance && Math.Abs(meanB - expected.B) <= tolerance,
             $"{label} GIF patch mean at ({x},{y}): actual=({meanR:F3},{meanG:F3},{meanB:F3}), expected={expected}, tolerance={tolerance}");
+    }
+
+    /// <summary>
+    /// A downscaled poster or filmstrip tile averages many source pixels. Compare the mean of each
+    /// patch's 5x5 interior with the reference's mean over the same source area, so per-pixel codec
+    /// noise (larger from the software H.264 encoder on GPU-less hosts) is not mistaken for a range
+    /// difference. Range errors move whole flat patches (16→0, 64→56, black→16) or tint greys and
+    /// still exceed the tolerance; see <see cref="PatchMeans_RejectRangeErrorsAndGreyTint"/>.
+    /// </summary>
+    private static void AssertPatchMeans(BitmapSource actual, BitmapSource reference, double tolerance)
+    {
+        (string label, double deviation) = MaxPatchMeanDeviation(actual, reference);
+        Assert.True(deviation <= tolerance, $"{label}: patch mean differs by {deviation:F2} (tolerance {tolerance})");
+    }
+
+    internal static (string Label, double Deviation) MaxPatchMeanDeviation(BitmapSource actual, BitmapSource reference)
+    {
+        byte[] a = Pixels(actual), r = Pixels(reference);
+        int aw = actual.PixelWidth, ah = actual.PixelHeight, rw = reference.PixelWidth, rh = reference.PixelHeight;
+        double sx = (double)rw / aw, sy = (double)rh / ah;
+        (string Label, double Deviation) worst = ("none", 0);
+        for (int i = 0; i < RangePatternClip.Patches.Length; i++)
+        {
+            (int x, int y) = RangePatternClip.Centre(i, aw, ah);
+            double[] am = Mean(a, aw, ah, x - 2, y - 2, x + 3, y + 3);
+            double[] rm = Mean(r, rw, rh, (int)Math.Floor((x - 2) * sx), (int)Math.Floor((y - 2) * sy),
+                (int)Math.Ceiling((x + 3) * sx), (int)Math.Ceiling((y + 3) * sy));
+            for (int c = 0; c < 3; c++)
+            {
+                double deviation = Math.Abs(am[c] - rm[c]);
+                if (deviation > worst.Deviation)
+                    worst = ($"{RangePatternClip.Patches[i].Name} at ({x},{y}) channel {"BGR"[c]}: actual mean {am[c]:F2}, reference mean {rm[c]:F2}", deviation);
+            }
+        }
+        return worst;
+    }
+
+    private static double[] Mean(byte[] bgra, int width, int height, int left, int top, int right, int bottom)
+    {
+        left = Math.Clamp(left, 0, width - 1); top = Math.Clamp(top, 0, height - 1);
+        right = Math.Clamp(right, left + 1, width); bottom = Math.Clamp(bottom, top + 1, height);
+        double[] sum = new double[3];
+        for (int y = top; y < bottom; y++)
+        for (int x = left; x < right; x++)
+        for (int c = 0; c < 3; c++) sum[c] += bgra[(y * width + x) * 4 + c];
+        int count = (right - left) * (bottom - top);
+        return [sum[0] / count, sum[1] / count, sum[2] / count];
+    }
+
+    [Fact]
+    public void PatchMeans_RejectRangeErrorsAndGreyTint() => StaTestHost.Run(() =>
+    {
+        BitmapSource reference = PatternBitmap(1280, 720, (r, g, b, _) => (r, g, b));
+        Assert.True(MaxPatchMeanDeviation(PatternBitmap(160, 90, (r, g, b, _) => (r, g, b)), reference).Deviation <= 1);
+        static byte Expand(byte v) => (byte)Math.Clamp(Math.Round((v - 16) * 255.0 / 219), 0, 255);
+        static byte Retain(byte v) => (byte)Math.Round(16 + v * 219.0 / 255);
+        var errors = new (string Name, Func<byte, byte, byte, int, (byte, byte, byte)> Map, double Minimum)[]
+        {
+            ("studio expanded as full (16→0, 64→56)", (r, g, b, _) => (Expand(r), Expand(g), Expand(b)), 8),
+            ("full shown as studio (black→16)", (r, g, b, _) => (Retain(r), Retain(g), Retain(b)), 8),
+            ("grey tint R/B +5", (r, g, b, i) => i < 7 ? ((byte)Math.Min(255, r + 5), g, (byte)Math.Min(255, b + 5)) : (r, g, b), 5),
+        };
+        foreach (var error in errors)
+        {
+            (string label, double deviation) = MaxPatchMeanDeviation(PatternBitmap(160, 90, error.Map), reference);
+            Assert.True(deviation >= error.Minimum, $"{error.Name}: {label} deviates only {deviation:F2}");
+        }
+    });
+
+    private static BitmapSource PatternBitmap(int width, int height, Func<byte, byte, byte, int, (byte R, byte G, byte B)> map)
+    {
+        byte[] pixels = new byte[width * height * 4];
+        for (int y = 0; y < height; y++)
+        for (int x = 0; x < width; x++)
+        {
+            int index = (y * 2 / height * 8) + (x * 8 / width);
+            var patch = RangePatternClip.Patches[index];
+            (byte r, byte g, byte b) = map(patch.R, patch.G, patch.B, index);
+            int o = (y * width + x) * 4;
+            pixels[o] = b; pixels[o + 1] = g; pixels[o + 2] = r; pixels[o + 3] = 255;
+        }
+        var bitmap = BitmapSource.Create(width, height, 96, 96, PixelFormats.Bgra32, null, pixels, width * 4);
+        bitmap.Freeze();
+        return bitmap;
     }
 
     private static void AssertPatches(BitmapSource actual, int sourceWidth, int sourceHeight,

@@ -390,9 +390,12 @@ public sealed partial class MediaFoundationVideoFrameReader : IDisposable
         return frame;
     }
 
+    /// <summary>Test-only: emulate a GPU-less host (no DXVA decode, no hardware transforms).</summary>
+    internal static bool ForceSoftwareForTest { get; set; }
+
     private void Initialize(string fullPath, MediaFoundationVideoFrameReaderOptions options)
     {
-        if (options.PreferHardwareDecode)
+        if (options.PreferHardwareDecode && !ForceSoftwareForTest)
         {
             string? failure = TryInitializeHardware(fullPath, options);
             if (failure is null)
@@ -412,7 +415,7 @@ public sealed partial class MediaFoundationVideoFrameReader : IDisposable
             Guid processing = SourceReaderEnableVideoProcessing;
             Guid hardware = ReadWriteEnableHardwareTransforms;
             Check(attributes.SetUINT32(ref processing, 1), "IMFAttributes.SetUINT32(video processing)");
-            Check(attributes.SetUINT32(ref hardware, 1), "IMFAttributes.SetUINT32(hardware transforms)");
+            Check(attributes.SetUINT32(ref hardware, ForceSoftwareForTest ? 0u : 1u), "IMFAttributes.SetUINT32(hardware transforms)");
             Check(
                 MFCreateSourceReaderFromURL(fullPath, attributes, out _reader),
                 nameof(MFCreateSourceReaderFromURL));
