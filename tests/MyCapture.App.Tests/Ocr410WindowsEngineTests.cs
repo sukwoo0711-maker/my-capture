@@ -32,6 +32,10 @@ public sealed class Ocr410WindowsEngineTests
         OcrExtraction extraction = OcrExtractionAnalyzer.Analyze(result);
         SaveEvidence(example, image, result, extraction);
         Assert.Equal(OcrStatus.Success, result.Status);
+        // Windows falls back to another installed recognizer; an English fixture read by the
+        // Korean engine measures the host's language packs, not extraction accuracy.
+        Assert.True((result.LanguageTag ?? "").StartsWith(languageTag[..2], StringComparison.OrdinalIgnoreCase),
+            $"Host precondition: Windows OCR {languageTag} is not installed; it used {result.LanguageTag}.");
         Assert.True(extraction.HasGeometry);
         if (example == "table")
         {
@@ -70,6 +74,9 @@ public sealed class Ocr410WindowsEngineTests
         RecognizedText? raw = recognizer.RecognizeAsync(image, example == "table" ? "ko" : "en",
             CancellationToken.None).GetAwaiter().GetResult();
         Assert.NotNull(raw);
+        string requested = example == "table" ? "ko" : "en";
+        Assert.True(raw.LanguageTag.StartsWith(requested, StringComparison.OrdinalIgnoreCase),
+            $"Host precondition: Windows OCR '{requested}' is not installed; it used {raw.LanguageTag}.");
         OcrLine[] lines = raw.Lines.Select(line => new OcrLine(line.Text,
             line.Words.Select(word => word.Bounds).Aggregate(default(OcrRect), OcrRect.Union),
             line.Words.Select(word => new OcrWord(word.Text, word.Bounds)).ToArray())).ToArray();

@@ -283,8 +283,14 @@ internal static class RecordingPerformanceSelfTest
         {
             if (!CaptureWindowExclusion.TryApply(editor)) throw new InvalidOperationException("Editor exclusion failed.");
             editor.Show();
+            // The editor never shrinks below its minimum DIP size (680×460 → 850×575 px at 125%).
+            // Request at least that physical size so the positioner's size check can succeed;
+            // the window still covers the 320×240 recorded region from its top-left corner.
+            DpiScale dpi = VisualTreeHelper.GetDpi(editor);
             PhysicalWindowPositioner.PlaceTopmost(new System.Windows.Interop.WindowInteropHelper(editor).Handle,
-                new RectD(region.Left, region.Top, 700, 500));
+                new RectD(region.Left, region.Top,
+                    Math.Max(700, Math.Ceiling(editor.MinWidth * dpi.DpiScaleX)),
+                    Math.Max(500, Math.Ceiling(editor.MinHeight * dpi.DpiScaleY))));
             Sample("excluded-editor", false);
         }
         finally { editor.Close(); }
