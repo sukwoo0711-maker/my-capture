@@ -9,6 +9,7 @@ using System.Windows.Input;
 using System.Windows.Interop;
 using Microsoft.Extensions.Logging;
 using MyCapture.App.Themes;
+using MyCapture.Core.Platform;
 using MyCapture.Core.Settings;
 using MyCapture.Platform.Shell;
 
@@ -73,6 +74,7 @@ internal sealed partial class SettingsWindow : Window
         InitializeUpdates();
         InitializeStoreRating();
         InitializePrintScreenGuide();
+        InitializeRecordingBorderNote();
 
         _draft = new SettingsDraft(_currentSettings());
         AttachDraftEvents();
@@ -99,6 +101,12 @@ internal sealed partial class SettingsWindow : Window
         RefreshCaptureFolderNote();
         RefreshCommandState();
     }
+
+    /// <summary>Windows 10 cannot hide the capture border, so the recording tab says it stays out of the video.</summary>
+    private void InitializeRecordingBorderNote() =>
+        RecordingBorderNote.Visibility = WindowsFeatureSupport.HasBorderlessCapture(Environment.OSVersion.Version.Build)
+            ? Visibility.Collapsed
+            : Visibility.Visible;
 
     internal static readonly RoutedUICommand ApplyCommand =
         new(UiText.Get("Text_6A1C963D5BC5"), nameof(ApplyCommand), typeof(SettingsWindow));
