@@ -337,7 +337,7 @@ internal sealed class VideoLayerTimeline : FrameworkElement
         {
             if (_frameLayers.Count == 0)
             {
-                DrawEmptyTrack(dc, currentTop, EmptyTrackHeight, UiText.Get("Text_541F62E38579"), UiText.Get("Text_49931F796C95"), timelineWidth);
+                DrawEmptyTrack(dc, currentTop, EmptyTrackHeight, UiText.Get("Text_541F62E38579"), timelineWidth);
                 currentTop += EmptyTrackHeight + Gap;
             }
         }
@@ -368,7 +368,7 @@ internal sealed class VideoLayerTimeline : FrameworkElement
         {
             if (_textLayers.Count == 0)
             {
-                DrawEmptyTrack(dc, currentTop, EmptyTrackHeight, UiText.Get("Text_01EC445E93F5"), UiText.Get("Text_986A825EE823"), timelineWidth);
+                DrawEmptyTrack(dc, currentTop, EmptyTrackHeight, UiText.Get("Text_01EC445E93F5"), timelineWidth);
                 currentTop += EmptyTrackHeight + Gap;
             }
         }
@@ -403,6 +403,16 @@ internal sealed class VideoLayerTimeline : FrameworkElement
             DrawRemovedRange(dc, cut.StartMs, cut.EndMs, timelineWidth, height);
         }
 
+        // Empty-state text stays readable over excluded time. Layer bars retain their
+        // shading above; only the placeholders are drawn after it.
+        if (_textLayers.Count == 0 && _frameLayers.Count == 0)
+        {
+            DrawText(dc, UiText.Get("Text_49931F796C95"), LabelWidth + 12,
+                PaddingTop + ((EmptyTrackHeight - 14) / 2.0), _muted, 12, timelineWidth - 24, _track);
+            DrawText(dc, UiText.Get("Text_986A825EE823"), LabelWidth + 12,
+                PaddingTop + EmptyTrackHeight + Gap + ((EmptyTrackHeight - 14) / 2.0), _muted, 12, timelineWidth - 24, _track);
+        }
+
         // Playhead
         if (_playheadMs >= _viewport.ViewStartMs && _playheadMs <= _viewport.ViewEndMs)
         {
@@ -423,13 +433,11 @@ internal sealed class VideoLayerTimeline : FrameworkElement
         double top,
         double height,
         string label,
-        string placeholder,
         double timelineWidth)
     {
         dc.DrawRectangle(_track, null, new Rect(LabelWidth, top, timelineWidth, height));
         dc.DrawLine(_gridPen, new Point(LabelWidth, top), new Point(LabelWidth, top + height));
-        DrawText(dc, label, 8, top + ((height - 14) / 2.0), _textSecondary, 10.5, LabelWidth - 12);
-        DrawText(dc, placeholder, LabelWidth + 12, top + ((height - 14) / 2.0), _muted, 10, timelineWidth - 24);
+        DrawText(dc, label, 8, top + ((height - 14) / 2.0), _textSecondary, 12, LabelWidth - 12);
     }
 
     private void DrawLayerRow(
@@ -447,7 +455,7 @@ internal sealed class VideoLayerTimeline : FrameworkElement
     {
         dc.DrawRectangle(_track, null, new Rect(LabelWidth, top, timelineWidth, height));
         dc.DrawLine(_gridPen, new Point(LabelWidth, top), new Point(LabelWidth, top + height));
-        DrawText(dc, rowLabel, 8, top + ((height - 14) / 2.0), _textSecondary, 10.5, LabelWidth - 12);
+        DrawText(dc, rowLabel, 8, top + ((height - 14) / 2.0), _textSecondary, 12, LabelWidth - 12);
 
         var bar = GetBarRect(startMs, endMs, top + ((height - BarHeight) / 2.0), LabelWidth + timelineWidth);
         if (bar.IsEmpty) return;
@@ -466,7 +474,7 @@ internal sealed class VideoLayerTimeline : FrameworkElement
 
         if (bar.Width >= 36)
         {
-            DrawText(dc, itemLabel, bar.Left + 6, bar.Top + ((bar.Height - 14) / 2.0), _foreground, 10, bar.Width - 12);
+            DrawText(dc, itemLabel, bar.Left + 6, bar.Top + ((bar.Height - 14) / 2.0), _foreground, 12, bar.Width - 12);
         }
 
         bool selected = layerId == _selectedId;
@@ -1040,7 +1048,8 @@ internal sealed class VideoLayerTimeline : FrameworkElement
         double y,
         Brush brush,
         double size,
-        double maxWidth)
+        double maxWidth,
+        Brush? background = null)
     {
         if (string.IsNullOrEmpty(text) || maxWidth <= 0)
         {
@@ -1060,6 +1069,14 @@ internal sealed class VideoLayerTimeline : FrameworkElement
             MaxLineCount = 1,
             Trimming = TextTrimming.CharacterEllipsis,
         };
+        if (background is not null)
+        {
+            // Only empty placeholders request a backing, so cut hatching cannot cross
+            // their glyphs. Keep its two-DIP padding inside the existing empty row.
+            double verticalPadding = Math.Clamp(EmptyTrackHeight - ((EmptyTrackHeight - 14) / 2.0) - formatted.Height, 0, 2);
+            dc.DrawRectangle(background, null, new Rect(x - 2, y - verticalPadding,
+                Math.Min(maxWidth, formatted.Width) + 4, formatted.Height + (2 * verticalPadding)));
+        }
         dc.DrawText(formatted, new Point(x, y));
     }
 

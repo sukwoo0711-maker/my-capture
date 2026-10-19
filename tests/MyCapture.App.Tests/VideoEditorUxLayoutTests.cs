@@ -1,4 +1,4 @@
-﻿using System.Reflection;
+using System.Reflection;
 using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Controls;
@@ -33,8 +33,8 @@ public sealed class VideoEditorUxLayoutTests
             Assert.Equal("동영상 편집 창", AutomationProperties.GetName(editor));
             var bar = Assert.Single(Descendants((DependencyObject)editor.Content).OfType<Grid>(), grid => grid.Name == "VideoEditorCommandBar");
             TextBlock[] texts = Descendants(bar).OfType<TextBlock>().Where(text => text.IsVisible).ToArray();
-            Assert.Contains(texts, text => text.Text == "동영상 편집");
-            Assert.Contains(texts, text => text.Text == "동영상 0:10.000 · 640×360 · 30fps");
+            Assert.DoesNotContain(texts, text => text.Text == "동영상 편집");
+            Assert.DoesNotContain(texts, text => text.Text == "동영상 0:10.000 · 640×360 · 30fps");
         }
         finally
         {
@@ -49,7 +49,7 @@ public sealed class VideoEditorUxLayoutTests
     /// </summary>
     private static void FitWide(VideoEditorWindow editor)
     {
-        editor.FitCommandBarForTest(1360);
+        editor.Width = 1400;
         editor.UpdateLayout();
     }
 
@@ -76,8 +76,7 @@ public sealed class VideoEditorUxLayoutTests
             double[] order =
             [
                 X(UiText.Get("Text_CE706412FA75")), X(UiText.Get("Text_078C44D5A66E")),
-                X(UiText.Get("VideoEditorUx_Trim")), X(UiText.Get("VideoMulticut_Split")),
-                X(UiText.Get("VideoEditorUx_AddText")), X(UiText.Get("VideoEditorUx_FrameImageEdit")),
+                X(UiText.Get("VideoEditorUx_Trim")), X(UiText.Get("VideoEditorUx_AddText")),
                 X(UiText.Get("MediaExport_ExportFormats")), X(UiText.Get("MediaExport_SaveEdits")),
             ];
             Assert.Equal(order.Order().ToArray(), order);
@@ -88,17 +87,14 @@ public sealed class VideoEditorUxLayoutTests
             Assert.Same(exportFile.FindResource("Button.Secondary"), exportFile.Style);
             foreach (var (name, gesture) in new[]
             {
-                ("VideoEditorUx_Trim", "X"), ("VideoMulticut_Split", "Ctrl+K"),
-                ("VideoEditorUx_AddText", "Ctrl+T"), ("VideoEditorUx_FrameImageEdit", "E"),
+                ("VideoEditorUx_Trim", "X"), ("VideoEditorUx_AddText", "Ctrl+T"),
             })
             {
                 Button tool = Assert.Single(Descendants(bar).OfType<Button>(), b => AutomationProperties.GetName(b) == UiText.Get(name));
                 Assert.Equal(gesture, AutomationProperties.GetAcceleratorKey(tool));
                 Assert.False(string.IsNullOrWhiteSpace(AutomationProperties.GetHelpText(tool)), name);
-                Assert.Contains(Descendants(tool).OfType<TextBlock>(), text => text.IsVisible && text.Text == UiText.Get(name));
+                Assert.Contains(Descendants(tool).OfType<TextBlock>(), text => text.IsVisible && !string.IsNullOrWhiteSpace(text.Text));
             }
-
-            Assert.Equal(0, editor.CommandBarLevelForTest);
         }
         finally
         {
@@ -110,7 +106,7 @@ public sealed class VideoEditorUxLayoutTests
     [Theory]
     [InlineData("ko-KR")]
     [InlineData("en-US")]
-    public void RemovedSegmentOffersRestoreInTheSplitSlotWithoutHidingOtherTools(string language) => StaTestHost.Run(() =>
+    public void RemovedSegmentEnablesRestoreInMoreWithoutHidingOtherTools(string language) => StaTestHost.Run(() =>
     {
         using var culture = UiText.UseLanguage(language);
         string root = OwnedTestDirectory.Create("mc-video-ux-cut-tools-");
@@ -120,10 +116,13 @@ public sealed class VideoEditorUxLayoutTests
             editor = OpenReadyEditor(root, 10_000, show: true, 760, 555);
             var layout = (Grid)editor.Content;
             Grid bar = Assert.Single(Descendants(layout).OfType<Grid>(), grid => grid.Name == "VideoEditorCommandBar");
-            Button split = Field<Button>(editor, "_splitToolButton");
-            Button restore = Field<Button>(editor, "_restoreSegmentButton");
-            Assert.True(split.IsVisible);
-            Assert.False(restore.IsVisible);
+            ContextMenu menu = Field<Button>(editor, "_moreToolsButton").ContextMenu!;
+            MenuItem split = Assert.Single(menu.Items.OfType<MenuItem>(), item => item.InputGestureText == "Ctrl+K");
+            Button restoreButton = Field<Button>(editor, "_restoreSegmentButton");
+            MenuItem restore = Assert.Single(menu.Items.OfType<MenuItem>(), item => Equals(item.Header, AutomationProperties.GetName(restoreButton)));
+            Assert.Equal(Visibility.Visible, split.Visibility);
+            Assert.Equal(Visibility.Visible, restore.Visibility);
+            Assert.False(restore.IsEnabled);
             foreach (double position in new[] { 2000d, 4000d })
             {
                 editor.TimelineForTest.SetPlayhead(position);
@@ -133,21 +132,21 @@ public sealed class VideoEditorUxLayoutTests
             Assert.True(editor.HandleShortcut(Key.Delete, ModifierKeys.None));
             editor.TimelineForTest.SelectSegmentAt(3000);
             editor.UpdateLayout();
-            Assert.False(split.IsVisible);
-            Assert.True(restore.IsVisible);
+            Assert.Equal(Visibility.Visible, split.Visibility);
+            Assert.Equal(Visibility.Visible, restore.Visibility);
             Assert.True(restore.IsEnabled);
             AssertToolsFit();
 
-            restore.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            restore.RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
             editor.UpdateLayout();
             Assert.Empty(Field<VideoEditDocument>(editor, "_editDocument").RemovedRanges);
-            Assert.True(split.IsVisible);
-            Assert.False(restore.IsVisible);
+            Assert.Equal(Visibility.Visible, split.Visibility);
+            Assert.Equal(Visibility.Visible, restore.Visibility);
+            Assert.False(restore.IsEnabled);
             AssertToolsFit();
 
             void AssertToolsFit()
             {
-                Assert.InRange(editor.CommandBarLevelForTest, 0, 5);
                 Assert.True(Field<Button>(editor, "_trimToolButton").IsVisible);
                 Button addText = Field<Button>(editor, "_addTextToolButton");
                 Assert.True(addText.IsVisible || Field<Button>(editor, "_moreToolsButton").ContextMenu!.Items.OfType<MenuItem>().Any(
@@ -192,15 +191,13 @@ public sealed class VideoEditorUxLayoutTests
 
             // Primary edit tools and the finishing action keep full labels and hit targets.
             // Secondary actions remain reachable from More when space is tight.
-            foreach (string key in new[] { "VideoEditorUx_Trim", "VideoMulticut_Split", "MediaExport_SaveEdits" })
+            foreach (string key in new[] { "VideoEditorUx_Trim", "VideoEditorUx_AddText", "MediaExport_ExportFormats", "MediaExport_SaveEdits" })
                 Assert.True(Assert.Single(Descendants(bar).OfType<Button>(), b => AutomationProperties.GetName(b) == UiText.Get(key)).IsVisible, key);
-            foreach (string key in new[] { "VideoEditorUx_AddText", "VideoEditorUx_FrameImageEdit", "MediaExport_ExportFormats" })
+            foreach (string key in new[] { "VideoMulticut_Split", "VideoEditorUx_FrameImageEdit" })
             {
-                Button action = Assert.Single(Descendants(bar).OfType<Button>(), b => AutomationProperties.GetName(b) == UiText.Get(key));
-                Assert.True(action.IsVisible || Field<Button>(editor, "_moreToolsButton").ContextMenu!.Items.OfType<MenuItem>().Any(
+                Assert.True(Field<Button>(editor, "_moreToolsButton").ContextMenu!.Items.OfType<MenuItem>().Any(
                     item => item.Visibility == Visibility.Visible && (string)item.Header == UiText.Get(key)), key);
             }
-            if (width <= 760) Assert.True(editor.CommandBarLevelForTest >= 3, $"level {editor.CommandBarLevelForTest} at {width}");
         }
         finally
         {
@@ -222,11 +219,11 @@ public sealed class VideoEditorUxLayoutTests
             var bar = Assert.Single(Descendants(layout).OfType<Grid>(), grid => grid.Name == "VideoEditorCommandBar");
             // A runner screen smaller than 1400x820 clamps the window, so the widest level is
             // whatever that screen allows; the bar must compact when narrowed and return to it.
-            int wide = editor.CommandBarLevelForTest;
+            int wide = Descendants(bar).OfType<Button>().Count(button => button.IsVisible);
             if (editor.ActualWidth >= 1399)
             {
                 // At the full width the editing tools stay inline; only a clamped window may need More.
-                Assert.InRange(wide, 0, 2);
+                Assert.Equal(7, wide);
             }
 
             int narrowest = wide;
@@ -238,11 +235,11 @@ public sealed class VideoEditorUxLayoutTests
                 editor.Dispatcher.Invoke(System.Windows.Threading.DispatcherPriority.ApplicationIdle, new Action(editor.UpdateLayout));
                 Button save = Assert.Single(Descendants(bar).OfType<Button>(), b => AutomationProperties.GetName(b) == UiText.Get("MediaExport_SaveEdits"));
                 AssertInside(save, layout, layout.ActualHeight);
-                if (width == 760) narrowest = Math.Max(narrowest, editor.CommandBarLevelForTest);
+                if (width == 760) narrowest = Descendants(bar).OfType<Button>().Count(button => button.IsVisible);
             }
 
-            Assert.True(narrowest > wide, $"760 DIP kept level {narrowest}, the wide window had {wide}");
-            Assert.Equal(wide, editor.CommandBarLevelForTest);
+            Assert.Equal(wide, narrowest);
+            Assert.Equal(wide, Descendants(bar).OfType<Button>().Count(button => button.IsVisible));
         }
         finally
         {
@@ -252,91 +249,66 @@ public sealed class VideoEditorUxLayoutTests
     });
 
     [Fact]
-    public void LayerPanelOpensWithTheFirstLayerAndClosesWithTheLast() => StaTestHost.Run(() =>
+    public void LayerPanelKeepsTheUsersDetailsChoiceWhenLayersChange() => StaTestHost.Run(() =>
     {
-        using var language = UiText.UseLanguage("ko-KR");
         string root = OwnedTestDirectory.Create("mc-video-ux-panel-");
         VideoEditorWindow? editor = null;
         try
         {
             editor = OpenReadyEditor(root, 10_000, show: true);
             var layout = (Grid)editor.Content;
-            Border panel = Assert.Single(Descendants(layout).OfType<Border>(), border => border.Name == "VideoLayersPanel");
+            Border panel = Field<Border>(editor, "_layerPanel");
             Grid viewport = Assert.Single(Descendants(layout).OfType<Grid>(), grid => grid.Name == "VideoPreviewViewport");
             void Settle() => editor.Dispatcher.Invoke(System.Windows.Threading.DispatcherPriority.ApplicationIdle, new Action(editor.UpdateLayout));
-
-            // A plain trim keeps the whole width for the preview: no empty layer panel.
-            Assert.Equal(Visibility.Collapsed, panel.Visibility);
-            Assert.False(editor.IsLayerPanelVisibleForTest);
-            double wide = viewport.ActualWidth;
-
             void AddShape() => typeof(VideoEditorWindow).GetMethod("AddShapeLayer", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(editor, [false]);
             void Undo() => typeof(VideoEditorWindow).GetMethod("RestoreEdit", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(editor, [false]);
-            AddShape();
-            Settle();
+            double wide = viewport.ActualWidth;
+            Assert.False(panel.IsVisible);
+            AddShape(); Settle();
+            Assert.False(panel.IsVisible);
+            Assert.Equal(wide, viewport.ActualWidth, precision: 0);
+            editor.SetDetailsExpandedForTest(true); Settle();
+            Assert.True(panel.IsVisible);
             Assert.True(editor.IsLayerPanelVisibleForTest);
-            Assert.True(viewport.ActualWidth < wide - 200, $"preview {viewport.ActualWidth} of {wide}");
-            Undo();
-            Settle();
+            Undo(); Settle();
+            Assert.True(panel.IsVisible);
+            Assert.True(editor.AreDetailsExpandedForTest);
+            Assert.True(viewport.ActualWidth > 0 && viewport.ActualWidth < wide);
+            Border details = Assert.Single(Descendants(layout).OfType<Border>(), border => border.Name == "VideoDetailsPanel");
+            Assert.False(new Rect(viewport.TranslatePoint(new Point(), layout), viewport.RenderSize)
+                .IntersectsWith(new Rect(details.TranslatePoint(new Point(), layout), details.RenderSize)));
+            editor.SetDetailsExpandedForTest(false); Settle();
+            Assert.False(panel.IsVisible);
             Assert.False(editor.IsLayerPanelVisibleForTest);
             Assert.Equal(wide, viewport.ActualWidth, precision: 0);
-
-            // The switch in the command bar is the user's choice and wins over the automatic rule.
-            var toggle = Assert.Single(Descendants(layout).OfType<System.Windows.Controls.Primitives.ToggleButton>(),
-                t => AutomationProperties.GetName(t) == UiText.Get("VideoEditorUx_LayerPanel"));
-            Assert.False(string.IsNullOrWhiteSpace(AutomationProperties.GetHelpText(toggle)));
-            toggle.IsChecked = true;
-            Settle();
-            Assert.True(editor.IsLayerPanelVisibleForTest);
-            AddShape();
-            Undo();
-            Settle();
-            Assert.True(editor.IsLayerPanelVisibleForTest);
-            toggle.IsChecked = false;
-            Settle();
-            Assert.False(editor.IsLayerPanelVisibleForTest);
         }
-        finally
-        {
-            editor?.Close();
-            OwnedTestDirectory.Delete(root);
-        }
+        finally { editor?.Close(); OwnedTestDirectory.Delete(root); }
     });
 
     [Fact]
-    public void TimelineViewToolsSitAtTheRightOfACentredTransport() => StaTestHost.Run(() =>
+    public void DetailsToggleSitsAtTheRightOfTheSingleTransportRow() => StaTestHost.Run(() =>
     {
-        using var language = UiText.UseLanguage("ko-KR");
         string root = OwnedTestDirectory.Create("mc-video-ux-transport-");
         VideoEditorWindow? editor = null;
         try
         {
             editor = OpenReadyEditor(root, 10_000, show: true);
             var layout = (Grid)editor.Content;
-            StackPanel transport = Assert.Single(Descendants(layout).OfType<StackPanel>(), panel => panel.Name == "VideoTransport");
-            StackPanel view = Assert.Single(Descendants(layout).OfType<StackPanel>(), panel => panel.Name == "VideoTimelineViewTools");
-            var row = (Grid)VisualTreeHelper.GetParent(transport);
-            double rowCentre = row.ActualWidth / 2;
-            double transportCentre = transport.TranslatePoint(new Point(transport.ActualWidth / 2, 0), row).X;
-            Assert.Equal(rowCentre, transportCentre, precision: 0);
-            double transportRight = transport.TranslatePoint(new Point(transport.ActualWidth, 0), row).X;
-            double viewLeft = view.TranslatePoint(new Point(), row).X;
-            Assert.True(viewLeft > transportRight, $"view tools at {viewLeft}, transport ends at {transportRight}");
-            foreach (string key in new[] { "Text_48D137437347", "Text_C5176D8C3041", "Text_6CA53DEDFF4A" })
-                Assert.Contains(Descendants(view).OfType<Button>(), b => AutomationProperties.GetName(b) == UiText.Get(key));
-            Assert.Contains(Descendants(view).OfType<System.Windows.Controls.Primitives.ToggleButton>(),
-                t => AutomationProperties.GetName(t) == UiText.Get("VideoEditorUx_DetailTimeline"));
-            Assert.Equal(2, editor.ControlRowCountForTest);
+            Grid transport = Assert.Single(Descendants(layout).OfType<Grid>(), panel => panel.Name == "VideoTransport");
+            var details = Assert.Single(Descendants(layout).OfType<System.Windows.Controls.Primitives.ToggleButton>(), item => item.Name == "VideoDetailsToggle");
+            Border time = Assert.Single(Descendants(transport).OfType<Border>(), border => border.Name == "VideoPositionChip");
+            double transportRight = time.TranslatePoint(new Point(time.ActualWidth, 0), layout).X;
+            double detailsLeft = details.TranslatePoint(new Point(), layout).X;
+            Assert.True(detailsLeft > transportRight, $"details at {detailsLeft}, transport ends at {transportRight}");
+            Assert.Single(Descendants(transport).OfType<Button>());
+            Assert.Contains(Descendants(transport).OfType<Border>(), border => border.Name == "VideoPositionChip");
+            Assert.Equal(2, editor.ControlRowCountForTest); // The second row is the collapsed save progress.
         }
-        finally
-        {
-            editor?.Close();
-            OwnedTestDirectory.Delete(root);
-        }
+        finally { editor?.Close(); OwnedTestDirectory.Delete(root); }
     });
 
     [Fact]
-    public void StatusLineHintsTheNextStepInsteadOfListingCounts() => StaTestHost.Run(() =>
+    public void IdleStatusDoesNotRepeatInstructionsAlreadyAvailableInTooltips() => StaTestHost.Run(() =>
     {
         using var language = UiText.UseLanguage("ko-KR");
         string root = OwnedTestDirectory.Create("mc-video-ux-status-");
@@ -350,14 +322,14 @@ public sealed class VideoEditorUxLayoutTests
             // The lengths live in the trim bar's summary right above, and the layer count on the
             // layer switch, so the status line no longer repeats them.
             typeof(VideoEditorWindow).GetMethod("UpdateStatusForMode", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(editor, null);
-            Assert.Equal("손잡이를 끌거나 I·O로 남길 구간을 정합니다", status.Text);
+            Assert.True(string.IsNullOrEmpty(status.Text));
             Assert.DoesNotContain("녹화 드롭", status.Text);
             Assert.True(editor.TimelineForTest.SetTrimRange(2_000, 8_000));
             typeof(VideoEditorWindow).GetMethod("UpdateStatusForMode", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(editor, null);
-            Assert.Equal("라이브러리에 저장 또는 내보내기로 적용합니다", status.Text);
+            Assert.True(string.IsNullOrEmpty(status.Text));
             typeof(VideoEditorWindow).GetMethod("AddShapeLayer", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(editor, [false]);
             typeof(VideoEditorWindow).GetMethod("UpdateStatusForMode", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(editor, null);
-            Assert.Equal("라이브러리에 저장 또는 내보내기로 적용합니다", status.Text);
+            Assert.True(string.IsNullOrEmpty(status.Text));
             // Recording health moved to the clip facts in the command bar.
             TextBlock details = Field<TextBlock>(editor, "_identityDetails");
             Assert.Equal(UiText.Get("Text_C1BE53C8ADAF"), details.ToolTip);
@@ -370,7 +342,7 @@ public sealed class VideoEditorUxLayoutTests
     });
 
     [Fact]
-    public void LayerTracksAppearOnlyOnceThereIsALayer() => StaTestHost.Run(() =>
+    public void LayerTracksStayVisibleBeforeAndAfterTheLastLayer() => StaTestHost.Run(() =>
     {
         using var language = UiText.UseLanguage("ko-KR");
         string root = OwnedTestDirectory.Create("mc-video-ux-tracks-");
@@ -379,12 +351,12 @@ public sealed class VideoEditorUxLayoutTests
         {
             editor = OpenReadyEditor(root, 10_000, show: true);
             ScrollViewer tracks = Field<ScrollViewer>(editor, "_layerTracksScroll");
-            Assert.Equal(Visibility.Collapsed, tracks.Visibility);
+            Assert.Equal(Visibility.Visible, tracks.Visibility);
             typeof(VideoEditorWindow).GetMethod("AddShapeLayer", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(editor, [false]);
             Assert.Equal(Visibility.Visible, tracks.Visibility);
             typeof(VideoEditorWindow).GetMethod("RestoreEdit", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(editor, [false]);
             Assert.Empty(Field<VideoEditDocument>(editor, "_editDocument").FrameEditLayers);
-            Assert.Equal(Visibility.Collapsed, tracks.Visibility);
+            Assert.Equal(Visibility.Visible, tracks.Visibility);
         }
         finally
         {

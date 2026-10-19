@@ -39,6 +39,7 @@ public sealed class VideoEditorViewportTests
                 Top = (monitor.WorkArea.Top + 10) / monitor.ScaleFactor,
                 WindowStartupLocation = WindowStartupLocation.Manual,
                 ShowInTaskbar = false, ShowActivated = false,
+                Opacity = 0, IsHitTestVisible = false,
             };
             VideoEditorWindow? editor = null;
             try
@@ -47,6 +48,7 @@ public sealed class VideoEditorViewportTests
                 editor = new VideoEditorWindow(recording, AppPaths.CreateForRoot(root), NullLoggerFactory.Instance)
                 {
                     Owner = owner, ShowActivated = false, ShowInTaskbar = false,
+                    Opacity = 0, IsHitTestVisible = false,
                 };
                 LoadWindowTheme(editor);
                 editor.FontSize = (double)editor.FindResource("FontSize.Body");
