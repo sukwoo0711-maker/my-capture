@@ -44,7 +44,7 @@
         <Style x:Key="LibraryUx.HoverWash" TargetType="Border" BasedOn="{StaticResource StateLayer.Hover}" />
         <!-- A selected navigation row keeps its wash and accent pill without a card outline. -->
         <Style x:Key="LibraryUx.SelectedWash" TargetType="Border" BasedOn="{StaticResource StateLayer}">
-            <Setter Property="Background" Value="{DynamicResource Accent.Subtle}" />
+            <Setter Property="Background" Value="{DynamicResource Surface.Selected}" />
             <Setter Property="BorderBrush" Value="Transparent" />
             <Setter Property="themes:FluidMotion.Transition" Value="Normal" />
         </Style>
@@ -365,8 +365,8 @@
                                                 BorderThickness="2"
                                                 CornerRadius="{StaticResource Radius.Lg}" />
                                         <ContentPresenter Margin="8" />
-                                        <Border x:Name="FocusRing" Margin="3" BorderThickness="1" Opacity="0"
-                                                BorderBrush="{DynamicResource Border.Focus}" IsHitTestVisible="False"
+                                        <Border x:Name="FocusRing" Margin="3" BorderThickness="{DynamicResource Focus.RingThickness}" Opacity="0"
+                                                BorderBrush="{DynamicResource Text.Primary}" IsHitTestVisible="False"
                                                 CornerRadius="{StaticResource Radius.Lg}" />
                                     </Grid>
                                     <ControlTemplate.Triggers>
@@ -612,7 +612,7 @@
                                   StrokeThickness="1" SnapsToDevicePixels="True" />
                             <Path x:Name="SelectedLayer" Data="{StaticResource LibraryUx.FolderCardShape}" Stretch="Fill"
                                   Style="{StaticResource StatePart.Normal}"
-                                  Fill="{DynamicResource Accent.Subtle}" Opacity="0" IsHitTestVisible="False" />
+                                  Fill="{DynamicResource Surface.Selected}" Opacity="0" IsHitTestVisible="False" />
                             <Path x:Name="Edge" Data="{StaticResource LibraryUx.FolderCardShape}" Stretch="Fill"
                                   Style="{StaticResource LibraryUx.RestEdge}"
                                   Stroke="{TemplateBinding BorderBrush}" StrokeThickness="1" SnapsToDevicePixels="True" />
@@ -656,7 +656,7 @@
                             <!-- The folder under the pointer: accent edge and wash, like Explorer's drop highlight. -->
                             <DataTrigger Binding="{Binding IsDropTarget}" Value="True">
                                 <Setter TargetName="SelectedLayer" Property="themes:FluidMotion.FadeTo" Value="1" />
-                                <Setter TargetName="DropRing" Property="Stroke" Value="{DynamicResource Border.Accent}" />
+                                <Setter TargetName="DropRing" Property="Stroke" Value="{DynamicResource Text.Primary}" />
                                 <Setter TargetName="DropRing" Property="StrokeThickness" Value="3" />
                                 <Setter TargetName="DropRing" Property="StrokeDashArray" Value="{x:Null}" />
                                 <Setter TargetName="DropRing" Property="Opacity" Value="1" />
@@ -901,10 +901,10 @@
                             <Border x:Name="SelectedLayer" Style="{StaticResource LibraryUx.SelectedWash}" BorderThickness="1" />
                             <Border x:Name="Indicator" Style="{StaticResource StatePart.Normal}" Width="3" Height="16" Margin="1,0,0,0"
                                     HorizontalAlignment="Left" VerticalAlignment="Center"
-                                    Background="{DynamicResource Accent.Indicator}" CornerRadius="{DynamicResource Radius.Pill}"
+                                    Background="{DynamicResource Text.Primary}" CornerRadius="{DynamicResource Radius.Pill}"
                                     Opacity="0" IsHitTestVisible="False" />
                             <ContentPresenter Margin="12,0,10,0" VerticalAlignment="Center" HorizontalAlignment="Stretch" />
-                            <Border x:Name="FocusRing" Margin="1" BorderBrush="{DynamicResource Border.Focus}" BorderThickness="1"
+                            <Border x:Name="FocusRing" Margin="1" BorderBrush="{DynamicResource Text.Primary}" BorderThickness="{DynamicResource Focus.RingThickness}"
                                     CornerRadius="{DynamicResource Radius.Sm}" Opacity="0" IsHitTestVisible="False" />
                         </Grid>
                         <ControlTemplate.Triggers>
@@ -988,7 +988,7 @@
                                 <Border x:Name="SelectedLayer" Style="{StaticResource LibraryUx.SelectedWash}" BorderThickness="1" />
                                 <Border x:Name="Indicator" Style="{StaticResource StatePart.Normal}" Width="3" Height="16" Margin="1,0,0,0"
                                         HorizontalAlignment="Left" VerticalAlignment="Center"
-                                        Background="{DynamicResource Accent.Indicator}" CornerRadius="{DynamicResource Radius.Pill}"
+                                        Background="{DynamicResource Text.Primary}" CornerRadius="{DynamicResource Radius.Pill}"
                                         Opacity="0" IsHitTestVisible="False" />
                                 <DockPanel Margin="4,0,10,0">
                                     <ToggleButton x:Name="Expander" DockPanel.Dock="Left" Style="{StaticResource LibraryUx.TreeExpander}"
@@ -996,7 +996,7 @@
                                     <ContentPresenter x:Name="PART_Header" ContentSource="Header" Margin="2,0,0,0"
                                                       VerticalAlignment="Center" HorizontalAlignment="Stretch" />
                                 </DockPanel>
-                                <Border x:Name="FocusRing" Margin="1" BorderBrush="{DynamicResource Border.Focus}" BorderThickness="1"
+                                <Border x:Name="FocusRing" Margin="1" BorderBrush="{DynamicResource Text.Primary}" BorderThickness="{DynamicResource Focus.RingThickness}"
                                         CornerRadius="{DynamicResource Radius.Sm}" Opacity="0" IsHitTestVisible="False" />
                             </Grid>
                             <ItemsPresenter x:Name="ItemsHost" Margin="16,0,0,0" />
@@ -1020,8 +1020,8 @@
                             <!-- Drop feedback stays immediate, as File Explorer's does: it follows the pointer
                                  during a drag. -->
                             <DataTrigger Binding="{Binding IsDropTarget}" Value="True">
-                                <Setter TargetName="Chrome" Property="Background" Value="{DynamicResource Accent.Subtle}" />
-                                <Setter TargetName="Chrome" Property="BorderBrush" Value="{DynamicResource Border.Accent}" />
+                                <Setter TargetName="Chrome" Property="Background" Value="{DynamicResource Surface.Selected}" />
+                                <Setter TargetName="Chrome" Property="BorderBrush" Value="{DynamicResource Text.Primary}" />
                                 <Setter TargetName="HoverLayer" Property="Visibility" Value="Collapsed" />
                                 <Setter TargetName="SelectedLayer" Property="Visibility" Value="Collapsed" />
                             </DataTrigger>
@@ -1085,10 +1085,10 @@
                             <Border x:Name="SelectedLayer" Style="{StaticResource LibraryUx.SelectedWash}" BorderThickness="1" />
                             <Border x:Name="Indicator" Style="{StaticResource StatePart.Normal}" Width="3" Height="16" Margin="1,0,0,0"
                                     HorizontalAlignment="Left" VerticalAlignment="Center"
-                                    Background="{DynamicResource Accent.Indicator}" CornerRadius="{DynamicResource Radius.Pill}"
+                                    Background="{DynamicResource Text.Primary}" CornerRadius="{DynamicResource Radius.Pill}"
                                     Opacity="0" IsHitTestVisible="False" />
                             <ContentPresenter Margin="12,0,10,0" VerticalAlignment="Center" />
-                            <Border x:Name="FocusRing" Margin="1" BorderBrush="{DynamicResource Border.Focus}" BorderThickness="1"
+                            <Border x:Name="FocusRing" Margin="1" BorderBrush="{DynamicResource Text.Primary}" BorderThickness="{DynamicResource Focus.RingThickness}"
                                     CornerRadius="{DynamicResource Radius.Sm}" Opacity="0" IsHitTestVisible="False" />
                         </Grid>
                         <ControlTemplate.Triggers>
@@ -1102,8 +1102,8 @@
                                 <Setter Property="FontWeight" Value="SemiBold" />
                             </Trigger>
                             <DataTrigger Binding="{Binding IsDropTarget}" Value="True">
-                                <Setter TargetName="Chrome" Property="Background" Value="{DynamicResource Accent.Subtle}" />
-                                <Setter TargetName="Chrome" Property="BorderBrush" Value="{DynamicResource Border.Accent}" />
+                                <Setter TargetName="Chrome" Property="Background" Value="{DynamicResource Surface.Selected}" />
+                                <Setter TargetName="Chrome" Property="BorderBrush" Value="{DynamicResource Text.Primary}" />
                                 <Setter TargetName="HoverLayer" Property="Visibility" Value="Collapsed" />
                                 <Setter TargetName="SelectedLayer" Property="Visibility" Value="Collapsed" />
                             </DataTrigger>
@@ -1142,8 +1142,8 @@
                                                                    VerticalAlignment="Center" />
                                                 <ContentPresenter VerticalAlignment="Center" />
                                             </DockPanel>
-                                            <Border x:Name="FocusRing" Margin="1" BorderBrush="{DynamicResource Border.Focus}"
-                                                    BorderThickness="1" CornerRadius="{DynamicResource Radius.Sm}" Opacity="0"
+                                            <Border x:Name="FocusRing" Margin="1" BorderBrush="{DynamicResource Text.Primary}"
+                                                    BorderThickness="{DynamicResource Focus.RingThickness}" CornerRadius="{DynamicResource Radius.Sm}" Opacity="0"
                                                     IsHitTestVisible="False" />
                                         </Grid>
                                         <ControlTemplate.Triggers>
@@ -1229,16 +1229,16 @@
                                     <Border x:Name="TrackHover" CornerRadius="10" BorderThickness="1" Opacity="0" IsHitTestVisible="False"
                                             BorderBrush="{DynamicResource Text.Primary}" />
                                     <Border x:Name="PART_SwitchFill" CornerRadius="10" Opacity="0"
-                                            Background="{DynamicResource Accent.Default}" />
+                                            Background="{DynamicResource Text.Primary}" />
                                     <Grid x:Name="PART_SwitchThumb" Width="12" Height="12" Margin="4,0,0,0"
                                           HorizontalAlignment="Left" VerticalAlignment="Center">
                                         <Ellipse x:Name="ThumbOff" Style="{StaticResource LibraryUx.RestEdge}" Fill="{DynamicResource Text.Secondary}" />
                                         <Ellipse x:Name="ThumbHover" Opacity="0" IsHitTestVisible="False" Fill="{DynamicResource Text.Primary}" />
-                                        <Ellipse x:Name="PART_SwitchThumbOn" Fill="{DynamicResource Text.OnAccent}" Opacity="0" />
+                                        <Ellipse x:Name="PART_SwitchThumbOn" Fill="{DynamicResource Surface.Raised}" Opacity="0" />
                                     </Grid>
                                 </Grid>
                             </StackPanel>
-                            <Border x:Name="FocusRing" BorderBrush="{DynamicResource Border.Focus}" BorderThickness="1"
+                            <Border x:Name="FocusRing" BorderBrush="{DynamicResource Text.Primary}" BorderThickness="{DynamicResource Focus.RingThickness}"
                                     CornerRadius="{DynamicResource Radius.Md}" Opacity="0" IsHitTestVisible="False" />
                         </Grid>
                         <ControlTemplate.Triggers>
@@ -1249,9 +1249,9 @@
                                 <Setter TargetName="ThumbOff" Property="themes:FluidMotion.FadeTo" Value="0" />
                                 <Setter TargetName="ThumbHover" Property="themes:FluidMotion.FadeTo" Value="1" />
                             </Trigger>
-                            <!-- On, the track keeps its accent edge whether or not the pointer is over it. -->
+                            <!-- On, the track keeps its neutral edge whether or not the pointer is over it. -->
                             <Trigger Property="IsChecked" Value="True">
-                                <Setter TargetName="Track" Property="BorderBrush" Value="{DynamicResource Accent.Indicator}" />
+                                <Setter TargetName="Track" Property="BorderBrush" Value="{DynamicResource Text.Primary}" />
                                 <Setter TargetName="Track" Property="themes:FluidMotion.FadeTo" Value="1" />
                                 <Setter TargetName="TrackHover" Property="themes:FluidMotion.FadeTo" Value="0" />
                             </Trigger>
@@ -1618,8 +1618,8 @@
                             <Style TargetType="RadioButton" BasedOn="{StaticResource LibraryUx.NavItem}">
                                 <Style.Triggers>
                                     <DataTrigger Binding="{Binding IsAllItemsDropTarget}" Value="True">
-                                        <Setter Property="Background" Value="{DynamicResource Accent.Subtle}" />
-                                        <Setter Property="BorderBrush" Value="{DynamicResource Border.Accent}" />
+                                        <Setter Property="Background" Value="{DynamicResource Surface.Selected}" />
+                                        <Setter Property="BorderBrush" Value="{DynamicResource Text.Primary}" />
                                     </DataTrigger>
                                 </Style.Triggers>
                             </Style>
@@ -1821,7 +1821,7 @@
                         <TextBlock Text="{loc:Text Library.Import.DropDetail}" Margin="0,8,0,0"
                                    Style="{DynamicResource Text.MutedBlock}" TextWrapping="Wrap" TextAlignment="Center" />
                         <ProgressBar x:Name="ImportProgress" Visibility="Collapsed" Height="6" Margin="0,16,0,0"
-                                     Foreground="{DynamicResource Accent.Indicator}" Background="{DynamicResource Surface.Sunken}" />
+                                     Foreground="{DynamicResource Text.Primary}" Background="{DynamicResource Surface.Sunken}" />
                         <Button x:Name="ImportCancelButton" Content="{loc:Text Library.Action.Cancel}"
                                 Visibility="Collapsed" Click="OnCancelImportClick" Margin="0,16,0,0"
                                 Style="{StaticResource Button.Secondary}" />
@@ -2004,7 +2004,7 @@
                                                             <Border x:Name="HoverOutline" Style="{StaticResource StateLayer}" BorderThickness="1"
                                                                     CornerRadius="{DynamicResource Radius.Sm}" />
                                                             <ContentPresenter Margin="{TemplateBinding Padding}" HorizontalAlignment="Center" VerticalAlignment="Center" />
-                                                            <Border x:Name="FocusRing" BorderBrush="{DynamicResource Border.Focus}" BorderThickness="1"
+                                                            <Border x:Name="FocusRing" BorderBrush="{DynamicResource Text.Primary}" BorderThickness="{DynamicResource Focus.RingThickness}"
                                                                     CornerRadius="{DynamicResource Radius.Sm}" IsHitTestVisible="False" Opacity="0" />
                                                         </Grid>
                                                         <ControlTemplate.Triggers>
@@ -2174,7 +2174,7 @@
         <!-- Pointer-side drop label ("제품리뷰 폴더로 이동 · 2개"), like Explorer's "Move to" hint. -->
         <Canvas x:Name="DragHintLayer" Grid.RowSpan="4" IsHitTestVisible="False" Panel.ZIndex="10">
             <Border x:Name="DragHint" Visibility="Collapsed" Padding="10,6" CornerRadius="6"
-                    Background="{DynamicResource Surface.Floating}" BorderBrush="{DynamicResource Border.Accent}" BorderThickness="1">
+                    Background="{DynamicResource Surface.Floating}" BorderBrush="{DynamicResource Text.Primary}" BorderThickness="1">
                 <StackPanel Orientation="Horizontal">
                     <themes:SymbolIcon StrokeThickness="0" Size="16" Data="{StaticResource LibraryUx.Icon.Folder}"
                           Fill="{DynamicResource Accent.Folder}" VerticalAlignment="Center" />

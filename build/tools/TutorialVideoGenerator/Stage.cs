@@ -238,7 +238,8 @@ internal static class Stage
         if (progress <= 0 || progress >= 1) return;
         dc.PushOpacity(Math.Sin(progress * Math.PI) * 0.9);
         double radius = 7 + progress * 15;
-        dc.DrawEllipse(null, new Pen(new SolidColorBrush(Color.FromRgb(0xA3, 0x90, 0xFF)), 2.5), new Point(point.X, point.Y), radius, radius);
+        dc.DrawEllipse(null, new Pen(Brushes.Black, 5.5), new Point(point.X, point.Y), radius, radius);
+        dc.DrawEllipse(null, new Pen(Brushes.White, 2.5), new Point(point.X, point.Y), radius, radius);
         dc.Pop();
     }
 

@@ -153,8 +153,8 @@ public sealed class ControlStateMotionTests
         Assert.Null(rail.Template.FindName("Indicator", rail));
         var railSelection = Assert.IsType<Border>(rail.Template.FindName("CheckedLayer", rail));
         Assert.Equal(1, railSelection.Opacity);
-        Assert.Same(window.FindResource("Accent.Default"), railSelection.Background);
-        Assert.Same(window.FindResource("Text.OnAccent"), rail.Foreground);
+        Assert.Same(window.FindResource("Surface.Selected"), railSelection.Background);
+        Assert.Same(window.FindResource("Text.Primary"), rail.Foreground);
         Assert.Equal(1, FluidMotion.GetScaleTo((DependencyObject)check.Template.FindName("Check", check)));
         Assert.Equal(0.5, FluidMotion.GetScaleTo((DependencyObject)cleared.Template.FindName("Check", cleared)));
         Assert.IsType<Track>(slider.Template.FindName("PART_Track", slider));
@@ -169,8 +169,8 @@ public sealed class ControlStateMotionTests
         host.Children.Add(rail);
         Drain(host);
         var layer = Assert.IsType<Border>(rail.Template.FindName("CheckedLayer", rail));
-        var accent = Assert.IsType<SolidColorBrush>(theme["Accent.Default"]);
-        var ink = Assert.IsType<SolidColorBrush>(theme["Text.OnAccent"]);
+        var accent = Assert.IsType<SolidColorBrush>(theme["Surface.Selected"]);
+        var ink = Assert.IsType<SolidColorBrush>(theme["Text.Primary"]);
         Color accentColor = accent.Color;
         Color inkColor = ink.Color;
         Assert.Null(rail.Template.FindName("Indicator", rail));

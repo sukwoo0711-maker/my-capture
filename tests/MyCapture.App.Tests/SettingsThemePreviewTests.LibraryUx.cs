@@ -284,7 +284,7 @@ public sealed partial class SettingsThemePreviewTests
             GalleryDropPlan back = window.PreviewFolderDrop(all, payload, all.TranslatePoint(new Point(20, 10), hintLayer));
             Assert.Equal(GalleryDropAction.RemoveFromFolder, back.Action);
             Assert.True(vm.IsAllItemsDropTarget);
-            Assert.Same(window.FindResource("Accent.Subtle"), all.Background);
+            Assert.Same(window.FindResource("Surface.Selected"), all.Background);
             Assert.True(PumpUiTask(window, () => window.DropAsync(all, payload)));
             PumpLibraryUntil(window, () => f.Records[0].FolderId is null, label + ": out of folder");
             Assert.False(vm.IsAllItemsDropTarget);

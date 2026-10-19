@@ -43,7 +43,7 @@ public sealed partial class SettingsThemePreviewTests
                     GalleryWindow window = fixture.Window;
                     try
                     {
-                        var brushes = new[] { "Accent.Subtle", "Border.Accent", "Surface.Hover", "Text.Secondary" }
+                        var brushes = new[] { "Surface.Selected", "Text.Primary", "Surface.Hover", "Text.Secondary" }
                             .Select(key => (Brush: (SolidColorBrush)application.FindResource(key), Key: key))
                             .Select(entry => (entry.Brush, entry.Key, Color: entry.Brush.Color)).ToArray();
                         window.Show();
@@ -83,7 +83,7 @@ public sealed partial class SettingsThemePreviewTests
                         Assert.Equal(Visibility.Collapsed, ((Border)folder.Template.FindName("SelectedLayer", folder)).Visibility);
                         var dropBrush = Assert.IsType<SolidColorBrush>(
                             ((Border)folder.Template.FindName("Chrome", folder)).Background);
-                        Assert.Equal(((SolidColorBrush)application.FindResource("Accent.Subtle")).Color, dropBrush.Color);
+                        Assert.Equal(((SolidColorBrush)application.FindResource("Surface.Selected")).Color, dropBrush.Color);
                         Assert.False(dropBrush.HasAnimatedProperties);
                         folderNode.IsDropTarget = false;
                         Assert.Equal(Visibility.Visible, ((Border)folder.Template.FindName("HoverLayer", folder)).Visibility);
