@@ -163,7 +163,8 @@ internal sealed partial class SettingsWindow
             // The apply service can roll back an entire settings group, including future boolean
             // members. Capture its requested projection before it mutates the candidate.
             var requested = new SettingsDraft(next);
-            SettingsApplyResult result = _applyDraft?.Invoke(next, _draft.FolderDestinationEdited, replacingAll) ?? _apply(next);
+            // A reset/import explicitly replaces the folder option, including partial saves while other fields are invalid.
+            SettingsApplyResult result = _applyDraft?.Invoke(next, _draft.ExportOptionsReplaced || _draft.FolderDestinationEdited, replacingAll) ?? _apply(next);
             _saveFailed = !result.Saved;
             if (!result.Saved)
             {
