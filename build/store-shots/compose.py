@@ -139,7 +139,7 @@ def title_check(scene, language):
     require(not any(mark in title for mark in ("!", "?", "！", "？")),
             f"scene {scene['id']} {key}: exclamations and questions are not allowed")
     if language == "ko":
-        length = len(re.sub(r"\s", "", title))
+        length = len(re.sub(r"[A-Za-z0-9+]+", "W", re.sub(r"\s", "", title)))  # a Latin word counts as one character
         require(6 <= length <= 14, f"scene {scene['id']} {key}: {length} characters excluding spaces; expected 6–14")
         require(not re.search(r"(하세요|해요|예요|이에요)[.]?$", title),
                 f"scene {scene['id']} {key}: use a noun phrase or 합니다체")

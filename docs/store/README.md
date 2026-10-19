@@ -153,7 +153,7 @@ python -X utf8 -I .\build\store-shots\compose.py --layers <레이어 폴더> --l
 ```
 
 - 결과는 `01.png`–`09.png`, 확인용 `contact-sheet.png`와 `search-card.png`(Store 검색 결과 카드 크기 319×179로 줄인 1번과 경쟁 앱 카드 비교)입니다.
-- 1번은 개인정보 가리기, 2번은 핀, 9번은 '캡처 도구에서 옮겨 오면' 비교 카드입니다. 9번의 비교 항목은 Microsoft의 Snipping Tool 기능 안내로 확인한 것만 쓰며, 제출 직전에 다시 확인합니다. 가리기는 Snipping Tool에도 있으므로 차이는 카드번호·토큰 자동 탐지로 씁니다.
+- 1번은 개인정보 가리기, 2번은 핀, 9번은 'Windows 캡처 도구에서 옮겨 오면' 비교 카드입니다. Microsoft 제품은 정식 명칭(Windows 캡처 도구, Windows Snipping Tool)으로만 쓰고 우열 표현 없이 그대로인 것과 더해지는 것만 나눕니다. 9번의 비교 항목은 Microsoft의 Snipping Tool 기능 안내로 확인한 것만 쓰며, 제출 직전에 다시 확인합니다. 가리기는 Snipping Tool에도 있으므로 차이는 카드번호·토큰 자동 탐지로 씁니다.
 - 레이어를 내보내는 자체 검사 옵션은 4.4.0 장면 소재를 바꿀 때 `StoreScreenshotSelfTest`에 더합니다.
 
 ## 5. 다음 버전 제출

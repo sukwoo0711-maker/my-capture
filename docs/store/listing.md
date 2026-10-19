@@ -16,7 +16,7 @@ Partner Center의 Store 목록과 제출 옵션에 붙여 넣을 4.4.0 문구입
 - **지원 연락처**: `https://github.com/sukwoo0711-maker/mycapture-support/issues`
 - **웹 사이트**: `https://sukwoo0711-maker.github.io/my-capture/`
 - **앱 타일 아이콘(선택)**: 패키징 결과물 `StoreListingIcon-300.png`
-- **스크린샷**: `build\store-shots\compose.py`로 만드는 언어별 9장(2560×1440)입니다. 그래파이트 바탕에 장마다 짧은 제목 한 줄과 실제 창을 크게 잘라 넣습니다. 순서는 개인정보 가리기, 핀, 오류 화면 주석, 캡처 직후 카드, 텍스트 복사, 라이브러리 검색, 영상 편집, GIF 내보내기, '캡처 도구에서 옮겨 오면' 비교 카드입니다. 제목은 `build\store-shots\scenes.json`에 있고, 언어별 스크린샷 캡션을 같은 순서로 넣습니다.
+- **스크린샷**: `build\store-shots\compose.py`로 만드는 언어별 9장(2560×1440)입니다. 그래파이트 바탕에 장마다 짧은 제목 한 줄과 실제 창을 크게 잘라 넣습니다. 순서는 개인정보 가리기, 핀, 오류 화면 주석, 캡처 직후 카드, 텍스트 복사, 라이브러리 검색, 영상 편집, GIF 내보내기, 'Windows 캡처 도구에서 옮겨 오면' 비교 카드입니다. 제목은 `build\store-shots\scenes.json`에 있고, 언어별 스크린샷 캡션을 같은 순서로 넣습니다.
 - **트레일러**: 기존 언어별 30초 1920×1080 60fps MP4(약 9MB)를 사용합니다. 두 영상은 장면, 키 입력, 음악이 같고 앱 화면과 예시 문의 페이지의 언어가 다릅니다. 4.4.0부터 썸네일은 어두운 코드 편집기 위에 밝은 핀이 뜬 22.333초 프레임입니다(4K 원본을 1.10배로 키워 1920×1080으로 자름, 가운데 재생 단추 자리에 핵심 내용 없음). 파일은 `artifacts/promo-2026-10-18/v2/MyCapture-trailer-thumbnail-v3-1920x1080.png`와 `v2-en/MyCapture-trailer-thumbnail-en-v3-1920x1080.png`이고, 고른 근거는 같은 폴더의 `thumb-440/`에 있습니다. 이전 썸네일(19.02초, 밝은 양식 위 검은 가림막)은 Store 재생 단추에 가려 판독되지 않았습니다. 자막 파일은 사용하지 않습니다.
 - **16:9 Super hero art**: 3840×2160 PNG, 두 언어 공통. 제품 이름과 앱 화면 없이 로고만 넣은 기존 이미지를 사용하며, 트레일러를 목록 맨 위에 재생하도록 지정합니다.
 - **시스템 요구 사항**: Windows 10 버전 22H2(빌드 19045) 이상, x64. ARM64 PC의 x64 에뮬레이션은 Windows 11(빌드 22000) 이상
@@ -47,7 +47,7 @@ MyCapture는 개발자를 위한 무료 Windows 캡처·핀 도구입니다. 광
 
 텍스트 복사는 이미지나 터미널 화면의 한국어·영어를 PC에서 인식해 클립보드에 복사합니다. 표는 CSV·Markdown·탭 구분 형식으로 복사합니다.
 
-신규 설치에서는 캡처 직후 이미지가 클립보드에 복사되고 작은 카드가 나타납니다. 카드에 포커스가 있을 때 C 복사, E 편집, P 핀, S 저장, T 텍스트 복사를 실행합니다.
+신규 설치에서는 캡처 직후 이미지가 클립보드에 복사되고 작은 카드가 나타납니다. 카드를 클릭하거나 Alt+Q를 누른 뒤 E 편집, P 핀, S 저장, T 텍스트 복사를 키 하나로 실행합니다. C는 다시 복사합니다.
 
 라이브러리는 창 제목과 이미지 속 글자로 검색하며, 폴더로 정리하고 폴더나 ZIP으로 내보냅니다. 신규 설치에서는 보관 기간 제한이 없고, 폴더 밖 캡처가 5 GiB나 1,000개를 넘을 때만 오래된 항목부터 정리합니다. 보관으로 표시하거나 폴더에 넣은 항목은 자동 정리에서 제외합니다.
 
@@ -75,9 +75,9 @@ MyCapture는 개발자를 위한 무료 Windows 캡처·핀 도구입니다. 광
 스크린샷 순서대로 넣습니다. 장마다 200자 이하입니다.
 
 1. 오류 보고서의 이메일, 토큰, 카드번호를 개인정보 가리기로 가린 화면입니다. 이미지 편집기에서 Ctrl+Shift+R로 실행합니다.
-2. 코드 옆에 참고 이미지를 핀으로 띄운 화면입니다. 카드에 포커스가 있을 때 P를 누르거나, 설정에서 지정한 단축키로 클립보드 내용을 띄웁니다.
+2. 코드 옆에 참고 이미지를 핀으로 띄운 화면입니다. 캡처 직후 카드에서 Alt+Q를 누른 뒤 P를 누르거나, 설정에서 지정한 단축키로 클립보드 내용을 띄웁니다.
 3. 오류 화면에 화살표와 단계 번호, 텍스트를 넣은 모습입니다. 주석 레이어는 나중에 수정합니다.
-4. 캡처 직후 복사됨 카드입니다. 카드에 포커스가 있을 때 C 복사, E 편집, P 핀, S 저장, T 텍스트 복사를 실행합니다.
+4. 캡처 직후 작은 카드가 뜹니다. 클릭하거나 Alt+Q를 누른 뒤 E 편집, P 핀, S 저장, T 텍스트 복사를 키 하나로 실행합니다.
 5. 터미널 화면의 한국어·영어를 텍스트 복사로 읽은 결과입니다. 결과 창에서 Ctrl+C로 복사합니다.
 6. 이미지 속 오류 문구와 창 제목으로 라이브러리를 검색합니다.
 7. 영상 편집기에서 남길 구간을 고르고 텍스트를 넣은 모습입니다. I와 O로 구간의 시작과 끝을 정합니다.
@@ -122,7 +122,7 @@ Pin keeps images, text and tables above other windows for reference beside your 
 
 Copy text recognizes Korean and English in images or terminal screenshots on this PC and copies the result to the clipboard. Tables can be copied as CSV, Markdown or tab-separated text.
 
-On a new installation, a capture goes to the clipboard and a small card appears. When the card has focus, press C (copy), E (edit), P (Pin), S (save) or T (Copy text).
+On a new installation, a capture goes to the clipboard and a small card appears. Click it or press Alt+Q, then press E (edit), P (Pin), S (save) or T (Copy text). C copies again.
 
 Search the library by window title or text inside images. Organize captures into folders and export to a folder or ZIP. New installations keep captures with no time limit; automatic cleanup removes the oldest captures outside folders only after they pass 5 GiB or 1,000 items. Items marked Keep or stored in folders are never cleaned up automatically.
 
@@ -150,14 +150,14 @@ Requirements: Windows 11 or Windows 10 version 22H2 (x64). ARM64 PCs need Window
 Enter them in screenshot order. Each caption is 200 characters or fewer.
 
 1. Redact covers an email address, token and card number in an error report. Press Ctrl+Shift+R in the image editor.
-2. A reference image pinned beside the code. With the capture card focused, press P, or pin clipboard content with a shortcut assigned in Settings.
+2. A reference image pinned beside the code. Press Alt+Q and then P on the capture card, or pin clipboard content with a shortcut assigned in Settings.
 3. An error screenshot with arrows, step numbers and text. Annotation layers remain editable.
-4. The card confirms the capture was copied. When it has focus, press C (copy), E (edit), P (Pin), S (save) or T (Copy text).
+4. A small card appears after each capture. Click it or press Alt+Q, then press E to edit, P to pin, S to save or T to copy text.
 5. Copy text reads Korean and English from a terminal screenshot. Press Ctrl+C in the result window to copy it.
 6. Library search finds an error message inside an image. Window titles are searchable too.
 7. The video editor shows a trimmed recording with text. Press I and O to set the start and end of the selected range.
 8. Check the estimated size before exporting a GIF. Press G in the video editor to open this view.
-9. Both apps capture, copy to the clipboard, extract text and record regions. MyCapture adds pins, scrolling capture, blur, mosaic, steps, library search and automatic card/token detection.
+9. Windows Snipping Tool and MyCapture both capture, copy to the clipboard, extract text and record regions. MyCapture adds pins, scrolling capture, blur, mosaic, steps, search and card/token detection.
 
 ### What's new in this version (4.4.0)
 
@@ -179,7 +179,7 @@ Partner Center의 Submission options > Restricted capabilities에 영어로 입�
 
 ## 인증 참고 사항 (Notes for certification)
 
-> MyCapture runs in the notification area. The first-run screen lets the user start a capture or skip to the library. On new installations, Ctrl+Shift+C captures a region and Ctrl+Shift+X starts or stops region recording. Pin and library global shortcuts are unassigned; existing installations retain their saved shortcuts. Ctrl+Shift+R runs Redact inside the image editor. A new installation copies each capture to the clipboard and shows the quick-access card by default. Its C/E/P/S/T keys work while the card has focus.
+> MyCapture runs in the notification area. The first-run screen lets the user start a capture or skip to the library. On new installations, Ctrl+Shift+C captures a region and Ctrl+Shift+X starts or stops region recording. Pin and library global shortcuts are unassigned; existing installations retain their saved shortcuts. Ctrl+Shift+R runs Redact inside the image editor. A new installation copies each capture to the clipboard and shows the quick-access card by default. Alt+Q or a click moves focus to the card; its C/E/P/S/T keys then work.
 >
 > Capture, editing, recording and OCR run on the PC. The only automatic network access is downloading missing OCR model files. The optional GitHub image attachment requires the user's own GitHub account. The package's startup task is disabled at install. The first-run screen offers launch at sign-in with its checkbox selected, and the user can clear it there or change it later in Settings > General.
 >

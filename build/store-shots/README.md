@@ -42,7 +42,7 @@ python -X utf8 -I "C:/GitRepositories/my-capture-440/store-shots/build/store-sho
 
 - 배경은 위 `#16191F`에서 아래 `#101318`로 이어지는 흑연색 수직 그라데이션입니다. 합성기에는 추가 색상 장식·질감·로고·배지·번호를 넣지 않습니다.
 - 제목은 132px, 굵기 700, `#F3F5F8`이며 왼쪽 160px·위 104px에서 시작합니다. 영어는 Segoe UI Variable의 Display 광학 크기를 사용합니다. 최대 두 줄, 줄 간격 1.15배이며 보조 문구는 44px·`#9AA5B5`입니다. 제목과 창 사이에는 최소 48px를 둡니다.
-- 한국어 제목은 공백 제외 6~14자, 영어는 공백 포함 최대 34자입니다. 기능을 설명하는 합니다체 또는 명사구를 사용하고 영어 끝 마침표는 생략합니다.
+- 한국어 제목은 공백 제외 6~14자(영문 단어는 한 글자로 셈), 영어는 공백 포함 최대 34자입니다. 기능을 설명하는 합니다체 또는 명사구를 사용하고 영어 끝 마침표는 생략합니다.
 - 그림자는 검정 약 50%·블러 60px·아래 이동 24px입니다. 원본 알파를 따라 흰색 약 9%의 1px 테두리를 적용하여 실제 둥근 모서리를 유지합니다.
 - 추가 강조가 필요할 때만 `#E5483B` 2px 외곽선을 한 번 사용합니다. 현재 장면 계획은 추가 외곽선을 사용하지 않습니다. 원본의 상태 색과 주석은 그대로 보존합니다.
 
@@ -61,12 +61,12 @@ python -X utf8 -I "C:/GitRepositories/my-capture-440/store-shots/build/store-sho
 | 1 | 개인정보를 한 번에 가립니다 / Redact personal data in one step | `redact/03.png` 0.75 → 2.25 |
 | 2 | 코드 옆에 참고 화면을 띄웁니다 / Pin references above your code | `samples/code.png` 0.80 → 1.60, `pins/code.png` 0.80 → 2.40 |
 | 3 | 오류 화면에 바로 표시합니다 / Mark up a bug screenshot | `annotation/06-step2.png` 0.70 → 2.10 |
-| 4 | 캡처 카드에서 작업을 고릅니다 / Choose an action on the card | `samples/code.png` 0.80 → 1.60, `quick-access/dashboard.png` 0.80 → 2.40 |
+| 4 | 캡처 카드에서 작업을 고릅니다 / Choose an action on the card | `samples/code.png` 0.80 → 1.60, `quick-access/dashboard.png` 1.00 → 3.00 |
 | 5 | 이미지 속 글자를 복사합니다 / Copy text out of an image | `ocr/result-source.png` 0.70 → 2.10 |
 | 6 | 지난 캡처를 글자로 찾습니다 / Find past captures by their text | `library/midnight-search.png` 0.75 → 2.25 |
 | 7 | 녹화하고 필요한 구간만 남깁니다 / Record a region and trim it | `video/editor.png` 0.67 → 2.01 |
 | 8 | GIF 크기를 미리 확인합니다 / Check GIF size before export | `video/gif-export-dialog.png` 0.67 → 2.01 |
-| 9 | 캡처 도구에서 옮겨 오면 / Coming from Snipping Tool | 창 없이 2열 문자만 배치합니다. |
+| 9 | Windows 캡처 도구에서 옮겨 오면 / Coming from Windows Snipping Tool | 창 없이 2열 문자만 배치합니다. |
 
 장면 9의 왼쪽(그대로)에는 영역·창·전체 화면 캡처, 클립보드 복사, 이미지 속 글자 복사, 영역 녹화를 넣습니다. 오른쪽(더해지는 것)에는 핀, 스크롤 캡처, 블러·모자이크·단계 번호, 창 제목과 글자로 찾는 라이브러리, 카드번호·토큰까지 찾는 가리기를 넣습니다. 오른쪽 다섯 항목은 Microsoft의 [Snipping Tool 기능 안내](https://support.microsoft.com/en-us/windows/apps/use-snipping-tool-to-capture-screenshots)에 없고(빠른 가리기는 이메일·전화번호만 안내), 스크롤 캡처는 Microsoft의 [2026-02-26 설명](https://www.microsoft.com/en-us/windows/learning-center/how-to-use-snipping-tool-on-windows-screenshots-shortcuts-and-screen-recordings)이 기본 제공하지 않는다고 밝힙니다. 제출 직전 기능 안내를 다시 열어 확인합니다. 표 복사는 [공식 Copy as table 발표](https://blogs.windows.com/windows-insider/2024/10/18/announcing-windows-11-insider-preview-build-22635-4371-beta-channel/)가 있어 차별점에서 제외했습니다. 출처·보류 사유는 `claim_review`에 보관하며 렌더에는 두 열의 본문만 넣습니다.
 
