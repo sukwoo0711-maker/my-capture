@@ -3829,6 +3829,13 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="VideoEditorUx_Trim" xml:space="preserve"><value>자르기</value></data>
   <data name="VideoEditorUx_TrimHelp" xml:space="preserve"><value>남길 구간의 시작 손잡이를 고르고 그 프레임을 보여 줍니다. 다시 누르면 끝 손잡이로 바뀝니다.</value></data>
   <data name="VideoEditorUx_AddText" xml:space="preserve"><value>텍스트 추가</value></data>
+  <data name="VideoEditorUx_TextShort" xml:space="preserve"><value>텍스트</value></data>
+  <data name="VideoEditorUx_SaveShort" xml:space="preserve"><value>저장</value></data>
+  <data name="VideoEditorUx_ExportShort" xml:space="preserve"><value>내보내기</value></data>
+  <data name="VideoEditorUx_Details" xml:space="preserve"><value>자세히</value></data>
+  <data name="VideoEditorUx_DetailsHelp" xml:space="preserve"><value>프레임 이동, 시작·끝 시간, 레이어 목록을 표시하거나 숨깁니다. Enter로 전환합니다.</value></data>
+  <data name="VideoEditorUx_TrimTrackHelp" xml:space="preserve"><value>손잡이를 끌거나 I·O로 남길 구간의 시작과 끝을 정합니다. Ctrl+K로 재생 위치에서 분할합니다.</value></data>
+  <data name="VideoEditorUx_LayerTrackHelp" xml:space="preserve"><value>레이어를 두 번 클릭하거나 선택 후 F2·Enter로 편집합니다. Del로 삭제합니다. 레이어를 끌어 표시 구간을 조정합니다.</value></data>
   <data name="VideoEditorUx_AddTextHelp" xml:space="preserve"><value>재생 위치부터 표시할 텍스트 레이어를 추가합니다.</value></data>
   <data name="VideoEditorUx_FrameImageEdit" xml:space="preserve"><value>이 장면에 그리기</value></data>
   <data name="VideoEditorUx_LayerPanel" xml:space="preserve"><value>레이어</value></data>

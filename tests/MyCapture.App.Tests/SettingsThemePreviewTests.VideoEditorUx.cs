@@ -80,6 +80,12 @@ public sealed partial class SettingsThemePreviewTests
             VideoUxSettle(window);
             SaveVideoUxEvidence(window, $"video-editor-default-{theme}-{phase}.png", 1.0);
 
+            window.SetDetailsExpandedForTest(true);
+            VideoUxSettle(window);
+            SaveVideoUxEvidence(window, $"video-editor-expanded-{theme}-{phase}.png", 1.0);
+            window.SetDetailsExpandedForTest(false);
+            VideoUxSettle(window);
+
             // A start handle mid-drag: the same state and notifications as a pointer drag,
             // without native mouse input on the user's desktop.
             TwoLineTimeline timeline = window.TimelineForTest;
@@ -103,6 +109,11 @@ public sealed partial class SettingsThemePreviewTests
             VideoUxSettle(window);
             SaveVideoUxEvidence(window, $"video-editor-minimum-{theme}-{phase}.png", 1.0);
             SaveVideoUxEvidence(window, $"video-editor-minimum-144dpi-{theme}-{phase}.png", 1.5);
+            window.SetDetailsExpandedForTest(true);
+            VideoUxSettle(window);
+            SaveVideoUxEvidence(window, $"video-editor-minimum-expanded-{theme}-{phase}.png", 1.0);
+            window.SetDetailsExpandedForTest(false);
+            VideoUxSettle(window);
 
             // 1920x1080 at 200% leaves about 960x516 DIPs of work area.
             window.MinHeight = 516;
@@ -110,6 +121,9 @@ public sealed partial class SettingsThemePreviewTests
             window.Height = 516;
             VideoUxSettle(window);
             SaveVideoUxEvidence(window, $"video-editor-1080p-200pct-{theme}-{phase}.png", 2.0);
+            window.SetDetailsExpandedForTest(true);
+            VideoUxSettle(window);
+            SaveVideoUxEvidence(window, $"video-editor-1080p-200pct-expanded-{theme}-{phase}.png", 2.0);
         }
         finally
         {

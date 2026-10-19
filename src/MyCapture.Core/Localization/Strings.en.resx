@@ -3829,6 +3829,13 @@ Delete {1} {1:plural:subfolder|subfolders}, {2} {2:plural:image|images}, and {3}
   <data name="VideoEditorUx_Trim" xml:space="preserve"><value>Trim</value></data>
   <data name="VideoEditorUx_TrimHelp" xml:space="preserve"><value>Selects the start handle of the part to keep and shows its frame. Press again for the end handle.</value></data>
   <data name="VideoEditorUx_AddText" xml:space="preserve"><value>Add text</value></data>
+  <data name="VideoEditorUx_TextShort" xml:space="preserve"><value>Text</value></data>
+  <data name="VideoEditorUx_SaveShort" xml:space="preserve"><value>Save</value></data>
+  <data name="VideoEditorUx_ExportShort" xml:space="preserve"><value>Export</value></data>
+  <data name="VideoEditorUx_Details" xml:space="preserve"><value>Details</value></data>
+  <data name="VideoEditorUx_DetailsHelp" xml:space="preserve"><value>Show or hide frame navigation, start and end times, and the layer list. Press Enter to toggle.</value></data>
+  <data name="VideoEditorUx_TrimTrackHelp" xml:space="preserve"><value>Drag the handles or press I and O to set the start and end. Press Ctrl+K to split at the playhead.</value></data>
+  <data name="VideoEditorUx_LayerTrackHelp" xml:space="preserve"><value>Double-click a layer or select it and press F2 or Enter to edit. Press Del to delete. Drag a layer to adjust its visible range.</value></data>
   <data name="VideoEditorUx_AddTextHelp" xml:space="preserve"><value>Adds a text layer that starts at the playhead.</value></data>
   <data name="VideoEditorUx_FrameImageEdit" xml:space="preserve"><value>Draw on this frame</value></data>
   <data name="VideoEditorUx_LayerPanel" xml:space="preserve"><value>Layers</value></data>
