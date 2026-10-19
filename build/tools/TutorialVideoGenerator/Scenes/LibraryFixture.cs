@@ -30,7 +30,7 @@ internal sealed class LibraryFixture : IDisposable
 {
     private readonly ILoggerFactory _logs = LoggerFactory.Create(builder => builder.SetMinimumLevel(LogLevel.Warning));
     private readonly OcrResultPresenter _presenter;
-    private readonly AppSettings _settings = new();
+    private readonly AppSettings _settings = NewInstallDefaults.Create();
 
     internal LibraryFixture(bool korean)
     {
@@ -59,7 +59,8 @@ internal sealed class LibraryFixture : IDisposable
         var ocr = new UxReviewSelfTest.FixtureOcr();
         _presenter = new OcrResultPresenter(ocr, System.Windows.Threading.Dispatcher.CurrentDispatcher, _ => { }, NullLogger.Instance);
         ViewModel = new GalleryViewModel(Controller,
-            record => Path.Combine(Queue.GetDirectory(record), CaptureFileNames.Thumbnail), 480, clock: () => Now);
+            record => Path.Combine(Queue.GetDirectory(record), CaptureFileNames.Thumbnail), 480, clock: () => Now,
+            imageRetentionHours: () => _settings.Queue.ImageRetentionHours);
         var indexing = new OcrIndexingService(Controller, ocr, Queue.GetDirectory, () => _settings.Ocr,
             _logs.CreateLogger<OcrIndexingService>(), System.Windows.Threading.Dispatcher.CurrentDispatcher);
         ReeditLoader = new GalleryReeditLoader(Queue, _logs.CreateLogger<GalleryReeditLoader>());
