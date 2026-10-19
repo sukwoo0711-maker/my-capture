@@ -2,7 +2,7 @@
 
 개발자를 위한 무료 Windows 캡처·핀 도구입니다.
 
-<img src="docs/media/readme-demo-ko.gif" width="720" alt="고객 문의 화면을 Ctrl+Shift+C로 캡처하고, Ctrl+Shift+R로 이메일·연락처·카드번호를 가린 뒤, 코드 편집기 옆에 핀으로 띄우는 장면">
+<img src="docs/media/readme-demo-ko.gif" width="720" alt="코드 위에 뜬 캡처 카드, Ctrl+Shift+R로 이메일·토큰·카드번호를 가린 오류 보고, 코드 옆에 핀으로 띄운 API 설명이 차례로 나오는 장면">
 
 <a href="https://apps.microsoft.com/detail/9PB33MC095VR?cid=gh-readme"><img src="https://get.microsoft.com/images/ko%20dark.svg" width="200" alt="Microsoft Store에서 받기"></a>
 
@@ -57,7 +57,7 @@ MyCapture 자체 코드에는 [MIT License](LICENSE)가 적용됩니다. 배포 
 
 A free Windows screenshot and pinning tool for developers.
 
-<img src="docs/media/readme-demo-en.gif" width="720" alt="A customer report captured with Ctrl+Shift+C, the email, phone and card number hidden with Ctrl+Shift+R, then pinned next to a code editor">
+<img src="docs/media/readme-demo-en.gif" width="720" alt="The capture card over code, a bug report with its email, token and card number covered by Ctrl+Shift+R, and an API note pinned next to the code">
 
 <a href="https://apps.microsoft.com/detail/9PB33MC095VR?cid=gh-readme"><img src="https://get.microsoft.com/images/en-us%20dark.svg" width="200" alt="Get it from Microsoft Store"></a>
 
@@ -65,7 +65,7 @@ No ads, no account and no capture limits. Capture and text recognition run on th
 
 ### What it adds to Snipping Tool
 
-**Redaction.** Press `Ctrl+Shift+R` in the editor and MyCapture covers email addresses, card numbers, IP addresses, Korean phone and resident registration numbers, and secrets such as GitHub tokens, AWS access keys and API keys that start with `sk-`. You can move or delete each cover before you save.
+**Redaction.** Press `Ctrl+Shift+R` in the editor and Auto-redact covers email addresses, card numbers, IP addresses, Korean phone and resident registration numbers, and secrets such as GitHub tokens, AWS access keys and API keys that start with `sk-`. You can move or delete each cover before you save.
 
 **Pins that stay on top.** Press `P` on the card that appears after a capture, or pin the image, code or table on your clipboard with a shortcut you assign in Settings (for example `F3`). A pin is a small window that stays above everything else. Keep a bug report in view while you fix the code, or a design mockup while you match the layout.
 
