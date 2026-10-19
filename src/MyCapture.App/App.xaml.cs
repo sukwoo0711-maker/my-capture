@@ -1989,6 +1989,23 @@ public partial class App : Application
             Shutdown(Ux402SelfTest.Run());
             return true;
         }
+        int storeLayersIndex = FindSwitch(args, StoreScreenshotSelfTest.LayersCommandLineSwitch);
+        if (storeLayersIndex >= 0)
+        {
+            try
+            {
+                var request = StoreScreenshotSelfTest.ParseLayersArguments(args, storeLayersIndex);
+                return RunSelfTest(request.Output, "store-layers-report.txt",
+                    directory => StoreScreenshotSelfTest.RunLayers(directory, request.Language));
+            }
+            catch (ArgumentException ex)
+            {
+                Console.Error.WriteLine(ex.Message);
+                Shutdown(2);
+                return true;
+            }
+        }
+
         int storeShotsIndex = FindSwitch(args, StoreScreenshotSelfTest.CommandLineSwitch);
         if (storeShotsIndex >= 0)
         {
