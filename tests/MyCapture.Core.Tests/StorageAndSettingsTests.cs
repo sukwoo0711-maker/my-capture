@@ -241,7 +241,7 @@ public sealed class SettingsStoreTests
 
         Assert.True(settings.General.IsFirstRun);
         Assert.True(settings.General.LaunchAtLogin);
-        Assert.Equal("glass", settings.General.Theme);
+        Assert.Equal("system", settings.General.Theme);
         Assert.Equal(OcrQuality.Fast, settings.Ocr.Quality);
         Assert.Equal(1.0, settings.Ocr.UpscaleFactor);
         Assert.Equal(300, settings.Queue.MaxItems);
@@ -251,7 +251,7 @@ public sealed class SettingsStoreTests
         // A new installation assigns only capture and recording; see SettingsUxDefaultsTests.
         Assert.Equal(Hotkey.None, settings.Hotkeys.OpenLibrary);
         Assert.Equal(Hotkey.None, settings.Hotkeys.PasteToScreen);
-        Assert.True(settings.General.ShowShortcutHints);
+        Assert.False(settings.General.ShowShortcutHints);
         Assert.True(settings.Export.CopyToClipboardOnQuickSave);
         Assert.Equal(RecordingFrameRate.Fps30, settings.Recording.FrameRate);
     }

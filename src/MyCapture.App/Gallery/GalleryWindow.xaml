@@ -251,11 +251,11 @@
                                     <ColumnDefinition Width="Auto" />
                                 </Grid.ColumnDefinitions>
                                 <Border Padding="8,4" CornerRadius="6" Margin="0,0,6,0"
-                                        Background="{DynamicResource Accent.Default}"
+                                        Background="{DynamicResource Surface.Badge}"
                                         Visibility="{Binding IsPinned, Converter={StaticResource BoolToVisibility}}">
                                     <TextBlock Text="{loc:Text LibraryUx_KeptBadge}" FontSize="{StaticResource FontSize.Caption}"
                                                FontWeight="SemiBold"
-                                               Foreground="{DynamicResource Text.OnAccent}" />
+                                               Foreground="{DynamicResource Text.Badge}" />
                                 </Border>
                                 <Border x:Name="FolderBadge" Grid.Column="1" Style="{StaticResource Gallery.FolderBadge}" MaxWidth="120"
                                         HorizontalAlignment="Left">
@@ -523,11 +523,11 @@
                             </Border>
                             <Border HorizontalAlignment="Left" VerticalAlignment="Top"
                                     Margin="5" Padding="6,2" CornerRadius="5"
-                                    Background="{DynamicResource Accent.Default}"
+                                    Background="{DynamicResource Surface.Badge}"
                                     Visibility="{Binding IsPinned, Converter={StaticResource BoolToVisibility}}">
                                 <TextBlock Text="{loc:Text LibraryUx_KeptBadge}" FontSize="{StaticResource FontSize.Caption}"
                                            FontWeight="SemiBold"
-                                           Foreground="{DynamicResource Text.OnAccent}" />
+                                           Foreground="{DynamicResource Text.Badge}" />
                             </Border>
                             <!-- One bottom line: the folder name (only a search inside the folder lists
                                  captures of its subfolders) gives way to a video's duration. -->

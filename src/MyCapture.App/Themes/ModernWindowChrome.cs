@@ -216,7 +216,7 @@ public static class ModernWindowChrome
     private static void Apply(Window window)
     {
         WindowIdentity.Attach(window);
-        AppTheme theme = ThemeService.Current;
+        AppTheme theme = ThemeService.EffectiveTheme;
         WorkspaceRole role = GetWorkspaceRole(window);
         WindowChromePlan plan = ResolveChrome(theme, role, ThemeService.IsSystemHighContrast);
 

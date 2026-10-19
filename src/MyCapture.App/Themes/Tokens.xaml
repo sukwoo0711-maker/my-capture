@@ -3,8 +3,8 @@
 
   Direction (design-system/mycapture/MASTER.md, "Iris"):
     * Captured pixels stay dominant on quiet graphite surfaces with clear depth hierarchy.
-    * Electric iris is reserved for primary actions, selection, keyboard focus, and the playhead.
-    * Violet fills use dark ink; the optional red palette pairs deep fills with warm white.
+    * Brand red fills primary actions; selection and keyboard focus use neutral text outlines.
+    * Red fills use dark ink; neutral surfaces retain their text hierarchy.
     * Normal UI is flat and token-driven: no decorative gradients or unowned raw colours.
 
   Compatibility: every previously shipped resource key remains available. Legacy Warm,
@@ -27,18 +27,18 @@
     <Color x:Key="Primitive.Warm600">#FF6A7B94</Color> <!-- strong boundary: hover, floating -->
     <Color x:Key="Primitive.Warm550">#FF56677F</Color> <!-- control boundary -->
     <Color x:Key="Primitive.Warm500">#FF2B3A50</Color> <!-- subtle divider -->
-    <Color x:Key="Primitive.Warm400">#FF8E9CAF</Color> <!-- muted text -->
-    <Color x:Key="Primitive.Warm300">#FFC6D0DF</Color> <!-- secondary text -->
-    <Color x:Key="Primitive.Warm100">#FFF6F8FC</Color> <!-- primary text -->
+    <Color x:Key="Primitive.Warm400">#FF9AA5B5</Color> <!-- muted text -->
+    <Color x:Key="Primitive.Warm300">#FFC9D1DD</Color> <!-- secondary text -->
+    <Color x:Key="Primitive.Warm100">#FFFFFFFF</Color> <!-- primary text -->
     <Color x:Key="Primitive.White">#FFFFFFFF</Color>
 
-    <!-- Iris brand ramp. Dark ink is the only text colour on these fills. -->
-    <Color x:Key="Primitive.Yellow300">#FF9789FF</Color> <!-- focus / hover -->
-    <Color x:Key="Primitive.Yellow400">#FF7C6CFF</Color> <!-- primary -->
-    <Color x:Key="Primitive.Yellow500">#FF7C6CFF</Color> <!-- border accent -->
-    <Color x:Key="Primitive.Yellow600">#FF7A68EE</Color> <!-- pressed -->
-    <Color x:Key="Primitive.Yellow900">#FF1A1733</Color> <!-- selected wash -->
-    <Color x:Key="Primitive.Ink">#FF061116</Color>
+    <!-- Legacy primitive names retain the fixed red action ramp. -->
+    <Color x:Key="Primitive.Yellow300">#FFF35B4D</Color> <!-- focus / hover -->
+    <Color x:Key="Primitive.Yellow400">#FFE0453C</Color> <!-- primary -->
+    <Color x:Key="Primitive.Yellow500">#FFE0453C</Color> <!-- border accent -->
+    <Color x:Key="Primitive.Yellow600">#FFDA433A</Color> <!-- pressed -->
+    <Color x:Key="Primitive.Yellow900">#FF303642</Color> <!-- selected wash -->
+    <Color x:Key="Primitive.Ink">#FF0A0818</Color>
 
     <!-- Status colours stay semantically distinct from the brand yellow. -->
     <Color x:Key="Primitive.Orange400">#FFF5B942</Color>
@@ -91,13 +91,14 @@
     <SolidColorBrush x:Key="Surface.Floating" Color="#F2151E2B" />
     <SolidColorBrush x:Key="Surface.Sunken" Color="{StaticResource Primitive.Warm980}" />
     <SolidColorBrush x:Key="Surface.Hover" Color="{StaticResource Primitive.Warm800}" />
+    <SolidColorBrush x:Key="Surface.Selected" Color="#FF303642" />
     <SolidColorBrush x:Key="Surface.Pressed" Color="{StaticResource Primitive.Warm700}" />
     <SolidColorBrush x:Key="Surface.Scrim" Color="#C2080C12" />
     <SolidColorBrush x:Key="Crop.Scrim" Color="#99080C12" />
     <SolidColorBrush x:Key="Crop.Frame" Color="White" />
     <SolidColorBrush x:Key="Crop.FrameShadow" Color="Black" />
-    <SolidColorBrush x:Key="Surface.Badge" Color="#E6080C12" />
-    <SolidColorBrush x:Key="Surface.BadgeStrong" Color="#F2080C12" />
+    <SolidColorBrush x:Key="Surface.Badge" Color="{StaticResource Primitive.Warm900}" />
+    <SolidColorBrush x:Key="Surface.BadgeStrong" Color="{StaticResource Primitive.Warm900}" />
 
     <!-- ============================================================= -->
     <!-- Semantic text: AA body pairings on intended warm surfaces     -->
@@ -107,20 +108,22 @@
     <SolidColorBrush x:Key="Text.Muted" Color="{StaticResource Primitive.Warm400}" />
     <SolidColorBrush x:Key="Text.Disabled" Color="#FF7A8290" />
     <SolidColorBrush x:Key="Text.OnAccent" Color="{StaticResource Primitive.Ink}" />
-    <SolidColorBrush x:Key="Text.Badge" Color="{StaticResource Primitive.White}" />
+    <SolidColorBrush x:Key="Text.Badge" Color="{StaticResource Primitive.Warm100}" />
+    <SolidColorBrush x:Key="Text.SelectionBackground" Color="{StaticResource Primitive.Warm100}" />
+    <SolidColorBrush x:Key="Text.SelectionForeground" Color="{StaticResource Primitive.Warm950}" />
 
     <!-- ============================================================= -->
     <!-- Accent and state                                              -->
     <!-- ============================================================= -->
     <SolidColorBrush x:Key="Accent.Default" Color="{StaticResource Primitive.Yellow400}" />
-    <!-- Bare text and glyphs retain the original violet; red uses the readable foreground ramp. -->
-    <SolidColorBrush x:Key="Accent.Foreground" Color="{StaticResource Primitive.Yellow400}" />
-    <SolidColorBrush x:Key="Accent.Indicator" Color="{StaticResource Primitive.Yellow400}" />
-    <SolidColorBrush x:Key="Border.SelectedTool" Color="Transparent" />
+    <!-- Bare text, glyphs and selection edges use the neutral primary text role. -->
+    <SolidColorBrush x:Key="Accent.Foreground" Color="{StaticResource Primitive.Warm100}" />
+    <SolidColorBrush x:Key="Accent.Indicator" Color="{StaticResource Primitive.Warm100}" />
+    <SolidColorBrush x:Key="Border.SelectedTool" Color="{StaticResource Primitive.Warm100}" />
     <SolidColorBrush x:Key="Accent.Hover" Color="{StaticResource Primitive.Yellow300}" />
     <SolidColorBrush x:Key="Accent.Pressed" Color="{StaticResource Primitive.Yellow600}" />
     <SolidColorBrush x:Key="Accent.Subtle" Color="{StaticResource Primitive.Yellow900}" />
-    <SolidColorBrush x:Key="Accent.Cool" Color="{StaticResource Primitive.Yellow300}" />
+    <SolidColorBrush x:Key="Accent.Cool" Color="{StaticResource Primitive.Warm100}" />
 
     <!-- Compatibility alias: deliberately flat, never a GradientBrush. -->
     <SolidColorBrush x:Key="Accent.Gradient" Color="{StaticResource Primitive.Yellow400}" />
@@ -143,12 +146,13 @@
     <SolidColorBrush x:Key="Border.Control" Color="{StaticResource Primitive.Warm550}" />
     <SolidColorBrush x:Key="Border.Strong" Color="{StaticResource Primitive.Warm600}" />
     <SolidColorBrush x:Key="Border.Hover" Color="Transparent" />
-    <SolidColorBrush x:Key="Border.Focus" Color="{StaticResource Primitive.Yellow300}" />
-    <!-- Focus ring weight; ThemeService doubles it for contrast themes. Rings are overlays, so
-         the weight never moves layout. -->
-    <Thickness x:Key="Focus.RingThickness">1</Thickness>
-    <sys:Double x:Key="Focus.RingWidth">1</sys:Double>
-    <SolidColorBrush x:Key="Border.Accent" Color="{StaticResource Primitive.Yellow500}" />
+    <SolidColorBrush x:Key="Border.Focus" Color="{StaticResource Primitive.Warm100}" />
+    <!-- Two-DIP focus rings are overlays, so the weight never moves layout. -->
+    <Thickness x:Key="Border.DecorativeThickness">0</Thickness>
+    <Thickness x:Key="Border.ToolThickness">0</Thickness>
+    <Thickness x:Key="Focus.RingThickness">2</Thickness>
+    <sys:Double x:Key="Focus.RingWidth">2</sys:Double>
+    <SolidColorBrush x:Key="Border.Accent" Color="{StaticResource Primitive.Warm100}" />
     <SolidColorBrush x:Key="Border.Badge" Color="#66F6F8FC" />
     <!-- Library folder cards: warm surface, outline and glyph (ThemeService recolours all six palettes). -->
     <SolidColorBrush x:Key="Surface.Folder" Color="#FF2A2213" />
@@ -166,6 +170,7 @@
     <SolidColorBrush x:Key="Timeline.Track" Color="{StaticResource Primitive.Graphite850}" />
     <SolidColorBrush x:Key="Timeline.TextLayer" Color="#FF8B7BFF" />
     <SolidColorBrush x:Key="Timeline.FrameLayer" Color="#FF3FD8C9" />
+    <SolidColorBrush x:Key="Timeline.LayerText" Color="{StaticResource Primitive.Ink}" />
     <SolidColorBrush x:Key="Timeline.Grid" Color="{StaticResource Primitive.Graphite500}" />
     <!-- Dark palettes resolve the playhead to white; light themes override it at runtime
          with a deep iris that keeps focus-weight contrast on pale surfaces. -->
@@ -178,7 +183,7 @@
     <!-- Capture overlay                                               -->
     <!-- ============================================================= -->
     <SolidColorBrush x:Key="Overlay.Dimmer" Color="#FF080C12" Opacity="0.52" />
-    <SolidColorBrush x:Key="Overlay.SelectionBorder" Color="{StaticResource Primitive.Yellow300}" />
+    <SolidColorBrush x:Key="Overlay.SelectionBorder" Color="{StaticResource Primitive.Warm100}" />
     <!-- Capture410 guide roles; ThemeService resolves all six palettes and system high contrast. -->
     <SolidColorBrush x:Key="CaptureGuide.SelectionBorder" Color="#FF9789FF" />
     <SolidColorBrush x:Key="CaptureGuide.InnerGlow" Color="#209789FF" />
@@ -197,8 +202,8 @@
     <!-- Text on accent-filled guide labels: black or white by WCAG contrast with the accent. -->
     <SolidColorBrush x:Key="CaptureGuide.AccentText" Color="#FF000000" />
 
-    <SolidColorBrush x:Key="Overlay.HandleFill" Color="{StaticResource Primitive.Warm100}" />
-    <SolidColorBrush x:Key="Overlay.HandleStroke" Color="{StaticResource Primitive.Yellow600}" />
+    <SolidColorBrush x:Key="Overlay.HandleFill" Color="{StaticResource Primitive.Warm900}" />
+    <SolidColorBrush x:Key="Overlay.HandleStroke" Color="{StaticResource Primitive.Warm100}" />
 
     <!-- ============================================================= -->
     <!-- 4px spacing rhythm (principal steps 8/12/16/24/32)            -->
@@ -233,10 +238,10 @@
     <FontFamily x:Key="Font.Mono">Cascadia Mono, Consolas, Malgun Gothic, monospace</FontFamily>
 
     <sys:Double x:Key="FontSize.Caption">12</sys:Double>
-    <sys:Double x:Key="FontSize.Control">13</sys:Double>
+    <sys:Double x:Key="FontSize.Control">14</sys:Double>
     <sys:Double x:Key="FontSize.Body">14</sys:Double>
-    <sys:Double x:Key="FontSize.Subtitle">17</sys:Double>
-    <sys:Double x:Key="FontSize.Title">24</sys:Double>
+    <sys:Double x:Key="FontSize.Subtitle">20</sys:Double>
+    <sys:Double x:Key="FontSize.Title">28</sys:Double>
     <sys:Double x:Key="FontSize.Display">28</sys:Double>
 
     <!-- ============================================================= -->

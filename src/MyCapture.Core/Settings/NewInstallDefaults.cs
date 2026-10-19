@@ -2,7 +2,7 @@ namespace MyCapture.Core.Settings;
 
 /// <summary>
 /// The settings a new installation starts with: only region capture and screen recording own a
-/// global shortcut, and the small key captions under buttons are visible.
+/// global shortcut, the theme follows Windows, and key captions appear while Alt is held.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -36,7 +36,8 @@ public static class NewInstallDefaults
         settings.Hotkeys.PasteToScreen = Hotkey.None;
         settings.Hotkeys.HideAllPins = Hotkey.None;
         settings.Hotkeys.UploadGitHubImage = Hotkey.None;
-        settings.General.ShowShortcutHints = true;
+        settings.General.Theme = MyCapture.Core.Themes.AppThemeNames.ToSetting(MyCapture.Core.Themes.AppTheme.System);
+        settings.General.ShowShortcutHints = false;
         settings.General.ShortcutHintsRevision = 1;
     }
 }

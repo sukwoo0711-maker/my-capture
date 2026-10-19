@@ -1,4 +1,6 @@
 using System.ComponentModel;
+using System.Globalization;
+using System.Runtime.CompilerServices;
 using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Controls;
@@ -21,6 +23,14 @@ internal sealed class ShortcutPresentation : INotifyPropertyChanged
     public Visibility HintVisibility => ReadEnabled?.Invoke() == false ? Visibility.Collapsed : Visibility.Visible;
     public event PropertyChangedEventHandler? PropertyChanged;
     internal static void Refresh() => Current.PropertyChanged?.Invoke(Current, new(nameof(HintVisibility)));
+
+    // A window owns its Alt state. Inheritance also covers captions added while Alt is held,
+    // without changing the saved preference or revealing another window's captions.
+    private static readonly DependencyProperty AltRevealedProperty = DependencyProperty.RegisterAttached(
+        "AltRevealed", typeof(bool), typeof(ShortcutPresentation),
+        new FrameworkPropertyMetadata(false, FrameworkPropertyMetadataOptions.Inherits));
+    private static readonly ConditionalWeakTable<Window, WindowAltReveal> WindowReveals = new();
+    private static readonly HintVisibilityConverter VisibilityConverter = new();
 
     /// <summary>
     /// Every assigned shortcut follows the same caption rule, including key combinations.
@@ -46,8 +56,87 @@ internal sealed class ShortcutPresentation : INotifyPropertyChanged
             LineStackingStrategy = LineStackingStrategy.BlockLineHeight,
         };
         hint.SetResourceReference(TextBlock.ForegroundProperty, "Text.Secondary");
-        hint.SetBinding(UIElement.VisibilityProperty, new Binding(nameof(HintVisibility)) { Source = Current });
+        var visibility = new MultiBinding { Converter = VisibilityConverter };
+        visibility.Bindings.Add(new Binding(nameof(HintVisibility)) { Source = Current });
+        visibility.Bindings.Add(new Binding { Source = hint, Path = new PropertyPath(AltRevealedProperty) });
+        hint.SetBinding(UIElement.VisibilityProperty, visibility);
+        hint.Loaded += OnHintLoaded;
         return hint;
+    }
+
+    private static void OnHintLoaded(object sender, RoutedEventArgs e)
+    {
+        if (Window.GetWindow((DependencyObject)sender) is { } window)
+            WindowReveals.GetValue(window, static owner => new WindowAltReveal(owner));
+    }
+
+    private sealed class HintVisibilityConverter : IMultiValueConverter
+    {
+        public object Convert(object[] values, Type targetType, object parameter, CultureInfo culture) =>
+            values[0] is Visibility.Visible || values[1] is true ? Visibility.Visible : Visibility.Collapsed;
+
+        public object[] ConvertBack(object value, Type[] targetTypes, object parameter, CultureInfo culture) =>
+            throw new NotSupportedException();
+    }
+
+    private sealed class WindowAltReveal
+    {
+        private readonly Window _window;
+        private readonly InputManager _inputManager;
+        private readonly ShortcutAltRevealState _state = new();
+
+        internal WindowAltReveal(Window window)
+        {
+            _window = window;
+            _inputManager = InputManager.Current;
+            // Observe handled events too, but never consume them: Alt accelerators and WPF
+            // menu access keys continue through their existing input handlers.
+            window.AddHandler(Keyboard.PreviewKeyDownEvent, new KeyEventHandler(OnKeyDown), true);
+            window.AddHandler(Keyboard.PreviewKeyUpEvent, new KeyEventHandler(OnKeyUp), true);
+            // ContextMenu and Popup route keys through a separate tree without necessarily
+            // deactivating their owner. Observe releases at the dispatcher input stage too.
+            // The weak subscription cannot keep an abandoned window alive through InputManager.
+            WeakEventManager<InputManager, ProcessInputEventArgs>.AddHandler(
+                _inputManager, nameof(InputManager.PostProcessInput), OnPostProcessInput);
+            window.Deactivated += OnDeactivated;
+            window.Closed += OnClosed;
+        }
+
+        private void OnKeyDown(object sender, KeyEventArgs e) =>
+            Update(_state.UpdateKey(e.Key == Key.System ? e.SystemKey : e.Key, isDown: true));
+
+        private void OnKeyUp(object sender, KeyEventArgs e) =>
+            Update(_state.UpdateKey(e.Key == Key.System ? e.SystemKey : e.Key, isDown: false));
+
+        private void OnPostProcessInput(object? sender, ProcessInputEventArgs e)
+        {
+            if (_state.IsRevealed && e.StagingItem.Input is KeyEventArgs key
+                && (key.RoutedEvent == Keyboard.PreviewKeyUpEvent || key.RoutedEvent == Keyboard.KeyUpEvent))
+                OnKeyUp(_window, key);
+        }
+
+        private void OnDeactivated(object? sender, EventArgs e) => Update(_state.Reset());
+
+        private void OnClosed(object? sender, EventArgs e)
+        {
+            Update(_state.Reset());
+            _window.RemoveHandler(Keyboard.PreviewKeyDownEvent, new KeyEventHandler(OnKeyDown));
+            _window.RemoveHandler(Keyboard.PreviewKeyUpEvent, new KeyEventHandler(OnKeyUp));
+            WeakEventManager<InputManager, ProcessInputEventArgs>.RemoveHandler(
+                _inputManager, nameof(InputManager.PostProcessInput), OnPostProcessInput);
+            _window.Deactivated -= OnDeactivated;
+            _window.Closed -= OnClosed;
+            WindowReveals.Remove(_window);
+        }
+
+        private void Update(bool changed)
+        {
+            if (!changed) return;
+            _window.SetValue(AltRevealedProperty, _state.IsRevealed);
+            // Existing command rows refit when this notification fires. Notify after the
+            // inherited flag changes so they measure the revealed captions.
+            Refresh();
+        }
     }
 
     internal static void Attach(ButtonBase button, ShortcutScope scope, string command, bool corner = false)
@@ -103,5 +192,29 @@ internal sealed class ShortcutPresentation : INotifyPropertyChanged
         // Older labels spell the minus key with a hyphen and Delete in full.
         string named = label[open..].Replace('−', '-');
         return named.Contains(hint.Replace('−', '-'), StringComparison.Ordinal);
+    }
+}
+
+/// <summary>Tracks both Alt keys independently; losing activation clears a missed release.</summary>
+internal sealed class ShortcutAltRevealState
+{
+    private bool _leftAlt;
+    private bool _rightAlt;
+
+    internal bool IsRevealed => _leftAlt || _rightAlt;
+
+    internal bool UpdateKey(Key key, bool isDown)
+    {
+        bool before = IsRevealed;
+        if (key == Key.LeftAlt) _leftAlt = isDown;
+        else if (key == Key.RightAlt) _rightAlt = isDown;
+        return before != IsRevealed;
+    }
+
+    internal bool Reset()
+    {
+        bool before = IsRevealed;
+        _leftAlt = _rightAlt = false;
+        return before;
     }
 }

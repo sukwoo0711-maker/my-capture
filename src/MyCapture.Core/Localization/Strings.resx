@@ -3138,14 +3138,13 @@
 Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
 트레이에서 라이브러리와 설정을 열 수 있습니다.</value></data>
   <data name="Settings.Theme" xml:space="preserve"><value>테마</value></data>
+  <data name="Settings.ThemeSystem" xml:space="preserve"><value>시스템 따르기</value></data>
   <data name="Settings.AccentColor" xml:space="preserve"><value>포인트 색</value></data>
   <data name="Settings.AccentViolet" xml:space="preserve"><value>바이올렛</value></data>
   <data name="Settings.AccentRed" xml:space="preserve"><value>레드</value></data>
   <data name="Settings.ThemeHint" xml:space="preserve"><value>테마를 선택하면 미리 볼 수 있습니다. 적용하면 저장됩니다.</value></data>
   <data name="Settings.ShowSourceWindowTitle" xml:space="preserve"><value>이미지 우측 상단에 문서·창 제목 표시</value></data>
   <data name="Settings.ShowSourceWindowTitleHint" xml:space="preserve"><value>새 캡처와 다시 여는 편집기에 적용됩니다.</value></data>
-  <data name="Settings.ThemeMidnight" xml:space="preserve"><value>미드나잇</value></data>
-  <data name="Settings.ThemeDaylight" xml:space="preserve"><value>데이라이트</value></data>
   <data name="Settings.ThemeHighContrast" xml:space="preserve"><value>고대비</value></data>
   <data name="Settings.GitHubIssueUrl" xml:space="preserve"><value>GitHub 이슈 URL</value></data>
   <data name="Settings.GitHubIssueUrlHint" xml:space="preserve"><value>F9가 클립보드 이미지를 붙여 넣을 이슈입니다. 본인이 쓸 수 있는 이슈를 지정하십시오. 비워 두면 MyCapture 공개 지원 저장소를 사용하며, 올린 이미지는 누구나 볼 수 있습니다.</value></data>
@@ -3186,9 +3185,8 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="Video.SourceTimeHint" xml:space="preserve"><value>원본 동영상 기준 시간입니다. 초(예: 2.5) 또는 시:분:초.밀리초로 입력하십시오. 시작부터 끝 직전까지 내보냅니다.</value></data>
   <data name="Video.TrimInputInvalid" xml:space="preserve"><value>구간을 적용하지 않았습니다. 원본 범위 안에서 시작이 끝보다 최소 0.1초 앞서도록 입력하십시오.</value></data>
   <data name="Video.TextSourceTimeHint" xml:space="preserve"><value>표시 시간은 원본 동영상 기준입니다. 초(예: 2.5) 또는 시:분:초.밀리초로 입력하십시오. 시작부터 끝 직전까지 표시되며, 내보내기에는 시작–끝 구간과 겹치는 부분만 포함됩니다.</value></data>
-  <data name="Settings.ThemeWorkspace" xml:space="preserve"><value>작업실 · 밝은 라이브러리와 어두운 동영상 편집기</value></data>
-  <data name="Settings.ThemeGlass" xml:space="preserve"><value>글래스 · Windows 기본</value></data>
-  <data name="Settings.ThemeGlassLight" xml:space="preserve"><value>글래스 라이트 · 밝은 반투명</value></data>
+  <data name="Settings.ThemeGlass" xml:space="preserve"><value>어둡게</value></data>
+  <data name="Settings.ThemeGlassLight" xml:space="preserve"><value>밝게</value></data>
   <data name="Settings.OcrQuality" xml:space="preserve"><value>인식 품질</value></data>
   <data name="Settings.OcrQualityHint" xml:space="preserve"><value>빠름과 보통은 Windows 기본 인식 기능을 씁니다. 정확은 영수증처럼 작은 글자에 강합니다. 가장 정확은 이미지를 보정하고 4배로 키워 인식하며, 처음 쓸 때 약 67MB를 내려받습니다.</value></data>
   <data name="Settings.OcrQualityFast" xml:space="preserve"><value>빠름</value></data>

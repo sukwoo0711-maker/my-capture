@@ -80,7 +80,7 @@ public sealed partial class SettingsThemePreviewTests
         Assert.Equal(AppThemeNames.Glass, saved.General.Theme);
         Assert.Equal(persisted, File.ReadAllText(paths.SettingsFile));
         Assert.Equal("321", Assert.IsType<SettingsDraft>(window.DataContext).MaxItems);
-        AssertPalette(window, AppTheme.Daylight);
+        AssertPalette(window, AppTheme.GlassLight);
 
         // Capture both default and minimum client layouts before assertions that also
         // expose the original hidden-status / clean-import regression on the baseline.
@@ -115,7 +115,7 @@ public sealed partial class SettingsThemePreviewTests
         AssertStatusFits(window, status);
         AssertCommandBarFits(window);
         Assert.Equal(persisted, File.ReadAllText(paths.SettingsFile));
-        AssertPalette(window, AppTheme.Daylight);
+        AssertPalette(window, AppTheme.GlassLight);
         SaveEvidence(window, $"settings-import-error-{locale}-780x560.png");
 
         string missingPath = Path.Combine(root, new string('a', 200), new string('b', 200), "missing-settings.json");
@@ -160,10 +160,10 @@ public sealed partial class SettingsThemePreviewTests
         Assert.NotSame(applied, window.DataContext);
         Assert.Equal("321", DraftOf(window).MaxItems);
         Assert.False(window.IsVisible);
-        Assert.Equal(AppThemeNames.Daylight, saved.General.Theme);
-        Assert.Equal(AppThemeNames.Daylight, store.Load().General.Theme);
+        Assert.Equal(AppThemeNames.GlassLight, saved.General.Theme);
+        Assert.Equal(AppThemeNames.GlassLight, store.Load().General.Theme);
         Assert.Equal(321, store.Load().Queue.MaxItems);
-        AssertPalette(window, AppTheme.Daylight);
+        AssertPalette(window, AppTheme.GlassLight);
     }
 
     private static SettingsDraft DraftOf(SettingsWindow window) => Assert.IsType<SettingsDraft>(window.DataContext);

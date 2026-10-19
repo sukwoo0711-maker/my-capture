@@ -2,9 +2,9 @@
   MyCapture shared control styles.
 
   Direction (M06 mark, with Windows-native glass palettes):
-    * Quiet graphite hierarchy with one iris action/focus accent. Glass themes keep
+    * Quiet graphite hierarchy with red primary actions and neutral selection/focus. Glass themes keep
       the same keys and paint translucent Surface brushes over the WPF client background.
-    * Accent fills pair with Text.OnAccent from the chosen palette, including checks and glyphs.
+    * Primary fills pair with Text.OnAccent; selection uses Surface.Selected and Text.Primary.
     * Focus visuals are STABLE: templates never change BorderThickness on focus. Focus is
       shown by recolouring the fixed chrome border and revealing an inset ring with no layout
       footprint, so keyboard navigation never shifts neighbouring content.
@@ -12,7 +12,7 @@
       FluidMotion.FadeTo on a layer: hover and press fade over Motion.Fast, selection and
       check indicators over Motion.Normal, and everything snaps when Windows animation
       effects are off. Shared brushes are never animated; only layer opacity moves.
-    * Border.Subtle draws decorative lines; control outlines use Border.Control.
+    * Surface depth separates panels; inputs and outline buttons retain Border.Control.
     * Every existing style/key is preserved for restored windows and external references.
 -->
 <ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
@@ -85,7 +85,7 @@
     <Style x:Key="Card" TargetType="Border">
         <Setter Property="Background" Value="{DynamicResource Surface.Raised}" />
         <Setter Property="BorderBrush" Value="{DynamicResource Border.Subtle}" />
-        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="BorderThickness" Value="{DynamicResource Border.DecorativeThickness}" />
         <Setter Property="CornerRadius" Value="{DynamicResource Radius.Lg}" />
         <Setter Property="Padding" Value="{DynamicResource Padding.Card}" />
         <Setter Property="SnapsToDevicePixels" Value="True" />
@@ -93,10 +93,10 @@
     <Style x:Key="Card.Sunken" TargetType="Border" BasedOn="{StaticResource Card}">
         <Setter Property="Background" Value="{DynamicResource Surface.Sunken}" />
     </Style>
-    <!-- Neutral information card: no heavy accent wash. Subtle accent border only. -->
+    <!-- Compatibility information card uses the same neutral surface. -->
     <Style x:Key="Card.Accent" TargetType="Border" BasedOn="{StaticResource Card}">
         <Setter Property="Background" Value="{DynamicResource Surface.Raised}" />
-        <Setter Property="BorderBrush" Value="{DynamicResource Border.Accent}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource Border.Subtle}" />
     </Style>
 
     <!-- ============================================================= -->
@@ -108,12 +108,12 @@
     <!--   Disabled keeps each tier's shape (fill, border or none). Bordered and tool      -->
     <!--   tiers fade by Button.DisabledOpacity; the filled tier keeps its fill but turns  -->
     <!--   neutral (Surface.Overlay + Text.Disabled), as WinUI does, so it stays readable. -->
-    <!--   Focus: recolour border to accent + fade in inset focus ring. Thickness fixed.   -->
+    <!--   Focus: recolour border to primary text + fade in inset focus ring. Thickness fixed.   -->
     <!-- ============================================================= -->
     <sys:Double x:Key="Button.DisabledOpacity">0.46</sys:Double>
     <sys:Double x:Key="CommandButton.Height.Standard">44</sys:Double>
     <sys:Double x:Key="CommandButton.Height.Compact">36</sys:Double>
-    <sys:Double x:Key="CommandButton.FontSize">12</sys:Double>
+    <sys:Double x:Key="CommandButton.FontSize">14</sys:Double>
     <sys:Double x:Key="CommandButton.IconSize">16</sys:Double>
     <Thickness x:Key="CommandButton.Padding.Standard">10,4</Thickness>
     <Thickness x:Key="CommandButton.Padding.Compact">10,2</Thickness>
@@ -137,8 +137,9 @@
         <Setter Property="Background" Value="{DynamicResource Surface.Pressed}" />
     </Style>
     <Style x:Key="StateLayer.Selected" TargetType="Border" BasedOn="{StaticResource StateLayer}">
-        <Setter Property="Background" Value="{DynamicResource Accent.Subtle}" />
-        <Setter Property="BorderBrush" Value="{DynamicResource Border.Accent}" />
+        <Setter Property="Background" Value="{DynamicResource Surface.Selected}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource Text.Primary}" />
+        <Setter Property="BorderThickness" Value="2" />
         <Setter Property="themes:FluidMotion.Transition" Value="Normal" />
     </Style>
     <!-- Template parts set motion through these styles rather than attached-property attributes,
@@ -234,6 +235,7 @@
         <Setter Property="Background" Value="{DynamicResource Accent.Default}" />
         <Setter Property="BorderBrush" Value="{DynamicResource Accent.Default}" />
         <Setter Property="Foreground" Value="{DynamicResource Text.OnAccent}" />
+        <Setter Property="BorderThickness" Value="{DynamicResource Border.DecorativeThickness}" />
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="{x:Type Button}">
@@ -260,7 +262,7 @@
                         </Border>
                         <Border x:Name="FocusRing"
                                 Margin="2"
-                                BorderBrush="{DynamicResource Text.OnAccent}"
+                                BorderBrush="{DynamicResource Border.Focus}"
                                 BorderThickness="{DynamicResource Focus.RingThickness}"
                                 CornerRadius="{DynamicResource Radius.Sm}"
                                 IsHitTestVisible="False"
@@ -296,6 +298,7 @@
     <Style x:Key="Button.Ghost" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
         <Setter Property="Background" Value="Transparent" />
         <Setter Property="BorderBrush" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="{DynamicResource Border.ToolThickness}" />
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="{x:Type Button}">
@@ -348,13 +351,10 @@
             </Setter.Value>
         </Setter>
     </Style>
-    <!-- Every destructive command (delete, move to the Recycle Bin, delete permanently, stop):
-         the bordered tier with danger text and a danger outline that stays on hover and press.
-         It is never the default button. High contrast maps State.Danger to the system text
-         colour, so the outline and caption stay visible there too. -->
-    <Style x:Key="Button.Danger" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
-        <Setter Property="Foreground" Value="{DynamicResource State.Danger}" />
-        <Setter Property="BorderBrush" Value="{DynamicResource State.Danger}" />
+    <!-- Destructive actions remain neutral until the confirmation surface. -->
+    <Style x:Key="Button.Danger" TargetType="Button" BasedOn="{StaticResource Button.Ghost}">
+        <Setter Property="Foreground" Value="{DynamicResource Text.Primary}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource Border.Control}" />
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="{x:Type Button}">
@@ -410,13 +410,13 @@
         <Setter Property="Height" Value="{DynamicResource CommandButton.Height.Compact}" />
         <Setter Property="MinHeight" Value="{DynamicResource Size.HitTarget.Compact}" />
         <Setter Property="Padding" Value="{DynamicResource CommandButton.Padding.Compact}" />
-        <Setter Property="FontSize" Value="{DynamicResource FontSize.Caption}" />
+        <Setter Property="FontSize" Value="{DynamicResource FontSize.Body}" />
     </Style>
     <Style x:Key="Button.GhostCompact" TargetType="Button" BasedOn="{StaticResource Button.Ghost}">
         <Setter Property="Height" Value="{DynamicResource CommandButton.Height.Compact}" />
         <Setter Property="MinHeight" Value="{DynamicResource Size.HitTarget.Compact}" />
         <Setter Property="Padding" Value="{DynamicResource CommandButton.Padding.Compact}" />
-        <Setter Property="FontSize" Value="{DynamicResource FontSize.Caption}" />
+        <Setter Property="FontSize" Value="{DynamicResource FontSize.Body}" />
     </Style>
 
     <!-- Command bars share sizing with action rows; the content helper reserves the hint line. -->
@@ -436,13 +436,13 @@
 
     <!-- ============================================================= -->
     <!-- ToggleButton (base) + Tool variant -->
-    <!--   Selected state uses accent border + subtle wash; focus is colour-only. -->
+    <!--   Selected state uses a primary-text outline and a neutral fill; focus is an overlay. -->
     <!-- ============================================================= -->
     <Style TargetType="{x:Type ToggleButton}">
         <Setter Property="Foreground" Value="{DynamicResource Text.Secondary}" />
         <Setter Property="Background" Value="Transparent" />
         <Setter Property="BorderBrush" Value="Transparent" />
-        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="BorderThickness" Value="{DynamicResource Border.ToolThickness}" />
         <Setter Property="Padding" Value="10,6" />
         <Setter Property="MinHeight" Value="{DynamicResource Size.HitTarget.Compact}" />
         <Setter Property="Cursor" Value="Hand" />
@@ -464,7 +464,7 @@
                         <!-- Above the hover wash, so a checked tool keeps its selected fill on hover. -->
                         <Border x:Name="CheckedLayer"
                                 Style="{StaticResource StateLayer.Selected}"
-                                BorderThickness="{TemplateBinding BorderThickness}" />
+                                BorderThickness="2" />
                         <Border BorderThickness="{TemplateBinding BorderThickness}">
                             <ContentPresenter Margin="{TemplateBinding Padding}"
                                               HorizontalAlignment="Center"
@@ -544,7 +544,9 @@
         <Setter Property="Background" Value="{DynamicResource Surface.Sunken}" />
         <Setter Property="Foreground" Value="{DynamicResource Text.Primary}" />
         <Setter Property="CaretBrush" Value="{DynamicResource Text.Primary}" />
-        <Setter Property="SelectionBrush" Value="{DynamicResource Accent.Default}" />
+        <Setter Property="SelectionBrush" Value="{DynamicResource Text.SelectionBackground}" />
+        <Setter Property="SelectionTextBrush" Value="{DynamicResource Text.SelectionForeground}" />
+        <Setter Property="SelectionOpacity" Value="1" />
         <Setter Property="BorderBrush" Value="{DynamicResource Border.Control}" />
         <Setter Property="BorderThickness" Value="1" />
         <!-- 7 + a 14px line (18.6) + 7 + border stays inside the 36 hit target. -->
@@ -636,17 +638,16 @@
                                     BorderBrush="{DynamicResource Border.Focus}"
                                     BorderThickness="1"
                                     CornerRadius="5" />
-                            <!-- The accent box fades in while the check mark settles from a smaller size. -->
+                            <!-- The selected box fades in while the check mark settles from a smaller size. -->
                             <Border x:Name="CheckedLayer"
                                     Style="{StaticResource StateLayer.Selected}"
-                                    Background="{DynamicResource Accent.Default}"
-                                    BorderBrush="{DynamicResource Accent.Indicator}"
-                                    BorderThickness="1"
+                                    Background="{DynamicResource Surface.Selected}"
+                                    BorderBrush="{DynamicResource Text.Primary}" BorderThickness="2"
                                     CornerRadius="5">
                                 <Path x:Name="Check"
                                       Style="{StaticResource StatePart.SettlingGlyph}"
                                       Data="M 3,8 L 7,12 L 15,4"
-                                      Stroke="{DynamicResource Text.OnAccent}"
+                                      Stroke="{DynamicResource Text.Primary}"
                                       StrokeThickness="2"
                                       StrokeStartLineCap="Round"
                                       StrokeEndLineCap="Round"
@@ -725,7 +726,7 @@
                                 <Ellipse Fill="{DynamicResource Accent.Indicator}" />
                                 <Ellipse x:Name="Check" Width="8" Height="8"
                                          Style="{StaticResource StatePart.SettlingGlyph}"
-                                         Fill="{DynamicResource Text.OnAccent}" />
+                                         Fill="{DynamicResource Surface.Raised}" />
                             </Grid>
                             <!-- Inset focus ring, opacity-toggled (stable thickness). -->
                             <Ellipse x:Name="FocusRing"
@@ -782,15 +783,18 @@
                 <ControlTemplate TargetType="{x:Type TabItem}">
                     <Grid Margin="0,0,6,4">
                         <Border x:Name="TabBorder" Background="{DynamicResource Surface.Raised}"
-                                BorderBrush="{DynamicResource Border.Subtle}" BorderThickness="1"
+                                BorderBrush="{DynamicResource Border.Subtle}" BorderThickness="{DynamicResource Border.DecorativeThickness}"
                                 CornerRadius="8" />
                         <Border x:Name="HoverLayer" Style="{StaticResource StateLayer.Hover}"
-                                BorderThickness="1" CornerRadius="8" />
+                                BorderThickness="{DynamicResource Border.ToolThickness}" CornerRadius="8" />
                         <Border x:Name="SelectedLayer" Style="{StaticResource StateLayer.Selected}"
-                                BorderBrush="{DynamicResource Accent.Indicator}" BorderThickness="1" CornerRadius="8" />
+                                BorderBrush="{DynamicResource Text.Primary}" BorderThickness="2" CornerRadius="8" />
                         <Border BorderThickness="1" Padding="{TemplateBinding Padding}">
                             <ContentPresenter ContentSource="Header" RecognizesAccessKey="True" />
                         </Border>
+                        <Border x:Name="FocusRing" BorderBrush="{DynamicResource Border.Focus}"
+                                BorderThickness="{DynamicResource Focus.RingThickness}" CornerRadius="8"
+                                IsHitTestVisible="False" Opacity="0" />
                     </Grid>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsMouseOver" Value="True">
@@ -801,7 +805,7 @@
                             <Setter Property="FontWeight" Value="SemiBold" />
                         </Trigger>
                         <Trigger Property="IsKeyboardFocused" Value="True">
-                            <Setter TargetName="TabBorder" Property="BorderBrush" Value="{DynamicResource Accent.Indicator}" />
+                            <Setter TargetName="FocusRing" Property="Opacity" Value="1" />
                         </Trigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>
@@ -814,7 +818,46 @@
     </Style>
     <Style TargetType="{x:Type ListBoxItem}">
         <Setter Property="Foreground" Value="{DynamicResource Text.Primary}" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderBrush" Value="{DynamicResource Border.Subtle}" />
+        <Setter Property="BorderThickness" Value="{DynamicResource Border.DecorativeThickness}" />
+        <Setter Property="MinHeight" Value="{DynamicResource Size.HitTarget.Compact}" />
+        <Setter Property="Padding" Value="8,6" />
+        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
         <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="{x:Type ListBoxItem}">
+                    <Grid>
+                        <Border x:Name="Chrome" Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="{DynamicResource Radius.Sm}" />
+                        <Border x:Name="HoverLayer" Style="{StaticResource StateLayer.Hover}"
+                                BorderThickness="{DynamicResource Border.ToolThickness}" />
+                        <Border x:Name="SelectedLayer" Style="{StaticResource StateLayer.Selected}" BorderThickness="2" />
+                        <ContentPresenter Margin="{TemplateBinding Padding}" VerticalAlignment="Center"
+                                          HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}" />
+                        <Border x:Name="FocusRing" BorderBrush="{DynamicResource Border.Focus}"
+                                BorderThickness="{DynamicResource Focus.RingThickness}" Margin="2"
+                                CornerRadius="{DynamicResource Radius.Sm}" IsHitTestVisible="False" Opacity="0" />
+                    </Grid>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="HoverLayer" Property="themes:FluidMotion.FadeTo" Value="1" />
+                        </Trigger>
+                        <Trigger Property="IsSelected" Value="True">
+                            <Setter TargetName="SelectedLayer" Property="themes:FluidMotion.FadeTo" Value="1" />
+                        </Trigger>
+                        <Trigger Property="IsKeyboardFocusWithin" Value="True">
+                            <Setter TargetName="FocusRing" Property="Opacity" Value="1" />
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter Property="Opacity" Value="{StaticResource Button.DisabledOpacity}" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
     </Style>
 
     <!-- ============================================================= -->
@@ -824,7 +867,7 @@
         <Setter Property="Foreground" Value="{DynamicResource Text.Primary}" />
         <Setter Property="Background" Value="{DynamicResource Surface.Floating}" />
         <Setter Property="BorderBrush" Value="{DynamicResource Border.Strong}" />
-        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="BorderThickness" Value="{DynamicResource Border.DecorativeThickness}" />
         <Setter Property="Padding" Value="10,7" />
         <Setter Property="FontSize" Value="{DynamicResource FontSize.Caption}" />
     </Style>
@@ -832,7 +875,7 @@
         <Setter Property="Background" Value="{DynamicResource Surface.Floating}" />
         <Setter Property="Foreground" Value="{DynamicResource Text.Primary}" />
         <Setter Property="BorderBrush" Value="{DynamicResource Border.Strong}" />
-        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="BorderThickness" Value="{DynamicResource Border.DecorativeThickness}" />
         <Setter Property="Padding" Value="5" />
         <Setter Property="HasDropShadow" Value="False" />
         <Setter Property="OverridesDefaultStyle" Value="True" />
@@ -910,12 +953,15 @@
                                 </Viewbox>
                             </Border>
                         </Grid>
+                        <Border x:Name="FocusRing" BorderBrush="{DynamicResource Border.Focus}"
+                                BorderThickness="{DynamicResource Focus.RingThickness}" CornerRadius="{DynamicResource Radius.Sm}"
+                                IsHitTestVisible="False" Opacity="0" />
                         <!-- Native MenuItem owns pointer/keyboard opening and screen-edge placement. -->
                         <Popup x:Name="PART_Popup" Placement="Right" AllowsTransparency="True"
                                Focusable="False" IsOpen="{TemplateBinding IsSubmenuOpen}"
                                PlacementTarget="{Binding RelativeSource={RelativeSource TemplatedParent}}">
                             <Border Background="{DynamicResource Surface.Floating}"
-                                    BorderBrush="{DynamicResource Border.Strong}" BorderThickness="1"
+                                    BorderBrush="{DynamicResource Border.Strong}" BorderThickness="{DynamicResource Border.DecorativeThickness}"
                                     CornerRadius="{DynamicResource Radius.Md}" Padding="5"
                                     SnapsToDevicePixels="True"
                                     MaxHeight="{Binding Source={x:Static SystemParameters.WorkArea}, Path=Height}">
@@ -931,6 +977,9 @@
                         <Trigger Property="HasItems" Value="True">
                             <Setter TargetName="SubmenuArrow" Property="UIElement.Visibility" Value="Visible" />
                             <Setter TargetName="GestureText" Property="UIElement.Visibility" Value="Collapsed" />
+                        </Trigger>
+                        <Trigger Property="IsKeyboardFocusWithin" Value="True">
+                            <Setter TargetName="FocusRing" Property="Opacity" Value="1" />
                         </Trigger>
                         <Trigger Property="IsHighlighted" Value="True">
                             <Setter TargetName="HoverLayer" Property="themes:FluidMotion.FadeTo" Value="1" />
@@ -971,10 +1020,11 @@
                     <Grid>
                         <Border x:Name="ItemChrome" Background="{TemplateBinding Background}"
                                 BorderBrush="Transparent" BorderThickness="1" CornerRadius="4" />
-                        <Border x:Name="SelectedLayer" Style="{StaticResource StateLayer.Selected}"
-                                BorderBrush="Transparent" BorderThickness="1" CornerRadius="4" />
                         <Border x:Name="HoverLayer" Style="{StaticResource StateLayer.Hover}"
-                                BorderBrush="{DynamicResource Border.Focus}" BorderThickness="1" CornerRadius="4" />
+                                BorderBrush="{DynamicResource Border.Focus}" BorderThickness="2" CornerRadius="4" />
+                        <Border x:Name="SelectedLayer" Style="{StaticResource StateLayer.Selected}"
+                                BorderBrush="{DynamicResource Text.Primary}" BorderThickness="2" CornerRadius="4" />
+
                         <Border BorderThickness="1" Padding="{TemplateBinding Padding}">
                             <ContentPresenter VerticalAlignment="Center"
                                               HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}" />
@@ -1067,6 +1117,9 @@
                                 </ScrollViewer>
                             </Border>
                         </Popup>
+                        <Border x:Name="FocusRing" BorderBrush="{DynamicResource Border.Focus}"
+                                BorderThickness="{DynamicResource Focus.RingThickness}" CornerRadius="6"
+                                IsHitTestVisible="False" Opacity="0" />
                     </Grid>
                     <!-- Contrast themes need no extra triggers here: every token the chrome uses
                          already resolves to the system palette (ThemeService). -->
@@ -1075,6 +1128,7 @@
                             <Setter TargetName="HoverLayer" Property="themes:FluidMotion.FadeTo" Value="1" />
                         </Trigger>
                         <Trigger Property="IsKeyboardFocusWithin" Value="True">
+                            <Setter TargetName="FocusRing" Property="Opacity" Value="1" />
                             <Setter TargetName="ComboChrome" Property="BorderBrush" Value="{DynamicResource Border.Focus}" />
                             <Setter TargetName="HoverLayer" Property="BorderBrush" Value="{DynamicResource Border.Focus}" />
                         </Trigger>
@@ -1380,7 +1434,7 @@
     <Style x:Key="Rail.Panel" TargetType="Border">
         <Setter Property="Background" Value="{DynamicResource Surface.Raised}" />
         <Setter Property="BorderBrush" Value="{DynamicResource Border.Subtle}" />
-        <Setter Property="BorderThickness" Value="0,0,1,0" />
+        <Setter Property="BorderThickness" Value="{DynamicResource Border.DecorativeThickness}" />
         <Setter Property="Padding" Value="6,8" />
         <Setter Property="SnapsToDevicePixels" Value="True" />
     </Style>
@@ -1406,8 +1460,8 @@
                         <Border x:Name="PressedLayer" Style="{StaticResource StateLayer.Pressed}" BorderThickness="1" />
                         <!-- Selection fills the tool's own tile. -->
                         <Border x:Name="CheckedLayer" Style="{StaticResource StateLayer.Selected}"
-                                Background="{DynamicResource Accent.Default}"
-                                BorderBrush="{DynamicResource Border.SelectedTool}" BorderThickness="1" />
+                                Background="{DynamicResource Surface.Selected}"
+                                BorderBrush="{DynamicResource Border.SelectedTool}" BorderThickness="2" />
                         <Border BorderThickness="1">
                             <ContentPresenter HorizontalAlignment="Center"
                                               VerticalAlignment="Center" />
@@ -1430,7 +1484,7 @@
                         </Trigger>
                         <Trigger Property="IsChecked" Value="True">
                             <Setter TargetName="CheckedLayer" Property="themes:FluidMotion.FadeTo" Value="1" />
-                            <Setter Property="Foreground" Value="{DynamicResource Text.OnAccent}" />
+                            <Setter Property="Foreground" Value="{DynamicResource Text.Primary}" />
                         </Trigger>
                         <Trigger Property="IsKeyboardFocused" Value="True">
                             <Setter TargetName="Chrome" Property="BorderBrush" Value="{DynamicResource Border.Focus}" />

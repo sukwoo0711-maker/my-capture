@@ -105,7 +105,7 @@ public sealed partial class SettingsThemePreviewTests
             Assert.True(window.IsVisible);
             Assert.Equal(1, asked);
             Assert.Equal("450", Draft(window).MaxItems);
-            Assert.Equal(AppTheme.Daylight, ThemeService.Current);
+            Assert.Equal(AppTheme.GlassLight, ThemeService.Current);
 
             // Esc asks too; "Don't apply" discards and restores the saved theme.
             answers.Enqueue(SettingsCloseChoice.Discard);
@@ -356,7 +356,7 @@ public sealed partial class SettingsThemePreviewTests
         {
             foreach ((string name, AppSettings settings, bool expectedHints) in new[]
             {
-                ("new", NewInstallDefaults.Create(), true),
+                ("new", NewInstallDefaults.Create(), false),
                 ("existing", new AppSettings(), true),
                 ("explicit-hints-off", new AppSettings { General = { ShowShortcutHints = false } }, false),
             })

@@ -35,7 +35,7 @@ public sealed partial class AccentColorThemeTests
     });
 
     [Fact]
-    public void LiveAccentSwitchSwapsFrozenBrushesAndRestoresVioletPixels() => StaTestHost.Run(() =>
+    public void LegacyAccentSwitchSwapsFrozenBrushesAndKeepsFixedPalette() => StaTestHost.Run(() =>
     {
         foreach (AppTheme theme in Enum.GetValues<AppTheme>())
         {
@@ -48,14 +48,14 @@ public sealed partial class AccentColorThemeTests
             foreach ((string key, SolidColorBrush shared) in original)
             {
                 Assert.True(shared.IsFrozen, key);
-                Assert.Equal(ToColor(ThemeCatalog.ColorsFor(theme)[key]), shared.Color);
+                Assert.Equal(ToColor(ThemeCatalog.ColorsFor(ThemeService.ResolveTheme(theme))[key]), shared.Color);
                 Assert.NotSame(shared, resources[key]);
                 Assert.True(((SolidColorBrush)resources[key]).IsFrozen, key);
             }
             Assert.Equal(((SolidColorBrush)resources["Accent.Default"]).Color, ((SolidColorBrush)follower).Color);
             ThemeService.ApplyResources(theme, resources, systemHighContrast: false, accent: AppAccent.Violet);
             Assert.Equal(originalPixels, RenderTokens(resources));
-            Assert.Equal(((SolidColorBrush)resources["Accent.Default"]).Color,
+            Assert.Equal(((SolidColorBrush)resources["Text.Primary"]).Color,
                 ((SolidColorBrush)resources["Accent.Foreground"]).Color);
         }
     });
@@ -103,7 +103,7 @@ public sealed partial class AccentColorThemeTests
                 Assert.Equal(violet, RenderTokens(resources));
                 Assert.Equal(Colors.Yellow, old.Color);
                 Assert.NotSame(old, resources["Accent.Default"]);
-                Assert.Equal(Colors.Yellow, ((SolidColorBrush)resources["Accent.Foreground"]).Color);
+                Assert.Equal(Colors.White, ((SolidColorBrush)resources["Accent.Foreground"]).Color);
             }
         }
         finally { ThemeService.SystemColorsOverrideForTest = null; }

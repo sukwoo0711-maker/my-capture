@@ -162,8 +162,8 @@ public sealed partial class SettingsThemePreviewTests
             SaveEvidence(window, "theme-before-selection.png");
 
             SettingsDraft abandoned = Assert.IsType<SettingsDraft>(window.DataContext);
-            SelectTheme(window, selector, AppThemeNames.Daylight);
-            AssertPalette(window, AppTheme.Daylight);
+            SelectTheme(window, selector, AppThemeNames.GlassLight);
+            AssertPalette(window, AppTheme.GlassLight);
             Assert.Equal(AppThemeNames.Glass, saved.General.Theme);
             Assert.Equal(AppThemeNames.Glass, store.Load().General.Theme);
             Assert.Equal(0, applyCount);
@@ -182,13 +182,13 @@ public sealed partial class SettingsThemePreviewTests
             var prompts = new Queue<SettingsCloseChoice>();
             int promptCount = 0;
             window.ConfirmUnappliedChanges = () => { promptCount++; return prompts.Dequeue(); };
-            SelectTheme(window, selector, AppThemeNames.Daylight);
+            SelectTheme(window, selector, AppThemeNames.GlassLight);
             var escape = Assert.Single(window.InputBindings.OfType<KeyBinding>(), key => key.Key == Key.Escape);
             Assert.Same(SettingsWindow.CloseCommand, escape.Command);
             prompts.Enqueue(SettingsCloseChoice.Cancel);
             Assert.IsType<RoutedUICommand>(escape.Command).Execute(null, window);
             Assert.True(window.IsVisible); // Cancel keeps editing, preview included.
-            AssertPalette(window, AppTheme.Daylight);
+            AssertPalette(window, AppTheme.GlassLight);
             prompts.Enqueue(SettingsCloseChoice.Discard);
             Assert.IsType<RoutedUICommand>(escape.Command).Execute(null, window);
             Assert.False(window.IsVisible);
@@ -196,7 +196,7 @@ public sealed partial class SettingsThemePreviewTests
             Assert.Equal(2, promptCount);
 
             window.ShowSettings();
-            SelectTheme(window, selector, AppThemeNames.Daylight);
+            SelectTheme(window, selector, AppThemeNames.GlassLight);
             prompts.Enqueue(SettingsCloseChoice.Discard);
             window.Close(); // Same Closing path as native X.
             Assert.False(window.IsVisible);
@@ -209,11 +209,11 @@ public sealed partial class SettingsThemePreviewTests
             Assert.Equal(3, promptCount);
 
             window.ShowSettings();
-            SelectTheme(window, selector, AppThemeNames.Daylight);
+            SelectTheme(window, selector, AppThemeNames.GlassLight);
             window.ShowSettings(); // Reopening an open window keeps its unapplied draft.
             Drain(window);
-            AssertPalette(window, AppTheme.Daylight);
-            Assert.Equal(AppThemeNames.Daylight, selector.SelectedValue);
+            AssertPalette(window, AppTheme.GlassLight);
+            Assert.Equal(AppThemeNames.GlassLight, selector.SelectedValue);
             SettingsWindow.CancelCommand.Execute(null, window); // Cancel discards without asking.
             Assert.False(window.IsVisible);
             AssertPalette(window, AppTheme.Glass);
@@ -222,13 +222,13 @@ public sealed partial class SettingsThemePreviewTests
             Drain(window);
             Assert.Equal(AppThemeNames.Glass, selector.SelectedValue);
 
-            SelectTheme(window, selector, AppThemeNames.Daylight);
+            SelectTheme(window, selector, AppThemeNames.GlassLight);
             Console.WriteLine("Theme lifecycle: applying a valid draft.");
             SettingsWindow.ApplyCommand.Execute(null, window);
             Assert.False(window.IsVisible);
             Assert.Equal(1, applyCount);
-            Assert.Equal(AppThemeNames.Daylight, store.Load().General.Theme);
-            AssertPalette(window, AppTheme.Daylight);
+            Assert.Equal(AppThemeNames.GlassLight, store.Load().General.Theme);
+            AssertPalette(window, AppTheme.GlassLight);
 
             window.ShowSettings();
             SelectTheme(window, selector, AppThemeNames.HighContrast);
@@ -239,18 +239,18 @@ public sealed partial class SettingsThemePreviewTests
             Assert.True(window.IsVisible);
             Assert.Equal(AppThemeNames.HighContrast, Assert.IsType<SettingsDraft>(window.DataContext).Theme);
             AssertPalette(window, AppTheme.HighContrast);
-            Assert.Equal(AppThemeNames.Daylight, saved.General.Theme);
-            Assert.Equal(AppThemeNames.Daylight, store.Load().General.Theme);
+            Assert.Equal(AppThemeNames.GlassLight, saved.General.Theme);
+            Assert.Equal(AppThemeNames.GlassLight, store.Load().General.Theme);
             SettingsWindow.CancelCommand.Execute(null, window);
-            AssertPalette(window, AppTheme.Daylight);
+            AssertPalette(window, AppTheme.GlassLight);
 
             window.ShowSettings();
             SettingsDraft reset = Assert.IsType<SettingsDraft>(window.DataContext);
             reset.ResetToDefaults(); // PropertyChanged(null) must preview the default palette.
-            AssertPalette(window, AppTheme.Glass);
-            Assert.Equal(AppThemeNames.Daylight, store.Load().General.Theme);
+            AssertPalette(window, AppTheme.System);
+            Assert.Equal(AppThemeNames.GlassLight, store.Load().General.Theme);
             SettingsWindow.CancelCommand.Execute(null, window);
-            AssertPalette(window, AppTheme.Daylight);
+            AssertPalette(window, AppTheme.GlassLight);
 
             window.ShowSettings();
             SelectTheme(window, selector, AppThemeNames.HighContrast);
@@ -265,11 +265,11 @@ public sealed partial class SettingsThemePreviewTests
             Console.WriteLine("Theme lifecycle: final window closed.");
             // Closed controls are detached from the resource tree. Verify that an
             // actual surviving WPF surface receives the restored saved palette.
-            Assert.Equal(AppTheme.Daylight, ThemeService.Current);
-            AssertBrush(survivingSurface.Background, ThemeCatalog.ColorsFor(AppTheme.Daylight)["Surface.Raised"]);
+            Assert.Equal(AppTheme.GlassLight, ThemeService.Current);
+            AssertBrush(survivingSurface.Background, ThemeCatalog.ColorsFor(AppTheme.GlassLight)["Surface.Raised"]);
             finalDraft.Theme = AppThemeNames.Midnight;
-            Assert.Equal(AppTheme.Daylight, ThemeService.Current);
-            AssertBrush(survivingSurface.Background, ThemeCatalog.ColorsFor(AppTheme.Daylight)["Surface.Raised"]);
+            Assert.Equal(AppTheme.GlassLight, ThemeService.Current);
+            AssertBrush(survivingSurface.Background, ThemeCatalog.ColorsFor(AppTheme.GlassLight)["Surface.Raised"]);
             window = null;
         }
         finally
@@ -291,7 +291,7 @@ public sealed partial class SettingsThemePreviewTests
     private static void AssertPalette(SettingsWindow window, AppTheme theme)
     {
         Assert.Equal(theme, ThemeService.Current);
-        IReadOnlyDictionary<string, ThemeColor> colors = ThemeCatalog.ColorsFor(theme);
+        IReadOnlyDictionary<string, ThemeColor> colors = ThemeCatalog.ColorsFor(ThemeService.ResolveTheme(theme));
 
         // Glass uses the native Mica backdrop, so Window.Background is deliberately
         // transparent. Assert the actual visible page and selector chrome instead of

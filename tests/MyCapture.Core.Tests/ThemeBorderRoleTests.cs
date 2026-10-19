@@ -73,8 +73,17 @@ public sealed class ThemeBorderRoleTests
         // WindowText on Window. Accent fills carry HighlightText.
         foreach ((string key, SystemColorRole role) in HighContrastPalette.Roles)
         {
-            if (key.StartsWith("Text.", StringComparison.Ordinal) && key is not "Text.OnAccent" and not "Text.Disabled")
-                Assert.Equal(SystemColorRole.WindowText, role);
+            if (key.StartsWith("Text.", StringComparison.Ordinal))
+            {
+                SystemColorRole expected = key switch
+                {
+                    "Text.OnAccent" or "Text.SelectionForeground" => SystemColorRole.HighlightText,
+                    "Text.SelectionBackground" => SystemColorRole.Highlight,
+                    "Text.Disabled" => SystemColorRole.GrayText,
+                    _ => SystemColorRole.WindowText,
+                };
+                Assert.Equal(expected, role);
+            }
             if (key is "Surface.Hover" or "Surface.Pressed" or "Accent.Subtle")
                 Assert.Equal(SystemColorRole.Window, role);
         }
@@ -82,7 +91,9 @@ public sealed class ThemeBorderRoleTests
         Assert.Equal(SystemColorRole.Highlight, HighContrastPalette.RoleFor("Accent.Default"));
         Assert.Equal(SystemColorRole.HighlightText, HighContrastPalette.RoleFor("Text.OnAccent"));
         Assert.Equal(SystemColorRole.GrayText, HighContrastPalette.RoleFor("Text.Disabled"));
-        Assert.Equal(SystemColorRole.Highlight, HighContrastPalette.RoleFor("Border.Focus"));
+        Assert.Equal(SystemColorRole.WindowText, HighContrastPalette.RoleFor("Border.Focus"));
+        Assert.Equal(SystemColorRole.WindowText, HighContrastPalette.RoleFor("Border.Accent"));
+        Assert.Equal(SystemColorRole.Window, HighContrastPalette.RoleFor("Surface.Selected"));
         Assert.Equal(SystemColorRole.ButtonText, HighContrastPalette.RoleFor("Border.Control"));
         Assert.Equal(SystemColorRole.Window, HighContrastPalette.RoleFor("Surface.Unknown"));
     }
