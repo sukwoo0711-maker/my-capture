@@ -169,7 +169,7 @@
     <!-- Video timeline semantics: layer identity, playhead, and destructive trim. -->
     <SolidColorBrush x:Key="Timeline.Background" Color="{StaticResource Primitive.Graphite950}" />
     <SolidColorBrush x:Key="Timeline.Track" Color="{StaticResource Primitive.Graphite850}" />
-    <SolidColorBrush x:Key="Timeline.TextLayer" Color="#FF8B7BFF" />
+    <SolidColorBrush x:Key="Timeline.TextLayer" Color="#FF7FA6FF" />
     <SolidColorBrush x:Key="Timeline.FrameLayer" Color="#FF3FD8C9" />
     <SolidColorBrush x:Key="Timeline.LayerText" Color="{StaticResource Primitive.Ink}" />
     <SolidColorBrush x:Key="Timeline.Grid" Color="{StaticResource Primitive.Graphite500}" />
