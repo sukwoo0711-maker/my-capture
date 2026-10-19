@@ -347,8 +347,10 @@ internal sealed partial class SettingsWindow : Window
         try
         {
             AppSettings imported = _settingsStore().ImportFrom(path);
+            AppSettings current = _currentSettings();
             // Exports never carry the GitHub PAT, so the import must not wipe the live one.
-            imported.GitHub.Token = _currentSettings().GitHub.Token;
+            imported.GitHub.Token = current.GitHub.Token;
+            imported.Hotkeys.CoreShortcutsAsked = current.Hotkeys.CoreShortcutsAsked;
             // The import replaces the values but stays an unapplied change until Apply.
             _legacySettingsDraft = null;
             _legacyProtectedBaseline = null;

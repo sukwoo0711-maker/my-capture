@@ -99,6 +99,7 @@ internal sealed partial class SettingsWindow
             candidate.StoreRating = current.StoreRating;
             candidate.StoreUpdate = current.StoreUpdate;
             candidate.General.IsFirstRun = current.General.IsFirstRun;
+            candidate.Hotkeys.CoreShortcutsAsked = current.Hotkeys.CoreShortcutsAsked;
             candidate.Capture.StartGuideShownCount = current.Capture.StartGuideShownCount;
         }
         return candidate;
@@ -114,6 +115,7 @@ internal sealed partial class SettingsWindow
         candidate.GitHub.Token = current.GitHub.Token;
         candidate.GitHub.IssueUrl = current.GitHub.IssueUrl;
         candidate.General.IsFirstRun = current.General.IsFirstRun;
+        candidate.Hotkeys.CoreShortcutsAsked = current.Hotkeys.CoreShortcutsAsked;
         candidate.General.LaunchAtLogin = current.General.LaunchAtLogin;
         candidate.Capture.StartGuideShownCount = current.Capture.StartGuideShownCount;
     }

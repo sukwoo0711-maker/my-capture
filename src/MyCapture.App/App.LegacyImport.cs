@@ -129,8 +129,9 @@ public partial class App
         try
         {
             await Task.WhenAll(_initialLibraryRecoveryTask, _initialEditRecoveryTask);
-            // Preserve the first-run contract: finish the existing welcome before a new offer.
-            while (Windows.Cast<Window>().OfType<WelcomeWindow>().Any(window => window.IsVisible)) await Task.Delay(100);
+            // Preserve the first-run contract: finish the shortcut question and welcome first.
+            while (_coreShortcutsQuestionPending || _coreShortcutsQuestion?.IsVisible == true
+                || Windows.Cast<Window>().OfType<WelcomeWindow>().Any(window => window.IsVisible)) await Task.Delay(100);
             LegacyMigrationScan scan = await _services.GetRequiredService<ILegacyLibraryMigrationService>()
                 .ScanAsync(DefaultLegacyDataRoot, _capturePaths ?? paths);
             if (scan.Status != LegacyMigrationScanStatus.Ready) return;

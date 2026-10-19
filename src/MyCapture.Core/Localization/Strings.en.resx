@@ -4502,4 +4502,19 @@ Turn off: {0}</value></data>
   <data name="CaptureBlocked_Scrolling" xml:space="preserve"><value>Cannot start until the scrolling capture finishes.</value></data>
   <data name="CaptureBlocked_Updating" xml:space="preserve"><value>Cannot start until the update or import finishes.</value></data>
   <data name="CaptureBlocked_Exiting" xml:space="preserve"><value>Not started because the app is closing.</value></data>
+  <data name="CoreShortcuts.Title" xml:space="preserve"><value>Core shortcuts</value></data>
+  <data name="CoreShortcuts.Body" xml:space="preserve"><value>Assign these shortcuts to MyCapture's core features.
+
+Ctrl+Shift+C  Region capture
+Ctrl+Shift+X  Start/stop region recording
+Ctrl+Shift+Z  Open library
+F3  Pin clipboard to screen
+
+MyCapture handles these keys first, even if another program already uses them. While MyCapture is running, the same shortcuts in other programs, such as F3 search in File Explorer and Ctrl+Shift+Z redo in editors, will not work.
+
+Overwrite these shortcuts? You can change this later in Settings → Shortcuts.</value></data>
+  <data name="CoreShortcuts.Overwrite" xml:space="preserve"><value>Overwrite</value></data>
+  <data name="CoreShortcuts.KeepCurrent" xml:space="preserve"><value>Keep current</value></data>
+  <data name="CoreShortcuts.Force" xml:space="preserve"><value>Handle Ctrl+Shift+C/X/Z and F3 before other programs</value></data>
+  <data name="CoreShortcuts.ForceDescription" xml:space="preserve"><value>MyCapture receives these shortcuts even if another program registered them first. Turn this off to let the program that registered them first use them.</value></data>
 </root>

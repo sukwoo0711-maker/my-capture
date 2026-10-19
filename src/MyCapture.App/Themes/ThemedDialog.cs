@@ -29,7 +29,7 @@ internal sealed class ThemedDialog : Window
     /// <param name="commands">Follow-up commands shown after the recovery action.</param>
     internal ThemedDialog(string text, string title, MessageBoxButton buttons, MessageBoxResult defaultResult,
         string? details = null, Action? recovery = null, string? recoveryLabel = null, string? okLabel = null,
-        bool destructive = false, IReadOnlyList<DialogCommand>? commands = null)
+        bool destructive = false, IReadOnlyList<DialogCommand>? commands = null, string? cancelLabel = null)
     {
         Title = MyCapture.Core.Platform.AppIdentity.WindowLabel;
         Width = 500;
@@ -88,7 +88,13 @@ internal sealed class ThemedDialog : Window
         foreach (var choice in choices)
         {
             bool isDefault = recovery is null && choice.Result == defaultResult;
-            Button button = MakeButton(choice.Key == "Dialog.OK" && okLabel is not null ? okLabel : UiText.Get(choice.Key), choice.Result,
+            string label = choice.Key switch
+            {
+                "Dialog.OK" when okLabel is not null => okLabel,
+                "Dialog.Cancel" when cancelLabel is not null => cancelLabel,
+                _ => UiText.Get(choice.Key),
+            };
+            Button button = MakeButton(label, choice.Result,
                 isDefault, choice.Result is MessageBoxResult.Cancel || choices.Length == 1);
             if (destructive && choice.Result == MessageBoxResult.OK && !isDefault) button.SetResourceReference(StyleProperty, "Button.Danger");
             actions.Children.Add(button);
@@ -343,16 +349,26 @@ internal sealed class ThemedDialog : Window
         owner = owner?.IsVisible == true ? owner : Application.Current?.Windows.OfType<Window>()
             .FirstOrDefault(window => window.IsActive && IsSuitableOwner(window));
         if (owner is not null) { dialog.Owner = owner; dialog.ShowInTaskbar = false; }
-        else
-        {
-            dialog.WindowStartupLocation = WindowStartupLocation.CenterScreen;
-            // Ownerless errors must remain above visible topmost capture/pin/recording UI.
-            bool keepTopmost = Application.Current?.Windows.OfType<Window>()
-                .Any(window => window.IsVisible && window.Topmost) == true;
-            dialog.Topmost = keepTopmost || icon == MessageBoxImage.Error;
-            dialog.ContentRendered += (_, _) => { dialog.Activate(); dialog.Topmost = keepTopmost; };
-        }
+        else PlaceOwnerless(dialog, icon);
         dialog.ShowDialog();
         return dialog.Result;
+    }
+
+    /// <summary>Shows a dialog without an owner and without blocking, placed as <see cref="Present"/> places one.</summary>
+    internal static void ShowOwnerless(ThemedDialog dialog)
+    {
+        PlaceOwnerless(dialog, MessageBoxImage.None);
+        dialog.Show();
+    }
+
+    /// <summary>An ownerless dialog opens centred on the screen and takes the foreground once rendered.</summary>
+    internal static void PlaceOwnerless(ThemedDialog dialog, MessageBoxImage icon)
+    {
+        dialog.WindowStartupLocation = WindowStartupLocation.CenterScreen;
+        // Ownerless errors must remain above visible topmost capture/pin/recording UI.
+        bool keepTopmost = Application.Current?.Windows.OfType<Window>()
+            .Any(window => window.IsVisible && window.Topmost) == true;
+        dialog.Topmost = keepTopmost || icon == MessageBoxImage.Error;
+        dialog.ContentRendered += (_, _) => { dialog.Activate(); dialog.Topmost = keepTopmost; };
     }
 }

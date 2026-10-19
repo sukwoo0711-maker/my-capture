@@ -49,7 +49,8 @@ public sealed partial class SettingsThemePreviewTests
         string root = TestRecycleBin.CreateTempSubdirectory("mc-settings-import-").FullName;
         AppPaths paths = AppPaths.CreateForRoot(root);
         var store = new SettingsStore(paths, NullLogger<SettingsStore>.Instance);
-        AppSettings saved = new() { General = { Theme = AppThemeNames.Glass }, GitHub = { Token = "" } };
+        AppSettings saved = new() { General = { Theme = AppThemeNames.Glass }, GitHub = { Token = "" },
+            Hotkeys = { CoreShortcutsAsked = true } };
         store.Save(saved);
         string persisted = File.ReadAllText(paths.SettingsFile);
         AppSettings imported = new() { General = { Theme = AppThemeNames.Daylight }, Queue = { MaxItems = 321 } };
@@ -80,6 +81,7 @@ public sealed partial class SettingsThemePreviewTests
         Assert.Equal(AppThemeNames.Glass, saved.General.Theme);
         Assert.Equal(persisted, File.ReadAllText(paths.SettingsFile));
         Assert.Equal("321", Assert.IsType<SettingsDraft>(window.DataContext).MaxItems);
+        Assert.True(DraftOf(window).ToAppSettings().Hotkeys.CoreShortcutsAsked);
         AssertPalette(window, AppTheme.Daylight);
 
         // Capture both default and minimum client layouts before assertions that also
@@ -163,6 +165,7 @@ public sealed partial class SettingsThemePreviewTests
         Assert.Equal(AppThemeNames.Daylight, saved.General.Theme);
         Assert.Equal(AppThemeNames.Daylight, store.Load().General.Theme);
         Assert.Equal(321, store.Load().Queue.MaxItems);
+        Assert.True(store.Load().Hotkeys.CoreShortcutsAsked);
         AssertPalette(window, AppTheme.Daylight);
     }
 
