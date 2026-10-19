@@ -14,6 +14,9 @@ dotnet run --project build/tools/TutorialVideoGenerator -c Release -- --install
 
 # 만든 영상의 특정 시점을 원본 크기 PNG로 꺼냅니다.
 dotnet run --project build/tools/TutorialVideoGenerator -c Release -- inspect artifacts/tutorials/<시각>/image-crop.ko.mp4 0,5200
+
+# 검토용으로 다른 테마와 포인트 색에서 만듭니다. 제품 자산(--install)은 기본값으로만 만듭니다.
+dotnet run --project build/tools/TutorialVideoGenerator -c Release -- --features pin-copy --languages ko --theme glass-light --accent violet
 ```
 
 깨끗한 클론에서 별도 준비 없이 실행됩니다. 생성기는 `MyCapture.App` 프로젝트를 참조해 현재 소스로 함께 빌드하고, 제품은 `InternalsVisibleTo("MyCapture.TutorialGenerator")`로 이 도구에만 내부 API를 엽니다. 출력은 Git이 무시하는 `artifacts/` 아래에 둡니다.
@@ -28,7 +31,7 @@ dotnet run --project build/tools/TutorialVideoGenerator -c Release -- inspect ar
 | 화질 | Media Foundation 소프트웨어 H.264 인코더의 고정 품질 60(`--quality`)과 품질 우선 설정(QualityVsSpeed 100). GPU와 관계없이 같은 인코더를 씁니다. 품질 우선 설정은 키 표시가 사라진 자리에 남던 옅은 잔상도 없앱니다 |
 | 색 범위 | 전체 범위(0–255)로 인코딩하고 스트림에 표시합니다. 제품 플레이어인 WPF `MediaElement`는 디코딩한 값을 범위 확장 없이 표시하므로, 녹화와 같은 제한 범위(16–235)로 만들면 흰색이 235, 검은색이 16으로 흐리게 보입니다 |
 | 정지 화면 | 첫 렌더 프레임을 JPEG 품질 90으로 저장합니다. 사용법 창은 이 파일을 바로 표시하고 영상이 열리면 영상으로 넘어갑니다 |
-| 테마 | 기본 테마(Glass, 어두운 테마) |
+| 테마 | 기본 테마(Glass, 어두운 테마)와 기본 포인트 색(빨간색). 검토용 렌더는 `--theme`(설정 값: glass, glass-light, midnight, daylight, workspace, high-contrast)과 `--accent`(red, violet)로 바꿉니다 |
 
 정지 구간은 움직임이 없어 거의 용량을 차지하지 않고, 첫 프레임은 키 프레임이라 애니메이션 줄이기 설정에서도 바로 보입니다.
 
