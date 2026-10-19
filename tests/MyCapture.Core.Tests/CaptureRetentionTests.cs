@@ -8,6 +8,36 @@ namespace MyCapture.Core.Tests;
 public sealed class CaptureRetentionTests
 {
     [Fact]
+    public void NewInstallDefaults_KeepOldImagesUntilCapacityEvictsTheOldestUnkeptCapture()
+    {
+        using var workspace = new TempWorkspace();
+        var queue = new CaptureQueue(workspace.Paths, NewInstallDefaults.Create().Queue,
+            NullLogger<CaptureQueue>.Instance);
+        DateTimeOffset now = new(2026, 10, 19, 12, 0, 0, TimeSpan.Zero);
+        CaptureRecord kept = Add(queue, now.AddDays(-30));
+        kept.IsPinned = true;
+        CaptureRecord oldestUnkept = Add(queue, now.AddDays(-29));
+        for (int index = 0; index < 998; index++)
+        {
+            Add(queue, now.AddDays(-28).AddMinutes(index));
+        }
+        Assert.Equal(1000, queue.Count);
+        Assert.Equal(0, queue.ExpireHistory(now));
+        Assert.NotNull(queue.Find(oldestUnkept.Id));
+        var evictions = new List<CaptureEvictedEventArgs>();
+        queue.Evicted += (_, e) => evictions.Add(e);
+
+        CaptureRecord newest = Add(queue, now);
+
+        Assert.Equal(1000, queue.Count);
+        Assert.Equal(oldestUnkept.Id, Assert.Single(evictions).Record.Id);
+        Assert.Equal("item-limit", evictions[0].Reason);
+        Assert.Null(queue.Find(oldestUnkept.Id));
+        Assert.NotNull(queue.Find(kept.Id));
+        Assert.NotNull(queue.Find(newest.Id));
+    }
+
+    [Fact]
     public void RetentionUsesCreationFifoAndPreservesPinsLeasesAndRecentRecords()
     {
         using var workspace = new TempWorkspace();

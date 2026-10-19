@@ -8,8 +8,8 @@ using Xunit;
 namespace MyCapture.Core.Tests;
 
 /// <summary>
-/// Automatic image deletion keeps its seven-day default but can be turned off, a stored hour count
-/// from an earlier version survives, the highlighter is edited in percent over the stored alpha,
+/// Automatic image deletion keeps its legacy seven-day fallback but can be turned off, a stored
+/// hour count from an earlier version survives, the highlighter is edited in percent over the stored alpha,
 /// and ranges are written "1–64".
 /// </summary>
 public sealed class RetentionChoiceAndSettingsUnitsTests
@@ -31,10 +31,25 @@ public sealed class RetentionChoiceAndSettingsUnitsTests
         Assert.True(CaptureRetention.IsIndefinite(ttl));
         Assert.Equal(UiText.Get("Gallery.RetentionNever"),
             CaptureRetention.FormatCountdown(ancient.CreatedAt, ttl, now, isImage: true, isPinned: false));
-        // The default is still seven days, and a stored hour count still means hours.
+        // Missing legacy properties still mean seven days, and stored hour counts still mean hours.
         Assert.Equal(TimeSpan.FromDays(7), CaptureRetention.TimeToLive(new QueueSettings()));
         Assert.Equal(TimeSpan.FromHours(36), CaptureRetention.TimeToLive(new QueueSettings { ImageRetentionHours = 36 }));
         Assert.Equal([24, 168, 720, 2160, 8760, CaptureRetention.NeverHours], CaptureRetention.PresetHours);
+    }
+
+    [Theory]
+    [InlineData("ko-KR", CaptureRetention.NeverHours, "보관 기간 제한 없음")]
+    [InlineData("en-US", CaptureRetention.NeverHours, "No time limit")]
+    [InlineData("ko-KR", 6, "자동 삭제까지 4시간")]
+    [InlineData("en-US", 6, "Auto-delete in 4 hours")]
+    public void Countdown_DistinguishesNoTimeLimitFromStoredHours(string language, int hours, string expected)
+    {
+        using var scope = UiText.UseLanguage(language);
+        DateTimeOffset now = new(2026, 10, 19, 12, 0, 0, TimeSpan.Zero);
+        TimeSpan ttl = CaptureRetention.TimeToLive(new QueueSettings { ImageRetentionHours = hours });
+
+        Assert.Equal(expected, CaptureRetention.FormatCountdown(
+            now.AddHours(-2), ttl, now, isImage: true, isPinned: false));
     }
 
     [Theory]

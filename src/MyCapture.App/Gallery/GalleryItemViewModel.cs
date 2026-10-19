@@ -142,6 +142,11 @@ public sealed class GalleryItemViewModel : INotifyPropertyChanged
 
     public string ActionLabel => IsVideo ? UiText.Get("Text_35383149904D") : UiText.Get("Text_87B0ACEF85A7");
 
+    // Enter opens the image editor, but plays videos; video editing has no tile shortcut.
+    public string EditToolTip => UiText.Get(IsVideo ? "Gallery.EditVideoHint" : "Text_0400CF56D074");
+
+    public string EditGestureText => IsVideo ? string.Empty : "Enter";
+
     /// <summary>Dragging moves the capture onto a library folder, or exports a file outside the app.</summary>
     public string ExportToolTip => IsVideo
         ? UiText.Get("LibraryUx_TileDragVideo")
@@ -302,6 +307,8 @@ public sealed class GalleryItemViewModel : INotifyPropertyChanged
         Raise(nameof(IsVideo));
         Raise(nameof(IsImage));
         Raise(nameof(ActionLabel));
+        Raise(nameof(EditToolTip));
+        Raise(nameof(EditGestureText));
         Raise(nameof(ExportToolTip));
         Raise(nameof(PreviewUnavailableText));
         Raise(nameof(DurationCaption));

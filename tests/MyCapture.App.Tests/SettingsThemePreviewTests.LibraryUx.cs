@@ -319,7 +319,7 @@ public sealed partial class SettingsThemePreviewTests
             // Smaller than the full card, at the compact card's own proportion.
             Assert.True(compactCard.ActualWidth < fullCardWidth, $"{label}: compact {compactCard.ActualWidth:0.#} DIP, full {fullCardWidth:0.#} DIP");
             double cardScale = VisualTreeHelper.GetDpi(compactCard).DpiScaleY;
-            double expectedHeight = GalleryCardRowPanel.CardHeightFor(compactCard.ActualWidth, 148, 180, 1);
+            double expectedHeight = GalleryCardRowPanel.CardHeightFor(compactCard.ActualWidth, 148, 174, 0.625);
             // The row's proportional height is authored in DIPs, then WPF rounds it to pixels.
             Assert.Equal(Math.Round(expectedHeight * cardScale) / cardScale, compactCard.ActualHeight, 3);
             Assert.True(vm.ColumnCount > rootColumns, $"{label}: {vm.ColumnCount} compact columns, {rootColumns} at the root");
