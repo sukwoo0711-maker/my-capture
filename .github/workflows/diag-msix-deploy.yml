@@ -1,0 +1,130 @@
+name: Diagnose Store package deployment before Windows 11
+
+# Builds the Store MSIX exactly as build\package-store.ps1 does, but with a test identity, signs it
+# with a throwaway self-signed certificate and installs it with Add-AppxPackage. Windows Server 2022
+# (build 20348) uses the deployment engine from before Windows 11; Windows Server 2025 is the control.
+on:
+  push:
+    branches:
+      - diag/win10-msix-deploy
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+  DOTNET_NOLOGO: '1'
+
+jobs:
+  deploy:
+    name: Install the Store package on ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-2022, windows-2025]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: powershell
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+
+      - name: Record host
+        run: |
+          [Environment]::OSVersion.Version.ToString()
+          (Get-CimInstance Win32_OperatingSystem | Select-Object Caption, Version, BuildNumber, OSArchitecture | Format-List | Out-String).Trim()
+          [xml]$props = Get-Content Directory.Build.props -Raw
+          "PACKAGE_VERSION=$([string]$props.Project.PropertyGroup.Version)" | Out-File $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Build Release
+        run: .\build\build.ps1 -Configuration Release
+
+      - name: Package clean source
+        run: .\build\package.ps1 -Version $env:PACKAGE_VERSION
+
+      - name: Build the Store package with a test identity
+        run: |
+          $ErrorActionPreference = 'Stop'
+          .\build\package-store.ps1 -Version $env:PACKAGE_VERSION -IdentityName 'MyCapture.DeployTest' `
+            -Publisher 'CN=MyCapture Deploy Test' -PublisherDisplayName 'MyCapture Deploy Test' `
+            -OutputRoot "$env:RUNNER_TEMP\store"
+          Get-Content "$env:RUNNER_TEMP\store\stage\AppxManifest.xml"
+
+      - name: Sign with a throwaway certificate
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $msix = (Get-ChildItem "$env:RUNNER_TEMP\store" -Filter *.msix | Select-Object -First 1).FullName
+          $cert = New-SelfSignedCertificate -Type Custom -Subject 'CN=MyCapture Deploy Test' -KeyUsage DigitalSignature `
+            -CertStoreLocation Cert:\CurrentUser\My -TextExtension @('2.5.29.37={text}1.3.6.1.5.5.7.3.3', '2.5.29.19={text}')
+          $cer = Join-Path $env:RUNNER_TEMP 'deploytest.cer'
+          Export-Certificate -Cert $cert -FilePath $cer | Out-Null
+          Import-Certificate -FilePath $cer -CertStoreLocation Cert:\LocalMachine\TrustedPeople | Out-Null
+          $signtool = Get-ChildItem 'C:\Program Files (x86)\Windows Kits\10\bin' -Recurse -Filter signtool.exe |
+            Where-Object { $_.FullName -match '\\x64\\' } | Sort-Object FullName -Descending | Select-Object -First 1
+          & $signtool.FullName sign /fd SHA256 /sha1 $cert.Thumbprint /s My $msix
+          if ($LASTEXITCODE -ne 0) { throw "signtool failed: $LASTEXITCODE" }
+          "MSIX=$msix" | Out-File $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Install, launch and remove
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $since = Get-Date
+          try {
+            Add-AppxPackage -Path $env:MSIX
+            'Add-AppxPackage: succeeded'
+          }
+          catch {
+            "Add-AppxPackage: FAILED"
+            $_.Exception.ToString()
+            $activity = ([regex]'[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}').Match($_.Exception.Message).Value
+            if ($activity) { Get-AppPackageLog -ActivityID $activity | Format-List TimeCreated, Id, Message | Out-String -Width 400 }
+            Get-WinEvent -LogName 'Microsoft-Windows-AppXDeploymentServer/Operational' -MaxEvents 300 |
+              Where-Object { $_.TimeCreated -ge $since -and $_.LevelDisplayName -in @('Error', 'Warning') } |
+              Format-List TimeCreated, Id, LevelDisplayName, Message | Out-String -Width 400
+            throw
+          }
+          $pkg = Get-AppxPackage -Name 'MyCapture.DeployTest'
+          $pkg | Format-List Name, Version, Architecture, PackageFamilyName, Status, SignatureKind | Out-String
+          Add-Type -TypeDefinition @'
+          using System;
+          using System.Runtime.InteropServices;
+          [ComImport, Guid("2e941141-7f97-4756-ba1d-9decde894a3d"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+          public interface IApplicationActivationManager {
+              [PreserveSig] int ActivateApplication([MarshalAs(UnmanagedType.LPWStr)] string appUserModelId,
+                  [MarshalAs(UnmanagedType.LPWStr)] string arguments, int options, out uint processId);
+          }
+          [ComImport, Guid("45BA127D-10A8-46EA-8AB7-56EA9078943C")]
+          public class ApplicationActivationManager {}
+          public static class PackagedLauncher {
+              public static uint Launch(string aumid) {
+                  var manager = (IApplicationActivationManager)new ApplicationActivationManager();
+                  uint pid;
+                  int hr = manager.ActivateApplication(aumid, null, 0, out pid);
+                  if (hr < 0) Marshal.ThrowExceptionForHR(hr);
+                  return pid;
+              }
+          }
+          '@
+          $launched = [PackagedLauncher]::Launch("$($pkg.PackageFamilyName)!MyCapture")
+          "Activated: PID $launched"
+          $proc = $null
+          foreach ($i in 1..30) {
+            Start-Sleep -Seconds 1
+            $proc = Get-Process -Name MyCapture -ErrorAction SilentlyContinue | Select-Object -First 1
+            if ($proc) { break }
+          }
+          if (-not $proc) { throw 'MyCapture did not start from the installed package.' }
+          Start-Sleep -Seconds 8
+          if ($proc.HasExited) { throw "MyCapture exited early with code $($proc.ExitCode)." }
+          "MyCapture is running from the package: PID $($proc.Id), $($proc.Path)"
+          Stop-Process -Id $proc.Id -Force
+          Remove-AppxPackage -Package $pkg.PackageFullName
+          'Removed'
