@@ -84,7 +84,7 @@ internal static class WorkspaceTheme
             ["Timeline.Background"] = light ? "#edf3f2" : "#141b22",
             ["Timeline.Track"] = light ? "#e5eeeb" : "#202b34",
             ["Timeline.Playhead"] = light ? "#4B3CC0" : "#FFFFFF",
-            ["Timeline.TextLayer"] = light ? "#5A48E0" : "#8B7BFF",
+            ["Timeline.TextLayer"] = light ? "#2F63D1" : "#7FA6FF",
             ["Timeline.FrameLayer"] = light ? "#0E8278" : "#3FD8C9",
             ["Timeline.LayerText"] = light ? "#FFFFFF" : "#0A0818",
         };

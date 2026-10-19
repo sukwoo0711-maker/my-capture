@@ -169,7 +169,7 @@ public static class ThemeCatalog
         ["Border.Badge"] = ThemeColor.Argb(0x66, 0xF6, 0xF8, 0xFC),
         ["Timeline.Background"] = ThemeColor.Rgb(0x0B, 0x0F, 0x17),
         ["Timeline.Track"] = ThemeColor.Rgb(0x15, 0x1E, 0x2B),
-        ["Timeline.TextLayer"] = ThemeColor.Rgb(0x8B, 0x7B, 0xFF),
+        ["Timeline.TextLayer"] = ThemeColor.Rgb(0x7F, 0xA6, 0xFF),
         ["Timeline.FrameLayer"] = ThemeColor.Rgb(0x3F, 0xD8, 0xC9),
         ["Timeline.Grid"] = ThemeColor.Rgb(0x2B, 0x3A, 0x50),
         ["Timeline.Playhead"] = ThemeColor.Rgb(0xFF, 0xFF, 0xFF),
@@ -222,7 +222,7 @@ public static class ThemeCatalog
         ["Border.Badge"] = ThemeColor.Argb(0x66, 0x12, 0x18, 0x24),
         ["Timeline.Background"] = ThemeColor.Rgb(0xF3, 0xF5, 0xF8),
         ["Timeline.Track"] = ThemeColor.Rgb(0xE7, 0xEC, 0xF2),
-        ["Timeline.TextLayer"] = ThemeColor.Rgb(0x5A, 0x48, 0xE0),
+        ["Timeline.TextLayer"] = ThemeColor.Rgb(0x2F, 0x63, 0xD1),
         ["Timeline.FrameLayer"] = ThemeColor.Rgb(0x0E, 0x82, 0x78),
         ["Timeline.Grid"] = ThemeColor.Rgb(0xC5, 0xD0, 0xDE),
         ["Timeline.Playhead"] = ThemeColor.Rgb(0x4B, 0x3C, 0xC0),
@@ -315,7 +315,7 @@ public static class ThemeCatalog
         ["Timeline.Background"] = ThemeColor.Rgb(0x14, 0x1b, 0x22),
         ["Timeline.Track"] = ThemeColor.Rgb(0x20, 0x2b, 0x34),
         ["Timeline.Playhead"] = ThemeColor.Rgb(0xFF, 0xFF, 0xFF),
-        ["Timeline.TextLayer"] = ThemeColor.Rgb(0x8B, 0x7B, 0xFF),
+        ["Timeline.TextLayer"] = ThemeColor.Rgb(0x7F, 0xA6, 0xFF),
         ["Timeline.FrameLayer"] = ThemeColor.Rgb(0x3F, 0xD8, 0xC9),
     };
 
