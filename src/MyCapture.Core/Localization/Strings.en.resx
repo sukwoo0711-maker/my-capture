@@ -653,7 +653,7 @@ This cannot be undone.</value>
     <comment>src\MyCapture.Core\Annotations\PolylineAnnotation.cs</comment>
   </data>
   <data name="Text_38B12BA58C48" xml:space="preserve">
-    <value>Recording · Esc or Stop to finish</value>
+    <value>Recording</value>
     <comment>src\MyCapture.App\Recording\RecordingControlWindow.cs</comment>
   </data>
   <data name="Text_38FF9B0AA541" xml:space="preserve">
@@ -1354,7 +1354,7 @@ This cannot be undone.</value>
     <comment>src\MyCapture.App\Recording\RecordingWallClockWindow.cs</comment>
   </data>
   <data name="Text_72A13C33A79E" xml:space="preserve">
-    <value>Preparing recording · Esc or Stop to finish</value>
+    <value>Preparing recording</value>
     <comment>src\MyCapture.App\Recording\RecordingControlWindow.cs</comment>
   </data>
   <data name="Text_72B6DBA8AAC5" xml:space="preserve">
@@ -3380,7 +3380,7 @@ Open the library or Settings from the tray menu.</value></data>
   <data name="Video.AddLayer" xml:space="preserve"><value>Add layer</value></data>
   <data name="Help.Gif" xml:space="preserve"><value>Export GIF</value></data>
   <data name="Hotkey.Twice" xml:space="preserve"><value>{0} twice</value></data>
-  <data name="Hotkey.TrayRestore" xml:space="preserve"><value>Hide all pins from the tray, then show them again</value></data>
+  <data name="Hotkey.TrayRestore" xml:space="preserve"><value>Tray menu &gt; Turn off click through on all pins</value></data>
   <data name="Hotkey.ModifierRequired" xml:space="preserve"><value>Use Ctrl, Alt, or Win with typing and navigation keys. F1–F24 and PrintScreen also support no modifier or Shift alone.</value></data>
   <data name="QuickAccess.KeyboardHint" xml:space="preserve"><value>Click the card background or press Alt+Q, then use C/E/P/S/T/Esc. For a card kept open, click the background.</value></data>
   <data name="Video.InvalidImage" xml:space="preserve"><value>The image could not be read. Select a valid PNG, JPEG or BMP file.</value></data>
@@ -3516,7 +3516,9 @@ Delete {1} {1:plural:subfolder|subfolders}, {2} {2:plural:image|images}, and {3}
   <data name="RecordingPause_ResumeName" xml:space="preserve"><value>Resume recording</value></data>
   <data name="RecordingPause_PauseHelp" xml:space="preserve"><value>Pauses the recording. Paused time is not included in the video.</value></data>
   <data name="RecordingPause_ResumeHelp" xml:space="preserve"><value>Resumes the recording. The video continues from the point where it was paused.</value></data>
-  <data name="RecordingPause_Status" xml:space="preserve"><value>Paused · Resume, or press Esc or Stop to finish</value></data>
+  <data name="RecordingPause_Status" xml:space="preserve"><value>Paused</value></data>
+  <data name="RecordingPause_StatusHelp" xml:space="preserve"><value>Select Resume to continue recording, or press Esc or select Stop to finish it.</value></data>
+  <data name="RecordingStatus_StopHelp" xml:space="preserve"><value>Press Esc or select Stop to finish the recording.</value></data>
   <data name="RecordingPause_State" xml:space="preserve"><value>Paused</value></data>
   <data name="PinRestore_Command" xml:space="preserve"><value>Reopen closed pin</value></data>
   <data name="PinRestore_CommandHelp" xml:space="preserve"><value>Reopens the most recently closed pin at its last position, zoom, and opacity.</value></data>
@@ -4018,6 +4020,7 @@ Delete {1} {1:plural:subfolder|subfolders}, {2} {2:plural:image|images}, and {3}
   <data name="Tray_ClipboardEmpty" xml:space="preserve"><value>Clipboard is empty</value></data>
   <data name="Tray_HideAllPins" xml:space="preserve"><value>Hide all pins</value></data>
   <data name="Tray_ShowAllPins" xml:space="preserve"><value>Show all pins</value></data>
+  <data name="Tray_ClearClickThrough" xml:space="preserve"><value>Turn off click through on all pins</value></data>
   <data name="Onboard_ShowShortcuts" xml:space="preserve"><value>Keyboard shortcuts</value></data>
   <data name="Onboard_TrayTipActions" xml:space="preserve"><value>Click: library · Right-click: menu</value></data>
   <data name="Onboard_BarCapture" xml:space="preserve"><value>Capture</value></data>
@@ -4046,7 +4049,8 @@ Delete {1} {1:plural:subfolder|subfolders}, {2} {2:plural:image|images}, and {3}
   <data name="Onboard_PinWheelUp" xml:space="preserve"><value>Ctrl+wheel up</value></data>
   <data name="Onboard_PinAllowClickThrough" xml:space="preserve"><value>Click through to windows behind</value></data>
   <data name="Onboard_PinAllowClickThroughHelp" xml:space="preserve"><value>Sends mouse input to the window behind. Turn off: {0}</value></data>
-  <data name="Onboard_PinClickThroughOn" xml:space="preserve"><value>Click through to windows behind: on · Turn off: {0}</value></data>
+  <data name="Onboard_PinClickThroughOn" xml:space="preserve"><value>Click through to windows behind: on
+Turn off: {0}</value></data>
   <data name="Onboard_PinClickThroughOff" xml:space="preserve"><value>Click through to windows behind: off</value></data>
   <data name="Onboard_CaptureFromTray" xml:space="preserve"><value>No shortcut is assigned. Choose Region capture from the tray icon menu.</value></data>
   <data name="Onboard_QuickKeep" xml:space="preserve"><value>Keep open</value></data>

@@ -154,6 +154,16 @@ internal sealed class PinManager
     /// <summary>Whether pins are currently hidden by the global hide-all toggle.</summary>
     internal bool AreHidden { get; private set; }
 
+    /// <summary>Number of open pins, shown or hidden, that let clicks through to the windows behind.</summary>
+    internal int ClickThroughCount
+    {
+        get
+        {
+            Prune();
+            return _pins.Count(pin => pin.State.IsClickThrough);
+        }
+    }
+
     /// <summary>
     /// The most recent save request routed from a pin. This awaitable internal seam lets the
     /// WPF boundary remain event-based while integration tests deterministically observe the
@@ -413,15 +423,39 @@ internal sealed class PinManager
         }
     }
 
+    /// <summary>
+    /// Turns click-through off on every open pin that has it, shown or hidden, and returns how
+    /// many changed. The tray menu's way back from click-through.
+    /// </summary>
+    /// <remarks>
+    /// A click-through pin carries <c>WS_EX_TRANSPARENT</c>, so the mouse can never land on it to
+    /// reverse the setting, and a new installation leaves both the
+    /// <see cref="MyCapture.Platform.Shell.GlobalHotkeyCommand.ToggleClickThrough"/> and the
+    /// hide-all keys unassigned. Hidden pins stay hidden.
+    /// </remarks>
+    internal int ClearClickThroughAll()
+    {
+        Prune();
+        int cleared = 0;
+        foreach (PinWindow pin in _pins.Where(pin => pin.State.IsClickThrough))
+        {
+            pin.ApplyClickThrough(enabled: false);
+            cleared++;
+        }
+
+        _log.LogInformation("Turned click-through off on {Count} pin(s)", cleared);
+        return cleared;
+    }
+
     /// <summary>Hides every pin if any are visible, otherwise reveals them all.</summary>
     /// <remarks>
-    /// Revealing doubles as the documented safety escape for a pin that turned on
-    /// click-through from its context menu while the global
+    /// Revealing also turns click-through off, a second way back for a pin that turned it on
+    /// from its context menu while the global
     /// <see cref="MyCapture.Platform.Shell.GlobalHotkeyCommand.ToggleClickThrough"/> hotkey
     /// is unassigned by default. A click-through pin carries <c>WS_EX_TRANSPARENT</c>, so the
     /// mouse can never land on it to reverse the setting. By turning click-through off on
-    /// every pin just before <see cref="PinWindow.ShowPin"/>, two presses of the default
-    /// Shift+F3 (hide, then show) always restore mouse interaction on every pin.
+    /// every pin just before <see cref="PinWindow.ShowPin"/>, two presses of the hide-all key
+    /// (hide, then show) always restore mouse interaction on every pin.
     /// </remarks>
     internal void HideOrShowAll()
     {

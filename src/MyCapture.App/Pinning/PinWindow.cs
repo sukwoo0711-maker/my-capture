@@ -1412,8 +1412,9 @@ internal sealed class PinWindow : Window
     }
 
     /// <summary>
-    /// How to turn click-through off again with the current shortcuts. The pin's feedback says it;
-    /// the tutorial clip generator shows the same words in its caption.
+    /// How to turn click-through off again with the current shortcuts: the toggle key, the hide-all
+    /// key twice, or else the tray menu's command for every pin. The pin's feedback says it; the
+    /// tutorial clip generator shows the same words in its caption.
     /// </summary>
     internal static string ClickThroughRecoveryHint()
     {

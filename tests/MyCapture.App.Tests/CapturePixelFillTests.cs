@@ -56,6 +56,46 @@ public sealed class CapturePixelFillTests
     });
 
     [Theory]
+    [InlineData(1.0)]
+    [InlineData(1.25)]
+    [InlineData(1.5)]
+    [InlineData(1.75)]
+    [InlineData(2.0)]
+    [InlineData(2.5)]
+    [InlineData(3.0)]
+    public void MagnifierColourAndCoordinatesNeverOverlapAndStayInsideItsPanel(double scale) => StaTestHost.Run(() =>
+    {
+        // The image is 150 frame pixels and the values under it are DIP text, so at 200% the
+        // 12 DIP colour and the 10 DIP coordinates overlapped inside a 75 DIP footer.
+        foreach (PointD cursor in new PointD[] { new(120, 100), new(639, 359), new(333, 207) })
+        {
+            var view = new CaptureOverlayView(NoiseFrame(), showSelectionGrid: false);
+            try
+            {
+                view.ReadCursor = () => cursor;
+                SetMouseOver(view, true);
+                view.InitializePointer();
+                Render(view, scale);
+                Drawing[] leaves = Leaves(Visual(view, "_magnifierVisual").Drawing).ToArray();
+                GlyphRunDrawing[] texts = leaves.OfType<GlyphRunDrawing>().ToArray();
+                Assert.Equal(2, texts.Length);
+                Rect colour = texts[0].Bounds, location = texts[1].Bounds;
+                string what = $"scale {scale}, cursor {cursor}: colour {colour}, coordinates {location}";
+                Assert.False(colour.IntersectsWith(location), what);
+                Rect panel = leaves.OfType<GeometryDrawing>().Select(drawing => drawing.Geometry).OfType<RectangleGeometry>()
+                    .Single(geometry => geometry.RadiusX == 9).Rect;
+                Assert.True(panel.Contains(colour) && panel.Contains(location), $"{what}, panel {panel}");
+                // 100% keeps the values side by side, as before; 200% puts the coordinates under the colour.
+                if (scale == 1.0) Assert.True(location.Top < colour.Bottom && location.Left > colour.Right, what);
+                if (scale == 2.0) Assert.True(location.Top >= colour.Bottom, what);
+                // Wider cells for the text are still whole device pixels, so the grid keeps its fills.
+                Assert.True(view.MagnifierGridFillCount > 0, what);
+            }
+            finally { view.ReleaseResources(); }
+        }
+    });
+
+    [Theory]
     [InlineData(1.0, true)]
     [InlineData(2.0, true)]
     [InlineData(1.25, false)]
@@ -159,6 +199,13 @@ public sealed class CapturePixelFillTests
         DrawingGroup group => group.Children.Sum(Lines),
         GeometryDrawing { Geometry: LineGeometry } => 1,
         _ => 0,
+    };
+
+    private static IEnumerable<Drawing> Leaves(Drawing? drawing) => drawing switch
+    {
+        DrawingGroup group => group.Children.SelectMany(Leaves),
+        null => [],
+        _ => [drawing],
     };
 
     private static void AssertSamePixels(byte[] expected, byte[] actual, string what)

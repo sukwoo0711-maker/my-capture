@@ -367,6 +367,7 @@ internal sealed class RecordingControlWindow : Window
         ShowRecordingControls();
         _statusText.Text = UiText.Get(paused ? "RecordingPause_Status" : "Text_38B12BA58C48");
         _statusText.Foreground = paused ? TryBrush("Text.Primary", Colors.White) : TryBrush("State.Danger", Colors.OrangeRed);
+        AnnounceStatus(UiText.Get(paused ? "RecordingPause_StatusHelp" : "RecordingStatus_StopHelp"));
         _timerText.Text = elapsed.ToString(@"mm\:ss", CultureInfo.InvariantCulture);
         UpdateRegionFrameBrush(_regionFrame);
     }
@@ -478,7 +479,9 @@ internal sealed class RecordingControlWindow : Window
         Grid.SetColumn(pause, 1);
         panel.Children.Add(pause);
 
-        // Results only: empty before recording, then the recording state.
+        // Results only: empty before recording, then the recording state. The cell gets whatever
+        // width the buttons leave, so it shows the state alone; how to resume or finish is in its
+        // tooltip and help text, where the bar's width cannot cut it off.
         status = new TextBlock
         {
             VerticalAlignment = VerticalAlignment.Center,
@@ -835,7 +838,7 @@ internal sealed class RecordingControlWindow : Window
         ShowRecordingControls();
         _statusText.Text = UiText.Get("Text_72A13C33A79E");
         _statusText.Foreground = TryBrush("State.Danger", Colors.OrangeRed);
-        AnnounceStatus();
+        AnnounceStatus(UiText.Get("RecordingStatus_StopHelp"));
 
         // Make the region interior click-through so the recorded app stays usable.
         SetRegionClickThrough(true);
@@ -865,7 +868,7 @@ internal sealed class RecordingControlWindow : Window
             if (!_paused)
             {
                 _statusText.Text = UiText.Get("Text_38B12BA58C48");
-                AnnounceStatus();
+                AnnounceStatus(UiText.Get("RecordingStatus_StopHelp"));
             }
         }
         // Recorded time only: the timer holds still while paused, matching the clip length.
@@ -993,7 +996,7 @@ internal sealed class RecordingControlWindow : Window
             _statusText.Foreground = TryBrush("State.Danger", Colors.OrangeRed);
         }
 
-        AnnounceStatus();
+        AnnounceStatus(UiText.Get(_paused ? "RecordingPause_StatusHelp" : "RecordingStatus_StopHelp"));
         AutomationProperties.SetItemStatus(
             _regionFrame,
             _paused ? UiText.Get("RecordingPause_State") : string.Empty);
@@ -1248,9 +1251,16 @@ internal sealed class RecordingControlWindow : Window
             $"{w}×{h} · {_settings.TargetFps}fps");
     }
 
-    private void AnnounceStatus()
+    /// <summary>
+    /// Names the status for screen readers. A state that can go on (preparing, recording, paused)
+    /// passes how to resume or finish it, which becomes the cell's tooltip and help text; every
+    /// other status clears both.
+    /// </summary>
+    private void AnnounceStatus(string? help = null)
     {
         AutomationProperties.SetName(_statusText, _statusText.Text);
+        AutomationProperties.SetHelpText(_statusText, help ?? string.Empty);
+        _statusText.ToolTip = help;
     }
 
     private double ResolveScale()

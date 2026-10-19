@@ -135,7 +135,7 @@ public sealed class VideoEditorNarrowLayoutTests
             TextBlock[] lines = Descendants(item).OfType<TextBlock>().Where(text => text.IsVisible).ToArray();
             Assert.Equal(2, lines.Length);
             Assert.Matches(@"^\d+:\d\d\.\d{3}–\d+:\d\d\.\d{3}$", lines[1].Text);
-            // Edit and delete for the selected row sit above the list.
+            // Edit and delete for the selected row sit under the list.
             foreach (string key in new[] { "Text_AEB8B9AA4E6F", "Text_9163C86EDB22" })
                 Assert.True(Assert.Single(Descendants(panel).OfType<Button>(), b => AutomationProperties.GetName(b) == UiText.Get(key)).IsVisible, key);
 
@@ -144,6 +144,61 @@ public sealed class VideoEditorNarrowLayoutTests
             int layers = Field<VideoEditDocument>(editor, "_editDocument").TextOverlays.Count + Field<VideoEditDocument>(editor, "_editDocument").FrameEditLayers.Count;
             Assert.Equal(1, layers);
             Assert.Equal(36, tracks.Height);
+        }
+        finally
+        {
+            editor?.Close();
+            OwnedTestDirectory.Delete(root);
+        }
+    });
+
+    [Theory]
+    [InlineData("ko-KR", 760, 555)]
+    [InlineData("en-US", 760, 555)]
+    [InlineData("ko-KR", 920, 660)]
+    [InlineData("en-US", 1400, 900)]
+    public void LayerHeadingKeepsItsWidthBesideAddLayerAndSelectionCommandsSitUnderTheList(string language, int width, int height) => StaTestHost.Run(() =>
+    {
+        using var culture = UiText.UseLanguage(language);
+        string root = OwnedTestDirectory.Create("mc-video-layer-heading-");
+        VideoEditorWindow? editor = null;
+        try
+        {
+            editor = OpenReadyEditor(root, 10_000, show: true, width, height);
+            typeof(VideoEditorWindow).GetMethod("AddShapeLayer", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(editor, [false]);
+            editor.Dispatcher.Invoke(System.Windows.Threading.DispatcherPriority.ApplicationIdle, new Action(editor.UpdateLayout));
+            var layout = (Grid)editor.Content;
+            Border panel = Assert.Single(Descendants(layout).OfType<Border>(), border => border.Name == "VideoLayersPanel");
+            Assert.True(panel.IsVisible);
+
+            // Edit and delete beside the heading left the 14 DIP heading 42 DIP in the narrowest
+            // panel and cut its last letter. An element given less than it needs keeps its own size
+            // and is clipped to its slot, so the slot is what shows whether the heading fits.
+            TextBlock heading = Assert.Single(Descendants(panel).OfType<TextBlock>(), text => text.Text == UiText.Get("Video.Layers"));
+            Rect slot = System.Windows.Controls.Primitives.LayoutInformation.GetLayoutSlot(heading);
+            Assert.True(slot.Width - heading.Margin.Left - heading.Margin.Right + 0.5 >= heading.ActualWidth,
+                $"heading slot {slot.Width:0.#} for {heading.ActualWidth:0.#} DIP");
+            // The UX review flags a text whose measured size exceeds its arranged size.
+            Assert.True(heading.DesiredSize.Width <= heading.ActualWidth + 1);
+
+            Button Command(string key) => Assert.Single(Descendants(panel).OfType<Button>(), button => AutomationProperties.GetName(button) == UiText.Get(key));
+            Button add = Command("Video.AddLayer");
+            double headingRight = heading.TranslatePoint(new Point(heading.ActualWidth, 0), panel).X;
+            Point addTop = add.TranslatePoint(new Point(), panel);
+            Assert.True(addTop.X >= headingRight + 8 - 0.5, $"Add layer at {addTop.X:0.#}, heading ends at {headingRight:0.#}");
+
+            ListBox list = Assert.Single(Descendants(panel).OfType<ListBox>());
+            Assert.True(addTop.Y + add.ActualHeight <= list.TranslatePoint(new Point(), panel).Y + 0.5, "Add layer sits in the heading row");
+            double listBottom = list.TranslatePoint(new Point(0, list.ActualHeight), panel).Y;
+            foreach (Button command in new[] { add, Command("Text_AEB8B9AA4E6F"), Command("Text_9163C86EDB22") })
+            {
+                Assert.True(command.IsVisible);
+                Point bottomRight = command.TranslatePoint(new Point(command.ActualWidth, command.ActualHeight), panel);
+                Assert.InRange(bottomRight.X, 0, panel.ActualWidth - panel.Padding.Right + 0.5);
+                Assert.InRange(bottomRight.Y, 0, panel.ActualHeight - panel.Padding.Bottom + 0.5);
+                if (!ReferenceEquals(command, add))
+                    Assert.True(command.TranslatePoint(new Point(), panel).Y >= listBottom - 0.5, "Edit and delete sit under the list");
+            }
         }
         finally
         {
