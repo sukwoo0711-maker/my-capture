@@ -453,7 +453,7 @@ This cannot be undone.</value>
     <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
   </data>
   <data name="Text_295F3F963B4A" xml:space="preserve">
-    <value>Library images are deleted automatically, oldest first, 7 days after they are created. Kept images, images being edited, videos, and files you saved or exported separately are never deleted.</value>
+    <value>Library images are deleted automatically, oldest first, after the configured retention period. Kept images, images being edited, videos, and files you saved or exported separately are never deleted.</value>
     <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
   </data>
   <data name="Text_29C79CAFC1D7" xml:space="preserve">
@@ -3151,10 +3151,11 @@ Open the library or Settings from the tray menu.</value></data>
   <data name="Settings.GitHubIssueUrlHint" xml:space="preserve"><value>F9 pastes the clipboard image into this issue’s Write box. Use an issue you can comment on. If blank, MyCapture's public support repository is used, and uploaded images are public.</value></data>
   <data name="Settings.GitHubIssueUrlInvalid" xml:space="preserve"><value>Use https://host/owner/repo/issues/number or /issues/new.</value></data>
   <data name="Settings.RetentionHours" xml:space="preserve"><value>Library image retention (hours)</value></data>
-  <data name="Settings.RetentionHoursHint" xml:space="preserve"><value>Images that are not kept are deleted after this many hours. The default is 168 hours (7 days). Videos and kept items are excluded.</value></data>
+  <data name="Settings.RetentionHoursHint" xml:space="preserve"><value>Images that are not kept are deleted after this many hours. New installations have no time limit by default. Videos and kept items are excluded.</value></data>
   <data name="Settings.UploadGitHubHotkey" xml:space="preserve"><value>Clipboard image to GitHub URL</value></data>
   <data name="Gallery.Float" xml:space="preserve"><value>Pin to screen</value></data>
   <data name="Gallery.FloatHint" xml:space="preserve"><value>Pin this capture on top of other windows.</value></data>
+  <data name="Gallery.EditVideoHint" xml:space="preserve"><value>Edit video</value></data>
   <data name="Gallery.RetentionDays" xml:space="preserve"><value>Auto-delete in {0} {0:plural:day|days}</value></data>
   <data name="Gallery.RetentionDaysHours" xml:space="preserve"><value>Auto-delete in {0} {0:plural:day|days} {1} {1:plural:hour|hours}</value></data>
   <data name="Gallery.RetentionHours" xml:space="preserve"><value>Auto-delete in {0} {0:plural:hour|hours}</value></data>
@@ -3163,7 +3164,7 @@ Open the library or Settings from the tray menu.</value></data>
   <data name="Gallery.RetentionKept" xml:space="preserve"><value>Kept</value></data>
   <data name="Gallery.RetentionVideo" xml:space="preserve"><value>No expiry</value></data>
   <data name="Gallery.RetentionExpired" xml:space="preserve"><value>Awaiting auto-delete</value></data>
-  <data name="Gallery.RetentionNever" xml:space="preserve"><value>No auto-delete</value></data>
+  <data name="Gallery.RetentionNever" xml:space="preserve"><value>No time limit</value></data>
   <data name="Gallery.FloatFailed" xml:space="preserve"><value>Could not pin this image to the screen.</value></data>
   <data name="GitHub.NeedImage" xml:space="preserve"><value>Copy an image first, then press F9.</value></data>
   <data name="GitHub.Opening" xml:space="preserve"><value>Opening the GitHub issue and pasting the image…</value></data>
@@ -3950,7 +3951,7 @@ Delete {1} {1:plural:subfolder|subfolders}, {2} {2:plural:image|images}, and {3}
   <data name="LibraryUx_KeptBadge" xml:space="preserve"><value>Kept</value></data>
   <data name="LibraryUx_KeptAccessible" xml:space="preserve"><value>, kept</value></data>
   <data name="LibraryUx_InFolderAccessible" xml:space="preserve"><value>, in folder {0}</value></data>
-  <data name="LibraryUx_TileMoreHint" xml:space="preserve"><value>More — keep, export and recognize text</value></data>
+  <data name="LibraryUx_TileMoreHint" xml:space="preserve"><value>More (Shift+F10)</value></data>
   <data name="LibraryUx_SearchPlaceholder" xml:space="preserve"><value>Search titles, apps, tags, image text · app:Edge tag:meeting</value></data>
   <data name="LibraryUx_SearchPlaceholderCompact" xml:space="preserve"><value>Search titles, apps, tags, image text</value></data>
   <data name="LibraryUx_CommandShortcut" xml:space="preserve"><value>{0} ({1})</value></data>

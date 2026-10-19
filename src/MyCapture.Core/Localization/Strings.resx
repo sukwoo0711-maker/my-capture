@@ -453,7 +453,7 @@
     <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
   </data>
   <data name="Text_295F3F963B4A" xml:space="preserve">
-    <value>만든 지 7일이 지난 라이브러리 이미지를 오래된 것부터 자동으로 지웁니다. 보관한 이미지, 편집 중인 이미지, 동영상, 따로 저장하거나 내보낸 파일은 지우지 않습니다.</value>
+    <value>설정한 보관 기간이 지난 라이브러리 이미지를 오래된 것부터 자동으로 지웁니다. 보관한 이미지, 편집 중인 이미지, 동영상, 따로 저장하거나 내보낸 파일은 지우지 않습니다.</value>
     <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
   </data>
   <data name="Text_29C79CAFC1D7" xml:space="preserve">
@@ -3151,10 +3151,11 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="Settings.GitHubIssueUrlHint" xml:space="preserve"><value>F9가 클립보드 이미지를 붙여 넣을 이슈입니다. 본인이 쓸 수 있는 이슈를 지정하십시오. 비워 두면 MyCapture 공개 지원 저장소를 사용하며, 올린 이미지는 누구나 볼 수 있습니다.</value></data>
   <data name="Settings.GitHubIssueUrlInvalid" xml:space="preserve"><value>https://호스트/소유자/저장소/issues/번호 또는 /issues/new 형식이어야 합니다.</value></data>
   <data name="Settings.RetentionHours" xml:space="preserve"><value>라이브러리 이미지 보관(시간)</value></data>
-  <data name="Settings.RetentionHoursHint" xml:space="preserve"><value>보관하지 않은 이미지가 자동 삭제되기까지의 시간입니다. 기본값은 168시간(7일)입니다. 동영상과 보관 항목은 제외됩니다.</value></data>
+  <data name="Settings.RetentionHoursHint" xml:space="preserve"><value>보관하지 않은 이미지가 자동 삭제되기까지의 시간입니다. 새 설치의 기본값은 보관 기간 제한 없음입니다. 동영상과 보관 항목은 제외됩니다.</value></data>
   <data name="Settings.UploadGitHubHotkey" xml:space="preserve"><value>클립보드 이미지를 GitHub URL로</value></data>
   <data name="Gallery.Float" xml:space="preserve"><value>핀으로 띄우기</value></data>
   <data name="Gallery.FloatHint" xml:space="preserve"><value>이 캡처를 핀으로 다른 창 위에 띄웁니다.</value></data>
+  <data name="Gallery.EditVideoHint" xml:space="preserve"><value>동영상 편집</value></data>
   <data name="Gallery.RetentionDays" xml:space="preserve"><value>자동 삭제까지 {0}일</value></data>
   <data name="Gallery.RetentionDaysHours" xml:space="preserve"><value>자동 삭제까지 {0}일 {1}시간</value></data>
   <data name="Gallery.RetentionHours" xml:space="preserve"><value>자동 삭제까지 {0}시간</value></data>
@@ -3163,7 +3164,7 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="Gallery.RetentionKept" xml:space="preserve"><value>보관</value></data>
   <data name="Gallery.RetentionVideo" xml:space="preserve"><value>만료 없음</value></data>
   <data name="Gallery.RetentionExpired" xml:space="preserve"><value>자동 삭제 대기 중</value></data>
-  <data name="Gallery.RetentionNever" xml:space="preserve"><value>자동 삭제 안 함</value></data>
+  <data name="Gallery.RetentionNever" xml:space="preserve"><value>보관 기간 제한 없음</value></data>
   <data name="Gallery.FloatFailed" xml:space="preserve"><value>이 이미지를 핀으로 띄우지 못했습니다.</value></data>
   <data name="GitHub.NeedImage" xml:space="preserve"><value>먼저 이미지를 복사한 뒤 F9를 누르십시오.</value></data>
   <data name="GitHub.Opening" xml:space="preserve"><value>GitHub 이슈를 열고 이미지를 붙이는 중…</value></data>
@@ -3950,7 +3951,7 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="LibraryUx_KeptBadge" xml:space="preserve"><value>보관됨</value></data>
   <data name="LibraryUx_KeptAccessible" xml:space="preserve"><value>, 보관됨</value></data>
   <data name="LibraryUx_InFolderAccessible" xml:space="preserve"><value>, {0} 폴더</value></data>
-  <data name="LibraryUx_TileMoreHint" xml:space="preserve"><value>더 보기 — 보관, 내보내기, 텍스트 인식</value></data>
+  <data name="LibraryUx_TileMoreHint" xml:space="preserve"><value>더 보기 (Shift+F10)</value></data>
   <data name="LibraryUx_SearchPlaceholder" xml:space="preserve"><value>제목, 앱, 태그, 이미지 속 글자 검색 · 앱:Edge 태그:회의</value></data>
   <data name="LibraryUx_SearchPlaceholderCompact" xml:space="preserve"><value>제목, 앱, 태그, 이미지 속 글자 검색</value></data>
   <data name="LibraryUx_CommandShortcut" xml:space="preserve"><value>{0} ({1})</value></data>

@@ -319,7 +319,7 @@ public sealed partial class SettingsThemePreviewTests
         bool compact = vm.IsCompactLayout;
         double track = compact ? GalleryRowBuilder.MinCompactTileTrackWidth : GalleryRowBuilder.MinTileTrackWidth;
         int max = compact ? GalleryRowBuilder.CompactMaxColumns : GalleryRowBuilder.MaxColumns;
-        (double baseWidth, double baseHeight, double slope) = compact ? (148d, 180d, 1d) : (244d, 292d, 0.8);
+        (double baseWidth, double baseHeight, double slope) = compact ? (148d, 174d, 0.625) : (244d, 234d, 0.625);
         // The visible card: a capture card inside its selection outline, or a folder card button.
         FrameworkElement[] cards = Descendants(rowsList).OfType<FrameworkElement>()
             .Where(element => element.IsVisible && (element is Border { Name: "TileCard" or "CompactTileCard" }

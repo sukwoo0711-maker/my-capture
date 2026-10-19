@@ -150,7 +150,8 @@ public sealed class QueueSettings
     public Guid? DefaultCaptureFolderId { get; set; }
 
     /// <summary>
-    /// Maximum number of retained captures. Oldest unpinned entries are evicted.
+    /// Maximum number of retained captures. Oldest eligible unkept entries are evicted.
+    /// The initializer preserves legacy files; new installations use <see cref="NewInstallDefaults"/>.
     /// </summary>
     public int MaxItems { get; set; } = 300;
 
@@ -159,8 +160,8 @@ public sealed class QueueSettings
     /// eviction.
     /// </summary>
     /// <remarks>
-    /// 2 GiB. Without a byte cap a user capturing 4K screens fills the disk
-    /// silently, because 300 items says nothing about their size.
+    /// The legacy fallback is 2 GiB; new installations use <see cref="NewInstallDefaults"/>.
+    /// A byte cap limits disk use independently of the number of captures.
     /// </remarks>
     public long MaxBytes { get; set; } = 2L * 1024 * 1024 * 1024;
 
@@ -176,7 +177,8 @@ public sealed class QueueSettings
 
     /// <summary>
     /// Hours after creation before an unpinned library image is expired.
-    /// Default is 168 (7 days), matching the previous hard-coded policy.
+    /// The legacy fallback is 168 (7 days), matching the previous hard-coded policy.
+    /// New installations use <see cref="NewInstallDefaults"/> and have no time limit.
     /// </summary>
     public int ImageRetentionHours { get; set; } = MyCapture.Core.Queue.CaptureRetention.DefaultImageRetentionHours;
 }

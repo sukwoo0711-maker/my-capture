@@ -257,7 +257,10 @@ public sealed partial class SettingsThemePreviewTests
                 double left = item.TranslatePoint(new Point(), scroll).X;
                 Assert.True(left >= -0.5 && left + item.ActualWidth <= scroll.ViewportWidth + 0.5,
                     $"{language}: a compact card spans {left:0.#}..{left + item.ActualWidth:0.#} in a {scroll.ViewportWidth:0.#}-DIP viewport");
-                AssertInsideClient(Descendants(item).OfType<Button>().Single(button => button.IsVisible), client, language);
+                Button[] tileActions = Descendants(item).OfType<Button>().Where(button => button.IsVisible).ToArray();
+                Assert.Equal(4, tileActions.Length);
+                foreach (Button action in tileActions)
+                    AssertInsideClient(action, client, language);
             }
             int folderCardsInView = CardsFullyInView(rows, scroll);
             Assert.True(folderCardsInView > rootCardsInView,

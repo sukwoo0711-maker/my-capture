@@ -1,5 +1,6 @@
 using System.Reflection;
 using Microsoft.Extensions.Logging.Abstractions;
+using MyCapture.Core.Queue;
 using MyCapture.Core.Settings;
 using MyCapture.Core.Storage;
 using MyCapture.Core.Themes;
@@ -34,6 +35,7 @@ public sealed class SettingsUxDefaultsTests
         Assert.Equal("Ctrl+Shift+X", fresh.Hotkeys.RecordRegion.ToString());
         Assert.All(OptionalHotkeys(fresh.Hotkeys), key => Assert.Equal(Hotkey.None, key));
         Assert.True(fresh.General.ShowShortcutHints);
+        AssertNewLibraryDefaults(fresh.Queue);
         Assert.False(File.Exists(workspace.Paths.SettingsFile));
     }
 
@@ -52,6 +54,7 @@ public sealed class SettingsUxDefaultsTests
         Assert.Equal("Ctrl+Shift+X", reloaded.Hotkeys.RecordRegion.ToString());
         Assert.All(OptionalHotkeys(reloaded.Hotkeys), key => Assert.Equal(Hotkey.None, key));
         Assert.True(reloaded.General.ShowShortcutHints);
+        AssertNewLibraryDefaults(reloaded.Queue);
     }
 
     [Fact]
@@ -76,6 +79,7 @@ public sealed class SettingsUxDefaultsTests
         Assert.Equal("Shift+F3", loaded.Hotkeys.HideAllPins.ToString());
         Assert.Equal("F9", loaded.Hotkeys.UploadGitHubImage.ToString());
         Assert.True(loaded.General.ShowShortcutHints);
+        AssertLegacyLibraryDefaults(loaded.Queue);
         Assert.Equal(before, File.ReadAllText(workspace.Paths.SettingsFile));
     }
 
@@ -96,6 +100,29 @@ public sealed class SettingsUxDefaultsTests
         Assert.Equal("F9", loaded.Hotkeys.UploadGitHubImage.ToString());
         Assert.Equal("Ctrl+Shift+X", loaded.Hotkeys.RecordRegion.ToString());
         Assert.True(loaded.General.ShowShortcutHints);
+        AssertLegacyLibraryDefaults(loaded.Queue);
+    }
+
+    [Theory]
+    [InlineData(168, 300, 2L * 1024 * 1024 * 1024)]
+    [InlineData(36, 750, 3L * 1024 * 1024 * 1024)]
+    [InlineData(CaptureRetention.NeverHours, 1500, 8L * 1024 * 1024 * 1024)]
+    public void ExistingFile_KeepsStoredLibraryLimits_WithoutRewriting(int hours, int items, long bytes)
+    {
+        using var workspace = new TempWorkspace();
+        workspace.Paths.EnsureCreated();
+        string json = $$"""
+            {"schemaVersion":4,"queue":{"imageRetentionHours":{{hours}},"maxItems":{{items}},"maxBytes":{{bytes}} } }
+            """;
+        File.WriteAllText(workspace.Paths.SettingsFile, json);
+
+        AppSettings loaded = Store(workspace).Load();
+
+        Assert.False(loaded.General.IsFirstRun);
+        Assert.Equal(hours, loaded.Queue.ImageRetentionHours);
+        Assert.Equal(items, loaded.Queue.MaxItems);
+        Assert.Equal(bytes, loaded.Queue.MaxBytes);
+        Assert.Equal(json, File.ReadAllText(workspace.Paths.SettingsFile));
     }
 
     [Fact]
@@ -133,6 +160,7 @@ public sealed class SettingsUxDefaultsTests
         Assert.False(loaded.General.IsFirstRun);
         Assert.Equal("F3", loaded.Hotkeys.PasteToScreen.ToString());
         Assert.True(loaded.General.ShowShortcutHints);
+        AssertLegacyLibraryDefaults(loaded.Queue);
     }
 
     [Fact]
@@ -154,6 +182,21 @@ public sealed class SettingsUxDefaultsTests
         Assert.False(draft.HasErrors);
         AppSettings mapped = draft.ToAppSettings();
         Assert.All(OptionalHotkeys(mapped.Hotkeys), key => Assert.Equal(Hotkey.None, key));
+        AssertNewLibraryDefaults(mapped.Queue);
+    }
+
+    private static void AssertNewLibraryDefaults(QueueSettings queue)
+    {
+        Assert.Equal(CaptureRetention.NeverHours, queue.ImageRetentionHours);
+        Assert.Equal(5L * 1024 * 1024 * 1024, queue.MaxBytes);
+        Assert.Equal(1000, queue.MaxItems);
+    }
+
+    private static void AssertLegacyLibraryDefaults(QueueSettings queue)
+    {
+        Assert.Equal(168, queue.ImageRetentionHours);
+        Assert.Equal(2L * 1024 * 1024 * 1024, queue.MaxBytes);
+        Assert.Equal(300, queue.MaxItems);
     }
 
     [Fact]

@@ -668,7 +668,7 @@ internal sealed partial class GalleryWindow : Window
 
     private void OnEditClick(object sender, RoutedEventArgs e)
     {
-        if (ResolveTile(sender) is GalleryItemViewModel tile)
+        if (ResolveTileFromCommand(sender) is GalleryItemViewModel tile)
         {
             OpenReedit(tile);
         }
@@ -684,7 +684,7 @@ internal sealed partial class GalleryWindow : Window
 
     private void OnFloatClick(object sender, RoutedEventArgs e)
     {
-        if (ResolveTile(sender) is not GalleryItemViewModel tile || !tile.IsImage)
+        if (ResolveTileFromCommand(sender) is not GalleryItemViewModel tile || !tile.IsImage)
         {
             return;
         }
@@ -714,7 +714,7 @@ internal sealed partial class GalleryWindow : Window
 
     private async void OnCopyClick(object sender, RoutedEventArgs e)
     {
-        if (ResolveTile(sender) is GalleryItemViewModel tile)
+        if (ResolveTileFromCommand(sender) is GalleryItemViewModel tile)
         {
             e.Handled = true;
             await CopyRenderedAsync(tile);
