@@ -111,6 +111,10 @@ public sealed class EditorLargeTextViewportTests
     public void FullWidthCaptionOverlaysItsBarInsideTheCanvasAndKeepsEditing(int paragraphLines) => StaTestHost.Run(() =>
     {
         using EditorWindowHost host = EditorWindowHost.Create(Solid(800, 600, 240));
+        // Keep this fixture width-limited: the full-width canvas otherwise letterboxes the
+        // image horizontally and legitimately leaves room for a scrollbar to its right.
+        host.Window.Height = 900;
+        host.Window.UpdateLayout();
         // At the image's left edge there is no room on either side: the bar overlays the right edge.
         Invoke(host.Editor, "PlaceTextBox", new PointD(0, 40));
         TextBox box = Field<TextBox>(host.Editor, "_activeTextBox");
@@ -170,7 +174,8 @@ public sealed class EditorLargeTextViewportTests
         var caption = new TextAnnotation
         {
             Text = string.Concat(Enumerable.Repeat("한글 줄바꿈과 소수 폭을 유지합니다 abcXYZ😀 ", 100)),
-            Rect = new RectD(left, 40, 800 - left - 0.5, 40),
+            // Keep the projected width fractional after the wider canvas's new fit scale.
+            Rect = new RectD(left, 40, 800 - left - 0.875, 40),
             FontSize = 18,
             AutoSize = false,
         };
@@ -215,6 +220,9 @@ public sealed class EditorLargeTextViewportTests
     public void OverflowScrollbarKeepsTheCommittedWrappingWidth(bool paragraphs) => StaTestHost.Run(() =>
     {
         using EditorWindowHost host = EditorWindowHost.Create(Solid(800, 600, 240));
+        // The left-slot case needs the image's right edge to meet the canvas clip boundary.
+        host.Window.Height = 900;
+        host.Window.UpdateLayout();
         Invoke(host.Editor, "PlaceTextBox", new PointD(600, 40));
         TextBox box = Field<TextBox>(host.Editor, "_activeTextBox");
         string line = "고정 폭에서 같은 줄바꿈을 유지합니다 abcXYZ😀 ";

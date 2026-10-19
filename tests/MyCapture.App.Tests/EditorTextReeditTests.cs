@@ -271,13 +271,15 @@ public sealed class EditorTextReeditTests
         var surface = Field<AnnotationEditorSurface>(editor, "_surface");
         Assert.Equal(original.Rect, restored.Rect);
         Assert.True(TextAnnotationLayout.Measure(restored).Height < restored.Rect.Height / 2);
-        Rect stored = surface.ToSurfaceRect(restored.Rect);
-        Point expectedGlyph = new RotateTransform(restored.RotationDegrees,
-            stored.Left + stored.Width / 2, stored.Top + stored.Height / 2).Transform(stored.TopLeft);
         var controller = Field<AnnotationEditorController>(editor, "_controller");
         controller.SetSelected(restored);
         Assert.True(editor.HandleShortcut(Key.F2, ModifierKeys.None));
         host.Window.UpdateLayout();
+        // Selection changes the contextual bar's height. Compare both positions after the
+        // same arrange pass, while keeping immediate selection -> F2 as the input sequence.
+        Rect stored = surface.ToSurfaceRect(restored.Rect);
+        Point expectedGlyph = new RotateTransform(restored.RotationDegrees,
+            stored.Left + stored.Width / 2, stored.Top + stored.Height / 2).Transform(stored.TopLeft);
         var box = Field<TextBox>(editor, "_activeTextBox");
         Point glyph = box.TranslatePoint(box.GetRectFromCharacterIndex(0).TopLeft, surface);
         Assert.True((glyph - expectedGlyph).Length <= 0.75,
