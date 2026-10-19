@@ -204,7 +204,7 @@ public sealed class GalleryCaptionPreviewTests
         CopyNamespaces(product, combined);
         // Import the card's local motion wash as well as its overflow menu and folder badge.
         // Every entry comes from product markup; the fixture preserves the real state layers.
-        string[] keys = ["LibraryUx.HoverWash", "Gallery.IconButton", "Gallery.TileContextMenu", "LibraryUx.Icon.Folder", "Gallery.FolderBadge",
+        string[] keys = ["Gallery.ThumbnailHeight", "LibraryUx.HoverWash", "Gallery.IconButton", "Gallery.TileContextMenu", "LibraryUx.Icon.Folder", "Gallery.FolderBadge",
             "Gallery.FolderBadgeContent", "Gallery.TileTemplate", "Gallery.TileRowList"];
         foreach (XElement entry in product.Element(p + "Window.Resources")!.Element(p + "ResourceDictionary")!.Elements()
             .Where(element => keys.Contains((string?)element.Attribute(x + "Key"))))

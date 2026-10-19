@@ -3,8 +3,6 @@ using System.Windows.Automation;
 using System.Windows.Controls;
 using System.Windows.Documents;
 using System.Windows.Input;
-using System.Windows.Media;
-using System.Windows.Shapes;
 using MyCapture.App.Capture;
 using MyCapture.App.Themes;
 using MyCapture.Core.Queue;
@@ -15,7 +13,7 @@ namespace MyCapture.App;
 /// <summary>What closed the first-run welcome, so the shell knows what to open next.</summary>
 internal enum WelcomeOutcome
 {
-    /// <summary>Closed with the library button, the close button or Esc: the library opens.</summary>
+    /// <summary>Skipped, closed with the close button or Esc: the library opens.</summary>
     Closed,
 
     /// <summary>"Try it now": a region capture starts once the window is gone.</summary>
@@ -28,23 +26,10 @@ internal enum WelcomeOutcome
     DismissedForCapture,
 }
 
-/// <summary>
-/// The one window a first run shows: three illustrated steps (take a region capture, what happens
-/// to it, where the tray icon lives) instead of a list of keys. Region capture has the only filled
-/// button and really starts a capture; changing shortcuts is a small link.
-/// </summary>
-/// <remarks>
-/// The illustrations are vector drawings in theme brushes, so they follow all six themes and high
-/// contrast. The after-capture sentence follows the user's after-capture setting and the retention
-/// sentence the library's image retention. The third step offers starting at sign-in, checked by
-/// default; the shell applies the choice when the window closes, so nothing is registered unless
-/// the box is left checked.
-/// </remarks>
+/// <summary>The first capture, with the current shortcut and the sign-in choice kept in reach.</summary>
 internal sealed class WelcomeWindow : Window
 {
-    private static readonly Geometry RegionGlyph = Geometry.Parse(
-        "M3.5,7 L3.5,3.5 L7,3.5 M13,3.5 L16.5,3.5 L16.5,7 M16.5,13 L16.5,16.5 L13,16.5 M7,16.5 L3.5,16.5 L3.5,13 M8,8 L12,8 L12,12 L8,12 Z");
-
+    // Keep the shell's constructor contract while capture and retention tips move to their moments of use.
     internal WelcomeWindow(HotkeySettings keys, AfterCaptureAction afterCapture,
         int imageRetentionHours = CaptureRetention.DefaultImageRetentionHours)
     {
@@ -59,63 +44,79 @@ internal sealed class WelcomeWindow : Window
         SetResourceReference(ForegroundProperty, "Text.Primary");
         WindowStartupLocation = WindowStartupLocation.CenterScreen;
 
-        TryNowButton = new Button { Content = UiText.Get("Onboard_TryNow") };
+        var title = new TextBlock
+        {
+            Text = UiText.Get("Welcome_FirstCaptureTitle"), FontSize = 26, FontWeight = FontWeights.SemiBold,
+            TextAlignment = TextAlignment.Center, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, 24),
+        };
+        AutomationProperties.SetName(title, title.Text);
+
+        FrameworkElement captureKeys = CaptureKeys(keys.Capture);
+        captureKeys.HorizontalAlignment = HorizontalAlignment.Center;
+        captureKeys.Margin = new Thickness(0, 0, 0, 28);
+
+        TryNowButton = new Button { Content = UiText.Get("Onboard_TryNow"), IsDefault = true };
         TryNowButton.SetResourceReference(StyleProperty, "Button.Primary");
         CommandButtonPresentation.Apply(TryNowButton);
-        TryNowButton.MinWidth = 120;
-        TryNowButton.ToolTip = UiText.Get("Onboard_TryNowHelp");
+        TryNowButton.MinWidth = 132;
+        TryNowButton.MinHeight = 40;
+        TryNowButton.ToolTip = UiText.Get("Onboard_TryNowHelp") + (keys.Capture.IsAssigned ? $"  {keys.Capture}" : "  Enter");
+        AutomationProperties.SetName(TryNowButton, UiText.Get("Onboard_TryNow"));
         AutomationProperties.SetHelpText(TryNowButton, UiText.Get("Onboard_TryNowHelp"));
         TryNowButton.Click += (_, _) => CloseWith(WelcomeOutcome.TryCapture);
 
-        AfterCaptureText = AfterCaptureSentence(afterCapture);
-        RetentionText = RetentionSentence(imageRetentionHours);
-        var steps = new StackPanel();
-        AutomationProperties.SetName(steps, UiText.Get("Onboard_StepsName"));
-        // Only a key that is really assigned is shown; otherwise the tray menu is the way in.
-        FrameworkElement captureKeys = keys.Capture.IsAssigned
-            ? ShortcutHelpWindow.Keycaps(keys.Capture.ToString())
-            : Sentence(UiText.Get("Onboard_CaptureFromTray"));
-        steps.Children.Add(Step(1, CaptureIllustration(), UiText.Get("Text_096A13A757DB"), captureKeys, TryNowButton));
-        var afterCaptureBody = new StackPanel();
-        afterCaptureBody.Children.Add(Sentence(AfterCaptureText));
-        TextBlock retention = Sentence(RetentionText);
-        retention.Margin = new Thickness(0, 4, 0, 0);
-        afterCaptureBody.Children.Add(retention);
-        steps.Children.Add(Step(2, AfterCaptureIllustration(afterCapture), UiText.Get("Onboard_AfterCaptureTitle"),
-            afterCaptureBody, action: null));
+        SkipButton = new Button { Content = UiText.Get("Welcome_Skip"), IsCancel = true };
+        SkipButton.SetResourceReference(StyleProperty, "Button.Secondary");
+        CommandButtonPresentation.Apply(SkipButton);
+        SkipButton.MinWidth = 112;
+        SkipButton.MinHeight = 40;
+        SkipButton.Margin = new Thickness(9, 0, 3, 0);
+        SkipButton.ToolTip = UiText.Get("Welcome_Skip") + "  Esc";
+        AutomationProperties.SetName(SkipButton, UiText.Get("Welcome_Skip"));
+        SkipButton.Click += (_, _) => CloseWith(WelcomeOutcome.Closed);
 
-        // Global shortcuts work only while MyCapture runs; without this they stop after a restart.
+        var actions = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Center };
+        actions.Children.Add(TryNowButton);
+        actions.Children.Add(SkipButton);
+
+        // The shell applies this choice after the welcome closes, before it opens the next surface.
         StartAtSignInCheck = new CheckBox
         {
-            Content = UiText.Get("Onboard_StartAtSignIn"), IsChecked = true, Margin = new Thickness(0, 10, 0, 0),
-            HorizontalAlignment = HorizontalAlignment.Left, ToolTip = UiText.Get("Onboard_StartAtSignInHelp"),
+            Content = UiText.Get("Onboard_StartAtSignIn"), IsChecked = true, MinHeight = 32, FontSize = 12,
+            HorizontalAlignment = HorizontalAlignment.Left, VerticalAlignment = VerticalAlignment.Center,
+            ToolTip = UiText.Get("Onboard_StartAtSignInHelp"),
         };
         AutomationProperties.SetName(StartAtSignInCheck, UiText.Get("Onboard_StartAtSignIn"));
         AutomationProperties.SetHelpText(StartAtSignInCheck, UiText.Get("Onboard_StartAtSignInHelp"));
-        var trayBody = new StackPanel();
-        trayBody.Children.Add(Sentence(UiText.Get("Onboard_TrayBody")));
-        trayBody.Children.Add(StartAtSignInCheck);
-        steps.Children.Add(Step(3, TrayIllustration(), UiText.Get("Onboard_TrayTitle"), trayBody, action: null));
 
-        var link = new Hyperlink(new Run(UiText.Get("Help.Settings")));
-        link.SetResourceReference(TextElement.ForegroundProperty, "Accent.Cool");
-        link.Click += (_, _) => CloseWith(WelcomeOutcome.OpenSettings);
-        ShortcutsLink = link;
-        var linkText = new TextBlock(link) { VerticalAlignment = VerticalAlignment.Center, FontSize = 13 };
+        ShortcutsLink = new Hyperlink(new Run(UiText.Get("Help.Settings")));
+        ShortcutsLink.SetResourceReference(TextElement.ForegroundProperty, "Text.Primary");
+        AutomationProperties.SetName(ShortcutsLink, UiText.Get("Help.Settings"));
+        ShortcutsLink.Click += (_, _) => CloseWith(WelcomeOutcome.OpenSettings);
+        var linkText = new TextBlock(ShortcutsLink)
+        {
+            VerticalAlignment = VerticalAlignment.Center, FontSize = 12, MinHeight = 32,
+            LineHeight = 32, LineStackingStrategy = LineStackingStrategy.BlockLineHeight,
+            Margin = new Thickness(16, 0, 0, 0),
+        };
 
-        LibraryButton = new Button { Content = UiText.Get("Text_66BA5DCDA810"), IsCancel = true };
-        LibraryButton.SetResourceReference(StyleProperty, "Button.Secondary");
-        CommandButtonPresentation.Apply(LibraryButton);
-        LibraryButton.MinWidth = 120;
-        LibraryButton.Click += (_, _) => CloseWith(WelcomeOutcome.Closed);
+        var preferences = new Grid();
+        preferences.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        preferences.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        preferences.Children.Add(StartAtSignInCheck);
+        Grid.SetColumn(linkText, 1);
+        preferences.Children.Add(linkText);
+        var footer = new Border
+        {
+            BorderThickness = new Thickness(0, 1, 0, 0), Padding = new Thickness(0, 16, 0, 0),
+            Margin = new Thickness(0, 28, 0, 0), Child = preferences,
+        };
+        footer.SetResourceReference(Border.BorderBrushProperty, "Border.Subtle");
 
-        var footer = new DockPanel { Margin = new Thickness(0, 20, 0, 0), LastChildFill = false };
-        DockPanel.SetDock(LibraryButton, Dock.Right);
-        footer.Children.Add(LibraryButton);
-        footer.Children.Add(linkText);
-
-        var root = new StackPanel { Margin = new Thickness(24, 20, 24, 24) };
-        root.Children.Add(steps);
+        var root = new StackPanel { Margin = new Thickness(24, 28, 24, 20) };
+        root.Children.Add(title);
+        root.Children.Add(captureKeys);
+        root.Children.Add(actions);
         root.Children.Add(footer);
         Content = root;
         Loaded += (_, _) => TryNowButton.Focus();
@@ -125,39 +126,15 @@ internal sealed class WelcomeWindow : Window
 
     internal Button TryNowButton { get; }
 
-    internal Button LibraryButton { get; }
+    internal Button SkipButton { get; }
 
     internal Hyperlink ShortcutsLink { get; }
-
-    /// <summary>The second step's sentence, as the after-capture setting makes it true.</summary>
-    internal string AfterCaptureText { get; }
-
-    /// <summary>The second step's retention sentence, as the library's image retention makes it true.</summary>
-    internal string RetentionText { get; }
 
     /// <summary>"Start MyCapture when I sign in to Windows", checked by default.</summary>
     internal CheckBox StartAtSignInCheck { get; }
 
     /// <summary>The start-at-sign-in choice the window closes with.</summary>
     internal bool StartAtSignIn => StartAtSignInCheck.IsChecked == true;
-
-    /// <summary>
-    /// "Images are deleted after {retention} unless kept or filed in a folder", with the
-    /// retention the library really applies (clamped to the accepted range).
-    /// </summary>
-    internal static string RetentionSentence(int imageRetentionHours)
-    {
-        int hours = (int)CaptureRetention.TimeToLive(new QueueSettings { ImageRetentionHours = imageRetentionHours }).TotalHours;
-        return UiText.Format("Onboard_RetentionNotice", MyCapture.App.Settings.SettingsUxText.Duration(hours));
-    }
-
-    /// <summary>What happens to every capture, worded for the after-capture setting.</summary>
-    internal static string AfterCaptureSentence(AfterCaptureAction action) => UiText.Get(action switch
-    {
-        AfterCaptureAction.QuickAccess => "Onboard_AfterCaptureQuickAccess",
-        AfterCaptureAction.ClipboardOnly => "Onboard_AfterCaptureClipboard",
-        _ => "Onboard_AfterCaptureEditor",
-    });
 
     /// <summary>A capture shortcut pressed while the welcome is open closes it without opening anything.</summary>
     internal void DismissForCapture()
@@ -172,184 +149,32 @@ internal sealed class WelcomeWindow : Window
         Close();
     }
 
-    private static FrameworkElement Step(int number, FrameworkElement illustration, string title, FrameworkElement body,
-        FrameworkElement? action)
+    private static FrameworkElement CaptureKeys(Hotkey capture)
     {
-        var grid = new Grid();
-        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-
-        var badge = new Border
+        if (!capture.IsAssigned)
         {
-            Width = 22, Height = 22, CornerRadius = new CornerRadius(11), BorderThickness = new Thickness(1.5),
-            HorizontalAlignment = HorizontalAlignment.Left, VerticalAlignment = VerticalAlignment.Top,
-            Margin = new Thickness(-6, -6, 0, 0),
-            Child = new TextBlock
-            {
-                Text = number.ToString(System.Globalization.CultureInfo.InvariantCulture), FontSize = 12,
-                FontWeight = FontWeights.SemiBold, HorizontalAlignment = HorizontalAlignment.Center,
-                VerticalAlignment = VerticalAlignment.Center,
-            },
-        };
-        badge.SetResourceReference(Border.BackgroundProperty, "Surface.Base");
-        badge.SetResourceReference(Border.BorderBrushProperty, "Accent.Cool");
-        AutomationProperties.SetName(badge, UiText.Format("Onboard_StepNumber", number));
-        var picture = new Grid { Width = 104, Height = 76, Margin = new Thickness(0, 0, 16, 0), VerticalAlignment = VerticalAlignment.Top };
-        picture.Children.Add(illustration);
-        picture.Children.Add(badge);
-        grid.Children.Add(picture);
-
-        var text = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
-        var heading = new TextBlock { Text = title, FontSize = 15, FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 0, 0, 6) };
-        text.Children.Add(heading);
-        text.Children.Add(body);
-        Grid.SetColumn(text, 1);
-        grid.Children.Add(text);
-        if (action is not null)
-        {
-            action.Margin = new Thickness(12, 0, 0, 0);
-            Grid.SetColumn(action, 2);
-            grid.Children.Add(action);
+            var unassigned = new TextBlock { Text = UiText.Get("Hotkey.Unassigned"), FontSize = 16, MinHeight = 52,
+                TextAlignment = TextAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
+            unassigned.SetResourceReference(TextBlock.ForegroundProperty, "Text.Secondary");
+            AutomationProperties.SetName(unassigned, unassigned.Text);
+            return unassigned;
         }
 
-        var card = new Border
+        var keys = (WrapPanel)ShortcutHelpWindow.Keycaps(capture.ToString());
+        foreach (Border cap in keys.Children.OfType<Border>())
         {
-            Padding = new Thickness(14), CornerRadius = new CornerRadius(10), BorderThickness = new Thickness(1), Child = grid,
-            Margin = new Thickness(0, number == 1 ? 0 : 10, 0, 0),
-        };
-        card.SetResourceReference(Border.BackgroundProperty, "Surface.Raised");
-        card.SetResourceReference(Border.BorderBrushProperty, "Border.Subtle");
-        AutomationProperties.SetName(card, UiText.Format("Onboard_StepNumber", number) + " · " + title);
-        return card;
-    }
-
-    private static TextBlock Sentence(string text)
-    {
-        var block = new TextBlock { TextWrapping = TextWrapping.Wrap, FontSize = 13 };
-        KoreanWordWrap.SetText(block, text);
-        block.SetResourceReference(TextBlock.ForegroundProperty, "Text.Secondary");
-        return block;
-    }
-
-    /// <summary>A screen with a window and an accent selection being dragged over part of it.</summary>
-    private static FrameworkElement CaptureIllustration()
-    {
-        Canvas canvas = Tile();
-        Add(canvas, Rounded(10, 10, 84, 56, 4, "Surface.Base", "Border.Strong", 1));
-        Add(canvas, Rounded(18, 18, 46, 32, 2, "Surface.Overlay", "Border.Subtle", 1));
-        var selection = new Rectangle { Width = 40, Height = 26, StrokeThickness = 1.5, StrokeDashArray = [3, 2] };
-        selection.SetResourceReference(Shape.StrokeProperty, "Accent.Cool");
-        Canvas.SetLeft(selection, 44);
-        Canvas.SetTop(selection, 30);
-        canvas.Children.Add(selection);
-        Add(canvas, Glyph(RegionGlyph, 76, 48, 20, "Accent.Cool"));
-        return Frame(canvas);
-    }
-
-    /// <summary>Clipboard, library and the next stop (editor, quick card or nothing) left to right.</summary>
-    private static FrameworkElement AfterCaptureIllustration(AfterCaptureAction action)
-    {
-        Canvas canvas = Tile();
-        string? third = action switch
-        {
-            AfterCaptureAction.QuickAccess => "Icon.Image",
-            AfterCaptureAction.ClipboardOnly => null,
-            _ => "Icon.Edit",
-        };
-        string[] icons = third is null ? ["Icon.Copy", "Icon.Storage"] : ["Icon.Copy", "Icon.Storage", third];
-        double width = (icons.Length * 22) + ((icons.Length - 1) * 10);
-        double x = (104 - width) / 2;
-        for (int i = 0; i < icons.Length; i++)
-        {
-            var glyph = new SymbolIcon { Size = SymbolIcon.CommandSize };
-            glyph.SetResourceReference(SymbolIcon.DataProperty, icons[i]);
-            glyph.SetResourceReference(SymbolIcon.StrokeProperty, i == icons.Length - 1 ? "Accent.Cool" : "Text.Primary");
-            Canvas.SetLeft(glyph, x);
-            Canvas.SetTop(glyph, 27);
-            canvas.Children.Add(glyph);
-            if (i < icons.Length - 1)
+            cap.MinWidth = 52;
+            cap.MinHeight = 52;
+            cap.Padding = new Thickness(14, 10, 14, 10);
+            cap.Margin = new Thickness(3, 2, 3, 2);
+            if (cap.Child is TextBlock label)
             {
-                var dot = new Ellipse { Width = 3, Height = 3 };
-                dot.SetResourceReference(Shape.FillProperty, "Text.Muted");
-                Canvas.SetLeft(dot, x + 25.5);
-                Canvas.SetTop(dot, 36.5);
-                canvas.Children.Add(dot);
+                label.FontSize = 22;
+                label.HorizontalAlignment = HorizontalAlignment.Center;
+                label.VerticalAlignment = VerticalAlignment.Center;
             }
-            x += 32;
         }
-        return Frame(canvas);
-    }
-
-    /// <summary>The right end of a taskbar: the ^ for hidden icons and the MyCapture icon ringed in accent.</summary>
-    private static FrameworkElement TrayIllustration()
-    {
-        Canvas canvas = Tile();
-        Add(canvas, Rounded(6, 46, 92, 22, 3, "Surface.Sunken", "Border.Subtle", 1));
-        var chevron = new Path { Data = Geometry.Parse("M0,5 L4.5,0 L9,5"), StrokeThickness = 1.6,
-            StrokeStartLineCap = PenLineCap.Round, StrokeEndLineCap = PenLineCap.Round };
-        chevron.SetResourceReference(Shape.StrokeProperty, "Text.Primary");
-        Canvas.SetLeft(chevron, 44);
-        Canvas.SetTop(chevron, 54);
-        canvas.Children.Add(chevron);
-        var ring = new Ellipse { Width = 20, Height = 20, StrokeThickness = 1.6 };
-        ring.SetResourceReference(Shape.StrokeProperty, "Accent.Cool");
-        Canvas.SetLeft(ring, 58);
-        Canvas.SetTop(ring, 47);
-        canvas.Children.Add(ring);
-        var icon = new Image { Width = 16, Height = 16, IsHitTestVisible = false };
-        icon.SetResourceReference(Image.SourceProperty, "Brand.Mark16");
-        Canvas.SetLeft(icon, 60);
-        Canvas.SetTop(icon, 49);
-        canvas.Children.Add(icon);
-        for (int i = 0; i < 2; i++)
-        {
-            var line = new Rectangle { Width = 10, Height = 2, RadiusX = 1, RadiusY = 1 };
-            line.SetResourceReference(Shape.FillProperty, "Text.Muted");
-            Canvas.SetLeft(line, 82);
-            Canvas.SetTop(line, 52 + (i * 6));
-            canvas.Children.Add(line);
-        }
-        var pointer = new Path { Data = Geometry.Parse("M0,0 L0,11 L3,8 L5.5,12.5 L7,11.8 L4.8,7.4 L8.5,7.4 Z"), StrokeThickness = 1 };
-        pointer.SetResourceReference(Shape.FillProperty, "Text.Primary");
-        pointer.SetResourceReference(Shape.StrokeProperty, "Surface.Base");
-        Canvas.SetLeft(pointer, 71);
-        Canvas.SetTop(pointer, 30);
-        canvas.Children.Add(pointer);
-        return Frame(canvas);
-    }
-
-    private static Canvas Tile() => new() { Width = 104, Height = 76, ClipToBounds = true };
-
-    private static FrameworkElement Frame(Canvas canvas)
-    {
-        var frame = new Border { CornerRadius = new CornerRadius(8), BorderThickness = new Thickness(1), Child = canvas };
-        frame.SetResourceReference(Border.BackgroundProperty, "Surface.Overlay");
-        frame.SetResourceReference(Border.BorderBrushProperty, "Border.Subtle");
-        frame.IsHitTestVisible = false;
-        return frame;
-    }
-
-    private static void Add(Canvas canvas, FrameworkElement element) => canvas.Children.Add(element);
-
-    private static FrameworkElement Rounded(double x, double y, double width, double height, double radius,
-        string fill, string stroke, double thickness)
-    {
-        var rect = new Rectangle { Width = width, Height = height, RadiusX = radius, RadiusY = radius, StrokeThickness = thickness };
-        rect.SetResourceReference(Shape.FillProperty, fill);
-        rect.SetResourceReference(Shape.StrokeProperty, stroke);
-        Canvas.SetLeft(rect, x);
-        Canvas.SetTop(rect, y);
-        return rect;
-    }
-
-    private static FrameworkElement Glyph(Geometry geometry, double x, double y, double size, string stroke)
-    {
-        var path = new SymbolIcon { Size = size, Data = geometry };
-        path.SetResourceReference(SymbolIcon.StrokeProperty, stroke);
-        Canvas.SetLeft(path, x);
-        Canvas.SetTop(path, y);
-        return path;
+        return keys;
     }
 
     protected override void OnPreviewKeyDown(KeyEventArgs e)

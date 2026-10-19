@@ -117,12 +117,12 @@ internal sealed partial class OcrResultWindow
         headerStyle.Setters.Add(new Setter(Control.FontWeightProperty, FontWeights.SemiBold));
         _tableGrid.ColumnHeaderStyle = headerStyle;
         var cellStyle = new Style(typeof(DataGridCell));
-        cellStyle.Setters.Add(new Setter(Control.BorderThicknessProperty, new Thickness(1)));
+        cellStyle.Setters.Add(new Setter(Control.BorderThicknessProperty, new Thickness(2)));
         cellStyle.Setters.Add(new Setter(Control.BorderBrushProperty, Brushes.Transparent));
         cellStyle.Setters.Add(new Setter(Control.ForegroundProperty, new DynamicResourceExtension("Text.Primary")));
         var selectedCell = new Trigger { Property = DataGridCell.IsSelectedProperty, Value = true };
-        selectedCell.Setters.Add(new Setter(Control.BackgroundProperty, new DynamicResourceExtension("Accent.Subtle")));
-        selectedCell.Setters.Add(new Setter(Control.BorderBrushProperty, new DynamicResourceExtension("Accent.Default")));
+        selectedCell.Setters.Add(new Setter(Control.BackgroundProperty, new DynamicResourceExtension("Surface.Selected")));
+        selectedCell.Setters.Add(new Setter(Control.BorderBrushProperty, new DynamicResourceExtension("Text.Primary")));
         cellStyle.Triggers.Add(selectedCell);
         _tableGrid.CellStyle = cellStyle;
         _tableGrid.SetResourceReference(Control.BackgroundProperty, "Surface.Sunken");

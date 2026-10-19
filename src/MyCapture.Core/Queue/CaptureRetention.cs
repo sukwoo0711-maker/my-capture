@@ -3,8 +3,9 @@ using MyCapture.Core.Settings;
 namespace MyCapture.Core.Queue;
 
 /// <summary>
-/// Gallery image time-to-live. The shipped default is seven days (168 hours);
-/// videos and pinned/leased records are never expired by this policy.
+/// Gallery image time-to-live. The legacy fallback is seven days (168 hours);
+/// new installations use <see cref="NeverHours"/> through <see cref="NewInstallDefaults"/>.
+/// Videos and pinned/leased records are never expired by this policy.
 /// </summary>
 public static class CaptureRetention
 {

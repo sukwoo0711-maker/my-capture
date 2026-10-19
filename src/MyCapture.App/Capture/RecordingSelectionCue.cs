@@ -30,5 +30,5 @@ internal static class RecordingSelectionCue
         return brush;
     }
 
-    internal static Brush Resolve() => Create(ThemeService.Current, SystemParameters.HighContrast);
+    internal static Brush Resolve() => Create(ThemeService.EffectiveTheme, ThemeService.IsSystemHighContrast);
 }

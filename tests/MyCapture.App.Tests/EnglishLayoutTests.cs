@@ -69,16 +69,18 @@ public sealed class EnglishLayoutTests
             window.UpdateLayout();
             Grid layout = Assert.IsType<Grid>(window.Content);
             Assert.DoesNotMatch("[가-힣]", window.Title);
-            Border preview = Descendants(layout).OfType<Border>().Single(child => child.Child is Grid panel && panel.Children.OfType<Grid>().Any(grid => grid.Name == "VideoPreviewViewport"));
-            Border status = layout.Children.OfType<Border>().Single(b => Grid.GetRow(b) == 3);
+            Border preview = Descendants(layout).OfType<Border>().Single(child => child.Child is Grid panel && panel.Name == "VideoPreviewViewport");
+            Border status = layout.Children.OfType<Border>().Single(b => Grid.GetRow(b) == 4);
             Assert.True(preview.ActualHeight >= 112);
             Grid viewport = Descendants(preview).OfType<Grid>().Single(grid => grid.Name == "VideoPreviewViewport");
             Assert.True(viewport.ActualHeight >= 112, "The actual video viewport must retain usable height");
             Assert.InRange(viewport.TranslatePoint(new Point(0, viewport.ActualHeight), preview).Y, 0, preview.ActualHeight + 0.5);
             ScrollViewer timeline = Assert.Single(layout.Children.OfType<ScrollViewer>());
-            Assert.True(timeline.ActualHeight <= layout.RowDefinitions[2].ActualHeight + 0.5,
+            Assert.True(timeline.ActualHeight <= layout.RowDefinitions[3].ActualHeight + 0.5,
                 "Timeline contents must scroll within the space allocated by the window");
             Assert.InRange(timeline.ViewportHeight, 0, timeline.ActualHeight + 0.5);
+            window.SetDetailsExpandedForTest(true);
+            window.UpdateLayout();
             foreach (string key in new[] { "Video.TrimIn", "Video.TrimOut" })
             {
                 TextBox input = Assert.Single(Descendants(layout).OfType<TextBox>(),
@@ -118,9 +120,10 @@ public sealed class EnglishLayoutTests
             }
             // The connector belongs to the detailed timeline, which is folded by default so the
             // trim timeline comes first; open it to check its hint, then fold it again.
-            var detailToggle = Assert.Single(Descendants(layout).OfType<System.Windows.Controls.Primitives.ToggleButton>(),
-                toggle => AutomationProperties.GetName(toggle) == UiText.Get("VideoEditorUx_DetailTimeline"));
-            detailToggle.IsChecked = true;
+            // The inspector now reserves a separate column. Its narrow timeline intentionally
+            // omits this optional hint, so check the English glyphs at the default full width.
+            window.SetDetailsExpandedForTest(false);
+            window.TimelineForTest.SetDetailVisible(true);
             window.UpdateLayout();
             var connector = Assert.Single(Descendants(layout).OfType<TimelineRenderSurface>(), surface => !surface.IsHitTestVisible);
             Assert.True(connector.IsVisible, "Opening the detailed timeline must show its connector hint");
@@ -137,14 +140,16 @@ public sealed class EnglishLayoutTests
             Assert.NotEmpty(glyphs);
             Assert.All(glyphs, glyph => Assert.True(hintBackground.Bounds.Contains(glyph.Bounds),
                 $"Connector glyphs {glyph.Bounds} must fit their padded background {hintBackground.Bounds}."));
-            detailToggle.IsChecked = false;
+            window.TimelineForTest.SetDetailVisible(false);
+            window.SetDetailsExpandedForTest(true);
             window.UpdateLayout();
             Button[] buttons = Descendants(layout).OfType<Button>().ToArray();
             // The layer panel's separate "Edit properties" button repeated the edit icon (F2)
             // above the list, so it was removed with the duplicated properties summary.
-            foreach (string caption in new[] { "Add layer", "Save to library", "Export · MP4 / GIF" })
+            foreach (string key in new[] { "Video.AddLayer", "MediaExport_SaveEdits", "MediaExport_ExportFormats" })
             {
-                Button button = Assert.Single(buttons, b => Equals(b.Content, caption) || Descendants(b).OfType<TextBlock>().Any(t => t.Text == caption));
+                string caption = UiText.Get(key);
+                Button button = Assert.Single(buttons, b => AutomationProperties.GetName(b) == caption);
                 Assert.False(string.IsNullOrWhiteSpace(AutomationProperties.GetName(button)), caption);
                 Assert.NotNull(button.ToolTip);
                 if (!button.IsVisible && caption == UiText.Get("MediaExport_ExportFormats"))
@@ -164,27 +169,25 @@ public sealed class EnglishLayoutTests
             {
                 "Text_AEB8B9AA4E6F", "Text_9163C86EDB22", // selected layer edit/delete
                 "Text_DC710AA11970", "Text_E166B75FADF4", "Text_9A9C87658130", "Text_E5CAF7CFC916", "Text_DFCA22AB9F61", // transport
-                "Text_B39342508541", "Text_B753165F6585", "Text_48D137437347", "Text_C5176D8C3041", "Text_6CA53DEDFF4A", // frames and zoom
+                "Text_B39342508541", "Text_B753165F6585", // frames
             })
             {
                 Button action = Assert.Single(buttons, button => AutomationProperties.GetName(button) == UiText.Get(key));
                 Assert.NotNull(action.ToolTip);
-                if (!action.IsVisible)
-                {
-                    Assert.Contains(key, new[] { "Text_48D137437347", "Text_C5176D8C3041", "Text_6CA53DEDFF4A" });
-                    Button more = Assert.Single(buttons, button => button.Name == "VideoTimelineMoreTools");
-                    MenuItem item = Assert.Single(more.ContextMenu!.Items.OfType<MenuItem>(), candidate =>
-                        AutomationProperties.GetName(candidate) == UiText.Get(key));
-                    Assert.Equal(Visibility.Visible, item.Visibility);
-                    Assert.NotNull(item.ToolTip);
-                    Assert.Equal(action.IsEnabled, item.IsEnabled);
-                    action = more;
-                }
                 Assert.True(action.IsVisible && action.ActualWidth >= 36 && action.ActualHeight >= 36);
                 AssertReachableInScrollViewport(action, window);
                 Point bottom = action.TranslatePoint(new Point(action.ActualWidth, action.ActualHeight), layout);
                 Assert.InRange(bottom.X, 0, layout.ActualWidth + 0.5);
                 Assert.InRange(bottom.Y, 0, layout.ActualHeight + 0.5);
+            }
+            Button moreTools = Assert.Single(buttons, button => button.Name == "VideoMoreTools");
+            foreach (string key in new[] { "Text_48D137437347", "Text_C5176D8C3041", "Text_6CA53DEDFF4A" })
+            {
+                MenuItem item = Assert.Single(moreTools.ContextMenu!.Items.OfType<MenuItem>(), candidate =>
+                    AutomationProperties.GetName(candidate) == UiText.Get(key));
+                Assert.Equal(Visibility.Visible, item.Visibility);
+                Assert.True(item.IsEnabled);
+                Assert.NotNull(item.ToolTip);
             }
             var bitmap = new RenderTargetBitmap((int)layout.ActualWidth, (int)layout.ActualHeight, 96, 96, PixelFormats.Pbgra32);
             bitmap.Render(layout);

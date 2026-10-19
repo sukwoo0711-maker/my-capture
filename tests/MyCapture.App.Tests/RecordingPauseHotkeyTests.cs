@@ -138,7 +138,7 @@ public sealed class RecordingPauseHotkeyTests : KoreanCaptionTest
                 PumpUntil(() => controls.IsPaused && !controls.IsPauseTransitionPending);
                 Assert.True(controls.IsRecording);
                 Assert.True(pause.IsEnabled);
-                Assert.Equal("재개", RecordingControlWindow.ButtonLabel(pause));
+                Assert.IsType<MyCapture.App.Themes.SymbolIcon>(pause.Content);
                 Assert.Equal("녹화 재개", AutomationProperties.GetName(pause));
                 Assert.StartsWith("일시 정지됨", status.Text, StringComparison.Ordinal);
                 Assert.Equal(status.Text, AutomationProperties.GetName(status));
@@ -165,7 +165,7 @@ public sealed class RecordingPauseHotkeyTests : KoreanCaptionTest
                 Assert.True(recorder.IsPaused);
                 PumpUntil(() => !controls.IsPaused && !controls.IsPauseTransitionPending);
                 Assert.False(recorder.IsPaused);
-                Assert.Equal("일시 정지", RecordingControlWindow.ButtonLabel(pause));
+                Assert.IsType<MyCapture.App.Themes.SymbolIcon>(pause.Content);
                 Assert.Equal("녹화 일시 정지", AutomationProperties.GetName(pause));
                 Assert.Equal(string.Empty, AutomationProperties.GetItemStatus(frame));
                 Assert.IsNotType<LinearGradientBrush>(frame.BorderBrush);

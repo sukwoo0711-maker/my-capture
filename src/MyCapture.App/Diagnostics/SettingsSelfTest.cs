@@ -169,8 +169,8 @@ internal static class SettingsSelfTest
                 string[] themeTags = themeSelector!.Items.OfType<ComboBoxItem>()
                     .Select(item => item.Tag as string ?? string.Empty)
                     .ToArray();
-                Check(report, "Theme selector lists glass, workspace, light, and contrast palettes",
-                    themeTags is ["glass", "glass-light", "workspace", "daylight", "midnight", "high-contrast"]);
+                Check(report, "Theme selector lists system, light, dark, and contrast palettes",
+                    themeTags is ["system", "glass-light", "glass", "high-contrast"]);
                 Check(report, "Theme selector defaults to glass",
                     Equals(themeSelector.SelectedValue, "glass"));
 
@@ -197,7 +197,7 @@ internal static class SettingsSelfTest
             static ThemeColor Opaque(ThemeColor color) => ThemeColor.Rgb(color.R, color.G, color.B);
             foreach (AppTheme theme in Enum.GetValues<AppTheme>())
             {
-                IReadOnlyDictionary<string, ThemeColor> colors = ThemeCatalog.ColorsFor(theme);
+                IReadOnlyDictionary<string, ThemeColor> colors = ThemeCatalog.ColorsFor(ThemeService.ResolveTheme(theme));
                 bool readable =
                     ThemeContrast.Ratio(colors["Text.Primary"], Opaque(colors["Surface.Base"])) >= 4.5
                     && ThemeContrast.Ratio(colors["Text.Secondary"], Opaque(colors["Surface.Raised"])) >= 4.5

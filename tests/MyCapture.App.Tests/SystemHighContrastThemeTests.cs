@@ -79,7 +79,7 @@ public sealed class SystemHighContrastThemeTests
         Assert.Same(resources["Accent.Folder"], resources["Border.FolderHover"]);
         Assert.Same(resources["Surface.Hover"], resources["Surface.FolderHoverWash"]);
         bool appContrast = theme == AppTheme.HighContrast;
-        Assert.Equal(new Thickness(appContrast ? 2 : 1), (Thickness)resources["Focus.RingThickness"]);
+        Assert.Equal(new Thickness(2), (Thickness)resources["Focus.RingThickness"]);
         Assert.Equal(ToColor(ThemeCatalog.ColorsFor(theme)["Surface.Raised"]), ((SolidColorBrush)consumer.Background).Color);
         if (!appContrast) Assert.Same(shadow, consumer.Effect);
     });
@@ -135,7 +135,7 @@ public sealed class SystemHighContrastThemeTests
         Color restored = ((SolidColorBrush)chrome.BorderBrush).Color;
         Assert.Contains(Enum.GetValues<AppTheme>(), palette => ToColor(ThemeCatalog.ColorsFor(palette)["Border.Control"]) == restored);
         Assert.NotEqual(NightSky[SystemColorRole.ButtonText], restored);
-        Assert.Equal(new Thickness(ThemeService.Current == AppTheme.HighContrast ? 2 : 1), ring.BorderThickness);
+        Assert.Equal(new Thickness(2), ring.BorderThickness);
     });
 
     [Fact]

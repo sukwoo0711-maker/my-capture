@@ -11,7 +11,7 @@ namespace MyCapture.Core.Tests;
 public sealed class AccentColorTests(ITestOutputHelper output)
 {
     [Fact]
-    public void NewSettingsAndResetUseRedAndExplicitVioletRemainsViolet()
+    public void NewSettingsResetAndLegacyVioletUseFixedRed()
     {
         Assert.Equal(AppAccentNames.Red, new GeneralSettings().AccentColor);
         Assert.Equal(AppAccentNames.Red, NewInstallDefaults.Create().General.AccentColor);
@@ -21,7 +21,7 @@ public sealed class AccentColorTests(ITestOutputHelper output)
         Assert.True(draft.HasUnappliedChanges);
         Assert.Equal(AppAccent.Red, AppAccentNames.Parse(null));
         Assert.Equal(AppAccent.Red, AppAccentNames.Parse("unknown"));
-        Assert.Equal(AppAccent.Violet, AppAccentNames.Parse("Violet"));
+        Assert.Equal(AppAccent.Red, AppAccentNames.Parse("Violet"));
         Assert.Equal(AppAccentNames.Red, AppAccentNames.ToSetting((AppAccent)99));
     }
 
@@ -46,9 +46,9 @@ public sealed class AccentColorTests(ITestOutputHelper output)
     [Theory]
     [InlineData(null, "red")]
     [InlineData("unknown", "red")]
-    [InlineData("Violet", "violet")]
+    [InlineData("Violet", "red")]
     [InlineData("Red", "red")]
-    public void LoadPreservesExplicitChoiceAndUsesRedForAbsentOrUnknown(string? accent, string expected)
+    public void LoadCanonicalizesLegacyAccentToRed(string? accent, string expected)
     {
         string root = TestRecycleBin.CreateTempSubdirectory("mc-accent-load-").FullName;
         var paths = AppPaths.CreateForRoot(root);
@@ -85,20 +85,11 @@ public sealed class AccentColorTests(ITestOutputHelper output)
             foreach (ThemeColor backdrop in backdrops)
             {
                 ThemeColor composite = ThemeContrast.Composite(colors[surface], backdrop);
-                if (accent == AppAccent.Red)
-                    Check(colors["Accent.Cool"], composite, 4.5, $"{theme}/{accent} foreground on {surface}");
-                else
-                {
-                    double legacy = ThemeContrast.RatioOverBackdrop(ThemeCatalog.ColorsFor(theme)["Accent.Cool"],
-                        ThemeCatalog.ColorsFor(theme)[surface], backdrop);
-                    Assert.Equal(legacy, ThemeContrast.Ratio(colors["Accent.Cool"], composite));
-                    output.WriteLine($"{theme}/Violet foreground on {surface}: {legacy:F3}:1 (unchanged)");
-                }
+                Check(colors["Accent.Cool"], composite, 4.5, $"{theme}/{accent} foreground on {surface}");
                 Check(colors["Border.Focus"], composite, 3, $"{theme}/{accent} focus on {surface}");
             }
-            // Red also covers state surfaces and floating chrome. Violet's shipped colours
-            // are deliberately unchanged; its regression oracle below locks every old token.
-            if (accent != AppAccent.Red || theme == AppTheme.HighContrast) continue;
+            // Both old accent values now share the same neutral foreground and focus roles.
+            if (theme == AppTheme.HighContrast) continue;
             foreach (string surface in new[] { "Surface.Hover", "Surface.Pressed", "Surface.Sunken", "Surface.Floating" })
             foreach (ThemeColor backdrop in backdrops)
             {
@@ -110,7 +101,7 @@ public sealed class AccentColorTests(ITestOutputHelper output)
     }
 
     [Fact]
-    public void VioletReturnsEveryOriginalTokenAndHighContrastIgnoresAccent()
+    public void VioletAndRedReturnTheSameFixedPaletteAndHighContrastKeepsItsPalette()
     {
         foreach (AppTheme theme in Enum.GetValues<AppTheme>())
         {
@@ -138,7 +129,7 @@ public sealed class AccentColorTests(ITestOutputHelper output)
     [InlineData(null, "red")]
     [InlineData("unknown", "red")]
     [InlineData("RED", "red")]
-    [InlineData("violet", "violet")]
+    [InlineData("violet", "red")]
     public void ImportNormalizesMissingOrUnknownAccentWithoutChangingTheme(string? accent, string expected)
     {
         string root = TestRecycleBin.CreateTempSubdirectory("mc-accent-import-").FullName;
@@ -149,7 +140,7 @@ public sealed class AccentColorTests(ITestOutputHelper output)
         File.WriteAllText(import, "{\"general\":{\"theme\":\"daylight\",\"themeRevision\":1" + field + "}}");
         AppSettings settings = store.ImportFrom(import);
         Assert.Equal(expected, settings.General.AccentColor);
-        Assert.Equal(AppThemeNames.Daylight, settings.General.Theme);
+        Assert.Equal(AppThemeNames.GlassLight, settings.General.Theme);
         store.Save(settings);
         Assert.Equal(expected, store.Load().General.AccentColor);
         // Retain the isolated fixture; no real profile data or permanent cleanup.
@@ -165,7 +156,8 @@ public sealed class AccentColorTests(ITestOutputHelper output)
         Assert.Equal(AppAccentNames.Red, draft.AccentColor);
         Assert.False(draft.HasUnappliedChanges);
         draft.AccentColor = AppAccentNames.Violet;
-        Assert.True(draft.HasUnappliedChanges);
+        Assert.Equal(AppAccentNames.Red, draft.AccentColor);
+        Assert.False(draft.HasUnappliedChanges);
         draft.AccentColor = AppAccentNames.Red;
         Assert.False(draft.HasUnappliedChanges);
         store.Save(draft.ToAppSettings());
@@ -182,30 +174,22 @@ public sealed class AccentColorTests(ITestOutputHelper output)
     [Theory]
     [InlineData(AppAccentNames.Violet, AppAccentNames.Red)]
     [InlineData(AppAccentNames.Red, AppAccentNames.Violet)]
-    public void AccentChangesRemainUnappliedUntilReloadedAndRestoreTheSavedBaseline(string savedAccent, string editedAccent)
+    public void LegacyAccentAssignmentsCanonicalizeWithoutCreatingAnUnappliedChoice(string savedAccent, string editedAccent)
     {
         var saved = new AppSettings { General = { AccentColor = savedAccent } };
         var draft = new SettingsDraft(saved);
+        Assert.Equal(AppAccentNames.Red, draft.AccentColor);
         Assert.False(draft.HasUnappliedChanges);
-
         draft.AccentColor = editedAccent;
-        Assert.True(draft.HasUnappliedChanges);
+        Assert.Equal(AppAccentNames.Red, draft.AccentColor);
+        Assert.False(draft.HasUnappliedChanges);
         Assert.Equal(savedAccent, saved.General.AccentColor);
-
-        draft.AccentColor = savedAccent;
-        Assert.False(draft.HasUnappliedChanges);
-
         draft.ReplaceValues(new AppSettings { General = { AccentColor = editedAccent } });
-        Assert.True(draft.HasUnappliedChanges);
+        Assert.False(draft.HasUnappliedChanges);
         draft.LoadFrom(saved);
-        Assert.Equal(savedAccent, draft.AccentColor);
+        Assert.Equal(AppAccentNames.Red, draft.AccentColor);
         Assert.False(draft.HasUnappliedChanges);
-
-        draft.AccentColor = editedAccent;
-        draft.LoadFrom(draft.ToAppSettings());
-        Assert.False(draft.HasUnappliedChanges);
-        draft.AccentColor = savedAccent;
-        Assert.True(draft.HasUnappliedChanges);
+        Assert.Equal(AppAccentNames.Red, draft.ToAppSettings().General.AccentColor);
     }
 
     private void Check(ThemeColor foreground, ThemeColor background, double minimum, string pair)

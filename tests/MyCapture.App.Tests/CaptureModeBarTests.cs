@@ -44,7 +44,7 @@ public sealed class CaptureModeBarTests
             Render(view);
             CaptureModeBar bar = view.ModeBarForTest!;
             Assert.Equal(CaptureSelectorMode.Capture, view.Mode);
-            Assert.True(bar.CaptureButton.IsChecked);
+            Assert.True(bar.WindowButton.IsChecked);
             Assert.Equal("영역 선택", AutomationProperties.GetName(bar.CaptureButton));
 
             // Mouse or UI Automation: selecting the text button is the T key's text mode.
@@ -60,7 +60,7 @@ public sealed class CaptureModeBarTests
             // T from the keyboard goes back, and the bar shows it.
             view.RaiseEvent(Overlay.KeyArgs(Key.T));
             Assert.Equal(CaptureSelectorMode.Capture, view.Mode);
-            Assert.True(bar.CaptureButton.IsChecked);
+            Assert.True(bar.WindowButton.IsChecked);
 
             // Enter on a focused bar button presses it, like Space.
             KeyEventArgs enter = Overlay.KeyArgs(Key.Enter);
@@ -73,12 +73,12 @@ public sealed class CaptureModeBarTests
             Assert.Empty(view.StatusTextsForTest);
             Assert.Null(view.TargetTabForTest);
 
-            // From colour, T goes straight to text; the image button returns to capture.
+            // From colour, T goes straight to text; the region button returns to drag-only capture.
             view.RaiseEvent(Overlay.KeyArgs(Key.T));
             Assert.Equal(CaptureSelectorMode.Text, view.Mode);
             bar.CaptureButton.IsChecked = true;
             Assert.Equal(CaptureSelectorMode.Capture, view.Mode);
-            Assert.NotNull(view.HoverRegionForTest);
+            Assert.Null(view.HoverRegionForTest);
 
             // Arrows on a focused bar button are left to keyboard navigation along the bar.
             KeyEventArgs arrow = Overlay.KeyArgs(Key.Right);

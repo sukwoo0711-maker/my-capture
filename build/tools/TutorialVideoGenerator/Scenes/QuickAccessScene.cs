@@ -1,5 +1,6 @@
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Media;
@@ -39,6 +40,7 @@ internal sealed class QuickAccessScene : TutorialScene
     private readonly QuickAccessWindow _card;
     private readonly Border _cardRoot;
     private readonly Button _closeButton;
+    private readonly ToggleButton _keepButton;
     private Point _cardOrigin;
     private bool _cardClosed, _active, _noteActive, _pasted;
     private int _copies;
@@ -64,6 +66,8 @@ internal sealed class QuickAccessScene : TutorialScene
         Size size = Detached.Layout(_cardRoot, _card.Width);
         _closeButton = OffscreenWindow.Descendants(_cardRoot).OfType<Button>()
             .First(button => System.Windows.Automation.AutomationProperties.GetName(button) == UiText.Get("Dialog.Close"));
+        _keepButton = OffscreenWindow.Descendants(_cardRoot).OfType<ToggleButton>()
+            .Single(button => System.Windows.Automation.AutomationProperties.GetName(button) == UiText.Get("QuickAccess.KeepName"));
 
         // QuickAccessWindow.Position: beside the captured region inside the work area.
         RectD region = StageRegion;
@@ -73,7 +77,7 @@ internal sealed class QuickAccessScene : TutorialScene
     }
 
     internal override string Provenance =>
-        "Real QuickAccessWindow content (preview, Copy/Edit/Pin/Save/Copy text with their keys, Keep toggle, status line, countdown) laid out "
+        "Real QuickAccessWindow content (large preview, labeled Edit, icon actions, Keep open toggle, status line, countdown) laid out "
         + "detached; placed by QuickAccessWindow.Position, timed by Advance and driven by HandleShortcut. Copy calls a fake delegate "
         + "(no clipboard). The captured page, note app and taskbar are synthetic.";
 
@@ -87,6 +91,9 @@ internal sealed class QuickAccessScene : TutorialScene
         var story = new TutorialStoryboard(start);
         story.Motion("appear", 32, start, start);
         story.Hold("alt-q", 1.6);
+        Point keep = _keepButton.TranslatePoint(new Point(_keepButton.ActualWidth / 2, _keepButton.ActualHeight / 2), _cardRoot);
+        story.Move("keep-move", new PointD(_cardOrigin.X + keep.X, _cardOrigin.Y + keep.Y), 12)
+            .Click("keep-on").Hold("kept", 0.8).Click("keep-off");
         story.Hold("copy", 2.2);
         story.Move("note-move", NoteBody, 18).Click("note-click");
         story.Motion("paste-wait", 10, NoteBody, NoteBody);
@@ -128,6 +135,13 @@ internal sealed class QuickAccessScene : TutorialScene
             case "copy" when _copies == 0:
                 ShortcutDefinition copy = ShortcutCatalog.Get(ShortcutScope.QuickAccess, "Copy");
                 if (!_card.HandleShortcut(copy.Key, copy.Modifiers)) throw new InvalidOperationException($"{copy.Hint} did not run the card's Copy.");
+                break;
+            case "keep-on" when frame.IsLast:
+                _card.IsKept = true;
+                FocusLook.Apply(_closeButton, focused: false);
+                break;
+            case "keep-off" when frame.IsLast:
+                _card.IsKept = false;
                 break;
             case "note-click" when frame.IsLast:
                 // Clicking another app deactivates the card: keyboard access ends, the countdown resumes.
@@ -176,6 +190,7 @@ internal sealed class QuickAccessScene : TutorialScene
         "appear" => (L($"캡처하면 {Ui("QuickAccess.Title")} 카드가 나타남", "After a capture, the quick access card appears"), ""),
         "alt-q" => (L($"{Hint(ShortcutScope.QuickAccess, "Activate")}: 키보드로 카드 사용", $"{Hint(ShortcutScope.QuickAccess, "Activate")}: control the card from the keyboard"),
             Hint(ShortcutScope.QuickAccess, "Activate")),
+        "keep-move" or "keep-on" or "kept" or "keep-off" => (Ui("QuickAccess.KeepName"), ""),
         "copy" => (L($"{Hint(ShortcutScope.QuickAccess, "Copy")}: {Ui("QuickAccess.Copy")} · 카드에 {Ui("QuickAccess.Copied")} 표시",
             $"{Hint(ShortcutScope.QuickAccess, "Copy")}: {Ui("QuickAccess.Copy")} · the card shows {Ui("QuickAccess.Copied")}"), Hint(ShortcutScope.QuickAccess, "Copy")),
         "note-move" or "note-click" or "paste-wait" => (L("붙여 넣을 곳 클릭", "Click where to paste"), ""),

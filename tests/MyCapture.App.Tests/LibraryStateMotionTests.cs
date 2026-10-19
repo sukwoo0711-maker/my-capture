@@ -35,7 +35,7 @@ public sealed class LibraryStateMotionTests
             var focus = Assert.IsType<ShapePath>(button.Template.FindName("FocusRing", button));
             var drop = Assert.IsType<ShapePath>(button.Template.FindName("DropRing", button));
             var restBrush = Assert.IsType<SolidColorBrush>(theme["Surface.Folder"]);
-            var selectedBrush = Assert.IsType<SolidColorBrush>(theme["Accent.Subtle"]);
+            var selectedBrush = Assert.IsType<SolidColorBrush>(theme["Surface.Selected"]);
             Color restColor = restBrush.Color;
             Color selectedColor = selectedBrush.Color;
             Assert.Equal(MotionSpeed.Normal, FluidMotion.GetTransition(selected));

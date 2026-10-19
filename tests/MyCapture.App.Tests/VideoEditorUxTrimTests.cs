@@ -279,10 +279,11 @@ public sealed class VideoEditorUxTrimTests
             Assert.Equal("In", ShortcutCatalog.Match(ShortcutScope.Video, Key.I, ModifierKeys.None));
             Assert.Equal("Out", ShortcutCatalog.Match(ShortcutScope.Video, Key.O, ModifierKeys.None));
 
-            Button reset = Assert.Single(buttons, b => AutomationProperties.GetName(b) == UiText.Get("VideoEditorUx_ResetTrim"));
+            Button reset = Field<Button>(editor, "_resetTrimButton");
+            Assert.Equal(UiText.Get("VideoEditorUx_ResetTrim"), AutomationProperties.GetName(reset));
             Assert.False(string.IsNullOrWhiteSpace(AutomationProperties.GetHelpText(reset)));
             ToggleButton detail = Assert.Single(Descendants(layout).OfType<ToggleButton>(),
-                t => AutomationProperties.GetName(t) == UiText.Get("VideoEditorUx_DetailTimeline"));
+                t => t.Name == "VideoDetailsToggle");
             Assert.False(detail.IsChecked);
             Assert.False(editor.TimelineForTest.DetailVisible);
             Button play = Assert.Single(buttons, b => AutomationProperties.GetName(b) == UiText.Get("Text_9A9C87658130"));
@@ -297,7 +298,7 @@ public sealed class VideoEditorUxTrimTests
 
             // Zooming opens the folded detailed timeline.
             Assert.True(editor.HandleShortcut(Key.OemPlus, ModifierKeys.Control | ModifierKeys.Shift));
-            Assert.True(detail.IsChecked);
+            Assert.False(detail.IsChecked);
             Assert.True(editor.TimelineForTest.DetailVisible);
         }
         finally
@@ -319,6 +320,8 @@ public sealed class VideoEditorUxTrimTests
         try
         {
             editor = OpenReadyEditor(root, 10_000, show: true, width, height);
+            editor.SetDetailsExpandedForTest(true);
+            editor.UpdateLayout();
             var layout = (Grid)editor.Content;
             var client = (FrameworkElement)VisualTreeHelper.GetParent(layout);
             ScrollViewer tools = Assert.Single(layout.Children.OfType<ScrollViewer>());
@@ -326,9 +329,13 @@ public sealed class VideoEditorUxTrimTests
             FrameworkElement strip = TrimStrip(editor.TimelineForTest);
             AssertInside(strip, tools, tools.ViewportHeight);
             var bar = Assert.Single(Descendants(layout).OfType<Panel>(), panel => panel.Name == "VideoTrimBar");
+            ScrollViewer inspector = Assert.Single(Descendants(layout).OfType<ScrollViewer>(), viewer => viewer.Name == "VideoDetailsScroll");
+            var inspectorViewport = Assert.IsType<ScrollContentPresenter>(inspector.Template.FindName("PART_ScrollContentPresenter", inspector));
             foreach (FrameworkElement control in Descendants(bar).OfType<FrameworkElement>().Where(e => e is Button or TextBox))
             {
-                AssertInside(control, tools, tools.ViewportHeight);
+                control.BringIntoView();
+                editor.UpdateLayout();
+                AssertInside(control, inspectorViewport, inspector.ViewportHeight);
                 foreach (TextBlock text in Descendants(control).OfType<TextBlock>())
                     Assert.True(text.ActualWidth + 0.5 >= text.DesiredSize.Width - text.Margin.Left - text.Margin.Right,
                         $"clipped '{text.Text}' at {width}x{height}");
@@ -407,7 +414,7 @@ public sealed class VideoEditorUxTrimTests
             $"{element.GetType().Name} '{name}' {top}..{bottom} outside {container.ActualWidth}x{containerHeight}");
     }
 
-    private static void LoadTheme(Window window)
+    internal static void LoadTheme(Window window)
     {
         System.Xml.Linq.XElement? combined = null;
         foreach (string name in new[] { "Tokens", "Symbols", "Controls" })

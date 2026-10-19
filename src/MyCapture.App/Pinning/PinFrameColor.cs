@@ -4,10 +4,8 @@ using MyCapture.Core.Themes;
 namespace MyCapture.App.Pinning;
 
 /// <summary>
-/// The colour of a pin's one-DIP outline. The outline takes the accent's focus tone, the colour
-/// the capture selection a pin comes from is drawn in: partly transparent while the pin rests and
-/// opaque while the pointer is over it or the pin is the active window. A red accent therefore
-/// frames every pin in red, and a violet accent in violet.
+/// The colour of a pin's one-DIP outline. The dedicated brand tone identifies a MyCapture window
+/// over other apps: partly transparent at rest and opaque on hover or activation.
 /// </summary>
 /// <remarks>
 /// A contrast theme (the Windows one or the app's High contrast palette) keeps the system pair it
@@ -17,8 +15,8 @@ namespace MyCapture.App.Pinning;
 /// </remarks>
 internal static class PinFrameColor
 {
-    /// <summary>The token the outline follows: the accent's focus and selection tone.</summary>
-    internal const string AccentKey = "Border.Focus";
+    /// <summary>The dedicated brand outline token, independent of focus and selection.</summary>
+    internal const string AccentKey = "Pin.Frame";
 
     /// <summary>The token a contrast theme draws the resting outline with.</summary>
     internal const string NeutralKey = "Border.Subtle";

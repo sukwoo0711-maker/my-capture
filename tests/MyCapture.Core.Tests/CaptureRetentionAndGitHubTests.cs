@@ -110,12 +110,12 @@ public sealed class ThemeCatalogTests
     public void ParseAndRoundTripKnownIds()
     {
         Assert.Equal(AppTheme.Midnight, AppThemeNames.Parse(null));
-        Assert.Equal(AppTheme.Daylight, AppThemeNames.Parse("light"));
+        Assert.Equal(AppTheme.GlassLight, AppThemeNames.Parse("light"));
         Assert.Equal(AppTheme.HighContrast, AppThemeNames.Parse("high-contrast"));
         Assert.Equal(AppTheme.Glass, AppThemeNames.Parse("glass"));
         Assert.Equal(AppTheme.Glass, AppThemeNames.Parse("mica"));
         Assert.Equal(AppTheme.GlassLight, AppThemeNames.Parse("glass-light"));
-        Assert.Equal("daylight", AppThemeNames.ToSetting(AppTheme.Daylight));
+        Assert.Equal("glass-light", AppThemeNames.ToSetting(AppTheme.Daylight));
         Assert.Equal("glass", AppThemeNames.ToSetting(AppTheme.Glass));
         Assert.Contains("Surface.Base", ThemeCatalog.ColorsFor(AppTheme.Daylight).Keys);
         Assert.Contains("Surface.Badge", ThemeCatalog.ColorsFor(AppTheme.Daylight).Keys);

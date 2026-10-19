@@ -225,7 +225,7 @@ public sealed partial class SettingsThemePreviewTests
                 window.ImportLegacySettingsDraft(oldSettings);
                 SettingsDraft draft = DraftOf(window);
                 AppSettings candidate = window.LegacyApplyCandidate(draft.ToAppSettings());
-                Assert.Equal(AppThemeNames.Daylight, candidate.General.Theme);
+                Assert.Equal(AppThemeNames.GlassLight, candidate.General.Theme);
                 Assert.Equal(JsonSerializer.Serialize(current.Queue), JsonSerializer.Serialize(candidate.Queue));
                 Assert.Equal(current.Export.QuickSaveDirectoryOverride, candidate.Export.QuickSaveDirectoryOverride);
                 Assert.Equal(current.GitHub.Token, candidate.GitHub.Token);

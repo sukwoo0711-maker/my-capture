@@ -26,6 +26,15 @@ namespace MyCapture.App.Tests;
 
 public sealed class CaptureLibraryFirstTests
 {
+    [Fact]
+    public void CompletingWelcomeCaptureWithoutInitializedShellIsSafe() => StaTestHost.Run(() =>
+    {
+        var app = (App)RuntimeHelpers.GetUninitializedObject(typeof(App));
+        MethodInfo complete = typeof(App).GetMethod("CompleteWelcomeCaptureAnnouncement",
+            BindingFlags.Instance | BindingFlags.NonPublic)!;
+        Assert.Null(complete.Invoke(app, null));
+    });
+
     public static IEnumerable<object[]> CapturePathsAndModes() =>
         from path in new[] { "region", "window", "full", "repeat", "delay", "scroll" }
         from mode in Enum.GetValues<AfterCaptureAction>()

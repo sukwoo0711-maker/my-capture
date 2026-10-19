@@ -704,8 +704,7 @@ internal sealed class PinWindow : Window
 
     private void UpdateChromeColor(bool animate)
     {
-        // The accent at rest and stronger on hover or while active: a quiet cue that the pin is
-        // interactive, in the colour of the capture selection it came from.
+        // The dedicated brand outline is quiet at rest and stronger on hover or activation.
         bool contrast = ThemeService.IsSystemHighContrast || ThemeService.Current == Core.Themes.AppTheme.HighContrast;
         Color target = PinFrameColor.Resolve(
             (Brush?)GetValue(FrameAccentProperty),

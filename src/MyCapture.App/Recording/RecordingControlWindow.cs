@@ -5,9 +5,11 @@ using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Automation.Peers;
 using System.Windows.Controls;
+using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
+using System.Windows.Media.Animation;
 using System.Windows.Threading;
 using Microsoft.Extensions.Logging;
 using MyCapture.App.Capture;
@@ -47,9 +49,12 @@ internal sealed class RecordingControlWindow : Window
 
     // The palette has a compact, predictable width independent from the recorded image.
     // On an unusually narrow work area the Viewbox fits its controls instead of clipping them.
-    // The extra width over the pre-pause 460 DIPs keeps the status text readable once the
-    // pause button appears during recording.
+    // Preparation and finalisation keep room for their status. The running session uses a
+    // 204-DIP pill; a paused session adds room for its explicit non-colour state label.
     private const double MinStripWidth = 560.0;
+    private double CurrentStripWidth => CompactSession ? (_paused ? 224 : _timerText.Text.Length > 5 ? 224 : 204) : MinStripWidth;
+    private bool CompactSession => (_previewRecording || IsRecording) && _readyAnnounced
+        && !_stopping && !_completionPending && !_finished;
 
     // Wait for the in-flight frame to finish before marking the in-region clock as paused.
     private static readonly TimeSpan PauseParkTimeout = TimeSpan.FromSeconds(2);
@@ -89,6 +94,14 @@ internal sealed class RecordingControlWindow : Window
     private readonly Button _cancelButton;
     private readonly TextBlock _statusText;
     private readonly TextBlock _timerText;
+    private readonly SymbolIcon _recordingIndicator = new()
+    {
+        Size = 16,
+        StrokeThickness = 0,
+        Margin = new Thickness(0, 0, 6, 0),
+        VerticalAlignment = VerticalAlignment.Center,
+        Visibility = Visibility.Collapsed,
+    };
     private bool _showTime;
     private bool _showTimeAvailable = true;
     private ContextMenu? _moreMenu;
@@ -162,6 +175,8 @@ internal sealed class RecordingControlWindow : Window
         SourceInitialized += OnSourceInitialized;
         ContentRendered += OnContentRendered;
         DpiChanged += OnDpiChanged;
+        Loaded += OnMotionLoaded;
+        Unloaded += OnMotionUnloaded;
     }
 
     internal event EventHandler<RecordingResult>? RecordingFinished;
@@ -204,6 +219,7 @@ internal sealed class RecordingControlWindow : Window
     // The coordinator keeps this visible until gallery registration and editor startup finish.
     internal void ShowCompletionStatus(string text)
     {
+        _completionPending = true;
         Opacity = 1;
         _showTimeAvailable = false;
         _statusText.Text = text;
@@ -309,6 +325,9 @@ internal sealed class RecordingControlWindow : Window
     /// <summary>An icon and a short name on one bar button; the glyph takes the button's text colour.</summary>
     private static void SetButtonContent(Button button, Geometry? glyph, string label)
     {
+        button.Width = double.NaN;
+        CommandButtonPresentation.Apply(button, compact: true);
+        button.MinWidth = 108;
         if (glyph is null)
         {
             button.Content = label;
@@ -330,6 +349,18 @@ internal sealed class RecordingControlWindow : Window
         button.Content = panel;
     }
 
+    private static void SetIconContent(Button button, Geometry glyph)
+    {
+        var icon = new SymbolIcon { Size = 20, StrokeThickness = 0, Data = glyph };
+        icon.SetBinding(SymbolIcon.FillProperty,
+            new System.Windows.Data.Binding(nameof(Control.Foreground)) { Source = button });
+        button.Content = icon;
+        button.Width = button.MinWidth = 32;
+        button.Height = button.MinHeight = 32;
+        button.Padding = new Thickness(5);
+        button.Margin = new Thickness(0, 0, 2, 0);
+    }
+
     /// <summary>Before recording: ● and "start recording", the area's size and frame rate in the tooltip.</summary>
     private void ShowReadyPrimary()
     {
@@ -341,12 +372,15 @@ internal sealed class RecordingControlWindow : Window
     }
 
     /// <summary>Cancel exists only before recording: once recording runs, stop is the way out.</summary>
-    /// <summary>While recording: ■ Stop in the danger style and ❚❚ Pause; cancel leaves the bar.</summary>
+    /// <summary>While recording: icon-only stop and pause; cancel leaves the bar.</summary>
     private void ShowRecordingControls()
     {
-        SetButtonContent(_primaryButton, StopGlyph, UiText.Get("Onboard_RecordStop"));
+        SetIconContent(_primaryButton, StopGlyph);
         AutomationProperties.SetName(_primaryButton, UiText.Get("Text_74C6AEBB2B6D"));
-        _primaryButton.Style = TryStyle("Button.Danger");
+        _primaryButton.Style = TryStyle("Button.Ghost");
+        _primaryButton.ToolTip = $"{UiText.Get("Text_74C6AEBB2B6D")}  Esc\n{UiText.Get("RecordingStatus_StopHelp")}";
+        AutomationProperties.SetHelpText(_primaryButton, UiText.Get("RecordingStatus_StopHelp"));
+        AutomationProperties.SetAcceleratorKey(_primaryButton, "Esc");
         _pauseButton.Visibility = Visibility.Visible;
         _pauseButton.IsEnabled = true;
         UpdatePauseButton();
@@ -369,6 +403,7 @@ internal sealed class RecordingControlWindow : Window
         _statusText.Foreground = paused ? TryBrush("Text.Primary", Colors.White) : TryBrush("State.Danger", Colors.OrangeRed);
         AnnounceStatus(UiText.Get(paused ? "RecordingPause_StatusHelp" : "RecordingStatus_StopHelp"));
         _timerText.Text = elapsed.ToString(@"mm\:ss", CultureInfo.InvariantCulture);
+        UpdateTimerAutomation();
         UpdateRegionFrameBrush(_regionFrame);
     }
 
@@ -400,7 +435,7 @@ internal sealed class RecordingControlWindow : Window
     {
         var frame = new AccessibleRegionFrame
         {
-            BorderBrush = TryBrush("Border.Accent", Color.FromRgb(0x7C, 0x6C, 0xFF)),
+            BorderBrush = TryBrush("Accent.Default", Colors.OrangeRed),
             BorderThickness = new Thickness(BorderThicknessPx),
             Background = Brushes.Transparent,
             CornerRadius = new CornerRadius(AllowsTransparency ? 2 : 0),
@@ -447,12 +482,11 @@ internal sealed class RecordingControlWindow : Window
         out Button cancel)
     {
         var panel = new Grid { Margin = new Thickness(10, 8, 10, 8) };
-        panel.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        panel.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        panel.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        panel.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        panel.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        panel.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        for (int column = 0; column < 7; column++)
+            panel.ColumnDefinitions.Add(new ColumnDefinition
+            {
+                Width = column == 2 ? new GridLength(1, GridUnitType.Star) : GridLength.Auto,
+            });
 
         // ● Start recording, then ■ Stop: an icon and a short name, the size and rate in the tooltip.
         primary = new Button
@@ -462,22 +496,20 @@ internal sealed class RecordingControlWindow : Window
             Style = TryStyle("Button.Primary"),
         };
         primary.Click += (_, _) => OnPrimaryClicked();
-        Grid.SetColumn(primary, 0);
-        panel.Children.Add(primary);
+        Grid.SetColumn(primary, 4);
 
         // Shown only while recording. A regular themed button keeps the theme's focus visual,
         // high-contrast colours and Space/Enter activation after Tab.
         pause = new Button
         {
-            MinWidth = 84,
-            Margin = new Thickness(8, 0, 0, 0),
+            MinWidth = 32,
+            Margin = new Thickness(0, 0, 2, 0),
             VerticalAlignment = VerticalAlignment.Center,
-            Style = TryStyle("Button.Secondary"),
+            Style = TryStyle("Button.Ghost"),
             Visibility = Visibility.Collapsed,
         };
         pause.Click += (_, _) => _ = TogglePause();
-        Grid.SetColumn(pause, 1);
-        panel.Children.Add(pause);
+        Grid.SetColumn(pause, 3);
 
         // Results only: empty before recording, then the recording state. The cell gets whatever
         // width the buttons leave, so it shows the state alone; how to resume or finish is in its
@@ -485,13 +517,12 @@ internal sealed class RecordingControlWindow : Window
         status = new TextBlock
         {
             VerticalAlignment = VerticalAlignment.Center,
-            Margin = new Thickness(12, 0, 12, 0),
+            Margin = new Thickness(0, 0, 8, 0),
             Foreground = TryBrush("Text.Secondary", Colors.LightGray),
             FontSize = 13,
             TextTrimming = TextTrimming.CharacterEllipsis,
         };
         Grid.SetColumn(status, 2);
-        panel.Children.Add(status);
 
         timer = new TextBlock
         {
@@ -502,16 +533,24 @@ internal sealed class RecordingControlWindow : Window
             FontFamily = TryFont("Font.Mono"),
             FontSize = 15,
         };
+        Typography.SetNumeralAlignment(timer, FontNumeralAlignment.Tabular);
+        Typography.SetNumeralStyle(timer, FontNumeralStyle.Lining);
         AutomationProperties.SetName(timer, UiText.Get("Text_F11BA21FB824"));
-        Grid.SetColumn(timer, 3);
+        Grid.SetColumn(_recordingIndicator, 0);
+        panel.Children.Add(_recordingIndicator);
+        Grid.SetColumn(timer, 1);
         panel.Children.Add(timer);
+        panel.Children.Add(status);
+        panel.Children.Add(pause);
+        panel.Children.Add(primary);
 
         // The time stamp option lives in the ⋯ menu instead of a check box on the bar.
         more = new Button
         {
-            MinWidth = 40,
-            Padding = new Thickness(6),
-            Margin = new Thickness(0, 0, 4, 0),
+            MinWidth = 32,
+            Width = 32,
+            Padding = new Thickness(5),
+            Margin = new Thickness(2, 0, 0, 0),
             VerticalAlignment = VerticalAlignment.Center,
             Style = TryStyle("Button.Ghost"),
             ToolTip = UiText.Get("Onboard_RecordMoreHelp"),
@@ -527,7 +566,7 @@ internal sealed class RecordingControlWindow : Window
         more.Click += (_, _) => OpenMoreMenu();
         AutomationProperties.SetName(more, UiText.Get("Onboard_RecordMore"));
         AutomationProperties.SetHelpText(more, UiText.Get("Onboard_RecordMoreHelp"));
-        Grid.SetColumn(more, 4);
+        Grid.SetColumn(more, 5);
         panel.Children.Add(more);
 
         // Before recording only; while recording, stop is the way out.
@@ -545,10 +584,16 @@ internal sealed class RecordingControlWindow : Window
             CommandButtonPresentation.Apply(command, compact: true);
             command.MinWidth = minimumWidth;
         }
+        more.Height = more.MinHeight = 32;
+        more.Padding = new Thickness(5);
+        more.Margin = new Thickness(2, 0, 0, 0);
         AutomationProperties.SetName(cancel, UiText.Get("Text_E1C96EF1EA0F"));
-        Grid.SetColumn(cancel, 5);
+        cancel.ToolTip = $"{UiText.Get("Text_E1C96EF1EA0F")}  Esc";
+        AutomationProperties.SetHelpText(cancel, (string)cancel.ToolTip);
+        AutomationProperties.SetAcceleratorKey(cancel, "Esc");
+        Grid.SetColumn(cancel, 6);
         panel.Children.Add(cancel);
-        Grid.SetColumnSpan(_completionProgress, 6);
+        Grid.SetColumnSpan(_completionProgress, 7);
         AutomationProperties.SetName(_completionProgress, UiText.Get("Text_C1767C4F1218"));
         panel.Children.Add(_completionProgress);
 
@@ -559,7 +604,7 @@ internal sealed class RecordingControlWindow : Window
                 : Background,
             BorderBrush = TryBrush("Border.Subtle", Color.FromRgb(0x2B, 0x3A, 0x50)),
             BorderThickness = new Thickness(1),
-            CornerRadius = new CornerRadius(AllowsTransparency ? 10 : 0),
+            CornerRadius = new CornerRadius(AllowsTransparency ? StripHeight / 2 : 0),
             Effect = AllowsTransparency ? Application.Current?.TryFindResource("Shadow.Floating") as System.Windows.Media.Effects.Effect : null,
             Child = new Viewbox
             {
@@ -642,7 +687,7 @@ internal sealed class RecordingControlWindow : Window
                 scale,
                 BorderThicknessPx,
                 StripHeight,
-                MinStripWidth);
+                CurrentStripWidth);
             // An excluded frame may sit inside the capture so full-screen edges remain visible.
             // Without exclusion keep every border pixel outside the source rectangle.
             RectD frameBox = IsRecording && _captureExclusionApplied ? _screenRegion : layout.FrameBounds;
@@ -671,6 +716,7 @@ internal sealed class RecordingControlWindow : Window
 
             _controlStrip.Width = stripBox.Width / scale;
             _controlStrip.Height = stripBox.Height / scale;
+            ((Border)((Viewbox)_controlStrip.Child).Child).Width = CurrentStripWidth - 2;
             Canvas.SetLeft(_controlStrip, (stripBox.Left - windowPixels.Left) / scale);
             Canvas.SetTop(_controlStrip, (stripBox.Top - windowPixels.Top) / scale);
 
@@ -868,12 +914,18 @@ internal sealed class RecordingControlWindow : Window
             if (!_paused)
             {
                 _statusText.Text = UiText.Get("Text_38B12BA58C48");
-                AnnounceStatus(UiText.Get("RecordingStatus_StopHelp"));
             }
+            // The first frame may arrive after Pause. Readiness still changes the compact layout,
+            // while the paused status and resume/stop guidance remain in place.
+            AnnounceStatus(UiText.Get(_paused ? "RecordingPause_StatusHelp" : "RecordingStatus_StopHelp"));
         }
         // Recorded time only: the timer holds still while paused, matching the clip length.
         TimeSpan elapsed = _recorder?.RecordedElapsed ?? TimeSpan.Zero;
-        _timerText.Text = elapsed.ToString(elapsed.TotalHours >= 1 ? @"h\:mm\:ss" : @"mm\:ss", CultureInfo.InvariantCulture);
+        string clock = elapsed.ToString(elapsed.TotalHours >= 1 ? @"h\:mm\:ss" : @"mm\:ss", CultureInfo.InvariantCulture);
+        bool widthChanged = _timerText.Text.Length != clock.Length;
+        _timerText.Text = clock;
+        UpdateTimerAutomation();
+        if (widthChanged) ApplyPhysicalLayout(positionHwnd: IsLoaded);
     }
 
     /// <summary>
@@ -1006,8 +1058,7 @@ internal sealed class RecordingControlWindow : Window
     private void UpdatePauseButton()
     {
         // ❚❚ Pause or ▶ Resume: the glyph shows what pressing it does.
-        SetButtonContent(_pauseButton, _paused ? ResumeGlyph : PauseGlyph,
-            UiText.Get(_paused ? "RecordingPause_Resume" : "RecordingPause_Pause"));
+        SetIconContent(_pauseButton, _paused ? ResumeGlyph : PauseGlyph);
         string help = UiText.Get(_paused ? "RecordingPause_ResumeHelp" : "RecordingPause_PauseHelp");
         // Read on every refresh so a chord changed in settings shows on the next state change;
         // an unassigned chord adds nothing.
@@ -1031,8 +1082,8 @@ internal sealed class RecordingControlWindow : Window
         frame.BorderBrush = _paused
             ? CreatePausedFrameBrush()
             : frame.IsKeyboardFocusWithin
-                ? TryBrush("Border.Focus", Color.FromRgb(0x97, 0x89, 0xFF))
-                : TryBrush("Border.Accent", Color.FromRgb(0x7C, 0x6C, 0xFF));
+                ? TryBrush("Border.Focus", Colors.White)
+                : TryBrush("Accent.Default", Colors.OrangeRed);
     }
 
     /// <summary>
@@ -1261,6 +1312,56 @@ internal sealed class RecordingControlWindow : Window
         AutomationProperties.SetName(_statusText, _statusText.Text);
         AutomationProperties.SetHelpText(_statusText, help ?? string.Empty);
         _statusText.ToolTip = help;
+        _statusText.Visibility = CompactSession && !_paused ? Visibility.Collapsed : Visibility.Visible;
+        // Paused words sit below the elapsed time; three commands keep their positions.
+        Grid.SetColumn(_statusText, CompactSession && _paused ? 1 : 2);
+        _statusText.FontSize = CompactSession && _paused ? 12 : 13;
+        _statusText.VerticalAlignment = CompactSession && _paused ? VerticalAlignment.Bottom : VerticalAlignment.Center;
+        _timerText.VerticalAlignment = CompactSession && _paused ? VerticalAlignment.Top : VerticalAlignment.Center;
+        _recordingIndicator.Visibility = CompactSession ? Visibility.Visible : Visibility.Collapsed;
+        _recordingIndicator.Data = _paused ? PauseGlyph : RecordGlyph;
+        _recordingIndicator.SetResourceReference(SymbolIcon.FillProperty, _paused ? "Text.Primary" : "State.Danger");
+        AutomationProperties.SetName(_recordingIndicator, _statusText.Text);
+        AutomationProperties.SetHelpText(_recordingIndicator, help ?? string.Empty);
+        _recordingIndicator.ToolTip = help;
+        AutomationProperties.SetHelpText(_timerText, help ?? string.Empty);
+        UpdateTimerAutomation();
+        UpdateRecordingPulse();
+        ApplyPhysicalLayout(positionHwnd: IsLoaded);
+    }
+
+    private void UpdateTimerAutomation() => AutomationProperties.SetName(_timerText,
+        $"{_statusText.Text} · {UiText.Get("Text_F11BA21FB824")} {_timerText.Text}");
+
+    private void OnMotionLoaded(object sender, RoutedEventArgs e)
+    {
+        SystemParameters.StaticPropertyChanged += OnSystemMotionChanged;
+        UpdateRecordingPulse();
+    }
+
+    private void OnMotionUnloaded(object sender, RoutedEventArgs e)
+    {
+        SystemParameters.StaticPropertyChanged -= OnSystemMotionChanged;
+        _recordingIndicator.BeginAnimation(OpacityProperty, null);
+    }
+
+    private void OnSystemMotionChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(SystemParameters.ClientAreaAnimation))
+            _ = Dispatcher.BeginInvoke(new Action(UpdateRecordingPulse));
+    }
+
+    private void UpdateRecordingPulse()
+    {
+        _recordingIndicator.BeginAnimation(OpacityProperty, null);
+        _recordingIndicator.Opacity = 1;
+        if (!IsLoaded || !CompactSession || _paused || !FluidMotion.AnimationsEnabled) return;
+        _recordingIndicator.BeginAnimation(OpacityProperty, new DoubleAnimation(1, 0.55, TimeSpan.FromMilliseconds(900))
+        {
+            AutoReverse = true,
+            RepeatBehavior = RepeatBehavior.Forever,
+            EasingFunction = new SineEase { EasingMode = EasingMode.EaseInOut },
+        });
     }
 
     private double ResolveScale()
@@ -1288,6 +1389,10 @@ internal sealed class RecordingControlWindow : Window
 
     protected override void OnClosed(EventArgs e)
     {
+        SystemParameters.StaticPropertyChanged -= OnSystemMotionChanged;
+        Loaded -= OnMotionLoaded;
+        Unloaded -= OnMotionUnloaded;
+        _recordingIndicator.BeginAnimation(OpacityProperty, null);
         CloseWallClock();
         KeyDown -= OnKeyDown;
         SourceInitialized -= OnSourceInitialized;

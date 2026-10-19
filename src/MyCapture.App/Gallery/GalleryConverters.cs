@@ -4,6 +4,16 @@ using System.Windows.Data;
 
 namespace MyCapture.App.Gallery;
 
+/// <summary>Keeps screenshot previews at 16:10 without scaling their overlay controls.</summary>
+public sealed class GalleryThumbnailHeightConverter : IValueConverter
+{
+    public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture) =>
+        value is double width && double.IsFinite(width) ? Math.Max(0, width) * 10 / 16 : 0.0;
+
+    public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) =>
+        throw new NotSupportedException();
+}
+
 /// <summary>
 /// Maps a bool to <see cref="Visibility.Visible"/> / <see cref="Visibility.Collapsed"/>.
 /// </summary>

@@ -19,7 +19,7 @@ internal static class WorkspaceTheme
         }
         Windows.Add((new WeakReference<Window>(window), role));
         ModernWindowChrome.SetWorkspaceRole(window, role);
-        Apply(window.Resources, role, ThemeService.Current);
+        Apply(window.Resources, role, ThemeService.EffectiveTheme);
         ModernWindowChrome.Refresh(window);
     }
 
@@ -31,7 +31,7 @@ internal static class WorkspaceTheme
         resources.MergedDictionaries.Add(new ResourceDictionary
         { Source = new Uri("pack://application:,,,/MyCapture;component/Themes/Tokens.xaml", UriKind.Absolute) });
         // The window's palette is a set of frozen brushes swapped on every theme change.
-        Apply(resources, role, ThemeService.Current);
+        Apply(resources, role, ThemeService.EffectiveTheme);
         var symbols = new ResourceDictionary { Source = new Uri("pack://application:,,,/MyCapture;component/Themes/Symbols.xaml", UriKind.Absolute) };
         resources.MergedDictionaries.Add(symbols);
         var controls = new ResourceDictionary { Source = new Uri("pack://application:,,,/MyCapture;component/Themes/Controls.xaml", UriKind.Absolute) };
@@ -66,9 +66,11 @@ internal static class WorkspaceTheme
             ["Surface.Hover"] = light ? "#e0eeea" : "#2a3c43",
             ["Surface.Pressed"] = light ? "#cde2db" : "#304951",
             ["Text.Primary"] = light ? "#10211e" : "#ffffff",
-            ["Text.Secondary"] = light ? "#20342e" : "#eaf2f7",
-            ["Text.Muted"] = light ? "#2f443b" : "#dce6ec",
+            ["Text.Secondary"] = light ? "#2f3c4f" : "#d0dce3",
+            ["Text.Muted"] = light ? "#495566" : "#a9bac3",
             ["Text.OnAccent"] = "#0A0818",
+            ["Text.SelectionBackground"] = light ? "#10211e" : "#ffffff",
+            ["Text.SelectionForeground"] = light ? "#edf3f2" : "#141b22",
             ["Accent.Default"] = "#7C6CFF",
             ["Accent.Hover"] = "#9789FF",
             ["Accent.Pressed"] = "#7A68EE",
@@ -82,8 +84,9 @@ internal static class WorkspaceTheme
             ["Timeline.Background"] = light ? "#edf3f2" : "#141b22",
             ["Timeline.Track"] = light ? "#e5eeeb" : "#202b34",
             ["Timeline.Playhead"] = light ? "#4B3CC0" : "#FFFFFF",
-            ["Timeline.TextLayer"] = light ? "#5A48E0" : "#8B7BFF",
-            ["Timeline.FrameLayer"] = light ? "#118F84" : "#3FD8C9",
+            ["Timeline.TextLayer"] = light ? "#2F63D1" : "#7FA6FF",
+            ["Timeline.FrameLayer"] = light ? "#0E8278" : "#3FD8C9",
+            ["Timeline.LayerText"] = light ? "#FFFFFF" : "#0A0818",
         };
     }
 
@@ -91,7 +94,8 @@ internal static class WorkspaceTheme
         bool? systemHighContrast = null, AppAccent? accent = null)
     {
         bool contrast = systemHighContrast ?? ThemeService.IsSystemHighContrast;
-        AppAccent selectedAccent = accent ?? ThemeService.CurrentAccent;
+        theme = ThemeService.ResolveTheme(theme);
+        AppAccent selectedAccent = AppAccent.Red;
         AppTheme palette = theme == AppTheme.Workspace
             ? role == WorkspaceRole.Gallery ? AppTheme.Daylight : AppTheme.Midnight : theme;
         ThemeService.ApplyResources(palette, resources, ThemeService.CaptureGuideColor, contrast, selectedAccent);
@@ -117,7 +121,10 @@ internal static class WorkspaceTheme
                     resources[key] = ThemeBrushes.Recolored(brush, Color.FromArgb(color.A, color.R, color.G, color.B));
             }
             resources["Accent.Foreground"] = resources["Accent.Cool"];
-            resources["Border.SelectedTool"] = resources["Accent.Indicator"];
+            resources["Border.SelectedTool"] = resources["Text.Primary"];
+            resources["Surface.Badge"] = resources["Surface.Raised"];
+            resources["Surface.BadgeStrong"] = resources["Surface.Raised"];
+            resources["Text.Badge"] = resources["Text.Primary"];
         }
         // Surface.Hover was just replaced; the folder card's wash aliases the new brush.
         ThemeService.ApplyFolderHoverResources(resources, contrast: false);

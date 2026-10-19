@@ -43,14 +43,22 @@ internal abstract class TutorialScene : IDisposable
     protected string FeatureKeys => MyCapture.App.TutorialCatalog.Get(Id).FixedKeys?.Invoke()
         ?? throw new InvalidOperationException($"{Id} has no fixed keys.");
 
-    /// <summary>The words a product button shows: its text, or the text beside its icon.</summary>
-    protected static string Label(System.Windows.Controls.ContentControl control) => control.Content switch
+    /// <summary>The product's accessible command name also covers icon-only buttons.</summary>
+    protected static string Label(System.Windows.Controls.ContentControl control)
     {
-        string text => text,
-        System.Windows.DependencyObject content => string.Join(" ", OffscreenWindow.Descendants(content)
-            .OfType<System.Windows.Controls.TextBlock>().Select(block => block.Text).Where(text => !string.IsNullOrWhiteSpace(text))),
-        _ => throw new InvalidOperationException("The control shows no words."),
-    };
+        string name = System.Windows.Automation.AutomationProperties.GetName(control);
+        if (!string.IsNullOrWhiteSpace(name)) return name;
+        string label = control.Content switch
+        {
+            string text => text,
+            System.Windows.DependencyObject content => string.Join(" ", OffscreenWindow.Descendants(content)
+                .OfType<System.Windows.Controls.TextBlock>().Where(block => block.Visibility == System.Windows.Visibility.Visible)
+                .Select(block => block.Text).Where(text => !string.IsNullOrWhiteSpace(text))),
+            _ => string.Empty,
+        };
+        return !string.IsNullOrWhiteSpace(label) ? label
+            : throw new InvalidOperationException("The control has no command name.");
+    }
 
     /// <summary>Common finish: caption strip, click ring and the pointer on top.</summary>
     protected static void Overlay(DrawingContext dc, TutorialFramePlan frame, string caption, string key,

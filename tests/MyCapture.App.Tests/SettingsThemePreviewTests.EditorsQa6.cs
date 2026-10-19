@@ -171,7 +171,10 @@ public sealed partial class SettingsThemePreviewTests
             while (!editor.IsMediaReadyForTest && !editor.HasMediaFailedForTest && DateTime.UtcNow < deadline)
                 Qa6Pump(TimeSpan.FromMilliseconds(25));
             Assert.True(editor.IsMediaReadyForTest, editor.MediaFailureForTest);
+            editor.SetDetailsExpandedForTest(true);
+            Drain(editor);
             EditorKeysTests.Descendants(editor).OfType<ListBox>().Single().SelectedIndex = 0;
+            editor.SetDetailsExpandedForTest(false);
             foreach ((int width, int height) in new[] { (760, 555), (780, 560), (920, 680), (1400, 900) })
             {
                 editor.Width = width;
@@ -183,6 +186,22 @@ public sealed partial class SettingsThemePreviewTests
                 foreach (int dpi in theme == AppTheme.Glass && language == "ko-KR" ? new[] { 96, 144 } : new[] { 96 })
                     SaveQa6Evidence(RenderAtDpi(editor, dpi),
                         $"video-{theme}-{language}-{width}x{height}-{dpi}dpi-{Qa6Phase}.png");
+                double previewWidth = viewport.ActualWidth;
+                editor.SetDetailsExpandedForTest(true);
+                Drain(editor);
+                Assert.True(viewport.ActualWidth > 0 && viewport.ActualWidth < previewWidth);
+                Assert.True(viewport.ActualHeight >= 140, $"{language} {theme} {width}x{height}: expanded preview {viewport.ActualHeight:0.#}");
+                var details = EditorKeysTests.Descendants(editor).OfType<Border>().Single(border => border.Name == "VideoDetailsPanel");
+                Assert.False(new Rect(viewport.TranslatePoint(new Point(), editor), viewport.RenderSize)
+                    .IntersectsWith(new Rect(details.TranslatePoint(new Point(), editor), details.RenderSize)));
+                var canvas = EditorKeysTests.Descendants(editor).OfType<MyCapture.App.Recording.VideoLayerCanvas>().Single();
+                Assert.Equal((double)recording.Width / recording.Height, canvas.ContentRect.Width / canvas.ContentRect.Height, precision: 6);
+                foreach (int dpi in theme == AppTheme.Glass && language == "ko-KR" ? new[] { 96, 144 } : new[] { 96 })
+                    SaveQa6Evidence(RenderAtDpi(editor, dpi),
+                        $"video-expanded-{theme}-{language}-{width}x{height}-{dpi}dpi-{Qa6Phase}.png");
+                editor.SetDetailsExpandedForTest(false);
+                Drain(editor);
+                Assert.Equal(previewWidth, viewport.ActualWidth, precision: 3);
             }
 
             // Playing switches the large button to the pause glyph (two bars) and back to the triangle.

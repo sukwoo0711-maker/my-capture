@@ -16,6 +16,8 @@ internal sealed partial class SettingsWindow
     internal void ShowShortcut(string draftProperty)
     {
         ShowSettings();
+        if (CategoryTabs.Template.FindName("SettingsSearchBox", CategoryTabs) is TextBox search) search.Clear();
+        FilterSettings(string.Empty);
         if (FindHotkeyRecorder(draftProperty) is not { } recorder) return;
         if (LogicalAncestor<TabItem>(recorder) is { } tab) CategoryTabs.SelectedItem = tab;
         // The tab's content is laid out only once it is selected.

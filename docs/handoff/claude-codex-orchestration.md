@@ -8,10 +8,10 @@ MyCapture 개선 작업을 이어 가는 오케스트레이터가 읽고 고치�
 |---|---|
 | 현재 오케스트레이터 | **Claude** (Claude Code, Opus 5.5), 2026-10-13부터 |
 | 이전 | Claude(10-11 ~ 10-12) → Codex `gpt-6-astra`(10-12 ~ 10-13) → Claude |
-| 작업 브랜치 | 작업마다 main에서 분기해 PR로 병합. 현재 `release/4.3.1` |
+| 작업 브랜치 | 작업마다 main에서 분기해 PR로 병합. 현재 `release/4.4.0`(통합 작업 공간 `C:\GitRepositories\my-capture-440\integ`) |
 | 통합 작업 공간 | `C:\GitRepositories\my-capture-codex` |
 | 백업 | `backup/pre-gif-rewrite-2026-10-13` (GIF 이력 제거 직전 상태) |
-| 원격 main | c4235a3 = 4.3.0 소스(cd345ad, PR #89) + 문서·Store 기록(PR #90–#93). 4.3.1은 `release/4.3.1` PR로 병합 예정. 저장소는 공개 |
+| 원격 main | ca958a7 = 4.3.1(PR #96, GitHub 릴리스 v4.3.1, Store 제출 12 게시). 4.4.0은 `release/4.4.0` PR #101로 병합 예정. 저장소는 공개 |
 
 **소통 규칙**
 1. 오케스트레이터만 §0~§4를 고칩니다. §7 로그는 아래로 추가만 합니다.
@@ -128,3 +128,9 @@ MyCapture 개선 작업을 이어 가는 오케스트레이터가 읽고 고치�
   - CI 재실행에서 드러난 설치 테스트 도우미의 경쟁 조건(정리 작업이 이름을 읽기 전에 끝남, caabcf2)도 고쳤습니다.
   - 합친 트리에서 Release 빌드 경고 0개였고, Core 1,716·Setup 148·App 3,619가 통과했습니다.
   - 사용자가 모든 권한을 위임해 병합, GitHub 릴리스, Store 제출까지 진행합니다.
+- 2026-10-20 Claude: 사용자가 "엄격 평가 30개"(디자이너·마케터 관점 AS-IS/TO-BE, https://claude.ai/artifact/6PPRg4KFLDZU3yUNg4tsgP)를 모두 반영하라고 위임했습니다. 4.4.0 릴리스 브랜치 `release/4.4.0`(PR #101)을 만들었습니다.
+  - 앱 개편은 Codex 작업자(우체통 CLI `exec-codex`) 9개 레인이 각자 worktree(`C:\GitRepositories\my-capture-440\*`)에서 구현했습니다. 레인마다 읽기 전용 Codex 교차 리뷰 후 원래 작업자가 수정했고, 통합본 전체 리뷰와 통합 테스트 수정도 Codex가 했습니다. 리드는 검토·커밋·병합 충돌 해결·샌드박스 밖 전체 테스트를 맡았습니다.
+  - 결정: 타깃은 개발자(제품 문장 "개발자를 위한 무료 Windows 캡처·핀 도구"), 새 설치 기본은 캡처 후 작은 카드·시스템 테마·단축키 글자 숨김·보관 기간 제한 없음(5 GiB/1,000개), 테마는 시스템/밝게/어둡게/고대비, 포인트 색은 빨강 고정. 빨강은 주 버튼·녹화 상태·핀 테두리·확인 단계 삭제에만 씁니다(AccentUsagePolicyTests가 강제).
+  - 다른 세션: 웹·README(PR #98, 랜딩 https://sukwoo0711-maker.github.io/my-capture/ gh-pages), 출시 자료(PR #100), Store 목록·스크린샷(PR #99, 장면 브랜치 claude/store-shots-440). 세 PR은 release/4.4.0에 합쳤습니다.
+  - 로컬 전체: Core 1,765, App 3,892 통과·11 건너뜀(기존 opt-in). Setup 25개는 Store판 MyCapture 실행 중 exit 15(환경 원인). CI에서 편집기 큰 글자 테스트 4건이 작은 러너 화면 때문에 실패해 화면 크기와 무관한 픽스처로 고쳤습니다.
+  - 사용자 승인 대기: Partner Center 게시자 표시 이름 변경(계정 재확인·재패키징 경고), 4.4.0 Store 제출(MSIX는 10MB 업로드 한도로 사용자가 끌어다 놓음). Store 세션은 승인 없이 Partner Center에 아무것도 저장하지 않았습니다.

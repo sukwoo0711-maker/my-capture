@@ -22,7 +22,7 @@ public enum ColorFormat
 /// migration code is needed for additive changes — which covers every change made
 /// so far.
 /// </remarks>
-public sealed class AppSettings
+public sealed class AppSettings : IJsonOnDeserializing
 {
     /// <summary>
     /// Incremented only for changes that cannot be handled by defaulting.
@@ -48,6 +48,9 @@ public sealed class AppSettings
     public GitHubSettings GitHub { get; set; } = new();
 
     public GeneralSettings General { get; set; } = new();
+
+    // Files predating the general section also retain the legacy editor default.
+    void IJsonOnDeserializing.OnDeserializing() => General.AfterCapture = AfterCaptureAction.Editor;
 
     /// <summary>Local state for the one-time Microsoft Store rating request. An explicit null reads as new.</summary>
     public StoreRatingState StoreRating { get; set => field = value ?? new(); } = new();
@@ -150,7 +153,8 @@ public sealed class QueueSettings
     public Guid? DefaultCaptureFolderId { get; set; }
 
     /// <summary>
-    /// Maximum number of retained captures. Oldest unpinned entries are evicted.
+    /// Maximum number of retained captures. Oldest eligible unkept entries are evicted.
+    /// The initializer preserves legacy files; new installations use <see cref="NewInstallDefaults"/>.
     /// </summary>
     public int MaxItems { get; set; } = 300;
 
@@ -159,8 +163,8 @@ public sealed class QueueSettings
     /// eviction.
     /// </summary>
     /// <remarks>
-    /// 2 GiB. Without a byte cap a user capturing 4K screens fills the disk
-    /// silently, because 300 items says nothing about their size.
+    /// The legacy fallback is 2 GiB; new installations use <see cref="NewInstallDefaults"/>.
+    /// A byte cap limits disk use independently of the number of captures.
     /// </remarks>
     public long MaxBytes { get; set; } = 2L * 1024 * 1024 * 1024;
 
@@ -176,7 +180,8 @@ public sealed class QueueSettings
 
     /// <summary>
     /// Hours after creation before an unpinned library image is expired.
-    /// Default is 168 (7 days), matching the previous hard-coded policy.
+    /// The legacy fallback is 168 (7 days), matching the previous hard-coded policy.
+    /// New installations use <see cref="NewInstallDefaults"/> and have no time limit.
     /// </summary>
     public int ImageRetentionHours { get; set; } = MyCapture.Core.Queue.CaptureRetention.DefaultImageRetentionHours;
 }
@@ -360,7 +365,10 @@ public sealed class GeneralSettings : IJsonOnDeserializing
     // legacy field without changing the new default or writing it back out.
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public bool? ShowQuickAccess { get => null; set { } }
-    public AfterCaptureAction AfterCapture { get; set; } = AfterCaptureAction.Editor;
+    public AfterCaptureAction AfterCapture { get; set; } = AfterCaptureAction.QuickAccess;
+
+    public bool FirstCaptureTipShown { get; set; }
+    public bool FirstPinTipShown { get; set; }
 
     /// <summary>Shows key captions under editor buttons. Tooltips always name the key.</summary>
     public bool ShowShortcutHints { get; set; } = true;
@@ -369,7 +377,11 @@ public sealed class GeneralSettings : IJsonOnDeserializing
     public int ShortcutHintsRevision { get; set; } = 1;
 
     // A missing marker identifies a legacy file; new settings and explicit choices start at one.
-    void IJsonOnDeserializing.OnDeserializing() => ShortcutHintsRevision = 0;
+    void IJsonOnDeserializing.OnDeserializing()
+    {
+        ShortcutHintsRevision = 0;
+        AfterCapture = AfterCaptureAction.Editor;
+    }
 
     public bool LaunchAtLogin { get; set; } = true;
 

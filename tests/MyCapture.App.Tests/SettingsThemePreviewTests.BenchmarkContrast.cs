@@ -121,7 +121,7 @@ public sealed partial class SettingsThemePreviewTests
                     Assert.Null(mixed.IsChecked);
                     var mark = Assert.IsType<System.Windows.Shapes.Path>(mixed.Template.FindName("Check", mixed));
                     Assert.Equal(0, mark.Data.Bounds.Height);
-                    CheckBenchmarkContrast(mark.Stroke, (Brush)application.FindResource("Accent.Default"), $"{theme}: mixed tag", failures);
+                    CheckBenchmarkContrast(mark.Stroke, (Brush)application.FindResource("Surface.Selected"), $"{theme}: mixed tag", failures);
                     mixed.IsChecked = true;
                     Assert.True(mark.Data.Bounds.Height > 0);
                     mixed.IsChecked = null;
@@ -131,7 +131,7 @@ public sealed partial class SettingsThemePreviewTests
                     ProgressBar exportProgress = progress.Children.OfType<ProgressBar>().Single();
                     foreach (ProgressBar bar in new[] { contactProgress, importProgress, exportProgress })
                     {
-                        Assert.Equal(Assert.IsType<SolidColorBrush>(bar.FindResource("Accent.Indicator")).Color,
+                        Assert.Equal(Assert.IsType<SolidColorBrush>(bar.FindResource("Text.Primary")).Color,
                             Assert.IsType<SolidColorBrush>(bar.Foreground).Color);
                         Assert.Equal(Assert.IsType<SolidColorBrush>(bar.FindResource("Surface.Sunken")).Color,
                             Assert.IsType<SolidColorBrush>(bar.Background).Color);

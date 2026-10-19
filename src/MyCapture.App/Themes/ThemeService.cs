@@ -1,3 +1,6 @@
+using System.IO;
+using System.Security;
+using Microsoft.Win32;
 using System.Windows;
 using System.Windows.Media;
 using System.Windows.Media.Effects;
@@ -23,7 +26,8 @@ internal static class ThemeService
     private static readonly string[] ShadowKeys = ["Shadow.Floating", "Shadow.Card"];
     private static readonly DropShadowEffect NoShadow = CreateNoShadow();
 
-    internal static AppTheme Current { get; private set; } = AppTheme.Workspace;
+    internal static AppTheme Current { get; private set; } = AppTheme.System;
+    internal static AppTheme EffectiveTheme => ResolveTheme(Current);
     internal static AppAccent CurrentAccent { get; private set; } = AppAccent.Red;
 
     /// <summary>Null until the first Apply; lets diagnostics restore the pre-fixture state.</summary>
@@ -36,6 +40,43 @@ internal static class ThemeService
 
     [ThreadStatic]
     private static Func<SystemColorRole, Color>? s_systemColorsOverrideForTest;
+
+    [ThreadStatic]
+    private static Func<bool>? s_systemLightThemeReaderForTest;
+
+    /// <summary>Injects the app-mode reader without writing the registry.</summary>
+    internal static Func<bool>? SystemLightThemeReaderForTest
+    {
+        get => s_systemLightThemeReaderForTest;
+        set => s_systemLightThemeReaderForTest = value;
+    }
+
+    internal static AppTheme ResolveTheme(AppTheme theme, Func<bool>? readLightTheme = null) => theme == AppTheme.System
+        ? (readLightTheme ?? s_systemLightThemeReaderForTest ?? ReadWindowsLightTheme)() ? AppTheme.GlassLight : AppTheme.Glass
+        : theme;
+
+    private static bool ReadWindowsLightTheme() => ReadWindowsLightTheme(static () =>
+    {
+        using RegistryKey? key = Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize", writable: false);
+        return key?.GetValue("AppsUseLightTheme");
+    });
+
+    /// <summary>Missing Windows app-mode settings mean Light; read failures retain the dark fallback.</summary>
+    internal static bool ReadWindowsLightTheme(Func<object?> readAppMode)
+    {
+        ArgumentNullException.ThrowIfNull(readAppMode);
+        try
+        {
+            // Both a missing Personalize key and a missing value return null. An explicit
+            // DWORD zero selects Dark; retain the previous handling of other stored types.
+            object? value = readAppMode();
+            return value is null || value is int number && number != 0;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or SecurityException)
+        {
+            return false;
+        }
+    }
 
     internal static string CaptureGuideColor { get; private set; } = string.Empty;
     internal static event Action? CaptureGuideChanged;
@@ -60,6 +101,7 @@ internal static class ThemeService
 
     static ThemeService()
     {
+        SystemEvents.UserPreferenceChanged += (_, _) => QueueSystemRefresh();
         SystemParameters.StaticPropertyChanged += (_, e) =>
         {
             if (e.PropertyName == nameof(SystemParameters.HighContrast)) QueueSystemRefresh();
@@ -90,7 +132,7 @@ internal static class ThemeService
                 ApplyResources(Current, resources, CaptureGuideColor, readHighContrast(), CurrentAccent);
                 if (ReferenceEquals(resources, Application.Current?.Resources))
                 {
-                    WorkspaceTheme.Refresh(Current);
+                    WorkspaceTheme.Refresh(EffectiveTheme);
                     ModernWindowChrome.RefreshAll();
                 }
 
@@ -107,14 +149,15 @@ internal static class ThemeService
         }
 
         ApplyResources(theme, resources, CaptureGuideColor, accent: CurrentAccent);
-        WorkspaceTheme.Refresh(theme);
+        WorkspaceTheme.Refresh(ResolveTheme(theme));
         ModernWindowChrome.RefreshAll();
         CaptureGuideChanged?.Invoke();
     }
 
     internal static void ApplyResources(AppTheme theme, ResourceDictionary resources, string? captureGuideColor = null,
-        bool? systemHighContrast = null, AppAccent accent = AppAccent.Violet)
+        bool? systemHighContrast = null, AppAccent accent = AppAccent.Red)
     {
+        theme = ResolveTheme(theme);
         bool contrast = systemHighContrast ?? IsSystemHighContrast;
         IReadOnlyDictionary<string, ThemeColor> colors = ThemeCatalog.ColorsFor(theme, accent);
         foreach ((string key, ThemeColor color) in colors)
@@ -129,15 +172,14 @@ internal static class ThemeService
             }
         }
 
-        ThemeColor foreground = colors[accent == AppAccent.Red ? "Accent.Cool" : "Accent.Default"];
-        SetBrush(resources, "Accent.Foreground", contrast ? SystemColor(SystemColorRole.Highlight)
+        ThemeColor foreground = colors["Text.Primary"];
+        SetBrush(resources, "Accent.Foreground", contrast ? SystemColor(SystemColorRole.WindowText)
             : Color.FromArgb(foreground.A, foreground.R, foreground.G, foreground.B));
         ThemeColor indicator = colors.TryGetValue("Accent.Indicator", out ThemeColor value) ? value : foreground;
-        SetBrush(resources, "Accent.Indicator", contrast ? SystemColor(SystemColorRole.Highlight)
+        SetBrush(resources, "Accent.Indicator", contrast ? SystemColor(SystemColorRole.WindowText)
             : Color.FromArgb(indicator.A, indicator.R, indicator.G, indicator.B));
-        SetBrush(resources, "Border.SelectedTool", contrast ? SystemColor(SystemColorRole.Highlight)
-            : accent == AppAccent.Red && theme != AppTheme.HighContrast
-                ? Color.FromArgb(indicator.A, indicator.R, indicator.G, indicator.B) : Colors.Transparent);
+        SetBrush(resources, "Border.SelectedTool", contrast ? SystemColor(SystemColorRole.WindowText)
+            : Color.FromArgb(foreground.A, foreground.R, foreground.G, foreground.B));
 
         SetBrush(resources, "Text.Disabled", contrast
             ? SystemColor(SystemColorRole.GrayText)
@@ -147,8 +189,10 @@ internal static class ThemeService
         SetBrush(resources, "Border.Hover", contrast ? SystemColor(SystemColorRole.Highlight) : Colors.Transparent);
         ApplyFolderHoverResources(resources, contrast);
         bool strongChrome = contrast || theme == AppTheme.HighContrast;
-        resources["Focus.RingThickness"] = new Thickness(strongChrome ? 2 : 1);
-        resources["Focus.RingWidth"] = strongChrome ? 2d : 1d;
+        resources["Focus.RingThickness"] = new Thickness(2);
+        resources["Focus.RingWidth"] = 2d;
+        resources["Border.DecorativeThickness"] = new Thickness(strongChrome ? 1 : 0);
+        resources["Border.ToolThickness"] = new Thickness(strongChrome ? 1 : 0);
         foreach (string key in ShadowKeys)
         {
             // Contrast themes draw no shadows. A null resource would fall through to the merged
