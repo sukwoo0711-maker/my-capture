@@ -14,8 +14,8 @@ namespace MyCapture.App.Tests;
 public sealed partial class SettingsThemePreviewTests
 {
     [Fact]
-    public Task SelectionGridCheckbox_PersistsOnlyAfterApply_AndCancelRestores() =>
-        RunIsolated(nameof(SelectionGridCheckbox_PersistsOnlyAfterApply_AndCancelRestores), VerifyGridCheckbox);
+    public Task SelectionGridCheckbox_PersistsImmediately_AndCloseRetains() =>
+        RunIsolated(nameof(SelectionGridCheckbox_PersistsImmediately_AndCloseRetains), VerifyGridCheckbox);
 
     private static void VerifyGridCheckbox()
     {
@@ -58,21 +58,23 @@ public sealed partial class SettingsThemePreviewTests
             checkbox.IsChecked = false;
             Drain(window);
             Assert.False(Assert.IsType<SettingsDraft>(window.DataContext).ShowSelectionGrid);
-            Assert.True(saved.Capture.ShowSelectionGrid);
-            Assert.True(store.Load().Capture.ShowSelectionGrid);
+            Assert.False(saved.Capture.ShowSelectionGrid);
+            Assert.False(store.Load().Capture.ShowSelectionGrid);
             SettingsWindow.CancelCommand.Execute(null, window);
             window.ShowSettings();
             Drain(window);
-            Assert.True(checkbox.IsChecked);
+            Assert.False(checkbox.IsChecked);
 
-            checkbox.IsChecked = false;
+            checkbox.IsChecked = true;
             Drain(window);
             SettingsWindow.ApplyCommand.Execute(null, window);
-            Assert.False(saved.Capture.ShowSelectionGrid);
-            Assert.False(store.Load().Capture.ShowSelectionGrid);
+            Assert.True(saved.Capture.ShowSelectionGrid);
+            Assert.True(store.Load().Capture.ShowSelectionGrid);
+            Assert.True(window.IsVisible);
+            SettingsWindow.CloseCommand.Execute(null, window);
             window.ShowSettings();
             Drain(window);
-            Assert.False(checkbox.IsChecked);
+            Assert.True(checkbox.IsChecked);
         }
         finally
         {

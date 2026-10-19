@@ -20,7 +20,7 @@
     <comment>Language selection</comment>
   </data>
   <data name="Settings.LanguageHint" xml:space="preserve">
-    <value>적용을 누르면 저장되며, 다음에 MyCapture를 시작할 때 모든 창과 메뉴에 적용됩니다. 진행 중인 작업을 종료하지 않습니다.</value>
+    <value>선택한 언어는 즉시 저장되며, 다음에 MyCapture를 시작할 때 모든 창과 메뉴에 적용됩니다.</value>
     <comment>Language selection</comment>
   </data>
   <data name="Settings.LanguageRestart" xml:space="preserve">
@@ -2507,7 +2507,7 @@
     <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
   </data>
   <data name="Text_D8A23CD47E7A" xml:space="preserve">
-    <value>모든 값을 기본값으로 되돌립니다. 적용을 누르기 전에는 취소로 되돌릴 수 있습니다.</value>
+    <value>확인 후 모든 설정을 기본값으로 재설정합니다.</value>
     <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
   </data>
   <data name="Text_D8A75FF54AF8" xml:space="preserve">
@@ -3141,7 +3141,7 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="Settings.AccentColor" xml:space="preserve"><value>포인트 색</value></data>
   <data name="Settings.AccentViolet" xml:space="preserve"><value>바이올렛</value></data>
   <data name="Settings.AccentRed" xml:space="preserve"><value>레드</value></data>
-  <data name="Settings.ThemeHint" xml:space="preserve"><value>테마를 선택하면 미리 볼 수 있습니다. 적용하면 저장됩니다.</value></data>
+  <data name="Settings.ThemeHint" xml:space="preserve"><value>선택한 테마는 즉시 적용되고 저장됩니다.</value></data>
   <data name="Settings.ShowSourceWindowTitle" xml:space="preserve"><value>이미지 우측 상단에 문서·창 제목 표시</value></data>
   <data name="Settings.ShowSourceWindowTitleHint" xml:space="preserve"><value>새 캡처와 다시 여는 편집기에 적용됩니다.</value></data>
   <data name="Settings.ThemeMidnight" xml:space="preserve"><value>미드나잇</value></data>
@@ -3220,7 +3220,12 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="Tools_CropApplied" xml:space="preserve"><value>자르기 적용됨</value></data>
   <data name="Settings_Export" xml:space="preserve"><value>설정 내보내기</value></data>
   <data name="Settings_Import" xml:space="preserve"><value>설정 가져오기</value></data>
-  <data name="Settings_ImportDone" xml:space="preserve"><value>설정을 불러왔습니다. 저장하려면 적용을 누르십시오.</value></data>
+  <data name="Settings_ImportDone" xml:space="preserve"><value>설정 불러옴</value></data>
+  <data name="Settings_Saved" xml:space="preserve"><value>저장됨</value></data>
+  <data name="Settings_Search" xml:space="preserve"><value>설정 검색</value></data>
+  <data name="Settings_SearchHint" xml:space="preserve"><value>설정 이름과 설명 검색 · Esc: 검색 지우기</value></data>
+  <data name="Settings_SearchEmpty" xml:space="preserve"><value>검색 결과 없음</value></data>
+  <data name="Settings_ResetConfirm" xml:space="preserve"><value>모든 설정을 기본값으로 재설정하시겠습니까?</value></data>
   <data name="Settings_ImportFailed" xml:space="preserve"><value>설정 파일을 읽을 수 없습니다.</value></data>
   <data name="Settings_ExportDone" xml:space="preserve"><value>설정 내보내기 완료</value></data>
   <data name="GitHub_TokenMode" xml:space="preserve"><value>토큰으로 업로드(실험)</value></data>
@@ -3700,7 +3705,7 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="LegacyImport.MissingPayload" xml:space="preserve"><value>기존 이미지나 동영상 파일을 찾을 수 없습니다. 기존 데이터 폴더를 확인하십시오.</value></data>
   <data name="LegacyImport.Failed" xml:space="preserve"><value>기존 데이터를 가져올 수 없습니다. 저장 위치와 접근 권한을 확인하십시오.</value></data>
   <data name="LegacyImport.FailedDetail" xml:space="preserve"><value>기존 데이터를 가져올 수 없습니다. {0}</value></data>
-  <data name="LegacyImport.SettingsReady" xml:space="preserve"><value>설정 불러옴 · 적용을 눌러야 저장합니다.</value></data>
+  <data name="LegacyImport.SettingsReady" xml:space="preserve"><value>설정 불러옴</value></data>
   <data name="LegacyImport.SettingsFailed" xml:space="preserve"><value>라이브러리는 가져왔지만 설정을 불러올 수 없습니다. {0}</value></data>
   <data name="LegacyImport.OverlappingRoots" xml:space="preserve"><value>현재 저장 위치와 다른 기존 데이터 폴더를 선택하십시오.</value></data>
   <data name="LegacyImport.TargetChanged" xml:space="preserve"><value>현재 라이브러리가 변경되었습니다. 가져오기를 다시 시도하십시오.</value></data>
@@ -3867,15 +3872,33 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="About_PrivacyModel" xml:space="preserve"><value>텍스트 인식 모델(약 {0} MB)은 정확 또는 가장 정확 품질을 처음 사용할 때 ModelScope에서 내려받습니다. 가장 정확 품질은 확대 모델(약 {1} MB)도 Qualcomm AI Hub에서 내려받습니다. 이미지는 전송하지 않습니다.</value></data>
   <data name="About_PrivacyGitHub" xml:space="preserve"><value>GitHub 업로드는 실행할 때만 공개 이슈에 올립니다.</value></data>
   <data name="About_FeedbackHeading" xml:space="preserve"><value>피드백</value></data>
-  <data name="About_ReportProblem" xml:space="preserve"><value>문제 신고</value></data>
-  <data name="About_ReportProblemHelp" xml:space="preserve"><value>진단 정보를 클립보드에 복사하고 GitHub 신고 페이지를 엽니다.</value></data>
+  <data name="About_ReportProblem" xml:space="preserve"><value>문의하기</value></data>
+  <data name="Support_Title" xml:space="preserve"><value>문의하기</value></data>
+  <data name="Support_Diagnostics" xml:space="preserve"><value>진단 정보</value></data>
+  <data name="Support_Message" xml:space="preserve"><value>문의 내용</value></data>
+  <data name="Support_GitHub" xml:space="preserve"><value>GitHub 이슈로 보내기</value></data>
+  <data name="Support_StoreReview" xml:space="preserve"><value>Microsoft Store 리뷰 남기기</value></data>
+  <data name="Support_Accounts" xml:space="preserve"><value>GitHub 이슈는 GitHub 계정이 필요하며 Store 리뷰는 Microsoft 계정을 사용합니다.</value></data>
+  <data name="Support_GitHubAccount" xml:space="preserve"><value>GitHub 이슈를 보내려면 GitHub 계정이 필요합니다.</value></data>
+  <data name="Support_Opened" xml:space="preserve"><value>문의 페이지 열림</value></data>
+  <data name="Support_GitHubOpened" xml:space="preserve"><value>GitHub 이슈 작성 페이지 열림</value></data>
+  <data name="Support_StoreOpened" xml:space="preserve"><value>Microsoft Store 리뷰 열림</value></data>
+  <data name="Support_CloseTip" xml:space="preserve"><value>문의 창 닫기 · Esc</value></data>
+  <data name="Support_Unknown" xml:space="preserve"><value>확인되지 않음</value></data>
+  <data name="Support_Build" xml:space="preserve"><value>빌드</value></data>
+  <data name="Support_Install" xml:space="preserve"><value>설치 유형</value></data>
+  <data name="Support_Packaged" xml:space="preserve"><value>패키지 설치</value></data>
+  <data name="Support_Unpackaged" xml:space="preserve"><value>일반 설치</value></data>
+  <data name="Support_DisplayScale" xml:space="preserve"><value>화면 배율: {0:0.##}%</value></data>
+  <data name="Support_IssueTitle" xml:space="preserve"><value>MyCapture 문의</value></data>
+  <data name="About_ReportProblemHelp" xml:space="preserve"><value>진단 정보를 확인하고 문의 내용을 작성합니다.</value></data>
   <data name="About_ReportCopied" xml:space="preserve"><value>진단 정보를 복사했습니다. 신고 페이지에 붙여 넣으십시오.</value></data>
   <data name="About_ReportCopyFailed" xml:space="preserve"><value>진단 정보를 복사하지 못했습니다. 신고 페이지에 문제 상황을 직접 적어 주십시오.</value></data>
   <data name="About_ReportNote" xml:space="preserve"><value>GitHub 계정이 필요하며 신고 내용은 공개됩니다.</value></data>
   <data name="About_DataHeading" xml:space="preserve"><value>데이터</value></data>
   <data name="About_LegacyImport" xml:space="preserve"><value>이전 버전 데이터 가져오기</value></data>
   <data name="About_LegacyImportHint" xml:space="preserve"><value>이전 MyCapture의 이미지·동영상·폴더를 이 라이브러리로 복사합니다. 원본은 그대로 둡니다.</value></data>
-  <data name="About_SettingsBackupHint" xml:space="preserve"><value>설정을 파일로 내보내거나 가져옵니다. 가져온 설정은 적용을 눌러야 저장합니다. GitHub 토큰은 내보내지 않습니다.</value></data>
+  <data name="About_SettingsBackupHint" xml:space="preserve"><value>불러온 설정은 바로 저장합니다.</value></data>
   <data name="SettingsUx_TabAboutHelp" xml:space="preserve"><value>버전, 업데이트, 설정 백업</value></data>
   <data name="SettingsUx_OtherShortcutsHeading" xml:space="preserve"><value>그 밖의 단축키</value></data>
   <data name="SettingsUx_OtherShortcutsHint" xml:space="preserve"><value>필요한 기능에만 지정하십시오. 다른 프로그램이 쓰는 키와 겹치지 않는 조합을 고르십시오.</value></data>
@@ -3927,7 +3950,7 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="SettingsUx_BackupHeading" xml:space="preserve"><value>설정 백업</value></data>
   <data name="SettingsUx_BackupHint" xml:space="preserve"><value>설정을 파일로 내보내거나 가져옵니다. 가져온 설정은 적용을 눌러야 저장합니다. GitHub 토큰은 내보내지 않습니다.</value></data>
   <data name="SettingsUx_CancelTip" xml:space="preserve"><value>변경 사항을 버리고 닫습니다.</value></data>
-  <data name="SettingsUx_CloseTip" xml:space="preserve"><value>설정 창을 닫습니다.</value></data>
+  <data name="SettingsUx_CloseTip" xml:space="preserve"><value>설정 창 닫기 · Esc</value></data>
   <data name="SettingsUx_CloseTitle" xml:space="preserve"><value>적용하지 않은 변경 사항</value></data>
   <data name="SettingsUx_CloseMessage" xml:space="preserve"><value>바꾼 설정을 아직 적용하지 않았습니다. 적용하지 않고 닫으면 바꾼 값이 사라집니다.</value></data>
   <data name="SettingsUx_CloseApply" xml:space="preserve"><value>적용하고 닫기</value></data>

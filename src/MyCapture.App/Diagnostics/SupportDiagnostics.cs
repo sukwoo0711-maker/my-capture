@@ -19,11 +19,18 @@ internal static class SupportDiagnostics
     /// issue page as Settings → About → Report a problem.
     /// </summary>
     /// <returns><see langword="false"/> when Windows could not open the page.</returns>
-    internal static bool TryOpenIssuePage()
+    internal static bool TryOpenIssuePage() => TryOpenUri(IssueUri);
+
+    /// <summary>Support destinations only; shared by error dialogs and the contact window.</summary>
+    internal static bool TryOpenUri(string uri)
     {
+        if (!Uri.TryCreate(uri, UriKind.Absolute, out Uri? destination)
+            || !(destination.Scheme == Uri.UriSchemeHttps && destination.Host == "github.com"
+                && destination.AbsolutePath == "/sukwoo0711-maker/mycapture-support/issues/new")
+            && uri != MyCapture.Core.Settings.StoreRatingPolicy.ReviewUri) return false;
         try
         {
-            OpenUri(IssueUri);
+            OpenUri(uri);
             return true;
         }
         catch (Exception error) when (error is Win32Exception or InvalidOperationException)

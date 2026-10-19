@@ -36,6 +36,8 @@ namespace MyCapture.Core.Settings;
 public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
 {
     private readonly Dictionary<string, List<string>> _errors = [];
+    private readonly Dictionary<string, string> _saveErrors = [];
+    private readonly Dictionary<string, string> _candidateErrors = [];
 
     // ----- General -----
     private bool _launchAtLogin;
@@ -142,7 +144,7 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
 
     public event EventHandler<DataErrorsChangedEventArgs>? ErrorsChanged;
 
-    public bool HasErrors => _errors.Count > 0;
+    public bool HasErrors => _errors.Count > 0 || _saveErrors.Count > 0 || _candidateErrors.Count > 0;
 
     /// <summary>Empty follows Windows; ko-KR and en are the supported explicit UI choices.</summary>
     public string Language
@@ -613,6 +615,8 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
     /// </summary>
     public void LoadFrom(AppSettings settings)
     {
+        _saveErrors.Clear();
+        _candidateErrors.Clear();
         ExportOptionsReplaced = false;
         LoadValues(settings);
         _baseline = CaptureState();
@@ -624,6 +628,8 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
     /// </summary>
     public void ReplaceValues(AppSettings settings)
     {
+        _saveErrors.Clear();
+        _candidateErrors.Clear();
         ExportOptionsReplaced = true;
         LoadValues(settings);
     }
@@ -633,6 +639,36 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
     /// and then restoring it counts as unchanged.
     /// </summary>
     public bool HasUnappliedChanges => !CaptureState().SequenceEqual(_baseline, StringComparer.Ordinal);
+
+    /// <summary>Advances the saved baseline without replacing text or moving the editing caret.</summary>
+    public void AcceptSaved(AppSettings saved, bool acceptReplacement = true)
+    {
+        _baseline = new SettingsDraft(saved).CaptureState();
+        if (acceptReplacement) ExportOptionsReplaced = false;
+        FolderDestinationEdited = UseCurrentFolderForNewCaptures != saved.Queue.UseCurrentFolderForNewCaptures;
+        RaisePropertyChanged(nameof(HasUnappliedChanges));
+    }
+
+    /// <summary>A rejected OS setting stays inline until that field is edited again.</summary>
+    public void SetSaveError(string property, string message)
+    {
+        _saveErrors[property] = message;
+        RaiseErrorsChanged(property);
+    }
+
+    /// <summary>A cross-field error from merging valid edits with saved values, recomputed before saving.</summary>
+    public void SetCandidateError(string property, string message)
+    {
+        _candidateErrors[property] = message;
+        RaiseErrorsChanged(property);
+    }
+
+    public void ClearCandidateErrors()
+    {
+        string[] properties = _candidateErrors.Keys.ToArray();
+        _candidateErrors.Clear();
+        foreach (string property in properties) RaiseErrorsChanged(property);
+    }
 
     private void LoadValues(AppSettings settings)
     {
@@ -974,17 +1010,19 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
     {
         if (string.IsNullOrEmpty(propertyName))
         {
-            return _errors.Values.SelectMany(v => v).ToList();
+            return AllErrors();
         }
 
-        return _errors.TryGetValue(propertyName, out List<string>? list)
-            ? list
-            : Array.Empty<string>();
+        IEnumerable<string> errors = _errors.TryGetValue(propertyName, out List<string>? list) ? list : [];
+        return errors.Concat(_saveErrors.TryGetValue(propertyName, out string? message) ? [message] : [])
+            .Concat(_candidateErrors.TryGetValue(propertyName, out string? candidateMessage) ? [candidateMessage] : []).ToList();
     }
 
     /// <summary>Every current error message across all fields, for the summary announcement.</summary>
     public IReadOnlyList<string> AllErrors() => _errors
         .SelectMany(kv => kv.Value)
+        .Concat(_saveErrors.Values).Distinct()
+        .Concat(_candidateErrors.Values).Distinct()
         .ToList();
 
     // ================= Validation =================
@@ -1400,6 +1438,8 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
         }
 
         field = value;
+        if (property is not null && _candidateErrors.Remove(property)) RaiseErrorsChanged(property);
+        if (property is not null && _saveErrors.Remove(property)) RaiseErrorsChanged(property);
         RaisePropertyChanged(property);
         return true;
     }

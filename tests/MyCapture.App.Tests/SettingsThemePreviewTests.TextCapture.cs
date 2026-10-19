@@ -87,7 +87,7 @@ public sealed partial class SettingsThemePreviewTests
                 Assert.EndsWith(" 사용법 보기", AutomationProperties.GetName(button), StringComparison.Ordinal);
             });
             Assert.Contains(featureTutorials, button => AutomationProperties.GetName(button) == "영역 캡처 사용법 보기");
-            Assert.True(saved.Capture.AutoDetectWindows);
+            Assert.False(saved.Capture.AutoDetectWindows);
 
             SettingsWindow.ApplyCommand.Execute(null, window);
             Assert.False(saved.Capture.AutoDetectWindows);
