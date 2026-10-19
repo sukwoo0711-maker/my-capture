@@ -104,7 +104,7 @@ public sealed class AccentUsagePolicyTests
                 // Explicit user-selected export background: output artwork, not chrome.
                 "src/MyCapture.App/Editing/ImageReductionExportDialog.cs" => line == "Color accent = (TryFindResource(\"Accent.Default\") as SolidColorBrush)?.Color ?? Colors.SteelBlue;",
                 // Recording-region outline. Other accent usages in this window still fail.
-                "src/MyCapture.App/Recording/RecordingControlWindow.cs" => line is "BorderBrush = TryBrush(\"Border.Accent\", Colors.White)," or ": TryBrush(\"Border.Accent\", Colors.White);",
+                "src/MyCapture.App/Recording/RecordingControlWindow.cs" => line is "BorderBrush = TryBrush(\"Accent.Default\", Colors.OrangeRed)," or ": TryBrush(\"Accent.Default\", Colors.OrangeRed);",
                 // Diagnostic contrast role classification does not paint a control.
                 "src/MyCapture.App/Diagnostics/UxReviewSelfTest.cs" => line == "|| brushKey is \"Text.OnAccent\" or \"Text.Badge\"",
                 // User-editable drawing colors and the capture-guide color preference.
