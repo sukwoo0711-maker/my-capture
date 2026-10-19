@@ -110,11 +110,9 @@ public sealed class EditorLargeTextViewportTests
     [InlineData(6)]
     public void FullWidthCaptionOverlaysItsBarInsideTheCanvasAndKeepsEditing(int paragraphLines) => StaTestHost.Run(() =>
     {
-        using EditorWindowHost host = EditorWindowHost.Create(Solid(800, 600, 240));
-        // Keep this fixture width-limited: the full-width canvas otherwise letterboxes the
-        // image horizontally and legitimately leaves room for a scrollbar to its right.
-        host.Window.Height = 900;
-        host.Window.UpdateLayout();
+        // A wide image stays width-limited in the default 1000x640 host, even on a
+        // small work area that would clamp a taller window and letterbox a 4:3 image.
+        using EditorWindowHost host = EditorWindowHost.Create(Solid(800, 300, 240));
         // At the image's left edge there is no room on either side: the bar overlays the right edge.
         Invoke(host.Editor, "PlaceTextBox", new PointD(0, 40));
         TextBox box = Field<TextBox>(host.Editor, "_activeTextBox");
@@ -133,6 +131,8 @@ public sealed class EditorLargeTextViewportTests
         TextAnnotation caption = Assert.Single(host.Editor.CreateCurrentImageSnapshot().Items.OfType<TextAnnotation>());
         Assert.False(caption.AutoSize);
         AnnotationEditorSurface surface = Field<AnnotationEditorSurface>(host.Editor, "_surface");
+        Assert.Equal(0, surface.FrameRectDip.Left, 6);
+        Assert.Equal(overlay.ActualWidth, surface.FrameRectDip.Right, 6);
         var inset = Field<Point>(host.Editor, "_liveTextInset");
         // Overlaying never narrows the text viewport, so the live lines match the committed ones.
         Assert.Equal(surface.ToSurfaceRect(caption.Rect).Width, box.ActualWidth - 2 * inset.X, 1);
@@ -219,10 +219,8 @@ public sealed class EditorLargeTextViewportTests
     [InlineData(true)]
     public void OverflowScrollbarKeepsTheCommittedWrappingWidth(bool paragraphs) => StaTestHost.Run(() =>
     {
-        using EditorWindowHost host = EditorWindowHost.Create(Solid(800, 600, 240));
-        // The left-slot case needs the image's right edge to meet the canvas clip boundary.
-        host.Window.Height = 900;
-        host.Window.UpdateLayout();
+        // Keep the image's right edge at the canvas clip boundary without a tall window.
+        using EditorWindowHost host = EditorWindowHost.Create(Solid(800, 300, 240));
         Invoke(host.Editor, "PlaceTextBox", new PointD(600, 40));
         TextBox box = Field<TextBox>(host.Editor, "_activeTextBox");
         string line = "고정 폭에서 같은 줄바꿈을 유지합니다 abcXYZ😀 ";
@@ -241,6 +239,8 @@ public sealed class EditorLargeTextViewportTests
         // The caption wraps at the image's right edge, where the viewport clips: the bar moves to the
         // caption's left, wholly inside the canvas, while the first glyph stays where the commit draws it.
         Canvas overlay = Field<Canvas>(host.Editor, "_overlayCanvas");
+        Assert.Equal(0, surface.FrameRectDip.Left, 6);
+        Assert.Equal(overlay.ActualWidth, surface.FrameRectDip.Right, 6);
         AssertBarInside(bar, overlay);
         Assert.True(bar.TranslatePoint(new Point(), overlay).X < box.TranslatePoint(new Point(inset.X, 0), overlay).X,
             "the bar sits left of the text");
