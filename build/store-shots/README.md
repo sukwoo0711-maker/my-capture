@@ -62,25 +62,33 @@ python -X utf8 -I "C:/GitRepositories/my-capture-440/store-shots/build/store-sho
 | 2 | 코드 옆에 참고 화면을 띄웁니다 / Pin references above your code | `samples/code.png` 0.80 → 1.60, `pins/code.png` 0.80 → 2.40 |
 | 3 | 오류 화면에 바로 표시합니다 / Mark up a bug screenshot | `annotation/06-step2.png` 0.70 → 2.10 |
 | 4 | 캡처 카드에서 작업을 고릅니다 / Choose an action on the card | `samples/code.png` 0.80 → 1.60, `quick-access/dashboard.png` 1.00 → 3.00 |
-| 5 | 이미지 속 글자를 복사합니다 / Copy text out of an image | `ocr/result-source.png` 0.70 → 2.10 |
+| 5 | 이미지 속 글자를 복사합니다 / Copy text out of an image | `ocr/result-source.png` 0.68 → 2.04 |
 | 6 | 지난 캡처를 글자로 찾습니다 / Find past captures by their text | `library/midnight-search.png` 0.75 → 2.25 |
-| 7 | 녹화하고 필요한 구간만 남깁니다 / Record a region and trim it | `video/editor.png` 0.67 → 2.01 |
-| 8 | GIF 크기를 미리 확인합니다 / Check GIF size before export | `video/gif-export-dialog.png` 0.67 → 2.01 |
-| 9 | Windows 캡처 도구에서 옮겨 오면 / Coming from Windows Snipping Tool | 창 없이 2열 문자만 배치합니다. |
+| 7 | 녹화하고 필요한 구간만 남깁니다 / Record a region and trim it | `video/editor.png` 0.75 → 2.25 |
+| 8 | GIF 크기를 미리 확인합니다 / Check GIF size before export | `video/editor.png` 0.42 → 1.26, `video/gif-export-dialog.png` 0.56 → 1.68 |
+| 9 | Windows 캡처 도구에서 옮겨 오면 / From Windows Snipping Tool | 창 없이 2열 문자만 배치합니다. |
 
 장면 9의 왼쪽(그대로)에는 영역·창·전체 화면 캡처, 클립보드 복사, 이미지 속 글자 복사, 영역 녹화를 넣습니다. 오른쪽(더해지는 것)에는 핀, 스크롤 캡처, 블러·모자이크·단계 번호, 창 제목과 글자로 찾는 라이브러리, 카드번호·토큰까지 찾는 가리기를 넣습니다. 오른쪽 다섯 항목은 Microsoft의 [Snipping Tool 기능 안내](https://support.microsoft.com/en-us/windows/apps/use-snipping-tool-to-capture-screenshots)에 없고(빠른 가리기는 이메일·전화번호만 안내), 스크롤 캡처는 Microsoft의 [2026-02-26 설명](https://www.microsoft.com/en-us/windows/learning-center/how-to-use-snipping-tool-on-windows-screenshots-shortcuts-and-screen-recordings)이 기본 제공하지 않는다고 밝힙니다. 제출 직전 기능 안내를 다시 열어 확인합니다. 표 복사는 [공식 Copy as table 발표](https://blogs.windows.com/windows-insider/2024/10/18/announcing-windows-11-insider-preview-build-22635-4371-beta-channel/)가 있어 차별점에서 제외했습니다. 출처·보류 사유는 `claim_review`에 보관하며 렌더에는 두 열의 본문만 넣습니다.
 
 ## 4.4.0 렌더 요구 사항
+
+`--selftest-store-layers <outputDirectory> [ko|en]`은 아래 경로의 원본 레이어 10장과 `manifest.json`, `store-layers-report.txt`를 생성합니다. 기존 `--selftest-store-shots`는 그대로 유지합니다. 실행 전 `MYCAPTURE_DATA_ROOT`, `TMP`, `TEMP`를 모두 작업 트리의 `artifacts\t` 절대 경로로 지정합니다. 예: `MyCapture.exe --selftest-store-layers C:\GitRepositories\my-capture-440\store-scenes\artifacts\layers\ko ko`. 영어는 출력 마지막 폴더와 언어를 `en`으로 바꿉니다.
+
+가리기는 합성 글자의 실제 글꼴 측정 좌표를 OCR 단어 입력으로 제공한 뒤 `PrivacyRedactionService`·`PrivacyDetector`·편집기의 실제 가리기 동작을 실행합니다. 터미널 OCR도 같은 합성 글자와 위치를 사용하며 외부 OCR 모델이나 사용자 캡처를 읽지 않습니다. 임시 라이브러리와 3초 영상은 언어별 출력 폴더의 `_fixtures-*`에만 작성하고, 실행이 끝나면 그 폴더를 지웁니다. 닫히는 창이 파일을 잡고 있어 지우지 못하면 보고서에 경로를 남깁니다.
+
+제품을 있는 그대로 렌더합니다. 4.4.0 빠른 카드는 단축키 글자를 그리지 않고(C/E/P/S/T는 도구 설명과 자동화 이름에만 있음), 영상 편집기의 텍스트 트랙은 제품 색을 씁니다. 두 사항은 보고서에 기록할 뿐 실패로 보지 않으며, 정상 실행은 `RESULT: PASS`·종료 코드 0입니다.
+
+4.4.0 렌더를 보고 배치를 조정했습니다. 장면 2의 핀은 `[1500,770]`, 장면 4의 카드는 배율 1.00(논리 3.00배)으로 키웠습니다. 장면 5는 crop `[0,300,3300,1920]`·배율 0.68, 장면 7은 미리보기 아래쪽부터 타임라인까지 crop `[0,1180,3720,2400]`·배율 0.75입니다. 장면 8은 실제 사용처럼 영상 편집기(배율 0.42) 위에 GIF 내보내기 창(crop `[0,0,1872,1900]`, 배율 0.56, 아래쪽이 캔버스 끝에 닿음)을 겹칩니다.
 
 언어마다 별도 레이어 폴더를 만들고 아래 상대 경로를 그대로 유지합니다. 제품 창은 실제 ko/en 리소스로 렌더하며 창 바깥의 투명 알파를 보존합니다. 합성기는 창 내부 문구나 주석을 새로 그리지 않습니다. 다음 항목은 후속 자체 테스트의 구현 계약입니다.
 
 1. **개인정보 가리기:** `AnnotationEditorWindow` 1240×780 DIP, 3×에서 `redact/00-before.png`와 `redact/03.png`를 각각 3720×2340px로 렌더합니다. 전자는 가리기 전 근거, 후자는 합성 입력입니다. 제목은 `로그 업로드 오류` / `Log upload failure`로 하고, `user@example.com`, `ghp_` 접두사와 36자 합성 토큰, 테스트 카드 `4111 1111 1111 1111`을 원본 y=650..1280에 배치합니다. 실제 가리기 결과로 세 값을 덮고 상단 도구막대와 가림막을 crop 안에 둡니다. 실제 사용자 데이터는 사용하지 않습니다. 보조 문구는 `Ctrl+Shift+R`입니다.
 2. **핀:** `samples/code.png`는 1440×900 논리 픽셀의 합성 중성색 코드 창을 2×, 2880×1800px로 렌더합니다. 큰 글씨로 `CaptureService.cs`의 `SaveAsync` 메서드와 `await library.AddAsync(capture)`를 표시합니다. `pins/code.png`는 `SaveAsync` 서명과 반환 규약을 담은 다른 참조 캡처의 실제 `PinWindow`를 436×184 DIP, 3×, 1308×552px로 렌더합니다. 참조 핀은 오른쪽에 두고 코드 편집 줄을 가리지 않습니다. 신규 설치에는 클립보드 핀 단축키가 없으므로 제목·보조 문구에 키 이름을 쓰지 않고, 다른 창 위 유지 동작을 최종 앱에서 확인합니다.
 3. **주석:** `annotation/06-step2.png`는 `AnnotationEditorWindow` 1240×780 DIP, 3×, 3720×2340px입니다. 합성 오류 대화상자 또는 실패 테스트 화면의 한 오류 지점을 중심으로 실제 편집기에서 화살표·단계 1과 2·`재시도 후 발생` / `After retry` 텍스트를 추가합니다. 오류와 세 주석은 원본 x=500..2600, y=650..1800에 둡니다. 현재 Office 차트와 형광펜 예제를 교체합니다.
-4. **빠른 카드:** 장면 2와 같은 `samples/code.png`와 `QuickAccessWindow`의 `quick-access/dashboard.png`를 사용합니다. 카드는 344×215 DIP, 3×, 1032×645px이며 방금 캡처한 함수·파일명과 같은 썸네일, 실제 C/E/P/S/T 동작, 키보드 포커스 진입 상태를 표시합니다. 카드 클릭 또는 Alt+Q 등 실제 활성화 조건과 활성 상태에서의 단일 키 동작을 최종 앱에서 확인합니다.
+4. **빠른 카드:** 장면 2와 같은 `samples/code.png`와 `QuickAccessWindow`의 `quick-access/dashboard.png`를 사용합니다. 카드는 344×215 DIP, 3×, 1032×645px이며 방금 캡처한 함수·파일명과 같은 썸네일과 실제 버튼을 보여 줍니다. 진단은 카드를 활성화하지 않은 유지 상태로 렌더하며, 단축키(Alt+Q로 카드 선택 뒤 E·P·S·T)는 보조 문구로 알립니다.
 5. **텍스트 복사:** `ocr/result-source.png`는 `OcrResultWindow` 1100×640 DIP, 3×, 3300×1920px입니다. 왼쪽 터미널 캡처와 오른쪽 실제 인식 결과에 `dotnet test`, `Failed: 1`, `Expected: 200`, `Actual: 500`을 사용합니다. 줄별 위치와 코드·숫자가 원본과 일치해야 합니다. 제목·버튼은 해당 언어의 제품 리소스를 사용합니다.
 6. **라이브러리:** `library/midnight-search.png`는 `LibraryWindow` 1240×760 DIP, 3×, 3720×2280px입니다. 자체 테스트 저장소에 합성 캡처 세 개와 OCR 색인을 준비하고 `timeout`을 검색합니다. 첫 결과는 창 제목 `CaptureService.cs — timeout`, 둘째는 OCR 본문 `Request timeout`, 셋째는 두 조건이 모두 일치합니다. 검색 필드·결과 제목·제목 또는 이미지 글자의 일치 근거를 crop 안에 둡니다. 실제 사용자 라이브러리는 사용하지 않습니다.
-7. **영상 편집:** `video/editor.png`는 `VideoEditorWindow` 1240×800 DIP, 3×, 3720×2400px입니다. 자체 생성 프레임으로 터미널 테스트 실패와 수정을 보여 주는 3초 영상을 만들고 0.4~2.6초를 선택합니다. 시간 지정 텍스트 두 개는 `오류 재현` / `Reproduce the error`, `수정 후 확인` / `Verify the fix`입니다. 프리뷰 하부·남는 길이·시작과 끝 핸들·두 텍스트 트랙을 하단 crop에 표시합니다. 실제 녹화 장치를 사용하지 않으며 보라색 트랙은 최종 제품의 흑연색·빨강 규칙을 반영한 실제 렌더로 교체합니다.
+7. **영상 편집:** `video/editor.png`는 `VideoEditorWindow` 1240×800 DIP, 3×, 3720×2400px입니다. 자체 생성 프레임으로 터미널 테스트 실패와 수정을 보여 주는 3초 영상을 만들고 0.4~2.6초를 선택합니다. 시간 지정 텍스트 두 개는 `오류 재현` / `Reproduce the error`, `수정 후 확인` / `Verify the fix`입니다. 프리뷰 하부·남는 길이·시작과 끝 핸들·두 텍스트 트랙을 하단 crop에 표시합니다. 실제 녹화 장치를 사용하지 않으며, 텍스트 트랙은 제품이 그리는 색 그대로 둡니다.
 8. **GIF 내보내기:** `video/gif-export-dialog.png`는 `VideoExportDialog` 624×1021 DIP, 3×, 1872×3063px입니다. 장면 7 영상 프리뷰, GIF 선택, 960px·10fps 권장 설정, 10MB GitHub 첨부 목표, 제품이 실제 계산한 크기를 표시합니다. 설정은 crop 위쪽, 권장 상태와 크기는 아래쪽에 둡니다. 예상/측정 크기는 실제 산정 결과와 제품 문구를 그대로 쓰며 기존 예제의 229KB를 고정하지 않습니다. 긴 아래 빈 공간과 내보내기 버튼은 crop 밖에 둡니다.
 9. **비교:** 창 레이어가 없습니다. `그대로` / `Works the same`, `더해지는 것` / `What MyCapture adds`의 두 열과 검토된 항목만 사용합니다. 열 제목은 44px `#9AA5B5`, 그 아래 흰색 10% 1px 선, 본문은 60px(왼쪽 `#9AA5B5`, 오른쪽 `#F3F5F8`)이며 아이콘·체크표시를 추가하지 않습니다.
 

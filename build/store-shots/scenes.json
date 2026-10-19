@@ -88,7 +88,7 @@
             552
           ],
           "placement": [
-            1200,
+            1500,
             770
           ],
           "scale": 0.8,
@@ -176,15 +176,15 @@
           "path": "ocr/result-source.png",
           "crop": [
             0,
-            400,
+            300,
             3300,
             1920
           ],
           "placement": [
             160,
-            360
+            330
           ],
-          "scale": 0.7,
+          "scale": 0.68,
           "z": 0,
           "final": "OcrResultWindow의 1100×640 DIP, 3× 레이어입니다. 왼쪽은 터미널 캡처, 오른쪽은 실제 인식 결과입니다. dotnet test, Failed: 1, Expected: 200, Actual: 500 같은 합성 줄을 사용하고 줄 단위 인식 위치를 입력 이미지와 맞춥니다. 하단 복사 버튼을 포함합니다."
         }
@@ -226,15 +226,15 @@
           "path": "video/editor.png",
           "crop": [
             0,
-            780,
-            3500,
+            1180,
+            3720,
             2400
           ],
           "placement": [
             160,
-            350
+            400
           ],
-          "scale": 0.67,
+          "scale": 0.75,
           "z": 0,
           "final": "VideoEditorWindow의 1240×800 DIP, 3× 레이어입니다. 합성 터미널에서 테스트 실패 후 수정하는 3초 영상의 0.4~2.6초를 선택합니다. 텍스트 레이어 두 개: ko '오류 재현' / '수정 후 확인', en 'Reproduce the error' / 'Verify the fix'. 남는 길이와 시작·끝 핸들, 시간 지정 텍스트 트랙을 하단 crop에 표시합니다."
         }
@@ -248,19 +248,35 @@
       "title_en": "Check GIF size before export",
       "layers": [
         {
+          "path": "video/editor.png",
+          "crop": [
+            0,
+            0,
+            3720,
+            2400
+          ],
+          "placement": [
+            160,
+            380
+          ],
+          "scale": 0.42,
+          "z": 0,
+          "final": "장면 7과 같은 VideoEditorWindow를 내보내기 창 뒤에 둡니다. 실제 사용처럼 편집기 위에 GIF 내보내기 창이 뜬 구도입니다."
+        },
+        {
           "path": "video/gif-export-dialog.png",
           "crop": [
             0,
-            240,
+            0,
             1872,
             1900
           ],
           "placement": [
-            160,
-            330
+            1352,
+            376
           ],
-          "scale": 0.67,
-          "z": 0,
+          "scale": 0.56,
+          "z": 1,
           "final": "VideoExportDialog의 624×1021 DIP, 3× 레이어입니다. GIF 선택, 960px·10fps 권장 설정, 10MB GitHub 첨부 목표, 장면 7의 개발 영상 프리뷰, 제품이 실제 계산한 크기 결과를 표시합니다. crop 위쪽에는 설정, 아래쪽에는 권장 상태와 크기 값이 들어갑니다."
         }
       ],
@@ -270,7 +286,7 @@
       "id": 9,
       "slug": "comparison",
       "title_ko": "Windows 캡처 도구에서 옮겨 오면",
-      "title_en": "Coming from Windows Snipping Tool",
+      "title_en": "From Windows Snipping Tool",
       "layers": [],
       "comparison": {
         "left_heading_ko": "그대로",
