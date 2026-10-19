@@ -116,13 +116,13 @@ Shortcuts:
 
 - Ctrl+Shift+C: Region capture
 - Ctrl+Shift+X: Start or stop region recording
-- Ctrl+Shift+R: Redact in the image editor
+- Ctrl+Shift+R: Auto-redact in the image editor
 
 Global shortcuts can be changed in Settings. The shortcuts for pinning clipboard content (for example F3) and opening the library start unassigned; set them in Settings.
 
 Capture a region, window or full screen, or use delayed and scrolling capture. Annotate error screenshots with arrows, text and step numbers. Blur and mosaic cover parts of an image. Non-destructive layers remain editable.
 
-Redact finds email addresses, Korean phone numbers, payment card numbers, Korean resident registration numbers, IPv4 addresses, and supported API key and token formats in recognized text, then covers them in the image.
+Auto-redact finds email addresses, Korean phone numbers, payment card numbers, Korean resident registration numbers, IPv4 addresses, and supported API key and token formats in recognized text, then covers them in the image.
 
 Pin keeps images, text and tables above other windows for reference beside your code. Recently closed pins can be reopened.
 
@@ -141,7 +141,7 @@ Requirements: Windows 11 or Windows 10 version 22H2 (x64). ARM64 PCs need Window
 ### Features
 
 - No ads, account or capture limits; captures and text recognition stay on this PC
-- Redact: email addresses, Korean phone numbers, payment card numbers, Korean resident registration numbers, IPv4 addresses, and supported API key and token formats
+- Auto-redact: email addresses, Korean phone numbers, payment card numbers, Korean resident registration numbers, IPv4 addresses, and supported API key and token formats
 - Pin: images, text and tables above other windows; recently closed pins can be reopened
 - Copy text: Korean and English recognition, plus tables as CSV, Markdown or tab-separated text
 - Region, window, full screen, delayed and scrolling capture
@@ -155,7 +155,7 @@ Requirements: Windows 11 or Windows 10 version 22H2 (x64). ARM64 PCs need Window
 
 Enter them in screenshot order. Each caption is 200 characters or fewer.
 
-1. Redact covers an email address, token and card number in an error report. Press Ctrl+Shift+R in the image editor.
+1. Auto-redact covers an email address, token and card number in an error report. Press Ctrl+Shift+R in the image editor.
 2. A reference image pinned beside the code. Press Alt+Q and then P on the capture card, or pin clipboard content with a shortcut assigned in Settings.
 3. An error screenshot with arrows, step numbers and text. Annotation layers remain editable.
 4. A small card appears after each capture. Click it or press Alt+Q, then press E to edit, P to pin, S to save or T to copy text.
@@ -191,7 +191,7 @@ Partner Center의 Submission options > Restricted capabilities에 영어로 입�
 
 ## 인증 참고 사항 (Notes for certification)
 
-> MyCapture runs in the notification area. The first-run screen lets the user start a capture or skip to the library. On new installations, Ctrl+Shift+C captures a region and Ctrl+Shift+X starts or stops region recording. Pin and library global shortcuts are unassigned; existing installations retain their saved shortcuts. Ctrl+Shift+R runs Redact inside the image editor. A new installation copies each capture to the clipboard and shows the quick-access card by default. Alt+Q or a click moves focus to the card; its C/E/P/S/T keys then work.
+> MyCapture runs in the notification area. The first-run screen lets the user start a capture or skip to the library. On new installations, Ctrl+Shift+C captures a region and Ctrl+Shift+X starts or stops region recording. Pin and library global shortcuts are unassigned; existing installations retain their saved shortcuts. Ctrl+Shift+R runs Auto-redact inside the image editor. A new installation copies each capture to the clipboard and shows the quick-access card by default. Alt+Q or a click moves focus to the card; its C/E/P/S/T keys then work.
 >
 > Capture, editing, recording and OCR run on the PC. The only automatic network access is downloading missing OCR model files. The optional GitHub image attachment requires the user's own GitHub account. The package's startup task is disabled at install. The first-run screen offers launch at sign-in with its checkbox selected, and the user can clear it there or change it later in Settings > General.
 >
