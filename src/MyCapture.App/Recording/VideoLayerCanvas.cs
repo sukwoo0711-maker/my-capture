@@ -9,6 +9,20 @@ namespace MyCapture.App.Recording;
 /// <summary>Source-coordinate selection overlay. The actual artwork is drawn by the export compositor.</summary>
 internal sealed class VideoLayerCanvas : FrameworkElement
 {
+    /// <summary>The selected layer's outline and handle edges: the accent, as the image editor's selection.</summary>
+    internal static readonly DependencyProperty SelectionBrushProperty = DependencyProperty.Register(
+        nameof(SelectionBrush), typeof(Brush), typeof(VideoLayerCanvas),
+        new FrameworkPropertyMetadata(FrozenBrush(Color.FromRgb(0xE0, 0x45, 0x3C)), FrameworkPropertyMetadataOptions.AffectsRender));
+
+    /// <summary>The fill of the selected layer's corner handles.</summary>
+    internal static readonly DependencyProperty HandleFillBrushProperty = DependencyProperty.Register(
+        nameof(HandleFillBrush), typeof(Brush), typeof(VideoLayerCanvas),
+        new FrameworkPropertyMetadata(Brushes.White, FrameworkPropertyMetadataOptions.AffectsRender));
+
+    internal Brush SelectionBrush { get => (Brush)GetValue(SelectionBrushProperty); set => SetValue(SelectionBrushProperty, value); }
+
+    internal Brush HandleFillBrush { get => (Brush)GetValue(HandleFillBrushProperty); set => SetValue(HandleFillBrushProperty, value); }
+
     private VideoEditDocument _document = VideoEditDocument.CreateFor(1, 1, 1);
     private double _time;
     private Point _start;
@@ -34,8 +48,18 @@ internal sealed class VideoLayerCanvas : FrameworkElement
     {
         Focusable = true;
         ClipToBounds = true;
+        // The window's palette (a workspace role or the application's) recolours both live.
+        SetResourceReference(SelectionBrushProperty, "Accent.Default");
+        SetResourceReference(HandleFillBrushProperty, "Overlay.HandleFill");
         AutomationProperties.SetName(this, UiText.Get("Text_FA67EC449E04"));
         ToolTip = UiText.Get("Video.EditTextHint");
+    }
+
+    private static Brush FrozenBrush(Color color)
+    {
+        var brush = new SolidColorBrush(color);
+        brush.Freeze();
+        return brush;
     }
 
     internal void SetDocument(VideoEditDocument document) { _document = document; InvalidateVisual(); }
@@ -89,11 +113,11 @@ internal sealed class VideoLayerCanvas : FrameworkElement
         if (SelectedId is { } id && ActiveBounds().TryGetValue(id, out Rect bounds))
         {
             Rect view = ToView(bounds);
-            var pen = new Pen(Brushes.DeepSkyBlue, IsKeyboardFocused ? 2 : 1);
+            var pen = new Pen(SelectionBrush, IsKeyboardFocused ? 2 : 1);
             dc.DrawRectangle(null, pen, view);
             foreach (Point corner in Corners(view))
             {
-                dc.DrawRectangle(Brushes.White, pen, new Rect(corner.X - 4, corner.Y - 4, 8, 8));
+                dc.DrawRectangle(HandleFillBrush, pen, new Rect(corner.X - 4, corner.Y - 4, 8, 8));
             }
 
             // The handles reach 4 px past the outline, plus the pen.
