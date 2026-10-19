@@ -46,8 +46,12 @@ MyCapture의 공식 배포 경로는 Microsoft Store 하나입니다. 이 문서
 | Store 주소 | https://apps.microsoft.com/detail/9PB33MC095VR |
 | `Package/Identity/Name` | `sukwoo0711.MyCapture` |
 | `Package/Identity/Publisher` | `CN=2BAAF359-E7FC-4D15-9E24-F3262AD74474` |
-| `Package/Properties/PublisherDisplayName` | `sukwoo0711` |
+| `Package/Properties/PublisherDisplayName` | `sukwoo0711` (게시자 표시 이름을 바꾸면 그 이름) |
 | 패키지 패밀리 이름 | `sukwoo0711.MyCapture_n98e1tgx2qxb2` |
+| 추가로 예약한 이름 | `MyCapture - 캡처·가리기·핀`, `MyCapture - Screenshot, Redact & Pin` (2026-10-20) |
+
+- **게시자 표시 이름**: Store의 게시자 표시는 계정의 게시자 표시 이름이고, 패키지의 `PublisherDisplayName`은 그 이름과 같아야 업로드됩니다. 계정 설정 > Legal info > Contact info의 Publisher name에서 `MyCapture`로 바꿀 수 있지만, 바꾸면 계정이 추가 검토를 받고 이후 패키지를 새 이름으로 다시 만들어 제출해야 합니다(`-PublisherDisplayName 'MyCapture'`). 인증 중인 제출의 패키지는 이전 이름으로 빌드되었으므로 그 제출이 게시된 뒤에 바꿉니다. 패키지 ID(`Package/Identity/Name`, 패키지 패밀리 이름)는 바뀌지 않습니다.
+- **추가로 예약한 이름**: Store 정책 10.1.1은 제품 이름에 설명 문구와 키워드를 넣지 못하게 하므로 목록 제품 이름은 `MyCapture`로 둡니다. 예약은 3개월 안에 제출에서 쓰지 않으면 풀릴 수 있습니다.
 
 ## 2. 패키지 만들기
 
@@ -138,6 +142,19 @@ Store 목록용 스크린샷은 실제 MyCapture 창을 렌더링해 만듭니�
 - 결과는 2560×1440 PNG 10장(라이브러리, 주석, 빠른 가리기, 캡처 후 카드, 핀, 텍스트 인식, 영상 편집기, GIF 내보내기, 설정, 밝은 테마 라이브러리)과 `store-screenshots-report.txt`입니다.
 - 생성하는 동안 화면 왼쪽 위에 MyCapture 창이 잠깐씩 나타났다 닫힙니다.
 - 한국어(ko-KR) 목록에는 `ko`, 영어(en-US) 목록에는 `en` 결과를 올립니다.
+
+### 4.4.0부터: 창 레이어 합성
+
+4.4.0 목록은 9장 체계로 바꿉니다. 앱이 렌더한 투명 창 레이어와 `manifest.json`을 [`build/store-shots/compose.py`](../../build/store-shots/compose.py)가 그래파이트 바탕(#16191F→#101318)에 제목 한 줄과 함께 합성합니다. 장면 순서, 두 언어 제목, 자르기·배치, 장면마다 필요한 개발자 소재는 [`build/store-shots/scenes.json`](../../build/store-shots/scenes.json)에 있고, 사용법과 4.4.0 렌더 요구 사항은 [`build/store-shots/README.md`](../../build/store-shots/README.md)에 있습니다.
+
+```powershell
+python -X utf8 -I .\build\store-shots\compose.py --layers <레이어 폴더> --lang ko --out .\artifacts\store\screenshots\4.4.0\ko
+python -X utf8 -I .\build\store-shots\compose.py --layers <레이어 폴더> --lang en --out .\artifacts\store\screenshots\4.4.0\en
+```
+
+- 결과는 `01.png`–`09.png`, 확인용 `contact-sheet.png`와 `search-card.png`(Store 검색 결과 카드 크기 319×179로 줄인 1번과 경쟁 앱 카드 비교)입니다.
+- 1번은 개인정보 가리기, 2번은 핀, 9번은 '캡처 도구에서 옮겨 오면' 비교 카드입니다. 9번의 비교 항목은 Microsoft의 Snipping Tool 기능 안내로 확인한 것만 쓰며, 제출 직전에 다시 확인합니다.
+- 레이어를 내보내는 자체 검사 옵션은 4.4.0 장면 소재를 바꿀 때 `StoreScreenshotSelfTest`에 더합니다.
 
 ## 5. 다음 버전 제출
 

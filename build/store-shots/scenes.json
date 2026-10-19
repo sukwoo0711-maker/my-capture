@@ -1,0 +1,340 @@
+{
+  "version": 1,
+  "prototype": {
+    "version": "4.2.1",
+    "language": "ko",
+    "note": "두 언어 모두 한국어 사무 예제 레이어를 사용하는 배치 시안입니다. 실제 창의 색·문구·픽셀은 바꾸지 않습니다. 최종 개발 예제와 영어 창은 4.4.0 렌더로 교체합니다."
+  },
+  "search_card": {
+    "evidence_path": "C:/GitRepositories/my-capture/artifacts/strict-review-2026-10-20/evidence/store-search-tall.png",
+    "thumbnail_rect": [
+      115,
+      3170,
+      434,
+      3349
+    ],
+    "competitor_rects": [
+      [
+        480,
+        736,
+        800,
+        916
+      ],
+      [
+        845,
+        736,
+        1165,
+        916
+      ]
+    ],
+    "measurement": "1280×6000 원본의 정수 픽셀 좌표입니다. MyCapture 이미지 경계는 x=115..433, y=3170..3348, 319×179입니다. x=114/434 및 y=3169/3349는 흰 여백입니다. 경쟁 앱 이미지는 각각 320×180이며 원본 배율을 유지합니다."
+  },
+  "scenes": [
+    {
+      "id": 1,
+      "slug": "redact",
+      "title_ko": "개인정보를 한 번에 가립니다",
+      "title_en": "Redact personal data in one step",
+      "subline_ko": "Ctrl+Shift+R",
+      "subline_en": "Ctrl+Shift+R",
+      "layers": [
+        {
+          "path": "redact/03.png",
+          "crop": [
+            0,
+            0,
+            3000,
+            1800
+          ],
+          "placement": [
+            160,
+            400
+          ],
+          "scale": 0.75,
+          "z": 0,
+          "final": "AnnotationEditorWindow의 개발 오류 보고서. user@example.com, ghp_ 접두사와 36자 합성 토큰, 테스트 카드 4111 1111 1111 1111의 세 값을 실제 개인정보 가리기 결과로 덮습니다. 상단 도구막대와 세 가림막을 crop 안에 둡니다."
+        }
+      ],
+      "final": "같은 1240×780 DIP 편집 창에서 redact/00-before.png와 redact/03.png를 3×로 각각 렌더합니다. 전자는 가리기 전 근거, 후자는 합성 입력입니다. 본문 제목은 ko '로그 업로드 오류', en 'Log upload failure'; 민감 값 세 줄은 원본 픽셀 y=650..1280에 배치합니다. 실제 사용자 로그·토큰·카드 데이터는 쓰지 않습니다."
+    },
+    {
+      "id": 2,
+      "slug": "pin",
+      "title_ko": "코드 옆에 참고 화면을 띄웁니다",
+      "title_en": "Pin references above your code",
+      "layers": [
+        {
+          "path": "samples/code.png",
+          "crop": [
+            0,
+            0,
+            2880,
+            1800
+          ],
+          "placement": [
+            160,
+            410
+          ],
+          "scale": 0.8,
+          "z": 0,
+          "final": "1440×900 논리 픽셀의 합성 코드 창을 2× PNG로 렌더합니다. CaptureService.cs의 SaveAsync 메서드와 await library.AddAsync(capture) 호출을 표시합니다. 중성색 편집기이며 코드는 읽을 수 있도록 큰 글씨로 배치합니다."
+        },
+        {
+          "path": "pins/code.png",
+          "crop": [
+            0,
+            0,
+            1308,
+            552
+          ],
+          "placement": [
+            1200,
+            770
+          ],
+          "scale": 0.8,
+          "z": 1,
+          "final": "PinWindow에 SaveAsync 서명과 반환 규약을 담은 참조 캡처를 띄운 436×184 DIP, 3× 투명 레이어입니다. 창 밖 알파와 실제 모서리를 보존합니다. 코드 창의 편집 줄을 가리지 않도록 우측에 둡니다."
+        }
+      ],
+      "final": "편집 중인 코드와 다른 참조 내용의 실제 PinWindow를 각각 렌더합니다. 핀의 최상위 동작은 제품 검증에서 확인하며 합성 이미지 자체를 동작 증거로 쓰지 않습니다. 신규 설치에는 클립보드 핀 단축키가 지정되어 있지 않으므로 제목과 보조 문구에 키 이름을 쓰지 않습니다."
+    },
+    {
+      "id": 3,
+      "slug": "annotate",
+      "title_ko": "오류 화면에 바로 표시합니다",
+      "title_en": "Mark up a bug screenshot",
+      "layers": [
+        {
+          "path": "annotation/06-step2.png",
+          "crop": [
+            0,
+            400,
+            3000,
+            2040
+          ],
+          "placement": [
+            160,
+            350
+          ],
+          "scale": 0.7,
+          "z": 0,
+          "final": "AnnotationEditorWindow의 합성 오류 대화상자 또는 실패 테스트 화면. 실제 편집기로 화살표, 단계 1·2, ko '재시도 후 발생' / en 'After retry' 텍스트를 추가합니다. 세 주석과 오류 메시지를 원본 x=500..2600, y=650..1800에 둡니다."
+        }
+      ],
+      "final": "1240×780 DIP, 3× 편집기 레이어입니다. Office 차트·형광펜 장식은 개발 예제로 교체합니다. 하나의 오류 지점을 중심으로 화살표와 단계 번호를 배치하며 합성기에서 새 주석을 그리지 않습니다."
+    },
+    {
+      "id": 4,
+      "slug": "quick-card",
+      "title_ko": "캡처 직후 키 하나로 처리합니다",
+      "title_en": "One key after each capture",
+      "subline_ko": "C 복사 · E 편집 · P 핀 · S 저장 · T 텍스트 복사",
+      "subline_en": "C Copy · E Edit · P Pin · S Save · T Copy text",
+      "layers": [
+        {
+          "path": "samples/code.png",
+          "crop": [
+            0,
+            0,
+            2880,
+            1600
+          ],
+          "placement": [
+            160,
+            420
+          ],
+          "scale": 0.8,
+          "z": 0,
+          "final": "장면 2와 같은 합성 코드 창입니다. 방금 캡처한 함수와 파일명이 카드 썸네일 내용과 일치합니다."
+        },
+        {
+          "path": "quick-access/dashboard.png",
+          "crop": [
+            0,
+            0,
+            1032,
+            645
+          ],
+          "placement": [
+            1520,
+            780
+          ],
+          "scale": 0.8,
+          "z": 1,
+          "final": "QuickAccessWindow의 344×215 DIP, 3× 투명 레이어입니다. 코드 캡처 썸네일과 C/E/P/S/T 동작을 실제 카드로 렌더합니다. 키보드 포커스 진입 상태를 명확히 표시합니다."
+        }
+      ],
+      "final": "캡처 후 QuickAccessWindow의 키보드 활성 상태를 렌더합니다. 카드 클릭 또는 Alt+Q 등 실제 활성화 조건을 최종 앱에서 확인하고 제목의 '키 하나'가 활성 상태에 해당하는지 검수합니다."
+    },
+    {
+      "id": 5,
+      "slug": "copy-text",
+      "title_ko": "이미지 속 글자를 복사합니다",
+      "title_en": "Copy text out of an image",
+      "layers": [
+        {
+          "path": "ocr/result-source.png",
+          "crop": [
+            0,
+            400,
+            3300,
+            1920
+          ],
+          "placement": [
+            160,
+            360
+          ],
+          "scale": 0.7,
+          "z": 0,
+          "final": "OcrResultWindow의 1100×640 DIP, 3× 레이어입니다. 왼쪽은 터미널 캡처, 오른쪽은 실제 인식 결과입니다. dotnet test, Failed: 1, Expected: 200, Actual: 500 같은 합성 줄을 사용하고 줄 단위 인식 위치를 입력 이미지와 맞춥니다. 하단 복사 버튼을 포함합니다."
+        }
+      ],
+      "final": "터미널 캡처와 인식 결과의 코드·숫자가 동일해야 합니다. 언어별 제목과 버튼은 실제 ko/en 리소스를 사용합니다. 합성기에서 결과 텍스트를 덧쓰지 않습니다."
+    },
+    {
+      "id": 6,
+      "slug": "library",
+      "title_ko": "지난 캡처를 글자로 찾습니다",
+      "title_en": "Find past captures by their text",
+      "layers": [
+        {
+          "path": "library/midnight-search.png",
+          "crop": [
+            0,
+            0,
+            3000,
+            1600
+          ],
+          "placement": [
+            160,
+            360
+          ],
+          "scale": 0.75,
+          "z": 0,
+          "final": "LibraryWindow의 1240×760 DIP, 3× 레이어입니다. 검색어 'timeout'으로 결과 세 개를 표시합니다. 첫 항목은 창 제목 CaptureService.cs — timeout, 둘째는 이미지 OCR 본문 Request timeout, 셋째는 둘 다 일치합니다. 검색어와 일치 근거를 crop 안에 배치합니다."
+        }
+      ],
+      "final": "임시 합성 캡처 세 개와 OCR 색인을 자체 테스트 저장소에 준비합니다. 실제 사용자의 라이브러리는 읽거나 수정하지 않습니다. 검색 필드, 결과 제목, 제목·이미지 글자 일치 설명이 보여야 합니다."
+    },
+    {
+      "id": 7,
+      "slug": "video-editor",
+      "title_ko": "녹화하고 필요한 구간만 남깁니다",
+      "title_en": "Record a region and trim it",
+      "layers": [
+        {
+          "path": "video/editor.png",
+          "crop": [
+            0,
+            780,
+            3500,
+            2400
+          ],
+          "placement": [
+            160,
+            350
+          ],
+          "scale": 0.67,
+          "z": 0,
+          "final": "VideoEditorWindow의 1240×800 DIP, 3× 레이어입니다. 합성 터미널에서 테스트 실패 후 수정하는 3초 영상의 0.4~2.6초를 선택합니다. 텍스트 레이어 두 개: ko '오류 재현' / '수정 후 확인', en 'Reproduce the error' / 'Verify the fix'. 남는 길이와 시작·끝 핸들, 시간 지정 텍스트 트랙을 하단 crop에 표시합니다."
+        }
+      ],
+      "final": "실제 녹화 장치를 실행하지 않고 자체 생성 프레임으로 영상을 준비하는 후속 자체 테스트입니다. 프리뷰 하부·트림 핸들·두 텍스트 트랙을 실제 제품에서 렌더합니다. 현재 프로토타입의 보라색 텍스트 트랙은 최종 앱의 흑연색·빨강 규칙에 맞는 실제 렌더로 교체해야 합니다."
+    },
+    {
+      "id": 8,
+      "slug": "gif-export",
+      "title_ko": "GIF 크기를 미리 확인합니다",
+      "title_en": "Check GIF size before export",
+      "layers": [
+        {
+          "path": "video/gif-export-dialog.png",
+          "crop": [
+            0,
+            240,
+            1872,
+            1900
+          ],
+          "placement": [
+            160,
+            330
+          ],
+          "scale": 0.67,
+          "z": 0,
+          "final": "VideoExportDialog의 624×1021 DIP, 3× 레이어입니다. GIF 선택, 960px·10fps 권장 설정, 10MB GitHub 첨부 목표, 장면 7의 개발 영상 프리뷰, 제품이 실제 계산한 크기 결과를 표시합니다. crop 위쪽에는 설정, 아래쪽에는 권장 상태와 크기 값이 들어갑니다."
+        }
+      ],
+      "final": "최종 자체 테스트는 표시한 설정으로 실제 산정한 예상/측정 크기를 제품 문구 그대로 사용합니다. 샘플의 229KB를 고정값으로 덧쓰지 않습니다. 긴 아래 빈 공간과 내보내기 버튼은 crop 밖이며 재배열하지 않습니다."
+    },
+    {
+      "id": 9,
+      "slug": "comparison",
+      "title_ko": "캡처 도구에서 옮겨 오면",
+      "title_en": "Coming from Snipping Tool",
+      "layers": [],
+      "comparison": {
+        "left_heading_ko": "그대로",
+        "left_heading_en": "Works the same",
+        "right_heading_ko": "더해지는 것",
+        "right_heading_en": "What MyCapture adds",
+        "left_ko": [
+          "영역·창·전체 화면 캡처",
+          "캡처하면 클립보드에 복사",
+          "이미지 속 글자 복사",
+          "영역 녹화"
+        ],
+        "left_en": [
+          "Region, window and full screen",
+          "Copied to the clipboard",
+          "Copy text from images",
+          "Region recording"
+        ],
+        "right_ko": [
+          "다른 창 위에 띄우는 핀",
+          "긴 화면을 잇는 스크롤 캡처",
+          "블러·모자이크·단계 번호",
+          "창 제목과 글자로 찾는 라이브러리",
+          "카드번호·토큰까지 찾는 가리기"
+        ],
+        "right_en": [
+          "Pins above other windows",
+          "Scrolling capture",
+          "Blur, mosaic and step numbers",
+          "Search by window title or text",
+          "Redact card numbers and tokens"
+        ]
+      },
+      "final": "앱 창을 사용하지 않는 2열 문자 전용 장면입니다. 아이콘·체크표시·부재를 단정하는 추가 문구를 넣지 않습니다.",
+      "claim_review": {
+        "reviewed_on": "2026-10-20",
+        "sources": [
+          {
+            "url": "https://support.microsoft.com/en-us/windows/apps/use-snipping-tool-to-capture-screenshots",
+            "summary": "공식 기능 안내. 캡처 모드(사각형·창·전체 화면·자유형·영상·지연), 펜·형광펜·도형, 텍스트 작업(글자 복사, 이메일·전화번호 빠른 가리기), 영상 캡처. 스크롤 캡처, 블러·모자이크·단계 번호, 다른 창 위 핀, 검색 가능한 기록은 언급 없음."
+          },
+          {
+            "url": "https://www.microsoft.com/en-us/windows/learning-center/how-to-use-snipping-tool-on-windows-screenshots-shortcuts-and-screen-recordings",
+            "quote": "Not natively. For long scrolling pages, you'll need a third-party screenshot tool."
+          }
+        ],
+        "included": [
+          "그대로: 영역·창·전체 화면 캡처, 클립보드 복사, 이미지 속 글자 복사, 영역 녹화 (두 제품 모두 지원)",
+          "더해지는 것: 핀, 스크롤 캡처, 블러·모자이크·단계 번호, 창 제목·글자 검색 라이브러리, 카드번호·토큰 탐지 (공식 기능 안내에 없음, 가리기는 이메일·전화번호만 안내)"
+        ],
+        "excluded": [
+          {
+            "claim": "표 복사",
+            "reason": "Snipping Tool Copy as table의 Insider 발표가 있어 차별점으로 쓰지 않습니다.",
+            "source": "https://blogs.windows.com/windows-insider/2024/10/18/announcing-windows-11-insider-preview-build-22635-4371-beta-channel/"
+          },
+          {
+            "claim": "GIF 내보내기",
+            "reason": "2025-06 Insider 배포 발표가 있어 차별점으로 쓰지 않습니다.",
+            "source": "https://blogs.windows.com/windows-insider/2025/06/19/gif-export-in-snipping-tool-begins-rolling-out-to-windows-insiders/"
+          }
+        ],
+        "recheck": "제출 직전 공식 기능 안내를 다시 열어 더해지는 것 다섯 줄이 여전히 Snipping Tool에 없는지 확인합니다."
+      }
+    }
+  ]
+}
