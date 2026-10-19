@@ -20,7 +20,7 @@ namespace MyCapture.App.Capture;
 internal sealed class QuickAccessWindow : Window
 {
     private readonly DispatcherTimer _timer = new() { Interval = TimeSpan.FromMilliseconds(100) };
-    private readonly ProgressBar _remaining = new() { Minimum = 0, Maximum = 100, Value = 100, Height = 3, BorderThickness = new Thickness(0) };
+    private readonly ProgressBar _remaining = new() { Minimum = 0, Maximum = 100, Value = 100, Height = 2, BorderThickness = new Thickness(0) };
     private readonly ToggleButton _keep;
     // Up to two wrapped lines beside the close button, where the card already has room.
     private readonly TextBlock _status = new()
@@ -50,9 +50,13 @@ internal sealed class QuickAccessWindow : Window
     private readonly List<Control> _keyboardTargets = [];
     private bool _keyboardAccess;
     private readonly Image _preview;
+    private readonly Border _previewSurface;
+    private DpiScale _previewDpi = new(1, 1);
+    private readonly TextBlock _firstUseTip = new() { TextWrapping = TextWrapping.Wrap, Margin = new Thickness(2, 6, 2, 6) };
     private readonly TextBlock _dimensions = new() { VerticalAlignment = VerticalAlignment.Center };
     private readonly RectD? _capturedRegion;
     private readonly MonitorInfo? _targetMonitor;
+    private readonly ReceiptKeyboardRouter? _keyboardRouter;
     private MonitorInfo? _placementMonitor;
     private NativeHotkeyRegistrar? _activationKey;
     private bool _activationRegistered;
@@ -84,12 +88,16 @@ internal sealed class QuickAccessWindow : Window
     /// </param>
     internal QuickAccessWindow(BitmapSource bitmap, Func<Task<bool>> copy, Action edit,
         Func<Task> pin, Func<Task<bool>> save, Action library, Func<Task<string>> export, bool excludeFromCapture = true,
-        RectD? capturedRegion = null, MonitorInfo? targetMonitor = null, Func<Task<TextCaptureOutcome>>? copyText = null)
+        RectD? capturedRegion = null, MonitorInfo? targetMonitor = null, Func<Task<TextCaptureOutcome>>? copyText = null,
+        bool copiedToClipboard = true, string? firstCaptureTip = null, ReceiptKeyboardRouter? keyboardRouter = null)
     {
         Title = UiText.Get("QuickAccess.Title");
-        // Keep the compact card width; labelled commands wrap without shrinking their targets.
+        // Fits a 1366 x 768 work area at 150% scaling.
         Width = 344;
         _capturedRegion = capturedRegion; _targetMonitor = targetMonitor;
+        _keyboardRouter = keyboardRouter;
+        _previewDpi = targetMonitor is null ? VisualTreeHelper.GetDpi(this)
+            : new DpiScale(targetMonitor.ScaleFactor, targetMonitor.ScaleFactor);
         SizeToContent = SizeToContent.Height;
         ResizeMode = ResizeMode.NoResize;
         ShowInTaskbar = false;
@@ -109,43 +117,56 @@ internal sealed class QuickAccessWindow : Window
         var close = Button("Dialog.Close", Close);
         close.Content = Glyph("Icon.Close");
         CommandButtonPresentation.Apply(close, compact: true);
-        close.HorizontalAlignment = HorizontalAlignment.Right;
-        close.VerticalAlignment = VerticalAlignment.Top;
+        close.Width = close.Height = close.MinWidth = close.MinHeight = 28;
+        close.Padding = new Thickness(4); close.Margin = new Thickness(4);
+        close.HorizontalAlignment = HorizontalAlignment.Right; close.VerticalAlignment = VerticalAlignment.Top;
         close.SetResourceReference(StyleProperty, "Button.Ghost");
-        // The status shares the close button's row, so a one-line message never moves the actions.
-        // Keep sits beside close: both decide how long the card stays.
-        var header = new Grid();
-        header.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        header.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        header.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        close.SetResourceReference(BackgroundProperty, "Surface.Floating");
+        close.ToolTip = UiText.Get("Dialog.Close") + "  Esc";
+        AutomationProperties.SetAcceleratorKey(close, "Esc");
+        // This button's focus border uses neutral text ink in every theme.
+        close.Resources["Border.Focus"] = ThemeBrushes.Follow("Text.Primary", SystemColors.ControlTextBrush);
+        ShortToolTip(close);
+        var preview = _preview = new Image
+        {
+            Source = bitmap, Stretch = Stretch.Uniform, ToolTip = UiText.Get("QuickAccess.Drag"),
+            HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center,
+        };
+        _previewSurface = new Border { Child = preview, ClipToBounds = true };
+        _previewSurface.SetResourceReference(Border.BackgroundProperty, "Surface.Base");
+        UpdatePreview(bitmap);
+        var previewArea = new Grid();
+        previewArea.Children.Add(_previewSurface); previewArea.Children.Add(close);
+        panel.Children.Add(previewArea);
+        AutomationProperties.SetAutomationId(preview, "QuickAccess.Preview");
+        AutomationProperties.SetName(preview, UiText.Get("QuickAccess.Drag"));
+        var receipt = new Grid { Margin = new Thickness(0, 6, 0, 6) };
+        receipt.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        receipt.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        receipt.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         _status.SetResourceReference(TextBlock.FontSizeProperty, "FontSize.Caption");
         AutomationProperties.SetLiveSetting(_status, AutomationLiveSetting.Polite);
         DockPanel.SetDock(_statusGlyph, Dock.Left);
-        _statusRow.Children.Add(_statusGlyph);
-        _statusRow.Children.Add(_status);
-        header.Children.Add(_statusRow);
-        // A word says what the toggle does; a padlock read as a lock on the capture itself.
+        _statusRow.Children.Add(_statusGlyph); _statusRow.Children.Add(_status);
+        receipt.Children.Add(_statusRow);
+        _dimensions.SetResourceReference(TextBlock.FontSizeProperty, "FontSize.Caption");
+        _dimensions.SetResourceReference(TextBlock.ForegroundProperty, "Text.Secondary");
+        _dimensions.Margin = new Thickness(2, 0, 6, 0);
+        AutomationProperties.SetAutomationId(_dimensions, "QuickAccess.Dimensions");
+        Grid.SetColumn(_dimensions, 1); receipt.Children.Add(_dimensions);
         _keep = new ToggleButton
         {
-            Content = UiText.Get("QuickAccess.KeepLabel"), Focusable = false,
-            VerticalAlignment = VerticalAlignment.Top, ToolTip = UiText.Get("Onboard_QuickKeep"),
+            Content = Glyph("Icon.Pause"), Focusable = false, ToolTip = UiText.Get("QuickAccess.KeepName"),
         };
         CommandButtonPresentation.Apply(_keep, compact: true);
+        _keep.Width = _keep.Height = _keep.MinWidth = _keep.MinHeight = 28;
+        _keep.Padding = new Thickness(4); _keep.Margin = new Thickness(0);
         _keyboardTargets.Add(_keep);
         AutomationProperties.SetName(_keep, UiText.Get("QuickAccess.KeepName"));
         AutomationProperties.SetHelpText(_keep, UiText.Get("Onboard_QuickKeep"));
         ShortToolTip(_keep);
-        // Close stays ahead of keep in the tab order, as before; keep is drawn left of it.
-        Grid.SetColumn(close, 2);
-        header.Children.Add(close);
-        Grid.SetColumn(_keep, 1);
-        header.Children.Add(_keep);
-        panel.Children.Add(header);
-        var row = new DockPanel { LastChildFill = true };
-        var preview = _preview = new Image { Source = bitmap, Width = 52, Height = 48, Stretch = Stretch.Uniform,
-            ToolTip = UiText.Get("QuickAccess.Drag"), Margin = new Thickness(0, 0, 6, 0) };
-        DockPanel.SetDock(preview, Dock.Left); row.Children.Add(preview);
-        AutomationProperties.SetName(preview, UiText.Get("QuickAccess.Drag"));
+        Grid.SetColumn(_keep, 2); receipt.Children.Add(_keep);
+        panel.Children.Add(receipt);
         preview.MouseLeftButtonDown += (_, e) => { _dragStart = e.GetPosition(preview); _dragArmed = true; };
         preview.MouseLeftButtonUp += (_, _) => _dragArmed = false;
         preview.MouseMove += async (_, e) =>
@@ -184,42 +205,55 @@ internal sealed class QuickAccessWindow : Window
             "QuickAccess.CopyingText");
         _actions["Close"] = Close;
         _actions["Activate"] = () => ActivateForKeyboard();
-        // Each command keeps its label and the same reserved shortcut row.
-        var actions = new WrapPanel { ItemHeight = 50, VerticalAlignment = VerticalAlignment.Center };
+        var actions = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Center };
         foreach (string action in ActionOrder)
         {
             Button button = Button("QuickAccess." + action, _actions[action]);
-            var face = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Center };
-            face.Children.Add(Glyph(action == "CopyText" ? "Icon.Ocr" : "Icon." + action));
-            // Names use the caption size, so the always-visible key letter is never larger than the name.
-            var name = new TextBlock
+            CommandButtonPresentation.Apply(button, compact: true);
+            button.Height = button.MinHeight = 32;
+            button.Margin = new Thickness(2, 0, 2, 0);
+            button.Padding = new Thickness(6, 0, 6, 0);
+            if (action == "Edit")
             {
-                Text = AutomationProperties.GetName(button), Margin = new Thickness(CommandButtonPresentation.IconLabelGap, 0, 0, 0),
-                VerticalAlignment = VerticalAlignment.Center,
-            };
-            name.SetResourceReference(TextBlock.FontSizeProperty, "FontSize.Caption");
-            face.Children.Add(name);
-            button.Content = face;
-            ShortcutPresentation.Attach(button, ShortcutScope.QuickAccess, action);
+                button.Content = new TextBlock { Text = UiText.Get("QuickAccess.Edit") };
+                button.MinWidth = 60;
+                button.SetResourceReference(StyleProperty, "Button.Primary");
+            }
+            else
+            {
+                button.Content = Glyph(action == "CopyText" ? "Icon.Ocr" : "Icon." + action);
+                button.Width = button.MinWidth = 32;
+                button.SetResourceReference(StyleProperty, "Button.Ghost");
+            }
+            string key = ShortcutCatalog.Get(ShortcutScope.QuickAccess, action).Hint;
+            button.ToolTip = AutomationProperties.GetName(button) + "  " + key;
+            AutomationProperties.SetAcceleratorKey(button, key);
             ShortToolTip(button);
             _actionButtons[action] = button;
             actions.Children.Add(button);
         }
-        row.Children.Add(actions); panel.Children.Add(row);
-        var footer = new DockPanel { Margin = new Thickness(0, 3, 0, 3) };
         var libraryButton = Button("QuickAccess.Library", () => { library(); Close(); });
         CommandButtonPresentation.Apply(libraryButton, compact: true);
         libraryButton.SetResourceReference(StyleProperty, "Button.Ghost");
-        DockPanel.SetDock(libraryButton, Dock.Right); footer.Children.Add(libraryButton);
-        _dimensions.Text = $"{bitmap.PixelWidth} × {bitmap.PixelHeight}";
-        _dimensions.SetResourceReference(TextBlock.FontSizeProperty, "FontSize.Caption"); _dimensions.SetResourceReference(TextBlock.ForegroundProperty, "Text.Secondary");
-        footer.Children.Add(_dimensions); panel.Children.Add(footer);
+        libraryButton.Height = libraryButton.MinHeight = 32;
+        libraryButton.Padding = new Thickness(4, 0, 4, 0);
+        libraryButton.Margin = new Thickness(2, 0, 0, 0);
+        actions.Children.Add(libraryButton); panel.Children.Add(actions);
+        _firstUseTip.SetResourceReference(TextBlock.FontSizeProperty, "FontSize.Caption");
+        _firstUseTip.SetResourceReference(TextBlock.ForegroundProperty, "Text.Secondary");
+        _firstUseTip.Text = firstCaptureTip ?? string.Empty;
+        _firstUseTip.Visibility = firstCaptureTip is null ? Visibility.Collapsed : Visibility.Visible;
+        AutomationProperties.SetName(_firstUseTip, _firstUseTip.Text);
+        AutomationProperties.SetHelpText(_firstUseTip, UiText.Get("Onboard_QuickCardTip"));
+        panel.Children.Add(_firstUseTip);
+        ShowStatus(UiText.Get(copiedToClipboard ? "QuickAccess.Copied" : "QuickAccess.InitialSaved"), FeedbackKind.Confirmation);
         _keyboardTargets.Remove(close);
         _keyboardTargets.Add(close);
         // The countdown is neutral; colour is kept for the result it reports.
         _remaining.SetResourceReference(BackgroundProperty, "Surface.Hover");
         _remaining.SetResourceReference(ForegroundProperty, "Border.Strong");
         _progressReveal.Tick += (_, _) => RevealProgress();
+        _remaining.Margin = new Thickness(0, 6, 0, 0);
         panel.Children.Add(_remaining);
         var surface = new Border { Child = panel, Margin = new Thickness(AllowsTransparency ? 8 : 0),
             CornerRadius = new CornerRadius(AllowsTransparency ? 12 : 0), BorderThickness = new Thickness(1) };
@@ -228,6 +262,11 @@ internal sealed class QuickAccessWindow : Window
         if (AllowsTransparency) surface.SetResourceReference(EffectProperty, "Shadow.Card");
         Content = surface;
         ToolTip = UiText.Get("Onboard_QuickCardTip");
+        if (_keyboardRouter is not null)
+        {
+            _keyboardRouter.RegistrationChanged += RefreshSharedActivationHint;
+            RefreshSharedActivationHint();
+        }
         SourceInitialized += (_, _) =>
         {
             IntPtr hwnd = new WindowInteropHelper(this).Handle;
@@ -252,7 +291,17 @@ internal sealed class QuickAccessWindow : Window
             Advance(elapsed, IsPointerOver || IsMouseCaptured || (_keyboardInteracting && IsKeyboardFocusWithin) || IsBusy);
         };
         SizeChanged += (_, _) => { if (IsLoaded && IsVisible && _placementMonitor is { } monitor) PlaceOnMonitor(monitor); };
-        Closed += (_, _) => { _timer.Stop(); _progressReveal.Stop(); UpdateActivationHotkey(); _activationKey = null; };
+        Closed += (_, _) =>
+        {
+            _timer.Stop(); _progressReveal.Stop();
+            if (_keyboardRouter is not null)
+            {
+                _keyboardRouter.RegistrationChanged -= RefreshSharedActivationHint;
+                _keyboardRouter.Remove(this);
+            }
+            else UpdateActivationHotkey();
+            _activationKey = null;
+        };
         IsVisibleChanged += (_, _) => UpdateActivationHotkey();
         // The toggle's own checked fill shows the state; its word stays the same.
         _keep.Checked += (_, _) => { _timer.Stop(); UpdateActivationHotkey(); };
@@ -317,6 +366,13 @@ internal sealed class QuickAccessWindow : Window
 
     private void UpdateActivationHotkey()
     {
+        if (_keyboardRouter is not null)
+        {
+            _keyboardRouter.SetTarget(this, new WindowInteropHelper(this).Handle, CanActivateByHotkey,
+                priority: 10, ActivateForKeyboard);
+            RefreshSharedActivationHint();
+            return;
+        }
         if (!CanActivateByHotkey)
         {
             if (_activationRegistered) _activationKey?.Unregister(ActivationKeyId);
@@ -330,6 +386,9 @@ internal sealed class QuickAccessWindow : Window
             new Hotkey((HotkeyModifiers)activation.Modifiers, (uint)KeyInterop.VirtualKeyFromKey(activation.Key)), out _, out _);
         ToolTip = UiText.Get(_activationRegistered ? "Onboard_QuickCardTip" : "Onboard_QuickCardTipNoHotkey");
     }
+
+    private void RefreshSharedActivationHint() => ToolTip = UiText.Get(
+        _keyboardRouter?.IsRegisteredFor(this) == true ? "Onboard_QuickCardTip" : "Onboard_QuickCardTipNoHotkey");
 
     internal bool HandleShortcut(Key key, ModifierKeys modifiers) => ShortcutCatalog.Execute(ShortcutScope.QuickAccess, key, modifiers, _actions);
 
@@ -345,6 +404,12 @@ internal sealed class QuickAccessWindow : Window
 
     private IntPtr NoActivateHook(IntPtr hwnd, int message, IntPtr wParam, IntPtr lParam, ref bool handled)
     {
+        if (_keyboardRouter?.MatchesMessage(hwnd, message, wParam) == true)
+        {
+            handled = true;
+            _ = Dispatcher.BeginInvoke(new Action(() => _keyboardRouter.Activate()));
+            return IntPtr.Zero;
+        }
         if (message == 0x0312 && wParam.ToInt32() == ActivationKeyId && CanActivateByHotkey)
         {
             handled = true;
@@ -388,7 +453,29 @@ internal sealed class QuickAccessWindow : Window
     internal void UpdatePreview(BitmapSource image)
     {
         _preview.Source = image;
+        ReflowPreview();
         _dimensions.Text = $"{image.PixelWidth} × {image.PixelHeight}";
+    }
+
+    private void ReflowPreview()
+    {
+        if (_preview?.Source is not BitmapSource image || _previewSurface is null) return;
+        // WPF image dimensions are DIPs and can carry arbitrary bitmap DPI metadata.
+        // Limit the displayed physical pixels to twice the original pixel dimensions.
+        _preview.Width = Math.Min(310, image.PixelWidth * 2.0 / _previewDpi.DpiScaleX);
+        _preview.Height = Math.Min(180, image.PixelHeight * 2.0 / _previewDpi.DpiScaleY);
+        _previewSurface.Height = _preview.Height;
+    }
+
+    protected override void OnDpiChanged(DpiScale oldDpi, DpiScale newDpi)
+    {
+        _previewDpi = newDpi;
+        // Resizing after a monitor move must use that monitor rather than snap back
+        // through the SizeChanged placement handler to the previous monitor.
+        if (IsLoaded && IsVisible)
+            _placementMonitor = MonitorEnumerator.GetFromWindow(new WindowInteropHelper(this).Handle);
+        ReflowPreview();
+        base.OnDpiChanged(oldDpi, newDpi);
     }
 
     internal void DismissForCapture(Action foregroundDismissed)
@@ -401,6 +488,8 @@ internal sealed class QuickAccessWindow : Window
     internal void PlaceOnMonitor(MonitorInfo monitor)
     {
         _placementMonitor = monitor;
+        _previewDpi = new DpiScale(monitor.ScaleFactor, monitor.ScaleFactor);
+        ReflowPreview();
         Rect position = Position(monitor.WorkArea, monitor.ScaleFactor, ActualWidth, ActualHeight, _capturedRegion);
         PhysicalWindowPositioner.PlaceTopmostWithoutActivation(new WindowInteropHelper(this).Handle,
             new RectD(position.Left * monitor.ScaleFactor, position.Top * monitor.ScaleFactor,
@@ -437,6 +526,7 @@ internal sealed class QuickAccessWindow : Window
         var button = new Button { Content = UiText.Get(key), Focusable = false };
         CommandButtonPresentation.Apply(button);
         _keyboardTargets.Add(button);
+        AutomationProperties.SetAutomationId(button, key);
         AutomationProperties.SetName(button, UiText.Get(key));
         button.Click += (_, _) => action();
         return button;
@@ -453,7 +543,7 @@ internal sealed class QuickAccessWindow : Window
             : (FailureText(action), FeedbackKind.ActionRequired), progress);
 
     /// <summary>The card's actions, left to right.</summary>
-    internal static IReadOnlyList<string> ActionOrder { get; } = ["Copy", "Edit", "Pin", "Save", "CopyText"];
+    internal static IReadOnlyList<string> ActionOrder { get; } = ["Edit", "Pin", "Save", "CopyText", "Copy"];
 
     /// <summary>Test hook: the action buttons, left to right.</summary>
     internal IReadOnlyList<Button> ActionButtonsForTest => ActionOrder.Select(action => _actionButtons[action]).ToArray();
@@ -565,10 +655,10 @@ internal sealed class QuickAccessWindow : Window
     {
         _progressReveal.Stop();
         if (!IsBusy) return;
-        // Reduced motion keeps a steady accent bar; the status text already says what is running.
+        // Reduced motion keeps a steady neutral bar; the status text already says what is running.
         _progressShown = true;
         _remaining.Visibility = Visibility.Visible;
-        _remaining.SetResourceReference(ForegroundProperty, "Accent.Foreground");
+        _remaining.SetResourceReference(ForegroundProperty, "Border.Strong");
         _remaining.IsIndeterminate = FluidMotion.AnimationsEnabled;
         if (!FluidMotion.AnimationsEnabled) _remaining.Value = 100;
     }

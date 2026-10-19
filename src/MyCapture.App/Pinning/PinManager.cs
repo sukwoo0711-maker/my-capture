@@ -141,6 +141,9 @@ internal sealed class PinManager
     /// <summary>Raised when a pin requests OCR of its image (Ctrl+double-click or menu).</summary>
     internal event EventHandler<BitmapSource>? OcrRequested;
 
+    /// <summary>Raised after a new pin is shown; reopening a closed pin does not raise it.</summary>
+    internal event Action? PinCreated;
+
     /// <summary>Number of open pins.</summary>
     internal int Count
     {
@@ -265,6 +268,19 @@ internal sealed class PinManager
             content.Kind,
             placement.Zoom,
             _pins.Count);
+
+        if (PinCreated is { } handlers)
+        {
+            foreach (Action handler in handlers.GetInvocationList())
+            {
+                try { handler(); }
+                catch (Exception ex)
+                {
+                    // Optional guidance must not turn an already-open pin into a failed action.
+                    _log.LogWarning(ex, "Could not notify a new-pin observer");
+                }
+            }
+        }
 
         return pin;
     }

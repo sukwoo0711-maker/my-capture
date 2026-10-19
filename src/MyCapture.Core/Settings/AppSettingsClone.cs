@@ -150,6 +150,8 @@ public static class AppSettingsClone
     private static GeneralSettings Clone(GeneralSettings s) => new()
     {
         AfterCapture = s.AfterCapture,
+        FirstCaptureTipShown = s.FirstCaptureTipShown,
+        FirstPinTipShown = s.FirstPinTipShown,
         ShowShortcutHints = s.ShowShortcutHints,
         ShortcutHintsRevision = s.ShortcutHintsRevision,
         LaunchAtLogin = s.LaunchAtLogin,

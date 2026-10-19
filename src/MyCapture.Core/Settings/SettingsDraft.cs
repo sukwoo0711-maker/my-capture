@@ -748,6 +748,8 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
         _preservedPreserveTransparency = s.Export.PreserveTransparency;
         _language = s.General.Language;
         _preservedIsFirstRun = s.General.IsFirstRun;
+        _preservedFirstCaptureTipShown = s.General.FirstCaptureTipShown;
+        _preservedFirstPinTipShown = s.General.FirstPinTipShown;
         _preservedRecordingBitrateBitsPerSecond = s.Recording.BitrateBitsPerSecond;
         _preservedRecordingCoarseStepSeconds = s.Recording.CoarseStepSeconds;
 
@@ -827,6 +829,8 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
                 CaptureGuideColor = CaptureGuideColorSetting,
                 ThemeRevision = 1,
                 IsFirstRun = _preservedIsFirstRun,
+                FirstCaptureTipShown = _preservedFirstCaptureTipShown,
+                FirstPinTipShown = _preservedFirstPinTipShown,
             },
             Capture =
             {
@@ -1423,6 +1427,8 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
     private bool _preservedPreserveTransparency;
     private string _language = string.Empty;
     private bool _preservedIsFirstRun;
+    private bool _preservedFirstCaptureTipShown;
+    private bool _preservedFirstPinTipShown;
     private int _preservedRecordingBitrateBitsPerSecond;
     private double _preservedRecordingCoarseStepSeconds;
 

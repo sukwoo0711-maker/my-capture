@@ -3306,8 +3306,8 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="QuickAccess.Edit" xml:space="preserve"><value>편집</value></data>
   <data name="QuickAccess.Enabled" xml:space="preserve"><value>캡처 후 빠른 작업 표시</value></data>
   <data name="QuickAccess.Failed" xml:space="preserve"><value>작업을 완료하지 못했습니다. 다시 시도하십시오.</value></data>
-  <data name="QuickAccess.Keep" xml:space="preserve"><value>자동으로 닫지 않기</value></data>
-  <data name="QuickAccess.Library" xml:space="preserve"><value>라이브러리에서 열기</value></data>
+  <data name="QuickAccess.Keep" xml:space="preserve"><value>자동으로 닫지 않음</value></data>
+  <data name="QuickAccess.Library" xml:space="preserve"><value>라이브러리</value></data>
   <data name="QuickAccess.Pin" xml:space="preserve"><value>핀</value></data>
   <data name="QuickAccess.Pinned" xml:space="preserve"><value>핀으로 띄움</value></data>
   <data name="QuickAccess.Pinning" xml:space="preserve"><value>핀 띄우는 중…</value></data>
@@ -3327,8 +3327,8 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="QuickAccess.SaveFailed" xml:space="preserve"><value>저장하지 못했습니다 · {0}로 다시 시도</value></data>
   <data name="QuickAccess.CopyTextFailed" xml:space="preserve"><value>텍스트를 복사하지 못했습니다 · {0}로 다시 시도</value></data>
   <data name="QuickAccess.DragFailed" xml:space="preserve"><value>파일을 준비하지 못했습니다 · 다시 끌어서 시도</value></data>
-  <data name="QuickAccess.KeepLabel" xml:space="preserve"><value>유지</value></data>
-  <data name="QuickAccess.KeepName" xml:space="preserve"><value>카드 유지</value></data>
+  <data name="QuickAccess.KeepLabel" xml:space="preserve"><value>자동으로 닫지 않음</value></data>
+  <data name="QuickAccess.KeepName" xml:space="preserve"><value>자동으로 닫지 않음</value></data>
   <data name="Hotkey.Clear" xml:space="preserve"><value>지우기</value></data>
   <data name="Hotkey.Delay" xml:space="preserve"><value>지연 캡처</value></data>
   <data name="Hotkey.Record" xml:space="preserve"><value>단축키 기록</value></data>
@@ -4004,6 +4004,17 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="Onboard_StepsName" xml:space="preserve"><value>시작 안내</value></data>
   <data name="Onboard_StepNumber" xml:space="preserve"><value>{0}단계</value></data>
   <data name="Onboard_AfterCaptureTitle" xml:space="preserve"><value>캡처한 다음</value></data>
+  <data name="Welcome_FirstCaptureTitle" xml:space="preserve"><value>한 번 캡처해 보십시오</value></data>
+  <data name="Welcome_Skip" xml:space="preserve"><value>건너뛰기</value></data>
+  <data name="Onboard_FirstCaptureTip" xml:space="preserve"><value>다른 창 위에 띄우려면 P</value></data>
+  <data name="Onboard_ReceiptKeyboard" xml:space="preserve"><value>Alt+Q로 선택 · Tab 이동 · Enter 실행</value></data>
+  <data name="Onboard_ReceiptKeyboardFallback" xml:space="preserve"><value>Alt+Tab으로 선택 · Tab 이동 · Enter 실행</value></data>
+  <data name="Onboard_FirstCaptureToastTip" xml:space="preserve"><value>핀으로 다른 창 위에 표시</value></data>
+  <data name="Onboard_PinFailed" xml:space="preserve"><value>핀을 만들지 못했습니다.</value></data>
+  <data name="Onboard_FirstPinTip" xml:space="preserve"><value>{0}으로 모든 핀을 숨기거나 다시 보일 수 있습니다.</value></data>
+  <data name="Onboard_FirstPinTipUnassigned" xml:space="preserve"><value>모든 핀 표시 단축키는 설정에서 지정할 수 있습니다.</value></data>
+  <data name="Onboard_ResidentTip" xml:space="preserve"><value>MyCapture는 알림 영역에서 계속 실행됩니다.</value></data>
+  <data name="QuickAccess.InitialSaved" xml:space="preserve"><value>저장됨</value></data>
   <data name="Onboard_AfterCaptureEditor" xml:space="preserve"><value>캡처하면 클립보드에 복사되고 라이브러리에 저장되며 편집기가 열립니다.</value></data>
   <data name="Onboard_AfterCaptureQuickAccess" xml:space="preserve"><value>캡처하면 클립보드에 복사되고 라이브러리에 저장되며 빠른 작업 카드가 나타납니다.</value></data>
   <data name="Onboard_AfterCaptureClipboard" xml:space="preserve"><value>캡처하면 클립보드에 복사되고 라이브러리에 저장됩니다.</value></data>
@@ -4053,7 +4064,7 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
 해제: {0}</value></data>
   <data name="Onboard_PinClickThroughOff" xml:space="preserve"><value>뒤 창 클릭 허용 꺼짐</value></data>
   <data name="Onboard_CaptureFromTray" xml:space="preserve"><value>단축키가 지정되지 않았습니다. 트레이 아이콘 메뉴에서 영역 캡처를 고를 수 있습니다.</value></data>
-  <data name="Onboard_QuickKeep" xml:space="preserve"><value>자동으로 닫지 않기</value></data>
+  <data name="Onboard_QuickKeep" xml:space="preserve"><value>자동으로 닫지 않음</value></data>
   <data name="Onboard_QuickCardTip" xml:space="preserve"><value>Alt+Q 또는 카드 클릭: 키보드 조작</value></data>
   <data name="Onboard_QuickCardTipNoHotkey" xml:space="preserve"><value>카드 클릭: 키보드 조작</value></data>
   <data name="Onboard_ErrorNextStep" xml:space="preserve"><value>같은 문제가 계속되면 트레이 메뉴에서 MyCapture를 종료한 뒤 다시 실행하십시오. 그래도 반복되면 자세히의 내용을 복사해 문제 신고에 첨부하십시오.</value></data>
