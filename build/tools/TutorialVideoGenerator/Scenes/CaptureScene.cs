@@ -47,11 +47,15 @@ internal sealed class CaptureScene : TutorialScene
     private CaptureOverlayView? _overlay;
     private OffscreenWindow? _editorHost;
     private AnnotationEditorWindow? _editor;
+    private QuickAccessWindow? _receipt;
+    private Border? _receiptRoot;
+    private bool _editRequested;
     private OffscreenWindow? _videoHost;
     private PointD _cursor;
     private string? _copiedColor;
     private BitmapSource? _notification;
     private RecordingControlWindow? _recording;
+    private bool? _recordingPreviewPaused;
     private PointD _dragStart;
 
     internal CaptureScene(string id, string language) : base(id, language)
@@ -64,7 +68,7 @@ internal sealed class CaptureScene : TutorialScene
     internal override string Provenance =>
         "Real CaptureOverlayView (mode bar, magnifier, guides, window highlight, text mode, colour toast) over a frozen synthetic desktop; "
         + "real tray menu (ThemedShellPresenter.CreateMenu), CountdownWindow, RecordingControlWindow, action notification, "
-        + "AnnotationEditorWindow and VideoEditorWindow. Desktop apps, taskbar and the auto-scrolled document are synthetic; "
+        + "detached QuickAccessWindow followed by its Edit shortcut, AnnotationEditorWindow and VideoEditorWindow. Desktop apps, taskbar and the auto-scrolled document are synthetic; "
         + "no screen, clipboard, OCR, file or recording transaction runs.";
 
     // ---- Storyboards -----------------------------------------------------------------------------
@@ -80,25 +84,29 @@ internal sealed class CaptureScene : TutorialScene
             case "capture-region":
                 story.Hold("desktop", 0.9).Hold("overlay", 1.2);
                 Drag(story, new PointD(NoteClient.X + 14, NoteClient.Y + 6), new PointD(Terminal.Right + 14, Terminal.Bottom + 12));
-                story.Hold("selected", 0.5).Hold("editor", 0.4);
+                story.Hold("selected", 0.5);
+                CaptureResult(story);
                 break;
             case "capture-window":
                 story.Hold("desktop", 0.8).Move("point", new PointD(NoteClient.X + 380, NoteClient.Y + 210)).Hold("pointed", 1.0);
-                story.Hold("shortcut", 0.8).Hold("editor", 0.4);
+                story.Hold("shortcut", 0.8);
+                CaptureResult(story);
                 break;
             case "capture-fullscreen":
                 TrayRoute(story, "Text_65BB6610ACA0");
-                story.Hold("editor", 0.4);
+                CaptureResult(story);
                 break;
             case "capture-delay":
                 TrayRoute(story, "Text_38FF9B0AA541");
                 story.Hold("countdown-3", 1.0).Hold("countdown-2", 1.0).Hold("countdown-1", 1.0).Hold("overlay", 0.6);
                 Drag(story, new PointD(NoteClient.X + 14, NoteClient.Y + 6), new PointD(Terminal.Right + 14, Terminal.Bottom + 12), frames: 26);
-                story.Hold("selected", 0.3).Hold("editor", 0.4);
+                story.Hold("selected", 0.3);
+                CaptureResult(story);
                 break;
             case "capture-scroll":
                 story.Hold("desktop", 0.8).Move("point", new PointD(NoteClient.X + 300, NoteClient.Y + 200)).Hold("pointed", 0.8);
-                story.Hold("shortcut", 0.6).Motion("scrolling", 50, story.End, story.End).Hold("scrolled", 0.4).Hold("editor", 0.4);
+                story.Hold("shortcut", 0.6).Motion("scrolling", 50, story.End, story.End).Hold("scrolled", 0.4);
+                CaptureResult(story);
                 break;
             case "color-copy":
                 story.Hold("overlay", 1.2).Move("approach", new PointD(Swatch.X + 14, Swatch.Y + 16)).Hold("pixel", 1.4).Hold("copy-key", 0.2).Hold("copied", 1.6);
@@ -127,6 +135,12 @@ internal sealed class CaptureScene : TutorialScene
 
         return story.Finish("result", 11);
     }
+
+    private static void CaptureResult(TutorialStoryboard story) =>
+        story.Hold("card", 1.2).Hold("activate-card", 0.7).Hold("edit-key", 0.4).Hold("editor", 0.4);
+
+    private static bool IsCaptureResult(string segment) =>
+        segment is "card" or "activate-card" or "edit-key" or "editor" or "result";
 
     private void Drag(TutorialStoryboard story, PointD from, PointD to, int frames = 34)
     {
@@ -157,15 +171,15 @@ internal sealed class CaptureScene : TutorialScene
         switch (_feature)
         {
             case "capture-window":
-                if (segment is "editor" or "result")
-                    DrawEditor(dc, new Rect(NoteClient.X, NoteClient.Y - Stage.TitleBarHeight, NoteClient.Width, NoteClient.Height + Stage.TitleBarHeight));
+                if (IsCaptureResult(segment))
+                    DrawCaptureResult(dc, frame, new Rect(NoteClient.X, NoteClient.Y - Stage.TitleBarHeight, NoteClient.Width, NoteClient.Height + Stage.TitleBarHeight));
                 else DrawDesktopPhase(dc, frame);
                 break;
             case "capture-region":
             case "capture-delay":
                 if (segment is "desktop" or "tray-move" or "tray-click" or "tray" or "to-more" or "submenu" or "to-command" or "command" or "countdown-3" or "countdown-2" or "countdown-1")
                     DrawDesktopPhase(dc, frame);
-                else if (segment is "editor" or "result") DrawEditor(dc, CaptureRegion());
+                else if (IsCaptureResult(segment)) DrawCaptureResult(dc, frame, CaptureRegion());
                 else
                 {
                     DriveOverlay(frame);
@@ -174,11 +188,11 @@ internal sealed class CaptureScene : TutorialScene
                 }
                 break;
             case "capture-fullscreen":
-                if (segment is "editor" or "result") DrawEditor(dc, new Rect(0, 0, SceneWidth, SceneHeight));
+                if (IsCaptureResult(segment)) DrawCaptureResult(dc, frame, new Rect(0, 0, SceneWidth, SceneHeight));
                 else DrawDesktopPhase(dc, frame);
                 break;
             case "capture-scroll":
-                if (segment is "editor" or "result") DrawEditor(dc, null);
+                if (IsCaptureResult(segment)) DrawCaptureResult(dc, frame, null);
                 else DrawScrolling(dc, frame);
                 break;
             case "color-copy":
@@ -473,7 +487,55 @@ internal sealed class CaptureScene : TutorialScene
         return new Rect(r.X / Stage.Scale, r.Y / Stage.Scale, r.Width / Stage.Scale, r.Height / Stage.Scale);
     }
 
-    // ---- Editor after a capture ----------------------------------------------------------------
+    // ---- Quick-access receipt, then explicit editing -------------------------------------------
+
+    private void DrawCaptureResult(DrawingContext dc, TutorialFramePlan frame, Rect? region)
+    {
+        if (_receipt is null)
+        {
+            BitmapSource image = region is { } r ? Crop(r) : ScrolledDocument();
+            if (_overlayHost is not null) { _overlayHost.Dispose(); _overlayHost = null; }
+            _receipt = new QuickAccessWindow(image, copy: () => Task.FromResult(true),
+                edit: () => _editRequested = true, pin: () => Task.CompletedTask,
+                save: () => Task.FromResult(true), library: () => { },
+                export: () => Task.FromResult(string.Empty), excludeFromCapture: false);
+            // Never show this window: Loaded registers a global hotkey and positions it on a
+            // real monitor. Render the same content and placement policy inside the stage.
+            var content = (UIElement)_receipt.Content;
+            _receipt.Content = null;
+            _receiptRoot = new Border { Width = _receipt.Width, Child = content };
+            _receiptRoot.SetResourceReference(System.Windows.Documents.TextElement.ForegroundProperty, "Text.Primary");
+        }
+
+        if (frame.Segment is "editor" or "result")
+        {
+            if (!_editRequested)
+            {
+                ShortcutDefinition edit = ShortcutCatalog.Get(ShortcutScope.QuickAccess, "Edit");
+                if (!_receipt.HandleShortcut(edit.Key, edit.Modifiers) || !_editRequested)
+                    throw new InvalidOperationException("The card did not open the editor through its Edit command.");
+            }
+            DrawEditor(dc, region);
+            return;
+        }
+
+        Size size = Detached.Layout(_receiptRoot!, _receipt.Width);
+        Rect? captured = region;
+        RectD? placementRegion = captured is { } capture
+            ? new RectD(capture.X, capture.Y, capture.Width, capture.Height) : null;
+        Rect placed = QuickAccessWindow.Position(new RectD(0, 0, SceneWidth, SceneHeight - TaskbarHeight),
+            1, size.Width, size.Height, placementRegion);
+        if (frame.Segment is "activate-card" or "edit-key")
+        {
+            Button close = OffscreenWindow.Descendants(_receiptRoot!).OfType<Button>().First(button =>
+                System.Windows.Automation.AutomationProperties.GetName(button) == Ui("Dialog.Close"));
+            FocusLook.Apply(close);
+        }
+        _receipt.Advance(TimeSpan.FromSeconds(frame.Repeat / (double)TutorialStoryboard.Fps),
+            interacting: frame.Segment is "activate-card" or "edit-key");
+        dc.DrawImage(_desktop, new Rect(0, 0, SceneWidth, SceneHeight));
+        Detached.Draw(dc, _receiptRoot!, placed.TopLeft);
+    }
 
     private void DrawEditor(DrawingContext dc, Rect? region)
     {
@@ -563,14 +625,16 @@ internal sealed class CaptureScene : TutorialScene
             int characters = TextCaptureService.CountCharacters(Fixtures.TerminalCommand + "\n" + Fixtures.TerminalResult);
             Window card = presenter.CreateActionNotification(UiText.Get("TextCapture_Copied"),
                 UiText.Format("TextCapture_CopiedDetail", characters), UiText.Get("TextCapture_OpenAdvanced"), () => { });
-            using var host = new OffscreenWindow(card, card.Width, 200, show: false);
-            card.SizeToContent = SizeToContent.Height;
-            card.Show();
-            Stage.Pump(60);            card.UpdateLayout();
-            FrameworkElement root = host.ClientRoot;
-            _notification = OffscreenWindow.SnapshotElement(root, root.ActualWidth, root.ActualHeight, opaque: false);
+            var content = (UIElement)card.Content;
+            card.Content = null;
+            var root = new Border { Width = card.Width, Child = content };
+            root.SetResourceReference(System.Windows.Documents.TextElement.ForegroundProperty, "Text.Primary");
+            Detached.Layout(root, card.Width);
+            _notification = Stage.Picture(root.ActualWidth, root.ActualHeight,
+                drawing => Detached.Draw(drawing, root, new Point(), pad: 0));
             _notificationBounds = ThemedShellPresenter.NotificationBounds(new RectD(0, 0, SceneWidth, SceneHeight - TaskbarHeight), 1,
                 root.ActualWidth, root.ActualHeight);
+            card.Close();
         }
 
         dc.DrawImage(_notification, _notificationBounds);
@@ -614,27 +678,38 @@ internal sealed class CaptureScene : TutorialScene
         // Captions name the button by the words it shows in that state (녹화 시작, 중지, 일시 정지, 재개).
         _buttonLabels[(primary, state)] = Label(button);
         Point center = button.TranslatePoint(new Point(button.ActualWidth / 2, button.ActualHeight / 2), (UIElement)window.Content);
+        window.Close();
         _recording = null; // a fresh window for the clip itself
         return new PointD(origin.X + center.X, origin.Y + center.Y);
     }
 
     private void DrawRecording(DrawingContext dc, TutorialFramePlan frame)
     {
-        RecordingControlWindow window = RecordingControls();
         string segment = frame.Segment;
         // The timer counts recorded time only: it shows the seconds recorded before this picture.
         bool recording, paused = false;
         if (_feature == "record-region")
         {
             recording = segment is "recording" or "stop-move" or "stop" || segment == "start" && frame.IsLast;
-            if (recording) window.PreviewRecordingForTest(paused: false, TimeSpan.FromSeconds(Math.Floor(_recordingSeconds)));
         }
         else
         {
             paused = segment is "paused" or "resume-move" || segment == "pause" && frame.IsLast || segment == "resume" && !frame.IsLast;
             recording = !paused;
-            window.PreviewRecordingForTest(paused, TimeSpan.FromSeconds(3 + Math.Floor(_recordingSeconds)));
         }
+
+        // A never-shown WPF window keeps a stale effect clip when the pill width changes.
+        // Each recording state gets a fresh detached product surface, with no HWND or recorder.
+        if (_recordingPreviewPaused != paused)
+        {
+            _recording?.Close();
+            _recording = null;
+            _recordingPreviewPaused = paused;
+        }
+        RecordingControlWindow window = RecordingControls();
+        if (_feature == "record-pause" || recording)
+            window.PreviewRecordingForTest(paused,
+                TimeSpan.FromSeconds((_feature == "record-pause" ? 3 : 0) + Math.Floor(_recordingSeconds)));
 
         if (recording) _recordingSeconds += frame.Repeat / (double)TutorialStoryboard.Fps;
         dc.DrawImage(_desktop, new Rect(0, 0, SceneWidth, SceneHeight));
@@ -676,6 +751,16 @@ internal sealed class CaptureScene : TutorialScene
     private (string Caption, string Key) Caption(TutorialFramePlan frame)
     {
         string s = frame.Segment;
+        if (_feature.StartsWith("capture-", StringComparison.Ordinal) && IsCaptureResult(s))
+        {
+            return s switch
+            {
+                "card" => (Ui("QuickAccess.Title") + " · " + Ui("QuickAccess.Copied"), ""),
+                "activate-card" => (Ui("Onboard_QuickCardTip"), Hint(ShortcutScope.QuickAccess, "Activate")),
+                "edit-key" => (Ui("QuickAccess.Edit"), Hint(ShortcutScope.QuickAccess, "Edit")),
+                _ => (Ui("QuickAccess.Edit"), ""),
+            };
+        }
         string region = Ui("Text_2C20ADDA2018"), more = Ui("Onboard_TrayMoreCaptures");
         string ButtonText(bool primary, string state) => _buttonLabels[(primary, state)];
         return _feature switch
@@ -685,7 +770,7 @@ internal sealed class CaptureScene : TutorialScene
                 "desktop" => (L($"{region} 시작", $"Start {region}"), ""),
                 "overlay" or "approach" => (L("캡처 선택 화면", "The capture selector opens"), ""),
                 "drag" or "selected" => (L("캡처할 부분을 드래그", "Drag over the area to capture"), ""),
-                _ => (L("편집기에서 결과 확인 · 클립보드와 라이브러리에 저장됨", "Review it in the editor · copied and saved to the library"), ""),
+                _ => (Ui("QuickAccess.Title"), ""),
             },
             "capture-window" => s switch
             {
@@ -707,7 +792,7 @@ internal sealed class CaptureScene : TutorialScene
                     (L($"{more} › {Ui("Text_38FF9B0AA541")} 선택", $"{more} › {Ui("Text_38FF9B0AA541")}"), ""),
                 "countdown-3" or "countdown-2" or "countdown-1" => (L("대기 시간 동안 캡처할 화면 준비", "Prepare the screen during the countdown"), ""),
                 "overlay" or "approach" or "drag" or "selected" => (L("선택 화면이 나타나면 영역을 드래그", "When the selector appears, drag the area"), ""),
-                _ => (L("편집기에서 결과 확인", "Review it in the editor"), ""),
+                _ => (Ui("QuickAccess.Title"), ""),
             },
             "capture-scroll" => s switch
             {
@@ -759,6 +844,7 @@ internal sealed class CaptureScene : TutorialScene
         _overlay?.ReleaseResources();
         _overlayHost?.Dispose();
         _editorHost?.Dispose();
+        if (!_editRequested) _receipt?.Close();
         _videoHost?.Dispose();
         try { _recording?.Close(); } catch (InvalidOperationException) { }
         foreach (IDisposable owned in Enumerable.Reverse(_owned)) owned.Dispose();

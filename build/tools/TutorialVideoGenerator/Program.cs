@@ -48,7 +48,7 @@ internal static class Program
         catch (ArgumentException error)
         {
             Console.Error.WriteLine(error.Message);
-            Console.Error.WriteLine("MyCapture.TutorialGenerator [--features id,id|all] [--languages ko,en] [--out folder] [--width 960] [--quality 60|bitrate] [--bitrate 300000] [--profile high|main|baseline|default] [--install] [--no-sheets] [--theme glass|glass-light|midnight|daylight|workspace|high-contrast] [--accent red|violet]");
+            Console.Error.WriteLine("MyCapture.TutorialGenerator [--features id,id|all] [--languages ko,en] [--out folder] [--width 960] [--quality 60|bitrate] [--bitrate 300000] [--profile high|main|baseline|default] [--install] [--no-sheets] [--theme system|glass|glass-light|high-contrast] [--accent red]");
             return 2;
         }
 
@@ -58,6 +58,11 @@ internal static class Program
             new System.Windows.Threading.DispatcherSynchronizationContext(System.Windows.Threading.Dispatcher.CurrentDispatcher));
         Application app = CreateResourceHost();
         FluidMotion.AnimationsEnabledOverrideForTest = false;
+        // App normally wires this preference at startup. The resource-only host must use the
+        // new-install preference too, otherwise null means every editor key caption is visible.
+        bool showShortcutHints = MyCapture.Core.Settings.NewInstallDefaults.Create().General.ShowShortcutHints;
+        ShortcutPresentation.ReadEnabled = () => showShortcutHints;
+        ShortcutPresentation.Refresh();
         // The product clips use the defaults (Glass, red accent); review renders may pick others.
         ThemeService.ApplyFromSettings(options.Theme, captureGuideColor: null, accentColor: options.Accent);
         Stage.Scale = options.Width / Stage.Width;
@@ -225,8 +230,16 @@ internal static class Program
         long renderMs = clock.ElapsedMilliseconds;
         if (options.Sheets)
         {
-            List<(double Ms, string Label)> chosen = keys.Count <= 12 ? keys
-                : Enumerable.Range(0, 12).Select(i => keys[(int)Math.Round(i * (keys.Count - 1) / 11.0)]).ToList();
+            // Every clip's review starts with its exact first, middle and last frames. The
+            // remaining cells preserve the storyboard's important actions and held states.
+            List<(double Ms, string Label)> chosen =
+            [
+                (0, "first"),
+                (frame * 500.0 / TutorialStoryboard.Fps, "middle"),
+                ((frame - 1) * 1000.0 / TutorialStoryboard.Fps, "last"),
+            ];
+            chosen.AddRange(keys.Count <= 9 ? keys
+                : Enumerable.Range(0, 9).Select(i => keys[(int)Math.Round(i * (keys.Count - 1) / 8.0)]));
             ClipReview.SaveSheet(mp4, chosen, Path.Combine(options.Output, $"{feature}.{language}.sheet.png"));
         }
 

@@ -15,8 +15,9 @@ dotnet run --project build/tools/TutorialVideoGenerator -c Release -- --install
 # 만든 영상의 특정 시점을 원본 크기 PNG로 꺼냅니다.
 dotnet run --project build/tools/TutorialVideoGenerator -c Release -- inspect artifacts/tutorials/<시각>/image-crop.ko.mp4 0,5200
 
-# 검토용으로 다른 테마와 포인트 색에서 만듭니다. 제품 자산(--install)은 기본값으로만 만듭니다.
-dotnet run --project build/tools/TutorialVideoGenerator -c Release -- --features pin-copy --languages ko --theme glass-light --accent violet
+# 검토용으로 다른 테마에서 만듭니다. 포인트 색은 빨간색으로 고정됩니다.
+# 제품 자산(--install)은 재현 가능한 기본 렌더(어두운 테마, 빨간색)로만 만듭니다.
+dotnet run --project build/tools/TutorialVideoGenerator -c Release -- --features pin-copy --languages ko --theme glass-light
 ```
 
 깨끗한 클론에서 별도 준비 없이 실행됩니다. 생성기는 `MyCapture.App` 프로젝트를 참조해 현재 소스로 함께 빌드하고, 제품은 `InternalsVisibleTo("MyCapture.TutorialGenerator")`로 이 도구에만 내부 API를 엽니다. 출력은 Git이 무시하는 `artifacts/` 아래에 둡니다.
@@ -31,7 +32,8 @@ dotnet run --project build/tools/TutorialVideoGenerator -c Release -- --features
 | 화질 | Media Foundation 소프트웨어 H.264 인코더의 고정 품질 60(`--quality`)과 품질 우선 설정(QualityVsSpeed 100). GPU와 관계없이 같은 인코더를 씁니다. 품질 우선 설정은 키 표시가 사라진 자리에 남던 옅은 잔상도 없앱니다 |
 | 색 범위 | 전체 범위(0–255)로 인코딩하고 스트림에 표시합니다. 제품 플레이어인 WPF `MediaElement`는 디코딩한 값을 범위 확장 없이 표시하므로, 녹화와 같은 제한 범위(16–235)로 만들면 흰색이 235, 검은색이 16으로 흐리게 보입니다 |
 | 정지 화면 | 첫 렌더 프레임을 JPEG 품질 90으로 저장합니다. 사용법 창은 이 파일을 바로 표시하고 영상이 열리면 영상으로 넘어갑니다 |
-| 테마 | 기본 테마(Glass, 어두운 테마)와 기본 포인트 색(빨간색). 검토용 렌더는 `--theme`(설정 값: glass, glass-light, midnight, daylight, workspace, high-contrast)과 `--accent`(red, violet)로 바꿉니다 |
+| 테마 | 기본 렌더는 Glass(어두운 테마)와 빨간색입니다. 검토용 `--theme` 값은 system(시스템), glass-light(밝은 테마), glass(어두운 테마), high-contrast(고대비)입니다. 이전 테마 이름은 제품과 같은 별칭으로 받으며, 이전 violet 인수도 제품과 같이 빨간색으로 정규화합니다 |
+| 단축키 표시 | `NewInstallDefaults`의 새 설치 설정을 사용합니다. 버튼 아래 키 캡션은 기본적으로 숨기며, 아래 설명 띠의 키는 해당 장면에서 실행하는 조작을 나타냅니다 |
 
 정지 구간은 움직임이 없어 거의 용량을 차지하지 않고, 첫 프레임은 키 프레임이라 애니메이션 줄이기 설정에서도 바로 보입니다.
 
@@ -58,7 +60,10 @@ dotnet run --project build/tools/TutorialVideoGenerator -c Release -- --features
 - 파일이 필요한 장면(동영상 편집기가 여는 합성 녹화, 실제 GIF 내보내기 결과)은 `Program.WorkFolder`(출력 폴더의 `work`) 아래 장면별 폴더에 만들고 장면이 끝나면 지웁니다. 모달 대화 상자는 띄우지 않습니다. 동영상 편집기의 내보내기 대화 상자는 `ExportDialogHostForTest`로 화면 밖에 열고, Windows 저장 대화 상자처럼 운영체제가 그리는 창만 장면이 직접 그립니다.
 - 설명 문구는 제품 용어와 같게 씁니다(예: 블러, 뒤 창 클릭 허용, 빠른 작업, 닫은 핀 다시 열기). 한국어 설명은 명사형 또는 합니다체로 쓰고 해요체, 느낌표, 감탄사, 이모지를 쓰지 않습니다.
 - 클립 길이는 7–15초여야 하며 보통 11초 안팎으로 맞춥니다.
+- 캡처 결과는 빠른 작업 카드로 먼저 보여 준 뒤 Alt+Q와 편집 단축키로 편집기에 진입합니다. 아이콘 버튼의 자막은 접근성 이름을 우선 사용하며, 이름이 없는 버튼은 생성 오류로 처리합니다.
 
 ## 출력물
 
 출력 폴더에는 `{기능}.{언어}.mp4`, 첫 프레임 정지 화면 `{기능}.{언어}.jpg`, 주요 장면을 디코딩한 `{기능}.{언어}.sheet.png`, 전체 결과를 담은 `receipt.json`(제품 DLL SHA256, 설정, 클립과 정지 화면별 크기·SHA256, 프레임·길이, 사용한 제품 UI 설명)이 생깁니다.
+
+검토 시트의 첫 줄은 정확한 첫 프레임·중간 프레임·마지막 프레임이고, 나머지는 주요 동작입니다. `inspect`는 원본 영상 옆에 PNG를 쓰므로 설치된 자산 폴더에서 실행하지 않습니다. 설치 자산을 검사할 때는 먼저 `artifacts/` 아래로 복사합니다.
