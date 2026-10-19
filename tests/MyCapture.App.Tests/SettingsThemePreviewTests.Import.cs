@@ -19,8 +19,8 @@ namespace MyCapture.App.Tests;
 public sealed partial class SettingsThemePreviewTests
 {
     [Fact]
-    public Task ImportedSettingsStayUnappliedAndReportResultsAcrossTabs() =>
-        RunIsolated(nameof(ImportedSettingsStayUnappliedAndReportResultsAcrossTabs), VerifyImportedSettings);
+    public Task ImportedSettingsSaveImmediatelyAndReportResultsAcrossTabs() =>
+        RunIsolated(nameof(ImportedSettingsSaveImmediatelyAndReportResultsAcrossTabs), VerifyImportedSettings);
 
     private static void VerifyImportedSettings()
     {
@@ -78,11 +78,12 @@ public sealed partial class SettingsThemePreviewTests
         Assert.NotEqual("321", DraftOf(window).MaxItems);
         window.ImportSettingsFrom(importPath);
         Drain(window);
-        Assert.Equal(AppThemeNames.Glass, saved.General.Theme);
-        Assert.Equal(persisted, File.ReadAllText(paths.SettingsFile));
+        Assert.Equal(AppThemeNames.GlassLight, saved.General.Theme);
+        Assert.NotEqual(persisted, File.ReadAllText(paths.SettingsFile));
+        persisted = File.ReadAllText(paths.SettingsFile);
         Assert.Equal("321", Assert.IsType<SettingsDraft>(window.DataContext).MaxItems);
         Assert.True(DraftOf(window).ToAppSettings().Hotkeys.CoreShortcutsAsked);
-        AssertPalette(window, AppTheme.Daylight);
+        AssertPalette(window, AppTheme.GlassLight);
 
         // Capture both default and minimum client layouts before assertions that also
         // expose the original hidden-status / clean-import regression on the baseline.
@@ -96,7 +97,7 @@ public sealed partial class SettingsThemePreviewTests
 
         Assert.Equal("321", DraftOf(window).MaxItems);
         TextBlock status = Assert.IsType<TextBlock>(window.FindName("SettingsStatus"));
-        Assert.Equal(UiText.Get("Settings_ImportDone"), status.Text);
+        Assert.Equal(UiText.Get("Settings_Saved"), status.Text);
         Assert.Equal(AutomationLiveSetting.Polite, AutomationProperties.GetLiveSetting(status));
         AssertStatusFits(window, status);
         var tabs = Assert.IsType<TabControl>(window.FindName("CategoryTabs"));
@@ -117,7 +118,7 @@ public sealed partial class SettingsThemePreviewTests
         AssertStatusFits(window, status);
         AssertCommandBarFits(window);
         Assert.Equal(persisted, File.ReadAllText(paths.SettingsFile));
-        AssertPalette(window, AppTheme.Daylight);
+        AssertPalette(window, AppTheme.GlassLight);
         SaveEvidence(window, $"settings-import-error-{locale}-780x560.png");
 
         string missingPath = Path.Combine(root, new string('a', 200), new string('b', 200), "missing-settings.json");
@@ -131,8 +132,9 @@ public sealed partial class SettingsThemePreviewTests
         AssertCommandBarFits(window);
 
         SettingsWindow.CancelCommand.Execute(null, window);
-        Assert.NotEqual("321", DraftOf(window).MaxItems);
-        AssertPalette(window, AppTheme.Glass);
+        Assert.False(window.IsVisible);
+        Assert.Equal("321", DraftOf(window).MaxItems);
+        AssertPalette(window, AppTheme.GlassLight);
         Assert.Equal(persisted, File.ReadAllText(paths.SettingsFile));
         window.ShowSettings();
         Drain(window);
@@ -141,43 +143,43 @@ public sealed partial class SettingsThemePreviewTests
         SettingsDraft clean = Assert.IsType<SettingsDraft>(window.DataContext);
         window.ImportSettingsFrom(invalidPath);
         Assert.Same(clean, window.DataContext);
-        Assert.NotEqual("321", clean.MaxItems);
-        AssertPalette(window, AppTheme.Glass);
+        Assert.Equal("321", clean.MaxItems);
+        AssertPalette(window, AppTheme.GlassLight);
 
         window.ImportSettingsFrom(importPath);
+        Drain(window);
         Assert.Equal("321", DraftOf(window).MaxItems);
-        Assert.True(DraftOf(window).HasUnappliedChanges);
-        window.ShowSettings(); // Already open: brought forward with the import still pending.
+        Assert.False(DraftOf(window).HasUnappliedChanges);
+        window.ShowSettings();
         Assert.Equal("321", DraftOf(window).MaxItems);
         SettingsWindow.CancelCommand.Execute(null, window);
         window.ShowSettings();
-        Assert.NotEqual("321", DraftOf(window).MaxItems);
-        AssertPalette(window, AppTheme.Glass);
+        Assert.Equal("321", DraftOf(window).MaxItems);
+        AssertPalette(window, AppTheme.GlassLight);
         Assert.True(string.IsNullOrEmpty(status.Text));
 
         window.ImportSettingsFrom(importPath);
         SettingsDraft applied = DraftOf(window);
         SettingsWindow.ApplyCommand.Execute(null, window);
-        // Apply reloads a fresh draft from the saved settings, which now hold the import.
-        Assert.NotSame(applied, window.DataContext);
+        Assert.Same(applied, window.DataContext); // Saving preserves the editor and caret.
         Assert.Equal("321", DraftOf(window).MaxItems);
-        Assert.False(window.IsVisible);
-        Assert.Equal(AppThemeNames.Daylight, saved.General.Theme);
-        Assert.Equal(AppThemeNames.Daylight, store.Load().General.Theme);
+        Assert.True(window.IsVisible);
+        Assert.Equal(AppThemeNames.GlassLight, saved.General.Theme);
+        Assert.Equal(AppThemeNames.GlassLight, store.Load().General.Theme);
         Assert.Equal(321, store.Load().Queue.MaxItems);
         Assert.True(store.Load().Hotkeys.CoreShortcutsAsked);
-        AssertPalette(window, AppTheme.Daylight);
+        AssertPalette(window, AppTheme.GlassLight);
     }
 
     private static SettingsDraft DraftOf(SettingsWindow window) => Assert.IsType<SettingsDraft>(window.DataContext);
 
     private static void AssertCommandBarFits(SettingsWindow window)
     {
-        var apply = Assert.IsType<Button>(window.FindName("ApplyButton"));
-        var bar = Assert.IsType<Grid>(VisualTreeHelper.GetParent(VisualTreeHelper.GetParent(apply)));
+        var apply = Assert.IsType<Button>(window.FindName("CancelButton"));
+        var bar = Assert.IsType<StackPanel>(VisualTreeHelper.GetParent(apply));
         Button[] buttons = Descendants(bar).OfType<Button>().ToArray();
-        Assert.Equal(3, buttons.Length); // Reset, Apply, Cancel; backup lives on the About tab.
-        Assert.Single(buttons, button => ReferenceEquals(button.Style, window.FindResource("Button.Primary")));
+        Assert.Single(buttons); // The footer has only Close; reset and backup live on About.
+        Assert.Same(apply, buttons[0]);
         foreach (Button button in buttons)
         {
             AssertFits(window, button);

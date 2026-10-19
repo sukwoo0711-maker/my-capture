@@ -89,11 +89,7 @@ public sealed class SettingsApplyService
 
     /// <summary>
     /// Applies <paramref name="next"/>. Returns a result describing the outcome the UI
-    /// should surface. Set <paramref name="applyStartup"/> to false while the first-run
-    /// welcome still owns the startup choice. Set <paramref name="keepAvailableHotkeys"/> to
-    /// keep every chord that registers when others cannot, as a launch does: the chosen
-    /// shortcuts are saved and the rest are reported in
-    /// <see cref="SettingsApplyResult.HotkeyFailures"/> instead of rolling the set back.
+    /// should surface.
     /// </summary>
     /// <remarks>
     /// When persistence succeeds (<see cref="SettingsApplyResult.Saved"/> is
@@ -105,8 +101,21 @@ public sealed class SettingsApplyService
     /// <see cref="SettingsApplyResult.Saved"/> is <see langword="false"/> so the window
     /// stays open with the user's draft intact.
     /// </remarks>
-    public SettingsApplyResult Apply(AppSettings next, bool applyFolderDestination = true, bool applyExportOptions = false,
-        bool applyStartup = true, bool keepAvailableHotkeys = false)
+    public SettingsApplyResult Apply(AppSettings next, bool applyFolderDestination = true, bool applyExportOptions = false) =>
+        Apply(next, applyFolderDestination, applyExportOptions, applyStartup: true, keepAvailableHotkeys: false);
+
+    /// <summary>
+    /// Applies the one-time core-shortcut answer. Set <paramref name="applyStartup"/> to false
+    /// while the first-run welcome still owns the startup choice. Every chord that registers
+    /// is kept when others cannot, as a launch does: the chosen shortcuts are saved and the
+    /// rest are reported in <see cref="SettingsApplyResult.HotkeyFailures"/> instead of
+    /// rolling the set back.
+    /// </summary>
+    internal SettingsApplyResult ApplyCoreShortcutAnswer(AppSettings next, bool applyStartup) =>
+        Apply(next, applyFolderDestination: true, applyExportOptions: false, applyStartup, keepAvailableHotkeys: true);
+
+    private SettingsApplyResult Apply(AppSettings next, bool applyFolderDestination, bool applyExportOptions,
+        bool applyStartup, bool keepAvailableHotkeys)
     {
         ArgumentNullException.ThrowIfNull(next);
 
@@ -121,6 +130,8 @@ public sealed class SettingsApplyService
         if (!applyExportOptions) next.Export.LastImageExport = previous.Export.LastImageExport;
         // Nor the capture start-guide count; a selector opened meanwhile may have advanced it.
         next.Capture.StartGuideShownCount = previous.Capture.StartGuideShownCount;
+        next.General.FirstCaptureTipShown = previous.General.FirstCaptureTipShown;
+        next.General.FirstPinTipShown = previous.General.FirstPinTipShown;
         ReconcileFolderDestination(next.Queue, _queue, applyFolderDestination);
         var messages = new List<string>();
 

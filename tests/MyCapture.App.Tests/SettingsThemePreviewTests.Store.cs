@@ -49,7 +49,7 @@ public sealed partial class SettingsThemePreviewTests
                     EngagementNoticeHost.Attach(window, notice, bottomInset: 76);
                     int requests = 0; notice.ReviewChosen = () => requests++;
                     window.Show();
-                    var apply = Assert.IsType<Button>(window.FindName("ApplyButton"));
+                    var apply = Assert.IsType<Button>(window.FindName("CancelButton"));
                     foreach ((double width, double height, string theme) in new[] { (940d, 700d, AppThemeNames.Glass), (780d, 560d, AppThemeNames.HighContrast) })
                     {
                         ThemeService.ApplyFromSettings(theme); window.Width = width; window.Height = height;
@@ -60,10 +60,10 @@ public sealed partial class SettingsThemePreviewTests
                         Assert.Equal(0, requests);
                         AssertFits(window, notice);
                         foreach (Button button in Descendants(notice).OfType<Button>()) AssertFits(window, button);
-                        // It sits above the Apply row, so Apply and Cancel stay reachable.
+                        // It sits above the footer, so Close stays reachable.
                         Rect card = notice.TransformToAncestor(window).TransformBounds(new Rect(notice.RenderSize));
                         Rect applyBounds = apply.TransformToAncestor(window).TransformBounds(new Rect(apply.RenderSize));
-                        Assert.True(card.Bottom <= applyBounds.Top, $"{card} covers Apply {applyBounds}");
+                        Assert.True(card.Bottom <= applyBounds.Top, $"{card} covers Close {applyBounds}");
                         SaveStoreUpdateEvidence(window, $"rating-invitation-{locale}-{theme}-{width}x{height}.png");
                     }
                     Button close = Descendants(notice).OfType<Button>().Single(button => (string)button.Content == UiText.Get("Dialog.Close"));
@@ -341,7 +341,7 @@ public sealed partial class SettingsThemePreviewTests
             Task install = window.RunStoreUpdateActionAsync();
             Assert.False(install.IsCompleted);
             Assert.False(window.IsEnabled);
-            Assert.False(((Button)window.FindName("ApplyButton")).IsEnabled);
+            Assert.False(((Button)window.FindName("CancelButton")).IsEnabled);
             Assert.Equal(1, fake.Installs);
             Assert.Equal(0, protectionReleased);
             Assert.Equal(UiText.Get("StoreUpdate_StateAwaitingConsent"), state.Text);
@@ -395,7 +395,7 @@ public sealed partial class SettingsThemePreviewTests
         Assert.True(task.IsCompletedSuccessfully, task.Exception?.ToString());
     }
 
-    /// <summary>Reporting a problem is one step: the diagnostics go to the clipboard, then the page opens.</summary>
+    /// <summary>Contact support previews diagnostics before explicit copy or URL actions.</summary>
     private static void VerifySupportPreview(SettingsWindow window, string build, string locale)
     {
         var report = (Button)window.FindName("SupportReport");
@@ -403,21 +403,27 @@ public sealed partial class SettingsThemePreviewTests
         var opened = new List<string>();
         window.CopySupportText = value =>
         {
-            Assert.Empty(opened); // copied before the page opens, so it is ready to paste
+            Assert.Empty(opened);
             copied = value;
         };
         window.OpenSupportPage = opened.Add;
+        SupportWindow? support = null;
+        window.OpenSupportDialog = dialog => support = dialog;
         report.RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));
-        Assert.Contains("DPI:", copied, StringComparison.Ordinal);
+        Assert.NotNull(support);
+        Assert.Null(copied);
+        Assert.Empty(opened);
+        support.CopyDiagnostics();
+        Assert.Contains("%", copied, StringComparison.Ordinal);
         Assert.Contains("Windows:", copied, StringComparison.Ordinal);
         Assert.DoesNotContain("https://", copied, StringComparison.Ordinal);
         Assert.DoesNotContain("C:\\", copied, StringComparison.OrdinalIgnoreCase);
-        Assert.Equal(new[] { SupportDiagnostics.IssueUri }, opened);
-        Assert.Equal(UiText.Get("About_ReportCopied"), ((TextBlock)window.FindName("SettingsStatus")).Text);
+        support.OpenGitHub();
+        Assert.StartsWith(SupportDiagnostics.IssueUri + "?title=", Assert.Single(opened), StringComparison.Ordinal);
+        support.Close();
         report.BringIntoView(); Drain(window); AssertFits(window, report);
         SaveStoreUpdateEvidence(window, $"support-report-{build}-{locale}-high-contrast-780x560.png");
     }
-
     private static void AssertUpdateTabFits(SettingsWindow window, TextBlock description, Button action, Button rating)
     {
         // Within the window, and within the tab page's scroll viewport once scrolled to.

@@ -89,7 +89,7 @@ public sealed class CoreShortcutSettingsApplyTests
             AppSettings candidate = original.DeepClone();
             CoreShortcuts.Accept(candidate.Hotkeys);
 
-            SettingsApplyResult result = apply.Apply(candidate, applyStartup: false);
+            SettingsApplyResult result = apply.ApplyCoreShortcutAnswer(candidate, applyStartup: false);
 
             Assert.Equal(0, startup.AccessCount);
             Assert.Equal(!failSave, result.Saved);
@@ -135,7 +135,9 @@ public sealed class CoreShortcutSettingsApplyTests
             AppSettings candidate = published.DeepClone();
             CoreShortcuts.Accept(candidate.Hotkeys);
 
-            SettingsApplyResult result = apply.Apply(candidate, keepAvailableHotkeys: keepAvailable);
+            SettingsApplyResult result = keepAvailable
+                ? apply.ApplyCoreShortcutAnswer(candidate, applyStartup: true)
+                : apply.Apply(candidate);
 
             Assert.True(result.Saved);
             Assert.Equal(keepAvailable, result.HotkeysApplied);

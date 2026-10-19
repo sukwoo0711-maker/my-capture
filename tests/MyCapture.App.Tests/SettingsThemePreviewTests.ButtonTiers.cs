@@ -27,15 +27,15 @@ public sealed partial class SettingsThemePreviewTests
         RunIsolated(nameof(SettingsUx_ButtonTiersKeepTheirShapeWhenDisabledInEveryTheme), VerifyButtonTiers);
 
     [Fact]
-    public Task SettingsUx_NewInstallShowsKeyCaptionsAndTooltipsKeepTheKey() =>
-        RunIsolated(nameof(SettingsUx_NewInstallShowsKeyCaptionsAndTooltipsKeepTheKey), VerifyKeyCaptionDefaults);
+    public Task SettingsUx_NewInstallHidesKeyCaptionsAndTooltipsKeepTheKey() =>
+        RunIsolated(nameof(SettingsUx_NewInstallHidesKeyCaptionsAndTooltipsKeepTheKey), VerifyKeyCaptionDefaults);
 
     private static void VerifyKeyCaptionDefaults()
     {
         using var language = MyCapture.Core.Localization.UiText.UseLanguage("ko-KR");
         foreach ((MyCapture.Core.Settings.AppSettings settings, Visibility expected) in new[]
         {
-            (MyCapture.Core.Settings.NewInstallDefaults.Create(), Visibility.Visible),
+            (MyCapture.Core.Settings.NewInstallDefaults.Create(), Visibility.Collapsed),
             (new MyCapture.Core.Settings.AppSettings(), Visibility.Visible),
             (new MyCapture.Core.Settings.AppSettings { General = { ShowShortcutHints = false } }, Visibility.Collapsed),
         })

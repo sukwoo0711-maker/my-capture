@@ -209,8 +209,12 @@ public sealed partial class SettingsThemePreviewTests
                 {
                     Hotkeys = { CoreShortcutsAsked = !asked, ForceCoreShortcuts = true },
                 }, importPath);
-                var window = new SettingsWindow(() => current, _ => throw new InvalidOperationException("Import must remain a draft."),
-                    NullLogger.Instance, () => store, _ => { })
+                var applied = new List<AppSettings>();
+                var window = new SettingsWindow(() => current, candidate =>
+                {
+                    applied.Add(candidate);
+                    return new SettingsApplyResult(true, true, true, false, []);
+                }, NullLogger.Instance, () => store, _ => { })
                 { Left = -10000, Top = -10000, ShowActivated = false, ShowInTaskbar = false };
                 try
                 {
@@ -227,8 +231,12 @@ public sealed partial class SettingsThemePreviewTests
                     Assert.True(candidate.Hotkeys.ForceCoreShortcuts);
                     Assert.Equal(asked, draft.ToAppSettings().Hotkeys.CoreShortcutsAsked);
                     Assert.Equal(before, File.ReadAllBytes(paths.SettingsFile));
+                    // The import stays a draft until it is saved.
+                    Assert.Empty(applied);
                 }
                 finally { window.CloseForExit(); }
+                // Closing saves the pending draft, still with the current answer.
+                Assert.All(applied, candidate => Assert.Equal(!asked, candidate.Hotkeys.CoreShortcutsAsked));
             }
         }
         finally { application.Shutdown(); }
@@ -272,7 +280,7 @@ public sealed partial class SettingsThemePreviewTests
                 window.ImportLegacySettingsDraft(oldSettings);
                 SettingsDraft draft = DraftOf(window);
                 AppSettings candidate = window.LegacyApplyCandidate(draft.ToAppSettings());
-                Assert.Equal(AppThemeNames.Daylight, candidate.General.Theme);
+                Assert.Equal(AppThemeNames.GlassLight, candidate.General.Theme);
                 Assert.Equal(JsonSerializer.Serialize(current.Queue), JsonSerializer.Serialize(candidate.Queue));
                 Assert.Equal(current.Export.QuickSaveDirectoryOverride, candidate.Export.QuickSaveDirectoryOverride);
                 Assert.Equal(current.GitHub.Token, candidate.GitHub.Token);

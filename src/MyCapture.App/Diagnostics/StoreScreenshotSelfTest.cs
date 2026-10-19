@@ -40,7 +40,7 @@ namespace MyCapture.App.Diagnostics;
 /// Usage: <c>MyCapture.exe --selftest-store-shots [outputDirectory] [ko|en]</c>. Each scene is
 /// rendered at 2x and composed onto a 2560x1440 canvas, above the Store's 1366x768 minimum.
 /// </remarks>
-internal static class StoreScreenshotSelfTest
+internal static partial class StoreScreenshotSelfTest
 {
     internal const string CommandLineSwitch = "--selftest-store-shots";
 

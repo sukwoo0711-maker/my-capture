@@ -20,7 +20,7 @@
     <comment>Language selection</comment>
   </data>
   <data name="Settings.LanguageHint" xml:space="preserve">
-    <value>Click Apply to save. All windows and menus use the new language the next time MyCapture starts. Your current work stays open.</value>
+    <value>Your language choice is saved immediately. All windows and menus use it the next time MyCapture starts.</value>
     <comment>Language selection</comment>
   </data>
   <data name="Settings.LanguageRestart" xml:space="preserve">
@@ -453,7 +453,7 @@ This cannot be undone.</value>
     <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
   </data>
   <data name="Text_295F3F963B4A" xml:space="preserve">
-    <value>Library images are deleted automatically, oldest first, 7 days after they are created. Kept images, images being edited, videos, and files you saved or exported separately are never deleted.</value>
+    <value>Library images are deleted automatically, oldest first, after the configured retention period. Kept images, images being edited, videos, and files you saved or exported separately are never deleted.</value>
     <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
   </data>
   <data name="Text_29C79CAFC1D7" xml:space="preserve">
@@ -2507,7 +2507,7 @@ This cannot be undone.</value>
     <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
   </data>
   <data name="Text_D8A23CD47E7A" xml:space="preserve">
-    <value>Reset all values to defaults. You can cancel these changes until you click Apply.</value>
+    <value>Reset all settings to their defaults after confirmation.</value>
     <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
   </data>
   <data name="Text_D8A75FF54AF8" xml:space="preserve">
@@ -3138,23 +3138,23 @@ Select Done or Save to add the capture to the library. Canceled or replaced draf
 Hold Shift for precise pixel selection.
 Open the library or Settings from the tray menu.</value></data>
   <data name="Settings.Theme" xml:space="preserve"><value>Theme</value></data>
+  <data name="Settings.ThemeSystem" xml:space="preserve"><value>System</value></data>
   <data name="Settings.AccentColor" xml:space="preserve"><value>Accent color</value></data>
   <data name="Settings.AccentViolet" xml:space="preserve"><value>Violet</value></data>
   <data name="Settings.AccentRed" xml:space="preserve"><value>Red</value></data>
-  <data name="Settings.ThemeHint" xml:space="preserve"><value>Select a theme to preview it. Apply to save your choice.</value></data>
+  <data name="Settings.ThemeHint" xml:space="preserve"><value>Your theme is applied and saved immediately.</value></data>
   <data name="Settings.ShowSourceWindowTitle" xml:space="preserve"><value>Show document/window title at the top right of images</value></data>
   <data name="Settings.ShowSourceWindowTitleHint" xml:space="preserve"><value>Applies to new captures and reopened editors.</value></data>
-  <data name="Settings.ThemeMidnight" xml:space="preserve"><value>Midnight</value></data>
-  <data name="Settings.ThemeDaylight" xml:space="preserve"><value>Daylight</value></data>
   <data name="Settings.ThemeHighContrast" xml:space="preserve"><value>High contrast</value></data>
   <data name="Settings.GitHubIssueUrl" xml:space="preserve"><value>GitHub issue URL</value></data>
   <data name="Settings.GitHubIssueUrlHint" xml:space="preserve"><value>F9 pastes the clipboard image into this issue’s Write box. Use an issue you can comment on. If blank, MyCapture's public support repository is used, and uploaded images are public.</value></data>
   <data name="Settings.GitHubIssueUrlInvalid" xml:space="preserve"><value>Use https://host/owner/repo/issues/number or /issues/new.</value></data>
   <data name="Settings.RetentionHours" xml:space="preserve"><value>Library image retention (hours)</value></data>
-  <data name="Settings.RetentionHoursHint" xml:space="preserve"><value>Images that are not kept are deleted after this many hours. The default is 168 hours (7 days). Videos and kept items are excluded.</value></data>
+  <data name="Settings.RetentionHoursHint" xml:space="preserve"><value>Images that are not kept are deleted after this many hours. New installations have no time limit by default. Videos and kept items are excluded.</value></data>
   <data name="Settings.UploadGitHubHotkey" xml:space="preserve"><value>Clipboard image to GitHub URL</value></data>
   <data name="Gallery.Float" xml:space="preserve"><value>Pin to screen</value></data>
   <data name="Gallery.FloatHint" xml:space="preserve"><value>Pin this capture on top of other windows.</value></data>
+  <data name="Gallery.EditVideoHint" xml:space="preserve"><value>Edit video</value></data>
   <data name="Gallery.RetentionDays" xml:space="preserve"><value>Auto-delete in {0} {0:plural:day|days}</value></data>
   <data name="Gallery.RetentionDaysHours" xml:space="preserve"><value>Auto-delete in {0} {0:plural:day|days} {1} {1:plural:hour|hours}</value></data>
   <data name="Gallery.RetentionHours" xml:space="preserve"><value>Auto-delete in {0} {0:plural:hour|hours}</value></data>
@@ -3163,7 +3163,7 @@ Open the library or Settings from the tray menu.</value></data>
   <data name="Gallery.RetentionKept" xml:space="preserve"><value>Kept</value></data>
   <data name="Gallery.RetentionVideo" xml:space="preserve"><value>No expiry</value></data>
   <data name="Gallery.RetentionExpired" xml:space="preserve"><value>Awaiting auto-delete</value></data>
-  <data name="Gallery.RetentionNever" xml:space="preserve"><value>No auto-delete</value></data>
+  <data name="Gallery.RetentionNever" xml:space="preserve"><value>No time limit</value></data>
   <data name="Gallery.FloatFailed" xml:space="preserve"><value>Could not pin this image to the screen.</value></data>
   <data name="GitHub.NeedImage" xml:space="preserve"><value>Copy an image first, then press F9.</value></data>
   <data name="GitHub.Opening" xml:space="preserve"><value>Opening the GitHub issue and pasting the image…</value></data>
@@ -3186,9 +3186,8 @@ Open the library or Settings from the tray menu.</value></data>
   <data name="Video.SourceTimeHint" xml:space="preserve"><value>Time in the original video. Enter seconds (e.g. 2.5) or hh:mm:ss.fff. Export includes In up to, but excluding, Out.</value></data>
   <data name="Video.TrimInputInvalid" xml:space="preserve"><value>The range was not changed. Enter In and Out within the source, with In at least 0.1 seconds before Out.</value></data>
   <data name="Video.TextSourceTimeHint" xml:space="preserve"><value>Display times refer to the original video. Enter seconds (e.g. 2.5) or hh:mm:ss.fff. Text appears from Start up to, but excluding, End. Only its overlap with In–Out is exported.</value></data>
-  <data name="Settings.ThemeWorkspace" xml:space="preserve"><value>Workspace · light library and dark video editor</value></data>
-  <data name="Settings.ThemeGlass" xml:space="preserve"><value>Glass · Windows default</value></data>
-  <data name="Settings.ThemeGlassLight" xml:space="preserve"><value>Glass light · bright translucent</value></data>
+  <data name="Settings.ThemeGlass" xml:space="preserve"><value>Dark</value></data>
+  <data name="Settings.ThemeGlassLight" xml:space="preserve"><value>Light</value></data>
   <data name="Settings.OcrQuality" xml:space="preserve"><value>Recognition quality</value></data>
   <data name="Settings.OcrQualityHint" xml:space="preserve"><value>Fast and Normal use the recognition built into Windows. Accurate handles small print such as receipts. Most accurate corrects and enlarges the image 4x before recognition and downloads about 67 MB the first time.</value></data>
   <data name="Settings.OcrQualityFast" xml:space="preserve"><value>Fast</value></data>
@@ -3219,7 +3218,12 @@ Open the library or Settings from the tray menu.</value></data>
   <data name="Tools_CropApplied" xml:space="preserve"><value>Crop applied</value></data>
   <data name="Settings_Export" xml:space="preserve"><value>Export settings</value></data>
   <data name="Settings_Import" xml:space="preserve"><value>Import settings</value></data>
-  <data name="Settings_ImportDone" xml:space="preserve"><value>Settings loaded. Select Apply to save.</value></data>
+  <data name="Settings_ImportDone" xml:space="preserve"><value>Settings imported</value></data>
+  <data name="Settings_Saved" xml:space="preserve"><value>Saved</value></data>
+  <data name="Settings_Search" xml:space="preserve"><value>Search settings</value></data>
+  <data name="Settings_SearchHint" xml:space="preserve"><value>Search names and help · Esc: clear search</value></data>
+  <data name="Settings_SearchEmpty" xml:space="preserve"><value>No matching settings</value></data>
+  <data name="Settings_ResetConfirm" xml:space="preserve"><value>Reset all settings to their defaults?</value></data>
   <data name="Settings_ImportFailed" xml:space="preserve"><value>Could not read the settings file.</value></data>
   <data name="Settings_ExportDone" xml:space="preserve"><value>Settings exported</value></data>
   <data name="GitHub_TokenMode" xml:space="preserve"><value>Upload with token (experimental)</value></data>
@@ -3307,7 +3311,7 @@ Open the library or Settings from the tray menu.</value></data>
   <data name="QuickAccess.Enabled" xml:space="preserve"><value>Show quick access after capture</value></data>
   <data name="QuickAccess.Failed" xml:space="preserve"><value>The action could not be completed. Try again.</value></data>
   <data name="QuickAccess.Keep" xml:space="preserve"><value>Keep open</value></data>
-  <data name="QuickAccess.Library" xml:space="preserve"><value>Open in library</value></data>
+  <data name="QuickAccess.Library" xml:space="preserve"><value>Library</value></data>
   <data name="QuickAccess.Pin" xml:space="preserve"><value>Pin</value></data>
   <data name="QuickAccess.Pinned" xml:space="preserve"><value>Pinned</value></data>
   <data name="QuickAccess.Pinning" xml:space="preserve"><value>Pinning…</value></data>
@@ -3327,8 +3331,8 @@ Open the library or Settings from the tray menu.</value></data>
   <data name="QuickAccess.SaveFailed" xml:space="preserve"><value>Could not save · Press {0} to retry</value></data>
   <data name="QuickAccess.CopyTextFailed" xml:space="preserve"><value>Could not copy text · Press {0} to retry</value></data>
   <data name="QuickAccess.DragFailed" xml:space="preserve"><value>Could not prepare the file · Drag again to retry</value></data>
-  <data name="QuickAccess.KeepLabel" xml:space="preserve"><value>Keep</value></data>
-  <data name="QuickAccess.KeepName" xml:space="preserve"><value>Keep card open</value></data>
+  <data name="QuickAccess.KeepLabel" xml:space="preserve"><value>Keep open</value></data>
+  <data name="QuickAccess.KeepName" xml:space="preserve"><value>Keep open</value></data>
   <data name="Hotkey.Clear" xml:space="preserve"><value>Clear</value></data>
   <data name="Hotkey.Delay" xml:space="preserve"><value>Delayed capture</value></data>
   <data name="Hotkey.Record" xml:space="preserve"><value>Record shortcut</value></data>
@@ -3338,6 +3342,14 @@ Open the library or Settings from the tray menu.</value></data>
   <data name="Hotkey.Unavailable" xml:space="preserve"><value>This shortcut is in use by another app or Windows. Choose another key.</value></data>
   <data name="Hotkey.Waiting" xml:space="preserve"><value>Press a shortcut · Esc to cancel</value></data>
   <data name="Tools.CustomColor" xml:space="preserve"><value>Apply custom color</value></data>
+  <data name="EditorProperty_CustomColor" xml:space="preserve"><value>Custom color</value></data>
+  <data name="EditorProperty_CustomColorHint" xml:space="preserve"><value>Custom color (Enter: apply, Esc: close)</value></data>
+  <data name="EditorProperty_Hex" xml:space="preserve"><value>HEX color</value></data>
+  <data name="EditorProperty_FillTransparency" xml:space="preserve"><value>Fill transparency</value></data>
+  <data name="EditorProperty_SelectedColor" xml:space="preserve"><value>Selected</value></data>
+  <data name="EditorProperty_ThicknessDecrease" xml:space="preserve"><value>Decrease line width</value></data>
+  <data name="EditorProperty_ThicknessIncrease" xml:space="preserve"><value>Increase line width</value></data>
+  <data name="EditorProperty_MosaicStrength" xml:space="preserve"><value>Mosaic strength</value></data>
   <data name="Tools.Ellipse" xml:space="preserve"><value>Ellipse</value></data>
   <data name="Tools.Highlighter" xml:space="preserve"><value>Highlighter</value></data>
   <data name="Tools.InvalidColor" xml:space="preserve"><value>Enter a color as #RRGGBB or #AARRGGBB.</value></data>
@@ -3691,7 +3703,7 @@ Delete {1} {1:plural:subfolder|subfolders}, {2} {2:plural:image|images}, and {3}
   <data name="LegacyImport.MissingPayload" xml:space="preserve"><value>An existing image or video file is missing. Check the existing data folder.</value></data>
   <data name="LegacyImport.Failed" xml:space="preserve"><value>Could not import existing data. Check storage locations and access permissions.</value></data>
   <data name="LegacyImport.FailedDetail" xml:space="preserve"><value>Could not import existing data. {0}</value></data>
-  <data name="LegacyImport.SettingsReady" xml:space="preserve"><value>Settings loaded · Choose Apply to save them.</value></data>
+  <data name="LegacyImport.SettingsReady" xml:space="preserve"><value>Settings imported</value></data>
   <data name="LegacyImport.SettingsFailed" xml:space="preserve"><value>The library was imported, but settings could not be loaded. {0}</value></data>
   <data name="LegacyImport.OverlappingRoots" xml:space="preserve"><value>Choose an existing data folder separate from the current storage location.</value></data>
   <data name="LegacyImport.TargetChanged" xml:space="preserve"><value>The current library changed. Try importing again.</value></data>
@@ -3736,6 +3748,14 @@ Delete {1} {1:plural:subfolder|subfolders}, {2} {2:plural:image|images}, and {3}
   <data name="CaptureGuide2_BarName" xml:space="preserve"><value>Capture options</value></data>
   <data name="CaptureGuide2_Region" xml:space="preserve"><value>Select region</value></data>
   <data name="CaptureGuide2_RegionOnly" xml:space="preserve"><value>Select region</value></data>
+  <data name="CaptureBar_Window" xml:space="preserve"><value>Select window</value></data>
+  <data name="CaptureBar_WindowHelp" xml:space="preserve"><value>Click the window under the pointer to capture it. Click the desktop to capture that monitor.</value></data>
+  <data name="CaptureBar_ScrollHelp" xml:space="preserve"><value>Select a window for scrolling capture.</value></data>
+  <data name="CaptureBar_Delay" xml:space="preserve"><value>Delayed capture</value></data>
+  <data name="CaptureBar_DelayHelp" xml:space="preserve"><value>Choose capture after 3, 5 or 10 seconds.</value></data>
+  <data name="CaptureBar_RecordRegionHelp" xml:space="preserve"><value>Drag over the area to record. Press Esc to cancel.</value></data>
+  <data name="CaptureBar_RecordFullScreenHelp" xml:space="preserve"><value>Selects this entire monitor as the recording area.</value></data>
+  <data name="CaptureBar_RecordGuideTitle" xml:space="preserve"><value>Choose a recording area</value></data>
   <data name="CaptureGuide2_RegionHelp" xml:space="preserve"><value>Click a window to capture it, drag to capture a region, or click the desktop to capture the whole monitor. Hold Shift to move one pixel at a time.</value></data>
   <data name="CaptureGuide2_RegionOnlyHelp" xml:space="preserve"><value>Drag to capture the region you want. Hold Shift to move one pixel at a time.</value></data>
   <data name="CaptureGuide2_FullScreen" xml:space="preserve"><value>Full screen</value></data>
@@ -3809,6 +3829,13 @@ Delete {1} {1:plural:subfolder|subfolders}, {2} {2:plural:image|images}, and {3}
   <data name="VideoEditorUx_Trim" xml:space="preserve"><value>Trim</value></data>
   <data name="VideoEditorUx_TrimHelp" xml:space="preserve"><value>Selects the start handle of the part to keep and shows its frame. Press again for the end handle.</value></data>
   <data name="VideoEditorUx_AddText" xml:space="preserve"><value>Add text</value></data>
+  <data name="VideoEditorUx_TextShort" xml:space="preserve"><value>Text</value></data>
+  <data name="VideoEditorUx_SaveShort" xml:space="preserve"><value>Save</value></data>
+  <data name="VideoEditorUx_ExportShort" xml:space="preserve"><value>Export</value></data>
+  <data name="VideoEditorUx_Details" xml:space="preserve"><value>Details</value></data>
+  <data name="VideoEditorUx_DetailsHelp" xml:space="preserve"><value>Show or hide frame navigation, start and end times, and the layer list. Press Enter to toggle.</value></data>
+  <data name="VideoEditorUx_TrimTrackHelp" xml:space="preserve"><value>Drag the handles or press I and O to set the start and end. Press Ctrl+K to split at the playhead.</value></data>
+  <data name="VideoEditorUx_LayerTrackHelp" xml:space="preserve"><value>Double-click a layer or select it and press F2 or Enter to edit. Press Del to delete. Drag a layer to adjust its visible range.</value></data>
   <data name="VideoEditorUx_AddTextHelp" xml:space="preserve"><value>Adds a text layer that starts at the playhead.</value></data>
   <data name="VideoEditorUx_FrameImageEdit" xml:space="preserve"><value>Draw on this frame</value></data>
   <data name="VideoEditorUx_LayerPanel" xml:space="preserve"><value>Layers</value></data>
@@ -3850,15 +3877,33 @@ Delete {1} {1:plural:subfolder|subfolders}, {2} {2:plural:image|images}, and {3}
   <data name="About_PrivacyModel" xml:space="preserve"><value>The text recognition model (about {0} MB) is downloaded from ModelScope the first time you use Accurate or Most accurate quality. Most accurate also downloads an upscaling model (about {1} MB) from Qualcomm AI Hub. Images are never sent.</value></data>
   <data name="About_PrivacyGitHub" xml:space="preserve"><value>GitHub upload posts to a public issue only when you run it.</value></data>
   <data name="About_FeedbackHeading" xml:space="preserve"><value>Feedback</value></data>
-  <data name="About_ReportProblem" xml:space="preserve"><value>Report a problem</value></data>
-  <data name="About_ReportProblemHelp" xml:space="preserve"><value>Copies diagnostics to the clipboard and opens the GitHub report page.</value></data>
+  <data name="About_ReportProblem" xml:space="preserve"><value>Contact support</value></data>
+  <data name="Support_Title" xml:space="preserve"><value>Contact support</value></data>
+  <data name="Support_Diagnostics" xml:space="preserve"><value>Diagnostics</value></data>
+  <data name="Support_Message" xml:space="preserve"><value>Message</value></data>
+  <data name="Support_GitHub" xml:space="preserve"><value>Send to GitHub issue</value></data>
+  <data name="Support_StoreReview" xml:space="preserve"><value>Review in Microsoft Store</value></data>
+  <data name="Support_Accounts" xml:space="preserve"><value>GitHub issues need a GitHub account; Store reviews use your Microsoft account.</value></data>
+  <data name="Support_GitHubAccount" xml:space="preserve"><value>You need a GitHub account to send an issue.</value></data>
+  <data name="Support_Opened" xml:space="preserve"><value>Contact page opened</value></data>
+  <data name="Support_GitHubOpened" xml:space="preserve"><value>GitHub issue page opened</value></data>
+  <data name="Support_StoreOpened" xml:space="preserve"><value>Microsoft Store review opened</value></data>
+  <data name="Support_CloseTip" xml:space="preserve"><value>Close support · Esc</value></data>
+  <data name="Support_Unknown" xml:space="preserve"><value>Unknown</value></data>
+  <data name="Support_Build" xml:space="preserve"><value>Build</value></data>
+  <data name="Support_Install" xml:space="preserve"><value>Installation</value></data>
+  <data name="Support_Packaged" xml:space="preserve"><value>Packaged</value></data>
+  <data name="Support_Unpackaged" xml:space="preserve"><value>Unpackaged</value></data>
+  <data name="Support_DisplayScale" xml:space="preserve"><value>Display scale: {0:0.##}%</value></data>
+  <data name="Support_IssueTitle" xml:space="preserve"><value>MyCapture support</value></data>
+  <data name="About_ReportProblemHelp" xml:space="preserve"><value>Review diagnostics and write a message.</value></data>
   <data name="About_ReportCopied" xml:space="preserve"><value>Diagnostics copied. Paste them into the report page.</value></data>
   <data name="About_ReportCopyFailed" xml:space="preserve"><value>Could not copy diagnostics. Describe the problem on the report page.</value></data>
   <data name="About_ReportNote" xml:space="preserve"><value>Requires a GitHub account. Reports are public.</value></data>
   <data name="About_DataHeading" xml:space="preserve"><value>Data</value></data>
   <data name="About_LegacyImport" xml:space="preserve"><value>Import data from an earlier version</value></data>
   <data name="About_LegacyImportHint" xml:space="preserve"><value>Copies images, videos and folders from an earlier MyCapture into this library. The originals stay where they are.</value></data>
-  <data name="About_SettingsBackupHint" xml:space="preserve"><value>Export settings to a file or import them. Imported settings are saved when you select Apply. The GitHub token is never exported.</value></data>
+  <data name="About_SettingsBackupHint" xml:space="preserve"><value>Imported settings are validated and saved immediately.</value></data>
   <data name="SettingsUx_TabAboutHelp" xml:space="preserve"><value>Version, updates, settings backup</value></data>
   <data name="SettingsUx_OtherShortcutsHeading" xml:space="preserve"><value>Other shortcuts</value></data>
   <data name="SettingsUx_OtherShortcutsHint" xml:space="preserve"><value>Assign only the ones you need, using combinations other apps do not use.</value></data>
@@ -3910,7 +3955,7 @@ Delete {1} {1:plural:subfolder|subfolders}, {2} {2:plural:image|images}, and {3}
   <data name="SettingsUx_BackupHeading" xml:space="preserve"><value>Settings backup</value></data>
   <data name="SettingsUx_BackupHint" xml:space="preserve"><value>Export your settings to a file or import them. Imported settings are saved when you select Apply. The GitHub token is never exported.</value></data>
   <data name="SettingsUx_CancelTip" xml:space="preserve"><value>Discards your changes and closes.</value></data>
-  <data name="SettingsUx_CloseTip" xml:space="preserve"><value>Closes the settings window.</value></data>
+  <data name="SettingsUx_CloseTip" xml:space="preserve"><value>Close settings · Esc</value></data>
   <data name="SettingsUx_CloseTitle" xml:space="preserve"><value>Unapplied changes</value></data>
   <data name="SettingsUx_CloseMessage" xml:space="preserve"><value>Your changes have not been applied. Closing without applying discards them.</value></data>
   <data name="SettingsUx_CloseApply" xml:space="preserve"><value>Apply and close</value></data>
@@ -3950,7 +3995,7 @@ Delete {1} {1:plural:subfolder|subfolders}, {2} {2:plural:image|images}, and {3}
   <data name="LibraryUx_KeptBadge" xml:space="preserve"><value>Kept</value></data>
   <data name="LibraryUx_KeptAccessible" xml:space="preserve"><value>, kept</value></data>
   <data name="LibraryUx_InFolderAccessible" xml:space="preserve"><value>, in folder {0}</value></data>
-  <data name="LibraryUx_TileMoreHint" xml:space="preserve"><value>More — keep, export and recognize text</value></data>
+  <data name="LibraryUx_TileMoreHint" xml:space="preserve"><value>More (Shift+F10)</value></data>
   <data name="LibraryUx_SearchPlaceholder" xml:space="preserve"><value>Search titles, apps, tags, image text · app:Edge tag:meeting</value></data>
   <data name="LibraryUx_SearchPlaceholderCompact" xml:space="preserve"><value>Search titles, apps, tags, image text</value></data>
   <data name="LibraryUx_CommandShortcut" xml:space="preserve"><value>{0} ({1})</value></data>
@@ -4004,6 +4049,17 @@ Delete {1} {1:plural:subfolder|subfolders}, {2} {2:plural:image|images}, and {3}
   <data name="Onboard_StepsName" xml:space="preserve"><value>Getting started</value></data>
   <data name="Onboard_StepNumber" xml:space="preserve"><value>Step {0}</value></data>
   <data name="Onboard_AfterCaptureTitle" xml:space="preserve"><value>After a capture</value></data>
+  <data name="Welcome_FirstCaptureTitle" xml:space="preserve"><value>Try your first capture</value></data>
+  <data name="Welcome_Skip" xml:space="preserve"><value>Skip</value></data>
+  <data name="Onboard_FirstCaptureTip" xml:space="preserve"><value>Press P to pin it above other windows</value></data>
+  <data name="Onboard_ReceiptKeyboard" xml:space="preserve"><value>Alt+Q to focus · Tab to move · Enter to run</value></data>
+  <data name="Onboard_ReceiptKeyboardFallback" xml:space="preserve"><value>Alt+Tab to focus · Tab to move · Enter to run</value></data>
+  <data name="Onboard_FirstCaptureToastTip" xml:space="preserve"><value>Pin above other windows</value></data>
+  <data name="Onboard_PinFailed" xml:space="preserve"><value>Could not create the pin.</value></data>
+  <data name="Onboard_FirstPinTip" xml:space="preserve"><value>Press {0} to hide or show all pins.</value></data>
+  <data name="Onboard_FirstPinTipUnassigned" xml:space="preserve"><value>Assign a shortcut in Settings to hide or show all pins.</value></data>
+  <data name="Onboard_ResidentTip" xml:space="preserve"><value>MyCapture keeps running in the notification area.</value></data>
+  <data name="QuickAccess.InitialSaved" xml:space="preserve"><value>Saved</value></data>
   <data name="Onboard_AfterCaptureEditor" xml:space="preserve"><value>Each capture is copied to the clipboard, saved to the library and opened in the editor.</value></data>
   <data name="Onboard_AfterCaptureQuickAccess" xml:space="preserve"><value>Each capture is copied to the clipboard, saved to the library and shown on a quick access card.</value></data>
   <data name="Onboard_AfterCaptureClipboard" xml:space="preserve"><value>Each capture is copied to the clipboard and saved to the library.</value></data>
@@ -4029,11 +4085,10 @@ Delete {1} {1:plural:subfolder|subfolders}, {2} {2:plural:image|images}, and {3}
   <data name="Onboard_BarCaptureHelp" xml:space="preserve"><value>Captures the screen as an image.</value></data>
   <data name="Onboard_BarRecordHelp" xml:space="preserve"><value>Switches to choosing an area to record.</value></data>
   <data name="Onboard_BarMore" xml:space="preserve"><value>More captures</value></data>
-  <data name="Onboard_BarMoreHelp" xml:space="preserve"><value>Delayed capture, scrolling capture or the previous region.</value></data>
+  <data name="Onboard_BarMoreHelp" xml:space="preserve"><value>Capture the previous region again.</value></data>
   <data name="Onboard_DelayCapture" xml:space="preserve"><value>Capture in {0} {0:plural:second|seconds}</value></data>
   <data name="Onboard_RecordSelectInstruction" xml:space="preserve"><value>Drag over the area to record</value></data>
   <data name="Onboard_RecordSelectTitle" xml:space="preserve"><value>MyCapture — Select an area to record</value></data>
-  <data name="Onboard_RecordStop" xml:space="preserve"><value>Stop</value></data>
   <data name="Onboard_RecordMore" xml:space="preserve"><value>Recording options</value></data>
   <data name="Onboard_RecordMoreHelp" xml:space="preserve"><value>Choose whether the recording shows the current time.</value></data>
   <data name="Onboard_RecordShowTime" xml:space="preserve"><value>Show time</value></data>

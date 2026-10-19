@@ -13,13 +13,13 @@ using Xunit;
 
 namespace MyCapture.App.Tests;
 
-/// <summary>The quick access card names its actions and says plainly what keeping it does.</summary>
+/// <summary>The receipt labels its primary action and gives every icon an accessible name.</summary>
 public sealed class QuickAccessCardLabelTests
 {
     [Theory]
-    [InlineData("ko", new[] { "복사", "편집", "핀", "저장", "텍스트 복사" }, "유지", "카드 유지", "자동으로 닫지 않기")]
-    [InlineData("en", new[] { "Copy", "Edit", "Pin", "Save", "Copy text" }, "Keep", "Keep card open", "Keep open")]
-    public void ActionsShowAShortNameUnderTheIconAndKeepIsAWord(string language, string[] names, string keep,
+    [InlineData("ko", new[] { "편집", "핀", "저장", "텍스트 복사", "복사" }, "자동으로 닫지 않음", "자동으로 닫지 않음")]
+    [InlineData("en", new[] { "Edit", "Pin", "Save", "Copy text", "Copy" }, "Keep open", "Keep open")]
+    public void EditHasAVisibleNameAndSecondaryIconsRetainTheirAccessibleNames(string language, string[] names,
         string keepName, string keepTip) =>
         StaTestHost.Run(() =>
         {
@@ -30,19 +30,21 @@ public sealed class QuickAccessCardLabelTests
             try
             {
                 IReadOnlyList<Button> actions = card.ActionButtonsForTest;
-                Assert.Equal(names, actions.Select(button => LogicalText(button)));
+                Assert.Equal(names, actions.Select(AutomationProperties.GetName));
+                Assert.Equal(names[0], Assert.IsType<TextBlock>(actions[0].Content).Text);
+                Assert.All(actions.Skip(1), button => Assert.IsType<SymbolIcon>(button.Content));
                 // The key is not written on the face; it is the tooltip's and the accelerator key's.
                 Assert.All(actions, button => Assert.False(string.IsNullOrEmpty(AutomationProperties.GetAcceleratorKey(button))));
-                // A word, not a padlock glyph; the visible word is part of its accessible name.
                 ToggleButton keepToggle = card.KeepToggleForTest;
-                Assert.Equal(keep, keepToggle.Content);
-                Assert.Equal(keepTip, keepToggle.ToolTip);
+                Assert.IsType<SymbolIcon>(keepToggle.Content);
+                Assert.Equal(keepName, keepToggle.ToolTip);
                 Assert.Equal(keepName, AutomationProperties.GetName(keepToggle));
-                Assert.Contains(keep, keepName, StringComparison.Ordinal);
                 Assert.Equal(keepTip, AutomationProperties.GetHelpText(keepToggle));
-                // It sits beside close, in the row that decides how long the card stays.
-                var header = ((StackPanel)((Border)card.Content).Child).Children.OfType<Grid>().First();
-                Assert.Same(header, keepToggle.Parent);
+                // Keep belongs to the receipt line; close remains over the preview.
+                var rows = ((StackPanel)((Border)card.Content).Child).Children.OfType<Grid>().ToArray();
+                Assert.Same(rows[1], keepToggle.Parent);
+                Assert.Contains(rows[0].Children.OfType<Button>(), button =>
+                    AutomationProperties.GetName(button) == UiText.Get("Dialog.Close"));
                 // The card's own tooltip is one short line, not a paragraph of keys.
                 Assert.True(((string)card.ToolTip).Length <= 40, (string)card.ToolTip);
             }
@@ -52,7 +54,7 @@ public sealed class QuickAccessCardLabelTests
     [Theory]
     [InlineData("ko")]
     [InlineData("en")]
-    public void ActionNamesFitUnderTheirIconsWithoutTrimming(string language) => StaTestHost.Run(() =>
+    public void PrimaryActionNameAndSecondaryIconsFitWithoutClipping(string language) => StaTestHost.Run(() =>
     {
         using var culture = UiText.UseLanguage(language);
         var image = BitmapSource.Create(2, 2, 96, 96, PixelFormats.Bgra32, null, new byte[16], 8);
@@ -61,14 +63,19 @@ public sealed class QuickAccessCardLabelTests
         try
         {
             card.IsKept = true;
-            Ocr410Fixture.LoadTheme(card);
-            card.Show();
-            card.UpdateLayout();
+            Border host = QuickAccessDetachedFixture.Layout(card);
             // Opaque capture-excluded cards omit the two 8-DIP shadow margins.
-            Assert.Equal(card.AllowsTransparency ? 344 : 328, card.ActualWidth);
+            Assert.Equal(card.AllowsTransparency ? 344 : 328, host.ActualWidth);
             foreach (Button button in card.ActionButtonsForTest)
             {
-                TextBlock name = FaceName(button)!;
+                Assert.Equal(32, button.ActualHeight);
+                FrameworkElement face = button.Content as FrameworkElement
+                    ?? Assert.Single(QuickAccessDetachedFixture.Descendants(button).OfType<TextBlock>(),
+                        text => text.Text == UiText.Get("QuickAccess.Edit"));
+                Rect bounds = face.TransformToAncestor(button).TransformBounds(new Rect(face.RenderSize));
+                Assert.True(bounds.Left >= -0.5 && bounds.Top >= -0.5 && bounds.Right <= button.ActualWidth + 0.5
+                    && bounds.Bottom <= button.ActualHeight + 0.5, $"{language}: button content is clipped: {bounds}");
+                if (face is not TextBlock name) continue;
                 var probe = new TextBlock
                 {
                     Text = name.Text, FontFamily = name.FontFamily, FontSize = name.FontSize,
@@ -84,20 +91,6 @@ public sealed class QuickAccessCardLabelTests
         finally { card.Close(); }
     });
 
-    /// <summary>The visible name on a button face (the icon is a shape; a key hint, when shown, is not a name).</summary>
-    private static string LogicalText(DependencyObject root) => FaceName(root)?.Text ?? string.Empty;
-
-    private static TextBlock? FaceName(DependencyObject root)
-    {
-        foreach (object child in LogicalTreeHelper.GetChildren(root))
-        {
-            if (child is StackPanel { Children.Count: 2 } face && face.Children[0] is MyCapture.App.Themes.SymbolIcon
-                && face.Children[1] is TextBlock name) return name;
-            if (child is DependencyObject node && FaceName(node) is { } found) return found;
-        }
-
-        return null;
-    }
 }
 
 /// <summary>The help names the frame keys the recording editor really uses.</summary>

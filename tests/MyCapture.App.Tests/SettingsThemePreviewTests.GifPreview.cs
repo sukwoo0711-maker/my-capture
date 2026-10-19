@@ -36,6 +36,8 @@ public sealed partial class SettingsThemePreviewTests
             });
         string root = OwnedTestDirectory.Create("mc-gif-preview-dialog-");
         bool? motion = FluidMotion.AnimationsEnabledOverrideForTest;
+        Func<bool>? previousReader = ThemeService.SystemLightThemeReaderForTest;
+        ThemeService.SystemLightThemeReaderForTest = static () => false;
         try
         {
             RecordingResult recording = GifPreviewFixtureClips.Encode(Path.Combine(root, "clip.mp4"),
@@ -50,6 +52,8 @@ public sealed partial class SettingsThemePreviewTests
             }
 
             VerifyGifPreviewTheme(recording, document, AppTheme.Glass, animate: true, "en-US");
+            ThemeService.SystemLightThemeReaderForTest = static () => true;
+            VerifyGifPreviewTheme(recording, document, AppTheme.System, animate: true, "en-US");
 
             RecordingResult longer = GifPreviewFixtureClips.Encode(Path.Combine(root, "long.mp4"),
                 GifPreviewFixtureClips.Kind.Mixed, 1280, 720, 15, 12_000);
@@ -58,6 +62,7 @@ public sealed partial class SettingsThemePreviewTests
         finally
         {
             FluidMotion.AnimationsEnabledOverrideForTest = motion;
+            ThemeService.SystemLightThemeReaderForTest = previousReader;
             application.Shutdown();
             OwnedTestDirectory.Delete(root);
         }
@@ -69,7 +74,7 @@ public sealed partial class SettingsThemePreviewTests
         bool korean = language.StartsWith("ko", StringComparison.Ordinal);
         ThemeService.Apply(theme);
         FluidMotion.AnimationsEnabledOverrideForTest = animate;
-        IReadOnlyDictionary<string, ThemeColor> colors = ThemeCatalog.ColorsFor(theme);
+        IReadOnlyDictionary<string, ThemeColor> colors = ThemeCatalog.ColorsFor(ThemeService.ResolveTheme(theme));
         var dialog = new VideoExportDialog(recording, document, NullLoggerFactory.Instance, gif: true)
         {
             WindowStartupLocation = WindowStartupLocation.Manual,

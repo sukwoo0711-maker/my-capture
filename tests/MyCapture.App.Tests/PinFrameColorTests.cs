@@ -15,11 +15,8 @@ using Xunit;
 namespace MyCapture.App.Tests;
 
 /// <summary>
-/// Borders of what the user made follow the accent. A pin's outline is the accent's focus tone,
-/// the colour of the capture selection it came from: 60% opaque at rest and opaque on hover or
-/// while the pin is active, and an open pin follows a theme, accent or contrast change at once.
-/// Contrast themes keep the opaque system pair. The video editor's layer selection is drawn in
-/// the accent too, like the image editor's.
+/// Pin outlines retain the brand while video layer selection stays neutral.
+/// Rest opacity and live theme changes are retained; contrast palettes keep their system pair.
 /// </summary>
 public sealed class PinFrameColorTests
 {
@@ -27,10 +24,10 @@ public sealed class PinFrameColorTests
         [AppTheme.Midnight, AppTheme.Glass, AppTheme.Workspace, AppTheme.Daylight, AppTheme.GlassLight];
 
     [Theory]
-    [InlineData(AppTheme.Glass, AppAccent.Red, 0xE9, 0x78, 0x72)]
-    [InlineData(AppTheme.Glass, AppAccent.Violet, 0x97, 0x89, 0xFF)]
+    [InlineData(AppTheme.Glass, AppAccent.Red, 0xE2, 0x4F, 0x47)]
+    [InlineData(AppTheme.Glass, AppAccent.Violet, 0xE2, 0x4F, 0x47)]
     [InlineData(AppTheme.GlassLight, AppAccent.Red, 0xCA, 0x3E, 0x36)]
-    [InlineData(AppTheme.GlassLight, AppAccent.Violet, 0x5A, 0x48, 0xE0)]
+    [InlineData(AppTheme.GlassLight, AppAccent.Violet, 0xCA, 0x3E, 0x36)]
     public void OutlineRestsInAQuietAccentAndTurnsOpaqueWhenEmphasized(AppTheme theme, AppAccent accent, byte r, byte g, byte b) =>
         StaTestHost.Run(() =>
         {
@@ -42,25 +39,22 @@ public sealed class PinFrameColorTests
         });
 
     [Fact]
-    public void EveryPaletteFramesPinsInTheCaptureSelectionColourOfItsAccent() => StaTestHost.Run(() =>
+    public void EveryPaletteFramesPinsInBrandRedIndependentlyOfSelectionInk() => StaTestHost.Run(() =>
     {
-        double redHue = Hue(Color.FromRgb(0xE0, 0x45, 0x3C));
-        double violetHue = Hue(Color.FromRgb(0x7C, 0x6C, 0xFF));
         foreach (AppTheme theme in PaletteThemes)
         foreach (AppAccent accent in Enum.GetValues<AppAccent>())
         {
             ResourceDictionary resources = LoadTokens();
             ThemeService.ApplyResources(theme, resources, systemHighContrast: false, accent: accent);
             IReadOnlyDictionary<string, ThemeColor> palette = ThemeCatalog.ColorsFor(theme, accent);
-            string label = $"{theme}/{accent}";
             Color emphasized = Resolve(resources, contrast: false, emphasized: true);
             Color rest = Resolve(resources, contrast: false, emphasized: false);
 
-            Assert.Equal(ToColor(palette["Overlay.SelectionBorder"]), emphasized);
+            Assert.Equal(ToColor(palette["Pin.Frame"]), emphasized);
             Assert.Equal(Color.FromArgb(0x99, emphasized.R, emphasized.G, emphasized.B), rest);
-            double hue = Hue(emphasized);
-            double expected = accent == AppAccent.Red ? redHue : violetHue;
-            Assert.True(Math.Abs(hue - expected) < 6, $"{label}: outline hue {hue:0.0} is not the accent's {expected:0.0}");
+            Assert.NotEqual(ToColor(palette["Overlay.SelectionBorder"]), emphasized);
+            Assert.Equal(ToColor(palette["Text.Primary"]), ToColor(palette["Overlay.SelectionBorder"]));
+            Assert.True(emphasized.R > emphasized.G && emphasized.R > emphasized.B);
         }
     });
 
@@ -103,8 +97,8 @@ public sealed class PinFrameColorTests
     [Fact]
     public void MissingTokensFallBackToTheDefaultPalette()
     {
-        Assert.Equal(Color.FromRgb(0xE9, 0x78, 0x72), PinFrameColor.FallbackAccent);
-        Assert.Equal(Color.FromArgb(0x99, 0xE9, 0x78, 0x72), PinFrameColor.Resolve(null, null, contrast: false, emphasized: false));
+        Assert.Equal(Color.FromRgb(0xE2, 0x4F, 0x47), PinFrameColor.FallbackAccent);
+        Assert.Equal(Color.FromArgb(0x99, 0xE2, 0x4F, 0x47), PinFrameColor.Resolve(null, null, contrast: false, emphasized: false));
         Assert.Equal(PinFrameColor.FallbackAccent, PinFrameColor.Resolve(null, null, contrast: false, emphasized: true));
         Assert.Equal(PinFrameColor.FallbackNeutral, PinFrameColor.Resolve(null, null, contrast: true, emphasized: false));
         Assert.Equal(PinFrameColor.FallbackAccent,
@@ -187,7 +181,7 @@ public sealed class PinFrameColorTests
     }
 
     [Fact]
-    public void VideoLayerSelectionTakesTheAccentAndFollowsAPaletteChange() => StaTestHost.Run(() =>
+    public void VideoLayerSelectionStaysNeutralAndFollowsAPaletteChange() => StaTestHost.Run(() =>
     {
         ResourceDictionary resources = LoadTokens();
         ThemeService.ApplyResources(AppTheme.Glass, resources, systemHighContrast: false, accent: AppAccent.Red);
@@ -199,12 +193,12 @@ public sealed class PinFrameColorTests
         canvas.Select(layer.Id);
         var host = new Border { Width = 320, Height = 240, Resources = resources, Child = canvas };
 
-        AssertSelectionColour(host, ((SolidColorBrush)resources["Accent.Default"]).Color, "red accent");
-        Assert.Equal(Color.FromRgb(0xE0, 0x45, 0x3C), ((SolidColorBrush)canvas.SelectionBrush).Color);
+        AssertSelectionColour(host, ((SolidColorBrush)resources["Text.Primary"]).Color, "dark neutral selection");
+        Assert.Same(resources["Text.Primary"], canvas.SelectionBrush);
 
-        ThemeService.ApplyResources(AppTheme.Glass, resources, systemHighContrast: false, accent: AppAccent.Violet);
-        AssertSelectionColour(host, Color.FromRgb(0x7C, 0x6C, 0xFF), "violet accent");
-        Assert.Same(resources["Overlay.HandleFill"], canvas.HandleFillBrush);
+        ThemeService.ApplyResources(AppTheme.GlassLight, resources, systemHighContrast: false, accent: AppAccent.Violet);
+        AssertSelectionColour(host, ((SolidColorBrush)resources["Text.Primary"]).Color, "light neutral selection");
+        Assert.Same(resources["Surface.Raised"], canvas.HandleFillBrush);
     });
 
     /// <summary>The selected layer's top edge (y = 60 in a 320×240 canvas) is drawn in <paramref name="expected"/>.</summary>

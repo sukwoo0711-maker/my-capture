@@ -106,14 +106,14 @@ public sealed class QuickAccessFeedbackTests : KoreanCaptionTest
     });
 
     [Fact]
-    public Task CopyTextIsTheFifthActionOnTAndReportsEachOutcomeInItsOwnWords() => RunStaAsync(async () =>
+    public Task CopyTextRemainsOnTAfterThePrimaryActionsAndReportsEachOutcomeInItsOwnWords() => RunStaAsync(async () =>
     {
         var recognition = new TaskCompletionSource<TextCaptureOutcome>();
         QuickAccessWindow card = Card(copyText: () => recognition.Task);
         try
         {
-            Assert.Equal(["Copy", "Edit", "Pin", "Save", "CopyText"], QuickAccessWindow.ActionOrder);
-            Button text = card.ActionButtonsForTest[4];
+            Assert.Equal(["Edit", "Pin", "Save", "CopyText", "Copy"], QuickAccessWindow.ActionOrder);
+            Button text = card.ActionButtonsForTest[3];
             Assert.Equal("텍스트 복사", AutomationProperties.GetName(text));
             Assert.Equal("T", AutomationProperties.GetAcceleratorKey(text));
 

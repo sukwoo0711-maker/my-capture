@@ -18,28 +18,7 @@ namespace MyCapture.App.Settings;
 /// <summary>
 /// The single reusable settings window.
 /// </summary>
-/// <remarks>
-/// <para>
-/// One instance, opened from the tray's <c>SettingsRequested</c>. A normal close hides it back
-/// to the tray; only an explicit application exit closes it for real. This mirrors the gallery's
-/// lifecycle, which the process's <c>OnExplicitShutdown</c> mode depends on.
-/// </para>
-/// <para>
-/// Cancel discards the edits deliberately. The title bar close, Alt+F4 and Esc first ask
-/// [Apply and close][Don't apply][Cancel] when the draft holds unapplied changes, and close at
-/// once when it does not. Only "Don't apply" (or Cancel) restores the saved theme.
-/// </para>
-/// <para>
-/// The window binds to a <see cref="SettingsDraft"/> — a deep copy of the live settings — so
-/// operational settings remain unchanged while editing. Theme selection previews the live
-/// palette; cancelling restores the palette from the saved settings.
-/// </para>
-/// <para>
-/// Apply validates first: if the draft has errors it does not close, reveals the error
-/// summary, and moves focus there so assistive technology announces it. Only a clean draft is
-/// mapped and handed to the injected apply callback.
-/// </para>
-/// </remarks>
+/// <remarks>Valid changes save automatically; closing flushes pending text and returns to the tray.</remarks>
 internal sealed partial class SettingsWindow : Window
 {
     private readonly Func<AppSettings> _currentSettings;
@@ -65,9 +44,7 @@ internal sealed partial class SettingsWindow : Window
         _applyDraft = applyDraft;
         _log = log ?? throw new ArgumentNullException(nameof(log));
         _settingsStore = settingsStore;
-        _showSaveFailureMessage = showSaveFailureMessage ?? (message => MyCapture.App.Themes.ThemedDialog.Show(
-            this, UiText.Get("Dialog.Storage"), UiText.Get("Text_13A717215F51"), MessageBoxButton.OK,
-            MessageBoxImage.Warning, details: message));
+        _showSaveFailureMessage = showSaveFailureMessage ?? (_ => { });
 
         InitializeComponent();
         InitializeAbout();
@@ -80,18 +57,19 @@ internal sealed partial class SettingsWindow : Window
         AttachDraftEvents();
         DataContext = _draft;
 
-        // ApplyCommand / CloseCommand back the Ctrl+S and Esc key bindings. They are added in
-        // code-behind (not XAML) because these RoutedUICommand fields are internal, which the
-        // XAML x:Static resolver cannot reach at runtime; the DataContext is the SettingsDraft,
-        // which intentionally exposes no commands. This mirrors GalleryWindow's approach.
-        // Esc behaves like the title bar close (it asks about unapplied changes); the Cancel
-        // button alone discards without asking.
+        InitializeInstantSave();
+        InitializeSearch();
+
+        // Preserve Ctrl+S as an immediate flush; Esc and Close flush before returning to the tray.
         CommandBindings.Add(new CommandBinding(ApplyCommand, (_, _) => Apply()));
         CommandBindings.Add(new CommandBinding(CancelCommand, (_, _) => CancelToTray()));
         CommandBindings.Add(new CommandBinding(CloseCommand, (_, _) => RequestClose()));
         InputBindings.Add(new KeyBinding(ApplyCommand, Key.S, ModifierKeys.Control));
         InputBindings.Add(new KeyBinding(CloseCommand, Key.Escape, ModifierKeys.None));
-        ConfirmUnappliedChanges = () => UnappliedChangesDialog.Ask(this);
+        ConfirmUnappliedChanges = () => SettingsCloseChoice.Cancel;
+        ConfirmResetDefaults = () => ThemedDialog.Show(this, UiText.Get("Settings_ResetConfirm"),
+            UiText.Get("Text_205C50A145BA"), MessageBoxButton.OKCancel, MessageBoxImage.Warning,
+            MessageBoxResult.Cancel) == MessageBoxResult.OK;
 
         _loadedRetentionHours = _draft.ImageRetentionHours;
         RefreshErrorSummary();
@@ -111,15 +89,15 @@ internal sealed partial class SettingsWindow : Window
     internal static readonly RoutedUICommand ApplyCommand =
         new(UiText.Get("Text_6A1C963D5BC5"), nameof(ApplyCommand), typeof(SettingsWindow));
 
-    /// <summary>Discards the edits and hides the window: the Cancel button.</summary>
+    /// <summary>Legacy command name for Close: flush valid edits and hide the window.</summary>
     internal static readonly RoutedUICommand CancelCommand =
         new(UiText.Get("Text_BE876433993A"), nameof(CancelCommand), typeof(SettingsWindow));
 
-    /// <summary>Closes like the title bar button, asking first about unapplied changes: Esc.</summary>
+    /// <summary>Closes like the title bar button, flushing pending text: Esc.</summary>
     internal static readonly RoutedUICommand CloseCommand =
         new(UiText.Get("Dialog.Close"), nameof(CloseCommand), typeof(SettingsWindow));
 
-    /// <summary>Asks what to do with unapplied changes on close. Tests replace the dialog.</summary>
+    /// <summary>Compatibility seam for callers of the former staged settings window.</summary>
     internal Func<SettingsCloseChoice> ConfirmUnappliedChanges { get; set; }
 
     /// <summary>Raised after a successful apply, so the shell can react (e.g. refresh state).</summary>
@@ -164,14 +142,14 @@ internal sealed partial class SettingsWindow : Window
     /// <summary>Closes the window for real, used only on an explicit application exit.</summary>
     internal void CloseForExit()
     {
+        FlushPendingSettings();
         _allowClose = true;
         Close();
     }
 
     protected override void OnClosing(CancelEventArgs e)
     {
-        // A normal close (title bar, Alt+F4) returns to the tray after asking about unapplied
-        // changes; only an explicit exit closes the window for real.
+        // A normal close flushes pending input and hides; explicit exit closes the window.
         if (!_allowClose)
         {
             e.Cancel = true;
@@ -184,6 +162,7 @@ internal sealed partial class SettingsWindow : Window
 
     protected override void OnClosed(EventArgs e)
     {
+        StopInstantSave();
         DetachDraftEvents();
         ThemeService.ApplyFromSettings(_currentSettings().General);
         base.OnClosed(e);
@@ -193,10 +172,13 @@ internal sealed partial class SettingsWindow : Window
 
     private void ReloadDraftFrom(AppSettings settings)
     {
+        StopInstantSave();
+        _saveFailed = false;
         _legacySettingsDraft = null;
         _legacyProtectedBaseline = null;
         DetachDraftEvents();
         _draft = new SettingsDraft(settings);
+        _acceptedValues = EditableProperties.ToDictionary(property => property.Name, property => property.GetValue(_draft));
         AttachDraftEvents();
         DataContext = _draft;
         ThemeService.ApplyFromSettings(_draft.Theme, _draft.CaptureGuideColorSetting, _draft.AccentColor);
@@ -236,30 +218,15 @@ internal sealed partial class SettingsWindow : Window
         if (all || e.PropertyName == nameof(SettingsDraft.FontFamily)) SyncFontFamilyBox();
         if (all || e.PropertyName == nameof(SettingsDraft.CapturesDirectoryOverride)) RefreshCaptureFolderNote();
         RefreshCommandState();
+        ScheduleSave(e.PropertyName);
     }
 
-    /// <summary>
-    /// Apply is enabled only while something is unapplied; with nothing to discard, Cancel reads
-    /// Close. Runs on every draft change, which only compares the draft's current values.
-    /// </summary>
-    private void RefreshCommandState()
-    {
-        bool pending = _draft.HasUnappliedChanges;
-        ApplyButton.IsEnabled = pending;
-        string label = UiText.Get(pending ? "Text_BE876433993A" : "Dialog.Close");
-        string help = UiText.Get(pending ? "SettingsUx_CancelTip" : "SettingsUx_CloseTip");
-        if (!Equals(CancelButton.Content, label))
-        {
-            CancelButton.Content = label;
-            CancelButton.ToolTip = help;
-            AutomationProperties.SetName(CancelButton, label);
-            AutomationProperties.SetHelpText(CancelButton, help);
-        }
-    }
+    private void RefreshCommandState() { }
 
     /// <summary>Reports settings file operations independently of the selected category.</summary>
     private void SetStatusMessage(string message)
     {
+        _savedNoticeDelay.Stop();
         SettingsStatus.Text = message;
         SettingsStatusRegion.Visibility = string.IsNullOrWhiteSpace(message) ? Visibility.Collapsed : Visibility.Visible;
         if (SettingsStatusRegion.IsVisible)
@@ -275,15 +242,15 @@ internal sealed partial class SettingsWindow : Window
 
     private void OnCancel(object sender, RoutedEventArgs e) => CancelToTray();
 
+    internal Func<bool> ConfirmResetDefaults { get; set; }
+
     private void OnResetDefaults(object sender, RoutedEventArgs e)
     {
-        // Deliberate and reversible: resets the draft only. Nothing is written until Apply,
-        // so Cancel (or reopening) restores the prior values.
+        if (!ConfirmResetDefaults()) return;
         _legacySettingsDraft = null;
         _legacyProtectedBaseline = null;
         _draft.ResetToDefaults();
-        RefreshErrorSummary();
-        RefreshCommandState();
+        FlushPendingSettings();
     }
 
     private void OnExportSettings(object sender, RoutedEventArgs e)
@@ -351,7 +318,7 @@ internal sealed partial class SettingsWindow : Window
             // Exports never carry the GitHub PAT, so the import must not wipe the live one.
             imported.GitHub.Token = current.GitHub.Token;
             imported.Hotkeys.CoreShortcutsAsked = current.Hotkeys.CoreShortcutsAsked;
-            // The import replaces the values but stays an unapplied change until Apply.
+            // The whole-draft notification schedules validation and saving after replacement completes.
             _legacySettingsDraft = null;
             _legacyProtectedBaseline = null;
             _draft.ReplaceValues(imported);
@@ -369,99 +336,20 @@ internal sealed partial class SettingsWindow : Window
 
     private void Apply()
     {
-        if (_draft.HasErrors)
-        {
-            RefreshErrorSummary();
-            AnnounceErrors();
-            return; // Do not close on errors.
-        }
-
-        AppSettings next = LegacyApplyCandidate(_draft.ToAppSettings());
-        SettingsApplyResult result = _applyDraft?.Invoke(next, _draft.FolderDestinationEdited, _draft.ExportOptionsReplaced) ?? _apply(next);
-
-        if (!result.Saved)
-        {
-            // Persistence failed and every OS-visible change was rolled back. Keep the
-            // window open and the user's draft exactly as typed — do NOT reload or hide —
-            // so they can fix the underlying problem (read-only folder, full disk, path
-            // conflict) and retry without re-entering everything. Its theme remains a
-            // reversible preview; the shell is not notified of a saved apply.
-            ThemeService.ApplyFromSettings(_draft.Theme, _draft.CaptureGuideColorSetting, _draft.AccentColor);
-            _showSaveFailureMessage(string.Join(Environment.NewLine, result.Messages));
-            return;
-        }
-
-        // A partial failure (hotkey collision, autostart) reports through the result but
-        // still saved the rest; reload the draft so it reflects what actually took effect.
-        ReloadDraft();
-        Applied?.Invoke(this, result);
-
-        if (result.Messages.Count > 0)
-        {
-            MyCapture.App.Themes.ThemedDialog.Show(
-                this,
-                string.Join(Environment.NewLine, result.Messages),
-                UiText.Get("Text_93CBE1538A34"),
-                MessageBoxButton.OK,
-                MessageBoxImage.Information);
-        }
-        else
-        {
-            CancelToTray(); // Clean apply with nothing to report: hide back to the tray.
-        }
+        if (!FlushPendingSettings()) AnnounceErrors();
     }
 
-    private void CancelToTray()
+    private void CancelToTray() => RequestClose();
+
+    internal void RequestClose()
     {
-        // Discard edits by dropping the draft, then hide.
-        if (_draft is not null)
-        {
-            ReloadDraft();
-        }
+        if (!FlushPendingSettings()) { AnnounceErrors(); return; }
+        StopInstantSave();
+        DetachDraftEvents();
         Hide();
     }
 
-    /// <summary>
-    /// The title bar close, Alt+F4 and Esc. Closes at once when nothing is unapplied; otherwise
-    /// asks first. Apply closes only when it applies cleanly; Cancel keeps every edit, including
-    /// a previewed theme.
-    /// </summary>
-    internal void RequestClose()
-    {
-        if (_draft.HasUnappliedChanges)
-        {
-            switch (ConfirmUnappliedChanges())
-            {
-                case SettingsCloseChoice.Apply:
-                    Apply();
-                    return;
-                case SettingsCloseChoice.Discard:
-                    break;
-                default:
-                    return;
-            }
-        }
-
-        CancelToTray();
-    }
-
-    internal bool PrepareForAppExit(bool keepVisible)
-    {
-        if (!_draft.HasUnappliedChanges) return true;
-        switch (ConfirmUnappliedChanges())
-        {
-            case SettingsCloseChoice.Apply:
-                Apply();
-                if (_draft.HasUnappliedChanges) return false;
-                if (keepVisible) ShowSettings();
-                return true;
-            case SettingsCloseChoice.Discard:
-                ReloadDraft();
-                return true;
-            default:
-                return false;
-        }
-    }
+    internal bool PrepareForAppExit(bool keepVisible) => FlushPendingSettings();
 
     // ---- GitHub token ---------------------------------------------------------------
 
@@ -518,8 +406,7 @@ internal sealed partial class SettingsWindow : Window
 
         ErrorList.ItemsSource = errors;
         ErrorSummary.Visibility = Visibility.Visible;
-        // An invalid entry is an unapplied change, so Apply stays pressable and a keyboard user
-        // reaches the announce-and-focus path; Apply itself refuses to close while errors exist.
+        // Keep invalid values and their messages visible until the user corrects them.
         RefreshCommandState();
     }
 

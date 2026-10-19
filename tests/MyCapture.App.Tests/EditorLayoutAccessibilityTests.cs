@@ -17,7 +17,7 @@ namespace MyCapture.App.Tests;
 
 /// <summary>
 /// Structural and accessibility guarantees for the redesigned annotation editor: the calm
-/// top-bar / left-rail / canvas / right-inspector / status hierarchy, the absence of any
+/// command-bar / property-bar / left-rail / full-width canvas / status hierarchy, the absence of any
 /// horizontal toolbar scroll, an announced live status region, and a name + tooltip on every
 /// icon control. These are visual-tree assertions rather than pixel checks, so they stay stable
 /// while catching regressions in the information architecture and automation surface.
@@ -25,31 +25,43 @@ namespace MyCapture.App.Tests;
 public sealed class EditorLayoutAccessibilityTests : KoreanCaptionTest
 {
     [Fact]
-    public void DefaultHierarchyIsTopBarBodyStatus_WithRailViewportInspectorColumns()
+    public void DefaultHierarchyIsCommandBarBodyStatus_WithPropertiesAboveTheFullWidthViewport()
     {
         StaTestHost.Run(() =>
         {
             using EditorHost host = EditorHost.Create();
 
-            // Root editor is a 3-row grid: command bar, body, status.
+            // Properties sit below the command bar inside the canvas column. The rail retains
+            // the entire body height while the viewport no longer shares width with an inspector.
             Grid root = host.Editor;
             Assert.Equal(3, root.RowDefinitions.Count);
             Assert.Equal(GridUnitType.Auto, root.RowDefinitions[0].Height.GridUnitType);
             Assert.Equal(GridUnitType.Star, root.RowDefinitions[1].Height.GridUnitType);
             Assert.Equal(GridUnitType.Auto, root.RowDefinitions[2].Height.GridUnitType);
 
-            // The body grid (row 1) has three columns: 94px tool rail, star viewport,
-            // and a 232px inspector at the default expanded width.
             Grid body = FindDescendants<Grid>(root)
-                .Single(g => g.ColumnDefinitions.Count == 3
+                .Single(g => g.ColumnDefinitions.Count == 2
                              && g.ColumnDefinitions[0].Width.IsAbsolute
                              && g.ColumnDefinitions[0].Width.Value == 94
-                             && g.ColumnDefinitions[1].Width.IsStar
-                             && g.ColumnDefinitions[2].Width.IsAbsolute
-                             && g.ColumnDefinitions[2].Width.Value == 232);
+                             && g.ColumnDefinitions[1].Width.IsStar);
+            Assert.Equal(1, Grid.GetRow(body));
             Assert.Equal(94, body.ColumnDefinitions[0].Width.Value);
             Assert.True(body.ColumnDefinitions[1].Width.IsStar);
-            Assert.Equal(232, body.ColumnDefinitions[2].Width.Value);
+            Assert.Equal(root.ActualWidth, body.ActualWidth, 1);
+            Border properties = (Border)typeof(AnnotationEditorControl)
+                .GetField("_inspectorPanel", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(host.Editor)!;
+            Assert.Same(body, properties.Parent);
+            Assert.Equal(0, Grid.GetRow(properties));
+            Assert.Equal(1, Grid.GetColumn(properties));
+            Assert.Equal(2, body.RowDefinitions.Count);
+            Assert.True(body.RowDefinitions[0].Height.IsAuto);
+            Assert.True(body.RowDefinitions[1].Height.IsStar);
+            Border rail = FindDescendants<Border>(body).Single(border => border.Name == "AnnotationToolRail");
+            Assert.Equal(2, Grid.GetRowSpan(rail));
+            FrameworkElement viewport = body.Children.OfType<FrameworkElement>()
+                .Single(child => Grid.GetColumn(child) == 1 && Grid.GetRow(child) == 1);
+            Assert.Equal(properties.ActualWidth,
+                viewport.ActualWidth + viewport.Margin.Left + viewport.Margin.Right, 1);
         });
     }
 
@@ -72,19 +84,19 @@ public sealed class EditorLayoutAccessibilityTests : KoreanCaptionTest
     }
 
     [Fact]
-    public void OnlyInspectorScrolls_ToolRailNeverScrolls()
+    public void OnlyPropertyBarMayScrollVertically_ToolRailNeverScrolls()
     {
         StaTestHost.Run(() =>
         {
             using EditorHost host = EditorHost.Create();
 
             List<ScrollViewer> scrollViewers = FindDescendants<ScrollViewer>(host.Editor).ToList();
-            ScrollViewer inspector = Assert.Single(scrollViewers, viewer => viewer.Name == "AnnotationInspectorScroll");
+            ScrollViewer inspector = Assert.Single(scrollViewers, viewer => viewer.Name == "AnnotationPropertyBarScroll");
             Assert.Equal(ScrollBarVisibility.Disabled, inspector.HorizontalScrollBarVisibility);
             Assert.Equal(ScrollBarVisibility.Auto, inspector.VerticalScrollBarVisibility);
             Assert.DoesNotContain(scrollViewers, viewer => viewer.Name == "AnnotationToolRailScroll");
-            // Native ComboBox templates can own their own dropdown ScrollViewer. All such
-            // viewers must remain inside the inspector, never in the command bar or canvas.
+            Assert.DoesNotContain(scrollViewers, viewer => viewer.Name == "AnnotationInspectorScroll");
+            // Native ComboBox templates can own dropdown ScrollViewers, all inside properties.
             List<ScrollViewer> inspectorChildren = FindDescendants<ScrollViewer>(inspector).ToList();
             Assert.All(scrollViewers.Where(viewer => !ReferenceEquals(viewer, inspector)),
                 viewer => Assert.Contains(viewer, inspectorChildren));
@@ -138,7 +150,7 @@ public sealed class EditorLayoutAccessibilityTests : KoreanCaptionTest
     }
 
     [Fact]
-    public void ColorSwatchesWrapInsideTheInspectorWithoutClipping()
+    public void SixColorSwatchesStayInOneCompactRowInsideThePropertyBar()
     {
         StaTestHost.Run(() =>
         {
@@ -157,14 +169,14 @@ public sealed class EditorLayoutAccessibilityTests : KoreanCaptionTest
 
             WrapPanel panel = Assert.IsType<WrapPanel>(swatches[0].Parent);
             Assert.All(swatches, swatch => Assert.Same(panel, swatch.Parent));
-            Assert.True(panel.ActualHeight >= 80,
-                "The swatch panel did not wrap to a second row inside the compact inspector.");
+            double firstRow = swatches[0].TranslatePoint(default, panel).Y;
+            Assert.All(swatches, swatch => Assert.Equal(firstRow, swatch.TranslatePoint(default, panel).Y, 1));
 
             foreach (Button swatch in swatches)
             {
                 Point topLeft = swatch.TranslatePoint(new Point(0, 0), panel);
                 Assert.True(topLeft.X >= -0.5 && topLeft.X + swatch.ActualWidth <= panel.ActualWidth + 0.5,
-                    $"A color swatch extends outside the inspector panel: x={topLeft.X}, width={swatch.ActualWidth}, panel={panel.ActualWidth}.");
+                    $"A color swatch extends outside its property group: x={topLeft.X}, width={swatch.ActualWidth}, panel={panel.ActualWidth}.");
             }
         });
     }
@@ -219,17 +231,19 @@ public sealed class EditorLayoutAccessibilityTests : KoreanCaptionTest
     }
 
     [Fact]
-    public void CompactEditor_KeepsShapeInspectorAvailableWithVerticalScrolling()
+    public void CompactEditor_WrapsShapePropertiesAboveTheCanvasWithoutHorizontalScrolling()
     {
         StaTestHost.Run(() =>
         {
             using EditorHost host = EditorHost.Create();
             Window window = Window.GetWindow(host.Editor);
-            window.Width = 780;
+            window.Width = 680;
             window.Height = 560;
             window.UpdateLayout();
             ScrollViewer inspector = FindDescendants<ScrollViewer>(host.Editor)
-                .Single(viewer => viewer.Name == "AnnotationInspectorScroll");
+                .Single(viewer => viewer.Name == "AnnotationPropertyBarScroll");
+            WrapPanel properties = FindDescendants<WrapPanel>(inspector)
+                .Single(panel => panel.Name == "AnnotationPropertyBar");
             ComboBox style = FindDescendants<ComboBox>(inspector)
                 .Single(combo => AutomationProperties.GetName(combo) == "도형 선 종류");
             Slider fill = FindDescendants<Slider>(inspector)
@@ -237,8 +251,12 @@ public sealed class EditorLayoutAccessibilityTests : KoreanCaptionTest
             Assert.True(inspector.IsVisible);
             Assert.True(style.IsVisible);
             Assert.True(fill.IsVisible);
-            Assert.True(inspector.ActualWidth >= 170);
+            Assert.True(inspector.ActualWidth >= 500);
             Assert.Equal(ScrollBarVisibility.Disabled, inspector.HorizontalScrollBarVisibility);
+            Assert.Equal(0, inspector.ScrollableWidth);
+            FrameworkElement[] groups = properties.Children.OfType<FrameworkElement>().Where(item => item.IsVisible).ToArray();
+            Assert.True(groups.Select(item => Math.Round(item.TranslatePoint(default, properties).Y)).Distinct().Count() >= 2,
+                "Shape property groups must wrap at 680 DIP.");
             IReadOnlyList<Button> swatches = FindDescendants<Button>(inspector)
                 .Where(button => AutomationProperties.GetName(button).StartsWith("색상 #", StringComparison.Ordinal)).ToList();
             Assert.Equal(6, swatches.Count);
@@ -246,7 +264,7 @@ public sealed class EditorLayoutAccessibilityTests : KoreanCaptionTest
             {
                 Point origin = swatch.TranslatePoint(new Point(0, 0), inspector);
                 Assert.True(origin.X >= -0.5 && origin.X + swatch.ActualWidth <= inspector.ViewportWidth + 1,
-                    "A color swatch extends beyond the actual inspector viewport.");
+                    "A color swatch extends beyond the actual property viewport.");
             }
             fill.BringIntoView();
             window.UpdateLayout();
@@ -351,8 +369,7 @@ public sealed class EditorLayoutAccessibilityTests : KoreanCaptionTest
             var frame = new FrozenFrame(bitmap, new RectD(0, 0, 320, 180), null, 1);
             var editor = new AnnotationEditorControl(frame, new RectD(0, 0, 320, 180), bitmap);
 
-            // A default-size window keeps the inspector expanded (above the 860px collapse width)
-            // so the three-column body is exercised at the design's default hierarchy.
+            // Exercise the default command / property / canvas / status hierarchy offscreen.
             var window = new Window
             {
                 Content = editor,

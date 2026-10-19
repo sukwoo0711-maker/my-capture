@@ -16,14 +16,14 @@ using Xunit;
 namespace MyCapture.App.Tests;
 
 /// <summary>
-/// The settings window asks before losing unapplied changes, keeps one title, groups its
+/// The settings window saves changes immediately, keeps one title, groups its
 /// options into seven categories and keeps the GitHub token out of plain text.
 /// </summary>
 public sealed partial class SettingsThemePreviewTests
 {
     [Fact]
-    public Task SettingsUx_CloseAsksOnlyWithUnappliedChanges_AndEachChoiceBehaves() =>
-        RunIsolated(nameof(SettingsUx_CloseAsksOnlyWithUnappliedChanges_AndEachChoiceBehaves), VerifySettingsUxClose);
+    public Task SettingsUx_CloseFlushesChangesAndPreservesInvalidInput() =>
+        RunIsolated(nameof(SettingsUx_CloseFlushesChangesAndPreservesInvalidInput), VerifySettingsUxClose);
 
     [Fact]
     public Task SettingsUx_SevenCategoriesWithDistinctIconsAndOneTitle() =>
@@ -71,13 +71,11 @@ public sealed partial class SettingsThemePreviewTests
         Application application = CreateThemedApplication();
         SettingsUxFixture fixture = CreateSettingsUxWindow(new AppSettings { General = { Theme = AppThemeNames.Glass } });
         SettingsWindow window = fixture.Window;
-        var answers = new Queue<SettingsCloseChoice>();
         int asked = 0;
-        window.ConfirmUnappliedChanges = () => { asked++; return answers.Dequeue(); };
+        window.ConfirmUnappliedChanges = () => { asked++; return SettingsCloseChoice.Cancel; };
         bool closed = false;
         try
         {
-            // Nothing changed: the title bar close, Alt+F4 (the same Closing path) and Esc close at once.
             window.ShowSettings();
             Drain(window);
             Assert.False(Draft(window).HasUnappliedChanges);
@@ -86,101 +84,80 @@ public sealed partial class SettingsThemePreviewTests
             window.ShowSettings();
             SettingsWindow.CloseCommand.Execute(null, window);
             Assert.False(window.IsVisible);
-            Assert.Equal(0, asked);
 
-            // A value typed and typed back is not a change.
             window.ShowSettings();
             Draft(window).MaxItems = "301";
             Draft(window).MaxItems = "300";
             window.Close();
             Assert.False(window.IsVisible);
-            Assert.Equal(0, asked);
+            Assert.Equal(0, fixture.ApplyCount());
 
-            // Cancel in the prompt keeps the window, the edit and the theme preview.
             window.ShowSettings();
             Draft(window).Theme = AppThemeNames.Daylight;
             Draft(window).MaxItems = "450";
-            answers.Enqueue(SettingsCloseChoice.Cancel);
             window.Close();
-            Assert.True(window.IsVisible);
-            Assert.Equal(1, asked);
+            Assert.False(window.IsVisible);
+            Assert.Equal(450, fixture.Saved().Queue.MaxItems);
             Assert.Equal("450", Draft(window).MaxItems);
-            Assert.Equal(AppTheme.Daylight, ThemeService.Current);
+            Assert.Equal(AppThemeNames.GlassLight, fixture.Saved().General.Theme);
+            Assert.Equal(AppTheme.GlassLight, ThemeService.Current);
+            Assert.Equal(0, asked);
 
-            // Esc asks too; "Don't apply" discards and restores the saved theme.
-            answers.Enqueue(SettingsCloseChoice.Discard);
+            window.ShowSettings();
+            Assert.Equal("450", Draft(window).MaxItems);
+            Draft(window).MaxItems = "555";
             var escape = Assert.Single(window.InputBindings.OfType<KeyBinding>(), binding => binding.Key == Key.Escape);
             Assert.IsType<RoutedUICommand>(escape.Command).Execute(null, window);
             Assert.False(window.IsVisible);
-            Assert.Equal(2, asked);
-            Assert.Equal(AppTheme.Glass, ThemeService.Current);
-            Assert.Equal(300, fixture.Saved().Queue.MaxItems);
-            Assert.Equal(0, fixture.ApplyCount());
-
-            // "Apply and close" applies, then hides.
-            window.ShowSettings();
-            Assert.Equal("300", Draft(window).MaxItems);
-            Draft(window).MaxItems = "450";
-            answers.Enqueue(SettingsCloseChoice.Apply);
-            window.Close();
-            Assert.False(window.IsVisible);
-            Assert.Equal(3, asked);
-            Assert.Equal(1, fixture.ApplyCount());
-            Assert.Equal(450, fixture.Saved().Queue.MaxItems);
-
-            // "Apply and close" with a validation error keeps the window and the typed value.
+            Assert.Equal(555, fixture.Saved().Queue.MaxItems);
             window.ShowSettings();
             Draft(window).MaxItems = "5";
-            answers.Enqueue(SettingsCloseChoice.Apply);
+            int beforeInvalid = fixture.ApplyCount();
             window.Close();
             Assert.True(window.IsVisible);
-            Assert.Equal(1, fixture.ApplyCount());
+            Assert.Equal(beforeInvalid, fixture.ApplyCount());
             Assert.Equal("5", Draft(window).MaxItems);
             Assert.Equal(Visibility.Visible, Assert.IsType<Border>(window.FindName("ErrorSummary")).Visibility);
-
-            // The Cancel button is the deliberate discard: it never asks.
-            var cancel = Assert.IsType<Button>(window.FindName("CancelButton"));
-            Assert.False(cancel.IsCancel);
-            cancel.RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));
+            var close = Assert.IsType<Button>(window.FindName("CancelButton"));
+            Assert.False(close.IsCancel);
+            close.RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));
+            Assert.True(window.IsVisible);
+            Assert.Equal(555, fixture.Saved().Queue.MaxItems);
+            Draft(window).MaxItems = "600";
+            close.RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));
             Assert.False(window.IsVisible);
-            Assert.Equal(4, asked);
-            Assert.Equal(450, fixture.Saved().Queue.MaxItems);
+            Assert.Equal(600, fixture.Saved().Queue.MaxItems);
 
-            // "Reset to defaults" is pending until Apply, so closing asks.
             window.ShowSettings();
-            Assert.IsType<Button>(window.FindName("DefaultsButton")).RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));
-            Assert.True(Draft(window).HasUnappliedChanges);
-            answers.Enqueue(SettingsCloseChoice.Discard);
-            window.Close();
-            Assert.Equal(5, asked);
-            Assert.False(window.IsVisible);
+            int resetPrompts = 0;
+            window.ConfirmResetDefaults = () => { resetPrompts++; return false; };
+            var defaults = Assert.IsType<Button>(window.FindName("DefaultsButton"));
+            defaults.RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));
+            Assert.Equal(600, fixture.Saved().Queue.MaxItems);
+            window.ConfirmResetDefaults = () => { resetPrompts++; return true; };
+            defaults.RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));
+            Drain(window);
+            Assert.Equal(2, resetPrompts);
+            Assert.Equal(1000, fixture.Saved().Queue.MaxItems);
+            Assert.Equal(5L * 1024 * 1024 * 1024, fixture.Saved().Queue.MaxBytes);
+            Assert.Equal(MyCapture.Core.Queue.CaptureRetention.NeverHours, fixture.Saved().Queue.ImageRetentionHours);
+            Assert.Equal(AfterCaptureAction.QuickAccess, fixture.Saved().General.AfterCapture);
+            Assert.Equal(AppThemeNames.System, fixture.Saved().General.Theme);
+            Assert.False(fixture.Saved().General.ShowShortcutHints);
+            Assert.False(Draft(window).HasUnappliedChanges);
 
-            // The shared exit/update gate preserves a canceled or invalid draft and keeps
-            // the Store consent owner visible after a successful apply.
-            window.ShowSettings();
-            Draft(window).MaxItems = "555";
-            answers.Enqueue(SettingsCloseChoice.Cancel);
-            Assert.False(window.PrepareForAppExit(keepVisible: true));
-            Assert.Equal("555", Draft(window).MaxItems);
             Draft(window).MaxItems = "5";
-            answers.Enqueue(SettingsCloseChoice.Apply);
             Assert.False(window.PrepareForAppExit(keepVisible: true));
             Assert.True(window.IsVisible);
-            answers.Enqueue(SettingsCloseChoice.Discard);
-            Assert.True(window.PrepareForAppExit(keepVisible: true));
-            Assert.Equal("450", Draft(window).MaxItems);
             Draft(window).MaxItems = "555";
-            answers.Enqueue(SettingsCloseChoice.Apply);
             Assert.True(window.PrepareForAppExit(keepVisible: true));
             Assert.Equal(555, fixture.Saved().Queue.MaxItems);
             Assert.True(window.IsVisible);
-
-            // After the shared guard, the final close does not prompt again.
-            window.ShowSettings();
+            Assert.Equal(0, asked);
             Draft(window).MaxItems = "999";
             window.CloseForExit();
             closed = true;
-            Assert.Equal(9, asked);
+            Assert.Equal(999, fixture.Saved().Queue.MaxItems);
         }
         finally
         {
@@ -203,7 +180,8 @@ public sealed partial class SettingsThemePreviewTests
                     window.Show();
                     Drain(window);
                     var tabs = Assert.IsType<TabControl>(window.FindName("CategoryTabs"));
-                    foreach (string name in new[] { "DefaultsButton", "ApplyButton", "CancelButton" })
+                    Assert.Null(window.FindName("ApplyButton"));
+                    foreach (string name in new[] { "CancelButton" })
                     {
                         Button action = Assert.IsType<Button>(window.FindName(name));
                         Assert.Equal(44, action.ActualHeight, 1);
@@ -233,7 +211,7 @@ public sealed partial class SettingsThemePreviewTests
                     string[] retired = [UiText.Get("Text_115BCED49291"), UiText.Get("Text_F5BF49635D43"),
                         UiText.Get("Text_BDA4A255187A"), UiText.Get("Text_FEAA5199651D")];
                     Style heading = Assert.IsType<Style>(window.FindResource("Settings.GroupHeading"));
-                    Button primary = Assert.IsType<Button>(window.FindName("ApplyButton"));
+                    Button primary = Assert.IsType<Button>(window.FindName("CancelButton"));
                     foreach (TabItem tab in items)
                     {
                         tabs.SelectedItem = tab;
@@ -241,18 +219,18 @@ public sealed partial class SettingsThemePreviewTests
                         TextBlock[] texts = Descendants(window).OfType<TextBlock>().Where(text => text.IsVisible).ToArray();
                         Assert.DoesNotContain(texts, text => retired.Contains(text.Text));
                         Assert.DoesNotContain(texts, text => ReferenceEquals(text.Style, heading) && text.Text == (string)tab.Header);
-                        // One filled button per screen: Apply.
+                        // The footer retains one close action.
                         Button[] filled = Descendants(window).OfType<Button>()
                             .Where(button => button.IsVisible && ReferenceEquals(button.Style, window.FindResource("Button.Primary")))
                             .ToArray();
-                        Assert.Equal(new[] { primary }, filled);
+                        Assert.DoesNotContain(filled, button => button.Name == "ApplyButton");
+                        Assert.True(primary.IsVisible);
                     }
 
-                    // Labels carry no key notation; keys are in tooltips and accelerator properties.
-                    Assert.Equal(UiText.Get("Text_6A1C963D5BC5"), primary.Content);
-                    Assert.Equal("Ctrl+S", AutomationProperties.GetAcceleratorKey(primary));
-                    // Nothing is pending, so the secondary command closes instead of cancelling.
-                    Assert.Equal(UiText.Get("Dialog.Close"), Assert.IsType<Button>(window.FindName("CancelButton")).Content);
+                    Assert.Contains(window.InputBindings.OfType<KeyBinding>(), binding =>
+                        binding.Key == Key.S && binding.Modifiers == ModifierKeys.Control
+                        && ReferenceEquals(binding.Command, SettingsWindow.ApplyCommand));
+                    Assert.Equal(UiText.Get("Dialog.Close"), primary.Content);
 
                     // Settings backup moved off the command bar onto the About page.
                     var export = Assert.IsType<Button>(window.FindName("ExportSettingsButton"));
@@ -260,6 +238,9 @@ public sealed partial class SettingsThemePreviewTests
                     var about = Assert.IsType<TabItem>(window.FindName("UpdateTab"));
                     Assert.Same(about, items[^1]);
                     Assert.True(IsInside(export, about) && IsInside(import, about));
+                    var defaults = Assert.IsType<Button>(window.FindName("DefaultsButton"));
+                    Assert.True(IsInside(defaults, about));
+                    Assert.True(defaults.MinHeight >= 24);
 
                     // The retention description states the period that will apply.
                     tabs.SelectedItem = items[5];
@@ -356,7 +337,7 @@ public sealed partial class SettingsThemePreviewTests
         {
             foreach ((string name, AppSettings settings, bool expectedHints) in new[]
             {
-                ("new", NewInstallDefaults.Create(), true),
+                ("new", NewInstallDefaults.Create(), false),
                 ("existing", new AppSettings(), true),
                 ("explicit-hints-off", new AppSettings { General = { ShowShortcutHints = false } }, false),
             })

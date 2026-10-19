@@ -7,12 +7,12 @@ namespace MyCapture.Core.Tests;
 public sealed class WorkspaceThemeMigrationTests
 {
     [Theory]
-    [InlineData("midnight", "workspace")]
-    [InlineData("unknown", "workspace")]
-    [InlineData(null, "workspace")]
-    [InlineData("daylight", "daylight")]
+    [InlineData("midnight", "glass")]
+    [InlineData("unknown", "glass")]
+    [InlineData(null, "glass")]
+    [InlineData("daylight", "glass-light")]
     [InlineData("high-contrast", "high-contrast")]
-    public void LegacyThemeMigratesOnceAndExplicitReselectionSurvivesSave(string? legacy, string expected)
+    public void LegacyThemeMigratesOnceAndReselectionSavesCanonicalName(string? legacy, string expected)
     {
         using var workspace = new TempWorkspace();
         var store = new SettingsStore(workspace.Paths, NullLogger<SettingsStore>.Instance);
@@ -27,6 +27,6 @@ public sealed class WorkspaceThemeMigrationTests
         AppSettings chosen = draft.ToAppSettings();
         Assert.Equal(1, chosen.General.ThemeRevision);
         store.Save(chosen);
-        Assert.Equal("midnight", store.Load().General.Theme);
+        Assert.Equal("glass", store.Load().General.Theme);
     }
 }

@@ -11,7 +11,7 @@ using Xunit;
 namespace MyCapture.App.Tests;
 
 /// <summary>
-/// A first run shows one window, the welcome, with three illustrated steps; the library follows
+/// A first run focuses on trying a capture; the library follows
 /// once it closes, and later launches behave as before.
 /// </summary>
 public sealed class FirstRunWelcomeTests
@@ -43,7 +43,7 @@ public sealed class FirstRunWelcomeTests
     }
 
     [Fact]
-    public void WelcomeHasThreeStepsOneFilledActionAndASmallShortcutLink() => StaTestHost.Run(() =>
+    public void WelcomeFocusesOnTheConfiguredCaptureAndKeepsBothChoicesInTheFooter() => StaTestHost.Run(() =>
     {
         using var language = UiText.UseLanguage("ko-KR");
         var keys = new HotkeySettings { Capture = new Hotkey(HotkeyModifiers.Control | HotkeyModifiers.Shift, 0x43) };
@@ -51,59 +51,79 @@ public sealed class FirstRunWelcomeTests
         try
         {
             Assert.Equal("MyCapture 시작", welcome.Title);
-            // The window title is not repeated in the body.
             Assert.DoesNotContain(Descendants(welcome).OfType<TextBlock>(), text => text.Text == welcome.Title);
+            Assert.Contains(Descendants(welcome).OfType<TextBlock>(), text => text.Text == "한 번 캡처해 보십시오");
 
-            StackPanel steps = Descendants(welcome).OfType<StackPanel>()
-                .Single(panel => AutomationProperties.GetName(panel) == "시작 안내");
-            Border[] cards = steps.Children.OfType<Border>().ToArray();
-            Assert.Equal(3, cards.Length);
-            Assert.Equal(["1단계 · 영역 캡처", "2단계 · 캡처한 다음", "3단계 · 트레이 아이콘"],
-                cards.Select(AutomationProperties.GetName));
+            WrapPanel caps = Descendants(welcome).OfType<WrapPanel>().Single();
+            Assert.Equal("Ctrl+Shift+C", AutomationProperties.GetName(caps));
+            Assert.Equal(["Ctrl", "Shift", "C"], caps.Children.OfType<Border>().Select(cap => ((TextBlock)cap.Child).Text));
+            Assert.All(caps.Children.OfType<Border>(), cap =>
+            {
+                Assert.True(cap.MinHeight >= 52);
+                Assert.True(((TextBlock)cap.Child).FontSize >= 22);
+            });
 
-            // Step 1: the configured key and the only filled button, which really starts a capture.
-            Assert.Contains(Descendants(cards[0]).OfType<WrapPanel>(), panel => AutomationProperties.GetName(panel) == "Ctrl+Shift+C");
-            Assert.Same(welcome.TryNowButton, Descendants(cards[0]).OfType<Button>().Single());
-            Assert.Equal("지금 해 보기", welcome.TryNowButton.Content);
             Button[] buttons = Descendants(welcome).OfType<Button>().ToArray();
-            Assert.Equal(2, buttons.Length);
-            Assert.Contains(welcome.LibraryButton, buttons);
+            Assert.Equal([welcome.TryNowButton, welcome.SkipButton], buttons);
+            Assert.Equal("지금 해 보기", welcome.TryNowButton.Content);
+            Assert.Equal("건너뛰기", welcome.SkipButton.Content);
+            Assert.True(welcome.TryNowButton.IsDefault);
+            Assert.True(welcome.SkipButton.IsCancel);
+            Assert.Equal("지금 해 보기", AutomationProperties.GetName(welcome.TryNowButton));
+            Assert.Equal("건너뛰기", AutomationProperties.GetName(welcome.SkipButton));
+            Assert.Equal(UiText.Get("Onboard_TryNowHelp"), AutomationProperties.GetHelpText(welcome.TryNowButton));
+            Assert.Contains("Ctrl+Shift+C", Assert.IsType<string>(welcome.TryNowButton.ToolTip), StringComparison.Ordinal);
+            Assert.Contains("Esc", Assert.IsType<string>(welcome.SkipButton.ToolTip), StringComparison.Ordinal);
+            Assert.All(buttons, button => Assert.True(button.MinHeight >= 24));
 
-            // Step 2 says what happens to a capture as the setting makes it true; step 3 where the icon is.
-            Assert.Equal("캡처하면 클립보드에 복사되고 라이브러리에 저장되며 편집기가 열립니다.", welcome.AfterCaptureText);
-            Assert.Equal("이미지는 7일 뒤 자동 삭제됩니다. 보관하거나 폴더에 넣은 항목은 유지됩니다.", welcome.RetentionText);
-            Assert.Contains(Descendants(cards[1]).OfType<TextBlock>(), text => AutomationProperties.GetName(text) == welcome.RetentionText
-                || text.Text == welcome.RetentionText);
-            // Step 3 offers starting at sign-in, checked by default.
-            Assert.Same(welcome.StartAtSignInCheck, Descendants(cards[2]).OfType<CheckBox>().Single());
             Assert.True(welcome.StartAtSignIn);
             Assert.Equal("Windows에 로그인하면 MyCapture 실행", welcome.StartAtSignInCheck.Content);
             Assert.Equal("Windows에 로그인하면 MyCapture 실행", AutomationProperties.GetName(welcome.StartAtSignInCheck));
-            Assert.Contains("^", string.Concat(Descendants(cards[2]).OfType<TextBlock>().Select(text => text.Text)), StringComparison.Ordinal);
-            Assert.Equal("캡처하면 클립보드에 복사되고 라이브러리에 저장되며 빠른 작업 카드가 나타납니다.",
-                WelcomeWindow.AfterCaptureSentence(AfterCaptureAction.QuickAccess));
-            Assert.Equal("캡처하면 클립보드에 복사되고 라이브러리에 저장됩니다.",
-                WelcomeWindow.AfterCaptureSentence(AfterCaptureAction.ClipboardOnly));
-
-            // Changing shortcuts is a link, not a button.
             Assert.Equal("단축키 변경", new TextRange(welcome.ShortcutsLink.ContentStart, welcome.ShortcutsLink.ContentEnd).Text);
+            Assert.Equal("단축키 변경", AutomationProperties.GetName(welcome.ShortcutsLink));
+            TextBlock shortcuts = Descendants(welcome).OfType<TextBlock>().Single(text => text.Inlines.Contains(welcome.ShortcutsLink));
+            Assert.Same(LogicalTreeHelper.GetParent(welcome.StartAtSignInCheck), LogicalTreeHelper.GetParent(shortcuts));
+            Assert.Equal(1, Grid.GetColumn(shortcuts));
+            Assert.True(welcome.StartAtSignInCheck.MinHeight >= 24);
+            Assert.True(shortcuts.LineHeight >= 24);
         }
         finally { welcome.Close(); }
 
-        // A key that is not assigned is not shown at all: the tray menu is named instead, and the
-        // library is reached by clicking the tray icon, never by a key that may be unassigned.
+        // An unassigned shortcut remains honest, and the primary button still offers a capture.
         using var english = UiText.UseLanguage("en-US");
         var unassigned = new WelcomeWindow(new HotkeySettings { Capture = Hotkey.None, OpenLibrary = Hotkey.None }, AfterCaptureAction.Editor);
         try
         {
             Assert.Equal("Try it now", unassigned.TryNowButton.Content);
+            Assert.Equal("Skip", unassigned.SkipButton.Content);
             Assert.Empty(Descendants(unassigned).OfType<WrapPanel>());
-            string text = string.Join(" ", Descendants(unassigned).OfType<TextBlock>().Select(AutomationProperties.GetName));
-            Assert.Contains("Choose Region capture from the tray icon menu.", text, StringComparison.Ordinal);
-            Assert.Contains("Click its icon for the library", text, StringComparison.Ordinal);
-            Assert.DoesNotContain(UiText.Get("Hotkey.Unassigned"), text, StringComparison.Ordinal);
+            Assert.Contains(Descendants(unassigned).OfType<TextBlock>(), text => text.Text == "Try your first capture");
+            Assert.Contains(Descendants(unassigned).OfType<TextBlock>(), text => text.Text == UiText.Get("Hotkey.Unassigned"));
+            Assert.DoesNotContain(Descendants(unassigned).OfType<TextBlock>(), text => text.Text == UiText.Get("Onboard_CaptureFromTray"));
         }
         finally { unassigned.Close(); }
+    });
+
+    [Theory]
+    [InlineData("ko-KR", AfterCaptureAction.Editor)]
+    [InlineData("ko-KR", AfterCaptureAction.QuickAccess)]
+    [InlineData("ko-KR", AfterCaptureAction.ClipboardOnly)]
+    [InlineData("en-US", AfterCaptureAction.Editor)]
+    [InlineData("en-US", AfterCaptureAction.QuickAccess)]
+    [InlineData("en-US", AfterCaptureAction.ClipboardOnly)]
+    public void WelcomeDefersTheCaptureAndTrayExplanations(string locale, AfterCaptureAction action) => StaTestHost.Run(() =>
+    {
+        using var language = UiText.UseLanguage(locale);
+        var welcome = new WelcomeWindow(new HotkeySettings(), action);
+        try
+        {
+            string[] paragraphs = ["Onboard_AfterCaptureEditor", "Onboard_AfterCaptureQuickAccess", "Onboard_AfterCaptureClipboard", "Onboard_TrayBody"];
+            foreach (string key in paragraphs)
+                Assert.DoesNotContain(Descendants(welcome).OfType<TextBlock>(), text =>
+                    text.Text == UiText.Get(key) || AutomationProperties.GetName(text) == UiText.Get(key));
+            Assert.Equal(2, Descendants(welcome).OfType<Button>().Count());
+        }
+        finally { welcome.Close(); }
     });
 
     [Fact]
@@ -114,7 +134,7 @@ public sealed class FirstRunWelcomeTests
         try
         {
             Assert.Equal(WelcomeOutcome.TryCapture, Run(window => window.TryNowButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent))));
-            Assert.Equal(WelcomeOutcome.Closed, Run(window => window.LibraryButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent))));
+            Assert.Equal(WelcomeOutcome.Closed, Run(window => window.SkipButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent))));
             Assert.Equal(WelcomeOutcome.OpenSettings, Run(window => window.ShortcutsLink.RaiseEvent(new RoutedEventArgs(Hyperlink.ClickEvent))));
             Assert.Equal(WelcomeOutcome.Closed, Run(window => window.Close()));
             Assert.Equal(WelcomeOutcome.Closed, Run(window =>

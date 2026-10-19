@@ -8,6 +8,10 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <!-- Render selected glyphs with SelectionTextBrush instead of painting an adorner over them. -->
+    <RuntimeHostConfigurationOption Include="Switch.System.Windows.Controls.Text.UseAdornerForTextboxSelectionRendering" Value="false" />
+  </ItemGroup>
+  <ItemGroup>
     <ProjectReference Include="..\..\src\MyCapture.App\MyCapture.App.csproj" />
     <ProjectReference Include="..\..\src\MyCapture.Setup\MyCapture.Setup.csproj" ReferenceOutputAssembly="false" SkipGetTargetFrameworkProperties="true" />
     <Compile Include="..\Shared\TestRecycleBin.cs" Link="TestRecycleBin.cs" />
@@ -24,6 +28,7 @@
     <EmbeddedResource Include="..\..\src\MyCapture.App\Themes\Symbols.xaml" LogicalName="ThemeFixture.Symbols.xaml" />
     <EmbeddedResource Include="..\..\src\MyCapture.App\Themes\Controls.xaml" LogicalName="ThemeFixture.Controls.xaml" />
     <EmbeddedResource Include="..\..\src\MyCapture.App\Gallery\GalleryWindow.xaml" LogicalName="GalleryFixture.Window.xaml" />
+    <EmbeddedResource Include="..\..\src\MyCapture.App\Settings\SettingsWindow.xaml" LogicalName="SettingsFixture.Window.xaml" />
   </ItemGroup>
 
   <ItemGroup>

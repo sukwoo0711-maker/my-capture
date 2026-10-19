@@ -110,5 +110,80 @@ public sealed class ThemeContrastTests
         }
     }
 
+    [Fact]
+    public void TextHierarchyHasDistinctStepsAndMeetsAaOnEveryTextSurface()
+    {
+        foreach (AppTheme theme in Enum.GetValues<AppTheme>())
+        {
+            var colors = ThemeCatalog.ColorsFor(theme);
+            foreach (string surface in new[] { "Surface.Canvas", "Surface.Base", "Surface.Raised", "Surface.Overlay",
+                         "Surface.Floating", "Surface.Sunken", "Surface.Hover", "Surface.Pressed", "Surface.Selected", "Surface.Folder" })
+            foreach (ThemeColor backdrop in new[] { ThemeColor.Rgb(0, 0, 0), ThemeColor.Rgb(255, 255, 255) })
+            {
+                ThemeColor background = ThemeContrast.Composite(colors[surface], backdrop);
+                double primary = ThemeContrast.Ratio(colors["Text.Primary"], background);
+                double secondary = ThemeContrast.Ratio(colors["Text.Secondary"], background);
+                double muted = ThemeContrast.Ratio(colors["Text.Muted"], background);
+                Assert.True(muted >= 4.5, $"{theme}/{surface}: muted {muted:F2}");
+                Assert.True(primary - secondary >= 1.25, $"{theme}/{surface}: primary/secondary gap {primary - secondary:F2}");
+                Assert.True(secondary - muted >= 1.25, $"{theme}/{surface}: secondary/muted gap {secondary - muted:F2}");
+            }
+        }
+    }
+
+    [Fact]
+    public void SelectionFocusAndBadgesUseNeutralRoles()
+    {
+        foreach (AppTheme theme in Enum.GetValues<AppTheme>())
+        {
+            var colors = ThemeCatalog.ColorsFor(theme);
+            foreach (string key in new[] { "Border.Focus", "Border.Accent", "Overlay.SelectionBorder", "Accent.Cool", "Accent.Indicator", "Text.Badge" })
+                Assert.Equal(colors["Text.Primary"], colors[key]);
+            Assert.Equal(colors["Surface.Selected"], colors["Accent.Subtle"]);
+            Assert.Equal(colors["Surface.Raised"], colors["Surface.Badge"]);
+            Assert.Equal(colors["Surface.Raised"], colors["Surface.BadgeStrong"]);
+        }
+    }
+
+    [Fact]
+    public void ColoredTimelineLayerTextMeetsAaInEveryPalette()
+    {
+        foreach (AppTheme theme in Enum.GetValues<AppTheme>())
+        {
+            var colors = ThemeCatalog.ColorsFor(theme);
+            foreach (string surface in new[] { "Timeline.TextLayer", "Timeline.FrameLayer" })
+            {
+                double ratio = ThemeContrast.Ratio(colors["Timeline.LayerText"], colors[surface]);
+                Assert.True(ratio >= 4.5, $"{theme}/Timeline.LayerText on {surface}: {ratio:F4}");
+            }
+        }
+    }
+
+    [Fact]
+    public void TextSelectionHasAnOpaqueDistinctBackgroundAndReadableText()
+    {
+        foreach (AppTheme theme in Enum.GetValues<AppTheme>())
+        {
+            var colors = ThemeCatalog.ColorsFor(theme);
+            ThemeColor background = colors["Text.SelectionBackground"];
+            ThemeColor foreground = colors["Text.SelectionForeground"];
+            Assert.Equal(255, background.A);
+            Assert.Equal(255, foreground.A);
+            Assert.True(ThemeContrast.Ratio(foreground, background) >= 4.5, $"{theme} selected text");
+            foreach (ThemeColor backdrop in new[] { ThemeColor.Rgb(0, 0, 0), ThemeColor.Rgb(255, 255, 255) })
+                Assert.True(ThemeContrast.RatioOverBackdrop(background, colors["Surface.Sunken"], backdrop) >= 3,
+                    $"{theme} selection must remain visible against the input surface");
+        }
+    }
+
+    [Fact]
+    public void WindowsSelectionAndTimelineTextUsePairedSystemRoles()
+    {
+        Assert.Equal(SystemColorRole.Highlight, HighContrastPalette.RoleFor("Text.SelectionBackground"));
+        Assert.Equal(SystemColorRole.HighlightText, HighContrastPalette.RoleFor("Text.SelectionForeground"));
+        Assert.Equal(SystemColorRole.Highlight, HighContrastPalette.RoleFor("Timeline.TextLayer"));
+        Assert.Equal(SystemColorRole.Highlight, HighContrastPalette.RoleFor("Timeline.FrameLayer"));
+        Assert.Equal(SystemColorRole.HighlightText, HighContrastPalette.RoleFor("Timeline.LayerText"));
+    }
     private static ThemeColor Opaque(ThemeColor color) => ThemeColor.Rgb(color.R, color.G, color.B);
 }

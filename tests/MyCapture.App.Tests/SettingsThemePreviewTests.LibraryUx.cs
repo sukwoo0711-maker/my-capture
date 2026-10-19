@@ -284,7 +284,7 @@ public sealed partial class SettingsThemePreviewTests
             GalleryDropPlan back = window.PreviewFolderDrop(all, payload, all.TranslatePoint(new Point(20, 10), hintLayer));
             Assert.Equal(GalleryDropAction.RemoveFromFolder, back.Action);
             Assert.True(vm.IsAllItemsDropTarget);
-            Assert.Same(window.FindResource("Accent.Subtle"), all.Background);
+            Assert.Same(window.FindResource("Surface.Selected"), all.Background);
             Assert.True(PumpUiTask(window, () => window.DropAsync(all, payload)));
             PumpLibraryUntil(window, () => f.Records[0].FolderId is null, label + ": out of folder");
             Assert.False(vm.IsAllItemsDropTarget);
@@ -319,7 +319,15 @@ public sealed partial class SettingsThemePreviewTests
             // Smaller than the full card, at the compact card's own proportion.
             Assert.True(compactCard.ActualWidth < fullCardWidth, $"{label}: compact {compactCard.ActualWidth:0.#} DIP, full {fullCardWidth:0.#} DIP");
             double cardScale = VisualTreeHelper.GetDpi(compactCard).DpiScaleY;
-            double expectedHeight = GalleryCardRowPanel.CardHeightFor(compactCard.ActualWidth, 148, 180, 1);
+            // The panel sizes rows from its unrounded cell width (row width / columns); a card's
+            // layout-rounded ActualWidth can sit a fraction lower, which at 0.625 DIP per DIP can
+            // flip the rounded height, so the expectation takes the panel's own input.
+            DependencyObject rowParent = compactTile;
+            while (rowParent is not GalleryCardRowPanel) rowParent = VisualTreeHelper.GetParent(rowParent);
+            var compactRow = (GalleryCardRowPanel)rowParent;
+            Assert.True(compactRow.Columns > 0, $"{label}: compact row columns {compactRow.Columns}");
+            double expectedHeight = GalleryCardRowPanel.CardHeightFor(
+                compactRow.ActualWidth / compactRow.Columns - compactRow.CardInset, 148, 174, 0.625);
             // The row's proportional height is authored in DIPs, then WPF rounds it to pixels.
             Assert.Equal(Math.Round(expectedHeight * cardScale) / cardScale, compactCard.ActualHeight, 3);
             Assert.True(vm.ColumnCount > rootColumns, $"{label}: {vm.ColumnCount} compact columns, {rootColumns} at the root");

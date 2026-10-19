@@ -210,6 +210,7 @@ public partial class App : Application
             () => _settings!.Pin,
             pinSaveService,
             _services.GetRequiredService<ILogger<PinManager>>());
+        _pins.PinCreated += ShowFirstPinTip;
         _gitHubUpload = new GitHubIssueImageUploadService(
             () => _settings!,
             _services.GetRequiredService<ILogger<GitHubIssueImageUploadService>>());
@@ -257,7 +258,7 @@ public partial class App : Application
 
         _shellPresenter = new ThemedShellPresenter(
             () => _overlay?.IsActive == true || _recorder?.IsActive == true,
-            () => _overlay?.IsActive == true || (_recorder?.IsActive == true && !_recorder.CanCaptureStill));
+            () => _overlay?.IsActive == true || (_recorder?.IsActive == true && !_recorder.CanCaptureStill), _receiptKeyboard);
         _tray.NotificationPresenter = _shellPresenter.ShowNotification;
         // Rebuilt on every open: the reopen-pin entry appears exactly while a closed pin can return,
         // and Pin clipboard is enabled only while the clipboard announces an image or text.
@@ -266,7 +267,7 @@ public partial class App : Application
             HandleCaptureTextRequested, HandleRestoreClosedPin, HandleGalleryRequested, HandleSettingsRequested,
             ShortcutHelpWindow.ShowHelp, () => _ = RequestSafeShutdownAsync(),
             PinClipboard: HandlePasteToScreen, HideOrShowAllPins: () => _pins?.HideOrShowAll(),
-            ClearClickThrough: () => _pins?.ClearClickThroughAll());
+            ClearClickThrough: () => _pins?.ClearClickThroughAll(), ContactSupport: SupportWindow.ShowSupport);
         _tray.MenuPresenter = () => _shellPresenter.ShowMenu(TrayMenuLayout.Build(trayCommands, _settings!.Hotkeys,
             new TrayMenuState(_pins?.CanRestoreClosed == true, _scrollCancellation is not null,
                 ClipboardAvailability.HasPinnableContent(), _pins?.Count ?? 0, _pins?.AreHidden == true,
@@ -311,6 +312,7 @@ public partial class App : Application
             _currentEditSession = null;
             _pendingRecord = null;
             RestoreTrayAfterCapture();
+            CompleteWelcomeCaptureAnnouncement();
             _storeRating?.NotifyFlowEnded();
             RequestLibraryMaintenance();
         };
@@ -329,7 +331,10 @@ public partial class App : Application
         };
         _overlay.RequiresCaptureExclusion = () => _recorder?.RequiresCaptureExclusion == true;
         _overlay.TransitionFailed += exception =>
+        {
             _tray?.ShowBalloon(UiText.Get("Text_B4B8EE7BE3D6"), MyCapture.App.Themes.ThemedDialog.RecoveryMessage(exception), TrayBalloonKind.Error);
+            CompleteWelcomeCaptureAnnouncement();
+        };
 
         // Region video recording (Ctrl+Shift+X). Shares the capture engine and, on a
         // frame-image edit, the same persistence/commit path as still capture so recordings
@@ -344,7 +349,8 @@ public partial class App : Application
         _recorder.FrameImageCommitHandlerFactory = CreateRecordedFrameCommitHandler;
         _recorder.PrivacyRedactionService = _privacyRedactionService;
         _recorder.ShowSelectionGrid = () => _settings!.Capture.ShowSelectionGrid;
-        _recorder.SessionEnded += (_, _) => RestoreTrayAfterCapture();
+        _recorder.CaptureSelectionRequested = HandleCaptureRequested;
+        _recorder.SessionEnded += (_, _) => { RestoreTrayAfterCapture(); CompleteWelcomeCaptureAnnouncement(); };
         // Answers the record command while the previous recording is still being saved.
         _recorder.FinishingBusyFeedback += () => ShowCommandNotice("MyCapture", UiText.Get("Recording.FinishingBusy"));
 
@@ -382,6 +388,7 @@ public partial class App : Application
                 Hotkey previousCapture = _settings!.Hotkeys.Capture;
                 _settings = updated; ShortcutPresentation.Refresh(); _pins?.TrimClosedHistory();
                 AnnounceCaptureKeyChange(previousCapture, updated.Hotkeys.Capture);
+                QueueWelcomeResidentAnnouncement();
             },
             _queue,
             _hotkeys,
@@ -713,7 +720,7 @@ public partial class App : Application
 
         try
         {
-            if (!await PrepareRetakeAsync(UiText.Get("Text_096A13A757DB"))) return;
+            if (!await PrepareRetakeAsync(UiText.Get("Text_096A13A757DB"))) { CompleteWelcomeCaptureAnnouncement(); return; }
             _tray?.SetState(TrayIconState.Capturing);
             // Start reserves the session immediately; full-desktop acquisition runs off the UI
             // thread and reports asynchronous failures through TransitionFailed on this dispatcher.
@@ -732,6 +739,7 @@ public partial class App : Application
                 UiText.Get("Text_70EECBC7C211"),
                 MyCapture.App.Themes.ThemedDialog.RecoveryMessage(ex),
                 TrayBalloonKind.Error);
+            CompleteWelcomeCaptureAnnouncement();
         }
     }
 
@@ -843,11 +851,12 @@ public partial class App : Application
                 UiText.Get("Text_70534261ED6C"),
                 TrayBalloonKind.Information,
                 playSound: false);
+            CompleteWelcomeCaptureAnnouncement();
         }
 
         countdown.Elapsed += OnElapsed;
         countdown.Cancelled += OnCancelled;
-        countdown.Closed += (_, _) => { if (_activeCountdown == countdown) { Cleanup(); RestoreTrayAfterCapture(); } };
+        countdown.Closed += (_, _) => { if (_activeCountdown == countdown) { Cleanup(); RestoreTrayAfterCapture(); CompleteWelcomeCaptureAnnouncement(); } };
         if (_recorder?.RequiresCaptureExclusion == true && !CaptureWindowExclusion.TryApply(countdown))
         {
             countdown.Close();
@@ -1011,6 +1020,7 @@ public partial class App : Application
                     TrayBalloonKind.Error);
                 break;
         }
+        CompleteWelcomeCaptureAnnouncement();
     }
 
     private CaptureRecord? _pendingRecord;
@@ -1031,6 +1041,7 @@ public partial class App : Application
         await Dispatcher.Yield(DispatcherPriority.Background);
         return true;
     }
+    private readonly ReceiptKeyboardRouter _receiptKeyboard = new();
     private QuickAccessWindow? _quickAccess;
     private Guid? _latestReceipt;
     private bool _preparingAdvancedCapture;
@@ -1054,7 +1065,7 @@ public partial class App : Application
             _log?.LogError(ex, "Advanced capture transition failed");
             ReportOutcome(CaptureOutcome.Failed(ThemedDialog.RecoveryMessage(ex)), mode);
         }
-        finally { _preparingAdvancedCapture = false; }
+        finally { _preparingAdvancedCapture = false; QueueWelcomeResidentAnnouncement(); }
     }
 
     private void OnQuickAccessKeyboardRequested(object sender, System.Windows.Input.KeyEventArgs e)
@@ -1062,7 +1073,7 @@ public partial class App : Application
         if (_preparingAdvancedCapture || _overlay?.IsSelecting == true || HotkeyRecorder.Active is not null) return;
         var key = e.Key == System.Windows.Input.Key.System ? e.SystemKey : e.Key;
         if (ShortcutCatalog.Match(ShortcutScope.QuickAccess, key, System.Windows.Input.Keyboard.Modifiers) == "Activate")
-            e.Handled = _quickAccess is { CanActivateByHotkey: true } card && card.ActivateForKeyboard();
+            e.Handled = _receiptKeyboard.Activate();
     }
 
     internal static string LibrarySaveFailureMessage(AfterCaptureAction mode, Exception error) =>
@@ -1224,16 +1235,17 @@ public partial class App : Application
                 try
                 {
                     if (_latestReceipt != receipt.Id || _preparingAdvancedCapture || _overlay?.IsSelecting == true) return;
-                    if (_settings?.General.AfterCapture == AfterCaptureAction.QuickAccess) ShowQuickAccess(receipt, selected, region, monitor);
-                    else if (_settings?.General.AfterCapture == AfterCaptureAction.ClipboardOnly)
-                        _shellPresenter?.ShowCaptureReceipt(UiText.Get(copied ? "Capture.CopiedAndSaved" : "Capture.Saved"),
-                            () => EnsureGalleryWindow()?.OpenCapture(receipt.Id, edit: false));
-                    // The editor opened for this capture says it is already saved (and copied).
-                    else if (ReferenceEquals(_currentRecord, receipt)) _overlay?.CurrentEditor?.ShowCaptureReceipt(copied);
+                    if (_settings?.General.AfterCapture == AfterCaptureAction.QuickAccess) ShowQuickAccess(receipt, selected, region, monitor, copied);
+                    else
+                    {
+                        if (ReferenceEquals(_currentRecord, receipt)) _overlay?.CurrentEditor?.ShowCaptureReceipt(copied);
+                        ShowCaptureToast(receipt, copied);
+                    }
                 }
                 finally { pendingReceipt?.Dispose(); }
             }));
         }
+        CompleteWelcomeCaptureAnnouncement();
     }
 
     private Task _sourceBackfillTask = Task.CompletedTask;
@@ -1260,7 +1272,7 @@ public partial class App : Application
     }
 
     private void ShowQuickAccess(CaptureRecord record, System.Windows.Media.Imaging.BitmapSource image,
-        Core.Primitives.RectD region, MonitorInfo monitor)
+        Core.Primitives.RectD region, MonitorInfo monitor, bool copiedToClipboard)
     {
         if (_latestReceipt != record.Id) return;
         if (_preparingAdvancedCapture || _overlay?.IsSelecting == true) return;
@@ -1300,10 +1312,13 @@ public partial class App : Application
                 actions.ExportAsync, capturedRegion: region, targetMonitor: monitor,
                 copyText: _textCapture is { } textCapture
                     ? async () => await textCapture.RecognizeAndCopyAsync(await Render(), CancellationToken.None)
-                    : null);
+                    : null, copiedToClipboard: copiedToClipboard,
+                firstCaptureTip: _settings.General.FirstCaptureTipShown ? null : UiText.Get("Onboard_FirstCaptureTip"),
+                keyboardRouter: _receiptKeyboard);
             card.Closed += (_, _) => { _overlay?.NoteForegroundDismissal(); lease.Dispose(); if (ReferenceEquals(_quickAccess, card)) _quickAccess = null; _storeRating?.NotifyFlowEnded(); };
             _quickAccess = card;
             card.Show();
+            if (FirstUseTips.ShowCaptureOnce(_settings.General, () => { })) SaveFirstUseTips();
         }
         catch (Exception ex)
         {
@@ -1418,6 +1433,7 @@ public partial class App : Application
                 UiText.Get("Text_48C3B6EBA637"),
                 MyCapture.App.Themes.ThemedDialog.RecoveryMessage(ex),
                 TrayBalloonKind.Error);
+            CompleteWelcomeCaptureAnnouncement();
         }
     }
 
@@ -1911,6 +1927,23 @@ public partial class App : Application
             Shutdown(Ux402SelfTest.Run());
             return true;
         }
+        int storeLayersIndex = FindSwitch(args, StoreScreenshotSelfTest.LayersCommandLineSwitch);
+        if (storeLayersIndex >= 0)
+        {
+            try
+            {
+                var request = StoreScreenshotSelfTest.ParseLayersArguments(args, storeLayersIndex);
+                return RunSelfTest(request.Output, "store-layers-report.txt",
+                    directory => StoreScreenshotSelfTest.RunLayers(directory, request.Language));
+            }
+            catch (ArgumentException ex)
+            {
+                Console.Error.WriteLine(ex.Message);
+                Shutdown(2);
+                return true;
+            }
+        }
+
         int storeShotsIndex = FindSwitch(args, StoreScreenshotSelfTest.CommandLineSwitch);
         if (storeShotsIndex >= 0)
         {
@@ -2252,6 +2285,7 @@ public partial class App : Application
         TextRecognitionRoute.Show = null;
         TextRecognitionRoute.IsAvailable = null;
         _shellPresenter?.Dispose();
+        _receiptKeyboard.Dispose();
         // Invalidate pending frame acquisition before tearing down tray/persistence services.
         // Native capture cannot be interrupted, but its late result must never open a window.
         _overlay?.Dispose();

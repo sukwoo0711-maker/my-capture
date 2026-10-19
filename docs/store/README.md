@@ -11,18 +11,18 @@ MyCapture의 공식 배포 경로는 Microsoft Store 하나입니다. 이 문서
 | 항목 | 개발 빌드(비패키지)와 기존 GitHub 설치본 | Store 빌드 |
 |---|---|---|
 | 업데이트 | 앱 안의 업데이트 확인·설치 없음. 정보 탭의 "Microsoft Store에서 열기" 버튼으로 Store 설치 페이지 열기 | Store API로 업데이트 확인·설치 요청. 앱에서 시작한 요청의 다운로드·설치 상태를 정보 탭에 표시 |
-| 로그인 시 자동 시작 | HKCU `Run` 키, 기본 켜짐 | 매니페스트 시작 작업(`MyCaptureStartup`), 기본 꺼짐 |
+| 로그인 시 자동 시작 | HKCU `Run` 키, 기본 켜짐 | 매니페스트 시작 작업(`MyCaptureStartup`). 설치 직후 꺼져 있고, 첫 실행 화면의 선택(기본 선택됨)을 적용 |
 | 설정·라이브러리 | `%APPDATA%\MyCapture` | `%LOCALAPPDATA%\Packages\<패키지 패밀리 이름>\LocalState` |
 | OCR 모델 | `%LOCALAPPDATA%\MyCapture\ocr-models` | 같은 패키지 폴더의 `LocalCache\ocr-models` |
 | 드래그 내보내기 임시 파일 | `%TEMP%\MyCapture\DragExports` | 같은 패키지 폴더의 `TempState\MyCapture\DragExports` |
 | 빠른 저장 | `사진\Captures` | 같음 |
-| 평가 요청 | 없음 | 성공한 캡처 10회와 최초 실행 후 3일이 지나면 Microsoft Store 평가 창을 한 번만 표시. 설정 > 업데이트 탭에 "Microsoft Store에서 평가" 버튼 |
+| 평가 요청 | 없음 | 성공한 캡처 10회와 최초 실행 후 3일이 지나면 앱 안 평가 안내를 한 번만 표시하고, 사용자가 평가를 고를 때만 Microsoft Store 평가 창을 엶. 설정 > 정보 탭에 "Microsoft Store에서 평가" 버튼 |
 
 - **업데이트**: Store 설치본은 `Windows.Services.Store` API로 업데이트를 확인하고 사용자 요청에 따라 설치합니다. Microsoft Store/Windows가 다운로드·패키지 교체와 설치 동의를 처리합니다. 앱에서 시작한 요청은 정보 탭에서 다운로드·설치 상태를 확인할 수 있습니다. 설치 중 MyCapture가 종료될 수 있으며 다음 실행에서 실제 버전 상승을 확인한 뒤 완료를 안내합니다. Microsoft Store에서 직접 시작한 업데이트의 진행 상태는 Store 화면에서 확인합니다. 같은 패키지 패밀리의 업데이트는 LocalState를 유지하므로 기존 앱을 먼저 제거하지 않습니다. 비패키지 실행본의 버튼은 Store 설치 페이지(`ms-windows-store://pdp/?productid=9PB33MC095VR`)를 열고, 실패하면 웹 주소 https://apps.microsoft.com/detail/9PB33MC095VR 를 엽니다. 두 경로 모두 실패하면 설정 창에 주소를 표시합니다. GitHub 업데이트 코드는 화면에 연결하지 않습니다.
 - **기존 데이터 가져오기**: Store 설치본의 설정 > 정보에서 이전 실행본의 사진·영상·주석·폴더를 현재 라이브러리로 복사합니다. 기본 위치는 `%APPDATA%\MyCapture`이며, `MYCAPTURE_DATA_ROOT`로 따로 지정했던 테스트 데이터 폴더도 직접 선택할 수 있습니다. 원본 폴더는 읽기만 하고, 현재 라이브러리의 기존 항목은 덮어쓰지 않습니다. 시작 전에 여유 공간(가져올 파일 크기와 여유분 64MB)을 확인하고, 파일은 라이브러리 폴더에 한 번만 복사합니다. 파일이 없거나 손상된 항목은 원본 폴더에 그대로 두고 건너뛴 개수를 알려 줍니다. 한 번 가져온 항목은 이후 어느 쪽에서 편집·이동·삭제하더라도 다시 가져오지 않습니다. 앱이 가져오기 도중 종료되면 다음 실행에서 마무리하고, 마무리할 수 없으면 다시 시도하거나 가져오기를 취소할 수 있습니다. 취소하면 현재 라이브러리와 원본 폴더는 그대로 유지됩니다. **설정도 불러오기**를 선택하면 설정을 초안으로 불러오며, **적용**을 눌러 저장합니다. 현재 저장 위치·라이브러리 보존 정책·계정 인증 정보와 업로드 대상 이슈 주소·자동 시작 선택은 유지합니다.
-- **평가 요청**: 요청 시점을 정하려고 성공한 캡처 수(최대 10), 최초 실행 시각, 직전 캡처 실패 여부, 요청 시각을 `settings.json`의 `storeRating`에만 저장하며 어디에도 전송하지 않습니다. 요청은 오버레이·편집기·녹화·빠른 작업 카드가 모두 닫힌 뒤 비차단으로 한 번만 시도하고, 결과와 관계없이 다시 묻지 않습니다. 평가 창과 평가 내용은 Microsoft Store가 처리합니다.
+- **평가 요청**: 요청 시점을 정하려고 성공한 캡처 수(최대 10), 최초 실행 시각, 직전 캡처 실패 여부, 요청 시각을 `settings.json`의 `storeRating`에만 저장하며 어디에도 전송하지 않습니다. 안내는 오버레이·편집기·녹화·빠른 작업 카드가 모두 닫힌 뒤 사용자가 앱으로 돌아왔을 때 한 번만 표시하고, 결과와 관계없이 다시 묻지 않습니다. Microsoft Store 평가 창은 사용자가 안내에서 평가를 고를 때만 열며, 평가 창과 평가 내용은 Microsoft Store가 처리합니다.
 - **PrintScreen 안내**: 단축키에 PrintScreen을 지정하면 `HKCU\Control Panel\Keyboard`의 `PrintScreenKeyForSnippingEnabled` 값을 읽기만 해서, Windows가 PrtSc로 캡처 도구를 여는 상태인지 판단합니다. 값이 없으면 빌드 22621 이상에서 켜짐으로 봅니다. 값을 바꾸지 않고 Windows 설정 바로 가기만 제공합니다.
-- **자동 시작**: 패키지 앱이 `Run` 키에 쓴 값은 가상화되어 로그인할 때 실행되지 않습니다. Store 정책 10.2.8은 Windows 시작 동작을 바꾸기 전에 사용자 동의를 요구합니다. 그래서 시작 작업은 꺼진 상태로 배포됩니다. 사용자가 MyCapture 설정이나 Windows 설정 > 앱 > 시작 프로그램에서 직접 켭니다. 앱 설정의 체크 상태는 Windows의 실제 상태를 따릅니다.
+- **자동 시작**: 패키지 앱이 `Run` 키에 쓴 값은 가상화되어 로그인할 때 실행되지 않습니다. Store 정책 10.2.8은 Windows 시작 동작을 바꾸기 전에 사용자 동의를 요구합니다. 그래서 시작 작업은 꺼진 상태로 배포되고, 첫 실행 화면의 'Windows에 로그인하면 MyCapture 실행' 선택(기본 선택됨, 사용자가 해제 가능)을 받은 뒤에만 켭니다. 이후에는 MyCapture 설정이나 Windows 설정 > 앱 > 시작 프로그램에서 바꿉니다. 앱 설정의 체크 상태는 Windows의 실제 상태를 따릅니다.
 - **저장 위치**: 패키지 앱이 AppData에 새로 만든 파일은 패키지 전용 위치로 리디렉션됩니다. 이 위치는 탐색기, 사진 앱, 드롭 대상이 원래 경로로 찾을 수 없습니다. 가상화를 끄는 `unvirtualizedResources` 기능은 게임용이어서 Store 승인을 기대하기 어렵습니다. 그래서 Store 빌드는 실제 경로인 패키지 폴더를 사용합니다.
 - **제거하면 데이터도 삭제됨**: Store 앱을 제거하면 패키지 폴더의 설정과 라이브러리도 함께 삭제됩니다. 라이브러리를 유지하려면 설정에서 캡처 폴더를 다른 위치로 지정하십시오. `사진\Captures`의 빠른 저장 파일은 남습니다.
 - **두 빌드의 관계**: Store 빌드와 개발 빌드·기존 GitHub 설치본은 데이터를 공유하지 않습니다. 설정은 설정 창의 내보내기·가져오기로 옮길 수 있습니다. 두 빌드는 같은 단일 실행 잠금을 쓰므로 동시에 상주하지 않습니다.
@@ -46,8 +46,12 @@ MyCapture의 공식 배포 경로는 Microsoft Store 하나입니다. 이 문서
 | Store 주소 | https://apps.microsoft.com/detail/9PB33MC095VR |
 | `Package/Identity/Name` | `sukwoo0711.MyCapture` |
 | `Package/Identity/Publisher` | `CN=2BAAF359-E7FC-4D15-9E24-F3262AD74474` |
-| `Package/Properties/PublisherDisplayName` | `sukwoo0711` |
+| `Package/Properties/PublisherDisplayName` | `sukwoo0711` (게시자 표시 이름을 바꾸면 그 이름) |
 | 패키지 패밀리 이름 | `sukwoo0711.MyCapture_n98e1tgx2qxb2` |
+| 추가로 예약한 이름 | `MyCapture - 캡처·가리기·핀`, `MyCapture - Screenshot, Redact & Pin` (2026-10-20) |
+
+- **게시자 표시 이름**: Store의 게시자 표시는 계정의 게시자 표시 이름이고, 패키지의 `PublisherDisplayName`은 그 이름과 같아야 업로드됩니다. 계정 설정 > Legal info > Contact info의 Publisher name에서 `MyCapture`로 바꿀 수 있지만, 바꾸면 계정이 추가 검토를 받고 이후 패키지를 새 이름으로 다시 만들어 제출해야 합니다(`-PublisherDisplayName 'MyCapture'`). 인증 중인 제출의 패키지는 이전 이름으로 빌드되었으므로 그 제출이 게시된 뒤에 바꿉니다. 패키지 ID(`Package/Identity/Name`, 패키지 패밀리 이름)는 바뀌지 않습니다.
+- **추가로 예약한 이름**: Store 정책 10.1.1은 제품 이름에 설명 문구와 키워드를 넣지 못하게 하므로 목록 제품 이름은 `MyCapture`로 둡니다. 예약은 3개월 안에 제출에서 쓰지 않으면 풀릴 수 있습니다.
 
 ## 2. 패키지 만들기
 
@@ -99,7 +103,7 @@ Add-AppxPackage -Path .\artifacts\store\4.1.1-localtest\MyCapture.LocalTest_4.1.
 다음 항목을 확인합니다.
 
 - 시작 메뉴와 작업 표시줄 아이콘
-- 설정 > 업데이트 탭의 Store 안내와 "Microsoft Store에서 업데이트 확인" 버튼으로 Store 앱의 MyCapture 페이지가 열리는지 여부
+- 설정 > 정보 탭의 "Microsoft Store에서 업데이트 확인" 버튼으로 Store 업데이트 확인·설치 요청과 진행 상태가 표시되는지 여부
 - 설정에서 로그인 시 자동 시작을 켜면 Windows 설정 > 앱 > 시작 프로그램에 MyCapture가 표시되는지 여부
 - 캡처 후 라이브러리에서 탐색기로 드래그하거나 다른 앱에서 열기
 
@@ -124,7 +128,7 @@ Get-AppxPackage MyCapture.LocalTest | Remove-AppxPackage
 - **제출 옵션**: 제한 기능 `runFullTrust`의 사용 사유를 적습니다. 문구는 [`listing.md`](listing.md)에 있습니다.
 - **Store 목록**
   - 매니페스트가 선언한 한국어(ko-KR)와 영어(en-US) 목록을 모두 작성합니다. 초안은 [`listing.md`](listing.md)에 있습니다.
-  - 스크린샷은 1장 이상 필요합니다. 아래 "Store 스크린샷 만들기"로 언어별 10장을 만들어 올립니다.
+  - 스크린샷은 1장 이상 필요합니다. 4.3.1까지는 아래 "Store 스크린샷 만들기"의 10장을, 4.4.0부터는 "4.4.0부터: 창 레이어 합성"의 9장을 언어별로 올립니다.
 
 ## Store 스크린샷 만들기
 
@@ -138,6 +142,19 @@ Store 목록용 스크린샷은 실제 MyCapture 창을 렌더링해 만듭니�
 - 결과는 2560×1440 PNG 10장(라이브러리, 주석, 빠른 가리기, 캡처 후 카드, 핀, 텍스트 인식, 영상 편집기, GIF 내보내기, 설정, 밝은 테마 라이브러리)과 `store-screenshots-report.txt`입니다.
 - 생성하는 동안 화면 왼쪽 위에 MyCapture 창이 잠깐씩 나타났다 닫힙니다.
 - 한국어(ko-KR) 목록에는 `ko`, 영어(en-US) 목록에는 `en` 결과를 올립니다.
+
+### 4.4.0부터: 창 레이어 합성
+
+4.4.0 목록은 9장 체계로 바꿉니다. 앱이 렌더한 투명 창 레이어와 `manifest.json`을 [`build/store-shots/compose.py`](../../build/store-shots/compose.py)가 그래파이트 바탕(#16191F→#101318)에 제목 한 줄과 함께 합성합니다. 장면 순서, 두 언어 제목, 자르기·배치, 장면마다 필요한 개발자 소재는 [`build/store-shots/scenes.json`](../../build/store-shots/scenes.json)에 있고, 사용법과 4.4.0 렌더 요구 사항은 [`build/store-shots/README.md`](../../build/store-shots/README.md)에 있습니다.
+
+```powershell
+python -X utf8 -I .\build\store-shots\compose.py --layers <레이어 폴더> --lang ko --out .\artifacts\store\screenshots\4.4.0\ko
+python -X utf8 -I .\build\store-shots\compose.py --layers <레이어 폴더> --lang en --out .\artifacts\store\screenshots\4.4.0\en
+```
+
+- 결과는 `01.png`–`09.png`, 확인용 `contact-sheet.png`와 `search-card.png`(Store 검색 결과 카드 크기 319×179로 줄인 1번과 경쟁 앱 카드 비교)입니다.
+- 1번은 개인정보 가리기, 2번은 핀, 9번은 'Windows 캡처 도구에서 옮겨 오면' 비교 카드입니다. Microsoft 제품은 정식 명칭(Windows 캡처 도구, Windows Snipping Tool)으로만 쓰고 우열 표현 없이 그대로인 것과 더해지는 것만 나눕니다. 9번의 비교 항목은 Microsoft의 Snipping Tool 기능 안내로 확인한 것만 쓰며, 제출 직전에 다시 확인합니다. 가리기는 Snipping Tool에도 있으므로 차이는 카드번호·토큰 자동 탐지로 씁니다.
+- 레이어를 내보내는 자체 검사 옵션은 4.4.0 장면 소재를 바꿀 때 `StoreScreenshotSelfTest`에 더합니다.
 
 ## 5. 다음 버전 제출
 

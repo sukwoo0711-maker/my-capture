@@ -164,7 +164,7 @@ public sealed class ReleaseUxInteractionTests
                 () => { pinned++; return Task.CompletedTask; }, () => { saved++; return Task.FromResult(true); }, () => { }, () => Task.FromResult("unused.png"));
             var panel = Assert.IsType<StackPanel>(Assert.IsType<Border>(card.Content).Child);
             IReadOnlyList<Button> actions = card.ActionButtonsForTest;
-            foreach (int index in new[] { 0, 2, 3 })
+            foreach (int index in new[] { 4, 1, 2 })
                 actions[index].RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
             Assert.Equal((1, 1, 1), (copied, pinned, saved));
             var progress = panel.Children.OfType<ProgressBar>().Single();
