@@ -20,7 +20,7 @@
 
 | 동작 | 새 설치 기본값 | 비고 |
 |---|---|---|
-| 영역 캡처 | `Ctrl+Shift+C` | 4.4.0부터 캡처 직후 카드에서 `P` 핀, `E` 편집, `C` 복사, `S` 저장, `T` 텍스트 복사 |
+| 영역 캡처 | `Ctrl+Shift+C` | 4.4.0부터 캡처 직후 작은 카드가 뜹니다. 카드를 클릭하거나 `Alt+Q`를 누른 뒤 `P` 핀, `E` 편집, `C` 복사, `S` 저장, `T` 텍스트 복사 |
 | 영역 녹화 시작/중지 | `Ctrl+Shift+X` | 같은 키로 녹화 종료 |
 | 클립보드 이미지·텍스트·표를 핀으로 띄우기 | 설정에서 지정(예: `F3`) | PNG 투명도와 텍스트/표 원문을 보존. GitHub 첨부 URL을 만든 뒤에는 추출한 GitHub 이미지 URL을 핀으로 띄움 |
 | 라이브러리 열기 | 설정에서 지정(예: `Ctrl+Shift+Z`) | 이미지와 동영상을 함께 조회하고 동영상을 창 안에서 재생 |
@@ -75,7 +75,7 @@ No ads, no account and no capture limits. Capture and text recognition run on th
 
 | Action | Default on a new install |
 |---|---|
-| Region capture | `Ctrl+Shift+C` (from 4.4.0, a card after the capture offers `P` pin, `E` edit, `C` copy, `S` save, `T` copy text) |
+| Region capture | `Ctrl+Shift+C` (from 4.4.0, a small card appears after the capture; click it or press `Alt+Q`, then `P` pin, `E` edit, `C` copy, `S` save, `T` copy text) |
 | Start or stop region recording | `Ctrl+Shift+X` |
 | Pin the clipboard image, text or table | Assign in Settings (for example `F3`) |
 | Open the library | Assign in Settings (for example `Ctrl+Shift+Z`) |
