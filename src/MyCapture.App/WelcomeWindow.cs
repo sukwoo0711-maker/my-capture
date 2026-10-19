@@ -90,7 +90,7 @@ internal sealed class WelcomeWindow : Window
         AutomationProperties.SetHelpText(StartAtSignInCheck, UiText.Get("Onboard_StartAtSignInHelp"));
 
         ShortcutsLink = new Hyperlink(new Run(UiText.Get("Help.Settings")));
-        ShortcutsLink.SetResourceReference(TextElement.ForegroundProperty, "Accent.Cool");
+        ShortcutsLink.SetResourceReference(TextElement.ForegroundProperty, "Text.Primary");
         AutomationProperties.SetName(ShortcutsLink, UiText.Get("Help.Settings"));
         ShortcutsLink.Click += (_, _) => CloseWith(WelcomeOutcome.OpenSettings);
         var linkText = new TextBlock(ShortcutsLink)

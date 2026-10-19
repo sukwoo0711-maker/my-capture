@@ -66,13 +66,12 @@ internal sealed class AnnotationEditorSurface : FrameworkElement
         SetResourceReference(CropFrameShadowProperty, "Crop.FrameShadow");
 
         _dimmerBrush = Resource("Overlay.Dimmer", new SolidColorBrush(Color.FromArgb(115, 0, 0, 0)));
-        _selectionBrush = Resource("Accent.Default", new SolidColorBrush(Color.FromRgb(0x7C, 0x6C, 0xFF)));
-        _handleFillBrush = Resource("Overlay.HandleFill", Brushes.White);
+        _selectionBrush = Resource("Text.Primary", Brushes.White);
+        _handleFillBrush = Resource("Surface.Raised", Brushes.Black);
 
-        _handlePen = new Pen(Resource("Accent.Pressed", new SolidColorBrush(Color.FromRgb(0x7A, 0x68, 0xEE))), 1);
-        _handlePen.Freeze();
-        _selectionOutlinePen = new Pen(_selectionBrush, 1) { DashStyle = new DashStyle([4, 3], 0) };
-        _selectionOutlinePen.Freeze();
+        // Keep private follower brushes mutable so an open editor follows theme changes.
+        _handlePen = new Pen(_selectionBrush, 2);
+        _selectionOutlinePen = new Pen(_selectionBrush, 2) { DashStyle = new DashStyle([4, 3], 0) };
 
         _controller.VisualInvalidated += (_, _) => InvalidateVisual();
         _controller.SelectionChanged += (_, _) => InvalidateVisual();
@@ -226,9 +225,9 @@ internal sealed class AnnotationEditorSurface : FrameworkElement
         dc.Pop();
         dc.Pop();
 
-        // A thin border marks the crop edge even when no annotation touches it.
-        var cropPen = new Pen(_selectionBrush, Math.Max(0.75, scale));
-        cropPen.Freeze();
+        // Opposing neutral edges remain visible on both light and dark image content.
+        dc.DrawRectangle(null, new Pen(_handleFillBrush, 4), CropRectDip);
+        var cropPen = new Pen(_selectionBrush, 2);
         dc.DrawRectangle(null, cropPen, CropRectDip);
 
         if (PendingCrop is { } pending) DrawPendingCrop(dc, pending);
@@ -305,6 +304,7 @@ internal sealed class AnnotationEditorSurface : FrameworkElement
             dc.PushOpacity(0.12);
             dc.DrawRectangle(_selectionBrush, null, ToSurfaceRect(marquee));
             dc.Pop();
+            dc.DrawRectangle(null, new Pen(_handleFillBrush, 4), ToSurfaceRect(marquee));
             dc.DrawRectangle(null, _selectionOutlinePen, ToSurfaceRect(marquee));
         }
         AnnotationItem? selected = _controller.Selected;
@@ -316,6 +316,7 @@ internal sealed class AnnotationEditorSurface : FrameworkElement
         bool multiple = _controller.SelectedItems.Count > 1;
         Rect bounds = ToSurfaceRect(_controller.SelectionBounds ?? selected.Bounds);
         Rect inflated = Rect.Inflate(bounds, 2, 2);
+        dc.DrawRectangle(null, new Pen(_handleFillBrush, 4), inflated);
         dc.DrawRectangle(null, _selectionOutlinePen, inflated);
 
         if (!multiple && !selected.SupportsResize)

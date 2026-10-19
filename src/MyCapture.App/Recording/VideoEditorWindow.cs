@@ -338,12 +338,12 @@ internal sealed partial class VideoEditorWindow : Window
         {
             FontSize = 13,
             FontWeight = FontWeights.SemiBold,
-            Foreground = TryBrush("Text.OnAccent", Color.FromRgb(0x0A, 0x08, 0x18)),
+            Foreground = TryBrush("Text.Primary", Colors.White),
         };
         _trimPreviewBadge = new Border
         {
             Name = "VideoTrimPreviewBadge",
-            Background = TryBrush("Accent.Default", Color.FromRgb(0x7C, 0x6C, 0xFF)),
+            Background = TryBrush("Surface.Raised", Color.FromRgb(0x10, 0x17, 0x22)),
             CornerRadius = new CornerRadius(4),
             Padding = new Thickness(8, 3, 8, 4),
             Margin = new Thickness(10),
@@ -2194,7 +2194,7 @@ internal sealed partial class VideoEditorWindow : Window
         {
             Size = 16,
             Data = TryGeometry(icon), Margin = new Thickness(0, 0, 10, 0),
-            Stroke = TryBrush("Accent.Foreground", Colors.Teal),
+            Stroke = TryBrush("Text.Secondary", Colors.LightGray),
             VerticalAlignment = VerticalAlignment.Center,
         };
         DockPanel.SetDock(symbol, Dock.Left); row.Children.Add(symbol);

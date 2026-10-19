@@ -217,9 +217,9 @@
                             <Setter TargetName="FocusRing" Property="Opacity" Value="1" />
                         </Trigger>
                         <Trigger Property="IsDefaulted" Value="True">
-                            <Setter TargetName="Chrome" Property="BorderBrush" Value="{DynamicResource Border.Accent}" />
-                            <Setter TargetName="HoverLayer" Property="BorderBrush" Value="{DynamicResource Border.Accent}" />
-                            <Setter TargetName="PressedLayer" Property="BorderBrush" Value="{DynamicResource Border.Accent}" />
+                            <Setter TargetName="Chrome" Property="BorderBrush" Value="{DynamicResource Text.Primary}" />
+                            <Setter TargetName="HoverLayer" Property="BorderBrush" Value="{DynamicResource Text.Primary}" />
+                            <Setter TargetName="PressedLayer" Property="BorderBrush" Value="{DynamicResource Text.Primary}" />
                         </Trigger>
                         <Trigger Property="IsEnabled" Value="False">
                             <Setter Property="Opacity" Value="{StaticResource Button.DisabledOpacity}" />
@@ -718,12 +718,12 @@
                                      StrokeThickness="1"
                                      IsHitTestVisible="False"
                                      Opacity="0" />
-                            <!-- The accent disc fades in while the centre dot settles from a smaller size. -->
+                            <!-- The neutral disc fades in while the centre dot settles from a smaller size. -->
                             <Grid x:Name="CheckedLayer"
                                   Style="{StaticResource StatePart.Normal}"
                                   IsHitTestVisible="False"
                                   Opacity="0">
-                                <Ellipse Fill="{DynamicResource Accent.Indicator}" />
+                                <Ellipse Fill="{DynamicResource Text.Primary}" />
                                 <Ellipse x:Name="Check" Width="8" Height="8"
                                          Style="{StaticResource StatePart.SettlingGlyph}"
                                          Fill="{DynamicResource Surface.Raised}" />
@@ -1319,7 +1319,7 @@
         </ControlTemplate.Triggers>
     </ControlTemplate>
     <Style TargetType="{x:Type Slider}">
-        <Setter Property="Foreground" Value="{DynamicResource Accent.Indicator}" />
+        <Setter Property="Foreground" Value="{DynamicResource Text.Primary}" />
         <Setter Property="Background" Value="Transparent" />
         <!-- The track is 4px, but the whole 32px row takes pointer input. -->
         <Setter Property="MinHeight" Value="{DynamicResource Size.HitTarget.Compact}" />
@@ -1354,7 +1354,7 @@
         <Setter Property="Stroke" Value="{DynamicResource Text.Muted}" />
     </Style>
     <Style x:Key="Icon.Symbol.Accent" TargetType="themes:SymbolIcon" BasedOn="{StaticResource Icon.Symbol}">
-        <Setter Property="Stroke" Value="{DynamicResource Accent.Foreground}" />
+        <Setter Property="Stroke" Value="{DynamicResource Text.Primary}" />
     </Style>
     <Style x:Key="Icon.Symbol.OnAccent" TargetType="themes:SymbolIcon" BasedOn="{StaticResource Icon.Symbol}">
         <Setter Property="Stroke" Value="{DynamicResource Text.OnAccent}" />
@@ -1587,7 +1587,7 @@
                             <Setter TargetName="Grip" Property="Background" Value="{DynamicResource Text.Muted}" />
                         </Trigger>
                         <Trigger Property="IsDragging" Value="True">
-                            <Setter TargetName="Grip" Property="Background" Value="{DynamicResource Accent.Indicator}" />
+                            <Setter TargetName="Grip" Property="Background" Value="{DynamicResource Text.Primary}" />
                         </Trigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>

@@ -12,7 +12,10 @@ internal sealed class OcrImageOverlay : FrameworkElement
 {
     internal static readonly DependencyProperty RegionBrushProperty = DependencyProperty.Register(
         nameof(RegionBrush), typeof(Brush), typeof(OcrImageOverlay),
-        new FrameworkPropertyMetadata(Brushes.MediumPurple, FrameworkPropertyMetadataOptions.AffectsRender));
+        new FrameworkPropertyMetadata(Brushes.White, FrameworkPropertyMetadataOptions.AffectsRender));
+    private static readonly DependencyProperty RegionHaloBrushProperty = DependencyProperty.Register(
+        "RegionHaloBrush", typeof(Brush), typeof(OcrImageOverlay),
+        new FrameworkPropertyMetadata(Brushes.Black, FrameworkPropertyMetadataOptions.AffectsRender));
     internal Brush RegionBrush { get => (Brush)GetValue(RegionBrushProperty); set => SetValue(RegionBrushProperty, value); }
     private BitmapSource? _image;
     private IReadOnlyList<OcrRect> _regions = [];
@@ -30,7 +33,8 @@ internal sealed class OcrImageOverlay : FrameworkElement
         ClipToBounds = true;
         MinHeight = 180;
         Cursor = Cursors.Cross;
-        SetResourceReference(RegionBrushProperty, "Accent.Default");
+        SetResourceReference(RegionBrushProperty, "Text.Primary");
+        SetResourceReference(RegionHaloBrushProperty, "Surface.Raised");
         AutomationProperties.SetName(this, UiText.Get("OCR410_OriginalImage"));
         AutomationProperties.SetHelpText(this, UiText.Get("OCR410_SelectionHelp"));
         ToolTip = UiText.Get("OCR410_SelectionHelp");
@@ -70,11 +74,17 @@ internal sealed class OcrImageOverlay : FrameworkElement
         if (!OcrGeometry.IsValid(fit)) return;
         drawing.DrawImage(_image, Rect(fit));
         Brush brush = SystemParameters.HighContrast ? SystemColors.HighlightBrush : RegionBrush;
+        Brush halo = SystemParameters.HighContrast ? SystemColors.WindowBrush : (Brush)GetValue(RegionHaloBrushProperty);
         var pen = new Pen(brush, 1);
-        foreach (OcrRect region in _regions) drawing.DrawRectangle(null, pen, ViewRect(region, fit));
+        foreach (OcrRect region in _regions)
+        {
+            drawing.DrawRectangle(null, new Pen(halo, 3), ViewRect(region, fit));
+            drawing.DrawRectangle(null, pen, ViewRect(region, fit));
+        }
         if (IsKeyboardFocused && _regions.Count > 0)
         {
             var focusPen = new Pen(brush, 2) { DashStyle = DashStyles.Dash };
+            drawing.DrawRectangle(null, new Pen(halo, 4), ViewRect(_regions[_activeRegion], fit));
             drawing.DrawRectangle(null, focusPen, ViewRect(_regions[_activeRegion], fit));
         }
         OcrRect? selection = _dragStart is Point start
@@ -86,6 +96,7 @@ internal sealed class OcrImageOverlay : FrameworkElement
             drawing.PushOpacity(.16);
             drawing.DrawRectangle(brush, null, rectangle);
             drawing.Pop();
+            drawing.DrawRectangle(null, new Pen(halo, 4), rectangle);
             drawing.DrawRectangle(null, new Pen(brush, 2), rectangle);
         }
     }

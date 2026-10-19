@@ -86,8 +86,8 @@
                             </Border>
                             <Border x:Name="FocusRing"
                                     Margin="1"
-                                    BorderBrush="{DynamicResource Border.Focus}"
-                                    BorderThickness="1"
+                                    BorderBrush="{DynamicResource Text.Primary}"
+                                    BorderThickness="{DynamicResource Focus.RingThickness}"
                                     CornerRadius="{DynamicResource Radius.Sm}"
                                     IsHitTestVisible="False"
                                     Opacity="0" />
@@ -236,8 +236,8 @@
                             </Border>
                             <Border x:Name="FocusRing"
                                     Margin="1"
-                                    BorderBrush="{DynamicResource Border.Focus}"
-                                    BorderThickness="1"
+                                    BorderBrush="{DynamicResource Text.Primary}"
+                                    BorderThickness="{DynamicResource Focus.RingThickness}"
                                     CornerRadius="{DynamicResource Radius.Sm}"
                                     IsHitTestVisible="False"
                                     Opacity="0" />
@@ -383,7 +383,7 @@
                                         Style="{StaticResource StatePart.Normal}"
                                         Opacity="0"
                                         Width="3"
-                                        Background="{DynamicResource Accent.Indicator}"
+                                        Background="{DynamicResource Text.Primary}"
                                         CornerRadius="2" />
                                 <Grid Grid.Column="1"
                                          Margin="10,0,0,0" VerticalAlignment="Center">
@@ -403,7 +403,7 @@
                             <Trigger Property="IsSelected" Value="True">
                                 <Setter TargetName="SelectedLayer" Property="themes:FluidMotion.FadeTo" Value="1" />
                                 <Setter TargetName="AccentBar" Property="themes:FluidMotion.FadeTo" Value="1" />
-                                <Setter TargetName="Glyph" Property="Stroke" Value="{DynamicResource Accent.Cool}" />
+                                <Setter TargetName="Glyph" Property="Stroke" Value="{DynamicResource Text.Primary}" />
                                 <Setter Property="Foreground" Value="{DynamicResource Text.Primary}" />
                                 <Setter Property="FontWeight" Value="SemiBold" />
                             </Trigger>

@@ -82,8 +82,8 @@ internal sealed class TwoLineTimeline : ContentControl, IDisposable
     private Brush _textSecondary = null!;
     private Brush _textMuted = null!;
     private Brush _borderSubtle = null!;
-    private Brush _accent = null!;
-    private Brush _accentSubtle = null!;
+    private Brush _selectionInk = null!;
+    private Brush _selectionFill = null!;
     private Brush _playhead = null!;
     private Brush _handleFill = null!;
     private Brush _handleText = null!;
@@ -93,7 +93,7 @@ internal sealed class TwoLineTimeline : ContentControl, IDisposable
     private Pen _overviewMajorTickPen = null!;
     private Pen _overviewMinorTickPen = null!;
     private Pen _detailGroupPen = null!;
-    private Pen _accentOutlinePen = null!;
+    private Pen _selectionOutlinePen = null!;
     private Pen _connectorPen = null!;
     private Pen _playheadPen = null!;
     private Pen _gripMarkPen = null!;
@@ -408,13 +408,13 @@ internal sealed class TwoLineTimeline : ContentControl, IDisposable
         _textSecondary = ResolveBrush("Text.Secondary", Colors.LightGray);
         _textMuted = ResolveBrush("Text.Secondary", Colors.Gray);
         _borderSubtle = ResolveBrush("Border.Subtle", Colors.DimGray);
-        _accent = ResolveBrush("Accent.Default", Color.FromRgb(0x7C, 0x6C, 0xFF));
-        _accentSubtle = ResolveBrush("Accent.Subtle", Color.FromRgb(0x15, 0x2F, 0x3E));
-        _playhead = ResolveBrush("Timeline.Playhead", Color.FromRgb(0x97, 0x89, 0xFF));
+        _selectionInk = ResolveBrush("Text.Primary", Colors.White);
+        _selectionFill = ResolveBrush("Surface.Selected", Color.FromRgb(0x30, 0x36, 0x42));
+        _playhead = ResolveBrush("Timeline.Playhead", Colors.White);
         // The kept range and its handles use the theme's accent pair (accent fill with its
         // on-accent text), so every palette, high contrast included, keeps a tested contrast.
-        _handleFill = _accent;
-        _handleText = ResolveBrush("Text.OnAccent", Color.FromRgb(0x0A, 0x08, 0x18));
+        _handleFill = _selectionInk;
+        _handleText = ResolveBrush("Surface.Raised", Color.FromRgb(0x10, 0x17, 0x22));
         _cutFill = ResolveBrush("Surface.Scrim", Color.FromArgb(0xE6, 0x08, 0x0C, 0x12));
 
         _majorTickPen = CreatePen(_textSecondary, 2.0);
@@ -424,13 +424,13 @@ internal sealed class TwoLineTimeline : ContentControl, IDisposable
         _overviewMajorTickPen = CreatePen(WithOpacity(_textSecondary, 0.55), 1.0);
         _overviewMinorTickPen = CreatePen(WithOpacity(_textSecondary, 0.35), 1.0);
         _detailGroupPen = CreatePen(_textMuted, 1.6);
-        _accentOutlinePen = CreatePen(_accent, 2.0);
-        _connectorPen = CreatePen(_accent, 2.0);
+        _selectionOutlinePen = CreatePen(_selectionInk, 2.0);
+        _connectorPen = CreatePen(_selectionInk, 2.0);
         _playheadPen = CreatePen(_playhead, 2.6);
         _gripMarkPen = CreatePen(_handleText, 1.6);
         _cutHatchPen = CreatePen(WithOpacity(_textSecondary, 0.38), 1.2);
         _cutEdgePen = CreatePen(WithOpacity(_textSecondary, 0.55), 1.0);
-        _focusPen = CreatePen(ResolveBrush("Border.Focus", Color.FromRgb(0x97, 0x89, 0xFF)), 2.0);
+        _focusPen = CreatePen(ResolveBrush("Border.Focus", Colors.White), 2.0);
         _laneSeparatorPen = CreatePen(_borderSubtle, 1.0);
 
     }
@@ -1646,10 +1646,10 @@ internal sealed class TwoLineTimeline : ContentControl, IDisposable
         double right = OverviewMsToPx(_viewport.ViewEndMs, width);
         double brushWidth = Math.Max(3, right - left);
         double laneHeight = bottom - top;
-        DrawRect(dc, left, top + 1, brushWidth, laneHeight - 1, _accentSubtle, _accentOutlinePen);
+        DrawRect(dc, left, top + 1, brushWidth, laneHeight - 1, _selectionFill, _selectionOutlinePen);
         double gripWidth = Math.Min(BrushGripWidth, Math.Max(3, brushWidth / 2.0));
-        DrawRect(dc, left, top + 1, gripWidth, laneHeight - 1, _accent, null);
-        DrawRect(dc, left + brushWidth - gripWidth, top + 1, gripWidth, laneHeight - 1, _accent, null);
+        DrawRect(dc, left, top + 1, gripWidth, laneHeight - 1, _selectionInk, null);
+        DrawRect(dc, left + brushWidth - gripWidth, top + 1, gripWidth, laneHeight - 1, _selectionInk, null);
     }
 
     private void DrawConnectorLayer(DrawingContext dc, TimelineRenderLayer layer, Size size)
@@ -1785,8 +1785,8 @@ internal sealed class TwoLineTimeline : ContentControl, IDisposable
         {
             if (split < start || split > end) continue;
             double x = Px(split);
-            DrawLine(dc, _accentOutlinePen, x, top, x, bottom);
-            DrawRect(dc, x - 3, top, 6, 5, _accent, null);
+            DrawLine(dc, _selectionOutlinePen, x, top, x, bottom);
+            DrawRect(dc, x - 3, top, 6, 5, _selectionInk, null);
         }
         if (SelectedSegment is not { } selected || selected.EndMs <= start || selected.StartMs >= end) return;
         double left = Px(Math.Max(start, selected.StartMs));
@@ -1878,8 +1878,8 @@ internal sealed class TwoLineTimeline : ContentControl, IDisposable
     /// </summary>
     private ChipLayout LayoutChips(double width)
     {
-        FormattedText inText = Format(TrimPresentation.StartChip(_trim.InMs), 11.5, semiBold: true, _handleText);
-        FormattedText outText = Format(TrimPresentation.EndChip(_trim.OutMs), 11.5, semiBold: true, _handleText);
+        FormattedText inText = Format(TrimPresentation.StartChip(_trim.InMs), 12, semiBold: true, _handleText);
+        FormattedText outText = Format(TrimPresentation.EndChip(_trim.OutMs), 12, semiBold: true, _handleText);
         const double gap = 4;
         double height = LabelLaneHeight - 1;
         double inWidth = inText.Width + 12;

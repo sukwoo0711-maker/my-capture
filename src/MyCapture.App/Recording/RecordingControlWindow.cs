@@ -435,7 +435,7 @@ internal sealed class RecordingControlWindow : Window
     {
         var frame = new AccessibleRegionFrame
         {
-            BorderBrush = TryBrush("Border.Accent", Color.FromRgb(0x7C, 0x6C, 0xFF)),
+            BorderBrush = TryBrush("Border.Accent", Colors.White),
             BorderThickness = new Thickness(BorderThicknessPx),
             Background = Brushes.Transparent,
             CornerRadius = new CornerRadius(AllowsTransparency ? 2 : 0),
@@ -1082,8 +1082,8 @@ internal sealed class RecordingControlWindow : Window
         frame.BorderBrush = _paused
             ? CreatePausedFrameBrush()
             : frame.IsKeyboardFocusWithin
-                ? TryBrush("Border.Focus", Color.FromRgb(0x97, 0x89, 0xFF))
-                : TryBrush("Border.Accent", Color.FromRgb(0x7C, 0x6C, 0xFF));
+                ? TryBrush("Border.Focus", Colors.White)
+                : TryBrush("Border.Accent", Colors.White);
     }
 
     /// <summary>
