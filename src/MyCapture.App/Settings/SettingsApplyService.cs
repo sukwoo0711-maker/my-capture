@@ -113,6 +113,8 @@ public sealed class SettingsApplyService
         if (!applyExportOptions) next.Export.LastImageExport = previous.Export.LastImageExport;
         // Nor the capture start-guide count; a selector opened meanwhile may have advanced it.
         next.Capture.StartGuideShownCount = previous.Capture.StartGuideShownCount;
+        next.General.FirstCaptureTipShown = previous.General.FirstCaptureTipShown;
+        next.General.FirstPinTipShown = previous.General.FirstPinTipShown;
         ReconcileFolderDestination(next.Queue, _queue, applyFolderDestination);
         var messages = new List<string>();
 

@@ -1,6 +1,7 @@
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Windows;
+using System.Windows.Automation;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Data;
@@ -9,6 +10,7 @@ using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using MyCapture.App.Capture;
+using MyCapture.App.Diagnostics;
 using MyCapture.App.Editing;
 using MyCapture.App.Gallery;
 using System.Reflection;
@@ -200,9 +202,47 @@ public sealed class HotfixUxRegressionTests
     public void CardPreviewUpdatesDimensions() => Sta(() =>
     {
         var card = Card();
-        card.UpdatePreview(new CroppedBitmap(Image(), new Int32Rect(0, 0, 16, 12)));
-        Assert.Equal("16 × 12", ((StackPanel)((Border)card.Content).Child).Children.OfType<DockPanel>().Last().Children.OfType<TextBlock>().Single().Text);
-        card.Close();
+        try
+        {
+            TextBlock dimensions = HotfixUxSelfTest.CardControl<TextBlock>(card, "QuickAccess.Dimensions");
+            Image preview = HotfixUxSelfTest.CardControl<Image>(card, "QuickAccess.Preview");
+            var cropped = new CroppedBitmap(Image(), new Int32Rect(0, 0, 16, 12));
+            card.UpdatePreview(cropped);
+            Assert.Equal("16 × 12", dimensions.Text);
+            Assert.Same(cropped, preview.Source);
+            Assert.False(card.IsVisible);
+        }
+        finally { card.Close(); }
+    });
+
+    [Theory]
+    [InlineData("ko")]
+    [InlineData("en")]
+    public void CardDiagnosticSelectorsInvokeNamedActionsWithoutClosingTheReceipt(string language) => Sta(() =>
+    {
+        using var culture = UiText.UseLanguage(language);
+        int copied = 0, pinned = 0, saved = 0, edited = 0, library = 0, closed = 0;
+        var card = new QuickAccessWindow(Image(), () => { copied++; return Task.FromResult(true); }, () => edited++,
+            () => { pinned++; return Task.CompletedTask; }, () => { saved++; return Task.FromResult(true); },
+            () => library++, () => Task.FromResult("unused.png"));
+        card.Closed += (_, _) => closed++;
+        try
+        {
+            foreach (string action in new[] { "Copy", "Pin", "Save" })
+            {
+                Button button = HotfixUxSelfTest.CardControl<Button>(card, "QuickAccess." + action);
+                Assert.Equal(UiText.Get("QuickAccess." + action), AutomationProperties.GetName(button));
+                Assert.Equal(ShortcutCatalog.Get(ShortcutScope.QuickAccess, action).Hint,
+                    AutomationProperties.GetAcceleratorKey(button));
+                button.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            }
+            Assert.Equal((1, 1, 1, 0, 0, 0), (copied, pinned, saved, edited, library, closed));
+            foreach (string action in new[] { "Edit", "CopyText", "Library" })
+                Assert.Equal(UiText.Get("QuickAccess." + action),
+                    AutomationProperties.GetName(HotfixUxSelfTest.CardControl<Button>(card, "QuickAccess." + action)));
+            Assert.False(card.IsVisible);
+        }
+        finally { card.Close(); }
     });
 
     [Fact]

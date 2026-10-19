@@ -16,7 +16,7 @@ namespace MyCapture.App.Tests;
 
 /// <summary>
 /// Shortcut captions use the caption size (12), including key combinations, and their
-/// reserved line fits the video editor's command rows and the quick access card.
+/// reserved line fits the video editor's command rows. The compact receipt keeps its keys in tooltips.
 /// </summary>
 public sealed class ShortcutCaptionTests
 {
@@ -183,7 +183,7 @@ public sealed class ShortcutCaptionTests
     [Theory]
     [InlineData("ko-KR")]
     [InlineData("en-US")]
-    public void QuickAccessKeyCaptionsReadAt12AndFitTheirButtons(string language) => StaTestHost.Run(() =>
+    public void QuickAccessKeysRemainDiscoverableWhenVisibleCaptionPreferenceChanges(string language) => StaTestHost.Run(() =>
     {
         using var culture = UiText.UseLanguage(language);
         Func<bool>? previous = ShortcutPresentation.ReadEnabled;
@@ -196,9 +196,7 @@ public sealed class ShortcutCaptionTests
             ShortcutPresentation.ReadEnabled = () => enabled;
             ShortcutPresentation.Refresh();
             card.IsKept = true;
-            Ocr410Fixture.LoadTheme(card);
-            card.Show();
-            card.UpdateLayout();
+            Border host = QuickAccessDetachedFixture.Layout(card);
             Assert.False(card.CanActivateByHotkey);
             IReadOnlyList<Button> actions = card.ActionButtonsForTest;
             Assert.Equal(5, actions.Count);
@@ -206,20 +204,14 @@ public sealed class ShortcutCaptionTests
             {
                 enabled = show;
                 ShortcutPresentation.Refresh();
-                card.UpdateLayout();
+                host.UpdateLayout();
                 foreach (Button button in actions)
                 {
-                    Assert.Equal(44, button.ActualHeight, 2);
+                    Assert.Equal(32, button.ActualHeight, 2);
                     string key = AutomationProperties.GetAcceleratorKey(button);
-                    TextBlock caption = Assert.Single(Descendants(button).OfType<TextBlock>(), text => text.Text == key);
-                    Assert.Equal(12, caption.FontSize);
-                    Assert.Equal(show ? Visibility.Visible : Visibility.Collapsed, caption.Visibility);
-                    if (show)
-                    {
-                        Assert.True(caption.ActualWidth + 0.5 >= caption.DesiredSize.Width, $"'{key}' is clipped");
-                        Rect bounds = caption.TransformToAncestor(button).TransformBounds(new Rect(caption.RenderSize));
-                        Assert.True(bounds.Bottom <= button.ActualHeight + 0.5, $"'{key}' leaves its button: {bounds} in {button.ActualHeight}");
-                    }
+                    Assert.False(string.IsNullOrWhiteSpace(key));
+                    Assert.Equal(AutomationProperties.GetName(button) + "  " + key, button.ToolTip);
+                    Assert.DoesNotContain(Descendants(button).OfType<TextBlock>(), text => text.Text == key);
                 }
             }
         }

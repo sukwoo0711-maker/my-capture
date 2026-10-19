@@ -22,7 +22,7 @@ public enum ColorFormat
 /// migration code is needed for additive changes — which covers every change made
 /// so far.
 /// </remarks>
-public sealed class AppSettings
+public sealed class AppSettings : IJsonOnDeserializing
 {
     /// <summary>
     /// Incremented only for changes that cannot be handled by defaulting.
@@ -48,6 +48,9 @@ public sealed class AppSettings
     public GitHubSettings GitHub { get; set; } = new();
 
     public GeneralSettings General { get; set; } = new();
+
+    // Files predating the general section also retain the legacy editor default.
+    void IJsonOnDeserializing.OnDeserializing() => General.AfterCapture = AfterCaptureAction.Editor;
 
     /// <summary>Local state for the one-time Microsoft Store rating request. An explicit null reads as new.</summary>
     public StoreRatingState StoreRating { get; set => field = value ?? new(); } = new();
@@ -362,7 +365,10 @@ public sealed class GeneralSettings : IJsonOnDeserializing
     // legacy field without changing the new default or writing it back out.
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public bool? ShowQuickAccess { get => null; set { } }
-    public AfterCaptureAction AfterCapture { get; set; } = AfterCaptureAction.Editor;
+    public AfterCaptureAction AfterCapture { get; set; } = AfterCaptureAction.QuickAccess;
+
+    public bool FirstCaptureTipShown { get; set; }
+    public bool FirstPinTipShown { get; set; }
 
     /// <summary>Shows key captions under editor buttons. Tooltips always name the key.</summary>
     public bool ShowShortcutHints { get; set; } = true;
@@ -371,7 +377,11 @@ public sealed class GeneralSettings : IJsonOnDeserializing
     public int ShortcutHintsRevision { get; set; } = 1;
 
     // A missing marker identifies a legacy file; new settings and explicit choices start at one.
-    void IJsonOnDeserializing.OnDeserializing() => ShortcutHintsRevision = 0;
+    void IJsonOnDeserializing.OnDeserializing()
+    {
+        ShortcutHintsRevision = 0;
+        AfterCapture = AfterCaptureAction.Editor;
+    }
 
     public bool LaunchAtLogin { get; set; } = true;
 

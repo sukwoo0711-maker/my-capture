@@ -3308,7 +3308,7 @@ Open the library or Settings from the tray menu.</value></data>
   <data name="QuickAccess.Enabled" xml:space="preserve"><value>Show quick access after capture</value></data>
   <data name="QuickAccess.Failed" xml:space="preserve"><value>The action could not be completed. Try again.</value></data>
   <data name="QuickAccess.Keep" xml:space="preserve"><value>Keep open</value></data>
-  <data name="QuickAccess.Library" xml:space="preserve"><value>Open in library</value></data>
+  <data name="QuickAccess.Library" xml:space="preserve"><value>Library</value></data>
   <data name="QuickAccess.Pin" xml:space="preserve"><value>Pin</value></data>
   <data name="QuickAccess.Pinned" xml:space="preserve"><value>Pinned</value></data>
   <data name="QuickAccess.Pinning" xml:space="preserve"><value>Pinning…</value></data>
@@ -3328,8 +3328,8 @@ Open the library or Settings from the tray menu.</value></data>
   <data name="QuickAccess.SaveFailed" xml:space="preserve"><value>Could not save · Press {0} to retry</value></data>
   <data name="QuickAccess.CopyTextFailed" xml:space="preserve"><value>Could not copy text · Press {0} to retry</value></data>
   <data name="QuickAccess.DragFailed" xml:space="preserve"><value>Could not prepare the file · Drag again to retry</value></data>
-  <data name="QuickAccess.KeepLabel" xml:space="preserve"><value>Keep</value></data>
-  <data name="QuickAccess.KeepName" xml:space="preserve"><value>Keep card open</value></data>
+  <data name="QuickAccess.KeepLabel" xml:space="preserve"><value>Keep open</value></data>
+  <data name="QuickAccess.KeepName" xml:space="preserve"><value>Keep open</value></data>
   <data name="Hotkey.Clear" xml:space="preserve"><value>Clear</value></data>
   <data name="Hotkey.Delay" xml:space="preserve"><value>Delayed capture</value></data>
   <data name="Hotkey.Record" xml:space="preserve"><value>Record shortcut</value></data>
@@ -4021,6 +4021,17 @@ Delete {1} {1:plural:subfolder|subfolders}, {2} {2:plural:image|images}, and {3}
   <data name="Onboard_StepsName" xml:space="preserve"><value>Getting started</value></data>
   <data name="Onboard_StepNumber" xml:space="preserve"><value>Step {0}</value></data>
   <data name="Onboard_AfterCaptureTitle" xml:space="preserve"><value>After a capture</value></data>
+  <data name="Welcome_FirstCaptureTitle" xml:space="preserve"><value>Try your first capture</value></data>
+  <data name="Welcome_Skip" xml:space="preserve"><value>Skip</value></data>
+  <data name="Onboard_FirstCaptureTip" xml:space="preserve"><value>Press P to pin it above other windows</value></data>
+  <data name="Onboard_ReceiptKeyboard" xml:space="preserve"><value>Alt+Q to focus · Tab to move · Enter to run</value></data>
+  <data name="Onboard_ReceiptKeyboardFallback" xml:space="preserve"><value>Alt+Tab to focus · Tab to move · Enter to run</value></data>
+  <data name="Onboard_FirstCaptureToastTip" xml:space="preserve"><value>Pin above other windows</value></data>
+  <data name="Onboard_PinFailed" xml:space="preserve"><value>Could not create the pin.</value></data>
+  <data name="Onboard_FirstPinTip" xml:space="preserve"><value>Press {0} to hide or show all pins.</value></data>
+  <data name="Onboard_FirstPinTipUnassigned" xml:space="preserve"><value>Assign a shortcut in Settings to hide or show all pins.</value></data>
+  <data name="Onboard_ResidentTip" xml:space="preserve"><value>MyCapture keeps running in the notification area.</value></data>
+  <data name="QuickAccess.InitialSaved" xml:space="preserve"><value>Saved</value></data>
   <data name="Onboard_AfterCaptureEditor" xml:space="preserve"><value>Each capture is copied to the clipboard, saved to the library and opened in the editor.</value></data>
   <data name="Onboard_AfterCaptureQuickAccess" xml:space="preserve"><value>Each capture is copied to the clipboard, saved to the library and shown on a quick access card.</value></data>
   <data name="Onboard_AfterCaptureClipboard" xml:space="preserve"><value>Each capture is copied to the clipboard and saved to the library.</value></data>

@@ -39,6 +39,7 @@ public static class NewInstallDefaults
         settings.Hotkeys.PasteToScreen = Hotkey.None;
         settings.Hotkeys.HideAllPins = Hotkey.None;
         settings.Hotkeys.UploadGitHubImage = Hotkey.None;
+        settings.General.AfterCapture = AfterCaptureAction.QuickAccess;
         settings.General.ShowShortcutHints = true;
         settings.General.ShortcutHintsRevision = 1;
         settings.Queue.ImageRetentionHours = CaptureRetention.NeverHours;
