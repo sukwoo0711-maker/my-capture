@@ -27,6 +27,9 @@ internal static class GifPreviewFixtureClips
 
         /// <summary>A still document page with only the pointer moving.</summary>
         StillPage,
+
+        /// <summary>A completely still page and pointer, followed by scrolling.</summary>
+        StillStretch,
     }
 
     private static readonly string[] Lines =
@@ -71,12 +74,15 @@ internal static class GifPreviewFixtureClips
                     case Kind.StillPage:
                         CopyRows(pageA, stride, 0, frame, height);
                         break;
+                    case Kind.StillStretch:
+                        CopyRows(pageA, stride, ScrollOffset(Math.Max(0, (progress - 0.5) * 2), pageAHeight - height), frame, height);
+                        break;
                     default:
                         CopyColumns(photo, photoWidth * 4, index * 3, frame, width, height);
                         break;
                 }
 
-                DrawPointer(frame, width, height, progress);
+                DrawPointer(frame, width, height, kind == Kind.StillStretch ? Math.Max(0, (progress - 0.5) * 2) : progress);
                 encoder.WriteFrame(new EncoderFrame(frame, width, height, stride, index * (1000.0 / fps)));
             }
 

@@ -384,6 +384,8 @@ internal sealed class VideoExportDialog : Window
 
     internal string EstimateText => _estimate.Text;
 
+    internal int DisplayedFrameCount { get; private set; }
+
     internal string AdviceText => _adviceRow.Visibility == Visibility.Visible ? _advice.Text : string.Empty;
 
     internal GifRecommendation? Recommendation => _recommendation;
@@ -568,22 +570,6 @@ internal sealed class VideoExportDialog : Window
         }
     }
 
-    /// <summary>Layer intervals and cut boundaries on the output clock used by the GIF schedule.</summary>
-    private List<(double StartMs, double EndMs)> LayerIntervals
-    {
-        get
-        {
-            VideoCutTimeline timeline = _document.CreateTimeline();
-            return _document.TextOverlays.Select(overlay => (overlay.StartMs, overlay.EndMs))
-                .Concat(_document.FrameEditLayers.Select(layer => (layer.StartMs, layer.EndMs)))
-                .Select(interval => (StartMs: timeline.ToOutputTime(interval.StartMs), EndMs: timeline.ToOutputTime(interval.EndMs)))
-                .Where(interval => interval.EndMs > interval.StartMs)
-                .Concat(timeline.KeptRanges.Skip(1).Select(segment =>
-                    (timeline.ToOutputTime(segment.StartMs), timeline.ToOutputTime(segment.StartMs))))
-                .ToList();
-        }
-    }
-
     /// <summary>Refreshes the summary line, the one-line recommendation and the 권장 mark.</summary>
     private void UpdateGuidance()
     {
@@ -591,6 +577,7 @@ internal sealed class VideoExportDialog : Window
         double span = SpanMs;
         if (!IsGif)
         {
+            DisplayedFrameCount = 0;
             long bytes = EstimateMp4Bytes(_recording.Width, _recording.Height, _recording.Fps, span, TargetReductionPercent);
             _estimate.Text = UiText.Format("MediaExport_Mp4Summary", FormatSize(bytes), FormatClock(span), _recording.Width, _recording.Height);
             _adviceRow.Visibility = Visibility.Collapsed;
@@ -600,9 +587,10 @@ internal sealed class VideoExportDialog : Window
 
         GifExportQuality quality = SelectedQuality;
         double speed = SelectedSpeed;
-        List<(double StartMs, double EndMs)> layers = LayerIntervals;
+        List<(double StartMs, double EndMs)> layers = GifPreviewSampling.LayerIntervals(_document);
         double playbackSeconds = span / speed / 1000;
-        int frames = GifPreviewSampling.EstimateFrameCount(span, quality.FramesPerSecond, layers);
+        int frames = GifPreviewSampling.FrameCountFor(span, quality, _measurements, layers);
+        DisplayedFrameCount = frames;
         if (_measurements.TryGetValue(quality, out GifPresetMeasurement? measured))
         {
             GifSizeEstimate own = GifSizeEstimator.FromMeasurement(measured, span);
@@ -634,7 +622,7 @@ internal sealed class VideoExportDialog : Window
         switch (recommendation.Kind)
         {
             case GifRecommendationKind.UseMp4:
-                int smallestFrames = GifPreviewSampling.EstimateFrameCount(span, recommendation.Quality.FramesPerSecond, layers);
+                int smallestFrames = GifPreviewSampling.FrameCountFor(span, recommendation.Quality, _measurements, layers);
                 double maximumSeconds = recommendation.MaximumGifSourceMs / 1000;
                 bool tooManyFrames = recommendation.Reason is GifLimitReason.DestinationFrames or GifLimitReason.SafetyFrames;
                 headline = tooManyFrames ? UiText.Get("MediaExport_AdviceMp4FramesShort") : UiText.Format("MediaExport_AdviceMp4Short", limit);
