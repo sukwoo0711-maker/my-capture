@@ -1176,7 +1176,7 @@ internal sealed partial class AnnotationEditorControl : Grid
             Background = annotation.Background.A > 0 ? annotation.Background.ToBrush()
                 : luma > 140 ? Brushes.Black : Brushes.White,
             Opacity = annotation.Opacity,
-            BorderBrush = Brush("Accent.Default", Color.FromRgb(0x7C, 0x6C, 0xFF)),
+            BorderBrush = Brush("Border.Control", Color.FromRgb(0x56, 0x67, 0x7F)),
             BorderThickness = new Thickness(1),
             AcceptsReturn = true,
             TextWrapping = TextWrapping.NoWrap,

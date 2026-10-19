@@ -162,22 +162,22 @@ public sealed partial class SettingsThemePreviewTests
             SaveEvidence(window, "theme-before-selection.png");
 
             SettingsDraft originalDraft = Assert.IsType<SettingsDraft>(window.DataContext);
-            SelectTheme(window, selector, AppThemeNames.Daylight);
-            AssertPalette(window, AppTheme.Daylight);
-            Assert.Equal(AppThemeNames.Daylight, saved.General.Theme);
-            Assert.Equal(AppThemeNames.Daylight, store.Load().General.Theme);
+            SelectTheme(window, selector, AppThemeNames.GlassLight);
+            AssertPalette(window, AppTheme.GlassLight);
+            Assert.Equal(AppThemeNames.GlassLight, saved.General.Theme);
+            Assert.Equal(AppThemeNames.GlassLight, store.Load().General.Theme);
             Assert.Equal(1, applyCount);
             Assert.Same(originalDraft, window.DataContext);
             SaveEvidence(window, "theme-saved-immediately.png");
 
             Assert.IsType<Button>(window.FindName("CancelButton")).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
             Assert.False(window.IsVisible);
-            AssertPalette(window, AppTheme.Daylight);
+            AssertPalette(window, AppTheme.GlassLight);
             originalDraft.Theme = AppThemeNames.HighContrast;
-            AssertPalette(window, AppTheme.Daylight);
+            AssertPalette(window, AppTheme.GlassLight);
             window.ShowSettings();
             Drain(window);
-            Assert.Equal(AppThemeNames.Daylight, selector.SelectedValue);
+            Assert.Equal(AppThemeNames.GlassLight, selector.SelectedValue);
 
             int prompts = 0;
             window.ConfirmUnappliedChanges = () => { prompts++; return SettingsCloseChoice.Cancel; };
@@ -189,28 +189,35 @@ public sealed partial class SettingsThemePreviewTests
             AssertPalette(window, AppTheme.Glass);
             Assert.Equal(0, prompts);
             window.ShowSettings();
-            SelectTheme(window, selector, AppThemeNames.Daylight);
+            SelectTheme(window, selector, AppThemeNames.GlassLight);
             window.Close();
             Assert.False(window.IsVisible);
-            AssertPalette(window, AppTheme.Daylight);
+            AssertPalette(window, AppTheme.GlassLight);
             window.ShowSettings();
             window.Close();
+            Assert.False(window.IsVisible);
             Assert.Equal(0, prompts);
 
             window.ShowSettings();
             SettingsDraft draft = Assert.IsType<SettingsDraft>(window.DataContext);
-            SelectTheme(window, selector, AppThemeNames.Midnight);
+            SelectTheme(window, selector, AppThemeNames.Glass);
             window.ShowSettings();
             Assert.Same(draft, window.DataContext);
-            AssertPalette(window, AppTheme.Midnight);
+            AssertPalette(window, AppTheme.Glass);
+            Assert.Equal(AppThemeNames.Glass, selector.SelectedValue);
             SettingsWindow.CancelCommand.Execute(null, window);
-            AssertPalette(window, AppTheme.Midnight);
+            Assert.False(window.IsVisible);
+            AssertPalette(window, AppTheme.Glass);
+            Assert.Equal(0, prompts);
             window.ShowSettings();
-            SelectTheme(window, selector, AppThemeNames.Daylight);
+            SelectTheme(window, selector, AppThemeNames.GlassLight);
             int beforeFlush = applyCount;
             SettingsWindow.ApplyCommand.Execute(null, window);
             Assert.True(window.IsVisible);
             Assert.Equal(beforeFlush, applyCount); // Ctrl+S does not duplicate an accepted save.
+            Assert.Equal(AppThemeNames.GlassLight, saved.General.Theme);
+            Assert.Equal(AppThemeNames.GlassLight, store.Load().General.Theme);
+            AssertPalette(window, AppTheme.GlassLight);
 
             failApply = true;
             int warningsBeforeSelection = saveFailureWarnings;
@@ -218,9 +225,11 @@ public sealed partial class SettingsThemePreviewTests
             Assert.Equal(warningsBeforeSelection + 1, saveFailureWarnings);
             Assert.True(window.IsVisible);
             AssertPalette(window, AppTheme.HighContrast);
-            Assert.Equal(AppThemeNames.Daylight, store.Load().General.Theme);
+            Assert.Equal(AppThemeNames.GlassLight, saved.General.Theme);
+            Assert.Equal(AppThemeNames.GlassLight, store.Load().General.Theme);
             SettingsWindow.CancelCommand.Execute(null, window);
             Assert.True(window.IsVisible); // Failed persistence remains retryable.
+            AssertPalette(window, AppTheme.HighContrast);
             failApply = false;
             SettingsWindow.ApplyCommand.Execute(null, window);
             Assert.Equal(AppThemeNames.HighContrast, store.Load().General.Theme);
@@ -229,8 +238,9 @@ public sealed partial class SettingsThemePreviewTests
             SettingsDraft reset = Assert.IsType<SettingsDraft>(window.DataContext);
             reset.ResetToDefaults();
             Drain(window);
-            AssertPalette(window, AppTheme.Glass);
-            Assert.Equal(AppThemeNames.Glass, store.Load().General.Theme);
+            AssertPalette(window, AppTheme.System);
+            Assert.Equal(AppThemeNames.System, saved.General.Theme);
+            Assert.Equal(AppThemeNames.System, store.Load().General.Theme);
             SelectTheme(window, selector, AppThemeNames.HighContrast);
             int attemptsBeforeValidation = applyCount;
             SettingsDraft finalDraft = Assert.IsType<SettingsDraft>(window.DataContext);
@@ -267,7 +277,7 @@ public sealed partial class SettingsThemePreviewTests
     private static void AssertPalette(SettingsWindow window, AppTheme theme)
     {
         Assert.Equal(theme, ThemeService.Current);
-        IReadOnlyDictionary<string, ThemeColor> colors = ThemeCatalog.ColorsFor(theme);
+        IReadOnlyDictionary<string, ThemeColor> colors = ThemeCatalog.ColorsFor(ThemeService.ResolveTheme(theme));
 
         // Glass uses the native Mica backdrop, so Window.Background is deliberately
         // transparent. Assert the actual visible page and selector chrome instead of

@@ -16,6 +16,10 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <!-- Render selected glyphs with SelectionTextBrush instead of painting an adorner over them. -->
+    <RuntimeHostConfigurationOption Include="Switch.System.Windows.Controls.Text.UseAdornerForTextboxSelectionRendering" Value="false" />
+  </ItemGroup>
+  <ItemGroup>
     <ProjectReference Include="..\..\..\src\MyCapture.App\MyCapture.App.csproj" />
   </ItemGroup>
 

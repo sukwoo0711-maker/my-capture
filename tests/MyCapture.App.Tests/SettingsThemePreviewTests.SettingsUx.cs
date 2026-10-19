@@ -98,7 +98,9 @@ public sealed partial class SettingsThemePreviewTests
             window.Close();
             Assert.False(window.IsVisible);
             Assert.Equal(450, fixture.Saved().Queue.MaxItems);
-            Assert.Equal(AppTheme.Daylight, ThemeService.Current);
+            Assert.Equal("450", Draft(window).MaxItems);
+            Assert.Equal(AppThemeNames.GlassLight, fixture.Saved().General.Theme);
+            Assert.Equal(AppTheme.GlassLight, ThemeService.Current);
             Assert.Equal(0, asked);
 
             window.ShowSettings();
@@ -136,7 +138,12 @@ public sealed partial class SettingsThemePreviewTests
             defaults.RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));
             Drain(window);
             Assert.Equal(2, resetPrompts);
-            Assert.Equal(new AppSettings().Queue.MaxItems, fixture.Saved().Queue.MaxItems);
+            Assert.Equal(1000, fixture.Saved().Queue.MaxItems);
+            Assert.Equal(5L * 1024 * 1024 * 1024, fixture.Saved().Queue.MaxBytes);
+            Assert.Equal(MyCapture.Core.Queue.CaptureRetention.NeverHours, fixture.Saved().Queue.ImageRetentionHours);
+            Assert.Equal(AfterCaptureAction.QuickAccess, fixture.Saved().General.AfterCapture);
+            Assert.Equal(AppThemeNames.System, fixture.Saved().General.Theme);
+            Assert.False(fixture.Saved().General.ShowShortcutHints);
             Assert.False(Draft(window).HasUnappliedChanges);
 
             Draft(window).MaxItems = "5";
@@ -330,7 +337,7 @@ public sealed partial class SettingsThemePreviewTests
         {
             foreach ((string name, AppSettings settings, bool expectedHints) in new[]
             {
-                ("new", NewInstallDefaults.Create(), true),
+                ("new", NewInstallDefaults.Create(), false),
                 ("existing", new AppSettings(), true),
                 ("explicit-hints-off", new AppSettings { General = { ShowShortcutHints = false } }, false),
             })

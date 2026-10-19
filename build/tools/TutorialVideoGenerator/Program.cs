@@ -294,10 +294,16 @@ internal static class Program
                 }
             }
 
-            // Only the settings' own names; the parsers fall back silently for anything else.
-            if (AppThemeNames.ToSetting(AppThemeNames.Parse(theme)) != theme)
-                throw new ArgumentException("Theme is glass, glass-light, midnight, daylight, workspace or high-contrast.");
-            if (AppAccentNames.ToSetting(AppAccentNames.Parse(accent)) != accent) throw new ArgumentException("Accent is red or violet.");
+            // Accept the previous CLI names before canonicalizing; comparing the saved name
+            // with the input would reject valid legacy aliases after the palette migration.
+            string[] acceptedThemes = ["system", "glass", "glass-light", "midnight", "daylight", "workspace",
+                "high-contrast", "highcontrast", "light", "mica", "acrylic", "mica-light", "light-glass"];
+            if (!acceptedThemes.Contains(theme, StringComparer.OrdinalIgnoreCase))
+                throw new ArgumentException("Theme is system, glass, glass-light or high-contrast; legacy theme names are accepted.");
+            if (!new[] { AppAccentNames.Red, AppAccentNames.Violet }.Contains(accent, StringComparer.OrdinalIgnoreCase))
+                throw new ArgumentException("Accent is red or violet.");
+            theme = AppThemeNames.ToSetting(AppThemeNames.Parse(theme));
+            accent = AppAccentNames.ToSetting(AppAccentNames.Parse(accent));
             // The product assets are the default look; another palette is for review only.
             if (install && (theme != AppThemeNames.Glass || accent != AppAccentNames.Red))
                 throw new ArgumentException("--install takes the default theme and accent only.");

@@ -33,7 +33,7 @@ public sealed partial class SettingsThemePreviewTests
                     if (accent == AppAccent.Violet) settings.General.AccentColor = AppAccentNames.Violet;
                     else Assert.Equal(AppAccentNames.Red, settings.General.AccentColor);
                     ThemeService.ApplyFromSettings(settings.General);
-                    string suffix = $"{AppThemeNames.ToSetting(theme)}-{AppAccentNames.ToSetting(accent)}-{phase}.png";
+                    string suffix = $"{AppThemeNames.ToSetting(theme)}-{accent.ToString().ToLowerInvariant()}-{phase}.png";
                     var window = CreateOffscreenSettingsWindow(settings);
                     window.Width = 1000;
                     window.Height = 820;
@@ -41,9 +41,8 @@ public sealed partial class SettingsThemePreviewTests
                     {
                         window.Show();
                         Drain(window);
-                        Assert.Equal(settings.General.AccentColor, Assert.IsType<ComboBox>(window.FindName("AccentColorSelector")).SelectedValue);
-                        Assert.Equal(AppAccentNames.Red,
-                            Assert.IsType<ComboBoxItem>(Assert.IsType<ComboBox>(window.FindName("AccentColorSelector")).Items[0]).Tag);
+                        Assert.Null(window.FindName("AccentColorSelector"));
+                        Assert.Equal(AppAccent.Red, ThemeService.CurrentAccent);
                         SaveEvidence(window, "settings-" + suffix);
                     }
                     finally { window.CloseForExit(); }

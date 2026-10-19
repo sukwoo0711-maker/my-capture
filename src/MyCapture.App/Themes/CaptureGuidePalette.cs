@@ -44,7 +44,7 @@ internal static class CaptureGuidePalette
     internal static IReadOnlyDictionary<string, Brush> Resolve()
     {
         var resolved = new Dictionary<string, Brush>(
-            Create(ThemeService.Current, ThemeService.CaptureGuideColor, ThemeService.IsSystemHighContrast, ThemeService.CurrentAccent),
+            Create(ThemeService.EffectiveTheme, ThemeService.CaptureGuideColor, ThemeService.IsSystemHighContrast, ThemeService.CurrentAccent),
             StringComparer.Ordinal);
         if (ThemeService.IsSystemHighContrast || ThemeService.Current == AppTheme.HighContrast
             || Application.Current?.Resources is not { } resources) return resolved;

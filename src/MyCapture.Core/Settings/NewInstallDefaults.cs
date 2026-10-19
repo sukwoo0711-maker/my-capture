@@ -4,8 +4,8 @@ namespace MyCapture.Core.Settings;
 
 /// <summary>
 /// The settings a new installation starts with: only region capture and screen recording own a
-/// global shortcut, the small key captions under buttons are visible, and library images have
-/// no time limit within a 1,000-item / 5 GiB capacity budget.
+/// global shortcut, the theme follows Windows, key captions appear while Alt is held, and
+/// library images have no time limit within a 1,000-item / 5 GiB capacity budget.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -40,7 +40,8 @@ public static class NewInstallDefaults
         settings.Hotkeys.HideAllPins = Hotkey.None;
         settings.Hotkeys.UploadGitHubImage = Hotkey.None;
         settings.General.AfterCapture = AfterCaptureAction.QuickAccess;
-        settings.General.ShowShortcutHints = true;
+        settings.General.Theme = MyCapture.Core.Themes.AppThemeNames.ToSetting(MyCapture.Core.Themes.AppTheme.System);
+        settings.General.ShowShortcutHints = false;
         settings.General.ShortcutHintsRevision = 1;
         settings.Queue.ImageRetentionHours = CaptureRetention.NeverHours;
         settings.Queue.MaxBytes = 5L * 1024 * 1024 * 1024;

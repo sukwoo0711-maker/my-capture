@@ -1,6 +1,6 @@
 namespace MyCapture.Core.Themes;
 
-/// <summary>User-selectable chrome palettes. Glass is the shipped Windows-native default.</summary>
+/// <summary>Chrome palettes. Legacy enum values remain stable for compatibility.</summary>
 public enum AppTheme
 {
     Midnight = 0,
@@ -9,10 +9,12 @@ public enum AppTheme
     Workspace = 3,
     Glass = 4,
     GlassLight = 5,
+    System = 6,
 }
 
 public static class AppThemeNames
 {
+    public const string System = "system";
     public const string Workspace = "workspace";
     public const string Midnight = "midnight";
     public const string Daylight = "daylight";
@@ -22,11 +24,13 @@ public static class AppThemeNames
 
     public static AppTheme Parse(string? value)
     {
-        if (string.Equals(value, Workspace, StringComparison.OrdinalIgnoreCase)) return AppTheme.Workspace;
+        if (string.Equals(value, System, StringComparison.OrdinalIgnoreCase)) return AppTheme.System;
+        if (string.Equals(value, Workspace, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(value, Midnight, StringComparison.OrdinalIgnoreCase)) return AppTheme.Glass;
         if (string.Equals(value, Daylight, StringComparison.OrdinalIgnoreCase)
             || string.Equals(value, "light", StringComparison.OrdinalIgnoreCase))
         {
-            return AppTheme.Daylight;
+            return AppTheme.GlassLight;
         }
 
         if (string.Equals(value, HighContrast, StringComparison.OrdinalIgnoreCase)
@@ -54,12 +58,13 @@ public static class AppThemeNames
 
     public static string ToSetting(AppTheme theme) => theme switch
     {
-        AppTheme.Workspace => Workspace,
-        AppTheme.Daylight => Daylight,
+        AppTheme.System => System,
+        AppTheme.Workspace or AppTheme.Midnight => Glass,
+        AppTheme.Daylight => GlassLight,
         AppTheme.HighContrast => HighContrast,
         AppTheme.Glass => Glass,
         AppTheme.GlassLight => GlassLight,
-        _ => Midnight,
+        _ => Glass,
     };
 
     public static bool IsLight(AppTheme theme) => theme is AppTheme.Daylight or AppTheme.GlassLight;
@@ -77,30 +82,52 @@ public readonly record struct ThemeColor(byte A, byte R, byte G, byte B)
 
 public static class ThemeCatalog
 {
-    private static readonly System.Collections.Concurrent.ConcurrentDictionary<AppTheme, IReadOnlyDictionary<string, ThemeColor>> RedPalettes = new();
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<AppTheme, IReadOnlyDictionary<string, ThemeColor>> Palettes = new();
 
-    public static IReadOnlyDictionary<string, ThemeColor> ColorsFor(AppTheme theme, AppAccent accent)
+    // The accent argument is retained for older callers and tutorial options. Red is now fixed.
+    public static IReadOnlyDictionary<string, ThemeColor> ColorsFor(AppTheme theme, AppAccent accent) => ColorsFor(theme);
+
+    // System has a deterministic dark fallback here. The UI resolves the Windows preference
+    // before asking for a palette; Core never reads a user's registry.
+    public static IReadOnlyDictionary<string, ThemeColor> ColorsFor(AppTheme theme) => Palettes.GetOrAdd(theme, value =>
     {
-        IReadOnlyDictionary<string, ThemeColor> colors = ColorsFor(theme);
-        if (accent != AppAccent.Red || theme == AppTheme.HighContrast) return colors;
-        return RedPalettes.GetOrAdd(theme, value =>
+        IReadOnlyDictionary<string, ThemeColor> source = value switch
         {
-            var accented = new Dictionary<string, ThemeColor>(colors, StringComparer.Ordinal);
+            AppTheme.Workspace => WorkspaceColors,
+            AppTheme.Daylight => DaylightColors,
+            AppTheme.HighContrast => HighContrastColors,
+            AppTheme.Glass or AppTheme.System => GlassColors,
+            AppTheme.GlassLight => GlassLightColors,
+            _ => MidnightColors,
+        };
+        var colors = new Dictionary<string, ThemeColor>(source, StringComparer.Ordinal)
+        {
+            ["Surface.Selected"] = AppThemeNames.IsLight(value)
+                ? ThemeColor.Rgb(0xDD, 0xE3, 0xEB) : ThemeColor.Rgb(0x30, 0x36, 0x42),
+        };
+        colors["Surface.Badge"] = colors["Surface.Raised"];
+        colors["Surface.BadgeStrong"] = colors["Surface.Raised"];
+        colors["Text.Badge"] = colors["Text.Primary"];
+        // Text selection has no outline: use an opaque, contrasting ink/fill pair of its own.
+        colors["Text.SelectionBackground"] = colors["Text.Primary"];
+        ThemeColor selectionInk = colors["Surface.Base"];
+        colors["Text.SelectionForeground"] = ThemeColor.Rgb(selectionInk.R, selectionInk.G, selectionInk.B);
+        // Layer bars keep their categorical colours; their ink must not follow neutral badges.
+        colors["Timeline.LayerText"] = AppThemeNames.IsLight(value)
+            ? ThemeColor.Rgb(0xFF, 0xFF, 0xFF) : ThemeColor.Rgb(0x0A, 0x08, 0x18);
+        colors["Border.Focus"] = colors["Text.Primary"];
+        colors["Border.Accent"] = colors["Text.Primary"];
+        colors["Overlay.SelectionBorder"] = colors["Text.Primary"];
+        colors["Overlay.HandleStroke"] = colors["Text.Primary"];
+        colors["Overlay.HandleFill"] = colors["Surface.Raised"];
+        colors["Accent.Subtle"] = colors["Surface.Selected"];
+        colors["Accent.Cool"] = colors["Text.Primary"];
+        colors["Accent.Indicator"] = colors["Text.Primary"];
+        if (value != AppTheme.HighContrast)
             foreach ((string key, ThemeColor color) in AccentPalette.RedOverrides(AppThemeNames.IsLight(value), colors))
-                accented[key] = color;
-            return accented.AsReadOnly();
-        });
-    }
-
-    public static IReadOnlyDictionary<string, ThemeColor> ColorsFor(AppTheme theme) => theme switch
-    {
-        AppTheme.Workspace => WorkspaceColors,
-        AppTheme.Daylight => DaylightColors,
-        AppTheme.HighContrast => HighContrastColors,
-        AppTheme.Glass => GlassColors,
-        AppTheme.GlassLight => GlassLightColors,
-        _ => MidnightColors,
-    };
+                colors[key] = color;
+        return colors.AsReadOnly();
+    });
 
     internal static readonly Dictionary<string, ThemeColor> MidnightColors = new(StringComparer.Ordinal)
     {
@@ -116,8 +143,8 @@ public static class ThemeCatalog
         ["Surface.Badge"] = ThemeColor.Argb(0xE6, 0x08, 0x0C, 0x12),
         ["Surface.BadgeStrong"] = ThemeColor.Argb(0xF2, 0x08, 0x0C, 0x12),
         ["Text.Primary"] = ThemeColor.Rgb(0xFF, 0xFF, 0xFF),
-        ["Text.Secondary"] = ThemeColor.Rgb(0xEC, 0xF1, 0xF9),
-        ["Text.Muted"] = ThemeColor.Rgb(0xD5, 0xDE, 0xEA),
+        ["Text.Secondary"] = ThemeColor.Rgb(0xC9, 0xD1, 0xDD),
+        ["Text.Muted"] = ThemeColor.Rgb(0x9A, 0xA5, 0xB5),
         ["Text.OnAccent"] = ThemeColor.Rgb(0x0A, 0x08, 0x18),
         ["Text.Badge"] = ThemeColor.Rgb(0xFF, 0xFF, 0xFF),
         ["Accent.Default"] = ThemeColor.Rgb(0x7C, 0x6C, 0xFF),
@@ -172,8 +199,8 @@ public static class ThemeCatalog
         ["Surface.Badge"] = ThemeColor.Argb(0xE6, 0x12, 0x18, 0x24),
         ["Surface.BadgeStrong"] = ThemeColor.Argb(0xF2, 0x12, 0x18, 0x24),
         ["Text.Primary"] = ThemeColor.Rgb(0x0B, 0x12, 0x1C),
-        ["Text.Secondary"] = ThemeColor.Rgb(0x16, 0x23, 0x34),
-        ["Text.Muted"] = ThemeColor.Rgb(0x2A, 0x39, 0x4E),
+        ["Text.Secondary"] = ThemeColor.Rgb(0x2F, 0x3C, 0x4F),
+        ["Text.Muted"] = ThemeColor.Rgb(0x49, 0x55, 0x66),
         ["Text.OnAccent"] = ThemeColor.Rgb(0x0A, 0x08, 0x18),
         ["Text.Badge"] = ThemeColor.Rgb(0xFF, 0xFF, 0xFF),
         ["Accent.Default"] = ThemeColor.Rgb(0x7C, 0x6C, 0xFF),
@@ -195,7 +222,7 @@ public static class ThemeCatalog
         ["Timeline.Background"] = ThemeColor.Rgb(0xF3, 0xF5, 0xF8),
         ["Timeline.Track"] = ThemeColor.Rgb(0xE7, 0xEC, 0xF2),
         ["Timeline.TextLayer"] = ThemeColor.Rgb(0x5A, 0x48, 0xE0),
-        ["Timeline.FrameLayer"] = ThemeColor.Rgb(0x11, 0x8F, 0x84),
+        ["Timeline.FrameLayer"] = ThemeColor.Rgb(0x0E, 0x82, 0x78),
         ["Timeline.Grid"] = ThemeColor.Rgb(0xC5, 0xD0, 0xDE),
         ["Timeline.Playhead"] = ThemeColor.Rgb(0x4B, 0x3C, 0xC0),
         ["Timeline.TrimDeleteFill"] = ThemeColor.Argb(0x55, 0xC4, 0x2B, 0x3A),
@@ -224,8 +251,8 @@ public static class ThemeCatalog
         ["Surface.Badge"] = ThemeColor.Argb(0xFF, 0x00, 0x00, 0x00),
         ["Surface.BadgeStrong"] = ThemeColor.Argb(0xFF, 0x00, 0x00, 0x00),
         ["Text.Primary"] = ThemeColor.Rgb(0xFF, 0xFF, 0xFF),
-        ["Text.Secondary"] = ThemeColor.Rgb(0xFF, 0xFF, 0xFF),
-        ["Text.Muted"] = ThemeColor.Rgb(0xDC, 0xDC, 0xDC),
+        ["Text.Secondary"] = ThemeColor.Rgb(0xDA, 0xDA, 0xDA),
+        ["Text.Muted"] = ThemeColor.Rgb(0xB3, 0xB3, 0xB3),
         ["Text.OnAccent"] = ThemeColor.Rgb(0x00, 0x00, 0x00),
         ["Text.Badge"] = ThemeColor.Rgb(0xFF, 0xFF, 0xFF),
         ["Accent.Default"] = ThemeColor.Rgb(0xFF, 0xD0, 0x00),
@@ -271,8 +298,8 @@ public static class ThemeCatalog
         ["Surface.Hover"] = ThemeColor.Rgb(0x2a, 0x3c, 0x43),
         ["Surface.Pressed"] = ThemeColor.Rgb(0x30, 0x49, 0x51),
         ["Text.Primary"] = ThemeColor.Rgb(0xff, 0xff, 0xff),
-        ["Text.Secondary"] = ThemeColor.Rgb(0xea, 0xf2, 0xf7),
-        ["Text.Muted"] = ThemeColor.Rgb(0xdc, 0xe6, 0xec),
+        ["Text.Secondary"] = ThemeColor.Rgb(0xD0, 0xDC, 0xE3),
+        ["Text.Muted"] = ThemeColor.Rgb(0xA9, 0xBA, 0xC3),
         ["Text.OnAccent"] = ThemeColor.Rgb(0x0A, 0x08, 0x18),
         ["Accent.Default"] = ThemeColor.Rgb(0x7C, 0x6C, 0xFF),
         ["Accent.Hover"] = ThemeColor.Rgb(0x97, 0x89, 0xFF),
@@ -299,12 +326,12 @@ public static class ThemeCatalog
         ["Surface.Overlay"] = ThemeColor.Argb(0xF4, 0x2A, 0x30, 0x3C),
         ["Surface.Floating"] = ThemeColor.Argb(0xF6, 0x22, 0x26, 0x30),
         ["Surface.Sunken"] = ThemeColor.Argb(0xF0, 0x10, 0x12, 0x18),
-        ["Surface.Hover"] = ThemeColor.Argb(0xF4, 0x32, 0x3A, 0x48),
-        ["Surface.Pressed"] = ThemeColor.Argb(0xF6, 0x3C, 0x46, 0x56),
+        ["Surface.Hover"] = ThemeColor.Rgb(0x2A, 0x30, 0x3C),
+        ["Surface.Pressed"] = ThemeColor.Rgb(0x30, 0x36, 0x42),
         ["Surface.Scrim"] = ThemeColor.Argb(0xE6, 0x08, 0x0C, 0x12),
         ["Text.Primary"] = ThemeColor.Rgb(0xFF, 0xFF, 0xFF),
-        ["Text.Secondary"] = ThemeColor.Rgb(0xF2, 0xF6, 0xFC),
-        ["Text.Muted"] = ThemeColor.Rgb(0xDD, 0xE4, 0xEF),
+        ["Text.Secondary"] = ThemeColor.Rgb(0xC9, 0xD1, 0xDD),
+        ["Text.Muted"] = ThemeColor.Rgb(0x9A, 0xA5, 0xB5),
         // Decorative lines stay quiet over the translucent surfaces (about 2:1); control
         // outlines keep 3:1 so inputs and bordered buttons still read as controls.
         ["Border.Subtle"] = ThemeColor.Argb(0x38, 0xF6, 0xF8, 0xFC),
@@ -327,8 +354,8 @@ public static class ThemeCatalog
         ["Surface.Hover"] = ThemeColor.Argb(0xF6, 0xDC, 0xE4, 0xEE),
         ["Surface.Pressed"] = ThemeColor.Argb(0xF6, 0xC8, 0xD2, 0xE0),
         ["Text.Primary"] = ThemeColor.Rgb(0x08, 0x0E, 0x16),
-        ["Text.Secondary"] = ThemeColor.Rgb(0x14, 0x20, 0x30),
-        ["Text.Muted"] = ThemeColor.Rgb(0x26, 0x34, 0x48),
+        ["Text.Secondary"] = ThemeColor.Rgb(0x2F, 0x3C, 0x4F),
+        ["Text.Muted"] = ThemeColor.Rgb(0x49, 0x55, 0x66),
         ["Border.Subtle"] = ThemeColor.Argb(0x80, 0x8A, 0x98, 0xAA),
         ["Timeline.Background"] = ThemeColor.Argb(0xF6, 0xF4, 0xF6, 0xF9),
         ["Timeline.Track"] = ThemeColor.Argb(0xF6, 0xE4, 0xEA, 0xF0),

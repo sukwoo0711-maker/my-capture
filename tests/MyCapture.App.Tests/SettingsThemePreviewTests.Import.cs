@@ -77,11 +77,11 @@ public sealed partial class SettingsThemePreviewTests
         Assert.NotEqual("321", DraftOf(window).MaxItems);
         window.ImportSettingsFrom(importPath);
         Drain(window);
-        Assert.Equal(AppThemeNames.Daylight, saved.General.Theme);
+        Assert.Equal(AppThemeNames.GlassLight, saved.General.Theme);
         Assert.NotEqual(persisted, File.ReadAllText(paths.SettingsFile));
         persisted = File.ReadAllText(paths.SettingsFile);
         Assert.Equal("321", Assert.IsType<SettingsDraft>(window.DataContext).MaxItems);
-        AssertPalette(window, AppTheme.Daylight);
+        AssertPalette(window, AppTheme.GlassLight);
 
         // Capture both default and minimum client layouts before assertions that also
         // expose the original hidden-status / clean-import regression on the baseline.
@@ -116,7 +116,7 @@ public sealed partial class SettingsThemePreviewTests
         AssertStatusFits(window, status);
         AssertCommandBarFits(window);
         Assert.Equal(persisted, File.ReadAllText(paths.SettingsFile));
-        AssertPalette(window, AppTheme.Daylight);
+        AssertPalette(window, AppTheme.GlassLight);
         SaveEvidence(window, $"settings-import-error-{locale}-780x560.png");
 
         string missingPath = Path.Combine(root, new string('a', 200), new string('b', 200), "missing-settings.json");
@@ -132,7 +132,7 @@ public sealed partial class SettingsThemePreviewTests
         SettingsWindow.CancelCommand.Execute(null, window);
         Assert.False(window.IsVisible);
         Assert.Equal("321", DraftOf(window).MaxItems);
-        AssertPalette(window, AppTheme.Daylight);
+        AssertPalette(window, AppTheme.GlassLight);
         Assert.Equal(persisted, File.ReadAllText(paths.SettingsFile));
         window.ShowSettings();
         Drain(window);
@@ -142,7 +142,7 @@ public sealed partial class SettingsThemePreviewTests
         window.ImportSettingsFrom(invalidPath);
         Assert.Same(clean, window.DataContext);
         Assert.Equal("321", clean.MaxItems);
-        AssertPalette(window, AppTheme.Daylight);
+        AssertPalette(window, AppTheme.GlassLight);
 
         window.ImportSettingsFrom(importPath);
         Drain(window);
@@ -153,7 +153,7 @@ public sealed partial class SettingsThemePreviewTests
         SettingsWindow.CancelCommand.Execute(null, window);
         window.ShowSettings();
         Assert.Equal("321", DraftOf(window).MaxItems);
-        AssertPalette(window, AppTheme.Daylight);
+        AssertPalette(window, AppTheme.GlassLight);
         Assert.True(string.IsNullOrEmpty(status.Text));
 
         window.ImportSettingsFrom(importPath);
@@ -162,10 +162,10 @@ public sealed partial class SettingsThemePreviewTests
         Assert.Same(applied, window.DataContext); // Saving preserves the editor and caret.
         Assert.Equal("321", DraftOf(window).MaxItems);
         Assert.True(window.IsVisible);
-        Assert.Equal(AppThemeNames.Daylight, saved.General.Theme);
-        Assert.Equal(AppThemeNames.Daylight, store.Load().General.Theme);
+        Assert.Equal(AppThemeNames.GlassLight, saved.General.Theme);
+        Assert.Equal(AppThemeNames.GlassLight, store.Load().General.Theme);
         Assert.Equal(321, store.Load().Queue.MaxItems);
-        AssertPalette(window, AppTheme.Daylight);
+        AssertPalette(window, AppTheme.GlassLight);
     }
 
     private static SettingsDraft DraftOf(SettingsWindow window) => Assert.IsType<SettingsDraft>(window.DataContext);

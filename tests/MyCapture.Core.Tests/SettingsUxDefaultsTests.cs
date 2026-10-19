@@ -9,7 +9,7 @@ using Xunit;
 namespace MyCapture.Core.Tests;
 
 /// <summary>
-/// New installations register only region capture and recording and show key captions; files
+/// New installations register only region capture and recording and hide key captions; files
 /// written by earlier versions keep every chord, and current caption choices persist.
 /// </summary>
 public sealed class SettingsUxDefaultsTests
@@ -24,7 +24,7 @@ public sealed class SettingsUxDefaultsTests
     ];
 
     [Fact]
-    public void NewInstall_RegistersOnlyRegionCaptureAndRecording_AndShowsKeyCaptions()
+    public void NewInstall_RegistersOnlyRegionCaptureAndRecording_AndHidesKeyCaptions()
     {
         using var workspace = new TempWorkspace();
 
@@ -34,7 +34,10 @@ public sealed class SettingsUxDefaultsTests
         Assert.Equal("Ctrl+Shift+C", fresh.Hotkeys.Capture.ToString());
         Assert.Equal("Ctrl+Shift+X", fresh.Hotkeys.RecordRegion.ToString());
         Assert.All(OptionalHotkeys(fresh.Hotkeys), key => Assert.Equal(Hotkey.None, key));
-        Assert.True(fresh.General.ShowShortcutHints);
+        Assert.False(fresh.General.ShowShortcutHints);
+        Assert.Equal(1, fresh.General.ShortcutHintsRevision);
+        Assert.Equal(AppThemeNames.ToSetting(AppTheme.System), fresh.General.Theme);
+        Assert.Equal(AfterCaptureAction.QuickAccess, fresh.General.AfterCapture);
         AssertNewLibraryDefaults(fresh.Queue);
         Assert.False(File.Exists(workspace.Paths.SettingsFile));
     }
@@ -53,7 +56,10 @@ public sealed class SettingsUxDefaultsTests
         Assert.Equal("Ctrl+Shift+C", reloaded.Hotkeys.Capture.ToString());
         Assert.Equal("Ctrl+Shift+X", reloaded.Hotkeys.RecordRegion.ToString());
         Assert.All(OptionalHotkeys(reloaded.Hotkeys), key => Assert.Equal(Hotkey.None, key));
-        Assert.True(reloaded.General.ShowShortcutHints);
+        Assert.False(reloaded.General.ShowShortcutHints);
+        Assert.Equal(1, reloaded.General.ShortcutHintsRevision);
+        Assert.Equal(AppThemeNames.ToSetting(AppTheme.System), reloaded.General.Theme);
+        Assert.Equal(AfterCaptureAction.QuickAccess, reloaded.General.AfterCapture);
         AssertNewLibraryDefaults(reloaded.Queue);
     }
 
@@ -166,9 +172,9 @@ public sealed class SettingsUxDefaultsTests
     [Fact]
     public void ResetToDefaults_UsesTheNewInstallDefaults()
     {
-        var draft = new SettingsDraft(new AppSettings { General = { ShowShortcutHints = false } });
+        var draft = new SettingsDraft(new AppSettings { General = { ShowShortcutHints = true } });
         Assert.Equal("F3", draft.PasteToScreenHotkey);
-        Assert.False(draft.ShowShortcutHints);
+        Assert.True(draft.ShowShortcutHints);
 
         draft.ResetToDefaults();
 
@@ -178,10 +184,13 @@ public sealed class SettingsUxDefaultsTests
         Assert.Equal(string.Empty, draft.PasteToScreenHotkey);
         Assert.Equal(string.Empty, draft.HideAllPinsHotkey);
         Assert.Equal(string.Empty, draft.UploadGitHubImageHotkey);
-        Assert.True(draft.ShowShortcutHints);
+        Assert.False(draft.ShowShortcutHints);
         Assert.False(draft.HasErrors);
         AppSettings mapped = draft.ToAppSettings();
         Assert.All(OptionalHotkeys(mapped.Hotkeys), key => Assert.Equal(Hotkey.None, key));
+        Assert.Equal(1, mapped.General.ShortcutHintsRevision);
+        Assert.Equal(AppThemeNames.ToSetting(AppTheme.System), mapped.General.Theme);
+        Assert.Equal(AfterCaptureAction.QuickAccess, mapped.General.AfterCapture);
         AssertNewLibraryDefaults(mapped.Queue);
     }
 
@@ -242,7 +251,20 @@ public sealed class SettingsUxDefaultsTests
         {
             var draft = new SettingsDraft(source);
             object? original = property.GetValue(draft);
-            object changed = Candidates(property.PropertyType, original)
+            // AccentColor remains writable for file compatibility, but both former choices
+            // now normalize to the same fixed red and must not create an unapplied change.
+            if (property.Name == nameof(SettingsDraft.AccentColor))
+            {
+                foreach (string accent in new[] { AppAccentNames.Violet, AppAccentNames.Red })
+                {
+                    property.SetValue(draft, accent);
+                    Assert.Equal(AppAccentNames.Red, draft.AccentColor);
+                    Assert.False(draft.HasUnappliedChanges);
+                }
+                continue;
+            }
+
+            object changed = Candidates(property, original)
                 .FirstOrDefault(candidate => { property.SetValue(draft, candidate); return !Equals(property.GetValue(draft), original); })
                 ?? throw new InvalidOperationException($"No different value could be assigned to {property.Name}.");
 
@@ -251,8 +273,14 @@ public sealed class SettingsUxDefaultsTests
             Assert.False(draft.HasUnappliedChanges, $"{property.Name} restored to {original} still reads as changed.");
         }
 
-        static IEnumerable<object> Candidates(Type type, object? original)
+        static IEnumerable<object> Candidates(PropertyInfo property, object? original)
         {
+            if (property.Name == nameof(SettingsDraft.Theme))
+            {
+                yield return Equals(original, AppThemeNames.HighContrast) ? AppThemeNames.Glass : AppThemeNames.HighContrast;
+                yield break;
+            }
+            Type type = property.PropertyType;
             if (type == typeof(bool)) { yield return !(bool)original!; yield break; }
             if (type.IsEnum)
             {
