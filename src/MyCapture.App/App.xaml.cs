@@ -279,7 +279,7 @@ public partial class App : Application
             HandleCaptureTextRequested, HandleRestoreClosedPin, HandleGalleryRequested, HandleSettingsRequested,
             ShortcutHelpWindow.ShowHelp, () => _ = RequestSafeShutdownAsync(),
             PinClipboard: HandlePasteToScreen, HideOrShowAllPins: () => _pins?.HideOrShowAll(),
-            ClearClickThrough: () => _pins?.ClearClickThroughAll());
+            ClearClickThrough: () => _pins?.ClearClickThroughAll(), ContactSupport: SupportWindow.ShowSupport);
         _tray.MenuPresenter = () => _shellPresenter.ShowMenu(TrayMenuLayout.Build(trayCommands, _settings!.Hotkeys,
             new TrayMenuState(_pins?.CanRestoreClosed == true, _scrollCancellation is not null,
                 ClipboardAvailability.HasPinnableContent(), _pins?.Count ?? 0, _pins?.AreHidden == true,

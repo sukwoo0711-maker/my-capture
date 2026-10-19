@@ -20,7 +20,7 @@
     <comment>Language selection</comment>
   </data>
   <data name="Settings.LanguageHint" xml:space="preserve">
-    <value>Click Apply to save. All windows and menus use the new language the next time MyCapture starts. Your current work stays open.</value>
+    <value>Your language choice is saved immediately. All windows and menus use it the next time MyCapture starts.</value>
     <comment>Language selection</comment>
   </data>
   <data name="Settings.LanguageRestart" xml:space="preserve">
@@ -2507,7 +2507,7 @@ This cannot be undone.</value>
     <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
   </data>
   <data name="Text_D8A23CD47E7A" xml:space="preserve">
-    <value>Reset all values to defaults. You can cancel these changes until you click Apply.</value>
+    <value>Reset all settings to their defaults after confirmation.</value>
     <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
   </data>
   <data name="Text_D8A75FF54AF8" xml:space="preserve">
@@ -3141,7 +3141,7 @@ Open the library or Settings from the tray menu.</value></data>
   <data name="Settings.AccentColor" xml:space="preserve"><value>Accent color</value></data>
   <data name="Settings.AccentViolet" xml:space="preserve"><value>Violet</value></data>
   <data name="Settings.AccentRed" xml:space="preserve"><value>Red</value></data>
-  <data name="Settings.ThemeHint" xml:space="preserve"><value>Select a theme to preview it. Apply to save your choice.</value></data>
+  <data name="Settings.ThemeHint" xml:space="preserve"><value>Your theme is applied and saved immediately.</value></data>
   <data name="Settings.ShowSourceWindowTitle" xml:space="preserve"><value>Show document/window title at the top right of images</value></data>
   <data name="Settings.ShowSourceWindowTitleHint" xml:space="preserve"><value>Applies to new captures and reopened editors.</value></data>
   <data name="Settings.ThemeMidnight" xml:space="preserve"><value>Midnight</value></data>
@@ -3219,7 +3219,12 @@ Open the library or Settings from the tray menu.</value></data>
   <data name="Tools_CropApplied" xml:space="preserve"><value>Crop applied</value></data>
   <data name="Settings_Export" xml:space="preserve"><value>Export settings</value></data>
   <data name="Settings_Import" xml:space="preserve"><value>Import settings</value></data>
-  <data name="Settings_ImportDone" xml:space="preserve"><value>Settings loaded. Select Apply to save.</value></data>
+  <data name="Settings_ImportDone" xml:space="preserve"><value>Settings imported</value></data>
+  <data name="Settings_Saved" xml:space="preserve"><value>Saved</value></data>
+  <data name="Settings_Search" xml:space="preserve"><value>Search settings</value></data>
+  <data name="Settings_SearchHint" xml:space="preserve"><value>Search names and help · Esc: clear search</value></data>
+  <data name="Settings_SearchEmpty" xml:space="preserve"><value>No matching settings</value></data>
+  <data name="Settings_ResetConfirm" xml:space="preserve"><value>Reset all settings to their defaults?</value></data>
   <data name="Settings_ImportFailed" xml:space="preserve"><value>Could not read the settings file.</value></data>
   <data name="Settings_ExportDone" xml:space="preserve"><value>Settings exported</value></data>
   <data name="GitHub_TokenMode" xml:space="preserve"><value>Upload with token (experimental)</value></data>
@@ -3691,7 +3696,7 @@ Delete {1} {1:plural:subfolder|subfolders}, {2} {2:plural:image|images}, and {3}
   <data name="LegacyImport.MissingPayload" xml:space="preserve"><value>An existing image or video file is missing. Check the existing data folder.</value></data>
   <data name="LegacyImport.Failed" xml:space="preserve"><value>Could not import existing data. Check storage locations and access permissions.</value></data>
   <data name="LegacyImport.FailedDetail" xml:space="preserve"><value>Could not import existing data. {0}</value></data>
-  <data name="LegacyImport.SettingsReady" xml:space="preserve"><value>Settings loaded · Choose Apply to save them.</value></data>
+  <data name="LegacyImport.SettingsReady" xml:space="preserve"><value>Settings imported</value></data>
   <data name="LegacyImport.SettingsFailed" xml:space="preserve"><value>The library was imported, but settings could not be loaded. {0}</value></data>
   <data name="LegacyImport.OverlappingRoots" xml:space="preserve"><value>Choose an existing data folder separate from the current storage location.</value></data>
   <data name="LegacyImport.TargetChanged" xml:space="preserve"><value>The current library changed. Try importing again.</value></data>
@@ -3850,15 +3855,33 @@ Delete {1} {1:plural:subfolder|subfolders}, {2} {2:plural:image|images}, and {3}
   <data name="About_PrivacyModel" xml:space="preserve"><value>The text recognition model (about {0} MB) is downloaded from ModelScope the first time you use Accurate or Most accurate quality. Most accurate also downloads an upscaling model (about {1} MB) from Qualcomm AI Hub. Images are never sent.</value></data>
   <data name="About_PrivacyGitHub" xml:space="preserve"><value>GitHub upload posts to a public issue only when you run it.</value></data>
   <data name="About_FeedbackHeading" xml:space="preserve"><value>Feedback</value></data>
-  <data name="About_ReportProblem" xml:space="preserve"><value>Report a problem</value></data>
-  <data name="About_ReportProblemHelp" xml:space="preserve"><value>Copies diagnostics to the clipboard and opens the GitHub report page.</value></data>
+  <data name="About_ReportProblem" xml:space="preserve"><value>Contact support</value></data>
+  <data name="Support_Title" xml:space="preserve"><value>Contact support</value></data>
+  <data name="Support_Diagnostics" xml:space="preserve"><value>Diagnostics</value></data>
+  <data name="Support_Message" xml:space="preserve"><value>Message</value></data>
+  <data name="Support_GitHub" xml:space="preserve"><value>Send to GitHub issue</value></data>
+  <data name="Support_StoreReview" xml:space="preserve"><value>Review in Microsoft Store</value></data>
+  <data name="Support_Accounts" xml:space="preserve"><value>GitHub issues need a GitHub account; Store reviews use your Microsoft account.</value></data>
+  <data name="Support_GitHubAccount" xml:space="preserve"><value>You need a GitHub account to send an issue.</value></data>
+  <data name="Support_Opened" xml:space="preserve"><value>Contact page opened</value></data>
+  <data name="Support_GitHubOpened" xml:space="preserve"><value>GitHub issue page opened</value></data>
+  <data name="Support_StoreOpened" xml:space="preserve"><value>Microsoft Store review opened</value></data>
+  <data name="Support_CloseTip" xml:space="preserve"><value>Close support · Esc</value></data>
+  <data name="Support_Unknown" xml:space="preserve"><value>Unknown</value></data>
+  <data name="Support_Build" xml:space="preserve"><value>Build</value></data>
+  <data name="Support_Install" xml:space="preserve"><value>Installation</value></data>
+  <data name="Support_Packaged" xml:space="preserve"><value>Packaged</value></data>
+  <data name="Support_Unpackaged" xml:space="preserve"><value>Unpackaged</value></data>
+  <data name="Support_DisplayScale" xml:space="preserve"><value>Display scale: {0:0.##}%</value></data>
+  <data name="Support_IssueTitle" xml:space="preserve"><value>MyCapture support</value></data>
+  <data name="About_ReportProblemHelp" xml:space="preserve"><value>Review diagnostics and write a message.</value></data>
   <data name="About_ReportCopied" xml:space="preserve"><value>Diagnostics copied. Paste them into the report page.</value></data>
   <data name="About_ReportCopyFailed" xml:space="preserve"><value>Could not copy diagnostics. Describe the problem on the report page.</value></data>
   <data name="About_ReportNote" xml:space="preserve"><value>Requires a GitHub account. Reports are public.</value></data>
   <data name="About_DataHeading" xml:space="preserve"><value>Data</value></data>
   <data name="About_LegacyImport" xml:space="preserve"><value>Import data from an earlier version</value></data>
   <data name="About_LegacyImportHint" xml:space="preserve"><value>Copies images, videos and folders from an earlier MyCapture into this library. The originals stay where they are.</value></data>
-  <data name="About_SettingsBackupHint" xml:space="preserve"><value>Export settings to a file or import them. Imported settings are saved when you select Apply. The GitHub token is never exported.</value></data>
+  <data name="About_SettingsBackupHint" xml:space="preserve"><value>Imported settings are validated and saved immediately.</value></data>
   <data name="SettingsUx_TabAboutHelp" xml:space="preserve"><value>Version, updates, settings backup</value></data>
   <data name="SettingsUx_OtherShortcutsHeading" xml:space="preserve"><value>Other shortcuts</value></data>
   <data name="SettingsUx_OtherShortcutsHint" xml:space="preserve"><value>Assign only the ones you need, using combinations other apps do not use.</value></data>
@@ -3910,7 +3933,7 @@ Delete {1} {1:plural:subfolder|subfolders}, {2} {2:plural:image|images}, and {3}
   <data name="SettingsUx_BackupHeading" xml:space="preserve"><value>Settings backup</value></data>
   <data name="SettingsUx_BackupHint" xml:space="preserve"><value>Export your settings to a file or import them. Imported settings are saved when you select Apply. The GitHub token is never exported.</value></data>
   <data name="SettingsUx_CancelTip" xml:space="preserve"><value>Discards your changes and closes.</value></data>
-  <data name="SettingsUx_CloseTip" xml:space="preserve"><value>Closes the settings window.</value></data>
+  <data name="SettingsUx_CloseTip" xml:space="preserve"><value>Close settings · Esc</value></data>
   <data name="SettingsUx_CloseTitle" xml:space="preserve"><value>Unapplied changes</value></data>
   <data name="SettingsUx_CloseMessage" xml:space="preserve"><value>Your changes have not been applied. Closing without applying discards them.</value></data>
   <data name="SettingsUx_CloseApply" xml:space="preserve"><value>Apply and close</value></data>

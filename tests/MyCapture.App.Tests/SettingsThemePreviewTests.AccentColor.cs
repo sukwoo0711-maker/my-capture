@@ -16,8 +16,8 @@ namespace MyCapture.App.Tests;
 public sealed partial class SettingsThemePreviewTests
 {
     [Fact]
-    public Task AccentColorSelectionPreviewsPersistsImportsResetsAndRollsBack() =>
-        RunIsolated(nameof(AccentColorSelectionPreviewsPersistsImportsResetsAndRollsBack), () =>
+    public Task AccentColorSelectionSavesImmediatelyImportsResetsAndRetriesFailure() =>
+        RunIsolated(nameof(AccentColorSelectionSavesImmediatelyImportsResetsAndRetriesFailure), () =>
         {
             using var language = UiText.UseLanguage("ko-KR");
             Application application = CreateThemedApplication();
@@ -61,17 +61,17 @@ public sealed partial class SettingsThemePreviewTests
                 Assert.Equal("포인트 색", System.Windows.Automation.AutomationProperties.GetName(selector));
                 Assert.Equal(AppAccentNames.Violet, selector.SelectedValue);
                 Assert.False(Assert.IsType<SettingsDraft>(window.DataContext).HasUnappliedChanges);
-                Assert.False(Assert.IsType<Button>(window.FindName("ApplyButton")).IsEnabled);
+                Assert.Null(window.FindName("ApplyButton"));
                 SaveEvidence(window, "accent-violet.png");
                 var oldBrush = Assert.IsType<SolidColorBrush>(survivor.Background);
 
                 selector.SelectedValue = AppAccentNames.Red;
                 Drain(window);
                 AssertAccent(AppAccent.Red);
-                Assert.True(Assert.IsType<SettingsDraft>(window.DataContext).HasUnappliedChanges);
-                Assert.True(Assert.IsType<Button>(window.FindName("ApplyButton")).IsEnabled);
-                Assert.Equal(AppAccentNames.Violet, saved.General.AccentColor);
-                Assert.Equal(0, saves);
+                Assert.False(Assert.IsType<SettingsDraft>(window.DataContext).HasUnappliedChanges);
+                Assert.Equal(AppAccentNames.Red, saved.General.AccentColor);
+                Assert.Equal(AppAccentNames.Red, store.Load().General.AccentColor);
+                Assert.Equal(1, saves);
                 Assert.True(oldBrush.IsFrozen);
                 Assert.Equal(ToAccentColor(ThemeCatalog.ColorsFor(AppTheme.Glass)["Accent.Default"]), oldBrush.Color);
                 Assert.NotSame(oldBrush, survivor.Background);
@@ -99,28 +99,31 @@ public sealed partial class SettingsThemePreviewTests
                 Drain(window);
                 AssertAccent(AppAccent.Red);
 
+                int beforeClose = saves;
                 SettingsWindow.CancelCommand.Execute(null, window);
-                AssertAccent(AppAccent.Violet);
-                SettingsDraft cancelled = Assert.IsType<SettingsDraft>(window.DataContext);
-                Assert.Equal(AppAccentNames.Violet, cancelled.AccentColor);
-                Assert.False(cancelled.HasUnappliedChanges);
-                Assert.Equal(AppAccentNames.Violet, saved.General.AccentColor);
-                Assert.Equal(0, saves);
+                AssertAccent(AppAccent.Red);
+                SettingsDraft closedDraft = Assert.IsType<SettingsDraft>(window.DataContext);
+                Assert.Equal(AppAccentNames.Red, closedDraft.AccentColor);
+                Assert.False(closedDraft.HasUnappliedChanges);
+                Assert.Equal(AppAccentNames.Red, saved.General.AccentColor);
+                Assert.Equal(beforeClose, saves);
                 window.ShowSettings();
-                selector.SelectedValue = AppAccentNames.Red;
                 Drain(window);
                 SettingsWindow.ApplyCommand.Execute(null, window);
-                Assert.Equal(1, saves);
+                Assert.Equal(beforeClose, saves);
+                Assert.True(window.IsVisible);
                 Assert.Equal(AppAccentNames.Red, store.Load().General.AccentColor);
 
                 window.ShowSettings();
                 SettingsDraft draft = Assert.IsType<SettingsDraft>(window.DataContext);
                 draft.ResetToDefaults();
+                Drain(window);
                 AssertAccent(AppAccent.Red);
                 Assert.Equal(AppAccentNames.Red, saved.General.AccentColor);
                 string exported = Path.Combine(root, "red-export.json");
                 store.ExportTo(saved, exported);
                 window.ImportSettingsFrom(exported);
+                Drain(window);
                 AssertAccent(AppAccent.Red);
                 Assert.Equal(AppAccentNames.Red, selector.SelectedValue);
 
@@ -131,12 +134,16 @@ public sealed partial class SettingsThemePreviewTests
                 Assert.True(window.IsVisible);
                 AssertAccent(AppAccent.Violet);
                 Assert.Equal(AppAccentNames.Red, saved.General.AccentColor);
-                window.ConfirmUnappliedChanges = () => SettingsCloseChoice.Discard;
                 window.Close();
-                AssertAccent(AppAccent.Red);
+                Assert.True(window.IsVisible);
+                Assert.Equal(AppAccentNames.Red, store.Load().General.AccentColor);
+                failSave = false;
+                window.Close();
+                Assert.False(window.IsVisible);
+                AssertAccent(AppAccent.Violet);
+                Assert.Equal(AppAccentNames.Violet, store.Load().General.AccentColor);
                 draft.AccentColor = AppAccentNames.Red;
-                draft.AccentColor = AppAccentNames.Violet;
-                AssertAccent(AppAccent.Red);
+                AssertAccent(AppAccent.Violet);
             }
             finally
             {

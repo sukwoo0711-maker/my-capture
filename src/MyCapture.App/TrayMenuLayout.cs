@@ -19,7 +19,8 @@ internal sealed record TrayMenuCommands(
     Action Exit,
     Action? PinClipboard = null,
     Action? HideOrShowAllPins = null,
-    Action? ClearClickThrough = null);
+    Action? ClearClickThrough = null,
+    Action? ContactSupport = null);
 
 /// <summary>What the tray menu reflects at the moment it opens. Read cheaply on every open.</summary>
 /// <param name="CanRestoreClosedPin">A closed pin can come back.</param>
@@ -101,6 +102,8 @@ internal static class TrayMenuLayout
         entries.Add(new(UiText.Get("Text_8739F6684453"), commands.Library, Gesture: Gesture(keys.OpenLibrary)));
         entries.Add(new(UiText.Get("Text_00480581AAB5"), commands.Settings));
         entries.Add(new(UiText.Get("Onboard_ShowShortcuts"), commands.Shortcuts, Gesture: ShortcutsGesture));
+        if (commands.ContactSupport is { } contactSupport)
+            entries.Add(new(UiText.Get("Support_Title"), contactSupport));
         entries.Add(ThemedShellPresenter.MenuEntry.Separator);
         entries.Add(new(UiText.Get("Text_72B6DBA8AAC5"), commands.Exit));
         return entries;

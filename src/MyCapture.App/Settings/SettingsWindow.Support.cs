@@ -25,7 +25,7 @@ internal sealed partial class SettingsWindow
     /// </summary>
     internal const int UpscaleModelMegabytes = 67;
 
-    internal Action<string> OpenSupportPage { get; set; } = uri => Process.Start(new ProcessStartInfo(uri) { UseShellExecute = true })?.Dispose();
+    internal Action<string> OpenSupportPage { get; set; } = uri => { if (!SupportDiagnostics.TryOpenUri(uri)) throw new InvalidOperationException(UiText.Get("Support_OpenFailed")); };
     internal Action<string> CopySupportText { get; set; } = text => Clipboard.SetText(text);
 
     private void InitializeAbout() =>
@@ -41,35 +41,21 @@ internal sealed partial class SettingsWindow
             RecentErrorLog.Shared.Snapshot());
     }
 
-    /// <summary>
-    /// Reporting a problem is one step: the diagnostics go to the clipboard, then the report page
-    /// opens, and the status line says to paste them. A clipboard failure still opens the page.
-    /// </summary>
+    internal Action<SupportWindow> OpenSupportDialog { get; set; } = dialog => dialog.ShowDialog();
+
     private void OnSupportReport(object sender, RoutedEventArgs e)
     {
-        bool copied;
-        try
-        {
-            CopySupportText(SupportDiagnosticsText());
-            copied = true;
-        }
-        catch (Exception error) when (error is System.Runtime.InteropServices.ExternalException or InvalidOperationException)
-        {
-            _log.LogWarning(error, "Could not copy diagnostics for a problem report");
-            copied = false;
-        }
+        var dialog = new SupportWindow(new SettingsSupportActions(this)) { Owner = this };
+        OpenSupportDialog(dialog);
+    }
 
-        try
+    private sealed class SettingsSupportActions(SettingsWindow owner) : ISupportActions
+    {
+        public void CopyText(string text) => owner.CopySupportText(text);
+        public bool TryOpenUri(string uri)
         {
-            OpenSupportPage(SupportDiagnostics.IssueUri);
+            try { owner.OpenSupportPage(uri); return true; }
+            catch (Exception error) when (error is Win32Exception or InvalidOperationException) { return false; }
         }
-        catch (Exception error) when (error is Win32Exception or InvalidOperationException)
-        {
-            _log.LogWarning(error, "Could not open support page");
-            SetStatusMessage(UiText.Get("Support_OpenFailed"));
-            return;
-        }
-
-        SetStatusMessage(UiText.Get(copied ? "About_ReportCopied" : "About_ReportCopyFailed"));
     }
 }
