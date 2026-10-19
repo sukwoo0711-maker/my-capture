@@ -53,6 +53,8 @@ internal sealed class RegionRecordingCoordinator
     internal Func<Window, bool> ExcludeSelectionWindow { get; set; } = CaptureWindowExclusion.TryApply;
     internal Task LastSelectionPreparation { get; private set; } = Task.CompletedTask;
     internal event Action<Exception>? SelectionPreparationFailed;
+    internal Action? CaptureSelectionRequested { get; set; }
+    internal Task LastSelectorActionForTest { get; private set; } = Task.CompletedTask;
 
     /// <summary>
     /// Raised when the Ctrl+Shift+X hotkey arrives while the post-stop tail (validation,
@@ -217,6 +219,8 @@ internal sealed class RegionRecordingCoordinator
             {
                 // Says "record" and takes the recording colour, so it never reads as a screenshot.
                 RecordingSelection = true,
+                ShowModeBar = true,
+                OffersOtherActions = CaptureSelectionRequested is not null,
             };
             // A configured preset fixes the recording's size; the drag only positions it.
             if (_settings().PresetWidth is { } w && w > 0
@@ -227,6 +231,7 @@ internal sealed class RegionRecordingCoordinator
             _selectionOverlay = overlay;
             overlay.GeometrySelectionCompleted = OpenControls;
             overlay.SelectionCancelled += OnSelectionCancelled;
+            overlay.ActionRequested += OnSelectionActionRequested;
             overlay.Closed += OnSelectionClosed;
             overlay.ContentRendered += (_, _) => _log.LogInformation(
                 "Recording selector first rendered after {Elapsed:0.0}ms", preparation.Elapsed.Elapsed.TotalMilliseconds);
@@ -306,6 +311,26 @@ internal sealed class RegionRecordingCoordinator
     private void OnSelectionCancelled(object? sender, EventArgs e) =>
         _log.LogInformation("Recording region selection cancelled");
 
+    private void OnSelectionActionRequested(object? sender, CaptureSelectorRequest request)
+    {
+        if (request.Action == CaptureSelectorAction.Capture && CaptureSelectionRequested is not null)
+            LastSelectorActionForTest = OpenCaptureAfterSelectionAsync();
+    }
+
+    private async Task OpenCaptureAfterSelectionAsync()
+    {
+        // The overlay raises its action before its finally block closes it. Let that close and
+        // any in-flight frozen-frame preparation finish before starting the sibling selector.
+        await Dispatcher.Yield(DispatcherPriority.Background);
+        await LastSelectionPreparation;
+        try { CaptureSelectionRequested?.Invoke(); }
+        catch (Exception ex)
+        {
+            _log.LogError(ex, "Could not switch from recording selection to capture");
+            SelectionPreparationFailed?.Invoke(ex);
+        }
+    }
+
     private void OnSelectionClosed(object? sender, EventArgs e)
     {
         if (sender is CaptureOverlayWindow overlay)
@@ -313,6 +338,7 @@ internal sealed class RegionRecordingCoordinator
             if (_selectionPreparation is { } preparation) preparation.Cancelled = true;
             overlay.GeometrySelectionCompleted = null;
             overlay.SelectionCancelled -= OnSelectionCancelled;
+            overlay.ActionRequested -= OnSelectionActionRequested;
             overlay.Closed -= OnSelectionClosed;
             if (ReferenceEquals(_selectionOverlay, overlay))
             {

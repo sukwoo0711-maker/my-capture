@@ -300,7 +300,7 @@ public sealed class RecordingControlWindowExclusionTests
             Assert.Equal(NativeExclusion.ExpectsSuccess(supported), window.IsCaptureExcluded);
             Border strip = NativeExclusion.Field<Border>(window, "_controlStrip");
             Border frame = NativeExclusion.Field<Border>(window, "_regionFrame");
-            Assert.Equal(new CornerRadius(supported ? 10 : 0), strip.CornerRadius);
+            Assert.Equal(new CornerRadius(supported ? 28 : 0), strip.CornerRadius);
             Assert.Equal(new CornerRadius(supported ? 2 : 0), frame.CornerRadius);
             double scale = VisualTreeHelper.GetDpi(window).DpiScaleX;
             RectD capture = NativeExclusion.Field<RectD>(window, "_screenRegion");

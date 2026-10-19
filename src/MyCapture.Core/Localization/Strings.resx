@@ -3736,6 +3736,14 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="CaptureGuide2_BarName" xml:space="preserve"><value>캡처 방법</value></data>
   <data name="CaptureGuide2_Region" xml:space="preserve"><value>영역 선택</value></data>
   <data name="CaptureGuide2_RegionOnly" xml:space="preserve"><value>영역 선택</value></data>
+  <data name="CaptureBar_Window" xml:space="preserve"><value>창 선택</value></data>
+  <data name="CaptureBar_WindowHelp" xml:space="preserve"><value>포인터 아래의 창을 클릭하면 캡처합니다. 바탕 화면을 클릭하면 해당 모니터를 캡처합니다.</value></data>
+  <data name="CaptureBar_ScrollHelp" xml:space="preserve"><value>스크롤 캡처할 창을 선택합니다.</value></data>
+  <data name="CaptureBar_Delay" xml:space="preserve"><value>지연 캡처</value></data>
+  <data name="CaptureBar_DelayHelp" xml:space="preserve"><value>3초, 5초 또는 10초 후 캡처를 선택합니다.</value></data>
+  <data name="CaptureBar_RecordRegionHelp" xml:space="preserve"><value>녹화할 영역을 드래그하십시오. Esc 키를 누르면 취소합니다.</value></data>
+  <data name="CaptureBar_RecordFullScreenHelp" xml:space="preserve"><value>이 모니터 전체를 녹화 영역으로 선택합니다.</value></data>
+  <data name="CaptureBar_RecordGuideTitle" xml:space="preserve"><value>녹화 영역 선택 방법</value></data>
   <data name="CaptureGuide2_RegionHelp" xml:space="preserve"><value>창을 클릭하면 그 창을, 드래그하면 그 영역을, 바탕 화면을 클릭하면 모니터 전체를 캡처합니다. Shift를 누르면 한 픽셀씩 이동합니다.</value></data>
   <data name="CaptureGuide2_RegionOnlyHelp" xml:space="preserve"><value>드래그하면 원하는 영역을 캡처합니다. Shift를 누른 채 움직이면 한 픽셀씩 이동합니다.</value></data>
   <data name="CaptureGuide2_FullScreen" xml:space="preserve"><value>전체 화면</value></data>
@@ -4029,11 +4037,10 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="Onboard_BarCaptureHelp" xml:space="preserve"><value>화면을 이미지로 캡처합니다.</value></data>
   <data name="Onboard_BarRecordHelp" xml:space="preserve"><value>녹화할 영역을 고르는 화면으로 바꿉니다.</value></data>
   <data name="Onboard_BarMore" xml:space="preserve"><value>다른 캡처</value></data>
-  <data name="Onboard_BarMoreHelp" xml:space="preserve"><value>지연 캡처, 스크롤 캡처, 이전 영역 반복을 고릅니다.</value></data>
+  <data name="Onboard_BarMoreHelp" xml:space="preserve"><value>이전 캡처 영역을 다시 캡처합니다.</value></data>
   <data name="Onboard_DelayCapture" xml:space="preserve"><value>{0}초 후 캡처</value></data>
   <data name="Onboard_RecordSelectInstruction" xml:space="preserve"><value>녹화할 영역을 드래그하십시오</value></data>
   <data name="Onboard_RecordSelectTitle" xml:space="preserve"><value>MyCapture — 녹화 영역 선택</value></data>
-  <data name="Onboard_RecordStop" xml:space="preserve"><value>중지</value></data>
   <data name="Onboard_RecordMore" xml:space="preserve"><value>녹화 옵션</value></data>
   <data name="Onboard_RecordMoreHelp" xml:space="preserve"><value>녹화 영역에 현재 시각을 표시할지 고릅니다.</value></data>
   <data name="Onboard_RecordShowTime" xml:space="preserve"><value>시각 표시</value></data>

@@ -91,16 +91,17 @@ internal sealed class CaptureStartGuideCard : Border
     internal string EscapeText => AutomationProperties.GetName(_escape);
 
     /// <summary>What a click and a drag do (only a drag without window detection).</summary>
-    internal void Configure(bool detectWindows)
+    internal void Configure(bool detectWindows, bool recording = false)
     {
+        detectWindows &= !recording;
         _clickColumn.Visibility = detectWindows ? Visibility.Visible : Visibility.Collapsed;
         _dragColumn.Margin = new Thickness(detectWindows ? ColumnGap : 0, 0, 0, 0);
         KoreanWordWrap.SetText(_clickCaption, UiText.Get("CaptureGuide2_ClickWindow"));
-        KoreanWordWrap.SetText(_dragCaption, UiText.Get("CaptureGuide2_DragCapture"));
+        KoreanWordWrap.SetText(_dragCaption, UiText.Get(recording ? "Onboard_RecordSelectInstruction" : "CaptureGuide2_DragCapture"));
         KoreanWordWrap.SetText(_escape, UiText.Get("CaptureGuide2_Esc"));
-        AutomationProperties.SetName(this, UiText.Get("CaptureGuide2_IntroTitle"));
+        AutomationProperties.SetName(this, UiText.Get(recording ? "CaptureBar_RecordGuideTitle" : "CaptureGuide2_IntroTitle"));
         AutomationProperties.SetHelpText(this,
-            UiText.Get(detectWindows ? "CaptureGuide2_IntroBody" : "CaptureGuide2_IntroBodyRegionOnly"));
+            UiText.Get(recording ? "CaptureBar_RecordRegionHelp" : detectWindows ? "CaptureGuide2_IntroBody" : "CaptureGuide2_IntroBodyRegionOnly"));
     }
 
     /// <summary>Same brushes as the mode bar.</summary>

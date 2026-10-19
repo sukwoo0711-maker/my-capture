@@ -77,7 +77,7 @@ public sealed class CaptureModeBarActionTests
     });
 
     [Fact]
-    public void MoreMenuOffersDelayScrollingAndPreviousRegionAsExistingCommands() => StaTestHost.Run(() =>
+    public void DirectDelayAndScrollingControlsAndMoreMenuRunExistingCommands() => StaTestHost.Run(() =>
     {
         using var language = UiText.UseLanguage("ko-KR");
         bool canRepeat = false;
@@ -91,13 +91,16 @@ public sealed class CaptureModeBarActionTests
             Render(view);
             CaptureModeBar bar = view.ModeBarForTest!;
             Assert.Equal("다른 캡처", AutomationProperties.GetName(bar.MoreButton));
-            ContextMenu menu = bar.CreateMoreMenu();
-            Assert.Same(bar.MoreButton, menu.PlacementTarget);
+            ContextMenu menu = bar.CreateDelayMenu();
+            Assert.Same(bar.DelayButton, menu.PlacementTarget);
             MenuItem[] items = menu.Items.OfType<MenuItem>().ToArray();
-            Assert.Equal(["3초 후 캡처", "5초 후 캡처", "10초 후 캡처", "스크롤 캡처", "이전 영역 반복"], items.Select(item => (string)item.Header));
-            Assert.Single(menu.Items.OfType<Separator>());
+            Assert.Equal(["3초 후 캡처", "5초 후 캡처", "10초 후 캡처"], items.Select(item => (string)item.Header));
+            ContextMenu more = bar.CreateMoreMenu();
+            Assert.Same(bar.MoreButton, more.PlacementTarget);
+            MenuItem repeat = Assert.IsType<MenuItem>(Assert.Single(more.Items));
+            Assert.Equal("이전 영역 반복", repeat.Header);
             // Without a previous region the entry stays visible but cannot run.
-            Assert.False(items[^1].IsEnabled);
+            Assert.False(repeat.IsEnabled);
             canRepeat = true;
             view.OffersOtherActions = true;
             Assert.True(bar.CreateMoreMenu().Items.OfType<MenuItem>().Last().IsEnabled);
@@ -105,7 +108,7 @@ public sealed class CaptureModeBarActionTests
             items[1].RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
             Assert.Equal([new CaptureSelectorRequest(CaptureSelectorAction.DelayedCapture, 5)], requests);
             // One request per selector: the rest are ignored once it has ended.
-            items[3].RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
+            bar.ScrollButton.RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));
             Assert.Single(requests);
         }
         finally { view.ReleaseResources(); }
@@ -116,8 +119,7 @@ public sealed class CaptureModeBarActionTests
         try
         {
             Render(scroll);
-            ContextMenu menu = scroll.ModeBarForTest!.CreateMoreMenu();
-            menu.Items.OfType<MenuItem>().Single(item => (string)item.Header == "스크롤 캡처").RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
+            scroll.ModeBarForTest!.ScrollButton.RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));
             Assert.Equal(new CaptureSelectorRequest(CaptureSelectorAction.ScrollingCapture), chosen);
         }
         finally { scroll.ReleaseResources(); }
@@ -249,8 +251,79 @@ public sealed class CaptureModeBarActionTests
             coordinator.Toggle();
             Assert.NotNull(overlay);
             Assert.True(overlay.RecordingSelection);
-            Assert.False(overlay.ShowModeBar);
+            Assert.True(overlay.ShowModeBar);
             coordinator.CancelRegionSelection();
+        }
+        finally
+        {
+            release.Set();
+            coordinator.CancelRegionSelection();
+            Overlay.PumpUntil(() => coordinator.LastSelectionPreparation.IsCompleted);
+            OwnedTestDirectory.Delete(root);
+        }
+    });
+
+    [Fact]
+    public void RecordingToCaptureSwitchWaitsForClosedSelectorAndFinishedFramePreparation() => StaTestHost.Run(() =>
+    {
+        string root = OwnedTestDirectory.Create("mc-record-capture-switch-");
+        using var acquiring = new ManualResetEventSlim();
+        using var release = new ManualResetEventSlim();
+        AppPaths paths = AppPaths.CreateForRoot(root);
+        var queue = new CaptureQueue(paths, new QueueSettings(), NullLogger<CaptureQueue>.Instance);
+        var library = new VideoLibraryService(queue, paths, NullLogger<VideoLibraryService>.Instance);
+        var coordinator = new RegionRecordingCoordinator(new ScreenCaptureEngine(NullLogger<ScreenCaptureEngine>.Instance),
+            paths, () => new RecordingSettings(), NullLoggerFactory.Instance, library)
+        {
+            SelectionDesktopBounds = () => new RectD(0, 0, 32, 20),
+        };
+        CaptureOverlayWindow? overlay = null;
+        bool closed = false;
+        var callbacks = new List<(bool Closed, bool Prepared, bool Active, object? Overlay, object? Preparation)>();
+        coordinator.ExcludeSelectionWindow = window =>
+        {
+            overlay = (CaptureOverlayWindow)window;
+            overlay.Closed += (_, _) => closed = true;
+            return true;
+        };
+        coordinator.CaptureSelectionRequested = () =>
+        {
+            callbacks.Add((closed, coordinator.LastSelectionPreparation.IsCompleted, coordinator.IsActive,
+                typeof(RegionRecordingCoordinator).GetField("_selectionOverlay", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(coordinator),
+                typeof(RegionRecordingCoordinator).GetField("_selectionPreparation", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(coordinator)));
+        };
+        coordinator.AcquireSelectionFrame = () =>
+        {
+            acquiring.Set();
+            Assert.True(release.Wait(TimeSpan.FromSeconds(10)));
+            BitmapSource bitmap = BitmapSource.Create(32, 20, 96, 96, PixelFormats.Bgra32, null, new byte[32 * 20 * 4], 32 * 4);
+            bitmap.Freeze();
+            return new FrozenFrame(bitmap, new RectD(0, 0, 32, 20), null, 0);
+        };
+        try
+        {
+            coordinator.Toggle();
+            Overlay.PumpUntil(() => acquiring.IsSet);
+            Assert.NotNull(overlay);
+            Assert.False(overlay.IsVisible);
+            var view = Assert.IsType<CaptureOverlayView>(overlay.Content);
+            Assert.True(view.ModeBarForTest!.RecordKindButton.IsChecked);
+            ((ISelectionItemProvider)new System.Windows.Automation.Peers.RadioButtonAutomationPeer(view.ModeBarForTest.CaptureKindButton)).Select();
+            Assert.True(closed);
+            Overlay.Pump();
+            Assert.Empty(callbacks);
+            Assert.False(coordinator.LastSelectionPreparation.IsCompleted);
+            Assert.False(coordinator.LastSelectorActionForTest.IsCompleted);
+            release.Set();
+            Overlay.PumpUntil(() => coordinator.LastSelectorActionForTest.IsCompleted);
+            coordinator.LastSelectorActionForTest.GetAwaiter().GetResult();
+            var callback = Assert.Single(callbacks);
+            Assert.True(callback.Closed);
+            Assert.True(callback.Prepared);
+            Assert.False(callback.Active);
+            Assert.Null(callback.Overlay);
+            Assert.Null(callback.Preparation);
+            Assert.False(coordinator.IsActive);
         }
         finally
         {

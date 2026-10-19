@@ -3736,6 +3736,14 @@ Delete {1} {1:plural:subfolder|subfolders}, {2} {2:plural:image|images}, and {3}
   <data name="CaptureGuide2_BarName" xml:space="preserve"><value>Capture options</value></data>
   <data name="CaptureGuide2_Region" xml:space="preserve"><value>Select region</value></data>
   <data name="CaptureGuide2_RegionOnly" xml:space="preserve"><value>Select region</value></data>
+  <data name="CaptureBar_Window" xml:space="preserve"><value>Select window</value></data>
+  <data name="CaptureBar_WindowHelp" xml:space="preserve"><value>Click the window under the pointer to capture it. Click the desktop to capture that monitor.</value></data>
+  <data name="CaptureBar_ScrollHelp" xml:space="preserve"><value>Select a window for scrolling capture.</value></data>
+  <data name="CaptureBar_Delay" xml:space="preserve"><value>Delayed capture</value></data>
+  <data name="CaptureBar_DelayHelp" xml:space="preserve"><value>Choose capture after 3, 5 or 10 seconds.</value></data>
+  <data name="CaptureBar_RecordRegionHelp" xml:space="preserve"><value>Drag over the area to record. Press Esc to cancel.</value></data>
+  <data name="CaptureBar_RecordFullScreenHelp" xml:space="preserve"><value>Selects this entire monitor as the recording area.</value></data>
+  <data name="CaptureBar_RecordGuideTitle" xml:space="preserve"><value>Choose a recording area</value></data>
   <data name="CaptureGuide2_RegionHelp" xml:space="preserve"><value>Click a window to capture it, drag to capture a region, or click the desktop to capture the whole monitor. Hold Shift to move one pixel at a time.</value></data>
   <data name="CaptureGuide2_RegionOnlyHelp" xml:space="preserve"><value>Drag to capture the region you want. Hold Shift to move one pixel at a time.</value></data>
   <data name="CaptureGuide2_FullScreen" xml:space="preserve"><value>Full screen</value></data>
@@ -4029,11 +4037,10 @@ Delete {1} {1:plural:subfolder|subfolders}, {2} {2:plural:image|images}, and {3}
   <data name="Onboard_BarCaptureHelp" xml:space="preserve"><value>Captures the screen as an image.</value></data>
   <data name="Onboard_BarRecordHelp" xml:space="preserve"><value>Switches to choosing an area to record.</value></data>
   <data name="Onboard_BarMore" xml:space="preserve"><value>More captures</value></data>
-  <data name="Onboard_BarMoreHelp" xml:space="preserve"><value>Delayed capture, scrolling capture or the previous region.</value></data>
+  <data name="Onboard_BarMoreHelp" xml:space="preserve"><value>Capture the previous region again.</value></data>
   <data name="Onboard_DelayCapture" xml:space="preserve"><value>Capture in {0} {0:plural:second|seconds}</value></data>
   <data name="Onboard_RecordSelectInstruction" xml:space="preserve"><value>Drag over the area to record</value></data>
   <data name="Onboard_RecordSelectTitle" xml:space="preserve"><value>MyCapture — Select an area to record</value></data>
-  <data name="Onboard_RecordStop" xml:space="preserve"><value>Stop</value></data>
   <data name="Onboard_RecordMore" xml:space="preserve"><value>Recording options</value></data>
   <data name="Onboard_RecordMoreHelp" xml:space="preserve"><value>Choose whether the recording shows the current time.</value></data>
   <data name="Onboard_RecordShowTime" xml:space="preserve"><value>Show time</value></data>
