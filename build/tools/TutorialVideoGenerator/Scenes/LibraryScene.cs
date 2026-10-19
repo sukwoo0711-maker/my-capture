@@ -51,7 +51,7 @@ internal sealed class LibraryScene : TutorialScene
     private Func<Task>? _save;
     // Pointer targets planned before the library changed (create, rename, move, delete): when the
     // pointer starts towards one, the target must still be that control in the changed library.
-    private readonly Dictionary<string, (PointD Planned, Func<FrameworkElement> Target)> _pointerChecks = [];
+    private readonly Dictionary<string, (PointD Planned, Func<PointD> Actual)> _pointerChecks = [];
     private CaptureRecord? _target;
     private CaptureFolder? _destination;
     private bool _libraryOpen = true, _deleted;
@@ -106,9 +106,11 @@ internal sealed class LibraryScene : TutorialScene
 
         internal bool Visible { get; set; } = true;
 
-        internal PointD Of(FrameworkElement element)
+        internal PointD Of(FrameworkElement element) => At(element, new Point(element.ActualWidth / 2, element.ActualHeight / 2));
+
+        internal PointD At(FrameworkElement element, Point local)
         {
-            PointD point = Host.CenterOf(element);
+            PointD point = Host.PointOf(element, local);
             return new PointD(Origin.X + point.X * Scale, Origin.Y + point.Y * Scale);
         }
 
@@ -163,6 +165,13 @@ internal sealed class LibraryScene : TutorialScene
             && candidate.DataContext is GalleryFolderNode node && node.FolderId == folder.Id);
         return item.Template.FindName("Row", item) as FrameworkElement ?? item;
     }
+
+    /// <summary>
+    /// A point on a folder row's name, measured from the row's left edge. Adding a row can bring
+    /// in the folder list's scroll bar, which narrows every row but keeps their left edges.
+    /// </summary>
+    private PointD RowName(FrameworkElement row) =>
+        _gallery.At(row, new Point(Math.Min(64, row.ActualWidth / 2), row.ActualHeight / 2));
 
     private GalleryFolderNode Node(Guid folderId) =>
         Flatten(ViewModel.FolderRoots).First(node => node.FolderId == folderId);
@@ -239,10 +248,10 @@ internal sealed class LibraryScene : TutorialScene
         GalleryFolderNode[] roots = [.. ViewModel.FolderRoots];
         int index = roots.Select(node => node.Name).Append(name).OrderBy(text => text, StringComparer.CurrentCultureIgnoreCase)
             .ToList().IndexOf(name);
-        PointD first = _gallery.Of(TreeRow(_library.Queue.FindFolder(roots[0].FolderId!.Value)!));
-        PointD second = _gallery.Of(TreeRow(_library.Queue.FindFolder(roots[1].FolderId!.Value)!));
+        PointD first = RowName(TreeRow(_library.Queue.FindFolder(roots[0].FolderId!.Value)!));
+        PointD second = RowName(TreeRow(_library.Queue.FindFolder(roots[1].FolderId!.Value)!));
         story.Move("created-move", new PointD(first.X, first.Y + index * (second.Y - first.Y)));
-        _pointerChecks["created-move"] = (story.End, () => TreeRow(_library.Queue.FindFolder(created!.Id)!));
+        _pointerChecks["created-move"] = (story.End, () => RowName(TreeRow(_library.Queue.FindFolder(created!.Id)!)));
         return story.Finish("result", 11);
     }
 
@@ -267,7 +276,7 @@ internal sealed class LibraryScene : TutorialScene
         Typing(story, _typedName);
         story.Move("save-move", _dialog.Of(dialog.SaveButton)).Click("save").Hold("renamed", 0.6);
         story.Move("renamed-move", _gallery.Of(TreeRow(folder)));
-        _pointerChecks["renamed-move"] = (story.End, () => TreeRow(folder));
+        _pointerChecks["renamed-move"] = (story.End, () => _gallery.Of(TreeRow(folder)));
         return story.Finish("result", 11);
     }
 
@@ -295,7 +304,7 @@ internal sealed class LibraryScene : TutorialScene
         story.Move("save-move", _dialog.Of(dialog.SaveButton)).Click("save").Hold("moved", 1.2);
         story.Move("folder-move", _gallery.Of(TreeRow(_destination))).Click("folder-click");
         CaptureFolder destination = _destination;
-        _pointerChecks["folder-move"] = (story.End, () => TreeRow(destination));
+        _pointerChecks["folder-move"] = (story.End, () => _gallery.Of(TreeRow(destination)));
         return story.Finish("result", 11.2);
     }
 
@@ -314,7 +323,7 @@ internal sealed class LibraryScene : TutorialScene
         // The result goes to the status line with Undo beside it; the pointer goes to Undo.
         PointD undo = MeasureUndo();
         story.Move("undo-move", undo).Hold("undo", 1.8);
-        _pointerChecks["undo-move"] = (undo, () => Gallery.LibraryStatusAction);
+        _pointerChecks["undo-move"] = (undo, () => _gallery.Of(Gallery.LibraryStatusAction));
         return story.Finish("result", 11);
     }
 
@@ -402,8 +411,7 @@ internal sealed class LibraryScene : TutorialScene
     {
         if (frame.IsFirst && _pointerChecks.TryGetValue(frame.Segment, out var check))
         {
-            FrameworkElement target = check.Target();
-            PointD actual = _gallery.Of(target);
+            PointD actual = check.Actual();
             if (Math.Abs(actual.X - check.Planned.X) > 2 || Math.Abs(actual.Y - check.Planned.Y) > 2)
                 throw new InvalidOperationException($"'{frame.Segment}' points at ({check.Planned.X:0},{check.Planned.Y:0}) but its target is now at ({actual.X:0},{actual.Y:0}).");
         }
