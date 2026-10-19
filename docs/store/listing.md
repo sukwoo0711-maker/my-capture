@@ -72,13 +72,13 @@ OCR로 이미지 속 글자를 텍스트로 복사하고, 표를 CSV·Markdown·
 9. 언어, 6가지 테마, 포인트 색, 단축키, 보관 기간을 설정에서 바꿉니다.
 10. 밝은 테마의 라이브러리입니다. Windows 11과 Windows 10 22H2에서 같은 기능을 사용합니다.
 
-### 이 버전의 새로운 기능 (4.3.0)
+### 이 버전의 새로운 기능 (4.3.1)
 
-- Windows 10 버전 22H2(빌드 19045) x64에서도 설치하고 사용할 수 있습니다.
-- Windows 10에서도 녹화 중 컨트롤 창과 메뉴가 녹화 결과에 찍히지 않습니다.
-- 갤러리와 편집기가 화면에 표시되는 영상을 원본과 비교해 밝기와 색 범위를 맞춥니다.
-- 프레임 편집과 MP4·GIF 내보내기가 전체 범위 영상의 색을 원본대로 유지합니다.
-- 자막이 있는 영상 프레임을 정지 이미지로 편집해도 주석을 나중에 수정할 수 있습니다.
+- 편집 중에 캡처 단축키를 누르면 편집기와 저장 확인 창을 앞으로 가져오고, 새 캡처를 시작하지 않은 이유를 알려 줍니다.
+- 저장 확인 창에서 '저장하고 닫기'를 고르면 저장한 뒤 바로 새 캡처를 시작합니다.
+- 핀 테두리와 영상 편집기의 레이어 선택 테두리가 포인트 색을 따릅니다.
+- 150%·200% 배율에서 돋보기 글자가 겹치지 않고, 영상 편집기 머리글과 녹화 막대 문구가 잘리지 않습니다.
+- 트레이 메뉴에서 모든 핀의 클릭 허용을 한 번에 해제할 수 있습니다.
 
 ### 검색어
 
@@ -139,13 +139,13 @@ Enter them in screenshot order. Each caption is 200 characters or fewer.
 9. Change the language, six themes, accent color, shortcuts and retention in Settings.
 10. The library in a light theme. Windows 11 and Windows 10 22H2 get the same features.
 
-### What's new in this version (4.3.0)
+### What's new in this version (4.3.1)
 
-- Install and use MyCapture on Windows 10 version 22H2 (build 19045) x64.
-- On Windows 10, the recording controls and menus stay out of the recording.
-- The gallery and editor compare the displayed video with the source and match its brightness and color range.
-- Frame edits and MP4 or GIF exports keep the colors of full-range videos.
-- Annotations on still images made from video frames with captions stay editable.
+- A capture shortcut pressed while you edit brings the editor and its save prompt to the front and says why a new capture did not start.
+- Choosing Save and close in the save prompt saves your edit and then starts the new capture.
+- Pin borders and the selected layer outline in the video editor follow the accent color.
+- At 150% and 200% scaling the magnifier text no longer overlaps, and the video editor header and recording bar text are no longer cut off.
+- Turn off click-through for all pins at once from the tray menu.
 
 ### Search terms
 
