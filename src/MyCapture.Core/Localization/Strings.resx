@@ -4496,4 +4496,10 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="Library.Activity.Ocr" xml:space="preserve">
     <value>텍스트 색인 중</value>
   </data>
+  <data name="CaptureBlocked_Editor" xml:space="preserve"><value>편집 중인 캡처가 있어 새 캡처를 시작하지 않았습니다.</value></data>
+  <data name="CaptureBlocked_EditorRecording" xml:space="preserve"><value>편집 중인 캡처가 있어 녹화를 시작하지 않았습니다.</value></data>
+  <data name="CaptureBlocked_EditorSaveFailed" xml:space="preserve"><value>편집 중인 캡처를 저장하지 못해 새 캡처를 시작하지 않았습니다.</value></data>
+  <data name="CaptureBlocked_Scrolling" xml:space="preserve"><value>스크롤 캡처가 끝날 때까지 시작할 수 없습니다.</value></data>
+  <data name="CaptureBlocked_Updating" xml:space="preserve"><value>업데이트나 가져오기가 끝날 때까지 시작할 수 없습니다.</value></data>
+  <data name="CaptureBlocked_Exiting" xml:space="preserve"><value>앱을 종료하는 중이라 시작하지 않았습니다.</value></data>
 </root>

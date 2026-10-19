@@ -69,9 +69,7 @@ public partial class App
 
         try
         {
-            if (!await TryPrepareCaptureAsync(_overlay.CanRetake,
-                allowRetake => GuardStillCapture(UiText.Get("TextCapture_Title"), allowRetake),
-                _overlay.CloseEditorForRetakeAsync)) return;
+            if (!await PrepareRetakeAsync(UiText.Get("TextCapture_Title"))) return;
             _tray?.SetState(TrayIconState.Capturing);
             // The pointer would only add noise to recognition, so text capture never draws it.
             _overlay.Start(
@@ -85,7 +83,7 @@ public partial class App
         {
             _log?.LogError(ex, "Could not open the text capture overlay");
             _tray?.SetState(TrayIconState.Error);
-            _tray?.ShowBalloon(
+            ShowCommandNotice(
                 UiText.Get("Text_70EECBC7C211"),
                 MyCapture.App.Themes.ThemedDialog.RecoveryMessage(ex),
                 TrayBalloonKind.Error);

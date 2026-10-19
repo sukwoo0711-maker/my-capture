@@ -4496,4 +4496,10 @@ Turn off: {0}</value></data>
   <data name="Library.Activity.Ocr" xml:space="preserve">
     <value>Indexing text</value>
   </data>
+  <data name="CaptureBlocked_Editor" xml:space="preserve"><value>A capture is open in the editor, so a new capture was not started.</value></data>
+  <data name="CaptureBlocked_EditorRecording" xml:space="preserve"><value>A capture is open in the editor, so recording was not started.</value></data>
+  <data name="CaptureBlocked_EditorSaveFailed" xml:space="preserve"><value>The capture in the editor could not be saved, so a new capture was not started.</value></data>
+  <data name="CaptureBlocked_Scrolling" xml:space="preserve"><value>Cannot start until the scrolling capture finishes.</value></data>
+  <data name="CaptureBlocked_Updating" xml:space="preserve"><value>Cannot start until the update or import finishes.</value></data>
+  <data name="CaptureBlocked_Exiting" xml:space="preserve"><value>Not started because the app is closing.</value></data>
 </root>

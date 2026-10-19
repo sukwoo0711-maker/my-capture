@@ -80,6 +80,23 @@ internal partial class AnnotationEditorWindow
         }
         finally { IsEnabled = enabled; }
     }
+    private Task<bool>? _saveCloseTask;
+    /// <summary>True from the Save and close answer until its save has closed the window or failed.</summary>
+    internal bool IsSavingToClose => _saveCloseTask is { IsCompleted: false };
+    /// <summary>
+    /// Saves through the Done commit, which closes the window once the edit is saved. Completes with
+    /// whether the window closed; it stays open, with the failure in its status line, when saving fails.
+    /// </summary>
+    private async Task<bool> SaveAndCloseAsync()
+    {
+        // Started after the Closing callback that asked has unwound: a commit that finishes
+        // synchronously must not re-enter Close while the window is still closing.
+        await Dispatcher.InvokeAsync(() => { }, System.Windows.Threading.DispatcherPriority.Input);
+        _editor.SaveAndClose();
+        while (_editor.IsCommitInProgress && !_closedForRecovery) await Task.Delay(50);
+        await _draftFinalization;
+        return _closedForRecovery;
+    }
     private async Task<bool> RetireDraftBeforeCloseAsync()
     {
         if (_retiringDraft) return false;
@@ -111,13 +128,15 @@ internal partial class AnnotationEditorWindow
     {
         if (_closedForRecovery) { await _draftFinalization; return true; }
         var deadline = DateTime.UtcNow.AddSeconds(60);
-        while ((_editor.IsEditingOperationInProgress || IsCloseInProgress) && DateTime.UtcNow < deadline) await Task.Delay(50);
-        if (_editor.IsEditingOperationInProgress || IsCloseInProgress) return false;
+        // A question already on screen (a capture shortcut asked first) is answered before exit asks.
+        while ((_editor.IsEditingOperationInProgress || IsCloseInProgress || IsAskingToClose || IsSavingToClose) && DateTime.UtcNow < deadline)
+            await Task.Delay(50);
+        if (_editor.IsEditingOperationInProgress || IsCloseInProgress || IsAskingToClose || IsSavingToClose) return false;
         await FlushDraftAsync();
         if (_closedForRecovery) { await _draftFinalization; return true; }
         if (!_committed && NeedsUnsavedProtection)
         {
-            switch (ConfirmClose())
+            switch (AskBeforeClosing())
             {
                 case EditorCloseChoice.Cancel: return false;
                 case EditorCloseChoice.SaveAndClose:
