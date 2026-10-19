@@ -6,11 +6,11 @@
 | --- | --- | --- |
 | community-ko | W1~W2 한국어 커뮤니티 글, 한국어 모집 안내 | https://apps.microsoft.com/detail/9PB33MC095VR?cid=community-ko |
 | community-en | W3 영어 커뮤니티 글, 영어 모집 안내 | https://apps.microsoft.com/detail/9PB33MC095VR?cid=community-en |
-| video | 개인 SNS, YouTube Shorts, Instagram Reels, 세로 영상을 첨부한 게시글 | https://apps.microsoft.com/detail/9PB33MC095VR?cid=video |
+| video | 개발자 개인 SNS, YouTube Shorts, Instagram Reels | https://apps.microsoft.com/detail/9PB33MC095VR?cid=video |
 | gh-readme | 별도 작업에서 수정하는 GitHub README | https://apps.microsoft.com/detail/9PB33MC095VR?cid=gh-readme |
 | site | 별도 작업의 소개 사이트 https://sukwoo0711-maker.github.io/my-capture/ | https://apps.microsoft.com/detail/9PB33MC095VR?cid=site |
 
-윈도우 포럼은 세로 영상을 첨부하면 video를, 정지 이미지로 대체하면 community-ko를 사용하도록 초안을 구분했습니다. 게시 기록에 실제 사용한 ID를 적습니다. 방문자가 같은 Store 세션에서 다른 개발자의 앱을 획득하면 그 개발자에게도 캠페인 ID가 보일 수 있으므로 개인 정보나 비공개 정보를 ID에 넣지 않습니다.
+윈도우 포럼은 첨부 형식과 관계없이 community-ko를 사용합니다. 게시 기록에 실제 사용한 ID를 적습니다. 방문자가 같은 Store 세션에서 다른 개발자의 앱을 획득하면 그 개발자에게도 캠페인 ID가 보일 수 있으므로 개인 정보나 비공개 정보를 ID에 넣지 않습니다.
 
 ## Partner Center에서 읽을 항목
 
@@ -51,15 +51,16 @@ GitHub 별 수와 릴리스 자산별 다운로드 수를 기록합니다. 아�
 gh api repos/sukwoo0711-maker/my-capture/releases --jq '.[] | {tag: .tag_name, assets: [.assets[] | {name, download_count}]}'
 ```
 
-GitHub Insights > Traffic에서 유입 경로도 매주 기록합니다. 14일 보존 기간 안에 수집해 이전 주 기록과 이어 봅니다. 주간 표의 릴리스 다운로드 칸에는 자산별 기록 위치나 자산별 값을 넣습니다.
+GitHub Insights > Traffic에서 유입 경로도 매주 기록합니다. [GitHub 안내](https://docs.github.com/en/repositories/viewing-activity-and-data-for-your-repository/viewing-traffic-to-a-repository)의 최근 14일 조회 범위 안에서 수집해 이전 주 기록과 이어 봅니다. 주간 표의 릴리스 다운로드 칸에는 자산별 기록 위치나 자산별 값을 넣습니다.
 
 ## 주간 기록 표
 
-아래 기준값은 요청서에서 제공한 2026-10-20 값입니다. 평점 1개, 리뷰 0개, GitHub 별 0개, `캡처` 검색 25위만 채웠습니다. 나머지는 직접 확인한 뒤 기록합니다. 조회·전환·획득·설치는 해당 주, 평점·리뷰·별은 확인 시점 누적값으로 적으며 평균 평점은 별도로 기록합니다.
+첫 행은 2026-10-20 값입니다. 평점·리뷰·'캡처' 검색 순위는 엄격 평가가 그날 Store에서 잰 값이고, 별과 릴리스 다운로드는 같은 날 GitHub API로 확인했습니다. D에 같은 항목을 다시 재서 둘째 행에 적고, 조회일과 근거를 함께 남깁니다. 조회·전환·획득·설치는 해당 주, 평점·리뷰·별은 확인 시점 누적값으로 적으며 평균 평점은 별도로 기록합니다.
 
 | 기간 | community-ko 조회 | community-ko 전환 | community-en 조회 | community-en 전환 | video 조회 | video 전환 | gh-readme 조회 | gh-readme 전환 | site 조회 | site 전환 | 획득 | 설치 | 평점 수 | 평균 평점 | 리뷰 수 | 미응답 | 별 | 릴리스 다운로드 | 비고 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| 기준 2026-10-20 |  |  |  |  |  |  |  |  |  |  |  |  | 1 |  | 0 |  | 0 |  | 캡처 검색 25위(2026-10-20), 요청서 제공 |
+| 2026-10-20 |  |  |  |  |  |  |  |  |  |  |  |  | 1 |  | 0 |  | 0 | v4.3.0 설치 파일 1, 포터블 ZIP 1 | '캡처' 검색 25번째(한국 Store) |
+| D |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
 | W1 |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
 | W2 |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
 | W3 |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |

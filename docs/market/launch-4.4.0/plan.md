@@ -1,14 +1,14 @@
 # MyCapture 4.4.0 출시 확산 계획
 
-엄격 평가 21번(출시를 알릴 채널과 일정이 없음)과 05번(평점 1건, 리뷰 0건)을 4주 일정으로 옮긴 문서입니다. 모든 글은 개발자 본인 계정으로 올리고, 이 폴더의 초안을 그대로 붙여 넣으면 되도록 준비했습니다. 제품 문장은 모든 채널에서 같게 씁니다. 한국어는 "개발자를 위한 무료 Windows 캡처·핀 도구", 영어는 "A free Windows screenshot and pinning tool for developers"입니다.
+엄격 평가(2026-10-20) 21번(출시를 알릴 채널과 일정이 없음)과 05번(평점 1건, 리뷰 0건)을 옮긴 4주 계획입니다. 모든 글은 개발자 본인 계정으로 올리고, 이 폴더의 초안을 그대로 붙여 넣으면 되도록 준비했습니다. 제품 문장은 모든 채널에서 같게 씁니다. 한국어는 "개발자를 위한 무료 Windows 캡처·핀 도구", 영어는 "A free Windows screenshot and pinning tool for developers"입니다.
 
-시작 시점(2026-10-20)의 숫자는 Store 평점 1건, 리뷰 0건, 한국 Store '캡처' 검색 25번째, GitHub 별 0개, v4.3.0 설치 파일 다운로드 1회입니다. 4주가 끝나면 [metrics.md](metrics.md)의 같은 칸과 비교합니다.
+출발점은 엄격 평가가 2026-10-20에 잰 Store 평점 1건, 리뷰 0건, 한국 Store '캡처' 검색 25번째와, 같은 날 GitHub API로 다시 확인한 별 0개, v4.3.0 설치 파일 다운로드 1회입니다. D에 같은 항목을 다시 재서 [metrics.md](metrics.md)의 기준 행에 적고, 4주가 끝나면 같은 조건으로 잰 값과 비교합니다.
 
 ## 시작 조건
 
 일정의 기준일 D는 4.4.0이 Microsoft Store에 게시된 것을 확인한 날입니다. 월요일을 D로 잡으면 아래 요일이 맞습니다. 4.4.0 게시 전에 글을 올리면 글에 적은 작은 카드, 테마, 보관 기간, 문의하기가 사용자 화면과 달라지므로 D 이전에는 올리지 않습니다.
 
-D 이전에 끝낼 일은 다음과 같습니다. 윈도우 포럼은 가입 후 7일이 지나야 글을 쓸 수 있으므로 D-7보다 먼저 가입합니다. 디스콰이엇은 릴레잇 계정(이메일 매직 링크 로그인)이 필요하고, 제품 등록은 검토를 거쳐 승인됩니다. Reddit은 r/software가 공개하지 않은 기준의 카르마를 요구하므로 W3 전까지 계정 활동 이력을 확인합니다. 캠페인 링크 세 개(`community-ko`, `community-en`, `video`)는 Microsoft 안내의 시험 절차대로 한 번씩 눌러 Partner Center 획득 보고서에 잡히는지 봅니다. 랜딩 페이지(https://sukwoo0711-maker.github.io/my-capture/)가 열리는지도 확인합니다.
+D 이전에 끝낼 일은 다음과 같습니다. 윈도우 포럼은 가입 후 7일이 지나야 글을 쓸 수 있으므로 D-7보다 먼저 가입합니다. 디스콰이엇은 릴레잇 계정(이메일 매직 링크 로그인)이 필요하고, 제품 등록은 검토를 거쳐 승인됩니다. Reddit은 r/software가 공개하지 않은 기준의 카르마를 요구하므로 W3 전까지 계정 활동 이력을 확인합니다. 캠페인 링크 세 개(`community-ko`, `community-en`, `video`)는 Microsoft 안내에 따라 클릭 수를 기록하고 시험 획득을 포함해 확인합니다. Partner Center 획득 보고서에서 예상 조회 수와 전환을 대조합니다. 랜딩 페이지(https://sukwoo0711-maker.github.io/my-capture/)가 열리는지도 확인합니다.
 
 ## 쓸 자료
 
@@ -16,22 +16,22 @@ D 이전에 끝낼 일은 다음과 같습니다. 윈도우 포럼은 가입 후
 
 | 자료 | 경로 | 쓰는 곳 |
 |---|---|---|
-| 세로 영상 한국어 1080×1920 | `artifacts\launch-4.4.0\MyCapture-vertical-ko-1080x1920.mp4` | 윈도우 포럼, 개인 SNS, YouTube Shorts, Instagram Reels |
-| 세로 영상 영어 1080×1920 | `artifacts\launch-4.4.0\MyCapture-vertical-en-1080x1920.mp4` | 영어 Shorts·Reels |
-| 세로 영상 표지 | `artifacts\launch-4.4.0\cover-ko-1080x1920.png`, `cover-en-1080x1920.png` | 영상 표지, 영상을 못 올리는 게시판 |
-| 가리기 전후 이미지 | `artifacts\launch-4.4.0\redact-before-after-ko-1080x1350.png`, `-en-` | 윈도우 포럼, 아이보스, GeekNews 본문 설명, OKKY, 디스콰이엇, r/software |
-| 30초 트레일러 | `artifacts\promo-2026-10-18\v2\MyCapture-trailer-store-1080p60.mp4`, `v2-en\MyCapture-trailer-store-en-1080p60.mp4` | 영상을 받는 게시판의 가로 영상 |
+| 세로 영상 한국어 1080×1920, 19.4초 | `artifacts\launch-4.4.0\MyCapture-vertical-ko-1080x1920.mp4` | 윈도우 포럼, 개인 SNS, YouTube Shorts, Instagram Reels |
+| 세로 영상 영어 1080×1920, 19.4초 | `artifacts\launch-4.4.0\MyCapture-vertical-en-1080x1920.mp4` | 영어 Shorts·Reels |
+| 세로 영상 표지 | `artifacts\launch-4.4.0\cover-ko-1080x1920.png`, `artifacts\launch-4.4.0\cover-en-1080x1920.png` | 영상 표지, 영상을 못 올리는 게시판 |
+| 가리기 전후 이미지 | `artifacts\launch-4.4.0\redact-before-after-ko-1080x1350.png`, `artifacts\launch-4.4.0\redact-before-after-en-1080x1350.png` | 윈도우 포럼, 아이보스, GeekNews 본문 설명, OKKY, 디스콰이엇, r/software |
+| 30초 트레일러 | `artifacts\promo-2026-10-18\v2\MyCapture-trailer-store-1080p60.mp4`, `artifacts\promo-2026-10-18\v2-en\MyCapture-trailer-store-en-1080p60.mp4` | 영상을 받는 게시판의 가로 영상 |
 | Store 스크린샷 | Store 목록(언어별 10장) | 디스콰이엇 제품 이미지 보충 |
 
 ## 4주 일정
 
-시각은 한국 시간입니다. 측정 링크는 글에 넣는 Store 주소의 캠페인 ID이고, 게시 뒤에는 글 주소를 [metrics.md](metrics.md) 기록 표에 적습니다. 한 주 안의 한국어 채널은 모두 `community-ko`를 쓰므로 하루에 한 채널만 올려 날짜로 나눠 봅니다.
+시각은 한국 시간입니다. 측정 링크는 글에 넣는 Store 주소의 캠페인 ID이고, 게시 뒤에는 글 주소를 [metrics.md](metrics.md) 기록 표에 적습니다. 한국어 커뮤니티 글과 한국어 모집 안내는 `community-ko`를 쓰므로 하루에 한 채널만 올려 날짜로 나눠 봅니다.
 
 | 주 | 날짜 | 시각 | 채널 | 형식과 규칙 요약 | 첫 댓글 | 쓸 자료 | 측정 | 초안 |
 |---|---|---|---|---|---|---|---|---|
 | 1 | D+0 (월) | 20:00 | 지인 메신저 | 첫 사용자 30~50명 모집, 보상 없음 | 없음 | 설치 안내 | `community-ko` | [beta.md](beta.md) |
-| 1 | D+1 (화) | 21:00 | 윈도우 포럼 개발 / 자작 | `[자작] 이름 — 설명` 제목, 직접 만든 무료 프로그램만, 링크만 있는 글 금지 | Snipaste·캡처 도구와 다른 점 | 가리기 전후 이미지, 세로 영상 또는 표지 | `community-ko` | [posts/w1-windowsforum-ko.md](posts/w1-windowsforum-ko.md) |
-| 1 | D+2 (수) | 10:00 | 아이보스 무료 툴 공유 | 완전 무료·직접 만든 도구만, 만든 이유·방식·해결하는 문제·사용법·데이터 수집 여부 필수, 과장 금지 | 보고서용 캡처에서 쓰는 순서 | 가리기 전후 이미지 | `community-ko` | [posts/w1-iboss-ko.md](posts/w1-iboss-ko.md) |
+| 1 | D+1 (화) | 21:00 | 윈도우 포럼 개발 / 자작 | `[자작] 이름 — 설명` 제목, 직접 만든 무료 프로그램만, 링크만 있는 글 금지 | Windows 캡처 도구·Snipaste와 다른 점 | 가리기 전후 이미지, 세로 영상 또는 표지 | `community-ko` | [posts/w1-windowsforum-ko.md](posts/w1-windowsforum-ko.md) |
+| 1 | D+2 (수) | 10:00 | 아이보스 무료 툴 공유 | 완전 무료·직접 만든 도구만, 만든 이유·방식·해결하는 문제·사용법·데이터 수집 여부 필수, 과장 금지 | 보고서용 캡처의 가림막 사용 의견 | 가리기 전후 이미지 | `community-ko` | [posts/w1-iboss-ko.md](posts/w1-iboss-ko.md) |
 | 1 | D+3 (목) | 12:00 | 개인 SNS(LinkedIn, Threads, X)와 Shorts·Reels | 본인 계정, 세로 영상 | 없음 | 세로 영상 한국어 | `video` | [posts/w1-social-ko.md](posts/w1-social-ko.md), [posts/video-descriptions.md](posts/video-descriptions.md) |
 | 2 | D+7 (월) | 10:00 | 디스콰이엇 제품 등록 | 본인 제품만, 검토 후 승인 | 없음 | 가리기 전후 이미지, 표지, Store 스크린샷 | `community-ko` | [posts/w2-disquiet-ko.md](posts/w2-disquiet-ko.md) |
 | 2 | D+8 (화) | 08:30 | GeekNews Show | 직접 만든 것은 Show로, 써 볼 수 있어야 함, YouTube 링크 불가, 같은 프로젝트 재등록 제한(한 번만) | 받고 싶은 피드백 세 가지 | GitHub 저장소 링크 | `community-ko`, GitHub 유입 | [posts/w2-geeknews-show-ko.md](posts/w2-geeknews-show-ko.md) |
@@ -48,7 +48,7 @@ D가 가장 이른 경우에도 3주차는 11월이므로 미국 동부 시간�
 
 ## 주마다 할 일
 
-**1주: 한국어 일반·생산성 커뮤니티.** 첫 사용자는 지인과 커뮤니티에서 직접 모읍니다. 앱이 성공한 캡처 10회와 3일이 지난 뒤 한 번 평가를 요청하므로, 설치를 부탁할 때 평가를 따로 부탁하지 않고 며칠 실제로 써 달라고만 합니다. 보상을 걸거나 별 다섯 개를 부탁하는 일은 Store 정책이 금지하는 평점 조작에 해당합니다. 윈도우 포럼과 아이보스 글은 사용자 질문에 하루 안에 답하고, 질문에서 나온 오해는 [review-replies.md](review-replies.md)와 W4 문구 수정 목록에 적어 둡니다.
+**1주: 한국어 일반·생산성 커뮤니티.** 첫 사용자는 지인과 커뮤니티에서 직접 모읍니다. Store 설치본은 3일 이상에 걸쳐 성공한 캡처가 10회 이상이면 한 번 평가를 요청하므로, 설치를 부탁할 때 평가를 따로 부탁하지 않고 며칠 실제로 써 달라고만 합니다. 보상을 걸거나 별 다섯 개를 부탁하는 일은 Store 정책이 금지하는 평점 조작에 해당합니다. 윈도우 포럼과 아이보스 글은 사용자 질문에 하루 안에 답하고, 질문에서 나온 오해는 [review-replies.md](review-replies.md)와 W4 문구 수정 목록에 적어 둡니다.
 
 **2주: 한국 개발자 커뮤니티.** GeekNews Show는 같은 프로젝트를 한동안 다시 올릴 수 없으므로 가장 다듬은 글을 한 번만 올립니다. 링크는 바로 써 볼 수 있는 GitHub 저장소(릴리스와 Store 링크 포함)로 하고, 랜딩 페이지만 링크하지 않습니다. OKKY는 피드백 요청 게시판이므로 끝에 구체적인 질문 세 가지를 둡니다. 디스콰이엇은 월요일에 제품 등록을 먼저 요청해 승인을 받은 뒤 목요일에 제품에 연결한 포스트를 씁니다.
 

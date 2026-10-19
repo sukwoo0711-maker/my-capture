@@ -1,8 +1,8 @@
 # 세로 영상 · YouTube Shorts / Instagram Reels
 
 - 채널: https://www.youtube.com/shorts/ · https://www.instagram.com/
-- 게시 제안: 한국어 D+3 목요일 12:00, 영어 D+15 화요일 22:00 KST. D는 월요일 Store 게시 확인일 기준입니다.
-- 작성 기준: 요청서의 제목·설명 길이와 영상 캠페인 기준입니다. 별도 커뮤니티 규칙 URL은 지정되지 않았습니다.
+- 게시 제안: 한국어 D+3 목요일 12:00, 영어 D+17 목요일 12:00 KST. D는 월요일 Store 게시 확인일 기준입니다.
+- 길이: Shorts 제목 60자 이하, Reels 캡션 300자 이하. 링크는 모두 `cid=video`입니다.
 - 한국어 영상: `C:\GitRepositories\my-capture\artifacts\launch-4.4.0\MyCapture-vertical-ko-1080x1920.mp4`
 - 한국어 표지: `C:\GitRepositories\my-capture\artifacts\launch-4.4.0\cover-ko-1080x1920.png`
 - English video: `C:\GitRepositories\my-capture\artifacts\launch-4.4.0\MyCapture-vertical-en-1080x1920.mp4`
@@ -22,9 +22,9 @@
 ## YouTube Shorts 한국어 설명
 
 ```text
-제가 만든 무료 Windows 캡처 앱 MyCapture의 사용 영상입니다.
-고객 문의 화면을 이슈로 옮길 때 연락처를 손으로 가리는 일이 반복되어 만들었습니다.
-로컬 OCR 기반 개인정보 가리기로 가림막을 넣고, 주석을 단 화면을 F3으로 코드 위에 핀으로 띄웁니다.
+제가 만든 MyCapture는 개발자를 위한 무료 Windows 캡처·핀 도구입니다.
+고객 문의 화면을 이슈에 붙이기 전에 연락처를 가리고, 고치는 동안 그 화면을 코드 옆에 띄워 두려고 만들었습니다.
+영상에서는 로컬 OCR로 가림막을 넣고 주석을 단 이미지를 복사한 뒤 코드 창 위에 핀으로 띄웁니다. 영상의 F3은 설정에서 지정한 핀 단축키이며, 새로 설치하면 정해진 단축키는 영역 캡처와 영역 녹화뿐입니다.
 계정·광고가 없으며 녹화에는 소리가 없습니다.
 OCR은 PC에서 처리하지만 모델 파일 다운로드에는 인터넷을 사용합니다.
 
@@ -48,10 +48,10 @@ MyCapture: local redaction for a customer screenshot
 ## YouTube Shorts English description
 
 ```text
-I built MyCapture, a free Windows screenshot and pinning tool.
-I kept covering contact details by hand when turning customer inquiries into issues.
-This video shows local OCR redaction and annotations, followed by pinning the screenshot above a code window with F3.
-No account or ads are required, and recordings have no audio.
+I built MyCapture, a free Windows screenshot and pinning tool for developers.
+I made it to cover contact details in customer screenshots before they go into an issue, and to keep those screenshots beside my code.
+In the video, local OCR suggests redaction boxes, then the annotated image is copied and pinned above a code window. F3 is a pin shortcut assigned in Settings; a new install only sets region capture and recording shortcuts.
+There is no app account or advertising. Recordings have no audio.
 OCR runs on the PC, with network access for model downloads.
 
 Store: https://apps.microsoft.com/detail/9PB33MC095VR?cid=video
@@ -74,7 +74,7 @@ MyCapture로 문의 화면 정리
 ## Instagram Reels 한국어 캡션
 
 ```text
-제가 만든 무료 Windows 캡처 앱 MyCapture입니다. 고객 문의 화면의 연락처를 가리는 일이 반복되어 만들었습니다. 로컬 OCR로 가림막을 넣은 뒤 코드 위에 핀으로 띄우는 영상입니다. 이름·주소는 직접 확인해야 합니다. 계정·광고가 없으며 녹화는 무음입니다.
+제가 만든 MyCapture는 개발자를 위한 무료 Windows 캡처·핀 도구입니다. 문의 화면의 연락처를 가리고 그 화면을 코드 옆에 두려고 만들었습니다. 로컬 OCR로 가림막을 넣고 주석을 단 이미지를 코드 창 위에 핀으로 띄우는 영상입니다. 이름·주소는 직접 확인해야 합니다. 계정·광고가 없으며 녹화는 무음입니다.
 https://apps.microsoft.com/detail/9PB33MC095VR?cid=video
 ```
 
@@ -93,7 +93,7 @@ A customer screenshot beside the code
 ## Instagram Reels English caption
 
 ```text
-I built MyCapture for customer screenshots. Local OCR adds editable redaction boxes; F3 pins the image above my code. Names and addresses need manual checking. Free, Windows only, no account or ads. Recordings have no audio.
+I built MyCapture, a free Windows screenshot and pinning tool for developers. Local OCR suggests redaction boxes, and the edited screenshot stays pinned above my code. Names and missed text need manual checks. Recordings have no audio.
 https://apps.microsoft.com/detail/9PB33MC095VR?cid=video
 ```
 

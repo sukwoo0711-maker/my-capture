@@ -4,7 +4,7 @@
 
 모든 리뷰에 48시간 안에 답변하는 것을 운영 기준으로 합니다. 매 평일 아침 Partner Center > MyCapture > Ratings and reviews에서 Responses 필터를 미응답으로 설정해 확인합니다. 주말에도 48시간을 넘길 리뷰가 있는지 확인합니다.
 
-답변은 기본적으로 리뷰 아래 공개됩니다. Partner Center에서 비공개 이메일 응답을 선택한 경우는 예외이며, 아래 초안은 공개 답변용입니다. 게시한 답변은 수정할 수 없습니다. 사용자가 원래 리뷰를 수정하면 답변이 사라지며 새 리뷰에 다시 답할 수 있습니다.
+아래 초안은 공개 답변용입니다. 답변은 기본으로 리뷰 아래에 공개되고, "Make this response public"을 끄면 Microsoft가 고객에게 이메일로 보냅니다. 게시한 답변은 고칠 수 없으며, 고객이 리뷰를 고치면 답변이 내려가므로 바뀐 리뷰에 다시 답합니다.
 
 Store 답변 한도는 1,000자입니다. 아래 초안은 각각 600자 미만이며, 대괄호를 채운 후에도 600자 미만인지 확인합니다. 실제 리뷰의 문제와 확인한 조치를 반영하고 같은 문장을 여러 사람에게 그대로 반복하지 않습니다. 평점 변경의 대가나 광고·다른 앱 홍보를 넣지 않으며 개인정보를 포함하지 않습니다. 버전이나 해결 상태가 없으면 확인되지 않은 상태를 적고, 예정하지 않은 수정 일정을 약속하지 않습니다.
 
@@ -27,11 +27,11 @@ Thank you for describing how [feature they praised] helped with [their actual ta
 개인화: 재현 여부와 조치 상태를 확인한 내용으로 채우며, 아직 재현하지 못했다면 그 사실과 다음 확인 항목을 적습니다.
 
 ```text
-[구체적인 오류]로 [작업에 생긴 영향]을 겪으신 점 죄송합니다. [버전 또는 버전 미확인]의 해당 문제는 [확인한 상태와 다음 조치]입니다. 4.4.0부터 트레이 메뉴나 설정 > 정보의 문의하기에서 진단 정보와 메시지를 복사하고 GitHub 이슈를 열 수 있습니다. 앱을 열 수 없으면 https://github.com/sukwoo0711-maker/mycapture-support/issues 에 재현 순서를 남겨 주십시오. GitHub 계정이 필요하며 고객 정보는 제외해 주십시오.
+[구체적인 오류]로 [작업에 생긴 영향]을 겪으신 점 죄송합니다. [버전 또는 버전 미확인]의 해당 문제는 [확인한 상태와 다음 조치]입니다. 4.4.0부터 트레이 메뉴나 설정 > 정보의 문의하기에서 진단 정보를 복사하거나 내용이 미리 채워진 GitHub 이슈를 열 수 있습니다. 앱을 열 수 없으면 https://github.com/sukwoo0711-maker/mycapture-support/issues 에 재현 순서를 남겨 주십시오. GitHub 계정이 필요하며 고객 정보는 제외해 주십시오.
 ```
 
 ```text
-I'm sorry [specific bug] interrupted [their task]. For [version or “the reported version”], [confirmed status and next step]. As of 4.4.0, Contact support in the tray menu or Settings > About can copy diagnostics and your message and open a GitHub issue. If the app won't open, use https://github.com/sukwoo0711-maker/mycapture-support/issues with reproduction steps. A GitHub account is required; please omit customer data.
+I'm sorry [specific bug] interrupted [their task]. For [version or “the reported version”], [confirmed status and next step]. As of 4.4.0, Contact support in the tray menu or Settings > About lets you copy diagnostics or open a prefilled GitHub issue. If the app won't open, use https://github.com/sukwoo0711-maker/mycapture-support/issues with reproduction steps. A GitHub account is required; please omit customer data.
 ```
 
 ## 기능 요청 · Feature request
@@ -60,7 +60,7 @@ I'm sorry installation stopped at [step or error]. For [target version or “thi
 
 ## 낮은 평점 · Low rating
 
-개인화: 평점 자체를 논박하지 않고 구체적인 문제를 인정합니다. 조치·계획이 없으면 이유를 적습니다. 무음 녹화에 대한 의견에는 소리 녹화가 현재 계획에 없다는 범위로 답합니다.
+개인화: 평점 자체를 논박하지 않고 구체적인 문제를 인정합니다. 조치·계획이 없으면 이유를 적습니다. 무음 녹화에 대한 의견에는 녹화가 화면 설명·편집·GIF에 집중하도록 마이크와 시스템 소리를 의도적으로 넣지 않았고, 지금은 추가할 계획이 없다고 답합니다(README의 녹화 설명과 docs/market/README.md의 제품 결정).
 
 ```text
 [구체적인 문제] 때문에 [기대했던 작업]을 하지 못하신 점을 확인했습니다. [버전 또는 버전 미확인]에서는 [현재 동작과 한계]입니다. [확정한 변경 내용과 시점 또는 변경 계획이 없는 이유]입니다. 남겨 주신 [구체적인 상황]은 사용 안내와 다음 변경을 검토할 때 참고하겠습니다.

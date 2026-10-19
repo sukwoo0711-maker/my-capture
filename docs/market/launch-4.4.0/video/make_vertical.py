@@ -38,13 +38,15 @@ CREAM = "#FFF8F4"
 TAGS = ["-colorspace", "bt709", "-color_primaries", "bt709",
         "-color_trc", "bt709", "-color_range", "tv"]
 ICC = ImageCms.ImageCmsProfile(ImageCms.createProfile("sRGB")).tobytes()
+# The pin caption names no key: new installs leave the clipboard-pin shortcut (F3 in the
+# trailer) unassigned; only region capture and recording have default shortcuts.
 CAPTIONS = {
     "ko": ["Ctrl+Shift+C 영역 캡처", "Ctrl+Shift+C 영역 캡처", "캡처 직후 키 하나로 다음 동작",
            "Ctrl+Shift+R 개인정보 가리기", "주석은 레이어로 남습니다",
-           "F3 다른 창 위에 핀", ""],
+           "다른 창 위에 핀", ""],
     "en": ["Ctrl+Shift+C  Region capture", "Ctrl+Shift+C  Region capture", "One key for the next step",
            "Ctrl+Shift+R  Redact personal details", "Annotations stay editable as layers",
-           "F3  Pin above other windows", ""],
+           "Pin above other windows", ""],
 }
 # Crops (x, y, w, h in source pixels) were measured on frames with a 120 px grid.
 # capture-window: the whole inquiry window, mode bar and Ctrl/Shift/C keycaps (2.0-5.4 s).
