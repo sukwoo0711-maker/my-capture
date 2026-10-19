@@ -57,6 +57,7 @@ public partial class App
     /// <summary>Called after capture success or cancellation, never merely when a selector is replaced.</summary>
     private void CompleteWelcomeCaptureAnnouncement()
     {
+        if (_readyNotification is null) return;
         if (_readyNotification.CompleteCapture()) _welcomeConflictPending |= _hotkeys?.Failures.Count > 0;
         QueueWelcomeResidentAnnouncement();
     }

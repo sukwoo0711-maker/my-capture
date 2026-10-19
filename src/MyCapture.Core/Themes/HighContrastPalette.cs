@@ -62,6 +62,7 @@ public static class HighContrastPalette
         // Strong is the hover and emphasis outline, so it takes the system emphasis colour.
         ["Border.Strong"] = SystemColorRole.Highlight,
         ["Border.Focus"] = SystemColorRole.WindowText,
+        ["Pin.Frame"] = SystemColorRole.Highlight,
         ["Border.Accent"] = SystemColorRole.WindowText,
         ["Border.Hover"] = SystemColorRole.Highlight,
         ["Border.Badge"] = SystemColorRole.WindowText,

@@ -147,6 +147,7 @@
     <SolidColorBrush x:Key="Border.Strong" Color="{StaticResource Primitive.Warm600}" />
     <SolidColorBrush x:Key="Border.Hover" Color="Transparent" />
     <SolidColorBrush x:Key="Border.Focus" Color="{StaticResource Primitive.Warm100}" />
+    <SolidColorBrush x:Key="Pin.Frame" Color="#E24F47" />
     <!-- Two-DIP focus rings are overlays, so the weight never moves layout. -->
     <Thickness x:Key="Border.DecorativeThickness">0</Thickness>
     <Thickness x:Key="Border.ToolThickness">0</Thickness>

@@ -63,6 +63,7 @@ public sealed class SystemThemeTests
     public void PreferenceRefreshFollowsLightAndDarkWithoutChangingTheSavedSelection() => StaTestHost.Run(() =>
     {
         AppTheme previous = ThemeService.Current;
+        Func<bool>? previousReader = ThemeService.SystemLightThemeReaderForTest;
         bool light = true;
         ThemeService.SystemLightThemeReaderForTest = () => light;
         ThemeService.SystemHighContrastOverrideForTest = false;
@@ -114,7 +115,7 @@ public sealed class SystemThemeTests
         {
             ThemeService.SystemColorsOverrideForTest = null;
             ThemeService.SystemHighContrastOverrideForTest = null;
-            ThemeService.SystemLightThemeReaderForTest = null;
+            ThemeService.SystemLightThemeReaderForTest = previousReader;
             ThemeService.Apply(previous);
         }
     });

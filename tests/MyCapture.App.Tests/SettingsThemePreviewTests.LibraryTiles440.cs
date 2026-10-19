@@ -163,7 +163,7 @@ public sealed partial class SettingsThemePreviewTests
         Assert.Equal(1, actions.Opacity);
         Assert.True(actions.IsHitTestVisible);
         var focus = Assert.IsType<Border>(item.Template.FindName("FocusRing", item));
-        Assert.Same(window.FindResource("Border.Focus"), focus.BorderBrush);
+        Assert.Same(window.FindResource("Text.Primary"), focus.BorderBrush);
         Assert.Equal(1, focus.Opacity);
         SetLibraryTileState440(item, "IsKeyboardFocusWithin", false);
         SettleGalleryLayout(window);
@@ -191,7 +191,20 @@ public sealed partial class SettingsThemePreviewTests
         Assert.Equal(TextTrimming.CharacterEllipsis, title.TextTrimming);
         Assert.Equal(TextWrapping.NoWrap, title.TextWrapping);
         Assert.Equal(vm.Caption, title.Text);
-        Assert.Equal(vm.Caption, title.ToolTip);
+        Assert.Null(title.ToolTip);
+        var captionTip = Assert.IsType<ToolTip>(item.ToolTip);
+        captionTip.PlacementTarget = item;
+        try
+        {
+            captionTip.IsOpen = true;
+            SettleGalleryLayout(window);
+            TextBlock expanded = Assert.Single(Descendants(captionTip).OfType<TextBlock>(), text => text.Text == vm.Caption);
+            Assert.Equal(TextWrapping.Wrap, expanded.TextWrapping);
+            Assert.Equal(TextTrimming.None, expanded.TextTrimming);
+            Assert.Equal(420, captionTip.MaxWidth);
+            Assert.Equal(300, Assert.Single(Descendants(captionTip).OfType<ScrollViewer>()).MaxHeight);
+        }
+        finally { captionTip.IsOpen = false; }
         Assert.True(title.FontSize >= 12);
         Assert.DoesNotContain(Descendants(item).OfType<TextBlock>(),
             text => text.IsVisible && text.Text == UiText.Get("Text_302BAE127938"));

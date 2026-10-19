@@ -45,6 +45,9 @@ internal static class WpfTestThread
         ArgumentNullException.ThrowIfNull(body);
         return new Thread(() =>
         {
+            // Theme tests must resolve System independently of the developer's Windows app mode.
+            // This seam is thread-local, so initialize it on each WPF thread, including children.
+            MyCapture.App.Themes.ThemeService.SystemLightThemeReaderForTest = static () => false;
             try
             {
                 body();
@@ -52,6 +55,7 @@ internal static class WpfTestThread
             finally
             {
                 ShutdownDispatcher();
+                MyCapture.App.Themes.ThemeService.SystemLightThemeReaderForTest = null;
             }
         });
     }

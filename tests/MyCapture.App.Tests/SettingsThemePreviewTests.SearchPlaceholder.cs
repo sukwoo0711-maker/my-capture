@@ -68,10 +68,18 @@ public sealed partial class SettingsThemePreviewTests
                                     {
                                         ArrangeSearchHost(host, width);
                                         AssertSearchPlaceholderFit(window, label + $"/host-{width}");
-                                        if (width == 1036)
-                                            Assert.Equal(fixture.ViewModel.SearchPlaceholder, placeholder.Text);
                                     }
                                     Assert.True(host.ActualWidth < window.MinWidth);
+
+                                    // Body 14 needs 372.8 DIP for the English hint at 125%, while the
+                                    // 1036-DIP host allocates 360 after recovering 12 DIP of padding.
+                                    // It still cannot fit. Keep the measured compact choice above and
+                                    // verify the field syntax reappears once the full hint has room.
+                                    double fullHintWidth = MeasureSearchHint(placeholder, fixture.ViewModel.SearchPlaceholder);
+                                    double roomyWidth = host.ActualWidth + Math.Max(0, fullHintWidth - placeholder.ActualWidth) + 4;
+                                    ArrangeSearchHost(host, roomyWidth);
+                                    Assert.Equal(fixture.ViewModel.SearchPlaceholder, placeholder.Text);
+                                    AssertSearchPlaceholderFit(window, label + "/full-hint-room");
 
                                     // Reproduce the CI failure's actual placeholder allocation, even
                                     // when this machine has different command-label font metrics.

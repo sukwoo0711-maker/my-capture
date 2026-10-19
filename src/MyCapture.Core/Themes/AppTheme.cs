@@ -116,6 +116,7 @@ public static class ThemeCatalog
         colors["Timeline.LayerText"] = AppThemeNames.IsLight(value)
             ? ThemeColor.Rgb(0xFF, 0xFF, 0xFF) : ThemeColor.Rgb(0x0A, 0x08, 0x18);
         colors["Border.Focus"] = colors["Text.Primary"];
+        colors["Pin.Frame"] = source["Border.Focus"];
         colors["Border.Accent"] = colors["Text.Primary"];
         colors["Overlay.SelectionBorder"] = colors["Text.Primary"];
         colors["Overlay.HandleStroke"] = colors["Text.Primary"];

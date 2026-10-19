@@ -15,8 +15,8 @@ using Xunit;
 namespace MyCapture.App.Tests;
 
 /// <summary>
-/// Pin outlines and video layer selection follow the neutral focus/selection palette.
-/// Rest opacity and live theme changes are retained; contrast palettes remain opaque.
+/// Pin outlines retain the brand while video layer selection stays neutral.
+/// Rest opacity and live theme changes are retained; contrast palettes keep their system pair.
 /// </summary>
 public sealed class PinFrameColorTests
 {
@@ -24,11 +24,11 @@ public sealed class PinFrameColorTests
         [AppTheme.Midnight, AppTheme.Glass, AppTheme.Workspace, AppTheme.Daylight, AppTheme.GlassLight];
 
     [Theory]
-    [InlineData(AppTheme.Glass, AppAccent.Red, 0xFF, 0xFF, 0xFF)]
-    [InlineData(AppTheme.Glass, AppAccent.Violet, 0xFF, 0xFF, 0xFF)]
-    [InlineData(AppTheme.GlassLight, AppAccent.Red, 0x08, 0x0E, 0x16)]
-    [InlineData(AppTheme.GlassLight, AppAccent.Violet, 0x08, 0x0E, 0x16)]
-    public void OutlineRestsInNeutralInkAndTurnsOpaqueWhenEmphasized(AppTheme theme, AppAccent accent, byte r, byte g, byte b) =>
+    [InlineData(AppTheme.Glass, AppAccent.Red, 0xE2, 0x4F, 0x47)]
+    [InlineData(AppTheme.Glass, AppAccent.Violet, 0xE2, 0x4F, 0x47)]
+    [InlineData(AppTheme.GlassLight, AppAccent.Red, 0xCA, 0x3E, 0x36)]
+    [InlineData(AppTheme.GlassLight, AppAccent.Violet, 0xCA, 0x3E, 0x36)]
+    public void OutlineRestsInAQuietAccentAndTurnsOpaqueWhenEmphasized(AppTheme theme, AppAccent accent, byte r, byte g, byte b) =>
         StaTestHost.Run(() =>
         {
             ResourceDictionary resources = LoadTokens();
@@ -39,7 +39,7 @@ public sealed class PinFrameColorTests
         });
 
     [Fact]
-    public void EveryPaletteFramesPinsInNeutralSelectionInk() => StaTestHost.Run(() =>
+    public void EveryPaletteFramesPinsInBrandRedIndependentlyOfSelectionInk() => StaTestHost.Run(() =>
     {
         foreach (AppTheme theme in PaletteThemes)
         foreach (AppAccent accent in Enum.GetValues<AppAccent>())
@@ -50,9 +50,11 @@ public sealed class PinFrameColorTests
             Color emphasized = Resolve(resources, contrast: false, emphasized: true);
             Color rest = Resolve(resources, contrast: false, emphasized: false);
 
-            Assert.Equal(ToColor(palette["Overlay.SelectionBorder"]), emphasized);
+            Assert.Equal(ToColor(palette["Pin.Frame"]), emphasized);
             Assert.Equal(Color.FromArgb(0x99, emphasized.R, emphasized.G, emphasized.B), rest);
-            Assert.Equal(ToColor(palette["Text.Primary"]), emphasized);
+            Assert.NotEqual(ToColor(palette["Overlay.SelectionBorder"]), emphasized);
+            Assert.Equal(ToColor(palette["Text.Primary"]), ToColor(palette["Overlay.SelectionBorder"]));
+            Assert.True(emphasized.R > emphasized.G && emphasized.R > emphasized.B);
         }
     });
 
@@ -64,7 +66,7 @@ public sealed class PinFrameColorTests
             ResourceDictionary resources = LoadTokens();
             ThemeService.ApplyResources(AppTheme.HighContrast, resources, systemHighContrast: false, accent: accent);
             Assert.Equal(Colors.White, Resolve(resources, contrast: true, emphasized: false));
-            Assert.Equal(Colors.White, Resolve(resources, contrast: true, emphasized: true));
+            Assert.Equal(Color.FromRgb(0xFF, 0xD0, 0x00), Resolve(resources, contrast: true, emphasized: true));
         }
 
         Color windowText = Color.FromRgb(0xFF, 0xFF, 0x00);
@@ -83,7 +85,7 @@ public sealed class PinFrameColorTests
                 ResourceDictionary resources = LoadTokens();
                 ThemeService.ApplyResources(theme, resources, systemHighContrast: true, accent: accent);
                 Assert.Equal(windowText, Resolve(resources, contrast: true, emphasized: false));
-                Assert.Equal(windowText, Resolve(resources, contrast: true, emphasized: true));
+                Assert.Equal(highlight, Resolve(resources, contrast: true, emphasized: true));
             }
         }
         finally
@@ -95,8 +97,8 @@ public sealed class PinFrameColorTests
     [Fact]
     public void MissingTokensFallBackToTheDefaultPalette()
     {
-        Assert.Equal(Colors.White, PinFrameColor.FallbackAccent);
-        Assert.Equal(Color.FromArgb(0x99, 0xFF, 0xFF, 0xFF), PinFrameColor.Resolve(null, null, contrast: false, emphasized: false));
+        Assert.Equal(Color.FromRgb(0xE2, 0x4F, 0x47), PinFrameColor.FallbackAccent);
+        Assert.Equal(Color.FromArgb(0x99, 0xE2, 0x4F, 0x47), PinFrameColor.Resolve(null, null, contrast: false, emphasized: false));
         Assert.Equal(PinFrameColor.FallbackAccent, PinFrameColor.Resolve(null, null, contrast: false, emphasized: true));
         Assert.Equal(PinFrameColor.FallbackNeutral, PinFrameColor.Resolve(null, null, contrast: true, emphasized: false));
         Assert.Equal(PinFrameColor.FallbackAccent,
@@ -145,7 +147,7 @@ public sealed class PinFrameColorTests
             ThemeService.ApplyFromSettings(AppThemeNames.HighContrast, null, AppAccentNames.Red);
             Assert.Equal(Colors.White, pin.FrameColorForTest);
             Hover(pin, Mouse.MouseEnterEvent);
-            Assert.Equal(Colors.White, pin.FrameColorForTest);
+            Assert.Equal(Color.FromRgb(0xFF, 0xD0, 0x00), pin.FrameColorForTest);
             Hover(pin, Mouse.MouseLeaveEvent);
 
             // A Windows contrast theme turning on and off.
@@ -161,7 +163,7 @@ public sealed class PinFrameColorTests
             ThemeService.ApplyFromSettings(AppThemeNames.Glass, null, AppAccentNames.Red);
             Assert.Equal(windowText, pin.FrameColorForTest);
             pin.SetChromeActiveForTest(true);
-            Assert.Equal(windowText, pin.FrameColorForTest);
+            Assert.Equal(highlight, pin.FrameColorForTest);
             pin.SetChromeActiveForTest(false);
             ThemeService.SystemHighContrastOverrideForTest = false;
             ThemeService.SystemColorsOverrideForTest = null;

@@ -2093,7 +2093,7 @@ internal sealed partial class AnnotationEditorControl : Grid
         _cropSection = BuildCropSection();
         stack.Children.Add(_cropSection);
 
-        _deleteButton = TextButton(UiText.Get("Text_0DED92FCE6B0"), UiText.Get("Text_7DFFA4D81765"), "Button.Danger", DeleteSelected);
+        _deleteButton = TextButton(UiText.Get("Text_0DED92FCE6B0"), UiText.Get("Text_7DFFA4D81765"), "Button.Ghost", DeleteSelected);
         _deleteButton.HorizontalAlignment = HorizontalAlignment.Left;
         _deleteButton.HorizontalContentAlignment = HorizontalAlignment.Center;
         _deleteButton.Height = 32;

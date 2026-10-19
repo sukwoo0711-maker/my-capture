@@ -116,7 +116,7 @@
     <sys:Double x:Key="CommandButton.FontSize">14</sys:Double>
     <sys:Double x:Key="CommandButton.IconSize">16</sys:Double>
     <Thickness x:Key="CommandButton.Padding.Standard">10,4</Thickness>
-    <Thickness x:Key="CommandButton.Padding.Compact">10,2</Thickness>
+    <Thickness x:Key="CommandButton.Padding.Compact">10,0</Thickness>
     <Thickness x:Key="CommandButton.IconLabelGap">6,0,0,0</Thickness>
 
     <!-- Interaction state layers. A template stacks them over its rest chrome, with the same
@@ -351,10 +351,11 @@
             </Setter.Value>
         </Setter>
     </Style>
-    <!-- Destructive actions remain neutral until the confirmation surface. -->
-    <Style x:Key="Button.Danger" TargetType="Button" BasedOn="{StaticResource Button.Ghost}">
-        <Setter Property="Foreground" Value="{DynamicResource Text.Primary}" />
-        <Setter Property="BorderBrush" Value="{DynamicResource Border.Control}" />
+    <!-- Reserve danger text and outline for the destructive confirmation action. -->
+    <Style x:Key="Button.Danger" TargetType="Button" BasedOn="{StaticResource Button.Secondary}">
+        <Setter Property="Foreground" Value="{DynamicResource State.Danger}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource State.Danger}" />
+        <Setter Property="BorderThickness" Value="1" />
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="{x:Type Button}">

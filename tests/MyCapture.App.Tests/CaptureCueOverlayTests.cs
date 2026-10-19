@@ -23,8 +23,8 @@ namespace MyCapture.App.Tests;
 /// </summary>
 public sealed class CaptureCueOverlayTests
 {
-    // Glass accent #9789FF and its keyline (black: the accent is light), as BGRA.
-    private static readonly byte[] Accent = [0xFF, 0x89, 0x97, 0xFF];
+    // Default neutral white guide and its contrasting black keyline, as BGRA.
+    private static readonly byte[] Accent = [0xFF, 0xFF, 0xFF, 0xFF];
     private static readonly byte[] Keyline = [0x00, 0x00, 0x00, 0xFF];
 
     [Fact]
@@ -155,8 +155,8 @@ public sealed class CaptureCueOverlayTests
                 Assert.DoesNotContain("T", barText);
                 Assert.DoesNotContain("C", barText);
                 Assert.DoesNotContain("Esc", barText);
-                Assert.StartsWith($"{UiText.Get("CaptureGuide2_Text")}  T\n", (string)bar.TextButton.ToolTip, StringComparison.Ordinal);
-                Assert.StartsWith($"{UiText.Get("CaptureGuide2_Cancel")}  Esc\n", (string)bar.CancelButton.ToolTip, StringComparison.Ordinal);
+                Assert.Equal($"{UiText.Get("CaptureGuide2_Text")}\n{UiText.Get("CaptureGuide2_TextHelp")} (T)", (string)bar.TextButton.ToolTip);
+                Assert.Equal($"{UiText.Get("CaptureGuide2_Cancel")}\n{UiText.Get("CaptureGuide2_CancelTip")} (Esc)", (string)bar.CancelButton.ToolTip);
                 Assert.Equal("T", System.Windows.Automation.AutomationProperties.GetAcceleratorKey(bar.TextButton));
                 Assert.Empty(barText);
                 Assert.Equal(UiText.Get("CaptureGuide2_Text"),

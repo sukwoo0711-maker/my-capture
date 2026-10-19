@@ -219,7 +219,7 @@ public sealed class ColorPickOverlayTests
             var button = view.ModeBarForTest!.ColorButton;
             string tooltip = UiText.Get("CaptureGuide2_Color") + "\n" + UiText.Get("CaptureGuide2_ColorHelp") + " (C)";
             Assert.Equal(tooltip, button.ToolTip);
-            Assert.Equal(UiText.Get("CaptureGuide2_ColorHelp"),
+            Assert.Equal(UiText.Get("CaptureGuide2_ColorHelp") + " (C)",
                 System.Windows.Automation.AutomationProperties.GetHelpText(button));
             view.ShowShortcutHints = false;
             Assert.Equal(tooltip, button.ToolTip);

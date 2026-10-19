@@ -8,7 +8,7 @@ namespace MyCapture.App.Tests;
 
 public sealed class AccentUsagePolicyTests
 {
-    private static readonly Regex AccentKey = new(@"\b(?:Accent\.(?:Default|Hover|Pressed|Subtle|Indicator|Foreground|Cool|Gradient)|Border\.Accent|Text\.OnAccent)\b");
+    private static readonly Regex AccentKey = new(@"\b(?:Accent\.(?:Default|Hover|Pressed|Subtle|Indicator|Foreground|Cool|Gradient)|Border\.Accent|Text\.OnAccent|Pin\.Frame)\b");
     // These files define palettes and their system-contrast mappings, rather than UI consumers.
     private static readonly HashSet<string> PaletteFiles =
     [
@@ -18,7 +18,7 @@ public sealed class AccentUsagePolicyTests
     ];
 
     [Fact]
-    public void AccentConsumersAreLimitedToPrimaryActionsRecordingAndUserArtwork()
+    public void AccentConsumersAreLimitedToPrimaryActionsPinFramesRecordingAndUserArtwork()
     {
         string root = RepositoryRoot();
         var failures = new List<string>();
@@ -44,6 +44,7 @@ public sealed class AccentUsagePolicyTests
     [InlineData("Accent.Cool")]
     [InlineData("Border.Accent")]
     [InlineData("Text.OnAccent")]
+    [InlineData("Pin.Frame")]
     public void SharedThemeFileDoesNotAllowAnAccentInAnUnrelatedStyle(string key)
     {
         string source = $$"""
@@ -98,6 +99,8 @@ public sealed class AccentUsagePolicyTests
             if (!accent && Regex.IsMatch(line, "\"State\\.(?:Danger|DangerHover|Warning)\"")) continue;
             bool allowed = file switch
             {
+                // A floating MyCapture pin uses its outline as brand identity over other apps.
+                "src/MyCapture.App/Pinning/PinFrameColor.cs" => line == "internal const string AccentKey = \"Pin.Frame\";",
                 // Explicit user-selected export background: output artwork, not chrome.
                 "src/MyCapture.App/Editing/ImageReductionExportDialog.cs" => line == "Color accent = (TryFindResource(\"Accent.Default\") as SolidColorBrush)?.Color ?? Colors.SteelBlue;",
                 // Recording-region outline. Other accent usages in this window still fail.

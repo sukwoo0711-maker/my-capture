@@ -407,8 +407,7 @@ internal sealed class CaptureModeBar : Border
         string tip = key is not null ? $"{help} ({key})" : help;
         AutomationProperties.SetHelpText(button, tip);
         string name = AutomationProperties.GetName(button);
-        string title = key is null ? name : $"{name}  {key}";
-        button.ToolTip = string.IsNullOrEmpty(title) ? tip : $"{title}\n{help}";
+        button.ToolTip = string.IsNullOrEmpty(name) ? tip : $"{name}\n{tip}";
     }
 
     /// <summary>Routes Enter through the same activation as a mouse/Space click.</summary>

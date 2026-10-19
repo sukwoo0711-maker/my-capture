@@ -42,6 +42,9 @@ public sealed class CompactCaptureBarTests
         };
         try
         {
+            Assert.Equal(UiText.Get("Text_255C28FD0AC2"), AutomationProperties.GetName(window.PrimaryButtonForTest));
+            Assert.Equal(UiText.Get("Text_E1C96EF1EA0F"), AutomationProperties.GetName(window.CancelButtonForTest));
+            Assert.Equal("Esc", AutomationProperties.GetAcceleratorKey(window.CancelButtonForTest));
             window.PreviewRecordingForTest(false, TimeSpan.FromSeconds(83));
             Border strip = Field<Border>(window, "_controlStrip");
             TextBlock status = Field<TextBlock>(window, "_statusText");
@@ -65,6 +68,10 @@ public sealed class CompactCaptureBarTests
                 Assert.True(button.Focusable && button.IsTabStop);
             }
             Assert.Contains("Esc", (string)window.PrimaryButtonForTest.ToolTip);
+            Assert.Equal(UiText.Get("Text_74C6AEBB2B6D"), AutomationProperties.GetName(window.PrimaryButtonForTest));
+            Assert.Equal(UiText.Get("Onboard_RecordMore"), AutomationProperties.GetName(window.MoreButtonForTest));
+            Assert.Equal(UiText.Get("RecordingPause_PauseName"), AutomationProperties.GetName(window.PauseButtonForTest));
+            Assert.Equal("Esc", AutomationProperties.GetAcceleratorKey(window.PrimaryButtonForTest));
             Assert.Contains("Esc", AutomationProperties.GetHelpText(window.PrimaryButtonForTest));
             Assert.Contains("Ctrl+Shift+P", (string)window.PauseButtonForTest.ToolTip);
             Assert.Contains("Ctrl+Shift+P", AutomationProperties.GetHelpText(window.PauseButtonForTest));
@@ -115,15 +122,18 @@ public sealed class CompactCaptureBarTests
             bar.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
             bar.Arrange(new Rect(bar.DesiredSize));
             Assert.InRange(bar.DesiredSize.Width, 300, 460);
-            foreach (ButtonBase command in new ButtonBase[]
+            foreach ((ButtonBase command, string nameKey) in new (ButtonBase, string)[]
                      {
-                         bar.CaptureKindButton, bar.RecordKindButton, bar.CaptureButton, bar.WindowButton,
-                         bar.FullScreenButton, bar.ScrollButton, bar.DelayButton, bar.TextButton, bar.ColorButton,
-                         bar.MoreButton, bar.HelpButton, bar.CancelButton,
+                         (bar.CaptureKindButton, "Onboard_BarCapture"), (bar.RecordKindButton, "Onboard_BarRecord"),
+                         (bar.CaptureButton, "CaptureGuide2_Region"), (bar.WindowButton, "CaptureBar_Window"),
+                         (bar.FullScreenButton, "CaptureGuide2_FullScreen"), (bar.ScrollButton, "Text_4DBA30197C0A"),
+                         (bar.DelayButton, "CaptureBar_Delay"), (bar.TextButton, "CaptureGuide2_Text"),
+                         (bar.ColorButton, "CaptureGuide2_Color"), (bar.MoreButton, "Onboard_BarMore"),
+                         (bar.HelpButton, "CaptureGuide2_Help"), (bar.CancelButton, "CaptureGuide2_Cancel"),
                      })
             {
                 Assert.Equal(Visibility.Visible, command.Visibility);
-                Assert.False(string.IsNullOrWhiteSpace(AutomationProperties.GetName(command)));
+                Assert.Equal(UiText.Get(nameKey), AutomationProperties.GetName(command));
                 Assert.False(string.IsNullOrWhiteSpace(AutomationProperties.GetHelpText(command)));
                 Assert.NotNull(command.ToolTip);
                 Assert.InRange(command.ActualWidth, 24, 40);
@@ -131,6 +141,12 @@ public sealed class CompactCaptureBarTests
             }
             Assert.Equal("T", AutomationProperties.GetAcceleratorKey(bar.TextButton));
             Assert.Equal("C", AutomationProperties.GetAcceleratorKey(bar.ColorButton));
+            foreach (ButtonBase command in new ButtonBase[] { bar.TextButton, bar.ColorButton, bar.CancelButton })
+            {
+                string key = AutomationProperties.GetAcceleratorKey(command);
+                Assert.EndsWith($"({key})", AutomationProperties.GetHelpText(command), StringComparison.Ordinal);
+                Assert.EndsWith($"({key})", Assert.IsType<string>(command.ToolTip), StringComparison.Ordinal);
+            }
             Assert.Equal(string.Empty, AutomationProperties.GetAcceleratorKey(bar.CaptureButton));
             foreach (RadioButton selected in new[] { bar.CaptureKindButton, bar.CaptureButton })
             {

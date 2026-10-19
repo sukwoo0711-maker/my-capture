@@ -52,8 +52,8 @@ public sealed class VisualSystemControlTests
         Assert.Equal(contrast ? 1d : 0d, sheet.Card.BorderThickness.Left);
         Assert.Equal(contrast ? 1d : 0d, sheet.Tool.BorderThickness.Left);
         Border dangerChrome = Part<Border>(sheet.Danger, "Chrome");
-        Assert.Equal(new Thickness(contrast ? 1 : 0), dangerChrome.BorderThickness);
-        Assert.Equal(ColorOf(resources, "Border.Control"), ColorOf(dangerChrome.BorderBrush));
+        Assert.Equal(new Thickness(1), dangerChrome.BorderThickness);
+        Assert.Equal(ColorOf(resources, "State.Danger"), ColorOf(dangerChrome.BorderBrush));
 
         foreach (Control control in new Control[] { sheet.Primary, sheet.Secondary, sheet.Tool,
                      sheet.Focused, sheet.Toggle, sheet.Rail, sheet.SelectedTab, sheet.ListItem,
@@ -70,7 +70,7 @@ public sealed class VisualSystemControlTests
         if (!contrast)
         {
             Assert.Equal(ColorOf(resources, "Text.Primary"), ColorOf(focus.BorderBrush));
-            Assert.Equal(ColorOf(resources, "Text.Primary"), ColorOf(sheet.Danger.Foreground));
+            Assert.Equal(ColorOf(resources, "State.Danger"), ColorOf(sheet.Danger.Foreground));
             Assert.NotEqual(ColorOf(resources, "Accent.Default"), ColorOf(sheet.Danger.Background));
             foreach ((Control control, string part) in new[]
             {
