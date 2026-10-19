@@ -13,6 +13,7 @@
 |---|---|
 | [commercial-readiness.md](./commercial-readiness.md) | **상용화 준비도 평가** — 13개 차원 점수표(43/65), 판정 "필수 수정 후 판매 가능", 판매를 막는 필수 결함 5종 |
 | [global-benchmark.md](./global-benchmark.md) | **글로벌 경쟁 벤치마크** — US/UK/JP/KR 선호 유료·무료 도구 기능·가격 비교, 지역별 기대치, 포지셔닝 |
+| [launch-4.4.0/plan.md](./launch-4.4.0/plan.md) | **4.4.0 출시 확산 자료(2026-10-20, 현행)** — 4주 채널 일정과 규칙 근거, 채널별 게시 글 초안, 첫 사용자 모집, Store 리뷰 답변 양식, 캠페인 ID별 지표 |
 | [voc-and-moat-roadmap.md](./voc-and-moat-roadmap.md) | **VOC + 아이디어 마라톤 + 해자 로드맵** — 사랑받는/불만 기능, 25개 우선순위 아이디어, 방어 가능한 해자 5종, v0.6/v0.7/v1.0 단계 로드맵, 수익 모델 |
 
 관련: 기능 매트릭스 상세는 [../competitive-matrix.md](../competitive-matrix.md), 녹화 아키텍처는 [../adr/0002-region-recording.md](../adr/0002-region-recording.md).
