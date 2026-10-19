@@ -3338,6 +3338,14 @@ Open the library or Settings from the tray menu.</value></data>
   <data name="Hotkey.Unavailable" xml:space="preserve"><value>This shortcut is in use by another app or Windows. Choose another key.</value></data>
   <data name="Hotkey.Waiting" xml:space="preserve"><value>Press a shortcut · Esc to cancel</value></data>
   <data name="Tools.CustomColor" xml:space="preserve"><value>Apply custom color</value></data>
+  <data name="EditorProperty_CustomColor" xml:space="preserve"><value>Custom color</value></data>
+  <data name="EditorProperty_CustomColorHint" xml:space="preserve"><value>Custom color (Enter: apply, Esc: close)</value></data>
+  <data name="EditorProperty_Hex" xml:space="preserve"><value>HEX color</value></data>
+  <data name="EditorProperty_FillTransparency" xml:space="preserve"><value>Fill transparency</value></data>
+  <data name="EditorProperty_SelectedColor" xml:space="preserve"><value>Selected</value></data>
+  <data name="EditorProperty_ThicknessDecrease" xml:space="preserve"><value>Decrease line width</value></data>
+  <data name="EditorProperty_ThicknessIncrease" xml:space="preserve"><value>Increase line width</value></data>
+  <data name="EditorProperty_MosaicStrength" xml:space="preserve"><value>Mosaic strength</value></data>
   <data name="Tools.Ellipse" xml:space="preserve"><value>Ellipse</value></data>
   <data name="Tools.Highlighter" xml:space="preserve"><value>Highlighter</value></data>
   <data name="Tools.InvalidColor" xml:space="preserve"><value>Enter a color as #RRGGBB or #AARRGGBB.</value></data>

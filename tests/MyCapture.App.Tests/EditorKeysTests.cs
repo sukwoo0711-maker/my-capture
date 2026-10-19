@@ -78,7 +78,7 @@ public sealed class EditorKeysTests
         color.Text = "#FF3B82F6";
         Assert.True(Press(color, Key.Enter, ime: false));
         Assert.Equal(ColorRgba.FromRgb(0x3B, 0x82, 0xF6), controller.StrokeColor);
-        Assert.Same(host.Editor, Keyboard.FocusedElement);
+        Assert.Same(host.Editor.CustomColorButtonForTest, Keyboard.FocusedElement);
         Assert.True(Press(host.Editor, Key.T, ime: true));
         Assert.Equal(EditorTool.Text, controller.Tool);
     });
@@ -95,7 +95,7 @@ public sealed class EditorKeysTests
 
         Assert.True(Press(color, Key.Escape, ime: false));
         Assert.Equal(AnnotationEditorControl.ColorCode(controller.StrokeColor), color.Text);
-        Assert.Same(host.Editor, Keyboard.FocusedElement);
+        Assert.Same(host.Editor.CustomColorButtonForTest, Keyboard.FocusedElement);
         Assert.True(Press(host.Editor, Key.E, ime: true));
         Assert.Equal(EditorTool.Ellipse, controller.Tool);
     });
@@ -108,10 +108,10 @@ public sealed class EditorKeysTests
         using EditorWindowHost host = EditorWindowHost.Create();
         AnnotationEditorController controller = Controller(host.Editor);
         Assert.True(Press(host.Editor, Key.R, ime: false));
-        Slider thickness = Field<Slider>(host.Editor, "_thicknessSlider");
-        Assert.True(thickness.Focus());
+        Slider fill = Field<Slider>(host.Editor, "_fillTransparencySlider");
+        Assert.True(fill.Focus());
 
-        Assert.True(Press(thickness, Key.T, ime));
+        Assert.True(Press(fill, Key.T, ime));
         Assert.Equal(EditorTool.Text, controller.Tool);
     });
 
@@ -234,8 +234,15 @@ public sealed class EditorKeysTests
         return args;
     }
 
-    internal static TextBox ColorInput(AnnotationEditorControl editor) =>
-        Descendants(editor).OfType<TextBox>().Single(box => AutomationProperties.GetName(box) == UiText.Get("Tools.CustomColor"));
+    internal static TextBox ColorInput(AnnotationEditorControl editor)
+    {
+        if (!editor.CustomColorPopupForTest.IsOpen)
+            editor.CustomColorButtonForTest.RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));
+        editor.UpdateLayout();
+        Assert.True(editor.CustomColorPopupForTest.IsOpen);
+        Assert.Equal(UiText.Get("Tools.CustomColor"), AutomationProperties.GetName(editor.CustomColorInputForTest));
+        return editor.CustomColorInputForTest;
+    }
 
     internal static AnnotationEditorController Controller(AnnotationEditorControl editor) =>
         Field<AnnotationEditorController>(editor, "_controller");

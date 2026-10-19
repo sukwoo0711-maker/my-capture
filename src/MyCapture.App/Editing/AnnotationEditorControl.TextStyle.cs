@@ -12,8 +12,8 @@ internal sealed partial class AnnotationEditorControl
 {
     private FrameworkElement BuildFontFamilySection()
     {
-        var panel = new StackPanel { Margin = new Thickness(0, 16, 0, 0) };
-        panel.Children.Add(SectionLabel(UiText.Get("EditorText_FontFamily")));
+        var panel = PropertyGroup("AnnotationFontFamilyProperties");
+        panel.Children.Add(PropertyLabel(UiText.Get("EditorText_FontFamily")));
         var preview = new FrameworkElementFactory(typeof(TextBlock));
         preview.SetBinding(TextBlock.TextProperty, new Binding(nameof(FontFamily.Source)));
         preview.SetBinding(TextBlock.FontFamilyProperty, new Binding());
@@ -21,6 +21,9 @@ internal sealed partial class AnnotationEditorControl
         _textFontFamily = new ComboBox
         {
             MinHeight = 32,
+            Width = 160,
+            FontSize = 12,
+            VerticalAlignment = VerticalAlignment.Center,
             MaxDropDownHeight = 320,
             IsTextSearchEnabled = true,
             ItemTemplate = new DataTemplate { VisualTree = preview },

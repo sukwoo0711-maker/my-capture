@@ -3338,6 +3338,14 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="Hotkey.Unavailable" xml:space="preserve"><value>다른 앱이나 Windows에서 사용 중입니다. 다른 키를 지정하십시오.</value></data>
   <data name="Hotkey.Waiting" xml:space="preserve"><value>새 단축키 입력 · Esc 취소</value></data>
   <data name="Tools.CustomColor" xml:space="preserve"><value>사용자 지정 색 적용</value></data>
+  <data name="EditorProperty_CustomColor" xml:space="preserve"><value>사용자 지정 색</value></data>
+  <data name="EditorProperty_CustomColorHint" xml:space="preserve"><value>사용자 지정 색 (Enter: 적용, Esc: 닫기)</value></data>
+  <data name="EditorProperty_Hex" xml:space="preserve"><value>HEX 색상</value></data>
+  <data name="EditorProperty_FillTransparency" xml:space="preserve"><value>내부 투명도</value></data>
+  <data name="EditorProperty_SelectedColor" xml:space="preserve"><value>선택됨</value></data>
+  <data name="EditorProperty_ThicknessDecrease" xml:space="preserve"><value>선 두께 줄이기</value></data>
+  <data name="EditorProperty_ThicknessIncrease" xml:space="preserve"><value>선 두께 늘리기</value></data>
+  <data name="EditorProperty_MosaicStrength" xml:space="preserve"><value>모자이크 강도</value></data>
   <data name="Tools.Ellipse" xml:space="preserve"><value>타원</value></data>
   <data name="Tools.Highlighter" xml:space="preserve"><value>형광펜</value></data>
   <data name="Tools.InvalidColor" xml:space="preserve"><value>색을 #RRGGBB 또는 #AARRGGBB 형식으로 입력하십시오.</value></data>

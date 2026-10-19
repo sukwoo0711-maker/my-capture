@@ -78,6 +78,19 @@ public sealed partial class SettingsThemePreviewTests
             var inspector = (FrameworkElement)typeof(AnnotationEditorControl).GetField("_inspectorPanel", flags)!.GetValue(editor)!;
             MethodInfo selectTool = typeof(AnnotationEditorControl).GetMethod("SelectTool", flags)!;
 
+            // The same fixture and sizes provide before/after evidence for the property bar.
+            foreach (int width in new[] { 1180, 680 })
+            {
+                window.Width = width;
+                foreach (EditorTool tool in new[] { EditorTool.Rectangle, EditorTool.Text })
+                {
+                    selectTool.Invoke(editor, [tool]);
+                    Drain(window);
+                    SaveEditorUxEvidence(RenderEditorWindow(window), $"editor-properties-{tool}-{width}-{theme}-{phase}.png");
+                }
+            }
+            window.Width = 1180;
+
             // Two numbers already placed, so the tool's next number is 3.
             controller.Tool = EditorTool.StepNumber;
             controller.AddStepNumber(new PointD(60, 60));

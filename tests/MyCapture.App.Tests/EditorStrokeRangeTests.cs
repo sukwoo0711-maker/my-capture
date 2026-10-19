@@ -126,13 +126,17 @@ public sealed class EditorStrokeRangeTests
         Assert.Equal(SliderValueEntry.BoxWidth, box.ActualWidth, precision: 1);
         Assert.Equal(SliderValueEntry.Format(slider.Value), box.Text);
         Assert.Contains("1–64px", AutomationProperties.GetHelpText(box), StringComparison.Ordinal);
-        // The unit is shown next to the box, and both sit on the label's row above the slider.
+        // The unit and editable value now sit between the two thickness stepper actions.
         TextBlock unit = Assert.Single(((Panel)VisualTreeHelper.GetParent(box)).Children.OfType<TextBlock>());
         Assert.Equal("px", unit.Text);
-        Point boxTop = box.TranslatePoint(default, host.Editor);
-        Assert.True(boxTop.Y + box.ActualHeight <= slider.TranslatePoint(default, host.Editor).Y + 0.5, "box sits above the slider");
+        Button decrease = Descendants(host.Editor).OfType<Button>().Single(button => AutomationProperties.GetAutomationId(button) == "AnnotationThicknessDecrease");
+        Button increase = Descendants(host.Editor).OfType<Button>().Single(button => AutomationProperties.GetAutomationId(button) == "AnnotationThicknessIncrease");
+        Assert.True(decrease.IsVisible && increase.IsVisible);
+        Assert.True(decrease.TranslatePoint(default, host.Editor).X + decrease.ActualWidth <= box.TranslatePoint(default, host.Editor).X + 0.5);
+        Assert.True(box.TranslatePoint(default, host.Editor).X + box.ActualWidth <= increase.TranslatePoint(default, host.Editor).X + 0.5);
+        Assert.DoesNotContain(slider, Descendants(host.Editor));
 
-        // Dragging the slider updates the box.
+        // The shared value model still synchronizes the box and selected annotation.
         slider.Value = 9;
         Assert.Equal("9", box.Text);
         Assert.Equal(9, shape.StrokeThickness);
