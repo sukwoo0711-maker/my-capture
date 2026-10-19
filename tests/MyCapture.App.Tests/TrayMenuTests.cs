@@ -129,9 +129,38 @@ public sealed class TrayMenuTests
             new TrayMenuState(PinCount: 2, PinsHidden: true)).Single(entry => entry.Label == "핀 모두 보이기");
         show.Action!();
         Assert.Equal(["HidePins", "HidePins"], calls);
+    }
 
-        // The tutorials' way out of click-through names exactly these entries.
-        Assert.Contains("핀 모두 숨기기", UiText.Get("Hotkey.TrayRestore"), StringComparison.Ordinal);
+    [Fact]
+    public void ClearClickThroughAppearsWhileAPinLetsClicksThroughAndIsTheUnassignedWayBack()
+    {
+        using var language = UiText.UseLanguage("ko-KR");
+        var calls = new List<string>();
+        HotkeySettings keys = NewInstallDefaults.Create().Hotkeys;
+        Assert.DoesNotContain(TrayMenuLayout.Build(Commands(calls), keys, new TrayMenuState(PinCount: 2)),
+            entry => entry.Label == "모든 핀 클릭 허용 해제");
+
+        IReadOnlyList<ThemedShellPresenter.MenuEntry> menu = TrayMenuLayout.Build(Commands(calls), keys,
+            new TrayMenuState(CanRestoreClosedPin: true, PinCount: 2, ClickThroughPinCount: 1));
+        Assert.Equal(["영역 캡처", "화면 녹화", "텍스트 복사", "다른 캡처", "클립보드를 핀으로 띄우기", "핀 모두 숨기기",
+            "모든 핀 클릭 허용 해제", "닫은 핀 다시 열기"], menu.TakeWhile(entry => !entry.IsSeparator).Select(entry => entry.Label));
+        ThemedShellPresenter.MenuEntry clear = menu[6];
+        Assert.True(clear.IsEnabled);
+        Assert.Equal(string.Empty, clear.Gesture);
+        clear.Action!();
+        Assert.Equal(["ClearClickThrough"], calls);
+
+        // With neither pin key assigned, a click-through pin's feedback and help name this entry.
+        Assert.False(keys.ToggleClickThrough.IsAssigned);
+        Assert.False(keys.HideAllPins.IsAssigned);
+        Assert.Equal("트레이 메뉴의 모든 핀 클릭 허용 해제", UiText.Get("Hotkey.TrayRestore"));
+        using (UiText.UseLanguage("en-US"))
+        {
+            string label = UiText.Get("Tray_ClearClickThrough");
+            Assert.Contains(label, UiText.Get("Hotkey.TrayRestore"), StringComparison.Ordinal);
+            Assert.Contains(TrayMenuLayout.Build(Commands(calls), keys, new TrayMenuState(PinCount: 1, ClickThroughPinCount: 1)),
+                entry => entry.Label == label);
+        }
     }
 
     [Fact]
@@ -215,5 +244,6 @@ public sealed class TrayMenuTests
         () => calls.Add("Capture"), () => calls.Add("Record"), () => calls.Add("Window"), () => calls.Add("FullScreen"),
         () => calls.Add("Scroll"), () => calls.Add("Delay"), () => calls.Add("Repeat"), () => calls.Add("Text"),
         () => calls.Add("Reopen"), () => calls.Add("Library"), () => calls.Add("Settings"), () => calls.Add("Shortcuts"),
-        () => calls.Add("Exit"), PinClipboard: () => calls.Add("PinClipboard"), HideOrShowAllPins: () => calls.Add("HidePins"));
+        () => calls.Add("Exit"), PinClipboard: () => calls.Add("PinClipboard"), HideOrShowAllPins: () => calls.Add("HidePins"),
+        ClearClickThrough: () => calls.Add("ClearClickThrough"));
 }

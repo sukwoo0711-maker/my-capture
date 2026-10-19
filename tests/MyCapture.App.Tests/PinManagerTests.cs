@@ -250,6 +250,44 @@ public sealed class PinManagerTests : KoreanCaptionTest
     }
 
     [Fact]
+    public void ClearClickThroughAll_ReachesEveryPinTheMouseCannotAndKeepsHiddenPinsHidden()
+    {
+        RunSta(() =>
+        {
+            PinManager manager = NewManager();
+            PinWindow first = manager.PinImage(SolidImage());
+            PinWindow second = manager.PinImage(SolidImage());
+            PinWindow ordinary = manager.PinImage(SolidImage());
+            try
+            {
+                Assert.Equal(0, manager.ClickThroughCount);
+                Assert.True(first.ToggleClickThrough());
+                Assert.True(second.ToggleClickThrough());
+                Assert.Equal(2, manager.ClickThroughCount);
+                Assert.True(WindowStyleFacade.IsClickThrough(first.Handle));
+
+                // The tray command: every click-through pin takes clicks again, hidden ones too,
+                // and hiding stays the user's choice.
+                manager.HideOrShowAll();
+                Assert.Equal(2, manager.ClearClickThroughAll());
+                Assert.True(manager.AreHidden);
+                foreach (PinWindow pin in new[] { first, second, ordinary })
+                {
+                    Assert.False(pin.State.IsClickThrough);
+                    Assert.False(WindowStyleFacade.IsClickThrough(pin.Handle));
+                }
+
+                Assert.Equal(0, manager.ClickThroughCount);
+                Assert.Equal(0, manager.ClearClickThroughAll());
+            }
+            finally
+            {
+                manager.CloseAll();
+            }
+        });
+    }
+
+    [Fact]
     public void ShowFeedback_AutoHidesOnTimerTick_AndStopsOnClose()
     {
         RunSta(() =>

@@ -188,7 +188,8 @@ internal sealed class RegionRecordingCoordinator
         return true;
     }
 
-    private void ActivateExisting()
+    /// <summary>Brings the recording's current window (its editor, controls or selector) forward.</summary>
+    internal void ActivateExisting()
     {
         Window? active = _editor ?? (Window?)_controls ?? _selectionOverlay;
         if (active is null)

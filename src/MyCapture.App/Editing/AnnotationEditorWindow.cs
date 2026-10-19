@@ -5,7 +5,6 @@ using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
-using System.Windows.Threading;
 using MyCapture.App.Ocr;
 using MyCapture.App.Themes;
 using MyCapture.Core.Annotations;
@@ -139,16 +138,57 @@ internal partial class AnnotationEditorWindow : Window
     /// </remarks>
     internal void RequestClose()
     {
+        // While the unsaved-edits question is open the window is already closing: a second Close
+        // would throw and leave the request flag set for a later close from code.
+        if (IsAskingToClose) return;
         _closeAsked = true;
         Close();
     }
 
+    /// <summary>
+    /// Closes the way <see cref="RequestClose"/> does and completes once the outcome is known: true
+    /// when the window has closed, false when it stays open (the user kept it, or saving failed).
+    /// </summary>
     internal Task<bool> RequestCloseAsync()
     {
-        if (IsCloseInProgress) return Task.FromResult(false);
+        if (IsCloseInProgress || IsAskingToClose || IsSavingToClose) return Task.FromResult(false);
         _discardCloseTask = null;
+        _saveCloseTask = null;
+        LastCloseChoice = null;
         RequestClose();
-        return _discardCloseTask ?? CompleteRequestedCloseAsync();
+        return _discardCloseTask ?? _saveCloseTask ?? CompleteRequestedCloseAsync();
+    }
+
+    /// <summary>True while the unsaved-edits question is on screen; the window is closing meanwhile.</summary>
+    internal bool IsAskingToClose { get; private set; }
+
+    /// <summary>The answer to the last requested close's unsaved-edits question; null when none was asked.</summary>
+    internal EditorCloseChoice? LastCloseChoice { get; private set; }
+
+    /// <summary>
+    /// True while a modal dialog keeps this window from taking input: one of its own, a file picker
+    /// over it, or another window's (a modal dialog disables every window of the app).
+    /// </summary>
+    internal bool HasOpenDialog => !WindowForeground.IsEnabled(this);
+
+    /// <summary>
+    /// Asks what to do with unsaved edits. A capture shortcut can ask while the editor is minimized
+    /// or behind another app, so the editor comes forward first and the question opens in front of it.
+    /// </summary>
+    private EditorCloseChoice AskBeforeClosing()
+    {
+        WindowForeground.BringForward(this);
+        IsAskingToClose = true;
+        try
+        {
+            EditorCloseChoice choice = ConfirmClose();
+            LastCloseChoice = choice;
+            return choice;
+        }
+        finally
+        {
+            IsAskingToClose = false;
+        }
     }
 
     private bool _closeAsked;
@@ -186,15 +226,13 @@ internal partial class AnnotationEditorWindow : Window
         _closeAsked = false;
         if (ask)
         {
-            switch (ConfirmClose())
+            switch (AskBeforeClosing())
             {
                 case EditorCloseChoice.SaveAndClose:
                     // The Done commit closes the window itself once the edit is saved, and keeps
-                    // it open (with the failure in the status line) when saving fails. Started
-                    // after this close is cancelled: a commit that finishes synchronously
-                    // must not re-enter Close while the window is still closing.
+                    // it open (with the failure in the status line) when saving fails.
                     e.Cancel = true;
-                    _ = Dispatcher.BeginInvoke(DispatcherPriority.Input, _editor.SaveAndClose);
+                    _saveCloseTask = SaveAndCloseAsync();
                     return;
                 case EditorCloseChoice.DontSave:
                     if (_draftSession is null)

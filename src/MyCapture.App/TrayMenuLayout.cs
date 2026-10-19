@@ -18,7 +18,8 @@ internal sealed record TrayMenuCommands(
     Action Shortcuts,
     Action Exit,
     Action? PinClipboard = null,
-    Action? HideOrShowAllPins = null);
+    Action? HideOrShowAllPins = null,
+    Action? ClearClickThrough = null);
 
 /// <summary>What the tray menu reflects at the moment it opens. Read cheaply on every open.</summary>
 /// <param name="CanRestoreClosedPin">A closed pin can come back.</param>
@@ -26,19 +27,21 @@ internal sealed record TrayMenuCommands(
 /// <param name="ClipboardHasContent">The clipboard holds an image or text a pin can show.</param>
 /// <param name="PinCount">Open pins, shown or hidden.</param>
 /// <param name="PinsHidden">The pins are hidden by "Hide all pins".</param>
+/// <param name="ClickThroughPinCount">Open pins that let clicks through to the windows behind.</param>
 internal sealed record TrayMenuState(
     bool CanRestoreClosedPin = false,
     bool ScrollingActive = false,
     bool ClipboardHasContent = true,
     int PinCount = 0,
-    bool PinsHidden = false);
+    bool PinsHidden = false,
+    int ClickThroughPinCount = 0);
 
 /// <summary>
 /// The tray menu's order, kept apart from the shell so it can be checked without a tray icon.
 /// The first group holds what people come for: region capture, screen recording, text capture,
 /// the rarer capture types in one branch, and the pin commands (pin the clipboard, hide or show
-/// every pin, reopen a closed pin). The destinations follow, and Exit is always last. The display
-/// language lives in Settings only.
+/// every pin, turn click-through off on every pin, reopen a closed pin). The destinations follow,
+/// and Exit is always last. The display language lives in Settings only.
 /// </summary>
 internal static class TrayMenuLayout
 {
@@ -78,12 +81,17 @@ internal static class TrayMenuLayout
                 ToolTip: state.ClipboardHasContent ? string.Empty : UiText.Get("Tray_ClipboardEmpty")));
         }
 
-        // The way back from click-through: hiding and showing again clears it on every pin.
+        // Showing the pins again also clears click-through on every pin.
         if (commands.HideOrShowAllPins is { } hideOrShow && state.PinCount > 0)
         {
             entries.Add(new(UiText.Get(state.PinsHidden ? "Tray_ShowAllPins" : "Tray_HideAllPins"), hideOrShow,
                 Gesture: Gesture(keys.HideAllPins)));
         }
+
+        // The way back from click-through in one step. A click-through pin cannot take the click
+        // that would turn it off, and a new installation leaves both pin keys unassigned.
+        if (commands.ClearClickThrough is { } clearClickThrough && state.ClickThroughPinCount > 0)
+            entries.Add(new(UiText.Get("Tray_ClearClickThrough"), clearClickThrough));
 
         // Only while a closed pin can come back; the menu is rebuilt on every open.
         if (state.CanRestoreClosedPin)

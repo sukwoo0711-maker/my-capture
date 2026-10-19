@@ -653,7 +653,7 @@
     <comment>src\MyCapture.Core\Annotations\PolylineAnnotation.cs</comment>
   </data>
   <data name="Text_38B12BA58C48" xml:space="preserve">
-    <value>녹화 중 · Esc 또는 중지로 종료</value>
+    <value>녹화 중</value>
     <comment>src\MyCapture.App\Recording\RecordingControlWindow.cs</comment>
   </data>
   <data name="Text_38FF9B0AA541" xml:space="preserve">
@@ -1354,7 +1354,7 @@
     <comment>src\MyCapture.App\Recording\RecordingWallClockWindow.cs</comment>
   </data>
   <data name="Text_72A13C33A79E" xml:space="preserve">
-    <value>녹화 준비 중 · Esc 또는 중지로 종료</value>
+    <value>녹화 준비 중</value>
     <comment>src\MyCapture.App\Recording\RecordingControlWindow.cs</comment>
   </data>
   <data name="Text_72B6DBA8AAC5" xml:space="preserve">
@@ -3380,7 +3380,7 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="Video.AddLayer" xml:space="preserve"><value>레이어 추가</value></data>
   <data name="Help.Gif" xml:space="preserve"><value>GIF 내보내기</value></data>
   <data name="Hotkey.Twice" xml:space="preserve"><value>{0} 두 번</value></data>
-  <data name="Hotkey.TrayRestore" xml:space="preserve"><value>트레이에서 핀 모두 숨기기 후 다시 보이기</value></data>
+  <data name="Hotkey.TrayRestore" xml:space="preserve"><value>트레이 메뉴의 모든 핀 클릭 허용 해제</value></data>
   <data name="Hotkey.ModifierRequired" xml:space="preserve"><value>문자·숫자·이동 키는 Ctrl, Alt 또는 Win과 함께 지정하십시오. F1–F24와 PrintScreen은 단독 또는 Shift 조합으로 지정할 수 있습니다.</value></data>
   <data name="QuickAccess.KeyboardHint" xml:space="preserve"><value>카드 배경을 클릭하거나 Alt+Q로 진입한 뒤 C·E·P·S·T·Esc를 사용합니다. 자동으로 닫지 않는 카드는 배경 클릭으로 진입합니다.</value></data>
   <data name="Video.InvalidImage" xml:space="preserve"><value>이미지를 읽을 수 없습니다. 올바른 PNG, JPEG 또는 BMP 파일을 선택하십시오.</value></data>
@@ -3516,7 +3516,9 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="RecordingPause_ResumeName" xml:space="preserve"><value>녹화 재개</value></data>
   <data name="RecordingPause_PauseHelp" xml:space="preserve"><value>녹화를 일시 정지합니다. 일시 정지한 구간은 동영상에 포함되지 않습니다.</value></data>
   <data name="RecordingPause_ResumeHelp" xml:space="preserve"><value>녹화를 다시 시작합니다. 동영상은 일시 정지한 지점에서 이어집니다.</value></data>
-  <data name="RecordingPause_Status" xml:space="preserve"><value>일시 정지됨 · 재개하거나 Esc 또는 중지로 종료</value></data>
+  <data name="RecordingPause_Status" xml:space="preserve"><value>일시 정지됨</value></data>
+  <data name="RecordingPause_StatusHelp" xml:space="preserve"><value>재개를 누르면 이어서 녹화하고, Esc 키나 중지를 누르면 녹화를 끝냅니다.</value></data>
+  <data name="RecordingStatus_StopHelp" xml:space="preserve"><value>Esc 키나 중지를 누르면 녹화를 끝냅니다.</value></data>
   <data name="RecordingPause_State" xml:space="preserve"><value>일시 정지됨</value></data>
   <data name="PinRestore_Command" xml:space="preserve"><value>닫은 핀 다시 열기</value></data>
   <data name="PinRestore_CommandHelp" xml:space="preserve"><value>가장 최근에 닫은 핀을 마지막 위치, 배율, 불투명도로 다시 엽니다.</value></data>
@@ -4018,6 +4020,7 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="Tray_ClipboardEmpty" xml:space="preserve"><value>클립보드가 비어 있습니다</value></data>
   <data name="Tray_HideAllPins" xml:space="preserve"><value>핀 모두 숨기기</value></data>
   <data name="Tray_ShowAllPins" xml:space="preserve"><value>핀 모두 보이기</value></data>
+  <data name="Tray_ClearClickThrough" xml:space="preserve"><value>모든 핀 클릭 허용 해제</value></data>
   <data name="Onboard_ShowShortcuts" xml:space="preserve"><value>단축키 보기</value></data>
   <data name="Onboard_TrayTipActions" xml:space="preserve"><value>클릭: 라이브러리 · 오른쪽 클릭: 메뉴</value></data>
   <data name="Onboard_BarCapture" xml:space="preserve"><value>캡처</value></data>
@@ -4046,7 +4049,8 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="Onboard_PinWheelUp" xml:space="preserve"><value>Ctrl+휠 위</value></data>
   <data name="Onboard_PinAllowClickThrough" xml:space="preserve"><value>뒤 창 클릭 허용</value></data>
   <data name="Onboard_PinAllowClickThroughHelp" xml:space="preserve"><value>마우스 입력을 뒤에 있는 창으로 보냅니다. 해제: {0}</value></data>
-  <data name="Onboard_PinClickThroughOn" xml:space="preserve"><value>뒤 창 클릭 허용 켜짐 · 해제: {0}</value></data>
+  <data name="Onboard_PinClickThroughOn" xml:space="preserve"><value>뒤 창 클릭 허용 켜짐
+해제: {0}</value></data>
   <data name="Onboard_PinClickThroughOff" xml:space="preserve"><value>뒤 창 클릭 허용 꺼짐</value></data>
   <data name="Onboard_CaptureFromTray" xml:space="preserve"><value>단축키가 지정되지 않았습니다. 트레이 아이콘 메뉴에서 영역 캡처를 고를 수 있습니다.</value></data>
   <data name="Onboard_QuickKeep" xml:space="preserve"><value>자동으로 닫지 않기</value></data>
@@ -4492,4 +4496,10 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="Library.Activity.Ocr" xml:space="preserve">
     <value>텍스트 색인 중</value>
   </data>
+  <data name="CaptureBlocked_Editor" xml:space="preserve"><value>편집 중인 캡처가 있어 새 캡처를 시작하지 않았습니다.</value></data>
+  <data name="CaptureBlocked_EditorRecording" xml:space="preserve"><value>편집 중인 캡처가 있어 녹화를 시작하지 않았습니다.</value></data>
+  <data name="CaptureBlocked_EditorSaveFailed" xml:space="preserve"><value>편집 중인 캡처를 저장하지 못해 새 캡처를 시작하지 않았습니다.</value></data>
+  <data name="CaptureBlocked_Scrolling" xml:space="preserve"><value>스크롤 캡처가 끝날 때까지 시작할 수 없습니다.</value></data>
+  <data name="CaptureBlocked_Updating" xml:space="preserve"><value>업데이트나 가져오기가 끝날 때까지 시작할 수 없습니다.</value></data>
+  <data name="CaptureBlocked_Exiting" xml:space="preserve"><value>앱을 종료하는 중이라 시작하지 않았습니다.</value></data>
 </root>

@@ -120,7 +120,13 @@ public sealed class Fixture : IDisposable
         try
         {
             using (var worker = Process.GetProcessById(int.Parse(started.Groups[1].Value, System.Globalization.CultureInfo.InvariantCulture)))
-                if (string.Equals(worker.ProcessName, "MyCaptureUninstall", StringComparison.OrdinalIgnoreCase)) Assert.True(worker.WaitForExit(30000));
+            {
+                string? workerName;
+                // The worker can exit between the lookup and the name read; an exited worker needs no wait.
+                try { workerName = worker.ProcessName; }
+                catch (InvalidOperationException) when (worker.HasExited) { workerName = null; }
+                if (string.Equals(workerName, "MyCaptureUninstall", StringComparison.OrdinalIgnoreCase)) Assert.True(worker.WaitForExit(30000));
+            }
         }
         catch (ArgumentException) { }
         return text;

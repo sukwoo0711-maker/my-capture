@@ -364,6 +364,17 @@ internal sealed partial class AnnotationEditorControl : Grid
         SetStatus(UiText.Get(copiedToClipboard ? "Capture.CopiedAndSaved" : "Capture.Saved"));
     }
 
+    /// <summary>
+    /// Says in the status line why a capture command the user just gave did not start. It replaces
+    /// even the typing hint: the command came from outside the editor and its answer is shown here.
+    /// </summary>
+    internal void ShowCaptureBlocked(string message)
+    {
+        if (_completed || _statusText is null) return;
+        _statusText.Text = message;
+        RaiseStatusAutomationEvent();
+    }
+
     internal BitmapSource DisplayedBitmap => _surface.Frame.Bitmap;
 
     /// <summary>Copies the same canvas, transforms, assets and title used by editor commits.</summary>

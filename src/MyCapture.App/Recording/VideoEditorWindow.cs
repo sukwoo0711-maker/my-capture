@@ -1296,21 +1296,25 @@ internal sealed partial class VideoEditorWindow : Window
         lane.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star), MinHeight = 48 });
         lane.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
 
+        // The heading keeps its whole width. Edit and delete used to share this row, and in the
+        // narrowest panel they left the heading 42 DIP, which cut its last letter. Add layer is
+        // narrow enough to sit beside it; edit and delete moved under the list.
         var label = new TextBlock
         {
-            Text = UiText.Get("Text_DCA8CAFD9D0D"),
+            Text = UiText.Get("Video.Layers"),
             FontWeight = FontWeights.SemiBold,
             Foreground = TryBrush("Text.Secondary", Colors.LightGray),
             VerticalAlignment = VerticalAlignment.Center,
-            Margin = new Thickness(0, 0, 10, 0),
         };
-        Grid.SetColumn(label, 0);
-        label.Text = UiText.Get("Video.Layers");
-        var layerHeader = new DockPanel();
+        var layerHeader = new Grid();
+        layerHeader.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        layerHeader.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(8) });
+        layerHeader.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        layerHeader.Children.Add(label);
         lane.Children.Add(layerHeader);
 
         // Each row already shows its layer's name and visible interval, and the edit and delete
-        // commands above act on the selected row. A separate properties block repeated the same
+        // commands below act on the selected row. A separate properties block repeated the same
         // name and times under the list and took the height the preview needs in small windows.
         Grid.SetRow(_overlayList, 1);
         _overlayList.MaxHeight = double.PositiveInfinity;
@@ -1344,13 +1348,11 @@ internal sealed partial class VideoEditorWindow : Window
         _deleteTextButton = MakeTransportIcon("Icon.Delete", UiText.Get("Text_9163C86EDB22"), "Button.Ghost", DeleteSelectedOverlay);
         CommandButtonPresentation.Apply(_editTextButton, compact: true);
         CommandButtonPresentation.Apply(_deleteTextButton, compact: true);
-        actions.Children.Add(_addTextButton);
-        var selectedActions = new StackPanel { Orientation = Orientation.Horizontal };
-        selectedActions.Children.Add(_editTextButton);
-        selectedActions.Children.Add(_deleteTextButton);
-        DockPanel.SetDock(selectedActions, Dock.Right);
-        layerHeader.Children.Add(selectedActions);
-        layerHeader.Children.Add(label);
+        _addTextButton.HorizontalAlignment = HorizontalAlignment.Right;
+        Grid.SetColumn(_addTextButton, 2);
+        layerHeader.Children.Add(_addTextButton);
+        actions.Children.Add(_editTextButton);
+        actions.Children.Add(_deleteTextButton);
         Grid.SetRow(actions, 2);
         Grid.SetColumnSpan(actions, 2);
         lane.Children.Add(actions);

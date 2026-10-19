@@ -9,6 +9,7 @@ using MyCapture.App.Themes;
 using MyCapture.Core.Pin;
 using MyCapture.Core.Platform;
 using MyCapture.Core.Settings;
+using MyCapture.Core.Themes;
 using Xunit;
 
 namespace MyCapture.App.Tests;
@@ -35,7 +36,10 @@ public sealed class PinFrameTests
 
     private static readonly Color LightDesk = Color.FromRgb(0xFF, 0xFF, 0xFF);
     private static readonly Color DarkDesk = Color.FromRgb(0x1F, 0x1F, 0x1F);
-    private static readonly Color ImageRed = Color.FromRgb(0xE0, 0x20, 0x20);
+
+    // The outline takes the accent, red in the default palette, and the corner check tells outline
+    // pixels from image pixels by colour, so the image is a green far from every accent tone.
+    private static readonly Color ImageGreen = Color.FromRgb(0x20, 0xA0, 0x40);
 
     [Theory]
     [InlineData(1.0, false, 1.0)]
@@ -47,14 +51,14 @@ public sealed class PinFrameTests
     [InlineData(1.75, false, 1.1)]
     public void FrameIsOneContinuousOutlineThatClosesAtEveryCorner(double scale, bool hover, double zoom) => RunWithoutMotion(() =>
     {
-        BitmapSource frame = RenderPin(PinContent.FromImage(Solid(201, 121, ImageRed)), scale, hover, LightDesk, zoom);
+        BitmapSource frame = RenderPin(PinContent.FromImage(Solid(201, 121, ImageGreen)), scale, hover, LightDesk, zoom);
         int width = frame.PixelWidth;
         int height = frame.PixelHeight;
         byte[] pixels = Pixels(frame);
 
         // The outline is drawn over the image edge, so all four sides show the same colour.
         Color outline = At(pixels, width, width / 2, 0);
-        Assert.True(Distance(outline, ImageRed) > 120, $"top edge shows the image, not the outline: {outline}");
+        Assert.True(Distance(outline, ImageGreen) > 120, $"top edge shows the image, not the outline: {outline}");
         foreach ((int x, int y) in new[] { (width / 2, height - 1), (0, height / 2), (width - 1, height / 2) })
         {
             Assert.True(Distance(At(pixels, width, x, y), outline) < 12, $"edge ({x},{y}) differs from the top outline");
@@ -75,7 +79,7 @@ public sealed class PinFrameTests
                 for (int j = 0; j < size; j++)
                 {
                     (double desk, double line, double image) =
-                        Unmix(At(pixels, width, x0 + (dx * i), y0 + (dy * j)), LightDesk, outline, ImageRed);
+                        Unmix(At(pixels, width, x0 + (dx * i), y0 + (dy * j)), LightDesk, outline, ImageGreen);
                     kind[i, j] = line >= desk && line >= image ? Outline : image > desk ? Picture : Desk;
                 }
             }
@@ -225,7 +229,11 @@ public sealed class PinFrameTests
             new PinViewState(content.Image.PixelWidth, content.Image.PixelHeight, zoom, 1, 0.1),
             -10000,
             -10000,
-            () => new PinSettings());
+            () => new PinSettings())
+        {
+            // The default palette, whatever application another test left behind.
+            Resources = DefaultPalette(),
+        };
         try
         {
             if (hover)
@@ -260,6 +268,17 @@ public sealed class PinFrameTests
         {
             pin.Close();
         }
+    }
+
+    /// <summary>The shipped default palette: Glass with the red accent.</summary>
+    private static ResourceDictionary DefaultPalette()
+    {
+        _ = System.IO.Packaging.PackUriHelper.UriSchemePack;
+        var resources = new ResourceDictionary();
+        resources.MergedDictionaries.Add(new ResourceDictionary
+        { Source = new Uri("pack://application:,,,/MyCapture;component/Themes/Tokens.xaml") });
+        ThemeService.ApplyResources(AppTheme.Glass, resources, systemHighContrast: false, accent: AppAccent.Red);
+        return resources;
     }
 
     /// <summary>The four corners, each <paramref name="size"/> pixels, enlarged without smoothing.</summary>

@@ -278,10 +278,12 @@ public partial class App : Application
             HandleCaptureFullScreen, HandleScrollingCapture, () => HandleDelayedCapture(), HandleRepeatLastRegion,
             HandleCaptureTextRequested, HandleRestoreClosedPin, HandleGalleryRequested, HandleSettingsRequested,
             ShortcutHelpWindow.ShowHelp, () => _ = RequestSafeShutdownAsync(),
-            PinClipboard: HandlePasteToScreen, HideOrShowAllPins: () => _pins?.HideOrShowAll());
+            PinClipboard: HandlePasteToScreen, HideOrShowAllPins: () => _pins?.HideOrShowAll(),
+            ClearClickThrough: () => _pins?.ClearClickThroughAll());
         _tray.MenuPresenter = () => _shellPresenter.ShowMenu(TrayMenuLayout.Build(trayCommands, _settings!.Hotkeys,
             new TrayMenuState(_pins?.CanRestoreClosed == true, _scrollCancellation is not null,
-                ClipboardAvailability.HasPinnableContent(), _pins?.Count ?? 0, _pins?.AreHidden == true)));
+                ClipboardAvailability.HasPinnableContent(), _pins?.Count ?? 0, _pins?.AreHidden == true,
+                _pins?.ClickThroughCount ?? 0)));
         // A capture started from the tray menu races the menu's dismissal; the coordinator
         // uses this to decide whether the frozen frame must wait it out.
         _shellPresenter.ForegroundDismissed += () => _overlay?.NoteForegroundDismissal();
@@ -384,11 +386,8 @@ public partial class App : Application
         _recorder.PrivacyRedactionService = _privacyRedactionService;
         _recorder.ShowSelectionGrid = () => _settings!.Capture.ShowSelectionGrid;
         _recorder.SessionEnded += (_, _) => RestoreTrayAfterCapture();
-        _recorder.FinishingBusyFeedback += () => _tray.ShowBalloon(
-            "MyCapture",
-            UiText.Get("Recording.FinishingBusy"),
-            TrayBalloonKind.Information,
-            playSound: false);
+        // Answers the record command while the previous recording is still being saved.
+        _recorder.FinishingBusyFeedback += () => ShowCommandNotice("MyCapture", UiText.Get("Recording.FinishingBusy"));
 
         // Add the icon first so registration failures have a non-modal place to be
         // reported. A tray utility must not interrupt logon with a message box merely
@@ -468,7 +467,14 @@ public partial class App : Application
 
     private void OnGlobalHotkeyPressed(object? sender, GlobalHotkeyPressedEventArgs e)
     {
-        if (_storeInstallationPending || _preparingExit) return;
+        if (_storeInstallationPending || _preparingExit)
+        {
+            // Capture commands say why they wait; the other commands stay quiet until the app is free.
+            if (CaptureCommandTitle(e.Command) is { } mode)
+                ReportCaptureBlock(CaptureGuard.Find(ReadCaptureGuardState(), allowRetake: false), mode,
+                    recording: e.Command == GlobalHotkeyCommand.RecordRegion);
+            return;
+        }
         if (HotkeyRecorder.Active is { } recorder && _hotkeys?.GetAssigned(e.Command) is { } recorded)
         {
             recorder.Accept(recorded);
@@ -769,9 +775,7 @@ public partial class App : Application
 
         try
         {
-            if (!await TryPrepareCaptureAsync(_overlay.CanRetake,
-                allowRetake => GuardStillCapture(UiText.Get("Text_096A13A757DB"), allowRetake),
-                _overlay.CloseEditorForRetakeAsync)) return;
+            if (!await PrepareRetakeAsync(UiText.Get("Text_096A13A757DB"))) return;
             _tray?.SetState(TrayIconState.Capturing);
             // Start reserves the session immediately; full-desktop acquisition runs off the UI
             // thread and reports asynchronous failures through TransitionFailed on this dispatcher.
@@ -785,7 +789,8 @@ public partial class App : Application
         {
             _log?.LogError(ex, "Could not open the capture overlay");
             _tray?.SetState(TrayIconState.Error);
-            _tray?.ShowBalloon(
+            // Answers the command even while an editor or a recording holds other notifications back.
+            ShowCommandNotice(
                 UiText.Get("Text_70EECBC7C211"),
                 MyCapture.App.Themes.ThemedDialog.RecoveryMessage(ex),
                 TrayBalloonKind.Error);
@@ -1015,34 +1020,6 @@ public partial class App : Application
         if (!canRetake) return true;
         closeEditor();
         return guard(false);
-    }
-
-    internal static async Task<bool> TryPrepareCaptureAsync(bool canRetake, Func<bool, bool> guard,
-        Func<Task<bool>> closeEditor)
-    {
-        if (!guard(canRetake)) return false;
-        if (!canRetake) return true;
-        if (!await closeEditor()) return false;
-        return guard(false);
-    }
-
-    private bool GuardStillCapture(string mode, bool allowRetake = false)
-    {
-        if (_storeInstallationPending || _preparingExit) return false;
-        DismissQuickAccessForCapture();
-        _shellPresenter?.DismissForCapture();
-        if (_preparingAdvancedCapture || (_overlay?.IsActive == true && !(allowRetake && _overlay.CanRetake)) ||
-            _activeCountdown is not null || _scrollCancellation is not null)
-            return false;
-        if (_recorder?.IsActive != true || _recorder.CanCaptureStill)
-            return true;
-
-        _tray?.ShowBalloon(
-            mode,
-            UiText.Get("Text_90290F46A7D5"),
-            TrayBalloonKind.Information,
-            playSound: false);
-        return false;
     }
 
     /// <summary>
@@ -1474,10 +1451,19 @@ public partial class App : Application
     /// </summary>
     private void HandleRecordRegion()
     {
-        if (_storeInstallationPending || _preparingExit) return;
-        _shellPresenter?.DismissForCapture();
-        if (_recorder is null || (!_recorder.IsActive && (_preparingAdvancedCapture || _overlay?.IsActive == true || _activeCountdown is not null || _scrollCancellation is not null)))
+        if (_recorder is null) return;
+        string mode = UiText.Get("Text_4F5AF20FAA6E");
+        if (_storeInstallationPending || _preparingExit)
         {
+            ReportCaptureBlock(CaptureGuard.Find(ReadCaptureGuardState(), allowRetake: false), mode, recording: true);
+            return;
+        }
+
+        _shellPresenter?.DismissForCapture();
+        // A running recording stops or reports its own state; a new one waits for a still capture in progress.
+        if (!_recorder.IsActive && CaptureGuard.Find(ReadCaptureGuardState(), allowRetake: false) is var block and not CaptureBlock.None)
+        {
+            ReportCaptureBlock(block, mode, recording: true);
             return;
         }
 
@@ -1490,7 +1476,7 @@ public partial class App : Application
         {
             _log?.LogError(ex, "Could not start region recording");
             _tray?.SetState(TrayIconState.Error);
-            _tray?.ShowBalloon(
+            ShowCommandNotice(
                 UiText.Get("Text_48C3B6EBA637"),
                 MyCapture.App.Themes.ThemedDialog.RecoveryMessage(ex),
                 TrayBalloonKind.Error);

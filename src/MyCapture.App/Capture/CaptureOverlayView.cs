@@ -171,6 +171,7 @@ internal sealed class CaptureOverlayView : FrameworkElement
     private string? _sampleTextLabel;
     private FormattedText? _coordinateText;
     private (int X, int Y) _coordinateTextPixel;
+    private FormattedText? _widestCoordinateText;
     private Pen _pointerOuterPen = null!;
     private Pen _pointerInnerPen = null!;
     private Pen _anchorPen = null!;
@@ -984,7 +985,7 @@ internal sealed class CaptureOverlayView : FrameworkElement
             _staticSize = RenderSize;
             StaticRenderCount++;
             BuildGuidePens();
-            _instructionText = _anchorText = _precisionText = _sampleText = _coordinateText = null;
+            _instructionText = _anchorText = _precisionText = _sampleText = _coordinateText = _widestCoordinateText = null;
             using (DrawingContext dc = _desktopVisual.RenderOpen())
                 if (_frame?.Bitmap is { } bitmap) dc.DrawImage(bitmap, new Rect(RenderSize));
             using (DrawingContext dc = _dimmerVisual.RenderOpen())
@@ -1602,9 +1603,42 @@ internal sealed class CaptureOverlayView : FrameworkElement
             return;
         }
 
-        double width = MagnifierDestinationPixels * DipPerPixelX;
-        double imageHeight = MagnifierDestinationPixels * DipPerPixelY;
-        double footerHeight = 38 * DipPerPixelY;
+        // A label that reads the same as on the last frame keeps its text layout.
+        if (_sampleText is null || !string.Equals(_sampleTextLabel, _sampleLabel, StringComparison.Ordinal))
+        {
+            _sampleText = CreateText(_sampleLabel, _monoTypeface, 12, _primaryTextBrush);
+            _sampleTextLabel = _sampleLabel;
+        }
+        (int X, int Y) coordinate = ((int)_cursorPixel.X, (int)_cursorPixel.Y);
+        if (_coordinateText is null || _coordinateTextPixel != coordinate)
+        {
+            _coordinateText = CreateText($"{coordinate.X}, {coordinate.Y}", _monoTypeface, 10, _mutedTextBrush);
+            _coordinateTextPixel = coordinate;
+        }
+        FormattedText color = _sampleText;
+        FormattedText location = _coordinateText;
+        // The layout follows the longest coordinates the frame can show, so it holds while the pointer moves.
+        _widestCoordinateText ??= CreateText($"{PixelWidth - 1}, {PixelHeight - 1}", _monoTypeface, 10, _mutedTextBrush);
+        double locationWidth = Math.Max(location.Width, _widestCoordinateText.Width);
+
+        // The image is frame pixels, ten per cell, so its grid stays on device pixels, while the
+        // values under it are DIP text. Where the image is too narrow for both side by side (150%
+        // and above, or four-digit coordinates at 125%) they used to overlap; the coordinates now
+        // move under the colour. A scale that leaves even one value wider than the image widens
+        // the cells by whole pixels.
+        const double padding = 8, gap = 8;
+        bool oneLine = padding + color.Width + gap + locationWidth + padding <= MagnifierDestinationPixels * DipPerPixelX;
+        double cellPixels = MagnifierDestinationPixels / MagnifierSourcePixels;
+        if (!oneLine)
+        {
+            double textPixels = (padding + Math.Max(color.Width, locationWidth) + padding) / DipPerPixelX;
+            cellPixels = Math.Max(cellPixels, Math.Ceiling(textPixels / MagnifierSourcePixels));
+        }
+
+        double width = cellPixels * MagnifierSourcePixels * DipPerPixelX;
+        double imageHeight = cellPixels * MagnifierSourcePixels * DipPerPixelY;
+        double footerText = oneLine ? 5 + color.Height + 5 : 5 + color.Height + 1 + location.Height + 6;
+        double footerHeight = Math.Max(38, Math.Ceiling(footerText / DipPerPixelY)) * DipPerPixelY;
         double gapX = 20 * DipPerPixelX;
         double gapY = 22 * DipPerPixelY;
         Point cursorDip = ToDipPoint(_cursorPixel);
@@ -1637,23 +1671,11 @@ internal sealed class CaptureOverlayView : FrameworkElement
         var cell = new Rect(x + (cursorX * cellWidth), y + (cursorY * cellHeight), cellWidth, cellHeight);
         dc.DrawRectangle(null, _magnifierBorderPen, cell);
 
-        // A label that reads the same as on the last frame keeps its text layout.
-        if (_sampleText is null || !string.Equals(_sampleTextLabel, _sampleLabel, StringComparison.Ordinal))
-        {
-            _sampleText = CreateText(_sampleLabel, _monoTypeface, 12, _primaryTextBrush);
-            _sampleTextLabel = _sampleLabel;
-        }
-        (int X, int Y) coordinate = ((int)_cursorPixel.X, (int)_cursorPixel.Y);
-        if (_coordinateText is null || _coordinateTextPixel != coordinate)
-        {
-            _coordinateText = CreateText($"{coordinate.X}, {coordinate.Y}", _monoTypeface, 10, _mutedTextBrush);
-            _coordinateTextPixel = coordinate;
-        }
-        FormattedText color = _sampleText;
-        FormattedText location = _coordinateText;
         double footerTop = y + imageHeight;
-        dc.DrawText(color, new Point(x + 8, footerTop + 5));
-        dc.DrawText(location, new Point(x + width - location.Width - 8, footerTop + 6));
+        dc.DrawText(color, new Point(x + padding, footerTop + 5));
+        dc.DrawText(location, oneLine
+            ? new Point(x + width - location.Width - padding, footerTop + 6)
+            : new Point(x + padding, footerTop + 5 + color.Height + 1));
     }
 
     /// <summary>

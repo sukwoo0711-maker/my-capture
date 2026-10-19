@@ -67,6 +67,8 @@ internal sealed class PinWindow : Window
     private readonly RectangleGeometry _imageClip;
     private readonly Grid _chrome;
     private readonly SolidColorBrush _chromeBrush;
+    private bool _chromeHover;
+    private bool _chromeActive;
     private readonly ScaleTransform _pinScale;
     private readonly Border _feedback;
     private readonly TextBlock _feedbackText;
@@ -187,12 +189,16 @@ internal sealed class PinWindow : Window
         };
 
         // Image-first chrome: one continuous one-DIP outline matching the host's window corners
-        // rests quietly and takes the accent colour on hover. The image fills the whole pin
-        // and is clipped to the rounded rectangle the outline follows, and the outline is drawn
+        // rests in a quiet accent tone and turns opaque on hover or while the pin is active
+        // (PinFrameColor). The image fills the whole pin and is clipped to the rounded
+        // rectangle the outline follows, and the outline is drawn
         // over the image's outermost edge. A Border's CornerRadius does not clip its child and
         // a child draws over its parent's stroke, so an image inset inside a Border covered the
         // corner arcs and left resampled edge rows beside the straight outline segments.
-        _chromeBrush = new SolidColorBrush(ResolveChromeColor("Border.Subtle", hovering: false));
+        _chromeBrush = new SolidColorBrush(PinFrameColor.Resolve(null, null, contrast: false, emphasized: false));
+        // The token references follow every theme, accent and contrast change while the pin is open.
+        SetResourceReference(FrameAccentProperty, PinFrameColor.AccentKey);
+        SetResourceReference(FrameNeutralProperty, PinFrameColor.NeutralKey);
         _pinScale = new ScaleTransform(1, 1);
         _imageClip = new RectangleGeometry(
             ImageClipBounds(new Size(_state.WidthDip, _state.HeightDip)),
@@ -265,6 +271,9 @@ internal sealed class PinWindow : Window
             SetChromeHover(false);
             ScheduleHoverBarHide();
         };
+        // The active pin takes the keys (Esc closes it), so its outline stays emphasized.
+        Activated += (_, _) => SetChromeActive(true);
+        Deactivated += (_, _) => SetChromeActive(false);
         LocationChanged += (_, _) => PlaceHoverBar();
         SizeChanged += (_, _) => PlaceHoverBar();
     }
@@ -663,24 +672,56 @@ internal sealed class PinWindow : Window
         _ = ApplyRestorePlacement();
     }
 
+    /// <summary>The accent token brush the outline follows (<see cref="PinFrameColor.AccentKey"/>).</summary>
+    private static readonly DependencyProperty FrameAccentProperty = DependencyProperty.Register(
+        "FrameAccent", typeof(Brush), typeof(PinWindow), new PropertyMetadata(null, OnFrameTokenChanged));
+
+    /// <summary>The neutral token brush a contrast theme rests on (<see cref="PinFrameColor.NeutralKey"/>).</summary>
+    private static readonly DependencyProperty FrameNeutralProperty = DependencyProperty.Register(
+        "FrameNeutral", typeof(Brush), typeof(PinWindow), new PropertyMetadata(null, OnFrameTokenChanged));
+
+    // A theme, accent or contrast change swaps the token brushes; the outline changes at once.
+    private static void OnFrameTokenChanged(DependencyObject sender, DependencyPropertyChangedEventArgs e) =>
+        ((PinWindow)sender).UpdateChromeColor(animate: false);
+
+    /// <summary>Test hook: the outline colour the pin shows once any transition ends.</summary>
+    internal Color FrameColorForTest => _chromeBrush.Color;
+
+    /// <summary>Test hook: what the Activated and Deactivated events do, without taking the foreground.</summary>
+    internal void SetChromeActiveForTest(bool active) => SetChromeActive(active);
+
     private void SetChromeHover(bool hovering)
     {
-        // Neutral at rest, restrained warm yellow on hover — a quiet cue that the pin is
-        // interactive without adding decorative colour to the frozen image.
-        Color target = ResolveChromeColor(
-            hovering ? "Accent.Cool" : "Border.Subtle",
-            hovering);
+        _chromeHover = hovering;
+        UpdateChromeColor(animate: true);
+    }
+
+    private void SetChromeActive(bool active)
+    {
+        _chromeActive = active;
+        UpdateChromeColor(animate: true);
+    }
+
+    private void UpdateChromeColor(bool animate)
+    {
+        // The accent at rest and stronger on hover or while active: a quiet cue that the pin is
+        // interactive, in the colour of the capture selection it came from.
+        bool contrast = ThemeService.IsSystemHighContrast || ThemeService.Current == Core.Themes.AppTheme.HighContrast;
+        Color target = PinFrameColor.Resolve(
+            (Brush?)GetValue(FrameAccentProperty),
+            (Brush?)GetValue(FrameNeutralProperty),
+            contrast,
+            emphasized: _chromeHover || _chromeActive);
         // Read the presentation value before replacing an in-flight animation; otherwise a
         // fast enter/leave reversal visibly jumps back to the previous base colour.
         Color current = _chromeBrush.Color;
         _chromeBrush.BeginAnimation(SolidColorBrush.ColorProperty, null);
-        if (!FluidMotion.AnimationsEnabled)
+        _chromeBrush.Color = target;
+        if (!animate || !FluidMotion.AnimationsEnabled || current == target)
         {
-            _chromeBrush.Color = target;
             return;
         }
 
-        _chromeBrush.Color = target;
         var animation = new ColorAnimation(current, target, FluidMotion.FastDuration)
         {
             EasingFunction = FluidMotion.StandardEasing,
@@ -698,18 +739,6 @@ internal sealed class PinWindow : Window
         FrameClipInsetDip,
         Math.Max(0, size.Width - (2 * FrameClipInsetDip)),
         Math.Max(0, size.Height - (2 * FrameClipInsetDip)));
-
-    private static Color ResolveChromeColor(string key, bool hovering)
-    {
-        if (Application.Current?.TryFindResource(key) is SolidColorBrush brush)
-        {
-            return brush.Color;
-        }
-
-        return hovering
-            ? Color.FromArgb(0xFF, 0x97, 0x89, 0xFF)
-            : Color.FromArgb(0xFF, 0x2B, 0x3A, 0x50);
-    }
 
     // ----- Mouse: drag to move, wheel to zoom, Ctrl+wheel opacity -----
 
@@ -1412,8 +1441,9 @@ internal sealed class PinWindow : Window
     }
 
     /// <summary>
-    /// How to turn click-through off again with the current shortcuts. The pin's feedback says it;
-    /// the tutorial clip generator shows the same words in its caption.
+    /// How to turn click-through off again with the current shortcuts: the toggle key, the hide-all
+    /// key twice, or else the tray menu's command for every pin. The pin's feedback says it; the
+    /// tutorial clip generator shows the same words in its caption.
     /// </summary>
     internal static string ClickThroughRecoveryHint()
     {

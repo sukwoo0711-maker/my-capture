@@ -58,10 +58,17 @@ internal sealed class ThemedShellPresenter(Func<bool> suppressNotification, Func
         internal bool IsSeparator { get; private init; }
     }
 
-    internal void ShowNotification(string title, string message, TrayBalloonKind kind)
+    internal void ShowNotification(string title, string message, TrayBalloonKind kind) =>
+        ShowNotification(title, message, kind, answersCommand: false);
+
+    /// <param name="answersCommand">
+    /// The notice answers a command the user just gave, such as a capture that could not start, so it
+    /// shows even during a capture or recording session, which holds other notifications back.
+    /// </param>
+    internal void ShowNotification(string title, string message, TrayBalloonKind kind, bool answersCommand)
     {
         Dismiss();
-        if (suppressNotification()) return;
+        if (!answersCommand && suppressNotification()) return;
         var content = new StackPanel();
         content.Children.Add(Heading(title));
         content.Children.Add(Body(message));

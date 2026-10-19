@@ -14,6 +14,9 @@ dotnet run --project build/tools/TutorialVideoGenerator -c Release -- --install
 
 # 만든 영상의 특정 시점을 원본 크기 PNG로 꺼냅니다.
 dotnet run --project build/tools/TutorialVideoGenerator -c Release -- inspect artifacts/tutorials/<시각>/image-crop.ko.mp4 0,5200
+
+# 검토용으로 다른 테마와 포인트 색에서 만듭니다. 제품 자산(--install)은 기본값으로만 만듭니다.
+dotnet run --project build/tools/TutorialVideoGenerator -c Release -- --features pin-copy --languages ko --theme glass-light --accent violet
 ```
 
 깨끗한 클론에서 별도 준비 없이 실행됩니다. 생성기는 `MyCapture.App` 프로젝트를 참조해 현재 소스로 함께 빌드하고, 제품은 `InternalsVisibleTo("MyCapture.TutorialGenerator")`로 이 도구에만 내부 API를 엽니다. 출력은 Git이 무시하는 `artifacts/` 아래에 둡니다.
@@ -28,7 +31,7 @@ dotnet run --project build/tools/TutorialVideoGenerator -c Release -- inspect ar
 | 화질 | Media Foundation 소프트웨어 H.264 인코더의 고정 품질 60(`--quality`)과 품질 우선 설정(QualityVsSpeed 100). GPU와 관계없이 같은 인코더를 씁니다. 품질 우선 설정은 키 표시가 사라진 자리에 남던 옅은 잔상도 없앱니다 |
 | 색 범위 | 전체 범위(0–255)로 인코딩하고 스트림에 표시합니다. 제품 플레이어인 WPF `MediaElement`는 디코딩한 값을 범위 확장 없이 표시하므로, 녹화와 같은 제한 범위(16–235)로 만들면 흰색이 235, 검은색이 16으로 흐리게 보입니다 |
 | 정지 화면 | 첫 렌더 프레임을 JPEG 품질 90으로 저장합니다. 사용법 창은 이 파일을 바로 표시하고 영상이 열리면 영상으로 넘어갑니다 |
-| 테마 | 기본 테마(Glass, 어두운 테마) |
+| 테마 | 기본 테마(Glass, 어두운 테마)와 기본 포인트 색(빨간색). 검토용 렌더는 `--theme`(설정 값: glass, glass-light, midnight, daylight, workspace, high-contrast)과 `--accent`(red, violet)로 바꿉니다 |
 
 정지 구간은 움직임이 없어 거의 용량을 차지하지 않고, 첫 프레임은 키 프레임이라 애니메이션 줄이기 설정에서도 바로 보입니다.
 
@@ -47,7 +50,7 @@ dotnet run --project build/tools/TutorialVideoGenerator -c Release -- inspect ar
 
 - 제품의 `App` 클래스를 만들지 않습니다. WPF는 `Application` 생성 시 `OnStartup`을 예약하므로, 첫 디스패처 처리에서 상주 앱(사용자 설정, 라이브러리, 보존 기간 정리, 트레이, 전역 단축키, 편집 초안 복구)이 생성기 안에서 시작됩니다. 생성기는 `App.xaml`과 같은 리소스만 가진 일반 `Application`을 사용합니다.
 - 사용자 프로필을 건드리지 않습니다. 라이브러리가 필요한 장면은 출력 폴더 아래 임시 `AppPaths`를 사용합니다. 클립보드 복사, 파일 저장, 휴지통 이동, OCR 모델 다운로드처럼 바깥에 흔적을 남기는 거래는 실행하지 않고, 제품이 그 결과로 보여 주는 화면 상태를 재현합니다. 편집기 커밋은 `CommitRequested`를 장면이 대신 받습니다.
-- 제품 흐름은 장면에서 다시 만들지 않고 제품 코드를 호출합니다. 라이브러리 삭제는 `LibraryPermanentDeletion.CreateRecycleConfirmation`이 만드는 확인 창에 답한 뒤 `GalleryWindow.DeleteCapturesAsync`를 실행하므로 상태 줄의 결과와 되돌리기가 제품 그대로 나옵니다. 픽스처의 `RecoverableLibraryService`는 휴지통 대신 픽스처 안 폴더로 옮기는 trash를 씁니다. 트레이 메뉴는 `Scenes/TrayMenu.cs`가 앱과 같은 명령(클립보드를 핀으로 띄우기, 핀 모두 숨기기/보이기 포함)과 새 설치 단축키로 `TrayMenuLayout.Build`를 호출해 만듭니다.
+- 제품 흐름은 장면에서 다시 만들지 않고 제품 코드를 호출합니다. 라이브러리 삭제는 `LibraryPermanentDeletion.CreateRecycleConfirmation`이 만드는 확인 창에 답한 뒤 `GalleryWindow.DeleteCapturesAsync`를 실행하므로 상태 줄의 결과와 되돌리기가 제품 그대로 나옵니다. 픽스처의 `RecoverableLibraryService`는 휴지통 대신 픽스처 안 폴더로 옮기는 trash를 씁니다. 트레이 메뉴는 `Scenes/TrayMenu.cs`가 앱과 같은 명령(클립보드를 핀으로 띄우기, 핀 모두 숨기기/보이기, 모든 핀 클릭 허용 해제 포함)과 새 설치 단축키로 `TrayMenuLayout.Build`를 호출해 만듭니다.
 - 자막이 제품의 버튼, 메뉴, 결과, 키를 가리킬 때는 문자열을 직접 쓰지 않고 제품 문구 키(`UiText`), `ShortcutCatalog`, `TutorialCatalog`의 고정 키, 또는 실제 컨트롤이 표시하는 글자에서 가져옵니다. 제품에서 이름이 바뀌면 다시 생성할 때 자막도 함께 바뀝니다. 키 입력도 `ShortcutCatalog`의 키로 `HandleShortcut`을 호출합니다.
 - 실제 마우스를 잡지 않습니다. 화면 밖 창에서 마우스 캡처를 얻으면 사용자의 클릭이 생성기로 갈 수 있습니다.
 - 팝업(ContextMenu, Popup, 드롭다운, 도구 설명)은 열지 않습니다. WPF는 팝업을 모니터 작업 영역 안으로 옮기므로 사용자 화면에 나타날 수 있습니다. 메뉴는 부모 없이 Measure/Arrange한 요소로 렌더합니다(`ThemedShellPresenter.CreateMenu`, 핀의 `ContextMenu`).
