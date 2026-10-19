@@ -49,7 +49,7 @@ MyCapture는 개발자를 위한 무료 Windows 캡처·핀 도구입니다. 광
 
 신규 설치에서는 캡처 직후 이미지가 클립보드에 복사되고 작은 카드가 나타납니다. 카드를 클릭하거나 Alt+Q를 누른 뒤 E 편집, P 핀, S 저장, T 텍스트 복사를 키 하나로 실행합니다. C는 다시 복사합니다.
 
-라이브러리는 창 제목과 이미지 속 글자로 검색하며, 폴더로 정리하고 폴더나 ZIP으로 내보냅니다. 신규 설치에서는 보관 기간 제한이 없고, 폴더 밖 캡처가 5 GiB나 1,000개를 넘을 때만 오래된 항목부터 정리합니다. 보관으로 표시하거나 폴더에 넣은 항목은 자동 정리에서 제외합니다.
+라이브러리는 창 제목과 이미지 속 글자로 검색하며, 폴더로 정리하고 폴더나 ZIP으로 내보냅니다. 신규 설치에서는 보관 기간 제한이 없고, 폴더 밖 캡처가 5GB나 1,000개를 넘을 때만 오래된 항목부터 정리합니다. 보관으로 표시하거나 폴더에 넣은 항목은 자동 정리에서 제외합니다.
 
 영역 녹화는 소리 없이 MP4로 저장합니다. 영상 편집기에서 구간을 자르고 텍스트를 넣은 뒤 MP4나 GIF로 내보냅니다. GIF 내보내기에는 예상 크기가 표시됩니다.
 
@@ -88,7 +88,13 @@ MyCapture는 개발자를 위한 무료 Windows 캡처·핀 도구입니다. 광
 
 입력 한도는 1,500자입니다.
 
-> 리드 확정본 대기: 4.4.0 출시 문구가 확정되면 이 자리에 넣습니다.
+- 캡처 직후 편집기 대신 작은 카드가 뜹니다(새로 설치할 때). 카드에서 E로 편집, P로 핀을 띄웁니다.
+- 카드 미리보기를 키우고, 버튼마다 붙어 있던 단축키 글자와 테두리를 걷어 냈습니다. 단축키는 Alt를 누르는 동안 보입니다.
+- 테마는 시스템 따르기·밝게·어둡게·고대비 네 가지로 정리했습니다.
+- 영역 선택 막대에 창·스크롤·지연 캡처를 바로 두고, 녹화 막대를 작게 줄였습니다.
+- 이미지 편집기 속성은 캔버스 위 한 줄로, 동영상 편집기는 자르기·텍스트·내보내기만 남긴 화면으로 바꿨습니다.
+- 라이브러리는 이미지가 타일을 채우고, 새로 설치하면 기간 제한 없이 보관합니다(5GB 또는 1,000개 한도).
+- 설정은 바꾸는 즉시 저장되고 검색할 수 있습니다. 트레이 메뉴에 '문의하기'가 생겼습니다.
 
 ### 검색어
 
@@ -124,7 +130,7 @@ Copy text recognizes Korean and English in images or terminal screenshots on thi
 
 On a new installation, a capture goes to the clipboard and a small card appears. Click it or press Alt+Q, then press E (edit), P (Pin), S (save) or T (Copy text). C copies again.
 
-Search the library by window title or text inside images. Organize captures into folders and export to a folder or ZIP. New installations keep captures with no time limit; automatic cleanup removes the oldest captures outside folders only after they pass 5 GiB or 1,000 items. Items marked Keep or stored in folders are never cleaned up automatically.
+Search the library by window title or text inside images. Organize captures into folders and export to a folder or ZIP. New installations keep captures with no time limit; automatic cleanup removes the oldest captures outside folders only after they pass 5 GB or 1,000 items. Items marked Keep or stored in folders are never cleaned up automatically.
 
 Record a screen region to MP4 without audio. Trim the video, add text and export MP4 or GIF. GIF export shows an estimated file size.
 
@@ -163,7 +169,13 @@ Enter them in screenshot order. Each caption is 200 characters or fewer.
 
 Limit: 1,500 characters.
 
-> Pending the final 4.4.0 release notes.
+- New installs show a small card after each capture instead of opening the editor. Press E to edit or P to pin.
+- A larger card preview, and no more key captions and borders on every button. Hold Alt to see shortcuts.
+- Four themes: follow Windows, Light, Dark and High contrast.
+- Window, scrolling and delayed capture sit right on the selection bar, and the recording bar is smaller.
+- Image editor properties sit in one row above the canvas; the video editor keeps trim, text and export up front.
+- Library images fill their tiles, and new installs keep them with no time limit (5 GB or 1,000 items).
+- Settings save as you change them and can be searched. Contact support from the tray menu.
 
 ### Search terms
 
