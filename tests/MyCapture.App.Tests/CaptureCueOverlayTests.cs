@@ -155,10 +155,13 @@ public sealed class CaptureCueOverlayTests
                 Assert.DoesNotContain("T", barText);
                 Assert.DoesNotContain("C", barText);
                 Assert.DoesNotContain("Esc", barText);
-                Assert.EndsWith("(T)", (string)bar.TextButton.ToolTip, StringComparison.Ordinal);
-                Assert.EndsWith("(Esc)", (string)bar.CancelButton.ToolTip, StringComparison.Ordinal);
+                Assert.StartsWith($"{UiText.Get("CaptureGuide2_Text")}  T\n", (string)bar.TextButton.ToolTip, StringComparison.Ordinal);
+                Assert.StartsWith($"{UiText.Get("CaptureGuide2_Cancel")}  Esc\n", (string)bar.CancelButton.ToolTip, StringComparison.Ordinal);
                 Assert.Equal("T", System.Windows.Automation.AutomationProperties.GetAcceleratorKey(bar.TextButton));
-                Assert.Contains(UiText.Get("CaptureGuide2_Text"), barText);
+                Assert.Empty(barText);
+                Assert.Equal(UiText.Get("CaptureGuide2_Text"),
+                    System.Windows.Automation.AutomationProperties.GetName(bar.TextButton));
+                Assert.EndsWith("(T)", System.Windows.Automation.AutomationProperties.GetHelpText(bar.TextButton), StringComparison.Ordinal);
             }
 
             // The bar alone: no status chip under it, and the setting changes nothing about its size.

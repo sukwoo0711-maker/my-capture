@@ -99,6 +99,9 @@ public sealed class RegionFrameGrabber : IDisposable
     /// </summary>
     public Action<double>? FrameCaptureTimed { get; set; }
 
+    /// <summary>Supplies synthetic pixels to lifecycle tests without opening a desktop capture session.</summary>
+    internal Action<byte[]>? CaptureFrameForTest { get; init; }
+
     /// <summary>
     /// Fixes the capture region and frame size. Width/height are forced even and
     /// clamped to the region.
@@ -122,7 +125,7 @@ public sealed class RegionFrameGrabber : IDisposable
         Height = height;
         _region = new RectD(pixels.Left, pixels.Top, width, height);
         _buffer = new byte[Stride * Height];
-        if (RequestedBackend == RecordingCaptureBackend.WindowsGraphicsCapture)
+        if (CaptureFrameForTest is null && RequestedBackend == RecordingCaptureBackend.WindowsGraphicsCapture)
         {
             RectD region = _region;
             bool includeCursor = _includeCursor;
@@ -140,6 +143,13 @@ public sealed class RegionFrameGrabber : IDisposable
     public byte[] GrabInto()
     {
         long started = Stopwatch.GetTimestamp();
+        if (CaptureFrameForTest is { } captureFrame)
+        {
+            captureFrame(_buffer);
+            FrameCaptureTimed?.Invoke(Stopwatch.GetElapsedTime(started).TotalMilliseconds);
+            return _buffer;
+        }
+
         if (_session is null && _wgc is null)
         {
             OpenBackend();

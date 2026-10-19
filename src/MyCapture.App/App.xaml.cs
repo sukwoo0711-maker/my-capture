@@ -385,6 +385,7 @@ public partial class App : Application
         _recorder.FrameImageCommitHandlerFactory = CreateRecordedFrameCommitHandler;
         _recorder.PrivacyRedactionService = _privacyRedactionService;
         _recorder.ShowSelectionGrid = () => _settings!.Capture.ShowSelectionGrid;
+        _recorder.CaptureSelectionRequested = HandleCaptureRequested;
         _recorder.SessionEnded += (_, _) => RestoreTrayAfterCapture();
         // Answers the record command while the previous recording is still being saved.
         _recorder.FinishingBusyFeedback += () => ShowCommandNotice("MyCapture", UiText.Get("Recording.FinishingBusy"));

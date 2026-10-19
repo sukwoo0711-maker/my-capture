@@ -116,6 +116,9 @@ internal sealed class CaptureOverlayView : FrameworkElement
     private bool _textCaptureMode;
     private bool _colorPickMode;
     private bool _detectWindows;
+    private bool _regionOnlySelected;
+    private bool _windowSelected;
+    private bool UsesWindowDetection => DetectWindows && !_regionOnlySelected;
     private bool _textCaptureAvailable;
     private bool _showShortcutHints = true;
     private bool _offersOtherActions;
@@ -244,6 +247,7 @@ internal sealed class CaptureOverlayView : FrameworkElement
         set
         {
             _detectWindows = value;
+            _windowSelected = value && !_regionOnlySelected;
             ConfigureGuides();
         }
     }
@@ -264,6 +268,7 @@ internal sealed class CaptureOverlayView : FrameworkElement
                 TextElement.SetFontFamily(bar, _uiTypeface.FontFamily);
                 bar.ApplyPalette(_guidePalette);
                 bar.ModeRequested += OnModeRequested;
+                bar.WindowRequested += OnWindowRequested;
                 bar.FullScreenRequested += OnFullScreenRequested;
                 bar.HelpRequested += OnHelpRequested;
                 bar.CancelRequested += RequestCancel;
@@ -274,6 +279,7 @@ internal sealed class CaptureOverlayView : FrameworkElement
             else if (_modeBar is { } bar)
             {
                 bar.ModeRequested -= OnModeRequested;
+                bar.WindowRequested -= OnWindowRequested;
                 bar.FullScreenRequested -= OnFullScreenRequested;
                 bar.HelpRequested -= OnHelpRequested;
                 bar.CancelRequested -= RequestCancel;
@@ -405,6 +411,7 @@ internal sealed class CaptureOverlayView : FrameworkElement
         {
             if (_recordingSelection == value) return;
             _recordingSelection = value;
+            ConfigureGuides();
             _staticDirty = true;
             QueueFeedback();
         }
@@ -431,7 +438,7 @@ internal sealed class CaptureOverlayView : FrameworkElement
     {
         get
         {
-            if (_ended || _colorPickMode || (!DetectWindows && !ShowModeBar)) return CaptureCueState.None;
+            if (_ended || _colorPickMode || (!UsesWindowDetection && !ShowModeBar)) return CaptureCueState.None;
             if (_interaction == InteractionMode.Create && _selection.HasValue) return CaptureCueState.Drag;
             return _hoverRegion.HasValue && !_selection.HasValue ? CaptureCueState.Click : CaptureCueState.None;
         }
@@ -476,14 +483,14 @@ internal sealed class CaptureOverlayView : FrameworkElement
                 break;
         }
 
-        _modeBar?.ShowMode(Mode);
+        _modeBar?.ShowMode(Mode, _windowSelected);
     }
 
     private void OnModeChanged()
     {
         // The colour mode never highlights a window; leaving it shows the one under the pointer again.
         if (_pointerInitialized) RefreshHover(_cursorPixel.Offset(_screenBounds.Left, _screenBounds.Top));
-        _modeBar?.ShowMode(Mode);
+        _modeBar?.ShowMode(Mode, _windowSelected);
         QueueFeedback();
     }
 
@@ -621,7 +628,7 @@ internal sealed class CaptureOverlayView : FrameworkElement
         WindowCandidate? window = null;
         RectD? region = null;
         bool wholeMonitor = false;
-        if (DetectWindows && !_ended && !_colorPickMode && !_pointerOverBar
+        if (UsesWindowDetection && !_ended && !_colorPickMode && !_pointerOverBar
             && _interaction == InteractionMode.None && !_selection.HasValue)
         {
             window = WindowDetectHitTest.FindTopmost(_windowCandidates, screenPoint, OwnWindowHandle);
@@ -846,9 +853,9 @@ internal sealed class CaptureOverlayView : FrameworkElement
     {
         if (_released) return;
         _modeBar?.Configure(DetectWindows, TextCaptureAvailable, CopyColorText is not null, OffersOtherActions,
-            CanRepeatLastRegion());
-        _modeBar?.ShowMode(Mode);
-        _startGuide?.Configure(DetectWindows);
+            CanRepeatLastRegion(), RecordingSelection);
+        _modeBar?.ShowMode(Mode, _windowSelected);
+        _startGuide?.Configure(UsesWindowDetection, RecordingSelection);
         _staticDirty = true;
         QueueFeedback();
     }
@@ -856,7 +863,26 @@ internal sealed class CaptureOverlayView : FrameworkElement
     private void OnModeRequested(CaptureSelectorMode mode)
     {
         DismissStartGuide();
+        if (mode == CaptureSelectorMode.Capture)
+        {
+            _regionOnlySelected = true;
+            _windowSelected = false;
+        }
         SelectMode(mode);
+        OnModeChanged();
+        ReturnFocusAfterPointer();
+    }
+
+    private void OnWindowRequested()
+    {
+        if (_ended || !DetectWindows || RecordingSelection) return;
+        DismissStartGuide();
+        _regionOnlySelected = false;
+        _windowSelected = true;
+        _selection = null;
+        _selectedWindow = null;
+        SelectMode(CaptureSelectorMode.Capture);
+        OnModeChanged();
         ReturnFocusAfterPointer();
     }
 
@@ -864,6 +890,7 @@ internal sealed class CaptureOverlayView : FrameworkElement
     private void OnBarActionRequested(CaptureSelectorRequest request)
     {
         if (_ended || _copyingColor || !OffersOtherActions) return;
+        if (RecordingSelection && request.Action != CaptureSelectorAction.Capture) return;
         DismissStartGuide();
         _ended = true;
         EndPointerInteraction();
@@ -919,7 +946,7 @@ internal sealed class CaptureOverlayView : FrameworkElement
             AddGuideChild(card);
         }
 
-        _startGuide.Configure(DetectWindows);
+        _startGuide.Configure(UsesWindowDetection, RecordingSelection);
         _startGuide.BeginAnimation(OpacityProperty, null);
         _startGuide.Opacity = 1;
         _startGuide.Visibility = Visibility.Visible;
@@ -1411,7 +1438,7 @@ internal sealed class CaptureOverlayView : FrameworkElement
         else
         {
             primary = RecordingSelection ? DrawRecordingInstruction(dc)
-                : DetectWindows ? DrawCueInstruction(dc, cue, centerX, 18, scale)
+                : UsesWindowDetection ? DrawCueInstruction(dc, cue, centerX, 18, scale)
                 : DrawPlainInstruction(dc);
             chrome.Add(primary.Value);
         }
@@ -1566,7 +1593,7 @@ internal sealed class CaptureOverlayView : FrameworkElement
         string drag = UiText.Get(_textCaptureMode ? "CaptureGuide2_DragText" : "CaptureGuide2_DragCapture");
         parts.Add((drag, [drag]));
         if (cue == CaptureCueState.Drag) active = 0;
-        if (DetectWindows)
+        if (UsesWindowDetection)
         {
             string window = UiText.Get(ClickKey(wholeMonitor: false));
             string monitor = UiText.Get(ClickKey(wholeMonitor: true));
@@ -1913,8 +1940,7 @@ internal sealed class CaptureOverlayView : FrameworkElement
         {
             if (key == Key.Enter && e.OriginalSource is ButtonBase button)
             {
-                if (button is System.Windows.Controls.RadioButton radio) radio.IsChecked = true;
-                else button.RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent, button));
+                _modeBar.ActivateButton(button);
                 e.Handled = true;
                 return;
             }
