@@ -82,7 +82,7 @@ MyCapture는 개발자를 위한 무료 Windows 캡처·핀 도구입니다. 광
 6. 이미지 속 오류 문구와 창 제목으로 라이브러리를 검색합니다.
 7. 영상 편집기에서 남길 구간을 고르고 텍스트를 넣은 모습입니다. I와 O로 구간의 시작과 끝을 정합니다.
 8. GIF로 내보내기 전 예상 크기를 확인하는 화면입니다. 영상 편집기에서 G로 엽니다.
-9. 영역·창·전체 화면 캡처, 클립보드 복사, 이미지 속 글자 복사, 영역 녹화는 Windows 캡처 도구와 같습니다. 여기에 핀, 스크롤 캡처, 블러·모자이크·단계 번호, 글자로 찾는 라이브러리, 카드번호·토큰까지 찾는 가리기가 더해집니다.
+9. 영역·창·전체 화면 캡처, 클립보드 복사, 이미지 속 글자 복사, 영역 녹화는 Windows 캡처 도구와 같습니다. 여기에 핀, 스크롤 캡처, 블러·모자이크·단계 번호, 글자로 찾는 라이브러리, 카드번호·토큰 자동 탐지가 더해집니다.
 
 ### 이 버전의 새로운 기능 (4.4.0)
 
@@ -157,7 +157,7 @@ Enter them in screenshot order. Each caption is 200 characters or fewer.
 6. Library search finds an error message inside an image. Window titles are searchable too.
 7. The video editor shows a trimmed recording with text. Press I and O to set the start and end of the selected range.
 8. Check the estimated size before exporting a GIF. Press G in the video editor to open this view.
-9. Capture, clipboard copy, text from images and region recording work as in Snipping Tool. MyCapture adds pins, scrolling capture, blur, mosaic, step numbers, library search and Redact for tokens.
+9. Both apps capture, copy to the clipboard, extract text and record regions. MyCapture adds pins, scrolling capture, blur, mosaic, steps, library search and automatic card/token detection.
 
 ### What's new in this version (4.4.0)
 

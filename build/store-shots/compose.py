@@ -362,6 +362,15 @@ def preflight(config, layers_root, selected, language, fonts, srgb_profile):
     return needed, images, headers, evidence, metrics
 
 
+def fixed_icc(profile):
+    """Return the sRGB profile bytes with a fixed creation date and no profile ID, so repeated runs write identical files."""
+    data = bytearray(profile.tobytes())
+    require(len(data) >= 128 and data[36:40] == b"acsp", "Unexpected ICC profile header")
+    data[24:36] = (2026).to_bytes(2, "big") + (1).to_bytes(2, "big") + (1).to_bytes(2, "big") + bytes(6)
+    data[84:100] = bytes(16)
+    return bytes(data)
+
+
 def background():
     width, height = STYLE["canvas"]
     strip = Image.new("RGB", (1, height))
@@ -532,7 +541,7 @@ def main(argv=None):
             require(not destination.exists() or destination.is_file(),
                     f"Output destination is not a regular file: {destination}")
         out.mkdir(parents=True, exist_ok=True)
-        icc = profile.tobytes()
+        icc = fixed_icc(profile)
         for name, image in outputs.items():
             destination = (out / name).resolve()
             image.save(destination, format="PNG", optimize=True, compress_level=STYLE["png_compress_level"], icc_profile=icc)

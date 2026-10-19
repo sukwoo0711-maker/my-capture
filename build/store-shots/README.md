@@ -1,6 +1,6 @@
 # 스토어 스크린샷 합성
 
-MyCapture의 실제 창 레이어를 2560×1440 스토어 이미지 9장으로 합성합니다. `compose.py`는 앱 실행 없이 `scenes.json`의 제목·자르기·배치를 적용합니다. 2026-10-20에 4.2.1 한국어 레이어로 두 언어 시안을 렌더해 배치와 검색 카드 가독성을 확인했습니다. 최종 이미지는 4.4.0 렌더가 나오면 아래 명령으로 다시 만듭니다.
+MyCapture의 실제 창 레이어를 2560×1440 스토어 이미지 9장으로 합성합니다. `compose.py`는 앱 실행 없이 `scenes.json`의 제목·자르기·배치를 적용합니다. 2026-10-20에 4.2.1 한국어 레이어로 두 언어 시안을 렌더해 배치와 검색 카드 가독성을 확인했습니다. 같은 입력이면 같은 바이트의 PNG가 나오도록 ICC 프로필의 생성 시각을 고정합니다. 최종 이미지는 4.4.0 렌더가 나오면 아래 명령으로 다시 만듭니다.
 
 ## 입력과 실행
 
@@ -61,7 +61,7 @@ python -X utf8 -I "C:/GitRepositories/my-capture-440/store-shots/build/store-sho
 | 1 | 개인정보를 한 번에 가립니다 / Redact personal data in one step | `redact/03.png` 0.75 → 2.25 |
 | 2 | 코드 옆에 참고 화면을 띄웁니다 / Pin references above your code | `samples/code.png` 0.80 → 1.60, `pins/code.png` 0.80 → 2.40 |
 | 3 | 오류 화면에 바로 표시합니다 / Mark up a bug screenshot | `annotation/06-step2.png` 0.70 → 2.10 |
-| 4 | 캡처 직후 키 하나로 처리합니다 / One key after each capture | `samples/code.png` 0.80 → 1.60, `quick-access/dashboard.png` 0.80 → 2.40 |
+| 4 | 캡처 카드에서 작업을 고릅니다 / Choose an action on the card | `samples/code.png` 0.80 → 1.60, `quick-access/dashboard.png` 0.80 → 2.40 |
 | 5 | 이미지 속 글자를 복사합니다 / Copy text out of an image | `ocr/result-source.png` 0.70 → 2.10 |
 | 6 | 지난 캡처를 글자로 찾습니다 / Find past captures by their text | `library/midnight-search.png` 0.75 → 2.25 |
 | 7 | 녹화하고 필요한 구간만 남깁니다 / Record a region and trim it | `video/editor.png` 0.67 → 2.01 |
@@ -82,7 +82,7 @@ python -X utf8 -I "C:/GitRepositories/my-capture-440/store-shots/build/store-sho
 6. **라이브러리:** `library/midnight-search.png`는 `LibraryWindow` 1240×760 DIP, 3×, 3720×2280px입니다. 자체 테스트 저장소에 합성 캡처 세 개와 OCR 색인을 준비하고 `timeout`을 검색합니다. 첫 결과는 창 제목 `CaptureService.cs — timeout`, 둘째는 OCR 본문 `Request timeout`, 셋째는 두 조건이 모두 일치합니다. 검색 필드·결과 제목·제목 또는 이미지 글자의 일치 근거를 crop 안에 둡니다. 실제 사용자 라이브러리는 사용하지 않습니다.
 7. **영상 편집:** `video/editor.png`는 `VideoEditorWindow` 1240×800 DIP, 3×, 3720×2400px입니다. 자체 생성 프레임으로 터미널 테스트 실패와 수정을 보여 주는 3초 영상을 만들고 0.4~2.6초를 선택합니다. 시간 지정 텍스트 두 개는 `오류 재현` / `Reproduce the error`, `수정 후 확인` / `Verify the fix`입니다. 프리뷰 하부·남는 길이·시작과 끝 핸들·두 텍스트 트랙을 하단 crop에 표시합니다. 실제 녹화 장치를 사용하지 않으며 보라색 트랙은 최종 제품의 흑연색·빨강 규칙을 반영한 실제 렌더로 교체합니다.
 8. **GIF 내보내기:** `video/gif-export-dialog.png`는 `VideoExportDialog` 624×1021 DIP, 3×, 1872×3063px입니다. 장면 7 영상 프리뷰, GIF 선택, 960px·10fps 권장 설정, 10MB GitHub 첨부 목표, 제품이 실제 계산한 크기를 표시합니다. 설정은 crop 위쪽, 권장 상태와 크기는 아래쪽에 둡니다. 예상/측정 크기는 실제 산정 결과와 제품 문구를 그대로 쓰며 기존 예제의 229KB를 고정하지 않습니다. 긴 아래 빈 공간과 내보내기 버튼은 crop 밖에 둡니다.
-9. **비교:** 창 레이어가 없습니다. `그대로` / `What stays the same`, `더해지는 것` / `What is added`의 두 열과 검토된 항목만 사용합니다. 열 제목은 52px, 본문은 44px이며 아이콘·체크표시를 추가하지 않습니다.
+9. **비교:** 창 레이어가 없습니다. `그대로` / `Works the same`, `더해지는 것` / `What MyCapture adds`의 두 열과 검토된 항목만 사용합니다. 열 제목은 44px `#9AA5B5`, 그 아래 흰색 10% 1px 선, 본문은 60px(왼쪽 `#9AA5B5`, 오른쪽 `#F3F5F8`)이며 아이콘·체크표시를 추가하지 않습니다.
 
 ## 최종 검수
 

@@ -126,8 +126,8 @@
     {
       "id": 4,
       "slug": "quick-card",
-      "title_ko": "캡처 직후 키 하나로 처리합니다",
-      "title_en": "One key after each capture",
+      "title_ko": "캡처 카드에서 작업을 고릅니다",
+      "title_en": "Choose an action on the card",
       "subline_ko": "C 복사 · E 편집 · P 핀 · S 저장 · T 텍스트 복사",
       "subline_en": "C Copy · E Edit · P Pin · S Save · T Copy text",
       "layers": [
@@ -294,14 +294,14 @@
           "긴 화면을 잇는 스크롤 캡처",
           "블러·모자이크·단계 번호",
           "창 제목과 글자로 찾는 라이브러리",
-          "카드번호·토큰까지 찾는 가리기"
+          "카드번호·토큰 자동 탐지"
         ],
         "right_en": [
           "Pins above other windows",
           "Scrolling capture",
           "Blur, mosaic and step numbers",
           "Search by window title or text",
-          "Redact card numbers and tokens"
+          "Detect card numbers and tokens"
         ]
       },
       "final": "앱 창을 사용하지 않는 2열 문자 전용 장면입니다. 아이콘·체크표시·부재를 단정하는 추가 문구를 넣지 않습니다.",
@@ -333,7 +333,8 @@
             "source": "https://blogs.windows.com/windows-insider/2025/06/19/gif-export-in-snipping-tool-begins-rolling-out-to-windows-insiders/"
           }
         ],
-        "recheck": "제출 직전 공식 기능 안내를 다시 열어 더해지는 것 다섯 줄이 여전히 Snipping Tool에 없는지 확인합니다."
+        "recheck": "제출 직전 공식 기능 안내를 다시 열어 더해지는 것 다섯 줄이 여전히 Snipping Tool에 없는지 확인합니다.",
+        "strength": "스크롤 캡처는 Microsoft가 기본 미지원이라고 밝혔습니다(높음). 핀, 블러·모자이크·단계 번호, 검색 라이브러리, 카드번호·토큰 자동 탐지는 공식 기능 안내에 없다는 근거입니다(중간). Snipping Tool은 이메일·전화번호 자동 가리기와 선택한 글자 가리기를 지원하므로 '가리기' 자체가 아니라 '자동 탐지'를 차이로 씁니다."
       }
     }
   ]
