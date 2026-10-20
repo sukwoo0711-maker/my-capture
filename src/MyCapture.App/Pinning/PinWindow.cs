@@ -242,7 +242,7 @@ internal sealed class PinWindow : Window
             OnFeedbackExpired);
 
         // Tracks the double-click interval without modifying the clipboard on a single click.
-        // Ctrl+C copies the rendered image; Ctrl+double-click copies text.
+        // Ctrl+C copies the image and retained source; Ctrl+double-click copies only text.
         _ctrlClickTimer = new DispatcherTimer(DispatcherPriority.Normal, Dispatcher);
         _ctrlClickTimer.Tick += OnCtrlClickTimerTick;
         _zoomSettleTimer = new DispatcherTimer(DispatcherPriority.Background, Dispatcher)
@@ -272,7 +272,11 @@ internal sealed class PinWindow : Window
             ScheduleHoverBarHide();
         };
         // The active pin takes the keys (Esc closes it), so its outline stays emphasized.
-        Activated += (_, _) => SetChromeActive(true);
+        Activated += (_, _) =>
+        {
+            SetChromeActive(true);
+            if (!_isClosed) ViewStateChanged?.Invoke();
+        };
         Deactivated += (_, _) => SetChromeActive(false);
         LocationChanged += (_, _) => PlaceHoverBar();
         SizeChanged += (_, _) => PlaceHoverBar();
@@ -399,6 +403,9 @@ internal sealed class PinWindow : Window
     /// <summary>Raised when the user asks (via this pin) to reopen the last closed pin.</summary>
     internal event EventHandler? RestoreClosedRequested;
 
+    /// <summary>Raised after movement or zoom settles, or opacity or stacking order changes.</summary>
+    internal event Action? ViewStateChanged;
+
     /// <summary>
     /// Reports whether a closed pin can be reopened; drives the context-menu item state.
     /// Set by the manager that owns the closed-pin history.
@@ -416,6 +423,9 @@ internal sealed class PinWindow : Window
     /// <see langword="null"/> when it closed before it had a native window.
     /// </summary>
     internal PinClosedPlacement? ClosedPlacement { get; private set; }
+
+    /// <summary>Reads the live placement without closing the window or recording history.</summary>
+    internal PinClosedPlacement? GetCurrentPlacement() => CaptureClosedPlacement();
 
     /// <summary>The pin's live presentation state.</summary>
     internal PinViewState State => _state;
@@ -852,6 +862,7 @@ internal sealed class PinWindow : Window
         _lastDragCursorY = int.MinValue;
         if (_dragInput.HasCapture(this)) _dragInput.Release(this);
         if (wasDragging && !_isClosed && IsMouseOver) ShowHoverBar();
+        if (wasDragging && !_isClosed) ViewStateChanged?.Invoke();
     }
 
     protected override void OnMouseWheel(MouseWheelEventArgs e)
@@ -883,8 +894,13 @@ internal sealed class PinWindow : Window
     {
         base.OnKeyDown(e);
 
-        bool shift = Keyboard.Modifiers.HasFlag(ModifierKeys.Shift);
-        bool ctrl = Keyboard.Modifiers.HasFlag(ModifierKeys.Control);
+        HandleKeyDown(e, Keyboard.Modifiers);
+    }
+
+    internal void HandleKeyDown(KeyEventArgs e, ModifierKeys modifiers)
+    {
+        bool shift = modifiers.HasFlag(ModifierKeys.Shift);
+        bool ctrl = modifiers.HasFlag(ModifierKeys.Control);
         double nudge = shift ? ArrowNudgeShiftDip : ArrowNudgeDip;
 
         switch (e.Key)
@@ -962,11 +978,14 @@ internal sealed class PinWindow : Window
         {
             Left += dx;
             Top += dy;
-            return;
         }
-        (int left, int top, _, _) = WindowStyleFacade.GetWindowBounds(_handle);
-        DpiScale dpi = VisualTreeHelper.GetDpi(this);
-        MovePhysical(left + (dx * dpi.DpiScaleX), top + (dy * dpi.DpiScaleY));
+        else
+        {
+            (int left, int top, _, _) = WindowStyleFacade.GetWindowBounds(_handle);
+            DpiScale dpi = VisualTreeHelper.GetDpi(this);
+            MovePhysical(left + (dx * dpi.DpiScaleX), top + (dy * dpi.DpiScaleY));
+        }
+        if (!_isClosed) ViewStateChanged?.Invoke();
     }
 
     private void MovePhysical(double left, double top)
@@ -1061,11 +1080,13 @@ internal sealed class PinWindow : Window
 
     private void CommitCrispZoom()
     {
+        bool wasZooming = _liveZooming;
         _liveZooming = false;
         _imageElement.CacheMode = null;
         RenderOptions.SetBitmapScalingMode(_imageElement, BitmapScalingMode.HighQuality);
         _imageElement.InvalidateVisual();
         _chrome.InvalidateVisual();
+        if (wasZooming && !_isClosed) ViewStateChanged?.Invoke();
     }
 
     private void ApplyPositionKeepingGrabbable(double left, double top)
@@ -1094,7 +1115,7 @@ internal sealed class PinWindow : Window
     private void CopyImageToClipboard()
     {
         ShowFeedback(UiText.Get("Text_4C160257F02C"), FeedbackKind.Progress);
-        CopyRequested?.Invoke(this, new PinImageCopyRequest(_image, SourcePageUrl));
+        CopyRequested?.Invoke(this, new PinImageCopyRequest(_image, SourcePageUrl, _originalText));
     }
 
     private void RequestOcr()
@@ -1164,6 +1185,7 @@ internal sealed class PinWindow : Window
             BeginAnimation(Window.OpacityProperty, fade, HandoffBehavior.SnapshotAndReplace);
         }
 
+        if (!_isClosed) ViewStateChanged?.Invoke();
         return target;
     }
 

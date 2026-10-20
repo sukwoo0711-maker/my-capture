@@ -61,8 +61,8 @@ public sealed class AppSettings : IJsonOnDeserializing
 /// <summary>Global shortcuts, registered for as long as the app runs.</summary>
 /// <remarks>
 /// The initialisers are the chords earlier versions shipped with, which an older settings file
-/// without a property reads back. A new installation assigns only region capture and region
-/// recording (<see cref="NewInstallDefaults"/>).
+/// without a property reads back. A new installation assigns region capture, region recording
+/// and clipboard pin shortcuts (<see cref="NewInstallDefaults"/>).
 /// </remarks>
 public sealed class HotkeySettings
 {
@@ -262,11 +262,16 @@ public sealed class PinSettings
     /// <summary>Close the pinned window on double-click.</summary>
     public bool CloseOnDoubleClick { get; set; } = true;
 
+    /// <summary>Save open pins on this PC and reopen them at the next launch.</summary>
+    /// <remarks>Legacy settings stay off; new installations enable this through <see cref="NewInstallDefaults"/>.</remarks>
+    public bool RestoreOpenPinsOnLaunch { get; set; } = false;
+
     /// <summary>
     /// Legacy copy-gesture delay retained for settings-file compatibility, in milliseconds.
     /// </summary>
     /// <remarks>
-    /// No longer controls a UI gesture. A focused pin uses <c>Ctrl+C</c> to copy its image;
+    /// No longer controls a UI gesture. A focused pin uses <c>Ctrl+C</c> to copy its image
+    /// together with any retained original text;
     /// <c>Ctrl</c>+double-click copies retained source text or locally recognized image text.
     /// Preserve the serialized field and draft value when reading and saving older settings.
     /// </remarks>
@@ -282,7 +287,8 @@ public sealed class PinSettings
     /// Snipaste defaults this to 1. 20 is kept here because the restore history is also
     /// bounded by a retained-byte budget (<c>ClosedPinMemory.DefaultMaxRetainedBytes</c>),
     /// so the count never decides memory use on its own. The history is memory-only and is
-    /// discarded when the app exits.
+    /// discarded when the app exits. Open pins may be saved separately when
+    /// <see cref="RestoreOpenPinsOnLaunch"/> is enabled.
     /// </remarks>
     public int ClosedWindowRestoreLimit { get; set; } = 20;
 

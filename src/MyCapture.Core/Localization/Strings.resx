@@ -573,7 +573,7 @@
     <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
   </data>
   <data name="Text_338C1B26A06A" xml:space="preserve">
-    <value>오른쪽 클릭: 저장/원문 복사 · Ctrl+더블클릭: 원문 텍스트 복사 · Ctrl+C: 이미지 복사 · 드래그: 이동 · 휠: 확대·축소</value>
+    <value>오른쪽 클릭: 저장/원문 복사 · Ctrl+더블클릭: 원문 텍스트 복사 · Ctrl+C: 원문과 이미지 복사 · 드래그: 이동 · 휠: 확대·축소</value>
     <comment>src\MyCapture.App\Pinning\PinWindow.cs</comment>
   </data>
   <data name="Text_339D1C10FD24" xml:space="preserve">
@@ -957,7 +957,7 @@
     <comment>src\MyCapture.App\App.xaml.cs</comment>
   </data>
   <data name="Text_55694B0252DB" xml:space="preserve">
-    <value>텍스트를 이미지로 표시한 핀입니다. Ctrl+C는 이미지를, Ctrl+더블클릭은 원문 텍스트를 복사합니다. 오른쪽 클릭 메뉴에서도 원문을 복사할 수 있습니다.</value>
+    <value>텍스트를 이미지로 표시한 핀입니다. Ctrl+C는 원문 텍스트와 이미지를 함께, Ctrl+더블클릭은 원문 텍스트만 복사합니다. 오른쪽 클릭 메뉴에서도 원문을 복사할 수 있습니다.</value>
     <comment>src\MyCapture.App\Pinning\PinWindow.cs</comment>
   </data>
   <data name="Text_55D025693B34" xml:space="preserve">
@@ -1842,7 +1842,7 @@
     <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
   </data>
   <data name="Text_A00997F45D07" xml:space="preserve">
-    <value>Ctrl+C는 핀의 이미지를, Ctrl+더블클릭은 원문 텍스트를 복사합니다. 원문이 없는 이미지는 이 PC에서 인식한 텍스트를 복사합니다.</value>
+    <value>Ctrl+C는 원문이 있는 핀(텍스트·표·코드)에서는 원문 텍스트와 이미지를 함께, 이미지 핀에서는 이미지만 복사합니다. Ctrl+더블클릭은 원문 텍스트만 복사하고, 원문이 없는 이미지는 이 PC에서 인식한 텍스트를 복사합니다.</value>
     <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
   </data>
   <data name="Text_A31A72A338DD" xml:space="preserve">
@@ -2822,6 +2822,8 @@
     <value>더블클릭으로 핀 닫기</value>
     <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
   </data>
+  <data name="PinSession.RestoreLabel" xml:space="preserve"><value>다음 실행 때 열린 핀 다시 띄우기</value></data>
+  <data name="PinSession.RestoreDescription" xml:space="preserve"><value>종료할 때 열려 있던 핀의 이미지와 원문 텍스트를 이 PC의 앱 데이터 폴더에 저장하고, 다음 실행 때 같은 자리에 다시 띄웁니다. 끄면 저장한 핀을 바로 지웁니다.</value></data>
   <data name="Text_F0CFD62F0971" xml:space="preserve">
     <value>녹화 동영상에 마우스 커서 포함</value>
     <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
@@ -3940,7 +3942,7 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="SettingsUx_GitHubIssueUrlHint" xml:space="preserve"><value>비워 두면 MyCapture 공개 지원 저장소를 사용합니다. 올린 이미지는 누구나 볼 수 있습니다.</value></data>
   <data name="SettingsUx_EditingDefaultsHeading" xml:space="preserve"><value>편집 도구 기본값</value></data>
   <data name="SettingsUx_PinCopy" xml:space="preserve"><value>핀 복사</value></data>
-  <data name="SettingsUx_PinCopyHint" xml:space="preserve"><value>Ctrl+C는 핀의 이미지를, Ctrl+더블클릭은 원문 텍스트를 복사합니다. 원문이 없는 이미지는 이 PC에서 인식한 텍스트를 복사합니다.</value></data>
+  <data name="SettingsUx_PinCopyHint" xml:space="preserve"><value>Ctrl+C는 원문이 있는 핀(텍스트·표·코드)에서는 원문 텍스트와 이미지를 함께, 이미지 핀에서는 이미지만 복사합니다. Ctrl+더블클릭은 원문 텍스트만 복사하고, 원문이 없는 이미지는 이 PC에서 인식한 텍스트를 복사합니다.</value></data>
   <data name="SettingsUx_OcrHeading" xml:space="preserve"><value>텍스트 인식</value></data>
   <data name="SettingsUx_OcrLanguages" xml:space="preserve"><value>인식 언어</value></data>
   <data name="SettingsUx_OcrQualityHint" xml:space="preserve"><value>빠름과 보통은 Windows 기본 인식 기능을 씁니다. 정확은 영수증처럼 작은 글자에 강합니다. 가장 정확은 이미지를 보정하고 4배로 키워 인식하며, 처음 쓸 때 약 67MB를 내려받습니다.</value></data>
@@ -4244,7 +4246,7 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="Tutorial.pin-restore.Step2" xml:space="preserve"><value>2. 지정된 단축키나 트레이 메뉴의 닫은 핀 다시 열기를 사용합니다.</value></data>
   <data name="Tutorial.pin-restore.Step3" xml:space="preserve"><value>3. 최근에 닫은 핀이 다시 나타납니다.</value></data>
   <data name="Tutorial.pin-copy.Step1" xml:space="preserve"><value>1. 복사할 핀을 클릭하여 선택합니다.</value></data>
-  <data name="Tutorial.pin-copy.Step2" xml:space="preserve"><value>2. Ctrl+C를 눌러 핀 이미지를 복사합니다.</value></data>
+  <data name="Tutorial.pin-copy.Step2" xml:space="preserve"><value>2. Ctrl+C로 핀 이미지를 복사합니다. 원문이 있는 핀은 원문 텍스트도 함께 복사합니다.</value></data>
   <data name="Tutorial.pin-copy.Step3" xml:space="preserve"><value>3. 다른 앱에서 Ctrl+V를 눌러 붙여 넣습니다. 핀은 열린 상태로 유지됩니다.</value></data>
   <data name="Tutorial.pin-save.Step1" xml:space="preserve"><value>1. 저장할 핀을 클릭하여 선택합니다.</value></data>
   <data name="Tutorial.pin-save.Step2" xml:space="preserve"><value>2. Ctrl+S를 눌러 저장합니다.</value></data>

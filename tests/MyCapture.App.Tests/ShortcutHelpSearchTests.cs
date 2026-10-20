@@ -50,14 +50,17 @@ public sealed class ShortcutHelpSearchTests
         Assert.Equal(UiText.Format("Help.SearchCountOne", 1), view.Count.Text);
         Assert.Equal(AutomationLiveSetting.Polite, AutomationProperties.GetLiveSetting(view.Count));
 
-        // The same command on two tabs is listed twice, each under its own category.
+        // Copy appears on two tabs, plus the pin's exact-source alternative.
         view.Search.Text = "Ctrl+C";
         Border[] copies = view.VisibleResults();
-        Assert.Equal(2, copies.Length);
-        Assert.Equal(new[] { UiText.Get("Help.Annotation"), UiText.Get("Text_33EFD44366A7") }, copies.Select(row => Texts(row)[1].Text));
-        Assert.All(copies, row => Assert.Contains(FirstRunWelcomeTests.Descendants(row).OfType<WrapPanel>(),
+        Assert.Equal(3, copies.Length);
+        Assert.Equal(new[] { UiText.Get("Help.Annotation"), UiText.Get("Text_33EFD44366A7"), UiText.Get("Text_33EFD44366A7") }, copies.Select(row => Texts(row)[1].Text));
+        Assert.All(copies.Take(2), row => Assert.Contains(FirstRunWelcomeTests.Descendants(row).OfType<WrapPanel>(),
             keys => AutomationProperties.GetName(keys) == "Ctrl+C"));
-        Assert.Equal(UiText.Format("Help.SearchCount", 2), view.Count.Text);
+        Assert.Equal(UiText.Get("Text_976A6C92B870"), Texts(copies[2])[0].Text);
+        Assert.Contains(FirstRunWelcomeTests.Descendants(copies[2]).OfType<WrapPanel>(),
+            keys => AutomationProperties.GetName(keys) == "Ctrl+C / " + UiText.Get("Text_C7011B8D345C"));
+        Assert.Equal(UiText.Format("Help.SearchCount", 3), view.Count.Text);
 
         // A category name finds its commands too.
         view.Search.Text = UiText.Get("Help.Video");
@@ -69,6 +72,22 @@ public sealed class ShortcutHelpSearchTests
         Assert.Equal(Visibility.Collapsed, view.ResultsView.Visibility);
         Assert.Equal(Visibility.Collapsed, view.Count.Visibility);
         Assert.Equal(0, view.Tabs.SelectedIndex);
+    });
+
+    [Fact]
+    public void PinSectionOffersBothOriginalTextCopyGesturesAfterCopy() => WithHelp((help, view) =>
+    {
+        TabItem tab = Assert.Single(view.Tabs.Items.OfType<TabItem>(), item => Equals(item.Header, UiText.Get("Text_33EFD44366A7")));
+        var panel = (StackPanel)((ScrollViewer)tab.Content).Content;
+        UniformGrid[] rows = panel.Children.OfType<UniformGrid>().ToArray();
+        int index = Array.FindIndex(rows, row => FirstRunWelcomeTests.Descendants(row).OfType<TextBlock>()
+            .Any(text => text.Text == UiText.Get("Text_976A6C92B870")));
+        Assert.True(index > 0);
+        Assert.Contains(FirstRunWelcomeTests.Descendants(rows[index - 1]).OfType<TextBlock>(),
+            text => text.Text == UiText.Get("QuickAccess.Copy"));
+        Assert.Contains(FirstRunWelcomeTests.Descendants(rows[index]).OfType<WrapPanel>(),
+            keys => AutomationProperties.GetName(keys) == "Ctrl+C / " + UiText.Get("Text_C7011B8D345C"));
+        Assert.Equal("pin-copy", TutorialCatalog.FindHelp("Text_33EFD44366A7", "QuickAccess.Copy")?.Id);
     });
 
     [Fact]

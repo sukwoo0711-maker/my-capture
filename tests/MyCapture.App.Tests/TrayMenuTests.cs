@@ -73,18 +73,28 @@ public sealed class TrayMenuTests
     public void PinClipboardIsReachableOnANewInstallAndSaysWhyItIsDisabled()
     {
         var calls = new List<string>();
-        // A new installation leaves Paste to screen unassigned; the tray is the way in.
+        // A new installation pins the clipboard with F3, and the tray names that key.
         HotkeySettings keys = NewInstallDefaults.Create().Hotkeys;
-        Assert.False(keys.PasteToScreen.IsAssigned);
+        Assert.Equal(new Hotkey(HotkeyModifiers.None, Hotkey.VkF3), keys.PasteToScreen);
         using (UiText.UseLanguage("ko-KR"))
         {
             ThemedShellPresenter.MenuEntry ready = PinClipboardEntry(TrayMenuLayout.Build(Commands(calls), keys,
                 new TrayMenuState(ClipboardHasContent: true)));
             Assert.True(ready.IsEnabled);
             Assert.Equal(string.Empty, ready.ToolTip);
-            Assert.Equal(string.Empty, ready.Gesture);
+            Assert.Equal("F3", ready.Gesture);
             ready.Action!();
             Assert.Equal(["PinClipboard"], calls);
+
+            // A user who clears the key still reaches the command from the tray.
+            HotkeySettings cleared = NewInstallDefaults.Create().Hotkeys;
+            cleared.PasteToScreen = Hotkey.None;
+            ThemedShellPresenter.MenuEntry unassigned = PinClipboardEntry(TrayMenuLayout.Build(Commands(calls), cleared,
+                new TrayMenuState(ClipboardHasContent: true)));
+            Assert.True(unassigned.IsEnabled);
+            Assert.Equal(string.Empty, unassigned.Gesture);
+            unassigned.Action!();
+            Assert.Equal(["PinClipboard", "PinClipboard"], calls);
 
             ThemedShellPresenter.MenuEntry empty = PinClipboardEntry(TrayMenuLayout.Build(Commands(calls), keys,
                 new TrayMenuState(ClipboardHasContent: false)));
@@ -137,6 +147,9 @@ public sealed class TrayMenuTests
         using var language = UiText.UseLanguage("ko-KR");
         var calls = new List<string>();
         HotkeySettings keys = NewInstallDefaults.Create().Hotkeys;
+        // A new installation assigns Shift+F3 to hide all pins; this case is a user who cleared it.
+        Assert.Equal(new Hotkey(HotkeyModifiers.Shift, Hotkey.VkF3), keys.HideAllPins);
+        keys.HideAllPins = Hotkey.None;
         Assert.DoesNotContain(TrayMenuLayout.Build(Commands(calls), keys, new TrayMenuState(PinCount: 2)),
             entry => entry.Label == "모든 핀 클릭 허용 해제");
 
