@@ -3,16 +3,16 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>MyCapture — A free Windows screenshot and pinning tool for developers</title>
-  <meta name="description" content="MyCapture is a free Windows screenshot and pinning tool for developers. Hide personal data in a screenshot, then keep it pinned next to your code.">
+  <title>MyCapture — Pin Excel tables and code above your editor</title>
+  <meta name="description" content="MyCapture is a free Windows pinning tool. Keep your Excel spec table and go-to code snippets above the editor, code while you look, and paste the original text back.">
   <link rel="canonical" href="https://sukwoo0711-maker.github.io/my-capture/en/">
   <link rel="alternate" hreflang="ko" href="https://sukwoo0711-maker.github.io/my-capture/">
   <link rel="alternate" hreflang="en" href="https://sukwoo0711-maker.github.io/my-capture/en/">
   <link rel="alternate" hreflang="x-default" href="https://sukwoo0711-maker.github.io/my-capture/">
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="MyCapture">
-  <meta property="og:title" content="MyCapture — A free Windows screenshot and pinning tool for developers">
-  <meta property="og:description" content="MyCapture is a free Windows screenshot and pinning tool for developers. Hide personal data in a screenshot, then keep it pinned next to your code.">
+  <meta property="og:title" content="MyCapture — Pin Excel tables and code above your editor">
+  <meta property="og:description" content="MyCapture is a free Windows pinning tool. Keep your Excel spec table and go-to code snippets above the editor, code while you look, and paste the original text back.">
   <meta property="og:url" content="https://sukwoo0711-maker.github.io/my-capture/en/">
   <meta property="og:image" content="https://sukwoo0711-maker.github.io/my-capture/media/og-en.jpg">
   <meta property="og:image:width" content="1200">
@@ -41,39 +41,47 @@
   </header>
   <main class="container" id="main" tabindex="-1">
     <section class="hero" aria-labelledby="hero-title">
-      <h1 id="hero-title">A free Windows screenshot and pinning tool for developers</h1>
-      <p class="lead">Capture a region with <kbd>Ctrl+Shift+C</kbd> and a small card appears, where one key edits, pins, saves or copies the text. In the editor, <kbd>Ctrl+Shift+R</kbd> covers emails, tokens and card numbers in one step.</p>
+      <h1 id="hero-title">Pin your Excel spec table and go-to code snippets above the editor</h1>
+      <p class="lead">Press <kbd>Ctrl+C</kbd> in Excel or your editor, then <kbd>F3</kbd>, and what you copied becomes a pin. Code while you look, then press <kbd>Ctrl+C</kbd> on the pin to copy its cells or code as the original text. Screen captures from <kbd>Ctrl+Shift+C</kbd> pin with <kbd>F3</kbd> too.</p>
       <div class="hero-action">
         <a class="store-button" href="https://apps.microsoft.com/detail/9PB33MC095VR?cid=site">Get it from Microsoft Store</a>
         <p class="requirements">Free · Windows 11, Windows 10 22H2 (x64)</p>
       </div>
-      <video id="hero-video" class="screen hero-video" autoplay muted loop playsinline controls controlslist="nodownload noplaybackrate noremoteplayback" disablepictureinpicture preload="auto" poster="../media/hero-en.jpg" width="1920" height="1080" aria-label="An 8-second loop: the capture card over code, a bug report with its email, token and card number covered, and an API note pinned next to the code">
+      <video id="hero-video" class="screen hero-video" autoplay muted loop playsinline controls controlslist="nodownload noplaybackrate noremoteplayback" disablepictureinpicture preload="auto" poster="../media/hero-en.jpg" width="1920" height="1080" aria-label="An 8-second loop: a translucent Excel register table pinned above code, a snippet pin whose original text is copied with Ctrl+double-click and pasted into the editor, and a click-through pin above a terminal">
         <source src="../media/hero-en.webm" type="video/webm">
         <source src="../media/hero-en.mp4" type="video/mp4">
       </video>
     </section>
     <aside class="promise">
-      <p class="promise-title"><strong>No ads, no account and no capture limits. Capture and text recognition run on this PC.</strong></p>
-      <p class="small">The only time the app connects to the internet without you asking is to download a text recognition model that is missing from the PC. Every connection is listed in the <a href="https://github.com/sukwoo0711-maker/mycapture-support/blob/main/PRIVACY.md#mycapture-privacy-policy">privacy policy</a>.</p>
+      <p class="promise-title"><strong>Free, including for work, with no ads and no account. Capture and text recognition run on this PC.</strong></p>
+      <p class="small">The only time the app connects to the internet without you asking is to download a text recognition model that is missing from the PC. Every connection is listed in the <a href="https://github.com/sukwoo0711-maker/mycapture-support/blob/main/PRIVACY.md#mycapture-privacy-policy">privacy policy</a>. The source code is on <a href="https://github.com/sukwoo0711-maker/my-capture">GitHub</a> under the MIT License.</p>
     </aside>
     <div class="features">
-    <section class="feature" id="redact" aria-labelledby="redact-title">
+    <section class="feature" id="pin" aria-labelledby="pin-title">
         <div class="feature-copy">
-          <h2 id="redact-title">Redact personal data</h2>
-          <p>Screenshots for an issue sometimes show a customer's email or a production key. Press <kbd>Ctrl+Shift+R</kbd> in the editor and Auto-redact covers email addresses, card numbers, IP addresses, Korean phone and resident registration numbers, and secrets such as GitHub tokens, AWS access keys and API keys that start with sk-.</p>
-          <p>You can move, delete or undo each cover before you save. Blur or pixelate anything it missed.</p>
+          <h2 id="pin-title">Pins that keep Excel tables and code as text</h2>
+          <p>Copy a range in Excel and pin it: the pin shows the picture Excel puts on the clipboard, so fonts, fills and borders look the way they do in the sheet, and the cell values stay attached as tab-separated text. Code copied from an editor that includes colors becomes a code pin with the editor's colors and indentation.</p>
+          <p>Press <kbd>F3</kbd> after copying and the pin appears while your cursor stays in the editor. <kbd>Ctrl+C</kbd> or <kbd>Ctrl</kbd>+double-click on a pin copies its original text, so a go-to <code>#if</code> or <code>#define</code> block goes straight into the editor.</p>
         </div>
-        <img class="screen" src="../media/redact-en.webp" width="1600" height="740" alt="The MyCapture image editor with the reporter, upload token and test card in a log upload failure report covered by black boxes" loading="lazy" decoding="async">
+        <img class="screen" src="../media/pin-en.webp" width="1600" height="707" alt="A #if defined(BOARD_REV_B) snippet pinned beside spi_init.c, showing Text copied, with the same five lines pasted into the editor" loading="lazy" decoding="async">
       </section>
-    <section class="feature feature-reverse" id="pin" aria-labelledby="pin-title">
+    <section class="feature feature-reverse" id="controls" aria-labelledby="controls-title">
         <div class="feature-copy">
-          <h2 id="pin-title">Pins that stay on top</h2>
-          <p>Press <kbd>P</kbd> on the card that appears after a capture, or pin the image, code or table on your clipboard with a shortcut you assign in Settings (for example <kbd>F3</kbd>). A pin is a small window that stays above everything else. Keep an API note or a bug report in view while you fix the code, or a design mockup while you match the layout.</p>
-          <p>Lower a pin's opacity or let clicks pass through to the window behind it. Pins you close by mistake reopen in the order you closed them.</p>
+          <h2 id="controls-title">Pins that stay out of your way</h2>
+          <p><kbd>Ctrl</kbd>+wheel over a pin sets its opacity from 20 to 100%. Turn on Click through to windows behind in its right-click menu and you can click and type in the editor or terminal underneath.</p>
+          <p><kbd>Shift+F3</kbd> hides or shows all pins, and pins that are open when you quit come back at the next launch. Up to 20 recently closed pins reopen with their position, zoom and opacity. Pins stay out of the taskbar and the <kbd>Alt+Tab</kbd> list.</p>
         </div>
-        <img class="screen" src="../media/pin-en.webp" width="1600" height="687" alt="An API note for SaveAsync pinned above the CaptureService.cs code" loading="lazy" decoding="async">
+        <img class="screen" src="../media/controls-en.webp" width="1600" height="707" alt="A translucent register table pin above a terminal, showing that click through to windows behind is on" loading="lazy" decoding="async">
       </section>
-    <section class="feature" id="library" aria-labelledby="library-title">
+    <section class="feature" id="text" aria-labelledby="text-title">
+        <div class="feature-copy">
+          <h2 id="text-title">Text out of images, too</h2>
+          <p><kbd>Ctrl</kbd>+double-click an image pin, such as a datasheet or a web page you captured, to copy its Korean or English text, recognized on this PC. A <kbd>Ctrl+Shift+C</kbd> capture goes to the clipboard, so <kbd>F3</kbd> right after it pins the capture.</p>
+          <p>Tables in images can be copied as CSV, Markdown or tab-separated text.</p>
+        </div>
+        <img class="screen" src="../media/text-en.webp" width="1600" height="707" alt="A pinned datasheet capture of USART characteristics showing Text copied, with the same text pasted into a comment in the editor" loading="lazy" decoding="async">
+      </section>
+    <section class="feature feature-reverse" id="library" aria-labelledby="library-title">
         <div class="feature-copy">
           <h2 id="library-title">A library you search by window title and text</h2>
           <p>Each capture keeps the title of the window it came from, and the text in the image is recognized on this PC. Type a phrase from an error message like <code>timeout</code> or a file name like <code>CaptureService.cs</code> to find the capture.</p>
@@ -81,18 +89,27 @@
         </div>
         <img class="screen" src="../media/library-en.webp" width="1600" height="670" alt="The MyCapture library searched for timeout, showing three captures matched by title, window title, file name or text in the image" loading="lazy" decoding="async">
       </section>
+    <section class="feature" id="redact" aria-labelledby="redact-title">
+        <div class="feature-copy">
+          <h2 id="redact-title">Markup and redaction before you share</h2>
+          <p>For a screenshot that goes into an issue, add arrows, text and step numbers in the editor, and blur or pixelate parts of it. Press <kbd>Ctrl+Shift+R</kbd> and Auto-redact covers email addresses, card numbers, IP addresses, Korean phone and resident registration numbers, and secrets such as GitHub tokens, AWS access keys and API keys that start with sk-.</p>
+          <p>You can move, delete or undo each cover and mark before you save.</p>
+        </div>
+        <img class="screen" src="../media/redact-en.webp" width="1600" height="838" alt="The MyCapture image editor with step numbers and an arrow on a log upload failure report, and its reporter, upload token and test card covered" loading="lazy" decoding="async">
+      </section>
     </div>
     <section class="comparison" aria-labelledby="comparison-title">
       <h2 id="comparison-title">Coming from Snipping Tool</h2>
-      <p class="section-intro">What you did in Snipping Tool works the same way here. The difference is what you can do after the capture.</p>
+      <p class="section-intro">What you did in Snipping Tool works the same way here. On top of that, you get pins to keep in view while you code.</p>
       <div class="comparison-columns">
-        <div><h3>Stays the same</h3><ul><li>Region, window and full-screen capture</li><li>Copied to the clipboard as soon as you capture</li><li>Pen and highlighter</li></ul></div>
-        <div><h3>What you gain</h3><ul><li>Pins that stay above other windows</li><li>A library you search by window title and text in the image</li><li>Redaction that also finds card numbers, resident registration numbers and secret keys</li><li>Tables in an image copied as CSV or Markdown</li></ul></div>
+        <div><h3>Stays the same</h3><ul><li>Region, window and full-screen capture</li><li>Copied to the clipboard as soon as you capture</li><li>Copy text from images</li><li>Region recording</li></ul></div>
+        <div><h3>What you gain</h3><ul><li>Excel ranges pinned as they look</li><li>Table and code pins that copy their original text</li><li>Translucent, click-through pins</li><li>Reopen closed pins</li><li>Scrolling capture</li><li>A library you search by window title and text in the image</li></ul></div>
       </div>
       <p class="small comparison-note">The default region capture shortcut is <kbd>Ctrl+Shift+C</kbd>. To capture with <kbd>Print Screen</kbd>, assign it in Settings. If Windows has <kbd>Print Screen</kbd> set to open Snipping Tool, Settings explains how to turn that off and links to the Windows setting.</p>
     </section>
     <section class="faq" id="faq" aria-labelledby="faq-title">
       <h2 id="faq-title">Frequently asked questions</h2>
+      <details><summary>Nothing happens when I press <kbd>F3</kbd>.</summary><div class="faq-answer"><p>If another app already uses <kbd>F3</kbd>, MyCapture tells you at startup. Assign another key to Pin clipboard to screen in Settings &gt; Shortcuts, or choose Pin clipboard from the tray icon menu. Settings from earlier versions keep their saved keys, so if the shortcut is empty there, assign <kbd>F3</kbd> to it.</p></div></details>
       <details><summary>Why is it free?</summary><div class="faq-answer"><p>MyCapture is open source under the MIT License. The app talks to no server of ours, so more users do not mean higher running costs. There are no paid features, subscriptions or ads. The source code is on <a href="https://github.com/sukwoo0711-maker/my-capture">GitHub</a>.</p></div></details>
       <details><summary>Does anything I capture leave my PC?</summary><div class="faq-answer"><p>Not unless you send it. Capture, editing, recording and text recognition run on this PC, and the app has no usage analytics or crash reporting. It connects to the internet to download a missing text recognition model, and when you run a feature that needs a connection, such as GitHub image attachment. The full list is in the <a href="https://github.com/sukwoo0711-maker/mycapture-support/blob/main/PRIVACY.md#mycapture-privacy-policy">privacy policy</a>.</p></div></details>
       <details><summary>Does it run on Windows 10?</summary><div class="faq-answer"><p>Yes, Windows 10 version 22H2 (x64) is supported since 4.3.0. While recording, a yellow border may appear around the screen; it is not included in the recording. Windows 10 21H2 and earlier, and Windows 10 on ARM64 PCs, are not supported. The <a href="https://github.com/sukwoo0711-maker/mycapture-support#mycapture-support">support page</a> lists the differences from Windows 11.</p></div></details>

@@ -1,7 +1,8 @@
-"""Build the 4.4.0 landing media from the Store composites (2560x1440, headline on top).
+"""Build the landing media from the pin-first Store composites (2560x1440, headline on top).
 
-Outputs per language into OUT: hero-<l>.mp4/.webm/.jpg (1920x1080 loop: card -> redact -> pin),
-redact-<l>.webp, pin-<l>.webp, library-<l>.webp (1600 wide), og-<l>.jpg (1200x630), and
+Outputs per language into OUT: hero-<l>.mp4/.webm/.jpg (1920x1080 loop: spec table pin ->
+snippet pin pasted -> click-through pin), pin-<l>.webp, controls-<l>.webp, text-<l>.webp,
+library-<l>.webp, redact-<l>.webp (1600 wide), og-<l>.jpg (1200x630), and
 readme-demo-<l>.gif (720 wide) for the repository README.
 """
 import subprocess
@@ -11,7 +12,7 @@ from pathlib import Path
 import numpy as np
 from PIL import Image
 
-SRC = Path(sys.argv[1])          # .../artifacts/store/screenshots/4.4.0
+SRC = Path(sys.argv[1])          # .../artifacts/store/screenshots/4.5.0-pin
 OUT = Path(sys.argv[2])
 FF = sys.argv[3]
 OUT.mkdir(parents=True, exist_ok=True)
@@ -19,14 +20,16 @@ OUT.mkdir(parents=True, exist_ok=True)
 BG = (16, 19, 24)                # composite background
 # App areas below the headline (x0, y0, x1, y1) in composite pixels, measured on both languages.
 CROPS = {
-    "01": (160, 400, 2410, 1440),   # auto-redact in the editor
-    "02": (160, 410, 2560, 1440),   # reference pinned above code
-    "04": (160, 420, 2470, 1440),   # capture card over code
-    "06": (160, 360, 2410, 1302),   # library search by text
+    "01": (160, 380, 2560, 1440),   # Excel register table pinned above uart_init.c
+    "02": (160, 380, 2560, 1440),   # #if/#define snippet pin, original text pasted into spi_init.c
+    "03": (160, 380, 2560, 1440),   # click-through table pin above a terminal
+    "05": (160, 380, 2560, 1440),   # datasheet image pin, recognized text pasted into a comment
+    "07": (160, 360, 2410, 1302),   # library search by text
+    "08": (160, 360, 2206, 1432),   # markup and Auto-redact before sharing
 }
 W, H, FPS = 1920, 1080, 30
 SCENE, FADE = 3.0, 0.4             # seconds per scene, crossfade
-ORDER = ["04", "01", "02"]         # capture card -> redact -> pin
+ORDER = ["01", "02", "03"]         # spec table pin -> snippet pasted -> click-through
 
 
 def crop(lang, n):
@@ -92,12 +95,12 @@ def hero(lang):
 
 
 def stills(lang):
-    for name, n in (("redact", "01"), ("pin", "02"), ("library", "06")):
+    for name, n in (("pin", "02"), ("controls", "03"), ("text", "05"), ("library", "07"), ("redact", "08")):
         img = crop(lang, n)
         img = img.resize((1600, round(img.height * 1600 / img.width)), Image.LANCZOS)
         img.save(OUT / f"{name}-{lang}.webp", quality=86, method=6)
         print(name, lang, img.size)
-    pin = crop(lang, "02")
+    pin = crop(lang, "01")
     pin = pin.resize((round(pin.width * 630 / pin.height), 630), Image.LANCZOS)
     pin.crop((pin.width - 1200, 0, pin.width, 630)).save(OUT / f"og-{lang}.jpg", quality=88)
 
