@@ -361,9 +361,13 @@ public sealed partial class SettingsThemePreviewTests
                     Assert.Equal("Ctrl+Shift+X", recorders[1].Text);
                     HotkeyRecorder library = Recorder(nameof(SettingsDraft.OpenLibraryHotkey));
                     HotkeyRecorder paste = Recorder(nameof(SettingsDraft.PasteToScreenHotkey));
+                    HotkeyRecorder hide = Recorder(nameof(SettingsDraft.HideAllPinsHotkey));
                     if (name == "new")
                     {
-                        Assert.All(recorders.Skip(2), recorder => Assert.Equal(string.Empty, recorder.Text));
+                        Assert.Equal("F3", paste.Text);
+                        Assert.Equal("Shift+F3", hide.Text);
+                        Assert.All(recorders.Skip(2).Where(recorder => recorder != paste && recorder != hide),
+                            recorder => Assert.Equal(string.Empty, recorder.Text));
                         // An unassigned row says so on the button that records a new chord.
                         Button record = Descendants(library).OfType<Button>().First();
                         Assert.Contains(Descendants(record).OfType<TextBlock>(), text => text.Text == UiText.Get("Hotkey.Unassigned"));
@@ -385,7 +389,7 @@ public sealed partial class SettingsThemePreviewTests
                         Assert.Contains(buttons, button => Equals(button.Content, UiText.Get("Hotkey.Clear")) && button.IsVisible);
                     }
 
-                    // Assigning an unassigned command takes one recorder interaction.
+                    // Changing the clipboard pin chord takes one recorder interaction.
                     paste.Accept(new Hotkey(HotkeyModifiers.Control | HotkeyModifiers.Alt, Hotkey.VkF3));
                     Assert.Equal("Ctrl+Alt+F3", Draft(window).PasteToScreenHotkey);
                     Assert.True(Draft(window).HasUnappliedChanges);
@@ -393,6 +397,17 @@ public sealed partial class SettingsThemePreviewTests
                     var hints = Assert.IsType<CheckBox>(window.FindName("ShowShortcutHintsCheck"));
                     Assert.Equal(expectedHints, hints.IsChecked);
                     Assert.True(hints.IsVisible);
+                    var force = Assert.IsType<CheckBox>(window.FindName("ForceCoreShortcutsCheck"));
+                    Assert.True(force.IsVisible);
+                    Assert.Same(hints.Style, force.Style);
+                    Assert.Equal(UiText.Get("CoreShortcuts.Force"), AutomationProperties.GetName(force));
+                    Assert.Equal(UiText.Get("CoreShortcuts.ForceDescription"), AutomationProperties.GetHelpText(force));
+                    string[] assigned = recorders.Select(recorder => recorder.Text).ToArray();
+                    force.IsChecked = true;
+                    Assert.True(Draft(window).ForceCoreShortcuts);
+                    Assert.Equal(assigned, recorders.Select(recorder => recorder.Text));
+                    force.IsChecked = false;
+                    Assert.False(Draft(window).ForceCoreShortcuts);
                     SaveSettingsUxEvidence(RenderEditorWindow(window), $"settings-shortcuts-{name}-install-glass-after.png");
                     SettingsWindow.CancelCommand.Execute(null, window);
                 }

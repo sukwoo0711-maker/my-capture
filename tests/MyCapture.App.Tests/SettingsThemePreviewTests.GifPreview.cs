@@ -88,6 +88,8 @@ public sealed partial class SettingsThemePreviewTests
             PumpUntil(dialog, () => dialog.SamplePanel.HasSample, "the preview sample");
             GifPreviewPanel panel = dialog.SamplePanel;
             Assert.True(panel.FrameCount > 30, $"{theme}: {panel.FrameCount} frames");
+            Assert.Equal(panel.FrameCount, dialog.DisplayedFrameCount);
+            Assert.Contains($"{panel.FrameCount}{(korean ? "프레임" : " frames")}", dialog.EstimateText, StringComparison.Ordinal);
             Assert.True(dialog.HasMeasuredResult, $"{theme}: a whole-range sample must be the exact export at once");
             Assert.True(dialog.CanExport && !dialog.IsProgressVisible, $"{theme}: 내보내기 is available before any encode");
             Assert.Contains(korean ? "측정" : "measured", dialog.EstimateText, StringComparison.Ordinal);

@@ -44,17 +44,21 @@ internal enum PasteResult
 /// <see cref="PinSettings.ClosedWindowRestoreLimit"/> and a byte budget, and
 /// <see cref="RestoreLastClosed"/> reopens the newest one with its original content and last
 /// placement. Hiding with Shift+F3 is not a close and is never recorded. The history is
-/// memory-only and is discarded when the app exits, so closed screens never reach disk.
+/// memory-only and is discarded when the app exits. The separate opt-in session store saves
+/// only pins that are still open, to reopen them at the next launch.
 /// </para>
 /// </remarks>
 internal sealed class PinManager
 {
     private readonly List<PinWindow> _pins = [];
+    private readonly Dictionary<PinWindow, long> _openedOrders = [];
+    private readonly Dictionary<PinWindow, long> _restoredOpenedOrders = [];
+    private long _nextOpenedOrder;
     private readonly ClosedPinHistory<ClosedPin> _closed;
     private bool _recordClosedPins = true;
     private readonly Func<PinSettings> _settings;
     private readonly PinImageSaveService? _saveService;
-    private readonly Func<BitmapSource, string?, Task<bool>> _copyImageAsync;
+    private readonly Func<BitmapSource, string?, string?, Task<bool>> _copyImageAsync;
     private readonly Func<string, Task<bool>> _copyTextAsync;
     private readonly ILogger _log;
 
@@ -75,7 +79,7 @@ internal sealed class PinManager
         : this(
             settings,
             saveService,
-            ClipboardImageService.CopyImageAsync,
+            ClipboardImageService.CopyImageWithTextAsync,
             ClipboardImageService.CopyTextAsync,
             log)
     {
@@ -101,6 +105,17 @@ internal sealed class PinManager
         Func<BitmapSource, string?, Task<bool>> copyImageAsync,
         Func<string, Task<bool>> copyTextAsync,
         ILogger log)
+        : this(settings, saveService, (image, sourceUrl, _) => copyImageAsync(image, sourceUrl), copyTextAsync, log)
+    {
+        ArgumentNullException.ThrowIfNull(copyImageAsync);
+    }
+
+    internal PinManager(
+        Func<PinSettings> settings,
+        PinImageSaveService? saveService,
+        Func<BitmapSource, string?, string?, Task<bool>> copyImageAsync,
+        Func<string, Task<bool>> copyTextAsync,
+        ILogger log)
     {
         _settings = settings ?? throw new ArgumentNullException(nameof(settings));
         _saveService = saveService;
@@ -121,7 +136,8 @@ internal sealed class PinManager
         double ImageHeightDip,
         double Zoom,
         double Opacity,
-        PinClosedPlacement? Placement);
+        PinClosedPlacement? Placement,
+        long OpenedOrder = 0);
 
     /// <summary>Number of closed pins that can currently be reopened.</summary>
     internal int ClosedCount => _closed.Count;
@@ -143,6 +159,41 @@ internal sealed class PinManager
 
     /// <summary>Raised after a new pin is shown; reopening a closed pin does not raise it.</summary>
     internal event Action? PinCreated;
+
+    /// <summary>Raised after pins open, close, or finish changing their saved presentation.</summary>
+    internal event Action? OpenPinsChanged;
+
+    internal Func<IReadOnlyList<IntPtr>, IReadOnlyList<IntPtr>>? ReadPinOrderForTest { get; set; }
+    internal Action<PinWindow>? ActivatePinForTest { get; set; }
+
+    /// <summary>Snapshots live pins bottom-to-top, keeping opening age separate from stacking.</summary>
+    internal IReadOnlyList<ClosedPin> SnapshotOpenPins()
+    {
+        Prune();
+        // Restored pins predate anything opened during asynchronous startup decoding.
+        Dictionary<PinWindow, long> openingAge = _pins
+            .OrderBy(pin => _restoredOpenedOrders.ContainsKey(pin) ? 0 : 1)
+            .ThenBy(pin => _restoredOpenedOrders.GetValueOrDefault(pin, _openedOrders[pin]))
+            .ThenBy(pin => _openedOrders[pin])
+            .Select((pin, index) => (Pin: pin, Order: (long)index + 1))
+            .ToDictionary(item => item.Pin, item => item.Order);
+        Dictionary<IntPtr, PinWindow> byHandle = _pins.Where(pin => pin.Handle != IntPtr.Zero)
+            .ToDictionary(pin => pin.Handle);
+        IntPtr[] handles = byHandle.Keys.ToArray();
+        IReadOnlyList<IntPtr> order = ReadPinOrderForTest?.Invoke(handles) ?? PinWindowOrder.BottomToTop(handles);
+        var ordered = new List<PinWindow>(_pins.Count);
+        foreach (IntPtr handle in order)
+            if (byHandle.Remove(handle, out PinWindow? pin)) ordered.Add(pin);
+        ordered.InsertRange(0, _pins.Where(pin => pin.Handle == IntPtr.Zero || byHandle.ContainsKey(pin.Handle)));
+        return ordered.Select(pin => new ClosedPin(
+            pin.PinnedContent,
+            pin.State.ImageWidthDip,
+            pin.State.ImageHeightDip,
+            pin.State.Zoom,
+            pin.State.Opacity,
+            pin.GetCurrentPlacement(),
+            openingAge[pin])).ToArray();
+    }
 
     /// <summary>Number of open pins.</summary>
     internal int Count
@@ -177,17 +228,19 @@ internal sealed class PinManager
     /// <summary>Most recent original-text copy, exposed for deterministic integration tests.</summary>
     internal Task<bool>? LastTextCopyOperationForTest { get; private set; }
 
+    internal Action<PinWindow>? BeforeShowForTest { get; set; }
+
     /// <summary>
     /// Reads supported clipboard content and, if present, opens a new independent pin for it.
     /// </summary>
-    internal async Task<PasteResult> PasteFromClipboardAsync()
+    internal async Task<PasteResult> PasteFromClipboardAsync(Func<Task<ClipboardImageReader.PinReadAttempt>>? readClipboard = null)
     {
-        ClipboardImageReader.PinReadAttempt read = await ClipboardImageReader.ReadPinAsync();
+        ClipboardImageReader.PinReadAttempt read = await (readClipboard ?? ClipboardImageReader.ReadPinAsync)();
 
         switch (read.Outcome.Status)
         {
             case ClipboardImageStatus.Success when read.Content is not null:
-                OpenPin(read.Content);
+                OpenPin(read.Content, activate: false);
                 return PasteResult.Pinned;
 
             case ClipboardImageStatus.Busy:
@@ -204,16 +257,16 @@ internal sealed class PinManager
     internal PinWindow PinImage(BitmapSource image)
     {
         ArgumentNullException.ThrowIfNull(image);
-        return OpenPin(PinContent.FromImage(image));
+        return OpenPin(PinContent.FromImage(image), activate: true);
     }
 
     /// <summary>
     /// Opens an already-rendered text or table pin while retaining its exact Unicode source.
     /// </summary>
     internal PinWindow PinRenderedText(BitmapSource image, string originalText, bool isTable) =>
-        OpenPin(PinContent.FromText(image, originalText, isTable));
+        OpenPin(PinContent.FromText(image, originalText, isTable), activate: true);
 
-    private PinWindow OpenPin(PinContent content)
+    private PinWindow OpenPin(PinContent content, bool activate)
     {
         BitmapSource image = content.Image;
 
@@ -259,7 +312,7 @@ internal sealed class PinManager
             settings.ZoomStep);
 
         var pin = new PinWindow(content, state, placement.Left, placement.Top, _settings);
-        AttachAndShow(pin);
+        AttachAndShow(pin, activate);
 
         _log.LogInformation(
             "Pinned {Width}x{Height} {Kind} at zoom {Zoom:0.##} ({Count} pin(s) open)",
@@ -299,6 +352,24 @@ internal sealed class PinManager
             return null;
         }
 
+        PinWindow pin = RestorePin(closed, activate: true);
+        _log.LogInformation(
+            "Restored a closed {Kind} pin at zoom {Zoom:0.##} ({Remaining} more restorable)",
+            closed.Content.Kind,
+            pin.State.Zoom,
+            _closed.Count);
+        return pin;
+    }
+
+    /// <summary>Reopens a saved open pin without activation, guidance, or closed-history changes.</summary>
+    internal PinWindow RestoreSessionPin(ClosedPin snapshot)
+    {
+        ArgumentNullException.ThrowIfNull(snapshot);
+        return RestorePin(snapshot, activate: false);
+    }
+
+    private PinWindow RestorePin(ClosedPin closed, bool activate)
+    {
         // Click-through is deliberately not carried over: the new state starts interactive.
         // A click-through pin carries WS_EX_TRANSPARENT, so the mouse cannot reach it to move,
         // zoom or open its menu, and the user is reopening this pin precisely to work with it.
@@ -312,29 +383,28 @@ internal sealed class PinManager
 
         (double leftDip, double topDip, RectD? physical) = ResolveRestorePosition(closed, state);
         var pin = new PinWindow(closed.Content, state, leftDip, topDip, _settings);
+        if (!activate)
+        {
+            _restoredOpenedOrders[pin] = closed.OpenedOrder > 0 ? closed.OpenedOrder : _nextOpenedOrder + 1;
+        }
         if (physical is { } bounds)
         {
             pin.PlaceAtPhysicalOnShow(bounds);
         }
 
-        AttachAndShow(pin);
+        AttachAndShow(pin, activate);
         if (!pin.ApplyRestorePlacement())
         {
             _log.LogWarning("Restored pin could not reach its recorded position; left where Windows placed it");
         }
 
         pin.CompleteRestorePlacement();
-        _log.LogInformation(
-            "Restored a closed {Kind} pin at zoom {Zoom:0.##} ({Remaining} more restorable)",
-            closed.Content.Kind,
-            state.Zoom,
-            _closed.Count);
         return pin;
     }
 
     /// <summary>
     /// Closes every pin at app exit without recording them and discards the restore history,
-    /// so no closed screen outlives the process in memory or on disk.
+    /// after the optional open-pin session has been saved by the app.
     /// </summary>
     internal void CloseAllForExit()
     {
@@ -397,7 +467,7 @@ internal sealed class PinManager
         return (left, top, null);
     }
 
-    private void AttachAndShow(PinWindow pin)
+    private void AttachAndShow(PinWindow pin, bool activate)
     {
         pin.CloseAllRequested += (_, _) => CloseAll();
         pin.CopyRequested += OnPinCopyRequested;
@@ -407,15 +477,28 @@ internal sealed class PinManager
         pin.RestoreClosedRequested += (_, _) => RestoreLastClosed();
         pin.CanRestoreClosedPin = () => CanRestoreClosed;
         pin.Closed += (_, _) => OnPinClosed(pin);
+        pin.ViewStateChanged += NotifyOpenPinsChanged;
 
         _pins.Add(pin);
+        _openedOrders.Add(pin, ++_nextOpenedOrder);
+        pin.ShowActivated = activate;
+        BeforeShowForTest?.Invoke(pin);
         pin.Show();
-        pin.Activate();
+        if (activate)
+        {
+            if (ActivatePinForTest is { } activatePin) activatePin(pin);
+            else pin.Activate();
+        }
+
+        NotifyOpenPinsChanged();
     }
 
     private void OnPinClosed(PinWindow pin)
     {
         _pins.Remove(pin);
+        _openedOrders.Remove(pin);
+        _restoredOpenedOrders.Remove(pin);
+        NotifyOpenPinsChanged();
         if (!_recordClosedPins)
         {
             return;
@@ -439,15 +522,32 @@ internal sealed class PinManager
         }
     }
 
+    private void NotifyOpenPinsChanged()
+    {
+        if (OpenPinsChanged is not { } handlers)
+        {
+            return;
+        }
+
+        foreach (Action handler in handlers.GetInvocationList())
+        {
+            try { handler(); }
+            catch (Exception ex)
+            {
+                _log.LogWarning(ex, "Could not notify an open-pin observer");
+            }
+        }
+    }
+
     /// <summary>
     /// Turns click-through off on every open pin that has it, shown or hidden, and returns how
     /// many changed. The tray menu's way back from click-through.
     /// </summary>
     /// <remarks>
     /// A click-through pin carries <c>WS_EX_TRANSPARENT</c>, so the mouse can never land on it to
-    /// reverse the setting, and a new installation leaves both the
-    /// <see cref="MyCapture.Platform.Shell.GlobalHotkeyCommand.ToggleClickThrough"/> and the
-    /// hide-all keys unassigned. Hidden pins stay hidden.
+    /// reverse the setting, and a new installation leaves the
+    /// <see cref="MyCapture.Platform.Shell.GlobalHotkeyCommand.ToggleClickThrough"/> key
+    /// unassigned. Hidden pins stay hidden.
     /// </remarks>
     internal int ClearClickThroughAll()
     {
@@ -573,7 +673,7 @@ internal sealed class PinManager
         bool copied;
         try
         {
-            copied = await _copyImageAsync(request.Image, request.SourcePageUrl);
+            copied = await _copyImageAsync(request.Image, request.SourcePageUrl, request.OriginalText);
         }
         catch (Exception ex)
         {
@@ -700,5 +800,13 @@ internal sealed class PinManager
     /// Drops any pin that has already closed. The <c>Closed</c> handler normally removes a
     /// pin immediately; this is a belt-and-braces sweep in case a close raced a query.
     /// </summary>
-    private void Prune() => _pins.RemoveAll(p => p.IsClosed);
+    private void Prune()
+    {
+        foreach (PinWindow pin in _pins.Where(pin => pin.IsClosed).ToArray())
+        {
+            _pins.Remove(pin);
+            _openedOrders.Remove(pin);
+            _restoredOpenedOrders.Remove(pin);
+        }
+    }
 }

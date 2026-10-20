@@ -29,12 +29,19 @@ internal static class ClipboardImageService
     /// </summary>
     internal static Task<bool> CopyImageAsync(BitmapSource bitmap, string? sourceUrl) => CopyImageAsync(bitmap, sourceUrl, null);
 
-    internal static async Task<bool> CopyImageAsync(BitmapSource bitmap, string? sourceUrl, Action<IDataObject>? writeData)
+    internal static Task<bool> CopyImageAsync(BitmapSource bitmap, string? sourceUrl, Action<IDataObject>? writeData) =>
+        CopyImageWithTextAsync(bitmap, sourceUrl, originalText: null, writeData);
+
+    /// <summary>Copies the image and any exact retained source in one clipboard data object.</summary>
+    internal static Task<bool> CopyImageWithTextAsync(BitmapSource bitmap, string? sourceUrl, string? originalText) =>
+        CopyImageWithTextAsync(bitmap, sourceUrl, originalText, writeData: null);
+
+    internal static async Task<bool> CopyImageWithTextAsync(BitmapSource bitmap, string? sourceUrl, string? originalText, Action<IDataObject>? writeData)
     {
         ArgumentNullException.ThrowIfNull(bitmap);
 
         BitmapSource frozen = Freeze(bitmap);
-        return await RunCopySerializedAsync(() => CopyFrozenAsync(frozen, sourceUrl, writeData)).ConfigureAwait(false);
+        return await RunCopySerializedAsync(() => CopyFrozenAsync(frozen, sourceUrl, originalText, writeData)).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -64,7 +71,7 @@ internal static class ClipboardImageService
         }
     }
 
-    private static async Task<bool> CopyFrozenAsync(BitmapSource frozen, string? sourceUrl, Action<IDataObject>? writeData)
+    private static async Task<bool> CopyFrozenAsync(BitmapSource frozen, string? sourceUrl, string? originalText, Action<IDataObject>? writeData)
     {
         byte[] pngBytes;
         try
@@ -85,7 +92,7 @@ internal static class ClipboardImageService
             // can synchronously sleep, so run the single operation on an isolated STA instead
             // of stacking another retry loop on the UI dispatcher.
             return await StaThreadTask.RunAsync(
-                () => TrySetOnce(frozen, pngBytes, writeData),
+                () => TrySetOnce(frozen, pngBytes, originalText, writeData),
                 "MyCapture clipboard writer").ConfigureAwait(false);
         }
         catch (Exception ex) when (ex is COMException or ExternalException)
@@ -108,7 +115,7 @@ internal static class ClipboardImageService
         }
     }
 
-    private static bool TrySetOnce(BitmapSource frozen, byte[] pngBytes, Action<IDataObject>? writeData)
+    private static bool TrySetOnce(BitmapSource frozen, byte[] pngBytes, string? originalText, Action<IDataObject>? writeData)
     {
         try
         {
@@ -116,6 +123,7 @@ internal static class ClipboardImageService
             using var pngStream = new MemoryStream(pngBytes, writable: false);
             data.SetData("PNG", pngStream);
             data.SetImage(frozen);
+            if (originalText is not null) data.SetText(originalText, TextDataFormat.UnicodeText);
 
             // copy:true materialises the delayed formats before this method and the stream
             // return, so clipboard content remains after MyCapture exits.

@@ -72,6 +72,15 @@ internal sealed record PinContent
     internal static PinContent FromImage(BitmapSource image, string? sourcePageUrl = null) =>
         new(image, PinContentKind.Image, originalText: null, sourcePageUrl ?? string.Empty, usesDeviceIndependentPixels: false);
 
+    /// <summary>Rebuilds the immutable content retained in an opt-in saved pin session.</summary>
+    internal static PinContent FromSession(
+        BitmapSource image,
+        PinContentKind kind,
+        string? originalText,
+        string sourcePageUrl,
+        bool usesDeviceIndependentPixels) =>
+        new(image, kind, originalText, sourcePageUrl, usesDeviceIndependentPixels);
+
     /// <summary>Text or a table that MyCapture rendered itself from the retained source string.</summary>
     internal static PinContent FromText(BitmapSource image, string originalText, bool isTable)
     {

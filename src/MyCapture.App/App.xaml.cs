@@ -108,7 +108,7 @@ public partial class App : Application
             return;
         }
 
-        // A sign-in launch stays quiet. The Store build's startup task carries no command line,
+        // A sign-in launch stays quiet after the one-time shortcut question. The Store build's startup task carries no command line,
         // so its activation kind stands in for the Run key's --background switch.
         bool quietLaunch = FindSwitch(e.Args, StartupRegistrationService.BackgroundSwitch) >= 0 ||
             MyCapture.Core.Platform.AppPackage.IsStartupTaskActivation();
@@ -146,7 +146,7 @@ public partial class App : Application
             CaptureWindowExclusion.Logger = _log;
             _log.LogInformation("MyCapture starting up");
             await RecoverLegacyImportBeforeLoadAsync();
-            InitializeShell();
+            InitializeShell(quietLaunch, FindSwitch(e.Args, SettingsCommandLineSwitch) >= 0);
             StartActivationListener();
         }
         catch (Exception ex)
@@ -157,29 +157,16 @@ public partial class App : Application
             return;
         }
 
-        // Optional deterministic UI smoke: a normal first-instance launch with --settings
-        // opens the settings window immediately. Used by the packaged UI smoke path; it does
-        // not alter the process lifecycle otherwise.
-        bool openSettings = FindSwitch(e.Args, SettingsCommandLineSwitch) >= 0;
-        if (openSettings)
-        {
-            _ = Dispatcher.BeginInvoke(new Action(HandleSettingsRequested));
-        }
-        else if (FirstRunPlan.ForLaunch(_launchedFirstRun, quietLaunch, openSettings).OpenLibrary)
-        {
-            // A first run opens the library only after its welcome window closes.
-            _ = Dispatcher.BeginInvoke(new Action(HandleGalleryRequested));
-        }
         _ = OfferLegacyImportAfterLaunchAsync(quietLaunch);
     }
 
-    /// <summary>The settings said first run when this process started; the welcome window was shown.</summary>
+    /// <summary>The settings said first run when this process started; the welcome follows consent.</summary>
     private bool _launchedFirstRun;
 
     /// <summary>First-instance switch that opens the settings window on launch.</summary>
     internal const string SettingsCommandLineSwitch = "--settings";
 
-    private void InitializeShell()
+    private void InitializeShell(bool quietLaunch, bool openSettings)
     {
         if (_services is null)
         {
@@ -224,6 +211,7 @@ public partial class App : Application
             pinSaveService,
             _services.GetRequiredService<ILogger<PinManager>>());
         _pins.PinCreated += ShowFirstPinTip;
+        InitializePinSession();
         _gitHubUpload = new GitHubIssueImageUploadService(
             () => _settings!,
             _services.GetRequiredService<ILogger<GitHubIssueImageUploadService>>());
@@ -310,35 +298,7 @@ public partial class App : Application
         EventManager.RegisterClassHandler(typeof(Window), System.Windows.Input.Keyboard.PreviewKeyDownEvent, new System.Windows.Input.KeyEventHandler(ShortcutHelpWindow.OnWindowKey));
         EventManager.RegisterClassHandler(typeof(Window), System.Windows.Input.Keyboard.PreviewKeyDownEvent,
             new System.Windows.Input.KeyEventHandler(OnQuickAccessKeyboardRequested));
-        // A first run shows one window: the welcome. The library follows once it closes.
-        LaunchPresentation launch = FirstRunPlan.ForLaunch(_settings.General.IsFirstRun, quietLaunch: false, openSettings: false);
-        _launchedFirstRun = launch.ShowWelcome;
-        if (launch.ShowWelcome)
-        {
-            var welcome = new WelcomeWindow(_settings.Hotkeys, _settings.General.AfterCapture, _settings.Queue.ImageRetentionHours);
-            welcome.Closed += (_, _) =>
-            {
-                StartAtSignInOutcome? startup = ApplyWelcomeStartAtSignIn(welcome.StartAtSignIn);
-                try { _services?.GetRequiredService<SettingsStore>().CompleteFirstRun(_settings!); }
-                catch (Exception ex) { _log?.LogWarning(ex, "Could not persist first-run completion"); }
-                AnnounceAfterWelcome(welcome.Outcome, startup);
-                switch (FirstRunPlan.Next(welcome.Outcome))
-                {
-                    case AfterWelcome.OpenLibrary:
-                        _ = Dispatcher.BeginInvoke(new Action(HandleGalleryRequested));
-                        break;
-                    case AfterWelcome.StartCapture:
-                        // The welcome has just left the screen; the frozen frame must not show it.
-                        _overlay?.NoteForegroundDismissal();
-                        _ = Dispatcher.BeginInvoke(new Action(HandleCaptureRequested));
-                        break;
-                    case AfterWelcome.OpenSettings:
-                        _ = Dispatcher.BeginInvoke(new Action(HandleSettingsRequested));
-                        break;
-                }
-            };
-            welcome.Show();
-        }
+        _launchedFirstRun = _settings.General.IsFirstRun;
         _hotkeys.Pressed += OnGlobalHotkeyPressed;
         _overlay.SelectionPersistRequested = e => _capturePersistenceTask = OnCaptureSelectionCompletedAsync(e);
         _overlay.OpenEditorAfterCapture = () => AfterCaptureBehavior.Resolve(_settings!.General.AfterCapture, _currentRecord is not null) == AfterCaptureAction.Editor;
@@ -410,7 +370,7 @@ public partial class App : Application
         _startupService = _services.GetRequiredService<IStartupRegistration>();
         try
         {
-            if (!launch.ShowWelcome) _ = _startupService.ReconcileOnStartup(_settings.General.LaunchAtLogin);
+            if (!_launchedFirstRun) _ = _startupService.ReconcileOnStartup(_settings.General.LaunchAtLogin);
             if (_startupService is PackagedStartupRegistration)
             {
                 _settings.General.LaunchAtLogin = _startupService.IsEnabled();
@@ -441,35 +401,14 @@ public partial class App : Application
         _initialLibraryRecoveryTask = RecoverLibraryStateAsync();
         _initialEditRecoveryTask = InitializeEditRecoveryAsync();
         _ = ResumeMaintenanceAfterInitialRecoveryAsync();
-        SessionEnding += (_, _) => { _ = PreserveDraftsForSessionEnding(); };
-
-        if (_hotkeys.Failures.Count > 0)
+        SessionEnding += (_, e) =>
         {
-            _tray.SetState(TrayIconState.Error);
+            _ = PreserveDraftsForSessionEnding();
+            // WPF shuts down right after this event unless it is cancelled.
+            if (!e.Cancel) _shutdownRequested = true;
+        };
 
-            HotkeyRegistrationFailure first = _hotkeys.Failures[0];
-            string suffix = _hotkeys.Failures.Count == 1
-                ? string.Empty
-                : UiText.Format("Text_646F2DBF1852", _hotkeys.Failures.Count - 1);
-
-            ShowHotkeyConflict(first,
-                UiText.Format("Text_114E1105C3EE", first.Hotkey, suffix)
-                    + PrintScreenFailureLine(_hotkeys.Failures)
-                    + (_services.GetRequiredService<SettingsStore>().LastLoadMigratedUnsafeHotkeys ? "\n" + UiText.Get("Hotkey.Migrated") : string.Empty));
-        }
-        else
-        {
-            try
-            {
-                if (_services.GetRequiredService<SettingsStore>().LastLoadMigratedUnsafeHotkeys)
-                    _tray.ShowBalloon(UiText.Get("Hotkey.MigratedTitle"), UiText.Get("Hotkey.Migrated"),
-                        TrayBalloonKind.Information, playSound: false);
-            }
-            catch (Exception ex)
-            {
-                _log?.LogWarning(ex, "Could not show the shortcut migration notification");
-            }
-        }
+        ShowLaunchPresentation(quietLaunch, openSettings);
     }
 
     private void OnGlobalHotkeyPressed(object? sender, GlobalHotkeyPressedEventArgs e)
@@ -1877,6 +1816,7 @@ public partial class App : Application
 
         // Keep the tray state in sync after an apply (a hotkey collision flips it to Error).
         window.Applied += (_, _) => RestoreTrayAfterCapture();
+        window.Applied += OnPinSessionSettingsApplied;
 
         _settingsWindow = window;
         return window;
@@ -2377,6 +2317,7 @@ public partial class App : Application
             // Window already torn down; nothing to do.
         }
 
+        FinishPinSessionOnExit();
         // Close every pinned window so no top-most orphan survives the process, and drop the
         // closed-pin restore history so no screen content outlives it.
         try

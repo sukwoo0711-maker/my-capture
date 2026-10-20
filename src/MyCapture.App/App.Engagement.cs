@@ -75,7 +75,12 @@ public partial class App
     private bool _storeInstallationPending;
     private bool _galleryEnabledBeforeUpdate;
 
-    private Task<bool> PrepareAndHoldStoreUpdateAsync() => PrepareAndHoldAsync(PrepareForStoreUpdateAsync);
+    private async Task<bool> PrepareAndHoldStoreUpdateAsync()
+    {
+        if (!await PrepareAndHoldAsync(PrepareForStoreUpdateAsync)) return false;
+        _pinSession?.SaveNow();
+        return true;
+    }
 
     /// <summary>The import holds the same protection, but asks with its own wording.</summary>
     private Task<bool> PrepareAndHoldForLegacyImportAsync() =>
