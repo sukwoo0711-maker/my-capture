@@ -10,6 +10,7 @@ using MyCapture.App.Editing;
 using MyCapture.Core.Localization;
 using MyCapture.Core.Primitives;
 using MyCapture.Platform.Capture;
+using MyCapture.Platform.Display;
 using Xunit;
 
 namespace MyCapture.App.Tests;
@@ -102,21 +103,36 @@ public sealed class CaptureEditorFlowTests
             Assert.Equal(sourceRegion, requested.BitmapRegion);
             Assert.Same(selectedBitmap, requested.SelectedBitmap);
 
-            var window = new AnnotationEditorWindow(frame, sourceRegion, selectedBitmap);
-            try
-            {
-                Assert.True(window.ShowInTaskbar);
-                Assert.True(window.ResizeMode is ResizeMode.CanResize or ResizeMode.CanResizeWithGrip);
-                Assert.Same(window.Editor, window.Content);
-                Assert.Same(selectedBitmap, window.Editor.DisplayedBitmap);
+            // The window opens on the pointer's monitor and is sized for it. The reported desktop has a
+            // landscape primary and a 768 x 1366 portrait secondary; the pointer may be on either.
+            var primary = new MonitorInfo(@"\\.\DISPLAY1", new RectD(0, 0, 1920, 1080),
+                new RectD(0, 0, 1920, 1032), 96, true);
+            var portrait = new MonitorInfo(@"\\.\DISPLAY2", new RectD(1920, 0, 768, 1366),
+                new RectD(1920, 0, 768, 1318), 96, false);
+            // 980 x 620 DIPs wanted; on the portrait monitor the width keeps 64 DIPs free: 768 - 64.
+            AssertStandaloneWindow(primary, 980, 620);
+            AssertStandaloneWindow(portrait, 704, 620);
 
-                Rect work = SystemParameters.WorkArea;
-                Assert.Equal(Math.Min(980, Math.Max(window.MinWidth, work.Width - 64)), window.Width);
-                Assert.Equal(Math.Min(620, Math.Max(window.MinHeight, work.Height - 64)), window.Height);
-            }
-            finally
+            void AssertStandaloneWindow(MonitorInfo pointerMonitor, double width, double height)
             {
-                window.Close();
+                var window = new AnnotationEditorWindow(frame, sourceRegion, selectedBitmap, pointerMonitor: pointerMonitor);
+                try
+                {
+                    Assert.True(window.ShowInTaskbar);
+                    Assert.True(window.ResizeMode is ResizeMode.CanResize or ResizeMode.CanResizeWithGrip);
+                    Assert.Same(window.Editor, window.Content);
+                    Assert.Same(selectedBitmap, window.Editor.DisplayedBitmap);
+                    Assert.Equal(WindowStartupLocation.CenterScreen, window.WindowStartupLocation);
+
+                    Assert.Equal(AnnotationEditorWindow.MinimumSize.Width, window.MinWidth);
+                    Assert.Equal(AnnotationEditorWindow.MinimumSize.Height, window.MinHeight);
+                    Assert.Equal(width, window.Width);
+                    Assert.Equal(height, window.Height);
+                }
+                finally
+                {
+                    window.Close();
+                }
             }
         });
     }
