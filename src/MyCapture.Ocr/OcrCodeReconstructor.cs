@@ -60,6 +60,20 @@ internal static class OcrCodeReconstructor
 
     internal static string? EstimateLanguage(string text)
     {
+        try
+        {
+            return EstimateLanguageCore(text);
+        }
+        catch (RegexMatchTimeoutException)
+        {
+            // The language is only a label; a pathological sample leaves it unknown instead of
+            // failing the recognized text it accompanies.
+            return null;
+        }
+    }
+
+    private static string? EstimateLanguageCore(string text)
+    {
         // Bounded, local keyword inference; ties deliberately remain unknown.
         string sample = text.Length > 100_000 ? text[..100_000] : text;
         const RegexOptions options = RegexOptions.CultureInvariant | RegexOptions.Multiline;
@@ -84,19 +98,18 @@ internal static class OcrCodeReconstructor
         // Directive bodies are not Python comments or independent language keywords.
         string codeSample = directives.Replace(sample, "");
         // A complete directive-only snippet is enough evidence, even for one #define.
-        int directiveScore = directiveCount > 0 && string.IsNullOrWhiteSpace(codeSample)
-            ? Math.Max(2, directiveCount) : directiveCount;
+        if (directiveCount > 0 && string.IsNullOrWhiteSpace(codeSample)) return "C/C++";
         (string Name, string Pattern)[] languages =
         [
             ("C/C++", @"\bstd\s*::|\b(nullptr|typedef)\b|\bprintf\s*\(|\bint\s+main\s*\("),
             ("C#", @"\b(namespace|using|public|private|internal|protected|async|Task|Console|IEnumerable)\b|=>|^[^\S\r\n]*#[^\S\r\n]*(region|endregion|nullable)\b"),
             ("JavaScript", @"\b(function|const|let|var|console|document|require|export|import)\b|===|!=="),
-            ("Python", @"\b(def|elif|lambda|self|None|True|False|print|import|from)\b|^[^\S\r\n]*#(?![^\S\r\n]*(region|endregion|nullable)\b)|^\s*for\s+[^\r\n]+\s+in\s+[^\r\n]+:\s*$"),
+            ("Python", @"\b(def|elif|lambda|self|None|True|False|print|import|from)\b|^[^\S\r\n]*#(?![^\S\r\n]*(region|endregion|nullable)\b)|^[^\S\r\n]*for\s+[^\r\n]+\s+in\s+[^\r\n]+:[^\S\r\n]*\r?$"),
             ("SQL", @"\b(SELECT|FROM|WHERE|JOIN|INSERT|UPDATE|DELETE|CREATE|GROUP\s+BY|ORDER\s+BY|VALUES)\b"),
         ];
         var scores = languages.Select(language => (language.Name, Score: Regex.Matches(codeSample,
             language.Pattern, options | (language.Name == "SQL" ? RegexOptions.IgnoreCase : RegexOptions.None),
-            timeout).Count + (language.Name == "C/C++" ? directiveScore : 0)))
+            timeout).Count + (language.Name == "C/C++" ? directiveCount : 0)))
             .OrderByDescending(value => value.Score).ToArray();
         return scores[0].Score >= 2 && scores[0].Score > scores[1].Score ? scores[0].Name : null;
     }

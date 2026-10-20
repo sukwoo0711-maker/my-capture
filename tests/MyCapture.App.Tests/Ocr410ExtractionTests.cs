@@ -234,6 +234,18 @@ public sealed class Ocr410ExtractionTests
     }
 
     [Fact]
+    public void Code_ManyEmptyLinesStayWithinTheRegexBudget()
+    {
+        // Removing thousands of directive lines leaves thousands of empty lines. No pattern may
+        // rescan them from every line start, and a timeout must not escape as an exception.
+        string directives = string.Concat(Enumerable.Repeat("#define X\n", 9_000));
+        Assert.Equal("C/C++", OcrCodeReconstructor.EstimateLanguage(directives));
+        Assert.Equal("C/C++", OcrCodeReconstructor.EstimateLanguage(directives + "def run():\n    return None"));
+        Assert.Equal("Python", OcrCodeReconstructor.EstimateLanguage(
+            new string('\n', 90_000) + "for item in items:\n    print(item)"));
+    }
+
+    [Fact]
     public void Code_CachedTextWithoutGeometryRecognizesCppDirectives()
     {
         var result = OcrResult.Success("# include <vector>\r\nstd::vector<int> values;",
