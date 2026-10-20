@@ -370,7 +370,6 @@ public sealed class PinTextSelectionTests
             pin.Show();
             pin.HideHoverBar();
             pin.UpdateLayout();
-            CaptureFixture(pin, "pin-text-before.png");
             Press(pin, Key.F2);
             pin.ForceFeedbackTimeoutForTest();
             pin.TextSelectionForTest!.TextBox!.Select(20, 19);
@@ -381,7 +380,6 @@ public sealed class PinTextSelectionTests
             var clip = Assert.IsType<RectangleGeometry>(pin.TextSelectionForTest.Clip);
             Assert.Equal(PinWindow.ImageClipBounds(pin.RenderSize), clip.Rect);
             Assert.Equal(255, Assert.IsType<SolidColorBrush>(pin.TextSelectionForTest.Background).Color.A);
-            CaptureFixture(pin, "pin-text-after.png");
         }
         finally
         {
@@ -412,19 +410,6 @@ public sealed class PinTextSelectionTests
         var args = new MouseWheelEventArgs(Mouse.PrimaryDevice, 0, delta) { RoutedEvent = Mouse.MouseWheelEvent };
         pin.HandleMouseWheel(args, modifiers);
         Assert.True(args.Handled);
-    }
-
-    private static void CaptureFixture(PinWindow pin, string name)
-    {
-        string? directory = Environment.GetEnvironmentVariable("MYCAPTURE_PIN_SELECTION_CAPTURE_ROOT");
-        if (string.IsNullOrEmpty(directory)) return;
-        var bitmap = new RenderTargetBitmap((int)Math.Ceiling(pin.Width), (int)Math.Ceiling(pin.Height),
-            96, 96, PixelFormats.Pbgra32);
-        bitmap.Render((Visual)pin.Content);
-        var png = new PngBitmapEncoder();
-        png.Frames.Add(BitmapFrame.Create(bitmap));
-        using var stream = System.IO.File.Create(System.IO.Path.Combine(directory, name));
-        png.Save(stream);
     }
 
     private static void InvokeMouseDown(PinWindow pin, bool doubleClick = false)
