@@ -5,6 +5,7 @@ using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using System.Windows.Threading;
 using MyCapture.App.Ocr;
 using MyCapture.App.Themes;
 using MyCapture.Core.Annotations;
@@ -105,11 +106,15 @@ internal partial class AnnotationEditorWindow : Window
         get => _editor.CommitRequested;
         set => _editor.CommitRequested = value is null ? null : async result =>
         {
-            AnnotationEditingResult still = FrameStillImage is null ? result : await FrameStillImage.CreateResultAsync(result);
-            if (FinishesOutOfSight && result.Action == EditorCommitAction.Done) still.CopiedToClipboard = LeaveScreenWhileFinishing;
+            // From here a capture command waits for this Done instead of being refused, also
+            // before the window has left the screen.
+            bool outOfSight = FinishesOutOfSight && result.Action == EditorCommitAction.Done;
+            if (outOfSight) _doneFinishing ??= new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
             bool closing = false;
             try
             {
+                AnnotationEditingResult still = FrameStillImage is null ? result : await FrameStillImage.CreateResultAsync(result);
+                if (outOfSight) still.CopiedToClipboard = LeaveScreenWhileFinishing;
                 bool saved = await value(still);
                 if (!saved || result.Action == EditorCommitAction.CopyToClipboard) return saved;
                 closing = await RetireDraftBeforeCloseAsync();
@@ -119,7 +124,7 @@ internal partial class AnnotationEditorWindow : Window
             {
                 // A save that failed after the window left the screen shows it again, with the
                 // failure in its status line and the draft kept, as when it never left.
-                if (!closing) ReturnToScreen();
+                if (!closing) EndDoneWithoutClosing();
             }
         };
     }
@@ -132,16 +137,20 @@ internal partial class AnnotationEditorWindow : Window
     /// </summary>
     internal bool FinishesOutOfSight { get; set; }
 
-    private TaskCompletionSource? _finishingOutOfSight;
+    private TaskCompletionSource? _doneFinishing;
+    private bool _leftScreen;
 
-    /// <summary>True while Done's save finishes after the window has left the screen.</summary>
-    internal bool IsFinishingOutOfSight => _finishingOutOfSight is not null;
+    /// <summary>True from the start of a Done that may finish out of sight until it has closed the window or ended without closing.</summary>
+    internal bool IsFinishingDone => _doneFinishing is not null;
 
     /// <summary>
-    /// Completes when a save finishing out of sight has closed the window, or has shown it again
-    /// after a failure; completed when no save is finishing out of sight.
+    /// Completes when that Done has closed the window, or has ended without closing (the editor is
+    /// usable again, on screen); completed when no such Done is running.
     /// </summary>
-    internal Task FinishedOutOfSight => _finishingOutOfSight?.Task ?? Task.CompletedTask;
+    internal Task DoneFinished => _doneFinishing?.Task ?? Task.CompletedTask;
+
+    /// <summary>True while Done's save finishes after the window has left the screen.</summary>
+    internal bool IsFinishingOutOfSight => _leftScreen;
 
     private void LeaveScreenWhileFinishing()
     {
@@ -151,22 +160,36 @@ internal partial class AnnotationEditorWindow : Window
             return;
         }
 
-        if (_finishingOutOfSight is not null || _windowClosed || !IsVisible) return;
-        _finishingOutOfSight = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        if (_doneFinishing is null || _leftScreen || _windowClosed || !IsVisible) return;
+        _leftScreen = true;
         Hide();
     }
 
-    private void ReturnToScreen()
+    private void EndDoneWithoutClosing()
     {
-        if (_finishingOutOfSight is not { } finishing) return;
-        _finishingOutOfSight = null;
-        if (!_windowClosed)
+        TaskCompletionSource? finishing = _doneFinishing;
+        _doneFinishing = null;
+        bool returning = _leftScreen;
+        _leftScreen = false;
+        try
         {
-            Show();
-            WindowForeground.BringForward(this);
+            if (returning && !_windowClosed)
+            {
+                Show();
+                WindowForeground.BringForward(this);
+            }
         }
-
-        finishing.TrySetResult();
+        finally
+        {
+            // Released after the editor has ended its commit and is editable again: the editor
+            // resumes on this turn or on a normal-priority one, both ahead of input priority, so a
+            // capture command that waited finds an idle editor (asked to save, keep or discard).
+            if (finishing is not null)
+            {
+                if (Dispatcher.HasShutdownStarted) finishing.TrySetResult();
+                else _ = Dispatcher.BeginInvoke(DispatcherPriority.Input, new Action(() => finishing.TrySetResult()));
+            }
+        }
     }
 
     // Only the persistence/export consumer sees timed text; Committed retains the text-free video layer input.
@@ -375,10 +398,11 @@ internal partial class AnnotationEditorWindow : Window
         }
 
         base.OnClosed(e);
-        // After Closed: whoever waits for a save finishing out of sight sees the window gone.
-        if (_finishingOutOfSight is { } finishing)
+        // After Closed: whoever waits for this Done sees the window gone.
+        _leftScreen = false;
+        if (_doneFinishing is { } finishing)
         {
-            _finishingOutOfSight = null;
+            _doneFinishing = null;
             finishing.TrySetResult();
         }
     }

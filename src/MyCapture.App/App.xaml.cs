@@ -1384,10 +1384,13 @@ public partial class App : Application
         {
             _log?.LogError(ex, "Could not finalise the annotated capture");
             _storeRating?.RecordCapture(succeeded: false);
-            _tray?.ShowBalloon(
-                UiText.Get("Text_C1A40373A077"),
-                MyCapture.App.Themes.ThemedDialog.RecoveryMessage(ex),
-                TrayBalloonKind.Error);
+            string title = UiText.Get("Text_C1A40373A077");
+            string message = MyCapture.App.Themes.ThemedDialog.RecoveryMessage(ex);
+            // Done may already have taken the editor off the screen. It comes back with the failure,
+            // but possibly behind the app the user went on to, and a capture session drops ordinary
+            // notices, so the failure answers the Done command at once.
+            if (_overlay?.IsEditorFinishingOutOfSight == true) ShowCommandNotice(title, message, TrayBalloonKind.Error);
+            else _tray?.ShowBalloon(title, message, TrayBalloonKind.Error);
 
             // A finalise failure keeps the editor open so the user can retry rather than
             // silently losing their annotations.

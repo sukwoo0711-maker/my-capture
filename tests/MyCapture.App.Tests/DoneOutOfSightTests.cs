@@ -52,7 +52,7 @@ public sealed class DoneOutOfSightTests
         Assert.True(host.Window.IsFinishingOutOfSight);
         Assert.True(host.Editor.IsCommitInProgress);
         Assert.False(host.Window.WasCommitted);
-        Task finished = host.Window.FinishedOutOfSight;
+        Task finished = host.Window.DoneFinished;
         Pump(TimeSpan.FromMilliseconds(100));
         Assert.False(finished.IsCompleted);
 
@@ -82,7 +82,7 @@ public sealed class DoneOutOfSightTests
 
         host.Editor.SaveAndClose();
         PumpUntil(() => !host.Window.IsVisible);
-        Task finished = host.Window.FinishedOutOfSight;
+        Task finished = host.Window.DoneFinished;
         saved.SetException(new IOException("The library save failed."));
         PumpUntil(() => finished.IsCompleted && !host.Editor.IsCommitInProgress);
 
@@ -94,6 +94,74 @@ public sealed class DoneOutOfSightTests
         Assert.Single(Controller(host.Editor).Document.Items);
         Assert.Equal(0, committed);
         Assert.Equal(0, cancelled);
+        Assert.False(host.Window.WasCommitted);
+    });
+
+    [Fact]
+    public void DoneIsWaitedForFromItsStartNotOnlyOnceTheWindowLeavesTheScreen() => StaTestHost.Run(() =>
+    {
+        using var context = new DispatcherContextScope();
+        using EditorWindowHost host = EditorWindowHost.Create();
+        host.Window.FinishesOutOfSight = true;
+        AddRectangle(host);
+        var copied = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var saved = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        host.Window.CommitRequested = async result =>
+        {
+            await copied.Task;
+            result.CopiedToClipboard!.Invoke();
+            return await saved.Task;
+        };
+
+        // Flattening and the clipboard's encode still run: the window is on screen, but a capture
+        // command pressed now already waits for this Done.
+        host.Editor.SaveAndClose();
+        Pump(TimeSpan.FromMilliseconds(50));
+        Assert.True(host.Window.IsVisible);
+        Assert.True(host.Window.IsFinishingDone);
+        Assert.False(host.Window.IsFinishingOutOfSight);
+        Task finished = host.Window.DoneFinished;
+        Assert.False(finished.IsCompleted);
+
+        copied.SetResult();
+        PumpUntil(() => !host.Window.IsVisible);
+        Assert.True(host.Window.IsFinishingOutOfSight);
+        Assert.False(finished.IsCompleted);
+        saved.SetResult(true);
+        PumpUntil(() => finished.IsCompleted);
+        Assert.True(host.Window.WasCommitted);
+        Assert.False(host.Window.IsFinishingDone);
+    });
+
+    [Fact]
+    public void AFailedDoneReleasesItsWaitersOnlyOnceTheEditorIsEditableAgain() => StaTestHost.Run(() =>
+    {
+        using var context = new DispatcherContextScope();
+        using EditorWindowHost host = EditorWindowHost.Create();
+        host.Window.FinishesOutOfSight = true;
+        AddRectangle(host);
+        var saved = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        host.Window.CommitRequested = result =>
+        {
+            result.CopiedToClipboard!.Invoke();
+            return saved.Task;
+        };
+        host.Editor.SaveAndClose();
+        PumpUntil(() => !host.Window.IsVisible);
+
+        // What a capture command that waited sees when it resumes, as App's handlers resume.
+        (bool Saving, bool Visible, bool HitTest)? seen = null;
+        async Task WaitLikeACaptureCommand()
+        {
+            await host.Window.DoneFinished;
+            seen = (host.Editor.IsCommitInProgress, host.Window.IsVisible, host.Editor.IsHitTestVisible);
+        }
+        Task waiter = WaitLikeACaptureCommand();
+        saved.SetResult(false);
+        PumpUntil(() => waiter.IsCompleted);
+
+        Assert.Equal((false, true, true), seen);
+        Assert.False(host.Window.IsFinishingDone);
         Assert.False(host.Window.WasCommitted);
     });
 
@@ -116,7 +184,7 @@ public sealed class DoneOutOfSightTests
         Pump(TimeSpan.FromMilliseconds(100));
         Assert.Null(reported);
         Assert.True(host.Window.IsVisible);
-        Assert.True(host.Window.FinishedOutOfSight.IsCompleted);
+        Assert.True(host.Window.DoneFinished.IsCompleted);
         saved.SetResult(true);
         PumpUntil(() => !host.Window.IsVisible);
         Assert.True(host.Window.WasCommitted);

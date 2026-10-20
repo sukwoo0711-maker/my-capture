@@ -349,25 +349,46 @@ public sealed class CaptureGuardTests
     }
 
     [Fact]
-    public void DoneSaveFailingOutOfSightBringsTheEditorBackForARetry()
+    public void DoneSaveFailingOutOfSightBringsTheEditorBackAndIsReportedAtOnce()
     {
         var saved = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        CaptureOverlayCoordinator? session = null;
+        bool? reportedOutOfSight = null;
         WithEditor((coordinator, editor) =>
         {
+            session = coordinator;
             editor.Editor.SaveAndClose();
-            PumpUntil(() => !editor.IsVisible);
+            // A capture command pressed before the editor leaves the screen already waits.
             Task finished = coordinator.WaitForEditorFinishedAsync();
-            saved.SetResult(false);
-            PumpUntil(() => finished.IsCompleted && !editor.Editor.IsCommitInProgress);
+            Assert.False(finished.IsCompleted);
+            PumpUntil(() => !editor.IsVisible);
+            Assert.True(coordinator.IsEditorFinishingOutOfSight);
+
+            saved.SetException(new System.IO.IOException("The library save failed."));
+            PumpUntil(() => finished.IsCompleted);
+            // App's commit handler saw the editor off the screen when the save failed, so it
+            // answers the Done command at once instead of a notice the session would drop.
+            Assert.True(reportedOutOfSight);
             Assert.True(editor.IsVisible);
+            Assert.False(editor.Editor.IsCommitInProgress);
+            Assert.False(coordinator.IsEditorFinishingOutOfSight);
             Assert.True(coordinator.IsActive);
             Assert.True(coordinator.CanRetake);
             Assert.Equal(CaptureBlock.None, CaptureGuard.Find(coordinator.WithSession(default), allowRetake: true));
             Assert.True(editor.Editor.HasUnsavedChanges);
-        }, commit: result =>
+        }, commit: async result =>
         {
+            // As App.HandleCommitAsync: a failed save is caught, reported and keeps the editor.
             result.CopiedToClipboard?.Invoke();
-            return saved.Task;
+            try
+            {
+                return await saved.Task;
+            }
+            catch (System.IO.IOException)
+            {
+                reportedOutOfSight = session!.IsEditorFinishingOutOfSight;
+                return false;
+            }
         });
     }
 

@@ -215,12 +215,16 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
     }
 
     /// <summary>
-    /// Completes once an editor whose Done save finishes out of sight has closed, or has come back
-    /// on screen because the save failed. A capture command waits for it, so it starts as soon as
-    /// the previous capture is saved instead of being refused by an editor the user no longer sees.
+    /// Completes once the editor's Done (which may take it off the screen while the save finishes)
+    /// has closed it, or has ended without closing and left it editable on screen; at once when no
+    /// such Done runs. A capture command waits for it, so it starts as soon as the previous capture
+    /// is saved instead of being refused by an editor the user is leaving.
     /// </summary>
     internal Task WaitForEditorFinishedAsync() =>
-        !_disposed && _activeEditor is { IsFinishingOutOfSight: true } editor ? editor.FinishedOutOfSight : Task.CompletedTask;
+        !_disposed && _activeEditor is { IsFinishingDone: true } editor ? editor.DoneFinished : Task.CompletedTask;
+
+    /// <summary>True while the editor's Done save finishes after the editor left the screen.</summary>
+    internal bool IsEditorFinishingOutOfSight => !_disposed && _activeEditor?.IsFinishingOutOfSight == true;
 
     /// <summary>Brings the open selector forward; false while its frame is still being taken.</summary>
     internal bool BringSelectorForward()
