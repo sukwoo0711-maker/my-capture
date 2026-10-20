@@ -2188,7 +2188,8 @@ internal sealed class PreciseDelay : IDisposable
 
 /// <summary>Writes the CSV files and the summary.</summary>
 internal sealed class ProbeReport(string output, ProbeRecorder recorder, IReadOnlyList<string> environment,
-    IReadOnlyList<string> substitutions, Exception? failure)
+    IReadOnlyList<string> substitutions, Exception? failure, string prefix = "editor-responsiveness",
+    string title = "이미지 편집기 UI 스레드 정지 측정")
 {
     private static readonly CultureInfo Invariant = CultureInfo.InvariantCulture;
 
@@ -2217,7 +2218,7 @@ internal sealed class ProbeReport(string output, ProbeRecorder recorder, IReadOn
                 Q(string.Join("; ", s.Extra.Select(pair => $"{pair.Key}={F(pair.Value)}"))), Q(s.Notes)));
         }
 
-        File.WriteAllText(Path.Combine(output, "editor-responsiveness.csv"), csv.ToString(), new UTF8Encoding(true));
+        File.WriteAllText(Path.Combine(output, prefix + ".csv"), csv.ToString(), new UTF8Encoding(true));
     }
 
     private void WriteStalls()
@@ -2229,7 +2230,7 @@ internal sealed class ProbeReport(string output, ProbeRecorder recorder, IReadOn
                 csv.AppendLine(string.Join(",", s.Size, s.Variant, Q(s.Name), F(stall.DelayMs), Q(stall.StepAtPost), F(stall.GcPauseMs), stall.Gen2Collections, Q(stall.Operations), Q(stall.Stacks)));
         foreach (ProbeStall stall in recorder.BetweenStalls)
             csv.AppendLine(string.Join(",", "-", "-", Q("(between scenarios)"), F(stall.DelayMs), Q(stall.StepAtPost), F(stall.GcPauseMs), stall.Gen2Collections, Q(stall.Operations), Q(stall.Stacks)));
-        File.WriteAllText(Path.Combine(output, "editor-responsiveness-stalls.csv"), csv.ToString(), new UTF8Encoding(true));
+        File.WriteAllText(Path.Combine(output, prefix + "-stalls.csv"), csv.ToString(), new UTF8Encoding(true));
     }
 
     private void WriteOperations()
@@ -2239,7 +2240,7 @@ internal sealed class ProbeReport(string output, ProbeRecorder recorder, IReadOn
         foreach (ProbeScenario s in recorder.Scenarios)
             foreach (var (name, value) in s.Operations.OrderByDescending(pair => pair.Value.Total))
                 csv.AppendLine(string.Join(",", s.Size, s.Variant, Q(s.Name), Q(name), value.Count, F(value.Total), F(value.Max)));
-        File.WriteAllText(Path.Combine(output, "editor-responsiveness-operations.csv"), csv.ToString(), new UTF8Encoding(true));
+        File.WriteAllText(Path.Combine(output, prefix + "-operations.csv"), csv.ToString(), new UTF8Encoding(true));
     }
 
     private void WriteLongOperations()
@@ -2248,7 +2249,7 @@ internal sealed class ProbeReport(string output, ProbeRecorder recorder, IReadOn
         csv.AppendLine("size,variant,scenario,step,operation,priority,exclusive_ms,total_ms");
         foreach (ProbeLongOperation op in recorder.LongOperations)
             csv.AppendLine(string.Join(",", op.Size, op.Variant, Q(op.Scenario), Q(op.Step), Q(op.Operation), op.Priority, F(op.ExclusiveMs), F(op.TotalMs)));
-        File.WriteAllText(Path.Combine(output, "editor-responsiveness-long-operations.csv"), csv.ToString(), new UTF8Encoding(true));
+        File.WriteAllText(Path.Combine(output, prefix + "-long-operations.csv"), csv.ToString(), new UTF8Encoding(true));
     }
 
     private void WriteBreakdown()
@@ -2257,13 +2258,13 @@ internal sealed class ProbeReport(string output, ProbeRecorder recorder, IReadOn
         csv.AppendLine("size,variant,item,samples,avg,max");
         foreach (var ((size, variant, item), values) in recorder.Breakdown)
             csv.AppendLine(string.Join(",", size, variant, Q(item), values.Count, F(values.Average()), F(values.Max())));
-        File.WriteAllText(Path.Combine(output, "editor-responsiveness-breakdown.csv"), csv.ToString(), new UTF8Encoding(true));
+        File.WriteAllText(Path.Combine(output, prefix + "-breakdown.csv"), csv.ToString(), new UTF8Encoding(true));
     }
 
     private void WriteSummary()
     {
         var md = new StringBuilder();
-        md.AppendLine("# 이미지 편집기 UI 스레드 정지 측정");
+        md.AppendLine("# " + title);
         md.AppendLine();
         md.AppendLine($"측정 시각: {DateTimeOffset.Now:yyyy-MM-dd HH:mm:ss zzz}");
         md.AppendLine();
@@ -2337,17 +2338,17 @@ internal sealed class ProbeReport(string output, ProbeRecorder recorder, IReadOn
         md.AppendLine();
         if (recorder.BetweenStalls.Count > 0)
         {
-            md.AppendLine($"시나리오 사이(측정 준비) 구간의 정지 {recorder.BetweenStalls.Count}회, 최대 {F(recorder.BetweenStalls.Max(s => s.DelayMs))} ms는 표에서 제외했습니다(editor-responsiveness-stalls.csv에 포함).");
+            md.AppendLine($"시나리오 사이(측정 준비) 구간의 정지 {recorder.BetweenStalls.Count}회, 최대 {F(recorder.BetweenStalls.Max(s => s.DelayMs))} ms는 표에서 제외했습니다({prefix}-stalls.csv에 포함).");
             md.AppendLine();
         }
 
         md.AppendLine("## 파일");
-        md.AppendLine("- editor-responsiveness.csv: 시나리오별 전체 지표");
-        md.AppendLine("- editor-responsiveness-stalls.csv: 50 ms를 넘은 모든 정지와 원인 표본");
-        md.AppendLine("- editor-responsiveness-operations.csv: 시나리오별 디스패처 작업 이름·횟수·시간");
-        md.AppendLine("- editor-responsiveness-long-operations.csv: 16 ms 이상 걸린 개별 디스패처 작업");
-        md.AppendLine("- editor-responsiveness-breakdown.csv: 제품 메서드 직접 호출 시간(렌더·초안 스냅숏)");
-        File.WriteAllText(Path.Combine(output, "editor-responsiveness-summary.md"), md.ToString(), new UTF8Encoding(false));
+        md.AppendLine("- " + prefix + ".csv: 시나리오별 전체 지표");
+        md.AppendLine("- " + prefix + "-stalls.csv: 50 ms를 넘은 모든 정지와 원인 표본");
+        md.AppendLine("- " + prefix + "-operations.csv: 시나리오별 디스패처 작업 이름·횟수·시간");
+        md.AppendLine("- " + prefix + "-long-operations.csv: 16 ms 이상 걸린 개별 디스패처 작업");
+        md.AppendLine("- " + prefix + "-breakdown.csv: 제품 메서드 직접 호출 시간(렌더·초안 스냅숏)");
+        File.WriteAllText(Path.Combine(output, prefix + "-summary.md"), md.ToString(), new UTF8Encoding(false));
     }
 
     private static string SlowestStep(ProbeScenario s) =>
