@@ -131,9 +131,8 @@ public static class AtomicFile
                 stream.Flush(flushToDisk: true);
             }
 
-            bool destinationExists = File.Exists(path);
             if (canCommit?.Invoke() == false) return false;
-            if (destinationExists)
+            if (File.Exists(path))
             {
                 // ignoreMetadataErrors avoids failing the swap when the destination
                 // lives on a volume that cannot carry all of the source's metadata,
