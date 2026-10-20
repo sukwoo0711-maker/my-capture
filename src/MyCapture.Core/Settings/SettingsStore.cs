@@ -12,8 +12,8 @@ namespace MyCapture.Core.Settings;
 /// </summary>
 /// <remarks>
 /// <para>
-/// Writes are debounced by the caller, not here: this type performs the write it is
-/// asked to perform. It does, however, guarantee that a write is atomic and that a
+/// Writes are debounced by the caller. Background requests coalesce while a write
+/// is in progress, and all saves share one writer. Every write is atomic and a
 /// corrupt file never prevents the app from starting.
 /// </para>
 /// <para>
@@ -31,6 +31,12 @@ public sealed class SettingsStore
 
     private readonly AppPaths _paths;
     private readonly ILogger<SettingsStore> _log;
+    private readonly object _writeGate = new();
+    private readonly object _pendingGate = new();
+    private (AppSettings Snapshot, string FailureMessage, long Version)? _pendingSave;
+    private Task _backgroundSave = Task.CompletedTask;
+    private long _nextSaveVersion;
+    private long _lastSavedVersion;
 
     public SettingsStore(AppPaths paths, ILogger<SettingsStore> log)
     {
@@ -49,6 +55,9 @@ public sealed class SettingsStore
 
     /// <summary>Clock for the Store rating first-seen stamp; replaced by tests.</summary>
     internal TimeProvider Clock { get; init; } = TimeProvider.System;
+
+    /// <summary>Durable writer; replaced by tests to control slow or failed storage.</summary>
+    internal Action<string, string> WriteAllText { get; init; } = AtomicFile.WriteAllText;
 
     public AppSettings Load()
     {
@@ -130,8 +139,80 @@ public sealed class SettingsStore
     {
         ArgumentNullException.ThrowIfNull(settings);
 
+        long version;
+        lock (_pendingGate)
+        {
+            version = ++_nextSaveVersion;
+            _pendingSave = null;
+        }
+        lock (_writeGate)
+        {
+            // A newer request may have finished while this caller waited for the writer.
+            if (version < _lastSavedVersion) return;
+            SaveCore(settings);
+            _lastSavedVersion = version;
+        }
+    }
+
+    /// <summary>
+    /// Queues an independent snapshot taken with <see cref="AppSettingsClone.DeepClone"/>
+    /// on the caller's thread. Ownership transfers to the writer: do not mutate it again.
+    /// Only the latest waiting snapshot is kept. Failures are logged as warnings.
+    /// </summary>
+    public void SaveInBackground(AppSettings snapshot, string failureMessage = "Could not save settings")
+    {
+        ArgumentNullException.ThrowIfNull(snapshot);
+        lock (_pendingGate)
+        {
+            _pendingSave = (snapshot, failureMessage, ++_nextSaveVersion);
+            if (_backgroundSave.IsCompleted)
+                _backgroundSave = Task.Run(WritePendingSaves);
+        }
+    }
+
+    /// <summary>
+    /// Waits for background saves already queued by the caller. Returns false on timeout;
+    /// the writer continues. Stop producing saves before using this during shutdown.
+    /// </summary>
+    public bool WaitForPendingSaves(TimeSpan timeout)
+    {
+        Task pending;
+        lock (_pendingGate) pending = _backgroundSave;
+        return pending.Wait(timeout);
+    }
+
+    private void WritePendingSaves()
+    {
+        while (true)
+        {
+            lock (_writeGate)
+            {
+                (AppSettings Snapshot, string FailureMessage, long Version) save;
+                lock (_pendingGate)
+                {
+                    if (_pendingSave is not { } pending)
+                    {
+                        _backgroundSave = Task.CompletedTask;
+                        return;
+                    }
+                    save = pending;
+                    _pendingSave = null;
+                }
+                if (save.Version < _lastSavedVersion) continue;
+                try
+                {
+                    SaveCore(save.Snapshot);
+                    _lastSavedVersion = save.Version;
+                }
+                catch (Exception error) { _log.LogWarning(error, "{Message}", save.FailureMessage); }
+            }
+        }
+    }
+
+    private void SaveCore(AppSettings settings)
+    {
         string json = JsonSerializer.Serialize(settings, SerializerOptions);
-        AtomicFile.WriteAllText(_paths.SettingsFile, json);
+        WriteAllText(_paths.SettingsFile, json);
 
         _log.LogDebug("Settings saved to {Path}", LogText.SingleLine(_paths.SettingsFile));
     }
