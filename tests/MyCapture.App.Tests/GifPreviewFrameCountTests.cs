@@ -33,6 +33,8 @@ public sealed class GifPreviewFrameCountTests(ITestOutputHelper output)
                     yield return [item.Name, item.Span, fps, speed, fps == 10 ? item.TenFps : item.FiveFps];
     }
 
+    // Parity holds for documents the exporter schedules. A layer that rounds to zero centiseconds
+    // is rejected by the schedule instead (SampleDocument_KeepsLayersInsideAndDropsEdgeSliversThatQuantizationWouldReject).
     [Theory]
     [MemberData(nameof(ScheduleCases))]
     public void ScheduledCount_MatchesExporterAndLiteralAcrossRangeLayerAndCutEdges(
