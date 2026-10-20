@@ -186,15 +186,32 @@ public sealed class DoneOutOfSightTests
     });
 
     [Fact]
-    public void DoneReportsTheSaveFailureEvenAfterTheClipboardIsReady() => StaTestHost.Run(() =>
+    public void DoneRefusedByTheSavesChecksNeverReachesTheClipboard() => StaTestHost.Run(() =>
     {
         int copies = 0;
         using var fixture = new CommitFixture((_, _) => { copies++; return Task.FromResult(true); });
         Assert.True(fixture.Queue.Remove(fixture.Record.Id));
+        int reported = 0;
+        AnnotationEditingResult result = fixture.Result();
+        result.CopiedToClipboard = () => reported++;
+
+        // The capture was deleted while it was edited: the save is refused before it writes.
+        Assert.Throws<CaptureGenerationConflictException>(() => fixture.Commit(result).GetAwaiter().GetResult());
+        Assert.Equal(0, copies);
+        Assert.Equal(0, reported);
+        Assert.False(fixture.Persisted);
+    });
+
+    [Fact]
+    public void DoneReportsAWriteFailureEvenAfterTheClipboardIsReady() => StaTestHost.Run(() =>
+    {
+        int copies = 0;
+        using var fixture = new CommitFixture((_, _) => { copies++; return Task.FromResult(true); });
+        fixture.Persistence.BeforeOriginalRewriteForTest = _ => throw new IOException("The disk refused the write.");
         AnnotationEditingResult result = fixture.Result();
 
         // The editor may already have left the screen; the failure still reaches it.
-        Assert.Throws<CaptureGenerationConflictException>(() => fixture.Commit(result).GetAwaiter().GetResult());
+        Assert.Throws<IOException>(() => fixture.Service.CommitAsync(fixture.Record, result, replaceOriginal: true).GetAwaiter().GetResult());
         Assert.Equal(1, copies);
         Assert.False(fixture.Persisted);
     });
@@ -251,7 +268,6 @@ public sealed class DoneOutOfSightTests
     private sealed class CommitFixture : IDisposable
     {
         private readonly string _root;
-        private readonly CapturePersistenceService _persistence;
         private readonly BitmapSource _original;
 
         internal CommitFixture(Func<BitmapSource, string?, Task<bool>> copy)
@@ -260,17 +276,18 @@ public sealed class DoneOutOfSightTests
             AppPaths paths = AppPaths.CreateForRoot(_root);
             var settings = new AppSettings();
             Queue = new CaptureQueue(paths, settings.Queue, NullLogger<CaptureQueue>.Instance);
-            _persistence = new CapturePersistenceService(Queue, paths, () => settings.Queue, NullLogger<CapturePersistenceService>.Instance);
-            Service = new CaptureCommitService(_persistence, () => settings, () => paths, NullLogger<CaptureCommitService>.Instance, copy);
+            Persistence = new CapturePersistenceService(Queue, paths, () => settings.Queue, NullLogger<CapturePersistenceService>.Instance);
+            Service = new CaptureCommitService(Persistence, () => settings, () => paths, NullLogger<CaptureCommitService>.Instance, copy);
             _original = Solid(48, 32, 0x40);
-            Record = _persistence.PersistOriginal(_original, 1.0, "Done test", "Test");
-            _persistence.ImagePersisted += (_, record) =>
+            Record = Persistence.PersistOriginal(_original, 1.0, "Done test", "Test");
+            Persistence.ImagePersisted += (_, record) =>
             {
                 if (record.Id == Record.Id) Persisted = true;
             };
         }
 
         internal CaptureQueue Queue { get; }
+        internal CapturePersistenceService Persistence { get; }
         internal CaptureCommitService Service { get; }
         internal CaptureRecord Record { get; }
         internal bool Persisted { get; private set; }

@@ -588,13 +588,19 @@ internal sealed class CapturePersistenceService
     /// busy and leased for the whole operation, so another save, a source backfill, a removal or
     /// capacity eviction of it waits or is refused exactly as while the image is encoded.
     /// </remarks>
+    /// <param name="admitted">
+    /// Called on the caller's context once the save has passed its checks (no transaction left
+    /// pending, the capture still exists at <paramref name="expectedContentRevision"/>) and starts
+    /// writing; a save refused by those checks never calls it.
+    /// </param>
     internal async Task FinalizeAsync(
         CaptureRecord record,
         BitmapSource flattened,
         AnnotationDocument document,
         IReadOnlyDictionary<string, BitmapSource> assetBitmaps,
         long? expectedContentRevision = null,
-        BitmapSource? replacementOriginal = null)
+        BitmapSource? replacementOriginal = null,
+        Action? admitted = null)
     {
         ArgumentNullException.ThrowIfNull(record);
         ArgumentNullException.ThrowIfNull(flattened);
@@ -615,6 +621,7 @@ internal sealed class CapturePersistenceService
             await RecoverRecordTransactionsAsync(record);
             await ThrowIfPendingTransactionRemainsAsync(record);
             EnsureExpectedGeneration(record, expectedContentRevision);
+            admitted?.Invoke();
             using IDisposable? originalChange = replacementOriginal is not null
                 ? await _queue.BeginOriginalChangeAsync(record) : null;
             if (replacementOriginal is not null && BeforeOriginalRewriteForTest is not null)
