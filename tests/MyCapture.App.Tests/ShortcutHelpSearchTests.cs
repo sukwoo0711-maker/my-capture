@@ -16,6 +16,44 @@ namespace MyCapture.App.Tests;
 /// </summary>
 public sealed class ShortcutHelpSearchTests
 {
+    [Theory]
+    [InlineData("ko-KR", "라이브러리")]
+    [InlineData("en-US", "Library")]
+    public void LibraryHelpIncludesPinAndKeepShortcuts(string language, string category) => WithHelp((help, view) =>
+    {
+        Assert.Equal(category, UiText.Get("Workspace.Library"));
+        TabItem library = Assert.Single(view.Tabs.Items.OfType<TabItem>(), tab => Equals(tab.Header, category));
+        Assert.DoesNotContain(view.Tabs.Items.OfType<TabItem>(), tab => Equals(tab.Header, UiText.Get("Folder410.Title")));
+        var panel = (StackPanel)((ScrollViewer)library.Content).Content;
+        UniformGrid[] rows = panel.Children.OfType<UniformGrid>().ToArray();
+        (string Label, string Shortcut)[] expected =
+        [
+            ("Gallery.Float", "P"), ("LibraryUx_KeepToggleName", "K"),
+            ("Folder410.MoveCaptures", "M"), ("Folder410.Delete", "Del"),
+            ("Folder410.NewFolder", "Ctrl+Shift+N"), ("Folder410.Rename", "F2"),
+        ];
+        Assert.Equal(expected.Select(entry => UiText.Get(entry.Label)), rows.Select(ShortcutHelpRowAssertions.Title));
+        Assert.Equal(expected.Select(entry => entry.Shortcut), rows.Select(row =>
+            AutomationProperties.GetName(Assert.Single(row.Children.OfType<WrapPanel>()))));
+
+        view.Search.Text = category;
+        help.UpdateLayout();
+        Border[] results = view.VisibleResults();
+        Assert.Equal(7, results.Length);
+        Border[] libraryResults = results.Where(row => Texts(row)[1].Text == category).ToArray();
+        Assert.Equal(6, libraryResults.Length);
+        Assert.Equal(expected.Select(entry => UiText.Get(entry.Label)), libraryResults.Select(row => Texts(row)[0].Text));
+        Border openLibrary = Assert.Single(results, row => Texts(row)[1].Text != category);
+        Assert.Equal(UiText.Get("Text_66BA5DCDA810"), Texts(openLibrary)[0].Text);
+        Assert.Equal(UiText.Get("Help.Capture"), Texts(openLibrary)[1].Text);
+        foreach (var (label, shortcut) in expected)
+        {
+            Border row = Assert.Single(libraryResults, result => Texts(result)[0].Text == UiText.Get(label));
+            Assert.Contains(FirstRunWelcomeTests.Descendants(row).OfType<WrapPanel>(),
+                keys => AutomationProperties.GetName(keys) == shortcut);
+        }
+    }, language);
+
     [Fact]
     public void VideoHelpKeepsStartAndEndShortcuts() => WithHelp((help, view) =>
     {
@@ -44,7 +82,7 @@ public sealed class ShortcutHelpSearchTests
         Border folder = Assert.Single(f2Results, row => Texts(row)[0].Text == UiText.Get("Folder410.Rename"));
         Assert.Equal(UiText.Get("Folder410.Rename"), Texts(folder)[0].Text);
         TextBlock category = Texts(folder)[1];
-        Assert.Equal(UiText.Get("Folder410.Title"), category.Text);
+        Assert.Equal(UiText.Get("Workspace.Library"), category.Text);
         Assert.Equal(12, category.FontSize);
         Assert.Equal(new Thickness(12, 4, 12, 4), folder.Padding);
         Assert.True(folder.ActualHeight >= 36, $"A result row is {folder.ActualHeight} high.");
@@ -199,9 +237,9 @@ public sealed class ShortcutHelpSearchTests
             RoutedEvent = Keyboard.PreviewKeyDownEvent,
         });
 
-    private static void WithHelp(Action<ShortcutHelpWindow, HelpView> verify) => StaTestHost.Run(() =>
+    private static void WithHelp(Action<ShortcutHelpWindow, HelpView> verify, string language = "ko-KR") => StaTestHost.Run(() =>
     {
-        using var language = UiText.UseLanguage("ko-KR");
+        using var locale = UiText.UseLanguage(language);
         Func<HotkeySettings> previous = ShortcutHelpWindow.ReadHotkeys;
         ShortcutHelpWindow.ReadHotkeys = () => new HotkeySettings();
         var help = new ShortcutHelpWindow

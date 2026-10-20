@@ -510,7 +510,9 @@ internal sealed partial class GalleryWindow : Window
 
     private async void OnTileKeyDown(object sender, KeyEventArgs e)
     {
-        if (IsInsideButton(e.OriginalSource)) return;
+        if (IsInsideButton(e.OriginalSource)
+            || IsNavigationTextInput(e.OriginalSource as DependencyObject)
+            || IsNavigationTextInput(Keyboard.FocusedElement as DependencyObject)) return;
         GalleryItemViewModel? tile = ResolveTileFromTree(e.OriginalSource) ?? _viewModel.SingleSelectedTile;
         if (tile is null)
         {
@@ -572,7 +574,11 @@ internal sealed partial class GalleryWindow : Window
                 _viewModel.Select(tile.Id, Keyboard.Modifiers.HasFlag(ModifierKeys.Control), Keyboard.Modifiers.HasFlag(ModifierKeys.Shift));
                 e.Handled = true;
                 break;
-            case Key.P:
+            case Key.P when Keyboard.Modifiers == ModifierKeys.None && tile.IsImage:
+                FloatTile(tile);
+                e.Handled = true;
+                break;
+            case Key.K when Keyboard.Modifiers == ModifierKeys.None:
                 TogglePin(tile);
                 e.Handled = true;
                 break;
@@ -690,6 +696,11 @@ internal sealed partial class GalleryWindow : Window
         }
 
         e.Handled = true;
+        FloatTile(tile);
+    }
+
+    private void FloatTile(GalleryItemViewModel tile)
+    {
         if (!EnsureRecordReady(tile.Id))
         {
             return;

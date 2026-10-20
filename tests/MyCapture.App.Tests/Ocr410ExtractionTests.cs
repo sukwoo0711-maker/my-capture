@@ -114,6 +114,15 @@ public sealed class Ocr410ExtractionTests
     [InlineData("Python", "def run(value):\n    if value is None:\n        print(True)\n    return value")]
     [InlineData("Python", "def calculate_total(prices):\n    total = 0\n    for price in prices:\n        total += price\n    return total")]
     [InlineData("SQL", "SELECT name, amount\nFROM orders\nWHERE amount > 10\nORDER BY amount")]
+    [InlineData("C/C++", "#ifndef CONFIG_H\n#define CONFIG_H\n#define MAX_LEN 256\n#endif")]
+    [InlineData("C/C++", "#include <stdio.h>\nint main(void) {\n    printf(\"Hello\");\n}")]
+    [InlineData("C/C++", "#ifdef DEBUG\n#define LOG(x) printf(x)\n#else\n#define LOG(x)\n#endif")]
+    [InlineData("C/C++", "#include <vector>\nstd::vector<int> values;")]
+    [InlineData("C/C++", "#define MAX_LEN 256")]
+    [InlineData("Python", "# comment\ndef run():\n    # another comment\n    print(True)")]
+    [InlineData("C#", "#define DEBUG\n#if DEBUG\n#region Example\nnamespace Example {\n    public class Sample { }\n}\n#endregion\n#endif")]
+    [InlineData("Python", "# if value is None, return early\ndef run(value):\n    return value")]
+    [InlineData("C/C++", "# ifndef CONFIG_H\n# define MAX_LEN 256\n# endif")]
     public void Code_RestoresIndentationAndEstimatesLanguageAndMonospace(string language, string source)
     {
         OcrCode code = OcrExtractionAnalyzer.Analyze(CodeResult(source)).Code;
@@ -121,6 +130,136 @@ public sealed class Ocr410ExtractionTests
         Assert.Equal(language, code.Language);
         Assert.True(code.IsMonospaced);
         Assert.Equal(8, code.CharacterWidth, 5);
+    }
+
+    [Theory]
+    [InlineData("#include <stdio.h>")]
+    [InlineData("# include <stdio.h>")]
+    [InlineData("#include \"config.h\"")]
+    [InlineData("#define MAX_LEN 256")]
+    [InlineData("#undef MAX_LEN")]
+    [InlineData("#if ENABLED")]
+    [InlineData("#ifdef DEBUG")]
+    [InlineData("#ifndef CONFIG_H")]
+    [InlineData("#elif ENABLED")]
+    [InlineData("#else")]
+    [InlineData("#endif")]
+    [InlineData("#pragma once")]
+    [InlineData("#error Unsupported platform")]
+    [InlineData(" \r\n\t# \tdefine MAX_LEN 256\r\n \t")]
+    [InlineData("#define QUERY SELECT FROM WHERE")]
+    public void Code_DirectiveOnlySnippetsReachTheThreshold(string source) =>
+        Assert.Equal("C/C++", OcrCodeReconstructor.EstimateLanguage(source));
+
+    [Theory]
+    [InlineData("# include <stdio.h>")]
+    [InlineData("# include \"config.h\"")]
+    [InlineData("# define MAX_LEN 256")]
+    [InlineData("# define FLAG")]
+    [InlineData("# define max_len 256")]
+    [InlineData("# define limit2 256")]
+    [InlineData("# define _limit 256")]
+    [InlineData("# define log(x) printf(x)")]
+    [InlineData("# ifndef CONFIG_H\n# endif")]
+    [InlineData("# ifdef DEBUG")]
+    [InlineData("# undef feature")]
+    [InlineData("# endif // CONFIG_H")]
+    [InlineData("# endif /* CONFIG_H */")]
+    [InlineData("# else")]
+    [InlineData("# if defined(CONFIG_H)")]
+    [InlineData("# if (DEBUG)")]
+    [InlineData("# if !defined(CONFIG_H)")]
+    [InlineData("# if 0")]
+    [InlineData("# if DEBUG")]
+    [InlineData("# elif _DEBUG")]
+    [InlineData("# pragma once")]
+    [InlineData("# pragma pack(push, 1)")]
+    [InlineData("# pragma warning disable CS0168")]
+    public void Code_SpacedDirectivesRequireCodeShapedContinuation(string source) =>
+        Assert.Equal("C/C++", OcrCodeReconstructor.EstimateLanguage(source));
+
+    [Theory]
+    [InlineData("Python", "# if value is None, return early\ndef run(value):\n    return value")]
+    [InlineData("Python", "# include the header path\n# define the limit here")]
+    [InlineData("Python", "# else fall back to defaults\n# error handling below\n# pragma: no cover")]
+    [InlineData(null, "# else fall back to defaults")]
+    [InlineData(null, "# error handling below")]
+    [InlineData(null, "# pragma: no cover")]
+    [InlineData(null, "# include the header path")]
+    [InlineData(null, "# define the limit here")]
+    [InlineData(null, "# define limit 256")]
+    [InlineData(null, "# ifdef feature flag")]
+    [InlineData(null, "# ifndef the header guard")]
+    [InlineData(null, "# undef the old setting")]
+    [InlineData(null, "# endif the block")]
+    [InlineData(null, "# pragma something to remember")]
+    [InlineData(null, "# pragma once upon a time")]
+    [InlineData(null, "# error Unsupported platform")]
+    public void Code_SpacedProseRemainsCommentEvidence(string? language, string source) =>
+        Assert.Equal(language, OcrCodeReconstructor.EstimateLanguage(source));
+
+    [Theory]
+    [InlineData("#include the header path")]
+    [InlineData("#define the limit here")]
+    [InlineData("#if value is None, return early")]
+    [InlineData("#else fall back to defaults")]
+    [InlineData("#error handling below")]
+    [InlineData("#pragma: no cover")]
+    public void Code_NoSpaceDirectiveRecognitionRemainsBroad(string source) =>
+        Assert.Equal("C/C++", OcrCodeReconstructor.EstimateLanguage(source));
+
+    [Theory]
+    [InlineData("C/C++", "typedef int Count;\nCount* value = nullptr;")]
+    [InlineData("C#", "#nullable enable\n#region Example\n#endregion")]
+    [InlineData("C#", "# nullable enable\n# region Example\n# endregion")]
+    [InlineData("C#", "#if DEBUG\n#pragma warning disable CS0168\nnamespace Example {\n    public class Sample { public void Run() { Console.WriteLine(1); } }\n}\n#endif")]
+    [InlineData("Python", "#define MAX_LEN 256\n# comment\ndef run():\n    print(True)")]
+    [InlineData("Python", "# include_notes\n# define_limits")]
+    [InlineData(null, "#if ENABLED\n#elif OTHER\n#endif\npublic namespace Console")]
+    [InlineData(null, "#define MAX_LEN 256\nordinary words")]
+    [InlineData(null, "def run():")]
+    [InlineData(null, "# comment")]
+    [InlineData(null, "NULL sizeof unsigned")]
+    [InlineData(null, " \r\n\t")]
+    public void Code_LanguageEvidenceKeepsOtherLanguagesAndUnknownCases(string? language, string source) =>
+        Assert.Equal(language, OcrCodeReconstructor.EstimateLanguage(source));
+
+    [Fact]
+    public void Code_LanguageInferenceIgnoresEvidenceBeyondTheSampleLimit()
+    {
+        string sample = new(' ', 100_000);
+        Assert.Null(OcrCodeReconstructor.EstimateLanguage(sample + "#define MAX_LEN 256"));
+        Assert.Equal("C/C++", OcrCodeReconstructor.EstimateLanguage(
+            "#define MAX_LEN 256\n".PadRight(100_000) + "public namespace Console"));
+    }
+
+    [Fact]
+    public void Code_CachedTextWithoutGeometryRecognizesCppDirectives()
+    {
+        var result = OcrResult.Success("# include <vector>\r\nstd::vector<int> values;",
+            "en-US", [], TimeSpan.Zero);
+        var extraction = OcrExtractionAnalyzer.Analyze(result);
+        Assert.False(extraction.HasGeometry);
+        Assert.Equal("C/C++", extraction.Code.Language);
+        Assert.Equal("# include <vector>\nstd::vector<int> values;", extraction.Code.Text);
+    }
+
+    [Fact]
+    public void Code_MixedCaptureSelectionKeepsCppLanguageContext()
+    {
+        var table = Result(
+            Line(0, Word("Name", 20, 0), Word("Amount", 300, 0)),
+            Line(24, Word("A", 20, 24), Word("20", 300, 24)));
+        const string source = "#include <vector>\nstd::vector<int> items;\nitems.clear();";
+        var code = CodeResult(source, 120);
+        var result = Result(table.Lines.Concat(code.Lines).ToArray());
+        var extraction = OcrExtractionAnalyzer.Analyze(result);
+        Assert.Equal(2, extraction.Table.Rows.Count);
+        Assert.Equal(source, extraction.Code.Text);
+        Assert.Equal("C/C++", extraction.Code.Language);
+        var selected = OcrExtractionAnalyzer.Analyze(result, new OcrRect(0, 165, 800, 20));
+        Assert.Equal("items.clear();", selected.Code.Text);
+        Assert.Equal("C/C++", selected.Code.Language);
     }
 
     [Fact]
