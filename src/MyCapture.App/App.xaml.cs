@@ -1895,6 +1895,20 @@ public partial class App : Application
             {
                 _log?.LogDebug(ex, "Capture selector prewarm failed");
             }
+
+            // The editor's first open after a capture likewise, on a later idle turn of its own.
+            _ = Dispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle, new Action(() =>
+            {
+                if (_overlay?.IsActive == true) return;
+                try
+                {
+                    AnnotationEditorPrewarm.Run();
+                }
+                catch (Exception ex)
+                {
+                    _log?.LogDebug(ex, "Image editor prewarm failed");
+                }
+            }));
         }));
     }
 
