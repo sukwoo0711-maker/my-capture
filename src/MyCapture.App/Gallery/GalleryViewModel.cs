@@ -337,14 +337,15 @@ public sealed partial class GalleryViewModel : INotifyPropertyChanged
         }
 
         // An opened folder lays out the smaller cards in more columns from the same width.
-        if (IsCompactLayout != _rowsCompact)
+        bool layoutChanged = IsCompactLayout != _rowsCompact;
+        if (layoutChanged)
         {
             _rowsCompact = IsCompactLayout;
             int columns = GalleryRowBuilder.ColumnCountForWidth(_availableWidth, _rowsCompact);
             if (columns != _columnCount) { _columnCount = columns; Raise(nameof(ColumnCount)); }
             Raise(nameof(IsCompactLayout));
         }
-        RebuildRows();
+        RebuildRows(layoutChanged);
 
         Selection.SetVisible(_groups.SelectMany(g => g.Items).Select(t => t.Id));
         PublishSelection();
@@ -380,7 +381,7 @@ public sealed partial class GalleryViewModel : INotifyPropertyChanged
 
         _columnCount = next;
         Raise(nameof(ColumnCount));
-        RebuildRows();
+        RebuildRows(layoutChanged: true);
         return true;
     }
 
@@ -390,28 +391,54 @@ public sealed partial class GalleryViewModel : INotifyPropertyChanged
     /// </summary>
     public bool IsCompactLayout => _scope.FolderId is not null;
 
-    private void RebuildRows()
+    /// <param name="layoutChanged">
+    /// The column count or card size changed: every row is rebuilt and the list lays out anew.
+    /// </param>
+    private void RebuildRows(bool layoutChanged)
     {
         IReadOnlyList<GalleryRow> built = GalleryRowBuilder.Build(_groups, _columnCount, _rowsCompact);
-
-        // A row also keeps its column count: cells are a share of the row, so a short row built
-        // for another count would no longer line up with the rows around it.
-        if (_rows.Count == built.Count && _rows.Zip(built).All(pair =>
-            pair.First.IsCompact == pair.Second.IsCompact && pair.First.Columns == pair.Second.Columns
-            && (pair.First, pair.Second) switch
-            {
-                (GalleryHeaderRow a, GalleryHeaderRow b) => a.Heading == b.Heading,
-                (GalleryFolderRow a, GalleryFolderRow b) => a.Folders.SequenceEqual(b.Folders),
-                (GalleryTileRow a, GalleryTileRow b) => a.Tiles.SequenceEqual(b.Tiles),
-                _ => false,
-            })) return;
-
-        _rows.Clear();
-        foreach (GalleryRow row in built)
+        if (layoutChanged)
         {
-            _rows.Add(row);
+            if (_rows.Count == built.Count && _rows.Zip(built).All(pair => SameRow(pair.First, pair.Second))) return;
+            _rows.Clear();
+            foreach (GalleryRow row in built)
+            {
+                _rows.Add(row);
+            }
+
+            return;
         }
+
+        // Same layout: only the rows that changed are replaced. A capture saved or indexed changes
+        // the rows of its own day, and every other day's rows (and the cards the list has realized
+        // for them) stay as they are. The rows that remain are the sequence a full rebuild produces.
+        int shared = Math.Min(_rows.Count, built.Count);
+        int prefix = 0;
+        while (prefix < shared && SameRow(_rows[prefix], built[prefix])) prefix++;
+        if (prefix == _rows.Count && prefix == built.Count) return;
+        int suffix = 0;
+        while (suffix < shared - prefix && SameRow(_rows[_rows.Count - 1 - suffix], built[built.Count - 1 - suffix])) suffix++;
+
+        int oldEnd = _rows.Count - suffix, newEnd = built.Count - suffix, index = prefix;
+        for (; index < oldEnd && index < newEnd; index++) _rows[index] = built[index];
+        while (oldEnd > index) _rows.RemoveAt(--oldEnd);
+        for (; index < newEnd; index++) _rows.Insert(index, built[index]);
     }
+
+    /// <summary>
+    /// Whether a built row shows what an existing one shows. A row also keeps its column count:
+    /// cells are a share of the row, so a short row built for another count would no longer line up
+    /// with the rows around it.
+    /// </summary>
+    private static bool SameRow(GalleryRow existing, GalleryRow built) =>
+        existing.IsCompact == built.IsCompact && existing.Columns == built.Columns
+        && (existing, built) switch
+        {
+            (GalleryHeaderRow a, GalleryHeaderRow b) => a.Heading == b.Heading,
+            (GalleryFolderRow a, GalleryFolderRow b) => a.Folders.SequenceEqual(b.Folders),
+            (GalleryTileRow a, GalleryTileRow b) => a.Tiles.SequenceEqual(b.Tiles),
+            _ => false,
+        };
 
     public GalleryItemViewModel? FindTile(Guid id) =>
         _tileCache.TryGetValue(id, out GalleryItemViewModel? tile) ? tile : null;
