@@ -2822,6 +2822,8 @@
     <value>더블클릭으로 핀 닫기</value>
     <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
   </data>
+  <data name="PinSession.RestoreLabel" xml:space="preserve"><value>다음 실행 때 열린 핀 다시 띄우기</value></data>
+  <data name="PinSession.RestoreDescription" xml:space="preserve"><value>종료할 때 열려 있던 핀의 이미지와 원문 텍스트를 이 PC의 앱 데이터 폴더에 저장하고, 다음 실행 때 같은 자리에 다시 띄웁니다. 끄면 저장한 핀을 바로 지웁니다.</value></data>
   <data name="Text_F0CFD62F0971" xml:space="preserve">
     <value>녹화 동영상에 마우스 커서 포함</value>
     <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>

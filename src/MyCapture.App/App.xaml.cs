@@ -224,6 +224,7 @@ public partial class App : Application
             pinSaveService,
             _services.GetRequiredService<ILogger<PinManager>>());
         _pins.PinCreated += ShowFirstPinTip;
+        InitializePinSession();
         _gitHubUpload = new GitHubIssueImageUploadService(
             () => _settings!,
             _services.GetRequiredService<ILogger<GitHubIssueImageUploadService>>());
@@ -1877,6 +1878,7 @@ public partial class App : Application
 
         // Keep the tray state in sync after an apply (a hotkey collision flips it to Error).
         window.Applied += (_, _) => RestoreTrayAfterCapture();
+        window.Applied += OnPinSessionSettingsApplied;
 
         _settingsWindow = window;
         return window;
@@ -2377,6 +2379,7 @@ public partial class App : Application
             // Window already torn down; nothing to do.
         }
 
+        FinishPinSessionOnExit();
         // Close every pinned window so no top-most orphan survives the process, and drop the
         // closed-pin restore history so no screen content outlives it.
         try

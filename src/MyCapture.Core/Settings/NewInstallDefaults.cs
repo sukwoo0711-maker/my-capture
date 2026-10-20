@@ -43,6 +43,7 @@ public static class NewInstallDefaults
         settings.General.Theme = MyCapture.Core.Themes.AppThemeNames.ToSetting(MyCapture.Core.Themes.AppTheme.System);
         settings.General.ShowShortcutHints = false;
         settings.General.ShortcutHintsRevision = 1;
+        settings.Pin.RestoreOpenPinsOnLaunch = true;
         settings.Queue.ImageRetentionHours = CaptureRetention.NeverHours;
         settings.Queue.MaxBytes = 5L * 1024 * 1024 * 1024;
         settings.Queue.MaxItems = 1000;

@@ -824,6 +824,14 @@
                                   AutomationProperties.Name="{loc:Text Text_F0C27AB1BA08}"
                                   IsChecked="{Binding CloseOnDoubleClick}" />
 
+                        <CheckBox Style="{StaticResource Settings.CheckBox}"
+                                  Content="{loc:Text PinSession.RestoreLabel}"
+                                  AutomationProperties.Name="{loc:Text PinSession.RestoreLabel}"
+                                  AutomationProperties.HelpText="{loc:Text PinSession.RestoreDescription}"
+                                  IsChecked="{Binding RestoreOpenPinsOnLaunch}" />
+                        <TextBlock Style="{StaticResource Settings.Description}"
+                                   Text="{loc:Text PinSession.RestoreDescription}" />
+
                         <settings:SettingsField Margin="0,6,0,12"
                                                 Header="{loc:Text Text_9165ADFF8EF8}" Hint="{loc:Text SettingsRange_InitialOpacity}">
                             <TextBox Style="{StaticResource Settings.NumberBox}"
