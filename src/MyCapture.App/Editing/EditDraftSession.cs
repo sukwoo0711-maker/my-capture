@@ -7,6 +7,13 @@ internal sealed record DraftSnapshot(string Kind, string Document, Dictionary<st
     IReadOnlyDictionary<string, byte[]> Files);
 
 /// <summary>Only the debounced snapshot runs on the dispatcher; all durable I/O runs off it.</summary>
+/// <remarks>
+/// The dispatcher never waits for a lock: the revision and the retired flag are atomic fields
+/// that the writer reads just before its one atomic publication. A revision whose check passed
+/// may still finish publishing after a later edit or a retirement, which changes nothing: one
+/// writer runs at a time, so a later revision is published by a later write under a higher
+/// number, recovery reads the highest, and retirement waits for the writer before its tombstone.
+/// </remarks>
 internal sealed class EditDraftSession
 {
     private static readonly System.Collections.Concurrent.ConcurrentDictionary<Task, byte> Finishing = new();
@@ -22,9 +29,8 @@ internal sealed class EditDraftSession
     private readonly DispatcherTimer _timer;
     private readonly Dispatcher _dispatcher;
     private readonly SemaphoreSlim _writer = new(1, 1);
-    private readonly object _publicationGate = new();
     private long _revision;
-    private bool _retired;
+    private volatile bool _retired;
     private bool _retiredDurably;
     internal Guid Id { get; }
     internal Task LastWrite { get; private set; } = Task.CompletedTask;
@@ -39,11 +45,8 @@ internal sealed class EditDraftSession
     }
     internal void Changed()
     {
-        lock (_publicationGate)
-        {
-            if (_retired) return;
-            Interlocked.Increment(ref _revision);
-        }
+        if (_retired) return;
+        Interlocked.Increment(ref _revision);
         _timer.Stop(); _timer.Start();
     }
     internal async Task FlushAsync()
@@ -63,15 +66,14 @@ internal sealed class EditDraftSession
             DraftSnapshot? snapshot = await _dispatcher.InvokeAsync(_snapshot).Task.Unwrap();
             if (snapshot is null || _retired || revision != Interlocked.Read(ref _revision)) return;
             await Task.Run(() => _store.WriteAsync(Id, revision, snapshot.Kind, snapshot.Document,
-                snapshot.Metadata, snapshot.Files, () => !_retired && revision == Interlocked.Read(ref _revision),
-                publicationGate: _publicationGate));
+                snapshot.Metadata, snapshot.Files, () => !_retired && revision == Interlocked.Read(ref _revision)));
         }
         catch (Exception error) { await _dispatcher.InvokeAsync(() => _failed(error)); }
         finally { _writer.Release(); }
     }
     internal async Task<bool> RetireAsync()
     {
-        lock (_publicationGate) _retired = true;
+        _retired = true;
         _timer.Stop();
         await _writer.WaitAsync();
         // A save retires before closing and the close retires again; the second call must not
@@ -82,7 +84,7 @@ internal sealed class EditDraftSession
         {
             await _dispatcher.InvokeAsync(() => _failed(error));
             bool completed = _store.IsRetired(Id);
-            if (!completed) lock (_publicationGate) _retired = false;
+            if (!completed) _retired = false;
             return completed;
         }
         finally { _writer.Release(); }

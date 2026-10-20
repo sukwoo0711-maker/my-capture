@@ -1,5 +1,8 @@
 using System.IO;
+using System.Runtime.InteropServices;
 using System.Text.Json;
+using System.Windows;
+using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using MyCapture.Core.Annotations;
 using MyCapture.Core.Primitives;
@@ -14,12 +17,13 @@ internal sealed partial class AnnotationEditorControl
     internal Task<DraftSnapshot?> CaptureDraftAsync()
     {
         if (_completed || _commitInProgress || _redactionInProgress) return Task.FromResult<DraftSnapshot?>(null);
+        // Everything the editor owns is read here. The document is a deep copy no one else
+        // references, so it and these plain values are serialized on the encoder thread.
         AnnotationDocument document = CreateCurrentImageSnapshot();
-        string json = document.ToJson();
-        var metadata = new Dictionary<string, string> { ["title"] = _sourceWindowTitle ?? string.Empty };
-        metadata["turns"] = _controller.RotationTurns.ToString(System.Globalization.CultureInfo.InvariantCulture);
-        metadata["origin"] = JsonSerializer.Serialize(_controller.CropOrigin, JsonDefaults.Compact);
-        if (_crop is not null) metadata["crop"] = JsonSerializer.Serialize(_crop.Region, JsonDefaults.Compact);
+        string title = _sourceWindowTitle ?? string.Empty;
+        int turns = _controller.RotationTurns;
+        PointD origin = _controller.CropOrigin;
+        RectD? crop = _crop?.Region;
         // Frozen bitmaps are shared and copied once on the encoder thread (and their PNG is
         // cached). A live, mutable bitmap must be read here, so its one copy is made now and
         // that independent copy is encoded as is.
@@ -28,15 +32,23 @@ internal sealed partial class AnnotationEditorControl
             ["base.png"] = PrepareForDraft(_surface.Frame.Bitmap),
             ["original.png"] = PrepareForDraft(_selectedBitmap),
         };
+        var assets = new List<(string Name, string File)>();
         int index = 0;
         foreach (var (name, bitmap) in _imageStore.DecodedFor(document.Items.OfType<ImageAnnotation>().Select(x => x.AssetFileName)))
         {
             string file = $"asset-{index++:D4}.png";
-            metadata["asset:" + name] = file;
+            assets.Add((name, file));
             bitmaps[file] = PrepareForDraft(bitmap);
         }
         return Threading.StaThreadTask.RunAsync<DraftSnapshot?>(() =>
         {
+            // The same JSON, and metadata in the same order, as when this ran on the UI thread.
+            string json = document.ToJson();
+            var metadata = new Dictionary<string, string> { ["title"] = title };
+            metadata["turns"] = turns.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            metadata["origin"] = JsonSerializer.Serialize(origin, JsonDefaults.Compact);
+            if (crop is { } region) metadata["crop"] = JsonSerializer.Serialize(region, JsonDefaults.Compact);
+            foreach (var (name, file) in assets) metadata["asset:" + name] = file;
             var files = bitmaps.ToDictionary(x => x.Key, x => x.Value.Detached
                 ? EncodeIndependentDraftBitmap(x.Value.Bitmap, x.Value.Bitmap)
                 : EncodeCachedDraftBitmap(x.Value.Bitmap));
@@ -51,14 +63,50 @@ internal sealed partial class AnnotationEditorControl
     /// <summary>
     /// Encodes a draft PNG from one native copy of <paramref name="bitmap"/>. The encoder runs
     /// on its background STA; a frozen source still shares its WIC lock with the live surface and
-    /// PNG WriteSource holds that lock for the whole encode, so the lock is held only while
-    /// <see cref="WriteableBitmap"/> copies the pixels, never during compression.
+    /// PNG WriteSource holds that lock for the whole encode, so the lock is held only while the
+    /// pixels are copied, never during compression.
     /// </summary>
+    /// <remarks>
+    /// The copy is never a <see cref="WriteableBitmap"/> here. Its constructor keeps the source's
+    /// lock while it creates this thread's MediaContext, which takes WPF's process-wide
+    /// composition lock; the UI thread renders the same source holding the composition lock and
+    /// then waits for the source's lock, so the two threads deadlocked for good.
+    /// </remarks>
     internal static byte[] EncodeDraftBitmap(BitmapSource bitmap)
     {
-        var independent = new WriteableBitmap(bitmap);
-        independent.Freeze();
+        BitmapSource independent = CopyToIndependentBitmap(bitmap);
         return EncodeIndependentDraftBitmap(independent, bitmap);
+    }
+    /// <summary>
+    /// A frozen bitmap with the pixels, format, palette and resolution of
+    /// <paramref name="bitmap"/>, as <see cref="WriteableBitmap"/> copied them, sharing nothing
+    /// with it. <see cref="BitmapSource.CopyPixels(Int32Rect, IntPtr, int, int)"/> holds only
+    /// the source's own lock and <see cref="BitmapSource.Create(int, int, double, double, PixelFormat, BitmapPalette, IntPtr, int, int)"/>
+    /// copies the buffer into a new bitmap; neither creates a MediaContext. The unmanaged buffer
+    /// is freed at once, so an 8K capture (66 MB) leaves no large object heap garbage behind.
+    /// </summary>
+    private static BitmapSource CopyToIndependentBitmap(BitmapSource bitmap)
+    {
+        int width = bitmap.PixelWidth, height = bitmap.PixelHeight;
+        PixelFormat format = bitmap.Format;
+        int stride = checked((width * format.BitsPerPixel + 7) / 8);
+        int size = checked(stride * height);
+        IntPtr pixels = Marshal.AllocHGlobal(size);
+        try
+        {
+            bitmap.CopyPixels(new Int32Rect(0, 0, width, height), pixels, size, stride);
+            // WriteableBitmap took the palette only for indexed formats.
+            bool indexed = format == PixelFormats.Indexed1 || format == PixelFormats.Indexed2
+                || format == PixelFormats.Indexed4 || format == PixelFormats.Indexed8;
+            BitmapSource copy = BitmapSource.Create(width, height, bitmap.DpiX, bitmap.DpiY, format,
+                indexed ? bitmap.Palette : null, pixels, size, stride);
+            copy.Freeze();
+            return copy;
+        }
+        finally
+        {
+            Marshal.FreeHGlobal(pixels);
+        }
     }
     private static byte[] EncodeIndependentDraftBitmap(BitmapSource independent, BitmapSource source)
     {
