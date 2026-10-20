@@ -613,23 +613,16 @@ internal sealed class VideoLibraryService
             return;
         }
 
-        var options = new EnumerationOptions
-        {
-            RecurseSubdirectories = true,
-            IgnoreInaccessible = true,
-            AttributesToSkip = FileAttributes.ReparsePoint,
-        };
-
         IEnumerable<string> pendingFiles;
         try
         {
-            pendingFiles = Directory.EnumerateFiles(
-                    // See the canonical-root and containment contract above.
-                    // codeql[cs/path-injection]
-                    _paths.CapturesRoot,
-                    CaptureFileNames.VideoPending,
-                    options)
-                .ToList();
+            // The recursive walk of Directory.EnumerateFiles (reparse points skipped,
+            // inaccessible directories ignored), with each tree level listed in parallel.
+            pendingFiles = ParallelFileScan.FindFiles(
+                // See the canonical-root and containment contract above.
+                // codeql[cs/path-injection]
+                _paths.CapturesRoot,
+                CaptureFileNames.VideoPending)[0];
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
@@ -796,19 +789,13 @@ internal sealed class VideoLibraryService
             return;
         }
 
-        var options = new EnumerationOptions
-        {
-            RecurseSubdirectories = true,
-            IgnoreInaccessible = true,
-            AttributesToSkip = FileAttributes.ReparsePoint,
-        };
-
         IEnumerable<string> markers;
         try
         {
+            // A separate walk: the recovery above can publish markers this one must find.
             // The root is canonical and PublishReady is a fixed private sidecar name.
             // codeql[cs/path-injection]
-            markers = Directory.EnumerateFiles(_paths.CapturesRoot, PublishReady, options).ToList();
+            markers = ParallelFileScan.FindFiles(_paths.CapturesRoot, PublishReady)[0];
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {

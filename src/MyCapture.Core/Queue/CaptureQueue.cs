@@ -253,22 +253,39 @@ public sealed partial class CaptureQueue
         // Drop records whose files are gone. This happens when a user clears the
         // capture folder by hand, and a phantom entry produces a broken thumbnail
         // that looks like data loss.
-        records = records
-            .Where(record =>
+        // The checks only read each record's stored path and the file system, so they run in
+        // parallel; the warnings, and any failure, follow afterwards in record order.
+        ParallelOutcome<bool?>[] present = ParallelFileScan.InspectEach(records, record =>
+        {
+            if (!TryResolveDirectory(record, out string directory))
             {
-                if (!TryResolveDirectory(record, out string directory))
-                {
-                    _log.LogWarning(
-                        "Dropped capture {Id} because its storage path escaped the captures root",
-                        record.Id);
-                    return false;
-                }
+                return (bool?)null;
+            }
 
-                string primaryFile = record.IsVideo
-                    ? CaptureFileNames.VideoSource
-                    : CaptureFileNames.Original;
-                return File.Exists(Path.Combine(directory, primaryFile));
-            })
+            string primaryFile = record.IsVideo
+                ? CaptureFileNames.VideoSource
+                : CaptureFileNames.Original;
+            return File.Exists(Path.Combine(directory, primaryFile));
+        });
+        var kept = new List<CaptureRecord>(records.Count);
+        for (int i = 0; i < records.Count; i++)
+        {
+            bool? exists = present[i].GetValue();
+            if (exists is null)
+            {
+                _log.LogWarning(
+                    "Dropped capture {Id} because its storage path escaped the captures root",
+                    records[i].Id);
+                continue;
+            }
+
+            if (exists.Value)
+            {
+                kept.Add(records[i]);
+            }
+        }
+
+        records = kept
             .OrderByDescending(r => r.CreatedAt)
             .ToList();
 
@@ -1057,25 +1074,18 @@ public sealed partial class CaptureQueue
         try
         {
             // Pending first, committed metadata second: if both exist after a crash just before
-            // marker cleanup, the fully committed meta record wins for the same ID.
-            var options = new EnumerationOptions
+            // marker cleanup, the fully committed meta record wins for the same ID. One walk
+            // finds every name, each in the order its own recursive walk would find it.
+            string[] sidecarNames = pendingOnly
+                ? [CaptureFileNames.OriginalPending, CaptureFileNames.VideoPending]
+                : [CaptureFileNames.OriginalPending, CaptureFileNames.VideoPending, CaptureFileNames.Meta];
+            foreach (IReadOnlyList<string> found in ParallelFileScan.FindFiles(
+                         // AppPaths canonicalizes the local capture root; the filenames are fixed
+                         // private sidecars and reparse points are excluded from the walk.
+                         // codeql[cs/path-injection]
+                         _paths.CapturesRoot, sidecarNames))
             {
-                RecurseSubdirectories = true,
-                IgnoreInaccessible = true,
-                AttributesToSkip = FileAttributes.ReparsePoint,
-            };
-            sidecarFiles.AddRange(Directory.EnumerateFiles(
-                // AppPaths canonicalizes the local capture root; the filename is a fixed private
-                // sidecar and reparse points are excluded from the recursive walk.
-                // codeql[cs/path-injection]
-                _paths.CapturesRoot, CaptureFileNames.OriginalPending, options));
-            sidecarFiles.AddRange(Directory.EnumerateFiles(
-                // codeql[cs/path-injection]
-                _paths.CapturesRoot, CaptureFileNames.VideoPending, options));
-            if (!pendingOnly)
-            {
-                sidecarFiles.AddRange(Directory.EnumerateFiles(
-                    _paths.CapturesRoot, CaptureFileNames.Meta, options));
+                sidecarFiles.AddRange(found);
             }
         }
         catch (IOException ex)
