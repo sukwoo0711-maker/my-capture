@@ -12,7 +12,6 @@ namespace MyCapture.App;
 public partial class App
 {
     private PinSessionService? _pinSession;
-    private bool _pinSessionSavedForSessionEnd;
 
     private void InitializePinSession()
     {
@@ -43,16 +42,14 @@ public partial class App
         if (!e.Cancel)
         {
             _pinSession?.SaveNow();
-            _pinSessionSavedForSessionEnd = true;
         }
     }
 
     private void FinishPinSessionOnExit()
     {
-        // WPF has already closed Application.Windows by OnExit. A session-end snapshot
-        // must survive that closure. Keep the service alive if Windows later cancels logoff.
-        if (_pinSessionSavedForSessionEnd) _pinSession?.Dispose();
-        else SavePinSessionForExit();
+        // WPF has already closed Application.Windows. Only explicit pre-shutdown and
+        // session-ending paths can capture live pins; preserve their last durable session.
+        _pinSession?.Dispose();
     }
 
     private void SavePinSessionForExit()

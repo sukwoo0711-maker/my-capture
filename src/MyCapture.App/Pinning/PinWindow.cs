@@ -272,7 +272,11 @@ internal sealed class PinWindow : Window
             ScheduleHoverBarHide();
         };
         // The active pin takes the keys (Esc closes it), so its outline stays emphasized.
-        Activated += (_, _) => SetChromeActive(true);
+        Activated += (_, _) =>
+        {
+            SetChromeActive(true);
+            if (!_isClosed) ViewStateChanged?.Invoke();
+        };
         Deactivated += (_, _) => SetChromeActive(false);
         LocationChanged += (_, _) => PlaceHoverBar();
         SizeChanged += (_, _) => PlaceHoverBar();
@@ -399,7 +403,7 @@ internal sealed class PinWindow : Window
     /// <summary>Raised when the user asks (via this pin) to reopen the last closed pin.</summary>
     internal event EventHandler? RestoreClosedRequested;
 
-    /// <summary>Raised after a drag or zoom settles, or the requested opacity changes.</summary>
+    /// <summary>Raised after movement or zoom settles, or opacity or stacking order changes.</summary>
     internal event Action? ViewStateChanged;
 
     /// <summary>
@@ -974,11 +978,14 @@ internal sealed class PinWindow : Window
         {
             Left += dx;
             Top += dy;
-            return;
         }
-        (int left, int top, _, _) = WindowStyleFacade.GetWindowBounds(_handle);
-        DpiScale dpi = VisualTreeHelper.GetDpi(this);
-        MovePhysical(left + (dx * dpi.DpiScaleX), top + (dy * dpi.DpiScaleY));
+        else
+        {
+            (int left, int top, _, _) = WindowStyleFacade.GetWindowBounds(_handle);
+            DpiScale dpi = VisualTreeHelper.GetDpi(this);
+            MovePhysical(left + (dx * dpi.DpiScaleX), top + (dy * dpi.DpiScaleY));
+        }
+        if (!_isClosed) ViewStateChanged?.Invoke();
     }
 
     private void MovePhysical(double left, double top)

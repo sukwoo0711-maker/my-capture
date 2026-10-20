@@ -27,57 +27,61 @@ public sealed partial class SettingsInstantSaveTests
                 {
                     using var language = UiText.UseLanguage(languageName);
                     string root = TestRecycleBin.CreateTempSubdirectory("mc-pin-session-settings-").FullName;
-                    var store = new SettingsStore(AppPaths.CreateForRoot(root), NullLogger<SettingsStore>.Instance);
-                    AppSettings saved = new();
-                    store.Save(saved);
-                    int saves = 0;
-                    var window = new SettingsWindow(() => saved, candidate =>
-                    {
-                        store.Save(candidate);
-                        saved = candidate;
-                        saves++;
-                        return new SettingsApplyResult(true, true, true, false, []);
-                    }, NullLogger.Instance);
                     try
                     {
-                        var tabs = Assert.IsType<TabControl>(window.FindName("CategoryTabs"));
-                        tabs.SelectedItem = tabs.Items.OfType<TabItem>().Single(tab =>
-                            Equals(tab.Header, UiText.Get("SettingsUx_TabEditing")));
-                        Render(window, $"pin-session-settings-{languageName}.png", 940, 700);
-                        SettingsDraft draft = Assert.IsType<SettingsDraft>(window.DataContext);
-                        CheckBox restore = Descendants(window).OfType<CheckBox>().Single(box =>
-                            box.GetBindingExpression(CheckBox.IsCheckedProperty)?.ParentBinding.Path.Path
-                                == nameof(SettingsDraft.RestoreOpenPinsOnLaunch));
-                        Assert.Equal(UiText.Get("PinSession.RestoreLabel"), restore.Content);
-                        Assert.Equal(UiText.Get("PinSession.RestoreLabel"), AutomationProperties.GetName(restore));
-                        Assert.Equal(UiText.Get("PinSession.RestoreDescription"), AutomationProperties.GetHelpText(restore));
-                        Assert.Same(window.FindResource("Settings.CheckBox"), restore.Style);
-                        var group = Assert.IsType<StackPanel>(LogicalTreeHelper.GetParent(restore));
-                        int index = group.Children.IndexOf(restore);
-                        CheckBox previous = Assert.IsType<CheckBox>(group.Children[index - 1]);
-                        Assert.Equal(nameof(SettingsDraft.CloseOnDoubleClick), previous
-                            .GetBindingExpression(CheckBox.IsCheckedProperty)!.ParentBinding.Path.Path);
-                        TextBlock description = Assert.IsType<TextBlock>(group.Children[index + 1]);
-                        Assert.Same(window.FindResource("Settings.Description"), description.Style);
-                        Assert.Equal(UiText.Get("PinSession.RestoreDescription"), KoreanWordWrap.Strip(description.Text));
-                        Assert.False(restore.IsChecked);
+                        var store = new SettingsStore(AppPaths.CreateForRoot(root), NullLogger<SettingsStore>.Instance);
+                        AppSettings saved = new();
+                        store.Save(saved);
+                        int saves = 0;
+                        var window = new SettingsWindow(() => saved, candidate =>
+                        {
+                            store.Save(candidate);
+                            saved = candidate;
+                            saves++;
+                            return new SettingsApplyResult(true, true, true, false, []);
+                        }, NullLogger.Instance);
+                        try
+                        {
+                            var tabs = Assert.IsType<TabControl>(window.FindName("CategoryTabs"));
+                            tabs.SelectedItem = tabs.Items.OfType<TabItem>().Single(tab =>
+                                Equals(tab.Header, UiText.Get("SettingsUx_TabEditing")));
+                            Render(window, $"pin-session-settings-{languageName}.png", 940, 700);
+                            SettingsDraft draft = Assert.IsType<SettingsDraft>(window.DataContext);
+                            CheckBox restore = Descendants(window).OfType<CheckBox>().Single(box =>
+                                box.GetBindingExpression(CheckBox.IsCheckedProperty)?.ParentBinding.Path.Path
+                                    == nameof(SettingsDraft.RestoreOpenPinsOnLaunch));
+                            Assert.Equal(UiText.Get("PinSession.RestoreLabel"), restore.Content);
+                            Assert.Equal(UiText.Get("PinSession.RestoreLabel"), AutomationProperties.GetName(restore));
+                            Assert.Equal(UiText.Get("PinSession.RestoreDescription"), AutomationProperties.GetHelpText(restore));
+                            Assert.Same(window.FindResource("Settings.CheckBox"), restore.Style);
+                            var group = Assert.IsType<StackPanel>(LogicalTreeHelper.GetParent(restore));
+                            int index = group.Children.IndexOf(restore);
+                            CheckBox previous = Assert.IsType<CheckBox>(group.Children[index - 1]);
+                            Assert.Equal(nameof(SettingsDraft.CloseOnDoubleClick), previous
+                                .GetBindingExpression(CheckBox.IsCheckedProperty)!.ParentBinding.Path.Path);
+                            TextBlock description = Assert.IsType<TextBlock>(group.Children[index + 1]);
+                            Assert.Same(window.FindResource("Settings.Description"), description.Style);
+                            Assert.Equal(UiText.Get("PinSession.RestoreDescription"), KoreanWordWrap.Strip(description.Text));
+                            Assert.False(restore.IsChecked);
 
-                        restore.IsChecked = true;
-                        Pump();
-                        Assert.True(draft.RestoreOpenPinsOnLaunch);
-                        Assert.True(saved.Pin.RestoreOpenPinsOnLaunch);
-                        Assert.True(store.Load().Pin.RestoreOpenPinsOnLaunch);
-                        Assert.Equal(1, saves);
+                            restore.IsChecked = true;
+                            Pump();
+                            Assert.True(draft.RestoreOpenPinsOnLaunch);
+                            Assert.True(saved.Pin.RestoreOpenPinsOnLaunch);
+                            Assert.True(store.Load().Pin.RestoreOpenPinsOnLaunch);
+                            Assert.Equal(1, saves);
 
-                        restore.IsChecked = false;
-                        Pump();
-                        Assert.False(saved.Pin.RestoreOpenPinsOnLaunch);
-                        Assert.False(store.Load().Pin.RestoreOpenPinsOnLaunch);
-                        Assert.Equal(2, saves);
+                            restore.IsChecked = false;
+                            Pump();
+                            Assert.False(saved.Pin.RestoreOpenPinsOnLaunch);
+                            Assert.False(store.Load().Pin.RestoreOpenPinsOnLaunch);
+                            Assert.Equal(2, saves);
 
-                        RenderPinSessionEvidence(languageName, window.Resources);
+                            RenderPinSessionEvidence(languageName, window.Resources);
+                        }
+                        finally { window.CloseForExit(); }
                     }
-                    finally { window.CloseForExit(); }
+                    finally { TestRecycleBin.DeleteDirectory(root, recursive: true); }
                 }
             }
             finally { app.Shutdown(); }

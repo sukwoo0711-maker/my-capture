@@ -1,4 +1,6 @@
 using System.Reflection;
+using System.Windows;
+using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -241,6 +243,8 @@ public sealed class PinSessionManagerTests
     public void OpenPinsChanged_FollowsOpenCloseAndSettledPresentation_DespiteObserverFailure() => StaTestHost.Run(() =>
     {
         PinManager manager = Manager();
+        manager.BeforeShowForTest = pin => pin.ShowActivated = false;
+        manager.ActivatePinForTest = _ => { };
         var counts = new List<int>();
         manager.OpenPinsChanged += () => throw new InvalidOperationException("Failed session observer");
         manager.OpenPinsChanged += () => counts.Add(manager.Count);
@@ -265,6 +269,60 @@ public sealed class PinSessionManagerTests
         finally { manager.CloseAllForExit(); }
     });
 
+    [Theory]
+    [InlineData(Key.Left, ModifierKeys.None, -1, 0)]
+    [InlineData(Key.Right, ModifierKeys.Shift, 10, 0)]
+    [InlineData(Key.Up, ModifierKeys.None, 0, -1)]
+    [InlineData(Key.Down, ModifierKeys.Shift, 0, 10)]
+    public void ViewStateChanged_ArrowNudgesNotifyAfterMoving(
+        Key key, ModifierKeys modifiers, double dx, double dy) => StaTestHost.Run(() =>
+    {
+        var pin = new PinWindow(PinContent.FromImage(Image()), new PinViewState(80, 60, 1, 1, 0.1), 200, 150,
+            () => new PinSettings()) { ShowActivated = false };
+        int changes = 0;
+        pin.ViewStateChanged += () =>
+        {
+            changes++;
+            Assert.Equal(200 + dx, pin.Left);
+            Assert.Equal(150 + dy, pin.Top);
+        };
+        try
+        {
+            // Exercise the real arrow command and its modifier selection without native focus.
+            var args = new KeyEventArgs(Keyboard.PrimaryDevice, new PinKeySource(), 0, key)
+                { RoutedEvent = Keyboard.KeyDownEvent };
+            pin.HandleKeyDown(args, modifiers);
+
+            Assert.True(args.Handled);
+            Assert.Equal(1, changes);
+        }
+        finally { pin.Close(); }
+    });
+
+    [Fact]
+    public void ViewStateChanged_ActivationNotifiesTheSessionObserver() => StaTestHost.Run(() =>
+    {
+        PinManager manager = Manager();
+        int changes = 0;
+        manager.OpenPinsChanged += () => changes++;
+        try
+        {
+            PinWindow pin = manager.RestoreSessionPin(new PinManager.ClosedPin(
+                PinContent.FromImage(Image()), 80, 60, 1, 1, null));
+            Assert.Equal(1, changes);
+            int viewChanges = 0;
+            pin.ViewStateChanged += () => viewChanges++;
+
+            // Raise Window's actual Activated event, without changing the desktop foreground.
+            typeof(Window).GetMethod("OnActivated", BindingFlags.Instance | BindingFlags.NonPublic)!
+                .Invoke(pin, [EventArgs.Empty]);
+
+            Assert.Equal(1, viewChanges);
+            Assert.Equal(2, changes);
+        }
+        finally { manager.CloseAllForExit(); }
+    });
+
     [Fact]
     public void ViewStateChanged_DragNotifiesOnceWhenTheGestureEnds() => StaTestHost.Run(() =>
     {
@@ -272,11 +330,12 @@ public sealed class PinSessionManagerTests
         var pin = new PinWindow(PinContent.FromImage(Image()), new PinViewState(80, 60, 1, 1, 0.1), 200, 150,
             () => new PinSettings { CloseOnDoubleClick = false }, input) { ShowActivated = false };
         int changes = 0;
-        pin.ViewStateChanged += () => changes++;
         try
         {
             pin.Show();
             input.Down(pin);
+            // Observe the drag after its initial activation, which is covered separately.
+            pin.ViewStateChanged += () => changes++;
             input.CursorPosition = (450, 300);
             input.Move(pin);
             Assert.Equal(0, changes);
@@ -290,6 +349,13 @@ public sealed class PinSessionManagerTests
     });
 
     private static PinManager Manager() => new(() => new PinSettings(), NullLogger.Instance);
+
+    private sealed class PinKeySource : PresentationSource
+    {
+        public override Visual? RootVisual { get; set; }
+        public override bool IsDisposed => false;
+        protected override CompositionTarget? GetCompositionTargetCore() => null;
+    }
 
     private static BitmapSource Image()
     {

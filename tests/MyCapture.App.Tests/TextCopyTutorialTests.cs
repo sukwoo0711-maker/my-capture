@@ -245,9 +245,16 @@ public sealed class TextCopyTutorialTests
             var view = ShortcutHelpSearchTests.View(help);
             view.Search.Text = UiText.Get("TextCapture_Title");
             Border[] rows = view.VisibleResults();
-            Assert.Equal(2, rows.Length);
+            Assert.Equal(3, rows.Length);
+            Border originalText = Assert.Single(rows, row => Texts(row)[0].Text == UiText.Get("Text_976A6C92B870"));
+            Assert.Equal(UiText.Get("Text_33EFD44366A7"), Texts(originalText)[1].Text);
+            Assert.Contains(FirstRunWelcomeTests.Descendants(originalText).OfType<WrapPanel>(),
+                keys => AutomationProperties.GetName(keys) == "Ctrl+C / " + UiText.Get("Text_C7011B8D345C"));
+            Assert.Empty(FirstRunWelcomeTests.Descendants(originalText).OfType<Button>());
             Button[] tutorials = rows.SelectMany(FirstRunWelcomeTests.Descendants).OfType<Button>().ToArray();
             Assert.Equal(2, tutorials.Length);
+            Assert.All(rows.Where(row => !ReferenceEquals(row, originalText)),
+                row => Assert.Single(FirstRunWelcomeTests.Descendants(row).OfType<Button>()));
             Assert.All(tutorials, button =>
             {
                 Assert.Null(button.Content);

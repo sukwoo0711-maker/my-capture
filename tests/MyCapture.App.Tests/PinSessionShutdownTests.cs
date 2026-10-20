@@ -16,6 +16,58 @@ namespace MyCapture.App.Tests;
 public sealed class PinSessionShutdownTests
 {
     [Fact]
+    public Task FrameworkShutdown_WithoutPreSavePreservesTheLastSavedSession() =>
+        Isolated(nameof(FrameworkShutdown_WithoutPreSavePreservesTheLastSavedSession), () =>
+        {
+            using var fixture = new ShutdownFixture();
+            PinWindow pin = fixture.OpenPin();
+            pin.State.SetZoom(1.4);
+            fixture.Service.SaveNow();
+            pin.State.SetZoom(2.3);
+
+            fixture.ShutdownThroughFramework();
+
+            Assert.True(pin.IsClosed);
+            Assert.Equal(0, fixture.Manager.Count);
+            PinSessionPin saved = Assert.Single(fixture.Store.Load()).Pin;
+            Assert.Equal(ShutdownFixture.OriginalText, saved.OriginalText);
+            Assert.Equal(1.4, saved.Zoom);
+        });
+
+    [Fact]
+    public Task StoreUpdatePreparation_SavesPinsBeforeDeploymentAndKeepsServiceUsable() =>
+        Isolated(nameof(StoreUpdatePreparation_SavesPinsBeforeDeploymentAndKeepsServiceUsable), () =>
+        {
+            using var fixture = new ShutdownFixture();
+            PinWindow pin = fixture.OpenPin();
+            pin.State.SetZoom(1.8);
+
+            Assert.True(fixture.PrepareStoreUpdate());
+
+            Assert.Equal(1.8, Assert.Single(fixture.Store.Load()).Pin.Zoom);
+            Assert.False(pin.IsClosed);
+            pin.State.SetZoom(2.2);
+            fixture.Service.SaveNow();
+            Assert.Equal(2.2, Assert.Single(fixture.Store.Load()).Pin.Zoom);
+            fixture.ShutdownThroughFramework();
+            Assert.Equal(2.2, Assert.Single(fixture.Store.Load()).Pin.Zoom);
+        });
+
+    [Fact]
+    public Task CancelledStoreUpdatePreparation_DoesNotSavePins() =>
+        Isolated(nameof(CancelledStoreUpdatePreparation_DoesNotSavePins), () =>
+        {
+            using var fixture = new ShutdownFixture();
+            PinWindow pin = fixture.OpenPin();
+            fixture.App.PrepareCapturePersistenceForExitAsync = () => Task.FromResult(false);
+
+            Assert.False(fixture.PrepareStoreUpdate());
+
+            Assert.False(pin.IsClosed);
+            Assert.False(File.Exists(Path.Combine(fixture.SessionRoot, "session.json")));
+        });
+
+    [Fact]
     public Task ExplicitShutdown_PreservesLivePinsAfterFrameworkClosesWindows() =>
         Isolated(nameof(ExplicitShutdown_PreservesLivePinsAfterFrameworkClosesWindows), () =>
         {
@@ -152,6 +204,15 @@ public sealed class PinSessionShutdownTests
         {
             App.Shutdown();
             WaitForExit();
+        }
+
+        internal bool PrepareStoreUpdate()
+        {
+            MethodInfo method = typeof(MyCapture.App.App).GetMethod("PrepareAndHoldStoreUpdateAsync",
+                BindingFlags.Instance | BindingFlags.NonPublic)!;
+            var preparation = (Task<bool>)method.Invoke(App, null)!;
+            Wait(preparation);
+            return preparation.GetAwaiter().GetResult();
         }
 
         private void SetAppField(string field, object value) =>

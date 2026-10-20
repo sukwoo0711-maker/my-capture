@@ -454,6 +454,9 @@ public sealed class ShellFirstRunTests
         try
         {
             HotkeySettings keys = NewInstallDefaults.Create().Hotkeys;
+            Assert.False(FeatureTutorialWindow.OffersSetShortcut(TutorialCatalog.Get("pin-clipboard"), keys));
+            keys.PasteToScreen = Hotkey.None;
+            keys.HideAllPins = Hotkey.None;
             Assert.True(FeatureTutorialWindow.OffersSetShortcut(TutorialCatalog.Get("pin-clipboard"), keys));
             Assert.False(FeatureTutorialWindow.OffersSetShortcut(TutorialCatalog.Get("capture-region"), keys));
             Assert.False(FeatureTutorialWindow.OffersSetShortcut(TutorialCatalog.Get("image-rectangle"), keys));

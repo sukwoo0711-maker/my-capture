@@ -42,6 +42,16 @@ public static class AtomicFile
         WriteAllBytesCore(path, contents, keepRecoveryBackup: false);
 
     /// <summary>
+    /// Flushes a replacement export, then checks whether it may still commit immediately
+    /// before the atomic swap. A rejected replacement leaves the destination unchanged.
+    /// </summary>
+    public static bool TryWriteExportBytes(string path, ReadOnlySpan<byte> contents, Func<bool> canCommit)
+    {
+        ArgumentNullException.ThrowIfNull(canCommit);
+        return WriteAllBytesCore(path, contents, keepRecoveryBackup: false, canCommit);
+    }
+
+    /// <summary>
     /// Atomically creates a new user-facing export and returns <see langword="false"/> when
     /// another writer already claimed the destination. Existing files are never replaced.
     /// </summary>
@@ -88,10 +98,11 @@ public static class AtomicFile
         }
     }
 
-    private static void WriteAllBytesCore(
+    private static bool WriteAllBytesCore(
         string path,
         ReadOnlySpan<byte> contents,
-        bool keepRecoveryBackup)
+        bool keepRecoveryBackup,
+        Func<bool>? canCommit = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
 
@@ -120,7 +131,9 @@ public static class AtomicFile
                 stream.Flush(flushToDisk: true);
             }
 
-            if (File.Exists(path))
+            bool destinationExists = File.Exists(path);
+            if (canCommit?.Invoke() == false) return false;
+            if (destinationExists)
             {
                 // ignoreMetadataErrors avoids failing the swap when the destination
                 // lives on a volume that cannot carry all of the source's metadata,
@@ -136,7 +149,7 @@ public static class AtomicFile
             {
                 File.Move(tempPath, path);
             }
-
+            return true;
         }
         finally
         {

@@ -159,7 +159,14 @@ public sealed class PinSessionStoreTests
         store.Save([oldPin]);
         byte[] manifest = File.ReadAllBytes(ManifestPath(workspace));
         using (var heldManifest = new FileStream(ManifestPath(workspace), FileMode.Open, FileAccess.Read, FileShare.Read))
-            store.Save([Snapshot()]);
+        {
+            for (int attempt = 0; attempt < 3; attempt++)
+            {
+                Assert.False(store.Save([Snapshot()]));
+                Assert.Equal(ImagePath(workspace, oldPin.Pin.Id),
+                    Assert.Single(Directory.GetFiles(workspace.Paths.PinSessionRoot, "*.png")));
+            }
+        }
 
         Assert.Equal(manifest, File.ReadAllBytes(ManifestPath(workspace)));
         Assert.Equal(oldPin.Pin, Assert.Single(store.Load()).Pin);
@@ -227,6 +234,161 @@ public sealed class PinSessionStoreTests
     }
 
     [Fact]
+    public void LoadDetailed_UnreadableManifestBlocksOverwriteUntilSuccessfulRetry()
+    {
+        using var workspace = new TempWorkspace();
+        PinSessionSnapshot original = Snapshot();
+        CreateStore(workspace).Save([original]);
+        PinSessionStore store = CreateStore(workspace);
+        byte[] manifest = File.ReadAllBytes(ManifestPath(workspace));
+        using (var locked = new FileStream(ManifestPath(workspace), FileMode.Open, FileAccess.Read, FileShare.None))
+        {
+            PinSessionLoadResult loaded = store.LoadDetailed();
+            Assert.True(loaded.ManifestUnreadable);
+            Assert.Empty(loaded.Pins);
+            Assert.False(store.Save([]));
+            Assert.False(store.Save([Snapshot()]));
+            Assert.Single(Directory.GetFiles(workspace.Paths.PinSessionRoot, "*.png"));
+        }
+
+        Assert.False(store.Save([]));
+        Assert.Equal(manifest, File.ReadAllBytes(ManifestPath(workspace)));
+        PinSessionLoadResult retry = store.LoadDetailed();
+        Assert.False(retry.ManifestUnreadable);
+        Assert.Equal(original.Pin, Assert.Single(retry.Pins).Pin);
+        PinSessionSnapshot added = Snapshot();
+        Assert.True(store.Save([retry.Pins[0] with { PngBytes = null }, added]));
+        Assert.Equal(new[] { original.Pin, added.Pin }, store.Load().Select(pin => pin.Pin));
+        Assert.True(File.Exists(ImagePath(workspace, original.Pin.Id)));
+    }
+
+    [Fact]
+    public void Save_FirstAttemptWithUnreadableManifestDoesNotCreateOrDeleteImages()
+    {
+        using var workspace = new TempWorkspace();
+        PinSessionSnapshot original = Snapshot();
+        CreateStore(workspace).Save([original]);
+        PinSessionStore store = CreateStore(workspace);
+        using var locked = new FileStream(ManifestPath(workspace), FileMode.Open, FileAccess.Read, FileShare.None);
+
+        Assert.False(store.Save([Snapshot()]));
+        Assert.Equal(ImagePath(workspace, original.Pin.Id),
+            Assert.Single(Directory.GetFiles(workspace.Paths.PinSessionRoot, "*.png")));
+    }
+
+    [Fact]
+    public void LoadDetailed_CorruptAndMissingManifestsAllowLaterSave()
+    {
+        using var workspace = new TempWorkspace();
+        PinSessionStore store = CreateStore(workspace);
+        Assert.False(store.LoadDetailed().ManifestUnreadable);
+        Directory.CreateDirectory(workspace.Paths.PinSessionRoot);
+        File.WriteAllText(ManifestPath(workspace), "{invalid");
+
+        PinSessionLoadResult loaded = store.LoadDetailed();
+
+        Assert.False(loaded.ManifestUnreadable);
+        Assert.Empty(loaded.Pins);
+        Assert.True(store.Save([Snapshot()]));
+        Assert.Single(store.Load());
+    }
+
+    [Fact]
+    public void LoadDetailed_UnreadablePngCarriesItsRecordThroughSaveAndRelease()
+    {
+        using var workspace = new TempWorkspace();
+        PinSessionSnapshot[] pins = [Snapshot(), Snapshot(), Snapshot()];
+        CreateStore(workspace).Save(pins);
+        PinSessionStore store = CreateStore(workspace);
+        string lockedPath = ImagePath(workspace, pins[1].Pin.Id);
+        using (var locked = new FileStream(lockedPath, FileMode.Open, FileAccess.Read, FileShare.None))
+        {
+            PinSessionLoadResult loaded = store.LoadDetailed();
+            Assert.False(loaded.ManifestUnreadable);
+            Assert.Equal(pins.Select(pin => pin.Pin), loaded.Pins.Select(pin => pin.Pin));
+            Assert.Equal(Png, loaded.Pins[0].PngBytes);
+            Assert.Null(loaded.Pins[1].PngBytes);
+            Assert.Equal(Png, loaded.Pins[2].PngBytes);
+            Assert.True(store.TryGetImageLength(pins[1].Pin.Id, out long length));
+            Assert.Equal(Png.LongLength, length);
+            Assert.True(store.Save(loaded.Pins.Select(pin => pin with { PngBytes = null }).ToList()));
+            Assert.True(File.Exists(lockedPath));
+            Assert.Equal(3, JsonNode.Parse(File.ReadAllText(ManifestPath(workspace)))!["pins"]!.AsArray().Count);
+        }
+
+        Assert.True(store.Save(pins.Select(pin => pin with { PngBytes = null }).ToList()));
+        Assert.Equal(pins.Select(pin => pin.Pin), store.Load().Select(pin => pin.Pin));
+        Assert.Equal(Png, File.ReadAllBytes(lockedPath));
+    }
+
+    [Fact]
+    public void Save_FreshBytesForCommittedLockedImagePreservesItsRecordAndFile()
+    {
+        using var workspace = new TempWorkspace();
+        PinSessionSnapshot pin = Snapshot();
+        CreateStore(workspace).Save([pin]);
+        PinSessionStore store = CreateStore(workspace);
+        string path = ImagePath(workspace, pin.Pin.Id);
+        using (var locked = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.None))
+        {
+            Assert.True(store.Save([pin]));
+            Assert.True(File.Exists(path));
+            Assert.Single(JsonNode.Parse(File.ReadAllText(ManifestPath(workspace)))!["pins"]!.AsArray());
+        }
+
+        Assert.Equal(pin.Pin, Assert.Single(store.Load()).Pin);
+        Assert.Equal(Png, File.ReadAllBytes(path));
+    }
+
+    [Fact]
+    public void LoadDetailed_UnmeasurableNewestPinDoesNotExcludeOlderCommittedPins()
+    {
+        using var workspace = new TempWorkspace();
+        PinSessionSnapshot[] pins = [Snapshot(), Snapshot(), Snapshot()];
+        CreateStore(workspace).Save(pins);
+        var store = new PinSessionStore(workspace.Paths.PinSessionRoot, NullLogger.Instance,
+            maxPngBytes: 2L * Png.Length)
+        {
+            ReadImageLengthForTest = id => id == pins[2].Pin.Id
+                ? throw new IOException("Transient metadata failure") : Png.LongLength
+        };
+
+        PinSessionLoadResult loaded = store.LoadDetailed();
+
+        Assert.False(loaded.ManifestUnreadable);
+        Assert.Equal(pins.Select(pin => pin.Pin), loaded.Pins.Select(pin => pin.Pin));
+        Assert.Equal(Png, loaded.Pins[0].PngBytes);
+        Assert.Equal(Png, loaded.Pins[1].PngBytes);
+        Assert.Null(loaded.Pins[2].PngBytes);
+        Assert.False(store.TryGetImageLength(pins[2].Pin.Id, out _));
+    }
+
+    [Fact]
+    public void Save_UnmeasurableCommittedPinDoesNotConsumeBudgetForOlderPins()
+    {
+        using var workspace = new TempWorkspace();
+        PinSessionSnapshot[] pins = [Snapshot(), Snapshot(), Snapshot()];
+        CreateStore(workspace).Save(pins);
+        var store = new PinSessionStore(workspace.Paths.PinSessionRoot, NullLogger.Instance,
+            maxPngBytes: 2L * Png.Length)
+        {
+            ReadImageLengthForTest = id => id == pins[2].Pin.Id
+                ? throw new IOException("Transient metadata failure") : Png.LongLength
+        };
+        List<PinSessionSnapshot> pending = pins.Select(pin => pin with { PngBytes = null }).ToList();
+
+        Assert.True(store.Save(pending));
+
+        Assert.Equal(pins.Select(pin => pin.Pin), CreateStore(workspace).Load().Select(pin => pin.Pin));
+        Assert.Equal(3, Directory.GetFiles(workspace.Paths.PinSessionRoot, "*.png").Length);
+        // Once metadata is readable, the ordinary byte limit applies again.
+        store.ReadImageLengthForTest = null;
+        Assert.True(store.Save(pending));
+        Assert.Equal(pins.Skip(1).Select(pin => pin.Pin), store.Load().Select(pin => pin.Pin));
+        Assert.Equal(2, Directory.GetFiles(workspace.Paths.PinSessionRoot, "*.png").Length);
+    }
+
+    [Fact]
     public void Load_MissingPngSkipsOnlyThatPinAndLogs()
     {
         using var workspace = new TempWorkspace();
@@ -285,12 +447,125 @@ public sealed class PinSessionStoreTests
         store.Save([pin, Snapshot()]);
         File.WriteAllText(Path.Combine(workspace.Paths.PinSessionRoot, $"session.json.{Guid.NewGuid():N}.tmp"), "pending");
 
-        store.Clear();
-        store.Clear();
+        Assert.True(store.Clear());
+        Assert.True(store.Clear());
 
         Assert.Empty(Directory.EnumerateFileSystemEntries(workspace.Paths.PinSessionRoot));
         Assert.Empty(store.Load());
         Assert.False(store.HasImage(pin.Pin.Id));
+    }
+
+    [Fact]
+    public void Clear_ReportsLockedFileFailureAndSucceedsOnRetry()
+    {
+        using var workspace = new TempWorkspace();
+        PinSessionStore store = CreateStore(workspace);
+        PinSessionSnapshot pin = Snapshot();
+        store.Save([pin]);
+        string path = ImagePath(workspace, pin.Pin.Id);
+        using (var locked = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.None))
+        {
+            Assert.False(store.Clear());
+            Assert.True(File.Exists(path));
+        }
+
+        Assert.True(store.Clear());
+        Assert.Empty(Directory.EnumerateFileSystemEntries(workspace.Paths.PinSessionRoot));
+        Assert.False(store.HasImage(pin.Pin.Id));
+    }
+
+    [Fact]
+    public void Save_RejectedGenerationDoesNotCreateFiles()
+    {
+        using var workspace = new TempWorkspace();
+        PinSessionStore store = CreateStore(workspace);
+
+        Assert.False(store.Save([Snapshot()], canCommit: () => false));
+
+        Assert.False(Directory.Exists(workspace.Paths.PinSessionRoot));
+    }
+
+    [Fact]
+    public void Save_GenerationRejectedAfterImageWriteKeepsCommittedSessionAndRemovesNewImage()
+    {
+        using var workspace = new TempWorkspace();
+        PinSessionStore store = CreateStore(workspace);
+        PinSessionSnapshot original = Snapshot();
+        PinSessionSnapshot stale = Snapshot();
+        store.Save([original]);
+        byte[] manifest = File.ReadAllBytes(ManifestPath(workspace));
+        string stalePath = ImagePath(workspace, stale.Pin.Id);
+
+        Assert.False(store.Save([stale], canCommit: () => !File.Exists(stalePath)));
+
+        Assert.Equal(manifest, File.ReadAllBytes(ManifestPath(workspace)));
+        Assert.False(File.Exists(stalePath));
+        Assert.Equal(original.Pin, Assert.Single(store.Load()).Pin);
+    }
+
+    [Fact]
+    public void Save_CanceledAfterManifestTempFlushPreservesCommittedSessionAndRemovesAttemptFiles()
+    {
+        using var workspace = new TempWorkspace();
+        PinSessionStore store = CreateStore(workspace);
+        PinSessionSnapshot original = Snapshot();
+        PinSessionSnapshot stale = Snapshot();
+        store.Save([original]);
+        byte[] manifest = File.ReadAllBytes(ManifestPath(workspace));
+        bool current = true;
+        int finalChecks = 0;
+        store.BeforeManifestCommitForTest = () =>
+        {
+            finalChecks++;
+            string staged = Assert.Single(Directory.GetFiles(workspace.Paths.PinSessionRoot, "session.json.*.tmp"));
+            Assert.NotEmpty(File.ReadAllBytes(staged));
+            Assert.Equal(manifest, File.ReadAllBytes(ManifestPath(workspace)));
+            Assert.True(File.Exists(ImagePath(workspace, stale.Pin.Id)));
+            current = false;
+        };
+
+        Assert.False(store.Save([stale], canCommit: () => current));
+
+        Assert.Equal(1, finalChecks);
+        Assert.Equal(manifest, File.ReadAllBytes(ManifestPath(workspace)));
+        Assert.Equal(ImagePath(workspace, original.Pin.Id),
+            Assert.Single(Directory.GetFiles(workspace.Paths.PinSessionRoot, "*.png")));
+        Assert.Empty(Directory.GetFiles(workspace.Paths.PinSessionRoot, "*.tmp"));
+        Assert.Equal(original.Pin, Assert.Single(store.Load()).Pin);
+    }
+
+    [Fact]
+    public async Task Clear_WaitsForSaveGateAndRemovesCommittedFilesAfterward()
+    {
+        using var workspace = new TempWorkspace();
+        PinSessionStore store = CreateStore(workspace);
+        using var saveInsideGate = new ManualResetEventSlim();
+        using var releaseSave = new ManualResetEventSlim();
+        using var clearStarted = new ManualResetEventSlim();
+        Task<bool> save = Task.Run(() => store.Save([Snapshot()], canCommit: () =>
+        {
+            saveInsideGate.Set();
+            return releaseSave.Wait(TimeSpan.FromSeconds(5));
+        }));
+        Assert.True(saveInsideGate.Wait(TimeSpan.FromSeconds(5)));
+        Task<bool> clear = Task.Run(() =>
+        {
+            clearStarted.Set();
+            return store.Clear();
+        });
+        try
+        {
+            Assert.True(clearStarted.Wait(TimeSpan.FromSeconds(5)));
+            Assert.False(clear.IsCompleted);
+        }
+        finally
+        {
+            releaseSave.Set();
+        }
+
+        Assert.True(await save);
+        Assert.True(await clear);
+        Assert.Empty(Directory.EnumerateFileSystemEntries(workspace.Paths.PinSessionRoot));
     }
 
     [Fact]

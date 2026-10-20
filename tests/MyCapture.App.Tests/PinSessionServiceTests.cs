@@ -1,4 +1,6 @@
 using System.IO;
+using System.Diagnostics;
+using System.Reflection;
 using System.Text;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
@@ -320,6 +322,471 @@ public sealed class PinSessionServiceTests
             }
             finally { manager.CloseAllForExit(); }
         });
+    }
+
+    [Fact]
+    public void LockedManifest_RetriesWithoutReplacingThePreviousSession()
+    {
+        StaTestHost.Run(() =>
+        {
+            using var workspace = new TempWorkspace();
+            var settings = new PinSettings { RestoreOpenPinsOnLaunch = true };
+            var store = new PinSessionStore(workspace.Paths.PinSessionRoot, NullLogger.Instance);
+            Seed(store);
+            PinSessionPin original = Assert.Single(store.Load()).Pin;
+            var manager = new PinManager(() => settings, NullLogger.Instance);
+            using var locked = new FileStream(Path.Combine(workspace.Paths.PinSessionRoot, "session.json"),
+                FileMode.Open, FileAccess.ReadWrite, FileShare.None);
+            using var service = Create(manager, store, settings);
+            try
+            {
+                Wait(service.RestoreAsync());
+                Assert.Equal(0, manager.Count);
+                manager.PinRenderedText(Image(), "new", false);
+                service.SaveNow();
+                Assert.Single(Directory.GetFiles(workspace.Paths.PinSessionRoot, "*.png"));
+                locked.Dispose();
+
+                service.SaveNow();
+
+                IReadOnlyList<PinSessionSnapshot> saved = store.Load();
+                Assert.Equal(2, saved.Count);
+                Assert.Contains(saved, entry => entry.Pin == original);
+                Assert.Contains(saved, entry => entry.Pin.OriginalText == "new");
+                service.SaveNow();
+                Assert.Contains(store.Load(), entry => entry.Pin == original);
+            }
+            finally { manager.CloseAllForExit(); }
+        });
+    }
+
+    [Fact]
+    public void LockedPng_RestoresOthersAndCarriesTheUnreadableRecordForward()
+    {
+        StaTestHost.Run(() =>
+        {
+            using var workspace = new TempWorkspace();
+            var settings = new PinSettings { RestoreOpenPinsOnLaunch = true };
+            var store = new PinSessionStore(workspace.Paths.PinSessionRoot, NullLogger.Instance);
+            Seed(store, count: 2);
+            PinSessionPin original = store.Load()[0].Pin;
+            string imagePath = Path.Combine(workspace.Paths.PinSessionRoot, $"{original.Id:N}.png");
+            using var locked = new FileStream(imagePath, FileMode.Open, FileAccess.ReadWrite, FileShare.None);
+            var manager = new PinManager(() => settings, NullLogger.Instance);
+            using var service = Create(manager, store, settings);
+            try
+            {
+                Wait(service.RestoreAsync());
+                Assert.Equal(1, manager.Count);
+                service.SaveNow();
+                Assert.Equal(2, store.LoadDetailed().Pins.Count);
+                Assert.True(File.Exists(imagePath));
+                locked.Dispose();
+
+                service.SaveNow();
+
+                Assert.Equal(2, store.Load().Count);
+                Assert.Contains(store.Load(), entry => entry.Pin == original);
+                Assert.True(File.Exists(imagePath));
+                Assert.Equal(1, manager.Count);
+            }
+            finally { manager.CloseAllForExit(); }
+        });
+    }
+
+    [Fact]
+    public void SettingOff_RetriesLockedFileCleanupWhileDisabled()
+    {
+        StaTestHost.Run(() =>
+        {
+            using var workspace = new TempWorkspace();
+            var settings = new PinSettings { RestoreOpenPinsOnLaunch = true };
+            var store = new PinSessionStore(workspace.Paths.PinSessionRoot, NullLogger.Instance);
+            var manager = new PinManager(() => settings, NullLogger.Instance);
+            using var service = Create(manager, store, settings);
+            try
+            {
+                Wait(service.RestoreAsync());
+                manager.PinImage(Image());
+                service.SaveNow();
+                string imagePath = Directory.GetFiles(workspace.Paths.PinSessionRoot, "*.png").Single();
+                using var locked = new FileStream(imagePath, FileMode.Open, FileAccess.ReadWrite, FileShare.None);
+                settings.RestoreOpenPinsOnLaunch = false;
+                service.ApplySettings();
+                Assert.True(service.CleanupPendingForTest);
+                Assert.True(File.Exists(imagePath));
+
+                locked.Dispose();
+                PumpUntil(() => !service.CleanupPendingForTest);
+
+                Assert.Empty(Directory.GetFiles(workspace.Paths.PinSessionRoot));
+                Assert.False(settings.RestoreOpenPinsOnLaunch);
+                Assert.Equal(1, manager.Count);
+            }
+            finally { manager.CloseAllForExit(); }
+        });
+    }
+
+    [Fact]
+    public void SaveAndRestore_DoNotRetainPngArraysOrTheCompletedReadTask()
+    {
+        StaTestHost.Run(() =>
+        {
+            using var workspace = new TempWorkspace();
+            var settings = new PinSettings { RestoreOpenPinsOnLaunch = true };
+            var store = new PinSessionStore(workspace.Paths.PinSessionRoot, NullLogger.Instance);
+            var manager = new PinManager(() => settings, NullLogger.Instance);
+            try
+            {
+                using (var service = Create(manager, store, settings))
+                {
+                    Wait(service.RestoreAsync());
+                    manager.PinImage(Image());
+                    service.SaveNow();
+                    AssertIdentityMetadataOnly(service);
+                    Assert.False(service.HasPendingReadForTest);
+                }
+                manager.CloseAllForExit();
+                using var restored = Create(manager, store, settings);
+                Wait(restored.RestoreAsync());
+                Assert.Equal(1, manager.Count);
+                AssertIdentityMetadataOnly(restored);
+                Assert.False(restored.HasPendingReadForTest);
+            }
+            finally { manager.CloseAllForExit(); }
+        });
+    }
+
+    [Fact]
+    public void BudgetExcludedContent_EncodesAgainOnlyWhenItCanBeAdmitted()
+    {
+        StaTestHost.Run(() =>
+        {
+            using var workspace = new TempWorkspace();
+            var settings = new PinSettings { RestoreOpenPinsOnLaunch = true };
+            long oneImageBudget = ImageCodec.EncodePng(Image()).LongLength;
+            var store = new PinSessionStore(workspace.Paths.PinSessionRoot, NullLogger.Instance, maxPngBytes: oneImageBudget);
+            var manager = new PinManager(() => settings, NullLogger.Instance);
+            int encodes = 0;
+            using var service = Create(manager, store, settings, image => { Interlocked.Increment(ref encodes); return ImageCodec.EncodePng(image); });
+            try
+            {
+                Wait(service.RestoreAsync());
+                manager.PinRenderedText(Image(), "older", false);
+                PinWindow newest = manager.PinRenderedText(Image(), "newest", false);
+                service.SaveNow();
+                Assert.Equal(2, encodes);
+                Assert.Equal("newest", Assert.Single(store.Load()).Pin.OriginalText);
+                service.SaveNow();
+                Assert.Equal(2, encodes);
+                AssertIdentityMetadataOnly(service);
+
+                newest.Close();
+                service.SaveNow();
+                Assert.Equal(3, encodes);
+                Assert.Equal("older", Assert.Single(store.Load()).Pin.OriginalText);
+                service.SaveNow();
+                Assert.Equal(3, encodes);
+            }
+            finally { manager.CloseAllForExit(); }
+        });
+    }
+
+    [Fact]
+    public void DebouncedSaves_RunOffDispatcherSerially_AndRejectTheStaleCapture()
+    {
+        StaTestHost.Run(() =>
+        {
+            using var workspace = new TempWorkspace();
+            var settings = new PinSettings { RestoreOpenPinsOnLaunch = true };
+            var store = new PinSessionStore(workspace.Paths.PinSessionRoot, NullLogger.Instance);
+            var manager = new PinManager(() => settings, NullLogger.Instance);
+            using var firstEntered = new ManualResetEventSlim();
+            using var firstRelease = new ManualResetEventSlim();
+            using var secondEntered = new ManualResetEventSlim();
+            using var secondRelease = new ManualResetEventSlim();
+            int uiThread = Environment.CurrentManagedThreadId;
+            int calls = 0, active = 0, maximumActive = 0;
+            using var service = Create(manager, store, settings, image =>
+            {
+                Assert.NotEqual(uiThread, Environment.CurrentManagedThreadId);
+                Assert.True(image.IsFrozen);
+                int parallel = Interlocked.Increment(ref active);
+                maximumActive = Math.Max(maximumActive, parallel);
+                try
+                {
+                    if (Interlocked.Increment(ref calls) == 1)
+                    {
+                        firstEntered.Set();
+                        Assert.True(firstRelease.Wait(TimeSpan.FromSeconds(10)));
+                    }
+                    else
+                    {
+                        secondEntered.Set();
+                        Assert.True(secondRelease.Wait(TimeSpan.FromSeconds(10)));
+                    }
+                    return ImageCodec.EncodePng(image);
+                }
+                finally { Interlocked.Decrement(ref active); }
+            });
+            try
+            {
+                Wait(service.RestoreAsync());
+                PinWindow pin = manager.PinImage(Image());
+                Task first = service.FlushDebounceForTest();
+                Assert.True(firstEntered.Wait(TimeSpan.FromSeconds(10)));
+                pin.State.SetZoom(2);
+                service.ScheduleSave();
+                Task latest = service.FlushDebounceForTest();
+                Assert.False(secondEntered.IsSet);
+                firstRelease.Set();
+                Assert.True(secondEntered.Wait(TimeSpan.FromSeconds(10)));
+                Assert.True(first.IsCompleted);
+                Assert.False(File.Exists(Path.Combine(workspace.Paths.PinSessionRoot, "session.json")));
+                secondRelease.Set();
+                Wait(latest);
+
+                Assert.Equal(1, maximumActive);
+                Assert.Equal(2, calls);
+                Assert.Equal(2, Assert.Single(store.Load()).Pin.Zoom);
+            }
+            finally
+            {
+                firstRelease.Set(); secondRelease.Set();
+                Wait(service.PendingWorkForTest);
+                manager.CloseAllForExit();
+            }
+        });
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void InFlightSave_CannotCommitAfterDisposeOrDisable(bool disable)
+    {
+        StaTestHost.Run(() =>
+        {
+            using var workspace = new TempWorkspace();
+            var settings = new PinSettings { RestoreOpenPinsOnLaunch = true };
+            var store = new PinSessionStore(workspace.Paths.PinSessionRoot, NullLogger.Instance);
+            var manager = new PinManager(() => settings, NullLogger.Instance);
+            using var entered = new ManualResetEventSlim();
+            using var release = new ManualResetEventSlim();
+            using var service = new PinSessionService(manager, store, () => settings, Dispatcher.CurrentDispatcher, NullLogger.Instance,
+                image => { entered.Set(); Assert.True(release.Wait(TimeSpan.FromSeconds(10))); return ImageCodec.EncodePng(image); })
+                { SynchronousSaveTimeout = TimeSpan.FromMilliseconds(80) };
+            try
+            {
+                Wait(service.RestoreAsync());
+                manager.PinImage(Image());
+                _ = service.FlushDebounceForTest();
+                Assert.True(entered.Wait(TimeSpan.FromSeconds(10)));
+                if (disable)
+                {
+                    settings.RestoreOpenPinsOnLaunch = false;
+                    service.ApplySettings();
+                }
+                else service.Dispose();
+                release.Set();
+                Wait(service.PendingWorkForTest);
+
+                Assert.False(File.Exists(Path.Combine(workspace.Paths.PinSessionRoot, "session.json")));
+                Assert.False(Directory.Exists(workspace.Paths.PinSessionRoot)
+                    && Directory.GetFiles(workspace.Paths.PinSessionRoot).Length > 0);
+                if (disable) Assert.False(service.CleanupPendingForTest);
+            }
+            finally { release.Set(); Wait(service.PendingWorkForTest); manager.CloseAllForExit(); }
+        });
+    }
+
+    [Fact]
+    public void ExitSave_WaitsForInFlightWorkThenCommitsLatestStateWithoutDispatcherWork()
+    {
+        StaTestHost.Run(() =>
+        {
+            using var workspace = new TempWorkspace();
+            var settings = new PinSettings { RestoreOpenPinsOnLaunch = true };
+            var store = new PinSessionStore(workspace.Paths.PinSessionRoot, NullLogger.Instance);
+            var manager = new PinManager(() => settings, NullLogger.Instance);
+            using var entered = new ManualResetEventSlim();
+            using var release = new ManualResetEventSlim();
+            int calls = 0;
+            using var service = Create(manager, store, settings, image =>
+            {
+                if (Interlocked.Increment(ref calls) == 1)
+                {
+                    entered.Set();
+                    Assert.True(release.Wait(TimeSpan.FromSeconds(10)));
+                }
+                return ImageCodec.EncodePng(image);
+            });
+            try
+            {
+                Wait(service.RestoreAsync());
+                PinWindow pin = manager.PinImage(Image());
+                _ = service.FlushDebounceForTest();
+                Assert.True(entered.Wait(TimeSpan.FromSeconds(10)));
+                pin.State.SetZoom(2.5);
+                Task unblock = Task.Run(async () => { await Task.Delay(80); release.Set(); });
+
+                service.SaveNow();
+
+                unblock.GetAwaiter().GetResult();
+                Assert.True(service.PendingWorkForTest.IsCompleted);
+                Assert.Equal(2, calls);
+                Assert.Equal(2.5, Assert.Single(store.Load()).Pin.Zoom);
+            }
+            finally { release.Set(); Wait(service.PendingWorkForTest); manager.CloseAllForExit(); }
+        });
+    }
+
+    [Fact]
+    public void ExitSave_TimeoutInvalidatesBothQueuedAndInFlightWrites()
+    {
+        StaTestHost.Run(() =>
+        {
+            using var workspace = new TempWorkspace();
+            var settings = new PinSettings { RestoreOpenPinsOnLaunch = true };
+            var store = new PinSessionStore(workspace.Paths.PinSessionRoot, NullLogger.Instance);
+            var manager = new PinManager(() => settings, NullLogger.Instance);
+            using var entered = new ManualResetEventSlim();
+            using var release = new ManualResetEventSlim();
+            int calls = 0;
+            using var service = new PinSessionService(manager, store, () => settings, Dispatcher.CurrentDispatcher, NullLogger.Instance,
+                image =>
+                {
+                    if (Interlocked.Increment(ref calls) > 1)
+                    {
+                        entered.Set();
+                        Assert.True(release.Wait(TimeSpan.FromSeconds(10)));
+                    }
+                    return ImageCodec.EncodePng(image);
+                });
+            try
+            {
+                Wait(service.RestoreAsync());
+                manager.PinRenderedText(Image(), "previous", false);
+                service.SaveNow();
+                PinSessionPin original = Assert.Single(store.Load()).Pin;
+                manager.PinRenderedText(Image(), "new", false);
+                _ = service.FlushDebounceForTest();
+                Assert.True(entered.Wait(TimeSpan.FromSeconds(10)));
+                service.SynchronousSaveTimeout = TimeSpan.FromMilliseconds(100);
+                var elapsed = Stopwatch.StartNew();
+
+                service.SaveNow();
+
+                Assert.InRange(elapsed.Elapsed, TimeSpan.FromMilliseconds(50), TimeSpan.FromSeconds(2));
+                release.Set();
+                Wait(service.PendingWorkForTest);
+                Assert.Equal(original, Assert.Single(store.Load()).Pin);
+                Assert.Equal(2, calls);
+            }
+            finally { release.Set(); Wait(service.PendingWorkForTest); manager.CloseAllForExit(); }
+        });
+    }
+
+    [Fact]
+    public void Dispose_AfterManifestTempFlush_PreservesPreviousSessionAndRemovesUncommittedPng()
+    {
+        StaTestHost.Run(() =>
+        {
+            using var workspace = new TempWorkspace();
+            var settings = new PinSettings { RestoreOpenPinsOnLaunch = true };
+            var store = new PinSessionStore(workspace.Paths.PinSessionRoot, NullLogger.Instance);
+            var manager = new PinManager(() => settings, NullLogger.Instance);
+            using var entered = new ManualResetEventSlim();
+            using var release = new ManualResetEventSlim();
+            using var service = Create(manager, store, settings);
+            try
+            {
+                Wait(service.RestoreAsync());
+                manager.PinRenderedText(Image(), "previous", false);
+                service.SaveNow();
+                PinSessionPin original = Assert.Single(store.Load()).Pin;
+                string manifestPath = Path.Combine(workspace.Paths.PinSessionRoot, "session.json");
+                byte[] originalManifest = File.ReadAllBytes(manifestPath);
+                store.BeforeManifestCommitForTest = () =>
+                {
+                    entered.Set();
+                    Assert.True(release.Wait(TimeSpan.FromSeconds(10)));
+                };
+                manager.PinRenderedText(Image(), "uncommitted", false);
+                _ = service.FlushDebounceForTest();
+                Assert.True(entered.Wait(TimeSpan.FromSeconds(10)));
+
+                service.Dispose();
+                release.Set();
+                Wait(service.PendingWorkForTest);
+
+                Assert.Equal(originalManifest, File.ReadAllBytes(manifestPath));
+                Assert.Equal(original, Assert.Single(store.Load()).Pin);
+                Assert.Equal($"{original.Id:N}.png", Path.GetFileName(Assert.Single(
+                    Directory.GetFiles(workspace.Paths.PinSessionRoot, "*.png"))));
+                Assert.Single(Directory.GetFiles(workspace.Paths.PinSessionRoot), path => path != manifestPath);
+            }
+            finally
+            {
+                release.Set();
+                Wait(service.PendingWorkForTest);
+                store.BeforeManifestCommitForTest = null;
+                manager.CloseAllForExit();
+            }
+        });
+    }
+
+    private static void AssertIdentityMetadataOnly(PinSessionService service)
+    {
+        Assert.NotEmpty(service.ContentIdentitiesForTest);
+        Assert.All(service.ContentIdentitiesForTest, identity =>
+        {
+            FieldInfo[] fields = identity.GetType().GetFields(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+            Assert.All(fields, field => Assert.True(field.FieldType == typeof(Guid) || field.FieldType == typeof(long),
+                $"Identity retained {field.FieldType}: only its identifier and encoded length belong here."));
+            Assert.DoesNotContain(fields, field => field.GetValue(identity) is byte[]);
+        });
+    }
+
+    [Fact]
+    public void Save_RepairsAnExistingCorruptPngFromTheLiveFrozenContent()
+    {
+        StaTestHost.Run(() =>
+        {
+            using var workspace = new TempWorkspace();
+            var settings = new PinSettings { RestoreOpenPinsOnLaunch = true };
+            var store = new PinSessionStore(workspace.Paths.PinSessionRoot, NullLogger.Instance);
+            var manager = new PinManager(() => settings, NullLogger.Instance);
+            int encodes = 0;
+            using var service = Create(manager, store, settings, image =>
+            {
+                Interlocked.Increment(ref encodes);
+                return ImageCodec.EncodePng(image);
+            });
+            try
+            {
+                Wait(service.RestoreAsync());
+                manager.PinRenderedText(Image(), "retained live source", false);
+                service.SaveNow();
+                PinSessionPin original = Assert.Single(store.Load()).Pin;
+                string path = Path.Combine(workspace.Paths.PinSessionRoot, $"{original.Id:N}.png");
+                File.WriteAllText(path, "structurally corrupt PNG");
+
+                service.SaveNow();
+
+                PinSessionSnapshot repaired = Assert.Single(store.Load());
+                Assert.Equal(original, repaired.Pin);
+                Assert.NotNull(ImageCodec.TryDecodePng(repaired.PngBytes!));
+                Assert.Equal(2, encodes);
+            }
+            finally { manager.CloseAllForExit(); }
+        });
+    }
+
+    private static void PumpUntil(Func<bool> completed)
+    {
+        var limit = Stopwatch.StartNew();
+        while (!completed() && limit.Elapsed < TimeSpan.FromSeconds(5)) Pump(TimeSpan.FromMilliseconds(100));
+        Assert.True(completed(), "Pending pin-session work did not complete.");
     }
 
     private static PinSessionService Create(PinManager manager, PinSessionStore store, PinSettings settings,
