@@ -66,6 +66,12 @@ public sealed class AppSettings : IJsonOnDeserializing
 /// </remarks>
 public sealed class HotkeySettings
 {
+    /// <summary>Claims assigned core chords even when another program registered them first.</summary>
+    public bool ForceCoreShortcuts { get; set; }
+
+    /// <summary>The one-time core-shortcut question was answered; not edited in Settings.</summary>
+    public bool CoreShortcutsAsked { get; set; }
+
     public Hotkey ScrollingCapture { get; set; } = Hotkey.None;
     public Hotkey DelayedCapture { get; set; } = Hotkey.None;
     /// <summary>

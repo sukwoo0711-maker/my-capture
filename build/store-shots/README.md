@@ -1,6 +1,8 @@
 # 스토어 스크린샷 합성
 
-MyCapture의 실제 창 레이어를 2560×1440 스토어 이미지 9장으로 합성합니다. `compose.py`는 앱 실행 없이 `scenes.json`의 제목·자르기·배치를 적용합니다. 2026-10-20에 4.2.1 한국어 레이어로 두 언어 시안을 렌더해 배치와 검색 카드 가독성을 확인했습니다. 같은 입력이면 같은 바이트의 PNG가 나오도록 ICC 프로필의 생성 시각을 고정합니다. 최종 이미지는 4.4.0 렌더가 나오면 아래 명령으로 다시 만듭니다.
+MyCapture의 실제 창 레이어를 2560×1440 스토어 이미지 9장으로 합성합니다. `compose.py`는 앱 실행 없이 `scenes.json`의 제목·자르기·배치를 적용합니다. 같은 입력이면 같은 바이트의 PNG가 나오도록 ICC 프로필의 생성 시각을 고정합니다.
+
+2026-10-20 장면을 핀 중심으로 바꿨습니다. 순서는 엑셀 레지스터 표 핀과 코드, `#define` 코드 핀 원문 붙여넣기, 뒤 창 클릭 허용, 캡처 후 카드에서 P, 이미지 핀 글자 복사, 핀 숨기기·다시 열기, 라이브러리, 공유 전 주석·가리기, 비교 카드입니다. 핀을 띄우는 키는 F3 하나로 보여 줍니다. 레이어는 `--selftest-store-layers`가 언어별로 만들고, 2026-10-20 렌더는 F3·Shift+F3이 새 설치 기본값인 4.5.0 핀 흐름 브랜치(`feat/pin-core-flow-450`) 위에서 했습니다. 결과는 `artifacts/store/screenshots/4.5.0-pin/{ko,en}`에 둡니다. 4.4.0 제출(제출 13)에 쓴 이전 장면 구성은 이 문서의 git 기록과 `artifacts/store/screenshots/4.4.0`에 있습니다.
 
 ## 입력과 실행
 
@@ -8,7 +10,7 @@ Python 3.12, Pillow와 다음 가변 글꼴이 필요합니다.
 
 - 한국어: `C:/Windows/Fonts/NotoSansKR-VF.ttf`
 - 영어: `C:/Windows/Fonts/SegUIVar.ttf`
-- 현재 레이어: `C:/GitRepositories/my-capture/artifacts/promo-2026-10-18/source/assets/ui/`
+- 레이어: `--selftest-store-layers`의 언어별 출력 폴더(아래 '레이어 만들기')
 - 검색 카드 근거: `C:/GitRepositories/my-capture/artifacts/strict-review-2026-10-20/evidence/store-search-tall.png`
 
 레이어 폴더의 `manifest.json`에는 `files` 배열을 둡니다. `path`는 해당 폴더 안의 슬래시 구분 상대 경로, `width`·`height`는 실제 PNG 픽셀 크기, `renderScale`은 원본의 논리 픽셀당 렌더 픽셀 수입니다. 모든 사용 파일에 네 필드를 기록합니다. `generator`에는 버전과 언어를 함께 기록하는 것을 권장합니다.
@@ -23,11 +25,17 @@ Python 3.12, Pillow와 다음 가변 글꼴이 필요합니다.
 }
 ```
 
-다음 명령은 절대 경로를 사용합니다. 최종 렌더에서는 `--layers`를 해당 언어의 4.4.0 레이어 폴더로 바꿉니다.
+레이어 만들기: 4.5.0 핀 흐름 브랜치를 분리 worktree로 풀고 이 브랜치의 `src/MyCapture.App/Diagnostics` 변경을 얹어 Release로 빌드한 뒤, 언어마다 격리 경로로 실행합니다. `MYCAPTURE_DATA_ROOT`, `TMP`, `TEMP`는 짧은 역슬래시 경로로 줍니다. 자체 검사는 시스템 클립보드, 사용자 설정·라이브러리, HKCU Run을 건드리지 않고, 끝나면 `_fixtures-*`를 지웁니다.
 
 ```powershell
-python -X utf8 -I "C:/GitRepositories/my-capture-440/store-shots/build/store-shots/compose.py" --layers "C:/GitRepositories/my-capture/artifacts/promo-2026-10-18/source/assets/ui" --lang ko --out "C:/GitRepositories/my-capture-440/store-shots/artifacts/store-shots/proto/ko" --scenes "C:/GitRepositories/my-capture-440/store-shots/build/store-shots/scenes.json"
-python -X utf8 -I "C:/GitRepositories/my-capture-440/store-shots/build/store-shots/compose.py" --layers "C:/GitRepositories/my-capture/artifacts/promo-2026-10-18/source/assets/ui" --lang en --out "C:/GitRepositories/my-capture-440/store-shots/artifacts/store-shots/proto/en" --scenes "C:/GitRepositories/my-capture-440/store-shots/build/store-shots/scenes.json"
+$env:TMP='C:\Users\<user>\AppData\Local\Temp\pl5\ko\t'; $env:TEMP=$env:TMP; $env:MYCAPTURE_DATA_ROOT='C:\Users\<user>\AppData\Local\Temp\pl5\ko\d'
+MyCapture.exe --selftest-store-layers C:\GitRepositories\my-capture\artifacts\store\layers\4.5.0-pin\ko ko
+```
+
+합성은 다음 명령입니다. 영어는 경로의 `ko`와 `--lang`을 `en`으로 바꿉니다.
+
+```powershell
+python -X utf8 -I build/store-shots/compose.py --layers "C:/GitRepositories/my-capture/artifacts/store/layers/4.5.0-pin/ko" --lang ko --out "C:/GitRepositories/my-capture/artifacts/store/screenshots/4.5.0-pin/ko" --scenes "<worktree>/build/store-shots/scenes.json"
 ```
 
 전체 실행은 `01.png`부터 `09.png`, `contact-sheet.png`, `search-card.png`를 만듭니다. 본 이미지는 RGB·sRGB ICC·알파 없는 최적화 PNG입니다. 연락판은 장당 640×360, 3열로 배치합니다. `search-card.png`에는 현재 등록 이미지, 새 장면 1, 경쟁 앱 두 장을 원본 카드 배율로 나란히 배치합니다. 글꼴 축, 실제 제목 높이, 줄바꿈, 배율과 출력 경로는 표준 출력의 JSON으로 보고합니다.
@@ -36,7 +44,7 @@ python -X utf8 -I "C:/GitRepositories/my-capture-440/store-shots/build/store-sho
 
 ## 좌표와 시각 규칙
 
-`crop`은 원본 레이어 픽셀의 `[left, top, right, bottom]`이며 오른쪽·아래 경계는 포함하지 않습니다. `placement`는 최종 캔버스의 `[x, y]`입니다. `scale`은 **원본 픽셀에 곱하는 값**이며, 최종 DIP 배율은 `scale × renderScale`입니다. `z`가 작은 레이어부터 합성합니다. 창 아래나 오른쪽이 캔버스 밖으로 이어지는 배치는 의도된 자르기입니다. 상세 값과 최종 원본 조건은 `scenes.json`을 기준으로 합니다.
+`crop`은 원본 레이어 픽셀의 `[left, top, right, bottom]`이며 오른쪽·아래 경계는 포함하지 않습니다. `crop`을 생략하면 레이어 전체를 씁니다. 메뉴와 핀처럼 언어마다 크기가 다른 레이어에 씁니다. manifest의 `windowOpacity`는 제품 창의 투명도이며, 합성기가 레이어와 그림자에 그 값을 곱합니다(`RenderTargetBitmap`은 창 투명도를 담지 않기 때문입니다). `placement`는 최종 캔버스의 `[x, y]`입니다. `scale`은 **원본 픽셀에 곱하는 값**이며, 최종 DIP 배율은 `scale × renderScale`입니다. `z`가 작은 레이어부터 합성합니다. 창 아래나 오른쪽이 캔버스 밖으로 이어지는 배치는 의도된 자르기입니다. 상세 값과 최종 원본 조건은 `scenes.json`을 기준으로 합니다.
 
 모든 시각 상수는 `compose.py` 상단의 `STYLE`에 둡니다.
 
@@ -50,27 +58,35 @@ python -X utf8 -I "C:/GitRepositories/my-capture-440/store-shots/build/store-sho
 
 글꼴 파일의 OS/2 표에 기록된 명목 x-height를 132px에 적용하면 Noto Sans KR은 `132 × 543/1000 = 71.676px`, 카드에서 약 **8.93px**입니다. Segoe UI Variable은 `132 × 1024/2048 = 66px`, 카드에서 약 **8.22px**입니다. 이 값은 글꼴 표의 비율로 계산한 명목값입니다. 실제 렌더에서 잰 한국어 제목의 x 높이는 74px, 검색 카드에서 9.2px이고 한글 높이는 카드에서 15.3px입니다. compose.py는 실행할 때마다 이 값을 다시 재고 7px 미만이면 중단합니다.
 
-현재 입력은 한국어 4.2.1 사무 예제입니다. `--lang en`도 같은 한국어 창 위에 영어 제목만 배치하는 시안입니다. 원본 영상 편집기의 보라색 트랙과 여러 빨강 상태·주석도 그대로 남습니다. 최종 흑연색·빨강 규칙과 영어 제품 화면은 4.4.0에서 실제로 렌더한 레이어로 충족해야 합니다.
-
 ## 장면
 
-아래 배율은 원본 픽셀 배율 → DIP 배율 순서입니다. 코드 배경은 2×, 제품 창은 3× 입력을 기준으로 합니다. 14 DIP 본문은 2.40배에서 33.6px, 2.25배에서 31.5px, 2.10배에서 29.4px, 2.01배에서 28.14px가 됩니다. 보조 맥락인 코드 배경은 1.60배이며 14 DIP 기준 22.4px입니다. 실제 코드 예제에는 더 큰 글씨를 사용하고 원본 글자 크기와 가독성을 함께 검수합니다.
+아래 배율은 원본 픽셀 배율 → DIP 배율 순서입니다. 에디터·터미널·문서 견본은 2×, 제품 창은 3× 입력입니다. 핀 장면은 실제 배율 200% 화면처럼 DIP 배율 2.0으로 맞춥니다. 텍스트·코드 핀은 제품이 96 DPI로 그린 그림이라 2.0배에서 조금 부드럽게 보이며, 실제 200% 화면에서 보이는 모습과 같습니다.
 
-| 번호 | 한국어 제목 / 영어 제목 | 레이어별 배율 |
-| --- | --- | --- |
-| 1 | 개인정보를 한 번에 가립니다 / Redact personal data in one step | `redact/03.png` 0.75 → 2.25 |
-| 2 | 코드 옆에 참고 화면을 띄웁니다 / Pin references above your code | `samples/code.png` 0.80 → 1.60, `pins/code.png` 0.80 → 2.40 |
-| 3 | 오류 화면에 바로 표시합니다 / Mark up a bug screenshot | `annotation/06-step2.png` 0.70 → 2.10 |
-| 4 | 캡처 카드에서 작업을 고릅니다 / Choose an action on the card | `samples/code.png` 0.80 → 1.60, `quick-access/dashboard.png` 1.00 → 3.00 |
-| 5 | 이미지 속 글자를 복사합니다 / Copy text out of an image | `ocr/result-source.png` 0.68 → 2.04 |
-| 6 | 지난 캡처를 글자로 찾습니다 / Find past captures by their text | `library/midnight-search.png` 0.75 → 2.25 |
-| 7 | 녹화하고 필요한 구간만 남깁니다 / Record a region and trim it | `video/editor.png` 0.75 → 2.25 |
-| 8 | GIF 크기를 미리 확인합니다 / Check GIF size before export | `video/editor.png` 0.42 → 1.26, `video/gif-export-dialog.png` 0.56 → 1.68 |
-| 9 | Windows 캡처 도구에서 옮겨 오면 / From Windows Snipping Tool | 창 없이 2열 문자만 배치합니다. |
+| 번호 | 한국어 제목 / 영어 제목 | 보조 문구(ko) | 레이어별 배율 |
+| --- | --- | --- | --- |
+| 1 | 사양 표를 띄워 두고 코딩합니다 / Code with the spec table in view | 엑셀에서 Ctrl+C → F3 · Ctrl+휠: 투명도 | `samples/editor-uart.png` 1.00 → 2.0, `pins/table.png` 0.667 → 2.0(창 투명도 0.88) |
+| 2 | 구문을 원문 그대로 붙여 넣습니다 / Paste the snippet back as text | 에디터에서 Ctrl+C → F3 · 핀에서 Ctrl+더블클릭 → Ctrl+V | `samples/editor-paste.png` 1.00 → 2.0, `pins/code-define.png` 0.667 → 2.0 |
+| 3 | 핀 아래 창을 그대로 씁니다 / Click through to the window below | 핀 오른쪽 클릭 → 뒤 창 클릭 허용 | `samples/terminal.png` 1.00 → 2.0, `pins/table-clickthrough.png` 0.667 → 2.0(0.72) |
+| 4 | 캡처한 화면도 F3으로 띄웁니다 / Capture, then press F3 to pin | Ctrl+Shift+C로 캡처하면 클립보드에 복사 → F3 | `samples/editor-uart.png` 1.00 → 2.0, `pins/api-doc.png` 0.60 → 1.8 |
+| 5 | 이미지 핀의 글자도 복사합니다 / Copy text from an image pin | 이미지 핀에서 Ctrl+더블클릭 · 한국어·영어 인식 | `samples/editor-ocr.png` 1.00 → 2.0, `pins/datasheet.png` 0.667 → 2.0 |
+| 6 | 필요할 때만 꺼내 봅니다 / Hide pins and bring them back | Shift+F3: 핀 모두 숨기기·보이기 · 트레이 메뉴: 닫은 핀 다시 열기 | `samples/editor-uart.png` 1.00 → 2.0, `film/table-plain.png`·`film/code-plain.png`·`menus/tray-pins.png` 0.667 → 2.0 |
+| 7 | 지난 캡처를 글자로 찾습니다 / Find past captures by their text | 없음 | `library/midnight-search.png` 0.75 → 2.25 |
+| 8 | 공유 전에 주석과 가리기 / Mark up and redact before sharing | Ctrl+Shift+R: 개인정보 가리기 | `share/redact-annotated.png` 0.55 → 1.65 |
+| 9 | Windows 캡처 도구에 더해지는 것 / What it adds to Snipping Tool | 없음 | 창 없이 2열 문자만 배치합니다. |
 
-장면 9의 왼쪽(그대로)에는 영역·창·전체 화면 캡처, 클립보드 복사, 이미지 속 글자 복사, 영역 녹화를 넣습니다. 오른쪽(더해지는 것)에는 핀, 스크롤 캡처, 블러·모자이크·단계 번호, 창 제목과 글자로 찾는 라이브러리, 카드번호·토큰까지 찾는 가리기를 넣습니다. 오른쪽 다섯 항목은 Microsoft의 [Snipping Tool 기능 안내](https://support.microsoft.com/en-us/windows/apps/use-snipping-tool-to-capture-screenshots)에 없고(빠른 가리기는 이메일·전화번호만 안내), 스크롤 캡처는 Microsoft의 [2026-02-26 설명](https://www.microsoft.com/en-us/windows/learning-center/how-to-use-snipping-tool-on-windows-screenshots-shortcuts-and-screen-recordings)이 기본 제공하지 않는다고 밝힙니다. 제출 직전 기능 안내를 다시 열어 확인합니다. 표 복사는 [공식 Copy as table 발표](https://blogs.windows.com/windows-insider/2024/10/18/announcing-windows-11-insider-preview-build-22635-4371-beta-channel/)가 있어 차별점에서 제외했습니다. 출처·보류 사유는 `claim_review`에 보관하며 렌더에는 두 열의 본문만 넣습니다.
+장면 9의 왼쪽(그대로)에는 영역·창·전체 화면 캡처, 클립보드 복사, 이미지 속 글자 복사, 영역 녹화를 넣습니다. 오른쪽(더해지는 것)에는 엑셀 모양 그대로 띄우는 표 핀, 원문을 다시 복사하는 표·코드 핀, 반투명·뒤 창 클릭 허용 핀, 닫은 핀 다시 열기, 스크롤 캡처를 넣습니다. Microsoft의 [Snipping Tool 기능 안내](https://support.microsoft.com/en-us/windows/apps/use-snipping-tool-to-capture-screenshots)에는 화면 위에 띄우는 핀 자체가 없고(2026-10-20 다시 확인, 'Pin to taskbar'는 앱 고정), 스크롤 캡처는 Microsoft의 [2026-02-26 설명](https://www.microsoft.com/en-us/windows/learning-center/how-to-use-snipping-tool-on-windows-screenshots-shortcuts-and-screen-recordings)이 기본 제공하지 않는다고 밝힙니다. 제출 직전 기능 안내를 다시 열어 확인합니다. 출처·보류 사유는 `claim_review`에 보관하며 렌더에는 두 열의 본문만 넣습니다.
 
-## 4.4.0 렌더 요구 사항
+## 핀 장면 레이어
+
+`StoreScreenshotSelfTest.PinLayers.cs`가 기존 10장에 더해 20장을 만듭니다(합계 30). 견본(에디터·터미널·API 문서·시트)만 진단 코드가 그리고, 핀·카드·메뉴·편집기는 제품 창을 그대로 렌더합니다.
+
+- 표 핀: 엑셀처럼 그림(PNG)·탭 구분 텍스트·HTML 표를 담은 메모리 안 `DataObject`를 `ClipboardImageReader.CaptureFrom`과 `CompletePinAttemptAsync`에 넣어 `PinContentKind.Table`을 만듭니다. 핀 그림은 넣은 PNG와 픽셀이 같아야 합니다.
+- 코드 핀: 에디터처럼 색을 담은 CF_HTML과 텍스트를 같은 경로에 넣어 코드 렌더러의 `PinContentKind.Text`를 만듭니다. `Ctrl`+더블클릭은 기록만 하는 처리기로 받고 제품 안내 `텍스트 복사됨`을 띄웁니다.
+- 이미지 핀 글자 복사: 실제 `PinTextCopyService.CopyAsync`에 고정 OCR 결과를 넣고, 복사한 문자열로 `samples/editor-ocr.png`의 주석을 그립니다.
+- 클릭 허용·메뉴: 실제 `ApplyClickThrough`, 핀의 `ContextMenu`, `TrayMenuLayout.Build`(새 설치 단축키, 문의하기 포함)를 렌더합니다. 해제 안내는 새 설치 단축키에 따라 정해집니다(4.5.0: `Shift+F3 두 번`).
+- 영상용(`film/`): 안내 없는 핀, 투명도 60% 안내, 붙여 넣기 전 에디터, 시트, 핀을 숨긴 트레이 메뉴.
+
+## 4.4.0 렌더 요구 사항(제출 13의 이전 장면)
 
 `--selftest-store-layers <outputDirectory> [ko|en]`은 아래 경로의 원본 레이어 10장과 `manifest.json`, `store-layers-report.txt`를 생성합니다. 기존 `--selftest-store-shots`는 그대로 유지합니다. 실행 전 `MYCAPTURE_DATA_ROOT`, `TMP`, `TEMP`를 모두 작업 트리의 `artifacts\t` 절대 경로로 지정합니다. 예: `MyCapture.exe --selftest-store-layers C:\GitRepositories\my-capture-440\store-scenes\artifacts\layers\ko ko`. 영어는 출력 마지막 폴더와 언어를 `en`으로 바꿉니다.
 
@@ -95,7 +111,7 @@ python -X utf8 -I "C:/GitRepositories/my-capture-440/store-shots/build/store-sho
 ## 최종 검수
 
 - [ ] 언어별 manifest의 경로·실제 크기·renderScale과 위 창 크기를 대조합니다. 모든 crop 안에 필요한 기능과 개발 예제가 들어가는지 확인합니다.
-- [ ] 실제 4.4.0 ko/en 레이어로 전체 명령을 실행하고, 종료 코드 0과 언어별 본 이미지 9장·연락판·검색 카드를 확인합니다.
+- [ ] 4.5.0 핀 흐름 빌드의 ko/en 레이어로 전체 명령을 실행하고, 종료 코드 0과 언어별 본 이미지 9장·연락판·검색 카드를 확인합니다.
 - [ ] 표준 출력의 제목 높이와 카드 환산값을 기록하고 7px 기준, 제목 잘림·줄바꿈·보조 문구 간격을 확인합니다.
 - [ ] 검색 카드의 현재 이미지와 새 시안을 나란히 열어 제목 가독성을 확인합니다. 연락판과 개별 2560×1440 이미지를 열어 창 크기·그림자·투명 모서리·본문 가독성·필수 정보의 자르기를 확인합니다.
 - [ ] 영어 창의 실제 번역, 개인정보 가리기 결과, 핀·카드 단축키, OCR 일치, 라이브러리 검색 근거, 시간 지정 텍스트, GIF 크기 산정을 확인합니다.

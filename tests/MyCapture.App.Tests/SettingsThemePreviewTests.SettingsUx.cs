@@ -397,6 +397,17 @@ public sealed partial class SettingsThemePreviewTests
                     var hints = Assert.IsType<CheckBox>(window.FindName("ShowShortcutHintsCheck"));
                     Assert.Equal(expectedHints, hints.IsChecked);
                     Assert.True(hints.IsVisible);
+                    var force = Assert.IsType<CheckBox>(window.FindName("ForceCoreShortcutsCheck"));
+                    Assert.True(force.IsVisible);
+                    Assert.Same(hints.Style, force.Style);
+                    Assert.Equal(UiText.Get("CoreShortcuts.Force"), AutomationProperties.GetName(force));
+                    Assert.Equal(UiText.Get("CoreShortcuts.ForceDescription"), AutomationProperties.GetHelpText(force));
+                    string[] assigned = recorders.Select(recorder => recorder.Text).ToArray();
+                    force.IsChecked = true;
+                    Assert.True(Draft(window).ForceCoreShortcuts);
+                    Assert.Equal(assigned, recorders.Select(recorder => recorder.Text));
+                    force.IsChecked = false;
+                    Assert.False(Draft(window).ForceCoreShortcuts);
                     SaveSettingsUxEvidence(RenderEditorWindow(window), $"settings-shortcuts-{name}-install-glass-after.png");
                     SettingsWindow.CancelCommand.Execute(null, window);
                 }

@@ -1,9 +1,9 @@
 {
   "version": 1,
   "prototype": {
-    "version": "4.2.1",
-    "language": "ko",
-    "note": "두 언어 모두 한국어 사무 예제 레이어를 사용하는 배치 시안입니다. 실제 창의 색·문구·픽셀은 바꾸지 않습니다. 최종 개발 예제와 영어 창은 4.4.0 렌더로 교체합니다."
+    "version": "4.5.0",
+    "language": "ko/en",
+    "note": "2026-10-20 핀 중심 9장. 레이어는 4.5.0 핀 흐름 브랜치(feat/pin-core-flow-450, F3·Shift+F3 새 설치 기본값) 위에서 --selftest-store-layers로 언어별로 렌더합니다."
   },
   "search_card": {
     "evidence_path": "C:/GitRepositories/my-capture/artifacts/strict-review-2026-10-20/evidence/store-search-tall.png",
@@ -32,167 +32,248 @@
   "scenes": [
     {
       "id": 1,
-      "slug": "redact",
-      "title_ko": "개인정보를 한 번에 가립니다",
-      "title_en": "Redact personal data in one step",
-      "subline_ko": "Ctrl+Shift+R",
-      "subline_en": "Ctrl+Shift+R",
+      "slug": "spec-table-pin",
+      "title_ko": "사양 표를 띄워 두고 코딩합니다",
+      "title_en": "Code with the spec table in view",
+      "subline_ko": "엑셀에서 Ctrl+C → F3 · Ctrl+휠: 투명도",
+      "subline_en": "Ctrl+C in Excel, then F3 · Ctrl+wheel: opacity",
       "layers": [
         {
-          "path": "redact/03.png",
+          "path": "samples/editor-uart.png",
           "crop": [
             0,
             0,
-            3000,
-            1800
+            2400,
+            1060
           ],
           "placement": [
             160,
-            400
+            380
           ],
-          "scale": 0.75,
+          "scale": 1.0,
           "z": 0,
-          "final": "AnnotationEditorWindow의 개발 오류 보고서. user@example.com, ghp_ 접두사와 36자 합성 토큰, 테스트 카드 4111 1111 1111 1111의 세 값을 실제 개인정보 가리기 결과로 덮습니다. 상단 도구막대와 세 가림막을 crop 안에 둡니다."
+          "final": "합성 에디터 uart_init.c(1440×900 DIP, 2×). #define 레지스터 맵과 uart_init 함수, 방금 입력한 UART_CR1 줄에 커서."
+        },
+        {
+          "path": "pins/table.png",
+          "placement": [
+            980,
+            1000
+          ],
+          "scale": 0.666667,
+          "z": 1,
+          "final": "엑셀처럼 그림·탭 구분 텍스트·HTML 표를 담은 메모리 안 클립보드 데이터를 제품의 클립보드 읽기 경로에 넣어 만든 표 핀(PinContentKind.Table). 창 투명도 0.88은 manifest의 windowOpacity로 적용합니다."
         }
       ],
-      "final": "같은 1240×780 DIP 편집 창에서 redact/00-before.png와 redact/03.png를 3×로 각각 렌더합니다. 전자는 가리기 전 근거, 후자는 합성 입력입니다. 본문 제목은 ko '로그 업로드 오류', en 'Log upload failure'; 민감 값 세 줄은 원본 픽셀 y=650..1280에 배치합니다. 실제 사용자 로그·토큰·카드 데이터는 쓰지 않습니다."
+      "final": "에디터와 표 핀의 DIP 배율을 2.0으로 맞춥니다. 핀은 함수 본문 줄 끝과 겹쳐 반투명이 보이게 두고, 방금 입력한 UART_CR1 줄은 가리지 않습니다. 클립보드 핀 F3은 4.5.0 새 설치 기본값입니다."
     },
     {
       "id": 2,
-      "slug": "pin",
-      "title_ko": "코드 옆에 참고 화면을 띄웁니다",
-      "title_en": "Pin references above your code",
+      "slug": "snippet-pin-paste",
+      "title_ko": "구문을 원문 그대로 붙여 넣습니다",
+      "title_en": "Paste the snippet back as text",
+      "subline_ko": "에디터에서 Ctrl+C → F3 · 핀에서 Ctrl+더블클릭 → Ctrl+V",
+      "subline_en": "Ctrl+C, then F3 · Ctrl+double-click the pin, then Ctrl+V",
       "layers": [
         {
-          "path": "samples/code.png",
+          "path": "samples/editor-paste.png",
           "crop": [
             0,
             0,
-            2880,
-            1800
+            2400,
+            1060
           ],
           "placement": [
             160,
-            410
+            380
           ],
-          "scale": 0.8,
+          "scale": 1.0,
           "z": 0,
-          "final": "1440×900 논리 픽셀의 합성 코드 창을 2× PNG로 렌더합니다. CaptureService.cs의 SaveAsync 메서드와 await library.AddAsync(capture) 호출을 표시합니다. 중성색 편집기이며 코드는 읽을 수 있도록 큰 글씨로 배치합니다."
+          "final": "합성 에디터 spi_init.c. 4–8줄은 코드 핀의 원문과 같은 다섯 줄이고, 붙여 넣은 직후의 9줄에 커서."
         },
         {
-          "path": "pins/code.png",
-          "crop": [
-            0,
-            0,
-            1308,
-            552
-          ],
+          "path": "pins/code-define.png",
           "placement": [
             1500,
-            770
+            470
           ],
-          "scale": 0.8,
+          "scale": 0.666667,
           "z": 1,
-          "final": "PinWindow에 SaveAsync 서명과 반환 규약을 담은 참조 캡처를 띄운 436×184 DIP, 3× 투명 레이어입니다. 창 밖 알파와 실제 모서리를 보존합니다. 코드 창의 편집 줄을 가리지 않도록 우측에 둡니다."
+          "final": "에디터처럼 색을 담은 CF_HTML과 텍스트를 제품의 클립보드 읽기 경로에 넣어 만든 코드 핀. Ctrl+더블클릭 뒤 원문 복사 결과 안내 '텍스트 복사됨'."
         }
       ],
-      "final": "편집 중인 코드와 다른 참조 내용의 실제 PinWindow를 각각 렌더합니다. 핀의 최상위 동작은 제품 검증에서 확인하며 합성 이미지 자체를 동작 증거로 쓰지 않습니다. 신규 설치에는 클립보드 핀 단축키가 지정되어 있지 않으므로 제목과 보조 문구에 키 이름을 쓰지 않습니다."
+      "final": "코드 핀은 제품이 96 DPI로 그린 그림이므로 2.0배에서 약간 부드럽게 보입니다. 실제 배율 200% 화면과 같습니다."
     },
     {
       "id": 3,
-      "slug": "annotate",
-      "title_ko": "오류 화면에 바로 표시합니다",
-      "title_en": "Mark up a bug screenshot",
+      "slug": "click-through",
+      "title_ko": "핀 아래 창을 그대로 씁니다",
+      "title_en": "Click through to the window below",
+      "subline_ko": "핀 오른쪽 클릭 → 뒤 창 클릭 허용",
+      "subline_en": "Right-click the pin → Click through to windows behind",
       "layers": [
         {
-          "path": "annotation/06-step2.png",
+          "path": "samples/terminal.png",
           "crop": [
             0,
-            400,
-            3000,
-            2040
+            0,
+            2400,
+            1060
           ],
           "placement": [
             160,
-            350
+            380
           ],
-          "scale": 0.7,
+          "scale": 1.0,
           "z": 0,
-          "final": "AnnotationEditorWindow의 합성 오류 대화상자 또는 실패 테스트 화면. 실제 편집기로 화살표, 단계 1·2, ko '재시도 후 발생' / en 'After retry' 텍스트를 추가합니다. 세 주석과 오류 메시지를 원본 x=500..2600, y=650..1800에 둡니다."
+          "final": "합성 터미널. 빌드 출력 뒤 flash 명령을 입력하는 중."
+        },
+        {
+          "path": "pins/table-clickthrough.png",
+          "placement": [
+            760,
+            560
+          ],
+          "scale": 0.666667,
+          "z": 1,
+          "final": "표 핀에 뒤 창 클릭 허용을 켠 직후. 제품 안내 '뒤 창 클릭 허용 켜짐 / 해제: Shift+F3 두 번'(4.5.0 새 설치). 창 투명도 0.72."
         }
       ],
-      "final": "1240×780 DIP, 3× 편집기 레이어입니다. Office 차트·형광펜 장식은 개발 예제로 교체합니다. 하나의 오류 지점을 중심으로 화살표와 단계 번호를 배치하며 합성기에서 새 주석을 그리지 않습니다."
+      "final": "핀이 입력 중인 명령 줄 끝과 겹쳐 그 아래 글자가 비치게 둡니다."
     },
     {
       "id": 4,
-      "slug": "quick-card",
-      "title_ko": "캡처 카드에서 작업을 고릅니다",
-      "title_en": "Choose an action on the card",
-      "subline_ko": "Alt+Q로 카드 선택 · E 편집 · P 핀 · S 저장 · T 텍스트 복사",
-      "subline_en": "Alt+Q to focus · E Edit · P Pin · S Save · T Copy text",
+      "slug": "capture-f3-pin",
+      "title_ko": "캡처한 화면도 F3으로 띄웁니다",
+      "title_en": "Capture, then press F3 to pin",
+      "subline_ko": "Ctrl+Shift+C로 캡처하면 클립보드에 복사 → F3",
+      "subline_en": "Ctrl+Shift+C copies the capture, then F3",
       "layers": [
         {
-          "path": "samples/code.png",
+          "path": "samples/editor-uart.png",
           "crop": [
             0,
             0,
-            2880,
-            1600
+            2400,
+            1060
           ],
           "placement": [
             160,
-            420
-          ],
-          "scale": 0.8,
-          "z": 0,
-          "final": "장면 2와 같은 합성 코드 창입니다. 방금 캡처한 함수와 파일명이 카드 썸네일 내용과 일치합니다."
-        },
-        {
-          "path": "quick-access/dashboard.png",
-          "crop": [
-            0,
-            0,
-            1032,
-            645
-          ],
-          "placement": [
-            1290,
-            620
+            380
           ],
           "scale": 1.0,
+          "z": 0,
+          "final": "장면 1과 같은 합성 에디터."
+        },
+        {
+          "path": "pins/api-doc.png",
+          "placement": [
+            1000,
+            820
+          ],
+          "scale": 0.6,
           "z": 1,
-          "final": "QuickAccessWindow의 344×215 DIP, 3× 투명 레이어입니다. 코드 캡처 썸네일과 C/E/P/S/T 동작을 실제 카드로 렌더합니다. 키보드 포커스 진입 상태를 명확히 표시합니다."
+          "final": "웹 API 문서의 제목·설명·매개변수 표를 캡처해 클립보드 이미지로 띄운 이미지 핀(200% 화면 캡처, 2×). 캡처는 새 설치에서 클립보드로 복사되므로 F3이 그대로 핀으로 띄웁니다."
         }
       ],
-      "final": "캡처 후 QuickAccessWindow의 키보드 활성 상태를 렌더합니다. 카드 클릭 또는 Alt+Q(ShortcutCatalog QuickAccess.Activate)로 포커스를 옮긴 상태를 렌더합니다. 4.4.0에서는 이미 클립보드에 복사된 상태라 C는 다시 복사입니다."
+      "final": "캡처 직후 카드의 P 대신 클립보드 핀 F3 경로를 보여 줍니다. 핀은 코드 오른쪽 아래에 두고 방금 입력한 줄을 가리지 않습니다."
     },
     {
       "id": 5,
-      "slug": "copy-text",
-      "title_ko": "이미지 속 글자를 복사합니다",
-      "title_en": "Copy text out of an image",
+      "slug": "image-pin-text",
+      "title_ko": "이미지 핀의 글자도 복사합니다",
+      "title_en": "Copy text from an image pin",
+      "subline_ko": "이미지 핀에서 Ctrl+더블클릭 · 한국어·영어 인식",
+      "subline_en": "Ctrl+double-click an image pin · Korean and English",
       "layers": [
         {
-          "path": "ocr/result-source.png",
+          "path": "samples/editor-ocr.png",
           "crop": [
             0,
-            300,
-            3300,
-            1920
+            0,
+            2400,
+            1060
           ],
           "placement": [
             160,
-            330
+            380
           ],
-          "scale": 0.68,
+          "scale": 1.0,
           "z": 0,
-          "final": "OcrResultWindow의 1100×640 DIP, 3× 레이어입니다. 왼쪽은 터미널 캡처, 오른쪽은 실제 인식 결과입니다. dotnet test, Failed: 1, Expected: 200, Actual: 500 같은 합성 줄을 사용하고 줄 단위 인식 위치를 입력 이미지와 맞춥니다. 하단 복사 버튼을 포함합니다."
+          "final": "합성 에디터 usart_timing.h. 주석 안의 글은 이미지 핀에서 복사한 글자 그대로."
+        },
+        {
+          "path": "pins/datasheet.png",
+          "placement": [
+            1380,
+            560
+          ],
+          "scale": 0.666667,
+          "z": 1,
+          "final": "데이터시트 일부를 캡처한 이미지 핀. Ctrl+더블클릭으로 제품의 PinTextCopyService가 고정 OCR 결과를 복사한 뒤의 안내 '텍스트 복사됨'."
         }
       ],
-      "final": "터미널 캡처와 인식 결과의 코드·숫자가 동일해야 합니다. 언어별 제목과 버튼은 실제 ko/en 리소스를 사용합니다. 합성기에서 결과 텍스트를 덧쓰지 않습니다."
+      "final": "주석의 글자와 핀의 표가 같은 내용이어야 합니다."
     },
     {
       "id": 6,
+      "slug": "hide-reopen",
+      "title_ko": "필요할 때만 꺼내 봅니다",
+      "title_en": "Hide pins and bring them back",
+      "subline_ko": "Shift+F3: 핀 모두 숨기기·보이기 · 트레이 메뉴: 닫은 핀 다시 열기",
+      "subline_en": "Shift+F3: hide or show all pins · Tray menu: Reopen closed pin",
+      "layers": [
+        {
+          "path": "samples/editor-uart.png",
+          "crop": [
+            0,
+            0,
+            2400,
+            1060
+          ],
+          "placement": [
+            160,
+            380
+          ],
+          "scale": 1.0,
+          "z": 0,
+          "final": "장면 1과 같은 합성 에디터."
+        },
+        {
+          "path": "film/table-plain.png",
+          "placement": [
+            900,
+            1010
+          ],
+          "scale": 0.666667,
+          "z": 1,
+          "final": "장면 1의 표 핀, 불투명."
+        },
+        {
+          "path": "film/code-plain.png",
+          "placement": [
+            1080,
+            470
+          ],
+          "scale": 0.666667,
+          "z": 2,
+          "final": "장면 2의 코드 핀, 안내 없음."
+        },
+        {
+          "path": "menus/tray-pins.png",
+          "placement": [
+            1960,
+            430
+          ],
+          "scale": 0.666667,
+          "z": 3,
+          "final": "실제 트레이 메뉴(4.5.0 새 설치 단축키 F3·Shift+F3). 핀 2개, 클릭 허용 핀 1개, 다시 열 수 있는 닫은 핀이 있는 상태."
+        }
+      ],
+      "final": "메뉴는 오른쪽에 두고 핀 두 개는 메뉴에 가리지 않게 둡니다."
+    },
+    {
+      "id": 7,
       "slug": "library",
       "title_ko": "지난 캡처를 글자로 찾습니다",
       "title_en": "Find past captures by their text",
@@ -217,76 +298,37 @@
       "final": "임시 합성 캡처 세 개와 OCR 색인을 자체 테스트 저장소에 준비합니다. 실제 사용자의 라이브러리는 읽거나 수정하지 않습니다. 검색 필드, 결과 제목, 제목·이미지 글자 일치 설명이 보여야 합니다."
     },
     {
-      "id": 7,
-      "slug": "video-editor",
-      "title_ko": "녹화하고 필요한 구간만 남깁니다",
-      "title_en": "Record a region and trim it",
-      "layers": [
-        {
-          "path": "video/editor.png",
-          "crop": [
-            0,
-            1180,
-            3720,
-            2400
-          ],
-          "placement": [
-            160,
-            400
-          ],
-          "scale": 0.75,
-          "z": 0,
-          "final": "VideoEditorWindow의 1240×800 DIP, 3× 레이어입니다. 합성 터미널에서 테스트 실패 후 수정하는 3초 영상의 0.4~2.6초를 선택합니다. 텍스트 레이어 두 개: ko '오류 재현' / '수정 후 확인', en 'Reproduce the error' / 'Verify the fix'. 남는 길이와 시작·끝 핸들, 시간 지정 텍스트 트랙을 하단 crop에 표시합니다."
-        }
-      ],
-      "final": "실제 녹화 장치를 실행하지 않고 자체 생성 프레임으로 영상을 준비하는 후속 자체 테스트입니다. 프리뷰 하부·트림 핸들·두 텍스트 트랙을 실제 제품에서 렌더합니다. 현재 프로토타입의 보라색 텍스트 트랙은 최종 앱의 흑연색·빨강 규칙에 맞는 실제 렌더로 교체해야 합니다."
-    },
-    {
       "id": 8,
-      "slug": "gif-export",
-      "title_ko": "GIF 크기를 미리 확인합니다",
-      "title_en": "Check GIF size before export",
+      "slug": "share-markup",
+      "title_ko": "공유 전에 주석과 가리기",
+      "title_en": "Mark up and redact before sharing",
+      "subline_ko": "Ctrl+Shift+R: 개인정보 가리기",
+      "subline_en": "Ctrl+Shift+R: Auto-redact",
       "layers": [
         {
-          "path": "video/editor.png",
+          "path": "share/redact-annotated.png",
           "crop": [
             0,
             0,
             3720,
-            2400
+            1950
           ],
           "placement": [
             160,
-            380
+            360
           ],
-          "scale": 0.42,
+          "scale": 0.55,
           "z": 0,
-          "final": "장면 7과 같은 VideoEditorWindow를 내보내기 창 뒤에 둡니다. 실제 사용처럼 편집기 위에 GIF 내보내기 창이 뜬 구도입니다."
-        },
-        {
-          "path": "video/gif-export-dialog.png",
-          "crop": [
-            0,
-            0,
-            1872,
-            1900
-          ],
-          "placement": [
-            1352,
-            376
-          ],
-          "scale": 0.56,
-          "z": 1,
-          "final": "VideoExportDialog의 624×1021 DIP, 3× 레이어입니다. GIF 선택, 960px·10fps 권장 설정, 10MB GitHub 첨부 목표, 장면 7의 개발 영상 프리뷰, 제품이 실제 계산한 크기 결과를 표시합니다. crop 위쪽에는 설정, 아래쪽에는 권장 상태와 크기 값이 들어갑니다."
+          "final": "redact/03.png와 같은 편집기에서 실제 가리기 뒤 단계 번호 둘, 화살표, 텍스트를 컨트롤러로 더한 상태."
         }
       ],
-      "final": "최종 자체 테스트는 표시한 설정으로 실제 산정한 예상/측정 크기를 제품 문구 그대로 사용합니다. 샘플의 229KB를 고정값으로 덧쓰지 않습니다. 긴 아래 빈 공간과 내보내기 버튼은 crop 밖이며 재배열하지 않습니다."
+      "final": "세 가림막과 주석이 모두 crop 안에 있어야 합니다."
     },
     {
       "id": 9,
       "slug": "comparison",
-      "title_ko": "Windows 캡처 도구에서 옮겨 오면",
-      "title_en": "From Windows Snipping Tool",
+      "title_ko": "Windows 캡처 도구에 더해지는 것",
+      "title_en": "What it adds to Snipping Tool",
       "layers": [],
       "comparison": {
         "left_heading_ko": "그대로",
@@ -306,18 +348,18 @@
           "Region recording"
         ],
         "right_ko": [
-          "다른 창 위에 띄우는 핀",
-          "긴 화면을 잇는 스크롤 캡처",
-          "블러·모자이크·단계 번호",
-          "창 제목과 글자로 찾는 라이브러리",
-          "카드번호·토큰 자동 탐지"
+          "엑셀 모양 그대로 띄우는 표 핀",
+          "원문을 다시 복사하는 표·코드 핀",
+          "반투명·뒤 창 클릭 허용 핀",
+          "닫은 핀 다시 열기",
+          "긴 화면을 잇는 스크롤 캡처"
         ],
         "right_en": [
-          "Pins above other windows",
-          "Scrolling capture",
-          "Blur, mosaic and step numbers",
-          "Search by window title or text",
-          "Detect card numbers and tokens"
+          "Excel ranges pinned as they look",
+          "Copy a pin's original text back",
+          "Translucent, click-through pins",
+          "Reopen closed pins",
+          "Scrolling capture"
         ]
       },
       "final": "앱 창을 사용하지 않는 2열 문자 전용 장면입니다. 아이콘·체크표시·부재를 단정하는 추가 문구를 넣지 않습니다.",
@@ -335,7 +377,7 @@
         ],
         "included": [
           "그대로: 영역·창·전체 화면 캡처, 클립보드 복사, 이미지 속 글자 복사, 영역 녹화 (두 제품 모두 지원)",
-          "더해지는 것: 핀, 스크롤 캡처, 블러·모자이크·단계 번호, 창 제목·글자 검색 라이브러리, 카드번호·토큰 탐지 (공식 기능 안내에 없음, 가리기는 이메일·전화번호만 안내)"
+          "더해지는 것: 표 핀(엑셀 그림 표시와 셀 원문 보관), 표·코드 핀의 원문 복사, 반투명·클릭 허용 핀, 닫은 핀 다시 열기, 스크롤 캡처. Snipping Tool 공식 기능 안내에는 다른 창 위에 띄우는 핀 자체가 없고, 스크롤 캡처는 Microsoft가 기본 미지원이라고 밝힙니다."
         ],
         "excluded": [
           {
@@ -349,8 +391,8 @@
             "source": "https://blogs.windows.com/windows-insider/2025/06/19/gif-export-in-snipping-tool-begins-rolling-out-to-windows-insiders/"
           }
         ],
-        "recheck": "제출 직전 공식 기능 안내를 다시 열어 더해지는 것 다섯 줄이 여전히 Snipping Tool에 없는지 확인합니다.",
-        "strength": "스크롤 캡처는 Microsoft가 기본 미지원이라고 밝혔습니다(높음). 핀, 블러·모자이크·단계 번호, 검색 라이브러리, 카드번호·토큰 자동 탐지는 공식 기능 안내에 없다는 근거입니다(중간). Snipping Tool은 이메일·전화번호 자동 가리기와 선택한 글자 가리기를 지원하므로 '가리기' 자체가 아니라 '자동 탐지'를 차이로 씁니다."
+        "recheck": "제출 직전 공식 기능 안내를 다시 열어 핀(화면 위 고정)과 스크롤 캡처가 여전히 Snipping Tool에 없는지 확인합니다.",
+        "strength": "스크롤 캡처는 Microsoft가 기본 미지원이라고 밝혔습니다(높음). 핀 네 줄은 공식 기능 안내에 화면 위 고정 기능이 없다는 근거입니다(중간). 이전 카드의 라이브러리·가리기 줄은 핀 중심 구성으로 바꾸면서 뺐고, 차별점이 아니어서 뺀 것은 아닙니다."
       }
     }
   ]

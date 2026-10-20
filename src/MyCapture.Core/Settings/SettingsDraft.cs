@@ -82,6 +82,7 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
     private string _restoreClosedPinHotkey = string.Empty;
     private string _captureTextHotkey = string.Empty;
     private string _pauseRecordingHotkey = string.Empty;
+    private bool _forceCoreShortcuts;
 
     // ----- Storage -----
     private string _maxItems = string.Empty;
@@ -355,6 +356,9 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
         get => _pauseRecordingHotkey;
         set { if (Set(ref _pauseRecordingHotkey, value)) ValidateAllHotkeys(); }
     }
+
+    /// <summary>Claims assigned core chords ahead of other programs without reassigning keys.</summary>
+    public bool ForceCoreShortcuts { get => _forceCoreShortcuts; set => Set(ref _forceCoreShortcuts, value); }
 
     // ================= Storage =================
 
@@ -721,6 +725,7 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
         _restoreClosedPinHotkey = s.Hotkeys.RestoreClosedPin.ToString();
         _captureTextHotkey = s.Hotkeys.CaptureText.ToString();
         _pauseRecordingHotkey = s.Hotkeys.PauseRecording.ToString();
+        _forceCoreShortcuts = s.Hotkeys.ForceCoreShortcuts;
 
         _maxItems = Int(s.Queue.MaxItems);
         _maxGiB = Gib(s.Queue.MaxBytes);
@@ -787,6 +792,7 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
         _preservedPreserveTransparency = s.Export.PreserveTransparency;
         _language = s.General.Language;
         _preservedIsFirstRun = s.General.IsFirstRun;
+        _preservedCoreShortcutsAsked = s.Hotkeys.CoreShortcutsAsked;
         _preservedFirstCaptureTipShown = s.General.FirstCaptureTipShown;
         _preservedFirstPinTipShown = s.General.FirstPinTipShown;
         _preservedRecordingBitrateBitsPerSecond = s.Recording.BitrateBitsPerSecond;
@@ -802,7 +808,12 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
     /// to disk until Apply, so a subsequent Cancel or a re-<see cref="LoadFrom"/> restores the
     /// previous values. The baseline is kept, so the reset counts as an unapplied change.
     /// </summary>
-    public void ResetToDefaults() => ReplaceValues(NewInstallDefaults.Create());
+    public void ResetToDefaults()
+    {
+        AppSettings defaults = NewInstallDefaults.Create();
+        defaults.Hotkeys.CoreShortcutsAsked = _preservedCoreShortcutsAsked;
+        ReplaceValues(defaults);
+    }
 
     /// <summary>
     /// Every value <see cref="ToAppSettings"/> writes, in a fixed order, as invariant text.
@@ -820,7 +831,7 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
         _captureHotkey, _openLibraryHotkey, _pasteToScreenHotkey, _hideAllPinsHotkey, _toggleClickThroughHotkey,
         _repeatLastRegionHotkey, _captureWindowHotkey, _captureFullScreenHotkey, _recordRegionHotkey,
         _scrollingCaptureHotkey, _delayedCaptureHotkey, _uploadGitHubImageHotkey, _restoreClosedPinHotkey,
-        _captureTextHotkey, _pauseRecordingHotkey,
+        _captureTextHotkey, _pauseRecordingHotkey, B(_forceCoreShortcuts), B(_preservedCoreShortcutsAsked),
         _maxItems, _maxGiB, _thumbnailLongEdge, _capturesDirectoryOverride, _imageRetentionHours, _folderFilePrefix,
         B(_useCurrentFolderForNewCaptures), _defaultCaptureFolderId?.ToString() ?? string.Empty,
         _gitHubIssueUrl, _gitHubToken,
@@ -913,6 +924,8 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
                 RestoreClosedPin = ParseHotkey(_restoreClosedPinHotkey),
                 CaptureText = ParseHotkey(_captureTextHotkey),
                 PauseRecording = ParseHotkey(_pauseRecordingHotkey),
+                ForceCoreShortcuts = _forceCoreShortcuts,
+                CoreShortcutsAsked = _preservedCoreShortcutsAsked,
             },
             Queue =
             {
@@ -1006,6 +1019,8 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
         RestoreClosedPin = ParseHotkey(_restoreClosedPinHotkey),
         CaptureText = ParseHotkey(_captureTextHotkey),
         PauseRecording = ParseHotkey(_pauseRecordingHotkey),
+        ForceCoreShortcuts = _forceCoreShortcuts,
+        CoreShortcutsAsked = _preservedCoreShortcutsAsked,
     };
 
     // ================= INotifyDataErrorInfo =================
@@ -1471,6 +1486,7 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
     private bool _preservedPreserveTransparency;
     private string _language = string.Empty;
     private bool _preservedIsFirstRun;
+    private bool _preservedCoreShortcutsAsked;
     private bool _preservedFirstCaptureTipShown;
     private bool _preservedFirstPinTipShown;
     private int _preservedRecordingBitrateBitsPerSecond;
