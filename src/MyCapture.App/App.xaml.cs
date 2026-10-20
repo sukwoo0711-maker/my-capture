@@ -706,8 +706,22 @@ public partial class App : Application
     private void FlushEditorPreferences()
     {
         _preferenceSaveTimer?.Stop();
-        try { if (_settings is not null) _services?.GetRequiredService<SettingsStore>().Save(_settings); }
+        try
+        {
+            if (_settings is not null)
+                _services?.GetRequiredService<SettingsStore>().SaveInBackground(
+                    _settings.DeepClone(), "Could not save editor preferences");
+        }
         catch (Exception ex) { _log?.LogWarning(ex, "Could not save editor preferences"); }
+    }
+
+    /// <summary>Drains preference saves off the dispatcher after exit preparation.</summary>
+    private async Task FlushPreferenceSavesForExitAsync()
+    {
+        if (_preferenceSaveTimer?.IsEnabled == true) FlushEditorPreferences();
+        if (_services?.GetService<SettingsStore>() is { } store
+            && !await Task.Run(() => store.WaitForPendingSaves(TimeSpan.FromSeconds(3))))
+            _log?.LogWarning("Timed out waiting for preference saves on exit");
     }
 
     private async void HandleCaptureRequested()
@@ -1564,7 +1578,8 @@ public partial class App : Application
             () => _settings!,
             () => paths,
             _services.GetRequiredService<ILogger<CaptureCommitService>>());
-        _commit.PersistExportSettings = () => _services.GetRequiredService<SettingsStore>().Save(_settings!);
+        _commit.PersistExportSettings = () => _services.GetRequiredService<SettingsStore>().SaveInBackground(
+            _settings!.DeepClone(), "Could not persist the last export options");
         _videoLibrary = new MyCapture.App.Recording.VideoLibraryService(
             queue,
             paths,
@@ -2278,6 +2293,9 @@ public partial class App : Application
     {
         _quickAccess?.Close();
         if (_preferenceSaveTimer?.IsEnabled == true) FlushEditorPreferences();
+        if (_services?.GetService<SettingsStore>() is { } store
+            && !store.WaitForPendingSaves(TimeSpan.FromSeconds(3)))
+            _log?.LogWarning("Timed out waiting for preference saves on exit");
         HotkeyRecorder.CanRegister = null;
         ShortcutHelpWindow.CanShowHelp = () => true;
         AnnotationEditorPreferences.Read = null;

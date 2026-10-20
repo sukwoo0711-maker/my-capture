@@ -471,17 +471,27 @@ public sealed partial class CaptureQueue
     /// <summary>
     /// Persists the index atomically.
     /// </summary>
-    public void Save()
+    public void Save() =>
+        // The writer never needs this gate or the caller dispatcher. This is also the exit drain.
+        SaveAsync().GetAwaiter().GetResult();
+
+    /// <summary>
+    /// The non-blocking form of <see cref="Save"/>: the same index snapshot, taken now on the
+    /// calling owner context, joins the same FIFO writer behind every earlier publication. Await
+    /// the task before relying on durability; it faults with the write failure.
+    /// </summary>
+    /// <remarks>
+    /// Like <see cref="Save"/> it bypasses the reservation pool, and a later <see cref="Save"/>
+    /// (the exit drain) still waits for it.
+    /// </remarks>
+    public Task SaveAsync()
     {
-        Task publication;
         lock (_writeGate)
         {
             var index = CreateIndexSnapshot();
             string json = JsonSerializer.Serialize(index, SerializerOptions);
-            publication = EnqueuePublication(null, BuildIndexWrites(json));
+            return EnqueuePublication(null, BuildIndexWrites(json));
         }
-        // The writer never needs this gate or the caller dispatcher. This is also the exit drain.
-        publication.GetAwaiter().GetResult();
     }
 
     /// <summary>
@@ -512,18 +522,46 @@ public sealed partial class CaptureQueue
     /// use this strict form so they never delete a pending marker/journal unless both meta and
     /// index durably name the same generation.
     /// </summary>
-    public void SaveRecordMetaOrThrow(CaptureRecord record)
+    public void SaveRecordMetaOrThrow(CaptureRecord record) =>
+        SaveRecordMetaOrThrowAsync(record).GetAwaiter().GetResult();
+
+    /// <summary>
+    /// The non-blocking form of <see cref="SaveRecordMetaOrThrow"/>: the record is serialized now
+    /// on the calling owner context and its write joins the same FIFO writer. Awaiting the task
+    /// gives the same strict guarantee; it faults with the write failure.
+    /// </summary>
+    public Task SaveRecordMetaOrThrowAsync(CaptureRecord record)
     {
         ArgumentNullException.ThrowIfNull(record);
 
-        Task publication;
         lock (_writeGate)
         {
             string path = GetFilePath(record, CaptureFileNames.Meta);
             string json = JsonSerializer.Serialize(record, MetaSerializerOptions);
-            publication = EnqueuePublication(null, [(path, json)]);
+            return EnqueuePublication(null, [(path, json)]);
         }
-        publication.GetAwaiter().GetResult();
+    }
+
+    /// <summary>
+    /// The non-blocking form of <see cref="SaveRecordMeta"/>: best-effort, so a write failure is
+    /// logged, never thrown.
+    /// </summary>
+    public async Task SaveRecordMetaAsync(CaptureRecord record)
+    {
+        ArgumentNullException.ThrowIfNull(record);
+
+        try
+        {
+            await SaveRecordMetaOrThrowAsync(record).ConfigureAwait(false);
+        }
+        catch (IOException ex)
+        {
+            _log.LogWarning(ex, "Could not write recovery metadata for {Id}", record.Id);
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            _log.LogWarning(ex, "Could not write recovery metadata for {Id}", record.Id);
+        }
     }
 
     /// <summary>

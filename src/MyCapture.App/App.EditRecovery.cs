@@ -128,6 +128,7 @@ public partial class App
                 if (window is VideoEditorWindow video && !await video.PrepareForAppExitAsync()) return false;
             }
             await EditDraftSession.WaitForFinalizationsAsync();
+            await FlushPreferenceSavesForExitAsync();
             return true;
         }
         catch (Exception error) { _log?.LogError(error, "Could not prepare app exit ({Reason})", reason); return false; }
@@ -161,6 +162,7 @@ public partial class App
                     await Task.Delay(50);
                 await FlushEditingDraftsAsync();
                 await EditDraftSession.WaitForFinalizationsAsync();
+                await FlushPreferenceSavesForExitAsync();
             }, TimeSpan.FromSeconds(3), message => _log?.LogWarning("Session-ending draft flush: {Message}", message));
         }
         finally
