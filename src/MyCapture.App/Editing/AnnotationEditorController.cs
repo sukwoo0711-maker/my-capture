@@ -43,6 +43,12 @@ internal sealed class AnnotationEditorController
     private AnnotationItem? _draftItem;
     private List<PointD>? _draftPoints;
 
+    // The draft pen's own point list, kept equal to _draftPoints by appending each move's point
+    // instead of copying the whole stroke. Null when something else changed the pen's points,
+    // so the next move gives it a fresh copy of the drawn points, as every move used to.
+    private List<PointD>? _draftPenPoints;
+    private bool _updatingDraftPen;
+
     // The text being typed into a live box. Until it is committed its add command is the
     // whole history of the item, so style changes apply to it directly (see PushProperty).
     private TextAnnotation? _creatingText;
@@ -507,16 +513,20 @@ internal sealed class AnnotationEditorController
                 PointD offset = new(constrained.X - _gestureStart.X, constrained.Y - _gestureStart.Y);
                 foreach (AnnotationItem item in _gestureSelection)
                     item.Translate(offset.X - _moveOffset.X, offset.Y - _moveOffset.Y);
+                bool moved = offset != _moveOffset;
                 _moveOffset = offset;
-                RaiseVisual();
+                // A repeated position (WPF raises MouseMove again after a layout pass, and an
+                // axis-locked drag ignores the other axis) moves nothing, so nothing repaints.
+                if (moved) RaiseVisual();
                 break;
             case Gesture.Marquee:
+                RectD? marqueeBefore = MarqueeBounds;
                 MarqueeBounds = RectD.FromCorners(_gestureStart, point);
                 // Explorer-style intersection selection, including touching bounds. A click
                 // has no area and only clears selection (or preserves it with a modifier).
                 SetSelection(MarqueeBounds.Value.IsEmpty ? _gestureSelection
                     : _gestureSelection.Concat(_document.HitTestRegion(MarqueeBounds.Value)));
-                RaiseVisual();
+                if (MarqueeBounds != marqueeBefore) RaiseVisual();
                 break;
             case Gesture.Resize:
                 // Handles extend beyond the bounds; a stationary click must not snap the
@@ -539,7 +549,30 @@ internal sealed class AnnotationEditorController
                 _draftPoints?.Add(point);
                 if (_draftItem is PenAnnotation pen)
                 {
-                    pen.Points = [.. _draftPoints!];
+                    // The pen's list already holds every earlier point, so one append keeps it
+                    // equal to the drawn points; reassigning it raises the same change
+                    // notifications the copy did.
+                    List<PointD> points;
+                    if (_draftPenPoints is { } own && ReferenceEquals(pen.Points, own))
+                    {
+                        own.Add(point);
+                        points = own;
+                    }
+                    else
+                    {
+                        points = [.. _draftPoints!];
+                    }
+
+                    _draftPenPoints = points;
+                    _updatingDraftPen = true;
+                    try
+                    {
+                        pen.Points = points;
+                    }
+                    finally
+                    {
+                        _updatingDraftPen = false;
+                    }
                 }
 
                 RaiseVisual();
@@ -627,8 +660,27 @@ internal sealed class AnnotationEditorController
         MarqueeBounds = null;
         _resizeHandle = ResizeHandle.None;
         _resizeStarted = false;
+        if (_draftItem is PenAnnotation draftPen)
+        {
+            draftPen.PropertyChanged -= OnDraftPenChanged;
+        }
+
         _draftItem = null;
         _draftPoints = null;
+        _draftPenPoints = null;
+    }
+
+    /// <summary>
+    /// Anything but the drawing gesture that changes the draft pen's points (moving or rotating
+    /// the document mid-stroke) ends the shared list, so the next move copies the drawn points
+    /// over that change exactly as it did when every move copied.
+    /// </summary>
+    private void OnDraftPenChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (!_updatingDraftPen && e.PropertyName == nameof(PenAnnotation.Points))
+        {
+            _draftPenPoints = null;
+        }
     }
 
     // ---- Single-click placement (text / image) --------------------------------------
@@ -1053,13 +1105,15 @@ internal sealed class AnnotationEditorController
         if (_tool is EditorTool.Pen or EditorTool.Highlighter)
         {
             _draftPoints = [point];
+            _draftPenPoints = [point];
             var pen = new PenAnnotation
             {
                 IsHighlighter = _tool == EditorTool.Highlighter,
-                Points = [point],
+                Points = _draftPenPoints,
                 Stroke = StrokeColor,
                 StrokeThickness = _tool == EditorTool.Highlighter ? Math.Max(12, StrokeThickness) : StrokeThickness,
             };
+            pen.PropertyChanged += OnDraftPenChanged;
             _draftItem = pen;
             _document.Add(pen);
             _gesture = Gesture.PenDraw;
@@ -1102,20 +1156,28 @@ internal sealed class AnnotationEditorController
             if (_draftItem is ShapeAnnotation) point = AnnotationGestureConstraints.Square(_gestureStart, point);
             else if (_draftItem is PolylineAnnotation) point = AnnotationGestureConstraints.Line(_gestureStart, point);
         }
+        // Unchanged when the pointer reports the same position again; nothing then repaints.
+        bool changed = true;
         switch (_draftItem)
         {
             case ShapeAnnotation rect:
+                RectD rectBefore = rect.Rect;
                 rect.Rect = RectD.FromCorners(_gestureStart, point);
+                changed = rect.Rect != rectBefore;
                 break;
             case BlurAnnotation blur:
+                RectD blurBefore = blur.Rect;
                 blur.Rect = RectD.FromCorners(_gestureStart, point);
+                changed = blur.Rect != blurBefore;
                 break;
             case PolylineAnnotation line:
+                List<PointD> lineBefore = line.Points;
                 line.Points = [_gestureStart, point];
+                changed = lineBefore is not [var start, var end] || start != _gestureStart || end != point;
                 break;
         }
 
-        RaiseVisual();
+        if (changed) RaiseVisual();
     }
 
     private void CommitDraftShape(PointD point, bool shift)
