@@ -7,6 +7,7 @@ using System.Windows;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
+using MyCapture.App.Diagnostics;
 using MyCapture.App.Editing;
 using MyCapture.App.Threading;
 using Xunit;
@@ -25,6 +26,7 @@ public sealed class EditDraftEncoderDeadlockTests
 {
     private const string ChildFlag = "MYCAPTURE_DRAFT_ENCODER_STRESS_CHILD";
     private const string ReceiptVariable = "MYCAPTURE_DRAFT_ENCODER_STRESS_RECEIPT";
+    private const string ReceiptFileName = "result.txt";
     private readonly ITestOutputHelper _output;
 
     public EditDraftEncoderDeadlockTests(ITestOutputHelper output) => _output = output;
@@ -188,7 +190,9 @@ public sealed class EditDraftEncoderDeadlockTests
     {
         if (Environment.GetEnvironmentVariable(ChildFlag) == "1")
         {
-            string receipt = Environment.GetEnvironmentVariable(ReceiptVariable) ?? throw new IOException("Missing parent test receipt.");
+            // The parent passes its receipt folder; the file name is fixed here.
+            string receipt = DiagnosticOutputPaths.Child(DiagnosticOutputPaths.Create(
+                Environment.GetEnvironmentVariable(ReceiptVariable) ?? throw new IOException("Missing parent test receipt.")), ReceiptFileName);
             string result = RenderAndEncodeConcurrently(7680, 2160, encodes: 24, limit: TimeSpan.FromSeconds(15));
             File.WriteAllText(receipt, result);
             // A deadlocked UI thread cannot shut its dispatcher down, and process exit would wait on it.
@@ -200,7 +204,7 @@ public sealed class EditDraftEncoderDeadlockTests
         string dotnet = Path.Combine(runtimeRoot, "dotnet.exe");
         Assert.True(File.Exists(dotnet), "The test runtime must provide its dotnet host.");
         string receiptRoot = TestRecycleBin.CreateTempSubdirectory("mc-draft-encoder-stress-").FullName;
-        string receiptPath = Path.Combine(receiptRoot, "result.txt");
+        string receiptPath = Path.Combine(receiptRoot, ReceiptFileName);
         var start = new ProcessStartInfo(dotnet)
         {
             UseShellExecute = false, CreateNoWindow = true,
@@ -213,7 +217,7 @@ public sealed class EditDraftEncoderDeadlockTests
             + "." + nameof(EncodingWhileTheUiRendersTheSameBitmap_NeverDeadlocks));
         start.ArgumentList.Add("--Logger:console;verbosity=normal");
         start.Environment[ChildFlag] = "1";
-        start.Environment[ReceiptVariable] = receiptPath;
+        start.Environment[ReceiptVariable] = receiptRoot;
         start.Environment["DOTNET_CLI_UI_LANGUAGE"] = "en";
         using Process child = Process.Start(start) ?? throw new IOException("Could not start the draft encoder stress process.");
         Task<string> output = child.StandardOutput.ReadToEndAsync();

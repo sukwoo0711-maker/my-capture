@@ -14,6 +14,7 @@ using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using Microsoft.Extensions.Logging.Abstractions;
+using MyCapture.App.Diagnostics;
 using MyCapture.App.Editing;
 using MyCapture.App.Themes;
 using MyCapture.Core.Annotations;
@@ -63,9 +64,9 @@ public sealed class EditorResponsivenessProbeTests
     [EditorPerfFact]
     public async Task MeasureEditorUiThreadBlocking()
     {
-        string output = Path.GetFullPath(Environment.GetEnvironmentVariable(OutputVariable)!);
-        Directory.CreateDirectory(output);
-        string receipt = Path.Combine(output, "probe-completed.txt");
+        // The output folder comes from the environment: confine every artifact to it.
+        string output = DiagnosticOutputPaths.Create(Environment.GetEnvironmentVariable(OutputVariable)!);
+        string receipt = DiagnosticOutputPaths.Child(output, "probe-completed.txt");
         if (Environment.GetEnvironmentVariable(ChildFlag) == "1")
         {
             EditorResponsivenessProbe.RunOnStaThread(output, receipt);
@@ -108,7 +109,7 @@ public sealed class EditorResponsivenessProbeTests
             }
 
             string console = await stdout + Environment.NewLine + await stderr;
-            File.WriteAllText(Path.Combine(output, "probe-child-console.txt"), console);
+            File.WriteAllText(DiagnosticOutputPaths.Child(output, "probe-child-console.txt"), console);
             Assert.True(child.ExitCode == 0, console);
             Assert.True(File.Exists(receipt), "The probe child finished without writing its receipt.\n" + console);
             Assert.Equal("PASS", File.ReadAllText(receipt));
