@@ -302,12 +302,19 @@ def preflight(config, layers_root, selected, language, fonts, srgb_profile):
             if path not in images:
                 images[path] = load_image(path, srgb_profile)
             require(images[path].size == (width, height), f"{label}: actual image size {images[path].size} differs from manifest {(width, height)}")
-            crop = rect(layer.get("crop"), (width, height), f"{label} crop")
+            # A layer without a crop uses the whole image; menus and pins differ in size between languages.
+            crop = (0, 0, width, height) if layer.get("crop") is None else rect(layer.get("crop"), (width, height), f"{label} crop")
+            layer["_crop"] = list(crop)
             placement = layer.get("placement")
             require(isinstance(placement, list) and len(placement) == 2, f"{label}: placement must be [x, y]")
             x, y = (integer(v, f"{label} placement") for v in placement)
             scale = number(layer.get("scale"), f"{label} scale", positive=True)
             number(layer.get("z", 0), f"{label} z")
+            # RenderTargetBitmap captures the window's client without Window.Opacity, so the
+            # exporter records the product opacity and the compositor applies it here.
+            opacity = number(entry.get("windowOpacity", 1), f"{label} windowOpacity", positive=True)
+            require(0.2 <= opacity <= 1, f"{label}: windowOpacity {opacity} is outside the product range 0.2–1")
+            layer["_window_opacity"] = opacity
             output_size = (round((crop[2] - crop[0]) * scale), round((crop[3] - crop[1]) * scale))
             require(min(output_size) > 0 and max(output_size) <= 16384, f"{label}: invalid resized dimensions {output_size}")
             require(x < STYLE["canvas"][0] and y < STYLE["canvas"][1] and x + output_size[0] > 0 and y + output_size[1] > 0,
@@ -316,7 +323,8 @@ def preflight(config, layers_root, selected, language, fonts, srgb_profile):
             text_value(layer.get("final"), f"{label} final")
             layer_metrics[sid].append({"path": layer["path"], "crop": list(crop), "placement": placement,
                 "raw_pixel_scale": scale, "source_render_scale": render_scale,
-                "logical_pixel_scale": round(scale * render_scale, 4), "output_size": list(output_size),
+                "logical_pixel_scale": round(scale * render_scale, 4), "window_opacity": opacity,
+                "output_size": list(output_size),
                 "ui_body_14_dip_px": round(14 * scale * render_scale, 2)})
         if scene.get("red_outline") is not None:
             require(sid != 9, "The comparison card does not use an accent outline")
@@ -388,9 +396,13 @@ def composite_clipped(canvas, image, x, y):
 
 
 def place_layer(canvas, source, layer):
-    crop = source.crop(tuple(layer["crop"]))
+    crop = source.crop(tuple(layer["_crop"]))
     scale = layer["scale"]
     image = crop.resize((round(crop.width * scale), round(crop.height * scale)), Image.Resampling.LANCZOS)
+    opacity = layer.get("_window_opacity", 1)
+    if opacity < 1:
+        # A translucent window shows what is behind it, and its shadow fades with it.
+        image.putalpha(image.getchannel("A").point(lambda value: round(value * opacity)))
     alpha = image.getchannel("A")
     pad = STYLE["shadow_blur"] * STYLE["shadow_padding_factor"]
     mask = Image.new("L", (image.width + 2 * pad, image.height + 2 * pad), 0)
