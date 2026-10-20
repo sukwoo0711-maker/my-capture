@@ -38,7 +38,13 @@ internal sealed class NeuralOcrEngine : IDisposable
         _store = store ?? throw new ArgumentNullException(nameof(store));
         _superResolution = superResolution ?? throw new ArgumentNullException(nameof(superResolution));
         _log = log ?? throw new ArgumentNullException(nameof(log));
+        ModelVerificationTask = _store.PreVerifyInstalledModelsAsync();
     }
+
+    /// <summary>
+    /// Installed-model verification runs independently of construction and never downloads weights.
+    /// </summary>
+    internal Task ModelVerificationTask { get; }
 
     internal bool CanRun => _store.HasRequiredModels;
 
