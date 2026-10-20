@@ -61,8 +61,8 @@ public sealed class AppSettings : IJsonOnDeserializing
 /// <summary>Global shortcuts, registered for as long as the app runs.</summary>
 /// <remarks>
 /// The initialisers are the chords earlier versions shipped with, which an older settings file
-/// without a property reads back. A new installation assigns only region capture and region
-/// recording (<see cref="NewInstallDefaults"/>).
+/// without a property reads back. A new installation assigns region capture, region recording
+/// and clipboard pin shortcuts (<see cref="NewInstallDefaults"/>).
 /// </remarks>
 public sealed class HotkeySettings
 {
@@ -266,7 +266,8 @@ public sealed class PinSettings
     /// Legacy copy-gesture delay retained for settings-file compatibility, in milliseconds.
     /// </summary>
     /// <remarks>
-    /// No longer controls a UI gesture. A focused pin uses <c>Ctrl+C</c> to copy its image;
+    /// No longer controls a UI gesture. A focused pin uses <c>Ctrl+C</c> to copy its image
+    /// together with any retained original text;
     /// <c>Ctrl</c>+double-click copies retained source text or locally recognized image text.
     /// Preserve the serialized field and draft value when reading and saving older settings.
     /// </remarks>

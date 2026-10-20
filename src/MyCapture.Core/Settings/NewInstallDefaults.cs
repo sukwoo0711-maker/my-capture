@@ -3,8 +3,8 @@ using MyCapture.Core.Queue;
 namespace MyCapture.Core.Settings;
 
 /// <summary>
-/// The settings a new installation starts with: only region capture and screen recording own a
-/// global shortcut, the theme follows Windows, key captions appear while Alt is held, and
+/// The settings a new installation starts with: region capture, screen recording and clipboard
+/// pin commands own global shortcuts, the theme follows Windows, key captions appear while Alt is held, and
 /// library images have no time limit within a 1,000-item / 5 GiB capacity budget.
 /// </summary>
 /// <remarks>
@@ -16,9 +16,9 @@ namespace MyCapture.Core.Settings;
 /// </para>
 /// <para>
 /// Only a launch with no settings file at all, and the "reset to defaults" command, use these
-/// values. Bare F3 is File Explorer's search key and Ctrl+Shift+Z is redo in many editors, so a
-/// new user should assign the optional commands deliberately rather than lose those keys
-/// elsewhere. Shortcut keys stay visible in every button tooltip.
+/// values. F3 pins clipboard content, matching Snipaste and PixPin and the app's core reference
+/// workflow; Shift+F3 hides or shows the pins. Library and upload shortcuts stay unassigned.
+/// Shortcut keys stay visible in every button tooltip, and double-click does not close a new pin.
 /// </para>
 /// </remarks>
 public static class NewInstallDefaults
@@ -36,9 +36,10 @@ public static class NewInstallDefaults
     {
         ArgumentNullException.ThrowIfNull(settings);
         settings.Hotkeys.OpenLibrary = Hotkey.None;
-        settings.Hotkeys.PasteToScreen = Hotkey.None;
-        settings.Hotkeys.HideAllPins = Hotkey.None;
+        settings.Hotkeys.PasteToScreen = new Hotkey(HotkeyModifiers.None, Hotkey.VkF3);
+        settings.Hotkeys.HideAllPins = new Hotkey(HotkeyModifiers.Shift, Hotkey.VkF3);
         settings.Hotkeys.UploadGitHubImage = Hotkey.None;
+        settings.Pin.CloseOnDoubleClick = false;
         settings.General.AfterCapture = AfterCaptureAction.QuickAccess;
         settings.General.Theme = MyCapture.Core.Themes.AppThemeNames.ToSetting(MyCapture.Core.Themes.AppTheme.System);
         settings.General.ShowShortcutHints = false;

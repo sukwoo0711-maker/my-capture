@@ -54,7 +54,7 @@ internal sealed class PinManager
     private bool _recordClosedPins = true;
     private readonly Func<PinSettings> _settings;
     private readonly PinImageSaveService? _saveService;
-    private readonly Func<BitmapSource, string?, Task<bool>> _copyImageAsync;
+    private readonly Func<BitmapSource, string?, string?, Task<bool>> _copyImageAsync;
     private readonly Func<string, Task<bool>> _copyTextAsync;
     private readonly ILogger _log;
 
@@ -75,7 +75,7 @@ internal sealed class PinManager
         : this(
             settings,
             saveService,
-            ClipboardImageService.CopyImageAsync,
+            ClipboardImageService.CopyImageWithTextAsync,
             ClipboardImageService.CopyTextAsync,
             log)
     {
@@ -99,6 +99,17 @@ internal sealed class PinManager
         Func<PinSettings> settings,
         PinImageSaveService? saveService,
         Func<BitmapSource, string?, Task<bool>> copyImageAsync,
+        Func<string, Task<bool>> copyTextAsync,
+        ILogger log)
+        : this(settings, saveService, (image, sourceUrl, _) => copyImageAsync(image, sourceUrl), copyTextAsync, log)
+    {
+        ArgumentNullException.ThrowIfNull(copyImageAsync);
+    }
+
+    internal PinManager(
+        Func<PinSettings> settings,
+        PinImageSaveService? saveService,
+        Func<BitmapSource, string?, string?, Task<bool>> copyImageAsync,
         Func<string, Task<bool>> copyTextAsync,
         ILogger log)
     {
@@ -177,17 +188,21 @@ internal sealed class PinManager
     /// <summary>Most recent original-text copy, exposed for deterministic integration tests.</summary>
     internal Task<bool>? LastTextCopyOperationForTest { get; private set; }
 
+    internal Action<PinWindow>? BeforeShowForTest { get; set; }
+
+    internal Func<PinWindow, bool> ActivatePin { get; set; } = static pin => pin.Activate();
+
     /// <summary>
     /// Reads supported clipboard content and, if present, opens a new independent pin for it.
     /// </summary>
-    internal async Task<PasteResult> PasteFromClipboardAsync()
+    internal async Task<PasteResult> PasteFromClipboardAsync(Func<Task<ClipboardImageReader.PinReadAttempt>>? readClipboard = null)
     {
-        ClipboardImageReader.PinReadAttempt read = await ClipboardImageReader.ReadPinAsync();
+        ClipboardImageReader.PinReadAttempt read = await (readClipboard ?? ClipboardImageReader.ReadPinAsync)();
 
         switch (read.Outcome.Status)
         {
             case ClipboardImageStatus.Success when read.Content is not null:
-                OpenPin(read.Content);
+                OpenPin(read.Content, activate: false);
                 return PasteResult.Pinned;
 
             case ClipboardImageStatus.Busy:
@@ -204,16 +219,16 @@ internal sealed class PinManager
     internal PinWindow PinImage(BitmapSource image)
     {
         ArgumentNullException.ThrowIfNull(image);
-        return OpenPin(PinContent.FromImage(image));
+        return OpenPin(PinContent.FromImage(image), activate: true);
     }
 
     /// <summary>
     /// Opens an already-rendered text or table pin while retaining its exact Unicode source.
     /// </summary>
     internal PinWindow PinRenderedText(BitmapSource image, string originalText, bool isTable) =>
-        OpenPin(PinContent.FromText(image, originalText, isTable));
+        OpenPin(PinContent.FromText(image, originalText, isTable), activate: true);
 
-    private PinWindow OpenPin(PinContent content)
+    private PinWindow OpenPin(PinContent content, bool activate)
     {
         BitmapSource image = content.Image;
 
@@ -259,7 +274,7 @@ internal sealed class PinManager
             settings.ZoomStep);
 
         var pin = new PinWindow(content, state, placement.Left, placement.Top, _settings);
-        AttachAndShow(pin);
+        AttachAndShow(pin, activate);
 
         _log.LogInformation(
             "Pinned {Width}x{Height} {Kind} at zoom {Zoom:0.##} ({Count} pin(s) open)",
@@ -317,7 +332,7 @@ internal sealed class PinManager
             pin.PlaceAtPhysicalOnShow(bounds);
         }
 
-        AttachAndShow(pin);
+        AttachAndShow(pin, activate: true);
         if (!pin.ApplyRestorePlacement())
         {
             _log.LogWarning("Restored pin could not reach its recorded position; left where Windows placed it");
@@ -397,7 +412,7 @@ internal sealed class PinManager
         return (left, top, null);
     }
 
-    private void AttachAndShow(PinWindow pin)
+    private void AttachAndShow(PinWindow pin, bool activate)
     {
         pin.CloseAllRequested += (_, _) => CloseAll();
         pin.CopyRequested += OnPinCopyRequested;
@@ -409,8 +424,10 @@ internal sealed class PinManager
         pin.Closed += (_, _) => OnPinClosed(pin);
 
         _pins.Add(pin);
+        pin.ShowActivated = activate;
+        BeforeShowForTest?.Invoke(pin);
         pin.Show();
-        pin.Activate();
+        if (activate) _ = ActivatePin(pin);
     }
 
     private void OnPinClosed(PinWindow pin)
@@ -445,9 +462,9 @@ internal sealed class PinManager
     /// </summary>
     /// <remarks>
     /// A click-through pin carries <c>WS_EX_TRANSPARENT</c>, so the mouse can never land on it to
-    /// reverse the setting, and a new installation leaves both the
-    /// <see cref="MyCapture.Platform.Shell.GlobalHotkeyCommand.ToggleClickThrough"/> and the
-    /// hide-all keys unassigned. Hidden pins stay hidden.
+    /// reverse the setting, and a new installation leaves the
+    /// <see cref="MyCapture.Platform.Shell.GlobalHotkeyCommand.ToggleClickThrough"/> key
+    /// unassigned. Hidden pins stay hidden.
     /// </remarks>
     internal int ClearClickThroughAll()
     {
@@ -573,7 +590,7 @@ internal sealed class PinManager
         bool copied;
         try
         {
-            copied = await _copyImageAsync(request.Image, request.SourcePageUrl);
+            copied = await _copyImageAsync(request.Image, request.SourcePageUrl, request.OriginalText);
         }
         catch (Exception ex)
         {

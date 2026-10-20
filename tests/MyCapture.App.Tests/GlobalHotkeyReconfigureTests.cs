@@ -95,6 +95,28 @@ public sealed class GlobalHotkeyReconfigureTests
     }
 
     [Fact]
+    public void NewInstall_F3AlreadyTaken_ReportsPasteToScreenInStartupFailures()
+    {
+        RunSta(() =>
+        {
+            Hotkey f3 = new(HotkeyModifiers.None, Hotkey.VkF3);
+            var registrar = new FakeRegistrar([f3]);
+            using var window = new NativeMessageWindow();
+            using var service = new GlobalHotkeyService(window, registrar, NullLogger<GlobalHotkeyService>.Instance);
+
+            service.Initialize(NewInstallDefaults.Create().Hotkeys);
+
+            HotkeyRegistrationFailure failure = Assert.Single(service.Failures);
+            Assert.Equal(GlobalHotkeyCommand.PasteToScreen, failure.Command);
+            Assert.Equal(f3, failure.Hotkey);
+            Assert.DoesNotContain(GlobalHotkeyCommand.PasteToScreen, service.RegisteredCommands);
+            Assert.Contains(GlobalHotkeyCommand.CaptureRegion, service.RegisteredCommands);
+            Assert.Contains(GlobalHotkeyCommand.RecordRegion, service.RegisteredCommands);
+            Assert.Contains(GlobalHotkeyCommand.HideAllPins, service.RegisteredCommands);
+        });
+    }
+
+    [Fact]
     public void RecorderProbeLeavesBindingsIntactAndNewCaptureCommandsRegister()
     {
         RunSta(() =>

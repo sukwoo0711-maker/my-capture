@@ -242,7 +242,7 @@ internal sealed class PinWindow : Window
             OnFeedbackExpired);
 
         // Tracks the double-click interval without modifying the clipboard on a single click.
-        // Ctrl+C copies the rendered image; Ctrl+double-click copies text.
+        // Ctrl+C copies the image and retained source; Ctrl+double-click copies only text.
         _ctrlClickTimer = new DispatcherTimer(DispatcherPriority.Normal, Dispatcher);
         _ctrlClickTimer.Tick += OnCtrlClickTimerTick;
         _zoomSettleTimer = new DispatcherTimer(DispatcherPriority.Background, Dispatcher)
@@ -883,8 +883,13 @@ internal sealed class PinWindow : Window
     {
         base.OnKeyDown(e);
 
-        bool shift = Keyboard.Modifiers.HasFlag(ModifierKeys.Shift);
-        bool ctrl = Keyboard.Modifiers.HasFlag(ModifierKeys.Control);
+        HandleKeyDown(e, Keyboard.Modifiers);
+    }
+
+    internal void HandleKeyDown(KeyEventArgs e, ModifierKeys modifiers)
+    {
+        bool shift = modifiers.HasFlag(ModifierKeys.Shift);
+        bool ctrl = modifiers.HasFlag(ModifierKeys.Control);
         double nudge = shift ? ArrowNudgeShiftDip : ArrowNudgeDip;
 
         switch (e.Key)
@@ -1094,7 +1099,7 @@ internal sealed class PinWindow : Window
     private void CopyImageToClipboard()
     {
         ShowFeedback(UiText.Get("Text_4C160257F02C"), FeedbackKind.Progress);
-        CopyRequested?.Invoke(this, new PinImageCopyRequest(_image, SourcePageUrl));
+        CopyRequested?.Invoke(this, new PinImageCopyRequest(_image, SourcePageUrl, _originalText));
     }
 
     private void RequestOcr()

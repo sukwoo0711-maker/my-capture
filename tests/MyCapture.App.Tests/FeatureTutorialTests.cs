@@ -96,7 +96,7 @@ public sealed class FeatureTutorialTests
     [Theory]
     [InlineData("ko-KR")]
     [InlineData("en-US")]
-    public void EveryTabRowKeepsDirectTextAndKeycapsAndHasItsOwnNamedTutorialButton(string language) => StaTestHost.Run(() =>
+    public void EveryTabRowKeepsDirectTextAndKeycapsAndExistingTutorialButtons(string language) => StaTestHost.Run(() =>
     {
         using var locale = UiText.UseLanguage(language);
         var help = new ShortcutHelpWindow();
@@ -106,13 +106,20 @@ public sealed class FeatureTutorialTests
             TabControl tabs = ((DockPanel)help.Content).Children.OfType<TabControl>().Single();
             UniformGrid[] rows = tabs.Items.Cast<TabItem>().SelectMany(tab =>
                 ((StackPanel)((ScrollViewer)tab.Content).Content).Children.OfType<UniformGrid>()).ToArray();
-            Assert.Equal(42, rows.Length);
+            Assert.Equal(43, rows.Length);
+            Assert.Single(rows, row => ShortcutHelpRowAssertions.Title(row) == UiText.Get("Text_976A6C92B870"));
             foreach (UniformGrid row in rows)
             {
                 DockPanel title = Assert.Single(row.Children.OfType<DockPanel>());
-                Assert.Single(title.Children.OfType<TextBlock>());
+                TextBlock label = Assert.Single(title.Children.OfType<TextBlock>());
                 WrapPanel keycaps = Assert.Single(row.Children.OfType<WrapPanel>());
                 Assert.Empty(keycaps.Children.OfType<Button>());
+                if (label.Text == UiText.Get("Text_976A6C92B870"))
+                {
+                    Assert.Empty(title.Children.OfType<Button>());
+                    Assert.Equal("Ctrl+C / " + UiText.Get("Text_C7011B8D345C"), AutomationProperties.GetName(keycaps));
+                    continue;
+                }
                 Button tutorial = Assert.Single(title.Children.OfType<Button>());
                 FeatureTutorial feature = TutorialCatalog.Get(Assert.IsType<string>(tutorial.Tag));
                 Assert.True(tutorial.IsTabStop && tutorial.Focusable);
