@@ -113,7 +113,8 @@ public sealed class HotfixHotkeyTests
         var source = new AppSettings();
         source.Hotkeys.Capture = previous;
         Hotkey duplicate = new(HotkeyModifiers.Control | HotkeyModifiers.Shift, Hotkey.VkC);
-        var optional = typeof(HotkeySettings).GetProperties().Where(property => property.Name != nameof(HotkeySettings.Capture)).ToArray();
+        var optional = typeof(HotkeySettings).GetProperties()
+            .Where(property => property.PropertyType == typeof(Hotkey) && property.Name != nameof(HotkeySettings.Capture)).ToArray();
         foreach (var property in optional) property.SetValue(source.Hotkeys, duplicate);
         store.Save(source);
         AppSettings repaired = store.Load();

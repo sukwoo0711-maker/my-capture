@@ -59,6 +59,8 @@ internal static partial class StoreScreenshotSelfTest
         bool? contrast = ThemeService.SystemHighContrastOverrideForTest;
         ThemeService.SystemHighContrastOverrideForTest = false;
         Func<bool>? hints = ShortcutPresentation.ReadEnabled;
+        Func<HotkeySettings> hotkeys = ShortcutHelpWindow.ReadHotkeys;
+        ShortcutHelpWindow.ReadHotkeys = () => NewInstallDefaults.Create().Hotkeys;
         ShortcutPresentation.ReadEnabled = () => false;
         ShortcutPresentation.Refresh();
         FluidMotion.AnimationsEnabledOverrideForTest = false;
@@ -78,6 +80,7 @@ internal static partial class StoreScreenshotSelfTest
                 FluidMotion.AnimationsEnabledOverrideForTest = motion;
                 ThemeService.SystemHighContrastOverrideForTest = contrast;
                 ShortcutPresentation.ReadEnabled = hints;
+                ShortcutHelpWindow.ReadHotkeys = hotkeys;
                 ShortcutPresentation.Refresh();
                 UiText.Configure(null);
             }
@@ -153,6 +156,7 @@ internal static partial class StoreScreenshotSelfTest
             Scene("OCR", ExportOcr);
             Scene("library", ExportLibrary);
             Scene("video", ExportVideo);
+            ExportPinLayers();
         }
 
         private string? _previousTmp;
@@ -191,12 +195,13 @@ internal static partial class StoreScreenshotSelfTest
             };
             File.WriteAllText(DiagnosticOutputPaths.Child(_root, "manifest.json"),
                 JsonSerializer.Serialize(manifest, new JsonSerializerOptions { WriteIndented = true }), new UTF8Encoding(false));
-            if (_files.Count != 10) { Failures++; _report.AppendLine($"FAIL expected 10 layers, got {_files.Count}"); }
+            if (_files.Count != ExpectedLayerCount) { Failures++; _report.AppendLine($"FAIL expected {ExpectedLayerCount} layers, got {_files.Count}"); }
             _report.AppendLine(Failures == 0 ? "RESULT: PASS" : $"RESULT: FAIL ({Failures})");
             File.WriteAllText(DiagnosticOutputPaths.Child(_root, "store-layers-report.txt"), _report.ToString(), new UTF8Encoding(false));
         }
 
-        private void Emit(string relative, BitmapSource image, double logicalWidth, double logicalHeight, double scale = Scale)
+        private void Emit(string relative, BitmapSource image, double logicalWidth, double logicalHeight, double scale = Scale,
+            double windowOpacity = 1)
         {
             if (image.PixelWidth != (int)Math.Round(logicalWidth * scale) || image.PixelHeight != (int)Math.Round(logicalHeight * scale))
                 throw new InvalidDataException($"Unexpected layer size for {relative}: {image.PixelWidth}x{image.PixelHeight}");
@@ -204,8 +209,9 @@ internal static partial class StoreScreenshotSelfTest
             string directory = DiagnosticOutputPaths.Create(DiagnosticOutputPaths.Child(_root, parts[0]));
             Save(image, DiagnosticOutputPaths.Child(directory, parts[1]));
             _files.Add(new { path = relative, width = image.PixelWidth, height = image.PixelHeight,
-                renderScale = scale, logicalWidth, logicalHeight, theme = "Dark",
-                background = relative.StartsWith("samples/", StringComparison.Ordinal) ? "opaque" : "transparent" });
+                renderScale = scale, logicalWidth, logicalHeight, windowOpacity, theme = "Dark",
+                background = relative.StartsWith("samples/", StringComparison.Ordinal)
+                    || relative is "film/editor-before-paste.png" or "film/sheet.png" ? "opaque" : "transparent" });
             _report.AppendLine($"PASS {relative}: {image.PixelWidth}x{image.PixelHeight}, {scale}x");
         }
 
@@ -298,6 +304,7 @@ internal static partial class StoreScreenshotSelfTest
                 Pump(100);
                 Emit("redact/03.png", RenderLayerWindow(window), 1240, 780);
                 _report.AppendLine("Redaction: 3 real detector matches; word bounds from FormattedText at fixture origins plus production 3px padding; selection cleared before both renders.");
+                Scene("annotated redaction", () => ExportRedactionAnnotated(window));
             }
             finally { CloseLayerWindow(window); }
         }

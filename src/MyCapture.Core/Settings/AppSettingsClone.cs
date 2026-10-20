@@ -59,6 +59,8 @@ public static class AppSettingsClone
         RestoreClosedPin = s.RestoreClosedPin,
         CaptureText = s.CaptureText,
         PauseRecording = s.PauseRecording,
+        ForceCoreShortcuts = s.ForceCoreShortcuts,
+        CoreShortcutsAsked = s.CoreShortcutsAsked,
     };
 
     private static QueueSettings Clone(QueueSettings s) => new()

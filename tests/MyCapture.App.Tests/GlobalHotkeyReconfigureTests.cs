@@ -1,9 +1,11 @@
 using System;
 using System.Collections.Generic;
 using System.Threading;
+using System.Windows.Threading;
 using Microsoft.Extensions.Logging.Abstractions;
 using MyCapture.App.Diagnostics;
 using MyCapture.Core.Settings;
+using MyCapture.Platform.Interop;
 using MyCapture.Platform.Shell;
 using Xunit;
 
@@ -45,18 +47,27 @@ public sealed class GlobalHotkeyReconfigureTests
 
         public int RegisterCallCount { get; private set; }
 
+        public int BlockedErrorCode { get; init; } = 1409;
+
+        public Action<Hotkey>? OnRegistrationAttempt { get; set; }
+
         public IReadOnlyDictionary<int, (uint Modifiers, uint Vk)> Held => _held;
+
+        public void Block(Hotkey hotkey) => _blocked.Add(((uint)hotkey.Modifiers, hotkey.VirtualKey));
+
+        public void Unblock(Hotkey hotkey) => _blocked.Remove(((uint)hotkey.Modifiers, hotkey.VirtualKey));
 
         public bool TryRegister(int id, Hotkey hotkey, out int errorCode, out string errorMessage)
         {
             RegisterCallCount++;
+            OnRegistrationAttempt?.Invoke(hotkey);
             var key = ((uint)hotkey.Modifiers, hotkey.VirtualKey);
 
             bool collides = _blocked.Contains(key)
                 || System.Linq.Enumerable.Contains(_held.Values, key);
             if (collides)
             {
-                errorCode = 1409; // ERROR_HOTKEY_ALREADY_REGISTERED
+                errorCode = BlockedErrorCode;
                 errorMessage = "Hot key is already registered.";
                 return false;
             }
@@ -69,6 +80,51 @@ public sealed class GlobalHotkeyReconfigureTests
 
         public void Unregister(int id) => _held.Remove(id);
     }
+
+    private sealed class FakeOverride : IHotkeyOverride
+    {
+        public Dictionary<int, Hotkey> Held { get; } = [];
+        public List<int> ReleasedIds { get; } = [];
+        public bool CanClaim { get; init; } = true;
+        public int ClaimCallCount { get; private set; }
+        public int DisposeCallCount { get; private set; }
+
+        public bool TryClaim(int id, Hotkey hotkey)
+        {
+            ClaimCallCount++;
+            if (!CanClaim) return false;
+            Held[id] = hotkey;
+            return true;
+        }
+
+        public void Release(int id)
+        {
+            ReleasedIds.Add(id);
+            Held.Remove(id);
+        }
+
+        public void Dispose() => DisposeCallCount++;
+    }
+
+    private static HotkeySettings OnlyCapture(Hotkey hotkey, bool forceCoreShortcuts = false) => new()
+    {
+        Capture = hotkey,
+        OpenLibrary = Hotkey.None,
+        PasteToScreen = Hotkey.None,
+        HideAllPins = Hotkey.None,
+        ToggleClickThrough = Hotkey.None,
+        RepeatLastRegion = Hotkey.None,
+        CaptureWindow = Hotkey.None,
+        CaptureFullScreen = Hotkey.None,
+        RecordRegion = Hotkey.None,
+        UploadGitHubImage = Hotkey.None,
+        ScrollingCapture = Hotkey.None,
+        DelayedCapture = Hotkey.None,
+        RestoreClosedPin = Hotkey.None,
+        CaptureText = Hotkey.None,
+        PauseRecording = Hotkey.None,
+        ForceCoreShortcuts = forceCoreShortcuts,
+    };
 
     private static void RunSta(Action action)
     {
@@ -282,6 +338,407 @@ public sealed class GlobalHotkeyReconfigureTests
             Assert.True(result.Applied);
             Assert.Single(service.RegisteredCommands);
             Assert.Contains(GlobalHotkeyCommand.CaptureRegion, service.RegisteredCommands);
+        });
+    }
+
+    [Theory]
+    [InlineData(HotkeyModifiers.Control | HotkeyModifiers.Shift, Hotkey.VkC)]
+    [InlineData(HotkeyModifiers.Control | HotkeyModifiers.Shift, Hotkey.VkX)]
+    [InlineData(HotkeyModifiers.Control | HotkeyModifiers.Shift, Hotkey.VkZ)]
+    [InlineData(HotkeyModifiers.None, Hotkey.VkF3)]
+    public void Initialize_ClaimsCoreConflictWhenForced(HotkeyModifiers modifiers, uint virtualKey)
+    {
+        RunSta(() =>
+        {
+            var chord = new Hotkey(modifiers, virtualKey);
+            var registrar = new FakeRegistrar([chord]);
+            var hotkeyOverride = new FakeOverride();
+            using var window = new NativeMessageWindow();
+            using var service = new GlobalHotkeyService(window, registrar, NullLogger<GlobalHotkeyService>.Instance, hotkeyOverride);
+
+            service.Initialize(OnlyCapture(chord, forceCoreShortcuts: true));
+
+            Assert.Empty(service.Failures);
+            Assert.Equal(GlobalHotkeyCommand.CaptureRegion, Assert.Single(service.RegisteredCommands));
+            Assert.Equal(GlobalHotkeyCommand.CaptureRegion, Assert.Single(service.OverriddenCommands));
+            Assert.Equal(chord, service.GetAssigned(GlobalHotkeyCommand.CaptureRegion));
+            Assert.Equal(chord, Assert.Single(hotkeyOverride.Held).Value);
+            Assert.Empty(registrar.Held);
+        });
+    }
+
+    [Theory]
+    [InlineData(false, HotkeyModifiers.Control | HotkeyModifiers.Shift, Hotkey.VkC, 1409)]
+    [InlineData(true, HotkeyModifiers.Control, Hotkey.VkF1, 1409)]
+    [InlineData(true, HotkeyModifiers.Control | HotkeyModifiers.Shift, Hotkey.VkC, 87)]
+    public void Initialize_DoesNotOverrideWithoutEligibleConflict(
+        bool forceCoreShortcuts, HotkeyModifiers modifiers, uint virtualKey, int errorCode)
+    {
+        RunSta(() =>
+        {
+            var chord = new Hotkey(modifiers, virtualKey);
+            var registrar = new FakeRegistrar([chord]) { BlockedErrorCode = errorCode };
+            var hotkeyOverride = new FakeOverride();
+            using var window = new NativeMessageWindow();
+            using var service = new GlobalHotkeyService(window, registrar, NullLogger<GlobalHotkeyService>.Instance, hotkeyOverride);
+
+            service.Initialize(OnlyCapture(chord, forceCoreShortcuts));
+
+            Assert.Equal(errorCode, Assert.Single(service.Failures).NativeErrorCode);
+            Assert.Empty(service.RegisteredCommands);
+            Assert.Empty(service.OverriddenCommands);
+            Assert.Equal(0, hotkeyOverride.ClaimCallCount);
+        });
+    }
+
+    [Fact]
+    public void Initialize_ReportsConflictWhenOverrideCannotClaim()
+    {
+        RunSta(() =>
+        {
+            var chord = new Hotkey(HotkeyModifiers.None, Hotkey.VkF3);
+            var registrar = new FakeRegistrar([chord]);
+            var hotkeyOverride = new FakeOverride { CanClaim = false };
+            using var window = new NativeMessageWindow();
+            using var service = new GlobalHotkeyService(window, registrar, NullLogger<GlobalHotkeyService>.Instance, hotkeyOverride);
+
+            service.Initialize(OnlyCapture(chord, forceCoreShortcuts: true));
+
+            Assert.Equal(1409, Assert.Single(service.Failures).NativeErrorCode);
+            Assert.Empty(service.RegisteredCommands);
+            Assert.Empty(service.OverriddenCommands);
+            Assert.Equal(1, hotkeyOverride.ClaimCallCount);
+        });
+    }
+
+    [Fact]
+    public void Initialize_PrefersNativeRegistrationWhenItSucceeds()
+    {
+        RunSta(() =>
+        {
+            var registrar = new FakeRegistrar();
+            var hotkeyOverride = new FakeOverride();
+            using var window = new NativeMessageWindow();
+            using var service = new GlobalHotkeyService(window, registrar, NullLogger<GlobalHotkeyService>.Instance, hotkeyOverride);
+
+            service.Initialize(OnlyCapture(new Hotkey(HotkeyModifiers.None, Hotkey.VkF3), forceCoreShortcuts: true));
+
+            Assert.Empty(service.Failures);
+            Assert.Single(service.RegisteredCommands);
+            Assert.Empty(service.OverriddenCommands);
+            Assert.Equal(0, hotkeyOverride.ClaimCallCount);
+            Assert.Single(registrar.Held);
+        });
+    }
+
+    [Fact]
+    public void Initialize_ClaimsCoreChordAssignedToAnotherCommandAndRoutesItsMessages()
+    {
+        RunSta(() =>
+        {
+            var chord = new Hotkey(HotkeyModifiers.None, Hotkey.VkF3);
+            var registrar = new FakeRegistrar([chord]);
+            var hotkeyOverride = new FakeOverride();
+            using var window = new NativeMessageWindow();
+            using var service = new GlobalHotkeyService(window, registrar, NullLogger<GlobalHotkeyService>.Instance, hotkeyOverride);
+            HotkeySettings settings = OnlyCapture(Hotkey.None, forceCoreShortcuts: true);
+            settings.CaptureText = chord;
+            service.Initialize(settings);
+
+            Assert.Empty(service.Failures);
+            Assert.Equal(GlobalHotkeyCommand.CaptureText, Assert.Single(service.RegisteredCommands));
+            Assert.Equal(GlobalHotkeyCommand.CaptureText, Assert.Single(service.OverriddenCommands));
+            Assert.Equal(chord, service.GetAssigned(GlobalHotkeyCommand.CaptureText));
+            Assert.Null(service.GetAssigned(GlobalHotkeyCommand.PasteToScreen));
+            int id = Assert.Single(hotkeyOverride.Held).Key;
+            var pressed = new List<GlobalHotkeyCommand>();
+            NativeWindowMessageEventArgs? receivedMessage = null;
+            service.Pressed += (_, args) => pressed.Add(args.Command);
+            window.MessageReceived += (_, args) =>
+            {
+                if (args.Message == NativeMethods.WM_HOTKEY) receivedMessage = args;
+            };
+
+            Assert.True(service.PostDiagnosticCommand(GlobalHotkeyCommand.CaptureText));
+            var frame = new DispatcherFrame();
+            Dispatcher.CurrentDispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle,
+                new Action(() => frame.Continue = false));
+            Dispatcher.PushFrame(frame);
+
+            Assert.Equal(GlobalHotkeyCommand.CaptureText, Assert.Single(pressed));
+            Assert.NotNull(receivedMessage);
+            Assert.Equal(new IntPtr(id), receivedMessage.WParam);
+            Assert.True(receivedMessage.Handled);
+        });
+    }
+
+    [Fact]
+    public void Reconfigure_ClaimsCoreConflictWhenForceIsEnabled()
+    {
+        RunSta(() =>
+        {
+            var chord = new Hotkey(HotkeyModifiers.None, Hotkey.VkF3);
+            var registrar = new FakeRegistrar([chord]);
+            var hotkeyOverride = new FakeOverride();
+            using var window = new NativeMessageWindow();
+            using var service = new GlobalHotkeyService(window, registrar, NullLogger<GlobalHotkeyService>.Instance, hotkeyOverride);
+            service.Initialize(OnlyCapture(Hotkey.None));
+
+            HotkeyReconfigureResult result = service.Reconfigure(OnlyCapture(chord, forceCoreShortcuts: true));
+
+            Assert.True(result.Applied);
+            Assert.Empty(result.Failures);
+            Assert.Empty(service.Failures);
+            Assert.Equal(GlobalHotkeyCommand.CaptureRegion, Assert.Single(service.OverriddenCommands));
+            Assert.Equal(chord, service.GetAssigned(GlobalHotkeyCommand.CaptureRegion));
+        });
+    }
+
+    [Fact]
+    public void Reconfigure_ReleasesOverrideWhenItsChordIsRemoved()
+    {
+        RunSta(() =>
+        {
+            var chord = new Hotkey(HotkeyModifiers.None, Hotkey.VkF3);
+            var registrar = new FakeRegistrar([chord]);
+            var hotkeyOverride = new FakeOverride();
+            using var window = new NativeMessageWindow();
+            using var service = new GlobalHotkeyService(window, registrar, NullLogger<GlobalHotkeyService>.Instance, hotkeyOverride);
+            service.Initialize(OnlyCapture(chord, forceCoreShortcuts: true));
+            int id = Assert.Single(hotkeyOverride.Held).Key;
+
+            HotkeyReconfigureResult result = service.Reconfigure(OnlyCapture(Hotkey.None));
+
+            Assert.True(result.Applied);
+            Assert.Empty(service.OverriddenCommands);
+            Assert.Empty(hotkeyOverride.Held);
+            Assert.Equal(id, Assert.Single(hotkeyOverride.ReleasedIds));
+            Assert.False(service.CanRegister(chord));
+        });
+    }
+
+    [Fact]
+    public void Reconfigure_RollbackRestoresOverridesAndPreviousForceFlag()
+    {
+        RunSta(() =>
+        {
+            var previousChord = new Hotkey(HotkeyModifiers.Control | HotkeyModifiers.Shift, Hotkey.VkC);
+            var blockedChord = new Hotkey(HotkeyModifiers.Control | HotkeyModifiers.Alt, Hotkey.VkX);
+            var unassignedCoreChord = new Hotkey(HotkeyModifiers.None, Hotkey.VkF3);
+            var registrar = new FakeRegistrar([previousChord, blockedChord, unassignedCoreChord]);
+            var hotkeyOverride = new FakeOverride();
+            using var window = new NativeMessageWindow();
+            using var service = new GlobalHotkeyService(window, registrar, NullLogger<GlobalHotkeyService>.Instance, hotkeyOverride);
+            service.Initialize(OnlyCapture(previousChord, forceCoreShortcuts: true));
+            int id = Assert.Single(hotkeyOverride.Held).Key;
+
+            HotkeyReconfigureResult result = service.Reconfigure(OnlyCapture(blockedChord));
+
+            Assert.False(result.Applied);
+            Assert.Equal(blockedChord, Assert.Single(result.Failures).Hotkey);
+            Assert.Equal(previousChord, service.GetAssigned(GlobalHotkeyCommand.CaptureRegion));
+            Assert.Equal(GlobalHotkeyCommand.CaptureRegion, Assert.Single(service.OverriddenCommands));
+            Assert.Equal(previousChord, Assert.Single(hotkeyOverride.Held).Value);
+            Assert.Equal(id, Assert.Single(hotkeyOverride.ReleasedIds));
+            Assert.Equal(2, hotkeyOverride.ClaimCallCount);
+            int calls = registrar.RegisterCallCount;
+            Assert.True(service.CanRegister(unassignedCoreChord));
+            Assert.Equal(calls, registrar.RegisterCallCount);
+        });
+    }
+
+    [Fact]
+    public void Reconfigure_RollbackReleasesNewOverridesAndRestoresForceDisabled()
+    {
+        RunSta(() =>
+        {
+            var previousChord = new Hotkey(HotkeyModifiers.Control, Hotkey.VkF1);
+            var coreChord = new Hotkey(HotkeyModifiers.Control | HotkeyModifiers.Shift, Hotkey.VkC);
+            var blockedChord = new Hotkey(HotkeyModifiers.Control | HotkeyModifiers.Alt, Hotkey.VkX);
+            var registrar = new FakeRegistrar([coreChord, blockedChord]);
+            var hotkeyOverride = new FakeOverride();
+            using var window = new NativeMessageWindow();
+            using var service = new GlobalHotkeyService(window, registrar, NullLogger<GlobalHotkeyService>.Instance, hotkeyOverride);
+            service.Initialize(OnlyCapture(previousChord));
+            HotkeySettings next = OnlyCapture(coreChord, forceCoreShortcuts: true);
+            next.RecordRegion = blockedChord;
+
+            HotkeyReconfigureResult result = service.Reconfigure(next);
+
+            Assert.False(result.Applied);
+            Assert.Equal(blockedChord, Assert.Single(result.Failures).Hotkey);
+            Assert.Equal(previousChord, service.GetAssigned(GlobalHotkeyCommand.CaptureRegion));
+            Assert.Empty(service.OverriddenCommands);
+            Assert.Empty(hotkeyOverride.Held);
+            Assert.Single(hotkeyOverride.ReleasedIds);
+            Assert.Equal(1, hotkeyOverride.ClaimCallCount);
+            Assert.False(service.CanRegister(coreChord));
+        });
+    }
+
+    [Fact]
+    public void Dispose_ReleasesOverridesAndDisposesOverrideOnce()
+    {
+        RunSta(() =>
+        {
+            var chord = new Hotkey(HotkeyModifiers.None, Hotkey.VkF3);
+            var registrar = new FakeRegistrar([chord]);
+            var hotkeyOverride = new FakeOverride();
+            using var window = new NativeMessageWindow();
+            var service = new GlobalHotkeyService(window, registrar, NullLogger<GlobalHotkeyService>.Instance, hotkeyOverride);
+            service.Initialize(OnlyCapture(chord, forceCoreShortcuts: true));
+            int id = Assert.Single(hotkeyOverride.Held).Key;
+
+            service.Dispose();
+            service.Dispose();
+
+            Assert.Empty(service.RegisteredCommands);
+            Assert.Empty(service.OverriddenCommands);
+            Assert.Empty(hotkeyOverride.Held);
+            Assert.Equal(id, Assert.Single(hotkeyOverride.ReleasedIds));
+            Assert.Equal(1, hotkeyOverride.DisposeCallCount);
+        });
+    }
+
+    [Fact]
+    public void Reconfigure_RollbackPreservesExistingStartupConflictAfterDecline()
+    {
+        RunSta(() =>
+        {
+            var chord = new Hotkey(HotkeyModifiers.Control | HotkeyModifiers.Shift, Hotkey.VkC);
+            var registrar = new FakeRegistrar([chord]);
+            var hotkeyOverride = new FakeOverride();
+            using var window = new NativeMessageWindow();
+            using var service = new GlobalHotkeyService(window, registrar, NullLogger<GlobalHotkeyService>.Instance, hotkeyOverride);
+            service.Initialize(OnlyCapture(chord));
+            HotkeyRegistrationFailure originalFailure = Assert.Single(service.Failures);
+            HotkeySettings declined = OnlyCapture(chord);
+            CoreShortcuts.Decline(declined);
+
+            HotkeyReconfigureResult result = service.Reconfigure(declined);
+
+            Assert.False(result.Applied);
+            Assert.Equal(originalFailure, Assert.Single(service.Failures));
+            Assert.Empty(service.RegisteredCommands);
+            Assert.Empty(service.OverriddenCommands);
+            Assert.Equal(0, hotkeyOverride.ClaimCallCount);
+        });
+    }
+
+    [Fact]
+    public void Reconfigure_RollbackClearsPreviousFailureWhenChordBecomesAvailable()
+    {
+        RunSta(() =>
+        {
+            var previousChord = new Hotkey(HotkeyModifiers.Control | HotkeyModifiers.Shift, Hotkey.VkC);
+            var proposedChord = new Hotkey(HotkeyModifiers.Control | HotkeyModifiers.Alt, Hotkey.VkX);
+            var registrar = new FakeRegistrar([previousChord, proposedChord]);
+            var hotkeyOverride = new FakeOverride();
+            using var window = new NativeMessageWindow();
+            using var service = new GlobalHotkeyService(window, registrar, NullLogger<GlobalHotkeyService>.Instance, hotkeyOverride);
+            service.Initialize(OnlyCapture(previousChord));
+            Assert.Single(service.Failures);
+            registrar.OnRegistrationAttempt = chord =>
+            {
+                if (chord == proposedChord) registrar.Unblock(previousChord);
+            };
+
+            HotkeyReconfigureResult result = service.Reconfigure(OnlyCapture(proposedChord));
+
+            Assert.False(result.Applied);
+            Assert.Equal(proposedChord, Assert.Single(result.Failures).Hotkey);
+            Assert.Empty(service.Failures);
+            Assert.Equal(previousChord, service.GetAssigned(GlobalHotkeyCommand.CaptureRegion));
+        });
+    }
+
+    [Fact]
+    public void Reconfigure_KeepAvailableKeepsClaimedAndRegisteredChordsBesideAnUnrelatedConflict()
+    {
+        RunSta(() =>
+        {
+            // Another program owns F3 and Shift+F3; the legacy set hides pins with Shift+F3.
+            var shiftF3 = new Hotkey(HotkeyModifiers.Shift, Hotkey.VkF3);
+            var registrar = new FakeRegistrar([CoreShortcuts.PasteToScreen, shiftF3]);
+            var hotkeyOverride = new FakeOverride();
+            using var window = new NativeMessageWindow();
+            using var service = new GlobalHotkeyService(window, registrar, NullLogger<GlobalHotkeyService>.Instance, hotkeyOverride);
+            var legacy = new HotkeySettings();
+            service.Initialize(legacy);
+            Assert.Equal(2, service.Failures.Count);
+            var accepted = new HotkeySettings();
+            CoreShortcuts.Accept(accepted);
+
+            HotkeyReconfigureResult result = service.Reconfigure(accepted, keepAvailable: true);
+
+            Assert.True(result.Applied);
+            HotkeyRegistrationFailure failure = Assert.Single(result.Failures);
+            Assert.Equal(GlobalHotkeyCommand.HideAllPins, failure.Command);
+            Assert.Equal(shiftF3, failure.Hotkey);
+            Assert.Equal(1409, failure.NativeErrorCode);
+            Assert.Equal(failure, Assert.Single(service.Failures));
+            Assert.Equal(GlobalHotkeyCommand.PasteToScreen, Assert.Single(service.OverriddenCommands));
+            Assert.Equal(CoreShortcuts.PasteToScreen, Assert.Single(hotkeyOverride.Held).Value);
+            Assert.Equal(CoreShortcuts.PasteToScreen, service.GetAssigned(GlobalHotkeyCommand.PasteToScreen));
+            Assert.Equal(CoreShortcuts.Capture, service.GetAssigned(GlobalHotkeyCommand.CaptureRegion));
+            Assert.Equal(CoreShortcuts.RecordRegion, service.GetAssigned(GlobalHotkeyCommand.RecordRegion));
+            Assert.Equal(CoreShortcuts.OpenLibrary, service.GetAssigned(GlobalHotkeyCommand.OpenLibrary));
+            Assert.Equal(legacy.UploadGitHubImage, service.GetAssigned(GlobalHotkeyCommand.UploadGitHubImage));
+            Assert.Null(service.GetAssigned(GlobalHotkeyCommand.HideAllPins));
+            Assert.Equal(4, registrar.Held.Count);
+        });
+    }
+
+    [Fact]
+    public void Reconfigure_WithoutKeepAvailableStillRollsBackTheSameConflict()
+    {
+        RunSta(() =>
+        {
+            var shiftF3 = new Hotkey(HotkeyModifiers.Shift, Hotkey.VkF3);
+            var registrar = new FakeRegistrar([CoreShortcuts.PasteToScreen, shiftF3]);
+            var hotkeyOverride = new FakeOverride();
+            using var window = new NativeMessageWindow();
+            using var service = new GlobalHotkeyService(window, registrar, NullLogger<GlobalHotkeyService>.Instance, hotkeyOverride);
+            var legacy = new HotkeySettings();
+            service.Initialize(legacy);
+            var accepted = new HotkeySettings();
+            CoreShortcuts.Accept(accepted);
+
+            HotkeyReconfigureResult result = service.Reconfigure(accepted);
+
+            Assert.False(result.Applied);
+            Assert.Equal(shiftF3, Assert.Single(result.Failures).Hotkey);
+            Assert.Empty(service.OverriddenCommands);
+            Assert.Empty(hotkeyOverride.Held);
+            Assert.Equal(2, service.Failures.Count);
+            Assert.Contains(service.Failures, item => item.Hotkey == CoreShortcuts.PasteToScreen);
+            Assert.Contains(service.Failures, item => item.Hotkey == shiftF3);
+        });
+    }
+
+    [Fact]
+    public void Reconfigure_RollbackReportsFailureToRestorePreviousChord()
+    {
+        RunSta(() =>
+        {
+            var previousChord = new Hotkey(HotkeyModifiers.Control | HotkeyModifiers.Shift, Hotkey.VkC);
+            var proposedChord = new Hotkey(HotkeyModifiers.Control | HotkeyModifiers.Alt, Hotkey.VkX);
+            var registrar = new FakeRegistrar([proposedChord]);
+            var hotkeyOverride = new FakeOverride();
+            using var window = new NativeMessageWindow();
+            using var service = new GlobalHotkeyService(window, registrar, NullLogger<GlobalHotkeyService>.Instance, hotkeyOverride);
+            service.Initialize(OnlyCapture(previousChord));
+            registrar.OnRegistrationAttempt = chord =>
+            {
+                if (chord == proposedChord) registrar.Block(previousChord);
+            };
+
+            HotkeyReconfigureResult result = service.Reconfigure(OnlyCapture(proposedChord));
+
+            Assert.False(result.Applied);
+            Assert.Equal(proposedChord, Assert.Single(result.Failures).Hotkey);
+            Assert.Equal(previousChord, Assert.Single(service.Failures).Hotkey);
+            Assert.Empty(service.RegisteredCommands);
         });
     }
 }
