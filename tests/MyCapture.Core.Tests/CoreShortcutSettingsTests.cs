@@ -130,7 +130,8 @@ public sealed class CoreShortcutSettingsTests
         Assert.True(mapped.Hotkeys.ForceCoreShortcuts);
         Assert.True(mapped.Hotkeys.CoreShortcutsAsked);
         Assert.Equal(Hotkey.None, mapped.Hotkeys.OpenLibrary);
-        Assert.Equal(Hotkey.None, mapped.Hotkeys.PasteToScreen);
+        // Toggling force never assigns keys: the new-install default (F3 since 4.5.0) stays as it was.
+        Assert.Equal(NewInstallDefaults.Create().Hotkeys.PasteToScreen, mapped.Hotkeys.PasteToScreen);
         Assert.True(draft.ToHotkeySettings().ForceCoreShortcuts);
         Assert.True(draft.ToHotkeySettings().CoreShortcutsAsked);
         draft.LoadFrom(mapped);
@@ -159,7 +160,7 @@ public sealed class CoreShortcutSettingsTests
         Assert.Equal(asked, draft.ToAppSettings().Hotkeys.CoreShortcutsAsked);
         Assert.Equal(asked, draft.ToHotkeySettings().CoreShortcutsAsked);
         Assert.Equal(Hotkey.None, draft.ToHotkeySettings().OpenLibrary);
-        Assert.Equal(Hotkey.None, draft.ToHotkeySettings().PasteToScreen);
+        Assert.Equal(NewInstallDefaults.Create().Hotkeys.PasteToScreen, draft.ToHotkeySettings().PasteToScreen);
     }
 
     [Fact]

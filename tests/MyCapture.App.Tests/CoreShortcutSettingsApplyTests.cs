@@ -63,7 +63,8 @@ public sealed class CoreShortcutSettingsApplyTests
             Assert.True(store.Load().Hotkeys.CoreShortcutsAsked);
             Assert.Equal(!blocked, published.Hotkeys.ForceCoreShortcuts);
             Assert.Equal(blocked ? Hotkey.None : CoreShortcuts.OpenLibrary, published.Hotkeys.OpenLibrary);
-            Assert.Equal(blocked ? Hotkey.None : CoreShortcuts.PasteToScreen, published.Hotkeys.PasteToScreen);
+            // A rolled-back apply keeps the pre-apply value, which for a new install is F3 since 4.5.0.
+            Assert.Equal(blocked ? NewInstallDefaults.Create().Hotkeys.PasteToScreen : CoreShortcuts.PasteToScreen, published.Hotkeys.PasteToScreen);
         });
 
     [Theory]
