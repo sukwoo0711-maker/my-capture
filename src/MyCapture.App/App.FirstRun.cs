@@ -1,6 +1,9 @@
 using System.IO;
+using System.Windows;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using MyCapture.App.Settings;
+using MyCapture.App.Themes;
 using MyCapture.Core.Settings;
 using MyCapture.Platform.Shell;
 
@@ -14,6 +17,160 @@ namespace MyCapture.App;
 /// </summary>
 public partial class App
 {
+    private ThemedDialog? _coreShortcutsQuestion;
+    private bool _coreShortcutsQuestionPending;
+
+    /// <summary>The one-time choice uses the shared dialog, with overwrite as its default action.</summary>
+    internal static ThemedDialog CreateCoreShortcutsQuestion() => new(
+        UiText.Get("CoreShortcuts.Body"), UiText.Get("CoreShortcuts.Title"),
+        MessageBoxButton.OKCancel, MessageBoxResult.OK,
+        okLabel: UiText.Get("CoreShortcuts.Overwrite"), cancelLabel: UiText.Get("CoreShortcuts.KeepCurrent"));
+
+    private void ShowLaunchPresentation(bool quietLaunch, bool openSettings, bool answeredThisLaunch = false)
+    {
+        if (_settings is null || _preparingExit) return;
+        LaunchPresentation launch = FirstRunPlan.ForLaunch(_launchedFirstRun, quietLaunch, openSettings,
+            answeredThisLaunch || _settings.Hotkeys.CoreShortcutsAsked);
+        if (launch.ShowCoreShortcuts)
+        {
+            _coreShortcutsQuestionPending = true;
+            ThemedDialog question = CreateCoreShortcutsQuestion();
+            _coreShortcutsQuestion = question;
+            question.Closed += (_, _) =>
+            {
+                _coreShortcutsQuestion = null;
+                if (_shutdownRequested)
+                {
+                    // The exit closed the question, not the user: nothing is recorded, so the next launch asks again.
+                    _coreShortcutsQuestionPending = false;
+                    _log?.LogInformation("Core shortcut question closed by exit without an answer");
+                    return;
+                }
+                try
+                {
+                    AppSettings next = _settings.DeepClone();
+                    if (question.Result == MessageBoxResult.OK) CoreShortcuts.Accept(next.Hotkeys);
+                    else CoreShortcuts.Decline(next.Hotkeys);
+                    // The welcome still owns the first start-at-sign-in choice. A chord another
+                    // program holds must not undo the answer: the rest of the set takes effect
+                    // and the conflict notification names what is left.
+                    SettingsApplyResult result = _settingsApply!.ApplyCoreShortcutAnswer(next, applyStartup: !_launchedFirstRun);
+                    // Chords still held elsewhere are in the hotkey failures and reported with the
+                    // launch's conflict notification; anything else (an unsaved file) is said now.
+                    if (!result.Saved || !result.HotkeysApplied || result.Messages.Count > 0)
+                    {
+                        _log?.LogWarning("Core shortcut choice could not be fully applied: saved {Saved}, hotkeys {HotkeysApplied}; {Messages}",
+                            result.Saved, result.HotkeysApplied, string.Join("; ", result.Messages));
+                        ShowCoreShortcutsProblem(string.Join("\n", result.Messages));
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _log?.LogWarning(ex, "Could not apply the core shortcut choice");
+                    ShowCoreShortcutsProblem(ThemedDialog.RecoveryMessage(ex));
+                }
+                finally
+                {
+                    _coreShortcutsQuestionPending = false;
+                }
+                ShowLaunchPresentation(quietLaunch, openSettings, answeredThisLaunch: true);
+            };
+            ThemedDialog.ShowOwnerless(question);
+            return;
+        }
+
+        if (launch.ShowWelcome)
+        {
+            // The conflict itself is announced after the welcome; the tray says so meanwhile.
+            if (_hotkeys?.Failures.Count > 0) _tray?.SetState(TrayIconState.Error);
+            ShowFirstRunWelcome();
+        }
+        else ShowStartupHotkeyNotification();
+        // --settings opens Settings on every launch, beside a first-run welcome too.
+        if (openSettings) _ = Dispatcher.BeginInvoke(new Action(HandleSettingsRequested));
+        else if (launch.OpenLibrary) _ = Dispatcher.BeginInvoke(new Action(HandleGalleryRequested));
+    }
+
+    private void ShowFirstRunWelcome()
+    {
+        var welcome = new WelcomeWindow(_settings!.Hotkeys, _settings.General.AfterCapture, _settings.Queue.ImageRetentionHours);
+        welcome.Closed += (_, _) =>
+        {
+            StartAtSignInOutcome? startup = ApplyWelcomeStartAtSignIn(welcome.StartAtSignIn);
+            try { _services?.GetRequiredService<SettingsStore>().CompleteFirstRun(_settings!); }
+            catch (Exception ex) { _log?.LogWarning(ex, "Could not persist first-run completion"); }
+            AnnounceAfterWelcome(welcome.Outcome, startup);
+            switch (FirstRunPlan.Next(welcome.Outcome))
+            {
+                case AfterWelcome.OpenLibrary:
+                    _ = Dispatcher.BeginInvoke(new Action(HandleGalleryRequested));
+                    break;
+                case AfterWelcome.StartCapture:
+                    // The welcome has just left the screen; the frozen frame must not show it.
+                    _overlay?.NoteForegroundDismissal();
+                    _ = Dispatcher.BeginInvoke(new Action(HandleCaptureRequested));
+                    break;
+                case AfterWelcome.OpenSettings:
+                    _ = Dispatcher.BeginInvoke(new Action(HandleSettingsRequested));
+                    break;
+            }
+        };
+        welcome.Show();
+    }
+
+    /// <summary>
+    /// A launch without the welcome reports the shortcuts Windows did not register, once the
+    /// core-shortcut question (if any) has been answered.
+    /// </summary>
+    private void ShowStartupHotkeyNotification()
+    {
+        if (_hotkeys is null || _tray is null || _services is null || _coreShortcutsQuestionPending) return;
+        if (_hotkeys.Failures.Count > 0)
+        {
+            _tray.SetState(TrayIconState.Error);
+
+            HotkeyRegistrationFailure first = _hotkeys.Failures[0];
+            string suffix = _hotkeys.Failures.Count == 1
+                ? string.Empty
+                : UiText.Format("Text_646F2DBF1852", _hotkeys.Failures.Count - 1);
+
+            ShowHotkeyConflict(first,
+                UiText.Format("Text_114E1105C3EE", first.Hotkey, suffix)
+                    + PrintScreenFailureLine(_hotkeys.Failures)
+                    + (_services.GetRequiredService<SettingsStore>().LastLoadMigratedUnsafeHotkeys ? "\n" + UiText.Get("Hotkey.Migrated") : string.Empty));
+        }
+        else
+        {
+            try
+            {
+                if (_services.GetRequiredService<SettingsStore>().LastLoadMigratedUnsafeHotkeys)
+                    _tray.ShowBalloon(UiText.Get("Hotkey.MigratedTitle"), UiText.Get("Hotkey.Migrated"),
+                        TrayBalloonKind.Information, playSound: false);
+            }
+            catch (Exception ex)
+            {
+                _log?.LogWarning(ex, "Could not show the shortcut migration notification");
+            }
+        }
+    }
+
+    /// <summary>The core-shortcut answer could not be saved: say so with a way into Settings → Shortcuts.</summary>
+    private void ShowCoreShortcutsProblem(string message)
+    {
+        if (message.Length == 0 || _shellPresenter is null) return;
+        string row = ShortcutSettingTarget.ForCommand(GlobalHotkeyCommand.CaptureRegion);
+        try
+        {
+            _shellPresenter.ShowActionNotification(UiText.Get("CoreShortcuts.Title"), message,
+                UiText.Get("Shell_ChangeShortcut"), () => HandleShortcutSettingsRequested(row), TrayBalloonKind.Error,
+                answersCommand: true);
+        }
+        catch (Exception ex)
+        {
+            _log?.LogWarning(ex, "Could not report the core shortcut answer problem");
+        }
+    }
+
     /// <summary>
     /// Applies the welcome's start-at-sign-in choice and records what Windows really does in the
     /// settings the welcome is about to save, so Settings shows the same state.
@@ -119,7 +276,7 @@ public partial class App
     /// <summary>Applied settings changed the capture key: the "ready" notification names the new one.</summary>
     private void AnnounceCaptureKeyChange(Hotkey previous, Hotkey current)
     {
-        if (_tray is null || _hotkeys?.Failures.Count != 0) return;
+        if (_tray is null || _coreShortcutsQuestionPending || _hotkeys?.Failures.Count != 0) return;
         if (_readyNotification.HasPendingResident)
         {
             QueueWelcomeResidentAnnouncement();

@@ -935,6 +935,14 @@
                             <settings:HotkeyRecorder HorizontalAlignment="Left" AutomationProperties.Name="{loc:Text Text_6FF5C7B32202}" DefaultText="Ctrl+Shift+X" Text="{Binding RecordRegionHotkey, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
                         </StackPanel>
 
+                        <CheckBox x:Name="ForceCoreShortcutsCheck" Style="{StaticResource Settings.CheckBox}"
+                                  Content="{loc:Text CoreShortcuts.Force}"
+                                  AutomationProperties.Name="{loc:Text CoreShortcuts.Force}"
+                                  AutomationProperties.HelpText="{loc:Text CoreShortcuts.ForceDescription}"
+                                  IsChecked="{Binding ForceCoreShortcuts}" />
+                        <TextBlock Style="{StaticResource Settings.Description}"
+                                   Text="{loc:Text CoreShortcuts.ForceDescription}" />
+
                         <TextBlock Style="{StaticResource Settings.GroupHeading}" Text="{loc:Text SettingsUx_OtherShortcutsHeading}" />
                         <TextBlock Style="{StaticResource Settings.Description}" Margin="0,0,0,10"
                                    Text="{loc:Text SettingsUx_OtherShortcutsHint}" />

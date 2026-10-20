@@ -24,6 +24,12 @@ public partial class App
 {
     internal EditDraftStore? DraftStore { get; private set; }
     private bool _preparingExit;
+    /// <summary>
+    /// Set just before WPF shuts the app down. <see cref="_preparingExit"/> is already false again
+    /// when the shutdown closes the remaining windows, so a window closed from here on was closed
+    /// by the exit, not by the user.
+    /// </summary>
+    private bool _shutdownRequested;
     internal Func<Task<bool>>? PrepareCapturePersistenceForExitAsync { get; set; }
     /// <summary>Call after persistence and queue initialization, before normal editor creation.</summary>
     internal async Task InitializeEditRecoveryAsync()
@@ -92,6 +98,7 @@ public partial class App
         if (_storeInstallationPending) return false;
         if (!await PrepareForAppExitAsync(AppExitReason.Explicit)) return false;
         SavePinSessionForExit();
+        _shutdownRequested = true;
         Shutdown(0); return true;
     }
     private async Task<bool> PrepareForAppExitAsync(AppExitReason reason)
