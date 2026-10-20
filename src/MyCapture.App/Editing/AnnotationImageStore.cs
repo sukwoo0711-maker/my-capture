@@ -36,7 +36,16 @@ internal sealed class AnnotationImageStore
     /// The decoded bitmap and the generated asset file name to store on the annotation,
     /// or <see langword="null"/> when the file could not be decoded as an image.
     /// </returns>
-    internal (BitmapSource Bitmap, string AssetFileName)? LoadFromFile(string sourcePath)
+    internal (BitmapSource Bitmap, string AssetFileName)? LoadFromFile(string sourcePath) =>
+        Decode(sourcePath) is { } decoded ? Register(decoded) : null;
+
+    /// <summary>
+    /// The decoding half of <see cref="LoadFromFile"/>: reads <paramref name="sourcePath"/>
+    /// without locking it and returns frozen pixels, or <see langword="null"/> when the file
+    /// could not be decoded as an image. It touches no store state, so it may run on any
+    /// thread; <see cref="Register"/> then names the result on the store's thread.
+    /// </summary>
+    internal static DecodedFile? Decode(string sourcePath)
     {
         if (string.IsNullOrWhiteSpace(sourcePath) || !File.Exists(sourcePath))
         {
@@ -46,12 +55,7 @@ internal sealed class AnnotationImageStore
         try
         {
             BitmapSource decoded = DecodeWithoutLocking(sourcePath);
-            string extension = SafeExtension(sourcePath);
-            string assetName = $"image-{++_counter:D2}{extension}";
-
-            _decoded[assetName] = decoded;
-            _sources[assetName] = Path.GetFullPath(sourcePath);
-            return (decoded, assetName);
+            return new DecodedFile(decoded, SafeExtension(sourcePath), Path.GetFullPath(sourcePath));
         }
         catch (Exception ex) when (ex is NotSupportedException or FileFormatException or IOException or ArgumentException)
         {
@@ -60,6 +64,22 @@ internal sealed class AnnotationImageStore
             return null;
         }
     }
+
+    /// <summary>
+    /// Registers a file <see cref="Decode"/> read under a fresh, path-separator-free asset
+    /// name, exactly as <see cref="LoadFromFile"/> does.
+    /// </summary>
+    internal (BitmapSource Bitmap, string AssetFileName) Register(DecodedFile file)
+    {
+        ArgumentNullException.ThrowIfNull(file);
+        string assetName = $"image-{++_counter:D2}{file.Extension}";
+        _decoded[assetName] = file.Bitmap;
+        _sources[assetName] = file.FullPath;
+        return (file.Bitmap, assetName);
+    }
+
+    /// <summary>A picked file's frozen pixels, asset extension and full source path.</summary>
+    internal sealed record DecodedFile(BitmapSource Bitmap, string Extension, string FullPath);
 
     internal BitmapSource? Get(string assetFileName) =>
         _decoded.TryGetValue(assetFileName, out BitmapSource? bitmap) ? bitmap : null;
@@ -80,14 +100,36 @@ internal sealed class AnnotationImageStore
     }
 
     /// <summary>Release assets that no live annotation or reversible command can restore.</summary>
+    /// <remarks>
+    /// Runs on every history change, so it looks only for the assets the store holds: it
+    /// returns at once when there are none, and walks the undo and redo stacks only while
+    /// some held asset has not yet been found in the document or an earlier command. The
+    /// assets it releases are exactly those neither the document nor the history references.
+    /// </remarks>
     internal void PruneToReachable(AnnotationDocument document, UndoStack history)
     {
         ArgumentNullException.ThrowIfNull(document);
         ArgumentNullException.ThrowIfNull(history);
-        var reachable = new HashSet<string>(document.Items.OfType<ImageAnnotation>()
-            .Select(item => item.AssetFileName), StringComparer.OrdinalIgnoreCase);
-        reachable.UnionWith(history.ReferencedImageAssets);
-        foreach (string name in _decoded.Keys.Where(name => !reachable.Contains(name)).ToArray())
+        if (_decoded.Count == 0)
+        {
+            return;
+        }
+
+        var unreached = new HashSet<string>(_decoded.Keys, StringComparer.OrdinalIgnoreCase);
+        foreach (ImageAnnotation item in document.Items.OfType<ImageAnnotation>())
+        {
+            if (item.AssetFileName is { } name) unreached.Remove(name);
+        }
+
+        if (unreached.Count != 0)
+        {
+            foreach (string name in history.ReferencedImageAssets)
+            {
+                if (name is not null && unreached.Remove(name) && unreached.Count == 0) break;
+            }
+        }
+
+        foreach (string name in unreached)
         {
             _decoded.Remove(name);
             _sources.Remove(name);
