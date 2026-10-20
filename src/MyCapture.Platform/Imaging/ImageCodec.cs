@@ -26,6 +26,24 @@ public static class ImageCodec
     /// </remarks>
     public const int ThumbnailJpegQuality = 82;
 
+    /// <summary>Decodes saved PNG bytes without keeping a stream or file open.</summary>
+    public static BitmapSource? TryDecodePng(byte[] bytes)
+    {
+        ArgumentNullException.ThrowIfNull(bytes);
+        try
+        {
+            using var stream = new MemoryStream(bytes, writable: false);
+            var decoder = new PngBitmapDecoder(stream, BitmapCreateOptions.PreservePixelFormat, BitmapCacheOption.OnLoad);
+            BitmapSource bitmap = decoder.Frames[0];
+            bitmap.Freeze();
+            return bitmap;
+        }
+        catch (Exception ex) when (ex is IOException or NotSupportedException or ArgumentException or FormatException)
+        {
+            return null;
+        }
+    }
+
     public static byte[] EncodePng(BitmapSource bitmap)
     {
         ArgumentNullException.ThrowIfNull(bitmap);

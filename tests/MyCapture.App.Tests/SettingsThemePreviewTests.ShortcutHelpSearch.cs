@@ -63,7 +63,7 @@ public sealed partial class SettingsThemePreviewTests
                         Assert.InRange(view.Search.ActualHeight, 40, 41);
 
                         Border[] rows = view.VisibleResults();
-                        Assert.Equal(2, rows.Length);
+                        Assert.Equal(3, rows.Length);
                         Rect list = BoundsIn(view.ResultsView, help);
                         foreach (Border row in rows)
                         {

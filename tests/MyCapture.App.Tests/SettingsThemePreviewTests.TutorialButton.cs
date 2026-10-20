@@ -94,7 +94,14 @@ public sealed partial class SettingsThemePreviewTests
                         Assert.Equal(42, total);
                         view.Search.Text = "Ctrl+C";
                         Drain(help);
-                        foreach (Border row in view.VisibleResults())
+                        Border[] rows = view.VisibleResults();
+                        Assert.Equal(3, rows.Length);
+                        Border originalText = Assert.Single(rows, row => Descendants(row).OfType<TextBlock>()
+                            .Any(text => text.Text == UiText.Get("Text_976A6C92B870")));
+                        Assert.Empty(Descendants(originalText).OfType<Button>());
+                        Assert.Contains(Descendants(originalText).OfType<WrapPanel>(),
+                            keys => AutomationProperties.GetName(keys) == "Ctrl+C / " + UiText.Get("Text_C7011B8D345C"));
+                        foreach (Border row in rows.Where(row => !ReferenceEquals(row, originalText)))
                         {
                             Button button = Assert.Single(TutorialButtons(row));
                             VerifyTutorialButton(help, button, (string)button.Tag);

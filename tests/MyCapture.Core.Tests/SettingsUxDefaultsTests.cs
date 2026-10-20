@@ -9,7 +9,7 @@ using Xunit;
 namespace MyCapture.Core.Tests;
 
 /// <summary>
-/// New installations register only region capture and recording and hide key captions; files
+/// New installations register capture, recording and clipboard pin keys and hide key captions; files
 /// written by earlier versions keep every chord, and current caption choices persist.
 /// </summary>
 public sealed class SettingsUxDefaultsTests
@@ -18,13 +18,13 @@ public sealed class SettingsUxDefaultsTests
 
     private static Hotkey[] OptionalHotkeys(HotkeySettings keys) =>
     [
-        keys.OpenLibrary, keys.PasteToScreen, keys.HideAllPins, keys.ToggleClickThrough, keys.RepeatLastRegion,
+        keys.OpenLibrary, keys.ToggleClickThrough, keys.RepeatLastRegion,
         keys.CaptureWindow, keys.CaptureFullScreen, keys.UploadGitHubImage, keys.ScrollingCapture, keys.DelayedCapture,
         keys.RestoreClosedPin, keys.CaptureText, keys.PauseRecording,
     ];
 
     [Fact]
-    public void NewInstall_RegistersOnlyRegionCaptureAndRecording_AndHidesKeyCaptions()
+    public void NewInstall_RegistersCaptureRecordingAndClipboardPinKeys_AndHidesKeyCaptions()
     {
         using var workspace = new TempWorkspace();
 
@@ -34,6 +34,7 @@ public sealed class SettingsUxDefaultsTests
         Assert.Equal("Ctrl+Shift+C", fresh.Hotkeys.Capture.ToString());
         Assert.Equal("Ctrl+Shift+X", fresh.Hotkeys.RecordRegion.ToString());
         Assert.All(OptionalHotkeys(fresh.Hotkeys), key => Assert.Equal(Hotkey.None, key));
+        AssertNewPinDefaults(fresh);
         Assert.False(fresh.General.ShowShortcutHints);
         Assert.Equal(1, fresh.General.ShortcutHintsRevision);
         Assert.Equal(AppThemeNames.ToSetting(AppTheme.System), fresh.General.Theme);
@@ -56,6 +57,7 @@ public sealed class SettingsUxDefaultsTests
         Assert.Equal("Ctrl+Shift+C", reloaded.Hotkeys.Capture.ToString());
         Assert.Equal("Ctrl+Shift+X", reloaded.Hotkeys.RecordRegion.ToString());
         Assert.All(OptionalHotkeys(reloaded.Hotkeys), key => Assert.Equal(Hotkey.None, key));
+        AssertNewPinDefaults(reloaded);
         Assert.False(reloaded.General.ShowShortcutHints);
         Assert.Equal(1, reloaded.General.ShortcutHintsRevision);
         Assert.Equal(AppThemeNames.ToSetting(AppTheme.System), reloaded.General.Theme);
@@ -86,6 +88,7 @@ public sealed class SettingsUxDefaultsTests
         Assert.Equal("F9", loaded.Hotkeys.UploadGitHubImage.ToString());
         Assert.True(loaded.General.ShowShortcutHints);
         AssertLegacyLibraryDefaults(loaded.Queue);
+        Assert.True(loaded.Pin.CloseOnDoubleClick);
         Assert.Equal(before, File.ReadAllText(workspace.Paths.SettingsFile));
     }
 
@@ -107,6 +110,23 @@ public sealed class SettingsUxDefaultsTests
         Assert.Equal("Ctrl+Shift+X", loaded.Hotkeys.RecordRegion.ToString());
         Assert.True(loaded.General.ShowShortcutHints);
         AssertLegacyLibraryDefaults(loaded.Queue);
+        Assert.True(loaded.Pin.CloseOnDoubleClick);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void ExistingFile_KeepsExplicitDoubleClickChoice_WithoutRewriting(bool closeOnDoubleClick)
+    {
+        using var workspace = new TempWorkspace();
+        workspace.Paths.EnsureCreated();
+        string json = $$"""{"schemaVersion":4,"pin":{"closeOnDoubleClick":{{closeOnDoubleClick.ToString().ToLowerInvariant()}} } }""";
+        File.WriteAllText(workspace.Paths.SettingsFile, json);
+
+        AppSettings loaded = Store(workspace).Load();
+
+        Assert.Equal(closeOnDoubleClick, loaded.Pin.CloseOnDoubleClick);
+        Assert.Equal(json, File.ReadAllText(workspace.Paths.SettingsFile));
     }
 
     [Theory]
@@ -181,17 +201,25 @@ public sealed class SettingsUxDefaultsTests
         Assert.Equal("Ctrl+Shift+C", draft.CaptureHotkey);
         Assert.Equal("Ctrl+Shift+X", draft.RecordRegionHotkey);
         Assert.Equal(string.Empty, draft.OpenLibraryHotkey);
-        Assert.Equal(string.Empty, draft.PasteToScreenHotkey);
-        Assert.Equal(string.Empty, draft.HideAllPinsHotkey);
+        Assert.Equal("F3", draft.PasteToScreenHotkey);
+        Assert.Equal("Shift+F3", draft.HideAllPinsHotkey);
         Assert.Equal(string.Empty, draft.UploadGitHubImageHotkey);
         Assert.False(draft.ShowShortcutHints);
         Assert.False(draft.HasErrors);
         AppSettings mapped = draft.ToAppSettings();
         Assert.All(OptionalHotkeys(mapped.Hotkeys), key => Assert.Equal(Hotkey.None, key));
+        AssertNewPinDefaults(mapped);
         Assert.Equal(1, mapped.General.ShortcutHintsRevision);
         Assert.Equal(AppThemeNames.ToSetting(AppTheme.System), mapped.General.Theme);
         Assert.Equal(AfterCaptureAction.QuickAccess, mapped.General.AfterCapture);
         AssertNewLibraryDefaults(mapped.Queue);
+    }
+
+    private static void AssertNewPinDefaults(AppSettings settings)
+    {
+        Assert.Equal(new Hotkey(HotkeyModifiers.None, Hotkey.VkF3), settings.Hotkeys.PasteToScreen);
+        Assert.Equal(new Hotkey(HotkeyModifiers.Shift, Hotkey.VkF3), settings.Hotkeys.HideAllPins);
+        Assert.False(settings.Pin.CloseOnDoubleClick);
     }
 
     private static void AssertNewLibraryDefaults(QueueSettings queue)

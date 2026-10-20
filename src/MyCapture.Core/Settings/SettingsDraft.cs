@@ -108,6 +108,7 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
 
     // ----- Pin -----
     private bool _closeOnDoubleClick;
+    private bool _restoreOpenPinsOnLaunch;
     private string _initialOpacity = string.Empty;
     private string _zoomStep = string.Empty;
     private string _ctrlClickDebounceMs = string.Empty;
@@ -492,6 +493,7 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
     // ================= Pin =================
 
     public bool CloseOnDoubleClick { get => _closeOnDoubleClick; set => Set(ref _closeOnDoubleClick, value); }
+    public bool RestoreOpenPinsOnLaunch { get => _restoreOpenPinsOnLaunch; set => Set(ref _restoreOpenPinsOnLaunch, value); }
     public bool CacheResults { get => _cacheResults; set => Set(ref _cacheResults, value); }
 
     public string InitialOpacity
@@ -755,6 +757,7 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
         _fileNamePattern = s.Export.FileNamePattern;
 
         _closeOnDoubleClick = s.Pin.CloseOnDoubleClick;
+        _restoreOpenPinsOnLaunch = s.Pin.RestoreOpenPinsOnLaunch;
         _initialOpacity = Dbl(s.Pin.InitialOpacity);
         _zoomStep = Dbl(s.Pin.ZoomStep);
         _ctrlClickDebounceMs = Int(s.Pin.CtrlClickDebounceMs);
@@ -837,7 +840,7 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
         _lastImageExport.Format.ToString(), Int(_lastImageExport.LongEdge), Int(_lastImageExport.ReductionPercent),
         B(_lastImageExport.IncludeSourceUrl), Int(_lastImageExport.Margin), Int(_lastImageExport.CornerRadius),
         _lastImageExport.Background.ToString(), B(_lastImageExport.Shadow),
-        B(_closeOnDoubleClick), _initialOpacity, _zoomStep, _ctrlClickDebounceMs, _closedWindowRestoreLimit,
+        B(_closeOnDoubleClick), B(_restoreOpenPinsOnLaunch), _initialOpacity, _zoomStep, _ctrlClickDebounceMs, _closedWindowRestoreLimit,
         _preferredLanguages, _ocrQuality, B(_cacheResults),
         _lastAnnotationTool, _annotationStrokeStyle.ToString(), Dbl(_annotationFillTransparency), _strokeThickness,
         _fontSize, _fontFamily, _mosaicBlockSize, _highlighterAlpha, _highlighterOpacityPercent, _blurRadius,
@@ -958,6 +961,7 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
             Pin =
             {
                 CloseOnDoubleClick = _closeOnDoubleClick,
+                RestoreOpenPinsOnLaunch = _restoreOpenPinsOnLaunch,
                 InitialOpacity = ParseDouble(_initialOpacity),
                 ZoomStep = ParseDouble(_zoomStep),
                 CtrlClickDebounceMs = ParseInt(_ctrlClickDebounceMs),

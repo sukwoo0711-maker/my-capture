@@ -97,6 +97,7 @@ public partial class App
         await StopLegacyImportForExitAsync();
         if (_storeInstallationPending) return false;
         if (!await PrepareForAppExitAsync(AppExitReason.Explicit)) return false;
+        SavePinSessionForExit();
         _shutdownRequested = true;
         Shutdown(0); return true;
     }
