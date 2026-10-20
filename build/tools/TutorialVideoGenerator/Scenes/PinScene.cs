@@ -19,7 +19,7 @@ namespace MyCapture.TutorialGenerator.Scenes;
 /// <summary>
 /// The pin clips: real PinWindows (image clip, frame outline, hover accent, bottom feedback), their
 /// PinHoverBar, the pin's own context menu and the tray menu over a synthetic desktop. Commands
-/// run through the product's handlers (menu items, the Esc key handler, hide/show, click-through);
+/// run through the product's handlers (menu items, the Esc and Ctrl+C key handlers, hide/show, click-through);
 /// the clipboard and file writes they request are intercepted and their results reported back the
 /// way PinManager reports them.
 /// </summary>
@@ -45,6 +45,11 @@ internal sealed class PinScene : TutorialScene
     private static readonly Rect TrayIconBounds = new(800, Stage.SceneHeight - TaskbarHeight + 16, 16, 16);
     private static readonly DateTimeOffset SavedAt = new(2026, 10, 13, 9, 30, 12, TimeSpan.FromHours(9));
 
+    /// <summary>The query the pin-copy clip keeps pinned beside the code editor; code reads the same in every language.</summary>
+    private const string Snippet = "SELECT id, status, updated_at\r\nFROM orders\r\nWHERE status = 'PENDING'\r\nORDER BY updated_at DESC;";
+    private const double CodeLineHeight = 24;
+    private static readonly double CodeTextX = NoteClient.X + 56;
+
     private static readonly FieldInfo CountdownField = PrivateField(typeof(PinWindow), "_feedbackCountdown");
     private static readonly FieldInfo CountdownTimerField = PrivateField(typeof(FeedbackCountdown), "_timer");
     private static readonly FieldInfo HoverHideTimerField = PrivateField(typeof(PinWindow), "_hoverHideTimer");
@@ -62,6 +67,11 @@ internal sealed class PinScene : TutorialScene
     private static readonly Brush FieldBorder = Solid(0xC4, 0xCA, 0xD3);
     private static readonly Brush FocusBlue = Solid(0x2F, 0x6F, 0xEB);
     private static readonly Brush SelectionBlue = Solid(0xC7, 0xDD, 0xFF);
+    private static readonly Brush Gutter = Solid(0xF6, 0xF7, 0xF9);
+    private static readonly Brush CurrentLine = Solid(0xF1, 0xF5, 0xFD);
+    private static readonly Brush CodeComment = Solid(0x3A, 0x7D, 0x44);
+    private static readonly Brush CodeKeyword = Solid(0x1F, 0x4F, 0xC4);
+    private static readonly Brush CodeString = Solid(0xA3, 0x31, 0x2A);
 
     private readonly string _feature;
     private readonly HotkeySettings _hotkeys = NewInstallDefaults.Create().Hotkeys;
@@ -79,8 +89,9 @@ internal sealed class PinScene : TutorialScene
     private PointD? _selectionTo;
     private double _clock;
     private int _lastRepeat;
-    private bool _inputFocused, _caret, _pasted, _explorer;
-    private string _typed = string.Empty;
+    private bool _inputFocused, _caret, _pasted, _explorer, _lineCaret;
+    private string _typed = string.Empty, _lineTail = string.Empty;
+    private string? _copiedText;
 
     internal PinScene(string id, string language) : base(id, language)
     {
@@ -89,8 +100,8 @@ internal sealed class PinScene : TutorialScene
         _noteLines = Korean
             ? ["배포 점검 순서", "1. 변경 사항 검토", "2. 테스트 결과 확인", "3. 배포 일정 공유"]
             : ["Release check", "1. Review the changes", "2. Confirm the test results", "3. Share the release date"];
-        // A new installation: the optional pin shortcuts are unassigned, so the menus show no
-        // key for them and no clip invents one.
+        // A new installation: F3 and Shift+F3 pin the clipboard and hide or show the pins; the other
+        // pin shortcuts are unassigned, so the menus show no key for them and no clip invents one.
         _previousHotkeys = ShortcutHelpWindow.ReadHotkeys;
         ShortcutHelpWindow.ReadHotkeys = () => _hotkeys;
         try
@@ -106,9 +117,11 @@ internal sealed class PinScene : TutorialScene
 
     internal override string Provenance =>
         "Real PinWindow (image clip, frame outline and hover accent, bottom feedback), PinHoverBar, the pin's ContextMenu and the tray "
-        + "ContextMenu (ThemedShellPresenter.CreateMenu over TrayMenuLayout.Build) rendered detached at 1:1; Esc, hide/show, "
-        + "click-through, copy, quick save and reopen run through the product's handlers and menu items. Clipboard and file writes "
-        + "are intercepted and reported with ReportCopyResult/ReportSaveResult. Note app, Explorer, taskbar and wallpaper are synthetic.";
+        + "ContextMenu (ThemedShellPresenter.CreateMenu over TrayMenuLayout.Build) rendered detached at 1:1; Esc, Ctrl+C, hide/show, "
+        + "click-through, quick save and reopen run through the product's handlers and menu items. The clipboard pin opens without "
+        + "activation, as PinManager opens it; a text pin's Ctrl+C request carries its original text, which the clip pastes. Clipboard "
+        + "and file writes are intercepted and reported with ReportCopyResult/ReportSaveResult. Note app, code editor, Explorer, "
+        + "taskbar and wallpaper are synthetic.";
 
     // ---- Storyboards ----------------------------------------------------------------------------
 
@@ -126,12 +139,18 @@ internal sealed class PinScene : TutorialScene
     private TutorialStoryboard ClipboardStory()
     {
         PointD start = LineStart(0), end = LineEnd(_noteLines.Length - 1);
-        var story = new TutorialStoryboard(new PointD(760, 400));
-        story.Hold("open", 0.8).Move("to-text", start);
-        story.Motion("select-text", 24, start, end, pressed: true).Hold("selected", 0.4);
-        story.Hold("copy", 0.8).Hold("shortcut", 0.9).Hold("pinned", 1.5);
-        _dragFrom = end;
-        story.Motion("drag", 32, end, new PointD(end.X + 560, end.Y - 90), pressed: true).Hold("moved", 1.0);
+        // The pin opens centred on the pointer, so the pointer rests beside the note first and the
+        // pin leaves the line the user keeps typing on in view.
+        var beside = new PointD(760, 170);
+        var story = new TutorialStoryboard(new PointD(520, 380));
+        story.Hold("open", 0.5).Move("to-text", start);
+        story.Motion("select-text", 22, start, end, pressed: true).Hold("selected", 0.3);
+        story.Hold("copy", 0.6).Move("to-beside", beside, 14).Hold("shortcut", 0.8).Hold("pinned", 1.0);
+        // The pin opens without activation (PinManager.PasteFromClipboardAsync), so the keys still
+        // go to the note: End clears the selection and the typing lands after the copied lines.
+        story.Hold("line-end", 0.4).Motion("keep-typing", 20, beside, beside).Hold("kept", 0.5);
+        _dragFrom = beside;
+        story.Motion("drag", 22, beside, new PointD(beside.X + 20, beside.Y + 150), pressed: true).Hold("moved", 0.6);
         story.Hold("esc", 0.4);
         return story.Finish("closed", 11);
     }
@@ -188,12 +207,14 @@ internal sealed class PinScene : TutorialScene
 
     private TutorialStoryboard CopyStory()
     {
-        _checklist = ChecklistCapture();
-        LivePin pin = AddPin(PinContent.FromImage(_checklist), new Point(596, 60));
+        // A pinned snippet keeps its source, so Ctrl+C carries the exact text with the image.
+        LivePin pin = AddPin(PinContent.FromText(ClipboardTextRenderer.Render(Snippet, isTabularContent: false), Snippet, isTable: false),
+            new Point(600, 70));
         var story = new TutorialStoryboard(new PointD(450, 420));
-        story.Hold("open", 0.8).Move("to-pin", new PointD(pin.Bounds.X + 150, pin.Bounds.Y + 170)).Click("select").Hold("selected", 0.6);
+        story.Hold("open", 0.8).Move("to-pin", Center(pin.Bounds)).Click("select").Hold("selected", 0.6);
         story.Hold("copy", 0.3).Hold("copied", FeedbackTiming.ConfirmationOverContent.TotalSeconds);
-        story.Move("to-note", new PointD(NoteClient.X + 60, NoteClient.Y + 130)).Click("note-click").Hold("caret", 0.6);
+        // Clicking right of the empty line puts the caret at its start and keeps the pointer clear of the paste.
+        story.Move("to-note", new PointD(CodeTextX + 320, CodeLineY(1) + 12)).Click("note-click").Hold("caret", 0.6);
         story.Hold("paste", 0.4);
         return story.Finish("pasted", 11);
     }
@@ -258,15 +279,33 @@ internal sealed class PinScene : TutorialScene
                 PinClipboard(cursor);
                 break;
             case "select" when _focus is { } focus:
-                // A press starts the pin's drag gesture, which hides the bar; the release brings it back.
-                if (first) focus.Window.HideHoverBar();
+                // A press activates the pin (its Activated handler) and starts its drag gesture, which
+                // hides the bar; the release brings it back.
+                if (first)
+                {
+                    focus.Window.SetChromeActiveForTest(true);
+                    focus.Window.HideHoverBar();
+                }
+
                 if (last) focus.Window.ShowHoverBar();
+                break;
+            case "line-end" when first:
+                _selectionTo = null;
+                _lineCaret = true;
+                break;
+            case "keep-typing":
+            case "kept":
+                string tail = L(" (10월 17일)", " (October 17)");
+                _lineTail = frame.Segment == "kept" ? tail : tail[..Math.Max(1, (int)Math.Ceiling(tail.Length * frame.Progress))];
                 break;
             case "drag" when _focus is { } dragged:
                 if (first)
                 {
+                    // Pressing the pin activates it and takes the keys from the note.
                     _dragged = dragged;
                     _dragPinStart = dragged.Position;
+                    _lineCaret = false;
+                    dragged.Window.SetChromeActiveForTest(true);
                     dragged.Window.HideHoverBar();
                 }
 
@@ -318,7 +357,7 @@ internal sealed class PinScene : TutorialScene
                 Click(_menuTarget!);
                 break;
             case "copy" when first && _focus is { } copying:
-                Click(MenuCommand(copying.Window, "Text_37B3D3B11B26"));
+                PressKey(copying.Window, Key.C, ModifierKeys.Control);
                 break;
             case "copied" when first:
                 // PinManager reports the clipboard result back to the pin; nothing touches the clipboard.
@@ -326,9 +365,13 @@ internal sealed class PinScene : TutorialScene
                 _copyPending = null;
                 break;
             case "note-click" when last:
+                // The editor takes the foreground back from the pin.
+                _focus?.Window.SetChromeActiveForTest(false);
                 _caret = true;
                 break;
             case "pasted" when first:
+                // An editor pastes the text format of the copy: the snippet exactly as it was pinned.
+                if (_copiedText != Snippet) throw new InvalidOperationException("Ctrl+C did not carry the pin's original text.");
                 _pasted = true;
                 break;
             case "save" when first && _focus is { } saving:
@@ -376,7 +419,11 @@ internal sealed class PinScene : TutorialScene
     {
         state ??= new PinViewState(content.Image.PixelWidth, content.Image.PixelHeight, 1, _settings.InitialOpacity, _settings.ZoomStep);
         var pin = new LivePin(content, state, position, () => _settings);
-        pin.Window.CopyRequested += (_, _) => _copyPending = pin;
+        pin.Window.CopyRequested += (_, request) =>
+        {
+            _copyPending = pin;
+            _copiedText = request.OriginalText;
+        };
         pin.Window.SaveRequested += (_, _) => _savePending = pin;
         _pins.Add(pin);
         _focus = pin;
@@ -447,10 +494,11 @@ internal sealed class PinScene : TutorialScene
         ((DispatcherTimer)HoverHideTimerField.GetValue(pin)!).Stop();
     }
 
-    private static void PressKey(PinWindow pin, Key key)
+    /// <summary>The pin's own key handler, with the modifiers held for this press rather than the real keyboard's.</summary>
+    private static void PressKey(PinWindow pin, Key key, ModifierKeys modifiers = ModifierKeys.None)
     {
         PresentationSource source = PresentationSource.FromVisual(pin) ?? throw new InvalidOperationException("The pin has no window yet.");
-        pin.RaiseEvent(new KeyEventArgs(Keyboard.PrimaryDevice, source, 0, key) { RoutedEvent = Keyboard.KeyDownEvent });
+        pin.HandleKeyDown(new KeyEventArgs(Keyboard.PrimaryDevice, source, 0, key) { RoutedEvent = Keyboard.KeyDownEvent }, modifiers);
     }
 
     private static MenuItem MenuCommand(PinWindow pin, string headerKey) =>
@@ -561,31 +609,25 @@ internal sealed class PinScene : TutorialScene
 
     private PointD LineEnd(int index) => new(NoteClient.X + 28 + LineWidth(index) + 1, LineY(index) + 10);
 
+    private static double CodeLineY(int index) => NoteClient.Y + 40 + index * CodeLineHeight;
+
     private void DrawNote(DrawingContext dc)
     {
-        Rect c = NoteClient;
-        bool meeting = _feature == "pin-copy";
-        DrawLightWindow(dc, c, meeting ? L("회의 메모 - 메모", "Meeting notes - Notes") : L("주간 보고 - 메모", "Weekly report - Notes"));
-        Stage.Text(dc, meeting ? L("회의 메모", "Meeting notes") : L("주간 보고", "Weekly report"), c.X + 28, c.Y + 20, 20, Ink, bold: true);
-        Stage.Text(dc, meeting ? L("10월 13일 · 릴리스 점검", "October 13 · Release review") : L("10월 둘째 주 · 개발팀", "Second week of October · Dev team"),
-            c.X + 28, c.Y + 54, 13, Muted);
-        if (meeting)
+        if (_feature == "pin-copy")
         {
-            Stage.Text(dc, L("체크리스트 현황", "Checklist status"), c.X + 28, c.Y + 92, 15, Ink, bold: true);
-            if (_pasted && _checklist is not null)
-            {
-                var image = new Rect(c.X + 28, c.Y + 124, _checklist.PixelWidth * 0.7, _checklist.PixelHeight * 0.7);
-                dc.DrawImage(_checklist, image);
-                dc.DrawRectangle(null, new Pen(Rule, 1), image);
-                DrawCaret(dc, image.Right + 3, image.Bottom - 20);
-            }
-            else if (_caret) DrawCaret(dc, c.X + 28, c.Y + 122);
-
+            DrawCodeEditor(dc);
             return;
         }
 
+        Rect c = NoteClient;
+        DrawLightWindow(dc, c, L("주간 보고 - 메모", "Weekly report - Notes"));
+        Stage.Text(dc, L("주간 보고", "Weekly report"), c.X + 28, c.Y + 20, 20, Ink, bold: true);
+        Stage.Text(dc, L("10월 둘째 주 · 개발팀", "Second week of October · Dev team"), c.X + 28, c.Y + 54, 13, Muted);
         if (_selectionTo is { } to) DrawSelection(dc, to);
-        for (int i = 0; i < _noteLines.Length; i++) Stage.Text(dc, _noteLines[i], c.X + 28, LineY(i), 15, Ink, bold: i == 0);
+        int last = _noteLines.Length - 1;
+        for (int i = 0; i < _noteLines.Length; i++)
+            Stage.Text(dc, i == last ? _noteLines[i] + _lineTail : _noteLines[i], c.X + 28, LineY(i), 15, Ink, bold: i == 0);
+        if (_lineCaret) DrawCaret(dc, c.X + 28 + Stage.Format(_noteLines[last] + _lineTail, 15, Ink).WidthIncludingTrailingWhitespace + 1, LineY(last));
         dc.DrawRectangle(Rule, null, new Rect(c.X + 28, c.Y + 206, c.Width - 56, 1));
         Stage.Text(dc, L("할 일", "To-do"), c.X + 28, c.Y + 220, 13, Muted);
         dc.DrawRoundedRectangle(Paper, new Pen(_inputFocused ? FocusBlue : FieldBorder, _inputFocused ? 2 : 1), NoteInput, 6, 6);
@@ -610,6 +652,55 @@ internal sealed class PinScene : TutorialScene
 
     private static void DrawCaret(DrawingContext dc, double x, double y) =>
         dc.DrawRectangle(Ink, null, new Rect(Math.Round(x), y, 1.5, 20));
+
+    /// <summary>
+    /// A code editor in its light theme. The paste inserts the snippet's text at the caret line, so
+    /// the lines below move down and the caret ends after the last pasted character.
+    /// </summary>
+    private void DrawCodeEditor(DrawingContext dc)
+    {
+        Rect c = NoteClient;
+        const string file = "weekly_report.sql";
+        DrawLightWindow(dc, c, $"{file} - {L("코드 편집기", "Code editor")}");
+        var tabs = new Rect(c.X, c.Y, c.Width, 30);
+        dc.DrawRectangle(CaptionLight, null, tabs);
+        var tab = new Rect(c.X, c.Y, Stage.Format(file, 12, Ink).Width + 32, 30);
+        dc.DrawRectangle(Paper, null, tab);
+        dc.DrawRectangle(FocusBlue, null, new Rect(tab.X, tab.Y, tab.Width, 2));
+        Stage.Text(dc, file, tab.X + 16, tab.Y + 8, 12, Ink);
+        dc.DrawRectangle(Rule, null, new Rect(c.X, tabs.Bottom, c.Width, 1));
+
+        string[] pasted = _pasted ? Snippet.Split("\r\n") : [string.Empty];
+        string[] lines = [L("-- 주간 보고: 처리 대기 주문", "-- Weekly report: pending orders"), .. pasted, string.Empty, L("-- 지연 건수 집계", "-- Count delayed orders")];
+        int caretLine = pasted.Length;
+        dc.DrawRectangle(Gutter, null, new Rect(c.X, tabs.Bottom + 1, CodeTextX - 14 - c.X, c.Bottom - tabs.Bottom - 1));
+        if (_caret) dc.DrawRectangle(CurrentLine, null, new Rect(CodeTextX - 14, CodeLineY(caretLine), c.Right - CodeTextX + 14, CodeLineHeight));
+        for (int i = 0; i < lines.Length; i++)
+        {
+            FormattedText number = Stage.Format((i + 1).ToString(System.Globalization.CultureInfo.InvariantCulture), 13, Placeholder, mono: true);
+            dc.DrawText(number, new Point(CodeTextX - 24 - number.Width, CodeLineY(i) + 4));
+            dc.DrawText(CodeLine(lines[i]), new Point(CodeTextX, CodeLineY(i) + 2));
+        }
+
+        if (_caret) DrawCaret(dc, CodeTextX + CodeLine(pasted[^1]).WidthIncludingTrailingWhitespace + 1, CodeLineY(caretLine) + 2);
+    }
+
+    /// <summary>One line of SQL with the editor's comment, keyword and string colours.</summary>
+    private static FormattedText CodeLine(string line)
+    {
+        FormattedText text = Stage.Format(line, 15, Ink, mono: true);
+        if (line.StartsWith("--", StringComparison.Ordinal))
+        {
+            text.SetForegroundBrush(CodeComment);
+            return text;
+        }
+
+        foreach (System.Text.RegularExpressions.Match keyword in System.Text.RegularExpressions.Regex.Matches(line, @"\b(SELECT|FROM|WHERE|ORDER|BY|DESC)\b"))
+            text.SetForegroundBrush(CodeKeyword, keyword.Index, keyword.Length);
+        foreach (System.Text.RegularExpressions.Match literal in System.Text.RegularExpressions.Regex.Matches(line, "'[^']*'"))
+            text.SetForegroundBrush(CodeString, literal.Index, literal.Length);
+        return text;
+    }
 
     /// <summary>Another company's app in its light theme, with the Windows 11 caption buttons.</summary>
     private static void DrawLightWindow(DrawingContext dc, Rect client, string title)
@@ -722,9 +813,12 @@ internal sealed class PinScene : TutorialScene
             "pin-clipboard" => segment switch
             {
                 "open" or "to-text" or "select-text" or "selected" => (L("핀으로 띄울 텍스트 선택", "Select the text to pin"), ""),
-                "copy" => (L("Ctrl+C로 클립보드에 복사", "Copy it to the clipboard with Ctrl+C"), "Ctrl+C"),
-                "shortcut" => (L($"지정된 {Ui("Text_1FBCF51E2FF5")} 단축키 누름", $"Press your {Ui("Text_1FBCF51E2FF5")} shortcut"), ""),
-                "pinned" => (L("클립보드 내용이 핀으로 화면에 표시됨", "The clipboard content appears as a pin"), ""),
+                "copy" or "to-beside" => (L("Ctrl+C로 클립보드에 복사", "Copy it to the clipboard with Ctrl+C"), "Ctrl+C"),
+                "shortcut" => (L($"{Ui("Text_1FBCF51E2FF5")} 단축키 {PasteKey} 누름", $"Press {PasteKey}, the {Ui("Text_1FBCF51E2FF5")} shortcut"), PasteKey),
+                "pinned" => (L("클립보드 내용이 포인터 위치에 핀으로 표시됨", "The clipboard content appears as a pin at the pointer"), ""),
+                "line-end" or "keep-typing" or "kept" =>
+                    (L("메모 앱에서 바로 이어서 입력 · 핀은 포커스를 가져가지 않음", "Keep typing in the note app · the pin does not take focus"),
+                        segment == "line-end" ? "End" : ""),
                 "drag" or "moved" => (L("핀을 드래그하여 원하는 위치로 이동", "Drag the pin where you need it"), ""),
                 "esc" => (L($"{CloseGesture}로 핀 닫기", $"Press {CloseGesture} to close the pin"), CloseGesture),
                 _ => (L("핀 닫힘", "The pin is closed"), ""),
@@ -732,9 +826,9 @@ internal sealed class PinScene : TutorialScene
             "pin-hide-all" => segment switch
             {
                 "pins" => (L("화면에 띄운 핀 두 개", "Two pins on the screen"), ""),
-                "hide" => (L($"지정된 {Ui("Tray_HideAllPins")} 단축키 누름", $"Press your {Ui("Tray_HideAllPins")} shortcut"), ""),
+                "hide" => (L($"{Ui("Tray_HideAllPins")} 단축키 {HideAllKey} 누름", $"Press {HideAllKey}, the {Ui("Tray_HideAllPins")} shortcut"), HideAllKey),
                 "hidden" => (L("모든 핀이 숨겨져 아래 창이 보임", "All pins are hidden and the window below shows"), ""),
-                "show" => (L("같은 단축키를 다시 누름", "Press the same shortcut again"), ""),
+                "show" => (L("같은 단축키를 다시 누름", "Press the same shortcut again"), HideAllKey),
                 "returned" => (L("핀이 같은 위치에 다시 표시됨", "The pins return to the same places"), ""),
                 _ => (L("가려졌던 메모를 바로 편집", "Edit the note the pins were covering"), ""),
             },
@@ -761,10 +855,10 @@ internal sealed class PinScene : TutorialScene
             "pin-copy" => segment switch
             {
                 "open" or "to-pin" or "select" or "selected" => (L("복사할 핀을 클릭하여 선택", "Click the pin to select it"), ""),
-                "copy" or "copied" => (L($"{FeatureKeys}로 핀 이미지 복사", $"Press {FeatureKeys} to copy the pin image"), FeatureKeys),
-                "to-note" or "note-click" or "caret" => (L("붙여 넣을 앱을 클릭", "Click the app to paste into"), ""),
+                "copy" or "copied" => (L($"{FeatureKeys}로 원문 텍스트와 이미지를 함께 복사", $"Press {FeatureKeys} to copy the original text with the pin image"), FeatureKeys),
+                "to-note" or "note-click" or "caret" => (L("붙여 넣을 편집기를 클릭", "Click the editor to paste into"), ""),
                 "paste" => (L("Ctrl+V로 붙여 넣기", "Paste with Ctrl+V"), "Ctrl+V"),
-                _ => (L("이미지 붙여 넣음 · 핀은 그대로 열려 있음", "The image is pasted · the pin stays open"), ""),
+                _ => (L("원문 텍스트가 그대로 붙음 · 핀은 계속 열려 있음", "The original text is pasted as text · the pin stays open"), ""),
             },
             _ => segment switch
             {
@@ -777,6 +871,15 @@ internal sealed class PinScene : TutorialScene
     }
 
     // ---- Helpers --------------------------------------------------------------------------------
+
+    /// <summary>The new-installation key for Pin clipboard to screen.</summary>
+    private string PasteKey => Assigned(_hotkeys.PasteToScreen);
+
+    /// <summary>The new-installation key for hiding and showing all pins.</summary>
+    private string HideAllKey => Assigned(_hotkeys.HideAllPins);
+
+    private static string Assigned(Hotkey key) =>
+        key.IsAssigned ? key.ToString() : throw new InvalidOperationException("A new installation has no key for this pin command.");
 
     /// <summary>The key the pin's own menu gives Close.</summary>
     private string CloseGesture => MenuCommand(FirstPin, "Dialog.Close").InputGestureText;
