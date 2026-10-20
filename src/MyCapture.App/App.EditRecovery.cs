@@ -91,6 +91,7 @@ public partial class App
         await StopLegacyImportForExitAsync();
         if (_storeInstallationPending) return false;
         if (!await PrepareForAppExitAsync(AppExitReason.Explicit)) return false;
+        SavePinSessionForExit();
         Shutdown(0); return true;
     }
     private async Task<bool> PrepareForAppExitAsync(AppExitReason reason)

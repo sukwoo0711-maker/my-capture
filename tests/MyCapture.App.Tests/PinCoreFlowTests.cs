@@ -135,7 +135,7 @@ public sealed class PinCoreFlowTests
             Assert.Equal(shown.Count != 0, pin.ShowActivated);
             shown.Add(pin);
         };
-        manager.ActivatePin = pin => { activated.Add(pin); return true; };
+        manager.ActivatePinForTest = activated.Add;
         try
         {
             Assert.Equal(PasteResult.Pinned, manager.PasteFromClipboardAsync(() => Task.FromResult(

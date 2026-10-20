@@ -2822,6 +2822,8 @@ This cannot be undone.</value>
     <value>Double-click to close a pin</value>
     <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
   </data>
+  <data name="PinSession.RestoreLabel" xml:space="preserve"><value>Reopen open pins at the next launch</value></data>
+  <data name="PinSession.RestoreDescription" xml:space="preserve"><value>When MyCapture exits, each open pin's image and original text are saved in the app data folder on this PC and reopened in the same place at the next launch. Turning this off deletes the saved pins right away.</value></data>
   <data name="Text_F0CFD62F0971" xml:space="preserve">
     <value>Include pointer in recordings</value>
     <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>

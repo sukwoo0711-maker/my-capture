@@ -824,6 +824,14 @@
                                   AutomationProperties.Name="{loc:Text Text_F0C27AB1BA08}"
                                   IsChecked="{Binding CloseOnDoubleClick}" />
 
+                        <CheckBox Style="{StaticResource Settings.CheckBox}"
+                                  Content="{loc:Text PinSession.RestoreLabel}"
+                                  AutomationProperties.Name="{loc:Text PinSession.RestoreLabel}"
+                                  AutomationProperties.HelpText="{loc:Text PinSession.RestoreDescription}"
+                                  IsChecked="{Binding RestoreOpenPinsOnLaunch}" />
+                        <TextBlock Style="{StaticResource Settings.Description}"
+                                   Text="{loc:Text PinSession.RestoreDescription}" />
+
                         <settings:SettingsField Margin="0,6,0,12"
                                                 Header="{loc:Text Text_9165ADFF8EF8}" Hint="{loc:Text SettingsRange_InitialOpacity}">
                             <TextBox Style="{StaticResource Settings.NumberBox}"
@@ -1007,7 +1015,7 @@
                                         DockPanel.Dock="Right" Style="{StaticResource Button.Tutorial}" HorizontalAlignment="Right" Margin="8,0,0,2" Tag="pin-clipboard" Click="OnFeatureTutorial" />
                                 <TextBlock Style="{StaticResource Settings.Label}" Text="{loc:Text Text_1FBCF51E2FF5}" VerticalAlignment="Center" TextWrapping="Wrap" />
                             </DockPanel>
-                            <settings:HotkeyRecorder HorizontalAlignment="Left" AutomationProperties.Name="{loc:Text Text_B53D43740F41}" DefaultText="" Text="{Binding PasteToScreenHotkey, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
+                            <settings:HotkeyRecorder HorizontalAlignment="Left" AutomationProperties.Name="{loc:Text Text_B53D43740F41}" DefaultText="F3" Text="{Binding PasteToScreenHotkey, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
                         </StackPanel>
 
                         <StackPanel Style="{StaticResource Settings.Field}">
@@ -1016,7 +1024,7 @@
                                         DockPanel.Dock="Right" Style="{StaticResource Button.Tutorial}" HorizontalAlignment="Right" Margin="8,0,0,2" Tag="pin-hide-all" Click="OnFeatureTutorial" />
                                 <TextBlock Style="{StaticResource Settings.Label}" Text="{loc:Text Text_4FED89116C1F}" VerticalAlignment="Center" TextWrapping="Wrap" />
                             </DockPanel>
-                            <settings:HotkeyRecorder HorizontalAlignment="Left" AutomationProperties.Name="{loc:Text Text_D6E142D9293C}" DefaultText="" Text="{Binding HideAllPinsHotkey, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
+                            <settings:HotkeyRecorder HorizontalAlignment="Left" AutomationProperties.Name="{loc:Text Text_D6E142D9293C}" DefaultText="Shift+F3" Text="{Binding HideAllPinsHotkey, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
                         </StackPanel>
 
                         <StackPanel Style="{StaticResource Settings.Field}">

@@ -399,6 +399,9 @@ internal sealed class PinWindow : Window
     /// <summary>Raised when the user asks (via this pin) to reopen the last closed pin.</summary>
     internal event EventHandler? RestoreClosedRequested;
 
+    /// <summary>Raised after a drag or zoom settles, or the requested opacity changes.</summary>
+    internal event Action? ViewStateChanged;
+
     /// <summary>
     /// Reports whether a closed pin can be reopened; drives the context-menu item state.
     /// Set by the manager that owns the closed-pin history.
@@ -416,6 +419,9 @@ internal sealed class PinWindow : Window
     /// <see langword="null"/> when it closed before it had a native window.
     /// </summary>
     internal PinClosedPlacement? ClosedPlacement { get; private set; }
+
+    /// <summary>Reads the live placement without closing the window or recording history.</summary>
+    internal PinClosedPlacement? GetCurrentPlacement() => CaptureClosedPlacement();
 
     /// <summary>The pin's live presentation state.</summary>
     internal PinViewState State => _state;
@@ -852,6 +858,7 @@ internal sealed class PinWindow : Window
         _lastDragCursorY = int.MinValue;
         if (_dragInput.HasCapture(this)) _dragInput.Release(this);
         if (wasDragging && !_isClosed && IsMouseOver) ShowHoverBar();
+        if (wasDragging && !_isClosed) ViewStateChanged?.Invoke();
     }
 
     protected override void OnMouseWheel(MouseWheelEventArgs e)
@@ -1066,11 +1073,13 @@ internal sealed class PinWindow : Window
 
     private void CommitCrispZoom()
     {
+        bool wasZooming = _liveZooming;
         _liveZooming = false;
         _imageElement.CacheMode = null;
         RenderOptions.SetBitmapScalingMode(_imageElement, BitmapScalingMode.HighQuality);
         _imageElement.InvalidateVisual();
         _chrome.InvalidateVisual();
+        if (wasZooming && !_isClosed) ViewStateChanged?.Invoke();
     }
 
     private void ApplyPositionKeepingGrabbable(double left, double top)
@@ -1169,6 +1178,7 @@ internal sealed class PinWindow : Window
             BeginAnimation(Window.OpacityProperty, fade, HandoffBehavior.SnapshotAndReplace);
         }
 
+        if (!_isClosed) ViewStateChanged?.Invoke();
         return target;
     }
 
