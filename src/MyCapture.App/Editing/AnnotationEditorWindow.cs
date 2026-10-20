@@ -220,6 +220,9 @@ internal partial class AnnotationEditorWindow : Window
         if (_editor.IsEditingOperationInProgress || (IsCloseInProgress && !_discardedDraft))
         {
             e.Cancel = true;
+            // A picked picture still being read is added first and the close then goes ahead,
+            // as it did while the picture was decoded on the UI thread; other work drops it.
+            if (_editor.IsOnlyReadingPictures && !IsCloseInProgress) _ = CloseAfterPicturesAsync(_closeAsked);
             _closeAsked = false;
             return;
         }
@@ -255,6 +258,25 @@ internal partial class AnnotationEditorWindow : Window
         base.OnClosing(e);
     }
 
+    private bool _closeWaitsForPictures;
+    private bool _deferredCloseAsked;
+    private bool _windowClosed;
+
+    /// <summary>Repeats a close deferred by <see cref="OnClosing"/> once picked pictures are in.</summary>
+    private async Task CloseAfterPicturesAsync(bool asked)
+    {
+        _deferredCloseAsked |= asked;
+        if (_closeWaitsForPictures) return;
+        _closeWaitsForPictures = true;
+        try { await _editor.ImageInsertsSettledAsync(); }
+        finally { _closeWaitsForPictures = false; }
+        bool ask = _deferredCloseAsked;
+        _deferredCloseAsked = false;
+        if (_windowClosed || IsAskingToClose) return;
+        _closeAsked = ask;
+        Close();
+    }
+
     protected override void OnPreviewKeyDown(KeyEventArgs e)
     {
         if (_editor.HandleKeyDown(e))
@@ -284,6 +306,7 @@ internal partial class AnnotationEditorWindow : Window
 
     protected override void OnClosed(EventArgs e)
     {
+        _windowClosed = true;
         FinishDraftRecovery();
         _editor.EditingCompleted -= OnEditingCompleted;
         _editor.CloseRequested -= OnCloseRequested;

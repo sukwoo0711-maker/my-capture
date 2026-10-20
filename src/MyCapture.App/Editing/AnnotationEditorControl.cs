@@ -406,6 +406,9 @@ internal sealed partial class AnnotationEditorControl : Grid
     /// </summary>
     internal bool IsEditingOperationInProgress => IsCommitInProgress || _redactionInProgress || _pendingImageInserts > 0;
 
+    /// <summary>Reading picked pictures is the only operation in progress, so a close can wait for it.</summary>
+    internal bool IsOnlyReadingPictures => _pendingImageInserts > 0 && !IsCommitInProgress && !_redactionInProgress;
+
     internal bool CapturePointer()
     {
         if (_simulatingPointer) return false;
