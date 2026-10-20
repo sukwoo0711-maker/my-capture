@@ -45,6 +45,8 @@ internal sealed class AnnotationEditorSurface : FrameworkElement
     private readonly Brush _handleFillBrush;
     private readonly Pen _handlePen;
     private readonly Pen _selectionOutlinePen;
+    private readonly Pen _edgeShadowPen;
+    private readonly Pen _cropEdgePen;
 
     internal AnnotationEditorSurface(
         FrozenFrame frame,
@@ -72,6 +74,9 @@ internal sealed class AnnotationEditorSurface : FrameworkElement
         // Keep private follower brushes mutable so an open editor follows theme changes.
         _handlePen = new Pen(_selectionBrush, 2);
         _selectionOutlinePen = new Pen(_selectionBrush, 2) { DashStyle = new DashStyle([4, 3], 0) };
+        // Drawn on every paint; one follower pen each instead of a new one per paint.
+        _edgeShadowPen = new Pen(_handleFillBrush, 4);
+        _cropEdgePen = new Pen(_selectionBrush, 2);
 
         _controller.VisualInvalidated += (_, _) => InvalidateVisual();
         _controller.SelectionChanged += (_, _) => InvalidateVisual();
@@ -209,11 +214,17 @@ internal sealed class AnnotationEditorSurface : FrameworkElement
         double scale = DipPerPixel;
         Point origin = FrameOrigin;
 
-        dc.PushClip(new RectangleGeometry(CropRectDip));
-        dc.PushTransform(new TranslateTransform(
+        var clip = new RectangleGeometry(CropRectDip);
+        clip.Freeze();
+        var translate = new TranslateTransform(
             origin.X + (_cropRegion.Left * scale),
-            origin.Y + (_cropRegion.Top * scale)));
-        dc.PushTransform(new ScaleTransform(scale, scale));
+            origin.Y + (_cropRegion.Top * scale));
+        translate.Freeze();
+        var scaleToDip = new ScaleTransform(scale, scale);
+        scaleToDip.Freeze();
+        dc.PushClip(clip);
+        dc.PushTransform(translate);
+        dc.PushTransform(scaleToDip);
 
         AnnotationItem? suppress = _controller.EditingText;
         // The editor's frame always starts at the selection origin, so the frame bitmap is the
@@ -226,9 +237,8 @@ internal sealed class AnnotationEditorSurface : FrameworkElement
         dc.Pop();
 
         // Opposing neutral edges remain visible on both light and dark image content.
-        dc.DrawRectangle(null, new Pen(_handleFillBrush, 4), CropRectDip);
-        var cropPen = new Pen(_selectionBrush, 2);
-        dc.DrawRectangle(null, cropPen, CropRectDip);
+        dc.DrawRectangle(null, _edgeShadowPen, CropRectDip);
+        dc.DrawRectangle(null, _cropEdgePen, CropRectDip);
 
         if (PendingCrop is { } pending) DrawPendingCrop(dc, pending);
         else DrawSelectionAdorner(dc);
@@ -304,7 +314,7 @@ internal sealed class AnnotationEditorSurface : FrameworkElement
             dc.PushOpacity(0.12);
             dc.DrawRectangle(_selectionBrush, null, ToSurfaceRect(marquee));
             dc.Pop();
-            dc.DrawRectangle(null, new Pen(_handleFillBrush, 4), ToSurfaceRect(marquee));
+            dc.DrawRectangle(null, _edgeShadowPen, ToSurfaceRect(marquee));
             dc.DrawRectangle(null, _selectionOutlinePen, ToSurfaceRect(marquee));
         }
         AnnotationItem? selected = _controller.Selected;
@@ -316,7 +326,7 @@ internal sealed class AnnotationEditorSurface : FrameworkElement
         bool multiple = _controller.SelectedItems.Count > 1;
         Rect bounds = ToSurfaceRect(_controller.SelectionBounds ?? selected.Bounds);
         Rect inflated = Rect.Inflate(bounds, 2, 2);
-        dc.DrawRectangle(null, new Pen(_handleFillBrush, 4), inflated);
+        dc.DrawRectangle(null, _edgeShadowPen, inflated);
         dc.DrawRectangle(null, _selectionOutlinePen, inflated);
 
         if (!multiple && !selected.SupportsResize)
