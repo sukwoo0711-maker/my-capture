@@ -59,7 +59,7 @@
 - [기능과 화면](docs/features.md): 전체 기능 목록과 화면
 - [설치와 배포](docs/install.md): Store 설치본과 GitHub 릴리스의 설치 파일·포터블 ZIP, `SHA256SUMS.txt` 확인, 설치 로그와 종료 코드, 사용자 데이터 위치, 개인정보와 네트워크
 - [소스에서 빌드](docs/build.md): .NET 10 SDK 준비, 빌드와 테스트, 자체 진단(self-test)
-- [4.4.0 릴리스 노트](docs/releases/4.4.0-release-notes.md)와 [이전 릴리스 노트](docs/releases/)
+- [4.5.0 릴리스 노트](docs/releases/4.5.0-release-notes.md)와 [이전 릴리스 노트](docs/releases/)
 - [지원](https://github.com/sukwoo0711-maker/mycapture-support)과 [개인정보처리방침](https://github.com/sukwoo0711-maker/mycapture-support/blob/main/PRIVACY.md)
 
 보안 문제는 공개 이슈에 재현 자료를 올리지 말고 [`SECURITY.md`](SECURITY.md)의 비공개 신고 절차를 따르십시오. 개발 참여 방법은 [`CONTRIBUTING.md`](CONTRIBUTING.md)를 참고하십시오.
