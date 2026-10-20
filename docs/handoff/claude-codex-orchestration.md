@@ -8,10 +8,10 @@ MyCapture 개선 작업을 이어 가는 오케스트레이터가 읽고 고치�
 |---|---|
 | 현재 오케스트레이터 | **Claude** (Claude Code, Opus 5.5), 2026-10-13부터 |
 | 이전 | Claude(10-11 ~ 10-12) → Codex `gpt-6-astra`(10-12 ~ 10-13) → Claude |
-| 작업 브랜치 | 작업마다 main에서 분기해 PR로 병합. 현재 `release/4.4.0`(통합 작업 공간 `C:\GitRepositories\my-capture-440\integ`) |
+| 작업 브랜치 | 작업마다 main에서 분기해 PR로 병합. 현재 `release/4.5.0`(작업 공간 `C:\GitRepositories\my-capture-450\rel`) |
 | 통합 작업 공간 | `C:\GitRepositories\my-capture-codex` |
 | 백업 | `backup/pre-gif-rewrite-2026-10-13` (GIF 이력 제거 직전 상태) |
-| 원격 main | ca958a7 = 4.3.1(PR #96, GitHub 릴리스 v4.3.1, Store 제출 12 게시). 4.4.0은 `release/4.4.0` PR #101로 병합 예정. 저장소는 공개 |
+| 원격 main | 6329499c = 4.4.0(PR #101, GitHub 릴리스 v4.4.0, Store 제출 13 인증 중). 4.5.0은 #102·#103·#106·#97·#104 병합 뒤 `release/4.5.0`으로 올림. 저장소는 공개 |
 
 **소통 규칙**
 1. 오케스트레이터만 §0~§4를 고칩니다. §7 로그는 아래로 추가만 합니다.
@@ -134,3 +134,7 @@ MyCapture 개선 작업을 이어 가는 오케스트레이터가 읽고 고치�
   - 다른 세션: 웹·README(PR #98, 랜딩 https://sukwoo0711-maker.github.io/my-capture/ gh-pages), 출시 자료(PR #100), Store 목록·스크린샷(PR #99, 장면 브랜치 claude/store-shots-440). 세 PR은 release/4.4.0에 합쳤습니다.
   - 로컬 전체: Core 1,765, App 3,892 통과·11 건너뜀(기존 opt-in). Setup 25개는 Store판 MyCapture 실행 중 exit 15(환경 원인). CI에서 편집기 큰 글자 테스트 4건이 작은 러너 화면 때문에 실패해 화면 크기와 무관한 픽스처로 고쳤습니다.
   - 사용자 승인 대기: Partner Center 게시자 표시 이름 변경(계정 재확인·재패키징 경고), 4.4.0 Store 제출(MSIX는 10MB 업로드 한도로 사용자가 끌어다 놓음). Store 세션은 승인 없이 Partner Center에 아무것도 저장하지 않았습니다.
+- 2026-10-20 Claude: 4.4.0을 main 6329499c로 병합하고 v4.4.0 GitHub 릴리스를 게시했습니다. Store 제출 13(4.4.0.0)은 사용자가 Store 세션에서 승인해 인증에 제출했습니다(게시자 이름은 sukwoo0711 유지).
+- 2026-10-20 Claude: 사용자가 핵심 가치를 바로잡았습니다. 개인정보 가리기가 아니라 "코딩 중 엑셀 사양 표와 자주 쓰는 구문을 핀으로 띄워 보고 원문 그대로 에디터에 붙여 넣기"입니다(분석 https://claude.ai/artifact/B9VhAkeCzLcGbnQiumSfLd).
+  - 4.5.0: 핀 핵심 흐름 #106(새 설치 F3·Shift+F3, 원문 핀 Ctrl+C 원문+이미지, 클립보드 핀 포커스 유지, 더블클릭 닫기 기본 끔, 열린 핀 복원), 핵심 단축키 질문 #97, GIF 프레임 수 #102, 테스트 안정화 #103(포인터 모니터 주입, 동영상 편집기 MediaOpened 대기), Store·README 핀 중심 개편 #104. 소개 페이지 #105(gh-pages)는 4.5.0 게시 뒤 병합.
+  - #97 병합 충돌은 App.EditRecovery.cs 한 곳(핀 세션 저장과 종료 요청 표시 둘 다 유지)이었고, F3 새 설치 기본값에 맞춰 #97 테스트 단언 3개를 NewInstallDefaults 비교로 바꿨습니다.
