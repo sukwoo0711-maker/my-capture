@@ -398,7 +398,13 @@ internal sealed partial class AnnotationEditorControl : Grid
     internal bool IsPointerCaptured => _viewport.IsMouseCaptured;
 
     internal bool IsCommitInProgress => _commitInProgress && !_completed;
-    internal bool IsEditingOperationInProgress => IsCommitInProgress || _redactionInProgress;
+
+    /// <summary>
+    /// A commit, privacy search or picked picture still being read is running. A picture counts
+    /// because the synchronous insert it replaced had always finished before the window could
+    /// close or the app could flush its drafts.
+    /// </summary>
+    internal bool IsEditingOperationInProgress => IsCommitInProgress || _redactionInProgress || _pendingImageInserts > 0;
 
     internal bool CapturePointer()
     {
@@ -1612,15 +1618,48 @@ internal sealed partial class AnnotationEditorControl : Grid
     /// moved the clicked pixels. A file that is not a readable image is reported as before,
     /// unless the editor has closed.
     /// </para>
+    /// <para>
+    /// Until it is added or dropped the picture counts as an editing operation: a commit
+    /// started meanwhile waits for it and saves it (see <see cref="Commit"/>), and the window's
+    /// exit paths wait for it, exactly as they found the synchronous insert already done.
+    /// </para>
     /// </remarks>
     internal async Task InsertImageFileAsync(string path, PointD image)
+    {
+        _pendingImageInserts++;
+        try
+        {
+            await InsertPendingImageAsync(path, image);
+        }
+        finally
+        {
+            if (--_pendingImageInserts == 0 && _imageInsertsSettled is { } settled)
+            {
+                _imageInsertsSettled = null;
+                settled.TrySetResult();
+            }
+        }
+    }
+
+    private async Task InsertPendingImageAsync(string path, PointD image)
     {
         CancellationToken closed = (_imageInsertCts ??= new CancellationTokenSource()).Token;
         var geometry = (_controller.RotationTurns, _controller.CropOrigin, _canvasWidth, _canvasHeight);
         // Both outcomes end on the select tool. Switching now means a click while the picture
         // is read selects, as it would after the insertion, instead of opening a second picker.
         if (_controller.Tool == EditorTool.Image) SelectTool(EditorTool.Select);
-        AnnotationImageStore.DecodedFile? decoded = await DecodeImageForInsert(path);
+        AnnotationImageStore.DecodedFile? decoded;
+        try
+        {
+            // Closing stops the wait at once, so a commit waiting for this picture is not held
+            // by a decode whose result would be dropped anyway.
+            decoded = await DecodeImageForInsert(path).WaitAsync(closed);
+        }
+        catch (OperationCanceledException) when (closed.IsCancellationRequested)
+        {
+            return;
+        }
+
         while (!IsImageInsertClosed(closed) && ImageInsertMustWait)
         {
             await Task.Delay(50);
@@ -1634,7 +1673,9 @@ internal sealed partial class AnnotationEditorControl : Grid
         if (decoded is null)
         {
             ReportUnreadableImage();
-            SelectTool(EditorTool.Select);
+            // Back to the select tool, as before, but never by discarding a crop frame that a
+            // commit waiting for this picture is about to apply.
+            if (_crop is null) SelectTool(EditorTool.Select);
             return;
         }
 
@@ -1672,14 +1713,33 @@ internal sealed partial class AnnotationEditorControl : Grid
     /// <summary>Cancelled when the editor unloads, so pictures still decoding are dropped.</summary>
     private CancellationTokenSource? _imageInsertCts;
 
+    /// <summary>Picked pictures not yet added or dropped.</summary>
+    private int _pendingImageInserts;
+
+    /// <summary>Completed when <see cref="_pendingImageInserts"/> returns to zero.</summary>
+    private TaskCompletionSource? _imageInsertsSettled;
+
+    /// <summary>A commit has prepared the document and waits for picked pictures before saving.</summary>
+    private bool _commitAwaitingImages;
+
+    /// <summary>
+    /// Completes once every picked picture has been added or dropped; at once when none is
+    /// pending. A caller that must not act on the document without them (a commit, a close)
+    /// awaits it on the UI thread.
+    /// </summary>
+    internal Task ImageInsertsSettledAsync() => _pendingImageInserts == 0
+        ? Task.CompletedTask
+        : (_imageInsertsSettled ??= new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously)).Task;
+
     private bool IsImageInsertClosed(CancellationToken closed) => _completed || closed.IsCancellationRequested;
 
     /// <summary>
     /// Whether a decoded picture must wait before it is added: a commit holds the document,
-    /// or a pointer gesture, caption or crop frame is in progress.
+    /// or a pointer gesture, caption or crop frame is in progress. A commit waiting for the
+    /// picture has already finished the caption, gesture and crop, so the picture goes in.
     /// </summary>
-    private bool ImageInsertMustWait => _commitInProgress || _activeTextBox is not null || _crop is not null
-        || _mosaicDragging || _edgeCropStart is not null || _viewport.IsMouseCaptured;
+    private bool ImageInsertMustWait => !_commitAwaitingImages && (_commitInProgress || _activeTextBox is not null
+        || _crop is not null || _mosaicDragging || _edgeCropStart is not null || _viewport.IsMouseCaptured);
 
     /// <summary>
     /// Decodes a picked file off the UI thread. Tests substitute it to decide when decoding
@@ -3488,10 +3548,59 @@ internal sealed partial class AnnotationEditorControl : Grid
         // Validate both inputs even when the crop still spans the full image.
         if (_crop is not null && !CommitCropInputs()) return;
         bool appliedCrop = _crop is { } pending && pending.Region != pending.Bounds;
+        bool awaitedImages = false;
+        if (_pendingImageInserts > 0)
+        {
+            // A picture picked just before this command is still being read. The synchronous
+            // insert it replaced had always added it first, before any crop frame was applied,
+            // so the commit waits for it here and saves it too. The editor is held as during
+            // the save, so a second command is ignored.
+            awaitedImages = true;
+            _commitInProgress = true;
+            IsHitTestVisible = false;
+            _commitAwaitingImages = true;
+            CancellationToken closed = (_imageInsertCts ??= new CancellationTokenSource()).Token;
+            RectD? framed = _crop?.Region;
+            try
+            {
+                await ImageInsertsSettledAsync();
+            }
+            finally
+            {
+                _commitAwaitingImages = false;
+            }
+
+            if (closed.IsCancellationRequested)
+            {
+                // The editor closed while waiting: there is nothing left to save into.
+                _commitInProgress = false;
+                IsHitTestVisible = true;
+                return;
+            }
+
+            // Adding the picture is a history change, which starts an open crop frame over on
+            // the whole canvas. The picture never changes the canvas size, so the frame the user
+            // drew is put back before it is applied.
+            if (framed is RectD region && _crop is { } frame && frame.Region != region)
+            {
+                frame.SetRegion(region);
+                RefreshCrop();
+            }
+        }
+
         if (appliedCrop)
         {
             ApplyPendingCrop();
-            if (_crop is not null) return; // An invalid tiny crop stays editable.
+            if (_crop is not null)
+            {
+                // An invalid tiny crop stays editable.
+                if (awaitedImages)
+                {
+                    _commitInProgress = false;
+                    IsHitTestVisible = true;
+                }
+                return;
+            }
         }
 
         AnnotationDocument document = _controller.Document;

@@ -242,6 +242,7 @@ public sealed class EditorHeavyOperationTests
             Invoke(editor, "SelectTool", EditorTool.Image);
 
             Task insert = editor.InsertImageFileAsync(path, new PointD(200, 120));
+            Assert.True(editor.IsEditingOperationInProgress);
 
             // The UI thread keeps running while the picture is still being read.
             Pump(TimeSpan.FromMilliseconds(100));
@@ -254,6 +255,7 @@ public sealed class EditorHeavyOperationTests
             PumpUntil(() => insert.IsCompleted);
             insert.GetAwaiter().GetResult();
 
+            Assert.False(editor.IsEditingOperationInProgress);
             ImageAnnotation item = Assert.IsType<ImageAnnotation>(Assert.Single(controller.Document.Items));
             Assert.Equal(1500, item.SourceWidth);
             Assert.Equal(900, item.SourceHeight);
@@ -283,11 +285,11 @@ public sealed class EditorHeavyOperationTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void PictureStillDecodingWhenTheEditorClosesIsDropped(bool unreadable) => StaTestHost.Run(() =>
+    public void PictureStillDecodingWhenTheEditorUnloadsIsDropped(bool unreadable) => StaTestHost.Run(() =>
     {
         using var context = new DispatcherContextScope();
-        var host = EditorWindowHost.Create();
-        AnnotationEditorControl editor = host.Editor;
+        AnnotationEditorControl editor = Editor(Pattern(64, 48, PixelFormats.Bgra32));
+        Window window = Host(editor);
         AnnotationEditorController controller = Controller(editor);
         AnnotationImageStore store = Field<AnnotationImageStore>(editor, "_imageStore");
         var decoded = new TaskCompletionSource<AnnotationImageStore.DecodedFile?>(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -296,54 +298,185 @@ public sealed class EditorHeavyOperationTests
         editor.ReportUnreadableImage = () => reports++;
 
         Task insert = editor.InsertImageFileAsync("picked.png", new PointD(50, 50));
-        host.Dispose();
-        PumpUntil(() => !editor.IsLoaded);
-        decoded.SetResult(unreadable ? null : Decoded(Pattern(30, 20, PixelFormats.Bgra32)));
+        Assert.True(editor.IsEditingOperationInProgress);
+        window.Close();
+        // Closing ends the wait at once; a decode that finishes later changes nothing.
         PumpUntil(() => insert.IsCompleted);
+        decoded.SetResult(unreadable ? null : Decoded(Pattern(30, 20, PixelFormats.Bgra32)));
+        Pump(TimeSpan.FromMilliseconds(50));
 
         insert.GetAwaiter().GetResult();
+        Assert.False(editor.IsEditingOperationInProgress);
         Assert.Empty(controller.Document.Items);
         Assert.False(controller.CanUndo);
         Assert.Null(store.Get("image-01.png"));
         Assert.Equal(0, reports);
     });
 
-    [Fact]
-    public void PictureStillDecodingWhenACommitClosesTheEditorIsDropped() => StaTestHost.Run(() =>
+    public static TheoryData<string> CommitActions() =>
+    [
+        nameof(EditorCommitAction.Done), nameof(EditorCommitAction.QuickSave), nameof(EditorCommitAction.SaveAs),
+        nameof(EditorCommitAction.CopyToClipboard),
+    ];
+
+    [Theory]
+    [MemberData(nameof(CommitActions))]
+    public void CommitDuringAPendingPictureWaitsOnceAndSavesThePicture(string actionName) => StaTestHost.Run(() =>
     {
         using var context = new DispatcherContextScope();
+        EditorCommitAction action = Enum.Parse<EditorCommitAction>(actionName);
         AnnotationEditorControl editor = Editor(Pattern(64, 48, PixelFormats.Bgra32));
         AnnotationEditorController controller = Controller(editor);
         var decoded = new TaskCompletionSource<AnnotationImageStore.DecodedFile?>(TaskCreationOptions.RunContinuationsAsynchronously);
         editor.DecodeImageForInsert = _ => decoded.Task;
-        AnnotationEditingResult? completed = null;
-        editor.EditingCompleted += (_, result) => completed = result;
+        var commits = new List<AnnotationEditingResult>();
+        editor.CommitRequested = result => { commits.Add(result); return Task.FromResult(true); };
+        int completed = 0;
+        editor.EditingCompleted += (_, _) => completed++;
 
         Task insert = editor.InsertImageFileAsync("picked.png", new PointD(20, 20));
+        Assert.True(editor.IsEditingOperationInProgress);
+        Invoke(editor, "Commit", action, false);
+        Assert.True(editor.IsCommitInProgress);
+        Assert.False(editor.IsHitTestVisible);
+        // Further commands while the commit waits start nothing, as during a save.
+        Invoke(editor, "Commit", action, false);
         editor.SaveAndClose();
-        Assert.NotNull(completed);
+        editor.ShortcutActions["Save"]();
+        editor.ShortcutActions["SaveAs"]();
+        Pump(TimeSpan.FromMilliseconds(100));
+        Assert.Empty(commits);
+        Assert.Empty(controller.Document.Items);
+
         decoded.SetResult(Decoded(Pattern(30, 20, PixelFormats.Bgra32)));
-        PumpUntil(() => insert.IsCompleted);
+        bool copy = action == EditorCommitAction.CopyToClipboard;
+        PumpUntil(() => insert.IsCompleted && commits.Count == 1 && (copy ? !editor.IsCommitInProgress : completed == 1));
+        Pump(TimeSpan.FromMilliseconds(100));
 
         insert.GetAwaiter().GetResult();
-        Assert.Empty(controller.Document.Items);
+        AnnotationEditingResult saved = Assert.Single(commits);
+        Assert.Equal(action, saved.Action);
+        ImageAnnotation item = Assert.IsType<ImageAnnotation>(Assert.Single(saved.Document.Items));
+        Assert.Equal(LegacyInsertRect(64, 48, 30, 20, new PointD(20, 20)), item.Rect);
+        BitmapSource asset = Assert.Contains(item.AssetFileName, saved.ImageAssetBitmaps);
+        Assert.Equal(30, asset.PixelWidth);
+        Assert.Equal(20, asset.PixelHeight);
+        Assert.Equal(copy ? 0 : 1, completed);
+        if (copy)
+        {
+            // Copy keeps the editor open and editable, with the picture in it.
+            Assert.False(editor.IsEditingOperationInProgress);
+            Assert.True(editor.IsHitTestVisible);
+            Assert.Same(item, Assert.Single(controller.Document.Items));
+        }
     });
 
     [Fact]
-    public void PictureWaitsForACommitInProgressAndIsAddedWhenTheEditorStaysOpen() => StaTestHost.Run(() =>
+    public void UnreadablePictureDuringAWaitingCommitIsReportedThenTheCommitSavesWithoutIt() => StaTestHost.Run(() =>
     {
         using var context = new DispatcherContextScope();
         AnnotationEditorControl editor = Editor(Pattern(64, 48, PixelFormats.Bgra32));
-        AnnotationEditorController controller = Controller(editor);
         var decoded = new TaskCompletionSource<AnnotationImageStore.DecodedFile?>(TaskCreationOptions.RunContinuationsAsynchronously);
-        var saved = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         editor.DecodeImageForInsert = _ => decoded.Task;
-        editor.CommitRequested = _ => saved.Task;
+        var order = new List<string>();
+        var commits = new List<AnnotationEditingResult>();
+        editor.ReportUnreadableImage = () => order.Add("unreadable");
+        editor.CommitRequested = result => { order.Add("commit"); commits.Add(result); return Task.FromResult(true); };
+
+        Task insert = editor.InsertImageFileAsync("not-an-image.png", new PointD(20, 20));
+        editor.SaveAndClose();
+        decoded.SetResult(null);
+        PumpUntil(() => insert.IsCompleted && commits.Count == 1);
+
+        insert.GetAwaiter().GetResult();
+        Assert.Equal(["unreadable", "commit"], order);
+        Assert.Empty(Assert.Single(commits).Document.Items);
+    });
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void PictureIsAddedBeforeTheCommitAppliesAnOpenCropFrame(bool unreadable) => StaTestHost.Run(() =>
+    {
+        using var context = new DispatcherContextScope();
+        AnnotationEditorControl editor = Editor(Pattern(64, 48, PixelFormats.Bgra32));
+        var decoded = new TaskCompletionSource<AnnotationImageStore.DecodedFile?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        editor.DecodeImageForInsert = _ => decoded.Task;
+        int reports = 0;
+        editor.ReportUnreadableImage = () => reports++;
+        var commits = new List<AnnotationEditingResult>();
+        editor.CommitRequested = result => { commits.Add(result); return Task.FromResult(true); };
+
+        Task insert = editor.InsertImageFileAsync("picked.png", new PointD(20, 20));
+        Invoke(editor, "SelectTool", EditorTool.Crop);
+        editor.PendingCrop!.SetRegion(new RectD(8, 6, 40, 30));
+        Invoke(editor, "RefreshCrop");
+        editor.SaveAndClose();
+        Assert.True(editor.IsCommitInProgress);
+        decoded.SetResult(unreadable ? null : Decoded(Pattern(30, 20, PixelFormats.Bgra32)));
+        PumpUntil(() => insert.IsCompleted && commits.Count == 1);
+
+        insert.GetAwaiter().GetResult();
+        AnnotationEditingResult saved = Assert.Single(commits);
+        // The crop the user framed is applied either way.
+        Assert.Equal(40, saved.Document.CanvasWidth);
+        Assert.Equal(30, saved.Document.CanvasHeight);
+        Assert.Equal(40, saved.SelectedBitmap.PixelWidth);
+        Assert.Equal(unreadable ? 1 : 0, reports);
+        if (unreadable)
+        {
+            Assert.Empty(saved.Document.Items);
+            return;
+        }
+
+        // Placed at the click on the uncropped canvas, then moved with the crop, as the
+        // synchronous insert followed by the crop placed it.
+        RectD placed = LegacyInsertRect(64, 48, 30, 20, new PointD(20, 20));
+        ImageAnnotation item = Assert.IsType<ImageAnnotation>(Assert.Single(saved.Document.Items));
+        Assert.Equal(new RectD(placed.X - 8, placed.Y - 6, placed.Width, placed.Height), item.Rect);
+        Assert.Contains(item.AssetFileName, saved.ImageAssetBitmaps);
+    });
+
+    [Fact]
+    public void EditorUnloadedWhileACommitWaitsForAPictureAbandonsTheCommit() => StaTestHost.Run(() =>
+    {
+        using var context = new DispatcherContextScope();
+        AnnotationEditorControl editor = Editor(Pattern(64, 48, PixelFormats.Bgra32));
+        Window window = Host(editor);
+        var decoded = new TaskCompletionSource<AnnotationImageStore.DecodedFile?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        editor.DecodeImageForInsert = _ => decoded.Task;
+        int commits = 0, completed = 0;
+        editor.CommitRequested = _ => { commits++; return Task.FromResult(true); };
+        editor.EditingCompleted += (_, _) => completed++;
 
         Task insert = editor.InsertImageFileAsync("picked.png", new PointD(20, 20));
         editor.SaveAndClose();
         Assert.True(editor.IsCommitInProgress);
+        window.Close();
+        PumpUntil(() => insert.IsCompleted && !editor.IsCommitInProgress);
         decoded.SetResult(Decoded(Pattern(30, 20, PixelFormats.Bgra32)));
+        Pump(TimeSpan.FromMilliseconds(100));
+
+        insert.GetAwaiter().GetResult();
+        Assert.Equal(0, commits);
+        Assert.Equal(0, completed);
+        Assert.False(editor.IsEditingOperationInProgress);
+        Assert.Empty(Controller(editor).Document.Items);
+    });
+
+    [Fact]
+    public void PictureStartedDuringASaveWaitsForItAndIsAddedWhenTheEditorStaysOpen() => StaTestHost.Run(() =>
+    {
+        using var context = new DispatcherContextScope();
+        AnnotationEditorControl editor = Editor(Pattern(64, 48, PixelFormats.Bgra32));
+        AnnotationEditorController controller = Controller(editor);
+        var saved = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        editor.DecodeImageForInsert = _ => Task.FromResult<AnnotationImageStore.DecodedFile?>(Decoded(Pattern(30, 20, PixelFormats.Bgra32)));
+        editor.CommitRequested = _ => saved.Task;
+
+        editor.SaveAndClose();
+        Assert.True(editor.IsCommitInProgress);
+        Task insert = editor.InsertImageFileAsync("picked.png", new PointD(20, 20));
         Pump(TimeSpan.FromMilliseconds(150));
         Assert.False(insert.IsCompleted);
         Assert.Empty(controller.Document.Items);
@@ -708,6 +841,18 @@ public sealed class EditorHeavyOperationTests
     {
         var bounds = new RectD(0, 0, bitmap.PixelWidth, bitmap.PixelHeight);
         return new AnnotationEditorControl(new FrozenFrame(bitmap, bounds, null, 0), bounds, bitmap, null, null);
+    }
+
+    private static Window Host(AnnotationEditorControl editor)
+    {
+        var window = new Window
+        {
+            Content = editor, Width = 800, Height = 600, WindowStyle = WindowStyle.None, ResizeMode = ResizeMode.NoResize,
+            Left = -4000, Top = -4000, ShowActivated = false, ShowInTaskbar = false,
+        };
+        window.Show();
+        window.UpdateLayout();
+        return window;
     }
 
     private static PixelFormat Format(string name) => name switch
