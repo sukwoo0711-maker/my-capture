@@ -6,6 +6,9 @@ namespace MyCapture.App.Pinning;
 
 internal static class PinTextCopyService
 {
+    internal static Task<bool> CopyOriginalAsync(string originalText, Func<string, Task<bool>> copyText) =>
+        copyText(originalText);
+
     internal static Task<bool> CopyAsync(
         BitmapSource image,
         IOcrService ocr,

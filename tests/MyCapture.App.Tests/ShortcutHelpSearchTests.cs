@@ -34,12 +34,14 @@ public sealed class ShortcutHelpSearchTests
     {
         view.Tabs.SelectedIndex = 0;
 
-        // F2 renames a folder; the capture tab is open, but the match is still shown.
+        // F2 renames a folder and selects pin text, even while the capture tab is open.
         view.Search.Text = "F2";
         help.UpdateLayout();
         Assert.Equal(Visibility.Collapsed, view.Tabs.Visibility);
         Assert.Equal(Visibility.Visible, view.ResultsView.Visibility);
-        Border folder = Assert.Single(view.VisibleResults());
+        Border[] f2Results = view.VisibleResults();
+        Assert.Equal(2, f2Results.Length);
+        Border folder = Assert.Single(f2Results, row => Texts(row)[0].Text == UiText.Get("Folder410.Rename"));
         Assert.Equal(UiText.Get("Folder410.Rename"), Texts(folder)[0].Text);
         TextBlock category = Texts(folder)[1];
         Assert.Equal(UiText.Get("Folder410.Title"), category.Text);
@@ -47,8 +49,16 @@ public sealed class ShortcutHelpSearchTests
         Assert.Equal(new Thickness(12, 4, 12, 4), folder.Padding);
         Assert.True(folder.ActualHeight >= 36, $"A result row is {folder.ActualHeight} high.");
         Assert.Equal(Visibility.Visible, view.Count.Visibility);
-        Assert.Equal(UiText.Format("Help.SearchCountOne", 1), view.Count.Text);
+        Assert.Equal(UiText.Format("Help.SearchCount", 2), view.Count.Text);
         Assert.Equal(AutomationLiveSetting.Polite, AutomationProperties.GetLiveSetting(view.Count));
+        Border selection = Assert.Single(f2Results, row => Texts(row)[0].Text == UiText.Get("Pin_SelectText"));
+        Assert.Equal(UiText.Get("Text_33EFD44366A7"), Texts(selection)[1].Text);
+        Assert.Contains(FirstRunWelcomeTests.Descendants(selection).OfType<WrapPanel>(),
+            keys => AutomationProperties.GetName(keys) == "F2");
+
+        view.Search.Text = UiText.Get("Folder410.Rename");
+        Assert.Single(view.VisibleResults());
+        Assert.Equal(UiText.Format("Help.SearchCountOne", 1), view.Count.Text);
 
         // Copy appears on two tabs, plus the pin's exact-source alternative.
         view.Search.Text = "Ctrl+C";
@@ -88,6 +98,18 @@ public sealed class ShortcutHelpSearchTests
         Assert.Contains(FirstRunWelcomeTests.Descendants(rows[index]).OfType<WrapPanel>(),
             keys => AutomationProperties.GetName(keys) == "Ctrl+C / " + UiText.Get("Text_C7011B8D345C"));
         Assert.Equal("pin-copy", TutorialCatalog.FindHelp("Text_33EFD44366A7", "QuickAccess.Copy")?.Id);
+    });
+
+    [Fact]
+    public void PinSectionOffersTextSelectionAfterOriginalTextCopy() => WithHelp((help, view) =>
+    {
+        TabItem tab = Assert.Single(view.Tabs.Items.OfType<TabItem>(), item => Equals(item.Header, UiText.Get("Text_33EFD44366A7")));
+        var panel = (StackPanel)((ScrollViewer)tab.Content).Content;
+        UniformGrid[] rows = panel.Children.OfType<UniformGrid>().ToArray();
+        int index = Array.FindIndex(rows, row => ShortcutHelpRowAssertions.Title(row) == UiText.Get("Text_976A6C92B870"));
+        Assert.True(index >= 0 && index + 1 < rows.Length);
+        Assert.Equal(UiText.Get("Pin_SelectText"), ShortcutHelpRowAssertions.Title(rows[index + 1]));
+        Assert.Equal("F2", ShortcutHelpRowAssertions.Keys(rows[index + 1]));
     });
 
     [Fact]

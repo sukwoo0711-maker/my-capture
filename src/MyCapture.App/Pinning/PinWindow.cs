@@ -96,6 +96,8 @@ internal sealed class PinWindow : Window
     private bool _saveInProgress;
     private MenuItem? _restoreClosedItem;
     private MenuItem? _clickThroughItem;
+    private MenuItem? _selectTextItem;
+    private PinTextSelectionView? _textSelection;
     private RectD? _restorePhysicalBounds;
 
     internal PinWindow(
@@ -306,7 +308,7 @@ internal sealed class PinWindow : Window
     /// </summary>
     internal void ShowHoverBar()
     {
-        if (_isClosed || _state.IsHidden || _state.IsClickThrough || _dragging || !IsVisible) return;
+        if (_isClosed || _state.IsHidden || _state.IsClickThrough || _dragging || IsTextSelectionMode || !IsVisible) return;
         _hoverHideTimer.Stop();
         PinHoverBar bar = _hoverBar ??= CreateHoverBar();
         if (!bar.IsVisible)
@@ -440,6 +442,10 @@ internal sealed class PinWindow : Window
     /// <summary>The exact retained source string, exposed internally for verification.</summary>
     internal string? OriginalText => _originalText;
 
+    internal bool IsTextSelectionMode => _textSelection is not null;
+
+    internal PinTextSelectionView? TextSelectionForTest => _textSelection;
+
     /// <summary>The source page this pin came from, if the clipboard carried one.</summary>
     internal string SourcePageUrl { get; } = string.Empty;
 
@@ -562,6 +568,7 @@ internal sealed class PinWindow : Window
     internal void HidePin()
     {
         _state.IsHidden = true;
+        LeaveTextSelection();
         HideHoverBar();
         if (!FluidMotion.AnimationsEnabled || !IsVisible)
         {
@@ -798,6 +805,7 @@ internal sealed class PinWindow : Window
     protected override void OnMouseLeftButtonDown(MouseButtonEventArgs e)
     {
         base.OnMouseLeftButtonDown(e);
+        if (IsTextSelectionMode) return;
 
         bool ctrl = _dragInput.Modifiers.HasFlag(ModifierKeys.Control);
 
@@ -912,13 +920,31 @@ internal sealed class PinWindow : Window
     protected override void OnMouseWheel(MouseWheelEventArgs e)
     {
         base.OnMouseWheel(e);
+        if (e.Handled) return;
+        HandleMouseWheel(e, Keyboard.Modifiers);
+    }
+
+    protected override void OnPreviewMouseWheel(MouseWheelEventArgs e)
+    {
+        base.OnPreviewMouseWheel(e);
+        if (IsTextSelectionMode) HandleMouseWheel(e, Keyboard.Modifiers);
+    }
+
+    internal void HandleMouseWheel(MouseWheelEventArgs e, ModifierKeys modifiers)
+    {
+        if (!modifiers.HasFlag(ModifierKeys.Control) && _textSelection?.TryScroll(e.Delta) == true)
+        {
+            e.Handled = true;
+            return;
+        }
+
         int notches = e.Delta / 120;
         if (notches == 0)
         {
             return;
         }
 
-        if (Keyboard.Modifiers.HasFlag(ModifierKeys.Control))
+        if (modifiers.HasFlag(ModifierKeys.Control))
         {
             double opacity = AdjustOpacity(OpacityStep * notches);
             ShowFeedback(UiText.Format("Text_C740003A2150", opacity * 100));
@@ -938,7 +964,14 @@ internal sealed class PinWindow : Window
     {
         base.OnKeyDown(e);
 
-        HandleKeyDown(e, Keyboard.Modifiers);
+        if (!e.Handled) HandleKeyDown(e, Keyboard.Modifiers);
+    }
+
+    protected override void OnPreviewKeyDown(KeyEventArgs e)
+    {
+        base.OnPreviewKeyDown(e);
+        // Text controls consume Copy and navigation before the bubbling window handler.
+        if (IsTextSelectionMode) HandleKeyDown(e, Keyboard.Modifiers);
     }
 
     internal void HandleKeyDown(KeyEventArgs e, ModifierKeys modifiers)
@@ -949,6 +982,16 @@ internal sealed class PinWindow : Window
 
         switch (e.Key)
         {
+            case Key.F2:
+                ToggleTextSelection();
+                e.Handled = true;
+                break;
+
+            case Key.Escape when IsTextSelectionMode:
+                LeaveTextSelection();
+                e.Handled = true;
+                break;
+
             case Key.Escape:
             case Key.Delete:
                 // Esc first dismisses a failure message that stays; the next Esc closes the pin.
@@ -980,6 +1023,14 @@ internal sealed class PinWindow : Window
                 e.Handled = true;
                 break;
 
+            case Key.Left or Key.Right or Key.Up or Key.Down when IsTextSelectionMode:
+                if (_textSelection!.TableGrid is not null)
+                {
+                    _textSelection.MoveCell(e.Key, shift);
+                    e.Handled = true;
+                }
+                break;
+
             case Key.Left:
                 MoveBy(-nudge, 0);
                 e.Handled = true;
@@ -1002,6 +1053,11 @@ internal sealed class PinWindow : Window
                 e.Handled = true;
                 break;
 
+            case Key.A when ctrl && IsTextSelectionMode:
+                _textSelection!.SelectAll();
+                e.Handled = true;
+                break;
+
             case Key.S when ctrl && shift:
                 RequestSave(PinSaveMode.SaveAs);
                 e.Handled = true;
@@ -1012,6 +1068,49 @@ internal sealed class PinWindow : Window
                 e.Handled = true;
                 break;
         }
+    }
+
+    private void ToggleTextSelection()
+    {
+        if (IsTextSelectionMode)
+        {
+            LeaveTextSelection();
+            return;
+        }
+        if (_originalText is null)
+        {
+            ShowFeedback(UiText.Get("Pin_SelectTextImageHint"), FeedbackKind.Result);
+            return;
+        }
+
+        _ctrlClickTimer.Stop();
+        EndDrag();
+        HideHoverBar();
+        var selection = new PinTextSelectionView(_content);
+        var clip = new RectangleGeometry(ImageClipBounds(new Size(Width, Height)),
+            Math.Max(0, FrameCornerRadiusDip - FrameClipInsetDip),
+            Math.Max(0, FrameCornerRadiusDip - FrameClipInsetDip));
+        selection.Clip = clip;
+        selection.SizeChanged += (_, args) => clip.Rect = ImageClipBounds(args.NewSize);
+        selection.ContextMenu = ContextMenu;
+        selection.SetZoom(_state.Zoom);
+        _textSelection = selection;
+        _chrome.Children.Insert(1, selection);
+        if (_selectTextItem is not null) _selectTextItem.IsChecked = true;
+        Activate();
+        selection.FocusSelection();
+        ShowFeedback(UiText.Get("Pin_SelectTextStarted"), FeedbackKind.Result);
+    }
+
+    private void LeaveTextSelection()
+    {
+        if (_textSelection is null) return;
+        _chrome.Children.Remove(_textSelection);
+        _textSelection = null;
+        if (_selectTextItem is not null) _selectTextItem.IsChecked = false;
+        Focus();
+        ShowFeedback(UiText.Get("Pin_SelectTextEnded"), FeedbackKind.Confirmation);
+        if (IsMouseOver) ShowHoverBar();
     }
 
     // ----- State mirroring -----
@@ -1100,6 +1199,7 @@ internal sealed class PinWindow : Window
 
     private void BeginLiveZoom()
     {
+        _textSelection?.SetZoom(_state.Zoom);
         _liveZooming = true;
         RenderOptions.SetBitmapScalingMode(_imageElement, BitmapScalingMode.LowQuality);
         _imageElement.CacheMode ??= new BitmapCache { RenderAtScale = 1, EnableClearType = false, SnapsToDevicePixels = true };
@@ -1158,6 +1258,12 @@ internal sealed class PinWindow : Window
 
     private void CopyImageToClipboard()
     {
+        if (_textSelection?.SelectedOriginalText is { } selection)
+        {
+            ShowFeedback(UiText.Get("Text_BDB7C68F7452"), FeedbackKind.Progress);
+            OriginalTextCopyRequested?.Invoke(this, selection);
+            return;
+        }
         ShowFeedback(UiText.Get("Text_4C160257F02C"), FeedbackKind.Progress);
         CopyRequested?.Invoke(this, new PinImageCopyRequest(_image, SourcePageUrl, _originalText));
     }
@@ -1171,6 +1277,7 @@ internal sealed class PinWindow : Window
     private void HandleCtrlDoubleClick()
     {
         _ctrlClickTimer.Stop();
+        if (IsTextSelectionMode) return;
         if (_originalText is not null)
         {
             RequestOriginalTextCopy();
@@ -1274,6 +1381,7 @@ internal sealed class PinWindow : Window
     /// </summary>
     private void StartCtrlClickCopyDebounce()
     {
+        if (IsTextSelectionMode) return;
         int debounceMs = Math.Max(0, _settings().CtrlClickDebounceMs);
         _ctrlClickTimer.Stop();
 
@@ -1429,6 +1537,10 @@ internal sealed class PinWindow : Window
                 UiText.Get("Text_BB7798D87E07"),
                 "Icon.Copy",
                 UiText.Get("Text_C7011B8D345C")));
+            _selectTextItem = MenuItemFor(UiText.Get("Pin_SelectText"),
+                (_, _) => ToggleTextSelection(), inputGestureText: "F2");
+            _selectTextItem.IsCheckable = true;
+            menu.Items.Add(_selectTextItem);
         }
         else
         {

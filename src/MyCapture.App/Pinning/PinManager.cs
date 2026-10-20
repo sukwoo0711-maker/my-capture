@@ -734,7 +734,7 @@ internal sealed class PinManager
         bool copied;
         try
         {
-            copied = await _copyTextAsync(originalText);
+            copied = await PinTextCopyService.CopyOriginalAsync(originalText, _copyTextAsync);
         }
         catch (Exception ex)
         {

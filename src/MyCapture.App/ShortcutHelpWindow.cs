@@ -107,6 +107,7 @@ internal sealed class ShortcutHelpWindow : Window
                 ("Text_33EFD44366A7", [("Text_1FBCF51E2FF5", Display(keys.PasteToScreen)), ("Text_4FED89116C1F", Display(keys.HideAllPins)),
                     ("Onboard_PinAllowClickThrough", Display(keys.ToggleClickThrough)), ("Onboard_TrayReopenPin", Display(keys.RestoreClosedPin)),
                     ("QuickAccess.Copy", "Ctrl+C"), ("Text_976A6C92B870", "Ctrl+C / " + UiText.Get("Text_C7011B8D345C")),
+                    ("Pin_SelectText", "F2"),
                     ("QuickAccess.Save", "Ctrl+S"), ("Dialog.Close", "Esc")]),
             ];
             var matches = new List<(string Search, FrameworkElement Row)>();

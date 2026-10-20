@@ -106,8 +106,9 @@ public sealed class FeatureTutorialTests
             TabControl tabs = ((DockPanel)help.Content).Children.OfType<TabControl>().Single();
             UniformGrid[] rows = tabs.Items.Cast<TabItem>().SelectMany(tab =>
                 ((StackPanel)((ScrollViewer)tab.Content).Content).Children.OfType<UniformGrid>()).ToArray();
-            Assert.Equal(43, rows.Length);
+            Assert.Equal(44, rows.Length);
             Assert.Single(rows, row => ShortcutHelpRowAssertions.Title(row) == UiText.Get("Text_976A6C92B870"));
+            Assert.Single(rows, row => ShortcutHelpRowAssertions.Title(row) == UiText.Get("Pin_SelectText"));
             foreach (UniformGrid row in rows)
             {
                 DockPanel title = Assert.Single(row.Children.OfType<DockPanel>());
@@ -118,6 +119,12 @@ public sealed class FeatureTutorialTests
                 {
                     Assert.Empty(title.Children.OfType<Button>());
                     Assert.Equal("Ctrl+C / " + UiText.Get("Text_C7011B8D345C"), AutomationProperties.GetName(keycaps));
+                    continue;
+                }
+                if (label.Text == UiText.Get("Pin_SelectText"))
+                {
+                    Assert.Empty(title.Children.OfType<Button>());
+                    Assert.Equal("F2", AutomationProperties.GetName(keycaps));
                     continue;
                 }
                 Button tutorial = Assert.Single(title.Children.OfType<Button>());

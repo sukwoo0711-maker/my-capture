@@ -573,7 +573,7 @@ This cannot be undone.</value>
     <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
   </data>
   <data name="Text_338C1B26A06A" xml:space="preserve">
-    <value>Right-click: save/copy original · Ctrl+double-click: copy original text · Ctrl+C: copy original text and image · Drag: move · Wheel: zoom</value>
+    <value>Right-click: save/copy original · Ctrl+double-click: copy original text · Ctrl+C: copy original text and image · F2: select text · Drag: move · Wheel: zoom</value>
     <comment>src\MyCapture.App\Pinning\PinWindow.cs</comment>
   </data>
   <data name="Text_339D1C10FD24" xml:space="preserve">
@@ -957,7 +957,7 @@ This cannot be undone.</value>
     <comment>src\MyCapture.App\App.xaml.cs</comment>
   </data>
   <data name="Text_55694B0252DB" xml:space="preserve">
-    <value>A pin that shows text as an image. Ctrl+C copies the original text together with the image; Ctrl+double-click copies only the original text. You can also copy the original text from the right-click menu.</value>
+    <value>A pin that shows text as an image. Ctrl+C copies the original text together with the image; Ctrl+double-click copies only the original text. You can also copy the original text from the right-click menu. Press F2 to select text.</value>
     <comment>src\MyCapture.App\Pinning\PinWindow.cs</comment>
   </data>
   <data name="Text_55D025693B34" xml:space="preserve">
@@ -1720,6 +1720,21 @@ This cannot be undone.</value>
   <data name="Text_976A6C92B870" xml:space="preserve">
     <value>Copy original text</value>
     <comment>src\MyCapture.App\Pinning\PinWindow.cs</comment>
+  </data>
+  <data name="Pin_SelectText" xml:space="preserve">
+    <value>Select text</value>
+  </data>
+  <data name="Pin_SelectTextStarted" xml:space="preserve">
+    <value>Select text: drag to choose, then press Ctrl+C. Press Esc to finish.</value>
+  </data>
+  <data name="Pin_SelectTextEnded" xml:space="preserve">
+    <value>Text selection ended</value>
+  </data>
+  <data name="Pin_SelectTextTableLimit" xml:space="preserve">
+    <value>Showing the first {0} rows and {1} columns. Long cells are shortened for display but copied in full. Press Ctrl+A, then Ctrl+C to copy the whole original text exactly.</value>
+  </data>
+  <data name="Pin_SelectTextImageHint" xml:space="preserve">
+    <value>Ctrl+double-click recognizes and copies text from the image.</value>
   </data>
   <data name="Text_97B224926F71" xml:space="preserve">
     <value>Change {1} of {0}</value>
