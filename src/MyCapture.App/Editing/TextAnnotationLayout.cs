@@ -26,31 +26,59 @@ namespace MyCapture.App.Editing;
 /// The box is measured at one pixel per DIP, the flattener's scale, so its size is a property of
 /// the document and not of the monitor the editor runs on.
 /// </para>
+/// <para>
+/// A layout is a pure function of its <see cref="FormatKey"/>. Measurements are cached by that
+/// key, so measuring the same caption again (a live box laid out twice per keystroke, the commit
+/// that stores the last live fit, opening a layer) reuses the numbers the first layout produced
+/// instead of formatting the whole text again.
+/// </para>
 /// </remarks>
 internal static class TextAnnotationLayout
 {
-    internal static FormattedText Format(TextAnnotation text, double pixelsPerDip)
+    private const int MetricsCacheLimit = 512;
+    private static readonly Lock MetricsGate = new();
+    private static readonly Dictionary<FormatKey, TextMetrics> MetricsCache = [];
+
+    internal static FormattedText Format(TextAnnotation text, double pixelsPerDip) => Format(KeyOf(text, pixelsPerDip));
+
+    /// <summary>Every value <see cref="Format(FormatKey)"/> reads from a caption and its surface.</summary>
+    internal static FormatKey KeyOf(TextAnnotation text, double pixelsPerDip)
     {
         ArgumentNullException.ThrowIfNull(text);
+        return new FormatKey(
+            text.Text ?? string.Empty,
+            text.FontFamily,
+            text.Italic,
+            text.Bold,
+            Math.Max(1, text.FontSize),
+            text.Foreground,
+            WrapWidth(text),
+            pixelsPerDip,
+            CultureInfo.CurrentUICulture);
+    }
+
+    /// <summary>Lays out <paramref name="key"/>'s text; equal keys give equal layouts.</summary>
+    internal static FormattedText Format(in FormatKey key)
+    {
         var typeface = new Typeface(
-            new FontFamily(text.FontFamily),
-            text.Italic ? FontStyles.Italic : FontStyles.Normal,
-            text.Bold ? FontWeights.Bold : FontWeights.Normal,
+            new FontFamily(key.FontFamily),
+            key.Italic ? FontStyles.Italic : FontStyles.Normal,
+            key.Bold ? FontWeights.Bold : FontWeights.Normal,
             FontStretches.Normal);
 
         var formatted = new FormattedText(
-            text.Text ?? string.Empty,
-            CultureInfo.CurrentUICulture,
+            key.Text,
+            key.Culture,
             FlowDirection.LeftToRight,
             typeface,
-            Math.Max(1, text.FontSize),
-            text.Foreground.ToBrush(),
-            pixelsPerDip)
+            key.EmSize,
+            key.Foreground.ToBrush(),
+            key.PixelsPerDip)
         {
             Trimming = TextTrimming.None,
         };
 
-        if (WrapWidth(text) is double wrap)
+        if (key.WrapWidth is double wrap)
         {
             formatted.MaxTextWidth = wrap;
         }
@@ -88,11 +116,12 @@ internal static class TextAnnotationLayout
             return rect;
         }
 
-        FormattedText formatted = Format(text, 1.0);
+        FormatKey key = KeyOf(text, 1.0);
+        TextMetrics formatted = MetricsOf(key);
         double margin = OutlineMargin(text);
         // An empty caption still has one line: the caret's.
-        double lines = formatted.Height > 0 ? formatted.Height : LineHeight(text);
-        double width = WrapWidth(text) is double wrap
+        double lines = formatted.Height > 0 ? formatted.Height : formatted.LineHeight;
+        double width = key.WrapWidth is double wrap
             ? Math.Max(wrap, formatted.Width)
             : formatted.WidthIncludingTrailingWhitespace + margin;
         return new RectD(rect.X, rect.Y, width, lines + margin);
@@ -113,7 +142,8 @@ internal static class TextAnnotationLayout
         }
 
         RectD rect = text.Rect;
-        FormattedText formatted = Format(text, 1.0);
+        // The same key as Measure's, so the fitting layout below reuses this one.
+        TextMetrics formatted = MetricsOf(KeyOf(text, 1.0));
         if (formatted.Width <= rect.Width + 0.01 && formatted.Height <= rect.Height + 0.01)
         {
             return false;
@@ -134,10 +164,84 @@ internal static class TextAnnotationLayout
         Math.Max(box.Width, formatted.WidthIncludingTrailingWhitespace),
         Math.Max(box.Height, formatted.Height));
 
-    private static double LineHeight(TextAnnotation text)
+    /// <summary>
+    /// The extents of <paramref name="key"/>'s layout, formatted once per distinct key.
+    /// </summary>
+    private static TextMetrics MetricsOf(in FormatKey key)
     {
-        var probe = (TextAnnotation)text.Clone();
-        probe.Text = " ";
-        return Format(probe, 1.0).Height;
+        lock (MetricsGate)
+        {
+            if (MetricsCache.TryGetValue(key, out TextMetrics cached))
+            {
+                return cached;
+            }
+        }
+
+        FormattedText formatted = Format(key);
+        double height = formatted.Height;
+        var metrics = new TextMetrics(
+            formatted.Width,
+            formatted.WidthIncludingTrailingWhitespace,
+            height,
+            // One line of the same caption, for an empty one; the same layout with a single space.
+            height > 0 ? height : Format(key with { Text = " " }).Height);
+
+        lock (MetricsGate)
+        {
+            if (MetricsCache.Count >= MetricsCacheLimit)
+            {
+                MetricsCache.Clear();
+            }
+
+            MetricsCache[key] = metrics;
+        }
+
+        return metrics;
     }
+
+    /// <summary>
+    /// Every input of a caption's layout: its text and font, the wrapping width, the culture
+    /// and the surface's pixels per DIP. Strings compare ordinally and the culture by identity,
+    /// so an equal key always describes the same layout.
+    /// </summary>
+    internal readonly record struct FormatKey(
+        string Text,
+        string FontFamily,
+        bool Italic,
+        bool Bold,
+        double EmSize,
+        ColorRgba Foreground,
+        double? WrapWidth,
+        double PixelsPerDip,
+        CultureInfo Culture)
+    {
+        public bool Equals(FormatKey other) =>
+            ReferenceEquals(Culture, other.Culture)
+            && Italic == other.Italic
+            && Bold == other.Bold
+            && EmSize.Equals(other.EmSize)
+            && Foreground == other.Foreground
+            && Nullable.Equals(WrapWidth, other.WrapWidth)
+            && PixelsPerDip.Equals(other.PixelsPerDip)
+            && string.Equals(FontFamily, other.FontFamily, StringComparison.Ordinal)
+            && string.Equals(Text, other.Text, StringComparison.Ordinal);
+
+        public override int GetHashCode()
+        {
+            var hash = new HashCode();
+            hash.Add(Text, StringComparer.Ordinal);
+            hash.Add(FontFamily, StringComparer.Ordinal);
+            hash.Add(Italic);
+            hash.Add(Bold);
+            hash.Add(EmSize);
+            hash.Add(Foreground);
+            hash.Add(WrapWidth);
+            hash.Add(PixelsPerDip);
+            hash.Add(System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(Culture));
+            return hash.ToHashCode();
+        }
+    }
+
+    /// <summary>The extents <see cref="Measure"/> and <see cref="GrowToText"/> read from a layout.</summary>
+    private readonly record struct TextMetrics(double Width, double WidthIncludingTrailingWhitespace, double Height, double LineHeight);
 }

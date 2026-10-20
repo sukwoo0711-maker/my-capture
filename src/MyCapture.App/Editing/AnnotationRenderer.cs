@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
@@ -17,8 +18,17 @@ namespace MyCapture.App.Editing;
 /// at 100% and 150%, and would render identically when flattening the layer later.
 /// </para>
 /// <para>
-/// Stateless except for the image store it reads inserted bitmaps from and, on the live
-/// editor surface, the cache of blurred frames.
+/// Holds the image store it reads inserted bitmaps from, on the live editor surface the
+/// cache of blurred frames, and the drawing resources it built for earlier paints.
+/// </para>
+/// <para>
+/// The editor repaints every item on every pointer move, so whatever a paint derives from an
+/// item (pens, brushes, arrowheads, ink and outline geometry, a caption's laid-out glyphs,
+/// rotations) is kept frozen and keyed by every value it was built from. An unchanged item
+/// then costs no allocation and hands the composition thread the resources it already has.
+/// When any input differs the resource is built exactly as before, so a paint issues the
+/// same drawing commands with equal resources, and therefore the same pixels, whether or not
+/// it was cached. Items that stop being drawn (deleted, undone, edited live) drop out.
 /// </para>
 /// <para>
 /// Blur layers sample the base capture passed as <c>blurSource</c>. Exports blur exactly the
@@ -29,10 +39,23 @@ namespace MyCapture.App.Editing;
 /// </remarks>
 internal sealed class AnnotationRenderer
 {
+    // Distinct pens and brushes in one document; a bound, not a working-set size.
+    private const int ResourceCacheLimit = 256;
+
+    // Paints after which an item that was not drawn (deleted, undone, edited live, or left out
+    // of a partial render) loses its cached resources.
+    private const int UndrawnPassesKept = 32;
+
     private static readonly Brush BlurCover = CreateBlurCover();
+    private static readonly Pen MissingImagePen = CreateMissingImagePen();
 
     private readonly AnnotationImageStore _images;
     private readonly AnnotationBlurCache? _liveBlur;
+    private readonly Dictionary<ColorRgba, SolidColorBrush> _brushes = [];
+    private readonly Dictionary<StrokeKey, Pen> _strokePens = [];
+    private readonly Dictionary<(ColorRgba Color, double Thickness), Pen> _outlinePens = [];
+    private readonly Dictionary<AnnotationItem, ItemCache> _itemCaches = new(ReferenceEqualityComparer.Instance);
+    private int _pass;
 
     /// <param name="images">Resolves inserted image assets.</param>
     /// <param name="liveBlur">
@@ -74,6 +97,7 @@ internal sealed class AnnotationRenderer
             _liveBlur!.BeginPass(blurSource!);
         }
 
+        _pass++;
         try
         {
             RenderItems(dc, document, pixelsPerDip, suppress, blurSource);
@@ -85,6 +109,8 @@ internal sealed class AnnotationRenderer
                 _liveBlur!.EndPass();
             }
         }
+
+        DropUndrawnItemCaches();
     }
 
     private void RenderItems(
@@ -146,28 +172,79 @@ internal sealed class AnnotationRenderer
         return new Rect(n.Left, n.Top, n.Width, n.Height);
     }
 
-    private static Pen StrokePen(ColorRgba color, double thickness, AnnotationStrokeStyle style = AnnotationStrokeStyle.Solid)
+    /// <summary>A frozen brush for <paramref name="color"/>, shared by every item that uses it.</summary>
+    private SolidColorBrush BrushOf(ColorRgba color)
     {
-        var pen = new Pen(color.ToBrush(), Math.Max(0.01, thickness))
+        if (!_brushes.TryGetValue(color, out SolidColorBrush? brush))
         {
-            StartLineCap = PenLineCap.Round,
-            EndLineCap = PenLineCap.Round,
-            LineJoin = PenLineJoin.Round,
-            DashCap = style == AnnotationStrokeStyle.Dotted ? PenLineCap.Round : PenLineCap.Flat,
-            DashStyle = style switch
+            if (_brushes.Count >= ResourceCacheLimit)
             {
-                AnnotationStrokeStyle.Dashed or AnnotationStrokeStyle.ThickDashed => DashStyles.Dash,
-                AnnotationStrokeStyle.Dotted => DashStyles.Dot,
-                _ => DashStyles.Solid,
-            },
-        };
-        pen.Freeze();
+                _brushes.Clear();
+            }
+
+            brush = color.ToBrush();
+            _brushes.Add(color, brush);
+        }
+
+        return brush;
+    }
+
+    /// <summary>As <see cref="WpfConversions.ToBrushOrNull"/>: no brush for a fully transparent colour.</summary>
+    private SolidColorBrush? BrushOrNull(ColorRgba color) => color.A == 0 ? null : BrushOf(color);
+
+    private Pen StrokePen(ColorRgba color, double thickness, AnnotationStrokeStyle style = AnnotationStrokeStyle.Solid)
+    {
+        var key = new StrokeKey(color, thickness, style);
+        if (!_strokePens.TryGetValue(key, out Pen? pen))
+        {
+            if (_strokePens.Count >= ResourceCacheLimit)
+            {
+                _strokePens.Clear();
+            }
+
+            pen = new Pen(BrushOf(color), Math.Max(0.01, thickness))
+            {
+                StartLineCap = PenLineCap.Round,
+                EndLineCap = PenLineCap.Round,
+                LineJoin = PenLineJoin.Round,
+                DashCap = style == AnnotationStrokeStyle.Dotted ? PenLineCap.Round : PenLineCap.Flat,
+                DashStyle = style switch
+                {
+                    AnnotationStrokeStyle.Dashed or AnnotationStrokeStyle.ThickDashed => DashStyles.Dash,
+                    AnnotationStrokeStyle.Dotted => DashStyles.Dot,
+                    _ => DashStyles.Solid,
+                },
+            };
+            pen.Freeze();
+            _strokePens.Add(key, pen);
+        }
+
         return pen;
     }
 
-    private static void DrawRectangle(DrawingContext dc, RectangleAnnotation rect)
+    private Pen OutlinePen(ColorRgba color, double thickness)
     {
-        Brush? fill = rect.Fill.ToBrushOrNull();
+        if (!_outlinePens.TryGetValue((color, thickness), out Pen? pen))
+        {
+            if (_outlinePens.Count >= ResourceCacheLimit)
+            {
+                _outlinePens.Clear();
+            }
+
+            pen = new Pen(BrushOf(color), thickness)
+            {
+                LineJoin = PenLineJoin.Round,
+            };
+            pen.Freeze();
+            _outlinePens.Add((color, thickness), pen);
+        }
+
+        return pen;
+    }
+
+    private void DrawRectangle(DrawingContext dc, RectangleAnnotation rect)
+    {
+        Brush? fill = BrushOrNull(rect.Fill);
         Pen? pen = rect.StrokeThickness > 0 ? StrokePen(rect.Stroke, rect.EffectiveStrokeThickness, rect.StrokeStyle) : null;
         Rect bounds = ToRect(rect.Rect);
         if (rect.CornerRadius > 0)
@@ -180,15 +257,15 @@ internal sealed class AnnotationRenderer
         }
     }
 
-    private static void DrawEllipse(DrawingContext dc, EllipseAnnotation ellipse)
+    private void DrawEllipse(DrawingContext dc, EllipseAnnotation ellipse)
     {
-        Brush? fill = ellipse.Fill.ToBrushOrNull();
+        Brush? fill = BrushOrNull(ellipse.Fill);
         Pen? pen = ellipse.StrokeThickness > 0 ? StrokePen(ellipse.Stroke, ellipse.EffectiveStrokeThickness, ellipse.StrokeStyle) : null;
         Rect b = ToRect(ellipse.Rect);
         dc.DrawEllipse(fill, pen, new Point(b.Left + (b.Width / 2), b.Top + (b.Height / 2)), b.Width / 2, b.Height / 2);
     }
 
-    private static void DrawPolyline(DrawingContext dc, PolylineAnnotation polyline)
+    private void DrawPolyline(DrawingContext dc, PolylineAnnotation polyline)
     {
         IReadOnlyList<PointD> points = polyline.Points;
         if (points.Count < 2)
@@ -221,30 +298,53 @@ internal sealed class AnnotationRenderer
             }
         }
 
+        if (!polyline.HeadAtEnd && !polyline.HeadAtStart)
+        {
+            return;
+        }
+
+        ArrowCache heads = CacheFor<ArrowCache>(polyline);
         if (polyline.HeadAtEnd)
         {
-            DrawArrowHead(dc, polyline, points[^2], points[^1]);
+            DrawArrowHead(dc, polyline, points[^2], points[^1], ref heads.End);
         }
 
         if (polyline.HeadAtStart)
         {
-            DrawArrowHead(dc, polyline, points[1], points[0]);
+            DrawArrowHead(dc, polyline, points[1], points[0], ref heads.Start);
         }
     }
 
-    private static void DrawArrowHead(DrawingContext dc, PolylineAnnotation polyline, PointD from, PointD to)
+    private void DrawArrowHead(DrawingContext dc, PolylineAnnotation polyline, PointD from, PointD to, ref ArrowHead head)
     {
+        var key = new ArrowHeadKey(from, to, polyline.StrokeThickness * polyline.HeadSizeFactor);
+        if (!head.Built || head.Key != key)
+        {
+            head = new ArrowHead { Built = true, Key = key, Geometry = BuildArrowHead(key) };
+        }
+
+        if (head.Geometry is { } geometry)
+        {
+            dc.DrawGeometry(BrushOf(polyline.Stroke), null, geometry);
+        }
+    }
+
+    /// <summary>The filled head at <c>To</c>, or <see langword="null"/> for a zero-length segment.</summary>
+    private static PathGeometry? BuildArrowHead(ArrowHeadKey key)
+    {
+        PointD from = key.From;
+        PointD to = key.To;
         double dx = to.X - from.X;
         double dy = to.Y - from.Y;
         double length = Math.Sqrt((dx * dx) + (dy * dy));
         if (length <= double.Epsilon)
         {
-            return;
+            return null;
         }
 
         double ux = dx / length;
         double uy = dy / length;
-        double headLength = polyline.StrokeThickness * polyline.HeadSizeFactor;
+        double headLength = key.HeadLength;
         double headWidth = headLength * 0.6;
 
         var baseCenter = new Point(to.X - (ux * headLength), to.Y - (uy * headLength));
@@ -260,13 +360,12 @@ internal sealed class AnnotationRenderer
         var geometry = new PathGeometry();
         geometry.Figures.Add(figure);
         geometry.Freeze();
-
-        dc.DrawGeometry(polyline.Stroke.ToBrush(), null, geometry);
+        return geometry;
     }
 
-    private static void DrawPen(DrawingContext dc, PenAnnotation pen)
+    private void DrawPen(DrawingContext dc, PenAnnotation pen)
     {
-        IReadOnlyList<PointD> points = pen.Points;
+        List<PointD> points = pen.Points;
         if (points.Count == 0)
         {
             return;
@@ -277,34 +376,60 @@ internal sealed class AnnotationRenderer
         if (points.Count == 1)
         {
             double r = Math.Max(0.5, pen.StrokeThickness / 2);
-            dc.DrawEllipse(color.ToBrush(), null, ToPoint(points[0]), r, r);
+            dc.DrawEllipse(BrushOf(color), null, ToPoint(points[0]), r, r);
             return;
         }
 
         Pen strokePen = StrokePen(color, pen.StrokeThickness);
+        dc.DrawGeometry(null, strokePen, InkGeometry(pen, points));
+    }
+
+    /// <summary>
+    /// The stroke's segments as one frozen geometry, rebuilt only when a point differs.
+    /// </summary>
+    /// <remarks>
+    /// Points can change in place (moves, undo, rotation), so the geometry is keyed by a copy
+    /// of the points it was built from and compared bit for bit, which a long stroke does in
+    /// a fraction of the time building its geometry takes.
+    /// </remarks>
+    private StreamGeometry InkGeometry(PenAnnotation pen, List<PointD> points)
+    {
+        InkCache cache = CacheFor<InkCache>(pen);
+        ReadOnlySpan<PointD> current = CollectionsMarshal.AsSpan(points);
+        if (cache.Geometry is { } cached
+            && MemoryMarshal.AsBytes(current).SequenceEqual(MemoryMarshal.AsBytes(CollectionsMarshal.AsSpan(cache.Points))))
+        {
+            return cached;
+        }
+
         // Ink can contain hundreds of thousands of points. Stream the same stroked
         // segments without allocating a mutable Freezable for every point on every pass.
         var geometry = new StreamGeometry();
         using (StreamGeometryContext context = geometry.Open())
         {
-            context.BeginFigure(ToPoint(points[0]), isFilled: false, isClosed: false);
-            for (int i = 1; i < points.Count; i++)
+            context.BeginFigure(ToPoint(current[0]), isFilled: false, isClosed: false);
+            for (int i = 1; i < current.Length; i++)
             {
-                context.LineTo(ToPoint(points[i]), isStroked: true, isSmoothJoin: false);
+                context.LineTo(ToPoint(current[i]), isStroked: true, isSmoothJoin: false);
             }
         }
+
         geometry.Freeze();
-        dc.DrawGeometry(null, strokePen, geometry);
+        cache.Points.Clear();
+        cache.Points.AddRange(current);
+        cache.Geometry = geometry;
+        return geometry;
     }
 
-    private static void DrawText(DrawingContext dc, TextAnnotation text, double pixelsPerDip)
+    private void DrawText(DrawingContext dc, TextAnnotation text, double pixelsPerDip)
     {
         Rect box = ToRect(text.Rect);
+        TextCache cache = CacheFor<TextCache>(text);
 
         bool rotated = Math.Abs(text.RotationDegrees) > 1e-6;
         if (rotated)
         {
-            dc.PushTransform(new RotateTransform(
+            dc.PushTransform(cache.Rotation.Get(
                 text.RotationDegrees,
                 box.Left + (box.Width / 2),
                 box.Top + (box.Height / 2)));
@@ -312,9 +437,18 @@ internal sealed class AnnotationRenderer
 
         // Never trimmed or cut at the box: see TextAnnotationLayout. Text that fits its box lays
         // out exactly as before, so existing captions keep their pixels.
-        FormattedText formatted = TextAnnotationLayout.Format(text, pixelsPerDip);
+        TextAnnotationLayout.FormatKey key = TextAnnotationLayout.KeyOf(text, pixelsPerDip);
+        if (cache.Formatted is null || !cache.Key.Equals(key))
+        {
+            cache.Key = key;
+            cache.Formatted = TextAnnotationLayout.Format(key);
+            cache.Glyphs = null;
+            cache.Outline = null;
+        }
 
-        Brush? plate = text.Background.ToBrushOrNull();
+        FormattedText formatted = cache.Formatted;
+
+        Brush? plate = BrushOrNull(text.Background);
         if (plate is not null)
         {
             dc.DrawRectangle(plate, null, text.IsStepNumber ? box : TextAnnotationLayout.PlateBounds(box, formatted));
@@ -323,26 +457,53 @@ internal sealed class AnnotationRenderer
         var origin = text.IsStepNumber
             ? new Point(box.Left + Math.Max(0, (box.Width - formatted.Width) / 2), box.Top + Math.Max(0, (box.Height - formatted.Height) / 2))
             : new Point(box.Left, box.Top);
+        if (cache.Glyphs is null || !cache.Origin.Equals(origin))
+        {
+            // The layout bakes its origin into every glyph and outline coordinate, so a moved
+            // caption builds both again exactly where the uncached paint would have.
+            cache.Origin = origin;
+            cache.Glyphs = RecordGlyphs(formatted, origin);
+            cache.Outline = null;
+        }
+
         if (text.HasOutline)
         {
-            Geometry geometry = formatted.BuildGeometry(origin);
+            cache.Outline ??= Frozen(formatted.BuildGeometry(origin));
             bool consistent = text.OutlineStyle == TextOutlineStyle.Consistent;
             ColorRgba outline = Contrasting(text.Foreground, consistent);
             double thickness = consistent ? text.FontSize / 18 : Math.Max(1, text.FontSize / 12);
-            var outlinePen = new Pen(outline.ToBrush(), thickness)
-            {
-                LineJoin = PenLineJoin.Round,
-            };
-            outlinePen.Freeze();
-            dc.DrawGeometry(null, outlinePen, geometry);
+            dc.DrawGeometry(null, OutlinePen(outline, thickness), cache.Outline);
         }
 
-        dc.DrawText(formatted, origin);
+        dc.DrawDrawing(cache.Glyphs);
 
         if (rotated)
         {
             dc.Pop();
         }
+    }
+
+    /// <summary>The glyph runs <c>DrawText(formatted, origin)</c> issues, recorded once and frozen.</summary>
+    private static DrawingGroup RecordGlyphs(FormattedText formatted, Point origin)
+    {
+        var glyphs = new DrawingGroup();
+        using (DrawingContext context = glyphs.Open())
+        {
+            context.DrawText(formatted, origin);
+        }
+
+        return Frozen(glyphs);
+    }
+
+    private static T Frozen<T>(T freezable)
+        where T : Freezable
+    {
+        if (freezable.CanFreeze)
+        {
+            freezable.Freeze();
+        }
+
+        return freezable;
     }
 
     private void DrawImage(DrawingContext dc, ImageAnnotation image)
@@ -353,7 +514,7 @@ internal sealed class AnnotationRenderer
         bool rotated = Math.Abs(image.RotationDegrees) > 1e-6;
         if (rotated)
         {
-            dc.PushTransform(new RotateTransform(
+            dc.PushTransform(CacheFor<ImageCache>(image).Rotation.Get(
                 image.RotationDegrees,
                 box.Left + (box.Width / 2),
                 box.Top + (box.Height / 2)));
@@ -368,9 +529,7 @@ internal sealed class AnnotationRenderer
             // Asset not decodable this session (for example a document reloaded without its
             // sidecar): draw a placeholder outline so the item is still visible and pickable
             // rather than silently vanishing.
-            var pen = new Pen(ColorRgba.FromRgb(0x88, 0x88, 0x88).ToBrush(), 1);
-            pen.Freeze();
-            dc.DrawRectangle(null, pen, box);
+            dc.DrawRectangle(null, MissingImagePen, box);
         }
 
         if (rotated)
@@ -407,9 +566,48 @@ internal sealed class AnnotationRenderer
             return;
         }
 
-        dc.PushClip(new RectangleGeometry(pixels));
+        dc.PushClip(CacheFor<BlurCache>(blur).Clip(pixels));
         dc.DrawImage(frame, new Rect(0, 0, source.PixelWidth, source.PixelHeight));
         dc.Pop();
+    }
+
+    /// <summary>
+    /// The cache entry of <paramref name="item"/>, created on first use and marked as drawn in
+    /// this pass.
+    /// </summary>
+    private T CacheFor<T>(AnnotationItem item)
+        where T : ItemCache, new()
+    {
+        ref ItemCache? slot = ref CollectionsMarshal.GetValueRefOrAddDefault(_itemCaches, item, out _);
+        if (slot is not T cache)
+        {
+            cache = new T();
+            slot = cache;
+        }
+
+        cache.Pass = _pass;
+        return cache;
+    }
+
+    /// <summary>
+    /// Every <see cref="UndrawnPassesKept"/> paints, forgets the items none of them drew, so a
+    /// deleted or undone item does not keep its geometry alive, while an item a partial render
+    /// (a subset document) left out keeps it.
+    /// </summary>
+    private void DropUndrawnItemCaches()
+    {
+        if (_pass % UndrawnPassesKept != 0)
+        {
+            return;
+        }
+
+        foreach ((AnnotationItem item, ItemCache cache) in _itemCaches)
+        {
+            if (_pass - cache.Pass >= UndrawnPassesKept)
+            {
+                _itemCaches.Remove(item);
+            }
+        }
     }
 
     /// <summary>
@@ -421,6 +619,13 @@ internal sealed class AnnotationRenderer
         var brush = new SolidColorBrush(Color.FromRgb(0x80, 0x80, 0x80));
         brush.Freeze();
         return brush;
+    }
+
+    private static Pen CreateMissingImagePen()
+    {
+        var pen = new Pen(ColorRgba.FromRgb(0x88, 0x88, 0x88).ToBrush(), 1);
+        pen.Freeze();
+        return pen;
     }
 
     private static Point ToPoint(PointD p) => new(p.X, p.Y);
@@ -436,5 +641,89 @@ internal sealed class AnnotationRenderer
         return luma > (consistent ? 45 : 140)
             ? new ColorRgba(c.A, 0, 0, 0)
             : new ColorRgba(c.A, 255, 255, 255);
+    }
+
+    private readonly record struct StrokeKey(ColorRgba Color, double Thickness, AnnotationStrokeStyle Style);
+
+    private readonly record struct ArrowHeadKey(PointD From, PointD To, double HeadLength);
+
+    /// <summary>One arrowhead and the key it was built for; <see cref="Built"/> is false until first use.</summary>
+    private struct ArrowHead
+    {
+        internal bool Built;
+        internal ArrowHeadKey Key;
+        internal PathGeometry? Geometry;
+    }
+
+    /// <summary>A frozen rotation about a box centre, rebuilt when the angle or centre changes.</summary>
+    private struct CachedRotation
+    {
+        private double _degrees;
+        private double _centerX;
+        private double _centerY;
+        private RotateTransform? _transform;
+
+        internal RotateTransform Get(double degrees, double centerX, double centerY)
+        {
+            if (_transform is null || !_degrees.Equals(degrees) || !_centerX.Equals(centerX) || !_centerY.Equals(centerY))
+            {
+                var transform = new RotateTransform(degrees, centerX, centerY);
+                transform.Freeze();
+                (_degrees, _centerX, _centerY, _transform) = (degrees, centerX, centerY, transform);
+            }
+
+            return _transform;
+        }
+    }
+
+    /// <summary>What one item's paints share; <see cref="Pass"/> is the last paint that drew it.</summary>
+    private abstract class ItemCache
+    {
+        internal int Pass;
+    }
+
+    private sealed class TextCache : ItemCache
+    {
+        internal CachedRotation Rotation;
+        internal TextAnnotationLayout.FormatKey Key;
+        internal FormattedText? Formatted;
+        internal Point Origin;
+        internal DrawingGroup? Glyphs;
+        internal Geometry? Outline;
+    }
+
+    private sealed class InkCache : ItemCache
+    {
+        internal readonly List<PointD> Points = [];
+        internal StreamGeometry? Geometry;
+    }
+
+    private sealed class ArrowCache : ItemCache
+    {
+        internal ArrowHead Start;
+        internal ArrowHead End;
+    }
+
+    private sealed class ImageCache : ItemCache
+    {
+        internal CachedRotation Rotation;
+    }
+
+    private sealed class BlurCache : ItemCache
+    {
+        private Rect _bounds;
+        private RectangleGeometry? _clip;
+
+        internal RectangleGeometry Clip(Rect bounds)
+        {
+            if (_clip is null || !_bounds.Equals(bounds))
+            {
+                var clip = new RectangleGeometry(bounds);
+                clip.Freeze();
+                (_bounds, _clip) = (bounds, clip);
+            }
+
+            return _clip;
+        }
     }
 }

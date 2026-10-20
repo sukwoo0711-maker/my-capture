@@ -17,18 +17,28 @@ public sealed class EditDraftStore
 {
     private readonly string _root;
     private readonly Action<string> _deleteSessionDirectory;
+    private readonly Action<string, string> _publishReadyMarker;
 
     /// <param name="deleteSessionDirectory">Test seam that replaces the direct deletion of a
     /// retired session directory. Production omits it.</param>
-    public EditDraftStore(string root, Action<string>? deleteSessionDirectory = null)
+    /// <param name="publishReadyMarker">Test seam that replaces the atomic rename of a revision's
+    /// durable <c>ready.pending</c> marker to <c>ready.json</c>. Production omits it.</param>
+    public EditDraftStore(string root, Action<string>? deleteSessionDirectory = null,
+        Action<string, string>? publishReadyMarker = null)
     {
         _root = Path.GetFullPath(root);
         _deleteSessionDirectory = deleteSessionDirectory ?? DeleteSessionDirectory;
+        _publishReadyMarker = publishReadyMarker ?? ((pending, ready) => File.Move(pending, ready));
     }
 
+    /// <summary>
+    /// Writes one immutable revision and publishes it if <paramref name="isCurrent"/> still holds
+    /// and the session is not retired. The caller runs one writer per session at a time, so a
+    /// later revision is always published by a later call.
+    /// </summary>
     public async Task WriteAsync(Guid session, long revision, string kind, string document,
         Dictionary<string, string> metadata, IReadOnlyDictionary<string, byte[]> files,
-        Func<bool> isCurrent, CancellationToken token = default, object? publicationGate = null)
+        Func<bool> isCurrent, CancellationToken token = default)
     {
         string parent = SessionPath(session);
         AssertNoLinks(parent);
@@ -56,12 +66,13 @@ public sealed class EditDraftStore
         var draft = new EditDraft(session, revision, kind, document, metadata, hashes, DateTimeOffset.UtcNow);
         await DurableWriteAsync(Path.Combine(directory, "ready.pending"),
             JsonSerializer.SerializeToUtf8Bytes(draft, JsonDefaults.Compact), token).ConfigureAwait(false);
-        // The caller serializes writers and synchronizes this publication with revision changes.
-        lock (publicationGate ?? this)
-        {
-            if (!isCurrent() || File.Exists(Path.Combine(parent, "retired"))) return;
-            File.Move(Path.Combine(directory, "ready.pending"), Path.Combine(directory, "ready.json"));
-        }
+        // The checks run just before the one atomic rename that publishes this revision, and no
+        // lock is held across that file I/O: an editor that changes the revision meanwhile never
+        // waits for the disk. The newer revision is published by the caller's next write under a
+        // higher number, and recovery reads the highest; the caller retires a session only after
+        // this writer finishes, so a revision published now still gets the tombstone after it.
+        if (!isCurrent() || File.Exists(Path.Combine(parent, "retired"))) return;
+        _publishReadyMarker(Path.Combine(directory, "ready.pending"), Path.Combine(directory, "ready.json"));
         // Small revision markers stay until this session is retired. This avoids one delete
         // per debounce; immutable pixel blobs are stored only once.
     }
