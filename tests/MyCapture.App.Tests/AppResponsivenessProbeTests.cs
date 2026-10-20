@@ -916,6 +916,8 @@ internal sealed class AppResponsivenessProbe
                 ShowActivated = false, ShowInTaskbar = false,
             };
             constructed = Stopwatch.GetTimestamp();
+            // As the capture flow (CaptureOverlayCoordinator) wires it, on builds that have it.
+            typeof(AnnotationEditorWindow).GetProperty("FinishesOutOfSight", Private)?.SetValue(window, true);
             window.DraftRecordSource = () => (record.Id, session.ExpectedContentRevision);
             // As the editor probe does: the app's draft session against the isolated store.
             window.AdoptRecoveredDraft(app.Drafts, Guid.NewGuid(), 0);

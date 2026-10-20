@@ -243,10 +243,24 @@ internal sealed class CaptureCommitService
                     return false;
                 }
 
-                await PersistFinalIfAvailableAsync(
+                // The library save and the clipboard copy each encode their own PNG of the same
+                // flattened pixels and need nothing from each other, so they run side by side. Once
+                // the clipboard holds the result the editor may leave the screen (CopiedToClipboard);
+                // the commit still completes only when both have, with the save's failure first.
+                Task persisting = PersistFinalIfAvailableAsync(
                     record, result.Action, flattened, snapshot, result.ImageAssetBitmaps, editSession, createRecordAsync,
                     replaceOriginal ? result.SelectedBitmap : null);
-                return await CopyEditedImageAsync(flattened, "Done", exportRecord?.SourcePageUrl);
+                Task<bool> copying = CopyEditedImageAsync(flattened, "Done", exportRecord?.SourcePageUrl);
+                try
+                {
+                    if (await copying && !persisting.IsFaulted && !persisting.IsCanceled) result.CopiedToClipboard?.Invoke();
+                }
+                finally
+                {
+                    await persisting;
+                }
+
+                return await copying;
         }
     }
 

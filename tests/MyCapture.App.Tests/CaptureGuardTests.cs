@@ -319,6 +319,58 @@ public sealed class CaptureGuardTests
         Assert.True(coordinator.CanRetake);
     });
 
+    [Fact]
+    public void DoneSavingOutOfSightIsWaitedForAndNeverBroughtBackToSayItIsBusy()
+    {
+        var saved = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        WithEditor((coordinator, editor) =>
+        {
+            Assert.True(editor.FinishesOutOfSight);
+            editor.Editor.SaveAndClose();
+            PumpUntil(() => !editor.IsVisible);
+            Task finished = coordinator.WaitForEditorFinishedAsync();
+            Assert.False(finished.IsCompleted);
+            // The session still holds the saving editor, but the user no longer sees it, so a
+            // capture command waits for it instead of bringing it back with a notice.
+            Assert.Equal(CaptureBlock.EditorSaving, CaptureGuard.Find(coordinator.WithSession(default), allowRetake: true));
+            Assert.False(coordinator.ShowEditorBlocked(UiText.Get("CaptureBlocked_Editor")));
+            Assert.False(editor.IsVisible);
+
+            saved.SetResult(true);
+            PumpUntil(() => finished.IsCompleted);
+            Assert.True(editor.WasCommitted);
+            Assert.False(coordinator.IsActive);
+            Assert.True(coordinator.WaitForEditorFinishedAsync().IsCompleted);
+        }, commit: result =>
+        {
+            result.CopiedToClipboard?.Invoke();
+            return saved.Task;
+        });
+    }
+
+    [Fact]
+    public void DoneSaveFailingOutOfSightBringsTheEditorBackForARetry()
+    {
+        var saved = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        WithEditor((coordinator, editor) =>
+        {
+            editor.Editor.SaveAndClose();
+            PumpUntil(() => !editor.IsVisible);
+            Task finished = coordinator.WaitForEditorFinishedAsync();
+            saved.SetResult(false);
+            PumpUntil(() => finished.IsCompleted && !editor.Editor.IsCommitInProgress);
+            Assert.True(editor.IsVisible);
+            Assert.True(coordinator.IsActive);
+            Assert.True(coordinator.CanRetake);
+            Assert.Equal(CaptureBlock.None, CaptureGuard.Find(coordinator.WithSession(default), allowRetake: true));
+            Assert.True(editor.Editor.HasUnsavedChanges);
+        }, commit: result =>
+        {
+            result.CopiedToClipboard?.Invoke();
+            return saved.Task;
+        });
+    }
+
     private static Task<CaptureBlock> Prepare(CaptureOverlayCoordinator coordinator) =>
         CaptureGuard.PrepareAsync(coordinator.CanRetake,
             allowRetake => CaptureGuard.Find(coordinator.WithSession(default), allowRetake),

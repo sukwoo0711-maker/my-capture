@@ -106,10 +106,67 @@ internal partial class AnnotationEditorWindow : Window
         set => _editor.CommitRequested = value is null ? null : async result =>
         {
             AnnotationEditingResult still = FrameStillImage is null ? result : await FrameStillImage.CreateResultAsync(result);
-            bool saved = await value(still);
-            if (!saved || result.Action == EditorCommitAction.CopyToClipboard) return saved;
-            return await RetireDraftBeforeCloseAsync();
+            if (FinishesOutOfSight && result.Action == EditorCommitAction.Done) still.CopiedToClipboard = LeaveScreenWhileFinishing;
+            bool closing = false;
+            try
+            {
+                bool saved = await value(still);
+                if (!saved || result.Action == EditorCommitAction.CopyToClipboard) return saved;
+                closing = await RetireDraftBeforeCloseAsync();
+                return closing;
+            }
+            finally
+            {
+                // A save that failed after the window left the screen shows it again, with the
+                // failure in its status line and the draft kept, as when it never left.
+                if (!closing) ReturnToScreen();
+            }
         };
+    }
+
+    /// <summary>
+    /// Lets Done take the window off the screen as soon as the clipboard holds the result, while
+    /// the library save finishes. The window stays open (hidden) until the save completes, so the
+    /// commit, its events and the draft keep their order; a failed save shows it again. Only for a
+    /// modeless window: hiding a modal one would end its <see cref="Window.ShowDialog"/> early.
+    /// </summary>
+    internal bool FinishesOutOfSight { get; set; }
+
+    private TaskCompletionSource? _finishingOutOfSight;
+
+    /// <summary>True while Done's save finishes after the window has left the screen.</summary>
+    internal bool IsFinishingOutOfSight => _finishingOutOfSight is not null;
+
+    /// <summary>
+    /// Completes when a save finishing out of sight has closed the window, or has shown it again
+    /// after a failure; completed when no save is finishing out of sight.
+    /// </summary>
+    internal Task FinishedOutOfSight => _finishingOutOfSight?.Task ?? Task.CompletedTask;
+
+    private void LeaveScreenWhileFinishing()
+    {
+        if (!Dispatcher.CheckAccess())
+        {
+            Dispatcher.Invoke(LeaveScreenWhileFinishing);
+            return;
+        }
+
+        if (_finishingOutOfSight is not null || _windowClosed || !IsVisible) return;
+        _finishingOutOfSight = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        Hide();
+    }
+
+    private void ReturnToScreen()
+    {
+        if (_finishingOutOfSight is not { } finishing) return;
+        _finishingOutOfSight = null;
+        if (!_windowClosed)
+        {
+            Show();
+            WindowForeground.BringForward(this);
+        }
+
+        finishing.TrySetResult();
     }
 
     // Only the persistence/export consumer sees timed text; Committed retains the text-free video layer input.
@@ -318,5 +375,11 @@ internal partial class AnnotationEditorWindow : Window
         }
 
         base.OnClosed(e);
+        // After Closed: whoever waits for a save finishing out of sight sees the window gone.
+        if (_finishingOutOfSight is { } finishing)
+        {
+            _finishingOutOfSight = null;
+            finishing.TrySetResult();
+        }
     }
 }
