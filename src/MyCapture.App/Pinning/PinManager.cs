@@ -165,6 +165,29 @@ internal sealed class PinManager
 
     internal Func<IReadOnlyList<IntPtr>, IReadOnlyList<IntPtr>>? ReadPinOrderForTest { get; set; }
     internal Action<PinWindow>? ActivatePinForTest { get; set; }
+    internal Func<MonitorInfo>? ReadPlacementMonitorForTest { get; set; }
+    internal Func<IReadOnlyList<MonitorInfo>>? ReadRestoreMonitorsForTest { get; set; }
+
+    /// <summary>Open pins in opening order, newest first, including hidden pins.</summary>
+    internal IReadOnlyList<PinWindow> SnapshotOpenPinWindows()
+    {
+        Prune();
+        return _pins
+            .OrderByDescending(pin => _restoredOpenedOrders.ContainsKey(pin) ? 0 : 1)
+            .ThenByDescending(pin => _restoredOpenedOrders.GetValueOrDefault(pin, _openedOrders[pin]))
+            .ThenByDescending(pin => _openedOrders[pin])
+            .ToArray();
+    }
+
+    internal void ActivateOpenPin(PinWindow pin)
+    {
+        Prune();
+        if (!_pins.Contains(pin)) return;
+        if (AreHidden) ShowAllPins(clearClickThrough: false);
+        if (pin.State.IsClickThrough) pin.ApplyClickThrough(enabled: false);
+        if (ActivatePinForTest is { } activatePin) activatePin(pin);
+        else pin.Activate();
+    }
 
     /// <summary>Snapshots live pins bottom-to-top, keeping opening age separate from stacking.</summary>
     internal IReadOnlyList<ClosedPin> SnapshotOpenPins()
@@ -268,19 +291,17 @@ internal sealed class PinManager
 
     private PinWindow OpenPin(PinContent content, bool activate)
     {
-        BitmapSource image = content.Image;
-
         PinSettings settings = _settings();
-        MonitorInfo monitor = MonitorEnumerator.GetFromCursor();
+        MonitorInfo monitor = ReadPlacementMonitorForTest?.Invoke() ?? MonitorEnumerator.GetFromCursor();
         double scale = monitor.ScaleFactor <= 0 ? 1.0 : monitor.ScaleFactor;
-        double sourcePixelsPerDip = content.UsesDeviceIndependentPixels ? 1.0 : scale;
 
         // Captured images and pictures published by other applications (including a
-        // spreadsheet's picture of its cells) contain display pixels. Text/table previews that
-        // MyCapture renders itself are deliberately rendered at 96 DPI, so keeping them at one
-        // pixel per DIP prevents tiny cards on a 150% or 200% monitor.
-        double imageWidthDip = image.PixelWidth / sourcePixelsPerDip;
-        double imageHeightDip = image.PixelHeight / sourcePixelsPerDip;
+        // spreadsheet's picture of its cells) contain display pixels. Locally rendered
+        // previews keep their original DIP layout while their raster follows the display.
+        double imageWidthDip = content.UsesDeviceIndependentPixels ? content.LayoutWidthDip : content.Image.PixelWidth / scale;
+        double imageHeightDip = content.UsesDeviceIndependentPixels ? content.LayoutHeightDip : content.Image.PixelHeight / scale;
+        content = content.RenderedAt(scale);
+        BitmapSource image = content.Image;
 
         RectD work = monitor.WorkArea;
         double workLeftDip = work.Left / scale;
@@ -381,8 +402,8 @@ internal sealed class PinManager
             closed.Opacity,
             _settings().ZoomStep);
 
-        (double leftDip, double topDip, RectD? physical) = ResolveRestorePosition(closed, state);
-        var pin = new PinWindow(closed.Content, state, leftDip, topDip, _settings);
+        (double leftDip, double topDip, RectD? physical, double scale) = ResolveRestorePosition(closed, state);
+        var pin = new PinWindow(closed.Content.RenderedAt(scale), state, leftDip, topDip, _settings);
         if (!activate)
         {
             _restoredOpenedOrders[pin] = closed.OpenedOrder > 0 ? closed.OpenedOrder : _nextOpenedOrder + 1;
@@ -420,13 +441,13 @@ internal sealed class PinManager
         }
     }
 
-    private (double LeftDip, double TopDip, RectD? Physical) ResolveRestorePosition(
+    private (double LeftDip, double TopDip, RectD? Physical, double Scale) ResolveRestorePosition(
         ClosedPin closed,
         PinViewState state)
     {
         if (closed.Placement is { } placement)
         {
-            PinDisplayArea[] displays = MonitorEnumerator.GetAll()
+            PinDisplayArea[] displays = (ReadRestoreMonitorsForTest?.Invoke() ?? MonitorEnumerator.GetAll())
                 .Select(m => new PinDisplayArea(m.DeviceName, m.Bounds, m.WorkArea, m.ScaleFactor))
                 .ToArray();
             PinRestorePlacement.Result result = PinRestorePlacement.Resolve(
@@ -447,11 +468,12 @@ internal sealed class PinManager
             return (
                 result.Left / displayScale,
                 result.Top / displayScale,
-                new RectD(result.Left, result.Top, result.Width, result.Height));
+                new RectD(result.Left, result.Top, result.Width, result.Height),
+                displayScale);
         }
 
         // The pin closed before it had a native window: reopen it centred on the cursor.
-        MonitorInfo monitor = MonitorEnumerator.GetFromCursor();
+        MonitorInfo monitor = ReadPlacementMonitorForTest?.Invoke() ?? MonitorEnumerator.GetFromCursor();
         double scale = monitor.ScaleFactor <= 0 ? 1.0 : monitor.ScaleFactor;
         (int cursorX, int cursorY) = WindowStyleFacade.GetCursorPosition();
         RectD work = monitor.WorkArea;
@@ -464,7 +486,7 @@ internal sealed class PinManager
             work.Top / scale,
             work.Width / scale,
             work.Height / scale);
-        return (left, top, null);
+        return (left, top, null, scale);
     }
 
     private void AttachAndShow(PinWindow pin, bool activate)
@@ -483,7 +505,7 @@ internal sealed class PinManager
         _openedOrders.Add(pin, ++_nextOpenedOrder);
         pin.ShowActivated = activate;
         BeforeShowForTest?.Invoke(pin);
-        pin.Show();
+        ShowPinWindow(pin, pin.Show);
         if (activate)
         {
             if (ActivatePinForTest is { } activatePin) activatePin(pin);
@@ -583,21 +605,7 @@ internal sealed class PinManager
 
         if (AreHidden)
         {
-            foreach (PinWindow pin in _pins)
-            {
-                // Safety escape: clear click-through before revealing so the mouse can
-                // always reach the pin again, even when the toggle hotkey is unassigned.
-                // Only touch pins that actually have it on, to avoid spurious feedback.
-                if (pin.State.IsClickThrough)
-                {
-                    pin.ApplyClickThrough(enabled: false);
-                }
-
-                pin.ShowPin();
-            }
-
-            AreHidden = false;
-            _log.LogInformation("Revealed {Count} pin(s) with click-through cleared", _pins.Count);
+            ShowAllPins(clearClickThrough: true);
         }
         else
         {
@@ -609,6 +617,26 @@ internal sealed class PinManager
             AreHidden = true;
             _log.LogInformation("Hid {Count} pin(s)", _pins.Count);
         }
+    }
+
+    private void ShowAllPins(bool clearClickThrough)
+    {
+        foreach (PinWindow pin in _pins)
+        {
+            if (clearClickThrough && pin.State.IsClickThrough) pin.ApplyClickThrough(enabled: false);
+            ShowPinWindow(pin, pin.ShowPin);
+        }
+
+        AreHidden = false;
+        _log.LogInformation("Revealed {Count} pin(s)", _pins.Count);
+    }
+
+    private void ShowPinWindow(PinWindow pin, Action show)
+    {
+        bool showActivated = pin.ShowActivated;
+        if (ActivatePinForTest is not null) pin.ShowActivated = false;
+        try { show(); }
+        finally { pin.ShowActivated = showActivated; }
     }
 
     /// <summary>

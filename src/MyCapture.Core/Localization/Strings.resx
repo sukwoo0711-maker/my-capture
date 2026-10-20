@@ -4079,6 +4079,13 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="Tray_HideAllPins" xml:space="preserve"><value>핀 모두 숨기기</value></data>
   <data name="Tray_ShowAllPins" xml:space="preserve"><value>핀 모두 보이기</value></data>
   <data name="Tray_ClearClickThrough" xml:space="preserve"><value>모든 핀 클릭 허용 해제</value></data>
+  <data name="Tray_OpenPins" xml:space="preserve"><value>열린 핀</value></data>
+  <data name="Tray_PinKindText" xml:space="preserve"><value>텍스트</value></data>
+  <data name="Tray_PinKindCode" xml:space="preserve"><value>코드</value></data>
+  <data name="Tray_PinKindTable" xml:space="preserve"><value>표</value></data>
+  <data name="Tray_PinKindImage" xml:space="preserve"><value>이미지</value></data>
+  <data name="Tray_PinImageTitle" xml:space="preserve"><value>{0} × {1} px</value></data>
+  <data name="Tray_MoreOpenPins" xml:space="preserve"><value>그 외 {0}개</value></data>
   <data name="Onboard_ShowShortcuts" xml:space="preserve"><value>단축키 보기</value></data>
   <data name="Onboard_TrayTipActions" xml:space="preserve"><value>클릭: 라이브러리 · 오른쪽 클릭: 메뉴</value></data>
   <data name="Onboard_BarCapture" xml:space="preserve"><value>캡처</value></data>

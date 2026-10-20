@@ -1,3 +1,6 @@
+using System.Globalization;
+using MyCapture.App.Pinning;
+using MyCapture.Core.Pin;
 using MyCapture.Core.Settings;
 
 namespace MyCapture.App;
@@ -20,7 +23,8 @@ internal sealed record TrayMenuCommands(
     Action? PinClipboard = null,
     Action? HideOrShowAllPins = null,
     Action? ClearClickThrough = null,
-    Action? ContactSupport = null);
+    Action? ContactSupport = null,
+    Action<PinWindow>? ActivateOpenPin = null);
 
 /// <summary>What the tray menu reflects at the moment it opens. Read cheaply on every open.</summary>
 /// <param name="CanRestoreClosedPin">A closed pin can come back.</param>
@@ -29,13 +33,15 @@ internal sealed record TrayMenuCommands(
 /// <param name="PinCount">Open pins, shown or hidden.</param>
 /// <param name="PinsHidden">The pins are hidden by "Hide all pins".</param>
 /// <param name="ClickThroughPinCount">Open pins that let clicks through to the windows behind.</param>
+/// <param name="OpenPins">Open pin windows in newest-first opening order, including hidden pins.</param>
 internal sealed record TrayMenuState(
     bool CanRestoreClosedPin = false,
     bool ScrollingActive = false,
     bool ClipboardHasContent = true,
     int PinCount = 0,
     bool PinsHidden = false,
-    int ClickThroughPinCount = 0);
+    int ClickThroughPinCount = 0,
+    IReadOnlyList<PinWindow>? OpenPins = null);
 
 /// <summary>
 /// The tray menu's order, kept apart from the shell so it can be checked without a tray icon.
@@ -48,6 +54,9 @@ internal static class TrayMenuLayout
 {
     /// <summary>F1 opens the shortcut window from any MyCapture window; the tray shows the same key.</summary>
     internal const string ShortcutsGesture = "F1";
+    internal const int MaxOpenPinEntries = 15;
+    internal const int MaxPinTitleLength = 40;
+    private const int MaxPinTitleCodeUnits = 512;
 
     internal static IReadOnlyList<ThemedShellPresenter.MenuEntry> Build(
         TrayMenuCommands commands, HotkeySettings keys, bool canRestoreClosedPin, bool scrollingActive) =>
@@ -74,12 +83,23 @@ internal static class TrayMenuLayout
             ]),
         };
 
-        // Reachable without a shortcut: a new installation leaves Paste to screen unassigned.
+        // A new installation assigns F3; the tray also works when the user clears the shortcut.
         if (commands.PinClipboard is { } pinClipboard)
         {
             entries.Add(new(UiText.Get("Tray_PinClipboard"), pinClipboard, Gesture: Gesture(keys.PasteToScreen),
                 IsEnabled: state.ClipboardHasContent,
                 ToolTip: state.ClipboardHasContent ? string.Empty : UiText.Get("Tray_ClipboardEmpty")));
+        }
+
+        // Find one pin before the commands that act on every pin. Rebuilt on each menu open.
+        if (commands.ActivateOpenPin is { } activatePin && state.OpenPins is { Count: > 0 } openPins)
+        {
+            var children = openPins.Take(MaxOpenPinEntries)
+                .Select(pin => new ThemedShellPresenter.MenuEntry(OpenPinLabel(pin.PinnedContent), () => activatePin(pin), LiteralLabel: true))
+                .ToList();
+            if (openPins.Count > MaxOpenPinEntries)
+                children.Add(new(UiText.Format("Tray_MoreOpenPins", openPins.Count - MaxOpenPinEntries), null, IsEnabled: false));
+            entries.Add(new(UiText.Get("Tray_OpenPins"), null, children));
         }
 
         // Showing the pins again also clears click-through on every pin.
@@ -90,7 +110,7 @@ internal static class TrayMenuLayout
         }
 
         // The way back from click-through in one step. A click-through pin cannot take the click
-        // that would turn it off, and a new installation leaves both pin keys unassigned.
+        // that would turn it off. This remains reachable when the pin shortcuts are cleared.
         if (commands.ClearClickThrough is { } clearClickThrough && state.ClickThroughPinCount > 0)
             entries.Add(new(UiText.Get("Tray_ClearClickThrough"), clearClickThrough));
 
@@ -110,4 +130,79 @@ internal static class TrayMenuLayout
     }
 
     private static string Gesture(Hotkey key) => key.IsAssigned ? key.ToString() : string.Empty;
+
+    private static string OpenPinLabel(PinContent content)
+    {
+        string kind = UiText.Get(content.Kind switch
+        {
+            PinContentKind.Image => "Tray_PinKindImage",
+            PinContentKind.Table => "Tray_PinKindTable",
+            _ when content.TextStyle == PinTextStyle.Code => "Tray_PinKindCode",
+            _ => "Tray_PinKindText",
+        });
+        string title = OpenPinTitle(content.OriginalText, content.Kind == PinContentKind.Table);
+        if (title.Length == 0)
+            title = UiText.Format("Tray_PinImageTitle", content.Image.PixelWidth, content.Image.PixelHeight);
+        return $"{title} · {kind}";
+    }
+
+    private static string OpenPinTitle(string? source, bool isTable)
+    {
+        ReadOnlySpan<char> remaining = source.AsSpan();
+        Span<char> buffer = stackalloc char[MaxPinTitleCodeUnits];
+        while (!remaining.IsEmpty)
+        {
+            int lineEnd = remaining.IndexOfAny('\r', '\n');
+            ReadOnlySpan<char> line = lineEnd < 0 ? remaining : remaining[..lineEnd];
+            remaining = lineEnd < 0 ? [] : remaining[(lineEnd + 1)..];
+            if (line.Trim().IsEmpty) continue;
+
+            // Only normalize a bounded prefix. A source line or a single grapheme may be huge.
+            int length = 0;
+            bool complete;
+            if (isTable)
+            {
+                complete = AppendTableTitle(line, buffer, ref length);
+            }
+            else
+            {
+                complete = AppendTitlePart(line.Trim(), buffer, ref length);
+                for (int i = 0; i < length; i++)
+                    if (buffer[i] == '\t') buffer[i] = ' ';
+            }
+
+            // If the prefix ends inside a surrogate pair, remove it before finding graphemes.
+            if (!complete && length > 0 && char.IsHighSurrogate(buffer[length - 1])) length--;
+            string title = new(buffer[..length]);
+            int[] elements = StringInfo.ParseCombiningCharacters(title);
+            if (complete && elements.Length <= MaxPinTitleLength) return title;
+
+            // An incomplete prefix's last grapheme may continue outside the buffer.
+            int keep = Math.Min(MaxPinTitleLength - 1, complete ? elements.Length : Math.Max(0, elements.Length - 1));
+            int end = keep < elements.Length ? elements[keep] : title.Length;
+            return title[..end].TrimEnd() + "…";
+        }
+        return string.Empty;
+    }
+
+    private static bool AppendTableTitle(ReadOnlySpan<char> row, Span<char> buffer, ref int length)
+    {
+        while (true)
+        {
+            int cellEnd = row.IndexOf('\t');
+            ReadOnlySpan<char> cell = cellEnd < 0 ? row : row[..cellEnd];
+            if (!AppendTitlePart(cell.Trim(), buffer, ref length)) return false;
+            if (cellEnd < 0) return true;
+            if (!AppendTitlePart(" | ", buffer, ref length)) return false;
+            row = row[(cellEnd + 1)..];
+        }
+    }
+
+    private static bool AppendTitlePart(ReadOnlySpan<char> part, Span<char> buffer, ref int length)
+    {
+        int copied = Math.Min(part.Length, buffer.Length - length);
+        part[..copied].CopyTo(buffer[length..]);
+        length += copied;
+        return copied == part.Length;
+    }
 }

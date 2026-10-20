@@ -133,7 +133,8 @@ internal sealed class PinSessionService : IDisposable
                         if (!image.IsFrozen) image.Freeze();
                         PinSessionPin pin = entry.Pin;
                         result.Add((pin, PinContent.FromSession(image, ToContentKind(pin.Kind), pin.OriginalText,
-                            pin.SourcePageUrl, pin.UsesDeviceIndependentPixels), bytes.LongLength));
+                            pin.SourcePageUrl, pin.UsesDeviceIndependentPixels, pin.TextStyle,
+                            pin.CodeDocument), bytes.LongLength));
                     }
                     catch (Exception ex)
                     {
@@ -245,7 +246,8 @@ internal sealed class PinSessionService : IDisposable
                 ContentIdentity identity = _identities.GetValue(pin.Content, _ => new ContentIdentity(Guid.NewGuid()));
                 var record = new PinSessionPin(identity.Id, ToStoredKind(pin.Content.Kind), pin.Content.OriginalText,
                     pin.Content.SourcePageUrl, pin.Content.UsesDeviceIndependentPixels, pin.ImageWidthDip,
-                    pin.ImageHeightDip, pin.Zoom, pin.Opacity, pin.Placement, pin.OpenedOrder);
+                    pin.ImageHeightDip, pin.Zoom, pin.Opacity, pin.Placement, pin.OpenedOrder,
+                    pin.Content.TextStyle, pin.Content.CodeDocument);
                 captured.Add(new CapturedPin(record, image, identity));
             }
         }

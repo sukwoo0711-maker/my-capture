@@ -1,5 +1,7 @@
 using System.Text;
+using System.Text.Json;
 using System.Text.Json.Nodes;
+using System.Text.Json.Serialization;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using MyCapture.Core.Pin;
@@ -43,6 +45,182 @@ public sealed class PinSessionStoreTests
         Assert.Equal(3, Directory.GetFiles(workspace.Paths.PinSessionRoot, "*.png").Length);
         Assert.All(Directory.GetFiles(workspace.Paths.PinSessionRoot, "*.png"),
             path => Assert.True(Guid.TryParseExact(Path.GetFileNameWithoutExtension(path), "N", out _)));
+    }
+
+    [Fact]
+    public void SaveThenLoad_RoundTripsRenderingMetadataAndRemainsReadableByLegacySchema()
+    {
+        using var workspace = new TempWorkspace();
+        PinSessionStore store = CreateStore(workspace);
+        PinSessionSnapshot code = CodeSnapshot();
+        PinSessionSnapshot plain = Snapshot(PinSessionContentKind.Text, "plain text", true);
+        plain = plain with { Pin = plain.Pin with { TextStyle = PinTextStyle.PlainText } };
+        PinSessionSnapshot grid = Snapshot(PinSessionContentKind.Table, "a\tb\r\n1\t2", true);
+        grid = grid with { Pin = grid.Pin with { TextStyle = PinTextStyle.Grid } };
+
+        Assert.True(store.Save([plain, grid, code]));
+        IReadOnlyList<PinSessionSnapshot> loaded = CreateStore(workspace).Load();
+
+        Assert.Equal(new PinTextStyle?[] { PinTextStyle.PlainText, PinTextStyle.Grid, PinTextStyle.Code },
+            loaded.Select(item => item.Pin.TextStyle));
+        PinCodeDocument restored = Assert.IsType<PinCodeDocument>(loaded[2].Pin.CodeDocument);
+        Assert.Equal(code.Pin.CodeDocument!.DisplayText, restored.DisplayText);
+        Assert.Equal(code.Pin.CodeDocument.Background, restored.Background);
+        Assert.Equal(code.Pin.CodeDocument.Foreground, restored.Foreground);
+        Assert.Equal(code.Pin.CodeDocument.Runs, restored.Runs);
+        Assert.Equal(code.Pin.OriginalText, loaded[2].Pin.OriginalText);
+        Assert.All(loaded, item => Assert.Equal(Png, item.PngBytes));
+
+        var legacyOptions = new JsonSerializerOptions
+        {
+            PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+            IgnoreReadOnlyProperties = true,
+            Converters = { new JsonStringEnumConverter<PinSessionContentKind>() }
+        };
+        LegacySessionManifest legacy = JsonSerializer.Deserialize<LegacySessionManifest>(
+            File.ReadAllText(ManifestPath(workspace)), legacyOptions)!;
+        Assert.Equal(1, legacy.SchemaVersion);
+        Assert.Equal(3, legacy.Pins.Count);
+        Assert.Equal(code.Pin.OriginalText, legacy.Pins[2].OriginalText);
+        Assert.Equal(code.Pin.Id, legacy.Pins[2].Id);
+        Assert.True(legacy.Pins[2].UsesDeviceIndependentPixels);
+    }
+
+    [Fact]
+    public void Load_LegacyManifestHasNoRenderingMetadata()
+    {
+        using var workspace = new TempWorkspace();
+        PinSessionStore store = CreateStore(workspace);
+        PinSessionSnapshot legacy = Snapshot(PinSessionContentKind.Text, "legacy code or text", true);
+        Assert.True(store.Save([legacy]));
+        JsonNode manifest = JsonNode.Parse(File.ReadAllText(ManifestPath(workspace)))!;
+        JsonObject record = manifest["pins"]![0]!.AsObject();
+        record.Remove("textStyle");
+        record.Remove("codeDocument");
+        File.WriteAllText(ManifestPath(workspace), manifest.ToJsonString());
+
+        PinSessionSnapshot restored = Assert.Single(CreateStore(workspace).Load());
+
+        Assert.Equal(legacy.Pin, restored.Pin);
+        Assert.Null(restored.Pin.TextStyle);
+        Assert.Null(restored.Pin.CodeDocument);
+        Assert.Equal(Png, restored.PngBytes);
+    }
+
+    [Theory]
+    [InlineData("unknown-style")]
+    [InlineData("undefined-style")]
+    [InlineData("wrong-style-type")]
+    [InlineData("missing-style")]
+    [InlineData("missing-document")]
+    [InlineData("plain-with-document")]
+    [InlineData("grid-with-text-kind")]
+    [InlineData("image-with-code-style")]
+    [InlineData("picture-with-code-style")]
+    [InlineData("missing-source")]
+    [InlineData("different-source")]
+    [InlineData("oversized-source")]
+    [InlineData("missing-display")]
+    [InlineData("empty-display")]
+    [InlineData("oversized-display")]
+    [InlineData("bad-background")]
+    [InlineData("bad-foreground")]
+    [InlineData("bad-run-color")]
+    [InlineData("missing-runs")]
+    [InlineData("null-run")]
+    [InlineData("negative-start")]
+    [InlineData("zero-length")]
+    [InlineData("outside-text")]
+    [InlineData("overflow-length")]
+    [InlineData("overlapping-runs")]
+    [InlineData("oversized-runs")]
+    public void Load_InvalidRenderingMetadataSkipsOnlyThatRecord(string corruption)
+    {
+        using var workspace = new TempWorkspace();
+        PinSessionStore store = CreateStore(workspace);
+        PinSessionSnapshot code = CodeSnapshot();
+        PinSessionSnapshot kept = Snapshot();
+        Assert.True(store.Save([code, kept]));
+        JsonNode manifest = JsonNode.Parse(File.ReadAllText(ManifestPath(workspace)))!;
+        JsonObject record = manifest["pins"]![0]!.AsObject();
+        JsonObject document = record["codeDocument"]!.AsObject();
+        JsonArray runs = document["runs"]!.AsArray();
+        switch (corruption)
+        {
+            case "unknown-style": record["textStyle"] = "FutureCode"; break;
+            case "undefined-style": record["textStyle"] = 99; break;
+            case "wrong-style-type": record["textStyle"] = new JsonObject(); break;
+            case "missing-style": record.Remove("textStyle"); break;
+            case "missing-document": record["codeDocument"] = null; break;
+            case "plain-with-document": record["textStyle"] = "PlainText"; break;
+            case "grid-with-text-kind":
+                record["textStyle"] = "Grid";
+                record["codeDocument"] = null;
+                break;
+            case "image-with-code-style": record["kind"] = "Image"; break;
+            case "picture-with-code-style": record["usesDeviceIndependentPixels"] = false; break;
+            case "missing-source": record["originalText"] = null; break;
+            case "different-source": record["originalText"] = "different code"; break;
+            case "oversized-source": record["originalText"] = new string(' ', PinCodeDocument.MaxOriginalTextLength + 1); break;
+            case "missing-display": document["displayText"] = null; break;
+            case "empty-display": document["displayText"] = ""; break;
+            case "oversized-display": document["displayText"] = new string(' ', PinCodeDocument.MaxDisplayTextLength + 1); break;
+            case "bad-background": document["background"] = "#12345G"; break;
+            case "bad-foreground": document["foreground"] = "red"; break;
+            case "bad-run-color": runs[0]!["color"] = "#FF123456"; break;
+            case "missing-runs": document["runs"] = null; break;
+            case "null-run": runs[0] = null; break;
+            case "negative-start": runs[0]!["start"] = -1; break;
+            case "zero-length": runs[0]!["length"] = 0; break;
+            case "outside-text": runs[0]!["start"] = 100; break;
+            case "overflow-length": runs[0]!["length"] = int.MaxValue; break;
+            case "overlapping-runs": runs[1]!["start"] = 2; break;
+            case "oversized-runs":
+                while (runs.Count <= PinCodeDocument.MaxRunCount) runs.Add(runs[0]!.DeepClone());
+                break;
+        }
+        File.WriteAllText(ManifestPath(workspace), manifest.ToJsonString());
+
+        PinSessionLoadResult loaded = CreateStore(workspace).LoadDetailed();
+
+        Assert.False(loaded.ManifestUnreadable);
+        Assert.Equal(kept.Pin, Assert.Single(loaded.Pins).Pin);
+    }
+
+    [Fact]
+    public void Save_InvalidRenderingMetadataDoesNotWriteItsImage()
+    {
+        using var workspace = new TempWorkspace();
+        PinSessionStore store = CreateStore(workspace);
+        PinSessionSnapshot code = CodeSnapshot();
+        PinSessionSnapshot invalid = code with
+        {
+            Pin = code.Pin with { CodeDocument = code.Pin.CodeDocument! with { Background = "invalid" } }
+        };
+        PinSessionSnapshot kept = Snapshot();
+
+        Assert.True(store.Save([invalid, kept]));
+
+        Assert.Equal(kept.Pin, Assert.Single(store.Load()).Pin);
+        Assert.False(File.Exists(ImagePath(workspace, invalid.Pin.Id)));
+    }
+
+    [Fact]
+    public void CodeDocument_DefensivelyCopiesRunsAndComparesWhitespaceWithoutChangingSource()
+    {
+        PinCodeRun[] runs = [new(0, 3, "#569CD6")];
+        var document = new PinCodeDocument("int x;", runs, "#1E1E1E", "#DCDCDC");
+        runs[0] = new PinCodeRun(0, 3, "#FFFFFF");
+        Assert.Equal("#569CD6", document.Runs[0].Color);
+        Assert.True(document.IsValid());
+        Assert.True(document.MatchesOriginalText("\tint   x;\r\n"));
+        Assert.False(document.MatchesOriginalText("int y;"));
+
+        PinCodeRun[] replacement = [new(4, 1, "#123ABC")];
+        PinCodeDocument copied = document with { Runs = replacement };
+        replacement[0] = new PinCodeRun(4, 1, "#FFFFFF");
+        Assert.Equal("#123ABC", copied.Runs[0].Color);
+        Assert.Throws<NotSupportedException>(() => ((IList<PinCodeRun>)copied.Runs).Clear());
     }
 
     [Fact]
@@ -634,6 +812,14 @@ public sealed class PinSessionStoreTests
     private static PinSessionStore CreateStore(TempWorkspace workspace) =>
         new(workspace.Paths.PinSessionRoot, NullLogger.Instance);
 
+    private static PinSessionSnapshot CodeSnapshot()
+    {
+        var document = new PinCodeDocument("int x = 1;",
+            [new PinCodeRun(0, 3, "#569CD6"), new PinCodeRun(4, 1, "#9CDCFE")], "#1E1E1E", "#DCDCDC");
+        PinSessionSnapshot snapshot = Snapshot(PinSessionContentKind.Text, "int\tx = 1;\r\n", true);
+        return snapshot with { Pin = snapshot.Pin with { TextStyle = PinTextStyle.Code, CodeDocument = document } };
+    }
+
     private static PinSessionSnapshot Snapshot(PinSessionContentKind kind = PinSessionContentKind.Image,
         string? text = null, bool usesDip = false, PinClosedPlacement? placement = null) =>
         new(new PinSessionPin(Guid.NewGuid(), kind, text, "https://example.test/spec?tab=핀", usesDip,
@@ -650,6 +836,11 @@ public sealed class PinSessionStoreTests
 
     private static string ImagePath(TempWorkspace workspace, Guid id) =>
         Path.Combine(workspace.Paths.PinSessionRoot, $"{id:N}.png");
+
+    private sealed record LegacySessionManifest(int SchemaVersion, List<LegacySessionPin> Pins);
+    private sealed record LegacySessionPin(Guid Id, PinSessionContentKind Kind, string? OriginalText,
+        string SourcePageUrl, bool UsesDeviceIndependentPixels, double ImageWidthDip, double ImageHeightDip,
+        double Zoom, double Opacity, PinClosedPlacement? Placement, long OpenedOrder = 0);
 
     private sealed class RecordingLogger : ILogger
     {

@@ -28,13 +28,21 @@ internal sealed record PinContent
         PinContentKind kind,
         string? originalText,
         string sourcePageUrl,
-        bool usesDeviceIndependentPixels)
+        bool usesDeviceIndependentPixels,
+        PinTextStyle? textStyle = null,
+        PinCodeDocument? codeDocument = null,
+        double? layoutWidthDip = null,
+        double? layoutHeightDip = null)
     {
         Image = image ?? throw new ArgumentNullException(nameof(image));
         Kind = kind;
         OriginalText = originalText;
         SourcePageUrl = sourcePageUrl;
         UsesDeviceIndependentPixels = usesDeviceIndependentPixels;
+        TextStyle = textStyle;
+        CodeDocument = codeDocument;
+        LayoutWidthDip = layoutWidthDip ?? image.Width;
+        LayoutHeightDip = layoutHeightDip ?? image.Height;
     }
 
     internal BitmapSource Image { get; }
@@ -52,9 +60,22 @@ internal sealed record PinContent
 
     internal bool HasOriginalText => OriginalText is not null;
 
+    internal PinTextStyle? TextStyle { get; }
+
+    internal PinCodeDocument? CodeDocument { get; }
+
+    /// <summary>Exact layout size, independent of outward rounding to integer render pixels.</summary>
+    internal double LayoutWidthDip { get; }
+
+    internal double LayoutHeightDip { get; }
+
+    internal bool CanRerender => UsesDeviceIndependentPixels && OriginalText is not null
+        && (TextStyle is PinTextStyle.PlainText or PinTextStyle.Grid
+            || (TextStyle == PinTextStyle.Code && CodeDocument is not null));
+
     /// <summary>
-    /// Text and tables MyCapture renders itself are authored at 96 DPI and therefore use one
-    /// bitmap pixel per WPF DIP. Screen captures and pictures published by another application,
+    /// Text and tables MyCapture renders itself retain a fixed DIP layout, independently of
+    /// the render target's pixel density. Screen captures and pictures published by another application,
     /// including a spreadsheet's picture of its cells, represent display pixels and use the
     /// target monitor's scale factor when their initial window size is calculated.
     /// </summary>
@@ -67,7 +88,12 @@ internal sealed record PinContent
     internal long EstimatedRetainedBytes =>
         ClosedPinMemory.EstimatePixelBytes(Image.PixelWidth, Image.PixelHeight, Image.Format.BitsPerPixel)
         + ClosedPinMemory.EstimateTextBytes(OriginalText)
-        + ClosedPinMemory.EstimateTextBytes(SourcePageUrl);
+        + ClosedPinMemory.EstimateTextBytes(SourcePageUrl)
+        + (CodeDocument is null ? 0
+            : ClosedPinMemory.EstimateTextBytes(CodeDocument.DisplayText)
+                + ClosedPinMemory.EstimateTextBytes(CodeDocument.Background)
+                + ClosedPinMemory.EstimateTextBytes(CodeDocument.Foreground)
+                + CodeDocument.Runs.Sum(static run => 32L + ClosedPinMemory.EstimateTextBytes(run.Color)));
 
     internal static PinContent FromImage(BitmapSource image, string? sourcePageUrl = null) =>
         new(image, PinContentKind.Image, originalText: null, sourcePageUrl ?? string.Empty, usesDeviceIndependentPixels: false);
@@ -78,8 +104,10 @@ internal sealed record PinContent
         PinContentKind kind,
         string? originalText,
         string sourcePageUrl,
-        bool usesDeviceIndependentPixels) =>
-        new(image, kind, originalText, sourcePageUrl, usesDeviceIndependentPixels);
+        bool usesDeviceIndependentPixels,
+        PinTextStyle? textStyle = null,
+        PinCodeDocument? codeDocument = null) =>
+        new(image, kind, originalText, sourcePageUrl, usesDeviceIndependentPixels, textStyle, codeDocument);
 
     /// <summary>Text or a table that MyCapture rendered itself from the retained source string.</summary>
     internal static PinContent FromText(BitmapSource image, string originalText, bool isTable)
@@ -90,7 +118,38 @@ internal sealed record PinContent
             isTable ? PinContentKind.Table : PinContentKind.Text,
             originalText,
             sourcePageUrl: string.Empty,
-            usesDeviceIndependentPixels: true);
+            usesDeviceIndependentPixels: true,
+            textStyle: isTable ? PinTextStyle.Grid : PinTextStyle.PlainText);
+    }
+
+    internal static PinContent FromCode(BitmapSource image, string originalText, PinCodeDocument document)
+    {
+        ArgumentNullException.ThrowIfNull(originalText);
+        ArgumentNullException.ThrowIfNull(document);
+        if (!document.IsValid() || !document.MatchesOriginalText(originalText))
+        {
+            throw new ArgumentException("The code document must describe the source text.", nameof(document));
+        }
+        return new(image, PinContentKind.Text, originalText, sourcePageUrl: string.Empty,
+            usesDeviceIndependentPixels: true, textStyle: PinTextStyle.Code, codeDocument: document);
+    }
+
+    /// <summary>Re-rasterises only locally authored text, retaining no reference to the old bitmap.</summary>
+    internal PinContent RenderedAt(double scale)
+    {
+        if (!CanRerender) return this;
+        ClipboardTextRenderer.ValidateScale(scale);
+        if (Math.Abs(Image.DpiX - (96 * scale)) < 0.000001
+            && Math.Abs(Image.DpiY - (96 * scale)) < 0.000001)
+        {
+            return this;
+        }
+
+        BitmapSource image = TextStyle == PinTextStyle.Code
+            ? ClipboardCodeRenderer.Render(CodeDocument!, scale)
+            : ClipboardTextRenderer.Render(OriginalText!, TextStyle == PinTextStyle.Grid, scale);
+        return new(image, Kind, OriginalText, SourcePageUrl, UsesDeviceIndependentPixels,
+            TextStyle, CodeDocument, LayoutWidthDip, LayoutHeightDip);
     }
 
     /// <summary>

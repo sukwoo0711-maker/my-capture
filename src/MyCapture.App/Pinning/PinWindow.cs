@@ -56,8 +56,8 @@ internal sealed class PinWindow : Window
     /// </summary>
     private const double FrameClipInsetDip = 0.5;
 
-    private readonly PinContent _content;
-    private readonly BitmapSource _image;
+    private PinContent _content;
+    private BitmapSource _image => _content.Image;
     private readonly PinContentKind _contentKind;
     private readonly string? _originalText;
     private readonly PinViewState _state;
@@ -108,7 +108,6 @@ internal sealed class PinWindow : Window
     {
         ArgumentNullException.ThrowIfNull(content);
         _content = content;
-        _image = content.Image;
         _contentKind = content.Kind;
         _originalText = content.OriginalText;
         SourcePageUrl = content.SourcePageUrl;
@@ -142,6 +141,7 @@ internal sealed class PinWindow : Window
             IsHitTestVisible = false,
         };
         RenderOptions.SetBitmapScalingMode(_imageElement, BitmapScalingMode.HighQuality);
+        UpdateImageRasterLayout();
 
         // The bottom message wraps inside narrow pins. It takes the pointer only to pause its
         // countdown and to offer a close button for a failure; dragging through it still moves the pin.
@@ -205,7 +205,7 @@ internal sealed class PinWindow : Window
             Math.Max(0, FrameCornerRadiusDip - FrameClipInsetDip),
             Math.Max(0, FrameCornerRadiusDip - FrameClipInsetDip));
         _imageElement.Clip = _imageClip;
-        _imageElement.SizeChanged += (_, args) => _imageClip.Rect = ImageClipBounds(args.NewSize);
+        _imageElement.SizeChanged += (_, args) => UpdateImageClip(args.NewSize);
         var outline = new Border
         {
             BorderThickness = new Thickness(FrameThicknessDip),
@@ -279,7 +279,11 @@ internal sealed class PinWindow : Window
         };
         Deactivated += (_, _) => SetChromeActive(false);
         LocationChanged += (_, _) => PlaceHoverBar();
-        SizeChanged += (_, _) => PlaceHoverBar();
+        SizeChanged += (_, _) =>
+        {
+            UpdateImageRasterLayout();
+            PlaceHoverBar();
+        };
     }
 
     /// <summary>How long the hover bar stays after the pointer leaves the pin and the bar.</summary>
@@ -625,6 +629,46 @@ internal sealed class PinWindow : Window
 
     /// <summary>Clears a completed restore placement request.</summary>
     internal void CompleteRestorePlacement() => _restorePhysicalBounds = null;
+
+    protected override void OnDpiChanged(DpiScale oldDpi, DpiScale newDpi)
+    {
+        RerenderForDisplayScale(newDpi.DpiScaleX);
+        base.OnDpiChanged(oldDpi, newDpi);
+    }
+
+    /// <summary>Changes only the raster; the pin's DIP geometry and interaction state stay intact.</summary>
+    internal void RerenderForDisplayScale(double scale)
+    {
+        if (_isClosed || !_content.CanRerender) return;
+        PinContent rendered = _content.RenderedAt(scale);
+        if (ReferenceEquals(rendered, _content)) return;
+        _content = rendered;
+        _imageElement.Source = rendered.Image;
+        UpdateImageRasterLayout();
+        ViewStateChanged?.Invoke();
+    }
+
+    internal void SimulateDpiChangeForTest(double scale) => RerenderForDisplayScale(scale);
+
+    private void UpdateImageRasterLayout()
+    {
+        if (!_content.CanRerender) return;
+        // The outward-rounded raster may contain a partial DIP of padding. Let the
+        // viewport clip it instead of stretching every glyph to fit that rounding.
+        _imageElement.Stretch = Stretch.None;
+        _imageElement.HorizontalAlignment = HorizontalAlignment.Left;
+        _imageElement.VerticalAlignment = VerticalAlignment.Top;
+        _imageElement.LayoutTransform = new ScaleTransform(_state.Zoom, _state.Zoom);
+        if (_imageClip is not null) UpdateImageClip(_imageElement.RenderSize);
+    }
+
+    private void UpdateImageClip(Size imageSize)
+    {
+        double zoom = _content.CanRerender ? _state.Zoom : 1;
+        Rect bounds = ImageClipBounds(_content.CanRerender ? new Size(_state.WidthDip, _state.HeightDip) : imageSize);
+        _imageClip.Rect = new Rect(bounds.X / zoom, bounds.Y / zoom, bounds.Width / zoom, bounds.Height / zoom);
+        _imageClip.RadiusX = _imageClip.RadiusY = Math.Max(0, FrameCornerRadiusDip - FrameClipInsetDip) / zoom;
+    }
 
     protected override void OnClosing(System.ComponentModel.CancelEventArgs e)
     {

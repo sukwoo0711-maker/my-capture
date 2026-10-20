@@ -4079,6 +4079,13 @@ Delete {1} {1:plural:subfolder|subfolders}, {2} {2:plural:image|images}, and {3}
   <data name="Tray_HideAllPins" xml:space="preserve"><value>Hide all pins</value></data>
   <data name="Tray_ShowAllPins" xml:space="preserve"><value>Show all pins</value></data>
   <data name="Tray_ClearClickThrough" xml:space="preserve"><value>Turn off click through on all pins</value></data>
+  <data name="Tray_OpenPins" xml:space="preserve"><value>Open pins</value></data>
+  <data name="Tray_PinKindText" xml:space="preserve"><value>Text</value></data>
+  <data name="Tray_PinKindCode" xml:space="preserve"><value>Code</value></data>
+  <data name="Tray_PinKindTable" xml:space="preserve"><value>Table</value></data>
+  <data name="Tray_PinKindImage" xml:space="preserve"><value>Image</value></data>
+  <data name="Tray_PinImageTitle" xml:space="preserve"><value>{0} × {1} px</value></data>
+  <data name="Tray_MoreOpenPins" xml:space="preserve"><value>{0} more</value></data>
   <data name="Onboard_ShowShortcuts" xml:space="preserve"><value>Keyboard shortcuts</value></data>
   <data name="Onboard_TrayTipActions" xml:space="preserve"><value>Click: library · Right-click: menu</value></data>
   <data name="Onboard_BarCapture" xml:space="preserve"><value>Capture</value></data>

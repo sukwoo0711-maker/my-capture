@@ -29,6 +29,7 @@ public sealed class TrayMenuTests
         Assert.Equal(["영역 캡처", "화면 녹화", "텍스트 복사", "다른 캡처", "클립보드를 핀으로 띄우기", "", "라이브러리", "설정", "단축키 보기", "", "종료"],
             menu.Select(entry => entry.Label));
         Assert.Equal([false, false, false, false, false, true, false, false, false, true, false], menu.Select(entry => entry.IsSeparator));
+        Assert.DoesNotContain(menu, entry => entry.Label == UiText.Get("Tray_OpenPins"));
         Assert.Equal(keys.Capture.ToString(), menu[0].Gesture);
         Assert.Equal(keys.RecordRegion.ToString(), menu[1].Gesture);
         Assert.Equal("F1", menu[8].Gesture);
