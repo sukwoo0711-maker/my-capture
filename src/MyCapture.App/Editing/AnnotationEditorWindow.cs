@@ -30,7 +30,8 @@ internal partial class AnnotationEditorWindow : Window
         AnnotationDocument? initialDocument = null,
         IReadOnlyDictionary<string, BitmapSource>? initialAssets = null,
         IPrivacyRedactionService? privacyRedactionService = null,
-        string? sourceWindowTitle = null)
+        string? sourceWindowTitle = null,
+        MonitorInfo? pointerMonitor = null)
     {
         ArgumentNullException.ThrowIfNull(sourceFrame);
         ArgumentNullException.ThrowIfNull(selectedBitmap);
@@ -52,8 +53,9 @@ internal partial class AnnotationEditorWindow : Window
         _desiredSize = new Size(Math.Max(980, selectedBitmap.PixelWidth + 360), Math.Max(620, selectedBitmap.PixelHeight + 156));
         // CenterScreen opens an ownerless window on the pointer's monitor, so it is sized for that
         // monitor, not the primary one. A capture moves it to its own monitor (PlaceOnMonitor).
+        // Tests pass the pointer's monitor so the size does not depend on where the pointer is.
         WindowStartupLocation = WindowStartupLocation.CenterScreen;
-        MonitorInfo pointerMonitor = MonitorEnumerator.GetFromCursor();
+        pointerMonitor ??= MonitorEnumerator.GetFromCursor();
         MonitorWindowPlacement.WindowFit fit = MonitorWindowPlacement.Fit(pointerMonitor.WorkArea,
             pointerMonitor.ScaleFactor, _desiredSize, MinimumSize, WorkAreaMargin);
         MinWidth = fit.Minimum.Width;

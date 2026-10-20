@@ -169,6 +169,11 @@ public sealed class VideoEditorSimplifiedViewTests
             editor.Show();
             PumpUntil(() => editor.IsMediaReadyForTest || editor.HasMediaFailedForTest);
             Assert.True(editor.IsMediaReadyForTest, editor.MediaFailureForTest);
+            // The checks below measure the MediaElement itself, whose size arrives with MediaOpened.
+            // On a cold hosted runner the open fallback makes the editor ready first, while
+            // NaturalVideoWidth is still 0 (CI: Expected 640, Actual 0), so wait for MediaOpened too.
+            Assert.True(RangePatternClip.PumpUntil(() => editor.HasMediaOpenedForTest || editor.HasMediaFailedForTest, TimeSpan.FromSeconds(30))
+                && editor.HasMediaOpenedForTest, editor.HasMediaFailedForTest ? editor.MediaFailureForTest : "MediaOpened did not arrive");
             Assert.Equal(640, editor.MediaForTest.NaturalVideoWidth);
             Assert.Equal(360, editor.MediaForTest.NaturalVideoHeight);
             Assert.Equal(Stretch.Uniform, editor.MediaForTest.Stretch);
