@@ -123,6 +123,92 @@ public sealed class PinDpiTests : KoreanCaptionTest
     });
 
     [Theory]
+    [InlineData(1.0, false)]
+    [InlineData(1.75, true)]
+    public void DpiOverrideRerendersAndKeepsCodeSelectionDuringZoom(double zoom, bool liveZoom) => StaTestHost.Run(() =>
+    {
+        const string text = "#define MAX_LEN 256\r\nreturn MAX_LEN;";
+        PinCodeDocument document = Assert.IsType<PinCodeDocument>(ClipboardCodeRenderer.TryParse(text,
+            "<pre style=\"background-color:#123456;color:#abcdef\">#define MAX_LEN 256\r\nreturn MAX_LEN;</pre>"));
+        PinContent content = PinContent.FromCode(ClipboardCodeRenderer.Render(document), text, document);
+        var state = new PinViewState(content.LayoutWidthDip, content.LayoutHeightDip, zoom, 0.7, 0.1);
+        var pin = new PinWindow(content, state, 40, 50)
+        {
+            ShowActivated = false,
+            SelectionFocus = new PassiveSelectionFocus(),
+        };
+        try
+        {
+            pin.Show();
+            pin.SimulateDpiChangeForTest(1);
+            pin.HandleKeyDown(new KeyEventArgs(Keyboard.PrimaryDevice, PresentationSource.FromVisual(pin), 0, Key.F2)
+            {
+                RoutedEvent = Keyboard.KeyDownEvent,
+            }, ModifierKeys.None);
+            PinTextSelectionView selection = Assert.IsType<PinTextSelectionView>(pin.TextSelectionForTest);
+            TextBox textBox = Assert.IsType<TextBox>(selection.TextBox);
+            textBox.Select(8, 7);
+            if (liveZoom)
+            {
+                pin.HandleKeyDown(new KeyEventArgs(Keyboard.PrimaryDevice, PresentationSource.FromVisual(pin), 0, Key.OemPlus)
+                {
+                    RoutedEvent = Keyboard.KeyDownEvent,
+                }, ModifierKeys.None);
+                Assert.True(pin.IsLiveZoomingForTest);
+            }
+            pin.UpdateLayout();
+            var geometry = (pin.Width, pin.Height, pin.Left, pin.Top, state.Zoom, pin.Opacity);
+            int notifications = 0;
+            int dpiEvents = 0;
+            pin.ViewStateChanged += () => notifications++;
+            pin.DpiChanged += (_, args) =>
+            {
+                dpiEvents++;
+                Assert.Equal(2, args.NewDpi.DpiScaleX);
+                Assert.Equal(192, pin.PinnedContent.Image.DpiX);
+            };
+            var dpiOverride = typeof(PinWindow).GetMethod("OnDpiChanged",
+                System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!;
+            PinContent before = pin.PinnedContent;
+            Assert.Equal(96, before.Image.DpiX);
+            // Exercise the production override and its base event, without changing the desktop's DPI.
+            dpiOverride.Invoke(pin, [new DpiScale(1, 1), new DpiScale(2, 2)]);
+            pin.UpdateLayout();
+
+            Assert.NotSame(before, pin.PinnedContent);
+            Assert.NotSame(before.Image, pin.PinnedContent.Image);
+            Assert.Equal(192, pin.PinnedContent.Image.DpiX);
+            Assert.Equal(content.Image.PixelWidth * 2, pin.PinnedContent.Image.PixelWidth);
+            Assert.Equal(content.Image.PixelHeight * 2, pin.PinnedContent.Image.PixelHeight);
+            Assert.Equal(geometry, (pin.Width, pin.Height, pin.Left, pin.Top, state.Zoom, pin.Opacity));
+            Assert.Equal(1, dpiEvents);
+            Assert.Equal(1, notifications);
+            Assert.Same(selection, pin.TextSelectionForTest);
+            Assert.Equal("MAX_LEN", selection.SelectedOriginalText);
+            Assert.Equal(ClipboardCodeRenderer.FontFamilyName, textBox.FontFamily.Source);
+            Assert.Equal(ClipboardCodeRenderer.FontSizeDip * state.Zoom, textBox.FontSize);
+            Assert.Equal(ClipboardCodeRenderer.LineHeightDip * state.Zoom, TextBlock.GetLineHeight(textBox));
+            Assert.Equal(new Thickness(ClipboardCodeRenderer.HorizontalPaddingDip * state.Zoom,
+                ClipboardCodeRenderer.VerticalPaddingDip * state.Zoom,
+                ClipboardCodeRenderer.HorizontalPaddingDip * state.Zoom,
+                ClipboardCodeRenderer.VerticalPaddingDip * state.Zoom), textBox.Padding);
+            Assert.Equal(Color.FromRgb(0x12, 0x34, 0x56), Assert.IsType<SolidColorBrush>(selection.Background).Color);
+            Assert.Same(selection.Background, textBox.Background);
+            Assert.Equal(liveZoom, pin.IsLiveZoomingForTest);
+
+            PinContent current = pin.PinnedContent;
+            dpiOverride.Invoke(pin, [new DpiScale(2, 2), new DpiScale(2, 2)]);
+            Assert.Same(current, pin.PinnedContent);
+            Assert.Equal(2, dpiEvents);
+            Assert.Equal(1, notifications);
+            pin.ForceZoomSettleForTest();
+            Assert.False(pin.IsLiveZoomingForTest);
+            Assert.Same(selection, pin.TextSelectionForTest);
+        }
+        finally { pin.Close(); }
+    });
+
+    [Theory]
     [InlineData(0.5)]
     [InlineData(1.5)]
     public void FractionalRasterPadding_IsClippedWithoutResamplingAndZoomKeepsFrameInset(double zoom) => StaTestHost.Run(() =>
@@ -216,8 +302,16 @@ public sealed class PinDpiTests : KoreanCaptionTest
     private static PinManager Manager(double scale) => new(() => new PinSettings(), NullLogger.Instance)
     {
         ReadPlacementMonitorForTest = () => Monitor(scale),
+        BeforeShowForTest = pin => pin.ShowActivated = false,
         ActivatePinForTest = _ => { },
     };
+
+    private sealed class PassiveSelectionFocus : IPinSelectionFocus
+    {
+        public bool IsActive(PinWindow owner) => false;
+        public void Enter(PinWindow owner, PinTextSelectionView selection) { }
+        public void Restore(PinWindow owner) => throw new InvalidOperationException("The passive pin must not request focus.");
+    }
 
     private static MonitorInfo Monitor(double scale) => new("fake",
         new RectD(0, 0, 3840, 2160), new RectD(0, 0, 3840, 2100), (uint)(96 * scale), true);

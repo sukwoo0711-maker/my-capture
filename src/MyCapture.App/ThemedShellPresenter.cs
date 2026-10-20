@@ -294,9 +294,22 @@ internal sealed class ThemedShellPresenter(Func<bool> suppressNotification, Func
     {
         Dismiss();
         ContextMenu menu = CreateMenu(commands);
-        _menu = menu;
+        TrackMenu(menu);
         menu.IsOpen = true;
     }
+
+    internal void TrackMenu(ContextMenu menu)
+    {
+        _menu = menu;
+        menu.Closed += OnClosed;
+        void OnClosed(object sender, RoutedEventArgs e)
+        {
+            menu.Closed -= OnClosed;
+            if (ReferenceEquals(_menu, menu)) _menu = null;
+        }
+    }
+
+    internal ContextMenu? MenuForTest => _menu;
 
     /// <summary>Builds the themed menu without opening it.</summary>
     internal ContextMenu CreateMenu(IEnumerable<MenuEntry> commands)

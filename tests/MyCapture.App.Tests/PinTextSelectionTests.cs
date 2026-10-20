@@ -204,6 +204,71 @@ public sealed class PinTextSelectionTests
     });
 
     [Fact]
+    public void HideAllLeavesSelectionWithoutRequestingFocusOrActivation() => StaTestHost.Run(() =>
+    {
+        var focus = new SelectionFocus { Active = true };
+        int activations = 0;
+        var manager = new PinManager(() => new PinSettings(), NullLogger.Instance)
+        {
+            BeforeShowForTest = pin =>
+            {
+                pin.ShowActivated = false;
+                pin.SelectionFocus = focus;
+            },
+            ActivatePinForTest = _ => activations++,
+        };
+        try
+        {
+            PinWindow pin = manager.PinRenderedText(Image(), Source, false);
+            Press(pin, Key.F2);
+            Assert.Equal(1, focus.Entries);
+            Assert.Equal(1, activations);
+            Assert.True(pin.IsTextSelectionMode);
+
+            manager.HideOrShowAll();
+
+            Assert.True(manager.AreHidden);
+            Assert.True(pin.State.IsHidden);
+            Assert.False(pin.IsTextSelectionMode);
+            Assert.Equal(1, focus.Entries);
+            Assert.Equal(0, focus.ActiveReads);
+            Assert.Equal(0, focus.Restores);
+            Assert.Equal(1, activations);
+        }
+        finally { manager.CloseAllForExit(); }
+    });
+
+    [Theory]
+    [InlineData(Key.Escape, true, 1)]
+    [InlineData(Key.Escape, false, 0)]
+    [InlineData(Key.F2, true, 1)]
+    [InlineData(Key.F2, false, 0)]
+    public void ExplicitSelectionExitRestoresFocusOnlyToAnActiveVisiblePin(Key key, bool active, int restores) => StaTestHost.Run(() =>
+    {
+        var focus = new SelectionFocus { Active = active };
+        var pin = NewPin();
+        pin.SelectionFocus = focus;
+        try
+        {
+            pin.Show();
+            Press(pin, Key.F2);
+            Assert.Equal(1, focus.Entries);
+
+            var exit = new KeyEventArgs(Keyboard.PrimaryDevice, PresentationSource.FromVisual(pin), 0, key)
+                { RoutedEvent = Keyboard.PreviewKeyDownEvent };
+            pin.TextSelectionForTest!.TextBox!.RaiseEvent(exit);
+
+            Assert.True(exit.Handled);
+            Assert.False(pin.IsTextSelectionMode);
+            Assert.False(pin.IsClosed);
+            Assert.Equal(1, focus.ActiveReads);
+            Assert.Equal(restores, focus.Restores);
+            Assert.Equal(1, focus.Entries);
+        }
+        finally { pin.Close(); }
+    });
+
+    [Fact]
     public void TablePictureUsesGridAndCopyAndArrowsSelectCells() => StaTestHost.Run(() =>
     {
         const string table = "A\tB\r\nC\t\"D\tE\"\r\n";
@@ -386,5 +451,16 @@ public sealed class PinTextSelectionTests
         public bool TryCapture(PinWindow owner) { Captures++; Captured = true; return true; }
         public bool HasCapture(PinWindow owner) => Captured;
         public void Release(PinWindow owner) => Captured = false;
+    }
+
+    private sealed class SelectionFocus : IPinSelectionFocus
+    {
+        internal bool Active { get; init; }
+        internal int ActiveReads { get; private set; }
+        internal int Entries { get; private set; }
+        internal int Restores { get; private set; }
+        public bool IsActive(PinWindow owner) { ActiveReads++; return Active; }
+        public void Enter(PinWindow owner, PinTextSelectionView selection) => Entries++;
+        public void Restore(PinWindow owner) => Restores++;
     }
 }

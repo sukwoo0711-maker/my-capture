@@ -9,6 +9,7 @@ using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using MyCapture.Core.Localization;
+using MyCapture.Core.Pin;
 
 namespace MyCapture.App.Pinning;
 
@@ -16,6 +17,7 @@ namespace MyCapture.App.Pinning;
 internal sealed class PinTextSelectionView : Grid
 {
     private readonly string _original;
+    private readonly bool _isCode;
     private readonly int[] _characterStarts = [];
     private readonly int[] _characterEnds = [];
     private readonly PinTableSelection? _table;
@@ -33,6 +35,7 @@ internal sealed class PinTextSelectionView : Grid
     internal PinTextSelectionView(PinContent content)
     {
         _original = content.OriginalText ?? throw new ArgumentException("The pin has no original text.", nameof(content));
+        _isCode = content.TextStyle == PinTextStyle.Code;
         Color background = SampleBackground(content.Image);
         var backgroundBrush = new SolidColorBrush(background);
         backgroundBrush.Freeze();
@@ -134,7 +137,8 @@ internal sealed class PinTextSelectionView : Grid
                 Background = backgroundBrush,
                 Foreground = foreground,
                 BorderThickness = new Thickness(0),
-                FontFamily = new FontFamily(_original.IndexOfAny(['\r', '\n', '\t']) >= 0 ? "Consolas" : "Segoe UI"),
+                FontFamily = new FontFamily(_isCode ? ClipboardCodeRenderer.FontFamilyName
+                    : _original.IndexOfAny(['\r', '\n', '\t']) >= 0 ? "Consolas" : "Segoe UI"),
                 HorizontalScrollBarVisibility = ScrollBarVisibility.Auto,
                 VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
                 SelectionBrush = SystemColors.HighlightBrush,
@@ -176,9 +180,11 @@ internal sealed class PinTextSelectionView : Grid
         _zoom = double.IsFinite(zoom) && zoom > 0 ? zoom : 1;
         if (TextBox is not null)
         {
-            TextBox.FontSize = 16 * _zoom;
-            TextBox.Padding = new Thickness(24 * _zoom, 20 * _zoom, 24 * _zoom, 20 * _zoom);
-            TextBlock.SetLineHeight(TextBox, 24 * _zoom);
+            double paddingX = _isCode ? ClipboardCodeRenderer.HorizontalPaddingDip : 24;
+            double paddingY = _isCode ? ClipboardCodeRenderer.VerticalPaddingDip : 20;
+            TextBox.FontSize = (_isCode ? ClipboardCodeRenderer.FontSizeDip : 16) * _zoom;
+            TextBox.Padding = new Thickness(paddingX * _zoom, paddingY * _zoom, paddingX * _zoom, paddingY * _zoom);
+            TextBlock.SetLineHeight(TextBox, (_isCode ? ClipboardCodeRenderer.LineHeightDip : 24) * _zoom);
         }
         if (TableGrid is not null)
         {

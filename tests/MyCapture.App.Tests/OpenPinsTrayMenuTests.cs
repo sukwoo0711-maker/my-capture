@@ -1,10 +1,12 @@
 using System.Globalization;
+using System.Runtime.CompilerServices;
 using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Automation.Peers;
 using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using System.Windows.Threading;
 using Microsoft.Extensions.Logging.Abstractions;
 using MyCapture.App.Pinning;
 using MyCapture.App.Themes;
@@ -298,6 +300,132 @@ public sealed class OpenPinsTrayMenuTests
         finally { pin.Close(); }
     });
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void ClosedMenuReleasesPinsContentAndAutomationPeers(bool chooseEntry) => StaTestHost.Run(() =>
+    {
+        bool? motion = FluidMotion.AnimationsEnabledOverrideForTest;
+        FluidMotion.AnimationsEnabledOverrideForTest = false;
+        using var presenter = new ThemedShellPresenter(() => false);
+        try
+        {
+            WeakReference[] references = CreateClosedMenuReferences(presenter, chooseEntry);
+            Assert.Null(presenter.MenuForTest);
+            for (int attempt = 0; attempt < 5 && references.Any(reference => reference.IsAlive); attempt++)
+            {
+                DrainDispatcher();
+                GC.Collect();
+                GC.WaitForPendingFinalizers();
+                GC.Collect();
+            }
+
+            Assert.All(references, reference => Assert.False(reference.IsAlive));
+            GC.KeepAlive(presenter);
+        }
+        finally { FluidMotion.AnimationsEnabledOverrideForTest = motion; }
+    });
+
+    [Fact]
+    public void ClosingAnEarlierMenuDoesNotReleaseItsReplacement() => StaTestHost.Run(() =>
+    {
+        using var presenter = new ThemedShellPresenter(() => false);
+        ContextMenu earlier = presenter.CreateMenu([]);
+        ContextMenu current = presenter.CreateMenu([]);
+        presenter.TrackMenu(earlier);
+        presenter.TrackMenu(current);
+
+        earlier.RaiseEvent(new RoutedEventArgs(ContextMenu.ClosedEvent));
+
+        Assert.Same(current, presenter.MenuForTest);
+        current.RaiseEvent(new RoutedEventArgs(ContextMenu.ClosedEvent));
+        Assert.Null(presenter.MenuForTest);
+    });
+
+    [Fact]
+    public void TraySelectionUsesRealShowWithAnExplicitPassiveShowPolicy() => StaTestHost.Run(() =>
+    {
+        bool? motion = FluidMotion.AnimationsEnabledOverrideForTest;
+        FluidMotion.AnimationsEnabledOverrideForTest = false;
+        var activated = new List<PinWindow>();
+        PinManager manager = Manager(activated.Add);
+        try
+        {
+            Assert.Null(manager.ShowPinForTest);
+            PinWindow pin = manager.PinImage(Image());
+            Assert.True(pin.IsVisible);
+            Assert.False(pin.ShowActivated);
+            manager.HideOrShowAll();
+            Assert.False(pin.IsVisible);
+            activated.Clear();
+
+            manager.ActivateOpenPin(pin);
+
+            Assert.True(pin.IsVisible);
+            Assert.False(pin.ShowActivated);
+            Assert.Equal([pin], activated);
+        }
+        finally
+        {
+            manager.CloseAllForExit();
+            FluidMotion.AnimationsEnabledOverrideForTest = motion;
+        }
+    });
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static WeakReference[] CreateClosedMenuReferences(ThemedShellPresenter presenter, bool chooseEntry)
+    {
+        PinSettings settings = NewInstallDefaults.Create().Pin;
+        settings.ClosedWindowRestoreLimit = 0;
+        int activations = 0;
+        var manager = new PinManager(() => settings, NullLogger.Instance)
+        {
+            BeforeShowForTest = pin => pin.ShowActivated = false,
+            ActivatePinForTest = _ => activations++,
+        };
+        try
+        {
+            PinWindow pin = manager.PinImage(Image());
+            activations = 0;
+            ContextMenu menu = presenter.CreateMenu(Build(manager));
+            presenter.TrackMenu(menu);
+            MenuItem branch = Assert.Single(menu.Items.OfType<MenuItem>(),
+                item => (string)item.Header == UiText.Get("Tray_OpenPins"));
+            MenuItem entry = Assert.IsAssignableFrom<MenuItem>(Assert.Single(branch.Items.Cast<object>()));
+            AutomationPeer peer = UIElementAutomationPeer.CreatePeerForElement(entry);
+            Assert.Equal(AutomationProperties.GetName(entry), peer.GetName());
+            var references = new[]
+            {
+                new WeakReference(pin),
+                new WeakReference(pin.PinnedContent),
+                new WeakReference(pin.PinnedContent.Image),
+                new WeakReference(menu),
+                new WeakReference(peer),
+            };
+            if (chooseEntry)
+            {
+                entry.RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
+                Assert.Equal(1, activations);
+            }
+
+            // Exercise the presenter's real close handler without opening a native popup.
+            menu.RaiseEvent(new RoutedEventArgs(ContextMenu.ClosedEvent));
+            pin.Close();
+            Assert.Equal(0, manager.ClosedCount);
+            Assert.Equal(0, manager.Count);
+            return references;
+        }
+        finally { manager.CloseAllForExit(); }
+    }
+
+    private static void DrainDispatcher()
+    {
+        var frame = new DispatcherFrame();
+        _ = Dispatcher.CurrentDispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle,
+            new Action(() => frame.Continue = false));
+        Dispatcher.PushFrame(frame);
+    }
+
     private static IReadOnlyList<ThemedShellPresenter.MenuEntry> Build(PinManager manager) =>
         TrayMenuLayout.Build(Commands(manager.ActivateOpenPin), new HotkeySettings(), new TrayMenuState(
             PinCount: manager.Count, PinsHidden: manager.AreHidden, ClickThroughPinCount: manager.ClickThroughCount,
@@ -314,6 +442,7 @@ public sealed class OpenPinsTrayMenuTests
     private static PinManager Manager(Action<PinWindow>? activate = null) => new(
         () => NewInstallDefaults.Create().Pin, NullLogger.Instance)
     {
+        BeforeShowForTest = pin => pin.ShowActivated = false,
         ActivatePinForTest = activate ?? (_ => { }),
     };
 

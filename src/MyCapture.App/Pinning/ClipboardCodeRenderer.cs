@@ -14,6 +14,12 @@ namespace MyCapture.App.Pinning;
 /// <summary>Renders a bounded subset of editor HTML as local WPF text, never a web page.</summary>
 internal static class ClipboardCodeRenderer
 {
+    internal const string FontFamilyName = "Consolas";
+    internal const double FontSizeDip = 15;
+    internal const double LineHeightDip = 23;
+    internal const int HorizontalPaddingDip = 24;
+    internal const int VerticalPaddingDip = 20;
+
     internal static bool IsCodeHtml(string? html) => html is not null
         && !html.Contains("<table", StringComparison.OrdinalIgnoreCase)
         && (html.Contains("<pre", StringComparison.OrdinalIgnoreCase)
@@ -112,19 +118,19 @@ internal static class ClipboardCodeRenderer
         // Ideal DIP metrics preserve the original wrapping and trimming at every target DPI.
         // The drawing retains vector glyphs until RenderTargetBitmap rasterises them.
         var formatted = new FormattedText(document.DisplayText, CultureInfo.InvariantCulture, FlowDirection.LeftToRight,
-            new Typeface("Consolas"), 15, ColorBrush(document.Foreground), 1)
-        { MaxTextWidth = 1152, MaxTextHeight = 852, LineHeight = 23, Trimming = TextTrimming.CharacterEllipsis };
+            new Typeface(FontFamilyName), FontSizeDip, ColorBrush(document.Foreground), 1)
+        { MaxTextWidth = 1152, MaxTextHeight = 852, LineHeight = LineHeightDip, Trimming = TextTrimming.CharacterEllipsis };
         foreach (PinCodeRun run in document.Runs)
         {
             formatted.SetForegroundBrush(ColorBrush(run.Color), run.Start, run.Length);
         }
-        int width = Math.Clamp((int)Math.Ceiling(formatted.WidthIncludingTrailingWhitespace) + 48, 240, 1200);
-        int height = Math.Clamp((int)Math.Ceiling(formatted.Height) + 40, 80, 900);
+        int width = Math.Clamp((int)Math.Ceiling(formatted.WidthIncludingTrailingWhitespace) + (2 * HorizontalPaddingDip), 240, 1200);
+        int height = Math.Clamp((int)Math.Ceiling(formatted.Height) + (2 * VerticalPaddingDip), 80, 900);
         var visual = new DrawingVisual();
         using (DrawingContext drawing = visual.RenderOpen())
         {
             drawing.DrawRectangle(ColorBrush(document.Background), null, new Rect(0, 0, width, height));
-            drawing.DrawText(formatted, new Point(24, 20));
+            drawing.DrawText(formatted, new Point(HorizontalPaddingDip, VerticalPaddingDip));
         }
         return ClipboardTextRenderer.RenderFrozen(visual, width, height, scale);
     }

@@ -6,6 +6,7 @@ using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using MyCapture.App.Pinning;
 using MyCapture.Core.Localization;
+using MyCapture.Core.Pin;
 using Xunit;
 
 namespace MyCapture.App.Tests;
@@ -54,6 +55,7 @@ public sealed class PinTextSelectionViewTests
         TextBox textBox = Assert.IsType<TextBox>(view.TextBox);
         Assert.Equal(font, textBox.FontFamily.Source);
         Assert.Equal(16, textBox.FontSize);
+        Assert.Equal(24, TextBlock.GetLineHeight(textBox));
         Assert.Equal(new Thickness(24, 20, 24, 20), textBox.Padding);
         Assert.True(textBox.IsReadOnly);
         Assert.Equal(ScrollBarVisibility.Auto, textBox.VerticalScrollBarVisibility);
@@ -61,7 +63,32 @@ public sealed class PinTextSelectionViewTests
         Assert.Equal("Select text", AutomationProperties.GetName(view));
         view.SetZoom(2);
         Assert.Equal(32, textBox.FontSize);
+        Assert.Equal(48, TextBlock.GetLineHeight(textBox));
         Assert.Equal(new Thickness(48, 40, 48, 40), textBox.Padding);
+    });
+
+    [Theory]
+    [InlineData("#define MAX_LEN 256", 1.0)]
+    [InlineData("#define MAX_LEN 256", 1.75)]
+    [InlineData("#include <stdio.h>\r\n#define MAX_LEN 256", 1.0)]
+    [InlineData("#include <stdio.h>\r\n#define MAX_LEN 256", 1.75)]
+    public void CodeViewUsesRendererTypographyAtEveryZoom(string original, double zoom) => StaTestHost.Run(() =>
+    {
+        var document = new PinCodeDocument(original, [], "#1E1E1E", "#DCDCDC");
+        PinContent content = PinContent.FromCode(ClipboardCodeRenderer.Render(document), original, document);
+        var view = new PinTextSelectionView(content);
+        view.SetZoom(zoom);
+
+        TextBox textBox = Assert.IsType<TextBox>(view.TextBox);
+        Assert.Equal(PinTextStyle.Code, content.TextStyle);
+        Assert.Equal("Consolas", textBox.FontFamily.Source);
+        Assert.Equal(15 * zoom, textBox.FontSize);
+        Assert.Equal(23 * zoom, TextBlock.GetLineHeight(textBox));
+        Assert.Equal(new Thickness(24 * zoom, 20 * zoom, 24 * zoom, 20 * zoom), textBox.Padding);
+        Assert.Equal(Color.FromRgb(0x1E, 0x1E, 0x1E), Assert.IsType<SolidColorBrush>(view.Background).Color);
+        Assert.Same(view.Background, textBox.Background);
+        view.SelectAll();
+        Assert.Equal(original, view.SelectedOriginalText);
     });
 
     [Theory]

@@ -446,6 +446,8 @@ internal sealed class PinWindow : Window
 
     internal PinTextSelectionView? TextSelectionForTest => _textSelection;
 
+    internal IPinSelectionFocus SelectionFocus { get; set; } = NativePinSelectionFocus.Instance;
+
     /// <summary>The source page this pin came from, if the clipboard carried one.</summary>
     internal string SourcePageUrl { get; } = string.Empty;
 
@@ -568,7 +570,7 @@ internal sealed class PinWindow : Window
     internal void HidePin()
     {
         _state.IsHidden = true;
-        LeaveTextSelection();
+        LeaveTextSelection(restoreFocus: false);
         HideHoverBar();
         if (!FluidMotion.AnimationsEnabled || !IsVisible)
         {
@@ -1097,18 +1099,20 @@ internal sealed class PinWindow : Window
         _textSelection = selection;
         _chrome.Children.Insert(1, selection);
         if (_selectTextItem is not null) _selectTextItem.IsChecked = true;
-        Activate();
-        selection.FocusSelection();
+        SelectionFocus.Enter(this, selection);
         ShowFeedback(UiText.Get("Pin_SelectTextStarted"), FeedbackKind.Result);
     }
 
-    private void LeaveTextSelection()
+    private void LeaveTextSelection(bool restoreFocus = true)
     {
         if (_textSelection is null) return;
         _chrome.Children.Remove(_textSelection);
         _textSelection = null;
         if (_selectTextItem is not null) _selectTextItem.IsChecked = false;
-        Focus();
+        if (restoreFocus && IsVisible && !_state.IsHidden && SelectionFocus.IsActive(this))
+        {
+            SelectionFocus.Restore(this);
+        }
         ShowFeedback(UiText.Get("Pin_SelectTextEnded"), FeedbackKind.Confirmation);
         if (IsMouseOver) ShowHoverBar();
     }

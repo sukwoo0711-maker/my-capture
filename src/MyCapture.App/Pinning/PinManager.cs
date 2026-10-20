@@ -252,6 +252,7 @@ internal sealed class PinManager
     internal Task<bool>? LastTextCopyOperationForTest { get; private set; }
 
     internal Action<PinWindow>? BeforeShowForTest { get; set; }
+    internal Action<PinWindow, Action>? ShowPinForTest { get; set; }
 
     /// <summary>
     /// Reads supported clipboard content and, if present, opens a new independent pin for it.
@@ -633,10 +634,8 @@ internal sealed class PinManager
 
     private void ShowPinWindow(PinWindow pin, Action show)
     {
-        bool showActivated = pin.ShowActivated;
-        if (ActivatePinForTest is not null) pin.ShowActivated = false;
-        try { show(); }
-        finally { pin.ShowActivated = showActivated; }
+        if (ShowPinForTest is { } showPin) showPin(pin, show);
+        else show();
     }
 
     /// <summary>

@@ -128,6 +128,7 @@ public sealed class PinSessionServiceTests
             var manager = new PinManager(() => settings, NullLogger.Instance)
             {
                 ReadPlacementMonitorForTest = () => Monitor(1),
+                BeforeShowForTest = pin => pin.ShowActivated = false,
                 ActivatePinForTest = _ => { },
             };
             int encodes = 0;
@@ -192,6 +193,7 @@ public sealed class PinSessionServiceTests
             {
                 ReadPlacementMonitorForTest = () => Monitor(2),
                 ReadRestoreMonitorsForTest = () => [Monitor(2)],
+                BeforeShowForTest = pin => pin.ShowActivated = false,
                 ActivatePinForTest = _ => { },
             };
             using var service = Create(manager, store, settings);
