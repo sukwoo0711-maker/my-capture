@@ -186,7 +186,7 @@ internal static class GifPreviewSampling
     }
 
     /// <summary>
-    /// GIF frames over the range as the exporter schedules them: the fixed cadence on the
+    /// Scheduled frames before identical frames merge: the fixed cadence on the
     /// centisecond grid plus every text or image layer start and end that falls between cadence
     /// boundaries.
     /// </summary>
@@ -213,6 +213,45 @@ internal static class GifPreviewSampling
         }
 
         return frames + extra.Count;
+    }
+
+    /// <summary>Layer intervals and cut boundaries on the output clock used by the GIF schedule.</summary>
+    internal static List<(double StartMs, double EndMs)> LayerIntervals(VideoEditDocument document)
+    {
+        VideoCutTimeline timeline = document.CreateTimeline();
+        return document.TextOverlays.Select(overlay => (overlay.StartMs, overlay.EndMs))
+            .Concat(document.FrameEditLayers.Select(layer => (layer.StartMs, layer.EndMs)))
+            .Select(interval => (StartMs: timeline.ToOutputTime(interval.StartMs), EndMs: timeline.ToOutputTime(interval.EndMs)))
+            .Where(interval => interval.EndMs > interval.StartMs)
+            .Concat(timeline.KeptRanges.Skip(1).Select(segment =>
+                (timeline.ToOutputTime(segment.StartMs), timeline.ToOutputTime(segment.StartMs))))
+            .ToList();
+    }
+
+    /// <summary>
+    /// Uses the preset's written image count when one measured segment covers the whole range;
+    /// otherwise keeps the scheduled count, an upper bound before identical frames merge.
+    /// </summary>
+    internal static int FrameCountFor(
+        double fullSourceMs,
+        GifExportQuality quality,
+        IReadOnlyDictionary<GifExportQuality, GifPresetMeasurement> measurements,
+        IReadOnlyList<(double StartMs, double EndMs)>? layers = null)
+    {
+        if (measurements.TryGetValue(quality, out GifPresetMeasurement? measurement)
+            && measurement.Quality == quality
+            && double.IsFinite(fullSourceMs) && fullSourceMs > 0
+            && measurement.SourceMs >= fullSourceMs - 0.5
+            && measurement.Segments.Count == 1)
+        {
+            GifMeasuredSegment segment = measurement.Segments[0];
+            if (segment.StartsRange && segment.SourceMs >= fullSourceMs - 0.5 && segment.Size.Images > 0)
+            {
+                return segment.Size.Images;
+            }
+        }
+
+        return EstimateFrameCount(fullSourceMs, quality.FramesPerSecond, layers);
     }
 
     private static bool Keep(double startMs, double endMs, GifSampleWindow window, VideoCutTimeline timeline)
@@ -296,6 +335,9 @@ internal sealed record GifMeasuredSegment(GifSegmentSize Size, double SourceMs, 
 /// <param name="HeadShare">Share of the playback the head images cover, from 0 to 1.</param>
 internal readonly record struct GifSegmentSize(long Bytes, long FirstImageBytes, long HeadBytes, double HeadShare)
 {
+    /// <summary>Image descriptors in the written GIF, after identical frames merge; zero when unknown.</summary>
+    internal int Images { get; init; }
+
     /// <summary>Reads the sizes of a written GIF; zero head and first image when it is malformed.</summary>
     internal static GifSegmentSize Measure(string path)
     {
@@ -360,7 +402,7 @@ internal readonly record struct GifSegmentSize(long Bytes, long FirstImageBytes,
         }
 
         double share = total == 0 || head == images.Count ? 1 : (double)start / total;
-        return new GifSegmentSize(gif.Length, images[0].End + 1, images[head - 1].End + 1, share);
+        return new GifSegmentSize(gif.Length, images[0].End + 1, images[head - 1].End + 1, share) { Images = images.Count };
 
         static int SkipSubBlocks(ReadOnlySpan<byte> data, int index)
         {
@@ -726,7 +768,7 @@ internal static class GifSharePolicy
         {
             GifSizeEstimate estimate = EstimateFor(preset, fullSourceMs, sourceWidth, sourceHeight, measurements, calibration);
             last = estimate;
-            int frames = GifPreviewSampling.EstimateFrameCount(fullSourceMs, preset.FramesPerSecond, layers);
+            int frames = GifPreviewSampling.FrameCountFor(fullSourceMs, preset, measurements, layers);
             if (frames > SafetyFrameLimit)
             {
                 reason = GifLimitReason.SafetyFrames;
