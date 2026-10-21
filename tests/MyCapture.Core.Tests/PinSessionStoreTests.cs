@@ -1,4 +1,5 @@
 using System.Text;
+using System.Security.Cryptography;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
@@ -14,6 +15,407 @@ public sealed class PinSessionStoreTests
 {
     private static readonly byte[] Png = Convert.FromBase64String(
         "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+ip1sAAAAASUVORK5CYII=");
+
+    [Fact]
+    public void Save_ProtectsManifestImagesAndSensitiveFieldsWithoutPlaintextLeftovers()
+    {
+        using var workspace = new TempWorkspace();
+        PinSessionSnapshot code = CodeSnapshot();
+        PinSessionSnapshot text = Snapshot(PinSessionContentKind.Text, "private-token-451-value", true);
+        text = text with { Pin = text.Pin with { SourcePageUrl = "https://private-host.test/private-session" } };
+        PinSessionStore store = CreateStore(workspace);
+
+        Assert.True(store.Save([code, text]));
+
+        string manifest = ReadManifestText(workspace);
+        Assert.Contains("private-token-451-value", manifest, StringComparison.Ordinal);
+        Assert.Contains("private-host.test", manifest, StringComparison.Ordinal);
+        Assert.Contains("int x = 1;", manifest, StringComparison.Ordinal);
+        Assert.All(Directory.GetFiles(workspace.Paths.PinSessionRoot), path =>
+        {
+            byte[] bytes = File.ReadAllBytes(path);
+            Assert.True(bytes.AsSpan().StartsWith("MCPIN\0"u8));
+            Assert.False(bytes.AsSpan().IndexOf("private-token-451-value"u8) >= 0);
+            Assert.False(bytes.AsSpan().IndexOf("private-host.test"u8) >= 0);
+            Assert.False(bytes.AsSpan().IndexOf("int x = 1;"u8) >= 0);
+            Assert.False(bytes.AsSpan().IndexOf(Png.AsSpan(0, 8)) >= 0);
+        });
+        Assert.Equal(3, Directory.GetFiles(workspace.Paths.PinSessionRoot).Length);
+        Assert.All(store.Load(), pin => Assert.Equal(Png, pin.PngBytes));
+    }
+
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
+    public void Save_MigratesLegacyManifestAndImagesEvenWithReuseAndWarmCache(bool warmCache, bool nullBytes)
+    {
+        using var workspace = new TempWorkspace();
+        PinSessionSnapshot original = CodeSnapshot();
+        WriteLegacySession(workspace, [original]);
+        PinSessionStore store = CreateStore(workspace);
+        PinSessionSnapshot restored = Assert.Single((warmCache ? store : CreateStore(workspace)).Load());
+        AssertSamePin(original.Pin, restored.Pin);
+        Assert.Equal(Png, restored.PngBytes);
+        if (warmCache) Assert.True(store.HasImage(original.Pin.Id));
+
+        Assert.True(store.Save([restored with { PngBytes = nullBytes ? null : restored.PngBytes }]));
+
+        AssertSamePin(original.Pin, Assert.Single(CreateStore(workspace).Load()).Pin);
+        Assert.Equal(Png, ReadImageBytes(ImagePath(workspace, original.Pin.Id)));
+        Assert.Contains("codeDocument", ReadManifestText(workspace), StringComparison.Ordinal);
+        Assert.Equal(2, Directory.GetFiles(workspace.Paths.PinSessionRoot).Length);
+        Assert.All(Directory.GetFiles(workspace.Paths.PinSessionRoot), path =>
+        {
+            byte[] bytes = File.ReadAllBytes(path);
+            Assert.True(bytes.AsSpan().StartsWith("MCPIN\0"u8));
+            Assert.False(bytes.AsSpan().IndexOf("int x = 1;"u8) >= 0);
+            Assert.False(bytes.AsSpan().IndexOf(Png.AsSpan(0, 8)) >= 0);
+        });
+        Assert.Empty(Directory.GetFiles(workspace.Paths.PinSessionRoot, "*.bak"));
+        Assert.Empty(Directory.GetFiles(workspace.Paths.PinSessionRoot, "*.tmp"));
+    }
+
+    [Theory]
+    [InlineData("blob")]
+    [InlineData("version")]
+    [InlineData("purpose")]
+    [InlineData("truncated")]
+    [InlineData("foreign-entropy")]
+    [InlineData("invalid-json")]
+    [InlineData("magic")]
+    public void Load_ProtectedManifestFailureBlocksOverwriteUntilSuccessfulRetry(string corruption)
+    {
+        using var workspace = new TempWorkspace();
+        var logger = new RecordingLogger();
+        PinSessionSnapshot original = Snapshot();
+        Assert.True(CreateStore(workspace).Save([original]));
+        byte[] saved = File.ReadAllBytes(ManifestPath(workspace));
+        byte[] damaged = CorruptEnvelope(saved, corruption, PinSessionFilePurpose.Manifest);
+        File.WriteAllBytes(ManifestPath(workspace), damaged);
+        var store = new PinSessionStore(workspace.Paths.PinSessionRoot, logger);
+
+        PinSessionLoadResult result = store.LoadDetailed();
+
+        Assert.True(result.ManifestUnreadable);
+        Assert.Empty(result.Pins);
+        Assert.False(store.Save([Snapshot()]));
+        Assert.False(CreateStore(workspace).Save([]));
+        Assert.Equal(damaged, File.ReadAllBytes(ManifestPath(workspace)));
+        Assert.True(File.Exists(ImagePath(workspace, original.Pin.Id)));
+        Assert.Contains(logger.Messages, message => message.Contains("Could not read the saved pin session", StringComparison.Ordinal));
+        File.WriteAllBytes(ManifestPath(workspace), saved);
+        Assert.False(store.LoadDetailed().ManifestUnreadable);
+        Assert.True(store.Save([original with { PngBytes = null }]));
+        Assert.Equal(original.Pin, Assert.Single(store.Load()).Pin);
+    }
+
+    [Theory]
+    [InlineData("blob")]
+    [InlineData("version")]
+    [InlineData("purpose")]
+    [InlineData("truncated")]
+    [InlineData("foreign-entropy")]
+    public void Load_ProtectedImageFailureKeepsPendingPinAndLiveBytesRepairIt(string corruption)
+    {
+        using var workspace = new TempWorkspace();
+        PinSessionSnapshot[] original = [Snapshot(), Snapshot(), Snapshot()];
+        PinSessionStore store = CreateStore(workspace);
+        Assert.True(store.Save(original));
+        string path = ImagePath(workspace, original[1].Pin.Id);
+        byte[] damaged = CorruptEnvelope(File.ReadAllBytes(path), corruption, PinSessionFilePurpose.Image);
+        File.WriteAllBytes(path, damaged);
+        File.SetLastWriteTimeUtc(path, DateTime.UtcNow.AddMinutes(1));
+
+        PinSessionLoadResult loaded = store.LoadDetailed();
+
+        Assert.False(loaded.ManifestUnreadable);
+        Assert.Equal(original.Select(pin => pin.Pin), loaded.Pins.Select(pin => pin.Pin));
+        Assert.Null(loaded.Pins[1].PngBytes);
+        Assert.True(loaded.Pins[1].ProtectionPending);
+        Assert.All(new[] { loaded.Pins[0], loaded.Pins[2] }, pin =>
+        {
+            Assert.Equal(Png, pin.PngBytes);
+            Assert.False(pin.ProtectionPending);
+        });
+        Assert.Equal(damaged, File.ReadAllBytes(path));
+        Assert.False(store.HasImage(original[1].Pin.Id));
+        Assert.True(store.TryGetImageLength(original[1].Pin.Id, out long length));
+        Assert.Equal(Png.LongLength, length);
+        Assert.True(store.Save(original));
+        Assert.Equal(original.Select(pin => pin.Pin), store.Load().Select(pin => pin.Pin));
+        Assert.All(store.Load(), pin => Assert.False(pin.ProtectionPending));
+        Assert.Equal(Png, ReadImageBytes(path));
+    }
+
+    [Theory]
+    [InlineData("crc")]
+    [InlineData("invalid-png")]
+    public void Load_DecodedImageFailureSkipsOnlyThatPinAndLiveBytesRepairIt(string corruption)
+    {
+        using var workspace = new TempWorkspace();
+        PinSessionSnapshot[] original = [Snapshot(), Snapshot(), Snapshot()];
+        PinSessionStore store = CreateStore(workspace);
+        Assert.True(store.Save(original));
+        string path = ImagePath(workspace, original[1].Pin.Id);
+        byte[] damaged = CorruptEnvelope(File.ReadAllBytes(path), corruption, PinSessionFilePurpose.Image);
+        File.WriteAllBytes(path, damaged);
+        File.SetLastWriteTimeUtc(path, DateTime.UtcNow.AddMinutes(1));
+
+        PinSessionLoadResult loaded = store.LoadDetailed();
+
+        Assert.False(loaded.ManifestUnreadable);
+        Assert.Equal(new[] { original[0].Pin, original[2].Pin }, loaded.Pins.Select(pin => pin.Pin));
+        Assert.False(store.HasImage(original[1].Pin.Id));
+        Assert.False(store.TryGetImageLength(original[1].Pin.Id, out _));
+        Assert.True(store.Save(original));
+        Assert.Equal(original.Select(pin => pin.Pin), store.Load().Select(pin => pin.Pin));
+        Assert.Equal(Png, ReadImageBytes(path));
+    }
+
+    [Theory]
+    [InlineData("blob")]
+    [InlineData("version")]
+    [InlineData("purpose")]
+    [InlineData("truncated")]
+    [InlineData("foreign-entropy")]
+    public void Save_ProtectionPendingImageSurvivesOtherPinsAndRepeatedRestarts(string corruption)
+    {
+        using var workspace = new TempWorkspace();
+        PinSessionSnapshot original = WithOpeningOrder(1);
+        Assert.True(CreateStore(workspace).Save([original]));
+        string path = ImagePath(workspace, original.Pin.Id);
+        byte[] saved = File.ReadAllBytes(path);
+        byte[] damaged = CorruptEnvelope(saved, corruption, PinSessionFilePurpose.Image);
+        File.WriteAllBytes(path, damaged);
+        PinSessionStore store = CreateStore(workspace);
+        PinSessionSnapshot pending = Assert.Single(store.Load());
+        Assert.Equal(original.Pin, pending.Pin);
+        Assert.Null(pending.PngBytes);
+        Assert.True(pending.ProtectionPending);
+        PinSessionSnapshot other = WithOpeningOrder(2);
+
+        Assert.True(store.Save([pending, other]));
+        Assert.Equal(damaged, File.ReadAllBytes(path));
+        PinSessionStore restarted = CreateStore(workspace);
+        IReadOnlyList<PinSessionSnapshot> restored = restarted.Load();
+        Assert.Equal(new[] { original.Pin, other.Pin }, restored.Select(pin => pin.Pin));
+        Assert.Null(restored[0].PngBytes);
+        Assert.True(restored[0].ProtectionPending);
+        Assert.Equal(Png, restored[1].PngBytes);
+        Assert.True(restarted.TryGetImageLength(original.Pin.Id, out long length));
+        Assert.Equal(Png.LongLength, length);
+
+        // A pending marker also prevents accidental replacement by stale caller-supplied pixels.
+        Assert.True(restarted.Save([restored[0] with { PngBytes = Png }, restored[1]]));
+        Assert.Equal(damaged, File.ReadAllBytes(path));
+        Assert.True(CreateStore(workspace).Load()[0].ProtectionPending);
+
+        File.WriteAllBytes(path, saved);
+        PinSessionSnapshot recovered = CreateStore(workspace).Load()[0];
+        Assert.Equal(original.Pin, recovered.Pin);
+        Assert.Equal(Png, recovered.PngBytes);
+        Assert.False(recovered.ProtectionPending);
+    }
+
+    [Fact]
+    public void Save_ProtectionPendingRecordsCountWithinFiftyPinLimitBeforeNewLivePins()
+    {
+        using var workspace = new TempWorkspace();
+        PinSessionSnapshot original = WithOpeningOrder(1);
+        Assert.True(CreateStore(workspace).Save([original]));
+        string path = ImagePath(workspace, original.Pin.Id);
+        byte[] damaged = CorruptEnvelope(File.ReadAllBytes(path), "version", PinSessionFilePurpose.Image);
+        File.WriteAllBytes(path, damaged);
+        PinSessionStore store = CreateStore(workspace);
+        PinSessionSnapshot pending = Assert.Single(store.Load());
+        PinSessionSnapshot[] live = Enumerable.Range(2, PinSessionStore.DefaultMaxPins)
+            .Select(order => WithOpeningOrder(order)).ToArray();
+
+        Assert.True(store.Save([pending, .. live]));
+
+        IReadOnlyList<PinSessionSnapshot> restored = CreateStore(workspace).Load();
+        Assert.Equal(PinSessionStore.DefaultMaxPins, restored.Count);
+        Assert.Equal(original.Pin, restored[0].Pin);
+        Assert.True(restored[0].ProtectionPending);
+        Assert.Null(restored[0].PngBytes);
+        Assert.Equal(live.Skip(1).Select(pin => pin.Pin), restored.Skip(1).Select(pin => pin.Pin));
+        Assert.Equal(damaged, File.ReadAllBytes(path));
+        Assert.Equal(PinSessionStore.DefaultMaxPins, Directory.GetFiles(workspace.Paths.PinSessionRoot, "*.png").Length);
+    }
+
+    [Fact]
+    public void Load_ProtectionPendingFlagIsKeptForEachRecordSharingTheSameImage()
+    {
+        using var workspace = new TempWorkspace();
+        PinSessionSnapshot original = WithOpeningOrder(1);
+        PinSessionSnapshot duplicate = original with { Pin = original.Pin with { OpenedOrder = 2, Zoom = 2 } };
+        Assert.True(CreateStore(workspace).Save([original, duplicate]));
+        string path = ImagePath(workspace, original.Pin.Id);
+        byte[] damaged = CorruptEnvelope(File.ReadAllBytes(path), "purpose", PinSessionFilePurpose.Image);
+        File.WriteAllBytes(path, damaged);
+        PinSessionStore store = CreateStore(workspace);
+
+        IReadOnlyList<PinSessionSnapshot> restored = store.Load();
+
+        Assert.Equal(new[] { original.Pin, duplicate.Pin }, restored.Select(pin => pin.Pin));
+        Assert.All(restored, pin =>
+        {
+            Assert.True(pin.ProtectionPending);
+            Assert.Null(pin.PngBytes);
+        });
+        Assert.True(store.Save(restored));
+        Assert.Equal(damaged, File.ReadAllBytes(path));
+        Assert.Equal(2, CreateStore(workspace).Load().Count);
+        Assert.All(CreateStore(workspace).Load(), pin => Assert.True(pin.ProtectionPending));
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    [InlineData(2)]
+    [InlineData(3)]
+    [InlineData(4)]
+    [InlineData(5)]
+    [InlineData(6)]
+    [InlineData(7)]
+    public void Load_ManifestTruncatedBeforeFullHeaderBlocksSaveAndPreservesImages(int length)
+    {
+        using var workspace = new TempWorkspace();
+        PinSessionSnapshot original = Snapshot();
+        Assert.True(CreateStore(workspace).Save([original]));
+        byte[] image = File.ReadAllBytes(ImagePath(workspace, original.Pin.Id));
+        byte[] truncated = File.ReadAllBytes(ManifestPath(workspace))[..length];
+        File.WriteAllBytes(ManifestPath(workspace), truncated);
+        PinSessionStore store = CreateStore(workspace);
+
+        PinSessionLoadResult loaded = store.LoadDetailed();
+
+        Assert.True(loaded.ManifestUnreadable);
+        Assert.Empty(loaded.Pins);
+        Assert.False(store.Save([Snapshot()]));
+        Assert.False(CreateStore(workspace).Save([]));
+        Assert.Equal(truncated, File.ReadAllBytes(ManifestPath(workspace)));
+        Assert.Equal(image, File.ReadAllBytes(ImagePath(workspace, original.Pin.Id)));
+        Assert.Equal(2, Directory.GetFiles(workspace.Paths.PinSessionRoot).Length);
+    }
+
+    [Theory]
+    [InlineData(" \t\r\n")]
+    [InlineData("\uFEFF")]
+    [InlineData("\uFEFF \t\r\n")]
+    public void Load_WhitespaceOnlyManifestBlocksSaveAndPreservesImages(string whitespace)
+    {
+        using var workspace = new TempWorkspace();
+        PinSessionSnapshot original = Snapshot();
+        WriteLegacySession(workspace, [original]);
+        byte[] invalid = Encoding.UTF8.GetBytes(whitespace);
+        File.WriteAllBytes(ManifestPath(workspace), invalid);
+        PinSessionStore store = CreateStore(workspace);
+
+        PinSessionLoadResult loaded = store.LoadDetailed();
+
+        Assert.True(loaded.ManifestUnreadable);
+        Assert.Empty(loaded.Pins);
+        Assert.False(store.Save([Snapshot()]));
+        Assert.False(CreateStore(workspace).Save([]));
+        Assert.Equal(invalid, File.ReadAllBytes(ManifestPath(workspace)));
+        Assert.Equal(Png, File.ReadAllBytes(ImagePath(workspace, original.Pin.Id)));
+        Assert.Equal(2, Directory.GetFiles(workspace.Paths.PinSessionRoot).Length);
+    }
+
+    [Fact]
+    public void Save_LockedLegacyImageKeepsItsPlaintextBudgetAndMigratesAfterRelease()
+    {
+        using var workspace = new TempWorkspace();
+        PinSessionSnapshot original = Snapshot();
+        WriteLegacySession(workspace, [original]);
+        var store = new PinSessionStore(workspace.Paths.PinSessionRoot, NullLogger.Instance, maxPngBytes: Png.Length);
+        string path = ImagePath(workspace, original.Pin.Id);
+        using (var locked = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.None))
+        {
+            Assert.Null(Assert.Single(store.Load()).PngBytes);
+            Assert.True(store.TryGetImageLength(original.Pin.Id, out long length));
+            Assert.Equal(Png.LongLength, length);
+            Assert.True(store.Save([original with { PngBytes = null }]));
+        }
+
+        Assert.True(store.Save([original with { PngBytes = null }]));
+        Assert.Equal(Png, ReadImageBytes(path));
+        Assert.Equal(original.Pin, Assert.Single(store.Load()).Pin);
+    }
+
+    [Fact]
+    public void Save_ReadableLegacyImageWithReplacementDeniedKeepsCommittedSessionUntilRetry()
+    {
+        using var workspace = new TempWorkspace();
+        PinSessionSnapshot original = Snapshot();
+        WriteLegacySession(workspace, [original]);
+        string path = ImagePath(workspace, original.Pin.Id);
+        byte[] manifest = File.ReadAllBytes(ManifestPath(workspace));
+        PinSessionStore store = CreateStore(workspace);
+        using (var locked = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read))
+        {
+            Assert.True(store.HasImage(original.Pin.Id));
+            Assert.False(store.Save([original with { PngBytes = null }]));
+            Assert.Equal(manifest, File.ReadAllBytes(ManifestPath(workspace)));
+            Assert.Equal(Png, File.ReadAllBytes(path));
+            Assert.Equal(original.Pin, Assert.Single(store.Load()).Pin);
+        }
+
+        Assert.True(store.Save([original with { PngBytes = null }]));
+        Assert.Equal(Png, ReadImageBytes(path));
+        Assert.Equal(original.Pin, Assert.Single(store.Load()).Pin);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Load_OversizedImageIsRejectedBeforeReadingAndCanBeRepaired(bool protectedHeader)
+    {
+        using var workspace = new TempWorkspace();
+        PinSessionSnapshot original = Snapshot();
+        var store = new PinSessionStore(workspace.Paths.PinSessionRoot, NullLogger.Instance, maxPngBytes: Png.Length);
+        Assert.True(store.Save([original]));
+        string path = ImagePath(workspace, original.Pin.Id);
+        using (var stream = new FileStream(path, FileMode.Create, FileAccess.Write))
+        {
+            stream.Write(protectedHeader ? new byte[] { 77, 67, 80, 73, 78, 0, 1, 2 } : Png);
+            stream.SetLength(Png.LongLength + 64 * 1024 + 1);
+        }
+        File.SetLastWriteTimeUtc(path, DateTime.UtcNow.AddMinutes(1));
+
+        Assert.Empty(store.Load());
+        Assert.False(store.HasImage(original.Pin.Id));
+        Assert.False(store.TryGetImageLength(original.Pin.Id, out _));
+        Assert.True(store.Save([original]));
+        Assert.Equal(Png, Assert.Single(store.Load()).PngBytes);
+    }
+
+    [Fact]
+    public void Failures_DoNotLogExceptionMessagesPathsOrPinContents()
+    {
+        using var workspace = new TempWorkspace();
+        var logger = new RecordingLogger();
+        const string secret = "secret-exception-pin-value";
+        PinSessionSnapshot original = Snapshot(PinSessionContentKind.Text, secret, true);
+        Assert.True(CreateStore(workspace).Save([original]));
+        var store = new PinSessionStore(workspace.Paths.PinSessionRoot, logger)
+        {
+            ReadImageLengthForTest = _ => throw new IOException(workspace.Root + secret)
+        };
+
+        Assert.Single(store.Load());
+
+        Assert.NotEmpty(logger.Messages);
+        Assert.All(logger.Messages, message =>
+        {
+            Assert.DoesNotContain(workspace.Root, message, StringComparison.Ordinal);
+            Assert.DoesNotContain(secret, message, StringComparison.Ordinal);
+        });
+        Assert.All(logger.Exceptions, exception => Assert.Null(exception));
+    }
 
     [Fact]
     public void SaveThenLoad_RoundTripsEveryFieldAndOriginalTextExactlyInZOrder()
@@ -37,7 +439,7 @@ public sealed class PinSessionStoreTests
         for (int i = 0; i < expected.Length; i++) Assert.Equal(Png, actual[i].PngBytes);
         Assert.Equal(Encoding.UTF8.GetBytes(text), Encoding.UTF8.GetBytes(actual[1].Pin.OriginalText!));
         Assert.Equal(Path.Combine(workspace.Paths.DataRoot, "pins"), workspace.Paths.PinSessionRoot);
-        JsonNode manifest = JsonNode.Parse(File.ReadAllText(ManifestPath(workspace)))!;
+        JsonNode manifest = JsonNode.Parse(ReadManifestText(workspace))!;
         Assert.Equal(1, manifest["schemaVersion"]!.GetValue<int>());
         Assert.Equal("Text", manifest["pins"]![1]!["kind"]!.GetValue<string>());
         Assert.DoesNotContain("isHidden", manifest.ToJsonString(), StringComparison.OrdinalIgnoreCase);
@@ -48,7 +450,7 @@ public sealed class PinSessionStoreTests
     }
 
     [Fact]
-    public void SaveThenLoad_RoundTripsRenderingMetadataAndRemainsReadableByLegacySchema()
+    public void SaveThenLoad_RoundTripsRenderingMetadataAndDecodedPayloadRemainsReadableByLegacySchema()
     {
         using var workspace = new TempWorkspace();
         PinSessionStore store = CreateStore(workspace);
@@ -78,7 +480,7 @@ public sealed class PinSessionStoreTests
             Converters = { new JsonStringEnumConverter<PinSessionContentKind>() }
         };
         LegacySessionManifest legacy = JsonSerializer.Deserialize<LegacySessionManifest>(
-            File.ReadAllText(ManifestPath(workspace)), legacyOptions)!;
+            ReadManifestText(workspace), legacyOptions)!;
         Assert.Equal(1, legacy.SchemaVersion);
         Assert.Equal(3, legacy.Pins.Count);
         Assert.Equal(code.Pin.OriginalText, legacy.Pins[2].OriginalText);
@@ -93,7 +495,7 @@ public sealed class PinSessionStoreTests
         PinSessionStore store = CreateStore(workspace);
         PinSessionSnapshot legacy = Snapshot(PinSessionContentKind.Text, "legacy code or text", true);
         Assert.True(store.Save([legacy]));
-        JsonNode manifest = JsonNode.Parse(File.ReadAllText(ManifestPath(workspace)))!;
+        JsonNode manifest = JsonNode.Parse(ReadManifestText(workspace))!;
         JsonObject record = manifest["pins"]![0]!.AsObject();
         record.Remove("textStyle");
         record.Remove("codeDocument");
@@ -141,7 +543,7 @@ public sealed class PinSessionStoreTests
         PinSessionSnapshot code = CodeSnapshot();
         PinSessionSnapshot kept = Snapshot();
         Assert.True(store.Save([code, kept]));
-        JsonNode manifest = JsonNode.Parse(File.ReadAllText(ManifestPath(workspace)))!;
+        JsonNode manifest = JsonNode.Parse(ReadManifestText(workspace))!;
         JsonObject record = manifest["pins"]![0]!.AsObject();
         JsonObject document = record["codeDocument"]!.AsObject();
         JsonArray runs = document["runs"]!.AsArray();
@@ -252,7 +654,7 @@ public sealed class PinSessionStoreTests
 
         Assert.Equal(pins.Skip(1).Select(pin => pin.Pin), store.Load().Select(pin => pin.Pin));
         Assert.Equal(2L * Png.Length, Directory.GetFiles(workspace.Paths.PinSessionRoot, "*.png")
-            .Sum(path => new FileInfo(path).Length));
+            .Sum(path => ReadImageBytes(path).LongLength));
         Assert.Contains(logger.Messages, message => message.Contains("Skipped 1 older pins", StringComparison.Ordinal));
     }
 
@@ -271,7 +673,7 @@ public sealed class PinSessionStoreTests
 
         Assert.Equal(new[] { pins[0].Pin, pins[2].Pin }, store.Load().Select(pin => pin.Pin));
         Assert.False(File.Exists(ImagePath(workspace, pins[1].Pin.Id)));
-        JsonNode manifest = JsonNode.Parse(File.ReadAllText(ManifestPath(workspace)))!;
+        JsonNode manifest = JsonNode.Parse(ReadManifestText(workspace))!;
         Assert.Equal(3, manifest["pins"]![0]!["openedOrder"]!.GetValue<long>());
         Assert.Equal(2, manifest["pins"]![1]!["openedOrder"]!.GetValue<long>());
     }
@@ -322,7 +724,7 @@ public sealed class PinSessionStoreTests
 
         Assert.Equal(timestamp, File.GetLastWriteTimeUtc(imagePath));
         Assert.Equal(updated.Pin, Assert.Single(store.Load()).Pin);
-        Assert.Equal(Png, File.ReadAllBytes(imagePath));
+        Assert.Equal(Png, ReadImageBytes(imagePath));
         Assert.Empty(Directory.GetFiles(workspace.Paths.PinSessionRoot, "*.tmp"));
         Assert.Empty(Directory.GetFiles(workspace.Paths.PinSessionRoot, "*.bak"));
     }
@@ -491,12 +893,12 @@ public sealed class PinSessionStoreTests
             Assert.Equal(Png.LongLength, length);
             Assert.True(store.Save(loaded.Pins.Select(pin => pin with { PngBytes = null }).ToList()));
             Assert.True(File.Exists(lockedPath));
-            Assert.Equal(3, JsonNode.Parse(File.ReadAllText(ManifestPath(workspace)))!["pins"]!.AsArray().Count);
+            Assert.Equal(3, JsonNode.Parse(ReadManifestText(workspace))!["pins"]!.AsArray().Count);
         }
 
         Assert.True(store.Save(pins.Select(pin => pin with { PngBytes = null }).ToList()));
         Assert.Equal(pins.Select(pin => pin.Pin), store.Load().Select(pin => pin.Pin));
-        Assert.Equal(Png, File.ReadAllBytes(lockedPath));
+        Assert.Equal(Png, ReadImageBytes(lockedPath));
     }
 
     [Fact]
@@ -511,11 +913,11 @@ public sealed class PinSessionStoreTests
         {
             Assert.True(store.Save([pin]));
             Assert.True(File.Exists(path));
-            Assert.Single(JsonNode.Parse(File.ReadAllText(ManifestPath(workspace)))!["pins"]!.AsArray());
+            Assert.Single(JsonNode.Parse(ReadManifestText(workspace))!["pins"]!.AsArray());
         }
 
         Assert.Equal(pin.Pin, Assert.Single(store.Load()).Pin);
-        Assert.Equal(Png, File.ReadAllBytes(path));
+        Assert.Equal(Png, ReadImageBytes(path));
     }
 
     [Fact]
@@ -769,7 +1171,7 @@ public sealed class PinSessionStoreTests
         string outside = Path.Combine(workspace.Root, "outside.png");
         File.WriteAllText(outside, "outside sentinel");
         store.Save([Snapshot()]);
-        JsonNode manifest = JsonNode.Parse(File.ReadAllText(ManifestPath(workspace)))!;
+        JsonNode manifest = JsonNode.Parse(ReadManifestText(workspace))!;
         manifest["pins"]![0]!["id"] = "../outside";
         manifest["pins"]![0]!["fileName"] = outside;
         File.WriteAllText(ManifestPath(workspace), manifest.ToJsonString());
@@ -812,6 +1214,73 @@ public sealed class PinSessionStoreTests
     private static PinSessionStore CreateStore(TempWorkspace workspace) =>
         new(workspace.Paths.PinSessionRoot, NullLogger.Instance);
 
+    private static string ReadManifestText(TempWorkspace workspace) =>
+        Encoding.UTF8.GetString(ReadProtectedFile(ManifestPath(workspace), purpose: 1));
+
+    private static byte[] ReadImageBytes(string path) => ReadProtectedFile(path, purpose: 2);
+
+    // Decode independently of the production helper to assert the exact on-disk contract.
+    private static byte[] ReadProtectedFile(string path, byte purpose)
+    {
+        byte[] bytes = File.ReadAllBytes(path);
+        byte[] header = [77, 67, 80, 73, 78, 0, 1, purpose];
+        Assert.True(bytes.Length > header.Length);
+        Assert.Equal(header, bytes[..header.Length]);
+        return ProtectedData.Unprotect(bytes[header.Length..], header, DataProtectionScope.CurrentUser);
+    }
+
+    // PinCodeDocument.Runs is a copied list, so record equality compares it by reference;
+    // compare the code document structurally and every other field by record equality.
+    private static void AssertSamePin(PinSessionPin expected, PinSessionPin actual)
+    {
+        Assert.Equal(expected with { CodeDocument = null }, actual with { CodeDocument = null });
+        if (expected.CodeDocument is null) { Assert.Null(actual.CodeDocument); return; }
+        Assert.NotNull(actual.CodeDocument);
+        Assert.Equal(expected.CodeDocument.DisplayText, actual.CodeDocument.DisplayText);
+        Assert.Equal(expected.CodeDocument.Background, actual.CodeDocument.Background);
+        Assert.Equal(expected.CodeDocument.Foreground, actual.CodeDocument.Foreground);
+        Assert.Equal(expected.CodeDocument.Runs, actual.CodeDocument.Runs);
+    }
+
+    private static void WriteLegacySession(TempWorkspace workspace, IReadOnlyList<PinSessionSnapshot> pins)
+    {
+        Directory.CreateDirectory(workspace.Paths.PinSessionRoot);
+        var options = new JsonSerializerOptions
+        {
+            PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+            WriteIndented = true,
+            IgnoreReadOnlyProperties = true,
+            Converters = { new JsonStringEnumConverter<PinSessionContentKind>(), new JsonStringEnumConverter<PinTextStyle>() }
+        };
+        // A record preserves schemaVersion with IgnoreReadOnlyProperties, matching the 4.5.0 writer.
+        File.WriteAllText(ManifestPath(workspace), JsonSerializer.Serialize(
+            new SessionManifest(1, pins.Select(pin => pin.Pin).ToList()), options));
+        foreach (PinSessionSnapshot pin in pins) File.WriteAllBytes(ImagePath(workspace, pin.Pin.Id), pin.PngBytes!);
+    }
+
+    private static byte[] CorruptEnvelope(byte[] bytes, string corruption, PinSessionFilePurpose purpose)
+    {
+        byte[] damaged = bytes.ToArray();
+        switch (corruption)
+        {
+            case "blob": damaged[^1] ^= 1; break;
+            case "magic": damaged[0] ^= 1; break;
+            case "version": damaged[6] = 99; break;
+            case "purpose": damaged[7] = purpose == PinSessionFilePurpose.Manifest ? (byte)2 : (byte)1; break;
+            case "truncated": return damaged[..PinSessionProtection.HeaderLength];
+            case "foreign-entropy":
+                byte[] wrongKey = ProtectedData.Protect([1, 2, 3], [77, 88, 99], DataProtectionScope.CurrentUser);
+                return [.. damaged[..PinSessionProtection.HeaderLength], .. wrongKey];
+            case "invalid-json": return PinSessionProtection.Protect("{invalid"u8.ToArray(), purpose);
+            case "invalid-png": return PinSessionProtection.Protect("invalid png"u8.ToArray(), purpose);
+            case "crc":
+                byte[] png = Png.ToArray();
+                png[45] ^= 1;
+                return PinSessionProtection.Protect(png, purpose);
+        }
+        return damaged;
+    }
+
     private static PinSessionSnapshot CodeSnapshot()
     {
         var document = new PinCodeDocument("int x = 1;",
@@ -837,6 +1306,7 @@ public sealed class PinSessionStoreTests
     private static string ImagePath(TempWorkspace workspace, Guid id) =>
         Path.Combine(workspace.Paths.PinSessionRoot, $"{id:N}.png");
 
+    private sealed record SessionManifest(int SchemaVersion, List<PinSessionPin> Pins);
     private sealed record LegacySessionManifest(int SchemaVersion, List<LegacySessionPin> Pins);
     private sealed record LegacySessionPin(Guid Id, PinSessionContentKind Kind, string? OriginalText,
         string SourcePageUrl, bool UsesDeviceIndependentPixels, double ImageWidthDip, double ImageHeightDip,
@@ -845,9 +1315,14 @@ public sealed class PinSessionStoreTests
     private sealed class RecordingLogger : ILogger
     {
         public List<string> Messages { get; } = [];
+        public List<Exception?> Exceptions { get; } = [];
         public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
         public bool IsEnabled(LogLevel logLevel) => true;
         public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception,
-            Func<TState, Exception?, string> formatter) => Messages.Add(formatter(state, exception));
+            Func<TState, Exception?, string> formatter)
+        {
+            Messages.Add(formatter(state, exception));
+            Exceptions.Add(exception);
+        }
     }
 }

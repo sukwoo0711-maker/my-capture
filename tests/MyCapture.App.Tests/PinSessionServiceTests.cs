@@ -508,6 +508,171 @@ public sealed class PinSessionServiceTests
         });
     }
 
+    [Theory]
+    [InlineData("ciphertext")]
+    [InlineData("version")]
+    [InlineData("purpose")]
+    [InlineData("truncated")]
+    public void ProtectedPngFailure_RemainsPendingAcrossSavesAndFreshServiceRestarts(string failure)
+    {
+        StaTestHost.Run(() =>
+        {
+            using var workspace = new TempWorkspace();
+            var settings = new PinSettings { RestoreOpenPinsOnLaunch = true };
+            var seed = NewStore();
+            Seed(seed);
+            PinSessionPin original = Assert.Single(seed.Load()).Pin;
+            string imagePath = Path.Combine(workspace.Paths.PinSessionRoot, $"{original.Id:N}.png");
+            byte[] recoverable = File.ReadAllBytes(imagePath);
+            byte[] damaged = recoverable.ToArray();
+            switch (failure)
+            {
+                case "ciphertext": damaged[^1] ^= 1; break;
+                case "version": damaged[6] = 99; break;
+                case "purpose": damaged[7] = 1; break;
+                case "truncated": damaged = damaged[..7]; break;
+            }
+            File.WriteAllBytes(imagePath, damaged);
+            var manager = new PinManager(() => settings, NullLogger.Instance);
+            try
+            {
+                int decodes = 0;
+                using (var service = Create(manager, NewStore(), settings, decode: bytes =>
+                {
+                    decodes++;
+                    return ImageCodec.TryDecodePng(bytes);
+                }))
+                {
+                    Wait(service.RestoreAsync());
+                    Assert.Equal(0, manager.Count);
+                    Assert.Equal(0, decodes);
+                    manager.PinRenderedText(Image(), "older live", false);
+                    manager.PinRenderedText(Image(), "newest live", false);
+                    service.SaveNow();
+                    AssertPendingAndLatest("newest live");
+                    service.SaveNow();
+                    AssertPendingAndLatest("newest live");
+                }
+                manager.CloseAllForExit();
+
+                using (var restarted = Create(manager, NewStore(), settings))
+                {
+                    Wait(restarted.RestoreAsync());
+                    Assert.Equal("newest live", Assert.Single(manager.SnapshotOpenPins()).Content.OriginalText);
+                    manager.PinRenderedText(Image(), "after restart", false);
+                    restarted.SaveNow();
+                    AssertPendingAndLatest("after restart");
+                    restarted.SaveNow();
+                    AssertPendingAndLatest("after restart");
+                }
+                manager.CloseAllForExit();
+
+                // Restoring access to the original envelope must make the retained record usable again.
+                File.WriteAllBytes(imagePath, recoverable);
+                using var recovered = Create(manager, NewStore(), settings);
+                Wait(recovered.RestoreAsync());
+                Assert.Equal(2, manager.Count);
+                Assert.Contains(manager.SnapshotOpenPins(), pin => pin.Content.OriginalText == original.OriginalText);
+            }
+            finally { manager.CloseAllForExit(); }
+
+            PinSessionStore NewStore() => new(workspace.Paths.PinSessionRoot, NullLogger.Instance, maxPins: 2);
+
+            void AssertPendingAndLatest(string latest)
+            {
+                PinSessionLoadResult saved = NewStore().LoadDetailed();
+                Assert.False(saved.ManifestUnreadable);
+                Assert.Equal(2, saved.Pins.Count);
+                PinSessionSnapshot pending = Assert.Single(saved.Pins, entry => entry.ProtectionPending);
+                Assert.Equal(original, pending.Pin);
+                Assert.Null(pending.PngBytes);
+                Assert.Contains(saved.Pins, entry => entry.Pin.OriginalText == latest && entry.PngBytes is not null);
+                Assert.Equal(damaged, File.ReadAllBytes(imagePath));
+                Assert.Equal(2, Directory.GetFiles(workspace.Paths.PinSessionRoot, "*.png").Length);
+            }
+        });
+    }
+
+    [Fact]
+    public void ProtectionPendingImage_ReservesKnownPlaintextBudgetAcrossRepeatedSaves()
+    {
+        StaTestHost.Run(() =>
+        {
+            using var workspace = new TempWorkspace();
+            var settings = new PinSettings { RestoreOpenPinsOnLaunch = true };
+            long budget = ImageCodec.EncodePng(Image()).LongLength;
+            var seed = new PinSessionStore(workspace.Paths.PinSessionRoot, NullLogger.Instance, maxPngBytes: budget);
+            Seed(seed);
+            PinSessionPin original = Assert.Single(seed.Load()).Pin;
+            string imagePath = Path.Combine(workspace.Paths.PinSessionRoot, $"{original.Id:N}.png");
+            byte[] damaged = File.ReadAllBytes(imagePath);
+            damaged[6] = 99;
+            File.WriteAllBytes(imagePath, damaged);
+            var store = new PinSessionStore(workspace.Paths.PinSessionRoot, NullLogger.Instance, maxPngBytes: budget);
+            var manager = new PinManager(() => settings, NullLogger.Instance);
+            int encodes = 0;
+            using var service = Create(manager, store, settings, image =>
+            {
+                encodes++;
+                return ImageCodec.EncodePng(image);
+            });
+            try
+            {
+                Wait(service.RestoreAsync());
+                manager.PinRenderedText(Image(), "over budget", false);
+                service.SaveNow();
+                service.SaveNow();
+                PinSessionSnapshot pending = Assert.Single(new PinSessionStore(workspace.Paths.PinSessionRoot,
+                    NullLogger.Instance, maxPngBytes: budget).Load());
+                Assert.Equal(original, pending.Pin);
+                Assert.True(pending.ProtectionPending);
+                Assert.Null(pending.PngBytes);
+                Assert.Equal(1, encodes);
+                Assert.Equal(damaged, File.ReadAllBytes(imagePath));
+                Assert.Single(Directory.GetFiles(workspace.Paths.PinSessionRoot, "*.png"));
+            }
+            finally { manager.CloseAllForExit(); }
+        });
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(7)]
+    [InlineData(-1)]
+    public void EmptyWhitespaceOrTruncatedManifest_PreservesFilesAcrossServiceSave(int length)
+    {
+        StaTestHost.Run(() =>
+        {
+            using var workspace = new TempWorkspace();
+            var settings = new PinSettings { RestoreOpenPinsOnLaunch = true };
+            var seed = new PinSessionStore(workspace.Paths.PinSessionRoot, NullLogger.Instance);
+            Seed(seed);
+            PinSessionPin original = Assert.Single(seed.Load()).Pin;
+            string manifestPath = Path.Combine(workspace.Paths.PinSessionRoot, "session.json");
+            string imagePath = Path.Combine(workspace.Paths.PinSessionRoot, $"{original.Id:N}.png");
+            byte[] image = File.ReadAllBytes(imagePath);
+            byte[] damaged = length < 0 ? Encoding.UTF8.GetBytes(" \t\r\n ") : File.ReadAllBytes(manifestPath)[..length];
+            File.WriteAllBytes(manifestPath, damaged);
+            var manager = new PinManager(() => settings, NullLogger.Instance);
+            using var service = Create(manager,
+                new PinSessionStore(workspace.Paths.PinSessionRoot, NullLogger.Instance), settings);
+            try
+            {
+                Wait(service.RestoreAsync());
+                Assert.Equal(0, manager.Count);
+                manager.PinRenderedText(Image(), "new live", false);
+                service.SaveNow();
+                service.SaveNow();
+                Assert.Equal(damaged, File.ReadAllBytes(manifestPath));
+                Assert.Equal(image, File.ReadAllBytes(imagePath));
+                Assert.Single(Directory.GetFiles(workspace.Paths.PinSessionRoot, "*.png"));
+                Assert.True(new PinSessionStore(workspace.Paths.PinSessionRoot, NullLogger.Instance)
+                    .LoadDetailed().ManifestUnreadable);
+            }
+            finally { manager.CloseAllForExit(); }
+        });
+    }
+
     [Fact]
     public void SettingOff_RetriesLockedFileCleanupWhileDisabled()
     {

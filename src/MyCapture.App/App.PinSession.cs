@@ -27,7 +27,7 @@ public partial class App
         }
         catch (Exception ex)
         {
-            _log?.LogWarning(ex, "Could not initialize the open-pin session");
+            _log?.LogWarning("Could not initialize the open-pin session ({FailureType})", ex.GetType().Name);
         }
     }
 
@@ -61,7 +61,7 @@ public partial class App
         }
         catch (Exception ex)
         {
-            _log?.LogWarning(ex, "Could not finish the open-pin session on exit");
+            _log?.LogWarning("Could not finish the open-pin session on exit ({FailureType})", ex.GetType().Name);
         }
     }
 }

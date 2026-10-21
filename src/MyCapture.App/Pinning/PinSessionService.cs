@@ -33,7 +33,7 @@ internal sealed class PinSessionService : IDisposable
     private readonly object _stateGate = new();
     private Task<PinSessionLoadResult>? _pendingRead;
     private Task _worker = Task.CompletedTask;
-    private IReadOnlyList<PinSessionPin> _unrestored = [];
+    private IReadOnlyList<PinSessionSnapshot> _unrestored = [];
     private bool _baselineLoaded;
     private bool _manifestUnreadable;
     private bool _pendingClear;
@@ -108,7 +108,7 @@ internal sealed class PinSessionService : IDisposable
             if (!IsGenerationCurrent(generation) || _baselineLoaded) return;
             _baselineLoaded = true;
             _manifestUnreadable = result.ManifestUnreadable;
-            _unrestored = result.Pins.Select(entry => entry.Pin).ToArray();
+            _unrestored = result.Pins.Select(entry => entry with { PngBytes = null }).ToArray();
         }
     }
 
@@ -124,7 +124,7 @@ internal sealed class PinSessionService : IDisposable
                 var corrupt = new HashSet<Guid>();
                 foreach (PinSessionSnapshot entry in loaded.Pins)
                 {
-                    // IO-unreadable records stay in _unrestored; they must keep their files.
+                    // IO-unreadable and protection-pending records keep their files without opening a window.
                     if (entry.PngBytes is not { } bytes) continue;
                     try
                     {
@@ -139,7 +139,7 @@ internal sealed class PinSessionService : IDisposable
                     catch (Exception ex)
                     {
                         corrupt.Add(entry.Pin.Id);
-                        _log.LogWarning(ex, "Could not decode saved pin {PinId}", entry.Pin.Id);
+                        _log.LogWarning("Could not decode saved pin {PinId} ({FailureType})", entry.Pin.Id, ex.GetType().Name);
                     }
                 }
                 return (Pins: result, Corrupt: corrupt);
@@ -157,15 +157,15 @@ internal sealed class PinSessionService : IDisposable
                             pin.ImageHeightDip, pin.Zoom, pin.Opacity, pin.Placement, pin.OpenedOrder));
                         consumed.Add(pin.Id);
                     }
-                    catch (Exception ex) { _log.LogWarning(ex, "Could not reopen saved pin {PinId}", pin.Id); }
+                    catch (Exception ex) { _log.LogWarning("Could not reopen saved pin {PinId} ({FailureType})", pin.Id, ex.GetType().Name); }
                 }
-                lock (_stateGate) _unrestored = _unrestored.Where(pin => !consumed.Contains(pin.Id)).ToArray();
+                lock (_stateGate) _unrestored = _unrestored.Where(entry => !consumed.Contains(entry.Pin.Id)).ToArray();
                 FinishRestore();
             }, DispatcherPriority.Background);
         }
         catch (Exception ex)
         {
-            _log.LogWarning(ex, "Could not restore the open-pin session");
+            _log.LogWarning("Could not restore the open-pin session ({FailureType})", ex.GetType().Name);
             if (!_dispatcher.HasShutdownStarted)
                 await _dispatcher.InvokeAsync(() => { if (IsGenerationCurrent(generation)) FinishRestore(); });
         }
@@ -230,7 +230,7 @@ internal sealed class PinSessionService : IDisposable
         {
             if (!_disposed && _enabled) QueueWork(CaptureRequest(save: true));
         }
-        catch (Exception ex) { _log.LogWarning(ex, "Could not capture the open-pin session for saving"); }
+        catch (Exception ex) { _log.LogWarning("Could not capture the open-pin session for saving ({FailureType})", ex.GetType().Name); }
     }
 
     private SaveRequest CaptureRequest(bool save)
@@ -293,20 +293,23 @@ internal sealed class PinSessionService : IDisposable
                 {
                     if (!CanCommit(request)) return;
                     _manifestUnreadable = false;
-                    _unrestored = retry.Pins.Select(entry => entry.Pin).ToArray();
+                    _unrestored = retry.Pins.Select(entry => entry with { PngBytes = null }).ToArray();
                 }
             }
-            IReadOnlyList<PinSessionPin> carried;
+            IReadOnlyList<PinSessionSnapshot> carried;
             lock (_stateGate) carried = _unrestored;
-            long carriedAge = carried.Select(pin => pin.OpenedOrder).DefaultIfEmpty().Max();
-            var candidates = carried.Select(pin => (Pin: pin, Live: (CapturedPin?)null))
-                .Concat(request.Pins.Select(pin => (Pin: pin.Pin with { OpenedOrder = carriedAge + pin.Pin.OpenedOrder }, Live: (CapturedPin?)pin)))
-                .Select((entry, index) => (entry.Pin, entry.Live, Index: index)).ToArray();
+            long carriedAge = carried.Select(entry => entry.Pin.OpenedOrder).DefaultIfEmpty().Max();
+            var candidates = carried.Select(entry => (entry.Pin, Live: (CapturedPin?)null, entry.ProtectionPending))
+                .Concat(request.Pins.Select(pin => (Pin: pin.Pin with { OpenedOrder = carriedAge + pin.Pin.OpenedOrder },
+                    Live: (CapturedPin?)pin, ProtectionPending: false)))
+                .Select((entry, index) => (entry.Pin, entry.Live, entry.ProtectionPending, Index: index)).ToArray();
             var admitted = new List<(int Index, PinSessionSnapshot Snapshot)>();
             var images = new HashSet<Guid>();
             long used = 0;
             int skipped = 0;
-            foreach (var candidate in candidates.OrderByDescending(entry => entry.Pin.OpenedOrder).ThenByDescending(entry => entry.Index))
+            // Recovery records reserve their slots within the same limit so newer live pins cannot orphan them.
+            foreach (var candidate in candidates.OrderByDescending(entry => entry.ProtectionPending)
+                .ThenByDescending(entry => entry.Pin.OpenedOrder).ThenByDescending(entry => entry.Index))
             {
                 if (!CanCommit(request)) return;
                 if (admitted.Count >= _store.MaxPins) { skipped++; continue; }
@@ -335,12 +338,12 @@ internal sealed class PinSessionService : IDisposable
                     }
                     used += length;
                 }
-                admitted.Add((candidate.Index, new PinSessionSnapshot(candidate.Pin, bytes)));
+                admitted.Add((candidate.Index, new PinSessionSnapshot(candidate.Pin, bytes, candidate.ProtectionPending)));
             }
             if (skipped > 0) _log.LogInformation("Skipped {Count} older open pins over the session budget", skipped);
             _store.Save(admitted.OrderBy(entry => entry.Index).Select(entry => entry.Snapshot).ToArray(), () => CanCommit(request));
         }
-        catch (Exception ex) { _log.LogWarning(ex, "Could not save the open-pin session"); }
+        catch (Exception ex) { _log.LogWarning("Could not save the open-pin session ({FailureType})", ex.GetType().Name); }
     }
 
     /// <summary>Waits for serialized persistence without work that needs the dispatcher.</summary>
@@ -361,7 +364,7 @@ internal sealed class PinSessionService : IDisposable
                 _log.LogWarning("Timed out saving open pins; retained the previously committed session");
             }
         }
-        catch (Exception ex) { _log.LogWarning(ex, "Could not finish saving the open-pin session"); }
+        catch (Exception ex) { _log.LogWarning("Could not finish saving the open-pin session ({FailureType})", ex.GetType().Name); }
     }
 
     private void MarkPendingClear()

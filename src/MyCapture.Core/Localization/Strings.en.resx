@@ -2838,7 +2838,7 @@ This cannot be undone.</value>
     <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
   </data>
   <data name="PinSession.RestoreLabel" xml:space="preserve"><value>Reopen open pins at the next launch</value></data>
-  <data name="PinSession.RestoreDescription" xml:space="preserve"><value>When MyCapture exits, each open pin's image and original text are saved in the app data folder on this PC and reopened in the same place at the next launch. Turning this off deletes the saved pins right away.</value></data>
+  <data name="PinSession.RestoreDescription" xml:space="preserve"><value>When MyCapture exits, each open pin's image and original text are encrypted so only this Windows user on this PC can read them, saved in the app data folder, and reopened in the same place at the next launch. Turning this off deletes the saved pins right away.</value></data>
   <data name="Text_F0CFD62F0971" xml:space="preserve">
     <value>Include pointer in recordings</value>
     <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
@@ -4068,6 +4068,7 @@ Delete {1} {1:plural:subfolder|subfolders}, {2} {2:plural:image|images}, and {3}
   <data name="Onboard_AfterCaptureTitle" xml:space="preserve"><value>After a capture</value></data>
   <data name="Welcome_FirstCaptureTitle" xml:space="preserve"><value>Try your first capture</value></data>
   <data name="Welcome_Skip" xml:space="preserve"><value>Skip</value></data>
+  <data name="Welcome_PinHint" xml:space="preserve"><value>Press {0} to pin what you copied or captured above other windows.</value></data>
   <data name="Onboard_FirstCaptureTip" xml:space="preserve"><value>Press P to pin it above other windows</value></data>
   <data name="Onboard_ReceiptKeyboard" xml:space="preserve"><value>Alt+Q to focus · Tab to move · Enter to run</value></data>
   <data name="Onboard_ReceiptKeyboardFallback" xml:space="preserve"><value>Alt+Tab to focus · Tab to move · Enter to run</value></data>

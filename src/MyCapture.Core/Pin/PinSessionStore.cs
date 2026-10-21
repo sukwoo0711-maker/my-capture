@@ -1,4 +1,6 @@
 using System.Buffers.Binary;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.Extensions.Logging;
@@ -25,7 +27,8 @@ public sealed record PinSessionPin(
     PinCodeDocument? CodeDocument = null);
 
 /// <param name="PngBytes">Null reuses this content's previously saved PNG.</param>
-public sealed record PinSessionSnapshot(PinSessionPin Pin, byte[]? PngBytes);
+/// <param name="ProtectionPending">The saved image could not be decrypted and must be kept for a later retry.</param>
+public sealed record PinSessionSnapshot(PinSessionPin Pin, byte[]? PngBytes, bool ProtectionPending = false);
 
 public sealed record PinSessionLoadResult(IReadOnlyList<PinSessionSnapshot> Pins, bool ManifestUnreadable);
 
@@ -38,6 +41,8 @@ public sealed class PinSessionStore
     // Optional rendering metadata is ignored by the 4.5.0 reader, which still restores the PNG.
     private const int SchemaVersion = 1;
     private const string ManifestName = "session.json";
+    // DPAPI adds a small envelope; bound the allocation before reading untrusted files.
+    private const int ProtectedImageOverheadLimit = 64 * 1024;
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
@@ -57,7 +62,9 @@ public sealed class PinSessionStore
     private readonly object _gate = new();
     private readonly Dictionary<Guid, ImageStamp> _knownImages = [];
     private HashSet<Guid>? _committedReferences;
+    private Dictionary<Guid, long> _committedImageLengths = [];
     private bool _manifestUnreadable;
+    private bool _manifestProtected;
 
     public PinSessionStore(string root, ILogger log,
         int maxPins = DefaultMaxPins, long maxPngBytes = DefaultMaxPngBytes)
@@ -86,6 +93,7 @@ public sealed class PinSessionStore
             if (manifest is null) return new([], ManifestUnreadable: false);
             var restored = new List<(int Index, PinSessionSnapshot Snapshot)>();
             var images = new Dictionary<Guid, byte[]?>();
+            var protectionPending = new HashSet<Guid>();
             long totalBytes = 0;
             int budgetSkipped = 0;
             foreach (int i in NewestFirst(manifest.Pins))
@@ -107,19 +115,50 @@ public sealed class PinSessionStore
                     if (!images.TryGetValue(pin.Id, out byte[]? bytes))
                     {
                         string path = ImagePath(pin.Id);
-                        length = ReadImageLength(pin.Id, path);
+                        // The hook models a metadata failure before any image bytes are read.
+                        length = ReadImageLengthForTest?.Invoke(pin.Id) ?? 0;
                         if (length > _maxPngBytes - totalBytes)
                         {
                             budgetSkipped++;
                             continue;
                         }
-                        bytes = File.ReadAllBytes(path);
+                        if (length == 0 && _knownImages.TryGetValue(pin.Id, out ImageStamp known))
+                        {
+                            var info = new FileInfo(path);
+                            if (known.DiskLength == info.Length && known.LastWriteTimeUtc == info.LastWriteTimeUtc)
+                                length = known.Length;
+                        }
+                        if (length > _maxPngBytes - totalBytes)
+                        {
+                            budgetSkipped++;
+                            continue;
+                        }
+                        bytes = PinSessionProtection.Read(ReadImageFile(path), PinSessionFilePurpose.Image,
+                            out bool isProtected);
                         if (!IsPng(bytes)) throw new InvalidDataException("Invalid PNG data.");
+                        length = bytes.LongLength;
+                        if (length > _maxPngBytes - totalBytes)
+                        {
+                            budgetSkipped++;
+                            continue;
+                        }
                         images.Add(pin.Id, bytes);
                         totalBytes += bytes.LongLength;
-                        RememberImage(pin.Id, path);
+                        RememberImage(pin.Id, path, length, isProtected);
                     }
-                    restored.Add((i, new PinSessionSnapshot(pin, bytes)));
+                    restored.Add((i, new PinSessionSnapshot(pin, bytes, protectionPending.Contains(pin.Id))));
+                }
+                catch (CryptographicException ex)
+                {
+                    // A different user profile or an unsupported envelope is not evidence
+                    // that the image is corrupt. Keep its record without restoring a window.
+                    _knownImages.Remove(pin.Id);
+                    images[pin.Id] = null;
+                    protectionPending.Add(pin.Id);
+                    if (_manifestProtected && _committedImageLengths.TryGetValue(pin.Id, out long savedLength))
+                        totalBytes = Math.Min(_maxPngBytes, totalBytes + savedLength);
+                    restored.Add((i, new PinSessionSnapshot(pin, null, ProtectionPending: true)));
+                    _log.LogWarning("Kept protected saved pin {PinId} for a later decryption retry ({FailureType}).", pin.Id, ex.GetType().Name);
                 }
                 catch (Exception ex) when (IsTransientReadFailure(ex))
                 {
@@ -127,13 +166,15 @@ public sealed class PinSessionStore
                     // Preserve unmeasurable committed files without evicting other records;
                     // the byte budget bounds measurable images until metadata is readable again.
                     images[pin.Id] = null;
+                    if (length == 0 && TryGetImageLength(pin.Id, out long knownLength)) length = knownLength;
                     totalBytes = Math.Min(_maxPngBytes, totalBytes + length);
                     restored.Add((i, new PinSessionSnapshot(pin, null)));
-                    _log.LogWarning(ex, "Kept temporarily unreadable saved pin {PinId} for a later save.", pin.Id);
+                    _log.LogWarning("Kept temporarily unreadable saved pin {PinId} for a later save ({FailureType}).", pin.Id, ex.GetType().Name);
                 }
                 catch (Exception ex) when (IsStorageFailure(ex))
                 {
-                    _log.LogWarning(ex, "Skipped missing or corrupt saved pin {PinId}.", pin.Id);
+                    _knownImages.Remove(pin.Id);
+                    _log.LogWarning("Skipped missing or corrupt saved pin {PinId} ({FailureType}).", pin.Id, ex.GetType().Name);
                 }
             }
             LogBudgetSkipped(budgetSkipped);
@@ -156,9 +197,11 @@ public sealed class PinSessionStore
                 ValidatedFilePaths.CreateDirectory(_root);
                 var saved = new List<(int Index, PinSessionPin Pin)>();
                 var retainedImages = new HashSet<Guid>();
+                var retainedLengths = new Dictionary<Guid, long>();
                 long totalBytes = 0;
                 int budgetSkipped = 0;
-                foreach (int i in NewestFirst(pins.Select(snapshot => snapshot.Pin).ToList()))
+                foreach (int i in NewestFirst(pins.Select(snapshot => snapshot.Pin).ToList())
+                    .OrderByDescending(index => pins[index].ProtectionPending))
                 {
                     PinSessionSnapshot snapshot = pins[i];
                     PinSessionPin pin = snapshot.Pin;
@@ -178,9 +221,18 @@ public sealed class PinSessionStore
                         {
                             bool reuse;
                             long length;
-                            try { reuse = TryGetExistingImageLength(pin.Id, out length); }
-                            catch (Exception ex) when ((snapshot.PngBytes is null || _committedReferences?.Contains(pin.Id) == true)
-                                && IsTransientReadFailure(ex))
+                            byte[]? legacyBytes;
+                            try { reuse = TryGetExistingImageLength(pin.Id, out length, out legacyBytes); }
+                            catch (CryptographicException) when (!snapshot.ProtectionPending && snapshot.PngBytes is not null)
+                            {
+                                // A live pin still has its original pixels and can repair a damaged envelope.
+                                reuse = false;
+                                length = 0;
+                                legacyBytes = null;
+                            }
+                            catch (Exception ex) when ((snapshot.PngBytes is null || snapshot.ProtectionPending
+                                || _committedReferences?.Contains(pin.Id) == true)
+                                && (ex is CryptographicException || IsTransientReadFailure(ex)))
                             {
                                 // Carry a pending-read record unchanged instead of making its image
                                 // an orphan merely because another process still has it locked.
@@ -188,9 +240,12 @@ public sealed class PinSessionStore
                                 saved.Add((i, pin));
                                 // Unknown committed bytes must not consume the entire budget and
                                 // silently remove unrelated, readable records from the session.
-                                long reserved = TryGetImageLength(pin.Id, out long knownLength) ? knownLength : 0;
+                                long reserved = ex is CryptographicException
+                                    ? (_manifestProtected ? _committedImageLengths.GetValueOrDefault(pin.Id) : 0)
+                                    : TryGetImageLength(pin.Id, out long knownLength) ? knownLength : 0;
+                                if (reserved > 0) retainedLengths[pin.Id] = reserved;
                                 totalBytes = Math.Min(_maxPngBytes, totalBytes + reserved);
-                                _log.LogWarning(ex, "Kept temporarily unreadable saved pin {PinId} during save.", pin.Id);
+                                _log.LogWarning("Kept temporarily unreadable saved pin {PinId} during save ({FailureType}).", pin.Id, ex.GetType().Name);
                                 continue;
                             }
                             if (!reuse)
@@ -204,22 +259,32 @@ public sealed class PinSessionStore
                                 budgetSkipped++;
                                 continue;
                             }
-                            if (!reuse)
+                            if (!reuse || legacyBytes is not null)
                             {
                                 if (canCommit?.Invoke() == false) return false;
                                 string path = ImagePath(pin.Id);
-                                AtomicFile.WriteExportBytes(path, snapshot.PngBytes!);
+                                byte[] protectedBytes = PinSessionProtection.Protect(legacyBytes ?? snapshot.PngBytes!,
+                                    PinSessionFilePurpose.Image);
+                                try { AtomicFile.WriteExportBytes(path, protectedBytes); }
+                                catch (Exception ex) when (legacyBytes is not null && IsTransientReadFailure(ex))
+                                {
+                                    // A readable legacy file can still deny replacement. Do not commit
+                                    // a manifest that drops its record just because migration is blocked.
+                                    _log.LogWarning("Could not migrate a saved pin image ({FailureType}).", ex.GetType().Name);
+                                    return false;
+                                }
                                 writtenImages.Add(pin.Id);
-                                RememberImage(pin.Id, path);
+                                RememberImage(pin.Id, path, length, isProtected: true);
                             }
                             totalBytes += length;
                             retainedImages.Add(pin.Id);
+                            retainedLengths[pin.Id] = length;
                         }
                         saved.Add((i, pin));
                     }
                     catch (Exception ex) when (IsStorageFailure(ex))
                     {
-                        _log.LogWarning(ex, "Could not save pin {PinId}; skipped this pin.", pin.Id);
+                        _log.LogWarning("Could not save pin {PinId}; skipped this pin ({FailureType}).", pin.Id, ex.GetType().Name);
                     }
                 }
                 List<PinSessionPin> orderedPins = saved.OrderBy(item => item.Index).Select(item => item.Pin).ToList();
@@ -227,20 +292,23 @@ public sealed class PinSessionStore
                 // after the atomic replacement succeeds, keeping the old session recoverable.
                 if (canCommit?.Invoke() == false) return false;
                 if (!AtomicFile.TryWriteExportBytes(FilePath(ManifestName, ".json"),
-                    JsonSerializer.SerializeToUtf8Bytes(new SessionManifest(SchemaVersion, orderedPins), JsonOptions), () =>
+                    PinSessionProtection.Protect(JsonSerializer.SerializeToUtf8Bytes(
+                        new SessionManifest(SchemaVersion, orderedPins, retainedLengths), JsonOptions), PinSessionFilePurpose.Manifest), () =>
                     {
                         BeforeManifestCommitForTest?.Invoke();
                         return canCommit?.Invoke() != false;
                     })) return false;
                 committed = true;
                 _committedReferences = retainedImages;
+                _committedImageLengths = retainedLengths;
+                _manifestProtected = true;
                 LogBudgetSkipped(budgetSkipped);
                 CleanupFiles(retainedImages, clear: false);
                 return true;
             }
             catch (Exception ex) when (IsStorageFailure(ex))
             {
-                _log.LogWarning(ex, "Could not save the open-pin session.");
+                _log.LogWarning("Could not save the open-pin session ({FailureType}).", ex.GetType().Name);
                 return committed;
             }
             finally
@@ -250,7 +318,7 @@ public sealed class PinSessionStore
         }
     }
 
-    /// <summary>Reads filesystem metadata only; does not open or retain PNG bytes.</summary>
+    /// <summary>Returns the plaintext PNG length, using validated metadata or decrypting an uncached image.</summary>
     public bool TryGetImageLength(Guid id, out long length)
     {
         lock (_gate)
@@ -259,7 +327,39 @@ public sealed class PinSessionStore
             if (id == Guid.Empty) return false;
             try
             {
-                length = ReadImageLength(id, ImagePath(id));
+                if (ReadImageLengthForTest is { } readLength) length = readLength(id);
+                else
+                {
+                    string path = ImagePath(id);
+                    var info = new FileInfo(path);
+                    long diskLength = info.Length;
+                    if (diskLength > ImageReadLimit) return false;
+                    if (_knownImages.TryGetValue(id, out ImageStamp known)
+                        && known.DiskLength == diskLength && known.LastWriteTimeUtc == info.LastWriteTimeUtc)
+                        length = known.Length;
+                    else
+                    {
+                        try
+                        {
+                            byte[] bytes = PinSessionProtection.Read(ReadImageFile(path), PinSessionFilePurpose.Image,
+                                out bool isProtected);
+                            if (!IsPng(bytes)) return false;
+                            length = bytes.LongLength;
+                            RememberImage(id, path, length, isProtected);
+                        }
+                        catch (Exception ex) when (ex is CryptographicException || IsTransientReadFailure(ex))
+                        {
+                            // The encrypted manifest carries lengths for locked or protection-pending images.
+                            // A legacy manifest has no lengths, and its PNG length equals its disk length.
+                            if (_committedReferences is null && !TryReadManifest(out _)) return false;
+                            if ((ex is not CryptographicException || _manifestProtected)
+                                && _committedImageLengths.TryGetValue(id, out long savedLength)) length = savedLength;
+                            else if (IsTransientReadFailure(ex) && !_manifestProtected
+                                && _committedReferences?.Contains(id) == true) length = diskLength;
+                            else return false;
+                        }
+                    }
+                }
                 return length > 0;
             }
             catch (Exception ex) when (IsStorageFailure(ex))
@@ -278,10 +378,10 @@ public sealed class PinSessionStore
     {
         lock (_gate)
         {
-            try { return id != Guid.Empty && TryGetExistingImageLength(id, out _); }
+            try { return id != Guid.Empty && TryGetExistingImageLength(id, out _, out _); }
             catch (Exception ex) when (IsStorageFailure(ex))
             {
-                _log.LogWarning(ex, "Could not reuse saved pin image {PinId}.", id);
+                _log.LogWarning("Could not reuse saved pin image {PinId} ({FailureType}).", id, ex.GetType().Name);
                 return false;
             }
         }
@@ -295,44 +395,88 @@ public sealed class PinSessionStore
             {
                 bool success = CleanupFiles([], clear: true);
                 _knownImages.Clear();
+                _committedImageLengths.Clear();
+                _manifestProtected = false;
                 _committedReferences = success ? [] : null;
                 if (success) _manifestUnreadable = false;
                 return success;
             }
             catch (Exception ex) when (IsStorageFailure(ex))
             {
-                _log.LogWarning(ex, "Could not clear the saved pin session.");
+                _log.LogWarning("Could not clear the saved pin session ({FailureType}).", ex.GetType().Name);
                 return false;
             }
         }
     }
 
-    private bool TryGetExistingImageLength(Guid id, out long length)
+    private bool TryGetExistingImageLength(Guid id, out long length, out byte[]? legacyBytes)
     {
+        length = 0;
+        legacyBytes = null;
         string path = ImagePath(id);
         var info = new FileInfo(path);
-        try { length = ReadImageLength(id, path); }
+        long diskLength;
+        try
+        {
+            _ = ReadImageLengthForTest?.Invoke(id);
+            diskLength = info.Length;
+        }
         catch (Exception ex) when (ex is FileNotFoundException or DirectoryNotFoundException)
         {
             length = 0;
             return false;
         }
-        if (length <= 0 || length > _maxPngBytes) return false;
-        var stamp = new ImageStamp(length, info.LastWriteTimeUtc);
-        if (_knownImages.TryGetValue(id, out ImageStamp known) && known == stamp) return true;
-        if (!IsPng(File.ReadAllBytes(path))) return false;
-        _knownImages[id] = stamp;
-        return true;
+        if (diskLength > ImageReadLimit) return false;
+        if (_knownImages.TryGetValue(id, out ImageStamp known) && known.IsProtected
+            && known.DiskLength == diskLength && known.LastWriteTimeUtc == info.LastWriteTimeUtc)
+        {
+            length = known.Length;
+            return length > 0 && length <= _maxPngBytes;
+        }
+        try
+        {
+            byte[] bytes = PinSessionProtection.Read(ReadImageFile(path), PinSessionFilePurpose.Image,
+                out bool isProtected);
+            if (!IsPng(bytes)) return false;
+            length = bytes.LongLength;
+            if (length <= 0 || length > _maxPngBytes) return false;
+            RememberImage(id, path, length, isProtected);
+            if (!isProtected) legacyBytes = bytes;
+            return true;
+        }
+        catch (CryptographicException)
+        {
+            // Save must distinguish an unreadable envelope from a decoded, invalid PNG.
+            _knownImages.Remove(id);
+            throw;
+        }
+        catch (InvalidDataException ex)
+        {
+            _knownImages.Remove(id);
+            _log.LogWarning("Could not reuse protected pin image {PinId} ({FailureType}).", id, ex.GetType().Name);
+            return false;
+        }
     }
 
-    private void RememberImage(Guid id, string path)
+    private void RememberImage(Guid id, string path, long length, bool isProtected)
     {
         var info = new FileInfo(path);
-        _knownImages[id] = new ImageStamp(info.Length, info.LastWriteTimeUtc);
+        _knownImages[id] = new ImageStamp(info.Length, info.LastWriteTimeUtc, length, isProtected);
     }
 
-    private long ReadImageLength(Guid id, string path) =>
-        ReadImageLengthForTest?.Invoke(id) ?? new FileInfo(path).Length;
+    private byte[] ReadImageFile(string path)
+    {
+        using var stream = File.OpenRead(path);
+        long length = stream.Length;
+        if (length > ImageReadLimit) throw new InvalidDataException("Saved pin image exceeds its size limit.");
+        byte[] bytes = new byte[(int)length];
+        stream.ReadExactly(bytes);
+        if (stream.ReadByte() != -1) throw new InvalidDataException("Saved pin image changed while reading.");
+        return bytes;
+    }
+
+    private long ImageReadLimit =>
+        Math.Min(_maxPngBytes, Array.MaxLength - ProtectedImageOverheadLimit) + ProtectedImageOverheadLimit;
 
     private bool CleanupFiles(HashSet<Guid> retainedImages, bool clear)
     {
@@ -360,7 +504,7 @@ public sealed class PinSessionStore
             catch (Exception ex) when (IsStorageFailure(ex))
             {
                 success = false;
-                _log.LogWarning(ex, "Could not remove an obsolete saved pin file.");
+                _log.LogWarning("Could not remove an obsolete saved pin file ({FailureType}).", ex.GetType().Name);
             }
         }
         return success;
@@ -369,10 +513,19 @@ public sealed class PinSessionStore
     private bool TryReadManifest(out SessionManifest? manifest)
     {
         manifest = null;
+        bool isProtected = false;
         try
         {
-            using var stream = File.OpenRead(FilePath(ManifestName, ".json"));
-            using JsonDocument document = JsonDocument.Parse(stream);
+            byte[] bytes = PinSessionProtection.Read(File.ReadAllBytes(FilePath(ManifestName, ".json")),
+                PinSessionFilePurpose.Manifest, out isProtected);
+            if (!isProtected && !IsLegacyManifest(bytes))
+            {
+                isProtected = true;
+                throw new CryptographicException("Unrecognized pin session protection header.");
+            }
+            // JSON stream parsing accepted a UTF-8 BOM in legacy manifests.
+            if (bytes.AsSpan().StartsWith(new byte[] { 239, 187, 191 })) bytes = bytes[3..];
+            using JsonDocument document = JsonDocument.Parse(bytes);
             JsonElement root = document.RootElement;
             if (root.ValueKind != JsonValueKind.Object
                 || !root.TryGetProperty("schemaVersion", out JsonElement version)
@@ -390,26 +543,39 @@ public sealed class PinSessionStore
                 }
                 catch (JsonException ex)
                 {
-                    _log.LogWarning(ex, "Skipped an invalid saved pin record.");
+                    _log.LogWarning("Skipped an invalid saved pin record ({FailureType}).", ex.GetType().Name);
                 }
             }
-            manifest = new SessionManifest(schemaVersion, records);
+            var imageLengths = new Dictionary<Guid, long>();
+            if (root.TryGetProperty("imageLengths", out JsonElement lengths) && lengths.ValueKind == JsonValueKind.Object)
+            {
+                foreach (JsonProperty property in lengths.EnumerateObject())
+                    if (Guid.TryParse(property.Name, out Guid id) && property.Value.ValueKind == JsonValueKind.Number
+                        && property.Value.TryGetInt64(out long length) && length > 0 && length <= Array.MaxLength)
+                        imageLengths[id] = length;
+            }
+            manifest = new SessionManifest(schemaVersion, records, imageLengths);
             _committedReferences = manifest.Pins.Where(pin => pin is not null).Select(pin => pin.Id).ToHashSet();
+            _committedImageLengths = imageLengths;
+            _manifestProtected = isProtected;
             _manifestUnreadable = false;
             return true;
         }
         catch (Exception ex) when (ex is FileNotFoundException or DirectoryNotFoundException)
         {
             _committedReferences = [];
+            _committedImageLengths.Clear();
+            _manifestProtected = false;
             _manifestUnreadable = false;
             return true;
         }
         catch (Exception ex) when (IsStorageFailure(ex))
         {
             manifest = null;
-            _manifestUnreadable = IsTransientReadFailure(ex);
+            _manifestUnreadable = isProtected || ex is CryptographicException || IsTransientReadFailure(ex);
             _committedReferences = _manifestUnreadable ? null : [];
-            _log.LogWarning(ex, "Could not read the saved pin session; no pins were restored.");
+            _committedImageLengths.Clear();
+            _log.LogWarning("Could not read the saved pin session; no pins were restored ({FailureType}).", ex.GetType().Name);
             return !_manifestUnreadable;
         }
     }
@@ -428,9 +594,21 @@ public sealed class PinSessionStore
             }
             catch (Exception ex) when (IsStorageFailure(ex))
             {
-                _log.LogWarning(ex, "Could not remove an uncommitted saved pin image {PinId}.", id);
+                _log.LogWarning("Could not remove an uncommitted saved pin image {PinId} ({FailureType}).", id, ex.GetType().Name);
             }
         }
+    }
+
+    private static bool IsLegacyManifest(byte[] bytes)
+    {
+        string text;
+        try { text = new UTF8Encoding(false, true).GetString(bytes); }
+        catch (DecoderFallbackException) { return false; }
+        ReadOnlySpan<char> candidate = text.AsSpan().TrimStart();
+        if (candidate.Length > 0 && candidate[0] == '\uFEFF') candidate = candidate[1..].TrimStart();
+        if (candidate.Length == 0) return false;
+        return candidate.IndexOf('\0') < 0 && candidate[0] is '{' or '[' or '"' or 'n' or 't' or 'f' or '-'
+            or >= '0' and <= '9';
     }
 
     private static bool IsOwnedTemporaryName(string name)
@@ -455,7 +633,8 @@ public sealed class PinSessionStore
     }
 
     private static bool IsStorageFailure(Exception ex) =>
-        ex is IOException or InvalidDataException or UnauthorizedAccessException or JsonException or ArgumentException or NotSupportedException;
+        ex is IOException or InvalidDataException or UnauthorizedAccessException or JsonException or ArgumentException
+            or NotSupportedException or CryptographicException;
 
     private static bool IsTransientReadFailure(Exception ex) =>
         ex is UnauthorizedAccessException || (ex is IOException && ex is not FileNotFoundException and not DirectoryNotFoundException);
@@ -538,6 +717,6 @@ public sealed class PinSessionStore
         return table;
     }
 
-    private sealed record SessionManifest(int SchemaVersion, List<PinSessionPin> Pins);
-    private readonly record struct ImageStamp(long Length, DateTime LastWriteTimeUtc);
+    private sealed record SessionManifest(int SchemaVersion, List<PinSessionPin> Pins, Dictionary<Guid, long> ImageLengths);
+    private readonly record struct ImageStamp(long DiskLength, DateTime LastWriteTimeUtc, long Length, bool IsProtected);
 }
