@@ -19,14 +19,6 @@ namespace MyCapture.App.Tests;
 
 public sealed class RecordingCaptureLifecycleTests
 {
-    // Bound for waits on the recorder's capture thread. These recorders use the default backend, Windows
-    // Graphics Capture: the first grab waits up to 5 s for the session to open, including the process's
-    // first borderless-access request, and then up to 2 s for a frame before RegionFrameGrabber falls
-    // back to GDI. The thread also runs below normal priority, so on a busy runner each of its steps can
-    // wait seconds for a CPU. On hosted runners the first recording in a test process has outlasted the
-    // 5 s these waits allowed. Each wait still returns as soon as its event arrives.
-    private static readonly TimeSpan CaptureThreadTimeout = TimeSpan.FromSeconds(30);
-
     [Fact]
     public void SlowInitialization_StopStillEmitsZeroFrameAndExcludesStartupFromDuration() => StaTestHost.Run(() =>
     {
@@ -43,14 +35,14 @@ public sealed class RecordingCaptureLifecycleTests
             return encoder;
         }, NullLogger.Instance);
         recorder.Start(fixture.Region, "unused.mp4", new RecordingSettings());
-        Assert.True(initializing.Wait(CaptureThreadTimeout));
+        Assert.True(initializing.Wait(RecordingTestTimeouts.CaptureThread));
         Assert.False(recorder.IsReady);
         Assert.Equal(TimeSpan.Zero, recorder.RecordedElapsed);
         Thread.Sleep(250);
         Task<RecordingResult> stopping = Task.Run(recorder.Stop);
         Thread.Sleep(30);
         release.Set();
-        Assert.True(stopping.Wait(CaptureThreadTimeout));
+        Assert.True(stopping.Wait(RecordingTestTimeouts.CaptureThread));
         RecordingResult result = stopping.Result;
         Assert.Equal(new[] { 0d }, encoder.Timestamps);
         Assert.True(encoder.Completed);
@@ -100,13 +92,13 @@ public sealed class RecordingCaptureLifecycleTests
         var encoder = new Encoder { OnWrite = () => { written.Set(); if (fail) throw new IOException("synthetic encoder failure"); } };
         using var recorder = new RegionRecorder(new RegionFrameGrabber(fixture.Engine, false), _ => encoder, NullLogger.Instance);
         recorder.Start(fixture.Region, "unused.mp4", new RecordingSettings());
-        Assert.True(written.Wait(CaptureThreadTimeout));
+        Assert.True(written.Wait(RecordingTestTimeouts.CaptureThread));
         Assert.Throws<InvalidOperationException>(() => recorder.Stop());
         Assert.True(encoder.Disposed);
         fail = false;
         written.Reset();
         recorder.Start(fixture.Region, "unused-again.mp4", new RecordingSettings());
-        Assert.True(written.Wait(CaptureThreadTimeout));
+        Assert.True(written.Wait(RecordingTestTimeouts.CaptureThread));
         Assert.True(recorder.Stop().EmittedFrames >= 1);
     });
 
@@ -165,12 +157,12 @@ public sealed class RecordingCaptureLifecycleTests
         {
             controls.Show();
             typeof(RecordingControlWindow).GetMethod("OnPrimaryClicked", flags)!.Invoke(controls, null);
-            Assert.True(written.Wait(CaptureThreadTimeout));
+            Assert.True(written.Wait(RecordingTestTimeouts.CaptureThread));
             Assert.True(recording.CanCaptureStill);
             var frame = new FrozenFrame(fixture.Engine.CaptureRegion(fixture.Region, false), fixture.Region, null, 0);
             capture.StartWithSelection(frame, new RectD(0, 0, 40, 40));
             controls.RequestStop();
-            Assert.True(completing.Wait(CaptureThreadTimeout));
+            Assert.True(completing.Wait(RecordingTestTimeouts.CaptureThread));
             Assert.False(recording.CanCaptureStill);
             Assert.True(recording.RequiresCaptureExclusion);
             persistence.SetResult();
@@ -184,7 +176,7 @@ public sealed class RecordingCaptureLifecycleTests
         {
             finish.Set();
             persistence.TrySetResult();
-            DateTime deadline = DateTime.UtcNow + CaptureThreadTimeout;
+            DateTime deadline = DateTime.UtcNow + RecordingTestTimeouts.CaptureThread;
             while (controls.IsRecording && DateTime.UtcNow < deadline) SyntheticCaptureFixture.Pump(10);
             SyntheticCaptureFixture.Pump(30);
             capture.Cancel();

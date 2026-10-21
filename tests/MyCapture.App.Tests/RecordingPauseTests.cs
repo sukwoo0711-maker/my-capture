@@ -44,7 +44,7 @@ public sealed class RecordingPauseTests : KoreanCaptionTest
         Assert.True(recorder.Pause());
         Assert.True(recorder.IsPaused);
         Assert.False(recorder.Pause());
-        Assert.True(recorder.WaitUntilCaptureParked(TimeSpan.FromSeconds(5)));
+        Assert.True(recorder.WaitUntilCaptureParked(RecordingTestTimeouts.CaptureThread));
         time.Advance(5_000);
         Thread.Sleep(300); // several capture-loop wake-ups while paused
         Assert.Equal(11, sink.Count);
@@ -79,7 +79,7 @@ public sealed class RecordingPauseTests : KoreanCaptionTest
         sink.WaitForCount(1);
         AdvanceFrames(time, sink, 5);
         Assert.True(recorder.Pause());
-        Assert.True(recorder.WaitUntilCaptureParked(TimeSpan.FromSeconds(5)));
+        Assert.True(recorder.WaitUntilCaptureParked(RecordingTestTimeouts.CaptureThread));
         // Long idle: the encoder receives nothing while paused, however much time passes.
         time.Advance(3_600_000);
         Thread.Sleep(200);
@@ -115,12 +115,12 @@ public sealed class RecordingPauseTests : KoreanCaptionTest
             time);
 
         recorder.Start(new RectD(0, 0, 64, 48), "pause-startup.mp4", new RecordingSettings { FrameRate = RecordingFrameRate.Fps10 });
-        Assert.True(factoryEntered.Wait(TimeSpan.FromSeconds(5)));
+        Assert.True(factoryEntered.Wait(RecordingTestTimeouts.CaptureThread));
         Assert.True(recorder.Pause());
         release.Set();
 
         sink.WaitForCount(1);
-        Assert.True(recorder.WaitUntilCaptureParked(TimeSpan.FromSeconds(5)));
+        Assert.True(recorder.WaitUntilCaptureParked(RecordingTestTimeouts.CaptureThread));
         time.Advance(2_000);
         Thread.Sleep(200);
         Assert.Equal(1, sink.Count);
@@ -461,7 +461,7 @@ public sealed class RecordingPauseTests : KoreanCaptionTest
 
         internal void WaitForCount(int count)
         {
-            long deadline = Environment.TickCount64 + 5_000;
+            long deadline = Environment.TickCount64 + (long)RecordingTestTimeouts.CaptureThread.TotalMilliseconds;
             lock (_timestamps)
             {
                 while (_timestamps.Count < count)
