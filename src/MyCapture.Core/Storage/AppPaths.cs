@@ -61,6 +61,8 @@ public sealed class AppPaths
 
     public string LogsRoot => Path.Combine(DataRoot, "logs");
 
+    public string PinSessionRoot => Path.Combine(DataRoot, "pins");
+
     /// <summary>
     /// Standard per-user locations, or the package's own folders for the Microsoft Store build.
     /// </summary>

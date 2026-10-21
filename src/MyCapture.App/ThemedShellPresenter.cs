@@ -1,5 +1,6 @@
 using System.Windows;
 using System.Windows.Automation;
+using System.Windows.Automation.Peers;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Interop;
@@ -19,7 +20,7 @@ namespace MyCapture.App;
 /// <c>Shadow.Card</c>) and appear at the bottom right of the monitor the pointer is on, so they
 /// show up where the user is working rather than on the primary monitor.
 /// </remarks>
-internal sealed class ThemedShellPresenter(Func<bool> suppressNotification, Func<bool>? suppressColorCopy = null) : IDisposable
+internal sealed class ThemedShellPresenter(Func<bool> suppressNotification, Func<bool>? suppressColorCopy = null, ReceiptKeyboardRouter? keyboardRouter = null) : IDisposable
 {
     /// <summary>The transparent band around a notification card that its shadow draws into.</summary>
     internal const double ShadowMargin = 12;
@@ -35,6 +36,9 @@ internal sealed class ThemedShellPresenter(Func<bool> suppressNotification, Func
         new(WindowsFeatureSupport.WindowCornerRadiusDip(Environment.OSVersion.Version.Build));
 
     private Window? _toast;
+    private ReceiptKeyboardSession? _receiptKeyboardSession;
+    internal bool HasNotification => _toast is not null;
+    internal event Action? NotificationDismissed;
 
     /// <summary>Raised whenever a tray-owned surface (command menu) has just left the screen,
     /// so a capture starting immediately afterwards can wait out the dismissal.</summary>
@@ -50,7 +54,7 @@ internal sealed class ThemedShellPresenter(Func<bool> suppressNotification, Func
     /// with <c>IsEnabled</c> false stays visible but cannot be invoked; its <c>ToolTip</c> says why.
     /// </summary>
     internal sealed record MenuEntry(string Label, Action? Action, IReadOnlyList<MenuEntry>? Children = null, string Gesture = "",
-        bool IsEnabled = true, string ToolTip = "")
+        bool IsEnabled = true, string ToolTip = "", bool LiteralLabel = false)
     {
         /// <summary>A divider between groups; it runs nothing.</summary>
         internal static MenuEntry Separator { get; } = new(string.Empty, null) { IsSeparator = true };
@@ -58,10 +62,17 @@ internal sealed class ThemedShellPresenter(Func<bool> suppressNotification, Func
         internal bool IsSeparator { get; private init; }
     }
 
-    internal void ShowNotification(string title, string message, TrayBalloonKind kind)
+    internal void ShowNotification(string title, string message, TrayBalloonKind kind) =>
+        ShowNotification(title, message, kind, answersCommand: false);
+
+    /// <param name="answersCommand">
+    /// The notice answers a command the user just gave, such as a capture that could not start, so it
+    /// shows even during a capture or recording session, which holds other notifications back.
+    /// </param>
+    internal void ShowNotification(string title, string message, TrayBalloonKind kind, bool answersCommand)
     {
         Dismiss();
-        if (suppressNotification()) return;
+        if (!answersCommand && suppressNotification()) return;
         var content = new StackPanel();
         content.Children.Add(Heading(title));
         content.Children.Add(Body(message));
@@ -124,13 +135,26 @@ internal sealed class ThemedShellPresenter(Func<bool> suppressNotification, Func
             Dismiss();
             e.Handled = true;
         };
-        _toast = window;
+        TrackNotification(window);
         _countdown ??= new FeedbackCountdown(window.Dispatcher,
             () => _toast is { } toast && (toast.IsMouseOver || toast.IsKeyboardFocusWithin), Dismiss);
         _toastKind = kind;
         window.Show();
         _countdown.Start(FeedbackTiming.DisplayTime(kind));
         if (window.Content is UIElement content) FeedbackTiming.Announce(content, announcement, kind, "MyCapture.Shell.Notification");
+    }
+
+    internal void TrackNotification(Window window)
+    {
+        _toast = window;
+        window.Closed += (_, _) =>
+        {
+            if (!ReferenceEquals(_toast, window)) return;
+            _toast = null;
+            _countdown?.Stop();
+            _receiptKeyboardSession = null;
+            NotificationDismissed?.Invoke();
+        };
     }
 
     private FeedbackKind _toastKind;
@@ -145,24 +169,121 @@ internal sealed class ThemedShellPresenter(Func<bool> suppressNotification, Func
     /// <summary>Test hook: spends display time as the countdown's clock would.</summary>
     internal void AdvanceNotificationForTest(TimeSpan elapsed) => _countdown?.Advance(elapsed);
 
-    internal void ShowCaptureReceipt(string message, Action openLibrary)
+    internal bool ShowCaptureReceipt(string message, Action openLibrary, string? tip = null, Action? pin = null, bool answersCommand = false, string? actionTooltip = null)
     {
         Dismiss();
-        if (suppressNotification()) return;
+        if (!answersCommand && suppressNotification()) return false;
+        Window window = CreateCaptureReceipt(message, openLibrary, tip, pin, actionTooltip);
+        PlaceOnPointerMonitor(window);
+        Present(window, FeedbackKind.Confirmation, tip is null ? message : message + " " + tip);
+        return true;
+    }
+
+    internal Window CreateCaptureReceipt(string message, Action openLibrary, string? tip = null, Action? pin = null, string? actionTooltip = null)
+    {
         var action = new Button { Content = KoreanWordWrap.Show(new TextBlock { TextWrapping = TextWrapping.Wrap }, message),
-            Height = double.NaN, Padding = new Thickness(12), ToolTip = UiText.Get("QuickAccess.Library") };
-        System.Windows.Automation.AutomationProperties.SetName(action, message);
+            Height = double.NaN, Padding = new Thickness(12), ToolTip = actionTooltip ?? UiText.Get("QuickAccess.Library") };
+        AutomationProperties.SetName(action, message);
+        AutomationProperties.SetAutomationId(action, "MyCapture.Receipt.Open");
         action.SetResourceReference(FrameworkElement.StyleProperty, "Button.Ghost");
         action.SetResourceReference(Control.FontSizeProperty, "FontSize.Body");
         action.Click += (_, _) => { Dismiss(); openLibrary(); };
-        Window window = CreateNotificationWindow(action, UiText.Get("QuickAccess.Title"), new Thickness(8), width: 320);
+        var content = new StackPanel();
+        content.Children.Add(action);
+        if (tip is not null && pin is not null)
+        {
+            var tipButton = new Button { Content = tip, MinHeight = 32, FontSize = 12 };
+            tipButton.SetResourceReference(FrameworkElement.StyleProperty, "Button.Ghost");
+            AutomationProperties.SetName(tipButton, tip);
+            AutomationProperties.SetAutomationId(tipButton, "MyCapture.Receipt.Pin");
+            tipButton.ToolTip = UiText.Get("QuickAccess.Pin");
+            tipButton.Click += (_, _) => { Dismiss(); pin(); };
+            content.Children.Add(tipButton);
+        }
+        var hint = new TextBlock { Text = UiText.Get("Onboard_ReceiptKeyboard"), FontSize = 12,
+            Margin = new Thickness(12, 4, 12, 4), TextWrapping = TextWrapping.Wrap };
+        hint.SetResourceReference(TextBlock.ForegroundProperty, "Text.Secondary");
+        content.Children.Add(hint);
+        Window window = CreateNotificationWindow(content, UiText.Get("QuickAccess.Title"), new Thickness(8), width: tip is null ? 320 : 360);
+        ConfigureReceiptKeyboard(window, content, hint);
+        return window;
+    }
+
+    private void ConfigureReceiptKeyboard(Window window, StackPanel content, TextBlock hint)
+    {
+        var actions = content.Children.OfType<Button>().ToArray();
+        System.Windows.Input.KeyboardNavigation.SetTabNavigation(content, System.Windows.Input.KeyboardNavigationMode.Cycle);
+        nint Handle() => new WindowInteropHelper(window).Handle;
+        nint previousActivation = 0, externalReturn = 0;
+        bool fallback = false, enteringFromTaskbar = false;
+        var session = new ReceiptKeyboardSession(
+            () => enteringFromTaskbar && ReceiptForeground.Get() == Handle() ? previousActivation : ReceiptForeground.Get(),
+            passive => WindowStyleFacade.SetNoActivate(Handle(), passive), window.Activate,
+            () => actions.FirstOrDefault(b => b.IsEnabled)?.Focus() == true, ReceiptForeground.Restore);
+        bool Activate()
+        {
+            if (!ReferenceEquals(_toast, window) || !window.IsVisible) return false;
+            _receiptKeyboardSession = session;
+            return session.Enter(Handle());
+        }
+        window.PreviewKeyDown += (_, e) =>
+        {
+            var key = e.Key == System.Windows.Input.Key.System ? e.SystemKey : e.Key;
+            e.Handled = session.HandleKey(key, System.Windows.Input.Keyboard.Modifiers,
+                forward => MoveReceiptFocus(actions, forward),
+                () => (System.Windows.Input.Keyboard.FocusedElement as Button)?.RaiseEvent(new RoutedEventArgs(Button.ClickEvent)), Dismiss);
+        };
         window.SourceInitialized += (_, _) =>
         {
-            WindowStyleFacade.SetNoActivate(new WindowInteropHelper(window).Handle, true);
+            WindowStyleFacade.SetNoActivate(Handle(), true);
             CaptureWindowExclusion.DisableTransitions(window); CaptureWindowExclusion.TryApply(window);
+            HwndSource.FromHwnd(Handle())?.AddHook((nint hwnd, int message, nint wParam, nint lParam, ref bool handled) =>
+            {
+                if (message == 0x0006 && (wParam.ToInt64() & 0xffff) != 0) previousActivation = lParam;
+                if (keyboardRouter?.MatchesMessage(hwnd, message, wParam) == true)
+                {
+                    handled = true;
+                    _ = window.Dispatcher.BeginInvoke(new Action(() => keyboardRouter.Activate()));
+                }
+                return 0;
+            });
         };
-        PlaceOnPointerMonitor(window);
-        Present(window, FeedbackKind.Confirmation, message);
+        window.Loaded += (_, _) =>
+        {
+            keyboardRouter?.SetTarget(window, Handle(), available: true, priority: 100, Activate);
+            if (keyboardRouter?.IsRegisteredFor(window) == true) return;
+            // A conflicting global chord must still leave a keyboard-only route through Alt+Tab.
+            fallback = true;
+            hint.Text = UiText.Get("Onboard_ReceiptKeyboardFallback");
+            WindowStyleFacade.SetNoActivate(Handle(), false);
+            window.ShowInTaskbar = true;
+        };
+        window.Activated += (_, _) =>
+        {
+            if (!fallback || enteringFromTaskbar) return;
+            enteringFromTaskbar = true;
+            try { Activate(); }
+            finally { enteringFromTaskbar = false; }
+        };
+        window.Closing += (_, _) =>
+        {
+            if (ReferenceEquals(_toast, window)) externalReturn = session.TakeReturnTarget(Handle());
+        };
+        window.Closed += (_, _) =>
+        {
+            keyboardRouter?.Remove(window);
+            session.Return(externalReturn);
+        };
+    }
+
+    internal static void MoveReceiptFocus(IReadOnlyList<Button> actions, bool forward)
+    {
+        var enabled = actions.Where(b => b.IsEnabled && b.Visibility == Visibility.Visible).ToArray();
+        if (enabled.Length == 0) return;
+        int current = Array.FindIndex(enabled, b => b.IsKeyboardFocused);
+        int next = current < 0 ? (forward ? 0 : enabled.Length - 1)
+            : (current + (forward ? 1 : enabled.Length - 1)) % enabled.Length;
+        enabled[next].Focus();
     }
 
     /// <summary>
@@ -173,9 +294,22 @@ internal sealed class ThemedShellPresenter(Func<bool> suppressNotification, Func
     {
         Dismiss();
         ContextMenu menu = CreateMenu(commands);
-        _menu = menu;
+        TrackMenu(menu);
         menu.IsOpen = true;
     }
+
+    internal void TrackMenu(ContextMenu menu)
+    {
+        _menu = menu;
+        menu.Closed += OnClosed;
+        void OnClosed(object sender, RoutedEventArgs e)
+        {
+            menu.Closed -= OnClosed;
+            if (ReferenceEquals(_menu, menu)) _menu = null;
+        }
+    }
+
+    internal ContextMenu? MenuForTest => _menu;
 
     /// <summary>Builds the themed menu without opening it.</summary>
     internal ContextMenu CreateMenu(IEnumerable<MenuEntry> commands)
@@ -187,6 +321,7 @@ internal sealed class ThemedShellPresenter(Func<bool> suppressNotification, Func
 
     private void AppendEntries(ItemCollection items, IEnumerable<MenuEntry> entries, ContextMenu root)
     {
+        DataTemplate? literalHeaderTemplate = null;
         foreach (MenuEntry entry in entries)
         {
             if (entry.IsSeparator)
@@ -206,7 +341,20 @@ internal sealed class ThemedShellPresenter(Func<bool> suppressNotification, Func
                 continue;
             }
 
-            var item = new MenuItem { Header = entry.Label, MinHeight = 36, InputGestureText = entry.Gesture, IsEnabled = entry.IsEnabled };
+            MenuItem item = entry.LiteralLabel ? new LiteralMenuItem() : new MenuItem();
+            item.Header = entry.Label;
+            item.MinHeight = 36;
+            item.InputGestureText = entry.Gesture;
+            item.IsEnabled = entry.IsEnabled;
+            if (entry.LiteralLabel)
+            {
+                item.HeaderTemplate = literalHeaderTemplate ??= (DataTemplate)System.Windows.Markup.XamlReader.Parse("""
+                    <DataTemplate xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation">
+                        <TextBlock Text="{Binding}" />
+                    </DataTemplate>
+                    """);
+            }
+            AutomationProperties.SetName(item, entry.Label);
             if (entry.Gesture.Length > 0) AutomationProperties.SetAcceleratorKey(item, entry.Gesture);
             if (entry.ToolTip.Length > 0)
             {
@@ -226,6 +374,17 @@ internal sealed class ThemedShellPresenter(Func<bool> suppressNotification, Func
             };
             items.Add(item);
         }
+    }
+
+    // Source titles contain literal underscores, not WPF access-key markers.
+    private sealed class LiteralMenuItem : MenuItem
+    {
+        protected override AutomationPeer OnCreateAutomationPeer() => new LiteralMenuItemAutomationPeer(this);
+    }
+
+    private sealed class LiteralMenuItemAutomationPeer(MenuItem owner) : MenuItemAutomationPeer(owner)
+    {
+        protected override string GetNameCore() => AutomationProperties.GetName(Owner);
     }
 
     /// <summary>
@@ -376,8 +535,18 @@ internal sealed class ThemedShellPresenter(Func<bool> suppressNotification, Func
     internal void Dismiss()
     {
         _countdown?.Stop();
-        _toast?.Close();
+        Window? toast = _toast;
+        ReceiptKeyboardSession? session = _receiptKeyboardSession;
+        nint returnTo = toast is null ? 0 : session?.TakeReturnTarget(new WindowInteropHelper(toast).Handle) ?? 0;
         _toast = null;
+        _receiptKeyboardSession = null;
+        if (toast is not null)
+        {
+            keyboardRouter?.Remove(toast);
+            toast.Close();
+            session?.Return(returnTo);
+            NotificationDismissed?.Invoke();
+        }
         if (_menu is not null) _menu.IsOpen = false;
         _menu = null;
     }
@@ -396,11 +565,11 @@ internal sealed class ThemedShellPresenter(Func<bool> suppressNotification, Func
     /// error stays until it is closed or acted on.
     /// </summary>
     internal void ShowActionNotification(string title, string message, string actionLabel, Action action,
-        TrayBalloonKind kind = TrayBalloonKind.Information)
+        TrayBalloonKind kind = TrayBalloonKind.Information, bool answersCommand = false)
     {
         ArgumentNullException.ThrowIfNull(action);
         Dismiss();
-        if (suppressNotification()) return;
+        if (!answersCommand && suppressNotification()) return;
         Window window = CreateActionNotification(title, message, actionLabel, action);
         PlaceOnPointerMonitor(window);
         Present(window, KindOf(kind), title + " " + message);

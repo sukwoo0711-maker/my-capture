@@ -36,6 +36,8 @@ namespace MyCapture.Core.Settings;
 public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
 {
     private readonly Dictionary<string, List<string>> _errors = [];
+    private readonly Dictionary<string, string> _saveErrors = [];
+    private readonly Dictionary<string, string> _candidateErrors = [];
 
     // ----- General -----
     private bool _launchAtLogin;
@@ -80,6 +82,7 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
     private string _restoreClosedPinHotkey = string.Empty;
     private string _captureTextHotkey = string.Empty;
     private string _pauseRecordingHotkey = string.Empty;
+    private bool _forceCoreShortcuts;
 
     // ----- Storage -----
     private string _maxItems = string.Empty;
@@ -105,6 +108,7 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
 
     // ----- Pin -----
     private bool _closeOnDoubleClick;
+    private bool _restoreOpenPinsOnLaunch;
     private string _initialOpacity = string.Empty;
     private string _zoomStep = string.Empty;
     private string _ctrlClickDebounceMs = string.Empty;
@@ -142,7 +146,7 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
 
     public event EventHandler<DataErrorsChangedEventArgs>? ErrorsChanged;
 
-    public bool HasErrors => _errors.Count > 0;
+    public bool HasErrors => _errors.Count > 0 || _saveErrors.Count > 0 || _candidateErrors.Count > 0;
 
     /// <summary>Empty follows Windows; ko-KR and en are the supported explicit UI choices.</summary>
     public string Language
@@ -353,6 +357,9 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
         set { if (Set(ref _pauseRecordingHotkey, value)) ValidateAllHotkeys(); }
     }
 
+    /// <summary>Claims assigned core chords ahead of other programs without reassigning keys.</summary>
+    public bool ForceCoreShortcuts { get => _forceCoreShortcuts; set => Set(ref _forceCoreShortcuts, value); }
+
     // ================= Storage =================
 
     public string MaxItems
@@ -486,6 +493,7 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
     // ================= Pin =================
 
     public bool CloseOnDoubleClick { get => _closeOnDoubleClick; set => Set(ref _closeOnDoubleClick, value); }
+    public bool RestoreOpenPinsOnLaunch { get => _restoreOpenPinsOnLaunch; set => Set(ref _restoreOpenPinsOnLaunch, value); }
     public bool CacheResults { get => _cacheResults; set => Set(ref _cacheResults, value); }
 
     public string InitialOpacity
@@ -613,6 +621,8 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
     /// </summary>
     public void LoadFrom(AppSettings settings)
     {
+        _saveErrors.Clear();
+        _candidateErrors.Clear();
         ExportOptionsReplaced = false;
         LoadValues(settings);
         _baseline = CaptureState();
@@ -624,6 +634,8 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
     /// </summary>
     public void ReplaceValues(AppSettings settings)
     {
+        _saveErrors.Clear();
+        _candidateErrors.Clear();
         ExportOptionsReplaced = true;
         LoadValues(settings);
     }
@@ -633,6 +645,36 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
     /// and then restoring it counts as unchanged.
     /// </summary>
     public bool HasUnappliedChanges => !CaptureState().SequenceEqual(_baseline, StringComparer.Ordinal);
+
+    /// <summary>Advances the saved baseline without replacing text or moving the editing caret.</summary>
+    public void AcceptSaved(AppSettings saved, bool acceptReplacement = true)
+    {
+        _baseline = new SettingsDraft(saved).CaptureState();
+        if (acceptReplacement) ExportOptionsReplaced = false;
+        FolderDestinationEdited = UseCurrentFolderForNewCaptures != saved.Queue.UseCurrentFolderForNewCaptures;
+        RaisePropertyChanged(nameof(HasUnappliedChanges));
+    }
+
+    /// <summary>A rejected OS setting stays inline until that field is edited again.</summary>
+    public void SetSaveError(string property, string message)
+    {
+        _saveErrors[property] = message;
+        RaiseErrorsChanged(property);
+    }
+
+    /// <summary>A cross-field error from merging valid edits with saved values, recomputed before saving.</summary>
+    public void SetCandidateError(string property, string message)
+    {
+        _candidateErrors[property] = message;
+        RaiseErrorsChanged(property);
+    }
+
+    public void ClearCandidateErrors()
+    {
+        string[] properties = _candidateErrors.Keys.ToArray();
+        _candidateErrors.Clear();
+        foreach (string property in properties) RaiseErrorsChanged(property);
+    }
 
     private void LoadValues(AppSettings settings)
     {
@@ -683,6 +725,7 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
         _restoreClosedPinHotkey = s.Hotkeys.RestoreClosedPin.ToString();
         _captureTextHotkey = s.Hotkeys.CaptureText.ToString();
         _pauseRecordingHotkey = s.Hotkeys.PauseRecording.ToString();
+        _forceCoreShortcuts = s.Hotkeys.ForceCoreShortcuts;
 
         _maxItems = Int(s.Queue.MaxItems);
         _maxGiB = Gib(s.Queue.MaxBytes);
@@ -714,6 +757,7 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
         _fileNamePattern = s.Export.FileNamePattern;
 
         _closeOnDoubleClick = s.Pin.CloseOnDoubleClick;
+        _restoreOpenPinsOnLaunch = s.Pin.RestoreOpenPinsOnLaunch;
         _initialOpacity = Dbl(s.Pin.InitialOpacity);
         _zoomStep = Dbl(s.Pin.ZoomStep);
         _ctrlClickDebounceMs = Int(s.Pin.CtrlClickDebounceMs);
@@ -748,6 +792,9 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
         _preservedPreserveTransparency = s.Export.PreserveTransparency;
         _language = s.General.Language;
         _preservedIsFirstRun = s.General.IsFirstRun;
+        _preservedCoreShortcutsAsked = s.Hotkeys.CoreShortcutsAsked;
+        _preservedFirstCaptureTipShown = s.General.FirstCaptureTipShown;
+        _preservedFirstPinTipShown = s.General.FirstPinTipShown;
         _preservedRecordingBitrateBitsPerSecond = s.Recording.BitrateBitsPerSecond;
         _preservedRecordingCoarseStepSeconds = s.Recording.CoarseStepSeconds;
 
@@ -761,7 +808,12 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
     /// to disk until Apply, so a subsequent Cancel or a re-<see cref="LoadFrom"/> restores the
     /// previous values. The baseline is kept, so the reset counts as an unapplied change.
     /// </summary>
-    public void ResetToDefaults() => ReplaceValues(NewInstallDefaults.Create());
+    public void ResetToDefaults()
+    {
+        AppSettings defaults = NewInstallDefaults.Create();
+        defaults.Hotkeys.CoreShortcutsAsked = _preservedCoreShortcutsAsked;
+        ReplaceValues(defaults);
+    }
 
     /// <summary>
     /// Every value <see cref="ToAppSettings"/> writes, in a fixed order, as invariant text.
@@ -779,7 +831,7 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
         _captureHotkey, _openLibraryHotkey, _pasteToScreenHotkey, _hideAllPinsHotkey, _toggleClickThroughHotkey,
         _repeatLastRegionHotkey, _captureWindowHotkey, _captureFullScreenHotkey, _recordRegionHotkey,
         _scrollingCaptureHotkey, _delayedCaptureHotkey, _uploadGitHubImageHotkey, _restoreClosedPinHotkey,
-        _captureTextHotkey, _pauseRecordingHotkey,
+        _captureTextHotkey, _pauseRecordingHotkey, B(_forceCoreShortcuts), B(_preservedCoreShortcutsAsked),
         _maxItems, _maxGiB, _thumbnailLongEdge, _capturesDirectoryOverride, _imageRetentionHours, _folderFilePrefix,
         B(_useCurrentFolderForNewCaptures), _defaultCaptureFolderId?.ToString() ?? string.Empty,
         _gitHubIssueUrl, _gitHubToken,
@@ -788,7 +840,7 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
         _lastImageExport.Format.ToString(), Int(_lastImageExport.LongEdge), Int(_lastImageExport.ReductionPercent),
         B(_lastImageExport.IncludeSourceUrl), Int(_lastImageExport.Margin), Int(_lastImageExport.CornerRadius),
         _lastImageExport.Background.ToString(), B(_lastImageExport.Shadow),
-        B(_closeOnDoubleClick), _initialOpacity, _zoomStep, _ctrlClickDebounceMs, _closedWindowRestoreLimit,
+        B(_closeOnDoubleClick), B(_restoreOpenPinsOnLaunch), _initialOpacity, _zoomStep, _ctrlClickDebounceMs, _closedWindowRestoreLimit,
         _preferredLanguages, _ocrQuality, B(_cacheResults),
         _lastAnnotationTool, _annotationStrokeStyle.ToString(), Dbl(_annotationFillTransparency), _strokeThickness,
         _fontSize, _fontFamily, _mosaicBlockSize, _highlighterAlpha, _highlighterOpacityPercent, _blurRadius,
@@ -827,6 +879,8 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
                 CaptureGuideColor = CaptureGuideColorSetting,
                 ThemeRevision = 1,
                 IsFirstRun = _preservedIsFirstRun,
+                FirstCaptureTipShown = _preservedFirstCaptureTipShown,
+                FirstPinTipShown = _preservedFirstPinTipShown,
             },
             Capture =
             {
@@ -870,6 +924,8 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
                 RestoreClosedPin = ParseHotkey(_restoreClosedPinHotkey),
                 CaptureText = ParseHotkey(_captureTextHotkey),
                 PauseRecording = ParseHotkey(_pauseRecordingHotkey),
+                ForceCoreShortcuts = _forceCoreShortcuts,
+                CoreShortcutsAsked = _preservedCoreShortcutsAsked,
             },
             Queue =
             {
@@ -905,6 +961,7 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
             Pin =
             {
                 CloseOnDoubleClick = _closeOnDoubleClick,
+                RestoreOpenPinsOnLaunch = _restoreOpenPinsOnLaunch,
                 InitialOpacity = ParseDouble(_initialOpacity),
                 ZoomStep = ParseDouble(_zoomStep),
                 CtrlClickDebounceMs = ParseInt(_ctrlClickDebounceMs),
@@ -962,6 +1019,8 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
         RestoreClosedPin = ParseHotkey(_restoreClosedPinHotkey),
         CaptureText = ParseHotkey(_captureTextHotkey),
         PauseRecording = ParseHotkey(_pauseRecordingHotkey),
+        ForceCoreShortcuts = _forceCoreShortcuts,
+        CoreShortcutsAsked = _preservedCoreShortcutsAsked,
     };
 
     // ================= INotifyDataErrorInfo =================
@@ -970,17 +1029,19 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
     {
         if (string.IsNullOrEmpty(propertyName))
         {
-            return _errors.Values.SelectMany(v => v).ToList();
+            return AllErrors();
         }
 
-        return _errors.TryGetValue(propertyName, out List<string>? list)
-            ? list
-            : Array.Empty<string>();
+        IEnumerable<string> errors = _errors.TryGetValue(propertyName, out List<string>? list) ? list : [];
+        return errors.Concat(_saveErrors.TryGetValue(propertyName, out string? message) ? [message] : [])
+            .Concat(_candidateErrors.TryGetValue(propertyName, out string? candidateMessage) ? [candidateMessage] : []).ToList();
     }
 
     /// <summary>Every current error message across all fields, for the summary announcement.</summary>
     public IReadOnlyList<string> AllErrors() => _errors
         .SelectMany(kv => kv.Value)
+        .Concat(_saveErrors.Values).Distinct()
+        .Concat(_candidateErrors.Values).Distinct()
         .ToList();
 
     // ================= Validation =================
@@ -1396,6 +1457,8 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
         }
 
         field = value;
+        if (property is not null && _candidateErrors.Remove(property)) RaiseErrorsChanged(property);
+        if (property is not null && _saveErrors.Remove(property)) RaiseErrorsChanged(property);
         RaisePropertyChanged(property);
         return true;
     }
@@ -1423,6 +1486,9 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
     private bool _preservedPreserveTransparency;
     private string _language = string.Empty;
     private bool _preservedIsFirstRun;
+    private bool _preservedCoreShortcutsAsked;
+    private bool _preservedFirstCaptureTipShown;
+    private bool _preservedFirstPinTipShown;
     private int _preservedRecordingBitrateBitsPerSecond;
     private double _preservedRecordingCoarseStepSeconds;
 

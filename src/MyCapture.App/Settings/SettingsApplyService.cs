@@ -101,11 +101,28 @@ public sealed class SettingsApplyService
     /// <see cref="SettingsApplyResult.Saved"/> is <see langword="false"/> so the window
     /// stays open with the user's draft intact.
     /// </remarks>
-    public SettingsApplyResult Apply(AppSettings next, bool applyFolderDestination = true, bool applyExportOptions = false)
+    public SettingsApplyResult Apply(AppSettings next, bool applyFolderDestination = true, bool applyExportOptions = false) =>
+        Apply(next, applyFolderDestination, applyExportOptions, applyStartup: true, keepAvailableHotkeys: false);
+
+    /// <summary>
+    /// Applies the one-time core-shortcut answer. Set <paramref name="applyStartup"/> to false
+    /// while the first-run welcome still owns the startup choice. Every chord that registers
+    /// is kept when others cannot, as a launch does: the chosen shortcuts are saved and the
+    /// rest are reported in <see cref="SettingsApplyResult.HotkeyFailures"/> instead of
+    /// rolling the set back.
+    /// </summary>
+    internal SettingsApplyResult ApplyCoreShortcutAnswer(AppSettings next, bool applyStartup) =>
+        Apply(next, applyFolderDestination: true, applyExportOptions: false, applyStartup, keepAvailableHotkeys: true);
+
+    private SettingsApplyResult Apply(AppSettings next, bool applyFolderDestination, bool applyExportOptions,
+        bool applyStartup, bool keepAvailableHotkeys)
     {
         ArgumentNullException.ThrowIfNull(next);
 
         AppSettings previous = _current();
+        // An older draft or failed registration must not erase the one-time answer.
+        bool coreShortcutsAsked = previous.Hotkeys.CoreShortcutsAsked || next.Hotkeys.CoreShortcutsAsked;
+        next.Hotkeys.CoreShortcutsAsked = coreShortcutsAsked;
         // The window never edits the Store rating state; keep what captures recorded meanwhile.
         next.StoreRating = previous.StoreRating;
         next.StoreUpdate = previous.StoreUpdate;
@@ -113,6 +130,8 @@ public sealed class SettingsApplyService
         if (!applyExportOptions) next.Export.LastImageExport = previous.Export.LastImageExport;
         // Nor the capture start-guide count; a selector opened meanwhile may have advanced it.
         next.Capture.StartGuideShownCount = previous.Capture.StartGuideShownCount;
+        next.General.FirstCaptureTipShown = previous.General.FirstCaptureTipShown;
+        next.General.FirstPinTipShown = previous.General.FirstPinTipShown;
         ReconcileFolderDestination(next.Queue, _queue, applyFolderDestination);
         var messages = new List<string>();
 
@@ -121,16 +140,18 @@ public sealed class SettingsApplyService
         //    state is what the OS actually reports right now, not what the old settings
         //    file claimed — the two can differ if the Run key was hand-edited.
         HotkeySettings previousHotkeys = previous.Hotkeys.DeepCloneHotkeys();
-        bool startupWasEnabled = _startup.IsEnabled();
+        bool? startupWasEnabled = applyStartup ? _startup.IsEnabled() : null;
 
         // 2) Hotkeys first, transactionally, so a collision can veto the chords before
         //    anything else changes. On rollback the app keeps its previous, working set.
-        HotkeyReconfigureResult hotkeyResult = _hotkeys.Reconfigure(next.Hotkeys);
+        //    A partial apply keeps the chosen set in effect without the failed chords.
+        HotkeyReconfigureResult hotkeyResult = _hotkeys.Reconfigure(next.Hotkeys, keepAvailableHotkeys);
         if (!hotkeyResult.Applied)
         {
             // Keep the previously working chords in what we persist, so the saved file
             // never claims a set the app could not register.
             next.Hotkeys = previousHotkeys.DeepCloneHotkeys();
+            next.Hotkeys.CoreShortcutsAsked = coreShortcutsAsked;
             foreach (HotkeyRegistrationFailure failure in hotkeyResult.Failures)
             {
                 messages.Add(UiText.Format("Text_2B53D424B10E", failure.Hotkey));
@@ -142,8 +163,8 @@ public sealed class SettingsApplyService
         }
 
         // 3) Launch-at-login, transactionally. Never persist a value the system rejects.
-        StartupApplyResult startupResult = _startup.Apply(next.General.LaunchAtLogin);
-        if (!startupResult.Succeeded)
+        StartupApplyResult? startupResult = applyStartup ? _startup.Apply(next.General.LaunchAtLogin) : null;
+        if (startupResult is { Succeeded: false })
         {
             next.General.LaunchAtLogin = _startup.IsEnabled();
             messages.Add(UiText.Format("Text_0FA1A9D03BE3", startupResult.Error));
@@ -166,7 +187,7 @@ public sealed class SettingsApplyService
         {
             _log.LogError(
                 ex,
-                "Persisting settings failed; rolling back hotkeys and launch-at-login to their prior state");
+                "Persisting settings failed; rolling back applied runtime settings to their prior state");
 
             List<string> rollbackMessages = RollBackAfterFailedSave(previousHotkeys, startupWasEnabled);
 
@@ -176,7 +197,7 @@ public sealed class SettingsApplyService
             };
             failureMessages.AddRange(rollbackMessages);
 
-            return SettingsApplyResult.NotSaved(failureMessages);
+            return SettingsApplyResult.NotSaved(failureMessages) with { HotkeyFailures = hotkeyResult.Failures };
         }
 
         // 6) Publish so existing Func suppliers see the new object immediately.
@@ -220,16 +241,16 @@ public sealed class SettingsApplyService
 
         _log.LogInformation(
             "Settings applied (hotkeys={HotkeyState}, autostart={Autostart}, messages={MessageCount})",
-            hotkeyResult.Applied ? "ok" : "rolled-back",
-            startupResult.Succeeded ? next.General.LaunchAtLogin : "unchanged",
+            !hotkeyResult.Applied ? "rolled-back" : hotkeyResult.Failures.Count > 0 ? "partial" : "ok",
+            startupResult?.Succeeded == true ? next.General.LaunchAtLogin : "unchanged",
             messages.Count);
 
         return new SettingsApplyResult(
             Saved: true,
             HotkeysApplied: hotkeyResult.Applied,
-            StartupApplied: startupResult.Succeeded,
+            StartupApplied: startupResult?.Succeeded == true,
             RestartRequired: capturesRootChanged || languageChanged,
-            Messages: messages);
+            Messages: messages) { HotkeyFailures = hotkeyResult.Failures };
     }
 
     /// <summary>
@@ -238,7 +259,7 @@ public sealed class SettingsApplyService
     /// reported on entry. Returns any messages describing a rollback that could not itself
     /// be completed, so the caller never silently claims a clean revert.
     /// </summary>
-    private List<string> RollBackAfterFailedSave(HotkeySettings previousHotkeys, bool startupWasEnabled)
+    private List<string> RollBackAfterFailedSave(HotkeySettings previousHotkeys, bool? startupWasEnabled)
     {
         var messages = new List<string>();
 
@@ -263,18 +284,20 @@ public sealed class SettingsApplyService
                 UiText.Get("Text_B2B3E2E19B90"));
         }
 
+        if (startupWasEnabled is not { } enabled) return messages;
+
         // Return the Run key to exactly the state the OS reported on entry. Only act when
         // the current state actually differs, so a no-op stays a no-op.
         try
         {
-            if (_startup.IsEnabled() != startupWasEnabled)
+            if (_startup.IsEnabled() != enabled)
             {
-                StartupApplyResult restore = _startup.Apply(startupWasEnabled);
+                StartupApplyResult restore = _startup.Apply(enabled);
                 if (!restore.Succeeded)
                 {
                     _log.LogCritical(
                         "Could not restore launch-at-login to its prior state ({Prior}) after a failed save: {Error}",
-                        startupWasEnabled,
+                        enabled,
                         restore.Error);
                     messages.Add(
                         UiText.Get("Text_B64A6FFA1008"));
@@ -309,6 +332,12 @@ public sealed record SettingsApplyResult(
     IReadOnlyList<string> Messages)
 {
     /// <summary>
+    /// The attempted shortcut failures, even when rollback restored the current set. After a
+    /// partial apply they are the chords left unregistered while the rest of the set is in effect.
+    /// </summary>
+    public IReadOnlyList<HotkeyRegistrationFailure> HotkeyFailures { get; init; } = [];
+
+    /// <summary>
     /// A persistence failure: settings were not saved, all OS-visible changes were rolled
     /// back, and <paramref name="messages"/> explain what to do (and any rollback trouble).
     /// </summary>
@@ -337,5 +366,7 @@ internal static class HotkeyCloneExtensions
         RestoreClosedPin = s.RestoreClosedPin,
         CaptureText = s.CaptureText,
         PauseRecording = s.PauseRecording,
+        ForceCoreShortcuts = s.ForceCoreShortcuts,
+        CoreShortcutsAsked = s.CoreShortcutsAsked,
     };
 }

@@ -22,7 +22,7 @@ public enum ColorFormat
 /// migration code is needed for additive changes — which covers every change made
 /// so far.
 /// </remarks>
-public sealed class AppSettings
+public sealed class AppSettings : IJsonOnDeserializing
 {
     /// <summary>
     /// Incremented only for changes that cannot be handled by defaulting.
@@ -49,6 +49,9 @@ public sealed class AppSettings
 
     public GeneralSettings General { get; set; } = new();
 
+    // Files predating the general section also retain the legacy editor default.
+    void IJsonOnDeserializing.OnDeserializing() => General.AfterCapture = AfterCaptureAction.Editor;
+
     /// <summary>Local state for the one-time Microsoft Store rating request. An explicit null reads as new.</summary>
     public StoreRatingState StoreRating { get; set => field = value ?? new(); } = new();
 
@@ -58,11 +61,17 @@ public sealed class AppSettings
 /// <summary>Global shortcuts, registered for as long as the app runs.</summary>
 /// <remarks>
 /// The initialisers are the chords earlier versions shipped with, which an older settings file
-/// without a property reads back. A new installation assigns only region capture and region
-/// recording (<see cref="NewInstallDefaults"/>).
+/// without a property reads back. A new installation assigns region capture, region recording
+/// and clipboard pin shortcuts (<see cref="NewInstallDefaults"/>).
 /// </remarks>
 public sealed class HotkeySettings
 {
+    /// <summary>Claims assigned core chords even when another program registered them first.</summary>
+    public bool ForceCoreShortcuts { get; set; }
+
+    /// <summary>The one-time core-shortcut question was answered; not edited in Settings.</summary>
+    public bool CoreShortcutsAsked { get; set; }
+
     public Hotkey ScrollingCapture { get; set; } = Hotkey.None;
     public Hotkey DelayedCapture { get; set; } = Hotkey.None;
     /// <summary>
@@ -150,7 +159,8 @@ public sealed class QueueSettings
     public Guid? DefaultCaptureFolderId { get; set; }
 
     /// <summary>
-    /// Maximum number of retained captures. Oldest unpinned entries are evicted.
+    /// Maximum number of retained captures. Oldest eligible unkept entries are evicted.
+    /// The initializer preserves legacy files; new installations use <see cref="NewInstallDefaults"/>.
     /// </summary>
     public int MaxItems { get; set; } = 300;
 
@@ -159,8 +169,8 @@ public sealed class QueueSettings
     /// eviction.
     /// </summary>
     /// <remarks>
-    /// 2 GiB. Without a byte cap a user capturing 4K screens fills the disk
-    /// silently, because 300 items says nothing about their size.
+    /// The legacy fallback is 2 GiB; new installations use <see cref="NewInstallDefaults"/>.
+    /// A byte cap limits disk use independently of the number of captures.
     /// </remarks>
     public long MaxBytes { get; set; } = 2L * 1024 * 1024 * 1024;
 
@@ -176,7 +186,8 @@ public sealed class QueueSettings
 
     /// <summary>
     /// Hours after creation before an unpinned library image is expired.
-    /// Default is 168 (7 days), matching the previous hard-coded policy.
+    /// The legacy fallback is 168 (7 days), matching the previous hard-coded policy.
+    /// New installations use <see cref="NewInstallDefaults"/> and have no time limit.
     /// </summary>
     public int ImageRetentionHours { get; set; } = MyCapture.Core.Queue.CaptureRetention.DefaultImageRetentionHours;
 }
@@ -257,11 +268,16 @@ public sealed class PinSettings
     /// <summary>Close the pinned window on double-click.</summary>
     public bool CloseOnDoubleClick { get; set; } = true;
 
+    /// <summary>Save open pins on this PC and reopen them at the next launch.</summary>
+    /// <remarks>Legacy settings stay off; new installations enable this through <see cref="NewInstallDefaults"/>.</remarks>
+    public bool RestoreOpenPinsOnLaunch { get; set; } = false;
+
     /// <summary>
     /// Legacy copy-gesture delay retained for settings-file compatibility, in milliseconds.
     /// </summary>
     /// <remarks>
-    /// No longer controls a UI gesture. A focused pin uses <c>Ctrl+C</c> to copy its image;
+    /// No longer controls a UI gesture. A focused pin uses <c>Ctrl+C</c> to copy its image
+    /// together with any retained original text;
     /// <c>Ctrl</c>+double-click copies retained source text or locally recognized image text.
     /// Preserve the serialized field and draft value when reading and saving older settings.
     /// </remarks>
@@ -277,7 +293,8 @@ public sealed class PinSettings
     /// Snipaste defaults this to 1. 20 is kept here because the restore history is also
     /// bounded by a retained-byte budget (<c>ClosedPinMemory.DefaultMaxRetainedBytes</c>),
     /// so the count never decides memory use on its own. The history is memory-only and is
-    /// discarded when the app exits.
+    /// discarded when the app exits. Open pins may be saved separately when
+    /// <see cref="RestoreOpenPinsOnLaunch"/> is enabled.
     /// </remarks>
     public int ClosedWindowRestoreLimit { get; set; } = 20;
 
@@ -360,7 +377,10 @@ public sealed class GeneralSettings : IJsonOnDeserializing
     // legacy field without changing the new default or writing it back out.
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public bool? ShowQuickAccess { get => null; set { } }
-    public AfterCaptureAction AfterCapture { get; set; } = AfterCaptureAction.Editor;
+    public AfterCaptureAction AfterCapture { get; set; } = AfterCaptureAction.QuickAccess;
+
+    public bool FirstCaptureTipShown { get; set; }
+    public bool FirstPinTipShown { get; set; }
 
     /// <summary>Shows key captions under editor buttons. Tooltips always name the key.</summary>
     public bool ShowShortcutHints { get; set; } = true;
@@ -369,7 +389,11 @@ public sealed class GeneralSettings : IJsonOnDeserializing
     public int ShortcutHintsRevision { get; set; } = 1;
 
     // A missing marker identifies a legacy file; new settings and explicit choices start at one.
-    void IJsonOnDeserializing.OnDeserializing() => ShortcutHintsRevision = 0;
+    void IJsonOnDeserializing.OnDeserializing()
+    {
+        ShortcutHintsRevision = 0;
+        AfterCapture = AfterCaptureAction.Editor;
+    }
 
     public bool LaunchAtLogin { get; set; } = true;
 

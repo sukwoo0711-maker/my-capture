@@ -71,9 +71,11 @@ public sealed partial class SettingsThemePreviewTests
                 using (var presenter = new ThemedShellPresenter(() => false) { NotificationMonitor = () => offDesktop })
                 {
                     var commands = new TrayMenuCommands(() => { }, () => { }, () => { }, () => { }, () => { }, () => { }, () => { },
-                        () => { }, () => { }, () => { }, () => { }, () => { }, () => { }, PinClipboard: () => { }, HideOrShowAllPins: () => { });
+                        () => { }, () => { }, () => { }, () => { }, () => { }, () => { }, PinClipboard: () => { }, HideOrShowAllPins: () => { },
+                        ClearClickThrough: () => { });
+                    // One of the two pins lets clicks through, so the menu carries its way back.
                     IReadOnlyList<ThemedShellPresenter.MenuEntry> entries = TrayMenuLayout.Build(commands, NewInstallDefaults.Create().Hotkeys,
-                        new TrayMenuState(CanRestoreClosedPin: true, ClipboardHasContent: false, PinCount: 2));
+                        new TrayMenuState(CanRestoreClosedPin: true, ClipboardHasContent: false, PinCount: 2, ClickThroughPinCount: 1));
                     Save(RenderMenu(presenter.CreateMenu(entries), openBranch: 3), "tray-menu");
 
                     presenter.ShowActionNotification(UiText.Get("Text_5564316AA7EB"),

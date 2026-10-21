@@ -319,7 +319,7 @@ public sealed class SettingsDraftTests
 
         draft.ResetToDefaults();
 
-        Assert.Equal("300", draft.MaxItems);
+        Assert.Equal("1000", draft.MaxItems);
         Assert.Equal("Ctrl+Shift+C", draft.CaptureHotkey);
         Assert.False(draft.HasErrors);
     }

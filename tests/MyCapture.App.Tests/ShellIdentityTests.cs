@@ -1,3 +1,4 @@
+using MyCapture.App.Capture;
 using MyCapture.Core.Localization;
 using MyCapture.Core.Platform;
 using MyCapture.Core.Settings;
@@ -71,21 +72,22 @@ public sealed class ShellIdentityTests
     [InlineData(true, false)]
     public async Task AsyncRetake_WaitsForCloseAndRechecksNewBlockers(bool closeAllowed, bool blockerArrives)
     {
-        Assert.False(await App.TryPrepareCaptureAsync(true, _ => false,
+        Assert.Equal(CaptureBlock.EditorBusy, await CaptureGuard.PrepareAsync(true, _ => CaptureBlock.EditorBusy,
             () => throw new InvalidOperationException("Blocked capture must not close its editor.")));
-        var retired = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var retired = new TaskCompletionSource<CaptureBlock>(TaskCreationOptions.RunContinuationsAsynchronously);
         var arguments = new List<bool>();
         bool blocked = false;
-        Task<bool> preparation = App.TryPrepareCaptureAsync(true, allowRetake =>
+        Task<CaptureBlock> preparation = CaptureGuard.PrepareAsync(true, allowRetake =>
         {
             arguments.Add(allowRetake);
-            return !blocked;
+            return blocked ? CaptureBlock.Countdown : CaptureBlock.None;
         }, () => retired.Task);
         Assert.False(preparation.IsCompleted);
         Assert.Equal(new[] { true }, arguments);
         blocked = blockerArrives;
-        retired.SetResult(closeAllowed);
-        Assert.Equal(closeAllowed && !blockerArrives, await preparation);
+        retired.SetResult(closeAllowed ? CaptureBlock.None : CaptureBlock.EditorKept);
+        Assert.Equal(!closeAllowed ? CaptureBlock.EditorKept : blockerArrives ? CaptureBlock.Countdown : CaptureBlock.None,
+            await preparation);
         Assert.Equal(closeAllowed ? new[] { true, false } : new[] { true }, arguments);
     }
 

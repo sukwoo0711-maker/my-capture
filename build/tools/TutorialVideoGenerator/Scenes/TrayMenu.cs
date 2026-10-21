@@ -5,7 +5,8 @@ namespace MyCapture.TutorialGenerator.Scenes;
 
 /// <summary>
 /// The tray menu exactly as the running app builds it on every open (App wires every command,
-/// including Pin clipboard and Hide/show all pins), with a new installation's shortcuts. Scenes
+/// including Pin clipboard, Hide/show all pins and turning click-through off on every pin), with a
+/// new installation's shortcuts. Scenes
 /// pass only the commands they act on; the clipboard is never read, so Pin clipboard shows as
 /// enabled, which is the menu's default state.
 /// </summary>
@@ -19,7 +20,7 @@ internal static class TrayMenu
     {
         static void None() { }
         var commands = new TrayMenuCommands(None, None, None, None, None, None, None, None, restoreClosedPin ?? None, library ?? None,
-            None, None, None, PinClipboard: None, HideOrShowAllPins: None);
+            None, None, None, PinClipboard: None, HideOrShowAllPins: None, ClearClickThrough: None);
         return TrayMenuLayout.Build(commands, Keys, state ?? new TrayMenuState());
     }
 }

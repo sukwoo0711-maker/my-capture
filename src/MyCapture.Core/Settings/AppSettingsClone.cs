@@ -59,6 +59,8 @@ public static class AppSettingsClone
         RestoreClosedPin = s.RestoreClosedPin,
         CaptureText = s.CaptureText,
         PauseRecording = s.PauseRecording,
+        ForceCoreShortcuts = s.ForceCoreShortcuts,
+        CoreShortcutsAsked = s.CoreShortcutsAsked,
     };
 
     private static QueueSettings Clone(QueueSettings s) => new()
@@ -113,6 +115,7 @@ public static class AppSettingsClone
     private static PinSettings Clone(PinSettings s) => new()
     {
         CloseOnDoubleClick = s.CloseOnDoubleClick,
+        RestoreOpenPinsOnLaunch = s.RestoreOpenPinsOnLaunch,
         CtrlClickDebounceMs = s.CtrlClickDebounceMs,
         InitialOpacity = s.InitialOpacity,
         ClosedWindowRestoreLimit = s.ClosedWindowRestoreLimit,
@@ -150,6 +153,8 @@ public static class AppSettingsClone
     private static GeneralSettings Clone(GeneralSettings s) => new()
     {
         AfterCapture = s.AfterCapture,
+        FirstCaptureTipShown = s.FirstCaptureTipShown,
+        FirstPinTipShown = s.FirstPinTipShown,
         ShowShortcutHints = s.ShowShortcutHints,
         ShortcutHintsRevision = s.ShortcutHintsRevision,
         LaunchAtLogin = s.LaunchAtLogin,

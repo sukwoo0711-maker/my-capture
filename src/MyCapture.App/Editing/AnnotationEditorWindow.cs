@@ -31,7 +31,8 @@ internal partial class AnnotationEditorWindow : Window
         AnnotationDocument? initialDocument = null,
         IReadOnlyDictionary<string, BitmapSource>? initialAssets = null,
         IPrivacyRedactionService? privacyRedactionService = null,
-        string? sourceWindowTitle = null)
+        string? sourceWindowTitle = null,
+        MonitorInfo? pointerMonitor = null)
     {
         ArgumentNullException.ThrowIfNull(sourceFrame);
         ArgumentNullException.ThrowIfNull(selectedBitmap);
@@ -53,8 +54,9 @@ internal partial class AnnotationEditorWindow : Window
         _desiredSize = new Size(Math.Max(980, selectedBitmap.PixelWidth + 360), Math.Max(620, selectedBitmap.PixelHeight + 156));
         // CenterScreen opens an ownerless window on the pointer's monitor, so it is sized for that
         // monitor, not the primary one. A capture moves it to its own monitor (PlaceOnMonitor).
+        // Tests pass the pointer's monitor so the size does not depend on where the pointer is.
         WindowStartupLocation = WindowStartupLocation.CenterScreen;
-        MonitorInfo pointerMonitor = MonitorEnumerator.GetFromCursor();
+        pointerMonitor ??= MonitorEnumerator.GetFromCursor();
         MonitorWindowPlacement.WindowFit fit = MonitorWindowPlacement.Fit(pointerMonitor.WorkArea,
             pointerMonitor.ScaleFactor, _desiredSize, MinimumSize, WorkAreaMargin);
         MinWidth = fit.Minimum.Width;
@@ -104,11 +106,90 @@ internal partial class AnnotationEditorWindow : Window
         get => _editor.CommitRequested;
         set => _editor.CommitRequested = value is null ? null : async result =>
         {
-            AnnotationEditingResult still = FrameStillImage is null ? result : await FrameStillImage.CreateResultAsync(result);
-            bool saved = await value(still);
-            if (!saved || result.Action == EditorCommitAction.CopyToClipboard) return saved;
-            return await RetireDraftBeforeCloseAsync();
+            // From here a capture command waits for this Done instead of being refused, also
+            // before the window has left the screen.
+            bool outOfSight = FinishesOutOfSight && result.Action == EditorCommitAction.Done;
+            if (outOfSight) _doneFinishing ??= new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            bool closing = false;
+            try
+            {
+                AnnotationEditingResult still = FrameStillImage is null ? result : await FrameStillImage.CreateResultAsync(result);
+                if (outOfSight) still.CopiedToClipboard = LeaveScreenWhileFinishing;
+                bool saved = await value(still);
+                if (!saved || result.Action == EditorCommitAction.CopyToClipboard) return saved;
+                closing = await RetireDraftBeforeCloseAsync();
+                return closing;
+            }
+            finally
+            {
+                // A save that failed after the window left the screen shows it again, with the
+                // failure in its status line and the draft kept, as when it never left.
+                if (!closing) EndDoneWithoutClosing();
+            }
         };
+    }
+
+    /// <summary>
+    /// Lets Done take the window off the screen as soon as the clipboard holds the result, while
+    /// the library save finishes. The window stays open (hidden) until the save completes, so the
+    /// commit, its events and the draft keep their order; a failed save shows it again. Only for a
+    /// modeless window: hiding a modal one would end its <see cref="Window.ShowDialog"/> early.
+    /// </summary>
+    internal bool FinishesOutOfSight { get; set; }
+
+    private TaskCompletionSource? _doneFinishing;
+    private bool _leftScreen;
+
+    /// <summary>True from the start of a Done that may finish out of sight until it has closed the window or ended without closing.</summary>
+    internal bool IsFinishingDone => _doneFinishing is not null;
+
+    /// <summary>
+    /// Completes when that Done has closed the window, or has ended without closing (the editor is
+    /// usable again, on screen); completed when no such Done is running.
+    /// </summary>
+    internal Task DoneFinished => _doneFinishing?.Task ?? Task.CompletedTask;
+
+    /// <summary>True while Done's save finishes after the window has left the screen.</summary>
+    internal bool IsFinishingOutOfSight => _leftScreen;
+
+    private void LeaveScreenWhileFinishing()
+    {
+        if (!Dispatcher.CheckAccess())
+        {
+            Dispatcher.Invoke(LeaveScreenWhileFinishing);
+            return;
+        }
+
+        if (_doneFinishing is null || _leftScreen || _windowClosed || !IsVisible) return;
+        _leftScreen = true;
+        Hide();
+    }
+
+    private void EndDoneWithoutClosing()
+    {
+        TaskCompletionSource? finishing = _doneFinishing;
+        _doneFinishing = null;
+        bool returning = _leftScreen;
+        _leftScreen = false;
+        try
+        {
+            if (returning && !_windowClosed)
+            {
+                Show();
+                WindowForeground.BringForward(this);
+            }
+        }
+        finally
+        {
+            // Released after the editor has ended its commit and is editable again: the editor
+            // resumes on this turn or on a normal-priority one, both ahead of input priority, so a
+            // capture command that waited finds an idle editor (asked to save, keep or discard).
+            if (finishing is not null)
+            {
+                if (Dispatcher.HasShutdownStarted) finishing.TrySetResult();
+                else _ = Dispatcher.BeginInvoke(DispatcherPriority.Input, new Action(() => finishing.TrySetResult()));
+            }
+        }
     }
 
     // Only the persistence/export consumer sees timed text; Committed retains the text-free video layer input.
@@ -139,16 +220,57 @@ internal partial class AnnotationEditorWindow : Window
     /// </remarks>
     internal void RequestClose()
     {
+        // While the unsaved-edits question is open the window is already closing: a second Close
+        // would throw and leave the request flag set for a later close from code.
+        if (IsAskingToClose) return;
         _closeAsked = true;
         Close();
     }
 
+    /// <summary>
+    /// Closes the way <see cref="RequestClose"/> does and completes once the outcome is known: true
+    /// when the window has closed, false when it stays open (the user kept it, or saving failed).
+    /// </summary>
     internal Task<bool> RequestCloseAsync()
     {
-        if (IsCloseInProgress) return Task.FromResult(false);
+        if (IsCloseInProgress || IsAskingToClose || IsSavingToClose) return Task.FromResult(false);
         _discardCloseTask = null;
+        _saveCloseTask = null;
+        LastCloseChoice = null;
         RequestClose();
-        return _discardCloseTask ?? CompleteRequestedCloseAsync();
+        return _discardCloseTask ?? _saveCloseTask ?? CompleteRequestedCloseAsync();
+    }
+
+    /// <summary>True while the unsaved-edits question is on screen; the window is closing meanwhile.</summary>
+    internal bool IsAskingToClose { get; private set; }
+
+    /// <summary>The answer to the last requested close's unsaved-edits question; null when none was asked.</summary>
+    internal EditorCloseChoice? LastCloseChoice { get; private set; }
+
+    /// <summary>
+    /// True while a modal dialog keeps this window from taking input: one of its own, a file picker
+    /// over it, or another window's (a modal dialog disables every window of the app).
+    /// </summary>
+    internal bool HasOpenDialog => !WindowForeground.IsEnabled(this);
+
+    /// <summary>
+    /// Asks what to do with unsaved edits. A capture shortcut can ask while the editor is minimized
+    /// or behind another app, so the editor comes forward first and the question opens in front of it.
+    /// </summary>
+    private EditorCloseChoice AskBeforeClosing()
+    {
+        WindowForeground.BringForward(this);
+        IsAskingToClose = true;
+        try
+        {
+            EditorCloseChoice choice = ConfirmClose();
+            LastCloseChoice = choice;
+            return choice;
+        }
+        finally
+        {
+            IsAskingToClose = false;
+        }
     }
 
     private bool _closeAsked;
@@ -178,6 +300,9 @@ internal partial class AnnotationEditorWindow : Window
         if (_editor.IsEditingOperationInProgress || (IsCloseInProgress && !_discardedDraft))
         {
             e.Cancel = true;
+            // A picked picture still being read is added first and the close then goes ahead,
+            // as it did while the picture was decoded on the UI thread; other work drops it.
+            if (_editor.IsOnlyReadingPictures && !IsCloseInProgress) _ = CloseAfterPicturesAsync(_closeAsked);
             _closeAsked = false;
             return;
         }
@@ -186,15 +311,13 @@ internal partial class AnnotationEditorWindow : Window
         _closeAsked = false;
         if (ask)
         {
-            switch (ConfirmClose())
+            switch (AskBeforeClosing())
             {
                 case EditorCloseChoice.SaveAndClose:
                     // The Done commit closes the window itself once the edit is saved, and keeps
-                    // it open (with the failure in the status line) when saving fails. Started
-                    // after this close is cancelled: a commit that finishes synchronously
-                    // must not re-enter Close while the window is still closing.
+                    // it open (with the failure in the status line) when saving fails.
                     e.Cancel = true;
-                    _ = Dispatcher.BeginInvoke(DispatcherPriority.Input, _editor.SaveAndClose);
+                    _saveCloseTask = SaveAndCloseAsync();
                     return;
                 case EditorCloseChoice.DontSave:
                     if (_draftSession is null)
@@ -213,6 +336,25 @@ internal partial class AnnotationEditorWindow : Window
         }
 
         base.OnClosing(e);
+    }
+
+    private bool _closeWaitsForPictures;
+    private bool _deferredCloseAsked;
+    private bool _windowClosed;
+
+    /// <summary>Repeats a close deferred by <see cref="OnClosing"/> once picked pictures are in.</summary>
+    private async Task CloseAfterPicturesAsync(bool asked)
+    {
+        _deferredCloseAsked |= asked;
+        if (_closeWaitsForPictures) return;
+        _closeWaitsForPictures = true;
+        try { await _editor.ImageInsertsSettledAsync(); }
+        finally { _closeWaitsForPictures = false; }
+        bool ask = _deferredCloseAsked;
+        _deferredCloseAsked = false;
+        if (_windowClosed || IsAskingToClose) return;
+        _closeAsked = ask;
+        Close();
     }
 
     protected override void OnPreviewKeyDown(KeyEventArgs e)
@@ -244,6 +386,7 @@ internal partial class AnnotationEditorWindow : Window
 
     protected override void OnClosed(EventArgs e)
     {
+        _windowClosed = true;
         FinishDraftRecovery();
         _editor.EditingCompleted -= OnEditingCompleted;
         _editor.CloseRequested -= OnCloseRequested;
@@ -255,5 +398,12 @@ internal partial class AnnotationEditorWindow : Window
         }
 
         base.OnClosed(e);
+        // After Closed: whoever waits for this Done sees the window gone.
+        _leftScreen = false;
+        if (_doneFinishing is { } finishing)
+        {
+            _doneFinishing = null;
+            finishing.TrySetResult();
+        }
     }
 }

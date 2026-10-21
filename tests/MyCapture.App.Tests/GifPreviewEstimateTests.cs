@@ -113,11 +113,13 @@ public sealed class GifPreviewEstimateTests
             GifSegmentSize size = GifSegmentSize.Measure(path);
             Assert.Equal((long)bytes.Length, size.Bytes);
             Assert.Equal(firstImageBytes, size.FirstImageBytes);
+            Assert.Equal(4, size.Images);
 
             // 60 cs of playback: the images starting at 0, 10 and 20 cs form the head.
             Assert.Equal(0.5, size.HeadShare, 6);
             Assert.InRange(size.HeadBytes, size.FirstImageBytes + 1, bytes.Length - 1);
             Assert.Equal(new GifSegmentSize(20, 0, 0, 0), GifSegmentSize.Read(bytes.AsSpan(0, 20)));
+            Assert.Equal(0, GifSegmentSize.Read(bytes.AsSpan(0, bytes.Length - 1)).Images);
         }
         finally { OwnedTestDirectory.Delete(root); }
     });

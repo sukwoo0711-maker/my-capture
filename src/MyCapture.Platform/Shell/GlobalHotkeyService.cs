@@ -94,18 +94,22 @@ public sealed class GlobalHotkeyService : IDisposable
 
     private readonly NativeMessageWindow _window;
     private readonly IHotkeyRegistrar _registrar;
+    private readonly IHotkeyOverride _override;
     private readonly ILogger<GlobalHotkeyService> _log;
     private readonly Dictionary<int, GlobalHotkeyCommand> _commandsById = [];
     private readonly Dictionary<GlobalHotkeyCommand, int> _idsByCommand = [];
     private readonly Dictionary<GlobalHotkeyCommand, Hotkey> _assignedByCommand = [];
+    private readonly HashSet<GlobalHotkeyCommand> _overriddenCommands = [];
     private readonly List<HotkeyRegistrationFailure> _failures = [];
+    private bool _forceCoreShortcuts;
     private bool _initialized;
     private bool _disposed;
 
     public GlobalHotkeyService(
         NativeMessageWindow window,
-        ILogger<GlobalHotkeyService> log)
-        : this(window, new NativeHotkeyRegistrar(window.Handle), log)
+        ILogger<GlobalHotkeyService> log,
+        IHotkeyOverride? hotkeyOverride = null)
+        : this(window, new NativeHotkeyRegistrar(window.Handle), log, hotkeyOverride)
     {
     }
 
@@ -116,18 +120,20 @@ public sealed class GlobalHotkeyService : IDisposable
     public GlobalHotkeyService(
         NativeMessageWindow window,
         IHotkeyRegistrar registrar,
-        ILogger<GlobalHotkeyService> log)
+        ILogger<GlobalHotkeyService> log,
+        IHotkeyOverride? hotkeyOverride = null)
     {
         _window = window ?? throw new ArgumentNullException(nameof(window));
         _registrar = registrar ?? throw new ArgumentNullException(nameof(registrar));
         _log = log ?? throw new ArgumentNullException(nameof(log));
+        _override = hotkeyOverride ?? new LowLevelKeyboardHotkeyOverride(window);
         _window.MessageReceived += OnMessageReceived;
     }
 
     public event EventHandler<GlobalHotkeyPressedEventArgs>? Pressed;
 
     /// <summary>
-    /// Every assigned shortcut that Windows rejected during the last
+    /// Every current shortcut that could not be registered or claimed during the last
     /// <see cref="Initialize"/> or <see cref="Reconfigure"/>. Error 1409 normally means
     /// another process already owns the chord.
     /// </summary>
@@ -135,12 +141,16 @@ public sealed class GlobalHotkeyService : IDisposable
 
     public IReadOnlyCollection<GlobalHotkeyCommand> RegisteredCommands => _idsByCommand.Keys;
 
+    /// <summary>Commands claimed ahead of another program's registered shortcut.</summary>
+    public IReadOnlyCollection<GlobalHotkeyCommand> OverriddenCommands => _overriddenCommands;
+
     public Hotkey? GetAssigned(GlobalHotkeyCommand command) => _assignedByCommand.GetValueOrDefault(command);
 
     public bool CanRegister(Hotkey hotkey)
     {
         if (!hotkey.IsSafeGlobalShortcut) return false;
         if (!hotkey.IsAssigned || _assignedByCommand.Values.Contains(hotkey)) return true;
+        if (_forceCoreShortcuts && CoreShortcuts.IsCoreChord(hotkey)) return true;
         const int probeId = FirstHotkeyId + 127;
         if (!_registrar.TryRegister(probeId, hotkey, out _, out _)) return false;
         _registrar.Unregister(probeId);
@@ -158,6 +168,7 @@ public sealed class GlobalHotkeyService : IDisposable
         }
 
         _initialized = true;
+        _forceCoreShortcuts = settings.ForceCoreShortcuts;
 
         foreach ((GlobalHotkeyCommand command, Hotkey hotkey) in Enumerate(settings))
         {
@@ -177,11 +188,16 @@ public sealed class GlobalHotkeyService : IDisposable
     /// reports the collisions that forced the rollback.
     /// </para>
     /// <para>
+    /// With <paramref name="keepAvailable"/>, a collision does not roll back: every chord that
+    /// registered or was claimed stays in effect and the rest are recorded in
+    /// <see cref="Failures"/> exactly as <see cref="Initialize"/> records a startup conflict.
+    /// </para>
+    /// <para>
     /// Call on the dispatcher thread that owns the message window — the same thread that
     /// pumps WM_HOTKEY — so registration and message handling never race.
     /// </para>
     /// </remarks>
-    public HotkeyReconfigureResult Reconfigure(HotkeySettings settings)
+    public HotkeyReconfigureResult Reconfigure(HotkeySettings settings, bool keepAvailable = false)
     {
         ArgumentNullException.ThrowIfNull(settings);
         ObjectDisposedException.ThrowIf(_disposed, this);
@@ -193,17 +209,16 @@ public sealed class GlobalHotkeyService : IDisposable
 
         // Snapshot the current assignments so we can restore them on collision.
         var previous = new Dictionary<GlobalHotkeyCommand, Hotkey>(_assignedByCommand);
+        foreach (HotkeyRegistrationFailure failure in _failures)
+        {
+            previous.TryAdd(failure.Command, failure.Hotkey);
+        }
+        bool previousForceCoreShortcuts = _forceCoreShortcuts;
 
         // Unregister everything currently held.
-        foreach (int id in _commandsById.Keys)
-        {
-            _registrar.Unregister(id);
-        }
-
-        _commandsById.Clear();
-        _idsByCommand.Clear();
-        _assignedByCommand.Clear();
+        ReleaseRegistrations();
         _failures.Clear();
+        _forceCoreShortcuts = settings.ForceCoreShortcuts;
 
         var failures = new List<HotkeyRegistrationFailure>();
         foreach ((GlobalHotkeyCommand command, Hotkey hotkey) in Enumerate(settings))
@@ -213,48 +228,34 @@ public sealed class GlobalHotkeyService : IDisposable
                 continue;
             }
 
-            int id = IdFor(command);
-            if (_registrar.TryRegister(id, hotkey, out int error, out string message))
-            {
-                _commandsById[id] = command;
-                _idsByCommand[command] = id;
-                _assignedByCommand[command] = hotkey;
-            }
-            else
+            if (!TryRegister(command, hotkey, out int error, out string message))
             {
                 failures.Add(new HotkeyRegistrationFailure(command, hotkey, error, message));
             }
         }
 
-        if (failures.Count == 0)
+        if (failures.Count == 0 || keepAvailable)
         {
+            foreach (HotkeyRegistrationFailure failure in failures)
+            {
+                RecordFailure(failure);
+            }
+
             _log.LogInformation(
                 "Hotkeys reconfigured: {Commands}",
                 string.Join(", ", _idsByCommand.Keys.Order()));
-            return HotkeyReconfigureResult.Success();
+            return failures.Count == 0 ? HotkeyReconfigureResult.Success() : HotkeyReconfigureResult.Partial(failures);
         }
 
         // Roll back: drop the partial new set and restore the previous registrations.
-        foreach (int id in _commandsById.Keys)
-        {
-            _registrar.Unregister(id);
-        }
-
-        _commandsById.Clear();
-        _idsByCommand.Clear();
-        _assignedByCommand.Clear();
+        ReleaseRegistrations();
+        _forceCoreShortcuts = previousForceCoreShortcuts;
 
         foreach ((GlobalHotkeyCommand command, Hotkey hotkey) in previous)
         {
-            int id = IdFor(command);
-            if (_registrar.TryRegister(id, hotkey, out _, out _))
+            if (!TryRegister(command, hotkey, out int error, out string message))
             {
-                _commandsById[id] = command;
-                _idsByCommand[command] = id;
-                _assignedByCommand[command] = hotkey;
-            }
-            else
-            {
+                _failures.Add(new HotkeyRegistrationFailure(command, hotkey, error, message));
                 _log.LogError(
                     "Could not restore previous hotkey {Command} ({Hotkey}) after a failed reconfigure",
                     command,
@@ -309,25 +310,67 @@ public sealed class GlobalHotkeyService : IDisposable
             return;
         }
 
-        int id = IdFor(command);
-        if (_registrar.TryRegister(id, hotkey, out int error, out string message))
+        if (TryRegister(command, hotkey, out int error, out string message))
         {
-            _commandsById[id] = command;
-            _idsByCommand[command] = id;
-            _assignedByCommand[command] = hotkey;
-            _log.LogInformation("Registered {Command} as {Hotkey}", command, hotkey);
             return;
         }
 
-        var failure = new HotkeyRegistrationFailure(command, hotkey, error, message);
+        RecordFailure(new HotkeyRegistrationFailure(command, hotkey, error, message));
+    }
+
+    private void RecordFailure(HotkeyRegistrationFailure failure)
+    {
         _failures.Add(failure);
 
         _log.LogWarning(
             "Could not register {Command} as {Hotkey}: Win32 {Error} ({Message})",
-            command,
-            hotkey,
-            error,
-            message);
+            failure.Command,
+            failure.Hotkey,
+            failure.NativeErrorCode,
+            failure.NativeMessage);
+    }
+
+    private bool TryRegister(GlobalHotkeyCommand command, Hotkey hotkey, out int error, out string message)
+    {
+        int id = IdFor(command);
+        bool registered = _registrar.TryRegister(id, hotkey, out error, out message);
+        if (!registered)
+        {
+            if (error != 1409 || !_forceCoreShortcuts || !CoreShortcuts.IsCoreChord(hotkey) ||
+                !_override.TryClaim(id, hotkey))
+            {
+                return false;
+            }
+
+            _overriddenCommands.Add(command);
+            _log.LogInformation("Claimed {Command} as {Hotkey} ahead of another program", command, hotkey);
+        }
+        else
+        {
+            _log.LogInformation("Registered {Command} as {Hotkey}", command, hotkey);
+        }
+
+        _commandsById[id] = command;
+        _idsByCommand[command] = id;
+        _assignedByCommand[command] = hotkey;
+        return true;
+    }
+
+    private void ReleaseRegistrations()
+    {
+        foreach ((int id, GlobalHotkeyCommand command) in _commandsById)
+        {
+            _registrar.Unregister(id);
+            if (_overriddenCommands.Contains(command))
+            {
+                _override.Release(id);
+            }
+        }
+
+        _commandsById.Clear();
+        _idsByCommand.Clear();
+        _assignedByCommand.Clear();
+        _overriddenCommands.Clear();
     }
 
     private void OnMessageReceived(object? sender, NativeWindowMessageEventArgs e)
@@ -357,14 +400,8 @@ public sealed class GlobalHotkeyService : IDisposable
         _disposed = true;
         _window.MessageReceived -= OnMessageReceived;
 
-        foreach (int id in _commandsById.Keys)
-        {
-            _registrar.Unregister(id);
-        }
-
-        _commandsById.Clear();
-        _idsByCommand.Clear();
-        _assignedByCommand.Clear();
+        ReleaseRegistrations();
+        _override.Dispose();
     }
 }
 
@@ -386,7 +423,8 @@ public sealed record HotkeyRegistrationFailure(
 
 /// <summary>
 /// The outcome of a <see cref="GlobalHotkeyService.Reconfigure"/>. On rollback the
-/// previous hotkey set remains registered and <see cref="Failures"/> explains why.
+/// previous hotkey set remains registered and <see cref="Failures"/> explains why. A partial
+/// reconfigure is applied, and <see cref="Failures"/> lists the chords it left unregistered.
 /// </summary>
 public sealed record HotkeyReconfigureResult(bool Applied, IReadOnlyList<HotkeyRegistrationFailure> Failures)
 {
@@ -394,4 +432,7 @@ public sealed record HotkeyReconfigureResult(bool Applied, IReadOnlyList<HotkeyR
 
     public static HotkeyReconfigureResult RolledBack(IReadOnlyList<HotkeyRegistrationFailure> failures) =>
         new(false, failures);
+
+    public static HotkeyReconfigureResult Partial(IReadOnlyList<HotkeyRegistrationFailure> failures) =>
+        new(true, failures);
 }

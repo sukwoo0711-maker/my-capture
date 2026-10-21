@@ -163,6 +163,37 @@ public sealed class SettingsApplyAndWindowTests : KoreanCaptionTest
     }
 
     [Fact]
+    public void Apply_StaleDraft_PreservesTipsShownWhileSettingsWereOpen()
+    {
+        RunSta(() =>
+        {
+            var store = new SettingsStore(AppPaths.CreateForRoot(NewTempRoot()), NullLogger<SettingsStore>.Instance);
+            AppSettings live = NewInstallDefaults.Create();
+            var draft = new SettingsDraft(live) { MaxItems = "450" };
+            FirstUseTips.ShowCaptureOnce(live.General, () => { });
+            FirstUseTips.ShowPinOnce(live.General, () => { });
+            AppSettings stale = draft.ToAppSettings();
+            Assert.False(stale.General.FirstCaptureTipShown);
+            Assert.False(stale.General.FirstPinTipShown);
+
+            using var window = new NativeMessageWindow();
+            using var hotkeys = new GlobalHotkeyService(window, new FakeRegistrar(), NullLogger<GlobalHotkeyService>.Instance);
+            hotkeys.Initialize(live.Hotkeys);
+            var startup = new StartupRegistrationService(new FakeRunKeyStore(), @"C:\Apps\MyCapture.exe");
+            var apply = new SettingsApplyService(store, () => live, updated => live = updated,
+                null, hotkeys, startup, NullLogger.Instance);
+
+            Assert.True(apply.Apply(stale).Saved);
+            foreach (AppSettings settings in new[] { live, store.Load() })
+            {
+                Assert.True(settings.General.FirstCaptureTipShown);
+                Assert.True(settings.General.FirstPinTipShown);
+                Assert.Equal(450, settings.Queue.MaxItems);
+            }
+        });
+    }
+
+    [Fact]
     public void Apply_SavesPublishesAndReconfigures()
     {
         RunSta(() =>

@@ -16,7 +16,7 @@ namespace MyCapture.App.Tests;
 
 /// <summary>
 /// Shortcut captions use the caption size (12), including key combinations, and their
-/// reserved line fits the video editor's command rows and the quick access card.
+/// reserved line fits the video editor's command rows. The compact receipt keeps its keys in tooltips.
 /// </summary>
 public sealed class ShortcutCaptionTests
 {
@@ -105,12 +105,14 @@ public sealed class ShortcutCaptionTests
         try
         {
             editor = OpenReadyEditor(root, 10_000, show: true, width, height);
+            editor.SetDetailsExpandedForTest(true);
+            editor.UpdateLayout();
             var layout = (Grid)editor.Content;
             Grid bar = Assert.Single(Descendants(layout).OfType<Grid>(), grid => grid.Name == "VideoEditorCommandBar");
-            StackPanel transport = Assert.Single(Descendants(layout).OfType<StackPanel>(), panel => panel.Name == "VideoTransport");
-            StackPanel view = Assert.Single(Descendants(layout).OfType<StackPanel>(), panel => panel.Name == "VideoTimelineViewTools");
+            Grid transport = Assert.Single(Descendants(layout).OfType<Grid>(), panel => panel.Name == "VideoTransport");
+            StackPanel precise = Assert.Single(Descendants(layout).OfType<StackPanel>(), panel => panel.Name == "VideoPreciseTransport");
             int captions = 0;
-            foreach (FrameworkElement row in new FrameworkElement[] { bar, transport, view })
+            foreach (FrameworkElement row in new FrameworkElement[] { bar, transport, precise })
             {
                 foreach (ButtonBase button in Descendants(row).OfType<ButtonBase>().Where(button => button.IsVisible))
                 {
@@ -118,7 +120,8 @@ public sealed class ShortcutCaptionTests
                     if (string.IsNullOrEmpty(key)) continue;
                     ShortcutDefinition definition = ShortcutCatalog.All.First(item => item.Scope == ShortcutScope.Video && item.Hint == key);
                     TextBlock[] keyTexts = Descendants(button).OfType<TextBlock>().Where(text => text.Text == key).ToArray();
-                    if (!ShortcutPresentation.ShowsCaption(definition))
+                    Assert.Contains(key, Assert.IsType<string>(button.ToolTip));
+                    if (!ReferenceEquals(row, precise) || !ShortcutPresentation.ShowsCaption(definition))
                     {
                         Assert.Empty(keyTexts);
                         continue;
@@ -138,7 +141,7 @@ public sealed class ShortcutCaptionTests
                 }
             }
 
-            Assert.True(captions >= 8, $"{captions} captions");
+            Assert.Equal(6, captions); // Four seek commands and two frame steps retain visible key captions.
             // Trim stays visible; secondary tools remain available from the compact overflow.
             Assert.Contains(Descendants(bar).OfType<Button>(), button => button.IsVisible
                 && AutomationProperties.GetName(button) == UiText.Get("VideoEditorUx_Trim"));
@@ -160,18 +163,19 @@ public sealed class ShortcutCaptionTests
                 ("Text_B753165F6585", "VideoEditorUx_NextFrameShort", "."),
             })
             {
-                Button step = Assert.Single(Descendants(transport).OfType<Button>(), b => AutomationProperties.GetName(b) == UiText.Get(nameKey));
+                Button step = Assert.Single(Descendants(precise).OfType<Button>(), b => AutomationProperties.GetName(b) == UiText.Get(nameKey));
                 Assert.Contains(Descendants(step).OfType<TextBlock>(), text => text.IsVisible && text.Text == UiText.Get(labelKey));
                 Assert.Equal(key, AutomationProperties.GetAcceleratorKey(step));
                 Assert.Contains(key, (string)step.ToolTip, StringComparison.Ordinal);
             }
 
-            // The centred transport and the timeline tools at the right never overlap.
-            var controlRow = (Grid)VisualTreeHelper.GetParent(transport);
-            double transportRight = transport.TranslatePoint(new Point(transport.ActualWidth, 0), controlRow).X;
-            double viewLeft = view.TranslatePoint(default, controlRow).X;
-            Assert.True(viewLeft >= transportRight, $"{language} {width}: tools at {viewLeft}, transport ends at {transportRight}");
-            Assert.True(view.TranslatePoint(new Point(view.ActualWidth, 0), controlRow).X <= controlRow.ActualWidth + 0.5);
+            // The time readout and Details at the right never overlap in the transport row.
+            Border time = Assert.Single(Descendants(transport).OfType<Border>(), item => item.Name == "VideoPositionChip");
+            ToggleButton details = Assert.Single(Descendants(transport).OfType<ToggleButton>(), item => item.Name == "VideoDetailsToggle");
+            double timeRight = time.TranslatePoint(new Point(time.ActualWidth, 0), transport).X;
+            double detailsLeft = details.TranslatePoint(default, transport).X;
+            Assert.True(detailsLeft >= timeRight, $"{language} {width}: details at {detailsLeft}, time ends at {timeRight}");
+            Assert.True(details.TranslatePoint(new Point(details.ActualWidth, 0), transport).X <= transport.ActualWidth + 0.5);
         }
         finally
         {
@@ -183,7 +187,7 @@ public sealed class ShortcutCaptionTests
     [Theory]
     [InlineData("ko-KR")]
     [InlineData("en-US")]
-    public void QuickAccessKeyCaptionsReadAt12AndFitTheirButtons(string language) => StaTestHost.Run(() =>
+    public void QuickAccessKeysRemainDiscoverableWhenVisibleCaptionPreferenceChanges(string language) => StaTestHost.Run(() =>
     {
         using var culture = UiText.UseLanguage(language);
         Func<bool>? previous = ShortcutPresentation.ReadEnabled;
@@ -196,9 +200,7 @@ public sealed class ShortcutCaptionTests
             ShortcutPresentation.ReadEnabled = () => enabled;
             ShortcutPresentation.Refresh();
             card.IsKept = true;
-            Ocr410Fixture.LoadTheme(card);
-            card.Show();
-            card.UpdateLayout();
+            Border host = QuickAccessDetachedFixture.Layout(card);
             Assert.False(card.CanActivateByHotkey);
             IReadOnlyList<Button> actions = card.ActionButtonsForTest;
             Assert.Equal(5, actions.Count);
@@ -206,20 +208,14 @@ public sealed class ShortcutCaptionTests
             {
                 enabled = show;
                 ShortcutPresentation.Refresh();
-                card.UpdateLayout();
+                host.UpdateLayout();
                 foreach (Button button in actions)
                 {
-                    Assert.Equal(44, button.ActualHeight, 2);
+                    Assert.Equal(32, button.ActualHeight, 2);
                     string key = AutomationProperties.GetAcceleratorKey(button);
-                    TextBlock caption = Assert.Single(Descendants(button).OfType<TextBlock>(), text => text.Text == key);
-                    Assert.Equal(12, caption.FontSize);
-                    Assert.Equal(show ? Visibility.Visible : Visibility.Collapsed, caption.Visibility);
-                    if (show)
-                    {
-                        Assert.True(caption.ActualWidth + 0.5 >= caption.DesiredSize.Width, $"'{key}' is clipped");
-                        Rect bounds = caption.TransformToAncestor(button).TransformBounds(new Rect(caption.RenderSize));
-                        Assert.True(bounds.Bottom <= button.ActualHeight + 0.5, $"'{key}' leaves its button: {bounds} in {button.ActualHeight}");
-                    }
+                    Assert.False(string.IsNullOrWhiteSpace(key));
+                    Assert.Equal(AutomationProperties.GetName(button) + "  " + key, button.ToolTip);
+                    Assert.DoesNotContain(Descendants(button).OfType<TextBlock>(), text => text.Text == key);
                 }
             }
         }

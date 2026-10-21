@@ -187,9 +187,13 @@ public sealed class RecordingPauseTests : KoreanCaptionTest
             sink.WaitForCount(1);
             Assert.Equal(Visibility.Visible, pause.Visibility);
             Assert.True(pause.IsEnabled && pause.Focusable && pause.IsTabStop);
-            Assert.Equal("일시 정지", RecordingControlWindow.ButtonLabel(pause));
+            Assert.IsType<MyCapture.App.Themes.SymbolIcon>(pause.Content);
             Assert.Equal("녹화 일시 정지", AutomationProperties.GetName(pause));
             Assert.Contains("동영상에 포함되지 않습니다", AutomationProperties.GetHelpText(pause), StringComparison.Ordinal);
+            // The status cell holds the state alone; how to finish is its tooltip and help text.
+            Assert.DoesNotContain("Esc", status.Text, StringComparison.Ordinal);
+            Assert.Equal("Esc 키나 중지를 누르면 녹화를 끝냅니다.", AutomationProperties.GetHelpText(status));
+            Assert.Equal(AutomationProperties.GetHelpText(status), status.ToolTip);
             Brush recordingBrush = frame.BorderBrush;
 
             window.ShowTime = true; // The ⋯ menu's "show time" (formerly the clock check box).
@@ -200,10 +204,12 @@ public sealed class RecordingPauseTests : KoreanCaptionTest
             PumpUntil(() => window.IsPaused && !window.IsPauseTransitionPending);
             Assert.True(recorder.IsPaused);
             Assert.True(window.IsRecording); // Ctrl+Shift+X routes to RequestStop while paused
-            Assert.Equal("재개", RecordingControlWindow.ButtonLabel(pause));
+            Assert.IsType<MyCapture.App.Themes.SymbolIcon>(pause.Content);
             Assert.Equal("녹화 재개", AutomationProperties.GetName(pause));
-            Assert.StartsWith("일시 정지됨", status.Text, StringComparison.Ordinal);
+            Assert.Equal("일시 정지됨", status.Text);
             Assert.Equal(status.Text, AutomationProperties.GetName(status));
+            Assert.Equal("재개를 누르면 이어서 녹화하고, Esc 키나 중지를 누르면 녹화를 끝냅니다.", AutomationProperties.GetHelpText(status));
+            Assert.Equal(AutomationProperties.GetHelpText(status), status.ToolTip);
             Assert.Equal("일시 정지됨", AutomationProperties.GetItemStatus(frame));
             Assert.IsType<LinearGradientBrush>(frame.BorderBrush);
             Assert.NotSame(recordingBrush, frame.BorderBrush);
@@ -220,9 +226,11 @@ public sealed class RecordingPauseTests : KoreanCaptionTest
             PumpUntil(() => !window.IsPaused && !window.IsPauseTransitionPending);
             Assert.False(recorder.IsPaused);
             Assert.False(clock.IsPaused);
-            Assert.Equal("일시 정지", RecordingControlWindow.ButtonLabel(pause));
+            Assert.IsType<MyCapture.App.Themes.SymbolIcon>(pause.Content);
+            Assert.Equal("녹화 일시 정지", AutomationProperties.GetName(pause));
             Assert.Equal(string.Empty, AutomationProperties.GetItemStatus(frame));
             Assert.IsNotType<LinearGradientBrush>(frame.BorderBrush);
+            Assert.Equal("Esc 키나 중지를 누르면 녹화를 끝냅니다.", AutomationProperties.GetHelpText(status));
             sink.WaitForCount(framesAtPause + 2);
 
             pause.RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));
@@ -236,6 +244,9 @@ public sealed class RecordingPauseTests : KoreanCaptionTest
             Assert.True(finished.PausedMs >= 550, $"paused {finished.PausedMs:0}ms");
             Assert.True(sink.Completed);
             Assert.False(pause.IsEnabled);
+            // Finishing leaves nothing to resume or stop: the guidance goes with the state.
+            Assert.Equal(string.Empty, AutomationProperties.GetHelpText(status));
+            Assert.Null(status.ToolTip);
             double[] timestamps = sink.Timestamps;
             for (int i = 1; i < timestamps.Length; i++)
             {

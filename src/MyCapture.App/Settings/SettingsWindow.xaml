@@ -86,8 +86,8 @@
                             </Border>
                             <Border x:Name="FocusRing"
                                     Margin="1"
-                                    BorderBrush="{DynamicResource Border.Focus}"
-                                    BorderThickness="1"
+                                    BorderBrush="{DynamicResource Text.Primary}"
+                                    BorderThickness="{DynamicResource Focus.RingThickness}"
                                     CornerRadius="{DynamicResource Radius.Sm}"
                                     IsHitTestVisible="False"
                                     Opacity="0" />
@@ -212,7 +212,9 @@
             <Setter Property="Background" Value="{DynamicResource Surface.Sunken}" />
             <Setter Property="Foreground" Value="{DynamicResource Text.Primary}" />
             <Setter Property="CaretBrush" Value="{DynamicResource Text.Primary}" />
-            <Setter Property="SelectionBrush" Value="{DynamicResource Accent.Default}" />
+            <Setter Property="SelectionBrush" Value="{DynamicResource Text.SelectionBackground}" />
+            <Setter Property="SelectionTextBrush" Value="{DynamicResource Text.SelectionForeground}" />
+            <Setter Property="SelectionOpacity" Value="1" />
             <Setter Property="BorderBrush" Value="{DynamicResource Border.Control}" />
             <Setter Property="BorderThickness" Value="1" />
             <Setter Property="Padding" Value="10,5" />
@@ -234,8 +236,8 @@
                             </Border>
                             <Border x:Name="FocusRing"
                                     Margin="1"
-                                    BorderBrush="{DynamicResource Border.Focus}"
-                                    BorderThickness="1"
+                                    BorderBrush="{DynamicResource Text.Primary}"
+                                    BorderThickness="{DynamicResource Focus.RingThickness}"
                                     CornerRadius="{DynamicResource Radius.Sm}"
                                     IsHitTestVisible="False"
                                     Opacity="0" />
@@ -381,7 +383,7 @@
                                         Style="{StaticResource StatePart.Normal}"
                                         Opacity="0"
                                         Width="3"
-                                        Background="{DynamicResource Accent.Indicator}"
+                                        Background="{DynamicResource Text.Primary}"
                                         CornerRadius="2" />
                                 <Grid Grid.Column="1"
                                          Margin="10,0,0,0" VerticalAlignment="Center">
@@ -401,7 +403,7 @@
                             <Trigger Property="IsSelected" Value="True">
                                 <Setter TargetName="SelectedLayer" Property="themes:FluidMotion.FadeTo" Value="1" />
                                 <Setter TargetName="AccentBar" Property="themes:FluidMotion.FadeTo" Value="1" />
-                                <Setter TargetName="Glyph" Property="Stroke" Value="{DynamicResource Accent.Cool}" />
+                                <Setter TargetName="Glyph" Property="Stroke" Value="{DynamicResource Text.Primary}" />
                                 <Setter Property="Foreground" Value="{DynamicResource Text.Primary}" />
                                 <Setter Property="FontWeight" Value="SemiBold" />
                             </Trigger>
@@ -435,6 +437,16 @@
                                 <ColumnDefinition Width="*" />
                             </Grid.ColumnDefinitions>
                             <Border Style="{StaticResource Card}" Padding="10">
+                                <DockPanel>
+                                <StackPanel DockPanel.Dock="Top" Margin="0,0,0,10">
+                                    <TextBlock Text="{loc:Text Settings_Search}" Style="{StaticResource Settings.Label}" />
+                                    <TextBox x:Name="SettingsSearchBox" Style="{StaticResource Settings.TextBox}"
+                                             AutomationProperties.Name="{loc:Text Settings_Search}"
+                                             AutomationProperties.HelpText="{loc:Text Settings_SearchHint}"
+                                             ToolTip="{loc:Text Settings_SearchHint}" TextChanged="OnSettingsSearchChanged" />
+                                    <TextBlock x:Name="SettingsSearchEmpty" Text="{loc:Text Settings_SearchEmpty}"
+                                               Style="{StaticResource Settings.Description}" Visibility="Collapsed" Margin="0,8,0,0" />
+                                </StackPanel>
                                 <ScrollViewer x:Name="CategoryScroll"
                                               VerticalScrollBarVisibility="Auto"
                                               HorizontalScrollBarVisibility="Disabled"
@@ -443,12 +455,13 @@
                                     <StackPanel IsItemsHost="True"
                                                 KeyboardNavigation.DirectionalNavigation="Cycle" />
                                 </ScrollViewer>
+                                </DockPanel>
                             </Border>
                             <Border Grid.Column="1" Margin="16,0,0,0"
                                     Style="{StaticResource Card}" Padding="0">
-                                <ContentPresenter x:Name="PART_SelectedContentHost"
+                                <AdornerDecorator><ContentPresenter x:Name="PART_SelectedContentHost"
                                                   ContentSource="SelectedContent"
-                                                  Margin="24,18,18,18" />
+                                                  Margin="24,18,18,18" /></AdornerDecorator>
                             </Border>
                         </Grid>
                     </ControlTemplate>
@@ -507,20 +520,12 @@
                         <TextBlock Style="{StaticResource Settings.Label}" Text="{loc:Text Settings.Theme}" Margin="0,12,0,0" />
                         <ComboBox x:Name="ThemeSelector" SelectedValue="{Binding Theme}" SelectedValuePath="Tag"
                                   AutomationProperties.Name="{loc:Text Settings.Theme}" MinWidth="320" HorizontalAlignment="Left" Margin="0,4,0,4">
-                            <ComboBoxItem Tag="glass" Content="{loc:Text Settings.ThemeGlass}" />
+                            <ComboBoxItem Tag="system" Content="{loc:Text Settings.ThemeSystem}" />
                             <ComboBoxItem Tag="glass-light" Content="{loc:Text Settings.ThemeGlassLight}" />
-                            <ComboBoxItem Tag="workspace" Content="{loc:Text Settings.ThemeWorkspace}" />
-                            <ComboBoxItem Tag="daylight" Content="{loc:Text Settings.ThemeDaylight}" />
-                            <ComboBoxItem Tag="midnight" Content="{loc:Text Settings.ThemeMidnight}" />
+                            <ComboBoxItem Tag="glass" Content="{loc:Text Settings.ThemeGlass}" />
                             <ComboBoxItem Tag="high-contrast" Content="{loc:Text Settings.ThemeHighContrast}" />
                         </ComboBox>
                         <TextBlock Style="{StaticResource Settings.Description}" Text="{loc:Text Settings.ThemeHint}" />
-                        <TextBlock Style="{StaticResource Settings.Label}" Text="{loc:Text Settings.AccentColor}" Margin="0,12,0,0" />
-                        <ComboBox x:Name="AccentColorSelector" SelectedValue="{Binding AccentColor}" SelectedValuePath="Tag"
-                                  AutomationProperties.Name="{loc:Text Settings.AccentColor}" MinWidth="320" HorizontalAlignment="Left" Margin="0,4,0,4">
-                            <ComboBoxItem Tag="red" Content="{loc:Text Settings.AccentRed}" />
-                            <ComboBoxItem Tag="violet" Content="{loc:Text Settings.AccentViolet}" />
-                        </ComboBox>
 
                         <CheckBox x:Name="LaunchAtLoginCheck"
                                   Style="{StaticResource Settings.CheckBox}"
@@ -744,6 +749,10 @@
                                 <ComboBoxItem Tag="auto" Content="{loc:Text SettingsUx_RecordingMethodAuto}" />
                                 <ComboBoxItem Tag="gdi" Content="{loc:Text SettingsUx_RecordingMethodCompatible}" />
                             </ComboBox>
+                            <!-- Windows 10 has no borderless capture API, so the automatic method shows the
+                                 system's yellow capture border (ADR 0007). Shown only there; see code-behind. -->
+                            <TextBlock x:Name="RecordingBorderNote" Style="{StaticResource Settings.Description}" Margin="0,8,0,0"
+                                       Text="{loc:Text SettingsUx_RecordingBorderNoteWindows10}" Visibility="Collapsed" />
                         </StackPanel>
                     </StackPanel>
                 </ScrollViewer>
@@ -814,6 +823,14 @@
                                   Content="{loc:Text Text_F0C27AB1BA08}"
                                   AutomationProperties.Name="{loc:Text Text_F0C27AB1BA08}"
                                   IsChecked="{Binding CloseOnDoubleClick}" />
+
+                        <CheckBox Style="{StaticResource Settings.CheckBox}"
+                                  Content="{loc:Text PinSession.RestoreLabel}"
+                                  AutomationProperties.Name="{loc:Text PinSession.RestoreLabel}"
+                                  AutomationProperties.HelpText="{loc:Text PinSession.RestoreDescription}"
+                                  IsChecked="{Binding RestoreOpenPinsOnLaunch}" />
+                        <TextBlock Style="{StaticResource Settings.Description}"
+                                   Text="{loc:Text PinSession.RestoreDescription}" />
 
                         <settings:SettingsField Margin="0,6,0,12"
                                                 Header="{loc:Text Text_9165ADFF8EF8}" Hint="{loc:Text SettingsRange_InitialOpacity}">
@@ -918,6 +935,14 @@
                             <settings:HotkeyRecorder HorizontalAlignment="Left" AutomationProperties.Name="{loc:Text Text_6FF5C7B32202}" DefaultText="Ctrl+Shift+X" Text="{Binding RecordRegionHotkey, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
                         </StackPanel>
 
+                        <CheckBox x:Name="ForceCoreShortcutsCheck" Style="{StaticResource Settings.CheckBox}"
+                                  Content="{loc:Text CoreShortcuts.Force}"
+                                  AutomationProperties.Name="{loc:Text CoreShortcuts.Force}"
+                                  AutomationProperties.HelpText="{loc:Text CoreShortcuts.ForceDescription}"
+                                  IsChecked="{Binding ForceCoreShortcuts}" />
+                        <TextBlock Style="{StaticResource Settings.Description}"
+                                   Text="{loc:Text CoreShortcuts.ForceDescription}" />
+
                         <TextBlock Style="{StaticResource Settings.GroupHeading}" Text="{loc:Text SettingsUx_OtherShortcutsHeading}" />
                         <TextBlock Style="{StaticResource Settings.Description}" Margin="0,0,0,10"
                                    Text="{loc:Text SettingsUx_OtherShortcutsHint}" />
@@ -998,7 +1023,7 @@
                                         DockPanel.Dock="Right" Style="{StaticResource Button.Tutorial}" HorizontalAlignment="Right" Margin="8,0,0,2" Tag="pin-clipboard" Click="OnFeatureTutorial" />
                                 <TextBlock Style="{StaticResource Settings.Label}" Text="{loc:Text Text_1FBCF51E2FF5}" VerticalAlignment="Center" TextWrapping="Wrap" />
                             </DockPanel>
-                            <settings:HotkeyRecorder HorizontalAlignment="Left" AutomationProperties.Name="{loc:Text Text_B53D43740F41}" DefaultText="" Text="{Binding PasteToScreenHotkey, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
+                            <settings:HotkeyRecorder HorizontalAlignment="Left" AutomationProperties.Name="{loc:Text Text_B53D43740F41}" DefaultText="F3" Text="{Binding PasteToScreenHotkey, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
                         </StackPanel>
 
                         <StackPanel Style="{StaticResource Settings.Field}">
@@ -1007,7 +1032,7 @@
                                         DockPanel.Dock="Right" Style="{StaticResource Button.Tutorial}" HorizontalAlignment="Right" Margin="8,0,0,2" Tag="pin-hide-all" Click="OnFeatureTutorial" />
                                 <TextBlock Style="{StaticResource Settings.Label}" Text="{loc:Text Text_4FED89116C1F}" VerticalAlignment="Center" TextWrapping="Wrap" />
                             </DockPanel>
-                            <settings:HotkeyRecorder HorizontalAlignment="Left" AutomationProperties.Name="{loc:Text Text_D6E142D9293C}" DefaultText="" Text="{Binding HideAllPinsHotkey, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
+                            <settings:HotkeyRecorder HorizontalAlignment="Left" AutomationProperties.Name="{loc:Text Text_D6E142D9293C}" DefaultText="Shift+F3" Text="{Binding HideAllPinsHotkey, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
                         </StackPanel>
 
                         <StackPanel Style="{StaticResource Settings.Field}">
@@ -1221,7 +1246,7 @@
                         <StackPanel x:Name="AboutUpdatesSection" Style="{StaticResource About.Section}">
                             <TextBlock Style="{StaticResource About.Heading}" Text="{loc:Text About_UpdatesHeading}" />
                             <TextBlock x:Name="UpdateVersionLabel" Style="{StaticResource Settings.Label}" Margin="0,0,0,8" />
-                            <!-- Secondary: the window's one filled button is Apply. -->
+                            <!-- Secondary action within the About section. -->
                             <WrapPanel>
                                 <Button x:Name="UpdateAction" Style="{StaticResource Button.Secondary}" Click="OnUpdateAction" MinWidth="140" Margin="0,0,12,8" />
                                 <TextBlock x:Name="UpdateObservedStatus" TextWrapping="Wrap" VerticalAlignment="Center" Margin="0,0,0,8"
@@ -1259,7 +1284,6 @@
                                         AutomationProperties.HelpText="{loc:Text StoreRating_ButtonHelp}"
                                         Click="OnStoreRatingClick" />
                             </WrapPanel>
-                            <TextBlock Style="{StaticResource Settings.Description}" Margin="0" Text="{loc:Text About_ReportNote}" />
                         </StackPanel>
 
                         <!-- Data -->
@@ -1286,6 +1310,11 @@
                                         Click="OnImportSettings" />
                             </WrapPanel>
                             <TextBlock Style="{StaticResource Settings.Description}" Margin="0" Text="{loc:Text About_SettingsBackupHint}" />
+                            <Button x:Name="DefaultsButton" Style="{StaticResource Button.Ghost}"
+                                    Content="{loc:Text Text_205C50A145BA}" HorizontalAlignment="Left" Margin="0,16,0,0"
+                                    AutomationProperties.Name="{loc:Text Text_205C50A145BA}"
+                                    AutomationProperties.HelpText="{loc:Text Text_D8A23CD47E7A}"
+                                    ToolTip="{loc:Text Text_D8A23CD47E7A}" Click="OnResetDefaults" />
                         </StackPanel>
                     </StackPanel>
                 </ScrollViewer>
@@ -1337,50 +1366,11 @@
             </ScrollViewer>
         </Border>
 
-        <!-- ===================== Command bar =====================
-             One filled button (Apply), enabled only while something is unapplied. Keys live in
-             tooltips and accelerator properties, not in the labels. Cancel discards deliberately and
-             reads Close when there is nothing to discard; Esc and the title bar close ask first when
-             something is unapplied. -->
-        <Grid Grid.Row="3" Margin="0,14,0,0">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="Auto" />
-                <ColumnDefinition Width="*" />
-                <ColumnDefinition Width="Auto" />
-            </Grid.ColumnDefinitions>
-
-            <Button Grid.Column="0"
-                    x:Name="DefaultsButton"
-                    Style="{StaticResource Button.Secondary}"
-                    Content="{loc:Text Text_205C50A145BA}"
-                    MinWidth="120"
-                    ToolTip="{loc:Text Text_D8A23CD47E7A}"
-                    AutomationProperties.Name="{loc:Text Text_205C50A145BA}"
-                    AutomationProperties.HelpText="{loc:Text Text_D8A23CD47E7A}"
-                    Click="OnResetDefaults" />
-
-            <StackPanel Grid.Column="2" Orientation="Horizontal">
-                <Button x:Name="ApplyButton"
-                        Style="{StaticResource Button.Primary}"
-                        Content="{loc:Text Text_6A1C963D5BC5}"
-                        MinWidth="88"
-                        IsDefault="True"
-                        ToolTip="{loc:Text Text_B89071D80D8F}"
-                        AutomationProperties.Name="{loc:Text Text_6A1C963D5BC5}"
-                        AutomationProperties.HelpText="{loc:Text Text_B89071D80D8F}"
-                        AutomationProperties.AcceleratorKey="Ctrl+S"
-                        Click="OnApply" />
-                <!-- Cancel while something is unapplied, Close otherwise (RefreshCommandState). -->
-                <Button x:Name="CancelButton"
-                        Style="{StaticResource Button.Secondary}"
-                        Content="{loc:Text Dialog.Close}"
-                        MinWidth="88"
-                        Margin="8,0,0,0"
-                        ToolTip="{loc:Text SettingsUx_CloseTip}"
-                        AutomationProperties.Name="{loc:Text Dialog.Close}"
-                        AutomationProperties.HelpText="{loc:Text SettingsUx_CloseTip}"
-                        Click="OnCancel" />
-            </StackPanel>
-        </Grid>
+        <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,14,0,0">
+            <Button x:Name="CancelButton" Style="{StaticResource Button.Secondary}"
+                    Content="{loc:Text Dialog.Close}" MinWidth="88"
+                    ToolTip="{loc:Text SettingsUx_CloseTip}" AutomationProperties.Name="{loc:Text Dialog.Close}"
+                    AutomationProperties.HelpText="{loc:Text SettingsUx_CloseTip}" Click="OnCancel" />
+        </StackPanel>
     </Grid>
 </Window>

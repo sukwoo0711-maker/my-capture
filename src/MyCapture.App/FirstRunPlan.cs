@@ -5,7 +5,8 @@ namespace MyCapture.App;
 /// <summary>What the shell opens itself at launch.</summary>
 /// <param name="ShowWelcome">The first-run welcome window.</param>
 /// <param name="OpenLibrary">The library, opened right away.</param>
-internal readonly record struct LaunchPresentation(bool ShowWelcome, bool OpenLibrary);
+/// <param name="ShowCoreShortcuts">The unanswered shortcut question, before any other launch window.</param>
+internal readonly record struct LaunchPresentation(bool ShowWelcome, bool OpenLibrary, bool ShowCoreShortcuts = false);
 
 /// <summary>What follows the welcome window.</summary>
 internal enum AfterWelcome
@@ -22,7 +23,8 @@ internal enum AfterWelcome
 internal sealed record StartAtSignInOutcome(bool Enabled, string? Notice);
 
 /// <summary>
-/// First-run presentation: one window at a time. A first run shows only the welcome window (no
+/// First-run presentation: one window at a time. The unanswered core-shortcut question comes
+/// first, including on a quiet launch. After the answer, a first run shows the welcome window (no
 /// library behind it and no notification on top); the library follows once it closes, with the
 /// "ready" notification naming the capture key. Later launches keep their behaviour: the library
 /// opens unless the launch is a quiet sign-in launch. They show no "ready" notification: it would
@@ -30,7 +32,9 @@ internal sealed record StartAtSignInOutcome(bool Enabled, string? Notice);
 /// </summary>
 internal static class FirstRunPlan
 {
-    internal static LaunchPresentation ForLaunch(bool isFirstRun, bool quietLaunch, bool openSettings) => isFirstRun
+    internal static LaunchPresentation ForLaunch(bool isFirstRun, bool quietLaunch, bool openSettings, bool coreShortcutsAsked = true) => !coreShortcutsAsked
+        ? new LaunchPresentation(ShowWelcome: false, OpenLibrary: false, ShowCoreShortcuts: true)
+        : isFirstRun
         ? new LaunchPresentation(ShowWelcome: true, OpenLibrary: false)
         : new LaunchPresentation(ShowWelcome: false, OpenLibrary: !quietLaunch && !openSettings);
 

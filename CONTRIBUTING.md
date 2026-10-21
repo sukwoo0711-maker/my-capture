@@ -4,7 +4,7 @@
 
 ## 개발 환경
 
-- Windows 11
+- Windows 10 버전 22H2(빌드 19045) 이상 또는 Windows 11, x64
 - .NET 10 SDK `10.0.400` 이상
 - Windows PowerShell 5.1 이상
 - Git
@@ -44,7 +44,7 @@ dotnet test tests\MyCapture.App.Tests\MyCapture.App.Tests.csproj -c Release
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File build\build.ps1 -Configuration Release -Test
 ```
 
-실제 Windows API, OCR, 녹화 또는 패키징 경로를 바꿨다면 [`README.md`](README.md#자체-진단self-test)의 관련 self-test도 실행하고, 환경과 결과를 변경 설명에 기록하십시오. UI를 바꿨다면 일반 DPI와 고배율 DPI, 키보드 조작, 애니메이션 감소 설정에서 확인한 결과나 스크린샷을 첨부하십시오.
+실제 Windows API, OCR, 녹화 또는 패키징 경로를 바꿨다면 [`docs/build.md`](docs/build.md#자체-진단self-test)의 관련 self-test도 실행하고, 환경과 결과를 변경 설명에 기록하십시오. UI를 바꿨다면 일반 DPI와 고배율 DPI, 키보드 조작, 애니메이션 감소 설정에서 확인한 결과나 스크린샷을 첨부하십시오.
 
 ## 변경 제안과 제출
 

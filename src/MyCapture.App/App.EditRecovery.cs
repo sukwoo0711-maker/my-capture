@@ -24,6 +24,12 @@ public partial class App
 {
     internal EditDraftStore? DraftStore { get; private set; }
     private bool _preparingExit;
+    /// <summary>
+    /// Set just before WPF shuts the app down. <see cref="_preparingExit"/> is already false again
+    /// when the shutdown closes the remaining windows, so a window closed from here on was closed
+    /// by the exit, not by the user.
+    /// </summary>
+    private bool _shutdownRequested;
     internal Func<Task<bool>>? PrepareCapturePersistenceForExitAsync { get; set; }
     /// <summary>Call after persistence and queue initialization, before normal editor creation.</summary>
     internal async Task InitializeEditRecoveryAsync()
@@ -91,6 +97,8 @@ public partial class App
         await StopLegacyImportForExitAsync();
         if (_storeInstallationPending) return false;
         if (!await PrepareForAppExitAsync(AppExitReason.Explicit)) return false;
+        SavePinSessionForExit();
+        _shutdownRequested = true;
         Shutdown(0); return true;
     }
     private async Task<bool> PrepareForAppExitAsync(AppExitReason reason)
@@ -120,6 +128,7 @@ public partial class App
                 if (window is VideoEditorWindow video && !await video.PrepareForAppExitAsync()) return false;
             }
             await EditDraftSession.WaitForFinalizationsAsync();
+            await FlushPreferenceSavesForExitAsync();
             return true;
         }
         catch (Exception error) { _log?.LogError(error, "Could not prepare app exit ({Reason})", reason); return false; }
@@ -153,6 +162,7 @@ public partial class App
                     await Task.Delay(50);
                 await FlushEditingDraftsAsync();
                 await EditDraftSession.WaitForFinalizationsAsync();
+                await FlushPreferenceSavesForExitAsync();
             }, TimeSpan.FromSeconds(3), message => _log?.LogWarning("Session-ending draft flush: {Message}", message));
         }
         finally

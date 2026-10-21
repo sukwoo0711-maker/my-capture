@@ -35,7 +35,7 @@ namespace MyCapture.App.Editing;
 /// Layout: a top command bar on the same surface as the title bar (Undo/Redo, Crop and
 /// Quick Redact on the left; Save to file, Copy, Done and Cancel on the right), a left rail
 /// of drawing tools grouped by intent, a central image-only viewport, a contextual
-/// inspector that shows values rather than instructions, and a bottom status line that
+/// wrapping property bar above the viewport, and a bottom status line that
 /// reports results. Crop is a mode: while it is active the command bar becomes
 /// rotate / ratio / auto trim / Apply / Cancel, as in Photos, where rotation lives inside
 /// crop. There is no horizontal toolbar scrolling; compact commands retain their icon and
@@ -54,11 +54,6 @@ internal sealed partial class AnnotationEditorControl : Grid
     private EditorTool _preferredTool = EditorTool.Rectangle;
     private bool _preferencesReady;
     private const double ToolRailWidth = 94;
-    private const double InspectorWidth = 232;
-
-    // Below this width the inspector collapses before it can squeeze the image workspace.
-    // Normal editor startup now targets a comfortable width above this threshold.
-    private const double InspectorCompactWidth = 860;
 
     private readonly AnnotationSourceMetadata _frame;
     private readonly BitmapSource _selectedBitmap;
@@ -129,7 +124,6 @@ internal sealed partial class AnnotationEditorControl : Grid
     private Slider _blurSlider = null!;
     private FrameworkElement _blurSection = null!;
     private bool _syncingInspector;
-    private ColumnDefinition _inspectorColumn = null!;
     private Border _inspectorPanel = null!;
     private WrapPanel _swatchPanel = null!;
     private TextBox _customColorInput = null!;
@@ -138,7 +132,6 @@ internal sealed partial class AnnotationEditorControl : Grid
     private TextBlock _inspectorTitle = null!;
     private TextBlock _statusText = null!;
     private TextBlock _dimensionsText = null!;
-    private bool _inspectorCompact;
     private FrameworkElement _editCommands = null!;
     private FrameworkElement _cropCommands = null!;
     private readonly List<IReadOnlyList<EditorTool>> _toolGroups = [];
@@ -285,6 +278,7 @@ internal sealed partial class AnnotationEditorControl : Grid
             if (!ReferenceEquals(e.OriginalSource, _viewport) || _viewport.IsMouseCaptured) return;
             _edgeCropStart = null;
             _controller.CancelGesture();
+            RestoreInspectorHeightAfterGesture();
             if (_crop is { IsDragging: true }) { _crop.End(); RefreshCrop(); }
         };
 
@@ -301,6 +295,9 @@ internal sealed partial class AnnotationEditorControl : Grid
             _redactionCts?.Cancel();
             _redactionCts?.Dispose();
             _redactionCts = null;
+            _imageInsertCts?.Cancel();
+            _imageInsertCts?.Dispose();
+            _imageInsertCts = null;
             _hangulNoticeTimer?.Stop();
             _blurCache.Clear();
         };
@@ -364,6 +361,17 @@ internal sealed partial class AnnotationEditorControl : Grid
         SetStatus(UiText.Get(copiedToClipboard ? "Capture.CopiedAndSaved" : "Capture.Saved"));
     }
 
+    /// <summary>
+    /// Says in the status line why a capture command the user just gave did not start. It replaces
+    /// even the typing hint: the command came from outside the editor and its answer is shown here.
+    /// </summary>
+    internal void ShowCaptureBlocked(string message)
+    {
+        if (_completed || _statusText is null) return;
+        _statusText.Text = message;
+        RaiseStatusAutomationEvent();
+    }
+
     internal BitmapSource DisplayedBitmap => _surface.Frame.Bitmap;
 
     /// <summary>Copies the same canvas, transforms, assets and title used by editor commits.</summary>
@@ -390,9 +398,24 @@ internal sealed partial class AnnotationEditorControl : Grid
     internal bool IsPointerCaptured => _viewport.IsMouseCaptured;
 
     internal bool IsCommitInProgress => _commitInProgress && !_completed;
-    internal bool IsEditingOperationInProgress => IsCommitInProgress || _redactionInProgress;
 
-    internal bool CapturePointer() => !_simulatingPointer && _viewport.CaptureMouse();
+    /// <summary>
+    /// A commit, privacy search or picked picture still being read is running. A picture counts
+    /// because the synchronous insert it replaced had always finished before the window could
+    /// close or the app could flush its drafts.
+    /// </summary>
+    internal bool IsEditingOperationInProgress => IsCommitInProgress || _redactionInProgress || _pendingImageInserts > 0;
+
+    /// <summary>Reading picked pictures is the only operation in progress, so a close can wait for it.</summary>
+    internal bool IsOnlyReadingPictures => _pendingImageInserts > 0 && !IsCommitInProgress && !_redactionInProgress;
+
+    internal bool CapturePointer()
+    {
+        if (_simulatingPointer) return false;
+        bool captured = _viewport.CaptureMouse();
+        if (!captured) CancelFrozenPointerGesture();
+        return captured;
+    }
 
     internal void ReleasePointer()
     {
@@ -400,6 +423,32 @@ internal sealed partial class AnnotationEditorControl : Grid
         {
             _viewport.ReleaseMouseCapture();
         }
+        RestoreInspectorHeightAfterGesture();
+    }
+
+    private double? _inspectorHeightBeforeGesture;
+
+    private void FreezeInspectorHeightForGesture()
+    {
+        if (_inspectorHeightBeforeGesture.HasValue) return;
+        // Selection changes can show or wrap property groups during a press. Keep the
+        // canvas transform unchanged until its final pointer coordinate has been read.
+        _inspectorHeightBeforeGesture = _inspectorPanel.Height;
+        _inspectorPanel.Height = _inspectorPanel.ActualHeight;
+    }
+
+    private void RestoreInspectorHeightAfterGesture()
+    {
+        if (_inspectorHeightBeforeGesture is not double height) return;
+        _inspectorHeightBeforeGesture = null;
+        _inspectorPanel.Height = height;
+    }
+
+    private void CancelFrozenPointerGesture()
+    {
+        if (!_inspectorHeightBeforeGesture.HasValue) return;
+        _controller.CancelGesture();
+        ReleasePointer();
     }
 
     // ---- Keyboard ------------------------------------------------------------------
@@ -475,6 +524,12 @@ internal sealed partial class AnnotationEditorControl : Grid
     internal bool HandleShortcut(Key key, ModifierKeys modifiers)
     {
         if (_commitInProgress) return true;
+        if (_customColorPopup is { IsOpen: true } && key == Key.Escape && modifiers == ModifierKeys.None)
+        {
+            _customColorInput.Text = ColorCode(CurrentPropertyColor());
+            CloseCustomColorFlyout(returnFocus: true);
+            return true;
+        }
         if (_activeTextBox is not null)
         {
             string? command = ShortcutCatalog.Match(ShortcutScope.Annotation, key, modifiers);
@@ -522,6 +577,7 @@ internal sealed partial class AnnotationEditorControl : Grid
         _shortcutActions["SendBackward"] = () => _controller.ReorderSelected(forward: false);
         _shortcutActions["EditText"] = () =>
         {
+            CancelFrozenPointerGesture();
             if (_controller.BeginSelectedTextEdit() is { } text) OpenTextBox(text);
         };
         _shortcutActions["RotateLeft"] = () => RotateCapture(-1);
@@ -715,6 +771,7 @@ internal sealed partial class AnnotationEditorControl : Grid
                 }
                 return true;
             default:
+                FreezeInspectorHeightForGesture();
                 _controller.HitTolerance = 6 / Math.Max(double.Epsilon, _surface.DipPerPixel);
                 _controller.PointerDown(image, shift, control);
                 CapturePointer();
@@ -740,14 +797,12 @@ internal sealed partial class AnnotationEditorControl : Grid
             return;
         }
 
-        int step = Math.Clamp(blockSize, 4, 64);
+        int step = Math.Clamp(blockSize, SettingsRanges.MosaicBlockSize.Min, SettingsRanges.MosaicBlockSize.Max);
         // Sample the base the user currently sees. After a rotation that base is the
         // rotated bitmap; sampling the untouched selection would read coordinates from
         // the rotated canvas space out of (or beside) the unrotated pixels.
         BitmapSource mosaicBase = _surface.Frame.Bitmap;
-        int stride = mosaicBase.PixelWidth * 4;
-        byte[] source = new byte[stride * mosaicBase.PixelHeight];
-        mosaicBase.CopyPixels(source, stride, 0);
+        byte[] source = ReadMosaicSource(mosaicBase, x, y, width, height, out int stride, out int originX, out int originY);
 
         int patchStride = width * 4;
         byte[] patch = new byte[patchStride * height];
@@ -764,11 +819,11 @@ internal sealed partial class AnnotationEditorControl : Grid
                 long sumB = 0, sumG = 0, sumR = 0, count = 0;
                 for (int py = 0; py < blockH; py++)
                 {
-                    int sy = y + by + py;
+                    int sy = y + by + py - originY;
                     int row = sy * stride;
                     for (int px = 0; px < blockW; px++)
                     {
-                        int sx = x + bx + px;
+                        int sx = x + bx + px - originX;
                         int i = row + (sx * 4);
                         if (source[i + 3] == 0)
                         {
@@ -825,6 +880,40 @@ internal sealed partial class AnnotationEditorControl : Grid
         _controller.AddImageAnnotation(asset.AssetFileName, width, height, rect);
         SelectTool(EditorTool.Select);
         SetStatus(UiText.Get("Text_3F8046019B34"));
+    }
+
+    /// <summary>
+    /// The base pixels a mosaic over <paramref name="x"/>, <paramref name="y"/>,
+    /// <paramref name="width"/>, <paramref name="height"/> averages, as four-byte rows of
+    /// <paramref name="stride"/> bytes whose first byte is base pixel
+    /// (<paramref name="originX"/>, <paramref name="originY"/>).
+    /// </summary>
+    /// <remarks>
+    /// The block averages read only pixels inside the region, so a 32bpp base yields exactly
+    /// the bytes a whole-image copy would hold there, without copying the rest of the image
+    /// on every mosaic. Any other format, or a region the base does not fully contain, keeps
+    /// the whole-image copy and its four-byte addressing, so the patch bytes never change.
+    /// </remarks>
+    private static byte[] ReadMosaicSource(BitmapSource bitmap, int x, int y, int width, int height,
+        out int stride, out int originX, out int originY)
+    {
+        if (bitmap.Format.BitsPerPixel == 32 && x >= 0 && y >= 0
+            && x + width <= bitmap.PixelWidth && y + height <= bitmap.PixelHeight)
+        {
+            stride = width * 4;
+            originX = x;
+            originY = y;
+            byte[] region = new byte[stride * height];
+            bitmap.CopyPixels(new Int32Rect(x, y, width, height), region, stride, 0);
+            return region;
+        }
+
+        stride = bitmap.PixelWidth * 4;
+        originX = 0;
+        originY = 0;
+        byte[] source = new byte[stride * bitmap.PixelHeight];
+        bitmap.CopyPixels(source, stride, 0);
+        return source;
     }
 
     internal CropGrip? EdgeCropGripAt(PointD image)
@@ -1043,6 +1132,7 @@ internal sealed partial class AnnotationEditorControl : Grid
         }
 
         _controller.CancelGesture();
+        ReleasePointer();
         _controller.SetSelected(null);
         SelectTool(EditorTool.Select);
         e.Handled = true;
@@ -1096,6 +1186,7 @@ internal sealed partial class AnnotationEditorControl : Grid
 
     private void OpenTextBox(TextAnnotation annotation)
     {
+        CancelFrozenPointerGesture();
         if (_controller.IsCreatingText)
         {
             annotation.Bold = _defaultTextBold;
@@ -1107,6 +1198,9 @@ internal sealed partial class AnnotationEditorControl : Grid
         }
         _editingText = annotation;
 
+        // Selection can replace a one-row property bar with wrapped text properties.
+        // Settle that layout before copying the image scale into the live font size.
+        UpdateLayout();
         double dipPerPixel = Math.Max(double.Epsilon, _surface.DipPerPixel);
         ColorRgba foreground = annotation.Foreground;
         double luma = 0.299 * foreground.R + 0.587 * foreground.G + 0.114 * foreground.B;
@@ -1126,7 +1220,7 @@ internal sealed partial class AnnotationEditorControl : Grid
             Background = annotation.Background.A > 0 ? annotation.Background.ToBrush()
                 : luma > 140 ? Brushes.Black : Brushes.White,
             Opacity = annotation.Opacity,
-            BorderBrush = Brush("Accent.Default", Color.FromRgb(0x7C, 0x6C, 0xFF)),
+            BorderBrush = Brush("Border.Control", Color.FromRgb(0x56, 0x67, 0x7F)),
             BorderThickness = new Thickness(1),
             AcceptsReturn = true,
             TextWrapping = TextWrapping.NoWrap,
@@ -1458,15 +1552,37 @@ internal sealed partial class AnnotationEditorControl : Grid
             cropStride);
         cropped.Freeze();
 
-        _controller.CropDocument(normalized);
-        SwapBaseBitmap(cropped, new RectD(0, 0, width, height));
+        // The crop command's history refresh adopts these pixels instead of cutting the same
+        // region a second time out of the re-rotated original (see SyncBaseBitmapWithDocument).
+        // They were the base that refresh ended with anyway, because this method swapped them
+        // in right after it. A crop the controller does not record (the whole canvas) raises
+        // no refresh, so the pixels are swapped in here as before.
+        bool adopted;
+        _cropBaseForHistory = cropped;
+        try
+        {
+            _controller.CropDocument(normalized);
+        }
+        finally
+        {
+            adopted = _cropBaseForHistory is null;
+            _cropBaseForHistory = null;
+        }
+
+        if (!adopted) SwapBaseBitmap(cropped, new RectD(0, 0, width, height));
         SelectTool(EditorTool.Select);
         SetStatus(UiText.Get("Tools_CropApplied"));
     }
 
+    /// <summary>
+    /// The cropped base <see cref="ApplyCrop"/> already cut, waiting for the history refresh
+    /// its crop command raises; <see langword="null"/> at any other time.
+    /// </summary>
+    private BitmapSource? _cropBaseForHistory;
+
     // ---- Image insertion -----------------------------------------------------------
 
-    private void InsertImage(PointD image)
+    private async void InsertImage(PointD image)
     {
         var dialog = new OpenFileDialog
         {
@@ -1481,19 +1597,98 @@ internal sealed partial class AnnotationEditorControl : Grid
             return;
         }
 
-        (BitmapSource Bitmap, string AssetFileName)? loaded = _imageStore.LoadFromFile(dialog.FileName);
-        if (loaded is null)
+        // An unexpected decoding failure still surfaces through the dispatcher's unhandled
+        // exception handling, as it did when the file was decoded inside this handler.
+        await InsertImageFileAsync(dialog.FileName, image);
+    }
+
+    /// <summary>
+    /// Decodes <paramref name="path"/> off the UI thread and adds it, centred on
+    /// <paramref name="image"/>, as one undoable image annotation once its pixels are ready.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Decoding a large picture on the UI thread froze the editor. The pixels are decoded at
+    /// their original resolution on a background STA and frozen; naming, fitting and adding
+    /// them stay on the UI thread and are unchanged: at most a third of the canvas, centred on
+    /// the click, one undo step, the image selected and announced.
+    /// </para>
+    /// <para>
+    /// The editor stays usable meanwhile. The picture is dropped when the editor closed first
+    /// (a commit completed or the window unloaded). It waits while a commit holds the document
+    /// or the user is in the middle of a gesture, a caption or a crop frame, so it never lands
+    /// inside one, and it is centred on the canvas when a rotation or crop in the meantime
+    /// moved the clicked pixels. A file that is not a readable image is reported as before,
+    /// unless the editor has closed.
+    /// </para>
+    /// <para>
+    /// Until it is added or dropped the picture counts as an editing operation: a commit
+    /// started meanwhile waits for it and saves it (see <see cref="Commit"/>), and the window's
+    /// exit paths wait for it, exactly as they found the synchronous insert already done.
+    /// </para>
+    /// </remarks>
+    internal async Task InsertImageFileAsync(string path, PointD image)
+    {
+        _pendingImageInserts++;
+        try
         {
-            MyCapture.App.Themes.ThemedDialog.Show(
-                UiText.Get("Text_5DD4908475B6"),
-                "MyCapture",
-                MessageBoxButton.OK,
-                MessageBoxImage.Warning);
-            SelectTool(EditorTool.Select);
+            await InsertPendingImageAsync(path, image);
+        }
+        finally
+        {
+            if (--_pendingImageInserts == 0 && _imageInsertsSettled is { } settled)
+            {
+                _imageInsertsSettled = null;
+                settled.TrySetResult();
+            }
+        }
+    }
+
+    private async Task InsertPendingImageAsync(string path, PointD image)
+    {
+        CancellationToken closed = (_imageInsertCts ??= new CancellationTokenSource()).Token;
+        var geometry = (_controller.RotationTurns, _controller.CropOrigin, _canvasWidth, _canvasHeight);
+        // Both outcomes end on the select tool. Switching now means a click while the picture
+        // is read selects, as it would after the insertion, instead of opening a second picker.
+        if (_controller.Tool == EditorTool.Image) SelectTool(EditorTool.Select);
+        AnnotationImageStore.DecodedFile? decoded;
+        try
+        {
+            // Closing stops the wait at once, so a commit waiting for this picture is not held
+            // by a decode whose result would be dropped anyway.
+            decoded = await DecodeImageForInsert(path).WaitAsync(closed);
+        }
+        catch (OperationCanceledException) when (closed.IsCancellationRequested)
+        {
             return;
         }
 
-        BitmapSource bitmap = loaded.Value.Bitmap;
+        while (!IsImageInsertClosed(closed) && ImageInsertMustWait)
+        {
+            await Task.Delay(50);
+        }
+
+        if (IsImageInsertClosed(closed))
+        {
+            return;
+        }
+
+        if (decoded is null)
+        {
+            ReportUnreadableImage();
+            // Back to the select tool, as before, but never by discarding a crop frame that a
+            // commit waiting for this picture is about to apply.
+            if (_crop is null) SelectTool(EditorTool.Select);
+            return;
+        }
+
+        if (geometry != (_controller.RotationTurns, _controller.CropOrigin, _canvasWidth, _canvasHeight))
+        {
+            image = new PointD(_canvasWidth / 2.0, _canvasHeight / 2.0);
+        }
+
+        (BitmapSource Bitmap, string AssetFileName) loaded = _imageStore.Register(decoded);
+        BitmapSource bitmap = loaded.Bitmap;
         int sourceWidth = bitmap.PixelWidth;
         int sourceHeight = bitmap.PixelHeight;
 
@@ -1513,10 +1708,55 @@ internal sealed partial class AnnotationEditorControl : Grid
         }
 
         var rect = new RectD(image.X - (width / 2), image.Y - (height / 2), width, height);
-        _controller.AddImageAnnotation(loaded.Value.AssetFileName, sourceWidth, sourceHeight, rect);
+        _controller.AddImageAnnotation(loaded.AssetFileName, sourceWidth, sourceHeight, rect);
         SyncToolButtons();
         SetStatus(UiText.Format("EditorFlow_Added", UiText.Get("Text_302BAE127938")));
     }
+
+    /// <summary>Cancelled when the editor unloads, so pictures still decoding are dropped.</summary>
+    private CancellationTokenSource? _imageInsertCts;
+
+    /// <summary>Picked pictures not yet added or dropped.</summary>
+    private int _pendingImageInserts;
+
+    /// <summary>Completed when <see cref="_pendingImageInserts"/> returns to zero.</summary>
+    private TaskCompletionSource? _imageInsertsSettled;
+
+    /// <summary>A commit has prepared the document and waits for picked pictures before saving.</summary>
+    private bool _commitAwaitingImages;
+
+    /// <summary>
+    /// Completes once every picked picture has been added or dropped; at once when none is
+    /// pending. A caller that must not act on the document without them (a commit, a close)
+    /// awaits it on the UI thread.
+    /// </summary>
+    internal Task ImageInsertsSettledAsync() => _pendingImageInserts == 0
+        ? Task.CompletedTask
+        : (_imageInsertsSettled ??= new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously)).Task;
+
+    private bool IsImageInsertClosed(CancellationToken closed) => _completed || closed.IsCancellationRequested;
+
+    /// <summary>
+    /// Whether a decoded picture must wait before it is added: a commit holds the document,
+    /// or a pointer gesture, caption or crop frame is in progress. A commit waiting for the
+    /// picture has already finished the caption, gesture and crop, so the picture goes in.
+    /// </summary>
+    private bool ImageInsertMustWait => !_commitAwaitingImages && (_commitInProgress || _activeTextBox is not null
+        || _crop is not null || _mosaicDragging || _edgeCropStart is not null || _viewport.IsMouseCaptured);
+
+    /// <summary>
+    /// Decodes a picked file off the UI thread. Tests substitute it to decide when decoding
+    /// finishes; the result must be frozen.
+    /// </summary>
+    internal Func<string, Task<AnnotationImageStore.DecodedFile?>> DecodeImageForInsert { get; set; } =
+        static path => Threading.StaThreadTask.RunAsync(() => AnnotationImageStore.Decode(path), "MyCapture image insert decoder");
+
+    /// <summary>Tells the user the picked file is not a readable image. Tests substitute the modal dialog.</summary>
+    internal Action ReportUnreadableImage { get; set; } = static () => MyCapture.App.Themes.ThemedDialog.Show(
+        UiText.Get("Text_5DD4908475B6"),
+        "MyCapture",
+        MessageBoxButton.OK,
+        MessageBoxImage.Warning);
 
     // ---- Layout construction -------------------------------------------------------
 
@@ -1887,21 +2127,23 @@ internal sealed partial class AnnotationEditorControl : Grid
         };
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(ToolRailWidth) });
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        _inspectorColumn = new ColumnDefinition { Width = new GridLength(InspectorWidth) };
-        grid.ColumnDefinitions.Add(_inspectorColumn);
+        grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        grid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
 
         grid.SetResourceReference(Panel.BackgroundProperty, "Surface.Base");
         UIElement toolRail = BuildToolRail();
         Grid.SetColumn(toolRail, 0);
+        Grid.SetRowSpan(toolRail, 2);
         grid.Children.Add(toolRail);
+
+        _inspectorPanel = BuildInspector();
+        Grid.SetColumn(_inspectorPanel, 1);
+        grid.Children.Add(_inspectorPanel);
 
         UIElement viewportFrame = BuildViewport();
         Grid.SetColumn(viewportFrame, 1);
+        Grid.SetRow(viewportFrame, 1);
         grid.Children.Add(viewportFrame);
-
-        _inspectorPanel = BuildInspector();
-        Grid.SetColumn(_inspectorPanel, 2);
-        grid.Children.Add(_inspectorPanel);
 
         return grid;
     }
@@ -2010,64 +2252,65 @@ internal sealed partial class AnnotationEditorControl : Grid
 
     private Border BuildInspector()
     {
-        var stack = new StackPanel { Orientation = Orientation.Vertical };
-
+        var stack = new WrapPanel { Name = "AnnotationPropertyBar", Orientation = Orientation.Horizontal };
+        KeyboardNavigation.SetTabNavigation(stack, KeyboardNavigationMode.Continue);
         _inspectorTitle = new TextBlock
         {
             Text = UiText.Get("Text_33406FC582BE"),
-            Foreground = Brush("Text.Primary", Colors.White),
-            FontWeight = FontWeights.SemiBold,
-            FontSize = 16,
-            TextWrapping = TextWrapping.Wrap,
+            Visibility = Visibility.Collapsed,
         };
-        // The panel names what is being edited and shows its values. How a tool is used is in
-        // the tool's tooltip, and results are in the status line, so no sentence repeats here.
-        _inspectorTitle.SetResourceReference(TextBlock.ForegroundProperty, "Text.Primary");
         stack.Children.Add(_inspectorTitle);
 
+        _colorSection = BuildColorSection();
+        stack.Children.Add(_colorSection);
+        _thicknessSection = BuildThicknessSection();
+        stack.Children.Add(_thicknessSection);
+        _shapeStyleSection = BuildShapeStyleSection();
+        stack.Children.Add(_shapeStyleSection);
+        stack.Children.Add(_fillSection);
         _stepSection = BuildStepNumberSection();
         stack.Children.Add(_stepSection);
-
         _fontFamilySection = BuildFontFamilySection();
         stack.Children.Add(_fontFamilySection);
         _fontSizeSection = BuildFontSizeSection();
         stack.Children.Add(_fontSizeSection);
         _textStyleSection = BuildTextStyleSection();
         stack.Children.Add(_textStyleSection);
-
-        _colorSection = BuildColorSection();
-        stack.Children.Add(_colorSection);
-
-        _thicknessSection = BuildThicknessSection();
-        stack.Children.Add(_thicknessSection);
-        _shapeStyleSection = BuildShapeStyleSection();
-        stack.Children.Add(_shapeStyleSection);
         _blurSection = BuildBlurSection();
         stack.Children.Add(_blurSection);
+        _mosaicSection = BuildMosaicSection();
+        stack.Children.Add(_mosaicSection);
         _cropSection = BuildCropSection();
         stack.Children.Add(_cropSection);
 
-        _deleteButton = TextButton(UiText.Get("Text_0DED92FCE6B0"), UiText.Get("Text_7DFFA4D81765"), "Button.Danger", DeleteSelected);
-        _deleteButton.HorizontalAlignment = HorizontalAlignment.Stretch;
+        _deleteButton = TextButton(UiText.Get("Text_0DED92FCE6B0"), UiText.Get("Text_7DFFA4D81765"), "Button.Ghost", DeleteSelected);
+        _deleteButton.HorizontalAlignment = HorizontalAlignment.Left;
         _deleteButton.HorizontalContentAlignment = HorizontalAlignment.Center;
-        _deleteButton.Margin = new Thickness(0, 16, 0, 0);
+        _deleteButton.Height = 32;
+        _deleteButton.MinHeight = 32;
+        _deleteButton.Margin = PropertyMargin;
         stack.Children.Add(_deleteButton);
 
-        return ThemedBorder(new Border
+        var border = new Border
         {
-            Background = Brush("Surface.Raised", Color.FromRgb(0x10, 0x17, 0x22)),
-            BorderBrush = Brush("Border.Subtle", Colors.Gray),
-            BorderThickness = new Thickness(1, 0, 0, 0),
-            Padding = new Thickness(18),
+            Name = "AnnotationPropertyBarHost",
+            BorderThickness = new Thickness(0, 0, 0, 1),
+            Padding = new Thickness(8, 4, 0, 4),
             Child = new ScrollViewer
             {
-                Name = "AnnotationInspectorScroll",
+                Name = "AnnotationPropertyBarScroll",
                 Content = stack,
                 VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
                 HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
+                CanContentScroll = false,
+                Focusable = false,
             },
             SnapsToDevicePixels = true,
-        }, "Surface.Raised");
+        };
+        border.SetResourceReference(Border.BackgroundProperty, "Surface.Raised");
+        border.SetResourceReference(Border.BorderBrushProperty, "Border.Subtle");
+        AutomationProperties.SetAutomationId(border, "AnnotationPropertyBarHost");
+        return border;
     }
 
     /// <summary>
@@ -2076,8 +2319,8 @@ internal sealed partial class AnnotationEditorControl : Grid
     /// </summary>
     private FrameworkElement BuildStepNumberSection()
     {
-        var panel = new StackPanel { Margin = new Thickness(0, 16, 0, 0) };
-        panel.Children.Add(SectionLabel(UiText.Get("EditorUx_StepNumberNext")));
+        var panel = PropertyGroup("AnnotationStepProperties");
+        panel.Children.Add(PropertyLabel(UiText.Get("EditorUx_StepNumberNext")));
         _stepPreviewNumber = new Path
         {
             Fill = Brushes.White,
@@ -2089,8 +2332,8 @@ internal sealed partial class AnnotationEditorControl : Grid
         };
         _stepPreview = new Border
         {
-            Width = 40,
-            Height = 40,
+            Width = 32,
+            Height = 32,
             CornerRadius = new CornerRadius(4),
             BorderThickness = new Thickness(1),
             Child = _stepPreviewNumber,
@@ -2110,17 +2353,27 @@ internal sealed partial class AnnotationEditorControl : Grid
         int number = _controller.NextStepNumber;
         string text = number.ToString(CultureInfo.CurrentCulture);
         ColorRgba color = _controller.StrokeColor;
+        double pixelsPerDip = VisualTreeHelper.GetDpi(this).PixelsPerDip;
+        string name = UiText.Format("EditorUx_StepNumberNextName", number);
+        // The inspector refreshes on every selection and history event while the step tool is
+        // active; the badge is rebuilt only when something it draws or announces changes.
+        var shown = (text, CultureInfo.CurrentCulture.Name, color, pixelsPerDip, name);
+        if (_stepPreviewShown == shown) return;
+        _stepPreviewShown = shown;
         _stepPreview.Background = new SolidColorBrush(Color.FromRgb(color.R, color.G, color.B));
         var formatted = new FormattedText(text, CultureInfo.CurrentCulture, FlowDirection.LeftToRight,
             new Typeface(new FontFamily("Segoe UI"), FontStyles.Normal, FontWeights.Bold, FontStretches.Normal),
-            text.Length > 2 ? 15 : 20, Brushes.White, VisualTreeHelper.GetDpi(this).PixelsPerDip);
+            text.Length > 2 ? 15 : 20, Brushes.White, pixelsPerDip);
         Geometry digits = formatted.BuildGeometry(new Point(0, 0));
         // Start the glyph outline at the path origin so the badge centres the ink, not the line box.
         Rect ink = digits.Bounds;
         if (!ink.IsEmpty) digits.Transform = new TranslateTransform(-ink.X, -ink.Y);
         _stepPreviewNumber.Data = digits;
-        AutomationName(_stepPreview, UiText.Format("EditorUx_StepNumberNextName", number));
+        AutomationName(_stepPreview, name);
     }
+
+    /// <summary>What the step preview last drew and announced.</summary>
+    private (string Text, string Culture, ColorRgba Color, double PixelsPerDip, string Name)? _stepPreviewShown;
 
     /// <summary>The number the step preview shows, for tests.</summary>
     internal string StepPreviewName => AutomationProperties.GetName(_stepPreview);
@@ -2138,15 +2391,16 @@ internal sealed partial class AnnotationEditorControl : Grid
     /// </summary>
     private FrameworkElement BuildCropSection()
     {
-        var panel = new StackPanel { Margin = new Thickness(0, 8, 0, 0) };
-        var dimensions = new UniformGrid { Columns = 2, Margin = new Thickness(0, 4, 0, 10) };
-        _cropWidth = new TextBox { MinHeight = 30, Margin = new Thickness(0, 0, 4, 0) };
-        _cropHeight = new TextBox { MinHeight = 30 };
+        var panel = PropertyGroup("AnnotationCropProperties");
+        var dimensions = new StackPanel { Orientation = Orientation.Horizontal };
+        _cropWidth = new TextBox { MinHeight = 32, Width = 64, FontSize = 12 };
+        _cropHeight = new TextBox { MinHeight = 32, Width = 64, FontSize = 12 };
         foreach (var (box, key) in new[] { (_cropWidth, "Crop.Width"), (_cropHeight, "Crop.Height") })
         {
-            var field = new StackPanel(); field.Children.Add(SectionLabel(UiText.Get(key)));
+            var field = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 8, 0) };
+            field.Children.Add(PropertyLabel(UiText.Get(key)));
             var border = new Border { Child = box, BorderThickness = new Thickness(1), BorderBrush = Brushes.Transparent };
-            var error = new TextBlock { Text = UiText.Get("Crop.InvalidSizeLabel"), FontSize = 11,
+            var error = new TextBlock { Text = UiText.Get("Crop.InvalidSizeLabel"), FontSize = 12, MaxWidth = 100,
                 TextWrapping = TextWrapping.Wrap, Visibility = Visibility.Collapsed };
             error.SetResourceReference(TextBlock.ForegroundProperty, "Text.Primary");
             _cropInputErrors.Add(box, (border, error));
@@ -2194,87 +2448,6 @@ internal sealed partial class AnnotationEditorControl : Grid
         AutomationProperties.SetHelpText(box, invalid ? UiText.Get("Crop.InvalidSize") : string.Empty);
     }
 
-    private FrameworkElement BuildColorSection()
-    {
-        var panel = new StackPanel { Orientation = Orientation.Vertical, Margin = new Thickness(0, 16, 0, 0) };
-        panel.Children.Add(SectionLabel(UiText.Get("Text_D1B87ACB2D22")));
-
-        _swatchPanel = new WrapPanel
-        {
-            Orientation = Orientation.Horizontal,
-            MaxWidth = 192,
-            HorizontalAlignment = HorizontalAlignment.Stretch,
-        };
-
-        ColorRgba[] palette =
-        [
-            ColorRgba.FromRgb(0xEF, 0x44, 0x44),
-            ColorRgba.FromRgb(0xFB, 0xBF, 0x24),
-            ColorRgba.FromRgb(0x34, 0xD3, 0x99),
-            ColorRgba.FromRgb(0x3B, 0x82, 0xF6),
-            ColorRgba.FromRgb(0x11, 0x18, 0x27),
-            ColorRgba.White,
-        ];
-
-        foreach (ColorRgba color in palette)
-        {
-            ColorRgba swatchColor = color;
-            var swatchButton = new Button
-            {
-                Width = 40,
-                Height = 40,
-                Margin = new Thickness(0, 0, 8, 8),
-                Padding = new Thickness(0),
-                ToolTip = UiText.Format("Text_151C77170A94", ColorCode(swatchColor)),
-                BorderThickness = new Thickness(1),
-                // A control boundary, so a dark swatch stays outlined on a dark panel.
-                BorderBrush = Brush("Border.Control", Colors.Gray),
-                Background = swatchColor.ToBrush(),
-            };
-            AutomationName(swatchButton, UiText.Format("Text_151C77170A94", ColorCode(swatchColor)));
-            PreserveEditorMouseFocus(swatchButton);
-            swatchButton.Click += (_, _) =>
-            {
-                _controller.ApplyStrokeColor(swatchColor);
-                RememberPreferences();
-                RefreshStepFeedback();
-                SetStatus(UiText.Format("Text_67CAE5B118A3", ColorCode(swatchColor)));
-            };
-            _swatchPanel.Children.Add(swatchButton);
-        }
-
-        panel.Children.Add(_swatchPanel);
-        var custom = new TextBox { Text = ColorCode(_controller.StrokeColor), MinHeight = 32, Margin = new Thickness(0, 4, 0, 4) };
-        _customColorInput = custom;
-        AutomationName(custom, UiText.Get("Tools.CustomColor"));
-        InputMethod.SetIsInputMethodEnabled(custom, true);
-        // Enter applies and Esc restores; both hand the keyboard back to the canvas so the next
-        // letter is a tool shortcut again instead of more text in this box. A composing IME
-        // reports ImeProcessed here and keeps its own Enter/Esc.
-        custom.PreviewKeyDown += (_, e) =>
-        {
-            if (Keyboard.Modifiers != ModifierKeys.None) return;
-            if (e.Key == Key.Enter)
-            {
-                e.Handled = true;
-                if (ApplyCustomColor(custom.Text)) Focus();
-            }
-            else if (e.Key == Key.Escape)
-            {
-                e.Handled = true;
-                custom.Text = ColorCode(_controller.StrokeColor);
-                Focus();
-            }
-        };
-        panel.Children.Add(custom);
-        var apply = new Button { Content = UiText.Get("Tools.CustomColor"), MinHeight = 36 };
-        AutomationName(apply, UiText.Get("Tools.CustomColor"));
-        PreserveEditorMouseFocus(apply);
-        apply.Click += (_, _) => ApplyCustomColor(custom.Text);
-        panel.Children.Add(apply);
-        return panel;
-    }
-
     /// <summary>
     /// Turns the IME off for <paramref name="root"/> and every non-text control under it.
     /// </summary>
@@ -2307,6 +2480,7 @@ internal sealed partial class AnnotationEditorControl : Grid
         _controller.ApplyStrokeColor(color);
         RememberPreferences();
         RefreshStepFeedback();
+        UpdateColorSwatches();
         // Short and lower-case forms read back in the one form the editor shows.
         if (_customColorInput is not null) _customColorInput.Text = ColorCode(color);
         SetStatus(UiText.Format("Text_67CAE5B118A3", ColorCode(color)));
@@ -2339,50 +2513,11 @@ internal sealed partial class AnnotationEditorControl : Grid
             });
         };
 
-    private FrameworkElement BuildThicknessSection()
-    {
-        var panel = new StackPanel { Orientation = Orientation.Vertical, Margin = new Thickness(0, 16, 0, 0) };
-
-        // The settings window accepts the same range; the editor never narrows it.
-        _thicknessSlider = new Slider
-        {
-            Minimum = SettingsRanges.StrokeThickness.Min,
-            Maximum = SettingsRanges.StrokeThickness.Max,
-            Value = _controller.StrokeThickness,
-            Margin = new Thickness(0, 2, 0, 0),
-            VerticalAlignment = VerticalAlignment.Center,
-            ToolTip = UiText.Get("Text_70EC2D232B4F"),
-            SmallChange = 1,
-            LargeChange = 4,
-            TickFrequency = 1,
-            IsSnapToTickEnabled = true,
-        };
-        AutomationName(_thicknessSlider, UiText.Get("Text_70EC2D232B4F"));
-        panel.Children.Add(SliderHeader(UiText.Get("Text_70EC2D232B4F"),
-            ValueEntry(_thicknessSlider, UiText.Get("Editor_UnitPx"), UiText.Get("Text_70EC2D232B4F"))));
-        _thicknessSlider.ValueChanged += (_, args) =>
-        {
-            if (_syncingInspector)
-            {
-                return;
-            }
-
-            _controller.ApplyStrokeThickness(args.NewValue);
-            RememberPreferences();
-            if (_controller.Selected is not null)
-            {
-                SetStatus(UiText.Format("Text_DBAF1D995258", args.NewValue));
-            }
-        };
-        panel.Children.Add(_thicknessSlider);
-        return panel;
-    }
-
     private FrameworkElement BuildShapeStyleSection()
     {
-        var panel = new StackPanel { Margin = new Thickness(0, 16, 0, 0) };
-        panel.Children.Add(SectionLabel(UiText.Get("Text_E0B58D1CFED1")));
-        _strokeStyleComboBox = new ComboBox { MinHeight = 32, Margin = new Thickness(0, 4, 0, 0) };
+        var panel = PropertyGroup("AnnotationShapeProperties");
+        panel.Children.Add(PropertyLabel(UiText.Get("Text_E0B58D1CFED1")));
+        _strokeStyleComboBox = new ComboBox { MinHeight = 32, Width = 108, FontSize = 12, VerticalAlignment = VerticalAlignment.Center };
         foreach ((AnnotationStrokeStyle style, string label) in new[]
         {
             (AnnotationStrokeStyle.Solid, UiText.Get("Text_99851CC7E6A4")),
@@ -2407,9 +2542,10 @@ internal sealed partial class AnnotationEditorControl : Grid
         };
         ReturnFocusAfterMousePick(_strokeStyleComboBox);
         panel.Children.Add(_strokeStyleComboBox);
-        _fillTransparencyLabel = SectionLabel(UiText.Get("Text_1E0DD4F46A0C"));
-        _fillTransparencyLabel.Margin = new Thickness(0, 16, 0, 4);
-        panel.Children.Add(_fillTransparencyLabel);
+        var fillPanel = PropertyGroup("AnnotationFillProperties");
+        _fillSection = fillPanel;
+        _fillTransparencyLabel = PropertyLabel(UiText.Get("EditorProperty_FillTransparency"));
+        fillPanel.Children.Add(_fillTransparencyLabel);
         _fillTransparencySlider = new Slider
         {
             Minimum = 0,
@@ -2420,33 +2556,30 @@ internal sealed partial class AnnotationEditorControl : Grid
             TickFrequency = 1,
             IsSnapToTickEnabled = true,
             ToolTip = UiText.Get("Text_27FD5EFB7773"),
+            Width = 80,
+            MinHeight = 32,
+            Margin = new Thickness(8, 0, 0, 0),
+            VerticalAlignment = VerticalAlignment.Center,
         };
         AutomationName(_fillTransparencySlider, UiText.Get("Text_35E5667BB610"));
         AutomationProperties.SetHelpText(_fillTransparencySlider, (string)_fillTransparencySlider.ToolTip);
         _fillTransparencySlider.ValueChanged += (_, args) =>
         {
-            _fillTransparencyLabel.Text = UiText.Format("Text_5D92A3982F2F", args.NewValue);
             if (!_syncingInspector)
             {
                 _controller.ApplyFillTransparency(args.NewValue);
                 RememberPreferences();
             }
         };
-        panel.Children.Add(_fillTransparencySlider);
-        panel.Children.Add(new TextBlock
-        {
-            Text = UiText.Get("Text_BA0448903510"),
-            TextWrapping = TextWrapping.Wrap,
-            Foreground = Brush("Text.Secondary", Colors.LightGray),
-            FontSize = 12,
-            Margin = new Thickness(0, 6, 0, 0),
-        });
+        fillPanel.Children.Add(ValueEntry(_fillTransparencySlider, "%", UiText.Get("Text_35E5667BB610")).Element);
+        fillPanel.Children.Add(_fillTransparencySlider);
         return panel;
     }
 
     private FrameworkElement BuildFontSizeSection()
     {
-        var panel = new StackPanel { Margin = new Thickness(0, 16, 0, 0) };
+        var panel = PropertyGroup("AnnotationFontSizeProperties");
+        panel.Children.Add(PropertyLabel(UiText.Get("Text_5F3A9C8D1E20")));
 
         _fontSizeSlider = new Slider
         {
@@ -2456,12 +2589,14 @@ internal sealed partial class AnnotationEditorControl : Grid
             SmallChange = 1,
             LargeChange = 4,
             TickFrequency = 1,
-            Margin = new Thickness(0, 2, 0, 0),
+            Margin = new Thickness(8, 0, 0, 0),
             ToolTip = UiText.Get("Text_5F3A9C8D1E20"),
+            Width = 80,
+            MinHeight = 32,
+            VerticalAlignment = VerticalAlignment.Center,
         };
         AutomationName(_fontSizeSlider, UiText.Get("Text_5F3A9C8D1E20"));
-        panel.Children.Add(SliderHeader(UiText.Get("Text_5F3A9C8D1E20"),
-            ValueEntry(_fontSizeSlider, UiText.Get("Editor_UnitPt"), UiText.Get("Text_5F3A9C8D1E20"))));
+        panel.Children.Add(ValueEntry(_fontSizeSlider, UiText.Get("Editor_UnitPt"), UiText.Get("Text_5F3A9C8D1E20")).Element);
         _fontSizeSlider.ValueChanged += (_, args) =>
         {
             if (_syncingInspector)
@@ -2488,10 +2623,11 @@ internal sealed partial class AnnotationEditorControl : Grid
 
     private FrameworkElement BuildTextStyleSection()
     {
-        var panel = new StackPanel { Margin = new Thickness(0, 8, 0, 0) };
+        var panel = PropertyGroup("AnnotationTextStyleProperties");
         CheckBox Toggle(string key, Action<bool> apply)
         {
-            var toggle = new CheckBox { Content = UiText.Get(key), MinHeight = 32 };
+            var toggle = new CheckBox { Content = UiText.Get(key), MinHeight = 32, MinWidth = 32, FontSize = 12,
+                VerticalContentAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 8, 0) };
             AutomationName(toggle, UiText.Get(key));
             toggle.Click += (_, _) =>
             {
@@ -2521,7 +2657,8 @@ internal sealed partial class AnnotationEditorControl : Grid
 
     private FrameworkElement BuildBlurSection()
     {
-        var panel = new StackPanel { Margin = new Thickness(0, 16, 0, 0) };
+        var panel = PropertyGroup("AnnotationBlurProperties");
+        panel.Children.Add(PropertyLabel(UiText.Get("EditorBlur_Strength")));
 
         _blurSlider = new Slider
         {
@@ -2532,12 +2669,14 @@ internal sealed partial class AnnotationEditorControl : Grid
             LargeChange = 4,
             TickFrequency = 1,
             IsSnapToTickEnabled = true,
-            Margin = new Thickness(0, 2, 0, 0),
+            Margin = new Thickness(8, 0, 0, 0),
             ToolTip = UiText.Get("EditorBlur_StrengthHint"),
+            Width = 96,
+            MinHeight = 32,
+            VerticalAlignment = VerticalAlignment.Center,
         };
         AutomationName(_blurSlider, UiText.Get("EditorBlur_Strength"));
-        panel.Children.Add(SliderHeader(UiText.Get("EditorBlur_Strength"),
-            ValueEntry(_blurSlider, UiText.Get("Editor_UnitPx"), UiText.Get("EditorBlur_Strength"))));
+        panel.Children.Add(ValueEntry(_blurSlider, UiText.Get("Editor_UnitPx"), UiText.Get("EditorBlur_Strength")).Element);
         AutomationProperties.SetHelpText(_blurSlider, UiText.Get("EditorBlur_StrengthHint"));
         _blurSlider.ValueChanged += (_, args) =>
         {
@@ -2850,6 +2989,7 @@ internal sealed partial class AnnotationEditorControl : Grid
     private void SelectTool(EditorTool tool)
     {
         _autoTrimCts?.Cancel();
+        CancelFrozenPointerGesture();
         if (_edgeCropStart is not null) { _edgeCropStart = null; ReleasePointer(); }
         if (_activeTextBox is not null)
         {
@@ -2888,7 +3028,7 @@ internal sealed partial class AnnotationEditorControl : Grid
             FontFamily = _controller.DefaultFontFamily, TextColor = previous.TextColor,
             TextBold = _defaultTextBold, TextBackground = _defaultTextBackground, TextOutline = _defaultTextOutline,
             RecentFontFamilies = [.. _recentFontFamilies],
-            MosaicBlockSize = previous.MosaicBlockSize, HighlighterAlpha = previous.HighlighterAlpha,
+            MosaicBlockSize = _mosaicBlockSize, HighlighterAlpha = previous.HighlighterAlpha,
             RecentColors = [.. previous.RecentColors], BlurRadius = _controller.BlurRadius,
         });
     }
@@ -2976,6 +3116,14 @@ internal sealed partial class AnnotationEditorControl : Grid
         }
 
         _rotationTurns = turns;
+        if (_cropBaseForHistory is { } cropped)
+        {
+            // ApplyCrop's own command: its pixels are the base the crop ends with.
+            _cropBaseForHistory = null;
+            SwapBaseBitmap(cropped, new RectD(0, 0, cropped.PixelWidth, cropped.PixelHeight));
+            return;
+        }
+
         BitmapSource rotated = _selectedBitmap;
         for (int pass = 0; pass < turns; pass++)
         {
@@ -3051,10 +3199,21 @@ internal sealed partial class AnnotationEditorControl : Grid
 
         _undoButton.IsEnabled = _controller.CanUndo;
         _redoButton.IsEnabled = _controller.CanRedo;
-        _undoButton.ToolTip = _controller.Undo.NextUndoDescription is { } undo
-            ? UiText.Format("EditorSelection_UndoHint", undo) : UiText.Get("Text_C61A081610C9");
-        _redoButton.ToolTip = _controller.Undo.NextRedoDescription is { } redo
-            ? UiText.Format("EditorSelection_RedoHint", redo) : UiText.Get("Text_F457141C336A");
+        SetToolTipText(_undoButton, _controller.Undo.NextUndoDescription is { } undo
+            ? UiText.Format("EditorSelection_UndoHint", undo) : UiText.Get("Text_C61A081610C9"));
+        SetToolTipText(_redoButton, _controller.Undo.NextRedoDescription is { } redo
+            ? UiText.Format("EditorSelection_RedoHint", redo) : UiText.Get("Text_F457141C336A"));
+    }
+
+    /// <summary>
+    /// Sets a text tooltip only when the text differs. <see cref="FrameworkElement.ToolTip"/>
+    /// compares objects by reference, so a freshly formatted equal string re-raised its change
+    /// on every history and selection event.
+    /// </summary>
+    private static void SetToolTipText(FrameworkElement element, string text)
+    {
+        if (element.ToolTip is string current && string.Equals(current, text, StringComparison.Ordinal)) return;
+        element.ToolTip = text;
     }
 
     /// <summary>
@@ -3073,7 +3232,6 @@ internal sealed partial class AnnotationEditorControl : Grid
         bool hasSelection = selected is not null;
 
         _deleteButton.IsEnabled = hasSelection;
-        _deleteButton.Visibility = hasSelection ? Visibility.Visible : Visibility.Collapsed;
 
         bool stepTool = _controller.Tool == EditorTool.StepNumber;
         _inspectorTitle.Text = _controller.SelectedItems.Count > 1
@@ -3088,18 +3246,23 @@ internal sealed partial class AnnotationEditorControl : Grid
 
         bool cropping = _crop is not null;
         _cropSection.Visibility = cropping ? Visibility.Visible : Visibility.Collapsed;
-        _deleteButton.Visibility = cropping ? Visibility.Collapsed : Visibility.Visible;
-        _colorSection.Visibility = colorApplies ? Visibility.Visible : Visibility.Collapsed;
-        _thicknessSection.Visibility = thicknessApplies ? Visibility.Visible : Visibility.Collapsed;
-        _shapeStyleSection.Visibility = shapeApplies ? Visibility.Visible : Visibility.Collapsed;
-        _fontSizeSection.Visibility = fontSizeApplies ? Visibility.Visible : Visibility.Collapsed;
+        _deleteButton.Visibility = hasSelection && !cropping ? Visibility.Visible : Visibility.Collapsed;
+        _colorSection.Visibility = colorApplies && !cropping ? Visibility.Visible : Visibility.Collapsed;
+        _thicknessSection.Visibility = thicknessApplies && !cropping ? Visibility.Visible : Visibility.Collapsed;
+        _shapeStyleSection.Visibility = shapeApplies && !cropping ? Visibility.Visible : Visibility.Collapsed;
+        _fillSection.Visibility = _shapeStyleSection.Visibility;
+        _fontSizeSection.Visibility = fontSizeApplies && !cropping ? Visibility.Visible : Visibility.Collapsed;
         bool textStyleApplies = selected is TextAnnotation { IsStepNumber: false }
             || (selected is null && _controller.Tool == EditorTool.Text);
         _fontFamilySection.Visibility = textStyleApplies && !cropping ? Visibility.Visible : Visibility.Collapsed;
         _textStyleSection.Visibility = textStyleApplies && !cropping
             ? Visibility.Visible : Visibility.Collapsed;
-        _blurSection.Visibility = blurApplies ? Visibility.Visible : Visibility.Collapsed;
+        _blurSection.Visibility = blurApplies && !cropping ? Visibility.Visible : Visibility.Collapsed;
+        _mosaicSection.Visibility = _controller.Tool == EditorTool.Mosaic && !cropping ? Visibility.Visible : Visibility.Collapsed;
         _stepSection.Visibility = stepTool && !cropping ? Visibility.Visible : Visibility.Collapsed;
+        AutomationName(_inspectorPanel, _inspectorTitle.Text);
+        UpdateColorSwatches();
+        if (_colorSection.Visibility != Visibility.Visible) CloseCustomColorFlyout(returnFocus: false);
         if (stepTool) UpdateStepPreview();
 
         _syncingInspector = true;
@@ -3116,11 +3279,14 @@ internal sealed partial class AnnotationEditorControl : Grid
             if (thicknessApplies)
             {
                 AnnotationStrokeStyle style = (selected as ShapeAnnotation)?.StrokeStyle ?? _controller.StrokeStyle;
-                _thicknessSlider.Minimum = (selected is ShapeAnnotation || (selected is null && _controller.Tool is EditorTool.Rectangle or EditorTool.Ellipse))
+                double minimum = (selected is ShapeAnnotation || (selected is null && _controller.Tool is EditorTool.Rectangle or EditorTool.Ellipse))
                     && style == AnnotationStrokeStyle.ThickDashed ? 6 : 1;
                 if (_controller.SelectedItems.Count > 1 && _controller.SelectedItems.Any(item =>
                     item is PolylineAnnotation or PenAnnotation || item is ShapeAnnotation { StrokeStyle: not AnnotationStrokeStyle.ThickDashed }))
-                    _thicknessSlider.Minimum = 1;
+                    minimum = 1;
+                // One assignment of the final minimum: setting 6 and then 1 re-coerced the value
+                // through 6 and back, raising two value changes that ended where they began.
+                _thicknessSlider.Minimum = minimum;
                 SyncThicknessFromSelection(selected);
             }
 
@@ -3355,23 +3521,10 @@ internal sealed partial class AnnotationEditorControl : Grid
 
     private void UpdateResponsiveLayout()
     {
-        if (_inspectorColumn is null || _inspectorPanel is null)
-        {
-            return;
-        }
-
-        // Keep styling reachable in compact windows; vertical scrolling handles short heights.
-        bool compact = ActualWidth > 0 && ActualWidth < InspectorCompactWidth;
-
-        if (compact == _inspectorCompact)
-        {
-            return;
-        }
-
-        _inspectorCompact = compact;
-        _inspectorColumn.Width = new GridLength(compact ? 200 : InspectorWidth);
-        _inspectorPanel.Padding = new Thickness(compact ? 12 : 18);
-        _inspectorPanel.Visibility = Visibility.Visible;
+        // Let the wrap panel use the actual window width. On very short windows its own
+        // scroll viewer keeps every property reachable without consuming the whole canvas.
+        if (_inspectorPanel is not null && ActualHeight > 0)
+            _inspectorPanel.MaxHeight = Math.Max(48, ActualHeight * 0.36);
     }
 
     // ---- Commit / cancel -----------------------------------------------------------
@@ -3389,6 +3542,7 @@ internal sealed partial class AnnotationEditorControl : Grid
             return;
         }
 
+        CancelFrozenPointerGesture();
         if (_activeTextBox is not null)
         {
             CommitActiveText();
@@ -3397,10 +3551,59 @@ internal sealed partial class AnnotationEditorControl : Grid
         // Validate both inputs even when the crop still spans the full image.
         if (_crop is not null && !CommitCropInputs()) return;
         bool appliedCrop = _crop is { } pending && pending.Region != pending.Bounds;
+        bool awaitedImages = false;
+        if (_pendingImageInserts > 0)
+        {
+            // A picture picked just before this command is still being read. The synchronous
+            // insert it replaced had always added it first, before any crop frame was applied,
+            // so the commit waits for it here and saves it too. The editor is held as during
+            // the save, so a second command is ignored.
+            awaitedImages = true;
+            _commitInProgress = true;
+            IsHitTestVisible = false;
+            _commitAwaitingImages = true;
+            CancellationToken closed = (_imageInsertCts ??= new CancellationTokenSource()).Token;
+            RectD? framed = _crop?.Region;
+            try
+            {
+                await ImageInsertsSettledAsync();
+            }
+            finally
+            {
+                _commitAwaitingImages = false;
+            }
+
+            if (closed.IsCancellationRequested)
+            {
+                // The editor closed while waiting: there is nothing left to save into.
+                _commitInProgress = false;
+                IsHitTestVisible = true;
+                return;
+            }
+
+            // Adding the picture is a history change, which starts an open crop frame over on
+            // the whole canvas. The picture never changes the canvas size, so the frame the user
+            // drew is put back before it is applied.
+            if (framed is RectD region && _crop is { } frame && frame.Region != region)
+            {
+                frame.SetRegion(region);
+                RefreshCrop();
+            }
+        }
+
         if (appliedCrop)
         {
             ApplyPendingCrop();
-            if (_crop is not null) return; // An invalid tiny crop stays editable.
+            if (_crop is not null)
+            {
+                // An invalid tiny crop stays editable.
+                if (awaitedImages)
+                {
+                    _commitInProgress = false;
+                    IsHitTestVisible = true;
+                }
+                return;
+            }
         }
 
         AnnotationDocument document = _controller.Document;
@@ -3507,6 +3710,7 @@ internal sealed partial class AnnotationEditorControl : Grid
             return;
         }
 
+        CancelFrozenPointerGesture();
         CloseRequested?.Invoke(this, EventArgs.Empty);
     }
 

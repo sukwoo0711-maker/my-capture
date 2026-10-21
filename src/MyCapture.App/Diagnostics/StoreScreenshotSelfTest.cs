@@ -40,7 +40,7 @@ namespace MyCapture.App.Diagnostics;
 /// Usage: <c>MyCapture.exe --selftest-store-shots [outputDirectory] [ko|en]</c>. Each scene is
 /// rendered at 2x and composed onto a 2560x1440 canvas, above the Store's 1366x768 minimum.
 /// </remarks>
-internal static class StoreScreenshotSelfTest
+internal static partial class StoreScreenshotSelfTest
 {
     internal const string CommandLineSwitch = "--selftest-store-shots";
 
@@ -62,6 +62,10 @@ internal static class StoreScreenshotSelfTest
         bool? oldMotion = FluidMotion.AnimationsEnabledOverrideForTest;
         FluidMotion.AnimationsEnabledOverrideForTest = false;
         int failures = 0;
+        // The video editor refreshes its status line and trim labels from dispatcher callbacks
+        // that do not carry the async-local scope below, so the process language is switched too.
+        // This diagnostic runs in its own process and restores the system language afterwards.
+        UiText.Configure(lang);
         try
         {
             using (UiText.UseLanguage(lang == "en" ? "en-US" : "ko-KR"))
@@ -72,6 +76,7 @@ internal static class StoreScreenshotSelfTest
         finally
         {
             FluidMotion.AnimationsEnabledOverrideForTest = oldMotion;
+            UiText.Configure(null);
         }
 
         report.AppendLine(failures == 0 ? "RESULT: PASS" : $"RESULT: FAIL ({failures})");

@@ -54,11 +54,10 @@ public sealed partial class SettingsThemePreviewTests
             window.ShowSettings();
             Drain(window);
             var tabs = (TabControl)window.FindName("CategoryTabs");
-            var apply = (Button)window.FindName("ApplyButton");
+            Assert.Null(window.FindName("ApplyButton"));
             var cancel = (Button)window.FindName("CancelButton");
 
-            // Nothing pending: Apply is off and the secondary button closes.
-            Assert.False(apply.IsEnabled);
+            // The one footer action always closes and retains saved changes.
             Assert.Equal(UiText.Get("Dialog.Close"), cancel.Content);
             Assert.Equal(UiText.Get("Dialog.Close"), AutomationProperties.GetName(cancel));
             Assert.Equal(UiText.Get("SettingsUx_CloseTip"), cancel.ToolTip);
@@ -76,21 +75,20 @@ public sealed partial class SettingsThemePreviewTests
             Assert.Contains(Descendants(window).OfType<TextBlock>(), text => text.IsVisible
                 && MyCapture.App.Themes.KoreanWordWrap.Strip(text.Text) == UiText.Get("Settings_LibraryMaxItems"));
 
-            // Choosing "never" is a pending change; choosing 36 again is not.
+            // Ctrl+S can flush a choice before its automatic save dispatch.
             retention.SelectedValue = never;
             Assert.Equal(never, Draft(window).ImageRetentionHours);
             Assert.Equal(UiText.Get("Retention_SummaryNever"), ((TextBlock)window.FindName("RetentionSummary")).Text);
-            Assert.True(apply.IsEnabled);
-            Assert.Equal(UiText.Get("Text_BE876433993A"), cancel.Content);
+            Assert.Equal(UiText.Get("Dialog.Close"), cancel.Content);
             Assert.Equal(7, retention.Items.Count);
             retention.SelectedValue = "36";
-            Assert.False(apply.IsEnabled);
             Assert.Equal(UiText.Get("Dialog.Close"), cancel.Content);
 
             // Applying "never" stores it; reopening offers only the presets.
             retention.SelectedValue = never;
             SettingsWindow.ApplyCommand.Execute(null, window);
             Assert.Equal(CaptureRetention.NeverHours, fixture.Saved().Queue.ImageRetentionHours);
+            SettingsWindow.CloseCommand.Execute(null, window);
             window.ShowSettings();
             Drain(window);
             Assert.Equal(6, retention.Items.Count);
@@ -146,21 +144,31 @@ public sealed partial class SettingsThemePreviewTests
             Assert.Equal(Visibility.Collapsed, ((Button)window.FindName("StorePageAction")).Visibility);
             Assert.True(((Button)window.FindName("StoreRatingButton")).IsVisible);
 
-            // Report a problem is one step: copy diagnostics, open the page, say so.
+            // Opening support does not copy or launch; those actions are explicit in its dialog.
             string? copied = null;
             var pages = new List<string>();
             window.CopySupportText = value => copied = value;
             window.OpenSupportPage = pages.Add;
+            SupportWindow? support = null;
+            window.OpenSupportDialog = dialog => support = dialog;
             var report = (Button)window.FindName("SupportReport");
             report.RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));
-            Assert.Contains("Windows:", copied, StringComparison.Ordinal);
+            Assert.NotNull(support);
+            Assert.Null(copied);
+            Assert.Empty(pages);
+            support.MessageBox.Text = "fixture support message";
+            support.CopyDiagnostics();
+            Assert.Contains("Windows", copied, StringComparison.Ordinal);
+            Assert.Contains("fixture support message", copied, StringComparison.Ordinal);
             Assert.DoesNotContain("C:\\", copied, StringComparison.OrdinalIgnoreCase);
-            Assert.Equal([SupportDiagnostics.IssueUri], pages);
-            Assert.Equal(UiText.Get("About_ReportCopied"), ((TextBlock)window.FindName("SettingsStatus")).Text);
+            support.OpenGitHub();
+            Assert.StartsWith(SupportDiagnostics.IssueUri + "?", Assert.Single(pages), StringComparison.Ordinal);
+            support.Close();
             window.CopySupportText = _ => throw new InvalidOperationException("clipboard busy");
             report.RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));
-            Assert.Equal(2, pages.Count);
-            Assert.Equal(UiText.Get("About_ReportCopyFailed"), ((TextBlock)window.FindName("SettingsStatus")).Text);
+            support!.CopyDiagnostics(); // Failure is contained inside the dialog.
+            Assert.Single(pages); // Clipboard failure never launches a browser by itself.
+            support.Close();
             Assert.Null(window.FindName("DiagnosticsCopy"));
 
             // A check reports its time; a failed one offers the Store listing.

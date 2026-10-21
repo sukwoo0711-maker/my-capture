@@ -25,6 +25,10 @@ public sealed partial class SettingsThemePreviewTests
         RunIsolated(nameof(LegacyImport_PreservesTargetSettingsUntilApplyAndFailedApplyRetainsDraft), VerifyLegacyDraft);
 
     [Fact]
+    public Task LegacyImport_PreservesCurrentCoreShortcutAnswerAtImportAndApply() =>
+        RunIsolated(nameof(LegacyImport_PreservesCurrentCoreShortcutAnswerAtImportAndApply), VerifyLegacyCoreShortcutAnswer);
+
+    [Fact]
     public Task LegacyImport_RecoveryFailureNeverTrapsTheWindowAndReleasesProtectionOnClose() =>
         RunIsolated(nameof(LegacyImport_RecoveryFailureNeverTrapsTheWindowAndReleasesProtectionOnClose), VerifyLegacyRecovery);
 
@@ -188,6 +192,56 @@ public sealed partial class SettingsThemePreviewTests
         finally { application.Shutdown(); }
     }
 
+    private static void VerifyLegacyCoreShortcutAnswer()
+    {
+        Application application = CreateThemedApplication();
+        try
+        {
+            foreach (bool asked in new[] { false, true })
+            {
+                var paths = AppPaths.CreateForRoot(ExportTestDirectory.Create());
+                var store = new SettingsStore(paths, NullLogger<SettingsStore>.Instance);
+                var current = new AppSettings { Hotkeys = { CoreShortcutsAsked = asked } };
+                store.Save(current);
+                byte[] before = File.ReadAllBytes(paths.SettingsFile);
+                string importPath = Path.Combine(paths.DataRoot, "legacy-core-shortcuts.json");
+                store.ExportTo(new AppSettings
+                {
+                    Hotkeys = { CoreShortcutsAsked = !asked, ForceCoreShortcuts = true },
+                }, importPath);
+                var applied = new List<AppSettings>();
+                var window = new SettingsWindow(() => current, candidate =>
+                {
+                    applied.Add(candidate);
+                    return new SettingsApplyResult(true, true, true, false, []);
+                }, NullLogger.Instance, () => store, _ => { })
+                { Left = -10000, Top = -10000, ShowActivated = false, ShowInTaskbar = false };
+                try
+                {
+                    window.Show(); Drain(window);
+                    window.ImportLegacySettingsDraft(importPath);
+                    SettingsDraft draft = DraftOf(window);
+                    Assert.True(draft.ForceCoreShortcuts);
+                    Assert.Equal(asked, draft.ToAppSettings().Hotkeys.CoreShortcutsAsked);
+                    Assert.Equal(asked, window.LegacyApplyCandidate(draft.ToAppSettings()).Hotkeys.CoreShortcutsAsked);
+
+                    current.Hotkeys.CoreShortcutsAsked = !asked;
+                    AppSettings candidate = window.LegacyApplyCandidate(draft.ToAppSettings());
+                    Assert.Equal(!asked, candidate.Hotkeys.CoreShortcutsAsked);
+                    Assert.True(candidate.Hotkeys.ForceCoreShortcuts);
+                    Assert.Equal(asked, draft.ToAppSettings().Hotkeys.CoreShortcutsAsked);
+                    Assert.Equal(before, File.ReadAllBytes(paths.SettingsFile));
+                    // The import stays a draft until it is saved.
+                    Assert.Empty(applied);
+                }
+                finally { window.CloseForExit(); }
+                // Closing saves the pending draft, still with the current answer.
+                Assert.All(applied, candidate => Assert.Equal(!asked, candidate.Hotkeys.CoreShortcutsAsked));
+            }
+        }
+        finally { application.Shutdown(); }
+    }
+
     private static void VerifyLegacyDraft()
     {
         Application application = CreateThemedApplication();
@@ -205,6 +259,7 @@ public sealed partial class SettingsThemePreviewTests
                 Export = { QuickSaveDirectoryOverride = Path.Combine(root, "store-exports") },
                 GitHub = { Token = "fixture-store-credential", IssueUrl = "https://github.com/store-owner/store-repo/issues/7" },
                 Capture = { StartGuideShownCount = 2 },
+                Hotkeys = { CoreShortcutsAsked = true },
                 StoreRating = { SuccessfulCaptureCount = 17 }, StoreUpdate = { CompletionNoticeVersion = "4.1.2.0" },
             };
             store.Save(current);
@@ -225,7 +280,7 @@ public sealed partial class SettingsThemePreviewTests
                 window.ImportLegacySettingsDraft(oldSettings);
                 SettingsDraft draft = DraftOf(window);
                 AppSettings candidate = window.LegacyApplyCandidate(draft.ToAppSettings());
-                Assert.Equal(AppThemeNames.Daylight, candidate.General.Theme);
+                Assert.Equal(AppThemeNames.GlassLight, candidate.General.Theme);
                 Assert.Equal(JsonSerializer.Serialize(current.Queue), JsonSerializer.Serialize(candidate.Queue));
                 Assert.Equal(current.Export.QuickSaveDirectoryOverride, candidate.Export.QuickSaveDirectoryOverride);
                 Assert.Equal(current.GitHub.Token, candidate.GitHub.Token);
@@ -233,6 +288,8 @@ public sealed partial class SettingsThemePreviewTests
                 Assert.Equal(current.GitHub.IssueUrl, draft.GitHubIssueUrl);
                 Assert.Equal(current.GitHub.IssueUrl, candidate.GitHub.IssueUrl);
                 Assert.Equal(current.General.IsFirstRun, candidate.General.IsFirstRun);
+                Assert.True(draft.ToAppSettings().Hotkeys.CoreShortcutsAsked);
+                Assert.True(candidate.Hotkeys.CoreShortcutsAsked);
                 Assert.Equal(current.General.LaunchAtLogin, candidate.General.LaunchAtLogin);
                 Assert.Equal(current.Capture.StartGuideShownCount, candidate.Capture.StartGuideShownCount);
                 Assert.Equal(current.StoreRating.SuccessfulCaptureCount, candidate.StoreRating.SuccessfulCaptureCount);

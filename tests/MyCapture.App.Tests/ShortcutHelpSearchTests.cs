@@ -16,6 +16,44 @@ namespace MyCapture.App.Tests;
 /// </summary>
 public sealed class ShortcutHelpSearchTests
 {
+    [Theory]
+    [InlineData("ko-KR", "라이브러리")]
+    [InlineData("en-US", "Library")]
+    public void LibraryHelpIncludesPinAndKeepShortcuts(string language, string category) => WithHelp((help, view) =>
+    {
+        Assert.Equal(category, UiText.Get("Workspace.Library"));
+        TabItem library = Assert.Single(view.Tabs.Items.OfType<TabItem>(), tab => Equals(tab.Header, category));
+        Assert.DoesNotContain(view.Tabs.Items.OfType<TabItem>(), tab => Equals(tab.Header, UiText.Get("Folder410.Title")));
+        var panel = (StackPanel)((ScrollViewer)library.Content).Content;
+        UniformGrid[] rows = panel.Children.OfType<UniformGrid>().ToArray();
+        (string Label, string Shortcut)[] expected =
+        [
+            ("Gallery.Float", "P"), ("LibraryUx_KeepToggleName", "K"),
+            ("Folder410.MoveCaptures", "M"), ("Folder410.Delete", "Del"),
+            ("Folder410.NewFolder", "Ctrl+Shift+N"), ("Folder410.Rename", "F2"),
+        ];
+        Assert.Equal(expected.Select(entry => UiText.Get(entry.Label)), rows.Select(ShortcutHelpRowAssertions.Title));
+        Assert.Equal(expected.Select(entry => entry.Shortcut), rows.Select(row =>
+            AutomationProperties.GetName(Assert.Single(row.Children.OfType<WrapPanel>()))));
+
+        view.Search.Text = category;
+        help.UpdateLayout();
+        Border[] results = view.VisibleResults();
+        Assert.Equal(7, results.Length);
+        Border[] libraryResults = results.Where(row => Texts(row)[1].Text == category).ToArray();
+        Assert.Equal(6, libraryResults.Length);
+        Assert.Equal(expected.Select(entry => UiText.Get(entry.Label)), libraryResults.Select(row => Texts(row)[0].Text));
+        Border openLibrary = Assert.Single(results, row => Texts(row)[1].Text != category);
+        Assert.Equal(UiText.Get("Text_66BA5DCDA810"), Texts(openLibrary)[0].Text);
+        Assert.Equal(UiText.Get("Help.Capture"), Texts(openLibrary)[1].Text);
+        foreach (var (label, shortcut) in expected)
+        {
+            Border row = Assert.Single(libraryResults, result => Texts(result)[0].Text == UiText.Get(label));
+            Assert.Contains(FirstRunWelcomeTests.Descendants(row).OfType<WrapPanel>(),
+                keys => AutomationProperties.GetName(keys) == shortcut);
+        }
+    }, language);
+
     [Fact]
     public void VideoHelpKeepsStartAndEndShortcuts() => WithHelp((help, view) =>
     {
@@ -34,30 +72,43 @@ public sealed class ShortcutHelpSearchTests
     {
         view.Tabs.SelectedIndex = 0;
 
-        // F2 renames a folder; the capture tab is open, but the match is still shown.
+        // F2 renames a folder and selects pin text, even while the capture tab is open.
         view.Search.Text = "F2";
         help.UpdateLayout();
         Assert.Equal(Visibility.Collapsed, view.Tabs.Visibility);
         Assert.Equal(Visibility.Visible, view.ResultsView.Visibility);
-        Border folder = Assert.Single(view.VisibleResults());
+        Border[] f2Results = view.VisibleResults();
+        Assert.Equal(2, f2Results.Length);
+        Border folder = Assert.Single(f2Results, row => Texts(row)[0].Text == UiText.Get("Folder410.Rename"));
         Assert.Equal(UiText.Get("Folder410.Rename"), Texts(folder)[0].Text);
         TextBlock category = Texts(folder)[1];
-        Assert.Equal(UiText.Get("Folder410.Title"), category.Text);
+        Assert.Equal(UiText.Get("Workspace.Library"), category.Text);
         Assert.Equal(12, category.FontSize);
         Assert.Equal(new Thickness(12, 4, 12, 4), folder.Padding);
         Assert.True(folder.ActualHeight >= 36, $"A result row is {folder.ActualHeight} high.");
         Assert.Equal(Visibility.Visible, view.Count.Visibility);
-        Assert.Equal(UiText.Format("Help.SearchCountOne", 1), view.Count.Text);
+        Assert.Equal(UiText.Format("Help.SearchCount", 2), view.Count.Text);
         Assert.Equal(AutomationLiveSetting.Polite, AutomationProperties.GetLiveSetting(view.Count));
+        Border selection = Assert.Single(f2Results, row => Texts(row)[0].Text == UiText.Get("Pin_SelectText"));
+        Assert.Equal(UiText.Get("Text_33EFD44366A7"), Texts(selection)[1].Text);
+        Assert.Contains(FirstRunWelcomeTests.Descendants(selection).OfType<WrapPanel>(),
+            keys => AutomationProperties.GetName(keys) == "F2");
 
-        // The same command on two tabs is listed twice, each under its own category.
+        view.Search.Text = UiText.Get("Folder410.Rename");
+        Assert.Single(view.VisibleResults());
+        Assert.Equal(UiText.Format("Help.SearchCountOne", 1), view.Count.Text);
+
+        // Copy appears on two tabs, plus the pin's exact-source alternative.
         view.Search.Text = "Ctrl+C";
         Border[] copies = view.VisibleResults();
-        Assert.Equal(2, copies.Length);
-        Assert.Equal(new[] { UiText.Get("Help.Annotation"), UiText.Get("Text_33EFD44366A7") }, copies.Select(row => Texts(row)[1].Text));
-        Assert.All(copies, row => Assert.Contains(FirstRunWelcomeTests.Descendants(row).OfType<WrapPanel>(),
+        Assert.Equal(3, copies.Length);
+        Assert.Equal(new[] { UiText.Get("Help.Annotation"), UiText.Get("Text_33EFD44366A7"), UiText.Get("Text_33EFD44366A7") }, copies.Select(row => Texts(row)[1].Text));
+        Assert.All(copies.Take(2), row => Assert.Contains(FirstRunWelcomeTests.Descendants(row).OfType<WrapPanel>(),
             keys => AutomationProperties.GetName(keys) == "Ctrl+C"));
-        Assert.Equal(UiText.Format("Help.SearchCount", 2), view.Count.Text);
+        Assert.Equal(UiText.Get("Text_976A6C92B870"), Texts(copies[2])[0].Text);
+        Assert.Contains(FirstRunWelcomeTests.Descendants(copies[2]).OfType<WrapPanel>(),
+            keys => AutomationProperties.GetName(keys) == "Ctrl+C / " + UiText.Get("Text_C7011B8D345C"));
+        Assert.Equal(UiText.Format("Help.SearchCount", 3), view.Count.Text);
 
         // A category name finds its commands too.
         view.Search.Text = UiText.Get("Help.Video");
@@ -69,6 +120,34 @@ public sealed class ShortcutHelpSearchTests
         Assert.Equal(Visibility.Collapsed, view.ResultsView.Visibility);
         Assert.Equal(Visibility.Collapsed, view.Count.Visibility);
         Assert.Equal(0, view.Tabs.SelectedIndex);
+    });
+
+    [Fact]
+    public void PinSectionOffersBothOriginalTextCopyGesturesAfterCopy() => WithHelp((help, view) =>
+    {
+        TabItem tab = Assert.Single(view.Tabs.Items.OfType<TabItem>(), item => Equals(item.Header, UiText.Get("Text_33EFD44366A7")));
+        var panel = (StackPanel)((ScrollViewer)tab.Content).Content;
+        UniformGrid[] rows = panel.Children.OfType<UniformGrid>().ToArray();
+        int index = Array.FindIndex(rows, row => FirstRunWelcomeTests.Descendants(row).OfType<TextBlock>()
+            .Any(text => text.Text == UiText.Get("Text_976A6C92B870")));
+        Assert.True(index > 0);
+        Assert.Contains(FirstRunWelcomeTests.Descendants(rows[index - 1]).OfType<TextBlock>(),
+            text => text.Text == UiText.Get("QuickAccess.Copy"));
+        Assert.Contains(FirstRunWelcomeTests.Descendants(rows[index]).OfType<WrapPanel>(),
+            keys => AutomationProperties.GetName(keys) == "Ctrl+C / " + UiText.Get("Text_C7011B8D345C"));
+        Assert.Equal("pin-copy", TutorialCatalog.FindHelp("Text_33EFD44366A7", "QuickAccess.Copy")?.Id);
+    });
+
+    [Fact]
+    public void PinSectionOffersTextSelectionAfterOriginalTextCopy() => WithHelp((help, view) =>
+    {
+        TabItem tab = Assert.Single(view.Tabs.Items.OfType<TabItem>(), item => Equals(item.Header, UiText.Get("Text_33EFD44366A7")));
+        var panel = (StackPanel)((ScrollViewer)tab.Content).Content;
+        UniformGrid[] rows = panel.Children.OfType<UniformGrid>().ToArray();
+        int index = Array.FindIndex(rows, row => ShortcutHelpRowAssertions.Title(row) == UiText.Get("Text_976A6C92B870"));
+        Assert.True(index >= 0 && index + 1 < rows.Length);
+        Assert.Equal(UiText.Get("Pin_SelectText"), ShortcutHelpRowAssertions.Title(rows[index + 1]));
+        Assert.Equal("F2", ShortcutHelpRowAssertions.Keys(rows[index + 1]));
     });
 
     [Fact]
@@ -158,9 +237,9 @@ public sealed class ShortcutHelpSearchTests
             RoutedEvent = Keyboard.PreviewKeyDownEvent,
         });
 
-    private static void WithHelp(Action<ShortcutHelpWindow, HelpView> verify) => StaTestHost.Run(() =>
+    private static void WithHelp(Action<ShortcutHelpWindow, HelpView> verify, string language = "ko-KR") => StaTestHost.Run(() =>
     {
-        using var language = UiText.UseLanguage("ko-KR");
+        using var locale = UiText.UseLanguage(language);
         Func<HotkeySettings> previous = ShortcutHelpWindow.ReadHotkeys;
         ShortcutHelpWindow.ReadHotkeys = () => new HotkeySettings();
         var help = new ShortcutHelpWindow

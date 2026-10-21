@@ -1,5 +1,6 @@
 using System.Reflection;
 using Microsoft.Extensions.Logging.Abstractions;
+using MyCapture.Core.Queue;
 using MyCapture.Core.Settings;
 using MyCapture.Core.Storage;
 using MyCapture.Core.Themes;
@@ -8,7 +9,7 @@ using Xunit;
 namespace MyCapture.Core.Tests;
 
 /// <summary>
-/// New installations register only region capture and recording and show key captions; files
+/// New installations register capture, recording and clipboard pin keys and hide key captions; files
 /// written by earlier versions keep every chord, and current caption choices persist.
 /// </summary>
 public sealed class SettingsUxDefaultsTests
@@ -17,13 +18,13 @@ public sealed class SettingsUxDefaultsTests
 
     private static Hotkey[] OptionalHotkeys(HotkeySettings keys) =>
     [
-        keys.OpenLibrary, keys.PasteToScreen, keys.HideAllPins, keys.ToggleClickThrough, keys.RepeatLastRegion,
+        keys.OpenLibrary, keys.ToggleClickThrough, keys.RepeatLastRegion,
         keys.CaptureWindow, keys.CaptureFullScreen, keys.UploadGitHubImage, keys.ScrollingCapture, keys.DelayedCapture,
         keys.RestoreClosedPin, keys.CaptureText, keys.PauseRecording,
     ];
 
     [Fact]
-    public void NewInstall_RegistersOnlyRegionCaptureAndRecording_AndShowsKeyCaptions()
+    public void NewInstall_RegistersCaptureRecordingAndClipboardPinKeys_AndHidesKeyCaptions()
     {
         using var workspace = new TempWorkspace();
 
@@ -33,7 +34,12 @@ public sealed class SettingsUxDefaultsTests
         Assert.Equal("Ctrl+Shift+C", fresh.Hotkeys.Capture.ToString());
         Assert.Equal("Ctrl+Shift+X", fresh.Hotkeys.RecordRegion.ToString());
         Assert.All(OptionalHotkeys(fresh.Hotkeys), key => Assert.Equal(Hotkey.None, key));
-        Assert.True(fresh.General.ShowShortcutHints);
+        AssertNewPinDefaults(fresh);
+        Assert.False(fresh.General.ShowShortcutHints);
+        Assert.Equal(1, fresh.General.ShortcutHintsRevision);
+        Assert.Equal(AppThemeNames.ToSetting(AppTheme.System), fresh.General.Theme);
+        Assert.Equal(AfterCaptureAction.QuickAccess, fresh.General.AfterCapture);
+        AssertNewLibraryDefaults(fresh.Queue);
         Assert.False(File.Exists(workspace.Paths.SettingsFile));
     }
 
@@ -51,7 +57,12 @@ public sealed class SettingsUxDefaultsTests
         Assert.Equal("Ctrl+Shift+C", reloaded.Hotkeys.Capture.ToString());
         Assert.Equal("Ctrl+Shift+X", reloaded.Hotkeys.RecordRegion.ToString());
         Assert.All(OptionalHotkeys(reloaded.Hotkeys), key => Assert.Equal(Hotkey.None, key));
-        Assert.True(reloaded.General.ShowShortcutHints);
+        AssertNewPinDefaults(reloaded);
+        Assert.False(reloaded.General.ShowShortcutHints);
+        Assert.Equal(1, reloaded.General.ShortcutHintsRevision);
+        Assert.Equal(AppThemeNames.ToSetting(AppTheme.System), reloaded.General.Theme);
+        Assert.Equal(AfterCaptureAction.QuickAccess, reloaded.General.AfterCapture);
+        AssertNewLibraryDefaults(reloaded.Queue);
     }
 
     [Fact]
@@ -76,6 +87,8 @@ public sealed class SettingsUxDefaultsTests
         Assert.Equal("Shift+F3", loaded.Hotkeys.HideAllPins.ToString());
         Assert.Equal("F9", loaded.Hotkeys.UploadGitHubImage.ToString());
         Assert.True(loaded.General.ShowShortcutHints);
+        AssertLegacyLibraryDefaults(loaded.Queue);
+        Assert.True(loaded.Pin.CloseOnDoubleClick);
         Assert.Equal(before, File.ReadAllText(workspace.Paths.SettingsFile));
     }
 
@@ -96,6 +109,46 @@ public sealed class SettingsUxDefaultsTests
         Assert.Equal("F9", loaded.Hotkeys.UploadGitHubImage.ToString());
         Assert.Equal("Ctrl+Shift+X", loaded.Hotkeys.RecordRegion.ToString());
         Assert.True(loaded.General.ShowShortcutHints);
+        AssertLegacyLibraryDefaults(loaded.Queue);
+        Assert.True(loaded.Pin.CloseOnDoubleClick);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void ExistingFile_KeepsExplicitDoubleClickChoice_WithoutRewriting(bool closeOnDoubleClick)
+    {
+        using var workspace = new TempWorkspace();
+        workspace.Paths.EnsureCreated();
+        string json = $$"""{"schemaVersion":4,"pin":{"closeOnDoubleClick":{{closeOnDoubleClick.ToString().ToLowerInvariant()}} } }""";
+        File.WriteAllText(workspace.Paths.SettingsFile, json);
+
+        AppSettings loaded = Store(workspace).Load();
+
+        Assert.Equal(closeOnDoubleClick, loaded.Pin.CloseOnDoubleClick);
+        Assert.Equal(json, File.ReadAllText(workspace.Paths.SettingsFile));
+    }
+
+    [Theory]
+    [InlineData(168, 300, 2L * 1024 * 1024 * 1024)]
+    [InlineData(36, 750, 3L * 1024 * 1024 * 1024)]
+    [InlineData(CaptureRetention.NeverHours, 1500, 8L * 1024 * 1024 * 1024)]
+    public void ExistingFile_KeepsStoredLibraryLimits_WithoutRewriting(int hours, int items, long bytes)
+    {
+        using var workspace = new TempWorkspace();
+        workspace.Paths.EnsureCreated();
+        string json = $$"""
+            {"schemaVersion":4,"queue":{"imageRetentionHours":{{hours}},"maxItems":{{items}},"maxBytes":{{bytes}} } }
+            """;
+        File.WriteAllText(workspace.Paths.SettingsFile, json);
+
+        AppSettings loaded = Store(workspace).Load();
+
+        Assert.False(loaded.General.IsFirstRun);
+        Assert.Equal(hours, loaded.Queue.ImageRetentionHours);
+        Assert.Equal(items, loaded.Queue.MaxItems);
+        Assert.Equal(bytes, loaded.Queue.MaxBytes);
+        Assert.Equal(json, File.ReadAllText(workspace.Paths.SettingsFile));
     }
 
     [Fact]
@@ -133,27 +186,54 @@ public sealed class SettingsUxDefaultsTests
         Assert.False(loaded.General.IsFirstRun);
         Assert.Equal("F3", loaded.Hotkeys.PasteToScreen.ToString());
         Assert.True(loaded.General.ShowShortcutHints);
+        AssertLegacyLibraryDefaults(loaded.Queue);
     }
 
     [Fact]
     public void ResetToDefaults_UsesTheNewInstallDefaults()
     {
-        var draft = new SettingsDraft(new AppSettings { General = { ShowShortcutHints = false } });
+        var draft = new SettingsDraft(new AppSettings { General = { ShowShortcutHints = true } });
         Assert.Equal("F3", draft.PasteToScreenHotkey);
-        Assert.False(draft.ShowShortcutHints);
+        Assert.True(draft.ShowShortcutHints);
 
         draft.ResetToDefaults();
 
         Assert.Equal("Ctrl+Shift+C", draft.CaptureHotkey);
         Assert.Equal("Ctrl+Shift+X", draft.RecordRegionHotkey);
         Assert.Equal(string.Empty, draft.OpenLibraryHotkey);
-        Assert.Equal(string.Empty, draft.PasteToScreenHotkey);
-        Assert.Equal(string.Empty, draft.HideAllPinsHotkey);
+        Assert.Equal("F3", draft.PasteToScreenHotkey);
+        Assert.Equal("Shift+F3", draft.HideAllPinsHotkey);
         Assert.Equal(string.Empty, draft.UploadGitHubImageHotkey);
-        Assert.True(draft.ShowShortcutHints);
+        Assert.False(draft.ShowShortcutHints);
         Assert.False(draft.HasErrors);
         AppSettings mapped = draft.ToAppSettings();
         Assert.All(OptionalHotkeys(mapped.Hotkeys), key => Assert.Equal(Hotkey.None, key));
+        AssertNewPinDefaults(mapped);
+        Assert.Equal(1, mapped.General.ShortcutHintsRevision);
+        Assert.Equal(AppThemeNames.ToSetting(AppTheme.System), mapped.General.Theme);
+        Assert.Equal(AfterCaptureAction.QuickAccess, mapped.General.AfterCapture);
+        AssertNewLibraryDefaults(mapped.Queue);
+    }
+
+    private static void AssertNewPinDefaults(AppSettings settings)
+    {
+        Assert.Equal(new Hotkey(HotkeyModifiers.None, Hotkey.VkF3), settings.Hotkeys.PasteToScreen);
+        Assert.Equal(new Hotkey(HotkeyModifiers.Shift, Hotkey.VkF3), settings.Hotkeys.HideAllPins);
+        Assert.True(settings.Pin.CloseOnDoubleClick);
+    }
+
+    private static void AssertNewLibraryDefaults(QueueSettings queue)
+    {
+        Assert.Equal(CaptureRetention.NeverHours, queue.ImageRetentionHours);
+        Assert.Equal(5L * 1024 * 1024 * 1024, queue.MaxBytes);
+        Assert.Equal(1000, queue.MaxItems);
+    }
+
+    private static void AssertLegacyLibraryDefaults(QueueSettings queue)
+    {
+        Assert.Equal(168, queue.ImageRetentionHours);
+        Assert.Equal(2L * 1024 * 1024 * 1024, queue.MaxBytes);
+        Assert.Equal(300, queue.MaxItems);
     }
 
     [Fact]
@@ -199,7 +279,20 @@ public sealed class SettingsUxDefaultsTests
         {
             var draft = new SettingsDraft(source);
             object? original = property.GetValue(draft);
-            object changed = Candidates(property.PropertyType, original)
+            // AccentColor remains writable for file compatibility, but both former choices
+            // now normalize to the same fixed red and must not create an unapplied change.
+            if (property.Name == nameof(SettingsDraft.AccentColor))
+            {
+                foreach (string accent in new[] { AppAccentNames.Violet, AppAccentNames.Red })
+                {
+                    property.SetValue(draft, accent);
+                    Assert.Equal(AppAccentNames.Red, draft.AccentColor);
+                    Assert.False(draft.HasUnappliedChanges);
+                }
+                continue;
+            }
+
+            object changed = Candidates(property, original)
                 .FirstOrDefault(candidate => { property.SetValue(draft, candidate); return !Equals(property.GetValue(draft), original); })
                 ?? throw new InvalidOperationException($"No different value could be assigned to {property.Name}.");
 
@@ -208,8 +301,14 @@ public sealed class SettingsUxDefaultsTests
             Assert.False(draft.HasUnappliedChanges, $"{property.Name} restored to {original} still reads as changed.");
         }
 
-        static IEnumerable<object> Candidates(Type type, object? original)
+        static IEnumerable<object> Candidates(PropertyInfo property, object? original)
         {
+            if (property.Name == nameof(SettingsDraft.Theme))
+            {
+                yield return Equals(original, AppThemeNames.HighContrast) ? AppThemeNames.Glass : AppThemeNames.HighContrast;
+                yield break;
+            }
+            Type type = property.PropertyType;
             if (type == typeof(bool)) { yield return !(bool)original!; yield break; }
             if (type.IsEnum)
             {

@@ -32,8 +32,12 @@ namespace MyCapture.App.Editing;
 /// </para>
 /// <para>
 /// Image encoding and durable file flushes run on isolated STA workers. Queue collection
-/// mutation and the final staged-file swap return to the caller context, keeping WPF state
-/// thread-affine while capture-to-editor transitions remain responsive.
+/// mutation returns to the caller context, keeping WPF state thread-affine while
+/// capture-to-editor transitions remain responsive. In <see cref="FinalizeAsync"/> the journal
+/// inspection, the staged-file swap, its rollback and the cleanup run on background threads as
+/// well, and the metadata and index writes are awaited instead of waited on, so a slow disk
+/// never stops the dispatcher. Record and queue changes, and <see cref="ImagePersisted"/>, stay
+/// on the caller context in the same order as the synchronous <see cref="Finalize"/>.
 /// </para>
 /// </remarks>
 internal sealed class CapturePersistenceService
@@ -67,6 +71,14 @@ internal sealed class CapturePersistenceService
     internal Action<Guid>? BeforeRecordMetadataCommit { get; set; }
 
     internal Func<CaptureRecord, Task>? BeforeOriginalRewriteForTest { get; set; }
+
+    /// <summary>
+    /// Test-only observer invoked at the start of each file-system step of
+    /// <see cref="FinalizeAsync"/> ("scan", "pending", "commit", "rollback", "cleanup"), on the
+    /// thread that runs the step. Production leaves it unset. It lets tests prove that the steps
+    /// run off the caller's dispatcher and hold one step to show that the dispatcher stays free.
+    /// </summary>
+    internal Action<string>? FileStepForTest { get; set; }
 
     internal CapturePersistenceService(
         CaptureQueue queue,
@@ -566,16 +578,29 @@ internal sealed class CapturePersistenceService
     }
 
     /// <summary>
-    /// Writes the image-heavy portion on an isolated STA worker, then updates the UI-owned
-    /// queue and its small index on the caller context.
+    /// Writes the image-heavy portion on an isolated STA worker and the file transaction
+    /// (journal inspection, swaps, rollback, cleanup) on background threads, then updates the
+    /// UI-owned record and queue on the caller context and awaits the metadata and index writes
+    /// before raising <see cref="ImagePersisted"/>.
     /// </summary>
+    /// <remarks>
+    /// Same protocol, order and failure handling as <see cref="Finalize"/>. The capture stays
+    /// busy and leased for the whole operation, so another save, a source backfill, a removal or
+    /// capacity eviction of it waits or is refused exactly as while the image is encoded.
+    /// </remarks>
+    /// <param name="admitted">
+    /// Called on the caller's context once the save has passed its checks (no transaction left
+    /// pending, the capture still exists at <paramref name="expectedContentRevision"/>) and starts
+    /// writing; a save refused by those checks never calls it.
+    /// </param>
     internal async Task FinalizeAsync(
         CaptureRecord record,
         BitmapSource flattened,
         AnnotationDocument document,
         IReadOnlyDictionary<string, BitmapSource> assetBitmaps,
         long? expectedContentRevision = null,
-        BitmapSource? replacementOriginal = null)
+        BitmapSource? replacementOriginal = null,
+        Action? admitted = null)
     {
         ArgumentNullException.ThrowIfNull(record);
         ArgumentNullException.ThrowIfNull(flattened);
@@ -593,9 +618,10 @@ internal sealed class CapturePersistenceService
 
         try
         {
-            RecoverRecordTransactions(record);
-            ThrowIfPendingTransactionRemains(record);
+            await RecoverRecordTransactionsAsync(record);
+            await ThrowIfPendingTransactionRemainsAsync(record);
             EnsureExpectedGeneration(record, expectedContentRevision);
+            admitted?.Invoke();
             using IDisposable? originalChange = replacementOriginal is not null
                 ? await _queue.BeginOriginalChangeAsync(record) : null;
             if (replacementOriginal is not null && BeforeOriginalRewriteForTest is not null)
@@ -603,7 +629,7 @@ internal sealed class CapturePersistenceService
             FinalizeFiles files = await StaThreadTask.RunAsync(
                 () => WriteFinalizeFiles(record, flattened, document, assetBitmaps, replacementOriginal),
                 "MyCapture capture persistence");
-            CompleteFinalize(record, files);
+            await CompleteFinalizeAsync(record, files);
             ImagePersisted?.Invoke(this, record);
         }
         finally
@@ -685,139 +711,29 @@ internal sealed class CapturePersistenceService
 
     private void CompleteFinalize(CaptureRecord record, FinalizeFiles files)
     {
-        var committed = new List<CommittedFile>();
+        var commit = new FinalizeCommit(record);
         bool rollbackComplete = false;
         bool commitComplete = false;
-        bool commitMarked = false;
-        bool previousHasAnnotations = record.HasAnnotations;
-        DateTimeOffset previousUpdatedAt = record.UpdatedAt;
-        long previousContentRevision = record.ContentRevision;
-        long previousTotalBytes = record.TotalBytes;
 
         try
         {
-            string[] stagedPaths = Directory.EnumerateFiles(
-                    files.StageDirectory,
-                    "*",
-                    SearchOption.TopDirectoryOnly)
-                .OrderBy(Path.GetFileName, StringComparer.OrdinalIgnoreCase)
-                .ToArray();
-
-            DateTimeOffset committedAt = DateTimeOffset.Now;
-            long committedContentRevision = checked(previousContentRevision + 1);
-            var stagedNames = stagedPaths
-                .Select(Path.GetFileName)
-                .ToHashSet(StringComparer.OrdinalIgnoreCase);
-            List<FinalizeJournalEntry> journalEntries = stagedPaths.Select(path => new FinalizeJournalEntry
-            {
-                FileName = Path.GetFileName(path),
-                HadPreviousFile = File.Exists(Path.Combine(files.TargetDirectory, Path.GetFileName(path))),
-            }).ToList();
-
-            foreach (string existingAsset in Directory.EnumerateFiles(
-                         files.TargetDirectory,
-                         $"{CaptureFileNames.AssetPrefix}*.png",
-                         SearchOption.TopDirectoryOnly))
-            {
-                string fileName = Path.GetFileName(existingAsset);
-                if (CaptureFileNames.IsSafeAssetFileName(fileName) && !stagedNames.Contains(fileName))
-                {
-                    journalEntries.Add(new FinalizeJournalEntry
-                    {
-                        FileName = fileName,
-                        HadPreviousFile = true,
-                        DeleteTarget = true,
-                    });
-                }
-            }
-
-            var journal = new FinalizeJournal
-            {
-                RecordId = record.Id,
-                Bytes = files.Bytes,
-                HasAnnotations = files.HasAnnotations,
-                ItemCount = files.ItemCount,
-                UpdatedAt = committedAt,
-                ContentRevision = committedContentRevision,
-                OriginalWidth = files.OriginalWidth,
-                OriginalHeight = files.OriginalHeight,
-                Files = journalEntries,
-            };
-
-            // The journal is flushed before the first target changes. On startup an absent
-            // commit marker means "roll back"; a present marker means every file swap finished
-            // and metadata must be rolled forward. This closes the process/power-loss gap that
-            // an in-process catch block alone cannot cover.
-            AtomicFile.WriteAllText(
-                Path.Combine(files.StageDirectory, FinalizeJournalFileName),
-                JsonSerializer.Serialize(journal));
-
-            string rollbackDirectory = Path.Combine(files.StageDirectory, ".rollback");
-            Directory.CreateDirectory(rollbackDirectory);
-
-            for (int index = 0; index < journal.Files.Count; index++)
-            {
-                FinalizeJournalEntry entry = journal.Files[index];
-                string targetPath = Path.Combine(files.TargetDirectory, entry.FileName);
-                BeforeStagedFileCommit?.Invoke(index, targetPath);
-                committed.Add(entry.DeleteTarget
-                    ? CommitTargetDeletion(targetPath, rollbackDirectory)
-                    : CommitStagedFile(
-                        Path.Combine(files.StageDirectory, entry.FileName),
-                        targetPath,
-                        rollbackDirectory,
-                        entry.HadPreviousFile));
-            }
-
-            AtomicFile.WriteAllBytes(
-                Path.Combine(files.StageDirectory, FinalizeCommitMarkerFileName),
-                [0x4D, 0x43, 0x46, 0x31]); // "MCF1"
-            commitMarked = true;
-
-            ApplyOriginalMetadata(record, files.OriginalWidth, files.OriginalHeight);
-            record.HasAnnotations = files.HasAnnotations;
-            record.UpdatedAt = committedAt;
-            record.ContentRevision = committedContentRevision;
-            record.OcrText = null;
-            record.OcrLanguage = null;
-            record.OcrContentRevision = null;
-
-            _queue.UpdateByteCount(record.Id, files.Bytes);
-            record.UpdatedAt = committedAt;
+            CommitFinalizeFiles(record.Id, files, commit);
+            ApplyCommittedGeneration(record, files, commit);
             SaveRecordMetaOrThrow(record);
             _queue.Save();
-
-            _log.LogInformation(
-                "Finalised capture {Id}: {ItemCount} annotation(s), {Bytes} bytes",
-                record.Id, files.ItemCount, files.Bytes);
+            LogFinalized(record, files);
             commitComplete = true;
         }
         catch (Exception commitError)
         {
-            if (commitMarked)
+            if (commit.Marked)
             {
-                // All file swaps are complete and the durable marker makes this generation the
-                // winner. Preserve the journal for startup/next-operation metadata repair; never
-                // roll coherent new files back merely because index persistence was unavailable.
-                _log.LogError(
-                    commitError,
-                    "Capture {Id} files committed, but metadata repair is pending in {StageDirectory}",
-                    record.Id,
-                    LogText.SingleLine(files.StageDirectory));
-                MarkBlocked(record.Id, BlockReason.FinalizeTransaction);
+                ReportCommittedMetadataPending(record, files, commitError);
                 return;
             }
 
-            rollbackComplete = TryRollbackCommittedFiles(committed, files.StageDirectory);
-
-            // Restore the in-memory queue state as well. Atomic queue/meta writes mean a failed
-            // save leaves the previous on-disk copy recoverable; this keeps the live model in
-            // the same generation as the files we just restored.
-            record.HasAnnotations = previousHasAnnotations;
-            record.UpdatedAt = previousUpdatedAt;
-            record.ContentRevision = previousContentRevision;
-            _queue.UpdateByteCount(record.Id, previousTotalBytes);
-            record.UpdatedAt = previousUpdatedAt;
+            rollbackComplete = TryRollbackCommittedFiles(commit.Committed, files.StageDirectory);
+            RestorePreviousGeneration(record, commit);
 
             if (rollbackComplete)
             {
@@ -828,26 +744,15 @@ internal sealed class CapturePersistenceService
                 }
                 catch (Exception recoveryError) when (recoveryError is IOException or UnauthorizedAccessException)
                 {
-                    _log.LogError(
-                        recoveryError,
-                        "Capture {Id} files rolled back, but its restored queue index could not be saved",
-                        record.Id);
+                    LogRestoredIndexFailure(record, recoveryError);
                 }
             }
             else
             {
-                MarkBlocked(record.Id, BlockReason.FinalizeTransaction);
-                _log.LogCritical(
-                    "Capture {Id} finalisation failed and rollback was incomplete; recovery files remain in {StageDirectory}",
-                    record.Id,
-                    LogText.SingleLine(files.StageDirectory));
+                ReportIncompleteRollback(record, files);
             }
 
-            throw new IOException(
-                rollbackComplete
-                    ? $"Capture {record.Id} finalisation failed; the previous file generation was restored."
-                    : $"Capture {record.Id} finalisation and rollback failed; recovery files remain in {files.StageDirectory}.",
-                commitError);
+            throw CreateFinalizeFailure(record, files, rollbackComplete, commitError);
         }
         finally
         {
@@ -856,17 +761,278 @@ internal sealed class CapturePersistenceService
                 RetireFinalizeStageDirectory(files.StageDirectory);
             }
 
+            SetFinalizeTransactionBlocked(record.Id, HasFinalizeStageDirectory(files.TargetDirectory, record.Id));
+        }
+    }
 
-            if (HasFinalizeStageDirectory(files.TargetDirectory, record.Id))
+    /// <summary>
+    /// <see cref="CompleteFinalize"/> with every file-system step on a background thread and the
+    /// metadata and index writes awaited. The steps, their order, the durability point and the
+    /// rollback are unchanged; the record and queue are touched only between the awaits, on the
+    /// caller context.
+    /// </summary>
+    /// <remarks>
+    /// While a step runs the dispatcher stays free. The capture is busy and leased meanwhile, as it
+    /// already is while its image is encoded, so no other writer of it can interleave. A crash
+    /// inside a step leaves the same journal states that startup recovery already resolves.
+    /// </remarks>
+    private async Task CompleteFinalizeAsync(CaptureRecord record, FinalizeFiles files)
+    {
+        var commit = new FinalizeCommit(record);
+        Guid recordId = record.Id;
+        bool rollbackComplete = false;
+        bool commitComplete = false;
+
+        try
+        {
+            await RunFileStepAsync("commit", () =>
             {
-                MarkBlocked(record.Id, BlockReason.FinalizeTransaction);
+                CommitFinalizeFiles(recordId, files, commit);
+                return true;
+            });
+            ApplyCommittedGeneration(record, files, commit);
+            await SaveRecordMetaOrThrowAsync(record);
+            await _queue.SaveAsync();
+            LogFinalized(record, files);
+            commitComplete = true;
+        }
+        catch (Exception commitError)
+        {
+            if (commit.Marked)
+            {
+                ReportCommittedMetadataPending(record, files, commitError);
+                return;
+            }
+
+            rollbackComplete = await RunFileStepAsync(
+                "rollback",
+                () => TryRollbackCommittedFiles(commit.Committed, files.StageDirectory));
+            RestorePreviousGeneration(record, commit);
+
+            if (rollbackComplete)
+            {
+                await _queue.SaveRecordMetaAsync(record);
+                try
+                {
+                    await _queue.SaveAsync();
+                }
+                catch (Exception recoveryError) when (recoveryError is IOException or UnauthorizedAccessException)
+                {
+                    LogRestoredIndexFailure(record, recoveryError);
+                }
             }
             else
             {
-                ClearBlocked(record.Id, BlockReason.FinalizeTransaction);
+                ReportIncompleteRollback(record, files);
             }
+
+            throw CreateFinalizeFailure(record, files, rollbackComplete, commitError);
+        }
+        finally
+        {
+            bool retire = commitComplete || rollbackComplete;
+            StageProbe remaining = await RunFileStepAsync("cleanup", () =>
+            {
+                if (retire)
+                {
+                    RetireFinalizeStageDirectory(files.StageDirectory);
+                }
+
+                return ProbeFinalizeStage(files.TargetDirectory);
+            });
+            SetFinalizeTransactionBlocked(record.Id, ReportStageProbe(record.Id, remaining));
         }
     }
+
+    /// <summary>
+    /// The file half of a finalisation commit: flushes the journal, swaps every staged file and
+    /// flushes the commit marker, in that order, recording progress in <paramref name="commit"/>.
+    /// It reads only values captured on the owner context, so it may run on any thread.
+    /// </summary>
+    private void CommitFinalizeFiles(Guid recordId, FinalizeFiles files, FinalizeCommit commit)
+    {
+        string[] stagedPaths = Directory.EnumerateFiles(
+                files.StageDirectory,
+                "*",
+                SearchOption.TopDirectoryOnly)
+            .OrderBy(Path.GetFileName, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        DateTimeOffset committedAt = DateTimeOffset.Now;
+        long committedContentRevision = checked(commit.PreviousContentRevision + 1);
+        var stagedNames = stagedPaths
+            .Select(Path.GetFileName)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        List<FinalizeJournalEntry> journalEntries = stagedPaths.Select(path => new FinalizeJournalEntry
+        {
+            FileName = Path.GetFileName(path),
+            HadPreviousFile = File.Exists(Path.Combine(files.TargetDirectory, Path.GetFileName(path))),
+        }).ToList();
+
+        foreach (string existingAsset in Directory.EnumerateFiles(
+                     files.TargetDirectory,
+                     $"{CaptureFileNames.AssetPrefix}*.png",
+                     SearchOption.TopDirectoryOnly))
+        {
+            string fileName = Path.GetFileName(existingAsset);
+            if (CaptureFileNames.IsSafeAssetFileName(fileName) && !stagedNames.Contains(fileName))
+            {
+                journalEntries.Add(new FinalizeJournalEntry
+                {
+                    FileName = fileName,
+                    HadPreviousFile = true,
+                    DeleteTarget = true,
+                });
+            }
+        }
+
+        var journal = new FinalizeJournal
+        {
+            RecordId = recordId,
+            Bytes = files.Bytes,
+            HasAnnotations = files.HasAnnotations,
+            ItemCount = files.ItemCount,
+            UpdatedAt = committedAt,
+            ContentRevision = committedContentRevision,
+            OriginalWidth = files.OriginalWidth,
+            OriginalHeight = files.OriginalHeight,
+            Files = journalEntries,
+        };
+
+        // The journal is flushed before the first target changes. On startup an absent
+        // commit marker means "roll back"; a present marker means every file swap finished
+        // and metadata must be rolled forward. This closes the process/power-loss gap that
+        // an in-process catch block alone cannot cover.
+        AtomicFile.WriteAllText(
+            Path.Combine(files.StageDirectory, FinalizeJournalFileName),
+            JsonSerializer.Serialize(journal));
+
+        string rollbackDirectory = Path.Combine(files.StageDirectory, ".rollback");
+        Directory.CreateDirectory(rollbackDirectory);
+
+        for (int index = 0; index < journal.Files.Count; index++)
+        {
+            FinalizeJournalEntry entry = journal.Files[index];
+            string targetPath = Path.Combine(files.TargetDirectory, entry.FileName);
+            BeforeStagedFileCommit?.Invoke(index, targetPath);
+            commit.Committed.Add(entry.DeleteTarget
+                ? CommitTargetDeletion(targetPath, rollbackDirectory)
+                : CommitStagedFile(
+                    Path.Combine(files.StageDirectory, entry.FileName),
+                    targetPath,
+                    rollbackDirectory,
+                    entry.HadPreviousFile));
+        }
+
+        AtomicFile.WriteAllBytes(
+            Path.Combine(files.StageDirectory, FinalizeCommitMarkerFileName),
+            [0x4D, 0x43, 0x46, 0x31]); // "MCF1"
+        commit.CommittedAt = committedAt;
+        commit.CommittedContentRevision = committedContentRevision;
+        commit.Marked = true;
+    }
+
+    /// <summary>Makes the record and the queue name the generation whose commit marker is durable.</summary>
+    private void ApplyCommittedGeneration(CaptureRecord record, FinalizeFiles files, FinalizeCommit commit)
+    {
+        ApplyOriginalMetadata(record, files.OriginalWidth, files.OriginalHeight);
+        record.HasAnnotations = files.HasAnnotations;
+        record.UpdatedAt = commit.CommittedAt;
+        record.ContentRevision = commit.CommittedContentRevision;
+        record.OcrText = null;
+        record.OcrLanguage = null;
+        record.OcrContentRevision = null;
+
+        _queue.UpdateByteCount(record.Id, files.Bytes);
+        record.UpdatedAt = commit.CommittedAt;
+    }
+
+    /// <summary>
+    /// Restores the in-memory queue state after a rollback. Atomic queue/meta writes mean a failed
+    /// save leaves the previous on-disk copy recoverable; this keeps the live model in the same
+    /// generation as the files just restored.
+    /// </summary>
+    private void RestorePreviousGeneration(CaptureRecord record, FinalizeCommit commit)
+    {
+        record.HasAnnotations = commit.PreviousHasAnnotations;
+        record.UpdatedAt = commit.PreviousUpdatedAt;
+        record.ContentRevision = commit.PreviousContentRevision;
+        _queue.UpdateByteCount(record.Id, commit.PreviousTotalBytes);
+        record.UpdatedAt = commit.PreviousUpdatedAt;
+    }
+
+    private void LogFinalized(CaptureRecord record, FinalizeFiles files) =>
+        _log.LogInformation(
+            "Finalised capture {Id}: {ItemCount} annotation(s), {Bytes} bytes",
+            record.Id, files.ItemCount, files.Bytes);
+
+    /// <summary>
+    /// All file swaps are complete and the durable marker makes this generation the winner.
+    /// Preserve the journal for startup/next-operation metadata repair; never roll coherent new
+    /// files back merely because index persistence was unavailable.
+    /// </summary>
+    private void ReportCommittedMetadataPending(CaptureRecord record, FinalizeFiles files, Exception commitError)
+    {
+        _log.LogError(
+            commitError,
+            "Capture {Id} files committed, but metadata repair is pending in {StageDirectory}",
+            record.Id,
+            LogText.SingleLine(files.StageDirectory));
+        MarkBlocked(record.Id, BlockReason.FinalizeTransaction);
+    }
+
+    private void LogRestoredIndexFailure(CaptureRecord record, Exception recoveryError) =>
+        _log.LogError(
+            recoveryError,
+            "Capture {Id} files rolled back, but its restored queue index could not be saved",
+            record.Id);
+
+    private void ReportIncompleteRollback(CaptureRecord record, FinalizeFiles files)
+    {
+        MarkBlocked(record.Id, BlockReason.FinalizeTransaction);
+        _log.LogCritical(
+            "Capture {Id} finalisation failed and rollback was incomplete; recovery files remain in {StageDirectory}",
+            record.Id,
+            LogText.SingleLine(files.StageDirectory));
+    }
+
+    private static IOException CreateFinalizeFailure(
+        CaptureRecord record,
+        FinalizeFiles files,
+        bool rollbackComplete,
+        Exception commitError) =>
+        new(
+            rollbackComplete
+                ? $"Capture {record.Id} finalisation failed; the previous file generation was restored."
+                : $"Capture {record.Id} finalisation and rollback failed; recovery files remain in {files.StageDirectory}.",
+            commitError);
+
+    private Task SaveRecordMetaOrThrowAsync(CaptureRecord record)
+    {
+        BeforeRecordMetadataCommit?.Invoke(record.Id);
+        return _queue.SaveRecordMetaOrThrowAsync(record);
+    }
+
+    /// <summary>
+    /// Runs one synchronous file-system step of <see cref="FinalizeAsync"/> on its own background
+    /// thread; the awaiting caller resumes on its context (the UI dispatcher).
+    /// </summary>
+    /// <remarks>
+    /// A step touches only paths and values captured beforehand, never the UI-owned record or
+    /// queue. Like the queue's publication writer, each step gets a dedicated thread
+    /// (LongRunning): a step blocked by a slow disk, an antivirus scan or a cloud-synced folder
+    /// then never waits for thread-pool injection on a small PC.
+    /// </remarks>
+    private Task<T> RunFileStepAsync<T>(string step, Func<T> work) =>
+        Task.Factory.StartNew(
+            () =>
+            {
+                FileStepForTest?.Invoke(step);
+                return work();
+            },
+            CancellationToken.None,
+            TaskCreationOptions.LongRunning,
+            TaskScheduler.Default);
 
     private static CommittedFile CommitStagedFile(
         string stagedPath,
@@ -1016,105 +1182,155 @@ internal sealed class CapturePersistenceService
 
     private void RecoverInterruptedTransactions()
     {
-        foreach (CaptureRecord record in _queue.Records.ToArray())
+        CaptureRecord[] records = _queue.Records.ToArray();
+        // Each scan touches only its record's directory, so the scans run in parallel. Applying
+        // them stays on the owner context in record order; a record whose directory or scan
+        // failed fails here at its turn, as the sequential loop did.
+        ParallelOutcome<(string Directory, RecordTransactionScan Scan)>[] scans = ParallelFileScan.InspectEach(
+            records,
+            record =>
+            {
+                string targetDirectory = _queue.GetDirectory(record);
+                return (targetDirectory, ScanRecordTransactions(targetDirectory));
+            });
+        for (int i = 0; i < records.Length; i++)
         {
-            RecoverRecordTransactions(record);
+            (string targetDirectory, RecordTransactionScan scan) = scans[i].GetValue();
+            ApplyRecordTransactionScan(records[i], targetDirectory, scan);
         }
     }
 
     private void RecoverPendingOriginals()
     {
-        foreach (CaptureRecord record in _queue.Records.ToArray())
+        CaptureRecord[] records = _queue.Records.ToArray();
+        // Looking for the pending-original marker is pure file-system inspection, so it runs in
+        // parallel. A record with a marker is then recovered on the owner context in record
+        // order, exactly as before, and a record whose check failed fails here at its turn.
+        ParallelOutcome<bool>[] pending = ParallelFileScan.InspectEach(
+            records,
+            record => File.Exists(Path.Combine(_queue.GetDirectory(record), CaptureFileNames.OriginalPending)));
+        for (int i = 0; i < records.Length; i++)
         {
-            string directory = _queue.GetDirectory(record);
-            string pendingPath = Path.Combine(directory, CaptureFileNames.OriginalPending);
-            if (!File.Exists(pendingPath))
+            if (pending[i].GetValue())
             {
-                continue;
+                RecoverPendingOriginal(records[i]);
             }
+        }
+    }
 
-            using IDisposable evictionLease = _queue.AcquireEvictionLease(record.Id);
-            try
-            {
-                string originalPath = Path.Combine(directory, CaptureFileNames.Original);
-                BitmapSource? original = ImageCodec.TryLoad(originalPath);
-                if (original is null)
-                {
-                    MarkBlocked(record.Id, BlockReason.PendingOriginal);
-                    _log.LogCritical(
-                        "Pending original {Id} has no decodable original.png; preserving its recovery files",
-                        record.Id);
-                    continue;
-                }
+    private void RecoverPendingOriginal(CaptureRecord record)
+    {
+        string directory = _queue.GetDirectory(record);
+        string pendingPath = Path.Combine(directory, CaptureFileNames.OriginalPending);
+        if (!File.Exists(pendingPath))
+        {
+            return;
+        }
 
-                record.Width = original.PixelWidth;
-                record.Height = original.PixelHeight;
-                // A complete derived image may precede the failed index publication. Keep its
-                // pixels (including legacy title badges) instead of drawing another badge.
-                BitmapSource? rendered = ImageCodec.TryLoad(Path.Combine(directory, CaptureFileNames.Rendered));
-                if (rendered is null || rendered.PixelWidth != original.PixelWidth || rendered.PixelHeight != original.PixelHeight)
-                    rendered = null;
-                // original.png is the durable source for this recovery. Rewriting it would
-                // create an untracked full-size .bak beside an otherwise valid 8K capture.
-                long bytes = WriteOriginalFiles(
-                    record,
-                    original,
-                    createPendingJournal: false,
-                    rewriteOriginal: false,
-                    initialRendered: rendered,
-                    preserveRendered: rendered is not null);
-                record.HasAnnotations = false;
-                record.ContentRevision = 0;
-                record.OcrText = null;
-                record.OcrLanguage = null;
-                record.OcrContentRevision = null;
-                _queue.UpdateByteCount(record.Id, bytes);
-                SaveRecordMetaOrThrow(record);
-                _queue.Save();
-
-                // Atomic rewrites of the derived files deliberately retain backups in normal
-                // operation. Here the untouched original plus pending marker is the recovery
-                // source, so those potentially huge copies are terminal debris. Keep the
-                // marker and eviction lease until every one has actually gone.
-                bool backupsCleared = TryCleanRecoveredOriginalBackups(directory);
-                if (backupsCleared)
-                {
-                    TryDeleteFile(pendingPath);
-                }
-
-                if (!backupsCleared || File.Exists(pendingPath))
-                {
-                    MarkBlocked(record.Id, BlockReason.PendingOriginal);
-                }
-                else
-                {
-                    ClearBlocked(record.Id, BlockReason.PendingOriginal);
-                }
-
-                _log.LogWarning(
-                    "Recovered original capture {Id} that was interrupted before queue indexing completed",
-                    record.Id);
-            }
-            catch (Exception ex) when (ex is IOException
-                                       or UnauthorizedAccessException
-                                       or ArgumentException
-                                       or NotSupportedException)
+        using IDisposable evictionLease = _queue.AcquireEvictionLease(record.Id);
+        try
+        {
+            string originalPath = Path.Combine(directory, CaptureFileNames.Original);
+            BitmapSource? original = ImageCodec.TryLoad(originalPath);
+            if (original is null)
             {
                 MarkBlocked(record.Id, BlockReason.PendingOriginal);
-                _log.LogError(
-                    ex,
-                    "Could not recover pending original capture {Id}; preserving its files",
+                _log.LogCritical(
+                    "Pending original {Id} has no decodable original.png; preserving its recovery files",
                     record.Id);
+                return;
             }
+
+            record.Width = original.PixelWidth;
+            record.Height = original.PixelHeight;
+            // A complete derived image may precede the failed index publication. Keep its
+            // pixels (including legacy title badges) instead of drawing another badge.
+            BitmapSource? rendered = ImageCodec.TryLoad(Path.Combine(directory, CaptureFileNames.Rendered));
+            if (rendered is null || rendered.PixelWidth != original.PixelWidth || rendered.PixelHeight != original.PixelHeight)
+                rendered = null;
+            // original.png is the durable source for this recovery. Rewriting it would
+            // create an untracked full-size .bak beside an otherwise valid 8K capture.
+            long bytes = WriteOriginalFiles(
+                record,
+                original,
+                createPendingJournal: false,
+                rewriteOriginal: false,
+                initialRendered: rendered,
+                preserveRendered: rendered is not null);
+            record.HasAnnotations = false;
+            record.ContentRevision = 0;
+            record.OcrText = null;
+            record.OcrLanguage = null;
+            record.OcrContentRevision = null;
+            _queue.UpdateByteCount(record.Id, bytes);
+            SaveRecordMetaOrThrow(record);
+            _queue.Save();
+
+            // Atomic rewrites of the derived files deliberately retain backups in normal
+            // operation. Here the untouched original plus pending marker is the recovery
+            // source, so those potentially huge copies are terminal debris. Keep the
+            // marker and eviction lease until every one has actually gone.
+            bool backupsCleared = TryCleanRecoveredOriginalBackups(directory);
+            if (backupsCleared)
+            {
+                TryDeleteFile(pendingPath);
+            }
+
+            if (!backupsCleared || File.Exists(pendingPath))
+            {
+                MarkBlocked(record.Id, BlockReason.PendingOriginal);
+            }
+            else
+            {
+                ClearBlocked(record.Id, BlockReason.PendingOriginal);
+            }
+
+            _log.LogWarning(
+                "Recovered original capture {Id} that was interrupted before queue indexing completed",
+                record.Id);
+        }
+        catch (Exception ex) when (ex is IOException
+                                   or UnauthorizedAccessException
+                                   or ArgumentException
+                                   or NotSupportedException)
+        {
+            MarkBlocked(record.Id, BlockReason.PendingOriginal);
+            _log.LogError(
+                ex,
+                "Could not recover pending original capture {Id}; preserving its files",
+                record.Id);
         }
     }
 
     private void RecoverRecordTransactions(CaptureRecord record)
     {
         string targetDirectory = _queue.GetDirectory(record);
+        ApplyRecordTransactionScan(record, targetDirectory, ScanRecordTransactions(targetDirectory));
+    }
+
+    /// <summary>
+    /// <see cref="RecoverRecordTransactions"/> with its directory scan on a background thread.
+    /// The rare recovery of a left-over journal (after a crash or an incomplete rollback) changes
+    /// the record and its metadata, so it still runs on the caller context.
+    /// </summary>
+    private async Task RecoverRecordTransactionsAsync(CaptureRecord record)
+    {
+        string targetDirectory = _queue.GetDirectory(record);
+        RecordTransactionScan scan = await RunFileStepAsync("scan", () => ScanRecordTransactions(targetDirectory));
+        ApplyRecordTransactionScan(record, targetDirectory, scan);
+    }
+
+    /// <summary>
+    /// The file-system half of <see cref="RecoverRecordTransactions"/>: purges retired
+    /// transaction directories and lists the record's stages. When there is none it also probes
+    /// what remains, as recovery would right after. Touches only
+    /// <paramref name="targetDirectory"/>, so it may run on any thread.
+    /// </summary>
+    private static RecordTransactionScan ScanRecordTransactions(string targetDirectory)
+    {
         if (!Directory.Exists(targetDirectory))
         {
-            return;
+            return new RecordTransactionScan(DirectoryExists: false, [], InspectionError: null, default);
         }
 
         PurgeRetiredTransactionDirectories(targetDirectory);
@@ -1132,12 +1348,32 @@ internal sealed class CapturePersistenceService
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            MarkBlocked(record.Id, BlockReason.FinalizeTransaction);
-            _log.LogWarning(ex, "Could not inspect pending finalisation journals for {Id}", record.Id);
+            return new RecordTransactionScan(DirectoryExists: true, [], ex, default);
+        }
+
+        return new RecordTransactionScan(
+            DirectoryExists: true,
+            stages,
+            InspectionError: null,
+            stages.Length == 0 ? ProbeFinalizeStage(targetDirectory) : default);
+    }
+
+    /// <summary>The owner-context half of <see cref="RecoverRecordTransactions"/>.</summary>
+    private void ApplyRecordTransactionScan(CaptureRecord record, string targetDirectory, RecordTransactionScan scan)
+    {
+        if (!scan.DirectoryExists)
+        {
             return;
         }
 
-        if (stages.Length > 1)
+        if (scan.InspectionError is { } inspectionError)
+        {
+            MarkBlocked(record.Id, BlockReason.FinalizeTransaction);
+            _log.LogWarning(inspectionError, "Could not inspect pending finalisation journals for {Id}", record.Id);
+            return;
+        }
+
+        if (scan.Stages.Length > 1)
         {
             // A normal writer can have only one transaction per record. With multiple marked
             // generations there is no safe filename-only way to infer which payload owns the
@@ -1146,48 +1382,86 @@ internal sealed class CapturePersistenceService
             _log.LogCritical(
                 "Capture {Id} has {Count} competing finalisation journals; automatic recovery was refused",
                 record.Id,
-                stages.Length);
+                scan.Stages.Length);
             return;
         }
 
-        foreach (string stageDirectory in stages)
+        StageProbe remaining = scan.RemainingStage;
+        foreach (string stageDirectory in scan.Stages)
         {
             RecoverTransaction(record, targetDirectory, stageDirectory);
+            remaining = ProbeFinalizeStage(targetDirectory);
         }
 
-        if (HasFinalizeStageDirectory(targetDirectory, record.Id))
-        {
-            MarkBlocked(record.Id, BlockReason.FinalizeTransaction);
-        }
-        else
-        {
-            ClearBlocked(record.Id, BlockReason.FinalizeTransaction);
-        }
+        SetFinalizeTransactionBlocked(record.Id, ReportStageProbe(record.Id, remaining));
     }
 
     private void ThrowIfPendingTransactionRemains(CaptureRecord record)
     {
         string targetDirectory = _queue.GetDirectory(record);
-        if (HasFinalizeStageDirectory(targetDirectory, record.Id))
+        ThrowIfPendingTransactionRemains(record, ProbeFinalizeStage(targetDirectory));
+    }
+
+    private async Task ThrowIfPendingTransactionRemainsAsync(CaptureRecord record)
+    {
+        string targetDirectory = _queue.GetDirectory(record);
+        StageProbe pending = await RunFileStepAsync("pending", () => ProbeFinalizeStage(targetDirectory));
+        ThrowIfPendingTransactionRemains(record, pending);
+    }
+
+    private void ThrowIfPendingTransactionRemains(CaptureRecord record, StageProbe pending)
+    {
+        if (ReportStageProbe(record.Id, pending))
         {
             throw new IOException(
                 $"Capture {record.Id} has an unresolved finalisation journal; its recovery files were preserved.");
         }
     }
 
-    private bool HasFinalizeStageDirectory(string targetDirectory, Guid recordId)
+    private bool HasFinalizeStageDirectory(string targetDirectory, Guid recordId) =>
+        ReportStageProbe(recordId, ProbeFinalizeStage(targetDirectory));
+
+    /// <summary>
+    /// Lists whether a finalisation stage directory remains. A failed listing counts as one, so
+    /// the capture stays blocked. Touches only <paramref name="targetDirectory"/>.
+    /// </summary>
+    private static StageProbe ProbeFinalizeStage(string targetDirectory)
     {
         try
         {
-            return Directory.Exists(targetDirectory)
-                   && Directory.EnumerateDirectories(targetDirectory, ".stage-*", SearchOption.TopDirectoryOnly)
-                       .Any(IsFinalizeStageDirectory);
+            return new StageProbe(
+                Directory.Exists(targetDirectory)
+                && Directory.EnumerateDirectories(targetDirectory, ".stage-*", SearchOption.TopDirectoryOnly)
+                    .Any(IsFinalizeStageDirectory),
+                Error: null);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
+            return new StageProbe(HasStage: true, ex);
+        }
+    }
+
+    /// <summary>Applies a probe on the owner context: a failed listing blocks the capture and is logged.</summary>
+    private bool ReportStageProbe(Guid recordId, StageProbe probe)
+    {
+        if (probe.Error is { } error)
+        {
             MarkBlocked(recordId, BlockReason.FinalizeTransaction);
-            _log.LogError(ex, "Could not inspect finalisation state for capture {Id}", recordId);
-            return true;
+            _log.LogError(error, "Could not inspect finalisation state for capture {Id}", recordId);
+        }
+
+        return probe.HasStage;
+    }
+
+    private void SetFinalizeTransactionBlocked(Guid recordId, bool stageRemains)
+    {
+        if (stageRemains)
+        {
+            MarkBlocked(recordId, BlockReason.FinalizeTransaction);
+        }
+        else
+        {
+            ClearBlocked(recordId, BlockReason.FinalizeTransaction);
         }
     }
 
@@ -1776,6 +2050,44 @@ internal sealed class CapturePersistenceService
         string TargetPath,
         string? BackupPath,
         bool HadPreviousFile);
+
+    /// <summary>Result of <see cref="ProbeFinalizeStage"/>; a listing error counts as a remaining stage.</summary>
+    private readonly record struct StageProbe(bool HasStage, Exception? Error);
+
+    /// <summary>
+    /// Result of <see cref="ScanRecordTransactions"/>. <see cref="RemainingStage"/> is probed only
+    /// when no stage was listed.
+    /// </summary>
+    private readonly record struct RecordTransactionScan(
+        bool DirectoryExists,
+        string[] Stages,
+        Exception? InspectionError,
+        StageProbe RemainingStage);
+
+    /// <summary>
+    /// One finalisation commit: the record's previous values, captured on the owner context
+    /// before any file changes, and the progress of the file half. A background file step fills
+    /// the progress; the owner reads it only after awaiting that step, which orders the accesses.
+    /// </summary>
+    private sealed class FinalizeCommit(CaptureRecord record)
+    {
+        internal bool PreviousHasAnnotations { get; } = record.HasAnnotations;
+
+        internal DateTimeOffset PreviousUpdatedAt { get; } = record.UpdatedAt;
+
+        internal long PreviousContentRevision { get; } = record.ContentRevision;
+
+        internal long PreviousTotalBytes { get; } = record.TotalBytes;
+
+        internal List<CommittedFile> Committed { get; } = [];
+
+        internal DateTimeOffset CommittedAt { get; set; }
+
+        internal long CommittedContentRevision { get; set; }
+
+        /// <summary>The commit marker is durable: every file swap finished.</summary>
+        internal bool Marked { get; set; }
+    }
 
     private sealed class FinalizeJournal
     {

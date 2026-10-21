@@ -147,8 +147,29 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
         NeedsPresentationSettle(Environment.TickCount64, _lastPresentationDismissedTick)
             ? Task.Delay(100) : Task.CompletedTask;
 
-    internal bool CanRetake => !_disposed && _activeEditor is not null && !_activeEditor.Editor.IsCommitInProgress && !_activeEditor.IsCloseInProgress &&
-        _preparation is null && !_isOpeningEditor;
+    internal bool CanRetake => !_disposed && _activeEditor is { } editor && !IsEditorSaving(editor) && !IsEditorBusy(editor) &&
+        !editor.IsAskingToClose && _preparation is null && !_isOpeningEditor;
+
+    private static bool IsEditorSaving(AnnotationEditorWindow editor) => editor.Editor.IsCommitInProgress || editor.IsSavingToClose;
+
+    private static bool IsEditorBusy(AnnotationEditorWindow editor) =>
+        editor.IsCloseInProgress || editor.Editor.IsEditingOperationInProgress || editor.HasOpenDialog;
+
+    /// <summary>Adds what this session holds (a selector, an opening or busy editor) to the shell's own state.</summary>
+    internal CaptureGuardState WithSession(CaptureGuardState state)
+    {
+        if (_disposed) return state;
+        AnnotationEditorWindow? editor = _activeEditor;
+        return state with
+        {
+            Selecting = IsSelecting,
+            EditorOpening = _isOpeningEditor,
+            EditorOpen = editor is not null,
+            EditorAsking = editor?.IsAskingToClose == true,
+            EditorSaving = editor is not null && IsEditorSaving(editor),
+            EditorBusy = editor is not null && IsEditorBusy(editor),
+        };
+    }
 
     /// <summary>
     /// Closes only the capture-owned draft editor before replacing the selection, the way the
@@ -164,14 +185,54 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
         _activeEditor?.RequestClose();
     }
 
-    internal async Task<bool> CloseEditorForRetakeAsync()
+    /// <summary>
+    /// Closes the capture-owned editor for a new capture as the user's own close does, over the editor
+    /// brought forward. Save and close finishes saving first, then the new capture starts.
+    /// </summary>
+    /// <returns><see cref="CaptureBlock.None"/> once the editor has closed, otherwise why it is still open.</returns>
+    internal async Task<CaptureBlock> CloseEditorForRetakeAsync()
     {
         VerifyDispatcherAccess();
-        if (!CanRetake) return false;
+        if (!CanRetake) return _activeEditor is null ? CaptureBlock.None : CaptureBlock.EditorBusy;
         _openingEditorCts?.Cancel();
         AnnotationEditorWindow editor = _activeEditor!;
-        bool closed = await editor.RequestCloseAsync();
-        return closed && !_disposed && _activeEditor is null;
+        if (await editor.RequestCloseAsync() && !_disposed && _activeEditor is null) return CaptureBlock.None;
+        return editor.LastCloseChoice == EditorCloseChoice.SaveAndClose ? CaptureBlock.EditorSaveFailed : CaptureBlock.EditorKept;
+    }
+
+    /// <summary>
+    /// Brings the editor, and any dialog it is waiting on, forward and says in its status line why a
+    /// command did not start. False when no editor is open.
+    /// </summary>
+    internal bool ShowEditorBlocked(string notice)
+    {
+        VerifyDispatcherAccess();
+        // An editor whose save finishes out of sight has already left the screen for the user.
+        if (_disposed || _activeEditor is not { IsFinishingOutOfSight: false } editor) return false;
+        WindowForeground.BringForward(editor);
+        editor.Editor.ShowCaptureBlocked(notice);
+        return true;
+    }
+
+    /// <summary>
+    /// Completes once the editor's Done (which may take it off the screen while the save finishes)
+    /// has closed it, or has ended without closing and left it editable on screen; at once when no
+    /// such Done runs. A capture command waits for it, so it starts as soon as the previous capture
+    /// is saved instead of being refused by an editor the user is leaving.
+    /// </summary>
+    internal Task WaitForEditorFinishedAsync() =>
+        !_disposed && _activeEditor is { IsFinishingDone: true } editor ? editor.DoneFinished : Task.CompletedTask;
+
+    /// <summary>True while the editor's Done save finishes after the editor left the screen.</summary>
+    internal bool IsEditorFinishingOutOfSight => !_disposed && _activeEditor?.IsFinishingOutOfSight == true;
+
+    /// <summary>Brings the open selector forward; false while its frame is still being taken.</summary>
+    internal bool BringSelectorForward()
+    {
+        VerifyDispatcherAccess();
+        if (_disposed || _activeOverlay is not { IsVisible: true } overlay) return false;
+        _ = overlay.Activate();
+        return true;
     }
 
     /// <summary>Used only by the explicit advanced “capture window” command.</summary>
@@ -654,6 +715,9 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
                 sourceWindowTitle: selection.SourceTitle);
             _activeEditor = editor;
             if (CaptureMonitor(selection) is { } monitor) editor.PlaceOnMonitor(monitor);
+            // Done leaves the screen once the clipboard holds the result; the save finishes behind
+            // it and the session ends when the editor closes, as before.
+            editor.FinishesOutOfSight = true;
             editor.DraftRecordSource = DraftRecord;
             if (OriginalNeedsRecovery()) editor.MarkUnpersistedCapture();
             editor.CommitRequested = CommitRequested;

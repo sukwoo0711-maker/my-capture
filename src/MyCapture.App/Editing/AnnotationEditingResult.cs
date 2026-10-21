@@ -125,4 +125,11 @@ internal sealed class AnnotationEditingResult
     /// uses <see cref="ImageAssetBitmaps"/> so a deleted source cannot lose the asset.
     /// </summary>
     internal IReadOnlyDictionary<string, string> ImageAssetSources { get; }
+
+    /// <summary>
+    /// Called once by the Done commit, on the caller's context, as soon as the clipboard holds the
+    /// result while the library save may still be running. The editor window sets it when it may
+    /// leave the screen at that point; null otherwise.
+    /// </summary>
+    internal Action? CopiedToClipboard { get; set; }
 }

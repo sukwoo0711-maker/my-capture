@@ -241,17 +241,20 @@ public sealed class SettingsStoreTests
 
         Assert.True(settings.General.IsFirstRun);
         Assert.True(settings.General.LaunchAtLogin);
-        Assert.Equal("glass", settings.General.Theme);
+        Assert.Equal("system", settings.General.Theme);
         Assert.Equal(OcrQuality.Fast, settings.Ocr.Quality);
         Assert.Equal(1.0, settings.Ocr.UpscaleFactor);
-        Assert.Equal(300, settings.Queue.MaxItems);
-        Assert.Equal(2L * 1024 * 1024 * 1024, settings.Queue.MaxBytes);
+        Assert.Equal(1000, settings.Queue.MaxItems);
+        Assert.Equal(5L * 1024 * 1024 * 1024, settings.Queue.MaxBytes);
+        Assert.Equal(MyCapture.Core.Queue.CaptureRetention.NeverHours, settings.Queue.ImageRetentionHours);
         Assert.Equal("Ctrl+Shift+C", settings.Hotkeys.Capture.ToString());
         Assert.Equal("Ctrl+Shift+X", settings.Hotkeys.RecordRegion.ToString());
-        // A new installation assigns only capture and recording; see SettingsUxDefaultsTests.
+        // A new installation assigns capture, recording and clipboard pin keys.
         Assert.Equal(Hotkey.None, settings.Hotkeys.OpenLibrary);
-        Assert.Equal(Hotkey.None, settings.Hotkeys.PasteToScreen);
-        Assert.True(settings.General.ShowShortcutHints);
+        Assert.Equal(new Hotkey(HotkeyModifiers.None, Hotkey.VkF3), settings.Hotkeys.PasteToScreen);
+        Assert.Equal(new Hotkey(HotkeyModifiers.Shift, Hotkey.VkF3), settings.Hotkeys.HideAllPins);
+        Assert.True(settings.Pin.CloseOnDoubleClick);
+        Assert.False(settings.General.ShowShortcutHints);
         Assert.True(settings.Export.CopyToClipboardOnQuickSave);
         Assert.Equal(RecordingFrameRate.Fps30, settings.Recording.FrameRate);
     }

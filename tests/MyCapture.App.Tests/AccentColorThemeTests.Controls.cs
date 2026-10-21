@@ -17,7 +17,7 @@ namespace MyCapture.App.Tests;
 public sealed partial class AccentColorThemeTests
 {
     [Fact]
-    public void SelectedToolAndCheckUseAccessibleRedAndRestoreTheirOriginalVioletPixels() => WithMotionDisabled(() =>
+    public void SelectedToolAndCheckStayNeutralForLegacyAndRedAccentInputs() => WithMotionDisabled(() =>
     {
         foreach ((AppTheme theme, WorkspaceRole? role) in ControlPalettes())
         {
@@ -42,6 +42,9 @@ public sealed partial class AccentColorThemeTests
             foreach (Control control in new Control[] { tool, check })
             {
                 Border selected = Part<Border>(control, "CheckedLayer");
+                Assert.Equal(new Thickness(2), selected.BorderThickness);
+                Assert.Equal(BrushColor((Brush)resources["Text.Primary"]), BrushColor(selected.BorderBrush));
+                Assert.Equal(BrushColor((Brush)resources["Surface.Selected"]), BrushColor(selected.Background));
                 Brush ink = control is CheckBox ? Part<System.Windows.Shapes.Path>(control, "Check").Stroke : control.Foreground;
                 Assert.True(ThemeContrast.Ratio(BrushColor(ink), BrushColor(selected.Background)) >= 4.5);
                 if (theme == AppTheme.HighContrast) continue;
@@ -52,7 +55,7 @@ public sealed partial class AccentColorThemeTests
             ApplyPalette(resources, theme, role, AppAccent.Violet);
             Layout(root);
             Assert.Equal(violet, RenderTokens(resources));
-            Assert.Equal(Colors.Transparent, ((SolidColorBrush)resources["Border.SelectedTool"]).Color);
+            Assert.Equal(((SolidColorBrush)resources["Text.Primary"]).Color, ((SolidColorBrush)resources["Border.SelectedTool"]).Color);
         }
     });
 
@@ -87,8 +90,10 @@ public sealed partial class AccentColorThemeTests
                     var tab = Part<Border>(sheet.SelectedTab, "TabBorder");
                     ThemeColor tabSurface = ThemeContrast.Composite(BrushColor(tab.Background), surface);
                     AssertContrast(selected.BorderBrush, ThemeContrast.Composite(BrushColor(selected.Background), tabSurface), context + " selected tab");
-                    var focused = Part<Border>(sheet.FocusedTab, "TabBorder");
-                    AssertContrast(focused.BorderBrush, ThemeContrast.Composite(BrushColor(focused.Background), surface), context + " focused tab");
+                    var focused = Part<Border>(sheet.FocusedTab, "FocusRing");
+                    Assert.Equal(new Thickness(2), focused.BorderThickness);
+                    Assert.Equal(1d, focused.Opacity);
+                    AssertContrast(focused.BorderBrush, surface, context + " focused tab");
                     AssertContrast(Part<Border>(sheet.ScrollThumb, "Grip").Background, surface, context + " dragged scrollbar");
                 }
             }
@@ -96,11 +101,11 @@ public sealed partial class AccentColorThemeTests
     });
 
     [Fact]
-    public void VioletControlsMatchFixedIntegrationBaselineInEveryPaletteAndWorkspaceRole() => WithMotionDisabled(() =>
+    public void LegacyAccentInputsRenderTheSameNewControlsAcrossEveryPaletteAndWorkspaceRole() => WithMotionDisabled(() =>
     {
         foreach ((AppTheme theme, WorkspaceRole? role) in ControlPalettes())
         {
-            ResourceDictionary baseline = LoadIntegrationBaseline(role is null ? theme.ToString() : $"Workspace{role}");
+            ResourceDictionary baseline = LoadIntegrationBaseline(role is null ? (theme == AppTheme.System ? "Glass" : theme.ToString()) : $"Workspace{role}");
             ResourceDictionary resources = LoadControlResources();
             ApplyPalette(resources, theme, role, AppAccent.Violet);
             ControlSheet expected = CreateControlSheet(baseline);
@@ -109,12 +114,13 @@ public sealed partial class AccentColorThemeTests
             {
                 expected.Root.Background = new SolidColorBrush(backdrop);
                 actual.Root.Background = new SolidColorBrush(backdrop);
-                Assert.True(RenderControlSheet(expected).SequenceEqual(RenderControlSheet(actual)), $"{theme}/{role}/{backdrop} baseline");
+                Assert.False(RenderControlSheet(expected).SequenceEqual(RenderControlSheet(actual)), $"{theme}/{role}/{backdrop} must reflect the new type and selection system");
             }
+            byte[] canonical = RenderControlSheet(actual);
             ApplyPalette(resources, theme, role, AppAccent.Red);
-            Assert.Equal(theme == AppTheme.HighContrast, RenderControlSheet(expected).SequenceEqual(RenderControlSheet(actual)));
+            Assert.Equal(canonical, RenderControlSheet(actual));
             ApplyPalette(resources, theme, role, AppAccent.Violet);
-            Assert.True(RenderControlSheet(expected).SequenceEqual(RenderControlSheet(actual)), $"{theme}/{role} restored baseline");
+            Assert.Equal(canonical, RenderControlSheet(actual));
         }
     });
 

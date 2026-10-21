@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
@@ -12,8 +13,8 @@ internal sealed partial class AnnotationEditorControl
 {
     private FrameworkElement BuildFontFamilySection()
     {
-        var panel = new StackPanel { Margin = new Thickness(0, 16, 0, 0) };
-        panel.Children.Add(SectionLabel(UiText.Get("EditorText_FontFamily")));
+        var panel = PropertyGroup("AnnotationFontFamilyProperties");
+        panel.Children.Add(PropertyLabel(UiText.Get("EditorText_FontFamily")));
         var preview = new FrameworkElementFactory(typeof(TextBlock));
         preview.SetBinding(TextBlock.TextProperty, new Binding(nameof(FontFamily.Source)));
         preview.SetBinding(TextBlock.FontFamilyProperty, new Binding());
@@ -21,6 +22,9 @@ internal sealed partial class AnnotationEditorControl
         _textFontFamily = new ComboBox
         {
             MinHeight = 32,
+            Width = 160,
+            FontSize = 12,
+            VerticalAlignment = VerticalAlignment.Center,
             MaxDropDownHeight = 320,
             IsTextSearchEnabled = true,
             ItemTemplate = new DataTemplate { VisualTree = preview },
@@ -29,7 +33,11 @@ internal sealed partial class AnnotationEditorControl
         VirtualizingPanel.SetIsVirtualizing(_textFontFamily, true);
         VirtualizingPanel.SetVirtualizationMode(_textFontFamily, VirtualizationMode.Recycling);
         AutomationName(_textFontFamily, UiText.Get("EditorText_FontFamily"));
-        RefreshFontFamilies(_controller.DefaultFontFamily);
+        // The list is filled the first time the section is used: the inspector selects the
+        // caption's family as soon as text styling applies (an empty list misses, which fills
+        // it), and opening the list refreshes it. Until then the section is collapsed. The
+        // installed families are sorted once per process, starting off the UI thread here.
+        PrewarmSystemFontFamilies(CultureInfo.CurrentCulture);
         _textFontFamily.DropDownOpened += (_, _) =>
             RefreshFontFamilies((_controller.Selected as TextAnnotation)?.FontFamily ?? _controller.DefaultFontFamily);
         _textFontFamily.SelectionChanged += (_, _) =>
@@ -63,13 +71,68 @@ internal sealed partial class AnnotationEditorControl
             }
             Add(_controller.DefaultFontFamily);
             foreach (string recent in _recentFontFamilies.Take(5)) Add(recent);
-            foreach (FontFamily font in Fonts.SystemFontFamilies.OrderBy(font => font.Source, StringComparer.CurrentCultureIgnoreCase))
-                Add(font.Source);
+            foreach (FontFamily font in SortedSystemFontFamilies(CultureInfo.CurrentCulture))
+            {
+                // The cached families were made from these names, as this list made them.
+                if (!string.IsNullOrWhiteSpace(font.Source) && names.Add(font.Source)) families.Add(font);
+            }
             Add(selected);
             _textFontFamily.ItemsSource = families;
             SelectFontFamily(selected);
         }
         finally { _syncingInspector = wasSyncing; }
+    }
+
+    private static readonly object SystemFontFamiliesGate = new();
+    private static CultureInfo? s_systemFontFamiliesCulture;
+    private static FontFamily[]? s_systemFontFamilies;
+
+    /// <summary>
+    /// The installed font families sorted by name as <paramref name="culture"/> compares them
+    /// ignoring case, each made from its name, built once per process and culture.
+    /// </summary>
+    /// <remarks>
+    /// Every editor used to enumerate, sort and recreate the whole system list as it opened.
+    /// WPF reads <see cref="Fonts.SystemFontFamilies"/> once per process, so that list never
+    /// changed within a session and the cached copy holds the same names in the same order.
+    /// <see cref="FontFamily"/> is not tied to a dispatcher, so the copy can be built on any
+    /// thread and shared by every editor.
+    /// </remarks>
+    internal static IReadOnlyList<FontFamily> SortedSystemFontFamilies(CultureInfo culture)
+    {
+        ArgumentNullException.ThrowIfNull(culture);
+        lock (SystemFontFamiliesGate)
+        {
+            if (s_systemFontFamilies is { } cached && Equals(s_systemFontFamiliesCulture, culture)) return cached;
+            StringComparer comparer = StringComparer.Create(culture, ignoreCase: true);
+            FontFamily[] families = Fonts.SystemFontFamilies.OrderBy(font => font.Source, comparer)
+                .Select(font => new FontFamily(font.Source)).ToArray();
+            s_systemFontFamiliesCulture = culture;
+            s_systemFontFamilies = families;
+            return families;
+        }
+    }
+
+    /// <summary>
+    /// Starts building <see cref="SortedSystemFontFamilies"/> on a worker thread when it is not
+    /// cached yet, so the first editor that needs the list rarely waits for it.
+    /// </summary>
+    private static void PrewarmSystemFontFamilies(CultureInfo culture)
+    {
+        lock (SystemFontFamiliesGate)
+        {
+            if (s_systemFontFamilies is not null && Equals(s_systemFontFamiliesCulture, culture)) return;
+        }
+
+        _ = Task.Run(() =>
+        {
+            try { SortedSystemFontFamilies(culture); }
+            catch (Exception ex)
+            {
+                // The UI thread builds the list itself when it is needed and reports any failure then.
+                System.Diagnostics.Trace.TraceWarning("Font list prewarm failed: {0}", ex);
+            }
+        });
     }
 
     private void SelectFontFamily(string family)

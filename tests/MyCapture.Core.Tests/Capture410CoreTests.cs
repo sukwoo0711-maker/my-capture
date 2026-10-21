@@ -159,7 +159,7 @@ public sealed class Capture410CoreTests
         var draft = new SettingsDraft(restored);
         Assert.Equal("custom", draft.CaptureGuideColorMode);
         Assert.Equal("#123ABC", draft.ToAppSettings().General.CaptureGuideColor);
-        Assert.Equal("daylight", draft.ToAppSettings().General.Theme);
+        Assert.Equal("glass-light", draft.ToAppSettings().General.Theme);
         draft.CaptureGuideColorMode = "theme";
         Assert.Equal(string.Empty, draft.ToAppSettings().General.CaptureGuideColor);
         draft.ResetToDefaults();

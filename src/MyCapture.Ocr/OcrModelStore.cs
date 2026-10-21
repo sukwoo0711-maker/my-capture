@@ -1,4 +1,5 @@
-﻿using System.IO;
+﻿using System.Collections.Concurrent;
+using System.IO;
 using System.Net.Http;
 using System.Security.Cryptography;
 using Microsoft.Extensions.Logging;
@@ -16,6 +17,8 @@ internal sealed class OcrModelStore
     private readonly HttpClient _http;
     private readonly ILogger _log;
     private readonly SemaphoreSlim _gate = new(1, 1);
+    private readonly Func<Stream, byte[]> _computeHash;
+    private readonly ConcurrentDictionary<string, VerificationState> _verification = new(StringComparer.OrdinalIgnoreCase);
 
     internal OcrModelStore(AppPaths paths, ILogger<OcrModelStore> log)
         : this(paths, CreateClient(), log)
@@ -23,10 +26,19 @@ internal sealed class OcrModelStore
     }
 
     internal OcrModelStore(AppPaths paths, HttpClient http, ILogger log)
+        : this(paths, http, log, SHA256.HashData)
+    {
+    }
+
+    /// <summary>
+    /// Supplies the file hasher so tests can observe verification without changing the catalog.
+    /// </summary>
+    internal OcrModelStore(AppPaths paths, HttpClient http, ILogger log, Func<Stream, byte[]> computeHash)
     {
         _paths = paths ?? throw new ArgumentNullException(nameof(paths));
         _http = http ?? throw new ArgumentNullException(nameof(http));
         _log = log ?? throw new ArgumentNullException(nameof(log));
+        _computeHash = computeHash ?? throw new ArgumentNullException(nameof(computeHash));
     }
 
     internal bool HasRequiredModels => OcrModelCatalog.Required.All(IsPresent);
@@ -46,7 +58,10 @@ internal sealed class OcrModelStore
     /// Downloads the optional Real-ESRGAN weights if they are missing. Non-fatal: the caller
     /// keeps nearest-neighbour scaling when this returns false.
     /// </summary>
-    internal async Task<bool> EnsureSuperResolutionAsync(CancellationToken cancellationToken)
+    internal Task<bool> EnsureSuperResolutionAsync(CancellationToken cancellationToken) =>
+        Task.Run(() => EnsureSuperResolutionCoreAsync(cancellationToken));
+
+    private async Task<bool> EnsureSuperResolutionCoreAsync(CancellationToken cancellationToken)
     {
         if (HasSuperResolution)
         {
@@ -91,7 +106,13 @@ internal sealed class OcrModelStore
 
     internal string PathFor(OcrModelFile file) => Path.Combine(_paths.OcrModelsRoot, file.FileName);
 
-    internal async Task EnsureFileAsync(OcrModelFile file, CancellationToken cancellationToken)
+    /// <summary>
+    /// Checks and prepares one model on a worker, including the initial verification.
+    /// </summary>
+    internal Task EnsureFileAsync(OcrModelFile file, CancellationToken cancellationToken) =>
+        Task.Run(() => EnsureFileCoreAsync(file, cancellationToken));
+
+    private async Task EnsureFileCoreAsync(OcrModelFile file, CancellationToken cancellationToken)
     {
         if (IsPresent(file))
         {
@@ -102,24 +123,98 @@ internal sealed class OcrModelStore
         await DownloadAsync(file, cancellationToken).ConfigureAwait(false);
     }
 
+    /// <summary>
+    /// Reuses a successful check only while the file metadata and expected hash still match.
+    /// Cache misses retain synchronous verification for availability callers.
+    /// </summary>
     internal bool IsPresent(OcrModelFile file)
     {
-        string path = PathFor(file);
-        if (!File.Exists(path))
+        string path = Path.GetFullPath(PathFor(file));
+        VerificationState state = VerificationFor(path);
+        lock (state)
         {
-            return false;
-        }
+            try
+            {
+                if (!File.Exists(path))
+                {
+                    state.Verified = null;
+                    return false;
+                }
 
-        var info = new FileInfo(path);
-        if (info.Length < file.MinimumBytes)
-        {
-            return false;
-        }
+                var info = new FileInfo(path);
+                if (info.Length < file.MinimumBytes)
+                {
+                    state.Verified = null;
+                    return false;
+                }
 
-        return file.ExpectedSha256 is null || HasExpectedHash(path, file.ExpectedSha256);
+                var current = new VerifiedFile(info.Length, info.LastWriteTimeUtc, file.ExpectedSha256);
+                if (state.Verified is VerifiedFile verified
+                    && verified.Length == current.Length
+                    && verified.LastWriteTimeUtc == current.LastWriteTimeUtc
+                    && string.Equals(verified.ExpectedSha256, current.ExpectedSha256, StringComparison.OrdinalIgnoreCase))
+                {
+                    return true;
+                }
+
+                state.Verified = null;
+                if (file.ExpectedSha256 is not null && !HasExpectedHash(path, file.ExpectedSha256))
+                {
+                    return false;
+                }
+
+                // A file changed during verification must be checked again before it is reused.
+                info.Refresh();
+                if (!info.Exists || info.Length != current.Length || info.LastWriteTimeUtc != current.LastWriteTimeUtc)
+                {
+                    return false;
+                }
+
+                state.Verified = current;
+                return true;
+            }
+            catch
+            {
+                state.Verified = null;
+                throw;
+            }
+        }
     }
 
-    internal async Task<bool> EnsureAsync(CancellationToken cancellationToken)
+    /// <summary>
+    /// Warms verification of installed models without downloading or delaying construction.
+    /// A missing or unreadable model does not prevent the remaining models from being checked.
+    /// </summary>
+    internal Task PreVerifyInstalledModelsAsync() => Task.Run(() =>
+    {
+        foreach (OcrModelFile file in OcrModelCatalog.Required.Concat(
+            [OcrModelCatalog.SuperResolution, OcrModelCatalog.SuperResolutionData]))
+        {
+            try
+            {
+                _ = IsPresent(file);
+            }
+            catch (Exception ex)
+            {
+                try
+                {
+                    _log.LogWarning(ex, "Could not verify installed OCR model {File}", file.FileName);
+                }
+                catch (Exception)
+                {
+                    // Background verification must remain non-fatal even if a logger fails.
+                }
+            }
+        }
+    });
+
+    /// <summary>
+    /// Starts preparation on a worker before performing any file or hash work.
+    /// </summary>
+    internal Task<bool> EnsureAsync(CancellationToken cancellationToken) =>
+        Task.Run(() => EnsureCoreAsync(cancellationToken));
+
+    private async Task<bool> EnsureCoreAsync(CancellationToken cancellationToken)
     {
         if (HasRequiredModels)
         {
@@ -183,6 +278,7 @@ internal sealed class OcrModelStore
     {
         string destination = PathFor(file);
         string temp = destination + ".download";
+        InvalidateVerification(destination);
         _log.LogInformation("Downloading OCR model {File}", file.FileName);
 
         byte[] payload = file.Uri.EndsWith(".zip", StringComparison.OrdinalIgnoreCase)
@@ -201,7 +297,7 @@ internal sealed class OcrModelStore
         }
 
         await File.WriteAllBytesAsync(temp, payload, cancellationToken).ConfigureAwait(false);
-        File.Copy(temp, destination, overwrite: true);
+        CopyModelFile(temp, destination);
 
         // The ONNX file records its weights under the exporter's original name
         // (real_esrgan_x4plus.data), so the external-data file must exist under both names.
@@ -210,11 +306,16 @@ internal sealed class OcrModelStore
             string exporterName = Path.Combine(_paths.OcrModelsRoot, OcrModelCatalog.ZipMemberNameFor(file.FileName));
             if (!string.Equals(exporterName, destination, StringComparison.OrdinalIgnoreCase))
             {
-                File.Copy(temp, exporterName, overwrite: true);
+                CopyModelFile(temp, exporterName);
             }
         }
 
-        TryDelete(temp);
+        VerificationState tempState = VerificationFor(temp);
+        lock (tempState)
+        {
+            tempState.Verified = null;
+            TryDelete(temp);
+        }
         _log.LogInformation("Stored OCR model {File} ({Bytes} bytes)", file.FileName, payload.Length);
     }
 
@@ -251,13 +352,42 @@ internal sealed class OcrModelStore
         return output.ToArray();
     }
 
-    private static bool HasExpectedHash(string path, string expected)
+    private bool HasExpectedHash(string path, string expected)
     {
         using var stream = File.OpenRead(path);
-        byte[] hash = SHA256.HashData(stream);
+        byte[] hash = _computeHash(stream);
         string actual = Convert.ToHexString(hash);
         return string.Equals(actual, expected, StringComparison.OrdinalIgnoreCase);
     }
+
+    private VerificationState VerificationFor(string path) =>
+        _verification.GetOrAdd(Path.GetFullPath(path), static _ => new VerificationState());
+
+    private void InvalidateVerification(string path)
+    {
+        VerificationState state = VerificationFor(path);
+        lock (state)
+        {
+            state.Verified = null;
+        }
+    }
+
+    private void CopyModelFile(string source, string destination)
+    {
+        VerificationState state = VerificationFor(destination);
+        lock (state)
+        {
+            state.Verified = null;
+            File.Copy(source, destination, overwrite: true);
+        }
+    }
+
+    private sealed class VerificationState
+    {
+        internal VerifiedFile? Verified { get; set; }
+    }
+
+    private readonly record struct VerifiedFile(long Length, DateTime LastWriteTimeUtc, string? ExpectedSha256);
 
     private static void TryDelete(string path)
     {

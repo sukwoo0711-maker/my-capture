@@ -189,9 +189,9 @@ public sealed class ShellRetakeWindowTests
 
         async Task<bool> PrepareAndStartAsync()
         {
-            bool ready = await App.TryPrepareCaptureAsync(coordinator.CanRetake,
-                allowRetake => !coordinator.IsActive || allowRetake && coordinator.CanRetake,
-                coordinator.CloseEditorForRetakeAsync);
+            bool ready = await CaptureGuard.PrepareAsync(coordinator.CanRetake,
+                allowRetake => CaptureGuard.Find(coordinator.WithSession(default), allowRetake),
+                coordinator.CloseEditorForRetakeAsync) == CaptureBlock.None;
             if (ready) coordinator.Start(false, false, false);
             return ready;
         }

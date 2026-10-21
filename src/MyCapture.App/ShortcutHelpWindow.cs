@@ -101,12 +101,15 @@ internal sealed class ShortcutHelpWindow : Window
                     ("Text_37DB9D0B1C8E", "P"), ("Tools.Highlighter", "H"), ("Text_258AD4B095A1", "T"), ("Tools.StepNumber", "N"),
                     ("Text_3F8046019B32", "M"), ("EditorBlur_Name", "B"), ("Tools_Crop", "X"),
                     ("EditorUx_RotateLeftHint", "Q"), ("EditorUx_RotateRightHint", "W"), ("QuickAccess.Save", "Ctrl+S"), ("QuickAccess.Copy", "Ctrl+C")]),
-                ("Folder410.Title", [("Folder410.NewFolder", "Ctrl+Shift+N"), ("Folder410.Rename", "F2"),
-                    ("Folder410.MoveCaptures", "M"), ("Folder410.Delete", "Del")]),
+                ("Workspace.Library", [("Gallery.Float", "P"), ("LibraryUx_KeepToggleName", "K"),
+                    ("Folder410.MoveCaptures", "M"), ("Folder410.Delete", "Del"),
+                    ("Folder410.NewFolder", "Ctrl+Shift+N"), ("Folder410.Rename", "F2")]),
                 ("Help.Video", [("Help.Play", "Space"), ("Help.Frame", FrameStepKeys), ("Video.TrimIn", "I"), ("Video.TrimOut", "O"), ("Help.Gif", "G")]),
                 ("Text_33EFD44366A7", [("Text_1FBCF51E2FF5", Display(keys.PasteToScreen)), ("Text_4FED89116C1F", Display(keys.HideAllPins)),
                     ("Onboard_PinAllowClickThrough", Display(keys.ToggleClickThrough)), ("Onboard_TrayReopenPin", Display(keys.RestoreClosedPin)),
-                    ("QuickAccess.Copy", "Ctrl+C"), ("QuickAccess.Save", "Ctrl+S"), ("Dialog.Close", "Esc")]),
+                    ("QuickAccess.Copy", "Ctrl+C"), ("Text_976A6C92B870", "Ctrl+C / " + UiText.Get("Text_C7011B8D345C")),
+                    ("Pin_SelectText", "F2"),
+                    ("QuickAccess.Save", "Ctrl+S"), ("Dialog.Close", "Esc")]),
             ];
             var matches = new List<(string Search, FrameworkElement Row)>();
             foreach (var section in sections)

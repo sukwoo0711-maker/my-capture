@@ -34,6 +34,7 @@ public sealed class ThemeResourceAvailabilityTests : KoreanCaptionTest
         "Surface.Canvas", "Surface.Base", "Surface.Raised", "Surface.Overlay", "Surface.Sunken",
         "Surface.Hover", "Surface.Badge", "Surface.BadgeStrong",
         "Text.Primary", "Text.Secondary", "Text.Muted", "Text.OnAccent", "Text.Badge",
+        "Text.SelectionBackground", "Text.SelectionForeground", "Timeline.LayerText",
         "Accent.Default", "Accent.Hover", "Accent.Pressed", "Accent.Subtle", "Accent.Cool",
         "Border.Subtle", "Border.Focus", "Border.Accent", "Border.Badge", "Overlay.SelectionBorder",
         "State.Warning", "State.DangerHover", "Timeline.Background", "Timeline.Track",
@@ -213,7 +214,7 @@ public sealed class ThemeResourceAvailabilityTests : KoreanCaptionTest
     }
 
     [Fact]
-    public void FocusBlueActionsUseDarkInkWithAaContrastInEveryState()
+    public void RedActionsUseDarkInkWithAaContrastInEveryState()
     {
         StaTestHost.Run(() =>
         {
@@ -230,12 +231,13 @@ public sealed class ThemeResourceAvailabilityTests : KoreanCaptionTest
     }
 
     [Fact]
-    public void FocusAndSelectionSemanticsUseTheBrightFocusPrimitive()
+    public void FocusAndSelectionUsePrimaryTextWithTwoDipRings()
     {
         StaTestHost.Run(() =>
         {
             ResourceDictionary theme = LoadMergedTheme();
-            Color brightFocus = Assert.IsType<Color>(theme["Primitive.Yellow300"]);
+            Color brightFocus = BrushFor(theme, "Text.Primary").Color;
+            Assert.Equal(new Thickness(2), Assert.IsType<Thickness>(theme["Focus.RingThickness"]));
 
             Assert.Equal(brightFocus, BrushFor(theme, "Accent.Cool").Color);
             Assert.Equal(brightFocus, BrushFor(theme, "Border.Focus").Color);

@@ -39,6 +39,7 @@ internal sealed class EditorScene : TutorialScene
     private int _steps;
     private string _typed = string.Empty;
     private PointD _dragStart;
+    private readonly PointD _plannedImageOrigin, _plannedImageUnit;
 
     internal EditorScene(string id, string language) : base(id, language)
     {
@@ -68,11 +69,13 @@ internal sealed class EditorScene : TutorialScene
         _tool = tool.Tool;
         _toolName = tool.Command.Length == 0 ? string.Empty : Ui(TutorialCatalog.Get(id).TitleKey);
         _toolKey = tool.Command.Length == 0 ? string.Empty : Hint(ShortcutScope.Annotation, tool.Command);
+        _plannedImageOrigin = Image(0, 0);
+        _plannedImageUnit = Image(1, 1);
         Story = BuildStory();
     }
 
     internal override string Provenance =>
-        "Real AnnotationEditorWindow (command bar, tool rail, inspector, crop mode, status line, tool cursors) over a synthetic page; "
+        "Real AnnotationEditorWindow (command bar, tool rail, property bar above the canvas, crop mode, status line, tool cursors) over a synthetic page; "
         + "tools, rotation, crop and commits run through the editor's own handlers. Explorer and note windows are synthetic.";
 
     private static AnnotationDocument Finished(BitmapSource image)
@@ -97,6 +100,13 @@ internal sealed class EditorScene : TutorialScene
 
     private Point Viewport(PointD stage) =>
         _host.ClientRoot.TranslatePoint(new Point(stage.X - ClientOrigin.X, stage.Y - ClientOrigin.Y), _editor.PointerInputElement);
+
+    // Changing tools changes the height of the property bar and refits the image. Storyboard
+    // canvas positions are stored in the opening layout; resolve their image pixels against
+    // the current viewport before every gesture instead of drawing at stale screen positions.
+    private PointD Reproject(PointD planned) => Image(
+        (planned.X - _plannedImageOrigin.X) / (_plannedImageUnit.X - _plannedImageOrigin.X),
+        (planned.Y - _plannedImageOrigin.Y) / (_plannedImageUnit.Y - _plannedImageOrigin.Y));
 
     private bool OverCanvas(PointD stage)
     {
@@ -161,8 +171,10 @@ internal sealed class EditorScene : TutorialScene
                 story.Move("apply-move", MeasureCropApply()).Click("crop-apply");
                 break;
             case "rotate":
-                story.Move("command", Of(RotateButton(left: true))).Click("rotate-left").Hold("rotated-left", 1.6);
-                story.Move("command2", Of(RotateButton(left: false))).Click("rotate-right").Hold("rotated-right", 1.0);
+                // The edit commands keep rotation under More (and crop mode), so the clip uses the keys
+                // the tutorial's steps name.
+                story.Hold("key-left", 0.8).Hold("rotated-left", 2.0);
+                story.Hold("key-right", 0.8).Hold("rotated-right", 1.4);
                 break;
             case "save":
                 story.Hold("review", 1.0).Hold("save-key", 0.3).Hold("saving", 0.8).Hold("closed", 0.6);
@@ -200,14 +212,16 @@ internal sealed class EditorScene : TutorialScene
         story.Move("canvas", from).Motion("drag", _feature == "pen" ? 40 : 34, from, to, pressed: true).Hold("dragged", 0.2);
     }
 
-    private FrameworkElement RotateButton(bool left) =>
-        _host.Find<Button>().First(button => button.IsVisible && AutomationProperties.GetName(button) == UiText.Get(left ? "EditorUx_RotateLeftHint" : "EditorUx_RotateRightHint"));
-
     // ---- Frames -----------------------------------------------------------------------------
 
     internal override void Draw(DrawingContext dc, TutorialFramePlan frame)
     {
         PointD cursor = frame.Cursor;
+        if (frame.Segment is "canvas" or "drag" or "dragged" or "place" or "placed" or "typing" or "typed"
+            or "away" or "commit" or "step-move" or "step" or "stepped" or "handle" or "crop-drag"
+            or "crop-adjusted" or "handle2" or "crop-drag2" or "crop-ready"
+            || frame.Segment == "result" && _tool is not (EditorTool.Select or EditorTool.Crop))
+            cursor = Reproject(cursor);
         Apply(frame, ref cursor);
         Stage.DrawDesktop(dc);
         if (!_closed)
@@ -219,7 +233,7 @@ internal sealed class EditorScene : TutorialScene
 
         (string caption, string key) = Caption(frame);
         if (frame.Pressed) Stage.DrawClick(dc, cursor, frame.Progress);
-        bool keyboardOnly = _feature == "save" && frame.Segment is not "open";
+        bool keyboardOnly = _feature is "save" or "rotate" && frame.Segment is not "open";
         if (!keyboardOnly) DrawPointer(dc, cursor);
         Stage.DrawCaption(dc, caption, key);
     }
@@ -240,7 +254,7 @@ internal sealed class EditorScene : TutorialScene
                 _editor.ToolButton(_tool).RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));
                 break;
             case "drag":
-                if (frame.IsFirst) _editor.SimulatePointerDown(Viewport(_dragStart));
+                if (frame.IsFirst) _editor.SimulatePointerDown(Viewport(Reproject(_dragStart)));
                 _editor.SimulatePointerMove(viewport, leftPressed: true);
                 if (frame.IsLast) _editor.SimulatePointerUp(viewport);
                 break;
@@ -271,12 +285,15 @@ internal sealed class EditorScene : TutorialScene
                 break;
             case "crop-apply" when frame.IsLast:
                 ((Button)ByAutomationId("EditorFlowCropApply")).RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));
+                AnnotationDocument cropped = _editor.CreateCurrentImageSnapshot();
+                if (Math.Abs(cropped.CanvasWidth - 378) > 1 || Math.Abs(cropped.CanvasHeight - 208) > 1)
+                    throw new InvalidOperationException($"The crop missed its image-space corners: {cropped.CanvasWidth}x{cropped.CanvasHeight}.");
                 break;
-            case "rotate-left" when frame.IsLast:
-                ((Button)RotateButton(left: true)).RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));
+            case "rotated-left":
+                Press(ShortcutScope.Annotation, "RotateLeft");
                 break;
-            case "rotate-right" when frame.IsLast:
-                ((Button)RotateButton(left: false)).RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));
+            case "rotated-right":
+                Press(ShortcutScope.Annotation, "RotateRight");
                 break;
             case "save-key":
                 BeginCommit(() => Press(ShortcutScope.Annotation, "Save"));
@@ -416,7 +433,7 @@ internal sealed class EditorScene : TutorialScene
             case "rotate":
                 return segment switch
                 {
-                    "open" or "command" or "rotate-left" or "rotated-left" =>
+                    "open" or "key-left" or "rotated-left" =>
                         (L($"{Ui("EditorUx_RotateLeft")}: 이미지를 왼쪽으로 90도", $"{Ui("EditorUx_RotateLeft")} turns the image 90°"), Hint(ShortcutScope.Annotation, "RotateLeft")),
                     _ => (L($"{Ui("EditorUx_RotateRight")}으로 되돌림", $"{Ui("EditorUx_RotateRight")} turns it back"), Hint(ShortcutScope.Annotation, "RotateRight")),
                 };

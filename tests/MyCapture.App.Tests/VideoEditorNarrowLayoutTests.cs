@@ -32,10 +32,12 @@ public sealed class VideoEditorNarrowLayoutTests
         try
         {
             editor = OpenReadyEditor(root, 10_000, show: true, width, height);
+            editor.SetDetailsExpandedForTest(true);
+            editor.UpdateLayout();
             var layout = (Grid)editor.Content;
             Panel bar = Assert.Single(Descendants(layout).OfType<Panel>(), panel => panel.Name == "VideoTrimBar");
             if (editor.ActualWidth < width - 1) return; // A runner screen smaller than the window clamps it.
-            Assert.Equal(twoRows, editor.TrimBarHasTwoRowsForTest);
+            Assert.False(twoRows); // The inspector uses a vertical stack at every width.
 
             Assert.DoesNotContain(Descendants(bar).OfType<Button>(), button =>
                 AutomationProperties.GetName(button) == UiText.Get("VideoEditorUx_MarkInHere")
@@ -48,22 +50,12 @@ public sealed class VideoEditorNarrowLayoutTests
             double Left(FrameworkElement element) => element.TranslatePoint(default, bar).X;
             double Right(FrameworkElement element) => element.TranslatePoint(new Point(element.ActualWidth, 0), bar).X;
 
-            // The typed range and the reset button always share one row: reset is never left alone.
-            Assert.Equal(Middle(start), Middle(end), precision: 0);
-            Assert.Equal(Middle(start), Middle(reset), precision: 0);
-            Assert.True(Left(end) > Right(start) - 0.5 && Left(reset) > Right(end) - 0.5);
-            if (twoRows)
-            {
-                Assert.True(summary.TranslatePoint(default, bar).Y >= start.TranslatePoint(new Point(0, start.ActualHeight), bar).Y - 0.5,
-                    "the summary sits under the range");
-                // Both rows start at the same left edge.
-                Assert.Equal(Left(summary), Left((FrameworkElement)VisualTreeHelper.GetParent(start)), precision: 0);
-            }
-            else
-            {
-                Assert.Equal(Middle(summary), Middle(start), precision: 0);
-                Assert.True(Left(summary) >= Right(reset) + TrimBarPanel.GroupGap - 0.5);
-            }
+            // Each numeric input has a full row in the narrow inspector; reset and
+            // summary follow without squeezing the old horizontal toolbar group.
+            Assert.True(Middle(end) > Middle(start));
+            Assert.True(Middle(reset) > Middle(end));
+            Assert.True(Middle(summary) > Middle(reset));
+            Assert.Equal(Left(start), Left(end), precision: 0);
 
             foreach (FrameworkElement control in new FrameworkElement[] { summary, reset, start, end })
                 Assert.True(Right(control) <= bar.ActualWidth + 0.5, $"{AutomationProperties.GetName(control)} leaves the bar at {width}");
@@ -106,6 +98,7 @@ public sealed class VideoEditorNarrowLayoutTests
         try
         {
             editor = OpenReadyEditor(root, 10_000, show: true, 780, 560);
+            editor.SetDetailsExpandedForTest(true);
             var flags = BindingFlags.Instance | BindingFlags.NonPublic;
             typeof(VideoEditorWindow).GetMethod("AddShapeLayer", flags)!.Invoke(editor, [false]);
             Assert.True(editor.TimelineForTest.SetTrimRange(2_000, 8_000));
@@ -122,7 +115,7 @@ public sealed class VideoEditorNarrowLayoutTests
             Assert.Single(visible, text => text.Text.Contains(kept, StringComparison.Ordinal));
             Assert.Single(visible, text => text.Text.Contains(removed, StringComparison.Ordinal));
             TextBlock status = Field<TextBlock>(editor, "_statusLabel");
-            Assert.Equal(UiText.Get("VideoEditorUx_StatusTrimmed"), status.Text);
+            Assert.True(string.IsNullOrEmpty(status.Text));
 
             // The layer panel: no properties block repeating the selected row.
             Border panel = Assert.Single(Descendants(layout).OfType<Border>(), border => border.Name == "VideoLayersPanel");
@@ -135,7 +128,7 @@ public sealed class VideoEditorNarrowLayoutTests
             TextBlock[] lines = Descendants(item).OfType<TextBlock>().Where(text => text.IsVisible).ToArray();
             Assert.Equal(2, lines.Length);
             Assert.Matches(@"^\d+:\d\d\.\d{3}–\d+:\d\d\.\d{3}$", lines[1].Text);
-            // Edit and delete for the selected row sit above the list.
+            // Edit and delete for the selected row sit under the list.
             foreach (string key in new[] { "Text_AEB8B9AA4E6F", "Text_9163C86EDB22" })
                 Assert.True(Assert.Single(Descendants(panel).OfType<Button>(), b => AutomationProperties.GetName(b) == UiText.Get(key)).IsVisible, key);
 
@@ -144,6 +137,62 @@ public sealed class VideoEditorNarrowLayoutTests
             int layers = Field<VideoEditDocument>(editor, "_editDocument").TextOverlays.Count + Field<VideoEditDocument>(editor, "_editDocument").FrameEditLayers.Count;
             Assert.Equal(1, layers);
             Assert.Equal(36, tracks.Height);
+        }
+        finally
+        {
+            editor?.Close();
+            OwnedTestDirectory.Delete(root);
+        }
+    });
+
+    [Theory]
+    [InlineData("ko-KR", 760, 555)]
+    [InlineData("en-US", 760, 555)]
+    [InlineData("ko-KR", 920, 660)]
+    [InlineData("en-US", 1400, 900)]
+    public void LayerHeadingKeepsItsWidthBesideAddLayerAndSelectionCommandsSitUnderTheList(string language, int width, int height) => StaTestHost.Run(() =>
+    {
+        using var culture = UiText.UseLanguage(language);
+        string root = OwnedTestDirectory.Create("mc-video-layer-heading-");
+        VideoEditorWindow? editor = null;
+        try
+        {
+            editor = OpenReadyEditor(root, 10_000, show: true, width, height);
+            editor.SetDetailsExpandedForTest(true);
+            typeof(VideoEditorWindow).GetMethod("AddShapeLayer", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(editor, [false]);
+            editor.Dispatcher.Invoke(System.Windows.Threading.DispatcherPriority.ApplicationIdle, new Action(editor.UpdateLayout));
+            var layout = (Grid)editor.Content;
+            Border panel = Assert.Single(Descendants(layout).OfType<Border>(), border => border.Name == "VideoLayersPanel");
+            Assert.True(panel.IsVisible);
+
+            // Edit and delete beside the heading left the 14 DIP heading 42 DIP in the narrowest
+            // panel and cut its last letter. An element given less than it needs keeps its own size
+            // and is clipped to its slot, so the slot is what shows whether the heading fits.
+            TextBlock heading = Assert.Single(Descendants(panel).OfType<TextBlock>(), text => text.Text == UiText.Get("Video.Layers"));
+            Rect slot = System.Windows.Controls.Primitives.LayoutInformation.GetLayoutSlot(heading);
+            Assert.True(slot.Width - heading.Margin.Left - heading.Margin.Right + 0.5 >= heading.ActualWidth,
+                $"heading slot {slot.Width:0.#} for {heading.ActualWidth:0.#} DIP");
+            // The UX review flags a text whose measured size exceeds its arranged size.
+            Assert.True(heading.DesiredSize.Width <= heading.ActualWidth + 1);
+
+            Button Command(string key) => Assert.Single(Descendants(panel).OfType<Button>(), button => AutomationProperties.GetName(button) == UiText.Get(key));
+            Button add = Command("Video.AddLayer");
+            double headingRight = heading.TranslatePoint(new Point(heading.ActualWidth, 0), panel).X;
+            Point addTop = add.TranslatePoint(new Point(), panel);
+            Assert.True(addTop.X >= headingRight + 8 - 0.5, $"Add layer at {addTop.X:0.#}, heading ends at {headingRight:0.#}");
+
+            ListBox list = Assert.Single(Descendants(panel).OfType<ListBox>());
+            Assert.True(addTop.Y + add.ActualHeight <= list.TranslatePoint(new Point(), panel).Y + 0.5, "Add layer sits in the heading row");
+            double listBottom = list.TranslatePoint(new Point(0, list.ActualHeight), panel).Y;
+            foreach (Button command in new[] { add, Command("Text_AEB8B9AA4E6F"), Command("Text_9163C86EDB22") })
+            {
+                Assert.True(command.IsVisible);
+                Point bottomRight = command.TranslatePoint(new Point(command.ActualWidth, command.ActualHeight), panel);
+                Assert.InRange(bottomRight.X, 0, panel.ActualWidth - panel.Padding.Right + 0.5);
+                Assert.InRange(bottomRight.Y, 0, panel.ActualHeight - panel.Padding.Bottom + 0.5);
+                if (!ReferenceEquals(command, add))
+                    Assert.True(command.TranslatePoint(new Point(), panel).Y >= listBottom - 0.5, "Edit and delete sit under the list");
+            }
         }
         finally
         {
@@ -164,6 +213,7 @@ public sealed class VideoEditorNarrowLayoutTests
         try
         {
             editor = OpenReadyEditor(root, 10_000, show: true, width, height);
+            editor.SetDetailsExpandedForTest(true);
             typeof(VideoEditorWindow).GetMethod("AddShapeLayer", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(editor, [false]);
             editor.Dispatcher.Invoke(System.Windows.Threading.DispatcherPriority.ApplicationIdle, new Action(editor.UpdateLayout));
             var layout = (Grid)editor.Content;
@@ -201,13 +251,13 @@ public sealed class VideoEditorNarrowLayoutTests
             editor = OpenReadyEditor(root, 10_000, show: true);
             var layout = (Grid)editor.Content;
             object primary = editor.FindResource("Button.Primary");
-            // Save to library finishes the edit; play is a wider transport target but not
-            // a second filled accent button competing with it.
+            // Save to library finishes the edit; the icon-only play button keeps a full
+            // command hit target without taking the filled accent style.
             Button filled = Assert.Single(Descendants(layout).OfType<Button>(), button => ReferenceEquals(button.Style, primary));
             Assert.Equal(UiText.Get("MediaExport_SaveEdits"), AutomationProperties.GetName(filled));
             Button play = Button(layout, "Text_9A9C87658130");
             Assert.Same(editor.FindResource("Button.Secondary"), play.Style);
-            Assert.True(play.ActualWidth >= 56);
+            Assert.True(play.ActualWidth >= 44);
             Assert.Equal(44, play.ActualHeight);
             Assert.Same(editor.FindResource("Button.Secondary"), Button(layout, "MediaExport_ExportFormats").Style);
         }

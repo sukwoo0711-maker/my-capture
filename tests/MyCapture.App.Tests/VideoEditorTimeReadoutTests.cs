@@ -22,19 +22,15 @@ public sealed partial class VideoEditorTimeReadoutTests : KoreanCaptionTest
     private const BindingFlags Private = BindingFlags.Instance | BindingFlags.NonPublic;
 
     [Theory]
-    // A caption in the readout's bottom-left corner: the readout moves to the top left.
-    [InlineData(760, 555, 0.01, 0.80, 0.42, 0.18, HorizontalAlignment.Left, VerticalAlignment.Top)]
-    [InlineData(920, 680, 0.01, 0.80, 0.42, 0.18, HorizontalAlignment.Left, VerticalAlignment.Top)]
-    [InlineData(1180, 760, 0.01, 0.80, 0.42, 0.18, HorizontalAlignment.Left, VerticalAlignment.Top)]
-    // A layer across the whole left side: the readout moves to the right.
-    [InlineData(920, 680, 0.0, 0.0, 0.45, 1.0, HorizontalAlignment.Right, VerticalAlignment.Bottom)]
-    // A caption across the whole bottom: the readout moves to the top.
-    [InlineData(920, 680, 0.0, 0.82, 1.0, 0.16, HorizontalAlignment.Left, VerticalAlignment.Top)]
-    // A layer clear of the corner: the readout stays.
-    [InlineData(920, 680, 0.55, 0.05, 0.4, 0.2, HorizontalAlignment.Left, VerticalAlignment.Bottom)]
+    // The transport readout stays outside layers at every former preview-chip corner.
+    [InlineData(760, 555, 0.01, 0.80, 0.42, 0.18)]
+    [InlineData(920, 680, 0.01, 0.80, 0.42, 0.18)]
+    [InlineData(1180, 760, 0.01, 0.80, 0.42, 0.18)]
+    [InlineData(920, 680, 0.0, 0.0, 0.45, 1.0)]
+    [InlineData(920, 680, 0.0, 0.82, 1.0, 0.16)]
+    [InlineData(920, 680, 0.55, 0.05, 0.4, 0.2)]
     public void TimeReadoutLeavesTheSelectedLayerFree(
-        double windowWidth, double windowHeight, double x, double y, double width, double height,
-        HorizontalAlignment expectedHorizontal, VerticalAlignment expectedVertical) => StaTestHost.Run(() =>
+        double windowWidth, double windowHeight, double x, double y, double width, double height) => StaTestHost.Run(() =>
     {
         string root = OwnedTestDirectory.Create("mc-time-readout-");
         VideoEditorWindow? editor = null;
@@ -49,21 +45,23 @@ public sealed partial class VideoEditorTimeReadoutTests : KoreanCaptionTest
             };
             editor = OpenEditor(root, windowWidth, windowHeight, caption);
             Border chip = Chip(editor);
-            Assert.Equal((HorizontalAlignment.Left, VerticalAlignment.Bottom), editor.PositionChipCornerForTest);
+            Assert.True(chip.IsVisible);
 
             var list = (ListBox)typeof(VideoEditorWindow).GetField("_overlayList", Private)!.GetValue(editor)!;
             list.SelectedIndex = 0;
             Settle(editor);
             var canvas = (VideoLayerCanvas)typeof(VideoEditorWindow).GetField("_layerCanvas", Private)!.GetValue(editor)!;
             Rect selection = canvas.SelectionViewBounds ?? throw new Xunit.Sdk.XunitException("the layer is not selected");
-            Assert.Equal((expectedHorizontal, expectedVertical), editor.PositionChipCornerForTest);
+            // Time belongs to the transport row, outside every selected-layer corner.
+            var transport = Assert.Single(Descendants(editor).OfType<Grid>(), panel => panel.Name == "VideoTransport");
+            Assert.Contains(chip, Descendants(transport));
             Rect shown = new(chip.TranslatePoint(new Point(0, 0), canvas), chip.RenderSize);
             Assert.False(shown.IntersectsWith(selection), $"the readout {shown} covers the selected layer {selection}");
 
             list.SelectedIndex = -1;
             Settle(editor);
             Assert.Null(canvas.SelectionViewBounds);
-            Assert.Equal((HorizontalAlignment.Left, VerticalAlignment.Bottom), editor.PositionChipCornerForTest);
+            Assert.True(chip.IsVisible);
         }
         finally
         {
@@ -82,6 +80,7 @@ public sealed partial class VideoEditorTimeReadoutTests : KoreanCaptionTest
         try
         {
             editor = OpenEditor(root, windowWidth, windowHeight, new TimedTextOverlay { Text = "자막", StartMs = 300, EndMs = 900 });
+            editor.SetDetailsExpandedForTest(true);
             Assert.True(editor.TimelineForTest.SetTrimRange(100, 900));
             Settle(editor);
             var times = new List<string>();

@@ -46,7 +46,6 @@ internal sealed class VideoScene : TutorialScene
     private readonly MediaElement _media;
     private readonly TwoLineTimeline _timeline;
     private TaskCompletionSource<bool>? _commit;
-    private BitmapSource? _committedShot;
     private bool _closed;
     private VideoExportDialog? _dialog;
     private OffscreenWindow? _dialogHost;
@@ -77,7 +76,6 @@ internal sealed class VideoScene : TutorialScene
             VideoCommitHandler = (_, _, _) => (_commit ??= new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously)).Task,
             ExportDialogHostForTest = HostExportDialog,
         };
-        _editor.VideoCommitted += (_, _) => _committedShot = _host!.Snapshot(EditorScale);
         _host = new OffscreenWindow(_editor, ClientWidth, ClientHeight);
         if (!WaitUntil(() => _editor.IsMediaReadyForTest || _editor.HasMediaFailedForTest, 12000) || _editor.HasMediaFailedForTest)
             throw new InvalidOperationException($"The video editor did not open the synthetic recording: {_editor.MediaFailureForTest}");
@@ -274,7 +272,6 @@ internal sealed class VideoScene : TutorialScene
         Apply(frame);
         Stage.DrawDesktop(dc);
         if (!_closed) Stage.DrawWindow(dc, _host.Snapshot(EditorScale), ClientOrigin, _editor.Title);
-        else if (_committedShot is not null) Stage.DrawWindow(dc, _committedShot, ClientOrigin, _editor.Title);
         if (_dialogHost is not null) Stage.DrawWindow(dc, _dialogHost.Snapshot(DialogScale), DialogOrigin, _dialog!.Title);
         if (_saveAsVisible) DrawSaveAs(dc, frame);
 
@@ -393,9 +390,12 @@ internal sealed class VideoScene : TutorialScene
             throw new InvalidOperationException($"The preview did not show the frame at {_timeline.PlayheadMs:0} ms after {shortcut.Hint}.");
     }
 
-    /// <summary>The status line under the timeline.</summary>
+    /// <summary>The accessible status line; independent of the editor grid's row numbers.</summary>
     private string StatusText() =>
-        _host.Find<TextBlock>().First(text => text.Parent is Border { Parent: Grid } bar && Grid.GetRow(bar) == 3).Text;
+        _host.Find<TextBlock>().Single(text => text.Parent is Border { Parent: Grid } bar
+            && ReferenceEquals(bar.Child, text) && text.TextTrimming == TextTrimming.CharacterEllipsis
+            && System.Windows.Automation.AutomationProperties.GetLiveSetting(text)
+                == System.Windows.Automation.AutomationLiveSetting.Polite).Text;
 
     /// <summary>A cheap fingerprint of the preview pixels, to wait until a sought frame is on screen.</summary>
     private long PreviewSignature()

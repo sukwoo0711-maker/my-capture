@@ -42,7 +42,7 @@ internal sealed class PinSaveRequestedEventArgs(PinSaveMode mode, BitmapSource i
 }
 
 /// <summary>A pin image copy request: the frozen image plus the page it came from.</summary>
-internal readonly record struct PinImageCopyRequest(BitmapSource Image, string SourcePageUrl);
+internal readonly record struct PinImageCopyRequest(BitmapSource Image, string SourcePageUrl, string? OriginalText = null);
 
 /// <summary>
 /// Resolves pin export names and writes the frozen source image away from the UI thread.

@@ -21,7 +21,7 @@ public sealed class ThemeChromeTests
         foreach (AppTheme theme in Enum.GetValues<AppTheme>())
         {
             ThemeService.ApplyResources(theme, resources);
-            ThemeColor expected = ThemeCatalog.ColorsFor(theme)["Surface.Base"];
+            ThemeColor expected = ThemeCatalog.ColorsFor(ThemeService.ResolveTheme(theme))["Surface.Base"];
             var brush = Assert.IsType<SolidColorBrush>(resources["Surface.Base"]);
             Assert.Equal(Color.FromArgb(expected.A, expected.R, expected.G, expected.B), brush.Color);
         }
@@ -32,7 +32,7 @@ public sealed class ThemeChromeTests
     [InlineData("glass-light", true, false)]
     [InlineData("daylight", true, false)]
     [InlineData("midnight", false, true)]
-    [InlineData("workspace", false, false)]
+    [InlineData("workspace", false, true)]
     [InlineData("workspace", true, true)]
     public void CaptionDarknessFollowsPaletteAndWorkspaceRole(string themeId, bool videoEditor, bool dark)
     {
@@ -45,11 +45,11 @@ public sealed class ThemeChromeTests
     [Theory]
     [InlineData("glass", false, 0x15, 0x17, 0x1F)]
     [InlineData("glass-light", false, 0xF0, 0xF1, 0xF4)]
-    [InlineData("midnight", false, 0x0B, 0x0F, 0x17)]
-    [InlineData("daylight", false, 0xF7, 0xF8, 0xFB)]
+    [InlineData("midnight", false, 0x15, 0x17, 0x1F)]
+    [InlineData("daylight", false, 0xF0, 0xF1, 0xF4)]
     [InlineData("high-contrast", false, 0x00, 0x00, 0x00)]
-    [InlineData("workspace", false, 0xED, 0xF3, 0xF2)]
-    [InlineData("workspace", true, 0x14, 0x1B, 0x22)]
+    [InlineData("workspace", false, 0x15, 0x17, 0x1F)]
+    [InlineData("workspace", true, 0x15, 0x17, 0x1F)]
     public void CaptionColourIsTheBodyColourTheWindowActuallyShows(string themeId, bool videoEditor, int r, int g, int b)
     {
         AppTheme theme = AppThemeNames.Parse(themeId);

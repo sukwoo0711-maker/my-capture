@@ -225,9 +225,7 @@ internal static class HotfixUxSelfTest
                         if (available) probe.Unregister(0x7103);
                         Check($"Alt+Q available to a separate registration iff kept={kept}", available == kept);
                     }
-                    var mouseRow = ((StackPanel)((Border)keyboardCard.Content).Child).Children.OfType<DockPanel>().First();
-                    var mouseActions = keyboardCard.ActionButtonsForTest.ToArray();
-                    Click(inputHandle, mouseActions[0]);
+                    Click(inputHandle, CardControl<Button>(keyboardCard, "QuickAccess.Copy"));
                     Check("copy click preserves external foreground", GetForegroundWindow() == inputHandle && !keyboardCard.IsActive && copies == 1);
                     Check("card writes actual Windows image clipboard", lastCopy is not null && Await(lastCopy));
                     InjectKey(inputHandle, 0x11, 0); SendKey(inputHandle, 0x56); InjectKey(inputHandle, 0x11, 2); Pump(200);
@@ -250,9 +248,10 @@ internal static class HotfixUxSelfTest
                     report.AppendLine("External fixture input trace:\n" + inputTrace);
                     Console.WriteLine("External fixture input trace:\n" + inputTrace);
                     Check("Ctrl+V pastes image in external app without refocusing", external.Text.EndsWith("[image:320x180]", StringComparison.Ordinal));
-                    Click(inputHandle, mouseActions[2]); Click(inputHandle, mouseActions[3]);
+                    Click(inputHandle, CardControl<Button>(keyboardCard, "QuickAccess.Pin"));
+                    Click(inputHandle, CardControl<Button>(keyboardCard, "QuickAccess.Save"));
                     Check("pin/save clicks preserve external foreground", GetForegroundWindow() == inputHandle && !keyboardCard.IsActive && saves == 1);
-                    var preview = mouseRow.Children.OfType<Image>().Single();
+                    var preview = CardControl<Image>(keyboardCard, "QuickAccess.Preview");
                     Click(inputHandle, preview);
                     Check("thumbnail click preserves external foreground", GetForegroundWindow() == inputHandle && !keyboardCard.IsActive);
                     DragToExternal(inputHandle, preview);
@@ -267,14 +266,12 @@ internal static class HotfixUxSelfTest
                         var actionCard = new QuickAccessWindow(sample, () => Task.FromResult(true), () => invoked++,
                             () => Task.CompletedTask, () => Task.FromResult(true), () => invoked++, () => Task.FromResult(dragPath)) { IsKept = true };
                         owned.Add(actionCard); actionCard.Show(); Pump(80);
-                        var action = Ux402VisualMetrics.Descendants(actionCard).OfType<Button>().Single(b => library
-                            ? AutomationProperties.GetName(b) == UiText.Get("QuickAccess.Library")
-                            : AutomationProperties.GetAcceleratorKey(b) == "E");
+                        var action = CardControl<Button>(actionCard, library ? "QuickAccess.Library" : "QuickAccess.Edit");
                         Click(inputHandle, action);
                         Check($"{(library ? "library" : "edit")} click invokes action without activating card", invoked == 1 && GetForegroundWindow() == inputHandle && !actionCard.IsVisible);
                     }
                     // Kept cards enter only by a non-action background click.
-                    var dimensions = ((StackPanel)((Border)keyboardCard.Content).Child).Children.OfType<DockPanel>().Last().Children.OfType<TextBlock>().Single();
+                    var dimensions = CardControl<TextBlock>(keyboardCard, "QuickAccess.Dimensions");
                     double originalLeft = keyboardCard.Left;
                     Point dragStart = dimensions.PointToScreen(new Point(dimensions.ActualWidth / 2, dimensions.ActualHeight / 2));
                     MoveCursor(inputHandle, (int)dragStart.X, (int)dragStart.Y);
@@ -330,7 +327,7 @@ internal static class HotfixUxSelfTest
                     Check("focused card Esc closes it", !keyboardCard.IsVisible);
                     external.Activate(); Pump(80);
                     var timed = Card(sample); owned.Add(timed); timed.Show(); Pump(100);
-                    var timedCopy = Ux402VisualMetrics.Descendants(timed).OfType<Button>().Single(b => AutomationProperties.GetAcceleratorKey(b) == "C");
+                    var timedCopy = CardControl<Button>(timed, "QuickAccess.Copy");
                     Click(inputHandle, timedCopy);
                     Check("automatic card remains passive after copy click", GetForegroundWindow() == inputHandle && !timed.IsActive);
                     MoveCursor(inputHandle, 70, 100);
@@ -358,16 +355,20 @@ internal static class HotfixUxSelfTest
                 var keep = receipt.KeepToggleForTest;
                 object kept = keep.Content;
                 receipt.IsKept = false;
-                Check($"{language}/{theme}: keep is a word and its checked state shows the choice",
-                    Equals(kept, UiText.Get("QuickAccess.KeepLabel")) && ReferenceEquals(kept, keep.Content) && keep.IsChecked == false);
+                Check($"{language}/{theme}: keep icon retains its accessible name and checked state",
+                    kept is SymbolIcon && AutomationProperties.GetName(keep) == UiText.Get("QuickAccess.KeepName")
+                    && ReferenceEquals(kept, keep.Content) && keep.IsChecked == false);
                 receipt.IsKept = true;
                 foreach (Button button in receipt.ActionButtonsForTest)
                 {
-                    // Each action shows an icon, its name and (when hints are on) its shortcut.
+                    // Edit is labelled; the remaining actions have icons and named shortcut tooltips.
                     var content = (FrameworkElement)button.Content;
                     var texts = Ux402VisualMetrics.Descendants(content).OfType<TextBlock>().Where(text => text.IsVisible).ToArray();
                     Check($"{language}/{theme}/{AutomationProperties.GetName(button)}: icon, name and shortcut fit the action",
-                        texts.Length > 0 && content.ActualWidth <= button.ActualWidth && content.ActualHeight <= button.ActualHeight
+                        (content is SymbolIcon || texts.Length > 0 || content is TextBlock)
+                        && !string.IsNullOrWhiteSpace(AutomationProperties.GetName(button))
+                        && !string.IsNullOrWhiteSpace(AutomationProperties.GetAcceleratorKey(button))
+                        && content.ActualWidth <= button.ActualWidth && content.ActualHeight <= button.ActualHeight
                         && texts.All(text => text.ActualWidth <= content.ActualWidth + 0.5 && text.ActualHeight <= content.ActualHeight + 0.5));
                 }
                 foreach (int dpi in new[] { 96, 144, 192 }) Render(receipt, Path.Combine(output, $"card-{language}-{theme}-{dpi}.png"), dpi);
@@ -437,8 +438,7 @@ internal static class HotfixUxSelfTest
             Render(updatedCard, Path.Combine(output, "preview-before-update.png"), 96);
             updatedCard.UpdatePreview(expected); updatedCard.UpdateLayout();
             Render(updatedCard, Path.Combine(output, "preview-after-update.png"), 96);
-            Check("preview dimensions reflect edited crop", ((StackPanel)((Border)updatedCard.Content).Child).Children.OfType<DockPanel>().Last()
-                .Children.OfType<TextBlock>().Single().Text == "230 × 130");
+            Check("preview dimensions reflect edited crop", CardControl<TextBlock>(updatedCard, "QuickAccess.Dimensions").Text == "230 × 130");
             updatedCard.Close();
             string? saved = null; BitmapSource? pinned = null; byte[]? clipboardPng = null;
             var actions = new QuickAccessImageActions(edit.RenderCurrentImageAsync,
@@ -623,6 +623,10 @@ internal static class HotfixUxSelfTest
             throw new InvalidOperationException("The dialog's sole cancel action must be the default, visible, enabled Close button.");
         return button;
     }
+
+    internal static T CardControl<T>(QuickAccessWindow card, string automationId) where T : FrameworkElement =>
+        Ux402VisualMetrics.Descendants((DependencyObject)card.Content).OfType<T>()
+            .Single(control => AutomationProperties.GetAutomationId(control) == automationId);
 
     private static QuickAccessWindow Card(BitmapSource image, bool excludeFromCapture = true) => new(image, () => Task.FromResult(true), () => { }, () => Task.CompletedTask, () => Task.FromResult(true), () => { }, () => Task.FromResult("unused.png"), excludeFromCapture);
     private static Exception Failure(Action action)

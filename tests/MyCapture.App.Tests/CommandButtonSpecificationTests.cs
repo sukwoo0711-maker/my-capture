@@ -1,5 +1,6 @@
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Media;
 using Xunit;
 
 namespace MyCapture.App.Tests;
@@ -7,9 +8,15 @@ namespace MyCapture.App.Tests;
 public sealed class CommandButtonSpecificationTests
 {
     [Theory]
-    [InlineData(false, 44, 4)]
-    [InlineData(true, 36, 2)]
-    public void EachTierKeepsEqualButtonHeightsAndLabelPositionsWithEveryHintState(bool compact, double height, double verticalPadding) => StaTestHost.Run(() =>
+    [InlineData(false, 44, 4, 1)]
+    [InlineData(false, 44, 4, 1.25)]
+    [InlineData(false, 44, 4, 1.5)]
+    [InlineData(false, 44, 4, 2)]
+    [InlineData(true, 36, 0, 1)]
+    [InlineData(true, 36, 0, 1.25)]
+    [InlineData(true, 36, 0, 1.5)]
+    [InlineData(true, 36, 0, 2)]
+    public void EachTierKeepsEqualButtonHeightsAndLabelPositionsWithEveryHintState(bool compact, double height, double verticalPadding, double scale) => StaTestHost.Run(() =>
     {
         Func<bool>? previous = ShortcutPresentation.ReadEnabled;
         bool enabled = true;
@@ -21,6 +28,7 @@ public sealed class CommandButtonSpecificationTests
                 Orientation = Orientation.Horizontal,
                 Resources = SystemHighContrastThemeTests.LoadTheme(),
             };
+            VisualTreeHelper.SetRootDpi(row, new DpiScale(scale, scale));
             var withoutHint = new Button { Content = "Command" };
             var singleKey = new Button { Content = "Command" };
             var combination = new Button { Content = "Command" };
@@ -46,12 +54,16 @@ public sealed class CommandButtonSpecificationTests
                     Assert.Equal(height, button.ActualHeight, 2);
                     Assert.Equal(new Thickness(10, verticalPadding, 10, verticalPadding), button.Padding);
                     Assert.Equal(new Thickness(3, 0, 3, 0), button.Margin);
-                    Assert.Equal(12, button.FontSize);
+                    Assert.Equal(14, button.FontSize);
                     Grid face = Assert.IsType<Grid>(button.Content);
                     Assert.Equal("CommandButtonFace", face.Name);
                     Assert.Equal(2, face.RowDefinitions.Count);
                     Assert.Equal(14, face.RowDefinitions[1].ActualHeight, 2);
                     var label = Assert.IsType<TextBlock>(face.Children[0]);
+                    Assert.Equal(14, label.FontSize);
+                    Assert.True(face.ActualHeight <= button.ActualHeight - button.Padding.Top - button.Padding.Bottom
+                        - button.BorderThickness.Top - button.BorderThickness.Bottom + 0.5,
+                        $"Command content {face.ActualHeight:0.##} exceeds the {height}-DIP button's inner height.");
                     double top = label.TranslatePoint(default, row).Y;
                     if (labelTop is { } expectedTop) Assert.Equal(expectedTop, top, 2);
                     else labelTop = top;
@@ -59,6 +71,7 @@ public sealed class CommandButtonSpecificationTests
                     else
                     {
                         TextBlock hint = Assert.IsType<TextBlock>(face.Children[1]);
+                        Assert.Equal(12, hint.FontSize);
                         Assert.Equal(show ? Visibility.Visible : Visibility.Collapsed, hint.Visibility);
                     }
                 }

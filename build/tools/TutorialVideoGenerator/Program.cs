@@ -18,6 +18,7 @@ namespace MyCapture.TutorialGenerator;
 /// <code>
 /// dotnet run --project build/tools/TutorialVideoGenerator -c Release -- [--features id,id] [--languages ko,en]
 ///     [--out folder] [--width 960] [--quality 60|bitrate] [--bitrate 300000] [--profile high] [--install] [--no-sheets]
+///     [--theme glass] [--accent red]
 /// </code>
 /// Output defaults to artifacts/tutorials/&lt;timestamp&gt; (Git ignores artifacts/). --install copies the
 /// clips and their stills to src/MyCapture.App/Assets/Tutorials.
@@ -47,7 +48,7 @@ internal static class Program
         catch (ArgumentException error)
         {
             Console.Error.WriteLine(error.Message);
-            Console.Error.WriteLine("MyCapture.TutorialGenerator [--features id,id|all] [--languages ko,en] [--out folder] [--width 960] [--quality 60|bitrate] [--bitrate 300000] [--profile high|main|baseline|default] [--install] [--no-sheets]");
+            Console.Error.WriteLine("MyCapture.TutorialGenerator [--features id,id|all] [--languages ko,en] [--out folder] [--width 960] [--quality 60|bitrate] [--bitrate 300000] [--profile high|main|baseline|default] [--install] [--no-sheets] [--theme system|glass|glass-light|high-contrast] [--accent red]");
             return 2;
         }
 
@@ -57,7 +58,13 @@ internal static class Program
             new System.Windows.Threading.DispatcherSynchronizationContext(System.Windows.Threading.Dispatcher.CurrentDispatcher));
         Application app = CreateResourceHost();
         FluidMotion.AnimationsEnabledOverrideForTest = false;
-        ThemeService.Apply(AppTheme.Glass);
+        // App normally wires this preference at startup. The resource-only host must use the
+        // new-install preference too, otherwise null means every editor key caption is visible.
+        bool showShortcutHints = MyCapture.Core.Settings.NewInstallDefaults.Create().General.ShowShortcutHints;
+        ShortcutPresentation.ReadEnabled = () => showShortcutHints;
+        ShortcutPresentation.Refresh();
+        // The product clips use the defaults (Glass, red accent); review renders may pick others.
+        ThemeService.ApplyFromSettings(options.Theme, captureGuideColor: null, accentColor: options.Accent);
         Stage.Scale = options.Width / Stage.Width;
         // The generator drives real product windows. A previous version created the resident App,
         // which ran retention cleanup on the owner's library and rewrote the sign-in Run entry to
@@ -166,7 +173,7 @@ internal static class Program
         {
             Product = typeof(TutorialCatalog).Assembly.GetName().Version?.ToString(),
             ProductDllSha256 = Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(dll))),
-            Theme = "Glass (default)",
+            options.Theme, options.Accent,
             Resolution = $"{Stage.PixelWidth}x{Stage.PixelHeight}",
             options.Bitrate, options.Quality, options.Profile,
             Fps = TutorialStoryboard.Fps,
@@ -223,8 +230,16 @@ internal static class Program
         long renderMs = clock.ElapsedMilliseconds;
         if (options.Sheets)
         {
-            List<(double Ms, string Label)> chosen = keys.Count <= 12 ? keys
-                : Enumerable.Range(0, 12).Select(i => keys[(int)Math.Round(i * (keys.Count - 1) / 11.0)]).ToList();
+            // Every clip's review starts with its exact first, middle and last frames. The
+            // remaining cells preserve the storyboard's important actions and held states.
+            List<(double Ms, string Label)> chosen =
+            [
+                (0, "first"),
+                (frame * 500.0 / TutorialStoryboard.Fps, "middle"),
+                ((frame - 1) * 1000.0 / TutorialStoryboard.Fps, "last"),
+            ];
+            chosen.AddRange(keys.Count <= 9 ? keys
+                : Enumerable.Range(0, 9).Select(i => keys[(int)Math.Round(i * (keys.Count - 1) / 8.0)]));
             ClipReview.SaveSheet(mp4, chosen, Path.Combine(options.Output, $"{feature}.{language}.sheet.png"));
         }
 
@@ -258,7 +273,7 @@ internal static class Program
     }
 
     private sealed record Options(IReadOnlyList<string> Features, IReadOnlyList<string> Languages, string Output, int Width, int Bitrate,
-        int? Quality, int? Profile, bool Install, bool Sheets)
+        int? Quality, int? Profile, bool Install, bool Sheets, string Theme, string Accent)
     {
         internal static Options Parse(string[] args)
         {
@@ -268,6 +283,7 @@ internal static class Program
             int width = 960, bitrate = DefaultBitrate;
             int? quality = DefaultQuality, profile = 100;
             bool install = false, sheets = true;
+            string theme = AppThemeNames.Glass, accent = AppAccentNames.Red;
             for (int i = 0; i < args.Length; i++)
             {
                 string Next() => i + 1 < args.Length ? args[++i] : throw new ArgumentException($"{args[i]} needs a value.");
@@ -285,9 +301,25 @@ internal static class Program
                     case "--profile": profile = Next() switch { "high" => 100, "main" => 77, "baseline" => 66, "default" => null, _ => throw new ArgumentException("Profile is high, main, baseline or default.") }; break;
                     case "--install": install = true; break;
                     case "--no-sheets": sheets = false; break;
+                    case "--theme": theme = Next(); break;
+                    case "--accent": accent = Next(); break;
                     default: throw new ArgumentException($"Unknown argument {args[i]}.");
                 }
             }
+
+            // Accept the previous CLI names before canonicalizing; comparing the saved name
+            // with the input would reject valid legacy aliases after the palette migration.
+            string[] acceptedThemes = ["system", "glass", "glass-light", "midnight", "daylight", "workspace",
+                "high-contrast", "highcontrast", "light", "mica", "acrylic", "mica-light", "light-glass"];
+            if (!acceptedThemes.Contains(theme, StringComparer.OrdinalIgnoreCase))
+                throw new ArgumentException("Theme is system, glass, glass-light or high-contrast; legacy theme names are accepted.");
+            if (!new[] { AppAccentNames.Red, AppAccentNames.Violet }.Contains(accent, StringComparer.OrdinalIgnoreCase))
+                throw new ArgumentException("Accent is red or violet.");
+            theme = AppThemeNames.ToSetting(AppThemeNames.Parse(theme));
+            accent = AppAccentNames.ToSetting(AppAccentNames.Parse(accent));
+            // The product assets are the default look; another palette is for review only.
+            if (install && (theme != AppThemeNames.Glass || accent != AppAccentNames.Red))
+                throw new ArgumentException("--install takes the default theme and accent only.");
 
             if (features.Count == 0 || features.Distinct().Count() != features.Count || features.Except(all).Any())
                 throw new ArgumentException("Unknown or duplicate feature id.");
@@ -297,7 +329,7 @@ internal static class Program
             output ??= Path.Combine(RepositoryRoot(), "artifacts", "tutorials", DateTime.Now.ToString("yyyyMMdd-HHmmss", CultureInfo.InvariantCulture));
             if (Directory.Exists(output) && Directory.EnumerateFileSystemEntries(output).Any())
                 throw new ArgumentException($"Output folder is not empty: {output}");
-            return new Options(features, languages, output, width, bitrate, quality, profile, install, sheets);
+            return new Options(features, languages, output, width, bitrate, quality, profile, install, sheets, theme, accent);
         }
     }
 }

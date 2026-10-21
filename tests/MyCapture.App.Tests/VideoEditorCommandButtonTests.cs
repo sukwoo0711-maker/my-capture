@@ -8,6 +8,7 @@ using System.Windows.Media;
 using MyCapture.App.Recording;
 using MyCapture.App.Themes;
 using MyCapture.Core.Localization;
+using MyCapture.Core.Recording;
 using Xunit;
 using static MyCapture.App.Tests.VideoEditorUxTrimTests;
 
@@ -31,16 +32,18 @@ public sealed class VideoEditorCommandButtonTests
             ShortcutPresentation.ReadEnabled = () => hints;
             ShortcutPresentation.Refresh();
             editor = OpenLayout(width);
+            editor.SetDetailsExpandedForTest(true);
+            editor.UpdateLayout();
             var layout = (Grid)editor.Content;
-            Grid bar = Assert.Single(Descendants(layout).OfType<Grid>(), element => element.Name == "VideoEditorCommandBar");
-            StackPanel transport = Assert.Single(Descendants(layout).OfType<StackPanel>(), element => element.Name == "VideoTransport");
-            StackPanel view = Assert.Single(Descendants(layout).OfType<StackPanel>(), element => element.Name == "VideoTimelineViewTools");
+            Grid bar = Named<Grid>(editor, "VideoEditorCommandBar");
+            Grid transport = Named<Grid>(editor, "VideoTransport");
+            StackPanel precise = Named<StackPanel>(editor, "VideoPreciseTransport");
             foreach (bool enabled in new[] { false, true, false, true })
             {
                 hints = enabled;
                 ShortcutPresentation.Refresh();
                 editor.Dispatcher.Invoke(System.Windows.Threading.DispatcherPriority.ApplicationIdle, new Action(editor.UpdateLayout));
-                foreach (FrameworkElement row in new FrameworkElement[] { bar, transport, view })
+                foreach (FrameworkElement row in new FrameworkElement[] { bar, transport, precise })
                 {
                     ButtonBase[] buttons = Descendants(row).OfType<ButtonBase>().Where(button => button.IsVisible).ToArray();
                     Assert.NotEmpty(buttons);
@@ -49,25 +52,25 @@ public sealed class VideoEditorCommandButtonTests
                         Assert.Equal(44, button.ActualHeight);
                         Assert.Equal(new Thickness(10, 4, 10, 4), button.Padding);
                         Assert.Equal(new Thickness(3, 0, 3, 0), button.Margin);
-                        Grid face = Assert.IsType<Grid>(button.Content);
-                        Assert.Equal("CommandButtonFace", face.Name);
-                        RowDefinition hintRow = face.RowDefinitions[1];
-                        Assert.Equal(new GridLength(14), hintRow.Height);
-                        double scale = VisualTreeHelper.GetDpi(face).DpiScaleY;
-                        Assert.Equal(Math.Round(14 * scale), hintRow.ActualHeight * scale, 6);
                         AssertInside(button, layout, layout.ActualHeight);
+                        string gesture = AutomationProperties.GetAcceleratorKey(button);
+                        if (!string.IsNullOrEmpty(gesture))
+                            Assert.Contains(gesture, Assert.IsType<string>(button.ToolTip));
                     }
                 }
-                foreach (ButtonBase button in Descendants(bar).OfType<ButtonBase>().Where(button => button.IsVisible))
+                foreach (ButtonBase button in Descendants(bar).OfType<ButtonBase>())
+                {
+                    string gesture = AutomationProperties.GetAcceleratorKey(button);
+                    if (!string.IsNullOrEmpty(gesture))
+                        Assert.DoesNotContain(Descendants(button).OfType<TextBlock>(), text => text.IsVisible && text.Text == gesture);
+                }
+                foreach (ButtonBase button in Descendants(precise).OfType<ButtonBase>())
                 {
                     string gesture = AutomationProperties.GetAcceleratorKey(button);
                     if (string.IsNullOrEmpty(gesture)) continue;
                     TextBlock hint = Assert.Single(Descendants(button).OfType<TextBlock>(), text => text.Text == gesture);
                     Assert.Equal(enabled ? Visibility.Visible : Visibility.Collapsed, hint.Visibility);
                 }
-                double transportRight = transport.TranslatePoint(new Point(transport.ActualWidth, 0), layout).X;
-                double viewLeft = view.TranslatePoint(default, layout).X;
-                Assert.True(viewLeft > transportRight, $"timeline view starts at {viewLeft}, transport ends at {transportRight}");
                 ButtonBase[] commands = Descendants(bar).OfType<ButtonBase>().Where(button => button.IsVisible)
                     .OrderBy(button => button.TranslatePoint(default, bar).X).ToArray();
                 for (int index = 1; index < commands.Length; index++)
@@ -89,88 +92,66 @@ public sealed class VideoEditorCommandButtonTests
     [Theory]
     [InlineData("ko-KR")]
     [InlineData("en-US")]
-    public void NarrowToolbarKeepsNamedTrimAndSplitAndMovesSecondaryActionsToMore(string language) => StaTestHost.Run(() =>
+    public void ToolbarKeepsTrimAndTextWhileRareCommandsStayInMoreAtEveryWidth(string language) => StaTestHost.Run(() =>
     {
         using var culture = UiText.UseLanguage(language);
         VideoEditorWindow editor = OpenLayout(760);
         try
         {
-            foreach (string field in new[] { "_trimToolButton", "_splitToolButton" })
+            foreach (int width in new[] { 760, 1400, 760 })
             {
-                Button tool = Field<Button>(editor, field);
-                Assert.True(tool.IsVisible);
-                Assert.Contains(Descendants(tool).OfType<TextBlock>(), text => text.IsVisible && text.Text == AutomationProperties.GetName(tool));
+                editor.Width = width;
+                editor.UpdateLayout();
+                foreach (string field in new[] { "_trimToolButton", "_addTextToolButton", "_exportToolButton" })
+                {
+                    Button tool = Field<Button>(editor, field);
+                    Assert.True(tool.IsVisible);
+                    AssertInside(tool, (Grid)editor.Content, ((Grid)editor.Content).ActualHeight);
+                }
+                Button more = Field<Button>(editor, "_moreToolsButton");
+                Assert.True(more.IsVisible);
+                ContextMenu menu = Assert.IsType<ContextMenu>(more.ContextMenu);
+                foreach ((string key, string hint) in new[]
+                {
+                    ("VideoMulticut_Split", "Ctrl+K"), ("VideoEditorUx_FrameImageEdit", "E"),
+                })
+                {
+                    MenuItem item = Assert.Single(menu.Items.OfType<MenuItem>(), candidate => (string)candidate.Header == UiText.Get(key));
+                    Assert.Equal(Visibility.Visible, item.Visibility);
+                    Assert.Equal(hint, item.InputGestureText);
+                    Assert.Contains(hint, Assert.IsType<string>(item.ToolTip));
+                }
+                Assert.False(Field<Button>(editor, "_splitToolButton").IsVisible);
+                Assert.False(Field<Button>(editor, "_frameEditToolButton").IsVisible);
+                Button frame = Field<Button>(editor, "_frameEditToolButton");
+                MenuItem frameItem = Assert.Single(menu.Items.OfType<MenuItem>(), item => item.InputGestureText == "E");
+                frame.IsEnabled = false;
+                Assert.False(frameItem.IsEnabled);
+                frame.IsEnabled = true;
+                Assert.True(frameItem.IsEnabled);
             }
-            Button more = Field<Button>(editor, "_moreToolsButton");
-            Assert.True(more.IsVisible);
-            ContextMenu menu = Assert.IsType<ContextMenu>(more.ContextMenu);
-            foreach ((string key, string hint) in new[]
-            {
-                ("VideoEditorUx_AddText", "Ctrl+T"),
-                ("VideoEditorUx_FrameImageEdit", "E"),
-                ("VideoEditorUx_LayerPanel", string.Empty),
-            })
-            {
-                MenuItem item = Assert.Single(menu.Items.OfType<MenuItem>(), candidate => (string)candidate.Header == UiText.Get(key));
-                Assert.Equal(Visibility.Visible, item.Visibility);
-                Assert.Equal(hint, item.InputGestureText);
-            }
-            MenuItem layers = Assert.Single(menu.Items.OfType<MenuItem>(), item => item.IsCheckable);
-            Assert.False(editor.IsLayerPanelVisibleForTest);
-            layers.RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
-            editor.UpdateLayout();
-            Assert.True(editor.IsLayerPanelVisibleForTest);
-            Assert.True(layers.IsChecked);
-            layers.RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
-            editor.UpdateLayout();
-            Assert.False(editor.IsLayerPanelVisibleForTest);
-            Button frame = Field<Button>(editor, "_frameEditToolButton");
-            MenuItem frameItem = Assert.Single(menu.Items.OfType<MenuItem>(), item => item.InputGestureText == "E");
-            frame.IsEnabled = false;
-            Assert.False(frameItem.IsEnabled);
-            frame.IsEnabled = true;
-            Assert.True(frameItem.IsEnabled);
-
-            editor.FitCommandBarForTest(1360);
-            editor.UpdateLayout();
-            Assert.False(more.IsVisible);
-            Assert.True(frame.IsVisible);
-            Assert.All(menu.Items.OfType<MenuItem>(), item => Assert.Equal(Visibility.Collapsed, item.Visibility));
         }
         finally { editor.Close(); }
     });
 
     [Fact]
-    public void LayerCountRefitsTheToolbarEvenWhenPanelVisibilityWasChosenByTheUser() => StaTestHost.Run(() =>
+    public void LayerChangesKeepToolbarActionsAndTheDetailsChoiceStable() => StaTestHost.Run(() =>
     {
-        VideoEditorWindow editor = OpenLayout(1400);
+        VideoEditorWindow editor = OpenLayout(760);
         try
         {
-            Grid bar = Assert.Single(Descendants(editor).OfType<Grid>(), element => element.Name == "VideoEditorCommandBar");
-            const BindingFlags flags = BindingFlags.Instance | BindingFlags.NonPublic;
-            MethodInfo sync = typeof(VideoEditorWindow).GetMethod("SyncLayerPanelToLayers", flags)!;
-            FieldInfo refitField = typeof(VideoEditorWindow).GetField("_refitCommandBar", flags)!;
-            Action originalRefit = Field<Action>(editor, "_refitCommandBar");
-            ToggleButton layers = Field<ToggleButton>(editor, "_layerPanelToggle");
-            layers.IsChecked = true;
-            layers.IsChecked = false;
-            sync.Invoke(editor, [0]);
-            editor.FitCommandBarForTest(2000);
-            double available = bar.Children.OfType<UIElement>().Sum(child => child.DesiredSize.Width) + 2;
-            try
+            Grid bar = Named<Grid>(editor, "VideoEditorCommandBar");
+            string[] before = Descendants(bar).OfType<Button>().Where(button => button.IsVisible).Select(AutomationProperties.GetName).ToArray();
+            foreach (bool details in new[] { false, true, false })
             {
-                refitField.SetValue(editor, new Action(() => editor.FitCommandBarForTest(available)));
-                editor.FitCommandBarForTest(available);
-                Assert.Equal(0, editor.CommandBarLevelForTest);
-                sync.Invoke(editor, [100]);
-                Assert.True(editor.CommandBarLevelForTest > 0);
-                Assert.False(layers.IsChecked);
-                Assert.Equal("100", Field<TextBlock>(editor, "_layerPanelCount").Text);
-                sync.Invoke(editor, [0]);
-                Assert.Equal(0, editor.CommandBarLevelForTest);
-                Assert.False(layers.IsChecked);
+                editor.SetDetailsExpandedForTest(details);
+                typeof(VideoEditorWindow).GetMethod("AddShapeLayer", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(editor, [false]);
+                Assert.Single(Field<VideoEditDocument>(editor, "_editDocument").FrameEditLayers);
+                Assert.True(editor.HandleShortcut(System.Windows.Input.Key.Z, System.Windows.Input.ModifierKeys.Control));
+                editor.UpdateLayout();
+                Assert.Equal(details, editor.AreDetailsExpandedForTest);
+                Assert.Equal(before, Descendants(bar).OfType<Button>().Where(button => button.IsVisible).Select(AutomationProperties.GetName).ToArray());
             }
-            finally { refitField.SetValue(editor, originalRefit); }
         }
         finally { editor.Close(); }
     });
@@ -178,36 +159,28 @@ public sealed class VideoEditorCommandButtonTests
     [Theory]
     [InlineData("ko-KR")]
     [InlineData("en-US")]
-    public void HistoryAndLayerActionsKeepTheirShortLabelsAndSharedHeight(string language) => StaTestHost.Run(() =>
+    public void HistoryUsesIconsAndLayerActionsKeepTheirShortLabelsAndSharedHeight(string language) => StaTestHost.Run(() =>
     {
         using var culture = UiText.UseLanguage(language);
         VideoEditorWindow editor = OpenLayout(760);
         try
         {
-            Field<ToggleButton>(editor, "_layerPanelToggle").IsChecked = true;
+            editor.SetDetailsExpandedForTest(true);
             editor.UpdateLayout();
-            foreach ((string field, string key, double height) in new[]
-            {
-                ("_undoButton", "Text_CE706412FA75", 44d),
-                ("_redoButton", "Text_078C44D5A66E", 44d),
-                ("_editTextButton", "Text_87B0ACEF85A7", 36d),
-                ("_deleteTextButton", "Text_6139B6C3ED73", 36d),
-            })
+            foreach (string field in new[] { "_undoButton", "_redoButton" })
             {
                 Button button = Field<Button>(editor, field);
-                if (!button.IsVisible)
-                {
-                    Assert.Contains(field, new[] { "_undoButton", "_redoButton" });
-                    MenuItem item = Assert.Single(Field<Button>(editor, "_moreToolsButton").ContextMenu!.Items.OfType<MenuItem>(), item =>
-                        (string)item.Header == UiText.Get(key));
-                    Assert.Equal(Visibility.Visible, item.Visibility);
-                    Assert.Equal(AutomationProperties.GetAcceleratorKey(button), item.InputGestureText);
-                    continue;
-                }
+                Assert.True(button.IsVisible);
+                Assert.Equal(44, button.ActualHeight);
+                Assert.DoesNotContain(Descendants(button).OfType<TextBlock>(), text => text.IsVisible && !string.IsNullOrEmpty(text.Text));
+                Assert.Contains(AutomationProperties.GetAcceleratorKey(button), Assert.IsType<string>(button.ToolTip));
+            }
+            foreach ((string field, string key) in new[] { ("_editTextButton", "Text_87B0ACEF85A7"), ("_deleteTextButton", "Text_6139B6C3ED73") })
+            {
+                Button button = Field<Button>(editor, field);
                 TextBlock label = Assert.Single(Descendants(button).OfType<TextBlock>(), text => text.Text == UiText.Get(key));
                 Assert.True(label.IsVisible);
-                Assert.Equal(height, button.ActualHeight);
-                AssertInside(button, (Grid)editor.Content, ((Grid)editor.Content).ActualHeight);
+                Assert.Equal(36, button.ActualHeight);
                 Assert.True(label.ActualWidth + 0.5 >= label.DesiredSize.Width - label.Margin.Left - label.Margin.Right);
             }
         }
@@ -215,54 +188,43 @@ public sealed class VideoEditorCommandButtonTests
     });
 
     [Fact]
-    public void OverflowZoomOpensTheDetailedTimelineLikeItsVisibleButton() => StaTestHost.Run(() =>
+    public void OverflowZoomOpensTheDetailedTimelineWithoutOpeningTheInspector() => StaTestHost.Run(() =>
     {
         VideoEditorWindow editor = OpenLayout(760);
         try
         {
-            Button more = Assert.Single(Descendants(editor).OfType<Button>(), button => button.Name == "VideoTimelineMoreTools");
+            Button more = Field<Button>(editor, "_moreToolsButton");
             Assert.True(more.IsVisible);
             foreach (string command in new[] { "ZoomIn", "ZoomOut" })
             {
-                Field<ToggleButton>(editor, "_detailToggle").IsChecked = false;
-                Assert.False(editor.TimelineForTest.DetailVisible);
+                editor.TimelineForTest.SetDetailVisible(false);
                 MenuItem zoom = Assert.Single(more.ContextMenu!.Items.OfType<MenuItem>(), item =>
                     item.InputGestureText == ShortcutCatalog.Get(ShortcutScope.Video, command).Hint);
                 Assert.True(zoom.IsEnabled);
                 zoom.RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
                 Assert.True(editor.TimelineForTest.DetailVisible);
-                Assert.True(Field<ToggleButton>(editor, "_detailToggle").IsChecked);
+                Assert.False(editor.AreDetailsExpandedForTest);
             }
         }
         finally { editor.Close(); }
     });
 
     [Fact]
-    public void OverflowExportOpensTheDefaultVideoDialog() => StaTestHost.Run(() =>
+    public void VisibleExportOpensTheDefaultVideoDialog() => StaTestHost.Run(() =>
     {
         VideoEditorWindow editor = OpenLayout(760);
         VideoExportDialog? hosted = null;
         try
         {
             editor.ExportDialogHostForTest = dialog => hosted = dialog;
-            editor.FitCommandBarForTest(500);
-            editor.UpdateLayout();
-            Button more = Field<Button>(editor, "_moreToolsButton");
-            MenuItem export = Assert.Single(more.ContextMenu!.Items.OfType<MenuItem>(), item =>
-                (string)item.Header == UiText.Get("MediaExport_ExportFormats"));
-            Assert.True(more.IsVisible);
-            Assert.Equal(Visibility.Visible, export.Visibility);
-            Assert.True(export.IsEnabled);
-            export.RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
+            Button export = Field<Button>(editor, "_exportToolButton");
+            Assert.True(export.IsVisible && export.IsEnabled);
+            export.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
             Assert.NotNull(hosted);
             Assert.False(hosted.IsGif);
             Assert.Same(editor, hosted.Owner);
         }
-        finally
-        {
-            hosted?.Close();
-            editor.Close();
-        }
+        finally { hosted?.Close(); editor.Close(); }
     });
 
     [Fact]
@@ -272,15 +234,22 @@ public sealed class VideoEditorCommandButtonTests
         try
         {
             SymbolIcon trim = Assert.Single(Descendants(Field<Button>(editor, "_trimToolButton")).OfType<SymbolIcon>());
-            SymbolIcon split = Assert.Single(Descendants(Field<Button>(editor, "_splitToolButton")).OfType<SymbolIcon>());
+            Button splitButton = Field<Button>(editor, "_splitToolButton");
+            splitButton.Resources.MergedDictionaries.Add(editor.Resources);
+            SymbolIcon split = Assert.Single(Descendants((DependencyObject)splitButton.Content).OfType<SymbolIcon>());
             Assert.Same(editor.FindResource("Icon.Trim"), trim.Data);
+            // The menu-only command is not in the window's visual tree, so resolve its dynamic
+            // icon resource against the owning editor explicitly before checking the geometry.
             Assert.Same(editor.FindResource("Icon.Split"), split.Data);
-            Assert.NotEqual(Assert.IsAssignableFrom<Geometry>(trim.Data).ToString(), Assert.IsAssignableFrom<Geometry>(split.Data).ToString());
+            Assert.NotEqual(Assert.IsAssignableFrom<Geometry>(trim.Data).ToString(), Assert.IsAssignableFrom<Geometry>(editor.FindResource("Icon.Split")).ToString());
             Assert.Equal(CommandButtonPresentation.IconSize, trim.Size);
             Assert.Equal(CommandButtonPresentation.IconSize, split.Size);
         }
         finally { editor.Close(); }
     });
+
+    private static T Named<T>(DependencyObject root, string name) where T : FrameworkElement =>
+        Assert.Single(Descendants(root).OfType<T>(), element => element.Name == name);
 
     private static VideoEditorWindow OpenLayout(int width) => OpenReadyEditor(
         Path.Combine(AppContext.BaseDirectory, "button-spec-in-memory"), 10_000, show: true, width, 760);

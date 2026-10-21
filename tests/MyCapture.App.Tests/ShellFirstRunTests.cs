@@ -22,7 +22,7 @@ using Xunit;
 namespace MyCapture.App.Tests;
 
 /// <summary>
-/// The shell a new user meets: start at sign-in offered on the welcome, the retention sentence,
+/// The shell a new user meets: start at sign-in offered on the welcome, deferred retention details,
 /// the "ready" notification only when it says something new, notifications on the pointer's
 /// monitor in the shared card chrome, the engagement card as an overlay, one draft recovery
 /// dialog and tutorials that lead to the unassigned shortcut's settings row.
@@ -89,7 +89,7 @@ public sealed class ShellFirstRunTests
             Assert.Equal(UiText.Get("Onboard_StartAtSignInHelp"), AutomationProperties.GetHelpText(welcome.StartAtSignInCheck));
             welcome.StartAtSignInCheck.IsChecked = false;
             Assert.False(welcome.StartAtSignIn);
-            Assert.Equal("Images are deleted after 7 days unless kept or filed in a folder.", welcome.RetentionText);
+            Assert.Same(welcome.StartAtSignInCheck, FirstRunWelcomeTests.Descendants(welcome).OfType<CheckBox>().Single());
         }
         finally { welcome.Close(); }
     });
@@ -100,11 +100,19 @@ public sealed class ShellFirstRunTests
     [InlineData("ko-KR", 0, "이미지는 1시간 뒤 자동 삭제됩니다. 보관하거나 폴더에 넣은 항목은 유지됩니다.")]
     [InlineData("en-US", 24, "Images are deleted after 1 day unless kept or filed in a folder.")]
     [InlineData("en-US", 720, "Images are deleted after 30 days unless kept or filed in a folder.")]
-    public void RetentionSentenceFollowsTheRetentionTheLibraryApplies(string locale, int hours, string expected)
+    public void WelcomeDefersRetentionDetailsForEveryLibraryRetention(string locale, int hours, string previousSentence) => StaTestHost.Run(() =>
     {
         using var language = UiText.UseLanguage(locale);
-        Assert.Equal(expected, WelcomeWindow.RetentionSentence(hours));
-    }
+        var welcome = new WelcomeWindow(new HotkeySettings(), AfterCaptureAction.QuickAccess, hours);
+        try
+        {
+            Assert.DoesNotContain(FirstRunWelcomeTests.Descendants(welcome).OfType<TextBlock>(), text =>
+                text.Text == previousSentence || AutomationProperties.GetName(text) == previousSentence);
+            Assert.Contains(FirstRunWelcomeTests.Descendants(welcome).OfType<TextBlock>(), text => text.Text == UiText.Get("Welcome_FirstCaptureTitle"));
+            Assert.True(welcome.StartAtSignIn);
+        }
+        finally { welcome.Close(); }
+    });
 
     // ---- Ready notification ---------------------------------------------------------------
 
@@ -446,6 +454,9 @@ public sealed class ShellFirstRunTests
         try
         {
             HotkeySettings keys = NewInstallDefaults.Create().Hotkeys;
+            Assert.False(FeatureTutorialWindow.OffersSetShortcut(TutorialCatalog.Get("pin-clipboard"), keys));
+            keys.PasteToScreen = Hotkey.None;
+            keys.HideAllPins = Hotkey.None;
             Assert.True(FeatureTutorialWindow.OffersSetShortcut(TutorialCatalog.Get("pin-clipboard"), keys));
             Assert.False(FeatureTutorialWindow.OffersSetShortcut(TutorialCatalog.Get("capture-region"), keys));
             Assert.False(FeatureTutorialWindow.OffersSetShortcut(TutorialCatalog.Get("image-rectangle"), keys));
