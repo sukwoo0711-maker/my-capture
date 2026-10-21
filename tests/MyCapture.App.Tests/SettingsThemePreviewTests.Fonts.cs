@@ -24,7 +24,13 @@ public sealed partial class SettingsThemePreviewTests
             Application application = CreateThemedApplication();
             try
             {
-                foreach (string language in new[] { "ko-KR", "en-US" })
+                // Korean last. On the CI runner (.NET 10.0.13) a process that expanded the Korean
+                // installed-font list and then kept running for a few seconds failed fast ("managed
+                // code after the runtime thread state has been destroyed") 7 of 8 times; Korean first
+                // then English failed, English then Korean passed 8 of 8 (diag/ux453-font-crash). It
+                // reproduces without the bundled fonts and not on .NET 10.0.12, so it is tracked
+                // separately rather than in this test. Every assertion still runs in both languages.
+                foreach (string language in new[] { "en-US", "ko-KR" })
                 {
                     using var scope = UiText.UseLanguage(language);
                     var saved = new AppSettings();
