@@ -1,5 +1,6 @@
 using System.Windows;
 using System.Windows.Automation;
+using System.Windows.Automation.Peers;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Interop;
@@ -53,7 +54,7 @@ internal sealed class ThemedShellPresenter(Func<bool> suppressNotification, Func
     /// with <c>IsEnabled</c> false stays visible but cannot be invoked; its <c>ToolTip</c> says why.
     /// </summary>
     internal sealed record MenuEntry(string Label, Action? Action, IReadOnlyList<MenuEntry>? Children = null, string Gesture = "",
-        bool IsEnabled = true, string ToolTip = "")
+        bool IsEnabled = true, string ToolTip = "", bool LiteralLabel = false)
     {
         /// <summary>A divider between groups; it runs nothing.</summary>
         internal static MenuEntry Separator { get; } = new(string.Empty, null) { IsSeparator = true };
@@ -293,9 +294,22 @@ internal sealed class ThemedShellPresenter(Func<bool> suppressNotification, Func
     {
         Dismiss();
         ContextMenu menu = CreateMenu(commands);
-        _menu = menu;
+        TrackMenu(menu);
         menu.IsOpen = true;
     }
+
+    internal void TrackMenu(ContextMenu menu)
+    {
+        _menu = menu;
+        menu.Closed += OnClosed;
+        void OnClosed(object sender, RoutedEventArgs e)
+        {
+            menu.Closed -= OnClosed;
+            if (ReferenceEquals(_menu, menu)) _menu = null;
+        }
+    }
+
+    internal ContextMenu? MenuForTest => _menu;
 
     /// <summary>Builds the themed menu without opening it.</summary>
     internal ContextMenu CreateMenu(IEnumerable<MenuEntry> commands)
@@ -307,6 +321,7 @@ internal sealed class ThemedShellPresenter(Func<bool> suppressNotification, Func
 
     private void AppendEntries(ItemCollection items, IEnumerable<MenuEntry> entries, ContextMenu root)
     {
+        DataTemplate? literalHeaderTemplate = null;
         foreach (MenuEntry entry in entries)
         {
             if (entry.IsSeparator)
@@ -326,7 +341,20 @@ internal sealed class ThemedShellPresenter(Func<bool> suppressNotification, Func
                 continue;
             }
 
-            var item = new MenuItem { Header = entry.Label, MinHeight = 36, InputGestureText = entry.Gesture, IsEnabled = entry.IsEnabled };
+            MenuItem item = entry.LiteralLabel ? new LiteralMenuItem() : new MenuItem();
+            item.Header = entry.Label;
+            item.MinHeight = 36;
+            item.InputGestureText = entry.Gesture;
+            item.IsEnabled = entry.IsEnabled;
+            if (entry.LiteralLabel)
+            {
+                item.HeaderTemplate = literalHeaderTemplate ??= (DataTemplate)System.Windows.Markup.XamlReader.Parse("""
+                    <DataTemplate xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation">
+                        <TextBlock Text="{Binding}" />
+                    </DataTemplate>
+                    """);
+            }
+            AutomationProperties.SetName(item, entry.Label);
             if (entry.Gesture.Length > 0) AutomationProperties.SetAcceleratorKey(item, entry.Gesture);
             if (entry.ToolTip.Length > 0)
             {
@@ -346,6 +374,17 @@ internal sealed class ThemedShellPresenter(Func<bool> suppressNotification, Func
             };
             items.Add(item);
         }
+    }
+
+    // Source titles contain literal underscores, not WPF access-key markers.
+    private sealed class LiteralMenuItem : MenuItem
+    {
+        protected override AutomationPeer OnCreateAutomationPeer() => new LiteralMenuItemAutomationPeer(this);
+    }
+
+    private sealed class LiteralMenuItemAutomationPeer(MenuItem owner) : MenuItemAutomationPeer(owner)
+    {
+        protected override string GetNameCore() => AutomationProperties.GetName(Owner);
     }
 
     /// <summary>

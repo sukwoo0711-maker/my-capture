@@ -82,6 +82,8 @@ internal static class ClipboardImageReader
     {
         internal BitmapSource? CodePreview { get; init; }
 
+        internal PinCodeDocument? CodeDocument { get; init; }
+
         internal static CapturedAttempt Retry() =>
             new(
                 ClipboardImageOutcome.Busy(),
@@ -187,7 +189,9 @@ internal static class ClipboardImageReader
 
         if (captured.CodePreview is not null && captured.OriginalText is not null)
         {
-            return PinReadAttempt.Success(PinContent.FromText(captured.CodePreview, captured.OriginalText, false));
+            return PinReadAttempt.Success(captured.CodeDocument is not null
+                ? PinContent.FromCode(captured.CodePreview, captured.OriginalText, captured.CodeDocument)
+                : PinContent.FromText(captured.CodePreview, captured.OriginalText, false));
         }
 
         ReadAttempt image = await CompleteCapturedAttemptWithFallbackAsync(
@@ -305,11 +309,26 @@ internal static class ClipboardImageReader
                 isTabularText,
                 clipboardSequence,
                 systemImageFallback);
+        PinCodeDocument? codeDocument = originalText is not null && !isTabularText
+            ? ClipboardCodeRenderer.TryParse(originalText, TryGetClipboardString(data, DataFormats.Html, false))
+            : null;
+        BitmapSource? codePreview = null;
+        if (codeDocument is not null)
+        {
+            try
+            {
+                codePreview = ClipboardCodeRenderer.Render(codeDocument);
+            }
+            catch (Exception ex) when (IsRecoverableTextFormatException(ex))
+            {
+                // Keep the same image/plain-text fallback when local text formatting fails.
+                codeDocument = null;
+            }
+        }
         return result with
         {
-            CodePreview = originalText is not null && !isTabularText
-                ? ClipboardCodeRenderer.TryRender(originalText, TryGetClipboardString(data, DataFormats.Html, false))
-                : null,
+            CodeDocument = codeDocument,
+            CodePreview = codePreview,
         };
     }
 

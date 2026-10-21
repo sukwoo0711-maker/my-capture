@@ -60,19 +60,57 @@ internal static class OcrCodeReconstructor
 
     internal static string? EstimateLanguage(string text)
     {
+        try
+        {
+            return EstimateLanguageCore(text);
+        }
+        catch (RegexMatchTimeoutException)
+        {
+            // The language is only a label; a pathological sample leaves it unknown instead of
+            // failing the recognized text it accompanies.
+            return null;
+        }
+    }
+
+    private static string? EstimateLanguageCore(string text)
+    {
         // Bounded, local keyword inference; ties deliberately remain unknown.
         string sample = text.Length > 100_000 ? text[..100_000] : text;
+        const RegexOptions options = RegexOptions.CultureInvariant | RegexOptions.Multiline;
+        TimeSpan timeout = TimeSpan.FromMilliseconds(200);
+        // OCR can separate # from a directive, but English comments need a code-shaped suffix.
+        // Spaced #error has no distinctive suffix, so it remains comment evidence.
+        var directives = new Regex(
+            @"^[^\S\r\n]*#(?:(include|define|undef|if|ifdef|ifndef|elif|else|endif|pragma|error)\b|"
+            + @"[^\S\r\n]+(?:"
+            + @"include[^\S\r\n]*(?:<[^>\r\n]+>|""[^""\r\n]+"")|"
+            + @"define[^\S\r\n]+(?:[A-Za-z_]\w*\(|"
+            + @"(?:[A-Z_][A-Z0-9_]*|(?=\w*[_0-9])[A-Za-z_]\w*)(?=[^\S\r\n]|\r?$))|"
+            + @"(?:ifdef|ifndef|undef)[^\S\r\n]+[A-Za-z_]\w*[^\S\r\n]*(?=\r?$)|"
+            + @"endif[^\S\r\n]*(?://[^\r\n]*|/\*[^\r\n]*\*/[^\S\r\n]*)?(?=\r?$)|"
+            + @"else[^\S\r\n]*(?=\r?$)|"
+            + @"(?:if|elif)[^\S\r\n]+(?:defined\b|[(!0-9]|[A-Z_][A-Z0-9_]*\b)|"
+            + @"pragma[^\S\r\n]+(?:once[^\S\r\n]*(?=\r?$|//|/\*)|"
+            + @"[a-z_][a-z_0-9]*[^\S\r\n]*\(|warning[^\S\r\n]+(?:disable|restore)\b)"
+            + @"))[^\r\n]*",
+            options, timeout);
+        int directiveCount = directives.Matches(sample).Count;
+        // Directive bodies are not Python comments or independent language keywords.
+        string codeSample = directives.Replace(sample, "");
+        // A complete directive-only snippet is enough evidence, even for one #define.
+        if (directiveCount > 0 && string.IsNullOrWhiteSpace(codeSample)) return "C/C++";
         (string Name, string Pattern)[] languages =
         [
-            ("C#", @"\b(namespace|using|public|private|internal|protected|async|Task|Console|IEnumerable)\b|=>"),
+            ("C/C++", @"\bstd\s*::|\b(nullptr|typedef)\b|\bprintf\s*\(|\bint\s+main\s*\("),
+            ("C#", @"\b(namespace|using|public|private|internal|protected|async|Task|Console|IEnumerable)\b|=>|^[^\S\r\n]*#[^\S\r\n]*(region|endregion|nullable)\b"),
             ("JavaScript", @"\b(function|const|let|var|console|document|require|export|import)\b|===|!=="),
-            ("Python", @"\b(def|elif|lambda|self|None|True|False|print|import|from)\b|^\s*#|^\s*for\s+[^\r\n]+\s+in\s+[^\r\n]+:\s*$"),
+            ("Python", @"\b(def|elif|lambda|self|None|True|False|print|import|from)\b|^[^\S\r\n]*#(?![^\S\r\n]*(region|endregion|nullable)\b)|^[^\S\r\n]*for\s+[^\r\n]+\s+in\s+[^\r\n]+:[^\S\r\n]*\r?$"),
             ("SQL", @"\b(SELECT|FROM|WHERE|JOIN|INSERT|UPDATE|DELETE|CREATE|GROUP\s+BY|ORDER\s+BY|VALUES)\b"),
         ];
-        var scores = languages.Select(language => (language.Name, Score: Regex.Matches(sample,
-            language.Pattern, RegexOptions.CultureInvariant | RegexOptions.Multiline
-                | (language.Name == "SQL" ? RegexOptions.IgnoreCase : RegexOptions.None),
-            TimeSpan.FromMilliseconds(200)).Count)).OrderByDescending(value => value.Score).ToArray();
+        var scores = languages.Select(language => (language.Name, Score: Regex.Matches(codeSample,
+            language.Pattern, options | (language.Name == "SQL" ? RegexOptions.IgnoreCase : RegexOptions.None),
+            timeout).Count + (language.Name == "C/C++" ? directiveCount : 0)))
+            .OrderByDescending(value => value.Score).ToArray();
         return scores[0].Score >= 2 && scores[0].Score > scores[1].Score ? scores[0].Name : null;
     }
 }

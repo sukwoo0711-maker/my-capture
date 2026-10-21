@@ -77,7 +77,7 @@
              even though menu items are outside the visual tree. -->
         <ContextMenu x:Key="Gallery.TileContextMenu" x:Shared="False"
                      DataContext="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}">
-            <MenuItem Header="{loc:Text Gallery.Float}" CommandParameter="{Binding}" Click="OnFloatClick"
+            <MenuItem Header="{loc:Text Gallery.Float}" CommandParameter="{Binding}" Click="OnFloatClick" InputGestureText="P"
                       AutomationProperties.Name="{loc:Text Gallery.Float}"
                       Visibility="{Binding IsImage, Converter={StaticResource BoolToVisibility}}" />
             <MenuItem Header="{loc:Text Text_42A667BC71B0}" CommandParameter="{Binding}" Click="OnCopyClick" InputGestureText="Ctrl+C"
@@ -91,7 +91,7 @@
             <MenuItem Header="{Binding IsPinned, Converter={StaticResource PinLabel}}"
                       CommandParameter="{Binding}"
                       AutomationProperties.Name="{loc:Text LibraryUx_KeepToggleName}"
-                      InputGestureText="P"
+                      InputGestureText="K"
                       Click="OnPinMenuClick" />
             <MenuItem Header="{loc:Text Text_854582314EBD}"
                       CommandParameter="{Binding}"

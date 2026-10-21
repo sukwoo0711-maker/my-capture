@@ -56,8 +56,8 @@ internal sealed class PinWindow : Window
     /// </summary>
     private const double FrameClipInsetDip = 0.5;
 
-    private readonly PinContent _content;
-    private readonly BitmapSource _image;
+    private PinContent _content;
+    private BitmapSource _image => _content.Image;
     private readonly PinContentKind _contentKind;
     private readonly string? _originalText;
     private readonly PinViewState _state;
@@ -96,6 +96,8 @@ internal sealed class PinWindow : Window
     private bool _saveInProgress;
     private MenuItem? _restoreClosedItem;
     private MenuItem? _clickThroughItem;
+    private MenuItem? _selectTextItem;
+    private PinTextSelectionView? _textSelection;
     private RectD? _restorePhysicalBounds;
 
     internal PinWindow(
@@ -108,7 +110,6 @@ internal sealed class PinWindow : Window
     {
         ArgumentNullException.ThrowIfNull(content);
         _content = content;
-        _image = content.Image;
         _contentKind = content.Kind;
         _originalText = content.OriginalText;
         SourcePageUrl = content.SourcePageUrl;
@@ -142,6 +143,7 @@ internal sealed class PinWindow : Window
             IsHitTestVisible = false,
         };
         RenderOptions.SetBitmapScalingMode(_imageElement, BitmapScalingMode.HighQuality);
+        UpdateImageRasterLayout();
 
         // The bottom message wraps inside narrow pins. It takes the pointer only to pause its
         // countdown and to offer a close button for a failure; dragging through it still moves the pin.
@@ -205,7 +207,7 @@ internal sealed class PinWindow : Window
             Math.Max(0, FrameCornerRadiusDip - FrameClipInsetDip),
             Math.Max(0, FrameCornerRadiusDip - FrameClipInsetDip));
         _imageElement.Clip = _imageClip;
-        _imageElement.SizeChanged += (_, args) => _imageClip.Rect = ImageClipBounds(args.NewSize);
+        _imageElement.SizeChanged += (_, args) => UpdateImageClip(args.NewSize);
         var outline = new Border
         {
             BorderThickness = new Thickness(FrameThicknessDip),
@@ -279,7 +281,11 @@ internal sealed class PinWindow : Window
         };
         Deactivated += (_, _) => SetChromeActive(false);
         LocationChanged += (_, _) => PlaceHoverBar();
-        SizeChanged += (_, _) => PlaceHoverBar();
+        SizeChanged += (_, _) =>
+        {
+            UpdateImageRasterLayout();
+            PlaceHoverBar();
+        };
     }
 
     /// <summary>How long the hover bar stays after the pointer leaves the pin and the bar.</summary>
@@ -302,7 +308,7 @@ internal sealed class PinWindow : Window
     /// </summary>
     internal void ShowHoverBar()
     {
-        if (_isClosed || _state.IsHidden || _state.IsClickThrough || _dragging || !IsVisible) return;
+        if (_isClosed || _state.IsHidden || _state.IsClickThrough || _dragging || IsTextSelectionMode || !IsVisible) return;
         _hoverHideTimer.Stop();
         PinHoverBar bar = _hoverBar ??= CreateHoverBar();
         if (!bar.IsVisible)
@@ -436,6 +442,12 @@ internal sealed class PinWindow : Window
     /// <summary>The exact retained source string, exposed internally for verification.</summary>
     internal string? OriginalText => _originalText;
 
+    internal bool IsTextSelectionMode => _textSelection is not null;
+
+    internal PinTextSelectionView? TextSelectionForTest => _textSelection;
+
+    internal IPinSelectionFocus SelectionFocus { get; set; } = NativePinSelectionFocus.Instance;
+
     /// <summary>The source page this pin came from, if the clipboard carried one.</summary>
     internal string SourcePageUrl { get; } = string.Empty;
 
@@ -558,6 +570,7 @@ internal sealed class PinWindow : Window
     internal void HidePin()
     {
         _state.IsHidden = true;
+        LeaveTextSelection(restoreFocus: false);
         HideHoverBar();
         if (!FluidMotion.AnimationsEnabled || !IsVisible)
         {
@@ -625,6 +638,46 @@ internal sealed class PinWindow : Window
 
     /// <summary>Clears a completed restore placement request.</summary>
     internal void CompleteRestorePlacement() => _restorePhysicalBounds = null;
+
+    protected override void OnDpiChanged(DpiScale oldDpi, DpiScale newDpi)
+    {
+        RerenderForDisplayScale(newDpi.DpiScaleX);
+        base.OnDpiChanged(oldDpi, newDpi);
+    }
+
+    /// <summary>Changes only the raster; the pin's DIP geometry and interaction state stay intact.</summary>
+    internal void RerenderForDisplayScale(double scale)
+    {
+        if (_isClosed || !_content.CanRerender) return;
+        PinContent rendered = _content.RenderedAt(scale);
+        if (ReferenceEquals(rendered, _content)) return;
+        _content = rendered;
+        _imageElement.Source = rendered.Image;
+        UpdateImageRasterLayout();
+        ViewStateChanged?.Invoke();
+    }
+
+    internal void SimulateDpiChangeForTest(double scale) => RerenderForDisplayScale(scale);
+
+    private void UpdateImageRasterLayout()
+    {
+        if (!_content.CanRerender) return;
+        // The outward-rounded raster may contain a partial DIP of padding. Let the
+        // viewport clip it instead of stretching every glyph to fit that rounding.
+        _imageElement.Stretch = Stretch.None;
+        _imageElement.HorizontalAlignment = HorizontalAlignment.Left;
+        _imageElement.VerticalAlignment = VerticalAlignment.Top;
+        _imageElement.LayoutTransform = new ScaleTransform(_state.Zoom, _state.Zoom);
+        if (_imageClip is not null) UpdateImageClip(_imageElement.RenderSize);
+    }
+
+    private void UpdateImageClip(Size imageSize)
+    {
+        double zoom = _content.CanRerender ? _state.Zoom : 1;
+        Rect bounds = ImageClipBounds(_content.CanRerender ? new Size(_state.WidthDip, _state.HeightDip) : imageSize);
+        _imageClip.Rect = new Rect(bounds.X / zoom, bounds.Y / zoom, bounds.Width / zoom, bounds.Height / zoom);
+        _imageClip.RadiusX = _imageClip.RadiusY = Math.Max(0, FrameCornerRadiusDip - FrameClipInsetDip) / zoom;
+    }
 
     protected override void OnClosing(System.ComponentModel.CancelEventArgs e)
     {
@@ -754,6 +807,7 @@ internal sealed class PinWindow : Window
     protected override void OnMouseLeftButtonDown(MouseButtonEventArgs e)
     {
         base.OnMouseLeftButtonDown(e);
+        if (IsTextSelectionMode) return;
 
         bool ctrl = _dragInput.Modifiers.HasFlag(ModifierKeys.Control);
 
@@ -868,13 +922,31 @@ internal sealed class PinWindow : Window
     protected override void OnMouseWheel(MouseWheelEventArgs e)
     {
         base.OnMouseWheel(e);
+        if (e.Handled) return;
+        HandleMouseWheel(e, Keyboard.Modifiers);
+    }
+
+    protected override void OnPreviewMouseWheel(MouseWheelEventArgs e)
+    {
+        base.OnPreviewMouseWheel(e);
+        if (IsTextSelectionMode) HandleMouseWheel(e, Keyboard.Modifiers);
+    }
+
+    internal void HandleMouseWheel(MouseWheelEventArgs e, ModifierKeys modifiers)
+    {
+        if (!modifiers.HasFlag(ModifierKeys.Control) && _textSelection?.TryScroll(e.Delta) == true)
+        {
+            e.Handled = true;
+            return;
+        }
+
         int notches = e.Delta / 120;
         if (notches == 0)
         {
             return;
         }
 
-        if (Keyboard.Modifiers.HasFlag(ModifierKeys.Control))
+        if (modifiers.HasFlag(ModifierKeys.Control))
         {
             double opacity = AdjustOpacity(OpacityStep * notches);
             ShowFeedback(UiText.Format("Text_C740003A2150", opacity * 100));
@@ -894,7 +966,14 @@ internal sealed class PinWindow : Window
     {
         base.OnKeyDown(e);
 
-        HandleKeyDown(e, Keyboard.Modifiers);
+        if (!e.Handled) HandleKeyDown(e, Keyboard.Modifiers);
+    }
+
+    protected override void OnPreviewKeyDown(KeyEventArgs e)
+    {
+        base.OnPreviewKeyDown(e);
+        // Text controls consume Copy and navigation before the bubbling window handler.
+        if (IsTextSelectionMode) HandleKeyDown(e, Keyboard.Modifiers);
     }
 
     internal void HandleKeyDown(KeyEventArgs e, ModifierKeys modifiers)
@@ -905,6 +984,16 @@ internal sealed class PinWindow : Window
 
         switch (e.Key)
         {
+            case Key.F2:
+                ToggleTextSelection();
+                e.Handled = true;
+                break;
+
+            case Key.Escape when IsTextSelectionMode:
+                LeaveTextSelection();
+                e.Handled = true;
+                break;
+
             case Key.Escape:
             case Key.Delete:
                 // Esc first dismisses a failure message that stays; the next Esc closes the pin.
@@ -936,6 +1025,14 @@ internal sealed class PinWindow : Window
                 e.Handled = true;
                 break;
 
+            case Key.Left or Key.Right or Key.Up or Key.Down when IsTextSelectionMode:
+                if (_textSelection!.TableGrid is not null)
+                {
+                    _textSelection.MoveCell(e.Key, shift);
+                    e.Handled = true;
+                }
+                break;
+
             case Key.Left:
                 MoveBy(-nudge, 0);
                 e.Handled = true;
@@ -958,6 +1055,11 @@ internal sealed class PinWindow : Window
                 e.Handled = true;
                 break;
 
+            case Key.A when ctrl && IsTextSelectionMode:
+                _textSelection!.SelectAll();
+                e.Handled = true;
+                break;
+
             case Key.S when ctrl && shift:
                 RequestSave(PinSaveMode.SaveAs);
                 e.Handled = true;
@@ -968,6 +1070,51 @@ internal sealed class PinWindow : Window
                 e.Handled = true;
                 break;
         }
+    }
+
+    private void ToggleTextSelection()
+    {
+        if (IsTextSelectionMode)
+        {
+            LeaveTextSelection();
+            return;
+        }
+        if (_originalText is null)
+        {
+            ShowFeedback(UiText.Get("Pin_SelectTextImageHint"), FeedbackKind.Result);
+            return;
+        }
+
+        _ctrlClickTimer.Stop();
+        EndDrag();
+        HideHoverBar();
+        var selection = new PinTextSelectionView(_content);
+        var clip = new RectangleGeometry(ImageClipBounds(new Size(Width, Height)),
+            Math.Max(0, FrameCornerRadiusDip - FrameClipInsetDip),
+            Math.Max(0, FrameCornerRadiusDip - FrameClipInsetDip));
+        selection.Clip = clip;
+        selection.SizeChanged += (_, args) => clip.Rect = ImageClipBounds(args.NewSize);
+        selection.ContextMenu = ContextMenu;
+        selection.SetZoom(_state.Zoom);
+        _textSelection = selection;
+        _chrome.Children.Insert(1, selection);
+        if (_selectTextItem is not null) _selectTextItem.IsChecked = true;
+        SelectionFocus.Enter(this, selection);
+        ShowFeedback(UiText.Get("Pin_SelectTextStarted"), FeedbackKind.Result);
+    }
+
+    private void LeaveTextSelection(bool restoreFocus = true)
+    {
+        if (_textSelection is null) return;
+        _chrome.Children.Remove(_textSelection);
+        _textSelection = null;
+        if (_selectTextItem is not null) _selectTextItem.IsChecked = false;
+        if (restoreFocus && IsVisible && !_state.IsHidden && SelectionFocus.IsActive(this))
+        {
+            SelectionFocus.Restore(this);
+        }
+        ShowFeedback(UiText.Get("Pin_SelectTextEnded"), FeedbackKind.Confirmation);
+        if (IsMouseOver) ShowHoverBar();
     }
 
     // ----- State mirroring -----
@@ -1056,6 +1203,7 @@ internal sealed class PinWindow : Window
 
     private void BeginLiveZoom()
     {
+        _textSelection?.SetZoom(_state.Zoom);
         _liveZooming = true;
         RenderOptions.SetBitmapScalingMode(_imageElement, BitmapScalingMode.LowQuality);
         _imageElement.CacheMode ??= new BitmapCache { RenderAtScale = 1, EnableClearType = false, SnapsToDevicePixels = true };
@@ -1114,6 +1262,12 @@ internal sealed class PinWindow : Window
 
     private void CopyImageToClipboard()
     {
+        if (_textSelection?.SelectedOriginalText is { } selection)
+        {
+            ShowFeedback(UiText.Get("Text_BDB7C68F7452"), FeedbackKind.Progress);
+            OriginalTextCopyRequested?.Invoke(this, selection);
+            return;
+        }
         ShowFeedback(UiText.Get("Text_4C160257F02C"), FeedbackKind.Progress);
         CopyRequested?.Invoke(this, new PinImageCopyRequest(_image, SourcePageUrl, _originalText));
     }
@@ -1127,6 +1281,7 @@ internal sealed class PinWindow : Window
     private void HandleCtrlDoubleClick()
     {
         _ctrlClickTimer.Stop();
+        if (IsTextSelectionMode) return;
         if (_originalText is not null)
         {
             RequestOriginalTextCopy();
@@ -1230,6 +1385,7 @@ internal sealed class PinWindow : Window
     /// </summary>
     private void StartCtrlClickCopyDebounce()
     {
+        if (IsTextSelectionMode) return;
         int debounceMs = Math.Max(0, _settings().CtrlClickDebounceMs);
         _ctrlClickTimer.Stop();
 
@@ -1385,6 +1541,10 @@ internal sealed class PinWindow : Window
                 UiText.Get("Text_BB7798D87E07"),
                 "Icon.Copy",
                 UiText.Get("Text_C7011B8D345C")));
+            _selectTextItem = MenuItemFor(UiText.Get("Pin_SelectText"),
+                (_, _) => ToggleTextSelection(), inputGestureText: "F2");
+            _selectTextItem.IsCheckable = true;
+            menu.Items.Add(_selectTextItem);
         }
         else
         {

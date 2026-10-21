@@ -20,7 +20,9 @@ public sealed record PinSessionPin(
     double Zoom,
     double Opacity,
     PinClosedPlacement? Placement,
-    long OpenedOrder = 0);
+    long OpenedOrder = 0,
+    PinTextStyle? TextStyle = null,
+    PinCodeDocument? CodeDocument = null);
 
 /// <param name="PngBytes">Null reuses this content's previously saved PNG.</param>
 public sealed record PinSessionSnapshot(PinSessionPin Pin, byte[]? PngBytes);
@@ -33,6 +35,7 @@ public sealed class PinSessionStore
     // Bound disk usage and launch work while retaining the most recently opened pins.
     public const int DefaultMaxPins = 50;
     public const long DefaultMaxPngBytes = 256L * 1024 * 1024;
+    // Optional rendering metadata is ignored by the 4.5.0 reader, which still restores the PNG.
     private const int SchemaVersion = 1;
     private const string ManifestName = "session.json";
     private static readonly JsonSerializerOptions JsonOptions = new()
@@ -40,7 +43,11 @@ public sealed class PinSessionStore
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
         WriteIndented = true,
         IgnoreReadOnlyProperties = true,
-        Converters = { new JsonStringEnumConverter<PinSessionContentKind>() }
+        Converters =
+        {
+            new JsonStringEnumConverter<PinSessionContentKind>(),
+            new JsonStringEnumConverter<PinTextStyle>()
+        }
     };
     private static readonly uint[] CrcTable = CreateCrcTable();
     private readonly string _root;
@@ -365,9 +372,28 @@ public sealed class PinSessionStore
         try
         {
             using var stream = File.OpenRead(FilePath(ManifestName, ".json"));
-            manifest = JsonSerializer.Deserialize<SessionManifest>(stream, JsonOptions);
-            if (manifest is null || manifest.SchemaVersion != SchemaVersion || manifest.Pins is null)
+            using JsonDocument document = JsonDocument.Parse(stream);
+            JsonElement root = document.RootElement;
+            if (root.ValueKind != JsonValueKind.Object
+                || !root.TryGetProperty("schemaVersion", out JsonElement version)
+                || version.ValueKind != JsonValueKind.Number
+                || !version.TryGetInt32(out int schemaVersion) || schemaVersion != SchemaVersion
+                || !root.TryGetProperty("pins", out JsonElement pins) || pins.ValueKind != JsonValueKind.Array)
                 throw new JsonException("The pin session schema is invalid or unsupported.");
+            var records = new List<PinSessionPin>();
+            foreach (JsonElement item in pins.EnumerateArray())
+            {
+                try
+                {
+                    PinSessionPin? pin = item.Deserialize<PinSessionPin>(JsonOptions);
+                    if (pin is not null) records.Add(pin);
+                }
+                catch (JsonException ex)
+                {
+                    _log.LogWarning(ex, "Skipped an invalid saved pin record.");
+                }
+            }
+            manifest = new SessionManifest(schemaVersion, records);
             _committedReferences = manifest.Pins.Where(pin => pin is not null).Select(pin => pin.Id).ToHashSet();
             _manifestUnreadable = false;
             return true;
@@ -447,7 +473,24 @@ public sealed class PinSessionStore
         && double.IsFinite(pin.ImageHeightDip) && pin.ImageHeightDip > 0
         && double.IsFinite(pin.Zoom) && pin.Zoom > 0
         && double.IsFinite(pin.Opacity) && pin.Opacity is >= 0 and <= 1
+        && HasValidRenderingMetadata(pin)
         && (pin.Placement is not { } placement || (IsFinite(placement.Bounds) && IsFinite(placement.DisplayBounds)));
+
+    private static bool HasValidRenderingMetadata(PinSessionPin pin)
+    {
+        if (pin.TextStyle is not { } style) return pin.CodeDocument is null;
+        if (!Enum.IsDefined(style) || !pin.UsesDeviceIndependentPixels || pin.OriginalText is null)
+            return false;
+        return style switch
+        {
+            PinTextStyle.PlainText => pin.Kind == PinSessionContentKind.Text && pin.CodeDocument is null,
+            PinTextStyle.Grid => pin.Kind == PinSessionContentKind.Table && pin.CodeDocument is null,
+            PinTextStyle.Code => pin.Kind == PinSessionContentKind.Text
+                && pin.CodeDocument is { } document && document.IsValid()
+                && document.MatchesOriginalText(pin.OriginalText),
+            _ => false,
+        };
+    }
 
     private static bool IsFinite(RectD rect) => double.IsFinite(rect.X) && double.IsFinite(rect.Y)
         && double.IsFinite(rect.Width) && double.IsFinite(rect.Height);

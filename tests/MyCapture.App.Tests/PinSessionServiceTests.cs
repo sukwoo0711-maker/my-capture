@@ -8,8 +8,10 @@ using System.Windows.Threading;
 using Microsoft.Extensions.Logging.Abstractions;
 using MyCapture.App.Pinning;
 using MyCapture.Core.Pin;
+using MyCapture.Core.Primitives;
 using MyCapture.Core.Settings;
 using MyCapture.Core.Storage;
+using MyCapture.Platform.Display;
 using MyCapture.Platform.Imaging;
 using Xunit;
 
@@ -110,6 +112,118 @@ public sealed class PinSessionServiceTests
                 Assert.Equal(1.75, saved.Zoom);
                 Assert.Equal(0.55, saved.Opacity);
                 Assert.Equal(pin.GetCurrentPlacement(), saved.Placement);
+            }
+            finally { manager.CloseAllForExit(); }
+        });
+    }
+
+    [Fact]
+    public void Save_AfterDpiChangeWritesCurrentBitmapWithANewContentIdentity()
+    {
+        StaTestHost.Run(() =>
+        {
+            using var workspace = new TempWorkspace();
+            var settings = new PinSettings { RestoreOpenPinsOnLaunch = true };
+            var store = new PinSessionStore(workspace.Paths.PinSessionRoot, NullLogger.Instance);
+            var manager = new PinManager(() => settings, NullLogger.Instance)
+            {
+                ReadPlacementMonitorForTest = () => Monitor(1),
+                BeforeShowForTest = pin => pin.ShowActivated = false,
+                ActivatePinForTest = _ => { },
+            };
+            int encodes = 0;
+            using var service = Create(manager, store, settings,
+                image => { encodes++; return ImageCodec.EncodePng(image); });
+            try
+            {
+                Wait(service.RestoreAsync());
+                const string text = "saved at the current display scale";
+                PinWindow pin = manager.PinRenderedText(ClipboardTextRenderer.Render(text, false), text, false);
+                service.SaveNow();
+                PinSessionSnapshot first = Assert.Single(store.Load());
+                pin.SimulateDpiChangeForTest(2);
+                BitmapSource current = pin.PinnedContent.Image;
+
+                service.SaveNow();
+                PinSessionSnapshot second = Assert.Single(store.Load());
+                BitmapSource saved = Assert.IsAssignableFrom<BitmapSource>(ImageCodec.TryDecodePng(second.PngBytes!));
+
+                Assert.NotEqual(first.Pin.Id, second.Pin.Id);
+                Assert.Equal(2, encodes);
+                Assert.Equal(current.PixelWidth, saved.PixelWidth);
+                Assert.Equal(current.PixelHeight, saved.PixelHeight);
+                Assert.Equal(ImageCodec.EncodePng(current), second.PngBytes);
+                Assert.Equal(PinTextStyle.PlainText, second.Pin.TextStyle);
+                Assert.Equal(text, second.Pin.OriginalText);
+                Assert.Equal(first.Pin.ImageWidthDip, second.Pin.ImageWidthDip);
+                Assert.Equal(first.Pin.ImageHeightDip, second.Pin.ImageHeightDip);
+                Assert.False(File.Exists(Path.Combine(workspace.Paths.PinSessionRoot, $"{first.Pin.Id:N}.png")));
+                service.SaveNow();
+                Assert.Equal(2, encodes);
+                Assert.Equal(second.Pin.Id, Assert.Single(store.Load()).Pin.Id);
+            }
+            finally { manager.CloseAllForExit(); }
+        });
+    }
+
+    [Fact]
+    public void Restore_CodeMetadataRerendersWithColoursWhileLegacyTextKeepsSavedPixels()
+    {
+        StaTestHost.Run(() =>
+        {
+            using var workspace = new TempWorkspace();
+            var settings = new PinSettings { RestoreOpenPinsOnLaunch = true };
+            var store = new PinSessionStore(workspace.Paths.PinSessionRoot, NullLogger.Instance);
+            const string text = "#define MAX_LEN 256";
+            PinCodeDocument document = Assert.IsType<PinCodeDocument>(ClipboardCodeRenderer.TryParse(text,
+                "<pre style=\"background-color:#112233\"><span style=\"color:#FF8800\">#define</span> MAX_LEN 256</pre>"));
+            BitmapSource codeImage = ClipboardCodeRenderer.Render(document, 1);
+            BitmapSource legacyImage = codeImage;
+            byte[] legacyPng = ImageCodec.EncodePng(legacyImage);
+            BitmapSource savedLegacy = Assert.IsAssignableFrom<BitmapSource>(ImageCodec.TryDecodePng(legacyPng));
+            Assert.True(store.Save(
+            [
+                new(new PinSessionPin(Guid.NewGuid(), PinSessionContentKind.Text, text, "", true,
+                    codeImage.Width, codeImage.Height, 1.25, 0.7, null, 1, PinTextStyle.Code, document),
+                    ImageCodec.EncodePng(codeImage)),
+                new(new PinSessionPin(Guid.NewGuid(), PinSessionContentKind.Text, text, "", true,
+                    legacyImage.Width, legacyImage.Height, 1, 1, null, 2), legacyPng),
+            ]));
+            var manager = new PinManager(() => settings, NullLogger.Instance)
+            {
+                ReadPlacementMonitorForTest = () => Monitor(2),
+                ReadRestoreMonitorsForTest = () => [Monitor(2)],
+                BeforeShowForTest = pin => pin.ShowActivated = false,
+                ActivatePinForTest = _ => { },
+            };
+            using var service = Create(manager, store, settings);
+            try
+            {
+                Wait(service.RestoreAsync());
+
+                IReadOnlyList<PinManager.ClosedPin> restored = manager.SnapshotOpenPins();
+                Assert.Equal(2, restored.Count);
+                PinContent code = restored[0].Content;
+                PinContent legacy = restored[1].Content;
+                Assert.True(code.CanRerender);
+                Assert.Equal(PinTextStyle.Code, code.TextStyle);
+                Assert.Equal(192, code.Image.DpiX);
+                Assert.Equal(codeImage.PixelWidth * 2, code.Image.PixelWidth);
+                Assert.Equal(document.Background, code.CodeDocument!.Background);
+                Assert.Equal(document.Runs, code.CodeDocument.Runs);
+                Assert.Equal(ImageCodec.EncodePng(ClipboardCodeRenderer.Render(document, 2)), ImageCodec.EncodePng(code.Image));
+                Assert.Equal(codeImage.Width, restored[0].ImageWidthDip);
+                Assert.Equal(codeImage.Height, restored[0].ImageHeightDip);
+                Assert.Equal(1.25, restored[0].Zoom);
+                Assert.Equal(0.7, restored[0].Opacity);
+                Assert.False(legacy.CanRerender);
+                Assert.Null(legacy.TextStyle);
+                Assert.Null(legacy.CodeDocument);
+                Assert.Equal(legacyImage.PixelWidth, legacy.Image.PixelWidth);
+                Assert.Equal(legacyImage.PixelHeight, legacy.Image.PixelHeight);
+                Assert.Equal(savedLegacy.DpiX, legacy.Image.DpiX);
+                Assert.Equal(savedLegacy.DpiY, legacy.Image.DpiY);
+                Assert.Equal(CopyPixels(legacyImage), CopyPixels(legacy.Image));
             }
             finally { manager.CloseAllForExit(); }
         });
@@ -793,11 +907,24 @@ public sealed class PinSessionServiceTests
         Func<BitmapSource, byte[]>? encode = null, Func<byte[], BitmapSource?>? decode = null) =>
         new(manager, store, () => settings, Dispatcher.CurrentDispatcher, NullLogger.Instance, encode, decode);
 
+    private static MonitorInfo Monitor(double scale) => new("fake",
+        new RectD(0, 0, 3840, 2160), new RectD(0, 0, 3840, 2100), (uint)(96 * scale), true);
+
     private static BitmapSource Image()
     {
         var bitmap = BitmapSource.Create(24, 16, 96, 96, PixelFormats.Bgra32, null, new byte[24 * 16 * 4], 24 * 4);
         bitmap.Freeze();
         return bitmap;
+    }
+
+    private static byte[] CopyPixels(BitmapSource image)
+    {
+        BitmapSource pixels = image.Format == PixelFormats.Bgra32
+            ? image : new FormatConvertedBitmap(image, PixelFormats.Bgra32, null, 0);
+        int stride = pixels.PixelWidth * 4;
+        byte[] bytes = new byte[stride * pixels.PixelHeight];
+        pixels.CopyPixels(bytes, stride, 0);
+        return bytes;
     }
 
     private static void Seed(PinSessionStore store, int count = 1)

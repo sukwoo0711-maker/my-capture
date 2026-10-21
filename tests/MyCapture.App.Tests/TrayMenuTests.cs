@@ -29,6 +29,7 @@ public sealed class TrayMenuTests
         Assert.Equal(["영역 캡처", "화면 녹화", "텍스트 복사", "다른 캡처", "클립보드를 핀으로 띄우기", "", "라이브러리", "설정", "단축키 보기", "", "종료"],
             menu.Select(entry => entry.Label));
         Assert.Equal([false, false, false, false, false, true, false, false, false, true, false], menu.Select(entry => entry.IsSeparator));
+        Assert.DoesNotContain(menu, entry => entry.Label == UiText.Get("Tray_OpenPins"));
         Assert.Equal(keys.Capture.ToString(), menu[0].Gesture);
         Assert.Equal(keys.RecordRegion.ToString(), menu[1].Gesture);
         Assert.Equal("F1", menu[8].Gesture);
@@ -234,6 +235,58 @@ public sealed class TrayMenuTests
         var timer = System.Diagnostics.Stopwatch.StartNew();
         for (int i = 0; i < 1000; i++) _ = ClipboardAvailability.HasPinnableContent();
         Assert.True(timer.Elapsed < TimeSpan.FromMilliseconds(500), $"1000 checks took {timer.Elapsed.TotalMilliseconds:0.0} ms");
+    }
+
+    [Theory]
+    [InlineData(13)]
+    [InlineData(1)]
+    [InlineData(17)]
+    [InlineData(8)]
+    [InlineData(2)]
+    [InlineData(0xC123)]
+    [InlineData(0)]
+    public void ClipboardCheckRecognizesAnnouncedFormatsAndEmptyClipboard(uint announcedFormat)
+    {
+        const uint pngFormat = 0xC123;
+        var queried = new List<uint>();
+        int registrations = 0;
+        bool available = ClipboardAvailability.HasPinnableContent(
+            format => { queried.Add(format); return format == announcedFormat; },
+            () => { registrations++; return pngFormat; });
+
+        Assert.Equal(announcedFormat != 0, available);
+        uint[] formats = [13, 1, 17, 8, 2, pngFormat];
+        int match = Array.IndexOf(formats, announcedFormat);
+        Assert.Equal(match < 0 ? formats : formats[..(match + 1)], queried);
+        Assert.Equal(announcedFormat is 0 or pngFormat ? 1 : 0, registrations);
+    }
+
+    [Fact]
+    public void ClipboardCheckSkipsAnUnregisteredPngFormat()
+    {
+        var queried = new List<uint>();
+        Assert.False(ClipboardAvailability.HasPinnableContent(
+            format => { queried.Add(format); return false; }, static () => 0));
+        Assert.Equal(new uint[] { 13, 1, 17, 8, 2 }, queried);
+    }
+
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
+    public void ClipboardCheckKeepsTheCommandAvailableWhenNativeQueriesAreMissing(bool png, bool entryPoint)
+    {
+        Exception Missing() => entryPoint ? new EntryPointNotFoundException() : new DllNotFoundException();
+        Assert.True(ClipboardAvailability.HasPinnableContent(
+            _ => png ? false : throw Missing(), () => throw Missing()));
+    }
+
+    [Fact]
+    public void ClipboardCheckPropagatesUnexpectedQueryFailures()
+    {
+        Assert.Throws<InvalidOperationException>(() => ClipboardAvailability.HasPinnableContent(
+            _ => throw new InvalidOperationException(), static () => 0));
     }
 
     [Fact]

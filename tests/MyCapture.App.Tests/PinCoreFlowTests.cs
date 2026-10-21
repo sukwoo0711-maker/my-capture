@@ -136,6 +136,14 @@ public sealed class PinCoreFlowTests
             shown.Add(pin);
         };
         manager.ActivatePinForTest = activated.Add;
+        manager.ShowPinForTest = (pin, show) =>
+        {
+            // Observe the requested policy without giving this test the desktop foreground.
+            bool requestedActivation = pin.ShowActivated;
+            pin.ShowActivated = false;
+            try { show(); }
+            finally { pin.ShowActivated = requestedActivation; }
+        };
         try
         {
             Assert.Equal(PasteResult.Pinned, manager.PasteFromClipboardAsync(() => Task.FromResult(

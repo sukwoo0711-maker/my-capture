@@ -21,16 +21,19 @@ internal static class ClipboardAvailability
     internal static Func<bool>? OverrideForTest { get; set; }
 
     /// <summary>True when the clipboard announces an image (PNG or bitmap) or text.</summary>
-    internal static bool HasPinnableContent()
+    internal static bool HasPinnableContent() =>
+        HasPinnableContent(IsClipboardFormatAvailable, static () => PngFormat.Value);
+
+    internal static bool HasPinnableContent(Func<uint, bool> hasFormat, Func<uint> getPngFormat)
     {
         if (OverrideForTest is { } overridden) return overridden();
         try
         {
-            if (IsClipboardFormatAvailable(CfUnicodeText) || IsClipboardFormatAvailable(CfText)
-                || IsClipboardFormatAvailable(CfDibV5) || IsClipboardFormatAvailable(CfDib)
-                || IsClipboardFormatAvailable(CfBitmap)) return true;
-            uint png = PngFormat.Value;
-            return png != 0 && IsClipboardFormatAvailable(png);
+            if (hasFormat(CfUnicodeText) || hasFormat(CfText)
+                || hasFormat(CfDibV5) || hasFormat(CfDib)
+                || hasFormat(CfBitmap)) return true;
+            uint png = getPngFormat();
+            return png != 0 && hasFormat(png);
         }
         catch (Exception error) when (error is DllNotFoundException or EntryPointNotFoundException)
         {

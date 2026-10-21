@@ -13,8 +13,8 @@ namespace MyCapture.App.Pinning;
 /// The caller continues to own the original string (and can therefore put that exact value
 /// back on the clipboard). This renderer only builds a capped visual preview: plain text is
 /// presented as a readable card, while tab-delimited text is presented as a grid whose empty
-/// cells remain visible. All dimensions and typography are fixed at 96 DPI so the same input
-/// produces the same layout independently of the current monitor scale.
+/// cells remain visible. Layout uses fixed DIP typography, while the target DPI controls
+/// rasterisation independently of the current monitor scale.
 /// </remarks>
 internal static class ClipboardTextRenderer
 {
@@ -65,15 +65,19 @@ internal static class ClipboardTextRenderer
     /// Invoke this WPF rasterisation entry point from an STA thread. The frozen result can be
     /// consumed safely from any thread after this method returns.
     /// </remarks>
-    internal static BitmapSource Render(string sourceText, bool isTabularContent)
+    internal static BitmapSource Render(string sourceText, bool isTabularContent) =>
+        Render(sourceText, isTabularContent, 1);
+
+    internal static BitmapSource Render(string sourceText, bool isTabularContent, double scale)
     {
         ArgumentNullException.ThrowIfNull(sourceText);
+        ValidateScale(scale);
         return isTabularContent
-            ? RenderTable(sourceText)
-            : RenderPlainText(sourceText);
+            ? RenderTable(sourceText, scale)
+            : RenderPlainText(sourceText, scale);
     }
 
-    private static BitmapSource RenderPlainText(string sourceText)
+    private static BitmapSource RenderPlainText(string sourceText, double scale)
     {
         string preview = CreatePlainPreview(sourceText).Replace("\t", "    ", StringComparison.Ordinal);
         FormattedText? text = preview.Length == 0
@@ -108,18 +112,19 @@ internal static class ClipboardTextRenderer
         var visual = CreateVisual();
         using (DrawingContext drawing = visual.RenderOpen())
         {
-            var bounds = new Rect(0.5, 0.5, width - 1, height - 1);
-            drawing.DrawRoundedRectangle(CardBackground, CardBorder, bounds, 10, 10);
+            double halfPixel = 0.5 / scale;
+            var bounds = new Rect(halfPixel, halfPixel, width - (1 / scale), height - (1 / scale));
+            drawing.DrawRoundedRectangle(CardBackground, DevicePixelPen(CardBorder, scale), bounds, 10, 10);
             if (text is not null)
             {
                 drawing.DrawText(text, new Point(PlainHorizontalPadding, PlainVerticalPadding));
             }
         }
 
-        return RenderFrozen(visual, width, height);
+        return RenderFrozen(visual, width, height, scale);
     }
 
-    private static BitmapSource RenderTable(string sourceText)
+    private static BitmapSource RenderTable(string sourceText, double scale)
     {
         TablePreview preview = ParseTablePreview(sourceText);
         int[] columnWidths = MeasureColumnWidths(preview);
@@ -154,10 +159,10 @@ internal static class ClipboardTextRenderer
                 DrawTableRow(drawing, preview.Rows[rowIndex], columnWidths, rowTop);
             }
 
-            DrawGrid(drawing, columnWidths, preview.Rows.Count, tableWidth);
+            DrawGrid(drawing, columnWidths, preview.Rows.Count, tableWidth, scale);
         }
 
-        return RenderFrozen(visual, width, height);
+        return RenderFrozen(visual, width, height, scale);
     }
 
     private static DrawingVisual CreateVisual()
@@ -200,30 +205,33 @@ internal static class ClipboardTextRenderer
         DrawingContext drawing,
         IReadOnlyList<int> columnWidths,
         int rowCount,
-        int tableWidth)
+        int tableWidth,
+        double scale)
     {
-        double top = TableMargin + 0.5;
-        double bottom = TableMargin + (rowCount * TableRowHeight) - 0.5;
-        double left = TableMargin + 0.5;
-        double right = TableMargin + tableWidth - 0.5;
+        double top = SnapLine(TableMargin, scale);
+        double bottom = SnapLine(TableMargin + (rowCount * TableRowHeight), scale) - (1 / scale);
+        double left = SnapLine(TableMargin, scale);
+        double right = SnapLine(TableMargin + tableWidth, scale) - (1 / scale);
+        Pen gridLine = DevicePixelPen(GridLine, scale);
 
         double x = TableMargin;
         for (int columnIndex = 1; columnIndex < columnWidths.Count; columnIndex++)
         {
             x += columnWidths[columnIndex - 1];
-            drawing.DrawLine(GridLine, new Point(x + 0.5, top), new Point(x + 0.5, bottom));
+            double snappedX = SnapLine(x, scale);
+            drawing.DrawLine(gridLine, new Point(snappedX, top), new Point(snappedX, bottom));
         }
 
         for (int rowIndex = 1; rowIndex < rowCount; rowIndex++)
         {
-            double y = TableMargin + (rowIndex * TableRowHeight) + 0.5;
-            drawing.DrawLine(GridLine, new Point(left, y), new Point(right, y));
+            double y = SnapLine(TableMargin + (rowIndex * TableRowHeight), scale);
+            drawing.DrawLine(gridLine, new Point(left, y), new Point(right, y));
         }
 
         drawing.DrawRectangle(
             null,
-            GridBorder,
-            new Rect(left, top, tableWidth - 1, (rowCount * TableRowHeight) - 1));
+            DevicePixelPen(GridBorder, scale),
+            new Rect(left, top, right - left, bottom - top));
     }
 
     private static int[] MeasureColumnWidths(TablePreview preview)
@@ -291,6 +299,9 @@ internal static class ClipboardTextRenderer
         double maxHeight,
         bool singleLine)
     {
+        // FormattedText's ideal advances at 96 DPI keep wrapping and ellipsis decisions
+        // fixed. DrawText records vector glyphs, which the target re-rasterises at its DPI;
+        // no 96-DPI bitmap is scaled and no display-mode reflow is introduced.
         var text = new FormattedText(
             value,
             TextCulture,
@@ -433,12 +444,39 @@ internal static class ClipboardTextRenderer
         row.Add(wasTruncated ? string.Concat(value, "\u2026") : value);
     }
 
-    private static BitmapSource RenderFrozen(DrawingVisual visual, int width, int height)
+    internal static BitmapSource RenderFrozen(DrawingVisual visual, int width, int height, double scale)
     {
-        var target = new RenderTargetBitmap(width, height, Dpi, Dpi, PixelFormats.Pbgra32);
+        // Integer pixel extents round outward. At fractional scales BitmapSource.Width can
+        // differ from the canonical DIP width by less than one device pixel; PinContent
+        // retains that canonical layout separately for window sizing.
+        var target = new RenderTargetBitmap(
+            checked((int)Math.Ceiling(width * scale)),
+            checked((int)Math.Ceiling(height * scale)),
+            Dpi * scale,
+            Dpi * scale,
+            PixelFormats.Pbgra32);
         target.Render(visual);
         target.Freeze();
         return target;
+    }
+
+    internal static void ValidateScale(double scale)
+    {
+        if (!double.IsFinite(scale) || scale <= 0 || scale > 8)
+        {
+            throw new ArgumentOutOfRangeException(nameof(scale));
+        }
+    }
+
+    private static double SnapLine(double position, double scale) =>
+        (Math.Floor(position * scale) + 0.5) / scale;
+
+    private static Pen DevicePixelPen(Pen source, double scale)
+    {
+        if (scale == 1) return source;
+        var pen = new Pen(source.Brush, 1 / scale);
+        pen.Freeze();
+        return pen;
     }
 
     private static SolidColorBrush FrozenBrush(byte alpha, byte red, byte green, byte blue)
