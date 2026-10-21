@@ -219,7 +219,7 @@ public sealed class SettingsUxDefaultsTests
     {
         Assert.Equal(new Hotkey(HotkeyModifiers.None, Hotkey.VkF3), settings.Hotkeys.PasteToScreen);
         Assert.Equal(new Hotkey(HotkeyModifiers.Shift, Hotkey.VkF3), settings.Hotkeys.HideAllPins);
-        Assert.False(settings.Pin.CloseOnDoubleClick);
+        Assert.True(settings.Pin.CloseOnDoubleClick);
     }
 
     private static void AssertNewLibraryDefaults(QueueSettings queue)

@@ -4068,7 +4068,6 @@ Delete {1} {1:plural:subfolder|subfolders}, {2} {2:plural:image|images}, and {3}
   <data name="Onboard_AfterCaptureTitle" xml:space="preserve"><value>After a capture</value></data>
   <data name="Welcome_FirstCaptureTitle" xml:space="preserve"><value>Try your first capture</value></data>
   <data name="Welcome_Skip" xml:space="preserve"><value>Skip</value></data>
-  <data name="Welcome_PinHint" xml:space="preserve"><value>Press {0} to pin what you copied or captured above other windows.</value></data>
   <data name="Onboard_FirstCaptureTip" xml:space="preserve"><value>Press P to pin it above other windows</value></data>
   <data name="Onboard_ReceiptKeyboard" xml:space="preserve"><value>Alt+Q to focus · Tab to move · Enter to run</value></data>
   <data name="Onboard_ReceiptKeyboardFallback" xml:space="preserve"><value>Alt+Tab to focus · Tab to move · Enter to run</value></data>
