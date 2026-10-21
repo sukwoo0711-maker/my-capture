@@ -30,6 +30,10 @@ public sealed class GalleryFolderCardViewModel : INotifyPropertyChanged
 
     public Guid FolderId { get; }
 
+    public bool IsFolder => true;
+
+    public string DeleteLabel => UiText.Get("Folder410.Delete");
+
     /// <summary>The library scope this card opens.</summary>
     public CaptureFolderScope Scope { get; }
 

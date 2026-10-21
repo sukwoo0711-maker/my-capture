@@ -105,9 +105,10 @@ public sealed partial class SettingsInstantSaveTests
             Pump();
             Assert.Equal(7, store.Load().Annotation.StrokeThickness);
             Assert.Equal(exactByteBudget, store.Load().Queue.MaxBytes);
-            draft.ShowShortcutHints = !draft.ShowShortcutHints;
+            draft.AlwaysShowShortcutHints = !draft.AlwaysShowShortcutHints;
             Pump();
             Assert.Equal(7, saved.Annotation.StrokeThickness);
+            Assert.Equal(draft.AlwaysShowShortcutHints, store.Load().General.AlwaysShowShortcutHints);
 
             draft.Language = "en-US";
             Pump();
@@ -133,6 +134,114 @@ public sealed partial class SettingsInstantSaveTests
             Assert.Equal(beforeClose + 1, saves); // Queued callback/timer cannot duplicate the flush.
         }
         finally { window.CloseForExit(); app.Shutdown(); }
+    });
+
+    [Fact]
+    public Task AlwaysShortcutHintsCheckboxSavesAndRefreshesAnOpenCommandWindow() =>
+        Isolated(nameof(AlwaysShortcutHintsCheckboxSavesAndRefreshesAnOpenCommandWindow), () =>
+    {
+        Application app = CreateApplication();
+        try
+        {
+            foreach (string languageName in new[] { "ko-KR", "en" })
+            {
+                using var language = UiText.UseLanguage(languageName);
+                string root = TestRecycleBin.CreateTempSubdirectory("mc-always-hints-").FullName;
+                var store = new SettingsStore(AppPaths.CreateForRoot(root), NullLogger<SettingsStore>.Instance);
+                AppSettings saved = new(); // Legacy hint default is true; the new choice starts off.
+                store.Save(saved);
+                int saves = 0;
+                ShortcutPresentation.ReadEnabled = () => saved.General.AlwaysShowShortcutHints;
+                ShortcutPresentation.Refresh();
+                var command = new Button { Content = "Rotate", HorizontalAlignment = HorizontalAlignment.Left };
+                CommandButtonPresentation.Apply(command);
+                ShortcutPresentation.Attach(command, ShortcutScope.Annotation, "RotateLeft");
+                TextBlock hint = Assert.IsType<Grid>(command.Content).Children.OfType<TextBlock>().Last();
+                var commandWindow = new Window
+                {
+                    Content = new StackPanel { Children = { command } }, Width = 300, Height = 150,
+                    WindowStartupLocation = WindowStartupLocation.Manual, Left = -10000, Top = -10000,
+                    ShowActivated = false, ShowInTaskbar = false,
+                };
+                var settings = new SettingsWindow(() => saved, candidate =>
+                {
+                    store.Save(candidate);
+                    saved = candidate;
+                    saves++;
+                    // This is the app's settings-publish boundary, after persistence succeeds.
+                    ShortcutPresentation.Refresh();
+                    return new SettingsApplyResult(true, true, true, false, []);
+                }, NullLogger.Instance, settingsStore: () => store)
+                {
+                    WindowStartupLocation = WindowStartupLocation.Manual, Left = -10000, Top = -10000,
+                    ShowActivated = false, ShowInTaskbar = false,
+                };
+                try
+                {
+                    commandWindow.Show();
+                    settings.Show();
+                    var tabs = Assert.IsType<TabControl>(settings.FindName("CategoryTabs"));
+                    tabs.SelectedItem = tabs.Items.OfType<TabItem>().Single(tab => Equals(tab.Header, UiText.Get("SettingsUx_TabEditing")));
+                    Pump();
+                    commandWindow.UpdateLayout();
+                    var checkbox = Assert.IsType<CheckBox>(settings.FindName("AlwaysShowShortcutHintsCheck"));
+                    var description = Assert.IsType<TextBlock>(settings.FindName("ShortcutHintsDescription"));
+                    string expectedLabel = languageName == "ko-KR" ? "단축키 항상 표시" : "Always show shortcut keys";
+                    string expectedDescription = languageName == "ko-KR"
+                        ? "끄면 Alt를 누르는 동안에만 버튼 아래에 단축키가 표시됩니다."
+                        : "When off, shortcut keys appear under buttons only while Alt is held.";
+                    Assert.True(checkbox.IsVisible);
+                    Assert.Equal(expectedLabel, AutomationProperties.GetName(checkbox));
+                    Assert.Equal(expectedLabel, KoreanWordWrap.Strip(Assert.IsType<string>(checkbox.Content)));
+                    Assert.Equal(expectedDescription, KoreanWordWrap.Strip(description.Text));
+                    Assert.False(checkbox.IsChecked);
+                    Assert.Equal(Visibility.Collapsed, hint.Visibility);
+                    Size originalSize = command.RenderSize;
+                    Assert.Equal(44, originalSize.Height);
+
+                    checkbox.IsChecked = true;
+                    Assert.True(((SettingsDraft)settings.DataContext).AlwaysShowShortcutHints);
+                    Assert.Equal(0, saves);
+                    Pump();
+                    commandWindow.UpdateLayout();
+                    Assert.Equal(1, saves);
+                    Assert.True(store.Load().General.AlwaysShowShortcutHints);
+                    Assert.True(saved.General.ShowShortcutHints);
+                    Assert.Equal(Visibility.Visible, hint.Visibility);
+                    Assert.Equal(originalSize, command.RenderSize);
+                    Assert.False(((SettingsDraft)settings.DataContext).HasUnappliedChanges);
+
+                    // A separate editor's concurrent update must survive the next boolean-only save.
+                    // The retained draft can then differ from the saved baseline in that unrelated field.
+                    saved.Annotation.StrokeThickness = 7;
+                    checkbox.IsChecked = false;
+                    Pump();
+                    commandWindow.UpdateLayout();
+                    Assert.Equal(2, saves);
+                    Assert.False(store.Load().General.AlwaysShowShortcutHints);
+                    Assert.True(saved.General.ShowShortcutHints);
+                    Assert.Equal(7, saved.Annotation.StrokeThickness);
+                    Assert.Equal(7, store.Load().Annotation.StrokeThickness);
+                    Assert.Equal(Visibility.Collapsed, hint.Visibility);
+                    Assert.Equal(originalSize, command.RenderSize);
+                    ShortcutPresentation.SetAltRevealed(commandWindow, true);
+                    commandWindow.UpdateLayout();
+                    Assert.Equal(Visibility.Visible, hint.Visibility);
+                    Assert.Equal(originalSize, command.RenderSize);
+                    ShortcutPresentation.SetAltRevealed(commandWindow, false);
+                    Assert.Equal(Visibility.Collapsed, hint.Visibility);
+                    Assert.Equal(2, saves);
+                }
+                finally
+                {
+                    settings.CloseForExit();
+                    commandWindow.Close();
+                    ShortcutPresentation.ReadEnabled = null;
+                    ShortcutPresentation.Refresh();
+                }
+            }
+        }
+        finally { app.Shutdown(); }
     });
 
     [Fact]

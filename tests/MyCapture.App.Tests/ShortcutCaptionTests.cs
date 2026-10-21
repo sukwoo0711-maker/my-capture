@@ -16,7 +16,7 @@ namespace MyCapture.App.Tests;
 
 /// <summary>
 /// Shortcut captions use the caption size (12), including key combinations, and their
-/// reserved line fits the video editor's command rows. The compact receipt keeps its keys in tooltips.
+/// shortcut line fits the video editor's command rows and the compact receipt's fixed buttons.
 /// </summary>
 public sealed class ShortcutCaptionTests
 {
@@ -44,7 +44,7 @@ public sealed class ShortcutCaptionTests
     [InlineData("Video", "ZoomIn")]
     [InlineData("Video", "ZoomOut")]
     [InlineData("QuickAccess", "Copy")]
-    public void SingleKeysAndCombinationsUseTheSameReservedCaptionLine(string scopeName, string command) => StaTestHost.Run(() =>
+    public void SingleKeysAndCombinationsUseTheSameCollapsibleCaptionLine(string scopeName, string command) => StaTestHost.Run(() =>
     {
         ShortcutScope scope = Enum.Parse<ShortcutScope>(scopeName);
         ShortcutDefinition definition = ShortcutCatalog.Get(scope, command);
@@ -57,13 +57,27 @@ public sealed class ShortcutCaptionTests
         Grid face = Assert.IsType<Grid>(button.Content);
         Assert.Equal("CommandButtonFace", face.Name);
         Assert.Equal(2, face.RowDefinitions.Count);
-        Assert.Equal(new GridLength(14), face.RowDefinitions[1].Height);
+        Assert.All(face.RowDefinitions.Cast<RowDefinition>(), row => Assert.Equal(GridLength.Auto, row.Height));
         Assert.Equal("Command", Assert.IsType<TextBlock>(face.Children[0]).Text);
         TextBlock hint = Assert.IsType<TextBlock>(face.Children[1]);
         Assert.Equal(1, Grid.GetRow(hint));
         Assert.Equal(definition.Hint, hint.Text);
         Assert.Equal(12, hint.FontSize);
         Assert.Equal(FontWeights.Normal, hint.FontWeight);
+        Assert.Equal(Visibility.Collapsed, hint.Visibility);
+        face.Measure(new Size(200, 44));
+        face.Arrange(new Rect(face.DesiredSize));
+        Assert.Equal(0, face.RowDefinitions[1].ActualHeight);
+        ShortcutPresentation.SetAltRevealed(button, true);
+        face.Measure(new Size(200, 44));
+        face.Arrange(new Rect(face.DesiredSize));
+        Assert.Equal(Visibility.Visible, hint.Visibility);
+        Assert.Equal(CommandButtonPresentation.HintHeight, face.RowDefinitions[1].ActualHeight);
+        ShortcutPresentation.SetAltRevealed(button, false);
+        face.Measure(new Size(200, 44));
+        face.Arrange(new Rect(face.DesiredSize));
+        Assert.Equal(Visibility.Collapsed, hint.Visibility);
+        Assert.Equal(0, face.RowDefinitions[1].ActualHeight);
     });
 
     [Fact]
@@ -75,10 +89,194 @@ public sealed class ShortcutCaptionTests
         var grid = Assert.IsType<Grid>(button.Content);
         TextBlock letter = grid.Children.OfType<TextBlock>().Single();
         Assert.Equal(12, letter.FontSize);
+        Assert.Equal(Visibility.Collapsed, letter.Visibility);
+        ShortcutPresentation.SetAltRevealed(button, true);
+        Assert.Equal(Visibility.Visible, letter.Visibility);
         grid.Measure(new Size(32, 32));
         grid.Arrange(new Rect(0, 0, 32, 32));
         Point top = letter.TranslatePoint(default, grid);
         Assert.True(top.Y >= glyph.ActualHeight - 0.5, $"letter at {top.Y}, glyph ends at {glyph.ActualHeight}");
+    });
+
+    [Theory]
+    [InlineData(false, 44)]
+    [InlineData(true, 36)]
+    public void AlwaysShownCaptionsUseTheSameFixedHeightAndRowsAsAlt(bool compact, double expectedHeight) => StaTestHost.Run(() =>
+    {
+        Func<bool>? previous = ShortcutPresentation.ReadEnabled;
+        bool alwaysShow = false;
+        try
+        {
+            ShortcutPresentation.ReadEnabled = () => alwaysShow;
+            var row = new StackPanel
+            {
+                Orientation = Orientation.Horizontal,
+                Resources = SystemHighContrastThemeTests.LoadTheme(),
+            };
+            var button = new Button { Content = "Privacy" };
+            ShortcutPresentation.Attach(button, ShortcutScope.Annotation, "Privacy");
+            CommandButtonPresentation.Apply(button, compact);
+            row.Children.Add(button);
+            Grid face = Assert.IsType<Grid>(button.Content);
+            TextBlock caption = Assert.IsType<TextBlock>(face.Children[1]);
+            Size? restingSize = null;
+            Rect? altCaptionBounds = null;
+            foreach ((bool preference, bool alt) in new[]
+            {
+                (false, false), (false, true), (true, false), (true, true), (true, false), (false, false),
+            })
+            {
+                alwaysShow = preference;
+                ShortcutPresentation.SetAltRevealed(row, alt);
+                ShortcutPresentation.Refresh();
+                row.Dispatcher.Invoke(System.Windows.Threading.DispatcherPriority.ApplicationIdle, new Action(() => { }));
+                row.Measure(new Size(1000, 100));
+                row.Arrange(new Rect(row.DesiredSize));
+                bool visible = preference || alt;
+                Assert.Equal(expectedHeight, button.ActualHeight, 2);
+                if (restingSize is { } size) Assert.Equal(size, button.RenderSize);
+                else restingSize = button.RenderSize;
+                Assert.Equal(visible ? Visibility.Visible : Visibility.Collapsed, caption.Visibility);
+                Assert.Equal(visible ? CommandButtonPresentation.HintHeight : 0, face.RowDefinitions[1].ActualHeight, 2);
+                if (!visible) continue;
+                Rect bounds = caption.TransformToAncestor(button).TransformBounds(new Rect(caption.RenderSize));
+                Assert.True(bounds.Left >= -0.5 && bounds.Top >= -0.5
+                    && bounds.Right <= button.ActualWidth + 0.5 && bounds.Bottom <= button.ActualHeight + 0.5);
+                if (altCaptionBounds is { } expectedBounds) Assert.Equal(expectedBounds, bounds);
+                else altCaptionBounds = bounds;
+            }
+        }
+        finally
+        {
+            ShortcutPresentation.ReadEnabled = previous;
+            ShortcutPresentation.Refresh();
+        }
+    });
+
+    [Fact]
+    public void DynamicShortcutWidthsFollowTheLoadedFontAndShrinkWhenTheGestureChanges() => StaTestHost.Run(() =>
+    {
+        Func<bool>? previous = ShortcutPresentation.ReadEnabled;
+        var window = new Window
+        {
+            Width = 600, Height = 160, Left = -4000, Top = -4000,
+            ShowInTaskbar = false, ShowActivated = false, FontFamily = new FontFamily("Courier New"),
+        };
+        int dpiNotifications = 0;
+        window.DpiChanged += (_, _) => dpiNotifications++;
+        try
+        {
+            ShortcutPresentation.ReadEnabled = () => false;
+            TextOptions.SetTextFormattingMode(window, TextFormattingMode.Display);
+            const string longGesture = "Ctrl+Shift+Alt+F12";
+            var name = new TextBlock { Text = "Run" };
+            var button = new Button { Content = name };
+            CommandButtonPresentation.Apply(button);
+            button.Height = 44;
+            AutomationProperties.SetAcceleratorKey(button, longGesture);
+            CommandButtonPresentation.RefreshHint(button);
+            Grid face = Assert.IsType<Grid>(button.Content);
+            double beforeInheritance = face.MinWidth;
+            var row = new StackPanel { Orientation = Orientation.Horizontal };
+            row.Children.Add(button);
+            window.Content = row;
+            window.Show();
+            window.Dispatcher.Invoke(System.Windows.Threading.DispatcherPriority.ApplicationIdle, new Action(window.UpdateLayout));
+            TextBlock loadedCaption = Assert.IsType<TextBlock>(face.Children[1]);
+            Assert.True(button.IsLoaded);
+            Assert.Equal(window.FontFamily, loadedCaption.FontFamily);
+            Assert.True(Math.Abs(beforeInheritance - face.MinWidth) > 0.5,
+                "Loaded must remeasure the shortcut after the window's font is inherited.");
+            double nativeScale = PresentationSource.FromVisual(button)!.CompositionTarget!.TransformToDevice.M11;
+            foreach (double scale in new[] { nativeScale, 1.5, 2, nativeScale })
+            {
+                // Simulate a monitor move on the same loaded window. The production DPI
+                // observer must refresh the reserved width without a manual RefreshHint.
+                double previousScale = VisualTreeHelper.GetDpi(window).DpiScaleX;
+                int previousNotifications = dpiNotifications;
+                VisualTreeHelper.SetRootDpi(window, new DpiScale(scale, scale));
+                bool visualChangeRaisedEvent = dpiNotifications > previousNotifications;
+                if (previousScale != scale)
+                    Assert.True(visualChangeRaisedEvent, $"DPI change from {previousScale} to {scale} must notify the window.");
+                window.Dispatcher.Invoke(System.Windows.Threading.DispatcherPriority.ApplicationIdle, new Action(window.UpdateLayout));
+                TextBlock scaledCaption = Assert.IsType<TextBlock>(face.Children[1]);
+                Assert.Equal(scale, VisualTreeHelper.GetDpi(scaledCaption).DpiScaleX);
+                double longWidth = face.MinWidth;
+                Rect? originalBounds = null;
+                // A new visual takes the real HWND scale, not SetRootDpi's simulated scale.
+                // Cover removal/recreation at the native scale and reuse the caption at simulated scales.
+                bool recreateCaption = scale == nativeScale;
+                string[] gestures = recreateCaption ? [longGesture, "I", string.Empty, longGesture] : [longGesture, "I", longGesture];
+
+                foreach (string gesture in gestures)
+                {
+                    // The first long gesture is already assigned, so it specifically tests
+                    // the automatic DPI refresh before testing subsequent dynamic changes.
+                    if (originalBounds is not null)
+                    {
+                        AutomationProperties.SetAcceleratorKey(button, gesture);
+                        CommandButtonPresentation.RefreshHint(button);
+                    }
+                    Assert.Same(face, button.Content);
+                    if (gesture.Length == 0)
+                    {
+                        Assert.Single(face.Children);
+                        Assert.Equal(0, face.MinWidth);
+                    }
+                    else if (gesture == "I") Assert.True(face.MinWidth > 0 && face.MinWidth < longWidth);
+                    else
+                    {
+                        TextBlock currentCaption = Assert.IsType<TextBlock>(face.Children[1]);
+                        Assert.True(longWidth.Equals(face.MinWidth),
+                            $"scale={scale}, stage={(originalBounds is null ? "first" : recreateCaption ? "re-add" : "restore")}, gesture='{gesture}', "
+                            + $"expected MinWidth={longWidth}, actual MinWidth={face.MinWidth}, "
+                            + $"hintDpi={VisualTreeHelper.GetDpi(currentCaption).DpiScaleX}, faceDpi={VisualTreeHelper.GetDpi(face).DpiScaleX}, "
+                            + $"hintLoaded={currentCaption.IsLoaded}, buttonLoaded={button.IsLoaded}, "
+                            + $"sourceScale={PresentationSource.FromVisual(currentCaption)?.CompositionTarget?.TransformToDevice.M11}.");
+                    }
+
+                    Rect? restingBounds = null;
+                    foreach (bool alt in new[] { false, true, false })
+                    {
+                        ShortcutPresentation.SetAltRevealed(window, alt);
+                        window.Dispatcher.Invoke(System.Windows.Threading.DispatcherPriority.ApplicationIdle, new Action(window.UpdateLayout));
+                        Rect bounds = button.TransformToAncestor(row).TransformBounds(new Rect(button.RenderSize));
+                        if (restingBounds is { } resting) Assert.Equal(resting, bounds);
+                        else restingBounds = bounds;
+                        Assert.True(name.IsVisible);
+                        Assert.Equal("Run", name.Text);
+                        Assert.True(bounds.Left >= -0.5 && bounds.Right <= row.ActualWidth + 0.5);
+                        if (gesture.Length == 0) continue;
+                        TextBlock caption = Assert.IsType<TextBlock>(face.Children[1]);
+                        Assert.Equal(gesture, caption.Text);
+                        Assert.Equal(alt ? Visibility.Visible : Visibility.Collapsed, caption.Visibility);
+                        if (!alt) continue;
+                        double reservedRemainder = face.MinWidth - caption.DesiredSize.Width;
+                        string measurement = $"MinWidth={face.MinWidth}, DesiredSize={caption.DesiredSize.Width}, "
+                            + $"RenderSize={caption.RenderSize.Width}, faceActual={face.ActualWidth}, buttonActual={button.ActualWidth}, "
+                            + $"sourceScale={PresentationSource.FromVisual(caption)?.CompositionTarget?.TransformToDevice.M11}";
+                        Assert.True(reservedRemainder >= 0 && reservedRemainder <= 1.5,
+                            $"scale={scale}, gesture='{gesture}', {measurement}, "
+                            + $"actualDpi={VisualTreeHelper.GetDpi(caption).DpiScaleX}, remainder={reservedRemainder}; "
+                            + $"DPI events={dpiNotifications}, SetRootDpi raised event={visualChangeRaisedEvent}; expected remainder 0..1.5.");
+                        Rect captionBounds = caption.TransformToAncestor(button).TransformBounds(new Rect(caption.RenderSize));
+                        Assert.True(captionBounds.Left >= -0.5 && captionBounds.Right <= button.ActualWidth + 0.5);
+                    }
+                    if (gesture == longGesture)
+                    {
+                        if (originalBounds is { } expected) Assert.Equal(expected, restingBounds!.Value);
+                        else originalBounds = restingBounds;
+                    }
+                    else Assert.True(restingBounds!.Value.Width < originalBounds!.Value.Width);
+                }
+            }
+        }
+        finally
+        {
+            window.Close();
+            ShortcutPresentation.ReadEnabled = previous;
+            ShortcutPresentation.Refresh();
+        }
     });
 
     [Fact]
@@ -108,6 +306,11 @@ public sealed class ShortcutCaptionTests
             editor.SetDetailsExpandedForTest(true);
             editor.UpdateLayout();
             var layout = (Grid)editor.Content;
+            Assert.All(Descendants(layout).OfType<TextBlock>().Where(text =>
+                text.Parent is Grid { Name: "CommandButtonFace" } && Grid.GetRow(text) == 1),
+                caption => Assert.Equal(Visibility.Collapsed, caption.Visibility));
+            ShortcutPresentation.SetAltRevealed(editor, true);
+            editor.Dispatcher.Invoke(System.Windows.Threading.DispatcherPriority.ApplicationIdle, new Action(editor.UpdateLayout));
             Grid bar = Assert.Single(Descendants(layout).OfType<Grid>(), grid => grid.Name == "VideoEditorCommandBar");
             Grid transport = Assert.Single(Descendants(layout).OfType<Grid>(), panel => panel.Name == "VideoTransport");
             StackPanel precise = Assert.Single(Descendants(layout).OfType<StackPanel>(), panel => panel.Name == "VideoPreciseTransport");
@@ -118,14 +321,10 @@ public sealed class ShortcutCaptionTests
                 {
                     string key = AutomationProperties.GetAcceleratorKey(button);
                     if (string.IsNullOrEmpty(key)) continue;
-                    ShortcutDefinition definition = ShortcutCatalog.All.First(item => item.Scope == ShortcutScope.Video && item.Hint == key);
                     TextBlock[] keyTexts = Descendants(button).OfType<TextBlock>().Where(text => text.Text == key).ToArray();
                     Assert.Contains(key, Assert.IsType<string>(button.ToolTip));
-                    if (!ReferenceEquals(row, precise) || !ShortcutPresentation.ShowsCaption(definition))
-                    {
-                        Assert.Empty(keyTexts);
-                        continue;
-                    }
+                    Assert.Single(keyTexts);
+                    Assert.True(keyTexts[0].IsVisible);
 
                     foreach (TextBlock caption in keyTexts.Where(text => text.IsVisible))
                     {
@@ -141,7 +340,7 @@ public sealed class ShortcutCaptionTests
                 }
             }
 
-            Assert.Equal(6, captions); // Four seek commands and two frame steps retain visible key captions.
+            Assert.Equal(11, captions); // Four editing commands, Play, four seek commands and two frame steps.
             // Trim stays visible; secondary tools remain available from the compact overflow.
             Assert.Contains(Descendants(bar).OfType<Button>(), button => button.IsVisible
                 && AutomationProperties.GetName(button) == UiText.Get("VideoEditorUx_Trim"));
@@ -204,18 +403,28 @@ public sealed class ShortcutCaptionTests
             Assert.False(card.CanActivateByHotkey);
             IReadOnlyList<Button> actions = card.ActionButtonsForTest;
             Assert.Equal(5, actions.Count);
+            // The detached layout needs the same Loaded hook that attaches raw accelerator captions in a real window.
+            foreach (Button button in actions)
+                button.RaiseEvent(new RoutedEventArgs(FrameworkElement.LoadedEvent, button));
             foreach (bool show in new[] { true, false, true })
             {
                 enabled = show;
                 ShortcutPresentation.Refresh();
-                host.UpdateLayout();
+                host.Dispatcher.Invoke(System.Windows.Threading.DispatcherPriority.ApplicationIdle, new Action(() => { }));
+                host.Measure(new Size(card.Width, double.PositiveInfinity));
+                host.Arrange(new Rect(0, 0, card.Width, host.DesiredSize.Height));
                 foreach (Button button in actions)
                 {
-                    Assert.Equal(32, button.ActualHeight, 2);
+                    Assert.Equal(36, button.ActualHeight, 2);
                     string key = AutomationProperties.GetAcceleratorKey(button);
                     Assert.False(string.IsNullOrWhiteSpace(key));
                     Assert.Equal(AutomationProperties.GetName(button) + "  " + key, button.ToolTip);
-                    Assert.DoesNotContain(Descendants(button).OfType<TextBlock>(), text => text.Text == key);
+                    TextBlock caption = Assert.Single(Descendants(button).OfType<TextBlock>(), text => text.Text == key);
+                    Assert.Equal(show ? Visibility.Visible : Visibility.Collapsed, caption.Visibility);
+                    if (!show) continue;
+                    Rect bounds = caption.TransformToAncestor(button).TransformBounds(new Rect(caption.RenderSize));
+                    Assert.True(bounds.Left >= -0.5 && bounds.Top >= -0.5
+                        && bounds.Right <= button.ActualWidth + 0.5 && bounds.Bottom <= button.ActualHeight + 0.5);
                 }
             }
         }

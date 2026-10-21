@@ -726,7 +726,8 @@ public sealed class GalleryTests : KoreanCaptionTest
 
         Assert.Equal(string.Empty, tile.Caption);
         Assert.False(tile.HasCaption);
-        Assert.Equal("캡처 09:07", tile.ContextLabel);
+        Assert.Equal(MyCapture.Core.Localization.UiText.Format("Text_16DBAB47AC29",
+            created.DateTime.ToString("t", MyCapture.Core.Localization.UiText.Culture)), tile.ContextLabel);
         Assert.DoesNotContain("제목 없음", tile.AccessibleName, StringComparison.Ordinal);
         Assert.DoesNotContain("제목 없는", tile.AccessibleName, StringComparison.Ordinal);
 

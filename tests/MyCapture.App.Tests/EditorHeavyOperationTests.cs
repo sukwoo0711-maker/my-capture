@@ -598,39 +598,31 @@ public sealed class EditorHeavyOperationTests
     // ---- Font list -----------------------------------------------------------------
 
     [Fact]
-    public void SystemFontListIsSortedOnceInTheLegacyOrder() => StaTestHost.Run(() =>
+    public void SystemFontListIsLocalizedSortedAndCachedAcrossThreads() => StaTestHost.Run(() =>
     {
-        // WPF reads the installed families once per process, so the editor never saw a font
-        // installed mid-session; one sorted copy per process shows the same list.
-        Assert.Same(Fonts.SystemFontFamilies, Fonts.SystemFontFamilies);
-        string[] legacy = Fonts.SystemFontFamilies
-            .OrderBy(font => font.Source, StringComparer.CurrentCultureIgnoreCase).Select(font => font.Source).ToArray();
-        CultureInfo culture = CultureInfo.CurrentCulture;
-        IReadOnlyList<FontFamily> sorted = AnnotationEditorControl.SortedSystemFontFamilies(culture);
-        Assert.Equal(legacy, sorted.Select(font => font.Source));
-        Assert.Same(sorted, AnnotationEditorControl.SortedSystemFontFamilies(culture));
-        Assert.Same(sorted, Task.Run(() => AnnotationEditorControl.SortedSystemFontFamilies(culture)).GetAwaiter().GetResult());
-
-        CultureInfo other = CultureInfo.GetCultureInfo(CultureInfo.CurrentCulture.Name == "sv-SE" ? "en-US" : "sv-SE");
-        string[] otherLegacy = Fonts.SystemFontFamilies
-            .OrderBy(font => font.Source, StringComparer.Create(other, ignoreCase: true)).Select(font => font.Source).ToArray();
-        Assert.Equal(otherLegacy, AnnotationEditorControl.SortedSystemFontFamilies(other).Select(font => font.Source));
-        Assert.Equal(legacy, AnnotationEditorControl.SortedSystemFontFamilies(CultureInfo.CurrentCulture).Select(font => font.Source));
+        foreach (string language in new[] { "ko-KR", "en-US", "sv-SE" })
+        {
+            CultureInfo culture = CultureInfo.GetCultureInfo(language);
+            IReadOnlyList<FontChoice> sorted = AnnotationEditorControl.SortedSystemFontFamilies(culture);
+            Assert.Equal(Fonts.SystemFontFamilies.Select(font => font.Source).Distinct(StringComparer.OrdinalIgnoreCase).Order(),
+                sorted.Select(font => font.Value).Order());
+            Assert.Equal(sorted.OrderBy(font => font.Label, StringComparer.Create(culture, true)), sorted);
+            Assert.Same(sorted, AnnotationEditorControl.SortedSystemFontFamilies(culture));
+            Assert.Same(sorted, Task.Run(() => AnnotationEditorControl.SortedSystemFontFamilies(culture)).GetAwaiter().GetResult());
+            Assert.Same(sorted, MyCapture.App.Settings.SettingsWindow.InstalledFonts(culture));
+        }
     });
 
     [Fact]
-    public void FontPickerListsTheSameFamiliesInTheSameOrderAndSharesTheSortedCopy() => StaTestHost.Run(() =>
+    public void FontPickerSharesRecommendedOrderPreservesSavedValuesAndExpandsInstalledFonts() => StaTestHost.Run(() =>
     {
-        string[] installed = Fonts.SystemFontFamilies.Select(font => font.Source)
-            .Distinct(StringComparer.OrdinalIgnoreCase).Order(StringComparer.OrdinalIgnoreCase).ToArray();
         Func<AnnotationDefaults>? read = AnnotationEditorPreferences.Read;
         Action<AnnotationDefaults>? write = AnnotationEditorPreferences.Write;
-        var defaults = new AnnotationDefaults
+        AnnotationEditorPreferences.Read = () => new AnnotationDefaults
         {
             FontFamily = "Not Installed Family",
-            RecentFontFamilies = [installed[2], installed[0], "Another Missing Family", installed[2]],
+            RecentFontFamilies = ["Arial", "Another Missing Family"],
         };
-        AnnotationEditorPreferences.Read = () => defaults;
         AnnotationEditorPreferences.Write = _ => { };
         try
         {
@@ -638,48 +630,30 @@ public sealed class EditorHeavyOperationTests
             AnnotationEditorControl second = Editor(Pattern(64, 48, PixelFormats.Bgra32));
             foreach (AnnotationEditorControl editor in new[] { first, second })
                 Invoke(editor, "SelectTool", EditorTool.Text);
+            var expected = FontCatalog.ChoicesFor("Not Installed Family", FontCatalog.RecommendedFonts(UiText.Culture));
+            ComboBox picker = Field<ComboBox>(first, "_textFontFamily");
+            var firstChoices = picker.Items.Cast<FontChoice>().ToArray();
+            var secondChoices = Field<ComboBox>(second, "_textFontFamily").Items.Cast<FontChoice>().ToArray();
+            Assert.Equal(expected, firstChoices);
+            Assert.Equal(expected, secondChoices);
+            Assert.Equal("Not Installed Family", Assert.IsType<FontChoice>(picker.SelectedItem).Value);
+            Assert.Same(firstChoices[1], secondChoices[1]);
+            Assert.DoesNotContain(firstChoices, font => font.Value == "Another Missing Family");
 
-            string[] expected = LegacyFontList("Not Installed Family", defaults.RecentFontFamilies, "Not Installed Family");
-            FontFamily[] firstChoices = Field<ComboBox>(first, "_textFontFamily").Items.Cast<FontFamily>().ToArray();
-            FontFamily[] secondChoices = Field<ComboBox>(second, "_textFontFamily").Items.Cast<FontFamily>().ToArray();
-            Assert.Equal(expected, firstChoices.Select(font => font.Source));
-            Assert.Equal(expected, secondChoices.Select(font => font.Source));
-            Assert.Equal("Not Installed Family", Assert.IsType<FontFamily>(Field<ComboBox>(first, "_textFontFamily").SelectedItem).Source);
-            // The installed part comes from the one sorted copy.
-            int system = Array.FindIndex(expected, name => name == installed[1]);
-            Assert.Same(firstChoices[system], secondChoices[system]);
-
-            // A caption in a family that is not listed is added at the end, as before.
             var caption = new TextAnnotation { Text = "x", FontFamily = "Caption Only Family", Rect = new RectD(4, 4, 30, 12) };
             Controller(first).Document.Add(caption);
             Controller(first).SetSelected(caption);
-            string[] withCaption = LegacyFontList("Not Installed Family", defaults.RecentFontFamilies, "Caption Only Family");
-            Assert.Equal(withCaption, Field<ComboBox>(first, "_textFontFamily").Items.Cast<FontFamily>().Select(font => font.Source));
-            Assert.Equal("Caption Only Family", Assert.IsType<FontFamily>(Field<ComboBox>(first, "_textFontFamily").SelectedItem).Source);
+            Assert.Equal(FontCatalog.ChoicesFor(caption.FontFamily, FontCatalog.RecommendedFonts(UiText.Culture)), picker.Items.Cast<FontChoice>());
+            Assert.Equal(caption.FontFamily, Assert.IsType<FontChoice>(picker.SelectedItem).Value);
+            int undoCount = Controller(first).Undo.UndoCount;
+            picker.SelectedItem = picker.Items.Cast<FontChoice>().Single(font => font.IsMore);
+            Assert.Equal("Caption Only Family", caption.FontFamily);
+            Assert.Equal(undoCount, Controller(first).Undo.UndoCount);
+            Assert.Equal(FontCatalog.ChoicesFor(caption.FontFamily, FontCatalog.AvailableFonts(UiText.Culture)), picker.Items.Cast<FontChoice>());
+            Assert.Equal(caption.FontFamily, Assert.IsType<FontChoice>(picker.SelectedItem).Value);
         }
-        finally
-        {
-            AnnotationEditorPreferences.Read = read;
-            AnnotationEditorPreferences.Write = write;
-        }
+        finally { AnnotationEditorPreferences.Read = read; AnnotationEditorPreferences.Write = write; }
     });
-
-    // The list the picker built before the change, from its own enumeration and sort.
-    private static string[] LegacyFontList(string defaultFamily, IEnumerable<string> recent, string selected)
-    {
-        var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var list = new List<string>();
-        void Add(string name)
-        {
-            if (!string.IsNullOrWhiteSpace(name) && names.Add(name)) list.Add(name);
-        }
-        Add(defaultFamily);
-        foreach (string name in recent.Take(5)) Add(name);
-        foreach (FontFamily font in Fonts.SystemFontFamilies.OrderBy(font => font.Source, StringComparer.CurrentCultureIgnoreCase))
-            Add(font.Source);
-        Add(selected);
-        return [.. list];
-    }
 
     // ---- History bookkeeping -------------------------------------------------------
 

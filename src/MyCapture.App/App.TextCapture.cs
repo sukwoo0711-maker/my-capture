@@ -39,7 +39,7 @@ public partial class App
             ClipboardImageService.CopyTextAsync,
             _services.GetRequiredService<ILogger<TextCaptureService>>());
         _overlay.AutoDetectWindows = () => _settings?.Capture.AutoDetectWindows == true;
-        _overlay.ShowShortcutHints = () => _settings?.General.ShowShortcutHints != false;
+        _overlay.ShowShortcutHints = () => _settings?.General.AlwaysShowShortcutHints == true;
         _overlay.CopyColorText = ClipboardImageService.CopyTextAsync;
         _overlay.ColorCopied = feedback => _shellPresenter?.ShowColorCopy(feedback);
         _overlay.ReadColorFormat = () => _settings?.Capture.ColorFormat ?? MyCapture.Core.Settings.ColorFormat.Hex;

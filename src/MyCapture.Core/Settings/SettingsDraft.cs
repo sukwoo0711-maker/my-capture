@@ -45,6 +45,7 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
     private bool _playCaptureSound;
     private AfterCaptureAction _afterCapture;
     private bool _showShortcutHints;
+    private bool _alwaysShowShortcutHints;
 
     // ----- Capture -----
     private bool _includeCursor;
@@ -161,6 +162,7 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
     public bool PlayCaptureSound { get => _playCaptureSound; set => Set(ref _playCaptureSound, value); }
     public AfterCaptureAction AfterCapture { get => _afterCapture; set => Set(ref _afterCapture, value); }
     public bool ShowShortcutHints { get => _showShortcutHints; set => Set(ref _showShortcutHints, value); }
+    public bool AlwaysShowShortcutHints { get => _alwaysShowShortcutHints; set => Set(ref _alwaysShowShortcutHints, value); }
 
     // ================= Capture =================
 
@@ -686,6 +688,7 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
         _playCaptureSound = s.General.PlayCaptureSound;
         _afterCapture = s.General.AfterCapture;
         _showShortcutHints = s.General.ShowShortcutHints;
+        _alwaysShowShortcutHints = s.General.AlwaysShowShortcutHints;
 
         _includeCursor = s.Capture.IncludeCursor;
         _autoDetectWindows = s.Capture.AutoDetectWindows;
@@ -822,6 +825,7 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
     private string[] CaptureState() =>
     [
         B(_launchAtLogin), B(_notifyOnQuickSave), B(_playCaptureSound), _afterCapture.ToString(), B(_showShortcutHints),
+        B(_alwaysShowShortcutHints),
         _language, _theme, _accentColor, _captureGuideColorMode, IsCustomCaptureGuideColor ? _captureGuideColorHex : string.Empty,
         B(_includeCursor), B(_autoDetectWindows), B(_showMagnifier), B(_showSelectionGrid), B(_abortOnFocusLoss),
         _preservedColorFormat.ToString(), _delaySeconds, _regionHistoryLimit,
@@ -873,6 +877,7 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
                 PlayCaptureSound = _playCaptureSound,
                 AfterCapture = _afterCapture,
                 ShowShortcutHints = _showShortcutHints,
+                AlwaysShowShortcutHints = _alwaysShowShortcutHints,
                 Language = _language,
                 Theme = AppThemeNames.ToSetting(AppThemeNames.Parse(_theme)),
                 AccentColor = AppAccentNames.ToSetting(AppAccentNames.Parse(_accentColor)),

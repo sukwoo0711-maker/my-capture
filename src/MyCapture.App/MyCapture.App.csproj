@@ -49,4 +49,11 @@
   </ItemGroup>
 
   <ItemGroup><EmbeddedResource Include="Updates\UpdateHelper.ps1" LogicalName="MyCapture.UpdateHelper.ps1" /></ItemGroup>
+
+  <ItemGroup>
+    <!-- Bundled fonts ship as files beside the app, not as pack:// resources: WPF reads local font
+         files through DirectWrite's own file loader instead of a managed resource stream. -->
+    <None Update="Assets\Fonts\**\*.ttf;Assets\Fonts\**\*.otf;Assets\Fonts\**\*.ttc;Assets\Fonts\**\OFL.txt"
+          CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
 </Project>

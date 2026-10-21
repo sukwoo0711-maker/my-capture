@@ -141,6 +141,44 @@ public sealed class EditorKeysTests
     });
 
     [Fact]
+    public void LiveTextControlCKeepsSelectionAndDoesNotCommitImage() => StaTestHost.Run(() =>
+    {
+        using EditorWindowHost host = EditorWindowHost.Create();
+        host.Window.ConfirmClose = () => EditorCloseChoice.DontSave;
+        int commits = 0;
+        int completed = 0;
+        host.Window.CommitRequested = _ => { commits++; return Task.FromResult(true); };
+        host.Editor.EditingCompleted += (_, _) => completed++;
+        Invoke(host.Editor, "PlaceTextBox", new PointD(40, 40));
+        host.Window.UpdateLayout();
+        TextBox box = Field<TextBox>(host.Editor, "_activeTextBox");
+        const string text = "선택한 텍스트를 복사";
+        box.Text = text;
+        box.Select(4, 4);
+        Assert.Equal("텍스트를", box.SelectedText);
+        var controller = Controller(host.Editor);
+        var itemsBefore = controller.Document.Items.ToArray();
+        TextAnnotation annotation = Assert.IsType<TextAnnotation>(Assert.Single(itemsBefore));
+        string annotationTextBefore = annotation.Text;
+        RectD annotationRectBefore = annotation.Rect;
+
+        // Return the chord to WPF's text editor; do not invoke the actual clipboard in this test.
+        Assert.False(host.Editor.HandleShortcut(Key.C, ModifierKeys.Control));
+
+        Assert.Equal(0, commits);
+        Assert.Equal(0, completed);
+        Assert.Same(box, Field<TextBox?>(host.Editor, "_activeTextBox"));
+        Assert.Equal(text, box.Text);
+        Assert.Equal(4, box.SelectionStart);
+        Assert.Equal(4, box.SelectionLength);
+        Assert.Equal("텍스트를", box.SelectedText);
+        Assert.Same(annotation, Assert.Single(controller.Document.Items));
+        Assert.Equal(annotationTextBefore, annotation.Text);
+        Assert.Equal(annotationRectBefore, annotation.Rect);
+        Assert.True(host.Window.IsVisible);
+    });
+
+    [Fact]
     public void CanvasDisablesTheImeWhileTextInputsKeepIt() => StaTestHost.Run(() =>
     {
         using EditorWindowHost host = EditorWindowHost.Create();

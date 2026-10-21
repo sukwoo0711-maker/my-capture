@@ -50,9 +50,11 @@ internal sealed class RecordingControlWindow : Window
     // The palette has a compact, predictable width independent from the recorded image.
     // On an unusually narrow work area the Viewbox fits its controls instead of clipping them.
     // Preparation and finalisation keep room for their status. The running session uses a
-    // 204-DIP pill; a paused session adds room for its explicit non-colour state label.
+    // compact pill; a paused session adds room for its explicit non-colour state label.
     private const double MinStripWidth = 560.0;
-    private double CurrentStripWidth => CompactSession ? (_paused ? 224 : _timerText.Text.Length > 5 ? 224 : 204) : MinStripWidth;
+    private double CurrentStripWidth => CompactSession
+        ? (_paused || _timerText.Text.Length > 5 ? 236 : 216) + Math.Max(0, _pauseButton.Width - 36)
+        : MinStripWidth;
     private bool CompactSession => (_previewRecording || IsRecording) && _readyAnnounced
         && !_stopping && !_completionPending && !_finished;
 
@@ -257,12 +259,15 @@ internal sealed class RecordingControlWindow : Window
     internal Button CancelButtonForTest => _cancelButton;
 
     /// <summary>The visible words on a bar button (its glyph is decoration).</summary>
-    internal static string ButtonLabel(Button button) => button.Content switch
+    internal static string ButtonLabel(Button button) => ButtonFace(button) switch
     {
         string text => text,
         Panel panel => panel.Children.OfType<TextBlock>().LastOrDefault()?.Text ?? string.Empty,
         _ => string.Empty,
     };
+
+    private static object? ButtonFace(Button button) => button.Content is Grid { Name: "CommandButtonFace" } face
+        ? face.Children[0] : button.Content;
 
     /// <summary>
     /// The ⋯ menu: "show time" as a checked entry. It opens below the button and, like the bar, is
@@ -331,6 +336,8 @@ internal sealed class RecordingControlWindow : Window
         if (glyph is null)
         {
             button.Content = label;
+            AutomationProperties.SetAcceleratorKey(button, string.Empty);
+            CommandButtonPresentation.RefreshHint(button);
             return;
         }
 
@@ -347,17 +354,18 @@ internal sealed class RecordingControlWindow : Window
         panel.Children.Add(path);
         panel.Children.Add(new TextBlock { Text = label, Margin = new Thickness(CommandButtonPresentation.IconLabelGap, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center });
         button.Content = panel;
+        CommandButtonPresentation.RefreshHint(button);
     }
 
     private static void SetIconContent(Button button, Geometry glyph)
     {
-        var icon = new SymbolIcon { Size = 20, StrokeThickness = 0, Data = glyph };
+        var icon = new SymbolIcon { Size = CommandButtonPresentation.IconSize, StrokeThickness = 0, Data = glyph };
         icon.SetBinding(SymbolIcon.FillProperty,
             new System.Windows.Data.Binding(nameof(Control.Foreground)) { Source = button });
         button.Content = icon;
-        button.Width = button.MinWidth = 32;
-        button.Height = button.MinHeight = 32;
-        button.Padding = new Thickness(5);
+        button.Width = button.MinWidth = 36;
+        button.Height = button.MinHeight = 36;
+        button.Padding = new Thickness(2);
         button.Margin = new Thickness(0, 0, 2, 0);
     }
 
@@ -369,6 +377,8 @@ internal sealed class RecordingControlWindow : Window
         AutomationProperties.SetName(_primaryButton, label);
         _primaryButton.ToolTip = UiText.Format("Onboard_RecordAreaTip", FormatReadyStatus());
         AutomationProperties.SetHelpText(_primaryButton, (string)_primaryButton.ToolTip);
+        AutomationProperties.SetAcceleratorKey(_primaryButton, string.Empty);
+        CommandButtonPresentation.RefreshHint(_primaryButton);
     }
 
     /// <summary>Cancel exists only before recording: once recording runs, stop is the way out.</summary>
@@ -381,6 +391,7 @@ internal sealed class RecordingControlWindow : Window
         _primaryButton.ToolTip = $"{UiText.Get("Text_74C6AEBB2B6D")}  Esc\n{UiText.Get("RecordingStatus_StopHelp")}";
         AutomationProperties.SetHelpText(_primaryButton, UiText.Get("RecordingStatus_StopHelp"));
         AutomationProperties.SetAcceleratorKey(_primaryButton, "Esc");
+        CommandButtonPresentation.RefreshHint(_primaryButton);
         _pauseButton.Visibility = Visibility.Visible;
         _pauseButton.IsEnabled = true;
         UpdatePauseButton();
@@ -547,9 +558,9 @@ internal sealed class RecordingControlWindow : Window
         // The time stamp option lives in the ⋯ menu instead of a check box on the bar.
         more = new Button
         {
-            MinWidth = 32,
-            Width = 32,
-            Padding = new Thickness(5),
+            MinWidth = 36,
+            Width = 36,
+            Padding = new Thickness(2),
             Margin = new Thickness(2, 0, 0, 0),
             VerticalAlignment = VerticalAlignment.Center,
             Style = TryStyle("Button.Ghost"),
@@ -557,7 +568,7 @@ internal sealed class RecordingControlWindow : Window
         };
         var moreGlyph = new SymbolIcon
         {
-            Size = 20,
+            Size = CommandButtonPresentation.IconSize,
             Data = MoreGlyph,
         };
         moreGlyph.SetBinding(SymbolIcon.StrokeProperty,
@@ -584,8 +595,8 @@ internal sealed class RecordingControlWindow : Window
             CommandButtonPresentation.Apply(command, compact: true);
             command.MinWidth = minimumWidth;
         }
-        more.Height = more.MinHeight = 32;
-        more.Padding = new Thickness(5);
+        more.Height = more.MinHeight = 36;
+        more.Padding = new Thickness(2);
         more.Margin = new Thickness(2, 0, 0, 0);
         AutomationProperties.SetName(cancel, UiText.Get("Text_E1C96EF1EA0F"));
         cancel.ToolTip = $"{UiText.Get("Text_E1C96EF1EA0F")}  Esc";
@@ -1075,6 +1086,15 @@ internal sealed class RecordingControlWindow : Window
             UiText.Get(_paused ? "RecordingPause_ResumeName" : "RecordingPause_PauseName"));
         AutomationProperties.SetHelpText(_pauseButton, help);
         AutomationProperties.SetAcceleratorKey(_pauseButton, shortcutText);
+        // Reserve the optional global chord's width before Alt, including longer custom keys.
+        var caption = new TextBlock
+        {
+            Text = shortcutText, FontSize = ShortcutPresentation.CaptionFontSize,
+            FontFamily = _pauseButton.FontFamily, FontWeight = FontWeights.Normal,
+        };
+        caption.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+        _pauseButton.Width = _pauseButton.MinWidth = Math.Max(36, Math.Ceiling(caption.DesiredSize.Width) + 6);
+        CommandButtonPresentation.RefreshHint(_pauseButton);
     }
 
     private void UpdateRegionFrameBrush(Border frame)

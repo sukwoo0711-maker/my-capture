@@ -32,8 +32,8 @@ public sealed class EditorChromeAndTextInspectorTests : KoreanCaptionTest
             Assert.Null(Controller(host.Editor).Selected);
             ComboBox fonts = Field<ComboBox>(host.Editor, "_textFontFamily");
             Assert.True(fonts.IsVisible);
-            family = fonts.Items.Cast<FontFamily>().First(font => font.Source != "Malgun Gothic").Source;
-            fonts.SelectedItem = fonts.Items.Cast<FontFamily>().Single(font => font.Source == family);
+            family = fonts.Items.Cast<FontChoice>().First(font => !font.IsMore && font.Value != "Malgun Gothic").Value;
+            fonts.SelectedItem = fonts.Items.Cast<FontChoice>().Single(font => font.Value == family);
             Field<Slider>(host.Editor, "_fontSizeSlider").Value = 32;
             Toggle(host.Editor, "_textBold", true);
             Toggle(host.Editor, "_textBackground", true);
@@ -52,7 +52,7 @@ public sealed class EditorChromeAndTextInspectorTests : KoreanCaptionTest
 
         using var reopened = EditorHost.Create();
         SelectTextTool(reopened.Editor);
-        Assert.Equal(family, Assert.IsType<FontFamily>(Field<ComboBox>(reopened.Editor, "_textFontFamily").SelectedItem).Source);
+        Assert.Equal(family, Assert.IsType<FontChoice>(Field<ComboBox>(reopened.Editor, "_textFontFamily").SelectedItem).Value);
         Assert.Equal(32, Field<Slider>(reopened.Editor, "_fontSizeSlider").Value);
         Assert.True(Field<CheckBox>(reopened.Editor, "_textBold").IsChecked);
         Assert.True(Field<CheckBox>(reopened.Editor, "_textBackground").IsChecked);
@@ -77,7 +77,7 @@ public sealed class EditorChromeAndTextInspectorTests : KoreanCaptionTest
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void FontPickerKeepsCurrentAndRecentFamiliesFirstAndPreviewsInstalledFonts(bool reusePreview) => StaTestHost.Run(() =>
+    public void FontPickerSharesRecommendationsAndPreviewsEachResolvedFamily(bool reusePreview) => StaTestHost.Run(() =>
     {
         string[] installed = Fonts.SystemFontFamilies.Select(font => font.Source)
             .Distinct(StringComparer.OrdinalIgnoreCase).Order(StringComparer.OrdinalIgnoreCase).ToArray();
@@ -90,16 +90,14 @@ public sealed class EditorChromeAndTextInspectorTests : KoreanCaptionTest
         using var host = EditorHost.Create();
         SelectTextTool(host.Editor);
         ComboBox picker = Field<ComboBox>(host.Editor, "_textFontFamily");
-        FontFamily[] choices = picker.Items.Cast<FontFamily>().ToArray();
-        Assert.Equal(installed[^1], choices[0].Source);
-        Assert.Equal(installed[1], choices[1].Source);
-        Assert.Equal(installed[0], choices[2].Source);
-        Assert.Equal(choices.Length, choices.Select(font => font.Source).Distinct(StringComparer.OrdinalIgnoreCase).Count());
-        Assert.All(installed, name => Assert.Contains(choices, font => font.Source.Equals(name, StringComparison.OrdinalIgnoreCase)));
+        FontChoice[] choices = picker.Items.Cast<FontChoice>().ToArray();
+        Assert.Equal(FontCatalog.ChoicesFor(installed[^1], FontCatalog.RecommendedFonts(UiText.Culture)), choices);
+        Assert.Equal(choices.Length, choices.Select(font => font.Value).Distinct(StringComparer.OrdinalIgnoreCase).Count());
+        Assert.True(choices[^1].IsMore);
 
         Assert.NotNull(picker.ItemTemplate);
         ContentPresenter? preview = null;
-        foreach (FontFamily family in choices.Take(3))
+        foreach (FontChoice family in choices)
         {
             // Apply the template through WPF so its factory is sealed before instantiation.
             if (preview is null || !reusePreview)
@@ -107,8 +105,8 @@ public sealed class EditorChromeAndTextInspectorTests : KoreanCaptionTest
             preview.Content = family;
             preview.Measure(new Size(240, 100));
             preview.Arrange(new Rect(preview.DesiredSize));
-            TextBlock label = Assert.Single(Tree<TextBlock>(preview), text => text.Text.Contains(family.Source, StringComparison.Ordinal));
-            Assert.Equal(family.Source, label.FontFamily.Source);
+            TextBlock label = Assert.Single(Tree<TextBlock>(preview), text => text.Text == family.Label);
+            Assert.Same(family.PreviewFamily, label.FontFamily);
         }
     });
 
@@ -129,41 +127,46 @@ public sealed class EditorChromeAndTextInspectorTests : KoreanCaptionTest
         controller.SetSelected(caption);
         Assert.False(controller.CanUndo);
         ComboBox picker = Field<ComboBox>(host.Editor, "_textFontFamily");
-        FontFamily next = picker.Items.Cast<FontFamily>().First(font => font.Source != caption.FontFamily);
+        FontChoice next = picker.Items.Cast<FontChoice>().First(font => !font.IsMore && font.Value != caption.FontFamily);
         RectD original = caption.Rect;
         controller.TextFitter = text => new RectD(text.Rect.X, text.Rect.Y,
-            text.FontFamily == next.Source ? 220 : 120, 40);
+            text.FontFamily == next.Value ? 220 : 120, 40);
         int undoCount = controller.Undo.UndoCount;
 
         picker.SelectedItem = next;
 
-        Assert.Equal(next.Source, caption.FontFamily);
+        Assert.Equal(next.Value, caption.FontFamily);
         Assert.Equal(220, caption.Rect.Width);
         Assert.Equal(undoCount + 1, controller.Undo.UndoCount);
         Assert.True(controller.PerformUndo());
         Assert.Equal("Malgun Gothic", caption.FontFamily);
         Assert.Equal(original, caption.Rect);
-        Assert.Equal("Malgun Gothic", Assert.IsType<FontFamily>(picker.SelectedItem).Source);
+        Assert.Equal("Malgun Gothic", Assert.IsType<FontChoice>(picker.SelectedItem).Value);
         Assert.True(controller.PerformRedo());
-        Assert.Equal(next.Source, caption.FontFamily);
+        Assert.Equal(next.Value, caption.FontFamily);
         Assert.Equal(220, caption.Rect.Width);
     });
 
     [Theory]
     [InlineData(1000, 640)]
     [InlineData(680, 460)]
-    public void RailKeepsEveryHintAndHitTargetInsideItsBoundsWhenHintsAreEnabled(int width, int height) => StaTestHost.Run(() =>
+    public void RailKeepsEveryAltRevealedHintAndHitTargetInsideItsBounds(int width, int height) => StaTestHost.Run(() =>
     {
         using var preferences = new PreferencesScope(new AnnotationDefaults());
         Func<bool>? previous = ShortcutPresentation.ReadEnabled;
         try
         {
-            ShortcutPresentation.ReadEnabled = () => true;
+            ShortcutPresentation.ReadEnabled = () => false;
             ShortcutPresentation.Refresh();
             using var host = EditorHost.Create(width, height);
             Border rail = Tree<Border>(host.Editor).Single(border => border.Name == "AnnotationToolRail");
             Dictionary<EditorTool, ToggleButton> tools = Field<Dictionary<EditorTool, ToggleButton>>(host.Editor, "_toolButtons");
             Assert.Equal(Enum.GetValues<EditorTool>().Length - 1, tools.Count);
+            foreach (ToggleButton tool in tools.Values)
+                Assert.Equal(Visibility.Collapsed, Assert.Single(Tree<TextBlock>(tool), text =>
+                    text.Text == AutomationProperties.GetAcceleratorKey(tool)).Visibility);
+            ShortcutPresentation.SetAltRevealed(host.Window, true);
+            host.Window.Dispatcher.Invoke(System.Windows.Threading.DispatcherPriority.ApplicationIdle, new Action(host.Window.UpdateLayout));
             foreach (ToggleButton tool in tools.Values)
             {
                 string key = AutomationProperties.GetAcceleratorKey(tool);
@@ -194,7 +197,7 @@ public sealed class EditorChromeAndTextInspectorTests : KoreanCaptionTest
     });
 
     [Fact]
-    public void RailAndCommandBarHintsFollowPreferenceChanges() => StaTestHost.Run(() =>
+    public void RailAndCommandBarHintsFollowAlwaysPreferenceOrAltImmediately() => StaTestHost.Run(() =>
     {
         using var preferences = new PreferencesScope(new AnnotationDefaults());
         Func<bool>? previous = ShortcutPresentation.ReadEnabled;
@@ -220,11 +223,15 @@ public sealed class EditorChromeAndTextInspectorTests : KoreanCaptionTest
                 Assert.True(hints.Count > previousCount, $"{name} has no captioned commands.");
             }
             Assert.True(hints.Count > Enum.GetValues<EditorTool>().Length);
-            foreach (bool show in new[] { true, false, true })
+            foreach (bool preference in new[] { true, false, true })
             {
-                enabled = show;
+                enabled = preference;
                 ShortcutPresentation.Refresh();
-                Assert.All(hints, hint => Assert.Equal(show ? Visibility.Visible : Visibility.Collapsed, hint.Visibility));
+                Assert.All(hints, hint => Assert.Equal(preference ? Visibility.Visible : Visibility.Collapsed, hint.Visibility));
+                ShortcutPresentation.SetAltRevealed(host.Window, true);
+                Assert.All(hints, hint => Assert.Equal(Visibility.Visible, hint.Visibility));
+                ShortcutPresentation.SetAltRevealed(host.Window, false);
+                Assert.All(hints, hint => Assert.Equal(preference ? Visibility.Visible : Visibility.Collapsed, hint.Visibility));
             }
         }
         finally
@@ -235,12 +242,15 @@ public sealed class EditorChromeAndTextInspectorTests : KoreanCaptionTest
     });
 
     [Theory]
+    [InlineData(1280, 640)]
     [InlineData(1000, 640)]
     [InlineData(680, 460)]
     public void CommandsKeepButtonAffordancesIconsAndBoundKeysAtBothWidths(int width, int height) => StaTestHost.Run(() =>
     {
         using var preferences = new PreferencesScope(new AnnotationDefaults());
         using var host = EditorHost.Create(width, height);
+        ShortcutPresentation.SetAltRevealed(host.Window, true);
+        host.Window.Dispatcher.Invoke(System.Windows.Threading.DispatcherPriority.ApplicationIdle, new Action(host.Window.UpdateLayout));
         Border bar = Tree<Border>(host.Editor).Single(border => border.Name == "AnnotationCommandBar");
         Button[] commands = Tree<Button>(bar).Where(button => button.IsVisible).ToArray();
         Assert.True(commands.Length >= 10);
@@ -259,7 +269,13 @@ public sealed class EditorChromeAndTextInspectorTests : KoreanCaptionTest
                 AssertInside(hint, command);
             }
 
-            if (width >= 1000)
+            Assert.False(string.IsNullOrWhiteSpace(AutomationProperties.GetName(command)));
+            Assert.Contains(Tree<TextBlock>(command), text => !string.IsNullOrWhiteSpace(text.Text) && text.Text != key);
+            if ((bool)command.GetValue(CommandButtonPresentation.AlwaysIconProperty))
+            {
+                Assert.DoesNotContain(Tree<TextBlock>(command), text => text.IsVisible && !string.IsNullOrWhiteSpace(text.Text) && text.Text != key);
+            }
+            else if (width >= 960)
             {
                 Assert.Contains(Tree<TextBlock>(command), text => text.IsVisible && !string.IsNullOrWhiteSpace(text.Text) && text.Text != key);
             }
@@ -267,19 +283,20 @@ public sealed class EditorChromeAndTextInspectorTests : KoreanCaptionTest
     });
 
     [Theory]
+    [InlineData("ko-KR", 1280, 640)]
+    [InlineData("en-US", 1280, 640)]
     [InlineData("ko-KR", 1000, 640)]
     [InlineData("ko-KR", 680, 460)]
     [InlineData("en-US", 1000, 640)]
     [InlineData("en-US", 680, 460)]
-    public void EveryCommandKeepsItsHeightAndGapWithOrWithoutShortcutHints(string language, int width, int height) => StaTestHost.Run(() =>
+    public void EveryCommandKeepsItsHeightAndGapWithAltRevealedOrCollapsedHints(string language, int width, int height) => StaTestHost.Run(() =>
     {
         using var culture = UiText.UseLanguage(language);
         using var preferences = new PreferencesScope(new AnnotationDefaults());
         Func<bool>? previous = ShortcutPresentation.ReadEnabled;
-        bool enabled = true;
         try
         {
-            ShortcutPresentation.ReadEnabled = () => enabled;
+            ShortcutPresentation.ReadEnabled = () => false;
             using var host = EditorHost.Create(width, height);
             Border bar = Tree<Border>(host.Editor).Single(border => border.Name == "AnnotationCommandBar");
             foreach (bool crop in new[] { false, true })
@@ -287,9 +304,9 @@ public sealed class EditorChromeAndTextInspectorTests : KoreanCaptionTest
                 if (crop) Assert.True(host.Editor.HandleShortcut(System.Windows.Input.Key.X, System.Windows.Input.ModifierKeys.None));
                 foreach (bool show in new[] { true, false, true })
                 {
-                    enabled = show;
-                    ShortcutPresentation.Refresh();
-                    host.Window.UpdateLayout();
+                    ShortcutPresentation.SetAltRevealed(host.Window, show);
+                    // Allow inherited bindings and the panel's queued refit to settle before measuring.
+                    host.Window.Dispatcher.Invoke(System.Windows.Threading.DispatcherPriority.ApplicationIdle, new Action(host.Window.UpdateLayout));
                     Button[] commands = Tree<Button>(bar).Where(button => button.IsVisible).ToArray();
                     Assert.Equal(crop ? 5 : 10, commands.Length);
                     Assert.Contains(commands, button => !string.IsNullOrEmpty(AutomationProperties.GetAcceleratorKey(button)));
@@ -301,15 +318,22 @@ public sealed class EditorChromeAndTextInspectorTests : KoreanCaptionTest
                         Grid face = Assert.IsType<Grid>(button.Content);
                         Assert.Equal("CommandButtonFace", face.Name);
                         RowDefinition hintRow = face.RowDefinitions[1];
-                        Assert.Equal(new GridLength(14), hintRow.Height);
+                        Assert.Equal(GridLength.Auto, hintRow.Height);
                         double scale = VisualTreeHelper.GetDpi(face).DpiScaleY;
-                        Assert.Equal(Math.Round(14 * scale), hintRow.ActualHeight * scale, 6);
                         string key = AutomationProperties.GetAcceleratorKey(button);
+                        double hintHeight = show && !string.IsNullOrEmpty(key) ? 14 : 0;
+                        Assert.Equal(Math.Round(hintHeight * scale), hintRow.ActualHeight * scale, 6);
                         if (!string.IsNullOrEmpty(key))
                         {
                             TextBlock hint = Assert.Single(Tree<TextBlock>(button), text => text.Text == key);
                             Assert.Equal(show ? Visibility.Visible : Visibility.Collapsed, hint.Visibility);
                             if (show) AssertInside(hint, button);
+                        }
+                        if (hintHeight == 0)
+                        {
+                            FrameworkElement label = Assert.IsAssignableFrom<FrameworkElement>(face.Children[0]);
+                            double center = label.TranslatePoint(new Point(0, label.ActualHeight / 2), button).Y;
+                            Assert.InRange(center, button.ActualHeight / 2 - 1, button.ActualHeight / 2 + 1);
                         }
                     }
 
@@ -339,8 +363,13 @@ public sealed class EditorChromeAndTextInspectorTests : KoreanCaptionTest
                         {
                             Assert.True(primaryTool.IsVisible);
                             string key = AutomationProperties.GetAcceleratorKey(primaryTool);
-                            Assert.Contains(Tree<TextBlock>(primaryTool), text => text.IsVisible
-                                && !string.IsNullOrWhiteSpace(text.Text) && text.Text != key);
+                            Assert.NotEmpty(Tree<Viewbox>(primaryTool));
+                            Assert.False(string.IsNullOrWhiteSpace(AutomationProperties.GetName(primaryTool)));
+                            Assert.Contains(key, Assert.IsType<string>(primaryTool.ToolTip));
+                            Assert.Contains(Tree<TextBlock>(primaryTool), text => !string.IsNullOrWhiteSpace(text.Text) && text.Text != key);
+                            if (width >= 960)
+                                Assert.Contains(Tree<TextBlock>(primaryTool), text => text.IsVisible
+                                    && !string.IsNullOrWhiteSpace(text.Text) && text.Text != key);
                         }
                     }
                 }
@@ -377,10 +406,18 @@ public sealed class EditorChromeAndTextInspectorTests : KoreanCaptionTest
         Controller(host.Editor).SetSelected(document.Items[0]);
         host.Window.UpdateLayout();
         SaveEvidence(host.Editor, "text-inspector.png");
+        ShortcutPresentation.SetAltRevealed(host.Window, true);
+        host.Window.Dispatcher.Invoke(System.Windows.Threading.DispatcherPriority.ApplicationIdle, new Action(host.Window.UpdateLayout));
+        SaveEvidence(host.Editor, "text-inspector-alt.png");
+        ShortcutPresentation.SetAltRevealed(host.Window, false);
         host.Window.Width = 680;
         host.Window.Height = 460;
         host.Window.UpdateLayout();
         SaveEvidence(host.Editor, "text-inspector-compact.png");
+        ShortcutPresentation.SetAltRevealed(host.Window, true);
+        host.Window.Dispatcher.Invoke(System.Windows.Threading.DispatcherPriority.ApplicationIdle, new Action(() => { }));
+        host.Window.UpdateLayout();
+        SaveEvidence(host.Editor, "text-inspector-compact-alt.png");
     });
 
     private static void SelectTextTool(AnnotationEditorControl editor) =>

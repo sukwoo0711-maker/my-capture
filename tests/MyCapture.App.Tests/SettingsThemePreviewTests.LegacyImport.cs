@@ -166,8 +166,8 @@ public sealed partial class SettingsThemePreviewTests
                 Assert.Contains(UiText.Get("LegacyImport.StartupChoice"), message.Text);
                 Assert.Equal(AutomationLiveSetting.Polite, AutomationProperties.GetLiveSetting(message));
                 Button[] buttons = Descendants(window).OfType<Button>().ToArray();
-                Assert.Contains(buttons, button => button.IsDefault && (string)button.Content == UiText.Get("LegacyImport.Retry"));
-                Assert.Contains(buttons, button => button.IsCancel && (string)button.Content == UiText.Get("LegacyImport.Abandon"));
+                Assert.Contains(buttons, button => button.IsDefault && SurfaceShortcutHintTests.PrimaryCaption(button) == UiText.Get("LegacyImport.Retry"));
+                Assert.Contains(buttons, button => button.IsCancel && SurfaceShortcutHintTests.PrimaryCaption(button) == UiText.Get("LegacyImport.Abandon"));
                 CompleteLegacyTask(window.RetryAsync());
                 Assert.Equal(1, recoveries); Assert.True(window.IsAskingForDecision); Assert.True(window.IsVisible);
                 if (closeFromTitleBar) window.Close(); // Closing means Cancel import, never an open decision.

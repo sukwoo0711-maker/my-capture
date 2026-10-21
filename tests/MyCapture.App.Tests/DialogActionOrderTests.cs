@@ -103,7 +103,7 @@ public sealed class DialogActionOrderTests
             WrapPanel row = Descendants(dialog).OfType<WrapPanel>()
                 .Single(panel => panel.Children.Count == captions.Length && panel.Children.OfType<Button>().Count() == captions.Length);
             Button[] buttons = row.Children.OfType<Button>().ToArray();
-            Assert.Equal(captions, buttons.Select(button => button.Content as string));
+            Assert.Equal(captions, buttons.Select(SurfaceShortcutHintTests.PrimaryCaption));
             Assert.Equal(HorizontalAlignment.Right, row.HorizontalAlignment);
 
             // Esc is the last button; Enter is the one filled default.

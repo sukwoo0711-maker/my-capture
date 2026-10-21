@@ -439,11 +439,53 @@
                             <Border Style="{StaticResource Card}" Padding="10">
                                 <DockPanel>
                                 <StackPanel DockPanel.Dock="Top" Margin="0,0,0,10">
-                                    <TextBlock Text="{loc:Text Settings_Search}" Style="{StaticResource Settings.Label}" />
-                                    <TextBox x:Name="SettingsSearchBox" Style="{StaticResource Settings.TextBox}"
-                                             AutomationProperties.Name="{loc:Text Settings_Search}"
-                                             AutomationProperties.HelpText="{loc:Text Settings_SearchHint}"
-                                             ToolTip="{loc:Text Settings_SearchHint}" TextChanged="OnSettingsSearchChanged" />
+                                    <Border x:Name="SettingsSearchField">
+                                        <Border.Style>
+                                            <Style TargetType="Border" BasedOn="{StaticResource Card.Sunken}">
+                                                <Setter Property="Padding" Value="3" />
+                                                <Setter Property="BorderThickness" Value="1" />
+                                                <Setter Property="BorderBrush" Value="{DynamicResource Border.Control}" />
+                                                <Style.Triggers>
+                                                    <Trigger Property="IsMouseOver" Value="True">
+                                                        <Setter Property="BorderBrush" Value="{DynamicResource Border.Strong}" />
+                                                    </Trigger>
+                                                    <Trigger Property="IsKeyboardFocusWithin" Value="True">
+                                                        <Setter Property="BorderBrush" Value="{DynamicResource Border.Focus}" />
+                                                    </Trigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </Border.Style>
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="Auto" />
+                                                <ColumnDefinition Width="*" />
+                                            </Grid.ColumnDefinitions>
+                                            <themes:SymbolIcon x:Name="SettingsSearchIcon" Size="16" Data="{StaticResource Icon.Search}"
+                                                               Style="{StaticResource Icon.Symbol.Muted}" Margin="6,0,0,0"
+                                                               VerticalAlignment="Center" IsHitTestVisible="False" />
+                                            <TextBox x:Name="SettingsSearchBox" Grid.Column="1" Background="Transparent"
+                                                     BorderThickness="0" Padding="4,4" MinHeight="32"
+                                                     AutomationProperties.Name="{loc:Text Settings_Search}"
+                                                     AutomationProperties.HelpText="{loc:Text Settings_SearchHint}"
+                                                     ToolTip="{loc:Text Settings_SearchHint}" TextChanged="OnSettingsSearchChanged" />
+                                            <TextBlock x:Name="SettingsSearchPlaceholder" Grid.Column="1"
+                                                       Text="{loc:Text EditorText_SettingsSearchPlaceholder}"
+                                                       Foreground="{DynamicResource Text.Muted}" Margin="6,0"
+                                                       VerticalAlignment="Center" IsHitTestVisible="False"
+                                                       TextTrimming="CharacterEllipsis">
+                                                <TextBlock.Style>
+                                                    <Style TargetType="TextBlock">
+                                                        <Setter Property="Visibility" Value="Collapsed" />
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding Text, ElementName=SettingsSearchBox}" Value="">
+                                                                <Setter Property="Visibility" Value="Visible" />
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </TextBlock.Style>
+                                            </TextBlock>
+                                        </Grid>
+                                    </Border>
                                     <TextBlock x:Name="SettingsSearchEmpty" Text="{loc:Text Settings_SearchEmpty}"
                                                Style="{StaticResource Settings.Description}" Visibility="Collapsed" Margin="0,8,0,0" />
                                 </StackPanel>
@@ -779,11 +821,11 @@
                                      Text="{Binding FontSize, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
                         </settings:SettingsField>
 
-                        <!-- Installed fonts. The list is read when the page first appears, not when the
-                             window opens; a stored font that is not installed stays listed and selected. -->
+                        <!-- Shared recommendations; the final choice opens the installed list.
+                             A previously saved family remains selected even outside the recommendations. -->
                         <settings:SettingsField Header="{loc:Text Settings_FontName}">
                             <ComboBox x:Name="FontFamilyBox" Width="220" HorizontalAlignment="Left"
-                                      DisplayMemberPath="Label" SelectedValuePath="Value"
+                                      SelectedValuePath="Value"
                                       IsTextSearchEnabled="True" TextSearch.TextPath="Label"
                                       VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling"
                                       ScrollViewer.CanContentScroll="True" MaxDropDownHeight="360"
@@ -886,6 +928,15 @@
                                   Content="{loc:Text Text_695F77F44D69}"
                                   AutomationProperties.Name="{loc:Text Text_695F77F44D69}"
                                   IsChecked="{Binding CacheResults}" />
+
+                        <TextBlock Style="{StaticResource Settings.GroupHeading}" Text="{loc:Text SettingsUx_ShortcutHintsHeading}" />
+                        <CheckBox x:Name="AlwaysShowShortcutHintsCheck" Style="{StaticResource Settings.CheckBox}"
+                                  Content="{loc:Text SettingsUx_AlwaysShowShortcutHints}"
+                                  AutomationProperties.Name="{loc:Text SettingsUx_AlwaysShowShortcutHints}"
+                                  AutomationProperties.HelpText="{loc:Text SettingsUx_AlwaysShowShortcutHintsHint}"
+                                  IsChecked="{Binding AlwaysShowShortcutHints}" />
+                        <TextBlock x:Name="ShortcutHintsDescription" Style="{StaticResource Settings.Description}"
+                                   Text="{loc:Text SettingsUx_AlwaysShowShortcutHintsHint}" />
                     </StackPanel>
                 </ScrollViewer>
             </TabItem>
@@ -1058,14 +1109,6 @@
                             <settings:HotkeyRecorder HorizontalAlignment="Left" AutomationProperties.Name="{loc:Text Settings.UploadGitHubHotkey}" DefaultText="" Text="{Binding UploadGitHubImageHotkey, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
                         </StackPanel>
 
-                        <TextBlock Style="{StaticResource Settings.GroupHeading}" Text="{loc:Text SettingsUx_ShortcutHintsHeading}" />
-                        <CheckBox x:Name="ShowShortcutHintsCheck" Style="{StaticResource Settings.CheckBox}"
-                                  Content="{loc:Text Shortcuts.ShowHints}"
-                                  AutomationProperties.Name="{loc:Text Shortcuts.ShowHints}"
-                                  AutomationProperties.HelpText="{loc:Text SettingsUx_ShowShortcutHintsHint}"
-                                  IsChecked="{Binding ShowShortcutHints}" />
-                        <TextBlock Style="{StaticResource Settings.Description}"
-                                   Text="{loc:Text SettingsUx_ShowShortcutHintsHint}" />
                     </StackPanel>
                 </ScrollViewer>
             </TabItem>

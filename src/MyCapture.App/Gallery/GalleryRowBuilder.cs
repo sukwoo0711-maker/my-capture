@@ -65,14 +65,16 @@ public static class GalleryRowBuilder
     /// width (before first layout) yields <see cref="MinColumns"/>.
     /// </param>
     /// <param name="compact">True for the smaller cards shown inside a folder.</param>
-    public static int ColumnCountForWidth(double availableWidth, bool compact = false)
+    /// <param name="minimumTrackWidth">Width needed for localized metadata and enlarged text.</param>
+    public static int ColumnCountForWidth(double availableWidth, bool compact = false, double minimumTrackWidth = 0)
     {
         if (double.IsNaN(availableWidth) || availableWidth <= 0)
         {
             return MinColumns;
         }
 
-        int fit = (int)Math.Floor(availableWidth / (compact ? MinCompactTileTrackWidth : MinTileTrackWidth));
+        double track = Math.Max(compact ? MinCompactTileTrackWidth : MinTileTrackWidth, minimumTrackWidth);
+        int fit = (int)Math.Floor(availableWidth / track);
         return Math.Clamp(fit, MinColumns, compact ? CompactMaxColumns : MaxColumns);
     }
 

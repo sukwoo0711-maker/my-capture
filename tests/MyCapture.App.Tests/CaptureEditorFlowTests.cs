@@ -91,17 +91,21 @@ public sealed class CaptureEditorFlowTests
 
             bool handled = editor.HandleShortcut(Key.C, ModifierKeys.Control);
 
-            // Ctrl+C finishes the edit like Done: save, copy and close.
+            // Ctrl+C copies the edit while keeping it available for further work.
             Assert.True(handled);
             Assert.NotNull(requested);
-            Assert.Same(requested, completed);
-            Assert.Equal(EditorCommitAction.Done, requested!.Action);
+            Assert.Null(completed);
+            Assert.True(editor.IsHitTestVisible);
+            Assert.Equal(EditorCommitAction.CopyToClipboard, requested!.Action);
             Assert.Equal(frame.ScreenBounds, requested.Frame.ScreenBounds);
             Assert.Equal(frame.Monitor, requested.Frame.Monitor);
             Assert.Equal(frame.DpiScale, requested.Frame.DpiScale);
             Assert.Equal(frame.ElapsedMilliseconds, requested.Frame.ElapsedMilliseconds);
             Assert.Equal(sourceRegion, requested.BitmapRegion);
             Assert.Same(selectedBitmap, requested.SelectedBitmap);
+            Assert.True(editor.HandleShortcut(Key.Enter, ModifierKeys.Control));
+            Assert.Same(requested, completed);
+            Assert.Equal(EditorCommitAction.Done, completed!.Action);
 
             // The window opens on the pointer's monitor and is sized for it. The reported desktop has a
             // landscape primary and a 768 x 1366 portrait secondary; the pointer may be on either.
@@ -160,7 +164,8 @@ public sealed class CaptureEditorFlowTests
                 _ = host.Activate();
                 host.UpdateLayout();
 
-                Assert.True(editor.CapturePointer());
+                Assert.True(editor.CapturePointer(),
+                    $"Window active={host.IsActive}; viewport visible={editor.PointerInputElement.IsVisible}, enabled={editor.PointerInputElement.IsEnabled}, hit-test={editor.PointerInputElement.IsHitTestVisible}.");
                 Assert.True(editor.IsPointerCaptured);
                 Assert.Same(editor.PointerInputElement, Mouse.Captured);
                 Assert.False(editor.IsMouseCaptured);

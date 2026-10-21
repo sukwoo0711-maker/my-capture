@@ -167,6 +167,13 @@ public sealed class GallerySelectAllTests(ITestOutputHelper output)
         }
     }
 
+    /// <summary>
+    /// Tile properties the legacy select-all refresh raises once per tile: the baseline the
+    /// current path (which raises none) is compared against. 26 since the card's metadata
+    /// line (MetadataCaption) joined the refreshed metadata.
+    /// </summary>
+    private const long LegacyMetadataPerTile = 26;
+
     [Fact]
     public void SelectAllCostOnProductionFixtures()
     {
@@ -184,7 +191,7 @@ public sealed class GallerySelectAllTests(ITestOutputHelper output)
             AssertEquivalent(original, current, fixture);
             Assert.Equal(count, firstOriginal.SelectionNotifications);
             Assert.Equal(count, firstCurrent.SelectionNotifications);
-            Assert.Equal(25L * count, firstOriginal.MetadataNotifications);
+            Assert.Equal(LegacyMetadataPerTile * count, firstOriginal.MetadataNotifications);
             Assert.Equal(0, firstCurrent.MetadataNotifications);
             Assert.Equal(0, firstCurrent.GroupChanges);
             var firstSelection = new { BeforeMetadata = firstOriginal.MetadataNotifications,
@@ -198,7 +205,7 @@ public sealed class GallerySelectAllTests(ITestOutputHelper output)
             Measurement after = Measure(current.SelectAllVisible, fixture, currentObserver, iterations);
             AssertEquivalent(original, current, fixture);
             Assert.Equal(iterations, before.ClockCalls);
-            Assert.Equal(25L * count * iterations, before.MetadataNotifications);
+            Assert.Equal(LegacyMetadataPerTile * count * iterations, before.MetadataNotifications);
             Assert.True(before.GroupChanges > 0);
             Assert.Equal(0, after.ClockCalls);
             Assert.Equal(0, after.MetadataNotifications);
