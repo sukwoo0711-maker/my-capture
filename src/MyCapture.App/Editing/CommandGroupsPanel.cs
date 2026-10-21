@@ -1,17 +1,33 @@
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 
 namespace MyCapture.App.Editing;
 
-/// <summary>Keeps the commit actions at the right edge and wraps only when both groups cannot fit.</summary>
+/// <summary>Fits two command groups by hiding secondary names before falling back to two left-aligned rows.</summary>
 internal sealed class CommandGroupsPanel : Panel
 {
     internal const double GroupGap = 8;
     protected override Size MeasureOverride(Size availableSize)
     {
-        foreach (UIElement child in InternalChildren)
-            child.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
         if (InternalChildren.Count != 2) return default;
+        // Command faces include the revealed caption width even while it is collapsed,
+        // so Alt and the persistent hint preference cannot change the selected stage.
+        // A bounded measure pass chooses the presentation from desired widths. There are no
+        // SizeChanged/LayoutUpdated handlers or ActualWidth feedback loops to schedule another pass.
+        Compact(InternalChildren[0], false);
+        Compact(InternalChildren[1], false);
+        MeasureGroups();
+        if (CombinedWidth > availableSize.Width)
+        {
+            Compact(InternalChildren[0], true);
+            MeasureGroups();
+            if (CombinedWidth > availableSize.Width)
+            {
+                Compact(InternalChildren[1], true);
+                MeasureGroups();
+            }
+        }
         Size left = InternalChildren[0].DesiredSize, right = InternalChildren[1].DesiredSize;
         bool wrap = left.Width + GroupGap + right.Width > availableSize.Width;
         return new Size(Math.Min(availableSize.Width, left.Width + GroupGap + right.Width),
@@ -25,8 +41,35 @@ internal sealed class CommandGroupsPanel : Panel
         bool wrap = left.Width + GroupGap + right.Width > finalSize.Width;
         double rowHeight = Math.Max(left.Height, right.Height);
         InternalChildren[0].Arrange(new Rect(0, wrap ? 0 : (rowHeight - left.Height) / 2, left.Width, left.Height));
-        InternalChildren[1].Arrange(new Rect(Math.Max(0, finalSize.Width - right.Width),
+        InternalChildren[1].Arrange(new Rect(wrap ? 0 : Math.Max(0, finalSize.Width - right.Width),
             wrap ? left.Height + GroupGap : (rowHeight - right.Height) / 2, right.Width, right.Height));
         return finalSize;
+    }
+
+    private double CombinedWidth => InternalChildren[0].DesiredSize.Width + GroupGap + InternalChildren[1].DesiredSize.Width;
+
+    private void MeasureGroups()
+    {
+        foreach (UIElement child in InternalChildren)
+            child.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+    }
+
+    private static bool Compact(UIElement element, bool compact)
+    {
+        bool changed = false;
+        switch (element)
+        {
+            case ButtonBase button:
+                changed = CommandButtonPresentation.CompactLabel(button, compact);
+                break;
+            case Panel panel:
+                foreach (UIElement child in panel.Children) changed |= Compact(child, compact);
+                break;
+            case Decorator { Child: { } child }:
+                changed = Compact(child, compact);
+                break;
+        }
+        if (changed) element.InvalidateMeasure();
+        return changed;
     }
 }

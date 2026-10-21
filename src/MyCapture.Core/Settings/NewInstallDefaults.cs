@@ -45,6 +45,7 @@ public static class NewInstallDefaults
         settings.General.AfterCapture = AfterCaptureAction.QuickAccess;
         settings.General.Theme = MyCapture.Core.Themes.AppThemeNames.ToSetting(MyCapture.Core.Themes.AppTheme.System);
         settings.General.ShowShortcutHints = false;
+        settings.General.AlwaysShowShortcutHints = false;
         settings.General.ShortcutHintsRevision = 1;
         settings.Queue.ImageRetentionHours = CaptureRetention.NeverHours;
         settings.Queue.MaxBytes = 5L * 1024 * 1024 * 1024;

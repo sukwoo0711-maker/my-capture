@@ -716,9 +716,6 @@ internal sealed partial class VideoEditorWindow : Window
     private Grid BuildCommandBar()
     {
         var bar = new Grid { Name = "VideoEditorCommandBar", Margin = new Thickness(0, 0, 0, 6) };
-        bar.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        bar.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        bar.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         AutomationProperties.SetName(bar, UiText.Get("VideoEditorUx_CommandBarName"));
         _identityDetails = new TextBlock { FontSize = 12 };
         var editing = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
@@ -740,13 +737,16 @@ internal sealed partial class VideoEditorWindow : Window
         _moreToolsButton = ToolButton("Icon.More", string.Empty, UiText.Get("Common_More"), OpenMoreTools);
         _moreToolsButton.Name = "VideoMoreTools";
         AutomationProperties.SetName(_moreToolsButton, UiText.Get("Common_More"));
+        CommandButtonPresentation.AlwaysIcon(_undoButton);
+        CommandButtonPresentation.AlwaysIcon(_redoButton);
+        CommandButtonPresentation.AlwaysIcon(_moreToolsButton);
         editing.Children.Add(_moreToolsButton);
-        bar.Children.Add(editing);
 
-        var output = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(8, 0, 0, 0) };
+        var output = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
         Button saveEdits = MediaExportVisuals.Button(this, UiText.Get("VideoEditorUx_SaveShort"), primary: true);
         saveEdits.Name = "VideoSave";
         CommandButtonPresentation.Apply(saveEdits);
+        CommandButtonPresentation.KeepLabel(saveEdits);
         AutomationProperties.SetName(saveEdits, UiText.Get("MediaExport_SaveEdits"));
         saveEdits.ToolTip = UiText.Get("VideoEditorUx_SaveEditsHelp");
         AutomationProperties.SetHelpText(saveEdits, UiText.Get("VideoEditorUx_SaveEditsHelp"));
@@ -761,8 +761,7 @@ internal sealed partial class VideoEditorWindow : Window
         export.Click += (_, _) => OpenExport();
         _editControls.Add(saveEdits); _editControls.Add(export);
         output.Children.Add(export); output.Children.Add(saveEdits);
-        Grid.SetColumn(output, 2);
-        bar.Children.Add(output);
+        bar.Children.Add(new CommandGroupsPanel { Children = { editing, output } });
         BuildMoreToolsMenu();
         return bar;
     }
@@ -773,7 +772,7 @@ internal sealed partial class VideoEditorWindow : Window
         Button button = MakeButton(content, label, "Button.Secondary", onClick);
         button.ToolTip = help;
         AutomationProperties.SetHelpText(button, help);
-        if (command is not null) ShortcutPresentation.Describe(button, ShortcutScope.Video, command);
+        if (command is not null) ShortcutPresentation.Attach(button, ShortcutScope.Video, command);
         return button;
     }
 
@@ -3074,8 +3073,7 @@ internal sealed partial class VideoEditorWindow : Window
             command is null ? onClick : _shortcutActions[command]);
         if (command is not null)
         {
-            if (command is "Undo" or "Redo" or "Play") ShortcutPresentation.Describe(button, ShortcutScope.Video, command);
-            else ShortcutPresentation.Attach(button, ShortcutScope.Video, command);
+            ShortcutPresentation.Attach(button, ShortcutScope.Video, command);
         }
         else CommandButtonPresentation.ReserveHint(button);
 

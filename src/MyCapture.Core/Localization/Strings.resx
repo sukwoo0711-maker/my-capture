@@ -3929,7 +3929,7 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="SettingsUx_OtherShortcutsHeading" xml:space="preserve"><value>그 밖의 단축키</value></data>
   <data name="SettingsUx_OtherShortcutsHint" xml:space="preserve"><value>필요한 기능에만 지정하십시오. 다른 프로그램이 쓰는 키와 겹치지 않는 조합을 고르십시오.</value></data>
   <data name="SettingsUx_ShortcutHintsHeading" xml:space="preserve"><value>버튼 단축키 표시</value></data>
-  <data name="SettingsUx_ShowShortcutHintsHint" xml:space="preserve"><value>켜면 편집기 버튼 아래에 단축키를 함께 표시합니다. 끄더라도 버튼에 마우스를 올리면 단축키가 보입니다.</value></data>
+  <data name="SettingsUx_ShowShortcutHintsHint" xml:space="preserve"><value>Alt를 누르는 동안 버튼 아래에 단축키가 표시됩니다. 버튼에 마우스를 올려서도 확인할 수 있습니다.</value></data>
   <data name="SettingsUx_RecordHotkeyTip" xml:space="preserve"><value>누른 뒤 사용할 키 조합을 입력하십시오.</value></data>
   <data name="SettingsUx_MaxStorage" xml:space="preserve"><value>최대 저장 용량(GB)</value></data>
   <data name="SettingsUx_MaxStorageRange" xml:space="preserve"><value>0.125 ~ 512 GB.</value></data>
@@ -4033,6 +4033,9 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="EditorFlow_CropApplyHint" xml:space="preserve"><value>자르기 적용</value></data>
   <data name="EditorFlow_CropCancelHint" xml:space="preserve"><value>자르기 취소</value></data>
   <data name="EditorFlow_CommandBarName" xml:space="preserve"><value>편집 명령</value></data>
+  <data name="SettingsUx_AlwaysShowShortcutHints" xml:space="preserve"><value>단축키 항상 표시</value></data>
+  <data name="SettingsUx_AlwaysShowShortcutHintsHint" xml:space="preserve"><value>끄면 Alt를 누르는 동안에만 버튼 아래에 단축키가 표시됩니다.</value></data>
+  <data name="EditorFlow_CopyHint" xml:space="preserve"><value>편집한 이미지를 클립보드에 복사</value></data>
   <data name="EditorFlow_CropBarName" xml:space="preserve"><value>자르기 명령</value></data>
   <data name="EditorFlow_SelectionCleared" xml:space="preserve"><value>선택 해제됨</value></data>
   <data name="EditorFlow_Selected" xml:space="preserve"><value>선택: {0}</value></data>

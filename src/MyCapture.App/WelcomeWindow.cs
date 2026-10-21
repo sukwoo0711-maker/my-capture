@@ -60,7 +60,7 @@ internal sealed class WelcomeWindow : Window
         CommandButtonPresentation.Apply(TryNowButton);
         TryNowButton.MinWidth = 132;
         TryNowButton.MinHeight = 40;
-        TryNowButton.ToolTip = UiText.Get("Onboard_TryNowHelp") + (keys.Capture.IsAssigned ? $"  {keys.Capture}" : "  Enter");
+        TryNowButton.ToolTip = UiText.Get("Onboard_TryNowHelp") + "  Enter";
         AutomationProperties.SetName(TryNowButton, UiText.Get("Onboard_TryNow"));
         AutomationProperties.SetHelpText(TryNowButton, UiText.Get("Onboard_TryNowHelp"));
         TryNowButton.Click += (_, _) => CloseWith(WelcomeOutcome.TryCapture);

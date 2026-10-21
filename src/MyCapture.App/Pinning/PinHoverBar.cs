@@ -88,6 +88,12 @@ internal sealed class PinHoverBar : Window
         _surface.SetResourceReference(TextElement.ForegroundProperty, "Text.Primary");
         Content = _surface;
 
+        // The pin owns keyboard focus; this capture-excluded tool window never activates.
+        Loaded += (_, _) =>
+        {
+            if (Owner is { } owner) ShortcutPresentation.FollowOwner(this, owner);
+        };
+
         SourceInitialized += (_, _) =>
         {
             IntPtr hwnd = new WindowInteropHelper(this).Handle;
@@ -236,6 +242,8 @@ internal sealed class PinHoverBar : Window
         };
         button.SetResourceReference(StyleProperty, "Button.GhostCompact");
         CommandButtonPresentation.Apply(button, compact: true);
+        // Keep enough width for a chord even when the pin collapses the command names.
+        button.MinWidth = key is "Ctrl+C" or "Ctrl+S" ? 60 : key is "Esc" ? 44 : 36;
         var content = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
         SymbolIcon icon = Glyph(glyph, CommandButtonPresentation.IconSize);
         icon.SetBinding(SymbolIcon.StrokeProperty, new Binding(nameof(Control.Foreground)) { Source = button });

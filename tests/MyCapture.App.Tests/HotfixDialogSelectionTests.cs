@@ -19,7 +19,7 @@ public sealed class HotfixDialogSelectionTests
         WithUnhandledDialog(language, (dialog, row, buttons) =>
         {
             Assert.Equal([UiText.Get("Dialog.ReportProblem"), UiText.Get("Dialog.Close")],
-                buttons.Select(button => (string)button.Content));
+                buttons.Select(SurfaceShortcutHintTests.PrimaryCaption));
             Button close = buttons[1];
             if (reverseOrder)
             {
@@ -30,7 +30,7 @@ public sealed class HotfixDialogSelectionTests
             Button selected = HotfixUxSelfTest.SelectStandardCloseAction(dialog);
             Assert.Same(close, selected);
             Assert.True(selected.IsCancel && selected.IsDefault && selected.IsVisible && selected.IsEnabled);
-            Assert.Equal(UiText.Get("Dialog.Close"), selected.Content);
+            Assert.Equal(UiText.Get("Dialog.Close"), SurfaceShortcutHintTests.PrimaryCaption(selected));
             Assert.True(dialog.IsVisible);
             selected.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
             Assert.False(dialog.IsVisible);

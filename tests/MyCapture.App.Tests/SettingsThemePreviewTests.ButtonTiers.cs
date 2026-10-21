@@ -36,17 +36,22 @@ public sealed partial class SettingsThemePreviewTests
         foreach ((MyCapture.Core.Settings.AppSettings settings, Visibility expected) in new[]
         {
             (MyCapture.Core.Settings.NewInstallDefaults.Create(), Visibility.Collapsed),
-            (new MyCapture.Core.Settings.AppSettings(), Visibility.Visible),
+            (new MyCapture.Core.Settings.AppSettings(), Visibility.Collapsed),
             (new MyCapture.Core.Settings.AppSettings { General = { ShowShortcutHints = false } }, Visibility.Collapsed),
+            (new MyCapture.Core.Settings.AppSettings { General = { AlwaysShowShortcutHints = true } }, Visibility.Visible),
         })
         {
-            ShortcutPresentation.ReadEnabled = () => settings.General.ShowShortcutHints;
+            ShortcutPresentation.ReadEnabled = () => settings.General.AlwaysShowShortcutHints;
             ShortcutPresentation.Refresh();
-            // Every command reserves the same hint row, including key combinations.
+            // Only the explicit always-show preference reveals command captions without Alt.
             var button = new Button { Content = "Rotate", ToolTip = "Rotate left" };
             ShortcutPresentation.Attach(button, ShortcutScope.Annotation, "RotateLeft");
             TextBlock caption = Assert.IsType<Grid>(button.Content).Children.OfType<TextBlock>().Last();
             Assert.Equal("Q", caption.Text);
+            Assert.Equal(expected, caption.Visibility);
+            ShortcutPresentation.SetAltRevealed(button, true);
+            Assert.Equal(Visibility.Visible, caption.Visibility);
+            ShortcutPresentation.SetAltRevealed(button, false);
             Assert.Equal(expected, caption.Visibility);
             // The key stays discoverable either way: tooltip and accelerator property.
             Assert.Equal("Rotate left (Q)", button.ToolTip);

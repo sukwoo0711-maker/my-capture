@@ -67,25 +67,42 @@ public sealed class QuickAccessCardLabelTests
             // Opaque capture-excluded cards omit the two 8-DIP shadow margins.
             Assert.Equal(card.AllowsTransparency ? 344 : 328, host.ActualWidth);
             foreach (Button button in card.ActionButtonsForTest)
+                button.RaiseEvent(new RoutedEventArgs(FrameworkElement.LoadedEvent));
+            var restingSizes = new Dictionary<Button, Size>();
+            double? restingHeight = null;
+            foreach (bool revealed in new[] { false, true, false })
             {
-                Assert.Equal(32, button.ActualHeight);
-                FrameworkElement face = button.Content as FrameworkElement
-                    ?? Assert.Single(QuickAccessDetachedFixture.Descendants(button).OfType<TextBlock>(),
-                        text => text.Text == UiText.Get("QuickAccess.Edit"));
-                Rect bounds = face.TransformToAncestor(button).TransformBounds(new Rect(face.RenderSize));
-                Assert.True(bounds.Left >= -0.5 && bounds.Top >= -0.5 && bounds.Right <= button.ActualWidth + 0.5
-                    && bounds.Bottom <= button.ActualHeight + 0.5, $"{language}: button content is clipped: {bounds}");
-                if (face is not TextBlock name) continue;
-                var probe = new TextBlock
+                ShortcutPresentation.SetAltRevealed(host, revealed);
+                host.Dispatcher.Invoke(System.Windows.Threading.DispatcherPriority.ApplicationIdle, new Action(() => { }));
+                host.Measure(new Size(card.Width, double.PositiveInfinity));
+                host.Arrange(new Rect(0, 0, card.Width, host.DesiredSize.Height));
+                host.UpdateLayout();
+                if (restingHeight.HasValue) Assert.Equal(restingHeight.Value, host.ActualHeight);
+                else restingHeight = host.ActualHeight;
+                foreach (Button button in card.ActionButtonsForTest)
                 {
-                    Text = name.Text, FontFamily = name.FontFamily, FontSize = name.FontSize,
-                    FontWeight = name.FontWeight, FontStyle = name.FontStyle, FontStretch = name.FontStretch,
-                    UseLayoutRounding = name.UseLayoutRounding,
-                };
-                TextOptions.SetTextFormattingMode(probe, TextOptions.GetTextFormattingMode(name));
-                probe.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
-                Assert.True(name.ActualWidth + 0.5 >= probe.DesiredSize.Width,
-                    $"{language}: '{name.Text}' needs {probe.DesiredSize.Width:0.#} DIP but has {name.ActualWidth:0.#} DIP");
+                    Assert.Equal(36, button.ActualHeight);
+                    if (restingSizes.TryGetValue(button, out Size size)) Assert.Equal(size, button.RenderSize);
+                    else restingSizes.Add(button, button.RenderSize);
+                    Grid face = Assert.IsType<Grid>(button.Content);
+                    TextBlock caption = Assert.IsType<TextBlock>(face.Children[1]);
+                    Assert.Equal(AutomationProperties.GetAcceleratorKey(button), caption.Text);
+                    Assert.Equal(revealed ? Visibility.Visible : Visibility.Collapsed, caption.Visibility);
+                    Rect bounds = face.TransformToAncestor(button).TransformBounds(new Rect(face.RenderSize));
+                    Assert.True(bounds.Left >= -0.5 && bounds.Top >= -0.5 && bounds.Right <= button.ActualWidth + 0.5
+                        && bounds.Bottom <= button.ActualHeight + 0.5, $"{language}: button content is clipped: {bounds}");
+                    if (SurfaceShortcutHintTests.PrimaryContent(button) is not TextBlock name) continue;
+                    var probe = new TextBlock
+                    {
+                        Text = name.Text, FontFamily = name.FontFamily, FontSize = name.FontSize,
+                        FontWeight = name.FontWeight, FontStyle = name.FontStyle, FontStretch = name.FontStretch,
+                        UseLayoutRounding = name.UseLayoutRounding,
+                    };
+                    TextOptions.SetTextFormattingMode(probe, TextOptions.GetTextFormattingMode(name));
+                    probe.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+                    Assert.True(name.ActualWidth + 0.5 >= probe.DesiredSize.Width,
+                        $"{language}: '{name.Text}' needs {probe.DesiredSize.Width:0.#} DIP but has {name.ActualWidth:0.#} DIP");
+                }
             }
         }
         finally { card.Close(); }

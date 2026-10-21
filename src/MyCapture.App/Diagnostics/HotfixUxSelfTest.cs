@@ -362,7 +362,7 @@ internal static class HotfixUxSelfTest
                 foreach (Button button in receipt.ActionButtonsForTest)
                 {
                     // Edit is labelled; the remaining actions have icons and named shortcut tooltips.
-                    var content = (FrameworkElement)button.Content;
+                    var content = (FrameworkElement)CommandContent(button)!;
                     var texts = Ux402VisualMetrics.Descendants(content).OfType<TextBlock>().Where(text => text.IsVisible).ToArray();
                     Check($"{language}/{theme}/{AutomationProperties.GetName(button)}: icon, name and shortcut fit the action",
                         (content is SymbolIcon || texts.Length > 0 || content is TextBlock)
@@ -619,10 +619,15 @@ internal static class HotfixUxSelfTest
     {
         var panel = (StackPanel)((ScrollViewer)dialog.Content).Content;
         Button button = panel.Children.OfType<WrapPanel>().Single().Children.OfType<Button>().Single(action => action.IsCancel);
-        if (!button.IsDefault || !button.IsVisible || !button.IsEnabled || !Equals(button.Content, UiText.Get("Dialog.Close")))
+        object? content = CommandContent(button);
+        string? caption = content is TextBlock text ? text.Text : content as string;
+        if (!button.IsDefault || !button.IsVisible || !button.IsEnabled || caption != UiText.Get("Dialog.Close"))
             throw new InvalidOperationException("The dialog's sole cancel action must be the default, visible, enabled Close button.");
         return button;
     }
+
+    private static object? CommandContent(ButtonBase button) => button.Content is Grid { Name: "CommandButtonFace" } face
+        && face.Children.Count > 0 ? face.Children[0] : button.Content;
 
     internal static T CardControl<T>(QuickAccessWindow card, string automationId) where T : FrameworkElement =>
         Ux402VisualMetrics.Descendants((DependencyObject)card.Content).OfType<T>()

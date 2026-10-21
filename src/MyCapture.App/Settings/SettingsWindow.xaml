@@ -928,6 +928,15 @@
                                   Content="{loc:Text Text_695F77F44D69}"
                                   AutomationProperties.Name="{loc:Text Text_695F77F44D69}"
                                   IsChecked="{Binding CacheResults}" />
+
+                        <TextBlock Style="{StaticResource Settings.GroupHeading}" Text="{loc:Text SettingsUx_ShortcutHintsHeading}" />
+                        <CheckBox x:Name="AlwaysShowShortcutHintsCheck" Style="{StaticResource Settings.CheckBox}"
+                                  Content="{loc:Text SettingsUx_AlwaysShowShortcutHints}"
+                                  AutomationProperties.Name="{loc:Text SettingsUx_AlwaysShowShortcutHints}"
+                                  AutomationProperties.HelpText="{loc:Text SettingsUx_AlwaysShowShortcutHintsHint}"
+                                  IsChecked="{Binding AlwaysShowShortcutHints}" />
+                        <TextBlock x:Name="ShortcutHintsDescription" Style="{StaticResource Settings.Description}"
+                                   Text="{loc:Text SettingsUx_AlwaysShowShortcutHintsHint}" />
                     </StackPanel>
                 </ScrollViewer>
             </TabItem>
@@ -1100,14 +1109,6 @@
                             <settings:HotkeyRecorder HorizontalAlignment="Left" AutomationProperties.Name="{loc:Text Settings.UploadGitHubHotkey}" DefaultText="" Text="{Binding UploadGitHubImageHotkey, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
                         </StackPanel>
 
-                        <TextBlock Style="{StaticResource Settings.GroupHeading}" Text="{loc:Text SettingsUx_ShortcutHintsHeading}" />
-                        <CheckBox x:Name="ShowShortcutHintsCheck" Style="{StaticResource Settings.CheckBox}"
-                                  Content="{loc:Text Shortcuts.ShowHints}"
-                                  AutomationProperties.Name="{loc:Text Shortcuts.ShowHints}"
-                                  AutomationProperties.HelpText="{loc:Text SettingsUx_ShowShortcutHintsHint}"
-                                  IsChecked="{Binding ShowShortcutHints}" />
-                        <TextBlock Style="{StaticResource Settings.Description}"
-                                   Text="{loc:Text SettingsUx_ShowShortcutHintsHint}" />
                     </StackPanel>
                 </ScrollViewer>
             </TabItem>

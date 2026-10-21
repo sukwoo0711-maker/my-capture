@@ -119,7 +119,7 @@ public sealed partial class SettingsThemePreviewTests
 
     /// <summary>
     /// At the 680 × 460 DIP minimum window, with the real theme styles and the shortcut key
-    /// lines shown, command groups wrap only when necessary in both modes and languages,
+    /// lines revealed, command groups fit on one row in both modes and languages,
     /// no command is reduced to its key letter, and every rail tool is fully visible.
     /// </summary>
     [Fact]
@@ -154,6 +154,9 @@ public sealed partial class SettingsThemePreviewTests
                             Drain(window);
                         }
 
+                        ShortcutPresentation.SetAltRevealed(window, true);
+                        Drain(window);
+
                         string scene = $"{culture} {(crop ? "crop" : "edit")}";
                         CommandGroupsPanel bar = EditorKeysTests.Descendants(window.Editor).OfType<CommandGroupsPanel>().Single(panel => panel.IsVisible);
                         var left = (FrameworkElement)bar.Children[0];
@@ -164,6 +167,7 @@ public sealed partial class SettingsThemePreviewTests
                         Rect leftBounds = left.TransformToAncestor(bar).TransformBounds(new Rect(left.RenderSize));
                         Rect rightBounds = right.TransformToAncestor(bar).TransformBounds(new Rect(right.RenderSize));
                         bool wraps = left.ActualWidth + 8 + right.ActualWidth > bar.ActualWidth;
+                        Assert.False(wraps, $"{scene}: command groups must fit at the minimum width.");
                         Assert.Equal(wraps, rightBounds.Top >= leftBounds.Bottom - 0.5);
                         Rect overlap = Rect.Intersect(leftBounds, rightBounds);
                         Assert.True(overlap.IsEmpty || overlap.Width <= 0.5 || overlap.Height <= 0.5,

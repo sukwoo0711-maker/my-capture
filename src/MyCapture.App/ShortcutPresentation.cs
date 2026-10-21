@@ -7,20 +7,23 @@ using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Data;
 using System.Windows.Input;
+using System.Windows.Media;
+using System.Windows.Threading;
 
 namespace MyCapture.App;
 
 internal sealed class ShortcutPresentation : INotifyPropertyChanged
 {
     /// <summary>
-    /// The type size of every always-visible key caption: the FontSize.Caption token. A
+    /// The type size of every Alt-revealed key caption: the FontSize.Caption token. A
     /// constant, so a caption built before the window's resources load still reads at 12.
     /// </summary>
     internal const double CaptionFontSize = 12;
 
     internal static ShortcutPresentation Current { get; } = new();
+    // The app supplies the explicit always-show preference; absent a setting, Alt reveals hints.
     internal static Func<bool>? ReadEnabled { get; set; }
-    public Visibility HintVisibility => ReadEnabled?.Invoke() == false ? Visibility.Collapsed : Visibility.Visible;
+    public Visibility HintVisibility => ReadEnabled?.Invoke() == true ? Visibility.Visible : Visibility.Collapsed;
     public event PropertyChangedEventHandler? PropertyChanged;
     internal static void Refresh() => Current.PropertyChanged?.Invoke(Current, new(nameof(HintVisibility)));
 
@@ -32,6 +35,22 @@ internal sealed class ShortcutPresentation : INotifyPropertyChanged
     private static readonly ConditionalWeakTable<Window, WindowAltReveal> WindowReveals = new();
     private static readonly HintVisibilityConverter VisibilityConverter = new();
 
+    internal static void SetAltRevealed(DependencyObject target, bool revealed)
+    {
+        target.SetValue(AltRevealedProperty, revealed);
+        // Refit command rows after inherited visibility has changed.
+        Refresh();
+    }
+
+    /// <summary>Shares an owner's Alt gesture with a separate surface that does not activate.</summary>
+    internal static void FollowOwner(Window surface, Window owner)
+    {
+        ArgumentNullException.ThrowIfNull(surface);
+        ArgumentNullException.ThrowIfNull(owner);
+        WindowAltReveal ownerReveal = WindowReveals.GetValue(owner, static window => new WindowAltReveal(window));
+        WindowReveals.GetValue(surface, static window => new WindowAltReveal(window)).Follow(ownerReveal);
+    }
+
     /// <summary>
     /// Every assigned shortcut follows the same caption rule, including key combinations.
     /// </summary>
@@ -41,13 +60,15 @@ internal sealed class ShortcutPresentation : INotifyPropertyChanged
         return true;
     }
 
-    internal static TextBlock Hint(ShortcutScope scope, string command)
+    internal static TextBlock Hint(ShortcutScope scope, string command) => Hint(ShortcutCatalog.Get(scope, command).Hint);
+
+    internal static TextBlock Hint(string gesture)
     {
-        // 9–11 px captions were too small to read; every always-visible key uses the caption size.
+        // 9–11 px captions were too small to read; every revealed key uses the caption size.
         // Regular weight keeps the key below the command's own name, which buttons set semibold.
         var hint = new TextBlock
         {
-            Text = ShortcutCatalog.Get(scope, command).Hint,
+            Text = gesture,
             FontSize = CaptionFontSize,
             FontWeight = FontWeights.Normal,
             HorizontalAlignment = HorizontalAlignment.Center,
@@ -84,6 +105,8 @@ internal sealed class ShortcutPresentation : INotifyPropertyChanged
         private readonly Window _window;
         private readonly InputManager _inputManager;
         private readonly ShortcutAltRevealState _state = new();
+        private WindowAltReveal? _owner;
+        private DispatcherOperation? _dpiRefresh;
 
         internal WindowAltReveal(Window window)
         {
@@ -93,38 +116,135 @@ internal sealed class ShortcutPresentation : INotifyPropertyChanged
             // menu access keys continue through their existing input handlers.
             window.AddHandler(Keyboard.PreviewKeyDownEvent, new KeyEventHandler(OnKeyDown), true);
             window.AddHandler(Keyboard.PreviewKeyUpEvent, new KeyEventHandler(OnKeyUp), true);
+            window.AddHandler(Mouse.PreviewMouseDownEvent, new MouseButtonEventHandler(OnMouseButton), true);
+            window.AddHandler(Mouse.PreviewMouseUpEvent, new MouseButtonEventHandler(OnMouseButton), true);
+            window.AddHandler(Mouse.PreviewMouseMoveEvent, new MouseEventHandler(OnMouse), true);
+            window.AddHandler(Mouse.PreviewMouseWheelEvent, new MouseWheelEventHandler(OnMouseWheel), true);
             // ContextMenu and Popup route keys through a separate tree without necessarily
             // deactivating their owner. Observe releases at the dispatcher input stage too.
             // The weak subscription cannot keep an abandoned window alive through InputManager.
             WeakEventManager<InputManager, ProcessInputEventArgs>.AddHandler(
                 _inputManager, nameof(InputManager.PostProcessInput), OnPostProcessInput);
             window.Deactivated += OnDeactivated;
+            window.DpiChanged += OnDpiChanged;
             window.Closed += OnClosed;
         }
 
-        private void OnKeyDown(object sender, KeyEventArgs e) =>
-            Update(_state.UpdateKey(e.Key == Key.System ? e.SystemKey : e.Key, isDown: true));
+        internal void Follow(WindowAltReveal owner)
+        {
+            for (WindowAltReveal? ancestor = owner; ancestor is not null; ancestor = ancestor._owner)
+                if (ReferenceEquals(ancestor, this)) throw new ArgumentException("A shortcut surface cannot follow itself.", nameof(owner));
+            if (ReferenceEquals(_owner, owner)) return;
+            _owner = owner;
+            // Hints may have loaded before their surface received its owner. Discard that
+            // surface's old gesture and keep every subsequent update on the owner's state.
+            _state.Reset();
+            BindingOperations.SetBinding(_window, AltRevealedProperty, new Binding
+            {
+                Source = owner._window,
+                Path = new PropertyPath(AltRevealedProperty),
+                Mode = BindingMode.OneWay,
+            });
+            Refresh();
+        }
 
-        private void OnKeyUp(object sender, KeyEventArgs e) =>
-            Update(_state.UpdateKey(e.Key == Key.System ? e.SystemKey : e.Key, isDown: false));
+        private void OnKeyDown(object sender, KeyEventArgs e)
+        {
+            Key key = e.Key == Key.System ? e.SystemKey : e.Key;
+            if (_owner is { } owner)
+            {
+                if (key is not (Key.LeftAlt or Key.RightAlt)) owner.Dismiss();
+                return;
+            }
+            Update(_state.UpdateKey(key, isDown: true, isRepeat: e.IsRepeat));
+        }
+
+        private void OnKeyUp(object sender, KeyEventArgs e)
+        {
+            if (_owner is { } owner) owner.OnKeyUp(sender, e);
+            else Update(_state.UpdateKey(e.Key == Key.System ? e.SystemKey : e.Key, isDown: false));
+        }
+
+        private void Dismiss()
+        {
+            if (_owner is { } owner) owner.Dismiss();
+            else Update(_state.Dismiss());
+        }
+
+        private void OnMouseButton(object sender, MouseButtonEventArgs e) => Dismiss();
+        private void OnMouse(object sender, MouseEventArgs e) => Dismiss();
+        private void OnMouseWheel(object sender, MouseWheelEventArgs e) => Dismiss();
 
         private void OnPostProcessInput(object? sender, ProcessInputEventArgs e)
         {
-            if (_state.IsRevealed && e.StagingItem.Input is KeyEventArgs key
-                && (key.RoutedEvent == Keyboard.PreviewKeyUpEvent || key.RoutedEvent == Keyboard.KeyUpEvent))
-                OnKeyUp(_window, key);
+            if (_owner is not null) return; // The owner's observer already receives dispatcher input.
+            if (e.StagingItem.Input is KeyEventArgs key)
+            {
+                // Observe releases even after dismissal so a popup cannot leave Alt
+                // tracked as down. Global observations never begin another window's reveal.
+                if (key.RoutedEvent == Keyboard.PreviewKeyUpEvent || key.RoutedEvent == Keyboard.KeyUpEvent)
+                    OnKeyUp(_window, key);
+                else if ((key.RoutedEvent == Keyboard.PreviewKeyDownEvent || key.RoutedEvent == Keyboard.KeyDownEvent)
+                    && (key.Key == Key.System ? key.SystemKey : key.Key) is not (Key.LeftAlt or Key.RightAlt))
+                    Update(_state.Dismiss());
+            }
+            // Cursor queries also derive from MouseEventArgs and can be generated by a
+            // layout change while the pointer is stationary. Only actual mouse input dismisses.
+            else if (e.StagingItem.Input is MouseEventArgs mouse
+                && (mouse.RoutedEvent == Mouse.PreviewMouseDownEvent || mouse.RoutedEvent == Mouse.MouseDownEvent
+                    || mouse.RoutedEvent == Mouse.PreviewMouseUpEvent || mouse.RoutedEvent == Mouse.MouseUpEvent
+                    || mouse.RoutedEvent == Mouse.PreviewMouseMoveEvent || mouse.RoutedEvent == Mouse.MouseMoveEvent
+                    || mouse.RoutedEvent == Mouse.PreviewMouseWheelEvent || mouse.RoutedEvent == Mouse.MouseWheelEvent))
+                Update(_state.Dismiss());
         }
 
-        private void OnDeactivated(object? sender, EventArgs e) => Update(_state.Reset());
+        private void OnDeactivated(object? sender, EventArgs e)
+        {
+            if (_owner is null) Update(_state.Reset());
+        }
+
+        private void OnDpiChanged(object? sender, DpiChangedEventArgs e)
+        {
+            if (_dpiRefresh is { Status: DispatcherOperationStatus.Pending }) return;
+            // The window's notification can precede its children's DPI update. One queued
+            // pass measures the final subtree scale, including hints that are collapsed.
+            _dpiRefresh = _window.Dispatcher.BeginInvoke(DispatcherPriority.Loaded, new Action(() =>
+            {
+                _dpiRefresh = null;
+                RefreshCommandWidths(_window);
+            }));
+        }
+
+        private static void RefreshCommandWidths(DependencyObject root)
+        {
+            // Corner tool-rail hints use their own 32-DIP face and must not be wrapped.
+            if (root is ButtonBase { Content: Grid { Name: "CommandButtonFace" } } button)
+                CommandButtonPresentation.RefreshHint(button);
+            for (int index = 0; index < VisualTreeHelper.GetChildrenCount(root); index++)
+                RefreshCommandWidths(VisualTreeHelper.GetChild(root, index));
+        }
 
         private void OnClosed(object? sender, EventArgs e)
         {
-            Update(_state.Reset());
+            _dpiRefresh?.Abort();
+            _dpiRefresh = null;
+            if (_owner is null) Update(_state.Reset());
+            else
+            {
+                _owner = null;
+                BindingOperations.ClearBinding(_window, AltRevealedProperty);
+                SetAltRevealed(_window, false);
+            }
             _window.RemoveHandler(Keyboard.PreviewKeyDownEvent, new KeyEventHandler(OnKeyDown));
             _window.RemoveHandler(Keyboard.PreviewKeyUpEvent, new KeyEventHandler(OnKeyUp));
+            _window.RemoveHandler(Mouse.PreviewMouseDownEvent, new MouseButtonEventHandler(OnMouseButton));
+            _window.RemoveHandler(Mouse.PreviewMouseUpEvent, new MouseButtonEventHandler(OnMouseButton));
+            _window.RemoveHandler(Mouse.PreviewMouseMoveEvent, new MouseEventHandler(OnMouse));
+            _window.RemoveHandler(Mouse.PreviewMouseWheelEvent, new MouseWheelEventHandler(OnMouseWheel));
             WeakEventManager<InputManager, ProcessInputEventArgs>.RemoveHandler(
                 _inputManager, nameof(InputManager.PostProcessInput), OnPostProcessInput);
             _window.Deactivated -= OnDeactivated;
+            _window.DpiChanged -= OnDpiChanged;
             _window.Closed -= OnClosed;
             WindowReveals.Remove(_window);
         }
@@ -132,10 +252,7 @@ internal sealed class ShortcutPresentation : INotifyPropertyChanged
         private void Update(bool changed)
         {
             if (!changed) return;
-            _window.SetValue(AltRevealedProperty, _state.IsRevealed);
-            // Existing command rows refit when this notification fires. Notify after the
-            // inherited flag changes so they measure the revealed captions.
-            Refresh();
+            SetAltRevealed(_window, _state.IsRevealed);
         }
     }
 
@@ -200,21 +317,35 @@ internal sealed class ShortcutAltRevealState
 {
     private bool _leftAlt;
     private bool _rightAlt;
+    private bool _dismissed;
 
-    internal bool IsRevealed => _leftAlt || _rightAlt;
+    internal bool IsRevealed => (_leftAlt || _rightAlt) && !_dismissed;
 
-    internal bool UpdateKey(Key key, bool isDown)
+    internal bool UpdateKey(Key key, bool isDown, bool isRepeat = false)
     {
+        if (key is not (Key.LeftAlt or Key.RightAlt)) return Dismiss();
         bool before = IsRevealed;
+        // A repeat after activation was lost is still part of an old gesture. When
+        // dismissed, retain both down flags until their releases; repeats cannot reveal.
+        if (isDown && !_leftAlt && !_rightAlt) _dismissed = isRepeat;
         if (key == Key.LeftAlt) _leftAlt = isDown;
         else if (key == Key.RightAlt) _rightAlt = isDown;
+        if (!_leftAlt && !_rightAlt) _dismissed = false;
         return before != IsRevealed;
+    }
+
+    internal bool Dismiss()
+    {
+        bool before = IsRevealed;
+        _dismissed = true;
+        return before;
     }
 
     internal bool Reset()
     {
         bool before = IsRevealed;
         _leftAlt = _rightAlt = false;
+        _dismissed = false;
         return before;
     }
 }
