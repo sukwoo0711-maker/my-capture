@@ -8,10 +8,10 @@ MyCapture 개선 작업을 이어 가는 오케스트레이터가 읽고 고치�
 |---|---|
 | 현재 오케스트레이터 | **Claude** (Claude Code, Opus 5.5), 2026-10-13부터 |
 | 이전 | Claude(10-11 ~ 10-12) → Codex `gpt-6-astra`(10-12 ~ 10-13) → Claude |
-| 작업 브랜치 | 작업마다 main에서 분기해 PR로 병합. 현재 `release/4.5.1`(작업 공간 `C:\GitRepositories\my-capture-451\rel`) |
+| 작업 브랜치 | 작업마다 main에서 분기해 PR로 병합. 현재 `release/4.5.2`(작업 공간 `C:\GitRepositories\my-capture-452\rel`) |
 | 통합 작업 공간 | `C:\GitRepositories\my-capture-codex` |
 | 백업 | `backup/pre-gif-rewrite-2026-10-13` (GIF 이력 제거 직전 상태) |
-| 원격 main | 96fdd695 = 4.5.0(PR #108, GitHub 릴리스 v4.5.0, Store 제출 14 게시). 4.5.1은 #109·#110·#111·#113 뒤 `release/4.5.1`로 올림. 저장소는 공개 |
+| 원격 main | fc3aedbe = 4.5.1(PR #114, GitHub 릴리스 v4.5.1). Store는 4.5.0(제출 14) 게시, 게시자 표시 이름 Mimiloaf 승인. 4.5.2는 `release/4.5.2`(#112 포함)로 올림. 저장소는 공개 |
 
 **소통 규칙**
 1. 오케스트레이터만 §0~§4를 고칩니다. §7 로그는 아래로 추가만 합니다.
@@ -144,3 +144,5 @@ MyCapture 개선 작업을 이어 가는 오케스트레이터가 읽고 고치�
   - #97 병합 충돌은 App.EditRecovery.cs 한 곳(핀 세션 저장과 종료 요청 표시 둘 다 유지)이었고, F3 새 설치 기본값에 맞춰 #97 테스트 단언 3개를 NewInstallDefaults 비교로 바꿨습니다.
 - 2026-10-21 Claude: 4.5.1을 준비했습니다. #110(이미지 편집 중 응답 없음 교착 해결)·#111(체감 속도 2차)·#109(핀 글자 선택 F2, 고배율 다시 그리기, 트레이 열린 핀, OCR C/C++ 전처리, 라이브러리 P·K)·#113(핀 복원 저장본 DPAPI 암호화, 첫 실행 F3 안내)을 담습니다.
   - #113은 우체통 CLI로 Codex가 구현하고 다른 Codex가 읽기 전용으로 교차 리뷰했습니다(P1 2건 수정). Codex 샌드박스에서는 DPAPI가 실패하므로 리드가 샌드박스 밖에서 Core 1,916·App 4,486을 확인했습니다.
+- 2026-10-21 Claude: 4.5.1을 main fc3aedbe·v4.5.1로 냈습니다. 사용자가 다른 세션에서 F3 유지·첫 실행 문구 추가 없음·새 설치 더블클릭 닫기를 정해, 4.5.2에서 NewInstallDefaults의 CloseOnDoubleClick을 true로 되돌리고 환영 화면 F3 줄을 뺐습니다. #112(설치 안내·Store 목록 초안 정정)를 4.5.2 릴리스 PR에 포함했습니다.
+  - 게시자 표시 이름은 Mimiloaf(Partner Center 승인 완료)이며 Store MSIX는 `package-store.ps1 -PublisherDisplayName 'Mimiloaf'`로 만듭니다.

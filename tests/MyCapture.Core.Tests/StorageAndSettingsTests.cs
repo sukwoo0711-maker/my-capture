@@ -253,7 +253,7 @@ public sealed class SettingsStoreTests
         Assert.Equal(Hotkey.None, settings.Hotkeys.OpenLibrary);
         Assert.Equal(new Hotkey(HotkeyModifiers.None, Hotkey.VkF3), settings.Hotkeys.PasteToScreen);
         Assert.Equal(new Hotkey(HotkeyModifiers.Shift, Hotkey.VkF3), settings.Hotkeys.HideAllPins);
-        Assert.False(settings.Pin.CloseOnDoubleClick);
+        Assert.True(settings.Pin.CloseOnDoubleClick);
         Assert.False(settings.General.ShowShortcutHints);
         Assert.True(settings.Export.CopyToClipboardOnQuickSave);
         Assert.Equal(RecordingFrameRate.Fps30, settings.Recording.FrameRate);

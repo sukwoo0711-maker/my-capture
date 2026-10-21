@@ -40,7 +40,7 @@ public static class NewInstallDefaults
         settings.Hotkeys.PasteToScreen = new Hotkey(HotkeyModifiers.None, Hotkey.VkF3);
         settings.Hotkeys.HideAllPins = new Hotkey(HotkeyModifiers.Shift, Hotkey.VkF3);
         settings.Hotkeys.UploadGitHubImage = Hotkey.None;
-        settings.Pin.CloseOnDoubleClick = false;
+        settings.Pin.CloseOnDoubleClick = true;
         settings.Pin.RestoreOpenPinsOnLaunch = true;
         settings.General.AfterCapture = AfterCaptureAction.QuickAccess;
         settings.General.Theme = MyCapture.Core.Themes.AppThemeNames.ToSetting(MyCapture.Core.Themes.AppTheme.System);

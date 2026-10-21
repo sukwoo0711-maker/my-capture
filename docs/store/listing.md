@@ -1,10 +1,12 @@
 # Microsoft Store 목록 초안
 
-Partner Center의 Store 목록과 제출 옵션에 붙여 넣을 4.4.0 문구입니다. 한국어(ko-KR)와 영어(en-US) 목록을 함께 작성합니다.
+Partner Center의 Store 목록과 제출 옵션에 붙여 넣을 문구입니다. 한국어(ko-KR)와 영어(en-US) 목록을 함께 작성합니다.
 
 2026-10-20 핀 중심으로 다시 썼습니다. MyCapture의 핵심 쓰임은 코딩하는 동안 엑셀 사양 표와 자주 쓰는 코드를 에디터 위에 띄워 두고 원문 그대로 다시 붙여 넣는 것이고, 개인정보 가리기는 공유 전 정리 기능으로 뒤에 둡니다. 핀을 띄우는 키는 F3 하나로 씁니다. 복사한 표·코드도, Ctrl+Shift+C로 캡처한 화면도 F3으로 띄웁니다. 캡처 카드의 P는 소개하지 않습니다.
 
-이 문구는 4.5.0 핀 흐름 수정(`feat/pin-core-flow-450`)을 기준으로 합니다. 새 설치에서 F3 클립보드 핀, Shift+F3 핀 모두 숨기기·보이기, 핀의 Ctrl+C 원문 복사, 다음 실행 때 열린 핀 다시 띄우기가 그 수정으로 들어갑니다. 4.4.0 패키지에는 이 기본값이 없으므로, 목록 변경은 4.5.0 패키지와 함께 제출합니다. 제출 13(4.4.0) 인증이 끝나기 전에는 제출하지 않습니다.
+이 문구는 4.5.0 동작을 기준으로 합니다. 새 설치에서 F3 클립보드 핀, Shift+F3 핀 모두 숨기기·보이기, 핀의 Ctrl+C 원문 복사, 다음 실행 때 열린 핀 다시 띄우기가 4.5.0으로 들어갔습니다.
+
+2026-10-21 Gemini·Grok 외부 평가 합의안 2절에 따라 설명과 기능 목록을 다시 정리했습니다. 설명 첫 단락은 짧은 설명 하나로 줄이고, 단축키와 메뉴는 한 절에 모았습니다. 기능 줄은 단축키가 아니라 하는 일로 시작합니다. 녹화에 소리가 없다는 점은 설명·기능 줄·9번 캡션에 다른 항목과 같은 크기로 적고, 스크롤 캡처 한도(40프레임·32,760픽셀·256MB)를 밝혔습니다. 검색어는 핀·표·코드 단어로 바꿨습니다. 이 변경은 다음 제출 때 Partner Center에 입력합니다.
 
 ## 공통 항목
 
@@ -29,34 +31,42 @@ Partner Center의 Store 목록과 제출 옵션에 붙여 넣을 4.4.0 문구입
 
 ### 짧은 소개
 
-엑셀 사양 표와 자주 쓰는 코드를 에디터 위에 띄워 두고, 보면서 코딩하다가 원문 그대로 붙여 넣는 Windows 핀 도구입니다. 복사한 표·코드와 캡처한 화면을 F3 한 번으로 띄웁니다. 광고·계정 없이 무료이고, 캡처와 글자 인식은 이 PC 안에서 처리합니다.
+엑셀 사양 표와 자주 쓰는 코드를 에디터 위에 띄워 두고 원문을 그대로 다시 복사하는 Windows 핀 도구입니다. 광고·계정 없이 무료이고, 캡처와 글자 인식은 이 PC 안에서 처리합니다.
 
 ### 설명
 
-MyCapture는 코딩하는 동안 참고 자료를 다른 창 위에 띄워 두는 Windows 핀 도구입니다. 엑셀에서 범위를 복사해 핀으로 띄우면 엑셀이 함께 넣어 주는 그림을 그대로 써서 글꼴·채우기·테두리가 보던 모양 그대로 보이고, 셀 값은 탭 구분 원문으로 함께 보관됩니다. 색 정보를 함께 복사하는 에디터에서 복사한 코드는 에디터 색과 들여쓰기를 유지한 코드 핀이 되고, 그 밖의 텍스트는 글자 그대로 그린 핀이 됩니다. 핀에서 Ctrl+C나 Ctrl+더블클릭을 누르면 원문을 그대로 다시 복사하므로 에디터나 시트에 바로 붙여 넣습니다. 핀을 반투명으로 두거나 뒤 창 클릭을 허용하면 핀 아래 창에서 계속 입력합니다.
+MyCapture는 코딩하는 동안 엑셀 사양 표와 자주 쓰는 코드를 다른 창 위에 띄워 두는 Windows 핀 도구입니다.
 
-핀으로 띄우기:
+핀:
 
-- 엑셀·에디터에서 Ctrl+C를 누른 뒤 F3을 누르면 복사한 표·코드가 핀으로 뜹니다. 에디터의 입력 위치는 그대로 남습니다.
-- Ctrl+Shift+C로 화면 일부를 캡처하면 클립보드에 복사되므로, 이어서 F3을 누르면 그 캡처가 핀이 됩니다.
-- Shift+F3은 핀을 모두 숨기거나 다시 보입니다. 다른 프로그램이 F3을 쓰고 있으면 실행할 때 알려 주며, 설정에서 다른 키로 바꿉니다.
+- 엑셀 범위는 엑셀이 클립보드에 넣는 그림을 그대로 써서 글꼴·채우기·테두리가 시트와 같게 보입니다. 셀 값은 탭 구분 원문으로 함께 보관합니다.
+- 색 정보를 함께 복사하는 에디터에서 가져온 코드는 에디터 색과 들여쓰기를 유지합니다. 그 밖의 텍스트는 글자 그대로 그립니다.
+- 핀의 원문을 다시 복사해 에디터나 시트에 그대로 붙여 넣습니다. 캡처한 화면을 띄운 이미지 핀에서는 이 PC에서 인식한 한국어·영어 글자를 복사합니다.
+- 반투명(20–100%)으로 두거나 뒤 창 클릭을 허용하면 핀 아래 창에서 계속 입력합니다. 확대·축소는 10–800%입니다.
+- 앱을 끄고 다시 실행하면 열려 있던 핀이 다시 뜹니다. 닫은 핀은 최근 20개까지 내용·배율·투명도·위치 그대로 다시 엽니다.
+- 핀은 작업 표시줄과 Alt+Tab 목록에 나타나지 않습니다.
 
-핀 조작:
+단축키와 메뉴:
 
-- Ctrl+C 또는 Ctrl+더블클릭: 원문 복사. 이미지 핀은 이 PC에서 인식한 한국어·영어 글자를 복사합니다(Ctrl+더블클릭).
-- Ctrl+휠: 투명도(20–100%), 휠: 확대·축소(10–800%), 드래그: 이동
-- 오른쪽 클릭 메뉴: 뒤 창 클릭 허용, 원문 텍스트 복사, 닫은 핀 다시 열기, 저장
+- F3: 클립보드를 핀으로 띄우기. 엑셀·에디터에서 Ctrl+C 뒤에 누르면 복사한 표·코드가 핀이 되고, 에디터의 입력 위치는 그대로 남습니다.
+- Shift+F3: 핀 모두 숨기기·보이기
+- Ctrl+Shift+C: 영역 캡처. 캡처가 클립보드에 복사되므로 이어서 F3을 누르면 핀이 됩니다.
+- Ctrl+Shift+X: 영역 녹화 시작·끝
+- 핀에서 Ctrl+C 또는 Ctrl+더블클릭: 원문 복사(이미지 핀은 인식한 글자)
+- 핀에서 Ctrl+휠: 투명도, 휠: 확대·축소, 드래그: 이동
+- 핀 오른쪽 클릭 메뉴: 뒤 창 클릭 허용, 원문 텍스트 복사, 닫은 핀 다시 열기, 저장
 - 트레이 메뉴: 클립보드를 핀으로 띄우기, 핀 모두 숨기기·보이기, 모든 핀 클릭 허용 해제, 닫은 핀 다시 열기
+- 이미지 편집기에서 Ctrl+Shift+R: 자동 가리기
 
-앱을 끄고 다시 실행하면 열려 있던 핀이 다시 뜹니다. 닫은 핀은 최근 20개까지 내용·배율·투명도와 위치를 그대로 다시 엽니다. 핀은 작업 표시줄과 Alt+Tab 목록에 나타나지 않습니다. 새로 설치하면 전역 단축키는 영역 캡처 Ctrl+Shift+C, 영역 녹화 Ctrl+Shift+X, 클립보드 핀 F3, 핀 모두 숨기기 Shift+F3이고, 설정에서 바꿉니다.
+참고) 전역 단축키 네 개는 새로 설치했을 때의 기본값이며 설정에서 바꿉니다. 다른 프로그램이 F3을 이미 쓰고 있으면 실행할 때 알려 줍니다.
 
 텍스트 복사는 캡처한 이미지나 이미지 핀의 한국어·영어를 PC에서 인식해 클립보드에 복사합니다. 표는 CSV·Markdown·탭 구분 형식으로 복사합니다.
 
-라이브러리는 창 제목과 이미지 속 글자로 지난 캡처를 찾으며, 폴더로 정리하고 폴더나 ZIP으로 내보냅니다. 신규 설치에서는 보관 기간 제한이 없고, 폴더 밖 캡처가 5GB나 1,000개를 넘을 때만 오래된 항목부터 정리합니다. 보관으로 표시하거나 폴더에 넣은 항목은 자동 정리에서 제외합니다.
+라이브러리는 창 제목과 이미지 속 글자로 지난 캡처를 찾으며, 폴더로 정리하고 폴더나 ZIP으로 내보냅니다. 새로 설치하면 보관 기간 제한이 없고, 폴더 밖 항목이 5GB나 1,000개를 넘을 때만 오래된 항목부터 정리합니다. 보관으로 표시하거나 폴더에 넣은 항목은 자동 정리에서 제외합니다.
 
-공유하기 전에는 이미지 편집기에서 화살표, 텍스트, 단계 번호를 넣고 블러나 모자이크로 일부를 가립니다. Ctrl+Shift+R은 인식한 글자에서 이메일, 국내 전화번호, 카드번호, 주민등록번호, IPv4 주소와 지원 형식의 API 키·토큰을 찾아 가립니다. 주석과 가림막은 비파괴 레이어로 남아 나중에 수정합니다.
+영역·창·전체 화면·지연·스크롤 캡처를 지원합니다. 스크롤 캡처는 한 번에 최대 40프레임, 세로 32,760픽셀, 256MB까지 이어 붙이고, 한도에 닿으면 거기까지 이어 붙인 이미지를 엽니다. 녹화는 화면만 기록하며 소리는 녹음하지 않습니다. 영역 녹화는 MP4로 저장하고, 영상 편집기에서 구간을 자르고 텍스트를 넣은 뒤 MP4나 GIF로 내보냅니다.
 
-영역·창·전체 화면·지연·스크롤 캡처를 지원합니다. 영역 녹화는 소리 없이 MP4로 저장하고, 영상 편집기에서 구간을 자르고 텍스트를 넣은 뒤 MP4나 GIF로 내보냅니다.
+공유하기 전에는 이미지 편집기에서 화살표, 텍스트, 단계 번호를 넣고 블러나 모자이크로 일부를 가립니다. 자동 가리기는 인식한 글자에서 이메일, 국내 전화번호, 카드번호, 주민등록번호, IPv4 주소와 지원 형식의 API 키·토큰을 찾아 가립니다. 주석과 가림막은 비파괴 레이어로 남아 나중에 수정합니다.
 
 광고와 계정이 없고 회사 업무에도 무료로 씁니다. 캡처, 편집, 글자 인식, 녹화는 모두 이 PC 안에서 처리합니다. 소스 코드는 GitHub에 MIT 라이선스로 공개되어 있습니다.
 
@@ -66,16 +76,16 @@ MyCapture는 코딩하는 동안 참고 자료를 다른 창 위에 띄워 두�
 
 ### 기능 목록
 
-- F3 한 번으로 복사한 표·코드와 캡처한 화면을 핀으로, Shift+F3으로 모두 숨기기·보이기
-- 엑셀 범위 핀: 엑셀이 넣어 주는 그림 그대로 표시, 셀 값은 탭 구분 원문으로 보관
-- 코드 핀: 에디터 색과 들여쓰기 유지, Ctrl+C·Ctrl+더블클릭으로 원문 복사
-- 핀 조작: Ctrl+휠 투명도 20–100%, 뒤 창 클릭 허용, 휠 확대·축소 10–800%
-- 핀 관리: 다음 실행 때 열린 핀 다시 띄우기, 최근 닫은 핀 20개까지 다시 열기
-- 이미지 핀과 캡처의 한국어·영어 글자 복사
-- 표의 CSV·Markdown·탭 구분 형식 복사
-- 라이브러리의 창 제목·이미지 속 글자 검색, 폴더 정리, 보관, 폴더·ZIP 내보내기
+- 복사한 표·코드와 캡처한 화면을 다른 창 위에 핀으로 띄우기(F3)
+- 엑셀 범위 핀: 시트에서 보던 모양 그대로 표시, 셀 값은 탭 구분 원문으로 보관
+- 코드 핀: 에디터 색과 들여쓰기 유지, 원문 그대로 다시 복사
+- 핀 투명도 20–100%, 뒤 창 클릭 허용, 확대·축소 10–800%
+- 다음 실행 때 열린 핀 다시 띄우기, 최근 닫은 핀 20개까지 다시 열기
+- 캡처와 이미지 핀의 한국어·영어 글자 복사, 표는 CSV·Markdown·탭 구분으로 복사
+- 라이브러리: 창 제목·이미지 속 글자 검색, 폴더 정리, 보관, 폴더·ZIP 내보내기
+- 영역·창·전체 화면·지연 캡처, 스크롤 캡처(최대 40프레임, 세로 32,760픽셀)
+- 영역 녹화(MP4, 소리 없음), 구간 자르기·텍스트 넣기, MP4·GIF 내보내기
 - 공유 전 정리: 화살표·텍스트·단계 번호·블러·모자이크, 이메일·카드번호·토큰 자동 가리기
-- 영역·창·전체 화면·지연·스크롤 캡처, 소리 없는 영역 MP4 녹화와 MP4·GIF 내보내기
 - 광고·계정 없음, 캡처·글자 인식은 이 PC에서 처리, MIT 라이선스 소스 공개
 - 한국어·영어, Windows 설정 따르기·밝게·어둡게·고대비 테마, 키보드·스크린 리더 접근성
 
@@ -91,56 +101,66 @@ MyCapture는 코딩하는 동안 참고 자료를 다른 창 위에 띄워 두�
 6. Shift+F3으로 핀을 모두 숨기거나 다시 보이고, 트레이 메뉴에서 최근 닫은 핀을 위치·배율·투명도 그대로 다시 엽니다.
 7. 이미지 속 오류 문구와 창 제목으로 라이브러리를 검색합니다.
 8. 공유하기 전에 단계 번호와 화살표를 넣고, 이메일·토큰·카드번호를 Ctrl+Shift+R로 가린 화면입니다.
-9. 영역·창·전체 화면 캡처, 클립보드 복사, 이미지 속 글자 복사, 영역 녹화는 Windows 캡처 도구와 같습니다. 여기에 원문을 보관하는 표·코드 핀, 반투명·클릭 허용 핀, 닫은 핀 다시 열기, 스크롤 캡처가 더해집니다.
+9. 영역·창·전체 화면 캡처, 클립보드 복사, 이미지 속 글자 복사는 Windows 캡처 도구와 같습니다. 영역 녹화는 소리 없이 화면만 기록합니다. 여기에 원문을 보관하는 표·코드 핀, 반투명·클릭 허용 핀, 닫은 핀 다시 열기, 스크롤 캡처가 더해집니다.
 
-### 이 버전의 새로운 기능 (4.5.0 초안)
+### 이 버전의 새로운 기능 (4.5.2)
 
-입력 한도는 1,500자입니다. `feat/pin-core-flow-450`의 변경을 바탕으로 쓴 초안이며, 확정본은 4.5.0 릴리스 노트에 맞춥니다.
+입력 한도는 1,500자입니다. Store의 이전 게시 버전은 4.5.0이므로 4.5.1과 4.5.2의 변경을 함께 적습니다.
 
-- 새로 설치하면 F3이 클립보드를 핀으로 띄우고, Shift+F3이 핀을 모두 숨기거나 다시 보입니다. 다른 프로그램이 F3을 쓰고 있으면 실행할 때 알려 줍니다.
-- F3으로 띄운 핀은 에디터의 입력 위치를 가져가지 않습니다.
-- 텍스트·표·코드 핀에서 Ctrl+C를 누르면 원문과 그림을 함께 복사합니다. 에디터에는 원문이, 이미지 편집기에는 그림이 붙습니다.
-- 새로 설치하면 핀을 더블클릭해도 닫히지 않습니다. 닫기는 Esc나 닫기 단추로 합니다.
-- 앱을 끄고 다시 실행하면 열려 있던 핀이 다시 뜹니다.
+- 이미지 편집 중 '응답 없음'으로 멈추던 문제를 고쳤습니다. 펜·끌기·실행 취소와 큰 이미지의 저장도 빨라졌습니다.
+- 캡처를 마치면 클립보드에 복사되는 즉시 편집기가 사라지고, 앱 시작과 라이브러리 갱신이 빨라졌습니다.
+- 텍스트·코드·표 핀에서 F2를 누르면 글자나 셀을 골라 그 부분만 복사합니다.
+- 텍스트·표·코드 핀이 고배율 화면에서도 선명하고, 트레이 메뉴의 '열린 핀'에서 핀을 골라 앞으로 가져옵니다.
+- 다음 실행 때 다시 띄우려고 저장하는 핀은 이 Windows 사용자만 읽을 수 있도록 암호화합니다.
+- 코드 글자 인식이 C/C++ 전처리 줄을 알아보고, 라이브러리의 보관 전환은 K로 옮겼습니다. P는 핀으로 띄웁니다.
+- 새로 설치해도 핀을 더블클릭하면 닫힙니다.
 
 ### 검색어
 
-화면 고정 캡처, 항상 위에 고정, 이미지 띄우기, 스크린샷 고정, 캡처 프로그램, 화면 캡처, 캡쳐
+화면 고정 핀, 항상 위에 고정, 이미지 띄우기, 표 띄우기, 코드 띄우기, 클립보드 핀, 화면 캡처
 
-Partner Center 한도: 7개 검색어, 검색어당 40자 이하, 전체 고유 단어 21개 이하. 위 목록은 검색어 7개, 고유 단어 10개(화면, 고정, 캡처, 항상, 위에, 이미지, 띄우기, 스크린샷, 프로그램, 캡쳐)입니다. 쉼표로 검색어를 나눈 뒤 공백으로 단어를 나누어 중복을 제외했습니다. 사람들은 이 기능을 '화면 고정', '항상 위에 고정', '이미지 띄우기'로 찾습니다. '화면 고정'만 쓰면 휴대폰 화면 고정과 겹치므로 '캡처'·'스크린샷'과 묶었습니다. Store 정책 10.1.3은 검색어에 가격 단어와 다른 제품 이름을 금지하므로 '무료', '엑셀', '캡처 도구'(Windows 캡처 도구의 한국어 제품명)는 넣지 않습니다. 이전 검색어의 '모자이크', '스크롤 캡처', '핀'은 고정 쪽 검색어로 바꿨습니다.
+Partner Center 한도: 7개 검색어, 검색어당 40자 이하, 전체 고유 단어 21개 이하. 위 목록은 검색어 7개, 고유 단어 11개(화면, 고정, 핀, 항상, 위에, 이미지, 띄우기, 표, 코드, 클립보드, 캡처)입니다. 쉼표로 검색어를 나눈 뒤 공백으로 단어를 나누어 중복을 제외했습니다. 2026-10-21 외부 평가 합의(Grok #14)에 따라 캡처 일반명이던 '화면 고정 캡처', '스크린샷 고정', '캡처 프로그램', '캡쳐'를 핀·표·코드 단어로 바꿨습니다. 사람들은 이 기능을 '화면 고정', '항상 위에 고정', '이미지 띄우기'로 찾으므로 이 셋은 남기고, '화면 고정'은 휴대폰 화면 고정과 겹치지 않게 '핀'과 묶었습니다. Store 정책 10.1.3은 검색어에 가격 단어와 다른 제품 이름을 금지하므로 '무료', '엑셀', '캡처 도구'(Windows 캡처 도구의 한국어 제품명)는 넣지 않습니다.
 
 ## English (en-US)
 
 ### Short description
 
-Pin your Excel spec table and go-to code snippets above the editor, code while you look, and paste the original text back. Press F3 to pin what you copied or captured. Free, with no ads or account; capture and OCR stay on this PC.
+Keep your Excel spec table and go-to code snippets above the editor, and copy their original text back. Free, with no ads or account; capture and OCR stay on this PC.
 
 ### Description
 
-MyCapture is a Windows pinning tool that keeps reference material above your other windows while you code. Copy a range in Excel and pin it: the pin uses the picture Excel puts on the clipboard, so fonts, fills and borders look the way they do in the sheet, and the cell values stay attached as tab-separated text. Code copied from an editor that includes colors becomes a code pin with the editor's colors and indentation; other text is drawn as plain text. Press Ctrl+C or Ctrl+double-click on a pin to copy its original text, ready to paste into the editor or the sheet. Make a pin translucent or let clicks pass through it, and keep typing in the window underneath.
+MyCapture is a Windows pinning tool that keeps Excel spec tables and code snippets above your other windows while you code.
 
-Pinning:
+Pins:
 
-- Press Ctrl+C in Excel or your editor, then F3, and what you copied becomes a pin. Your cursor stays in the editor.
-- Press Ctrl+Shift+C to capture part of the screen; the capture goes to the clipboard, so F3 pins it.
-- Shift+F3 hides or shows all pins. If another app already uses F3, MyCapture tells you at startup, and you can choose another key in Settings.
+- Excel ranges use the picture Excel puts on the clipboard, so fonts, fills and borders look as they do in the sheet. Cell values are kept as tab-separated text.
+- Code copied from an editor that includes colors keeps the editor's colors and indentation. Other text is drawn as plain text.
+- Copy a pin's original text back into the editor or the sheet. Image pins copy Korean and English text recognized on this PC.
+- Translucent (20–100%) and click-through pins let you keep typing in the window underneath. Zoom from 10 to 800%.
+- Pins open when you quit come back at the next launch. Up to 20 recently closed pins reopen with their content, zoom, opacity and position.
+- Pins stay out of the taskbar and the Alt+Tab list.
 
-Working with pins:
+Shortcuts and menus:
 
-- Ctrl+C or Ctrl+double-click: copy the original text. Ctrl+double-click on an image pin copies Korean and English text recognized on this PC.
-- Ctrl+wheel: opacity (20–100%). Wheel: zoom (10–800%). Drag: move.
-- Right-click menu: Click through to windows behind, Copy original text, Reopen closed pin, Save
+- F3: pin the clipboard. After Ctrl+C in Excel or your editor, the copied table or code becomes a pin and your cursor stays in the editor.
+- Shift+F3: hide or show all pins
+- Ctrl+Shift+C: capture a region. The capture goes to the clipboard, so F3 pins it.
+- Ctrl+Shift+X: start or stop region recording
+- Ctrl+C or Ctrl+double-click on a pin: copy the original text (recognized text for an image pin)
+- On a pin: Ctrl+wheel for opacity, wheel to zoom, drag to move
+- Pin right-click menu: Click through to windows behind, Copy original text, Reopen closed pin, Save
 - Tray menu: Pin clipboard, Hide or show all pins, Turn off click through on all pins, Reopen closed pin
+- Ctrl+Shift+R in the image editor: Auto-redact
 
-Pins that are open when you quit come back at the next launch. Up to 20 recently closed pins reopen with their content, zoom, opacity and position. Pins stay out of the taskbar and the Alt+Tab list. A new installation assigns Ctrl+Shift+C for region capture, Ctrl+Shift+X for region recording, F3 to pin the clipboard and Shift+F3 to hide or show all pins; change them in Settings.
+Note: the four global shortcuts are the defaults for new installations; change them in Settings. If another app already uses F3, MyCapture tells you at startup.
 
-Copy text recognizes Korean and English in captures and image pins on this PC and copies the result to the clipboard. Tables can be copied as CSV, Markdown or tab-separated text.
+Copy text recognizes Korean and English in captures and image pins on this PC. Tables can be copied as CSV, Markdown or tab-separated text.
 
-Search the library by window title or by text inside images. Organize captures into folders and export to a folder or ZIP. New installations keep captures with no time limit; automatic cleanup removes the oldest captures outside folders only after they pass 5 GB or 1,000 items. Items marked Keep or stored in folders are never cleaned up automatically.
+Search the library by window title or by text inside images. Organize items into folders and export to a folder or ZIP. New installations keep items with no time limit; automatic cleanup removes the oldest items outside folders only after they pass 5 GB or 1,000 items. Items marked Keep or stored in folders are never cleaned up automatically.
 
-Before you share, add arrows, text and step numbers in the image editor, and blur or mosaic parts of the image. Ctrl+Shift+R runs Auto-redact, which finds email addresses, Korean phone numbers, payment card numbers, Korean resident registration numbers, IPv4 addresses, and supported API key and token formats in recognized text and covers them. Annotations and covers stay on editable, non-destructive layers.
+Capture a region, window or full screen, or use delayed and scrolling capture. Scrolling capture joins up to 40 frames, 32,760 pixels in height or 256 MB, and opens what it has joined when it reaches a limit. Recording captures the screen only; no sound is recorded. Record a region to MP4, trim it, add text and export MP4 or GIF.
 
-Capture a region, window or full screen, or use delayed and scrolling capture. Record a screen region to MP4 without audio, trim it, add text and export MP4 or GIF.
+Before you share, add arrows, text and step numbers in the image editor, and blur or mosaic parts of the image. Auto-redact finds email addresses, Korean phone numbers, payment card numbers, Korean resident registration numbers, IPv4 addresses, and supported API key and token formats in recognized text and covers them. Annotations and covers stay on editable, non-destructive layers.
 
 There are no ads and no account, and MyCapture is free for work use too. Capture, editing, text recognition and recording all run on this PC. The source code is published on GitHub under the MIT License.
 
@@ -150,16 +170,16 @@ Requirements: Windows 11 or Windows 10 version 22H2 (x64). ARM64 PCs need Window
 
 ### Features
 
-- F3 pins what you copied or captured; Shift+F3 hides or shows all pins
-- Excel range pins: shown with the picture Excel provides, cell values kept as tab-separated text
-- Code pins: the editor's colors and indentation, original text copied with Ctrl+C or Ctrl+double-click
-- Pin controls: Ctrl+wheel opacity from 20 to 100%, click-through, wheel zoom from 10 to 800%
-- Pin management: open pins return at the next launch; reopen up to 20 recently closed pins
-- Copy Korean and English text from captures and image pins
-- Copy tables as CSV, Markdown or tab-separated text
+- Pin copied tables, code and captures above other windows (F3)
+- Excel range pins: shown as they look in the sheet, cell values kept as tab-separated text
+- Code pins: the editor's colors and indentation, original text copied back
+- Pin opacity from 20 to 100%, click-through, zoom from 10 to 800%
+- Open pins return at the next launch; reopen up to 20 recently closed pins
+- Copy Korean and English text from captures and image pins; copy tables as CSV, Markdown or tab-separated text
 - Library search by window title or image text, folders, Keep, and folder or ZIP export
+- Region, window, full screen and delayed capture; scrolling capture up to 40 frames or 32,760 pixels high
+- Region recording to MP4, no sound; trim, add text, export MP4 or GIF
 - Before sharing: arrows, text, step numbers, blur, mosaic and Auto-redact for emails, card numbers and tokens
-- Region, window, full screen, delayed and scrolling capture; silent region MP4 recording with MP4 or GIF export
 - No ads or account; capture and text recognition stay on this PC; MIT-licensed source code
 - Korean and English; follow Windows, light, dark or high contrast themes; keyboard and screen reader access
 
@@ -175,23 +195,25 @@ Enter them in screenshot order. Each caption is 200 characters or fewer.
 6. Shift+F3 hides or shows all pins, and the tray menu reopens a closed pin with its position, zoom and opacity.
 7. Library search finds an error message inside an image. Window titles are searchable too.
 8. Step numbers and an arrow added before sharing, with an email address, token and card number covered by Ctrl+Shift+R.
-9. Windows Snipping Tool and MyCapture both capture, copy to the clipboard, extract text and record regions. MyCapture adds table and code pins with original text, click-through and scrolling capture.
+9. Like Snipping Tool, MyCapture captures, copies to the clipboard and extracts text. It adds table and code pins with original text, click-through pins and scrolling capture; recording is silent.
 
-### What's new in this version (4.5.0 draft)
+### What's new in this version (4.5.2)
 
-Limit: 1,500 characters. Drafted from `feat/pin-core-flow-450`; match the 4.5.0 release notes before submitting.
+Limit: 1,500 characters. The Store last published 4.5.0, so this lists the 4.5.1 and 4.5.2 changes together.
 
-- New installs use F3 to pin the clipboard and Shift+F3 to hide or show all pins. If another app already uses F3, MyCapture tells you at startup.
-- A pin opened with F3 leaves your cursor in the editor.
-- Ctrl+C on a text, table or code pin copies the original text together with the picture, so editors paste the text and image editors paste the picture.
-- On new installs, double-clicking a pin no longer closes it; use Esc or the close button.
-- Pins that are open when you quit come back at the next launch.
+- Fixed the image editor freezing as "Not responding" while you edit. Drawing, dragging, undo and saving large images are faster too.
+- After a capture, the editor disappears as soon as the image is on the clipboard, and startup and library updates are faster.
+- Press F2 on a text, code or table pin to select text or cells and copy only that part.
+- Text, table and code pins stay sharp on high-DPI displays, and Open pins in the tray menu brings a pin to the front.
+- Pins saved to reopen at the next launch are encrypted so only your Windows account on this PC can read them.
+- Code text recognition detects C/C++ preprocessor lines, and the library toggles Keep with K; P pins the capture.
+- On new installs, double-clicking a pin closes it again.
 
 ### Search terms
 
-pin screenshot to screen, pin image on screen, floating screenshot, image always on top, screenshot tool, screen capture, OCR
+pin to screen, always on top, pin clipboard, pin table on screen, pin code snippet, floating screenshot, screen capture
 
-Partner Center limits: 7 terms, 40 characters per term, and 21 unique words in total. This list has 7 terms and 12 unique words (pin, screenshot, to, screen, image, on, floating, always, top, tool, capture, OCR), counted by splitting terms at commas and words at spaces, then removing duplicates without regard to case. Store policy 10.1.3 does not allow pricing terms or other products' titles in search terms, so "free", "Excel" and "snipping tool alternative" are not used. "redact" and "print screen" from the previous list were replaced with pinning terms.
+Partner Center limits: 7 terms, 40 characters per term, and 21 unique words in total. This list has 7 terms and 13 unique words (pin, to, screen, always, on, top, clipboard, table, code, snippet, floating, screenshot, capture), counted by splitting terms at commas and words at spaces, then removing duplicates without regard to case. Following the 2026-10-21 review consensus (Grok #14), the generic capture terms "pin image on screen", "image always on top", "screenshot tool" and "OCR" were replaced with pin, table and code terms. Store policy 10.1.3 does not allow pricing terms or other products' titles in search terms, so "free", "Excel" and "snipping tool alternative" are not used.
 
 ## 제출 옵션: 제한 기능 사용 사유
 

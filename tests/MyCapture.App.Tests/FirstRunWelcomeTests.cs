@@ -3,11 +3,9 @@ using System.Windows.Automation;
 using System.Windows.Controls;
 using System.Windows.Documents;
 using System.Windows.Input;
-using System.Windows.Media;
 using MyCapture.App.Themes;
 using MyCapture.Core.Localization;
 using MyCapture.Core.Settings;
-using MyCapture.Core.Themes;
 using Xunit;
 
 namespace MyCapture.App.Tests;
@@ -104,77 +102,6 @@ public sealed class FirstRunWelcomeTests
             Assert.DoesNotContain(Descendants(unassigned).OfType<TextBlock>(), text => text.Text == UiText.Get("Onboard_CaptureFromTray"));
         }
         finally { unassigned.Close(); }
-    });
-
-    [Theory]
-    [InlineData("ko-KR", false, "복사한 표·코드나 캡처한 화면을 F3 키로 다른 창 위에 띄웁니다.")]
-    [InlineData("ko-KR", true, "복사한 표·코드나 캡처한 화면을 Ctrl+Alt+P 키로 다른 창 위에 띄웁니다.")]
-    [InlineData("en-US", false, "Press F3 to pin what you copied or captured above other windows.")]
-    [InlineData("en-US", true, "Press Ctrl+Alt+P to pin what you copied or captured above other windows.")]
-    public void WelcomeShowsTheConfiguredPinShortcutBelowCaptureKeys(string locale, bool customized, string expectedHint) => StaTestHost.Run(() =>
-    {
-        using var language = UiText.UseLanguage(locale);
-        var keys = new HotkeySettings();
-        if (customized) keys.PasteToScreen = new Hotkey(HotkeyModifiers.Control | HotkeyModifiers.Alt, 0x50);
-        var welcome = new WelcomeWindow(keys, AfterCaptureAction.Editor);
-        try
-        {
-            TextBlock hint = Assert.Single(Descendants(welcome).OfType<TextBlock>(), text => text.Text == expectedHint);
-            Assert.Equal(expectedHint, AutomationProperties.GetName(hint));
-            Assert.Equal(Visibility.Visible, hint.Visibility);
-            Assert.Equal(TextWrapping.Wrap, hint.TextWrapping);
-            StackPanel root = Assert.IsType<StackPanel>(welcome.Content);
-            Assert.Same(hint, root.Children[2]);
-            Assert.IsType<WrapPanel>(root.Children[1]);
-            Assert.DoesNotContain("{0}", hint.Text, StringComparison.Ordinal);
-            if (customized) Assert.DoesNotContain("F3", hint.Text, StringComparison.Ordinal);
-        }
-        finally { welcome.Close(); }
-    });
-
-    [Theory]
-    [InlineData("ko-KR")]
-    [InlineData("en-US")]
-    public void WelcomeOmitsThePinHintWhenItsShortcutIsUnassigned(string locale) => StaTestHost.Run(() =>
-    {
-        using var language = UiText.UseLanguage(locale);
-        var welcome = new WelcomeWindow(new HotkeySettings { PasteToScreen = Hotkey.None }, AfterCaptureAction.Editor);
-        try
-        {
-            StackPanel root = Assert.IsType<StackPanel>(welcome.Content);
-            Assert.Equal(4, root.Children.Count);
-            Assert.IsType<WrapPanel>(root.Children[1]);
-            StackPanel actions = Assert.IsType<StackPanel>(root.Children[2]);
-            Assert.Contains(welcome.TryNowButton, actions.Children.Cast<UIElement>());
-            Assert.DoesNotContain(Descendants(welcome).OfType<TextBlock>(), text =>
-                text.Text == UiText.Format("Welcome_PinHint", "F3") ||
-                text.Text == UiText.Format("Welcome_PinHint", string.Empty));
-            Assert.True(welcome.TryNowButton.IsDefault);
-        }
-        finally { welcome.Close(); }
-    });
-
-    [Fact]
-    public void WelcomePinHintFollowsTheThemeAndWindowsContrastColours() => SystemHighContrastThemeTests.Simulate(() =>
-    {
-        using var language = UiText.UseLanguage("en-US");
-        ResourceDictionary resources = SystemHighContrastThemeTests.LoadTheme();
-        ThemeService.ApplyResources(AppTheme.Daylight, resources, systemHighContrast: false);
-        var welcome = new WelcomeWindow(new HotkeySettings(), AfterCaptureAction.Editor) { Resources = resources };
-        try
-        {
-            TextBlock hint = Assert.Single(Descendants(welcome).OfType<TextBlock>(), text =>
-                text.Text == UiText.Format("Welcome_PinHint", "F3"));
-            Assert.Same(resources["Text.Secondary"], hint.Foreground);
-
-            ThemeService.ApplyResources(AppTheme.Daylight, resources, systemHighContrast: true);
-            Assert.Same(resources["Text.Secondary"], hint.Foreground);
-            Assert.Equal(SystemHighContrastThemeTests.NightSky[SystemColorRole.WindowText], Assert.IsType<SolidColorBrush>(hint.Foreground).Color);
-
-            ThemeService.ApplyResources(AppTheme.Daylight, resources, systemHighContrast: false);
-            Assert.Same(resources["Text.Secondary"], hint.Foreground);
-        }
-        finally { welcome.Close(); }
     });
 
     [Theory]
