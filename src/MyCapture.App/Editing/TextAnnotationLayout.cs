@@ -61,7 +61,7 @@ internal static class TextAnnotationLayout
     internal static FormattedText Format(in FormatKey key)
     {
         var typeface = new Typeface(
-            new FontFamily(key.FontFamily),
+            FontCatalog.Resolve(key.FontFamily),
             key.Italic ? FontStyles.Italic : FontStyles.Normal,
             key.Bold ? FontWeights.Bold : FontWeights.Normal,
             FontStretches.Normal);

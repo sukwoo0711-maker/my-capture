@@ -32,8 +32,8 @@ public sealed class EditorChromeAndTextInspectorTests : KoreanCaptionTest
             Assert.Null(Controller(host.Editor).Selected);
             ComboBox fonts = Field<ComboBox>(host.Editor, "_textFontFamily");
             Assert.True(fonts.IsVisible);
-            family = fonts.Items.Cast<FontFamily>().First(font => font.Source != "Malgun Gothic").Source;
-            fonts.SelectedItem = fonts.Items.Cast<FontFamily>().Single(font => font.Source == family);
+            family = fonts.Items.Cast<FontChoice>().First(font => !font.IsMore && font.Value != "Malgun Gothic").Value;
+            fonts.SelectedItem = fonts.Items.Cast<FontChoice>().Single(font => font.Value == family);
             Field<Slider>(host.Editor, "_fontSizeSlider").Value = 32;
             Toggle(host.Editor, "_textBold", true);
             Toggle(host.Editor, "_textBackground", true);
@@ -52,7 +52,7 @@ public sealed class EditorChromeAndTextInspectorTests : KoreanCaptionTest
 
         using var reopened = EditorHost.Create();
         SelectTextTool(reopened.Editor);
-        Assert.Equal(family, Assert.IsType<FontFamily>(Field<ComboBox>(reopened.Editor, "_textFontFamily").SelectedItem).Source);
+        Assert.Equal(family, Assert.IsType<FontChoice>(Field<ComboBox>(reopened.Editor, "_textFontFamily").SelectedItem).Value);
         Assert.Equal(32, Field<Slider>(reopened.Editor, "_fontSizeSlider").Value);
         Assert.True(Field<CheckBox>(reopened.Editor, "_textBold").IsChecked);
         Assert.True(Field<CheckBox>(reopened.Editor, "_textBackground").IsChecked);
@@ -77,7 +77,7 @@ public sealed class EditorChromeAndTextInspectorTests : KoreanCaptionTest
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void FontPickerKeepsCurrentAndRecentFamiliesFirstAndPreviewsInstalledFonts(bool reusePreview) => StaTestHost.Run(() =>
+    public void FontPickerSharesRecommendationsAndPreviewsEachResolvedFamily(bool reusePreview) => StaTestHost.Run(() =>
     {
         string[] installed = Fonts.SystemFontFamilies.Select(font => font.Source)
             .Distinct(StringComparer.OrdinalIgnoreCase).Order(StringComparer.OrdinalIgnoreCase).ToArray();
@@ -90,16 +90,14 @@ public sealed class EditorChromeAndTextInspectorTests : KoreanCaptionTest
         using var host = EditorHost.Create();
         SelectTextTool(host.Editor);
         ComboBox picker = Field<ComboBox>(host.Editor, "_textFontFamily");
-        FontFamily[] choices = picker.Items.Cast<FontFamily>().ToArray();
-        Assert.Equal(installed[^1], choices[0].Source);
-        Assert.Equal(installed[1], choices[1].Source);
-        Assert.Equal(installed[0], choices[2].Source);
-        Assert.Equal(choices.Length, choices.Select(font => font.Source).Distinct(StringComparer.OrdinalIgnoreCase).Count());
-        Assert.All(installed, name => Assert.Contains(choices, font => font.Source.Equals(name, StringComparison.OrdinalIgnoreCase)));
+        FontChoice[] choices = picker.Items.Cast<FontChoice>().ToArray();
+        Assert.Equal(FontCatalog.ChoicesFor(installed[^1], FontCatalog.RecommendedFonts(UiText.Culture)), choices);
+        Assert.Equal(choices.Length, choices.Select(font => font.Value).Distinct(StringComparer.OrdinalIgnoreCase).Count());
+        Assert.True(choices[^1].IsMore);
 
         Assert.NotNull(picker.ItemTemplate);
         ContentPresenter? preview = null;
-        foreach (FontFamily family in choices.Take(3))
+        foreach (FontChoice family in choices)
         {
             // Apply the template through WPF so its factory is sealed before instantiation.
             if (preview is null || !reusePreview)
@@ -107,8 +105,8 @@ public sealed class EditorChromeAndTextInspectorTests : KoreanCaptionTest
             preview.Content = family;
             preview.Measure(new Size(240, 100));
             preview.Arrange(new Rect(preview.DesiredSize));
-            TextBlock label = Assert.Single(Tree<TextBlock>(preview), text => text.Text.Contains(family.Source, StringComparison.Ordinal));
-            Assert.Equal(family.Source, label.FontFamily.Source);
+            TextBlock label = Assert.Single(Tree<TextBlock>(preview), text => text.Text == family.Label);
+            Assert.Same(family.PreviewFamily, label.FontFamily);
         }
     });
 
@@ -129,23 +127,23 @@ public sealed class EditorChromeAndTextInspectorTests : KoreanCaptionTest
         controller.SetSelected(caption);
         Assert.False(controller.CanUndo);
         ComboBox picker = Field<ComboBox>(host.Editor, "_textFontFamily");
-        FontFamily next = picker.Items.Cast<FontFamily>().First(font => font.Source != caption.FontFamily);
+        FontChoice next = picker.Items.Cast<FontChoice>().First(font => !font.IsMore && font.Value != caption.FontFamily);
         RectD original = caption.Rect;
         controller.TextFitter = text => new RectD(text.Rect.X, text.Rect.Y,
-            text.FontFamily == next.Source ? 220 : 120, 40);
+            text.FontFamily == next.Value ? 220 : 120, 40);
         int undoCount = controller.Undo.UndoCount;
 
         picker.SelectedItem = next;
 
-        Assert.Equal(next.Source, caption.FontFamily);
+        Assert.Equal(next.Value, caption.FontFamily);
         Assert.Equal(220, caption.Rect.Width);
         Assert.Equal(undoCount + 1, controller.Undo.UndoCount);
         Assert.True(controller.PerformUndo());
         Assert.Equal("Malgun Gothic", caption.FontFamily);
         Assert.Equal(original, caption.Rect);
-        Assert.Equal("Malgun Gothic", Assert.IsType<FontFamily>(picker.SelectedItem).Source);
+        Assert.Equal("Malgun Gothic", Assert.IsType<FontChoice>(picker.SelectedItem).Value);
         Assert.True(controller.PerformRedo());
-        Assert.Equal(next.Source, caption.FontFamily);
+        Assert.Equal(next.Value, caption.FontFamily);
         Assert.Equal(220, caption.Rect.Width);
     });
 
