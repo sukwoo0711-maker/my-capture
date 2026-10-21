@@ -35,7 +35,7 @@ internal sealed class EditorScene : TutorialScene
     private readonly string _toolName, _toolKey;
     private readonly List<PointD> _clicks = [];
     private TaskCompletionSource<bool>? _commit;
-    private bool _closed;
+    private bool _closed, _noteFront;
     private int _steps;
     private string _typed = string.Empty;
     private PointD _dragStart;
@@ -180,8 +180,10 @@ internal sealed class EditorScene : TutorialScene
                 story.Hold("review", 1.0).Hold("save-key", 0.3).Hold("saving", 0.8).Hold("closed", 0.6);
                 break;
             case "copy":
-                story.Move("command", Of(ByAutomationId("EditorFlowCopy"))).Click("copy").Hold("copying", 0.8).Hold("closed", 0.6);
-                story.Move("note", new PointD(330, 300)).Click("note-click").Hold("paste-key", 0.6).Hold("pasted", 0.4);
+                // Copy only fills the clipboard and the editor stays open (Done saves and closes), so
+                // the note app comes to the front over the editor for the paste.
+                story.Move("command", Of(ByAutomationId("EditorFlowCopy"))).Click("copy").Hold("copying", 0.8).Hold("copied", 1.4);
+                story.Hold("switch", 0.5).Move("note", new PointD(330, 300)).Click("note-click").Hold("paste-key", 0.6).Hold("pasted", 0.4);
                 break;
         }
 
@@ -228,8 +230,9 @@ internal sealed class EditorScene : TutorialScene
         {
             BitmapSource client = _host.Snapshot();
             Stage.DrawWindow(dc, client, ClientOrigin, _window.Title);
+            if (_noteFront) DrawNote(dc, pasted: frame.Segment is "pasted" or "result");
         }
-        else DrawAfterClose(dc, frame);
+        else DrawExplorer(dc);
 
         (string caption, string key) = Caption(frame);
         if (frame.Pressed) Stage.DrawClick(dc, cursor, frame.Progress);
@@ -240,7 +243,9 @@ internal sealed class EditorScene : TutorialScene
 
     private void Apply(TutorialFramePlan frame, ref PointD cursor)
     {
-        if (_closed) return;
+        // Once another app is in front, the pointer and keys go to it, not to the editor.
+        if (frame.Segment == "switch") _noteFront = true;
+        if (_closed || _noteFront) return;
         if (frame.Segment == "drag" && _feature == "pen")
         {
             double t = Stage.Ease(frame.Progress);
@@ -301,6 +306,12 @@ internal sealed class EditorScene : TutorialScene
             case "copy" when frame.IsLast:
                 BeginCommit(() => ((Button)ByAutomationId("EditorFlowCopy")).RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent)));
                 break;
+            case "copied" when _commit is not null:
+                _commit.TrySetResult(true);
+                Stage.Pump(80);
+                if (!_window.IsVisible || _editor.StatusText != Ui("EditorFlow_Copied"))
+                    throw new InvalidOperationException($"Copy should keep the editor open and report '{Ui("EditorFlow_Copied")}', not '{_editor.StatusText}'.");
+                break;
             case "closed" when _commit is not null:
                 _commit.TrySetResult(true);
                 Stage.Pump(80);
@@ -337,7 +348,7 @@ internal sealed class EditorScene : TutorialScene
 
     private void DrawPointer(DrawingContext dc, PointD cursor)
     {
-        if (!_closed && OverCanvas(cursor))
+        if (!_closed && !_noteFront && OverCanvas(cursor))
         {
             EditorCursorKind kind = _editor.CanvasCursorKind;
             if (EditorCursorPolicy.IsCustom(kind))
@@ -365,13 +376,7 @@ internal sealed class EditorScene : TutorialScene
         Stage.DrawPointer(dc, cursor);
     }
 
-    // ---- After the editor closes ---------------------------------------------------------------
-
-    private void DrawAfterClose(DrawingContext dc, TutorialFramePlan frame)
-    {
-        if (_feature == "save") DrawExplorer(dc);
-        else DrawNote(dc, pasted: frame.Segment is "pasted" or "result");
-    }
+    // ---- Other apps: the folder a save lands in, and the note a copy is pasted into ---------------
 
     private void DrawExplorer(DrawingContext dc)
     {
@@ -450,8 +455,8 @@ internal sealed class EditorScene : TutorialScene
                 return segment switch
                 {
                     "open" or "command" => (L($"{copyLabel} 선택 또는 {copy}", $"Click {copyLabel} or press {copy}"), copy),
-                    "copy" or "copying" or "closed" => (L("저장하고 클립보드에 복사한 뒤 편집기 닫힘", "Saves, copies to the clipboard and closes the editor"), copy),
-                    "note" or "note-click" => (L("붙여 넣을 앱으로 이동", "Switch to the app to paste into"), ""),
+                    "copy" or "copying" or "copied" => (L($"{Ui("EditorFlow_Copied")} · 편집기는 열린 채 유지", $"{Ui("EditorFlow_Copied")} · the editor stays open"), copy),
+                    "switch" or "note" or "note-click" => (L("붙여 넣을 앱으로 이동", "Switch to the app to paste into"), ""),
                     _ => (L("Ctrl+V로 이미지 붙여 넣기", "Paste the image with Ctrl+V"), "Ctrl+V"),
                 };
             case "text":

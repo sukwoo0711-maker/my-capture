@@ -4196,19 +4196,19 @@ Turn off: {0}</value></data>
   <data name="Tutorial.color-copy.Step3" xml:space="preserve"><value>3. Paste the value with Ctrl+V. Its format follows your color-format setting.</value></data>
   <data name="Tutorial.image-rectangle.Step1" xml:space="preserve"><value>1. Open an image in the editor.</value></data>
   <data name="Tutorial.image-rectangle.Step2" xml:space="preserve"><value>2. Select Rectangle and drag over the area to mark.</value></data>
-  <data name="Tutorial.image-rectangle.Step3" xml:space="preserve"><value>3. Review the rectangle, then save or copy to finish.</value></data>
+  <data name="Tutorial.image-rectangle.Step3" xml:space="preserve"><value>3. Review the rectangle, then press Done to save.</value></data>
   <data name="Tutorial.image-ellipse.Step1" xml:space="preserve"><value>1. Open an image in the editor.</value></data>
   <data name="Tutorial.image-ellipse.Step2" xml:space="preserve"><value>2. Select Ellipse and drag over the area to mark.</value></data>
-  <data name="Tutorial.image-ellipse.Step3" xml:space="preserve"><value>3. Review the ellipse, then save or copy to finish.</value></data>
+  <data name="Tutorial.image-ellipse.Step3" xml:space="preserve"><value>3. Review the ellipse, then press Done to save.</value></data>
   <data name="Tutorial.image-arrow.Step1" xml:space="preserve"><value>1. Open an image in the editor.</value></data>
   <data name="Tutorial.image-arrow.Step2" xml:space="preserve"><value>2. Select Arrow and drag from the start to the tip.</value></data>
-  <data name="Tutorial.image-arrow.Step3" xml:space="preserve"><value>3. Review its direction, then save or copy to finish.</value></data>
+  <data name="Tutorial.image-arrow.Step3" xml:space="preserve"><value>3. Review its direction, then press Done to save.</value></data>
   <data name="Tutorial.image-pen.Step1" xml:space="preserve"><value>1. Open an image in the editor.</value></data>
   <data name="Tutorial.image-pen.Step2" xml:space="preserve"><value>2. Select Pencil and drag the pointer to draw.</value></data>
-  <data name="Tutorial.image-pen.Step3" xml:space="preserve"><value>3. Review the drawing, then save or copy to finish.</value></data>
+  <data name="Tutorial.image-pen.Step3" xml:space="preserve"><value>3. Review the drawing, then press Done to save.</value></data>
   <data name="Tutorial.image-highlighter.Step1" xml:space="preserve"><value>1. Open an image in the editor.</value></data>
   <data name="Tutorial.image-highlighter.Step2" xml:space="preserve"><value>2. Select Highlighter and drag over the content to emphasize.</value></data>
-  <data name="Tutorial.image-highlighter.Step3" xml:space="preserve"><value>3. Review the highlight, then save or copy to finish.</value></data>
+  <data name="Tutorial.image-highlighter.Step3" xml:space="preserve"><value>3. Review the highlight, then press Done to save.</value></data>
   <data name="Tutorial.image-text.Step1" xml:space="preserve"><value>1. Open an image in the editor.</value></data>
   <data name="Tutorial.image-text.Step2" xml:space="preserve"><value>2. Select Text, click the image and enter the text.</value></data>
   <data name="Tutorial.image-text.Step3" xml:space="preserve"><value>3. Click outside the text box to commit it, then save.</value></data>
@@ -4226,12 +4226,12 @@ Turn off: {0}</value></data>
   <data name="Tutorial.image-crop.Step3" xml:space="preserve"><value>3. Press Enter to apply, or Esc to cancel the crop.</value></data>
   <data name="Tutorial.image-rotate.Step1" xml:space="preserve"><value>1. Open an image in the editor.</value></data>
   <data name="Tutorial.image-rotate.Step2" xml:space="preserve"><value>2. Press Q to rotate left or W to rotate right.</value></data>
-  <data name="Tutorial.image-rotate.Step3" xml:space="preserve"><value>3. Review the orientation, then save or copy to finish.</value></data>
+  <data name="Tutorial.image-rotate.Step3" xml:space="preserve"><value>3. Review the orientation, then press Done to save.</value></data>
   <data name="Tutorial.image-save.Step1" xml:space="preserve"><value>1. Review the edited image.</value></data>
   <data name="Tutorial.image-save.Step2" xml:space="preserve"><value>2. Press Ctrl+S to save.</value></data>
   <data name="Tutorial.image-save.Step3" xml:space="preserve"><value>3. To save another file, press Ctrl+Shift+S and choose the destination.</value></data>
   <data name="Tutorial.image-copy.Step1" xml:space="preserve"><value>1. Edit the image and review the result.</value></data>
-  <data name="Tutorial.image-copy.Step2" xml:space="preserve"><value>2. Press Ctrl+C to copy and save the image and finish editing.</value></data>
+  <data name="Tutorial.image-copy.Step2" xml:space="preserve"><value>2. Press Ctrl+C to copy the edited image. The editor stays open; press Done (Ctrl+Enter) to save and close.</value></data>
   <data name="Tutorial.image-copy.Step3" xml:space="preserve"><value>3. Press Ctrl+V in another app to paste the image.</value></data>
   <data name="Tutorial.folder-create.Step1" xml:space="preserve"><value>1. Open the library.</value></data>
   <data name="Tutorial.folder-create.Step2" xml:space="preserve"><value>2. Press Ctrl+Shift+N and enter a name for the new folder.</value></data>
