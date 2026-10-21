@@ -24,6 +24,21 @@ The portable and installer packages include the authoritative .NET license as
 `DOTNET-LICENSE.txt` and the complete .NET third-party notice set as
 `DOTNET-THIRD-PARTY-NOTICES.txt`.
 
+## Bundled fonts
+
+The following original, unmodified fonts are embedded in the application. Each is
+licensed under the SIL Open Font License 1.1. The complete license and copyright
+notice for each family is distributed at `Assets/Fonts/<folder>/OFL.txt` in both
+portable and installed packages. Font names stored in settings resolve to these
+bundled copies even when a family with the same name is installed on the PC.
+
+| Font | Version | Copyright | License | Original distribution | License folder |
+| --- | --- | --- | --- | --- | --- |
+| Maple Mono | v7.9 | Copyright 2022 The Maple Mono Project Authors (https://github.com/subframe7536/maple-font) | SIL OFL 1.1 | <https://github.com/subframe7536/maple-font/releases/tag/v7.9> | `MapleMono` |
+| JetBrains Mono | v2.304 | Copyright 2020 The JetBrains Mono Project Authors (https://github.com/JetBrains/JetBrainsMono) | SIL OFL 1.1 | <https://github.com/JetBrains/JetBrainsMono/releases/tag/v2.304> | `JetBrainsMono` |
+| D2Coding | 1.4.0 (20261003) | Copyright (c) 2015, NAVER Corporation (https://www.navercorp.com), with Reserved Font Name D2Coding; Copyright (c) 2015, NAVER Corporation (https://www.navercorp.com), with Reserved Font Name D2Coding-Bold. | SIL OFL 1.1 | <https://github.com/naver/d2codingfont> | `D2Coding` |
+| Pretendard | v1.3.9 | Copyright (c) 2021, Kil Hyung-jin (https://github.com/orioncactus/pretendard), with Reserved Font Name Pretendard. | SIL OFL 1.1 | <https://github.com/orioncactus/pretendard/releases/tag/v1.3.9> | `Pretendard` |
+
 ## Development and test dependencies
 
 These packages are used to build or test MyCapture and are not shipped as application

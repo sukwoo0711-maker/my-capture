@@ -1211,7 +1211,7 @@ internal sealed partial class AnnotationEditorControl : Grid
             UseLayoutRounding = false,
             MinWidth = 0,
             MinHeight = 0,
-            FontFamily = new FontFamily(annotation.FontFamily),
+            FontFamily = FontCatalog.Resolve(annotation.FontFamily),
             FontSize = Math.Max(1, annotation.FontSize * dipPerPixel),
             FontWeight = annotation.Bold ? FontWeights.Bold : FontWeights.Normal,
             FontStyle = annotation.Italic ? FontStyles.Italic : FontStyles.Normal,

@@ -49,4 +49,10 @@
   </ItemGroup>
 
   <ItemGroup><EmbeddedResource Include="Updates\UpdateHelper.ps1" LogicalName="MyCapture.UpdateHelper.ps1" /></ItemGroup>
+
+  <ItemGroup>
+    <None Remove="Assets\Fonts\**\*.ttf;Assets\Fonts\**\*.otf;Assets\Fonts\**\*.ttc" />
+    <Resource Include="Assets\Fonts\**\*.ttf;Assets\Fonts\**\*.otf;Assets\Fonts\**\*.ttc" />
+    <None Update="Assets\Fonts\**\OFL.txt" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
 </Project>
