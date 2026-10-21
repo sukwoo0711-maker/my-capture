@@ -2838,7 +2838,7 @@
     <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
   </data>
   <data name="PinSession.RestoreLabel" xml:space="preserve"><value>다음 실행 때 열린 핀 다시 띄우기</value></data>
-  <data name="PinSession.RestoreDescription" xml:space="preserve"><value>종료할 때 열려 있던 핀의 이미지와 원문 텍스트를 이 PC의 앱 데이터 폴더에 저장하고, 다음 실행 때 같은 자리에 다시 띄웁니다. 끄면 저장한 핀을 바로 지웁니다.</value></data>
+  <data name="PinSession.RestoreDescription" xml:space="preserve"><value>종료할 때 열려 있던 핀의 이미지와 원문 텍스트를 이 PC의 이 Windows 사용자만 읽도록 암호화해 앱 데이터 폴더에 저장하고, 다음 실행 때 같은 자리에 다시 띄웁니다. 끄면 저장한 핀을 바로 지웁니다.</value></data>
   <data name="Text_F0CFD62F0971" xml:space="preserve">
     <value>녹화 동영상에 마우스 커서 포함</value>
     <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
@@ -4068,6 +4068,7 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="Onboard_AfterCaptureTitle" xml:space="preserve"><value>캡처한 다음</value></data>
   <data name="Welcome_FirstCaptureTitle" xml:space="preserve"><value>한 번 캡처해 보십시오</value></data>
   <data name="Welcome_Skip" xml:space="preserve"><value>건너뛰기</value></data>
+  <data name="Welcome_PinHint" xml:space="preserve"><value>복사한 표·코드나 캡처한 화면을 {0} 키로 다른 창 위에 띄웁니다.</value></data>
   <data name="Onboard_FirstCaptureTip" xml:space="preserve"><value>다른 창 위에 띄우려면 P</value></data>
   <data name="Onboard_ReceiptKeyboard" xml:space="preserve"><value>Alt+Q로 선택 · Tab 이동 · Enter 실행</value></data>
   <data name="Onboard_ReceiptKeyboardFallback" xml:space="preserve"><value>Alt+Tab으로 선택 · Tab 이동 · Enter 실행</value></data>
