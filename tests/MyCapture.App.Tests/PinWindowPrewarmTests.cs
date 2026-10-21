@@ -15,11 +15,12 @@ public sealed class PinWindowPrewarmTests
     {
         PinWindowPrewarm.ResetForTest();
         var shown = new List<PinWindow>();
-        bool visible = false, active = true, topmost = true, onAMonitor = true;
+        bool visible = false, active = true, topmost = true, onAMonitor = true, markedWhileShown = false;
         double opacity = -1;
         PinWindowPrewarm.ShownForTest = pin =>
         {
             shown.Add(pin);
+            markedWhileShown = PinWindowPrewarm.IsPrewarmWindow(pin);
             visible = pin.IsVisible;
             active = pin.IsActive;
             topmost = pin.Topmost;
@@ -40,6 +41,7 @@ public sealed class PinWindowPrewarmTests
             Assert.False(topmost);
             Assert.Equal(0, opacity);
             Assert.False(onAMonitor);
+            Assert.True(markedWhileShown);
             Assert.Same(window, PinWindowPrewarm.WindowForTest);
             Assert.False(window.IsVisible);
             Assert.False(window.IsClosed);
@@ -73,8 +75,10 @@ public sealed class PinWindowPrewarmTests
             var image = BitmapSource.Create(24, 16, 96, 96, PixelFormats.Bgra32, null, new byte[24 * 16 * 4], 24 * 4);
             image.Freeze();
             // Opened without activation, as a restored session pin is.
-            manager.RestoreSessionPin(new PinManager.ClosedPin(PinContent.FromImage(image), 24, 16, 1, 1, null));
+            PinWindow pin = manager.RestoreSessionPin(new PinManager.ClosedPin(PinContent.FromImage(image), 24, 16, 1, 1, null));
             Assert.Equal(1, manager.Count);
+            Assert.True(PinWindowPrewarm.IsPrewarmWindow(kept));
+            Assert.False(PinWindowPrewarm.IsPrewarmWindow(pin));
             manager.CloseAll();
             Assert.Equal(0, manager.Count);
 

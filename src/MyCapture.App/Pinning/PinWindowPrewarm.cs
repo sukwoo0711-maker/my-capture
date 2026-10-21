@@ -45,6 +45,12 @@ internal static class PinWindowPrewarm
     /// <summary>Test hook: the hidden window this UI thread keeps.</summary>
     internal static PinWindow? WindowForTest => t_window;
 
+    /// <summary>
+    /// The out-of-sight prewarm window is a <see cref="PinWindow"/> but never a pin: nothing meant
+    /// for pins (landing decoration, lists, sessions) may run on it.
+    /// </summary>
+    internal static bool IsPrewarmWindow(PinWindow window) => t_window is { } kept && ReferenceEquals(kept, window);
+
     internal static void ResetForTest()
     {
         t_window?.Close();
@@ -67,15 +73,17 @@ internal static class PinWindowPrewarm
             Topmost = false,
             Opacity = 0,
         };
+        // Marked before Show, so its Loaded handlers can already tell it from a pin.
+        t_window = pin;
         try
         {
             pin.Show();
             ShownForTest?.Invoke(pin);
             pin.Hide();
-            t_window = pin;
         }
         catch
         {
+            t_window = null;
             pin.Close();
             throw;
         }
