@@ -49,14 +49,24 @@ public partial class App
         return CaptureGuard.Find(state, allowRetake);
     }
 
-    /// <summary>True when a still capture may start; otherwise the user is shown why it did not.</summary>
-    private bool GuardStillCapture(string mode)
+    /// <summary>
+    /// True when a still capture may start; otherwise the user is shown why it did not. A capture
+    /// editor whose save finishes out of sight is waited for first: the user already sees it closed.
+    /// </summary>
+    private async Task<bool> GuardStillCaptureAsync(string mode)
     {
+        await WaitForEditorFinishedAsync();
         CaptureBlock block = CheckStillCapture(allowRetake: false);
         if (block == CaptureBlock.None) return true;
         ReportCaptureBlock(block, mode);
         return false;
     }
+
+    /// <summary>
+    /// Completes at once unless Done has taken the capture editor off the screen while its save
+    /// finishes; then once the editor has closed, or has come back because the save failed.
+    /// </summary>
+    private Task WaitForEditorFinishedAsync() => _overlay?.WaitForEditorFinishedAsync() ?? Task.CompletedTask;
 
     /// <summary>
     /// Region and text capture replace an idle capture editor, asking first about unsaved edits.
@@ -65,6 +75,7 @@ public partial class App
     private async Task<bool> PrepareRetakeAsync(string mode)
     {
         if (_overlay is not { } overlay) return false;
+        await WaitForEditorFinishedAsync();
         CaptureBlock block = await CaptureGuard.PrepareAsync(overlay.CanRetake, CheckStillCapture, overlay.CloseEditorForRetakeAsync);
         if (block == CaptureBlock.None) return true;
         ReportCaptureBlock(block, mode);

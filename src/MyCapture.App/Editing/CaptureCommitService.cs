@@ -243,10 +243,34 @@ internal sealed class CaptureCommitService
                     return false;
                 }
 
-                await PersistFinalIfAvailableAsync(
+                // The library save and the clipboard copy each encode their own PNG of the same
+                // flattened pixels, so once the save has passed its checks (the capture is still at
+                // this editor's generation) the copy runs beside its writing. A save those checks
+                // refuse ends before any copy, as when the copy followed it. Once the clipboard holds
+                // the result the editor may leave the screen (CopiedToClipboard); the commit still
+                // completes only when both have, with the save's failure first.
+                var admitted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+                Task persisting = PersistFinalIfAvailableAsync(
                     record, result.Action, flattened, snapshot, result.ImageAssetBitmaps, editSession, createRecordAsync,
-                    replaceOriginal ? result.SelectedBitmap : null);
-                return await CopyEditedImageAsync(flattened, "Done", exportRecord?.SourcePageUrl);
+                    replaceOriginal ? result.SelectedBitmap : null, () => admitted.TrySetResult());
+                if (await Task.WhenAny(admitted.Task, persisting) != admitted.Task)
+                {
+                    // Refused (rethrown here, without a copy) or no record to save into.
+                    await persisting;
+                    return await CopyEditedImageAsync(flattened, "Done", exportRecord?.SourcePageUrl);
+                }
+
+                Task<bool> copying = CopyEditedImageAsync(flattened, "Done", exportRecord?.SourcePageUrl);
+                try
+                {
+                    if (await copying && !persisting.IsFaulted && !persisting.IsCanceled) result.CopiedToClipboard?.Invoke();
+                }
+                finally
+                {
+                    await persisting;
+                }
+
+                return await copying;
         }
     }
 
@@ -294,7 +318,8 @@ internal sealed class CaptureCommitService
         IReadOnlyDictionary<string, BitmapSource> imageAssetBitmaps,
         CaptureEditSession? editSession,
         Func<Task<(CaptureRecord Record, CaptureEditSession? Session)>>? createRecordAsync,
-        BitmapSource? replacementOriginal)
+        BitmapSource? replacementOriginal,
+        Action? admitted = null)
     {
         if (record is null && createRecordAsync is not null) (record, editSession) = await createRecordAsync();
         if (record is null)
@@ -309,7 +334,8 @@ internal sealed class CaptureCommitService
             snapshot,
             imageAssetBitmaps,
             editSession?.ExpectedContentRevision,
-            replacementOriginal);
+            replacementOriginal,
+            admitted);
         editSession?.AdvanceTo(record.ContentRevision);
         return record;
     }

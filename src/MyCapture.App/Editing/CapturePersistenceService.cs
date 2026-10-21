@@ -588,13 +588,19 @@ internal sealed class CapturePersistenceService
     /// busy and leased for the whole operation, so another save, a source backfill, a removal or
     /// capacity eviction of it waits or is refused exactly as while the image is encoded.
     /// </remarks>
+    /// <param name="admitted">
+    /// Called on the caller's context once the save has passed its checks (no transaction left
+    /// pending, the capture still exists at <paramref name="expectedContentRevision"/>) and starts
+    /// writing; a save refused by those checks never calls it.
+    /// </param>
     internal async Task FinalizeAsync(
         CaptureRecord record,
         BitmapSource flattened,
         AnnotationDocument document,
         IReadOnlyDictionary<string, BitmapSource> assetBitmaps,
         long? expectedContentRevision = null,
-        BitmapSource? replacementOriginal = null)
+        BitmapSource? replacementOriginal = null,
+        Action? admitted = null)
     {
         ArgumentNullException.ThrowIfNull(record);
         ArgumentNullException.ThrowIfNull(flattened);
@@ -615,6 +621,7 @@ internal sealed class CapturePersistenceService
             await RecoverRecordTransactionsAsync(record);
             await ThrowIfPendingTransactionRemainsAsync(record);
             EnsureExpectedGeneration(record, expectedContentRevision);
+            admitted?.Invoke();
             using IDisposable? originalChange = replacementOriginal is not null
                 ? await _queue.BeginOriginalChangeAsync(record) : null;
             if (replacementOriginal is not null && BeforeOriginalRewriteForTest is not null)
@@ -1175,96 +1182,123 @@ internal sealed class CapturePersistenceService
 
     private void RecoverInterruptedTransactions()
     {
-        foreach (CaptureRecord record in _queue.Records.ToArray())
+        CaptureRecord[] records = _queue.Records.ToArray();
+        // Each scan touches only its record's directory, so the scans run in parallel. Applying
+        // them stays on the owner context in record order; a record whose directory or scan
+        // failed fails here at its turn, as the sequential loop did.
+        ParallelOutcome<(string Directory, RecordTransactionScan Scan)>[] scans = ParallelFileScan.InspectEach(
+            records,
+            record =>
+            {
+                string targetDirectory = _queue.GetDirectory(record);
+                return (targetDirectory, ScanRecordTransactions(targetDirectory));
+            });
+        for (int i = 0; i < records.Length; i++)
         {
-            RecoverRecordTransactions(record);
+            (string targetDirectory, RecordTransactionScan scan) = scans[i].GetValue();
+            ApplyRecordTransactionScan(records[i], targetDirectory, scan);
         }
     }
 
     private void RecoverPendingOriginals()
     {
-        foreach (CaptureRecord record in _queue.Records.ToArray())
+        CaptureRecord[] records = _queue.Records.ToArray();
+        // Looking for the pending-original marker is pure file-system inspection, so it runs in
+        // parallel. A record with a marker is then recovered on the owner context in record
+        // order, exactly as before, and a record whose check failed fails here at its turn.
+        ParallelOutcome<bool>[] pending = ParallelFileScan.InspectEach(
+            records,
+            record => File.Exists(Path.Combine(_queue.GetDirectory(record), CaptureFileNames.OriginalPending)));
+        for (int i = 0; i < records.Length; i++)
         {
-            string directory = _queue.GetDirectory(record);
-            string pendingPath = Path.Combine(directory, CaptureFileNames.OriginalPending);
-            if (!File.Exists(pendingPath))
+            if (pending[i].GetValue())
             {
-                continue;
+                RecoverPendingOriginal(records[i]);
             }
+        }
+    }
 
-            using IDisposable evictionLease = _queue.AcquireEvictionLease(record.Id);
-            try
-            {
-                string originalPath = Path.Combine(directory, CaptureFileNames.Original);
-                BitmapSource? original = ImageCodec.TryLoad(originalPath);
-                if (original is null)
-                {
-                    MarkBlocked(record.Id, BlockReason.PendingOriginal);
-                    _log.LogCritical(
-                        "Pending original {Id} has no decodable original.png; preserving its recovery files",
-                        record.Id);
-                    continue;
-                }
+    private void RecoverPendingOriginal(CaptureRecord record)
+    {
+        string directory = _queue.GetDirectory(record);
+        string pendingPath = Path.Combine(directory, CaptureFileNames.OriginalPending);
+        if (!File.Exists(pendingPath))
+        {
+            return;
+        }
 
-                record.Width = original.PixelWidth;
-                record.Height = original.PixelHeight;
-                // A complete derived image may precede the failed index publication. Keep its
-                // pixels (including legacy title badges) instead of drawing another badge.
-                BitmapSource? rendered = ImageCodec.TryLoad(Path.Combine(directory, CaptureFileNames.Rendered));
-                if (rendered is null || rendered.PixelWidth != original.PixelWidth || rendered.PixelHeight != original.PixelHeight)
-                    rendered = null;
-                // original.png is the durable source for this recovery. Rewriting it would
-                // create an untracked full-size .bak beside an otherwise valid 8K capture.
-                long bytes = WriteOriginalFiles(
-                    record,
-                    original,
-                    createPendingJournal: false,
-                    rewriteOriginal: false,
-                    initialRendered: rendered,
-                    preserveRendered: rendered is not null);
-                record.HasAnnotations = false;
-                record.ContentRevision = 0;
-                record.OcrText = null;
-                record.OcrLanguage = null;
-                record.OcrContentRevision = null;
-                _queue.UpdateByteCount(record.Id, bytes);
-                SaveRecordMetaOrThrow(record);
-                _queue.Save();
-
-                // Atomic rewrites of the derived files deliberately retain backups in normal
-                // operation. Here the untouched original plus pending marker is the recovery
-                // source, so those potentially huge copies are terminal debris. Keep the
-                // marker and eviction lease until every one has actually gone.
-                bool backupsCleared = TryCleanRecoveredOriginalBackups(directory);
-                if (backupsCleared)
-                {
-                    TryDeleteFile(pendingPath);
-                }
-
-                if (!backupsCleared || File.Exists(pendingPath))
-                {
-                    MarkBlocked(record.Id, BlockReason.PendingOriginal);
-                }
-                else
-                {
-                    ClearBlocked(record.Id, BlockReason.PendingOriginal);
-                }
-
-                _log.LogWarning(
-                    "Recovered original capture {Id} that was interrupted before queue indexing completed",
-                    record.Id);
-            }
-            catch (Exception ex) when (ex is IOException
-                                       or UnauthorizedAccessException
-                                       or ArgumentException
-                                       or NotSupportedException)
+        using IDisposable evictionLease = _queue.AcquireEvictionLease(record.Id);
+        try
+        {
+            string originalPath = Path.Combine(directory, CaptureFileNames.Original);
+            BitmapSource? original = ImageCodec.TryLoad(originalPath);
+            if (original is null)
             {
                 MarkBlocked(record.Id, BlockReason.PendingOriginal);
-                _log.LogError(
-                    ex,
-                    "Could not recover pending original capture {Id}; preserving its files",
+                _log.LogCritical(
+                    "Pending original {Id} has no decodable original.png; preserving its recovery files",
                     record.Id);
+                return;
             }
+
+            record.Width = original.PixelWidth;
+            record.Height = original.PixelHeight;
+            // A complete derived image may precede the failed index publication. Keep its
+            // pixels (including legacy title badges) instead of drawing another badge.
+            BitmapSource? rendered = ImageCodec.TryLoad(Path.Combine(directory, CaptureFileNames.Rendered));
+            if (rendered is null || rendered.PixelWidth != original.PixelWidth || rendered.PixelHeight != original.PixelHeight)
+                rendered = null;
+            // original.png is the durable source for this recovery. Rewriting it would
+            // create an untracked full-size .bak beside an otherwise valid 8K capture.
+            long bytes = WriteOriginalFiles(
+                record,
+                original,
+                createPendingJournal: false,
+                rewriteOriginal: false,
+                initialRendered: rendered,
+                preserveRendered: rendered is not null);
+            record.HasAnnotations = false;
+            record.ContentRevision = 0;
+            record.OcrText = null;
+            record.OcrLanguage = null;
+            record.OcrContentRevision = null;
+            _queue.UpdateByteCount(record.Id, bytes);
+            SaveRecordMetaOrThrow(record);
+            _queue.Save();
+
+            // Atomic rewrites of the derived files deliberately retain backups in normal
+            // operation. Here the untouched original plus pending marker is the recovery
+            // source, so those potentially huge copies are terminal debris. Keep the
+            // marker and eviction lease until every one has actually gone.
+            bool backupsCleared = TryCleanRecoveredOriginalBackups(directory);
+            if (backupsCleared)
+            {
+                TryDeleteFile(pendingPath);
+            }
+
+            if (!backupsCleared || File.Exists(pendingPath))
+            {
+                MarkBlocked(record.Id, BlockReason.PendingOriginal);
+            }
+            else
+            {
+                ClearBlocked(record.Id, BlockReason.PendingOriginal);
+            }
+
+            _log.LogWarning(
+                "Recovered original capture {Id} that was interrupted before queue indexing completed",
+                record.Id);
+        }
+        catch (Exception ex) when (ex is IOException
+                                   or UnauthorizedAccessException
+                                   or ArgumentException
+                                   or NotSupportedException)
+        {
+            MarkBlocked(record.Id, BlockReason.PendingOriginal);
+            _log.LogError(
+                ex,
+                "Could not recover pending original capture {Id}; preserving its files",
+                record.Id);
         }
     }
 

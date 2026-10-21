@@ -319,6 +319,79 @@ public sealed class CaptureGuardTests
         Assert.True(coordinator.CanRetake);
     });
 
+    [Fact]
+    public void DoneSavingOutOfSightIsWaitedForAndNeverBroughtBackToSayItIsBusy()
+    {
+        var saved = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        WithEditor((coordinator, editor) =>
+        {
+            Assert.True(editor.FinishesOutOfSight);
+            editor.Editor.SaveAndClose();
+            PumpUntil(() => !editor.IsVisible);
+            Task finished = coordinator.WaitForEditorFinishedAsync();
+            Assert.False(finished.IsCompleted);
+            // The session still holds the saving editor, but the user no longer sees it, so a
+            // capture command waits for it instead of bringing it back with a notice.
+            Assert.Equal(CaptureBlock.EditorSaving, CaptureGuard.Find(coordinator.WithSession(default), allowRetake: true));
+            Assert.False(coordinator.ShowEditorBlocked(UiText.Get("CaptureBlocked_Editor")));
+            Assert.False(editor.IsVisible);
+
+            saved.SetResult(true);
+            PumpUntil(() => finished.IsCompleted);
+            Assert.True(editor.WasCommitted);
+            Assert.False(coordinator.IsActive);
+            Assert.True(coordinator.WaitForEditorFinishedAsync().IsCompleted);
+        }, commit: result =>
+        {
+            result.CopiedToClipboard?.Invoke();
+            return saved.Task;
+        });
+    }
+
+    [Fact]
+    public void DoneSaveFailingOutOfSightBringsTheEditorBackAndIsReportedAtOnce()
+    {
+        var saved = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        CaptureOverlayCoordinator? session = null;
+        bool? reportedOutOfSight = null;
+        WithEditor((coordinator, editor) =>
+        {
+            session = coordinator;
+            editor.Editor.SaveAndClose();
+            // A capture command pressed before the editor leaves the screen already waits.
+            Task finished = coordinator.WaitForEditorFinishedAsync();
+            Assert.False(finished.IsCompleted);
+            PumpUntil(() => !editor.IsVisible);
+            Assert.True(coordinator.IsEditorFinishingOutOfSight);
+
+            saved.SetException(new System.IO.IOException("The library save failed."));
+            PumpUntil(() => finished.IsCompleted);
+            // App's commit handler saw the editor off the screen when the save failed, so it
+            // answers the Done command at once instead of a notice the session would drop.
+            Assert.True(reportedOutOfSight);
+            Assert.True(editor.IsVisible);
+            Assert.False(editor.Editor.IsCommitInProgress);
+            Assert.False(coordinator.IsEditorFinishingOutOfSight);
+            Assert.True(coordinator.IsActive);
+            Assert.True(coordinator.CanRetake);
+            Assert.Equal(CaptureBlock.None, CaptureGuard.Find(coordinator.WithSession(default), allowRetake: true));
+            Assert.True(editor.Editor.HasUnsavedChanges);
+        }, commit: async result =>
+        {
+            // As App.HandleCommitAsync: a failed save is caught, reported and keeps the editor.
+            result.CopiedToClipboard?.Invoke();
+            try
+            {
+                return await saved.Task;
+            }
+            catch (System.IO.IOException)
+            {
+                reportedOutOfSight = session!.IsEditorFinishingOutOfSight;
+                return false;
+            }
+        });
+    }
+
     private static Task<CaptureBlock> Prepare(CaptureOverlayCoordinator coordinator) =>
         CaptureGuard.PrepareAsync(coordinator.CanRetake,
             allowRetake => CaptureGuard.Find(coordinator.WithSession(default), allowRetake),

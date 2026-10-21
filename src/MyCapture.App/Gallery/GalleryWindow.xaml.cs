@@ -135,6 +135,13 @@ internal sealed partial class GalleryWindow : Window
             else _hiddenForCapture = false;
             _viewModel.SetThumbnailLoadingEnabled(IsVisible);
             _viewModel.SetLibraryOpen(IsVisible || _hiddenForCapture);
+            if (IsVisible && _refreshWhenShown)
+            {
+                // Shown without ShowGallery (which refreshes itself): apply what arrived while hidden.
+                _refreshWhenShown = false;
+                _viewModel.Refresh();
+                RefreshOcrCoverageBanner();
+            }
         };
 
         // F2 edits the selected capture's searchable title/tags without altering pixels.
@@ -175,6 +182,7 @@ internal sealed partial class GalleryWindow : Window
     internal void ShowGallery()
     {
         UpdateCommandShortcuts();
+        _refreshWhenShown = false;
         _viewModel.Refresh();
         RefreshOcrCoverageBanner();
 
@@ -196,6 +204,11 @@ internal sealed partial class GalleryWindow : Window
     }
 
     /// <summary>Refreshes an already-open gallery without stealing focus from the video editor.</summary>
+    /// <remarks>
+    /// A library closed to the tray rebuilds once, when it is shown again (see
+    /// <see cref="ShowGallery"/> and the visibility handler), so captures saved or indexed meanwhile
+    /// cost nothing on the UI thread.
+    /// </remarks>
     internal void RefreshFromQueue(Guid? changedRecordId = null)
     {
         if (changedRecordId is Guid id)
@@ -206,10 +219,19 @@ internal sealed partial class GalleryWindow : Window
             _viewModel.FindTile(id)?.RefreshThumbnail();
         }
 
+        if (!IsVisible)
+        {
+            _refreshWhenShown = true;
+            return;
+        }
+
         _viewModel.Refresh();
         RefreshOcrCoverageBanner();
         ShowPendingRetentionNotice();
     }
+
+    /// <summary>A refresh arrived while the window was hidden; the next show applies it.</summary>
+    private bool _refreshWhenShown;
 
     /// <summary>Closes the window for real, used only on an explicit application exit.</summary>
     internal void CloseForExit()
