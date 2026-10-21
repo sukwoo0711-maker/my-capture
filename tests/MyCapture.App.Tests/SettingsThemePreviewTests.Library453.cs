@@ -386,4 +386,45 @@ public sealed partial class SettingsThemePreviewTests
                 f.Window.CloseForExit(); SynchronizationContext.SetSynchronizationContext(previous); application.Shutdown();
             }
         });
+
+    [Fact]
+    public Task Library453_SaveSearchCommandAppearsOnlyWithAQuery() =>
+        RunIsolated(nameof(Library453_SaveSearchCommandAppearsOnlyWithAQuery), () =>
+        {
+            Application application = CreateGalleryTestApplication();
+            using var scope = UiText.UseLanguage("ko-KR");
+            ThemeService.Apply(AppTheme.Midnight);
+            LibraryUxFixture f = CreateLibraryUxFixture("mc-library453-saved-search-");
+            try
+            {
+                f.Window.Show();
+                SettleGalleryLayout(f.Window);
+                var save = (Button)f.Window.FindName("SaveSearchButton");
+                var hint = (TextBlock)f.Window.FindName("SavedSearchEmptyHint");
+                var search = (TextBox)f.Window.FindName("SearchBox");
+
+                // No query: no dead command, a hint instead (the fixture has no saved searches).
+                Assert.Equal(Visibility.Collapsed, save.Visibility);
+                Assert.False(save.IsEnabled);
+                Assert.Equal(Visibility.Visible, hint.Visibility);
+                // Korean display text carries invisible line-break joiners; compare the visible letters.
+                Assert.Equal(UiText.Get("Library453.SavedSearchHint"),
+                    string.Concat(hint.Text.Where(c => CharUnicodeInfo.GetUnicodeCategory(c) != UnicodeCategory.Format)));
+
+                search.Text = "앱:Edge";
+                SettleGalleryLayout(f.Window);
+                Assert.Equal(Visibility.Visible, save.Visibility);
+                Assert.True(save.IsEnabled);
+                Assert.Equal(UiText.Get("Library.SavedSearch.Save"), AutomationProperties.GetName(save));
+                Assert.Equal(Visibility.Collapsed, hint.Visibility);
+
+                search.Text = "   ";
+                SettleGalleryLayout(f.Window);
+                Assert.Equal(Visibility.Collapsed, save.Visibility);
+            }
+            finally
+            {
+                f.Window.CloseForExit(); application.Shutdown();
+            }
+        });
 }

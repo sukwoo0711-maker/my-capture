@@ -1763,13 +1763,40 @@
                 <Expander Grid.Row="2" Style="{StaticResource LibraryUx.Section}"
                           Header="{loc:Text Library.SavedSearch.Title}" IsExpanded="True" Margin="0,0,0,4">
                     <DockPanel>
-                        <Button x:Name="SaveSearchButton" DockPanel.Dock="Top" Content="{loc:Text Library.SavedSearch.Save}"
-                                Style="{StaticResource LibraryUx.CommandButton}" HorizontalAlignment="Left" Click="OnSaveSearchClick" />
+                        <!-- Saving needs a query, so the command appears only while one is typed; flat like the folder [+]. -->
+                        <Button x:Name="SaveSearchButton" DockPanel.Dock="Top" Style="{StaticResource Button.GhostCompact}"
+                                HorizontalAlignment="Left" Margin="4,0,0,2" Click="OnSaveSearchClick"
+                                AutomationProperties.Name="{loc:Text Library.SavedSearch.Save}" Visibility="Collapsed">
+                            <StackPanel Orientation="Horizontal">
+                                <themes:SymbolIcon Size="16" Data="{StaticResource LibraryUx.Icon.Add}" Style="{StaticResource LibraryUx.CommandGlyph}" />
+                                <TextBlock Text="{loc:Text Library.SavedSearch.Save}" Margin="6,0,0,0" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </Button>
+                        <TextBlock x:Name="SavedSearchEmptyHint" DockPanel.Dock="Top" Text="{loc:Text Library453.SavedSearchHint}"
+                                   Margin="12,2,10,4" TextWrapping="Wrap" FontSize="{StaticResource FontSize.Caption}"
+                                   Foreground="{DynamicResource Text.Secondary}">
+                            <TextBlock.Style>
+                                <Style TargetType="TextBlock">
+                                    <Setter Property="Visibility" Value="Collapsed" />
+                                    <Style.Triggers>
+                                        <MultiDataTrigger>
+                                            <MultiDataTrigger.Conditions>
+                                                <Condition Binding="{Binding Text.Length, ElementName=SearchBox}" Value="0" />
+                                                <Condition Binding="{Binding HasItems, ElementName=SavedSearchList}" Value="False" />
+                                            </MultiDataTrigger.Conditions>
+                                            <Setter Property="Visibility" Value="Visible" />
+                                        </MultiDataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBlock.Style>
+                        </TextBlock>
                         <ScrollViewer MaxHeight="144" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
                             <ItemsControl x:Name="SavedSearchList">
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate>
-                                        <Button Style="{StaticResource LibraryUx.CommandButton}" HorizontalContentAlignment="Left"
+                                        <!-- Flat rows like the tag and folder lists above and below. -->
+                                        <Button Style="{StaticResource Button.GhostCompact}" HorizontalAlignment="Stretch"
+                                                HorizontalContentAlignment="Left" MinHeight="36" Padding="12,0,10,0" Margin="0,1"
                                                 Click="OnApplySavedSearchClick" ToolTip="{Binding Query}" AutomationProperties.Name="{Binding Name}">
                                             <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
                                             <Button.ContextMenu>

@@ -17,8 +17,8 @@ internal sealed partial class GalleryWindow
     private void InitializeLibraryExtras()
     {
         SavedSearchList.ItemsSource = _queue.SavedSearches;
-        SearchBox.TextChanged += (_, _) => SaveSearchButton.IsEnabled = !string.IsNullOrWhiteSpace(SearchBox.Text);
-        SaveSearchButton.IsEnabled = !string.IsNullOrWhiteSpace(SearchBox.Text);
+        SearchBox.TextChanged += (_, _) => RefreshSaveSearchCommand();
+        RefreshSaveSearchCommand();
         _queue.Activities.Changed += OnLibraryActivitiesChanged;
         _queue.LibraryUndo.Recorded += OnLibraryUndoRecorded;
         Closed += (_, _) =>
@@ -27,6 +27,14 @@ internal sealed partial class GalleryWindow
             _queue.LibraryUndo.Recorded -= OnLibraryUndoRecorded;
         };
         RefreshLibraryActivities();
+    }
+
+    /// <summary>Saving needs a query, so the command shows only while one is typed.</summary>
+    private void RefreshSaveSearchCommand()
+    {
+        bool hasQuery = !string.IsNullOrWhiteSpace(SearchBox.Text);
+        SaveSearchButton.IsEnabled = hasQuery;
+        SaveSearchButton.Visibility = hasQuery ? Visibility.Visible : Visibility.Collapsed;
     }
 
     private void OnSaveSearchClick(object sender, RoutedEventArgs e) => EditSavedSearch(null);
