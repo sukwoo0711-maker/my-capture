@@ -186,15 +186,21 @@ internal sealed class PinOpenProbe
         await Dispatcher.Yield(DispatcherPriority.ApplicationIdle);
         var scenario = new ProbeScenario(_kind, "prewarm", "idle prewarm");
         scenario.Start();
+        IntPtr foreground = PinProbeDisplay.GetForegroundWindow();
         long started = Stopwatch.GetTimestamp();
         run.Invoke(null, null);
         double sync = Ms(started, Stopwatch.GetTimestamp());
         await Dispatcher.Yield(DispatcherPriority.ApplicationIdle);
         double toIdle = Ms(started, Stopwatch.GetTimestamp());
+        IntPtr after = PinProbeDisplay.GetForegroundWindow();
         scenario.AddSync("PinWindowPrewarm.Run", sync);
         scenario.Finish(Stopwatch.GetTimestamp());
         _recorder.Add(scenario);
-        _environment.Add($"Idle prewarm (PinWindowPrewarm.Run) before the cold row: {PinOpenReport.F(sync)} ms on the UI thread, {PinOpenReport.F(toIdle)} ms to the next idle turn.");
+        _environment.Add($"Idle prewarm (PinWindowPrewarm.Run) before the cold row: {PinOpenReport.F(sync)} ms on the UI thread, {PinOpenReport.F(toIdle)} ms to the next idle turn; foreground {foreground:X} -> {after:X}.");
+        if (foreground == IntPtr.Zero || after == IntPtr.Zero)
+            throw new InvalidOperationException("The probe could not observe the foreground window around the prewarm.");
+        if (foreground != after)
+            throw new InvalidOperationException($"Foreground changed during the prewarm: {foreground:X} -> {after:X}.");
     }
 
     private async Task MeasureKindAsync()
