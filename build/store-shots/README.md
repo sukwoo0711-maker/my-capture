@@ -2,7 +2,7 @@
 
 MyCapture의 실제 창 레이어를 2560×1440 스토어 이미지 9장으로 합성합니다. `compose.py`는 앱 실행 없이 `scenes.json`의 제목·자르기·배치를 적용합니다. 같은 입력이면 같은 바이트의 PNG가 나오도록 ICC 프로필의 생성 시각을 고정합니다.
 
-2026-10-20 장면을 핀 중심으로 바꿨습니다. 순서는 엑셀 레지스터 표 핀과 코드, `#define` 코드 핀 원문 붙여넣기, 뒤 창 클릭 허용, 캡처 후 카드에서 P, 이미지 핀 글자 복사, 핀 숨기기·다시 열기, 라이브러리, 공유 전 주석·가리기, 비교 카드입니다. 핀을 띄우는 키는 F3 하나로 보여 줍니다. 레이어는 `--selftest-store-layers`가 언어별로 만들고, 2026-10-20 렌더는 F3·Shift+F3이 새 설치 기본값인 4.5.0 핀 흐름 브랜치(`feat/pin-core-flow-450`) 위에서 했습니다. 결과는 `artifacts/store/screenshots/4.5.0-pin/{ko,en}`에 둡니다. 4.4.0 제출(제출 13)에 쓴 이전 장면 구성은 이 문서의 git 기록과 `artifacts/store/screenshots/4.4.0`에 있습니다.
+2026-10-20 장면을 핀 중심으로 바꿨습니다. 순서는 엑셀 레지스터 표 핀과 코드, `#define` 코드 핀 원문 붙여넣기, 뒤 창 클릭 허용, 캡처 후 카드에서 P, 이미지 핀 글자 복사, 핀 숨기기·다시 열기, 라이브러리, 공유 전 주석·가리기, 비교 카드입니다. 핀을 띄우는 키는 F3 하나로 보여 줍니다. 레이어는 `--selftest-store-layers`가 언어별로 만들고, 2026-10-20 렌더는 F3·Shift+F3이 새 설치 기본값인 4.5.0 핀 흐름 브랜치(`feat/pin-core-flow-450`) 위에서 했습니다. 그 결과는 `artifacts/store/screenshots/4.5.0-pin/{ko,en}`에 있습니다. 2026-10-22 UX 개선(#119) 화면으로 다시 렌더한 현재 결과는 `artifacts/store/screenshots/ux453/{ko,en}`입니다. 바뀐 장은 7번 라이브러리(썸네일 시각 배지와 머리글 '새 폴더' 버튼 제거, '검색 저장' 정리)와 8번 편집기(한 줄 명령 막대, 실행 취소·다시 실행·더보기는 아이콘)이고, 나머지 일곱 장은 `4.5.0-pin`과 픽셀까지 같습니다. 4.4.0 제출(제출 13)에 쓴 이전 장면 구성은 이 문서의 git 기록과 `artifacts/store/screenshots/4.4.0`에 있습니다.
 
 ## 입력과 실행
 
@@ -25,17 +25,17 @@ Python 3.12, Pillow와 다음 가변 글꼴이 필요합니다.
 }
 ```
 
-레이어 만들기: 4.5.0 핀 흐름 브랜치를 분리 worktree로 풀고 이 브랜치의 `src/MyCapture.App/Diagnostics` 변경을 얹어 Release로 빌드한 뒤, 언어마다 격리 경로로 실행합니다. `MYCAPTURE_DATA_ROOT`, `TMP`, `TEMP`는 짧은 역슬래시 경로로 줍니다. 자체 검사는 시스템 클립보드, 사용자 설정·라이브러리, HKCU Run을 건드리지 않고, 끝나면 `_fixtures-*`를 지웁니다.
+레이어 만들기: main을 Release로 빌드한 뒤, 언어마다 격리 경로로 실행합니다(레이어 코드는 `src/MyCapture.App/Diagnostics/StoreScreenshotSelfTest.*.cs`에 있습니다). `MYCAPTURE_DATA_ROOT`, `TMP`, `TEMP`는 짧은 역슬래시 경로로 줍니다. 자체 검사는 시스템 클립보드, 사용자 설정·라이브러리, HKCU Run을 건드리지 않고, 끝나면 `_fixtures-*`를 지웁니다.
 
 ```powershell
 $env:TMP='C:\Users\<user>\AppData\Local\Temp\pl5\ko\t'; $env:TEMP=$env:TMP; $env:MYCAPTURE_DATA_ROOT='C:\Users\<user>\AppData\Local\Temp\pl5\ko\d'
-MyCapture.exe --selftest-store-layers C:\GitRepositories\my-capture\artifacts\store\layers\4.5.0-pin\ko ko
+MyCapture.exe --selftest-store-layers C:\GitRepositories\my-capture\artifacts\store\layers\ux453\ko ko
 ```
 
 합성은 다음 명령입니다. 영어는 경로의 `ko`와 `--lang`을 `en`으로 바꿉니다.
 
 ```powershell
-python -X utf8 -I build/store-shots/compose.py --layers "C:/GitRepositories/my-capture/artifacts/store/layers/4.5.0-pin/ko" --lang ko --out "C:/GitRepositories/my-capture/artifacts/store/screenshots/4.5.0-pin/ko" --scenes "<worktree>/build/store-shots/scenes.json"
+python -X utf8 -I build/store-shots/compose.py --layers "C:/GitRepositories/my-capture/artifacts/store/layers/ux453/ko" --lang ko --out "C:/GitRepositories/my-capture/artifacts/store/screenshots/ux453/ko" --scenes "<worktree>/build/store-shots/scenes.json"
 ```
 
 전체 실행은 `01.png`부터 `09.png`, `contact-sheet.png`, `search-card.png`를 만듭니다. 본 이미지는 RGB·sRGB ICC·알파 없는 최적화 PNG입니다. 연락판은 장당 640×360, 3열로 배치합니다. `search-card.png`에는 현재 등록 이미지, 새 장면 1, 경쟁 앱 두 장을 원본 카드 배율로 나란히 배치합니다. 글꼴 축, 실제 제목 높이, 줄바꿈, 배율과 출력 경로는 표준 출력의 JSON으로 보고합니다.
