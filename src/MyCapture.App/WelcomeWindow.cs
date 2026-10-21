@@ -53,7 +53,7 @@ internal sealed class WelcomeWindow : Window
 
         FrameworkElement captureKeys = CaptureKeys(keys.Capture);
         captureKeys.HorizontalAlignment = HorizontalAlignment.Center;
-        captureKeys.Margin = new Thickness(0, 0, 0, 28);
+        captureKeys.Margin = new Thickness(0, 0, 0, keys.PasteToScreen.IsAssigned ? 16 : 28);
 
         TryNowButton = new Button { Content = UiText.Get("Onboard_TryNow"), IsDefault = true };
         TryNowButton.SetResourceReference(StyleProperty, "Button.Primary");
@@ -116,6 +116,18 @@ internal sealed class WelcomeWindow : Window
         var root = new StackPanel { Margin = new Thickness(24, 28, 24, 20) };
         root.Children.Add(title);
         root.Children.Add(captureKeys);
+        if (keys.PasteToScreen.IsAssigned)
+        {
+            var pinHint = new TextBlock
+            {
+                Text = UiText.Format("Welcome_PinHint", keys.PasteToScreen.ToString()), FontSize = 14,
+                TextAlignment = TextAlignment.Center, TextWrapping = TextWrapping.Wrap,
+                Margin = new Thickness(0, 0, 0, 28),
+            };
+            pinHint.SetResourceReference(TextBlock.ForegroundProperty, "Text.Secondary");
+            AutomationProperties.SetName(pinHint, pinHint.Text);
+            root.Children.Add(pinHint);
+        }
         root.Children.Add(actions);
         root.Children.Add(footer);
         Content = root;
