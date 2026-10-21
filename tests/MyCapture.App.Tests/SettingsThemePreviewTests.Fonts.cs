@@ -6,6 +6,7 @@ using System.Windows.Markup;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Xml.Linq;
+using MyCapture.App.Diagnostics;
 using MyCapture.App.Settings;
 using MyCapture.App.Themes;
 using MyCapture.Core.Localization;
@@ -92,7 +93,8 @@ public sealed partial class SettingsThemePreviewTests
     {
         string? evidence = Environment.GetEnvironmentVariable("MYCAPTURE_THEME_PREVIEW_EVIDENCE");
         string? baseline = Environment.GetEnvironmentVariable("MYCAPTURE_FONTS_BASELINE");
-        if (string.IsNullOrEmpty(evidence) || string.IsNullOrEmpty(baseline)) return;
+        if (string.IsNullOrWhiteSpace(evidence) || string.IsNullOrEmpty(baseline)) return;
+        string directory = DiagnosticOutputPaths.Create(evidence);
         using Stream current = typeof(SettingsThemePreviewTests).Assembly.GetManifestResourceStream("SettingsFixture.Window.xaml")!;
         RenderSearchMarkup(XDocument.Load(baseline), "before");
         RenderSearchMarkup(XDocument.Load(current), "after");
@@ -135,7 +137,7 @@ public sealed partial class SettingsThemePreviewTests
             bitmap.Render(border);
             var encoder = new PngBitmapEncoder();
             encoder.Frames.Add(BitmapFrame.Create(bitmap));
-            using var file = File.Create(Path.Combine(evidence, $"settings-search-{stage}-{language}.png"));
+            using var file = File.Create(DiagnosticOutputPaths.Child(directory, $"settings-search-{stage}-{language}.png"));
             encoder.Save(file);
         }
 
