@@ -19,6 +19,14 @@ namespace MyCapture.App.Tests;
 
 public sealed class RecordingCaptureLifecycleTests
 {
+    // These recorders use the default backend, Windows Graphics Capture. Its first grab waits up to 5 s
+    // for the session to open, including the process's first borderless-access request, and then up to
+    // 2 s for a frame before RegionFrameGrabber falls back to GDI. On hosted runners the first recording
+    // in a test process has run seconds longer than later ones and outlasted the 5 s these waits allowed.
+    // Every wait that ends only after the first frame uses this bound and still returns as soon as its
+    // event arrives.
+    private static readonly TimeSpan FirstFrameTimeout = TimeSpan.FromSeconds(30);
+
     [Fact]
     public void SlowInitialization_StopStillEmitsZeroFrameAndExcludesStartupFromDuration() => StaTestHost.Run(() =>
     {
@@ -42,7 +50,7 @@ public sealed class RecordingCaptureLifecycleTests
         Task<RecordingResult> stopping = Task.Run(recorder.Stop);
         Thread.Sleep(30);
         release.Set();
-        Assert.True(stopping.Wait(TimeSpan.FromSeconds(5)));
+        Assert.True(stopping.Wait(FirstFrameTimeout));
         RecordingResult result = stopping.Result;
         Assert.Equal(new[] { 0d }, encoder.Timestamps);
         Assert.True(encoder.Completed);
@@ -92,13 +100,13 @@ public sealed class RecordingCaptureLifecycleTests
         var encoder = new Encoder { OnWrite = () => { written.Set(); if (fail) throw new IOException("synthetic encoder failure"); } };
         using var recorder = new RegionRecorder(new RegionFrameGrabber(fixture.Engine, false), _ => encoder, NullLogger.Instance);
         recorder.Start(fixture.Region, "unused.mp4", new RecordingSettings());
-        Assert.True(written.Wait(TimeSpan.FromSeconds(5)));
+        Assert.True(written.Wait(FirstFrameTimeout));
         Assert.Throws<InvalidOperationException>(() => recorder.Stop());
         Assert.True(encoder.Disposed);
         fail = false;
         written.Reset();
         recorder.Start(fixture.Region, "unused-again.mp4", new RecordingSettings());
-        Assert.True(written.Wait(TimeSpan.FromSeconds(5)));
+        Assert.True(written.Wait(FirstFrameTimeout));
         Assert.True(recorder.Stop().EmittedFrames >= 1);
     });
 
@@ -157,7 +165,7 @@ public sealed class RecordingCaptureLifecycleTests
         {
             controls.Show();
             typeof(RecordingControlWindow).GetMethod("OnPrimaryClicked", flags)!.Invoke(controls, null);
-            Assert.True(written.Wait(TimeSpan.FromSeconds(5)));
+            Assert.True(written.Wait(FirstFrameTimeout));
             Assert.True(recording.CanCaptureStill);
             var frame = new FrozenFrame(fixture.Engine.CaptureRegion(fixture.Region, false), fixture.Region, null, 0);
             capture.StartWithSelection(frame, new RectD(0, 0, 40, 40));
