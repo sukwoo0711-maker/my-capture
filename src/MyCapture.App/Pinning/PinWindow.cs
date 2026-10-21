@@ -1,4 +1,5 @@
 ﻿using System.Windows;
+using System.Diagnostics;
 using System.Windows.Automation;
 using System.Windows.Controls;
 using System.Windows.Data;
@@ -99,6 +100,11 @@ internal sealed class PinWindow : Window
     private MenuItem? _selectTextItem;
     private PinTextSelectionView? _textSelection;
     private RectD? _restorePhysicalBounds;
+    private Stopwatch? _landingClock;
+    private PinLandingDecoration? _landingDecoration;
+    private DispatcherTimer? _landingResetTimer;
+    private RectD _landingBounds;
+    private double _landingAccentAmount;
 
     internal PinWindow(
         PinContent content,
@@ -570,6 +576,7 @@ internal sealed class PinWindow : Window
     internal void HidePin()
     {
         _state.IsHidden = true;
+        StopLandingEffect();
         LeaveTextSelection(restoreFocus: false);
         HideHoverBar();
         if (!FluidMotion.AnimationsEnabled || !IsVisible)
@@ -765,6 +772,15 @@ internal sealed class PinWindow : Window
         UpdateChromeColor(animate: true);
     }
 
+    /// <summary>
+    /// The emphasized outline colour of the current theme. The landing flash on the frame and
+    /// the landing ornament's ring and glow share it, so they follow the chosen accent.
+    /// </summary>
+    internal Color LandingAccentColor => PinFrameColor.Resolve(
+        (Brush?)GetValue(FrameAccentProperty), (Brush?)GetValue(FrameNeutralProperty),
+        ThemeService.IsSystemHighContrast || ThemeService.Current == Core.Themes.AppTheme.HighContrast,
+        emphasized: true);
+
     private void UpdateChromeColor(bool animate)
     {
         // The dedicated brand outline is quiet at rest and stronger on hover or activation.
@@ -774,6 +790,11 @@ internal sealed class PinWindow : Window
             (Brush?)GetValue(FrameNeutralProperty),
             contrast,
             emphasized: _chromeHover || _chromeActive);
+        if (_landingAccentAmount > 0)
+        {
+            target = BlendFrameColor(target, LandingAccentColor, _landingAccentAmount);
+            animate = false;
+        }
         // Read the presentation value before replacing an in-flight animation; otherwise a
         // fast enter/leave reversal visibly jumps back to the previous base colour.
         Color current = _chromeBrush.Color;
@@ -1363,21 +1384,121 @@ internal sealed class PinWindow : Window
             return;
         }
 
-        var fade = new DoubleAnimation(0, 1, FluidMotion.NormalDuration)
-        {
-            EasingFunction = FluidMotion.SoftLandingEasing,
-            FillBehavior = FillBehavior.Stop,
-        };
-        var scaleX = new DoubleAnimation(0.97, 1, FluidMotion.NormalDuration)
-        {
-            EasingFunction = FluidMotion.StandardEasing,
-            FillBehavior = FillBehavior.Stop,
-        };
-        var scaleY = scaleX.Clone();
+        DoubleAnimation fade = CreateRevealAnimation();
         _chrome.BeginAnimation(UIElement.OpacityProperty, fade, HandoffBehavior.SnapshotAndReplace);
-        _pinScale.BeginAnimation(ScaleTransform.ScaleXProperty, scaleX, HandoffBehavior.SnapshotAndReplace);
-        _pinScale.BeginAnimation(ScaleTransform.ScaleYProperty, scaleY, HandoffBehavior.SnapshotAndReplace);
     }
+
+    internal static DoubleAnimation CreateRevealAnimation() => new(0, 1, FluidMotion.FastDuration)
+    {
+        FillBehavior = FillBehavior.Stop,
+    };
+
+    internal PinLandingDecoration? LandingDecoration => _landingDecoration;
+    internal bool LandingStarted { get; private set; }
+
+    /// <summary>Called in the same dispatcher turn immediately after a new/reopened pin's Show.</summary>
+    internal void StartLandingEffect()
+    {
+        if (_isClosed || !IsVisible || _state.IsHidden) return;
+        StopLandingEffect();
+        // A restored HWND may have changed DPI during Show. Settle that physical move
+        // before the ornament takes its bounds; the manager still verifies/reports it.
+        bool placementSettled = ApplyRestorePlacement();
+        LandingStarted = true;
+        _landingClock = Stopwatch.StartNew();
+        (int left, int top, int right, int bottom) = PhysicalBounds;
+        _landingBounds = new RectD(left, top, right - left, bottom - top);
+        LocationChanged += OnLandingBoundsChanged;
+        SizeChanged += OnLandingSizeChanged;
+        IsVisibleChanged += OnLandingVisibilityChanged;
+
+        if (!FluidMotion.AnimationsEnabled)
+        {
+            // Reduced motion is an immediate colour change followed by an immediate reset;
+            // neither the content nor the outline has an animation clock in this path.
+            _landingAccentAmount = 1;
+            UpdateChromeColor(animate: false);
+            _landingResetTimer = new DispatcherTimer(DispatcherPriority.Normal, Dispatcher)
+            {
+                Interval = TimeSpan.FromMilliseconds(570),
+            };
+            _landingResetTimer.Tick += OnLandingReset;
+            _landingResetTimer.Start();
+            return;
+        }
+
+        CompositionTarget.Rendering += OnLandingRendering;
+        bool withinBurst = PinLandingDecoration.Throttle.TryAcquire(PinLandingDecoration.ReadOpeningTime());
+        try
+        {
+            bool remote = PinLandingDecoration.ReadRemoteSession();
+            if (placementSettled && withinBurst && PinLandingDecoration.IsEligible(
+                animations: true, remote, layered: !remote && PinLandingDecoration.ReadLayeredSupport()))
+            {
+                _landingDecoration = PinLandingDecoration.TryShow(this, _landingClock);
+            }
+        }
+        catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException)
+        {
+            // A failed optional capability probe must not interrupt activation or the
+            // manager's open-pin notification. The already-open pin keeps its outline flash.
+        }
+    }
+
+    private void OnLandingRendering(object? sender, EventArgs e)
+    {
+        if (_landingClock is not { } clock) return;
+        double elapsed = clock.Elapsed.TotalMilliseconds;
+        if (elapsed >= 570)
+        {
+            StopLandingEffect();
+            return;
+        }
+        double amount = PinLandingDecoration.Render(elapsed).BorderAccentAmount;
+        if (amount == _landingAccentAmount) return;
+        _landingAccentAmount = amount;
+        UpdateChromeColor(animate: false);
+    }
+
+    private void OnLandingReset(object? sender, EventArgs e) => StopLandingEffect();
+
+    private void OnLandingBoundsChanged(object? sender, EventArgs e)
+    {
+        (int left, int top, int right, int bottom) = PhysicalBounds;
+        if (new RectD(left, top, right - left, bottom - top) != _landingBounds) StopLandingEffect();
+    }
+
+    private void OnLandingSizeChanged(object sender, SizeChangedEventArgs e) => OnLandingBoundsChanged(sender, e);
+
+    private void OnLandingVisibilityChanged(object sender, DependencyPropertyChangedEventArgs e)
+    {
+        if (e.NewValue is false) StopLandingEffect();
+    }
+
+    private void StopLandingEffect()
+    {
+        CompositionTarget.Rendering -= OnLandingRendering;
+        LocationChanged -= OnLandingBoundsChanged;
+        SizeChanged -= OnLandingSizeChanged;
+        IsVisibleChanged -= OnLandingVisibilityChanged;
+        if (_landingResetTimer is { } timer)
+        {
+            timer.Stop();
+            timer.Tick -= OnLandingReset;
+            _landingResetTimer = null;
+        }
+        _landingClock = null;
+        if (_landingDecoration is { IsClosed: false } decoration) decoration.Close();
+        _landingDecoration = null;
+        _landingAccentAmount = 0;
+        UpdateChromeColor(animate: false);
+    }
+
+    private static Color BlendFrameColor(Color rest, Color accent, double amount) => Color.FromArgb(
+        (byte)Math.Round(rest.A + ((accent.A - rest.A) * amount)),
+        (byte)Math.Round(rest.R + ((accent.R - rest.R) * amount)),
+        (byte)Math.Round(rest.G + ((accent.G - rest.G) * amount)),
+        (byte)Math.Round(rest.B + ((accent.B - rest.B) * amount)));
 
     /// <summary>
     /// Tracks the configured double-click interval. Expiry never changes the clipboard;
@@ -1667,6 +1788,7 @@ internal sealed class PinWindow : Window
     protected override void OnClosed(EventArgs e)
     {
         _isClosed = true;
+        StopLandingEffect();
         EndDrag();
         _feedbackCountdown.Stop();
         _ctrlClickTimer.Stop();
