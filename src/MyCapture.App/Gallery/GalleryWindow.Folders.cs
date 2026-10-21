@@ -40,13 +40,15 @@ internal sealed partial class GalleryWindow
 
     private void RenameSelectedFolderOrCapture()
     {
+        if (IsNavigationTextInput(Keyboard.FocusedElement as DependencyObject)) return;
         if (FolderTree.IsKeyboardFocusWithin)
         {
             OnRenameFolderClick(this, new RoutedEventArgs());
         }
         else if (Keyboard.FocusedElement is FrameworkElement { DataContext: GalleryFolderCardViewModel card })
             OnRenameFolderClick(card, new RoutedEventArgs());
-        else OnOrganizeClick(this, new RoutedEventArgs());
+        else if ((ResolveTileFromTree(Keyboard.FocusedElement) ?? _viewModel.SingleSelectedTile) is { } tile)
+            _ = BeginCaptureRenameAsync(tile);
     }
 
     internal static bool IsNavigationTextInput(DependencyObject? source)
@@ -246,6 +248,8 @@ internal sealed partial class GalleryWindow
 
     private CaptureFolderScope FolderScopeFromSender(object sender) =>
         sender is GalleryFolderCardViewModel card ? card.Scope
+        : sender is MenuItem { CommandParameter: GalleryFolderCardViewModel menuCard } ? menuCard.Scope
+        : sender is FrameworkElement { DataContext: GalleryFolderCardViewModel sourceCard } ? sourceCard.Scope
         : sender is MenuItem { CommandParameter: GalleryFolderNode menuNode } ? menuNode.Scope
         : sender is FrameworkElement { DataContext: GalleryFolderNode node } ? node.Scope
         : FolderTree.IsKeyboardFocusWithin && FolderTree.SelectedItem is GalleryFolderNode selected ? selected.Scope

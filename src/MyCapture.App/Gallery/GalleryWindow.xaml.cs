@@ -117,6 +117,7 @@ internal sealed partial class GalleryWindow : Window
         _viewModel.SetThumbnailLoadingEnabled(false);
         DataContext = _viewModel;
         InitializeFolderActions();
+        RowsList.LayoutUpdated += OnMetadataLayoutUpdated;
         PreviewMouseLeftButtonUp += OnDragButtonUp;
         PreviewMouseMove += OnTileMouseMove;
         LostMouseCapture += (_, _) => { if (Mouse.Captured != this) ResetDragGesture(); };
@@ -144,7 +145,7 @@ internal sealed partial class GalleryWindow : Window
             }
         };
 
-        // F2 edits the selected capture's searchable title/tags without altering pixels.
+        // F2 edits a capture title in place, or renames the focused folder.
         InputBindings.Add(new KeyBinding(new RelayCommand(RenameSelectedFolderOrCapture),
             new KeyGesture(Key.F2)));
         // Ctrl+F focuses the search box from anywhere in the window.
@@ -409,6 +410,7 @@ internal sealed partial class GalleryWindow : Window
         if (_dragPreparing) { e.Handled = true; return; }
         ResetDragGesture();
         if (IsInsideButton(e.OriginalSource)
+            || IsNavigationTextInput(e.OriginalSource as DependencyObject)
             || ResolveTileFromTree(e.OriginalSource) is not GalleryItemViewModel tile)
         {
             return;
@@ -516,7 +518,8 @@ internal sealed partial class GalleryWindow : Window
 
     private void OnTileDoubleClick(object sender, MouseButtonEventArgs e)
     {
-        if (ResolveTile(e.OriginalSource) is GalleryItemViewModel tile)
+        if (!IsNavigationTextInput(e.OriginalSource as DependencyObject)
+            && ResolveTile(e.OriginalSource) is GalleryItemViewModel tile)
         {
             if (tile.IsVideo)
             {

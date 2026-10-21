@@ -79,6 +79,8 @@ public sealed partial class GalleryViewModel : INotifyPropertyChanged
     private int _columnCount = GalleryRowBuilder.MinColumns;
     private double _availableWidth = double.NaN;
     private bool _rowsCompact;
+    private double _fullMetadataTrackWidth;
+    private double _compactMetadataTrackWidth;
     private bool _publishedCanCompareSelected;
 
     public GallerySelection Selection { get; } = new();
@@ -341,7 +343,7 @@ public sealed partial class GalleryViewModel : INotifyPropertyChanged
         if (layoutChanged)
         {
             _rowsCompact = IsCompactLayout;
-            int columns = GalleryRowBuilder.ColumnCountForWidth(_availableWidth, _rowsCompact);
+            int columns = MetadataColumnCountForWidth(_availableWidth);
             if (columns != _columnCount) { _columnCount = columns; Raise(nameof(ColumnCount)); }
             Raise(nameof(IsCompactLayout));
         }
@@ -363,6 +365,17 @@ public sealed partial class GalleryViewModel : INotifyPropertyChanged
         RefreshTags();
     }
 
+    internal void SetMetadataMinimumTrackWidths(double full, double compact)
+    {
+        if (_fullMetadataTrackWidth == full && _compactMetadataTrackWidth == compact) return;
+        _fullMetadataTrackWidth = full;
+        _compactMetadataTrackWidth = compact;
+        SetColumnCountForWidth(_availableWidth);
+    }
+
+    private int MetadataColumnCountForWidth(double width) => GalleryRowBuilder.ColumnCountForWidth(width,
+        _rowsCompact, _rowsCompact ? _compactMetadataTrackWidth : _fullMetadataTrackWidth);
+
     /// <summary>
     /// Updates the tiles-per-row from the current gallery width and, only when that count
     /// actually changes, rebuilds the flat <see cref="Rows"/> list. Called on meaningful
@@ -373,7 +386,7 @@ public sealed partial class GalleryViewModel : INotifyPropertyChanged
     public bool SetColumnCountForWidth(double availableWidth)
     {
         _availableWidth = availableWidth;
-        int next = GalleryRowBuilder.ColumnCountForWidth(availableWidth, _rowsCompact);
+        int next = MetadataColumnCountForWidth(availableWidth);
         if (next == _columnCount)
         {
             return false;

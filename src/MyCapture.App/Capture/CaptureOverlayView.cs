@@ -120,7 +120,7 @@ internal sealed class CaptureOverlayView : FrameworkElement
     private bool _windowSelected;
     private bool UsesWindowDetection => DetectWindows && !_regionOnlySelected;
     private bool _textCaptureAvailable;
-    private bool _showShortcutHints = true;
+    private bool _showShortcutHints;
     private bool _offersOtherActions;
     private bool _recordingSelection;
     private Brush _recordingBrush = RecordingSelectionCue.Resolve();
@@ -364,8 +364,8 @@ internal sealed class CaptureOverlayView : FrameworkElement
     }
 
     /// <summary>
-    /// General.ShowShortcutHints, read per selector. The mode bar no longer draws key badges: its keys
-    /// are in the tooltips and accelerator keys whatever this says, like the target tab and the names.
+    /// General.AlwaysShowShortcutHints, read per selector. The mode bar's shared shortcut binding
+    /// also refreshes an already-open selector when the setting changes. Names and cues stay visible.
     /// </summary>
     internal bool ShowShortcutHints
     {

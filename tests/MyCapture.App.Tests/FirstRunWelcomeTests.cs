@@ -72,7 +72,8 @@ public sealed class FirstRunWelcomeTests
             Assert.Equal("지금 해 보기", AutomationProperties.GetName(welcome.TryNowButton));
             Assert.Equal("건너뛰기", AutomationProperties.GetName(welcome.SkipButton));
             Assert.Equal(UiText.Get("Onboard_TryNowHelp"), AutomationProperties.GetHelpText(welcome.TryNowButton));
-            Assert.Contains("Ctrl+Shift+C", Assert.IsType<string>(welcome.TryNowButton.ToolTip), StringComparison.Ordinal);
+            Assert.Contains("Enter", Assert.IsType<string>(welcome.TryNowButton.ToolTip), StringComparison.Ordinal);
+            Assert.DoesNotContain("Ctrl+Shift+C", Assert.IsType<string>(welcome.TryNowButton.ToolTip), StringComparison.Ordinal);
             Assert.Contains("Esc", Assert.IsType<string>(welcome.SkipButton.ToolTip), StringComparison.Ordinal);
             Assert.All(buttons, button => Assert.True(button.MinHeight >= 24));
 

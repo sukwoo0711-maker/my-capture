@@ -561,8 +561,8 @@ internal sealed partial class AnnotationEditorControl : Grid
     {
         foreach (EditorTool tool in Enum.GetValues<EditorTool>()) _shortcutActions[tool.ToString()] = () => SelectTool(tool);
         _shortcutActions["Done"] = () => Commit(EditorCommitAction.Done);
-        // Copying is how people finish an edit, so Copy saves, copies and closes like Done.
-        _shortcutActions["Copy"] = () => Commit(EditorCommitAction.Done);
+        // Copy keeps the live edit and history available; Done follows the final save path.
+        _shortcutActions["Copy"] = () => Commit(EditorCommitAction.CopyToClipboard);
         _shortcutActions["Save"] = () => Commit(EditorCommitAction.QuickSave);
         _shortcutActions["SaveAs"] = () => Commit(EditorCommitAction.SaveAs);
         _shortcutActions["Privacy"] = () => _ = ApplyPrivacyRedactionsAsync();
@@ -1211,7 +1211,7 @@ internal sealed partial class AnnotationEditorControl : Grid
             UseLayoutRounding = false,
             MinWidth = 0,
             MinHeight = 0,
-            FontFamily = new FontFamily(annotation.FontFamily),
+            FontFamily = FontCatalog.Resolve(annotation.FontFamily),
             FontSize = Math.Max(1, annotation.FontSize * dipPerPixel),
             FontWeight = annotation.Bold ? FontWeights.Bold : FontWeights.Normal,
             FontStyle = annotation.Italic ? FontStyles.Italic : FontStyles.Normal,
@@ -1864,13 +1864,14 @@ internal sealed partial class AnnotationEditorControl : Grid
         right.Children.Add(Separator());
         Button save = BuildSaveOverflowMenu();
         Button copy = IconTextButton(
-            UiText.Get("Text_37B3D3B11B26"), UiText.Get("Text_74EEFE6E43AE"), "Icon.Copy", FallbackCopy,
-            () => Commit(EditorCommitAction.Done));
+            UiText.Get("Text_37B3D3B11B26"), UiText.Get("EditorFlow_CopyHint"), "Icon.Copy", FallbackCopy,
+            () => Commit(EditorCommitAction.CopyToClipboard));
         copy.SetResourceReference(FrameworkElement.StyleProperty, "Button.Secondary");
         Button done = IconTextButton(
             UiText.Get("Text_727333AB0740"), UiText.Get("EditorFlow_DoneHint"), "Icon.Check", FallbackCheck,
             () => Commit(EditorCommitAction.Done));
         done.SetResourceReference(FrameworkElement.StyleProperty, "Button.Primary");
+        CommandButtonPresentation.KeepLabel(done);
         // Esc no longer closes, so Cancel carries no shortcut; it closes like the title bar does.
         Button cancel = IconTextButton(UiText.Get("Text_BE876433993A"), UiText.Get("EditorFlow_CancelHint"), "Icon.Close", FallbackClose, RequestClose);
         AutomationProperties.SetAutomationId(cancel, "EditorFlowCancel");
@@ -1891,6 +1892,9 @@ internal sealed partial class AnnotationEditorControl : Grid
         CommandButton(cancel, borderless: true);
         CommandButton(_copyTextButton, borderless: true);
         CommandButton(more, borderless: true);
+        CommandButtonPresentation.AlwaysIcon(_undoButton);
+        CommandButtonPresentation.AlwaysIcon(_redoButton);
+        CommandButtonPresentation.AlwaysIcon(more);
         var panel = new CommandGroupsPanel { Children = { left, right } };
         AutomationProperties.SetName(panel, UiText.Get("EditorFlow_CommandBarName"));
         return panel;
@@ -1936,6 +1940,7 @@ internal sealed partial class AnnotationEditorControl : Grid
         var right = CommandRow();
         Button apply = IconTextButton(UiText.Get("Crop.Apply"), UiText.Get("EditorFlow_CropApplyHint"), "Icon.Check", FallbackCheck, ApplyPendingCrop);
         apply.SetResourceReference(StyleProperty, "Button.Primary");
+        CommandButtonPresentation.KeepLabel(apply);
         Button cancel = IconTextButton(UiText.Get("Text_BE876433993A"), UiText.Get("EditorFlow_CropCancelHint"), "Icon.Close", FallbackClose, () =>
         {
             CancelPendingCrop();

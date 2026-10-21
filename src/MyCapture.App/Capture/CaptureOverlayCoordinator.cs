@@ -84,8 +84,8 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
     /// <summary>Reads Capture.AutoDetectWindows when each selector opens. Off unless the app wires it.</summary>
     internal Func<bool> AutoDetectWindows { get; set; } = () => false;
 
-    /// <summary>Reads General.ShowShortcutHints when each selector opens; off hides only the key badges.</summary>
-    internal Func<bool> ShowShortcutHints { get; set; } = () => true;
+    /// <summary>Reads General.AlwaysShowShortcutHints when each selector opens; defaults to Alt-only hints.</summary>
+    internal Func<bool> ShowShortcutHints { get; set; } = () => false;
 
     /// <summary>
     /// Asked once per selector whether it opens with the short start guide. The owner counts the

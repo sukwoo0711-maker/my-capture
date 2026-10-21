@@ -117,8 +117,8 @@ internal sealed class QuickAccessWindow : Window
         var close = Button("Dialog.Close", Close);
         close.Content = Glyph("Icon.Close");
         CommandButtonPresentation.Apply(close, compact: true);
-        close.Width = close.Height = close.MinWidth = close.MinHeight = 28;
-        close.Padding = new Thickness(4); close.Margin = new Thickness(4);
+        close.Width = close.Height = close.MinWidth = close.MinHeight = 36;
+        close.Padding = new Thickness(2); close.Margin = new Thickness(4);
         close.HorizontalAlignment = HorizontalAlignment.Right; close.VerticalAlignment = VerticalAlignment.Top;
         close.SetResourceReference(StyleProperty, "Button.Ghost");
         close.SetResourceReference(BackgroundProperty, "Surface.Floating");
@@ -159,8 +159,8 @@ internal sealed class QuickAccessWindow : Window
             Content = Glyph("Icon.Pause"), Focusable = false, ToolTip = UiText.Get("QuickAccess.KeepName"),
         };
         CommandButtonPresentation.Apply(_keep, compact: true);
-        _keep.Width = _keep.Height = _keep.MinWidth = _keep.MinHeight = 28;
-        _keep.Padding = new Thickness(4); _keep.Margin = new Thickness(0);
+        _keep.Width = _keep.Height = _keep.MinWidth = _keep.MinHeight = 36;
+        _keep.Padding = new Thickness(2); _keep.Margin = new Thickness(0);
         _keyboardTargets.Add(_keep);
         AutomationProperties.SetName(_keep, UiText.Get("QuickAccess.KeepName"));
         AutomationProperties.SetHelpText(_keep, UiText.Get("Onboard_QuickKeep"));
@@ -210,7 +210,7 @@ internal sealed class QuickAccessWindow : Window
         {
             Button button = Button("QuickAccess." + action, _actions[action]);
             CommandButtonPresentation.Apply(button, compact: true);
-            button.Height = button.MinHeight = 32;
+            button.Height = button.MinHeight = 36;
             button.Margin = new Thickness(2, 0, 2, 0);
             button.Padding = new Thickness(6, 0, 6, 0);
             if (action == "Edit")
@@ -222,7 +222,7 @@ internal sealed class QuickAccessWindow : Window
             else
             {
                 button.Content = Glyph(action == "CopyText" ? "Icon.Ocr" : "Icon." + action);
-                button.Width = button.MinWidth = 32;
+                button.Width = button.MinWidth = 36;
                 button.SetResourceReference(StyleProperty, "Button.Ghost");
             }
             string key = ShortcutCatalog.Get(ShortcutScope.QuickAccess, action).Hint;
@@ -235,7 +235,7 @@ internal sealed class QuickAccessWindow : Window
         var libraryButton = Button("QuickAccess.Library", () => { library(); Close(); });
         CommandButtonPresentation.Apply(libraryButton, compact: true);
         libraryButton.SetResourceReference(StyleProperty, "Button.Ghost");
-        libraryButton.Height = libraryButton.MinHeight = 32;
+        libraryButton.Height = libraryButton.MinHeight = 36;
         libraryButton.Padding = new Thickness(4, 0, 4, 0);
         libraryButton.Margin = new Thickness(2, 0, 0, 0);
         actions.Children.Add(libraryButton); panel.Children.Add(actions);

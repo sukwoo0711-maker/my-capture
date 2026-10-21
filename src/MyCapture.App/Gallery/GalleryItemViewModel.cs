@@ -96,6 +96,16 @@ public sealed class GalleryItemViewModel : INotifyPropertyChanged
     }
 
     public bool IsPinned => Record.IsManuallyPinned;
+
+    private bool _isRenaming;
+    private bool _isRenameSaving;
+    private string _renameDraft = string.Empty;
+    public bool IsRenaming { get => _isRenaming; internal set { _isRenaming = value; Raise(); } }
+    public bool IsRenameSaving { get => _isRenameSaving; internal set { _isRenameSaving = value; Raise(); } }
+    public string RenameDraft { get => _renameDraft; set { _renameDraft = value; Raise(); } }
+
+    /// <summary>Search evidence replaces the ordinary metadata, keeping every card two lines tall.</summary>
+    public string MetadataCaption => HasSearchMatch ? SearchMatchText : IsExpiringSoon ? RetentionCaption : TimeCaption;
     public string SearchMatchText { get; private set; } = string.Empty;
     public bool HasSearchMatch => SearchMatchText.Length > 0;
 
@@ -106,6 +116,7 @@ public sealed class GalleryItemViewModel : INotifyPropertyChanged
         SearchMatchText = text;
         Raise(nameof(SearchMatchText));
         Raise(nameof(HasSearchMatch));
+        Raise(nameof(MetadataCaption));
     }
 
     internal Func<CaptureRecord, string>? FolderFileName { get; set; }
@@ -164,7 +175,7 @@ public sealed class GalleryItemViewModel : INotifyPropertyChanged
         : Record.FolderId is not null ? Path.GetFileNameWithoutExtension(FolderFileName?.Invoke(Record)
             ?? CaptureFolderNaming.SequenceName(CaptureFolderNaming.DefaultPrefix, Record.FolderSequence) + (IsVideo ? ".mp4" : ".png"))
         : !string.IsNullOrWhiteSpace(Record.SourceWindowTitle) ? Record.SourceWindowTitle
-        : string.Empty;
+        : Record.SourceDetails.AppName;
 
     public string DetailDimensions => $"{Record.Width} \u00d7 {Record.Height}";
 
@@ -241,11 +252,13 @@ public sealed class GalleryItemViewModel : INotifyPropertyChanged
     {
         get
         {
-            string time = Record.CreatedAt.DateTime.ToString("yyyy-MM-dd HH:mm");
+            string time = Record.CreatedAt.DateTime.ToString("d", UiText.Culture) + ", "
+                + UiText.Format("Library453.CapturedAt", TimeCaption);
             string pin = IsPinned ? UiText.Get("LibraryUx_KeptAccessible") : string.Empty;
+            string edited = HasAnnotations ? ", " + UiText.Get("Text_2C64DDA4D878") : string.Empty;
             string media = IsVideo ? UiText.Format("Text_DFB3664A9A08", DurationCaption) : UiText.Get("Text_AA3D7105289A");
             string folder = HasFolderBadge ? UiText.Format("LibraryUx_InFolderAccessible", _folderPath) : string.Empty;
-            return $"{ContextLabel}{media}, {Record.Width}×{Record.Height}, {time}{pin}{folder}";
+            return $"{ContextLabel}{media}, {Record.Width}×{Record.Height}, {time}{pin}{edited}{folder}";
         }
     }
 
@@ -270,7 +283,7 @@ public sealed class GalleryItemViewModel : INotifyPropertyChanged
     // Keep the wall-clock time captured with the record's stored offset. LocalDateTime
     // would reinterpret it through the current machine time zone and could change the
     // label after travel, restore, or execution on a UTC host.
-    public string TimeCaption => Record.CreatedAt.DateTime.ToString("HH:mm");
+    public string TimeCaption => Record.CreatedAt.DateTime.ToString("t", UiText.Culture);
 
     /// <summary>The decoded thumbnail, or <see langword="null"/> until requested / when broken.</summary>
     public BitmapSource? Thumbnail
@@ -319,6 +332,7 @@ public sealed class GalleryItemViewModel : INotifyPropertyChanged
         Raise(nameof(AccessibleName));
         Raise(nameof(RetentionCaption));
         Raise(nameof(IsExpiringSoon));
+        Raise(nameof(MetadataCaption));
     }
 
     /// <summary>Notifies the view that pin/meta changed without re-decoding the image.</summary>
@@ -354,6 +368,7 @@ public sealed class GalleryItemViewModel : INotifyPropertyChanged
         Raise(nameof(AccessibleName));
         Raise(nameof(RetentionCaption));
         Raise(nameof(IsExpiringSoon));
+        Raise(nameof(MetadataCaption));
     }
 
     private void EnsureThumbnail()

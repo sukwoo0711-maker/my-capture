@@ -34,8 +34,8 @@ public sealed partial class SettingsThemePreviewTests
         RunIsolated(nameof(SettingsUx_GitHubTokenIsAPasswordInTheFoldedAdvancedGroup), VerifySettingsUxToken);
 
     [Fact]
-    public Task SettingsUx_NewInstallAndExistingShortcutsAndHintsShowAsSaved() =>
-        RunIsolated(nameof(SettingsUx_NewInstallAndExistingShortcutsAndHintsShowAsSaved), VerifySettingsUxShortcuts);
+    public Task SettingsUx_SavedShortcutsStayIntactAndAlwaysHintOptionExplainsAlt() =>
+        RunIsolated(nameof(SettingsUx_SavedShortcutsStayIntactAndAlwaysHintOptionExplainsAlt), VerifySettingsUxShortcuts);
 
     [Fact]
     public Task SettingsUx_CloseDialogOrdersApplyDiscardCancel() =>
@@ -144,6 +144,7 @@ public sealed partial class SettingsThemePreviewTests
             Assert.Equal(AfterCaptureAction.QuickAccess, fixture.Saved().General.AfterCapture);
             Assert.Equal(AppThemeNames.System, fixture.Saved().General.Theme);
             Assert.False(fixture.Saved().General.ShowShortcutHints);
+            Assert.False(fixture.Saved().General.AlwaysShowShortcutHints);
             Assert.False(Draft(window).HasUnappliedChanges);
 
             Draft(window).MaxItems = "5";
@@ -335,11 +336,12 @@ public sealed partial class SettingsThemePreviewTests
         Application application = CreateThemedApplication();
         try
         {
-            foreach ((string name, AppSettings settings, bool expectedHints) in new[]
+            foreach ((string name, AppSettings settings, bool expectedLegacyHints, bool expectedAlwaysHints) in new[]
             {
-                ("new", NewInstallDefaults.Create(), false),
-                ("existing", new AppSettings(), true),
-                ("explicit-hints-off", new AppSettings { General = { ShowShortcutHints = false } }, false),
+                ("new", NewInstallDefaults.Create(), false, false),
+                ("existing", new AppSettings(), true, false),
+                ("explicit-hints-off", new AppSettings { General = { ShowShortcutHints = false } }, false, false),
+                ("always-hints-on", new AppSettings { General = { AlwaysShowShortcutHints = true } }, true, true),
             })
             {
                 SettingsWindow window = CreateSettingsUxWindow(settings).Window;
@@ -394,12 +396,11 @@ public sealed partial class SettingsThemePreviewTests
                     Assert.Equal("Ctrl+Alt+F3", Draft(window).PasteToScreenHotkey);
                     Assert.True(Draft(window).HasUnappliedChanges);
 
-                    var hints = Assert.IsType<CheckBox>(window.FindName("ShowShortcutHintsCheck"));
-                    Assert.Equal(expectedHints, hints.IsChecked);
-                    Assert.True(hints.IsVisible);
+                    Assert.Null(window.FindName("ShowShortcutHintsCheck"));
+                    Assert.Equal(expectedLegacyHints, Draft(window).ShowShortcutHints);
                     var force = Assert.IsType<CheckBox>(window.FindName("ForceCoreShortcutsCheck"));
                     Assert.True(force.IsVisible);
-                    Assert.Same(hints.Style, force.Style);
+                    Assert.Same(window.FindResource("Settings.CheckBox"), force.Style);
                     Assert.Equal(UiText.Get("CoreShortcuts.Force"), AutomationProperties.GetName(force));
                     Assert.Equal(UiText.Get("CoreShortcuts.ForceDescription"), AutomationProperties.GetHelpText(force));
                     string[] assigned = recorders.Select(recorder => recorder.Text).ToArray();
@@ -409,6 +410,21 @@ public sealed partial class SettingsThemePreviewTests
                     force.IsChecked = false;
                     Assert.False(Draft(window).ForceCoreShortcuts);
                     SaveSettingsUxEvidence(RenderEditorWindow(window), $"settings-shortcuts-{name}-install-glass-after.png");
+
+                    tabs.SelectedItem = tabs.Items.OfType<TabItem>().Single(tab => Equals(tab.Header, UiText.Get("SettingsUx_TabEditing")));
+                    Drain(window);
+                    var hints = Assert.IsType<TextBlock>(window.FindName("ShortcutHintsDescription"));
+                    var alwaysHints = Assert.IsType<CheckBox>(window.FindName("AlwaysShowShortcutHintsCheck"));
+                    Assert.Equal(UiText.Get("SettingsUx_AlwaysShowShortcutHintsHint"), KoreanWordWrap.Strip(hints.Text));
+                    Assert.True(hints.IsVisible);
+                    Assert.True(alwaysHints.IsVisible);
+                    Assert.Same(window.FindResource("Settings.CheckBox"), alwaysHints.Style);
+                    Assert.Equal(UiText.Get("SettingsUx_AlwaysShowShortcutHints"), AutomationProperties.GetName(alwaysHints));
+                    Assert.Equal(UiText.Get("SettingsUx_AlwaysShowShortcutHintsHint"), AutomationProperties.GetHelpText(alwaysHints));
+                    Assert.Equal(nameof(SettingsDraft.AlwaysShowShortcutHints),
+                        alwaysHints.GetBindingExpression(ToggleButton.IsCheckedProperty)!.ParentBinding.Path.Path);
+                    Assert.Equal(expectedAlwaysHints, alwaysHints.IsChecked);
+                    Assert.Equal(expectedAlwaysHints, Draft(window).AlwaysShowShortcutHints);
                     SettingsWindow.CancelCommand.Execute(null, window);
                 }
                 finally
@@ -446,8 +462,8 @@ public sealed partial class SettingsThemePreviewTests
                         Button[] buttons = Descendants(dialog).OfType<Button>().ToArray();
                         Assert.Equal(new[] { dialog.ApplyButton, dialog.DiscardButton, dialog.CancelButton }, buttons);
                         Assert.Equal(new[] { UiText.Get("SettingsUx_CloseApply"), UiText.Get("SettingsUx_CloseDiscard"), UiText.Get("Dialog.Cancel") },
-                            buttons.Select(button => (string)button.Content));
-                        Assert.Equal(buttons.Select(button => (string)button.Content), buttons.Select(AutomationProperties.GetName));
+                            buttons.Select(DialogActionCaption));
+                        Assert.Equal(buttons.Select(DialogActionCaption), buttons.Select(AutomationProperties.GetName));
                         Assert.True(dialog.ApplyButton.IsDefault);
                         Assert.True(dialog.CancelButton.IsCancel);
                         Assert.False(dialog.DiscardButton.IsDefault || dialog.DiscardButton.IsCancel);
@@ -500,4 +516,7 @@ public sealed partial class SettingsThemePreviewTests
     }
 
     private static SettingsDraft Draft(SettingsWindow window) => Assert.IsType<SettingsDraft>(window.DataContext);
+
+    private static string DialogActionCaption(Button button) => SurfaceShortcutHintTests.PrimaryContent(button) is string text
+        ? text : Assert.IsType<TextBlock>(SurfaceShortcutHintTests.PrimaryContent(button)).Text;
 }

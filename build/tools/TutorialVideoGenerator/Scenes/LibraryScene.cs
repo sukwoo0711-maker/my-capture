@@ -186,7 +186,9 @@ internal sealed class LibraryScene : TutorialScene
     private PointD TilePoint(CaptureRecord record, bool onTitle = false)
     {
         ListBoxItem item = TileItem(record);
-        Point local = onTitle ? new Point(item.ActualWidth * 0.3, item.ActualHeight - 62) : new Point(item.ActualWidth * 0.45, Math.Min(item.ActualHeight * 0.45, 120));
+        TextBlock? title = onTitle ? OffscreenWindow.Descendants(item).OfType<TextBlock>().FirstOrDefault(text => text.Name == "TileTitle") : null;
+        Point local = title is not null ? title.TranslatePoint(new Point(title.ActualWidth * 0.3, title.ActualHeight / 2), item)
+            : new Point(item.ActualWidth * 0.45, Math.Min(item.ActualHeight * 0.45, 120));
         PointD point = _gallery.Host.PointOf(item, local);
         return new PointD(ClientOrigin.X + point.X * Scale, ClientOrigin.Y + point.Y * Scale);
     }

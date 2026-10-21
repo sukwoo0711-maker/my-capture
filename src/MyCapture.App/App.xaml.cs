@@ -278,7 +278,7 @@ public partial class App : Application
         // uses this to decide whether the frozen frame must wait it out.
         _shellPresenter.ForegroundDismissed += () => _overlay?.NoteForegroundDismissal();
         AnnotationEditorPreferences.Read = () => _settings!.Annotation;
-        ShortcutPresentation.ReadEnabled = () => _settings!.General.ShowShortcutHints;
+        ShortcutPresentation.ReadEnabled = () => _settings!.General.AlwaysShowShortcutHints;
         AnnotationEditorPreferences.ReadShowSourceWindowTitle = () => _settings!.Export.ShowSourceWindowTitle;
         AnnotationEditorPreferences.Write = RememberEditorPreferences;
         _tray.CaptureRequested += (_, _) => HandleCaptureRequested();

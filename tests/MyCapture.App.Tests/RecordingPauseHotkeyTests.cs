@@ -108,21 +108,43 @@ public sealed class RecordingPauseHotkeyTests : KoreanCaptionTest
     [Fact]
     public void Coordinator_PauseHotkeyTogglesThroughThePauseButtonPath() => StaTestHost.Run(() =>
     {
-        using var fixture = new SyntheticCaptureFixture();
+        var engine = new ScreenCaptureEngine(NullLogger<ScreenCaptureEngine>.Instance);
+        var grabber = new RegionFrameGrabber(engine, false)
+        {
+            CaptureFrameForTest = static pixels => Array.Fill(pixels, (byte)0xA0),
+        };
+        using var recorder = new RegionRecorder(grabber, _ => new DiscardingEncoder(320, 240), NullLogger.Instance);
         string root = OwnedTestDirectory.Create("mc-recording-pause-hotkey-");
         try
         {
-            RegionRecordingCoordinator coordinator = NewCoordinator(fixture, root);
-            OpenControls(coordinator, fixture.Region);
-            RecordingControlWindow controls = Field<RecordingControlWindow>(coordinator, "_controls");
+            RegionRecordingCoordinator coordinator = NewCoordinator(engine, root);
+            var controls = new RecordingControlWindow(new RectD(100, 100, 320, 240),
+                new RecordingSettings { UseStartDelay = false, FrameRate = RecordingFrameRate.Fps15, IncludeCursor = false },
+                () => recorder, () => "unused-pause-hotkey.mp4", NullLogger<RecordingControlWindow>.Instance);
+            // Keep the real coordinator/control/recorder path while replacing desktop capture
+            // and the codec. The production factory also opens unrelated library/error UI.
+            typeof(RegionRecordingCoordinator).GetField("_controls", Flags)!.SetValue(coordinator, controls);
+            controls.Closed += (EventHandler)Delegate.CreateDelegate(typeof(EventHandler), coordinator,
+                typeof(RegionRecordingCoordinator).GetMethod("OnControlsClosed", Flags)!);
+            Exception? failure = null;
+            controls.Failed += (_, args) => failure = args.Exception;
+
+            void WaitForState(Func<bool> predicate)
+            {
+                PumpUntil(() => predicate() || failure is not null);
+                Assert.Null(failure);
+                Assert.True(predicate(), "The expected recording state was not reached.");
+            }
+
             try
             {
+                Assert.True(coordinator.IsActive);
                 Button pause = Field<Button>(controls, "_pauseButton");
                 Border frame = Field<Border>(controls, "_regionFrame");
                 TextBlock status = Field<TextBlock>(controls, "_statusText");
                 Invoke(controls, "OnPrimaryClicked");
-                PumpUntil(() => controls.CanCaptureStill);
-                RegionRecorder recorder = Field<RegionRecorder>(controls, "_recorder");
+                WaitForState(() => controls.CanCaptureStill);
+                Assert.Same(recorder, Field<RegionRecorder>(controls, "_recorder"));
                 controls.ShowTime = true; // The ⋯ menu's "show time" (formerly the clock check box).
                 RecordingWallClockWindow clock = Field<RecordingWallClockWindow>(controls, "_wallClock");
 
@@ -135,10 +157,10 @@ public sealed class RecordingPauseHotkeyTests : KoreanCaptionTest
                 Assert.False(clock.IsPaused);
                 // A repeated press while the pause is still applying is ignored, not queued.
                 Assert.False(coordinator.TogglePause());
-                PumpUntil(() => controls.IsPaused && !controls.IsPauseTransitionPending);
+                WaitForState(() => controls.IsPaused && !controls.IsPauseTransitionPending);
                 Assert.True(controls.IsRecording);
                 Assert.True(pause.IsEnabled);
-                Assert.IsType<MyCapture.App.Themes.SymbolIcon>(pause.Content);
+                Assert.IsType<MyCapture.App.Themes.SymbolIcon>(SurfaceShortcutHintTests.PrimaryContent(pause));
                 Assert.Equal("녹화 재개", AutomationProperties.GetName(pause));
                 Assert.StartsWith("일시 정지됨", status.Text, StringComparison.Ordinal);
                 Assert.Equal(status.Text, AutomationProperties.GetName(status));
@@ -152,20 +174,20 @@ public sealed class RecordingPauseHotkeyTests : KoreanCaptionTest
 
                 // The button resumes a hotkey pause: both drive one shared state.
                 pause.RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));
-                PumpUntil(() => !controls.IsPaused && !controls.IsPauseTransitionPending);
+                WaitForState(() => !controls.IsPaused && !controls.IsPauseTransitionPending);
                 Assert.False(recorder.IsPaused);
                 Assert.False(clock.IsPaused);
 
                 // And the hotkey resumes a button pause, clearing the badge before frames flow.
                 pause.RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));
-                PumpUntil(() => controls.IsPaused && !controls.IsPauseTransitionPending);
+                WaitForState(() => controls.IsPaused && !controls.IsPauseTransitionPending);
                 Assert.True(clock.IsPaused);
                 Assert.True(coordinator.TogglePause());
                 Assert.False(clock.IsPaused);
                 Assert.True(recorder.IsPaused);
-                PumpUntil(() => !controls.IsPaused && !controls.IsPauseTransitionPending);
+                WaitForState(() => !controls.IsPaused && !controls.IsPauseTransitionPending);
                 Assert.False(recorder.IsPaused);
-                Assert.IsType<MyCapture.App.Themes.SymbolIcon>(pause.Content);
+                Assert.IsType<MyCapture.App.Themes.SymbolIcon>(SurfaceShortcutHintTests.PrimaryContent(pause));
                 Assert.Equal("녹화 일시 정지", AutomationProperties.GetName(pause));
                 Assert.Equal(string.Empty, AutomationProperties.GetItemStatus(frame));
                 Assert.IsNotType<LinearGradientBrush>(frame.BorderBrush);
@@ -176,6 +198,8 @@ public sealed class RecordingPauseHotkeyTests : KoreanCaptionTest
                 controls.Close();
             }
 
+            Assert.True(controls.FinalizedOnClose);
+            Assert.False(recorder.IsRecording);
             Assert.False(coordinator.IsActive);
             Assert.False(coordinator.TogglePause());
         }
@@ -188,12 +212,14 @@ public sealed class RecordingPauseHotkeyTests : KoreanCaptionTest
     [Fact]
     public void ControlWindow_PauseGuidanceNamesTheShortcutOnlyWhenAssigned() => StaTestHost.Run(() =>
     {
-        using var fixture = new SyntheticCaptureFixture();
-        using var recorder = new RegionRecorder(
-            new RegionFrameGrabber(fixture.Engine, false), _ => new DiscardingEncoder(320, 240), NullLogger.Instance);
+        var grabber = new RegionFrameGrabber(new ScreenCaptureEngine(NullLogger<ScreenCaptureEngine>.Instance), false)
+        {
+            CaptureFrameForTest = static pixels => Array.Fill(pixels, (byte)0xA0),
+        };
+        using var recorder = new RegionRecorder(grabber, _ => new DiscardingEncoder(320, 240), NullLogger.Instance);
         Hotkey assigned = Hotkey.None;
         var window = new RecordingControlWindow(
-            fixture.Region,
+            new RectD(100, 100, 320, 240),
             new RecordingSettings { UseStartDelay = false, FrameRate = RecordingFrameRate.Fps15 },
             () => recorder,
             () => "unused.mp4",
@@ -208,12 +234,14 @@ public sealed class RecordingPauseHotkeyTests : KoreanCaptionTest
         window.Failed += (_, args) => failure = args.Exception;
         try
         {
-            window.Show();
+            // Exercise the real recording lifecycle without showing or capturing desktop windows.
             Button pause = Field<Button>(window, "_pauseButton");
             Assert.False(window.TogglePause());
 
             Invoke(window, "OnPrimaryClicked");
-            PumpUntil(() => window.CanCaptureStill);
+            PumpUntil(() => window.CanCaptureStill || failure is not null);
+            Assert.Null(failure);
+            Assert.True(window.CanCaptureStill);
             const string pauseHelp = "녹화를 일시 정지합니다. 일시 정지한 구간은 동영상에 포함되지 않습니다.";
             Assert.Equal(pauseHelp, pause.ToolTip);
             Assert.Equal(pauseHelp, AutomationProperties.GetHelpText(pause));
@@ -222,7 +250,9 @@ public sealed class RecordingPauseHotkeyTests : KoreanCaptionTest
             // Assigned in settings while recording: the next state change names the chord.
             assigned = CtrlAltP;
             Assert.True(window.TogglePause());
-            PumpUntil(() => window.IsPaused && !window.IsPauseTransitionPending);
+            PumpUntil(() => (window.IsPaused && !window.IsPauseTransitionPending) || failure is not null);
+            Assert.Null(failure);
+            Assert.True(window.IsPaused && !window.IsPauseTransitionPending);
             const string resumeHelp = "녹화를 다시 시작합니다. 동영상은 일시 정지한 지점에서 이어집니다. 단축키: Ctrl+Alt+P";
             Assert.Equal(resumeHelp, pause.ToolTip);
             Assert.Equal(resumeHelp, AutomationProperties.GetHelpText(pause));
@@ -280,14 +310,17 @@ public sealed class RecordingPauseHotkeyTests : KoreanCaptionTest
         }
     });
 
-    private static RegionRecordingCoordinator NewCoordinator(SyntheticCaptureFixture fixture, string root)
+    private static RegionRecordingCoordinator NewCoordinator(SyntheticCaptureFixture fixture, string root) =>
+        NewCoordinator(fixture.Engine, root);
+
+    private static RegionRecordingCoordinator NewCoordinator(ScreenCaptureEngine engine, string root)
     {
         AppPaths paths = AppPaths.CreateForRoot(root);
         var queue = new CaptureQueue(paths, new QueueSettings(), NullLogger<CaptureQueue>.Instance);
         queue.Load();
         var library = new VideoLibraryService(queue, paths, NullLogger<VideoLibraryService>.Instance);
         return new RegionRecordingCoordinator(
-            fixture.Engine,
+            engine,
             paths,
             () => new RecordingSettings
             {
