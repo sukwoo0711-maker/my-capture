@@ -707,8 +707,22 @@ public partial class App : Application
     private void FlushEditorPreferences()
     {
         _preferenceSaveTimer?.Stop();
-        try { if (_settings is not null) _services?.GetRequiredService<SettingsStore>().Save(_settings); }
+        try
+        {
+            if (_settings is not null)
+                _services?.GetRequiredService<SettingsStore>().SaveInBackground(
+                    _settings.DeepClone(), "Could not save editor preferences");
+        }
         catch (Exception ex) { _log?.LogWarning(ex, "Could not save editor preferences"); }
+    }
+
+    /// <summary>Drains preference saves off the dispatcher after exit preparation.</summary>
+    private async Task FlushPreferenceSavesForExitAsync()
+    {
+        if (_preferenceSaveTimer?.IsEnabled == true) FlushEditorPreferences();
+        if (_services?.GetService<SettingsStore>() is { } store
+            && !await Task.Run(() => store.WaitForPendingSaves(TimeSpan.FromSeconds(3))))
+            _log?.LogWarning("Timed out waiting for preference saves on exit");
     }
 
     private async void HandleCaptureRequested()
@@ -751,7 +765,7 @@ public partial class App : Application
     /// </summary>
     private async void HandleCaptureFullScreen()
     {
-        if (_advancedCapture is null || !GuardStillCapture(UiText.Get("Text_254C836B9ED2")))
+        if (_advancedCapture is null || !await GuardStillCaptureAsync(UiText.Get("Text_254C836B9ED2")))
         {
             return;
         }
@@ -766,7 +780,7 @@ public partial class App : Application
     /// </summary>
     private async void HandleCaptureWindow()
     {
-        if (_advancedCapture is null || !GuardStillCapture(UiText.Get("Text_36458FABBDBB")))
+        if (_advancedCapture is null || !await GuardStillCaptureAsync(UiText.Get("Text_36458FABBDBB")))
         {
             return;
         }
@@ -781,7 +795,7 @@ public partial class App : Application
     /// </summary>
     private async void HandleRepeatLastRegion()
     {
-        if (_advancedCapture is null || !GuardStillCapture(UiText.Get("Text_92E815063265")))
+        if (_advancedCapture is null || !await GuardStillCaptureAsync(UiText.Get("Text_92E815063265")))
         {
             return;
         }
@@ -802,9 +816,9 @@ public partial class App : Application
     /// preserving the capture-before-wait invariant.
     /// </remarks>
     /// <param name="delaySeconds">The selector's ⋯ menu picks 3, 5 or 10; otherwise the setting applies.</param>
-    private void HandleDelayedCapture(int? delaySeconds = null)
+    private async void HandleDelayedCapture(int? delaySeconds = null)
     {
-        if (_settings is null || !GuardStillCapture(UiText.Get("Text_38476EDDA50B")))
+        if (_settings is null || !await GuardStillCaptureAsync(UiText.Get("Text_38476EDDA50B")))
         {
             return;
         }
@@ -906,7 +920,7 @@ public partial class App : Application
             return;
         }
 
-        if (!GuardStillCapture(UiText.Get("Text_4B4D91FFC215")))
+        if (!await GuardStillCaptureAsync(UiText.Get("Text_4B4D91FFC215")))
         {
             return;
         }
@@ -1371,10 +1385,13 @@ public partial class App : Application
         {
             _log?.LogError(ex, "Could not finalise the annotated capture");
             _storeRating?.RecordCapture(succeeded: false);
-            _tray?.ShowBalloon(
-                UiText.Get("Text_C1A40373A077"),
-                MyCapture.App.Themes.ThemedDialog.RecoveryMessage(ex),
-                TrayBalloonKind.Error);
+            string title = UiText.Get("Text_C1A40373A077");
+            string message = MyCapture.App.Themes.ThemedDialog.RecoveryMessage(ex);
+            // Done may already have taken the editor off the screen. It comes back with the failure,
+            // but possibly behind the app the user went on to, and a capture session drops ordinary
+            // notices, so the failure answers the Done command at once.
+            if (_overlay?.IsEditorFinishingOutOfSight == true) ShowCommandNotice(title, message, TrayBalloonKind.Error);
+            else _tray?.ShowBalloon(title, message, TrayBalloonKind.Error);
 
             // A finalise failure keeps the editor open so the user can retry rather than
             // silently losing their annotations.
@@ -1404,7 +1421,7 @@ public partial class App : Application
     /// Region video recording entry point. Toggles: a running recording is stopped, otherwise
     /// a new region is chosen. Never throws into the message pump.
     /// </summary>
-    private void HandleRecordRegion()
+    private async void HandleRecordRegion()
     {
         if (_recorder is null) return;
         string mode = UiText.Get("Text_4F5AF20FAA6E");
@@ -1414,6 +1431,7 @@ public partial class App : Application
             return;
         }
 
+        if (!_recorder.IsActive) await WaitForEditorFinishedAsync();
         _shellPresenter?.DismissForCapture();
         // A running recording stops or reports its own state; a new one waits for a still capture in progress.
         if (!_recorder.IsActive && CaptureGuard.Find(ReadCaptureGuardState(), allowRetake: false) is var block and not CaptureBlock.None)
@@ -1565,7 +1583,8 @@ public partial class App : Application
             () => _settings!,
             () => paths,
             _services.GetRequiredService<ILogger<CaptureCommitService>>());
-        _commit.PersistExportSettings = () => _services.GetRequiredService<SettingsStore>().Save(_settings!);
+        _commit.PersistExportSettings = () => _services.GetRequiredService<SettingsStore>().SaveInBackground(
+            _settings!.DeepClone(), "Could not persist the last export options");
         _videoLibrary = new MyCapture.App.Recording.VideoLibraryService(
             queue,
             paths,
@@ -1880,6 +1899,20 @@ public partial class App : Application
             {
                 _log?.LogDebug(ex, "Capture selector prewarm failed");
             }
+
+            // The editor's first open after a capture likewise, on a later idle turn of its own.
+            _ = Dispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle, new Action(() =>
+            {
+                if (_overlay?.IsActive == true) return;
+                try
+                {
+                    AnnotationEditorPrewarm.Run();
+                }
+                catch (Exception ex)
+                {
+                    _log?.LogDebug(ex, "Image editor prewarm failed");
+                }
+            }));
         }));
     }
 
@@ -2279,6 +2312,9 @@ public partial class App : Application
     {
         _quickAccess?.Close();
         if (_preferenceSaveTimer?.IsEnabled == true) FlushEditorPreferences();
+        if (_services?.GetService<SettingsStore>() is { } store
+            && !store.WaitForPendingSaves(TimeSpan.FromSeconds(3)))
+            _log?.LogWarning("Timed out waiting for preference saves on exit");
         HotkeyRecorder.CanRegister = null;
         ShortcutHelpWindow.CanShowHelp = () => true;
         AnnotationEditorPreferences.Read = null;

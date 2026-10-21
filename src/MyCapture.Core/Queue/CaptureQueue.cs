@@ -253,22 +253,39 @@ public sealed partial class CaptureQueue
         // Drop records whose files are gone. This happens when a user clears the
         // capture folder by hand, and a phantom entry produces a broken thumbnail
         // that looks like data loss.
-        records = records
-            .Where(record =>
+        // The checks only read each record's stored path and the file system, so they run in
+        // parallel; the warnings, and any failure, follow afterwards in record order.
+        ParallelOutcome<bool?>[] present = ParallelFileScan.InspectEach(records, record =>
+        {
+            if (!TryResolveDirectory(record, out string directory))
             {
-                if (!TryResolveDirectory(record, out string directory))
-                {
-                    _log.LogWarning(
-                        "Dropped capture {Id} because its storage path escaped the captures root",
-                        record.Id);
-                    return false;
-                }
+                return (bool?)null;
+            }
 
-                string primaryFile = record.IsVideo
-                    ? CaptureFileNames.VideoSource
-                    : CaptureFileNames.Original;
-                return File.Exists(Path.Combine(directory, primaryFile));
-            })
+            string primaryFile = record.IsVideo
+                ? CaptureFileNames.VideoSource
+                : CaptureFileNames.Original;
+            return File.Exists(Path.Combine(directory, primaryFile));
+        });
+        var kept = new List<CaptureRecord>(records.Count);
+        for (int i = 0; i < records.Count; i++)
+        {
+            bool? exists = present[i].GetValue();
+            if (exists is null)
+            {
+                _log.LogWarning(
+                    "Dropped capture {Id} because its storage path escaped the captures root",
+                    records[i].Id);
+                continue;
+            }
+
+            if (exists.Value)
+            {
+                kept.Add(records[i]);
+            }
+        }
+
+        records = kept
             .OrderByDescending(r => r.CreatedAt)
             .ToList();
 
@@ -471,17 +488,27 @@ public sealed partial class CaptureQueue
     /// <summary>
     /// Persists the index atomically.
     /// </summary>
-    public void Save()
+    public void Save() =>
+        // The writer never needs this gate or the caller dispatcher. This is also the exit drain.
+        SaveAsync().GetAwaiter().GetResult();
+
+    /// <summary>
+    /// The non-blocking form of <see cref="Save"/>: the same index snapshot, taken now on the
+    /// calling owner context, joins the same FIFO writer behind every earlier publication. Await
+    /// the task before relying on durability; it faults with the write failure.
+    /// </summary>
+    /// <remarks>
+    /// Like <see cref="Save"/> it bypasses the reservation pool, and a later <see cref="Save"/>
+    /// (the exit drain) still waits for it.
+    /// </remarks>
+    public Task SaveAsync()
     {
-        Task publication;
         lock (_writeGate)
         {
             var index = CreateIndexSnapshot();
             string json = JsonSerializer.Serialize(index, SerializerOptions);
-            publication = EnqueuePublication(null, BuildIndexWrites(json));
+            return EnqueuePublication(null, BuildIndexWrites(json));
         }
-        // The writer never needs this gate or the caller dispatcher. This is also the exit drain.
-        publication.GetAwaiter().GetResult();
     }
 
     /// <summary>
@@ -512,18 +539,46 @@ public sealed partial class CaptureQueue
     /// use this strict form so they never delete a pending marker/journal unless both meta and
     /// index durably name the same generation.
     /// </summary>
-    public void SaveRecordMetaOrThrow(CaptureRecord record)
+    public void SaveRecordMetaOrThrow(CaptureRecord record) =>
+        SaveRecordMetaOrThrowAsync(record).GetAwaiter().GetResult();
+
+    /// <summary>
+    /// The non-blocking form of <see cref="SaveRecordMetaOrThrow"/>: the record is serialized now
+    /// on the calling owner context and its write joins the same FIFO writer. Awaiting the task
+    /// gives the same strict guarantee; it faults with the write failure.
+    /// </summary>
+    public Task SaveRecordMetaOrThrowAsync(CaptureRecord record)
     {
         ArgumentNullException.ThrowIfNull(record);
 
-        Task publication;
         lock (_writeGate)
         {
             string path = GetFilePath(record, CaptureFileNames.Meta);
             string json = JsonSerializer.Serialize(record, MetaSerializerOptions);
-            publication = EnqueuePublication(null, [(path, json)]);
+            return EnqueuePublication(null, [(path, json)]);
         }
-        publication.GetAwaiter().GetResult();
+    }
+
+    /// <summary>
+    /// The non-blocking form of <see cref="SaveRecordMeta"/>: best-effort, so a write failure is
+    /// logged, never thrown.
+    /// </summary>
+    public async Task SaveRecordMetaAsync(CaptureRecord record)
+    {
+        ArgumentNullException.ThrowIfNull(record);
+
+        try
+        {
+            await SaveRecordMetaOrThrowAsync(record).ConfigureAwait(false);
+        }
+        catch (IOException ex)
+        {
+            _log.LogWarning(ex, "Could not write recovery metadata for {Id}", record.Id);
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            _log.LogWarning(ex, "Could not write recovery metadata for {Id}", record.Id);
+        }
     }
 
     /// <summary>
@@ -1019,25 +1074,18 @@ public sealed partial class CaptureQueue
         try
         {
             // Pending first, committed metadata second: if both exist after a crash just before
-            // marker cleanup, the fully committed meta record wins for the same ID.
-            var options = new EnumerationOptions
+            // marker cleanup, the fully committed meta record wins for the same ID. One walk
+            // finds every name, each in the order its own recursive walk would find it.
+            string[] sidecarNames = pendingOnly
+                ? [CaptureFileNames.OriginalPending, CaptureFileNames.VideoPending]
+                : [CaptureFileNames.OriginalPending, CaptureFileNames.VideoPending, CaptureFileNames.Meta];
+            foreach (IReadOnlyList<string> found in ParallelFileScan.FindFiles(
+                         // AppPaths canonicalizes the local capture root; the filenames are fixed
+                         // private sidecars and reparse points are excluded from the walk.
+                         // codeql[cs/path-injection]
+                         _paths.CapturesRoot, sidecarNames))
             {
-                RecurseSubdirectories = true,
-                IgnoreInaccessible = true,
-                AttributesToSkip = FileAttributes.ReparsePoint,
-            };
-            sidecarFiles.AddRange(Directory.EnumerateFiles(
-                // AppPaths canonicalizes the local capture root; the filename is a fixed private
-                // sidecar and reparse points are excluded from the recursive walk.
-                // codeql[cs/path-injection]
-                _paths.CapturesRoot, CaptureFileNames.OriginalPending, options));
-            sidecarFiles.AddRange(Directory.EnumerateFiles(
-                // codeql[cs/path-injection]
-                _paths.CapturesRoot, CaptureFileNames.VideoPending, options));
-            if (!pendingOnly)
-            {
-                sidecarFiles.AddRange(Directory.EnumerateFiles(
-                    _paths.CapturesRoot, CaptureFileNames.Meta, options));
+                sidecarFiles.AddRange(found);
             }
         }
         catch (IOException ex)

@@ -207,11 +207,24 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
     internal bool ShowEditorBlocked(string notice)
     {
         VerifyDispatcherAccess();
-        if (_disposed || _activeEditor is not { } editor) return false;
+        // An editor whose save finishes out of sight has already left the screen for the user.
+        if (_disposed || _activeEditor is not { IsFinishingOutOfSight: false } editor) return false;
         WindowForeground.BringForward(editor);
         editor.Editor.ShowCaptureBlocked(notice);
         return true;
     }
+
+    /// <summary>
+    /// Completes once the editor's Done (which may take it off the screen while the save finishes)
+    /// has closed it, or has ended without closing and left it editable on screen; at once when no
+    /// such Done runs. A capture command waits for it, so it starts as soon as the previous capture
+    /// is saved instead of being refused by an editor the user is leaving.
+    /// </summary>
+    internal Task WaitForEditorFinishedAsync() =>
+        !_disposed && _activeEditor is { IsFinishingDone: true } editor ? editor.DoneFinished : Task.CompletedTask;
+
+    /// <summary>True while the editor's Done save finishes after the editor left the screen.</summary>
+    internal bool IsEditorFinishingOutOfSight => !_disposed && _activeEditor?.IsFinishingOutOfSight == true;
 
     /// <summary>Brings the open selector forward; false while its frame is still being taken.</summary>
     internal bool BringSelectorForward()
@@ -702,6 +715,9 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
                 sourceWindowTitle: selection.SourceTitle);
             _activeEditor = editor;
             if (CaptureMonitor(selection) is { } monitor) editor.PlaceOnMonitor(monitor);
+            // Done leaves the screen once the clipboard holds the result; the save finishes behind
+            // it and the session ends when the editor closes, as before.
+            editor.FinishesOutOfSight = true;
             editor.DraftRecordSource = DraftRecord;
             if (OriginalNeedsRecovery()) editor.MarkUnpersistedCapture();
             editor.CommitRequested = CommitRequested;

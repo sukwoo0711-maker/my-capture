@@ -193,6 +193,12 @@ internal sealed partial class AnnotationEditorControl
         _ => _controller.StrokeColor,
     };
 
+    /// <remarks>
+    /// Runs on every inspector refresh, including each selection change of a marquee drag, so
+    /// a ring is re-pointed only when its swatch becomes or stops being the current colour.
+    /// A ring that already follows the <c>Text.Primary</c> resource keeps following it, so a
+    /// theme change still reaches it.
+    /// </remarks>
     private void UpdateColorSwatches()
     {
         ColorRgba current = CurrentPropertyColor();
@@ -200,8 +206,9 @@ internal sealed partial class AnnotationEditorControl
         {
             bool selected = button.Tag is ColorRgba color && color == current;
             var ring = (Border)button.Content;
-            if (selected) ring.SetResourceReference(Border.BorderBrushProperty, "Text.Primary");
-            else ring.BorderBrush = Brushes.Transparent;
+            object ringBrush = ring.ReadLocalValue(Border.BorderBrushProperty);
+            if (selected && ringBrush is not Expression) ring.SetResourceReference(Border.BorderBrushProperty, "Text.Primary");
+            else if (!selected && !ReferenceEquals(ringBrush, Brushes.Transparent)) ring.BorderBrush = Brushes.Transparent;
             AutomationProperties.SetItemStatus(button, selected ? UiText.Get("EditorProperty_SelectedColor") : string.Empty);
         }
         if (!_customColorPopup.IsOpen) _customColorInput.Text = ColorCode(current);

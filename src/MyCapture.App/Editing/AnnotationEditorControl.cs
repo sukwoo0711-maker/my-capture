@@ -295,6 +295,9 @@ internal sealed partial class AnnotationEditorControl : Grid
             _redactionCts?.Cancel();
             _redactionCts?.Dispose();
             _redactionCts = null;
+            _imageInsertCts?.Cancel();
+            _imageInsertCts?.Dispose();
+            _imageInsertCts = null;
             _hangulNoticeTimer?.Stop();
             _blurCache.Clear();
         };
@@ -395,7 +398,16 @@ internal sealed partial class AnnotationEditorControl : Grid
     internal bool IsPointerCaptured => _viewport.IsMouseCaptured;
 
     internal bool IsCommitInProgress => _commitInProgress && !_completed;
-    internal bool IsEditingOperationInProgress => IsCommitInProgress || _redactionInProgress;
+
+    /// <summary>
+    /// A commit, privacy search or picked picture still being read is running. A picture counts
+    /// because the synchronous insert it replaced had always finished before the window could
+    /// close or the app could flush its drafts.
+    /// </summary>
+    internal bool IsEditingOperationInProgress => IsCommitInProgress || _redactionInProgress || _pendingImageInserts > 0;
+
+    /// <summary>Reading picked pictures is the only operation in progress, so a close can wait for it.</summary>
+    internal bool IsOnlyReadingPictures => _pendingImageInserts > 0 && !IsCommitInProgress && !_redactionInProgress;
 
     internal bool CapturePointer()
     {
@@ -790,9 +802,7 @@ internal sealed partial class AnnotationEditorControl : Grid
         // rotated bitmap; sampling the untouched selection would read coordinates from
         // the rotated canvas space out of (or beside) the unrotated pixels.
         BitmapSource mosaicBase = _surface.Frame.Bitmap;
-        int stride = mosaicBase.PixelWidth * 4;
-        byte[] source = new byte[stride * mosaicBase.PixelHeight];
-        mosaicBase.CopyPixels(source, stride, 0);
+        byte[] source = ReadMosaicSource(mosaicBase, x, y, width, height, out int stride, out int originX, out int originY);
 
         int patchStride = width * 4;
         byte[] patch = new byte[patchStride * height];
@@ -809,11 +819,11 @@ internal sealed partial class AnnotationEditorControl : Grid
                 long sumB = 0, sumG = 0, sumR = 0, count = 0;
                 for (int py = 0; py < blockH; py++)
                 {
-                    int sy = y + by + py;
+                    int sy = y + by + py - originY;
                     int row = sy * stride;
                     for (int px = 0; px < blockW; px++)
                     {
-                        int sx = x + bx + px;
+                        int sx = x + bx + px - originX;
                         int i = row + (sx * 4);
                         if (source[i + 3] == 0)
                         {
@@ -870,6 +880,40 @@ internal sealed partial class AnnotationEditorControl : Grid
         _controller.AddImageAnnotation(asset.AssetFileName, width, height, rect);
         SelectTool(EditorTool.Select);
         SetStatus(UiText.Get("Text_3F8046019B34"));
+    }
+
+    /// <summary>
+    /// The base pixels a mosaic over <paramref name="x"/>, <paramref name="y"/>,
+    /// <paramref name="width"/>, <paramref name="height"/> averages, as four-byte rows of
+    /// <paramref name="stride"/> bytes whose first byte is base pixel
+    /// (<paramref name="originX"/>, <paramref name="originY"/>).
+    /// </summary>
+    /// <remarks>
+    /// The block averages read only pixels inside the region, so a 32bpp base yields exactly
+    /// the bytes a whole-image copy would hold there, without copying the rest of the image
+    /// on every mosaic. Any other format, or a region the base does not fully contain, keeps
+    /// the whole-image copy and its four-byte addressing, so the patch bytes never change.
+    /// </remarks>
+    private static byte[] ReadMosaicSource(BitmapSource bitmap, int x, int y, int width, int height,
+        out int stride, out int originX, out int originY)
+    {
+        if (bitmap.Format.BitsPerPixel == 32 && x >= 0 && y >= 0
+            && x + width <= bitmap.PixelWidth && y + height <= bitmap.PixelHeight)
+        {
+            stride = width * 4;
+            originX = x;
+            originY = y;
+            byte[] region = new byte[stride * height];
+            bitmap.CopyPixels(new Int32Rect(x, y, width, height), region, stride, 0);
+            return region;
+        }
+
+        stride = bitmap.PixelWidth * 4;
+        originX = 0;
+        originY = 0;
+        byte[] source = new byte[stride * bitmap.PixelHeight];
+        bitmap.CopyPixels(source, stride, 0);
+        return source;
     }
 
     internal CropGrip? EdgeCropGripAt(PointD image)
@@ -1508,15 +1552,37 @@ internal sealed partial class AnnotationEditorControl : Grid
             cropStride);
         cropped.Freeze();
 
-        _controller.CropDocument(normalized);
-        SwapBaseBitmap(cropped, new RectD(0, 0, width, height));
+        // The crop command's history refresh adopts these pixels instead of cutting the same
+        // region a second time out of the re-rotated original (see SyncBaseBitmapWithDocument).
+        // They were the base that refresh ended with anyway, because this method swapped them
+        // in right after it. A crop the controller does not record (the whole canvas) raises
+        // no refresh, so the pixels are swapped in here as before.
+        bool adopted;
+        _cropBaseForHistory = cropped;
+        try
+        {
+            _controller.CropDocument(normalized);
+        }
+        finally
+        {
+            adopted = _cropBaseForHistory is null;
+            _cropBaseForHistory = null;
+        }
+
+        if (!adopted) SwapBaseBitmap(cropped, new RectD(0, 0, width, height));
         SelectTool(EditorTool.Select);
         SetStatus(UiText.Get("Tools_CropApplied"));
     }
 
+    /// <summary>
+    /// The cropped base <see cref="ApplyCrop"/> already cut, waiting for the history refresh
+    /// its crop command raises; <see langword="null"/> at any other time.
+    /// </summary>
+    private BitmapSource? _cropBaseForHistory;
+
     // ---- Image insertion -----------------------------------------------------------
 
-    private void InsertImage(PointD image)
+    private async void InsertImage(PointD image)
     {
         var dialog = new OpenFileDialog
         {
@@ -1531,19 +1597,98 @@ internal sealed partial class AnnotationEditorControl : Grid
             return;
         }
 
-        (BitmapSource Bitmap, string AssetFileName)? loaded = _imageStore.LoadFromFile(dialog.FileName);
-        if (loaded is null)
+        // An unexpected decoding failure still surfaces through the dispatcher's unhandled
+        // exception handling, as it did when the file was decoded inside this handler.
+        await InsertImageFileAsync(dialog.FileName, image);
+    }
+
+    /// <summary>
+    /// Decodes <paramref name="path"/> off the UI thread and adds it, centred on
+    /// <paramref name="image"/>, as one undoable image annotation once its pixels are ready.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Decoding a large picture on the UI thread froze the editor. The pixels are decoded at
+    /// their original resolution on a background STA and frozen; naming, fitting and adding
+    /// them stay on the UI thread and are unchanged: at most a third of the canvas, centred on
+    /// the click, one undo step, the image selected and announced.
+    /// </para>
+    /// <para>
+    /// The editor stays usable meanwhile. The picture is dropped when the editor closed first
+    /// (a commit completed or the window unloaded). It waits while a commit holds the document
+    /// or the user is in the middle of a gesture, a caption or a crop frame, so it never lands
+    /// inside one, and it is centred on the canvas when a rotation or crop in the meantime
+    /// moved the clicked pixels. A file that is not a readable image is reported as before,
+    /// unless the editor has closed.
+    /// </para>
+    /// <para>
+    /// Until it is added or dropped the picture counts as an editing operation: a commit
+    /// started meanwhile waits for it and saves it (see <see cref="Commit"/>), and the window's
+    /// exit paths wait for it, exactly as they found the synchronous insert already done.
+    /// </para>
+    /// </remarks>
+    internal async Task InsertImageFileAsync(string path, PointD image)
+    {
+        _pendingImageInserts++;
+        try
         {
-            MyCapture.App.Themes.ThemedDialog.Show(
-                UiText.Get("Text_5DD4908475B6"),
-                "MyCapture",
-                MessageBoxButton.OK,
-                MessageBoxImage.Warning);
-            SelectTool(EditorTool.Select);
+            await InsertPendingImageAsync(path, image);
+        }
+        finally
+        {
+            if (--_pendingImageInserts == 0 && _imageInsertsSettled is { } settled)
+            {
+                _imageInsertsSettled = null;
+                settled.TrySetResult();
+            }
+        }
+    }
+
+    private async Task InsertPendingImageAsync(string path, PointD image)
+    {
+        CancellationToken closed = (_imageInsertCts ??= new CancellationTokenSource()).Token;
+        var geometry = (_controller.RotationTurns, _controller.CropOrigin, _canvasWidth, _canvasHeight);
+        // Both outcomes end on the select tool. Switching now means a click while the picture
+        // is read selects, as it would after the insertion, instead of opening a second picker.
+        if (_controller.Tool == EditorTool.Image) SelectTool(EditorTool.Select);
+        AnnotationImageStore.DecodedFile? decoded;
+        try
+        {
+            // Closing stops the wait at once, so a commit waiting for this picture is not held
+            // by a decode whose result would be dropped anyway.
+            decoded = await DecodeImageForInsert(path).WaitAsync(closed);
+        }
+        catch (OperationCanceledException) when (closed.IsCancellationRequested)
+        {
             return;
         }
 
-        BitmapSource bitmap = loaded.Value.Bitmap;
+        while (!IsImageInsertClosed(closed) && ImageInsertMustWait)
+        {
+            await Task.Delay(50);
+        }
+
+        if (IsImageInsertClosed(closed))
+        {
+            return;
+        }
+
+        if (decoded is null)
+        {
+            ReportUnreadableImage();
+            // Back to the select tool, as before, but never by discarding a crop frame that a
+            // commit waiting for this picture is about to apply.
+            if (_crop is null) SelectTool(EditorTool.Select);
+            return;
+        }
+
+        if (geometry != (_controller.RotationTurns, _controller.CropOrigin, _canvasWidth, _canvasHeight))
+        {
+            image = new PointD(_canvasWidth / 2.0, _canvasHeight / 2.0);
+        }
+
+        (BitmapSource Bitmap, string AssetFileName) loaded = _imageStore.Register(decoded);
+        BitmapSource bitmap = loaded.Bitmap;
         int sourceWidth = bitmap.PixelWidth;
         int sourceHeight = bitmap.PixelHeight;
 
@@ -1563,10 +1708,55 @@ internal sealed partial class AnnotationEditorControl : Grid
         }
 
         var rect = new RectD(image.X - (width / 2), image.Y - (height / 2), width, height);
-        _controller.AddImageAnnotation(loaded.Value.AssetFileName, sourceWidth, sourceHeight, rect);
+        _controller.AddImageAnnotation(loaded.AssetFileName, sourceWidth, sourceHeight, rect);
         SyncToolButtons();
         SetStatus(UiText.Format("EditorFlow_Added", UiText.Get("Text_302BAE127938")));
     }
+
+    /// <summary>Cancelled when the editor unloads, so pictures still decoding are dropped.</summary>
+    private CancellationTokenSource? _imageInsertCts;
+
+    /// <summary>Picked pictures not yet added or dropped.</summary>
+    private int _pendingImageInserts;
+
+    /// <summary>Completed when <see cref="_pendingImageInserts"/> returns to zero.</summary>
+    private TaskCompletionSource? _imageInsertsSettled;
+
+    /// <summary>A commit has prepared the document and waits for picked pictures before saving.</summary>
+    private bool _commitAwaitingImages;
+
+    /// <summary>
+    /// Completes once every picked picture has been added or dropped; at once when none is
+    /// pending. A caller that must not act on the document without them (a commit, a close)
+    /// awaits it on the UI thread.
+    /// </summary>
+    internal Task ImageInsertsSettledAsync() => _pendingImageInserts == 0
+        ? Task.CompletedTask
+        : (_imageInsertsSettled ??= new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously)).Task;
+
+    private bool IsImageInsertClosed(CancellationToken closed) => _completed || closed.IsCancellationRequested;
+
+    /// <summary>
+    /// Whether a decoded picture must wait before it is added: a commit holds the document,
+    /// or a pointer gesture, caption or crop frame is in progress. A commit waiting for the
+    /// picture has already finished the caption, gesture and crop, so the picture goes in.
+    /// </summary>
+    private bool ImageInsertMustWait => !_commitAwaitingImages && (_commitInProgress || _activeTextBox is not null
+        || _crop is not null || _mosaicDragging || _edgeCropStart is not null || _viewport.IsMouseCaptured);
+
+    /// <summary>
+    /// Decodes a picked file off the UI thread. Tests substitute it to decide when decoding
+    /// finishes; the result must be frozen.
+    /// </summary>
+    internal Func<string, Task<AnnotationImageStore.DecodedFile?>> DecodeImageForInsert { get; set; } =
+        static path => Threading.StaThreadTask.RunAsync(() => AnnotationImageStore.Decode(path), "MyCapture image insert decoder");
+
+    /// <summary>Tells the user the picked file is not a readable image. Tests substitute the modal dialog.</summary>
+    internal Action ReportUnreadableImage { get; set; } = static () => MyCapture.App.Themes.ThemedDialog.Show(
+        UiText.Get("Text_5DD4908475B6"),
+        "MyCapture",
+        MessageBoxButton.OK,
+        MessageBoxImage.Warning);
 
     // ---- Layout construction -------------------------------------------------------
 
@@ -2163,17 +2353,27 @@ internal sealed partial class AnnotationEditorControl : Grid
         int number = _controller.NextStepNumber;
         string text = number.ToString(CultureInfo.CurrentCulture);
         ColorRgba color = _controller.StrokeColor;
+        double pixelsPerDip = VisualTreeHelper.GetDpi(this).PixelsPerDip;
+        string name = UiText.Format("EditorUx_StepNumberNextName", number);
+        // The inspector refreshes on every selection and history event while the step tool is
+        // active; the badge is rebuilt only when something it draws or announces changes.
+        var shown = (text, CultureInfo.CurrentCulture.Name, color, pixelsPerDip, name);
+        if (_stepPreviewShown == shown) return;
+        _stepPreviewShown = shown;
         _stepPreview.Background = new SolidColorBrush(Color.FromRgb(color.R, color.G, color.B));
         var formatted = new FormattedText(text, CultureInfo.CurrentCulture, FlowDirection.LeftToRight,
             new Typeface(new FontFamily("Segoe UI"), FontStyles.Normal, FontWeights.Bold, FontStretches.Normal),
-            text.Length > 2 ? 15 : 20, Brushes.White, VisualTreeHelper.GetDpi(this).PixelsPerDip);
+            text.Length > 2 ? 15 : 20, Brushes.White, pixelsPerDip);
         Geometry digits = formatted.BuildGeometry(new Point(0, 0));
         // Start the glyph outline at the path origin so the badge centres the ink, not the line box.
         Rect ink = digits.Bounds;
         if (!ink.IsEmpty) digits.Transform = new TranslateTransform(-ink.X, -ink.Y);
         _stepPreviewNumber.Data = digits;
-        AutomationName(_stepPreview, UiText.Format("EditorUx_StepNumberNextName", number));
+        AutomationName(_stepPreview, name);
     }
+
+    /// <summary>What the step preview last drew and announced.</summary>
+    private (string Text, string Culture, ColorRgba Color, double PixelsPerDip, string Name)? _stepPreviewShown;
 
     /// <summary>The number the step preview shows, for tests.</summary>
     internal string StepPreviewName => AutomationProperties.GetName(_stepPreview);
@@ -2916,6 +3116,14 @@ internal sealed partial class AnnotationEditorControl : Grid
         }
 
         _rotationTurns = turns;
+        if (_cropBaseForHistory is { } cropped)
+        {
+            // ApplyCrop's own command: its pixels are the base the crop ends with.
+            _cropBaseForHistory = null;
+            SwapBaseBitmap(cropped, new RectD(0, 0, cropped.PixelWidth, cropped.PixelHeight));
+            return;
+        }
+
         BitmapSource rotated = _selectedBitmap;
         for (int pass = 0; pass < turns; pass++)
         {
@@ -2991,10 +3199,21 @@ internal sealed partial class AnnotationEditorControl : Grid
 
         _undoButton.IsEnabled = _controller.CanUndo;
         _redoButton.IsEnabled = _controller.CanRedo;
-        _undoButton.ToolTip = _controller.Undo.NextUndoDescription is { } undo
-            ? UiText.Format("EditorSelection_UndoHint", undo) : UiText.Get("Text_C61A081610C9");
-        _redoButton.ToolTip = _controller.Undo.NextRedoDescription is { } redo
-            ? UiText.Format("EditorSelection_RedoHint", redo) : UiText.Get("Text_F457141C336A");
+        SetToolTipText(_undoButton, _controller.Undo.NextUndoDescription is { } undo
+            ? UiText.Format("EditorSelection_UndoHint", undo) : UiText.Get("Text_C61A081610C9"));
+        SetToolTipText(_redoButton, _controller.Undo.NextRedoDescription is { } redo
+            ? UiText.Format("EditorSelection_RedoHint", redo) : UiText.Get("Text_F457141C336A"));
+    }
+
+    /// <summary>
+    /// Sets a text tooltip only when the text differs. <see cref="FrameworkElement.ToolTip"/>
+    /// compares objects by reference, so a freshly formatted equal string re-raised its change
+    /// on every history and selection event.
+    /// </summary>
+    private static void SetToolTipText(FrameworkElement element, string text)
+    {
+        if (element.ToolTip is string current && string.Equals(current, text, StringComparison.Ordinal)) return;
+        element.ToolTip = text;
     }
 
     /// <summary>
@@ -3013,7 +3232,6 @@ internal sealed partial class AnnotationEditorControl : Grid
         bool hasSelection = selected is not null;
 
         _deleteButton.IsEnabled = hasSelection;
-        _deleteButton.Visibility = hasSelection ? Visibility.Visible : Visibility.Collapsed;
 
         bool stepTool = _controller.Tool == EditorTool.StepNumber;
         _inspectorTitle.Text = _controller.SelectedItems.Count > 1
@@ -3061,11 +3279,14 @@ internal sealed partial class AnnotationEditorControl : Grid
             if (thicknessApplies)
             {
                 AnnotationStrokeStyle style = (selected as ShapeAnnotation)?.StrokeStyle ?? _controller.StrokeStyle;
-                _thicknessSlider.Minimum = (selected is ShapeAnnotation || (selected is null && _controller.Tool is EditorTool.Rectangle or EditorTool.Ellipse))
+                double minimum = (selected is ShapeAnnotation || (selected is null && _controller.Tool is EditorTool.Rectangle or EditorTool.Ellipse))
                     && style == AnnotationStrokeStyle.ThickDashed ? 6 : 1;
                 if (_controller.SelectedItems.Count > 1 && _controller.SelectedItems.Any(item =>
                     item is PolylineAnnotation or PenAnnotation || item is ShapeAnnotation { StrokeStyle: not AnnotationStrokeStyle.ThickDashed }))
-                    _thicknessSlider.Minimum = 1;
+                    minimum = 1;
+                // One assignment of the final minimum: setting 6 and then 1 re-coerced the value
+                // through 6 and back, raising two value changes that ended where they began.
+                _thicknessSlider.Minimum = minimum;
                 SyncThicknessFromSelection(selected);
             }
 
@@ -3330,10 +3551,59 @@ internal sealed partial class AnnotationEditorControl : Grid
         // Validate both inputs even when the crop still spans the full image.
         if (_crop is not null && !CommitCropInputs()) return;
         bool appliedCrop = _crop is { } pending && pending.Region != pending.Bounds;
+        bool awaitedImages = false;
+        if (_pendingImageInserts > 0)
+        {
+            // A picture picked just before this command is still being read. The synchronous
+            // insert it replaced had always added it first, before any crop frame was applied,
+            // so the commit waits for it here and saves it too. The editor is held as during
+            // the save, so a second command is ignored.
+            awaitedImages = true;
+            _commitInProgress = true;
+            IsHitTestVisible = false;
+            _commitAwaitingImages = true;
+            CancellationToken closed = (_imageInsertCts ??= new CancellationTokenSource()).Token;
+            RectD? framed = _crop?.Region;
+            try
+            {
+                await ImageInsertsSettledAsync();
+            }
+            finally
+            {
+                _commitAwaitingImages = false;
+            }
+
+            if (closed.IsCancellationRequested)
+            {
+                // The editor closed while waiting: there is nothing left to save into.
+                _commitInProgress = false;
+                IsHitTestVisible = true;
+                return;
+            }
+
+            // Adding the picture is a history change, which starts an open crop frame over on
+            // the whole canvas. The picture never changes the canvas size, so the frame the user
+            // drew is put back before it is applied.
+            if (framed is RectD region && _crop is { } frame && frame.Region != region)
+            {
+                frame.SetRegion(region);
+                RefreshCrop();
+            }
+        }
+
         if (appliedCrop)
         {
             ApplyPendingCrop();
-            if (_crop is not null) return; // An invalid tiny crop stays editable.
+            if (_crop is not null)
+            {
+                // An invalid tiny crop stays editable.
+                if (awaitedImages)
+                {
+                    _commitInProgress = false;
+                    IsHitTestVisible = true;
+                }
+                return;
+            }
         }
 
         AnnotationDocument document = _controller.Document;
