@@ -150,7 +150,7 @@ public sealed partial class SettingsThemePreviewTests
             var search = (TextBox)window.FindName("SearchBox");
             var placeholder = (TextBlock)window.FindName("SearchPlaceholderText");
             foreach (FrameworkElement element in new FrameworkElement[]
-                     { capture, search, placeholder, (FrameworkElement)window.FindName("NewFolderButton"),
+                     { capture, search, placeholder, (FrameworkElement)window.FindName("NewFolderPaneButton"),
                        (FrameworkElement)window.FindName("SortBox"), (FrameworkElement)window.FindName("MoreCommandsButton") })
                 AssertInsideClient(element, client, label);
             AssertNotTrimmed(placeholder, label);
@@ -327,7 +327,7 @@ public sealed partial class SettingsThemePreviewTests
             var compactRow = (GalleryCardRowPanel)rowParent;
             Assert.True(compactRow.Columns > 0, $"{label}: compact row columns {compactRow.Columns}");
             double expectedHeight = GalleryCardRowPanel.CardHeightFor(
-                compactRow.ActualWidth / compactRow.Columns - compactRow.CardInset, 148, 174, 0.625);
+                compactRow.ActualWidth / compactRow.Columns - compactRow.CardInset, 148, 144, 0.625);
             // The row's proportional height is authored in DIPs, then WPF rounds it to pixels.
             Assert.Equal(Math.Round(expectedHeight * cardScale) / cardScale, compactCard.ActualHeight, 3);
             Assert.True(vm.ColumnCount > rootColumns, $"{label}: {vm.ColumnCount} compact columns, {rootColumns} at the root");

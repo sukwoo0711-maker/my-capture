@@ -88,6 +88,24 @@ public sealed class GalleryCardRowPanel : Panel
     public static double CardHeightFor(double cardWidth, double baseWidth, double baseHeight, double heightPerWidth) =>
         Math.Max(1, Math.Round(baseHeight + (cardWidth - baseWidth) * heightPerWidth));
 
+    // Three caption lines cover the folder's kind/count and the capture's metadata. Extra
+    // leading keeps both row types aligned when the shared text tokens are enlarged.
+    public static readonly DependencyProperty TitleFontSizeProperty = DependencyProperty.Register(
+        nameof(TitleFontSize), typeof(double), typeof(GalleryCardRowPanel),
+        new FrameworkPropertyMetadata(14.0, FrameworkPropertyMetadataOptions.AffectsMeasure));
+    public static readonly DependencyProperty CaptionFontSizeProperty = DependencyProperty.Register(
+        nameof(CaptionFontSize), typeof(double), typeof(GalleryCardRowPanel),
+        new FrameworkPropertyMetadata(12.0, FrameworkPropertyMetadataOptions.AffectsMeasure));
+    public static readonly DependencyProperty BaseTitleFontSizeProperty = DependencyProperty.Register(
+        nameof(BaseTitleFontSize), typeof(double), typeof(GalleryCardRowPanel),
+        new FrameworkPropertyMetadata(14.0, FrameworkPropertyMetadataOptions.AffectsMeasure));
+    public double TitleFontSize { get => (double)GetValue(TitleFontSizeProperty); set => SetValue(TitleFontSizeProperty, value); }
+    public double CaptionFontSize { get => (double)GetValue(CaptionFontSizeProperty); set => SetValue(CaptionFontSizeProperty, value); }
+    public double BaseTitleFontSize { get => (double)GetValue(BaseTitleFontSizeProperty); set => SetValue(BaseTitleFontSizeProperty, value); }
+
+    private double TextHeightGrowth => Math.Ceiling(Math.Max(0, TitleFontSize - BaseTitleFontSize) * 1.5
+        + Math.Max(0, CaptionFontSize - 12) * 3);
+
     private int ColumnCount => Columns > 0 ? Columns : Math.Max(1, InternalChildren.Count);
 
     private double CellWidth(double rowWidth) =>
@@ -96,7 +114,7 @@ public sealed class GalleryCardRowPanel : Panel
             : rowWidth / ColumnCount;
 
     private double CellHeight(double cellWidth) =>
-        CardHeightFor(cellWidth - CardInset, BaseCardWidth, BaseCardHeight, HeightPerWidth) + CardInset;
+        CardHeightFor(cellWidth - CardInset, BaseCardWidth, BaseCardHeight, HeightPerWidth) + TextHeightGrowth + CardInset;
 
     protected override Size MeasureOverride(Size availableSize)
     {

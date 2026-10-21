@@ -139,20 +139,22 @@ public sealed partial class SettingsThemePreviewTests
             var placeholder = (TextBlock)window.FindName("SearchPlaceholderText");
             var capture = (Button)window.FindName("CaptureRegionButton");
             var record = (Button)window.FindName("RecordRegionButton");
-            var newFolder = (Button)window.FindName("NewFolderButton");
+            Assert.Null(window.FindName("NewFolderButton"));
+            var newFolder = (Button)window.FindName("NewFolderPaneButton");
+            AssertInsideClient(newFolder, client, language);
             var more = (Button)window.FindName("MoreCommandsButton");
-            foreach (FrameworkElement element in new FrameworkElement[] { capture, record, searchBox, placeholder, newFolder, sort, more })
+            foreach (FrameworkElement element in new FrameworkElement[] { capture, record, searchBox, placeholder, sort, more })
                 AssertInsideClient(element, client, language);
-            AssertSameRow(bar, capture, record, searchField, newFolder, sort, more);
+            AssertSameRow(bar, capture, record, searchField, sort, more);
             // The root hint switches to compact text at minimum width; folder hints may still ellipsize.
             Assert.Equal(TextTrimming.CharacterEllipsis, placeholder.TextTrimming);
             AssertNotTrimmed(placeholder, language);
             Assert.Equal(vm.SearchToolTip, searchBox.ToolTip);
-            foreach (TextBlock label in new[] { capture, record, newFolder }.SelectMany(button => Descendants(button).OfType<TextBlock>()))
+            foreach (TextBlock label in new[] { capture, record }.SelectMany(button => Descendants(button).OfType<TextBlock>()))
                 AssertNotTrimmed(label, language);
             // Tab order follows the visual order: capture, search, then the library commands.
-            AssertLeftToRight(client, record, searchField, newFolder);
-            AssertLeftToRight(client, newFolder, sort, more);
+            AssertLeftToRight(client, record, searchField, sort);
+            AssertLeftToRight(client, sort, more);
             double barHeight = bar.ActualHeight;
             var workspace = (FrameworkElement)window.FindName("GalleryWorkspace");
             double workspaceTop = workspace.TranslatePoint(new Point(), client).Y;
