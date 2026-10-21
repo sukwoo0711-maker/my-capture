@@ -103,15 +103,17 @@ MyCapture는 코딩하는 동안 엑셀 사양 표와 자주 쓰는 코드를 �
 8. 공유하기 전에 단계 번호와 화살표를 넣고, 이메일·토큰·카드번호를 Ctrl+Shift+R로 가린 화면입니다.
 9. 영역·창·전체 화면 캡처, 클립보드 복사, 이미지 속 글자 복사는 Windows 캡처 도구와 같습니다. 영역 녹화는 소리 없이 화면만 기록합니다. 여기에 원문을 보관하는 표·코드 핀, 반투명·클릭 허용 핀, 닫은 핀 다시 열기, 스크롤 캡처가 더해집니다.
 
-### 이 버전의 새로운 기능 (4.5.0 초안)
+### 이 버전의 새로운 기능 (4.5.2)
 
-입력 한도는 1,500자입니다. `feat/pin-core-flow-450`의 변경을 바탕으로 쓴 초안이며, 확정본은 4.5.0 릴리스 노트에 맞춥니다.
+입력 한도는 1,500자입니다. Store의 이전 게시 버전은 4.5.0이므로 4.5.1과 4.5.2의 변경을 함께 적습니다.
 
-- 새로 설치하면 F3이 클립보드를 핀으로 띄우고, Shift+F3이 핀을 모두 숨기거나 다시 보입니다. 다른 프로그램이 F3을 쓰고 있으면 실행할 때 알려 줍니다.
-- F3으로 띄운 핀은 에디터의 입력 위치를 가져가지 않습니다.
-- 텍스트·표·코드 핀에서 Ctrl+C를 누르면 원문과 그림을 함께 복사합니다. 에디터에는 원문이, 이미지 편집기에는 그림이 붙습니다.
-- 새로 설치하면 핀을 더블클릭해도 닫히지 않습니다. 닫기는 Esc나 닫기 단추로 합니다.
-- 앱을 끄고 다시 실행하면 열려 있던 핀이 다시 뜹니다.
+- 이미지 편집 중 '응답 없음'으로 멈추던 문제를 고쳤습니다. 펜·끌기·실행 취소와 큰 이미지의 저장도 빨라졌습니다.
+- 캡처를 마치면 클립보드에 복사되는 즉시 편집기가 사라지고, 앱 시작과 라이브러리 갱신이 빨라졌습니다.
+- 텍스트·코드·표 핀에서 F2를 누르면 글자나 셀을 골라 그 부분만 복사합니다.
+- 텍스트·표·코드 핀이 고배율 화면에서도 선명하고, 트레이 메뉴의 '열린 핀'에서 핀을 골라 앞으로 가져옵니다.
+- 다음 실행 때 다시 띄우려고 저장하는 핀은 이 Windows 사용자만 읽을 수 있도록 암호화합니다.
+- 코드 글자 인식이 C/C++ 전처리 줄을 알아보고, 라이브러리의 보관 전환은 K로 옮겼습니다. P는 핀으로 띄웁니다.
+- 새로 설치해도 핀을 더블클릭하면 닫힙니다.
 
 ### 검색어
 
@@ -193,17 +195,19 @@ Enter them in screenshot order. Each caption is 200 characters or fewer.
 6. Shift+F3 hides or shows all pins, and the tray menu reopens a closed pin with its position, zoom and opacity.
 7. Library search finds an error message inside an image. Window titles are searchable too.
 8. Step numbers and an arrow added before sharing, with an email address, token and card number covered by Ctrl+Shift+R.
-9. Snipping Tool and MyCapture both capture, copy to the clipboard and extract text. MyCapture records without sound and adds table and code pins with original text, click-through and scrolling capture.
+9. Like Snipping Tool, MyCapture captures, copies to the clipboard and extracts text. It adds table and code pins with original text, click-through pins and scrolling capture; recording is silent.
 
-### What's new in this version (4.5.0 draft)
+### What's new in this version (4.5.2)
 
-Limit: 1,500 characters. Drafted from `feat/pin-core-flow-450`; match the 4.5.0 release notes before submitting.
+Limit: 1,500 characters. The Store last published 4.5.0, so this lists the 4.5.1 and 4.5.2 changes together.
 
-- New installs use F3 to pin the clipboard and Shift+F3 to hide or show all pins. If another app already uses F3, MyCapture tells you at startup.
-- A pin opened with F3 leaves your cursor in the editor.
-- Ctrl+C on a text, table or code pin copies the original text together with the picture, so editors paste the text and image editors paste the picture.
-- On new installs, double-clicking a pin no longer closes it; use Esc or the close button.
-- Pins that are open when you quit come back at the next launch.
+- Fixed the image editor freezing as "Not responding" while you edit. Drawing, dragging, undo and saving large images are faster too.
+- After a capture, the editor disappears as soon as the image is on the clipboard, and startup and library updates are faster.
+- Press F2 on a text, code or table pin to select text or cells and copy only that part.
+- Text, table and code pins stay sharp on high-DPI displays, and Open pins in the tray menu brings a pin to the front.
+- Pins saved to reopen at the next launch are encrypted so only your Windows account on this PC can read them.
+- Code text recognition detects C/C++ preprocessor lines, and the library toggles Keep with K; P pins the capture.
+- On new installs, double-clicking a pin closes it again.
 
 ### Search terms
 
