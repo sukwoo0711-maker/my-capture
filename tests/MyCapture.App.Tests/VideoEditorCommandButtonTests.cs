@@ -19,17 +19,19 @@ public sealed class VideoEditorCommandButtonTests
     [Theory]
     [InlineData("ko-KR", 760)]
     [InlineData("en-US", 760)]
+    [InlineData("ko-KR", 800)]
+    [InlineData("en-US", 960)]
+    [InlineData("ko-KR", 1280)]
     [InlineData("ko-KR", 1400)]
     [InlineData("en-US", 1400)]
-    public void CommandAndTransportButtonsKeepTheirHeightWithHintsOnAndOff(string language, int width) => StaTestHost.Run(() =>
+    public void CommandAndTransportButtonsKeepTheirHeightWithAltRevealedAndCollapsedHints(string language, int width) => StaTestHost.Run(() =>
     {
         using var culture = UiText.UseLanguage(language);
         Func<bool>? previous = ShortcutPresentation.ReadEnabled;
         VideoEditorWindow? editor = null;
         try
         {
-            bool hints = false;
-            ShortcutPresentation.ReadEnabled = () => hints;
+            ShortcutPresentation.ReadEnabled = () => false;
             ShortcutPresentation.Refresh();
             editor = OpenLayout(width);
             editor.SetDetailsExpandedForTest(true);
@@ -40,9 +42,13 @@ public sealed class VideoEditorCommandButtonTests
             StackPanel precise = Named<StackPanel>(editor, "VideoPreciseTransport");
             foreach (bool enabled in new[] { false, true, false, true })
             {
-                hints = enabled;
-                ShortcutPresentation.Refresh();
+                ShortcutPresentation.SetAltRevealed(editor, enabled);
                 editor.Dispatcher.Invoke(System.Windows.Threading.DispatcherPriority.ApplicationIdle, new Action(editor.UpdateLayout));
+                var groups = Assert.Single(Descendants(bar).OfType<MyCapture.App.Editing.CommandGroupsPanel>());
+                Assert.Equal(44, groups.ActualHeight);
+                var left = (FrameworkElement)groups.Children[0];
+                var right = (FrameworkElement)groups.Children[1];
+                Assert.Equal(left.TranslatePoint(default, groups).Y, right.TranslatePoint(default, groups).Y, 2);
                 foreach (FrameworkElement row in new FrameworkElement[] { bar, transport, precise })
                 {
                     ButtonBase[] buttons = Descendants(row).OfType<ButtonBase>().Where(button => button.IsVisible).ToArray();
@@ -55,29 +61,37 @@ public sealed class VideoEditorCommandButtonTests
                         AssertInside(button, layout, layout.ActualHeight);
                         string gesture = AutomationProperties.GetAcceleratorKey(button);
                         if (!string.IsNullOrEmpty(gesture))
+                        {
                             Assert.Contains(gesture, Assert.IsType<string>(button.ToolTip));
+                            TextBlock hint = Assert.Single(Descendants(button).OfType<TextBlock>(), text => text.Text == gesture);
+                            Assert.Equal(enabled ? Visibility.Visible : Visibility.Collapsed, hint.Visibility);
+                            Grid face = Assert.IsType<Grid>(button.Content);
+                            Assert.Equal(GridLength.Auto, face.RowDefinitions[1].Height);
+                            Assert.Equal(enabled ? 14 : 0, face.RowDefinitions[1].ActualHeight, 2);
+                            if (enabled) AssertInside(hint, button, button.ActualHeight);
+                            else
+                            {
+                                FrameworkElement content = Assert.IsAssignableFrom<FrameworkElement>(face.Children[0]);
+                                double center = content.TranslatePoint(new Point(0, content.ActualHeight / 2), button).Y;
+                                Assert.InRange(center, button.ActualHeight / 2 - 1, button.ActualHeight / 2 + 1);
+                            }
+                        }
                     }
                 }
-                foreach (ButtonBase button in Descendants(bar).OfType<ButtonBase>())
+                ButtonBase[] commands = Descendants(bar).OfType<ButtonBase>().Where(button => button.IsVisible).ToArray();
+                for (int first = 0; first < commands.Length; first++)
                 {
-                    string gesture = AutomationProperties.GetAcceleratorKey(button);
-                    if (!string.IsNullOrEmpty(gesture))
-                        Assert.DoesNotContain(Descendants(button).OfType<TextBlock>(), text => text.IsVisible && text.Text == gesture);
-                }
-                foreach (ButtonBase button in Descendants(precise).OfType<ButtonBase>())
-                {
-                    string gesture = AutomationProperties.GetAcceleratorKey(button);
-                    if (string.IsNullOrEmpty(gesture)) continue;
-                    TextBlock hint = Assert.Single(Descendants(button).OfType<TextBlock>(), text => text.Text == gesture);
-                    Assert.Equal(enabled ? Visibility.Visible : Visibility.Collapsed, hint.Visibility);
-                }
-                ButtonBase[] commands = Descendants(bar).OfType<ButtonBase>().Where(button => button.IsVisible)
-                    .OrderBy(button => button.TranslatePoint(default, bar).X).ToArray();
-                for (int index = 1; index < commands.Length; index++)
-                {
-                    double right = commands[index - 1].TranslatePoint(new Point(commands[index - 1].ActualWidth, 0), bar).X;
-                    double left = commands[index].TranslatePoint(default, bar).X;
-                    Assert.True(left >= right + 5.5, $"command gap {left - right} with hints {enabled}");
+                    Rect firstBounds = commands[first].TransformToAncestor(bar).TransformBounds(new Rect(commands[first].RenderSize));
+                    for (int second = first + 1; second < commands.Length; second++)
+                    {
+                        Rect secondBounds = commands[second].TransformToAncestor(bar).TransformBounds(new Rect(commands[second].RenderSize));
+                        Assert.False(firstBounds.IntersectsWith(secondBounds), $"Commands overlap with hints {enabled}: {firstBounds}, {secondBounds}.");
+                        if (Math.Abs(firstBounds.Top - secondBounds.Top) < 0.5)
+                        {
+                            double gap = Math.Max(firstBounds.Left, secondBounds.Left) - Math.Min(firstBounds.Right, secondBounds.Right);
+                            Assert.True(gap >= 5.5, $"command gap {gap} with hints {enabled}");
+                        }
+                    }
                 }
             }
         }
@@ -166,22 +180,36 @@ public sealed class VideoEditorCommandButtonTests
         try
         {
             editor.SetDetailsExpandedForTest(true);
-            editor.UpdateLayout();
-            foreach (string field in new[] { "_undoButton", "_redoButton" })
+            foreach (bool revealed in new[] { false, true, false })
             {
-                Button button = Field<Button>(editor, field);
-                Assert.True(button.IsVisible);
-                Assert.Equal(44, button.ActualHeight);
-                Assert.DoesNotContain(Descendants(button).OfType<TextBlock>(), text => text.IsVisible && !string.IsNullOrEmpty(text.Text));
-                Assert.Contains(AutomationProperties.GetAcceleratorKey(button), Assert.IsType<string>(button.ToolTip));
-            }
-            foreach ((string field, string key) in new[] { ("_editTextButton", "Text_87B0ACEF85A7"), ("_deleteTextButton", "Text_6139B6C3ED73") })
-            {
-                Button button = Field<Button>(editor, field);
-                TextBlock label = Assert.Single(Descendants(button).OfType<TextBlock>(), text => text.Text == UiText.Get(key));
-                Assert.True(label.IsVisible);
-                Assert.Equal(36, button.ActualHeight);
-                Assert.True(label.ActualWidth + 0.5 >= label.DesiredSize.Width - label.Margin.Left - label.Margin.Right);
+                ShortcutPresentation.SetAltRevealed(editor, revealed);
+                editor.Dispatcher.Invoke(System.Windows.Threading.DispatcherPriority.ApplicationIdle, new Action(editor.UpdateLayout));
+                foreach (string field in new[] { "_undoButton", "_redoButton" })
+                {
+                    Button button = Field<Button>(editor, field);
+                    Assert.True(button.IsVisible);
+                    Assert.Equal(44, button.ActualHeight);
+                    string gesture = AutomationProperties.GetAcceleratorKey(button);
+                    TextBlock hint = Assert.Single(Descendants(button).OfType<TextBlock>(), text => text.Text == gesture);
+                    Assert.Equal(revealed ? Visibility.Visible : Visibility.Collapsed, hint.Visibility);
+                    Assert.DoesNotContain(Descendants(button).OfType<TextBlock>(), text => text.IsVisible
+                        && !string.IsNullOrEmpty(text.Text) && text.Text != gesture);
+                    Assert.Contains(gesture, Assert.IsType<string>(button.ToolTip));
+                    if (revealed) AssertInside(hint, button, button.ActualHeight);
+                }
+                foreach ((string field, string key) in new[] { ("_editTextButton", "Text_87B0ACEF85A7"), ("_deleteTextButton", "Text_6139B6C3ED73") })
+                {
+                    Button button = Field<Button>(editor, field);
+                    TextBlock label = Assert.Single(Descendants(button).OfType<TextBlock>(), text => text.Text == UiText.Get(key));
+                    Assert.True(label.IsVisible);
+                    Assert.Equal(36, button.ActualHeight);
+                    Assert.True(label.ActualWidth + 0.5 >= label.DesiredSize.Width - label.Margin.Left - label.Margin.Right);
+                    AssertInside(label, button, button.ActualHeight);
+                    TextBlock hint = Assert.Single(Descendants(button).OfType<TextBlock>(), text =>
+                        text.Text == AutomationProperties.GetAcceleratorKey(button));
+                    Assert.Equal(revealed ? Visibility.Visible : Visibility.Collapsed, hint.Visibility);
+                    if (revealed) AssertInside(hint, button, button.ActualHeight);
+                }
             }
         }
         finally { editor.Close(); }

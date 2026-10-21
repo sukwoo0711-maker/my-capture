@@ -382,8 +382,11 @@ public sealed class GeneralSettings : IJsonOnDeserializing
     public bool FirstCaptureTipShown { get; set; }
     public bool FirstPinTipShown { get; set; }
 
-    /// <summary>Shows key captions under editor buttons. Tooltips always name the key.</summary>
+    /// <summary>Legacy file compatibility. Command visibility uses <see cref="AlwaysShowShortcutHints"/>.</summary>
     public bool ShowShortcutHints { get; set; } = true;
+
+    /// <summary>Shows shortcut keys without holding Alt. Existing and new installations start off.</summary>
+    public bool AlwaysShowShortcutHints { get; set; }
 
     /// <summary>One preserves hint choices made after hints became visible by default.</summary>
     public int ShortcutHintsRevision { get; set; } = 1;

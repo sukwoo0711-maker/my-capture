@@ -54,7 +54,8 @@ internal sealed record CaptureSelectorRequest(CaptureSelectorAction Action, int 
 /// The bar is drawn from the selector's capture-guide palette (all six themes and the guide colour
 /// override), not from the chrome tokens, so it matches the highlight around it. Every button has a
 /// tooltip, an automation name and, where one exists, its key as tooltip text and accelerator key; the
-/// bar draws no key badges. The bar only raises requests; the overlay view decides what they do. It
+/// bar reveals those keys while Alt is held or always when that preference is enabled.
+/// The bar only raises requests; the overlay view decides what they do. It
 /// is never part of a capture: the selection is cropped from the frozen frame, not from what the
 /// overlay draws.
 /// </remarks>
@@ -399,7 +400,7 @@ internal sealed class CaptureModeBar : Border
         Describe(_cancel, "CaptureGuide2_CancelTip", "Esc");
     }
 
-    /// <summary>Tooltip and automation help; a key goes into the tooltip and the accelerator key, never onto the bar.</summary>
+    /// <summary>Tooltip and automation help, plus the shared shortcut caption for assigned keys.</summary>
     private static void Describe(ButtonBase button, string helpKey, string? key)
     {
         string help = UiText.Get(helpKey);
@@ -408,6 +409,7 @@ internal sealed class CaptureModeBar : Border
         AutomationProperties.SetHelpText(button, tip);
         string name = AutomationProperties.GetName(button);
         button.ToolTip = string.IsNullOrEmpty(name) ? tip : $"{name}\n{tip}";
+        CommandButtonPresentation.RefreshHint(button);
     }
 
     /// <summary>Routes Enter through the same activation as a mouse/Space click.</summary>
@@ -470,9 +472,9 @@ internal sealed class CaptureModeBar : Border
     private static void Decorate(ButtonBase button)
     {
         CommandButtonPresentation.Apply(button, compact: true);
-        button.Width = button.MinWidth = 32;
-        button.Height = button.MinHeight = 32;
-        button.Padding = new Thickness(5);
+        button.Width = button.MinWidth = 36;
+        button.Height = button.MinHeight = 36;
+        button.Padding = new Thickness(2);
         button.Margin = new Thickness(1, 0, 1, 0);
         button.Cursor = Cursors.Hand;
         button.FocusVisualStyle = null;

@@ -203,6 +203,10 @@ internal sealed class VideoExportDialog : Window
         var footer = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(0, 12, 0, 0) };
         _export = MediaExportVisuals.Button(this, UiText.Get("MediaExport_Export"), "MediaExport_ArrowExport", true).AsDialogAction();
         _close = MediaExportVisuals.Button(this, UiText.Get("MediaExport_Close")).AsDialogAction();
+        AutomationProperties.SetAcceleratorKey(_close, "Esc");
+        _close.ToolTip = UiText.Get("MediaExport_Close") + "  Esc";
+        AutomationProperties.SetAcceleratorKey(_progressRow.CancelButton, "Esc");
+        _progressRow.CancelButton.ToolTip = AutomationProperties.GetName(_progressRow.CancelButton) + "  Esc";
         footer.Children.Add(_export); footer.Children.Add(_close);
         Grid.SetRow(footer, 3); root.Children.Add(footer);
         Content = root;
@@ -883,6 +887,10 @@ internal sealed class VideoExportDialog : Window
         _working = working;
         _settings.IsEnabled = !working;
         _export.IsEnabled = !working;
+        // Esc cancels active work; it only closes the idle dialog.
+        AutomationProperties.SetAcceleratorKey(_close, working ? string.Empty : "Esc");
+        _close.ToolTip = UiText.Get("MediaExport_Close") + (working ? string.Empty : "  Esc");
+        CommandButtonPresentation.RefreshHint(_close);
         if (!working) _progressRow.Stop();
         if (working)
         {

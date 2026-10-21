@@ -164,7 +164,9 @@ internal sealed class ThemedDialog : Window
         var button = new Button
         {
             Content = label,
+            ToolTip = label,
         };
+        AutomationProperties.SetName(button, label);
         CommandButtonPresentation.Apply(button);
         button.MinWidth = ActionMinWidth;
         // The leading gap of the first button falls outside the right-aligned row.

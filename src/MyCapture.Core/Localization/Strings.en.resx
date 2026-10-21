@@ -3925,7 +3925,7 @@ Delete {1} {1:plural:subfolder|subfolders}, {2} {2:plural:image|images}, and {3}
   <data name="SettingsUx_OtherShortcutsHeading" xml:space="preserve"><value>Other shortcuts</value></data>
   <data name="SettingsUx_OtherShortcutsHint" xml:space="preserve"><value>Assign only the ones you need, using combinations other apps do not use.</value></data>
   <data name="SettingsUx_ShortcutHintsHeading" xml:space="preserve"><value>Keys on buttons</value></data>
-  <data name="SettingsUx_ShowShortcutHintsHint" xml:space="preserve"><value>Shows each key under the editor buttons. Hovering over a button always shows its key.</value></data>
+  <data name="SettingsUx_ShowShortcutHintsHint" xml:space="preserve"><value>Hold Alt to show shortcuts beneath buttons. Hover over a button to see its shortcut.</value></data>
   <data name="SettingsUx_RecordHotkeyTip" xml:space="preserve"><value>Select, then press the key combination.</value></data>
   <data name="SettingsUx_MaxStorage" xml:space="preserve"><value>Maximum storage (GB)</value></data>
   <data name="SettingsUx_MaxStorageRange" xml:space="preserve"><value>0.125–512 GB.</value></data>
@@ -4029,6 +4029,9 @@ Delete {1} {1:plural:subfolder|subfolders}, {2} {2:plural:image|images}, and {3}
   <data name="EditorFlow_CropApplyHint" xml:space="preserve"><value>Apply the crop</value></data>
   <data name="EditorFlow_CropCancelHint" xml:space="preserve"><value>Cancel the crop</value></data>
   <data name="EditorFlow_CommandBarName" xml:space="preserve"><value>Editing commands</value></data>
+  <data name="SettingsUx_AlwaysShowShortcutHints" xml:space="preserve"><value>Always show shortcut keys</value></data>
+  <data name="SettingsUx_AlwaysShowShortcutHintsHint" xml:space="preserve"><value>When off, shortcut keys appear under buttons only while Alt is held.</value></data>
+  <data name="EditorFlow_CopyHint" xml:space="preserve"><value>Copy the edited image to the clipboard</value></data>
   <data name="EditorFlow_CropBarName" xml:space="preserve"><value>Crop commands</value></data>
   <data name="EditorFlow_SelectionCleared" xml:space="preserve"><value>Selection cleared</value></data>
   <data name="EditorFlow_Selected" xml:space="preserve"><value>Selected: {0}</value></data>

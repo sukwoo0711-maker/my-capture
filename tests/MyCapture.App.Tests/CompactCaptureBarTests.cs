@@ -51,7 +51,17 @@ public sealed class CompactCaptureBarTests
             TextBlock clock = Field<TextBlock>(window, "_timerText");
             SymbolIcon indicator = Field<SymbolIcon>(window, "_recordingIndicator");
             Arrange(strip);
-            Assert.InRange(strip.ActualWidth, 195, 210);
+            var pauseCaption = new TextBlock
+            {
+                Text = "Ctrl+Shift+P", FontSize = ShortcutPresentation.CaptionFontSize,
+                FontFamily = window.PauseButtonForTest.FontFamily, FontWeight = FontWeights.Normal,
+            };
+            pauseCaption.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+            double pauseWidth = Math.Max(36, Math.Ceiling(pauseCaption.DesiredSize.Width) + 6);
+            Assert.Equal(pauseWidth, window.PauseButtonForTest.ActualWidth);
+            // The compact pill keeps its clock room plus three 36-DIP targets; only the
+            // assigned pause chord needs additional horizontal room, reserved before Alt.
+            Assert.Equal(216 + pauseWidth - 36, strip.ActualWidth);
             Assert.Equal(Visibility.Collapsed, status.Visibility);
             Assert.Equal(FontNumeralAlignment.Tabular, Typography.GetNumeralAlignment(clock));
             Assert.Equal("01:23", clock.Text);
@@ -59,9 +69,11 @@ public sealed class CompactCaptureBarTests
             Assert.False(indicator.HasAnimatedProperties);
             foreach (Button button in new[] { window.PauseButtonForTest, window.PrimaryButtonForTest, window.MoreButtonForTest })
             {
-                Assert.IsType<SymbolIcon>(button.Content);
-                Assert.InRange(button.ActualWidth, 24, 40);
-                Assert.InRange(button.ActualHeight, 24, 40);
+                Assert.IsType<SymbolIcon>(SurfaceShortcutHintTests.PrimaryContent(button));
+                Assert.Equal(ReferenceEquals(button, window.PauseButtonForTest) ? pauseWidth : 36, button.ActualWidth);
+                Assert.Equal(36, button.ActualHeight);
+                Rect bounds = button.TransformToAncestor(strip).TransformBounds(new Rect(button.RenderSize));
+                Assert.True(bounds.Left >= 0 && bounds.Right <= strip.ActualWidth && bounds.Top >= 0 && bounds.Bottom <= strip.ActualHeight);
                 var peer = new ButtonAutomationPeer(button);
                 Assert.False(string.IsNullOrWhiteSpace(peer.GetName()));
                 Assert.False(string.IsNullOrWhiteSpace(peer.GetHelpText()));
@@ -81,7 +93,7 @@ public sealed class CompactCaptureBarTests
 
             window.PreviewRecordingForTest(true, TimeSpan.FromSeconds(83));
             Arrange(strip);
-            Assert.InRange(strip.ActualWidth, 195, 230);
+            Assert.Equal(236 + pauseWidth - 36, strip.ActualWidth);
             Assert.Equal(pausedLabel, status.Text);
             Assert.Equal(Visibility.Visible, status.Visibility);
             Assert.Equal(Grid.GetColumn(clock), Grid.GetColumn(status));
@@ -121,7 +133,9 @@ public sealed class CompactCaptureBarTests
             bar.ShowMode(CaptureSelectorMode.Capture);
             bar.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
             bar.Arrange(new Rect(bar.DesiredSize));
-            Assert.InRange(bar.DesiredSize.Width, 300, 460);
+            // Twelve targets now reserve 36 DIPs each so the Alt caption has two lines;
+            // the complete bar still fits within 500 DIPs including separators and chrome.
+            Assert.InRange(bar.DesiredSize.Width, 300, 500);
             foreach ((ButtonBase command, string nameKey) in new (ButtonBase, string)[]
                      {
                          (bar.CaptureKindButton, "Onboard_BarCapture"), (bar.RecordKindButton, "Onboard_BarRecord"),
@@ -136,8 +150,8 @@ public sealed class CompactCaptureBarTests
                 Assert.Equal(UiText.Get(nameKey), AutomationProperties.GetName(command));
                 Assert.False(string.IsNullOrWhiteSpace(AutomationProperties.GetHelpText(command)));
                 Assert.NotNull(command.ToolTip);
-                Assert.InRange(command.ActualWidth, 24, 40);
-                Assert.InRange(command.ActualHeight, 24, 40);
+                Assert.Equal(36, command.ActualWidth);
+                Assert.Equal(36, command.ActualHeight);
             }
             Assert.Equal("T", AutomationProperties.GetAcceleratorKey(bar.TextButton));
             Assert.Equal("C", AutomationProperties.GetAcceleratorKey(bar.ColorButton));
@@ -296,7 +310,7 @@ public sealed class CompactCaptureBarTests
             Assert.Equal(1, sink.Frames);
             Assert.Null(grabber.ActiveBackend); // Neither GDI nor WGC is opened for this lifecycle test.
             Assert.True(window.IsPaused && recorder.IsPaused);
-            Assert.Equal(224, strip.ActualWidth);
+            Assert.Equal(236 + Math.Max(0, window.PauseButtonForTest.Width - 36), strip.ActualWidth);
             Assert.Equal(Visibility.Visible, indicator.Visibility);
             Assert.Same(pausedGlyph, indicator.Data);
             Assert.False(indicator.HasAnimatedProperties);

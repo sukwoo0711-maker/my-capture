@@ -36,6 +36,7 @@ public sealed class SettingsUxDefaultsTests
         Assert.All(OptionalHotkeys(fresh.Hotkeys), key => Assert.Equal(Hotkey.None, key));
         AssertNewPinDefaults(fresh);
         Assert.False(fresh.General.ShowShortcutHints);
+        Assert.False(fresh.General.AlwaysShowShortcutHints);
         Assert.Equal(1, fresh.General.ShortcutHintsRevision);
         Assert.Equal(AppThemeNames.ToSetting(AppTheme.System), fresh.General.Theme);
         Assert.Equal(AfterCaptureAction.QuickAccess, fresh.General.AfterCapture);
@@ -59,6 +60,7 @@ public sealed class SettingsUxDefaultsTests
         Assert.All(OptionalHotkeys(reloaded.Hotkeys), key => Assert.Equal(Hotkey.None, key));
         AssertNewPinDefaults(reloaded);
         Assert.False(reloaded.General.ShowShortcutHints);
+        Assert.False(reloaded.General.AlwaysShowShortcutHints);
         Assert.Equal(1, reloaded.General.ShortcutHintsRevision);
         Assert.Equal(AppThemeNames.ToSetting(AppTheme.System), reloaded.General.Theme);
         Assert.Equal(AfterCaptureAction.QuickAccess, reloaded.General.AfterCapture);
@@ -192,9 +194,10 @@ public sealed class SettingsUxDefaultsTests
     [Fact]
     public void ResetToDefaults_UsesTheNewInstallDefaults()
     {
-        var draft = new SettingsDraft(new AppSettings { General = { ShowShortcutHints = true } });
+        var draft = new SettingsDraft(new AppSettings { General = { ShowShortcutHints = true, AlwaysShowShortcutHints = true } });
         Assert.Equal("F3", draft.PasteToScreenHotkey);
         Assert.True(draft.ShowShortcutHints);
+        Assert.True(draft.AlwaysShowShortcutHints);
 
         draft.ResetToDefaults();
 
@@ -205,6 +208,7 @@ public sealed class SettingsUxDefaultsTests
         Assert.Equal("Shift+F3", draft.HideAllPinsHotkey);
         Assert.Equal(string.Empty, draft.UploadGitHubImageHotkey);
         Assert.False(draft.ShowShortcutHints);
+        Assert.False(draft.AlwaysShowShortcutHints);
         Assert.False(draft.HasErrors);
         AppSettings mapped = draft.ToAppSettings();
         Assert.All(OptionalHotkeys(mapped.Hotkeys), key => Assert.Equal(Hotkey.None, key));

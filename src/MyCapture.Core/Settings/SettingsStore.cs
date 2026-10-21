@@ -530,8 +530,8 @@ public sealed class SettingsStore
         if (!Enum.IsDefined(s.General.AfterCapture)) s.General.AfterCapture = AfterCaptureAction.Editor;
         if (s.General.ShortcutHintsRevision < 1)
         {
-            // Legacy false did not distinguish an opt-out from the former new-install default.
-            // Show hints once on upgrade, then preserve choices stored with the new marker.
+            // Preserve the old field's migration for file compatibility. The independent
+            // AlwaysShowShortcutHints defaults to false and never inherits this legacy value.
             s.General.ShowShortcutHints = true;
             s.General.ShortcutHintsRevision = 1;
         }

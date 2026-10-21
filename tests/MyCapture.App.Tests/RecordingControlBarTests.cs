@@ -75,12 +75,12 @@ public sealed class RecordingControlBarTests
             Assert.True(window.IsRecording);
 
             // While recording: ■ Stop and ❚❚ Pause; cancel would only have stopped, so it is gone.
-            Assert.IsType<MyCapture.App.Themes.SymbolIcon>(primary.Content);
+            Assert.IsType<MyCapture.App.Themes.SymbolIcon>(SurfaceShortcutHintTests.PrimaryContent(primary));
             Assert.Equal(string.Empty, RecordingControlWindow.ButtonLabel(primary));
             Assert.Equal("녹화 중지", AutomationProperties.GetName(primary));
             Assert.Equal(Visibility.Collapsed, cancel.Visibility);
             Assert.Equal(Visibility.Visible, pause.Visibility);
-            Assert.IsType<MyCapture.App.Themes.SymbolIcon>(pause.Content);
+            Assert.IsType<MyCapture.App.Themes.SymbolIcon>(SurfaceShortcutHintTests.PrimaryContent(pause));
             Assert.Equal("녹화 일시 정지", AutomationProperties.GetName(pause));
 
             ContextMenu during = window.CreateMoreMenu();
@@ -91,7 +91,7 @@ public sealed class RecordingControlBarTests
 
             pause.RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));
             PumpUntil(() => window.IsPaused && !window.IsPauseTransitionPending);
-            Assert.IsType<MyCapture.App.Themes.SymbolIcon>(pause.Content);
+            Assert.IsType<MyCapture.App.Themes.SymbolIcon>(SurfaceShortcutHintTests.PrimaryContent(pause));
             Assert.Equal("녹화 재개", AutomationProperties.GetName(pause));
             Assert.Equal(Visibility.Collapsed, cancel.Visibility);
 

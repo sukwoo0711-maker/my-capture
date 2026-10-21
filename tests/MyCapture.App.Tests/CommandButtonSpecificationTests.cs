@@ -19,10 +19,9 @@ public sealed class CommandButtonSpecificationTests
     public void EachTierKeepsEqualButtonHeightsAndLabelPositionsWithEveryHintState(bool compact, double height, double verticalPadding, double scale) => StaTestHost.Run(() =>
     {
         Func<bool>? previous = ShortcutPresentation.ReadEnabled;
-        bool enabled = true;
         try
         {
-            ShortcutPresentation.ReadEnabled = () => enabled;
+            ShortcutPresentation.ReadEnabled = () => false;
             var row = new StackPanel
             {
                 Orientation = Orientation.Horizontal,
@@ -42,10 +41,11 @@ public sealed class CommandButtonSpecificationTests
                 row.Children.Add(button);
             }
 
-            foreach (bool show in new[] { true, false, true })
+            var restingTops = new Dictionary<Button, double>();
+            foreach (bool show in new[] { false, true, false })
             {
-                enabled = show;
-                ShortcutPresentation.Refresh();
+                ShortcutPresentation.SetAltRevealed(row, show);
+                row.Dispatcher.Invoke(System.Windows.Threading.DispatcherPriority.ApplicationIdle, new Action(() => { }));
                 row.Measure(new Size(1000, 100));
                 row.Arrange(new Rect(0, 0, row.DesiredSize.Width, row.DesiredSize.Height));
                 double? labelTop = null;
@@ -58,15 +58,24 @@ public sealed class CommandButtonSpecificationTests
                     Grid face = Assert.IsType<Grid>(button.Content);
                     Assert.Equal("CommandButtonFace", face.Name);
                     Assert.Equal(2, face.RowDefinitions.Count);
-                    Assert.Equal(14, face.RowDefinitions[1].ActualHeight, 2);
+                    bool hasHint = !ReferenceEquals(button, withoutHint);
+                    Assert.Equal(GridLength.Auto, face.RowDefinitions[1].Height);
+                    Assert.Equal(show && hasHint ? 14 : 0, face.RowDefinitions[1].ActualHeight, 2);
                     var label = Assert.IsType<TextBlock>(face.Children[0]);
                     Assert.Equal(14, label.FontSize);
                     Assert.True(face.ActualHeight <= button.ActualHeight - button.Padding.Top - button.Padding.Bottom
                         - button.BorderThickness.Top - button.BorderThickness.Bottom + 0.5,
                         $"Command content {face.ActualHeight:0.##} exceeds the {height}-DIP button's inner height.");
                     double top = label.TranslatePoint(default, row).Y;
-                    if (labelTop is { } expectedTop) Assert.Equal(expectedTop, top, 2);
-                    else labelTop = top;
+                    if (!show)
+                    {
+                        if (labelTop is { } expectedTop) Assert.Equal(expectedTop, top, 2);
+                        else labelTop = top;
+                        if (restingTops.TryGetValue(button, out double resting)) Assert.Equal(resting, top, 2);
+                        else restingTops.Add(button, top);
+                    }
+                    else if (hasHint) Assert.True(top < restingTops[button] - 5, "The name moves up inside the fixed-height button.");
+                    else Assert.Equal(restingTops[button], top, 2);
                     if (ReferenceEquals(button, withoutHint)) Assert.Single(face.Children);
                     else
                     {

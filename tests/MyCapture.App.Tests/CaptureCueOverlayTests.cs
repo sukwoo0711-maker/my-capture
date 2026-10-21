@@ -9,6 +9,7 @@ using MyCapture.App.Capture;
 using MyCapture.App.Themes;
 using MyCapture.Core.Localization;
 using MyCapture.Core.Primitives;
+using MyCapture.Core.Settings;
 using MyCapture.Core.Themes;
 using MyCapture.Platform.Capture;
 using Xunit;
@@ -135,30 +136,51 @@ public sealed class CaptureCueOverlayTests
     });
 
     [Fact]
-    public void TheBarDrawsNoKeyBadgesItsKeysLiveInTooltipsAndAcceleratorKeys() => StaTestHost.Run(() =>
+    public void TheBarRevealsKeysOnlyDuringAltAndKeepsTooltipsAndAcceleratorKeys() => StaTestHost.Run(() =>
     {
         using var language = UiText.UseLanguage("ko-KR");
         FrozenFrame frame = Desktop();
         CaptureOverlayView shown = EvidenceView(frame, AppTheme.Glass, "window-hover");
         CaptureOverlayView hidden = EvidenceView(frame, AppTheme.Glass, "window-hover");
+        Assert.False(shown.ShowShortcutHints);
         hidden.ShowShortcutHints = false;
         try
         {
             Render(shown);
             Render(hidden);
-            // No key text on the bar in either setting: the keys are in the tooltip and the
-            // accelerator key, the way the rest of MyCapture shows them.
+            // The default and an explicitly disabled preference show no key text at rest; Alt reveals the same keys
+            // while tooltips and accelerator metadata remain available in every state.
             foreach (CaptureOverlayView view in new[] { shown, hidden })
             {
                 CaptureModeBar bar = view.ModeBarForTest!;
-                string[] barText = Descendants(bar).OfType<System.Windows.Controls.TextBlock>().Select(text => text.Text).ToArray();
-                Assert.DoesNotContain("T", barText);
-                Assert.DoesNotContain("C", barText);
-                Assert.DoesNotContain("Esc", barText);
+                var captions = Descendants(bar).OfType<System.Windows.Controls.TextBlock>().ToArray();
+                Assert.Equal(new[] { "T", "C", "Esc" }, captions.Select(text => text.Text));
+                Size restingSize = bar.RenderSize;
+                FrameworkElement[] commands = [bar.TextButton, bar.ColorButton, bar.CancelButton];
+                Size[] restingCommands = commands.Select(command => command.RenderSize).ToArray();
+                foreach (bool revealed in new[] { false, true, false })
+                {
+                    ShortcutPresentation.SetAltRevealed(view, revealed);
+                    view.Dispatcher.Invoke(System.Windows.Threading.DispatcherPriority.ApplicationIdle, new Action(() => { }));
+                    Render(view);
+                    Assert.All(captions, caption => Assert.Equal(revealed ? Visibility.Visible : Visibility.Collapsed, caption.Visibility));
+                    string[] visibleText = captions.Where(text => text.Visibility == Visibility.Visible).Select(text => text.Text).ToArray();
+                    if (revealed) Assert.Equal(new[] { "T", "C", "Esc" }, visibleText);
+                    else Assert.Empty(visibleText);
+                    Assert.Equal(restingSize, bar.RenderSize);
+                    Assert.Equal(restingCommands, commands.Select(command => command.RenderSize));
+                    Assert.All(commands, command => Assert.Equal(36, command.ActualHeight));
+                    if (!revealed) continue;
+                    for (int index = 0; index < captions.Length; index++)
+                    {
+                        Rect bounds = captions[index].TransformToAncestor(commands[index]).TransformBounds(new Rect(captions[index].RenderSize));
+                        Assert.True(bounds.Left >= -0.5 && bounds.Top >= -0.5 && bounds.Right <= commands[index].ActualWidth + 0.5
+                            && bounds.Bottom <= commands[index].ActualHeight + 0.5, $"Shortcut caption leaves its button: {bounds}");
+                    }
+                }
                 Assert.Equal($"{UiText.Get("CaptureGuide2_Text")}\n{UiText.Get("CaptureGuide2_TextHelp")} (T)", (string)bar.TextButton.ToolTip);
                 Assert.Equal($"{UiText.Get("CaptureGuide2_Cancel")}\n{UiText.Get("CaptureGuide2_CancelTip")} (Esc)", (string)bar.CancelButton.ToolTip);
                 Assert.Equal("T", System.Windows.Automation.AutomationProperties.GetAcceleratorKey(bar.TextButton));
-                Assert.Empty(barText);
                 Assert.Equal(UiText.Get("CaptureGuide2_Text"),
                     System.Windows.Automation.AutomationProperties.GetName(bar.TextButton));
                 Assert.EndsWith("(T)", System.Windows.Automation.AutomationProperties.GetHelpText(bar.TextButton), StringComparison.Ordinal);
@@ -187,6 +209,56 @@ public sealed class CaptureCueOverlayTests
         }
     });
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void NewAlwaysShowPreferenceRefreshesTheCaptureBarWithoutChangingItsSize(bool legacyEnabled) => StaTestHost.Run(() =>
+    {
+        Func<bool>? previous = ShortcutPresentation.ReadEnabled;
+        var settings = new AppSettings { General = { ShowShortcutHints = legacyEnabled } };
+        CaptureOverlayView view = EvidenceView(Desktop(), AppTheme.Glass, "window-hover");
+        try
+        {
+            ShortcutPresentation.ReadEnabled = () => settings.General.AlwaysShowShortcutHints;
+            ShortcutPresentation.Refresh();
+            Render(view);
+            CaptureModeBar bar = view.ModeBarForTest!;
+            var captions = Descendants(bar).OfType<System.Windows.Controls.TextBlock>().ToArray();
+            FrameworkElement[] commands = [bar.TextButton, bar.ColorButton, bar.CancelButton];
+            Assert.Equal(new[] { "T", "C", "Esc" }, captions.Select(caption => caption.Text));
+            Size initialSize = bar.RenderSize;
+            Size[] commandSizes = commands.Select(command => command.RenderSize).ToArray();
+            foreach (bool alwaysShow in new[] { false, true, false })
+            {
+                settings.General.AlwaysShowShortcutHints = alwaysShow;
+                ShortcutPresentation.Refresh();
+                foreach (bool alt in new[] { false, true, false })
+                {
+                    ShortcutPresentation.SetAltRevealed(view, alt);
+                    view.Dispatcher.Invoke(System.Windows.Threading.DispatcherPriority.ApplicationIdle, new Action(() => { }));
+                    Render(view);
+                    Assert.All(captions, caption => Assert.Equal(alwaysShow || alt ? Visibility.Visible : Visibility.Collapsed, caption.Visibility));
+                    Assert.Equal(initialSize, bar.RenderSize);
+                    Assert.Equal(commandSizes, commands.Select(command => command.RenderSize));
+                    Assert.All(commands, command => Assert.Equal(36, command.ActualHeight));
+                    if (!alwaysShow && !alt) continue;
+                    for (int index = 0; index < captions.Length; index++)
+                    {
+                        Rect bounds = captions[index].TransformToAncestor(commands[index]).TransformBounds(new Rect(captions[index].RenderSize));
+                        Assert.True(bounds.Left >= -0.5 && bounds.Top >= -0.5 && bounds.Right <= commands[index].ActualWidth + 0.5
+                            && bounds.Bottom <= commands[index].ActualHeight + 0.5, $"Shortcut caption leaves its button: {bounds}");
+                    }
+                }
+            }
+        }
+        finally
+        {
+            view.ReleaseResources();
+            ShortcutPresentation.ReadEnabled = previous;
+            ShortcutPresentation.Refresh();
+        }
+    });
+
     private static IEnumerable<DependencyObject> Descendants(DependencyObject root)
     {
         for (int index = 0; index < VisualTreeHelper.GetChildrenCount(root); index++)
@@ -198,23 +270,25 @@ public sealed class CaptureCueOverlayTests
     }
 
     [Fact]
-    public void CoordinatorReadsTheShortcutHintSettingForEachSelector() => StaTestHost.Run(() =>
+    public void CoordinatorReadsTheNewAlwaysShowSettingForEachSelector() => StaTestHost.Run(() =>
     {
-        bool hints = false;
+        var settings = new AppSettings { General = { ShowShortcutHints = true } };
         using var coordinator = new CaptureOverlayCoordinator(
             new ScreenCaptureEngine(NullLogger<ScreenCaptureEngine>.Instance),
             new WindowCandidateService(NullLogger<WindowCandidateService>.Instance),
             NullLogger<CaptureOverlayCoordinator>.Instance)
         {
             AutoDetectWindows = () => true,
-            ShowShortcutHints = () => hints,
             ApplyCaptureExclusion = _ => true,
         };
+        Assert.False(coordinator.ShowShortcutHints());
+        coordinator.ShowShortcutHints = () => settings.General.AlwaysShowShortcutHints;
         MethodInfo show = typeof(CaptureOverlayCoordinator).GetMethod("ShowOverlay", BindingFlags.Instance | BindingFlags.NonPublic)!;
         FieldInfo active = typeof(CaptureOverlayCoordinator).GetField("_activeOverlay", BindingFlags.Instance | BindingFlags.NonPublic)!;
-        foreach (bool expected in new[] { false, true })
+        foreach (bool expected in new[] { false, true, false })
         {
-            hints = expected;
+            settings.General.AlwaysShowShortcutHints = expected;
+            settings.General.ShowShortcutHints = !expected;
             // No frame yet: the selector is created hidden, exactly as before acquisition.
             show.Invoke(coordinator, [new RectD(0, 0, 640, 360), false, false, Stopwatch.StartNew(), null, true]);
             var overlay = (CaptureOverlayWindow)active.GetValue(coordinator)!;

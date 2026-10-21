@@ -101,7 +101,7 @@ public sealed class ErrorRecoveryAndDangerTests
             ThemedDialog dialog = ThemedDialog.CreateError(UiText.Get("Dialog.AppFailure"), error);
             Show(dialog);
             Button[] buttons = ActionButtons(dialog);
-            Assert.Equal([UiText.Get("Dialog.OpenSaveLocation"), UiText.Get("Dialog.Close")], buttons.Select(button => (string)button.Content));
+            Assert.Equal([UiText.Get("Dialog.OpenSaveLocation"), UiText.Get("Dialog.Close")], buttons.Select(SurfaceShortcutHintTests.PrimaryCaption));
             Assert.True(buttons[1].IsDefault);
             Assert.Same(dialog.FindResource("Button.Secondary"), buttons[0].Style);
             buttons[0].RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
@@ -120,7 +120,7 @@ public sealed class ErrorRecoveryAndDangerTests
             // A failure that is not about storage has no location to open.
             ThemedDialog other = ThemedDialog.CreateError("Title", new InvalidOperationException("x"));
             Show(other);
-            Assert.Equal([UiText.Get("Dialog.Close")], ActionButtons(other).Select(button => (string)button.Content));
+            Assert.Equal([UiText.Get("Dialog.Close")], ActionButtons(other).Select(SurfaceShortcutHintTests.PrimaryCaption));
             other.Close();
         }
         finally
@@ -146,7 +146,7 @@ public sealed class ErrorRecoveryAndDangerTests
             {
                 Show(dialog);
                 Button[] buttons = ActionButtons(dialog);
-                Assert.Equal([UiText.Get("Dialog.ReportProblem"), UiText.Get("Dialog.Close")], buttons.Select(button => (string)button.Content));
+                Assert.Equal([UiText.Get("Dialog.ReportProblem"), UiText.Get("Dialog.Close")], buttons.Select(SurfaceShortcutHintTests.PrimaryCaption));
                 Assert.True(buttons[1].IsDefault && buttons[1].IsCancel);
                 // The message tells the reader to attach the details to the report the button opens.
                 Assert.Contains(UiText.Get("Dialog.ReportProblem"), Strip(BodyText(dialog)), StringComparison.OrdinalIgnoreCase);

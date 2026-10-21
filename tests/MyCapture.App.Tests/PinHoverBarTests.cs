@@ -222,8 +222,13 @@ public sealed class PinHoverBarTests
                     PinHoverBar bar = pin.HoverBarForTest!;
                     bar.UpdateLayout();
                     Assert.Equal(compact, bar.Compact);
-                    TextBlock[] names = [.. Descendants(bar.CopyButton).OfType<TextBlock>()];
-                    Assert.All(names, name => Assert.Equal(compact ? Visibility.Collapsed : Visibility.Visible, name.Visibility));
+                    var primary = Assert.IsType<StackPanel>(SurfaceShortcutHintTests.PrimaryContent(bar.CopyButton));
+                    TextBlock name = Assert.Single(primary.Children.OfType<TextBlock>());
+                    Assert.Equal("복사", name.Text);
+                    Assert.Equal(compact ? Visibility.Collapsed : Visibility.Visible, name.Visibility);
+                    TextBlock shortcut = Assert.IsType<TextBlock>(Assert.IsType<Grid>(bar.CopyButton.Content).Children[1]);
+                    Assert.Equal("Ctrl+C", shortcut.Text);
+                    Assert.Equal(Visibility.Collapsed, shortcut.Visibility);
                     // The names stay in the tooltips and automation names.
                     Assert.Equal("복사", AutomationProperties.GetName(bar.CopyButton));
                     if (compact) Assert.True(bar.ActualWidth < labeled, $"compact {bar.ActualWidth} vs {labeled}");
