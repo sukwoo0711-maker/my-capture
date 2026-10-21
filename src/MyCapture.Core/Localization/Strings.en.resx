@@ -3483,6 +3483,9 @@ Open the library or Settings from the tray menu.</value></data>
   <data name="Ocr_LanguageName_zh-Hant" xml:space="preserve"><value>Chinese (Traditional)</value></data>
   <data name="Folder410.Title" xml:space="preserve"><value>Folders</value></data>
   <data name="Folder410.NewFolder" xml:space="preserve"><value>New folder</value></data>
+  <data name="Library453.Rename" xml:space="preserve"><value>Rename</value></data>
+  <data name="Library453.SelectAll" xml:space="preserve"><value>Select all</value></data>
+  <data name="Library453.CapturedAt" xml:space="preserve"><value>Captured at {0}</value></data>
   <data name="Folder410.Name" xml:space="preserve"><value>Folder name</value></data>
   <data name="Folder410.Create" xml:space="preserve"><value>Create</value></data>
   <data name="Folder410.Rename" xml:space="preserve"><value>Rename</value></data>

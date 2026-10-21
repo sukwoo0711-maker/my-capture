@@ -204,7 +204,7 @@ public sealed class GalleryCaptionPreviewTests
         CopyNamespaces(product, combined);
         // Import the card's local motion wash as well as its overflow menu and folder badge.
         // Every entry comes from product markup; the fixture preserves the real state layers.
-        string[] keys = ["Gallery.ThumbnailHeight", "LibraryUx.HoverWash", "Gallery.IconButton", "Gallery.TileContextMenu", "LibraryUx.Icon.Folder", "Gallery.FolderBadge",
+        string[] keys = ["Gallery.ThumbnailHeight", "LibraryUx.HoverWash", "Gallery.IconButton", "Gallery.TileContextMenu", "LibraryUx.Icon.Folder", "LibraryUx.Icon.Kept", "Gallery.FolderBadge",
             "Gallery.FolderBadgeContent", "Gallery.TileTemplate", "Gallery.TileRowList"];
         foreach (XElement entry in product.Element(p + "Window.Resources")!.Element(p + "ResourceDictionary")!.Elements()
             .Where(element => keys.Contains((string?)element.Attribute(x + "Key"))))
@@ -212,7 +212,7 @@ public sealed class GalleryCaptionPreviewTests
             var copy = new XElement(entry);
             // Event handlers belong to GalleryWindow and are irrelevant to the unchanged
             // card visuals. Keep all production bindings, templates and sizing intact.
-            foreach (XAttribute handler in copy.DescendantsAndSelf().Attributes().Where(attribute => attribute.Name.LocalName == "Click").ToArray()) handler.Remove();
+            foreach (XAttribute handler in copy.DescendantsAndSelf().Attributes().Where(attribute => attribute.Name.LocalName is "Click" or "PreviewKeyDown" or "LostKeyboardFocus").ToArray()) handler.Remove();
             // x:Shared is honoured only in compiled dictionaries; XamlReader rejects it.
             copy.Attribute(x + "Shared")?.Remove();
             // Product types used as elements (the card row panel) keep the window's
