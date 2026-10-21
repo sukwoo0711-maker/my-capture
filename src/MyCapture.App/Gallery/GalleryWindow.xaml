@@ -669,7 +669,6 @@
              folder tab, warm Surface.Folder fill, Border.Folder outline and a large folder glyph
              keep them apart from captures in every palette. -->
         <Style x:Key="Gallery.FolderCardButton" TargetType="Button">
-            <Setter Property="ContextMenu" Value="{StaticResource Gallery.FolderContextMenu}" />
             <Setter Property="Height" Value="Auto" />
             <Setter Property="Margin" Value="8" />
             <Setter Property="Padding" Value="12,22,12,12" />
@@ -753,6 +752,7 @@
 
         <DataTemplate x:Key="Gallery.FolderCardTemplate" DataType="{x:Type gallery:GalleryFolderCardViewModel}">
             <Button Style="{StaticResource Gallery.FolderCardButton}"
+                    ContextMenu="{StaticResource Gallery.FolderContextMenu}"
                     AutomationProperties.Name="{Binding AccessibleName}"
                     ToolTip="{Binding ToolTipText}"
                     Click="OnFolderCardClick"
@@ -832,6 +832,7 @@
 
         <DataTemplate x:Key="Gallery.CompactFolderCardTemplate" DataType="{x:Type gallery:GalleryFolderCardViewModel}">
             <Button Style="{StaticResource Gallery.CompactFolderCardButton}"
+                    ContextMenu="{StaticResource Gallery.FolderContextMenu}"
                     AutomationProperties.Name="{Binding AccessibleName}"
                     ToolTip="{Binding ToolTipText}"
                     Click="OnFolderCardClick"
