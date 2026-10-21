@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Globalization;
+using System.IO;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;
@@ -37,14 +38,17 @@ internal static class FontCatalog
     {
         if (!Bundled.TryGetValue(name, out string? folder)) return new FontFamily(name);
         string canonical = Bundled.Keys.First(key => string.Equals(key, name, StringComparison.OrdinalIgnoreCase));
-        string source = $"./MyCapture;component/Assets/Fonts/{folder}/#{canonical}";
+        // The bundled files sit beside the app (see the project file). A copy missing them falls
+        // back to an installed family of the same name rather than to a broken source.
+        if (!Directory.Exists(Path.Combine(BundledFontRoot, folder))) return new FontFamily(canonical);
+        string source = $"./{folder}/#{canonical}";
         if (canonical is "Maple Mono" or "JetBrains Mono")
-            source += ", ./MyCapture;component/Assets/Fonts/D2Coding/#D2Coding";
-        // Initialize WPF's application resource package and pack URI handler without
-        // constructing an Application or requiring a window on this thread.
-        _ = Application.ResourceAssembly;
-        return new FontFamily(new Uri("pack://application:,,,/", UriKind.Absolute), source);
+            source += ", ./D2Coding/#D2Coding";
+        return new FontFamily(new Uri(BundledFontRoot, UriKind.Absolute), source);
     }
+
+    internal static string BundledFontRoot { get; } =
+        Path.Combine(AppContext.BaseDirectory, "Assets", "Fonts") + Path.DirectorySeparatorChar;
 
     internal static IReadOnlyList<FontChoice> InstalledFonts(CultureInfo culture) => Installed.GetOrAdd(culture.Name, _ => new(() =>
         Fonts.SystemFontFamilies.Where(font => !string.IsNullOrWhiteSpace(font.Source))

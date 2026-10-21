@@ -47,7 +47,7 @@ public sealed class FontCatalogTests
     [InlineData("D2Coding", true)]
     [InlineData("Pretendard", false)]
     [InlineData("Pretendard", true)]
-    public void BundledTextUsesPackGlyphsAndKoreanFallsBackToD2Coding(string family, bool bold) => StaTestHost.Run(() =>
+    public void BundledTextUsesBundledFileGlyphsAndKoreanFallsBackToD2Coding(string family, bool bold) => StaTestHost.Run(() =>
     {
         var text = new TextAnnotation { Text = "ABC 한글", FontFamily = family, FontSize = 32, Bold = bold, AutoSize = true };
         var drawing = new DrawingGroup();
@@ -56,8 +56,8 @@ public sealed class FontCatalogTests
         Assert.NotEmpty(runs);
         Assert.All(runs, run =>
         {
-            Assert.Equal("pack", run.GlyphTypeface.FontUri.Scheme);
-            Assert.Contains("MyCapture;component/Assets/Fonts/", run.GlyphTypeface.FontUri.ToString(), StringComparison.OrdinalIgnoreCase);
+            Assert.Equal(Uri.UriSchemeFile, run.GlyphTypeface.FontUri.Scheme);
+            Assert.StartsWith(new Uri(FontCatalog.BundledFontRoot).AbsoluteUri, run.GlyphTypeface.FontUri.AbsoluteUri, StringComparison.OrdinalIgnoreCase);
             Assert.Equal(bold ? FontWeights.Bold : FontWeights.Normal, run.GlyphTypeface.Weight);
             Assert.DoesNotContain((ushort)0, run.GlyphIndices);
         });
