@@ -188,7 +188,8 @@ public sealed class Ux402RevisionTests
         try
         {
             window.Show(); window.Activate(); window.UpdateLayout();
-            var button = Descendants(editor).OfType<ToggleButton>().First();
+            // Text-style toggles exist but stay collapsed until the text tool; take a visible tool.
+            var button = Descendants(editor).OfType<ToggleButton>().First(toggle => toggle.IsVisible && toggle.Focusable);
             Assert.True(button.Focus());
             Assert.False(editor.HandleShortcut(Key.Space, ModifierKeys.None));
             Assert.False(editor.HandleShortcut(Key.Enter, ModifierKeys.None));

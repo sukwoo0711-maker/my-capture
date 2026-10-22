@@ -410,7 +410,7 @@ public sealed class EditorHeavyOperationTests
         Task insert = editor.InsertImageFileAsync("picked.png", new PointD(20, 20));
         Invoke(editor, "SelectTool", EditorTool.Crop);
         editor.PendingCrop!.SetRegion(new RectD(8, 6, 40, 30));
-        Invoke(editor, "RefreshCrop");
+        Invoke(editor, "RefreshCrop", true);
         editor.SaveAndClose();
         Assert.True(editor.IsCommitInProgress);
         decoded.SetResult(unreadable ? null : Decoded(Pattern(30, 20, PixelFormats.Bgra32)));

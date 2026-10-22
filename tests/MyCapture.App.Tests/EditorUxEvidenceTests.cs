@@ -38,6 +38,7 @@ public sealed class EditorUxEvidenceTests : KoreanCaptionTest
         {
             foreach ((int width, int height) in new[] { (1000, 640), (760, 600) })
                 RenderSequence(root, width, height, rows);
+            RenderSourceScene(root, rows);
         }
         finally
         {
@@ -100,6 +101,37 @@ public sealed class EditorUxEvidenceTests : KoreanCaptionTest
             Scene("07-pen-again");
             SelectTool(editor, EditorTool.Crop);
             Scene("08-crop");
+        }
+        finally
+        {
+            window.Close();
+        }
+    }
+
+    /// <summary>A web capture whose source chip sits in the status line.</summary>
+    private static void RenderSourceScene(string root, List<Dictionary<string, object>> rows)
+    {
+        BitmapSource bitmap = SpecTable(900, 520);
+        var region = new RectD(0, 0, bitmap.PixelWidth, bitmap.PixelHeight);
+        var provenance = MyCapture.Core.Capture.CaptureProvenance.Create(
+            url: "https://github.com/acme/orders-api/blob/main/docs/fields.md?token=demo#L12",
+            appName: "Microsoft Edge", windowTitle: "fields.md - orders-api");
+        var editor = new AnnotationEditorControl(new FrozenFrame(bitmap, region, null, 0), region, bitmap, null, null,
+            provenance: provenance);
+        ResourceDictionary resources = SystemHighContrastThemeTests.LoadTheme();
+        ThemeService.ApplyResources(AppTheme.Midnight, resources, systemHighContrast: false);
+        var window = new Window
+        {
+            Content = editor, Resources = resources, Width = 1000, Height = 640, WindowStyle = WindowStyle.None,
+            ResizeMode = ResizeMode.NoResize, Left = -6000, Top = -6000, ShowActivated = false, ShowInTaskbar = false,
+        };
+        window.Show();
+        try
+        {
+            SelectTool(editor, EditorTool.Select);
+            Settle(window);
+            rows.Add(Measure(editor, "1000x640", "09-source"));
+            Save(window, Path.Combine(root, "1000x640-09-source.png"));
         }
         finally
         {
