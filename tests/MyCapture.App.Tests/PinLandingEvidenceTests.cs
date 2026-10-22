@@ -30,7 +30,7 @@ public sealed class PinLandingEvidenceTests
             const string html = "<div style=\"color: #d4d4d4; background-color: #1e1e1e; white-space: pre;\"><div><span style=\"color: #569cd6;\">public void</span> Capture()</div><div>{</div><div>    Save();</div><div>}</div></div>";
             BitmapSource code = ClipboardCodeRenderer.TryRender(source, html) ?? throw new InvalidOperationException("Code fixture failed.");
             foreach (double scale in new[] { 1.0, 1.5, 2.0 })
-                foreach (double time in new[] { 0d, 83, 150, 195, 300, 420, 560 })
+                foreach (double time in new[] { 0d, 83, 150, 190, 235, 340, 460, 600 })
                     SaveSnapshot(code, source, scale, time, output);
         });
     }
@@ -64,12 +64,12 @@ public sealed class PinLandingEvidenceTests
             var layout = PinLandingDecoration.LayoutFor(new RectD(64 * scale, 64 * scale, pin.Width * scale, pin.Height * scale), scale);
             decoration = new PinLandingDecoration(pin, layout);
             // Render the actual product drawing surface without showing the ornament.
-            decoration.Advance(Math.Min(time, 559.999));
+            decoration.Advance(Math.Min(time, PinLandingDecoration.DurationMs - .001));
             var ornament = (FrameworkElement)decoration.Content;
             decoration.Content = null;
             ornament.Width = layout.PhysicalBounds.Width / scale;
             ornament.Height = layout.PhysicalBounds.Height / scale;
-            if (time >= 560) ornament.Visibility = Visibility.Hidden;
+            if (time >= PinLandingDecoration.DurationMs) ornament.Visibility = Visibility.Hidden;
             var canvas = new Canvas { Background = Brushes.White, Width = ornament.Width, Height = ornament.Height };
             Canvas.SetLeft(chrome, layout.PinBoundsDip.Left);
             Canvas.SetTop(chrome, layout.PinBoundsDip.Top);
