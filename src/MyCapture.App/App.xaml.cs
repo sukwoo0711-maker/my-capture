@@ -1,4 +1,4 @@
-﻿using System.IO;
+using System.IO;
 using System.Threading;
 using System.Windows;
 using System.Windows.Threading;
@@ -279,6 +279,7 @@ public partial class App : Application
         _shellPresenter.ForegroundDismissed += () => _overlay?.NoteForegroundDismissal();
         AnnotationEditorPreferences.Read = () => _settings!.Annotation;
         ShortcutPresentation.ReadEnabled = () => _settings!.General.AlwaysShowShortcutHints;
+        ShortcutRevealMotion.Initialize();
         AnnotationEditorPreferences.ReadShowSourceWindowTitle = () => _settings!.Export.ShowSourceWindowTitle;
         AnnotationEditorPreferences.Write = RememberEditorPreferences;
         _tray.CaptureRequested += (_, _) => HandleCaptureRequested();
@@ -388,7 +389,10 @@ public partial class App : Application
             updated =>
             {
                 Hotkey previousCapture = _settings!.Hotkeys.Capture;
-                _settings = updated; ShortcutPresentation.Refresh(); _pins?.TrimClosedHistory();
+                bool previousShortcutHints = _settings.General.AlwaysShowShortcutHints;
+                _settings = updated;
+                if (previousShortcutHints != updated.General.AlwaysShowShortcutHints) ShortcutPresentation.Refresh();
+                _pins?.TrimClosedHistory();
                 AnnounceCaptureKeyChange(previousCapture, updated.Hotkeys.Capture);
                 QueueWelcomeResidentAnnouncement();
             },

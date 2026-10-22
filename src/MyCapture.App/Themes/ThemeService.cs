@@ -206,6 +206,7 @@ internal static class ThemeService
         ApplyCropResources(resources, contrast);
         CaptureGuidePalette.Apply(resources, theme, captureGuideColor, contrast, accent);
         ThemeBrushes.Refresh(resources);
+        ShortcutRevealMotion.SettleAll();
     }
 
     /// <summary>The system colour of <paramref name="role"/>, always opaque.</summary>
