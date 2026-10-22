@@ -1,11 +1,42 @@
 using MyCapture.App.Settings;
 using MyCapture.Core.Localization;
+using MyCapture.Core.Settings;
+using MyCapture.Ocr;
 using Xunit;
 
 namespace MyCapture.App.Tests;
 
 public sealed class SettingsUxTextTests
 {
+    [Theory]
+    [InlineData("ko-KR")]
+    [InlineData("en-US")]
+    public void OcrSizes_IncludeOptionalDetectionAndOneSuperResolutionArchive(string language)
+    {
+        using var scope = UiText.UseLanguage(language);
+        Assert.Equal(101_654_967, OcrModelCatalog.DownloadBytesFor(OcrQuality.Accurate));
+        Assert.Equal(163_828_993, OcrModelCatalog.DownloadBytesFor(OcrQuality.Enhanced));
+        Assert.Equal(0, OcrModelCatalog.DownloadBytesFor(OcrQuality.Fast));
+        Assert.Equal(0, OcrModelCatalog.DownloadBytesFor(OcrQuality.Balanced));
+        Assert.Equal(102, SettingsWindow.OcrModelMegabytes);
+        Assert.Equal(164, SettingsWindow.EnhancedModelMegabytes);
+        string privacy = UiText.Format("About_PrivacyModel", SettingsWindow.OcrModelMegabytes,
+            SettingsWindow.EnhancedModelMegabytes);
+        Assert.Contains("102 MB", privacy, StringComparison.Ordinal);
+        Assert.Contains("164 MB", privacy, StringComparison.Ordinal);
+        Assert.Contains("102 MB", SettingsWindow.OcrQualityDescription, StringComparison.Ordinal);
+        Assert.Contains("164 MB", SettingsWindow.OcrQualityDescription, StringComparison.Ordinal);
+        Assert.DoesNotContain("{0}", SettingsWindow.OcrQualityDescription, StringComparison.Ordinal);
+        if (language == "ko-KR")
+        {
+            Assert.StartsWith("정확 품질은 텍스트 인식 모델", privacy, StringComparison.Ordinal);
+            Assert.StartsWith("빠름과 보통은 Windows 기본 인식 기능을 사용합니다.", SettingsWindow.OcrQualityDescription,
+                StringComparison.Ordinal);
+            Assert.DoesNotContain("?", privacy, StringComparison.Ordinal);
+            Assert.DoesNotContain("?", SettingsWindow.OcrQualityDescription, StringComparison.Ordinal);
+        }
+    }
+
     [Theory]
     [InlineData("ko-KR", 168, "7일")]
     [InlineData("ko-KR", 24, "1일")]

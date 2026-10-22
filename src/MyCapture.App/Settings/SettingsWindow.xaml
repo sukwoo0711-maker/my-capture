@@ -913,7 +913,7 @@
 
                         <StackPanel Style="{StaticResource Settings.Field}">
                             <TextBlock Style="{StaticResource Settings.Label}" Text="{loc:Text Settings.OcrQuality}" />
-                            <TextBlock Style="{StaticResource Settings.Description}" Text="{loc:Text SettingsUx_OcrQualityHint}" />
+                            <TextBlock x:Name="OcrQualityHintText" Style="{StaticResource Settings.Description}" />
                             <ComboBox x:Name="OcrQualitySelector" SelectedValue="{Binding OcrQuality}" SelectedValuePath="Tag"
                                       AutomationProperties.Name="{loc:Text Settings.OcrQuality}"
                                       MinWidth="320" HorizontalAlignment="Left" Margin="0,4,0,0">

@@ -18,14 +18,17 @@ internal sealed class SuperResolutionEngine : IDisposable
 
     private readonly OcrModelStore _store;
     private readonly ILogger _log;
+    private readonly OnnxRuntimeInitialization _runtime;
     private readonly object _sync = new();
     private InferenceSession? _session;
     private bool _initFailed;
 
-    internal SuperResolutionEngine(OcrModelStore store, ILogger<SuperResolutionEngine> log)
+    internal SuperResolutionEngine(OcrModelStore store, ILogger<SuperResolutionEngine> log,
+        OnnxRuntimeInitialization? runtime = null)
     {
         _store = store ?? throw new ArgumentNullException(nameof(store));
         _log = log ?? throw new ArgumentNullException(nameof(log));
+        _runtime = runtime ?? OnnxRuntimeInitialization.Shared;
     }
 
     internal bool IsReady
@@ -56,6 +59,7 @@ internal sealed class SuperResolutionEngine : IDisposable
             string modelPath = _store.PathFor(OcrModelCatalog.SuperResolution);
             try
             {
+                _runtime.EnsureInitialized();
                 _session = new InferenceSession(modelPath);
                 _log.LogInformation("Real-ESRGAN session ready {Model}", modelPath);
                 return true;

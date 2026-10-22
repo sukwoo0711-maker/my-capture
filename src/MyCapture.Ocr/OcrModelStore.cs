@@ -1,5 +1,6 @@
 ﻿using System.Collections.Concurrent;
 using System.IO;
+using System.IO.Compression;
 using System.Net.Http;
 using System.Security.Cryptography;
 using Microsoft.Extensions.Logging;
@@ -18,6 +19,7 @@ internal sealed class OcrModelStore
     private readonly ILogger _log;
     private readonly SemaphoreSlim _gate = new(1, 1);
     private readonly Func<Stream, byte[]> _computeHash;
+    private readonly OcrModelFile[] _superResolutionFiles;
     private readonly ConcurrentDictionary<string, VerificationState> _verification = new(StringComparer.OrdinalIgnoreCase);
 
     internal OcrModelStore(AppPaths paths, ILogger<OcrModelStore> log)
@@ -33,19 +35,20 @@ internal sealed class OcrModelStore
     /// <summary>
     /// Supplies the file hasher so tests can observe verification without changing the catalog.
     /// </summary>
-    internal OcrModelStore(AppPaths paths, HttpClient http, ILogger log, Func<Stream, byte[]> computeHash)
+    internal OcrModelStore(AppPaths paths, HttpClient http, ILogger log, Func<Stream, byte[]> computeHash,
+        OcrModelFile? superResolution = null, OcrModelFile? superResolutionData = null)
     {
         _paths = paths ?? throw new ArgumentNullException(nameof(paths));
         _http = http ?? throw new ArgumentNullException(nameof(http));
         _log = log ?? throw new ArgumentNullException(nameof(log));
         _computeHash = computeHash ?? throw new ArgumentNullException(nameof(computeHash));
+        _superResolutionFiles = [superResolution ?? OcrModelCatalog.SuperResolution,
+            superResolutionData ?? OcrModelCatalog.SuperResolutionData];
     }
 
     internal bool HasRequiredModels => OcrModelCatalog.Required.All(IsPresent);
 
-    internal bool HasSuperResolution => IsPresent(OcrModelCatalog.SuperResolution)
-        && IsPresent(OcrModelCatalog.SuperResolutionData)
-        && File.Exists(SuperResolutionExporterDataPath);
+    internal bool HasSuperResolution => _superResolutionFiles.All(IsPresent);
 
     /// <summary>
     /// The ONNX graph references its weights under the exporter's original name, so that
@@ -77,15 +80,8 @@ internal sealed class OcrModelStore
             }
 
             Directory.CreateDirectory(_paths.OcrModelsRoot);
-            foreach (OcrModelFile file in (OcrModelFile[])[OcrModelCatalog.SuperResolution, OcrModelCatalog.SuperResolutionData])
-            {
-                if (IsPresent(file))
-                {
-                    continue;
-                }
-
-                await DownloadAsync(file, cancellationToken).ConfigureAwait(false);
-            }
+            await DownloadArchiveAsync(_superResolutionFiles.Where(file => !IsPresent(file)).ToArray(),
+                cancellationToken).ConfigureAwait(false);
 
             return HasSuperResolution;
         }
@@ -93,7 +89,7 @@ internal sealed class OcrModelStore
         {
             throw;
         }
-        catch (Exception ex) when (ex is HttpRequestException or IOException or UnauthorizedAccessException or CryptographicException)
+        catch (Exception ex) when (ex is HttpRequestException or IOException or InvalidDataException or UnauthorizedAccessException or CryptographicException)
         {
             _log.LogWarning(ex, "Could not download the Real-ESRGAN model");
             return false;
@@ -104,7 +100,11 @@ internal sealed class OcrModelStore
         }
     }
 
-    internal string PathFor(OcrModelFile file) => Path.Combine(_paths.OcrModelsRoot, file.FileName);
+    // Keep the catalog's legacy identifier, but write and verify the actual ONNX external-data
+    // name. Old installs already contain this file alongside their redundant legacy copy.
+    internal string PathFor(OcrModelFile file) => Path.Combine(_paths.OcrModelsRoot,
+        file.FileName == OcrModelCatalog.SuperResolutionData.FileName
+            ? OcrModelCatalog.ZipMemberNameFor(file.FileName) : file.FileName);
 
     /// <summary>
     /// Checks and prepares one model on a worker, including the initial verification.
@@ -114,13 +114,18 @@ internal sealed class OcrModelStore
 
     private async Task EnsureFileCoreAsync(OcrModelFile file, CancellationToken cancellationToken)
     {
-        if (IsPresent(file))
+        if (IsPresent(file)) return;
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
         {
-            return;
+            if (IsPresent(file)) return;
+            Directory.CreateDirectory(_paths.OcrModelsRoot);
+            await DownloadAsync(file, cancellationToken).ConfigureAwait(false);
         }
-
-        Directory.CreateDirectory(_paths.OcrModelsRoot);
-        await DownloadAsync(file, cancellationToken).ConfigureAwait(false);
+        finally
+        {
+            _gate.Release();
+        }
     }
 
     /// <summary>
@@ -142,7 +147,7 @@ internal sealed class OcrModelStore
                 }
 
                 var info = new FileInfo(path);
-                if (info.Length < file.MinimumBytes)
+                if (info.Length < file.MinimumBytes || info.Length > file.ByteLimit)
                 {
                     state.Verified = null;
                     return false;
@@ -276,80 +281,131 @@ internal sealed class OcrModelStore
 
     private async Task DownloadAsync(OcrModelFile file, CancellationToken cancellationToken)
     {
+        if (file.Uri.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
+        {
+            await DownloadArchiveAsync([file], cancellationToken).ConfigureAwait(false);
+            return;
+        }
+
         string destination = PathFor(file);
         string temp = destination + ".download";
         InvalidateVerification(destination);
-        _log.LogInformation("Downloading OCR model {File}", file.FileName);
-
-        byte[] payload = file.Uri.EndsWith(".zip", StringComparison.OrdinalIgnoreCase)
-            ? await DownloadZipMemberAsync(file, cancellationToken).ConfigureAwait(false)
-            : await DownloadBytesAsync(file.Uri, cancellationToken).ConfigureAwait(false);
-
-        if (file.ExpectedSha256 is not null
-            && !string.Equals(Convert.ToHexString(SHA256.HashData(payload)), file.ExpectedSha256, StringComparison.OrdinalIgnoreCase))
+        try
         {
-            throw new CryptographicException($"OCR model hash mismatch: {file.FileName}");
+            using HttpResponseMessage response = await OpenDownloadAsync(file.Uri, file.ByteLimit, cancellationToken)
+                .ConfigureAwait(false);
+            using Stream source = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
+            await WriteVerifiedAsync(source, temp, file, cancellationToken).ConfigureAwait(false);
+            CopyModelFile(temp, destination);
+            _log.LogInformation("Stored OCR model {File}", file.FileName);
         }
-
-        if (payload.Length < file.MinimumBytes)
+        finally
         {
-            throw new IOException($"OCR model was truncated: {file.FileName}");
+            CleanDownload(temp);
         }
+    }
 
-        await File.WriteAllBytesAsync(temp, payload, cancellationToken).ConfigureAwait(false);
-        CopyModelFile(temp, destination);
-
-        // The ONNX file records its weights under the exporter's original name
-        // (real_esrgan_x4plus.data), so the external-data file must exist under both names.
-        if (string.Equals(file.FileName, OcrModelCatalog.SuperResolutionData.FileName, StringComparison.Ordinal))
+    private async Task<HttpResponseMessage> OpenDownloadAsync(string uri, long cap, CancellationToken cancellationToken)
+    {
+        HttpResponseMessage response = await _http.GetAsync(uri, HttpCompletionOption.ResponseHeadersRead,
+            cancellationToken).ConfigureAwait(false);
+        try
         {
-            string exporterName = Path.Combine(_paths.OcrModelsRoot, OcrModelCatalog.ZipMemberNameFor(file.FileName));
-            if (!string.Equals(exporterName, destination, StringComparison.OrdinalIgnoreCase))
+            response.EnsureSuccessStatusCode();
+            if (response.Content.Headers.ContentLength is long length && length > cap)
+                throw new IOException("OCR download exceeds its byte limit.");
+            return response;
+        }
+        catch
+        {
+            response.Dispose();
+            throw;
+        }
+    }
+
+    // Bound both the HTTP transfer and each uncompressed entry. Only the pinned members are
+    // extracted, to fixed destinations, and every missing member is verified before publishing.
+    private async Task DownloadArchiveAsync(OcrModelFile[] files, CancellationToken cancellationToken)
+    {
+        if (files.Length == 0) return;
+        string archiveTemp = Path.Combine(_paths.OcrModelsRoot, "realesrgan_x4.zip.download");
+        try
+        {
+            using (HttpResponseMessage response = await OpenDownloadAsync(files[0].Uri,
+                OcrModelCatalog.SuperResolutionArchiveBytes, cancellationToken).ConfigureAwait(false))
+            using (Stream source = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false))
             {
-                CopyModelFile(temp, exporterName);
+                await WriteBoundedAsync(source, archiveTemp, OcrModelCatalog.SuperResolutionArchiveBytes,
+                    cancellationToken).ConfigureAwait(false);
             }
-        }
 
+            using (var archiveStream = File.OpenRead(archiveTemp))
+            using (var archive = new ZipArchive(archiveStream, ZipArchiveMode.Read))
+            {
+                foreach (OcrModelFile file in files)
+                {
+                    string memberName = OcrModelCatalog.ZipMemberNameFor(file.FileName);
+                    ZipArchiveEntry entry = archive.Entries.FirstOrDefault(e =>
+                        string.Equals(Path.GetFileName(e.FullName), memberName, StringComparison.OrdinalIgnoreCase))
+                        ?? throw new IOException($"OCR model archive was missing {memberName}");
+                    if (entry.Length > file.ByteLimit)
+                        throw new IOException($"OCR archive entry exceeds its byte limit: {memberName}");
+                    using Stream source = entry.Open();
+                    await WriteVerifiedAsync(source, PathFor(file) + ".download", file, cancellationToken)
+                        .ConfigureAwait(false);
+                }
+            }
+
+            foreach (OcrModelFile file in files)
+                CopyModelFile(PathFor(file) + ".download", PathFor(file));
+        }
+        finally
+        {
+            CleanDownload(archiveTemp);
+            foreach (OcrModelFile file in files)
+                CleanDownload(PathFor(file) + ".download");
+        }
+    }
+
+    private static async Task WriteVerifiedAsync(Stream source, string temp, OcrModelFile file,
+        CancellationToken cancellationToken)
+    {
+        (long length, string hash) = await WriteBoundedAsync(source, temp, file.ByteLimit, cancellationToken)
+            .ConfigureAwait(false);
+        if (length < file.MinimumBytes || (file.ExpectedBytes is long expected && length != expected))
+            throw new IOException($"OCR model was truncated or has an unexpected size: {file.FileName}");
+        if (file.ExpectedSha256 is not null && !string.Equals(hash, file.ExpectedSha256, StringComparison.OrdinalIgnoreCase))
+            throw new CryptographicException($"OCR model hash mismatch: {file.FileName}");
+    }
+
+    private static async Task<(long Length, string Hash)> WriteBoundedAsync(Stream source, string temp,
+        long cap, CancellationToken cancellationToken)
+    {
+        using var output = new FileStream(temp, FileMode.Create, FileAccess.Write, FileShare.None,
+            64 * 1024, FileOptions.Asynchronous | FileOptions.SequentialScan);
+        using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+        byte[] buffer = new byte[64 * 1024];
+        long length = 0;
+        int read;
+        while ((read = await source.ReadAsync(buffer.AsMemory(), cancellationToken).ConfigureAwait(false)) != 0)
+        {
+            if (read > cap - length)
+                throw new IOException("OCR download exceeds its byte limit.");
+            hash.AppendData(buffer, 0, read);
+            await output.WriteAsync(buffer.AsMemory(0, read), cancellationToken).ConfigureAwait(false);
+            length += read;
+        }
+        return (length, Convert.ToHexString(hash.GetHashAndReset()));
+    }
+
+    private void CleanDownload(string temp)
+    {
         VerificationState tempState = VerificationFor(temp);
         lock (tempState)
         {
             tempState.Verified = null;
             TryDelete(temp);
         }
-        _log.LogInformation("Stored OCR model {File} ({Bytes} bytes)", file.FileName, payload.Length);
-    }
-
-    private async Task<byte[]> DownloadBytesAsync(string uri, CancellationToken cancellationToken)
-    {
-        using HttpResponseMessage response = await _http.GetAsync(
-                uri,
-                HttpCompletionOption.ResponseHeadersRead,
-                cancellationToken)
-            .ConfigureAwait(false);
-        response.EnsureSuccessStatusCode();
-        return await response.Content.ReadAsByteArrayAsync(cancellationToken).ConfigureAwait(false);
-    }
-
-    /// <summary>
-    /// Reads the single ONNX member named <c>real_esrgan_x4plus.onnx</c> or
-    /// <c>real_esrgan_x4plus.data</c> out of the Qualcomm AI Hub zip. Entries outside those
-    /// names are ignored; a missing entry throws and the caller treats the model as absent.
-    /// </summary>
-    private async Task<byte[]> DownloadZipMemberAsync(OcrModelFile file, CancellationToken cancellationToken)
-    {
-        string memberName = file.Uri.EndsWith(".zip", StringComparison.OrdinalIgnoreCase)
-            ? OcrModelCatalog.ZipMemberNameFor(file.FileName)
-            : file.FileName;
-        byte[] zipBytes = await DownloadBytesAsync(file.Uri, cancellationToken).ConfigureAwait(false);
-        using var archive = new System.IO.Compression.ZipArchive(new MemoryStream(zipBytes), System.IO.Compression.ZipArchiveMode.Read);
-        System.IO.Compression.ZipArchiveEntry? entry = archive.Entries.FirstOrDefault(e =>
-            string.Equals(e.FullName, memberName, StringComparison.OrdinalIgnoreCase)
-            || string.Equals(Path.GetFileName(e.FullName), memberName, StringComparison.OrdinalIgnoreCase))
-            ?? throw new IOException($"OCR model archive was missing {memberName}");
-        using Stream source = entry.Open();
-        using var output = new MemoryStream();
-        await source.CopyToAsync(output, cancellationToken).ConfigureAwait(false);
-        return output.ToArray();
     }
 
     private bool HasExpectedHash(string path, string expected)

@@ -344,7 +344,8 @@ public sealed class OcrModelVerificationCacheTests(ITestOutputHelper output)
             Assert.True(store.HasRequiredModels);
             Assert.True(store.HasSuperResolution);
             Assert.Equal(CatalogModels.Length, hashes.Count);
-            Assert.All(CatalogModels, file => Assert.Equal(1, hashes[file.FileName]));
+            Assert.All(CatalogModels, file => Assert.Equal(1, hashes[file == OcrModelCatalog.SuperResolutionData
+                ? OcrModelCatalog.ZipMemberNameFor(file.FileName) : file.FileName]));
             Assert.Equal(0, workspace.Handler.Calls);
             Assert.False(engine.IsReady);
         }
@@ -394,7 +395,8 @@ public sealed class OcrModelVerificationCacheTests(ITestOutputHelper output)
         foreach (OcrModelFile file in CatalogModels.Where(file => file != OcrModelCatalog.Recognition))
         {
             Assert.True(store.IsPresent(file));
-            Assert.Equal(1, hashes[file.FileName]);
+            Assert.Equal(1, hashes[file == OcrModelCatalog.SuperResolutionData
+                ? OcrModelCatalog.ZipMemberNameFor(file.FileName) : file.FileName]);
         }
         Assert.True(store.HasSuperResolution);
         Assert.Equal(0, workspace.Handler.Calls);
@@ -509,7 +511,7 @@ public sealed class OcrModelVerificationCacheTests(ITestOutputHelper output)
     }
 
     [Fact]
-    public async Task HasSuperResolution_StillRequiresExporterDataAliasAfterPreverification()
+    public async Task HasSuperResolution_VerifiesExporterDataAfterPreverification()
     {
         using var workspace = new ModelWorkspace();
         workspace.WriteSyntheticCatalogModels(includeExporterAlias: false);
@@ -518,7 +520,7 @@ public sealed class OcrModelVerificationCacheTests(ITestOutputHelper output)
 
         await engine.ModelVerificationTask.WaitAsync(Timeout);
         Assert.False(store.HasSuperResolution);
-        File.WriteAllBytes(store.SuperResolutionExporterDataPath, [1]);
+        File.WriteAllBytes(store.SuperResolutionExporterDataPath, new byte[OcrModelCatalog.SuperResolutionData.MinimumBytes]);
         Assert.True(store.HasSuperResolution);
         File.Move(store.SuperResolutionExporterDataPath, store.SuperResolutionExporterDataPath + ".previous");
         Assert.False(store.HasSuperResolution);
@@ -588,7 +590,8 @@ public sealed class OcrModelVerificationCacheTests(ITestOutputHelper output)
     private static byte[] SyntheticCatalogHash(Stream stream)
     {
         string name = Path.GetFileName(((FileStream)stream).Name);
-        return Convert.FromHexString(CatalogModels.Single(file => file.FileName == name).ExpectedSha256!);
+        return Convert.FromHexString(CatalogModels.Single(file => file.FileName == name
+            || (file == OcrModelCatalog.SuperResolutionData && OcrModelCatalog.ZipMemberNameFor(file.FileName) == name)).ExpectedSha256!);
     }
 
     private static async Task<bool> Ensure(OcrModelStore store, string operation, CancellationToken token)
@@ -668,7 +671,7 @@ public sealed class OcrModelVerificationCacheTests(ITestOutputHelper output)
             {
                 string alias = Path.Combine(Paths.OcrModelsRoot,
                     OcrModelCatalog.ZipMemberNameFor(OcrModelCatalog.SuperResolutionData.FileName));
-                File.WriteAllBytes(alias, [1]);
+                File.WriteAllBytes(alias, new byte[OcrModelCatalog.SuperResolutionData.MinimumBytes]);
             }
         }
 

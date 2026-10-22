@@ -18,6 +18,7 @@ internal sealed class NeuralOcrEngine : IDisposable
     private readonly OcrModelStore _store;
     private readonly ILogger _log;
     private readonly SuperResolutionEngine _superResolution;
+    private readonly OnnxRuntimeInitialization _runtime;
     private readonly object _sync = new();
     private RapidOcr? _engine;
     private bool _initFailed;
@@ -33,11 +34,13 @@ internal sealed class NeuralOcrEngine : IDisposable
     internal NeuralOcrEngine(
         OcrModelStore store,
         SuperResolutionEngine superResolution,
-        ILogger<NeuralOcrEngine> log)
+        ILogger<NeuralOcrEngine> log,
+        OnnxRuntimeInitialization? runtime = null)
     {
         _store = store ?? throw new ArgumentNullException(nameof(store));
         _superResolution = superResolution ?? throw new ArgumentNullException(nameof(superResolution));
         _log = log ?? throw new ArgumentNullException(nameof(log));
+        _runtime = runtime ?? OnnxRuntimeInitialization.Shared;
         ModelVerificationTask = _store.PreVerifyInstalledModelsAsync();
     }
 
@@ -194,6 +197,7 @@ internal sealed class NeuralOcrEngine : IDisposable
 
             try
             {
+                _runtime.EnsureInitialized();
                 var engine = new RapidOcr();
                 engine.InitModels(det, cls, rec, keys);
                 _engine = engine;

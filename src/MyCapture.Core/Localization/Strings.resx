@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <root>
   <resheader name="resmimetype">
     <value>text/microsoft-resx</value>
@@ -3206,7 +3206,7 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="Settings.ThemeGlass" xml:space="preserve"><value>어둡게</value></data>
   <data name="Settings.ThemeGlassLight" xml:space="preserve"><value>밝게</value></data>
   <data name="Settings.OcrQuality" xml:space="preserve"><value>인식 품질</value></data>
-  <data name="Settings.OcrQualityHint" xml:space="preserve"><value>빠름과 보통은 Windows 기본 인식 기능을 씁니다. 정확은 영수증처럼 작은 글자에 강합니다. 가장 정확은 이미지를 보정하고 4배로 키워 인식하며, 처음 쓸 때 약 67MB를 내려받습니다.</value></data>
+  <data name="Settings.OcrQualityHint" xml:space="preserve"><value>빠름과 보통은 Windows 기본 인식 기능을 사용합니다. 정확은 영수증처럼 작은 글자에 강하며, 처음 사용할 때 약 {0} MB를 내려받습니다. 가장 정확은 이미지를 보정하고 4배로 키워 인식하며, 처음 사용할 때 총 약 {1} MB를 내려받습니다.</value></data>
   <data name="Settings.OcrQualityFast" xml:space="preserve"><value>빠름</value></data>
   <data name="Settings.OcrQualityBalanced" xml:space="preserve"><value>보통</value></data>
   <data name="Settings.OcrQualityAccurate" xml:space="preserve"><value>정확</value></data>
@@ -3895,7 +3895,7 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="About_UpToDate" xml:space="preserve"><value>최신 버전</value></data>
   <data name="About_PrivacyHeading" xml:space="preserve"><value>개인정보</value></data>
   <data name="About_PrivacyLocal" xml:space="preserve"><value>캡처와 텍스트 인식은 이 PC에서 처리합니다.</value></data>
-  <data name="About_PrivacyModel" xml:space="preserve"><value>텍스트 인식 모델(약 {0} MB)은 정확 또는 가장 정확 품질을 처음 사용할 때 ModelScope에서 내려받습니다. 가장 정확 품질은 확대 모델(약 {1} MB)도 Qualcomm AI Hub에서 내려받습니다. 이미지는 전송하지 않습니다.</value></data>
+  <data name="About_PrivacyModel" xml:space="preserve"><value>정확 품질은 텍스트 인식 모델(약 {0} MB)을 ModelScope에서 내려받습니다. 가장 정확 품질은 Qualcomm AI Hub의 확대 모델을 포함해 총 약 {1} MB를 내려받습니다. 이미지는 전송하지 않습니다.</value></data>
   <data name="About_PrivacyGitHub" xml:space="preserve"><value>GitHub 업로드는 실행할 때만 공개 이슈에 올립니다.</value></data>
   <data name="About_FeedbackHeading" xml:space="preserve"><value>피드백</value></data>
   <data name="About_ReportProblem" xml:space="preserve"><value>문의하기</value></data>
@@ -3964,7 +3964,7 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="SettingsUx_PinCopyHint" xml:space="preserve"><value>Ctrl+C는 원문이 있는 핀(텍스트·표·코드)에서는 원문 텍스트와 이미지를 함께, 이미지 핀에서는 이미지만 복사합니다. Ctrl+더블클릭은 원문 텍스트만 복사하고, 원문이 없는 이미지는 이 PC에서 인식한 텍스트를 복사합니다.</value></data>
   <data name="SettingsUx_OcrHeading" xml:space="preserve"><value>텍스트 인식</value></data>
   <data name="SettingsUx_OcrLanguages" xml:space="preserve"><value>인식 언어</value></data>
-  <data name="SettingsUx_OcrQualityHint" xml:space="preserve"><value>빠름과 보통은 Windows 기본 인식 기능을 씁니다. 정확은 영수증처럼 작은 글자에 강합니다. 가장 정확은 이미지를 보정하고 4배로 키워 인식하며, 처음 쓸 때 약 67MB를 내려받습니다.</value></data>
+  <data name="SettingsUx_OcrQualityHint" xml:space="preserve"><value>빠름과 보통은 Windows 기본 인식 기능을 사용합니다. 정확은 영수증처럼 작은 글자에 강하며, 처음 사용할 때 약 {0} MB를 내려받습니다. 가장 정확은 이미지를 보정하고 4배로 키워 인식하며, 처음 사용할 때 총 약 {1} MB를 내려받습니다.</value></data>
   <data name="SettingsUx_OcrFast" xml:space="preserve"><value>빠름</value></data>
   <data name="SettingsUx_OcrBalanced" xml:space="preserve"><value>보통</value></data>
   <data name="SettingsUx_OcrAccurate" xml:space="preserve"><value>정확</value></data>
@@ -4605,4 +4605,6 @@ F3  클립보드를 핀으로 띄우기
   <data name="CoreShortcuts.KeepCurrent" xml:space="preserve"><value>그대로 두기</value></data>
   <data name="CoreShortcuts.Force" xml:space="preserve"><value>Ctrl+Shift+C·X·Z와 F3을 다른 프로그램보다 먼저 처리</value></data>
   <data name="CoreShortcuts.ForceDescription" xml:space="preserve"><value>다른 프로그램이 같은 단축키를 먼저 등록했어도 MyCapture가 받습니다. 끄면 먼저 등록한 프로그램이 사용합니다.</value></data>
+  <data name="Welcome_AccurateOcr" xml:space="preserve"><value>정확한 한국어 글자 인식</value></data>
+  <data name="Welcome_AccurateOcrHelp" xml:space="preserve"><value>모델 약 {0} MB를 한 번 내려받습니다. 내려받기는 뒤에서 진행합니다. 빠름보다 인식에 시간이 더 걸리며, 설정에서 변경할 수 있습니다.</value></data>
 </root>
