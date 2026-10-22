@@ -427,8 +427,12 @@ internal sealed class PinScene : TutorialScene
 
     // ---- Landing (PinManager.AttachAndShow starts it for a new or reopened pin) -----------------
 
-    /// <summary>Per-frame plans that cover the landing ornament (PinLandingDecoration.DurationMs) and the outline flash.</summary>
-    private const int LandingFrames = 15;
+    /// <summary>
+    /// Per-frame plans from the pin's opening until the outline is back at rest
+    /// (PinLandingDecoration.OutlineEndMs, after the ornament's DurationMs); the plan after them
+    /// shows the resting pin.
+    /// </summary>
+    private static readonly int LandingFrames = (int)Math.Ceiling(PinLandingDecoration.OutlineEndMs * TutorialStoryboard.Fps / 1000);
 
     /// <summary>
     /// The product's ornament is its own capture-excluded window on the wall clock. The clip builds
@@ -449,10 +453,10 @@ internal sealed class PinScene : TutorialScene
         if (pin.LandedAt is not { } landed) return;
         double ms = (_clock - landed) * 1000;
         pin.Landing?.Advance(ms);
-        // PinWindow.OnLandingRendering blends the outline toward the accent until 570 ms.
-        LandingAccentField.SetValue(pin.Window, ms < 570 ? PinLandingDecoration.Render(ms).BorderAccentAmount : 0);
+        // PinWindow.OnLandingRendering blends the outline toward the accent until OutlineEndMs.
+        LandingAccentField.SetValue(pin.Window, ms < PinLandingDecoration.OutlineEndMs ? PinLandingDecoration.Render(ms).BorderAccentAmount : 0);
         UpdateChromeColorMethod.Invoke(pin.Window, [false]);
-        if (ms < 570) return;
+        if (ms < PinLandingDecoration.OutlineEndMs) return;
         pin.Landing = null;
         pin.LandedAt = null;
     }

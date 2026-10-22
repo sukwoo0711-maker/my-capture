@@ -57,7 +57,7 @@ dotnet run --project build/tools/TutorialVideoGenerator -c Release -- --features
 - 실제 마우스를 잡지 않습니다. 화면 밖 창에서 마우스 캡처를 얻으면 사용자의 클릭이 생성기로 갈 수 있습니다.
 - 팝업(ContextMenu, Popup, 드롭다운, 도구 설명)은 열지 않습니다. WPF는 팝업을 모니터 작업 영역 안으로 옮기므로 사용자 화면에 나타날 수 있습니다. 메뉴는 부모 없이 Measure/Arrange한 요소로 렌더합니다(`ThemedShellPresenter.CreateMenu`, 핀의 `ContextMenu`).
 - 화면에 직접 자리를 잡는 창(알림 카드, 녹화 제어 창, 카운트다운, 핀 꽂힘 장식)은 띄우지 않고 내용만 렌더합니다. 알림 카드는 `ThemedShellPresenter.CreateActionNotification`으로 만들고, 그림자 여백을 포함한 창 너비와 자연 높이로 렌더해 `ThemedShellPresenter.NotificationBounds`가 정하는 자리에 그립니다. 창 틀은 덧그리지 않습니다.
-- 새로 열거나 다시 연 핀의 꽂힘 효과는 `PinManager`처럼 핀이 열린 직후 시작합니다. 장식 창(`PinLandingDecoration`)은 핀의 장면 위치와 `LayoutFor`로 만들고, 제품의 벽시계 대신 영상 시간으로 `Advance`합니다. 테두리 빛(`BorderAccentAmount`)과 83ms 내용 페이드도 같은 시간으로 맞춥니다. 효과가 프레임마다 그려지도록 핀이 열린 직후 0.6초는 정지 구간 대신 프레임 단위 구간으로 둡니다.
+- 새로 열거나 다시 연 핀의 꽂힘 효과는 `PinManager`처럼 핀이 열린 직후 시작합니다. 장식 창(`PinLandingDecoration`)은 핀의 장면 위치와 `LayoutFor`로 만들고, 제품의 벽시계 대신 영상 시간으로 `Advance`합니다. 테두리 빛(`BorderAccentAmount`)과 83ms 내용 페이드도 같은 시간으로 맞춥니다. 효과가 프레임마다 그려지도록, 핀이 열린 때부터 테두리가 원래 색으로 돌아오는 `OutlineEndMs`까지는 정지 구간 대신 프레임 단위 구간으로 둡니다. 이 구간은 장식이 닫히는 `DurationMs`도 덮습니다.
 - 파일이 필요한 장면(동영상 편집기가 여는 합성 녹화, 실제 GIF 내보내기 결과)은 `Program.WorkFolder`(출력 폴더의 `work`) 아래 장면별 폴더에 만들고 장면이 끝나면 지웁니다. 모달 대화 상자는 띄우지 않습니다. 동영상 편집기의 내보내기 대화 상자는 `ExportDialogHostForTest`로 화면 밖에 열고, Windows 저장 대화 상자처럼 운영체제가 그리는 창만 장면이 직접 그립니다.
 - 설명 문구는 제품 용어와 같게 씁니다(예: 블러, 뒤 창 클릭 허용, 빠른 작업, 닫은 핀 다시 열기). 한국어 설명은 명사형 또는 합니다체로 쓰고 해요체, 느낌표, 감탄사, 이모지를 쓰지 않습니다.
 - 클립 길이는 7–15초여야 하며 보통 11초 안팎으로 맞춥니다.
