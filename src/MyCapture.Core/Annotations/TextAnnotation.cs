@@ -15,7 +15,12 @@ namespace MyCapture.Core.Annotations;
 public sealed class TextAnnotation : AnnotationItem
 {
     /// <summary>Optional numbered badge; remains a text layer for older readers.</summary>
-    public bool IsStepNumber { get; set; }
+    public bool IsStepNumber
+    {
+        get => _isStepNumber;
+        set => SetProperty(ref _isStepNumber, value);
+    }
+    private bool _isStepNumber;
     private RectD _rect;
     private bool _autoSize;
     private string _text = string.Empty;
