@@ -622,6 +622,24 @@ internal sealed class EditorResponsivenessProbe
             for (int i = 0; i < 100; i++)
                 Op(steps, "NextStepNumber", () => { _ = ed.Controller.NextStepNumber; }, idle: false);
             End(steps);
+
+            // Alt reveal and tool changes on a busy document: both used to reflow the editor.
+            ProbeScenario alt = Begin("alt-toggle-40");
+            for (int i = 0; i < 40; i++)
+            {
+                bool reveal = i % 2 == 0;
+                Op(alt, reveal ? "Alt reveal" : "Alt hide", () => ShortcutPresentation.SetAltRevealed(ed.Window, reveal), idle: true);
+            }
+            End(alt);
+
+            string[] tools = ["Pen", "Rectangle", "Text", "Select"];
+            ProbeScenario switches = Begin("tool-switch-40");
+            for (int i = 0; i < 40; i++)
+            {
+                string tool = tools[i % tools.Length];
+                Op(switches, "tool " + tool, () => ed.Editor.ShortcutActions[tool](), idle: true);
+            }
+            End(switches);
             Done(ed, record);
         }
         finally
