@@ -8,6 +8,7 @@ using Microsoft.Win32;
 using MyCapture.App.Gallery;
 using MyCapture.App.Recording;
 using MyCapture.App.Themes;
+using MyCapture.App.Threading;
 using MyCapture.Core.Storage;
 using MyCapture.Core.Settings;
 using System.Windows.Media;
@@ -155,30 +156,13 @@ internal sealed class ImageReductionExportDialog : Window
     /// Runs an action once after a delay; disposing the returned handle cancels it. Tests
     /// replace it to see each request and run the calculation when they choose.
     /// </summary>
-    internal Func<TimeSpan, Action, IDisposable> ScheduleRecalculation { get; set; } = ScheduleOnDispatcher;
+    internal Func<TimeSpan, Action, IDisposable> ScheduleRecalculation { get; set; } = DispatcherDelay.Schedule;
 
     /// <summary>The size encoder; tests replace it to control when a calculation finishes.</summary>
     internal Func<BitmapSource, byte[], int, CancellationToken, ImageExportResult>? Encoder { get; set; }
 
     /// <summary>Prepares a drag file on the preview worker before dragging is enabled.</summary>
     internal Func<ImageExportResult, IImageExportStage> CreateStage { get; set; } = result => OwnedImageExportStage.Create(result);
-
-    private static IDisposable ScheduleOnDispatcher(TimeSpan delay, Action action)
-    {
-        var timer = new System.Windows.Threading.DispatcherTimer(System.Windows.Threading.DispatcherPriority.Background) { Interval = delay };
-        timer.Tick += (_, _) =>
-        {
-            timer.Stop();
-            action();
-        };
-        timer.Start();
-        return new TimerHandle(timer);
-    }
-
-    private sealed class TimerHandle(System.Windows.Threading.DispatcherTimer timer) : IDisposable
-    {
-        public void Dispose() => timer.Stop();
-    }
 
     /// <summary>
     /// Shows that a calculation is pending or running. A result already on screen stays,
