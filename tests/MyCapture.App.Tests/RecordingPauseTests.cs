@@ -297,8 +297,19 @@ public sealed class RecordingPauseTests : KoreanCaptionTest
 
             typeof(RegionRecordingCoordinator).GetMethod("OpenControls", Flags)!.Invoke(coordinator, [fixture.Region]);
             var controls = Field<RecordingControlWindow>(coordinator, "_controls");
+            // A failed recording would raise the coordinator's modal error dialog on this thread and stall
+            // the run until the job times out. Report it here instead, so the test fails with the cause.
+            controls.Failed -= (EventHandler<RecordingFailedEventArgs>)Delegate.CreateDelegate(
+                typeof(EventHandler<RecordingFailedEventArgs>), coordinator,
+                typeof(RegionRecordingCoordinator).GetMethod("OnControlsFailed", Flags)!);
+            Exception? failure = null;
+            controls.Failed += (_, args) => failure = args.Exception;
             Invoke(controls, "OnPrimaryClicked");
-            PumpUntil(() => controls.CanCaptureStill);
+            // The production recorder creates the process's first Media Foundation H.264 encoder on the
+            // capture thread before the first frame, alongside the WGC session.
+            PumpUntil(() => controls.CanCaptureStill || failure is not null, RecordingTestTimeouts.CaptureThread);
+            Assert.Null(failure);
+            Assert.True(controls.CanCaptureStill);
             SyntheticCaptureFixture.Pump(400);
             Invoke(controls, "TogglePause");
             PumpUntil(() => controls.IsPaused && !controls.IsPauseTransitionPending);
@@ -394,10 +405,10 @@ public sealed class RecordingPauseTests : KoreanCaptionTest
     private static void Invoke(object owner, string method) =>
         owner.GetType().GetMethod(method, Flags)!.Invoke(owner, null);
 
-    private static void PumpUntil(Func<bool> predicate)
+    private static void PumpUntil(Func<bool> predicate, TimeSpan? timeout = null)
     {
         var watch = Stopwatch.StartNew();
-        while (!predicate() && watch.Elapsed < TimeSpan.FromSeconds(10))
+        while (!predicate() && watch.Elapsed < (timeout ?? TimeSpan.FromSeconds(10)))
         {
             SyntheticCaptureFixture.Pump(10);
         }
