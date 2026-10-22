@@ -103,9 +103,17 @@ MyCapture는 코딩하는 동안 엑셀 사양 표와 자주 쓰는 코드를 �
 8. 공유하기 전에 단계 번호와 화살표를 넣고, 이메일·토큰·카드번호를 Ctrl+Shift+R로 가린 화면입니다.
 9. 영역·창·전체 화면 캡처, 클립보드 복사, 이미지 속 글자 복사는 Windows 캡처 도구와 같습니다. 영역 녹화는 소리 없이 화면만 기록합니다. 여기에 원문을 보관하는 표·코드 핀, 반투명·클릭 허용 핀, 닫은 핀 다시 열기, 스크롤 캡처가 더해집니다.
 
-### 이 버전의 새로운 기능 (4.5.2)
+### 이 버전의 새로운 기능 (4.6.0)
 
-입력 한도는 1,500자입니다. Store의 이전 게시 버전은 4.5.0이므로 4.5.1과 4.5.2의 변경을 함께 적습니다.
+입력 한도는 1,500자입니다. 4.5.2(제출 15)가 Store에 게시된 뒤 제출한다고 보고 4.6.0의 변경만 적습니다. 4.5.2가 게시되지 않았다면 제출할 때 아래 '4.5.2 항목'을 이어 붙입니다.
+
+- 새 핀이 압정처럼 꽂히며 나타납니다. 내용은 제자리에서 바로 선명하게 보이고, 압정·고리·그림자는 잠깐 뒤 사라집니다.
+- 편집기 단축키는 Alt를 누르는 동안만 보입니다. 늘 보려면 설정에서 '단축키 항상 표시'를 켭니다.
+- 편집기의 '복사'(Ctrl+C)는 클립보드에 복사하고 편집기를 열어 둡니다. 저장하고 닫는 것은 '완료'입니다.
+- 라이브러리에서 캡처 이름을 바꾸고(F2), 빈 곳을 오른쪽 클릭해 새 폴더를 만듭니다. 캡처 시각은 제목 아래에 보입니다.
+- 글꼴 목록을 추천 글꼴로 줄이고 Maple Mono, JetBrains Mono, D2Coding, Pretendard를 함께 넣었습니다.
+
+4.5.2 항목:
 
 - 이미지 편집 중 '응답 없음'으로 멈추던 문제를 고쳤습니다. 펜·끌기·실행 취소와 큰 이미지의 저장도 빨라졌습니다.
 - 캡처를 마치면 클립보드에 복사되는 즉시 편집기가 사라지고, 앱 시작과 라이브러리 갱신이 빨라졌습니다.
@@ -197,9 +205,17 @@ Enter them in screenshot order. Each caption is 200 characters or fewer.
 8. Step numbers and an arrow added before sharing, with an email address, token and card number covered by Ctrl+Shift+R.
 9. Like Snipping Tool, MyCapture captures, copies to the clipboard and extracts text. It adds table and code pins with original text, click-through pins and scrolling capture; recording is silent.
 
-### What's new in this version (4.5.2)
+### What's new in this version (4.6.0)
 
-Limit: 1,500 characters. The Store last published 4.5.0, so this lists the 4.5.1 and 4.5.2 changes together.
+Limit: 1,500 characters. This assumes 4.5.2 (submission 15) is published before 4.6.0 is submitted, so it lists only the 4.6.0 changes. If 4.5.2 is not published yet, append the "4.5.2 items" below when submitting.
+
+- New pins land like a pushpin. The content appears sharp and in place at once; the pushpin, ring and shadow fade a moment later.
+- Editor shortcuts appear only while you hold Alt. To keep them visible, turn on Always show shortcut keys in Settings.
+- Copy (Ctrl+C) in the editor copies to the clipboard and keeps the editor open. Done saves and closes.
+- In the library, rename a capture with F2 and right-click empty space to create a folder. Capture times appear under the title.
+- The font list is trimmed to recommended fonts, and Maple Mono, JetBrains Mono, D2Coding and Pretendard are included.
+
+4.5.2 items:
 
 - Fixed the image editor freezing as "Not responding" while you edit. Drawing, dragging, undo and saving large images are faster too.
 - After a capture, the editor disappears as soon as the image is on the clipboard, and startup and library updates are faster.
