@@ -289,15 +289,16 @@ public sealed class OcrModelVerificationCacheTests(ITestOutputHelper output)
         {
             await handler.Requested.Task.WaitAsync(Timeout);
             Assert.True(store.IsPresent(oldFile));
-            Assert.Equal(3, hashes);
+            // The stale file is checked once before and once inside the download gate.
+            Assert.Equal(4, hashes);
             handler.Release.TrySetResult();
             await preparation.WaitAsync(Timeout);
             File.SetLastWriteTimeUtc(path, timestamp);
 
             Assert.False(store.IsPresent(oldFile));
-            Assert.Equal(4, hashes);
-            Assert.True(store.IsPresent(newFile));
             Assert.Equal(5, hashes);
+            Assert.True(store.IsPresent(newFile));
+            Assert.Equal(6, hashes);
             Assert.Equal(1, handler.Calls);
         }
         finally
@@ -524,6 +525,43 @@ public sealed class OcrModelVerificationCacheTests(ITestOutputHelper output)
         Assert.True(store.HasSuperResolution);
         File.Move(store.SuperResolutionExporterDataPath, store.SuperResolutionExporterDataPath + ".previous");
         Assert.False(store.HasSuperResolution);
+        Assert.Equal(0, workspace.Handler.Calls);
+    }
+
+    [Fact]
+    public async Task Preverification_RemovesTheLegacySuperResolutionCopyAfterTheExporterFileVerifies()
+    {
+        using var workspace = new ModelWorkspace();
+        workspace.WriteSyntheticCatalogModels();
+        string legacy = workspace.PathFor(OcrModelCatalog.SuperResolutionData);
+        OcrModelStore store = workspace.CreateStore(SyntheticCatalogHash);
+        Assert.True(File.Exists(legacy));
+
+        using var engine = new NeuralOcrEngine(store, NullLogger<NeuralOcrEngine>.Instance);
+        await engine.ModelVerificationTask.WaitAsync(Timeout);
+
+        Assert.False(File.Exists(legacy));
+        Assert.True(File.Exists(store.SuperResolutionExporterDataPath));
+        Assert.True(store.HasSuperResolution);
+        Assert.Equal(0, workspace.Handler.Calls);
+    }
+
+    [Fact]
+    public async Task Preverification_KeepsTheLegacySuperResolutionCopyWithoutAVerifiedReplacement()
+    {
+        using var workspace = new ModelWorkspace();
+        workspace.WriteSyntheticCatalogModels(includeExporterAlias: false);
+        string legacy = workspace.PathFor(OcrModelCatalog.SuperResolutionData);
+        OcrModelStore store = workspace.CreateStore(SyntheticCatalogHash);
+
+        using var engine = new NeuralOcrEngine(store, NullLogger<NeuralOcrEngine>.Instance);
+        await engine.ModelVerificationTask.WaitAsync(Timeout);
+
+        Assert.True(File.Exists(legacy));
+        Assert.False(store.HasSuperResolution);
+        File.WriteAllBytes(store.SuperResolutionExporterDataPath, [1]);
+        store.RemoveLegacySuperResolutionCopy();
+        Assert.True(File.Exists(legacy));
         Assert.Equal(0, workspace.Handler.Calls);
     }
 

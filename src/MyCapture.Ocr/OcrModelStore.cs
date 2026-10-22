@@ -192,12 +192,14 @@ internal sealed class OcrModelStore
     /// </summary>
     internal Task PreVerifyInstalledModelsAsync() => Task.Run(() =>
     {
+        bool weightsVerified = false;
         foreach (OcrModelFile file in OcrModelCatalog.Required.Concat(
             [OcrModelCatalog.SuperResolution, OcrModelCatalog.SuperResolutionData]))
         {
             try
             {
-                _ = IsPresent(file);
+                bool present = IsPresent(file);
+                if (file == OcrModelCatalog.SuperResolutionData) weightsVerified = present;
             }
             catch (Exception ex)
             {
@@ -211,7 +213,51 @@ internal sealed class OcrModelStore
                 }
             }
         }
+
+        // Only after the weights verified above; a failed check is not repeated for cleanup.
+        try
+        {
+            if (weightsVerified) RemoveLegacySuperResolutionCopy();
+        }
+        catch (Exception ex)
+        {
+            try
+            {
+                _log.LogWarning(ex, "Could not remove the redundant super-resolution weights");
+            }
+            catch (Exception)
+            {
+                // Same rule as verification: cleanup never faults the background task.
+            }
+        }
     });
+
+    /// <summary>
+    /// Versions up to 4.6.0 kept a second 67 MB copy of the super-resolution weights under the
+    /// catalog name. The session loads only the exporter-named file, so the old copy is
+    /// removed once that file has been verified; without a verified replacement it stays.
+    /// </summary>
+    internal void RemoveLegacySuperResolutionCopy()
+    {
+        string legacy = Path.GetFullPath(Path.Combine(_paths.OcrModelsRoot, OcrModelCatalog.SuperResolutionData.FileName));
+        if (string.Equals(legacy, Path.GetFullPath(SuperResolutionExporterDataPath), StringComparison.OrdinalIgnoreCase)
+            || !File.Exists(legacy)
+            || !IsPresent(OcrModelCatalog.SuperResolutionData))
+        {
+            return;
+        }
+
+        File.Delete(legacy);
+        InvalidateVerification(legacy);
+        try
+        {
+            _log.LogInformation("Removed the redundant super-resolution weights {File}", OcrModelCatalog.SuperResolutionData.FileName);
+        }
+        catch (Exception)
+        {
+            // The file is gone either way; a failing logger must not report it as kept.
+        }
+    }
 
     /// <summary>
     /// Starts preparation on a worker before performing any file or hash work.

@@ -3004,9 +3004,9 @@ internal sealed partial class AnnotationEditorControl : Grid
     private static Geometry FallbackRedo() => Geometry.Parse("M12.75,5.25 L16.5,9 L12.75,12.75 M16.25,9 H8.75 A5,5 0 0 0 5.25,17");
 
     // Same as the shared Icon.RotateLeft/RotateRight: a picture under a half-turn arrow.
-    private static Geometry FallbackRotateLeft() => Geometry.Parse("M7,8.75 H13 A1,1 0 0 1 14,9.75 V16 A1,1 0 0 1 13,17 H7 A1,1 0 0 1 6,16 V9.75 A1,1 0 0 1 7,8.75 Z M17,10.75 A7,7 0 0 0 3,10.75 M1,8.75 L3,10.75 L5,8.75");
+    private static Geometry FallbackRotateLeft() => Geometry.Parse("M8.5,8 H15 A1,1 0 0 1 16,9 V16 A1,1 0 0 1 15,17 H8.5 A1,1 0 0 1 7.5,16 V9 A1,1 0 0 1 8.5,8 Z M11.5,3.5 A7.5,7.5 0 0 0 4,11 M1.75,8.75 L4,11 L6.25,8.75");
 
-    private static Geometry FallbackRotateRight() => Geometry.Parse("M13,8.75 H7 A1,1 0 0 0 6,9.75 V16 A1,1 0 0 0 7,17 H13 A1,1 0 0 0 14,16 V9.75 A1,1 0 0 0 13,8.75 Z M3,10.75 A7,7 0 0 1 17,10.75 M19,8.75 L17,10.75 L15,8.75");
+    private static Geometry FallbackRotateRight() => Geometry.Parse("M11.5,8 H5 A1,1 0 0 0 4,9 V16 A1,1 0 0 0 5,17 H11.5 A1,1 0 0 0 12.5,16 V9 A1,1 0 0 0 11.5,8 Z M8.5,3.5 A7.5,7.5 0 0 1 16,11 M13.75,8.75 L16,11 L18.25,8.75");
 
     private static Geometry FallbackCopy() => Geometry.Parse("M7,3.5 H15.25 A1.25,1.25 0 0 1 16.5,4.75 V13 H7 Z M5,6.5 H4.75 A1.25,1.25 0 0 0 3.5,7.75 V15.25 A1.25,1.25 0 0 0 4.75,16.5 H12.25 A1.25,1.25 0 0 0 13.5,15.25 V15");
 
