@@ -148,7 +148,7 @@
     <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
   </data>
   <data name="Text_0DED92FCE6B0" xml:space="preserve">
-    <value>Delete selected item</value>
+    <value>Delete selection</value>
     <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
   </data>
   <data name="Text_0DFC300AD94D" xml:space="preserve">
@@ -1478,7 +1478,7 @@ This cannot be undone.</value>
     <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
   </data>
   <data name="Text_7DFFA4D81765" xml:space="preserve">
-    <value>Delete selected item (Delete)</value>
+    <value>Delete selection (Delete)</value>
     <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
   </data>
   <data name="Text_7E6DD424D331" xml:space="preserve">
@@ -3366,6 +3366,8 @@ Open the library or Settings from the tray menu.</value></data>
   <data name="EditorProperty_SelectedColor" xml:space="preserve"><value>Selected</value></data>
   <data name="EditorProperty_ThicknessDecrease" xml:space="preserve"><value>Decrease line width</value></data>
   <data name="EditorProperty_ThicknessIncrease" xml:space="preserve"><value>Increase line width</value></data>
+  <data name="EditorProperty_FontSizeDecrease" xml:space="preserve"><value>Decrease font size</value></data>
+  <data name="EditorProperty_FontSizeIncrease" xml:space="preserve"><value>Increase font size</value></data>
   <data name="EditorProperty_MosaicStrength" xml:space="preserve"><value>Mosaic strength</value></data>
   <data name="Tools.Ellipse" xml:space="preserve"><value>Ellipse</value></data>
   <data name="Tools.Highlighter" xml:space="preserve"><value>Highlighter</value></data>
@@ -4363,7 +4365,7 @@ Turn off: {0}</value></data>
   <data name="EditorText_Cancelled" xml:space="preserve"><value>Text editing cancelled</value></data>
   <data name="EditorText_Updated" xml:space="preserve"><value>Text updated</value></data>
   <data name="EditorText_Bold" xml:space="preserve"><value>Bold</value></data>
-  <data name="EditorText_Background" xml:space="preserve"><value>Background plate</value></data>
+  <data name="EditorText_Background" xml:space="preserve"><value>Text background</value></data>
   <data name="EditorText_FontFamily" xml:space="preserve"><value>Font family</value></data>
   <data name="EditorText_OtherInstalledFonts" xml:space="preserve"><value>Other installed fonts…</value></data>
   <data name="EditorText_SettingsSearchPlaceholder" xml:space="preserve"><value>Find a setting</value></data>

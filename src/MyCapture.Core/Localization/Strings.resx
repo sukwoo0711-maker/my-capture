@@ -3366,6 +3366,8 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="EditorProperty_SelectedColor" xml:space="preserve"><value>선택됨</value></data>
   <data name="EditorProperty_ThicknessDecrease" xml:space="preserve"><value>선 두께 줄이기</value></data>
   <data name="EditorProperty_ThicknessIncrease" xml:space="preserve"><value>선 두께 늘리기</value></data>
+  <data name="EditorProperty_FontSizeDecrease" xml:space="preserve"><value>글자 크기 줄이기</value></data>
+  <data name="EditorProperty_FontSizeIncrease" xml:space="preserve"><value>글자 크기 늘리기</value></data>
   <data name="EditorProperty_MosaicStrength" xml:space="preserve"><value>모자이크 강도</value></data>
   <data name="Tools.Ellipse" xml:space="preserve"><value>타원</value></data>
   <data name="Tools.Highlighter" xml:space="preserve"><value>형광펜</value></data>
@@ -4362,8 +4364,8 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="EditorText_Editing" xml:space="preserve"><value>텍스트 수정 중 · Ctrl+Enter 완료 · Enter 줄바꿈 · Esc 취소</value></data>
   <data name="EditorText_Cancelled" xml:space="preserve"><value>텍스트 편집 취소됨</value></data>
   <data name="EditorText_Updated" xml:space="preserve"><value>텍스트 수정됨</value></data>
-  <data name="EditorText_Bold" xml:space="preserve"><value>굵은 글꼴</value></data>
-  <data name="EditorText_Background" xml:space="preserve"><value>배경 판</value></data>
+  <data name="EditorText_Bold" xml:space="preserve"><value>굵게</value></data>
+  <data name="EditorText_Background" xml:space="preserve"><value>글자 배경</value></data>
   <data name="EditorText_FontFamily" xml:space="preserve"><value>글꼴</value></data>
   <data name="EditorText_OtherInstalledFonts" xml:space="preserve"><value>설치된 다른 글꼴…</value></data>
   <data name="EditorText_SettingsSearchPlaceholder" xml:space="preserve"><value>설정 찾기</value></data>

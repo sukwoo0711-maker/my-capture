@@ -269,7 +269,7 @@ internal sealed partial class AnnotationEditorControl
             Minimum = SettingsRanges.MosaicBlockSize.Min, Maximum = SettingsRanges.MosaicBlockSize.Max,
             Value = Math.Clamp(_mosaicBlockSize, SettingsRanges.MosaicBlockSize.Min, SettingsRanges.MosaicBlockSize.Max),
             SmallChange = 1, LargeChange = 4, TickFrequency = 1, IsSnapToTickEnabled = true,
-            Width = 96, MinHeight = 32, Margin = new Thickness(8, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center,
+            Width = 64, MinHeight = 32, Margin = new Thickness(8, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center,
         };
         AutomationName(_mosaicSlider, UiText.Get("EditorProperty_MosaicStrength"));
         panel.Children.Add(ValueEntry(_mosaicSlider, UiText.Get("Editor_UnitPx"), UiText.Get("EditorProperty_MosaicStrength")).Element);

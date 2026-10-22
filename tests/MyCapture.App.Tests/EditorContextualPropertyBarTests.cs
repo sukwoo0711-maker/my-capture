@@ -401,7 +401,8 @@ public sealed class EditorContextualPropertyBarTests : KoreanCaptionTest
     {
         string name = AutomationProperties.GetName(control);
         Assert.False(string.IsNullOrWhiteSpace(name), $"{context}: {control.GetType().Name} has no accessible name.");
-        if (AutomationProperties.GetAutomationId(control) is "AnnotationThicknessDecrease" or "AnnotationThicknessIncrease")
+        if (AutomationProperties.GetAutomationId(control) is "AnnotationThicknessDecrease" or "AnnotationThicknessIncrease"
+            or "AnnotationFontSizeDecrease" or "AnnotationFontSizeIncrease")
         {
             // The numeric value is the one keyboard stop for the integrated stepper.
             Assert.False(control.Focusable);

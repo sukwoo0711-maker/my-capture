@@ -1,5 +1,6 @@
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Documents;
 using System.Windows.Media;
 using MyCapture.Core.Primitives;
@@ -9,9 +10,9 @@ namespace MyCapture.App.Editing;
 internal sealed partial class AnnotationEditorControl
 {
     private static readonly (object Key, DependencyProperty Property)[] InspectorMeasureResources =
-        new object[] { typeof(TextBox), typeof(TextBlock), typeof(ComboBox), typeof(CheckBox), typeof(Button),
+        new object[] { typeof(TextBox), typeof(TextBlock), typeof(ComboBox), typeof(ToggleButton), typeof(Button),
             "Font.Ui", "FontSize.Body", "FontSize.Control", "FontSize.Caption", "Inspector.SectionLabel",
-            "Button.GhostCompact", "Button.Ghost", "Surface.Raised" }
+            "Button.GhostCompact", "Button.Ghost", "ToggleButton.Tool", "Surface.Raised" }
         .Select((key, index) => (key, DependencyProperty.Register("InspectorMeasureResource" + index,
             typeof(object), typeof(AnnotationEditorControl),
             new FrameworkPropertyMetadata(null, FrameworkPropertyMetadataOptions.AffectsMeasure))))
@@ -45,10 +46,11 @@ internal sealed partial class AnnotationEditorControl
                 UiText.Culture.Name, TextElement.GetFontSize(this), TextElement.GetFontFamily(this),
                 TextElement.GetFontWeight(this), TextElement.GetFontStyle(this),
                 (TryFindResource(typeof(TextBox)), TryFindResource(typeof(TextBlock)), TryFindResource(typeof(ComboBox)),
-                    TryFindResource(typeof(CheckBox)), TryFindResource(typeof(Button))),
+                    TryFindResource(typeof(ToggleButton)), TryFindResource(typeof(Button))),
                 (TryFindResource("Font.Ui"), TryFindResource("FontSize.Body"), TryFindResource("FontSize.Control"),
                     TryFindResource("FontSize.Caption"), TryFindResource("Inspector.SectionLabel")),
-                (TryFindResource("Button.GhostCompact"), TryFindResource("Button.Ghost"), TryFindResource("Surface.Raised")));
+                (TryFindResource("Button.GhostCompact"), TryFindResource("Button.Ghost"),
+                    TryFindResource("ToggleButton.Tool"), TryFindResource("Surface.Raised")));
             if (!Equals(_inspectorMeasureKey, key))
             {
                 // Only geometry/typography changes invalidate this measurement. Selection and
@@ -94,23 +96,25 @@ internal sealed partial class AnnotationEditorControl
             foreach (var (message, visibility) in errors) message.Visibility = visibility;
         }
 
-        // Enumerate reachable sets, including smaller selections: with unequal group
-        // heights, removing a group can produce a taller wrap. Color/thickness/style
-        // aggregate over the selection; font/text/blur depend on its primary item.
+        // Reserve space for tool defaults and homogeneous selections only. Selecting
+        // several items of one type exposes the same groups as selecting one item.
+        // Mixed selections retain their full group union, but wrap and scroll inside
+        // this fixed budget so everyday states keep their canvas space.
         int[][] selections =
         [
-            [0, 5, 6, 7, 11], [0, 1, 5, 6, 7, 11], [0, 1, 2, 3, 5, 6, 7, 11], // text
-            [0, 6, 11], [0, 1, 6, 11], [0, 1, 2, 3, 6, 11], // number
+            [0, 5, 6, 7, 11], // text
+            [0, 6, 11], // number
             [0, 1, 11], [0, 1, 2, 3, 11], // pen/line/shape
-            [8, 11], [0, 8, 11], [0, 1, 8, 11], [0, 1, 2, 3, 8, 11], // blur
-            [11], [0, 11], [0, 1, 11], [0, 1, 2, 3, 11], // image
+            [8, 11], // blur
+            [11], // image
         ];
         int[][] defaults = [[], [0, 1], [0, 1, 2, 3], [0, 5, 6, 7], [0, 4], [8], [9]];
         double maximum = WrappedHeight([10]);
         foreach (int[] configuration in defaults) maximum = Math.Max(maximum, WrappedHeight(configuration));
-        foreach (int[] primary in selections)
-            foreach (int extra in new[] { -1, 4, 9 })
-                maximum = Math.Max(maximum, WrappedHeight(extra < 0 ? primary : primary.Append(extra).Order().ToArray()));
+        foreach (int[] configuration in selections) maximum = Math.Max(maximum, WrappedHeight(configuration));
+        // Entering a drawing tool clears the selection. Step can then select its newly
+        // created badge; mosaic switches to Select before selecting its inserted image.
+        maximum = Math.Max(maximum, WrappedHeight([0, 4, 6, 11]));
         return maximum;
 
         double WrappedHeight(int[] indices)

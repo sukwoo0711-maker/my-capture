@@ -116,9 +116,9 @@ internal sealed partial class AnnotationEditorControl : Grid
     private Slider _fontSizeSlider = null!;
     private FrameworkElement _fontSizeSection = null!;
     private FrameworkElement _textStyleSection = null!;
-    private CheckBox _textBold = null!;
-    private CheckBox _textBackground = null!;
-    private CheckBox _textOutline = null!;
+    private ToggleButton _textBold = null!;
+    private ToggleButton _textBackground = null!;
+    private ToggleButton _textOutline = null!;
     private ComboBox _textFontFamily = null!;
     private FrameworkElement _fontFamilySection = null!;
     private bool _defaultTextBold;
@@ -2290,7 +2290,14 @@ internal sealed partial class AnnotationEditorControl : Grid
         _cropSection = BuildCropSection();
         stack.Children.Add(_cropSection);
 
-        _deleteButton = TextButton(UiText.Get("Text_0DED92FCE6B0"), UiText.Get("Text_7DFFA4D81765"), "Button.Ghost", DeleteSelected);
+        _deleteButton = PropertyButton(BuildIcon("Icon.Delete", () => Geometry.Parse(
+            "M3.75,5.75 L16.25,5.75 M7.5,5.75 L7.5,3.75 L12.5,3.75 L12.5,5.75 M5.25,5.75 L6,16.25 L14,16.25 L14.75,5.75 M8.25,8.25 L8.5,13.75 M11.75,8.25 L11.5,13.75"), 20),
+            UiText.Get("Text_0DED92FCE6B0"));
+        _deleteButton.ToolTip = UiText.Get("Text_7DFFA4D81765");
+        AutomationProperties.SetAutomationId(_deleteButton, "AnnotationDeleteSelection");
+        AutomationProperties.SetAcceleratorKey(_deleteButton, "Delete");
+        PreserveEditorMouseFocus(_deleteButton);
+        _deleteButton.Click += (_, _) => DeleteSelected();
         _deleteButton.HorizontalAlignment = HorizontalAlignment.Left;
         _deleteButton.HorizontalContentAlignment = HorizontalAlignment.Center;
         _deleteButton.Height = 32;
@@ -2563,7 +2570,7 @@ internal sealed partial class AnnotationEditorControl : Grid
             TickFrequency = 1,
             IsSnapToTickEnabled = true,
             ToolTip = UiText.Get("Text_27FD5EFB7773"),
-            Width = 80,
+            Width = 64,
             MinHeight = 32,
             Margin = new Thickness(8, 0, 0, 0),
             VerticalAlignment = VerticalAlignment.Center,
@@ -2598,12 +2605,19 @@ internal sealed partial class AnnotationEditorControl : Grid
             TickFrequency = 1,
             Margin = new Thickness(8, 0, 0, 0),
             ToolTip = UiText.Get("Text_5F3A9C8D1E20"),
-            Width = 80,
+            Width = 64,
             MinHeight = 32,
             VerticalAlignment = VerticalAlignment.Center,
         };
         AutomationName(_fontSizeSlider, UiText.Get("Text_5F3A9C8D1E20"));
-        panel.Children.Add(ValueEntry(_fontSizeSlider, UiText.Get("Editor_UnitPt"), UiText.Get("Text_5F3A9C8D1E20")).Element);
+        SliderValueEntry entry = ValueEntry(_fontSizeSlider, UiText.Get("Editor_UnitPt"), UiText.Get("Text_5F3A9C8D1E20"));
+        AutomationProperties.SetAutomationId(entry.Box, "AnnotationFontSizeValue");
+        var stepper = new NumberStepperField(_fontSizeSlider, entry,
+            UiText.Get("EditorProperty_FontSizeDecrease"), UiText.Get("EditorProperty_FontSizeIncrease"));
+        AutomationProperties.SetAutomationId(stepper.Element, "AnnotationFontSizeField");
+        AutomationProperties.SetAutomationId(stepper.DecreaseButton, "AnnotationFontSizeDecrease");
+        AutomationProperties.SetAutomationId(stepper.IncreaseButton, "AnnotationFontSizeIncrease");
+        panel.Children.Add(stepper.Element);
         _fontSizeSlider.ValueChanged += (_, args) =>
         {
             if (_syncingInspector)
@@ -2624,18 +2638,24 @@ internal sealed partial class AnnotationEditorControl : Grid
                 SetStatus(UiText.Format("Text_5F3A9C8D1E21", args.NewValue));
             }
         };
-        panel.Children.Add(_fontSizeSlider);
         return panel;
     }
 
     private FrameworkElement BuildTextStyleSection()
     {
         var panel = PropertyGroup("AnnotationTextStyleProperties");
-        CheckBox Toggle(string key, Action<bool> apply)
+        ToggleButton Toggle(string key, string automationId, FrameworkElement glyph, Action<bool> apply)
         {
-            var toggle = new CheckBox { Content = UiText.Get(key), MinHeight = 32, MinWidth = 32, FontSize = 12,
-                VerticalContentAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 8, 0) };
+            var toggle = new ToggleButton
+            {
+                Content = glyph, Width = 32, Height = 32, MinHeight = 32, MinWidth = 32,
+                Padding = new Thickness(0), ToolTip = UiText.Get(key),
+                VerticalContentAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 4, 0),
+                Focusable = true, IsTabStop = true,
+            };
+            toggle.SetResourceReference(StyleProperty, "ToggleButton.Tool");
             AutomationName(toggle, UiText.Get(key));
+            AutomationProperties.SetAutomationId(toggle, automationId);
             toggle.Click += (_, _) =>
             {
                 if (_syncingInspector) return;
@@ -2648,17 +2668,18 @@ internal sealed partial class AnnotationEditorControl : Grid
             panel.Children.Add(toggle);
             return toggle;
         }
-        _textBold = Toggle("EditorText_Bold", enabled =>
+        _textBold = Toggle("EditorText_Bold", "AnnotationTextBold", BuildTextStyleGlyph(TextStyleGlyphKind.Bold), enabled =>
         {
             if (_controller.Selected is TextAnnotation) _controller.ApplyTextBold(enabled);
             else _defaultTextBold = enabled;
         });
-        _textBackground = Toggle("EditorText_Background", enabled =>
+        _textBackground = Toggle("EditorText_Background", "AnnotationTextBackground", BuildTextStyleGlyph(TextStyleGlyphKind.Background), enabled =>
         {
             if (_controller.Selected is TextAnnotation) _controller.ApplyTextBackground(enabled);
             else _defaultTextBackground = enabled;
         });
-        _textOutline = Toggle("EditorText_Outline", ApplyTextOutline);
+        _textOutline = Toggle("EditorText_Outline", "AnnotationTextOutline", BuildTextStyleGlyph(TextStyleGlyphKind.Outline), ApplyTextOutline);
+        _textOutline.Margin = new Thickness(0);
         return panel;
     }
 
@@ -2678,7 +2699,7 @@ internal sealed partial class AnnotationEditorControl : Grid
             IsSnapToTickEnabled = true,
             Margin = new Thickness(8, 0, 0, 0),
             ToolTip = UiText.Get("EditorBlur_StrengthHint"),
-            Width = 96,
+            Width = 64,
             MinHeight = 32,
             VerticalAlignment = VerticalAlignment.Center,
         };
@@ -3305,6 +3326,9 @@ internal sealed partial class AnnotationEditorControl : Grid
             _blurSection.Visibility = blurApplies && !cropping ? Visibility.Visible : Visibility.Collapsed;
             _mosaicSection.Visibility = _controller.Tool == EditorTool.Mosaic && !cropping ? Visibility.Visible : Visibility.Collapsed;
             _stepSection.Visibility = stepTool && !cropping ? Visibility.Visible : Visibility.Collapsed;
+            // Reconsider Auto scrollbar visibility at the full width. Otherwise a
+            // previous mixed selection's scrollbar can keep a single row wrapped.
+            (_inspectorPanel.Child as ScrollViewer)?.InvalidateMeasure();
         }
         AutomationName(_inspectorPanel, _inspectorTitle.Text);
         UpdateColorSwatches();
