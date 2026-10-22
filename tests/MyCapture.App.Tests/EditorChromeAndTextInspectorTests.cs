@@ -21,9 +21,70 @@ namespace MyCapture.App.Tests;
 
 public sealed class EditorChromeAndTextInspectorTests : KoreanCaptionTest
 {
+    [Theory]
+    [InlineData(680, 460)]
+    [InlineData(1280, 640)]
+    public void AltMotionLeavesEditorLayoutCompactionAndViewportUnchanged(int width, int height) => StaTestHost.Run(() =>
+    {
+        using var preferences = new PreferencesScope(new AnnotationDefaults());
+        Func<bool>? previous = ShortcutPresentation.ReadEnabled;
+        try
+        {
+            ShortcutPresentation.ReadEnabled = () => false;
+            using var host = EditorHost.Create(width, height);
+            FluidMotion.AnimationsEnabledOverrideForTest = true;
+            ShortcutRevealMotionTests.Pump(100);
+            Border bar = Tree<Border>(host.Editor).Single(border => border.Name == "AnnotationCommandBar");
+            var surface = Field<AnnotationEditorSurface>(host.Editor, "_surface");
+            FrameworkElement body = host.Editor;
+            var faces = Tree<Grid>(bar).Where(grid => grid.Name == "CommandButtonFace").ToArray();
+            var commands = Tree<Button>(bar).Where(button => button.IsVisible).ToArray();
+            Size[] faceSizes = faces.Select(face => face.RenderSize).ToArray();
+            Size[] buttonSizes = commands.Select(button => button.RenderSize).ToArray();
+            // Label visibility and command positions describe the chosen fitting tier.
+            Visibility[] labels = Tree<TextBlock>(bar).Select(label => label.Visibility).ToArray();
+            Point[] positions = commands.Select(button => button.TranslatePoint(default, bar)).ToArray();
+            double dipPerPixel = surface.DipPerPixel;
+            int sizeChanges = 0;
+            host.Editor.LayoutUpdated += (_, _) =>
+            {
+                if (!faceSizes.SequenceEqual(faces.Select(face => face.RenderSize))
+                    || !buttonSizes.SequenceEqual(commands.Select(button => button.RenderSize))) sizeChanges++;
+            };
+            void Check()
+            {
+                Assert.True(bar.IsMeasureValid && bar.IsArrangeValid);
+                Assert.True(body.IsMeasureValid && body.IsArrangeValid);
+                Assert.True(surface.IsMeasureValid && surface.IsArrangeValid);
+                Assert.All(faces, face => Assert.True(face.IsMeasureValid && face.IsArrangeValid));
+                Assert.Equal(faceSizes, faces.Select(face => face.RenderSize));
+                Assert.Equal(buttonSizes, commands.Select(button => button.RenderSize));
+                Assert.Equal(labels, Tree<TextBlock>(bar).Select(label => label.Visibility));
+                Assert.Equal(positions, commands.Select(button => button.TranslatePoint(default, bar)));
+                Assert.Equal(dipPerPixel, surface.DipPerPixel);
+                Assert.Equal(0, sizeChanges);
+            }
+            foreach (bool revealed in new[] { true, false, true, false })
+            {
+                ShortcutPresentation.SetAltRevealed(host.Window, revealed);
+                Check();
+                ShortcutRevealMotionTests.Pump(45);
+                Check();
+                ShortcutRevealMotionTests.Pump(180);
+                Check();
+            }
+        }
+        finally
+        {
+            ShortcutPresentation.ReadEnabled = previous;
+            ShortcutPresentation.Refresh();
+        }
+    });
+
     [Fact]
     public void UnselectedTextSettingsPersistAndApplyToTheNextCaption() => StaTestHost.Run(() =>
     {
+        using var motion = new ShortcutMotionTestScope();
         using var preferences = new PreferencesScope(new AnnotationDefaults());
         string family;
         using (var host = EditorHost.Create())
@@ -79,6 +140,7 @@ public sealed class EditorChromeAndTextInspectorTests : KoreanCaptionTest
     [InlineData(true)]
     public void FontPickerSharesRecommendationsAndPreviewsEachResolvedFamily(bool reusePreview) => StaTestHost.Run(() =>
     {
+        using var motion = new ShortcutMotionTestScope();
         string[] installed = Fonts.SystemFontFamilies.Select(font => font.Source)
             .Distinct(StringComparer.OrdinalIgnoreCase).Order(StringComparer.OrdinalIgnoreCase).ToArray();
         Assert.True(installed.Length >= 3);
@@ -113,6 +175,7 @@ public sealed class EditorChromeAndTextInspectorTests : KoreanCaptionTest
     [Fact]
     public void SelectedFontChangeRefitsAndOneUndoRestoresTheFamilyAndBounds() => StaTestHost.Run(() =>
     {
+        using var motion = new ShortcutMotionTestScope();
         using var preferences = new PreferencesScope(new AnnotationDefaults());
         using var host = EditorHost.Create();
         var controller = Controller(host.Editor);
@@ -152,6 +215,7 @@ public sealed class EditorChromeAndTextInspectorTests : KoreanCaptionTest
     [InlineData(680, 460)]
     public void RailKeepsEveryAltRevealedHintAndHitTargetInsideItsBounds(int width, int height) => StaTestHost.Run(() =>
     {
+        using var motion = new ShortcutMotionTestScope();
         using var preferences = new PreferencesScope(new AnnotationDefaults());
         Func<bool>? previous = ShortcutPresentation.ReadEnabled;
         try
@@ -163,8 +227,22 @@ public sealed class EditorChromeAndTextInspectorTests : KoreanCaptionTest
             Dictionary<EditorTool, ToggleButton> tools = Field<Dictionary<EditorTool, ToggleButton>>(host.Editor, "_toolButtons");
             Assert.Equal(Enum.GetValues<EditorTool>().Length - 1, tools.Count);
             foreach (ToggleButton tool in tools.Values)
-                Assert.Equal(Visibility.Collapsed, Assert.Single(Tree<TextBlock>(tool), text =>
-                    text.Text == AutomationProperties.GetAcceleratorKey(tool)).Visibility);
+            {
+                ShortcutMotionTestScope.AssertState(Assert.Single(Tree<TextBlock>(tool), text =>
+                    text.Text == AutomationProperties.GetAcceleratorKey(tool)), false);
+                Grid face = Assert.IsType<Grid>(tool.Content);
+                Viewbox glyph = Assert.Single(Tree<Viewbox>(tool));
+                Rect bounds = glyph.TransformToAncestor(face).TransformBounds(new Rect(glyph.RenderSize));
+                Assert.Equal(24, bounds.Width, 6);
+                Assert.Equal(24, bounds.Height, 6);
+                Assert.InRange(bounds.Left + bounds.Width / 2, 15.5, 16.5);
+                Assert.InRange(bounds.Top + bounds.Height / 2, 15.5, 16.5);
+                var path = Assert.Single(Tree<System.Windows.Shapes.Path>(glyph));
+                Assert.Equal(1.6, path.StrokeThickness * glyph.Width / 20, 6);
+                Rect ink = path.RenderedGeometry.Bounds;
+                ink.Inflate(path.StrokeThickness / 2, path.StrokeThickness / 2);
+                Assert.True(new Rect(face.RenderSize).Contains(path.TransformToAncestor(face).TransformBounds(ink)));
+            }
             ShortcutPresentation.SetAltRevealed(host.Window, true);
             host.Window.Dispatcher.Invoke(System.Windows.Threading.DispatcherPriority.ApplicationIdle, new Action(host.Window.UpdateLayout));
             foreach (ToggleButton tool in tools.Values)
@@ -179,6 +257,14 @@ public sealed class EditorChromeAndTextInspectorTests : KoreanCaptionTest
                 Assert.True(hint.IsVisible);
                 AssertInside(hint, tool);
                 Assert.Single(Tree<Viewbox>(tool));
+                Grid face = Assert.IsType<Grid>(tool.Content);
+                Viewbox glyph = Assert.Single(Tree<Viewbox>(tool));
+                Rect glyphBounds = glyph.TransformToAncestor(face).TransformBounds(new Rect(glyph.RenderSize));
+                Rect hintBounds = hint.TransformToAncestor(face).TransformBounds(new Rect(hint.RenderSize));
+                Assert.Equal(18, glyphBounds.Width, 6);
+                Assert.Equal(18, glyphBounds.Height, 6);
+                Assert.False(glyphBounds.IntersectsWith(hintBounds));
+                Assert.True(new Rect(face.RenderSize).Contains(glyphBounds));
                 Assert.Null(tool.Template.FindName("Indicator", tool));
                 Assert.NotNull(tool.Template.FindName("FocusRing", tool));
             }
@@ -199,6 +285,7 @@ public sealed class EditorChromeAndTextInspectorTests : KoreanCaptionTest
     [Fact]
     public void RailAndCommandBarHintsFollowAlwaysPreferenceOrAltImmediately() => StaTestHost.Run(() =>
     {
+        using var motion = new ShortcutMotionTestScope();
         using var preferences = new PreferencesScope(new AnnotationDefaults());
         Func<bool>? previous = ShortcutPresentation.ReadEnabled;
         bool enabled = true;
@@ -227,11 +314,11 @@ public sealed class EditorChromeAndTextInspectorTests : KoreanCaptionTest
             {
                 enabled = preference;
                 ShortcutPresentation.Refresh();
-                Assert.All(hints, hint => Assert.Equal(preference ? Visibility.Visible : Visibility.Collapsed, hint.Visibility));
+                Assert.All(hints, hint => ShortcutMotionTestScope.AssertState(hint, preference));
                 ShortcutPresentation.SetAltRevealed(host.Window, true);
-                Assert.All(hints, hint => Assert.Equal(Visibility.Visible, hint.Visibility));
+                Assert.All(hints, hint => ShortcutMotionTestScope.AssertState(hint, true));
                 ShortcutPresentation.SetAltRevealed(host.Window, false);
-                Assert.All(hints, hint => Assert.Equal(preference ? Visibility.Visible : Visibility.Collapsed, hint.Visibility));
+                Assert.All(hints, hint => ShortcutMotionTestScope.AssertState(hint, preference));
             }
         }
         finally
@@ -247,6 +334,7 @@ public sealed class EditorChromeAndTextInspectorTests : KoreanCaptionTest
     [InlineData(680, 460)]
     public void CommandsKeepButtonAffordancesIconsAndBoundKeysAtBothWidths(int width, int height) => StaTestHost.Run(() =>
     {
+        using var motion = new ShortcutMotionTestScope();
         using var preferences = new PreferencesScope(new AnnotationDefaults());
         using var host = EditorHost.Create(width, height);
         ShortcutPresentation.SetAltRevealed(host.Window, true);
@@ -291,6 +379,7 @@ public sealed class EditorChromeAndTextInspectorTests : KoreanCaptionTest
     [InlineData("en-US", 680, 460)]
     public void EveryCommandKeepsItsHeightAndGapWithAltRevealedOrCollapsedHints(string language, int width, int height) => StaTestHost.Run(() =>
     {
+        using var motion = new ShortcutMotionTestScope();
         using var culture = UiText.UseLanguage(language);
         using var preferences = new PreferencesScope(new AnnotationDefaults());
         Func<bool>? previous = ShortcutPresentation.ReadEnabled;
@@ -318,18 +407,18 @@ public sealed class EditorChromeAndTextInspectorTests : KoreanCaptionTest
                         Grid face = Assert.IsType<Grid>(button.Content);
                         Assert.Equal("CommandButtonFace", face.Name);
                         RowDefinition hintRow = face.RowDefinitions[1];
-                        Assert.Equal(GridLength.Auto, hintRow.Height);
+                        Assert.Equal(new GridLength(14), hintRow.Height);
                         double scale = VisualTreeHelper.GetDpi(face).DpiScaleY;
                         string key = AutomationProperties.GetAcceleratorKey(button);
-                        double hintHeight = show && !string.IsNullOrEmpty(key) ? 14 : 0;
+                        double hintHeight = CommandButtonPresentation.HintHeight;
                         Assert.Equal(Math.Round(hintHeight * scale), hintRow.ActualHeight * scale, 6);
                         if (!string.IsNullOrEmpty(key))
                         {
                             TextBlock hint = Assert.Single(Tree<TextBlock>(button), text => text.Text == key);
-                            Assert.Equal(show ? Visibility.Visible : Visibility.Collapsed, hint.Visibility);
+                            ShortcutMotionTestScope.AssertState(hint, show);
                             if (show) AssertInside(hint, button);
                         }
-                        if (hintHeight == 0)
+                        if (!show || string.IsNullOrEmpty(key))
                         {
                             FrameworkElement label = Assert.IsAssignableFrom<FrameworkElement>(face.Children[0]);
                             double center = label.TranslatePoint(new Point(0, label.ActualHeight / 2), button).Y;
@@ -385,6 +474,7 @@ public sealed class EditorChromeAndTextInspectorTests : KoreanCaptionTest
     [Fact]
     public void TextInspectorVisualEvidenceUsesOnlySyntheticContent() => StaTestHost.Run(() =>
     {
+        using var motion = new ShortcutMotionTestScope();
         using var preferences = new PreferencesScope(new AnnotationDefaults());
         var document = AnnotationDocument.CreateFor(640, 360);
         ColorRgba[] colors = [ColorRgba.FromRgb(0xEF, 0x44, 0x44), ColorRgba.FromRgb(0xFA, 0xCC, 0x15),

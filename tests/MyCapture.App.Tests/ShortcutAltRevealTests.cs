@@ -65,6 +65,7 @@ public sealed class ShortcutAltRevealTests
     [Fact]
     public void LoadedCaptionsRevealOnlyInTheirWindowAndDoNotHandleAccelerators() => StaTestHost.Run(() =>
     {
+        using var motion = new ShortcutMotionTestScope();
         Func<bool>? previous = ShortcutPresentation.ReadEnabled;
         var first = new HintWindow();
         var second = new HintWindow();
@@ -73,30 +74,30 @@ public sealed class ShortcutAltRevealTests
             ShortcutPresentation.ReadEnabled = () => false;
             TextBlock firstCaption = AddCaption(first);
             TextBlock secondCaption = AddCaption(second);
-            Assert.Equal(Visibility.Collapsed, firstCaption.Visibility);
-            Assert.Equal(Visibility.Collapsed, secondCaption.Visibility);
+            ShortcutMotionTestScope.AssertState(firstCaption, false);
+            ShortcutMotionTestScope.AssertState(secondCaption, false);
 
             // WPF reports Alt through SystemKey. Synthetic routed events do not send input
             // to the desktop, and neither test window is ever shown or activated.
             KeyEventArgs down = RaiseKey(first, Key.LeftAlt, isDown: true, system: true);
             Assert.False(down.Handled);
-            Assert.Equal(Visibility.Visible, firstCaption.Visibility);
-            Assert.Equal(Visibility.Collapsed, secondCaption.Visibility);
+            ShortcutMotionTestScope.AssertState(firstCaption, true);
+            ShortcutMotionTestScope.AssertState(secondCaption, false);
             Assert.False(ShortcutPresentation.ReadEnabled());
             TextBlock addedWhileHeld = AddCaption(first);
-            Assert.Equal(Visibility.Visible, addedWhileHeld.Visibility);
+            ShortcutMotionTestScope.AssertState(addedWhileHeld, true);
             Assert.False(RaiseKey(first, Key.A, isDown: true, system: true).Handled);
-            Assert.Equal(Visibility.Collapsed, firstCaption.Visibility);
-            Assert.Equal(Visibility.Collapsed, addedWhileHeld.Visibility);
+            ShortcutMotionTestScope.AssertState(firstCaption, false);
+            ShortcutMotionTestScope.AssertState(addedWhileHeld, false);
             Assert.False(RaiseKey(first, Key.LeftAlt, isDown: true, system: true, repeat: true).Handled);
-            Assert.Equal(Visibility.Collapsed, firstCaption.Visibility);
+            ShortcutMotionTestScope.AssertState(firstCaption, false);
             Assert.False(RaiseKey(first, Key.LeftAlt, isDown: false, system: true).Handled);
-            Assert.Equal(Visibility.Collapsed, firstCaption.Visibility);
-            Assert.Equal(Visibility.Collapsed, addedWhileHeld.Visibility);
+            ShortcutMotionTestScope.AssertState(firstCaption, false);
+            ShortcutMotionTestScope.AssertState(addedWhileHeld, false);
             RaiseKey(first, Key.LeftAlt, isDown: true);
-            Assert.Equal(Visibility.Visible, firstCaption.Visibility);
-            Assert.Equal(Visibility.Visible, addedWhileHeld.Visibility);
-            Assert.Equal(Visibility.Collapsed, secondCaption.Visibility);
+            ShortcutMotionTestScope.AssertState(firstCaption, true);
+            ShortcutMotionTestScope.AssertState(addedWhileHeld, true);
+            ShortcutMotionTestScope.AssertState(secondCaption, false);
         }
         finally
         {
@@ -110,6 +111,7 @@ public sealed class ShortcutAltRevealTests
     [Fact]
     public void HandledKeyEventsAndWindowDeactivationCannotLeaveCaptionsStuck() => StaTestHost.Run(() =>
     {
+        using var motion = new ShortcutMotionTestScope();
         Func<bool>? previous = ShortcutPresentation.ReadEnabled;
         var window = new HintWindow();
         try
@@ -117,25 +119,25 @@ public sealed class ShortcutAltRevealTests
             ShortcutPresentation.ReadEnabled = () => false;
             TextBlock caption = AddCaption(window);
             Assert.True(RaiseKey(window, Key.RightAlt, isDown: true, handled: true).Handled);
-            Assert.Equal(Visibility.Visible, caption.Visibility);
+            ShortcutMotionTestScope.AssertState(caption, true);
             Assert.True(RaiseKey(window, Key.RightAlt, isDown: false, handled: true).Handled);
-            Assert.Equal(Visibility.Collapsed, caption.Visibility);
+            ShortcutMotionTestScope.AssertState(caption, false);
 
             RaiseKey(window, Key.LeftAlt, isDown: true);
             RaiseKey(window, Key.RightAlt, isDown: true);
             window.DeactivateForTest();
-            Assert.Equal(Visibility.Collapsed, caption.Visibility);
+            ShortcutMotionTestScope.AssertState(caption, false);
             RaiseKey(window, Key.RightAlt, isDown: true, repeat: true);
-            Assert.Equal(Visibility.Collapsed, caption.Visibility);
+            ShortcutMotionTestScope.AssertState(caption, false);
             RaiseKey(window, Key.LeftAlt, isDown: false);
-            Assert.Equal(Visibility.Collapsed, caption.Visibility);
+            ShortcutMotionTestScope.AssertState(caption, false);
             RaiseKey(window, Key.RightAlt, isDown: false);
             RaiseKey(window, Key.RightAlt, isDown: true);
-            Assert.Equal(Visibility.Visible, caption.Visibility);
+            ShortcutMotionTestScope.AssertState(caption, true);
             window.Close();
-            Assert.Equal(Visibility.Collapsed, caption.Visibility);
+            ShortcutMotionTestScope.AssertState(caption, false);
             RaiseKey(window, Key.LeftAlt, isDown: true);
-            Assert.Equal(Visibility.Collapsed, caption.Visibility);
+            ShortcutMotionTestScope.AssertState(caption, false);
         }
         finally
         {
@@ -148,6 +150,7 @@ public sealed class ShortcutAltRevealTests
     [Fact]
     public void AlwaysShowPreferenceRefreshesOpenWindowsAndCombinesWithTheCurrentAltGesture() => StaTestHost.Run(() =>
     {
+        using var motion = new ShortcutMotionTestScope();
         Func<bool>? previous = ShortcutPresentation.ReadEnabled;
         var window = new HintWindow();
         var other = new HintWindow();
@@ -157,42 +160,42 @@ public sealed class ShortcutAltRevealTests
             ShortcutPresentation.ReadEnabled = () => settings.General.AlwaysShowShortcutHints;
             TextBlock caption = AddCaption(window);
             TextBlock otherCaption = AddCaption(other);
-            Assert.Equal(Visibility.Collapsed, caption.Visibility);
-            Assert.Equal(Visibility.Collapsed, otherCaption.Visibility);
+            ShortcutMotionTestScope.AssertState(caption, false);
+            ShortcutMotionTestScope.AssertState(otherCaption, false);
             Assert.Equal(Visibility.Collapsed, ShortcutPresentation.Current.HintVisibility);
 
             settings.General.AlwaysShowShortcutHints = true;
             ShortcutPresentation.Refresh();
-            Assert.Equal(Visibility.Visible, caption.Visibility);
-            Assert.Equal(Visibility.Visible, otherCaption.Visibility);
+            ShortcutMotionTestScope.AssertState(caption, true);
+            ShortcutMotionTestScope.AssertState(otherCaption, true);
             Assert.Equal(Visibility.Visible, ShortcutPresentation.Current.HintVisibility);
-            Assert.Equal(Visibility.Visible, AddCaption(other).Visibility);
+            ShortcutMotionTestScope.AssertState(AddCaption(other), true);
 
             RaiseKey(window, Key.LeftAlt, isDown: true);
             settings.General.AlwaysShowShortcutHints = false;
             ShortcutPresentation.Refresh();
-            Assert.Equal(Visibility.Visible, caption.Visibility);
-            Assert.Equal(Visibility.Collapsed, otherCaption.Visibility);
+            ShortcutMotionTestScope.AssertState(caption, true);
+            ShortcutMotionTestScope.AssertState(otherCaption, false);
             RaiseKey(window, Key.LeftAlt, isDown: false);
-            Assert.Equal(Visibility.Collapsed, caption.Visibility);
+            ShortcutMotionTestScope.AssertState(caption, false);
 
             RaiseKey(window, Key.LeftAlt, isDown: true);
             settings.General.AlwaysShowShortcutHints = true;
             ShortcutPresentation.Refresh();
             RaiseKey(window, Key.LeftAlt, isDown: false);
-            Assert.Equal(Visibility.Visible, caption.Visibility);
+            ShortcutMotionTestScope.AssertState(caption, true);
             RaiseKey(window, Key.C, isDown: true);
-            Assert.Equal(Visibility.Visible, caption.Visibility);
+            ShortcutMotionTestScope.AssertState(caption, true);
             window.RaiseEvent(CreateMouse("down", handled: true));
-            Assert.Equal(Visibility.Visible, caption.Visibility);
+            ShortcutMotionTestScope.AssertState(caption, true);
             window.DeactivateForTest();
-            Assert.Equal(Visibility.Visible, caption.Visibility);
-            Assert.Equal(Visibility.Visible, otherCaption.Visibility);
+            ShortcutMotionTestScope.AssertState(caption, true);
+            ShortcutMotionTestScope.AssertState(otherCaption, true);
 
             ShortcutPresentation.ReadEnabled = null;
             ShortcutPresentation.Refresh();
-            Assert.Equal(Visibility.Collapsed, caption.Visibility);
-            Assert.Equal(Visibility.Collapsed, otherCaption.Visibility);
+            ShortcutMotionTestScope.AssertState(caption, false);
+            ShortcutMotionTestScope.AssertState(otherCaption, false);
         }
         finally
         {
@@ -208,6 +211,7 @@ public sealed class ShortcutAltRevealTests
     [InlineData(true)]
     public void LegacyPreferenceDoesNotRevealHintsOrOverrideTheNewPreference(bool legacyEnabled) => StaTestHost.Run(() =>
     {
+        using var motion = new ShortcutMotionTestScope();
         Func<bool>? previous = ShortcutPresentation.ReadEnabled;
         var window = new HintWindow();
         var settings = new AppSettings { General = { ShowShortcutHints = legacyEnabled } };
@@ -216,16 +220,16 @@ public sealed class ShortcutAltRevealTests
             ShortcutPresentation.ReadEnabled = () => settings.General.AlwaysShowShortcutHints;
             TextBlock caption = AddCaption(window);
             Assert.False(settings.General.AlwaysShowShortcutHints);
-            Assert.Equal(Visibility.Collapsed, caption.Visibility);
+            ShortcutMotionTestScope.AssertState(caption, false);
             settings.General.ShowShortcutHints = !legacyEnabled;
             ShortcutPresentation.Refresh();
-            Assert.Equal(Visibility.Collapsed, caption.Visibility);
+            ShortcutMotionTestScope.AssertState(caption, false);
             settings.General.AlwaysShowShortcutHints = true;
             ShortcutPresentation.Refresh();
-            Assert.Equal(Visibility.Visible, caption.Visibility);
+            ShortcutMotionTestScope.AssertState(caption, true);
             settings.General.ShowShortcutHints = legacyEnabled;
             ShortcutPresentation.Refresh();
-            Assert.Equal(Visibility.Visible, caption.Visibility);
+            ShortcutMotionTestScope.AssertState(caption, true);
         }
         finally
         {
@@ -246,21 +250,22 @@ public sealed class ShortcutAltRevealTests
     [InlineData("wheel", true)]
     public void MouseInputDismissesWithoutConsumingInputOrRevealingOnRepeat(string input, bool handled) => StaTestHost.Run(() =>
     {
+        using var motion = new ShortcutMotionTestScope();
         var window = new HintWindow();
         try
         {
             TextBlock caption = AddCaption(window);
             RaiseKey(window, Key.LeftAlt, isDown: true);
-            Assert.Equal(Visibility.Visible, caption.Visibility);
+            ShortcutMotionTestScope.AssertState(caption, true);
             MouseEventArgs mouse = CreateMouse(input, handled);
             window.RaiseEvent(mouse);
             Assert.Equal(handled, mouse.Handled);
-            Assert.Equal(Visibility.Collapsed, caption.Visibility);
+            ShortcutMotionTestScope.AssertState(caption, false);
             RaiseKey(window, Key.LeftAlt, isDown: true, repeat: true);
-            Assert.Equal(Visibility.Collapsed, caption.Visibility);
+            ShortcutMotionTestScope.AssertState(caption, false);
             RaiseKey(window, Key.LeftAlt, isDown: false);
             RaiseKey(window, Key.LeftAlt, isDown: true);
-            Assert.Equal(Visibility.Visible, caption.Visibility);
+            ShortcutMotionTestScope.AssertState(caption, true);
         }
         finally { window.Close(); }
     });
@@ -268,12 +273,13 @@ public sealed class ShortcutAltRevealTests
     [Fact]
     public void LayoutCursorQueriesDoNotDismissTheCurrentAltGesture() => StaTestHost.Run(() =>
     {
+        using var motion = new ShortcutMotionTestScope();
         var window = new HintWindow();
         try
         {
             TextBlock caption = AddCaption(window);
             RaiseKey(window, Key.LeftAlt, isDown: true);
-            Assert.Equal(Visibility.Visible, caption.Visibility);
+            ShortcutMotionTestScope.AssertState(caption, true);
             var query = new QueryCursorEventArgs(Mouse.PrimaryDevice, 0)
             {
                 RoutedEvent = Mouse.QueryCursorEvent,
@@ -282,9 +288,9 @@ public sealed class ShortcutAltRevealTests
             };
             InputManager.Current.ProcessInput(query);
             Assert.True(query.Handled);
-            Assert.Equal(Visibility.Visible, caption.Visibility);
+            ShortcutMotionTestScope.AssertState(caption, true);
             RaiseKey(window, Key.LeftAlt, isDown: false);
-            Assert.Equal(Visibility.Collapsed, caption.Visibility);
+            ShortcutMotionTestScope.AssertState(caption, false);
         }
         finally { window.Close(); }
     });
@@ -294,6 +300,7 @@ public sealed class ShortcutAltRevealTests
     [InlineData(true)]
     public void NonActivatingSurfaceFollowsCaptionlessOwnerEvenWhenItsHintsAlreadyLoaded(bool loadBeforeFollowing) => StaTestHost.Run(() =>
     {
+        using var motion = new ShortcutMotionTestScope();
         var owner = new HintWindow();
         var surface = new HintWindow { ShowActivated = false, Focusable = false };
         var unrelated = new HintWindow();
@@ -304,32 +311,32 @@ public sealed class ShortcutAltRevealTests
             if (caption is not null)
             {
                 RaiseKey(surface, Key.LeftAlt, isDown: true);
-                Assert.Equal(Visibility.Visible, caption.Visibility);
+                ShortcutMotionTestScope.AssertState(caption, true);
             }
             Assert.Empty(owner.Commands.Children);
             ShortcutPresentation.FollowOwner(surface, owner);
             ShortcutPresentation.FollowOwner(surface, owner); // Repeated Loaded notifications are harmless.
             caption ??= AddCaption(surface);
-            Assert.Equal(Visibility.Collapsed, caption.Visibility);
+            ShortcutMotionTestScope.AssertState(caption, false);
             Assert.False(RaiseKey(surface, Key.RightAlt, isDown: true).Handled);
-            Assert.Equal(Visibility.Collapsed, caption.Visibility);
+            ShortcutMotionTestScope.AssertState(caption, false);
 
             Assert.True(RaiseKey(owner, Key.LeftAlt, isDown: true, system: true, handled: true).Handled);
-            Assert.Equal(Visibility.Visible, caption.Visibility);
+            ShortcutMotionTestScope.AssertState(caption, true);
             TextBlock addedWhileHeld = AddCaption(surface);
-            Assert.Equal(Visibility.Visible, addedWhileHeld.Visibility);
-            Assert.Equal(Visibility.Collapsed, unrelatedCaption.Visibility);
+            ShortcutMotionTestScope.AssertState(addedWhileHeld, true);
+            ShortcutMotionTestScope.AssertState(unrelatedCaption, false);
             surface.DeactivateForTest();
-            Assert.Equal(Visibility.Visible, caption.Visibility);
+            ShortcutMotionTestScope.AssertState(caption, true);
             RaiseKey(owner, Key.LeftAlt, isDown: false);
-            Assert.Equal(Visibility.Collapsed, caption.Visibility);
-            Assert.Equal(Visibility.Collapsed, addedWhileHeld.Visibility);
+            ShortcutMotionTestScope.AssertState(caption, false);
+            ShortcutMotionTestScope.AssertState(addedWhileHeld, false);
 
             RaiseKey(owner, Key.RightAlt, isDown: true);
-            Assert.Equal(Visibility.Visible, caption.Visibility);
+            ShortcutMotionTestScope.AssertState(caption, true);
             owner.DeactivateForTest();
-            Assert.Equal(Visibility.Collapsed, caption.Visibility);
-            Assert.Equal(Visibility.Collapsed, unrelatedCaption.Visibility);
+            ShortcutMotionTestScope.AssertState(caption, false);
+            ShortcutMotionTestScope.AssertState(unrelatedCaption, false);
         }
         finally { surface.Close(); owner.Close(); unrelated.Close(); }
     });
@@ -341,6 +348,7 @@ public sealed class ShortcutAltRevealTests
     [InlineData("wheel")]
     public void SurfaceMouseInputDismissesItsOwnerButClosingSurfaceLeavesTheOwnerGestureIntact(string input) => StaTestHost.Run(() =>
     {
+        using var motion = new ShortcutMotionTestScope();
         var owner = new HintWindow();
         var surface = new HintWindow { ShowActivated = false };
         try
@@ -349,26 +357,26 @@ public sealed class ShortcutAltRevealTests
             ShortcutPresentation.FollowOwner(surface, owner);
             TextBlock surfaceCaption = AddCaption(surface);
             RaiseKey(owner, Key.LeftAlt, isDown: true);
-            Assert.Equal(Visibility.Visible, ownerCaption.Visibility);
-            Assert.Equal(Visibility.Visible, surfaceCaption.Visibility);
+            ShortcutMotionTestScope.AssertState(ownerCaption, true);
+            ShortcutMotionTestScope.AssertState(surfaceCaption, true);
             MouseEventArgs mouse = CreateMouse(input, handled: true);
             surface.RaiseEvent(mouse);
             Assert.True(mouse.Handled);
-            Assert.Equal(Visibility.Collapsed, ownerCaption.Visibility);
-            Assert.Equal(Visibility.Collapsed, surfaceCaption.Visibility);
+            ShortcutMotionTestScope.AssertState(ownerCaption, false);
+            ShortcutMotionTestScope.AssertState(surfaceCaption, false);
             RaiseKey(owner, Key.LeftAlt, isDown: true, repeat: true);
-            Assert.Equal(Visibility.Collapsed, surfaceCaption.Visibility);
+            ShortcutMotionTestScope.AssertState(surfaceCaption, false);
             RaiseKey(owner, Key.LeftAlt, isDown: false);
             RaiseKey(owner, Key.LeftAlt, isDown: true);
-            Assert.Equal(Visibility.Visible, surfaceCaption.Visibility);
+            ShortcutMotionTestScope.AssertState(surfaceCaption, true);
 
             surface.Close();
-            Assert.Equal(Visibility.Collapsed, surfaceCaption.Visibility);
-            Assert.Equal(Visibility.Visible, ownerCaption.Visibility);
+            ShortcutMotionTestScope.AssertState(surfaceCaption, false);
+            ShortcutMotionTestScope.AssertState(ownerCaption, true);
             surface.RaiseEvent(CreateMouse(input, handled: false));
-            Assert.Equal(Visibility.Visible, ownerCaption.Visibility);
+            ShortcutMotionTestScope.AssertState(ownerCaption, true);
             RaiseKey(owner, Key.LeftAlt, isDown: false);
-            Assert.Equal(Visibility.Collapsed, ownerCaption.Visibility);
+            ShortcutMotionTestScope.AssertState(ownerCaption, false);
         }
         finally { surface.Close(); owner.Close(); }
     });
@@ -376,6 +384,7 @@ public sealed class ShortcutAltRevealTests
     [Fact]
     public void ClosingOwnerClearsItsFollowingSurfaceAndSurfaceCannotStartAnotherGesture() => StaTestHost.Run(() =>
     {
+        using var motion = new ShortcutMotionTestScope();
         var owner = new HintWindow();
         var surface = new HintWindow { ShowActivated = false };
         try
@@ -383,12 +392,12 @@ public sealed class ShortcutAltRevealTests
             ShortcutPresentation.FollowOwner(surface, owner);
             TextBlock caption = AddCaption(surface);
             RaiseKey(owner, Key.LeftAlt, isDown: true);
-            Assert.Equal(Visibility.Visible, caption.Visibility);
+            ShortcutMotionTestScope.AssertState(caption, true);
             owner.Close();
-            Assert.Equal(Visibility.Collapsed, caption.Visibility);
+            ShortcutMotionTestScope.AssertState(caption, false);
             RaiseKey(surface, Key.RightAlt, isDown: true);
             RaiseKey(owner, Key.RightAlt, isDown: true);
-            Assert.Equal(Visibility.Collapsed, caption.Visibility);
+            ShortcutMotionTestScope.AssertState(caption, false);
         }
         finally { surface.Close(); owner.Close(); }
     });
@@ -396,6 +405,7 @@ public sealed class ShortcutAltRevealTests
     [Fact]
     public void PopupKeyReleasesClearRevealedOwnersWithoutRevealingOtherWindows() => StaTestHost.Run(() =>
     {
+        using var motion = new ShortcutMotionTestScope();
         Func<bool>? previous = ShortcutPresentation.ReadEnabled;
         var first = new HintWindow();
         var second = new HintWindow();
@@ -416,9 +426,9 @@ public sealed class ShortcutAltRevealTests
             KeyEventArgs popupDown = CreateKey(Key.LeftAlt, Keyboard.KeyDownEvent, system: true);
             popupDown.Source = popupTarget;
             InputManager.Current.ProcessInput(popupDown);
-            Assert.Equal(Visibility.Collapsed, firstCaption.Visibility);
-            Assert.Equal(Visibility.Collapsed, secondCaption.Visibility);
-            Assert.Equal(Visibility.Collapsed, untouchedCaption.Visibility);
+            ShortcutMotionTestScope.AssertState(firstCaption, false);
+            ShortcutMotionTestScope.AssertState(secondCaption, false);
+            ShortcutMotionTestScope.AssertState(untouchedCaption, false);
 
             RaiseKey(first, Key.LeftAlt, isDown: true);
             RaiseKey(first, Key.RightAlt, isDown: true);
@@ -427,17 +437,17 @@ public sealed class ShortcutAltRevealTests
             leftUp.Source = popupTarget;
             InputManager.Current.ProcessInput(leftUp);
             Assert.True(leftUp.Handled);
-            Assert.Equal(Visibility.Visible, firstCaption.Visibility); // Right Alt is still held.
-            Assert.Equal(Visibility.Collapsed, secondCaption.Visibility);
-            Assert.Equal(Visibility.Collapsed, untouchedCaption.Visibility);
+            ShortcutMotionTestScope.AssertState(firstCaption, true); // Right Alt is still held.
+            ShortcutMotionTestScope.AssertState(secondCaption, false);
+            ShortcutMotionTestScope.AssertState(untouchedCaption, false);
 
             KeyEventArgs rightUp = CreateKey(Key.RightAlt, Keyboard.KeyUpEvent, system: true);
             rightUp.Source = popupTarget;
             InputManager.Current.ProcessInput(rightUp);
             Assert.False(rightUp.Handled);
-            Assert.Equal(Visibility.Collapsed, firstCaption.Visibility);
-            Assert.Equal(Visibility.Collapsed, secondCaption.Visibility);
-            Assert.Equal(Visibility.Collapsed, untouchedCaption.Visibility);
+            ShortcutMotionTestScope.AssertState(firstCaption, false);
+            ShortcutMotionTestScope.AssertState(secondCaption, false);
+            ShortcutMotionTestScope.AssertState(untouchedCaption, false);
         }
         finally
         {
@@ -454,6 +464,7 @@ public sealed class ShortcutAltRevealTests
     [InlineData(true)]
     public void PopupInputDismissesAndItsLaterAltReleaseAllowsTheNextGesture(bool mouseInput) => StaTestHost.Run(() =>
     {
+        using var motion = new ShortcutMotionTestScope();
         var owner = new HintWindow();
         var untouched = new HintWindow();
         try
@@ -465,7 +476,7 @@ public sealed class ShortcutAltRevealTests
             menu.Items.Add(popupTarget);
             Assert.Null(Window.GetWindow(popupTarget));
             RaiseKey(owner, Key.LeftAlt, isDown: true);
-            Assert.Equal(Visibility.Visible, caption.Visibility);
+            ShortcutMotionTestScope.AssertState(caption, true);
 
             InputEventArgs input = mouseInput
                 ? CreateMouse("down", handled: true)
@@ -473,17 +484,17 @@ public sealed class ShortcutAltRevealTests
             input.Source = popupTarget;
             InputManager.Current.ProcessInput(input);
             Assert.True(input.Handled);
-            Assert.Equal(Visibility.Collapsed, caption.Visibility);
-            Assert.Equal(Visibility.Collapsed, otherCaption.Visibility);
+            ShortcutMotionTestScope.AssertState(caption, false);
+            ShortcutMotionTestScope.AssertState(otherCaption, false);
             RaiseKey(owner, Key.LeftAlt, isDown: true, repeat: true);
-            Assert.Equal(Visibility.Collapsed, caption.Visibility);
+            ShortcutMotionTestScope.AssertState(caption, false);
 
             KeyEventArgs release = CreateKey(Key.LeftAlt, Keyboard.KeyUpEvent, system: true);
             release.Source = popupTarget;
             InputManager.Current.ProcessInput(release);
             RaiseKey(owner, Key.LeftAlt, isDown: true);
-            Assert.Equal(Visibility.Visible, caption.Visibility);
-            Assert.Equal(Visibility.Collapsed, otherCaption.Visibility);
+            ShortcutMotionTestScope.AssertState(caption, true);
+            ShortcutMotionTestScope.AssertState(otherCaption, false);
         }
         finally { owner.Close(); untouched.Close(); }
     });

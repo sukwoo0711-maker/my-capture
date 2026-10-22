@@ -18,6 +18,7 @@ public sealed class CommandButtonSpecificationTests
     [InlineData(true, 36, 0, 2)]
     public void EachTierKeepsEqualButtonHeightsAndLabelPositionsWithEveryHintState(bool compact, double height, double verticalPadding, double scale) => StaTestHost.Run(() =>
     {
+        using var motion = new ShortcutMotionTestScope();
         Func<bool>? previous = ShortcutPresentation.ReadEnabled;
         try
         {
@@ -59,8 +60,8 @@ public sealed class CommandButtonSpecificationTests
                     Assert.Equal("CommandButtonFace", face.Name);
                     Assert.Equal(2, face.RowDefinitions.Count);
                     bool hasHint = !ReferenceEquals(button, withoutHint);
-                    Assert.Equal(GridLength.Auto, face.RowDefinitions[1].Height);
-                    Assert.Equal(show && hasHint ? 14 : 0, face.RowDefinitions[1].ActualHeight, 2);
+                    Assert.Equal(new GridLength(14), face.RowDefinitions[1].Height);
+                    Assert.Equal(CommandButtonPresentation.HintHeight, face.RowDefinitions[1].ActualHeight, 2);
                     var label = Assert.IsType<TextBlock>(face.Children[0]);
                     Assert.Equal(14, label.FontSize);
                     Assert.True(face.ActualHeight <= button.ActualHeight - button.Padding.Top - button.Padding.Bottom
@@ -79,9 +80,9 @@ public sealed class CommandButtonSpecificationTests
                     if (ReferenceEquals(button, withoutHint)) Assert.Single(face.Children);
                     else
                     {
-                        TextBlock hint = Assert.IsType<TextBlock>(face.Children[1]);
+                        TextBlock hint = Assert.IsAssignableFrom<TextBlock>(face.Children[1]);
                         Assert.Equal(12, hint.FontSize);
-                        Assert.Equal(show ? Visibility.Visible : Visibility.Collapsed, hint.Visibility);
+                        ShortcutMotionTestScope.AssertState(hint, show);
                     }
                 }
             }

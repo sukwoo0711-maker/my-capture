@@ -9,7 +9,7 @@ namespace MyCapture.App;
 /// <summary>Fixed command sizing with an optional shortcut line inside the button.</summary>
 internal static class CommandButtonPresentation
 {
-    internal const double IconSize = 16;
+    internal const double IconSize = ShortcutRevealMotion.CommandIconSize;
     internal const double IconLabelGap = 6;
     internal const double HintHeight = 14;
 
@@ -25,12 +25,14 @@ internal static class CommandButtonPresentation
         button.VerticalAlignment = VerticalAlignment.Center;
         button.Loaded -= OnCommandLoaded;
         button.Loaded += OnCommandLoaded;
+        ShortcutRevealMotion.PrepareCommandIcon(button.Content);
     }
 
     private static void OnCommandLoaded(object sender, RoutedEventArgs e) => RefreshHint((ButtonBase)sender);
 
     internal static void RefreshHint(ButtonBase button)
     {
+        ShortcutRevealMotion.PrepareCommandIcon(button.Content);
         string gesture = AutomationProperties.GetAcceleratorKey(button);
         if (string.IsNullOrWhiteSpace(gesture) && button is Button action && (action.IsDefault || action.IsCancel))
         {
@@ -45,11 +47,13 @@ internal static class CommandButtonPresentation
             {
                 face.Children.RemoveAt(1);
                 face.MinWidth = 0;
+                ShortcutRevealMotion.ResetPrimary((FrameworkElement)face.Children[0]);
             }
             else if (face.Children[1] is TextBlock current)
             {
                 current.Text = gesture;
                 ReserveHintWidth(face, current);
+                ShortcutRevealMotion.Update(current, animate: false);
             }
             return;
         }
@@ -71,6 +75,7 @@ internal static class CommandButtonPresentation
                 if (face.Children.Count > 1) face.Children.RemoveAt(1);
                 Grid.SetRow(hint, 1);
                 face.Children.Add(hint);
+                ShortcutRevealMotion.Configure(hint, (FrameworkElement)face.Children[0], corner: false);
                 ReserveHintWidth(face, hint);
             }
             return;
@@ -78,7 +83,7 @@ internal static class CommandButtonPresentation
 
         object? previous = button.Content;
         button.Content = null;
-        var content = previous as UIElement ?? new TextBlock
+        var content = previous as FrameworkElement ?? new TextBlock
         {
             Text = previous?.ToString() ?? string.Empty,
             HorizontalAlignment = HorizontalAlignment.Center,
@@ -89,13 +94,15 @@ internal static class CommandButtonPresentation
             HorizontalAlignment = HorizontalAlignment.Center,
             VerticalAlignment = VerticalAlignment.Center,
         };
-        face.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-        face.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        face.RowDefinitions.Add(new RowDefinition { Height = new GridLength(IconSize) });
+        face.RowDefinitions.Add(new RowDefinition { Height = new GridLength(HintHeight) });
+        ShortcutRevealMotion.PreparePrimary(content);
         face.Children.Add(content);
         if (hint is not null)
         {
             Grid.SetRow(hint, 1);
             face.Children.Add(hint);
+            ShortcutRevealMotion.Configure(hint, content, corner: false);
             ReserveHintWidth(face, hint);
         }
         button.Content = face;
@@ -103,9 +110,8 @@ internal static class CommandButtonPresentation
 
     private static void ReserveHintWidth(Grid face, TextBlock hint)
     {
-        // A collapsed caption must still participate in horizontal fitting. Reserve only
-        // its width, so the primary face remains vertically centered at rest. Loaded and
-        // dynamic command refreshes measure the actual inherited typeface again.
+        // Reserve the full chord independently of reveal and refresh its inherited font/DPI
+        // on load or a real metadata change. Alt never enters this measurement path.
         var probe = new TextBlock
         {
             Text = hint.Text,
@@ -121,8 +127,7 @@ internal static class CommandButtonPresentation
         VisualTreeHelper.SetRootDpi(probe, VisualTreeHelper.GetDpi(hint));
         probe.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
         face.MinWidth = Math.Ceiling(probe.DesiredSize.Width);
-        // A collapsed caption can retain its old DPI measurement when its text did not
-        // change. Refresh the actual caption as well as the detached width probe.
+        // Refresh the actual caption as well as the detached width probe after DPI changes.
         hint.InvalidateMeasure();
         hint.InvalidateVisual();
     }
