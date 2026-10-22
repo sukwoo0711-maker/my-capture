@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.IO;
 using System.Reflection;
 using System.Windows;
@@ -28,7 +29,9 @@ namespace MyCapture.TutorialGenerator.Scenes;
 /// moves only that drawn position, because the product's drag clamps a pin into the real virtual
 /// desktop. Menus are measured and rendered as detached elements, never opened as popups, because
 /// WPF keeps a popup inside a monitor and would put it on the user's screen. The feedback and
-/// hover-bar timers run on video time, so the clip is the same however fast it renders.
+/// hover-bar timers run on video time, so the clip is the same however fast it renders. So does the
+/// landing of a new or reopened pin: its ornament window is built but never shown, and its surface is
+/// drawn above the pin.
 /// </remarks>
 internal sealed class PinScene : TutorialScene
 {
@@ -53,6 +56,9 @@ internal sealed class PinScene : TutorialScene
     private static readonly FieldInfo CountdownField = PrivateField(typeof(PinWindow), "_feedbackCountdown");
     private static readonly FieldInfo CountdownTimerField = PrivateField(typeof(FeedbackCountdown), "_timer");
     private static readonly FieldInfo HoverHideTimerField = PrivateField(typeof(PinWindow), "_hoverHideTimer");
+    private static readonly FieldInfo LandingAccentField = PrivateField(typeof(PinWindow), "_landingAccentAmount");
+    private static readonly MethodInfo UpdateChromeColorMethod = typeof(PinWindow).GetMethod("UpdateChromeColor", BindingFlags.Instance | BindingFlags.NonPublic)
+        ?? throw new MissingMethodException(nameof(PinWindow), "UpdateChromeColor");
     private static readonly FieldInfo IsMouseOverKeyField = typeof(UIElement).GetField("IsMouseOverPropertyKey", BindingFlags.Static | BindingFlags.NonPublic)
         ?? throw new MissingFieldException(nameof(UIElement), "IsMouseOverPropertyKey");
     private static readonly MethodInfo SetHighlighted =typeof(MenuItem).GetProperty(nameof(MenuItem.IsHighlighted))?.GetSetMethod(nonPublic: true)
@@ -116,7 +122,8 @@ internal sealed class PinScene : TutorialScene
     }
 
     internal override string Provenance =>
-        "Real PinWindow (image clip, frame outline and hover accent, bottom feedback), PinHoverBar, the pin's ContextMenu and the tray "
+        "Real PinWindow (image clip, frame outline and hover accent, bottom feedback), PinHoverBar, the landing ornament of a new or "
+        + "reopened pin (PinLandingDecoration's own surface and outline flash on video time), the pin's ContextMenu and the tray "
         + "ContextMenu (ThemedShellPresenter.CreateMenu over TrayMenuLayout.Build) rendered detached at 1:1; Esc, Ctrl+C, hide/show, "
         + "click-through, quick save and reopen run through the product's handlers and menu items. The clipboard pin opens without "
         + "activation, as PinManager opens it; a text pin's Ctrl+C request carries its original text, which the clip pastes. Clipboard "
@@ -145,7 +152,9 @@ internal sealed class PinScene : TutorialScene
         var story = new TutorialStoryboard(new PointD(520, 380));
         story.Hold("open", 0.5).Move("to-text", start);
         story.Motion("select-text", 22, start, end, pressed: true).Hold("selected", 0.3);
-        story.Hold("copy", 0.6).Move("to-beside", beside, 14).Hold("shortcut", 0.8).Hold("pinned", 1.0);
+        // The landing plays frame by frame before the pin rests.
+        story.Hold("copy", 0.6).Move("to-beside", beside, 14).Hold("shortcut", 0.8)
+            .Motion("pinned", LandingFrames, beside, beside).Hold("pinned", 1.0 - LandingFrames / (double)TutorialStoryboard.Fps);
         // The pin opens without activation (PinManager.PasteFromClipboardAsync), so the keys still
         // go to the note: End clears the selection and the typing lands after the copied lines.
         story.Hold("line-end", 0.4).Motion("keep-typing", 20, beside, beside).Hold("kept", 0.5);
@@ -202,6 +211,7 @@ internal sealed class PinScene : TutorialScene
         story.Hold("open", 1.0).Move("to-pin", Center(pin.Bounds)).Click("select").Hold("selected", 0.5).Hold("esc", 0.5).Hold("closed", 1.0);
         story.Move("to-tray", tray).Click("tray-click").Hold("tray-menu", 1.0);
         story.Move("to-reopen", _trayMenu.CenterOf(_menuTarget)).Hold("reopen-hover", 0.4).Click("reopen");
+        story.Motion("restored", LandingFrames, story.End, story.End);
         return story.Finish("restored", 11);
     }
 
@@ -252,6 +262,7 @@ internal sealed class PinScene : TutorialScene
         foreach (LivePin pin in _pins) FreezeClocks(pin.Window);
         Stage.Pump(15);
         foreach (LivePin pin in _pins) FreezeClocks(pin.Window);
+        foreach (LivePin pin in _pins) AdvanceLanding(pin);
 
         Stage.DrawDesktop(dc);
         DrawNote(dc);
@@ -401,7 +412,7 @@ internal sealed class PinScene : TutorialScene
         PinContent content = PinContent.FromText(ClipboardTextRenderer.Render(text, isTabularContent: false), text, isTable: false);
         PinGeometry.Placement placement = PinGeometry.CascadedPlacement(content.Image.PixelWidth, content.Image.PixelHeight,
             0, 0, Stage.Width, _workBottom, cursor.X, cursor.Y, openPinCount: 0);
-        AddPin(content, new Point(placement.Left, placement.Top));
+        StartLanding(AddPin(content, new Point(placement.Left, placement.Top)));
     }
 
     private void Reopen()
@@ -411,6 +422,55 @@ internal sealed class PinScene : TutorialScene
         PinViewState old = closed.Window.State;
         var state = new PinViewState(old.ImageWidthDip, old.ImageHeightDip, old.Zoom, old.Opacity, _settings.ZoomStep);
         _focus = AddPin(closed.Window.PinnedContent, closed.Position, state);
+        StartLanding(_focus);
+    }
+
+    // ---- Landing (PinManager.AttachAndShow starts it for a new or reopened pin) -----------------
+
+    /// <summary>Per-frame plans that cover the landing ornament (PinLandingDecoration.DurationMs) and the outline flash.</summary>
+    private const int LandingFrames = 15;
+
+    /// <summary>
+    /// The product's ornament is its own capture-excluded window on the wall clock. The clip builds
+    /// the same decoration over the pin's stage bounds, never shows it, and advances it, the outline
+    /// flash and the content fade on video time.
+    /// </summary>
+    private void StartLanding(LivePin pin)
+    {
+        Rect bounds = pin.Bounds;
+        PinLandingLayout layout = PinLandingDecoration.LayoutFor(new RectD(bounds.X, bounds.Y, bounds.Width, bounds.Height), 1);
+        pin.Landing = new PinLandingDecoration(pin.Window, layout, new Stopwatch());
+        pin.LandedAt = _clock;
+        AdvanceLanding(pin);
+    }
+
+    private void AdvanceLanding(LivePin pin)
+    {
+        if (pin.LandedAt is not { } landed) return;
+        double ms = (_clock - landed) * 1000;
+        pin.Landing?.Advance(ms);
+        // PinWindow.OnLandingRendering blends the outline toward the accent until 570 ms.
+        LandingAccentField.SetValue(pin.Window, ms < 570 ? PinLandingDecoration.Render(ms).BorderAccentAmount : 0);
+        UpdateChromeColorMethod.Invoke(pin.Window, [false]);
+        if (ms < 570) return;
+        pin.Landing = null;
+        pin.LandedAt = null;
+    }
+
+    /// <summary>PinWindow.CreateRevealAnimation: the content fades in over FluidMotion.FastDuration.</summary>
+    private double RevealOpacity(LivePin pin) => pin.LandedAt is { } landed
+        ? Math.Clamp((_clock - landed) * 1000 / FluidMotion.FastDuration.TimeSpan.TotalMilliseconds, 0, 1) : 1;
+
+    /// <summary>The ornament above its pin: the decoration's own surface at its layout bounds.</summary>
+    private static void DrawLanding(DrawingContext dc, LivePin pin)
+    {
+        if (pin.Landing is not { IsClosed: false } landing || landing.Content is not FrameworkElement surface) return;
+        RectD bounds = landing.Layout.PhysicalBounds;
+        var area = new Rect(bounds.Left, bounds.Top, bounds.Width, bounds.Height);
+        surface.Measure(area.Size);
+        surface.Arrange(new Rect(area.Size));
+        surface.UpdateLayout();
+        dc.DrawImage(Snapshot(surface), area);
     }
 
     // ---- Pins -----------------------------------------------------------------------------------
@@ -555,10 +615,13 @@ internal sealed class PinScene : TutorialScene
         {
             pin.Window.UpdateLayout();
             var root = (FrameworkElement)VisualTreeHelper.GetChild(pin.Window, 0);
-            dc.PushOpacity(pin.Window.Opacity);
+            dc.PushOpacity(pin.Window.Opacity * RevealOpacity(pin));
             dc.DrawImage(Snapshot(root), new Rect(pin.Position, root.RenderSize));
             dc.Pop();
         }
+
+        // A landing ornament is a top-most window shown right after its pin.
+        foreach (LivePin pin in _pins.Where(pin => pin.Shown)) DrawLanding(dc, pin);
 
         // Each hover bar is its own top-most window above every pin.
         foreach (LivePin pin in _pins)
@@ -566,7 +629,8 @@ internal sealed class PinScene : TutorialScene
             if (BarBounds(pin) is not { } bounds) continue;
             PinHoverBar bar = pin.Window.HoverBarForTest!;
             var root = (FrameworkElement)VisualTreeHelper.GetChild(bar, 0);
-            dc.PushOpacity(bar.Opacity);
+            // A bar over a pin that is still fading in appears with it.
+            dc.PushOpacity(bar.Opacity * RevealOpacity(pin));
             dc.DrawImage(Snapshot(root), new Rect(bounds.Location, root.RenderSize));
             dc.Pop();
         }
@@ -929,11 +993,20 @@ internal sealed class PinScene : TutorialScene
         /// <summary>Video time the pointer left the pin while its bar was showing.</summary>
         internal double? LeftAt { get; set; }
 
+        /// <summary>The landing ornament while it plays, and the video time the pin opened.</summary>
+        internal PinLandingDecoration? Landing { get; set; }
+
+        internal double? LandedAt { get; set; }
+
         internal Rect Bounds => new(Position, new Size(Window.State.WidthDip, Window.State.HeightDip));
 
         internal bool Shown => !Window.IsClosed && Window.IsVisible;
 
-        public void Dispose() => _host.Dispose();
+        public void Dispose()
+        {
+            if (Landing is { IsClosed: false } landing) landing.Close();
+            _host.Dispose();
+        }
     }
 
     /// <summary>
