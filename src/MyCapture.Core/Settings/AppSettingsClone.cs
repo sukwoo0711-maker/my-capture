@@ -37,6 +37,8 @@ public static class AppSettingsClone
             GitHub = Clone(source.GitHub),
             General = Clone(source.General),
             StoreRating = Clone(source.StoreRating),
+            StoreUpdate = Clone(source.StoreUpdate),
+            Updates = Clone(source.Updates),
         };
     }
 
@@ -184,5 +186,19 @@ public static class AppSettingsClone
         SuccessfulCaptureCount = s.SuccessfulCaptureCount,
         LastCaptureFailed = s.LastCaptureFailed,
         RequestAttemptedUtc = s.RequestAttemptedUtc,
+        InvitationShownUtc = s.InvitationShownUtc,
+    };
+
+    private static StoreUpdateState Clone(StoreUpdateState s) => new()
+    {
+        LastSeenVersion = s.LastSeenVersion,
+        CompletionNoticeVersion = s.CompletionNoticeVersion,
+    };
+
+    private static UpdateSettings Clone(UpdateSettings s) => new()
+    {
+        AutoCheck = s.AutoCheck,
+        LastCheckUtc = s.LastCheckUtc,
+        DismissedVersion = s.DismissedVersion,
     };
 }

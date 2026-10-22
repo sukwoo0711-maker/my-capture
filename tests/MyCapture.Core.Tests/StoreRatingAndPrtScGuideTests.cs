@@ -41,9 +41,9 @@ public sealed class StoreRatingPolicyTests
 
     [Theory]
     [InlineData(0, false)]
-    [InlineData(9, false)]
-    [InlineData(10, true)]
-    [InlineData(11, true)]
+    [InlineData(4, false)]
+    [InlineData(5, true)]
+    [InlineData(6, true)]
     public void SuccessfulCaptureBoundary(int count, bool expected)
     {
         StoreRatingState state = Eligible();
@@ -52,8 +52,9 @@ public sealed class StoreRatingPolicyTests
     }
 
     [Fact]
-    public void AgeBoundary_RequiresThreeFullDays()
+    public void AgeBoundary_RequiresOneFullDay()
     {
+        Assert.Equal(TimeSpan.FromDays(1), StoreRatingPolicy.RequiredAge);
         Assert.False(StoreRatingPolicy.ShouldRequest(Eligible(), isPackaged: true, Due - TimeSpan.FromTicks(1)));
         Assert.True(StoreRatingPolicy.ShouldRequest(Eligible(), isPackaged: true, Due));
         Assert.False(StoreRatingPolicy.ShouldRequest(Eligible(), isPackaged: true, Start));
@@ -116,7 +117,7 @@ public sealed class StoreRatingPolicyTests
     [Theory]
     [InlineData(-5, true, 1)]
     [InlineData(-5, false, 0)]
-    [InlineData(int.MaxValue, true, 10)]
+    [InlineData(int.MaxValue, true, 5)]
     public void RecordCapture_RepairsHandEditedCounts(int stored, bool succeeded, int expected)
     {
         var state = new StoreRatingState { SuccessfulCaptureCount = stored };

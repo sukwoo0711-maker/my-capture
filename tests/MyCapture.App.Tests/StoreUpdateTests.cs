@@ -5,6 +5,7 @@ using MyCapture.App.Settings;
 using MyCapture.App.Store;
 using MyCapture.App.Updates;
 using MyCapture.Core.Localization;
+using MyCapture.Core.Settings;
 using Xunit;
 
 namespace MyCapture.App.Tests;
@@ -15,6 +16,30 @@ namespace MyCapture.App.Tests;
 /// </summary>
 public sealed class StoreUpdateTests
 {
+    [Fact]
+    public void AutomaticUpdatePreference_IsIndependentAndIncludedInDraftChanges()
+    {
+        var settings = new AppSettings
+        {
+            Updates = { LastCheckUtc = DateTimeOffset.UnixEpoch, DismissedVersion = "4.2.0" },
+        };
+        var draft = new SettingsDraft(settings);
+        Assert.True(draft.AutoCheckUpdates);
+        Assert.False(draft.HasUnappliedChanges);
+        draft.AutoCheckUpdates = false;
+        Assert.True(draft.HasUnappliedChanges);
+        Assert.True(settings.Updates.AutoCheck);
+        AppSettings candidate = draft.ToAppSettings();
+        Assert.False(candidate.Updates.AutoCheck);
+        Assert.Equal(settings.Updates.LastCheckUtc, candidate.Updates.LastCheckUtc);
+        Assert.Equal(settings.Updates.DismissedVersion, candidate.Updates.DismissedVersion);
+        draft.LoadFrom(candidate);
+        Assert.False(draft.HasUnappliedChanges);
+        draft.ResetToDefaults();
+        Assert.True(draft.AutoCheckUpdates);
+        Assert.True(draft.HasUnappliedChanges);
+    }
+
     [Theory]
     [InlineData("ko-KR")]
     [InlineData("en-US")]
@@ -27,12 +52,6 @@ public sealed class StoreUpdateTests
         Assert.Equal(phases.Length, labels.Distinct(StringComparer.Ordinal).Count());
         Assert.Throws<ArgumentOutOfRangeException>(() => SettingsWindow.StoreUpdateStatusText((StoreUpdatePhase)int.MaxValue));
     }
-
-    private static readonly Type[] GitHubUpdateTypes =
-    [
-        typeof(GitHubUpdateService), typeof(IUpdateService), typeof(UpdateSession), typeof(UpdateInstaller),
-        typeof(UpdateTarget), typeof(VerifiedUpdatePackage), typeof(StagedUpdateResult),
-    ];
 
     [Fact]
     public void Links_PointAtTheMyCaptureListing()
@@ -92,38 +111,17 @@ public sealed class StoreUpdateTests
     [Theory]
     [InlineData(typeof(SettingsWindow))]
     [InlineData(typeof(App))]
-    public void SettingsWindowAndApp_HoldNoGitHubUpdater(Type owner)
+    public void SettingsWindowAndApp_UseSharedUpdatesAndKeepLegacyInstallControlsRemoved(Type owner)
     {
         const BindingFlags all = BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public
             | BindingFlags.NonPublic | BindingFlags.DeclaredOnly;
-        var offenders = new List<string>();
-        foreach (Type type in WithNestedTypes(owner))
-        {
-            foreach (FieldInfo field in type.GetFields(all))
-                if (UsesGitHubUpdater(field.FieldType)) offenders.Add($"{type.Name}.{field.Name}: {field.FieldType}");
-            foreach (PropertyInfo property in type.GetProperties(all))
-                if (UsesGitHubUpdater(property.PropertyType)) offenders.Add($"{type.Name}.{property.Name}: {property.PropertyType}");
-        }
-
-        Assert.True(offenders.Count == 0, string.Join(Environment.NewLine, offenders));
+        // Both shell surfaces hold the same coordinator contract, so an install cannot be
+        // started independently by the settings tab and the engagement card.
+        Assert.Contains(owner.GetFields(all), field => field.FieldType == typeof(AppUpdateCoordinator));
         foreach (string removed in new[] { "CanExitForUpdate", "ExitForUpdate" })
             Assert.Null(typeof(SettingsWindow).GetProperty(removed, all));
         foreach (string removed in new[] { "InstallStagedUpdateAsync", "OnUpdateCancel", "ResetUpdateAction" })
             Assert.Null(typeof(SettingsWindow).GetMethod(removed, all));
     }
 
-    private static IEnumerable<Type> WithNestedTypes(Type type)
-    {
-        yield return type;
-        foreach (Type nested in type.GetNestedTypes(BindingFlags.Public | BindingFlags.NonPublic))
-            foreach (Type inner in WithNestedTypes(nested))
-                yield return inner;
-    }
-
-    private static bool UsesGitHubUpdater(Type type)
-    {
-        if (type.HasElementType) return UsesGitHubUpdater(type.GetElementType()!);
-        if (GitHubUpdateTypes.Contains(type)) return true;
-        return type.IsGenericType && type.GetGenericArguments().Any(UsesGitHubUpdater);
-    }
 }

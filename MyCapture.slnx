@@ -1,7 +1,6 @@
 <Solution>
   <Folder Name="/build/">
     <Project Path="build/tools/TutorialVideoGenerator/MyCapture.TutorialGenerator.csproj" />
-    <Project Path="build/tools/UpdateHelperResourceReader/UpdateHelperResourceReader.csproj" />
   </Folder>
   <Folder Name="/src/">
     <Project Path="src/MyCapture.App/MyCapture.App.csproj" />

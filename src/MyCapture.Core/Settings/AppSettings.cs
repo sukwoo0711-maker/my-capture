@@ -56,6 +56,8 @@ public sealed class AppSettings : IJsonOnDeserializing
     public StoreRatingState StoreRating { get; set => field = value ?? new(); } = new();
 
     public StoreUpdateState StoreUpdate { get; set => field = value ?? new(); } = new();
+
+    public UpdateSettings Updates { get; set => field = value ?? new(); } = new();
 }
 
 /// <summary>Global shortcuts, registered for as long as the app runs.</summary>

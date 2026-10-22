@@ -1,7 +1,6 @@
 using System.Diagnostics;
 using System.IO;
 using System.Security.Cryptography;
-using System.Text;
 using System.Text.Json;
 
 namespace MyCapture.App.Updates;
@@ -11,15 +10,20 @@ internal sealed class UpdateInstaller
 {
     private readonly Action<ProcessStartInfo> _start;
     internal UpdateInstaller(Action<ProcessStartInfo>? start = null) =>
-        _start = start ?? (info => { using var process = Process.Start(info) ?? throw new IOException("Updater helper did not start."); });
+        _start = start ?? (info => { using var process = Process.Start(info) ?? throw new IOException("Update installer did not start."); });
 
     internal async Task<bool> InstallAsync(VerifiedUpdatePackage package, Func<bool> canExit,
         Action exit, CancellationToken cancellationToken, UpdateTarget? target = null)
     {
         ArgumentNullException.ThrowIfNull(package);
         target ??= UpdateTarget.Resolve(AppContext.BaseDirectory, UpdateTarget.DefaultRoot);
+        if (target.IsPortableMigration)
+            throw new IOException("Only an owned installation can hand off an in-app update.");
         await target.ValidateAsync(cancellationToken);
         string session = UpdatePaths.CanonicalRoot(package.StagingDirectory);
+        if (!UpdatePaths.TryParseSessionName(Path.GetFileName(session), out UpdateVersion version, out string token) ||
+            version != package.Version)
+            throw new IOException("The update session name does not match its package version.");
         string expectedName = UpdatePaths.InstallerName(package.Version);
         if (!string.Equals(UpdatePaths.Child(session, expectedName), package.InstallerPath, StringComparison.OrdinalIgnoreCase))
             throw new IOException("Installer is outside its update session.");
@@ -32,41 +36,32 @@ internal sealed class UpdateInstaller
                 package.ExpectedSha256, StringComparison.OrdinalIgnoreCase))
             throw new IOException("Installer integrity changed after download.");
 
-        string scriptPath = UpdatePaths.Child(session, "update-helper.ps1");
         string configPath = UpdatePaths.Child(session, "update-session.json");
-        using Stream resource = typeof(UpdateInstaller).Assembly.GetManifestResourceStream("MyCapture.UpdateHelper.ps1")
-            ?? throw new IOException("Updater helper resource is missing.");
-        await using (var script = new FileStream(scriptPath, FileMode.CreateNew, FileAccess.Write, FileShare.None))
-            await resource.CopyToAsync(script, cancellationToken);
         using var parent = Process.GetCurrentProcess();
         var config = new
         {
+            Token = token,
+            Version = package.Version.ToNormalizedString(),
+            InstallRoot = UpdatePaths.CanonicalRoot(target.InstallRoot),
+            SourceRoot = UpdatePaths.CanonicalRoot(target.SourceRoot),
+            TargetMode = "OwnedInstall",
             ParentId = parent.Id,
             ParentStartedUtc = parent.StartTime.ToUniversalTime().Ticks,
-            Installer = package.InstallerPath,
-            Sha256 = package.ExpectedSha256,
-            Bytes = package.FileSizeBytes,
-            Version = package.Version.ToNormalizedString(),
-            Token = Guid.NewGuid().ToString("N"),
-            InstallRoot = target.InstallRoot,
-            SourceRoot = target.SourceRoot,
-            TargetMode = target.IsPortableMigration ? "InstallToDefault" : "OwnedInstall",
-            FailureMessage = UpdateStrings.HelperFailed,
+            WaitForParent = true,
+            RestartAfterInstall = true,
+            ShowProgress = true,
         };
         await using (var file = new FileStream(configPath, FileMode.CreateNew, FileAccess.Write, FileShare.None))
             await JsonSerializer.SerializeAsync(file, config, cancellationToken: cancellationToken);
         cancellationToken.ThrowIfCancellationRequested();
         // This callback and exit run on the UI dispatcher, with no intervening await.
         if (!canExit()) return false;
-        var info = new ProcessStartInfo(Path.Combine(Environment.SystemDirectory,
-            "WindowsPowerShell", "v1.0", "powershell.exe"))
+        var info = new ProcessStartInfo(package.InstallerPath)
         {
             UseShellExecute = false,
-            CreateNoWindow = true,
-            WindowStyle = ProcessWindowStyle.Hidden,
+            WorkingDirectory = session,
         };
-        foreach (string argument in new[] { "-NoLogo", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", scriptPath, "-Session", configPath })
-            info.ArgumentList.Add(argument);
+        info.Environment["MYCAPTURE_UPDATE_SESSION"] = configPath;
         _start(info);
         exit();
         return true;

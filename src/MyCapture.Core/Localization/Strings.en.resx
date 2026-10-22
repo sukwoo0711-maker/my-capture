@@ -4605,4 +4605,18 @@ Overwrite these shortcuts? You can change this later in Settings → Shortcuts.<
   <data name="CoreShortcuts.KeepCurrent" xml:space="preserve"><value>Keep current</value></data>
   <data name="CoreShortcuts.Force" xml:space="preserve"><value>Handle Ctrl+Shift+C/X/Z and F3 before other programs</value></data>
   <data name="CoreShortcuts.ForceDescription" xml:space="preserve"><value>MyCapture receives these shortcuts even if another program registered them first. Turn this off to let the program that registered them first use them.</value></data>
+  <data name="Update_AutoCheck" xml:space="preserve"><value>Check for new versions automatically</value></data>
+  <data name="Update_UnpackagedDescription" xml:space="preserve"><value>Installation from Microsoft Store is recommended.</value></data>
+  <data name="Update_AvailableVersion" xml:space="preserve"><value>MyCapture {0} is available.</value></data>
+  <data name="Update_StoreAvailable" xml:space="preserve"><value>A new version of MyCapture is available.</value></data>
+  <data name="Update_Action" xml:space="preserve"><value>Update</value></data>
+  <data name="Update_TrayInstallVersion" xml:space="preserve"><value>Install update ({0})</value></data>
+  <data name="Update_TrayInstall" xml:space="preserve"><value>Install update</value></data>
+  <data name="Update_DownloadingPercent" xml:space="preserve"><value>Downloading update {0}%</value></data>
+  <data name="Update_Verifying" xml:space="preserve"><value>Verifying update</value></data>
+  <data name="Update_Preparing" xml:space="preserve"><value>Preparing installation</value></data>
+  <data name="Update_InstallFailed" xml:space="preserve"><value>The update could not be installed. Try again in Settings &gt; About.</value></data>
+  <data name="Update_CheckHelp" xml:space="preserve"><value>Checks GitHub for a new version of this app.</value></data>
+  <data name="Update_InstallHelp" xml:space="preserve"><value>Saves your work, then installs the new version.</value></data>
+  <data name="Update_OpenReleaseHelp" xml:space="preserve"><value>Opens the download page for the new version in your browser.</value></data>
 </root>
