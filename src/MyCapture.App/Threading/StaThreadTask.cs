@@ -10,7 +10,9 @@ namespace MyCapture.App.Threading;
 /// WPF clipboard calls and some imaging primitives can perform their own blocking native
 /// retries. Keeping those calls on a short-lived STA preserves COM requirements without ever
 /// sleeping the UI dispatcher. Callers must pass only immutable/frozen inputs and return only
-/// detached or frozen results.
+/// detached or frozen results. Never show text input (a TextBox and the like) on these threads:
+/// a WPF thread that exits while the process lives can leave a TSF text store registered that
+/// msctf calls during the thread exit, which fails fast on .NET 10 (dotnet/wpf#11785).
 /// </remarks>
 internal static class StaThreadTask
 {
