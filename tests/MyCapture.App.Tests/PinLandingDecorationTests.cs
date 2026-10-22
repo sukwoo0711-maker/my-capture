@@ -25,27 +25,32 @@ public sealed class PinLandingDecorationTests
 {
     // Independent samples of the authored curves, calculated by solving the cubic's x
     // coordinate before evaluating y. Keep constants here rather than duplicating Render.
+    // The 40ms hit stop holds the 150ms contact frame until 190ms, so the authored
+    // 195, 300, 420 and 560ms values appear at 235, 340, 460 and 600ms.
     public static IEnumerable<object[]> Frames()
     {
+        double[] contact = [0, 0, 0, 1, 1, .4, .7, 3, 8, .44, .38, 1];
         yield return [0d, new double[] { -15, -17, -30, 1.35, 0, .4, 0, 22, 36, 0, 0, 0 }, false];
         yield return [83d, new double[]
         {
             -11.7021544575, -13.2624417185, -23.4043089150, 1.2730502707, 1,
             .4, 0, 17.8227289795, 29.8440216540, .4824114904, 0, 0,
         }, false];
-        yield return [150d, new double[] { 0, 0, 0, 1, 1, .4, .7, 3, 8, .44, .38, 1 }, false];
-        yield return [195d, new double[]
+        yield return [150d, contact, false];
+        yield return [170d, contact, false];
+        yield return [190d, contact, false];
+        yield return [235d, new double[]
         {
             0, 0, 0, .86, 1, 1.3994616238, .4786612426, 4.3036455963,
             11.4763882567, .3878541761, .2755427203, .7074036474,
         }, false];
-        yield return [300d, new double[]
+        yield return [340d, new double[]
         {
             0, 0, 0, 1.0051934340, 1, 2.5258249886, .1252958580, 5.7728152025,
             15.3941738735, .3290873919, .1301571649, .3154212746,
         }, false];
-        yield return [420d, new double[] { 0, 0, 0, 1, 1, 2.7, 0, 6, 16, .32, .0552351665, .1253152048 }, false];
-        yield return [560d, new double[] { 0, 0, 0, 1, 0, 2.7, 0, 6, 16, 0, 0, .0426876275 }, true];
+        yield return [460d, new double[] { 0, 0, 0, 1, 1, 2.7, 0, 6, 16, .32, .0552351665, .1253152048 }, false];
+        yield return [600d, new double[] { 0, 0, 0, 1, 0, 2.7, 0, 6, 16, 0, 0, .0426876275 }, true];
     }
 
     [Theory]
@@ -78,8 +83,9 @@ public sealed class PinLandingDecorationTests
     {
         Assert.Equal(PinLandingDecoration.Render(0), PinLandingDecoration.Render(-10));
         Assert.Equal(PinLandingDecoration.Render(0), PinLandingDecoration.Render(double.NaN));
-        Assert.InRange(PinLandingDecoration.Render(559.999).PinOpacity, double.Epsilon, .00001);
-        PinLandingFrame complete = PinLandingDecoration.Render(570);
+        Assert.InRange(PinLandingDecoration.Render(599.999).PinOpacity, double.Epsilon, .00001);
+        Assert.True(PinLandingDecoration.Render(609.999).BorderAccentAmount > 0);
+        PinLandingFrame complete = PinLandingDecoration.Render(610);
         Assert.True(complete.IsComplete);
         Assert.Equal(0, complete.BorderAccentAmount);
         Assert.Equal(0, complete.PinOpacity);
@@ -87,6 +93,23 @@ public sealed class PinLandingDecorationTests
         Assert.Equal(0, complete.ShadowOpacity);
         Assert.Equal(0, complete.GlowOpacity);
         Assert.Equal(complete, PinLandingDecoration.Render(10_000));
+    }
+
+    [Fact]
+    public void Render_HoldsTheContactFrameForTheHitStopThenResumes()
+    {
+        Assert.Equal(40, PinLandingDecoration.HitStopMs);
+        Assert.Equal(600, PinLandingDecoration.DurationMs);
+        Assert.Equal(610, PinLandingDecoration.OutlineEndMs);
+        PinLandingFrame contact = PinLandingDecoration.Render(150);
+        foreach (double ms in new[] { 150.001, 160, 175, 189.999, 190 })
+            Assert.Equal(contact, PinLandingDecoration.Render(ms));
+        Assert.NotEqual(contact, PinLandingDecoration.Render(190.5));
+        Assert.NotEqual(contact, PinLandingDecoration.Render(149.5));
+        Assert.Equal(149.5, PinLandingDecoration.MotionTime(149.5));
+        Assert.Equal(150, PinLandingDecoration.MotionTime(170));
+        Assert.Equal(155, PinLandingDecoration.MotionTime(195));
+        Assert.Equal(560, PinLandingDecoration.MotionTime(PinLandingDecoration.DurationMs));
     }
 
     [Theory]
@@ -199,7 +222,7 @@ public sealed class PinLandingDecorationTests
     });
 
     [Fact]
-    public void Decoration_IsPassiveClickThroughCaptureExcludedAndClosesAt560ms() => StaTestHost.Run(() =>
+    public void Decoration_IsPassiveClickThroughCaptureExcludedAndClosesAt600ms() => StaTestHost.Run(() =>
     {
         using var hooks = new LandingHooks();
         var excluded = new List<Window>();
@@ -229,14 +252,14 @@ public sealed class PinLandingDecorationTests
 
             int closed = 0;
             decoration.Closed += (_, _) => closed++;
-            decoration.Advance(559.999);
+            decoration.Advance(599.999);
             Assert.False(decoration.IsClosed);
             Assert.True(decoration.IsVisible);
-            Assert.Equal(PinLandingDecoration.Render(559.999), decoration.State);
-            decoration.Advance(560);
+            Assert.Equal(PinLandingDecoration.Render(599.999), decoration.State);
+            decoration.Advance(600);
             Assert.True(decoration.IsClosed);
             Assert.False(decoration.IsVisible);
-            Assert.Equal(PinLandingDecoration.Render(560), decoration.State);
+            Assert.Equal(PinLandingDecoration.Render(600), decoration.State);
             Assert.Equal(1, closed);
             decoration.Advance(700);
             Assert.Equal(1, closed);
@@ -259,7 +282,7 @@ public sealed class PinLandingDecorationTests
             Assert.True(decoration.ShowDecoration());
             Assert.False(decoration.IsActive);
             Assert.Equal(foreground, NativeExclusion.GetForegroundWindow());
-            decoration.Advance(560);
+            decoration.Advance(PinLandingDecoration.DurationMs);
             Assert.Equal(foreground, NativeExclusion.GetForegroundWindow());
             Assert.True(foreground != IntPtr.Zero,
                 "The desktop did not expose a foreground HWND; foreground preservation needs an interactive desktop run.");
@@ -393,7 +416,7 @@ public sealed class PinLandingDecorationTests
             pin.StartLandingEffect();
             Assert.Equal(Colors.Crimson, pin.FrameColorForTest);
             DispatcherTimer reset = Assert.IsType<DispatcherTimer>(Field<DispatcherTimer?>(pin, "_landingResetTimer"));
-            Assert.Equal(TimeSpan.FromMilliseconds(570), reset.Interval);
+            Assert.Equal(TimeSpan.FromMilliseconds(610), reset.Interval);
             Assert.True(reset.IsEnabled);
             Assert.False(Field<SolidColorBrush>(pin, "_chromeBrush").HasAnimatedProperties);
 
@@ -414,7 +437,7 @@ public sealed class PinLandingDecorationTests
             Dispatcher.PushFrame(frame);
             guard.Stop();
 
-            Assert.True(ticked, "The production 570ms border reset timer did not tick within 900ms.");
+            Assert.True(ticked, "The production 610ms border reset timer did not tick within 900ms.");
             Assert.False(reset.IsEnabled);
             Assert.Null(Field<DispatcherTimer?>(pin, "_landingResetTimer"));
             Assert.Null(Field<Stopwatch?>(pin, "_landingClock"));
@@ -579,7 +602,8 @@ public sealed class PinLandingDecorationTests
             pin.Show();
             decoration = new PinLandingDecoration(pin,
                 PinLandingDecoration.LayoutFor(new RectD(-10000, -10000, 300, 200), 1), new Stopwatch());
-            decoration.Advance(195);
+            // The deepest press, 45ms after the hit stop ends.
+            decoration.Advance(235);
             var surface = Assert.IsAssignableFrom<FrameworkElement>(decoration.Content);
             surface.Measure(new Size(428, 328));
             surface.Arrange(new Rect(0, 0, 428, 328));

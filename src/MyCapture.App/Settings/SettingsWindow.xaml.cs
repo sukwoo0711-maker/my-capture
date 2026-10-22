@@ -226,7 +226,7 @@ internal sealed partial class SettingsWindow : Window
     /// <summary>Reports settings file operations independently of the selected category.</summary>
     private void SetStatusMessage(string message)
     {
-        _savedNoticeDelay.Stop();
+        CancelSavedNotice();
         SettingsStatus.Text = message;
         SettingsStatusRegion.Visibility = string.IsNullOrWhiteSpace(message) ? Visibility.Collapsed : Visibility.Visible;
         if (SettingsStatusRegion.IsVisible)

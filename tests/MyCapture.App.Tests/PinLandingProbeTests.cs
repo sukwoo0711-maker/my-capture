@@ -70,7 +70,7 @@ public sealed class PinLandingProbeTests
                 new[] { "width_dip,height_dip,decorated,repeat,first_callback_ms,show_return_ms,max_gap_ms,over_25ms,callbacks,ambient,overlay_pixels,foreground_same,foreground_observed,actual_width_dip,actual_height_dip" }
                     .Concat(rows.Select(r => string.Join(',', r.Width, r.Height, r.Decorated, r.Repeat,
                         F(r.First), F(r.Show), F(r.MaxGap), r.Over25, r.Callbacks, r.Ambient, F(r.OverlayPixels), r.ForegroundSame, r.ForegroundObserved, F(r.ActualWidth), F(r.ActualHeight)))), new UTF8Encoding(false));
-            var summary = new StringBuilder("First CompositionTarget.Rendering callback after Loaded, timed from Show entry; this is not a DWM-present measurement.\nTen warm alternating pairs per size; wall-clock gaps count distinct RenderingTime callbacks over 560ms after Show returns. All evidence and synthetic fixtures are retained.\n\n");
+            var summary = new StringBuilder("First CompositionTarget.Rendering callback after Loaded, timed from Show entry; this is not a DWM-present measurement.\nTen warm alternating pairs per size; wall-clock gaps count distinct RenderingTime callbacks over the landing duration after Show returns. All evidence and synthetic fixtures are retained.\n\n");
             summary.AppendLine("| DIP | none median ms | effect median ms | increase ms | max gap none/effect ms | >25ms none/effect | ambient | overlay pixels |");
             summary.AppendLine("| --- | ---: | ---: | ---: | --- | --- | --- | ---: |");
             foreach (IGrouping<int, Sample> group in rows.GroupBy(r => r.Width))
@@ -109,7 +109,7 @@ public sealed class PinLandingProbeTests
             TimeSpan time = ((RenderingEventArgs)args).RenderingTime;
             if (!loaded || time == lastFrame) return;
             lastFrame = time;
-            if (clock.Elapsed.TotalMilliseconds <= show + 560) callbacks.Add(clock.Elapsed.TotalMilliseconds);
+            if (clock.Elapsed.TotalMilliseconds <= show + PinLandingDecoration.DurationMs) callbacks.Add(clock.Elapsed.TotalMilliseconds);
         };
         IntPtr foreground = GetForegroundWindow();
         CompositionTarget.Rendering += rendered;

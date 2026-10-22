@@ -1420,7 +1420,7 @@ internal sealed class PinWindow : Window
             UpdateChromeColor(animate: false);
             _landingResetTimer = new DispatcherTimer(DispatcherPriority.Normal, Dispatcher)
             {
-                Interval = TimeSpan.FromMilliseconds(570),
+                Interval = TimeSpan.FromMilliseconds(PinLandingDecoration.OutlineEndMs),
             };
             _landingResetTimer.Tick += OnLandingReset;
             _landingResetTimer.Start();
@@ -1449,7 +1449,7 @@ internal sealed class PinWindow : Window
     {
         if (_landingClock is not { } clock) return;
         double elapsed = clock.Elapsed.TotalMilliseconds;
-        if (elapsed >= 570)
+        if (elapsed >= PinLandingDecoration.OutlineEndMs)
         {
             StopLandingEffect();
             return;
