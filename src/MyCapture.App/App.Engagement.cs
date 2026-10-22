@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging;
 using MyCapture.App.Gallery;
 using MyCapture.App.Settings;
 using MyCapture.App.Store;
+using MyCapture.App.Updates;
 using MyCapture.Core.Platform;
 using MyCapture.Core.Settings;
 
@@ -21,7 +22,20 @@ public partial class App
     private void ConfigureEngagementWindow(Window window)
     {
         if (window.Content is not UIElement) return;
-        var notice = new EngagementNotice { ReviewChosen = () => _storeRating?.AcceptInvitation() };
+        var notice = new EngagementNotice
+        {
+            ReviewChosen = () => _storeRating?.AcceptInvitation(),
+            UpdateChosen = () => _ = InstallKnownUpdateAsync(window),
+            ClosedByUser = kind =>
+            {
+                if (kind == EngagementNoticeKind.UpdateAvailable) _updates?.DismissAvailable();
+                if (kind == EngagementNoticeKind.UpdateCompleted && _settings is not null)
+                {
+                    _settings.StoreUpdate.CompletionNoticeVersion = null;
+                    SaveEngagementState();
+                }
+            },
+        };
         // An overlay, so nothing under the pointer moves when it appears. It stays until closed
         // or acted on; leaving the window does not take it away.
         EngagementNoticeHost.Attach(window, notice, window is SettingsWindow ? SettingsFooterInset : LibraryFooterInset);
@@ -34,31 +48,31 @@ public partial class App
         {
             settings.PrepareStoreUpdate = PrepareStoreUpdateSafelyAsync;
             settings.FinishStoreUpdate = ReleaseStoreUpdateProtection;
+            if (_updates is not null) settings.ConfigureUpdates(_updates);
         }
     }
 
     private void OnEngagementReturn(Window window)
     {
         if (!window.IsActive || !window.IsVisible || IsStoreRatingDeferred()) return;
-        if (_settings?.StoreUpdate.CompletionNoticeVersion is { } version)
-        {
-            _engagementNotices[window].ShowUpdateCompleted(version);
-            _settings.StoreUpdate.CompletionNoticeVersion = null;
-            SaveEngagementState();
-            return;
-        }
+        if (ShowPendingEngagement(window)) return;
         _storeRating?.NotifyUserReturned();
     }
 
     private void ShowStoreInvitation()
     {
-        if (ActiveEngagementWindow() is { } window) _engagementNotices[window].ShowInvitation();
+        if (ActiveEngagementWindow() is { } window && !ShowPendingEngagement(window))
+        {
+            HideOtherEngagementNotices(window);
+            _engagementNotices[window].ShowInvitation();
+        }
     }
 
     private void InitializeStoreUpdateObservation()
     {
         string version = Assembly.GetExecutingAssembly().GetName().Version?.ToString() ?? "0.0.0.0";
-        if (_settings?.StoreUpdate.ObserveLaunch(version, AppPackage.IsPackaged) == true) SaveEngagementState();
+        bool owned = UpdateChannelResolver.Resolve(AppPackage.IsPackaged, AppContext.BaseDirectory) == UpdateChannel.GitHubInstall;
+        if (_settings?.StoreUpdate.ObserveLaunch(version, AppPackage.IsPackaged, owned) == true) SaveEngagementState();
     }
 
     private void SaveEngagementState()

@@ -48,8 +48,6 @@
     <None Update="Assets\Tutorials\*.mp4;Assets\Tutorials\*.jpg" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
 
-  <ItemGroup><EmbeddedResource Include="Updates\UpdateHelper.ps1" LogicalName="MyCapture.UpdateHelper.ps1" /></ItemGroup>
-
   <ItemGroup>
     <!-- Bundled fonts ship as files beside the app, not as pack:// resources: WPF reads local font
          files through DirectWrite's own file loader instead of a managed resource stream. -->

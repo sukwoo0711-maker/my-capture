@@ -14,7 +14,7 @@ internal interface IStorePackageUpdateService
 }
 
 /// <summary>Only the Store consent API deploys packages; no installer, elevation or silent capability.</summary>
-internal sealed class StorePackageUpdateService(Window owner) : IStorePackageUpdateService
+internal sealed class StorePackageUpdateService(Window? owner = null) : IStorePackageUpdateService
 {
     private StoreContext? _context;
     private IReadOnlyList<StorePackageUpdate> _updates = [];
@@ -22,10 +22,11 @@ internal sealed class StorePackageUpdateService(Window owner) : IStorePackageUpd
     {
         get
         {
-            owner.Dispatcher.VerifyAccess();
+            owner?.Dispatcher.VerifyAccess();
             if (_context is not null) return _context;
             _context = StoreContext.GetDefault();
-            WinRT.Interop.InitializeWithWindow.Initialize(_context, new WindowInteropHelper(owner).EnsureHandle());
+            if (owner is not null)
+                WinRT.Interop.InitializeWithWindow.Initialize(_context, new WindowInteropHelper(owner).EnsureHandle());
             return _context;
         }
     }
@@ -36,6 +37,7 @@ internal sealed class StorePackageUpdateService(Window owner) : IStorePackageUpd
     }
     public async Task<StoreUpdatePhase> InstallAsync(IProgress<StoreUpdateSnapshot> progress)
     {
+        if (owner is null) throw new InvalidOperationException("Store consent requires a visible owner.");
         if (_updates.Count == 0) throw new InvalidOperationException("Check Store availability before requesting an update.");
         var operation = Context.RequestDownloadAndInstallStorePackageUpdatesAsync(_updates);
         operation.Progress = (_, status) =>

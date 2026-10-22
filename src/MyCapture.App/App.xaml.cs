@@ -269,11 +269,13 @@ public partial class App : Application
             ShortcutHelpWindow.ShowHelp, () => _ = RequestSafeShutdownAsync(),
             PinClipboard: HandlePasteToScreen, HideOrShowAllPins: () => _pins?.HideOrShowAll(),
             ClearClickThrough: () => _pins?.ClearClickThroughAll(), ContactSupport: SupportWindow.ShowSupport,
-            ActivateOpenPin: pin => _pins?.ActivateOpenPin(pin));
+            ActivateOpenPin: pin => _pins?.ActivateOpenPin(pin), InstallUpdate: () => _ = InstallKnownUpdateAsync());
         _tray.MenuPresenter = () => _shellPresenter.ShowMenu(TrayMenuLayout.Build(trayCommands, _settings!.Hotkeys,
             new TrayMenuState(_pins?.CanRestoreClosed == true, _scrollCancellation is not null,
                 ClipboardAvailability.HasPinnableContent(), _pins?.Count ?? 0, _pins?.AreHidden == true,
-                _pins?.ClickThroughCount ?? 0, _pins?.SnapshotOpenPinWindows())));
+                _pins?.ClickThroughCount ?? 0, _pins?.SnapshotOpenPinWindows(),
+                UpdateAvailable: _updates?.HasAvailableUpdate == true, UpdateVersion: _updates?.AvailableVersion,
+                UpdateBusy: _updates?.IsBusy == true)));
         // A capture started from the tray menu races the menu's dismissal; the coordinator
         // uses this to decide whether the frozen frame must wait it out.
         _shellPresenter.ForegroundDismissed += () => _overlay?.NoteForegroundDismissal();
@@ -399,6 +401,7 @@ public partial class App : Application
         InitializeStoreRating();
         PrepareCapturePersistenceForExitAsync = PreparePendingCaptureForExitAsync;
         PrepareStoreUpdateProtection = PrepareAndHoldStoreUpdateAsync;
+        InitializeUpdates();
         _initialLibraryRecoveryTask = RecoverLibraryStateAsync();
         _initialEditRecoveryTask = InitializeEditRecoveryAsync();
         _ = ResumeMaintenanceAfterInitialRecoveryAsync();
@@ -2310,6 +2313,8 @@ public partial class App : Application
 
     protected override void OnExit(ExitEventArgs e)
     {
+        _updateTimer?.Stop();
+        _updates?.Dispose();
         _quickAccess?.Close();
         if (_preferenceSaveTimer?.IsEnabled == true) FlushEditorPreferences();
         if (_services?.GetService<SettingsStore>() is { } store

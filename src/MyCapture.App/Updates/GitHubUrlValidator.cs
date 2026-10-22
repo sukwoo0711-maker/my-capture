@@ -8,6 +8,14 @@ namespace MyCapture.App.Updates;
 /// </summary>
 public static class GitHubUrlValidator
 {
+    public static bool IsValidReleaseUri(Uri? uri, string expectedOwner, string expectedRepo, string expectedTag) =>
+        uri is not null && IsSecureHttps(uri)
+        && string.Equals(uri.Host, GitHubHost, StringComparison.OrdinalIgnoreCase)
+        && RepoOwnerNameRegex.IsMatch(expectedOwner) && RepoOwnerNameRegex.IsMatch(expectedRepo)
+        && !string.IsNullOrWhiteSpace(expectedTag) && !expectedTag.Contains('/') && !expectedTag.Contains('\\')
+        && string.Equals(uri.AbsolutePath, $"/{expectedOwner}/{expectedRepo}/releases/tag/{expectedTag}", StringComparison.Ordinal)
+        && string.IsNullOrEmpty(uri.Query) && string.IsNullOrEmpty(uri.Fragment);
+
     private const string GitHubHost = "github.com";
     public const string ReleaseAssetsHost = "release-assets.githubusercontent.com";
     public const string ObjectsHost = "objects.githubusercontent.com";

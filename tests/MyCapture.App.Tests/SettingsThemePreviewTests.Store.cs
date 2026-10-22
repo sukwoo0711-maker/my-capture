@@ -21,8 +21,8 @@ namespace MyCapture.App.Tests;
 public sealed partial class SettingsThemePreviewTests
 {
     [Fact]
-    public Task UpdateTab_OpensTheMicrosoftStoreListing_InEveryBuild() =>
-        RunIsolated(nameof(UpdateTab_OpensTheMicrosoftStoreListing_InEveryBuild), VerifyStoreUpdateTab);
+    public Task UpdateTab_StandaloneStoreAndDevelopmentWindowsKeepListingFallback() =>
+        RunIsolated(nameof(UpdateTab_StandaloneStoreAndDevelopmentWindowsKeepListingFallback), VerifyStoreUpdateTab);
 
     [Fact]
     public Task StoreUpdate_RejectsPreviousProgressAndResetsFailedAttempts() =>
@@ -79,6 +79,13 @@ public sealed partial class SettingsThemePreviewTests
                     Assert.Equal(Visibility.Collapsed, review.Visibility);
                     Assert.Single(Descendants(notice).OfType<TextBlock>(), text => text.Text == UiText.Format("StoreUpdate_CompletedVersion", "4.1.2"));
                     SaveStoreUpdateEvidence(window, $"update-completed-{locale}-high-contrast-780x560.png");
+                    notice.Dismiss();
+                    notice.ShowUpdateAvailable("4.6.0"); Drain(window);
+                    Assert.Single(Descendants(notice).OfType<TextBlock>(), text => text.Text == UiText.Format("Update_AvailableVersion", "4.6.0"));
+                    Button update = Descendants(notice).OfType<Button>().Single(button => (string)button.Content == UiText.Get("Update_Action"));
+                    Assert.Equal(Visibility.Visible, update.Visibility);
+                    AssertFits(window, update);
+                    SaveStoreUpdateEvidence(window, $"update-available-{locale}-high-contrast-780x560.png");
                 }
                 finally { window.CloseForExit(); }
             }
@@ -120,7 +127,7 @@ public sealed partial class SettingsThemePreviewTests
             tabs.SelectedItem = window.FindName("UpdateTab");
             Drain(window);
 
-            // Legacy GitHub updater controls remain absent; progress belongs to the Store adapter.
+            // The shared operation uses the existing status row, not the retired updater controls.
             Assert.Null(window.FindName("UpdateCancel"));
             Assert.Null(window.FindName("UpdateDownloadProgress"));
             Assert.Null(window.FindName("UpdateStatus"));
@@ -140,6 +147,8 @@ public sealed partial class SettingsThemePreviewTests
             Assert.Equal(expectedHelp, AutomationProperties.GetHelpText(action));
             Assert.True(action.IsVisible && action.IsEnabled && action.Focusable);
             Assert.Equal(packaged, rating.IsVisible);
+            Assert.Equal(packaged ? Visibility.Visible : Visibility.Collapsed,
+                ((CheckBox)window.FindName("AutoCheckUpdatesCheckBox")).Visibility);
             // Checking for updates heads the update section; rating sits with reporting a problem in
             // the feedback section. Each row wraps when narrow.
             Assert.IsType<WrapPanel>(VisualTreeHelper.GetParent(action));
