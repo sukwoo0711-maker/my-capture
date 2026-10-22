@@ -181,6 +181,8 @@ internal static class ShortcutRevealMotion
         {
             bool revealed = ShortcutPresentation.IsRevealed(caption);
             animate &= caption.IsLoaded && !SettleImmediatelyForTest && ShortcutPresentation.ReadEnabled?.Invoke() != true;
+            // Faces inside collapsed groups (hidden properties, the inactive command mode) settle directly.
+            animate &= caption.IsVisible;
             string profile = ProfileForTest ?? Profile;
             bool reduced = profile == "C" || !FluidMotion.AnimationsEnabled;
             int move = !animate || reduced ? 0 : profile == "B"
