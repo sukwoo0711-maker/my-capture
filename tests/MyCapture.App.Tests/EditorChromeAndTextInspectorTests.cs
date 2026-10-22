@@ -54,15 +54,15 @@ public sealed class EditorChromeAndTextInspectorTests : KoreanCaptionTest
         SelectTextTool(reopened.Editor);
         Assert.Equal(family, Assert.IsType<FontChoice>(Field<ComboBox>(reopened.Editor, "_textFontFamily").SelectedItem).Value);
         Assert.Equal(32, Field<Slider>(reopened.Editor, "_fontSizeSlider").Value);
-        Assert.True(Field<CheckBox>(reopened.Editor, "_textBold").IsChecked);
-        Assert.True(Field<CheckBox>(reopened.Editor, "_textBackground").IsChecked);
-        Assert.False(Field<CheckBox>(reopened.Editor, "_textOutline").IsChecked);
+        Assert.True(Field<ToggleButton>(reopened.Editor, "_textBold").IsChecked);
+        Assert.True(Field<ToggleButton>(reopened.Editor, "_textBackground").IsChecked);
+        Assert.False(Field<ToggleButton>(reopened.Editor, "_textOutline").IsChecked);
 
         reopened.Editor.SimulatePointerDown(reopened.Editor.ViewportPointOf(new PointD(60, 60)), 1, shift: false);
         TextBox input = Field<TextBox>(reopened.Editor, "_activeTextBox");
-        Assert.True(Field<CheckBox>(reopened.Editor, "_textBold").IsChecked);
-        Assert.True(Field<CheckBox>(reopened.Editor, "_textBackground").IsChecked);
-        Assert.False(Field<CheckBox>(reopened.Editor, "_textOutline").IsChecked);
+        Assert.True(Field<ToggleButton>(reopened.Editor, "_textBold").IsChecked);
+        Assert.True(Field<ToggleButton>(reopened.Editor, "_textBackground").IsChecked);
+        Assert.False(Field<ToggleButton>(reopened.Editor, "_textOutline").IsChecked);
         input.Text = "새 텍스트";
         Invoke(reopened.Editor, "CommitActiveText");
         TextAnnotation caption = Assert.IsType<TextAnnotation>(Assert.Single(Controller(reopened.Editor).Document.Items));
@@ -426,7 +426,7 @@ public sealed class EditorChromeAndTextInspectorTests : KoreanCaptionTest
 
     private static void Toggle(AnnotationEditorControl editor, string field, bool value)
     {
-        CheckBox control = Field<CheckBox>(editor, field);
+        ToggleButton control = Field<ToggleButton>(editor, field);
         Assert.True(control.IsVisible);
         control.IsChecked = value;
         control.RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));
