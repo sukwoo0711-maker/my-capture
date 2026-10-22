@@ -96,10 +96,14 @@ public sealed class EditorLayoutAccessibilityTests : KoreanCaptionTest
             Assert.Equal(ScrollBarVisibility.Auto, inspector.VerticalScrollBarVisibility);
             Assert.DoesNotContain(scrollViewers, viewer => viewer.Name == "AnnotationToolRailScroll");
             Assert.DoesNotContain(scrollViewers, viewer => viewer.Name == "AnnotationInspectorScroll");
-            // Native ComboBox templates can own dropdown ScrollViewers, all inside properties.
+            // Measuring the reserved crop command panel also realizes its native ratio
+            // ComboBox dropdown. It is hidden in edit mode and is not a scrolling bar.
             List<ScrollViewer> inspectorChildren = FindDescendants<ScrollViewer>(inspector).ToList();
+            ComboBox cropRatio = EditorKeysTests.Field<ComboBox>(host.Editor, "_cropRatio");
+            List<ScrollViewer> cropDropdown = FindDescendants<ScrollViewer>(cropRatio).ToList();
+            Assert.All(cropDropdown, viewer => Assert.False(viewer.IsVisible));
             Assert.All(scrollViewers.Where(viewer => !ReferenceEquals(viewer, inspector)),
-                viewer => Assert.Contains(viewer, inspectorChildren));
+                viewer => Assert.Contains(viewer, inspectorChildren.Concat(cropDropdown)));
         });
     }
 
