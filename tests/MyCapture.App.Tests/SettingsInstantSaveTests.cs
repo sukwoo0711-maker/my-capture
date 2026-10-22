@@ -32,6 +32,9 @@ public sealed partial class SettingsInstantSaveTests
         store.Save(saved);
         int saves = 0;
         bool rejectHotkey = false, failSave = false;
+        // The typing pause and the saved notice run on the test's clock. On the wall clock a stalled
+        // CI runner let the 400 ms pause expire between "6" and "7", which added a save.
+        var clock = new ManualDelayClock();
         var window = new SettingsWindow(() => saved, candidate =>
         {
             saves++;
@@ -43,7 +46,7 @@ public sealed partial class SettingsInstantSaveTests
             saved = candidate;
             return new SettingsApplyResult(true, !reject, true, languageChanged,
                 reject ? ["Synthetic hotkey collision"] : languageChanged ? [UiText.Get("Settings.LanguageRestart")] : []);
-        }, NullLogger.Instance, settingsStore: () => store);
+        }, NullLogger.Instance, settingsStore: () => store) { ScheduleDelay = clock.Schedule };
         try
         {
             SettingsDraft draft = (SettingsDraft)window.DataContext;
@@ -59,26 +62,26 @@ public sealed partial class SettingsInstantSaveTests
             window.ImportSettingsFrom(Path.Combine(root, "missing-settings.json"));
             string importFailure = ((TextBlock)window.FindName("SettingsStatus")).Text;
             Assert.StartsWith(UiText.Get("Settings_ImportFailed"), importFailure, StringComparison.Ordinal);
-            Pump(2100);
+            clock.Advance(2100);
             Assert.Equal(importFailure, ((TextBlock)window.FindName("SettingsStatus")).Text);
 
             draft.DelaySeconds = "6";
-            Pump(180);
+            clock.Advance(180);
             draft.DelaySeconds = "7";
             draft.ShowMagnifier = !draft.ShowMagnifier;
             Pump();
             Assert.Equal(2, saves);
             Assert.Equal(priorDelay, store.Load().Capture.DelaySeconds); // A toggle never flushes typing early.
-            Pump(200);
+            clock.Advance(200);
             Assert.Equal(2, saves);
-            Pump(250);
+            clock.Advance(250);
             Assert.Equal(3, saves);
             Assert.Equal(7, store.Load().Capture.DelaySeconds);
 
             Hotkey original = saved.Hotkeys.Capture;
             draft.CaptureHotkey = "not a shortcut";
             draft.IncludeCursor = !draft.IncludeCursor;
-            Pump(450);
+            clock.Advance(450);
             Assert.Equal(original, store.Load().Hotkeys.Capture);
             Assert.Equal(draft.IncludeCursor, saved.Capture.IncludeCursor);
             Assert.True(draft.GetErrors(nameof(SettingsDraft.CaptureHotkey)).Cast<string>().Any());
@@ -87,7 +90,7 @@ public sealed partial class SettingsInstantSaveTests
 
             rejectHotkey = true;
             draft.CaptureHotkey = "Ctrl+Alt+F8";
-            Pump(450);
+            clock.Advance(450);
             Assert.Equal(original, saved.Hotkeys.Capture);
             Assert.Contains("Synthetic hotkey collision", draft.GetErrors(nameof(SettingsDraft.CaptureHotkey)).Cast<string>());
             draft.PlayCaptureSound = !draft.PlayCaptureSound;
@@ -115,7 +118,7 @@ public sealed partial class SettingsInstantSaveTests
             string restart = UiText.Get("Settings.LanguageRestart");
             Assert.Contains(restart, ((TextBlock)window.FindName("SettingsStatus")).Text);
             draft.ShowMagnifier = !draft.ShowMagnifier;
-            Pump(2100);
+            clock.Advance(2100);
             Assert.Contains(restart, ((TextBlock)window.FindName("SettingsStatus")).Text);
 
             failSave = true;
@@ -130,7 +133,7 @@ public sealed partial class SettingsInstantSaveTests
             int beforeClose = saves;
             window.RequestClose();
             Assert.Equal(4, store.Load().Capture.DelaySeconds);
-            Pump(450);
+            clock.Advance(450);
             Assert.Equal(beforeClose + 1, saves); // Queued callback/timer cannot duplicate the flush.
         }
         finally { window.CloseForExit(); app.Shutdown(); }
@@ -438,6 +441,43 @@ public sealed partial class SettingsInstantSaveTests
         internal List<string> Opened = [];
         public void CopyText(string text) => Copied = text;
         public bool TryOpenUri(string uri) { Opened.Add(uri); return true; }
+    }
+    /// <summary>Stands in for the window's dispatcher delays; its clock moves only when the test advances it.</summary>
+    private sealed class ManualDelayClock
+    {
+        private readonly List<Delay> _pending = [];
+        private TimeSpan _now;
+        internal IDisposable Schedule(TimeSpan delay, Action action)
+        {
+            var scheduled = new Delay(_now + delay, action);
+            _pending.Add(scheduled);
+            return scheduled;
+        }
+        /// <summary>
+        /// Lets queued dispatcher work run first, then runs each delay that comes due in order of
+        /// its due time, each followed by the work it queued, as dispatcher timers would.
+        /// </summary>
+        internal void Advance(int milliseconds)
+        {
+            TimeSpan end = _now + TimeSpan.FromMilliseconds(milliseconds);
+            Pump();
+            while (_pending.Where(item => !item.Cancelled && item.Due <= end).MinBy(item => item.Due) is { } due)
+            {
+                _pending.Remove(due);
+                _now = due.Due;
+                due.Action();
+                Pump();
+            }
+            _pending.RemoveAll(item => item.Cancelled);
+            _now = end;
+        }
+        private sealed class Delay(TimeSpan due, Action action) : IDisposable
+        {
+            internal TimeSpan Due { get; } = due;
+            internal Action Action { get; } = action;
+            internal bool Cancelled { get; private set; }
+            public void Dispose() => Cancelled = true;
+        }
     }
     private static Task Isolated(string name, Action action) => SettingsThemePreviewTests.RunIsolated(name, action, typeof(SettingsInstantSaveTests));
     private static Application CreateApplication()
