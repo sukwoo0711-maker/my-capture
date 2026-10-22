@@ -200,7 +200,7 @@ $install = Join-Path $run 'installed'
 [IO.Directory]::CreateDirectory((Join-Path $run 'temporary')) | Out-Null
 $seedLog = Join-Path $run 'seed-install.log'
 $env:MYCAPTURE_DATA_ROOT = Join-Path $run 'isolated-data'
-& (Join-Path $artifacts 'installer-stage\MyCaptureSetup.exe') /quiet --no-shell-integration --install-root $install --payload $payload --manifest (Join-Path $artifacts 'installer-manifest.json') --log $seedLog
+& (Join-Path $artifacts 'installer-stage\MyCaptureSetup.exe') /quiet --no-shell-integration --install-root $install --payload $payload --manifest (Join-Path $artifacts 'installer-manifest.json') --log $seedLog | Out-Null
 Assert-True ($LASTEXITCODE -eq 0) "Isolated seed installation failed; see $seedLog"
 $installedManifest = Get-Content -LiteralPath (Join-Path $install 'install-manifest.json') -Raw -Encoding UTF8 | ConvertFrom-Json
 Assert-Inventory $install $installedManifest

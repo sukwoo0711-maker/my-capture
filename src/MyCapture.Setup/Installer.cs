@@ -39,7 +39,6 @@ public sealed class SetupLog
     public void Write(string level, string message)
     {
         string line = DateTime.Now.ToString("O") + " [" + level.ToUpperInvariant() + "] " + message;
-        if (!Quiet) Console.WriteLine(line);
         if (Path != null) try { File.AppendAllText(Path, line + Environment.NewLine, new UTF8Encoding(false)); } catch { }
     }
 }
@@ -63,12 +62,14 @@ public sealed class Installer
     private readonly Options options;
     private readonly string directory;
     private readonly SetupLog log;
+    private readonly ISetupProgress progress;
     private string? stage, backup, installRoot, receipt;
     private UpdaterSession? update;
     private bool movedOld, committed;
     private bool migrateLegacyShell;
     private int warnings;
-    public Installer(Options options, string directory, SetupLog log) { this.options = options; this.directory = directory; this.log = log; }
+    public Installer(Options options, string directory, SetupLog log, ISetupProgress? progress = null)
+    { this.options = options; this.directory = directory; this.log = log; this.progress = progress ?? NullSetupProgress.Instance; }
     private void Info(string message) => log.Write("INFO", message);
     private void Warning(string message) { warnings++; log.Write("WARN", message); }
     public int Run()
@@ -84,7 +85,6 @@ public sealed class Installer
             string message = "Installation failed (exit " + code + "): " + e.Message;
             log.Write("ERROR", message);
             if (backup != null && Directory.Exists(backup)) log.Write("ERROR", "Rollback backup retained at " + backup);
-            if (!options.Quiet) WindowsHost.Popup(false, message + "\r\nLog: " + log.Path);
         }
         finally
         {
@@ -101,8 +101,10 @@ public sealed class Installer
     private void Install()
     {
         Info("MyCapture installer starting. PID=" + Process.GetCurrentProcess().Id + "; executable=" + Program.Executable);
+        progress.Stage(SetupStage.VerifyingPackage);
         if (!File.Exists(options.Payload) || !File.Exists(options.Manifest)) throw new SetupException(14, "Payload ZIP or installer manifest is missing.");
         var manifest = PackageManifest.Read(options.Manifest);
+        progress.Version(manifest.Version);
         ValidateUpdate(manifest);
         WindowsHost.RequireSupported(manifest);
         manifest.VerifyBootstrap(directory);
@@ -118,7 +120,8 @@ public sealed class Installer
         stage = Path.Combine(parent, ".MyCapture.stage." + transaction);
         backup = Path.Combine(parent, ".MyCapture.backup." + transaction);
         if (Directory.Exists(stage) || Directory.Exists(backup) || File.Exists(stage) || File.Exists(backup)) throw new SetupException(12, "Transaction staging path already exists.");
-        Payload.Extract(options.Payload, manifest, stage);
+        progress.Stage(SetupStage.ExtractingFiles);
+        Payload.Extract(options.Payload, manifest, stage, progress);
         Payload.Application(stage, manifest);
         AddInstalledFiles(manifest, stage);
         Info("Payload extracted and verified in transaction staging: " + manifest.FileCount + " files.");
@@ -126,12 +129,14 @@ public sealed class Installer
         else
         {
             FileRemoval.RemoveStaleWorkers(Info);
+            progress.Stage(SetupStage.StoppingApplication);
             AppProcesses.Stop(Path.Combine(installRoot, "MyCapture.exe"), update != null, false, Info);
             // install.ps1 preserves unmanifested files only for updater sessions. A direct
             // reinstall replaces the whole root and then deletes the previous tree.
             if (update != null) PathSafety.PreserveUserFiles(installRoot, stage);
             // Recheck ancestors and ownership immediately before the transactional moves.
             PathSafety.InstallRoot(installRoot, manifest);
+            progress.Stage(SetupStage.ReplacingVersion);
             try
             {
                 if (Directory.Exists(installRoot)) { Move(installRoot, backup); movedOld = true; Info("Existing installation moved to rollback backup: " + backup); }
@@ -148,9 +153,10 @@ public sealed class Installer
                 if (original is SetupException) throw;
                 throw new SetupException(17, "Installation transaction failed: " + original.Message);
             }
-            if (!options.NoShellIntegration) ShellIntegration.Install(installRoot, manifest, Warning);
-            else if (migrateLegacyShell) ShellIntegration.RepairLegacyTargets(installRoot, manifest, Warning);
+            if (!options.NoShellIntegration) { progress.Stage(SetupStage.RegisteringStartMenu); ShellIntegration.Install(installRoot, manifest, Warning); }
+            else if (migrateLegacyShell) { progress.Stage(SetupStage.RegisteringStartMenu); ShellIntegration.RepairLegacyTargets(installRoot, manifest, Warning); }
             else Info("Shell integration was intentionally skipped.");
+            progress.Stage(SetupStage.FinalizingInstallation);
             if (movedOld && Directory.Exists(backup))
             {
                 try { FileRemoval.DeleteDirectoryWithRetry(backup); movedOld = false; }
@@ -160,14 +166,16 @@ public sealed class Installer
         string summary = "MyCapture " + manifest.Version + (options.VerifyOnly ? " package verification succeeded." : " installed successfully to " + installRoot + ".") +
             (warnings == 0 ? "" : " Warnings: " + warnings + ".") + " Log: " + log.Path;
         Info(summary);
-        if (!options.Quiet) WindowsHost.Popup(true, summary);
-        if (!options.Quiet && !options.VerifyOnly && !options.NoShellIntegration && update == null)
-            try
-            {
-                using (Process.Start(LaunchInfo(installRoot))) { }
-                Info("Launched MyCapture after successful interactive installation.");
-            }
-            catch (Exception e) { Warning("Installation succeeded, but MyCapture could not start. Open MyCapture from the Start Menu. " + e.Message); }
+    }
+    public void Launch()
+    {
+        if (installRoot == null || !committed || options.Quiet || options.VerifyOnly || update != null) return;
+        try
+        {
+            using (Process.Start(LaunchInfo(installRoot))) { }
+            Info("Launched MyCapture after successful interactive installation.");
+        }
+        catch (Exception e) { Warning("Installation succeeded, but MyCapture could not start. Open MyCapture from the Start Menu. " + e.Message); }
     }
     /// <summary>
     /// install.ps1 used Start-Process -WindowStyle Hidden, which is a shell launch with SW_HIDE.
@@ -267,6 +275,7 @@ public sealed class Installer
     private void Rollback()
     {
         log.Write("WARN", "Rolling back the installation transaction.");
+        progress.Stage(SetupStage.RollingBack);
         if (committed && Directory.Exists(installRoot)) { FileRemoval.DeleteDirectoryWithRetry(installRoot!); committed = false; }
         if (movedOld && Directory.Exists(backup)) { Move(backup!, installRoot!); movedOld = false; }
     }

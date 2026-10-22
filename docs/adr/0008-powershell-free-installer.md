@@ -10,7 +10,9 @@
 
 ## 결정
 
-`MyCapture.Setup`을 .NET Framework 4.8 x64 콘솔 실행 파일로 빌드합니다. Windows 10 22H2와 Windows 11에 포함된 Framework를 사용하므로 설치기에 별도 런타임을 함께 배포하지 않습니다. 새 NuGet 의존성은 추가하지 않습니다. JSON은 `DataContractJsonSerializer`, ZIP은 `System.IO.Compression`, 바로가기는 `IShellLinkW`와 `IPersistFile`, 등록은 HKCU 레지스트리를 사용합니다.
+`MyCapture.Setup`을 .NET Framework 4.8 x64 GUI 실행 파일(`WinExe`)로 빌드합니다. Windows 10 22H2와 Windows 11에 포함된 Framework를 사용하므로 설치기에 별도 런타임을 함께 배포하지 않습니다. 새 NuGet 의존성은 추가하지 않습니다. JSON은 `DataContractJsonSerializer`, ZIP은 `System.IO.Compression`, 바로가기는 `IShellLinkW`와 `IPersistFile`, 등록은 HKCU 레지스트리를 사용합니다.
+
+대화형 설치·제거는 콘솔 대신 기본 Windows Forms 창에서 실제 작업 진행과 완료·실패 결과를 표시합니다. 설치 완료 후 실행 여부는 창에서 선택하며, 작업 중에는 창을 닫아 파일 교체를 중단할 수 없습니다. `/quiet`·`/Q`, 업데이트 세션, `--cleanup-request`, `--verify-only`는 창 없이 실행하고 기존 종료 코드·영수증·파일 로그 형식을 유지합니다. 개발 PowerShell 스크립트는 실행 파일 출력을 파이프에 연결해 GUI 프로세스의 종료를 기다린 뒤 종료 코드를 확인합니다.
 
 IExpress는 `AppLaunched=MyCaptureSetup.exe`로 직접 실행하며 두 quiet 명령은 `MyCaptureSetup.exe /quiet`입니다. 설치 경로에는 배치·PowerShell 호스트가 없습니다. 설치 위치의 `MyCaptureUninstall.exe`는 같은 바이너리의 복사본이며 `/uninstall`로 실행합니다. 실행 manifest는 `asInvoker`, `uiAccess=false`, Windows 10/11 호환성을 명시하여 이름에 Setup 또는 Uninstall이 있어도 관리자 승격을 요청하지 않습니다.
 

@@ -2,17 +2,20 @@
   <PropertyGroup>
     <!-- In-box on Windows 10 22H2 and Windows 11: setup needs no PowerShell and no .NET 10 runtime. -->
     <TargetFramework>net48</TargetFramework>
-    <OutputType>Exe</OutputType>
+    <OutputType>WinExe</OutputType>
     <AssemblyName>MyCaptureSetup</AssemblyName>
     <RootNamespace>MyCapture.Setup</RootNamespace>
     <ImplicitUsings>disable</ImplicitUsings>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>../MyCapture.App/Assets/app.ico</ApplicationIcon>
     <Deterministic>true</Deterministic>
   </PropertyGroup>
   <ItemGroup>
     <Reference Include="System.IO.Compression" />
     <Reference Include="System.IO.Compression.FileSystem" />
     <Reference Include="System.Runtime.Serialization" />
+    <Reference Include="System.Windows.Forms" />
+    <Reference Include="System.Drawing" />
     <!-- Tests substitute the updater boundary folders without touching real system folders. -->
     <InternalsVisibleTo Include="MyCapture.Setup.Tests" />
   </ItemGroup>
