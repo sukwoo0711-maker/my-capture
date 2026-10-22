@@ -71,7 +71,7 @@ public sealed class RecordingControlBarTests
             window.Show();
             window.UpdateLayout();
             primary.RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));
-            Assert.True(firstFrame.Wait(TimeSpan.FromSeconds(3)), "recording did not start");
+            Assert.True(firstFrame.Wait(RecordingTestTimeouts.CaptureThread), "recording did not start");
             Assert.True(window.IsRecording);
 
             // While recording: ■ Stop and ❚❚ Pause; cancel would only have stopped, so it is gone.

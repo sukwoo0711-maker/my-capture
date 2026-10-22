@@ -32,20 +32,11 @@ public sealed partial class SettingsThemePreviewTests
     {
         if (Environment.GetEnvironmentVariable(ChildFlag) == "1")
         {
-            // End the STA thread's dispatcher with it. Left running, its windows could still
-            // receive a message while the child process was exiting, which crashed the host
-            // ("managed code after the runtime thread state has been destroyed") under load.
-            StaTestHost.Run(() =>
-            {
-                try
-                {
-                    verify();
-                }
-                finally
-                {
-                    System.Windows.Threading.Dispatcher.CurrentDispatcher.InvokeShutdown();
-                }
-            });
+            // This process runs only this test. Its STA thread shuts its dispatcher down and then
+            // stays until the process ends: a WPF thread that exits while the process lives can
+            // still have msctf call a managed TSF text store from its thread-exit cleanup, which
+            // crashed this host ("managed code after the runtime thread state has been destroyed").
+            StaTestHost.RunUntilProcessExit(verify);
             string receipt = DiagnosticOutputPaths.Child(
                 Environment.GetEnvironmentVariable(ReceiptRoot) ?? throw new IOException("Missing parent test receipt."), "completed.txt");
             File.WriteAllText(receipt, "PASS");
