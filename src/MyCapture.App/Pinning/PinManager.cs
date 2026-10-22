@@ -414,7 +414,7 @@ internal sealed class PinManager
             pin.PlaceAtPhysicalOnShow(bounds);
         }
 
-        AttachAndShow(pin, activate);
+        AttachAndShow(pin, activate, landing: activate);
         if (!pin.ApplyRestorePlacement())
         {
             _log.LogWarning("Restored pin could not reach its recorded position; left where Windows placed it");
@@ -490,7 +490,7 @@ internal sealed class PinManager
         return (left, top, null, scale);
     }
 
-    private void AttachAndShow(PinWindow pin, bool activate)
+    private void AttachAndShow(PinWindow pin, bool activate, bool landing = true)
     {
         pin.CloseAllRequested += (_, _) => CloseAll();
         pin.CopyRequested += OnPinCopyRequested;
@@ -507,6 +507,7 @@ internal sealed class PinManager
         pin.ShowActivated = activate;
         BeforeShowForTest?.Invoke(pin);
         ShowPinWindow(pin, pin.Show);
+        if (landing) pin.StartLandingEffect();
         if (activate)
         {
             if (ActivatePinForTest is { } activatePin) activatePin(pin);
