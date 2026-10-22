@@ -405,10 +405,11 @@ internal sealed class AnnotationRenderer
         var geometry = new StreamGeometry();
         using (StreamGeometryContext context = geometry.Open())
         {
-            context.BeginFigure(ToPoint(points[0]), isFilled: false, isClosed: false);
-            for (int i = 1; i < points.Count; i++)
+            ReadOnlySpan<PointD> span = points.AsSpan();
+            context.BeginFigure(ToPoint(span[0]), isFilled: false, isClosed: false);
+            for (int i = 1; i < span.Length; i++)
             {
-                context.LineTo(ToPoint(points[i]), isStroked: true, isSmoothJoin: false);
+                context.LineTo(ToPoint(span[i]), isStroked: true, isSmoothJoin: false);
             }
         }
 

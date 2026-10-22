@@ -68,7 +68,7 @@ public sealed class PenAnnotation : AnnotationItem
     public override string DisplayName => IsHighlighter ? UiText.Get("Text_425C77DFA926") : UiText.Get("Text_E414AD855B8D");
 
     [JsonIgnore]
-    public override RectD Bounds => GeometryMath.BoundsOf(_points);
+    public override RectD Bounds => GeometryMath.BoundsOfSpan(_points.AsSpan());
 
     [JsonIgnore]
     public override bool SupportsResize => false;
@@ -93,7 +93,7 @@ public sealed class PenAnnotation : AnnotationItem
 
     public override double DistanceTo(PointD point)
     {
-        double d = GeometryMath.DistanceToPolyline(point, _points);
+        double d = GeometryMath.DistanceToPolylineSpan(point, _points.AsSpan());
         double band = Math.Max(StrokeThickness / 2.0, 4.0);
         return Math.Max(0, d - band);
     }

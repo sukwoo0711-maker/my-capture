@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Runtime.InteropServices;
 using MyCapture.Core.Primitives;
 
 namespace MyCapture.Core.Annotations;
@@ -14,6 +15,12 @@ public sealed class PenPointCollection : Collection<PointD>
     public static implicit operator PenPointCollection(List<PointD> points) => new(points);
 
     internal event Action? Changed;
+
+    /// <summary>
+    /// The points as one contiguous span for hot loops (bounds, hit tests, geometry). It is
+    /// valid until the next mutation; the indexer goes through two interface calls per point.
+    /// </summary>
+    public ReadOnlySpan<PointD> AsSpan() => CollectionsMarshal.AsSpan((List<PointD>)Items);
 
     protected override void InsertItem(int index, PointD item)
     {
