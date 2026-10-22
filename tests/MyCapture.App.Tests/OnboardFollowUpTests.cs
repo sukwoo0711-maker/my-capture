@@ -56,6 +56,7 @@ public sealed class QuickAccessCardLabelTests
     [InlineData("en")]
     public void PrimaryActionNameAndSecondaryIconsFitWithoutClipping(string language) => StaTestHost.Run(() =>
     {
+        using var motion = new ShortcutMotionTestScope();
         using var culture = UiText.UseLanguage(language);
         var image = BitmapSource.Create(2, 2, 96, 96, PixelFormats.Bgra32, null, new byte[16], 8);
         var card = new QuickAccessWindow(image, () => Task.FromResult(true), () => { }, () => Task.CompletedTask,
@@ -85,9 +86,9 @@ public sealed class QuickAccessCardLabelTests
                     if (restingSizes.TryGetValue(button, out Size size)) Assert.Equal(size, button.RenderSize);
                     else restingSizes.Add(button, button.RenderSize);
                     Grid face = Assert.IsType<Grid>(button.Content);
-                    TextBlock caption = Assert.IsType<TextBlock>(face.Children[1]);
+                    TextBlock caption = Assert.IsAssignableFrom<TextBlock>(face.Children[1]);
                     Assert.Equal(AutomationProperties.GetAcceleratorKey(button), caption.Text);
-                    Assert.Equal(revealed ? Visibility.Visible : Visibility.Collapsed, caption.Visibility);
+                    ShortcutMotionTestScope.AssertState(caption, revealed);
                     Rect bounds = face.TransformToAncestor(button).TransformBounds(new Rect(face.RenderSize));
                     Assert.True(bounds.Left >= -0.5 && bounds.Top >= -0.5 && bounds.Right <= button.ActualWidth + 0.5
                         && bounds.Bottom <= button.ActualHeight + 0.5, $"{language}: button content is clipped: {bounds}");

@@ -131,7 +131,14 @@ public sealed class EditorLayoutAccessibilityTests : KoreanCaptionTest
                 Assert.Equal(20, coordinateGrid.Width);
                 Assert.Equal(20, coordinateGrid.Height);
                 Path glyph = Assert.IsType<Path>(Assert.Single(coordinateGrid.Children));
-                Assert.Equal(1.6, glyph.StrokeThickness, 3);
+                // The 20-unit geometry is enlarged inside the resting 24-DIP icon. Check the
+                // rendered pen in both axes, including the Viewbox and inner render transforms.
+                GeneralTransform transform = glyph.TransformToAncestor(tool);
+                Point origin = transform.Transform(new Point());
+                double scaleX = (transform.Transform(new Point(1, 0)) - origin).Length;
+                double scaleY = (transform.Transform(new Point(0, 1)) - origin).Length;
+                Assert.Equal(1.6, glyph.StrokeThickness * scaleX, 3);
+                Assert.Equal(1.6, glyph.StrokeThickness * scaleY, 3);
                 Assert.Equal(Stretch.None, glyph.Stretch);
                 Assert.False(ContainsText(icon),
                     "A tool-rail button must not reintroduce a visible label that can clip.");
