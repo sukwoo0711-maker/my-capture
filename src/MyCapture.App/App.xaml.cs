@@ -1853,7 +1853,7 @@ public partial class App : Application
         return window;
     }
 
-    private void StartOcrModelDownload(bool isBackground = true)
+    private void StartOcrModelDownload(bool isBackground = true, bool deferForBatterySaver = false)
     {
         if (_services is null)
         {
@@ -1869,7 +1869,7 @@ public partial class App : Application
             {
                 // Download only. Session creation stays on the first Accurate OCR so a
                 // native ONNX fault during startup cannot take down the tray process.
-                await download.EnsureAsync(quality, isBackground, CancellationToken.None).ConfigureAwait(false);
+                await download.EnsureAsync(quality, isBackground, CancellationToken.None, deferForBatterySaver).ConfigureAwait(false);
             }
             catch (Exception ex)
             {

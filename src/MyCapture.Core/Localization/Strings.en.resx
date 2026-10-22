@@ -4605,4 +4605,6 @@ Overwrite these shortcuts? You can change this later in Settings → Shortcuts.<
   <data name="CoreShortcuts.KeepCurrent" xml:space="preserve"><value>Keep current</value></data>
   <data name="CoreShortcuts.Force" xml:space="preserve"><value>Handle Ctrl+Shift+C/X/Z and F3 before other programs</value></data>
   <data name="CoreShortcuts.ForceDescription" xml:space="preserve"><value>MyCapture receives these shortcuts even if another program registered them first. Turn this off to let the program that registered them first use them.</value></data>
+  <data name="Welcome_AccurateOcr" xml:space="preserve"><value>Accurate Korean text recognition</value></data>
+  <data name="Welcome_AccurateOcrHelp" xml:space="preserve"><value>Downloads about {0} MB of models once in the background. Recognition takes longer than Fast. You can change this in Settings.</value></data>
 </root>

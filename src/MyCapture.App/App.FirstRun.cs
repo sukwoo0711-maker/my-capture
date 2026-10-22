@@ -97,7 +97,14 @@ public partial class App
         welcome.Closed += (_, _) =>
         {
             StartAtSignInOutcome? startup = ApplyWelcomeStartAtSignIn(welcome.StartAtSignIn);
-            try { _services?.GetRequiredService<SettingsStore>().CompleteFirstRun(_settings!); }
+            try
+            {
+                FirstRunOcrChoice.Complete(_settings!, welcome.UseAccurateOcr,
+                    settings => _services!.GetRequiredService<SettingsStore>().CompleteFirstRun(settings),
+                    () => StartOcrModelDownload(isBackground: false, deferForBatterySaver: true));
+                _log?.LogInformation("Welcome accurate OCR: selected {Selected}, quality {Quality}",
+                    welcome.UseAccurateOcr, _settings!.Ocr.Quality);
+            }
             catch (Exception ex) { _log?.LogWarning(ex, "Could not persist first-run completion"); }
             AnnounceAfterWelcome(welcome.Outcome, startup);
             switch (FirstRunPlan.Next(welcome.Outcome))

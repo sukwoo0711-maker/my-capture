@@ -27,6 +27,14 @@ public sealed class SettingsUxTextTests
         Assert.Contains("102 MB", SettingsWindow.OcrQualityDescription, StringComparison.Ordinal);
         Assert.Contains("164 MB", SettingsWindow.OcrQualityDescription, StringComparison.Ordinal);
         Assert.DoesNotContain("{0}", SettingsWindow.OcrQualityDescription, StringComparison.Ordinal);
+        if (language == "ko-KR")
+        {
+            Assert.StartsWith("정확 품질은 텍스트 인식 모델", privacy, StringComparison.Ordinal);
+            Assert.StartsWith("빠름과 보통은 Windows 기본 인식 기능을 사용합니다.", SettingsWindow.OcrQualityDescription,
+                StringComparison.Ordinal);
+            Assert.DoesNotContain("?", privacy, StringComparison.Ordinal);
+            Assert.DoesNotContain("?", SettingsWindow.OcrQualityDescription, StringComparison.Ordinal);
+        }
     }
 
     [Theory]
