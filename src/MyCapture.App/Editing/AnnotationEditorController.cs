@@ -46,7 +46,7 @@ internal sealed class AnnotationEditorController
     // The draft pen's own point list, kept equal to _draftPoints by appending each move's point
     // instead of copying the whole stroke. Null when something else changed the pen's points,
     // so the next move gives it a fresh copy of the drawn points, as every move used to.
-    private List<PointD>? _draftPenPoints;
+    private PenPointCollection? _draftPenPoints;
     private bool _updatingDraftPen;
 
     // The text being typed into a live box. Until it is committed its add command is the
@@ -93,10 +93,24 @@ internal sealed class AnnotationEditorController
     internal AnnotationItem? Selected => _selected;
     internal IReadOnlyList<AnnotationItem> SelectedItems => _selection;
     internal RectD? MarqueeBounds { get; private set; }
-    internal RectD? SelectionBounds => _selection.Count == 0 ? null : new RectD(
-        _selection.Min(item => item.Bounds.Left), _selection.Min(item => item.Bounds.Top),
-        _selection.Max(item => item.Bounds.Right) - _selection.Min(item => item.Bounds.Left),
-        _selection.Max(item => item.Bounds.Bottom) - _selection.Min(item => item.Bounds.Top));
+    internal RectD? SelectionBounds
+    {
+        get
+        {
+            if (_selection.Count == 0) return null;
+            RectD first = _selection[0].Bounds;
+            double left = first.Left, top = first.Top, right = first.Right, bottom = first.Bottom;
+            for (int i = 1; i < _selection.Count; i++)
+            {
+                RectD bounds = _selection[i].Bounds;
+                left = Math.Min(left, bounds.Left);
+                top = Math.Min(top, bounds.Top);
+                right = Math.Max(right, bounds.Right);
+                bottom = Math.Max(bottom, bounds.Bottom);
+            }
+            return new RectD(left, top, right - left, bottom - top);
+        }
+    }
 
     /// <summary>Current stroke/foreground colour applied to new items.</summary>
     internal ColorRgba StrokeColor { get; set; } = ColorRgba.FromRgb(0xEF, 0x44, 0x44);
@@ -549,25 +563,16 @@ internal sealed class AnnotationEditorController
                 _draftPoints?.Add(point);
                 if (_draftItem is PenAnnotation pen)
                 {
-                    // The pen's list already holds every earlier point, so one append keeps it
-                    // equal to the drawn points; reassigning it raises the same change
-                    // notifications the copy did.
-                    List<PointD> points;
-                    if (_draftPenPoints is { } own && ReferenceEquals(pen.Points, own))
-                    {
-                        own.Add(point);
-                        points = own;
-                    }
-                    else
-                    {
-                        points = [.. _draftPoints!];
-                    }
-
-                    _draftPenPoints = points;
+                    // Appending now raises the points/bounds notifications itself. Guard
+                    // the append too, so it is not mistaken for an external draft edit.
                     _updatingDraftPen = true;
                     try
                     {
-                        pen.Points = points;
+                        if (_draftPenPoints is { } own && ReferenceEquals(pen.Points, own))
+                            own.Add(point);
+                        else
+                            pen.Points = [.. _draftPoints!];
+                        _draftPenPoints = pen.Points;
                     }
                     finally
                     {
@@ -1229,12 +1234,34 @@ internal sealed class AnnotationEditorController
         SetSelected(null);
     }
 
+    private long _nextStepRevision = -1;
+    private int _nextStepNumber;
+    private string? _nextStepPositiveSign;
+    private string? _nextStepNegativeSign;
+
     /// <summary>
     /// The number the step tool adds next: one more than the highest number on the image, so
     /// deleting or undoing the last badge gives its number back.
     /// </summary>
-    internal int NextStepNumber => _document.Items.OfType<TextAnnotation>().Where(t => t.IsStepNumber)
-        .Select(t => int.TryParse(t.Text, out int n) ? n : 0).DefaultIfEmpty(0).Max() + 1;
+    internal int NextStepNumber
+    {
+        get
+        {
+            // Preview and cursor both ask for this value. Selection/style changes do not
+            // change the sequence. Keep the original culture-sensitive integer parsing.
+            var format = System.Globalization.CultureInfo.CurrentCulture.NumberFormat;
+            if (_nextStepRevision != _document.StepNumberRevision
+                || _nextStepPositiveSign != format.PositiveSign || _nextStepNegativeSign != format.NegativeSign)
+            {
+                _nextStepNumber = _document.Items.OfType<TextAnnotation>().Where(t => t.IsStepNumber)
+                    .Select(t => int.TryParse(t.Text, out int n) ? n : 0).DefaultIfEmpty(0).Max() + 1;
+                _nextStepRevision = _document.StepNumberRevision;
+                _nextStepPositiveSign = format.PositiveSign;
+                _nextStepNegativeSign = format.NegativeSign;
+            }
+            return _nextStepNumber;
+        }
+    }
 
     internal TextAnnotation AddStepNumber(PointD point)
     {
