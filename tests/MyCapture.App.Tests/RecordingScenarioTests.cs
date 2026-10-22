@@ -67,11 +67,11 @@ public sealed class RecordingScenarioTests
             NullLogger.Instance);
 
         recorder.Start(SmallRegion(), "warmup-stop.mp4", new RecordingSettings { FrameRate = RecordingFrameRate.Fps15 });
-        Assert.True(factoryEntered.Wait(TimeSpan.FromSeconds(5)), "encoder factory did not start");
+        Assert.True(factoryEntered.Wait(RecordingTestTimeouts.CaptureThread), "encoder factory did not start");
         Task<RecordingResult> stopping = Task.Run(recorder.Stop);
         await Task.Delay(50);
         allowFactoryToFinish.Set();
-        RecordingResult result = await stopping.WaitAsync(TimeSpan.FromSeconds(5));
+        RecordingResult result = await stopping.WaitAsync(RecordingTestTimeouts.CaptureThread);
 
         Assert.NotNull(spy);
         Assert.True(spy!.Completed);

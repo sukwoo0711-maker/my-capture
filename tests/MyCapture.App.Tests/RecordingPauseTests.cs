@@ -44,7 +44,7 @@ public sealed class RecordingPauseTests : KoreanCaptionTest
         Assert.True(recorder.Pause());
         Assert.True(recorder.IsPaused);
         Assert.False(recorder.Pause());
-        Assert.True(recorder.WaitUntilCaptureParked(TimeSpan.FromSeconds(5)));
+        Assert.True(recorder.WaitUntilCaptureParked(RecordingTestTimeouts.CaptureThread));
         time.Advance(5_000);
         Thread.Sleep(300); // several capture-loop wake-ups while paused
         Assert.Equal(11, sink.Count);
@@ -79,7 +79,7 @@ public sealed class RecordingPauseTests : KoreanCaptionTest
         sink.WaitForCount(1);
         AdvanceFrames(time, sink, 5);
         Assert.True(recorder.Pause());
-        Assert.True(recorder.WaitUntilCaptureParked(TimeSpan.FromSeconds(5)));
+        Assert.True(recorder.WaitUntilCaptureParked(RecordingTestTimeouts.CaptureThread));
         // Long idle: the encoder receives nothing while paused, however much time passes.
         time.Advance(3_600_000);
         Thread.Sleep(200);
@@ -115,12 +115,12 @@ public sealed class RecordingPauseTests : KoreanCaptionTest
             time);
 
         recorder.Start(new RectD(0, 0, 64, 48), "pause-startup.mp4", new RecordingSettings { FrameRate = RecordingFrameRate.Fps10 });
-        Assert.True(factoryEntered.Wait(TimeSpan.FromSeconds(5)));
+        Assert.True(factoryEntered.Wait(RecordingTestTimeouts.CaptureThread));
         Assert.True(recorder.Pause());
         release.Set();
 
         sink.WaitForCount(1);
-        Assert.True(recorder.WaitUntilCaptureParked(TimeSpan.FromSeconds(5)));
+        Assert.True(recorder.WaitUntilCaptureParked(RecordingTestTimeouts.CaptureThread));
         time.Advance(2_000);
         Thread.Sleep(200);
         Assert.Equal(1, sink.Count);
@@ -297,8 +297,19 @@ public sealed class RecordingPauseTests : KoreanCaptionTest
 
             typeof(RegionRecordingCoordinator).GetMethod("OpenControls", Flags)!.Invoke(coordinator, [fixture.Region]);
             var controls = Field<RecordingControlWindow>(coordinator, "_controls");
+            // A failed recording would raise the coordinator's modal error dialog on this thread and stall
+            // the run until the job times out. Report it here instead, so the test fails with the cause.
+            controls.Failed -= (EventHandler<RecordingFailedEventArgs>)Delegate.CreateDelegate(
+                typeof(EventHandler<RecordingFailedEventArgs>), coordinator,
+                typeof(RegionRecordingCoordinator).GetMethod("OnControlsFailed", Flags)!);
+            Exception? failure = null;
+            controls.Failed += (_, args) => failure = args.Exception;
             Invoke(controls, "OnPrimaryClicked");
-            PumpUntil(() => controls.CanCaptureStill);
+            // The production recorder creates the process's first Media Foundation H.264 encoder on the
+            // capture thread before the first frame, alongside the WGC session.
+            PumpUntil(() => controls.CanCaptureStill || failure is not null, RecordingTestTimeouts.CaptureThread);
+            Assert.Null(failure);
+            Assert.True(controls.CanCaptureStill);
             SyntheticCaptureFixture.Pump(400);
             Invoke(controls, "TogglePause");
             PumpUntil(() => controls.IsPaused && !controls.IsPauseTransitionPending);
@@ -394,10 +405,10 @@ public sealed class RecordingPauseTests : KoreanCaptionTest
     private static void Invoke(object owner, string method) =>
         owner.GetType().GetMethod(method, Flags)!.Invoke(owner, null);
 
-    private static void PumpUntil(Func<bool> predicate)
+    private static void PumpUntil(Func<bool> predicate, TimeSpan? timeout = null)
     {
         var watch = Stopwatch.StartNew();
-        while (!predicate() && watch.Elapsed < TimeSpan.FromSeconds(10))
+        while (!predicate() && watch.Elapsed < (timeout ?? TimeSpan.FromSeconds(10)))
         {
             SyntheticCaptureFixture.Pump(10);
         }
@@ -461,7 +472,7 @@ public sealed class RecordingPauseTests : KoreanCaptionTest
 
         internal void WaitForCount(int count)
         {
-            long deadline = Environment.TickCount64 + 5_000;
+            long deadline = Environment.TickCount64 + (long)RecordingTestTimeouts.CaptureThread.TotalMilliseconds;
             lock (_timestamps)
             {
                 while (_timestamps.Count < count)

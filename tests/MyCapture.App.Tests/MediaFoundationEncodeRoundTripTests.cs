@@ -215,6 +215,12 @@ public sealed class MediaFoundationEncodeRoundTripTests
         }
     }
 
+    // The first WPF media open in a test process reads the Windows Media Player and Media Foundation
+    // DLLs from a cold cache; on hosted runners that took 15 to 25 s, longer still while other test
+    // processes write to disk. This class has been that first open in CI and gave up after 10 s ("WPF
+    // could not open the clip"). The wait still ends as soon as MediaOpened or MediaFailed arrives.
+    private static readonly TimeSpan MediaOpenTimeout = TimeSpan.FromSeconds(30);
+
     private static BitmapSource? RenderMiddleFrame(string path, int width, int height)
     {
         var player = new MediaPlayer { Volume = 0, ScrubbingEnabled = true };
@@ -222,7 +228,7 @@ public sealed class MediaFoundationEncodeRoundTripTests
         player.MediaOpened += (_, _) => opened = true;
         player.MediaFailed += (_, _) => failed = true;
         player.Open(new Uri(Path.GetFullPath(path), UriKind.Absolute));
-        DateTime deadline = DateTime.UtcNow + TimeSpan.FromSeconds(10);
+        DateTime deadline = DateTime.UtcNow + MediaOpenTimeout;
         while (!opened && !failed && DateTime.UtcNow < deadline)
         {
             PumpFor(TimeSpan.FromMilliseconds(20));
@@ -300,7 +306,7 @@ public sealed class MediaFoundationEncodeRoundTripTests
         player.MediaFailed += (_, _) => failed = true;
         player.Open(new Uri(path, UriKind.Absolute));
 
-        DateTime deadline = DateTime.UtcNow + TimeSpan.FromSeconds(10);
+        DateTime deadline = DateTime.UtcNow + MediaOpenTimeout;
         while (!opened && !failed && DateTime.UtcNow < deadline)
         {
             PumpFor(TimeSpan.FromMilliseconds(20));
