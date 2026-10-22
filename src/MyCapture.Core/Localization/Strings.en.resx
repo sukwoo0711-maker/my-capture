@@ -4607,4 +4607,13 @@ Overwrite these shortcuts? You can change this later in Settings → Shortcuts.<
   <data name="CoreShortcuts.ForceDescription" xml:space="preserve"><value>MyCapture receives these shortcuts even if another program registered them first. Turn this off to let the program that registered them first use them.</value></data>
   <data name="Welcome_AccurateOcr" xml:space="preserve"><value>Accurate Korean text recognition</value></data>
   <data name="Welcome_AccurateOcrHelp" xml:space="preserve"><value>Downloads about {0} MB of models once in the background. Recognition takes longer than Fast. You can change this in Settings.</value></data>
+  <data name="Source.Open" xml:space="preserve"><value>Open source</value></data>
+  <data name="Source.CopyUrl" xml:space="preserve"><value>Copy address</value></data>
+  <data name="Source.CopyPath" xml:space="preserve"><value>Copy path</value></data>
+  <data name="Source.OpenLocation" xml:space="preserve"><value>Open file location</value></data>
+  <data name="Source.ShowSame" xml:space="preserve"><value>Show captures from this source</value></data>
+  <data name="Source.Label" xml:space="preserve"><value>Source: {0}</value></data>
+  <data name="Source.OpenAutomation" xml:space="preserve"><value>Source: {0}, open</value></data>
+  <data name="Source.AppMissing" xml:space="preserve"><value>The source app could not be found.</value></data>
+  <data name="Source.AppOpenFailed" xml:space="preserve"><value>The source app could not be opened.</value></data>
 </root>

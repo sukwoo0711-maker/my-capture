@@ -24,7 +24,12 @@ public sealed record PinSessionPin(
     PinClosedPlacement? Placement,
     long OpenedOrder = 0,
     PinTextStyle? TextStyle = null,
-    PinCodeDocument? CodeDocument = null);
+    PinCodeDocument? CodeDocument = null,
+    string? SourceUrl = null,
+    string? SourceDocumentPath = null,
+    string? SourceAppName = null,
+    string? SourceAppExecutablePath = null,
+    string? SourceWindowTitle = null);
 
 /// <param name="PngBytes">Null reuses this content's previously saved PNG.</param>
 /// <param name="ProtectionPending">The saved image could not be decrypted and must be kept for a later retry.</param>

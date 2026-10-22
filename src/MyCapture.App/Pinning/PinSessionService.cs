@@ -2,6 +2,7 @@
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using Microsoft.Extensions.Logging;
+using MyCapture.Core.Capture;
 using MyCapture.Core.Pin;
 using MyCapture.Core.Settings;
 using MyCapture.Platform.Imaging;
@@ -134,7 +135,9 @@ internal sealed class PinSessionService : IDisposable
                         PinSessionPin pin = entry.Pin;
                         result.Add((pin, PinContent.FromSession(image, ToContentKind(pin.Kind), pin.OriginalText,
                             pin.SourcePageUrl, pin.UsesDeviceIndependentPixels, pin.TextStyle,
-                            pin.CodeDocument), bytes.LongLength));
+                            pin.CodeDocument, CaptureProvenance.Create(pin.SourceUrl ?? pin.SourcePageUrl,
+                                pin.SourceDocumentPath, pin.SourceAppName, pin.SourceAppExecutablePath,
+                                pin.SourceWindowTitle)), bytes.LongLength));
                     }
                     catch (Exception ex)
                     {
@@ -247,7 +250,9 @@ internal sealed class PinSessionService : IDisposable
                 var record = new PinSessionPin(identity.Id, ToStoredKind(pin.Content.Kind), pin.Content.OriginalText,
                     pin.Content.SourcePageUrl, pin.Content.UsesDeviceIndependentPixels, pin.ImageWidthDip,
                     pin.ImageHeightDip, pin.Zoom, pin.Opacity, pin.Placement, pin.OpenedOrder,
-                    pin.Content.TextStyle, pin.Content.CodeDocument);
+                    pin.Content.TextStyle, pin.Content.CodeDocument, pin.Content.Provenance.Url,
+                    pin.Content.Provenance.DocumentPath, pin.Content.Provenance.AppName,
+                    pin.Content.Provenance.AppExecutablePath, pin.Content.Provenance.WindowTitle);
                 captured.Add(new CapturedPin(record, image, identity));
             }
         }

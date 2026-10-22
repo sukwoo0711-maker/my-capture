@@ -1,5 +1,6 @@
 using System.IO;
 using System.Windows;
+using System.Windows.Automation;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
@@ -115,7 +116,11 @@ public sealed class GalleryCaptionPreviewTests
             Drain(window);
             Assert.True(tip.IsOpen);
             Assert.Same(first, tip.PlacementTarget);
-            Button actionButton = Descendants(first).OfType<Button>().First();
+            // Source badges can precede the action row and be collapsed for this fixture.
+            // Exercise the original keyboard-reachable Float action and its own hint.
+            Button actionButton = Assert.Single(Descendants(first).OfType<Button>(),
+                button => AutomationProperties.GetName(button) == UiText.Get("Gallery.Float"));
+            Assert.True(actionButton.IsVisible && actionButton.Focusable && actionButton.IsTabStop);
             RaiseFocusChange(first, actionButton);
             Assert.False(tip.IsOpen); // Action buttons retain their own hints.
             Assert.NotNull(actionButton.ToolTip);
@@ -222,6 +227,14 @@ public sealed class GalleryCaptionPreviewTests
                 if (element.Name.NamespaceName.StartsWith("clr-namespace:MyCapture.", StringComparison.Ordinal)
                     && !element.Name.NamespaceName.Contains(";assembly=", StringComparison.Ordinal))
                     element.Name = XName.Get(element.Name.LocalName, element.Name.NamespaceName + ";assembly=MyCapture");
+                foreach (XAttribute attached in element.Attributes().Where(attribute => !attribute.IsNamespaceDeclaration
+                    && attribute.Name.NamespaceName.StartsWith("clr-namespace:MyCapture.", StringComparison.Ordinal)
+                    && !attribute.Name.NamespaceName.Contains(";assembly=", StringComparison.Ordinal)).ToArray())
+                {
+                    attached.Remove();
+                    element.SetAttributeValue(XName.Get(attached.Name.LocalName,
+                        attached.Name.NamespaceName + ";assembly=MyCapture"), attached.Value);
+                }
             }
             combined.Add(copy);
         }

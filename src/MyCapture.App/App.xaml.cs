@@ -1121,7 +1121,8 @@ public partial class App : Application
             _pendingRecord.Tags = UiText.Get("Capture.WebpageTag");
         Task<bool>? automaticClipboardCopy = _commit is not null
             ? _commit.CopyCapturedRegionAsync(e.SelectedBitmap, e.SourceTitle,
-                _pendingRecord.InitialRenderShowsSourceWindowTitle, _pendingRecord.SourcePageUrl)
+                _pendingRecord.InitialRenderShowsSourceWindowTitle, _pendingRecord.SourcePageUrl,
+                Core.Capture.CaptureProvenance.FromRecord(_pendingRecord), CaptureSelectionProvenance.Pending(e))
             : null;
         try
         {
@@ -1194,7 +1195,8 @@ public partial class App : Application
             try
             {
                 copied = await (automaticClipboardCopy ?? _commit.CopyCapturedRegionAsync(e.SelectedBitmap,
-                    e.SourceTitle, _pendingRecord.InitialRenderShowsSourceWindowTitle, _pendingRecord.SourcePageUrl));
+                    e.SourceTitle, _pendingRecord.InitialRenderShowsSourceWindowTitle, _pendingRecord.SourcePageUrl,
+                    Core.Capture.CaptureProvenance.FromRecord(_pendingRecord), CaptureSelectionProvenance.Pending(e)));
             }
             catch (Exception ex)
             {
@@ -1311,8 +1313,9 @@ public partial class App : Application
                 return rendered;
             }
             var actions = new QuickAccessImageActions(Render,
-                bitmap => ClipboardImageService.CopyImageAsync(bitmap, record.SourcePageUrl),
-                bitmap => _pins?.PinImage(bitmap),
+                bitmap => ClipboardImageService.CopyImageWithProvenanceAsync(bitmap, record.SourcePageUrl,
+                    Core.Capture.CaptureProvenance.FromRecord(record)),
+                bitmap => _pins?.PinImage(bitmap, Core.Capture.CaptureProvenance.FromRecord(record)),
                 async bitmap => (await saver.QuickSaveAsync(bitmap, record.SourcePageUrl)).Status == PinSaveStatus.Saved,
                 record.SourcePageUrl, new GalleryDragExportService(_queue));
             card = new QuickAccessWindow(image,
@@ -1776,7 +1779,7 @@ public partial class App : Application
         // A re-edit commit finalises against the same record; keep the tray count in sync.
         ConfigureEngagementWindow(window);
         window.CaptureChanged += (_, _) => _tray?.SetCaptureCount(_queue?.Count ?? 0);
-        window.FloatRequested += (_, image) => _pins?.PinImage(image);
+        window.FloatRequested += (_, source) => _pins?.PinImage(source.Image, source.Provenance);
         // Header toolbar commands mirror the tray entries so capture/recording are reachable
         // without the global hotkeys or the tray icon.
         window.CaptureRegionRequested = () => HandleCaptureRequested();

@@ -11,6 +11,7 @@ using System.Windows.Media.Animation;
 using System.Windows.Shapes;
 using MyCapture.App.Capture;
 using MyCapture.App.Themes;
+using MyCapture.Core.Capture;
 using MyCapture.Core.Primitives;
 using MyCapture.Platform.Display;
 
@@ -40,13 +41,15 @@ internal sealed class PinHoverBar : Window
     // 20x20 outline glyphs on the shared symbol grid.
     private static readonly Geometry OpacityGlyph = Geometry.Parse(
         "M10,3 A7,7 0 1 1 9.99,3 Z M10,3 L10,17 M10,6 L15.5,6 M10,9 L16.8,9 M10,12 L16.6,12 M10,15 L15,15");
+    private static readonly Geometry SourceGlyph = Geometry.Parse(
+        "M8,5 H4 V16 H15 V12 M10,4 H16 V10 M9,11 L16,4");
 
     private readonly List<TextBlock> _labels = [];
     private readonly Border _surface;
     private ContextMenu? _opacityMenu;
     private bool _compact;
 
-    internal PinHoverBar()
+    internal PinHoverBar(CaptureProvenance? provenance = null)
     {
         Title = UiText.Get("Onboard_PinBarName");
         WindowStyle = WindowStyle.None;
@@ -65,15 +68,23 @@ internal sealed class PinHoverBar : Window
 
         CopyButton = BarButton(SymbolGeometry("Icon.Copy"), UiText.Get("QuickAccess.Copy"), "Ctrl+C");
         SaveButton = BarButton(SymbolGeometry("Icon.Save"), UiText.Get("QuickAccess.Save"), "Ctrl+S");
+        SourceButton = BarButton(SourceGlyph, UiText.Get("Source.Open"), key: null, showLabel: false);
+        SourceButton.Visibility = provenance?.HasSource == true ? Visibility.Visible : Visibility.Collapsed;
+        if (provenance?.HasSource == true)
+        {
+            SourceButton.ToolTip = $"{provenance.DisplayText}\n{provenance.Tooltip}";
+            AutomationProperties.SetName(SourceButton, UiText.Format("Source.OpenAutomation", provenance.DisplayText));
+        }
         OpacityButton = BarButton(OpacityGlyph, UiText.Get("Onboard_PinOpacity"), key: null);
         CloseButton = BarButton(SymbolGeometry("Icon.Close"), UiText.Get("Dialog.Close"), "Esc", showLabel: false);
         CopyButton.Click += (_, _) => CopyRequested?.Invoke();
         SaveButton.Click += (_, _) => SaveRequested?.Invoke();
+        SourceButton.Click += (_, _) => SourceRequested?.Invoke();
         OpacityButton.Click += (_, _) => OpenOpacityMenu();
         CloseButton.Click += (_, _) => CloseRequested?.Invoke();
 
         var row = new StackPanel { Orientation = Orientation.Horizontal };
-        foreach (Button button in new[] { CopyButton, SaveButton, OpacityButton, CloseButton })
+        foreach (Button button in new[] { CopyButton, SaveButton, SourceButton, OpacityButton, CloseButton })
             row.Children.Add(button);
         _surface = new Border
         {
@@ -109,6 +120,8 @@ internal sealed class PinHoverBar : Window
 
     internal event Action? SaveRequested;
 
+    internal event Action? SourceRequested;
+
     internal event Action<double>? OpacityRequested;
 
     internal event Action? CloseRequested;
@@ -116,6 +129,8 @@ internal sealed class PinHoverBar : Window
     internal Button CopyButton { get; }
 
     internal Button SaveButton { get; }
+
+    internal Button SourceButton { get; }
 
     internal Button OpacityButton { get; }
 
@@ -231,7 +246,7 @@ internal sealed class PinHoverBar : Window
     }
 
     /// <summary>True while the opacity menu is open, so the pin keeps the bar while the pointer is in it.</summary>
-    internal bool IsMenuOpen => _opacityMenu?.IsOpen == true;
+    internal bool IsMenuOpen => _opacityMenu?.IsOpen == true || SourceButton.ContextMenu?.IsOpen == true;
 
     private Button BarButton(Geometry glyph, string name, string? key, bool showLabel = true)
     {

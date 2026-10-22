@@ -62,6 +62,8 @@ internal sealed partial class AnnotationEditorControl : Grid
     private readonly AnnotationEditorController _controller;
     private readonly AnnotationEditorSurface _surface;
     private readonly string? _sourceWindowTitle;
+    private readonly MyCapture.Core.Capture.CaptureProvenance _provenance;
+    private readonly Task<MyCapture.Core.Capture.CaptureProvenance>? _pendingProvenance;
     private readonly bool _showSourceWindowTitle;
     private readonly IPrivacyRedactionService? _privacyRedactionService;
     private readonly Grid _viewport = new();
@@ -187,7 +189,9 @@ internal sealed partial class AnnotationEditorControl : Grid
         AnnotationDocument? initialDocument,
         IReadOnlyDictionary<string, BitmapSource>? initialAssets,
         IPrivacyRedactionService? privacyRedactionService = null,
-        string? sourceWindowTitle = null)
+        string? sourceWindowTitle = null,
+        MyCapture.Core.Capture.CaptureProvenance? provenance = null,
+        Task<MyCapture.Core.Capture.CaptureProvenance>? pendingProvenance = null)
     {
         _frame = AnnotationSourceMetadata.FromFrame(frame);
         _selectedBitmap = selectedBitmap ?? throw new ArgumentNullException(nameof(selectedBitmap));
@@ -195,6 +199,8 @@ internal sealed partial class AnnotationEditorControl : Grid
         // A frame/clipboard editor has no captured window title. Preserve that explicit
         // absence in the result instead of falling back to a synthetic record label.
         _sourceWindowTitle = sourceWindowTitle ?? string.Empty;
+        _provenance = provenance ?? MyCapture.Core.Capture.CaptureProvenance.None;
+        _pendingProvenance = pendingProvenance;
         _showSourceWindowTitle = AnnotationEditorPreferences.ReadShowSourceWindowTitle?.Invoke() == true;
         _frameMonitor = frame.Monitor;
         _frameElapsedMilliseconds = frame.ElapsedMilliseconds;
@@ -2703,9 +2709,36 @@ internal sealed partial class AnnotationEditorControl : Grid
 
     private UIElement BuildStatusBar()
     {
-        var grid = new Grid();
+        var grid = new Grid { MinHeight = _provenance.HasSource || _pendingProvenance is not null ? 26 : 0 };
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto, MaxWidth = 332 });
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+
+        var source = new Border { Visibility = Visibility.Collapsed, Margin = new Thickness(0, 0, 12, 0) };
+        grid.Children.Add(source);
+        void ShowSource(MyCapture.Core.Capture.CaptureProvenance provenance)
+        {
+            source.Child = provenance.HasSource
+                ? MyCapture.App.Sources.SourceChip.CreateButton(provenance, message => SetStatus(message))
+                : null;
+            source.Visibility = provenance.HasSource ? Visibility.Visible : Visibility.Collapsed;
+        }
+        ShowSource(_provenance);
+        if (_pendingProvenance is { } pending) _ = ShowConfirmedSourceAsync(pending);
+
+        async Task ShowConfirmedSourceAsync(Task<MyCapture.Core.Capture.CaptureProvenance> pending)
+        {
+            try
+            {
+                var provenance = await pending.ConfigureAwait(false);
+                if (Dispatcher.HasShutdownStarted) return;
+                await Dispatcher.InvokeAsync(() => ShowSource(provenance));
+            }
+            catch (Exception error) when (error is not OutOfMemoryException)
+            {
+                // Keep the already confirmed capture context if optional enrichment fails.
+            }
+        }
 
         _statusText = new TextBlock
         {
@@ -2718,7 +2751,7 @@ internal sealed partial class AnnotationEditorControl : Grid
         _statusText.SetResourceReference(TextBlock.ForegroundProperty, "Text.Secondary");
         AutomationProperties.SetLiveSetting(_statusText, AutomationLiveSetting.Polite);
         AutomationName(_statusText, UiText.Get("Text_4D6051F71010"));
-        Grid.SetColumn(_statusText, 0);
+        Grid.SetColumn(_statusText, 1);
         grid.Children.Add(_statusText);
 
         var dimensions = _dimensionsText = new TextBlock
@@ -2732,7 +2765,7 @@ internal sealed partial class AnnotationEditorControl : Grid
             Margin = new Thickness(16, 0, 0, 0),
         };
         dimensions.SetResourceReference(TextBlock.ForegroundProperty, "Text.Secondary");
-        Grid.SetColumn(dimensions, 1);
+        Grid.SetColumn(dimensions, 2);
         grid.Children.Add(dimensions);
 
         return ThemedBorder(new Border

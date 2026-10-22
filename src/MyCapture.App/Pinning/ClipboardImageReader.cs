@@ -4,6 +4,7 @@ using System.Windows;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using MyCapture.App.Threading;
+using MyCapture.Core.Capture;
 using MyCapture.Core.Pin;
 using MyCapture.Platform.Imaging;
 
@@ -83,6 +84,8 @@ internal static class ClipboardImageReader
         internal BitmapSource? CodePreview { get; init; }
 
         internal PinCodeDocument? CodeDocument { get; init; }
+
+        internal CaptureProvenance? Provenance { get; init; }
 
         internal static CapturedAttempt Retry() =>
             new(
@@ -190,8 +193,8 @@ internal static class ClipboardImageReader
         if (captured.CodePreview is not null && captured.OriginalText is not null)
         {
             return PinReadAttempt.Success(captured.CodeDocument is not null
-                ? PinContent.FromCode(captured.CodePreview, captured.OriginalText, captured.CodeDocument)
-                : PinContent.FromText(captured.CodePreview, captured.OriginalText, false));
+                ? PinContent.FromCode(captured.CodePreview, captured.OriginalText, captured.CodeDocument, captured.Provenance)
+                : PinContent.FromText(captured.CodePreview, captured.OriginalText, false, captured.Provenance));
         }
 
         ReadAttempt image = await CompleteCapturedAttemptWithFallbackAsync(
@@ -209,7 +212,7 @@ internal static class ClipboardImageReader
             // falls through: Windows does not synthesise a Bitmap from it, and playing a
             // metafile at the right scale is not reliable enough to replace the grid.
             return PinReadAttempt.Success(
-                PinContent.FromTablePicture(FlattenOntoWhite(image.Image), captured.OriginalText!));
+                PinContent.FromTablePicture(FlattenOntoWhite(image.Image), captured.OriginalText!, captured.Provenance));
         }
 
         if (image.Image is not null)
@@ -219,7 +222,7 @@ internal static class ClipboardImageReader
             string sourcePageUrl = captured.PngBytes is { Length: > 0 } png
                 ? PngSourceUrlMetadata.TryReadSourceUrl(png)
                 : string.Empty;
-            return PinReadAttempt.Success(PinContent.FromImage(image.Image, sourcePageUrl));
+            return PinReadAttempt.Success(PinContent.FromImage(image.Image, sourcePageUrl, captured.Provenance));
         }
 
         if (HasSourceText(captured))
@@ -278,6 +281,8 @@ internal static class ClipboardImageReader
         ArgumentNullException.ThrowIfNull(data);
         ArgumentNullException.ThrowIfNull(systemImageFallback);
         (string? originalText, bool isTabularText) = CaptureText(data);
+        CaptureProvenance? provenance = ClipboardProvenance.Resolve(
+            TryGetClipboardString(data, ClipboardProvenance.Format, autoConvert: false));
 
         byte[]? pngBytes = null;
         if (data.GetDataPresent("PNG", autoConvert: false))
@@ -329,6 +334,7 @@ internal static class ClipboardImageReader
         {
             CodeDocument = codeDocument,
             CodePreview = codePreview,
+            Provenance = provenance,
         };
     }
 
@@ -431,7 +437,7 @@ internal static class ClipboardImageReader
         {
             BitmapSource rendered = await renderText(originalText, captured.IsTabularText)
                 .ConfigureAwait(false);
-            return PinContent.FromText(rendered, originalText, captured.IsTabularText);
+            return PinContent.FromText(rendered, originalText, captured.IsTabularText, captured.Provenance);
         }
         catch (Exception ex) when (ex is ArgumentException
                                    or FormatException
