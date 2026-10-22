@@ -3,7 +3,8 @@ namespace MyCapture.Setup;
 public enum SetupStage
 {
     VerifyingPackage, ExtractingFiles, ReplacingVersion, RegisteringStartMenu, FinalizingInstallation,
-    RollingBack, VerifyingInstallation, StoppingApplication, PreparingRemoval, RemovingFiles, RemovingRegistration
+    RollingBack, VerifyingInstallation, StoppingApplication, PreparingRemoval, RemovingFiles, RemovingRegistration,
+    WaitingForParent
 }
 
 public interface ISetupProgress

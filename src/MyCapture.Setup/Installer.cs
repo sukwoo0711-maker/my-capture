@@ -62,14 +62,40 @@ public sealed class Installer
     private readonly Options options;
     private readonly string directory;
     private readonly SetupLog log;
-    private readonly ISetupProgress progress;
+    private ISetupProgress progress;
     private string? stage, backup, installRoot, receipt;
     private UpdaterSession? update;
     private bool movedOld, committed;
     private bool migrateLegacyShell;
+    private bool updatePrepared, updateValidated;
+    private Exception? preparationError;
+    private string? preparedVersion, restartTestArguments;
     private int warnings;
     public Installer(Options options, string directory, SetupLog log, ISetupProgress? progress = null)
     { this.options = options; this.directory = directory; this.log = log; this.progress = progress ?? NullSetupProgress.Instance; }
+    internal void SetProgress(ISetupProgress value) { progress = value; }
+    internal UpdaterSession? PrepareUpdate()
+    {
+        if (string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("MYCAPTURE_UPDATE_SESSION"))) return null;
+        try
+        {
+            restartTestArguments = Environment.GetEnvironmentVariable(UpdateRestart.TestArgumentsVariable);
+            UpdateRestart.ValidateTestArguments(restartTestArguments);
+            if (!File.Exists(options.Payload) || !File.Exists(options.Manifest)) throw new SetupException(14, "Payload ZIP or installer manifest is missing.");
+            var manifest = PackageManifest.Read(options.Manifest);
+            ValidateUpdate(manifest); preparedVersion = manifest.Version;
+        }
+        catch (Exception error) { preparationError = error; }
+        updatePrepared = true;
+        return updateValidated ? update : null;
+    }
+    internal bool CanOpenUpdatedApplication => updateValidated && update != null && !options.VerifyOnly &&
+        File.Exists(Path.Combine(update.InstallRoot, "MyCapture.exe"));
+    internal void OpenUpdatedApplication()
+    {
+        if (CanOpenUpdatedApplication && receipt != null)
+            new UpdateRestart(Info, Warning).Start(update!.InstallRoot, Path.GetDirectoryName(receipt)!, restartTestArguments);
+    }
     private void Info(string message) => log.Write("INFO", message);
     private void Warning(string message) { warnings++; log.Write("WARN", message); }
     public int Run()
@@ -92,20 +118,28 @@ public sealed class Installer
                 try { FileRemoval.DeleteDirectoryWithRetry(stage); } catch { log.Write("WARN", "Could not remove staging directory: " + stage); }
         }
         if (update != null && receipt != null)
-        {
-            try { new InstallReceipt { Token = update.Token, Version = update.Version, ExitCode = code, InstallRoot = installRoot, LogPath = log.Path }.Write(receipt); }
-            catch (Exception e) { log.Write("ERROR", "Could not write updater receipt: " + e.Message); }
-        }
+            UpdateCompletion.Finish(update, receipt, installRoot, log, code, options.VerifyOnly, updateValidated,
+                restartTestArguments, new UpdateRestart(Info, Warning));
         return code;
     }
     private void Install()
     {
         Info("MyCapture installer starting. PID=" + Process.GetCurrentProcess().Id + "; executable=" + Program.Executable);
+        if (preparationError != null) throw preparationError;
+        restartTestArguments = Environment.GetEnvironmentVariable(UpdateRestart.TestArgumentsVariable);
+        UpdateRestart.ValidateTestArguments(restartTestArguments);
         progress.Stage(SetupStage.VerifyingPackage);
         if (!File.Exists(options.Payload) || !File.Exists(options.Manifest)) throw new SetupException(14, "Payload ZIP or installer manifest is missing.");
         var manifest = PackageManifest.Read(options.Manifest);
         progress.Version(manifest.Version);
-        ValidateUpdate(manifest);
+        if (!updatePrepared) ValidateUpdate(manifest);
+        else if (preparedVersion != manifest.Version) throw new SetupException(14, "Updater package changed after session validation.");
+        if (updateValidated && update != null)
+        {
+            if (update.WaitForParent) progress.Stage(SetupStage.WaitingForParent);
+            UpdateParent.Wait(update, Info);
+            progress.Stage(SetupStage.VerifyingPackage);
+        }
         WindowsHost.RequireSupported(manifest);
         manifest.VerifyBootstrap(directory);
         if (!manifest.Payload.Matches(options.Payload)) throw new SetupException(14, "Payload ZIP SHA-256 or size does not match the installer manifest.");
@@ -242,7 +276,8 @@ public sealed class Installer
             throw new SetupException(14, "Invalid updater session identity.");
         receipt = Path.Combine(sessionDirectory, "install-result.json");
         if (File.Exists(receipt) || Directory.Exists(receipt)) throw new SetupException(12, "Updater receipt already exists.");
-        update = candidate; options.Quiet = true; log.Quiet = true;
+        update = candidate;
+        if (!candidate.ShowProgress) { options.Quiet = true; log.Quiet = true; }
         if (candidate.TargetMode != null)
         {
             if (candidate.TargetMode == "OwnedInstall")
@@ -258,11 +293,11 @@ public sealed class Installer
         if (!string.Equals(candidate.InstallRoot, expected, StringComparison.OrdinalIgnoreCase)) throw new SetupException(14, "Updater session does not match this package.");
         options.InstallRoot = candidate.InstallRoot;
         if (candidate.ParentId <= 0) throw new SetupException(14, "Invalid updater parent ID.");
-        try
-        {
-            using (Process.GetProcessById(candidate.ParentId)) throw new SetupException(15, "Updater parent is still running.");
-        }
-        catch (ArgumentException) { }
+        if (candidate.WaitForParent && candidate.ParentStartedUtc <= 0)
+            throw new SetupException(14, "WaitForParent requires a positive ParentStartedUtc.");
+        if (candidate.WaitForParent && !Path.GetFileName(sessionDirectory).EndsWith("-" + candidate.Token, StringComparison.Ordinal))
+            throw new SetupException(14, "Updater token does not match its session folder.");
+        updateValidated = true;
     }
     private static void Move(string source, string destination)
     {

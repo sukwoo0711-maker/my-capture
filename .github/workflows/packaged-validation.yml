@@ -108,7 +108,6 @@ jobs:
             Invoke-CheckedTest .\build\tests\installer-resident-tests.ps1
             Invoke-CheckedTest .\build\tests\installer-hostile-tests.ps1 @('-Version', $env:PACKAGE_VERSION, '-ArtifactRoot', "artifacts/release/$env:PACKAGE_VERSION")
             Invoke-CheckedTest .\build\tests\installer-compatibility-tests.ps1
-            Invoke-CheckedTest .\build\tests\update-helper-tests.ps1
             Invoke-CheckedTest .\build\tests\update-preservation-tests.ps1
             Invoke-CheckedTest .\build\tests\update-restart-preflight-tests.ps1
             Invoke-CheckedTest .\build\tests\update-restart-acceptance.ps1 @('-ArtifactRoot', "artifacts/release/$env:PACKAGE_VERSION", '-ExpectedSourceCommit', $env:EXPECTED_SOURCE_SHA, '-DotNetPath', (Get-Command dotnet).Source, '-Execute')

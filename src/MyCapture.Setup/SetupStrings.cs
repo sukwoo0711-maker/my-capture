@@ -6,6 +6,8 @@ namespace MyCapture.Setup;
 
 public static class SetupInteraction
 {
+    internal static bool ShowUpdateProgress(Options options, UpdaterSession? validatedSession) =>
+        validatedSession?.ShowProgress == true && !options.Quiet && !options.VerifyOnly;
     public static bool IsInteractive(string[] args, string? updateSession) =>
         string.IsNullOrWhiteSpace(updateSession) && !args.Any(a =>
             string.Equals(a, "/quiet", StringComparison.OrdinalIgnoreCase) ||
@@ -20,6 +22,11 @@ public sealed class SetupStrings
     public SetupStrings(CultureInfo culture) { korean = culture.TwoLetterISOLanguageName == "ko"; }
     private string Text(string ko, string en) => korean ? ko : en;
     public string Title(bool uninstall) => uninstall ? Text("MyCapture 제거", "MyCapture Uninstall") : Text("MyCapture 설치", "MyCapture Setup");
+    public string UpdateTitle => Text("MyCapture 업데이트", "MyCapture Update");
+    public string UpdateHeading(string? version = null) => Text("MyCapture" + (string.IsNullOrEmpty(version) ? "" : " " + version) + " 업데이트 중",
+        "Updating MyCapture" + (string.IsNullOrEmpty(version) ? "" : " " + version));
+    public string UpdateFailureHeading => Text("업데이트하지 못했습니다", "Could not update MyCapture");
+    public string OpenApplication => Text("MyCapture 열기", "Open MyCapture");
     public string WorkingHeading(bool uninstall, string? version = null) => uninstall ? Text("MyCapture 제거 중", "Removing MyCapture") :
         Text("MyCapture" + (string.IsNullOrEmpty(version) ? "" : " " + version) + " 설치 중", "Installing MyCapture" + (string.IsNullOrEmpty(version) ? "" : " " + version));
     public string SuccessHeading(bool uninstall) => uninstall ? Text("제거 완료", "Uninstall complete") : Text("설치 완료", "Setup complete");
@@ -44,6 +51,7 @@ public sealed class SetupStrings
             case SetupStage.RollingBack: return Text("이전 버전 복원 중", "Restoring the previous version");
             case SetupStage.VerifyingInstallation: return Text("설치 파일 확인 중", "Verifying installed files");
             case SetupStage.StoppingApplication: return Text("MyCapture 종료 중", "Closing MyCapture");
+            case SetupStage.WaitingForParent: return Text("앱 종료 대기 중", "Waiting for the app to close");
             case SetupStage.PreparingRemoval: return Text("제거 준비 중", "Preparing to uninstall");
             case SetupStage.RemovingFiles: return Text("파일 제거 중", "Removing files");
             case SetupStage.RemovingRegistration: return Text("시작 메뉴 정리 중", "Removing Start menu entries");

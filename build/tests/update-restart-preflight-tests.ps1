@@ -64,10 +64,36 @@ try {
     [IO.File]::AppendAllText($setup, 'tamper')
     Invoke-Preflight $false
     [IO.File]::WriteAllText($setup, 'synthetic package, never executed')
+    # A recomputed package checksum must not conceal a payload/manifest mismatch.
+    $payload = Join-Path $root 'MyCapture-1.8.0-win-x64-portable.zip'
+    [IO.File]::AppendAllText($payload, 'tamper')
+    Write-Checksums
+    Invoke-Preflight $false
+    [IO.File]::WriteAllText($payload, 'synthetic package, never executed')
+    Write-Checksums
+    $binary = Join-Path (Join-Path $root 'publish-win-x64') 'MyCapture.dll'
+    [IO.File]::AppendAllText($binary, 'tamper')
+    Invoke-Preflight $false
+    [IO.File]::WriteAllText($binary, 'synthetic fixture, never executed')
+    $manifest.Files = @($files) + @($files[0])
+    Write-Json 'installer-manifest.json' $manifest
+    Invoke-Preflight $false
+    $manifest.Files = @($files)
+    $release.Version = '1.8.1'
+    Write-Json 'release-manifest.json' $release
+    Write-Checksums
+    Write-Json 'installer-manifest.json' $manifest
+    Invoke-Preflight $false
+    $release.Version = '1.8.0'
+    Write-Json 'release-manifest.json' $release
+    Write-Checksums
     $manifest.BootstrapFiles[0].Sha256 = '0' * 64
     Write-Json 'installer-manifest.json' $manifest
     Invoke-Preflight $false
-    Write-Output 'PASS: valid preflight and wrong source, dirty source, tampered setup, and bootstrap mismatch rejection; no installation executed.'
+    $manifest.BootstrapFiles = @($bootstrap | ForEach-Object { Record (Get-SetupBootstrapSource $_.Path) $_.Path })
+    Write-Json 'installer-manifest.json' $manifest
+    Invoke-Preflight $true
+    Write-Output 'PASS: valid preflight and wrong source, dirty source, tampered setup/payload/binary, duplicate inventory, version mismatch, and bootstrap mismatch rejection; no installation executed.'
 }
 finally {
     # Exact generated files only; no recursive caller-path deletion.

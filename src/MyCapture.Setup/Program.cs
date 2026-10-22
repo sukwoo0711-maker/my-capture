@@ -37,8 +37,21 @@ public static class Program
         SetupLog? log = null;
         try
         {
-            var options = Options.Parse(args, directory); options.Quiet |= quiet;
+            var options = Options.Parse(args, directory);
+            bool updateRequested = !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("MYCAPTURE_UPDATE_SESSION"));
+            options.Quiet |= !SetupInteraction.IsInteractive(args, null);
             log = new SetupLog(options.Log, directory, options.Quiet, options.Uninstall, options.UninstallUiRequest != null);
+            if (!options.Uninstall && updateRequested)
+            {
+                var updater = new Installer(options, directory, log);
+                var session = updater.PrepareUpdate();
+                bool showProgress = SetupInteraction.ShowUpdateProgress(options, session);
+                options.Quiet = !showProgress; log.Quiet = !showProgress;
+                if (!showProgress) return updater.Run();
+                return SetupWindow.RunUpdate(session!.Version, session.WaitForParent, log, progress =>
+                    { updater.SetProgress(progress); return updater.Run(); }, updater.OpenUpdatedApplication, () => updater.CanOpenUpdatedApplication);
+            }
+            options.Quiet |= quiet;
             if (options.Quiet)
                 return options.Uninstall ? Uninstaller.Run(options, directory, log) : new Installer(options, directory, log).Run();
             if (options.Uninstall)

@@ -12,7 +12,7 @@
 
 `MyCapture.Setup`을 .NET Framework 4.8 x64 GUI 실행 파일(`WinExe`)로 빌드합니다. Windows 10 22H2와 Windows 11에 포함된 Framework를 사용하므로 설치기에 별도 런타임을 함께 배포하지 않습니다. 새 NuGet 의존성은 추가하지 않습니다. JSON은 `DataContractJsonSerializer`, ZIP은 `System.IO.Compression`, 바로가기는 `IShellLinkW`와 `IPersistFile`, 등록은 HKCU 레지스트리를 사용합니다.
 
-대화형 설치·제거는 콘솔 대신 기본 Windows Forms 창에서 실제 작업 진행과 완료·실패 결과를 표시합니다. 설치 완료 후 실행 여부는 창에서 선택하며, 작업 중에는 창을 닫아 파일 교체를 중단할 수 없습니다. `/quiet`·`/Q`, 업데이트 세션, `--cleanup-request`, `--verify-only`는 창 없이 실행하고 기존 종료 코드·영수증·파일 로그 형식을 유지합니다. 개발 PowerShell 스크립트는 실행 파일 출력을 파이프에 연결해 GUI 프로세스의 종료를 기다린 뒤 종료 코드를 확인합니다.
+대화형 설치·제거는 콘솔 대신 기본 Windows Forms 창에서 실제 작업 진행과 완료·실패 결과를 표시합니다. 설치 완료 후 실행 여부는 창에서 선택하며, 작업 중에는 창을 닫아 파일 교체를 중단할 수 없습니다. `/quiet`·`/Q`, `ShowProgress`를 지정하지 않은 업데이트 세션, `--cleanup-request`, `--verify-only`는 창 없이 실행하고 기존 종료 코드·영수증·파일 로그 형식을 유지합니다. 개발 PowerShell 스크립트는 실행 파일 출력을 파이프에 연결해 GUI 프로세스의 종료를 기다린 뒤 종료 코드를 확인합니다.
 
 IExpress는 `AppLaunched=MyCaptureSetup.exe`로 직접 실행하며 두 quiet 명령은 `MyCaptureSetup.exe /quiet`입니다. 설치 경로에는 배치·PowerShell 호스트가 없습니다. 설치 위치의 `MyCaptureUninstall.exe`는 같은 바이너리의 복사본이며 `/uninstall`로 실행합니다. 실행 manifest는 `asInvoker`, `uiAccess=false`, Windows 10/11 호환성을 명시하여 이름에 Setup 또는 Uninstall이 있어도 관리자 승격을 요청하지 않습니다.
 
@@ -76,12 +76,16 @@ IExpress는 `AppLaunched=MyCaptureSetup.exe`로 직접 실행하며 두 quiet �
 
 실제 바로가기와 등록은 `--test-uninstall-key Software\MyCapture.SetupTests\<32자리 guid>`와 `--test-start-menu <TEMP 아래 정규 절대 경로>`를 함께 지정해 격리합니다. 기본값에는 테스트 대상이 없습니다. 등록 루트 자체·추가 하위 키·다른 HKCU 키·TEMP 루트·TEMP 밖 경로·링크를 거부합니다. 설치 manifest에 해당 대상을 저장해 제거 후속 프로세스도 같은 격리를 유지합니다.
 
+재시작 검사는 테스트 전용 환경 변수 `MYCAPTURE_SETUP_TEST_RESTART_ARGUMENTS=--selftest-ux-review`만 허용합니다. 변수가 없으면 인수 없이 실행하며, 다른 값은 종료 코드 21로 거부합니다. 실행 파일은 항상 검증한 설치 루트의 `MyCapture.exe`이며 테스트 값으로 바꿀 수 없습니다. 진단의 표준 출력·오류는 검증한 세션 폴더의 `restart.stdout.txt`, `restart.stderr.txt`에 기록합니다. `update-restart-acceptance.ps1`은 격리된 검증 계정에서 실제 IExpress를 인수 없이 실행하고, 살아 있는 부모의 종료 대기, 영수증, 설치 파일 전체 해시·버전, 설치 경로에서 실행된 진단 프로세스와 `RESULT: PASS` 보고서를 확인합니다. 설치·앱 데이터·진단 출력은 고유 증거 폴더에 두고, 세션은 제품과 같은 `%LOCALAPPDATA%\MyCapture\Updates` 하위의 고유 폴더에 보존합니다.
+
 개발 PowerShell 스크립트는 실행 정책을 변경하지 않고 빌드한 실행 파일을 검사합니다. 기존 bootstrap의 시작 마커·정책 오류 텍스트·Notepad 모의 실행 사례는 스크립트 호스트가 없어 적용 대상이 사라졌습니다. `installer-bootstrap-tests.ps1`에서 직접 IExpress 명령, quiet 오류 코드, 특수 문자 경로, 영속 로그, BOM 도움말, CLR 설정, release probe 검사로 대체합니다. 실제 IExpress 패키지 실행과 구형·신형 설치기 왕복은 일반 데스크톱에서 추가로 검증합니다.
 
 `installer-compatibility-tests.ps1`은 `git show 4769935:build/installer/...`에서 구형 소스를 가져옵니다. 실행 정책을 바꾸지 않기 위해 테스트 사본에서 정책 완화 인수만 제거하며 구형 삭제 동작은 그대로 실행합니다. 구형 설치기는 `-NoShellIntegration`으로 실행하며 구형 cleanup의 실제 셸 정리 호출은 비활성화합니다. 따라서 구형 실제 HKCU·시작 메뉴 재등록은 실행하지 않습니다. 신형의 실제 등록과 바로가기는 격리된 테스트 대상으로 확인합니다. 로컬 스크립트 실행이 정책으로 차단되면 정책 목록과 SKIP을 출력합니다.
 
-## 앱 안 업데이트 도우미
+## 앱 안 업데이트 세션 계약
 
-`src/MyCapture.App/Updates/UpdateHelper.ps1`, `UpdateInstaller`, 업데이트 도우미 리소스 리더는 4.1.2(ee4581b, #72)부터 제품에 연결되어 있지 않습니다. 업데이트는 Microsoft Store로만 제공합니다. 사용자 결정에 따라 4.3.0에서는 이 파일들을 그대로 둡니다.
+GitHub 설치본은 앱에서 setup.exe와 `SHA256SUMS.txt`를 내려받아 해시를 확인하고 작업을 저장한 뒤 설치기를 시작하고 종료합니다. 앱은 `%LOCALAPPDATA%\MyCapture\Updates\update-<major.minor.patch>-<32자리 소문자 hex>`에 UTF-8 BOM 없는 `update-session.json`을 쓰고, 해당 폴더를 작업 디렉터리로 하여 IExpress를 인수 없이 `UseShellExecute=false`로 실행합니다. `MYCAPTURE_UPDATE_SESSION`은 세션 파일의 전체 경로입니다. `Token`은 폴더 끝 식별자와 같고, `InstallRoot`와 `SourceRoot`는 기존 소유 설치를 가리키며 `TargetMode`는 `OwnedInstall`입니다. 기존 경로·소유권·영수증 중복·사용자 추가 파일 보존 검사를 유지합니다.
 
-4.1.1 이하의 GitHub 앱 안 업데이트는 새 setup.exe를 `/Q`와 `MYCAPTURE_UPDATE_SESSION`으로 실행합니다. 새 설치기는 이 계약을 지킵니다. 이번 결정의 PowerShell 제거 범위는 IExpress 안의 설치기, 업데이트 설치 본문, 설치된 제거기입니다.
+추가 선택 필드는 `ParentStartedUtc`(UTC ticks), `WaitForParent`, `RestartAfterInstall`, `ShowProgress`이며 생략값은 0 또는 false입니다. `WaitForParent=true`이면 양수 시작 시각이 필요하고, PID와 시작 시각이 같은 부모만 최대 60초 기다립니다. 시간이 지나면 15로 종료하며 PID가 재사용되었으면 종료한 부모로 처리합니다. 새 필드가 없는 구형 `/Q` 세션은 부모가 아직 실행 중이면 즉시 15를 반환하는 기존 동작을 유지합니다.
+
+검증된 `ShowProgress=true` 세션은 명시적 quiet 옵션이 없을 때 업데이트 창에서 앱 종료 대기와 설치 진행을 표시합니다. 성공하면 완료 페이지 없이 재시작 후 닫고, 실패하면 로그와 닫기, 설치된 실행 파일이 있을 때 기본 `MyCapture 열기` 버튼을 표시합니다. 초기 런타임 오류 19는 모든 업데이트 세션에서 창 없이 처리합니다. `RestartAfterInstall=true`이면 설치 성공 및 영수증 저장 후 설치된 앱을 인수 없이 `UseShellExecute=false`로 실행하고 자식의 업데이트 세션 환경 변수를 제거합니다. 3초 안에 종료되면 경고를 남깁니다. 실패한 `ShowProgress=false` 세션은 복원된 실행 파일이 있으면 다시 열고, 진행 창이 있는 실패는 사용자의 열기 버튼으로 실행합니다. `--verify-only`에서는 재시작하지 않습니다. 설치기와 앱 사이에 별도 스크립트 실행 단계가 없습니다.

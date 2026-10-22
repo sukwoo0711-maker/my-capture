@@ -2,10 +2,9 @@
 param(
     [string]$ArtifactRoot = '',
     [string]$ExpectedSourceCommit = '',
+    # Retained for existing workflow callers; the installer no longer needs a reader tool.
     [string]$DotNetPath = '',
-    [switch]$Execute,
-    [string]$WorkerRoot = '',
-    [string]$WorkerSession = ''
+    [switch]$Execute
 )
 
 Set-StrictMode -Version 2.0
@@ -13,7 +12,6 @@ $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'setup-test-common.ps1')
 $repository = [IO.Path]::GetFullPath((Split-Path -Parent (Split-Path -Parent $PSScriptRoot))).TrimEnd('\')
 $evidenceBase = Join-Path $repository 'artifacts\validation\update-restart'
-$powerShell = Join-Path ([Environment]::SystemDirectory) 'WindowsPowerShell\v1.0\powershell.exe'
 
 function Assert-True([bool]$Condition, [string]$Message) { if (-not $Condition) { throw $Message } }
 function Assert-NoOutputLinks([string]$Path) {
@@ -34,13 +32,14 @@ function Write-Json([string]$Path, $Value) {
     [IO.File]::WriteAllText($Path, ($Value | ConvertTo-Json -Depth 12), (New-Object Text.UTF8Encoding($false)))
 }
 function Assert-Inventory([string]$Root, $Manifest) {
-    Assert-True (@($Manifest.Files).Count -gt 0 -and @($Manifest.Files).Count -le 10000) 'Invalid inventory count.'
+    Assert-True (@($Manifest.Files).Count -gt 0 -and @($Manifest.Files).Count -le 10003) 'Invalid inventory count.'
     foreach ($required in @('MyCapture.exe', 'MyCapture.dll')) {
         Assert-True (@($Manifest.Files | Where-Object { $_.Path -ceq $required }).Count -eq 1) "Missing or duplicate binary: $required"
     }
+    $seen = New-Object 'Collections.Generic.HashSet[string]' ([StringComparer]::OrdinalIgnoreCase)
     foreach ($entry in $Manifest.Files) {
         $relative = [string]$entry.Path
-        Assert-True (-not [IO.Path]::IsPathRooted($relative) -and -not $relative.Contains(':')) 'Invalid inventory path.'
+        Assert-True (-not [IO.Path]::IsPathRooted($relative) -and -not $relative.Contains(':') -and $seen.Add($relative)) 'Invalid or duplicate inventory path.'
         $path = [IO.Path]::GetFullPath((Join-Path $Root $relative))
         Assert-True ($path.StartsWith($Root.TrimEnd('\') + '\', [StringComparison]::OrdinalIgnoreCase)) 'Inventory escaped its root.'
         Assert-NoOutputLinks $path
@@ -48,94 +47,36 @@ function Assert-Inventory([string]$Root, $Manifest) {
         Assert-True ((Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash -eq [string]$entry.Sha256) "Inventory hash mismatch: $relative"
     }
 }
-
-# This private subprocess mode instruments only the existing test seam. The helper's
-# production functions and main body are read from the verified candidate's PE resource.
-if ($WorkerRoot) {
-    $run = [IO.Path]::GetFullPath($WorkerRoot).TrimEnd('\')
-    Assert-True ([string]::Equals((Split-Path -Parent $run), $evidenceBase, [StringComparison]::OrdinalIgnoreCase) -and
-        (Split-Path -Leaf $run) -match '^[a-f0-9]{32}$') 'Invalid acceptance worker root.'
-    Assert-NoOutputLinks $run
-    $owner = Get-Content -LiteralPath (Join-Path $run 'acceptance-owner.json') -Raw -Encoding UTF8 | ConvertFrom-Json
-    Assert-True ([string]::Equals([string]$owner.Session, $WorkerSession, [StringComparison]::OrdinalIgnoreCase)) 'Worker session mismatch.'
-    $configuration = Get-Content -LiteralPath $WorkerSession -Raw -Encoding UTF8 | ConvertFrom-Json
-    Assert-True ($configuration.Token -eq $owner.Token -and $configuration.InstallRoot -eq (Join-Path $run 'installed')) 'Worker ownership mismatch.'
-    $helper = Join-Path (Split-Path -Parent $WorkerSession) 'update-helper.ps1'
-    Assert-True ((Get-FileHash -LiteralPath $helper -Algorithm SHA256).Hash -eq $owner.HelperSha256) 'Embedded helper changed.'
-    $helperText = [IO.File]::ReadAllText($helper)
-    $tokens = $null; $errors = $null
-    $ast = [Management.Automation.Language.Parser]::ParseInput($helperText, [ref]$tokens, [ref]$errors)
-    Assert-True ($errors.Count -eq 0) 'Embedded helper parse failed.'
-    $main = @($ast.EndBlock.Statements | Where-Object {
-        $_ -is [Management.Automation.Language.AssignmentStatementAst] -and $_.Left.Extent.Text -eq '$sessionRoot'
-    })
-    Assert-True ($main.Count -eq 1) 'Expected one helper main-body boundary.'
-    . $helper -Session $WorkerSession -FunctionsOnly
-    $script:AcceptanceRun = $run
-    $script:AcceptanceConfig = $configuration
-    $script:RestartObserver = $null
-    function Start-UpdateProcess($Info) {
-        $expected = Join-Path $script:AcceptanceConfig.InstallRoot 'MyCapture.exe'
-        Assert-True ($Info.FileName -eq $expected -and -not $Info.UseShellExecute -and [string]::IsNullOrEmpty($Info.Arguments)) 'Unexpected helper restart boundary.'
-        Copy-Item -LiteralPath (Join-Path (Split-Path -Parent $WorkerSession) 'install-result.json') -Destination (Join-Path $script:AcceptanceRun 'verified-install-result.json')
-        $Info.Arguments = '--selftest-ux-review'
-        $Info.CreateNoWindow = $true
-        $Info.WindowStyle = [Diagnostics.ProcessWindowStyle]::Hidden
-        $Info.RedirectStandardOutput = $true
-        $Info.RedirectStandardError = $true
-        $Info.EnvironmentVariables['TEMP'] = Join-Path $script:AcceptanceRun 'temporary'
-        $Info.EnvironmentVariables['TMP'] = Join-Path $script:AcceptanceRun 'temporary'
-        $Info.EnvironmentVariables['MYCAPTURE_UX_REVIEW_HOLD_SECONDS'] = '15'
-        $actual = [Diagnostics.Process]::Start($Info)
-        Assert-True ($null -ne $actual) 'Actual installed process did not start.'
-        # The helper disposes its handle after the three-second gate. Keep the original
-        # redirected-stream owner alive until the diagnostic has exited and output is read.
-        $script:RestartObserver = $actual
-        $script:RestartOutput = $actual.StandardOutput.ReadToEndAsync()
-        $script:RestartError = $actual.StandardError.ReadToEndAsync()
-        Write-Json (Join-Path $script:AcceptanceRun 'restart-process.json') @{
-            Id = $actual.Id; StartedUtc = $actual.StartTime.ToUniversalTime().ToString('O'); Executable = $expected
-            Arguments = '--selftest-ux-review'; Mode = 'Actual installed binary, isolated existing diagnostic startup'
-        }
-        return [Diagnostics.Process]::GetProcessById($actual.Id)
-    }
-    try {
-        # All installer launch, receipt/hash/version validation, liveness and session cleanup
-        # statements run unchanged. No fake Process object and no installer override exists.
-        . ([scriptblock]::Create($helperText.Substring($main[0].Extent.StartOffset)))
-        Assert-True ($null -ne $script:RestartObserver) 'Helper never reached actual restart.'
-        Assert-True ($script:RestartObserver.WaitForExit(180000)) 'Diagnostic restart timed out.'
-        Assert-True ($script:RestartObserver.ExitCode -eq 0) 'Diagnostic restart failed.'
-        $stdout = $script:RestartOutput.GetAwaiter().GetResult()
-        $stderr = $script:RestartError.GetAwaiter().GetResult()
-        [IO.File]::WriteAllText((Join-Path $run 'restart.stdout.txt'), $stdout)
-        [IO.File]::WriteAllText((Join-Path $run 'restart.stderr.txt'), $stderr)
-        $matches = @([regex]::Matches($stdout, '(?m)^UX_REVIEW_OUTPUT=(.+)\r?$'))
-        Assert-True ($matches.Count -eq 1) 'Expected exactly one diagnostic output root.'
-        $diagnostics = [IO.Path]::GetFullPath($matches[0].Groups[1].Value.Trim()).TrimEnd('\')
-        Assert-True ($diagnostics.StartsWith((Join-Path $run 'temporary') + '\', [StringComparison]::OrdinalIgnoreCase)) 'Diagnostic output escaped the owned temporary directory.'
-        Assert-NoOutputLinks $diagnostics
-        $report = [IO.File]::ReadAllText((Join-Path $diagnostics 'ux-review-selftest-report.txt'))
-        Assert-True ($report -match '(?m)^RESULT: PASS ' -and $report -notmatch '(?m)^RESULT: FAIL') 'Actual WPF diagnostic report did not pass.'
-        Write-Json (Join-Path $run 'acceptance-result.json') @{
-            Result = 'PASS'; Version = $configuration.Version; DiagnosticOutput = $diagnostics
-            SetupSha256 = $configuration.Sha256; HelperSha256 = $owner.HelperSha256; SourceCommit = $owner.SourceCommit
-            Evidence = 'Real IExpress, installer receipt, installed hashes/version, real process and existing WPF diagnostic startup'
-            Limitations = 'Diagnostic mode only. Does not test resident tray, live user settings, or hotkey registration. Visual review remains separate.'
-        }
-        exit 0
-    }
-    finally {
-        if ($null -ne $script:RestartObserver) {
-            try {
-                if (-not $script:RestartObserver.HasExited) {
-                    $script:RestartObserver.Kill()
-                    $script:RestartObserver.WaitForExit(5000) | Out-Null
-                }
+function New-IsolatedStartInfo([string]$Executable, [string]$WorkingDirectory) {
+    $info = New-Object Diagnostics.ProcessStartInfo
+    $info.FileName = $Executable
+    $info.WorkingDirectory = $WorkingDirectory
+    $info.UseShellExecute = $false
+    $info.CreateNoWindow = $true
+    $info.WindowStyle = [Diagnostics.ProcessWindowStyle]::Hidden
+    $info.EnvironmentVariables['TEMP'] = $temporary
+    $info.EnvironmentVariables['TMP'] = $temporary
+    $info.EnvironmentVariables['MYCAPTURE_DATA_ROOT'] = Join-Path $run 'isolated-data'
+    $info.EnvironmentVariables.Remove('MYCAPTURE_UPDATE_SESSION')
+    $info.EnvironmentVariables.Remove('MYCAPTURE_SETUP_TEST_RESTART_ARGUMENTS')
+    return $info
+}
+function Find-Restart([string]$Executable, [long]$EarliestTicks) {
+    foreach ($candidate in @(Get-Process -Name MyCapture -ErrorAction SilentlyContinue)) {
+        $matched = $false
+        try {
+            # Keep a handle for the observed identity before checking its path or waiting.
+            $null = $candidate.Handle
+            if ($candidate.StartTime.ToUniversalTime().Ticks -ge $EarliestTicks -and
+                [string]::Equals($candidate.MainModule.FileName, $Executable, [StringComparison]::OrdinalIgnoreCase)) {
+                $matched = $true
+                return $candidate
             }
-            finally { $script:RestartObserver.Dispose() }
         }
+        catch { }
+        finally { if (-not $matched) { $candidate.Dispose() } }
     }
+    return $null
 }
 
 Assert-True ($ExpectedSourceCommit -match '^[a-f0-9]{40}$') 'Supply the exact expected candidate source commit.'
@@ -146,6 +87,7 @@ $manifest = Get-Content -LiteralPath (Join-Path $artifacts 'installer-manifest.j
 $version = [string]$manifest.Version
 Assert-True ($version -match '^\d+\.\d+\.\d+$') 'Restart acceptance requires a stable numeric package.'
 Assert-True ($manifest.Product -eq 'MyCapture') 'Unexpected installer product.'
+Assert-True (@($manifest.Files).Count -le 10000) 'Invalid package inventory count.'
 Assert-True ($release.SourceCommit -eq $ExpectedSourceCommit -and $release.SourceTreeClean -is [bool] -and $release.SourceTreeClean) 'Package source provenance does not match the expected clean commit.'
 Assert-True ($release.Product -eq 'MyCapture' -and $release.Version -eq $version) 'Package manifests disagree.'
 $publish = Join-Path $artifacts 'publish-win-x64'
@@ -161,119 +103,204 @@ foreach ($name in @($setupName, $payloadName, 'release-manifest.json')) {
 Assert-True ((Get-FileHash -LiteralPath $payload -Algorithm SHA256).Hash -eq $manifest.Payload.Sha256 -and
     (Get-Item -LiteralPath $payload).Length -eq [long]$manifest.Payload.Bytes) 'Installer manifest payload mismatch.'
 Assert-Inventory $publish $manifest
+Assert-True (@($manifest.BootstrapFiles).Count -eq 3) 'Expected three bootstrap files.'
+foreach ($required in @('MyCaptureSetup.exe', 'MyCaptureSetup.exe.config', 'SETUP-HELP.txt')) {
+    Assert-True (@($manifest.BootstrapFiles | Where-Object { $_.Path -ceq $required }).Count -eq 1) 'Missing or duplicate bootstrap file.'
+}
 foreach ($bootstrap in $manifest.BootstrapFiles) {
     Assert-True ([string]$bootstrap.Path -in @('MyCaptureSetup.exe', 'MyCaptureSetup.exe.config', 'SETUP-HELP.txt')) 'Unexpected installer bootstrap name.'
     $bootstrapPath = Get-SetupBootstrapSource ([string]$bootstrap.Path)
-    Assert-True ((Get-FileHash -LiteralPath $bootstrapPath -Algorithm SHA256).Hash -eq [string]$bootstrap.Sha256) 'Seed installer source does not match the candidate bootstrap inventory.'
+    Assert-True ((Get-FileHash -LiteralPath $bootstrapPath -Algorithm SHA256).Hash -eq [string]$bootstrap.Sha256 -and
+        (Get-Item -LiteralPath $bootstrapPath).Length -eq [long]$bootstrap.Bytes) 'Seed installer source does not match the candidate bootstrap inventory.'
 }
 if (-not $Execute) {
     Write-Output "PREFLIGHT PASS: verified $version at $ExpectedSourceCommit. Re-run with -Execute for isolated installation and diagnostic restart."
     exit 0
 }
-if (-not $DotNetPath) { $DotNetPath = (Get-Command dotnet -CommandType Application -ErrorAction Stop).Source }
-$toolProject = Join-Path $repository 'build\tools\UpdateHelperResourceReader\UpdateHelperResourceReader.csproj'
-& $DotNetPath build $toolProject -c Release --nologo
-Assert-True ($LASTEXITCODE -eq 0) 'Embedded helper reader build failed.'
-$tool = Join-Path (Split-Path -Parent $toolProject) 'bin\Release\net10.0-windows10.0.22000.0\UpdateHelperResourceReader.dll'
-$readerInfo = New-Object Diagnostics.ProcessStartInfo
-$readerInfo.FileName = $DotNetPath
-$readerInfo.Arguments = Quote-Argument $tool
-$readerInfo.WorkingDirectory = $publish
-$readerInfo.UseShellExecute = $false
-$readerInfo.CreateNoWindow = $true
-$readerInfo.RedirectStandardOutput = $true
-$readerInfo.RedirectStandardError = $true
-$reader = [Diagnostics.Process]::Start($readerInfo)
-try {
-    $encoded = $reader.StandardOutput.ReadToEnd()
-    $readerError = $reader.StandardError.ReadToEnd()
-    $reader.WaitForExit()
-    Assert-True ($reader.ExitCode -eq 0) "Embedded helper extraction failed: $readerError"
-    $helperBytes = [Convert]::FromBase64String($encoded)
-}
-finally { $reader.Dispose() }
 
 $run = Join-Path $evidenceBase ([guid]::NewGuid().ToString('N'))
 Assert-NoOutputLinks $run
 [IO.Directory]::CreateDirectory($run) | Out-Null
 $install = Join-Path $run 'installed'
-[IO.Directory]::CreateDirectory((Join-Path $run 'temporary')) | Out-Null
+$temporary = Join-Path $run 'temporary'
+[IO.Directory]::CreateDirectory($temporary) | Out-Null
 $seedLog = Join-Path $run 'seed-install.log'
-$env:MYCAPTURE_DATA_ROOT = Join-Path $run 'isolated-data'
-& (Join-Path $artifacts 'installer-stage\MyCaptureSetup.exe') /quiet --no-shell-integration --install-root $install --payload $payload --manifest (Join-Path $artifacts 'installer-manifest.json') --log $seedLog | Out-Null
-Assert-True ($LASTEXITCODE -eq 0) "Isolated seed installation failed; see $seedLog"
+$seedInfo = New-IsolatedStartInfo (Join-Path $artifacts 'installer-stage\MyCaptureSetup.exe') $artifacts
+$seedInfo.Arguments = '/quiet --no-shell-integration --install-root ' + (Quote-Argument $install) +
+    ' --payload ' + (Quote-Argument $payload) + ' --manifest ' + (Quote-Argument (Join-Path $artifacts 'installer-manifest.json')) +
+    ' --log ' + (Quote-Argument $seedLog)
+$seed = [Diagnostics.Process]::Start($seedInfo)
+Assert-True ($null -ne $seed) 'Seed installer did not start.'
+try {
+    Assert-True ($seed.WaitForExit(600000)) "Isolated seed installation timed out; see $seedLog"
+    Assert-True ($seed.ExitCode -eq 0) "Isolated seed installation failed; see $seedLog"
+}
+finally { $seed.Dispose() }
 $installedManifest = Get-Content -LiteralPath (Join-Path $install 'install-manifest.json') -Raw -Encoding UTF8 | ConvertFrom-Json
 Assert-Inventory $install $installedManifest
+
+# The real no-argument IExpress path validates the standard update-session parent.
+# Run -Execute only in the dedicated validation account; all app data and install files
+# remain under the GUID-owned evidence root, and no shell registration is created.
 $updates = Join-Path ([Environment]::GetFolderPath([Environment+SpecialFolder]::LocalApplicationData)) 'MyCapture\Updates'
-$sessionRoot = Join-Path $updates ('update-' + $version + '-' + [guid]::NewGuid().ToString('N'))
+$token = [guid]::NewGuid().ToString('N')
+$sessionRoot = Join-Path $updates ('update-' + $version + '-' + $token)
 Assert-NoOutputLinks $sessionRoot
 [IO.Directory]::CreateDirectory($sessionRoot) | Out-Null
 $session = Join-Path $sessionRoot 'update-session.json'
 $installer = Join-Path $sessionRoot $setupName
 Copy-Item -LiteralPath $setup -Destination $installer
 Copy-Item -LiteralPath (Join-Path $artifacts 'SHA256SUMS.txt') -Destination (Join-Path $sessionRoot 'SHA256SUMS.txt')
-$helperPath = Join-Path $sessionRoot 'update-helper.ps1'
-[IO.File]::WriteAllBytes($helperPath, $helperBytes)
-$token = [guid]::NewGuid().ToString('N')
 $setupHash = (Get-FileHash -LiteralPath $installer -Algorithm SHA256).Hash
-Write-Json $session @{
-    ParentId = [int]::MaxValue; ParentStartedUtc = 0; Installer = $installer; Sha256 = $setupHash
-    Bytes = (Get-Item -LiteralPath $installer).Length; Version = $version; Token = $token
-    InstallRoot = $install; SourceRoot = $install; TargetMode = 'OwnedInstall'
-    FailureMessage = 'Isolated updater acceptance failed. Inspect the retained test evidence.'
-}
-Write-Json (Join-Path $run 'acceptance-owner.json') @{
-    Token = $token; Session = $session; SourceCommit = $ExpectedSourceCommit
-    HelperSha256 = (Get-FileHash -LiteralPath $helperPath -Algorithm SHA256).Hash
-}
-$workerInfo = New-Object Diagnostics.ProcessStartInfo
-$workerInfo.FileName = $powerShell
-$workerInfo.Arguments = '-NoLogo -NoProfile -NonInteractive -File ' + (Quote-Argument $PSCommandPath) + ' -WorkerRoot ' + (Quote-Argument $run) + ' -WorkerSession ' + (Quote-Argument $session)
-$workerInfo.UseShellExecute = $false
-$workerInfo.CreateNoWindow = $true
-$workerInfo.WindowStyle = [Diagnostics.ProcessWindowStyle]::Hidden
-$workerInfo.EnvironmentVariables['TEMP'] = Join-Path $run 'temporary'
-$workerInfo.EnvironmentVariables['TMP'] = Join-Path $run 'temporary'
-$workerInfo.EnvironmentVariables['MYCAPTURE_DATA_ROOT'] = Join-Path $run 'isolated-data'
-$worker = [Diagnostics.Process]::Start($workerInfo)
+Assert-True ($setupHash -eq (Get-FileHash -LiteralPath $setup -Algorithm SHA256).Hash) 'Copied setup hash mismatch.'
+$parentInfo = New-IsolatedStartInfo (Join-Path ([Environment]::SystemDirectory) 'cmd.exe') $run
+$parentInfo.Arguments = '/d /q /c "set /p MYCAPTURE_ACCEPTANCE_PARENT="'
+$parentInfo.RedirectStandardInput = $true
+$standIn = [Diagnostics.Process]::Start($parentInfo)
+Assert-True ($null -ne $standIn) 'Parent stand-in did not start.'
+$packageProcess = $null
+$diagnostic = $null
+$locked = $null
 try {
+    $parentTicks = $standIn.StartTime.ToUniversalTime().Ticks
+    Write-Json $session @{
+        Token = $token; Version = $version; InstallRoot = $install; SourceRoot = $install; TargetMode = 'OwnedInstall'
+        ParentId = $standIn.Id; ParentStartedUtc = $parentTicks
+        WaitForParent = $true; RestartAfterInstall = $true; ShowProgress = $true
+    }
+    Write-Json (Join-Path $run 'acceptance-owner.json') @{
+        Token = $token; Session = $session; SourceCommit = $ExpectedSourceCommit; SetupSha256 = $setupHash
+        ParentId = $standIn.Id; ParentStartedUtc = $parentTicks; InstallRoot = $install
+    }
+    $locked = [IO.File]::Open($installer, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::Read)
+    $setupInfo = New-IsolatedStartInfo $installer $sessionRoot
+    # No IExpress arguments: exercise the same interactive AppLaunched command as the app.
+    $setupInfo.WindowStyle = [Diagnostics.ProcessWindowStyle]::Normal
+    $setupInfo.EnvironmentVariables['MYCAPTURE_UPDATE_SESSION'] = $session
+    $setupInfo.EnvironmentVariables['MYCAPTURE_SETUP_TEST_RESTART_ARGUMENTS'] = '--selftest-ux-review'
+    $setupInfo.EnvironmentVariables['MYCAPTURE_UX_REVIEW_HOLD_SECONDS'] = '15'
+    $packageStartedTicks = [DateTime]::UtcNow.Ticks
+    $packageProcess = [Diagnostics.Process]::Start($setupInfo)
+    Assert-True ($null -ne $packageProcess) 'IExpress did not start.'
     Write-Output "ACCEPTANCE_OUTPUT=$run"
-    Assert-True ($worker.WaitForExit(900000)) "Acceptance timed out. Worker PID $($worker.Id); owned evidence: $run"
-    Assert-True ($worker.ExitCode -eq 0) "Acceptance failed; inspect $run and $sessionRoot"
-    $result = Get-Content -LiteralPath (Join-Path $run 'acceptance-result.json') -Raw -Encoding UTF8 | ConvertFrom-Json
-    Assert-True ($result.Result -eq 'PASS') 'Acceptance result was not PASS.'
-    Write-Output 'RESULT: PASS (real packaged update and diagnostic restart; resident startup remains outside this harness)'
+    $receiptPath = Join-Path $sessionRoot 'install-result.json'
+    $waitDeadline = [DateTime]::UtcNow.AddSeconds(60)
+    $waitEvidence = $null
+    while ($null -eq $waitEvidence) {
+        Assert-True (-not $standIn.HasExited) 'Parent stand-in exited before the installer reached its wait.'
+        Assert-True (-not (Test-Path -LiteralPath $receiptPath)) 'Installer completed before waiting for its live parent.'
+        foreach ($candidateLog in @(Get-ChildItem -LiteralPath $temporary -Filter 'MyCapture-Install-*.log' -File)) {
+            $line = @(Get-Content -LiteralPath $candidateLog.FullName -Encoding UTF8 | Where-Object {
+                $_ -match ('Waiting for updater parent to exit\. PID=' + $standIn.Id + ';')
+            })
+            if ($line.Count -gt 0) { $waitEvidence = [string]$line[0]; break }
+        }
+        Assert-True ([DateTime]::UtcNow -lt $waitDeadline) 'Installer did not confirm waiting for the live parent within sixty seconds.'
+        if ($null -eq $waitEvidence) { Start-Sleep -Milliseconds 100 }
+    }
+    $standIn.StandardInput.WriteLine('release')
+    $standIn.StandardInput.Close()
+    Assert-True ($standIn.WaitForExit(5000) -and $standIn.ExitCode -eq 0) 'Parent stand-in did not exit normally.'
+
+    # IExpress exit is not install evidence. Wait for the installer's committed receipt.
+    $deadline = [DateTime]::UtcNow.AddMinutes(10)
+    while (-not (Test-Path -LiteralPath $receiptPath)) {
+        Assert-True ([DateTime]::UtcNow -lt $deadline) 'Installer did not write a receipt within ten minutes.'
+        Start-Sleep -Milliseconds 100
+    }
+    Assert-NoOutputLinks $receiptPath
+    $receiptBytes = [IO.File]::ReadAllBytes($receiptPath)
+    Assert-True (-not ($receiptBytes.Length -ge 3 -and $receiptBytes[0] -eq 239 -and $receiptBytes[1] -eq 187 -and $receiptBytes[2] -eq 191)) 'Receipt has an unexpected UTF-8 BOM.'
+    $receipt = Get-Content -LiteralPath $receiptPath -Raw -Encoding UTF8 | ConvertFrom-Json
+    Assert-True (@($receipt.PSObject.Properties.Name).Count -eq 5 -and $receipt.Token -ceq $token -and $receipt.Version -ceq $version -and
+        [int]$receipt.ExitCode -eq 0 -and [string]::Equals([string]$receipt.InstallRoot, $install, [StringComparison]::OrdinalIgnoreCase)) 'Installer failed or returned an unexpected receipt.'
+    Assert-True (-not [string]::IsNullOrWhiteSpace([string]$receipt.LogPath) -and (Test-Path -LiteralPath $receipt.LogPath)) 'Receipt log is missing.'
+    Copy-Item -LiteralPath $receiptPath -Destination (Join-Path $run 'verified-install-result.json')
+    # Observe the process before hashing the full installation: large packages can take
+    # longer than the diagnostic hold, but the retained handle still proves its identity.
+    $expectedExe = Join-Path $install 'MyCapture.exe'
+    $restartDeadline = [DateTime]::UtcNow.AddSeconds(30)
+    while ($null -eq $diagnostic) {
+        $diagnostic = Find-Restart $expectedExe $packageStartedTicks
+        Assert-True ([DateTime]::UtcNow -lt $restartDeadline) 'Installer did not restart the actual installed diagnostic.'
+        if ($null -eq $diagnostic) { Start-Sleep -Milliseconds 100 }
+    }
+    Write-Json (Join-Path $run 'restart-process.json') @{
+        Id = $diagnostic.Id; StartedUtc = $diagnostic.StartTime.ToUniversalTime().ToString('O')
+        StartedUtcTicks = $diagnostic.StartTime.ToUniversalTime().Ticks; Executable = $diagnostic.MainModule.FileName
+        Arguments = '--selftest-ux-review'; Mode = 'Actual installed binary observed by process handle and executable path'
+        ParentWaitLog = $waitEvidence; ParentId = $standIn.Id; ParentStartedUtc = $parentTicks
+    }
+    $installedManifest = Get-Content -LiteralPath (Join-Path $install 'install-manifest.json') -Raw -Encoding UTF8 | ConvertFrom-Json
+    Assert-True ($installedManifest.Product -ceq 'MyCapture' -and $installedManifest.Version -ceq $version) 'Installed version was not confirmed.'
+    Assert-Inventory $install $installedManifest
+    foreach ($entry in $manifest.Files) {
+        $installedEntry = @($installedManifest.Files | Where-Object { $_.Path -ceq $entry.Path })
+        Assert-True ($installedEntry.Count -eq 1 -and $installedEntry[0].Sha256 -eq $entry.Sha256 -and [long]$installedEntry[0].Bytes -eq [long]$entry.Bytes) 'Installed inventory differs from the candidate package.'
+    }
+    foreach ($name in @('MyCapture.exe', 'MyCapture.dll')) {
+        $binaryVersion = [Diagnostics.FileVersionInfo]::GetVersionInfo((Join-Path $install $name))
+        $actualVersion = '{0}.{1}.{2}' -f $binaryVersion.FileMajorPart, $binaryVersion.FileMinorPart, $binaryVersion.FileBuildPart
+        Assert-True ($actualVersion -ceq $version) "Installed binary version mismatch: $name"
+    }
+    Assert-True ($diagnostic.WaitForExit(180000)) 'Diagnostic restart timed out.'
+    Assert-True ($diagnostic.ExitCode -eq 0) 'Diagnostic restart failed.'
+    $stdoutPath = Join-Path $sessionRoot 'restart.stdout.txt'
+    $stderrPath = Join-Path $sessionRoot 'restart.stderr.txt'
+    $flushDeadline = [DateTime]::UtcNow.AddSeconds(15)
+    do {
+        $outputReady = $false
+        if ((Test-Path -LiteralPath $stdoutPath) -and (Test-Path -LiteralPath $stderrPath)) {
+            Assert-NoOutputLinks $stdoutPath
+            Assert-NoOutputLinks $stderrPath
+            try {
+                # Ordinary reads require the observer's write handles to be closed.
+                # Process exit may precede its final redirected-stream drain.
+                $stdout = [IO.File]::ReadAllText($stdoutPath)
+                $stderr = [IO.File]::ReadAllText($stderrPath)
+                $outputReady = $true
+            }
+            catch [IO.IOException] { }
+        }
+        if ($outputReady) {
+            $matches = @([regex]::Matches($stdout, '(?m)^UX_REVIEW_OUTPUT=(.+)\r?$'))
+            if ($matches.Count -eq 1) { break }
+        }
+        Assert-True ([DateTime]::UtcNow -lt $flushDeadline) 'Diagnostic output was not flushed to its session files.'
+        Start-Sleep -Milliseconds 100
+    } while ($true)
+    Assert-NoOutputLinks $stdoutPath
+    Assert-NoOutputLinks $stderrPath
+    Copy-Item -LiteralPath $stdoutPath -Destination (Join-Path $run 'restart.stdout.txt')
+    Copy-Item -LiteralPath $stderrPath -Destination (Join-Path $run 'restart.stderr.txt')
+    Assert-True ($matches.Count -eq 1) 'Expected exactly one diagnostic output root.'
+    $diagnostics = [IO.Path]::GetFullPath($matches[0].Groups[1].Value.Trim()).TrimEnd('\')
+    Assert-True ($diagnostics.StartsWith($temporary + '\', [StringComparison]::OrdinalIgnoreCase)) 'Diagnostic output escaped the owned temporary directory.'
+    Assert-NoOutputLinks $diagnostics
+    $report = [IO.File]::ReadAllText((Join-Path $diagnostics 'ux-review-selftest-report.txt'))
+    Assert-True ($report -match '(?m)^RESULT: PASS ' -and $report -notmatch '(?m)^RESULT: FAIL') 'Actual WPF diagnostic report did not pass.'
+    Write-Json (Join-Path $run 'acceptance-result.json') @{
+        Result = 'PASS'; Version = $version; DiagnosticOutput = $diagnostics
+        SetupSha256 = $setupHash; SourceCommit = $ExpectedSourceCommit; ParentWaitObserved = $true
+        Evidence = 'Real no-argument IExpress, live parent wait, installer receipt, installed hashes/version, observed installed process and WPF diagnostic startup'
+        Limitations = 'Diagnostic mode only. Does not test resident tray, live user settings, or hotkey registration. Visual review remains separate.'
+    }
+    Write-Output 'RESULT: PASS (real packaged update, parent wait and diagnostic restart; resident startup remains outside this harness)'
 }
 finally {
-    try {
-        if (-not $worker.HasExited) {
-            # Stop only this harness worker and its recorded diagnostic, never all MyCapture processes.
-            try {
-            $identityPath = Join-Path $run 'restart-process.json'
-            if (Test-Path -LiteralPath $identityPath) {
-                $identity = Get-Content -LiteralPath $identityPath -Raw -Encoding UTF8 | ConvertFrom-Json
-                $diagnostic = Get-Process -Id ([int]$identity.Id) -ErrorAction SilentlyContinue
-                if ($null -ne $diagnostic) {
-                    try {
-                        if ($diagnostic.StartTime.ToUniversalTime().ToString('O') -eq $identity.StartedUtc -and
-                            [string]::Equals($diagnostic.MainModule.FileName, (Join-Path $install 'MyCapture.exe'), [StringComparison]::OrdinalIgnoreCase)) {
-                            $diagnostic.Kill()
-                            $diagnostic.WaitForExit(5000) | Out-Null
-                        }
-                    }
-                    finally { $diagnostic.Dispose() }
-                }
-            }
-            }
-            finally {
-                if (-not $worker.HasExited) {
-                    $worker.Kill()
-                    $worker.WaitForExit(5000) | Out-Null
-                }
-            }
+    if ($null -ne $diagnostic) {
+        try {
+            # This handle was retained only after its start time and installed path matched.
+            if (-not $diagnostic.HasExited) { $diagnostic.Kill(); $diagnostic.WaitForExit(5000) | Out-Null }
         }
+        finally { $diagnostic.Dispose() }
     }
-    finally { $worker.Dispose() }
+    try {
+        if (-not $standIn.HasExited) { $standIn.StandardInput.Close(); $standIn.WaitForExit(5000) | Out-Null }
+        if (-not $standIn.HasExited) { $standIn.Kill(); $standIn.WaitForExit(5000) | Out-Null }
+    }
+    finally { $standIn.Dispose() }
+    if ($null -ne $packageProcess) { $packageProcess.Dispose() }
+    if ($null -ne $locked) { $locked.Dispose() }
 }
-# Evidence and the GUID-owned installation are deliberately retained for inspection.
-# The real helper removes only its exact successful session files; no parent is swept.
+# Preserve this exact session, evidence and GUID-owned install for inspection.
