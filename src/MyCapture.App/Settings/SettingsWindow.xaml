@@ -1309,6 +1309,7 @@
                             <TextBlock Style="{StaticResource About.Heading}" Text="{loc:Text About_PrivacyHeading}" />
                             <TextBlock x:Name="PrivacyLocalText" Style="{StaticResource About.Body}" Text="{loc:Text About_PrivacyLocal}" />
                             <TextBlock x:Name="PrivacyModelText" Style="{StaticResource About.Body}" />
+                            <TextBlock x:Name="PrivacyUpdateText" Style="{StaticResource About.Body}" Visibility="Collapsed" Text="{loc:Text About_PrivacyUpdates}" />
                             <TextBlock x:Name="PrivacyGitHubText" Style="{StaticResource About.Body}" Margin="0" Text="{loc:Text About_PrivacyGitHub}" />
                         </StackPanel>
 

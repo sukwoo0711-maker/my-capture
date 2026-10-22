@@ -3897,6 +3897,7 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="About_PrivacyLocal" xml:space="preserve"><value>캡처와 텍스트 인식은 이 PC에서 처리합니다.</value></data>
   <data name="About_PrivacyModel" xml:space="preserve"><value>텍스트 인식 모델(약 {0} MB)은 정확 또는 가장 정확 품질을 처음 사용할 때 ModelScope에서 내려받습니다. 가장 정확 품질은 확대 모델(약 {1} MB)도 Qualcomm AI Hub에서 내려받습니다. 이미지는 전송하지 않습니다.</value></data>
   <data name="About_PrivacyGitHub" xml:space="preserve"><value>GitHub 업로드는 실행할 때만 공개 이슈에 올립니다.</value></data>
+  <data name="About_PrivacyUpdates" xml:space="preserve"><value>새 버전 자동 확인이 켜져 있으면 하루에 한 번 새 버전 정보를 확인합니다.</value></data>
   <data name="About_FeedbackHeading" xml:space="preserve"><value>피드백</value></data>
   <data name="About_ReportProblem" xml:space="preserve"><value>문의하기</value></data>
   <data name="Support_Title" xml:space="preserve"><value>문의하기</value></data>

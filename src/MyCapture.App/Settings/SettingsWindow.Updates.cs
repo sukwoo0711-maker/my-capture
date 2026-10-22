@@ -26,6 +26,8 @@ internal sealed partial class SettingsWindow
         Closed -= OnUpdatesClosed;
         Closed += OnUpdatesClosed;
         InitializeUpdateChannel(coordinator.Channel);
+        // Only builds that check for new versions disclose the daily check.
+        PrivacyUpdateText.Visibility = coordinator.Channel == UpdateChannel.None ? Visibility.Collapsed : Visibility.Visible;
         RefreshUpdates();
     }
 

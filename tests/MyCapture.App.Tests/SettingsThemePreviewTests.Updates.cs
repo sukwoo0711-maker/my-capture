@@ -49,6 +49,7 @@ public sealed partial class SettingsThemePreviewTests
                     var state = (TextBlock)window.FindName("UpdateObservedStatus");
                     var listing = (Button)window.FindName("StorePageAction");
                     Assert.Equal(channel == UpdateChannel.None ? Visibility.Collapsed : Visibility.Visible, automatic.Visibility);
+                    Assert.Equal(automatic.Visibility, ((TextBlock)window.FindName("PrivacyUpdateText")).Visibility);
                     Assert.Equal(channel is UpdateChannel.GitHubInstall or UpdateChannel.Portable
                         ? Visibility.Visible : Visibility.Collapsed, listing.Visibility);
                     if (channel == UpdateChannel.None)
