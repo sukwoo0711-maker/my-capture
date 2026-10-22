@@ -8,6 +8,118 @@ namespace MyCapture.App.Tests;
 public sealed class CommandButtonSpecificationTests
 {
     [Theory]
+    [InlineData(1)]
+    [InlineData(1.25)]
+    [InlineData(1.5)]
+    [InlineData(2)]
+    public void CollapsedStandardFaceKeepsFullChordWidthAcrossAltAndRestoresLivePadding(double scale) => StaTestHost.Run(() =>
+    {
+        using var motion = new ShortcutMotionTestScope();
+        Func<bool>? previous = ShortcutPresentation.ReadEnabled;
+        try
+        {
+            ShortcutPresentation.ReadEnabled = () => false;
+            Button button = IconAndLabel();
+            VisualTreeHelper.SetRootDpi(button, new DpiScale(scale, scale));
+            ShortcutPresentation.Attach(button, ShortcutScope.Annotation, "Privacy");
+            Grid face = Assert.IsType<Grid>(button.Content);
+            var label = ((StackPanel)face.Children[0]).Children.OfType<TextBlock>().Single();
+            var hint = Assert.IsAssignableFrom<TextBlock>(face.Children[1]);
+            double reservedWidth = face.MinWidth;
+            Assert.True(reservedWidth > 0);
+            Assert.Equal(new Thickness(10, 4, 10, 4), button.Padding);
+            Assert.True(CommandButtonPresentation.CompactLabel(button, true));
+            Assert.Equal(Visibility.Collapsed, label.Visibility);
+            Assert.Equal(new Thickness(4), button.Padding);
+            double? restingWidth = null;
+            foreach (bool reveal in new[] { false, true, false })
+            {
+                ShortcutPresentation.SetAltRevealed(button, reveal);
+                button.Dispatcher.Invoke(System.Windows.Threading.DispatcherPriority.ApplicationIdle, new Action(() => { }));
+                button.Measure(new Size(500, 100));
+                button.Arrange(new Rect(0, 0, button.DesiredSize.Width, button.DesiredSize.Height));
+                Assert.Equal(44, button.ActualHeight, 2);
+                Assert.Equal(36, button.MinWidth);
+                Assert.Equal(reservedWidth, face.MinWidth);
+                Assert.True(face.ActualWidth >= reservedWidth);
+                Assert.True(hint.ActualWidth >= hint.DesiredSize.Width - 0.5);
+                ShortcutMotionTestScope.AssertState(hint, reveal);
+                if (restingWidth.HasValue) Assert.Equal(restingWidth.Value, button.ActualWidth, 2);
+                else restingWidth = button.ActualWidth;
+            }
+
+            // Expanding must resolve today's theme token, not a value saved before compaction.
+            button.Resources["CommandButton.Padding.Standard"] = new Thickness(12, 4, 12, 4);
+            Assert.True(CommandButtonPresentation.CompactLabel(button, false));
+            Assert.Equal(Visibility.Visible, label.Visibility);
+            Assert.Equal(new Thickness(12, 4, 12, 4), button.Padding);
+            button.Resources["CommandButton.Padding.Standard"] = new Thickness(11, 4, 11, 4);
+            Assert.Equal(new Thickness(11, 4, 11, 4), button.Padding);
+        }
+        finally
+        {
+            ShortcutPresentation.ReadEnabled = previous;
+            ShortcutPresentation.Refresh();
+        }
+    });
+
+    [Fact]
+    public void AlwaysIconRetainsTightPaddingWhenStandardPresentationIsReapplied() => StaTestHost.Run(() =>
+    {
+        Button button = IconAndLabel();
+        CommandButtonPresentation.Apply(button);
+        CommandButtonPresentation.AlwaysIcon(button);
+        CommandButtonPresentation.Apply(button);
+        CommandButtonPresentation.CompactLabel(button, false);
+        Assert.Equal(new Thickness(4), button.Padding);
+        Assert.Equal(Visibility.Collapsed, ((StackPanel)button.Content).Children.OfType<TextBlock>().Single().Visibility);
+        button.Resources["CommandButton.Padding.StandardIconOnly"] = new Thickness(3, 4, 3, 4);
+        Assert.Equal(new Thickness(3, 4, 3, 4), button.Padding);
+    });
+
+    [Fact]
+    public void CompactionPreservesCompactTierCustomTextOnlyAndPrimaryCommandPadding() => StaTestHost.Run(() =>
+    {
+        Button compact = IconAndLabel();
+        CommandButtonPresentation.Apply(compact, compact: true);
+        Button custom = IconAndLabel();
+        custom.Padding = new Thickness(7, 2, 7, 2);
+        Button textOnly = IconAndLabel();
+        textOnly.Content = new TextBlock { Text = "Command" };
+        CommandButtonPresentation.Apply(textOnly);
+        Button iconOnly = IconAndLabel();
+        ((StackPanel)iconOnly.Content).Children.RemoveAt(1);
+        CommandButtonPresentation.Apply(iconOnly);
+        Button primary = IconAndLabel();
+        CommandButtonPresentation.Apply(primary);
+        CommandButtonPresentation.KeepLabel(primary);
+        foreach (Button button in new[] { compact, custom, textOnly, iconOnly, primary })
+        {
+            Thickness padding = button.Padding;
+            foreach (bool collapse in new[] { true, false })
+            {
+                CommandButtonPresentation.CompactLabel(button, collapse);
+                Assert.Equal(padding, button.Padding);
+            }
+        }
+        Assert.Equal(Visibility.Visible, ((StackPanel)primary.Content).Children.OfType<TextBlock>().Single().Visibility);
+    });
+
+    private static Button IconAndLabel() => new()
+    {
+        Resources = SystemHighContrastThemeTests.LoadTheme(),
+        Content = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            Children =
+            {
+                new Viewbox { Width = 20, Height = 20, Child = new Border { Width = 16, Height = 16 } },
+                new TextBlock { Text = "Command", Margin = new Thickness(6, 0, 0, 0) },
+            },
+        },
+    };
+
+    [Theory]
     [InlineData(false, 44, 4, 1)]
     [InlineData(false, 44, 4, 1.25)]
     [InlineData(false, 44, 4, 1.5)]
