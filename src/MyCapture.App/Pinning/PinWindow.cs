@@ -11,6 +11,8 @@ using System.Windows.Media.Imaging;
 using System.Windows.Shapes;
 using System.Windows.Threading;
 using MyCapture.App.Themes;
+using MyCapture.App.Sources;
+using MyCapture.Core.Capture;
 using MyCapture.Core.Pin;
 using MyCapture.Core.Platform;
 using MyCapture.Core.Primitives;
@@ -337,9 +339,18 @@ internal sealed class PinWindow : Window
 
     private PinHoverBar CreateHoverBar()
     {
-        var bar = new PinHoverBar { Owner = this, ReadOpacity = () => _state.Opacity };
+        var bar = new PinHoverBar(Provenance) { Owner = this, ReadOpacity = () => _state.Opacity };
         bar.CopyRequested += CopyImageToClipboard;
         bar.SaveRequested += () => RequestSave(PinSaveMode.QuickSave);
+        bar.SourceRequested += () => LastSourceOperationForTest = OpenSourceAsync();
+        if (Provenance.HasSource)
+        {
+            ContextMenu menu = SourceChip.CreateMenu(Provenance,
+                status => ShowFeedback(status, FeedbackKind.Result),
+                menu: MyCapture.App.Capture.CaptureWindowExclusion.CreateContextMenu());
+            menu.Opened += (_, _) => MyCapture.App.Capture.CaptureWindowExclusion.ExcludeMenuPopup(menu);
+            bar.SourceButton.ContextMenu = menu;
+        }
         bar.OpacityRequested += opacity =>
         {
             double target = AdjustOpacity(opacity - _state.Opacity);
@@ -456,6 +467,20 @@ internal sealed class PinWindow : Window
 
     /// <summary>The source page this pin came from, if the clipboard carried one.</summary>
     internal string SourcePageUrl { get; } = string.Empty;
+
+    internal CaptureProvenance Provenance => _content.Provenance;
+
+    internal Func<CaptureProvenance, Task<string>> OpenSource { get; set; } =
+        CaptureSourceActions.Default.OpenAsync;
+
+    internal Task? LastSourceOperationForTest { get; private set; }
+
+    internal async Task OpenSourceAsync()
+    {
+        if (!Provenance.HasSource || _isClosed) return;
+        string status = await OpenSource(Provenance);
+        if (!string.IsNullOrEmpty(status)) ShowFeedback(status, FeedbackKind.Result);
+    }
 
     /// <summary>The native handle, valid after the window is shown.</summary>
     internal IntPtr Handle => _handle;

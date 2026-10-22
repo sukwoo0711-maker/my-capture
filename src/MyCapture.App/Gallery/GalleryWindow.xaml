@@ -189,6 +189,15 @@
                         <Grid>
                             <Image Source="{Binding Thumbnail}" Stretch="Uniform"
                                    RenderOptions.BitmapScalingMode="HighQuality" AutomationProperties.Name="{Binding AccessibleName}" />
+                            <Button x:Name="SourceBadge" Style="{StaticResource Button.GhostCompact}"
+                                    gallery:GallerySourceBadge.Provenance="{Binding SourceProvenance}"
+                                    AutomationProperties.AutomationId="LibrarySourceBadge"
+                                    HorizontalAlignment="Left" VerticalAlignment="Bottom" HorizontalContentAlignment="Stretch"
+                                    Margin="5" Padding="6,3" MinWidth="0" MinHeight="26" MaxWidth="200"
+                                    FontSize="{DynamicResource FontSize.Caption}"
+                                    Background="{DynamicResource Surface.Floating}" Foreground="{DynamicResource Text.Primary}"
+                                    BorderBrush="{DynamicResource Border.Subtle}" BorderThickness="1"
+                                    Visibility="{Binding HasSourceBadge, Converter={StaticResource BoolToVisibility}}" />
                             <TextBlock Text="{Binding PreviewUnavailableText}" Margin="6" TextWrapping="Wrap" TextAlignment="Center"
                                        FontSize="{DynamicResource FontSize.Caption}" Foreground="{DynamicResource Text.Secondary}"
                                        HorizontalAlignment="Center" VerticalAlignment="Center"
@@ -476,6 +485,15 @@
                         <Grid>
                             <Image Source="{Binding Thumbnail}" Stretch="Uniform"
                                    RenderOptions.BitmapScalingMode="HighQuality" AutomationProperties.Name="{Binding AccessibleName}" />
+                            <Button x:Name="SourceBadge" Style="{StaticResource Button.GhostCompact}"
+                                    gallery:GallerySourceBadge.Provenance="{Binding SourceProvenance}"
+                                    AutomationProperties.AutomationId="LibrarySourceBadge"
+                                    HorizontalAlignment="Left" VerticalAlignment="Bottom" HorizontalContentAlignment="Stretch"
+                                    Margin="5" Padding="6,3" MinWidth="0" MinHeight="26" MaxWidth="200"
+                                    FontSize="{DynamicResource FontSize.Caption}"
+                                    Background="{DynamicResource Surface.Floating}" Foreground="{DynamicResource Text.Primary}"
+                                    BorderBrush="{DynamicResource Border.Subtle}" BorderThickness="1"
+                                    Visibility="{Binding HasSourceBadge, Converter={StaticResource BoolToVisibility}}" />
                             <TextBlock Text="{Binding PreviewUnavailableText}" Margin="6" TextWrapping="Wrap" TextAlignment="Center"
                                        FontSize="{DynamicResource FontSize.Caption}" Foreground="{DynamicResource Text.Secondary}"
                                        HorizontalAlignment="Center" VerticalAlignment="Center"
@@ -2164,7 +2182,7 @@
                                         <TextBlock x:Name="SourcePageValue" AutomationProperties.AutomationId="LibrarySourcePageValue" Margin="0,2,0,0"
                                                    FontSize="{StaticResource FontSize.Control}" ToolTip="{Binding SourcePageUrl}"
                                                    AutomationProperties.Name="{Binding SourcePageUrlAutomationName}"
-                                                   gallery:GalleryTextClamp.MaxLines="2" gallery:GalleryTextClamp.Text="{Binding SourcePageUrl}" />
+                                                    gallery:GalleryTextClamp.MaxLines="2" gallery:GalleryTextClamp.Text="{Binding SourcePageDisplayText}" />
                                         <WrapPanel Margin="0,8,0,0">
                                             <Button Content="{loc:Text Library.SourcePage.Open}" Style="{StaticResource Button.Secondary}" Click="OnOpenSourcePageClick" Margin="0,0,8,8" />
                                             <Button Content="{loc:Text Library.SourcePage.Copy}" Style="{StaticResource Button.Secondary}" Click="OnCopySourcePageClick" Margin="0,0,0,8" />

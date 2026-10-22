@@ -3,6 +3,7 @@ using System.IO;
 using System.Runtime.CompilerServices;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
+using MyCapture.Core.Capture;
 using MyCapture.Core.Queue;
 using MyCapture.Core.Settings;
 using MyCapture.Platform.Imaging;
@@ -79,6 +80,8 @@ public sealed class GalleryItemViewModel : INotifyPropertyChanged
         Record = record ?? throw new ArgumentNullException(nameof(record));
         _thumbnailPathResolver = thumbnailPathResolver ?? throw new ArgumentNullException(nameof(thumbnailPathResolver));
         _decodePixelWidth = Math.Max(1, decodePixelWidth);
+        SourceProvenance = CaptureProvenance.FromRecord(record);
+        SourcePageDisplayText = PageDisplayText(SourceProvenance.Url);
         _publishedSourceLocation = (IsSourceDocumentFile, HasUnsavedSourceDocument, SourceLocationAction);
     }
 
@@ -185,11 +188,25 @@ public sealed class GalleryItemViewModel : INotifyPropertyChanged
 
     public string SourcePageUrl => MyCapture.Core.Capture.SourcePageUrl.Normalize(Record.SourcePageUrl);
 
+    /// <summary>One immutable, text-only projection per metadata update; scrolling never resolves a source.</summary>
+    public CaptureProvenance SourceProvenance { get; private set; }
+
+    public bool HasSourceBadge => SourceProvenance.HasSource;
+
+    public string SourceBadgeText => SourceProvenance.BadgeText;
+
+    public string SourceBadgeToolTip => SourceProvenance.Tooltip;
+
+    public string SourceSearchQuery => SourceProvenance.SearchQuery;
+
+    /// <summary>Query parameters and fragments remain available only through the tooltip and copy action.</summary>
+    public string SourcePageDisplayText { get; private set; }
+
     public bool HasSourcePageUrl => SourcePageUrl.Length > 0;
 
-    /// <summary>The whole address with its label, read by screen readers whatever the summary shows.</summary>
+    /// <summary>The page address without query or fragment, read by screen readers regardless of trimming.</summary>
     public string SourcePageUrlAutomationName =>
-        HasSourcePageUrl ? UiText.Format("Library.SourcePage.Accessible", SourcePageUrl) : string.Empty;
+        HasSourcePageUrl ? UiText.Format("Library.SourcePage.Accessible", SourcePageDisplayText) : string.Empty;
 
     /// <summary>
     /// Whether the details panel shows a source section. Videos have no capture-time source; their
@@ -338,6 +355,13 @@ public sealed class GalleryItemViewModel : INotifyPropertyChanged
     /// <summary>Notifies the view that pin/meta changed without re-decoding the image.</summary>
     public void RaiseMetaChanged()
     {
+        SourceProvenance = CaptureProvenance.FromRecord(Record);
+        SourcePageDisplayText = PageDisplayText(SourceProvenance.Url);
+        Raise(nameof(SourceProvenance));
+        Raise(nameof(HasSourceBadge));
+        Raise(nameof(SourceBadgeText));
+        Raise(nameof(SourceBadgeToolTip));
+        Raise(nameof(SourceSearchQuery));
         Raise(nameof(Caption));
         Raise(nameof(HasCaption));
         Raise(nameof(CompactCaption));
@@ -345,6 +369,7 @@ public sealed class GalleryItemViewModel : INotifyPropertyChanged
         Raise(nameof(TagsCaption));
         Raise(nameof(HasTags));
         Raise(nameof(SourcePageUrl));
+        Raise(nameof(SourcePageDisplayText));
         Raise(nameof(HasSourcePageUrl));
         Raise(nameof(SourcePageUrlAutomationName));
         Raise(nameof(HasSource));
@@ -450,6 +475,9 @@ public sealed class GalleryItemViewModel : INotifyPropertyChanged
 
     private void Raise([CallerMemberName] string? name = null) =>
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
+
+    private static string PageDisplayText(string url) => Uri.TryCreate(url, UriKind.Absolute, out Uri? uri)
+        ? uri.GetLeftPart(UriPartial.Path) : string.Empty;
 
     private static string FormatDuration(double durationMs)
     {

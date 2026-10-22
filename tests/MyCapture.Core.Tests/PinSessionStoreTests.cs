@@ -450,6 +450,52 @@ public sealed class PinSessionStoreTests
     }
 
     [Fact]
+    public void SaveThenLoad_RoundTripsProvenanceSeparatelyFromTheLegacyExportUrl()
+    {
+        using var workspace = new TempWorkspace();
+        PinSessionSnapshot snapshot = Snapshot();
+        snapshot = snapshot with
+        {
+            Pin = snapshot.Pin with
+            {
+                SourcePageUrl = string.Empty,
+                SourceUrl = "https://example.test/spec?token=private#section",
+                SourceDocumentPath = @"C:\specs\사양서.xlsx",
+                SourceAppName = "Excel",
+                SourceAppExecutablePath = @"C:\Office\EXCEL.EXE",
+                SourceWindowTitle = "사양서 - Excel",
+            }
+        };
+        Assert.True(CreateStore(workspace).Save([snapshot]));
+        Assert.Equal(snapshot.Pin, Assert.Single(CreateStore(workspace).Load()).Pin);
+        JsonNode manifest = JsonNode.Parse(ReadManifestText(workspace))!;
+        Assert.Equal(1, manifest["schemaVersion"]!.GetValue<int>());
+        Assert.Equal(string.Empty, manifest["pins"]![0]!["sourcePageUrl"]!.GetValue<string>());
+        Assert.Equal(snapshot.Pin.SourceDocumentPath, manifest["pins"]![0]!["sourceDocumentPath"]!.GetValue<string>());
+    }
+
+    [Fact]
+    public void Load_LegacySessionWithoutProvenanceFieldsKeepsTheSourcePageUrl()
+    {
+        using var workspace = new TempWorkspace();
+        PinSessionSnapshot snapshot = Snapshot();
+        Assert.True(CreateStore(workspace).Save([snapshot]));
+        JsonNode manifest = JsonNode.Parse(ReadManifestText(workspace))!;
+        JsonObject record = manifest["pins"]![0]!.AsObject();
+        foreach (string key in new[] { "sourceUrl", "sourceDocumentPath", "sourceAppName", "sourceAppExecutablePath", "sourceWindowTitle" })
+            record.Remove(key);
+        File.WriteAllText(ManifestPath(workspace), manifest.ToJsonString());
+        PinSessionPin restored = Assert.Single(CreateStore(workspace).Load()).Pin;
+        Assert.Equal(snapshot.Pin, restored);
+        Assert.Equal(snapshot.Pin.SourcePageUrl, restored.SourcePageUrl);
+        Assert.Null(restored.SourceUrl);
+        Assert.Null(restored.SourceDocumentPath);
+        Assert.Null(restored.SourceAppName);
+        Assert.Null(restored.SourceAppExecutablePath);
+        Assert.Null(restored.SourceWindowTitle);
+    }
+
+    [Fact]
     public void SaveThenLoad_RoundTripsRenderingMetadataAndDecodedPayloadRemainsReadableByLegacySchema()
     {
         using var workspace = new TempWorkspace();

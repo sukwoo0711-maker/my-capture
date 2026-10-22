@@ -180,13 +180,15 @@ public partial class App
         var document = decoded.Document;
         var assets = decoded.Assets;
         var region = new RectD(0, 0, bitmap.PixelWidth, bitmap.PixelHeight);
+        CaptureRecord? sourceRecord = FindDraftRecord(draft);
         var window = new AnnotationEditorWindow(new FrozenFrame(bitmap, region, null, 0), region, original,
-            initialDocument: document, initialAssets: assets, sourceWindowTitle: draft.Metadata.GetValueOrDefault("title"));
+            initialDocument: document, initialAssets: assets, sourceWindowTitle: draft.Metadata.GetValueOrDefault("title"),
+            provenance: MyCapture.Core.Capture.CaptureProvenance.FromRecord(sourceRecord));
         if (draft.Metadata.TryGetValue(AnnotationEditorWindow.DraftFrameStillImageKey, out string? frameStillImage))
             window.FrameStillImage = System.Text.Json.JsonSerializer.Deserialize<VideoFrameStillImage>(frameStillImage);
         window.Editor.RestoreDraftGeometry(bitmap, int.Parse(draft.Metadata.GetValueOrDefault("turns", "0"),
             System.Globalization.CultureInfo.InvariantCulture), draft.Metadata.GetValueOrDefault("origin", "{\"x\":0,\"y\":0}"));
-        if (FindDraftRecord(draft) is { } record && _commit is { } commitService)
+        if (sourceRecord is { } record && _commit is { } commitService)
         {
             // The draft was editing a library capture that still exists unchanged: save back
             // onto it, exactly like the editor it came from, instead of creating a new capture.

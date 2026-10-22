@@ -4605,4 +4605,13 @@ F3  클립보드를 핀으로 띄우기
   <data name="CoreShortcuts.KeepCurrent" xml:space="preserve"><value>그대로 두기</value></data>
   <data name="CoreShortcuts.Force" xml:space="preserve"><value>Ctrl+Shift+C·X·Z와 F3을 다른 프로그램보다 먼저 처리</value></data>
   <data name="CoreShortcuts.ForceDescription" xml:space="preserve"><value>다른 프로그램이 같은 단축키를 먼저 등록했어도 MyCapture가 받습니다. 끄면 먼저 등록한 프로그램이 사용합니다.</value></data>
+  <data name="Source.Open" xml:space="preserve"><value>원본 열기</value></data>
+  <data name="Source.CopyUrl" xml:space="preserve"><value>주소 복사</value></data>
+  <data name="Source.CopyPath" xml:space="preserve"><value>경로 복사</value></data>
+  <data name="Source.OpenLocation" xml:space="preserve"><value>파일 위치 열기</value></data>
+  <data name="Source.ShowSame" xml:space="preserve"><value>같은 출처 캡처 보기</value></data>
+  <data name="Source.Label" xml:space="preserve"><value>출처: {0}</value></data>
+  <data name="Source.OpenAutomation" xml:space="preserve"><value>출처: {0}, 열기</value></data>
+  <data name="Source.AppMissing" xml:space="preserve"><value>원본 앱을 찾을 수 없습니다.</value></data>
+  <data name="Source.AppOpenFailed" xml:space="preserve"><value>원본 앱을 열 수 없습니다.</value></data>
 </root>

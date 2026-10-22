@@ -2,6 +2,7 @@ using System.IO;
 using System.Windows;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using MyCapture.App.Capture;
 using MyCapture.App.Settings;
 using MyCapture.App.Themes;
 using MyCapture.Core.Settings;
@@ -347,7 +348,8 @@ public partial class App
         if (_settings is null || _shellPresenter is null || _hotkeys?.Failures.Count > 0) return;
         bool first = !_settings.General.FirstCaptureTipShown;
         if (!first && _settings.General.AfterCapture != AfterCaptureAction.ClipboardOnly) return;
-        bool shown = _shellPresenter.ShowCaptureReceipt(UiText.Get(copied ? "Capture.CopiedAndSaved" : "Capture.Saved"),
+        bool shown = _shellPresenter.ShowCaptureReceipt(CaptureSelectionProvenance.ReceiptText(
+                UiText.Get(copied ? "Capture.CopiedAndSaved" : "Capture.Saved"), Core.Capture.CaptureProvenance.FromRecord(record)),
             () => EnsureGalleryWindow()?.OpenCapture(record.Id, edit: false),
             first ? UiText.Get("Onboard_FirstCaptureToastTip") : null,
             first ? async () => await PinCaptureFromTipAsync(record) : null, answersCommand: true);
@@ -364,7 +366,7 @@ public partial class App
                 ? await editor.RenderCurrentImageAsync()
                 : await Task.Run(() => MyCapture.Platform.Imaging.ImageCodec.TryLoad(_queue.GetFilePath(record, Core.Queue.CaptureFileNames.Rendered))
                     ?? throw new IOException("The rendered capture is unavailable."));
-            _pins.PinImage(rendered);
+            _pins.PinImage(rendered, Core.Capture.CaptureProvenance.FromRecord(record));
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
