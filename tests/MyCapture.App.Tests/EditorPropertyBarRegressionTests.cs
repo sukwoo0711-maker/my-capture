@@ -34,6 +34,7 @@ public sealed class EditorPropertyBarRegressionTests : KoreanCaptionTest
         controller.SetSelected(null);
         Invoke(host.Editor, "UpdateInspector");
         host.Window.UpdateLayout();
+        double inspectorHeight = StableInspectorHeight(host.Editor);
         string before = controller.Document.ToJson();
         int undoBefore = controller.Undo.UndoCount;
         Point windowPoint = WindowPoint(host, new PointD(170, 150));
@@ -54,7 +55,7 @@ public sealed class EditorPropertyBarRegressionTests : KoreanCaptionTest
         Assert.Equal(before, controller.Document.ToJson());
         Assert.Equal(undoBefore, controller.Undo.UndoCount);
         Assert.Same(shape, controller.Selected);
-        Assert.True(double.IsNaN(Field<FrameworkElement>(host.Editor, "_inspectorPanel").Height));
+        Assert.Equal(inspectorHeight, StableInspectorHeight(host.Editor));
     });
 
     [Theory]
@@ -94,7 +95,7 @@ public sealed class EditorPropertyBarRegressionTests : KoreanCaptionTest
     });
 
     [Fact]
-    public void ActualWindowDragStillMovesExactlyOnceAndRestoresAutomaticPropertyHeight() => StaTestHost.Run(() =>
+    public void ActualWindowDragStillMovesExactlyOnceAndKeepsStablePropertyHeight() => StaTestHost.Run(() =>
     {
         using EditorWindowHost host = EditorWindowHost.Create();
         host.Window.Width = 680;
@@ -105,6 +106,7 @@ public sealed class EditorPropertyBarRegressionTests : KoreanCaptionTest
         controller.SetSelected(null);
         Invoke(host.Editor, "UpdateInspector");
         host.Window.UpdateLayout();
+        double inspectorHeight = StableInspectorHeight(host.Editor);
         Point start = WindowPoint(host, new PointD(170, 150));
         Point end = WindowPoint(host, new PointD(210, 170));
         host.Editor.SimulatePointerDown(ViewportPoint(host, start));
@@ -117,7 +119,7 @@ public sealed class EditorPropertyBarRegressionTests : KoreanCaptionTest
         Assert.Equal(140, shape.Rect.X, precision: 8);
         Assert.Equal(120, shape.Rect.Y, precision: 8);
         Assert.Equal(1, controller.Undo.UndoCount);
-        Assert.True(double.IsNaN(Field<FrameworkElement>(host.Editor, "_inspectorPanel").Height));
+        Assert.Equal(inspectorHeight, StableInspectorHeight(host.Editor));
         Assert.True(Field<FrameworkElement>(host.Editor, "_colorSection").IsVisible);
         Assert.True(controller.PerformUndo());
         Assert.Equal(100, shape.Rect.X, precision: 8);
@@ -132,7 +134,7 @@ public sealed class EditorPropertyBarRegressionTests : KoreanCaptionTest
     [InlineData("rightClick")]
     [InlineData("toolChange")]
     [InlineData("captureLoss")]
-    public void CancelledGestureRestoresAutomaticPropertyHeight(string cancellation) => StaTestHost.Run(() =>
+    public void CancelledGestureKeepsStablePropertyHeight(string cancellation) => StaTestHost.Run(() =>
     {
         using EditorWindowHost host = EditorWindowHost.Create();
         AnnotationEditorController controller = Controller(host.Editor);
@@ -142,13 +144,14 @@ public sealed class EditorPropertyBarRegressionTests : KoreanCaptionTest
         controller.SetSelected(null);
         Invoke(host.Editor, "UpdateInspector");
         host.Window.UpdateLayout();
+        double inspectorHeight = StableInspectorHeight(host.Editor);
         string before = controller.Document.ToJson();
         Point start = WindowPoint(host, new PointD(170, 150));
         Point end = WindowPoint(host, new PointD(210, 170));
         host.Editor.SimulatePointerDown(ViewportPoint(host, start));
         host.Window.UpdateLayout();
         host.Editor.SimulatePointerMove(ViewportPoint(host, end), leftPressed: true);
-        Assert.False(double.IsNaN(Field<FrameworkElement>(host.Editor, "_inspectorPanel").Height));
+        Assert.Equal(inspectorHeight, StableInspectorHeight(host.Editor));
         switch (cancellation)
         {
             case "escape":
@@ -168,7 +171,7 @@ public sealed class EditorPropertyBarRegressionTests : KoreanCaptionTest
                 break;
         }
         host.Window.UpdateLayout();
-        Assert.True(double.IsNaN(Field<FrameworkElement>(host.Editor, "_inspectorPanel").Height));
+        Assert.Equal(inspectorHeight, StableInspectorHeight(host.Editor));
         Assert.Equal(before, controller.Document.ToJson());
         Assert.Equal(0, controller.Undo.UndoCount);
     });
@@ -176,7 +179,7 @@ public sealed class EditorPropertyBarRegressionTests : KoreanCaptionTest
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void TextEditWhilePointerIsHeldRestoresAutomaticPropertyHeight(bool moveBeforeEditing) => StaTestHost.Run(() =>
+    public void TextEditWhilePointerIsHeldKeepsStablePropertyHeight(bool moveBeforeEditing) => StaTestHost.Run(() =>
     {
         using EditorWindowHost host = EditorWindowHost.Create();
         host.Window.Width = 680;
@@ -187,11 +190,12 @@ public sealed class EditorPropertyBarRegressionTests : KoreanCaptionTest
         controller.SetSelected(null);
         Invoke(host.Editor, "UpdateInspector");
         host.Window.UpdateLayout();
+        double inspectorHeight = StableInspectorHeight(host.Editor);
         Point point = WindowPoint(host, new PointD(170, 140));
         Point end = WindowPoint(host, new PointD(210, 160));
         host.Editor.SimulatePointerDown(ViewportPoint(host, point));
         Assert.Same(text, controller.Selected);
-        Assert.False(double.IsNaN(Field<FrameworkElement>(host.Editor, "_inspectorPanel").Height));
+        Assert.Equal(inspectorHeight, StableInspectorHeight(host.Editor));
         if (moveBeforeEditing)
         {
             host.Window.UpdateLayout();
@@ -203,7 +207,7 @@ public sealed class EditorPropertyBarRegressionTests : KoreanCaptionTest
 
         var input = Field<System.Windows.Controls.TextBox>(host.Editor, "_activeTextBox");
         Assert.NotNull(input);
-        Assert.True(double.IsNaN(Field<FrameworkElement>(host.Editor, "_inspectorPanel").Height));
+        Assert.Equal(inspectorHeight, StableInspectorHeight(host.Editor));
         Assert.Equal(text.FontSize * Field<AnnotationEditorSurface>(host.Editor, "_surface").DipPerPixel, input.FontSize);
         Assert.Equal(0, controller.Undo.UndoCount);
         Assert.Equal(new RectD(100, 100, 200, 80), text.Rect);
@@ -223,6 +227,7 @@ public sealed class EditorPropertyBarRegressionTests : KoreanCaptionTest
         controller.SetSelected(null);
         Invoke(host.Editor, "UpdateInspector");
         host.Window.UpdateLayout();
+        double inspectorHeight = StableInspectorHeight(host.Editor);
         string before = controller.Document.ToJson();
         Point start = WindowPoint(host, new PointD(170, 150));
         Point end = WindowPoint(host, new PointD(210, 170));
@@ -241,7 +246,7 @@ public sealed class EditorPropertyBarRegressionTests : KoreanCaptionTest
         Assert.Equal(before, handedOff);
         Assert.Equal(before, controller.Document.ToJson());
         Assert.Equal(0, controller.Undo.UndoCount);
-        Assert.True(double.IsNaN(Field<FrameworkElement>(host.Editor, "_inspectorPanel").Height));
+        Assert.Equal(inspectorHeight, StableInspectorHeight(host.Editor));
     });
 
     [Theory]
@@ -283,6 +288,13 @@ public sealed class EditorPropertyBarRegressionTests : KoreanCaptionTest
         Assert.Equal(expected, actual);
         Assert.Equal(1, Controller(host.Editor).Undo.UndoCount);
     });
+
+    private static double StableInspectorHeight(AnnotationEditorControl editor)
+    {
+        double height = Field<FrameworkElement>(editor, "_inspectorPanel").Height;
+        Assert.True(double.IsFinite(height) && height > 0, $"Inspector height must retain a positive stable budget; actual: {height}.");
+        return height;
+    }
 
     private static Point WindowPoint(EditorWindowHost host, PointD imagePoint) =>
         Field<FrameworkElement>(host.Editor, "_viewport").TranslatePoint(host.Editor.ViewportPointOf(imagePoint), host.Window);

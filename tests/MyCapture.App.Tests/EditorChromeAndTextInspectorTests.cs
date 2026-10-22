@@ -341,7 +341,7 @@ public sealed class EditorChromeAndTextInspectorTests : KoreanCaptionTest
         host.Window.Dispatcher.Invoke(System.Windows.Threading.DispatcherPriority.ApplicationIdle, new Action(host.Window.UpdateLayout));
         Border bar = Tree<Border>(host.Editor).Single(border => border.Name == "AnnotationCommandBar");
         Button[] commands = Tree<Button>(bar).Where(button => button.IsVisible).ToArray();
-        Assert.True(commands.Length >= 10);
+        Assert.Equal(11, commands.Length);
         foreach (Button command in commands)
         {
             AssertInside(command, bar);
@@ -397,7 +397,7 @@ public sealed class EditorChromeAndTextInspectorTests : KoreanCaptionTest
                     // Allow inherited bindings and the panel's queued refit to settle before measuring.
                     host.Window.Dispatcher.Invoke(System.Windows.Threading.DispatcherPriority.ApplicationIdle, new Action(host.Window.UpdateLayout));
                     Button[] commands = Tree<Button>(bar).Where(button => button.IsVisible).ToArray();
-                    Assert.Equal(crop ? 5 : 10, commands.Length);
+                    Assert.Equal(crop ? 5 : 11, commands.Length);
                     Assert.Contains(commands, button => !string.IsNullOrEmpty(AutomationProperties.GetAcceleratorKey(button)));
                     Assert.Contains(commands, button => string.IsNullOrEmpty(AutomationProperties.GetAcceleratorKey(button)));
                     foreach (Button button in commands)
