@@ -1837,12 +1837,23 @@ public partial class App : Application
         // Keep the tray state in sync after an apply (a hotkey collision flips it to Error).
         window.Applied += (_, _) => RestoreTrayAfterCapture();
         window.Applied += OnPinSessionSettingsApplied;
+        OcrQuality lastOcrQuality = _settings.Ocr.Quality;
+        window.Applied += (_, _) =>
+        {
+            OcrQuality quality = _settings?.Ocr.Quality ?? OcrQuality.Fast;
+            if (lastOcrQuality != quality)
+            {
+                lastOcrQuality = quality;
+                if (OcrQualityProfile.UseNeuralModel(quality))
+                    StartOcrModelDownload(isBackground: false);
+            }
+        };
 
         _settingsWindow = window;
         return window;
     }
 
-    private void StartOcrModelDownload()
+    private void StartOcrModelDownload(bool isBackground = true)
     {
         if (_services is null)
         {
@@ -1850,13 +1861,15 @@ public partial class App : Application
         }
 
         OcrModelStore store = _services.GetRequiredService<OcrModelStore>();
+        OcrQuality quality = _settings?.Ocr.Quality ?? OcrQuality.Fast;
+        var download = new OcrModelDownloadCoordinator(store, new WindowsOcrDownloadEnvironment());
         _ = Task.Run(async () =>
         {
             try
             {
                 // Download only. Session creation stays on the first Accurate OCR so a
                 // native ONNX fault during startup cannot take down the tray process.
-                await store.EnsureAsync(CancellationToken.None).ConfigureAwait(false);
+                await download.EnsureAsync(quality, isBackground, CancellationToken.None).ConfigureAwait(false);
             }
             catch (Exception ex)
             {

@@ -3206,7 +3206,7 @@ Open the library or Settings from the tray menu.</value></data>
   <data name="Settings.ThemeGlass" xml:space="preserve"><value>Dark</value></data>
   <data name="Settings.ThemeGlassLight" xml:space="preserve"><value>Light</value></data>
   <data name="Settings.OcrQuality" xml:space="preserve"><value>Recognition quality</value></data>
-  <data name="Settings.OcrQualityHint" xml:space="preserve"><value>Fast and Normal use the recognition built into Windows. Accurate handles small print such as receipts. Most accurate corrects and enlarges the image 4x before recognition and downloads about 67 MB the first time.</value></data>
+  <data name="Settings.OcrQualityHint" xml:space="preserve"><value>Fast and Normal use the recognition built into Windows. Accurate handles small print such as receipts and downloads about {0} MB the first time. Most accurate corrects and enlarges the image 4x before recognition and downloads about {1} MB in total the first time.</value></data>
   <data name="Settings.OcrQualityFast" xml:space="preserve"><value>Fast</value></data>
   <data name="Settings.OcrQualityBalanced" xml:space="preserve"><value>Normal</value></data>
   <data name="Settings.OcrQualityAccurate" xml:space="preserve"><value>Accurate</value></data>
@@ -3895,7 +3895,7 @@ Delete {1} {1:plural:subfolder|subfolders}, {2} {2:plural:image|images}, and {3}
   <data name="About_UpToDate" xml:space="preserve"><value>Up to date</value></data>
   <data name="About_PrivacyHeading" xml:space="preserve"><value>Privacy</value></data>
   <data name="About_PrivacyLocal" xml:space="preserve"><value>Captures and text recognition are processed on this PC.</value></data>
-  <data name="About_PrivacyModel" xml:space="preserve"><value>The text recognition model (about {0} MB) is downloaded from ModelScope the first time you use Accurate or Most accurate quality. Most accurate also downloads an upscaling model (about {1} MB) from Qualcomm AI Hub. Images are never sent.</value></data>
+  <data name="About_PrivacyModel" xml:space="preserve"><value>Accurate downloads text recognition models (about {0} MB) from ModelScope. Most accurate downloads about {1} MB in total, including an upscaling model from Qualcomm AI Hub. Images are never sent.</value></data>
   <data name="About_PrivacyGitHub" xml:space="preserve"><value>GitHub upload posts to a public issue only when you run it.</value></data>
   <data name="About_FeedbackHeading" xml:space="preserve"><value>Feedback</value></data>
   <data name="About_ReportProblem" xml:space="preserve"><value>Contact support</value></data>
@@ -3964,7 +3964,7 @@ Delete {1} {1:plural:subfolder|subfolders}, {2} {2:plural:image|images}, and {3}
   <data name="SettingsUx_PinCopyHint" xml:space="preserve"><value>Ctrl+C copies the original text together with the image on a pin that keeps its source (text, table or code), and only the image on an image pin. Ctrl+double-click copies only the original text; on an image without one, it copies text recognized on this PC.</value></data>
   <data name="SettingsUx_OcrHeading" xml:space="preserve"><value>Text recognition</value></data>
   <data name="SettingsUx_OcrLanguages" xml:space="preserve"><value>Recognition languages</value></data>
-  <data name="SettingsUx_OcrQualityHint" xml:space="preserve"><value>Fast and Normal use the recognition built into Windows. Accurate handles small print such as receipts. Most accurate corrects and enlarges the image 4x before recognition and downloads about 67 MB the first time.</value></data>
+  <data name="SettingsUx_OcrQualityHint" xml:space="preserve"><value>Fast and Normal use the recognition built into Windows. Accurate handles small print such as receipts and downloads about {0} MB the first time. Most accurate corrects and enlarges the image 4x before recognition and downloads about {1} MB in total the first time.</value></data>
   <data name="SettingsUx_OcrFast" xml:space="preserve"><value>Fast</value></data>
   <data name="SettingsUx_OcrBalanced" xml:space="preserve"><value>Normal</value></data>
   <data name="SettingsUx_OcrAccurate" xml:space="preserve"><value>Accurate</value></data>
