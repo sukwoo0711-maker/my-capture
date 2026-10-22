@@ -84,6 +84,7 @@ public sealed class UpdateWindowTests
                                 Assert.Equal("MyCapture 업데이트", window.Text);
                                 Assert.Equal("MyCapture 4.5.2 업데이트 중", Field<Label>(window, "heading").Text);
                                 Assert.Equal("앱 종료 대기 중", Field<Label>(window, "status").Text);
+                                Assert.Equal(ProgressBarStyle.Marquee, Field<ProgressBar>(window, "progress").Style);
                                 Assert.False(finish.Enabled); Assert.False(open.Visible);
                                 Assert.False(Field<LinkLabel>(window, "openLog").Visible);
                                 window.Close(); Assert.False(window.IsDisposed);

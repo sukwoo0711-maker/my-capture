@@ -43,7 +43,9 @@ internal sealed class SetupWindow : Form, ISetupProgress
         heading.SetBounds(24, 22, 412, 30); heading.Font = new Font(Font, FontStyle.Bold);
         heading.Text = update ? strings.UpdateHeading(version) : strings.WorkingHeading(uninstall); heading.AutoEllipsis = true;
         status.SetBounds(24, 58, 412, 45); status.Text = strings.Stage(waitingForParent ? SetupStage.WaitingForParent : uninstall ? SetupStage.VerifyingInstallation : SetupStage.VerifyingPackage);
-        progress.SetBounds(24, 111, 412, 18); progress.Style = ProgressBarStyle.Continuous;
+        progress.SetBounds(24, 111, 412, 18);
+        // Waiting for the app to close has no measurable progress; a moving bar shows it is alive.
+        progress.Style = waitingForParent ? ProgressBarStyle.Marquee : ProgressBarStyle.Continuous;
         launchChoice.SetBounds(24, 108, 300, 24); launchChoice.Text = strings.Launch;
         launchChoice.Checked = true; launchChoice.Visible = false;
         openLog.SetBounds(24, 110, 300, 24); openLog.Text = strings.OpenLog; openLog.Visible = false;
@@ -151,7 +153,7 @@ internal sealed class SetupWindow : Form, ISetupProgress
     public void Stage(SetupStage stage) => Post(() =>
     {
         status.Text = strings.Stage(stage);
-        progress.Style = stage == SetupStage.RollingBack ? ProgressBarStyle.Marquee : ProgressBarStyle.Continuous;
+        progress.Style = stage is SetupStage.RollingBack or SetupStage.WaitingForParent ? ProgressBarStyle.Marquee : ProgressBarStyle.Continuous;
         switch (stage)
         {
             case SetupStage.VerifyingPackage: case SetupStage.VerifyingInstallation: case SetupStage.WaitingForParent: progress.Value = 0; break;
