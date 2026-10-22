@@ -35,14 +35,14 @@ public sealed class RecordingCaptureLifecycleTests
             return encoder;
         }, NullLogger.Instance);
         recorder.Start(fixture.Region, "unused.mp4", new RecordingSettings());
-        Assert.True(initializing.Wait(TimeSpan.FromSeconds(5)));
+        Assert.True(initializing.Wait(RecordingTestTimeouts.CaptureThread));
         Assert.False(recorder.IsReady);
         Assert.Equal(TimeSpan.Zero, recorder.RecordedElapsed);
         Thread.Sleep(250);
         Task<RecordingResult> stopping = Task.Run(recorder.Stop);
         Thread.Sleep(30);
         release.Set();
-        Assert.True(stopping.Wait(TimeSpan.FromSeconds(5)));
+        Assert.True(stopping.Wait(RecordingTestTimeouts.CaptureThread));
         RecordingResult result = stopping.Result;
         Assert.Equal(new[] { 0d }, encoder.Timestamps);
         Assert.True(encoder.Completed);
@@ -92,13 +92,13 @@ public sealed class RecordingCaptureLifecycleTests
         var encoder = new Encoder { OnWrite = () => { written.Set(); if (fail) throw new IOException("synthetic encoder failure"); } };
         using var recorder = new RegionRecorder(new RegionFrameGrabber(fixture.Engine, false), _ => encoder, NullLogger.Instance);
         recorder.Start(fixture.Region, "unused.mp4", new RecordingSettings());
-        Assert.True(written.Wait(TimeSpan.FromSeconds(5)));
+        Assert.True(written.Wait(RecordingTestTimeouts.CaptureThread));
         Assert.Throws<InvalidOperationException>(() => recorder.Stop());
         Assert.True(encoder.Disposed);
         fail = false;
         written.Reset();
         recorder.Start(fixture.Region, "unused-again.mp4", new RecordingSettings());
-        Assert.True(written.Wait(TimeSpan.FromSeconds(5)));
+        Assert.True(written.Wait(RecordingTestTimeouts.CaptureThread));
         Assert.True(recorder.Stop().EmittedFrames >= 1);
     });
 
@@ -157,12 +157,12 @@ public sealed class RecordingCaptureLifecycleTests
         {
             controls.Show();
             typeof(RecordingControlWindow).GetMethod("OnPrimaryClicked", flags)!.Invoke(controls, null);
-            Assert.True(written.Wait(TimeSpan.FromSeconds(5)));
+            Assert.True(written.Wait(RecordingTestTimeouts.CaptureThread));
             Assert.True(recording.CanCaptureStill);
             var frame = new FrozenFrame(fixture.Engine.CaptureRegion(fixture.Region, false), fixture.Region, null, 0);
             capture.StartWithSelection(frame, new RectD(0, 0, 40, 40));
             controls.RequestStop();
-            Assert.True(completing.Wait(TimeSpan.FromSeconds(5)));
+            Assert.True(completing.Wait(RecordingTestTimeouts.CaptureThread));
             Assert.False(recording.CanCaptureStill);
             Assert.True(recording.RequiresCaptureExclusion);
             persistence.SetResult();
@@ -176,7 +176,7 @@ public sealed class RecordingCaptureLifecycleTests
         {
             finish.Set();
             persistence.TrySetResult();
-            DateTime deadline = DateTime.UtcNow.AddSeconds(3);
+            DateTime deadline = DateTime.UtcNow + RecordingTestTimeouts.CaptureThread;
             while (controls.IsRecording && DateTime.UtcNow < deadline) SyntheticCaptureFixture.Pump(10);
             SyntheticCaptureFixture.Pump(30);
             capture.Cancel();

@@ -322,7 +322,7 @@ public sealed class RecordingFeatureTests : KoreanCaptionTest
                 window.UpdateLayout();
                 const BindingFlags flags = BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.DeclaredOnly;
                 typeof(RecordingControlWindow).GetMethod("OnPrimaryClicked", flags)!.Invoke(window, null);
-                Assert.True(firstFrame.Wait(TimeSpan.FromSeconds(3)), "recording did not emit a real captured frame");
+                Assert.True(firstFrame.Wait(RecordingTestTimeouts.CaptureThread), "recording did not emit a real captured frame");
                 Assert.True(window.IsRecording);
                 Border frame = (Border)typeof(RecordingControlWindow).GetField("_regionFrame", flags)!.GetValue(window)!;
                 Assert.Equal(Visibility.Visible, frame.Visibility);
@@ -332,7 +332,7 @@ public sealed class RecordingFeatureTests : KoreanCaptionTest
 
                 window.RequestStop();
                 var dispatcherFrame = new DispatcherFrame();
-                DateTime deadline = DateTime.UtcNow + TimeSpan.FromSeconds(5);
+                DateTime deadline = DateTime.UtcNow + RecordingTestTimeouts.CaptureThread;
                 var timer = new DispatcherTimer(DispatcherPriority.Background) { Interval = TimeSpan.FromMilliseconds(10) };
                 timer.Tick += (_, _) =>
                 {

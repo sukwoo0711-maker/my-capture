@@ -33,7 +33,7 @@ dotnet run --project build/tools/TutorialVideoGenerator -c Release -- --features
 | 색 범위 | 전체 범위(0–255)로 인코딩하고 스트림에 표시합니다. 제품 플레이어인 WPF `MediaElement`는 디코딩한 값을 범위 확장 없이 표시하므로, 녹화와 같은 제한 범위(16–235)로 만들면 흰색이 235, 검은색이 16으로 흐리게 보입니다 |
 | 정지 화면 | 첫 렌더 프레임을 JPEG 품질 90으로 저장합니다. 사용법 창은 이 파일을 바로 표시하고 영상이 열리면 영상으로 넘어갑니다 |
 | 테마 | 기본 렌더는 Glass(어두운 테마)와 빨간색입니다. 검토용 `--theme` 값은 system(시스템), glass-light(밝은 테마), glass(어두운 테마), high-contrast(고대비)입니다. 이전 테마 이름은 제품과 같은 별칭으로 받으며, 이전 violet 인수도 제품과 같이 빨간색으로 정규화합니다 |
-| 단축키 표시 | `NewInstallDefaults`의 새 설치 설정을 사용합니다. 버튼 아래 키 캡션은 기본적으로 숨기며, 아래 설명 띠의 키는 해당 장면에서 실행하는 조작을 나타냅니다 |
+| 단축키 표시 | `NewInstallDefaults`의 새 설치 설정(`AlwaysShowShortcutHints` 꺼짐)을 사용합니다. 제품처럼 버튼 아래 키 캡션은 Alt를 누르는 동안만 보이고 장면은 Alt를 누르지 않으므로, 영상에는 키 캡션이 없습니다. 아래 설명 띠의 키는 해당 장면에서 실행하는 조작을 나타냅니다 |
 
 정지 구간은 움직임이 없어 거의 용량을 차지하지 않고, 첫 프레임은 키 프레임이라 애니메이션 줄이기 설정에서도 바로 보입니다.
 
@@ -56,7 +56,8 @@ dotnet run --project build/tools/TutorialVideoGenerator -c Release -- --features
 - 자막이 제품의 버튼, 메뉴, 결과, 키를 가리킬 때는 문자열을 직접 쓰지 않고 제품 문구 키(`UiText`), `ShortcutCatalog`, `TutorialCatalog`의 고정 키, 또는 실제 컨트롤이 표시하는 글자에서 가져옵니다. 제품에서 이름이 바뀌면 다시 생성할 때 자막도 함께 바뀝니다. 키 입력도 `ShortcutCatalog`의 키로 `HandleShortcut`을 호출합니다.
 - 실제 마우스를 잡지 않습니다. 화면 밖 창에서 마우스 캡처를 얻으면 사용자의 클릭이 생성기로 갈 수 있습니다.
 - 팝업(ContextMenu, Popup, 드롭다운, 도구 설명)은 열지 않습니다. WPF는 팝업을 모니터 작업 영역 안으로 옮기므로 사용자 화면에 나타날 수 있습니다. 메뉴는 부모 없이 Measure/Arrange한 요소로 렌더합니다(`ThemedShellPresenter.CreateMenu`, 핀의 `ContextMenu`).
-- 화면에 직접 자리를 잡는 창(알림 카드, 녹화 제어 창, 카운트다운)은 띄우지 않고 내용만 렌더합니다. 알림 카드는 `ThemedShellPresenter.CreateActionNotification`으로 만들고, 그림자 여백을 포함한 창 너비와 자연 높이로 렌더해 `ThemedShellPresenter.NotificationBounds`가 정하는 자리에 그립니다. 창 틀은 덧그리지 않습니다.
+- 화면에 직접 자리를 잡는 창(알림 카드, 녹화 제어 창, 카운트다운, 핀 꽂힘 장식)은 띄우지 않고 내용만 렌더합니다. 알림 카드는 `ThemedShellPresenter.CreateActionNotification`으로 만들고, 그림자 여백을 포함한 창 너비와 자연 높이로 렌더해 `ThemedShellPresenter.NotificationBounds`가 정하는 자리에 그립니다. 창 틀은 덧그리지 않습니다.
+- 새로 열거나 다시 연 핀의 꽂힘 효과는 `PinManager`처럼 핀이 열린 직후 시작합니다. 장식 창(`PinLandingDecoration`)은 핀의 장면 위치와 `LayoutFor`로 만들고, 제품의 벽시계 대신 영상 시간으로 `Advance`합니다. 테두리 빛(`BorderAccentAmount`)과 83ms 내용 페이드도 같은 시간으로 맞춥니다. 효과가 프레임마다 그려지도록, 핀이 열린 때부터 테두리가 원래 색으로 돌아오는 `OutlineEndMs`까지는 정지 구간 대신 프레임 단위 구간으로 둡니다. 이 구간은 장식이 닫히는 `DurationMs`도 덮습니다.
 - 파일이 필요한 장면(동영상 편집기가 여는 합성 녹화, 실제 GIF 내보내기 결과)은 `Program.WorkFolder`(출력 폴더의 `work`) 아래 장면별 폴더에 만들고 장면이 끝나면 지웁니다. 모달 대화 상자는 띄우지 않습니다. 동영상 편집기의 내보내기 대화 상자는 `ExportDialogHostForTest`로 화면 밖에 열고, Windows 저장 대화 상자처럼 운영체제가 그리는 창만 장면이 직접 그립니다.
 - 설명 문구는 제품 용어와 같게 씁니다(예: 블러, 뒤 창 클릭 허용, 빠른 작업, 닫은 핀 다시 열기). 한국어 설명은 명사형 또는 합니다체로 쓰고 해요체, 느낌표, 감탄사, 이모지를 쓰지 않습니다.
 - 클립 길이는 7–15초여야 하며 보통 11초 안팎으로 맞춥니다.

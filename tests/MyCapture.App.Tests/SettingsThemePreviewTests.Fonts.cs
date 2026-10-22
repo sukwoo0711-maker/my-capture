@@ -24,13 +24,13 @@ public sealed partial class SettingsThemePreviewTests
             Application application = CreateThemedApplication();
             try
             {
-                // Korean last. On the CI runner (.NET 10.0.13) a process that expanded the Korean
-                // installed-font list and then kept running for a few seconds failed fast ("managed
-                // code after the runtime thread state has been destroyed") 7 of 8 times; Korean first
-                // then English failed, English then Korean passed 8 of 8 (diag/ux453-font-crash). It
-                // reproduces without the bundled fonts and not on .NET 10.0.12, so it is tracked
-                // separately rather than in this test. Every assertion still runs in both languages.
-                foreach (string language in new[] { "en-US", "ko-KR" })
+                // Korean first once failed fast on some CI runners ("managed code after the runtime
+                // thread state has been destroyed"), on .NET 10.0.11 through 10.0.13 alike. The
+                // Korean window's text editors were collected before the test thread ended, so their
+                // TSF text stores stayed registered and msctf called them while the thread exited
+                // (dotnet/wpf#11785). RunIsolated now keeps that thread until the process ends, and
+                // WpfTestThread unregisters such stores first, so the order no longer matters.
+                foreach (string language in new[] { "ko-KR", "en-US" })
                 {
                     using var scope = UiText.UseLanguage(language);
                     var saved = new AppSettings();

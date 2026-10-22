@@ -940,7 +940,8 @@ public sealed class PinSessionServiceTests
                         Assert.True(release.Wait(TimeSpan.FromSeconds(10)));
                     }
                     return ImageCodec.EncodePng(image);
-                });
+                })
+                { SynchronousSaveTimeout = SaveCompletionTimeout };
             try
             {
                 Wait(service.RestoreAsync());
@@ -1068,9 +1069,18 @@ public sealed class PinSessionServiceTests
         Assert.True(completed(), "Pending pin-session work did not complete.");
     }
 
+    // SaveNow drops a write that outlasts its 3 s exit budget, by design; the timeout tests above set
+    // their own short budget. Each save flushes a PNG and the manifest to disk, and on a hosted runner
+    // busy with Core tests' gigabyte writes a save outlasted 3 s, so the next restore found no pin.
+    // Saves that a test relies on get this budget instead; SaveNow still returns as soon as they finish.
+    private static readonly TimeSpan SaveCompletionTimeout = TimeSpan.FromSeconds(30);
+
     private static PinSessionService Create(PinManager manager, PinSessionStore store, PinSettings settings,
         Func<BitmapSource, byte[]>? encode = null, Func<byte[], BitmapSource?>? decode = null) =>
-        new(manager, store, () => settings, Dispatcher.CurrentDispatcher, NullLogger.Instance, encode, decode);
+        new(manager, store, () => settings, Dispatcher.CurrentDispatcher, NullLogger.Instance, encode, decode)
+        {
+            SynchronousSaveTimeout = SaveCompletionTimeout,
+        };
 
     private static MonitorInfo Monitor(double scale) => new("fake",
         new RectD(0, 0, 3840, 2160), new RectD(0, 0, 3840, 2100), (uint)(96 * scale), true);

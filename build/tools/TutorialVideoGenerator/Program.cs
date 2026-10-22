@@ -58,9 +58,10 @@ internal static class Program
             new System.Windows.Threading.DispatcherSynchronizationContext(System.Windows.Threading.Dispatcher.CurrentDispatcher));
         Application app = CreateResourceHost();
         FluidMotion.AnimationsEnabledOverrideForTest = false;
-        // App normally wires this preference at startup. The resource-only host must use the
-        // new-install preference too, otherwise null means every editor key caption is visible.
-        bool showShortcutHints = MyCapture.Core.Settings.NewInstallDefaults.Create().General.ShowShortcutHints;
+        // App normally wires this preference (General.AlwaysShowShortcutHints) at startup. The
+        // resource-only host uses the new-install value: key captions stay hidden, as they do in
+        // the product until Alt is held, and no scene holds Alt.
+        bool showShortcutHints = MyCapture.Core.Settings.NewInstallDefaults.Create().General.AlwaysShowShortcutHints;
         ShortcutPresentation.ReadEnabled = () => showShortcutHints;
         ShortcutPresentation.Refresh();
         // The product clips use the defaults (Glass, red accent); review renders may pick others.

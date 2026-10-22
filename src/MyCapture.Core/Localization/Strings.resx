@@ -4197,19 +4197,19 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="Tutorial.color-copy.Step3" xml:space="preserve"><value>3. 색상 형식 설정에 따른 값을 Ctrl+V로 붙여 넣습니다.</value></data>
   <data name="Tutorial.image-rectangle.Step1" xml:space="preserve"><value>1. 이미지를 편집기에서 엽니다.</value></data>
   <data name="Tutorial.image-rectangle.Step2" xml:space="preserve"><value>2. 사각형 도구를 선택하고 표시할 부분을 드래그합니다.</value></data>
-  <data name="Tutorial.image-rectangle.Step3" xml:space="preserve"><value>3. 사각형을 확인한 뒤 저장하거나 복사하여 완료합니다.</value></data>
+  <data name="Tutorial.image-rectangle.Step3" xml:space="preserve"><value>3. 사각형을 확인한 뒤 완료를 눌러 저장합니다.</value></data>
   <data name="Tutorial.image-ellipse.Step1" xml:space="preserve"><value>1. 이미지를 편집기에서 엽니다.</value></data>
   <data name="Tutorial.image-ellipse.Step2" xml:space="preserve"><value>2. 타원 도구를 선택하고 표시할 부분을 드래그합니다.</value></data>
-  <data name="Tutorial.image-ellipse.Step3" xml:space="preserve"><value>3. 타원을 확인한 뒤 저장하거나 복사하여 완료합니다.</value></data>
+  <data name="Tutorial.image-ellipse.Step3" xml:space="preserve"><value>3. 타원을 확인한 뒤 완료를 눌러 저장합니다.</value></data>
   <data name="Tutorial.image-arrow.Step1" xml:space="preserve"><value>1. 이미지를 편집기에서 엽니다.</value></data>
   <data name="Tutorial.image-arrow.Step2" xml:space="preserve"><value>2. 화살표 도구를 선택하고 시작점에서 끝점까지 드래그합니다.</value></data>
-  <data name="Tutorial.image-arrow.Step3" xml:space="preserve"><value>3. 화살표 방향을 확인한 뒤 저장하거나 복사하여 완료합니다.</value></data>
+  <data name="Tutorial.image-arrow.Step3" xml:space="preserve"><value>3. 화살표 방향을 확인한 뒤 완료를 눌러 저장합니다.</value></data>
   <data name="Tutorial.image-pen.Step1" xml:space="preserve"><value>1. 이미지를 편집기에서 엽니다.</value></data>
   <data name="Tutorial.image-pen.Step2" xml:space="preserve"><value>2. 연필 도구를 선택하고 포인터를 드래그하여 그립니다.</value></data>
-  <data name="Tutorial.image-pen.Step3" xml:space="preserve"><value>3. 그린 내용을 확인한 뒤 저장하거나 복사하여 완료합니다.</value></data>
+  <data name="Tutorial.image-pen.Step3" xml:space="preserve"><value>3. 그린 내용을 확인한 뒤 완료를 눌러 저장합니다.</value></data>
   <data name="Tutorial.image-highlighter.Step1" xml:space="preserve"><value>1. 이미지를 편집기에서 엽니다.</value></data>
   <data name="Tutorial.image-highlighter.Step2" xml:space="preserve"><value>2. 형광펜 도구를 선택하고 강조할 부분을 드래그합니다.</value></data>
-  <data name="Tutorial.image-highlighter.Step3" xml:space="preserve"><value>3. 강조 표시를 확인한 뒤 저장하거나 복사하여 완료합니다.</value></data>
+  <data name="Tutorial.image-highlighter.Step3" xml:space="preserve"><value>3. 강조 표시를 확인한 뒤 완료를 눌러 저장합니다.</value></data>
   <data name="Tutorial.image-text.Step1" xml:space="preserve"><value>1. 이미지를 편집기에서 엽니다.</value></data>
   <data name="Tutorial.image-text.Step2" xml:space="preserve"><value>2. 텍스트 도구를 선택하고 이미지 위를 클릭하여 내용을 입력합니다.</value></data>
   <data name="Tutorial.image-text.Step3" xml:space="preserve"><value>3. 입력 상자 밖을 클릭하여 텍스트를 확정한 뒤 저장합니다.</value></data>
@@ -4227,12 +4227,12 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="Tutorial.image-crop.Step3" xml:space="preserve"><value>3. Enter로 적용합니다. Esc를 누르면 자르기를 취소합니다.</value></data>
   <data name="Tutorial.image-rotate.Step1" xml:space="preserve"><value>1. 이미지를 편집기에서 엽니다.</value></data>
   <data name="Tutorial.image-rotate.Step2" xml:space="preserve"><value>2. Q로 왼쪽, W로 오른쪽으로 회전합니다.</value></data>
-  <data name="Tutorial.image-rotate.Step3" xml:space="preserve"><value>3. 방향을 확인한 뒤 저장하거나 복사하여 완료합니다.</value></data>
+  <data name="Tutorial.image-rotate.Step3" xml:space="preserve"><value>3. 방향을 확인한 뒤 완료를 눌러 저장합니다.</value></data>
   <data name="Tutorial.image-save.Step1" xml:space="preserve"><value>1. 편집한 이미지를 확인합니다.</value></data>
   <data name="Tutorial.image-save.Step2" xml:space="preserve"><value>2. Ctrl+S를 눌러 저장합니다.</value></data>
   <data name="Tutorial.image-save.Step3" xml:space="preserve"><value>3. 다른 파일로 저장하려면 Ctrl+Shift+S로 저장 위치를 선택합니다.</value></data>
   <data name="Tutorial.image-copy.Step1" xml:space="preserve"><value>1. 이미지를 편집하고 결과를 확인합니다.</value></data>
-  <data name="Tutorial.image-copy.Step2" xml:space="preserve"><value>2. Ctrl+C를 누르면 이미지를 복사하고 저장한 뒤 편집을 완료합니다.</value></data>
+  <data name="Tutorial.image-copy.Step2" xml:space="preserve"><value>2. Ctrl+C를 누르면 편집한 이미지를 클립보드에 복사합니다. 편집기는 열린 채로 남고, 완료(Ctrl+Enter)를 누르면 저장한 뒤 닫습니다.</value></data>
   <data name="Tutorial.image-copy.Step3" xml:space="preserve"><value>3. 다른 앱에서 Ctrl+V를 눌러 이미지를 붙여 넣습니다.</value></data>
   <data name="Tutorial.folder-create.Step1" xml:space="preserve"><value>1. 라이브러리를 엽니다.</value></data>
   <data name="Tutorial.folder-create.Step2" xml:space="preserve"><value>2. Ctrl+Shift+N을 눌러 새 폴더 이름을 입력합니다.</value></data>
