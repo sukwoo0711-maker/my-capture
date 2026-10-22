@@ -93,16 +93,20 @@ public sealed class EditorCopyTextTests
     private static Task RunStaAsync(Func<Task> action)
     {
         var completion = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
-        var thread = new Thread(() =>
+        var thread = WpfTestThread.Create(() =>
         {
             Dispatcher dispatcher = Dispatcher.CurrentDispatcher;
             SynchronizationContext.SetSynchronizationContext(new DispatcherSynchronizationContext(dispatcher));
             try
             {
                 Task work = action();
-                _ = work.ContinueWith(_ => dispatcher.BeginInvokeShutdown(DispatcherPriority.Send),
+                var running = new DispatcherFrame();
+                _ = work.ContinueWith(_ => dispatcher.BeginInvoke(DispatcherPriority.Send, new Action(() => running.Continue = false)),
                     CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
-                Dispatcher.Run();
+                Dispatcher.PushFrame(running);
+                // The editor builds text boxes: shut down through the TSF cleanup, which a direct
+                // shutdown would skip, and still before the result is reported.
+                WpfTestThread.ShutdownDispatcher();
                 work.GetAwaiter().GetResult();
                 completion.TrySetResult(null);
             }
