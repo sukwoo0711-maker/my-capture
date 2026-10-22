@@ -57,7 +57,11 @@ public sealed class VideoEditorCommandButtonTests
                     foreach (ButtonBase button in buttons)
                     {
                         Assert.Equal(44, button.ActualHeight);
-                        Assert.Equal(new Thickness(10, 4, 10, 4), button.Padding);
+                        bool collapsedLabel = button.Content is Grid { Name: "CommandButtonFace" } commandFace
+                            && commandFace.Children[0] is StackPanel primaryRow
+                            && primaryRow.Children.OfType<TextBlock>().Any(label => label.Visibility == Visibility.Collapsed);
+                        double horizontalPadding = collapsedLabel ? 4 : 10;
+                        Assert.Equal(new Thickness(horizontalPadding, 4, horizontalPadding, 4), button.Padding);
                         Assert.Equal(new Thickness(3, 0, 3, 0), button.Margin);
                         AssertInside(button, layout, layout.ActualHeight);
                         string gesture = AutomationProperties.GetAcceleratorKey(button);

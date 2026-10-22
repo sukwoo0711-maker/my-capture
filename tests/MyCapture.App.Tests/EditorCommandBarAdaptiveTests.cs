@@ -18,7 +18,7 @@ public sealed class EditorCommandBarAdaptiveTests(ITestOutputHelper output)
     [InlineData("en-US", 1)]
     [InlineData("ko-KR", 1.5)]
     [InlineData("en-US", 2)]
-    public void EditorWrapsOnlyBelowItsCompactBoundaryAndCropStaysOnOneRowThroughAlt(string language, double scale) => StaTestHost.Run(() =>
+    public void EditorAndCropStayOnOneRowAtEverySupportedWidthThroughAlt(string language, double scale) => StaTestHost.Run(() =>
     {
         using var culture = UiText.UseLanguage(language);
         bool always = false;
@@ -51,22 +51,9 @@ public sealed class EditorCommandBarAdaptiveTests(ITestOutputHelper output)
                     var left = (FrameworkElement)bar.Children[0];
                     var right = (FrameworkElement)bar.Children[1];
                     double combinedWidth = left.DesiredSize.Width + CommandGroupsPanel.GroupGap + right.DesiredSize.Width;
-                    if (!crop && width < 724)
-                    {
-                        Assert.True(combinedWidth > bar.ActualWidth);
-                        Assert.True(left.DesiredSize.Width <= bar.ActualWidth + 0.5);
-                        Assert.True(right.DesiredSize.Width <= bar.ActualWidth + 0.5);
-                        Assert.Equal(0, left.TranslatePoint(default, bar).X, 2);
-                        Assert.Equal(0, right.TranslatePoint(default, bar).X, 2);
-                        Assert.Equal(left.TranslatePoint(default, bar).Y + left.DesiredSize.Height + CommandGroupsPanel.GroupGap,
-                            right.TranslatePoint(default, bar).Y, 2);
-                    }
-                    else
-                    {
-                        Assert.True(combinedWidth <= bar.ActualWidth + 0.5,
-                            $"{language} {width} crop={crop} Alt={reveal}: {combinedWidth}>{bar.ActualWidth}");
-                        Assert.Equal(left.TranslatePoint(default, bar).Y, right.TranslatePoint(default, bar).Y, 2);
-                    }
+                    Assert.True(combinedWidth <= bar.ActualWidth + 0.5,
+                        $"{language} {width} crop={crop} Alt={reveal}: {combinedWidth}>{bar.ActualWidth}");
+                    Assert.Equal(left.TranslatePoint(default, bar).Y, right.TranslatePoint(default, bar).Y, 2);
                     if (barHeight.HasValue) Assert.Equal(barHeight.Value, bar.ActualHeight, 2);
                     else barHeight = bar.ActualHeight;
                     Assert.True(bar.IsMeasureValid && bar.IsArrangeValid);
@@ -102,8 +89,8 @@ public sealed class EditorCommandBarAdaptiveTests(ITestOutputHelper output)
     });
 
     [Theory]
-    [InlineData("ko-KR", 985, 832, 724)]
-    [InlineData("en-US", 956, 845, 724)]
+    [InlineData("ko-KR", 981, 800, 654)]
+    [InlineData("en-US", 952, 813, 654)]
     public void ActualWindowWidthsMeetEachMeasuredStageBoundary(string language, int fullWidth, int secondaryWidth, int compactWidth) => StaTestHost.Run(() =>
     {
         using var culture = UiText.UseLanguage(language);
@@ -133,6 +120,7 @@ public sealed class EditorCommandBarAdaptiveTests(ITestOutputHelper output)
             int stage = compactRight ? 3 : compactLeft ? 2 : 1;
             return stage <= maximumStage && left.DesiredSize.Width + CommandGroupsPanel.GroupGap + right.DesiredSize.Width <= bar.ActualWidth + 0.01;
         }
+        var measuredWidths = new List<int>();
         foreach (int stage in new[] { 1, 2, 3 })
         {
             int low = 300, high = 1280;
@@ -147,9 +135,10 @@ public sealed class EditorCommandBarAdaptiveTests(ITestOutputHelper output)
             Assert.False(Fits(high - 1, stage));
             Assert.True(Fits(high, stage));
             output.WriteLine($"{language}: stage {stage} minimum outer width = {high} DIP; panel = {bar.ActualWidth:0.##} DIP");
-            Assert.Equal(stage switch { 1 => fullWidth, 2 => secondaryWidth, _ => compactWidth }, high);
+            measuredWidths.Add(high);
             if (stage == 1) Assert.InRange(high, Math.Ceiling(fullLabelWidth) - 1, Math.Ceiling(fullLabelWidth) + 1);
         }
+        Assert.Equal(new[] { fullWidth, secondaryWidth, compactWidth }, measuredWidths);
     });
 
     private static IEnumerable<TextBlock> PrimaryLabels(Button button)

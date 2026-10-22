@@ -13,12 +13,20 @@ internal static class CommandButtonPresentation
     internal const double IconLabelGap = 6;
     internal const double HintHeight = 14;
 
+    private static readonly DependencyProperty StandardTierProperty = DependencyProperty.RegisterAttached(
+        "StandardTier", typeof(bool), typeof(CommandButtonPresentation), new PropertyMetadata(false));
+
+    private static readonly DependencyProperty LabelCompactedProperty = DependencyProperty.RegisterAttached(
+        "LabelCompacted", typeof(bool), typeof(CommandButtonPresentation), new PropertyMetadata(false));
+
     internal static void Apply(ButtonBase button, bool compact = false)
     {
         string tier = compact ? "Compact" : "Standard";
+        button.SetValue(StandardTierProperty, !compact);
         button.SetResourceReference(FrameworkElement.HeightProperty, $"CommandButton.Height.{tier}");
         button.SetResourceReference(FrameworkElement.MinHeightProperty, $"CommandButton.Height.{tier}");
-        button.SetResourceReference(Control.PaddingProperty, $"CommandButton.Padding.{tier}");
+        string paddingTier = !compact && (bool)button.GetValue(LabelCompactedProperty) ? "StandardIconOnly" : tier;
+        button.SetResourceReference(Control.PaddingProperty, $"CommandButton.Padding.{paddingTier}");
         button.SetResourceReference(Control.FontSizeProperty, "CommandButton.FontSize");
         button.MinWidth = 36;
         button.Margin = new Thickness(3, 0, 3, 0);
@@ -156,8 +164,21 @@ internal static class CommandButtonPresentation
             content = face.Children[0];
         // Only icon-and-name faces can become icon-only. Text-only controls remain usable.
         if (content is not StackPanel row || row.Orientation != Orientation.Horizontal
+            || !row.Children.OfType<TextBlock>().Any()
             || !row.Children.Cast<UIElement>().Any(child => child is not TextBlock)) return false;
         bool changed = false;
+        if ((bool)button.GetValue(LabelCompactedProperty) != compact)
+        {
+            button.SetValue(LabelCompactedProperty, compact);
+            if ((bool)button.GetValue(StandardTierProperty))
+            {
+                // Only standard command faces trade horizontal padding for space. Keep the
+                // resource reference on expansion so theme changes still reach labeled faces.
+                button.SetResourceReference(Control.PaddingProperty,
+                    compact ? "CommandButton.Padding.StandardIconOnly" : "CommandButton.Padding.Standard");
+                changed = true;
+            }
+        }
         foreach (TextBlock label in row.Children.OfType<TextBlock>())
         {
             Visibility visibility = compact ? Visibility.Collapsed : Visibility.Visible;
