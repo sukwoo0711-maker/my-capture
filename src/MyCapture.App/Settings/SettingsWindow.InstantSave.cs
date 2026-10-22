@@ -1,6 +1,7 @@
 using System.Reflection;
 using System.Windows;
 using System.Windows.Threading;
+using MyCapture.App.Threading;
 using MyCapture.Core.Settings;
 
 namespace MyCapture.App.Settings;
@@ -9,9 +10,11 @@ internal sealed partial class SettingsWindow
 {
     private static readonly PropertyInfo[] EditableProperties = typeof(SettingsDraft).GetProperties()
         .Where(property => property.SetMethod?.IsPublic == true && property.GetIndexParameters().Length == 0).ToArray();
+    private static readonly TimeSpan TextSaveDelay = TimeSpan.FromMilliseconds(400);
+    private static readonly TimeSpan SavedNoticeDelay = TimeSpan.FromSeconds(2);
     private readonly HashSet<string> _pendingText = [];
-    private readonly DispatcherTimer _saveDelay = new() { Interval = TimeSpan.FromMilliseconds(400) };
-    private readonly DispatcherTimer _savedNoticeDelay = new() { Interval = TimeSpan.FromSeconds(2) };
+    private IDisposable? _textSave;
+    private IDisposable? _savedNotice;
     private Dictionary<string, object?> _acceptedValues = [];
     private string _restartNotice = string.Empty;
     private bool _saveQueued;
@@ -19,17 +22,15 @@ internal sealed partial class SettingsWindow
     private bool _saving;
     private bool _saveFailed;
 
-    private void InitializeInstantSave()
-    {
+    /// <summary>
+    /// Runs the typing save or the saved-notice timeout once after its delay; disposing the handle
+    /// cancels it. Tests replace it with their own clock, so a stalled runner cannot expire a delay
+    /// between two steps.
+    /// </summary>
+    internal Func<TimeSpan, Action, IDisposable> ScheduleDelay { get; set; } = DispatcherDelay.Schedule;
+
+    private void InitializeInstantSave() =>
         _acceptedValues = EditableProperties.ToDictionary(property => property.Name, property => property.GetValue(_draft));
-        _saveDelay.Tick += (_, _) => { _saveDelay.Stop(); SavePending(includeText: true); };
-        _savedNoticeDelay.Tick += (_, _) =>
-        {
-            _savedNoticeDelay.Stop();
-            // A later import or storage failure owns the status line now.
-            if (SettingsStatus.Text == UiText.Get("Settings_Saved")) SetStatusMessage(string.Empty);
-        };
-    }
 
     private void ScheduleSave(string? propertyName)
     {
@@ -40,7 +41,7 @@ internal sealed partial class SettingsWindow
             _ = Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(() => ScheduleSave(propertyName)));
             return;
         }
-        _savedNoticeDelay.Stop();
+        CancelSavedNotice();
         if (!_saveFailed) SetStatusMessage(_restartNotice);
         // Setters raise PropertyChanged before their validation and related fields finish.
         // Even toggles and choices must therefore wait until the dispatcher regains control.
@@ -51,8 +52,13 @@ internal sealed partial class SettingsWindow
         if (isText)
         {
             _pendingText.Add(propertyName!);
-            _saveDelay.Stop();
-            _saveDelay.Start();
+            // Each keystroke restarts the pause.
+            CancelTextSave();
+            _textSave = ScheduleDelay(TextSaveDelay, () =>
+            {
+                _textSave = null;
+                SavePending(includeText: true);
+            });
             return;
         }
         _saveAllQueued |= propertyName is null;
@@ -70,7 +76,7 @@ internal sealed partial class SettingsWindow
     /// <summary>Ctrl+S and every close path flush pending typing without rolling back saved changes.</summary>
     internal bool FlushPendingSettings()
     {
-        _saveDelay.Stop();
+        CancelTextSave();
         _saveQueued = _saveAllQueued = false;
         return SavePending(includeText: true);
     }
@@ -189,7 +195,13 @@ internal sealed partial class SettingsWindow
             if (result.RestartRequired) _restartNotice = notice;
             SetStatusMessage(notice.Length > 0 ? notice : _restartNotice.Length > 0 ? _restartNotice
                 : _draft.HasErrors ? string.Empty : UiText.Get("Settings_Saved"));
-            if (notice.Length == 0 && _restartNotice.Length == 0 && !_draft.HasErrors) _savedNoticeDelay.Start();
+            if (notice.Length == 0 && _restartNotice.Length == 0 && !_draft.HasErrors)
+                _savedNotice ??= ScheduleDelay(SavedNoticeDelay, () =>
+                {
+                    _savedNotice = null;
+                    // A later import or storage failure owns the status line now.
+                    if (SettingsStatus.Text == UiText.Get("Settings_Saved")) SetStatusMessage(string.Empty);
+                });
             RefreshErrorSummary();
             return !_draft.HasErrors;
         }
@@ -199,9 +211,21 @@ internal sealed partial class SettingsWindow
     private void StopInstantSave()
     {
         _saveQueued = _saveAllQueued = false;
-        _saveDelay.Stop();
-        _savedNoticeDelay.Stop();
+        CancelTextSave();
+        CancelSavedNotice();
         _pendingText.Clear();
+    }
+
+    private void CancelTextSave()
+    {
+        _textSave?.Dispose();
+        _textSave = null;
+    }
+
+    private void CancelSavedNotice()
+    {
+        _savedNotice?.Dispose();
+        _savedNotice = null;
     }
 }
 

@@ -13,7 +13,21 @@ namespace MyCapture.App.Pinning;
 internal sealed class PinLandingDecoration : Window
 {
     internal const double LandingMs = 150;
-    internal const double DurationMs = 560;
+
+    // A game-style hit stop: the contact frame holds this long, then the ring, shadow,
+    // glow and outline resume where they stopped. The content never moves.
+    internal const double HitStopMs = 40;
+
+    // The authored motion ends, before the hit stop is added.
+    private const double MotionEndMs = 560;
+    private const double OutlineMotionEndMs = 570;
+
+    /// <summary>Elapsed time at which the ornament closes.</summary>
+    internal const double DurationMs = MotionEndMs + HitStopMs;
+
+    /// <summary>Elapsed time at which the pin outline is back to its resting colour.</summary>
+    internal const double OutlineEndMs = OutlineMotionEndMs + HitStopMs;
+
     internal const double MarginDip = 64;
     internal const double CornerSizeDip = 120;
 
@@ -220,12 +234,12 @@ internal sealed class PinLandingDecoration : Window
     /// <summary>All motion values in DIPs, degrees and opacity, driven by one elapsed time.</summary>
     internal static PinLandingFrame Render(double ms)
     {
-        double t = double.IsNaN(ms) ? 0 : Math.Max(0, ms);
-        bool complete = t >= DurationMs;
+        double t = MotionTime(double.IsNaN(ms) ? 0 : Math.Max(0, ms));
+        bool complete = t >= MotionEndMs;
         double p = Bezier(Segment(t, 0, LandingMs), .5, 0, .9, .5);
         double d = Math.Max(0, t - LandingMs);
         double press = d <= 45 ? OutQuad(d / 45) : 1 - Bezier(Segment(d, 45, 175), .3, 1.6, .6, 1);
-        double fade = 1 - Segment(t, 420, DurationMs);
+        double fade = 1 - Segment(t, 420, MotionEndMs);
         double r = OutCubic(Segment(d, 0, 260));
         double lift = 1 - p;
         return new PinLandingFrame(
@@ -238,9 +252,15 @@ internal sealed class PinLandingDecoration : Window
             t < LandingMs ? Lerp(8, 36, lift) : Lerp(8, 16, r),
             complete ? 0 : (t < LandingMs ? Lerp(.42, .5, lift) * Segment(t, 0, 83) : Lerp(.44, .32, r)) * fade,
             !complete && t >= LandingMs ? .38 * Math.Exp(-d / 140) * fade : 0,
-            t >= LandingMs && t < 570 ? Math.Exp(-d / 130) : 0,
+            t >= LandingMs && t < OutlineMotionEndMs ? Math.Exp(-d / 130) : 0,
             complete);
     }
+
+    /// <summary>
+    /// The authored motion time for an elapsed time: unchanged until contact, held on the contact
+    /// frame for <see cref="HitStopMs"/>, then the same curve <see cref="HitStopMs"/> later.
+    /// </summary>
+    internal static double MotionTime(double ms) => ms < LandingMs ? ms : Math.Max(LandingMs, ms - HitStopMs);
 
     private static double Segment(double t, double from, double to) => Math.Clamp((t - from) / (to - from), 0, 1);
     private static double OutQuad(double t) => 1 - ((1 - t) * (1 - t));
