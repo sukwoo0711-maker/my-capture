@@ -39,7 +39,8 @@ internal static class StaTestHost
     public static void RunUntilProcessExit(Action action)
     {
         Exception? failure = null;
-        using var finished = new ManualResetEventSlim();
+        // Not disposed: the kept thread may still be inside Set when this wait returns.
+        var finished = new ManualResetEventSlim();
         Thread thread = WpfTestThread.Create(() =>
         {
             try
