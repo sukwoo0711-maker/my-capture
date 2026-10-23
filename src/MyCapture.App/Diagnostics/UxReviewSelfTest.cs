@@ -257,8 +257,12 @@ internal static class UxReviewSelfTest
                     {
                         renderThemes.Insert(0, initial);
                     }
-                    if (window is VideoEditorWindow)
+                    if (window is VideoEditorWindow details)
                     {
+                        // The layer list lives in the details inspector, which opens collapsed;
+                        // a collapsed inspector has not built its visual tree yet.
+                        details.SetDetailsExpandedForTest(true);
+                        window.UpdateLayout();
                         Descendants(window).OfType<ListBox>().Single().SelectedIndex = 0;
                         window.UpdateLayout();
                     }
@@ -354,13 +358,20 @@ internal static class UxReviewSelfTest
                             if (window is VideoEditorWindow)
                             {
                                 // The layer panel's commands: add a layer, and edit the selected one.
-                                bool fits = Descendants(window).OfType<Button>().Where(button =>
-                                        Equals(button.Content, UiText.Get("Video.AddLayer"))
+                                // Both sit in the scrolling inspector, so each is scrolled to first.
+                                Button[] layerCommands = Descendants(window).OfType<Button>().Where(button =>
+                                        AutomationProperties.GetName(button) == UiText.Get("Video.AddLayer")
                                         || AutomationProperties.GetName(button) == UiText.Get("Text_AEB8B9AA4E6F"))
-                                    .Select(button => button.TransformToAncestor(window).TransformBounds(new Rect(button.RenderSize)))
-                                    .DefaultIfEmpty(Rect.Empty)
-                                    .All(bounds => !bounds.IsEmpty && bounds.Top >= 0 && bounds.Bottom <= window.ActualHeight
-                                        && bounds.Left >= 0 && bounds.Right <= window.ActualWidth);
+                                    .ToArray();
+                                bool fits = layerCommands.Length == 2 && layerCommands.All(button =>
+                                {
+                                    button.BringIntoView();
+                                    window.UpdateLayout();
+                                    Pump(TimeSpan.FromMilliseconds(60));
+                                    Rect bounds = button.TransformToAncestor(window).TransformBounds(new Rect(button.RenderSize));
+                                    return button.IsVisible && bounds.Top >= 0 && bounds.Bottom <= window.ActualHeight
+                                        && bounds.Left >= 0 && bounds.Right <= window.ActualWidth;
+                                });
                                 report.AppendLine($"Video layer commands [{themeLabel}] compact={compact}; fully visible={fits}");
                                 if (!fits) failures++;
                             }
