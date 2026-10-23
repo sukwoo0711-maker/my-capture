@@ -1,14 +1,27 @@
+using System.Runtime.CompilerServices;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Documents;
 using System.Windows.Media;
+using System.Windows.Threading;
 using MyCapture.Core.Primitives;
 
 namespace MyCapture.App.Editing;
 
 internal sealed partial class AnnotationEditorControl
 {
+    // The key contains resource identities as well as geometry and typography. Bound the
+    // cache so replaced themes and unusual window sizes cannot accumulate forever. Resource
+    // keys can contain dispatcher-owned Styles, including during hashing for eviction: keep
+    // each UI thread's entries together and release them when its dispatcher is collected.
+    private static readonly ConditionalWeakTable<Dispatcher, InspectorMeasurementCache> InspectorMeasurementCaches = new();
+    private sealed class InspectorMeasurementCache
+    {
+        internal readonly Dictionary<object, Size[]> Exact = [];
+        internal readonly Dictionary<object, Size[]> Unconstrained = [];
+    }
+    private const int InspectorMeasurementCapacity = 32;
     private static readonly (object Key, DependencyProperty Property)[] InspectorMeasureResources =
         new object[] { typeof(TextBox), typeof(TextBlock), typeof(ComboBox), typeof(ToggleButton), typeof(Button),
             "Font.Ui", "FontSize.Body", "FontSize.Control", "FontSize.Caption", "Inspector.SectionLabel",
@@ -28,6 +41,7 @@ internal sealed partial class AnnotationEditorControl
     private bool _inspectorUpdatePending;
     internal int InspectorSynchronizationCount { get; private set; }
     internal int InspectorBudgetMeasureCount { get; private set; }
+    internal int InspectorBudgetCacheHitCount { get; private set; }
 
     private void TrackInspectorMeasureResources()
     {
@@ -42,22 +56,49 @@ internal sealed partial class AnnotationEditorControl
         {
             double width = constraint.Width - ToolRailWidth - 8;
             DpiScale dpi = VisualTreeHelper.GetDpi(this);
-            object key = (width, dpi.DpiScaleX, dpi.DpiScaleY, Language.IetfLanguageTag,
+            object environment = (dpi.DpiScaleX, dpi.DpiScaleY, Language.IetfLanguageTag,
                 UiText.Culture.Name, TextElement.GetFontSize(this), TextElement.GetFontFamily(this),
-                TextElement.GetFontWeight(this), TextElement.GetFontStyle(this),
+                TextElement.GetFontWeight(this), TextElement.GetFontStyle(this), TextElement.GetFontStretch(this),
+                TextOptions.GetTextFormattingMode(this), FlowDirection, UseLayoutRounding, SnapsToDevicePixels,
                 (TryFindResource(typeof(TextBox)), TryFindResource(typeof(TextBlock)), TryFindResource(typeof(ComboBox)),
                     TryFindResource(typeof(ToggleButton)), TryFindResource(typeof(Button))),
                 (TryFindResource("Font.Ui"), TryFindResource("FontSize.Body"), TryFindResource("FontSize.Control"),
                     TryFindResource("FontSize.Caption"), TryFindResource("Inspector.SectionLabel")),
                 (TryFindResource("Button.GhostCompact"), TryFindResource("Button.Ghost"),
                     TryFindResource("ToggleButton.Tool"), TryFindResource("Surface.Raised")));
+            object key = (width, environment);
             if (!Equals(_inspectorMeasureKey, key))
             {
                 // Only geometry/typography changes invalidate this measurement. Selection and
                 // typed values keep the same budget and never reveal hidden groups on screen.
                 _inspectorMeasureKey = key;
                 InspectorBudgetMeasureCount++;
-                _desiredInspectorHeight = MeasureInspectorConfigurations(width) + 9;
+                InspectorMeasurementCache cache = InspectorMeasurementCaches.GetValue(Dispatcher, static _ => new());
+                cache.Exact.TryGetValue(key, out Size[]? sizes);
+                // A group that fit strictly inside its measured constraint was not clipped
+                // or wrapped by that constraint. Its intrinsic size is also valid at any
+                // other width that fits it. Keep narrow constrained measurements exact.
+                if (sizes is null && cache.Unconstrained.TryGetValue(environment, out Size[]? intrinsic)
+                    && intrinsic.All(size => size.Width < width))
+                    sizes = intrinsic;
+                if (sizes is null)
+                {
+                    // Prewarm (or the first editor with these resources) pays this once. Later
+                    // editors can reserve the exact same space without building hidden groups.
+                    EnsureAllInspectorSections();
+                    sizes = MeasureInspectorGroups(width);
+                    if (cache.Exact.Count >= InspectorMeasurementCapacity)
+                        cache.Exact.Remove(cache.Exact.Keys.First());
+                    cache.Exact[key] = sizes;
+                    if (sizes.All(size => size.Width < width))
+                    {
+                        if (cache.Unconstrained.Count >= InspectorMeasurementCapacity)
+                            cache.Unconstrained.Remove(cache.Unconstrained.Keys.First());
+                        cache.Unconstrained[environment] = sizes;
+                    }
+                }
+                else InspectorBudgetCacheHitCount++;
+                _desiredInspectorHeight = MeasureInspectorConfigurations(width, sizes) + 9;
             }
             double cap = double.IsFinite(constraint.Height) ? Math.Max(48, constraint.Height * 0.36) : _inspectorPanel.MaxHeight;
             _stableInspectorHeight = Math.Max(48, Math.Min(cap, _desiredInspectorHeight));
@@ -67,7 +108,7 @@ internal sealed partial class AnnotationEditorControl
         return base.MeasureOverride(constraint);
     }
 
-    private double MeasureInspectorConfigurations(double width)
+    private Size[] MeasureInspectorGroups(double width)
     {
         FrameworkElement[] groups = [_colorSection, _thicknessSection, _shapeStyleSection, _fillSection,
             _stepSection, _fontFamilySection, _fontSizeSection, _textStyleSection, _blurSection,
@@ -95,7 +136,11 @@ internal sealed partial class AnnotationEditorControl
         {
             foreach (var (message, visibility) in errors) message.Visibility = visibility;
         }
+        return sizes;
+    }
 
+    private static double MeasureInspectorConfigurations(double width, Size[] sizes)
+    {
         // Reserve space for tool defaults and homogeneous selections only. Selecting
         // several items of one type exposes the same groups as selecting one item.
         // Mixed selections retain their full group union, but wrap and scroll inside

@@ -285,6 +285,8 @@ internal sealed partial class AnnotationEditorControl : Grid
         {
             if (!ReferenceEquals(e.OriginalSource, _viewport) || _viewport.IsMouseCaptured) return;
             _edgeCropStart = null;
+            _mosaicDragging = false;
+            UpdateMosaicGesture(default);
             _controller.CancelGesture();
             RestoreInspectorHeightAfterGesture();
             if (_crop is { IsDragging: true }) { _crop.End(); RefreshCrop(); }
@@ -294,11 +296,13 @@ internal sealed partial class AnnotationEditorControl : Grid
 
         Loaded += (_, _) =>
         {
+            ResetMosaicAfterLoad();
             UpdateResponsiveLayout();
             Focus();
         };
         Unloaded += (_, _) =>
         {
+            CancelPendingMosaics();
             _autoTrimCts?.Cancel();
             _redactionCts?.Cancel();
             _redactionCts?.Dispose();
@@ -351,7 +355,7 @@ internal sealed partial class AnnotationEditorControl : Grid
                 if (_controller.IsCreatingText && string.IsNullOrEmpty(box.Text)) steps--;
                 else if (!string.Equals(box.Text, text.Text, StringComparison.Ordinal)) return true;
             }
-            return steps > 0 || _crop is { } crop && crop.Region != crop.Bounds;
+            return HasMosaicWork || steps > 0 || _crop is { } crop && crop.Region != crop.Bounds;
         }
     }
 
@@ -386,6 +390,7 @@ internal sealed partial class AnnotationEditorControl : Grid
     internal Task<BitmapSource> RenderCurrentImageAsync()
     {
         Dispatcher.VerifyAccess();
+        if (HasUnsettledMosaicWork) return RenderCurrentImageAfterMosaicsAsync();
         AnnotationDocument snapshot = CreateCurrentImageSnapshot();
         var assets = _imageStore.DecodedFor(snapshot.Items.OfType<ImageAnnotation>().Select(item => item.AssetFileName));
         BitmapSource bitmap = _surface.Frame.Bitmap;
@@ -454,6 +459,12 @@ internal sealed partial class AnnotationEditorControl : Grid
 
     private void CancelFrozenPointerGesture()
     {
+        if (_mosaicDragging)
+        {
+            _mosaicDragging = false;
+            UpdateMosaicGesture(default);
+            ReleasePointer();
+        }
         if (!_inspectorHeightBeforeGesture.HasValue) return;
         _controller.CancelGesture();
         ReleasePointer();
@@ -576,7 +587,7 @@ internal sealed partial class AnnotationEditorControl : Grid
         _shortcutActions["Privacy"] = () => _ = ApplyPrivacyRedactionsAsync();
         // Esc steps back; it is never a way out of the editor (closing asks first instead).
         _shortcutActions["Cancel"] = StepBack;
-        _shortcutActions["Undo"] = () => { using var update = BatchInspectorUpdate(); if (_controller.PerformUndo()) SetStatus(UiText.Get("Text_DAF93C3AA95D")); };
+        _shortcutActions["Undo"] = () => { using var update = BatchInspectorUpdate(); if (_controller.PerformUndo() || TryUndoUnretainedMosaic()) SetStatus(UiText.Get("Text_DAF93C3AA95D")); };
         _shortcutActions["Redo"] = () => { using var update = BatchInspectorUpdate(); if (_controller.PerformRedo()) SetStatus(UiText.Get("Text_8B22B7BBB0CD")); };
         _shortcutActions["Delete"] = DeleteSelected;
         _shortcutActions["SelectAll"] = () => { SelectTool(EditorTool.Select); _controller.SelectAll(); };
@@ -640,7 +651,7 @@ internal sealed partial class AnnotationEditorControl : Grid
             foreach (var box in _cropInputErrors.Keys) SetCropInputError(box, false);
             return;
         }
-        if (_cropWidth is null) return;
+        EnsureSection(ref _cropSection, BuildCropSection);
         _syncingInspector = true;
         RectD pixels = _crop.Region.ToPixelBounds();
         if (!_dirtyCropInputs.Contains(_cropWidth)) _cropWidth.Text = pixels.Width.ToString(CultureInfo.InvariantCulture);
@@ -684,6 +695,7 @@ internal sealed partial class AnnotationEditorControl : Grid
         _surface.ReplaceFrame(frame, region);
         _canvasWidth = Math.Max(1, bitmap.PixelWidth);
         _canvasHeight = Math.Max(1, bitmap.PixelHeight);
+        InvalidateIncompatibleMosaics();
         UpdateResponsiveLayout();
     }
 
@@ -772,6 +784,7 @@ internal sealed partial class AnnotationEditorControl : Grid
             case EditorTool.Mosaic:
                 _mosaicDragging = true;
                 _mosaicStart = image;
+                UpdateMosaicGesture(image);
                 CapturePointer();
                 return true;
             case EditorTool.Crop:
@@ -800,102 +813,7 @@ internal sealed partial class AnnotationEditorControl : Grid
     /// in sync with rotation and crop, and making it an image (not a live effect) means
     /// the flattener, video layer pipeline and re-edit story need no new code path.
     /// </summary>
-    internal void ApplyMosaic(RectD region, int blockSize)
-    {
-        RectD normalized = region.Normalized().ClampTo(new RectD(0, 0, _canvasWidth, _canvasHeight));
-        int x = (int)Math.Floor(normalized.X);
-        int y = (int)Math.Floor(normalized.Y);
-        int width = (int)Math.Ceiling(normalized.Width);
-        int height = (int)Math.Ceiling(normalized.Height);
-        if (width < 2 || height < 2)
-        {
-            return;
-        }
-
-        int step = Math.Clamp(blockSize, SettingsRanges.MosaicBlockSize.Min, SettingsRanges.MosaicBlockSize.Max);
-        // Sample the base the user currently sees. After a rotation that base is the
-        // rotated bitmap; sampling the untouched selection would read coordinates from
-        // the rotated canvas space out of (or beside) the unrotated pixels.
-        BitmapSource mosaicBase = _surface.Frame.Bitmap;
-        byte[] source = ReadMosaicSource(mosaicBase, x, y, width, height, out int stride, out int originX, out int originY);
-
-        int patchStride = width * 4;
-        byte[] patch = new byte[patchStride * height];
-
-        // Box-average each block into a 1횞1 sample, then write the sample across the
-        // block. Block averages (not nearest-neighbour picks) keep thin dark text visible
-        // as a smear rather than vanishing into the surrounding colour.
-        for (int by = 0; by < height; by += step)
-        {
-            int blockH = Math.Min(step, height - by);
-            for (int bx = 0; bx < width; bx += step)
-            {
-                int blockW = Math.Min(step, width - bx);
-                long sumB = 0, sumG = 0, sumR = 0, count = 0;
-                for (int py = 0; py < blockH; py++)
-                {
-                    int sy = y + by + py - originY;
-                    int row = sy * stride;
-                    for (int px = 0; px < blockW; px++)
-                    {
-                        int sx = x + bx + px - originX;
-                        int i = row + (sx * 4);
-                        if (source[i + 3] == 0)
-                        {
-                            continue;
-                        }
-
-                        sumB += source[i];
-                        sumG += source[i + 1];
-                        sumR += source[i + 2];
-                        count++;
-                    }
-                }
-
-                if (count == 0)
-                {
-                    continue;
-                }
-
-                byte b = (byte)(sumB / count);
-                byte gByte = (byte)(sumG / count);
-                byte r = (byte)(sumR / count);
-                for (int py = 0; py < blockH; py++)
-                {
-                    int dy = by + py;
-                    int row = dy * patchStride;
-                    for (int px = 0; px < blockW; px++)
-                    {
-                        int di = row + ((bx + px) * 4);
-                        patch[di] = b;
-                        patch[di + 1] = gByte;
-                        patch[di + 2] = r;
-                        patch[di + 3] = 255;
-                    }
-                }
-            }
-        }
-
-        var decoded = BitmapSource.Create(
-            width,
-            height,
-            96,
-            96,
-            System.Windows.Media.PixelFormats.Bgra32,
-            null,
-            patch,
-            patchStride);
-        decoded.Freeze();
-
-        (BitmapSource Bitmap, string AssetFileName) asset = _imageStore.RegisterInMemory(decoded);
-        // Annotation rects are in image pixels, so the patch sits exactly on the pixels it
-        // was sampled from. Scaling by the display zoom shrank it on enlarged small captures
-        // and left part of the selected content uncovered.
-        var rect = new RectD(x, y, width, height);
-        _controller.AddImageAnnotation(asset.AssetFileName, width, height, rect);
-        SelectTool(EditorTool.Select);
-        SetStatus(UiText.Get("Text_3F8046019B34"));
-    }
+    internal void ApplyMosaic(RectD region, int blockSize) => QueueMosaic(region, blockSize);
 
     /// <summary>
     /// The base pixels a mosaic over <paramref name="x"/>, <paramref name="y"/>,
@@ -1043,6 +961,12 @@ internal sealed partial class AnnotationEditorControl : Grid
 
         PointD image = _surface.ToImagePoint(dip);
 
+        if (_mosaicDragging)
+        {
+            UpdateMosaicGesture(image);
+            return;
+        }
+
         if (_edgeCropStart is not null)
         {
             if (leftPressed) ContinueEdgeCrop(image, shift);
@@ -1099,6 +1023,7 @@ internal sealed partial class AnnotationEditorControl : Grid
         if (_mosaicDragging)
         {
             _mosaicDragging = false;
+            UpdateMosaicGesture(default);
             ReleasePointer();
             PointD mosaicEnd = _surface.ToImagePoint(dip);
             ApplyMosaic(
@@ -1476,6 +1401,7 @@ internal sealed partial class AnnotationEditorControl : Grid
     internal AnnotationDocument CreateCurrentImageSnapshot()
     {
         Dispatcher.VerifyAccess();
+        EnsureMosaicsReadyForSnapshot();
         if (_redactionInProgress)
             throw UserFacingError.Mark(new InvalidOperationException(UiText.Get("Text_D0FD12A01E4A")));
         AnnotationDocument snapshot = CaptureCommitService.CreatePersistenceSnapshot(_controller.Document);
@@ -1827,7 +1753,7 @@ internal sealed partial class AnnotationEditorControl : Grid
         _undoButton = IconTextButton(UiText.Get("Text_CE706412FA75"), UiText.Get("Text_C61A081610C9"), "Icon.Undo", FallbackUndo, () =>
         {
             using var update = BatchInspectorUpdate();
-            if (_controller.PerformUndo())
+            if (_controller.PerformUndo() || TryUndoUnretainedMosaic())
             {
                 SetStatus(UiText.Get("Text_DAF93C3AA95D"));
             }
@@ -2268,27 +2194,20 @@ internal sealed partial class AnnotationEditorControl : Grid
         };
         stack.Children.Add(_inspectorTitle);
 
-        _colorSection = BuildColorSection();
-        stack.Children.Add(_colorSection);
-        _thicknessSection = BuildThicknessSection();
-        stack.Children.Add(_thicknessSection);
-        _shapeStyleSection = BuildShapeStyleSection();
-        stack.Children.Add(_shapeStyleSection);
-        stack.Children.Add(_fillSection);
-        _stepSection = BuildStepNumberSection();
-        stack.Children.Add(_stepSection);
-        _fontFamilySection = BuildFontFamilySection();
-        stack.Children.Add(_fontFamilySection);
-        _fontSizeSection = BuildFontSizeSection();
-        stack.Children.Add(_fontSizeSection);
-        _textStyleSection = BuildTextStyleSection();
-        stack.Children.Add(_textStyleSection);
-        _blurSection = BuildBlurSection();
-        stack.Children.Add(_blurSection);
-        _mosaicSection = BuildMosaicSection();
-        stack.Children.Add(_mosaicSection);
-        _cropSection = BuildCropSection();
-        stack.Children.Add(_cropSection);
+        _colorSection = DeferredSection("AnnotationColorProperties");
+        _thicknessSection = DeferredSection("AnnotationThicknessProperties");
+        _shapeStyleSection = DeferredSection("AnnotationShapeProperties");
+        _fillSection = DeferredSection("AnnotationFillProperties");
+        _stepSection = DeferredSection("AnnotationStepProperties");
+        _fontFamilySection = DeferredSection("AnnotationFontFamilyProperties");
+        _fontSizeSection = DeferredSection("AnnotationFontSizeProperties");
+        _textStyleSection = DeferredSection("AnnotationTextStyleProperties");
+        _blurSection = DeferredSection("AnnotationBlurProperties");
+        _mosaicSection = DeferredSection("AnnotationMosaicProperties");
+        _cropSection = DeferredSection("AnnotationCropProperties");
+        // Keep the numeric inputs' IME contract ready before building the crop chrome.
+        _cropWidth = CropDimensionInput();
+        _cropHeight = CropDimensionInput();
 
         _deleteButton = PropertyButton(BuildIcon("Icon.Delete", () => Geometry.Parse(
             "M3.75,5.75 L16.25,5.75 M7.5,5.75 L7.5,3.75 L12.5,3.75 L12.5,5.75 M5.25,5.75 L6,16.25 L14,16.25 L14.75,5.75 M8.25,8.25 L8.5,13.75 M11.75,8.25 L11.5,13.75"), 20),
@@ -2339,7 +2258,7 @@ internal sealed partial class AnnotationEditorControl : Grid
         _stepPreviewNumber = new Path
         {
             Fill = Brushes.White,
-            Stroke = new SolidColorBrush(Color.FromRgb(0x0B, 0x0F, 0x17)),
+            Stroke = StepPreviewOutlineBrush,
             StrokeThickness = 1,
             StrokeLineJoin = PenLineJoin.Round,
             HorizontalAlignment = HorizontalAlignment.Center,
@@ -2408,8 +2327,6 @@ internal sealed partial class AnnotationEditorControl : Grid
     {
         var panel = PropertyGroup("AnnotationCropProperties");
         var dimensions = new StackPanel { Orientation = Orientation.Horizontal };
-        _cropWidth = new TextBox { MinHeight = 32, Width = 64, FontSize = 12 };
-        _cropHeight = new TextBox { MinHeight = 32, Width = 64, FontSize = 12 };
         foreach (var (box, key) in new[] { (_cropWidth, "Crop.Width"), (_cropHeight, "Crop.Height") })
         {
             var field = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 8, 0) };
@@ -2956,11 +2873,11 @@ internal sealed partial class AnnotationEditorControl : Grid
         Geometry geometry;
         try
         {
-            geometry = Application.Current?.TryFindResource(resourceKey) as Geometry ?? fallback();
+            geometry = Application.Current?.TryFindResource(resourceKey) as Geometry ?? SharedFallbackIcon(resourceKey, fallback);
         }
         catch (ResourceReferenceKeyNotFoundException)
         {
-            geometry = fallback();
+            geometry = SharedFallbackIcon(resourceKey, fallback);
         }
 
         var glyph = new Path
@@ -3057,6 +2974,7 @@ internal sealed partial class AnnotationEditorControl : Grid
         _controller.Tool = tool;
         if (tool == EditorTool.Crop && _crop is null)
         {
+            EnsureSection(ref _cropSection, BuildCropSection);
             _controller.SetSelected(null);
             _crop = new CropSelection(_canvasWidth, _canvasHeight);
             _cropRatio.SelectedIndex = 0;
@@ -3135,6 +3053,7 @@ internal sealed partial class AnnotationEditorControl : Grid
     private void OnHistoryChanged()
     {
         _documentRevision++;
+        ForgetDiscardedMosaics();
         _autoTrimCts?.Cancel();
         _imageStore.PruneToReachable(_controller.Document, _controller.Undo);
         SyncBaseBitmapWithDocument();
@@ -3255,7 +3174,7 @@ internal sealed partial class AnnotationEditorControl : Grid
             return;
         }
 
-        _undoButton.IsEnabled = _controller.CanUndo;
+        _undoButton.IsEnabled = HasMosaicWork || _controller.CanUndo;
         _redoButton.IsEnabled = _controller.CanRedo;
         SetToolTipText(_undoButton, _controller.Undo.NextUndoDescription is { } undo
             ? UiText.Format("EditorSelection_UndoHint", undo) : UiText.Get("Text_C61A081610C9"));
@@ -3310,6 +3229,22 @@ internal sealed partial class AnnotationEditorControl : Grid
             text: selected is TextAnnotation { IsStepNumber: false } || (selected is null && _controller.Tool == EditorTool.Text),
             blurApplies, mosaic: _controller.Tool == EditorTool.Mosaic, stepTool);
         bool textStyleApplies = groups.text;
+        if (cropping) EnsureSection(ref _cropSection, BuildCropSection);
+        else
+        {
+            if (colorApplies) EnsureSection(ref _colorSection, BuildColorSection);
+            if (thicknessApplies) EnsureSection(ref _thicknessSection, BuildThicknessSection);
+            if (shapeApplies) EnsureShapeSection();
+            if (fontSizeApplies) EnsureSection(ref _fontSizeSection, BuildFontSizeSection);
+            if (textStyleApplies)
+            {
+                EnsureSection(ref _fontFamilySection, BuildFontFamilySection);
+                EnsureSection(ref _textStyleSection, BuildTextStyleSection);
+            }
+            if (blurApplies) EnsureSection(ref _blurSection, BuildBlurSection);
+            if (_controller.Tool == EditorTool.Mosaic) EnsureSection(ref _mosaicSection, BuildMosaicSection);
+            if (stepTool) EnsureSection(ref _stepSection, BuildStepNumberSection);
+        }
         if (_inspectorGroupState != groups)
         {
             _inspectorGroupState = groups;
@@ -3601,7 +3536,7 @@ internal sealed partial class AnnotationEditorControl : Grid
 
     private async void Commit(EditorCommitAction action, bool reduceExport = false)
     {
-        if (_completed || _commitInProgress)
+        if (_completed || _commitInProgress || _mosaicClosed)
         {
             return;
         }
@@ -3609,6 +3544,12 @@ internal sealed partial class AnnotationEditorControl : Grid
         if (_redactionInProgress)
         {
             SetStatus(UiText.Get("Text_D0FD12A01E4A"));
+            return;
+        }
+
+        if (HasMosaicWork)
+        {
+            await CommitAfterMosaicsAsync(action, reduceExport);
             return;
         }
 

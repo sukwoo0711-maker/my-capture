@@ -85,6 +85,7 @@ public sealed class EditorHeavyOperationTests
                 int itemsBefore = controller.Document.Items.Count;
                 byte[]? expected = LegacyMosaic(visible, region, block, out int x, out int y, out int pw, out int ph);
                 editor.ApplyMosaic(region, block);
+                EditorMosaicAsyncTests.WaitFor(editor.MosaicOperationsSettledAsync());
                 Assert.Same(visible, editor.DisplayedBitmap);
                 if (expected is null)
                 {

@@ -391,6 +391,7 @@ internal partial class AnnotationEditorWindow : Window
     protected override void OnClosed(EventArgs e)
     {
         _windowClosed = true;
+        _editor.CancelPendingMosaics(closing: true);
         FinishDraftRecovery();
         _editor.EditingCompleted -= OnEditingCompleted;
         _editor.CloseRequested -= OnCloseRequested;

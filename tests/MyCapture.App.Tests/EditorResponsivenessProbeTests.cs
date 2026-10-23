@@ -588,6 +588,9 @@ internal sealed class EditorResponsivenessProbe
             Autosave(ed, "first tool selection (long ink)");
             ProbeScenario mosaic = Begin("mosaic-1200x800");
             Op(mosaic, "ApplyMosaic 1200x800", () => ed.Editor.ApplyMosaic(new RectD(0, 0, 1200, 800), 12), idle: true);
+            var mosaicCompletion = Stopwatch.StartNew();
+            WaitTask(Ui(ed.Editor.MosaicOperationsSettledAsync), "mosaic worker completion");
+            mosaic.Notes = $"worker_wait_ms={mosaicCompletion.Elapsed.TotalMilliseconds:F3}";
             End(mosaic);
             Ui(() =>
             {

@@ -12,6 +12,7 @@ internal static class CommandButtonPresentation
     internal const double IconSize = ShortcutRevealMotion.CommandIconSize;
     internal const double IconLabelGap = 6;
     internal const double HintHeight = 14;
+    [ThreadStatic] private static Dictionary<object, double>? s_hintWidths;
 
     private static readonly DependencyProperty StandardTierProperty = DependencyProperty.RegisterAttached(
         "StandardTier", typeof(bool), typeof(CommandButtonPresentation), new PropertyMetadata(false));
@@ -120,6 +121,18 @@ internal static class CommandButtonPresentation
     {
         // Reserve the full chord independently of reveal and refresh its inherited font/DPI
         // on load or a real metadata change. Alt never enters this measurement path.
+        DpiScale dpi = VisualTreeHelper.GetDpi(hint);
+        object key = (hint.Text, hint.FontFamily, hint.FontSize, hint.FontWeight, hint.FontStyle,
+            hint.FontStretch, hint.FlowDirection, hint.Language.IetfLanguageTag,
+            TextOptions.GetTextFormattingMode(hint), dpi.DpiScaleX, dpi.DpiScaleY);
+        var widths = s_hintWidths ??= [];
+        if (widths.TryGetValue(key, out double width))
+        {
+            face.MinWidth = width;
+            hint.InvalidateMeasure();
+            hint.InvalidateVisual();
+            return;
+        }
         var probe = new TextBlock
         {
             Text = hint.Text,
@@ -132,9 +145,11 @@ internal static class CommandButtonPresentation
             Language = hint.Language,
         };
         TextOptions.SetTextFormattingMode(probe, TextOptions.GetTextFormattingMode(hint));
-        VisualTreeHelper.SetRootDpi(probe, VisualTreeHelper.GetDpi(hint));
+        VisualTreeHelper.SetRootDpi(probe, dpi);
         probe.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
         face.MinWidth = Math.Ceiling(probe.DesiredSize.Width);
+        if (widths.Count >= 256) widths.Clear();
+        widths[key] = face.MinWidth;
         // Refresh the actual caption as well as the detached width probe after DPI changes.
         hint.InvalidateMeasure();
         hint.InvalidateVisual();

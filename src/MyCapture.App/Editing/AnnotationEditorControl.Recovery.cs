@@ -17,6 +17,8 @@ internal sealed partial class AnnotationEditorControl
     internal Task<DraftSnapshot?> CaptureDraftAsync()
     {
         if (_completed || _commitInProgress || _redactionInProgress) return Task.FromResult<DraftSnapshot?>(null);
+        if (HasUnsettledMosaicWork) return CaptureDraftAfterMosaicsAsync();
+        if (!MosaicsReadyForExport) return Task.FromResult<DraftSnapshot?>(null);
         // Everything the editor owns is read here. The document is a deep copy no one else
         // references, so it and these plain values are serialized on the encoder thread.
         AnnotationDocument document = CreateCurrentImageSnapshot();
@@ -54,6 +56,12 @@ internal sealed partial class AnnotationEditorControl
                 : EncodeCachedDraftBitmap(x.Value.Bitmap));
             return new DraftSnapshot("image", json, metadata, files);
         }, "MyCapture image draft encoder");
+    }
+
+    private async Task<DraftSnapshot?> CaptureDraftAfterMosaicsAsync()
+    {
+        await MosaicOperationsSettledAsync().ConfigureAwait(false);
+        return await Dispatcher.InvokeAsync(CaptureDraftAsync).Task.Unwrap().ConfigureAwait(false);
     }
     private static (BitmapSource Bitmap, bool Detached) PrepareForDraft(BitmapSource bitmap)
     {

@@ -1,9 +1,11 @@
 using System.Globalization;
+using System.Runtime.CompilerServices;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Data;
 using System.Windows.Media;
+using System.Windows.Threading;
 using MyCapture.Core.Annotations;
 using MyCapture.Core.Undo;
 
@@ -11,6 +13,8 @@ namespace MyCapture.App.Editing;
 
 internal sealed partial class AnnotationEditorControl
 {
+    private static readonly ConditionalWeakTable<Dispatcher, DataTemplate> FontPreviewTemplates = new();
+
     private FrameworkElement BuildFontFamilySection()
     {
         var panel = PropertyGroup("AnnotationFontFamilyProperties");
@@ -23,7 +27,7 @@ internal sealed partial class AnnotationEditorControl
             VerticalAlignment = VerticalAlignment.Center,
             MaxDropDownHeight = 320,
             IsTextSearchEnabled = true,
-            ItemTemplate = FontCatalog.PreviewTemplate(),
+            ItemTemplate = FontPreviewTemplates.GetValue(Dispatcher, static _ => FontCatalog.PreviewTemplate()),
             SelectedValuePath = nameof(FontChoice.Value),
         };
         TextSearch.SetTextPath(_textFontFamily, nameof(FontChoice.Label));

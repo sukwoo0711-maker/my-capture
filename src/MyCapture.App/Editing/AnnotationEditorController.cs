@@ -191,7 +191,7 @@ internal sealed class AnnotationEditorController
 
     private void SetSelection(IEnumerable<AnnotationItem> items)
     {
-        AnnotationItem[] selection = items.Distinct().ToArray();
+        AnnotationItem[] selection = items.Where(item => item is not PendingMosaicAnnotation).Distinct().ToArray();
         if (_selection.SequenceEqual(selection)) return;
         _selection.Clear();
         _selection.AddRange(selection);

@@ -279,6 +279,7 @@ public sealed class EditorPropertyBarRegressionTests : KoreanCaptionTest
         bitmap.Freeze();
         using EditorWindowHost host = EditorWindowHost.Create(bitmap);
         host.Editor.ApplyMosaic(new RectD(0, 0, size, size), requestedSize);
+        EditorMosaicAsyncTests.WaitFor(host.Editor.MosaicOperationsSettledAsync());
 
         ImageAnnotation patch = Assert.IsType<ImageAnnotation>(Assert.Single(Controller(host.Editor).Document.Items));
         BitmapSource actualBitmap = Field<AnnotationImageStore>(host.Editor, "_imageStore").Get(patch.AssetFileName)!;

@@ -1,10 +1,12 @@
 using System.Globalization;
+using System.Runtime.CompilerServices;
 using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Controls;
 using System.Windows.Data;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Threading;
 using MyCapture.Core.Themes;
 
 namespace MyCapture.App.Editing;
@@ -12,6 +14,10 @@ namespace MyCapture.App.Editing;
 /// <summary>A single numeric field whose buttons share its outline, focus and value model.</summary>
 internal sealed class NumberStepperField
 {
+    private static readonly ConditionalWeakTable<Dispatcher, ControlTemplate> ValueTemplates = new();
+    private static readonly LimitConverter DecreaseLimit = new(false);
+    private static readonly LimitConverter IncreaseLimit = new(true);
+
     internal NumberStepperField(Slider slider, SliderValueEntry entry, string decreaseName, string increaseName)
     {
         Element = (Border)entry.Element;
@@ -54,9 +60,14 @@ internal sealed class NumberStepperField
         box.SetResourceReference(Control.ForegroundProperty, "Text.Primary");
         // The shared outer frame owns all chrome; the native TextBox retains its Value peer,
         // selection, caret and editing behavior through the standard content-host part.
-        var host = new FrameworkElementFactory(typeof(ScrollViewer), "PART_ContentHost");
-        host.SetValue(FrameworkElement.VerticalAlignmentProperty, VerticalAlignment.Center);
-        box.Template = new ControlTemplate(typeof(TextBox)) { VisualTree = host };
+        box.Template = ValueTemplates.GetValue(box.Dispatcher, static _ =>
+        {
+            var host = new FrameworkElementFactory(typeof(ScrollViewer), "PART_ContentHost");
+            host.SetValue(FrameworkElement.VerticalAlignmentProperty, VerticalAlignment.Center);
+            var template = new ControlTemplate(typeof(TextBox)) { VisualTree = host };
+            template.Seal();
+            return template;
+        });
         var unitText = new TextBlock
         {
             Text = unit, FontSize = 12, Margin = new Thickness(0, 0, 6, 0),
@@ -103,7 +114,7 @@ internal sealed class NumberStepperField
 
     private static void BindLimit(Button button, Slider slider, TextBox box, bool increase)
     {
-        var binding = new MultiBinding { Converter = new LimitConverter(increase) };
+        var binding = new MultiBinding { Converter = increase ? IncreaseLimit : DecreaseLimit };
         binding.Bindings.Add(new Binding(nameof(Slider.IsEnabled)) { Source = slider });
         binding.Bindings.Add(new Binding(nameof(Slider.Value)) { Source = slider });
         binding.Bindings.Add(new Binding(nameof(TextBox.Text)) { Source = box });
@@ -136,6 +147,7 @@ internal sealed class NumberStepperField
     /// </summary>
     private sealed class NumericFieldBorder : Border
     {
+        private static readonly ThemeColor[] ContrastBackdrops = [ThemeColor.Rgb(0, 0, 0), ThemeColor.Rgb(255, 255, 255)];
         private static readonly DependencyProperty ControlBrushProperty = BrushProperty("ControlBrush");
         private static readonly DependencyProperty StrongBrushProperty = BrushProperty("StrongBrush");
         private static readonly DependencyProperty RaisedBrushProperty = BrushProperty("RaisedBrush");
@@ -190,7 +202,7 @@ internal sealed class NumberStepperField
                 || GetValue(RaisedBrushProperty) is not SolidColorBrush raised
                 || GetValue(BaseBrushProperty) is not SolidColorBrush surfaceBase) return true;
             // Translucent themes must work over either extreme of the desktop backdrop.
-            foreach (ThemeColor backdrop in new[] { ThemeColor.Rgb(0, 0, 0), ThemeColor.Rgb(255, 255, 255) })
+            foreach (ThemeColor backdrop in ContrastBackdrops)
             {
                 ThemeColor outer = ThemeContrast.Composite(ColorOf(raised), ThemeContrast.Composite(ColorOf(surfaceBase), backdrop));
                 ThemeColor inner = ThemeContrast.Composite(ColorOf(sunken), outer);
