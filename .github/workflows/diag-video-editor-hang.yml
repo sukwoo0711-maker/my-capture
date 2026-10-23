@@ -53,6 +53,9 @@ jobs:
       - name: Package clean source
         run: .\build\package.ps1 -Version $env:PACKAGE_VERSION
 
+      - name: Install dump tool
+        run: dotnet tool install --global dotnet-dump
+
       - name: Run all eight packaged self-tests with a 240-second limit
         continue-on-error: true
         run: |
@@ -67,14 +70,20 @@ jobs:
           $dumps = @(Get-ChildItem artifacts/validation/hosted/packaged-self-tests -Recurse -Filter '*-hang.dmp' -ErrorAction SilentlyContinue)
           Write-Host "Hang dumps: $($dumps.Count)"
           if ($dumps.Count -eq 0) { exit 0 }
-          dotnet tool install --global dotnet-dump
           $tool = Join-Path $env:USERPROFILE '.dotnet\tools\dotnet-dump.exe'
           $publish = [IO.Path]::GetFullPath("artifacts/release/$env:PACKAGE_VERSION/publish-win-x64")
+          $cdb = Get-ChildItem 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\cdb.exe' -ErrorAction SilentlyContinue | Select-Object -First 1
+          Write-Host "cdb: $(if ($cdb) { $cdb.FullName } else { 'not found' })"
           foreach ($dump in $dumps) {
             $out = Join-Path $dump.DirectoryName ($dump.BaseName + '-stacks-report.txt')
             & $tool analyze $dump.FullName -c "setclrpath $publish" -c 'clrthreads' -c 'clrstack -all' -c 'exit' *> $out
             Write-Host "== $($dump.FullName) ($([math]::Round($dump.Length / 1MB)) MB) =="
             Get-Content $out | Out-Host
+            if ($cdb) {
+              $native = Join-Path $dump.DirectoryName ($dump.BaseName + '-native-report.txt')
+              & $cdb.FullName -z $dump.FullName -c '.symfix; .reload; ~* kn 40; q' *> $native
+              Get-Content $native | Out-Host
+            }
           }
 
       - name: Upload probe evidence
