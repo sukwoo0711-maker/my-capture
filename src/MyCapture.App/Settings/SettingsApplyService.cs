@@ -126,6 +126,10 @@ public sealed class SettingsApplyService
         // The window never edits the Store rating state; keep what captures recorded meanwhile.
         next.StoreRating = previous.StoreRating;
         next.StoreUpdate = previous.StoreUpdate;
+        // Only the automatic-check preference is editable; checks and card dismissals can
+        // advance while this window holds an older draft.
+        next.Updates.LastCheckUtc = previous.Updates.LastCheckUtc;
+        next.Updates.DismissedVersion = previous.Updates.DismissedVersion;
         // Preserve concurrent exports unless the draft explicitly resets or imports options.
         if (!applyExportOptions) next.Export.LastImageExport = previous.Export.LastImageExport;
         // Nor the capture start-guide count; a selector opened meanwhile may have advanced it.

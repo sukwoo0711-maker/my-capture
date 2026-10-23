@@ -11,7 +11,7 @@ $env:MYCAPTURE_DATA_ROOT = Join-Path $root 'data'
 function Assert-True([bool]$Condition, [string]$Message) { if (-not $Condition) { throw $Message } }
 try {
     $package = [IO.File]::ReadAllText((Join-Path $setupTestRepo 'build\package.ps1'))
-    foreach ($line in @('AppLaunched=MyCaptureSetup.exe', 'AdminQuietInstCmd=MyCaptureSetup.exe /quiet', 'UserQuietInstCmd=MyCaptureSetup.exe /quiet', 'FILE2=MyCaptureSetup.exe', 'FILE3=MyCaptureSetup.exe.config', 'FILE4=SETUP-HELP.txt')) {
+    foreach ($line in @('AppLaunched=MyCaptureSetup.exe', 'HideExtractAnimation=1', 'AdminQuietInstCmd=MyCaptureSetup.exe /quiet', 'UserQuietInstCmd=MyCaptureSetup.exe /quiet', 'FILE2=MyCaptureSetup.exe', 'FILE3=MyCaptureSetup.exe.config', 'FILE4=SETUP-HELP.txt')) {
         Assert-True ($package.Contains($line)) "Missing IExpress executable bootstrap contract: $line"
     }
     foreach ($old in @('install.ps1', 'install.cmd', 'uninstall.ps1', 'uninstall.cmd', 'uninstall-cleanup.ps1')) {
@@ -24,11 +24,11 @@ try {
     foreach ($name in @('MyCaptureSetup.exe', 'MyCaptureSetup.exe.config', 'SETUP-HELP.txt')) { Copy-Item -LiteralPath (Get-SetupBootstrapSource $name) -Destination (Join-Path $root $name) }
     $exe = Join-Path $root 'MyCaptureSetup.exe'
     $log = Join-Path $root 'missing-payload.log'
-    & $exe /quiet --install-root (Join-Path $root 'installed') --no-shell-integration --log $log
+    & $exe /quiet --install-root (Join-Path $root 'installed') --no-shell-integration --log $log | Out-Null
     Assert-True ($LASTEXITCODE -eq 14) 'Direct quiet failure must retain exit 14.'
     Assert-True ([IO.File]::ReadAllText($log).Contains('Installation failed (exit 14)')) 'Missing durable native failure log.'
     Assert-True (-not [IO.Directory]::Exists((Join-Path $root 'installed'))) 'Missing payload changed install state.'
-    & $exe /quiet --unknown
+    & $exe /quiet --unknown | Out-Null
     Assert-True ($LASTEXITCODE -eq 21) 'Unknown executable option must return exit 21.'
     $rejected = $false
     try { [MyCapture.Setup.WindowsHost]::RequireRuntime([Func[int]]{ 528039 }, [Action]{ throw 'Compression must not load' }) }

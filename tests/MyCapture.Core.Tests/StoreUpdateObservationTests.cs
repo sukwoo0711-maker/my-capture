@@ -35,4 +35,24 @@ public sealed class StoreUpdateObservationTests
         state.ObserveLaunch(version, packaged);
         Assert.Null(state.CompletionNoticeVersion);
     }
+
+    [Fact]
+    public void OwnedGitHubInstall_ObservesTheVersionIncreaseAfterRestart()
+    {
+        var state = new StoreUpdateState();
+        Assert.True(state.ObserveLaunch("4.5.2", packaged: false, ownedInstall: true));
+        Assert.Null(state.CompletionNoticeVersion);
+        Assert.True(state.ObserveLaunch("4.5.3", packaged: false, ownedInstall: true));
+        Assert.Equal("4.5.3", state.CompletionNoticeVersion);
+        Assert.False(state.ObserveLaunch("4.5.3", packaged: false, ownedInstall: true));
+    }
+
+    [Fact]
+    public void PortableAndDevelopmentLaunches_KeepTheExistingObservation()
+    {
+        var state = new StoreUpdateState { LastSeenVersion = "4.5.2" };
+        Assert.False(state.ObserveLaunch("4.5.3", packaged: false, ownedInstall: false));
+        Assert.Equal("4.5.2", state.LastSeenVersion);
+        Assert.Null(state.CompletionNoticeVersion);
+    }
 }

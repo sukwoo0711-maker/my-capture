@@ -98,6 +98,8 @@ internal sealed partial class SettingsWindow
             if (Unchanged(nameof(SettingsDraft.LaunchAtLogin))) candidate.General.LaunchAtLogin = current.General.LaunchAtLogin;
             candidate.StoreRating = current.StoreRating;
             candidate.StoreUpdate = current.StoreUpdate;
+            candidate.Updates.LastCheckUtc = current.Updates.LastCheckUtc;
+            candidate.Updates.DismissedVersion = current.Updates.DismissedVersion;
             candidate.General.IsFirstRun = current.General.IsFirstRun;
             candidate.Hotkeys.CoreShortcutsAsked = current.Hotkeys.CoreShortcutsAsked;
             candidate.Capture.StartGuideShownCount = current.Capture.StartGuideShownCount;
@@ -112,6 +114,8 @@ internal sealed partial class SettingsWindow
         candidate.Export.QuickSaveDirectoryOverride = current.Export.QuickSaveDirectoryOverride;
         candidate.StoreRating = current.StoreRating;
         candidate.StoreUpdate = current.StoreUpdate;
+        candidate.Updates.LastCheckUtc = current.Updates.LastCheckUtc;
+        candidate.Updates.DismissedVersion = current.Updates.DismissedVersion;
         candidate.GitHub.Token = current.GitHub.Token;
         candidate.GitHub.IssueUrl = current.GitHub.IssueUrl;
         candidate.General.IsFirstRun = current.General.IsFirstRun;

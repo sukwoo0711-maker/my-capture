@@ -15,10 +15,7 @@ namespace MyCapture.App.Updates;
 /// and isolated staging directory management without executing installers.
 /// </summary>
 /// <remarks>
-/// Not connected to the UI. MyCapture is distributed only through the Microsoft Store, and the
-/// settings update tab opens the Store listing instead (<c>MyCapture.App.Store.StoreUpdateLink</c>).
-/// The GitHub updater stays in the source for its tests and the build tools that read the
-/// embedded update helper; removing it is a separate decision.
+/// Used by published unpackaged builds; Store builds use the Store deployment API.
 /// </remarks>
 public sealed class GitHubUpdateService : IUpdateService
 {
@@ -204,7 +201,8 @@ public sealed class GitHubUpdateService : IUpdateService
                 return UpdateCheckResult.Failed(UpdateErrorKind.InvalidUrl, $"Checksum download URL '{checksumAsset.BrowserDownloadUrl}' was rejected by security policy.", currentVersion, latest);
             }
 
-            Uri releaseWebUrl = Uri.TryCreate(release.HtmlUrl, UriKind.Absolute, out Uri? htmlUri) && GitHubUrlValidator.IsSecureHttps(htmlUri)
+            Uri releaseWebUrl = Uri.TryCreate(release.HtmlUrl, UriKind.Absolute, out Uri? htmlUri)
+                && GitHubUrlValidator.IsValidReleaseUri(htmlUri, _options.RepositoryOwner, _options.RepositoryName, release.TagName)
                 ? htmlUri
                 : new Uri($"https://github.com/{_options.RepositoryOwner}/{_options.RepositoryName}/releases/tag/{release.TagName}");
 

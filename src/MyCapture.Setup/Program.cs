@@ -15,10 +15,10 @@ public static class Program
         string? directoryOverride = null, Action<bool, string, bool>? popup = null)
     {
         string directory = directoryOverride ?? Path.GetDirectoryName(Executable)!;
-        bool quiet = args.Any(a => string.Equals(a, "/quiet", StringComparison.OrdinalIgnoreCase) || string.Equals(a, "/q", StringComparison.OrdinalIgnoreCase)) ||
-            !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("MYCAPTURE_UPDATE_SESSION")) || args.Contains("--cleanup-request");
-        bool uninstall = args.Any(a => string.Equals(a, "/uninstall", StringComparison.OrdinalIgnoreCase)) || args.Contains("--cleanup-request");
-        // Only CLR 4 APIs run before this probe. No Compression types appear in Main's JIT graph.
+        bool quiet = !SetupInteraction.IsInteractive(args, Environment.GetEnvironmentVariable("MYCAPTURE_UPDATE_SESSION"));
+        bool uninstall = args.Any(a => string.Equals(a, "/uninstall", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(a, "--cleanup-request", StringComparison.OrdinalIgnoreCase) || string.Equals(a, "--uninstall-ui", StringComparison.OrdinalIgnoreCase));
+        // Only CLR 4 APIs run before this probe. WinForms and Compression stay behind the no-inline boundary.
         try { WindowsHost.RequireRuntime(releaseProbe, compressionProbe); }
         catch (SetupException e)
         {
@@ -29,22 +29,45 @@ public static class Program
             if (!quiet) (popup ?? WindowsHost.Popup)(false, guidance, uninstall);
             return 19;
         }
-        try { return Execute(args, directory, quiet); }
-        catch (Exception e)
-        {
-            var log = new SetupLog("", directory, quiet, uninstall);
-            int code = ExitCodes.FromException(e);
-            log.Write("ERROR", "Setup failed (exit " + code + "): " + e.Message);
-            if (!quiet) WindowsHost.Popup(false, e.Message + "\r\nLog: " + log.Path, uninstall);
-            return code;
-        }
+        return Execute(args, directory, quiet, uninstall);
     }
     [MethodImpl(MethodImplOptions.NoInlining)]
-    private static int Execute(string[] args, string directory, bool quiet)
+    private static int Execute(string[] args, string directory, bool quiet, bool uninstall)
     {
-        var options = Options.Parse(args, directory); options.Quiet |= quiet;
-        var log = new SetupLog(options.Log, directory, options.Quiet, options.Uninstall);
-        return options.Uninstall ? Uninstaller.Run(options, directory, log) : new Installer(options, directory, log).Run();
+        SetupLog? log = null;
+        try
+        {
+            var options = Options.Parse(args, directory);
+            bool updateRequested = !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("MYCAPTURE_UPDATE_SESSION"));
+            options.Quiet |= !SetupInteraction.IsInteractive(args, null);
+            log = new SetupLog(options.Log, directory, options.Quiet, options.Uninstall, options.UninstallUiRequest != null);
+            if (!options.Uninstall && updateRequested)
+            {
+                var updater = new Installer(options, directory, log);
+                var session = updater.PrepareUpdate();
+                bool showProgress = SetupInteraction.ShowUpdateProgress(options, session);
+                options.Quiet = !showProgress; log.Quiet = !showProgress;
+                if (!showProgress) return updater.Run();
+                return SetupWindow.RunUpdate(session!.Version, session.WaitForParent, log, progress =>
+                    { updater.SetProgress(progress); return updater.Run(); }, updater.OpenUpdatedApplication, () => updater.CanOpenUpdatedApplication);
+            }
+            options.Quiet |= quiet;
+            if (options.Quiet)
+                return options.Uninstall ? Uninstaller.Run(options, directory, log) : new Installer(options, directory, log).Run();
+            if (options.Uninstall)
+                return options.UninstallUiRequest == null ? SetupWindow.LaunchUninstall(options, directory, log) :
+                    SetupWindow.Run(true, log, progress => Uninstaller.Run(options, directory, log, progress));
+            Installer? installer = null;
+            return SetupWindow.Run(false, log, progress => (installer = new Installer(options, directory, log, progress)).Run(),
+                () => installer?.Launch());
+        }
+        catch (Exception e)
+        {
+            log = log ?? new SetupLog("", directory, quiet, uninstall);
+            int code = ExitCodes.FromException(e);
+            log.Write("ERROR", "Setup failed (exit " + code + "): " + e.Message);
+            return quiet ? code : SetupWindow.Run(uninstall, log, _ => code);
+        }
     }
     public static string Quote(string value)
     {

@@ -3900,6 +3900,7 @@ Delete {1} {1:plural:subfolder|subfolders}, {2} {2:plural:image|images}, and {3}
   <data name="About_PrivacyLocal" xml:space="preserve"><value>Captures and text recognition are processed on this PC.</value></data>
   <data name="About_PrivacyModel" xml:space="preserve"><value>Accurate downloads text recognition models (about {0} MB) from ModelScope. Images are never sent.</value></data>
   <data name="About_PrivacyGitHub" xml:space="preserve"><value>GitHub upload posts to a public issue only when you run it.</value></data>
+  <data name="About_PrivacyUpdates" xml:space="preserve"><value>With automatic checks on, MyCapture looks up new version information once a day.</value></data>
   <data name="About_FeedbackHeading" xml:space="preserve"><value>Feedback</value></data>
   <data name="About_ReportProblem" xml:space="preserve"><value>Contact support</value></data>
   <data name="Support_Title" xml:space="preserve"><value>Contact support</value></data>
@@ -4608,6 +4609,20 @@ Overwrite these shortcuts? You can change this later in Settings → Shortcuts.<
   <data name="CoreShortcuts.KeepCurrent" xml:space="preserve"><value>Keep current</value></data>
   <data name="CoreShortcuts.Force" xml:space="preserve"><value>Handle Ctrl+Shift+C/X/Z and F3 before other programs</value></data>
   <data name="CoreShortcuts.ForceDescription" xml:space="preserve"><value>MyCapture receives these shortcuts even if another program registered them first. Turn this off to let the program that registered them first use them.</value></data>
+  <data name="Update_AutoCheck" xml:space="preserve"><value>Check for new versions automatically</value></data>
+  <data name="Update_UnpackagedDescription" xml:space="preserve"><value>Installation from Microsoft Store is recommended.</value></data>
+  <data name="Update_AvailableVersion" xml:space="preserve"><value>MyCapture {0} is available.</value></data>
+  <data name="Update_StoreAvailable" xml:space="preserve"><value>A new version of MyCapture is available.</value></data>
+  <data name="Update_Action" xml:space="preserve"><value>Update</value></data>
+  <data name="Update_TrayInstallVersion" xml:space="preserve"><value>Install update ({0})</value></data>
+  <data name="Update_TrayInstall" xml:space="preserve"><value>Install update</value></data>
+  <data name="Update_DownloadingPercent" xml:space="preserve"><value>Downloading update {0}%</value></data>
+  <data name="Update_Verifying" xml:space="preserve"><value>Verifying update</value></data>
+  <data name="Update_Preparing" xml:space="preserve"><value>Preparing installation</value></data>
+  <data name="Update_InstallFailed" xml:space="preserve"><value>The update could not be installed. Try again in Settings &gt; About.</value></data>
+  <data name="Update_CheckHelp" xml:space="preserve"><value>Checks GitHub for a new version of this app.</value></data>
+  <data name="Update_InstallHelp" xml:space="preserve"><value>Saves your work, then installs the new version.</value></data>
+  <data name="Update_OpenReleaseHelp" xml:space="preserve"><value>Opens the download page for the new version in your browser.</value></data>
   <data name="Welcome_AccurateOcr" xml:space="preserve"><value>Accurate Korean text recognition</value></data>
   <data name="Welcome_AccurateOcrHelp" xml:space="preserve"><value>Downloads about {0} MB of models once in the background. Recognition takes longer than Fast. You can change this in Settings.</value></data>
   <data name="Source.Open" xml:space="preserve"><value>Open source</value></data>

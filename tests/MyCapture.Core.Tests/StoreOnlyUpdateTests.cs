@@ -1,5 +1,4 @@
 using System.Text.Json;
-using System.Text.RegularExpressions;
 using Microsoft.Extensions.Logging.Abstractions;
 using MyCapture.Core.Recording;
 using MyCapture.Core.Settings;
@@ -8,15 +7,11 @@ using Xunit;
 namespace MyCapture.Core.Tests;
 
 /// <summary>
-/// Updates come only from the Microsoft Store. Settings carry only typed Store version observations;
-/// legacy updater sections are ignored without losing the rest of the file, and no app code
-/// outside the dormant <c>Updates</c> folder reaches the GitHub updater.
+/// Store and GitHub releases share typed update preferences and version observations.
+/// Legacy updater fields are ignored without losing the rest of the settings file.
 /// </summary>
 public sealed class StoreOnlyUpdateTests
 {
-    private static readonly Regex GitHubUpdaterReference = new(
-        @"\b(?:GitHubUpdateService|UpdateSession|UpdateInstaller)\b", RegexOptions.Compiled);
-
     [Fact]
     public void SettingsFileWithAnUpdateSection_LoadsAndKeepsTheOtherValues()
     {
@@ -43,11 +38,14 @@ public sealed class StoreOnlyUpdateTests
         Assert.Empty(store.LastLoadWarnings);
         Assert.Equal("4.1.1.0", loaded.StoreUpdate.LastSeenVersion);
         Assert.Equal("4.1.2.0", loaded.StoreUpdate.CompletionNoticeVersion);
+        Assert.True(loaded.Updates.AutoCheck);
+        Assert.Null(loaded.Updates.LastCheckUtc);
+        Assert.Null(loaded.Updates.DismissedVersion);
 
-        // The next save writes only known settings, so the stale section disappears.
+        // The next save writes the new contract, dropping unknown legacy updater fields.
         store.Save(loaded);
         using JsonDocument saved = JsonDocument.Parse(File.ReadAllText(workspace.Paths.SettingsFile));
-        AssertOnlyStoreObservation(saved.RootElement);
+        AssertTypedUpdateSettings(saved.RootElement);
         Assert.Equal("4.1.2.0", saved.RootElement.GetProperty("storeUpdate").GetProperty("completionNoticeVersion").GetString());
         Assert.Equal("fps60", saved.RootElement.GetProperty("recording").GetProperty("frameRate").GetString());
     }
@@ -62,47 +60,87 @@ public sealed class StoreOnlyUpdateTests
         AppSettings imported = new SettingsStore(workspace.Paths, NullLogger<SettingsStore>.Instance).ImportFrom(path);
 
         Assert.Equal(0.25, imported.Pin.ZoomStep, 3);
+        Assert.True(imported.Updates.AutoCheck);
+        Assert.Null(imported.Updates.LastCheckUtc);
     }
 
     [Fact]
-    public void DefaultSettingsJson_HasOnlyTypedStoreVersionObservation()
+    public void DefaultSettingsJson_HasAutomaticChecksAndTypedVersionObservations()
     {
         string json = JsonSerializer.Serialize(new AppSettings(), MyCapture.Core.Serialization.JsonDefaults.Readable);
         using JsonDocument document = JsonDocument.Parse(json);
 
-        AssertOnlyStoreObservation(document.RootElement);
+        AssertTypedUpdateSettings(document.RootElement);
+        Assert.True(document.RootElement.GetProperty("updates").GetProperty("autoCheck").GetBoolean());
+        Assert.Equal(JsonValueKind.Null, document.RootElement.GetProperty("updates").GetProperty("lastCheckUtc").ValueKind);
+        Assert.Equal(JsonValueKind.Null, document.RootElement.GetProperty("updates").GetProperty("dismissedVersion").ValueKind);
         foreach (JsonProperty property in document.RootElement.GetProperty("storeUpdate").EnumerateObject())
             Assert.Equal(JsonValueKind.Null, property.Value.ValueKind);
     }
 
     [Fact]
-    public void AppSource_ReachesTheGitHubUpdaterOnlyFromItsOwnFolder()
+    public void SharedUpdateState_RoundTripsWithoutAnInstallerOrChannelInSettings()
     {
-        string root = RepositoryRoot();
-        string updates = Path.Combine(root, "src", "MyCapture.App", "Updates") + Path.DirectorySeparatorChar;
-        // The dormant updater still exists, so the scan below is not vacuous.
-        Assert.True(File.Exists(Path.Combine(updates, "GitHubUpdateService.cs")));
-
-        var offenders = new List<string>();
-        int scanned = 0;
-        foreach (string file in Directory.EnumerateFiles(Path.Combine(root, "src"), "*.*", SearchOption.AllDirectories)
-            .Where(p => (p.EndsWith(".cs", StringComparison.OrdinalIgnoreCase) || p.EndsWith(".xaml", StringComparison.OrdinalIgnoreCase))
-                && !IsBuildOutput(p, root)
-                && !p.StartsWith(updates, StringComparison.OrdinalIgnoreCase)))
+        var checkedAt = new DateTimeOffset(2026, 10, 22, 12, 0, 0, TimeSpan.Zero);
+        var settings = new AppSettings
         {
-            scanned++;
-            string text = File.ReadAllText(file);
-            foreach (Match match in GitHubUpdaterReference.Matches(text))
+            Updates = new()
             {
-                int line = text.Take(match.Index).Count(c => c == '\n') + 1;
-                offenders.Add($"{Path.GetRelativePath(root, file)}:{line}: {match.Value}");
-            }
-        }
+                AutoCheck = false,
+                LastCheckUtc = checkedAt,
+                DismissedVersion = "4.5.3",
+            },
+            StoreUpdate = new() { LastSeenVersion = "4.5.2", CompletionNoticeVersion = "4.5.3" },
+        };
+        string json = JsonSerializer.Serialize(settings, MyCapture.Core.Serialization.JsonDefaults.Readable);
+        AppSettings loaded = JsonSerializer.Deserialize<AppSettings>(json, MyCapture.Core.Serialization.JsonDefaults.Readable)!;
 
-        Assert.True(scanned > 100, $"Only {scanned} source files were scanned.");
-        Assert.True(offenders.Count == 0,
-            "Only the Microsoft Store delivers updates; the GitHub updater must stay disconnected:\n"
-            + string.Join(Environment.NewLine, offenders));
+        Assert.False(loaded.Updates.AutoCheck);
+        Assert.Equal(checkedAt, loaded.Updates.LastCheckUtc);
+        Assert.Equal("4.5.3", loaded.Updates.DismissedVersion);
+        Assert.Equal("4.5.2", loaded.StoreUpdate.LastSeenVersion);
+        Assert.Equal("4.5.3", loaded.StoreUpdate.CompletionNoticeVersion);
+        using JsonDocument document = JsonDocument.Parse(json);
+        AssertTypedUpdateSettings(document.RootElement);
+    }
+
+    [Theory]
+    [InlineData("{}")]
+    [InlineData("{\"updates\":null}")]
+    [InlineData("{\"updates\":{\"checkOnStartup\":false,\"channel\":\"github\"}}")]
+    public void MissingNullOrLegacyUpdatePreferences_DefaultToAutomaticChecks(string json)
+    {
+        AppSettings loaded = JsonSerializer.Deserialize<AppSettings>(json, MyCapture.Core.Serialization.JsonDefaults.Readable)!;
+        Assert.True(loaded.Updates.AutoCheck);
+        Assert.Null(loaded.Updates.LastCheckUtc);
+        Assert.Null(loaded.Updates.DismissedVersion);
+    }
+
+    [Fact]
+    public void DeepClone_PreservesUpdateAndInvitationStateWithoutSharingIt()
+    {
+        var now = new DateTimeOffset(2026, 10, 22, 12, 0, 0, TimeSpan.Zero);
+        var settings = new AppSettings
+        {
+            Updates = new() { AutoCheck = false, LastCheckUtc = now, DismissedVersion = "4.5.3" },
+            StoreUpdate = new() { LastSeenVersion = "4.5.2", CompletionNoticeVersion = "4.5.3" },
+            StoreRating = new() { InvitationShownUtc = now },
+        };
+
+        AppSettings clone = settings.DeepClone();
+
+        Assert.NotSame(settings.Updates, clone.Updates);
+        Assert.NotSame(settings.StoreUpdate, clone.StoreUpdate);
+        Assert.False(clone.Updates.AutoCheck);
+        Assert.Equal(now, clone.Updates.LastCheckUtc);
+        Assert.Equal("4.5.3", clone.Updates.DismissedVersion);
+        Assert.Equal("4.5.2", clone.StoreUpdate.LastSeenVersion);
+        Assert.Equal("4.5.3", clone.StoreUpdate.CompletionNoticeVersion);
+        Assert.Equal(now, clone.StoreRating.InvitationShownUtc);
+        clone.Updates.DismissedVersion = "4.5.4";
+        clone.StoreUpdate.CompletionNoticeVersion = null;
+        Assert.Equal("4.5.3", settings.Updates.DismissedVersion);
+        Assert.Equal("4.5.3", settings.StoreUpdate.CompletionNoticeVersion);
     }
 
     private static List<string> UpdatePropertyPaths(JsonElement element, string path)
@@ -128,9 +166,12 @@ public sealed class StoreOnlyUpdateTests
         return found;
     }
 
-    private static void AssertOnlyStoreObservation(JsonElement settings)
+    private static void AssertTypedUpdateSettings(JsonElement settings)
     {
-        Assert.Equal(new[] { "$.storeUpdate" }, UpdatePropertyPaths(settings, "$"));
+        Assert.Equal(new[] { "$.storeUpdate", "$.updates" }, UpdatePropertyPaths(settings, "$"));
+        JsonElement updates = settings.GetProperty("updates");
+        Assert.Equal(new[] { "autoCheck", "dismissedVersion", "lastCheckUtc" },
+            updates.EnumerateObject().Select(property => property.Name).Order(StringComparer.Ordinal));
         JsonElement observations = settings.GetProperty("storeUpdate");
         Assert.Equal(JsonValueKind.Object, observations.ValueKind);
         // pendingFromVersion, written but never read by unreleased 4.1.2 candidates, is dropped on save.
@@ -143,23 +184,4 @@ public sealed class StoreOnlyUpdateTests
                 Assert.True(Version.TryParse(property.Value.GetString(), out _), property.Name);
         }
     }
-
-    private static string RepositoryRoot()
-    {
-        var dir = new DirectoryInfo(AppContext.BaseDirectory);
-        while (dir is not null)
-        {
-            if (File.Exists(Path.Combine(dir.FullName, "Directory.Build.props"))
-                && Directory.Exists(Path.Combine(dir.FullName, "src"))
-                && Directory.Exists(Path.Combine(dir.FullName, "build")))
-                return dir.FullName;
-            dir = dir.Parent;
-        }
-
-        throw new InvalidOperationException($"Repository root was not found above '{AppContext.BaseDirectory}'.");
-    }
-
-    private static bool IsBuildOutput(string path, string root) =>
-        Path.GetRelativePath(root, path).Split(Path.DirectorySeparatorChar, StringSplitOptions.RemoveEmptyEntries)
-            .Any(part => part.Equals("bin", StringComparison.OrdinalIgnoreCase) || part.Equals("obj", StringComparison.OrdinalIgnoreCase));
 }
