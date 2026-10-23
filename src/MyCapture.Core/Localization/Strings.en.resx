@@ -3362,6 +3362,8 @@ Open the library or Settings from the tray menu.</value></data>
   <data name="EditorProperty_CustomColorHint" xml:space="preserve"><value>Custom color (Enter: apply, Esc: close)</value></data>
   <data name="EditorProperty_Hex" xml:space="preserve"><value>HEX color</value></data>
   <data name="EditorProperty_FillTransparency" xml:space="preserve"><value>Fill transparency</value></data>
+  <data name="EditorProperty_StrokeWidthLabel" xml:space="preserve"><value>Width</value></data>
+  <data name="EditorProperty_StrokeStyleLabel" xml:space="preserve"><value>Style</value></data>
   <data name="EditorProperty_SelectedColor" xml:space="preserve"><value>Selected</value></data>
   <data name="EditorProperty_ThicknessDecrease" xml:space="preserve"><value>Decrease line width</value></data>
   <data name="EditorProperty_ThicknessIncrease" xml:space="preserve"><value>Increase line width</value></data>

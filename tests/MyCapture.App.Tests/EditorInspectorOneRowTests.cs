@@ -23,13 +23,21 @@ public sealed class EditorInspectorOneRowTests(ITestOutputHelper output)
 {
     [Theory]
     [InlineData("ko-KR", 1000)]
+    [InlineData("ko-KR", 1053)]
     [InlineData("en-US", 1053)]
     public void EverySingleTypeConfigurationHasOneRowAtTheAcceptedWindowWidth(string language, int width) => StaTestHost.Run(() =>
     {
         using var culture = UiText.UseLanguage(language);
         using var host = new InspectorContractHost(width);
+        // Windows clamps even this offscreen window to the display's maximum tracking size, so
+        // a small CI screen can make it narrower than requested. That only reduces the available
+        // width: the row and headroom checks below are then stricter than at the accepted width.
+        double windowWidth = host.Window.ActualWidth;
+        Assert.InRange(windowWidth, 1, width + 0.001);
         var failures = new List<string>();
         int homogeneousSelections = 0;
+        double widest = 0, smallestHeadroom = double.PositiveInfinity;
+        string widestName = string.Empty;
         VisitConfigurations(host, (name, mixed) =>
         {
             if (mixed) return;
@@ -39,13 +47,24 @@ public sealed class EditorInspectorOneRowTests(ITestOutputHelper output)
             int rows = visible.Select(group => Math.Round(LayoutInformation.GetLayoutSlot(group).Top, 3)).Distinct().Count();
             ScrollViewer scroll = PropertyScroll(host);
             double budget = Field<Border>(host.Editor, "_inspectorPanel").Height;
+            double contentWidth = visible.Sum(group => group.DesiredSize.Width);
+            double headroom = panel.ActualWidth - contentWidth;
+            smallestHeadroom = Math.Min(smallestHeadroom, headroom);
+            if (contentWidth > widest)
+            {
+                widest = contentWidth;
+                widestName = name;
+            }
             if (rows > 1 || budget > 48.001 || scroll.ScrollableHeight > 0.001 || scroll.ScrollableWidth > 0.001)
                 failures.Add($"{name}: rows={rows}, budget={budget:0.###}, contentWidth={visible.Sum(group => group.DesiredSize.Width):0.###}, available={panel.ActualWidth:0.###}, scroll={scroll.ScrollableWidth:0.###}/{scroll.ScrollableHeight:0.###}");
             Assert.Equal(Visibility.Collapsed, scroll.ComputedVerticalScrollBarVisibility);
         });
         Assert.Equal(8, homogeneousSelections);
+        output.WriteLine($"{language} at {width} DIP (window {windowWidth:0.###}): widest={widest:0.###} ({widestName}), minimum headroom={smallestHeadroom:0.###} DIP.");
         foreach (string failure in failures) output.WriteLine($"{language}: {failure}");
-        Assert.True(failures.Count == 0, $"{language}: {failures.Count} single-type configurations exceed the one-row budget at {width} DIP. {string.Join("; ", failures)}");
+        Assert.True(failures.Count == 0, $"{language}: {failures.Count} single-type configurations exceed the one-row budget at {width} DIP (window {windowWidth:0.###}). {string.Join("; ", failures)}");
+        if (width == 1053)
+            Assert.True(smallestHeadroom >= 32, $"{language}: only {smallestHeadroom:0.###} DIP headroom in a {windowWidth:0.###}-DIP window (widest {widestName}, {widest:0.###} DIP); at least 32 DIP is required for font and display variation.");
     });
 
     [Theory]

@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Diagnostics;
 using System.Windows;
 using System.Windows.Automation.Peers;
 using System.Windows.Controls;
@@ -108,9 +109,10 @@ public sealed class ShortcutRevealMotionTests
     [InlineData("B", true)]
     public void MidAnimationReversalStartsAtTheCurrentValue(string profile, bool withoutShortcut) => StaTestHost.Run(() =>
     {
+        using var clocks = new ControlledAnimationScope();
         using var host = new FaceHost(profile, withoutShortcut);
         ShortcutPresentation.SetAltRevealed(host.Window, true);
-        Pump(50);
+        clocks.SeekTo(50);
         var scale = ((TransformGroup)host.Glyph.RenderTransform).Children.OfType<ScaleTransform>().Single();
         var shift = ((TransformGroup)host.Glyph.RenderTransform).Children.OfType<TranslateTransform>().Single();
         var captionShift = ((TransformGroup)host.Hint.RenderTransform).Children.OfType<TranslateTransform>().Single();
@@ -121,21 +123,55 @@ public sealed class ShortcutRevealMotionTests
         Assert.Equal(beforeShift, shift.Y, 6);
         Assert.Equal(beforeOpacity, host.Hint.Opacity, 6);
         Assert.Equal(beforeCaption, captionShift.Y, 6);
-        Pump(25);
+        clocks.SeekTo(25);
+        Assert.InRange(scale.ScaleX, beforeScale + .000001, .999999);
         beforeScale = scale.ScaleX;
         beforeOpacity = host.Hint.Opacity;
         ShortcutPresentation.SetAltRevealed(host.Window, true);
         Assert.Equal(beforeScale, scale.ScaleX, 6);
         Assert.Equal(beforeOpacity, host.Hint.Opacity, 6);
-        Pump(250);
+        clocks.SeekTo(250);
         Assert.Equal(.8, scale.ScaleX);
         Assert.Equal(1, host.Hint.Opacity);
         ShortcutPresentation.SetAltRevealed(host.Window, false);
-        Pump(250);
+        clocks.SeekTo(250);
         Assert.Equal(1, scale.ScaleX);
         Assert.Equal(ShortcutRevealMotion.PrimaryRestOffset, shift.Y);
         Assert.Equal(0, host.Hint.Opacity);
         Assert.Equal(ShortcutRevealMotion.CaptionExitOffset, captionShift.Y);
+    });
+
+    [Theory]
+    [InlineData("A", false)]
+    [InlineData("A", true)]
+    [InlineData("B", false)]
+    [InlineData("B", true)]
+    public void RealAnimationClocksEventuallySettle(string profile, bool withoutShortcut) => StaTestHost.Run(() =>
+    {
+        using var host = new FaceHost(profile, withoutShortcut);
+        Assert.Null(ShortcutRevealMotion.AnimationClockCreatedForTest);
+        var scale = ((TransformGroup)host.Glyph.RenderTransform).Children.OfType<ScaleTransform>().Single();
+        var shift = ((TransformGroup)host.Glyph.RenderTransform).Children.OfType<TranslateTransform>().Single();
+        var captionShift = ((TransformGroup)host.Hint.RenderTransform).Children.OfType<TranslateTransform>().Single();
+
+        foreach (bool revealed in new[] { true, false })
+        {
+            ShortcutPresentation.SetAltRevealed(host.Window, revealed);
+            double expectedScale = revealed ? .8 : 1;
+            double expectedShift = revealed ? 0 : ShortcutRevealMotion.PrimaryRestOffset;
+            double expectedOpacity = revealed ? 1 : 0;
+            double expectedCaption = revealed ? 0 : ShortcutRevealMotion.CaptionExitOffset;
+            var elapsed = Stopwatch.StartNew();
+            while (elapsed.Elapsed < TimeSpan.FromSeconds(5)
+                && (scale.ScaleX != expectedScale || shift.Y != expectedShift
+                    || host.Hint.Opacity != expectedOpacity || captionShift.Y != expectedCaption))
+                Pump(20);
+
+            Assert.Equal(expectedScale, scale.ScaleX);
+            Assert.Equal(expectedShift, shift.Y);
+            Assert.Equal(expectedOpacity, host.Hint.Opacity);
+            Assert.Equal(expectedCaption, captionShift.Y);
+        }
     });
 
     [Theory]
@@ -265,6 +301,7 @@ public sealed class ShortcutRevealMotionTests
     [InlineData("B")]
     public void KeyedAndBlankIconsInTheSameBarShareGeometryAndAnimationTiming(string profile) => StaTestHost.Run(() =>
     {
+        using var clocks = new ControlledAnimationScope();
         using var host = new FaceHost(profile);
         var glyph = SymbolIcon.Create(Geometry.Parse("M2,2 L18,2 18,18 2,18Z"));
         var pressTransform = new ScaleTransform(.96, .96);
@@ -304,20 +341,20 @@ public sealed class ShortcutRevealMotionTests
 
         AssertTogether();
         ShortcutPresentation.SetAltRevealed(host.Window, true);
-        Pump(50);
+        clocks.SeekTo(50);
         Assert.InRange(blankScale.ScaleX, .800001, .999999);
         AssertTogether();
         ShortcutPresentation.SetAltRevealed(host.Window, false);
         AssertTogether();
-        Pump(25);
+        clocks.SeekTo(25);
         AssertTogether();
         ShortcutPresentation.SetAltRevealed(host.Window, true);
-        Pump(250);
+        clocks.SeekTo(250);
         Assert.Equal(.8, blankScale.ScaleX);
         Assert.Equal(0, blankShift.Y);
         AssertTogether();
         ShortcutPresentation.SetAltRevealed(host.Window, false);
-        Pump(200);
+        clocks.SeekTo(200);
         Assert.Equal(1, blankScale.ScaleX);
         Assert.Equal(ShortcutRevealMotion.PrimaryRestOffset, blankShift.Y);
         AssertTogether();
@@ -328,6 +365,7 @@ public sealed class ShortcutRevealMotionTests
     [InlineData("B")]
     public void BlankTextFaceOnlyTranslatesAndPreservesTheButtonTransform(string profile) => StaTestHost.Run(() =>
     {
+        using var clocks = new ControlledAnimationScope();
         using var host = new FaceHost(profile);
         var pressTransform = new ScaleTransform(.96, .96);
         var button = new Button { Content = "옵션", RenderTransform = pressTransform };
@@ -348,10 +386,10 @@ public sealed class ShortcutRevealMotionTests
         foreach (bool revealed in new[] { true, false })
         {
             ShortcutPresentation.SetAltRevealed(host.Window, revealed);
-            Pump(50);
+            clocks.SeekTo(50);
             Assert.InRange(shift.Y, .000001, ShortcutRevealMotion.PrimaryRestOffset - .000001);
             Assert.Equal(keyedShift.Y, shift.Y, 6);
-            Pump(200);
+            clocks.SeekTo(200);
             Assert.Equal(revealed ? 0 : ShortcutRevealMotion.PrimaryRestOffset, shift.Y);
             Assert.Same(shift, Assert.Single(transforms.Children));
             Assert.Equal(fontSize, primary.FontSize);
@@ -417,6 +455,30 @@ public sealed class ShortcutRevealMotionTests
         timer.Tick += (_, _) => { timer.Stop(); frame.Continue = false; };
         timer.Start();
         Dispatcher.PushFrame(frame);
+    }
+
+    private sealed class ControlledAnimationScope : IDisposable
+    {
+        private readonly Action<AnimationClock>? _previous = ShortcutRevealMotion.AnimationClockCreatedForTest;
+        private readonly List<AnimationClock> _clocks = [];
+
+        internal ControlledAnimationScope() => ShortcutRevealMotion.AnimationClockCreatedForTest = clock =>
+        {
+            _clocks.Add(clock);
+            clock.Controller!.Pause();
+            clock.Controller.SeekAlignedToLastTick(TimeSpan.Zero, TimeSeekOrigin.BeginTime);
+        };
+
+        // Seek within each clock's active period, after any entrance delay. No dispatcher
+        // pump is needed, so even a descheduled test resumes at this exact animation time.
+        internal void SeekTo(int milliseconds)
+        {
+            Assert.NotEmpty(_clocks);
+            foreach (AnimationClock clock in _clocks)
+                clock.Controller!.SeekAlignedToLastTick(TimeSpan.FromMilliseconds(milliseconds), TimeSeekOrigin.BeginTime);
+        }
+
+        public void Dispose() => ShortcutRevealMotion.AnimationClockCreatedForTest = _previous;
     }
 
     private sealed class CountingDecorator : Decorator

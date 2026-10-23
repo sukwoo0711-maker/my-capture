@@ -43,6 +43,7 @@ internal static class ShortcutRevealMotion
     internal static void Initialize() => _ = Profile;
     [ThreadStatic] internal static bool SettleImmediatelyForTest;
     [ThreadStatic] internal static string? ProfileForTest;
+    [ThreadStatic] internal static Action<AnimationClock>? AnimationClockCreatedForTest;
     [ThreadStatic] private static List<WeakReference<Face>>? s_faces;
     [ThreadStatic] private static int s_registrationsSincePrune;
 
@@ -254,6 +255,14 @@ internal static class ShortcutRevealMotion
         animation.KeyFrames.Add(control1 is { } first && control2 is { } second
             ? new SplineDoubleKeyFrame(to, end, new KeySpline(first, second))
             : new LinearDoubleKeyFrame(to, end));
-        target.BeginAnimation(property, animation, HandoffBehavior.SnapshotAndReplace);
+        if (AnimationClockCreatedForTest is { } clockCreated)
+        {
+            // Let midpoint tests pause and seek the real animation, including its key splines,
+            // without relying on how promptly the dispatcher can schedule a render tick.
+            var clock = (AnimationClock)animation.CreateClock(true);
+            target.ApplyAnimationClock(property, clock, HandoffBehavior.SnapshotAndReplace);
+            clockCreated(clock);
+        }
+        else target.BeginAnimation(property, animation, HandoffBehavior.SnapshotAndReplace);
     }
 }

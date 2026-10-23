@@ -232,7 +232,7 @@ internal sealed partial class AnnotationEditorControl
     private FrameworkElement BuildThicknessSection()
     {
         var panel = PropertyGroup("AnnotationThicknessProperties");
-        panel.Children.Add(PropertyLabel(UiText.Get("Text_70EC2D232B4F")));
+        panel.Children.Add(PropertyLabel(UiText.Get("EditorProperty_StrokeWidthLabel")));
         // The existing slider owns range, snapping and change notification. Its number box
         // and step buttons are the visible control; the right panel's duplicate track is gone.
         _thicknessSlider = new Slider
