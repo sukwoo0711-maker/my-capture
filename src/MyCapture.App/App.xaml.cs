@@ -1073,7 +1073,13 @@ public partial class App : Application
     private void DismissQuickAccessForCapture()
     {
         _latestReceipt = null;
+        // A capture still flying into its card lands at once; the next capture never waits for it.
+        _pendingLift = null;
+        _captureFlight?.Finish();
+        _captureFlight = null;
         _quickAccess?.DismissForCapture(() => _overlay?.NoteForegroundDismissal());
+        // Load the shutter while the user selects, so the release plays it without delay.
+        if (_settings?.General.PlayCaptureSound == true) CaptureShutterSound.Prepare();
     }
 
     private async Task CompleteAdvancedCaptureAsync(Func<CaptureOutcome> capture, string mode)
@@ -1106,6 +1112,11 @@ public partial class App : Application
 
     private async Task OnCaptureSelectionCompletedAsync(CaptureSelectionCompletedEventArgs e)
     {
+        // Every still capture (region release, window click, full screen, a delayed capture, a
+        // finished scroll) arrives here as soon as its image exists, before anything is saved or
+        // copied: the shutter answers the gesture itself, and the capture lifts off the screen.
+        if (_settings?.General.PlayCaptureSound == true) CaptureShutterSound.Play();
+        LiftCaptureForQuickAccess(e);
         _log?.LogInformation(
             "Capture selection ready for editor: {Width}x{Height}",
             e.SelectedBitmap.PixelWidth,
@@ -1243,8 +1254,7 @@ public partial class App : Application
         // Region, window, full-screen and scrolling captures all complete here. Only a durable,
         // copied result counts toward the Store rating request; a save or copy failure resets it.
         _storeRating?.RecordCapture(succeeded: _currentRecord is not null && copiedToClipboard);
-        if (_settings?.General.PlayCaptureSound == true)
-            System.Media.SystemSounds.Asterisk.Play();
+        if (_services is null || _currentRecord is null) CancelCaptureFlight(e.SelectedBitmap);
         if (_services is not null && _currentRecord is { } receipt)
         {
             _latestReceipt = receipt.Id;
@@ -1268,10 +1278,64 @@ public partial class App : Application
                         ShowCaptureToast(receipt, copied);
                     }
                 }
-                finally { pendingReceipt?.Dispose(); }
+                finally
+                {
+                    pendingReceipt?.Dispose();
+                    // No card took the lifted capture (another mode, or a newer capture): it fades away.
+                    CancelCaptureFlight(selected);
+                }
             }));
         }
         CompleteWelcomeCaptureAnnouncement();
+    }
+
+    private CaptureFlight? _captureFlight;
+    private System.Windows.Media.Imaging.BitmapSource? _pendingLift;
+
+    /// <summary>
+    /// When this capture will show the quick access card, lifts the captured region off the screen
+    /// where it was taken; the card then receives it (CaptureFlight). A scrolling capture's image
+    /// was never on screen as one piece, so it shows the card without a flight.
+    /// </summary>
+    /// <remarks>
+    /// The lift runs on the dispatcher's next turn, at once after the selector has closed and the
+    /// save and copy have started, so neither they nor the next capture wait for its window.
+    /// </remarks>
+    private void LiftCaptureForQuickAccess(CaptureSelectionCompletedEventArgs e)
+    {
+        _captureFlight?.Finish();
+        _captureFlight = null;
+        _pendingLift = null;
+        // The same conditions as the card itself (_services, the after-capture mode); whether the
+        // save succeeds is known only later, and a failed one lets the image fade away.
+        if (_services is null || e.TextCapture || _scrollCancellation is not null
+            || _settings?.General.AfterCapture != AfterCaptureAction.QuickAccess) return;
+        System.Windows.Media.Imaging.BitmapSource image = e.SelectedBitmap;
+        var source = new Core.Primitives.RectD(e.Frame.ScreenBounds.Left + e.BitmapRegion.Left,
+            e.Frame.ScreenBounds.Top + e.BitmapRegion.Top, e.BitmapRegion.Width, e.BitmapRegion.Height);
+        _pendingLift = image;
+        _ = Dispatcher.BeginInvoke(DispatcherPriority.Send, new Action(() =>
+        {
+            // A newer capture, or this one failing, has already taken its place.
+            if (!ReferenceEquals(_pendingLift, image)) return;
+            _pendingLift = null;
+            try
+            {
+                _captureFlight = CaptureFlight.TryLift(image, source);
+            }
+            catch (Exception ex) when (ex is not OutOfMemoryException)
+            {
+                // The flight is decoration; the capture goes on without it.
+                _log?.LogWarning(ex, "Could not lift the capture toward its receipt card");
+            }
+        }));
+    }
+
+    /// <summary>The lifted capture of <paramref name="image"/> fades away when no card takes it.</summary>
+    private void CancelCaptureFlight(System.Windows.Media.Imaging.BitmapSource image)
+    {
+        if (ReferenceEquals(_pendingLift, image)) _pendingLift = null;
+        if (_captureFlight is { } flight && ReferenceEquals(flight.Image, image)) flight.Cancel();
     }
 
     private Task _sourceBackfillTask = Task.CompletedTask;
@@ -1303,7 +1367,9 @@ public partial class App : Application
         if (_latestReceipt != record.Id) return;
         if (_preparingAdvancedCapture || _overlay?.IsSelecting == true) return;
         if (_queue is null || _commit is null || _services is null || _settings?.General.AfterCapture != AfterCaptureAction.QuickAccess) return;
-        _quickAccess?.Close();
+        // The newer card replaces the older one at once, without its exit.
+        _quickAccess?.CloseNow();
+        CaptureFlight? flight = _captureFlight is { } lifted && ReferenceEquals(lifted.Image, image) ? lifted : null;
         IDisposable lease = _queue.AcquireEvictionLease(record.Id);
         try
         {
@@ -1344,11 +1410,14 @@ public partial class App : Application
                 keyboardRouter: _receiptKeyboard);
             card.Closed += (_, _) => { _overlay?.NoteForegroundDismissal(); lease.Dispose(); if (ReferenceEquals(_quickAccess, card)) _quickAccess = null; _storeRating?.NotifyFlowEnded(); };
             _quickAccess = card;
+            // The lifted capture flies into this card; without one the card uses its usual entrance.
+            flight?.Land(card);
             card.Show();
             if (FirstUseTips.ShowCaptureOnce(_settings.General, () => { })) SaveFirstUseTips();
         }
         catch (Exception ex)
         {
+            flight?.Finish();
             lease.Dispose();
             _log?.LogWarning(ex, "Could not show the optional capture receipt");
         }
