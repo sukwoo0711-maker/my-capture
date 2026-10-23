@@ -161,7 +161,14 @@ internal static class SelfTestStallEvidence
         try
         {
             Dictionary<int, TimeSpan> before = ReadThreadTimes();
+            ulong? cyclesBefore = ReadThreadCycles(uiThreadId);
             Thread.Sleep(interval);
+            ulong? cyclesAfter = ReadThreadCycles(uiThreadId);
+            // Thread times advance only on clock ticks; cycles also count a thread that wakes
+            // briefly many times a second, as a dispatcher re-arming a 1 ms timer does.
+            text.AppendLine(cyclesBefore is { } first && cyclesAfter is { } last
+                ? string.Create(CultureInfo.InvariantCulture, $"UI thread cycles: +{last - first} over {interval.TotalMilliseconds:0}ms")
+                : "UI thread cycles: unavailable");
             using Process process = Process.GetCurrentProcess();
             process.Refresh();
             text.AppendLine(string.Create(
@@ -205,21 +212,52 @@ internal static class SelfTestStallEvidence
         int count = 0;
         _ = EnumWindows((hwnd, lParam) =>
         {
-            _ = GetWindowThreadProcessId(hwnd, out uint owner);
+            uint thread = GetWindowThreadProcessId(hwnd, out uint owner);
             if (owner == processId)
             {
                 count++;
                 IntPtr ownerWindow = GetWindow(hwnd, GwOwner);
+                uint ownerThread = ownerWindow == IntPtr.Zero ? 0 : GetWindowThreadProcessId(ownerWindow, out _);
                 text.AppendLine(string.Create(
                     CultureInfo.InvariantCulture,
-                    $"  window 0x{hwnd.ToInt64():X}: {Describe(hwnd)}, visible={IsWindowVisible(hwnd)}, " +
-                    $"enabled={IsWindowEnabled(hwnd)}, owner=0x{ownerWindow.ToInt64():X}"));
+                    $"  window 0x{hwnd.ToInt64():X} thread {thread}: {Describe(hwnd)}, visible={IsWindowVisible(hwnd)}, " +
+                    $"enabled={IsWindowEnabled(hwnd)}, owner=0x{ownerWindow.ToInt64():X} (thread {ownerThread})"));
+                // A child window created by another thread shares that thread's input queue.
+                _ = EnumChildWindows(hwnd, (child, childParam) =>
+                {
+                    uint childThread = GetWindowThreadProcessId(child, out _);
+                    text.AppendLine(string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"    child 0x{child.ToInt64():X} thread {childThread}: {Describe(child)}"));
+                    return true;
+                }, IntPtr.Zero);
             }
 
             return true;
         }, IntPtr.Zero);
         text.AppendLine(string.Create(CultureInfo.InvariantCulture, $"Process windows: {count}"));
         return text.ToString();
+    }
+
+    /// <summary>
+    /// The UI thread's GUI state as Windows sees it: active, focus and capture windows, and
+    /// whether it is in a menu, move or size loop, each of which runs its own message loop.
+    /// </summary>
+    internal static string DescribeGuiThread(int threadId)
+    {
+        var info = new GuiThreadInfo { Size = Marshal.SizeOf<GuiThreadInfo>() };
+        if (!GetGUIThreadInfo((uint)threadId, ref info))
+        {
+            return string.Create(
+                CultureInfo.InvariantCulture,
+                $"GUI thread {threadId}: unavailable (Win32 {Marshal.GetLastWin32Error()})");
+        }
+
+        return string.Create(
+            CultureInfo.InvariantCulture,
+            $"GUI thread {threadId}: flags=0x{info.Flags:X} (1 caret, 2 in move/size, 4 menu mode, 8 system menu, 0x10 popup menu), " +
+            $"active=0x{info.Active.ToInt64():X}, focus=0x{info.Focus.ToInt64():X}, capture=0x{info.Capture.ToInt64():X}, " +
+            $"menu-owner=0x{info.MenuOwner.ToInt64():X}, move-size=0x{info.MoveSize.ToInt64():X}");
     }
 
     /// <summary>
@@ -410,6 +448,24 @@ internal static class SelfTestStallEvidence
     /// <summary>The native id of the calling thread, as <see cref="ProcessThread.Id"/> reports it.</summary>
     internal static int CurrentNativeThreadId() => (int)GetCurrentThreadId();
 
+    private static ulong? ReadThreadCycles(int threadId)
+    {
+        IntPtr handle = OpenThread(ThreadQueryLimitedInformation, false, (uint)threadId);
+        if (handle == IntPtr.Zero)
+        {
+            return null;
+        }
+
+        try
+        {
+            return QueryThreadCycleTime(handle, out ulong cycles) ? cycles : null;
+        }
+        finally
+        {
+            _ = CloseHandle(handle);
+        }
+    }
+
     private static Dictionary<int, TimeSpan> ReadThreadTimes()
     {
         var times = new Dictionary<int, TimeSpan>();
@@ -473,6 +529,29 @@ internal static class SelfTestStallEvidence
     private static extern uint GetWindowThreadProcessId(IntPtr hwnd, out uint processId);
 
     [DllImport("user32.dll")]
+    private static extern bool EnumChildWindows(IntPtr parent, EnumWindowsProc callback, IntPtr lParam);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern bool GetGUIThreadInfo(uint threadId, ref GuiThreadInfo info);
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct GuiThreadInfo
+    {
+        public int Size;
+        public uint Flags;
+        public IntPtr Active;
+        public IntPtr Focus;
+        public IntPtr Capture;
+        public IntPtr MenuOwner;
+        public IntPtr MoveSize;
+        public IntPtr Caret;
+        public int CaretLeft;
+        public int CaretTop;
+        public int CaretRight;
+        public int CaretBottom;
+    }
+
+    [DllImport("user32.dll")]
     private static extern IntPtr GetForegroundWindow();
 
     [DllImport("user32.dll")]
@@ -492,6 +571,17 @@ internal static class SelfTestStallEvidence
 
     [DllImport("user32.dll", SetLastError = true)]
     private static extern bool PostMessage(IntPtr hwnd, uint message, IntPtr wParam, IntPtr lParam);
+
+    private const uint ThreadQueryLimitedInformation = 0x0800;
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern IntPtr OpenThread(uint access, bool inherit, uint threadId);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern bool QueryThreadCycleTime(IntPtr thread, out ulong cycles);
+
+    [DllImport("kernel32.dll")]
+    private static extern bool CloseHandle(IntPtr handle);
 
     [DllImport("kernel32.dll")]
     private static extern uint GetCurrentThreadId();

@@ -637,6 +637,7 @@ internal static class VideoEditorResponsivenessSelfTest
             $"{stall.Elapsed.TotalSeconds:0.0}s; the phase budget is {stall.Budget.TotalSeconds:0}s");
         var evidence = new StringBuilder();
         evidence.Append(SelfTestStallEvidence.DescribeThreads(_uiThreadId, TimeSpan.FromSeconds(1)));
+        evidence.AppendLine(SelfTestStallEvidence.DescribeGuiThread(_uiThreadId));
         evidence.Append(SelfTestStallEvidence.DescribeWindows());
         evidence.AppendLine(ReadEditorState(TimeSpan.FromSeconds(2)));
         System.Windows.Threading.Dispatcher? dispatcher = _dispatcher;
