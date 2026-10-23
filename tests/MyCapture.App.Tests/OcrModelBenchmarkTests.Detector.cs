@@ -18,12 +18,13 @@ public sealed partial class OcrModelBenchmarkTests
         VerifyMetricExamples();
         string corpusName = Environment.GetEnvironmentVariable("MYCAPTURE_OCR_BENCH_CORPUS") ?? "original";
         string split = Environment.GetEnvironmentVariable("MYCAPTURE_OCR_BENCH_SPLIT") ?? "tuning";
-        Assert.Contains(corpusName, new[] { "original", "validation2", "rotated" });
+        Assert.Contains(corpusName, new[] { "original", "validation2", "validation3", "rotated" });
         Assert.Contains(split, new[] { "tuning", "validation", "all" });
         Assert.False(corpusName != "original" && split != "all", "Additional corpora must run in full.");
         List<Sample> all = corpusName switch
         {
             "validation2" => CreateValidationCorpus(output),
+            "validation3" => CreateValidation3Corpus(output),
             "rotated" => CreateRotatedCorpus(output),
             _ => CreateCorpus(output),
         };

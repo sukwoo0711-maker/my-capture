@@ -18,13 +18,6 @@ public sealed partial class OcrModelBenchmarkTests
     /// </summary>
     private static List<Sample> CreateValidationCorpus(string output)
     {
-        string images = Path.Combine(output, "images");
-        Directory.CreateDirectory(images);
-        string uiFont = SelectFont("Malgun Gothic", "Pretendard", "Segoe UI");
-        string codeFont = SelectFont("Cascadia Mono", "Consolas");
-        var samples = new List<Sample>();
-        var layouts = new List<ValidationLayout>();
-
         ValidationScene[] scenes =
         [
             new("korean-ui", "edge-list", 264, 130,
@@ -87,31 +80,44 @@ public sealed partial class OcrModelBenchmarkTests
                 [new(18, 99, 430, 27)]),
         ];
 
+        return RenderValidationCorpus(output, "validation2", scenes, new
+        {
+            koreanUi = 36, codeControls = 12, spreadsheetControls = 12,
+            themes = new[] { "light", "dark" }, captureScales = new[] { 1.0, 1.25, 1.5 },
+            notes = new[]
+            {
+                "Six Korean layouts use one-to-three-word labels, small headings and independently varied top/left offsets.",
+                "Code and spreadsheet controls contain untitled blank areas, rules and highlights for checking extra recognized lines.",
+                "All drawn text is in images[].lines. Each spreadsheet row joins its left-to-right cells with one space.",
+                "layouts[].lines[].bounds and cells[].bounds are actual glyph geometry in PNG pixels; they exclude decoration and are checked against the canvas.",
+            },
+        });
+    }
+
+    // Each scene renders at three capture scales in both themes; ids carry the corpus name.
+    private static List<Sample> RenderValidationCorpus(string output, string corpus, ValidationScene[] scenes, object coverage)
+    {
+        string images = Path.Combine(output, "images");
+        Directory.CreateDirectory(images);
+        string uiFont = SelectFont("Malgun Gothic", "Pretendard", "Segoe UI");
+        string codeFont = SelectFont("Cascadia Mono", "Consolas");
+        var samples = new List<Sample>();
+        var layouts = new List<ValidationLayout>();
+
         foreach (ValidationScene scene in scenes)
         foreach (double scale in new[] { 1.0, 1.25, 1.5 })
         foreach (bool dark in new[] { false, true })
             Add(scene, scale, dark);
 
-        Assert.Equal(60, samples.Count);
-        Assert.Equal(60, samples.Select(s => s.Truth.Id).Distinct(StringComparer.Ordinal).Count());
+        Assert.Equal(scenes.Length * 6, samples.Count);
+        Assert.Equal(samples.Count, samples.Select(s => s.Truth.Id).Distinct(StringComparer.Ordinal).Count());
         WriteJson(Path.Combine(output, "truth.json"), new
         {
             schemaVersion = 2,
-            corpus = "validation2",
+            corpus,
             rendering = "Independent WPF layouts; Display formatting; grayscale antialiasing; 96 DPI PNG; logical geometry and em size multiplied by 1/1.25/1.5; no random data",
             fonts = new { uiFont, codeFont },
-            coverage = new
-            {
-                koreanUi = 36, codeControls = 12, spreadsheetControls = 12,
-                themes = new[] { "light", "dark" }, captureScales = new[] { 1.0, 1.25, 1.5 },
-                notes = new[]
-                {
-                    "Six Korean layouts use one-to-three-word labels, small headings and independently varied top/left offsets.",
-                    "Code and spreadsheet controls contain untitled blank areas, rules and highlights for checking extra recognized lines.",
-                    "All drawn text is in images[].lines. Each spreadsheet row joins its left-to-right cells with one space.",
-                    "layouts[].lines[].bounds and cells[].bounds are actual glyph geometry in PNG pixels; they exclude decoration and are checked against the canvas.",
-                },
-            },
+            coverage,
             images = samples.Select(s => s.Truth).ToArray(),
             layouts,
         });
@@ -122,7 +128,7 @@ public sealed partial class OcrModelBenchmarkTests
             int width = (int)Math.Ceiling(scene.Width * scale);
             int height = (int)Math.Ceiling(scene.Height * scale);
             string font = scene.Category == "code" ? codeFont : uiFont;
-            string id = $"{samples.Count + 1:D3}-validation2-{scene.Category}-{scene.Name}-{scale * 100:0}-{(dark ? "dark" : "light")}";
+            string id = $"{samples.Count + 1:D3}-{corpus}-{scene.Category}-{scene.Name}-{scale * 100:0}-{(dark ? "dark" : "light")}";
             var visual = new DrawingVisual();
             TextOptions.SetTextFormattingMode(visual, TextFormattingMode.Display);
             TextOptions.SetTextRenderingMode(visual, TextRenderingMode.Grayscale);
@@ -196,12 +202,13 @@ public sealed partial class OcrModelBenchmarkTests
             samples.Add(new Sample(truth, bitmap));
             layouts.Add(new ValidationLayout(id, scene.Name, lineLayouts.ToArray()));
         }
-
-        static ValidationLine Line(string text, double x, double y, double size, bool bold = false) =>
-            new([text], [x], y, size, bold);
-        static ValidationLine Row(string[] cells, double[] x, double y, double size) =>
-            new(cells, x, y, size, false);
     }
+
+    private static ValidationLine Line(string text, double x, double y, double size, bool bold = false) =>
+        new([text], [x], y, size, bold);
+
+    private static ValidationLine Row(string[] cells, double[] x, double y, double size) =>
+        new(cells, x, y, size, false);
 
     private static Rect[] ValidationGrid(double[] columns, double[] rows) =>
         rows.Select(y => new Rect(columns[0], y, columns[^1] - columns[0], 0))

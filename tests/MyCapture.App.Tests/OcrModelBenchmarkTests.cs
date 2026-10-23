@@ -64,8 +64,12 @@ public sealed partial class OcrModelBenchmarkTests
     {
         VerifyMetricExamples();
         HashSet<string>? selectedPipelines = SelectPipelines();
-        List<Sample> corpus = Environment.GetEnvironmentVariable("MYCAPTURE_OCR_BENCH_CORPUS") == "validation2"
-            ? CreateValidationCorpus(output) : CreateCorpus(output);
+        List<Sample> corpus = Environment.GetEnvironmentVariable("MYCAPTURE_OCR_BENCH_CORPUS") switch
+        {
+            "validation2" => CreateValidationCorpus(output),
+            "validation3" => CreateValidation3Corpus(output),
+            _ => CreateCorpus(output),
+        };
         Assert.True(corpus.Count >= 48);
         var report = new BenchmarkReport
         {
