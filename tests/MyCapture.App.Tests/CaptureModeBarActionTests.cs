@@ -175,8 +175,10 @@ public sealed class CaptureModeBarActionTests
         FrozenFrame frame = Desktop();
         Brush recording = RecordingSelectionCue.Create(AppTheme.Glass, systemHighContrast: false);
         Color red = ((SolidColorBrush)recording).Color;
-        ThemeColor danger = ThemeCatalog.ColorsFor(AppTheme.Glass)["State.Danger"];
-        Assert.Equal(Color.FromRgb(danger.R, danger.G, danger.B), red);
+        // The selector uses the same recording red as the frame that follows it.
+        ThemeColor live = ThemeCatalog.ColorsFor(AppTheme.Glass)["Recording.Live"];
+        Assert.Equal(Color.FromRgb(live.R, live.G, live.B), red);
+        Assert.Equal(ThemeCatalog.ColorsFor(AppTheme.Glass)["Accent.Default"], live);
         Assert.Equal(SystemColors.HighlightColor, ((SolidColorBrush)RecordingSelectionCue.Create(AppTheme.Glass, true)).Color);
 
         PointD pointer = new(320, 210);

@@ -80,8 +80,17 @@ public sealed class EditorCommandBarAdaptiveTests(ITestOutputHelper output)
                             double chrome = button.Padding.Left + button.Padding.Right
                                 + button.BorderThickness.Left + button.BorderThickness.Right;
                             double content = ((FrameworkElement)face.Children[0]).DesiredSize.Width;
-                            if (ShortcutPresentation.IsRevealed((TextBlock)face.Children[1]))
-                                content = Math.Max(content, CommandButtonPresentation.CaptionWidth(face));
+                            var chord = (TextBlock)face.Children[1];
+                            if (ShortcutPresentation.IsRevealed(chord))
+                            {
+                                // The reserved caption is a whole-DIP ceiling of a detached
+                                // measurement; laid out at a fractional scale the chord can be up
+                                // to one DIP narrower. It must still show whole, and the command
+                                // is as wide as the chord it shows.
+                                Assert.True(chord.DesiredSize.Width >= CommandButtonPresentation.CaptionWidth(face) - 1,
+                                    $"{language} {width} {AutomationProperties.GetName(button)}: chord {chord.DesiredSize.Width} < {CommandButtonPresentation.CaptionWidth(face)}");
+                                content = Math.Max(content, chord.DesiredSize.Width);
+                            }
                             double expected = Math.Max(button.MinWidth, content + chrome);
                             Assert.InRange(button.ActualWidth, expected - 1, expected + 1);
                         }
@@ -101,8 +110,9 @@ public sealed class EditorCommandBarAdaptiveTests(ITestOutputHelper output)
     });
 
     [Theory]
-    [InlineData("ko-KR", new[] { 981, 945, 897, 870, 787, 729, 654 })]
-    [InlineData("en-US", new[] { 952, 904, 866, 835, 755, 718, 654 })]
+    // Measured with the editing commands as borderless tool buttons (no 1-DIP outline).
+    [InlineData("ko-KR", new[] { 969, 935, 889, 862, 779, 721, 648 })]
+    [InlineData("en-US", new[] { 940, 894, 858, 827, 747, 710, 648 })]
     public void NamesCollapseOneCommandAtATimeInTheirDeclaredOrder(string language, int[] boundaries) => StaTestHost.Run(() =>
     {
         using var culture = UiText.UseLanguage(language);

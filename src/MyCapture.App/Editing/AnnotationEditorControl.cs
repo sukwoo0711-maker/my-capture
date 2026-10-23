@@ -1171,6 +1171,8 @@ internal sealed partial class AnnotationEditorControl : Grid
         // The committed caption is drawn with ideal glyph metrics (FormattedText). The editor
         // window's display-mode text would space and wrap the live copy differently.
         TextOptions.SetTextFormattingMode(textBox, TextFormattingMode.Ideal);
+        // Pretendard would otherwise show "0x02D9" as "0×02D9" and "->" as an arrow while typing.
+        if (LiteralShaping.Applies(annotation.FontFamily)) LiteralShaping.Apply(textBox);
         AutomationName(textBox, UiText.Get("Text_FAC754F72C25"));
         InputMethod.SetIsInputMethodEnabled(textBox, true);
 
@@ -1955,8 +1957,10 @@ internal sealed partial class AnnotationEditorControl : Grid
     /// </summary>
     /// <remarks>
     /// The disabled look comes from the shared button styles: each button level keeps its shape
-    /// and only dims. <paramref name="borderless"/> identifies former ghost commands, which now
-    /// use the secondary button surface so they remain recognisable before hover.
+    /// and only dims. <paramref name="borderless"/> marks an editing command (undo, crop, rotate,
+    /// redact, copy text, cancel), drawn as a borderless tool button with its icon and name. Only
+    /// the output commands (save, copy) keep the bordered surface and Done the fill, so the bar
+    /// reads as tools, outputs and one finishing action.
     /// </remarks>
     private void CommandButton(Button button, bool borderless, ShortcutScope? scope = null, string? command = null)
     {
@@ -1965,7 +1969,7 @@ internal sealed partial class AnnotationEditorControl : Grid
             AttachEditorShortcut(button, shortcutScope, command);
         }
 
-        if (borderless) button.SetResourceReference(StyleProperty, "Button.Secondary");
+        if (borderless) button.SetResourceReference(StyleProperty, "Button.Ghost");
         button.Width = double.NaN;
         CommandButtonPresentation.Apply(button);
         CommandButtonPresentation.ReserveHint(button);

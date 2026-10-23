@@ -113,10 +113,11 @@ internal sealed class GalleryFolderDeletionDialog : Window
         content.Children.Add(KoreanWordWrap.Show(new TextBlock { TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 10, 0, 0) },
             UiText.Get("Folder410.DeleteIrreversible")));
         // Delete comes first like any confirming action, but Enter and Esc both cancel: a
-        // destructive command is never the default. As in ThemedDialog, the default carries the fill.
+        // destructive command is never the default. As in ThemedDialog's destructive
+        // confirmations, that default stays bordered: the red fill would mark Cancel as the danger.
         DeleteButton = ThemedDialog.CreateDangerButton(UiText.Get("Folder410.Delete"));
         DeleteButton.Click += (_, _) => DialogResult = true;
-        CancelButton = ThemedDialog.CreateActionButton(UiText.Get("Library.Action.Cancel"), primary: true);
+        CancelButton = ThemedDialog.CreateActionButton(UiText.Get("Library.Action.Cancel"), primary: false);
         CancelButton.IsCancel = true;
         CancelButton.IsDefault = true;
         WrapPanel buttons = ThemedDialog.CreateActionRow(DeleteButton, CancelButton);

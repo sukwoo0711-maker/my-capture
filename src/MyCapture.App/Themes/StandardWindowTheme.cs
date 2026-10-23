@@ -1,4 +1,6 @@
 using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Media;
 
 namespace MyCapture.App.Themes;
 
@@ -23,5 +25,25 @@ internal static class StandardWindowTheme
         // not load App.xaml (for example diagnostics and lightweight STA tests).
         ModernWindowChrome.SetEnabled(window, true);
         FluidMotion.SetWindowEntrance(window, true);
+    }
+
+    /// <summary>
+    /// The text settings of <see cref="ResourceKey"/> for floating surfaces that keep their own
+    /// chrome (the pin bar, the recording bar): the UI font, Display text formatting and pixel
+    /// snapping. Their small Korean and Latin text then renders as in the standard windows
+    /// instead of in the default font with Ideal formatting.
+    /// </summary>
+    /// <remarks>
+    /// The capture card does not take it yet: its preview keeps exact aspect at every display
+    /// scale without layout rounding, and its named commands are fitted to its current font.
+    /// </remarks>
+    internal static void ApplyFloatingText(Window window)
+    {
+        ArgumentNullException.ThrowIfNull(window);
+        if (window.ReadLocalValue(Control.FontFamilyProperty) == DependencyProperty.UnsetValue)
+            window.SetResourceReference(Control.FontFamilyProperty, "Font.Ui");
+        TextOptions.SetTextFormattingMode(window, TextFormattingMode.Display);
+        window.UseLayoutRounding = true;
+        window.SnapsToDevicePixels = true;
     }
 }

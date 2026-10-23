@@ -7,7 +7,7 @@ namespace MyCapture.App.Capture;
 
 /// <summary>
 /// The colour that tells the recording region selector apart from the screenshot selector: the
-/// theme's existing danger token (the red the recording bar already uses), or the system highlight
+/// theme's recording token (the red of the recording frame that follows), or the system highlight
 /// colour when Windows high contrast is on.
 /// </summary>
 internal static class RecordingSelectionCue
@@ -21,8 +21,8 @@ internal static class RecordingSelectionCue
         }
         else
         {
-            ThemeColor danger = ThemeCatalog.ColorsFor(theme)["State.Danger"];
-            color = Color.FromArgb(danger.A, danger.R, danger.G, danger.B);
+            ThemeColor live = ThemeCatalog.ColorsFor(theme)["Recording.Live"];
+            color = Color.FromArgb(live.A, live.R, live.G, live.B);
         }
 
         var brush = new SolidColorBrush(color);
