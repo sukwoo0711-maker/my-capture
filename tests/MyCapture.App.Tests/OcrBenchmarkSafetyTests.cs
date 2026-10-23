@@ -43,7 +43,6 @@ public sealed class OcrBenchmarkSafetyTests
     [Theory]
     [InlineData(@"C:\")]
     [InlineData(@"\\server\share\reports")]
-eports")]
     public void BenchmarkOutputs_RejectDriveRootsAndNetworkPaths(string requested) =>
         Assert.Throws<IOException>(() => OcrModelBenchmarkTests.SafeOutputRoot(requested));
 
