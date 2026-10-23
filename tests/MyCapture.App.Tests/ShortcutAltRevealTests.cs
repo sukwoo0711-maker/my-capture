@@ -1,7 +1,9 @@
 using System.Reflection;
+using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Interop;
 using System.Windows.Media;
 using MyCapture.Core.Settings;
 using Xunit;
@@ -61,6 +63,52 @@ public sealed class ShortcutAltRevealTests
         Assert.False(state.Reset());
         Assert.True(state.UpdateKey(Key.LeftAlt, isDown: true));
     }
+
+    [Theory]
+    [InlineData(0x0112, 0xF100, 0, true)]     // SC_KEYMENU from Alt or F10 alone
+    [InlineData(0x0112, 0xF103, 0, true)]     // Windows keeps four flag bits below the command
+    [InlineData(0x0112, 0xF100, 0x20, false)] // Alt+Space opens the system menu
+    [InlineData(0x0112, 0xF100, 0x51, false)] // Alt+Q, an access key
+    [InlineData(0x0112, 0xF060, 0, false)]    // SC_CLOSE (Alt+F4)
+    [InlineData(0x0105, 0x12, 0, false)]      // WM_SYSKEYUP for Alt itself
+    public void OnlyABareKeyboardMenuRequestIsSuppressed(int message, int wParam, int lParam, bool suppressed) =>
+        Assert.Equal(suppressed, ShortcutPresentation.IsBareKeyboardMenu(message, wParam, lParam));
+
+    [Fact]
+    public void BareAltNeverOpensTheSystemMenuLoopThatSwallowsTheNextKeys() => StaTestHost.Run(() =>
+    {
+        using var motion = new ShortcutMotionTestScope();
+        Func<bool>? previous = ShortcutPresentation.ReadEnabled;
+        var window = new HintWindow();
+        try
+        {
+            ShortcutPresentation.ReadEnabled = () => false;
+            // A handle without showing the window, so nothing reaches the desktop. HwndSource
+            // calls the newest hook first, so this probe, added before the captions load, sees
+            // only the system commands the product passes on toward DefWindowProc, and stops
+            // them there so no menu can open.
+            IntPtr handle = new WindowInteropHelper(window).EnsureHandle();
+            var reached = new List<(long Command, long Character)>();
+            HwndSource.FromHwnd(handle).AddHook((IntPtr _, int message, IntPtr wParam, IntPtr lParam, ref bool handled) =>
+            {
+                if (message != 0x0112) return IntPtr.Zero;
+                reached.Add((wParam.ToInt64(), lParam.ToInt64()));
+                handled = true;
+                return IntPtr.Zero;
+            });
+            AddCaption(window);
+
+            SendMessage(handle, 0x0112, 0xF100, IntPtr.Zero);
+            SendMessage(handle, 0x0112, 0xF100, ' ');
+            Assert.Equal(new[] { (0xF100L, (long)' ') }, reached);
+        }
+        finally
+        {
+            window.Close();
+            ShortcutPresentation.ReadEnabled = previous;
+            ShortcutPresentation.Refresh();
+        }
+    });
 
     [Fact]
     public void LoadedCaptionsRevealOnlyInTheirWindowAndDoNotHandleAccelerators() => StaTestHost.Run(() =>
@@ -550,6 +598,9 @@ public sealed class ShortcutAltRevealTests
         args.Handled = handled;
         return args;
     }
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr SendMessage(IntPtr window, int message, IntPtr wParam, IntPtr lParam);
 
     private sealed class HintWindow : Window
     {
