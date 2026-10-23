@@ -69,12 +69,7 @@ internal sealed class PinHoverBar : Window
         CopyButton = BarButton(SymbolGeometry("Icon.Copy"), UiText.Get("QuickAccess.Copy"), "Ctrl+C");
         SaveButton = BarButton(SymbolGeometry("Icon.Save"), UiText.Get("QuickAccess.Save"), "Ctrl+S");
         SourceButton = BarButton(SourceGlyph, UiText.Get("Source.Open"), key: null, showLabel: false);
-        SourceButton.Visibility = provenance?.HasSource == true ? Visibility.Visible : Visibility.Collapsed;
-        if (provenance?.HasSource == true)
-        {
-            SourceButton.ToolTip = $"{provenance.DisplayText}\n{provenance.Tooltip}";
-            AutomationProperties.SetName(SourceButton, UiText.Format("Source.OpenAutomation", provenance.DisplayText));
-        }
+        SetProvenance(provenance ?? CaptureProvenance.None);
         OpacityButton = BarButton(OpacityGlyph, UiText.Get("Onboard_PinOpacity"), key: null);
         CloseButton = BarButton(SymbolGeometry("Icon.Close"), UiText.Get("Dialog.Close"), "Esc", showLabel: false);
         CopyButton.Click += (_, _) => CopyRequested?.Invoke();
@@ -131,6 +126,16 @@ internal sealed class PinHoverBar : Window
     internal Button SaveButton { get; }
 
     internal Button SourceButton { get; }
+
+    internal void SetProvenance(CaptureProvenance source)
+    {
+        SourceButton.Visibility = source.HasSource ? Visibility.Visible : Visibility.Collapsed;
+        SourceButton.ToolTip = source.HasSource ? $"{source.DisplayText}\n{source.Tooltip}" : null;
+        AutomationProperties.SetName(SourceButton, source.HasSource
+            ? UiText.Format(source.CanOpen ? "Source.OpenAutomation" : "Source.Label", source.DisplayText)
+            : UiText.Get("Source.Open"));
+        AutomationProperties.SetHelpText(SourceButton, source.Tooltip);
+    }
 
     internal Button OpacityButton { get; }
 

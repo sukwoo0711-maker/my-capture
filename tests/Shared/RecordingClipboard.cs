@@ -4,6 +4,7 @@ using System.Runtime.CompilerServices;
 using System.Windows;
 using System.Windows.Media.Imaging;
 using MyCapture.App;
+using MyCapture.App.Pinning;
 
 namespace MyCapture.Tests;
 
@@ -22,8 +23,19 @@ internal static class RecordingClipboard
     internal static long WriteCount { get { lock (Gate) return _writeCount; } }
 
     [ModuleInitializer]
-    internal static void Initialize() => ClipboardWriter.InstallTestOverride(
-        RecordDataObject, RecordText, GetVersion, TryRecordTextAtVersion);
+    internal static void Initialize()
+    {
+        ClipboardWriter.InstallTestOverride(RecordDataObject, RecordText, GetVersion, TryRecordTextAtVersion);
+        ClipboardAvailability.InstallTestOverride(HasPinnableContent);
+    }
+
+    private static bool HasPinnableContent()
+    {
+        lock (Gate)
+            return _lastWrite is { } write && write.Formats.Keys.Any(format =>
+                format is "PNG" || format == DataFormats.Bitmap || format == DataFormats.Dib
+                || format == DataFormats.UnicodeText || format == DataFormats.Text);
+    }
 
     private static void RecordDataObject(IDataObject data, bool copy)
     {

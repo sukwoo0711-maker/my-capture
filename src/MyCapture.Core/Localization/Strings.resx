@@ -4296,6 +4296,7 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="Library.Search.Field.Tag" xml:space="preserve"><value>태그</value></data>
   <data name="Library.Search.Field.Text" xml:space="preserve"><value>글자</value></data>
   <data name="Library.Search.Field.Url" xml:space="preserve"><value>주소</value></data>
+  <data name="Library.Search.Field.Host" xml:space="preserve"><value>사이트</value></data>
   <data name="Library.Search.Field.Folder" xml:space="preserve"><value>폴더</value></data>
   <data name="Library.Search.Field.Type" xml:space="preserve"><value>종류</value></data>
   <data name="Library.Search.Field.Pinned" xml:space="preserve"><value>보관</value></data>

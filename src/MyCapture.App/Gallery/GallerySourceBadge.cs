@@ -12,6 +12,9 @@ namespace MyCapture.App.Gallery;
 /// <summary>Realized cards render cached provenance without looking up files, applications or icons.</summary>
 public static class GallerySourceBadge
 {
+    private static readonly DependencyProperty ActionsProperty = DependencyProperty.RegisterAttached(
+        "Actions", typeof(CaptureSourceActions), typeof(GallerySourceBadge), new PropertyMetadata(null));
+
     public static readonly DependencyProperty ProvenanceProperty = DependencyProperty.RegisterAttached(
         "Provenance", typeof(CaptureProvenance), typeof(GallerySourceBadge),
         new PropertyMetadata(CaptureProvenance.None, OnProvenanceChanged));
@@ -32,13 +35,15 @@ public static class GallerySourceBadge
     }
 
     internal static void Configure(Button button, CaptureProvenance provenance,
-        Action<string>? status, Action<string>? search)
+        Action<string>? status, Action<string>? search, CaptureSourceActions? actions = null)
     {
+        button.SetValue(ActionsProperty, actions ?? CaptureSourceActions.Default);
         button.Click -= OnClick;
         button.Click += OnClick;
         button.PreviewMouseDoubleClick -= OnPreviewDoubleClick;
         button.PreviewMouseDoubleClick += OnPreviewDoubleClick;
         button.ToolTip = provenance.Tooltip;
+        AutomationProperties.SetHelpText(button, provenance.Tooltip);
         AutomationProperties.SetName(button, UiText.Format(provenance.CanOpen
             ? "Source.OpenAutomation" : "Source.Label", provenance.BadgeText));
 
@@ -62,7 +67,7 @@ public static class GallerySourceBadge
         Grid.SetColumn(label, 1);
         content.Children.Add(label);
         button.Content = content;
-        button.ContextMenu = SourceChip.CreateMenu(provenance, status, search);
+        button.ContextMenu = SourceChip.CreateMenu(provenance, status, search, actions);
     }
 
     private static async void OnClick(object sender, RoutedEventArgs e)
@@ -76,7 +81,8 @@ public static class GallerySourceBadge
             return;
         }
         GalleryWindow? gallery = Window.GetWindow(button) as GalleryWindow;
-        string status = await CaptureSourceActions.Default.OpenAsync(provenance);
+        var actions = (CaptureSourceActions)button.GetValue(ActionsProperty);
+        string status = await actions.OpenAsync(provenance);
         gallery?.SetSourceActionStatus(status);
         if (status.Length > 0 && provenance.Kind == CaptureProvenanceKind.Document) ShowMenu(button);
     }

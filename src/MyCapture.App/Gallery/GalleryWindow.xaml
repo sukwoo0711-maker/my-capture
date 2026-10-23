@@ -2180,8 +2180,9 @@
                                                           gallery:GalleryTextClamp.ToggleTarget="{Binding ElementName=SourcePageValue}" />
                                         </Grid>
                                         <TextBlock x:Name="SourcePageValue" AutomationProperties.AutomationId="LibrarySourcePageValue" Margin="0,2,0,0"
-                                                   FontSize="{StaticResource FontSize.Control}" ToolTip="{Binding SourcePageUrl}"
+                                                   FontSize="{StaticResource FontSize.Control}" ToolTip="{Binding SourcePageDisplayText}"
                                                    AutomationProperties.Name="{Binding SourcePageUrlAutomationName}"
+                                                   AutomationProperties.HelpText="{Binding SourcePageDisplayText}"
                                                     gallery:GalleryTextClamp.MaxLines="2" gallery:GalleryTextClamp.Text="{Binding SourcePageDisplayText}" />
                                         <WrapPanel Margin="0,8,0,0">
                                             <Button Content="{loc:Text Library.SourcePage.Open}" Style="{StaticResource Button.Secondary}" Click="OnOpenSourcePageClick" Margin="0,0,8,8" />

@@ -5,6 +5,7 @@ using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using MyCapture.App.Editing;
 using MyCapture.App.GitHub;
+using MyCapture.App.Pinning;
 using MyCapture.App.Threading;
 using Xunit;
 
@@ -13,6 +14,7 @@ namespace MyCapture.App.Tests;
 public sealed class ClipboardWriterGuardTests
 {
     private readonly bool _installedBeforeTestConstruction = ClipboardWriter.IsTestOverrideInstalled;
+    private readonly bool _availabilityInstalledBeforeTestConstruction = ClipboardAvailability.IsTestOverrideInstalled;
 
     // Include method groups as well as invocations. Aliasing/static imports would hide the
     // Clipboard qualifier, so require those writes to use the gateway too.
@@ -20,11 +22,17 @@ public sealed class ClipboardWriterGuardTests
         @"\bClipboard\s*\.\s*(?:Set\w*|Clear)\b|\b(?:EmptyClipboard|SetClipboardData|OleSetClipboard)\b|\busing\s+(?:static\s+|@?\w+\s*=\s*)(?:global::)?System\s*\.\s*Windows\s*\.\s*(?:Forms\s*\.\s*)?Clipboard\s*;",
         RegexOptions.CultureInvariant);
 
+    private static readonly Regex DirectAvailabilityQuery = new(
+        @"\b(?:IsClipboardFormatAvailable|CountClipboardFormats|EnumClipboardFormats|GetUpdatedClipboardFormats|GetPriorityClipboardFormat)\b|\bClipboard\s*\.\s*Contains\w*\b|\busing\s+(?:static\s+|@?\w+\s*=\s*)(?:global::)?System\s*\.\s*Windows\s*\.\s*(?:Forms\s*\.\s*)?Clipboard\s*;",
+        RegexOptions.CultureInvariant);
+
     [Fact]
     public void ModuleInitializer_InstallsOverrideBeforeTestsAreConstructed()
     {
         Assert.True(_installedBeforeTestConstruction);
         Assert.True(ClipboardWriter.IsTestOverrideInstalled);
+        Assert.True(_availabilityInstalledBeforeTestConstruction);
+        Assert.True(ClipboardAvailability.IsTestOverrideInstalled);
     }
 
     [Fact]
@@ -44,6 +52,33 @@ public sealed class ClipboardWriterGuardTests
         RecordingClipboard.ClipboardWrite write = Assert.IsType<RecordingClipboard.ClipboardWrite>(RecordingClipboard.LastWrite);
         Assert.Null(write.Copy);
         Assert.Equal(text, write.Formats[DataFormats.UnicodeText]);
+    }
+
+    [Fact]
+    public void InstalledAvailabilityOverride_CannotBeReplacedOrReset()
+    {
+        Assert.True(_availabilityInstalledBeforeTestConstruction);
+        Assert.Throws<InvalidOperationException>(() => ClipboardAvailability.InstallTestOverride(
+            () => throw new InvalidOperationException("Replacement must not run.")));
+        Assert.Throws<ArgumentNullException>(() => ClipboardAvailability.InstallTestOverride(null!));
+        Assert.True(ClipboardAvailability.IsTestOverrideInstalled);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task AvailabilityQuery_UsesRecordedFormats(bool hasText)
+    {
+        Assert.True(_availabilityInstalledBeforeTestConstruction);
+        await StaThreadTask.RunAsync(() =>
+        {
+            var data = new DataObject();
+            data.SetData("MyCapture.Test.Unpinnable", "fixture");
+            if (hasText) data.SetText("recorded text", TextDataFormat.UnicodeText);
+            ClipboardWriter.SetDataObject(data, copy: true);
+            Assert.Equal(hasText, ClipboardAvailability.HasPinnableContent());
+            return true;
+        });
     }
 
     [Theory]
@@ -110,7 +145,7 @@ public sealed class ClipboardWriterGuardTests
         string root = RepositoryRoot();
         string gateway = Path.Combine(root, "src", "MyCapture.App", "ClipboardWriter.cs");
         Assert.True(File.Exists(gateway));
-        AssertNoDirectWrites(Path.Combine(root, "src"), gateway);
+        AssertNoMatches(Path.Combine(root, "src"), DirectWrite, "Route clipboard writes through ClipboardWriter:", gateway);
     }
 
     [Fact]
@@ -118,8 +153,19 @@ public sealed class ClipboardWriterGuardTests
     {
         string root = RepositoryRoot();
         // This file contains intentional scanner fixtures, never executable clipboard calls.
-        AssertNoDirectWrites(Path.Combine(root, "tests"), Path.Combine(root, "tests", "MyCapture.App.Tests", "ClipboardWriterGuardTests.cs"));
-        AssertNoDirectWrites(Path.Combine(root, "build", "tools", "TutorialVideoGenerator"));
+        AssertNoMatches(Path.Combine(root, "tests"), DirectWrite, "Route clipboard writes through ClipboardWriter:",
+            Path.Combine(root, "tests", "MyCapture.App.Tests", "ClipboardWriterGuardTests.cs"));
+        AssertNoMatches(Path.Combine(root, "build", "tools", "TutorialVideoGenerator"), DirectWrite, "Route clipboard writes through ClipboardWriter:");
+    }
+
+    [Fact]
+    public void TestAndTutorialSources_DoNotQueryNativeClipboardAvailability()
+    {
+        string root = RepositoryRoot();
+        const string guidance = "Inject clipboard availability or use the module-isolated ClipboardAvailability gateway:";
+        AssertNoMatches(Path.Combine(root, "tests"), DirectAvailabilityQuery, guidance,
+            Path.Combine(root, "tests", "MyCapture.App.Tests", "ClipboardWriterGuardTests.cs"));
+        AssertNoMatches(Path.Combine(root, "build", "tools", "TutorialVideoGenerator"), DirectAvailabilityQuery, guidance);
     }
 
     [Theory]
@@ -141,7 +187,30 @@ public sealed class ClipboardWriterGuardTests
     [InlineData("Clipboard.GetText();")]
     public void SourceGuard_AllowsGatewayDataObjectsAndReads(string source) => Assert.DoesNotMatch(DirectWrite, source);
 
-    private static void AssertNoDirectWrites(string directory, string? excludedFile = null)
+    [Theory]
+    [InlineData("IsClipboardFormatAvailable(13);")]
+    [InlineData("Func<uint, bool> query = IsClipboardFormatAvailable;")]
+    [InlineData("[DllImport(\"user32.dll\", EntryPoint = \"IsClipboardFormatAvailable\")]")]
+    [InlineData("[LibraryImport(\"user32.dll\", EntryPoint = \"IsClipboardFormatAvailable\")]")]
+    [InlineData("CountClipboardFormats();")]
+    [InlineData("EnumClipboardFormats(0);")]
+    [InlineData("GetUpdatedClipboardFormats(formats, count, out written);")]
+    [InlineData("GetPriorityClipboardFormat(formats, count);")]
+    [InlineData("System.Windows.Clipboard.ContainsImage();")]
+    [InlineData("Clipboard \n . ContainsText();")]
+    [InlineData("using Clip = System.Windows.Clipboard;")]
+    [InlineData("using static global::System.Windows.Forms.Clipboard;")]
+    public void SourceGuard_DetectsDirectAvailabilityQueriesAndImports(string source) =>
+        Assert.Matches(DirectAvailabilityQuery, source);
+
+    [Theory]
+    [InlineData("ClipboardAvailability.HasPinnableContent();")]
+    [InlineData("ClipboardAvailability.HasPinnableContent(_ => false, () => 0);")]
+    [InlineData("data.GetDataPresent(DataFormats.UnicodeText);")]
+    public void SourceGuard_AllowsIsolatedAvailabilityGatewayAndDataObjects(string source) =>
+        Assert.DoesNotMatch(DirectAvailabilityQuery, source);
+
+    private static void AssertNoMatches(string directory, Regex forbidden, string guidance, string? excludedFile = null)
     {
         string[] files = Directory.EnumerateFiles(directory, "*.cs", SearchOption.AllDirectories)
             .Where(file => !Path.GetRelativePath(directory, file).Split(Path.DirectorySeparatorChar)
@@ -153,13 +222,13 @@ public sealed class ClipboardWriterGuardTests
         foreach (string file in files)
         {
             string source = File.ReadAllText(file);
-            foreach (Match match in DirectWrite.Matches(source))
+            foreach (Match match in forbidden.Matches(source))
             {
                 int line = source.AsSpan(0, match.Index).Count('\n') + 1;
                 violations.Add($"{Path.GetRelativePath(directory, file)}:{line}: {match.Value}");
             }
         }
-        Assert.True(violations.Count == 0, "Route clipboard writes through ClipboardWriter:\n" + string.Join("\n", violations));
+        Assert.True(violations.Count == 0, guidance + "\n" + string.Join("\n", violations));
     }
 
     private static string RepositoryRoot()

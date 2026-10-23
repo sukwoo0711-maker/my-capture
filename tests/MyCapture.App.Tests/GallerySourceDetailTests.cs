@@ -95,7 +95,8 @@ public sealed class GallerySourceDetailTests
             Assert.Empty(Descendants(panel).OfType<ScrollViewer>());
             TextBlock link = Named<TextBlock>(page, "LibrarySourcePageValue");
             Assert.Equal(DisplayUrl, link.Text);
-            Assert.Equal(Url, link.ToolTip);
+            Assert.Equal(DisplayUrl, link.ToolTip);
+            Assert.Equal(DisplayUrl, AutomationProperties.GetHelpText(link));
             // The visible and accessible address omit private query/fragment values, even when expanded.
             Assert.Equal(UiText.Format("Library.SourcePage.Accessible", DisplayUrl), new TextBlockAutomationPeer(link).GetName());
             ToggleButton showAll = Named<ToggleButton>(page, "LibrarySourcePageToggle");
@@ -122,6 +123,8 @@ public sealed class GallerySourceDetailTests
             panel.DataContext = second;
             Drain(window);
             Assert.Equal("https://example.org/other-page", link.Text);
+            Assert.Equal("https://example.org/other-page", link.ToolTip);
+            Assert.Equal("https://example.org/other-page", AutomationProperties.GetHelpText(link));
             Assert.Equal(UiText.Format("Library.SourcePage.Accessible", "https://example.org/other-page"), AutomationProperties.GetName(link));
             Assert.False(showAll.IsChecked);
             Assert.False(GalleryTextClamp.GetIsExpanded(link));

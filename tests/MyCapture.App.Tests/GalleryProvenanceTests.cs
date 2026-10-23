@@ -1,9 +1,11 @@
+using System.Diagnostics;
 using System.IO;
 using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Controls;
 using System.Xml.Linq;
 using MyCapture.App.Gallery;
+using MyCapture.App.Sources;
 using MyCapture.Core.Capture;
 using MyCapture.Core.Localization;
 using MyCapture.Core.Queue;
@@ -25,8 +27,8 @@ public sealed class GalleryProvenanceTests
         CaptureProvenance initial = tile.SourceProvenance;
         Assert.True(tile.HasSourceBadge);
         Assert.Equal("github.com", tile.SourceBadgeText);
-        Assert.Equal("url:github.com", tile.SourceSearchQuery);
-        Assert.Contains(record.SourcePageUrl, tile.SourceBadgeToolTip);
+        Assert.Equal("host:github.com", tile.SourceSearchQuery);
+        Assert.Equal("https://www.github.com/owner/repo" + Environment.NewLine + "Browser", tile.SourceBadgeToolTip);
         Assert.Equal("https://www.github.com/owner/repo", tile.SourcePageDisplayText);
         Assert.DoesNotContain("private", tile.SourcePageUrlAutomationName);
 
@@ -68,7 +70,7 @@ public sealed class GalleryProvenanceTests
         CaptureSearchToken token = Assert.Single(query.Tokens);
         Assert.Equal(kind switch
         {
-            "web" => CaptureSearchField.Url,
+            "web" => CaptureSearchField.Host,
             "document" => CaptureSearchField.Folder,
             _ => CaptureSearchField.App,
         }, token.Field);
@@ -104,6 +106,8 @@ public sealed class GalleryProvenanceTests
         CaptureProvenance web = CaptureProvenance.Create(url: "https://www.github.com/owner/repo?private=value#part");
         GallerySourceBadge.SetProvenance(button, web);
         Assert.Equal(web.Tooltip, button.ToolTip);
+        Assert.Equal("https://www.github.com/owner/repo", button.ToolTip);
+        Assert.Equal(button.ToolTip, AutomationProperties.GetHelpText(button));
         Assert.Contains("github.com", AutomationProperties.GetName(button));
         Assert.DoesNotContain("private", AutomationProperties.GetName(button));
         Assert.True(button.Focusable && button.IsTabStop);
@@ -116,6 +120,7 @@ public sealed class GalleryProvenanceTests
         Assert.Same(document, GallerySourceBadge.GetProvenance(button));
         Assert.Equal("사양서.xlsx", Assert.IsType<TextBlock>(Assert.IsType<Grid>(button.Content).Children[1]).Text);
         Assert.Equal(document.Tooltip, button.ToolTip);
+        Assert.Equal(document.Tooltip, AutomationProperties.GetHelpText(button));
         Assert.Equal(new[] { UiText.Get("Source.Open"), UiText.Get("Source.CopyPath"), UiText.Get("Source.OpenLocation"), UiText.Get("Source.ShowSame") },
             button.ContextMenu.Items.OfType<MenuItem>().Select(item => (string)item.Header));
 
@@ -127,7 +132,37 @@ public sealed class GalleryProvenanceTests
 
         GallerySourceBadge.SetProvenance(button, CaptureProvenance.None);
         Assert.Empty(button.ContextMenu.Items);
+        Assert.Empty(AutomationProperties.GetHelpText(button));
         Assert.Empty(Assert.IsType<TextBlock>(Assert.IsType<Grid>(button.Content).Children[1]).Text);
+    });
+
+    [Fact]
+    public void WebBadgeHidesPrivatePartsButOpenAndCopyKeepTheFullUrl() => StaTestHost.Run(() =>
+    {
+        const string url = "https://github.com/owner/repo?access_token=secret#private";
+        CaptureProvenance source = CaptureProvenance.Create(url);
+        var launched = new List<ProcessStartInfo>();
+        var copied = new List<string>();
+        var actions = new CaptureSourceActions(launched.Add,
+            _ => throw new InvalidOperationException("Unexpected file access"),
+            _ => throw new InvalidOperationException("Unexpected folder access"), copied.Add, @"C:\Windows");
+        var button = new Button();
+        GallerySourceBadge.SetProvenance(button, source);
+        string? searched = null;
+        GallerySourceBadge.Configure(button, source, null, query => searched = query, actions);
+
+        Assert.Equal("https://github.com/owner/repo", button.ToolTip);
+        Assert.Equal(button.ToolTip, AutomationProperties.GetHelpText(button));
+        Assert.DoesNotContain("secret", AutomationProperties.GetName(button));
+        button.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        MenuItem[] items = button.ContextMenu.Items.OfType<MenuItem>().ToArray();
+        items[0].RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
+        items[1].RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
+        items[2].RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
+        Assert.Equal(2, launched.Count);
+        Assert.All(launched, start => Assert.Equal(url, start.FileName));
+        Assert.Equal(url, Assert.Single(copied));
+        Assert.Equal("host:github.com", searched);
     });
 
     [Fact]

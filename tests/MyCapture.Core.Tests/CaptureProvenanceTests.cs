@@ -7,17 +7,48 @@ namespace MyCapture.Core.Tests;
 public sealed class CaptureProvenanceTests
 {
     [Fact]
-    public void WebDisplayKeepsHostAndPathButOnlyTooltipContainsQueryAndFragment()
+    public void WebDisplayAndTooltipKeepHostAndPathWhileOnlyActionUrlContainsQueryAndFragment()
     {
         const string url = "https://www.github.com/owner/repo?token=private#anchor";
         CaptureProvenance source = CaptureProvenance.Create(url, appName: "Browser");
         Assert.Equal(CaptureProvenanceKind.Web, source.Kind);
         Assert.Equal("github.com/owner/repo", source.DisplayText);
         Assert.Equal("github.com", source.BadgeText);
-        Assert.Equal("url:github.com", source.SearchQuery);
+        Assert.Equal("host:github.com", source.SearchQuery);
         Assert.Equal(url, source.Url);
-        Assert.Equal(url + Environment.NewLine + "Browser", source.Tooltip);
+        Assert.Equal("https://www.github.com/owner/repo" + Environment.NewLine + "Browser", source.Tooltip);
+        foreach (string text in new[] { source.DisplayText, source.BadgeText, source.Tooltip })
+        {
+            Assert.DoesNotContain("token=private", text);
+            Assert.DoesNotContain("anchor", text);
+        }
         Assert.True(source.CanOpen);
+    }
+
+    [Fact]
+    public void UserInfoIsRejectedBeforeItCanReachSourceDisplayOrActions()
+    {
+        CaptureProvenance source = CaptureProvenance.Create("https://private-user:private-password@example.com/path?secret=1#private");
+        Assert.Same(CaptureProvenance.None, source);
+        Assert.Empty(source.Url);
+        Assert.Empty(source.DisplayText);
+        Assert.Empty(source.BadgeText);
+        Assert.Empty(source.Tooltip);
+    }
+
+    [Theory]
+    [InlineData("https://github.com/owner/repo", true)]
+    [InlineData("https://www.github.com/other", true)]
+    [InlineData("https://GitHub.com/other", true)]
+    [InlineData("https://notgithub.com/", false)]
+    [InlineData("https://other.example/?redirect=https://github.com", false)]
+    [InlineData("https://other.example/github.com", false)]
+    [InlineData("https://docs.github.com/", false)]
+    public void WebSourceActionMatchesOnlyTheNormalizedHost(string url, bool expected)
+    {
+        CaptureProvenance source = CaptureProvenance.Create("https://www.GitHub.com/owner/repo?token=private#anchor");
+        Assert.Equal("host:github.com", source.SearchQuery);
+        Assert.Equal(expected, CaptureSearchQuery.Parse(source.SearchQuery).IsMatch(new CaptureRecord { SourcePageUrl = url }));
     }
 
     [Fact]
@@ -30,13 +61,15 @@ public sealed class CaptureProvenanceTests
     }
 
     [Fact]
-    public void InternationalDomainSearchMatchesTheStoredUnicodeAddress()
+    public void InternationalDomainSearchMatchesUnicodeAndAsciiAddresses()
     {
         var record = new CaptureRecord { SourcePageUrl = "https://bücher.example/spec" };
         CaptureProvenance source = CaptureProvenance.FromRecord(record);
         Assert.Equal("xn--bcher-kva.example", source.BadgeText);
-        Assert.Equal("url:bücher.example", source.SearchQuery);
+        Assert.Equal("host:xn--bcher-kva.example", source.SearchQuery);
         Assert.True(CaptureSearchQuery.Parse(source.SearchQuery).IsMatch(record));
+        Assert.True(CaptureSearchQuery.Parse(source.SearchQuery).IsMatch(new CaptureRecord { SourcePageUrl = "https://www.xn--bcher-kva.example/other" }));
+        Assert.Equal(source.SearchQuery, CaptureProvenance.Create("https://xn--bcher-kva.example/spec").SearchQuery);
     }
 
     [Fact]
