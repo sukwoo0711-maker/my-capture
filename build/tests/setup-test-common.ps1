@@ -17,9 +17,14 @@ function Get-SetupBootstrapSource([string]$Name) {
     if ($Name -notin @('MyCaptureSetup.exe', 'MyCaptureSetup.exe.config')) { throw "Unexpected bootstrap name: $Name" }
     return Join-Path $setupTestOutput $Name
 }
-function New-SyntheticSetupPackage([string]$Root, [string]$Version = '') {
-    # The fixture must carry the built setup's own version; a pinned default broke on every release bump.
-    if (-not $Version) { $Version = ([Diagnostics.FileVersionInfo]::GetVersionInfo($setupTestExe).ProductVersion -split '\+')[0] }
+function Get-SourceReleaseVersion {
+    # The release version declared in source. The built setup must carry it, so a stale build still fails below.
+    [xml]$props = Get-Content -LiteralPath (Join-Path $setupTestRepo 'Directory.Build.props') -Raw -Encoding UTF8
+    $nodes = @($props.SelectNodes('/Project/PropertyGroup/Version'))
+    if ($nodes.Count -ne 1) { throw 'Directory.Build.props must declare exactly one Version.' }
+    return [string]$nodes[0].InnerText
+}
+function New-SyntheticSetupPackage([string]$Root, [string]$Version = (Get-SourceReleaseVersion)) {
     $Root = [IO.Path]::GetFullPath($Root)
     $publish = Join-Path $Root 'publish-win-x64'
     $stage = Join-Path $Root 'installer-stage'
