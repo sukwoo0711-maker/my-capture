@@ -7,7 +7,10 @@ using MyCapture.App.Themes;
 
 namespace MyCapture.App;
 
-/// <summary>Alt feedback owns only inner render transforms and opacity; layout is fixed.</summary>
+/// <summary>
+/// Alt feedback owns inner render transforms and opacity. Only an icon-only command's width
+/// follows it, within the space its command bar already holds for the revealed caption.
+/// </summary>
 internal static class ShortcutRevealMotion
 {
     internal const double CommandIconSize = 20;
@@ -30,6 +33,10 @@ internal static class ShortcutRevealMotion
     internal const int BOpacityInMilliseconds = 100;
     internal const int BOpacityOutMilliseconds = 80;
     internal const int ReducedFadeMilliseconds = 83;
+    // A widening command's chord appears over the last part of the widening and leaves before
+    // the face narrows, so no frame shows it clipped.
+    internal const int WideningCaptionDelayPercent = 55;
+    internal const int WideningCaptionOutMilliseconds = 40;
     private static readonly Point AControl1 = new(0, 0);
     private static readonly Point AControl2 = new(0, 1);
     private static readonly Point BControl1 = new(0.2, 0.15);
@@ -53,6 +60,12 @@ internal static class ShortcutRevealMotion
         "Shift", typeof(TranslateTransform), typeof(ShortcutRevealMotion));
     private static readonly DependencyProperty ScaleProperty = DependencyProperty.RegisterAttached(
         "Scale", typeof(ScaleTransform), typeof(ShortcutRevealMotion));
+    // Follows the caption's reveal; an icon-only command widens with it (CommandButtonPresentation).
+    private static readonly DependencyProperty WidthProgressProperty = DependencyProperty.RegisterAttached(
+        "WidthProgress", typeof(double), typeof(ShortcutRevealMotion),
+        new PropertyMetadata(0d, (target, _) => CommandButtonPresentation.FitCaption((TextBlock)target)));
+
+    internal static double WidthProgress(TextBlock caption) => (double)caption.GetValue(WidthProgressProperty);
 
     internal static void Register(TextBlock hint)
     {
@@ -212,6 +225,9 @@ internal static class ShortcutRevealMotion
                 Animate(CaptionScale, ScaleTransform.ScaleXProperty, revealed ? 1 : CornerCaptionScale, move, c1, c2);
                 Animate(CaptionScale, ScaleTransform.ScaleYProperty, revealed ? 1 : CornerCaptionScale, move, c1, c2);
             }
+            bool widens = !Corner && animate && CommandButtonPresentation.Widens(caption);
+            if (!Corner) Animate(caption, WidthProgressProperty, revealed ? 1 : 0, move, c1, c2,
+                widens && !revealed && !reduced ? WideningCaptionOutMilliseconds : 0);
             // A fresh entrance starts at +4. A reversal retains its currently rendered value.
             if (animate && !reduced && !Corner && revealed && caption.Opacity == 0
                 && (!_captionShift.HasAnimatedProperties || _captionShift.Y == CaptionExitOffset))
@@ -222,9 +238,15 @@ internal static class ShortcutRevealMotion
                 ? revealed ? BOpacityInMilliseconds : BOpacityOutMilliseconds
                 : revealed ? AOpacityInMilliseconds : AOpacityOutMilliseconds;
             bool splineOpacity = profile == "B" && revealed && !reduced;
+            int fadeDelay = animate && splineOpacity ? BOpacityDelayMilliseconds : 0;
+            if (widens && revealed && !reduced)
+            {
+                fadeDelay = move * WideningCaptionDelayPercent / 100;
+                fade = move - fadeDelay;
+            }
+            else if (widens && !revealed) fade = reduced ? 0 : WideningCaptionOutMilliseconds;
             Animate(caption, UIElement.OpacityProperty, revealed ? 1 : 0, fade,
-                splineOpacity ? BOpacityControl1 : null, splineOpacity ? BOpacityControl2 : null,
-                animate && splineOpacity ? BOpacityDelayMilliseconds : 0);
+                splineOpacity ? BOpacityControl1 : null, splineOpacity ? BOpacityControl2 : null, fadeDelay);
         }
     }
 

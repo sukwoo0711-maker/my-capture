@@ -21,6 +21,7 @@ public sealed class EditorCommandBarAdaptiveTests(ITestOutputHelper output)
     public void EditorAndCropStayOnOneRowAtEverySupportedWidthThroughAlt(string language, double scale) => StaTestHost.Run(() =>
     {
         using var culture = UiText.UseLanguage(language);
+        using var motion = new ShortcutMotionTestScope();
         bool always = false;
         using var preference = new HintPreference(() => always);
         using EditorWindowHost host = EditorWindowHost.Create();
@@ -33,9 +34,7 @@ public sealed class EditorCommandBarAdaptiveTests(ITestOutputHelper output)
             host.Window.Width = 1280;
             host.Window.Dispatcher.Invoke(System.Windows.Threading.DispatcherPriority.ApplicationIdle, new Action(host.Window.UpdateLayout));
             var fullBar = Descendants(host.Editor).OfType<CommandGroupsPanel>().Single(panel => panel.IsVisible);
-            double fullLabelWidth = ((FrameworkElement)fullBar.Children[0]).DesiredSize.Width
-                + CommandGroupsPanel.GroupGap + ((FrameworkElement)fullBar.Children[1]).DesiredSize.Width
-                + host.Window.Width - fullBar.ActualWidth;
+            double fullLabelWidth = RevealedWidth(fullBar) + host.Window.Width - fullBar.ActualWidth;
             // Revisit widths in both directions to catch stale compression and layout loops.
             foreach (double width in new[] { 1280d, Math.Ceiling(fullLabelWidth) + 1, 960d, 800d, host.Window.MinWidth, 1280d, host.Window.MinWidth })
             {
@@ -73,6 +72,28 @@ public sealed class EditorCommandBarAdaptiveTests(ITestOutputHelper output)
                         string id = AutomationProperties.GetAutomationId(button);
                         if (id is "EditorFlowDone" or "EditorFlowCropApply")
                             Assert.Contains(Descendants(face.Children[0]).OfType<TextBlock>(), label => label.IsVisible && label.Text.Length > 0);
+                        if ((bool)button.GetValue(CommandButtonPresentation.AlwaysIconProperty)
+                            || PrimaryLabels(button).Any(label => label.Visibility == Visibility.Collapsed))
+                        {
+                            // An icon-only command reserves nothing for its hidden chord. While the
+                            // caption shows, the command is wide enough for the whole chord.
+                            double chrome = button.Padding.Left + button.Padding.Right
+                                + button.BorderThickness.Left + button.BorderThickness.Right;
+                            double content = ((FrameworkElement)face.Children[0]).DesiredSize.Width;
+                            var chord = (TextBlock)face.Children[1];
+                            if (ShortcutPresentation.IsRevealed(chord))
+                            {
+                                // The reserved caption is a whole-DIP ceiling of a detached
+                                // measurement; laid out at a fractional scale the chord can be up
+                                // to one DIP narrower. It must still show whole, and the command
+                                // is as wide as the chord it shows.
+                                Assert.True(chord.DesiredSize.Width >= CommandButtonPresentation.CaptionWidth(face) - 1,
+                                    $"{language} {width} {AutomationProperties.GetName(button)}: chord {chord.DesiredSize.Width} < {CommandButtonPresentation.CaptionWidth(face)}");
+                                content = Math.Max(content, chord.DesiredSize.Width);
+                            }
+                            double expected = Math.Max(button.MinWidth, content + chrome);
+                            Assert.InRange(button.ActualWidth, expected - 1, expected + 1);
+                        }
                         if ((bool)button.GetValue(CommandButtonPresentation.AlwaysIconProperty))
                         {
                             Assert.All(PrimaryLabels(button), label => Assert.Equal(Visibility.Collapsed, label.Visibility));
@@ -89,10 +110,10 @@ public sealed class EditorCommandBarAdaptiveTests(ITestOutputHelper output)
     });
 
     [Theory]
-    // Measured after the editing commands became borderless tool buttons (no 1-DIP outline).
-    [InlineData("ko-KR", 969, 792, 648)]
-    [InlineData("en-US", 940, 805, 648)]
-    public void ActualWindowWidthsMeetEachMeasuredStageBoundary(string language, int fullWidth, int secondaryWidth, int compactWidth) => StaTestHost.Run(() =>
+    // Measured with the editing commands as borderless tool buttons (no 1-DIP outline).
+    [InlineData("ko-KR", new[] { 969, 935, 889, 862, 779, 721, 648 })]
+    [InlineData("en-US", new[] { 940, 894, 858, 827, 747, 710, 648 })]
+    public void NamesCollapseOneCommandAtATimeInTheirDeclaredOrder(string language, int[] boundaries) => StaTestHost.Run(() =>
     {
         using var culture = UiText.UseLanguage(language);
         using var preference = new HintPreference(() => false);
@@ -106,41 +127,56 @@ public sealed class EditorCommandBarAdaptiveTests(ITestOutputHelper output)
         host.Window.Width = 1280;
         host.Window.Dispatcher.Invoke(System.Windows.Threading.DispatcherPriority.ApplicationIdle, new Action(host.Window.UpdateLayout));
         var bar = Descendants(host.Editor).OfType<CommandGroupsPanel>().Single(panel => panel.IsVisible);
-        double fullLabelWidth = ((FrameworkElement)bar.Children[0]).DesiredSize.Width
-            + CommandGroupsPanel.GroupGap + ((FrameworkElement)bar.Children[1]).DesiredSize.Width
-            + host.Window.Width - bar.ActualWidth;
-        bool Fits(int width, int maximumStage)
+        double fullLabelWidth = RevealedWidth(bar) + host.Window.Width - bar.ActualWidth;
+        Button[] ordered = Descendants(bar).OfType<Button>()
+            .Where(button => (int)button.GetValue(CommandButtonPresentation.CollapseOrderProperty) > 0)
+            .OrderBy(button => (int)button.GetValue(CommandButtonPresentation.CollapseOrderProperty)).ToArray();
+        // Cancel, Crop, Copy, Save to file, Auto-redact, Copy text.
+        Assert.Equal(["EditorFlowCancel", "Capture410Crop", "EditorFlowCopy"], ordered.Take(3).Select(AutomationProperties.GetAutomationId));
+        Assert.Equal("EditorFlowCopyText", AutomationProperties.GetAutomationId(ordered[^1]));
+        Assert.Equal(6, ordered.Length);
+        // How many names a width hides, or null when the bar cannot hold Alt's widths on one row.
+        int? Hidden(int width)
         {
             host.Window.Width = width;
             host.Window.Dispatcher.Invoke(System.Windows.Threading.DispatcherPriority.ApplicationIdle, new Action(host.Window.UpdateLayout));
-            var left = (FrameworkElement)bar.Children[0];
-            var right = (FrameworkElement)bar.Children[1];
-            bool compactLeft = Descendants(left).OfType<Button>().Where(button => !(bool)button.GetValue(CommandButtonPresentation.AlwaysIconProperty))
-                .SelectMany(PrimaryLabels).Any(label => label.Visibility == Visibility.Collapsed);
-            bool compactRight = Descendants(right).OfType<Button>().SelectMany(PrimaryLabels).Any(label => label.Visibility == Visibility.Collapsed);
-            int stage = compactRight ? 3 : compactLeft ? 2 : 1;
-            return stage <= maximumStage && left.DesiredSize.Width + CommandGroupsPanel.GroupGap + right.DesiredSize.Width <= bar.ActualWidth + 0.01;
+            if (RevealedWidth(bar) > bar.ActualWidth + 0.01) return null;
+            bool[] hidden = ordered.Select(button => PrimaryLabels(button).Any(label => label.Visibility == Visibility.Collapsed)).ToArray();
+            int count = hidden.Count(value => value);
+            // Names go strictly in order: the hidden ones are always the first in the order.
+            Assert.All(hidden.Take(count), value => Assert.True(value));
+            return count;
         }
         var measuredWidths = new List<int>();
-        foreach (int stage in new[] { 1, 2, 3 })
+        for (int hidden = 0; hidden <= ordered.Length; hidden++)
         {
             int low = 300, high = 1280;
-            Assert.True(Fits(high, stage));
-            Assert.False(Fits(low, stage));
+            bool Fits(int width) => Hidden(width) is { } count && count <= hidden;
+            Assert.True(Fits(high));
+            Assert.False(Fits(low));
             while (high - low > 1)
             {
                 int middle = (low + high) / 2;
-                if (Fits(middle, stage)) high = middle;
+                if (Fits(middle)) high = middle;
                 else low = middle;
             }
-            Assert.False(Fits(high - 1, stage));
-            Assert.True(Fits(high, stage));
-            output.WriteLine($"{language}: stage {stage} minimum outer width = {high} DIP; panel = {bar.ActualWidth:0.##} DIP");
+            Assert.False(Fits(high - 1));
+            Assert.True(Fits(high));
+            output.WriteLine($"{language}: {hidden} hidden names, minimum outer width = {high} DIP; panel = {bar.ActualWidth:0.##} DIP");
             measuredWidths.Add(high);
-            if (stage == 1) Assert.InRange(high, Math.Ceiling(fullLabelWidth) - 1, Math.Ceiling(fullLabelWidth) + 1);
+            if (hidden == 0) Assert.InRange(high, Math.Ceiling(fullLabelWidth) - 1, Math.Ceiling(fullLabelWidth) + 1);
         }
-        Assert.Equal(new[] { fullWidth, secondaryWidth, compactWidth }, measuredWidths);
+        Assert.Equal(boundaries, measuredWidths);
     });
+
+    // Stages are chosen for this width: every command as wide as it is while its caption shows.
+    private static double RevealedWidth(CommandGroupsPanel bar)
+    {
+        var left = (FrameworkElement)bar.Children[0];
+        var right = (FrameworkElement)bar.Children[1];
+        return left.DesiredSize.Width + CommandGroupsPanel.GroupGap + right.DesiredSize.Width
+            + CommandButtonPresentation.RevealGrowth(left) + CommandButtonPresentation.RevealGrowth(right);
+    }
 
     private static IEnumerable<TextBlock> PrimaryLabels(Button button)
     {
@@ -193,6 +229,118 @@ public sealed class EditorCommandBarAdaptiveTests(ITestOutputHelper output)
             }
         }
     });
+
+    [Fact]
+    public void OrderedCommandsGiveUpTheirNamesOneAtATimeBeforeTheirGroups() => StaTestHost.Run(() =>
+    {
+        Button edit = Command("Edit", 100), crop = Command("Crop", 60), copy = Command("Copy", 80);
+        Button done = Command("Done", 70), cancel = Command("Cancel", 50);
+        CommandButtonPresentation.KeepLabel(done);
+        CommandButtonPresentation.CollapseOrder(cancel, 1);
+        CommandButtonPresentation.CollapseOrder(crop, 2);
+        var left = new StackPanel { Orientation = Orientation.Horizontal, Children = { edit, crop } };
+        var right = new StackPanel { Orientation = Orientation.Horizontal, Children = { copy, done, cancel } };
+        var panel = new CommandGroupsPanel { Children = { left, right } };
+        panel.Measure(new Size(double.PositiveInfinity, 200));
+        double full = left.DesiredSize.Width + CommandGroupsPanel.GroupGap + right.DesiredSize.Width;
+
+        string Named(double width)
+        {
+            panel.Measure(new Size(width, 200));
+            panel.Arrange(new Rect(0, 0, width, panel.DesiredSize.Height));
+            Assert.Equal(Visibility.Visible, Label(done).Visibility);
+            return string.Join(",", new[] { edit, crop, copy, cancel }
+                .Where(button => Label(button).Visibility == Visibility.Visible).Select(button => AutomationProperties.GetName(button)));
+        }
+
+        Assert.Equal("Edit,Crop,Copy,Cancel", Named(full));
+        // Cancel goes first and alone, even though it sits in the second group.
+        Assert.Equal("Edit,Crop,Copy", Named(full - 1));
+        Assert.Equal("Edit,Crop,Copy", Named(full - 50));
+        Assert.Equal("Edit,Copy", Named(full - 51));
+        Assert.Equal("Edit,Copy", Named(full - 110));
+        // Unordered names then follow the group rule: the first group, then the second.
+        Assert.Equal("Copy", Named(full - 111));
+        Assert.Equal("Copy", Named(full - 210));
+        Assert.Equal(string.Empty, Named(full - 211));
+        Assert.Equal("Edit,Crop,Copy,Cancel", Named(full));
+    });
+
+    [Fact]
+    public void StagesHoldTheWidthIconCommandsGrowToWhileTheirCaptionsShow() => StaTestHost.Run(() =>
+    {
+        using var motion = new ShortcutMotionTestScope();
+        Func<bool>? previous = ShortcutPresentation.ReadEnabled;
+        try
+        {
+            ShortcutPresentation.ReadEnabled = () => false;
+            Button privacy = IconCommand("Privacy"), crop = IconCommand("Crop");
+            var done = new Button { Content = "Done" };
+            ShortcutPresentation.Attach(done, ShortcutScope.Annotation, "Done");
+            var left = new StackPanel { Orientation = Orientation.Horizontal, Children = { privacy, crop } };
+            var right = new StackPanel { Orientation = Orientation.Horizontal, Children = { done } };
+            var panel = new CommandGroupsPanel { Children = { left, right }, Resources = SystemHighContrastThemeTests.LoadTheme() };
+            panel.Measure(new Size(double.PositiveInfinity, 200));
+            double resting = left.DesiredSize.Width + CommandGroupsPanel.GroupGap + right.DesiredSize.Width;
+            double revealed = RevealedWidth(panel);
+            Assert.True(revealed > resting + 20, $"Ctrl+Shift+R should need room beyond the resting face: {resting} → {revealed}");
+            double privacyRest = privacy.DesiredSize.Width, cropRest = crop.DesiredSize.Width;
+            Assert.Equal(cropRest, privacyRest, 2);
+
+            double Layout(double width, bool alt)
+            {
+                ShortcutPresentation.SetAltRevealed(panel, alt);
+                panel.Dispatcher.Invoke(System.Windows.Threading.DispatcherPriority.ApplicationIdle, new Action(() => { }));
+                panel.Measure(new Size(width, 200));
+                panel.Arrange(new Rect(0, 0, width, panel.DesiredSize.Height));
+                panel.UpdateLayout();
+                return right.TranslatePoint(default, panel).Y;
+            }
+
+            // The width that holds every revealed caption keeps one row through Alt.
+            double fits = Math.Ceiling(revealed);
+            foreach (bool alt in new[] { false, true, false })
+            {
+                Assert.Equal(0, Layout(fits, alt));
+                Assert.True(left.DesiredSize.Width + CommandGroupsPanel.GroupGap + right.DesiredSize.Width <= fits + 0.01);
+                // Only the command whose chord does not fit its resting face widens.
+                Assert.Equal(cropRest, crop.DesiredSize.Width, 2);
+                if (alt) Assert.True(privacy.DesiredSize.Width > privacyRest + 20);
+                else Assert.Equal(privacyRest, privacy.DesiredSize.Width, 2);
+            }
+
+            // Even though the resting commands would fit, a narrower bar cannot hold Alt's widths,
+            // so it already uses its final row arrangement before Alt is pressed.
+            Assert.True(resting < fits - 2);
+            foreach (bool alt in new[] { false, true, false })
+                Assert.True(Layout(fits - 2, alt) > 0);
+        }
+        finally
+        {
+            ShortcutPresentation.ReadEnabled = previous;
+            ShortcutPresentation.Refresh();
+        }
+    });
+
+    private static Button IconCommand(string command)
+    {
+        var button = new Button
+        {
+            Content = new StackPanel
+            {
+                Orientation = Orientation.Horizontal,
+                Children =
+                {
+                    new Viewbox { Width = 20, Height = 20, Child = new Border { Width = 16, Height = 16 } },
+                    new TextBlock { Text = command, Margin = new Thickness(6, 0, 0, 0) },
+                },
+            },
+        };
+        AutomationProperties.SetName(button, command);
+        ShortcutPresentation.Attach(button, ShortcutScope.Annotation, command);
+        CommandButtonPresentation.AlwaysIcon(button);
+        return button;
+    }
 
     private static Button Command(string name, double labelWidth)
     {

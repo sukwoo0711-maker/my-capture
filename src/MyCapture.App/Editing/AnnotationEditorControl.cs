@@ -1841,6 +1841,14 @@ internal sealed partial class AnnotationEditorControl : Grid
         CommandButton(_copyTextButton, borderless: true);
         CommandButtonPresentation.AlwaysIcon(_undoButton);
         CommandButtonPresentation.AlwaysIcon(_redoButton);
+        // A narrow bar hides names one at a time: first where the icon alone is unmistakable,
+        // last where it could be taken for a tool (the T and the mosaic grid on the tool rail).
+        CommandButtonPresentation.CollapseOrder(cancel, 1);
+        CommandButtonPresentation.CollapseOrder(crop, 2);
+        CommandButtonPresentation.CollapseOrder(copy, 3);
+        CommandButtonPresentation.CollapseOrder(save, 4);
+        CommandButtonPresentation.CollapseOrder(_redactButton, 5);
+        CommandButtonPresentation.CollapseOrder(_copyTextButton, 6);
         var panel = new CommandGroupsPanel { Children = { left, right } };
         AutomationProperties.SetName(panel, UiText.Get("EditorFlow_CommandBarName"));
         return panel;

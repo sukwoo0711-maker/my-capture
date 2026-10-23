@@ -62,8 +62,8 @@
 - [설치와 배포](docs/install.md): Store 설치본과 GitHub 릴리스의 설치 파일·포터블 ZIP, `SHA256SUMS.txt` 확인, 설치 로그와 종료 코드, 사용자 데이터 위치, 개인정보와 네트워크
 - [소스에서 빌드](docs/build.md): .NET 10 SDK 준비, 빌드와 테스트, 자체 진단(self-test)
 - [4.6.0 릴리스 노트](docs/releases/4.6.0-release-notes.md)와 [이전 릴리스 노트](docs/releases/)
-- [지원](https://github.com/sukwoo0711-maker/mycapture-support)과 [개인정보처리방침](https://github.com/sukwoo0711-maker/mycapture-support/blob/main/PRIVACY.md)
-- [소개 페이지](https://mycapture.mimiloaf.com/)와 게시자 [Mimiloaf](https://mimiloaf.com/). 메일 문의는 [support@mimiloaf.com](mailto:support@mimiloaf.com)으로 보내 주십시오.
+- [지원](https://github.com/sukwoo0711-maker/mycapture-support)과 [개인정보처리방침](https://mimiloaf.com/mycapture/privacy/)
+- [소개 페이지](https://mimiloaf.com/mycapture/)와 게시자 [Mimiloaf](https://mimiloaf.com/). 메일 문의는 [support@mimiloaf.com](mailto:support@mimiloaf.com)으로 보내 주십시오.
 
 보안 문제는 공개 이슈에 재현 자료를 올리지 말고 [`SECURITY.md`](SECURITY.md)의 비공개 신고 절차를 따르십시오. 개발 참여 방법은 [`CONTRIBUTING.md`](CONTRIBUTING.md)를 참고하십시오.
 
@@ -130,4 +130,4 @@ All shortcuts can be changed in Settings.
 
 ### Documents
 
-Most documents are in Korean. [Install and release files](docs/install.md#english-summary) ends with an English summary. Support and the privacy policy are in the [support repository](https://github.com/sukwoo0711-maker/mycapture-support#mycapture-support) ([privacy policy](https://github.com/sukwoo0711-maker/mycapture-support/blob/main/PRIVACY.md#mycapture-privacy-policy)). Report security issues as described in [`SECURITY.md`](SECURITY.md). The product page is [mycapture.mimiloaf.com](https://mycapture.mimiloaf.com/en/), MyCapture is published by [Mimiloaf](https://mimiloaf.com/en/), and you can email [support@mimiloaf.com](mailto:support@mimiloaf.com). MyCapture is licensed under the [MIT License](LICENSE).
+Most documents are in Korean. [Install and release files](docs/install.md#english-summary) ends with an English summary. Support is in the [support repository](https://github.com/sukwoo0711-maker/mycapture-support#mycapture-support), and the privacy policy is on [mimiloaf.com](https://mimiloaf.com/en/mycapture/privacy/). Report security issues as described in [`SECURITY.md`](SECURITY.md). The product page is [mimiloaf.com/en/mycapture](https://mimiloaf.com/en/mycapture/), MyCapture is published by [Mimiloaf](https://mimiloaf.com/en/), and you can email [support@mimiloaf.com](mailto:support@mimiloaf.com). MyCapture is licensed under the [MIT License](LICENSE).
