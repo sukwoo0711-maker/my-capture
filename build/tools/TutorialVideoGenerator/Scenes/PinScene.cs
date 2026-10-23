@@ -122,7 +122,7 @@ internal sealed class PinScene : TutorialScene
     }
 
     internal override string Provenance =>
-        "Real PinWindow (image clip, frame outline and hover accent, bottom feedback), PinHoverBar, the landing ornament of a new or "
+        "Real PinWindow (image clip, frame outline and hover accent, bottom feedback), PinHoverBar (Open source for the pin captured from a page), the landing ornament of a new or "
         + "reopened pin (PinLandingDecoration's own surface and outline flash on video time), the pin's ContextMenu and the tray "
         + "ContextMenu (ThemedShellPresenter.CreateMenu over TrayMenuLayout.Build) rendered detached at 1:1; Esc, Ctrl+C, hide/show, "
         + "click-through, quick save and reopen run through the product's handlers and menu items. The clipboard pin opens without "
@@ -167,7 +167,7 @@ internal sealed class PinScene : TutorialScene
     private TutorialStoryboard HideAllStory()
     {
         _checklist = ChecklistCapture();
-        AddPin(PinContent.FromImage(_checklist), new Point(330, 150));
+        AddPin(PinContent.FromImage(_checklist, provenance: Fixtures.ChecklistSource), new Point(330, 150));
         AddPin(TablePin(), new Point(612, 36));
         var story = new TutorialStoryboard(new PointD(190, 404));
         story.Hold("pins", 2.0).Hold("hide", 0.8).Hold("hidden", 1.3);
@@ -180,7 +180,7 @@ internal sealed class PinScene : TutorialScene
     private TutorialStoryboard ClickThroughStory()
     {
         _checklist = ChecklistCapture();
-        LivePin pin = AddPin(PinContent.FromImage(_checklist), new Point(330, 160));
+        LivePin pin = AddPin(PinContent.FromImage(_checklist, provenance: Fixtures.ChecklistSource), new Point(330, 160));
         var rightClick = new PointD(560, 236);
         // Opening the menu refreshes the reopen command, exactly as its Opened handler does.
         pin.Window.CanRestoreClosedPin = () => false;
@@ -232,7 +232,7 @@ internal sealed class PinScene : TutorialScene
     private TutorialStoryboard SaveStory()
     {
         _checklist = ChecklistCapture();
-        LivePin pin = AddPin(PinContent.FromImage(_checklist), new Point(596, 80));
+        LivePin pin = AddPin(PinContent.FromImage(_checklist, provenance: Fixtures.ChecklistSource), new Point(596, 80));
         // Measure where the hover bar's Save button lands for this pin, then leave the bar hidden.
         pin.Window.ShowHoverBar();
         Stage.Pump(40);
@@ -483,6 +483,8 @@ internal sealed class PinScene : TutorialScene
     {
         state ??= new PinViewState(content.Image.PixelWidth, content.Image.PixelHeight, 1, _settings.InitialOpacity, _settings.ZoomStep);
         var pin = new LivePin(content, state, position, () => _settings);
+        // A pin captured from a page shows Open source on its hover bar; no clip may open a browser.
+        pin.Window.OpenSource = static _ => Task.FromResult(string.Empty);
         pin.Window.CopyRequested += (_, request) =>
         {
             _copyPending = pin;
@@ -583,7 +585,7 @@ internal sealed class PinScene : TutorialScene
     private PointD BarButtonCenter(LivePin pin, Button button) =>
         Center(ButtonBounds(pin, button) ?? throw new InvalidOperationException("The hover bar is not shown."));
 
-    private static Button[] BarButtons(PinHoverBar bar) => [bar.CopyButton, bar.SaveButton, bar.OpacityButton, bar.CloseButton];
+    private static Button[] BarButtons(PinHoverBar bar) => [bar.CopyButton, bar.SaveButton, bar.SourceButton, bar.OpacityButton, bar.CloseButton];
 
     /// <summary>A hover-bar button's stage bounds while the bar is shown.</summary>
     private Rect? ButtonBounds(LivePin pin, Button button)

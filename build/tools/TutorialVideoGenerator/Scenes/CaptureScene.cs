@@ -544,8 +544,11 @@ internal sealed class CaptureScene : TutorialScene
             BitmapSource image = region is { } r ? Crop(r) : ScrolledDocument();
             if (_overlayHost is not null) { _overlayHost.Dispose(); _overlayHost = null; }
             var pixels = new RectD(0, 0, image.PixelWidth, image.PixelHeight);
+            // A capture names the app of the window it came from; a whole monitor has no source
+            // (CaptureOverlayWindow.ResolveSelectionSource), so full screen opens without the chip.
             _editor = new AnnotationEditorWindow(new FrozenFrame(image, pixels, null, 0), pixels, image,
-                sourceWindowTitle: L("릴리스 메모 - 메모장", "Release notes - Notepad"));
+                sourceWindowTitle: L("릴리스 메모 - 메모장", "Release notes - Notepad"),
+                provenance: Id == "capture-fullscreen" ? null : Fixtures.NotepadSource(Korean));
             _editorHost = new OffscreenWindow(_editor, 940, 448);
             _editor.Editor.ShowCaptureReceipt(copiedToClipboard: true);
             Stage.Pump(40);
