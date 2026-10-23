@@ -598,6 +598,10 @@
                         <CheckBox Style="{StaticResource Settings.CheckBox}" Content="{loc:Text QuickAccess.Sound}"
                                   AutomationProperties.Name="{loc:Text QuickAccess.Sound}"
                                   IsChecked="{Binding PlayCaptureSound}" />
+                        <CheckBox Style="{StaticResource Settings.CheckBox}"
+                                  Content="{loc:Text QuickAccess.NotifyOnQuickSave}"
+                                  AutomationProperties.Name="{loc:Text QuickAccess.NotifyOnQuickSave}"
+                                  IsChecked="{Binding NotifyOnQuickSave}" />
 
                         <CheckBox Style="{StaticResource Settings.CheckBox}"
                                   Content="{loc:Text Text_4BE214FF10B0}"

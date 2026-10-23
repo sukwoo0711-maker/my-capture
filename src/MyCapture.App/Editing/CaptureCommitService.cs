@@ -65,6 +65,13 @@ internal sealed class CaptureCommitService
     internal Func<ImageExportOptions, ImageExportOptions?>? ExportOptionsPrompt { get; set; }
 
     internal Func<BitmapSource, string, bool>? ReducedExportPrompt { get; set; }
+
+    /// <summary>
+    /// Raised with the written file's path when an editor's Quick Save has written it, before the
+    /// clipboard copy that completes the commit. Runs on the caller's context.
+    /// </summary>
+    internal event Action<string>? QuickSaved;
+
     internal Action? PersistExportSettings { get; set; }
     internal ImageExportOptions LastExportOptions => _settings().Export.LastImageExport;
     internal void RememberExportOptions(ImageExportOptions options)
@@ -214,12 +221,14 @@ internal sealed class CaptureCommitService
                 record = await PersistFinalIfAvailableAsync(
                     record, result.Action, flattened, snapshot, result.ImageAssetBitmaps, editSession, createRecordAsync,
                     replaceOriginal ? result.SelectedBitmap : null);
-                bool quickSaved = await ImageExportTransaction.RunAsync(() => QuickSaveAsync(flattened, record ?? exportRecord));
-                if (!quickSaved)
+                string? quickSavedPath = await ImageExportTransaction.RunAsync(() => QuickSaveAsync(flattened, record ?? exportRecord));
+                if (quickSavedPath is null)
                 {
                     return false;
                 }
 
+                // The file exists whatever the clipboard does next, so it is announced now.
+                AnnounceQuickSave(quickSavedPath);
                 bool quickSaveCopied = await CopyEditedImageAsync(flattened, "Quick save", record ?? exportRecord);
 
                 // Queue persistence is already durable, but Quick Save is an explicit export
@@ -344,7 +353,21 @@ internal sealed class CaptureCommitService
         return record;
     }
 
-    private async Task<bool> QuickSaveAsync(BitmapSource flattened, CaptureRecord? record)
+    private void AnnounceQuickSave(string path)
+    {
+        try
+        {
+            QuickSaved?.Invoke(path);
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or IOException)
+        {
+            // The notice is a courtesy; the saved file and the rest of the commit stand.
+            _log.LogWarning(ex, "Could not announce a quick save");
+        }
+    }
+
+    /// <returns>The written file, or <see langword="null"/> when the quick save failed.</returns>
+    private async Task<string?> QuickSaveAsync(BitmapSource flattened, CaptureRecord? record)
     {
         string directory = ResolveQuickSaveDirectory();
         try
@@ -361,7 +384,7 @@ internal sealed class CaptureCommitService
                 return (savedPath, encoded.LongLength);
             });
             _log.LogInformation("Quick-saved {Bytes} bytes to {Path}", bytes, path);
-            return true;
+            return path;
         }
         catch (Exception ex) when (ex is IOException
                                    or UnauthorizedAccessException
@@ -370,7 +393,7 @@ internal sealed class CaptureCommitService
         {
             // Quick save failure must not fail the persist that already succeeded.
             _log.LogWarning(ex, "Quick save to {Directory} failed", directory);
-            return false;
+            return null;
         }
     }
 

@@ -550,6 +550,58 @@ public sealed class CaptureCommitServiceTests
     });
 
     [Fact]
+    public void QuickSave_AnnouncesTheWrittenFileOnceEvenWhenTheCopyFails() => RunSta(() =>
+    {
+        string root = NewRoot();
+        try
+        {
+            var (commit, _, record, settings, _) = Build(root, (_, _) => Task.FromResult(false));
+            string quickSaveDir = Path.Combine(root, "exports");
+            settings.Export.QuickSaveDirectoryOverride = quickSaveDir;
+            var announced = new List<string>();
+            commit.QuickSaved += announced.Add;
+
+            bool close = commit.CommitAsync(record, MakeResult(EditorCommitAction.QuickSave)).GetAwaiter().GetResult();
+
+            // The copy failed, so the editor stays, but the file it wrote is real.
+            Assert.False(close);
+            Assert.Equal(Directory.GetFiles(quickSaveDir, "*.png"), announced);
+
+            // Other actions write no quick-save file and announce nothing.
+            commit.CommitAsync(record, MakeResult(EditorCommitAction.Done)).GetAwaiter().GetResult();
+            Assert.Single(announced);
+        }
+        finally
+        {
+            DeleteRoot(root);
+        }
+    });
+
+    [Fact]
+    public void QuickSave_FailureAnnouncesNothing() => RunSta(() =>
+    {
+        string root = NewRoot();
+        try
+        {
+            var (commit, _, record, settings, _) = Build(root);
+            string pathBlockingDirectoryCreation = Path.Combine(root, "not-a-directory");
+            File.WriteAllText(pathBlockingDirectoryCreation, "block directory creation");
+            settings.Export.QuickSaveDirectoryOverride = Path.Combine(pathBlockingDirectoryCreation, "exports");
+            var announced = new List<string>();
+            commit.QuickSaved += announced.Add;
+
+            bool close = commit.CommitAsync(record, MakeResult(EditorCommitAction.QuickSave)).GetAwaiter().GetResult();
+
+            Assert.False(close);
+            Assert.Empty(announced);
+        }
+        finally
+        {
+            DeleteRoot(root);
+        }
+    });
+
+    [Fact]
     public void QuickSave_ExportFailureKeepsEditorOpenAfterDurableQueueFinalize() => RunSta(() =>
     {
         string root = NewRoot();

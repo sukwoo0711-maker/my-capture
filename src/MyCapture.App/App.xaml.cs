@@ -1410,6 +1410,30 @@ public partial class App : Application
         }
     }
 
+    /// <summary>
+    /// After any editor's quick save has written its file, names it in the shared notification card
+    /// with a way to its folder, unless "Notify after quick save" is off.
+    /// </summary>
+    private void AnnounceQuickSave(string path)
+    {
+        if (_settings?.General.NotifyOnQuickSave != true) return;
+        _shellPresenter?.ShowQuickSaved(path, OpenQuickSaveFolder);
+    }
+
+    private void OpenQuickSaveFolder(string folder)
+    {
+        try
+        {
+            ExplorerLauncher.OpenFolder(folder);
+        }
+        catch (Exception ex) when (ex is ArgumentException or IOException
+                                   or System.ComponentModel.Win32Exception or InvalidOperationException)
+        {
+            _log?.LogWarning(ex, "Could not open the quick-save folder");
+            ShowCommandNotice(UiText.Get("QuickAccess.Saved"), UiText.Get("Storage_OpenFolderFailed"), TrayBalloonKind.Warning);
+        }
+    }
+
     private void OnAnnotationEditingCompleted(
         object? sender,
         AnnotationEditingResult e)
@@ -1596,6 +1620,7 @@ public partial class App : Application
             _services.GetRequiredService<ILogger<CaptureCommitService>>());
         _commit.PersistExportSettings = () => _services.GetRequiredService<SettingsStore>().SaveInBackground(
             _settings!.DeepClone(), "Could not persist the last export options");
+        _commit.QuickSaved += path => _ = Dispatcher.BeginInvoke(new Action(() => AnnounceQuickSave(path)));
         _videoLibrary = new MyCapture.App.Recording.VideoLibraryService(
             queue,
             paths,
