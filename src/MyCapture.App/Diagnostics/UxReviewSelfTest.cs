@@ -69,14 +69,29 @@ internal static class UxReviewSelfTest
         }
     }
 
+    private const string ReportFileName = "ux-review-selftest-report.txt";
+
+    // A normal run takes about 90 s on a hosted runner; one fixture takes a few seconds. A phase
+    // that outlives its budget has hung, and the run ends with a stall report instead of holding
+    // the update-restart check until its own limit.
+    private static readonly TimeSpan SetupPhaseBudget = TimeSpan.FromSeconds(180);
+    private static readonly TimeSpan FixturePhaseBudget = TimeSpan.FromSeconds(120);
+
     private static int RunGenerated(string outputDirectory, bool compareBaseline = false)
     {
         Directory.CreateDirectory(outputDirectory);
+        string reportPath = Path.Combine(outputDirectory, ReportFileName);
+        int uiThreadId = SelfTestStallEvidence.CurrentNativeThreadId();
+        Dispatcher dispatcher = Dispatcher.CurrentDispatcher;
+        StringBuilder? progress = null;
+        using var watchdog = new SelfTestWatchdog("fixture setup", SetupPhaseBudget,
+            stall => OnStalled(stall, progress, reportPath, uiThreadId, dispatcher));
         // A fresh child on every invocation prevents recovery/retention work on earlier fixtures.
         AppPaths paths = AppPaths.CreateForRoot(Path.Combine(outputDirectory, "fixtures-" + Guid.NewGuid().ToString("N")));
         Directory.CreateDirectory(paths.DataRoot);
         Directory.CreateDirectory(paths.CapturesRoot);
         var report = new StringBuilder("MyCapture real WPF UX review\n");
+        progress = report;
         report.AppendLine($"UTC: {DateTimeOffset.UtcNow:O}");
         report.AppendLine("Fixtures only. No screen capture, user queue, OS settings, registry, or clipboard writes.");
         IReadOnlyList<MonitorInfo> monitors = MonitorEnumerator.GetAll();
@@ -228,6 +243,11 @@ internal static class UxReviewSelfTest
 
             foreach ((string name, Window window) in windows)
             {
+                // Each fixture leaves the report so far on disk, without a RESULT line, so a run
+                // that is ended from outside still shows the fixture it reached.
+                watchdog.Enter("fixture " + name, FixturePhaseBudget);
+                report.AppendLine("Fixture: " + name);
+                SaveProgress(reportPath, report);
                 try
                 {
                     window.WindowStartupLocation = WindowStartupLocation.Manual;
@@ -489,7 +509,8 @@ internal static class UxReviewSelfTest
                 (int pinLeft, _, int pinRight, _) = WindowStyleFacade.GetWindowBounds(pinHandle);
                 pin.MovePhysicalForTest(primary.Bounds.Right - (pinRight - pinLeft), primary.Bounds.Top + 100);
                 report.AppendLine("Interactive pin fixture starts at the primary monitor's right boundary for bounded cross-monitor drag checks; taskbar/title metadata is diagnostic-only.");
-                File.WriteAllText(Path.Combine(outputDirectory, "ux-review-selftest-report.txt"), report.ToString());
+                File.WriteAllText(reportPath, report.ToString());
+                watchdog.Enter("interactive hold", TimeSpan.FromSeconds(Math.Min(seconds, 600) + 60));
                 for (int elapsed = 0; elapsed < Math.Min(seconds, 600); elapsed++) Pump(TimeSpan.FromSeconds(1));
             }
         }
@@ -506,8 +527,52 @@ internal static class UxReviewSelfTest
         }
         report.AppendLine("Layout JSON records visible text, font metrics, wrapping/trimming, and control automation/focus metadata; candidates require visual review, not automatic pass claims.");
         report.AppendLine(failures == 0 ? "RESULT: PASS (fixture rendering and command checks; manual visual review required)" : $"RESULT: FAIL ({failures})");
-        File.WriteAllText(Path.Combine(outputDirectory, "ux-review-selftest-report.txt"), report.ToString(), new UTF8Encoding(false));
+        File.WriteAllText(reportPath, report.ToString(), new UTF8Encoding(false));
         return failures == 0 ? 0 : 1;
+    }
+
+    private static void SaveProgress(string path, StringBuilder report)
+    {
+        try
+        {
+            File.WriteAllText(path, report.ToString(), new UTF8Encoding(false));
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // A progress save must never fail the run it records.
+        }
+    }
+
+    /// <summary>
+    /// Runs on the watchdog thread: records the fixture the review stopped in and how the process
+    /// stood, then ends it so the caller gets a failure instead of waiting out its own limit.
+    /// </summary>
+    private static void OnStalled(
+        SelfTestStall stall,
+        StringBuilder? report,
+        string reportPath,
+        int uiThreadId,
+        Dispatcher dispatcher)
+    {
+        string body;
+        try
+        {
+            // The UI thread has stopped appending; a torn read only costs the copy.
+            body = report?.ToString() ?? string.Empty;
+        }
+        catch (Exception ex) when (ex is ArgumentException or IndexOutOfRangeException)
+        {
+            body = "(report text unavailable: " + ex.GetType().Name + ")" + Environment.NewLine;
+        }
+
+        string failure = SelfTestStallEvidence.Failure("ux review", stall);
+        var evidence = new StringBuilder(SelfTestStallEvidence.Collect(uiThreadId, dispatcher));
+        SelfTestStallEvidence.WriteStalledReport(reportPath, body, failure, evidence.ToString());
+        evidence.AppendLine(SelfTestStallEvidence.WriteDump(
+            Path.Combine(Path.GetDirectoryName(reportPath) ?? Path.GetTempPath(), "ux-review-stall.dmp"),
+            TimeSpan.FromSeconds(120)));
+        SelfTestStallEvidence.WriteStalledReport(reportPath, body, failure, evidence.ToString());
+        SelfTestStallEvidence.Terminate(SelfTestStallEvidence.StalledExitCode);
     }
 
     private static void PressSpace(UIElement target, Window window)

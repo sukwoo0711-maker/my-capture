@@ -631,44 +631,17 @@ internal static class VideoEditorResponsivenessSelfTest
             return;
         }
 
-        string failure = string.Create(
-            CultureInfo.InvariantCulture,
-            $"self-test stalled in phase '{stall.Phase}' (step {stall.Step}) for " +
-            $"{stall.Elapsed.TotalSeconds:0.0}s; the phase budget is {stall.Budget.TotalSeconds:0}s");
-        var evidence = new StringBuilder();
-        evidence.Append(SelfTestStallEvidence.DescribeThreads(_uiThreadId, TimeSpan.FromSeconds(1)));
-        evidence.AppendLine(SelfTestStallEvidence.DescribeGuiThread(_uiThreadId));
-        evidence.Append(SelfTestStallEvidence.DescribeWindows());
+        string failure = SelfTestStallEvidence.Failure("self-test", stall);
+        var evidence = new StringBuilder(SelfTestStallEvidence.Collect(_uiThreadId, _dispatcher));
         evidence.AppendLine(ReadEditorState(TimeSpan.FromSeconds(2)));
-        System.Windows.Threading.Dispatcher? dispatcher = _dispatcher;
-        if (dispatcher is not null)
-        {
-            evidence.Append(SelfTestStallEvidence.DescribeDispatcher(dispatcher));
-        }
 
         // Save before the dump, which can take a while: the runner must find the record even
-        // if its own limit ends the process first.
+        // if its own limit ends the process first. Sealed, so the stalled thread cannot replace it.
         report.Stalled(failure, evidence.ToString());
         string dumpPath = Path.Combine(
             Path.GetDirectoryName(report.Path) ?? Path.GetTempPath(),
             "video-editor-stall.dmp");
         evidence.AppendLine(SelfTestStallEvidence.WriteDump(dumpPath, TimeSpan.FromSeconds(120)));
-
-        // With the stalled state recorded, post the dispatcher's own wake-up once: if the run
-        // moves on, a lost processing request was all that held it.
-        if (dispatcher is not null && _watchdog is { } watchdog)
-        {
-            string phaseBefore = watchdog.Phase;
-            int stepBefore = watchdog.CurrentStep;
-            bool posted = SelfTestStallEvidence.PostDispatcherProcessMessage(dispatcher);
-            Thread.Sleep(TimeSpan.FromSeconds(3));
-            evidence.AppendLine(string.Create(
-                CultureInfo.InvariantCulture,
-                $"After posting the dispatcher's process-queue message (posted={posted}): " +
-                $"phase '{phaseBefore}' step {stepBefore} -> '{watchdog.Phase}' step {watchdog.CurrentStep}"));
-            evidence.Append(SelfTestStallEvidence.DescribeDispatcher(dispatcher));
-        }
-
         report.Stalled(failure, evidence.ToString(), seal: true);
         SelfTestStallEvidence.Terminate(SelfTestStallEvidence.StalledExitCode);
     }
@@ -841,28 +814,14 @@ internal static class VideoEditorResponsivenessSelfTest
         /// </summary>
         internal void Stalled(string failure, string evidence, bool seal = false)
         {
-            var text = new StringBuilder();
+            string body;
             lock (_gate)
             {
                 _sealed |= seal;
-                text.Append(_body);
+                body = _body.ToString();
             }
 
-            text.AppendLine();
-            text.AppendLine("FAIL: " + failure);
-            text.AppendLine("Stall evidence:");
-            text.Append(evidence);
-            text.AppendLine();
-            text.AppendLine("RESULT: FAIL (stalled)");
-            text.AppendLine("  - " + failure);
-            try
-            {
-                File.WriteAllText(path, text.ToString(), Utf8);
-            }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-            {
-                // The exit code still reports the stall.
-            }
+            SelfTestStallEvidence.WriteStalledReport(path, body, failure, evidence);
         }
     }
 }

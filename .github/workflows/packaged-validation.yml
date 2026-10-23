@@ -188,3 +188,16 @@ jobs:
             artifacts/validation/update-restart/*/temporary/**/ux-review-selftest-report.txt
           if-no-files-found: warn
           retention-days: 14
+
+      # A self-test that stalls or times out leaves a dump with heap beside its report; only then
+      # is there anything to upload.
+      - name: Upload stall dumps
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: packaged-validation-stall-dumps-${{ github.sha }}-${{ github.run_attempt }}
+          path: |
+            artifacts/validation/hosted/packaged-self-tests/**/*.dmp
+            artifacts/validation/update-restart/*/temporary/**/*.dmp
+          if-no-files-found: ignore
+          retention-days: 7

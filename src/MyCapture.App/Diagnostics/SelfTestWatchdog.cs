@@ -101,8 +101,6 @@ internal sealed class SelfTestWatchdog : IDisposable
         }
     }
 
-    internal int CurrentStep => Volatile.Read(ref _step);
-
     /// <summary>Records progress inside a phase (a sample index) without allocating.</summary>
     internal void Step(int step) => Volatile.Write(ref _step, step);
 
@@ -149,6 +147,36 @@ internal static class SelfTestStallEvidence
 {
     /// <summary>Exit code of a self-test that ended itself after a stall.</summary>
     internal const int StalledExitCode = 3;
+
+    /// <summary>The single-line failure a stall report and the runner both show.</summary>
+    internal static string Failure(string test, SelfTestStall stall) => string.Create(
+        CultureInfo.InvariantCulture,
+        $"{test} stalled in phase '{stall.Phase}' (step {stall.Step}) for " +
+        $"{stall.Elapsed.TotalSeconds:0.0}s; the phase budget is {stall.Budget.TotalSeconds:0}s");
+
+    /// <summary>
+    /// Writes a self-test report that ends in a stall: the lines the test had recorded, the
+    /// failure, the evidence and a single <c>RESULT: FAIL (stalled)</c> line for the runner.
+    /// </summary>
+    internal static void WriteStalledReport(string path, string body, string failure, string evidence)
+    {
+        var text = new StringBuilder(body);
+        text.AppendLine();
+        text.AppendLine("FAIL: " + failure);
+        text.AppendLine("Stall evidence:");
+        text.Append(evidence);
+        text.AppendLine();
+        text.AppendLine("RESULT: FAIL (stalled)");
+        text.AppendLine("  - " + failure);
+        try
+        {
+            File.WriteAllText(path, text.ToString(), new UTF8Encoding(false));
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // The exit code still reports the stall.
+        }
+    }
 
     /// <summary>
     /// Describes the process's threads over a short interval. A thread whose CPU time grows is
@@ -240,6 +268,25 @@ internal static class SelfTestStallEvidence
     }
 
     /// <summary>
+    /// Everything a stall report records about the process apart from the test's own state:
+    /// whether the UI thread runs or waits, its GUI state, the process's windows and the
+    /// dispatcher's queue and timers.
+    /// </summary>
+    internal static string Collect(int uiThreadId, System.Windows.Threading.Dispatcher? dispatcher)
+    {
+        var text = new StringBuilder();
+        text.Append(DescribeThreads(uiThreadId, TimeSpan.FromSeconds(1)));
+        text.AppendLine(DescribeGuiThread(uiThreadId));
+        text.Append(DescribeWindows());
+        if (dispatcher is not null)
+        {
+            text.Append(DescribeDispatcher(dispatcher));
+        }
+
+        return text.ToString();
+    }
+
+    /// <summary>
     /// The UI thread's GUI state as Windows sees it: active, focus and capture windows, and
     /// whether it is in a menu, move or size loop, each of which runs its own message loop.
     /// </summary>
@@ -253,11 +300,13 @@ internal static class SelfTestStallEvidence
                 $"GUI thread {threadId}: unavailable (Win32 {Marshal.GetLastWin32Error()})");
         }
 
+        _ = GetCursorPos(out NativePoint cursor);
         return string.Create(
             CultureInfo.InvariantCulture,
             $"GUI thread {threadId}: flags=0x{info.Flags:X} (1 caret, 2 in move/size, 4 menu mode, 8 system menu, 0x10 popup menu), " +
             $"active=0x{info.Active.ToInt64():X}, focus=0x{info.Focus.ToInt64():X}, capture=0x{info.Capture.ToInt64():X}, " +
-            $"menu-owner=0x{info.MenuOwner.ToInt64():X}, move-size=0x{info.MoveSize.ToInt64():X}");
+            $"menu-owner=0x{info.MenuOwner.ToInt64():X}, move-size=0x{info.MoveSize.ToInt64():X}; cursor=({cursor.X},{cursor.Y}) " +
+            $"over 0x{WindowFromPoint(cursor).ToInt64():X}");
     }
 
     /// <summary>
@@ -294,6 +343,20 @@ internal static class SelfTestStallEvidence
                 $"Dispatcher timers: count={(Field(dispatcher, "_timers") as System.Collections.ICollection)?.Count}, " +
                 $"due-found={Field(dispatcher, "_dueTimeFound")}, due-in={(Field(dispatcher, "_dueTimeInTicks") is int due ? due - tick : 0)}ms, " +
                 $"win32-timer-set={Field(dispatcher, "_isWin32TimerSet")}"));
+            if (Field(dispatcher, "_timers") is System.Collections.IEnumerable timers)
+            {
+                foreach (object timer in timers)
+                {
+                    string handlers = Field(timer, "Tick") is Delegate tickHandlers
+                        ? string.Join(", ", tickHandlers.GetInvocationList().Select(handler => handler.Method.DeclaringType?.Name + "." + handler.Method.Name))
+                        : "(none)";
+                    text.AppendLine(string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"  timer: interval={Property(timer, "Interval")}, priority={Field(timer, "_priority")}, " +
+                        $"due-in={(Field(timer, "_dueTimeInTicks") is int timerDue ? timerDue - tick : 0)}ms, tick={handlers}"));
+                }
+            }
+
             if (Field(dispatcher, "_reservedPtsCache") is Tuple<object, List<string>> failures)
             {
                 foreach (string failure in failures.Item2.Take(20))
@@ -333,29 +396,6 @@ internal static class SelfTestStallEvidence
         }
 
         return text.ToString();
-    }
-
-    /// <summary>
-    /// Posts the dispatcher's own process-queue message once, as WPF does when it requests
-    /// processing, so the report can say whether a lost wake-up was all that held the queue.
-    /// Diagnostic only: the run has already failed when this is called.
-    /// </summary>
-    internal static bool PostDispatcherProcessMessage(System.Windows.Threading.Dispatcher dispatcher)
-    {
-        try
-        {
-            Type type = typeof(System.Windows.Threading.Dispatcher);
-            object? window = type.GetField("_window", BindingFlags.Instance | BindingFlags.NonPublic)?.GetValue(dispatcher);
-            object? handle = window?.GetType().GetProperty("Handle")?.GetValue(window);
-            object? message = type.GetField("_msgProcessQueue", BindingFlags.Static | BindingFlags.NonPublic)?.GetValue(null);
-            return handle is IntPtr hwnd && message is not null
-                && PostMessage(hwnd, (uint)Convert.ToInt32(message, CultureInfo.InvariantCulture), IntPtr.Zero, IntPtr.Zero);
-        }
-        catch (Exception ex) when (ex is TargetInvocationException or InvalidOperationException
-            or ArgumentException or InvalidCastException)
-        {
-            return false;
-        }
     }
 
     /// <summary>
@@ -534,6 +574,19 @@ internal static class SelfTestStallEvidence
     [DllImport("user32.dll", SetLastError = true)]
     private static extern bool GetGUIThreadInfo(uint threadId, ref GuiThreadInfo info);
 
+    [DllImport("user32.dll")]
+    private static extern bool GetCursorPos(out NativePoint point);
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr WindowFromPoint(NativePoint point);
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct NativePoint
+    {
+        public int X;
+        public int Y;
+    }
+
     [StructLayout(LayoutKind.Sequential)]
     private struct GuiThreadInfo
     {
@@ -568,9 +621,6 @@ internal static class SelfTestStallEvidence
 
     [DllImport("user32.dll", CharSet = CharSet.Unicode)]
     private static extern int GetWindowText(IntPtr hwnd, StringBuilder text, int maxCount);
-
-    [DllImport("user32.dll", SetLastError = true)]
-    private static extern bool PostMessage(IntPtr hwnd, uint message, IntPtr wParam, IntPtr lParam);
 
     private const uint ThreadQueryLimitedInformation = 0x0800;
 
