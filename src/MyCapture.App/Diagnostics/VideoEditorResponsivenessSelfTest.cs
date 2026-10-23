@@ -700,6 +700,7 @@ internal static class VideoEditorResponsivenessSelfTest
     {
         PreviewSeekCoordinator coordinator = editor.PreviewSeekCoordinatorForTest;
         TwoLineTimeline timeline = editor.TimelineForTest;
+        PresentedFrameVerification? verification = StudioRangeVideoEffect.VerificationFor(editor.MediaForTest);
         return string.Create(
             CultureInfo.InvariantCulture,
             $"Editor: media-ready={editor.IsMediaReadyForTest}, media-opened={editor.HasMediaOpenedForTest}, " +
@@ -707,7 +708,9 @@ internal static class VideoEditorResponsivenessSelfTest
             $"filmstrip-completed={timeline.FilmstripForTest?.IsCompleted}, render-frames={timeline.RenderFrameCountForTest}, " +
             $"presented-generation={coordinator.PresentedGeneration}, presented-mode={coordinator.PresentedMode}, " +
             $"in-flight={coordinator.IsInFlightForTest}, pending={coordinator.PendingCountForTest}, " +
-            $"issued-seeks={coordinator.IssuedSeekCountForTest}");
+            $"issued-seeks={coordinator.IssuedSeekCountForTest}; range verification: " +
+            $"samples={verification?.Samples}, decodes={verification?.Decodes}, running={verification?.IsRunning}, " +
+            $"result={verification?.LastResult?.Details}");
     }
 
     private static bool PumpUntil(Func<bool> condition, TimeSpan timeout)
