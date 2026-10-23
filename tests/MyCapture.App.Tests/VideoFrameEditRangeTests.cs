@@ -91,6 +91,7 @@ public sealed class VideoFrameEditRangeTests
             }
             if (edit == "mosaic")
                 foreach (RectD patch in patches) annotation.ApplyMosaic(patch, 4);
+            EditorMosaicAsyncTests.WaitFor(annotation.MosaicOperationsSettledAsync());
             AnnotationEditingResult? committed = null;
             annotation.EditingCompleted += (_, result) => committed = result;
             annotation.SaveAndClose(); // No persistence/clipboard handler: capture the actual editor hand-off.

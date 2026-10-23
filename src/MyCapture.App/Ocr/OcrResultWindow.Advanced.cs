@@ -377,7 +377,7 @@ internal sealed partial class OcrResultWindow
         if (text.Length == 0) return;
         try
         {
-            Clipboard.SetText(text);
+            ClipboardWriter.SetText(text);
             _status.Text = UiText.Get("OCR410_Copied");
         }
         catch (System.Runtime.InteropServices.COMException)

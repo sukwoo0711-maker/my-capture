@@ -474,7 +474,8 @@ internal sealed class CaptureModeBar : Border
         CommandButtonPresentation.Apply(button, compact: true);
         button.Width = button.MinWidth = 36;
         button.Height = button.MinHeight = 36;
-        button.Padding = new Thickness(2);
+        // The shared face needs all 34 DIPs inside the 36-DIP button's border.
+        button.Padding = new Thickness(2, 0, 2, 0);
         button.Margin = new Thickness(1, 0, 1, 0);
         button.Cursor = Cursors.Hand;
         button.FocusVisualStyle = null;

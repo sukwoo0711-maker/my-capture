@@ -46,7 +46,7 @@ public sealed class AnnotationEditorDraftInkTests
             Assert.Equal(path.Take(i + 1), pen.Points);
         }
 
-        // Every move still replaces the stroke's points, raising the same notifications.
+        // Every move still raises the same points/bounds notifications.
         Assert.Equal(
             Enumerable.Repeat(new[] { nameof(PenAnnotation.Points), nameof(PenAnnotation.Bounds) }, path.Length - 1).SelectMany(static pair => pair),
             notifications);
@@ -57,7 +57,7 @@ public sealed class AnnotationEditorDraftInkTests
         Assert.Equal(expected.Points, pen.Points);
         Assert.Same(pen, Assert.Single(document.Items));
 
-        List<PointD> committed = pen.Points;
+        PenPointCollection committed = pen.Points;
         PointD[] snapshot = [.. committed];
         Assert.True(undo.Undo());
         Assert.Empty(document.Items);

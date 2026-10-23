@@ -9,28 +9,39 @@ namespace MyCapture.App;
 /// <summary>Fixed command sizing with an optional shortcut line inside the button.</summary>
 internal static class CommandButtonPresentation
 {
-    internal const double IconSize = 16;
+    internal const double IconSize = ShortcutRevealMotion.CommandIconSize;
     internal const double IconLabelGap = 6;
     internal const double HintHeight = 14;
+    [ThreadStatic] private static Dictionary<object, double>? s_hintWidths;
+
+    private static readonly DependencyProperty StandardTierProperty = DependencyProperty.RegisterAttached(
+        "StandardTier", typeof(bool), typeof(CommandButtonPresentation), new PropertyMetadata(false));
+
+    private static readonly DependencyProperty LabelCompactedProperty = DependencyProperty.RegisterAttached(
+        "LabelCompacted", typeof(bool), typeof(CommandButtonPresentation), new PropertyMetadata(false));
 
     internal static void Apply(ButtonBase button, bool compact = false)
     {
         string tier = compact ? "Compact" : "Standard";
+        button.SetValue(StandardTierProperty, !compact);
         button.SetResourceReference(FrameworkElement.HeightProperty, $"CommandButton.Height.{tier}");
         button.SetResourceReference(FrameworkElement.MinHeightProperty, $"CommandButton.Height.{tier}");
-        button.SetResourceReference(Control.PaddingProperty, $"CommandButton.Padding.{tier}");
+        string paddingTier = !compact && (bool)button.GetValue(LabelCompactedProperty) ? "StandardIconOnly" : tier;
+        button.SetResourceReference(Control.PaddingProperty, $"CommandButton.Padding.{paddingTier}");
         button.SetResourceReference(Control.FontSizeProperty, "CommandButton.FontSize");
         button.MinWidth = 36;
         button.Margin = new Thickness(3, 0, 3, 0);
         button.VerticalAlignment = VerticalAlignment.Center;
         button.Loaded -= OnCommandLoaded;
         button.Loaded += OnCommandLoaded;
+        ShortcutRevealMotion.PrepareCommandIcon(button.Content);
     }
 
     private static void OnCommandLoaded(object sender, RoutedEventArgs e) => RefreshHint((ButtonBase)sender);
 
     internal static void RefreshHint(ButtonBase button)
     {
+        ShortcutRevealMotion.PrepareCommandIcon(button.Content);
         string gesture = AutomationProperties.GetAcceleratorKey(button);
         if (string.IsNullOrWhiteSpace(gesture) && button is Button action && (action.IsDefault || action.IsCancel))
         {
@@ -39,21 +50,17 @@ internal static class CommandButtonPresentation
             if (button.ToolTip is string tooltip && !tooltip.Contains(gesture, StringComparison.Ordinal))
                 button.ToolTip = $"{tooltip} ({gesture})";
         }
+        if (string.IsNullOrWhiteSpace(gesture)) gesture = string.Empty;
         if (button.Content is Grid { Name: "CommandButtonFace", Children.Count: > 1 } face)
         {
-            if (string.IsNullOrWhiteSpace(gesture))
-            {
-                face.Children.RemoveAt(1);
-                face.MinWidth = 0;
-            }
-            else if (face.Children[1] is TextBlock current)
+            if (face.Children[1] is TextBlock current)
             {
                 current.Text = gesture;
                 ReserveHintWidth(face, current);
+                ShortcutRevealMotion.Update(current, animate: false);
             }
             return;
         }
-        if (string.IsNullOrWhiteSpace(gesture)) return;
         // Several surfaces describe shortcuts directly instead of using the catalog. They
         // join the same window-owned Alt behavior after their metadata/content is ready.
         TextBlock hint = ShortcutPresentation.Hint(gesture);
@@ -64,6 +71,15 @@ internal static class CommandButtonPresentation
 
     internal static void ReserveHint(ButtonBase button, TextBlock? hint = null)
     {
+        // An empty caption owns the same render-only motion and fixed-height slot as a
+        // keyed face. Keep it visible in the tree so visible commands animate together.
+        if (hint is null)
+        {
+            if (button.Content is Grid { Name: "CommandButtonFace", Children.Count: > 1 }) return;
+            hint = ShortcutPresentation.Hint(string.Empty);
+            hint.SetBinding(TextBlock.ForegroundProperty,
+                new System.Windows.Data.Binding(nameof(Control.Foreground)) { Source = button });
+        }
         if (button.Content is Grid { Name: "CommandButtonFace" } face)
         {
             if (hint is not null)
@@ -71,6 +87,7 @@ internal static class CommandButtonPresentation
                 if (face.Children.Count > 1) face.Children.RemoveAt(1);
                 Grid.SetRow(hint, 1);
                 face.Children.Add(hint);
+                ShortcutRevealMotion.Configure(hint, (FrameworkElement)face.Children[0], corner: false);
                 ReserveHintWidth(face, hint);
             }
             return;
@@ -78,7 +95,7 @@ internal static class CommandButtonPresentation
 
         object? previous = button.Content;
         button.Content = null;
-        var content = previous as UIElement ?? new TextBlock
+        var content = previous as FrameworkElement ?? new TextBlock
         {
             Text = previous?.ToString() ?? string.Empty,
             HorizontalAlignment = HorizontalAlignment.Center,
@@ -89,13 +106,15 @@ internal static class CommandButtonPresentation
             HorizontalAlignment = HorizontalAlignment.Center,
             VerticalAlignment = VerticalAlignment.Center,
         };
-        face.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-        face.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        face.RowDefinitions.Add(new RowDefinition { Height = new GridLength(IconSize) });
+        face.RowDefinitions.Add(new RowDefinition { Height = new GridLength(HintHeight) });
+        ShortcutRevealMotion.PreparePrimary(content);
         face.Children.Add(content);
         if (hint is not null)
         {
             Grid.SetRow(hint, 1);
             face.Children.Add(hint);
+            ShortcutRevealMotion.Configure(hint, content, corner: false);
             ReserveHintWidth(face, hint);
         }
         button.Content = face;
@@ -103,9 +122,25 @@ internal static class CommandButtonPresentation
 
     private static void ReserveHintWidth(Grid face, TextBlock hint)
     {
-        // A collapsed caption must still participate in horizontal fitting. Reserve only
-        // its width, so the primary face remains vertically centered at rest. Loaded and
-        // dynamic command refreshes measure the actual inherited typeface again.
+        if (hint.Text.Length == 0)
+        {
+            face.MinWidth = 0;
+            return;
+        }
+        // Reserve the full chord independently of reveal and refresh its inherited font/DPI
+        // on load or a real metadata change. Alt never enters this measurement path.
+        DpiScale dpi = VisualTreeHelper.GetDpi(hint);
+        object key = (hint.Text, hint.FontFamily, hint.FontSize, hint.FontWeight, hint.FontStyle,
+            hint.FontStretch, hint.FlowDirection, hint.Language.IetfLanguageTag,
+            TextOptions.GetTextFormattingMode(hint), dpi.DpiScaleX, dpi.DpiScaleY);
+        var widths = s_hintWidths ??= [];
+        if (widths.TryGetValue(key, out double width))
+        {
+            face.MinWidth = width;
+            hint.InvalidateMeasure();
+            hint.InvalidateVisual();
+            return;
+        }
         var probe = new TextBlock
         {
             Text = hint.Text,
@@ -118,11 +153,12 @@ internal static class CommandButtonPresentation
             Language = hint.Language,
         };
         TextOptions.SetTextFormattingMode(probe, TextOptions.GetTextFormattingMode(hint));
-        VisualTreeHelper.SetRootDpi(probe, VisualTreeHelper.GetDpi(hint));
+        VisualTreeHelper.SetRootDpi(probe, dpi);
         probe.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
         face.MinWidth = Math.Ceiling(probe.DesiredSize.Width);
-        // A collapsed caption can retain its old DPI measurement when its text did not
-        // change. Refresh the actual caption as well as the detached width probe.
+        if (widths.Count >= 256) widths.Clear();
+        widths[key] = face.MinWidth;
+        // Refresh the actual caption as well as the detached width probe after DPI changes.
         hint.InvalidateMeasure();
         hint.InvalidateVisual();
     }
@@ -151,8 +187,21 @@ internal static class CommandButtonPresentation
             content = face.Children[0];
         // Only icon-and-name faces can become icon-only. Text-only controls remain usable.
         if (content is not StackPanel row || row.Orientation != Orientation.Horizontal
+            || !row.Children.OfType<TextBlock>().Any()
             || !row.Children.Cast<UIElement>().Any(child => child is not TextBlock)) return false;
         bool changed = false;
+        if ((bool)button.GetValue(LabelCompactedProperty) != compact)
+        {
+            button.SetValue(LabelCompactedProperty, compact);
+            if ((bool)button.GetValue(StandardTierProperty))
+            {
+                // Only standard command faces trade horizontal padding for space. Keep the
+                // resource reference on expansion so theme changes still reach labeled faces.
+                button.SetResourceReference(Control.PaddingProperty,
+                    compact ? "CommandButton.Padding.StandardIconOnly" : "CommandButton.Padding.Standard");
+                changed = true;
+            }
+        }
         foreach (TextBlock label in row.Children.OfType<TextBlock>())
         {
             Visibility visibility = compact ? Visibility.Collapsed : Visibility.Visible;

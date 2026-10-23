@@ -143,6 +143,7 @@ public sealed partial class SettingsInstantSaveTests
     public Task AlwaysShortcutHintsCheckboxSavesAndRefreshesAnOpenCommandWindow() =>
         Isolated(nameof(AlwaysShortcutHintsCheckboxSavesAndRefreshesAnOpenCommandWindow), () =>
     {
+        using var motion = new ShortcutMotionTestScope();
         Application app = CreateApplication();
         try
         {
@@ -198,7 +199,7 @@ public sealed partial class SettingsInstantSaveTests
                     Assert.Equal(expectedLabel, KoreanWordWrap.Strip(Assert.IsType<string>(checkbox.Content)));
                     Assert.Equal(expectedDescription, KoreanWordWrap.Strip(description.Text));
                     Assert.False(checkbox.IsChecked);
-                    Assert.Equal(Visibility.Collapsed, hint.Visibility);
+                    ShortcutMotionTestScope.AssertState(hint, false);
                     Size originalSize = command.RenderSize;
                     Assert.Equal(44, originalSize.Height);
 
@@ -210,7 +211,7 @@ public sealed partial class SettingsInstantSaveTests
                     Assert.Equal(1, saves);
                     Assert.True(store.Load().General.AlwaysShowShortcutHints);
                     Assert.True(saved.General.ShowShortcutHints);
-                    Assert.Equal(Visibility.Visible, hint.Visibility);
+                    ShortcutMotionTestScope.AssertState(hint, true);
                     Assert.Equal(originalSize, command.RenderSize);
                     Assert.False(((SettingsDraft)settings.DataContext).HasUnappliedChanges);
 
@@ -225,14 +226,14 @@ public sealed partial class SettingsInstantSaveTests
                     Assert.True(saved.General.ShowShortcutHints);
                     Assert.Equal(7, saved.Annotation.StrokeThickness);
                     Assert.Equal(7, store.Load().Annotation.StrokeThickness);
-                    Assert.Equal(Visibility.Collapsed, hint.Visibility);
+                    ShortcutMotionTestScope.AssertState(hint, false);
                     Assert.Equal(originalSize, command.RenderSize);
                     ShortcutPresentation.SetAltRevealed(commandWindow, true);
                     commandWindow.UpdateLayout();
-                    Assert.Equal(Visibility.Visible, hint.Visibility);
+                    ShortcutMotionTestScope.AssertState(hint, true);
                     Assert.Equal(originalSize, command.RenderSize);
                     ShortcutPresentation.SetAltRevealed(commandWindow, false);
-                    Assert.Equal(Visibility.Collapsed, hint.Visibility);
+                    ShortcutMotionTestScope.AssertState(hint, false);
                     Assert.Equal(2, saves);
                 }
                 finally

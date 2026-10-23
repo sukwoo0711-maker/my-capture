@@ -79,6 +79,7 @@ public sealed class Ux402InteractionTests
     [InlineData(1000, 620)] [InlineData(680, 460)]
     public void AllToolsFitWithoutScrollingAndHintsFollowPreference(int width, int height) => StaTestHost.Run(() =>
     {
+        using var motion = new ShortcutMotionTestScope();
         var image = Image(); var region = new RectD(0, 0, 640, 360);
         var window = new AnnotationEditorWindow(new FrozenFrame(image, region, null, 0), region, image) { Width = width, Height = height, ShowActivated = false };
         try
@@ -97,7 +98,8 @@ public sealed class Ux402InteractionTests
             try
             {
                 ShortcutPresentation.ReadEnabled = () => false; ShortcutPresentation.Refresh();
-                Assert.All(tools.SelectMany(button => Descendants(button).OfType<TextBlock>()), hint => Assert.Equal(Visibility.Collapsed, hint.Visibility));
+                Assert.All(tools, button => ShortcutMotionTestScope.AssertState(
+                    Assert.Single(Descendants(button).OfType<TextBlock>()), false));
             }
             finally { ShortcutPresentation.ReadEnabled = read; ShortcutPresentation.Refresh(); }
         }
