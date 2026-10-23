@@ -63,6 +63,7 @@ internal static class VideoEditorResponsivenessSelfTest
     private static ProgressReport? _report;
     private static Func<string>? _editorState;
     private static int _uiThreadId;
+    private static System.Windows.Threading.Dispatcher? _dispatcher;
     private static long _started;
 
     internal static int Run(string outputDirectory)
@@ -70,6 +71,7 @@ internal static class VideoEditorResponsivenessSelfTest
         ConfigureCalibration();
         _started = Stopwatch.GetTimestamp();
         _uiThreadId = SelfTestStallEvidence.CurrentNativeThreadId();
+        _dispatcher = Dispatcher.CurrentDispatcher;
         _report = new ProgressReport(Path.Combine(outputDirectory, ReportFileName));
         _watchdog = new SelfTestWatchdog("start", ShortPhaseBudget, OnStalled);
         try
@@ -637,6 +639,12 @@ internal static class VideoEditorResponsivenessSelfTest
         evidence.Append(SelfTestStallEvidence.DescribeThreads(_uiThreadId, TimeSpan.FromSeconds(1)));
         evidence.Append(SelfTestStallEvidence.DescribeWindows());
         evidence.AppendLine(ReadEditorState(TimeSpan.FromSeconds(2)));
+        System.Windows.Threading.Dispatcher? dispatcher = _dispatcher;
+        if (dispatcher is not null)
+        {
+            evidence.Append(SelfTestStallEvidence.DescribeDispatcher(dispatcher));
+        }
+
         // Save before the dump, which can take a while: the runner must find the record even
         // if its own limit ends the process first.
         report.Stalled(failure, evidence.ToString());
@@ -644,7 +652,23 @@ internal static class VideoEditorResponsivenessSelfTest
             Path.GetDirectoryName(report.Path) ?? Path.GetTempPath(),
             "video-editor-stall.dmp");
         evidence.AppendLine(SelfTestStallEvidence.WriteDump(dumpPath, TimeSpan.FromSeconds(120)));
-        report.Stalled(failure, evidence.ToString());
+
+        // With the stalled state recorded, post the dispatcher's own wake-up once: if the run
+        // moves on, a lost processing request was all that held it.
+        if (dispatcher is not null && _watchdog is { } watchdog)
+        {
+            string phaseBefore = watchdog.Phase;
+            int stepBefore = watchdog.CurrentStep;
+            bool posted = SelfTestStallEvidence.PostDispatcherProcessMessage(dispatcher);
+            Thread.Sleep(TimeSpan.FromSeconds(3));
+            evidence.AppendLine(string.Create(
+                CultureInfo.InvariantCulture,
+                $"After posting the dispatcher's process-queue message (posted={posted}): " +
+                $"phase '{phaseBefore}' step {stepBefore} -> '{watchdog.Phase}' step {watchdog.CurrentStep}"));
+            evidence.Append(SelfTestStallEvidence.DescribeDispatcher(dispatcher));
+        }
+
+        report.Stalled(failure, evidence.ToString(), seal: true);
         SelfTestStallEvidence.Terminate(SelfTestStallEvidence.StalledExitCode);
     }
 
@@ -743,6 +767,7 @@ internal static class VideoEditorResponsivenessSelfTest
         private readonly object _gate = new();
         private readonly StringBuilder _body = new();
         private string _result = string.Empty;
+        private bool _sealed;
 
         internal string Path => path;
 
@@ -760,6 +785,11 @@ internal static class VideoEditorResponsivenessSelfTest
             string text;
             lock (_gate)
             {
+                if (_sealed)
+                {
+                    return;
+                }
+
                 text = _body + _result;
             }
 
@@ -788,6 +818,11 @@ internal static class VideoEditorResponsivenessSelfTest
             string text;
             lock (_gate)
             {
+                if (_sealed)
+                {
+                    return 1;
+                }
+
                 _result = result.ToString();
                 text = _body + _result;
             }
@@ -796,12 +831,16 @@ internal static class VideoEditorResponsivenessSelfTest
             return failures.Count == 0 ? 0 : 1;
         }
 
-        /// <summary>Replaces any earlier result: a stall, even after a pass, fails the run.</summary>
-        internal void Stalled(string failure, string evidence)
+        /// <summary>
+        /// Replaces any earlier result: a stall, even after a pass, fails the run. Once
+        /// <paramref name="seal"/> is set, the stalled thread cannot overwrite the record.
+        /// </summary>
+        internal void Stalled(string failure, string evidence, bool seal = false)
         {
             var text = new StringBuilder();
             lock (_gate)
             {
+                _sealed |= seal;
                 text.Append(_body);
             }
 

@@ -86,6 +86,46 @@ public sealed class SelfTestWatchdogTests
         Assert.Contains("cpu +", evidence, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void DispatcherEvidence_ReadsQueuedWorkOfABlockedDispatcher()
+    {
+        using var ready = new ManualResetEventSlim();
+        using var release = new ManualResetEventSlim();
+        System.Windows.Threading.Dispatcher? dispatcher = null;
+        var thread = new Thread(() =>
+        {
+            dispatcher = System.Windows.Threading.Dispatcher.CurrentDispatcher;
+            _ = dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Normal, new Action(() =>
+            {
+                ready.Set();
+                release.Wait(Wait);
+            }));
+            _ = dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Background, new Action(QueuedBehindTheBlock));
+            System.Windows.Threading.Dispatcher.Run();
+        });
+        thread.SetApartmentState(ApartmentState.STA);
+        thread.Start();
+        try
+        {
+            Assert.True(ready.Wait(Wait));
+            string evidence = SelfTestStallEvidence.DescribeDispatcher(dispatcher!);
+            Assert.Contains("Dispatcher: posted-processing=", evidence, StringComparison.Ordinal);
+            Assert.Contains("max-priority=Background", evidence, StringComparison.Ordinal);
+            Assert.Contains($"queued: Background {typeof(SelfTestWatchdogTests)}.{nameof(QueuedBehindTheBlock)}", evidence, StringComparison.Ordinal);
+            Assert.Contains("process-queue message 0x", evidence, StringComparison.Ordinal);
+        }
+        finally
+        {
+            release.Set();
+            dispatcher?.InvokeShutdown();
+            thread.Join(Wait);
+        }
+    }
+
+    private static void QueuedBehindTheBlock()
+    {
+    }
+
     private sealed class ManualClock
     {
         private long _now = Stopwatch.GetTimestamp();

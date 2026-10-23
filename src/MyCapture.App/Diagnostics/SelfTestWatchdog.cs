@@ -1,7 +1,10 @@
+using System.Buffers.Binary;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Globalization;
 using System.IO;
+using System.IO.Pipes;
+using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Text;
 
@@ -97,6 +100,8 @@ internal sealed class SelfTestWatchdog : IDisposable
             _step = 0;
         }
     }
+
+    internal int CurrentStep => Volatile.Read(ref _step);
 
     /// <summary>Records progress inside a phase (a sample index) without allocating.</summary>
     internal void Step(int step) => Volatile.Write(ref _step, step);
@@ -218,55 +223,179 @@ internal static class SelfTestStallEvidence
     }
 
     /// <summary>
-    /// Writes a dump of this process with the runtime's createdump tool, which ships beside the
-    /// runtime (the app folder of a self-contained package). Returns what happened, for the report.
+    /// Reads the WPF dispatcher's private scheduling state by reflection: whether it believes a
+    /// processing message or background timer is outstanding, the highest queued priority and the
+    /// first queued operations, its DispatcherTimers and Win32 timer, and any recorded failure to
+    /// post. A dispatcher that has work queued but no outstanding wake-up waits for a message that
+    /// never comes; this tells that apart from one starved by pending input.
+    /// </summary>
+    internal static string DescribeDispatcher(System.Windows.Threading.Dispatcher dispatcher)
+    {
+        var text = new StringBuilder();
+        try
+        {
+            Type type = typeof(System.Windows.Threading.Dispatcher);
+            object? Field(object target, string name) =>
+                target.GetType().GetField(name, BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public)
+                    ?.GetValue(target);
+            object? Static(string name) =>
+                type.GetField(name, BindingFlags.Static | BindingFlags.NonPublic)?.GetValue(null);
+            object? Property(object target, string name) =>
+                target.GetType().GetProperty(name, BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public)
+                    ?.GetValue(target);
+
+            int tick = Environment.TickCount;
+            text.AppendLine(string.Create(
+                CultureInfo.InvariantCulture,
+                $"Dispatcher: posted-processing={Field(dispatcher, "_postedProcessingType")} (0 none, 1 background timer, 2 message), " +
+                $"frame-depth={Field(dispatcher, "_frameDepth")}, disable-processing={Field(dispatcher, "_disableProcessingCount")}, " +
+                $"request-failed={Field(dispatcher, "_hasRequestProcessingFailed")}, tsf-pump={Field(dispatcher, "_isTSFMessagePumpEnabled")}, " +
+                $"shutdown={dispatcher.HasShutdownStarted}"));
+            text.AppendLine(string.Create(
+                CultureInfo.InvariantCulture,
+                $"Dispatcher timers: count={(Field(dispatcher, "_timers") as System.Collections.ICollection)?.Count}, " +
+                $"due-found={Field(dispatcher, "_dueTimeFound")}, due-in={(Field(dispatcher, "_dueTimeInTicks") is int due ? due - tick : 0)}ms, " +
+                $"win32-timer-set={Field(dispatcher, "_isWin32TimerSet")}"));
+            if (Field(dispatcher, "_reservedPtsCache") is Tuple<object, List<string>> failures)
+            {
+                foreach (string failure in failures.Item2.Take(20))
+                {
+                    text.AppendLine("  request failure: " + failure);
+                }
+            }
+
+            if (Field(dispatcher, "_queue") is { } queue)
+            {
+                text.AppendLine("Dispatcher queue: max-priority=" + Property(queue, "MaxPriority"));
+                object? item = Field(queue, "_head");
+                for (int i = 0; item is not null && i < 30; i++)
+                {
+                    object? operation = Property(item, "Data");
+                    if (operation is System.Windows.Threading.DispatcherOperation op)
+                    {
+                        text.AppendLine($"  queued: {op.Priority} {Property(op, "Name")}");
+                    }
+
+                    item = Property(item, "SequentialNext");
+                }
+            }
+
+            if (Field(dispatcher, "_window") is { } window && Property(window, "Handle") is IntPtr handle
+                && Static("_msgProcessQueue") is { } processMessage)
+            {
+                text.AppendLine(string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"Dispatcher window: 0x{handle.ToInt64():X}, process-queue message 0x{Convert.ToInt32(processMessage, CultureInfo.InvariantCulture):X}"));
+            }
+        }
+        catch (Exception ex) when (ex is TargetInvocationException or InvalidOperationException
+            or ArgumentException or NullReferenceException or InvalidCastException)
+        {
+            text.AppendLine("Dispatcher: state unavailable (" + ex.GetType().Name + ": " + ex.Message + ")");
+        }
+
+        return text.ToString();
+    }
+
+    /// <summary>
+    /// Posts the dispatcher's own process-queue message once, as WPF does when it requests
+    /// processing, so the report can say whether a lost wake-up was all that held the queue.
+    /// Diagnostic only: the run has already failed when this is called.
+    /// </summary>
+    internal static bool PostDispatcherProcessMessage(System.Windows.Threading.Dispatcher dispatcher)
+    {
+        try
+        {
+            Type type = typeof(System.Windows.Threading.Dispatcher);
+            object? window = type.GetField("_window", BindingFlags.Instance | BindingFlags.NonPublic)?.GetValue(dispatcher);
+            object? handle = window?.GetType().GetProperty("Handle")?.GetValue(window);
+            object? message = type.GetField("_msgProcessQueue", BindingFlags.Static | BindingFlags.NonPublic)?.GetValue(null);
+            return handle is IntPtr hwnd && message is not null
+                && PostMessage(hwnd, (uint)Convert.ToInt32(message, CultureInfo.InvariantCulture), IntPtr.Zero, IntPtr.Zero);
+        }
+        catch (Exception ex) when (ex is TargetInvocationException or InvalidOperationException
+            or ArgumentException or InvalidCastException)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Asks this process's runtime, through its diagnostics port (as <c>dotnet-dump collect</c>
+    /// does), to write a dump with heap. The runtime writes it from a separate process, so a
+    /// stalled thread holding the loader lock cannot stop it, and the heap keeps the runtime data
+    /// that managed stacks are read from. Returns what happened, for the report.
     /// </summary>
     internal static string WriteDump(string path, TimeSpan timeout)
     {
-        string tool = Path.Combine(RuntimeEnvironment.GetRuntimeDirectory(), "createdump.exe");
-        if (!File.Exists(tool))
-        {
-            return "Dump: not written; createdump.exe is not beside the runtime";
-        }
-
+        var clock = Stopwatch.StartNew();
         try
         {
-            var start = new ProcessStartInfo(tool)
-            {
-                UseShellExecute = false,
-                CreateNoWindow = true,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-            };
-            // A heap dump keeps the runtime's own data, so managed stacks can be read from it.
-            start.ArgumentList.Add("--withheap");
-            start.ArgumentList.Add("--name");
-            start.ArgumentList.Add(path);
-            start.ArgumentList.Add(Environment.ProcessId.ToString(CultureInfo.InvariantCulture));
-            var clock = Stopwatch.StartNew();
-            using Process dumper = Process.Start(start)
-                ?? throw new InvalidOperationException("createdump did not start");
-            Task<string> output = dumper.StandardOutput.ReadToEndAsync();
-            Task<string> error = dumper.StandardError.ReadToEndAsync();
-            if (!dumper.WaitForExit(timeout))
-            {
-                dumper.Kill();
-                return string.Create(
-                    CultureInfo.InvariantCulture,
-                    $"Dump: createdump did not finish within {timeout.TotalSeconds:0}s");
-            }
+            using var pipe = new NamedPipeClientStream(
+                ".",
+                "dotnet-diagnostic-" + Environment.ProcessId.ToString(CultureInfo.InvariantCulture),
+                PipeDirection.InOut);
+            pipe.Connect((int)Math.Min(int.MaxValue, timeout.TotalMilliseconds));
+            pipe.Write(DumpRequest(path));
+            pipe.Flush();
 
+            using var cancel = new CancellationTokenSource(timeout);
+            byte[] header = new byte[DiagnosticsHeaderSize];
+            pipe.ReadExactlyAsync(header, cancel.Token).AsTask().GetAwaiter().GetResult();
+            byte[] payload = new byte[Math.Max(0, BinaryPrimitives.ReadUInt16LittleEndian(header.AsSpan(14)) - DiagnosticsHeaderSize)];
+            pipe.ReadExactlyAsync(payload, cancel.Token).AsTask().GetAwaiter().GetResult();
+            uint status = payload.Length >= 4 ? BinaryPrimitives.ReadUInt32LittleEndian(payload) : 0;
             long bytes = File.Exists(path) ? new FileInfo(path).Length : 0;
-            string detail = (output.Result + " " + error.Result).ReplaceLineEndings(" ").Trim();
             return string.Create(
                 CultureInfo.InvariantCulture,
-                $"Dump: {path} ({bytes} bytes, exit {dumper.ExitCode}, {clock.Elapsed.TotalSeconds:0.0}s) {detail}");
+                $"Dump: {path} ({bytes} bytes, {(header[17] == 0 ? "ok" : "error")} 0x{status:X8}, {clock.Elapsed.TotalSeconds:0.0}s)");
         }
-        catch (Exception ex) when (ex is IOException or Win32Exception or InvalidOperationException
-            or UnauthorizedAccessException)
+        catch (Exception ex) when (ex is IOException or TimeoutException or OperationCanceledException
+            or UnauthorizedAccessException or EndOfStreamException)
         {
-            return "Dump: not written; " + ex.Message;
+            return string.Create(
+                CultureInfo.InvariantCulture,
+                $"Dump: not written after {clock.Elapsed.TotalSeconds:0.0}s; {ex.GetType().Name}: {ex.Message}");
         }
+    }
+
+    private const int DiagnosticsHeaderSize = 20;
+
+    /// <summary>
+    /// A diagnostics IPC "generate core dump" request: the 20-byte header (magic, total size,
+    /// command set Dump = 1, command GenerateCoreDump = 1, reserved), then the dump path as a
+    /// length-prefixed null-terminated UTF-16 string, the dump type (2 = with heap) and the
+    /// diagnostics-logging flag.
+    /// </summary>
+    internal static byte[] DumpRequest(string path)
+    {
+        ReadOnlySpan<byte> magic = "DOTNET_IPC_V1\0"u8;
+        int size = DiagnosticsHeaderSize + 4 + ((path.Length + 1) * 2) + 4 + 4;
+        if (size > ushort.MaxValue)
+        {
+            throw new IOException("The dump path is too long for a diagnostics request.");
+        }
+
+        byte[] message = new byte[size];
+        Span<byte> span = message;
+        magic.CopyTo(span);
+        BinaryPrimitives.WriteUInt16LittleEndian(span[14..], (ushort)size);
+        span[16] = 0x01; // Dump command set.
+        span[17] = 0x01; // GenerateCoreDump.
+        int offset = DiagnosticsHeaderSize;
+        BinaryPrimitives.WriteInt32LittleEndian(span[offset..], path.Length + 1);
+        offset += 4;
+        foreach (char c in path)
+        {
+            BinaryPrimitives.WriteUInt16LittleEndian(span[offset..], c);
+            offset += 2;
+        }
+
+        offset += 2; // The terminating null.
+        BinaryPrimitives.WriteUInt32LittleEndian(span[offset..], 2); // WithHeap.
+        offset += 4;
+        BinaryPrimitives.WriteUInt32LittleEndian(span[offset..], 0); // No createdump logging.
+        return message;
     }
 
     /// <summary>
@@ -360,6 +489,9 @@ internal static class SelfTestStallEvidence
 
     [DllImport("user32.dll", CharSet = CharSet.Unicode)]
     private static extern int GetWindowText(IntPtr hwnd, StringBuilder text, int maxCount);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern bool PostMessage(IntPtr hwnd, uint message, IntPtr wParam, IntPtr lParam);
 
     [DllImport("kernel32.dll")]
     private static extern uint GetCurrentThreadId();
