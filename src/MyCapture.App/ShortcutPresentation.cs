@@ -8,6 +8,7 @@ using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Data;
 using System.Windows.Input;
+using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Threading;
 
@@ -117,6 +118,25 @@ internal sealed class ShortcutPresentation : INotifyPropertyChanged
             throw new NotSupportedException();
     }
 
+    private const int WmSysCommand = 0x0112;
+    private const int ScKeyMenu = 0xF100;
+    private static readonly HwndSourceHook KeyboardMenuHook = SuppressBareKeyboardMenu;
+
+    /// <summary>
+    /// Alt (or F10) pressed and released on its own asks Windows for the keyboard menu: SC_KEYMENU
+    /// without a character. These windows have no menu bar, so Windows would hold the system menu
+    /// in a modal loop that swallows the next keys, including the next Alt that reveals captions.
+    /// Alt+Space carries its character and still opens the system menu.
+    /// </summary>
+    internal static bool IsBareKeyboardMenu(int message, IntPtr wParam, IntPtr lParam) =>
+        message == WmSysCommand && (wParam.ToInt64() & 0xFFF0) == ScKeyMenu && lParam == IntPtr.Zero;
+
+    private static IntPtr SuppressBareKeyboardMenu(IntPtr hwnd, int message, IntPtr wParam, IntPtr lParam, ref bool handled)
+    {
+        if (IsBareKeyboardMenu(message, wParam, lParam)) handled = true;
+        return IntPtr.Zero;
+    }
+
     private sealed class WindowAltReveal
     {
         private readonly Window _window;
@@ -124,11 +144,14 @@ internal sealed class ShortcutPresentation : INotifyPropertyChanged
         private readonly ShortcutAltRevealState _state = new();
         private WindowAltReveal? _owner;
         private DispatcherOperation? _dpiRefresh;
+        private HwndSource? _source;
 
         internal WindowAltReveal(Window window)
         {
             _window = window;
             _inputManager = InputManager.Current;
+            if (SourceOf(window) is { } source) HookSource(source);
+            else window.SourceInitialized += OnSourceInitialized;
             // Observe handled events too, but never consume them: Alt accelerators and WPF
             // menu access keys continue through their existing input handlers.
             window.AddHandler(Keyboard.PreviewKeyDownEvent, new KeyEventHandler(OnKeyDown), true);
@@ -145,6 +168,25 @@ internal sealed class ShortcutPresentation : INotifyPropertyChanged
             window.Deactivated += OnDeactivated;
             window.DpiChanged += OnDpiChanged;
             window.Closed += OnClosed;
+        }
+
+        private void OnSourceInitialized(object? sender, EventArgs e)
+        {
+            _window.SourceInitialized -= OnSourceInitialized;
+            if (SourceOf(_window) is { } source) HookSource(source);
+        }
+
+        // The handle exists before the window is shown and gets its root visual.
+        private static HwndSource? SourceOf(Window window)
+        {
+            IntPtr handle = new WindowInteropHelper(window).Handle;
+            return handle == IntPtr.Zero ? null : HwndSource.FromHwnd(handle);
+        }
+
+        private void HookSource(HwndSource source)
+        {
+            _source = source;
+            source.AddHook(KeyboardMenuHook);
         }
 
         internal void Follow(WindowAltReveal owner)
@@ -264,6 +306,9 @@ internal sealed class ShortcutPresentation : INotifyPropertyChanged
             _window.Deactivated -= OnDeactivated;
             _window.DpiChanged -= OnDpiChanged;
             _window.Closed -= OnClosed;
+            _window.SourceInitialized -= OnSourceInitialized;
+            _source?.RemoveHook(KeyboardMenuHook);
+            _source = null;
             WindowReveals.Remove(_window);
         }
 
