@@ -143,7 +143,7 @@ internal static class ClipboardImageService
 
             // copy:true materialises the delayed formats before this method and the stream
             // return, so clipboard content remains after MyCapture exits.
-            if (writeData is null) Clipboard.SetDataObject(data, copy: true);
+            if (writeData is null) ClipboardWriter.SetDataObject(data, copy: true);
             else writeData(data);
             if (sourceToken is not null)
                 ClipboardProvenance.Publish(sourceToken, provenance ?? CaptureProvenance.None, pendingProvenance);
@@ -169,7 +169,7 @@ internal static class ClipboardImageService
         {
             var data = new DataObject();
             data.SetText(text, TextDataFormat.UnicodeText);
-            Clipboard.SetDataObject(data, copy: true);
+            ClipboardWriter.SetDataObject(data, copy: true);
             return true;
         }
         catch (COMException ex) when ((uint)ex.HResult == ClipboardCantOpen)

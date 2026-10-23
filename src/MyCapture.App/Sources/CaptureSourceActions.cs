@@ -26,7 +26,7 @@ internal sealed class CaptureSourceActions
         _launch = launch ?? (start => Process.Start(start)?.Dispose());
         _fileExists = fileExists ?? File.Exists;
         _directoryExists = directoryExists ?? Directory.Exists;
-        _copy = copy ?? Clipboard.SetText;
+        _copy = copy ?? ClipboardWriter.SetText;
         string windows = windowsDirectory ?? Environment.GetFolderPath(Environment.SpecialFolder.Windows);
         _explorerPath = Path.Combine(windows, "explorer.exe");
         _textEditorPath = Path.Combine(windows, "System32", "notepad.exe");

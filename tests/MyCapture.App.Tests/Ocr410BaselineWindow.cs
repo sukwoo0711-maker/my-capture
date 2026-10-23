@@ -287,7 +287,7 @@ internal sealed class Ocr410BaselineWindow : Window
 
         try
         {
-            Clipboard.SetText(_textBox.Text);
+            MyCapture.App.ClipboardWriter.SetText(_textBox.Text);
             _status.Text = UiText.Get("Text_6EAF5A406E0E") + _status.Text;
         }
         catch (System.Runtime.InteropServices.COMException)

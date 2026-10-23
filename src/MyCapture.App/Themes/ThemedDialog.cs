@@ -54,7 +54,7 @@ internal sealed class ThemedDialog : Window
             AutomationProperties.SetName(technical, UiText.Get("Dialog.Details"));
             content.Children.Add(technical);
             var copy = new Button { Content = UiText.Get("QuickAccess.Copy"), MinHeight = 36, HorizontalAlignment = HorizontalAlignment.Left };
-            copy.Click += (_, _) => { try { Clipboard.SetText(details); } catch (System.Runtime.InteropServices.COMException) { technical.SelectAll(); technical.Focus(); } };
+            copy.Click += (_, _) => { try { ClipboardWriter.SetText(details); } catch (System.Runtime.InteropServices.COMException) { technical.SelectAll(); technical.Focus(); } };
             content.Children.Add(copy);
             var detailsHeading = new TextBlock { Text = UiText.Get("Dialog.Details") };
             detailsHeading.SetResourceReference(TextBlock.ForegroundProperty, "Text.Primary");
