@@ -8,7 +8,7 @@ namespace MyCapture.App.Tests;
 
 public sealed class AccentUsagePolicyTests
 {
-    private static readonly Regex AccentKey = new(@"\b(?:Accent\.(?:Default|Hover|Pressed|Subtle|Indicator|Foreground|Cool|Gradient)|Border\.Accent|Text\.OnAccent|Pin\.Frame)\b");
+    private static readonly Regex AccentKey = new(@"\b(?:Accent\.(?:Default|Hover|Pressed|Subtle|Indicator|Foreground|Cool|Gradient)|Border\.Accent|Text\.OnAccent|Pin\.Frame|Recording\.Live)\b");
     // These files define palettes and their system-contrast mappings, rather than UI consumers.
     private static readonly HashSet<string> PaletteFiles =
     [
@@ -45,6 +45,7 @@ public sealed class AccentUsagePolicyTests
     [InlineData("Border.Accent")]
     [InlineData("Text.OnAccent")]
     [InlineData("Pin.Frame")]
+    [InlineData("Recording.Live")]
     public void SharedThemeFileDoesNotAllowAnAccentInAnUnrelatedStyle(string key)
     {
         string source = $$"""
@@ -103,8 +104,13 @@ public sealed class AccentUsagePolicyTests
                 "src/MyCapture.App/Pinning/PinFrameColor.cs" => line == "internal const string AccentKey = \"Pin.Frame\";",
                 // Explicit user-selected export background: output artwork, not chrome.
                 "src/MyCapture.App/Editing/ImageReductionExportDialog.cs" => line == "Color accent = (TryFindResource(\"Accent.Default\") as SolidColorBrush)?.Color ?? Colors.SteelBlue;",
-                // Recording-region outline. Other accent usages in this window still fail.
-                "src/MyCapture.App/Recording/RecordingControlWindow.cs" => line is "BorderBrush = TryBrush(\"Accent.Default\", Colors.OrangeRed)," or ": TryBrush(\"Accent.Default\", Colors.OrangeRed);",
+                // The one recording red: region outline and the compact bar's live dot. Other
+                // accent usages in this window still fail.
+                "src/MyCapture.App/Recording/RecordingControlWindow.cs" => line is "BorderBrush = TryBrush(\"Recording.Live\", Colors.OrangeRed),"
+                    or ": TryBrush(\"Recording.Live\", Colors.OrangeRed);"
+                    or "_recordingIndicator.SetResourceReference(SymbolIcon.FillProperty, _paused ? \"Text.Primary\" : \"Recording.Live\");",
+                // The recording region selector's cue, the same red as the frame that follows.
+                "src/MyCapture.App/Capture/RecordingSelectionCue.cs" => line == "ThemeColor live = ThemeCatalog.ColorsFor(theme)[\"Recording.Live\"];",
                 // Diagnostic contrast role classification does not paint a control.
                 "src/MyCapture.App/Diagnostics/UxReviewSelfTest.cs" => line == "|| brushKey is \"Text.OnAccent\" or \"Text.Badge\"",
                 // User-editable drawing colors and the capture-guide color preference.

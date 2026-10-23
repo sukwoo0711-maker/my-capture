@@ -43,6 +43,82 @@ $runRoot = Join-Path $outputBase $runName
 
 . (Join-Path $PSScriptRoot 'packaged-validation.ps1')
 $tests = @(Get-PackagedSelfTests)
+
+# A self-test that outlives the runner's limit is ended without a report of its own. Before it is
+# ended, record where it is: a dump with heap (managed and native stacks), requested through the
+# process's .NET diagnostics port as dotnet-dump collect does, and the processes and windows on
+# the desktop, which can block the next test as well.
+function Request-ProcessDump {
+    param([int]$ProcessId, [string]$Path)
+
+    # Diagnostics IPC: 20-byte header (magic, total size, command set Dump = 1,
+    # GenerateCoreDump = 1, reserved), then the length-prefixed UTF-16 path with its null,
+    # dump type 2 (with heap) and the createdump logging flag.
+    $pathBytes = [Text.Encoding]::Unicode.GetBytes($Path + [char]0)
+    $size = 20 + 4 + $pathBytes.Length + 8
+    $message = New-Object byte[] $size
+    [Text.Encoding]::ASCII.GetBytes("DOTNET_IPC_V1").CopyTo($message, 0)
+    [BitConverter]::GetBytes([uint16]$size).CopyTo($message, 14)
+    $message[16] = 1
+    $message[17] = 1
+    [BitConverter]::GetBytes([int]($Path.Length + 1)).CopyTo($message, 20)
+    $pathBytes.CopyTo($message, 24)
+    [BitConverter]::GetBytes([uint32]2).CopyTo($message, 24 + $pathBytes.Length)
+
+    $pipe = New-Object System.IO.Pipes.NamedPipeClientStream('.', "dotnet-diagnostic-$ProcessId", [System.IO.Pipes.PipeDirection]::InOut)
+    try {
+        $pipe.Connect(10000)
+        $pipe.Write($message, 0, $message.Length)
+        $pipe.Flush()
+        # The reply (header and HRESULT) comes once the runtime has written the dump.
+        $response = New-Object byte[] 24
+        $read = 0
+        while ($read -lt $response.Length) {
+            $pending = $pipe.ReadAsync($response, $read, $response.Length - $read)
+            if (-not $pending.Wait(180000)) { throw 'The dump request did not finish within 180 seconds.' }
+            if ($pending.Result -le 0) { break }
+            $read += $pending.Result
+        }
+        $status = if ($read -ge 24) { '0x{0:X8}' -f [BitConverter]::ToUInt32($response, 20) } else { "short response ($read bytes)" }
+        $bytes = if (Test-Path -LiteralPath $Path) { (Get-Item -LiteralPath $Path).Length } else { 0 }
+        return "Dump: $Path ($bytes bytes, $(if ($response[17] -eq 0) { 'ok' } else { 'error' }) $status)"
+    }
+    finally {
+        $pipe.Dispose()
+    }
+}
+
+function Write-TimeoutEvidence {
+    param([System.Diagnostics.Process]$Process, [string]$TestRoot)
+
+    # Evidence is best effort: it must never keep the hung process alive.
+    try {
+        $lines = New-Object 'System.Collections.Generic.List[string]'
+        $lines.Add("Timed out after $TimeoutSeconds second(s): PID $($Process.Id)")
+        try {
+            $lines.Add((Request-ProcessDump -ProcessId $Process.Id -Path (Join-Path $TestRoot 'timeout.dmp')))
+        }
+        catch {
+            $lines.Add("Dump: not written: $($_.Exception.Message)")
+        }
+
+        $lines.Add('Processes with a window title:')
+        foreach ($candidate in @(Get-Process -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowTitle })) {
+            $lines.Add("  $($candidate.ProcessName) $($candidate.Id): $($candidate.MainWindowTitle)")
+        }
+        foreach ($name in @('MyCapture', 'WerFault', 'WerFaultSecure', 'createdump')) {
+            foreach ($candidate in @(Get-Process -Name $name -ErrorAction SilentlyContinue)) {
+                $lines.Add("  $name $($candidate.Id) started $($candidate.StartTime.ToString('o'))")
+            }
+        }
+
+        Set-Content -LiteralPath (Join-Path $TestRoot 'timeout-report.txt') -Value $lines -Encoding UTF8
+    }
+    catch {
+        Write-Host "Timeout evidence was not recorded: $($_.Exception.Message)" -ForegroundColor Yellow
+    }
+}
+
 $evidence = @($tests | ForEach-Object {
     [pscustomobject]@{ Name = $_.Name; Path = "$($_.Name)/$($_.Report)"; ExitCode = $null; Result = ''; Sha256 = '' }
 })
@@ -94,6 +170,7 @@ try {
 
             if (-not $process.WaitForExit($TimeoutSeconds * 1000)) {
                 $timedOut = $true
+                Write-TimeoutEvidence -Process $process -TestRoot $testRoot
                 Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
                 $process.WaitForExit()
             }

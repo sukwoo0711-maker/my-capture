@@ -148,6 +148,9 @@
     <SolidColorBrush x:Key="Border.Hover" Color="Transparent" />
     <SolidColorBrush x:Key="Border.Focus" Color="{StaticResource Primitive.Warm100}" />
     <SolidColorBrush x:Key="Pin.Frame" Color="#E24F47" />
+    <!-- The one recording red: region frame, compact bar dot and the region selector's cue.
+         Status words stay State.Danger, which keeps text contrast on the floating bar. -->
+    <SolidColorBrush x:Key="Recording.Live" Color="#E0453C" />
     <!-- Two-DIP focus rings are overlays, so the weight never moves layout. -->
     <Thickness x:Key="Border.DecorativeThickness">0</Thickness>
     <Thickness x:Key="Border.ToolThickness">0</Thickness>

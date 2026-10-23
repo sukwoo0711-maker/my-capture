@@ -1,6 +1,7 @@
 using System.IO;
 using System.Reflection;
 using System.Windows;
+using System.Windows.Automation;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
@@ -167,6 +168,65 @@ public sealed class EditorRotationAndTextTests
             Assert.DoesNotContain('\n', text.Text.Replace("\r", ""));
             Assert.True(text.Rect.Width > 180, $"Committed box stayed narrow: {text.Rect.Width:0}");
         });
+    }
+
+    [Fact]
+    public void LiveTextBox_DrawsPretendardTechnicalTextAsTyped()
+    {
+        StaTestHost.Run(() =>
+        {
+            using EditorHost host = EditorHost.Create(Solid(640, 200, 0x20), 640, 200);
+            host.Window.UpdateLayout();
+            Field<AnnotationEditorController>(host.Editor, "_controller").DefaultFontFamily = "Pretendard";
+            MethodInfo place = typeof(AnnotationEditorControl).GetMethod(
+                "PlaceTextBox",
+                BindingFlags.Instance | BindingFlags.NonPublic)!;
+            place.Invoke(host.Editor, [new PointD(20, 20)]);
+            host.Window.UpdateLayout();
+
+            // The features that would show "0x02D9" as "0×02D9" and "->" as an arrow are off,
+            // as in the committed caption.
+            TextBox box = FindLiveTextBox(host.Editor);
+            Assert.False(System.Windows.Documents.Typography.GetStandardLigatures(box));
+            Assert.False(System.Windows.Documents.Typography.GetContextualAlternates(box));
+            Assert.False(System.Windows.Documents.Typography.GetContextualLigatures(box));
+        });
+    }
+
+    [Fact]
+    public void CommandBarReadsAsToolsOutputsAndOneFinishingAction()
+    {
+        StaTestHost.Run(() =>
+        {
+            using EditorHost host = EditorHost.Create(Solid(640, 200, 0x20), 640, 200);
+            host.Window.UpdateLayout();
+            CommandGroupsPanel bar = Descendants(host.Editor).OfType<CommandGroupsPanel>()
+                .First(panel => panel.IsVisible);
+            Button Command(string id) => Descendants(bar).OfType<Button>()
+                .Single(button => AutomationProperties.GetAutomationId(button) == id);
+            string? Tier(Button button) => StyleKey(button);
+
+            // Editing commands are borderless tools; Copy is a bordered output; Done is the fill.
+            foreach (string tool in new[] { "Capture410Crop", "EditorFlowCopyText", "EditorFlowCancel" })
+                Assert.Equal("Button.Ghost", Tier(Command(tool)));
+            Assert.Equal("Button.Primary", Tier(Command("EditorFlowDone")));
+            Assert.NotEqual("Button.Ghost", Tier(Command("EditorFlowCopy")));
+        });
+    }
+
+    private static string? StyleKey(FrameworkElement element) =>
+        element.ReadLocalValue(FrameworkElement.StyleProperty) is { } value && value.GetType().Name == "ResourceReferenceExpression"
+            ? value.GetType().GetProperty("ResourceKey")?.GetValue(value) as string
+            : null;
+
+    private static IEnumerable<DependencyObject> Descendants(DependencyObject parent)
+    {
+        for (int index = 0; index < VisualTreeHelper.GetChildrenCount(parent); index++)
+        {
+            DependencyObject child = VisualTreeHelper.GetChild(parent, index);
+            yield return child;
+            foreach (DependencyObject descendant in Descendants(child)) yield return descendant;
+        }
     }
 
     private static TextBox FindLiveTextBox(AnnotationEditorControl editor)

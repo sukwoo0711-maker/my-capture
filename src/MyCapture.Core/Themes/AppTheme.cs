@@ -127,6 +127,9 @@ public static class ThemeCatalog
         if (value != AppTheme.HighContrast)
             foreach ((string key, ThemeColor color) in AccentPalette.RedOverrides(AppThemeNames.IsLight(value), colors))
                 colors[key] = color;
+        // Every live-recording mark (region frame, compact bar dot, region selector cue) shares
+        // one colour, the accent the recording frame already used. Status words keep State.Danger.
+        colors["Recording.Live"] = colors["Accent.Default"];
         return colors.AsReadOnly();
     });
 

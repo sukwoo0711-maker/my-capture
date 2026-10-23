@@ -4634,4 +4634,8 @@ F3  클립보드를 핀으로 띄우기
   <data name="Source.OpenAutomation" xml:space="preserve"><value>출처: {0}, 열기</value></data>
   <data name="Source.AppMissing" xml:space="preserve"><value>원본 앱을 찾을 수 없습니다.</value></data>
   <data name="Source.AppOpenFailed" xml:space="preserve"><value>원본 앱을 열 수 없습니다.</value></data>
+  <data name="About_DiagnosticsBundle" xml:space="preserve"><value>진단 묶음 저장</value></data>
+  <data name="About_DiagnosticsBundleHelp" xml:space="preserve"><value>최근 로그와 진단 정보를 ZIP 파일 하나로 저장합니다. 캡처 내용, 클립보드, 창 제목, 파일 경로는 포함하지 않으며 자동으로 전송하지 않습니다.</value></data>
+  <data name="About_DiagnosticsBundleSaved" xml:space="preserve"><value>진단 묶음 저장 완료</value></data>
+  <data name="About_DiagnosticsBundleFilter" xml:space="preserve"><value>진단 묶음 (*.zip)|*.zip</value></data>
 </root>
