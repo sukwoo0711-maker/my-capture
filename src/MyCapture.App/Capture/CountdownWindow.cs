@@ -21,11 +21,9 @@ namespace MyCapture.App.Capture;
 /// <para>
 /// Kept deliberately separate from the capture overlay. The capture-before-wait invariant
 /// requires that nothing this window draws can end up in the frozen frame. The owner closes it
-/// first, then schedules the capture on a later dispatcher turn. A layered countdown is excluded
-/// from capture before it is first shown, so that close plays a short shrink while the capture
-/// already runs; a countdown that could not be excluded closes at once, before the capture.
-/// Because it is its own top-level window it never shares an HWND or a frozen background with
-/// the overlay.
+/// first and starts the capture only once <see cref="Window.Closed"/> has been raised, so the
+/// short shrink a layered countdown plays as it leaves ends before the freeze. Because it is its
+/// own top-level window it never shares an HWND or a frozen background with the overlay.
 /// </para>
 /// <para>
 /// Each second the new digit lands while the previous one fades out, and a thin accent ring
@@ -207,22 +205,6 @@ internal sealed class CountdownWindow : Window
     /// <summary>Raised when the user cancels (Esc) before the countdown completes.</summary>
     internal event EventHandler? Cancelled;
 
-    /// <summary>Excludes this window from screen capture; replaced by tests.</summary>
-    internal Func<Window, bool> ApplyCaptureExclusion { get; set; } = CaptureWindowExclusion.TryApply;
-
-    /// <summary>
-    /// Whether the window was excluded from capture before it was first shown. Only then may it stay
-    /// on screen, leaving, while the capture that follows it runs.
-    /// </summary>
-    internal bool IsCaptureExcluded { get; private set; }
-
-    protected override void OnSourceInitialized(EventArgs e)
-    {
-        base.OnSourceInitialized(e);
-        // An opaque countdown cannot play an exit (it closes at once), so it is left as it was.
-        IsCaptureExcluded = AllowsTransparency && ApplyCaptureExclusion(this);
-    }
-
     private void OnTick(object? sender, EventArgs e)
     {
         _remaining--;
@@ -362,9 +344,9 @@ internal sealed class CountdownWindow : Window
     /// closes when it ends. The window stops taking input at once.
     /// </summary>
     /// <remarks>
-    /// When the countdown elapsed, the capture starts while the window leaves, so the window
-    /// shrinks only when it is excluded from capture; otherwise it closes at once, before the
-    /// capture, as it always did. A cancelled countdown fades down. Any other close (shutdown, a
+    /// When the countdown elapsed the window shrinks away, and the owner starts the capture only
+    /// after <see cref="Window.Closed"/>, so the exit never reaches the frozen frame. A cancelled
+    /// countdown fades down. Any other close (shutdown, a
     /// close during the exit, a window that never counted down) is immediate, and so is every close
     /// with Windows animation effects off or on an opaque window.
     /// </remarks>
@@ -373,7 +355,7 @@ internal sealed class CountdownWindow : Window
         base.OnClosing(e);
         ExitMotion? exit = _outcome switch
         {
-            Outcome.Elapsed when IsCaptureExcluded => ExitMotion.Shrink,
+            Outcome.Elapsed => ExitMotion.Shrink,
             Outcome.Cancelled => ExitMotion.FadeDown,
             _ => null,
         };

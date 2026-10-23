@@ -859,10 +859,10 @@ public partial class App : Application
         void OnElapsed(object? sender, EventArgs e)
         {
             Cleanup();
-            // Close the window FIRST, then start the capture on the next turn so the countdown
-            // is gone from the screen before the freeze.
+            // Close the window FIRST, then start the capture on the turn after it has closed, so
+            // the countdown, including its short exit, is gone from the screen before the freeze.
+            countdown.Closed += (_, _) => _ = Dispatcher.BeginInvoke(new Action(HandleCaptureRequested));
             countdown.Close();
-            _ = Dispatcher.BeginInvoke(new Action(HandleCaptureRequested));
         }
 
         void OnCancelled(object? sender, EventArgs e)

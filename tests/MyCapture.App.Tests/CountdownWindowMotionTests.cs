@@ -1,10 +1,8 @@
 using System.Reflection;
-using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Controls;
 using System.Windows.Input;
-using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Threading;
 using MyCapture.App.Capture;
@@ -17,7 +15,7 @@ namespace MyCapture.App.Tests;
 /// <summary>
 /// The delayed-capture countdown: each new digit lands over the fading previous one, a ring runs
 /// down every second, the value itself changes at once, and the window leaves with a short exit
-/// only when the capture that follows cannot see it. Everything snaps with animation effects off.
+/// that ends before the capture starts. Everything snaps with animation effects off.
 /// </summary>
 public sealed class CountdownWindowMotionTests
 {
@@ -77,29 +75,19 @@ public sealed class CountdownWindowMotionTests
         Assert.Equal(label.DesiredSize.Height, digit.DesiredSize.Height, 6);
     });
 
-    [Theory]
-    [InlineData(true)]
-    [InlineData(false)]
-    public void ElapsedShrinksAwayOnlyWhileTheCaptureCannotSeeIt(bool excluded) => Run(true, window =>
+    [Fact]
+    public void ElapsedShrinksAwayAndClosesBeforeTheCapture() => Run(true, window =>
     {
         int closed = 0;
         window.Closed += (_, _) => closed++;
-        // What the app does: close first, then start the capture.
+        // What the app does: close, then start the capture once Closed has been raised.
         window.Elapsed += (_, _) => window.Close();
-        Assert.Equal(excluded, window.IsCaptureExcluded);
 
         Tick(window);
         Tick(window);
         Tick(window);
 
-        if (!excluded)
-        {
-            // Visible to the capture: gone before it, exactly as before.
-            Assert.Equal(1, closed);
-            Assert.False(FluidMotion.IsExiting(window));
-            return;
-        }
-
+        // Still leaving: the capture has not started, and the window takes no input.
         Assert.Equal(0, closed);
         Assert.True(window.IsVisible);
         Assert.True(FluidMotion.IsExiting(window));
@@ -109,7 +97,7 @@ public sealed class CountdownWindowMotionTests
         FluidMotion.CompleteExit(window);
         Assert.Equal(1, closed);
         Assert.False(window.IsVisible);
-    }, excluded: excluded);
+    });
 
     [Theory]
     [InlineData(true)]
@@ -152,14 +140,13 @@ public sealed class CountdownWindowMotionTests
             Assert.Equal(1, closed);
         });
 
-        // An opaque countdown is not excluded by this window and cannot fade into the desktop.
+        // An opaque countdown cannot fade into the desktop.
         Run(true, window =>
         {
             int closed = 0;
             window.Closed += (_, _) => closed++;
             window.Elapsed += (_, _) => window.Close();
             Assert.False(window.AllowsTransparency);
-            Assert.False(window.IsCaptureExcluded);
             Tick(window);
             Tick(window);
             Tick(window);
@@ -167,34 +154,7 @@ public sealed class CountdownWindowMotionTests
         }, layered: false);
     }
 
-    [Fact]
-    public void ExclusionIsAppliedBeforeTheWindowIsFirstShown() => StaTestHost.Run(() =>
-    {
-        using var mode = new ExclusionMode(true);
-        bool? visibleWhenExcluded = null;
-        var window = new CountdownWindow(3)
-        {
-            WindowStartupLocation = WindowStartupLocation.Manual,
-            Left = -32000,
-            Top = -32000,
-            ShowActivated = false,
-        };
-        window.ApplyCaptureExclusion = target =>
-        {
-            // The HWND exists but has not been shown on screen yet.
-            visibleWhenExcluded = IsWindowVisible(new WindowInteropHelper(target).Handle);
-            return true;
-        };
-        try
-        {
-            window.Show();
-            Assert.False(visibleWhenExcluded);
-            Assert.True(window.IsCaptureExcluded);
-        }
-        finally { window.Close(); }
-    });
-
-    private static void Run(bool motion, Action<CountdownWindow> body, bool layered = true, bool excluded = true) => StaTestHost.Run(() =>
+    private static void Run(bool motion, Action<CountdownWindow> body, bool layered = true) => StaTestHost.Run(() =>
     {
         bool? previous = FluidMotion.AnimationsEnabledOverrideForTest;
         FluidMotion.AnimationsEnabledOverrideForTest = motion;
@@ -202,7 +162,6 @@ public sealed class CountdownWindowMotionTests
         // Off screen and never activated: other sessions may be using this desktop.
         var window = new CountdownWindow(3)
         {
-            ApplyCaptureExclusion = _ => excluded,
             WindowStartupLocation = WindowStartupLocation.Manual,
             Left = -32000,
             Top = -32000,
@@ -231,8 +190,4 @@ public sealed class CountdownWindowMotionTests
 
     private static T Field<T>(CountdownWindow window, string name) =>
         (T)typeof(CountdownWindow).GetField(name, BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(window)!;
-
-    [DllImport("user32.dll")]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool IsWindowVisible(IntPtr window);
 }
