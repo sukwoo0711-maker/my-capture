@@ -204,6 +204,7 @@ public sealed class SetupContractsTests
             var level = document.Descendants().Single(n => n.Name.LocalName == "requestedExecutionLevel");
             Assert.Equal("asInvoker", level.Attribute("level")!.Value); Assert.Equal("false", level.Attribute("uiAccess")!.Value);
             Assert.Contains(document.Descendants(), n => n.Name.LocalName == "supportedOS" && n.Attribute("Id")!.Value == "{8e0f7a12-bfb3-4fe8-b9a5-48fd50a15a9a}");
+            Assert.Contains(document.Descendants(), n => n.Name.LocalName == "dpiAwareness" && n.Value == "PerMonitorV2");
             string config = File.ReadAllText(Path.Combine(Fixture.Repository, "src", "MyCapture.Setup", "App.config"));
             Assert.Contains("<supportedRuntime version=\"v4.0\" />", config); Assert.DoesNotContain("sku=", config);
         }
