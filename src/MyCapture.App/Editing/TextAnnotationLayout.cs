@@ -67,7 +67,8 @@ internal static class TextAnnotationLayout
             FontStretches.Normal);
 
         var formatted = new FormattedText(
-            key.Text,
+            // Pretendard draws technical text as typed, as the live editing box does.
+            LiteralShaping.Applies(key.FontFamily) ? LiteralShaping.Prepare(key.Text) : key.Text,
             key.Culture,
             FlowDirection.LeftToRight,
             typeface,

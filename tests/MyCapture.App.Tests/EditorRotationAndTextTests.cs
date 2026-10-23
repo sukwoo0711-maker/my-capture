@@ -169,6 +169,29 @@ public sealed class EditorRotationAndTextTests
         });
     }
 
+    [Fact]
+    public void LiveTextBox_DrawsPretendardTechnicalTextAsTyped()
+    {
+        StaTestHost.Run(() =>
+        {
+            using EditorHost host = EditorHost.Create(Solid(640, 200, 0x20), 640, 200);
+            host.Window.UpdateLayout();
+            Field<AnnotationEditorController>(host.Editor, "_controller").DefaultFontFamily = "Pretendard";
+            MethodInfo place = typeof(AnnotationEditorControl).GetMethod(
+                "PlaceTextBox",
+                BindingFlags.Instance | BindingFlags.NonPublic)!;
+            place.Invoke(host.Editor, [new PointD(20, 20)]);
+            host.Window.UpdateLayout();
+
+            // The features that would show "0x02D9" as "0×02D9" and "->" as an arrow are off,
+            // as in the committed caption.
+            TextBox box = FindLiveTextBox(host.Editor);
+            Assert.False(System.Windows.Documents.Typography.GetStandardLigatures(box));
+            Assert.False(System.Windows.Documents.Typography.GetContextualAlternates(box));
+            Assert.False(System.Windows.Documents.Typography.GetContextualLigatures(box));
+        });
+    }
+
     private static TextBox FindLiveTextBox(AnnotationEditorControl editor)
     {
         var overlay = Field<Canvas>(editor, "_overlayCanvas");

@@ -1171,6 +1171,8 @@ internal sealed partial class AnnotationEditorControl : Grid
         // The committed caption is drawn with ideal glyph metrics (FormattedText). The editor
         // window's display-mode text would space and wrap the live copy differently.
         TextOptions.SetTextFormattingMode(textBox, TextFormattingMode.Ideal);
+        // Pretendard would otherwise show "0x02D9" as "0×02D9" and "->" as an arrow while typing.
+        if (LiteralShaping.Applies(annotation.FontFamily)) LiteralShaping.Apply(textBox);
         AutomationName(textBox, UiText.Get("Text_FAC754F72C25"));
         InputMethod.SetIsInputMethodEnabled(textBox, true);
 
