@@ -1949,8 +1949,10 @@ internal sealed partial class AnnotationEditorControl : Grid
     /// </summary>
     /// <remarks>
     /// The disabled look comes from the shared button styles: each button level keeps its shape
-    /// and only dims. <paramref name="borderless"/> identifies former ghost commands, which now
-    /// use the secondary button surface so they remain recognisable before hover.
+    /// and only dims. <paramref name="borderless"/> marks an editing command (undo, crop, rotate,
+    /// redact, copy text, cancel), drawn as a borderless tool button with its icon and name. Only
+    /// the output commands (save, copy) keep the bordered surface and Done the fill, so the bar
+    /// reads as tools, outputs and one finishing action.
     /// </remarks>
     private void CommandButton(Button button, bool borderless, ShortcutScope? scope = null, string? command = null)
     {
@@ -1959,7 +1961,7 @@ internal sealed partial class AnnotationEditorControl : Grid
             AttachEditorShortcut(button, shortcutScope, command);
         }
 
-        if (borderless) button.SetResourceReference(StyleProperty, "Button.Secondary");
+        if (borderless) button.SetResourceReference(StyleProperty, "Button.Ghost");
         button.Width = double.NaN;
         CommandButtonPresentation.Apply(button);
         CommandButtonPresentation.ReserveHint(button);

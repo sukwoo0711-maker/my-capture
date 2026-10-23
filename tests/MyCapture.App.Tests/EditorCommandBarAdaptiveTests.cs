@@ -89,8 +89,9 @@ public sealed class EditorCommandBarAdaptiveTests(ITestOutputHelper output)
     });
 
     [Theory]
-    [InlineData("ko-KR", 981, 800, 654)]
-    [InlineData("en-US", 952, 813, 654)]
+    // Measured after the editing commands became borderless tool buttons (no 1-DIP outline).
+    [InlineData("ko-KR", 969, 792, 648)]
+    [InlineData("en-US", 940, 805, 648)]
     public void ActualWindowWidthsMeetEachMeasuredStageBoundary(string language, int fullWidth, int secondaryWidth, int compactWidth) => StaTestHost.Run(() =>
     {
         using var culture = UiText.UseLanguage(language);
