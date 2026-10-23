@@ -171,10 +171,10 @@ internal sealed class EditorScene : TutorialScene
                 story.Move("apply-move", MeasureCropApply()).Click("crop-apply");
                 break;
             case "rotate":
-                // The edit commands keep rotation under More (and crop mode), so the clip uses the keys
-                // the tutorial's steps name.
-                story.Hold("key-left", 0.8).Hold("rotated-left", 2.0);
-                story.Hold("key-right", 0.8).Hold("rotated-right", 1.4);
+                // Rotation sits next to Crop in the edit commands; the captions name the keys the
+                // tutorial's steps use for the same buttons.
+                story.Move("command", Of(ByAutomationId("EditorRotateLeft"))).Click("rotate-left").Hold("rotated-left", 2.0);
+                story.Move("command-right", Of(ByAutomationId("EditorRotateRight"))).Click("rotate-right").Hold("rotated-right", 1.4);
                 break;
             case "save":
                 story.Hold("review", 1.0).Hold("save-key", 0.3).Hold("saving", 0.8).Hold("closed", 0.6);
@@ -236,7 +236,7 @@ internal sealed class EditorScene : TutorialScene
 
         (string caption, string key) = Caption(frame);
         if (frame.Pressed) Stage.DrawClick(dc, cursor, frame.Progress);
-        bool keyboardOnly = _feature is "save" or "rotate" && frame.Segment is not "open";
+        bool keyboardOnly = _feature is "save" && frame.Segment is not "open";
         if (!keyboardOnly) DrawPointer(dc, cursor);
         Stage.DrawCaption(dc, caption, key);
     }
@@ -294,11 +294,11 @@ internal sealed class EditorScene : TutorialScene
                 if (Math.Abs(cropped.CanvasWidth - 378) > 1 || Math.Abs(cropped.CanvasHeight - 208) > 1)
                     throw new InvalidOperationException($"The crop missed its image-space corners: {cropped.CanvasWidth}x{cropped.CanvasHeight}.");
                 break;
-            case "rotated-left":
-                Press(ShortcutScope.Annotation, "RotateLeft");
+            case "rotate-left" when frame.IsLast:
+                ((Button)ByAutomationId("EditorRotateLeft")).RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));
                 break;
-            case "rotated-right":
-                Press(ShortcutScope.Annotation, "RotateRight");
+            case "rotate-right" when frame.IsLast:
+                ((Button)ByAutomationId("EditorRotateRight")).RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));
                 break;
             case "save-key":
                 BeginCommit(() => Press(ShortcutScope.Annotation, "Save"));
@@ -438,7 +438,7 @@ internal sealed class EditorScene : TutorialScene
             case "rotate":
                 return segment switch
                 {
-                    "open" or "key-left" or "rotated-left" =>
+                    "open" or "command" or "rotate-left" or "rotated-left" =>
                         (L($"{Ui("EditorUx_RotateLeft")}: 이미지를 왼쪽으로 90도", $"{Ui("EditorUx_RotateLeft")} turns the image 90°"), Hint(ShortcutScope.Annotation, "RotateLeft")),
                     _ => (L($"{Ui("EditorUx_RotateRight")}으로 되돌림", $"{Ui("EditorUx_RotateRight")} turns it back"), Hint(ShortcutScope.Annotation, "RotateRight")),
                 };

@@ -8,6 +8,8 @@
 
 광고·계정 없이 무료이고 회사 업무에도 씁니다. 캡처와 글자 인식은 이 PC 안에서 처리하며, 소스 코드는 이 저장소에 MIT 라이선스로 공개되어 있습니다. Windows 11과 Windows 10 버전 22H2(x64)에서 실행하며, ARM64 PC에서는 Windows 11이 필요합니다. 소개 페이지는 <https://sukwoo0711-maker.github.io/my-capture/>입니다.
 
+새 버전이 있으면 앱에서 알려 줍니다. Store와 GitHub 설치형은 **업데이트**로 설치하고, 포터블은 릴리스 페이지에서 새 ZIP을 받습니다. 자동 확인은 **설정 > 정보 > 새 버전 자동 확인**에서 끌 수 있습니다. 배포 형식별 동작과 연결 주소는 [업데이트 안내](docs/install.md#업데이트)에 있습니다.
+
 ## 기본 캡처 도구와 다른 점
 
 **엑셀 표와 코드를 원문째 띄우는 핀.** 엑셀에서 범위를 복사해 핀으로 띄우면 엑셀이 클립보드에 함께 넣는 그림을 그대로 보여 주므로 글꼴·채우기·테두리가 시트에서 보던 모양 그대로입니다. 셀 값은 탭 구분 원문으로 핀에 붙어 있습니다. 색 정보를 함께 복사하는 에디터에서 복사한 코드는 에디터 색과 들여쓰기를 유지한 코드 핀이 되고, 그 밖의 텍스트는 글자 그대로 그린 핀이 됩니다. 엑셀이나 에디터에서 `Ctrl+C`를 누른 뒤 `F3`을 누르면 복사한 내용이 핀으로 뜨고, 에디터의 입력 위치는 그대로 남습니다. 핀에서 `Ctrl+C`나 `Ctrl+더블클릭`을 누르면 원문을 그대로 복사하므로 에디터나 시트에 바로 붙여 넣습니다.
@@ -60,8 +62,8 @@
 - [설치와 배포](docs/install.md): Store 설치본과 GitHub 릴리스의 설치 파일·포터블 ZIP, `SHA256SUMS.txt` 확인, 설치 로그와 종료 코드, 사용자 데이터 위치, 개인정보와 네트워크
 - [소스에서 빌드](docs/build.md): .NET 10 SDK 준비, 빌드와 테스트, 자체 진단(self-test)
 - [4.6.0 릴리스 노트](docs/releases/4.6.0-release-notes.md)와 [이전 릴리스 노트](docs/releases/)
-- [지원](https://github.com/sukwoo0711-maker/mycapture-support)과 [개인정보처리방침](https://github.com/sukwoo0711-maker/mycapture-support/blob/main/PRIVACY.md)
-- [소개 페이지](https://mycapture.mimiloaf.com/)와 게시자 [Mimiloaf](https://mimiloaf.com/). 메일 문의는 [support@mimiloaf.com](mailto:support@mimiloaf.com)으로 보내 주십시오.
+- [지원](https://github.com/sukwoo0711-maker/mycapture-support)과 [개인정보처리방침](https://mimiloaf.com/mycapture/privacy/)
+- [소개 페이지](https://mimiloaf.com/mycapture/)와 게시자 [Mimiloaf](https://mimiloaf.com/). 메일 문의는 [support@mimiloaf.com](mailto:support@mimiloaf.com)으로 보내 주십시오.
 
 보안 문제는 공개 이슈에 재현 자료를 올리지 말고 [`SECURITY.md`](SECURITY.md)의 비공개 신고 절차를 따르십시오. 개발 참여 방법은 [`CONTRIBUTING.md`](CONTRIBUTING.md)를 참고하십시오.
 
@@ -80,6 +82,8 @@ A Windows pinning tool that keeps your Excel spec table and go-to code snippets 
 <a href="https://apps.microsoft.com/detail/9PB33MC095VR?cid=gh-readme"><img src="https://get.microsoft.com/images/en-us%20dark.svg" width="200" alt="Get it from Microsoft Store"></a>
 
 Free, including for work, with no ads and no account. Capture and text recognition run on this PC, and the source code is in this repository under the MIT License. MyCapture runs on Windows 11 and Windows 10 version 22H2 (x64); ARM64 PCs need Windows 11. Website: <https://sukwoo0711-maker.github.io/my-capture/en/>
+
+The app automatically checks for new versions and shows an update notice. **Update** installs the new version for Store and GitHub setup installs; portable copies open the release page for a new ZIP. Turn off automatic checks in **Settings > About > Check for new versions automatically**. See [update behavior and network destinations](docs/install.md#english-summary).
 
 ### What it adds to Snipping Tool
 
@@ -126,4 +130,4 @@ All shortcuts can be changed in Settings.
 
 ### Documents
 
-Most documents are in Korean. [Install and release files](docs/install.md#english-summary) ends with an English summary. Support and the privacy policy are in the [support repository](https://github.com/sukwoo0711-maker/mycapture-support#mycapture-support) ([privacy policy](https://github.com/sukwoo0711-maker/mycapture-support/blob/main/PRIVACY.md#mycapture-privacy-policy)). Report security issues as described in [`SECURITY.md`](SECURITY.md). The product page is [mycapture.mimiloaf.com](https://mycapture.mimiloaf.com/en/), MyCapture is published by [Mimiloaf](https://mimiloaf.com/en/), and you can email [support@mimiloaf.com](mailto:support@mimiloaf.com). MyCapture is licensed under the [MIT License](LICENSE).
+Most documents are in Korean. [Install and release files](docs/install.md#english-summary) ends with an English summary. Support is in the [support repository](https://github.com/sukwoo0711-maker/mycapture-support#mycapture-support), and the privacy policy is on [mimiloaf.com](https://mimiloaf.com/en/mycapture/privacy/). Report security issues as described in [`SECURITY.md`](SECURITY.md). The product page is [mimiloaf.com/en/mycapture](https://mimiloaf.com/en/mycapture/), MyCapture is published by [Mimiloaf](https://mimiloaf.com/en/), and you can email [support@mimiloaf.com](mailto:support@mimiloaf.com). MyCapture is licensed under the [MIT License](LICENSE).

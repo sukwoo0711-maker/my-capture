@@ -20,6 +20,7 @@ public sealed class Options
     public string? TestRegistryKey { get; set; }
     public string? TestStartMenu { get; set; }
     internal string? CleanupRequest { get; set; }
+    internal string? UninstallUiRequest { get; set; }
     public static Options Parse(string[] args, string directory)
     {
         var result = new Options { Payload = Path.Combine(directory, "payload.zip"), Manifest = Path.Combine(directory, "installer-manifest.json") };
@@ -53,12 +54,15 @@ public sealed class Options
                         case "--test-uninstall-key": result.TestRegistryKey = value; break;
                         case "--test-start-menu": result.TestStartMenu = value; break;
                         case "--cleanup-request": result.CleanupRequest = Path.GetFullPath(value); result.Uninstall = true; result.Quiet = true; break;
+                        case "--uninstall-ui": result.UninstallUiRequest = Path.GetFullPath(value); result.Uninstall = true; break;
                         default: throw new SetupException(21, "Unknown option: " + option);
                     }
                     break;
             }
         }
         ValidateTestTargets(result.TestRegistryKey, result.TestStartMenu);
+        if (result.CleanupRequest != null && result.UninstallUiRequest != null)
+            throw new SetupException(21, "Only one cleanup request may be supplied.");
         if (result.Uninstall && (result.InstallRoot.Length != 0 || result.VerifyOnly || result.TestFault.Length != 0))
             throw new SetupException(21, "Uninstall uses its own executable directory; install options are not accepted.");
         return result;

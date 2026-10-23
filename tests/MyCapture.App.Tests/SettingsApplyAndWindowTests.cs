@@ -163,7 +163,7 @@ public sealed class SettingsApplyAndWindowTests : KoreanCaptionTest
     }
 
     [Fact]
-    public void Apply_StaleDraft_PreservesTipsShownWhileSettingsWereOpen()
+    public void Apply_StaleDraft_PreservesTipsAndUpdateObservationsChangedWhileSettingsWereOpen()
     {
         RunSta(() =>
         {
@@ -172,9 +172,15 @@ public sealed class SettingsApplyAndWindowTests : KoreanCaptionTest
             var draft = new SettingsDraft(live) { MaxItems = "450" };
             FirstUseTips.ShowCaptureOnce(live.General, () => { });
             FirstUseTips.ShowPinOnce(live.General, () => { });
+            draft.AutoCheckUpdates = false;
+            DateTimeOffset checkedAt = new(2026, 10, 22, 14, 2, 0, TimeSpan.Zero);
+            live.Updates.LastCheckUtc = checkedAt;
+            live.Updates.DismissedVersion = "4.2.0";
             AppSettings stale = draft.ToAppSettings();
             Assert.False(stale.General.FirstCaptureTipShown);
             Assert.False(stale.General.FirstPinTipShown);
+            Assert.Null(stale.Updates.LastCheckUtc);
+            Assert.Null(stale.Updates.DismissedVersion);
 
             using var window = new NativeMessageWindow();
             using var hotkeys = new GlobalHotkeyService(window, new FakeRegistrar(), NullLogger<GlobalHotkeyService>.Instance);
@@ -189,6 +195,9 @@ public sealed class SettingsApplyAndWindowTests : KoreanCaptionTest
                 Assert.True(settings.General.FirstCaptureTipShown);
                 Assert.True(settings.General.FirstPinTipShown);
                 Assert.Equal(450, settings.Queue.MaxItems);
+                Assert.False(settings.Updates.AutoCheck);
+                Assert.Equal(checkedAt, settings.Updates.LastCheckUtc);
+                Assert.Equal("4.2.0", settings.Updates.DismissedVersion);
             }
         });
     }

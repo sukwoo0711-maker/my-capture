@@ -46,6 +46,9 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
     private AfterCaptureAction _afterCapture;
     private bool _showShortcutHints;
     private bool _alwaysShowShortcutHints;
+    private bool _autoCheckUpdates;
+    private DateTimeOffset? _lastUpdateCheckUtc;
+    private string? _dismissedUpdateVersion;
 
     // ----- Capture -----
     private bool _includeCursor;
@@ -163,6 +166,7 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
     public AfterCaptureAction AfterCapture { get => _afterCapture; set => Set(ref _afterCapture, value); }
     public bool ShowShortcutHints { get => _showShortcutHints; set => Set(ref _showShortcutHints, value); }
     public bool AlwaysShowShortcutHints { get => _alwaysShowShortcutHints; set => Set(ref _alwaysShowShortcutHints, value); }
+    public bool AutoCheckUpdates { get => _autoCheckUpdates; set => Set(ref _autoCheckUpdates, value); }
 
     // ================= Capture =================
 
@@ -689,6 +693,9 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
         _afterCapture = s.General.AfterCapture;
         _showShortcutHints = s.General.ShowShortcutHints;
         _alwaysShowShortcutHints = s.General.AlwaysShowShortcutHints;
+        _autoCheckUpdates = s.Updates.AutoCheck;
+        _lastUpdateCheckUtc = s.Updates.LastCheckUtc;
+        _dismissedUpdateVersion = s.Updates.DismissedVersion;
 
         _includeCursor = s.Capture.IncludeCursor;
         _autoDetectWindows = s.Capture.AutoDetectWindows;
@@ -825,7 +832,7 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
     private string[] CaptureState() =>
     [
         B(_launchAtLogin), B(_notifyOnQuickSave), B(_playCaptureSound), _afterCapture.ToString(), B(_showShortcutHints),
-        B(_alwaysShowShortcutHints),
+        B(_alwaysShowShortcutHints), B(_autoCheckUpdates),
         _language, _theme, _accentColor, _captureGuideColorMode, IsCustomCaptureGuideColor ? _captureGuideColorHex : string.Empty,
         B(_includeCursor), B(_autoDetectWindows), B(_showMagnifier), B(_showSelectionGrid), B(_abortOnFocusLoss),
         _preservedColorFormat.ToString(), _delaySeconds, _regionHistoryLimit,
@@ -870,6 +877,12 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
         var s = new AppSettings
         {
             SchemaVersion = _preservedSchemaVersion,
+            Updates =
+            {
+                AutoCheck = _autoCheckUpdates,
+                LastCheckUtc = _lastUpdateCheckUtc,
+                DismissedVersion = _dismissedUpdateVersion,
+            },
             General =
             {
                 LaunchAtLogin = _launchAtLogin,

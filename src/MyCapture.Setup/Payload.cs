@@ -9,7 +9,7 @@ namespace MyCapture.Setup;
 
 public static class Payload
 {
-    public static void Extract(string zipPath, PackageManifest manifest, string destination)
+    public static void Extract(string zipPath, PackageManifest manifest, string destination, ISetupProgress? progress = null)
     {
         try
         {
@@ -35,6 +35,8 @@ public static class Payload
                 }
                 if (entries.Count != manifest.FileCount) throw new SetupException(14, "ZIP file count does not match manifest count.");
                 string prefix = Path.GetFullPath(destination).TrimEnd('\\') + "\\";
+                int done = 0;
+                progress?.Files(done, manifest.FileCount);
                 foreach (var file in manifest.Files)
                 {
                     if (!entries.TryGetValue(file.Path, out var entry)) throw new SetupException(14, "ZIP entry is missing: " + file.Path);
@@ -56,6 +58,7 @@ public static class Payload
                         if (written != file.Bytes) throw new SetupException(14, "ZIP entry size mismatch: " + file.Path);
                     }
                     if (!file.Matches(target)) throw new SetupException(14, "Extracted file SHA-256 mismatch: " + file.Path);
+                    progress?.Files(++done, manifest.FileCount);
                 }
             }
         }
