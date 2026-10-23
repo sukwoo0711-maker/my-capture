@@ -148,12 +148,28 @@ public sealed class EditorStableViewportTests : KoreanCaptionTest
     public void RealWindowResizeRefitsTheImage(double width, int imageWidth, int imageHeight) => StaTestHost.Run(() =>
     {
         using EditorWindowHost host = CreateHost(width, imageWidth, imageHeight);
-        ViewportSnapshot before = Snapshot(host);
-        // Change both axes so both portrait and landscape captures have a new limiting axis size.
+        // Windows clamps even an offscreen window to its maximum tracking size, which follows
+        // the display: a small CI screen cannot hold the 1440 x 820 DIP target. Ask for that
+        // target, keep the size this machine really gives, and start below it by the growth.
         host.Window.Width = width + 240;
-        host.Window.Height += 180;
+        host.Window.Height = 640 + 180;
+        host.Window.UpdateLayout();
+        double grownWidth = host.Window.ActualWidth, grownHeight = host.Window.ActualHeight;
+        double growWidth = Math.Min(240, Math.Floor((grownWidth - host.Window.MinWidth) / 2));
+        double growHeight = Math.Min(180, Math.Floor((grownHeight - host.Window.MinHeight) / 2));
+        Assert.True(growWidth >= 1 && growHeight >= 1,
+            $"This screen leaves no room to grow the editor: largest {grownWidth}x{grownHeight} DIP, minimum {host.Window.MinWidth}x{host.Window.MinHeight} DIP.");
+        host.Window.Width = grownWidth - growWidth;
+        host.Window.Height = grownHeight - growHeight;
+        ViewportSnapshot before = Snapshot(host);
+        double beforeWidth = host.Window.ActualWidth, beforeHeight = host.Window.ActualHeight;
+        // Change both axes so both portrait and landscape captures have a new limiting axis size.
+        host.Window.Width = grownWidth;
+        host.Window.Height = grownHeight;
         ViewportSnapshot resized = Snapshot(host);
 
+        Assert.True(host.Window.ActualWidth > beforeWidth && host.Window.ActualHeight > beforeHeight,
+            $"Window growth precondition failed: {beforeWidth}x{beforeHeight} -> {host.Window.ActualWidth}x{host.Window.ActualHeight} DIP.");
         Assert.True(resized.ViewportWidth > before.ViewportWidth);
         Assert.True(resized.ViewportHeight > before.ViewportHeight);
         Assert.True(resized.DipPerPixel > before.DipPerPixel);

@@ -158,7 +158,10 @@ public partial class App
         {
             return EditRecoveryPresentation.DrainSessionEnding(Dispatcher, async () =>
             {
-                while (Windows.Cast<Window>().OfType<AnnotationEditorWindow>().Any(window => window.Editor.IsEditingOperationInProgress))
+                // A draft snapshot skips an unfinished mosaic, so let a completed gesture's
+                // pixels arrive within the same budget before the final flush.
+                while (Windows.Cast<Window>().OfType<AnnotationEditorWindow>().Any(window =>
+                           window.Editor.IsEditingOperationInProgress || window.Editor.HasUnsettledMosaicWork))
                     await Task.Delay(50);
                 await FlushEditingDraftsAsync();
                 await EditDraftSession.WaitForFinalizationsAsync();

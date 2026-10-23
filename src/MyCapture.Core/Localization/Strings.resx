@@ -3362,6 +3362,8 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="EditorProperty_CustomColorHint" xml:space="preserve"><value>사용자 지정 색 (Enter: 적용, Esc: 닫기)</value></data>
   <data name="EditorProperty_Hex" xml:space="preserve"><value>HEX 색상</value></data>
   <data name="EditorProperty_FillTransparency" xml:space="preserve"><value>내부 투명도</value></data>
+  <data name="EditorProperty_StrokeWidthLabel" xml:space="preserve"><value>선 두께</value></data>
+  <data name="EditorProperty_StrokeStyleLabel" xml:space="preserve"><value>선 종류</value></data>
   <data name="EditorProperty_SelectedColor" xml:space="preserve"><value>선택됨</value></data>
   <data name="EditorProperty_ThicknessDecrease" xml:space="preserve"><value>선 두께 줄이기</value></data>
   <data name="EditorProperty_ThicknessIncrease" xml:space="preserve"><value>선 두께 늘리기</value></data>

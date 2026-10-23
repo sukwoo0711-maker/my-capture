@@ -2447,7 +2447,7 @@ internal sealed partial class AnnotationEditorControl : Grid
     private FrameworkElement BuildShapeStyleSection()
     {
         var panel = PropertyGroup("AnnotationShapeProperties");
-        panel.Children.Add(PropertyLabel(UiText.Get("Text_E0B58D1CFED1")));
+        panel.Children.Add(PropertyLabel(UiText.Get("EditorProperty_StrokeStyleLabel")));
         _strokeStyleComboBox = new ComboBox { MinHeight = 32, Width = 108, FontSize = 12, VerticalAlignment = VerticalAlignment.Center };
         foreach ((AnnotationStrokeStyle style, string label) in new[]
         {

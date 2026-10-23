@@ -103,7 +103,7 @@ public sealed class EditorMosaicAsyncTests
     });
 
     [Fact]
-    public void RenderAndDraftWaitForPendingMosaicAndSynchronousSnapshotFailsClosed() => StaTestHost.Run(() =>
+    public void RenderWaitsDraftDefersUntilMosaicCompletionAndSynchronousSnapshotFailsClosed() => StaTestHost.Run(() =>
     {
         using var context = new DispatcherContextScope();
         AnnotationEditorControl editor = Editor();
@@ -114,14 +114,19 @@ public sealed class EditorMosaicAsyncTests
         Task<BitmapSource> render = editor.RenderCurrentImageAsync();
         Task<DraftSnapshot?> draft = editor.CaptureDraftAsync();
         Assert.False(render.IsCompleted);
-        Assert.False(draft.IsCompleted);
+        Assert.True(draft.IsCompletedSuccessfully);
+        Assert.Null(draft.Result);
+        Task<DraftSnapshot?>? completedDraft = null;
+        editor.DraftChanged += (_, _) => completedDraft = editor.CaptureDraftAsync();
         gate.Release.TrySetResult();
-        WaitFor(Task.WhenAll(render, draft));
-        Assert.NotNull(draft.Result);
+        WaitFor(render);
+        Assert.NotNull(completedDraft);
+        WaitFor(completedDraft);
+        Assert.NotNull(completedDraft.Result);
         ImageAnnotation patch = Assert.IsType<ImageAnnotation>(Assert.Single(editor.CreateCurrentImageSnapshot().Items));
         BitmapSource asset = Field<AnnotationImageStore>(editor, "_imageStore").Get(patch.AssetFileName)!;
         Assert.Equal(Pixels(asset), Pixels(render.Result));
-        Assert.Contains(patch.AssetFileName, draft.Result!.Document);
+        Assert.Contains(patch.AssetFileName, completedDraft.Result.Document);
     });
 
     [Fact]
