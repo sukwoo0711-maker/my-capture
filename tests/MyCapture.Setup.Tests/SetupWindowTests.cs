@@ -41,10 +41,14 @@ public sealed class SetupWindowTests
                         return result;
                     }
                 };
+                WinFormsWarmUp.Ensure();
                 using (var window = (Form)Activator.CreateInstance(typeof(SetupWindow), BindingFlags.Instance | BindingFlags.NonPublic,
                     null, new object[] { uninstall, log, work, (Action)(() => { }) }, CultureInfo.InvariantCulture)!)
                 {
-                    DateTime deadline = DateTime.UtcNow.AddSeconds(10);
+                    // The process's first WinForms window can take tens of seconds to come up on a busy runner;
+                    // that start-up is not under test. The behaviour budget runs from the moment the window is shown.
+                    DateTime deadline = DateTime.UtcNow.AddSeconds(120);
+                    window.Shown += (_, __) => deadline = DateTime.UtcNow.AddSeconds(10);
                     timer.Tick += (_, __) =>
                     {
                         try
@@ -120,4 +124,25 @@ public sealed class SetupWindowTests
 
     private static T Field<T>(Form window, string name) =>
         (T)typeof(SetupWindow).GetField(name, BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(window)!;
+}
+
+/// <summary>
+/// Shows one throwaway dialog with the setup window's kinds of controls per test process, so
+/// the first-window cost (GDI+, fonts, common controls, shell icon lookup) stays out of timed checks.
+/// </summary>
+internal static class WinFormsWarmUp
+{
+    private static int done;
+    internal static void Ensure()
+    {
+        if (Volatile.Read(ref done) != 0) return;
+        using (var form = new Form { ShowInTaskbar = false, StartPosition = FormStartPosition.Manual, Location = new Point(-32000, -32000),
+            Font = new Font("Segoe UI", 9F), Icon = Icon.ExtractAssociatedIcon(Program.Executable) })
+        {
+            form.Controls.AddRange(new Control[] { new Label { Text = "MyCapture", Font = new Font("Segoe UI", 9F, FontStyle.Bold) },
+                new ProgressBar { Value = 50 }, new CheckBox { Text = "MyCapture" }, new LinkLabel { Text = "MyCapture" }, new Button { Text = "MyCapture" } });
+            form.Show(); form.Refresh(); Application.DoEvents(); form.Close();
+        }
+        Volatile.Write(ref done, 1);
+    }
 }

@@ -61,6 +61,7 @@ public sealed class UpdateWindowTests
                     if (!release.Wait(TimeSpan.FromSeconds(10))) throw new TimeoutException("The update window test did not release its worker.");
                     return result;
                 };
+                WinFormsWarmUp.Ensure();
                 using (var window = (Form)Activator.CreateInstance(typeof(SetupWindow), BindingFlags.Instance | BindingFlags.NonPublic,
                     null, new object[] { false, log, work, launch, true, "4.5.2", true, (Func<bool>)(() => appExists) }, CultureInfo.InvariantCulture)!)
                 {
@@ -70,7 +71,10 @@ public sealed class UpdateWindowTests
                         closed = true;
                         if (result == 0) sawFinishPage = Field<Button>(window, "finish").Enabled;
                     };
-                    DateTime deadline = DateTime.UtcNow.AddSeconds(10);
+                    // The process's first WinForms window can take tens of seconds to come up on a busy runner;
+                    // that start-up is not under test. The behaviour budget runs from the moment the window is shown.
+                    DateTime deadline = DateTime.UtcNow.AddSeconds(120);
+                    window.Shown += (_, __) => deadline = DateTime.UtcNow.AddSeconds(10);
                     timer.Tick += (_, __) =>
                     {
                         try
