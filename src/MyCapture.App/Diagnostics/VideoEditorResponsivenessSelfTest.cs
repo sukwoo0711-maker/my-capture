@@ -638,10 +638,8 @@ internal static class VideoEditorResponsivenessSelfTest
         // Save before the dump, which can take a while: the runner must find the record even
         // if its own limit ends the process first. Sealed, so the stalled thread cannot replace it.
         report.Stalled(failure, evidence.ToString());
-        string dumpPath = Path.Combine(
-            Path.GetDirectoryName(report.Path) ?? Path.GetTempPath(),
-            "video-editor-stall.dmp");
-        evidence.AppendLine(SelfTestStallEvidence.WriteDump(dumpPath, TimeSpan.FromSeconds(120)));
+        evidence.AppendLine(SelfTestStallEvidence.WriteDump(
+            report.Directory, "video-editor-stall.dmp", TimeSpan.FromSeconds(120)));
         report.Stalled(failure, evidence.ToString(), seal: true);
         SelfTestStallEvidence.Terminate(SelfTestStallEvidence.StalledExitCode);
     }
@@ -747,6 +745,8 @@ internal static class VideoEditorResponsivenessSelfTest
         private bool _sealed;
 
         internal string Path => path;
+
+        internal string Directory => System.IO.Path.GetDirectoryName(path)!;
 
         internal void Line(string value = "")
         {

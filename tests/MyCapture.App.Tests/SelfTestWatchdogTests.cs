@@ -122,6 +122,24 @@ public sealed class SelfTestWatchdogTests
         }
     }
 
+    [Fact]
+    public void DumpRequest_IsADiagnosticsIpcGenerateCoreDumpWithHeap()
+    {
+        const string Path = @"C:\out\stall.dmp";
+        byte[] request = SelfTestStallEvidence.DumpRequest(Path);
+
+        Assert.Equal("DOTNET_IPC_V1\0", System.Text.Encoding.ASCII.GetString(request, 0, 14));
+        Assert.Equal(request.Length, BitConverter.ToUInt16(request, 14));
+        Assert.Equal(0x01, request[16]); // Dump command set.
+        Assert.Equal(0x01, request[17]); // GenerateCoreDump.
+        Assert.Equal(Path.Length + 1, BitConverter.ToInt32(request, 20));
+        Assert.Equal(Path + "\0", System.Text.Encoding.Unicode.GetString(request, 24, (Path.Length + 1) * 2));
+        int tail = 24 + ((Path.Length + 1) * 2);
+        Assert.Equal(2u, BitConverter.ToUInt32(request, tail)); // WithHeap.
+        Assert.Equal(0u, BitConverter.ToUInt32(request, tail + 4));
+        Assert.Equal(tail + 8, request.Length);
+    }
+
     private static void QueuedBehindTheBlock()
     {
     }

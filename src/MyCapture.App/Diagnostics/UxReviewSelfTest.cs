@@ -569,8 +569,7 @@ internal static class UxReviewSelfTest
         var evidence = new StringBuilder(SelfTestStallEvidence.Collect(uiThreadId, dispatcher));
         SelfTestStallEvidence.WriteStalledReport(reportPath, body, failure, evidence.ToString());
         evidence.AppendLine(SelfTestStallEvidence.WriteDump(
-            Path.Combine(Path.GetDirectoryName(reportPath) ?? Path.GetTempPath(), "ux-review-stall.dmp"),
-            TimeSpan.FromSeconds(120)));
+            Path.GetDirectoryName(reportPath)!, "ux-review-stall.dmp", TimeSpan.FromSeconds(120)));
         SelfTestStallEvidence.WriteStalledReport(reportPath, body, failure, evidence.ToString());
         SelfTestStallEvidence.Terminate(SelfTestStallEvidence.StalledExitCode);
     }

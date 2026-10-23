@@ -404,11 +404,12 @@ internal static class SelfTestStallEvidence
     /// stalled thread holding the loader lock cannot stop it, and the heap keeps the runtime data
     /// that managed stacks are read from. Returns what happened, for the report.
     /// </summary>
-    internal static string WriteDump(string path, TimeSpan timeout)
+    internal static string WriteDump(string directory, string fileName, TimeSpan timeout)
     {
         var clock = Stopwatch.StartNew();
         try
         {
+            string path = DiagnosticOutputPaths.Child(directory, fileName);
             using var pipe = new NamedPipeClientStream(
                 ".",
                 "dotnet-diagnostic-" + Environment.ProcessId.ToString(CultureInfo.InvariantCulture),
