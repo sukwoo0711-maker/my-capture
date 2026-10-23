@@ -215,6 +215,7 @@ internal sealed partial class AnnotationEditorControl
     /// </remarks>
     private void UpdateColorSwatches()
     {
+        if (_swatchPanel is null) return;
         ColorRgba current = CurrentPropertyColor();
         foreach (Button button in _swatchPanel.Children.OfType<Button>())
         {

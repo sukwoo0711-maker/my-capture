@@ -1,6 +1,7 @@
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Threading;
 using MyCapture.App.Editing;
 using MyCapture.Core.Annotations;
 using MyCapture.Core.Localization;
@@ -221,7 +222,31 @@ public sealed class EditorStableViewportTests : KoreanCaptionTest
         SelectTool(host, EditorTool.Select);
         Controller(host.Editor).SetSelected(null);
         host.Window.UpdateLayout();
+        // Show queues the real entrance at render priority. Let it begin, then establish
+        // the geometry baseline after it settles so a later asynchronous edit cannot be
+        // the first dispatcher pump that starts the window's own translation.
+        EditorMosaicAsyncTests.WaitFor(host.Editor.Dispatcher.InvokeAsync(
+            static () => { }, DispatcherPriority.ApplicationIdle).Task);
+        if (!EntranceSettled())
+        {
+            var settled = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            var timer = new DispatcherTimer(DispatcherPriority.Render, host.Editor.Dispatcher)
+            {
+                Interval = TimeSpan.FromMilliseconds(10),
+            };
+            timer.Tick += (_, _) =>
+            {
+                if (EntranceSettled()) settled.TrySetResult();
+            };
+            timer.Start();
+            try { EditorMosaicAsyncTests.WaitFor(settled.Task); }
+            finally { timer.Stop(); }
+        }
+        host.Window.UpdateLayout();
         return host;
+
+        bool EntranceSettled() => host.Editor.RenderTransform.Value.IsIdentity
+            && !host.Editor.RenderTransform.HasAnimatedProperties;
     }
 
     private static AnnotationItem Draw(EditorWindowHost host, EditorTool tool, ViewportSnapshot before, string phase)
@@ -250,6 +275,11 @@ public sealed class EditorStableViewportTests : KoreanCaptionTest
             }
             host.Editor.SimulatePointerUp(ViewportPoint(host, tool is EditorTool.Text or EditorTool.StepNumber ? start : end));
             AssertStable(before, host, $"{phase}: pointer release");
+            if (tool == EditorTool.Mosaic)
+            {
+                EditorMosaicAsyncTests.WaitFor(host.Editor.MosaicOperationsSettledAsync());
+                AssertStable(before, host, $"{phase}: mosaic completion");
+            }
             if (tool == EditorTool.Text)
             {
                 TextBox input = Field<TextBox>(host.Editor, "_activeTextBox");

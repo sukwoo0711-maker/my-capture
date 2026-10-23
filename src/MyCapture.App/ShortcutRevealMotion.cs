@@ -44,6 +44,7 @@ internal static class ShortcutRevealMotion
     [ThreadStatic] internal static bool SettleImmediatelyForTest;
     [ThreadStatic] internal static string? ProfileForTest;
     [ThreadStatic] private static List<WeakReference<Face>>? s_faces;
+    [ThreadStatic] private static int s_registrationsSincePrune;
 
     private static readonly DependencyProperty FaceProperty = DependencyProperty.RegisterAttached(
         "Face", typeof(Face), typeof(ShortcutRevealMotion));
@@ -57,7 +58,11 @@ internal static class ShortcutRevealMotion
         var face = new Face(hint);
         hint.SetValue(FaceProperty, face);
         s_faces ??= [];
-        s_faces.RemoveAll(reference => !reference.TryGetTarget(out _));
+        if (++s_registrationsSincePrune >= 64)
+        {
+            s_faces.RemoveAll(reference => !reference.TryGetTarget(out _));
+            s_registrationsSincePrune = 0;
+        }
         s_faces.Add(new WeakReference<Face>(face));
         hint.Loaded += (_, _) => face.Update(animate: false);
         hint.Unloaded += (_, _) => face.Update(animate: false);
@@ -229,6 +234,9 @@ internal static class ShortcutRevealMotion
         double from = (double)owner.GetValue(property);
         if (milliseconds == 0 || from.Equals(to))
         {
+            // Most faces are already at their resting values during construction. Avoid
+            // creating animation storage or invalidating layout/render for those values.
+            if (from.Equals(to) && !target.HasAnimatedProperties) return;
             target.BeginAnimation(property, null);
             owner.SetValue(property, to);
             return;
