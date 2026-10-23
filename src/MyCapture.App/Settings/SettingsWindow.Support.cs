@@ -20,7 +20,7 @@ internal sealed partial class SettingsWindow
         UiText.Format("SettingsUx_OcrQualityHint", OcrModelMegabytes);
 
     internal Action<string> OpenSupportPage { get; set; } = uri => { if (!SupportDiagnostics.TryOpenUri(uri)) throw new InvalidOperationException(UiText.Get("Support_OpenFailed")); };
-    internal Action<string> CopySupportText { get; set; } = text => Clipboard.SetText(text);
+    internal Action<string> CopySupportText { get; set; } = text => ClipboardWriter.SetText(text);
 
     private void InitializeAbout()
     {
