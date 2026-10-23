@@ -10,6 +10,106 @@ namespace MyCapture.App.Tests;
 
 public sealed class CaptureOcrServiceOrchestrationTests
 {
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task AvailabilityCheckIoFailure_UsesOriginalWindowsRequest(bool accessDenied)
+    {
+        OcrRequest request = NeuralRequest(enhanced: true);
+        OcrResult expected = Success("original windows result");
+        var windows = new FakeEngine(expected);
+        int neuralCalls = 0;
+        var service = new CaptureOcrService(windows, (_, _) =>
+        {
+            neuralCalls++;
+            throw new InvalidOperationException("Must not invoke neural recognition.");
+        }, () =>
+        {
+            if (accessDenied) throw new UnauthorizedAccessException("model hash");
+            throw new IOException("model hash");
+        },
+            () => false, NullLogger<CaptureOcrService>.Instance);
+
+        Assert.Same(expected, await service.RecognizeAsync(request));
+        Assert.Same(request, windows.LastRequest);
+        Assert.Equal(1, windows.CallCount);
+        Assert.Equal(0, neuralCalls);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void AvailabilityCheckIoFailure_DoesNotEscapeIsAvailable(bool accessDenied)
+    {
+        var windows = new FakeEngine(Success("unused")) { IsAvailable = false };
+        var service = new CaptureOcrService(windows, (_, _) => Task.FromResult(Success("unused")), () =>
+        {
+            if (accessDenied) throw new UnauthorizedAccessException("model hash");
+            throw new IOException("model hash");
+        }, () => false, NullLogger<CaptureOcrService>.Instance);
+
+        Assert.False(service.IsAvailable);
+    }
+
+    [Theory]
+    [InlineData(OcrStatus.Failed, "rotation")]
+    [InlineData(OcrStatus.Unavailable, "rotation")]
+    [InlineData(OcrStatus.Failed, "upscale")]
+    [InlineData(OcrStatus.Unavailable, "upscale")]
+    [InlineData(OcrStatus.Failed, "contrast")]
+    [InlineData(OcrStatus.Unavailable, "contrast")]
+    public async Task FailedNeural_RetriesWindowsWithOriginalPreprocessing(OcrStatus status, string option)
+    {
+        OcrRequest request = OcrRequest.FromBytes([1], upscaleFactor: option == "upscale" ? 4 : 1,
+            searchRotatedOrientations: option == "rotation", enhanceContrast: option == "contrast", useNeuralModel: true);
+        OcrResult expected = Success("original preprocessing only");
+        var windows = new FakeEngine((supplied, _) => Task.FromResult(
+            supplied.SearchRotatedOrientations == request.SearchRotatedOrientations &&
+            supplied.UpscaleFactor == request.UpscaleFactor && supplied.EnhanceContrast == request.EnhanceContrast
+                ? expected : OcrResult.NoText("ko-KR", TimeSpan.Zero)));
+        var neural = new FakeEngine(status == OcrStatus.Failed ? OcrResult.Failed("failed") : OcrResult.Unavailable());
+
+        Assert.Same(expected, await Create(windows, neural).RecognizeAsync(request));
+        Assert.Same(request, windows.LastRequest);
+        Assert.Equal(2, windows.CallCount);
+        Assert.Equal(1, neural.CallCount);
+    }
+
+    [Theory]
+    [InlineData(OcrStatus.Failed)]
+    [InlineData(OcrStatus.Unavailable)]
+    public async Task FailedNeural_KeepsFastTextWhenOriginalPreprocessingFindsNone(OcrStatus status)
+    {
+        OcrRequest request = OcrRequest.FromBytes([1], upscaleFactor: 4, searchRotatedOrientations: true,
+            enhanceContrast: true, useNeuralModel: true);
+        var windows = new FakeEngine((supplied, _) => Task.FromResult(supplied.UpscaleFactor == 1
+            ? Success("fast only") : OcrResult.NoText("ko-KR", TimeSpan.Zero)));
+        var neural = new FakeEngine(status == OcrStatus.Failed ? OcrResult.Failed("failed") : OcrResult.Unavailable());
+
+        Assert.Equal("fast only", (await Create(windows, neural).RecognizeAsync(request)).Text);
+        Assert.Same(request, windows.LastRequest);
+        Assert.Equal(2, windows.CallCount);
+    }
+
+    [Theory]
+    [InlineData(OcrStatus.Failed, false)]
+    [InlineData(OcrStatus.Unavailable, false)]
+    [InlineData(OcrStatus.NoText, true)]
+    public async Task EquivalentFastRequestOrHealthyNoText_DoesNotRepeatWindows(OcrStatus status, bool preprocess)
+    {
+        OcrRequest request = OcrRequest.FromBytes([1], upscaleFactor: preprocess ? 4 : 1,
+            searchRotatedOrientations: preprocess, enhanceContrast: preprocess, useNeuralModel: true);
+        var windows = new FakeEngine(Success("windows"));
+        var neural = new FakeEngine(status switch
+        {
+            OcrStatus.NoText => OcrResult.NoText("ko-KR", TimeSpan.Zero),
+            OcrStatus.Unavailable => OcrResult.Unavailable(),
+            _ => OcrResult.Failed("failed"),
+        });
+        Assert.Equal("windows", (await Create(windows, neural).RecognizeAsync(request)).Text);
+        Assert.Equal(1, windows.CallCount);
+    }
+
     [Fact]
     public async Task DualEngine_StartsBothBeforeEitherCompletes_AndUsesWallElapsed()
     {

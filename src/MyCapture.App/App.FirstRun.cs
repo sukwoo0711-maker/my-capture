@@ -98,14 +98,7 @@ public partial class App
         welcome.Closed += (_, _) =>
         {
             StartAtSignInOutcome? startup = ApplyWelcomeStartAtSignIn(welcome.StartAtSignIn);
-            try
-            {
-                FirstRunOcrChoice.Complete(_settings!, welcome.UseAccurateOcr,
-                    settings => _services!.GetRequiredService<SettingsStore>().CompleteFirstRun(settings),
-                    () => StartOcrModelDownload(isBackground: false, deferForBatterySaver: true));
-                _log?.LogInformation("Welcome accurate OCR: selected {Selected}, quality {Quality}",
-                    welcome.UseAccurateOcr, _settings!.Ocr.Quality);
-            }
+            try { CompleteWelcomeOcrChoice(welcome.UseAccurateOcr); }
             catch (Exception ex) { _log?.LogWarning(ex, "Could not persist first-run completion"); }
             AnnounceAfterWelcome(welcome.Outcome, startup);
             switch (FirstRunPlan.Next(welcome.Outcome))
@@ -124,6 +117,26 @@ public partial class App
             }
         };
         welcome.Show();
+    }
+
+    /// <summary>
+    /// Records the welcome's OCR checkbox and completes the first run. The app's exit also
+    /// closes the welcome: then, like the core-shortcut question, the unanswered checkbox is not
+    /// applied and no model download starts, while the first run still completes as before.
+    /// </summary>
+    private void CompleteWelcomeOcrChoice(bool selected)
+    {
+        bool closedByExit = _shutdownRequested;
+        FirstRunOcrChoice.Complete(_settings!, selected,
+            settings => _services!.GetRequiredService<SettingsStore>().CompleteFirstRun(settings),
+            () => StartOcrModelDownload(isBackground: false, deferForBatterySaver: true),
+            shutdownRequested: closedByExit);
+        if (closedByExit)
+            _log?.LogInformation("Welcome closed by exit; accurate OCR choice not recorded, quality {Quality}",
+                _settings!.Ocr.Quality);
+        else
+            _log?.LogInformation("Welcome accurate OCR: selected {Selected}, quality {Quality}",
+                selected, _settings!.Ocr.Quality);
     }
 
     /// <summary>

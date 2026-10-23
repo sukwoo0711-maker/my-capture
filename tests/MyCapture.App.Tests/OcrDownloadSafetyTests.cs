@@ -7,12 +7,82 @@ using MyCapture.Core.Settings;
 using MyCapture.Core.Storage;
 using MyCapture.Ocr;
 using Windows.Networking.Connectivity;
+using Windows.System.Power;
 using Xunit;
 
 namespace MyCapture.App.Tests;
 
 public sealed class OcrDownloadSafetyTests
 {
+    [Theory]
+    [InlineData(EnergySaverStatus.Disabled, false)]
+    [InlineData(EnergySaverStatus.Off, false)]
+    [InlineData(EnergySaverStatus.On, true)]
+    [InlineData((EnergySaverStatus)999, null)]
+    public void EnergySaverMapping_OnlyDefersWhenOnOrUnknown(EnergySaverStatus status, bool? expected) =>
+        Assert.Equal(expected, WindowsOcrDownloadEnvironment.MapEnergySaverStatus(status));
+
+    // The welcome path is explicit and rechecks battery saver; the startup path is a background
+    // transfer and checks the connection as well. App.StartOcrModelDownload uses these arguments.
+    [Theory]
+    [InlineData(false, true, EnergySaverStatus.Disabled, 1)]
+    [InlineData(true, false, EnergySaverStatus.Disabled, 1)]
+    [InlineData(false, true, EnergySaverStatus.Off, 1)]
+    [InlineData(true, false, EnergySaverStatus.Off, 1)]
+    [InlineData(false, true, EnergySaverStatus.On, 0)]
+    [InlineData(true, false, EnergySaverStatus.On, 0)]
+    public async Task WelcomeAndStartup_PrepareUnlessBatterySaverIsOn(bool background, bool deferForBatterySaver,
+        EnergySaverStatus status, int expectedRequests)
+    {
+        using var fixture = new Fixture();
+        var environment = new WindowsOcrDownloadEnvironment(() => status,
+            () => new ConnectionCostState(NetworkCostType.Unrestricted, Roaming: false, OverDataLimit: false));
+        var coordinator = new OcrModelDownloadCoordinator(fixture.CreateStore(), environment);
+        Assert.False(await coordinator.EnsureAsync(OcrQuality.Accurate, background,
+            CancellationToken.None, deferForBatterySaver));
+        // The synthetic server rejects the request; reaching it proves preparation was not deferred.
+        Assert.Equal(expectedRequests, fixture.Handler.Calls);
+    }
+
+    [Theory]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    public async Task WelcomeAndStartup_DeferWhenBatterySaverCannotBeRead(bool background, bool deferForBatterySaver)
+    {
+        using var fixture = new Fixture();
+        var environment = new WindowsOcrDownloadEnvironment(
+            () => throw new InvalidOperationException("Power status unavailable"),
+            () => new ConnectionCostState(NetworkCostType.Unrestricted, Roaming: false, OverDataLimit: false));
+        Assert.Null(environment.IsBatterySaverOn);
+        var coordinator = new OcrModelDownloadCoordinator(fixture.CreateStore(), environment);
+        Assert.False(await coordinator.EnsureAsync(OcrQuality.Accurate, background,
+            CancellationToken.None, deferForBatterySaver));
+        Assert.Equal(0, fixture.Handler.Calls);
+    }
+
+    [Theory]
+    [InlineData(EnergySaverStatus.Disabled, NetworkCostType.Unrestricted, false)]
+    [InlineData(EnergySaverStatus.Disabled, NetworkCostType.Fixed, true)]
+    [InlineData(EnergySaverStatus.Disabled, NetworkCostType.Variable, true)]
+    [InlineData(EnergySaverStatus.Off, NetworkCostType.Unrestricted, false)]
+    [InlineData(EnergySaverStatus.On, NetworkCostType.Unrestricted, true)]
+    public void Environment_DefersBackgroundOnlyForCostlyNetworkOrBatterySaver(EnergySaverStatus status,
+        NetworkCostType cost, bool expected)
+    {
+        var environment = new WindowsOcrDownloadEnvironment(() => status,
+            () => new ConnectionCostState(cost, Roaming: false, OverDataLimit: false));
+        Assert.Equal(expected, environment.ShouldDeferBackgroundDownload());
+    }
+
+    [Fact]
+    public void Environment_DefersBackgroundWithoutConnectionProfileOrWhenTheReadFails()
+    {
+        Assert.True(new WindowsOcrDownloadEnvironment(() => EnergySaverStatus.Disabled, () => null)
+            .ShouldDeferBackgroundDownload());
+        Assert.True(new WindowsOcrDownloadEnvironment(() => EnergySaverStatus.Disabled,
+            () => throw new InvalidOperationException("Network status unavailable")).ShouldDeferBackgroundDownload());
+    }
+
     [Theory]
     [InlineData(true)]
     [InlineData(false)]

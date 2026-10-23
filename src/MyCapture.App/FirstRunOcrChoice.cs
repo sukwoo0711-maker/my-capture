@@ -24,8 +24,16 @@ internal static class FirstRunOcrChoice
 
     // Every welcome close uses this path, including dismissal by a capture shortcut.
     internal static void Complete(AppSettings settings, bool selected,
-        Action<AppSettings> completeFirstRun, Action startExplicitDownload)
+        Action<AppSettings> completeFirstRun, Action startExplicitDownload, bool shutdownRequested = false)
     {
+        if (shutdownRequested)
+        {
+            // The app's exit closed the welcome, not the person: keep the persisted quality and
+            // start no download, but complete the first run exactly as before this choice existed.
+            completeFirstRun(settings);
+            return;
+        }
+
         OcrQuality previous = settings.Ocr.Quality;
         double previousUpscale = settings.Ocr.UpscaleFactor;
         settings.Ocr.Quality = OcrQualityNames.Normalize(previous);
