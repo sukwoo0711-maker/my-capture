@@ -5,8 +5,9 @@ using Microsoft.Extensions.Logging;
 namespace MyCapture.Ocr;
 
 /// <summary>
-/// Routes Accurate and Enhanced requests through PP-OCR when the downloaded Korean model is
-/// present, and keeps Windows OCR as the Fast/Balanced engine and as a fallback.
+/// Runs Accurate and Enhanced requests through PP-OCR and Windows OCR in parallel when the
+/// downloaded Korean model is present, and merges their lines; Windows OCR alone serves
+/// Fast/Balanced requests and remains the fallback when the model is missing.
 /// </summary>
 public sealed class CaptureOcrService : IOcrService
 {
@@ -30,16 +31,18 @@ public sealed class CaptureOcrService : IOcrService
     {
     }
 
-    // Keep the production default off until the per-category accuracy and wall-time
-    // benchmark gates pass. The switch belongs to the instance, so tests cannot alter
-    // another request's routing through process-wide state.
+    // On by default since the 2026-10-23 benchmark gates passed on the original, validation2
+    // and held-out validation3 corpora: every category CER within 0.5 pp of the better single
+    // engine, overall CER below both, and median wall time within 30 ms of PP-OCR alone
+    // (OcrModelBenchmarkTests, A-dual). The switch belongs to the instance, so tests cannot
+    // alter another request's routing through process-wide state.
     internal CaptureOcrService(
         IOcrService windows,
         Func<OcrRequest, CancellationToken, Task<OcrResult>> recognizeNeural,
         Func<bool> neuralCanRun,
         Func<bool> neuralIsReady,
         ILogger<CaptureOcrService> log,
-        bool enableDualEngine = false)
+        bool enableDualEngine = true)
     {
         _windows = windows ?? throw new ArgumentNullException(nameof(windows));
         _recognizeNeural = recognizeNeural ?? throw new ArgumentNullException(nameof(recognizeNeural));

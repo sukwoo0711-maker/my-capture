@@ -52,17 +52,31 @@ public sealed class CaptureOcrServiceOrchestrationTests
         Assert.Equal(1, neural.CallCount);
     }
 
+    [Fact]
+    public async Task SwitchDefaultsOn_RunsBothEnginesAndMergesTheirLines()
+    {
+        var windows = new FakeEngine(Success("shared text"));
+        var neural = new FakeEngine(Success("sharedtext"));
+        var service = new CaptureOcrService(
+            windows, neural.RecognizeAsync, () => neural.IsAvailable, () => true,
+            NullLogger<CaptureOcrService>.Instance);
+
+        OcrResult result = await service.RecognizeAsync(NeuralRequest());
+
+        Assert.Equal("shared text", result.Text);
+        Assert.Equal(1, windows.CallCount);
+        Assert.Equal(1, neural.CallCount);
+    }
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task SwitchDefaultsOff_AndKeepsNeuralFirstBehavior(bool modelsInstalled)
+    public async Task SwitchOff_KeepsNeuralFirstBehavior(bool modelsInstalled)
     {
         var windows = new FakeEngine(Success("windows"));
         OcrResult expected = Success("neural");
         var neural = new FakeEngine(expected) { IsAvailable = modelsInstalled };
-        var service = new CaptureOcrService(
-            windows, neural.RecognizeAsync, () => neural.IsAvailable, () => true,
-            NullLogger<CaptureOcrService>.Instance);
+        var service = Create(windows, neural, enabled: false);
         OcrRequest request = NeuralRequest();
 
         OcrResult result = await service.RecognizeAsync(request);
