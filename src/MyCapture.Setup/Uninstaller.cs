@@ -44,20 +44,26 @@ public static class Uninstaller
         }
         catch (Exception e) { throw new SetupException(30, "Invalid installation; removal was refused: " + e.Message); }
     }
-    public static int Run(Options options, string directory, SetupLog log)
+    public static int Run(Options options, string directory, SetupLog log, ISetupProgress? progress = null)
     {
         if (options.CleanupRequest != null) return Cleanup(options.CleanupRequest, directory, log);
+        progress = progress ?? NullSetupProgress.Instance;
+        if (options.UninstallUiRequest != null) return Cleanup(options.UninstallUiRequest, directory, log, progress, !options.Quiet);
         try
         {
             using (new OperationMutex(0, 31))
             {
+                progress.Stage(SetupStage.VerifyingInstallation);
                 string root = Path.GetFullPath(directory).TrimEnd('\\');
                 var manifest = Verify(root);
+                progress.Version(manifest.Version);
                 if (!PathSafety.Equal(Program.Executable, Path.Combine(root, "MyCaptureUninstall.exe"))) throw new SetupException(30, "Run the installed MyCaptureUninstall.exe /uninstall.");
                 if (options.TestRegistryKey != null && (options.TestRegistryKey != manifest.TestRegistryKey || !PathSafety.Equal(options.TestStartMenu, manifest.TestStartMenu)))
                     throw new SetupException(30, "Uninstall test targets do not match the installed ownership manifest.");
+                progress.Stage(SetupStage.StoppingApplication);
                 AppProcesses.Stop(Path.Combine(root, "MyCapture.exe"), false, true, message => log.Write("INFO", message));
                 FileRemoval.RemoveStaleWorkers(message => log.Write("INFO", message));
+                progress.Stage(SetupStage.PreparingRemoval);
                 string workerRoot = Path.Combine(Path.GetTempPath(), FileRemoval.WorkerPrefix + Guid.NewGuid().ToString("N"));
                 PathSafety.NotLink(workerRoot);
                 var security = new DirectorySecurity(); security.SetAccessRuleProtection(true, false);
@@ -83,8 +89,11 @@ public static class Uninstaller
                         using (var stream = File.Open(requestPath, FileMode.CreateNew, FileAccess.Write, FileShare.None))
                         { byte[] bytes = Json.Bytes(request); stream.Write(bytes, 0, bytes.Length); }
                     }
-                    using (var worker = Process.Start(new ProcessStartInfo(copy, "--cleanup-request " + Program.Quote(requestPath))
-                        { WorkingDirectory = workerRoot, UseShellExecute = false, CreateNoWindow = true, WindowStyle = ProcessWindowStyle.Hidden }))
+                    string arguments = options.Quiet ? "--cleanup-request " + Program.Quote(requestPath) :
+                        "--uninstall-ui " + Program.Quote(requestPath) + (log.Path == null ? "" : " --log " + Program.Quote(log.Path));
+                    using (var worker = Process.Start(new ProcessStartInfo(copy, arguments)
+                        { WorkingDirectory = workerRoot, UseShellExecute = false, CreateNoWindow = true,
+                            WindowStyle = options.Quiet ? ProcessWindowStyle.Hidden : ProcessWindowStyle.Normal }))
                         log.Write("INFO", "Deferred cleanup worker started (PID " + worker.Id + ").");
                 }
                 catch (Exception e)
@@ -96,7 +105,6 @@ public static class Uninstaller
             }
             string message = "MyCapture removal is scheduled. Captures and settings are preserved. Log: " + log.Path;
             log.Write("INFO", message);
-            if (!options.Quiet) WindowsHost.Popup(true, message, true);
             return 0;
         }
         catch (Exception e)
@@ -104,13 +112,13 @@ public static class Uninstaller
             int code = ExitCodes.FromException(e, true);
             string message = "Uninstall failed (exit " + code + "): " + e.Message;
             log.Write("ERROR", message);
-            if (!options.Quiet) WindowsHost.Popup(false, message + "\r\nLog: " + log.Path, true);
             return code;
         }
     }
-    private static int Cleanup(string requestPath, string directory, SetupLog initialLog)
+    private static int Cleanup(string requestPath, string directory, SetupLog initialLog, ISetupProgress? progress = null, bool interactive = false)
     {
         SetupLog log = initialLog;
+        progress = progress ?? NullSetupProgress.Instance;
         bool privateWorker = false;
         try
         {
@@ -122,12 +130,15 @@ public static class Uninstaller
             // Like the temporary uninstall-cleanup.ps1 copy, the worker always removes its own files.
             privateWorker = PathSafety.Equal(Program.Executable, Path.Combine(directory, "MyCaptureUninstall.exe"));
             PathSafety.NotLink(directory); PathSafety.NotLink(requestPath);
+            progress.Stage(SetupStage.VerifyingInstallation);
             var request = Json.Read<CleanupRequest>(requestPath);
             var manifest = Verify(request.Root);
+            progress.Version(manifest.Version);
             if (FileRecord.Hash(Path.Combine(request.Root, "install-manifest.json")) != request.ManifestHash ||
                 FileRecord.Hash(Program.Executable) != FileRecord.Hash(Path.Combine(request.Root, "MyCaptureUninstall.exe")))
                 throw new SetupException(30, "Cleanup ownership changed.");
             log = new SetupLog(request.Log, directory, true, true, true);
+            progress.Stage(SetupStage.PreparingRemoval);
             try
             {
                 using (var parent = Process.GetProcessById(request.ParentId))
@@ -140,17 +151,23 @@ public static class Uninstaller
                 if (FileRecord.Hash(Path.Combine(request.Root, "install-manifest.json")) != request.ManifestHash) throw new SetupException(30, "Cleanup target changed while waiting.");
                 // Never traverse a link added under the installation after it was installed.
                 AssertTreeNoLinks(request.Root);
+                progress.Stage(SetupStage.RemovingFiles);
                 if (!FileRemoval.RemoveTarget(request.Root, message => log.Write("WARN", message)))
                     throw new IOException("Installation directory remained after all removal retries: " + request.Root);
                 // Shell and startup records are removed only after the payload directory is gone. If
                 // deletion fails, Apps & Features remains available for a retry.
+                progress.Stage(SetupStage.RemovingRegistration);
                 ShellIntegration.RemoveOwnedStartupValue(request.Root, manifest, message => log.Write("INFO", message), message => log.Write("WARN", message));
                 ShellIntegration.Remove(request.Root, manifest, message => log.Write("WARN", message), message => log.Write("INFO", message));
                 log.Write("INFO", "MyCapture removal completed. Captures and settings under APPDATA were not accessed.");
             }
             return 0;
         }
-        catch (Exception e) { log.Write("ERROR", "Deferred uninstall cleanup failed: " + e.Message); return 1; }
+        catch (Exception e)
+        {
+            log.Write("ERROR", "Deferred uninstall cleanup failed: " + e.Message);
+            return interactive ? ExitCodes.FromException(e, true) : 1;
+        }
         finally
         {
             if (privateWorker) RemoveOwnWorkerFiles(directory, log);

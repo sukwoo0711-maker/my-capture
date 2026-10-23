@@ -1,11 +1,28 @@
 using System.Globalization;
 using System.IO;
+using System.Text.RegularExpressions;
 
 namespace MyCapture.App.Updates;
 
 /// <summary>Canonical paths for locally named, single-session update files.</summary>
 internal static class UpdatePaths
 {
+    private static readonly Regex SessionPattern = new(
+        @"\Aupdate-(?<version>(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*))-(?<token>[a-f0-9]{32})\z",
+        RegexOptions.CultureInvariant);
+
+    internal static bool TryParseSessionName(string name, out UpdateVersion version, out string token)
+    {
+        version = default;
+        token = string.Empty;
+        Match match = SessionPattern.Match(name);
+        if (!match.Success || !UpdateVersion.TryParse(match.Groups["version"].Value, out UpdateVersion? parsed))
+            return false;
+        version = parsed.Value;
+        token = match.Groups["token"].Value;
+        return true;
+    }
+
     internal static string SessionName(UpdateVersion version)
     {
         _ = InstallerName(version); // Apply the same stable numeric version policy.

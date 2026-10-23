@@ -43,8 +43,8 @@ public sealed class StoreRatingState
 /// <remarks>
 /// Apps that asked for a rating before first use drew a quarter of their Korean reviews as
 /// complaints about it; asking once, after repeated success, drew almost none. So the request
-/// waits for <see cref="RequiredSuccessfulCaptures"/> successes and <see cref="RequiredAge"/>
-/// of use, never follows an error, and is attempted at most once per install.
+/// waits for five successful captures and one full day of use, never follows an error,
+/// and is attempted at most once per install.
 /// </remarks>
 public static class StoreRatingPolicy
 {
@@ -54,9 +54,9 @@ public static class StoreRatingPolicy
     /// <summary>Opens the listing's review page in the Microsoft Store app.</summary>
     public const string ReviewUri = "ms-windows-store://review/?ProductId=" + ProductId;
 
-    public const int RequiredSuccessfulCaptures = 10;
+    public const int RequiredSuccessfulCaptures = 5;
 
-    public static readonly TimeSpan RequiredAge = TimeSpan.FromDays(3);
+    public static readonly TimeSpan RequiredAge = TimeSpan.FromDays(1);
 
     /// <summary>
     /// A stamp further ahead than this is treated as a clock that was later corrected, and the
