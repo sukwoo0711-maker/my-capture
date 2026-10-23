@@ -46,10 +46,12 @@ internal static class LocalizationSelfTest
                 Check(Equals(selector.SelectedValue, "en-US"), "Persisted English selected");
                 Check(AutomationProperties.GetName(selector) == "Display language", "English language selector accessibility");
                 var themeSelector = (ComboBox)window.FindName("ThemeSelector");
-                Check(themeSelector.Items.Count == 6, "English theme selector has six palettes");
+                Check(themeSelector.Items.OfType<ComboBoxItem>().Select(item => item.Tag as string).ToArray()
+                    is ["system", "glass-light", "glass", "high-contrast"], "English theme selector has the four current palettes");
                 Check(Equals(themeSelector.SelectedValue, "glass"), "Default glass theme selected");
                 var qualitySelector = (ComboBox)window.FindName("OcrQualitySelector");
-                Check(qualitySelector.Items.Count == 4, "English OCR quality selector has four stages");
+                Check(qualitySelector.Items.OfType<ComboBoxItem>().Select(item => item.Tag as string).ToArray()
+                    is ["fast", "balanced", "accurate"], "English OCR quality selector has three stages");
                 Check(Equals(qualitySelector.SelectedValue, "fast"), "Default OCR quality is fast");
                 selector.SelectedValue = "ko-KR";
                 Check(((SettingsDraft)window.DataContext).Language == "ko-KR", "Language selection edits existing draft field");
@@ -91,7 +93,8 @@ internal static class LocalizationSelfTest
                 {
                     Show(video, width, width == 760 ? 555 : 680);
                     Grid layout = (Grid)video.Content;
-                    Border status = layout.Children.OfType<Border>().Single(b => Grid.GetRow(b) == 3);
+                    Border status = layout.Children.OfType<Border>().Single(b =>
+                        b.Child is TextBlock text && AutomationProperties.GetLiveSetting(text) == AutomationLiveSetting.Polite);
                     var client = (FrameworkElement)VisualTreeHelper.GetParent(layout);
                     var statusText = (TextBlock)status.Child;
                     Check(statusText.ActualHeight >= statusText.DesiredSize.Height - .5, $"Video {width}: complete status glyph height");
@@ -99,9 +102,11 @@ internal static class LocalizationSelfTest
                         $"Video {width}: status inside native client");
                     // The connector belongs to the detailed timeline, which is folded by default so
                     // the trim timeline comes first; open it for the check, then fold it again.
-                    var detailToggle = Descendants(layout).OfType<System.Windows.Controls.Primitives.ToggleButton>()
-                        .Single(toggle => AutomationProperties.GetName(toggle) == UiText.Get("VideoEditorUx_DetailTimeline"));
+                    var more = Descendants(layout).OfType<Button>().Single(button => button.Name == "VideoMoreTools");
+                    var detailToggle = more.ContextMenu!.Items.OfType<MenuItem>()
+                        .Single(item => AutomationProperties.GetName(item) == UiText.Get("VideoEditorUx_DetailTimeline"));
                     detailToggle.IsChecked = true;
+                    detailToggle.RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
                     video.UpdateLayout();
                     var connector = Descendants(layout).OfType<TimelineRenderSurface>().Single(surface => !surface.IsHitTestVisible);
                     var hint = new FormattedText("The selected interval above fills the timeline below.", CultureInfo.InvariantCulture,
@@ -109,6 +114,7 @@ internal static class LocalizationSelfTest
                         10.5, Brushes.White, VisualTreeHelper.GetDpi(video).PixelsPerDip);
                     Check(connector.IsVisible && connector.ActualHeight >= hint.Height, $"Video {width}: complete connector hint glyph height");
                     detailToggle.IsChecked = false;
+                    detailToggle.RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
                     video.UpdateLayout();
                     foreach (Button button in Descendants(layout).OfType<Button>().Where(b => b.IsVisible))
                     {

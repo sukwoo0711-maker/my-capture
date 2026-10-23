@@ -63,6 +63,8 @@ public sealed class WelcomeOcrChoiceTests
             Assert.Equal(expected, welcome.AccurateOcrCheck.ToolTip);
             Assert.Equal(expected, welcome.AccurateOcrHelp.Text);
             Assert.Contains("102 MB", expected, StringComparison.Ordinal);
+            Assert.DoesNotContain("164", expected, StringComparison.Ordinal);
+            Assert.DoesNotContain("Qualcomm", expected, StringComparison.Ordinal);
             Assert.Equal(32, welcome.AccurateOcrCheck.MinHeight);
             Assert.Equal(12, welcome.AccurateOcrCheck.FontSize);
             Assert.Equal(560, welcome.Width);
@@ -83,8 +85,8 @@ public sealed class WelcomeOcrChoiceTests
     [InlineData(OcrQuality.Balanced, false, OcrQuality.Balanced, 0)]
     [InlineData(OcrQuality.Accurate, true, OcrQuality.Accurate, 1)]
     [InlineData(OcrQuality.Accurate, false, OcrQuality.Accurate, 0)]
-    [InlineData(OcrQuality.Enhanced, true, OcrQuality.Enhanced, 1)]
-    [InlineData(OcrQuality.Enhanced, false, OcrQuality.Enhanced, 0)]
+    [InlineData(OcrQuality.Enhanced, true, OcrQuality.Accurate, 1)]
+    [InlineData(OcrQuality.Enhanced, false, OcrQuality.Accurate, 0)]
     public void ChoiceOnlyChangesFastAndSavesBeforeDownloading(OcrQuality previous, bool selected,
         OcrQuality expected, int expectedDownloads)
     {
@@ -100,16 +102,21 @@ public sealed class WelcomeOcrChoiceTests
         Assert.Equal(expected, settings.Ocr.Quality);
         Assert.Equal(1, saves);
         Assert.Equal(expectedDownloads, downloads);
+        if (previous == OcrQuality.Enhanced || (previous == OcrQuality.Fast && selected))
+            Assert.Equal(4.0, settings.Ocr.UpscaleFactor);
     }
 
-    [Fact]
-    public void FailedSaveRestoresQualityAndDoesNotStartDownload()
+    [Theory]
+    [InlineData(OcrQuality.Fast, 1.0)]
+    [InlineData(OcrQuality.Enhanced, 2.0)]
+    public void FailedSaveRestoresQualityAndDoesNotStartDownload(OcrQuality previous, double previousUpscale)
     {
-        var settings = new AppSettings();
+        var settings = new AppSettings { Ocr = { Quality = previous, UpscaleFactor = previousUpscale } };
         int downloads = 0;
         Assert.Throws<IOException>(() => FirstRunOcrChoice.Complete(settings, true,
             _ => throw new IOException("Injected save failure"), () => downloads++));
-        Assert.Equal(OcrQuality.Fast, settings.Ocr.Quality);
+        Assert.Equal(previous, settings.Ocr.Quality);
+        Assert.Equal(previousUpscale, settings.Ocr.UpscaleFactor);
         Assert.Equal(0, downloads);
     }
 

@@ -217,8 +217,8 @@ public partial class App : Application
             _services.GetRequiredService<ILogger<GitHubIssueImageUploadService>>());
 
         _ocrService = _services.GetRequiredService<IOcrService>();
-        // Only the Accurate and Most accurate qualities use the downloaded model. Everyone else never
-        // downloads it; a later switch to those qualities downloads it on first use (NeuralOcrEngine).
+        // Accurate uses downloaded PP-OCR models, including settings migrated from Enhanced.
+        // Switching to Accurate also prepares missing models before the next recognition.
         if (OcrQualityProfile.UseNeuralModel(_settings.Ocr.Quality)) StartOcrModelDownload();
         _automaticIndexer = new OcrIndexingService(
             _galleryController!, _ocrService, record => _queue!.GetDirectory(record),
@@ -1868,7 +1868,7 @@ public partial class App : Application
         }
 
         OcrModelStore store = _services.GetRequiredService<OcrModelStore>();
-        OcrQuality quality = _settings?.Ocr.Quality ?? OcrQuality.Fast;
+        OcrQuality quality = OcrQualityNames.Normalize(_settings?.Ocr.Quality ?? OcrQuality.Fast);
         var download = new OcrModelDownloadCoordinator(store, new WindowsOcrDownloadEnvironment());
         _ = Task.Run(async () =>
         {
@@ -2253,12 +2253,8 @@ public partial class App : Application
         services.AddSingleton(serviceProvider => new OcrModelStore(
             serviceProvider.GetRequiredService<AppPaths>(),
             serviceProvider.GetRequiredService<ILogger<OcrModelStore>>()));
-        services.AddSingleton(serviceProvider => new SuperResolutionEngine(
-            serviceProvider.GetRequiredService<OcrModelStore>(),
-            serviceProvider.GetRequiredService<ILogger<SuperResolutionEngine>>()));
         services.AddSingleton(serviceProvider => new NeuralOcrEngine(
             serviceProvider.GetRequiredService<OcrModelStore>(),
-            serviceProvider.GetRequiredService<SuperResolutionEngine>(),
             serviceProvider.GetRequiredService<ILogger<NeuralOcrEngine>>()));
         services.AddSingleton<WindowsOcrService>();
         services.AddSingleton<IOcrService>(serviceProvider => new CaptureOcrService(

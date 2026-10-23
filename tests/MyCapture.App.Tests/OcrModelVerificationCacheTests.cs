@@ -343,10 +343,8 @@ public sealed class OcrModelVerificationCacheTests(ITestOutputHelper output)
 
             Assert.True(engine.CanRun);
             Assert.True(store.HasRequiredModels);
-            Assert.True(store.HasSuperResolution);
             Assert.Equal(CatalogModels.Length, hashes.Count);
-            Assert.All(CatalogModels, file => Assert.Equal(1, hashes[file == OcrModelCatalog.SuperResolutionData
-                ? OcrModelCatalog.ZipMemberNameFor(file.FileName) : file.FileName]));
+            Assert.All(CatalogModels, file => Assert.Equal(1, hashes[file.FileName]));
             Assert.Equal(0, workspace.Handler.Calls);
             Assert.False(engine.IsReady);
         }
@@ -396,10 +394,8 @@ public sealed class OcrModelVerificationCacheTests(ITestOutputHelper output)
         foreach (OcrModelFile file in CatalogModels.Where(file => file != OcrModelCatalog.Recognition))
         {
             Assert.True(store.IsPresent(file));
-            Assert.Equal(1, hashes[file == OcrModelCatalog.SuperResolutionData
-                ? OcrModelCatalog.ZipMemberNameFor(file.FileName) : file.FileName]);
+            Assert.Equal(1, hashes[file.FileName]);
         }
-        Assert.True(store.HasSuperResolution);
         Assert.Equal(0, workspace.Handler.Calls);
     }
 
@@ -427,7 +423,6 @@ public sealed class OcrModelVerificationCacheTests(ITestOutputHelper output)
 
     [Theory]
     [InlineData("required")]
-    [InlineData("super-resolution")]
     [InlineData("file")]
     public async Task Ensure_VerificationRunsOffCallingThreadAndReturnsBeforeHashCompletes(string operation)
     {
@@ -473,7 +468,6 @@ public sealed class OcrModelVerificationCacheTests(ITestOutputHelper output)
 
     [Theory]
     [InlineData("required")]
-    [InlineData("super-resolution")]
     [InlineData("file")]
     public async Task Ensure_AlreadyPresentModelsStillSucceedWithAnAlreadyCanceledToken(string operation)
     {
@@ -512,56 +506,26 @@ public sealed class OcrModelVerificationCacheTests(ITestOutputHelper output)
     }
 
     [Fact]
-    public async Task HasSuperResolution_VerifiesExporterDataAfterPreverification()
-    {
-        using var workspace = new ModelWorkspace();
-        workspace.WriteSyntheticCatalogModels(includeExporterAlias: false);
-        OcrModelStore store = workspace.CreateStore(SyntheticCatalogHash);
-        using var engine = new NeuralOcrEngine(store, NullLogger<NeuralOcrEngine>.Instance);
-
-        await engine.ModelVerificationTask.WaitAsync(Timeout);
-        Assert.False(store.HasSuperResolution);
-        File.WriteAllBytes(store.SuperResolutionExporterDataPath, new byte[OcrModelCatalog.SuperResolutionData.MinimumBytes]);
-        Assert.True(store.HasSuperResolution);
-        File.Move(store.SuperResolutionExporterDataPath, store.SuperResolutionExporterDataPath + ".previous");
-        Assert.False(store.HasSuperResolution);
-        Assert.Equal(0, workspace.Handler.Calls);
-    }
-
-    [Fact]
-    public async Task Preverification_RemovesTheLegacySuperResolutionCopyAfterTheExporterFileVerifies()
+    public async Task Preverification_PreservesAndDoesNotHashLegacySuperResolutionFiles()
     {
         using var workspace = new ModelWorkspace();
         workspace.WriteSyntheticCatalogModels();
-        string legacy = workspace.PathFor(OcrModelCatalog.SuperResolutionData);
-        OcrModelStore store = workspace.CreateStore(SyntheticCatalogHash);
-        Assert.True(File.Exists(legacy));
-
+        byte[] legacyBytes = [1, 2, 3, 4];
+        foreach (string name in OcrModelCatalog.LegacySuperResolutionFiles)
+            File.WriteAllBytes(Path.Combine(workspace.Paths.OcrModelsRoot, name), legacyBytes);
+        var hashes = new ConcurrentBag<string>();
+        OcrModelStore store = workspace.CreateStore(stream =>
+        {
+            hashes.Add(Path.GetFileName(((FileStream)stream).Name));
+            return SyntheticCatalogHash(stream);
+        });
         using var engine = new NeuralOcrEngine(store, NullLogger<NeuralOcrEngine>.Instance);
         await engine.ModelVerificationTask.WaitAsync(Timeout);
 
-        Assert.False(File.Exists(legacy));
-        Assert.True(File.Exists(store.SuperResolutionExporterDataPath));
-        Assert.True(store.HasSuperResolution);
-        Assert.Equal(0, workspace.Handler.Calls);
-    }
-
-    [Fact]
-    public async Task Preverification_KeepsTheLegacySuperResolutionCopyWithoutAVerifiedReplacement()
-    {
-        using var workspace = new ModelWorkspace();
-        workspace.WriteSyntheticCatalogModels(includeExporterAlias: false);
-        string legacy = workspace.PathFor(OcrModelCatalog.SuperResolutionData);
-        OcrModelStore store = workspace.CreateStore(SyntheticCatalogHash);
-
-        using var engine = new NeuralOcrEngine(store, NullLogger<NeuralOcrEngine>.Instance);
-        await engine.ModelVerificationTask.WaitAsync(Timeout);
-
-        Assert.True(File.Exists(legacy));
-        Assert.False(store.HasSuperResolution);
-        File.WriteAllBytes(store.SuperResolutionExporterDataPath, [1]);
-        store.RemoveLegacySuperResolutionCopy();
-        Assert.True(File.Exists(legacy));
+        Assert.Equal(CatalogModels.Length, hashes.Count);
+        Assert.All(hashes, name => Assert.DoesNotContain(name, OcrModelCatalog.LegacySuperResolutionFiles));
+        foreach (string name in OcrModelCatalog.LegacySuperResolutionFiles)
+            Assert.Equal(legacyBytes, File.ReadAllBytes(Path.Combine(workspace.Paths.OcrModelsRoot, name)));
         Assert.Equal(0, workspace.Handler.Calls);
     }
 
@@ -611,7 +575,7 @@ public sealed class OcrModelVerificationCacheTests(ITestOutputHelper output)
     }
 
     private static readonly OcrModelFile[] CatalogModels =
-        [.. OcrModelCatalog.Required, OcrModelCatalog.SuperResolution, OcrModelCatalog.SuperResolutionData];
+        [.. OcrModelCatalog.Required, .. OcrModelCatalog.Optional];
 
     private static byte[] Payload(int length)
     {
@@ -628,8 +592,7 @@ public sealed class OcrModelVerificationCacheTests(ITestOutputHelper output)
     private static byte[] SyntheticCatalogHash(Stream stream)
     {
         string name = Path.GetFileName(((FileStream)stream).Name);
-        return Convert.FromHexString(CatalogModels.Single(file => file.FileName == name
-            || (file == OcrModelCatalog.SuperResolutionData && OcrModelCatalog.ZipMemberNameFor(file.FileName) == name)).ExpectedSha256!);
+        return Convert.FromHexString(CatalogModels.Single(file => file.FileName == name).ExpectedSha256!);
     }
 
     private static async Task<bool> Ensure(OcrModelStore store, string operation, CancellationToken token)
@@ -638,8 +601,6 @@ public sealed class OcrModelVerificationCacheTests(ITestOutputHelper output)
         {
             case "required":
                 return await store.EnsureAsync(token);
-            case "super-resolution":
-                return await store.EnsureSuperResolutionAsync(token);
             case "file":
                 await store.EnsureFileAsync(OcrModelCatalog.Recognition, token);
                 return true;
@@ -695,7 +656,7 @@ public sealed class OcrModelVerificationCacheTests(ITestOutputHelper output)
             return new OcrModelFile(name, $"https://example.test/{name}", Convert.ToHexString(SHA256.HashData(payload)), 16);
         }
 
-        internal void WriteSyntheticCatalogModels(bool omitRecognition = false, bool includeExporterAlias = true)
+        internal void WriteSyntheticCatalogModels(bool omitRecognition = false)
         {
             foreach (OcrModelFile file in CatalogModels)
             {
@@ -705,12 +666,7 @@ public sealed class OcrModelVerificationCacheTests(ITestOutputHelper output)
                 }
                 File.WriteAllBytes(PathFor(file), new byte[file.MinimumBytes]);
             }
-            if (includeExporterAlias)
-            {
-                string alias = Path.Combine(Paths.OcrModelsRoot,
-                    OcrModelCatalog.ZipMemberNameFor(OcrModelCatalog.SuperResolutionData.FileName));
-                File.WriteAllBytes(alias, new byte[OcrModelCatalog.SuperResolutionData.MinimumBytes]);
-            }
+
         }
 
         public void Dispose()

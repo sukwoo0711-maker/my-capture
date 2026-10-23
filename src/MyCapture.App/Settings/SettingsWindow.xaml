@@ -920,7 +920,6 @@
                                 <ComboBoxItem Tag="fast" Content="{loc:Text SettingsUx_OcrFast}" />
                                 <ComboBoxItem Tag="balanced" Content="{loc:Text SettingsUx_OcrBalanced}" />
                                 <ComboBoxItem Tag="accurate" Content="{loc:Text SettingsUx_OcrAccurate}" />
-                                <ComboBoxItem Tag="enhanced" Content="{loc:Text SettingsUx_OcrEnhanced}" />
                             </ComboBox>
                         </StackPanel>
 

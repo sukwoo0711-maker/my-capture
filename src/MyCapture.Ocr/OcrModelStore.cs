@@ -1,6 +1,5 @@
-﻿using System.Collections.Concurrent;
+using System.Collections.Concurrent;
 using System.IO;
-using System.IO.Compression;
 using System.Net.Http;
 using System.Security.Cryptography;
 using Microsoft.Extensions.Logging;
@@ -19,7 +18,6 @@ internal sealed class OcrModelStore
     private readonly ILogger _log;
     private readonly SemaphoreSlim _gate = new(1, 1);
     private readonly Func<Stream, byte[]> _computeHash;
-    private readonly OcrModelFile[] _superResolutionFiles;
     private readonly ConcurrentDictionary<string, VerificationState> _verification = new(StringComparer.OrdinalIgnoreCase);
 
     internal OcrModelStore(AppPaths paths, ILogger<OcrModelStore> log)
@@ -35,76 +33,17 @@ internal sealed class OcrModelStore
     /// <summary>
     /// Supplies the file hasher so tests can observe verification without changing the catalog.
     /// </summary>
-    internal OcrModelStore(AppPaths paths, HttpClient http, ILogger log, Func<Stream, byte[]> computeHash,
-        OcrModelFile? superResolution = null, OcrModelFile? superResolutionData = null)
+    internal OcrModelStore(AppPaths paths, HttpClient http, ILogger log, Func<Stream, byte[]> computeHash)
     {
         _paths = paths ?? throw new ArgumentNullException(nameof(paths));
         _http = http ?? throw new ArgumentNullException(nameof(http));
         _log = log ?? throw new ArgumentNullException(nameof(log));
         _computeHash = computeHash ?? throw new ArgumentNullException(nameof(computeHash));
-        _superResolutionFiles = [superResolution ?? OcrModelCatalog.SuperResolution,
-            superResolutionData ?? OcrModelCatalog.SuperResolutionData];
     }
 
     internal bool HasRequiredModels => OcrModelCatalog.Required.All(IsPresent);
 
-    internal bool HasSuperResolution => _superResolutionFiles.All(IsPresent);
-
-    /// <summary>
-    /// The ONNX graph references its weights under the exporter's original name, so that
-    /// file must exist beside the model for the session to load.
-    /// </summary>
-    internal string SuperResolutionExporterDataPath =>
-        Path.Combine(_paths.OcrModelsRoot, OcrModelCatalog.ZipMemberNameFor(OcrModelCatalog.SuperResolutionData.FileName));
-
-    /// <summary>
-    /// Downloads the optional Real-ESRGAN weights if they are missing. Non-fatal: the caller
-    /// keeps nearest-neighbour scaling when this returns false.
-    /// </summary>
-    internal Task<bool> EnsureSuperResolutionAsync(CancellationToken cancellationToken) =>
-        Task.Run(() => EnsureSuperResolutionCoreAsync(cancellationToken));
-
-    private async Task<bool> EnsureSuperResolutionCoreAsync(CancellationToken cancellationToken)
-    {
-        if (HasSuperResolution)
-        {
-            return true;
-        }
-
-        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
-        try
-        {
-            if (HasSuperResolution)
-            {
-                return true;
-            }
-
-            Directory.CreateDirectory(_paths.OcrModelsRoot);
-            await DownloadArchiveAsync(_superResolutionFiles.Where(file => !IsPresent(file)).ToArray(),
-                cancellationToken).ConfigureAwait(false);
-
-            return HasSuperResolution;
-        }
-        catch (OperationCanceledException)
-        {
-            throw;
-        }
-        catch (Exception ex) when (ex is HttpRequestException or IOException or InvalidDataException or UnauthorizedAccessException or CryptographicException)
-        {
-            _log.LogWarning(ex, "Could not download the Real-ESRGAN model");
-            return false;
-        }
-        finally
-        {
-            _gate.Release();
-        }
-    }
-
-    // Keep the catalog's legacy identifier, but write and verify the actual ONNX external-data
-    // name. Old installs already contain this file alongside their redundant legacy copy.
-    internal string PathFor(OcrModelFile file) => Path.Combine(_paths.OcrModelsRoot,
-        file.FileName == OcrModelCatalog.SuperResolutionData.FileName
-            ? OcrModelCatalog.ZipMemberNameFor(file.FileName) : file.FileName);
+    internal string PathFor(OcrModelFile file) => Path.Combine(_paths.OcrModelsRoot, file.FileName);
 
     /// <summary>
     /// Checks and prepares one model on a worker, including the initial verification.
@@ -192,14 +131,11 @@ internal sealed class OcrModelStore
     /// </summary>
     internal Task PreVerifyInstalledModelsAsync() => Task.Run(() =>
     {
-        bool weightsVerified = false;
-        foreach (OcrModelFile file in OcrModelCatalog.Required.Concat(
-            [OcrModelCatalog.SuperResolution, OcrModelCatalog.SuperResolutionData]))
+        foreach (OcrModelFile file in OcrModelCatalog.Required.Concat(OcrModelCatalog.Optional))
         {
             try
             {
-                bool present = IsPresent(file);
-                if (file == OcrModelCatalog.SuperResolutionData) weightsVerified = present;
+                _ = IsPresent(file);
             }
             catch (Exception ex)
             {
@@ -214,50 +150,7 @@ internal sealed class OcrModelStore
             }
         }
 
-        // Only after the weights verified above; a failed check is not repeated for cleanup.
-        try
-        {
-            if (weightsVerified) RemoveLegacySuperResolutionCopy();
-        }
-        catch (Exception ex)
-        {
-            try
-            {
-                _log.LogWarning(ex, "Could not remove the redundant super-resolution weights");
-            }
-            catch (Exception)
-            {
-                // Same rule as verification: cleanup never faults the background task.
-            }
-        }
     });
-
-    /// <summary>
-    /// Versions up to 4.6.0 kept a second 67 MB copy of the super-resolution weights under the
-    /// catalog name. The session loads only the exporter-named file, so the old copy is
-    /// removed once that file has been verified; without a verified replacement it stays.
-    /// </summary>
-    internal void RemoveLegacySuperResolutionCopy()
-    {
-        string legacy = Path.GetFullPath(Path.Combine(_paths.OcrModelsRoot, OcrModelCatalog.SuperResolutionData.FileName));
-        if (string.Equals(legacy, Path.GetFullPath(SuperResolutionExporterDataPath), StringComparison.OrdinalIgnoreCase)
-            || !File.Exists(legacy)
-            || !IsPresent(OcrModelCatalog.SuperResolutionData))
-        {
-            return;
-        }
-
-        File.Delete(legacy);
-        InvalidateVerification(legacy);
-        try
-        {
-            _log.LogInformation("Removed the redundant super-resolution weights {File}", OcrModelCatalog.SuperResolutionData.FileName);
-        }
-        catch (Exception)
-        {
-            // The file is gone either way; a failing logger must not report it as kept.
-        }
-    }
 
     /// <summary>
     /// Starts preparation on a worker before performing any file or hash work.
@@ -316,7 +209,7 @@ internal sealed class OcrModelStore
         }
         catch (Exception ex) when (ex is HttpRequestException or IOException or UnauthorizedAccessException or CryptographicException)
         {
-            _log.LogWarning(ex, "Could not download PP-OCR receipt models");
+            _log.LogWarning(ex, "Could not download PP-OCR models");
             return false;
         }
         finally
@@ -327,12 +220,6 @@ internal sealed class OcrModelStore
 
     private async Task DownloadAsync(OcrModelFile file, CancellationToken cancellationToken)
     {
-        if (file.Uri.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
-        {
-            await DownloadArchiveAsync([file], cancellationToken).ConfigureAwait(false);
-            return;
-        }
-
         string destination = PathFor(file);
         string temp = destination + ".download";
         InvalidateVerification(destination);
@@ -366,50 +253,6 @@ internal sealed class OcrModelStore
         {
             response.Dispose();
             throw;
-        }
-    }
-
-    // Bound both the HTTP transfer and each uncompressed entry. Only the pinned members are
-    // extracted, to fixed destinations, and every missing member is verified before publishing.
-    private async Task DownloadArchiveAsync(OcrModelFile[] files, CancellationToken cancellationToken)
-    {
-        if (files.Length == 0) return;
-        string archiveTemp = Path.Combine(_paths.OcrModelsRoot, "realesrgan_x4.zip.download");
-        try
-        {
-            using (HttpResponseMessage response = await OpenDownloadAsync(files[0].Uri,
-                OcrModelCatalog.SuperResolutionArchiveBytes, cancellationToken).ConfigureAwait(false))
-            using (Stream source = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false))
-            {
-                await WriteBoundedAsync(source, archiveTemp, OcrModelCatalog.SuperResolutionArchiveBytes,
-                    cancellationToken).ConfigureAwait(false);
-            }
-
-            using (var archiveStream = File.OpenRead(archiveTemp))
-            using (var archive = new ZipArchive(archiveStream, ZipArchiveMode.Read))
-            {
-                foreach (OcrModelFile file in files)
-                {
-                    string memberName = OcrModelCatalog.ZipMemberNameFor(file.FileName);
-                    ZipArchiveEntry entry = archive.Entries.FirstOrDefault(e =>
-                        string.Equals(Path.GetFileName(e.FullName), memberName, StringComparison.OrdinalIgnoreCase))
-                        ?? throw new IOException($"OCR model archive was missing {memberName}");
-                    if (entry.Length > file.ByteLimit)
-                        throw new IOException($"OCR archive entry exceeds its byte limit: {memberName}");
-                    using Stream source = entry.Open();
-                    await WriteVerifiedAsync(source, PathFor(file) + ".download", file, cancellationToken)
-                        .ConfigureAwait(false);
-                }
-            }
-
-            foreach (OcrModelFile file in files)
-                CopyModelFile(PathFor(file) + ".download", PathFor(file));
-        }
-        finally
-        {
-            CleanDownload(archiveTemp);
-            foreach (OcrModelFile file in files)
-                CleanDownload(PathFor(file) + ".download");
         }
     }
 

@@ -81,9 +81,6 @@ internal sealed class OcrModelDownloadCoordinator(OcrModelStore store, IOcrDownl
         if (!OcrQualityProfile.UseNeuralModel(quality)) return true;
         if (deferForBatterySaver && environment.IsBatterySaverOn != false) return false;
         if (isBackground && environment.ShouldDeferBackgroundDownload()) return false;
-        if (!await store.EnsureAsync(cancellationToken).ConfigureAwait(false)) return false;
-        // Preserve the startup prefetch scope; super-resolution is prepared on explicit use.
-        return isBackground || quality != OcrQuality.Enhanced
-            || await store.EnsureSuperResolutionAsync(cancellationToken).ConfigureAwait(false);
+        return await store.EnsureAsync(cancellationToken).ConfigureAwait(false);
     }
 }

@@ -1,7 +1,6 @@
 using System.Diagnostics;
 using System.Globalization;
 using System.IO;
-using System.Net.Http;
 using System.Reflection;
 using System.Security.Cryptography;
 using System.Text;
@@ -14,7 +13,6 @@ using System.Windows.Media.Imaging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.ML.OnnxRuntime;
 using MyCapture.Core.Settings;
-using MyCapture.Core.Storage;
 using MyCapture.Ocr;
 using MyCapture.Platform.Imaging;
 using RapidOcrNet;
@@ -92,15 +90,15 @@ public sealed partial class OcrModelBenchmarkTests
             "Space-free CER in the detector and angle benchmark summaries is the same SpaceInsensitiveCer metric; both branches use NFC and remove all Unicode whitespace before edit distance. The existing field names, counts and line-insensitive metric are retained.",
             "Exact-line match: LCS of normalized nonempty output/truth lines divided by truth line count; also report matches / max(truth lines, output lines) to expose extra lines.",
             "Cold init is first construction of one reusable wrapper/model set per pipeline in this process; filesystem and native DLL caches are not flushed. First inference is measured separately and excluded from all warm samples. Every corpus image then has three full pipeline warm runs; first warm output supplies accuracy, repeated-output changes are counted.",
-            "Warm time includes product preprocessing, SR when applicable, PNG encoding, SKBitmap decode, detection/classification/recognition and product text reconstruction. Image generation, disk writes, metrics, and model file hashing are outside timed inference.",
+            "Warm time includes product preprocessing, PNG encoding, SKBitmap decode, detection/classification/recognition and product text reconstruction. Image generation, disk writes, metrics, and model file hashing are outside timed inference.",
             "Windows uses one real WindowsOcrService/WindowsOcrRecognizer wrapper. The product creates its WinRT OcrEngine on every call, so native init is included in each W latency; wrapper construction is the reported W init. Only Korean is requested, and unavailable Korean is skipped.",
-            "Accurate uses the actual contrast stretch without resizing: the neural product ignores its configured 4x factor unless LocalCorrection is true. Enhanced uses actual local correction, actual SR tiling, or actual nearest-neighbour 2x fallback capped at 4096.",
-            "Enhanced variants share the small-text and low-contrast subsets, including their JPEG variants. Their detector is selected between A-cur and A-v6 by corpus CER, then warm median as tie-breaker. This is an in-sample exploratory selection, not independent validation.",
+            "Accurate uses the actual contrast stretch without resizing. The neural product does not apply local correction or super-resolution.",
+            "The historical EnhancedSubset field identifies the small-text and low-contrast samples for report compatibility; it no longer selects a product quality or additional pipeline.",
             "Working-set samples are taken every 20 ms and at inference boundaries. Peak delta is max sampled working set minus pre-init baseline; lifetime high-water increase is also recorded. Sequential shared-process measurements are order-dependent and include allocator/cache reuse; they are not isolated model memory requirements.",
             "Latency and memory in the shared sandbox may be noisy. All pipelines use product CPU options and serial image execution; no throughput parallelism is added.",
             "A-dual and A-v6-dual run the unchanged W Fast and corresponding Accurate neural runners concurrently on each frozen corpus image, then call the product OcrResultMerger. Warm wall time includes scheduling, both engines' preprocessing/inference, waiting and merging. Images still run serially. First-warm line/word geometry is retained for all pipelines, and both engine results are retained for dual pipelines.",
             "Dual pipelines use the product PrepareDualRequest handoff before starting both engines: decoder-backed BitmapFrame inputs receive a lossless detached bitmap preserving pixels, format and DPI. Snapshot overhead is included in dual wall time; single-engine baselines and corpus generation are unchanged.",
-            "MYCAPTURE_OCR_BENCH_PIPELINES optionally selects comma-, semicolon- or whitespace-separated pipeline names before model hashing/loading. Omitted pipelines are skipped; an unset variable preserves the full experiment including SR.",
+            "MYCAPTURE_OCR_BENCH_PIPELINES optionally selects comma-, semicolon- or whitespace-separated pipeline names before model hashing/loading. Omitted pipelines are skipped; an unset variable runs all current OCR pipelines.",
             "Dual-engine gates require complete matching corpus evidence for W, the corresponding neural baseline and dual pipeline: each category CER <= min(W, neural) + 0.005, overall CER strictly below both, and warm median wall time <= neural + 30 ms. Missing data cannot pass. The report does not enable any product feature switch.",
         ]);
 
@@ -134,39 +132,6 @@ public sealed partial class OcrModelBenchmarkTests
         ExecuteDual("A-dual", server, defaults);
         ExecuteDual("A-v6-dual", v6, defaults);
 
-        PipelineReport? selected = report.Pipelines
-            .Where(p => (p.Name == "A-cur" || p.Name == "A-v6") && p.Status == "completed")
-            .OrderBy(p => p.Overall!.Cer).ThenBy(p => p.Overall!.WarmMedianMs).FirstOrDefault();
-        if (selected is not null && corpus.Any(s => s.Truth.EnhancedSubset))
-        {
-            report.EnhancedDetector = selected.Name;
-            string detector = selected.Name == "A-v6" ? v6 : server;
-            List<Sample> difficult = corpus.Where(s => s.Truth.EnhancedSubset).ToList();
-            // Run fallback first so a long SR experiment still leaves its baseline on disk.
-            ExecuteNeural("E-none", difficult, detector, defaults, OcrQuality.Enhanced);
-            ExecuteNeural("E-cur", difficult, detector, defaults, OcrQuality.Enhanced,
-                Path.Combine(current, "realesrgan_x4.onnx"), Path.Combine(current, "real_esrgan_x4plus.data"));
-            ExecuteNeural("E-v3", difficult, detector, defaults, OcrQuality.Enhanced,
-                Path.Combine(candidate, "real_esrgan_general_x4v3.onnx"), Path.Combine(candidate, "real_esrgan_general_x4v3.data"));
-        }
-        else if (selected is not null)
-        {
-            foreach (string name in new[] { "E-none", "E-cur", "E-v3" })
-                report.Pipelines.Add(new PipelineReport { Name = name, Status = "skipped", Note = "This corpus has no Enhanced subset." });
-        }
-        else
-        {
-            foreach (string name in new[] { "E-none", "E-cur", "E-v3" })
-                report.Pipelines.Add(new PipelineReport
-                {
-                    Name = name,
-                    Status = selectedPipelines is not null && !selectedPipelines.Contains(name) ? "skipped" : "failed",
-                    Note = selectedPipelines is not null && !selectedPipelines.Contains(name)
-                        ? "Not selected by MYCAPTURE_OCR_BENCH_PIPELINES."
-                        : "Neither detector baseline completed; Enhanced selection is unavailable.",
-                });
-        }
-
         report.DualEngineGates.Add(EvaluateDualGate(report, corpus, "A-dual", "A-cur"));
         report.DualEngineGates.Add(EvaluateDualGate(report, corpus, "A-v6-dual", "A-v6"));
         report.FinishedUtc = DateTimeOffset.UtcNow;
@@ -177,21 +142,18 @@ public sealed partial class OcrModelBenchmarkTests
             string.Join("; ", report.Pipelines.Where(p => p.Status == "failed").Select(p => p.Name + ": " + p.Note)));
 
         void ExecuteNeural(string name, List<Sample> samples, string detector, RapidOcrOptions options,
-            OcrQuality quality, string? sr = null, string? srData = null)
+            OcrQuality quality)
         {
-            string[] files = sr is null
-                ? [detector, classifier, recognizer, dictionary]
-                : [detector, classifier, recognizer, dictionary, sr, srData!];
             Execute(name, samples,
-                () => new NeuralRunner(detector, classifier, recognizer, dictionary, options, quality, sr, output),
-                files, quality + (sr is null ? "; no SR" : "; product SR tiling"), DescribeOptions(options));
+                () => new NeuralRunner(detector, classifier, recognizer, dictionary, options, quality),
+                [detector, classifier, recognizer, dictionary], quality.ToString(), DescribeOptions(options));
         }
 
         void ExecuteDual(string name, string detector, RapidOcrOptions options) =>
             Execute(name, corpus,
-                () => new DualRunner(detector, classifier, recognizer, dictionary, options, output),
+                () => new DualRunner(detector, classifier, recognizer, dictionary, options),
                 [detector, classifier, recognizer, dictionary],
-                "Parallel Windows Fast + neural Accurate; product line merger; no SR", DescribeOptions(options));
+                "Parallel Windows Fast + neural Accurate; product line merger", DescribeOptions(options));
 
         void Execute(string name, List<Sample> samples, Func<IRunner> factory, string[] files,
             string description, Dictionary<string, string>? options)
@@ -284,7 +246,7 @@ public sealed partial class OcrModelBenchmarkTests
                         pipeline.SampledPeakWorkingSetBytes = memory.Peak;
                         pipeline.SampledPeakDeltaBytes = Math.Max(0, memory.Peak - memory.Baseline);
                         pipeline.LifetimePeakIncreaseBytes = memory.LifetimeIncrease;
-                        // Incremental evidence survives a long-running SR model or an interrupted host.
+                        // Incremental evidence survives an interrupted host.
                         WriteJson(Path.Combine(output, "results.json"), report);
                     }
                     pipeline.Status = "completed";
@@ -319,7 +281,7 @@ public sealed partial class OcrModelBenchmarkTests
         if (string.IsNullOrWhiteSpace(selection)) return null;
         var names = Regex.Split(selection.Trim(), @"[,;\s]+")
             .Where(n => n.Length > 0).ToHashSet(StringComparer.Ordinal);
-        string[] known = ["W", "A-cur", "A-mob", "A-v6", "A-v6opt", "A-dual", "A-v6-dual", "E-none", "E-cur", "E-v3"];
+        string[] known = ["W", "A-cur", "A-mob", "A-v6", "A-v6opt", "A-dual", "A-v6-dual"];
         string[] unknown = names.Except(known, StringComparer.Ordinal).ToArray();
         if (names.Count == 0 || unknown.Length > 0)
             throw new ArgumentException("MYCAPTURE_OCR_BENCH_PIPELINES must select known pipeline names. Unknown: " + string.Join(", ", unknown));
@@ -359,13 +321,13 @@ public sealed partial class OcrModelBenchmarkTests
         public string? UnavailableReason => _windows.UnavailableReason;
 
         public DualRunner(string detector, string classifier, string recognizer, string dictionary,
-            RapidOcrOptions options, string output)
+            RapidOcrOptions options)
         {
             // A benchmark dual pipeline must have both engines; a single-engine fallback
             // is useful in the product, but cannot supply evidence for the dual gate.
             if (_windows.UnavailableReason is null)
                 _neural = new NeuralRunner(detector, classifier, recognizer, dictionary,
-                    options, OcrQuality.Accurate, null, output);
+                    options, OcrQuality.Accurate);
         }
 
         public ProductResult Recognize(BitmapSource bitmap)
@@ -400,40 +362,14 @@ public sealed partial class OcrModelBenchmarkTests
         private readonly RapidOcr _engine = new();
         private readonly RapidOcrOptions _options;
         private readonly OcrQuality _quality;
-        private readonly SuperResolutionEngine? _sr;
-        private readonly HttpClient? _offlineHttp;
         public string? UnavailableReason => null;
 
         public NeuralRunner(string detector, string classifier, string recognizer, string dictionary,
-            RapidOcrOptions options, OcrQuality quality, string? srModel, string output)
+            RapidOcrOptions options, OcrQuality quality)
         {
             _options = options;
             _quality = quality;
-            try
-            {
-                _engine.InitModels(detector, classifier, recognizer, dictionary);
-                if (srModel is not null)
-                {
-                    _offlineHttp = new HttpClient(new NoNetworkHandler());
-                    var store = new OcrModelStore(AppPaths.CreateForRoot(Path.Combine(output, "isolated-profile")),
-                        _offlineHttp, NullLogger<OcrModelStore>.Instance);
-                    _sr = new SuperResolutionEngine(store, NullLogger<SuperResolutionEngine>.Instance);
-                    FieldInfo field = typeof(SuperResolutionEngine).GetField("_session", BindingFlags.Instance | BindingFlags.NonPublic)
-                        ?? throw new MissingFieldException(nameof(SuperResolutionEngine), "_session");
-                    var session = new InferenceSession(srModel);
-                    try
-                    {
-                        // Product tiling has fixed names/shapes. Fail instead of silently measuring fallback.
-                        if (!session.InputMetadata.TryGetValue("image", out NodeMetadata? input)
-                            || !input.Dimensions.SequenceEqual(new[] { 1, 3, 128, 128 })
-                            || !session.OutputMetadata.TryGetValue("upscaled_image", out NodeMetadata? result)
-                            || !result.Dimensions.SequenceEqual(new[] { 1, 3, 512, 512 }))
-                            throw new InvalidOperationException("SR model is incompatible with product image/upscaled_image 128-to-512 tiling.");
-                        field.SetValue(_sr, session);
-                    }
-                    catch { session.Dispose(); throw; }
-                }
-            }
+            try { _engine.InitModels(detector, classifier, recognizer, dictionary); }
             catch { Dispose(); throw; }
         }
 
@@ -442,24 +378,8 @@ public sealed partial class OcrModelBenchmarkTests
             OcrRequest request = Request(bitmap, _quality);
             BitmapSource source = bitmap;
             double scale = 1.0;
-            // Deliberately mirrors RecognizeOnWorker; calls the product's actual pixel operations.
-            if (request.LocalCorrection)
-            {
-                source = ImageCodec.CorrectImageForRecognition(source);
-                if (request.UseSuperResolution && _sr?.IsReady == true
-                    && Math.Max(source.PixelWidth, source.PixelHeight) <= SuperResolutionEngine.MaxLongEdge)
-                {
-                    source = _sr.Upscale(source) ?? throw new InvalidOperationException("Selected SR unexpectedly returned no image.");
-                    scale = SuperResolutionEngine.Scale;
-                }
-                if (scale == 1.0 && request.UpscaleFactor > 1.0)
-                {
-                    double cap = 4096.0 / Math.Max(1, Math.Max(source.PixelWidth, source.PixelHeight));
-                    scale = cap < 1.0 ? 1.0 : Math.Min(request.UpscaleFactor, cap);
-                    if (scale > 1.0) source = ImageCodec.UpscaleForRecognition(source, scale);
-                }
-            }
-            else if (request.EnhanceContrast) source = ImageCodec.StretchContrastForRecognition(source);
+            // Deliberately mirrors RecognizeOnWorker; calls the product's actual pixel operation.
+            if (request.EnhanceContrast) source = ImageCodec.StretchContrastForRecognition(source);
             using SKBitmap decoded = SKBitmap.Decode(ImageCodec.EncodePng(source))
                 ?? throw new InvalidOperationException("Prepared bitmap could not be decoded.");
             RapidOcrNet.OcrResult raw = _engine.Detect(decoded, _options, CancellationToken.None);
@@ -469,8 +389,6 @@ public sealed partial class OcrModelBenchmarkTests
         public void Dispose()
         {
             _engine.Dispose();
-            _sr?.Dispose();
-            _offlineHttp?.Dispose();
         }
 
         public object Diagnose(BitmapSource bitmap)
@@ -482,12 +400,6 @@ public sealed partial class OcrModelBenchmarkTests
                 ?? throw new InvalidOperationException("Diagnostic bitmap could not be decoded.");
             return DiagnoseBeforeFilter(_engine, decoded, _options);
         }
-    }
-
-    private sealed class NoNetworkHandler : HttpMessageHandler
-    {
-        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) =>
-            throw new InvalidOperationException("Network access is forbidden in the local OCR benchmark.");
     }
 
     private static OcrRequest Request(BitmapSource bitmap, OcrQuality quality)
@@ -879,7 +791,7 @@ public sealed partial class OcrModelBenchmarkTests
     {
         WriteJson(Path.Combine(output, "results.json"), report);
         var markdown = new StringBuilder("# Local OCR model benchmark\n\n");
-        markdown.AppendLine($"State: **{report.Status}**. Images: {report.CorpusCount}. Enhanced detector: {report.EnhancedDetector ?? "pending"}.");
+        markdown.AppendLine($"State: **{report.Status}**. Images: {report.CorpusCount}.");
         markdown.AppendLine($"\nStarted UTC: {report.StartedUtc:O}. Finished UTC: {report.FinishedUtc:O}.");
         markdown.AppendLine("\n## Method\n");
         foreach (string note in report.Notes) markdown.AppendLine("- " + note);
@@ -969,7 +881,6 @@ public sealed partial class OcrModelBenchmarkTests
         public string[]? SelectedPipelines { get; init; }
         public int WarmRepetitionsPerImage => Repetitions;
         public bool V6PresetAvailable { get; set; }
-        public string? EnhancedDetector { get; set; }
         public List<string> Notes { get; } = [];
         public List<PipelineReport> Pipelines { get; } = [];
         public List<DualGateReport> DualEngineGates { get; } = [];

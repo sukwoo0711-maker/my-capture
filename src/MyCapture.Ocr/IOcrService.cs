@@ -46,26 +46,26 @@ public sealed class OcrRequest
     public double UpscaleFactor { get; init; } = 1.0;
 
     /// <summary>
-    /// Stretch luminance before recognition. Accurate/receipt mode uses this so faint
+    /// Stretch luminance before recognition. Accurate mode uses this so faint
     /// grey print separates from paper without changing the caller's bitmap.
     /// </summary>
     public bool EnhanceContrast { get; init; }
 
     /// <summary>
-    /// Run the downloaded PP-OCR receipt model when it is available. Windows OCR remains
+    /// Run the downloaded PP-OCR text model when it is available. Windows OCR remains
     /// the fallback when the model has not been fetched yet.
     /// </summary>
     public bool UseNeuralModel { get; init; }
 
     /// <summary>
-    /// Flatten lighting, stretch contrast, and sharpen before recognition.
-    /// Enhanced/Careful mode uses this for receipts with glare or fuzzy ink.
+    /// Legacy request flag for Windows image correction. Quality profiles no longer enable
+    /// it, and the neural engine ignores it.
     /// </summary>
     public bool LocalCorrection { get; init; }
 
     /// <summary>
-    /// Run the optional Real-ESRGAN x4 weights before recognition. Careful mode downloads
-    /// the model on first use; when it is absent or fails, nearest-neighbour scaling runs.
+    /// Legacy request flag retained for source compatibility. Ignored by all recognizers;
+    /// super-resolution models are no longer downloaded or loaded.
     /// </summary>
     public bool UseSuperResolution { get; init; }
 

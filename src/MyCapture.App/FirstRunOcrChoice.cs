@@ -27,7 +27,10 @@ internal static class FirstRunOcrChoice
         Action<AppSettings> completeFirstRun, Action startExplicitDownload)
     {
         OcrQuality previous = settings.Ocr.Quality;
+        double previousUpscale = settings.Ocr.UpscaleFactor;
+        settings.Ocr.Quality = OcrQualityNames.Normalize(previous);
         if (selected && previous == OcrQuality.Fast) settings.Ocr.Quality = OcrQuality.Accurate;
+        if (settings.Ocr.Quality != previous) OcrQualityProfile.Synchronize(settings.Ocr);
         try
         {
             completeFirstRun(settings);
@@ -35,6 +38,7 @@ internal static class FirstRunOcrChoice
         catch
         {
             settings.Ocr.Quality = previous;
+            settings.Ocr.UpscaleFactor = previousUpscale;
             throw;
         }
         if (selected && OcrQualityProfile.UseNeuralModel(settings.Ocr.Quality)) startExplicitDownload();

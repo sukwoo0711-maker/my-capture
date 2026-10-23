@@ -5,7 +5,7 @@ using Microsoft.Extensions.Logging;
 namespace MyCapture.Ocr;
 
 /// <summary>
-/// Runs Accurate and Enhanced requests through PP-OCR and Windows OCR in parallel when the
+/// Runs Accurate requests through PP-OCR and Windows OCR in parallel when the
 /// downloaded Korean model is present, and merges their lines; Windows OCR alone serves
 /// Fast/Balanced requests and remains the fallback when the model is missing.
 /// </summary>
@@ -164,7 +164,7 @@ public sealed class CaptureOcrService : IOcrService
         }
 
         // Start both before awaiting either. Windows sees the same Fast pipeline as
-        // the benchmark, while Accurate/Enhanced preprocessing stays on PP-OCR.
+        // the benchmark, while Accurate preprocessing stays on PP-OCR.
         Task<OcrResult> windowsTask = RecognizeSafelyAsync(
             _windows.RecognizeAsync, "Windows OCR", CreateFastWindowsRequest(prepared), cancellationToken);
         Task<OcrResult> neuralTask = RecognizeSafelyAsync(

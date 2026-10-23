@@ -211,7 +211,9 @@ public sealed class SettingsStore
 
     private void SaveCore(AppSettings settings)
     {
-        string json = JsonSerializer.Serialize(settings, SerializerOptions);
+        // Canonicalize an old in-memory value without mutating the caller's settings.
+        AppSettings snapshot = settings.Ocr.Quality == OcrQuality.Enhanced ? settings.DeepClone() : settings;
+        string json = JsonSerializer.Serialize(snapshot, SerializerOptions);
         WriteAllText(_paths.SettingsFile, json);
 
         _log.LogDebug("Settings saved to {Path}", LogText.SingleLine(_paths.SettingsFile));
@@ -243,6 +245,8 @@ public sealed class SettingsStore
             JsonSerializer.Serialize(settings, SerializerOptions),
             SerializerOptions)!;
         exportable.GitHub.Token = string.Empty;
+        if (exportable.Ocr.Quality == OcrQuality.Enhanced)
+            OcrQualityProfile.Synchronize(exportable.Ocr);
 
         string json = JsonSerializer.Serialize(exportable, SerializerOptions);
         AtomicFile.WriteAllText(destinationPath, json);

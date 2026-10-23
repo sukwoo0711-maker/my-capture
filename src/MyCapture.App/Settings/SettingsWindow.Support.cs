@@ -15,18 +15,16 @@ namespace MyCapture.App.Settings;
 internal sealed partial class SettingsWindow
 {
     internal static int OcrModelMegabytes => OcrModelCatalog.DownloadMegabytesFor(OcrQuality.Accurate);
-    internal static int EnhancedModelMegabytes => OcrModelCatalog.DownloadMegabytesFor(OcrQuality.Enhanced);
-    internal static int UpscaleModelMegabytes => (int)Math.Ceiling(OcrModelCatalog.SuperResolutionArchiveBytes / 1_000_000d);
 
     internal static string OcrQualityDescription =>
-        UiText.Format("SettingsUx_OcrQualityHint", OcrModelMegabytes, EnhancedModelMegabytes);
+        UiText.Format("SettingsUx_OcrQualityHint", OcrModelMegabytes);
 
     internal Action<string> OpenSupportPage { get; set; } = uri => { if (!SupportDiagnostics.TryOpenUri(uri)) throw new InvalidOperationException(UiText.Get("Support_OpenFailed")); };
     internal Action<string> CopySupportText { get; set; } = text => Clipboard.SetText(text);
 
     private void InitializeAbout()
     {
-        PrivacyModelText.Text = UiText.Format("About_PrivacyModel", OcrModelMegabytes, EnhancedModelMegabytes);
+        PrivacyModelText.Text = UiText.Format("About_PrivacyModel", OcrModelMegabytes);
         OcrQualityHintText.Text = OcrQualityDescription;
     }
 

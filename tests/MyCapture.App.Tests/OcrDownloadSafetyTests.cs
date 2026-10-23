@@ -1,5 +1,4 @@
 using System.IO;
-using System.IO.Compression;
 using System.Net;
 using System.Net.Http;
 using System.Security.Cryptography;
@@ -14,51 +13,6 @@ namespace MyCapture.App.Tests;
 
 public sealed class OcrDownloadSafetyTests
 {
-    [Fact]
-    public async Task SuperResolution_DownloadsOneArchiveStoresOneWeightFileAndReusesIt()
-    {
-        using var fixture = new Fixture();
-        OcrModelStore store = fixture.CreateStore();
-        Assert.All(await Task.WhenAll(Enumerable.Range(0, 4)
-            .Select(_ => store.EnsureSuperResolutionAsync(CancellationToken.None))), Assert.True);
-        Assert.Equal(1, fixture.Handler.Calls);
-        Assert.True(store.HasSuperResolution);
-        Assert.Equal(fixture.ModelBytes, File.ReadAllBytes(store.PathFor(fixture.Model)));
-        Assert.Equal(fixture.WeightBytes, File.ReadAllBytes(store.SuperResolutionExporterDataPath));
-        Assert.False(File.Exists(Path.Combine(fixture.Paths.OcrModelsRoot, OcrModelCatalog.SuperResolutionData.FileName)));
-        Assert.Equal(2, Directory.GetFiles(fixture.Paths.OcrModelsRoot).Length);
-    }
-
-    [Fact]
-    public async Task SuperResolution_AcceptsOldLayoutAndPreservesItsDuplicate()
-    {
-        using var fixture = new Fixture();
-        OcrModelStore store = fixture.CreateStore();
-        File.WriteAllBytes(store.PathFor(fixture.Model), fixture.ModelBytes);
-        File.WriteAllBytes(store.SuperResolutionExporterDataPath, fixture.WeightBytes);
-        string legacy = Path.Combine(fixture.Paths.OcrModelsRoot, OcrModelCatalog.SuperResolutionData.FileName);
-        File.WriteAllBytes(legacy, fixture.WeightBytes);
-        Assert.True(store.HasSuperResolution);
-        Assert.True(await store.EnsureSuperResolutionAsync(CancellationToken.None));
-        Assert.Equal(0, fixture.Handler.Calls);
-        Assert.Equal(fixture.WeightBytes, File.ReadAllBytes(legacy));
-    }
-
-    [Fact]
-    public async Task SuperResolution_RepairsMissingExporterFileWithoutTouchingLegacyCopy()
-    {
-        using var fixture = new Fixture();
-        OcrModelStore store = fixture.CreateStore();
-        File.WriteAllBytes(store.PathFor(fixture.Model), fixture.ModelBytes);
-        string legacy = Path.Combine(fixture.Paths.OcrModelsRoot, OcrModelCatalog.SuperResolutionData.FileName);
-        File.WriteAllBytes(legacy, fixture.WeightBytes);
-        Assert.False(store.HasSuperResolution);
-        Assert.True(await store.EnsureSuperResolutionAsync(CancellationToken.None));
-        Assert.Equal(1, fixture.Handler.Calls);
-        Assert.Equal(fixture.WeightBytes, File.ReadAllBytes(legacy));
-        Assert.Equal(fixture.WeightBytes, File.ReadAllBytes(store.SuperResolutionExporterDataPath));
-    }
-
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
@@ -74,50 +28,6 @@ public sealed class OcrDownloadSafetyTests
         await Assert.ThrowsAsync<IOException>(() => store.EnsureFileAsync(file, CancellationToken.None));
         Assert.False(File.Exists(store.PathFor(file)));
         Assert.Empty(Directory.GetFiles(fixture.Paths.OcrModelsRoot, "*.download"));
-    }
-
-    [Fact]
-    public async Task Archive_RejectsOversizeContentLength()
-    {
-        using var fixture = new Fixture();
-        fixture.Handler.Respond = () =>
-        {
-            var content = new ByteArrayContent([1]);
-            content.Headers.ContentLength = OcrModelCatalog.SuperResolutionArchiveBytes + 1;
-            return new HttpResponseMessage(HttpStatusCode.OK) { Content = content };
-        };
-        Assert.False(await fixture.CreateStore().EnsureSuperResolutionAsync(CancellationToken.None));
-        Assert.Empty(Directory.GetFiles(fixture.Paths.OcrModelsRoot));
-    }
-
-    [Fact]
-    public async Task Archive_RejectsOversizeEntryBeforeExtractingOrPublishing()
-    {
-        using var fixture = new Fixture();
-        OcrModelStore store = fixture.CreateStore(weights: fixture.Weights with { ExpectedBytes = 4 });
-        Assert.False(await store.EnsureSuperResolutionAsync(CancellationToken.None));
-        Assert.Empty(Directory.GetFiles(fixture.Paths.OcrModelsRoot));
-    }
-
-    [Fact]
-    public async Task Archive_RejectsSecondMemberHashMismatchWithoutPublishingFirstMember()
-    {
-        using var fixture = new Fixture();
-        OcrModelStore store = fixture.CreateStore(weights: fixture.Weights with { ExpectedSha256 = new string('0', 64) });
-        Assert.False(await store.EnsureSuperResolutionAsync(CancellationToken.None));
-        Assert.Empty(Directory.GetFiles(fixture.Paths.OcrModelsRoot));
-    }
-
-    [Fact]
-    public async Task Archive_MalformedZipIsNonFatalAndTemporaryFileIsCleaned()
-    {
-        using var fixture = new Fixture();
-        fixture.Handler.Respond = () => new HttpResponseMessage(HttpStatusCode.OK)
-        {
-            Content = new ByteArrayContent([1, 2, 3, 4]),
-        };
-        Assert.False(await fixture.CreateStore().EnsureSuperResolutionAsync(CancellationToken.None));
-        Assert.Empty(Directory.GetFiles(fixture.Paths.OcrModelsRoot));
     }
 
     [Theory]
@@ -186,24 +96,56 @@ public sealed class OcrDownloadSafetyTests
     }
 
     [Theory]
-    [InlineData(true, 0)]
-    [InlineData(false, 1)]
-    public async Task Coordinator_EnhancedExplicitActionAlsoDownloadsSuperResolution(bool background, int expectedCalls)
+    [InlineData(OcrQuality.Fast, true)]
+    [InlineData(OcrQuality.Fast, false)]
+    [InlineData(OcrQuality.Balanced, true)]
+    [InlineData(OcrQuality.Balanced, false)]
+    [InlineData(OcrQuality.Accurate, true)]
+    [InlineData(OcrQuality.Accurate, false)]
+    [InlineData(OcrQuality.Enhanced, true)]
+    [InlineData(OcrQuality.Enhanced, false)]
+    public async Task Coordinator_AllQualitiesNeverDownloadSuperResolution(OcrQuality quality, bool background)
     {
         using var fixture = new Fixture();
-        foreach (OcrModelFile file in OcrModelCatalog.Required)
-            File.WriteAllBytes(Path.Combine(fixture.Paths.OcrModelsRoot, file.FileName), new byte[file.MinimumBytes]);
-        using var http = new HttpClient(fixture.Handler);
-        var store = new OcrModelStore(fixture.Paths, http, NullLogger.Instance, stream =>
-        {
-            OcrModelFile? required = OcrModelCatalog.Required.FirstOrDefault(file =>
-                file.FileName == Path.GetFileName(((FileStream)stream).Name));
-            return required is null ? SHA256.HashData(stream) : Convert.FromHexString(required.ExpectedSha256!);
-        }, fixture.Model, fixture.Weights);
-        var coordinator = new OcrModelDownloadCoordinator(store, new FakeEnvironment(false));
-        Assert.True(await coordinator.EnsureAsync(OcrQuality.Enhanced, background, CancellationToken.None));
-        Assert.Equal(expectedCalls, fixture.Handler.Calls);
-        Assert.Equal(!background, store.HasSuperResolution);
+        var environment = new FakeEnvironment(false);
+        OcrModelStore store = fixture.CreateCatalogStore();
+        var coordinator = new OcrModelDownloadCoordinator(store, environment);
+        bool usesNeural = OcrQualityProfile.UseNeuralModel(quality);
+
+        // With no installed models the rejecting handler sees only the first PP-OCR file.
+        Assert.Equal(!usesNeural, await coordinator.EnsureAsync(quality, background, CancellationToken.None));
+        Assert.Equal(usesNeural ? 1 : 0, fixture.Handler.Calls);
+        Assert.All(fixture.Handler.Requests, uri => Assert.Equal(OcrModelCatalog.Recognition.Uri, uri));
+
+        fixture.WriteCatalogModels();
+        fixture.WriteLegacyFiles();
+        int requests = fixture.Handler.Calls;
+        Assert.True(await coordinator.EnsureAsync(quality, background, CancellationToken.None));
+        Assert.Equal(requests, fixture.Handler.Calls);
+        fixture.AssertLegacyFilesUnchanged();
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task NeuralEngine_LegacyRequestFlagsNeverDownloadSuperResolution(bool modelsInstalled)
+    {
+        using var fixture = new Fixture();
+        if (modelsInstalled) fixture.WriteCatalogModels();
+        fixture.WriteLegacyFiles();
+        var runtime = new OnnxRuntimeInitialization(() =>
+            throw new InvalidOperationException("Stop before a native session is created."));
+        using var engine = new NeuralOcrEngine(fixture.CreateCatalogStore(),
+            NullLogger<NeuralOcrEngine>.Instance, runtime);
+        await engine.ModelVerificationTask;
+
+        OcrResult result = await engine.RecognizeAsync(OcrRequest.FromBytes([1], useNeuralModel: true,
+            localCorrection: true, useSuperResolution: true), CancellationToken.None);
+
+        Assert.Equal(OcrStatus.Unavailable, result.Status);
+        Assert.Equal(modelsInstalled ? 0 : 1, fixture.Handler.Calls);
+        Assert.All(fixture.Handler.Requests, uri => Assert.Equal(OcrModelCatalog.Recognition.Uri, uri));
+        fixture.AssertLegacyFilesUnchanged();
     }
 
     [Fact]
@@ -212,26 +154,6 @@ public sealed class OcrDownloadSafetyTests
         int calls = 0;
         var runtime = new OnnxRuntimeInitialization(() => Interlocked.Increment(ref calls));
         await Task.WhenAll(Enumerable.Range(0, 20).Select(_ => Task.Run(runtime.EnsureInitialized)));
-        Assert.Equal(1, calls);
-    }
-
-    [Fact]
-    public void SuperResolution_CallsTelemetryGuardBeforeCreatingSession()
-    {
-        using var fixture = new Fixture();
-        OcrModelStore store = fixture.CreateStore();
-        File.WriteAllBytes(store.PathFor(fixture.Model), fixture.ModelBytes);
-        File.WriteAllBytes(store.SuperResolutionExporterDataPath, fixture.WeightBytes);
-        int calls = 0;
-        var runtime = new OnnxRuntimeInitialization(() =>
-        {
-            calls++;
-            throw new InvalidOperationException("Stop before a native session is created.");
-        });
-        using var engine = new SuperResolutionEngine(store, NullLogger<SuperResolutionEngine>.Instance, runtime);
-        Assert.False(engine.TryInitialize());
-        Assert.False(engine.TryInitialize());
-        Assert.False(engine.IsReady);
         Assert.Equal(1, calls);
     }
 
@@ -251,8 +173,7 @@ public sealed class OcrDownloadSafetyTests
             calls++;
             throw new InvalidOperationException("Stop before a native session is created.");
         });
-        using var superResolution = new SuperResolutionEngine(store, NullLogger<SuperResolutionEngine>.Instance, runtime);
-        using var engine = new NeuralOcrEngine(store, superResolution, NullLogger<NeuralOcrEngine>.Instance, runtime);
+        using var engine = new NeuralOcrEngine(store, NullLogger<NeuralOcrEngine>.Instance, runtime);
         await engine.ModelVerificationTask;
         Assert.False(engine.TryInitialize());
         Assert.False(engine.TryInitialize());
@@ -271,7 +192,7 @@ public sealed class OcrDownloadSafetyTests
         {
             hashes++;
             return SHA256.HashData(stream);
-        }, fixture.Model, fixture.Weights);
+        });
         string path = store.PathFor(fixture.Model);
         File.WriteAllBytes(path, fixture.ModelBytes);
         Assert.True(store.IsPresent(fixture.Model));
@@ -295,42 +216,42 @@ public sealed class OcrDownloadSafetyTests
         private readonly string _root = OwnedTestDirectory.Create("ocr-safe-");
         private readonly HttpClient _http;
         internal byte[] ModelBytes { get; } = [1, 2, 3, 4];
-        internal byte[] WeightBytes { get; } = [5, 6, 7, 8, 9, 10, 11, 12];
         internal AppPaths Paths { get; }
         internal Handler Handler { get; } = new();
         internal OcrModelFile Model { get; }
-        internal OcrModelFile Weights { get; }
 
         internal Fixture()
         {
             Paths = AppPaths.CreateForRoot(_root);
             Directory.CreateDirectory(Paths.OcrModelsRoot);
             _http = new HttpClient(Handler);
-            Model = ForBytes(OcrModelCatalog.SuperResolution, ModelBytes);
-            Weights = ForBytes(OcrModelCatalog.SuperResolutionData, WeightBytes);
-            byte[] archiveBytes;
-            using (var output = new MemoryStream())
-            {
-                using (var archive = new ZipArchive(output, ZipArchiveMode.Create, leaveOpen: true))
-                {
-                    using (Stream entry = archive.CreateEntry("nested/real_esrgan_x4plus.onnx").Open()) entry.Write(ModelBytes);
-                    using (Stream entry = archive.CreateEntry("nested/real_esrgan_x4plus.data").Open()) entry.Write(WeightBytes);
-                }
-                archiveBytes = output.ToArray();
-            }
-            Handler.Respond = () => new HttpResponseMessage(HttpStatusCode.OK)
-            {
-                Content = new UnknownLengthContent(archiveBytes),
-            };
+            Model = new OcrModelFile("model.bin", "https://example.test/model",
+                Convert.ToHexString(SHA256.HashData(ModelBytes)), 1, ModelBytes.Length);
         }
 
-        internal OcrModelStore CreateStore(OcrModelFile? weights = null) =>
-            new(Paths, _http, NullLogger.Instance, SHA256.HashData, Model, weights ?? Weights);
+        internal OcrModelStore CreateStore() => new(Paths, _http, NullLogger.Instance, SHA256.HashData);
 
-        private static OcrModelFile ForBytes(OcrModelFile file, byte[] bytes) => file with
+        internal OcrModelStore CreateCatalogStore() => new(Paths, _http, NullLogger.Instance, stream =>
+            Convert.FromHexString(OcrModelCatalog.Required.Concat(OcrModelCatalog.Optional).Single(file =>
+                file.FileName == Path.GetFileName(((FileStream)stream).Name)).ExpectedSha256!));
+
+        internal void WriteCatalogModels()
         {
-            ExpectedSha256 = Convert.ToHexString(SHA256.HashData(bytes)), MinimumBytes = 1, ExpectedBytes = bytes.Length,
-        };
+            foreach (OcrModelFile file in OcrModelCatalog.Required)
+                File.WriteAllBytes(Path.Combine(Paths.OcrModelsRoot, file.FileName), new byte[file.MinimumBytes]);
+        }
+
+        internal void WriteLegacyFiles()
+        {
+            foreach (string name in OcrModelCatalog.LegacySuperResolutionFiles)
+                File.WriteAllBytes(Path.Combine(Paths.OcrModelsRoot, name), ModelBytes);
+        }
+
+        internal void AssertLegacyFilesUnchanged()
+        {
+            foreach (string name in OcrModelCatalog.LegacySuperResolutionFiles)
+                Assert.Equal(ModelBytes, File.ReadAllBytes(Path.Combine(Paths.OcrModelsRoot, name)));
+        }
 
         public void Dispose()
         {
@@ -344,9 +265,11 @@ public sealed class OcrDownloadSafetyTests
     {
         internal Func<HttpResponseMessage> Respond { get; set; } = () => new(HttpStatusCode.ServiceUnavailable);
         internal int Calls { get; private set; }
+        internal List<string> Requests { get; } = [];
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
             Calls++;
+            Requests.Add(request.RequestUri!.AbsoluteUri);
             return Task.FromResult(Respond());
         }
     }

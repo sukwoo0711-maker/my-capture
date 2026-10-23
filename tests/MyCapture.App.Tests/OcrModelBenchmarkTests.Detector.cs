@@ -73,7 +73,7 @@ public sealed partial class OcrModelBenchmarkTests
         pipeline.BaselineWorkingSetBytes = memory.Baseline;
         var timer = Stopwatch.StartNew();
         using var runner = new NeuralRunner(detector, classifier, recognizer, dictionary, options,
-            MyCapture.Core.Settings.OcrQuality.Accurate, null, output);
+            MyCapture.Core.Settings.OcrQuality.Accurate);
         pipeline.InitMs = timer.Elapsed.TotalMilliseconds;
         memory.Sample();
         timer.Restart();
