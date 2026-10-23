@@ -24,7 +24,8 @@ internal sealed class GalleryEditorWindow : AnnotationEditorWindow
             context.Document,
             context.AssetBitmaps,
             privacyRedactionService,
-            context.Record.SourceWindowTitle)
+            context.Record.SourceWindowTitle,
+            provenance: MyCapture.Core.Capture.CaptureProvenance.FromRecord(context.Record))
     {
         if (record is null || Content is not UIElement editor)
         {

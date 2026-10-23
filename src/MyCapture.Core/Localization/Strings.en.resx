@@ -148,7 +148,7 @@
     <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
   </data>
   <data name="Text_0DED92FCE6B0" xml:space="preserve">
-    <value>Delete selected item</value>
+    <value>Delete selection</value>
     <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
   </data>
   <data name="Text_0DFC300AD94D" xml:space="preserve">
@@ -1478,7 +1478,7 @@ This cannot be undone.</value>
     <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
   </data>
   <data name="Text_7DFFA4D81765" xml:space="preserve">
-    <value>Delete selected item (Delete)</value>
+    <value>Delete selection (Delete)</value>
     <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
   </data>
   <data name="Text_7E6DD424D331" xml:space="preserve">
@@ -3206,11 +3206,10 @@ Open the library or Settings from the tray menu.</value></data>
   <data name="Settings.ThemeGlass" xml:space="preserve"><value>Dark</value></data>
   <data name="Settings.ThemeGlassLight" xml:space="preserve"><value>Light</value></data>
   <data name="Settings.OcrQuality" xml:space="preserve"><value>Recognition quality</value></data>
-  <data name="Settings.OcrQualityHint" xml:space="preserve"><value>Fast and Normal use the recognition built into Windows. Accurate handles small print such as receipts. Most accurate corrects and enlarges the image 4x before recognition and downloads about 67 MB the first time.</value></data>
+  <data name="Settings.OcrQualityHint" xml:space="preserve"><value>Fast and Normal use the recognition built into Windows. Accurate reads small, low-contrast text and code better. It compares results with Windows recognition line by line. It downloads about {0} MB the first time.</value></data>
   <data name="Settings.OcrQualityFast" xml:space="preserve"><value>Fast</value></data>
   <data name="Settings.OcrQualityBalanced" xml:space="preserve"><value>Normal</value></data>
   <data name="Settings.OcrQualityAccurate" xml:space="preserve"><value>Accurate</value></data>
-  <data name="Settings.OcrQualityEnhanced" xml:space="preserve"><value>Most accurate</value></data>
   <data name="Workspace.Library" xml:space="preserve"><value>Library</value></data>
   <data name="Workspace.All" xml:space="preserve"><value>All captures</value></data>
   <data name="Workspace.Pinned" xml:space="preserve"><value>Kept captures</value></data>
@@ -3363,9 +3362,13 @@ Open the library or Settings from the tray menu.</value></data>
   <data name="EditorProperty_CustomColorHint" xml:space="preserve"><value>Custom color (Enter: apply, Esc: close)</value></data>
   <data name="EditorProperty_Hex" xml:space="preserve"><value>HEX color</value></data>
   <data name="EditorProperty_FillTransparency" xml:space="preserve"><value>Fill transparency</value></data>
+  <data name="EditorProperty_StrokeWidthLabel" xml:space="preserve"><value>Width</value></data>
+  <data name="EditorProperty_StrokeStyleLabel" xml:space="preserve"><value>Style</value></data>
   <data name="EditorProperty_SelectedColor" xml:space="preserve"><value>Selected</value></data>
   <data name="EditorProperty_ThicknessDecrease" xml:space="preserve"><value>Decrease line width</value></data>
   <data name="EditorProperty_ThicknessIncrease" xml:space="preserve"><value>Increase line width</value></data>
+  <data name="EditorProperty_FontSizeDecrease" xml:space="preserve"><value>Decrease font size</value></data>
+  <data name="EditorProperty_FontSizeIncrease" xml:space="preserve"><value>Increase font size</value></data>
   <data name="EditorProperty_MosaicStrength" xml:space="preserve"><value>Mosaic strength</value></data>
   <data name="Tools.Ellipse" xml:space="preserve"><value>Ellipse</value></data>
   <data name="Tools.Highlighter" xml:space="preserve"><value>Highlighter</value></data>
@@ -3895,7 +3898,7 @@ Delete {1} {1:plural:subfolder|subfolders}, {2} {2:plural:image|images}, and {3}
   <data name="About_UpToDate" xml:space="preserve"><value>Up to date</value></data>
   <data name="About_PrivacyHeading" xml:space="preserve"><value>Privacy</value></data>
   <data name="About_PrivacyLocal" xml:space="preserve"><value>Captures and text recognition are processed on this PC.</value></data>
-  <data name="About_PrivacyModel" xml:space="preserve"><value>The text recognition model (about {0} MB) is downloaded from ModelScope the first time you use Accurate or Most accurate quality. Most accurate also downloads an upscaling model (about {1} MB) from Qualcomm AI Hub. Images are never sent.</value></data>
+  <data name="About_PrivacyModel" xml:space="preserve"><value>Accurate downloads text recognition models (about {0} MB) from ModelScope. Images are never sent.</value></data>
   <data name="About_PrivacyGitHub" xml:space="preserve"><value>GitHub upload posts to a public issue only when you run it.</value></data>
   <data name="About_FeedbackHeading" xml:space="preserve"><value>Feedback</value></data>
   <data name="About_ReportProblem" xml:space="preserve"><value>Contact support</value></data>
@@ -3964,11 +3967,10 @@ Delete {1} {1:plural:subfolder|subfolders}, {2} {2:plural:image|images}, and {3}
   <data name="SettingsUx_PinCopyHint" xml:space="preserve"><value>Ctrl+C copies the original text together with the image on a pin that keeps its source (text, table or code), and only the image on an image pin. Ctrl+double-click copies only the original text; on an image without one, it copies text recognized on this PC.</value></data>
   <data name="SettingsUx_OcrHeading" xml:space="preserve"><value>Text recognition</value></data>
   <data name="SettingsUx_OcrLanguages" xml:space="preserve"><value>Recognition languages</value></data>
-  <data name="SettingsUx_OcrQualityHint" xml:space="preserve"><value>Fast and Normal use the recognition built into Windows. Accurate handles small print such as receipts. Most accurate corrects and enlarges the image 4x before recognition and downloads about 67 MB the first time.</value></data>
+  <data name="SettingsUx_OcrQualityHint" xml:space="preserve"><value>Fast and Normal use the recognition built into Windows. Accurate reads small, low-contrast text and code better. It compares results with Windows recognition line by line. It downloads about {0} MB the first time.</value></data>
   <data name="SettingsUx_OcrFast" xml:space="preserve"><value>Fast</value></data>
   <data name="SettingsUx_OcrBalanced" xml:space="preserve"><value>Normal</value></data>
   <data name="SettingsUx_OcrAccurate" xml:space="preserve"><value>Accurate</value></data>
-  <data name="SettingsUx_OcrEnhanced" xml:space="preserve"><value>Most accurate</value></data>
   <data name="SettingsUx_RecordingMethodAuto" xml:space="preserve"><value>Automatic (recommended)</value></data>
   <data name="SettingsUx_RecordingMethodCompatible" xml:space="preserve"><value>Compatibility mode</value></data>
   <data name="SettingsUx_RecordingMethodHint" xml:space="preserve"><value>Automatic records most screens most smoothly. If recordings look broken or freeze, choose compatibility mode.</value></data>
@@ -4296,6 +4298,7 @@ Turn off: {0}</value></data>
   <data name="Library.Search.Field.Tag" xml:space="preserve"><value>Tag</value></data>
   <data name="Library.Search.Field.Text" xml:space="preserve"><value>Text</value></data>
   <data name="Library.Search.Field.Url" xml:space="preserve"><value>URL</value></data>
+  <data name="Library.Search.Field.Host" xml:space="preserve"><value>Site</value></data>
   <data name="Library.Search.Field.Folder" xml:space="preserve"><value>Folder</value></data>
   <data name="Library.Search.Field.Type" xml:space="preserve"><value>Type</value></data>
   <data name="Library.Search.Field.Pinned" xml:space="preserve"><value>Kept</value></data>
@@ -4363,7 +4366,7 @@ Turn off: {0}</value></data>
   <data name="EditorText_Cancelled" xml:space="preserve"><value>Text editing cancelled</value></data>
   <data name="EditorText_Updated" xml:space="preserve"><value>Text updated</value></data>
   <data name="EditorText_Bold" xml:space="preserve"><value>Bold</value></data>
-  <data name="EditorText_Background" xml:space="preserve"><value>Background plate</value></data>
+  <data name="EditorText_Background" xml:space="preserve"><value>Text background</value></data>
   <data name="EditorText_FontFamily" xml:space="preserve"><value>Font family</value></data>
   <data name="EditorText_OtherInstalledFonts" xml:space="preserve"><value>Other installed fonts…</value></data>
   <data name="EditorText_SettingsSearchPlaceholder" xml:space="preserve"><value>Find a setting</value></data>
@@ -4605,4 +4608,15 @@ Overwrite these shortcuts? You can change this later in Settings → Shortcuts.<
   <data name="CoreShortcuts.KeepCurrent" xml:space="preserve"><value>Keep current</value></data>
   <data name="CoreShortcuts.Force" xml:space="preserve"><value>Handle Ctrl+Shift+C/X/Z and F3 before other programs</value></data>
   <data name="CoreShortcuts.ForceDescription" xml:space="preserve"><value>MyCapture receives these shortcuts even if another program registered them first. Turn this off to let the program that registered them first use them.</value></data>
+  <data name="Welcome_AccurateOcr" xml:space="preserve"><value>Accurate Korean text recognition</value></data>
+  <data name="Welcome_AccurateOcrHelp" xml:space="preserve"><value>Downloads about {0} MB of models once in the background. Recognition takes longer than Fast. You can change this in Settings.</value></data>
+  <data name="Source.Open" xml:space="preserve"><value>Open source</value></data>
+  <data name="Source.CopyUrl" xml:space="preserve"><value>Copy address</value></data>
+  <data name="Source.CopyPath" xml:space="preserve"><value>Copy path</value></data>
+  <data name="Source.OpenLocation" xml:space="preserve"><value>Open file location</value></data>
+  <data name="Source.ShowSame" xml:space="preserve"><value>Show captures from this source</value></data>
+  <data name="Source.Label" xml:space="preserve"><value>Source: {0}</value></data>
+  <data name="Source.OpenAutomation" xml:space="preserve"><value>Source: {0}, open</value></data>
+  <data name="Source.AppMissing" xml:space="preserve"><value>The source app could not be found.</value></data>
+  <data name="Source.AppOpenFailed" xml:space="preserve"><value>The source app could not be opened.</value></data>
 </root>

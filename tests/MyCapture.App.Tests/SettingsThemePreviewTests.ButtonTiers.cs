@@ -32,13 +32,14 @@ public sealed partial class SettingsThemePreviewTests
 
     private static void VerifyKeyCaptionDefaults()
     {
+        using var motion = new ShortcutMotionTestScope();
         using var language = MyCapture.Core.Localization.UiText.UseLanguage("ko-KR");
-        foreach ((MyCapture.Core.Settings.AppSettings settings, Visibility expected) in new[]
+        foreach ((MyCapture.Core.Settings.AppSettings settings, bool expected) in new[]
         {
-            (MyCapture.Core.Settings.NewInstallDefaults.Create(), Visibility.Collapsed),
-            (new MyCapture.Core.Settings.AppSettings(), Visibility.Collapsed),
-            (new MyCapture.Core.Settings.AppSettings { General = { ShowShortcutHints = false } }, Visibility.Collapsed),
-            (new MyCapture.Core.Settings.AppSettings { General = { AlwaysShowShortcutHints = true } }, Visibility.Visible),
+            (MyCapture.Core.Settings.NewInstallDefaults.Create(), false),
+            (new MyCapture.Core.Settings.AppSettings(), false),
+            (new MyCapture.Core.Settings.AppSettings { General = { ShowShortcutHints = false } }, false),
+            (new MyCapture.Core.Settings.AppSettings { General = { AlwaysShowShortcutHints = true } }, true),
         })
         {
             ShortcutPresentation.ReadEnabled = () => settings.General.AlwaysShowShortcutHints;
@@ -48,11 +49,11 @@ public sealed partial class SettingsThemePreviewTests
             ShortcutPresentation.Attach(button, ShortcutScope.Annotation, "RotateLeft");
             TextBlock caption = Assert.IsType<Grid>(button.Content).Children.OfType<TextBlock>().Last();
             Assert.Equal("Q", caption.Text);
-            Assert.Equal(expected, caption.Visibility);
+            ShortcutMotionTestScope.AssertState(caption, expected);
             ShortcutPresentation.SetAltRevealed(button, true);
-            Assert.Equal(Visibility.Visible, caption.Visibility);
+            ShortcutMotionTestScope.AssertState(caption, true);
             ShortcutPresentation.SetAltRevealed(button, false);
-            Assert.Equal(expected, caption.Visibility);
+            ShortcutMotionTestScope.AssertState(caption, expected);
             // The key stays discoverable either way: tooltip and accelerator property.
             Assert.Equal("Rotate left (Q)", button.ToolTip);
             Assert.Equal("Q", System.Windows.Automation.AutomationProperties.GetAcceleratorKey(button));

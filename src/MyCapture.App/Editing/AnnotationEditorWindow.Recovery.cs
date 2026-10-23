@@ -129,9 +129,11 @@ internal partial class AnnotationEditorWindow
         if (_closedForRecovery) { await _draftFinalization; return true; }
         var deadline = DateTime.UtcNow.AddSeconds(60);
         // A question already on screen (a capture shortcut asked first) is answered before exit asks.
-        while ((_editor.IsEditingOperationInProgress || IsCloseInProgress || IsAskingToClose || IsSavingToClose) && DateTime.UtcNow < deadline)
+        // Ordinary close can discard pending mosaics, but protected exit must include a
+        // completed gesture in its flush before asking whether to keep the editor open.
+        while ((_editor.IsEditingOperationInProgress || _editor.HasUnsettledMosaicWork || IsCloseInProgress || IsAskingToClose || IsSavingToClose) && DateTime.UtcNow < deadline)
             await Task.Delay(50);
-        if (_editor.IsEditingOperationInProgress || IsCloseInProgress || IsAskingToClose || IsSavingToClose) return false;
+        if (_editor.IsEditingOperationInProgress || _editor.HasUnsettledMosaicWork || IsCloseInProgress || IsAskingToClose || IsSavingToClose) return false;
         await FlushDraftAsync();
         if (_closedForRecovery) { await _draftFinalization; return true; }
         if (!_committed && NeedsUnsavedProtection)

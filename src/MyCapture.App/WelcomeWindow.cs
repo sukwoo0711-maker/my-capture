@@ -7,6 +7,7 @@ using MyCapture.App.Capture;
 using MyCapture.App.Themes;
 using MyCapture.Core.Queue;
 using MyCapture.Core.Settings;
+using MyCapture.Ocr;
 
 namespace MyCapture.App;
 
@@ -31,7 +32,8 @@ internal sealed class WelcomeWindow : Window
 {
     // Keep the shell's constructor contract while capture and retention tips move to their moments of use.
     internal WelcomeWindow(HotkeySettings keys, AfterCaptureAction afterCapture,
-        int imageRetentionHours = CaptureRetention.DefaultImageRetentionHours)
+        int imageRetentionHours = CaptureRetention.DefaultImageRetentionHours,
+        IOcrDownloadEnvironment? ocrEnvironment = null)
     {
         ArgumentNullException.ThrowIfNull(keys);
         Title = UiText.Get("Help.Welcome");
@@ -89,6 +91,23 @@ internal sealed class WelcomeWindow : Window
         AutomationProperties.SetName(StartAtSignInCheck, UiText.Get("Onboard_StartAtSignIn"));
         AutomationProperties.SetHelpText(StartAtSignInCheck, UiText.Get("Onboard_StartAtSignInHelp"));
 
+        AccurateOcrCheck = new CheckBox
+        {
+            Content = UiText.Get("Welcome_AccurateOcr"),
+            IsChecked = FirstRunOcrChoice.ShouldPreselect(ocrEnvironment ?? new WindowsOcrDownloadEnvironment()),
+            MinHeight = 32, FontSize = 12, Margin = new Thickness(0, 8, 0, 0),
+            HorizontalAlignment = HorizontalAlignment.Left, VerticalAlignment = VerticalAlignment.Center,
+            ToolTip = FirstRunOcrChoice.Description,
+        };
+        AutomationProperties.SetName(AccurateOcrCheck, UiText.Get("Welcome_AccurateOcr"));
+        AutomationProperties.SetHelpText(AccurateOcrCheck, FirstRunOcrChoice.Description);
+        AccurateOcrHelp = new TextBlock
+        {
+            Text = FirstRunOcrChoice.Description, FontSize = 12, TextWrapping = TextWrapping.Wrap,
+            Margin = new Thickness(28, 0, 0, 0),
+        };
+        AccurateOcrHelp.SetResourceReference(TextBlock.ForegroundProperty, "Text.Secondary");
+
         ShortcutsLink = new Hyperlink(new Run(UiText.Get("Help.Settings")));
         ShortcutsLink.SetResourceReference(TextElement.ForegroundProperty, "Text.Primary");
         AutomationProperties.SetName(ShortcutsLink, UiText.Get("Help.Settings"));
@@ -101,11 +120,19 @@ internal sealed class WelcomeWindow : Window
         };
 
         var preferences = new Grid();
+        for (int row = 0; row < 3; row++)
+            preferences.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         preferences.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         preferences.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         preferences.Children.Add(StartAtSignInCheck);
         Grid.SetColumn(linkText, 1);
         preferences.Children.Add(linkText);
+        Grid.SetRow(AccurateOcrCheck, 1);
+        Grid.SetColumnSpan(AccurateOcrCheck, 2);
+        preferences.Children.Add(AccurateOcrCheck);
+        Grid.SetRow(AccurateOcrHelp, 2);
+        Grid.SetColumnSpan(AccurateOcrHelp, 2);
+        preferences.Children.Add(AccurateOcrHelp);
         var footer = new Border
         {
             BorderThickness = new Thickness(0, 1, 0, 0), Padding = new Thickness(0, 16, 0, 0),
@@ -135,6 +162,10 @@ internal sealed class WelcomeWindow : Window
 
     /// <summary>The start-at-sign-in choice the window closes with.</summary>
     internal bool StartAtSignIn => StartAtSignInCheck.IsChecked == true;
+
+    internal CheckBox AccurateOcrCheck { get; }
+    internal TextBlock AccurateOcrHelp { get; }
+    internal bool UseAccurateOcr => AccurateOcrCheck.IsChecked == true;
 
     /// <summary>A capture shortcut pressed while the welcome is open closes it without opening anything.</summary>
     internal void DismissForCapture()

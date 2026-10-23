@@ -1,9 +1,11 @@
 using System.Globalization;
+using System.Runtime.CompilerServices;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Data;
 using System.Windows.Media;
+using System.Windows.Threading;
 using MyCapture.Core.Annotations;
 using MyCapture.Core.Undo;
 
@@ -11,6 +13,8 @@ namespace MyCapture.App.Editing;
 
 internal sealed partial class AnnotationEditorControl
 {
+    private static readonly ConditionalWeakTable<Dispatcher, DataTemplate> FontPreviewTemplates = new();
+
     private FrameworkElement BuildFontFamilySection()
     {
         var panel = PropertyGroup("AnnotationFontFamilyProperties");
@@ -23,7 +27,7 @@ internal sealed partial class AnnotationEditorControl
             VerticalAlignment = VerticalAlignment.Center,
             MaxDropDownHeight = 320,
             IsTextSearchEnabled = true,
-            ItemTemplate = FontCatalog.PreviewTemplate(),
+            ItemTemplate = FontPreviewTemplates.GetValue(Dispatcher, static _ => FontCatalog.PreviewTemplate()),
             SelectedValuePath = nameof(FontChoice.Value),
         };
         TextSearch.SetTextPath(_textFontFamily, nameof(FontChoice.Label));
@@ -146,32 +150,7 @@ internal sealed partial class AnnotationEditorControl
     }
 
     private static void AttachEditorShortcut(ButtonBase button, ShortcutScope scope, string command, bool corner = false)
-    {
-        if (!corner)
-        {
-            ShortcutPresentation.Attach(button, scope, command);
-            return;
-        }
-        UIElement content = (UIElement)button.Content;
-        button.Content = null;
-        var hint = ShortcutPresentation.Hint(scope, command);
-        hint.SetBinding(TextBlock.ForegroundProperty, new Binding(nameof(Control.Foreground)) { Source = button });
-        var grid = new Grid { Width = 32, Height = 32 };
-        if (content is FrameworkElement glyph)
-        {
-            glyph.HorizontalAlignment = HorizontalAlignment.Left;
-            glyph.VerticalAlignment = VerticalAlignment.Top;
-        }
-        hint.HorizontalAlignment = HorizontalAlignment.Right;
-        hint.VerticalAlignment = VerticalAlignment.Bottom;
-        hint.Height = 12;
-        hint.LineHeight = 12;
-        hint.LineStackingStrategy = LineStackingStrategy.BlockLineHeight;
-        grid.Children.Add(content);
-        grid.Children.Add(hint);
-        button.Content = grid;
-        ShortcutPresentation.Describe(button, scope, command);
-    }
+        => ShortcutPresentation.Attach(button, scope, command, corner);
 
     private static Geometry FallbackClose() => Geometry.Parse("M5,5 L15,15 M15,5 L5,15");
 }

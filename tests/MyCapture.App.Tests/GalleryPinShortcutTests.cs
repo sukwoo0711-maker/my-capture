@@ -42,8 +42,9 @@ public sealed class GalleryPinShortcutTests
                 window.Show();
                 window.UpdateLayout();
                 var floated = new List<BitmapSource>();
+                var sources = new List<MyCapture.Core.Capture.CaptureProvenance>();
                 int changes = 0;
-                window.FloatRequested += (_, bitmap) => floated.Add(bitmap);
+                window.FloatRequested += (_, source) => { floated.Add(source.Image); sources.Add(source.Provenance); };
                 window.CaptureChanged += (_, _) => changes++;
 
                 // The focused image wins over another selected image, just like its menu.
@@ -56,6 +57,7 @@ public sealed class GalleryPinShortcutTests
                 Assert.Same(imageTile, Keyboard.FocusedElement);
                 Assert.True(PressTile(imageTile, Key.P).Handled);
                 Assert.Equal(3, Assert.Single(floated).PixelWidth);
+                Assert.Equal(fixture.Second.SourceDocumentPath, Assert.Single(sources).DocumentPath);
                 Assert.False(fixture.First.IsPinned);
                 Assert.False(fixture.Second.IsPinned);
                 Assert.Equal(0, changes);
@@ -131,6 +133,7 @@ public sealed class GalleryPinShortcutTests
                 pin.RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
                 Assert.Equal(2, floated.Count);
                 Assert.All(floated, bitmap => Assert.Equal(3, bitmap.PixelWidth));
+                Assert.All(sources, source => Assert.Equal(fixture.Second.SourceDocumentPath, source.DocumentPath));
                 Assert.False(fixture.Second.IsPinned);
                 Assert.Equal(2, changes);
             }
@@ -227,6 +230,7 @@ public sealed class GalleryPinShortcutTests
                 {
                     RelativeDirectory = Guid.NewGuid().ToString("N"), Width = width, Height = 2,
                     MediaKind = video ? CaptureMediaKind.Video : CaptureMediaKind.Image,
+                    SourceDocumentPath = $@"C:\Specs\capture-{width}.xlsx", SourceAppName = "Excel",
                 };
                 queue.Add(record);
                 Directory.CreateDirectory(queue.GetDirectory(record));

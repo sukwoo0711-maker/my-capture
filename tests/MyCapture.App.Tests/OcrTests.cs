@@ -482,13 +482,14 @@ public sealed class OcrTests
 
         settings.Quality = OcrQuality.Enhanced;
         OcrQualityProfile.Synchronize(settings);
+        Assert.Equal(OcrQuality.Accurate, settings.Quality);
         OcrRequest enhanced = OcrRequestFactory.FromBitmap(Solid(), settings);
-        Assert.Equal(2.0, enhanced.UpscaleFactor);
+        Assert.Equal(4.0, enhanced.UpscaleFactor);
         Assert.True(enhanced.EnhanceContrast);
         Assert.True(enhanced.SearchRotatedOrientations);
         Assert.True(enhanced.UseNeuralModel);
-        Assert.True(enhanced.LocalCorrection);
-        Assert.True(enhanced.UseSuperResolution);
+        Assert.False(enhanced.LocalCorrection);
+        Assert.False(enhanced.UseSuperResolution);
     }
 
     [Fact]

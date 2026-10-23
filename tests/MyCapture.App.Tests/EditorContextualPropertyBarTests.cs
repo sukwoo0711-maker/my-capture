@@ -401,7 +401,14 @@ public sealed class EditorContextualPropertyBarTests : KoreanCaptionTest
     {
         string name = AutomationProperties.GetName(control);
         Assert.False(string.IsNullOrWhiteSpace(name), $"{context}: {control.GetType().Name} has no accessible name.");
-        Assert.True(control.Focusable, $"{context}: {name} cannot take keyboard focus.");
+        if (AutomationProperties.GetAutomationId(control) is "AnnotationThicknessDecrease" or "AnnotationThicknessIncrease"
+            or "AnnotationFontSizeDecrease" or "AnnotationFontSizeIncrease")
+        {
+            // The numeric value is the one keyboard stop for the integrated stepper.
+            Assert.False(control.Focusable);
+            Assert.False(control.IsTabStop);
+        }
+        else Assert.True(control.Focusable, $"{context}: {name} cannot take keyboard focus.");
         Assert.True(control.ActualWidth >= 24 && control.ActualHeight >= 24,
             $"{context}: {name} target is {control.ActualWidth} × {control.ActualHeight}.");
     }

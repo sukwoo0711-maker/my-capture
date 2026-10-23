@@ -96,10 +96,14 @@ public sealed class EditorLayoutAccessibilityTests : KoreanCaptionTest
             Assert.Equal(ScrollBarVisibility.Auto, inspector.VerticalScrollBarVisibility);
             Assert.DoesNotContain(scrollViewers, viewer => viewer.Name == "AnnotationToolRailScroll");
             Assert.DoesNotContain(scrollViewers, viewer => viewer.Name == "AnnotationInspectorScroll");
-            // Native ComboBox templates can own dropdown ScrollViewers, all inside properties.
+            // Measuring the reserved crop command panel also realizes its native ratio
+            // ComboBox dropdown. It is hidden in edit mode and is not a scrolling bar.
             List<ScrollViewer> inspectorChildren = FindDescendants<ScrollViewer>(inspector).ToList();
+            ComboBox cropRatio = EditorKeysTests.Field<ComboBox>(host.Editor, "_cropRatio");
+            List<ScrollViewer> cropDropdown = FindDescendants<ScrollViewer>(cropRatio).ToList();
+            Assert.All(cropDropdown, viewer => Assert.False(viewer.IsVisible));
             Assert.All(scrollViewers.Where(viewer => !ReferenceEquals(viewer, inspector)),
-                viewer => Assert.Contains(viewer, inspectorChildren));
+                viewer => Assert.Contains(viewer, inspectorChildren.Concat(cropDropdown)));
         });
     }
 
@@ -127,7 +131,14 @@ public sealed class EditorLayoutAccessibilityTests : KoreanCaptionTest
                 Assert.Equal(20, coordinateGrid.Width);
                 Assert.Equal(20, coordinateGrid.Height);
                 Path glyph = Assert.IsType<Path>(Assert.Single(coordinateGrid.Children));
-                Assert.Equal(1.6, glyph.StrokeThickness, 3);
+                // The 20-unit geometry is enlarged inside the resting 24-DIP icon. Check the
+                // rendered pen in both axes, including the Viewbox and inner render transforms.
+                GeneralTransform transform = glyph.TransformToAncestor(tool);
+                Point origin = transform.Transform(new Point());
+                double scaleX = (transform.Transform(new Point(1, 0)) - origin).Length;
+                double scaleY = (transform.Transform(new Point(0, 1)) - origin).Length;
+                Assert.Equal(1.6, glyph.StrokeThickness * scaleX, 3);
+                Assert.Equal(1.6, glyph.StrokeThickness * scaleY, 3);
                 Assert.Equal(Stretch.None, glyph.Stretch);
                 Assert.False(ContainsText(icon),
                     "A tool-rail button must not reintroduce a visible label that can clip.");

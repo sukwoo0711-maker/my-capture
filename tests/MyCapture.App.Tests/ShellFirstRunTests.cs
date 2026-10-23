@@ -89,7 +89,8 @@ public sealed class ShellFirstRunTests
             Assert.Equal(UiText.Get("Onboard_StartAtSignInHelp"), AutomationProperties.GetHelpText(welcome.StartAtSignInCheck));
             welcome.StartAtSignInCheck.IsChecked = false;
             Assert.False(welcome.StartAtSignIn);
-            Assert.Same(welcome.StartAtSignInCheck, FirstRunWelcomeTests.Descendants(welcome).OfType<CheckBox>().Single());
+            Assert.Equal([welcome.StartAtSignInCheck, welcome.AccurateOcrCheck],
+                FirstRunWelcomeTests.Descendants(welcome).OfType<CheckBox>());
         }
         finally { welcome.Close(); }
     });

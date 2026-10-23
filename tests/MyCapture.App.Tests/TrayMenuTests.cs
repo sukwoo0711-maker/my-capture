@@ -216,24 +216,23 @@ public sealed class TrayMenuTests
         Assert.Null(items[0].ToolTip);
     });
 
-    [Fact]
-    public void ClipboardCheckAnswersWithoutOpeningTheClipboard()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void ClipboardCheckAnswersWithoutOpeningTheClipboard(bool available)
     {
-        // The native check runs on any thread and never throws; the answer depends on the desktop.
-        _ = ClipboardAvailability.HasPinnableContent();
-        Func<bool>? previous = ClipboardAvailability.OverrideForTest;
-        try
-        {
-            ClipboardAvailability.OverrideForTest = () => false;
-            Assert.False(ClipboardAvailability.HasPinnableContent());
-            ClipboardAvailability.OverrideForTest = () => true;
-            Assert.True(ClipboardAvailability.HasPinnableContent());
-        }
-        finally { ClipboardAvailability.OverrideForTest = previous; }
+        using var language = UiText.UseLanguage("ko-KR");
+        // Exercise both answers with announced formats supplied by this test.
+        bool HasContent() => ClipboardAvailability.HasPinnableContent(_ => available, static () => 0);
+        Assert.Equal(available, HasContent());
+        ThemedShellPresenter.MenuEntry pin = TrayMenuLayout.Build(Commands([]), NewInstallDefaults.Create().Hotkeys,
+            new TrayMenuState(ClipboardHasContent: HasContent())).Single(entry => entry.Label == "클립보드를 핀으로 띄우기");
+        Assert.Equal(available, pin.IsEnabled);
+        Assert.Equal(available ? string.Empty : "클립보드가 비어 있습니다", pin.ToolTip);
 
-        // Cheap enough to run on every menu open: well under a millisecond per check.
+        // Keep the availability algorithm cheap without sampling the user's clipboard.
         var timer = System.Diagnostics.Stopwatch.StartNew();
-        for (int i = 0; i < 1000; i++) _ = ClipboardAvailability.HasPinnableContent();
+        for (int i = 0; i < 1000; i++) _ = HasContent();
         Assert.True(timer.Elapsed < TimeSpan.FromMilliseconds(500), $"1000 checks took {timer.Elapsed.TotalMilliseconds:0.0} ms");
     }
 

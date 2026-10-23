@@ -138,6 +138,7 @@ public sealed class CaptureCueOverlayTests
     [Fact]
     public void TheBarRevealsKeysOnlyDuringAltAndKeepsTooltipsAndAcceleratorKeys() => StaTestHost.Run(() =>
     {
+        using var motion = new ShortcutMotionTestScope();
         using var language = UiText.UseLanguage("ko-KR");
         FrozenFrame frame = Desktop();
         CaptureOverlayView shown = EvidenceView(frame, AppTheme.Glass, "window-hover");
@@ -153,7 +154,7 @@ public sealed class CaptureCueOverlayTests
             foreach (CaptureOverlayView view in new[] { shown, hidden })
             {
                 CaptureModeBar bar = view.ModeBarForTest!;
-                var captions = Descendants(bar).OfType<System.Windows.Controls.TextBlock>().ToArray();
+                var captions = Descendants(bar).OfType<System.Windows.Controls.TextBlock>().Where(text => text.Text.Length > 0).ToArray();
                 Assert.Equal(new[] { "T", "C", "Esc" }, captions.Select(text => text.Text));
                 Size restingSize = bar.RenderSize;
                 FrameworkElement[] commands = [bar.TextButton, bar.ColorButton, bar.CancelButton];
@@ -163,8 +164,9 @@ public sealed class CaptureCueOverlayTests
                     ShortcutPresentation.SetAltRevealed(view, revealed);
                     view.Dispatcher.Invoke(System.Windows.Threading.DispatcherPriority.ApplicationIdle, new Action(() => { }));
                     Render(view);
-                    Assert.All(captions, caption => Assert.Equal(revealed ? Visibility.Visible : Visibility.Collapsed, caption.Visibility));
-                    string[] visibleText = captions.Where(text => text.Visibility == Visibility.Visible).Select(text => text.Text).ToArray();
+                    AssertAllCommandFaces(bar, revealed);
+                    Assert.All(captions, caption => ShortcutMotionTestScope.AssertState(caption, revealed));
+                    string[] visibleText = captions.Where(text => text.Opacity > 0).Select(text => text.Text).ToArray();
                     if (revealed) Assert.Equal(new[] { "T", "C", "Esc" }, visibleText);
                     else Assert.Empty(visibleText);
                     Assert.Equal(restingSize, bar.RenderSize);
@@ -214,6 +216,7 @@ public sealed class CaptureCueOverlayTests
     [InlineData(true)]
     public void NewAlwaysShowPreferenceRefreshesTheCaptureBarWithoutChangingItsSize(bool legacyEnabled) => StaTestHost.Run(() =>
     {
+        using var motion = new ShortcutMotionTestScope();
         Func<bool>? previous = ShortcutPresentation.ReadEnabled;
         var settings = new AppSettings { General = { ShowShortcutHints = legacyEnabled } };
         CaptureOverlayView view = EvidenceView(Desktop(), AppTheme.Glass, "window-hover");
@@ -223,7 +226,7 @@ public sealed class CaptureCueOverlayTests
             ShortcutPresentation.Refresh();
             Render(view);
             CaptureModeBar bar = view.ModeBarForTest!;
-            var captions = Descendants(bar).OfType<System.Windows.Controls.TextBlock>().ToArray();
+            var captions = Descendants(bar).OfType<System.Windows.Controls.TextBlock>().Where(text => text.Text.Length > 0).ToArray();
             FrameworkElement[] commands = [bar.TextButton, bar.ColorButton, bar.CancelButton];
             Assert.Equal(new[] { "T", "C", "Esc" }, captions.Select(caption => caption.Text));
             Size initialSize = bar.RenderSize;
@@ -237,7 +240,8 @@ public sealed class CaptureCueOverlayTests
                     ShortcutPresentation.SetAltRevealed(view, alt);
                     view.Dispatcher.Invoke(System.Windows.Threading.DispatcherPriority.ApplicationIdle, new Action(() => { }));
                     Render(view);
-                    Assert.All(captions, caption => Assert.Equal(alwaysShow || alt ? Visibility.Visible : Visibility.Collapsed, caption.Visibility));
+                    AssertAllCommandFaces(bar, alwaysShow || alt);
+                    Assert.All(captions, caption => ShortcutMotionTestScope.AssertState(caption, alwaysShow || alt));
                     Assert.Equal(initialSize, bar.RenderSize);
                     Assert.Equal(commandSizes, commands.Select(command => command.RenderSize));
                     Assert.All(commands, command => Assert.Equal(36, command.ActualHeight));
@@ -258,6 +262,22 @@ public sealed class CaptureCueOverlayTests
             ShortcutPresentation.Refresh();
         }
     });
+
+    private static void AssertAllCommandFaces(CaptureModeBar bar, bool revealed)
+    {
+        var faces = Descendants(bar).OfType<System.Windows.Controls.Grid>()
+            .Where(face => face.Name == "CommandButtonFace").ToArray();
+        Assert.Contains(faces, face => ((System.Windows.Controls.TextBlock)face.Children[1]).Text.Length == 0);
+        foreach (var face in faces)
+        {
+            var hint = Assert.IsAssignableFrom<System.Windows.Controls.TextBlock>(face.Children[1]);
+            ShortcutMotionTestScope.AssertState(hint, revealed);
+            if (hint.Text.Length == 0) Assert.Equal(0, face.MinWidth);
+            var primary = Assert.IsAssignableFrom<FrameworkElement>(face.Children[0]);
+            var shift = Assert.IsType<TransformGroup>(primary.RenderTransform).Children.OfType<TranslateTransform>().Single();
+            Assert.Equal(revealed ? 0 : ShortcutRevealMotion.PrimaryRestOffset, shift.Y);
+        }
+    }
 
     private static IEnumerable<DependencyObject> Descendants(DependencyObject root)
     {

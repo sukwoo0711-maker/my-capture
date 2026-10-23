@@ -2,6 +2,7 @@ using System.Windows;
 using System.Windows.Media.Imaging;
 using Microsoft.Extensions.Logging;
 using MyCapture.App.Editing;
+using MyCapture.Core.Capture;
 using MyCapture.Core.Pin;
 using MyCapture.Core.Primitives;
 using MyCapture.Core.Settings;
@@ -58,7 +59,7 @@ internal sealed class PinManager
     private bool _recordClosedPins = true;
     private readonly Func<PinSettings> _settings;
     private readonly PinImageSaveService? _saveService;
-    private readonly Func<BitmapSource, string?, string?, Task<bool>> _copyImageAsync;
+    private readonly Func<BitmapSource, string?, string?, CaptureProvenance?, Task<bool>> _copyImageAsync;
     private readonly Func<string, Task<bool>> _copyTextAsync;
     private readonly ILogger _log;
 
@@ -79,7 +80,8 @@ internal sealed class PinManager
         : this(
             settings,
             saveService,
-            ClipboardImageService.CopyImageWithTextAsync,
+            static (image, sourceUrl, text, provenance) => ClipboardImageService.CopyImageWithTextAsync(
+                image, sourceUrl, text, writeData: null, provenance),
             ClipboardImageService.CopyTextAsync,
             log)
     {
@@ -114,6 +116,17 @@ internal sealed class PinManager
         Func<PinSettings> settings,
         PinImageSaveService? saveService,
         Func<BitmapSource, string?, string?, Task<bool>> copyImageAsync,
+        Func<string, Task<bool>> copyTextAsync,
+        ILogger log)
+        : this(settings, saveService, (image, sourceUrl, text, _) => copyImageAsync(image, sourceUrl, text), copyTextAsync, log)
+    {
+        ArgumentNullException.ThrowIfNull(copyImageAsync);
+    }
+
+    internal PinManager(
+        Func<PinSettings> settings,
+        PinImageSaveService? saveService,
+        Func<BitmapSource, string?, string?, CaptureProvenance?, Task<bool>> copyImageAsync,
         Func<string, Task<bool>> copyTextAsync,
         ILogger log)
     {
@@ -278,10 +291,10 @@ internal sealed class PinManager
     }
 
     /// <summary>Opens a new pin for an already-decoded, frozen image.</summary>
-    internal PinWindow PinImage(BitmapSource image)
+    internal PinWindow PinImage(BitmapSource image, CaptureProvenance? provenance = null)
     {
         ArgumentNullException.ThrowIfNull(image);
-        return OpenPin(PinContent.FromImage(image), activate: true);
+        return OpenPin(PinContent.FromImage(image, provenance: provenance), activate: true);
     }
 
     /// <summary>
@@ -501,6 +514,7 @@ internal sealed class PinManager
         pin.CanRestoreClosedPin = () => CanRestoreClosed;
         pin.Closed += (_, _) => OnPinClosed(pin);
         pin.ViewStateChanged += NotifyOpenPinsChanged;
+        pin.ContentChanged += NotifyOpenPinsChanged;
 
         _pins.Add(pin);
         _openedOrders.Add(pin, ++_nextOpenedOrder);
@@ -701,7 +715,8 @@ internal sealed class PinManager
         bool copied;
         try
         {
-            copied = await _copyImageAsync(request.Image, request.SourcePageUrl, request.OriginalText);
+            copied = await _copyImageAsync(request.Image, request.SourcePageUrl, request.OriginalText,
+                (sender as PinWindow)?.Provenance);
         }
         catch (Exception ex)
         {

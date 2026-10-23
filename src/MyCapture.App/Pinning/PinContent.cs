@@ -1,4 +1,5 @@
 using System.Windows.Media.Imaging;
+using MyCapture.Core.Capture;
 using MyCapture.Core.Pin;
 
 namespace MyCapture.App.Pinning;
@@ -32,12 +33,14 @@ internal sealed record PinContent
         PinTextStyle? textStyle = null,
         PinCodeDocument? codeDocument = null,
         double? layoutWidthDip = null,
-        double? layoutHeightDip = null)
+        double? layoutHeightDip = null,
+        CaptureProvenance? provenance = null)
     {
         Image = image ?? throw new ArgumentNullException(nameof(image));
         Kind = kind;
         OriginalText = originalText;
         SourcePageUrl = sourcePageUrl;
+        Provenance = provenance ?? CaptureProvenance.Create(url: sourcePageUrl);
         UsesDeviceIndependentPixels = usesDeviceIndependentPixels;
         TextStyle = textStyle;
         CodeDocument = codeDocument;
@@ -57,6 +60,15 @@ internal sealed record PinContent
     /// the origin link with the image.
     /// </summary>
     internal string SourcePageUrl { get; }
+
+    internal CaptureProvenance Provenance { get; }
+
+    /// <summary>The source lookup detached from this pin's clipboard token, if still pending.</summary>
+    internal Task<CaptureProvenance>? PendingProvenance { get; init; }
+
+    internal PinContent WithProvenance(CaptureProvenance provenance) =>
+        new(Image, Kind, OriginalText, SourcePageUrl, UsesDeviceIndependentPixels,
+            TextStyle, CodeDocument, LayoutWidthDip, LayoutHeightDip, provenance);
 
     internal bool HasOriginalText => OriginalText is not null;
 
@@ -89,14 +101,24 @@ internal sealed record PinContent
         ClosedPinMemory.EstimatePixelBytes(Image.PixelWidth, Image.PixelHeight, Image.Format.BitsPerPixel)
         + ClosedPinMemory.EstimateTextBytes(OriginalText)
         + ClosedPinMemory.EstimateTextBytes(SourcePageUrl)
+        + ClosedPinMemory.EstimateTextBytes(Provenance.Url)
+        + ClosedPinMemory.EstimateTextBytes(Provenance.DocumentPath)
+        + ClosedPinMemory.EstimateTextBytes(Provenance.AppName)
+        + ClosedPinMemory.EstimateTextBytes(Provenance.AppExecutablePath)
+        + ClosedPinMemory.EstimateTextBytes(Provenance.WindowTitle)
+        + ClosedPinMemory.EstimateTextBytes(Provenance.DisplayText)
+        + ClosedPinMemory.EstimateTextBytes(Provenance.BadgeText)
+        + ClosedPinMemory.EstimateTextBytes(Provenance.Tooltip)
+        + ClosedPinMemory.EstimateTextBytes(Provenance.SearchQuery)
         + (CodeDocument is null ? 0
             : ClosedPinMemory.EstimateTextBytes(CodeDocument.DisplayText)
                 + ClosedPinMemory.EstimateTextBytes(CodeDocument.Background)
                 + ClosedPinMemory.EstimateTextBytes(CodeDocument.Foreground)
                 + CodeDocument.Runs.Sum(static run => 32L + ClosedPinMemory.EstimateTextBytes(run.Color)));
 
-    internal static PinContent FromImage(BitmapSource image, string? sourcePageUrl = null) =>
-        new(image, PinContentKind.Image, originalText: null, sourcePageUrl ?? string.Empty, usesDeviceIndependentPixels: false);
+    internal static PinContent FromImage(BitmapSource image, string? sourcePageUrl = null, CaptureProvenance? provenance = null) =>
+        new(image, PinContentKind.Image, originalText: null, sourcePageUrl ?? string.Empty,
+            usesDeviceIndependentPixels: false, provenance: provenance);
 
     /// <summary>Rebuilds the immutable content retained in an opt-in saved pin session.</summary>
     internal static PinContent FromSession(
@@ -106,11 +128,13 @@ internal sealed record PinContent
         string sourcePageUrl,
         bool usesDeviceIndependentPixels,
         PinTextStyle? textStyle = null,
-        PinCodeDocument? codeDocument = null) =>
-        new(image, kind, originalText, sourcePageUrl, usesDeviceIndependentPixels, textStyle, codeDocument);
+        PinCodeDocument? codeDocument = null,
+        CaptureProvenance? provenance = null) =>
+        new(image, kind, originalText, sourcePageUrl, usesDeviceIndependentPixels, textStyle, codeDocument,
+            provenance: provenance);
 
     /// <summary>Text or a table that MyCapture rendered itself from the retained source string.</summary>
-    internal static PinContent FromText(BitmapSource image, string originalText, bool isTable)
+    internal static PinContent FromText(BitmapSource image, string originalText, bool isTable, CaptureProvenance? provenance = null)
     {
         ArgumentNullException.ThrowIfNull(originalText);
         return new(
@@ -119,10 +143,11 @@ internal sealed record PinContent
             originalText,
             sourcePageUrl: string.Empty,
             usesDeviceIndependentPixels: true,
-            textStyle: isTable ? PinTextStyle.Grid : PinTextStyle.PlainText);
+            textStyle: isTable ? PinTextStyle.Grid : PinTextStyle.PlainText,
+            provenance: provenance);
     }
 
-    internal static PinContent FromCode(BitmapSource image, string originalText, PinCodeDocument document)
+    internal static PinContent FromCode(BitmapSource image, string originalText, PinCodeDocument document, CaptureProvenance? provenance = null)
     {
         ArgumentNullException.ThrowIfNull(originalText);
         ArgumentNullException.ThrowIfNull(document);
@@ -131,7 +156,7 @@ internal sealed record PinContent
             throw new ArgumentException("The code document must describe the source text.", nameof(document));
         }
         return new(image, PinContentKind.Text, originalText, sourcePageUrl: string.Empty,
-            usesDeviceIndependentPixels: true, textStyle: PinTextStyle.Code, codeDocument: document);
+            usesDeviceIndependentPixels: true, textStyle: PinTextStyle.Code, codeDocument: document, provenance: provenance);
     }
 
     /// <summary>Re-rasterises only locally authored text, retaining no reference to the old bitmap.</summary>
@@ -149,14 +174,17 @@ internal sealed record PinContent
             ? ClipboardCodeRenderer.Render(CodeDocument!, scale)
             : ClipboardTextRenderer.Render(OriginalText!, TextStyle == PinTextStyle.Grid, scale);
         return new(image, Kind, OriginalText, SourcePageUrl, UsesDeviceIndependentPixels,
-            TextStyle, CodeDocument, LayoutWidthDip, LayoutHeightDip);
+            TextStyle, CodeDocument, LayoutWidthDip, LayoutHeightDip, Provenance)
+        {
+            PendingProvenance = PendingProvenance,
+        };
     }
 
     /// <summary>
     /// A table shown with the picture its source application published for the same copy. The
     /// cell text stays attached, so the pin copies the original table rather than offering OCR.
     /// </summary>
-    internal static PinContent FromTablePicture(BitmapSource picture, string originalText)
+    internal static PinContent FromTablePicture(BitmapSource picture, string originalText, CaptureProvenance? provenance = null)
     {
         ArgumentNullException.ThrowIfNull(originalText);
         return new(
@@ -164,6 +192,7 @@ internal sealed record PinContent
             PinContentKind.Table,
             originalText,
             sourcePageUrl: string.Empty,
-            usesDeviceIndependentPixels: false);
+            usesDeviceIndependentPixels: false,
+            provenance: provenance);
     }
 }

@@ -158,7 +158,7 @@ internal sealed partial class GalleryWindow : Window
     internal event EventHandler? CaptureChanged;
 
     /// <summary>Asks the shell to float a rendered library image as a pin window.</summary>
-    internal event EventHandler<BitmapSource>? FloatRequested;
+    internal event EventHandler<GalleryFloatRequestedEventArgs>? FloatRequested;
 
     /// <summary>Header toolbar commands, wired by the shell: region capture and region recording.</summary>
     internal Action? CaptureRegionRequested { get; set; }
@@ -519,6 +519,7 @@ internal sealed partial class GalleryWindow : Window
     private void OnTileDoubleClick(object sender, MouseButtonEventArgs e)
     {
         if (!IsNavigationTextInput(e.OriginalSource as DependencyObject)
+            && !IsInsideButton(e.OriginalSource as DependencyObject)
             && ResolveTile(e.OriginalSource) is GalleryItemViewModel tile)
         {
             if (tile.IsVideo)
@@ -745,7 +746,8 @@ internal sealed partial class GalleryWindow : Window
             return;
         }
 
-        FloatRequested?.Invoke(this, rendered);
+        FloatRequested?.Invoke(this, new GalleryFloatRequestedEventArgs(rendered,
+            MyCapture.Core.Capture.CaptureProvenance.FromRecord(record)));
     }
 
     private async void OnCopyClick(object sender, RoutedEventArgs e)
@@ -1086,7 +1088,8 @@ internal sealed partial class GalleryWindow : Window
 
         try
         {
-            if (!await ClipboardImageService.CopyImageAsync(rendered, record.SourcePageUrl))
+            if (!await ClipboardImageService.CopyImageWithProvenanceAsync(rendered, record.SourcePageUrl,
+                    MyCapture.Core.Capture.CaptureProvenance.FromRecord(record)))
             {
                 ShowStatus(UiText.Get("Text_75425A6D9BE8"));
             }

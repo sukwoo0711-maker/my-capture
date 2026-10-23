@@ -3,6 +3,8 @@ using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Media.Imaging;
 using MyCapture.App.Threading;
+using MyCapture.App.Pinning;
+using MyCapture.Core.Capture;
 using MyCapture.Platform.Imaging;
 
 namespace MyCapture.App.Editing;
@@ -32,16 +34,22 @@ internal static class ClipboardImageService
     internal static Task<bool> CopyImageAsync(BitmapSource bitmap, string? sourceUrl, Action<IDataObject>? writeData) =>
         CopyImageWithTextAsync(bitmap, sourceUrl, originalText: null, writeData);
 
+    internal static Task<bool> CopyImageWithProvenanceAsync(BitmapSource bitmap, string? sourceUrl,
+        CaptureProvenance? provenance, Action<IDataObject>? writeData = null,
+        Task<CaptureProvenance>? pendingProvenance = null) =>
+        CopyImageWithTextAsync(bitmap, sourceUrl, originalText: null, writeData, provenance, pendingProvenance);
+
     /// <summary>Copies the image and any exact retained source in one clipboard data object.</summary>
     internal static Task<bool> CopyImageWithTextAsync(BitmapSource bitmap, string? sourceUrl, string? originalText) =>
         CopyImageWithTextAsync(bitmap, sourceUrl, originalText, writeData: null);
 
-    internal static async Task<bool> CopyImageWithTextAsync(BitmapSource bitmap, string? sourceUrl, string? originalText, Action<IDataObject>? writeData)
+    internal static async Task<bool> CopyImageWithTextAsync(BitmapSource bitmap, string? sourceUrl, string? originalText, Action<IDataObject>? writeData,
+        CaptureProvenance? provenance = null, Task<CaptureProvenance>? pendingProvenance = null)
     {
         ArgumentNullException.ThrowIfNull(bitmap);
 
         BitmapSource frozen = Freeze(bitmap);
-        return await RunCopySerializedAsync(() => CopyFrozenAsync(frozen, sourceUrl, originalText, writeData)).ConfigureAwait(false);
+        return await RunCopySerializedAsync(() => CopyFrozenAsync(frozen, sourceUrl, originalText, writeData, provenance, pendingProvenance)).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -71,7 +79,8 @@ internal static class ClipboardImageService
         }
     }
 
-    private static async Task<bool> CopyFrozenAsync(BitmapSource frozen, string? sourceUrl, string? originalText, Action<IDataObject>? writeData)
+    private static async Task<bool> CopyFrozenAsync(BitmapSource frozen, string? sourceUrl, string? originalText, Action<IDataObject>? writeData,
+        CaptureProvenance? provenance, Task<CaptureProvenance>? pendingProvenance)
     {
         byte[] pngBytes;
         try
@@ -92,7 +101,7 @@ internal static class ClipboardImageService
             // can synchronously sleep, so run the single operation on an isolated STA instead
             // of stacking another retry loop on the UI dispatcher.
             return await StaThreadTask.RunAsync(
-                () => TrySetOnce(frozen, pngBytes, originalText, writeData),
+                () => TrySetOnce(frozen, pngBytes, originalText, writeData, provenance, pendingProvenance),
                 "MyCapture clipboard writer").ConfigureAwait(false);
         }
         catch (Exception ex) when (ex is COMException or ExternalException)
@@ -115,7 +124,8 @@ internal static class ClipboardImageService
         }
     }
 
-    private static bool TrySetOnce(BitmapSource frozen, byte[] pngBytes, string? originalText, Action<IDataObject>? writeData)
+    private static bool TrySetOnce(BitmapSource frozen, byte[] pngBytes, string? originalText, Action<IDataObject>? writeData,
+        CaptureProvenance? provenance, Task<CaptureProvenance>? pendingProvenance)
     {
         try
         {
@@ -124,11 +134,19 @@ internal static class ClipboardImageService
             data.SetData("PNG", pngStream);
             data.SetImage(frozen);
             if (originalText is not null) data.SetText(originalText, TextDataFormat.UnicodeText);
+            // Only an opaque process-local reference travels with the clipboard. File exports
+            // and PNG metadata retain their existing privacy rules.
+            string? sourceToken = provenance is { HasSource: true } || pendingProvenance is not null
+                ? Guid.NewGuid().ToString("N") : null;
+            if (sourceToken is not null)
+                data.SetData(ClipboardProvenance.Format, sourceToken, autoConvert: false);
 
             // copy:true materialises the delayed formats before this method and the stream
             // return, so clipboard content remains after MyCapture exits.
-            if (writeData is null) Clipboard.SetDataObject(data, copy: true);
+            if (writeData is null) ClipboardWriter.SetDataObject(data, copy: true);
             else writeData(data);
+            if (sourceToken is not null)
+                ClipboardProvenance.Publish(sourceToken, provenance ?? CaptureProvenance.None, pendingProvenance);
             return true;
         }
         catch (COMException ex) when ((uint)ex.HResult == ClipboardCantOpen)
@@ -151,7 +169,7 @@ internal static class ClipboardImageService
         {
             var data = new DataObject();
             data.SetText(text, TextDataFormat.UnicodeText);
-            Clipboard.SetDataObject(data, copy: true);
+            ClipboardWriter.SetDataObject(data, copy: true);
             return true;
         }
         catch (COMException ex) when ((uint)ex.HResult == ClipboardCantOpen)

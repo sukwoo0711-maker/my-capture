@@ -12,10 +12,13 @@ public enum OcrQuality
     /// <summary>2× with rotation search. Middle stage for UI screenshots.</summary>
     Balanced = 1,
 
-    /// <summary>4×, rotation search, and contrast stretch for receipts and faint type.</summary>
+    /// <summary>4×, rotation search, and contrast stretch for small or faint screen text.</summary>
     Accurate = 2,
 
-    /// <summary>Local lighting flatten, contrast, sharpen, then PP-OCR for difficult receipts.</summary>
+    /// <summary>
+    /// Legacy persisted value only. Normalized to Accurate; never offered as a separate quality.
+    /// Keep the numeric value so older settings files remain readable.
+    /// </summary>
     Enhanced = 3,
 }
 
@@ -44,24 +47,26 @@ public static class OcrQualityNames
             || string.Equals(value, "document", StringComparison.OrdinalIgnoreCase)
             || string.Equals(value, "precise", StringComparison.OrdinalIgnoreCase))
         {
-            return OcrQuality.Enhanced;
+            return OcrQuality.Accurate;
         }
 
         return OcrQuality.Balanced;
     }
 
-    public static string ToSetting(OcrQuality quality) => quality switch
+    public static OcrQuality Normalize(OcrQuality quality) =>
+        quality == OcrQuality.Enhanced ? OcrQuality.Accurate : quality;
+
+    public static string ToSetting(OcrQuality quality) => Normalize(quality) switch
     {
         OcrQuality.Fast => Fast,
         OcrQuality.Accurate => Accurate,
-        OcrQuality.Enhanced => Enhanced,
         _ => Balanced,
     };
 }
 
 public static class OcrQualityProfile
 {
-    public static double UpscaleFactor(OcrQuality quality) => quality switch
+    public static double UpscaleFactor(OcrQuality quality) => OcrQualityNames.Normalize(quality) switch
     {
         OcrQuality.Fast => 1.0,
         OcrQuality.Accurate => 4.0,
@@ -73,18 +78,16 @@ public static class OcrQualityProfile
     public static bool EnhanceContrast(OcrQuality quality) =>
         quality is OcrQuality.Accurate or OcrQuality.Enhanced;
 
-    public static bool LocalCorrection(OcrQuality quality) => quality == OcrQuality.Enhanced;
+    public static bool LocalCorrection(OcrQuality quality) => false;
 
     /// <summary>
-    /// Careful additionally runs the optional Real-ESRGAN x4 weights when they are present.
-    /// The download happens on the first Careful recognition and failure falls back to
-    /// nearest-neighbour scaling.
+    /// Kept for callers that inspect a quality profile. No quality uses super-resolution.
     /// </summary>
-    public static bool UseSuperResolution(OcrQuality quality) => quality == OcrQuality.Enhanced;
+    public static bool UseSuperResolution(OcrQuality quality) => false;
 
     /// <summary>
-    /// Accurate and Enhanced modes download and run PP-OCRv5 Korean recognition instead of
-    /// relying on Windows OCR alone.
+    /// Accurate (including its legacy Enhanced value) runs PP-OCRv5 Korean recognition
+    /// alongside Windows OCR.
     /// </summary>
     public static bool UseNeuralModel(OcrQuality quality) =>
         quality is OcrQuality.Accurate or OcrQuality.Enhanced;
@@ -121,12 +124,13 @@ public static class OcrQualityProfile
             return FromUpscale(upscale);
         }
 
-        return quality;
+        return OcrQualityNames.Normalize(quality);
     }
 
     public static void Synchronize(OcrSettings settings)
     {
         ArgumentNullException.ThrowIfNull(settings);
+        settings.Quality = OcrQualityNames.Normalize(settings.Quality);
         settings.UpscaleFactor = UpscaleFactor(settings.Quality);
     }
 }

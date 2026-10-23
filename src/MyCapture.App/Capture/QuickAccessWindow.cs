@@ -118,7 +118,8 @@ internal sealed class QuickAccessWindow : Window
         close.Content = Glyph("Icon.Close");
         CommandButtonPresentation.Apply(close, compact: true);
         close.Width = close.Height = close.MinWidth = close.MinHeight = 36;
-        close.Padding = new Thickness(2); close.Margin = new Thickness(4);
+        // Keep the full 34-DIP face visible with the contrast theme's 1-DIP border.
+        close.Padding = new Thickness(2, 0, 2, 0); close.Margin = new Thickness(4);
         close.HorizontalAlignment = HorizontalAlignment.Right; close.VerticalAlignment = VerticalAlignment.Top;
         close.SetResourceReference(StyleProperty, "Button.Ghost");
         close.SetResourceReference(BackgroundProperty, "Surface.Floating");
@@ -160,7 +161,7 @@ internal sealed class QuickAccessWindow : Window
         };
         CommandButtonPresentation.Apply(_keep, compact: true);
         _keep.Width = _keep.Height = _keep.MinWidth = _keep.MinHeight = 36;
-        _keep.Padding = new Thickness(2); _keep.Margin = new Thickness(0);
+        _keep.Padding = new Thickness(2, 0, 2, 0); _keep.Margin = new Thickness(0);
         _keyboardTargets.Add(_keep);
         AutomationProperties.SetName(_keep, UiText.Get("QuickAccess.KeepName"));
         AutomationProperties.SetHelpText(_keep, UiText.Get("Onboard_QuickKeep"));

@@ -1,4 +1,5 @@
 using System.Windows;
+using System.Windows.Documents;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using MyCapture.Core.Primitives;
@@ -30,6 +31,19 @@ internal static class AnnotationEditorPrewarm
         bitmap.Freeze();
         var region = new RectD(0, 0, ImageWidth, ImageHeight);
         var editor = new AnnotationEditorControl(new FrozenFrame(bitmap, region, null, 0), region, bitmap);
+        // Match the host window's inherited typography, so its first real layout can reuse
+        // the measured inspector groups even when the capture opens at another width.
+        TextElement.SetFontFamily(editor, Application.Current?.TryFindResource("Font.Ui") as FontFamily
+            ?? new FontFamily("Segoe UI"));
+        // Window.Standard supplies these inherited values to a real editor. A detached
+        // Grid otherwise measures with 12-DIP text and Ideal formatting instead.
+        if (Application.Current?.TryFindResource(MyCapture.App.Themes.StandardWindowTheme.ResourceKey) is Style)
+        {
+            editor.SetResourceReference(TextElement.FontSizeProperty, "FontSize.Body");
+            TextOptions.SetTextFormattingMode(editor, TextFormattingMode.Display);
+        }
+        editor.UseLayoutRounding = true;
+        editor.SnapsToDevicePixels = true;
         editor.Measure(Viewport);
         editor.Arrange(new Rect(Viewport));
         var target = new RenderTargetBitmap((int)Viewport.Width, (int)Viewport.Height, 96, 96, PixelFormats.Pbgra32);
