@@ -17,7 +17,9 @@ function Get-SetupBootstrapSource([string]$Name) {
     if ($Name -notin @('MyCaptureSetup.exe', 'MyCaptureSetup.exe.config')) { throw "Unexpected bootstrap name: $Name" }
     return Join-Path $setupTestOutput $Name
 }
-function New-SyntheticSetupPackage([string]$Root, [string]$Version = '4.2.1') {
+function New-SyntheticSetupPackage([string]$Root, [string]$Version = '') {
+    # The fixture must carry the built setup's own version; a pinned default broke on every release bump.
+    if (-not $Version) { $Version = ([Diagnostics.FileVersionInfo]::GetVersionInfo($setupTestExe).ProductVersion -split '\+')[0] }
     $Root = [IO.Path]::GetFullPath($Root)
     $publish = Join-Path $Root 'publish-win-x64'
     $stage = Join-Path $Root 'installer-stage'
