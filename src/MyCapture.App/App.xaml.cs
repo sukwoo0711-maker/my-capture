@@ -46,6 +46,7 @@ public partial class App : Application
     private RegisteredWaitHandle? _activationWait;
     private ServiceProvider? _services;
     private ILogger<App>? _log;
+    private RollingFileLog? _fileLog;
     private TrayIconService? _tray;
     private GlobalHotkeyService? _hotkeys;
     private AppSettings? _settings;
@@ -89,6 +90,9 @@ public partial class App : Application
     {
         base.OnStartup(e);
         UiText.Configure(null);
+        // Before any window: a tooltip's default show duration would otherwise stop every
+        // DispatcherTimer while it is open, self-tests included.
+        MyCapture.App.Threading.ToolTipTimerGuard.Install();
 
         // Windows 10 22H2 is the supported x64 baseline. The installer refuses older hosts, but the
         // portable ZIP does not run the installer, so the process enforces the floor itself
@@ -134,6 +138,8 @@ public partial class App : Application
         }
 
         DispatcherUnhandledException += OnDispatcherUnhandledException;
+        AppDomain.CurrentDomain.UnhandledException += OnDomainUnhandledException;
+        TaskScheduler.UnobservedTaskException += OnUnobservedTaskException;
         EventManager.RegisterClassHandler(typeof(Window), FrameworkElement.LoadedEvent,
             new RoutedEventHandler((sender, _) =>
             {
@@ -143,6 +149,7 @@ public partial class App : Application
         try
         {
             _services = BuildServiceProvider();
+            _fileLog = _services.GetRequiredService<RollingFileLog>();
             _log = _services.GetRequiredService<ILogger<App>>();
             CaptureWindowExclusion.Logger = _log;
             _log.LogInformation("MyCapture starting up");
@@ -270,11 +277,13 @@ public partial class App : Application
             ShortcutHelpWindow.ShowHelp, () => _ = RequestSafeShutdownAsync(),
             PinClipboard: HandlePasteToScreen, HideOrShowAllPins: () => _pins?.HideOrShowAll(),
             ClearClickThrough: () => _pins?.ClearClickThroughAll(), ContactSupport: SupportWindow.ShowSupport,
-            ActivateOpenPin: pin => _pins?.ActivateOpenPin(pin));
+            ActivateOpenPin: pin => _pins?.ActivateOpenPin(pin), InstallUpdate: () => _ = InstallKnownUpdateAsync());
         _tray.MenuPresenter = () => _shellPresenter.ShowMenu(TrayMenuLayout.Build(trayCommands, _settings!.Hotkeys,
             new TrayMenuState(_pins?.CanRestoreClosed == true, _scrollCancellation is not null,
                 ClipboardAvailability.HasPinnableContent(), _pins?.Count ?? 0, _pins?.AreHidden == true,
-                _pins?.ClickThroughCount ?? 0, _pins?.SnapshotOpenPinWindows())));
+                _pins?.ClickThroughCount ?? 0, _pins?.SnapshotOpenPinWindows(),
+                UpdateAvailable: _updates?.HasAvailableUpdate == true, UpdateVersion: _updates?.AvailableVersion,
+                UpdateBusy: _updates?.IsBusy == true)));
         // A capture started from the tray menu races the menu's dismissal; the coordinator
         // uses this to decide whether the frozen frame must wait it out.
         _shellPresenter.ForegroundDismissed += () => _overlay?.NoteForegroundDismissal();
@@ -404,6 +413,7 @@ public partial class App : Application
         InitializeStoreRating();
         PrepareCapturePersistenceForExitAsync = PreparePendingCaptureForExitAsync;
         PrepareStoreUpdateProtection = PrepareAndHoldStoreUpdateAsync;
+        InitializeUpdates();
         _initialLibraryRecoveryTask = RecoverLibraryStateAsync();
         _initialEditRecoveryTask = InitializeEditRecoveryAsync();
         _ = ResumeMaintenanceAfterInitialRecoveryAsync();
@@ -1841,6 +1851,7 @@ public partial class App : Application
         ConfigureEngagementWindow(window);
         ConfigureLegacyImportWindow(window);
         window.StoreReviewOpened = () => _storeRating?.NoteManualReviewOpened();
+        window.FileLog = _fileLog;
 
         // Keep the tray state in sync after an apply (a hotkey collision flips it to Error).
         window.Applied += (_, _) => RestoreTrayAfterCapture();
@@ -2227,15 +2238,23 @@ public partial class App : Application
     private static ServiceProvider BuildServiceProvider()
     {
         var services = new ServiceCollection();
+        AppPaths paths = ResolveAppPaths();
+
+        // Information and above also go to logs\mycapture.log under the same rule as the recent-error
+        // list: numbers and code identifiers only, never message text, paths, titles or clipboard.
+        var fileLog = new RollingFileLog(paths.LogsRoot);
+        fileLog.Append(SafeLogLine.Session(DateTimeOffset.UtcNow));
 
         services.AddLogging(builder =>
         {
             builder.SetMinimumLevel(LogLevel.Debug);
             builder.AddDebug();
             builder.AddProvider(new MyCapture.App.Diagnostics.RecentErrorLogProvider(MyCapture.App.Diagnostics.RecentErrorLog.Shared));
+            builder.AddProvider(new RollingFileLogProvider(fileLog));
         });
 
-        services.AddSingleton(ResolveAppPaths());
+        services.AddSingleton(paths);
+        services.AddSingleton(fileLog);
         services.AddSingleton<SettingsStore>();
         services.AddSingleton<ILegacyLibraryMigrationService, LegacyLibraryMigrationService>();
         services.AddSingleton<ScreenCaptureEngine>();
@@ -2328,8 +2347,25 @@ public partial class App : Application
         e.Handled = true;
     }
 
+    /// <summary>
+    /// An exception no handler caught off the dispatcher thread. The runtime still ends the process;
+    /// this only records it and writes the file log out before that happens.
+    /// </summary>
+    private void OnDomainUnhandledException(object sender, UnhandledExceptionEventArgs e)
+    {
+        _log?.LogCritical(e.ExceptionObject as Exception,
+            "Unhandled exception off the dispatcher thread (terminating: {IsTerminating})", e.IsTerminating);
+        _fileLog?.Flush(TimeSpan.FromSeconds(2));
+    }
+
+    /// <summary>A faulted task nobody awaited. Recorded only; the runtime's own handling is unchanged.</summary>
+    private void OnUnobservedTaskException(object? sender, UnobservedTaskExceptionEventArgs e) =>
+        _log?.LogError(e.Exception, "Unobserved task exception");
+
     protected override void OnExit(ExitEventArgs e)
     {
+        _updateTimer?.Stop();
+        _updates?.Dispose();
         // Stop a model download in progress; completed, verified model files stay.
         _ocrModelPreparation.Close();
         _quickAccess?.Close();
@@ -2424,6 +2460,8 @@ public partial class App : Application
         }
 
         _services?.Dispose();
+        // Last: services log while they dispose. Dispose writes every queued line first.
+        _fileLog?.Dispose();
 
         if (_singleInstanceMutex is not null)
         {

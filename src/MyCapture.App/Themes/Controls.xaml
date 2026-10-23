@@ -876,6 +876,11 @@
     <Style TargetType="{x:Type ContextMenu}">
         <Setter Property="Background" Value="{DynamicResource Surface.Floating}" />
         <Setter Property="Foreground" Value="{DynamicResource Text.Primary}" />
+        <!-- A menu is its own popup root: without these it takes the system font and Ideal
+             formatting, so its small text would not match the windows it opens from. -->
+        <Setter Property="FontFamily" Value="{DynamicResource Font.Ui}" />
+        <Setter Property="TextOptions.TextFormattingMode" Value="Display" />
+        <Setter Property="UseLayoutRounding" Value="True" />
         <Setter Property="BorderBrush" Value="{DynamicResource Border.Strong}" />
         <Setter Property="BorderThickness" Value="{DynamicResource Border.DecorativeThickness}" />
         <Setter Property="Padding" Value="5" />
@@ -1009,6 +1014,11 @@
             </Setter.Value>
         </Setter>
     </Style>
+    <!-- A Separator inside a Menu or ContextMenu is given MenuItem.SeparatorStyleKey, not the
+         implicit style above. Without this key every menu rule fell back to the system theme's
+         light grey line on the dark menus. -->
+    <Style x:Key="{x:Static MenuItem.SeparatorStyleKey}" TargetType="{x:Type Separator}"
+           BasedOn="{StaticResource {x:Type Separator}}" />
     <!-- Keep the native ComboBox selection, text search and popup behaviour, but own its chrome. -->
     <Style TargetType="ComboBoxItem">
         <Setter Property="Foreground" Value="{DynamicResource Text.Primary}" />

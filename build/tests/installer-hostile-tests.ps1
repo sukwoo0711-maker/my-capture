@@ -1,6 +1,6 @@
 ﻿[CmdletBinding()]
 param(
-    [string]$Version = '4.6.0',
+    [string]$Version = '4.7.0',
     [string]$ArtifactRoot = ''
 )
 
@@ -76,7 +76,7 @@ function Invoke-Installer(
         '--log', $log
     )
     $arguments += $ExtraArguments
-    $null = & $installerExe @arguments 2>&1
+    & $installerExe @arguments 2>&1 | Out-Null
     return [int]$LASTEXITCODE
 }
 
@@ -111,7 +111,7 @@ function Invoke-Uninstaller([string]$ExecutablePath, [string]$LogPath) {
     $arguments = @(
         '/uninstall', '/quiet', '--log', $LogPath
     )
-    $null = & $ExecutablePath @arguments 2>&1
+    & $ExecutablePath @arguments 2>&1 | Out-Null
     return [int]$LASTEXITCODE
 }
 

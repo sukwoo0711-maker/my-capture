@@ -135,6 +135,10 @@ public sealed class UpdaterSession
     [DataMember(IsRequired = true)] public int ParentId { get; set; }
     [DataMember] public string? SourceRoot { get; set; }
     [DataMember] public string? TargetMode { get; set; }
+    [DataMember] public long ParentStartedUtc { get; set; }
+    [DataMember] public bool WaitForParent { get; set; }
+    [DataMember] public bool RestartAfterInstall { get; set; }
+    [DataMember] public bool ShowProgress { get; set; }
 }
 
 [DataContract]

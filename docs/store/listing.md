@@ -18,9 +18,9 @@ Partner Center의 Store 목록과 제출 옵션에 붙여 넣을 문구입니다
 - **저작권**: `Copyright (c) 2026 MyCapture`
 - **범주**: 생산성 또는 사진 및 비디오
 - **가격**: 무료
-- **개인정보처리방침 URL**: `https://github.com/sukwoo0711-maker/mycapture-support/blob/main/PRIVACY.md`
-- **지원 연락처**: `https://github.com/sukwoo0711-maker/mycapture-support/issues`
-- **웹 사이트**: `https://sukwoo0711-maker.github.io/my-capture/`
+- **개인정보처리방침 URL**: `https://mimiloaf.com/mycapture/privacy/` (2026-10-24 제출 17부터. 원문은 지원 저장소의 `PRIVACY.md`이고, 사이트 페이지는 그 main 판에서 만듭니다.)
+- **지원 연락처**: `support@mimiloaf.com` (문의 창구 안내는 지원 저장소 README에 있습니다)
+- **웹 사이트**: `https://mimiloaf.com/mycapture/` (2026-10-24 제출 18부터. 그 전에는 `https://mimiloaf.com`)
 - **앱 타일 아이콘(선택)**: 패키징 결과물 `StoreListingIcon-300.png`
 - **스크린샷**: `build\store-shots\compose.py`로 만드는 언어별 9장(2560×1440)입니다. 그래파이트 바탕에 장마다 짧은 제목 한 줄과 실제 창을 크게 넣습니다. 순서는 엑셀 레지스터 표 핀과 코드, `#define` 코드 핀 원문 붙여넣기, 뒤 창 클릭 허용, 캡처 후 F3으로 핀, 이미지 핀 글자 복사, 핀 숨기기·다시 열기, 라이브러리 검색, 공유 전 주석·가리기, 'Windows 캡처 도구에 더해지는 것' 비교 카드입니다. 제목은 `build\store-shots\scenes.json`에 있고, 언어별 스크린샷 캡션을 같은 순서로 넣습니다. 결과물은 `artifacts/store/screenshots/ux461/{ko,en}`입니다. 2026-10-23 편집기 점검(#132) 화면으로 다시 렌더해 8번 편집기만 바뀌었고, 나머지 여덟 장은 이전 판(`artifacts/store/screenshots/ux453/{ko,en}`)과 같습니다. 그 이전 판은 2026-10-22 UX 개선(#119) 화면으로 7번 라이브러리와 8번 편집기를 바꾼 것이고, 나머지 일곱 장은 4.5.0 핀 흐름 판(`artifacts/store/screenshots/4.5.0-pin/{ko,en}`)과 같습니다. 2026-10-23 현재 Partner Center에는 둘 다 올리지 않았습니다. 4.4.0 제출(제출 13)에 올린 이전 9장은 `artifacts/store/screenshots/4.4.0/{ko,en}`에 그대로 있습니다.
 - **트레일러**: 새 트레일러가 나올 때까지 기존 언어별 30초 1920×1080 60fps MP4(약 9MB)를 사용합니다. 두 영상은 장면, 키 입력, 음악이 같고 앱 화면과 예시 문의 페이지의 언어가 다릅니다. 4.4.0부터 썸네일은 어두운 코드 편집기 위에 밝은 핀이 뜬 22.333초 프레임입니다(4K 원본을 1.10배로 키워 1920×1080으로 자름, 가운데 재생 단추 자리에 핵심 내용 없음). 파일은 `artifacts/promo-2026-10-18/v2/MyCapture-trailer-thumbnail-v3-1920x1080.png`와 `v2-en/MyCapture-trailer-thumbnail-en-v3-1920x1080.png`이고, 고른 근거는 같은 폴더의 `thumb-440/`에 있습니다. 이전 썸네일(19.02초, 밝은 양식 위 검은 가림막)은 Store 재생 단추에 가려 판독되지 않았습니다. 자막 파일은 사용하지 않습니다. 핀 중심 30초 구성(Ctrl+C·F3 사양 표 핀 → 보면서 코딩 → 구문 핀 원문 붙여넣기 → 클릭 허용·Shift+F3 숨기기 → 캡처 후 F3)은 `docs/store/trailer-pin-storyboard.md`에 있습니다.
@@ -103,25 +103,18 @@ MyCapture는 코딩하는 동안 엑셀 사양 표와 자주 쓰는 코드를 �
 8. 공유하기 전에 단계 번호와 화살표를 넣고, 이메일·토큰·카드번호를 Ctrl+Shift+R로 가린 화면입니다.
 9. 영역·창·전체 화면 캡처, 클립보드 복사, 이미지 속 글자 복사는 Windows 캡처 도구와 같습니다. 영역 녹화는 소리 없이 화면만 기록합니다. 여기에 원문을 보관하는 표·코드 핀, 반투명·클릭 허용 핀, 닫은 핀 다시 열기, 스크롤 캡처가 더해집니다.
 
-### 이 버전의 새로운 기능 (4.6.0)
+### 이 버전의 새로운 기능 (4.7.0)
 
-입력 한도는 1,500자입니다. 4.5.2(제출 15)가 Store에 게시된 뒤 제출한다고 보고 4.6.0의 변경만 적습니다. 4.5.2가 게시되지 않았다면 제출할 때 아래 '4.5.2 항목'을 이어 붙입니다.
+입력 한도는 1,500자입니다. 4.6.0(제출 16)이 게시된 뒤 제출하므로 4.7.0의 변경만 적습니다.
 
-- 새 핀이 압정처럼 꽂히며 나타납니다. 내용은 제자리에서 바로 선명하게 보이고, 압정·고리·그림자는 잠깐 뒤 사라집니다.
-- 편집기 단축키는 Alt를 누르는 동안만 보입니다. 늘 보려면 설정에서 '단축키 항상 표시'를 켭니다.
-- 편집기의 '복사'(Ctrl+C)는 클립보드에 복사하고 편집기를 열어 둡니다. 저장하고 닫는 것은 '완료'입니다.
-- 라이브러리에서 캡처 이름을 바꾸고(F2), 빈 곳을 오른쪽 클릭해 새 폴더를 만듭니다. 캡처 시각은 제목 아래에 보입니다.
-- 글꼴 목록을 추천 글꼴로 줄이고 Maple Mono, JetBrains Mono, D2Coding, Pretendard를 함께 넣었습니다.
-
-4.5.2 항목:
-
-- 이미지 편집 중 '응답 없음'으로 멈추던 문제를 고쳤습니다. 펜·끌기·실행 취소와 큰 이미지의 저장도 빨라졌습니다.
-- 캡처를 마치면 클립보드에 복사되는 즉시 편집기가 사라지고, 앱 시작과 라이브러리 갱신이 빨라졌습니다.
-- 텍스트·코드·표 핀에서 F2를 누르면 글자나 셀을 골라 그 부분만 복사합니다.
-- 텍스트·표·코드 핀이 고배율 화면에서도 선명하고, 트레이 메뉴의 '열린 핀'에서 핀을 골라 앞으로 가져옵니다.
-- 다음 실행 때 다시 띄우려고 저장하는 핀은 이 Windows 사용자만 읽을 수 있도록 암호화합니다.
-- 코드 글자 인식이 C/C++ 전처리 줄을 알아보고, 라이브러리의 보관 전환은 K로 옮겼습니다. P는 핀으로 띄웁니다.
-- 새로 설치해도 핀을 더블클릭하면 닫힙니다.
+- 새 버전이 나오면 앱이 알려 주고, 카드의 '업데이트'로 바로 설치합니다. 설정 > 정보에서 자동 확인을 끌 수 있습니다.
+- 편집기 단추는 평소 아이콘을 크게 보여 주고, Alt를 누르는 동안 단축키가 나타납니다. Alt만 눌렀다 뗀 뒤 다음 키가 무시되던 문제도 고쳤습니다.
+- 도구를 바꿔도 이미지 크기가 흔들리지 않고, 회전 단추(Q·W)를 자르기 옆에 두었습니다. 창이 좁아지면 명령 이름을 하나씩 숨깁니다.
+- 웹 페이지나 앱에서 찍은 캡처에 출처를 표시하고, 같은 출처의 캡처를 모아 봅니다.
+- '정확' 품질의 글자 인식이 두 엔진을 함께 써서 한국어 화면 글자를 더 정확하게 읽고, 짧은 줄을 빠뜨리지 않습니다.
+- 툴팁이 열려 있는 동안 재생 위치 표시나 자동 저장이 멈추던 문제를 고쳤습니다.
+- 삭제 확인의 기본 단추와 메뉴 구분선, 녹화 빨강을 정리했습니다.
+- 설정 > 정보의 '진단 묶음 저장'으로 이 PC에만 남는 기록을 문의에 첨부할 수 있습니다.
 
 ### 검색어
 
@@ -205,25 +198,18 @@ Enter them in screenshot order. Each caption is 200 characters or fewer.
 8. Step numbers and an arrow added before sharing, with an email address, token and card number covered by Ctrl+Shift+R.
 9. Like Snipping Tool, MyCapture captures, copies to the clipboard and extracts text. It adds table and code pins with original text, click-through pins and scrolling capture; recording is silent.
 
-### What's new in this version (4.6.0)
+### What's new in this version (4.7.0)
 
-Limit: 1,500 characters. This assumes 4.5.2 (submission 15) is published before 4.6.0 is submitted, so it lists only the 4.6.0 changes. If 4.5.2 is not published yet, append the "4.5.2 items" below when submitting.
+Limit: 1,500 characters. 4.6.0 (submission 16) is published, so this lists only the 4.7.0 changes.
 
-- New pins land like a pushpin. The content appears sharp and in place at once; the pushpin, ring and shadow fade a moment later.
-- Editor shortcuts appear only while you hold Alt. To keep them visible, turn on Always show shortcut keys in Settings.
-- Copy (Ctrl+C) in the editor copies to the clipboard and keeps the editor open. Done saves and closes.
-- In the library, rename a capture with F2 and right-click empty space to create a folder. Capture times appear under the title.
-- The font list is trimmed to recommended fonts, and Maple Mono, JetBrains Mono, D2Coding and Pretendard are included.
-
-4.5.2 items:
-
-- Fixed the image editor freezing as "Not responding" while you edit. Drawing, dragging, undo and saving large images are faster too.
-- After a capture, the editor disappears as soon as the image is on the clipboard, and startup and library updates are faster.
-- Press F2 on a text, code or table pin to select text or cells and copy only that part.
-- Text, table and code pins stay sharp on high-DPI displays, and Open pins in the tray menu brings a pin to the front.
-- Pins saved to reopen at the next launch are encrypted so only your Windows account on this PC can read them.
-- Code text recognition detects C/C++ preprocessor lines, and the library toggles Keep with K; P pins the capture.
-- On new installs, double-clicking a pin closes it again.
+- MyCapture tells you when a new version is available, and Update on the card installs it. Turn off automatic checks in Settings > About.
+- Editor buttons show larger icons, and shortcut keys appear while you hold Alt. Fixed keys being ignored after pressing Alt alone.
+- The image no longer resizes when you switch tools, and rotate buttons (Q, W) sit next to Crop. In narrow windows, command names hide one at a time.
+- Captures from a web page or app show their source, and you can view all captures from the same source.
+- Text recognition at Accurate combines two engines to read Korean screen text more accurately and no longer drops short lines.
+- Fixed the playback position and autosave pausing while a tooltip was open.
+- Cleaner delete confirmations, menu separators and recording red.
+- Save diagnostics in Settings > About to attach local logs to a support request.
 
 ### Search terms
 
@@ -243,6 +229,6 @@ Partner Center 제품 단위의 Additional Testing Information(인증 참고)에
 
 > MyCapture runs in the notification area. The first-run screen lets the user start a capture or skip to the library. On new installations, Ctrl+Shift+C captures a region, Ctrl+Shift+X starts or stops region recording, F3 pins clipboard content and Shift+F3 hides or shows all pins. The library shortcut is unassigned; existing installations retain their saved shortcuts. To try a pin, copy cells in a spreadsheet or text in an editor and press F3 (Pin clipboard is also in the tray menu). Ctrl+C or Ctrl+double-click on a pin copies its original text (recognized text for an image pin). Ctrl+Shift+R runs Auto-redact inside the image editor. A new installation copies each capture to the clipboard and shows the quick-access card by default. Alt+Q or a click moves focus to the card; its C/E/P/S/T keys then work.
 >
-> Capture, editing, recording and OCR run on the PC. The only automatic network access is downloading missing OCR model files. The optional GitHub image attachment requires the user's own GitHub account. The package's startup task is disabled at install. The first-run screen offers launch at sign-in with its checkbox selected, and the user can clear it there or change it later in Settings > General.
+> Capture, editing, recording and OCR run on the PC. Automatic network access is limited to downloading missing OCR model files and a daily update check through the Microsoft Store APIs, which the user can turn off in Settings > About. The optional GitHub image attachment requires the user's own GitHub account. The package's startup task is disabled at install. The first-run screen offers launch at sign-in with its checkbox selected, and the user can clear it there or change it later in Settings > General.
 >
-> Updates are delivered through the Microsoft Store. Settings > About lets the user check for and install Store package updates through the Store APIs, with consent before installation. After at least 10 successful captures and 3 days of use, the Store package offers one inline review invitation when the user returns to the app. It calls StoreContext.RequestRateAndReviewAppAsync only after the user chooses Review. Settings > About also offers a manual review link. The app reads the Windows Print Screen keyboard setting only to show guidance and never changes it.
+> Updates are delivered through the Microsoft Store. Settings > About lets the user check for and install Store package updates through the Store APIs, with consent before installation. After at least 5 successful captures and 1 day of use, the Store package offers one inline review invitation when the user returns to the app. It calls StoreContext.RequestRateAndReviewAppAsync only after the user chooses Review. Settings > About also offers a manual review link. The app reads the Windows Print Screen keyboard setting only to show guidance and never changes it.

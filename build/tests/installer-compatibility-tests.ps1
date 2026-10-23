@@ -116,7 +116,7 @@ try {
                 ConvertTo-Json | Set-Content -LiteralPath $env:MYCAPTURE_UPDATE_SESSION -Encoding UTF8
             $args += '--no-shell-integration'
         }
-        & $newExe @args
+        & $newExe @args | Out-Null
         Assert-True ($LASTEXITCODE -eq 0) "Forward $mode upgrade failed."
         $env:MYCAPTURE_UPDATE_SESSION = $null
         foreach ($name in @('uninstall.ps1', 'uninstall.cmd', 'uninstall-cleanup.ps1')) { Assert-True (-not [IO.File]::Exists((Join-Path $install $name))) "Legacy residue: $name" }
@@ -134,7 +134,7 @@ try {
         finally { $registration.Dispose() }
         Assert-True ([MyCapture.Setup.PathSafety]::Equal([MyCapture.Setup.ShellLink]::Target((Join-Path $menu 'Uninstall MyCapture.lnk')), (Join-Path $install 'MyCaptureUninstall.exe'))) 'New shortcut target mismatch.'
         $log = Join-Path $root "$mode-uninstall.log"
-        & (Join-Path $install 'MyCaptureUninstall.exe') /uninstall /quiet --log $log
+        & (Join-Path $install 'MyCaptureUninstall.exe') /uninstall /quiet --log $log | Out-Null
         Assert-True ($LASTEXITCODE -eq 0) 'New uninstall launch failed.'
         Wait-Removed $install $log $true
         Assert-True (-not [IO.Directory]::Exists($menu)) 'New uninstall retained the isolated shortcuts.'
@@ -143,7 +143,7 @@ try {
         finally { if ($null -ne $registration) { $registration.Dispose() } }
     }
     $install = Join-Path $root 'reverse'
-    & $newExe /quiet --no-shell-integration --install-root $install --log (Join-Path $root 'reverse-new.log')
+    & $newExe /quiet --no-shell-integration --install-root $install --log (Join-Path $root 'reverse-new.log') | Out-Null
     Assert-True ($LASTEXITCODE -eq 0) 'Reverse seed failed.'
     Invoke-Legacy (Join-Path $legacy 'install.ps1') @('-Quiet', '-NoShellIntegration', '-InstallRoot', $install, '-LogPath', (Join-Path $root 'reverse-old.log'))
     Assert-True ([IO.File]::Exists((Join-Path $install 'uninstall.cmd'))) 'Reverse install did not restore legacy bootstrap.'

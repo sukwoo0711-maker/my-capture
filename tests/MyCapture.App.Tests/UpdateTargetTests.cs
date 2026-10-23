@@ -59,7 +59,7 @@ public sealed class UpdateTargetTests
         var target = UpdateTarget.Resolve(source.Root, UpdateTarget.DefaultRoot);
         var installer = new UpdateInstaller(info =>
         {
-            using var json = JsonDocument.Parse(File.ReadAllText(info.ArgumentList[8]));
+            using var json = JsonDocument.Parse(File.ReadAllText(info.Environment["MYCAPTURE_UPDATE_SESSION"]!));
             Assert.Equal(source.Root, json.RootElement.GetProperty("SourceRoot").GetString());
             Assert.Equal(source.Root, json.RootElement.GetProperty("InstallRoot").GetString());
             Assert.Equal("OwnedInstall", json.RootElement.GetProperty("TargetMode").GetString());

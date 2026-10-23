@@ -1295,6 +1295,8 @@
                                            Foreground="{DynamicResource Text.Secondary}" AutomationProperties.LiveSetting="Polite" />
                             </WrapPanel>
                             <ProgressBar x:Name="UpdateProgress" Minimum="0" Maximum="100" Height="4" Margin="0,0,0,8" Visibility="Collapsed" />
+                            <CheckBox x:Name="AutoCheckUpdatesCheckBox" Content="{loc:Text Update_AutoCheck}" IsChecked="{Binding AutoCheckUpdates}"
+                                      HorizontalAlignment="Left" Margin="0,0,0,8" Visibility="Collapsed" />
                             <!-- Shown only after a failed check, as the way to reach the listing anyway. -->
                             <Button x:Name="StorePageAction" Content="{loc:Text StoreUpdate_OpenStore}" Style="{StaticResource Button.Secondary}"
                                     HorizontalAlignment="Left" Margin="0,0,0,8" Click="OnStoreUpdatePage" Visibility="Collapsed" />
@@ -1306,6 +1308,7 @@
                             <TextBlock Style="{StaticResource About.Heading}" Text="{loc:Text About_PrivacyHeading}" />
                             <TextBlock x:Name="PrivacyLocalText" Style="{StaticResource About.Body}" Text="{loc:Text About_PrivacyLocal}" />
                             <TextBlock x:Name="PrivacyModelText" Style="{StaticResource About.Body}" />
+                            <TextBlock x:Name="PrivacyUpdateText" Style="{StaticResource About.Body}" Visibility="Collapsed" Text="{loc:Text About_PrivacyUpdates}" />
                             <TextBlock x:Name="PrivacyGitHubText" Style="{StaticResource About.Body}" Margin="0" Text="{loc:Text About_PrivacyGitHub}" />
                         </StackPanel>
 
@@ -1319,6 +1322,13 @@
                                         AutomationProperties.HelpText="{loc:Text About_ReportProblemHelp}"
                                         ToolTip="{loc:Text About_ReportProblemHelp}"
                                         Click="OnSupportReport" />
+                                <!-- Logs and the support summary in one ZIP the user saves and attaches; nothing is sent. -->
+                                <Button x:Name="DiagnosticsBundleButton" Content="{loc:Text About_DiagnosticsBundle}" Style="{StaticResource Button.Secondary}"
+                                        MinWidth="140" Margin="0,0,8,8"
+                                        AutomationProperties.Name="{loc:Text About_DiagnosticsBundle}"
+                                        AutomationProperties.HelpText="{loc:Text About_DiagnosticsBundleHelp}"
+                                        ToolTip="{loc:Text About_DiagnosticsBundleHelp}"
+                                        Click="OnSaveDiagnosticsBundle" />
                                 <Button x:Name="StoreRatingButton" Style="{StaticResource Button.Secondary}" Visibility="Collapsed"
                                         MinWidth="140" Margin="0,0,8,8"
                                         Content="{loc:Text StoreRating_Button}"

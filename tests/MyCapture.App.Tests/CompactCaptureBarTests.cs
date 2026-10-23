@@ -67,6 +67,8 @@ public sealed class CompactCaptureBarTests
             Assert.Equal("01:23", clock.Text);
             Geometry recordGlyph = Assert.IsAssignableFrom<Geometry>(indicator.Data);
             Assert.False(indicator.HasAnimatedProperties);
+            // The live dot is a mark, not text: it takes the one recording red the region frame uses.
+            Assert.Equal("Recording.Live", ResourceKey(indicator, SymbolIcon.FillProperty));
             foreach (Button button in new[] { window.PauseButtonForTest, window.PrimaryButtonForTest, window.MoreButtonForTest })
             {
                 Assert.IsType<SymbolIcon>(SurfaceShortcutHintTests.PrimaryContent(button));
@@ -416,4 +418,9 @@ public sealed class CompactCaptureBarTests
 
     private static T Field<T>(object instance, string name) => (T)instance.GetType()
         .GetField(name, BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(instance)!;
+
+    private static string? ResourceKey(DependencyObject element, DependencyProperty property) =>
+        element.ReadLocalValue(property) is { } value && value.GetType().Name == "ResourceReferenceExpression"
+            ? value.GetType().GetProperty("ResourceKey")?.GetValue(value) as string
+            : null;
 }

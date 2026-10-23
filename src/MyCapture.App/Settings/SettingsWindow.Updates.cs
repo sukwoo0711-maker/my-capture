@@ -5,15 +5,50 @@ using Microsoft.Extensions.Logging;
 using MyCapture.App.Store;
 using MyCapture.App.Updates;
 using MyCapture.Core.Platform;
+using MyCapture.Core.Settings;
 
 namespace MyCapture.App.Settings;
 
 /// <summary>
-/// The update tab. MyCapture is distributed only through the Microsoft Store, so every build
-/// observes Store deployment in packaged builds and opens the listing in unpackaged builds.
+/// The update tab observes the shell's shared update operation. Standalone windows retain
+/// the Store service seam so the consent and progress behavior can be exercised in isolation.
 /// </summary>
 internal sealed partial class SettingsWindow
 {
+    internal AppUpdateCoordinator? UpdateCoordinator { get; private set; }
+
+    internal void ConfigureUpdates(AppUpdateCoordinator coordinator)
+    {
+        ArgumentNullException.ThrowIfNull(coordinator);
+        if (UpdateCoordinator is { } previous) previous.Changed -= RefreshUpdates;
+        UpdateCoordinator = coordinator;
+        coordinator.Changed += RefreshUpdates;
+        Closed -= OnUpdatesClosed;
+        Closed += OnUpdatesClosed;
+        InitializeUpdateChannel(coordinator.Channel);
+        // Only builds that check for new versions disclose the daily check.
+        PrivacyUpdateText.Visibility = coordinator.Channel == UpdateChannel.None ? Visibility.Collapsed : Visibility.Visible;
+        RefreshUpdates();
+    }
+
+    private void OnUpdatesClosed(object? sender, EventArgs e)
+    {
+        if (UpdateCoordinator is { } coordinator) coordinator.Changed -= RefreshUpdates;
+        UpdateCoordinator = null;
+    }
+
+    private void RefreshUpdates()
+    {
+        if (!Dispatcher.CheckAccess()) { Dispatcher.BeginInvoke((Action)RefreshUpdates); return; }
+        if (UpdateCoordinator is not { } coordinator || coordinator.Channel == UpdateChannel.None) return;
+        _lastStoreCheck = coordinator.LastCheckUtc;
+        SetStoreUpdateAction(coordinator.HasAvailableUpdate);
+        UpdateAction.IsEnabled = !coordinator.IsBusy;
+        ShowStoreUpdate(coordinator.Snapshot);
+        if (coordinator.StatusText is { } text) UpdateObservedStatus.Text = text;
+        AutomationProperties.SetName(UpdateProgress, UpdateObservedStatus.Text);
+    }
+
     /// <summary>Opens the Store listing. Tests replace it so no process starts.</summary>
     internal StoreUpdateLink StoreLink { get; set; } = new();
     internal IStorePackageUpdateService? StoreUpdates { get; set; }
@@ -40,16 +75,22 @@ internal sealed partial class SettingsWindow
         // The tab is the "About" category (header in XAML); the label carries the version, so
         // name the product without it.
         UpdateVersionLabel.Text = AppIdentity.WindowLabel + " · " + UpdateStrings.Current(CurrentUpdateVersion);
-        if (AppPackage.IsPackaged)
+        InitializeUpdateChannel(AppPackage.IsPackaged ? UpdateChannel.Store : UpdateChannel.None);
+    }
+
+    private void InitializeUpdateChannel(UpdateChannel channel)
+    {
+        bool enabled = channel != UpdateChannel.None;
+        bool packaged = channel == UpdateChannel.Store;
+        AutoCheckUpdatesCheckBox.Visibility = enabled ? Visibility.Visible : Visibility.Collapsed;
+        if (enabled)
         {
-            // The Store owns consent, downloading and deployment.
-            UpdateDescription.Text = UiText.Get("StoreUpdate_ObservedDescription");
+            UpdateDescription.Text = UiText.Get(packaged ? "StoreUpdate_ObservedDescription" : "Update_UnpackagedDescription");
             SetStoreUpdateAction(false);
         }
         else
         {
-            // A development, portable or earlier GitHub install has no update channel of its
-            // own any more. It points to the Store version, which keeps its data separately.
+            // Development output has no release channel and retains its Store listing action.
             UpdateDescription.Text = UiText.Get("StoreUpdate_UnpackagedDescription")
                 + Environment.NewLine + Environment.NewLine + UiText.Get("StoreUpdate_UnpackagedNote");
             UpdateAction.Content = UiText.Get("StoreUpdate_OpenStore");
@@ -57,14 +98,22 @@ internal sealed partial class SettingsWindow
         }
 
         AutomationProperties.SetName(UpdateAction, (string)UpdateAction.Content);
-        // The listing button repeats what Check and Rate already open; it appears only after a
-        // failed check, as the way to reach the Store anyway.
-        StorePageAction.Visibility = Visibility.Collapsed;
-        if (AppPackage.IsPackaged) ShowStoreUpdate(new(StoreUpdatePhase.Idle));
+        StorePageAction.Visibility = enabled && !packaged ? Visibility.Visible : Visibility.Collapsed;
+        if (enabled) ShowStoreUpdate(new(StoreUpdatePhase.Idle));
+        else
+        {
+            UpdateObservedStatus.Text = string.Empty;
+            UpdateProgress.Visibility = Visibility.Collapsed;
+        }
     }
 
     private async void OnUpdateAction(object sender, RoutedEventArgs e)
     {
+        if (UpdateCoordinator is { Channel: not UpdateChannel.None })
+        {
+            await RunUpdateActionAsync();
+            return;
+        }
         if (StoreUpdatePackaged)
         {
             await RunStoreUpdateActionAsync();
@@ -74,14 +123,21 @@ internal sealed partial class SettingsWindow
             SetStatusMessage(UiText.Format("StoreUpdate_OpenFailed", StoreUpdateLink.WebUri));
     }
 
+    internal async Task RunUpdateActionAsync()
+    {
+        if (UpdateCoordinator is not { } coordinator) { await RunStoreUpdateActionAsync(); return; }
+        if (coordinator.IsBusy || coordinator.Channel == UpdateChannel.None) return;
+        SetStatusMessage(string.Empty);
+        if (coordinator.HasAvailableUpdate) await coordinator.InstallAsync(this);
+        else await coordinator.CheckAsync(this);
+    }
+
     internal async Task RunStoreUpdateActionAsync()
     {
         if (_storeUpdateBusy || !StoreUpdatePackaged) return;
         long operation = ++_storeUpdateOperation;
         _storeUpdateBusy = true; UpdateAction.IsEnabled = false;
         SetStatusMessage(string.Empty);
-        bool protectionAcquired = false;
-        bool enabledBeforeInstallation = IsEnabled;
         try
         {
             StoreUpdates ??= new StorePackageUpdateService(this);
@@ -95,14 +151,11 @@ internal sealed partial class SettingsWindow
             }
             else
             {
-                if (!await PrepareStoreUpdate()) { ShowStoreUpdate(new(StoreUpdatePhase.Blocked)); return; }
-                protectionAcquired = true;
-                enabledBeforeInstallation = IsEnabled;
-                IsEnabled = false;
-                ShowStoreUpdate(new(StoreUpdatePhase.AwaitingConsent));
                 _storeUpdateProgressActive = true;
-                StoreUpdatePhase result = await StoreUpdates.InstallAsync(new UpdateProgressObserver(this, operation));
+                StoreUpdatePhase result = await StoreUpdateInstallation.InstallAsync(this, StoreUpdates,
+                    PrepareStoreUpdate, FinishStoreUpdate, new UpdateProgressObserver(this, operation));
                 _storeUpdateProgressActive = false;
+                if (result == StoreUpdatePhase.Blocked) { ShowStoreUpdate(new(result)); return; }
                 _storeUpdateAvailable = false;
                 SetStoreUpdateAction(false);
                 ShowStoreUpdate(new(result));
@@ -119,13 +172,8 @@ internal sealed partial class SettingsWindow
         finally
         {
             _storeUpdateProgressActive = false;
-            try { if (protectionAcquired) FinishStoreUpdate(); }
-            finally
-            {
-                if (protectionAcquired) IsEnabled = enabledBeforeInstallation;
-                _storeUpdateBusy = false; UpdateAction.IsEnabled = true;
-                AutomationProperties.SetName(UpdateAction, (string)UpdateAction.Content);
-            }
+            _storeUpdateBusy = false; UpdateAction.IsEnabled = true;
+            AutomationProperties.SetName(UpdateAction, (string)UpdateAction.Content);
         }
     }
 
@@ -133,7 +181,14 @@ internal sealed partial class SettingsWindow
     {
         UpdateAction.Content = UiText.Get(install ? "StoreUpdate_Install" : "StoreUpdate_Check");
         AutomationProperties.SetName(UpdateAction, (string)UpdateAction.Content);
-        AutomationProperties.SetHelpText(UpdateAction, UiText.Get(install ? "StoreUpdate_InstallHelp" : "StoreUpdate_CheckHelp"));
+        string help = UpdateCoordinator?.Channel switch
+        {
+            UpdateChannel.Portable when install => "Update_OpenReleaseHelp",
+            UpdateChannel.GitHubInstall when install => "Update_InstallHelp",
+            UpdateChannel.GitHubInstall or UpdateChannel.Portable => "Update_CheckHelp",
+            _ => install ? "StoreUpdate_InstallHelp" : "StoreUpdate_CheckHelp",
+        };
+        AutomationProperties.SetHelpText(UpdateAction, UiText.Get(help));
     }
 
     private sealed class UpdateProgressObserver(SettingsWindow owner, long operation) : IProgress<StoreUpdateSnapshot>
@@ -153,7 +208,9 @@ internal sealed partial class SettingsWindow
     private void ShowStoreUpdate(StoreUpdateSnapshot snapshot)
     {
         UpdateObservedStatus.Text = UpdateCheckSummary(snapshot.Phase, _lastStoreCheck);
-        StorePageAction.Visibility = StoreUpdatePackaged && snapshot.Phase == StoreUpdatePhase.Failed
+        bool githubChannel = UpdateCoordinator?.Channel is UpdateChannel.GitHubInstall or UpdateChannel.Portable;
+        bool storeChannel = UpdateCoordinator?.Channel == UpdateChannel.Store || UpdateCoordinator is null && StoreUpdatePackaged;
+        StorePageAction.Visibility = githubChannel || storeChannel && snapshot.Phase == StoreUpdatePhase.Failed
             ? Visibility.Visible : Visibility.Collapsed;
         UpdateProgress.Visibility = snapshot.Phase is StoreUpdatePhase.Checking or StoreUpdatePhase.AwaitingConsent
             or StoreUpdatePhase.Downloading or StoreUpdatePhase.Installing ? Visibility.Visible : Visibility.Collapsed;
