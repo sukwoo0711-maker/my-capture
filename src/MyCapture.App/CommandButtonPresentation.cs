@@ -201,8 +201,7 @@ internal static class CommandButtonPresentation
             minimum = 0;
             // Growth starts from the width the resting button already has, so the reveal
             // widens it from the first frame. Captions that fit there never move anything.
-            double rest = Math.Max(0, button.MinWidth - button.Padding.Left - button.Padding.Right
-                - button.BorderThickness.Left - button.BorderThickness.Right);
+            double rest = RestingCaptionWidth(button);
             if (caption > rest) maximum = rest + (caption - rest) * ShortcutRevealMotion.WidthProgress(hint);
         }
         if (face.MinWidth.Equals(minimum) && hint.MaxWidth.Equals(maximum)) return false;
@@ -210,6 +209,15 @@ internal static class CommandButtonPresentation
         hint.MaxWidth = maximum;
         return true;
     }
+
+    private static double RestingCaptionWidth(ButtonBase button) => Math.Max(0, button.MinWidth
+        - button.Padding.Left - button.Padding.Right - button.BorderThickness.Left - button.BorderThickness.Right);
+
+    /// <summary>Whether this caption's command widens while the caption shows.</summary>
+    internal static bool Widens(TextBlock hint) =>
+        hint.Parent is Grid { Name: "CommandButtonFace", Children.Count: > 1 } face && ReferenceEquals(face.Children[1], hint)
+        && face.Parent is ButtonBase button && IsIconOnly(button)
+        && (double)face.GetValue(CaptionWidthProperty) > RestingCaptionWidth(button);
 
     private static bool RefitCaption(ButtonBase button)
     {
@@ -258,6 +266,13 @@ internal static class CommandButtonPresentation
         "KeepLabel", typeof(bool), typeof(CommandButtonPresentation), new PropertyMetadata(false));
 
     internal static void KeepLabel(ButtonBase button) => button.SetValue(KeepLabelProperty, true);
+
+    // When a command bar runs short, ordered commands give up their names one at a time,
+    // lowest first. Unordered commands (0) keep the group rule: first group, then second.
+    internal static readonly DependencyProperty CollapseOrderProperty = DependencyProperty.RegisterAttached(
+        "CollapseOrder", typeof(int), typeof(CommandButtonPresentation), new PropertyMetadata(0));
+
+    internal static void CollapseOrder(ButtonBase button, int order) => button.SetValue(CollapseOrderProperty, order);
 
     internal static readonly DependencyProperty AlwaysIconProperty = DependencyProperty.RegisterAttached(
         "AlwaysIcon", typeof(bool), typeof(CommandButtonPresentation), new PropertyMetadata(false));

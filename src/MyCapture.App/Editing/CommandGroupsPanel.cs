@@ -1,10 +1,14 @@
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
+using System.Windows.Media;
 
 namespace MyCapture.App.Editing;
 
-/// <summary>Fits two command groups by hiding secondary names before falling back to two left-aligned rows.</summary>
+/// <summary>
+/// Fits two command groups by hiding names, one ordered command at a time and then group by
+/// group, before falling back to two left-aligned rows.
+/// </summary>
 internal sealed class CommandGroupsPanel : Panel
 {
     internal const double GroupGap = 8;
@@ -19,6 +23,16 @@ internal sealed class CommandGroupsPanel : Panel
         Compact(InternalChildren[0], false);
         Compact(InternalChildren[1], false);
         MeasureGroups();
+        if (RevealedWidth > availableSize.Width)
+        {
+            // A bar that is only slightly short gives up only as many names as it must.
+            foreach (ButtonBase button in OrderedCommands())
+            {
+                if (!Collapse(button)) continue;
+                MeasureGroups();
+                if (RevealedWidth <= availableSize.Width) break;
+            }
+        }
         if (RevealedWidth > availableSize.Width)
         {
             Compact(InternalChildren[0], true);
@@ -56,6 +70,42 @@ internal sealed class CommandGroupsPanel : Panel
     {
         foreach (UIElement child in InternalChildren)
             child.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+    }
+
+    private IEnumerable<ButtonBase> OrderedCommands()
+    {
+        var commands = new List<ButtonBase>();
+        Collect(InternalChildren[0]);
+        Collect(InternalChildren[1]);
+        // OrderBy is stable, so commands sharing an order keep their position in the bar.
+        return commands.OrderBy(button => (int)button.GetValue(CommandButtonPresentation.CollapseOrderProperty));
+
+        void Collect(UIElement element)
+        {
+            switch (element)
+            {
+                case ButtonBase button when (int)button.GetValue(CommandButtonPresentation.CollapseOrderProperty) > 0:
+                    commands.Add(button);
+                    break;
+                case Panel panel:
+                    foreach (UIElement child in panel.Children) Collect(child);
+                    break;
+                case Decorator { Child: { } child }:
+                    Collect(child);
+                    break;
+            }
+        }
+    }
+
+    private bool Collapse(ButtonBase button)
+    {
+        if (!CommandButtonPresentation.CompactLabel(button, true)) return false;
+        // The groups measure again inside this pass, so every ancestor up to them must too.
+        for (DependencyObject? parent = VisualTreeHelper.GetParent(button);
+             parent is UIElement element && !ReferenceEquals(parent, this);
+             parent = VisualTreeHelper.GetParent(parent))
+            element.InvalidateMeasure();
+        return true;
     }
 
     private static bool Compact(UIElement element, bool compact)
