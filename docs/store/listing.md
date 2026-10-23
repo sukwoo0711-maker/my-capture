@@ -18,9 +18,9 @@ Partner Center의 Store 목록과 제출 옵션에 붙여 넣을 문구입니다
 - **저작권**: `Copyright (c) 2026 MyCapture`
 - **범주**: 생산성 또는 사진 및 비디오
 - **가격**: 무료
-- **개인정보처리방침 URL**: `https://github.com/sukwoo0711-maker/mycapture-support/blob/main/PRIVACY.md`
-- **지원 연락처**: `https://github.com/sukwoo0711-maker/mycapture-support/issues`
-- **웹 사이트**: `https://sukwoo0711-maker.github.io/my-capture/`
+- **개인정보처리방침 URL**: `https://mimiloaf.com/mycapture/privacy/` (2026-10-24 제출 17부터. 원문은 지원 저장소의 `PRIVACY.md`이고, 사이트 페이지는 그 main 판에서 만듭니다.)
+- **지원 연락처**: `support@mimiloaf.com` (문의 창구 안내는 지원 저장소 README에 있습니다)
+- **웹 사이트**: `https://mimiloaf.com/mycapture/` (2026-10-24 제출 18부터. 그 전에는 `https://mimiloaf.com`)
 - **앱 타일 아이콘(선택)**: 패키징 결과물 `StoreListingIcon-300.png`
 - **스크린샷**: `build\store-shots\compose.py`로 만드는 언어별 9장(2560×1440)입니다. 그래파이트 바탕에 장마다 짧은 제목 한 줄과 실제 창을 크게 넣습니다. 순서는 엑셀 레지스터 표 핀과 코드, `#define` 코드 핀 원문 붙여넣기, 뒤 창 클릭 허용, 캡처 후 F3으로 핀, 이미지 핀 글자 복사, 핀 숨기기·다시 열기, 라이브러리 검색, 공유 전 주석·가리기, 'Windows 캡처 도구에 더해지는 것' 비교 카드입니다. 제목은 `build\store-shots\scenes.json`에 있고, 언어별 스크린샷 캡션을 같은 순서로 넣습니다. 결과물은 `artifacts/store/screenshots/ux461/{ko,en}`입니다. 2026-10-23 편집기 점검(#132) 화면으로 다시 렌더해 8번 편집기만 바뀌었고, 나머지 여덟 장은 이전 판(`artifacts/store/screenshots/ux453/{ko,en}`)과 같습니다. 그 이전 판은 2026-10-22 UX 개선(#119) 화면으로 7번 라이브러리와 8번 편집기를 바꾼 것이고, 나머지 일곱 장은 4.5.0 핀 흐름 판(`artifacts/store/screenshots/4.5.0-pin/{ko,en}`)과 같습니다. 2026-10-23 현재 Partner Center에는 둘 다 올리지 않았습니다. 4.4.0 제출(제출 13)에 올린 이전 9장은 `artifacts/store/screenshots/4.4.0/{ko,en}`에 그대로 있습니다.
 - **트레일러**: 새 트레일러가 나올 때까지 기존 언어별 30초 1920×1080 60fps MP4(약 9MB)를 사용합니다. 두 영상은 장면, 키 입력, 음악이 같고 앱 화면과 예시 문의 페이지의 언어가 다릅니다. 4.4.0부터 썸네일은 어두운 코드 편집기 위에 밝은 핀이 뜬 22.333초 프레임입니다(4K 원본을 1.10배로 키워 1920×1080으로 자름, 가운데 재생 단추 자리에 핵심 내용 없음). 파일은 `artifacts/promo-2026-10-18/v2/MyCapture-trailer-thumbnail-v3-1920x1080.png`와 `v2-en/MyCapture-trailer-thumbnail-en-v3-1920x1080.png`이고, 고른 근거는 같은 폴더의 `thumb-440/`에 있습니다. 이전 썸네일(19.02초, 밝은 양식 위 검은 가림막)은 Store 재생 단추에 가려 판독되지 않았습니다. 자막 파일은 사용하지 않습니다. 핀 중심 30초 구성(Ctrl+C·F3 사양 표 핀 → 보면서 코딩 → 구문 핀 원문 붙여넣기 → 클릭 허용·Shift+F3 숨기기 → 캡처 후 F3)은 `docs/store/trailer-pin-storyboard.md`에 있습니다.
