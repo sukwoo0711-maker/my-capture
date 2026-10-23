@@ -68,7 +68,12 @@ internal static class HotfixUxSelfTest
 
     internal static int Run(string output)
     {
-        try { output = ValidatedFilePaths.CreateDirectory(output); }
+        string reportPath;
+        try
+        {
+            output = ValidatedFilePaths.CreateDirectory(output);
+            reportPath = ValidatedFilePaths.FileWithinRoot(output, "hotfix-ux-report.txt", ".txt");
+        }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
         {
             Trace.TraceError("{0}: {1}", UiText.Get("Dialog.Storage"), error);
@@ -88,10 +93,18 @@ internal static class HotfixUxSelfTest
         Func<bool> oldCanShow = ShortcutHelpWindow.CanShowHelp;
         int result = 1;
         var originalCursor = WindowStyleFacade.GetCursorPosition();
+        // The runner stops a run that hangs before the final report is written. Each check
+        // leaves the report so far on disk, without a RESULT line, so the stop point is known.
+        void SaveProgress()
+        {
+            try { File.WriteAllText(reportPath, report.ToString(), new UTF8Encoding(false)); }
+            catch (Exception error) when (error is IOException or UnauthorizedAccessException) { }
+        }
         void Check(string label, bool passed)
         {
             report.AppendLine($"{(passed ? "PASS" : "FAIL")}: {label}");
             Console.WriteLine($"{(passed ? "PASS" : "FAIL")}: {label}");
+            SaveProgress();
             if (!passed) throw new InvalidOperationException(label);
         }
         void RecordForeground(string target, bool acquired, TimeSpan elapsed)
@@ -604,8 +617,7 @@ internal static class HotfixUxSelfTest
             report.AppendLine(ResultLine(result == 0, warnings.Count));
             try
             {
-                File.WriteAllText(ValidatedFilePaths.FileWithinRoot(output, "hotfix-ux-report.txt", ".txt"),
-                    report.ToString(), new UTF8Encoding(false));
+                File.WriteAllText(reportPath, report.ToString(), new UTF8Encoding(false));
             }
             catch (Exception error) when (error is IOException or UnauthorizedAccessException)
             {
