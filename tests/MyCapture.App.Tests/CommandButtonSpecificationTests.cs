@@ -171,7 +171,6 @@ public sealed class CommandButtonSpecificationTests
                     Grid face = Assert.IsType<Grid>(button.Content);
                     Assert.Equal("CommandButtonFace", face.Name);
                     Assert.Equal(2, face.RowDefinitions.Count);
-                    bool hasHint = !ReferenceEquals(button, withoutHint);
                     Assert.Equal(new GridLength(14), face.RowDefinitions[1].Height);
                     Assert.Equal(CommandButtonPresentation.HintHeight, face.RowDefinitions[1].ActualHeight, 2);
                     var label = Assert.IsType<TextBlock>(face.Children[0]);
@@ -180,21 +179,22 @@ public sealed class CommandButtonSpecificationTests
                         - button.BorderThickness.Top - button.BorderThickness.Bottom + 0.5,
                         $"Command content {face.ActualHeight:0.##} exceeds the {height}-DIP button's inner height.");
                     double top = label.TranslatePoint(default, row).Y;
+                    if (labelTop is { } expectedTop) Assert.Equal(expectedTop, top, 2);
+                    else labelTop = top;
                     if (!show)
                     {
-                        if (labelTop is { } expectedTop) Assert.Equal(expectedTop, top, 2);
-                        else labelTop = top;
                         if (restingTops.TryGetValue(button, out double resting)) Assert.Equal(resting, top, 2);
                         else restingTops.Add(button, top);
                     }
-                    else if (hasHint) Assert.True(top < restingTops[button] - 5, "The name moves up inside the fixed-height button.");
-                    else Assert.Equal(restingTops[button], top, 2);
-                    if (ReferenceEquals(button, withoutHint)) Assert.Single(face.Children);
-                    else
+                    else Assert.True(top < restingTops[button] - 5, "Every name moves up inside the fixed-height button.");
+                    Assert.Equal(2, face.Children.Count);
+                    TextBlock hint = Assert.IsAssignableFrom<TextBlock>(face.Children[1]);
+                    Assert.Equal(12, hint.FontSize);
+                    ShortcutMotionTestScope.AssertState(hint, show);
+                    if (ReferenceEquals(button, withoutHint))
                     {
-                        TextBlock hint = Assert.IsAssignableFrom<TextBlock>(face.Children[1]);
-                        Assert.Equal(12, hint.FontSize);
-                        ShortcutMotionTestScope.AssertState(hint, show);
+                        Assert.Empty(hint.Text);
+                        Assert.Equal(0, face.MinWidth);
                     }
                 }
             }
