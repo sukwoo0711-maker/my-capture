@@ -30,8 +30,9 @@ public sealed class OcrRequest
     public BitmapSource? Bitmap { get; }
 
     /// <summary>
-    /// When true, a weak upright result also probes 90/180/270° orientations. Automatic
-    /// background indexing turns this off so text-free captures do not pay eight OCR passes.
+    /// For Windows OCR, a weak upright result also probes 90/180/270° orientations when true.
+    /// Background indexing disables that search to bound work on text-free images. PP-OCR's
+    /// per-line angle correction is independent of this flag; false does not mean upright input.
     /// </summary>
     public bool SearchRotatedOrientations { get; init; } = true;
 

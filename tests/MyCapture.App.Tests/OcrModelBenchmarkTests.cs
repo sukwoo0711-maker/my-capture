@@ -29,7 +29,7 @@ namespace MyCapture.App.Tests;
 /// download method, or existing test cleanup is used. All generated evidence stays in the
 /// explicitly selected output directory; this test deliberately retains it for inspection.
 /// </summary>
-public sealed class OcrModelBenchmarkTests
+public sealed partial class OcrModelBenchmarkTests
 {
     private const string DefaultModels = @"C:\GitRepositories\my-capture-ux461-ocrbench\artifacts\ocr-bench\models";
     private const int Repetitions = 3;
@@ -51,13 +51,20 @@ public sealed class OcrModelBenchmarkTests
         string models = Path.GetFullPath(Environment.GetEnvironmentVariable("MYCAPTURE_OCR_BENCH_MODELS")
             ?? DefaultModels);
         Directory.CreateDirectory(output);
-        StaTestHost.Run(() => Run(output, models));
+        StaTestHost.Run(() =>
+        {
+            if (Environment.GetEnvironmentVariable("MYCAPTURE_OCR_BENCH_MODE") == "detector")
+                RunDetector(output, models);
+            else
+                Run(output, models);
+        });
     }
 
     private static void Run(string output, string models)
     {
         VerifyMetricExamples();
-        List<Sample> corpus = CreateCorpus(output);
+        List<Sample> corpus = Environment.GetEnvironmentVariable("MYCAPTURE_OCR_BENCH_CORPUS") == "validation2"
+            ? CreateValidationCorpus(output) : CreateCorpus(output);
         Assert.True(corpus.Count >= 48);
         var report = new BenchmarkReport
         {
@@ -115,7 +122,7 @@ public sealed class OcrModelBenchmarkTests
         PipelineReport? selected = report.Pipelines
             .Where(p => (p.Name == "A-cur" || p.Name == "A-v6") && p.Status == "completed")
             .OrderBy(p => p.Overall!.Cer).ThenBy(p => p.Overall!.WarmMedianMs).FirstOrDefault();
-        if (selected is not null)
+        if (selected is not null && corpus.Any(s => s.Truth.EnhancedSubset))
         {
             report.EnhancedDetector = selected.Name;
             string detector = selected.Name == "A-v6" ? v6 : server;
@@ -126,6 +133,11 @@ public sealed class OcrModelBenchmarkTests
                 Path.Combine(current, "realesrgan_x4.onnx"), Path.Combine(current, "real_esrgan_x4plus.data"));
             ExecuteNeural("E-v3", difficult, detector, defaults, OcrQuality.Enhanced,
                 Path.Combine(candidate, "real_esrgan_general_x4v3.onnx"), Path.Combine(candidate, "real_esrgan_general_x4v3.data"));
+        }
+        else if (selected is not null)
+        {
+            foreach (string name in new[] { "E-none", "E-cur", "E-v3" })
+                report.Pipelines.Add(new PipelineReport { Name = name, Status = "skipped", Note = "This corpus has no Enhanced subset." });
         }
         else
         {
@@ -362,6 +374,16 @@ public sealed class OcrModelBenchmarkTests
             _sr?.Dispose();
             _offlineHttp?.Dispose();
         }
+
+        public object Diagnose(BitmapSource bitmap)
+        {
+            Assert.Equal(OcrQuality.Accurate, _quality);
+            OcrRequest request = Request(bitmap, _quality);
+            BitmapSource prepared = request.EnhanceContrast ? ImageCodec.StretchContrastForRecognition(bitmap) : bitmap;
+            using SKBitmap decoded = SKBitmap.Decode(ImageCodec.EncodePng(prepared))
+                ?? throw new InvalidOperationException("Diagnostic bitmap could not be decoded.");
+            return DiagnoseBeforeFilter(_engine, decoded, _options);
+        }
     }
 
     private sealed class NoNetworkHandler : HttpMessageHandler
@@ -377,11 +399,16 @@ public sealed class OcrModelBenchmarkTests
         return OcrRequestFactory.FromBitmap(bitmap, settings);
     }
 
-    private static RapidOcrOptions ProductOverrides(RapidOcrOptions options) => options with
+    private static RapidOcrOptions ProductOverrides(RapidOcrOptions options)
     {
-        ReturnWordBox = true, DoAngle = true,
-        RecMaxDegreeOfParallelism = Math.Clamp(Environment.ProcessorCount, 1, 8),
-    };
+        RapidOcrOptions product = NeuralOcrEngine.CreateOptions();
+        return options with
+        {
+            ReturnWordBox = product.ReturnWordBox, DoAngle = product.DoAngle,
+            ClsThresh = product.ClsThresh,
+            RecMaxDegreeOfParallelism = product.RecMaxDegreeOfParallelism,
+        };
+    }
 
     private static RapidOcrOptions? GetV6Options() =>
         (typeof(RapidOcrOptions).GetProperty("PPOCRv6", BindingFlags.Public | BindingFlags.Static)?.GetValue(null)
@@ -554,6 +581,7 @@ public sealed class OcrModelBenchmarkTests
     {
         string expected = NormalizeLines(truth), actual = NormalizeLines(output);
         string flatExpected = Regex.Replace(expected, @"\s+", " "), flatActual = Regex.Replace(actual, @"\s+", " ");
+        string compactExpected = Regex.Replace(expected, @"\s+", ""), compactActual = Regex.Replace(actual, @"\s+", "");
         string[] expectedLines = expected.Split('\n', StringSplitOptions.RemoveEmptyEntries);
         string[] actualLines = actual.Split('\n', StringSplitOptions.RemoveEmptyEntries);
         int[] previous = new int[actualLines.Length + 1], current = new int[actualLines.Length + 1];
@@ -568,6 +596,7 @@ public sealed class OcrModelBenchmarkTests
         {
             Edits = Levenshtein(expected, actual), TruthCharacters = expected.Length,
             LineInsensitiveEdits = Levenshtein(flatExpected, flatActual), LineInsensitiveTruthCharacters = flatExpected.Length,
+            SpaceInsensitiveEdits = Levenshtein(compactExpected, compactActual), SpaceInsensitiveTruthCharacters = compactExpected.Length,
             MatchedLines = previous[actualLines.Length], TruthLines = expectedLines.Length, OutputLines = actualLines.Length,
         };
     }
@@ -607,6 +636,7 @@ public sealed class OcrModelBenchmarkTests
         {
             Images = images.Count, Edits = edits, TruthCharacters = chars, Cer = edits / (double)Math.Max(1, chars),
             LineInsensitiveCer = flatEdits / (double)Math.Max(1, flatChars),
+            SpaceInsensitiveCer = images.Sum(i => i.Metrics.SpaceInsensitiveEdits) / (double)Math.Max(1, images.Sum(i => i.Metrics.SpaceInsensitiveTruthCharacters)),
             ExactLineMatchRate = matches / (double)Math.Max(1, lines),
             ExtraLinePenalizedMatchRate = matches / (double)Math.Max(1, images.Sum(i => Math.Max(i.Metrics.TruthLines, i.Metrics.OutputLines))),
             WarmMedianMs = Percentile(times, 0.5), WarmP95Ms = Percentile(times, 0.95),
@@ -805,6 +835,8 @@ public sealed class OcrModelBenchmarkTests
         public double Cer => Edits / (double)Math.Max(1, TruthCharacters);
         public int LineInsensitiveEdits { get; init; }
         public int LineInsensitiveTruthCharacters { get; init; }
+        public int SpaceInsensitiveEdits { get; init; }
+        public int SpaceInsensitiveTruthCharacters { get; init; }
         public int MatchedLines { get; init; }
         public int TruthLines { get; init; }
         public int OutputLines { get; init; }
@@ -816,6 +848,7 @@ public sealed class OcrModelBenchmarkTests
         public int TruthCharacters { get; init; }
         public double Cer { get; init; }
         public double LineInsensitiveCer { get; init; }
+        public double SpaceInsensitiveCer { get; init; }
         public double ExactLineMatchRate { get; init; }
         public double ExtraLinePenalizedMatchRate { get; init; }
         public double WarmMedianMs { get; init; }
