@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Win32;
 using MyCapture.App.Threading;
 using MyCapture.Core.Annotations;
+using MyCapture.Core.Capture;
 using MyCapture.Core.Queue;
 using MyCapture.Core.Settings;
 using MyCapture.Core.Storage;
@@ -36,7 +37,7 @@ internal sealed class CaptureCommitService
     private readonly Func<AppSettings> _settings;
     private readonly Func<AppPaths> _paths;
     private readonly ILogger<CaptureCommitService> _log;
-    private readonly Func<BitmapSource, string?, Task<bool>> _copyImageAsync;
+    private readonly Func<BitmapSource, string?, CaptureProvenance?, Task<CaptureProvenance>?, Task<bool>> _copyImageAsync;
 
     internal CaptureCommitService(
         CapturePersistenceService persistence,
@@ -49,7 +50,9 @@ internal sealed class CaptureCommitService
         _settings = settings ?? throw new ArgumentNullException(nameof(settings));
         _paths = paths ?? throw new ArgumentNullException(nameof(paths));
         _log = log ?? throw new ArgumentNullException(nameof(log));
-        _copyImageAsync = copyImageAsync ?? ClipboardImageService.CopyImageAsync;
+        _copyImageAsync = copyImageAsync is null
+            ? (image, url, provenance, pending) => ClipboardImageService.CopyImageWithProvenanceAsync(image, url, provenance, pendingProvenance: pending)
+            : (image, url, _, _) => copyImageAsync(image, url);
     }
 
     /// <summary>
@@ -91,14 +94,15 @@ internal sealed class CaptureCommitService
     /// and later editor actions.
     /// </summary>
     internal async Task<bool> CopyCapturedRegionAsync(BitmapSource capturedBitmap, string? sourceWindowTitle = null,
-        bool? showSourceWindowTitle = null, string? sourcePageUrl = null)
+        bool? showSourceWindowTitle = null, string? sourcePageUrl = null, CaptureProvenance? provenance = null,
+        Task<CaptureProvenance>? pendingProvenance = null)
     {
         ArgumentNullException.ThrowIfNull(capturedBitmap);
 
         try
         {
             BitmapSource result = await RenderCapturedImageAsync(capturedBitmap, sourceWindowTitle, showSourceWindowTitle);
-            bool copied = await _copyImageAsync(result, sourcePageUrl);
+            bool copied = await _copyImageAsync(result, sourcePageUrl, provenance, pendingProvenance);
             if (!copied)
             {
                 _log.LogWarning("Automatic captured-region clipboard copy failed");
@@ -204,7 +208,7 @@ internal sealed class CaptureCommitService
                 await PersistFinalIfAvailableAsync(
                     record, result.Action, flattened, snapshot, result.ImageAssetBitmaps, editSession, createRecordAsync,
                     replaceOriginal ? result.SelectedBitmap : null);
-                return await CopyEditedImageAsync(flattened, "Save As", exportRecord?.SourcePageUrl);
+                return await CopyEditedImageAsync(flattened, "Save As", exportRecord);
 
             case EditorCommitAction.QuickSave:
                 record = await PersistFinalIfAvailableAsync(
@@ -216,7 +220,7 @@ internal sealed class CaptureCommitService
                     return false;
                 }
 
-                bool quickSaveCopied = await CopyEditedImageAsync(flattened, "Quick save", (record ?? exportRecord)?.SourcePageUrl);
+                bool quickSaveCopied = await CopyEditedImageAsync(flattened, "Quick save", record ?? exportRecord);
 
                 // Queue persistence is already durable, but Quick Save is an explicit export
                 // request. Keep the editor open when that request fails so the user sees the
@@ -227,7 +231,7 @@ internal sealed class CaptureCommitService
                 // Copy is the editor's secondary action: the edited pixels go to the clipboard
                 // and nothing else changes. The library keeps its current version until the
                 // user finishes with Done (or saves a file), and the editor stays open.
-                bool clipboardCopied = await _copyImageAsync(flattened, exportRecord?.SourcePageUrl);
+                bool clipboardCopied = await _copyImageAsync(flattened, exportRecord?.SourcePageUrl, CaptureProvenance.FromRecord(exportRecord), null);
                 if (!clipboardCopied)
                 {
                     _log.LogWarning("Explicit clipboard copy of the edited image failed");
@@ -257,10 +261,10 @@ internal sealed class CaptureCommitService
                 {
                     // Refused (rethrown here, without a copy) or no record to save into.
                     await persisting;
-                    return await CopyEditedImageAsync(flattened, "Done", exportRecord?.SourcePageUrl);
+                    return await CopyEditedImageAsync(flattened, "Done", exportRecord);
                 }
 
-                Task<bool> copying = CopyEditedImageAsync(flattened, "Done", exportRecord?.SourcePageUrl);
+                Task<bool> copying = CopyEditedImageAsync(flattened, "Done", exportRecord);
                 try
                 {
                     if (await copying && !persisting.IsFaulted && !persisting.IsCanceled) result.CopiedToClipboard?.Invoke();
@@ -274,9 +278,9 @@ internal sealed class CaptureCommitService
         }
     }
 
-    private async Task<bool> CopyEditedImageAsync(BitmapSource flattened, string operation, string? sourcePageUrl = null)
+    private async Task<bool> CopyEditedImageAsync(BitmapSource flattened, string operation, CaptureRecord? source = null)
     {
-        bool copied = await _copyImageAsync(flattened, sourcePageUrl);
+        bool copied = await _copyImageAsync(flattened, source?.SourcePageUrl, CaptureProvenance.FromRecord(source), null);
         if (!copied)
         {
             _log.LogWarning(

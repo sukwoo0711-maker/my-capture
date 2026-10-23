@@ -15,19 +15,32 @@ namespace MyCapture.Core.Annotations;
 /// </remarks>
 public sealed class PenAnnotation : AnnotationItem
 {
-    private List<PointD> _points = [];
+    private PenPointCollection _points = [];
     private ColorRgba _stroke = ColorRgba.FromRgb(0xEF, 0x44, 0x44);
     private double _strokeThickness = 3;
 
-    public List<PointD> Points
+    public PenAnnotation() => _points.Changed += OnPointsChanged;
+
+    [JsonIgnore]
+    public long PointsVersion { get; private set; }
+
+    public PenPointCollection Points
     {
         get => _points;
         set
         {
+            _points.Changed -= OnPointsChanged;
             _points = value ?? [];
-            RaisePropertyChanged();
-            RaisePropertyChanged(nameof(Bounds));
+            _points.Changed += OnPointsChanged;
+            OnPointsChanged();
         }
+    }
+
+    private void OnPointsChanged()
+    {
+        PointsVersion++;
+        RaisePropertyChanged(nameof(Points));
+        RaisePropertyChanged(nameof(Bounds));
     }
 
     public ColorRgba Stroke
@@ -55,20 +68,14 @@ public sealed class PenAnnotation : AnnotationItem
     public override string DisplayName => IsHighlighter ? UiText.Get("Text_425C77DFA926") : UiText.Get("Text_E414AD855B8D");
 
     [JsonIgnore]
-    public override RectD Bounds => GeometryMath.BoundsOf(_points);
+    public override RectD Bounds => GeometryMath.BoundsOfSpan(_points.AsSpan());
 
     [JsonIgnore]
     public override bool SupportsResize => false;
 
     public override void Translate(double dx, double dy)
     {
-        for (int i = 0; i < _points.Count; i++)
-        {
-            _points[i] = _points[i].Offset(dx, dy);
-        }
-
-        RaisePropertyChanged(nameof(Points));
-        RaisePropertyChanged(nameof(Bounds));
+        _points.Transform(p => p.Offset(dx, dy));
     }
 
     public override void SetBounds(RectD bounds)
@@ -79,21 +86,14 @@ public sealed class PenAnnotation : AnnotationItem
         RectD from = Bounds;
         RectD to = bounds.Normalized();
 
-        for (int i = 0; i < _points.Count; i++)
-        {
-            PointD p = _points[i];
-            _points[i] = new PointD(
+        _points.Transform(p => new PointD(
                 MapRange(p.X, from.Left, from.Width, to.Left, to.Width),
-                MapRange(p.Y, from.Top, from.Height, to.Top, to.Height));
-        }
-
-        RaisePropertyChanged(nameof(Points));
-        RaisePropertyChanged(nameof(Bounds));
+                MapRange(p.Y, from.Top, from.Height, to.Top, to.Height)));
     }
 
     public override double DistanceTo(PointD point)
     {
-        double d = GeometryMath.DistanceToPolyline(point, _points);
+        double d = GeometryMath.DistanceToPolylineSpan(point, _points.AsSpan());
         double band = Math.Max(StrokeThickness / 2.0, 4.0);
         return Math.Max(0, d - band);
     }

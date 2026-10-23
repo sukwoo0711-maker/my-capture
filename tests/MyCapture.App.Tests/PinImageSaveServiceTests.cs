@@ -286,7 +286,8 @@ public sealed class PinImageSaveServiceTests
             persistence,
             () => settings,
             () => paths,
-            NullLogger<CaptureCommitService>.Instance);
+            NullLogger<CaptureCommitService>.Instance,
+            copyImageAsync: static (_, _) => Task.FromResult(true));
         PinImageSaveService pin = CreateService(temp.Path);
         string pinPath = Path.Combine(temp.Path, "pin.png");
         string editorPath = Path.Combine(temp.Path, "editor.png");

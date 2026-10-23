@@ -1,7 +1,6 @@
 using System.IO;
 using System.Windows.Media.Imaging;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Logging.Abstractions;
 using MyCapture.Platform.Imaging;
 using RapidOcrNet;
 using SkiaSharp;
@@ -9,35 +8,26 @@ using SkiaSharp;
 namespace MyCapture.Ocr;
 
 /// <summary>
-/// PP-OCRv5 receipt recognizer. Detection uses the RapidAI server detector; recognition
-/// uses the Korean mobile weights, which also cover digits and Latin print common on
-/// Korean receipts.
+/// PP-OCRv5 text recognizer for captures and imported images. Detection uses the RapidAI
+/// server detector; the Korean mobile recognizer also covers digits and Latin text.
 /// </summary>
 internal sealed class NeuralOcrEngine : IDisposable
 {
     private readonly OcrModelStore _store;
     private readonly ILogger _log;
-    private readonly SuperResolutionEngine _superResolution;
+    private readonly OnnxRuntimeInitialization _runtime;
     private readonly object _sync = new();
     private RapidOcr? _engine;
     private bool _initFailed;
 
-    internal NeuralOcrEngine(OcrModelStore store, ILogger<NeuralOcrEngine> log)
-        : this(
-            store,
-            new SuperResolutionEngine(store, NullLogger<SuperResolutionEngine>.Instance),
-            log)
-    {
-    }
-
     internal NeuralOcrEngine(
         OcrModelStore store,
-        SuperResolutionEngine superResolution,
-        ILogger<NeuralOcrEngine> log)
+        ILogger<NeuralOcrEngine> log,
+        OnnxRuntimeInitialization? runtime = null)
     {
         _store = store ?? throw new ArgumentNullException(nameof(store));
-        _superResolution = superResolution ?? throw new ArgumentNullException(nameof(superResolution));
         _log = log ?? throw new ArgumentNullException(nameof(log));
+        _runtime = runtime ?? OnnxRuntimeInitialization.Shared;
         ModelVerificationTask = _store.PreVerifyInstalledModelsAsync();
     }
 
@@ -67,11 +57,6 @@ internal sealed class NeuralOcrEngine : IDisposable
             return OcrResult.Unavailable(UiText.Get("Text_D6580A6EEFB2"));
         }
 
-        if (request.UseSuperResolution)
-        {
-            _ = await _store.EnsureSuperResolutionAsync(cancellationToken).ConfigureAwait(false);
-        }
-
         // ONNX init + detect must not run on the WPF dispatcher. A large receipt otherwise
         // freezes the shell long enough to look like a hang or failed launch.
         return await Task.Run(() => RecognizeOnWorker(request, cancellationToken), cancellationToken)
@@ -91,37 +76,7 @@ internal sealed class NeuralOcrEngine : IDisposable
             return OcrResult.Failed(UiText.Get("Text_475D185DC33B"), TimeSpan.Zero);
         }
 
-        double scale = 1.0;
-        if (request.LocalCorrection)
-        {
-            source = ImageCodec.CorrectImageForRecognition(source);
-            if (request.UseSuperResolution && _superResolution.IsReady)
-            {
-                int srLongEdge = Math.Max(source.PixelWidth, source.PixelHeight);
-                if (srLongEdge <= SuperResolutionEngine.MaxLongEdge)
-                {
-                    BitmapSource? upscaled = _superResolution.Upscale(source);
-                    if (upscaled is not null)
-                    {
-                        source = upscaled;
-                        scale = SuperResolutionEngine.Scale;
-                    }
-                }
-            }
-
-            if (scale == 1.0 && request.UpscaleFactor > 1.0)
-            {
-                int maxDimension = 4096;
-                int longEdge = Math.Max(source.PixelWidth, source.PixelHeight);
-                double cap = (double)maxDimension / Math.Max(1, longEdge);
-                scale = cap < 1.0 ? 1.0 : Math.Min(request.UpscaleFactor, cap);
-                if (scale > 1.0)
-                {
-                    source = ImageCodec.UpscaleForRecognition(source, scale);
-                }
-            }
-        }
-        else if (request.EnhanceContrast)
+        if (request.EnhanceContrast)
         {
             source = ImageCodec.StretchContrastForRecognition(source);
         }
@@ -138,16 +93,7 @@ internal sealed class NeuralOcrEngine : IDisposable
             lock (_sync)
             {
                 RapidOcr engine = _engine ?? throw new InvalidOperationException("PP-OCR session was not initialized.");
-                // Recognition dominates receipts (many short lines); serial recognition was
-                // the default and left every core but one idle. Angle classification stays
-                // on because rotated phone photos are the common case here.
-                var options = RapidOcrOptions.Default with
-                {
-                    ReturnWordBox = true,
-                    DoAngle = true,
-                    RecMaxDegreeOfParallelism = Math.Clamp(Environment.ProcessorCount, 1, 8),
-                };
-                return ToResult(engine.Detect(bitmap, options, cancellationToken), scale);
+                return ToResult(engine.Detect(bitmap, CreateOptions(), cancellationToken));
             }
         }
         catch (OperationCanceledException)
@@ -160,6 +106,18 @@ internal sealed class NeuralOcrEngine : IDisposable
             return OcrResult.Failed(UiText.Get("Text_AA254F35F02E"), TimeSpan.Zero);
         }
     }
+
+    internal static RapidOcrOptions CreateOptions() => RapidOcrOptions.Default with
+    {
+        ReturnWordBox = true,
+        // Most capture text is upright. Requiring stronger evidence avoids flipping short
+        // Korean UI lines, while retaining angle correction for imported/edited images and
+        // pins. SearchRotatedOrientations controls Windows whole-image search; it does not
+        // establish that an input is upright (background indexing disables that search).
+        DoAngle = true,
+        ClsThresh = 0.99f,
+        RecMaxDegreeOfParallelism = Math.Clamp(Environment.ProcessorCount, 1, 8),
+    };
 
     internal bool TryInitialize()
     {
@@ -194,6 +152,7 @@ internal sealed class NeuralOcrEngine : IDisposable
 
             try
             {
+                _runtime.EnsureInitialized();
                 var engine = new RapidOcr();
                 engine.InitModels(det, cls, rec, keys);
                 _engine = engine;
@@ -216,8 +175,6 @@ internal sealed class NeuralOcrEngine : IDisposable
             _engine?.Dispose();
             _engine = null;
         }
-
-        _superResolution.Dispose();
     }
 
     private static string? Bundled(string fileName)

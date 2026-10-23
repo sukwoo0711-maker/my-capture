@@ -1,34 +1,23 @@
-using System.ComponentModel;
-using System.Diagnostics;
-using System.IO;
-using System.Runtime.InteropServices;
 using System.Windows;
+using MyCapture.App.Sources;
 using MyCapture.Core.Capture;
 
 namespace MyCapture.App.Gallery;
 
 internal sealed partial class GalleryWindow
 {
-    private void OnOpenSourcePageClick(object sender, RoutedEventArgs e)
+    private async void OnOpenSourcePageClick(object sender, RoutedEventArgs e)
     {
         string url = SourceUrlForAction(sender);
         if (url.Length == 0) return;
-        try { Process.Start(new ProcessStartInfo(url) { UseShellExecute = true }); }
-        catch (Exception ex) when (ex is Win32Exception or InvalidOperationException)
-        { LibraryActionStatus.Text = UiText.Get("Library.SourcePage.OpenFailed"); }
+        SetSourceActionStatus(await CaptureSourceActions.Default.OpenAsync(CaptureProvenance.Create(url: url)));
     }
 
     private void OnCopySourcePageClick(object sender, RoutedEventArgs e)
     {
         string url = SourceUrlForAction(sender);
         if (url.Length == 0) return;
-        try
-        {
-            Clipboard.SetText(url);
-            LibraryActionStatus.Text = UiText.Get("Library.SourcePage.Copied");
-        }
-        catch (ExternalException)
-        { LibraryActionStatus.Text = UiText.Get("Library.SourcePage.CopyFailed"); }
+        SetSourceActionStatus(CaptureSourceActions.Default.CopyUrl(url));
     }
 
     private static string SourceUrlForAction(object sender) =>
@@ -39,71 +28,44 @@ internal sealed partial class GalleryWindow
     {
         string path = SourcePathForAction(sender);
         if (path.Length == 0) return;
-        bool document = (sender as FrameworkElement)?.DataContext is GalleryItemViewModel { IsSourceDocumentFile: true };
-        // A disconnected network share can take seconds to answer; never ask on the UI thread.
-        SourceFolderTarget target = await Task.Run(() => document
-            ? new SourceFolderTarget(SourceDocument.FileExists(path) ? SourceFolderTargetKind.File : SourceFolderTargetKind.Missing, path)
-            : ResolveFolderTarget(path));
-        // The recorded path came from another application's window. Only an existing, fully
-        // qualified path is handed to Explorer: it cannot contain quotes or start with '/', so it
-        // can never become a switch beyond the fixed "/select," prefix.
-        string explorer = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "explorer.exe");
-        ProcessStartInfo? start = SourceDocument.CreateOpenFolderStartInfo(target.Path, explorer,
-            target.Kind == SourceFolderTargetKind.File);
-        if (target.Kind == SourceFolderTargetKind.Missing || start is null)
-        {
-            LibraryActionStatus.Text = UiText.Get(document
-                ? "Library.Source.FileMissing" : "Library.Source.FolderMissing");
-            return;
-        }
-
-        try
-        {
-            // Always hand the path to Explorer as an argument. Shell-executing the path itself would
-            // run it if it ever named a program instead of a folder.
-            Process.Start(start)?.Dispose();
-        }
-        catch (Exception ex) when (ex is Win32Exception or InvalidOperationException)
-        { LibraryActionStatus.Text = UiText.Get("Library.Source.OpenFolderFailed"); }
+        var tile = (GalleryItemViewModel)((FrameworkElement)sender).DataContext;
+        SetSourceActionStatus(await CaptureSourceActions.Default.OpenLocationAsync(
+            CaptureProvenance.Create(documentPath: path, appName: tile.SourceAppName,
+                appExecutablePath: tile.SourceAppPath)));
     }
 
     private async void OnOpenSourceFileClick(object sender, RoutedEventArgs e)
     {
         string path = SourcePathForAction(sender);
         if (path.Length == 0) return;
-        if (!await Task.Run(() => SourceDocument.FileExists(path)))
-        {
-            LibraryActionStatus.Text = UiText.Get("Library.Source.FileMissing");
-            return;
-        }
-        string editor = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "System32", "notepad.exe");
-        ProcessStartInfo? start = await Task.Run(() => SourceDocument.CreateOpenStartInfo(path, editor));
-        if (start is null)
-        {
-            LibraryActionStatus.Text = UiText.Get("Library.Source.OpenFileFailed");
-            return;
-        }
-        try { Process.Start(start)?.Dispose(); }
-        catch (Exception ex) when (ex is Win32Exception or InvalidOperationException or IOException or UnauthorizedAccessException)
-        { LibraryActionStatus.Text = UiText.Get("Library.Source.OpenFileFailed"); }
+        var tile = (GalleryItemViewModel)((FrameworkElement)sender).DataContext;
+        SetSourceActionStatus(await CaptureSourceActions.Default.OpenAsync(
+            CaptureProvenance.Create(documentPath: path, appName: tile.SourceAppName,
+                appExecutablePath: tile.SourceAppPath)));
     }
 
     private void OnCopySourcePathClick(object sender, RoutedEventArgs e)
     {
         string path = SourcePathForAction(sender);
         if (path.Length == 0) return;
-        try
-        {
-            Clipboard.SetText(path);
-            LibraryActionStatus.Text = UiText.Get("Library.Source.PathCopied");
-        }
-        catch (ExternalException)
-        { LibraryActionStatus.Text = UiText.Get("Library.Source.CopyPathFailed"); }
+        SetSourceActionStatus(CaptureSourceActions.Default.CopyPath(path));
     }
 
     private static string SourcePathForAction(object sender) =>
         (sender as FrameworkElement)?.DataContext is GalleryItemViewModel tile
             ? CaptureSourceText.NormalizeLocalPath(tile.SourceDocumentPath) : string.Empty;
+
+    internal void SetSourceActionStatus(string status)
+    {
+        if (status.Length > 0) LibraryActionStatus.Text = status;
+    }
+
+    internal void SearchSource(string query)
+    {
+        SearchBox.Text = query;
+        SearchBox.Focus();
+        SearchBox.CaretIndex = query.Length;
+    }
 
     internal enum SourceFolderTargetKind { Missing, Folder, File }
 
@@ -112,14 +74,13 @@ internal sealed partial class GalleryWindow
     /// <summary>A folder opens itself; a file opens its folder with the file selected.</summary>
     internal static SourceFolderTarget ResolveFolderTarget(string path)
     {
-        string normalized = CaptureSourceText.NormalizeLocalPath(path);
-        if (normalized.Length == 0) return new(SourceFolderTargetKind.Missing, string.Empty);
-        try
+        var target = CaptureSourceActions.Default.ResolveFolderTarget(path);
+        SourceFolderTargetKind kind = target.Kind switch
         {
-            if (Directory.Exists(normalized)) return new(SourceFolderTargetKind.Folder, normalized);
-            if (File.Exists(normalized)) return new(SourceFolderTargetKind.File, normalized);
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
-        return new(SourceFolderTargetKind.Missing, normalized);
+            CaptureSourceActions.SourceFolderTargetKind.Folder => SourceFolderTargetKind.Folder,
+            CaptureSourceActions.SourceFolderTargetKind.File => SourceFolderTargetKind.File,
+            _ => SourceFolderTargetKind.Missing,
+        };
+        return new(kind, target.Path);
     }
 }

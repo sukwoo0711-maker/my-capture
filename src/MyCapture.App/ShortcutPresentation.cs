@@ -3,6 +3,7 @@ using System.Globalization;
 using System.Runtime.CompilerServices;
 using System.Windows;
 using System.Windows.Automation;
+using System.Windows.Automation.Peers;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Data;
@@ -25,7 +26,11 @@ internal sealed class ShortcutPresentation : INotifyPropertyChanged
     internal static Func<bool>? ReadEnabled { get; set; }
     public Visibility HintVisibility => ReadEnabled?.Invoke() == true ? Visibility.Visible : Visibility.Collapsed;
     public event PropertyChangedEventHandler? PropertyChanged;
-    internal static void Refresh() => Current.PropertyChanged?.Invoke(Current, new(nameof(HintVisibility)));
+    internal static void Refresh()
+    {
+        Current.PropertyChanged?.Invoke(Current, new(nameof(HintVisibility)));
+        ShortcutRevealMotion.SettleAll();
+    }
 
     // A window owns its Alt state. Inheritance also covers captions added while Alt is held,
     // without changing the saved preference or revealing another window's captions.
@@ -33,13 +38,16 @@ internal sealed class ShortcutPresentation : INotifyPropertyChanged
         "AltRevealed", typeof(bool), typeof(ShortcutPresentation),
         new FrameworkPropertyMetadata(false, FrameworkPropertyMetadataOptions.Inherits));
     private static readonly ConditionalWeakTable<Window, WindowAltReveal> WindowReveals = new();
-    private static readonly HintVisibilityConverter VisibilityConverter = new();
+    private static readonly HintRevealConverter RevealConverter = new();
+    private static readonly DependencyProperty RevealedProperty = DependencyProperty.RegisterAttached(
+        "Revealed", typeof(bool), typeof(ShortcutPresentation), new PropertyMetadata(false,
+            (target, _) => ShortcutRevealMotion.Update((TextBlock)target, animate: true)));
+
+    internal static bool IsRevealed(TextBlock hint) => (bool)hint.GetValue(RevealedProperty);
 
     internal static void SetAltRevealed(DependencyObject target, bool revealed)
     {
         target.SetValue(AltRevealedProperty, revealed);
-        // Refit command rows after inherited visibility has changed.
-        Refresh();
     }
 
     /// <summary>Shares an owner's Alt gesture with a separate surface that does not activate.</summary>
@@ -66,7 +74,7 @@ internal sealed class ShortcutPresentation : INotifyPropertyChanged
     {
         // 9–11 px captions were too small to read; every revealed key uses the caption size.
         // Regular weight keeps the key below the command's own name, which buttons set semibold.
-        var hint = new TextBlock
+        var hint = new ShortcutCaption
         {
             Text = gesture,
             FontSize = CaptionFontSize,
@@ -75,12 +83,15 @@ internal sealed class ShortcutPresentation : INotifyPropertyChanged
             Height = CommandButtonPresentation.HintHeight,
             LineHeight = CommandButtonPresentation.HintHeight,
             LineStackingStrategy = LineStackingStrategy.BlockLineHeight,
+            IsHitTestVisible = false,
+            Focusable = false,
         };
         hint.SetResourceReference(TextBlock.ForegroundProperty, "Text.Secondary");
-        var visibility = new MultiBinding { Converter = VisibilityConverter };
-        visibility.Bindings.Add(new Binding(nameof(HintVisibility)) { Source = Current });
-        visibility.Bindings.Add(new Binding { Source = hint, Path = new PropertyPath(AltRevealedProperty) });
-        hint.SetBinding(UIElement.VisibilityProperty, visibility);
+        ShortcutRevealMotion.Register(hint);
+        var reveal = new MultiBinding { Converter = RevealConverter };
+        reveal.Bindings.Add(new Binding(nameof(HintVisibility)) { Source = Current });
+        reveal.Bindings.Add(new Binding { Source = hint, Path = new PropertyPath(AltRevealedProperty) });
+        hint.SetBinding(RevealedProperty, reveal);
         hint.Loaded += OnHintLoaded;
         return hint;
     }
@@ -91,10 +102,16 @@ internal sealed class ShortcutPresentation : INotifyPropertyChanged
             WindowReveals.GetValue(window, static owner => new WindowAltReveal(owner));
     }
 
-    private sealed class HintVisibilityConverter : IMultiValueConverter
+    private sealed class ShortcutCaption : TextBlock
+    {
+        // The owning button already exposes the chord through AcceleratorKey and its tooltip.
+        protected override AutomationPeer? OnCreateAutomationPeer() => null;
+    }
+
+    private sealed class HintRevealConverter : IMultiValueConverter
     {
         public object Convert(object[] values, Type targetType, object parameter, CultureInfo culture) =>
-            values[0] is Visibility.Visible || values[1] is true ? Visibility.Visible : Visibility.Collapsed;
+            values[0] is Visibility.Visible || values[1] is true;
 
         public object[] ConvertBack(object value, Type[] targetTypes, object parameter, CultureInfo culture) =>
             throw new NotSupportedException();
@@ -145,7 +162,6 @@ internal sealed class ShortcutPresentation : INotifyPropertyChanged
                 Path = new PropertyPath(AltRevealedProperty),
                 Mode = BindingMode.OneWay,
             });
-            Refresh();
         }
 
         private void OnKeyDown(object sender, KeyEventArgs e)
@@ -207,7 +223,7 @@ internal sealed class ShortcutPresentation : INotifyPropertyChanged
         {
             if (_dpiRefresh is { Status: DispatcherOperationStatus.Pending }) return;
             // The window's notification can precede its children's DPI update. One queued
-            // pass measures the final subtree scale, including hints that are collapsed.
+            // pass measures the final subtree scale and settles the visual state.
             _dpiRefresh = _window.Dispatcher.BeginInvoke(DispatcherPriority.Loaded, new Action(() =>
             {
                 _dpiRefresh = null;
@@ -217,6 +233,8 @@ internal sealed class ShortcutPresentation : INotifyPropertyChanged
 
         private static void RefreshCommandWidths(DependencyObject root)
         {
+            if (root is ShortcutCaption hint)
+                ShortcutRevealMotion.Update(hint, animate: false);
             // Corner tool-rail hints use their own 32-DIP face and must not be wrapped.
             if (root is ButtonBase { Content: Grid { Name: "CommandButtonFace" } } button)
                 CommandButtonPresentation.RefreshHint(button);
@@ -268,8 +286,8 @@ internal sealed class ShortcutPresentation : INotifyPropertyChanged
         {
             button.Content = null;
             UIElement content = previous as UIElement ?? new TextBlock { Text = previous?.ToString() ?? string.Empty };
-            var grid = new Grid { Width = 32, Height = 32 };
-            if (content is FrameworkElement glyph) { glyph.HorizontalAlignment = HorizontalAlignment.Center; glyph.VerticalAlignment = VerticalAlignment.Top; }
+            var grid = new Grid { Width = ShortcutRevealMotion.CornerFaceSize, Height = ShortcutRevealMotion.CornerFaceSize };
+            if (content is FrameworkElement glyph) { glyph.HorizontalAlignment = HorizontalAlignment.Center; glyph.VerticalAlignment = VerticalAlignment.Center; }
             grid.Children.Add(content);
             // The letter sits in the corner; its line box hangs below the glyph, not over it.
             hint.HorizontalAlignment = HorizontalAlignment.Right; hint.VerticalAlignment = VerticalAlignment.Bottom;
@@ -277,6 +295,7 @@ internal sealed class ShortcutPresentation : INotifyPropertyChanged
             hint.LineHeight = 12;
             hint.LineStackingStrategy = LineStackingStrategy.BlockLineHeight;
             grid.Children.Add(hint); button.Content = grid;
+            if (content is FrameworkElement primary) ShortcutRevealMotion.Configure(hint, primary, corner: true);
         }
         else
         {

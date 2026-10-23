@@ -15,6 +15,7 @@ namespace MyCapture.Core.Settings;
 /// the copy is exact regardless of the JSON contract (which deliberately ignores some
 /// members such as <see cref="GeneralSettings.IsFirstRun"/>), and so cloning never
 /// touches the disk or throws on a serialiser edge case.
+/// The retired Enhanced OCR quality is normalized to Accurate in every new copy.
 /// </para>
 /// </remarks>
 public static class AppSettingsClone
@@ -145,8 +146,10 @@ public static class AppSettingsClone
     private static OcrSettings Clone(OcrSettings s) => new()
     {
         PreferredLanguages = [.. s.PreferredLanguages],
-        Quality = s.Quality,
-        UpscaleFactor = s.UpscaleFactor,
+        Quality = OcrQualityNames.Normalize(s.Quality),
+        UpscaleFactor = s.Quality == OcrQuality.Enhanced
+            ? OcrQualityProfile.UpscaleFactor(OcrQuality.Accurate)
+            : s.UpscaleFactor,
         CacheResults = s.CacheResults,
     };
 

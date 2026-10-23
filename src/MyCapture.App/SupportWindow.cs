@@ -17,7 +17,7 @@ internal interface ISupportActions
 
 internal sealed class SupportActions : ISupportActions
 {
-    public void CopyText(string text) => Clipboard.SetText(text);
+    public void CopyText(string text) => ClipboardWriter.SetText(text);
     public bool TryOpenUri(string uri) => SupportDiagnostics.TryOpenUri(uri);
 }
 

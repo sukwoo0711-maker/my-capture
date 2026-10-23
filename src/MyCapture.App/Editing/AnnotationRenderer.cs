@@ -365,7 +365,7 @@ internal sealed class AnnotationRenderer
 
     private void DrawPen(DrawingContext dc, PenAnnotation pen)
     {
-        List<PointD> points = pen.Points;
+        PenPointCollection points = pen.Points;
         if (points.Count == 0)
         {
             return;
@@ -385,19 +385,17 @@ internal sealed class AnnotationRenderer
     }
 
     /// <summary>
-    /// The stroke's segments as one frozen geometry, rebuilt only when a point differs.
+    /// The stroke's segments as one frozen geometry, rebuilt only after a point mutation.
     /// </summary>
     /// <remarks>
-    /// Points can change in place (moves, undo, rotation), so the geometry is keyed by a copy
-    /// of the points it was built from and compared bit for bit, which a long stroke does in
-    /// a fraction of the time building its geometry takes.
+    /// The collection reports in-place edits as well as replacement, keeping the unchanged
+    /// stroke check constant-time even for very long strokes.
     /// </remarks>
-    private StreamGeometry InkGeometry(PenAnnotation pen, List<PointD> points)
+    private StreamGeometry InkGeometry(PenAnnotation pen, PenPointCollection points)
     {
         InkCache cache = CacheFor<InkCache>(pen);
-        ReadOnlySpan<PointD> current = CollectionsMarshal.AsSpan(points);
         if (cache.Geometry is { } cached
-            && MemoryMarshal.AsBytes(current).SequenceEqual(MemoryMarshal.AsBytes(CollectionsMarshal.AsSpan(cache.Points))))
+            && cache.PointsVersion == pen.PointsVersion)
         {
             return cached;
         }
@@ -407,16 +405,16 @@ internal sealed class AnnotationRenderer
         var geometry = new StreamGeometry();
         using (StreamGeometryContext context = geometry.Open())
         {
-            context.BeginFigure(ToPoint(current[0]), isFilled: false, isClosed: false);
-            for (int i = 1; i < current.Length; i++)
+            ReadOnlySpan<PointD> span = points.AsSpan();
+            context.BeginFigure(ToPoint(span[0]), isFilled: false, isClosed: false);
+            for (int i = 1; i < span.Length; i++)
             {
-                context.LineTo(ToPoint(current[i]), isStroked: true, isSmoothJoin: false);
+                context.LineTo(ToPoint(span[i]), isStroked: true, isSmoothJoin: false);
             }
         }
 
         geometry.Freeze();
-        cache.Points.Clear();
-        cache.Points.AddRange(current);
+        cache.PointsVersion = pen.PointsVersion;
         cache.Geometry = geometry;
         return geometry;
     }
@@ -694,7 +692,7 @@ internal sealed class AnnotationRenderer
 
     private sealed class InkCache : ItemCache
     {
-        internal readonly List<PointD> Points = [];
+        internal long PointsVersion;
         internal StreamGeometry? Geometry;
     }
 

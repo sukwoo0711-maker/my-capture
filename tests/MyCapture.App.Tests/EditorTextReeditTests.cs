@@ -227,11 +227,11 @@ public sealed class EditorTextReeditTests
         Assert.Same(original, Assert.Single(controller.Document.Items));
 
         controller.SetSelected(original);
-        CheckBox bold = Field<CheckBox>(editor, "_textBold");
+        ToggleButton bold = Field<ToggleButton>(editor, "_textBold");
         bold.IsChecked = false;
         bold.RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));
         Assert.False(original.Bold);
-        CheckBox plate = Field<CheckBox>(editor, "_textBackground");
+        ToggleButton plate = Field<ToggleButton>(editor, "_textBackground");
         plate.IsChecked = false;
         plate.RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));
         Assert.Equal(0, original.Background.A);

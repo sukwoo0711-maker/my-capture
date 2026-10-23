@@ -23,7 +23,8 @@ namespace MyCapture.App.Tests;
 /// <summary>The library details panel's source section: app, window, and page link or folder.</summary>
 public sealed class GallerySourceDetailTests
 {
-    private const string Url = "https://example.com/projects/MyCapture/pull/313?view=split&discussion=long-capture-filename-review#discussion_r42";
+    private const string DisplayUrl = "https://example.com/projects/MyCapture/pull/313/reviews/source-metadata-and-library-provenance/open-original-document-and-web-page";
+    private const string Url = DisplayUrl + "?view=split&discussion=long-capture-filename-review#discussion_r42";
     private const string Folder = @"C:\Users\test\Documents\계약 검토\2026 하반기 프로젝트 자료\최종 보고서 초안";
     private const string EdgePath = @"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe";
     private const string ExplorerPath = @"C:\Windows\explorer.exe";
@@ -93,10 +94,11 @@ public sealed class GallerySourceDetailTests
             Assert.Empty(Descendants(panel).OfType<TextBox>());
             Assert.Empty(Descendants(panel).OfType<ScrollViewer>());
             TextBlock link = Named<TextBlock>(page, "LibrarySourcePageValue");
-            Assert.Equal(Url, link.Text);
-            Assert.Equal(Url, link.ToolTip);
-            // A screen reader hears the label and the whole address, never the two-line summary.
-            Assert.Equal(UiText.Format("Library.SourcePage.Accessible", Url), new TextBlockAutomationPeer(link).GetName());
+            Assert.Equal(DisplayUrl, link.Text);
+            Assert.Equal(DisplayUrl, link.ToolTip);
+            Assert.Equal(DisplayUrl, AutomationProperties.GetHelpText(link));
+            // The visible and accessible address omit private query/fragment values, even when expanded.
+            Assert.Equal(UiText.Format("Library.SourcePage.Accessible", DisplayUrl), new TextBlockAutomationPeer(link).GetName());
             ToggleButton showAll = Named<ToggleButton>(page, "LibrarySourcePageToggle");
             AssertTwoLineSummary(link, showAll, UiText.Get("Library.SourcePage.ShowFull"), language);
             Assert.True(GalleryTextClamp.GetIsOverflowing(link), $"{language}: the long address must be summarized");
@@ -110,6 +112,7 @@ public sealed class GallerySourceDetailTests
             showAll.IsChecked = true;
             Drain(window);
             AssertWholeValueShown(link, showAll, language);
+            Assert.Equal(DisplayUrl, link.Text);
             SaveEvidence(window, $"gallery-source-page-expanded-{language}-{width:0}.png");
 
             // Retargeting to another record moves both the text and the action target, and the
@@ -119,8 +122,10 @@ public sealed class GallerySourceDetailTests
             window.DataContext = Tile(Image(EdgeSource(), "Ambient", "https://wrong-ambient.example/"));
             panel.DataContext = second;
             Drain(window);
-            Assert.Equal(secondUrl, link.Text);
-            Assert.Equal(UiText.Format("Library.SourcePage.Accessible", secondUrl), AutomationProperties.GetName(link));
+            Assert.Equal("https://example.org/other-page", link.Text);
+            Assert.Equal("https://example.org/other-page", link.ToolTip);
+            Assert.Equal("https://example.org/other-page", AutomationProperties.GetHelpText(link));
+            Assert.Equal(UiText.Format("Library.SourcePage.Accessible", "https://example.org/other-page"), AutomationProperties.GetName(link));
             Assert.False(showAll.IsChecked);
             Assert.False(GalleryTextClamp.GetIsExpanded(link));
             Assert.All(actions, action => Assert.Equal(secondUrl, ResolveAction("SourceUrlForAction", action)));

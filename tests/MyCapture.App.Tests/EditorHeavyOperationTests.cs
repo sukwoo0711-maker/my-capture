@@ -85,6 +85,7 @@ public sealed class EditorHeavyOperationTests
                 int itemsBefore = controller.Document.Items.Count;
                 byte[]? expected = LegacyMosaic(visible, region, block, out int x, out int y, out int pw, out int ph);
                 editor.ApplyMosaic(region, block);
+                EditorMosaicAsyncTests.WaitFor(editor.MosaicOperationsSettledAsync());
                 Assert.Same(visible, editor.DisplayedBitmap);
                 if (expected is null)
                 {
@@ -410,7 +411,7 @@ public sealed class EditorHeavyOperationTests
         Task insert = editor.InsertImageFileAsync("picked.png", new PointD(20, 20));
         Invoke(editor, "SelectTool", EditorTool.Crop);
         editor.PendingCrop!.SetRegion(new RectD(8, 6, 40, 30));
-        Invoke(editor, "RefreshCrop");
+        Invoke(editor, "RefreshCrop", true);
         editor.SaveAndClose();
         Assert.True(editor.IsCommitInProgress);
         decoded.SetResult(unreadable ? null : Decoded(Pattern(30, 20, PixelFormats.Bgra32)));

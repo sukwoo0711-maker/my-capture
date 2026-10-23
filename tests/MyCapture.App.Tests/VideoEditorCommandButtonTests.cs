@@ -26,6 +26,7 @@ public sealed class VideoEditorCommandButtonTests
     [InlineData("en-US", 1400)]
     public void CommandAndTransportButtonsKeepTheirHeightWithAltRevealedAndCollapsedHints(string language, int width) => StaTestHost.Run(() =>
     {
+        using var motion = new ShortcutMotionTestScope();
         using var culture = UiText.UseLanguage(language);
         Func<bool>? previous = ShortcutPresentation.ReadEnabled;
         VideoEditorWindow? editor = null;
@@ -56,7 +57,11 @@ public sealed class VideoEditorCommandButtonTests
                     foreach (ButtonBase button in buttons)
                     {
                         Assert.Equal(44, button.ActualHeight);
-                        Assert.Equal(new Thickness(10, 4, 10, 4), button.Padding);
+                        bool collapsedLabel = button.Content is Grid { Name: "CommandButtonFace" } commandFace
+                            && commandFace.Children[0] is StackPanel primaryRow
+                            && primaryRow.Children.OfType<TextBlock>().Any(label => label.Visibility == Visibility.Collapsed);
+                        double horizontalPadding = collapsedLabel ? 4 : 10;
+                        Assert.Equal(new Thickness(horizontalPadding, 4, horizontalPadding, 4), button.Padding);
                         Assert.Equal(new Thickness(3, 0, 3, 0), button.Margin);
                         AssertInside(button, layout, layout.ActualHeight);
                         string gesture = AutomationProperties.GetAcceleratorKey(button);
@@ -64,10 +69,10 @@ public sealed class VideoEditorCommandButtonTests
                         {
                             Assert.Contains(gesture, Assert.IsType<string>(button.ToolTip));
                             TextBlock hint = Assert.Single(Descendants(button).OfType<TextBlock>(), text => text.Text == gesture);
-                            Assert.Equal(enabled ? Visibility.Visible : Visibility.Collapsed, hint.Visibility);
+                            ShortcutMotionTestScope.AssertState(hint, enabled);
                             Grid face = Assert.IsType<Grid>(button.Content);
-                            Assert.Equal(GridLength.Auto, face.RowDefinitions[1].Height);
-                            Assert.Equal(enabled ? 14 : 0, face.RowDefinitions[1].ActualHeight, 2);
+                            Assert.Equal(new GridLength(14), face.RowDefinitions[1].Height);
+                            Assert.Equal(CommandButtonPresentation.HintHeight, face.RowDefinitions[1].ActualHeight, 2);
                             if (enabled) AssertInside(hint, button, button.ActualHeight);
                             else
                             {
@@ -108,6 +113,7 @@ public sealed class VideoEditorCommandButtonTests
     [InlineData("en-US")]
     public void ToolbarKeepsTrimAndTextWhileRareCommandsStayInMoreAtEveryWidth(string language) => StaTestHost.Run(() =>
     {
+        using var motion = new ShortcutMotionTestScope();
         using var culture = UiText.UseLanguage(language);
         VideoEditorWindow editor = OpenLayout(760);
         try
@@ -151,6 +157,7 @@ public sealed class VideoEditorCommandButtonTests
     [Fact]
     public void LayerChangesKeepToolbarActionsAndTheDetailsChoiceStable() => StaTestHost.Run(() =>
     {
+        using var motion = new ShortcutMotionTestScope();
         VideoEditorWindow editor = OpenLayout(760);
         try
         {
@@ -175,6 +182,7 @@ public sealed class VideoEditorCommandButtonTests
     [InlineData("en-US")]
     public void HistoryUsesIconsAndLayerActionsKeepTheirShortLabelsAndSharedHeight(string language) => StaTestHost.Run(() =>
     {
+        using var motion = new ShortcutMotionTestScope();
         using var culture = UiText.UseLanguage(language);
         VideoEditorWindow editor = OpenLayout(760);
         try
@@ -191,7 +199,7 @@ public sealed class VideoEditorCommandButtonTests
                     Assert.Equal(44, button.ActualHeight);
                     string gesture = AutomationProperties.GetAcceleratorKey(button);
                     TextBlock hint = Assert.Single(Descendants(button).OfType<TextBlock>(), text => text.Text == gesture);
-                    Assert.Equal(revealed ? Visibility.Visible : Visibility.Collapsed, hint.Visibility);
+                    ShortcutMotionTestScope.AssertState(hint, revealed);
                     Assert.DoesNotContain(Descendants(button).OfType<TextBlock>(), text => text.IsVisible
                         && !string.IsNullOrEmpty(text.Text) && text.Text != gesture);
                     Assert.Contains(gesture, Assert.IsType<string>(button.ToolTip));
@@ -207,7 +215,7 @@ public sealed class VideoEditorCommandButtonTests
                     AssertInside(label, button, button.ActualHeight);
                     TextBlock hint = Assert.Single(Descendants(button).OfType<TextBlock>(), text =>
                         text.Text == AutomationProperties.GetAcceleratorKey(button));
-                    Assert.Equal(revealed ? Visibility.Visible : Visibility.Collapsed, hint.Visibility);
+                    ShortcutMotionTestScope.AssertState(hint, revealed);
                     if (revealed) AssertInside(hint, button, button.ActualHeight);
                 }
             }
@@ -218,6 +226,7 @@ public sealed class VideoEditorCommandButtonTests
     [Fact]
     public void OverflowZoomOpensTheDetailedTimelineWithoutOpeningTheInspector() => StaTestHost.Run(() =>
     {
+        using var motion = new ShortcutMotionTestScope();
         VideoEditorWindow editor = OpenLayout(760);
         try
         {
@@ -240,6 +249,7 @@ public sealed class VideoEditorCommandButtonTests
     [Fact]
     public void VisibleExportOpensTheDefaultVideoDialog() => StaTestHost.Run(() =>
     {
+        using var motion = new ShortcutMotionTestScope();
         VideoEditorWindow editor = OpenLayout(760);
         VideoExportDialog? hosted = null;
         try
@@ -258,6 +268,7 @@ public sealed class VideoEditorCommandButtonTests
     [Fact]
     public void TrimAndSplitUseDifferentNamedGeometryResources() => StaTestHost.Run(() =>
     {
+        using var motion = new ShortcutMotionTestScope();
         VideoEditorWindow editor = OpenLayout(760);
         try
         {

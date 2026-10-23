@@ -373,6 +373,7 @@ internal sealed class EditorResponsivenessProbe
         {
             RunBaseVariant(app, image);
             RunManyVariant(app, image);
+            if (width >= 1200 && height >= 800) RunHotPathsVariant(app, image);
             RunLibraryVariant(app, image);
         }
         finally
@@ -541,6 +542,108 @@ internal sealed class EditorResponsivenessProbe
             Wait(ed.Closed, "editor close (200)");
             WaitTask(Ui(EditDraftSession.WaitForFinalizationsAsync), "draft finalization (200)");
             End(close);
+        }
+        finally
+        {
+            CloseIfOpen(ed);
+            Ui(session.Dispose);
+        }
+    }
+
+    /// <summary>Large-stroke cache, selection and mosaic work on a 300-annotation document.</summary>
+    private void RunHotPathsVariant(AppEnvironment app, BitmapSource image)
+    {
+        _variant = "300-items-long-ink-mosaic";
+        int w = image.PixelWidth, h = image.PixelHeight;
+        CaptureRecord record = WaitTask(Ui(() => app.Persistence.PersistOriginalAsync(image, 1.0,
+            "Probe 300", "Probe")), "persist original (300)");
+        CaptureEditSession session = Ui(() => app.Commit.BeginEditSession(record));
+        _recorder.Step = "setup: 299 annotations including 30 strokes of 8192 points";
+        AnnotationDocument document = Ui(() =>
+        {
+            var doc = AnnotationDocument.CreateFor(w, h);
+            for (int i = 0; i < 30; i++)
+            {
+                int row = i;
+                doc.Add(new PenAnnotation
+                {
+                    Points = [.. Enumerable.Range(0, 8192).Select(p => new PointD(
+                        20 + p * (w - 40.0) / 8191, 20 + row * (h - 80.0) / 30 + Math.Sin(p * .025) * 12))],
+                    StrokeThickness = 3,
+                });
+            }
+            for (int i = 0; i < 268; i++)
+                doc.Add(new RectangleAnnotation
+                {
+                    Rect = new RectD(20 + i % 20 * (w - 60.0) / 20, 20 + i / 20 * (h - 60.0) / 14, 24, 18),
+                    StrokeThickness = 2,
+                });
+            doc.Add(new TextAnnotation { IsStepNumber = true, Text = "12", Rect = new RectD(30, 30, 32, 32) });
+            return doc;
+        });
+        EditorUnderTest ed = OpenEditor(app, image, record, session, document, null, "open-299-long-ink");
+        try
+        {
+            Tool(ed, "Mosaic");
+            Autosave(ed, "first tool selection (long ink)");
+            ProbeScenario mosaic = Begin("mosaic-1200x800");
+            Op(mosaic, "ApplyMosaic 1200x800", () => ed.Editor.ApplyMosaic(new RectD(0, 0, 1200, 800), 12), idle: true);
+            var mosaicCompletion = Stopwatch.StartNew();
+            WaitTask(Ui(ed.Editor.MosaicOperationsSettledAsync), "mosaic worker completion");
+            mosaic.Notes = $"worker_wait_ms={mosaicCompletion.Elapsed.TotalMilliseconds:F3}";
+            End(mosaic);
+            Ui(() =>
+            {
+                Assert.Equal(300, ed.Controller.Document.Items.Count);
+                var patch = Assert.IsType<ImageAnnotation>(ed.Controller.Document.Items[^1]);
+                Assert.Equal(new RectD(0, 0, 1200, 800), patch.Rect);
+            });
+            Autosave(ed, "mosaic-1200x800");
+            Breakdown(ed);
+
+            Tool(ed, "Select");
+            ProbeScenario selection = Begin("selection-bounds-300");
+            Op(selection, "SelectAll", () => ed.Controller.SelectAll(), idle: true);
+            for (int i = 0; i < 100; i++)
+                Op(selection, "SelectionBounds", () => { _ = ed.Controller.SelectionBounds; }, idle: false);
+            End(selection);
+
+            ProbeScenario hit = Begin("hit-tests-300");
+            for (int i = 0; i < 100; i++)
+            {
+                int sample = i;
+                Op(hit, "point and region hit tests", () =>
+                {
+                    _ = ed.Controller.Document.HitTest(new PointD(w - 10, sample * h / 100.0), 6);
+                    _ = ed.Controller.Document.HitTestRegion(new RectD(sample, sample, 400, 300));
+                }, idle: false);
+            }
+            End(hit);
+
+            Tool(ed, "StepNumber");
+            ProbeScenario steps = Begin("step-number-300");
+            for (int i = 0; i < 100; i++)
+                Op(steps, "NextStepNumber", () => { _ = ed.Controller.NextStepNumber; }, idle: false);
+            End(steps);
+
+            // Alt reveal and tool changes on a busy document: both used to reflow the editor.
+            ProbeScenario alt = Begin("alt-toggle-40");
+            for (int i = 0; i < 40; i++)
+            {
+                bool reveal = i % 2 == 0;
+                Op(alt, reveal ? "Alt reveal" : "Alt hide", () => ShortcutPresentation.SetAltRevealed(ed.Window, reveal), idle: true);
+            }
+            End(alt);
+
+            string[] tools = ["Pen", "Rectangle", "Text", "Select"];
+            ProbeScenario switches = Begin("tool-switch-40");
+            for (int i = 0; i < 40; i++)
+            {
+                string tool = tools[i % tools.Length];
+                Op(switches, "tool " + tool, () => ed.Editor.ShortcutActions[tool](), idle: true);
+            }
+            End(switches);
+            Done(ed, record);
         }
         finally
         {

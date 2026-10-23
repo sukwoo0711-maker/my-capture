@@ -18,7 +18,7 @@ public sealed class EditorCommandBarAdaptiveTests(ITestOutputHelper output)
     [InlineData("en-US", 1)]
     [InlineData("ko-KR", 1.5)]
     [InlineData("en-US", 2)]
-    public void EditorAndCropStayOnOneRowThroughMinimumWidthAndAlt(string language, double scale) => StaTestHost.Run(() =>
+    public void EditorAndCropStayOnOneRowAtEverySupportedWidthThroughAlt(string language, double scale) => StaTestHost.Run(() =>
     {
         using var culture = UiText.UseLanguage(language);
         bool always = false;
@@ -30,8 +30,14 @@ public sealed class EditorCommandBarAdaptiveTests(ITestOutputHelper output)
         foreach (bool crop in new[] { false, true })
         {
             if (crop) Assert.True(host.Editor.HandleShortcut(System.Windows.Input.Key.X, System.Windows.Input.ModifierKeys.None));
+            host.Window.Width = 1280;
+            host.Window.Dispatcher.Invoke(System.Windows.Threading.DispatcherPriority.ApplicationIdle, new Action(host.Window.UpdateLayout));
+            var fullBar = Descendants(host.Editor).OfType<CommandGroupsPanel>().Single(panel => panel.IsVisible);
+            double fullLabelWidth = ((FrameworkElement)fullBar.Children[0]).DesiredSize.Width
+                + CommandGroupsPanel.GroupGap + ((FrameworkElement)fullBar.Children[1]).DesiredSize.Width
+                + host.Window.Width - fullBar.ActualWidth;
             // Revisit widths in both directions to catch stale compression and layout loops.
-            foreach (double width in new[] { 1280d, 960d, 800d, host.Window.MinWidth, 1280d, host.Window.MinWidth })
+            foreach (double width in new[] { 1280d, Math.Ceiling(fullLabelWidth) + 1, 960d, 800d, host.Window.MinWidth, 1280d, host.Window.MinWidth })
             {
                 host.Window.Width = width;
                 double? barHeight = null;
@@ -44,8 +50,9 @@ public sealed class EditorCommandBarAdaptiveTests(ITestOutputHelper output)
                     var bar = Descendants(host.Editor).OfType<CommandGroupsPanel>().Single(panel => panel.IsVisible);
                     var left = (FrameworkElement)bar.Children[0];
                     var right = (FrameworkElement)bar.Children[1];
-                    Assert.True(left.DesiredSize.Width + CommandGroupsPanel.GroupGap + right.DesiredSize.Width <= bar.ActualWidth + 0.5,
-                        $"{language} {width} crop={crop} Alt={reveal}: {left.DesiredSize.Width}+8+{right.DesiredSize.Width}>{bar.ActualWidth}");
+                    double combinedWidth = left.DesiredSize.Width + CommandGroupsPanel.GroupGap + right.DesiredSize.Width;
+                    Assert.True(combinedWidth <= bar.ActualWidth + 0.5,
+                        $"{language} {width} crop={crop} Alt={reveal}: {combinedWidth}>{bar.ActualWidth}");
                     Assert.Equal(left.TranslatePoint(default, bar).Y, right.TranslatePoint(default, bar).Y, 2);
                     if (barHeight.HasValue) Assert.Equal(barHeight.Value, bar.ActualHeight, 2);
                     else barHeight = bar.ActualHeight;
@@ -56,7 +63,7 @@ public sealed class EditorCommandBarAdaptiveTests(ITestOutputHelper output)
                     Visibility[] names = buttons.SelectMany(PrimaryLabels).Select(label => label.Visibility).ToArray();
                     if (restingNames is not null) Assert.Equal(restingNames, names);
                     else restingNames = names;
-                    Assert.Equal(crop ? 0 : 3, buttons.Count(button => (bool)button.GetValue(CommandButtonPresentation.AlwaysIconProperty)));
+                    Assert.Equal(crop ? 0 : 4, buttons.Count(button => (bool)button.GetValue(CommandButtonPresentation.AlwaysIconProperty)));
                     foreach (Button button in buttons)
                     {
                         Assert.False(string.IsNullOrWhiteSpace(AutomationProperties.GetName(button)));
@@ -73,7 +80,7 @@ public sealed class EditorCommandBarAdaptiveTests(ITestOutputHelper output)
                             string gesture = AutomationProperties.GetAcceleratorKey(button);
                             if (gesture.Length > 0) Assert.Contains(gesture, (string)button.ToolTip);
                         }
-                        else if ((!crop && width >= 960) || width == 1280)
+                        else if (width >= Math.Ceiling(fullLabelWidth) + 1)
                             Assert.All(PrimaryLabels(button), label => Assert.Equal(Visibility.Visible, label.Visibility));
                     }
                 }
@@ -82,19 +89,25 @@ public sealed class EditorCommandBarAdaptiveTests(ITestOutputHelper output)
     });
 
     [Theory]
-    [InlineData("ko-KR")]
-    [InlineData("en-US")]
-    public void ActualWindowWidthsMeetEachStageBoundaryAndKeepNamesFrom960(string language) => StaTestHost.Run(() =>
+    [InlineData("ko-KR", 981, 800, 654)]
+    [InlineData("en-US", 952, 813, 654)]
+    public void ActualWindowWidthsMeetEachMeasuredStageBoundary(string language, int fullWidth, int secondaryWidth, int compactWidth) => StaTestHost.Run(() =>
     {
         using var culture = UiText.UseLanguage(language);
         using var preference = new HintPreference(() => false);
         using EditorWindowHost host = EditorWindowHost.Create();
         host.Window.Resources = SystemHighContrastThemeTests.LoadTheme();
+        VisualTreeHelper.SetRootDpi(host.Window, new DpiScale(1, 1));
         // Measure the bar's natural boundary separately from the supported 680-DIP floor.
         // The preceding test verifies the unchanged real minimum and every supported size.
         Assert.Equal(680, host.Window.MinWidth);
         host.Window.MinWidth = 1;
+        host.Window.Width = 1280;
+        host.Window.Dispatcher.Invoke(System.Windows.Threading.DispatcherPriority.ApplicationIdle, new Action(host.Window.UpdateLayout));
         var bar = Descendants(host.Editor).OfType<CommandGroupsPanel>().Single(panel => panel.IsVisible);
+        double fullLabelWidth = ((FrameworkElement)bar.Children[0]).DesiredSize.Width
+            + CommandGroupsPanel.GroupGap + ((FrameworkElement)bar.Children[1]).DesiredSize.Width
+            + host.Window.Width - bar.ActualWidth;
         bool Fits(int width, int maximumStage)
         {
             host.Window.Width = width;
@@ -107,6 +120,7 @@ public sealed class EditorCommandBarAdaptiveTests(ITestOutputHelper output)
             int stage = compactRight ? 3 : compactLeft ? 2 : 1;
             return stage <= maximumStage && left.DesiredSize.Width + CommandGroupsPanel.GroupGap + right.DesiredSize.Width <= bar.ActualWidth + 0.01;
         }
+        var measuredWidths = new List<int>();
         foreach (int stage in new[] { 1, 2, 3 })
         {
             int low = 300, high = 1280;
@@ -121,9 +135,10 @@ public sealed class EditorCommandBarAdaptiveTests(ITestOutputHelper output)
             Assert.False(Fits(high - 1, stage));
             Assert.True(Fits(high, stage));
             output.WriteLine($"{language}: stage {stage} minimum outer width = {high} DIP; panel = {bar.ActualWidth:0.##} DIP");
-            if (stage == 1) Assert.InRange(high, 300, 960);
-            if (stage == 3) Assert.InRange(high, 300, 680);
+            measuredWidths.Add(high);
+            if (stage == 1) Assert.InRange(high, Math.Ceiling(fullLabelWidth) - 1, Math.Ceiling(fullLabelWidth) + 1);
         }
+        Assert.Equal(new[] { fullWidth, secondaryWidth, compactWidth }, measuredWidths);
     });
 
     private static IEnumerable<TextBlock> PrimaryLabels(Button button)

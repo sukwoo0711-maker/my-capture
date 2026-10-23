@@ -48,6 +48,7 @@ public sealed partial class GalleryViewModel
         CaptureSearchField.Tag => UiText.Get("Library.Search.Field.Tag"),
         CaptureSearchField.Text => UiText.Get("Library.Search.Field.Text"),
         CaptureSearchField.Url => UiText.Get("Library.Search.Field.Url"),
+        CaptureSearchField.Host => UiText.Get("Library.Search.Field.Host"),
         CaptureSearchField.Folder => UiText.Get("Library.Search.Field.Folder"),
         CaptureSearchField.Type => UiText.Get("Library.Search.Field.Type"),
         CaptureSearchField.Pinned => UiText.Get("Library.Search.Field.Pinned"),

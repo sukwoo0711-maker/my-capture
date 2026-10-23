@@ -175,7 +175,7 @@ public sealed class EditorLargeTextViewportTests
         {
             Text = string.Concat(Enumerable.Repeat("한글 줄바꿈과 소수 폭을 유지합니다 abcXYZ😀 ", 100)),
             // Keep the projected width fractional after the wider canvas's new fit scale.
-            Rect = new RectD(left, 40, 800 - left - 0.875, 40),
+            Rect = new RectD(left, 40, 800 - left - 1.4, 40),
             FontSize = 18,
             AutoSize = false,
         };

@@ -16,17 +16,26 @@ internal static class ClipboardAvailability
 {
     private const uint CfText = 1, CfBitmap = 2, CfDib = 8, CfUnicodeText = 13, CfDibV5 = 17;
     private static readonly Lazy<uint> PngFormat = new(() => RegisterClipboardFormat("PNG"));
+    private static Func<bool>? _testOverride;
 
-    /// <summary>Replaces the native check in tests.</summary>
-    internal static Func<bool>? OverrideForTest { get; set; }
+    internal static bool IsTestOverrideInstalled => Volatile.Read(ref _testOverride) is not null;
+
+    // Installed before product code runs. Tests cannot reset this and accidentally resume
+    // native clipboard queries; the delegate overload below remains available for fixtures.
+    internal static void InstallTestOverride(Func<bool> hasPinnableContent)
+    {
+        ArgumentNullException.ThrowIfNull(hasPinnableContent);
+        if (Interlocked.CompareExchange(ref _testOverride, hasPinnableContent, null) is not null)
+            throw new InvalidOperationException("The clipboard availability test override is already installed for this process.");
+    }
 
     /// <summary>True when the clipboard announces an image (PNG or bitmap) or text.</summary>
     internal static bool HasPinnableContent() =>
-        HasPinnableContent(IsClipboardFormatAvailable, static () => PngFormat.Value);
+        Volatile.Read(ref _testOverride)?.Invoke()
+        ?? HasPinnableContent(IsClipboardFormatAvailable, static () => PngFormat.Value);
 
     internal static bool HasPinnableContent(Func<uint, bool> hasFormat, Func<uint> getPngFormat)
     {
-        if (OverrideForTest is { } overridden) return overridden();
         try
         {
             if (hasFormat(CfUnicodeText) || hasFormat(CfText)

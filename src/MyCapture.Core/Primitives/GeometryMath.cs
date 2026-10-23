@@ -41,6 +41,32 @@ public static class GeometryMath
     /// <returns>
     /// <see cref="double.PositiveInfinity"/> when fewer than two points are given.
     /// </returns>
+    /// <summary>Same as <see cref="DistanceToPolyline(PointD, IReadOnlyList{PointD})"/> over a contiguous span.</summary>
+    public static double DistanceToPolylineSpan(PointD p, ReadOnlySpan<PointD> points)
+    {
+        if (points.IsEmpty)
+        {
+            return double.PositiveInfinity;
+        }
+
+        if (points.Length == 1)
+        {
+            return p.DistanceTo(points[0]);
+        }
+
+        double best = double.PositiveInfinity;
+        for (int i = 0; i < points.Length - 1; i++)
+        {
+            double d = DistanceToSegment(p, points[i], points[i + 1]);
+            if (d < best)
+            {
+                best = d;
+            }
+        }
+
+        return best;
+    }
+
     public static double DistanceToPolyline(PointD p, IReadOnlyList<PointD> points)
     {
         ArgumentNullException.ThrowIfNull(points);
@@ -150,6 +176,27 @@ public static class GeometryMath
     /// <summary>
     /// Axis-aligned bounds enclosing <paramref name="points"/>.
     /// </summary>
+    /// <summary>Same as <see cref="BoundsOf(IReadOnlyList{PointD})"/> over a contiguous span.</summary>
+    public static RectD BoundsOfSpan(ReadOnlySpan<PointD> points)
+    {
+        if (points.IsEmpty)
+        {
+            return RectD.Empty;
+        }
+
+        double minX = double.MaxValue, minY = double.MaxValue;
+        double maxX = double.MinValue, maxY = double.MinValue;
+        foreach (PointD p in points)
+        {
+            if (p.X < minX) minX = p.X;
+            if (p.Y < minY) minY = p.Y;
+            if (p.X > maxX) maxX = p.X;
+            if (p.Y > maxY) maxY = p.Y;
+        }
+
+        return new RectD(minX, minY, maxX - minX, maxY - minY);
+    }
+
     public static RectD BoundsOf(IReadOnlyList<PointD> points)
     {
         ArgumentNullException.ThrowIfNull(points);

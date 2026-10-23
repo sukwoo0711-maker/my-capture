@@ -87,6 +87,8 @@ internal sealed class AnnotationEditorSurface : FrameworkElement
 
     internal string? SourceWindowTitle { get; set; }
     internal CropSelection? PendingCrop { get; set; }
+    internal IReadOnlyList<RectD> PendingMosaicRegions { get; set; } = [];
+    internal RectD? MosaicGestureRegion { get; set; }
 
     /// <summary>
     /// Replaces the base bitmap and crop (a rotation swaps width and height) and repaints.
@@ -242,6 +244,18 @@ internal sealed class AnnotationEditorSurface : FrameworkElement
 
         if (PendingCrop is { } pending) DrawPendingCrop(dc, pending);
         else DrawSelectionAdorner(dc);
+        foreach (RectD region in PendingMosaicRegions) DrawMosaicDraft(dc, region);
+        if (MosaicGestureRegion is { } gesture) DrawMosaicDraft(dc, gesture);
+    }
+
+    private void DrawMosaicDraft(DrawingContext dc, RectD region)
+    {
+        Rect bounds = ToSurfaceRect(region);
+        dc.PushOpacity(0.12);
+        dc.DrawRectangle(_selectionBrush, null, bounds);
+        dc.Pop();
+        dc.DrawRectangle(null, _edgeShadowPen, bounds);
+        dc.DrawRectangle(null, _selectionOutlinePen, bounds);
     }
 
     private void DrawPendingCrop(DrawingContext dc, CropSelection pending)
