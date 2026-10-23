@@ -4605,4 +4605,8 @@ Overwrite these shortcuts? You can change this later in Settings → Shortcuts.<
   <data name="CoreShortcuts.KeepCurrent" xml:space="preserve"><value>Keep current</value></data>
   <data name="CoreShortcuts.Force" xml:space="preserve"><value>Handle Ctrl+Shift+C/X/Z and F3 before other programs</value></data>
   <data name="CoreShortcuts.ForceDescription" xml:space="preserve"><value>MyCapture receives these shortcuts even if another program registered them first. Turn this off to let the program that registered them first use them.</value></data>
+  <data name="About_DiagnosticsBundle" xml:space="preserve"><value>Save diagnostics bundle</value></data>
+  <data name="About_DiagnosticsBundleHelp" xml:space="preserve"><value>Saves recent logs and diagnostics in one ZIP file. Captures, clipboard contents, window titles and file paths are not included, and nothing is sent automatically.</value></data>
+  <data name="About_DiagnosticsBundleSaved" xml:space="preserve"><value>Diagnostics bundle saved</value></data>
+  <data name="About_DiagnosticsBundleFilter" xml:space="preserve"><value>Diagnostics bundle (*.zip)|*.zip</value></data>
 </root>

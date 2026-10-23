@@ -271,6 +271,16 @@ public sealed class ReleaseVersionContractTests
     }
 
     [Fact]
+    public void PackagedValidation_RunsForEveryReleaseTagAndOnDemand()
+    {
+        // It ran only for a retired v1.8.0 branch, so no release from 4.0.0 to 4.5.2 was validated.
+        string workflow = Read(".github/workflows/packaged-validation.yml").Replace("\r\n", "\n", StringComparison.Ordinal);
+        Assert.Contains("  push:\n    tags:\n      - 'v*'\n  workflow_dispatch:\n", workflow, StringComparison.Ordinal);
+        Assert.DoesNotContain("branches:", workflow, StringComparison.Ordinal);
+        Assert.Contains("$env:GITHUB_REF_NAME -cne \"v$version\"", workflow, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void PublishedGitHubReleases_MustIncludeTheSixRequiredAssets()
     {
         string required = Read("build/required-release-assets.ps1");
