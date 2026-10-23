@@ -187,8 +187,20 @@ internal static class VideoEditorResponsivenessSelfTest
         var report = new StringBuilder();
         var failures = new List<string>();
         VideoEditorWindow? editor = null;
+        var clock = Stopwatch.StartNew();
+        bool finished = false;
 
-        void Line(string value = "") => report.AppendLine(value);
+        // The runner stops a run that hangs before the final report is written. Each line
+        // leaves the report so far on disk, without a RESULT line, so the stop point is known.
+        // Lines are written between measured phases only, never inside a measured loop.
+        void Line(string value = "")
+        {
+            report.AppendLine(value);
+            try { File.WriteAllText(reportPath, report.ToString(), new UTF8Encoding(false)); }
+            catch (Exception error) when (error is IOException or UnauthorizedAccessException) { }
+        }
+        void Phase(string name) => Line(string.Create(
+            CultureInfo.InvariantCulture, $"Phase +{clock.Elapsed.TotalSeconds:0.0}s: {name}"));
         void Gate(bool condition, string pass, string failure)
         {
             if (condition)
@@ -211,7 +223,9 @@ internal static class VideoEditorResponsivenessSelfTest
             Line($"Verification mode: {_verificationMode}");
             Line();
 
-            RecordingResult recording = sharedRecording ?? RecordClip(clipPath);
+            Phase(sharedRecording is null ? "recording the source clip" : "using the shared source clip");
+            RecordingResult recording = sharedRecording ?? RecordClip(clipPath, Phase);
+            Phase("reading the container duration");
             double containerMs = MediaFoundationVideoFrameReader.ReadContainerDurationMs(clipPath);
             ValidateSourceClip(recording, containerMs);
             Line(string.Create(
@@ -222,6 +236,7 @@ internal static class VideoEditorResponsivenessSelfTest
 
             using ILoggerFactory loggerFactory = LoggerFactory.Create(builder =>
                 builder.SetMinimumLevel(LogLevel.Warning));
+            Phase("opening the editor window");
             editor = new VideoEditorWindow(
                 recording,
                 AppPaths.CreateForRoot(outputDirectory),
@@ -236,6 +251,7 @@ internal static class VideoEditorResponsivenessSelfTest
             };
             editor.Show();
 
+            Phase("waiting for the media to open");
             bool ready = PumpUntil(
                 () => editor.IsMediaReadyForTest || editor.HasMediaFailedForTest,
                 TimeSpan.FromSeconds(10));
@@ -244,6 +260,7 @@ internal static class VideoEditorResponsivenessSelfTest
                 "real MP4 did not reach ready state: " + editor.MediaFailureForTest);
             if (!editor.IsMediaReadyForTest)
             {
+                finished = true;
                 return Finish(reportPath, report, failures);
             }
 
@@ -322,6 +339,7 @@ internal static class VideoEditorResponsivenessSelfTest
             // Filmstrip publications request legitimate static redraws independently of pointer input:
             // each decoded batch must appear, so a batch landing between two scrub frames costs one
             // extra composition frame. Measure and gate that phase on its own, then count the scrub.
+            Phase("waiting for the filmstrip");
             long preparationFramesBefore = timeline.RenderFrameCountForTest;
             editor.UpdateLayout();
             bool filmstripCompleted = PumpUntil(
@@ -347,6 +365,7 @@ internal static class VideoEditorResponsivenessSelfTest
 
             // Five seconds at approximately 60 input samples/sec. SeekFromOverview exercises
             // the real event wiring and worst-case detail-follow path, not a private shortcut.
+            Phase("five-second scrub and release seek");
             var pointerLatencies = new double[DragSamples];
             var cycleTimes = new double[DragSamples - 1];
             long framesBefore = timeline.RenderFrameCountForTest;
@@ -449,6 +468,7 @@ internal static class VideoEditorResponsivenessSelfTest
                 "release exact seek completed and stale preview was suppressed",
                 "release exact seek did not become the final presented generation");
 
+            Phase("exact seeks");
             var exactLatencies = new double[ExactSamples];
             for (int i = 0; i < ExactSamples; i++)
             {
@@ -473,6 +493,7 @@ internal static class VideoEditorResponsivenessSelfTest
 
             // The final frame lies past Windows Media Player's whole-second length; the preview
             // must still seek there instead of stopping at the truncated end.
+            Phase("final-frame seek");
             double tailTarget = Math.Max(0, clipMs - (500.0 / Math.Max(1, recording.Fps)));
             long tailGeneration = coordinator.RequestExact(tailTarget);
             bool tailPresented = PumpUntil(
@@ -488,6 +509,7 @@ internal static class VideoEditorResponsivenessSelfTest
                     CultureInfo.InvariantCulture,
                     $"final-frame seek to {tailTarget:0.###}ms presented {tailPresentedMs:0.###}ms (completed={tailPresented})"));
 
+            Phase("trim, zoom and Fit All");
             timeline.SetIn(clipMs * 0.1);
             timeline.SetOut(clipMs * 0.9);
             timeline.ZoomAroundPlayhead(0.5);
@@ -496,6 +518,7 @@ internal static class VideoEditorResponsivenessSelfTest
                 "trim, zoom, and Fit All remain usable after sustained scrub",
                 "timeline invariants failed after scrub/trim/zoom flow");
 
+            Phase("editor window screenshot");
             CaptureWindow(editor, screenshotPath);
             Gate(File.Exists(screenshotPath) && new FileInfo(screenshotPath).Length > 1000,
                 "real editor window screenshot was captured for visual review",
@@ -511,6 +534,8 @@ internal static class VideoEditorResponsivenessSelfTest
         }
         finally
         {
+            // The early return above has already written the final report.
+            if (!finished) Phase("closing the editor");
             editor?.Close();
             PumpFor(TimeSpan.FromMilliseconds(30));
         }
@@ -518,7 +543,7 @@ internal static class VideoEditorResponsivenessSelfTest
         return Finish(reportPath, report, failures);
     }
 
-    private static RecordingResult RecordClip(string path)
+    private static RecordingResult RecordClip(string path, Action<string>? phase = null)
     {
         var engine = new ScreenCaptureEngine(NullLogger<ScreenCaptureEngine>.Instance);
         var grabber = new RegionFrameGrabber(engine, includeCursor: false);
@@ -532,6 +557,7 @@ internal static class VideoEditorResponsivenessSelfTest
             new RectD(0, 0, 320, 240),
             path,
             new RecordingSettings { FrameRate = RecordingFrameRate.Fps15, IncludeCursor = false });
+        phase?.Invoke("waiting for the first encoded frame");
         var startup = Stopwatch.StartNew();
         while (!firstFrame.Wait(50) && recorder.IsRecording && startup.Elapsed < TimeSpan.FromSeconds(15)) { }
         if (!firstFrame.IsSet)
@@ -542,7 +568,9 @@ internal static class VideoEditorResponsivenessSelfTest
         // Sample real recording time after startup, so a slow WGC/codec cannot consume
         // the whole fixture interval and leave a single timestamp-zero frame.
         Thread.Sleep(2500);
+        phase?.Invoke("stopping the recorder");
         RecordingResult recording = recorder.Stop();
+        phase?.Invoke("validating the recorded clip");
         ValidateSourceClip(recording, MediaFoundationVideoFrameReader.ReadContainerDurationMs(path));
         return recording;
     }
