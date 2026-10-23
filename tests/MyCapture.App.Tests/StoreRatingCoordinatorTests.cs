@@ -25,7 +25,7 @@ public sealed class StoreRatingCoordinatorTests
     private sealed class Harness
     {
         public readonly AppSettings Settings = new() { StoreRating = { FirstSeenUtc = Start } };
-        public readonly StoreRatingTestClock Clock = new(Start.AddDays(4));
+        public readonly StoreRatingTestClock Clock = new(Start.AddDays(1));
         public readonly List<string> Events = [];
         public bool Busy;
         public bool Active = true;
@@ -73,14 +73,14 @@ public sealed class StoreRatingCoordinatorTests
     }
 
     [Fact]
-    public void StoreRating_TenthSuccessOffersOnReturnAndExplicitReviewAsksExactlyOnce()
+    public void StoreRating_FifthSuccessOffersOnReturnAndExplicitReviewAsksExactlyOnce()
     {
         StaTestHost.Run(() =>
         {
             var harness = new Harness();
             StoreRatingCoordinator coordinator = harness.Create();
 
-            Succeed(coordinator, 9);
+            Succeed(coordinator, 4);
             Assert.False(coordinator.IsPending);
             coordinator.NotifyFlowEnded();
             Assert.False(coordinator.IsSettleTimerRunning);
@@ -105,7 +105,7 @@ public sealed class StoreRatingCoordinatorTests
             Assert.Equal(harness.Clock.Now, harness.Settings.StoreRating.RequestAttemptedUtc);
             // The attempt is persisted before the dialog is requested.
             int request = harness.Events.IndexOf("request");
-            Assert.Equal("save count=10 attempted=True", harness.Events[request - 1]);
+            Assert.Equal("save count=5 attempted=True", harness.Events[request - 1]);
 
             int eventsAfterAttempt = harness.Events.Count;
             harness.Clock.Now = harness.Clock.Now.AddDays(30);
@@ -119,15 +119,15 @@ public sealed class StoreRatingCoordinatorTests
     }
 
     [Fact]
-    public void StoreRating_WaitsThreeDaysFromFirstSeen()
+    public void StoreRating_WaitsOneFullDayFromFirstSeen()
     {
         var harness = new Harness();
-        harness.Clock.Now = Start.AddDays(3) - TimeSpan.FromMinutes(1);
+        harness.Clock.Now = Start.AddDays(1) - TimeSpan.FromTicks(1);
         StoreRatingCoordinator coordinator = harness.Create();
-        Succeed(coordinator, 10);
+        Succeed(coordinator, 5);
         Assert.False(coordinator.IsPending);
 
-        harness.Clock.Now = Start.AddDays(3);
+        harness.Clock.Now = Start.AddDays(1);
         coordinator.RecordCapture(succeeded: true);
         Assert.True(coordinator.IsPending);
     }
@@ -137,7 +137,7 @@ public sealed class StoreRatingCoordinatorTests
     {
         var harness = new Harness();
         StoreRatingCoordinator coordinator = harness.Create();
-        Succeed(coordinator, 10);
+        Succeed(coordinator, 5);
         Assert.True(coordinator.IsPending);
 
         coordinator.RecordCapture(succeeded: false);
@@ -157,7 +157,7 @@ public sealed class StoreRatingCoordinatorTests
     {
         var harness = new Harness { Request = () => Task.FromException<string>(new InvalidOperationException("Store unavailable")) };
         StoreRatingCoordinator coordinator = harness.Create();
-        Succeed(coordinator, 10);
+        Succeed(coordinator, 5);
         Assert.True(coordinator.NotifyUserReturned());
         Assert.True(coordinator.AcceptInvitation());
         await coordinator.LastRequest!;
@@ -173,7 +173,7 @@ public sealed class StoreRatingCoordinatorTests
     {
         var harness = new Harness();
         StoreRatingCoordinator coordinator = harness.Create();
-        Succeed(coordinator, 10);
+        Succeed(coordinator, 5);
         coordinator.NotifyFlowEnded();
         Assert.False(coordinator.TryRequestNow());
         harness.Active = false;
@@ -196,7 +196,7 @@ public sealed class StoreRatingCoordinatorTests
     {
         var harness = new Harness();
         StoreRatingCoordinator coordinator = harness.Create();
-        Succeed(coordinator, 10);
+        Succeed(coordinator, 5);
         Assert.True(coordinator.NotifyUserReturned());
         coordinator.RecordCapture(false);
         Assert.False(coordinator.AcceptInvitation());
@@ -224,7 +224,7 @@ public sealed class StoreRatingCoordinatorTests
         Assert.NotNull(harness.Settings.StoreRating.RequestAttemptedUtc);
         Assert.Equal("save count=4 attempted=True", harness.Events[^1]);
 
-        Succeed(coordinator, 10);
+        Succeed(coordinator, 5);
         Assert.False(coordinator.IsPending);
         Assert.False(coordinator.TryRequestNow());
         Assert.Equal(0, harness.Requests);
