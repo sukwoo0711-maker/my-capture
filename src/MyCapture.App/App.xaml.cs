@@ -46,6 +46,7 @@ public partial class App : Application
     private RegisteredWaitHandle? _activationWait;
     private ServiceProvider? _services;
     private ILogger<App>? _log;
+    private RollingFileLog? _fileLog;
     private TrayIconService? _tray;
     private GlobalHotkeyService? _hotkeys;
     private AppSettings? _settings;
@@ -137,6 +138,8 @@ public partial class App : Application
         }
 
         DispatcherUnhandledException += OnDispatcherUnhandledException;
+        AppDomain.CurrentDomain.UnhandledException += OnDomainUnhandledException;
+        TaskScheduler.UnobservedTaskException += OnUnobservedTaskException;
         EventManager.RegisterClassHandler(typeof(Window), FrameworkElement.LoadedEvent,
             new RoutedEventHandler((sender, _) =>
             {
@@ -146,6 +149,7 @@ public partial class App : Application
         try
         {
             _services = BuildServiceProvider();
+            _fileLog = _services.GetRequiredService<RollingFileLog>();
             _log = _services.GetRequiredService<ILogger<App>>();
             CaptureWindowExclusion.Logger = _log;
             _log.LogInformation("MyCapture starting up");
@@ -1847,6 +1851,7 @@ public partial class App : Application
         ConfigureEngagementWindow(window);
         ConfigureLegacyImportWindow(window);
         window.StoreReviewOpened = () => _storeRating?.NoteManualReviewOpened();
+        window.FileLog = _fileLog;
 
         // Keep the tray state in sync after an apply (a hotkey collision flips it to Error).
         window.Applied += (_, _) => RestoreTrayAfterCapture();
@@ -2233,15 +2238,23 @@ public partial class App : Application
     private static ServiceProvider BuildServiceProvider()
     {
         var services = new ServiceCollection();
+        AppPaths paths = ResolveAppPaths();
+
+        // Information and above also go to logs\mycapture.log under the same rule as the recent-error
+        // list: numbers and code identifiers only, never message text, paths, titles or clipboard.
+        var fileLog = new RollingFileLog(paths.LogsRoot);
+        fileLog.Append(SafeLogLine.Session(DateTimeOffset.UtcNow));
 
         services.AddLogging(builder =>
         {
             builder.SetMinimumLevel(LogLevel.Debug);
             builder.AddDebug();
             builder.AddProvider(new MyCapture.App.Diagnostics.RecentErrorLogProvider(MyCapture.App.Diagnostics.RecentErrorLog.Shared));
+            builder.AddProvider(new RollingFileLogProvider(fileLog));
         });
 
-        services.AddSingleton(ResolveAppPaths());
+        services.AddSingleton(paths);
+        services.AddSingleton(fileLog);
         services.AddSingleton<SettingsStore>();
         services.AddSingleton<ILegacyLibraryMigrationService, LegacyLibraryMigrationService>();
         services.AddSingleton<ScreenCaptureEngine>();
@@ -2333,6 +2346,21 @@ public partial class App : Application
 
         e.Handled = true;
     }
+
+    /// <summary>
+    /// An exception no handler caught off the dispatcher thread. The runtime still ends the process;
+    /// this only records it and writes the file log out before that happens.
+    /// </summary>
+    private void OnDomainUnhandledException(object sender, UnhandledExceptionEventArgs e)
+    {
+        _log?.LogCritical(e.ExceptionObject as Exception,
+            "Unhandled exception off the dispatcher thread (terminating: {IsTerminating})", e.IsTerminating);
+        _fileLog?.Flush(TimeSpan.FromSeconds(2));
+    }
+
+    /// <summary>A faulted task nobody awaited. Recorded only; the runtime's own handling is unchanged.</summary>
+    private void OnUnobservedTaskException(object? sender, UnobservedTaskExceptionEventArgs e) =>
+        _log?.LogError(e.Exception, "Unobserved task exception");
 
     protected override void OnExit(ExitEventArgs e)
     {
@@ -2432,6 +2460,8 @@ public partial class App : Application
         }
 
         _services?.Dispose();
+        // Last: services log while they dispose. Dispose writes every queued line first.
+        _fileLog?.Dispose();
 
         if (_singleInstanceMutex is not null)
         {
