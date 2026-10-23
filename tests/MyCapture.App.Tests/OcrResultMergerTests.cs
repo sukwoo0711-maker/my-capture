@@ -7,6 +7,74 @@ public sealed class OcrResultMergerTests
 {
     private static readonly TimeSpan WallTime = TimeSpan.FromMilliseconds(125);
 
+    [Theory]
+    [InlineData("...")]
+    [InlineData("=>")]
+    [InlineData("₩")]
+    public void SpatialAgreementPreservesSymbolOnlyLines(string text)
+    {
+        OcrLine windows = Line(text, 10, 10, 35, 20);
+        OcrResult merged = Merge(Result(windows), Result(Line(text, 12, 11, 35, 20)));
+        Assert.Equal(OcrStatus.Success, merged.Status);
+        Assert.Equal(text, merged.Text);
+        Assert.Single(merged.Lines);
+    }
+
+    [Theory]
+    [InlineData("...")]
+    [InlineData("=>")]
+    [InlineData("₩")]
+    public void AgreementInDifferentCellsDoesNotRescueSymbols(string text)
+    {
+        OcrResult merged = Merge(Result(Line(text, 10, 10, 35, 20)), Result(Line(text, 100, 10, 35, 20)));
+        Assert.Equal(OcrStatus.NoText, merged.Status);
+        Assert.Empty(merged.Lines);
+    }
+
+    [Fact]
+    public void SpatialAgreementAcceptsPaddedNeuralBoxOffsetFromTightGlyphs()
+    {
+        // A PP-OCR box padded by the unclip ratio, its center well below the tight Windows box.
+        OcrResult merged = Merge(Result(Line("...", 10, 10, 30, 10)), Result(Line("...", 8, 12, 34, 20)));
+        Assert.Equal(OcrStatus.Success, merged.Status);
+        Assert.Equal("...", merged.Text);
+        Assert.Single(merged.Lines);
+    }
+
+    [Fact]
+    public void SpatialAgreementPreservesLowDensityDotLeaderLine()
+    {
+        // Two digits among eleven glyphs fall below the single-engine density filter.
+        OcrResult merged = Merge(Result(Line(".........12", 10, 10, 120)), Result(Line(".........12", 11, 11, 120)));
+        Assert.Equal(".........12", merged.Text);
+        Assert.Single(merged.Lines);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void UncorroboratedSymbolOnlyLineIsStillDropped(bool windowsHasSymbol)
+    {
+        OcrResult symbol = Result(Line("본문", 10, 10), Line("=>", 10, 40, 30));
+        OcrResult other = Result(Line("본문", 10, 10));
+        OcrResult merged = windowsHasSymbol ? Merge(symbol, other) : Merge(other, symbol);
+        Assert.Equal("본문", merged.Text);
+        Assert.Single(merged.Lines);
+    }
+
+    [Theory]
+    [InlineData("\uFFFD")]
+    [InlineData("\uE000")]
+    [InlineData("\u200B")]
+    [InlineData("\u0001")]
+    [InlineData("=>\uFFFD")]
+    public void AgreedInvalidGlyphsAreStillRejected(string text)
+    {
+        OcrResult merged = Merge(Result(Line(text, 10, 10)), Result(Line(text, 10, 10)));
+        Assert.Equal(OcrStatus.NoText, merged.Status);
+        Assert.Empty(merged.Lines);
+    }
+
     [Fact]
     public void CompactAgreementKeepsWindowsSpacingAndWordGeometry()
     {

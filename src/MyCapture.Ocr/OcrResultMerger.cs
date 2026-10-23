@@ -18,8 +18,8 @@ internal static class OcrResultMerger
         // orientation metadata. Use the explicit reading axes while leaving every box untouched.
         OcrReadingOrientation orientation = windows.HasText && windows.ReadingOrientation.OriginalWidth > 0
             ? windows.ReadingOrientation : neural.ReadingOrientation;
-        OcrLine[] first = OrderLines(PlausibleLines(windows), orientation);
-        OcrLine[] second = OrderLines(PlausibleLines(neural), orientation);
+        OcrLine[] first = OrderLines(PlausibleLines(windows, neural, orientation), orientation);
+        OcrLine[] second = OrderLines(PlausibleLines(neural, windows, orientation), orientation);
         var parents = Enumerable.Range(0, first.Length + second.Length).ToArray();
         OcrLine[] allLines = [.. first, .. second];
         OcrRect[] readingBounds = allLines.Select(line => orientation.ToReading(line.Bounds)).ToArray();
@@ -145,8 +145,25 @@ internal static class OcrResultMerger
         return OcrResult.Unavailable(neural.Message ?? windows.Message);
     }
 
-    private static OcrLine[] PlausibleLines(OcrResult result) => result.HasText
-        ? result.Lines.Where(line => Profile.Create(line.Text).Plausible)
+    private static OcrLine[] PlausibleLines(OcrResult result, OcrResult other, OcrReadingOrientation orientation) => result.HasText
+        ? result.Lines.Where(line =>
+            {
+                Profile profile = Profile.Create(line.Text);
+                if (profile.Plausible) return true;
+                // The noise filter judges one engine's reading alone. A line both engines read
+                // identically in the same source region ("...", "=>", a currency-only cell) is
+                // corroborated, so it is kept before that filter. Agreement never rehabilitates
+                // replacement glyphs, private-use or control characters.
+                if (!profile.Clean || !other.HasText) return false;
+                OcrRect bounds = orientation.ToReading(line.Bounds);
+                return other.Lines.Any(candidate =>
+                {
+                    OcrRect candidateBounds = orientation.ToReading(candidate.Bounds);
+                    return Profile.Create(candidate.Text).Compact == profile.Compact &&
+                        (SameRow(bounds, candidateBounds) || PaddedRow(bounds, candidateBounds)) &&
+                        Aligns(bounds, candidateBounds);
+                });
+            })
             .Select(line => line with { Text = line.Text.Trim() }).ToArray()
         : [];
 
@@ -461,11 +478,9 @@ internal static class OcrResultMerger
         // box with its center inside. That geometry identifies the row when the two texts
         // agree, or when the larger box holds no other row of the smaller box's engine.
         OcrRect a = bounds[first], b = bounds[second];
-        if (!HasArea(a) || !HasArea(b)) return false;
+        if (!PaddedRow(a, b)) return false;
         (int small, OcrRect inner, OcrRect outer) = a.Height <= b.Height ? (first, a, b) : (second, b, a);
         double overlap = VerticalOverlap(inner, outer);
-        double center = CenterY(inner);
-        if (overlap < inner.Height * .5 || center < outer.Y || center > outer.Bottom) return false;
         if (TextSupports(compact[first], compact[second])) return true;
         if (overlap < inner.Height * .8) return false;
         int start = small < windowsCount ? 0 : windowsCount, end = small < windowsCount ? windowsCount : bounds.Length;
@@ -476,6 +491,16 @@ internal static class OcrResultMerger
                 return false;
         }
         return true;
+    }
+
+    // The geometric part of OffsetRow: the smaller box lies mostly inside the larger one,
+    // with its center inside. Agreeing texts need nothing more to share a row.
+    private static bool PaddedRow(OcrRect a, OcrRect b)
+    {
+        if (!HasArea(a) || !HasArea(b)) return false;
+        (OcrRect inner, OcrRect outer) = a.Height <= b.Height ? (a, b) : (b, a);
+        double center = CenterY(inner);
+        return VerticalOverlap(inner, outer) >= inner.Height * .5 && center >= outer.Y && center <= outer.Bottom;
     }
 
     private static bool TextSupports(string first, string second)
@@ -569,7 +594,8 @@ internal static class OcrResultMerger
     }
 
     private sealed record Profile(string Compact, string LettersAndDigits, int Meaningful,
-        int OtherScript, double DefectRatio, bool Plausible, int Letters, int Hangul, int Latin)
+        int OtherScript, double DefectRatio, bool Plausible, int Letters, int Hangul, int Latin,
+        bool Clean)
     {
         internal static Profile Create(string text)
         {
@@ -610,7 +636,8 @@ internal static class OcrResultMerger
             bool plausible = count > 0 && defects == 0 &&
                 (meaningful >= Math.Max(1, count / 5.0) || syntaxOnly);
             return new(value, letters.ToString(), meaningful, otherScript,
-                count == 0 ? 1 : (defects + fragments * .5) / count, plausible, letterCount, hangul, latin);
+                count == 0 ? 1 : (defects + fragments * .5) / count, plausible, letterCount, hangul, latin,
+                count > 0 && defects == 0);
         }
     }
 

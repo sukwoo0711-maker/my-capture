@@ -15,7 +15,8 @@ public sealed partial class OcrModelBenchmarkTests
     /// Opt-in, offline replay of the product line merger over engine results retained by a
     /// previous dual benchmark run. No engine, model, image, profile or clipboard is used:
     /// only results.json files named by MYCAPTURE_OCR_MERGE_REPLAY are read, and the report
-    /// goes to MYCAPTURE_OCR_MERGE_REPLAY_OUT. Wall time still requires the full benchmark.
+    /// goes below the temp directory using the MYCAPTURE_OCR_MERGE_REPLAY_OUT folder name.
+    /// Wall time still requires the full benchmark.
     /// </summary>
     [Fact]
     public void ReplayOcrMergerOnRetainedResults_WhenExplicitlyEnabled()
@@ -23,8 +24,8 @@ public sealed partial class OcrModelBenchmarkTests
         string? inputs = Environment.GetEnvironmentVariable("MYCAPTURE_OCR_MERGE_REPLAY");
         if (string.IsNullOrWhiteSpace(inputs)) return;
 
-        string output = SafeOutputRoot(Environment.GetEnvironmentVariable("MYCAPTURE_OCR_MERGE_REPLAY_OUT")
-            ?? throw new InvalidOperationException("Set MYCAPTURE_OCR_MERGE_REPLAY_OUT to a report directory."));
+        string output = ReplayOutputRoot(Environment.GetEnvironmentVariable("MYCAPTURE_OCR_MERGE_REPLAY_OUT")
+            ?? throw new InvalidOperationException("Set MYCAPTURE_OCR_MERGE_REPLAY_OUT to a report folder name."));
         string dualName = Environment.GetEnvironmentVariable("MYCAPTURE_OCR_MERGE_REPLAY_DUAL") ?? "A-dual";
         string neuralName = Environment.GetEnvironmentVariable("MYCAPTURE_OCR_MERGE_REPLAY_NEURAL") ?? "A-cur";
         Directory.CreateDirectory(output);
@@ -40,7 +41,7 @@ public sealed partial class OcrModelBenchmarkTests
             JsonElement[] pipelines = document.RootElement.GetProperty("pipelines").EnumerateArray().ToArray();
             Dictionary<string, JsonElement> W = Images(pipelines, "W"), N = Images(pipelines, neuralName);
             Dictionary<string, JsonElement> D = Images(pipelines, dualName);
-            Assert.True(D.Count > 0 && D.Keys.All(W.ContainsKey) && D.Keys.All(N.ContainsKey),
+            Assert.True(ReplayIdsMatch(W.Keys, N.Keys, D.Keys),
                 $"{path}: W, {neuralName} and {dualName} must cover the same images.");
 
             var rows = new List<ReplayRow>();
@@ -127,6 +128,20 @@ public sealed partial class OcrModelBenchmarkTests
             }
             return matched / (double)Math.Max(1, lines);
         }
+    }
+
+    internal static string ReplayOutputRoot(string requested)
+    {
+        string name = Path.GetFileName(requested);
+        if (string.IsNullOrWhiteSpace(name) || name is "." or "..")
+            throw new ArgumentException("A report folder name is required.", nameof(requested));
+        return Path.Combine(Path.GetTempPath(), "mycapture-ocr-merge-replay", name);
+    }
+
+    internal static bool ReplayIdsMatch(IEnumerable<string> windows, IEnumerable<string> neural, IEnumerable<string> dual)
+    {
+        var ids = new HashSet<string>(dual, StringComparer.Ordinal);
+        return ids.Count > 0 && ids.SetEquals(windows) && ids.SetEquals(neural);
     }
 
     private static ProductResult ReadResult(JsonElement result)

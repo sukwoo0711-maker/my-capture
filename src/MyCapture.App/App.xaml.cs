@@ -71,6 +71,7 @@ public partial class App : Application
     private GalleryWindow? _galleryWindow;
     private PinManager? _pins;
     private IOcrService? _ocrService;
+    private readonly OcrModelPreparation _ocrModelPreparation = new();
     private OcrResultPresenter? _ocrPresenter;
     private IPrivacyRedactionService? _privacyRedactionService;
     private SettingsWindow? _settingsWindow;
@@ -1851,6 +1852,8 @@ public partial class App : Application
             if (lastOcrQuality != quality)
             {
                 lastOcrQuality = quality;
+                // A quality without PP-OCR no longer needs the models being prepared.
+                _ocrModelPreparation.CancelForQuality(quality);
                 if (OcrQualityProfile.UseNeuralModel(quality))
                     StartOcrModelDownload(isBackground: false);
             }
@@ -1862,7 +1865,7 @@ public partial class App : Application
 
     private void StartOcrModelDownload(bool isBackground = true, bool deferForBatterySaver = false)
     {
-        if (_services is null)
+        if (_services is null || _shutdownRequested)
         {
             return;
         }
@@ -1870,14 +1873,15 @@ public partial class App : Application
         OcrModelStore store = _services.GetRequiredService<OcrModelStore>();
         OcrQuality quality = OcrQualityNames.Normalize(_settings?.Ocr.Quality ?? OcrQuality.Fast);
         var download = new OcrModelDownloadCoordinator(store, new WindowsOcrDownloadEnvironment());
-        _ = Task.Run(async () =>
+        _ = _ocrModelPreparation.StartAsync(async token =>
         {
             try
             {
                 // Download only. Session creation stays on the first Accurate OCR so a
                 // native ONNX fault during startup cannot take down the tray process.
-                await download.EnsureAsync(quality, isBackground, CancellationToken.None, deferForBatterySaver).ConfigureAwait(false);
+                await download.EnsureAsync(quality, isBackground, token, deferForBatterySaver).ConfigureAwait(false);
             }
+            catch (OperationCanceledException) when (token.IsCancellationRequested) { }
             catch (Exception ex)
             {
                 _log?.LogWarning(ex, "Background OCR model download failed");
@@ -2326,6 +2330,8 @@ public partial class App : Application
 
     protected override void OnExit(ExitEventArgs e)
     {
+        // Stop a model download in progress; completed, verified model files stay.
+        _ocrModelPreparation.Close();
         _quickAccess?.Close();
         if (_preferenceSaveTimer?.IsEnabled == true) FlushEditorPreferences();
         if (_services?.GetService<SettingsStore>() is { } store

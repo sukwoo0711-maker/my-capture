@@ -25,7 +25,7 @@ namespace MyCapture.App.Tests;
 /// <summary>
 /// Opt-in, local-only model experiment. No application, real profile, clipboard, model-store
 /// download method, or existing test cleanup is used. All generated evidence stays in the
-/// explicitly selected output directory; this test deliberately retains it for inspection.
+/// named output folder under the temp directory; this test retains it for inspection.
 /// </summary>
 public sealed partial class OcrModelBenchmarkTests
 {
@@ -354,21 +354,25 @@ public sealed partial class OcrModelBenchmarkTests
         }
     }
 
-    private sealed class NeuralRunner : IRunner
+    internal sealed class NeuralRunner : IRunner
     {
         private static readonly MethodInfo ToResult = typeof(NeuralOcrEngine).GetMethod(
             "ToResult", BindingFlags.Static | BindingFlags.NonPublic)
             ?? throw new MissingMethodException(nameof(NeuralOcrEngine), "ToResult");
-        private readonly RapidOcr _engine = new();
+        private readonly RapidOcr _engine;
         private readonly RapidOcrOptions _options;
         private readonly OcrQuality _quality;
         public string? UnavailableReason => null;
 
         public NeuralRunner(string detector, string classifier, string recognizer, string dictionary,
-            RapidOcrOptions options, OcrQuality quality)
+            RapidOcrOptions options, OcrQuality quality, OnnxRuntimeInitialization? runtime = null)
         {
             _options = options;
             _quality = quality;
+            // Same order as NeuralOcrEngine: disable ONNX Runtime telemetry before any RapidOcr
+            // object or native session exists.
+            (runtime ?? OnnxRuntimeInitialization.Shared).EnsureInitialized();
+            _engine = new RapidOcr();
             try { _engine.InitModels(detector, classifier, recognizer, dictionary); }
             catch { Dispose(); throw; }
         }
@@ -772,17 +776,12 @@ public sealed partial class OcrModelBenchmarkTests
         return new ModelFile(path, stream.Length, Convert.ToHexString(SHA256.HashData(stream)));
     }
 
-    private static string SafeOutputRoot(string requested)
+    internal static string SafeOutputRoot(string requested)
     {
-        string result = Path.GetFullPath(requested);
-        foreach (Environment.SpecialFolder folder in new[] { Environment.SpecialFolder.ApplicationData, Environment.SpecialFolder.LocalApplicationData })
-        {
-            string profile = Path.GetFullPath(Path.Combine(Environment.GetFolderPath(folder), "MyCapture"));
-            if (string.Equals(result.TrimEnd(Path.DirectorySeparatorChar), profile, StringComparison.OrdinalIgnoreCase)
-                || result.StartsWith(profile + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
-                throw new InvalidOperationException("Benchmark output must not use the real MyCapture profile.");
-        }
-        return result;
+        string name = Path.GetFileName(requested);
+        if (string.IsNullOrWhiteSpace(name) || name is "." or "..")
+            throw new ArgumentException("A benchmark folder name is required.", nameof(requested));
+        return Path.Combine(Path.GetTempPath(), "mycapture-ocr-benchmark", name);
     }
 
     private static void WriteJson(string path, object value) => File.WriteAllText(path, JsonSerializer.Serialize(value, Json), new UTF8Encoding(false));

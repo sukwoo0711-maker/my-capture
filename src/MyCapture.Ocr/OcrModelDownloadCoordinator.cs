@@ -15,22 +15,43 @@ internal interface IOcrDownloadEnvironment
 
 internal sealed class WindowsOcrDownloadEnvironment : IOcrDownloadEnvironment
 {
+    private readonly Func<EnergySaverStatus> _energySaverStatus;
+    private readonly Func<ConnectionCostState?> _connectionCost;
+
+    public WindowsOcrDownloadEnvironment()
+        : this(() => PowerManager.EnergySaverStatus, ReadConnectionCost)
+    {
+    }
+
+    /// <summary>Supplies the two OS readings so tests can run this class's own decisions.</summary>
+    internal WindowsOcrDownloadEnvironment(Func<EnergySaverStatus> energySaverStatus,
+        Func<ConnectionCostState?> connectionCost)
+    {
+        _energySaverStatus = energySaverStatus ?? throw new ArgumentNullException(nameof(energySaverStatus));
+        _connectionCost = connectionCost ?? throw new ArgumentNullException(nameof(connectionCost));
+    }
+
     public bool? IsBatterySaverOn
     {
         get
         {
             try
             {
-                return PowerManager.EnergySaverStatus switch
-                {
-                    EnergySaverStatus.Off => false,
-                    EnergySaverStatus.On => true,
-                    _ => null,
-                };
+                return MapEnergySaverStatus(_energySaverStatus());
             }
             catch (Exception) { return null; }
         }
     }
+
+    // Windows reports Disabled when battery saver is off permanently or the device is plugged
+    // in, which is what a desktop without a battery reports. Only On saves power; an unknown
+    // value stays unknown so callers keep their cautious default.
+    internal static bool? MapEnergySaverStatus(EnergySaverStatus status) => status switch
+    {
+        EnergySaverStatus.Disabled or EnergySaverStatus.Off => false,
+        EnergySaverStatus.On => true,
+        _ => null,
+    };
 
     public int? ProcessorCount => Environment.ProcessorCount;
 
@@ -58,7 +79,7 @@ internal sealed class WindowsOcrDownloadEnvironment : IOcrDownloadEnvironment
         // An explicit action bypasses this check and can still prepare the models.
         try
         {
-            ConnectionCost? cost = NetworkInformation.GetInternetConnectionProfile()?.GetConnectionCost();
+            ConnectionCostState? cost = _connectionCost();
             return ShouldDefer(cost?.NetworkCostType ?? NetworkCostType.Unknown,
                 cost?.Roaming ?? false, cost?.OverDataLimit ?? false,
                 IsBatterySaverOn != false);
@@ -71,7 +92,15 @@ internal sealed class WindowsOcrDownloadEnvironment : IOcrDownloadEnvironment
 
     internal static bool ShouldDefer(NetworkCostType cost, bool roaming, bool overLimit, bool batterySaver) =>
         cost != NetworkCostType.Unrestricted || roaming || overLimit || batterySaver;
+
+    private static ConnectionCostState? ReadConnectionCost()
+    {
+        ConnectionCost? cost = NetworkInformation.GetInternetConnectionProfile()?.GetConnectionCost();
+        return cost is null ? null : new ConnectionCostState(cost.NetworkCostType, cost.Roaming, cost.OverDataLimit);
+    }
 }
+
+internal readonly record struct ConnectionCostState(NetworkCostType NetworkCostType, bool Roaming, bool OverDataLimit);
 
 internal sealed class OcrModelDownloadCoordinator(OcrModelStore store, IOcrDownloadEnvironment environment)
 {

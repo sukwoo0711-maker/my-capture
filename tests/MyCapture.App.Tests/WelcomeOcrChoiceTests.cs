@@ -1,10 +1,13 @@
 using System.IO;
 using System.Net;
 using System.Net.Http;
+using System.Reflection;
+using System.Runtime.CompilerServices;
 using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Controls;
 using System.Windows.Documents;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using MyCapture.Core.Localization;
 using MyCapture.Core.Settings;
@@ -16,6 +19,73 @@ namespace MyCapture.App.Tests;
 
 public sealed class WelcomeOcrChoiceTests
 {
+    [Theory]
+    [InlineData(OcrQuality.Fast, 1.0)]
+    [InlineData(OcrQuality.Balanced, 2.0)]
+    [InlineData(OcrQuality.Enhanced, 3.0)]
+    public void PrecheckedWelcomeClosedByExit_PreservesOcrButCompletesFirstRun(OcrQuality quality, double upscale) => StaTestHost.Run(() =>
+    {
+        var settings = new AppSettings { Ocr = { Quality = quality, UpscaleFactor = upscale } };
+        var window = new WelcomeWindow(settings.Hotkeys, settings.General.AfterCapture,
+            ocrEnvironment: new WelcomeOcrTestEnvironment())
+        {
+            WindowStartupLocation = WindowStartupLocation.Manual,
+            Left = -10000, Top = -10000, ShowActivated = false, ShowInTaskbar = false,
+        };
+        int saves = 0, downloads = 0;
+        bool shutdownRequested = false;
+        window.Closed += (_, _) => FirstRunOcrChoice.Complete(settings, window.UseAccurateOcr,
+            _ => saves++, () => downloads++, shutdownRequested: shutdownRequested);
+        try
+        {
+            window.Show();
+            Assert.True(window.UseAccurateOcr);
+            shutdownRequested = true;
+            window.Close();
+            Assert.Equal(quality, settings.Ocr.Quality);
+            Assert.Equal(upscale, settings.Ocr.UpscaleFactor);
+            Assert.Equal(1, saves);
+            Assert.Equal(0, downloads);
+        }
+        finally { if (window.IsVisible) window.Close(); }
+    });
+
+    [Theory]
+    [InlineData(OcrQuality.Fast, 1.0)]
+    [InlineData(OcrQuality.Balanced, 2.0)]
+    public void AppWelcomeHandlerClosedByExit_CompletesFirstRunWithoutOcrChoice(OcrQuality quality, double upscale)
+    {
+        string root = OwnedTestDirectory.Create("welcome-exit-");
+        try
+        {
+            var paths = AppPaths.CreateForRoot(root);
+            var settings = new AppSettings
+            {
+                General = { IsFirstRun = true }, Ocr = { Quality = quality, UpscaleFactor = upscale },
+            };
+            // No OcrModelStore is registered: a started model download would throw here.
+            using ServiceProvider services = new ServiceCollection()
+                .AddSingleton(new SettingsStore(paths, NullLogger<SettingsStore>.Instance))
+                .BuildServiceProvider();
+            var app = (App)RuntimeHelpers.GetUninitializedObject(typeof(App));
+            const BindingFlags flags = BindingFlags.Instance | BindingFlags.NonPublic;
+            typeof(App).GetField("_settings", flags)!.SetValue(app, settings);
+            typeof(App).GetField("_services", flags)!.SetValue(app, services);
+            typeof(App).GetField("_shutdownRequested", flags)!.SetValue(app, true);
+
+            // The production Closed handler's OCR step, with the checkbox checked.
+            typeof(App).GetMethod("CompleteWelcomeOcrChoice", flags)!.Invoke(app, [true]);
+
+            Assert.Equal(quality, settings.Ocr.Quality);
+            Assert.Equal(upscale, settings.Ocr.UpscaleFactor);
+            Assert.False(settings.General.IsFirstRun);
+            AppSettings saved = new SettingsStore(paths, NullLogger<SettingsStore>.Instance).Load();
+            Assert.Equal(quality, saved.Ocr.Quality);
+            Assert.False(saved.General.IsFirstRun);
+        }
+        finally { OwnedTestDirectory.Delete(root); }
+    }
+
     [Theory]
     [InlineData(true, false, 4, 8192, true)]
     [InlineData(true, false, 8, 16384, true)]

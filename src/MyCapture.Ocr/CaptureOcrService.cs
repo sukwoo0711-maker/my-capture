@@ -52,7 +52,7 @@ public sealed class CaptureOcrService : IOcrService
         _enableDualEngine = enableDualEngine;
     }
 
-    public bool IsAvailable => _windows.IsAvailable || _neuralCanRun();
+    public bool IsAvailable => _windows.IsAvailable || NeuralCanRunSafely();
 
     public IReadOnlyList<string> SupportedLanguages
     {
@@ -127,9 +127,9 @@ public sealed class CaptureOcrService : IOcrService
             return OcrResult.Cancelled();
         }
 
-        // A missing model keeps the original Windows fallback, including the caller's
-        // preprocessing. CanRun is an installed-model check; it does not fetch models.
-        if (!_neuralCanRun())
+        // A missing or unreadable model keeps the original Windows fallback, including the
+        // caller's preprocessing. CanRun is an installed-model check; it does not fetch models.
+        if (!NeuralCanRunSafely())
         {
             return await RecognizeSafelyAsync(
                 _windows.RecognizeAsync, "Windows OCR", request, cancellationToken).ConfigureAwait(false);
@@ -165,8 +165,9 @@ public sealed class CaptureOcrService : IOcrService
 
         // Start both before awaiting either. Windows sees the same Fast pipeline as
         // the benchmark, while Accurate preprocessing stays on PP-OCR.
+        OcrRequest fastWindows = CreateFastWindowsRequest(prepared);
         Task<OcrResult> windowsTask = RecognizeSafelyAsync(
-            _windows.RecognizeAsync, "Windows OCR", CreateFastWindowsRequest(prepared), cancellationToken);
+            _windows.RecognizeAsync, "Windows OCR", fastWindows, cancellationToken);
         Task<OcrResult> neuralTask = RecognizeSafelyAsync(
             _recognizeNeural, "PP-OCR", prepared, cancellationToken);
         await Task.WhenAll(windowsTask, neuralTask).ConfigureAwait(false);
@@ -180,8 +181,43 @@ public sealed class CaptureOcrService : IOcrService
             return OcrResult.Cancelled();
         }
 
+        // Without a PP-OCR reading the merge would return only the reduced Fast pass. Read the
+        // same snapshot again with the caller's own preprocessing, as the missing-model path
+        // does. A healthy PP-OCR result, including NoText, keeps the parallel merge.
+        if (neural.Status is OcrStatus.Failed or OcrStatus.Unavailable &&
+            !SameWindowsPreprocessing(prepared, fastWindows))
+        {
+            _log.LogInformation("PP-OCR returned {Status}; repeating Windows OCR with the original preprocessing",
+                neural.Status);
+            OcrResult original = await RecognizeSafelyAsync(
+                _windows.RecognizeAsync, "Windows OCR", prepared, cancellationToken).ConfigureAwait(false);
+            // Text the Fast pass already found is never replaced by an empty or failed retry.
+            return original.Status == OcrStatus.Cancelled || original.HasText || !windows.HasText
+                ? original : windows;
+        }
+
         return OcrResultMerger.Merge(windows, neural, stopwatch.Elapsed);
     }
+
+    private bool NeuralCanRunSafely()
+    {
+        try
+        {
+            return _neuralCanRun();
+        }
+        catch (Exception ex)
+        {
+            // Model verification hashes the installed files; a locked or unreadable file
+            // (IOException, UnauthorizedAccessException) must not escape recognition.
+            _log.LogWarning(ex, "PP-OCR availability check failed; using Windows OCR");
+            return false;
+        }
+    }
+
+    private static bool SameWindowsPreprocessing(OcrRequest left, OcrRequest right) =>
+        left.SearchRotatedOrientations == right.SearchRotatedOrientations &&
+        left.UpscaleFactor.Equals(right.UpscaleFactor) &&
+        left.EnhanceContrast == right.EnhanceContrast;
 
     private async Task<OcrResult> RecognizeSafelyAsync(
         Func<OcrRequest, CancellationToken, Task<OcrResult>> recognize,

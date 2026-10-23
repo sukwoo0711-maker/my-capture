@@ -89,11 +89,8 @@ public sealed class OcrAnglePolicyTests
         OcrQuality quality,
         bool imported)
     {
-        // The runner may direct this retained fixture to its evidence directory. No fixture
-        // cleanup is performed, and no real application profile is constructed.
-        string? configuredRoot = Environment.GetEnvironmentVariable("MYCAPTURE_OCR_ANGLE_TEST_ROOT");
-        string root = Path.Combine(string.IsNullOrWhiteSpace(configuredRoot) ? Path.GetTempPath() : configuredRoot,
-            "mc-ocr-angle-" + Guid.NewGuid().ToString("N"));
+        // TMP/TEMP may redirect retained fixtures without accepting a separate path override.
+        string root = Path.Combine(Path.GetTempPath(), "mc-ocr-angle-" + Guid.NewGuid().ToString("N"));
         var paths = AppPaths.CreateForRoot(root);
         var queue = new CaptureQueue(paths, new QueueSettings(), NullLogger<CaptureQueue>.Instance);
         var record = new CaptureRecord
