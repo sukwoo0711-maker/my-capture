@@ -3,6 +3,7 @@ using System.Globalization;
 using System.IO;
 using System.Text;
 using System.Text.Json;
+using MyCapture.App.Diagnostics;
 using MyCapture.Ocr;
 using Xunit;
 using ProductResult = MyCapture.Ocr.OcrResult;
@@ -15,7 +16,7 @@ public sealed partial class OcrModelBenchmarkTests
     /// Opt-in, offline replay of the product line merger over engine results retained by a
     /// previous dual benchmark run. No engine, model, image, profile or clipboard is used:
     /// only results.json files named by MYCAPTURE_OCR_MERGE_REPLAY are read, and the report
-    /// goes below the temp directory using the MYCAPTURE_OCR_MERGE_REPLAY_OUT folder name.
+    /// goes to the MYCAPTURE_OCR_MERGE_REPLAY_OUT folder (never the real MyCapture profile).
     /// Wall time still requires the full benchmark.
     /// </summary>
     [Fact]
@@ -24,11 +25,10 @@ public sealed partial class OcrModelBenchmarkTests
         string? inputs = Environment.GetEnvironmentVariable("MYCAPTURE_OCR_MERGE_REPLAY");
         if (string.IsNullOrWhiteSpace(inputs)) return;
 
-        string output = ReplayOutputRoot(Environment.GetEnvironmentVariable("MYCAPTURE_OCR_MERGE_REPLAY_OUT")
-            ?? throw new InvalidOperationException("Set MYCAPTURE_OCR_MERGE_REPLAY_OUT to a report folder name."));
+        string output = SafeOutputRoot(Environment.GetEnvironmentVariable("MYCAPTURE_OCR_MERGE_REPLAY_OUT")
+            ?? throw new InvalidOperationException("Set MYCAPTURE_OCR_MERGE_REPLAY_OUT to a report folder."));
         string dualName = Environment.GetEnvironmentVariable("MYCAPTURE_OCR_MERGE_REPLAY_DUAL") ?? "A-dual";
         string neuralName = Environment.GetEnvironmentVariable("MYCAPTURE_OCR_MERGE_REPLAY_NEURAL") ?? "A-cur";
-        Directory.CreateDirectory(output);
 
         var markdown = new StringBuilder("# OCR merger replay\n\n");
         markdown.AppendLine("Stored W and neural results from the dual pipeline are merged again by the current product merger. " +
@@ -96,9 +96,10 @@ public sealed partial class OcrModelBenchmarkTests
                     "\n\nREPLAYED\n" + row.Replayed + "\n```\n");
             }
         }
-        File.WriteAllText(Path.Combine(output, "replay.md"), markdown.ToString(), new UTF8Encoding(false));
+        string report = DiagnosticOutputPaths.Child(output, "replay.md");
+        File.WriteAllText(report, markdown.ToString(), new UTF8Encoding(false));
         Assert.True(allPassed || Environment.GetEnvironmentVariable("MYCAPTURE_OCR_MERGE_REPLAY_REPORT_ONLY") == "1",
-            "Replay accuracy gate failed; see " + Path.Combine(output, "replay.md"));
+            "Replay accuracy gate failed; see " + report);
 
         static Dictionary<string, JsonElement> Images(JsonElement[] pipelines, string name) =>
             pipelines.Where(p => p.GetProperty("name").GetString() == name && p.GetProperty("status").GetString() == "completed")
@@ -128,14 +129,6 @@ public sealed partial class OcrModelBenchmarkTests
             }
             return matched / (double)Math.Max(1, lines);
         }
-    }
-
-    internal static string ReplayOutputRoot(string requested)
-    {
-        string name = Path.GetFileName(requested);
-        if (string.IsNullOrWhiteSpace(name) || name is "." or "..")
-            throw new ArgumentException("A report folder name is required.", nameof(requested));
-        return Path.Combine(Path.GetTempPath(), "mycapture-ocr-merge-replay", name);
     }
 
     internal static bool ReplayIdsMatch(IEnumerable<string> windows, IEnumerable<string> neural, IEnumerable<string> dual)

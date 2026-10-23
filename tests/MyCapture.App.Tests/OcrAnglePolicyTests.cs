@@ -89,35 +89,38 @@ public sealed class OcrAnglePolicyTests
         OcrQuality quality,
         bool imported)
     {
-        // TMP/TEMP may redirect retained fixtures without accepting a separate path override.
-        string root = Path.Combine(Path.GetTempPath(), "mc-ocr-angle-" + Guid.NewGuid().ToString("N"));
-        var paths = AppPaths.CreateForRoot(root);
-        var queue = new CaptureQueue(paths, new QueueSettings(), NullLogger<CaptureQueue>.Instance);
-        var record = new CaptureRecord
+        string root = OwnedTestDirectory.Create("mc-ocr-angle-");
+        try
         {
-            ImportedFileName = imported ? "rotated-scan.png" : null,
-            IsPinned = true,
-        };
-        queue.Add(record);
-        Directory.CreateDirectory(queue.GetDirectory(record));
-        string originalPath = queue.GetFilePath(record, CaptureFileNames.Original);
-        await File.WriteAllBytesAsync(originalPath, [1]);
-        var ocr = new RecordingOcr();
-        var gallery = new GalleryController(queue, NullLogger<GalleryController>.Instance);
-        var service = new OcrIndexingService(gallery, ocr, queue.GetDirectory, () => Settings(quality),
-            NullLogger<OcrIndexingService>.Instance);
+            var paths = AppPaths.CreateForRoot(root);
+            var queue = new CaptureQueue(paths, new QueueSettings(), NullLogger<CaptureQueue>.Instance);
+            var record = new CaptureRecord
+            {
+                ImportedFileName = imported ? "rotated-scan.png" : null,
+                IsPinned = true,
+            };
+            queue.Add(record);
+            Directory.CreateDirectory(queue.GetDirectory(record));
+            string originalPath = queue.GetFilePath(record, CaptureFileNames.Original);
+            await File.WriteAllBytesAsync(originalPath, [1]);
+            var ocr = new RecordingOcr();
+            var gallery = new GalleryController(queue, NullLogger<GalleryController>.Instance);
+            var service = new OcrIndexingService(gallery, ocr, queue.GetDirectory, () => Settings(quality),
+                NullLogger<OcrIndexingService>.Instance);
 
-        OcrIndexingOutcome outcome = await service.IndexMissingAsync();
+            OcrIndexingOutcome outcome = await service.IndexMissingAsync();
 
-        Assert.Equal(OcrIndexingOutcome.Cancelled, outcome);
-        OcrRequest request = Assert.Single(ocr.Requests);
-        Assert.Equal(originalPath, request.FilePath);
-        Assert.Null(request.Bitmap);
-        Assert.False(request.SearchRotatedOrientations);
-        Assert.True(request.UseNeuralModel);
-        AssertMeasuredAnglePolicy();
-        Assert.Null(record.OcrText);
-        Assert.False(File.Exists(paths.IndexFile));
+            Assert.Equal(OcrIndexingOutcome.Cancelled, outcome);
+            OcrRequest request = Assert.Single(ocr.Requests);
+            Assert.Equal(originalPath, request.FilePath);
+            Assert.Null(request.Bitmap);
+            Assert.False(request.SearchRotatedOrientations);
+            Assert.True(request.UseNeuralModel);
+            AssertMeasuredAnglePolicy();
+            Assert.Null(record.OcrText);
+            Assert.False(File.Exists(paths.IndexFile));
+        }
+        finally { OwnedTestDirectory.Delete(root); }
     }
 
     [Theory]

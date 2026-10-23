@@ -53,8 +53,6 @@ function run(geometry, policy, corpus, split) {
   const output = path.join(root, name);
   fs.mkdirSync(output);
   const temp = path.join(output, 'temp'); fs.mkdirSync(temp);
-  // The C# harness accepts a basename and confines reports under its TMP/TEMP root.
-  const report = path.join(temp, 'mycapture-ocr-benchmark', name);
   const profile = path.join(output, 'profile'); fs.mkdirSync(profile);
   const args = ['test', 'tests/MyCapture.App.Tests/MyCapture.App.Tests.csproj', '-c', 'Release', '--no-build', '--no-restore',
     '--filter', 'FullyQualifiedName=MyCapture.App.Tests.OcrModelBenchmarkTests.BenchmarkLocalOcrModels_WhenExplicitlyEnabled',
@@ -64,15 +62,15 @@ function run(geometry, policy, corpus, split) {
   const startedUtc = stamp();
   const executed = spawnSync('dotnet', args, { cwd, encoding: 'utf8', windowsHide: true, maxBuffer: 16 * 1024 * 1024,
     env: { ...process.env, DOTNET_CLI_TELEMETRY_OPTOUT: '1', DOTNET_NOLOGO: '1', TEMP: temp, TMP: temp,
-      MYCAPTURE_DATA_ROOT: profile, MYCAPTURE_OCR_BENCH: name, MYCAPTURE_OCR_BENCH_MODE: 'detector',
+      MYCAPTURE_DATA_ROOT: profile, MYCAPTURE_OCR_BENCH: output, MYCAPTURE_OCR_BENCH_MODE: 'detector',
       MYCAPTURE_OCR_BENCH_SPLIT: split, MYCAPTURE_OCR_BENCH_CORPUS: corpus,
       MYCAPTURE_OCR_BENCH_OPTIONS: JSON.stringify(config), MYCAPTURE_OCR_BENCH_DIAGNOSTICS: phase === 'gate' ? '1' : '0' } });
   fs.writeFileSync(path.join(output, 'execution.log'), (executed.stdout ?? '') + (executed.stderr ?? ''));
   fs.writeFileSync(path.join(output, 'execution.json'), JSON.stringify({ cwd, command: ['dotnet', ...args],
     startedUtc, finishedUtc: stamp(), exitCode: executed.status, error: executed.error?.message }, null, 2));
   if (executed.status !== 0) throw new Error(`${name} failed (${executed.status}); see execution.log`);
-  const result = JSON.parse(fs.readFileSync(path.join(report, 'detector-results.json'), 'utf8'));
-  result.directory = report;
+  const result = JSON.parse(fs.readFileSync(path.join(output, 'detector-results.json'), 'utf8'));
+  result.directory = output;
   results.push(result); write('all-results.json', results); saveTable();
   console.log(`${stamp()} DONE ${name} CER=${pct(result.pipeline.overall.cer)}% median=${result.pipeline.overall.warmMedianMs.toFixed(2)}ms`);
 }

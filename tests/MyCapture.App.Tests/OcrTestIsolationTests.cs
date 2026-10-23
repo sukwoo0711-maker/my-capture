@@ -74,22 +74,6 @@ public sealed class OcrTestIsolationTests
         }
     }
 
-    [Theory]
-    [InlineData("ocr-live-models")]
-    [InlineData(@"..\..\ocr-live-models")]
-    [InlineData(@"C:\Users\someone\AppData\Local\MyCapture\ocr-live-models")]
-    public void LiveModelSource_UsesOnlyTheFolderNameUnderTemp(string setting) =>
-        Assert.Equal(Path.Combine(Path.GetTempPath(), "ocr-live-models"), NeuralOcrEngineLiveTests.LiveModelSource(setting));
-
-    [Theory]
-    [InlineData("")]
-    [InlineData(" ")]
-    [InlineData(".")]
-    [InlineData("..")]
-    [InlineData(@"models\")]
-    public void LiveModelSource_RejectsMissingOrTraversalFolderName(string setting) =>
-        Assert.Throws<ArgumentException>(() => NeuralOcrEngineLiveTests.LiveModelSource(setting));
-
     private static string RepositoryRoot()
     {
         for (DirectoryInfo? directory = new(AppContext.BaseDirectory); directory is not null; directory = directory.Parent)

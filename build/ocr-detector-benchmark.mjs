@@ -38,9 +38,6 @@ function run(configuration, split = 'tuning', corpus = 'original', diagnostic = 
   const name = `${String(++next).padStart(3, '0')}-${config.name}-${corpus}-${split}`;
   const output = path.join(root, name);
   fs.mkdirSync(output);
-  const temp = path.join(output, 'temp'); fs.mkdirSync(temp);
-  // The C# harness accepts a basename and confines reports under its TMP/TEMP root.
-  const report = path.join(temp, 'mycapture-ocr-benchmark', name);
   const args = ['test', 'tests/MyCapture.App.Tests/MyCapture.App.Tests.csproj', '-c', 'Release',
     '--no-build', '--no-restore', '--filter', 'FullyQualifiedName~OcrModelBenchmarkTests.BenchmarkLocalOcrModels_WhenExplicitlyEnabled',
     '--logger', 'console;verbosity=minimal', '--results-directory', output];
@@ -48,8 +45,8 @@ function run(configuration, split = 'tuning', corpus = 'original', diagnostic = 
   console.log(`${stamp()} START ${name}`);
   const startedUtc = stamp();
   const executed = spawnSync('dotnet', args, { cwd, encoding: 'utf8', windowsHide: true,
-    env: { ...process.env, DOTNET_CLI_TELEMETRY_OPTOUT: '1', DOTNET_NOLOGO: '1', TEMP: temp, TMP: temp,
-      MYCAPTURE_OCR_BENCH: name, MYCAPTURE_OCR_BENCH_MODE: 'detector',
+    env: { ...process.env, DOTNET_CLI_TELEMETRY_OPTOUT: '1', DOTNET_NOLOGO: '1',
+      MYCAPTURE_OCR_BENCH: output, MYCAPTURE_OCR_BENCH_MODE: 'detector',
       MYCAPTURE_OCR_BENCH_SPLIT: split, MYCAPTURE_OCR_BENCH_CORPUS: corpus,
       MYCAPTURE_OCR_BENCH_OPTIONS: JSON.stringify(config), MYCAPTURE_OCR_BENCH_DIAGNOSTICS: diagnostic ? '1' : '0' },
     maxBuffer: 16 * 1024 * 1024 });
@@ -57,8 +54,8 @@ function run(configuration, split = 'tuning', corpus = 'original', diagnostic = 
   fs.writeFileSync(path.join(output, 'execution.json'), JSON.stringify({ cwd, command: ['dotnet', ...args],
     startedUtc, finishedUtc: stamp(), exitCode: executed.status, error: executed.error?.message }, null, 2));
   if (executed.status !== 0) throw new Error(`${name} failed (${executed.status}); see execution.log`);
-  const result = JSON.parse(fs.readFileSync(path.join(report, 'detector-results.json'), 'utf8'));
-  result.directory = report;
+  const result = JSON.parse(fs.readFileSync(path.join(output, 'detector-results.json'), 'utf8'));
+  result.directory = output;
   results.push(result);
   write('all-results.json', results);
   const m = result.pipeline.Overall ?? result.pipeline.overall;

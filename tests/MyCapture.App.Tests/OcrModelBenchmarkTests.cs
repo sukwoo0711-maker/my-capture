@@ -12,6 +12,7 @@ using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.ML.OnnxRuntime;
+using MyCapture.App.Diagnostics;
 using MyCapture.Core.Settings;
 using MyCapture.Ocr;
 using MyCapture.Platform.Imaging;
@@ -25,7 +26,7 @@ namespace MyCapture.App.Tests;
 /// <summary>
 /// Opt-in, local-only model experiment. No application, real profile, clipboard, model-store
 /// download method, or existing test cleanup is used. All generated evidence stays in the
-/// named output folder under the temp directory; this test retains it for inspection.
+/// requested output folder; this test retains it for inspection.
 /// </summary>
 public sealed partial class OcrModelBenchmarkTests
 {
@@ -48,7 +49,6 @@ public sealed partial class OcrModelBenchmarkTests
         string output = SafeOutputRoot(requestedOutput);
         string models = Path.GetFullPath(Environment.GetEnvironmentVariable("MYCAPTURE_OCR_BENCH_MODELS")
             ?? DefaultModels);
-        Directory.CreateDirectory(output);
         StaTestHost.Run(() =>
         {
             if (Environment.GetEnvironmentVariable("MYCAPTURE_OCR_BENCH_MODE") == "detector")
@@ -776,12 +776,23 @@ public sealed partial class OcrModelBenchmarkTests
         return new ModelFile(path, stream.Length, Convert.ToHexString(SHA256.HashData(stream)));
     }
 
+    /// <summary>
+    /// The output folder comes from the environment. It goes through the same confinement as
+    /// the other diagnostic harnesses (local drive folder, no links) and never into the real
+    /// MyCapture profile, which is checked before anything is created.
+    /// </summary>
     internal static string SafeOutputRoot(string requested)
     {
-        string name = Path.GetFileName(requested);
-        if (string.IsNullOrWhiteSpace(name) || name is "." or "..")
-            throw new ArgumentException("A benchmark folder name is required.", nameof(requested));
-        return Path.Combine(Path.GetTempPath(), "mycapture-ocr-benchmark", name);
+        ArgumentException.ThrowIfNullOrWhiteSpace(requested);
+        string full = Path.TrimEndingDirectorySeparator(Path.GetFullPath(requested));
+        foreach (Environment.SpecialFolder folder in new[] { Environment.SpecialFolder.ApplicationData, Environment.SpecialFolder.LocalApplicationData })
+        {
+            string profile = Path.GetFullPath(Path.Combine(Environment.GetFolderPath(folder), "MyCapture"));
+            if (string.Equals(full, profile, StringComparison.OrdinalIgnoreCase)
+                || full.StartsWith(profile + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+                throw new InvalidOperationException("Benchmark output must not use the real MyCapture profile.");
+        }
+        return DiagnosticOutputPaths.Create(requested);
     }
 
     private static void WriteJson(string path, object value) => File.WriteAllText(path, JsonSerializer.Serialize(value, Json), new UTF8Encoding(false));

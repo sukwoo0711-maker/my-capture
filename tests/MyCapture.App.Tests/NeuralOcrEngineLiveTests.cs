@@ -3,6 +3,7 @@ using System.Net.Http;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using Microsoft.Extensions.Logging.Abstractions;
+using MyCapture.App.Diagnostics;
 using MyCapture.Core.Storage;
 using MyCapture.Ocr;
 using Xunit;
@@ -97,9 +98,8 @@ public sealed class NeuralOcrEngineLiveTests
     }
 
     /// <summary>
-    /// Opt-in: set MYCAPTURE_OCR_LIVE_MODELS to the name of a folder directly under the temp
-    /// directory (Path.GetTempPath, which TMP/TEMP redirect) that holds the catalog's model files.
-    /// The files are copied into an owned test profile; the store and engine, including their
+    /// Opt-in: set MYCAPTURE_OCR_LIVE_MODELS to a local folder that holds the catalog's model
+    /// files. The files are copied into an owned test profile; the store and engine, including their
     /// background verification and retired-file cleanup, never see the source folder or the
     /// real MyCapture profile, and every download request is rejected.
     /// </summary>
@@ -108,7 +108,7 @@ public sealed class NeuralOcrEngineLiveTests
         string? setting = Environment.GetEnvironmentVariable("MYCAPTURE_OCR_LIVE_MODELS");
         if (string.IsNullOrWhiteSpace(setting)) return null;
 
-        string models = LiveModelSource(setting);
+        string models = Path.GetFullPath(setting);
         string root = OwnedTestDirectory.Create("ocr-live-");
         HttpClient? http = null;
         try
@@ -127,28 +127,19 @@ public sealed class NeuralOcrEngineLiveTests
         }
     }
 
-    /// <summary>Only a folder name is used, so the setting cannot direct file access elsewhere.</summary>
-    internal static string LiveModelSource(string setting)
-    {
-        string name = Path.GetFileName(setting);
-        if (string.IsNullOrWhiteSpace(name) || name is "." or "..")
-            throw new ArgumentException("MYCAPTURE_OCR_LIVE_MODELS must name a folder under the temp directory.",
-                nameof(setting));
-        return Path.Combine(Path.GetTempPath(), name);
-    }
-
     internal static AppPaths CopyModelsToIsolatedProfile(string models, string root)
     {
         // Read the supplied weights, but allow verification and retired-file cleanup only in a
         // fresh owned profile. Required files must exist; the optional server detector is
         // copied when present so recognition uses the same models as an installed profile.
+        // Source files are confined to the supplied folder like other diagnostic inputs.
         AppPaths paths = AppPaths.CreateForRoot(root);
         Directory.CreateDirectory(paths.OcrModelsRoot);
         foreach (OcrModelFile file in OcrModelCatalog.Required)
-            File.Copy(Path.Combine(models, file.FileName), Path.Combine(paths.OcrModelsRoot, file.FileName));
+            File.Copy(DiagnosticOutputPaths.Child(models, file.FileName), Path.Combine(paths.OcrModelsRoot, file.FileName));
         foreach (OcrModelFile file in OcrModelCatalog.Optional)
         {
-            string source = Path.Combine(models, file.FileName);
+            string source = DiagnosticOutputPaths.Child(models, file.FileName);
             if (File.Exists(source)) File.Copy(source, Path.Combine(paths.OcrModelsRoot, file.FileName));
         }
         return paths;
