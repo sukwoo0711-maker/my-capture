@@ -20,6 +20,13 @@ internal static class CommandButtonPresentation
     private static readonly DependencyProperty LabelCompactedProperty = DependencyProperty.RegisterAttached(
         "LabelCompacted", typeof(bool), typeof(CommandButtonPresentation), new PropertyMetadata(false));
 
+    // The measured shortcut width, kept apart from the face's MinWidth: a named face reserves
+    // it, while an icon-only face grows to it only as its caption is revealed.
+    private static readonly DependencyProperty CaptionWidthProperty = DependencyProperty.RegisterAttached(
+        "CaptionWidth", typeof(double), typeof(CommandButtonPresentation), new PropertyMetadata(0d));
+
+    internal static double CaptionWidth(Grid face) => (double)face.GetValue(CaptionWidthProperty);
+
     internal static void Apply(ButtonBase button, bool compact = false)
     {
         string tier = compact ? "Compact" : "Standard";
@@ -35,6 +42,7 @@ internal static class CommandButtonPresentation
         button.Loaded -= OnCommandLoaded;
         button.Loaded += OnCommandLoaded;
         ShortcutRevealMotion.PrepareCommandIcon(button.Content);
+        RefitCaption(button);
     }
 
     private static void OnCommandLoaded(object sender, RoutedEventArgs e) => RefreshHint((ButtonBase)sender);
@@ -124,10 +132,10 @@ internal static class CommandButtonPresentation
     {
         if (hint.Text.Length == 0)
         {
-            face.MinWidth = 0;
+            SetCaptionWidth(face, hint, 0);
             return;
         }
-        // Reserve the full chord independently of reveal and refresh its inherited font/DPI
+        // Measure the full chord independently of reveal and refresh its inherited font/DPI
         // on load or a real metadata change. Alt never enters this measurement path.
         DpiScale dpi = VisualTreeHelper.GetDpi(hint);
         object key = (hint.Text, hint.FontFamily, hint.FontSize, hint.FontWeight, hint.FontStyle,
@@ -136,7 +144,7 @@ internal static class CommandButtonPresentation
         var widths = s_hintWidths ??= [];
         if (widths.TryGetValue(key, out double width))
         {
-            face.MinWidth = width;
+            SetCaptionWidth(face, hint, width);
             hint.InvalidateMeasure();
             hint.InvalidateVisual();
             return;
@@ -155,12 +163,94 @@ internal static class CommandButtonPresentation
         TextOptions.SetTextFormattingMode(probe, TextOptions.GetTextFormattingMode(hint));
         VisualTreeHelper.SetRootDpi(probe, dpi);
         probe.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
-        face.MinWidth = Math.Ceiling(probe.DesiredSize.Width);
+        width = Math.Ceiling(probe.DesiredSize.Width);
         if (widths.Count >= 256) widths.Clear();
-        widths[key] = face.MinWidth;
+        widths[key] = width;
+        SetCaptionWidth(face, hint, width);
         // Refresh the actual caption as well as the detached width probe after DPI changes.
         hint.InvalidateMeasure();
         hint.InvalidateVisual();
+    }
+
+    private static void SetCaptionWidth(Grid face, TextBlock hint, double width)
+    {
+        face.SetValue(CaptionWidthProperty, width);
+        FitCaption(face, hint);
+    }
+
+    private static bool IsIconOnly(ButtonBase button) =>
+        (bool)button.GetValue(LabelCompactedProperty) || (bool)button.GetValue(AlwaysIconProperty);
+
+    /// <summary>Fits a command caption whose reveal progress changed.</summary>
+    internal static void FitCaption(TextBlock hint)
+    {
+        if (hint.Parent is Grid { Name: "CommandButtonFace", Children.Count: > 1 } face && ReferenceEquals(face.Children[1], hint))
+            FitCaption(face, hint);
+    }
+
+    /// <summary>
+    /// A named face reserves its caption, so Alt never moves it. An icon-only face keeps the
+    /// command's own width at rest and widens with the caption's reveal progress instead.
+    /// </summary>
+    private static bool FitCaption(Grid face, TextBlock hint)
+    {
+        double caption = (double)face.GetValue(CaptionWidthProperty);
+        double minimum = caption, maximum = double.PositiveInfinity;
+        if (face.Parent is ButtonBase button && IsIconOnly(button))
+        {
+            minimum = 0;
+            // Growth starts from the width the resting button already has, so the reveal
+            // widens it from the first frame. Captions that fit there never move anything.
+            double rest = Math.Max(0, button.MinWidth - button.Padding.Left - button.Padding.Right
+                - button.BorderThickness.Left - button.BorderThickness.Right);
+            if (caption > rest) maximum = rest + (caption - rest) * ShortcutRevealMotion.WidthProgress(hint);
+        }
+        if (face.MinWidth.Equals(minimum) && hint.MaxWidth.Equals(maximum)) return false;
+        face.MinWidth = minimum;
+        hint.MaxWidth = maximum;
+        return true;
+    }
+
+    private static bool RefitCaption(ButtonBase button)
+    {
+        if (button.Content is not Grid { Name: "CommandButtonFace", Children.Count: > 1 } face
+            || face.Children[1] is not TextBlock hint || !FitCaption(face, hint)) return false;
+        // Like a label change, the candidate width is needed inside the panel's current measure.
+        for (DependencyObject? parent = hint; parent is UIElement visual; parent = VisualTreeHelper.GetParent(parent))
+        {
+            visual.InvalidateMeasure();
+            if (ReferenceEquals(parent, button)) break;
+        }
+        return true;
+    }
+
+    /// <summary>
+    /// How much wider the commands in <paramref name="element"/> become while their captions
+    /// show. Zero once revealed, so the sum of current and growth widths stays constant.
+    /// </summary>
+    internal static double RevealGrowth(UIElement element)
+    {
+        if (element.Visibility == Visibility.Collapsed) return 0;
+        switch (element)
+        {
+            case ButtonBase button:
+                if (!IsIconOnly(button) || button.Content is not Grid { Name: "CommandButtonFace", Children.Count: > 1 } face)
+                    return 0;
+                double caption = (double)face.GetValue(CaptionWidthProperty);
+                if (caption <= 0) return 0;
+                double content = Math.Max(caption, face.Children[0].DesiredSize.Width);
+                double revealed = Math.Max(button.MinWidth, content + button.Padding.Left + button.Padding.Right
+                    + button.BorderThickness.Left + button.BorderThickness.Right) + button.Margin.Left + button.Margin.Right;
+                return Math.Max(0, revealed - button.DesiredSize.Width);
+            case Panel panel:
+                double growth = 0;
+                foreach (UIElement child in panel.Children) growth += RevealGrowth(child);
+                return growth;
+            case Decorator { Child: { } child }:
+                return RevealGrowth(child);
+            default:
+                return 0;
+        }
     }
 
     // Primary completion commands keep their name even at the narrowest supported size.
@@ -176,6 +266,8 @@ internal static class CommandButtonPresentation
     {
         button.SetValue(AlwaysIconProperty, true);
         CompactLabel(button, true);
+        // Glyph-only faces have no name to collapse but still widen only for their caption.
+        RefitCaption(button);
     }
 
     internal static bool CompactLabel(ButtonBase button, bool compact)
@@ -216,6 +308,7 @@ internal static class CommandButtonPresentation
                 if (ReferenceEquals(parent, button)) break;
             }
         }
+        changed |= RefitCaption(button);
         if (changed) button.InvalidateMeasure();
         return changed;
     }

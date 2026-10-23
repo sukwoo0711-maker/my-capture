@@ -11,25 +11,26 @@ internal sealed class CommandGroupsPanel : Panel
     protected override Size MeasureOverride(Size availableSize)
     {
         if (InternalChildren.Count != 2) return default;
-        // Command faces include the revealed caption width even while it is collapsed,
-        // so Alt and the persistent hint preference cannot change the selected stage.
+        // Each stage is chosen for its revealed width: named faces hold their caption, and
+        // icon-only faces count the width they grow to while it shows. Alt and the persistent
+        // hint preference therefore only use space the selected stage already holds.
         // A bounded measure pass chooses the presentation from desired widths. There are no
         // SizeChanged/LayoutUpdated handlers or ActualWidth feedback loops to schedule another pass.
         Compact(InternalChildren[0], false);
         Compact(InternalChildren[1], false);
         MeasureGroups();
-        if (CombinedWidth > availableSize.Width)
+        if (RevealedWidth > availableSize.Width)
         {
             Compact(InternalChildren[0], true);
             MeasureGroups();
-            if (CombinedWidth > availableSize.Width)
+            if (RevealedWidth > availableSize.Width)
             {
                 Compact(InternalChildren[1], true);
                 MeasureGroups();
             }
         }
         Size left = InternalChildren[0].DesiredSize, right = InternalChildren[1].DesiredSize;
-        bool wrap = left.Width + GroupGap + right.Width > availableSize.Width;
+        bool wrap = RevealedWidth > availableSize.Width;
         return new Size(Math.Min(availableSize.Width, left.Width + GroupGap + right.Width),
             wrap ? left.Height + GroupGap + right.Height : Math.Max(left.Height, right.Height));
     }
@@ -38,7 +39,7 @@ internal sealed class CommandGroupsPanel : Panel
     {
         if (InternalChildren.Count != 2) return finalSize;
         Size left = InternalChildren[0].DesiredSize, right = InternalChildren[1].DesiredSize;
-        bool wrap = left.Width + GroupGap + right.Width > finalSize.Width;
+        bool wrap = RevealedWidth > finalSize.Width;
         double rowHeight = Math.Max(left.Height, right.Height);
         InternalChildren[0].Arrange(new Rect(0, wrap ? 0 : (rowHeight - left.Height) / 2, left.Width, left.Height));
         InternalChildren[1].Arrange(new Rect(wrap ? 0 : Math.Max(0, finalSize.Width - right.Width),
@@ -47,6 +48,9 @@ internal sealed class CommandGroupsPanel : Panel
     }
 
     private double CombinedWidth => InternalChildren[0].DesiredSize.Width + GroupGap + InternalChildren[1].DesiredSize.Width;
+
+    private double RevealedWidth => CombinedWidth + CommandButtonPresentation.RevealGrowth(InternalChildren[0])
+        + CommandButtonPresentation.RevealGrowth(InternalChildren[1]);
 
     private void MeasureGroups()
     {

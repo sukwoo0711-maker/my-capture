@@ -7,7 +7,10 @@ using MyCapture.App.Themes;
 
 namespace MyCapture.App;
 
-/// <summary>Alt feedback owns only inner render transforms and opacity; layout is fixed.</summary>
+/// <summary>
+/// Alt feedback owns inner render transforms and opacity. Only an icon-only command's width
+/// follows it, within the space its command bar already holds for the revealed caption.
+/// </summary>
 internal static class ShortcutRevealMotion
 {
     internal const double CommandIconSize = 20;
@@ -53,6 +56,12 @@ internal static class ShortcutRevealMotion
         "Shift", typeof(TranslateTransform), typeof(ShortcutRevealMotion));
     private static readonly DependencyProperty ScaleProperty = DependencyProperty.RegisterAttached(
         "Scale", typeof(ScaleTransform), typeof(ShortcutRevealMotion));
+    // Follows the caption's reveal; an icon-only command widens with it (CommandButtonPresentation).
+    private static readonly DependencyProperty WidthProgressProperty = DependencyProperty.RegisterAttached(
+        "WidthProgress", typeof(double), typeof(ShortcutRevealMotion),
+        new PropertyMetadata(0d, (target, _) => CommandButtonPresentation.FitCaption((TextBlock)target)));
+
+    internal static double WidthProgress(TextBlock caption) => (double)caption.GetValue(WidthProgressProperty);
 
     internal static void Register(TextBlock hint)
     {
@@ -212,6 +221,7 @@ internal static class ShortcutRevealMotion
                 Animate(CaptionScale, ScaleTransform.ScaleXProperty, revealed ? 1 : CornerCaptionScale, move, c1, c2);
                 Animate(CaptionScale, ScaleTransform.ScaleYProperty, revealed ? 1 : CornerCaptionScale, move, c1, c2);
             }
+            if (!Corner) Animate(caption, WidthProgressProperty, revealed ? 1 : 0, move, c1, c2);
             // A fresh entrance starts at +4. A reversal retains its currently rendered value.
             if (animate && !reduced && !Corner && revealed && caption.Opacity == 0
                 && (!_captionShift.HasAnimatedProperties || _captionShift.Y == CaptionExitOffset))
