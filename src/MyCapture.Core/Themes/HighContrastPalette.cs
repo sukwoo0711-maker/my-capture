@@ -63,6 +63,7 @@ public static class HighContrastPalette
         ["Border.Strong"] = SystemColorRole.Highlight,
         ["Border.Focus"] = SystemColorRole.WindowText,
         ["Pin.Frame"] = SystemColorRole.Highlight,
+        ["Recording.Live"] = SystemColorRole.Highlight,
         ["Border.Accent"] = SystemColorRole.WindowText,
         ["Border.Hover"] = SystemColorRole.Highlight,
         ["Border.Badge"] = SystemColorRole.WindowText,
