@@ -103,25 +103,16 @@ MyCapture는 코딩하는 동안 엑셀 사양 표와 자주 쓰는 코드를 �
 8. 공유하기 전에 단계 번호와 화살표를 넣고, 이메일·토큰·카드번호를 Ctrl+Shift+R로 가린 화면입니다.
 9. 영역·창·전체 화면 캡처, 클립보드 복사, 이미지 속 글자 복사는 Windows 캡처 도구와 같습니다. 영역 녹화는 소리 없이 화면만 기록합니다. 여기에 원문을 보관하는 표·코드 핀, 반투명·클릭 허용 핀, 닫은 핀 다시 열기, 스크롤 캡처가 더해집니다.
 
-### 이 버전의 새로운 기능 (4.6.0)
+### 이 버전의 새로운 기능 (4.6.1)
 
-입력 한도는 1,500자입니다. 4.5.2(제출 15)가 Store에 게시된 뒤 제출한다고 보고 4.6.0의 변경만 적습니다. 4.5.2가 게시되지 않았다면 제출할 때 아래 '4.5.2 항목'을 이어 붙입니다.
+입력 한도는 1,500자입니다. 4.6.0(제출 16)이 게시된 뒤 제출하므로 4.6.1의 변경만 적습니다.
 
-- 새 핀이 압정처럼 꽂히며 나타납니다. 내용은 제자리에서 바로 선명하게 보이고, 압정·고리·그림자는 잠깐 뒤 사라집니다.
-- 편집기 단축키는 Alt를 누르는 동안만 보입니다. 늘 보려면 설정에서 '단축키 항상 표시'를 켭니다.
-- 편집기의 '복사'(Ctrl+C)는 클립보드에 복사하고 편집기를 열어 둡니다. 저장하고 닫는 것은 '완료'입니다.
-- 라이브러리에서 캡처 이름을 바꾸고(F2), 빈 곳을 오른쪽 클릭해 새 폴더를 만듭니다. 캡처 시각은 제목 아래에 보입니다.
-- 글꼴 목록을 추천 글꼴로 줄이고 Maple Mono, JetBrains Mono, D2Coding, Pretendard를 함께 넣었습니다.
-
-4.5.2 항목:
-
-- 이미지 편집 중 '응답 없음'으로 멈추던 문제를 고쳤습니다. 펜·끌기·실행 취소와 큰 이미지의 저장도 빨라졌습니다.
-- 캡처를 마치면 클립보드에 복사되는 즉시 편집기가 사라지고, 앱 시작과 라이브러리 갱신이 빨라졌습니다.
-- 텍스트·코드·표 핀에서 F2를 누르면 글자나 셀을 골라 그 부분만 복사합니다.
-- 텍스트·표·코드 핀이 고배율 화면에서도 선명하고, 트레이 메뉴의 '열린 핀'에서 핀을 골라 앞으로 가져옵니다.
-- 다음 실행 때 다시 띄우려고 저장하는 핀은 이 Windows 사용자만 읽을 수 있도록 암호화합니다.
-- 코드 글자 인식이 C/C++ 전처리 줄을 알아보고, 라이브러리의 보관 전환은 K로 옮겼습니다. P는 핀으로 띄웁니다.
-- 새로 설치해도 핀을 더블클릭하면 닫힙니다.
+- 새 버전이 나오면 앱이 알려 주고, 카드의 '업데이트'로 바로 설치합니다. 설정 > 정보에서 자동 확인을 끌 수 있습니다.
+- 편집기 단추는 평소 아이콘을 크게 보여 주고, Alt를 누르는 동안 단축키가 나타납니다. Alt만 눌렀다 뗀 뒤 다음 키가 무시되던 문제도 고쳤습니다.
+- 도구를 바꿔도 이미지 크기가 흔들리지 않고, 회전 단추(Q·W)를 자르기 옆에 두었습니다. 창이 좁아지면 명령 이름을 하나씩 숨깁니다.
+- 웹 페이지나 앱에서 찍은 캡처에 출처를 표시하고, 같은 출처의 캡처를 모아 봅니다.
+- '정확' 품질의 글자 인식이 두 엔진을 함께 써서 한국어 화면 글자를 더 정확하게 읽고, 짧은 줄을 빠뜨리지 않습니다.
+- 툴팁이 열려 있는 동안 재생 위치 표시나 자동 저장이 멈추던 문제를 고쳤습니다.
 
 ### 검색어
 
@@ -205,25 +196,16 @@ Enter them in screenshot order. Each caption is 200 characters or fewer.
 8. Step numbers and an arrow added before sharing, with an email address, token and card number covered by Ctrl+Shift+R.
 9. Like Snipping Tool, MyCapture captures, copies to the clipboard and extracts text. It adds table and code pins with original text, click-through pins and scrolling capture; recording is silent.
 
-### What's new in this version (4.6.0)
+### What's new in this version (4.6.1)
 
-Limit: 1,500 characters. This assumes 4.5.2 (submission 15) is published before 4.6.0 is submitted, so it lists only the 4.6.0 changes. If 4.5.2 is not published yet, append the "4.5.2 items" below when submitting.
+Limit: 1,500 characters. 4.6.0 (submission 16) is published, so this lists only the 4.6.1 changes.
 
-- New pins land like a pushpin. The content appears sharp and in place at once; the pushpin, ring and shadow fade a moment later.
-- Editor shortcuts appear only while you hold Alt. To keep them visible, turn on Always show shortcut keys in Settings.
-- Copy (Ctrl+C) in the editor copies to the clipboard and keeps the editor open. Done saves and closes.
-- In the library, rename a capture with F2 and right-click empty space to create a folder. Capture times appear under the title.
-- The font list is trimmed to recommended fonts, and Maple Mono, JetBrains Mono, D2Coding and Pretendard are included.
-
-4.5.2 items:
-
-- Fixed the image editor freezing as "Not responding" while you edit. Drawing, dragging, undo and saving large images are faster too.
-- After a capture, the editor disappears as soon as the image is on the clipboard, and startup and library updates are faster.
-- Press F2 on a text, code or table pin to select text or cells and copy only that part.
-- Text, table and code pins stay sharp on high-DPI displays, and Open pins in the tray menu brings a pin to the front.
-- Pins saved to reopen at the next launch are encrypted so only your Windows account on this PC can read them.
-- Code text recognition detects C/C++ preprocessor lines, and the library toggles Keep with K; P pins the capture.
-- On new installs, double-clicking a pin closes it again.
+- MyCapture tells you when a new version is available, and Update on the card installs it. Turn off automatic checks in Settings > About.
+- Editor buttons show larger icons, and shortcut keys appear while you hold Alt. Fixed keys being ignored after pressing Alt alone.
+- The image no longer resizes when you switch tools, and rotate buttons (Q, W) sit next to Crop. In narrow windows, command names hide one at a time.
+- Captures from a web page or app show their source, and you can view all captures from the same source.
+- Text recognition at Accurate combines two engines to read Korean screen text more accurately and no longer drops short lines.
+- Fixed the playback position and autosave pausing while a tooltip was open.
 
 ### Search terms
 
