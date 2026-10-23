@@ -26,7 +26,7 @@ namespace MyCapture.App.Capture;
 /// own top-level window it never shares an HWND or a frozen background with the overlay.
 /// </para>
 /// <para>
-/// Each second the new digit lands while the previous one fades out, and a thin accent ring
+/// Each second the new digit lands while the previous one fades out, and a thin ring in the text colour
 /// around the digit runs down over that second. With Windows animation effects off the digit
 /// changes in place and the ring steps once a second through the whole countdown.
 /// </para>
@@ -106,8 +106,9 @@ internal sealed class CountdownWindow : Window
         double inkCentre = InkCentre(_label, out double lineHeight);
         _label.RenderTransformOrigin = _leaving.RenderTransformOrigin = new Point(0.5, inkCentre / lineHeight);
 
-        Brush accent = Application.Current?.TryFindResource("Accent.Default") as Brush
-            ?? new SolidColorBrush(Color.FromRgb(0xF2, 0xC9, 0x4C));
+        // The text colour, not the accent: accents are kept for primary actions, pin frames and
+        // recording, and the digit stays the one focal point of this panel.
+        Brush ink = Application.Current?.TryFindResource("Text.Primary") as Brush ?? Brushes.White;
         Brush track = Application.Current?.TryFindResource("Border.Subtle") as Brush
             ?? new SolidColorBrush(Color.FromArgb(0x30, 0xFF, 0xFF, 0xFF));
         double radius = (RingDiameter - RingThickness) / 2;
@@ -117,7 +118,7 @@ internal sealed class CountdownWindow : Window
         _ring = new Shapes.Path
         {
             Data = RingGeometry(radius),
-            Stroke = accent,
+            Stroke = ink,
             StrokeThickness = RingThickness,
             StrokeStartLineCap = PenLineCap.Round,
             StrokeEndLineCap = PenLineCap.Round,
