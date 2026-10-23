@@ -182,7 +182,9 @@ public sealed class EditorMosaicRecoveryTests
             if (Window.IsVisible) Window.Close();
             WaitFor(Field<Task>(Window.Editor, "_mosaicTail"));
             Assert.False(Window.IsVisible);
-            WaitFor(EditDraftSession.WaitForFinalizationsAsync());
+            // Only this window's draft: the process-wide set can still hold finalizations of
+            // earlier tests whose dispatchers have already shut down.
+            WaitFor(Field<Task>(Window, "_draftFinalization"));
             OwnedTestDirectory.Delete(Root);
         }
     }
