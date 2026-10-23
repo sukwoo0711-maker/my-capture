@@ -153,6 +153,8 @@ internal sealed partial class VideoEditorWindow : Window
 
     internal PreviewSeekCoordinator PreviewSeekCoordinatorForTest => _previewSeeks;
 
+    internal MediaElementPreviewEngine PreviewEngineForTest => _previewEngine;
+
     internal MediaElement MediaForTest => _media;
 
     /// <summary>Visual-only test hook: includes presenter errors and the preview effect.</summary>
@@ -1247,8 +1249,10 @@ internal sealed partial class VideoEditorWindow : Window
             return;
         }
 
+        // The preview engine reopens the clip to leave the player's media-ended state.
+        bool reopened = _mediaOpened;
         _mediaOpened = true;
-        if (_mediaReady)
+        if (_mediaReady && !reopened)
         {
             _log.LogInformation("MediaOpened arrived after the editor opened via the duration fallback");
         }
