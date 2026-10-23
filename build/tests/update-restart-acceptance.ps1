@@ -225,6 +225,7 @@ try {
         Assert-True ([DateTime]::UtcNow -lt $restartDeadline) 'Installer did not restart the actual installed diagnostic.'
         if ($null -eq $diagnostic) { Start-Sleep -Milliseconds 100 }
     }
+    $restartStartedUtc = $diagnostic.StartTime.ToUniversalTime()
     Write-Json (Join-Path $run 'restart-process.json') @{
         Id = $diagnostic.Id; StartedUtc = $diagnostic.StartTime.ToUniversalTime().ToString('O')
         StartedUtcTicks = $diagnostic.StartTime.ToUniversalTime().Ticks; Executable = $diagnostic.MainModule.FileName
@@ -243,13 +244,19 @@ try {
         $actualVersion = '{0}.{1}.{2}' -f $binaryVersion.FileMajorPart, $binaryVersion.FileMinorPart, $binaryVersion.FileBuildPart
         Assert-True ($actualVersion -ceq $version) "Installed binary version mismatch: $name"
     }
-    Assert-True ($diagnostic.WaitForExit(180000)) 'Diagnostic restart timed out.'
-    Assert-True ($diagnostic.ExitCode -eq 0) 'Diagnostic restart failed.'
+    # The UX review renders every fixture in every theme and can take minutes on a hosted
+    # runner. Keep its output and timing as evidence even when it times out or fails.
+    $exited = $diagnostic.WaitForExit(600000)
+    if (-not $exited) {
+        $diagnostic.Kill()
+        $diagnostic.WaitForExit(5000) | Out-Null
+    }
+    $restartSeconds = [Math]::Round(([DateTime]::UtcNow - $restartStartedUtc).TotalSeconds, 1)
     $stdoutPath = Join-Path $sessionRoot 'restart.stdout.txt'
     $stderrPath = Join-Path $sessionRoot 'restart.stderr.txt'
+    $stdout = ''; $stderr = ''; $outputReady = $false; $matches = @()
     $flushDeadline = [DateTime]::UtcNow.AddSeconds(15)
     do {
-        $outputReady = $false
         if ((Test-Path -LiteralPath $stdoutPath) -and (Test-Path -LiteralPath $stderrPath)) {
             Assert-NoOutputLinks $stdoutPath
             Assert-NoOutputLinks $stderrPath
@@ -264,15 +271,19 @@ try {
         }
         if ($outputReady) {
             $matches = @([regex]::Matches($stdout, '(?m)^UX_REVIEW_OUTPUT=(.+)\r?$'))
-            if ($matches.Count -eq 1) { break }
+            if ($matches.Count -eq 1 -or -not $exited) { break }
         }
-        Assert-True ([DateTime]::UtcNow -lt $flushDeadline) 'Diagnostic output was not flushed to its session files.'
+        if ([DateTime]::UtcNow -ge $flushDeadline) { break }
         Start-Sleep -Milliseconds 100
     } while ($true)
-    Assert-NoOutputLinks $stdoutPath
-    Assert-NoOutputLinks $stderrPath
-    Copy-Item -LiteralPath $stdoutPath -Destination (Join-Path $run 'restart.stdout.txt')
-    Copy-Item -LiteralPath $stderrPath -Destination (Join-Path $run 'restart.stderr.txt')
+    [IO.File]::WriteAllText((Join-Path $run 'restart.stdout.txt'), $stdout)
+    [IO.File]::WriteAllText((Join-Path $run 'restart.stderr.txt'), $stderr)
+    Write-Json (Join-Path $run 'restart-exit.json') @{
+        Exited = $exited; ExitCode = $(if ($exited) { $diagnostic.ExitCode } else { $null }); Seconds = $restartSeconds
+    }
+    Assert-True $exited 'Diagnostic restart timed out.'
+    Assert-True ($diagnostic.ExitCode -eq 0) 'Diagnostic restart failed.'
+    Assert-True $outputReady 'Diagnostic output was not flushed to its session files.'
     Assert-True ($matches.Count -eq 1) 'Expected exactly one diagnostic output root.'
     $diagnostics = [IO.Path]::GetFullPath($matches[0].Groups[1].Value.Trim()).TrimEnd('\')
     Assert-True ($diagnostics.StartsWith($temporary + '\', [StringComparison]::OrdinalIgnoreCase)) 'Diagnostic output escaped the owned temporary directory.'

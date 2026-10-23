@@ -180,6 +180,7 @@ jobs:
             artifacts/validation/update-restart/*/acceptance-result.json
             artifacts/validation/update-restart/*/verified-install-result.json
             artifacts/validation/update-restart/*/restart-process.json
+            artifacts/validation/update-restart/*/restart-exit.json
             artifacts/validation/update-restart/*/seed-install.log
             artifacts/validation/update-restart/*/restart.stdout.txt
             artifacts/validation/update-restart/*/restart.stderr.txt
