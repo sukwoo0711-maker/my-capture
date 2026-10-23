@@ -1,5 +1,6 @@
 using System.Reflection;
 using System.Windows;
+using System.Windows.Automation;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
@@ -357,8 +358,9 @@ internal sealed class LibraryScene : TutorialScene
             Math.Round(ownerTop + (ownerHeight - outerHeight) / 2 + Stage.TitleBarHeight)), closeOnly: true);
     }
 
+    // Dialog actions name themselves with their label; their visible face also holds the Alt caption.
     private static Button DialogButton(Shown dialog, string key) => dialog.Host.Find<Button>()
-        .First(button => button.IsVisible && Equals(button.Content, UiText.Get(key)));
+        .First(button => button.IsVisible && AutomationProperties.GetName(button) == UiText.Get(key));
 
     private ListBoxItem DestinationItem(CaptureFolder folder)
     {
