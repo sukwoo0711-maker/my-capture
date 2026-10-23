@@ -299,6 +299,58 @@ public sealed class ShortcutRevealMotionTests
     [Theory]
     [InlineData("A")]
     [InlineData("B")]
+    public void WideningCommandShowsItsChordOnlyOnceAlmostWideAndHidesItBeforeNarrowing(string profile) => StaTestHost.Run(() =>
+    {
+        using var clocks = new ControlledAnimationScope();
+        using var host = new FaceHost(profile);
+        var button = new Button
+        {
+            Content = new StackPanel
+            {
+                Orientation = Orientation.Horizontal,
+                Children = { SymbolIcon.Create(Geometry.Parse("M2,2 L18,2 18,18 2,18Z")), new TextBlock { Text = "Auto-redact" } },
+            },
+        };
+        ShortcutPresentation.Attach(button, ShortcutScope.Annotation, "Privacy");
+        CommandButtonPresentation.AlwaysIcon(button);
+        host.Bar.Children.Add(button);
+        host.Window.UpdateLayout();
+        Pump(50);
+        var face = Assert.IsType<Grid>(button.Content);
+        var chord = Assert.IsAssignableFrom<TextBlock>(face.Children[1]);
+        Assert.True(CommandButtonPresentation.Widens(chord));
+        // The neighbouring glyph-only command does not widen and keeps the shared timing.
+        Assert.False(CommandButtonPresentation.Widens(host.Hint));
+        double rest = button.ActualWidth;
+        int entrance = profile == "B" ? ShortcutRevealMotion.BEntranceMilliseconds : ShortcutRevealMotion.AEntranceMilliseconds;
+        int exit = profile == "B" ? ShortcutRevealMotion.BExitMilliseconds : ShortcutRevealMotion.AExitMilliseconds;
+        int delay = entrance * ShortcutRevealMotion.WideningCaptionDelayPercent / 100;
+
+        double At(int milliseconds)
+        {
+            clocks.SeekShared(milliseconds);
+            host.Window.UpdateLayout();
+            return button.ActualWidth;
+        }
+
+        ShortcutPresentation.SetAltRevealed(host.Window, true);
+        Assert.True(At(delay - 10) > rest + 1, "The command widens from the start.");
+        Assert.Equal(0, chord.Opacity);
+        Assert.True(host.Hint.Opacity > 0, "A command that does not widen fades in as before.");
+        Assert.True(At(entrance) > rest + 20);
+        Assert.Equal(1, chord.Opacity);
+        double wide = button.ActualWidth;
+        Assert.True(face.ActualWidth >= CommandButtonPresentation.CaptionWidth(face) - 1);
+
+        ShortcutPresentation.SetAltRevealed(host.Window, false);
+        Assert.Equal(wide, At(ShortcutRevealMotion.WideningCaptionOutMilliseconds), 2);
+        Assert.Equal(0, chord.Opacity);
+        Assert.Equal(rest, At(ShortcutRevealMotion.WideningCaptionOutMilliseconds + exit), 2);
+    });
+
+    [Theory]
+    [InlineData("A")]
+    [InlineData("B")]
     public void KeyedAndBlankIconsInTheSameBarShareGeometryAndAnimationTiming(string profile) => StaTestHost.Run(() =>
     {
         using var clocks = new ControlledAnimationScope();
@@ -476,6 +528,18 @@ public sealed class ShortcutRevealMotionTests
             Assert.NotEmpty(_clocks);
             foreach (AnimationClock clock in _clocks)
                 clock.Controller!.SeekAlignedToLastTick(TimeSpan.FromMilliseconds(milliseconds), TimeSeekOrigin.BeginTime);
+        }
+
+        // Seek every clock to one shared moment since the gesture, so a delayed clock stays
+        // behind the others by exactly its delay.
+        internal void SeekShared(int milliseconds)
+        {
+            Assert.NotEmpty(_clocks);
+            foreach (AnimationClock clock in _clocks)
+            {
+                TimeSpan offset = TimeSpan.FromMilliseconds(milliseconds) - (clock.Timeline.BeginTime ?? TimeSpan.Zero);
+                clock.Controller!.SeekAlignedToLastTick(offset < TimeSpan.Zero ? TimeSpan.Zero : offset, TimeSeekOrigin.BeginTime);
+            }
         }
 
         public void Dispose() => ShortcutRevealMotion.AnimationClockCreatedForTest = _previous;
