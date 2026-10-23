@@ -24,7 +24,9 @@ internal sealed class ThemedDialog : Window
 
     /// <param name="destructive">
     /// The OK action deletes or discards something: it takes <c>Button.Danger</c> and, as for
-    /// any destructive confirmation, the caller makes Cancel the default.
+    /// any destructive confirmation, the caller makes Cancel the default. That default keeps the
+    /// bordered tier: the fill is the red accent, and a red Cancel beside a delete reads as the
+    /// dangerous choice.
     /// </param>
     /// <param name="commands">Follow-up commands shown after the recovery action.</param>
     internal ThemedDialog(string text, string title, MessageBoxButton buttons, MessageBoxResult defaultResult,
@@ -95,7 +97,7 @@ internal sealed class ThemedDialog : Window
                 _ => UiText.Get(choice.Key),
             };
             Button button = MakeButton(label, choice.Result,
-                isDefault, choice.Result is MessageBoxResult.Cancel || choices.Length == 1);
+                isDefault, choice.Result is MessageBoxResult.Cancel || choices.Length == 1, filled: isDefault && !destructive);
             if (destructive && choice.Result == MessageBoxResult.OK && !isDefault) button.SetResourceReference(StyleProperty, "Button.Danger");
             actions.Children.Add(button);
         }
@@ -103,9 +105,9 @@ internal sealed class ThemedDialog : Window
         Content = new ScrollViewer { Content = panel, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
     }
 
-    private Button MakeButton(string label, MessageBoxResult result, bool isDefault, bool isCancel)
+    private Button MakeButton(string label, MessageBoxResult result, bool isDefault, bool isCancel, bool? filled = null)
     {
-        Button button = CreateActionButton(label, primary: isDefault);
+        Button button = CreateActionButton(label, primary: filled ?? isDefault);
         button.IsDefault = isDefault;
         button.IsCancel = isCancel;
         button.Click += (_, _) => { Result = result; Close(); };
@@ -149,7 +151,8 @@ internal sealed class ThemedDialog : Window
     /// The caller keeps <see cref="Button.IsDefault"/> on the confirming action and
     /// <see cref="Button.IsCancel"/> on the dismissal. A destructive confirmation makes the
     /// dismissal the default instead, so Enter never deletes, and gives the destructive action
-    /// <see cref="CreateDangerButton"/>.
+    /// <see cref="CreateDangerButton"/>. There the default stays bordered, because the filled
+    /// tier is the red accent and would mark Cancel as the dangerous choice.
     /// </remarks>
     internal static WrapPanel CreateActionRow(params Button[] actions)
     {
