@@ -18,7 +18,7 @@ Partner Center의 Store 목록과 제출 옵션에 붙여 넣을 문구입니다
 - **저작권**: `Copyright (c) 2026 MyCapture`
 - **범주**: 생산성 또는 사진 및 비디오
 - **가격**: 무료
-- **개인정보처리방침 URL**: `https://github.com/sukwoo0711-maker/mycapture-support/blob/main/PRIVACY.md`
+- **개인정보처리방침 URL**: `https://mimiloaf.com/mycapture/privacy/` (2026-10-24 제출 17부터. 원문은 지원 저장소의 `PRIVACY.md`이고, 사이트 페이지는 그 main 판에서 만듭니다.)
 - **지원 연락처**: `https://github.com/sukwoo0711-maker/mycapture-support/issues`
 - **웹 사이트**: `https://sukwoo0711-maker.github.io/my-capture/`
 - **앱 타일 아이콘(선택)**: 패키징 결과물 `StoreListingIcon-300.png`
