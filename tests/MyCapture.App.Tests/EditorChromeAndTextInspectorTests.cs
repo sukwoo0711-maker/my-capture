@@ -72,6 +72,8 @@ public sealed class EditorChromeAndTextInspectorTests : KoreanCaptionTest
                 Check();
                 ShortcutRevealMotionTests.Pump(180);
                 Check();
+                foreach (Button command in commands)
+                    AssertCommandGeometry(Assert.IsType<Grid>(command.Content), revealed);
             }
         }
         finally
@@ -418,7 +420,15 @@ public sealed class EditorChromeAndTextInspectorTests : KoreanCaptionTest
                             ShortcutMotionTestScope.AssertState(hint, show);
                             if (show) AssertInside(hint, button);
                         }
-                        if (!show || string.IsNullOrEmpty(key))
+                        AssertCommandGeometry(face, show);
+                        if (string.IsNullOrEmpty(key))
+                        {
+                            TextBlock empty = Assert.IsAssignableFrom<TextBlock>(face.Children[1]);
+                            Assert.Empty(empty.Text);
+                            Assert.Equal(0, face.MinWidth);
+                            ShortcutMotionTestScope.AssertState(empty, show);
+                        }
+                        if (!show)
                         {
                             FrameworkElement label = Assert.IsAssignableFrom<FrameworkElement>(face.Children[0]);
                             double center = label.TranslatePoint(new Point(0, label.ActualHeight / 2), button).Y;
@@ -509,6 +519,22 @@ public sealed class EditorChromeAndTextInspectorTests : KoreanCaptionTest
         host.Window.UpdateLayout();
         SaveEvidence(host.Editor, "text-inspector-compact-alt.png");
     });
+
+    private static void AssertCommandGeometry(Grid face, bool revealed)
+    {
+        FrameworkElement primary = Assert.IsAssignableFrom<FrameworkElement>(face.Children[0]);
+        var shift = Assert.IsType<TransformGroup>(primary.RenderTransform).Children.OfType<TranslateTransform>().Single();
+        Assert.Equal(revealed ? 0 : ShortcutRevealMotion.PrimaryRestOffset, shift.Y);
+        FrameworkElement? icon = primary is StackPanel row
+            ? row.Children.OfType<FrameworkElement>().FirstOrDefault(child => child is not TextBlock)
+            : primary is TextBlock ? null : primary;
+        if (icon is not null)
+        {
+            var scale = Assert.IsType<TransformGroup>(icon.RenderTransform).Children.OfType<ScaleTransform>().Single();
+            Assert.Equal(revealed ? ShortcutRevealMotion.CommandIconScale : 1, scale.ScaleX);
+            Assert.Equal(scale.ScaleX, scale.ScaleY);
+        }
+    }
 
     private static void SelectTextTool(AnnotationEditorControl editor) =>
         Field<Dictionary<EditorTool, ToggleButton>>(editor, "_toolButtons")[EditorTool.Text]

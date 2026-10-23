@@ -50,15 +50,10 @@ internal static class CommandButtonPresentation
             if (button.ToolTip is string tooltip && !tooltip.Contains(gesture, StringComparison.Ordinal))
                 button.ToolTip = $"{tooltip} ({gesture})";
         }
+        if (string.IsNullOrWhiteSpace(gesture)) gesture = string.Empty;
         if (button.Content is Grid { Name: "CommandButtonFace", Children.Count: > 1 } face)
         {
-            if (string.IsNullOrWhiteSpace(gesture))
-            {
-                face.Children.RemoveAt(1);
-                face.MinWidth = 0;
-                ShortcutRevealMotion.ResetPrimary((FrameworkElement)face.Children[0]);
-            }
-            else if (face.Children[1] is TextBlock current)
+            if (face.Children[1] is TextBlock current)
             {
                 current.Text = gesture;
                 ReserveHintWidth(face, current);
@@ -66,7 +61,6 @@ internal static class CommandButtonPresentation
             }
             return;
         }
-        if (string.IsNullOrWhiteSpace(gesture)) return;
         // Several surfaces describe shortcuts directly instead of using the catalog. They
         // join the same window-owned Alt behavior after their metadata/content is ready.
         TextBlock hint = ShortcutPresentation.Hint(gesture);
@@ -77,6 +71,15 @@ internal static class CommandButtonPresentation
 
     internal static void ReserveHint(ButtonBase button, TextBlock? hint = null)
     {
+        // An empty caption owns the same render-only motion and fixed-height slot as a
+        // keyed face. Keep it visible in the tree so visible commands animate together.
+        if (hint is null)
+        {
+            if (button.Content is Grid { Name: "CommandButtonFace", Children.Count: > 1 }) return;
+            hint = ShortcutPresentation.Hint(string.Empty);
+            hint.SetBinding(TextBlock.ForegroundProperty,
+                new System.Windows.Data.Binding(nameof(Control.Foreground)) { Source = button });
+        }
         if (button.Content is Grid { Name: "CommandButtonFace" } face)
         {
             if (hint is not null)
@@ -119,6 +122,11 @@ internal static class CommandButtonPresentation
 
     private static void ReserveHintWidth(Grid face, TextBlock hint)
     {
+        if (hint.Text.Length == 0)
+        {
+            face.MinWidth = 0;
+            return;
+        }
         // Reserve the full chord independently of reveal and refresh its inherited font/DPI
         // on load or a real metadata change. Alt never enters this measurement path.
         DpiScale dpi = VisualTreeHelper.GetDpi(hint);

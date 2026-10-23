@@ -209,10 +209,8 @@ public sealed class ShortcutCaptionTests
                 Assert.Equal(scale, VisualTreeHelper.GetDpi(scaledCaption).DpiScaleX);
                 double longWidth = face.MinWidth;
                 Rect? originalBounds = null;
-                // A new visual takes the real HWND scale, not SetRootDpi's simulated scale.
-                // Cover removal/recreation at the native scale and reuse the caption at simulated scales.
-                bool recreateCaption = scale == nativeScale;
-                string[] gestures = recreateCaption ? [longGesture, "I", string.Empty, longGesture] : [longGesture, "I", longGesture];
+                // Removing metadata preserves the caption, including its inherited DPI.
+                string[] gestures = [longGesture, "I", string.Empty, longGesture];
 
                 foreach (string gesture in gestures)
                 {
@@ -224,17 +222,22 @@ public sealed class ShortcutCaptionTests
                         CommandButtonPresentation.RefreshHint(button);
                     }
                     Assert.Same(face, button.Content);
+                    Assert.Equal(2, face.Children.Count);
+                    Assert.Same(loadedCaption, face.Children[1]);
                     if (gesture.Length == 0)
                     {
-                        Assert.Single(face.Children);
+                        Assert.Empty(loadedCaption.Text);
                         Assert.Equal(0, face.MinWidth);
+                        Assert.Empty(AutomationProperties.GetName(loadedCaption));
+                        Assert.Null(System.Windows.Automation.Peers.UIElementAutomationPeer.CreatePeerForElement(loadedCaption));
+                        Assert.False(loadedCaption.IsHitTestVisible);
                     }
                     else if (gesture == "I") Assert.True(face.MinWidth > 0 && face.MinWidth < longWidth);
                     else
                     {
                         TextBlock currentCaption = Assert.IsAssignableFrom<TextBlock>(face.Children[1]);
                         Assert.True(longWidth.Equals(face.MinWidth),
-                            $"scale={scale}, stage={(originalBounds is null ? "first" : recreateCaption ? "re-add" : "restore")}, gesture='{gesture}', "
+                            $"scale={scale}, stage={(originalBounds is null ? "first" : "restore")}, gesture='{gesture}', "
                             + $"expected MinWidth={longWidth}, actual MinWidth={face.MinWidth}, "
                             + $"hintDpi={VisualTreeHelper.GetDpi(currentCaption).DpiScaleX}, faceDpi={VisualTreeHelper.GetDpi(face).DpiScaleX}, "
                             + $"hintLoaded={currentCaption.IsLoaded}, buttonLoaded={button.IsLoaded}, "
@@ -252,10 +255,10 @@ public sealed class ShortcutCaptionTests
                         Assert.True(name.IsVisible);
                         Assert.Equal("Run", name.Text);
                         Assert.True(bounds.Left >= -0.5 && bounds.Right <= row.ActualWidth + 0.5);
-                        if (gesture.Length == 0) continue;
                         TextBlock caption = Assert.IsAssignableFrom<TextBlock>(face.Children[1]);
                         Assert.Equal(gesture, caption.Text);
                         ShortcutMotionTestScope.AssertState(caption, alt);
+                        if (gesture.Length == 0) continue;
                         if (!alt) continue;
                         double reservedRemainder = face.MinWidth - caption.DesiredSize.Width;
                         string measurement = $"MinWidth={face.MinWidth}, DesiredSize={caption.DesiredSize.Width}, "
