@@ -63,6 +63,7 @@ public sealed partial class OcrModelBenchmarkTests
     private static void Run(string output, string models)
     {
         VerifyMetricExamples();
+        HashSet<string>? selectedPipelines = SelectPipelines();
         List<Sample> corpus = Environment.GetEnvironmentVariable("MYCAPTURE_OCR_BENCH_CORPUS") == "validation2"
             ? CreateValidationCorpus(output) : CreateCorpus(output);
         Assert.True(corpus.Count >= 48);
@@ -77,11 +78,14 @@ public sealed partial class OcrModelBenchmarkTests
             RapidOcrAssembly = typeof(RapidOcr).Assembly.FullName ?? "",
             OnnxRuntimeAssembly = typeof(InferenceSession).Assembly.FullName ?? "",
             CorpusCount = corpus.Count,
+            SelectedPipelines = selectedPipelines?.OrderBy(n => n, StringComparer.Ordinal).ToArray(),
         };
         report.Notes.AddRange([
             "Synthetic deterministic screenshots; results describe this corpus, not real-world prevalence. Fonts and PNG SHA-256 are recorded in truth.json.",
             "CER: NFC; CRLF/CR become LF; horizontal whitespace collapses to one space; trim each line and remove empty lines. LF remains one character. Micro-average total edit distance / total truth characters (may exceed 100%).",
             "Line-insensitive CER: the same normalization, then all whitespace including LF collapses to one space. Reading order is retained.",
+            "Space-insensitive CER: the same NFC normalization, then remove all Unicode whitespace, including LF. This separately measures character recognition without word spacing or line-break penalties; it is not line-insensitive CER.",
+            "Space-free CER in the detector and angle benchmark summaries is the same SpaceInsensitiveCer metric; both branches use NFC and remove all Unicode whitespace before edit distance. The existing field names, counts and line-insensitive metric are retained.",
             "Exact-line match: LCS of normalized nonempty output/truth lines divided by truth line count; also report matches / max(truth lines, output lines) to expose extra lines.",
             "Cold init is first construction of one reusable wrapper/model set per pipeline in this process; filesystem and native DLL caches are not flushed. First inference is measured separately and excluded from all warm samples. Every corpus image then has three full pipeline warm runs; first warm output supplies accuracy, repeated-output changes are counted.",
             "Warm time includes product preprocessing, SR when applicable, PNG encoding, SKBitmap decode, detection/classification/recognition and product text reconstruction. Image generation, disk writes, metrics, and model file hashing are outside timed inference.",
@@ -90,6 +94,10 @@ public sealed partial class OcrModelBenchmarkTests
             "Enhanced variants share the small-text and low-contrast subsets, including their JPEG variants. Their detector is selected between A-cur and A-v6 by corpus CER, then warm median as tie-breaker. This is an in-sample exploratory selection, not independent validation.",
             "Working-set samples are taken every 20 ms and at inference boundaries. Peak delta is max sampled working set minus pre-init baseline; lifetime high-water increase is also recorded. Sequential shared-process measurements are order-dependent and include allocator/cache reuse; they are not isolated model memory requirements.",
             "Latency and memory in the shared sandbox may be noisy. All pipelines use product CPU options and serial image execution; no throughput parallelism is added.",
+            "A-dual and A-v6-dual run the unchanged W Fast and corresponding Accurate neural runners concurrently on each frozen corpus image, then call the product OcrResultMerger. Warm wall time includes scheduling, both engines' preprocessing/inference, waiting and merging. Images still run serially. First-warm line/word geometry is retained for all pipelines, and both engine results are retained for dual pipelines.",
+            "Dual pipelines use the product PrepareDualRequest handoff before starting both engines: decoder-backed BitmapFrame inputs receive a lossless detached bitmap preserving pixels, format and DPI. Snapshot overhead is included in dual wall time; single-engine baselines and corpus generation are unchanged.",
+            "MYCAPTURE_OCR_BENCH_PIPELINES optionally selects comma-, semicolon- or whitespace-separated pipeline names before model hashing/loading. Omitted pipelines are skipped; an unset variable preserves the full experiment including SR.",
+            "Dual-engine gates require complete matching corpus evidence for W, the corresponding neural baseline and dual pipeline: each category CER <= min(W, neural) + 0.005, overall CER strictly below both, and warm median wall time <= neural + 30 ms. Missing data cannot pass. The report does not enable any product feature switch.",
         ]);
 
         string current = Path.Combine(models, "current");
@@ -119,6 +127,9 @@ public sealed partial class OcrModelBenchmarkTests
             SaveReport(output, report);
         }
 
+        ExecuteDual("A-dual", server, defaults);
+        ExecuteDual("A-v6-dual", v6, defaults);
+
         PipelineReport? selected = report.Pipelines
             .Where(p => (p.Name == "A-cur" || p.Name == "A-v6") && p.Status == "completed")
             .OrderBy(p => p.Overall!.Cer).ThenBy(p => p.Overall!.WarmMedianMs).FirstOrDefault();
@@ -142,9 +153,18 @@ public sealed partial class OcrModelBenchmarkTests
         else
         {
             foreach (string name in new[] { "E-none", "E-cur", "E-v3" })
-                report.Pipelines.Add(new PipelineReport { Name = name, Status = "failed", Note = "Neither detector baseline completed; Enhanced selection is unavailable." });
+                report.Pipelines.Add(new PipelineReport
+                {
+                    Name = name,
+                    Status = selectedPipelines is not null && !selectedPipelines.Contains(name) ? "skipped" : "failed",
+                    Note = selectedPipelines is not null && !selectedPipelines.Contains(name)
+                        ? "Not selected by MYCAPTURE_OCR_BENCH_PIPELINES."
+                        : "Neither detector baseline completed; Enhanced selection is unavailable.",
+                });
         }
 
+        report.DualEngineGates.Add(EvaluateDualGate(report, corpus, "A-dual", "A-cur"));
+        report.DualEngineGates.Add(EvaluateDualGate(report, corpus, "A-v6-dual", "A-v6"));
         report.FinishedUtc = DateTimeOffset.UtcNow;
         report.Status = report.Pipelines.Any(p => p.Status == "failed") ? "failed" : "completed";
         SaveReport(output, report);
@@ -163,11 +183,24 @@ public sealed partial class OcrModelBenchmarkTests
                 files, quality + (sr is null ? "; no SR" : "; product SR tiling"), DescribeOptions(options));
         }
 
+        void ExecuteDual(string name, string detector, RapidOcrOptions options) =>
+            Execute(name, corpus,
+                () => new DualRunner(detector, classifier, recognizer, dictionary, options, output),
+                [detector, classifier, recognizer, dictionary],
+                "Parallel Windows Fast + neural Accurate; product line merger; no SR", DescribeOptions(options));
+
         void Execute(string name, List<Sample> samples, Func<IRunner> factory, string[] files,
             string description, Dictionary<string, string>? options)
         {
             var pipeline = new PipelineReport { Name = name, Description = description, Options = options };
             report.Pipelines.Add(pipeline);
+            if (selectedPipelines is not null && !selectedPipelines.Contains(name))
+            {
+                pipeline.Status = "skipped";
+                pipeline.Note = "Not selected by MYCAPTURE_OCR_BENCH_PIPELINES.";
+                SaveReport(output, report);
+                return;
+            }
             IRunner? runner = null;
             try
             {
@@ -228,6 +261,12 @@ public sealed partial class OcrModelBenchmarkTests
                                 image.Output = recognized.Text;
                                 image.Status = recognized.Status.ToString();
                                 image.Language = recognized.LanguageTag;
+                                image.Lines = recognized.Lines;
+                                if (runner is DualRunner dual)
+                                {
+                                    image.WindowsResult = dual.LastWindowsResult;
+                                    image.NeuralResult = dual.LastNeuralResult;
+                                }
                             }
                             else if (!string.Equals(image.Output, recognized.Text, StringComparison.Ordinal))
                                 image.DifferentRepeatedOutputs++;
@@ -270,6 +309,19 @@ public sealed partial class OcrModelBenchmarkTests
             });
     }
 
+    private static HashSet<string>? SelectPipelines()
+    {
+        string? selection = Environment.GetEnvironmentVariable("MYCAPTURE_OCR_BENCH_PIPELINES");
+        if (string.IsNullOrWhiteSpace(selection)) return null;
+        var names = Regex.Split(selection.Trim(), @"[,;\s]+")
+            .Where(n => n.Length > 0).ToHashSet(StringComparer.Ordinal);
+        string[] known = ["W", "A-cur", "A-mob", "A-v6", "A-v6opt", "A-dual", "A-v6-dual", "E-none", "E-cur", "E-v3"];
+        string[] unknown = names.Except(known, StringComparer.Ordinal).ToArray();
+        if (names.Count == 0 || unknown.Length > 0)
+            throw new ArgumentException("MYCAPTURE_OCR_BENCH_PIPELINES must select known pipeline names. Unknown: " + string.Join(", ", unknown));
+        return names;
+    }
+
     private static void CheckResult(ProductResult result)
     {
         if (result.Status is not (OcrStatus.Success or OcrStatus.NoText))
@@ -292,6 +344,48 @@ public sealed partial class OcrModelBenchmarkTests
         public ProductResult Recognize(BitmapSource bitmap) =>
             _service.RecognizeAsync(Request(bitmap, OcrQuality.Fast)).GetAwaiter().GetResult();
         public void Dispose() { }
+    }
+
+    private sealed class DualRunner : IRunner
+    {
+        private readonly WindowsRunner _windows = new();
+        private readonly NeuralRunner? _neural;
+        public ProductResult? LastWindowsResult { get; private set; }
+        public ProductResult? LastNeuralResult { get; private set; }
+        public string? UnavailableReason => _windows.UnavailableReason;
+
+        public DualRunner(string detector, string classifier, string recognizer, string dictionary,
+            RapidOcrOptions options, string output)
+        {
+            // A benchmark dual pipeline must have both engines; a single-engine fallback
+            // is useful in the product, but cannot supply evidence for the dual gate.
+            if (_windows.UnavailableReason is null)
+                _neural = new NeuralRunner(detector, classifier, recognizer, dictionary,
+                    options, OcrQuality.Accurate, null, output);
+        }
+
+        public ProductResult Recognize(BitmapSource bitmap)
+        {
+            var timer = Stopwatch.StartNew();
+            if (!bitmap.IsFrozen) throw new InvalidOperationException("Dual OCR requires a frozen corpus bitmap.");
+            OcrRequest prepared = CaptureOcrService.PrepareDualRequest(Request(bitmap, OcrQuality.Accurate));
+            BitmapSource sharedBitmap = prepared.Bitmap
+                ?? throw new InvalidOperationException("Prepared dual request must preserve the bitmap source.");
+            Task<ProductResult> windows = Task.Run(() => _windows.Recognize(sharedBitmap));
+            Task<ProductResult> neural = Task.Run(() => _neural!.Recognize(sharedBitmap));
+            Task.WhenAll(windows, neural).GetAwaiter().GetResult();
+            LastWindowsResult = windows.GetAwaiter().GetResult();
+            LastNeuralResult = neural.GetAwaiter().GetResult();
+            CheckResult(LastWindowsResult);
+            CheckResult(LastNeuralResult);
+            return OcrResultMerger.Merge(LastWindowsResult, LastNeuralResult, timer.Elapsed);
+        }
+
+        public void Dispose()
+        {
+            _neural?.Dispose();
+            _windows.Dispose();
+        }
     }
 
     private sealed class NeuralRunner : IRunner
@@ -581,7 +675,7 @@ public sealed partial class OcrModelBenchmarkTests
     {
         string expected = NormalizeLines(truth), actual = NormalizeLines(output);
         string flatExpected = Regex.Replace(expected, @"\s+", " "), flatActual = Regex.Replace(actual, @"\s+", " ");
-        string compactExpected = Regex.Replace(expected, @"\s+", ""), compactActual = Regex.Replace(actual, @"\s+", "");
+        string noSpaceExpected = Regex.Replace(expected, @"\s+", ""), noSpaceActual = Regex.Replace(actual, @"\s+", "");
         string[] expectedLines = expected.Split('\n', StringSplitOptions.RemoveEmptyEntries);
         string[] actualLines = actual.Split('\n', StringSplitOptions.RemoveEmptyEntries);
         int[] previous = new int[actualLines.Length + 1], current = new int[actualLines.Length + 1];
@@ -596,7 +690,7 @@ public sealed partial class OcrModelBenchmarkTests
         {
             Edits = Levenshtein(expected, actual), TruthCharacters = expected.Length,
             LineInsensitiveEdits = Levenshtein(flatExpected, flatActual), LineInsensitiveTruthCharacters = flatExpected.Length,
-            SpaceInsensitiveEdits = Levenshtein(compactExpected, compactActual), SpaceInsensitiveTruthCharacters = compactExpected.Length,
+            SpaceInsensitiveEdits = Levenshtein(noSpaceExpected, noSpaceActual), SpaceInsensitiveTruthCharacters = noSpaceExpected.Length,
             MatchedLines = previous[actualLines.Length], TruthLines = expectedLines.Length, OutputLines = actualLines.Length,
         };
     }
@@ -622,6 +716,10 @@ public sealed partial class OcrModelBenchmarkTests
         Assert.Equal(0, Measure("a  b\r\nc", "a b\nc").Edits);
         Assert.Equal(1, Measure("a\nb", "a b").Edits);
         Assert.Equal(0, Measure("a\nb", "a b").LineInsensitiveEdits);
+        Assert.Equal(1, Measure("a b", "ab").LineInsensitiveEdits);
+        Assert.Equal(0, Measure("a b", "ab").SpaceInsensitiveEdits);
+        Assert.Equal(0, Measure("a\nb", "ab").SpaceInsensitiveEdits);
+        Assert.Equal(2, Measure("a\nb", "b\na").SpaceInsensitiveEdits);
         Assert.Equal(2, Measure("a\nb\nc", "a\nc").MatchedLines);
         Assert.Equal(1, Measure("a", "a\na").MatchedLines);
     }
@@ -631,17 +729,83 @@ public sealed partial class OcrModelBenchmarkTests
         double[] times = images.SelectMany(i => i.WarmMs).OrderBy(t => t).ToArray();
         int edits = images.Sum(i => i.Metrics.Edits), chars = images.Sum(i => i.Metrics.TruthCharacters);
         int flatEdits = images.Sum(i => i.Metrics.LineInsensitiveEdits), flatChars = images.Sum(i => i.Metrics.LineInsensitiveTruthCharacters);
+        int noSpaceEdits = images.Sum(i => i.Metrics.SpaceInsensitiveEdits), noSpaceChars = images.Sum(i => i.Metrics.SpaceInsensitiveTruthCharacters);
         int matches = images.Sum(i => i.Metrics.MatchedLines), lines = images.Sum(i => i.Metrics.TruthLines);
         return new AggregateMetrics
         {
             Images = images.Count, Edits = edits, TruthCharacters = chars, Cer = edits / (double)Math.Max(1, chars),
             LineInsensitiveCer = flatEdits / (double)Math.Max(1, flatChars),
-            SpaceInsensitiveCer = images.Sum(i => i.Metrics.SpaceInsensitiveEdits) / (double)Math.Max(1, images.Sum(i => i.Metrics.SpaceInsensitiveTruthCharacters)),
+            SpaceInsensitiveEdits = noSpaceEdits, SpaceInsensitiveTruthCharacters = noSpaceChars,
+            SpaceInsensitiveCer = noSpaceEdits / (double)Math.Max(1, noSpaceChars),
             ExactLineMatchRate = matches / (double)Math.Max(1, lines),
             ExtraLinePenalizedMatchRate = matches / (double)Math.Max(1, images.Sum(i => Math.Max(i.Metrics.TruthLines, i.Metrics.OutputLines))),
             WarmMedianMs = Percentile(times, 0.5), WarmP95Ms = Percentile(times, 0.95),
             WarmMeasurements = times.Length, DifferentRepeatedOutputs = images.Sum(i => i.DifferentRepeatedOutputs),
         };
+    }
+
+    private static DualGateReport EvaluateDualGate(BenchmarkReport report, List<Sample> corpus,
+        string dualName, string neuralName)
+    {
+        var gate = new DualGateReport { DualPipeline = dualName, NeuralPipeline = neuralName };
+        PipelineReport? windows = report.Pipelines.SingleOrDefault(p => p.Name == "W");
+        PipelineReport? neural = report.Pipelines.SingleOrDefault(p => p.Name == neuralName);
+        PipelineReport? dual = report.Pipelines.SingleOrDefault(p => p.Name == dualName);
+        foreach ((string name, PipelineReport? pipeline) in new[] { ("W", windows), (neuralName, neural), (dualName, dual) })
+        {
+            if (pipeline?.Status != "completed" || pipeline.Overall is null
+                || pipeline.Images.Count != corpus.Count
+                || !pipeline.Images.Select(i => i.Id).ToHashSet(StringComparer.Ordinal)
+                    .SetEquals(corpus.Select(s => s.Truth.Id))
+                || pipeline.Images.Any(i => i.WarmMs.Count != Repetitions
+                    || i.WarmMs.Any(t => !double.IsFinite(t) || t < 0)
+                    || i.Status is not (nameof(OcrStatus.Success) or nameof(OcrStatus.NoText))))
+                gate.MissingEvidence.Add(name + ": complete matching corpus and warm timings required.");
+        }
+        if (gate.MissingEvidence.Count > 0) return gate;
+
+        AggregateMetrics w = windows!.Overall!, n = neural!.Overall!, d = dual!.Overall!;
+        foreach (IGrouping<string, Sample> category in corpus.GroupBy(s => s.Truth.Category))
+        {
+            var comparison = new CategoryGateReport { Category = category.Key };
+            gate.Categories.Add(comparison);
+            if (!windows!.Categories.TryGetValue(category.Key, out AggregateMetrics? wc)
+                || !neural!.Categories.TryGetValue(category.Key, out AggregateMetrics? nc)
+                || !dual!.Categories.TryGetValue(category.Key, out AggregateMetrics? dc)
+                || !CompleteMetric(wc, category.Count()) || !CompleteMetric(nc, category.Count())
+                || !CompleteMetric(dc, category.Count()))
+            {
+                gate.MissingEvidence.Add(category.Key + ": complete category metrics required for all three pipelines.");
+                continue;
+            }
+            comparison.WindowsCer = wc.Cer;
+            comparison.NeuralCer = nc.Cer;
+            comparison.DualCer = dc.Cer;
+            comparison.MaximumDualCer = Math.Min(wc.Cer, nc.Cer) + gate.CategoryToleranceCer;
+            comparison.Passed = dc.Cer <= comparison.MaximumDualCer;
+        }
+        if (!CompleteMetric(w, corpus.Count) || !CompleteMetric(n, corpus.Count) || !CompleteMetric(d, corpus.Count))
+            gate.MissingEvidence.Add("Complete overall metrics and warm timings required for all three pipelines.");
+        if (gate.MissingEvidence.Count > 0) return gate;
+
+        gate.WindowsOverallCer = w.Cer;
+        gate.NeuralOverallCer = n.Cer;
+        gate.DualOverallCer = d.Cer;
+        gate.OverallCerPassed = d.Cer < w.Cer && d.Cer < n.Cer;
+        gate.NeuralMedianMs = n.WarmMedianMs;
+        gate.DualMedianMs = d.WarmMedianMs;
+        gate.MaximumDualMedianMs = n.WarmMedianMs + gate.LatencyToleranceMs;
+        gate.LatencyPassed = d.WarmMedianMs <= gate.MaximumDualMedianMs;
+        gate.Passed = gate.Categories.Count > 0 && gate.Categories.All(c => c.Passed)
+            && gate.OverallCerPassed && gate.LatencyPassed;
+        gate.Status = gate.Passed ? "passed" : "failed";
+        return gate;
+
+        static bool CompleteMetric(AggregateMetrics metrics, int expectedImages) =>
+            metrics.Images == expectedImages && metrics.TruthCharacters > 0
+            && metrics.WarmMeasurements == expectedImages * Repetitions
+            && double.IsFinite(metrics.Cer) && double.IsFinite(metrics.WarmMedianMs)
+            && metrics.Cer >= 0 && metrics.WarmMedianMs >= 0;
     }
 
     private static double Percentile(double[] sorted, double fraction)
@@ -715,27 +879,38 @@ public sealed partial class OcrModelBenchmarkTests
         markdown.AppendLine($"\nStarted UTC: {report.StartedUtc:O}. Finished UTC: {report.FinishedUtc:O}.");
         markdown.AppendLine("\n## Method\n");
         foreach (string note in report.Notes) markdown.AppendLine("- " + note);
-        markdown.AppendLine("\n## Overall\n\n| Pipeline | State | Images | CER | Line-insensitive CER | Exact lines | Extra-line-penalized |\n|---|---|---:|---:|---:|---:|---:|");
+        markdown.AppendLine("\n## Overall\n\n| Pipeline | State | Images | CER | Line-insensitive CER | Space-insensitive CER | Exact lines | Extra-line-penalized |\n|---|---|---:|---:|---:|---:|---:|---:|");
         foreach (PipelineReport pipeline in report.Pipelines)
         {
             AggregateMetrics? a = pipeline.Overall;
-            markdown.AppendLine($"| {pipeline.Name} | {pipeline.Status} | {a?.Images ?? 0} | {Pct(a?.Cer)} | {Pct(a?.LineInsensitiveCer)} | {Pct(a?.ExactLineMatchRate)} | {Pct(a?.ExtraLinePenalizedMatchRate)} |");
+            markdown.AppendLine($"| {pipeline.Name} | {pipeline.Status} | {a?.Images ?? 0} | {Pct(a?.Cer)} | {Pct(a?.LineInsensitiveCer)} | {Pct(a?.SpaceInsensitiveCer)} | {Pct(a?.ExactLineMatchRate)} | {Pct(a?.ExtraLinePenalizedMatchRate)} |");
         }
-        markdown.AppendLine("\n## Category accuracy and warm latency\n\n| Pipeline | Category | Images | CER | Line-insensitive CER | Exact lines | Median ms | p95 ms |\n|---|---|---:|---:|---:|---:|---:|---:|");
+        markdown.AppendLine("\n## Category accuracy and warm latency\n\n| Pipeline | Category | Images | CER | Line-insensitive CER | Space-insensitive CER | Exact lines | Median ms | p95 ms |\n|---|---|---:|---:|---:|---:|---:|---:|---:|");
         foreach (PipelineReport pipeline in report.Pipelines)
         foreach ((string category, AggregateMetrics a) in pipeline.Categories.OrderBy(p => p.Key, StringComparer.Ordinal))
-            markdown.AppendLine($"| {pipeline.Name} | {category} | {a.Images} | {Pct(a.Cer)} | {Pct(a.LineInsensitiveCer)} | {Pct(a.ExactLineMatchRate)} | {Num(a.WarmMedianMs)} | {Num(a.WarmP95Ms)} |");
+            markdown.AppendLine($"| {pipeline.Name} | {category} | {a.Images} | {Pct(a.Cer)} | {Pct(a.LineInsensitiveCer)} | {Pct(a.SpaceInsensitiveCer)} | {Pct(a.ExactLineMatchRate)} | {Num(a.WarmMedianMs)} | {Num(a.WarmP95Ms)} |");
         markdown.AppendLine("\n## Latency\n\n| Pipeline | Init ms | First inference ms | Warm median ms | Warm p95 ms | Warm runs | Changed repeats |\n|---|---:|---:|---:|---:|---:|---:|");
         foreach (PipelineReport p in report.Pipelines)
             markdown.AppendLine($"| {p.Name} | {Num(p.InitMs)} | {Num(p.FirstInferenceMs)} | {Num(p.Overall?.WarmMedianMs)} | {Num(p.Overall?.WarmP95Ms)} | {p.Overall?.WarmMeasurements ?? 0} | {p.Overall?.DifferentRepeatedOutputs ?? 0} |");
         markdown.AppendLine("\n## Memory and disk (MiB)\n\n| Pipeline | Pre-init working set | Sampled peak | Sampled peak delta | Lifetime high-water increase | Model files |\n|---|---:|---:|---:|---:|---:|");
         foreach (PipelineReport p in report.Pipelines)
             markdown.AppendLine($"| {p.Name} | {MiB(p.BaselineWorkingSetBytes)} | {MiB(p.SampledPeakWorkingSetBytes)} | {MiB(p.SampledPeakDeltaBytes)} | {MiB(p.LifetimePeakIncreaseBytes)} | {(p.Name == "W" ? "OS-managed, unknown" : MiB(p.ModelBytes))} |");
-        markdown.AppendLine("\n## Difficult-subset comparison\n\nThe same image IDs are used below, including the two matching JPEG derivatives.\n\n| Pipeline | Images | CER | Line-insensitive CER | Exact lines | Warm median ms | Warm p95 ms |\n|---|---:|---:|---:|---:|---:|---:|");
+        markdown.AppendLine("\n## Difficult-subset comparison\n\nThe same image IDs are used below, including the two matching JPEG derivatives.\n\n| Pipeline | Images | CER | Line-insensitive CER | Space-insensitive CER | Exact lines | Warm median ms | Warm p95 ms |\n|---|---:|---:|---:|---:|---:|---:|---:|");
         foreach (PipelineReport p in report.Pipelines.Where(p => p.Images.Any(i => i.EnhancedSubset)))
         {
             AggregateMetrics a = Aggregate(p.Images.Where(i => i.EnhancedSubset).ToList());
-            markdown.AppendLine($"| {p.Name} | {a.Images} | {Pct(a.Cer)} | {Pct(a.LineInsensitiveCer)} | {Pct(a.ExactLineMatchRate)} | {Num(a.WarmMedianMs)} | {Num(a.WarmP95Ms)} |");
+            markdown.AppendLine($"| {p.Name} | {a.Images} | {Pct(a.Cer)} | {Pct(a.LineInsensitiveCer)} | {Pct(a.SpaceInsensitiveCer)} | {Pct(a.ExactLineMatchRate)} | {Num(a.WarmMedianMs)} | {Num(a.WarmP95Ms)} |");
+        }
+        markdown.AppendLine("\n## Dual-engine gates\n\nThis report does not change the product switch. An incomplete gate cannot pass.\n");
+        foreach (DualGateReport gate in report.DualEngineGates)
+        {
+            markdown.AppendLine($"### {gate.DualPipeline} vs W / {gate.NeuralPipeline}: {gate.Status}\n");
+            foreach (string missing in gate.MissingEvidence) markdown.AppendLine("- " + missing);
+            markdown.AppendLine($"\nOverall CER: W {Pct(gate.WindowsOverallCer)}, neural {Pct(gate.NeuralOverallCer)}, dual {Pct(gate.DualOverallCer)}; strictly below both: {gate.OverallCerPassed}.");
+            markdown.AppendLine($"Warm median: neural {Num(gate.NeuralMedianMs)} ms, dual {Num(gate.DualMedianMs)} ms, maximum {Num(gate.MaximumDualMedianMs)} ms; latency gate: {gate.LatencyPassed}.\n");
+            markdown.AppendLine("| Category | W CER | Neural CER | Dual CER | Maximum dual CER | Passed |\n|---|---:|---:|---:|---:|---|");
+            foreach (CategoryGateReport category in gate.Categories)
+                markdown.AppendLine($"| {category.Category} | {Pct(category.WindowsCer)} | {Pct(category.NeuralCer)} | {Pct(category.DualCer)} | {Pct(category.MaximumDualCer)} | {category.Passed} |");
         }
         foreach (PipelineReport p in report.Pipelines)
         {
@@ -787,11 +962,13 @@ public sealed partial class OcrModelBenchmarkTests
         public string RapidOcrAssembly { get; init; } = "";
         public string OnnxRuntimeAssembly { get; init; } = "";
         public int CorpusCount { get; init; }
+        public string[]? SelectedPipelines { get; init; }
         public int WarmRepetitionsPerImage => Repetitions;
         public bool V6PresetAvailable { get; set; }
         public string? EnhancedDetector { get; set; }
         public List<string> Notes { get; } = [];
         public List<PipelineReport> Pipelines { get; } = [];
+        public List<DualGateReport> DualEngineGates { get; } = [];
     }
     private sealed class PipelineReport
     {
@@ -824,6 +1001,9 @@ public sealed partial class OcrModelBenchmarkTests
         public string Output { get; set; } = "";
         public string Status { get; set; } = "";
         public string? Language { get; set; }
+        public IReadOnlyList<MyCapture.Ocr.OcrLine> Lines { get; set; } = [];
+        public ProductResult? WindowsResult { get; set; }
+        public ProductResult? NeuralResult { get; set; }
         public List<double> WarmMs { get; } = [];
         public int DifferentRepeatedOutputs { get; set; }
         public TextMetrics Metrics { get; set; } = new();
@@ -837,6 +1017,7 @@ public sealed partial class OcrModelBenchmarkTests
         public int LineInsensitiveTruthCharacters { get; init; }
         public int SpaceInsensitiveEdits { get; init; }
         public int SpaceInsensitiveTruthCharacters { get; init; }
+        public double SpaceInsensitiveCer => SpaceInsensitiveEdits / (double)Math.Max(1, SpaceInsensitiveTruthCharacters);
         public int MatchedLines { get; init; }
         public int TruthLines { get; init; }
         public int OutputLines { get; init; }
@@ -848,6 +1029,8 @@ public sealed partial class OcrModelBenchmarkTests
         public int TruthCharacters { get; init; }
         public double Cer { get; init; }
         public double LineInsensitiveCer { get; init; }
+        public int SpaceInsensitiveEdits { get; init; }
+        public int SpaceInsensitiveTruthCharacters { get; init; }
         public double SpaceInsensitiveCer { get; init; }
         public double ExactLineMatchRate { get; init; }
         public double ExtraLinePenalizedMatchRate { get; init; }
@@ -855,5 +1038,33 @@ public sealed partial class OcrModelBenchmarkTests
         public double WarmP95Ms { get; init; }
         public int WarmMeasurements { get; init; }
         public int DifferentRepeatedOutputs { get; init; }
+    }
+    private sealed class DualGateReport
+    {
+        public string DualPipeline { get; init; } = "";
+        public string NeuralPipeline { get; init; } = "";
+        public string Status { get; set; } = "incomplete";
+        public bool Passed { get; set; }
+        public double CategoryToleranceCer => 0.005;
+        public double LatencyToleranceMs => 30;
+        public List<string> MissingEvidence { get; } = [];
+        public List<CategoryGateReport> Categories { get; } = [];
+        public double? WindowsOverallCer { get; set; }
+        public double? NeuralOverallCer { get; set; }
+        public double? DualOverallCer { get; set; }
+        public bool OverallCerPassed { get; set; }
+        public double? NeuralMedianMs { get; set; }
+        public double? DualMedianMs { get; set; }
+        public double? MaximumDualMedianMs { get; set; }
+        public bool LatencyPassed { get; set; }
+    }
+    private sealed class CategoryGateReport
+    {
+        public string Category { get; init; } = "";
+        public double? WindowsCer { get; set; }
+        public double? NeuralCer { get; set; }
+        public double? DualCer { get; set; }
+        public double? MaximumDualCer { get; set; }
+        public bool Passed { get; set; }
     }
 }
