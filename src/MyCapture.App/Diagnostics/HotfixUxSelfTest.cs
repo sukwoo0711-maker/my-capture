@@ -68,7 +68,12 @@ internal static class HotfixUxSelfTest
 
     internal static int Run(string output)
     {
-        try { output = ValidatedFilePaths.CreateDirectory(output); }
+        string reportPath;
+        try
+        {
+            output = ValidatedFilePaths.CreateDirectory(output);
+            reportPath = ValidatedFilePaths.FileWithinRoot(output, "hotfix-ux-report.txt", ".txt");
+        }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
         {
             Trace.TraceError("{0}: {1}", UiText.Get("Dialog.Storage"), error);
@@ -88,10 +93,18 @@ internal static class HotfixUxSelfTest
         Func<bool> oldCanShow = ShortcutHelpWindow.CanShowHelp;
         int result = 1;
         var originalCursor = WindowStyleFacade.GetCursorPosition();
+        // The runner stops a run that hangs before the final report is written. Each check
+        // leaves the report so far on disk, without a RESULT line, so the stop point is known.
+        void SaveProgress()
+        {
+            try { File.WriteAllText(reportPath, report.ToString(), new UTF8Encoding(false)); }
+            catch (Exception error) when (error is IOException or UnauthorizedAccessException) { }
+        }
         void Check(string label, bool passed)
         {
             report.AppendLine($"{(passed ? "PASS" : "FAIL")}: {label}");
             Console.WriteLine($"{(passed ? "PASS" : "FAIL")}: {label}");
+            SaveProgress();
             if (!passed) throw new InvalidOperationException(label);
         }
         void RecordForeground(string target, bool acquired, TimeSpan elapsed)
@@ -149,7 +162,8 @@ internal static class HotfixUxSelfTest
             editor.CommitRequested = value => { committed = value.Action; return Task.FromResult(false); };
             Check("editor Ctrl+C command accepted", editor.Editor.HandleShortcut(Key.C, ModifierKeys.Control));
             Pump(150);
-            Check("Ctrl+C reaches editor commit, not receipt", committed == EditorCommitAction.Done);
+            // Ctrl+C copies and keeps the editor open; Ctrl+Enter is the closing Done.
+            Check("Ctrl+C reaches editor copy commit, not receipt", committed == EditorCommitAction.CopyToClipboard);
             // Keep the real dispatcher timer running while editor commands execute.
             var lifetime = Stopwatch.StartNew();
             while (card.IsVisible && lifetime.Elapsed < TimeSpan.FromSeconds(12)) Pump(100);
@@ -603,8 +617,7 @@ internal static class HotfixUxSelfTest
             report.AppendLine(ResultLine(result == 0, warnings.Count));
             try
             {
-                File.WriteAllText(ValidatedFilePaths.FileWithinRoot(output, "hotfix-ux-report.txt", ".txt"),
-                    report.ToString(), new UTF8Encoding(false));
+                File.WriteAllText(reportPath, report.ToString(), new UTF8Encoding(false));
             }
             catch (Exception error) when (error is IOException or UnauthorizedAccessException)
             {
@@ -747,6 +760,19 @@ internal static class HotfixUxSelfTest
         finally { Observe("FINAL"); }
     }
 
+    /// <summary>
+    /// Clicks a control in a popup the foreground window owns. The owner stays the expected
+    /// foreground for every injection, and the pointer must be over the popup's own HWND.
+    /// </summary>
+    private static void ClickOwnedPopup(IntPtr foreground, IntPtr popup, FrameworkElement control)
+    {
+        Point point = control.PointToScreen(new Point(control.ActualWidth / 2, control.ActualHeight / 2));
+        MoveCursor(foreground, (int)point.X, (int)point.Y);
+        if (popup == IntPtr.Zero || GetWindow(popup, 4 /* GW_OWNER */) != foreground || !WindowStyleFacade.IsPointerOverWindow(popup))
+            throw new InvalidOperationException($"Input aborted: pointer {(int)point.X},{(int)point.Y} is not over popup {popup} owned by {foreground}.");
+        Click(foreground, control);
+    }
+
     private static void DragToExternal(IntPtr foreground, FrameworkElement preview)
     {
         Point start = preview.PointToScreen(new Point(preview.ActualWidth / 2, preview.ActualHeight / 2));
@@ -825,12 +851,29 @@ internal static class HotfixUxSelfTest
         check("mouse color swatch returns editor keyboard focus", ReferenceEquals(Keyboard.FocusedElement, window.Editor));
         SendKey(hwnd, 0x52); Pump(50);
         check("native color swatch click then R selects Rectangle", ((ToggleButton)Button("R")).IsChecked == true);
-        var customInput = Ux402VisualMetrics.Descendants(window).OfType<TextBox>().Single(b => AutomationProperties.GetName(b) == UiText.Get("Tools.CustomColor"));
-        customInput.BringIntoView(); Pump(50);
-        Click(hwnd, customInput);
-        var customApply = Ux402VisualMetrics.Descendants(window).OfType<Button>().Single(b => AutomationProperties.GetName(b) == UiText.Get("Tools.CustomColor"));
-        Click(hwnd, customApply);
-        check("mouse custom color apply leaves input and returns editor focus", ReferenceEquals(Keyboard.FocusedElement, window.Editor));
+        // The hex input and its apply button live in a flyout that the + button opens. The flyout
+        // is a WPF Popup: its own HWND, owned by the editor and never activated (WS_EX_NOACTIVATE),
+        // so the editor stays foreground and every injection still requires the editor HWND.
+        Button customOpen = window.Editor.CustomColorButtonForTest;
+        Popup customPopup = window.Editor.CustomColorPopupForTest;
+        customOpen.BringIntoView(); Pump(50);
+        check("native custom color button is visible", customOpen.IsVisible && !customPopup.IsOpen);
+        Click(hwnd, customOpen);
+        IntPtr popupHwnd = customPopup.Child is Visual flyout && PresentationSource.FromVisual(flyout) is HwndSource popupSource
+            ? popupSource.Handle : IntPtr.Zero;
+        check($"mouse custom color button opens its owned flyout; popup={popupHwnd}; owner={GetWindow(popupHwnd, 4 /* GW_OWNER */)}; foreground={GetForegroundWindow()}",
+            customPopup.IsOpen && popupHwnd != IntPtr.Zero && popupHwnd != hwnd
+            && GetWindow(popupHwnd, 4 /* GW_OWNER */) == hwnd && GetForegroundWindow() == hwnd);
+        var customInput = Ux402VisualMetrics.Descendants(customPopup.Child).OfType<TextBox>().Single(b => AutomationProperties.GetName(b) == UiText.Get("Tools.CustomColor"));
+        check("custom color flyout focuses its input", ReferenceEquals(Keyboard.FocusedElement, customInput));
+        ClickOwnedPopup(hwnd, popupHwnd, customInput);
+        customInput.Text = "#22AA66";
+        var customApply = Ux402VisualMetrics.Descendants(customPopup.Child).OfType<Button>().Single(b => AutomationProperties.GetName(b) == UiText.Get("Tools.CustomColor"));
+        ClickOwnedPopup(hwnd, popupHwnd, customApply);
+        // Closing the flyout returns focus to the + button that opened it, inside the editor.
+        check("mouse custom color apply closes the flyout, leaves input and returns editor focus",
+            !customPopup.IsOpen && window.Editor.StatusText == UiText.Format("Text_67CAE5B118A3", "#22AA66")
+            && ReferenceEquals(Keyboard.FocusedElement, customOpen) && window.Editor.IsKeyboardFocusWithin && GetForegroundWindow() == hwnd);
         SendKey(hwnd, 0x45); Pump(50);
         check("native custom color apply then E selects Ellipse", ((ToggleButton)Button("E")).IsChecked == true);
         Click(hwnd, Button("X"));
