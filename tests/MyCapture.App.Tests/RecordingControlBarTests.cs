@@ -51,7 +51,7 @@ public sealed class RecordingControlBarTests
 
             // Before recording: ● Start recording, the size and rate only in the tooltip, cancel offered.
             Assert.Equal("녹화 시작", RecordingControlWindow.ButtonLabel(primary));
-            Assert.IsType<StackPanel>(primary.Content);
+            Assert.IsType<StackPanel>(SurfaceShortcutHintTests.PrimaryContent(primary));
             Assert.Equal("녹화 시작", AutomationProperties.GetName(primary));
             Assert.Equal("녹화 영역 16×16 · 30fps", primary.ToolTip);
             Assert.Equal(Visibility.Visible, cancel.Visibility);
