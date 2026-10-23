@@ -199,7 +199,7 @@ public sealed class GalleryItemViewModel : INotifyPropertyChanged
 
     public string SourceSearchQuery => SourceProvenance.SearchQuery;
 
-    /// <summary>Query parameters and fragments remain available only through the tooltip and copy action.</summary>
+    /// <summary>Query parameters and fragments remain available only through explicit open and copy actions.</summary>
     public string SourcePageDisplayText { get; private set; }
 
     public bool HasSourcePageUrl => SourcePageUrl.Length > 0;

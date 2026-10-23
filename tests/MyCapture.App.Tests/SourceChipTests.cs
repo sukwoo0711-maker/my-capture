@@ -14,7 +14,7 @@ public sealed class SourceChipTests
     [Theory]
     [InlineData("ko-KR")]
     [InlineData("en")]
-    public void SourceChipIsBoundedKeyboardReachableAndDoesNotExposeUrlSecretsInItsLabel(string language) => StaTestHost.Run(() =>
+    public void SourceChipIsBoundedKeyboardReachableAndDoesNotExposeUrlSecretsInPresentation(string language) => StaTestHost.Run(() =>
     {
         using var scope = UiText.UseLanguage(language);
         CaptureProvenance source = CaptureProvenance.Create("https://www.example.com/spec?token=secret#private", appName: "Browser");
@@ -24,6 +24,8 @@ public sealed class SourceChipTests
         Assert.True(chip.IsTabStop);
         Assert.True(chip.Focusable);
         Assert.Equal(source.Tooltip, chip.ToolTip);
+        Assert.Equal("https://www.example.com/spec" + Environment.NewLine + "Browser", chip.ToolTip);
+        Assert.Equal(chip.ToolTip, AutomationProperties.GetHelpText(chip));
         Assert.Equal(UiText.Format("Source.OpenAutomation", "example.com/spec"), AutomationProperties.GetName(chip));
         var content = Assert.IsType<Grid>(chip.Content);
         TextBlock label = Assert.Single(content.Children.OfType<TextBlock>());
@@ -87,6 +89,8 @@ public sealed class SourceChipTests
             _ => throw new InvalidOperationException("Unexpected folder access"), copied.Add, @"C:\Windows");
         CaptureProvenance source = CaptureProvenance.Create("https://example.com/spec?token=secret#private");
         Button chip = SourceChip.CreateButton(source, actions: actions);
+        Assert.Equal("https://example.com/spec", chip.ToolTip);
+        Assert.Equal("https://example.com/spec", AutomationProperties.GetHelpText(chip));
         chip.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
         Assert.Equal(source.Url, Assert.Single(launched).FileName);
         MenuItem[] items = chip.ContextMenu.Items.OfType<MenuItem>().ToArray();

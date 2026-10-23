@@ -4298,6 +4298,7 @@ Turn off: {0}</value></data>
   <data name="Library.Search.Field.Tag" xml:space="preserve"><value>Tag</value></data>
   <data name="Library.Search.Field.Text" xml:space="preserve"><value>Text</value></data>
   <data name="Library.Search.Field.Url" xml:space="preserve"><value>URL</value></data>
+  <data name="Library.Search.Field.Host" xml:space="preserve"><value>Site</value></data>
   <data name="Library.Search.Field.Folder" xml:space="preserve"><value>Folder</value></data>
   <data name="Library.Search.Field.Type" xml:space="preserve"><value>Type</value></data>
   <data name="Library.Search.Field.Pinned" xml:space="preserve"><value>Kept</value></data>

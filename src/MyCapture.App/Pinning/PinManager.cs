@@ -514,6 +514,7 @@ internal sealed class PinManager
         pin.CanRestoreClosedPin = () => CanRestoreClosed;
         pin.Closed += (_, _) => OnPinClosed(pin);
         pin.ViewStateChanged += NotifyOpenPinsChanged;
+        pin.ContentChanged += NotifyOpenPinsChanged;
 
         _pins.Add(pin);
         _openedOrders.Add(pin, ++_nextOpenedOrder);

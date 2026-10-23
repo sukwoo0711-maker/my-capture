@@ -69,8 +69,8 @@ internal static class ClipboardImageReader
     }
 
     /// <summary>
-    /// Immutable clipboard data captured on the WPF dispatcher. Only detached PNG bytes and a
-    /// frozen legacy image are allowed to cross the dispatcher boundary.
+    /// Immutable clipboard data captured on the WPF dispatcher. Detached payloads, frozen
+    /// images and the matching source lookup may cross the dispatcher boundary.
     /// </summary>
     internal readonly record struct CapturedAttempt(
         ClipboardImageOutcome Outcome,
@@ -86,6 +86,8 @@ internal static class ClipboardImageReader
         internal PinCodeDocument? CodeDocument { get; init; }
 
         internal CaptureProvenance? Provenance { get; init; }
+
+        internal Task<CaptureProvenance>? PendingProvenance { get; init; }
 
         internal static CapturedAttempt Retry() =>
             new(
@@ -192,9 +194,10 @@ internal static class ClipboardImageReader
 
         if (captured.CodePreview is not null && captured.OriginalText is not null)
         {
-            return PinReadAttempt.Success(captured.CodeDocument is not null
+            PinContent code = captured.CodeDocument is not null
                 ? PinContent.FromCode(captured.CodePreview, captured.OriginalText, captured.CodeDocument, captured.Provenance)
-                : PinContent.FromText(captured.CodePreview, captured.OriginalText, false, captured.Provenance));
+                : PinContent.FromText(captured.CodePreview, captured.OriginalText, false, captured.Provenance);
+            return PinReadAttempt.Success(code with { PendingProvenance = captured.PendingProvenance });
         }
 
         ReadAttempt image = await CompleteCapturedAttemptWithFallbackAsync(
@@ -212,7 +215,8 @@ internal static class ClipboardImageReader
             // falls through: Windows does not synthesise a Bitmap from it, and playing a
             // metafile at the right scale is not reliable enough to replace the grid.
             return PinReadAttempt.Success(
-                PinContent.FromTablePicture(FlattenOntoWhite(image.Image), captured.OriginalText!, captured.Provenance));
+                PinContent.FromTablePicture(FlattenOntoWhite(image.Image), captured.OriginalText!, captured.Provenance)
+                with { PendingProvenance = captured.PendingProvenance });
         }
 
         if (image.Image is not null)
@@ -222,7 +226,8 @@ internal static class ClipboardImageReader
             string sourcePageUrl = captured.PngBytes is { Length: > 0 } png
                 ? PngSourceUrlMetadata.TryReadSourceUrl(png)
                 : string.Empty;
-            return PinReadAttempt.Success(PinContent.FromImage(image.Image, sourcePageUrl, captured.Provenance));
+            return PinReadAttempt.Success(PinContent.FromImage(image.Image, sourcePageUrl, captured.Provenance)
+                with { PendingProvenance = captured.PendingProvenance });
         }
 
         if (HasSourceText(captured))
@@ -230,7 +235,7 @@ internal static class ClipboardImageReader
             PinContent? text = await TryRenderTextAsync(captured, renderText).ConfigureAwait(false);
             if (text is not null)
             {
-                return PinReadAttempt.Success(text);
+                return PinReadAttempt.Success(text with { PendingProvenance = captured.PendingProvenance });
             }
         }
 
@@ -281,7 +286,7 @@ internal static class ClipboardImageReader
         ArgumentNullException.ThrowIfNull(data);
         ArgumentNullException.ThrowIfNull(systemImageFallback);
         (string? originalText, bool isTabularText) = CaptureText(data);
-        CaptureProvenance? provenance = ClipboardProvenance.Resolve(
+        ClipboardProvenance.Snapshot provenance = ClipboardProvenance.Capture(
             TryGetClipboardString(data, ClipboardProvenance.Format, autoConvert: false));
 
         byte[]? pngBytes = null;
@@ -334,7 +339,8 @@ internal static class ClipboardImageReader
         {
             CodeDocument = codeDocument,
             CodePreview = codePreview,
-            Provenance = provenance,
+            Provenance = provenance.Source,
+            PendingProvenance = provenance.Pending,
         };
     }
 

@@ -24,16 +24,11 @@ public sealed record CaptureProvenance
         {
             case CaptureProvenanceKind.Web:
                 var uri = new Uri(url);
-                string host = uri.IdnHost;
-                if (host.StartsWith("www.", StringComparison.OrdinalIgnoreCase)) host = host[4..];
+                string host = NormalizeHost(uri);
                 DisplayText = Shorten(host + (uri.AbsolutePath == "/" ? string.Empty : uri.AbsolutePath), 80);
                 BadgeText = host;
-                // Search is a substring match against the stored URI, whose Host preserves
-                // a Unicode domain even when its safe display form uses IdnHost.
-                string searchHost = uri.Host;
-                if (searchHost.StartsWith("www.", StringComparison.OrdinalIgnoreCase)) searchHost = searchHost[4..];
-                SearchQuery = "url:" + searchHost;
-                target = url;
+                SearchQuery = "host:" + host;
+                target = uri.GetComponents(UriComponents.SchemeAndServer | UriComponents.Path, UriFormat.UriEscaped);
                 break;
             case CaptureProvenanceKind.Document:
                 string fileName = Path.GetFileName(documentPath);
@@ -87,6 +82,13 @@ public sealed record CaptureProvenance
 
     public static CaptureProvenance FromSource(CaptureSourceDetails? source, string? url = null, string? windowTitle = null) =>
         Create(url, source?.DocumentPath, source?.AppName, source?.AppPath, windowTitle);
+
+    internal static string NormalizeHost(Uri uri)
+    {
+        string host = uri.IdnHost;
+        if (host.StartsWith("www.", StringComparison.OrdinalIgnoreCase)) host = host[4..];
+        return host.ToLowerInvariant();
+    }
 
     private static string Shorten(string value, int length)
     {

@@ -63,6 +63,13 @@ internal sealed record PinContent
 
     internal CaptureProvenance Provenance { get; }
 
+    /// <summary>The source lookup detached from this pin's clipboard token, if still pending.</summary>
+    internal Task<CaptureProvenance>? PendingProvenance { get; init; }
+
+    internal PinContent WithProvenance(CaptureProvenance provenance) =>
+        new(Image, Kind, OriginalText, SourcePageUrl, UsesDeviceIndependentPixels,
+            TextStyle, CodeDocument, LayoutWidthDip, LayoutHeightDip, provenance);
+
     internal bool HasOriginalText => OriginalText is not null;
 
     internal PinTextStyle? TextStyle { get; }
@@ -167,7 +174,10 @@ internal sealed record PinContent
             ? ClipboardCodeRenderer.Render(CodeDocument!, scale)
             : ClipboardTextRenderer.Render(OriginalText!, TextStyle == PinTextStyle.Grid, scale);
         return new(image, Kind, OriginalText, SourcePageUrl, UsesDeviceIndependentPixels,
-            TextStyle, CodeDocument, LayoutWidthDip, LayoutHeightDip, Provenance);
+            TextStyle, CodeDocument, LayoutWidthDip, LayoutHeightDip, Provenance)
+        {
+            PendingProvenance = PendingProvenance,
+        };
     }
 
     /// <summary>

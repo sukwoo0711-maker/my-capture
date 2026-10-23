@@ -41,12 +41,23 @@ public sealed class PinProvenanceTests
     public void RerenderedSessionContentRetainsTheSameProvenance() => StaTestHost.Run(() =>
     {
         CaptureProvenance source = CaptureProvenance.Create(documentPath: @"C:\specs\reference.txt", appName: "Notepad");
+        var pending = new TaskCompletionSource<CaptureProvenance>();
         PinContent content = PinContent.FromSession(ClipboardTextRenderer.Render("reference", false),
-            PinContentKind.Text, "reference", string.Empty, true, PinTextStyle.PlainText, provenance: source);
+            PinContentKind.Text, "reference", string.Empty, true, PinTextStyle.PlainText, provenance: source)
+            with { PendingProvenance = pending.Task };
         PinContent rendered = content.RenderedAt(2);
         Assert.NotSame(content.Image, rendered.Image);
         Assert.Same(source, rendered.Provenance);
         Assert.Equal(content.SourcePageUrl, rendered.SourcePageUrl);
+        Assert.Same(pending.Task, rendered.PendingProvenance);
+        CaptureProvenance resolved = CaptureProvenance.Create(url: "https://example.test/resolved");
+        PinContent enriched = rendered.WithProvenance(resolved);
+        Assert.Same(rendered.Image, enriched.Image);
+        Assert.Equal(rendered.LayoutWidthDip, enriched.LayoutWidthDip);
+        Assert.Equal(rendered.LayoutHeightDip, enriched.LayoutHeightDip);
+        Assert.Equal(rendered.OriginalText, enriched.OriginalText);
+        Assert.Same(resolved, enriched.Provenance);
+        Assert.Null(enriched.PendingProvenance);
     });
 
     [Fact]

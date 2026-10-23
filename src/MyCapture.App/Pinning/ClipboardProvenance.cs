@@ -9,6 +9,9 @@ internal static class ClipboardProvenance
     private static readonly object Gate = new();
     private static string? _token;
     private static CaptureProvenance? _source;
+    private static Task<CaptureProvenance>? _pending;
+
+    internal readonly record struct Snapshot(CaptureProvenance? Source, Task<CaptureProvenance>? Pending);
 
     internal static string Remember(CaptureProvenance provenance, Task<CaptureProvenance>? pending = null)
     {
@@ -25,6 +28,7 @@ internal static class ClipboardProvenance
         {
             _token = token;
             _source = provenance;
+            _pending = pending;
         }
         if (pending is not null) _ = ResolvePendingAsync(token, pending);
     }
@@ -37,7 +41,11 @@ internal static class ClipboardProvenance
             if (!source.HasSource) return;
             lock (Gate)
             {
-                if (string.Equals(token, _token, StringComparison.Ordinal)) _source = source;
+                if (string.Equals(token, _token, StringComparison.Ordinal))
+                {
+                    _source = source;
+                    _pending = null;
+                }
             }
         }
         catch (Exception ex) when (ex is not OutOfMemoryException and not StackOverflowException and not AccessViolationException)
@@ -47,8 +55,12 @@ internal static class ClipboardProvenance
     }
 
     internal static CaptureProvenance? Resolve(string? token)
+        => Capture(token).Source;
+
+    /// <summary>Detaches the matching copy's lookup before another clipboard copy replaces it.</summary>
+    internal static Snapshot Capture(string? token)
     {
-        if (string.IsNullOrEmpty(token)) return null;
-        lock (Gate) return string.Equals(token, _token, StringComparison.Ordinal) ? _source : null;
+        if (string.IsNullOrEmpty(token)) return default;
+        lock (Gate) return string.Equals(token, _token, StringComparison.Ordinal) ? new(_source, _pending) : default;
     }
 }
