@@ -7,6 +7,8 @@ using MyCapture.Core.Localization;
 
 namespace MyCapture.App.Store;
 
+internal enum EngagementNoticeKind { None, Rating, UpdateAvailable, UpdateCompleted }
+
 /// <summary>
 /// The update-done and rating card: a floating InfoBar laid over the bottom right of a library or
 /// settings window. It never moves the window's content, fades in with the shared motion tokens
@@ -40,7 +42,11 @@ internal sealed class EngagementNotice : Grid
         _review.SetResourceReference(StyleProperty, "Button.Secondary");
         _review.Margin = new Thickness(0, 0, 8, 0);
         AutomationProperties.SetName(_review, UiText.Get("StoreRating_InviteAction"));
-        _review.Click += (_, _) => { ReviewChosen?.Invoke(); Dismiss(); };
+        _review.Click += (_, _) =>
+        {
+            if (Kind == EngagementNoticeKind.UpdateAvailable) UpdateChosen?.Invoke();
+            else { ReviewChosen?.Invoke(); Dismiss(); }
+        };
         var close = new Button { Content = UiText.Get("Dialog.Close") };
         close.SetResourceReference(StyleProperty, "Button.Secondary");
         AutomationProperties.SetName(close, UiText.Get("Dialog.Close"));
@@ -56,22 +62,47 @@ internal sealed class EngagementNotice : Grid
     }
 
     internal Action? ReviewChosen { get; set; }
+    internal Action? UpdateChosen { get; set; }
+    internal Action<EngagementNoticeKind>? ClosedByUser { get; set; }
+    internal EngagementNoticeKind Kind { get; private set; }
 
     /// <summary>The message the card shows.</summary>
     internal string Message => _message.Text;
 
     internal void ShowInvitation()
     {
+        if (Visibility == Visibility.Visible && Kind > EngagementNoticeKind.Rating) return;
+        Kind = EngagementNoticeKind.Rating;
         _message.Text = UiText.Get("StoreRating_InviteMessage");
+        SetAction(UiText.Get("StoreRating_InviteAction"), true);
         _review.Visibility = Visibility.Visible;
         Reveal();
     }
 
     internal void ShowUpdateCompleted(string version)
     {
+        Kind = EngagementNoticeKind.UpdateCompleted;
         _message.Text = UiText.Format("StoreUpdate_CompletedVersion", DisplayVersion(version));
         _review.Visibility = Visibility.Collapsed;
         Reveal();
+    }
+
+    internal void ShowUpdateAvailable(string? version, bool busy = false, string? status = null)
+    {
+        if (Visibility == Visibility.Visible && Kind == EngagementNoticeKind.UpdateCompleted) return;
+        Kind = EngagementNoticeKind.UpdateAvailable;
+        _message.Text = status ?? (version is null ? UiText.Get("Update_StoreAvailable")
+            : UiText.Format("Update_AvailableVersion", DisplayVersion(version)));
+        SetAction(UiText.Get("Update_Action"), !busy);
+        _review.Visibility = status is null ? Visibility.Visible : Visibility.Collapsed;
+        Reveal();
+    }
+
+    private void SetAction(string text, bool enabled)
+    {
+        _review.Content = text;
+        _review.IsEnabled = enabled;
+        AutomationProperties.SetName(_review, text);
     }
 
     /// <summary>"4.1.2.0" as people read it, "4.1.2"; a real fourth part stays.</summary>
@@ -80,7 +111,14 @@ internal sealed class EngagementNotice : Grid
             ? parsed.Revision > 0 ? parsed.ToString(4) : parsed.ToString(3)
             : version;
 
-    internal void Dismiss() => Visibility = Visibility.Collapsed;
+    internal void Dismiss()
+    {
+        EngagementNoticeKind previous = Kind;
+        Hide();
+        ClosedByUser?.Invoke(previous);
+    }
+
+    internal void Hide() { Visibility = Visibility.Collapsed; Kind = EngagementNoticeKind.None; }
 
     private void Reveal()
     {

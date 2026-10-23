@@ -24,7 +24,8 @@ internal sealed record TrayMenuCommands(
     Action? HideOrShowAllPins = null,
     Action? ClearClickThrough = null,
     Action? ContactSupport = null,
-    Action<PinWindow>? ActivateOpenPin = null);
+    Action<PinWindow>? ActivateOpenPin = null,
+    Action? InstallUpdate = null);
 
 /// <summary>What the tray menu reflects at the moment it opens. Read cheaply on every open.</summary>
 /// <param name="CanRestoreClosedPin">A closed pin can come back.</param>
@@ -41,7 +42,10 @@ internal sealed record TrayMenuState(
     int PinCount = 0,
     bool PinsHidden = false,
     int ClickThroughPinCount = 0,
-    IReadOnlyList<PinWindow>? OpenPins = null);
+    IReadOnlyList<PinWindow>? OpenPins = null,
+    bool UpdateAvailable = false,
+    string? UpdateVersion = null,
+    bool UpdateBusy = false);
 
 /// <summary>
 /// The tray menu's order, kept apart from the shell so it can be checked without a tray icon.
@@ -121,6 +125,9 @@ internal static class TrayMenuLayout
         entries.Add(ThemedShellPresenter.MenuEntry.Separator);
         entries.Add(new(UiText.Get("Text_8739F6684453"), commands.Library, Gesture: Gesture(keys.OpenLibrary)));
         entries.Add(new(UiText.Get("Text_00480581AAB5"), commands.Settings));
+        if (state.UpdateAvailable && commands.InstallUpdate is { } installUpdate)
+            entries.Add(new(state.UpdateVersion is { } version ? UiText.Format("Update_TrayInstallVersion", version)
+                : UiText.Get("Update_TrayInstall"), installUpdate, IsEnabled: !state.UpdateBusy));
         entries.Add(new(UiText.Get("Onboard_ShowShortcuts"), commands.Shortcuts, Gesture: ShortcutsGesture));
         if (commands.ContactSupport is { } contactSupport)
             entries.Add(new(UiText.Get("Support_Title"), contactSupport));

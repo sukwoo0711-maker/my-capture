@@ -261,11 +261,13 @@ public sealed partial class SettingsThemePreviewTests
                 Capture = { StartGuideShownCount = 2 },
                 Hotkeys = { CoreShortcutsAsked = true },
                 StoreRating = { SuccessfulCaptureCount = 17 }, StoreUpdate = { CompletionNoticeVersion = "4.1.2.0" },
+                Updates = { LastCheckUtc = DateTimeOffset.UnixEpoch.AddDays(2), DismissedVersion = "4.2.0" },
             };
             store.Save(current);
             byte[] before = File.ReadAllBytes(paths.SettingsFile);
             string oldSettings = Path.Combine(root, "legacy-settings.json");
             store.ExportTo(new AppSettings { General = { Theme = AppThemeNames.Daylight }, Queue = { MaxItems = 12 },
+                Updates = { AutoCheck = false, LastCheckUtc = DateTimeOffset.UnixEpoch, DismissedVersion = "1.0.0" },
                 GitHub = { Token = "fixture-legacy-credential", IssueUrl = "https://github.com/legacy-owner/legacy-repo/issues/3" } }, oldSettings);
             int applies = 0;
             var window = new SettingsWindow(() => current, _ =>
@@ -293,6 +295,15 @@ public sealed partial class SettingsThemePreviewTests
                 Assert.Equal(current.General.LaunchAtLogin, candidate.General.LaunchAtLogin);
                 Assert.Equal(current.Capture.StartGuideShownCount, candidate.Capture.StartGuideShownCount);
                 Assert.Equal(current.StoreRating.SuccessfulCaptureCount, candidate.StoreRating.SuccessfulCaptureCount);
+                Assert.False(candidate.Updates.AutoCheck);
+                Assert.Equal(current.Updates.LastCheckUtc, candidate.Updates.LastCheckUtc);
+                Assert.Equal("4.2.0", candidate.Updates.DismissedVersion);
+                // A check or dismissal after import stays live when the draft is applied later.
+                current.Updates.LastCheckUtc = DateTimeOffset.UnixEpoch.AddDays(3);
+                current.Updates.DismissedVersion = "4.3.0";
+                candidate = window.LegacyApplyCandidate(draft.ToAppSettings());
+                Assert.Equal(current.Updates.LastCheckUtc, candidate.Updates.LastCheckUtc);
+                Assert.Equal("4.3.0", candidate.Updates.DismissedVersion);
                 Assert.Equal(before, File.ReadAllBytes(paths.SettingsFile));
                 Assert.Equal(0, applies);
                 SettingsWindow.ApplyCommand.Execute(null, window);

@@ -367,11 +367,12 @@ internal static class HotfixUxSelfTest
                 var receipt = Card(sample); owned.Add(receipt); receipt.IsKept = true;
                 receipt.Show(); Pump(70); receipt.UpdateLayout();
                 var keep = receipt.KeepToggleForTest;
-                object kept = keep.Content;
+                // Since #132 every command button wraps its icon in the shortcut face; the icon is its first child.
+                object? kept = CommandContent(keep);
                 receipt.IsKept = false;
                 Check($"{language}/{theme}: keep icon retains its accessible name and checked state",
                     kept is SymbolIcon && AutomationProperties.GetName(keep) == UiText.Get("QuickAccess.KeepName")
-                    && ReferenceEquals(kept, keep.Content) && keep.IsChecked == false);
+                    && ReferenceEquals(kept, CommandContent(keep)) && keep.IsChecked == false);
                 receipt.IsKept = true;
                 foreach (Button button in receipt.ActionButtonsForTest)
                 {
