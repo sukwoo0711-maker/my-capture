@@ -24,7 +24,7 @@ public sealed class EditorChromeAndTextInspectorTests : KoreanCaptionTest
     [Theory]
     [InlineData(680, 460)]
     [InlineData(1280, 640)]
-    public void AltMotionLeavesEditorLayoutCompactionAndViewportUnchanged(int width, int height) => StaTestHost.Run(() =>
+    public void AltMotionWidensOnlyIconCommandsAndLeavesCompactionAndViewportUnchanged(int width, int height) => StaTestHost.Run(() =>
     {
         using var preferences = new PreferencesScope(new AnnotationDefaults());
         Func<bool>? previous = ShortcutPresentation.ReadEnabled;
@@ -39,39 +39,54 @@ public sealed class EditorChromeAndTextInspectorTests : KoreanCaptionTest
             FrameworkElement body = host.Editor;
             var faces = Tree<Grid>(bar).Where(grid => grid.Name == "CommandButtonFace").ToArray();
             var commands = Tree<Button>(bar).Where(button => button.IsVisible).ToArray();
-            Size[] faceSizes = faces.Select(face => face.RenderSize).ToArray();
-            Size[] buttonSizes = commands.Select(button => button.RenderSize).ToArray();
-            // Label visibility and command positions describe the chosen fitting tier.
+            Size[] resting = commands.Select(button => button.RenderSize).ToArray();
+            bool[] iconOnly = commands.Select(button => (bool)button.GetValue(CommandButtonPresentation.AlwaysIconProperty)
+                || Tree<TextBlock>(Assert.IsType<Grid>(button.Content).Children[0]).Any(label => label.Visibility == Visibility.Collapsed)).ToArray();
+            double[] revealedWidths = commands.Select((button, index) => iconOnly[index] ? RevealedWidth(button) : resting[index].Width).ToArray();
+            Assert.Contains(commands.Select((button, index) => revealedWidths[index] - resting[index].Width), growth => growth > 1);
+            // Label visibility describes the chosen fitting tier. The bar and canvas never move.
             Visibility[] labels = Tree<TextBlock>(bar).Select(label => label.Visibility).ToArray();
-            Point[] positions = commands.Select(button => button.TranslatePoint(default, bar)).ToArray();
+            Size barSize = bar.RenderSize, surfaceSize = surface.RenderSize;
             double dipPerPixel = surface.DipPerPixel;
-            int sizeChanges = 0;
+            int viewportChanges = 0;
             host.Editor.LayoutUpdated += (_, _) =>
             {
-                if (!faceSizes.SequenceEqual(faces.Select(face => face.RenderSize))
-                    || !buttonSizes.SequenceEqual(commands.Select(button => button.RenderSize))) sizeChanges++;
+                if (bar.RenderSize != barSize || surface.RenderSize != surfaceSize) viewportChanges++;
             };
-            void Check()
+            void Check(bool? settled)
             {
                 Assert.True(bar.IsMeasureValid && bar.IsArrangeValid);
                 Assert.True(body.IsMeasureValid && body.IsArrangeValid);
                 Assert.True(surface.IsMeasureValid && surface.IsArrangeValid);
                 Assert.All(faces, face => Assert.True(face.IsMeasureValid && face.IsArrangeValid));
-                Assert.Equal(faceSizes, faces.Select(face => face.RenderSize));
-                Assert.Equal(buttonSizes, commands.Select(button => button.RenderSize));
                 Assert.Equal(labels, Tree<TextBlock>(bar).Select(label => label.Visibility));
-                Assert.Equal(positions, commands.Select(button => button.TranslatePoint(default, bar)));
                 Assert.Equal(dipPerPixel, surface.DipPerPixel);
-                Assert.Equal(0, sizeChanges);
+                Assert.Equal(0, viewportChanges);
+                for (int index = 0; index < commands.Length; index++)
+                {
+                    Size size = commands[index].RenderSize;
+                    Assert.Equal(resting[index].Height, size.Height);
+                    if (!iconOnly[index]) Assert.Equal(resting[index], size);
+                    else if (settled is { } revealed) Assert.Equal(revealed ? revealedWidths[index] : resting[index].Width, size.Width, 1);
+                    else Assert.InRange(size.Width, resting[index].Width - 0.01, revealedWidths[index] + 0.01);
+                    AssertInside(commands[index], bar);
+                    if (index > 0)
+                    {
+                        Point start = commands[index].TranslatePoint(default, bar);
+                        Point previousEnd = commands[index - 1].TranslatePoint(new Point(commands[index - 1].RenderSize.Width, 0), bar);
+                        Assert.True(start.X >= previousEnd.X - 0.01 || Math.Abs(start.Y - previousEnd.Y) > 0.5,
+                            $"Commands {index - 1} and {index} overlap by {previousEnd.X - start.X}.");
+                    }
+                }
             }
             foreach (bool revealed in new[] { true, false, true, false })
             {
                 ShortcutPresentation.SetAltRevealed(host.Window, revealed);
-                Check();
+                Check(null);
                 ShortcutRevealMotionTests.Pump(45);
-                Check();
+                Check(null);
                 ShortcutRevealMotionTests.Pump(180);
-                Check();
+                Check(revealed);
                 foreach (Button command in commands)
                     AssertCommandGeometry(Assert.IsType<Grid>(command.Content), revealed);
             }
@@ -519,6 +534,15 @@ public sealed class EditorChromeAndTextInspectorTests : KoreanCaptionTest
         host.Window.UpdateLayout();
         SaveEvidence(host.Editor, "text-inspector-compact-alt.png");
     });
+
+    // An icon-only command's width while its whole caption shows.
+    private static double RevealedWidth(Button button)
+    {
+        Grid face = Assert.IsType<Grid>(button.Content);
+        double content = Math.Max(((FrameworkElement)face.Children[0]).DesiredSize.Width, CommandButtonPresentation.CaptionWidth(face));
+        return Math.Max(button.MinWidth, content + button.Padding.Left + button.Padding.Right
+            + button.BorderThickness.Left + button.BorderThickness.Right);
+    }
 
     private static void AssertCommandGeometry(Grid face, bool revealed)
     {

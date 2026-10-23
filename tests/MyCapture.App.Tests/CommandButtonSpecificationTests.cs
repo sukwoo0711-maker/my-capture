@@ -12,7 +12,7 @@ public sealed class CommandButtonSpecificationTests
     [InlineData(1.25)]
     [InlineData(1.5)]
     [InlineData(2)]
-    public void CollapsedStandardFaceKeepsFullChordWidthAcrossAltAndRestoresLivePadding(double scale) => StaTestHost.Run(() =>
+    public void CollapsedStandardFaceWidensForItsChordOnlyWhileRevealedAndRestoresLivePadding(double scale) => StaTestHost.Run(() =>
     {
         using var motion = new ShortcutMotionTestScope();
         Func<bool>? previous = ShortcutPresentation.ReadEnabled;
@@ -27,11 +27,13 @@ public sealed class CommandButtonSpecificationTests
             var hint = Assert.IsAssignableFrom<TextBlock>(face.Children[1]);
             double reservedWidth = face.MinWidth;
             Assert.True(reservedWidth > 0);
+            Assert.Equal(reservedWidth, CommandButtonPresentation.CaptionWidth(face));
             Assert.Equal(new Thickness(10, 4, 10, 4), button.Padding);
             Assert.True(CommandButtonPresentation.CompactLabel(button, true));
             Assert.Equal(Visibility.Collapsed, label.Visibility);
             Assert.Equal(new Thickness(4), button.Padding);
-            double? restingWidth = null;
+            // The icon-only face reserves nothing for its hidden chord.
+            Assert.Equal(0, face.MinWidth);
             foreach (bool reveal in new[] { false, true, false })
             {
                 ShortcutPresentation.SetAltRevealed(button, reveal);
@@ -40,18 +42,24 @@ public sealed class CommandButtonSpecificationTests
                 button.Arrange(new Rect(0, 0, button.DesiredSize.Width, button.DesiredSize.Height));
                 Assert.Equal(44, button.ActualHeight, 2);
                 Assert.Equal(36, button.MinWidth);
-                Assert.Equal(reservedWidth, face.MinWidth);
-                Assert.True(face.ActualWidth >= reservedWidth);
-                Assert.True(hint.ActualWidth >= hint.DesiredSize.Width - 0.5);
+                Assert.Equal(0, face.MinWidth);
                 ShortcutMotionTestScope.AssertState(hint, reveal);
-                if (restingWidth.HasValue) Assert.Equal(restingWidth.Value, button.ActualWidth, 2);
-                else restingWidth = button.ActualWidth;
+                if (reveal)
+                {
+                    // Ctrl+Shift+R does not fit the resting face, so the command widens until it does.
+                    // The reserved chord is rounded up to a whole DIP.
+                    Assert.True(face.ActualWidth >= reservedWidth - 1, $"face {face.ActualWidth} < chord {reservedWidth}");
+                    Assert.Null(VisualTreeHelper.GetClip(hint));
+                    Assert.True(button.ActualWidth > 36 + 0.5);
+                }
+                else Assert.Equal(36, button.ActualWidth, 2);
             }
 
             // Expanding must resolve today's theme token, not a value saved before compaction.
             button.Resources["CommandButton.Padding.Standard"] = new Thickness(12, 4, 12, 4);
             Assert.True(CommandButtonPresentation.CompactLabel(button, false));
             Assert.Equal(Visibility.Visible, label.Visibility);
+            Assert.Equal(reservedWidth, face.MinWidth);
             Assert.Equal(new Thickness(12, 4, 12, 4), button.Padding);
             button.Resources["CommandButton.Padding.Standard"] = new Thickness(11, 4, 11, 4);
             Assert.Equal(new Thickness(11, 4, 11, 4), button.Padding);
