@@ -153,11 +153,25 @@ Copy-Item -LiteralPath $setup -Destination $installer
 Copy-Item -LiteralPath (Join-Path $artifacts 'SHA256SUMS.txt') -Destination (Join-Path $sessionRoot 'SHA256SUMS.txt')
 $setupHash = (Get-FileHash -LiteralPath $installer -Algorithm SHA256).Hash
 Assert-True ($setupHash -eq (Get-FileHash -LiteralPath $setup -Algorithm SHA256).Hash) 'Copied setup hash mismatch.'
-$parentInfo = New-IsolatedStartInfo (Join-Path ([Environment]::SystemDirectory) 'cmd.exe') $run
-$parentInfo.Arguments = '/d /q /c "set /p MYCAPTURE_ACCEPTANCE_PARENT="'
-$parentInfo.RedirectStandardInput = $true
+# The live parent waits on a named event this harness owns, not on console input: a hosted
+# runner ended a stdin-blocked cmd stand-in immediately. Its output is kept as evidence.
+$parentEventName = 'Local\MyCaptureAcceptanceParent-' + $token
+$parentEvent = New-Object Threading.EventWaitHandle($false, [Threading.EventResetMode]::ManualReset, $parentEventName)
+$parentInfo = New-IsolatedStartInfo (Join-Path ([Environment]::SystemDirectory) 'WindowsPowerShell\v1.0\powershell.exe') $run
+$parentInfo.Arguments = '-NoLogo -NoProfile -NonInteractive -Command "$e = [Threading.EventWaitHandle]::OpenExisting(''' + $parentEventName + '''); if ($e.WaitOne(600000)) { exit 0 }; exit 3"'
+$parentInfo.RedirectStandardOutput = $true
+$parentInfo.RedirectStandardError = $true
 $standIn = [Diagnostics.Process]::Start($parentInfo)
 Assert-True ($null -ne $standIn) 'Parent stand-in did not start.'
+$standInOutput = $standIn.StandardOutput.ReadToEndAsync()
+$standInError = $standIn.StandardError.ReadToEndAsync()
+function Assert-StandInAlive {
+    if (-not $standIn.HasExited) { return }
+    $standIn.WaitForExit()
+    [IO.File]::WriteAllText((Join-Path $run 'parent-stand-in.txt'), ('ExitCode=' + $standIn.ExitCode + [Environment]::NewLine +
+        $standInOutput.GetAwaiter().GetResult() + [Environment]::NewLine + $standInError.GetAwaiter().GetResult()))
+    throw ('Parent stand-in exited before the installer reached its wait (exit ' + $standIn.ExitCode + ').')
+}
 $packageProcess = $null
 $diagnostic = $null
 $locked = $null
@@ -187,7 +201,7 @@ try {
     $waitDeadline = [DateTime]::UtcNow.AddSeconds(60)
     $waitEvidence = $null
     while ($null -eq $waitEvidence) {
-        Assert-True (-not $standIn.HasExited) 'Parent stand-in exited before the installer reached its wait.'
+        Assert-StandInAlive
         Assert-True (-not (Test-Path -LiteralPath $receiptPath)) 'Installer completed before waiting for its live parent.'
         foreach ($candidateLog in @(Get-ChildItem -LiteralPath $temporary -Filter 'MyCapture-Install-*.log' -File)) {
             $line = @(Get-Content -LiteralPath $candidateLog.FullName -Encoding UTF8 | Where-Object {
@@ -198,9 +212,8 @@ try {
         Assert-True ([DateTime]::UtcNow -lt $waitDeadline) 'Installer did not confirm waiting for the live parent within sixty seconds.'
         if ($null -eq $waitEvidence) { Start-Sleep -Milliseconds 100 }
     }
-    $standIn.StandardInput.WriteLine('release')
-    $standIn.StandardInput.Close()
-    Assert-True ($standIn.WaitForExit(5000) -and $standIn.ExitCode -eq 0) 'Parent stand-in did not exit normally.'
+    $parentEvent.Set() | Out-Null
+    Assert-True ($standIn.WaitForExit(15000) -and $standIn.ExitCode -eq 0) 'Parent stand-in did not exit normally.'
 
     # IExpress exit is not install evidence. Wait for the installer's committed receipt.
     $deadline = [DateTime]::UtcNow.AddMinutes(10)
@@ -307,10 +320,10 @@ finally {
         finally { $diagnostic.Dispose() }
     }
     try {
-        if (-not $standIn.HasExited) { $standIn.StandardInput.Close(); $standIn.WaitForExit(5000) | Out-Null }
+        if (-not $standIn.HasExited) { $parentEvent.Set() | Out-Null; $standIn.WaitForExit(15000) | Out-Null }
         if (-not $standIn.HasExited) { $standIn.Kill(); $standIn.WaitForExit(5000) | Out-Null }
     }
-    finally { $standIn.Dispose() }
+    finally { $standIn.Dispose(); $parentEvent.Dispose() }
     if ($null -ne $packageProcess) { $packageProcess.Dispose() }
     if ($null -ne $locked) { $locked.Dispose() }
 }
