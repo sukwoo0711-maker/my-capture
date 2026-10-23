@@ -150,7 +150,39 @@ internal sealed class OcrModelStore
             }
         }
 
+        RemoveRetiredSuperResolutionFiles();
     });
+
+    /// <summary>
+    /// The most accurate quality and its super-resolution model were retired. Their files
+    /// (about 70 MB, up to 137 MB with the old duplicate) are never loaded again, so they
+    /// are removed once; a file that cannot be removed now is tried again on a later start.
+    /// </summary>
+    internal void RemoveRetiredSuperResolutionFiles()
+    {
+        foreach (string name in OcrModelCatalog.LegacySuperResolutionFiles)
+        {
+            string path = Path.Combine(_paths.OcrModelsRoot, name);
+            try
+            {
+                if (!File.Exists(path)) continue;
+                File.Delete(path);
+                InvalidateVerification(path);
+                _log.LogInformation("Removed retired super-resolution model file {File}", name);
+            }
+            catch (Exception ex)
+            {
+                try
+                {
+                    _log.LogWarning(ex, "Could not remove retired super-resolution model file {File}", name);
+                }
+                catch (Exception)
+                {
+                    // Same rule as verification: cleanup never faults the background task.
+                }
+            }
+        }
+    }
 
     /// <summary>
     /// Starts preparation on a worker before performing any file or hash work.

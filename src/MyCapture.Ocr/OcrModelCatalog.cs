@@ -32,9 +32,10 @@ internal static class OcrModelCatalog
 
     internal static IReadOnlyList<OcrModelFile> Optional { get; } = [Detection];
 
-    // Recognition only: retained for the lead's separate one-time cleanup of old installs.
-    // These files are never downloaded, verified or loaded by the OCR runtime.
-    internal static IReadOnlyList<string> LegacySuperResolutionFiles => LegacyOcrModelFiles.SuperResolution;
+    // Super-resolution weights that versions up to 4.6.0 downloaded for the retired most
+    // accurate quality. Nothing loads them; background verification removes them once.
+    internal static IReadOnlyList<string> LegacySuperResolutionFiles { get; } =
+        ["realesrgan_x4.onnx", "realesrgan_x4.onnx.data", "real_esrgan_x4plus.data"];
 
     internal static long DownloadBytesFor(OcrQuality quality) => quality switch
     {

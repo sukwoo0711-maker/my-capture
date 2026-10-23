@@ -4,8 +4,8 @@ using Xunit;
 
 namespace MyCapture.App.Tests;
 
-// The retired engine's live tests are replaced by catalog compatibility checks. No real
-// profile or model weights are opened; the legacy source filename is retained deliberately.
+// The most accurate quality and its super-resolution engine were retired; these checks keep
+// the old file names for cleanup and the legacy quality on the Accurate download.
 public sealed class SuperResolutionRetirementTests
 {
     [Fact]

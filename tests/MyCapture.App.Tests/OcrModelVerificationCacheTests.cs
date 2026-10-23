@@ -506,7 +506,7 @@ public sealed class OcrModelVerificationCacheTests(ITestOutputHelper output)
     }
 
     [Fact]
-    public async Task Preverification_PreservesAndDoesNotHashLegacySuperResolutionFiles()
+    public async Task Preverification_RemovesRetiredSuperResolutionFilesWithoutHashingThem()
     {
         using var workspace = new ModelWorkspace();
         workspace.WriteSyntheticCatalogModels();
@@ -525,7 +525,8 @@ public sealed class OcrModelVerificationCacheTests(ITestOutputHelper output)
         Assert.Equal(CatalogModels.Length, hashes.Count);
         Assert.All(hashes, name => Assert.DoesNotContain(name, OcrModelCatalog.LegacySuperResolutionFiles));
         foreach (string name in OcrModelCatalog.LegacySuperResolutionFiles)
-            Assert.Equal(legacyBytes, File.ReadAllBytes(Path.Combine(workspace.Paths.OcrModelsRoot, name)));
+            Assert.False(File.Exists(Path.Combine(workspace.Paths.OcrModelsRoot, name)));
+        Assert.True(store.HasRequiredModels);
         Assert.Equal(0, workspace.Handler.Calls);
     }
 

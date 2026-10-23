@@ -145,7 +145,7 @@ public sealed class OcrDownloadSafetyTests
         Assert.Equal(OcrStatus.Unavailable, result.Status);
         Assert.Equal(modelsInstalled ? 0 : 1, fixture.Handler.Calls);
         Assert.All(fixture.Handler.Requests, uri => Assert.Equal(OcrModelCatalog.Recognition.Uri, uri));
-        fixture.AssertLegacyFilesUnchanged();
+        fixture.AssertLegacyFilesRemoved();
     }
 
     [Fact]
@@ -247,10 +247,18 @@ public sealed class OcrDownloadSafetyTests
                 File.WriteAllBytes(Path.Combine(Paths.OcrModelsRoot, name), ModelBytes);
         }
 
+        // The download coordinator never touches the retired super-resolution files.
         internal void AssertLegacyFilesUnchanged()
         {
             foreach (string name in OcrModelCatalog.LegacySuperResolutionFiles)
                 Assert.Equal(ModelBytes, File.ReadAllBytes(Path.Combine(Paths.OcrModelsRoot, name)));
+        }
+
+        // Background verification removes the retired super-resolution files; nothing reads them.
+        internal void AssertLegacyFilesRemoved()
+        {
+            foreach (string name in OcrModelCatalog.LegacySuperResolutionFiles)
+                Assert.False(File.Exists(Path.Combine(Paths.OcrModelsRoot, name)));
         }
 
         public void Dispose()
