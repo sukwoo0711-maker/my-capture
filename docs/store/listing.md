@@ -103,9 +103,9 @@ MyCapture는 코딩하는 동안 엑셀 사양 표와 자주 쓰는 코드를 �
 8. 공유하기 전에 단계 번호와 화살표를 넣고, 이메일·토큰·카드번호를 Ctrl+Shift+R로 가린 화면입니다.
 9. 영역·창·전체 화면 캡처, 클립보드 복사, 이미지 속 글자 복사는 Windows 캡처 도구와 같습니다. 영역 녹화는 소리 없이 화면만 기록합니다. 여기에 원문을 보관하는 표·코드 핀, 반투명·클릭 허용 핀, 닫은 핀 다시 열기, 스크롤 캡처가 더해집니다.
 
-### 이 버전의 새로운 기능 (4.6.1)
+### 이 버전의 새로운 기능 (4.7.0)
 
-입력 한도는 1,500자입니다. 4.6.0(제출 16)이 게시된 뒤 제출하므로 4.6.1의 변경만 적습니다.
+입력 한도는 1,500자입니다. 4.6.0(제출 16)이 게시된 뒤 제출하므로 4.7.0의 변경만 적습니다.
 
 - 새 버전이 나오면 앱이 알려 주고, 카드의 '업데이트'로 바로 설치합니다. 설정 > 정보에서 자동 확인을 끌 수 있습니다.
 - 편집기 단추는 평소 아이콘을 크게 보여 주고, Alt를 누르는 동안 단축키가 나타납니다. Alt만 눌렀다 뗀 뒤 다음 키가 무시되던 문제도 고쳤습니다.
@@ -113,6 +113,8 @@ MyCapture는 코딩하는 동안 엑셀 사양 표와 자주 쓰는 코드를 �
 - 웹 페이지나 앱에서 찍은 캡처에 출처를 표시하고, 같은 출처의 캡처를 모아 봅니다.
 - '정확' 품질의 글자 인식이 두 엔진을 함께 써서 한국어 화면 글자를 더 정확하게 읽고, 짧은 줄을 빠뜨리지 않습니다.
 - 툴팁이 열려 있는 동안 재생 위치 표시나 자동 저장이 멈추던 문제를 고쳤습니다.
+- 삭제 확인의 기본 단추와 메뉴 구분선, 녹화 빨강을 정리했습니다.
+- 설정 > 정보의 '진단 묶음 저장'으로 이 PC에만 남는 기록을 문의에 첨부할 수 있습니다.
 
 ### 검색어
 
@@ -196,9 +198,9 @@ Enter them in screenshot order. Each caption is 200 characters or fewer.
 8. Step numbers and an arrow added before sharing, with an email address, token and card number covered by Ctrl+Shift+R.
 9. Like Snipping Tool, MyCapture captures, copies to the clipboard and extracts text. It adds table and code pins with original text, click-through pins and scrolling capture; recording is silent.
 
-### What's new in this version (4.6.1)
+### What's new in this version (4.7.0)
 
-Limit: 1,500 characters. 4.6.0 (submission 16) is published, so this lists only the 4.6.1 changes.
+Limit: 1,500 characters. 4.6.0 (submission 16) is published, so this lists only the 4.7.0 changes.
 
 - MyCapture tells you when a new version is available, and Update on the card installs it. Turn off automatic checks in Settings > About.
 - Editor buttons show larger icons, and shortcut keys appear while you hold Alt. Fixed keys being ignored after pressing Alt alone.
@@ -206,6 +208,8 @@ Limit: 1,500 characters. 4.6.0 (submission 16) is published, so this lists only 
 - Captures from a web page or app show their source, and you can view all captures from the same source.
 - Text recognition at Accurate combines two engines to read Korean screen text more accurately and no longer drops short lines.
 - Fixed the playback position and autosave pausing while a tooltip was open.
+- Cleaner delete confirmations, menu separators and recording red.
+- Save diagnostics in Settings > About to attach local logs to a support request.
 
 ### Search terms
 
@@ -225,6 +229,6 @@ Partner Center 제품 단위의 Additional Testing Information(인증 참고)에
 
 > MyCapture runs in the notification area. The first-run screen lets the user start a capture or skip to the library. On new installations, Ctrl+Shift+C captures a region, Ctrl+Shift+X starts or stops region recording, F3 pins clipboard content and Shift+F3 hides or shows all pins. The library shortcut is unassigned; existing installations retain their saved shortcuts. To try a pin, copy cells in a spreadsheet or text in an editor and press F3 (Pin clipboard is also in the tray menu). Ctrl+C or Ctrl+double-click on a pin copies its original text (recognized text for an image pin). Ctrl+Shift+R runs Auto-redact inside the image editor. A new installation copies each capture to the clipboard and shows the quick-access card by default. Alt+Q or a click moves focus to the card; its C/E/P/S/T keys then work.
 >
-> Capture, editing, recording and OCR run on the PC. The only automatic network access is downloading missing OCR model files. The optional GitHub image attachment requires the user's own GitHub account. The package's startup task is disabled at install. The first-run screen offers launch at sign-in with its checkbox selected, and the user can clear it there or change it later in Settings > General.
+> Capture, editing, recording and OCR run on the PC. Automatic network access is limited to downloading missing OCR model files and a daily update check through the Microsoft Store APIs, which the user can turn off in Settings > About. The optional GitHub image attachment requires the user's own GitHub account. The package's startup task is disabled at install. The first-run screen offers launch at sign-in with its checkbox selected, and the user can clear it there or change it later in Settings > General.
 >
-> Updates are delivered through the Microsoft Store. Settings > About lets the user check for and install Store package updates through the Store APIs, with consent before installation. After at least 10 successful captures and 3 days of use, the Store package offers one inline review invitation when the user returns to the app. It calls StoreContext.RequestRateAndReviewAppAsync only after the user chooses Review. Settings > About also offers a manual review link. The app reads the Windows Print Screen keyboard setting only to show guidance and never changes it.
+> Updates are delivered through the Microsoft Store. Settings > About lets the user check for and install Store package updates through the Store APIs, with consent before installation. After at least 5 successful captures and 1 day of use, the Store package offers one inline review invitation when the user returns to the app. It calls StoreContext.RequestRateAndReviewAppAsync only after the user chooses Review. Settings > About also offers a manual review link. The app reads the Windows Print Screen keyboard setting only to show guidance and never changes it.
