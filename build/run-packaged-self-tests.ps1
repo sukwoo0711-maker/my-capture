@@ -94,6 +94,16 @@ try {
 
             if (-not $process.WaitForExit($TimeoutSeconds * 1000)) {
                 $timedOut = $true
+                # Diagnostic branch only: keep a heap dump of the hung self-test before stopping it.
+                $dumpPath = Join-Path $testRoot "$($test.Name)-hang.dmp"
+                $oldPreference = $ErrorActionPreference
+                try {
+                    $ErrorActionPreference = 'Continue'
+                    & (Join-Path $publish 'createdump.exe') -f $dumpPath $process.Id 2>&1 | Out-Host
+                    Write-Host "DUMP $($test.Name): exit=$LASTEXITCODE path=$dumpPath"
+                }
+                catch { Write-Host "DUMP $($test.Name) failed: $($_.Exception.Message)" }
+                finally { $ErrorActionPreference = $oldPreference }
                 Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
                 $process.WaitForExit()
             }
