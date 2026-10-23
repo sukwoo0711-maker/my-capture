@@ -641,6 +641,189 @@ public sealed class OcrResultMergerTests
         Assert.Equal(full.Lines[0].Bounds, Assert.Single(merged.Lines).Bounds);
     }
 
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    [InlineData(true, true)]
+    public void Observed026OffsetPaddedBoxesAlignWithTightGlyphRowsWithoutDuplicates(bool reverseWindows, bool reverseNeural)
+    {
+        // Line boxes retained from validation2 026 (offset heading, 100%, dark). Each padded
+        // PP-OCR box sits 9-10 px above its Windows glyph box, beyond the center tolerance.
+        OcrLine[] windows =
+        [
+            Line("내보내기", 28, 8.5, 50, 15.25), Line("이미지 형식", 2.25, 43.75, 57, 13.75),
+            Line("석상 유지", 4, 73.5, 46.25, 12.75), Line("품즫 조정", 6, 102.5, 46.75, 13.25),
+        ];
+        OcrLine[] neural =
+        [
+            Line("Ichah", 24, 0, 62, 22), Line("이미지 형식", 0, 30, 66, 23),
+            Line("색상 유지", 0, 59, 54, 23), Line("품질 조정", 0, 85, 57, 28),
+        ];
+
+        OcrResult merged = Merge(Result(reverseWindows ? windows.Reverse().ToArray() : windows),
+            Result(reverseNeural ? neural.Reverse().ToArray() : neural));
+
+        // One line per glyph row. Exact agreement keeps the Windows box; one-syllable
+        // disagreements keep the existing neural choice; the Latin misreading is rejected.
+        Assert.Equal("내보내기\n이미지 형식\n색상 유지\n품질 조정", merged.Text);
+        Assert.Equal(new[] { windows[0].Bounds, windows[1].Bounds, neural[2].Bounds, neural[3].Bounds },
+            merged.Lines.Select(line => line.Bounds));
+    }
+
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    [InlineData(true, true)]
+    public void OffsetPaddedRowsWithIdenticalValuesStayOnePerRow(bool reverseWindows, bool reverseNeural)
+    {
+        OcrLine[] windows = [Line("100", 10, 40, 30, 12), Line("100", 10, 68, 30, 12)];
+        OcrLine[] neural = [Line("100", 5, 28, 40, 24), Line("100", 5, 56, 40, 24)];
+
+        OcrResult merged = Merge(Result(reverseWindows ? windows.Reverse().ToArray() : windows),
+            Result(reverseNeural ? neural.Reverse().ToArray() : neural));
+
+        Assert.Equal("100\n100", merged.Text);
+        Assert.Equal(windows.Select(line => line.Bounds), merged.Lines.Select(line => line.Bounds));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Observed029ContainedGlyphBoxAlignsWithItsPaddedRowWithoutTextAgreement(bool reverseInputs)
+    {
+        // Original 029-code boxes. The garbled Windows first line lies inside the neural
+        // box, which holds no other Windows row, so it is the same row and not an extra line.
+        OcrLine[] windows =
+        [
+            Line("const I'OWS", 9.75, 16.5, 69, 9.25),
+            Line("fnC{ 교•. 7, value: 0.25 }),•", 9.75, 31.5, 187.25, 16.5),
+            Line("// 결과 확인: ok-done", 10.75, 54.75, 138.25, 15.25),
+        ];
+        OcrLine[] neural =
+        [
+            Line("const rows = [1, 2, 3];", 5, 4, 167, 23),
+            Line("fn({ id: 7, value: 0.25 });", 4, 25, 196, 23),
+            Line("//결과 확인: ok_done", 5, 44, 147, 26),
+        ];
+
+        OcrResult merged = Merge(Result(reverseInputs ? windows.Reverse().ToArray() : windows),
+            Result(reverseInputs ? neural.Reverse().ToArray() : neural));
+
+        // The substituted mark ("-" for "_") does not order the last pair; neural stays.
+        Assert.Equal("const rows = [1, 2, 3];\nfn({ id: 7, value: 0.25 });\n//결과 확인: ok_done", merged.Text);
+        Assert.Equal(neural.Select(line => line.Bounds), merged.Lines.Select(line => line.Bounds));
+    }
+
+    [Fact]
+    public void SeparateRowInsideTallBoxIsNotJoinedToTheAgreeingRow()
+    {
+        OcrResult windows = Result(Line("first row", 10, 10), Line("second row", 10, 50));
+        OcrResult neural = Result(Line("first row", 8, 8, 105, 65));
+
+        OcrResult merged = Merge(windows, neural);
+
+        Assert.Equal("first row\nsecond row", merged.Text);
+        Assert.Equal(windows.Lines.Select(line => line.Bounds), merged.Lines.Select(line => line.Bounds));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Observed017StackedHalvesOfOneRowDoNotLeaveAnExtraLine(bool reverseInputs)
+    {
+        // validation2 017 (storage card, 150%): Windows split one bold row into an upper and a
+        // lower partial line; both lie inside the single neural box for that row.
+        OcrLine[] windows =
+        [
+            Line("보관함", 9.75, 8.75, 62.25, 19.5), Line("나으 요 근들", 10.75, 63.75, 71.5, 9.5),
+            Line("口 0", 12.75, 72.75, 67.5, 6.5), Line("폴더 이동", 93.75, 117.75, 76.5, 17.5),
+        ];
+        OcrLine[] neural =
+        [
+            Line("보관함", 3, 0, 74, 35), Line("남은 용량", 3, 55, 84, 31), Line("폴더 이동", 86, 109, 89, 34),
+        ];
+
+        OcrResult merged = Merge(Result(reverseInputs ? windows.Reverse().ToArray() : windows),
+            Result(reverseInputs ? neural.Reverse().ToArray() : neural));
+
+        Assert.Equal("보관함\n남은 용량\n폴더 이동", merged.Text);
+        Assert.Equal(3, merged.Lines.Count);
+    }
+
+    [Theory]
+    [InlineData("내보내기", "Ichah", "내보내기")]
+    [InlineData("Ichah", "내보내기", "내보내기")]
+    [InlineData("최근 캡처", "Recent", "최근 캡처")]
+    [InlineData("설", "Sl", "Sl")]
+    [InlineData("Wi-Fi 연결", "WiFi 연걸", "WiFi 연걸")]
+    public void HangulReadingWinsOnlyOverUnrelatedLatinReadingOfSameBox(string windows, string neural, string expected)
+    {
+        // One syllable is too little evidence, and mixed-script readings are not a script
+        // conflict; both keep the ordinary neural default for an ambiguous disagreement.
+        OcrResult merged = Merge(Result(Line(windows, 10, 10, 60, 16)), Result(Line(neural, 8, 6, 66, 24)));
+
+        Assert.Equal(expected, merged.Text);
+    }
+
+    [Theory]
+    [InlineData("2,750", "2750", "2,750")]
+    [InlineData("2750", "2,750", "2,750")]
+    [InlineData("cfg.enabled = active !== null;", "cfg.enabled = active != null;", "cfg.enabled = active !== null;")]
+    [InlineData("저장하시겠습니까", "저장하시겠습니까?", "저장하시겠습니까?")]
+    [InlineData("검토 대상: draft-v2", "검토 대상:draft_v2", "검토 대상:draft_v2")]
+    [InlineData("연결 상태. Ready", "연결 상태: Ready", "연결 상태: Ready")]
+    public void SameLettersKeepTheReadingWithEveryMarkAndSubstitutedMarksKeepNeural(
+        string windows, string neural, string expected)
+    {
+        OcrResult merged = Merge(Result(Line(windows, 10, 10, 200)), Result(Line(neural, 9, 9, 202, 22)));
+
+        Assert.Equal(expected, merged.Text);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Observed053GarbledHeaderCellJoinsCorroboratedCells(bool reverseCells)
+    {
+        // validation2 053 header (150%): Windows read the first two cells as one line with the
+        // second cell garbled; the neural cells agree with the first word and contain no digit.
+        OcrLine row = new("구분 거 人", new OcrRect(12.67, 13.67, 161, 16.67),
+        [
+            new("구분", new OcrRect(12.67, 13.67, 32.67, 16.67)),
+            new("거", new OcrRect(142, 13.67, 14, 11.67)),
+            new("人", new OcrRect(159.67, 13.67, 14, 6.67)),
+        ]);
+        OcrLine[] cells = [Line("구분", 2, 1, 51, 40), Line("건수", 132, 2, 50, 36)];
+        OcrLine[] neural = [.. cells, Line("단가", 286, 2, 50, 36), Line("잔액", 446, 1, 50, 37)];
+
+        OcrResult merged = Merge(Result(row, Line("단가", 295.67, 13.67, 32.33, 16.67), Line("잔액", 455.67, 13.67, 31.67, 16.67)),
+            Result(reverseCells ? neural.Reverse().ToArray() : neural));
+
+        Assert.Equal("구분 건수\n단가\n잔액", merged.Text);
+        Assert.Equal(cells.SelectMany(line => line.Words), merged.Lines[0].Words);
+    }
+
+    [Theory]
+    [InlineData("23400", "23,401")]
+    [InlineData("18", "16")]
+    public void GarbledCellWithConflictingQuantityKeepsBothRowReadings(string rowValue, string cellValue)
+    {
+        OcrLine row = new("잉크 " + rowValue, new OcrRect(11.25, 53.75, 120.75, 11.5),
+        [
+            new("잉크", new OcrRect(11.25, 53.75, 22.75, 11.5)),
+            new(rowValue, new OcrRect(94, 54.5, 38, 9.75)),
+        ]);
+        OcrLine[] cells = [Line("잉크", 4, 44, 34, 25), Line(cellValue, 87, 46, 50, 23)];
+
+        OcrResult merged = Merge(Result(row), Result(cells));
+
+        Assert.Equal(3, merged.Lines.Count);
+        Assert.Contains(merged.Lines, line => line.Text == row.Text);
+        Assert.Contains(merged.Lines, line => line.Text == cellValue);
+    }
+
     [Fact]
     public void EmptyInputsReturnNoTextWithWallTime()
     {
