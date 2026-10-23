@@ -99,7 +99,8 @@ try {
                 $oldPreference = $ErrorActionPreference
                 try {
                     $ErrorActionPreference = 'Continue'
-                    & (Join-Path $publish 'createdump.exe') -f $dumpPath $process.Id 2>&1 | Out-Host
+                    # .NET 10 createdump no longer takes a PID; dotnet-dump uses the diagnostics port.
+                    & (Join-Path $env:USERPROFILE '.dotnet\tools\dotnet-dump.exe') collect -p $process.Id --type Heap -o $dumpPath 2>&1 | Out-Host
                     Write-Host "DUMP $($test.Name): exit=$LASTEXITCODE path=$dumpPath"
                 }
                 catch { Write-Host "DUMP $($test.Name) failed: $($_.Exception.Message)" }
