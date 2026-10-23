@@ -25,6 +25,24 @@ internal static class OcrResultMerger
         OcrRect[] readingBounds = allLines.Select(line => orientation.ToReading(line.Bounds)).ToArray();
         string[] compact = allLines.Select(line => Profile.Create(line.Text).Compact).ToArray();
         var members = parents.Select(index => new List<int> { index }).ToArray();
+        var consumed = new bool[allLines.Length];
+        var selected = new List<OcrLine>();
+        int windowsCharacters = 0, neuralCharacters = 0;
+
+        // A padded narrow cell and a tight wide row can have little area overlap despite
+        // representing the same row. Match that layout separately, using horizontal cell
+        // coverage and corroborated text, without relaxing the ordinary row-bridge checks.
+        foreach (RowMatch match in FindRowMatches(allLines, first.Length, readingBounds, compact, orientation))
+        {
+            if (consumed[match.Row] || match.Cells.Any(index => consumed[index])) continue;
+            consumed[match.Row] = true;
+            foreach (int index in match.Cells) consumed[index] = true;
+            selected.Add(match.Line);
+            bool fromWindows = (match.UseCells ? match.Cells[0] : match.Row) < first.Length;
+            int count = Profile.Create(match.Line.Text).Meaningful;
+            if (fromWindows) windowsCharacters += count;
+            else neuralCharacters += count;
+        }
 
         int Root(int index)
         {
@@ -47,7 +65,8 @@ internal static class OcrResultMerger
         for (int right = 0; right < second.Length; right++)
         {
             int other = first.Length + right;
-            if (Aligns(readingBounds[left], readingBounds[other])) edges.Add((left, other));
+            if (!consumed[left] && !consumed[other] && Aligns(readingBounds[left], readingBounds[other]))
+                edges.Add((left, other));
         }
         foreach (var edge in edges.OrderByDescending(edge => compact[edge.Left] == compact[edge.Right])
                      .ThenBy(edge => Math.Abs(CenterY(readingBounds[edge.Left]) - CenterY(readingBounds[edge.Right])))
@@ -60,9 +79,7 @@ internal static class OcrResultMerger
             members[left].AddRange(members[right]);
         }
 
-        var groups = Enumerable.Range(0, parents.Length).GroupBy(Root);
-        var selected = new List<OcrLine>();
-        int windowsCharacters = 0, neuralCharacters = 0;
+        var groups = Enumerable.Range(0, parents.Length).Where(index => !consumed[index]).GroupBy(Root);
         foreach (var group in groups)
         {
             OcrLine[] left = OrderLines(group.Where(index => index < first.Length)
@@ -102,6 +119,119 @@ internal static class OcrResultMerger
         ? result.Lines.Where(line => Profile.Create(line.Text).Plausible)
             .Select(line => line with { Text = line.Text.Trim() }).ToArray()
         : [];
+
+    private static IEnumerable<RowMatch> FindRowMatches(OcrLine[] lines, int windowsCount,
+        OcrRect[] bounds, string[] compact, OcrReadingOrientation orientation)
+    {
+        var matches = new List<RowMatch>();
+        for (int row = 0; row < lines.Length; row++)
+        {
+            int start = row < windowsCount ? windowsCount : 0;
+            int count = row < windowsCount ? lines.Length - windowsCount : windowsCount;
+            int[] cells = Enumerable.Range(start, count)
+                .Where(index => SameRow(bounds[row], bounds[index]) &&
+                    HorizontalOverlap(bounds[row], bounds[index]) >= bounds[index].Width * .65)
+                .OrderBy(index => bounds[index].X).ThenBy(index => bounds[index].Y)
+                .ThenBy(index => compact[index], StringComparer.Ordinal).ToArray();
+            if (cells.Length < 2) continue;
+
+            // Distinct cell regions must share a row. In particular, a spanning box cannot
+            // connect two adjacent rows or count two overlapping alternatives as two cells.
+            bool separateCells = true;
+            for (int first = 0; first < cells.Length && separateCells; first++)
+            for (int second = first + 1; second < cells.Length; second++)
+            {
+                OcrRect left = bounds[cells[first]], right = bounds[cells[second]];
+                if (!SameRow(left, right) || HorizontalOverlap(left, right) > Math.Min(left.Width, right.Width) * .15)
+                {
+                    separateCells = false;
+                    break;
+                }
+            }
+            if (!separateCells) continue;
+
+            OcrLine[] cellLines = cells.Select(index => lines[index]).ToArray();
+            string cellText = string.Concat(cells.Select(index => compact[index]));
+            int distance = CompactAgreementDistance(compact[row], cellText);
+            if (distance < 0) continue;
+            // Approximate agreement must not erase a corroborated interior quantity. This
+            // existing spatial evidence is stronger than a small aggregate edit distance.
+            bool useCells = distance == 0 || !HasSupportedInteriorWords([lines[row]], cellLines, orientation);
+            OcrLine chosen = useCells ? AssembleCells(cellLines) : lines[row];
+            matches.Add(new(row, cells, distance, chosen, useCells));
+        }
+        return matches.OrderBy(match => match.Distance).ThenByDescending(match => match.Cells.Length)
+            .ThenByDescending(match => bounds[match.Row].Width)
+            .ThenBy(match => CenterY(bounds[match.Row])).ThenBy(match => bounds[match.Row].X)
+            .ThenBy(match => match.Row);
+    }
+
+    private static OcrLine AssembleCells(OcrLine[] cells)
+    {
+        // Emit one visual row, taking its text from the cell-level representation. Keep every
+        // actual cell word and source box so text reconstruction and table column inference
+        // use the cell geometry. A detector's whole-row text is never emitted a second time.
+        OcrWord[] words = cells.SelectMany(line => line.Words.Count > 0
+            ? line.Words : new[] { new OcrWord(line.Text, line.Bounds) }).ToArray();
+        return new OcrLine(string.Join(' ', cells.Select(line => line.Text)),
+            cells.Select(line => line.Bounds).Aggregate(default(OcrRect), OcrRect.Union), words);
+    }
+
+    private static int CompactAgreementDistance(string first, string second)
+    {
+        if (first == second) return 0;
+        // Short numeric cells can differ only by a thousands separator ("23 400" vs
+        // "23,400"). Require exact equality after removing valid integer-grouping commas;
+        // signs, decimal points, digits and malformed grouping remain significant. This
+        // does not permit arbitrary substitutions in short labels or change emitted text.
+        if (WithoutIntegerGrouping(first) == WithoutIntegerGrouping(second)) return 0;
+        // At most two edits, at most 10% of the shorter text, and therefore close length
+        // agreement. Short labels require exact agreement; this is not a dictionary rule.
+        int limit = Math.Min(2, Math.Min(first.Length, second.Length) / 10);
+        if (limit == 0 || Math.Abs(first.Length - second.Length) > limit) return -1;
+        int[] previous = Enumerable.Range(0, second.Length + 1).Select(value => Math.Min(value, limit + 1)).ToArray();
+        var current = new int[previous.Length];
+        for (int row = 1; row <= first.Length; row++)
+        {
+            current[0] = Math.Min(row, limit + 1);
+            int start = Math.Max(1, row - limit), end = Math.Min(second.Length, row + limit);
+            if (start > 1) current[start - 1] = limit + 1;
+            if (end < second.Length) current[end + 1] = limit + 1;
+            int minimum = limit + 1;
+            for (int column = start; column <= end; column++)
+            {
+                current[column] = Math.Min(previous[column] + 1, Math.Min(current[column - 1] + 1,
+                    previous[column - 1] + (first[row - 1] == second[column - 1] ? 0 : 1)));
+                minimum = Math.Min(minimum, current[column]);
+            }
+            if (minimum > limit) return -1;
+            (previous, current) = (current, previous);
+        }
+        return previous[second.Length] <= limit ? previous[second.Length] : -1;
+    }
+
+    private static string WithoutIntegerGrouping(string text)
+    {
+        var result = new StringBuilder(text.Length);
+        for (int index = 0; index < text.Length;)
+        {
+            if (!char.IsAsciiDigit(text[index]))
+            {
+                result.Append(text[index++]);
+                continue;
+            }
+            int end = index + 1;
+            while (end < text.Length && (char.IsAsciiDigit(text[end]) || text[end] == ',')) end++;
+            string run = text[index..end];
+            string[] groups = run.Split(',');
+            bool integerGrouping = (index == 0 || text[index - 1] != '.') && groups.Length > 1 &&
+                groups[0].Length is >= 1 and <= 3 && groups[0].All(char.IsAsciiDigit) &&
+                groups.Skip(1).All(group => group.Length == 3 && group.All(char.IsAsciiDigit));
+            result.Append(integerGrouping ? string.Concat(groups) : run);
+            index = end;
+        }
+        return result.ToString();
+    }
 
     private static bool PreferWindows(OcrLine[] windows, OcrLine[] neural,
         string? windowsLanguage, OcrReadingOrientation orientation)
@@ -143,6 +273,8 @@ internal static class OcrResultMerger
         // also extends beyond the shorter recognition, indicating actual truncation.
         OcrRect firstBounds = ReadingUnion(windows, orientation);
         OcrRect secondBounds = ReadingUnion(neural, orientation);
+        if (IsBroadFragment(second, first, secondBounds, firstBounds)) return true;
+        if (IsBroadFragment(first, second, firstBounds, secondBounds)) return false;
         if (Extends(first.Compact, second.Compact, firstBounds, secondBounds)) return true;
         if (Extends(second.Compact, first.Compact, secondBounds, firstBounds)) return false;
 
@@ -150,6 +282,22 @@ internal static class OcrResultMerger
         // rules cannot establish the truth of two plausible alternatives; the benchmark gate
         // determines whether the dual-engine path may become the product default.
         return false;
+    }
+
+    private static bool IsBroadFragment(Profile fragment, Profile longer, OcrRect fragmentBounds, OcrRect longerBounds)
+    {
+        // A tiny string assigned to almost the same broad source strip has much less text
+        // coverage. Require a large length/density discrepancy and strong geometric coverage;
+        // an actual short label with its own tight box must not trigger this rule. The fragment
+        // need not be a substring: the few surviving characters can themselves be misrecognized.
+        if (!HasArea(fragmentBounds) || !HasArea(longerBounds) || fragment.Compact.Length == 0 ||
+            longer.Meaningful < 4 || longer.Compact.Length < fragment.Compact.Length * 4) return false;
+        double verticalOverlap = Math.Min(fragmentBounds.Bottom, longerBounds.Bottom) -
+            Math.Max(fragmentBounds.Y, longerBounds.Y);
+        return SameRow(fragmentBounds, longerBounds) &&
+            fragmentBounds.Width >= fragment.Compact.Length * fragmentBounds.Height * 1.5 &&
+            HorizontalOverlap(fragmentBounds, longerBounds) >= Math.Max(fragmentBounds.Width, longerBounds.Width) * .8 &&
+            verticalOverlap >= Math.Min(fragmentBounds.Height, longerBounds.Height) * .8;
     }
 
     private static bool HasSupportedInteriorWords(OcrLine[] windows, OcrLine[] neural,
@@ -168,8 +316,13 @@ internal static class OcrResultMerger
         var matched = new bool[words.Length];
         for (int cell = 0; cell < cells.Length; cell++)
         {
+            // Exact text corroboration below permits padded/narrower cell boxes to match
+            // tight words by horizontal containment rather than their incompatible areas.
+            // A word assigned to two cells is rejected, even when both cell texts agree.
             int[] matching = Enumerable.Range(0, words.Length)
-                .Where(index => Aligns(words[index].Bounds, cells[cell])).ToArray();
+                .Where(index => SameRow(words[index].Bounds, cells[cell]) &&
+                    HorizontalOverlap(words[index].Bounds, cells[cell]) >=
+                    Math.Min(words[index].Bounds.Width, cells[cell].Width) * .65).ToArray();
             if (matching.Length == 0 || matching.Any(index => matched[index]) ||
                 Profile.Create(string.Concat(matching.Select(index => words[index].Word.Text))).Compact !=
                 Profile.Create(neural[cell].Text).Compact) return false;
@@ -233,6 +386,9 @@ internal static class OcrResultMerger
 
     private static double CenterY(OcrRect bounds) => bounds.Y + bounds.Height / 2;
 
+    private static double HorizontalOverlap(OcrRect left, OcrRect right) =>
+        Math.Max(0, Math.Min(left.Right, right.Right) - Math.Max(left.X, right.X));
+
     private static bool HasArea(OcrRect bounds) => bounds.Width > 0 && bounds.Height > 0 &&
         double.IsFinite(bounds.X) && double.IsFinite(bounds.Y) &&
         double.IsFinite(bounds.Right) && double.IsFinite(bounds.Bottom);
@@ -293,4 +449,6 @@ internal static class OcrResultMerger
                 count == 0 ? 1 : (defects + fragments * .5) / count, plausible);
         }
     }
+
+    private sealed record RowMatch(int Row, int[] Cells, int Distance, OcrLine Line, bool UseCells);
 }

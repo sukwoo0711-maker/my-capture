@@ -170,8 +170,12 @@ public sealed class OcrResultMergerTests
 
         OcrResult merged = Merge(Result(windows), neural);
 
-        Assert.Equal("USB cable 2 99.50", merged.Text);
-        Assert.Equal(windows.Words, Assert.Single(merged.Lines).Words);
+        // Corroborated row/cell matches now prefer the cell-level text and preserve its
+        // real word geometry, assembling one visual row rather than retaining the wide row.
+        Assert.Equal("USBcable 2 99.50", merged.Text);
+        Assert.Equal(neural.Lines.OrderBy(line => line.Bounds.X).SelectMany(line => line.Words),
+            Assert.Single(merged.Lines).Words);
+        Assert.Equal("USBcable,2,99.50", OcrTableExport.Csv(OcrExtractionAnalyzer.Analyze(merged).Table));
     }
 
     [Fact]
@@ -182,8 +186,191 @@ public sealed class OcrResultMergerTests
 
         OcrResult merged = Merge(windows, neural);
 
-        Assert.Equal(new[] { "left cell", "right cell" }, merged.Lines.Select(line => line.Text));
+        // The same assembly applies with the engines reversed: the Windows cell text
+        // supplies a single row while its separate cell boxes continue to define columns.
+        Assert.Equal("left cell right cell", Assert.Single(merged.Lines).Text);
         Assert.Equal(windows.Lines.Sum(line => line.Words.Count), merged.Lines.Sum(line => line.Words.Count));
+        Assert.Equal(windows.Lines.OrderBy(line => line.Bounds.X).SelectMany(line => line.Words), merged.Lines[0].Words);
+        Assert.Equal("left cell,right cell", OcrTableExport.Csv(OcrExtractionAnalyzer.Analyze(merged).Table));
+    }
+
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    [InlineData(true, true)]
+    public void Observed031SpreadsheetBoxesEmitCellRepresentationOnce(bool rowFromWindows, bool reverseCells)
+    {
+        // Retained original-coordinate line boxes from 031-spreadsheet. The word fallback
+        // is synthetic: the old report retained these line boxes, not individual word boxes.
+        OcrLine row = Line("용지 1,250.50 2026-10-23", 10.25, 32.75, 261, 12.5);
+        OcrLine[] cells =
+        [
+            Line("용지", 0, 22, 39, 31),
+            Line("1,250.50", 86, 25, 62, 27),
+            Line("2026-10-23", 198, 25, 78, 27),
+        ];
+        OcrResult cellResult = Result(reverseCells ? cells.Reverse().ToArray() : cells);
+
+        OcrResult merged = rowFromWindows ? Merge(Result(row), cellResult) : Merge(cellResult, Result(row));
+        OcrExtraction extraction = OcrExtractionAnalyzer.Analyze(merged);
+
+        Assert.Equal("용지 1,250.50 2026-10-23", merged.Text);
+        Assert.Single(merged.Lines);
+        Assert.Equal(cells.SelectMany(line => line.Words), merged.Lines[0].Words);
+        Assert.Equal("용지 1,250.50 2026-10-23", extraction.Text(false));
+        Assert.Equal("용지,\"1,250.50\",2026-10-23", OcrTableExport.Csv(extraction.Table));
+        Assert.Equal(3, extraction.Table.Columns.Count);
+        Assert.Equal(cells.Select(line => line.Bounds), extraction.Table.Rows[0].Cells.Select(cell => cell.Bounds));
+    }
+
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    [InlineData(true, true)]
+    public void JpegStyle057SpreadsheetUsesCorroboratedCellsDespiteSmallRecognitionDifference(bool reverseCells, bool slightDifference)
+    {
+        // This earlier JPEG-style fixture uses illustrative padding/recognition variation.
+        // A separate regression below uses the subsequently recovered actual 057 boxes.
+        OcrLine row = Line(slightDifference ? "용지 1,250.50 2026-10-28" : "용지 1,250.50 2026-10-23",
+            11, 33, 260, 13);
+        OcrLine[] cells =
+        [
+            Line("용지", 2, 23, 40, 32),
+            Line("1,250.50", 85, 24, 66, 30),
+            Line("2026-10-23", 196, 23, 84, 31),
+        ];
+
+        OcrResult merged = Merge(Result(row), Result(reverseCells ? cells.Reverse().ToArray() : cells));
+        OcrExtraction extraction = OcrExtractionAnalyzer.Analyze(merged);
+
+        Assert.Equal("용지 1,250.50 2026-10-23", merged.Text);
+        Assert.Single(merged.Lines);
+        Assert.Equal(cells.SelectMany(line => line.Words), merged.Lines[0].Words);
+        Assert.Equal(3, extraction.Table.Columns.Count);
+        Assert.Equal("용지,\"1,250.50\",2026-10-23", OcrTableExport.Csv(extraction.Table));
+        Assert.Equal("용지 1,250.50 2026-10-23", extraction.Text(false));
+    }
+
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    [InlineData(true, true)]
+    public void Observed057JpegNumericGroupingDifferenceEmitsCellRepresentationOnce(bool rowFromWindows, bool reverseCells)
+    {
+        // Original 057-jpeg70-spreadsheet A-dual evidence, including actual word boxes.
+        OcrLine row = new("잉크 23 400", new OcrRect(11.25, 53.75, 120.75, 11.5),
+        [
+            new("잉크", new OcrRect(11.25, 53.75, 22.75, 11.5)),
+            new("23", new OcrRect(94, 54.5, 13.25, 9.75)),
+            new("400", new OcrRect(110.75, 54.5, 21.25, 9.75)),
+        ]);
+        OcrLine[] cells =
+        [
+            new("잉크", new OcrRect(4, 44, 34, 25), [new("잉크", new OcrRect(8, 44, 26, 25))]),
+            new("23,400", new OcrRect(87, 46, 50, 23), [new("23,400", new OcrRect(93, 46, 42, 23))]),
+        ];
+        OcrResult cellResult = Result(reverseCells ? cells.Reverse().ToArray() : cells);
+
+        OcrResult merged = rowFromWindows ? Merge(Result(row), cellResult) : Merge(cellResult, Result(row));
+        OcrExtraction extraction = OcrExtractionAnalyzer.Analyze(merged);
+
+        Assert.Equal("잉크 23,400", merged.Text);
+        Assert.Equal(cells.SelectMany(line => line.Words), Assert.Single(merged.Lines).Words);
+        Assert.Equal("잉크 23,400", extraction.Text(false));
+        Assert.Equal("잉크,\"23,400\"", OcrTableExport.Csv(extraction.Table));
+        Assert.Equal(2, extraction.Table.Columns.Count);
+        Assert.Equal(cells.SelectMany(line => line.Words).Select(word => word.Bounds),
+            extraction.Table.Rows[0].Cells.Select(cell => cell.Bounds));
+    }
+
+    [Theory]
+    [InlineData("23400", "23,400")]
+    [InlineData("1234567", "1,234,567")]
+    [InlineData("-23400", "-23,400")]
+    [InlineData("23400.50", "23,400.50")]
+    public void NumericGroupingAgreementPreservesCellFormattingAndValue(string ungrouped, string grouped)
+    {
+        OcrLine row = Line("Ink " + ungrouped, 11.25, 53.75, 120.75, 11.5);
+        OcrLine[] cells = [Line("Ink", 4, 44, 34, 25), Line(grouped, 87, 46, 50, 23)];
+
+        OcrResult merged = Merge(Result(row), Result(cells));
+
+        Assert.Equal("Ink " + grouped, merged.Text);
+        Assert.Equal(cells.SelectMany(line => line.Words), Assert.Single(merged.Lines).Words);
+    }
+
+    [Theory]
+    [InlineData("23400", "23,401")]
+    [InlineData("23400", "-23,400")]
+    [InlineData("23400", "+23,400")]
+    [InlineData("23400", "23.400")]
+    [InlineData("2340", "23,40")]
+    [InlineData("23400", "2,34,00")]
+    [InlineData("1.2345", "1.2,345")]
+    [InlineData("12345", "12345.")]
+    public void ShortNumericValueSignDecimalOrMalformedGroupingConflictDoesNotCreateRowMatch(string rowValue, string cellValue)
+    {
+        OcrLine row = Line("잉크 " + rowValue, 11.25, 53.75, 120.75, 11.5);
+        OcrLine[] cells = [Line("잉크", 4, 44, 34, 25), Line(cellValue, 87, 46, 50, 23)];
+
+        OcrResult merged = Merge(Result(row), Result(cells));
+
+        // The ordinary area-overlap evidence is insufficient for these padded cell boxes.
+        // Numeric formatting must not manufacture equivalence or merge conflicting values.
+        Assert.Equal(3, merged.Lines.Count);
+        Assert.Contains(merged.Lines, line => line.Text == row.Text);
+        foreach (OcrLine cell in cells) Assert.Contains(merged.Lines, line => line.Text == cell.Text);
+    }
+
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    [InlineData(true, true)]
+    public void PaddedCellsFromAdjacentTableRowsRemainSeparate(bool reverseRows, bool reverseCells)
+    {
+        OcrLine[] rows =
+        [
+            Line("용지 1,250.50 2026-10-23", 10.25, 32.75, 261, 12.5),
+            Line("토너 9,500.00 2026-10-24", 10.25, 52.75, 261, 12.5),
+        ];
+        OcrLine[] cells =
+        [
+            Line("용지", 0, 22, 39, 31), Line("1,250.50", 86, 25, 62, 27), Line("2026-10-23", 198, 25, 78, 27),
+            Line("토너", 0, 42, 39, 31), Line("9,500.00", 86, 45, 62, 27), Line("2026-10-24", 198, 45, 78, 27),
+        ];
+
+        OcrResult merged = Merge(Result(reverseRows ? rows.Reverse().ToArray() : rows),
+            Result(reverseCells ? cells.Reverse().ToArray() : cells));
+        OcrTable table = OcrExtractionAnalyzer.Analyze(merged).Table;
+
+        Assert.Equal("용지 1,250.50 2026-10-23\n토너 9,500.00 2026-10-24", merged.Text);
+        Assert.Equal(2, merged.Lines.Count);
+        Assert.Equal(cells.SelectMany(line => line.Words), merged.Lines.SelectMany(line => line.Words));
+        Assert.Equal(2, table.Rows.Count);
+        Assert.Equal(3, table.Columns.Count);
+        Assert.Equal("용지,\"1,250.50\",2026-10-23\r\n토너,\"9,500.00\",2026-10-24", OcrTableExport.Csv(table));
+    }
+
+    [Fact]
+    public void MateriallyDisagreeingCellsDoNotCreateAnApproximateWholeRowMatch()
+    {
+        OcrLine row = Line("용지 1,250.50 2026-10-23", 10.25, 32.75, 261, 12.5);
+        OcrLine[] cells =
+        [
+            Line("잉크", 0, 22, 39, 31), Line("9,999.99", 86, 25, 62, 27), Line("2030-01-01", 198, 25, 78, 27),
+        ];
+
+        OcrResult merged = Merge(Result(row), Result(cells));
+
+        // With weak ordinary overlap and incompatible text there is no evidence to discard
+        // either interpretation. In particular, no synthetic hybrid row should be emitted.
+        Assert.Equal(4, merged.Lines.Count);
+        Assert.Contains(merged.Lines, line => line.Text == row.Text);
+        foreach (OcrLine cell in cells) Assert.Contains(merged.Lines, line => line.Text == cell.Text);
     }
 
     [Fact]
@@ -259,6 +446,54 @@ public sealed class OcrResultMergerTests
         Assert.Equal(neural.Lines, merged.Lines);
     }
 
+    [Fact]
+    public void ApproximatePaddedCellAgreementDoesNotEraseCorroboratedInteriorQuantity()
+    {
+        OcrWord[] words =
+        [
+            new("ProductName", new OcrRect(10, 30, 100, 10)),
+            new("2", new OcrRect(200, 30, 8, 10)),
+            new("12345678", new OcrRect(300, 30, 80, 10)),
+        ];
+        OcrLine row = new("ProductName 2 12345678", new OcrRect(10, 30, 370, 10), words);
+        // Padded/narrower detector boxes fail area overlap for these tight word boxes.
+        // Their text and horizontal containment still corroborate both outside cells.
+        OcrResult neural = Result(Line("ProductName", 30, 20, 40, 30), Line("12345678", 295, 20, 30, 30));
+
+        OcrResult merged = Merge(Result(row), neural);
+        OcrTable table = OcrExtractionAnalyzer.Analyze(merged).Table;
+
+        Assert.Equal("ProductName 2 12345678", merged.Text);
+        Assert.Same(words, Assert.Single(merged.Lines).Words);
+        Assert.Equal("ProductName,2,12345678", OcrTableExport.Csv(table));
+        Assert.Equal(3, table.Columns.Count);
+        Assert.Equal(words[1].Bounds, table.Rows[0].Cells[1].Bounds);
+    }
+
+    [Fact]
+    public void OneWideWordCannotCorroborateTwoDifferentCellRegions()
+    {
+        OcrWord[] words =
+        [
+            new("A", new OcrRect(10, 30, 100, 10)),
+            new("2", new OcrRect(200, 30, 8, 10)),
+            new("12345678901234567890", new OcrRect(300, 30, 100, 10)),
+        ];
+        OcrLine row = new("A 2 12345678901234567890", new OcrRect(10, 30, 390, 10), words);
+        OcrLine[] cells =
+        [
+            Line("A", 20, 20, 10, 30), Line("A", 80, 20, 10, 30),
+            Line("12345678901234567890", 300, 20, 100, 30),
+        ];
+
+        OcrResult merged = Merge(Result(row), Result(cells));
+
+        // Matching the same wide A box twice is ambiguous and cannot establish the
+        // interior-quantity exception. The normal corroborated cell representation wins.
+        Assert.Equal("A A 12345678901234567890", merged.Text);
+        Assert.Equal(cells.SelectMany(line => line.Words), Assert.Single(merged.Lines).Words);
+    }
+
     [Theory]
     [InlineData("ru-RU", "Привет мир", "privetmir")]
     [InlineData("ja-JP", "設定を保存", "설정저장")]
@@ -325,6 +560,71 @@ public sealed class OcrResultMergerTests
             Result(Line("실제 본문", 10, 10)));
 
         Assert.Equal("실제 본문", merged.Text);
+    }
+
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    [InlineData(true, true)]
+    public void Observed038BroadFragmentBoxesPreferPlausibleLongLineWithoutSubstringEvidence(bool longFromWindows, bool reverseInputs)
+    {
+        // The geometry and neural fragment are retained from 038-mixed-paragraph. The full
+        // raw sentence was not retained; representative text deliberately excludes that glyph.
+        OcrLine full = Line("선택한 문장의 내용을 확인합니다", 10.75, 32, 216.75, 12.25);
+        OcrLine fragment = Line("이", 5, 24, 225, 24);
+        OcrLine heading = Line("본문", 10, 0, 40, 12);
+        OcrLine[] longLines = [heading, full];
+        OcrLine[] shortLines = [heading, fragment];
+        OcrResult longer = Result(reverseInputs ? longLines.Reverse().ToArray() : longLines);
+        OcrResult shorter = Result(reverseInputs ? shortLines.Reverse().ToArray() : shortLines);
+
+        OcrResult merged = longFromWindows ? Merge(longer, shorter) : Merge(shorter, longer);
+
+        Assert.DoesNotContain("이", full.Text);
+        Assert.Equal("본문\n선택한 문장의 내용을 확인합니다", merged.Text);
+        Assert.Equal(2, merged.Lines.Count);
+        Assert.Equal(full.Bounds, merged.Lines[1].Bounds);
+        Assert.Same(full.Words, merged.Lines[1].Words);
+    }
+
+    [Theory]
+    [InlineData("X")]
+    [InlineData("ZZ")]
+    public void BroadFragmentRuleUsesCoverageAndLengthRatherThanSpecificCharacters(string fragment)
+    {
+        OcrResult longer = Result("en-US", Line("Read the selected paragraph carefully", 12, 30, 220, 14));
+        OcrResult shorter = Result("en-US", Line(fragment, 5, 22, 230, 30));
+
+        OcrResult merged = Merge(longer, shorter);
+
+        Assert.Equal(longer.Text, merged.Text);
+        Assert.Equal(longer.Lines, merged.Lines);
+    }
+
+    [Fact]
+    public void NarrowSingleCharacterDoesNotTriggerBroadFragmentPreference()
+    {
+        OcrResult longer = Result(Line("Read the selected paragraph carefully", 10, 10, 220, 20));
+        OcrResult narrow = Result(Line("Z", 40, 10, 9, 20));
+
+        OcrResult merged = Merge(longer, narrow);
+
+        Assert.Equal("Z", merged.Text);
+        Assert.Equal(narrow.Lines, merged.Lines);
+    }
+
+    [Fact]
+    public void SeparateShortLabelOutsideLongLineIsRetained()
+    {
+        OcrResult longer = Result(Line("Read the selected paragraph carefully", 10, 10, 220, 20));
+        OcrResult label = Result(Line("Z", 260, 10, 9, 20));
+
+        OcrResult merged = Merge(longer, label);
+
+        Assert.Equal(2, merged.Lines.Count);
+        Assert.Equal("Read the selected paragraph carefully\nZ", merged.Text);
+        Assert.Equal(label.Lines[0].Bounds, merged.Lines[1].Bounds);
     }
 
     [Theory]

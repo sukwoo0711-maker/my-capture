@@ -29,7 +29,7 @@ namespace MyCapture.App.Tests;
 /// download method, or existing test cleanup is used. All generated evidence stays in the
 /// explicitly selected output directory; this test deliberately retains it for inspection.
 /// </summary>
-public sealed class OcrModelBenchmarkTests
+public sealed partial class OcrModelBenchmarkTests
 {
     private const string DefaultModels = @"C:\GitRepositories\my-capture-ux461-ocrbench\artifacts\ocr-bench\models";
     private const int Repetitions = 3;
@@ -51,14 +51,21 @@ public sealed class OcrModelBenchmarkTests
         string models = Path.GetFullPath(Environment.GetEnvironmentVariable("MYCAPTURE_OCR_BENCH_MODELS")
             ?? DefaultModels);
         Directory.CreateDirectory(output);
-        StaTestHost.Run(() => Run(output, models));
+        StaTestHost.Run(() =>
+        {
+            if (Environment.GetEnvironmentVariable("MYCAPTURE_OCR_BENCH_MODE") == "detector")
+                RunDetector(output, models);
+            else
+                Run(output, models);
+        });
     }
 
     private static void Run(string output, string models)
     {
         VerifyMetricExamples();
         HashSet<string>? selectedPipelines = SelectPipelines();
-        List<Sample> corpus = CreateCorpus(output);
+        List<Sample> corpus = Environment.GetEnvironmentVariable("MYCAPTURE_OCR_BENCH_CORPUS") == "validation2"
+            ? CreateValidationCorpus(output) : CreateCorpus(output);
         Assert.True(corpus.Count >= 48);
         var report = new BenchmarkReport
         {
@@ -78,6 +85,7 @@ public sealed class OcrModelBenchmarkTests
             "CER: NFC; CRLF/CR become LF; horizontal whitespace collapses to one space; trim each line and remove empty lines. LF remains one character. Micro-average total edit distance / total truth characters (may exceed 100%).",
             "Line-insensitive CER: the same normalization, then all whitespace including LF collapses to one space. Reading order is retained.",
             "Space-insensitive CER: the same NFC normalization, then remove all Unicode whitespace, including LF. This separately measures character recognition without word spacing or line-break penalties; it is not line-insensitive CER.",
+            "Space-free CER in the detector and angle benchmark summaries is the same SpaceInsensitiveCer metric; both branches use NFC and remove all Unicode whitespace before edit distance. The existing field names, counts and line-insensitive metric are retained.",
             "Exact-line match: LCS of normalized nonempty output/truth lines divided by truth line count; also report matches / max(truth lines, output lines) to expose extra lines.",
             "Cold init is first construction of one reusable wrapper/model set per pipeline in this process; filesystem and native DLL caches are not flushed. First inference is measured separately and excluded from all warm samples. Every corpus image then has three full pipeline warm runs; first warm output supplies accuracy, repeated-output changes are counted.",
             "Warm time includes product preprocessing, SR when applicable, PNG encoding, SKBitmap decode, detection/classification/recognition and product text reconstruction. Image generation, disk writes, metrics, and model file hashing are outside timed inference.",
@@ -125,7 +133,7 @@ public sealed class OcrModelBenchmarkTests
         PipelineReport? selected = report.Pipelines
             .Where(p => (p.Name == "A-cur" || p.Name == "A-v6") && p.Status == "completed")
             .OrderBy(p => p.Overall!.Cer).ThenBy(p => p.Overall!.WarmMedianMs).FirstOrDefault();
-        if (selected is not null)
+        if (selected is not null && corpus.Any(s => s.Truth.EnhancedSubset))
         {
             report.EnhancedDetector = selected.Name;
             string detector = selected.Name == "A-v6" ? v6 : server;
@@ -136,6 +144,11 @@ public sealed class OcrModelBenchmarkTests
                 Path.Combine(current, "realesrgan_x4.onnx"), Path.Combine(current, "real_esrgan_x4plus.data"));
             ExecuteNeural("E-v3", difficult, detector, defaults, OcrQuality.Enhanced,
                 Path.Combine(candidate, "real_esrgan_general_x4v3.onnx"), Path.Combine(candidate, "real_esrgan_general_x4v3.data"));
+        }
+        else if (selected is not null)
+        {
+            foreach (string name in new[] { "E-none", "E-cur", "E-v3" })
+                report.Pipelines.Add(new PipelineReport { Name = name, Status = "skipped", Note = "This corpus has no Enhanced subset." });
         }
         else
         {
@@ -455,6 +468,16 @@ public sealed class OcrModelBenchmarkTests
             _sr?.Dispose();
             _offlineHttp?.Dispose();
         }
+
+        public object Diagnose(BitmapSource bitmap)
+        {
+            Assert.Equal(OcrQuality.Accurate, _quality);
+            OcrRequest request = Request(bitmap, _quality);
+            BitmapSource prepared = request.EnhanceContrast ? ImageCodec.StretchContrastForRecognition(bitmap) : bitmap;
+            using SKBitmap decoded = SKBitmap.Decode(ImageCodec.EncodePng(prepared))
+                ?? throw new InvalidOperationException("Diagnostic bitmap could not be decoded.");
+            return DiagnoseBeforeFilter(_engine, decoded, _options);
+        }
     }
 
     private sealed class NoNetworkHandler : HttpMessageHandler
@@ -470,11 +493,16 @@ public sealed class OcrModelBenchmarkTests
         return OcrRequestFactory.FromBitmap(bitmap, settings);
     }
 
-    private static RapidOcrOptions ProductOverrides(RapidOcrOptions options) => options with
+    private static RapidOcrOptions ProductOverrides(RapidOcrOptions options)
     {
-        ReturnWordBox = true, DoAngle = true,
-        RecMaxDegreeOfParallelism = Math.Clamp(Environment.ProcessorCount, 1, 8),
-    };
+        RapidOcrOptions product = NeuralOcrEngine.CreateOptions();
+        return options with
+        {
+            ReturnWordBox = product.ReturnWordBox, DoAngle = product.DoAngle,
+            ClsThresh = product.ClsThresh,
+            RecMaxDegreeOfParallelism = product.RecMaxDegreeOfParallelism,
+        };
+    }
 
     private static RapidOcrOptions? GetV6Options() =>
         (typeof(RapidOcrOptions).GetProperty("PPOCRv6", BindingFlags.Public | BindingFlags.Static)?.GetValue(null)
