@@ -43,6 +43,48 @@ $runRoot = Join-Path $outputBase $runName
 
 . (Join-Path $PSScriptRoot 'packaged-validation.ps1')
 $tests = @(Get-PackagedSelfTests)
+
+# A self-test that outlives the runner's limit is ended without a report of its own. Before it is
+# ended, record where it is: a dump from the package's own createdump (managed and native stacks)
+# and the processes and windows on the desktop, which can block the next test as well.
+function Write-TimeoutEvidence {
+    param([System.Diagnostics.Process]$Process, [string]$TestRoot)
+
+    # Evidence is best effort: it must never keep the hung process alive.
+    try {
+        $lines = New-Object 'System.Collections.Generic.List[string]'
+        $lines.Add("Timed out after $TimeoutSeconds second(s): PID $($Process.Id)")
+        $dumpTool = Join-Path $publish 'createdump.exe'
+        $dumpPath = Join-Path $TestRoot 'timeout.dmp'
+        if (Test-Path -LiteralPath $dumpTool -PathType Leaf) {
+            try {
+                $dumpOutput = & $dumpTool --withheap --name $dumpPath $Process.Id 2>&1
+                $lines.Add("Dump: exit $LASTEXITCODE, $dumpPath; $(@($dumpOutput) -join ' ')")
+            }
+            catch {
+                $lines.Add("Dump: failed: $($_.Exception.Message)")
+            }
+        }
+        else {
+            $lines.Add('Dump: createdump.exe is not in the package')
+        }
+
+        $lines.Add('Processes with a window title:')
+        foreach ($candidate in @(Get-Process -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowTitle })) {
+            $lines.Add("  $($candidate.ProcessName) $($candidate.Id): $($candidate.MainWindowTitle)")
+        }
+        foreach ($name in @('MyCapture', 'WerFault', 'WerFaultSecure', 'createdump')) {
+            foreach ($candidate in @(Get-Process -Name $name -ErrorAction SilentlyContinue)) {
+                $lines.Add("  $name $($candidate.Id) started $($candidate.StartTime.ToString('o'))")
+            }
+        }
+
+        Set-Content -LiteralPath (Join-Path $TestRoot 'timeout-report.txt') -Value $lines -Encoding UTF8
+    }
+    catch {
+        Write-Host "Timeout evidence was not recorded: $($_.Exception.Message)" -ForegroundColor Yellow
+    }
+}
 $evidence = @($tests | ForEach-Object {
     [pscustomobject]@{ Name = $_.Name; Path = "$($_.Name)/$($_.Report)"; ExitCode = $null; Result = ''; Sha256 = '' }
 })
@@ -94,6 +136,7 @@ try {
 
             if (-not $process.WaitForExit($TimeoutSeconds * 1000)) {
                 $timedOut = $true
+                Write-TimeoutEvidence -Process $process -TestRoot $testRoot
                 Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
                 $process.WaitForExit()
             }

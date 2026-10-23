@@ -1,0 +1,118 @@
+name: Video editor hang probe
+
+# Temporary diagnostic for the intermittent video-editor self-test hang. Each job builds and
+# packages like packaged-validation.yml, runs the eight packaged self-tests in the same order,
+# and when a test stalls or times out turns its dump into managed and native stacks on the
+# runner. Removed before the fix is merged.
+
+on:
+  push:
+    branches:
+      - claude/fix-video-editor-selftest-hang-aca4eb
+
+permissions:
+  contents: read
+
+concurrency:
+  group: video-editor-hang-probe-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+  DOTNET_NOLOGO: '1'
+
+jobs:
+  probe:
+    name: Probe ${{ matrix.sample }}
+    runs-on: windows-latest
+    timeout-minutes: 75
+    strategy:
+      fail-fast: false
+      matrix:
+        sample: [1, 2, 3, 4, 5, 6]
+    defaults:
+      run:
+        shell: powershell
+
+    steps:
+      - name: Check out exact event commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Set up .NET from global.json
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+
+      - name: Record hosted session
+        run: |
+          $ErrorActionPreference = 'Stop'
+          "TEMP=$env:RUNNER_TEMP" | Out-File $env:GITHUB_ENV -Encoding utf8 -Append
+          "TMP=$env:RUNNER_TEMP" | Out-File $env:GITHUB_ENV -Encoding utf8 -Append
+          [xml]$props = Get-Content Directory.Build.props -Raw
+          "PACKAGE_VERSION=$([string]$props.Project.PropertyGroup.Version)" | Out-File $env:GITHUB_ENV -Encoding utf8 -Append
+          New-Item -ItemType Directory -Path artifacts/validation/hosted -Force | Out-Null
+
+      - name: Build Release
+        run: .\build\build.ps1 -Configuration Release
+
+      - name: Package clean source
+        run: .\build\package.ps1 -Version $env:PACKAGE_VERSION
+
+      - name: Build Microsoft Store package from the same publish folder
+        run: .\build\package-store.ps1 -Version $env:PACKAGE_VERSION -LocalTest
+
+      - name: Run all eight packaged self-tests
+        continue-on-error: true
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $env:MYCAPTURE_DATA_ROOT = Join-Path $env:TEMP ('MyCapture-validation-data-' + [guid]::NewGuid().ToString('N'))
+          .\build\run-packaged-self-tests.ps1 -PublishRoot "artifacts/release/$env:PACKAGE_VERSION/publish-win-x64" -OutputRoot artifacts/validation/hosted/packaged-self-tests
+
+      - name: Stacks from stall dumps
+        if: always()
+        continue-on-error: true
+        timeout-minutes: 30
+        run: |
+          $ErrorActionPreference = 'Continue'
+          $dumps = @(Get-ChildItem artifacts/validation/hosted/packaged-self-tests -Recurse -Filter '*.dmp' -ErrorAction SilentlyContinue)
+          if ($dumps.Count -eq 0) { Write-Host 'No stall dumps.'; exit 0 }
+          dotnet tool install --global dotnet-dump | Out-Host
+          $dotnetDump = Join-Path $env:USERPROFILE '.dotnet\tools\dotnet-dump.exe'
+          $cdb = @("${env:ProgramFiles(x86)}\Windows Kits\10\Debuggers\x64\cdb.exe", "$env:ProgramFiles\Windows Kits\10\Debuggers\x64\cdb.exe") |
+            Where-Object { Test-Path $_ } | Select-Object -First 1
+          $symbols = "srv*$env:RUNNER_TEMP\symbols*https://msdl.microsoft.com/download/symbols"
+          foreach ($dump in $dumps) {
+            Write-Host "==> $($dump.FullName) ($($dump.Length) bytes)"
+            & $dotnetDump analyze $dump.FullName -c 'clrthreads' -c 'clrstack -all' -c 'syncblk' -c 'exit' *> "$($dump.FullName).managed.txt"
+            Get-Content "$($dump.FullName).managed.txt" -TotalCount 400
+            if ($cdb) {
+              $out = "$($dump.FullName).native.txt"
+              $process = Start-Process -FilePath $cdb -ArgumentList @('-z', "`"$($dump.FullName)`"", '-y', "`"$symbols`"", '-logo', "`"$out`"", '-c', '"~*k 60; q"') -NoNewWindow -PassThru
+              if (-not $process.WaitForExit(900000)) { Stop-Process -Id $process.Id -Force }
+            }
+            else {
+              Write-Host 'cdb.exe is not installed on this runner.'
+            }
+          }
+
+      - name: Upload probe evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: video-editor-hang-probe-${{ matrix.sample }}-${{ github.run_attempt }}
+          path: |
+            artifacts/validation/hosted/packaged-self-tests/**/*.txt
+            artifacts/validation/hosted/packaged-self-tests/**/result.json
+          if-no-files-found: warn
+          retention-days: 7
+
+      - name: Upload stall dumps
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: video-editor-hang-dumps-${{ matrix.sample }}-${{ github.run_attempt }}
+          path: artifacts/validation/hosted/packaged-self-tests/**/*.dmp
+          if-no-files-found: ignore
+          retention-days: 7
