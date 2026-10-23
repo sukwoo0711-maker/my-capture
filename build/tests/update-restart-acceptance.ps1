@@ -91,6 +91,7 @@ if ($WorkerRoot) {
         # The helper disposes its handle after the three-second gate. Keep the original
         # redirected-stream owner alive until the diagnostic has exited and output is read.
         $script:RestartObserver = $actual
+        $script:RestartStartedUtc = $actual.StartTime.ToUniversalTime()
         $script:RestartOutput = $actual.StandardOutput.ReadToEndAsync()
         $script:RestartError = $actual.StandardError.ReadToEndAsync()
         Write-Json (Join-Path $script:AcceptanceRun 'restart-process.json') @{
@@ -104,12 +105,23 @@ if ($WorkerRoot) {
         # statements run unchanged. No fake Process object and no installer override exists.
         . ([scriptblock]::Create($helperText.Substring($main[0].Extent.StartOffset)))
         Assert-True ($null -ne $script:RestartObserver) 'Helper never reached actual restart.'
-        Assert-True ($script:RestartObserver.WaitForExit(180000)) 'Diagnostic restart timed out.'
-        Assert-True ($script:RestartObserver.ExitCode -eq 0) 'Diagnostic restart failed.'
-        $stdout = $script:RestartOutput.GetAwaiter().GetResult()
-        $stderr = $script:RestartError.GetAwaiter().GetResult()
+        # The UX review renders every fixture in every theme; keep its output and timing as
+        # evidence even when it times out or fails, since this worker's own output is not kept.
+        $exited = $script:RestartObserver.WaitForExit(600000)
+        if (-not $exited) {
+            $script:RestartObserver.Kill()
+            $script:RestartObserver.WaitForExit(5000) | Out-Null
+        }
+        $stdout = if ($script:RestartOutput.Wait(10000)) { $script:RestartOutput.Result } else { '' }
+        $stderr = if ($script:RestartError.Wait(10000)) { $script:RestartError.Result } else { '' }
         [IO.File]::WriteAllText((Join-Path $run 'restart.stdout.txt'), $stdout)
         [IO.File]::WriteAllText((Join-Path $run 'restart.stderr.txt'), $stderr)
+        Write-Json (Join-Path $run 'restart-exit.json') @{
+            Exited = $exited; ExitCode = $(if ($exited) { $script:RestartObserver.ExitCode } else { $null })
+            Seconds = [Math]::Round(([DateTime]::UtcNow - $script:RestartStartedUtc).TotalSeconds, 1)
+        }
+        Assert-True $exited 'Diagnostic restart timed out.'
+        Assert-True ($script:RestartObserver.ExitCode -eq 0) 'Diagnostic restart failed.'
         $matches = @([regex]::Matches($stdout, '(?m)^UX_REVIEW_OUTPUT=(.+)\r?$'))
         Assert-True ($matches.Count -eq 1) 'Expected exactly one diagnostic output root.'
         $diagnostics = [IO.Path]::GetFullPath($matches[0].Groups[1].Value.Trim()).TrimEnd('\')

@@ -32,7 +32,9 @@ internal partial class AnnotationEditorWindow : Window
         IReadOnlyDictionary<string, BitmapSource>? initialAssets = null,
         IPrivacyRedactionService? privacyRedactionService = null,
         string? sourceWindowTitle = null,
-        MonitorInfo? pointerMonitor = null)
+        MonitorInfo? pointerMonitor = null,
+        MyCapture.Core.Capture.CaptureProvenance? provenance = null,
+        Task<MyCapture.Core.Capture.CaptureProvenance>? pendingProvenance = null)
     {
         ArgumentNullException.ThrowIfNull(sourceFrame);
         ArgumentNullException.ThrowIfNull(selectedBitmap);
@@ -76,7 +78,9 @@ internal partial class AnnotationEditorWindow : Window
             initialDocument,
             initialAssets,
             privacyRedactionService,
-            sourceWindowTitle);
+            sourceWindowTitle,
+            provenance,
+            pendingProvenance);
         _editor.EditingCompleted += OnEditingCompleted;
         _editor.CloseRequested += OnCloseRequested;
         ConfirmClose = () => EditorCloseDialog.Ask(this);
@@ -387,6 +391,7 @@ internal partial class AnnotationEditorWindow : Window
     protected override void OnClosed(EventArgs e)
     {
         _windowClosed = true;
+        _editor.CancelPendingMosaics(closing: true);
         FinishDraftRecovery();
         _editor.EditingCompleted -= OnEditingCompleted;
         _editor.CloseRequested -= OnCloseRequested;

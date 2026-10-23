@@ -11,6 +11,8 @@ using System.Windows.Media.Imaging;
 using System.Windows.Shapes;
 using System.Windows.Threading;
 using MyCapture.App.Themes;
+using MyCapture.App.Sources;
+using MyCapture.Core.Capture;
 using MyCapture.Core.Pin;
 using MyCapture.Core.Platform;
 using MyCapture.Core.Primitives;
@@ -292,6 +294,49 @@ internal sealed class PinWindow : Window
             UpdateImageRasterLayout();
             PlaceHoverBar();
         };
+        PendingProvenanceUpdateForTest = content.PendingProvenance is { } pending
+            ? ApplyPendingProvenanceAsync(new WeakReference<PinWindow>(this), pending)
+            : Task.CompletedTask;
+    }
+
+    internal Task PendingProvenanceUpdateForTest { get; }
+
+    private static async Task ApplyPendingProvenanceAsync(WeakReference<PinWindow> target, Task<CaptureProvenance> pending)
+    {
+        CaptureProvenance source;
+        try
+        {
+            source = await pending.ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException and not StackOverflowException and not AccessViolationException)
+        {
+            return;
+        }
+        if (!source.HasSource || !target.TryGetTarget(out PinWindow? pin)
+            || pin.Dispatcher.HasShutdownStarted || pin.Dispatcher.HasShutdownFinished) return;
+
+        try
+        {
+            await pin.Dispatcher.InvokeAsync(() =>
+            {
+                if (pin._isClosed) return;
+                bool changed = pin.Provenance != source;
+                pin._content = pin._content.WithProvenance(source);
+                if (!changed) return;
+                if (pin._hoverBar is { } bar)
+                {
+                    bar.SetProvenance(source);
+                    pin.RefreshSourceMenu(bar);
+                    pin._labeledHoverBarWidth = bar.MeasureLabeledWidth();
+                    pin.PlaceHoverBar();
+                }
+                pin.ContentChanged?.Invoke();
+            });
+        }
+        catch (OperationCanceledException)
+        {
+            // The pin's dispatcher shut down before the source lookup could be applied.
+        }
     }
 
     /// <summary>How long the hover bar stays after the pointer leaves the pin and the bar.</summary>
@@ -302,6 +347,8 @@ internal sealed class PinWindow : Window
 
     /// <summary>The hover bar, once the pointer has been over the pin.</summary>
     internal PinHoverBar? HoverBarForTest => _hoverBar;
+
+    internal PinHoverBar CreateHoverBarForTest() => _hoverBar ??= CreateHoverBar(attachOwner: false);
 
     internal bool IsHoverBarShown => _hoverBar?.IsVisible == true;
 
@@ -335,11 +382,14 @@ internal sealed class PinWindow : Window
         if (_hoverBar is { IsVisible: true } bar) bar.Hide();
     }
 
-    private PinHoverBar CreateHoverBar()
+    private PinHoverBar CreateHoverBar(bool attachOwner = true)
     {
-        var bar = new PinHoverBar { Owner = this, ReadOpacity = () => _state.Opacity };
+        var bar = new PinHoverBar(Provenance) { ReadOpacity = () => _state.Opacity };
+        if (attachOwner) bar.Owner = this;
         bar.CopyRequested += CopyImageToClipboard;
         bar.SaveRequested += () => RequestSave(PinSaveMode.QuickSave);
+        bar.SourceRequested += () => LastSourceOperationForTest = OpenSourceAsync();
+        RefreshSourceMenu(bar);
         bar.OpacityRequested += opacity =>
         {
             double target = AdjustOpacity(opacity - _state.Opacity);
@@ -353,6 +403,18 @@ internal sealed class PinWindow : Window
         // so even the narrowest pin kept the names.
         _labeledHoverBarWidth = bar.MeasureLabeledWidth();
         return bar;
+    }
+
+    private void RefreshSourceMenu(PinHoverBar bar)
+    {
+        if (bar.SourceButton.ContextMenu is { } previous) previous.IsOpen = false;
+        bar.SourceButton.ContextMenu = null;
+        if (!Provenance.HasSource) return;
+        ContextMenu menu = SourceChip.CreateMenu(Provenance,
+            status => ShowFeedback(status, FeedbackKind.Result),
+            menu: MyCapture.App.Capture.CaptureWindowExclusion.CreateContextMenu());
+        menu.Opened += (_, _) => MyCapture.App.Capture.CaptureWindowExclusion.ExcludeMenuPopup(menu);
+        bar.SourceButton.ContextMenu = menu;
     }
 
     private void ScheduleHoverBarHide()
@@ -418,6 +480,9 @@ internal sealed class PinWindow : Window
     /// <summary>Raised after movement or zoom settles, or opacity or stacking order changes.</summary>
     internal event Action? ViewStateChanged;
 
+    /// <summary>Raised when a source lookup enriches the retained content and its saved session.</summary>
+    internal event Action? ContentChanged;
+
     /// <summary>
     /// Reports whether a closed pin can be reopened; drives the context-menu item state.
     /// Set by the manager that owns the closed-pin history.
@@ -456,6 +521,20 @@ internal sealed class PinWindow : Window
 
     /// <summary>The source page this pin came from, if the clipboard carried one.</summary>
     internal string SourcePageUrl { get; } = string.Empty;
+
+    internal CaptureProvenance Provenance => _content.Provenance;
+
+    internal Func<CaptureProvenance, Task<string>> OpenSource { get; set; } =
+        CaptureSourceActions.Default.OpenAsync;
+
+    internal Task? LastSourceOperationForTest { get; private set; }
+
+    internal async Task OpenSourceAsync()
+    {
+        if (!Provenance.HasSource || _isClosed) return;
+        string status = await OpenSource(Provenance);
+        if (!string.IsNullOrEmpty(status)) ShowFeedback(status, FeedbackKind.Result);
+    }
 
     /// <summary>The native handle, valid after the window is shown.</summary>
     internal IntPtr Handle => _handle;

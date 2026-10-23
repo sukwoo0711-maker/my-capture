@@ -26,6 +26,7 @@ public sealed class SurfaceShortcutHintTests
     [Fact]
     public void CaptureAndQuickAccessKeepTheirCommandsInsideFixedBounds() => StaTestHost.Run(() =>
     {
+        using var motion = new ShortcutMotionTestScope();
         using var language = UiText.UseLanguage("en-US");
         var capture = new CaptureModeBar { Resources = SystemHighContrastThemeTests.LoadTheme() };
         capture.Configure(true, true, true, otherActions: true);
@@ -40,7 +41,7 @@ public sealed class SurfaceShortcutHintTests
             ButtonBase[] commands = Descendants(root).OfType<ButtonBase>()
                 .Where(button => !string.IsNullOrEmpty(AutomationProperties.GetAcceleratorKey(button))).ToArray();
             Assert.Equal(6, commands.Length);
-            CheckStates(root, card.Width, commands);
+            CheckStates(root, card.Width, [.. commands, card.KeepToggleForTest]);
         }
         finally { card.Close(); }
     });
@@ -48,6 +49,7 @@ public sealed class SurfaceShortcutHintTests
     [Fact]
     public void CompactPinCommandsKeepFullChordsInsideUnchangingButtons() => StaTestHost.Run(() =>
     {
+        using var motion = new ShortcutMotionTestScope();
         using var language = UiText.UseLanguage("en-US");
         var bar = new PinHoverBar();
         try
@@ -65,6 +67,7 @@ public sealed class SurfaceShortcutHintTests
     [Fact]
     public void RecordingStateRebuildsKeepHintsAndLongPauseChordsWithinThePalette() => StaTestHost.Run(() =>
     {
+        using var motion = new ShortcutMotionTestScope();
         using var language = UiText.UseLanguage("en-US");
         var controls = new RecordingControlWindow(new RectD(100, 100, 640, 360), new RecordingSettings(),
             () => throw new InvalidOperationException("This test never records."), () => "unused.mp4", NullLogger.Instance);
@@ -90,7 +93,11 @@ public sealed class SurfaceShortcutHintTests
             controls.ReadPauseHotkey = () => Hotkey.None;
             controls.PreviewRecordingForTest(true, TimeSpan.FromSeconds(12));
             Assert.Empty(AutomationProperties.GetAcceleratorKey(controls.PauseButtonForTest));
-            Assert.IsType<SymbolIcon>(controls.PauseButtonForTest.Content);
+            Assert.IsType<SymbolIcon>(PrimaryContent(controls.PauseButtonForTest));
+            var emptyFace = Assert.IsType<Grid>(controls.PauseButtonForTest.Content);
+            Assert.Empty(Assert.IsAssignableFrom<TextBlock>(emptyFace.Children[1]).Text);
+            Assert.Equal(0, emptyFace.MinWidth);
+            CheckStates(root, controls.Width, [controls.PauseButtonForTest]);
             controls.ShowCompletionStatus("Saved");
             Assert.Empty(AutomationProperties.GetAcceleratorKey(controls.PrimaryButtonForTest));
             Assert.False(controls.PrimaryButtonForTest.IsEnabled);
@@ -101,6 +108,7 @@ public sealed class SurfaceShortcutHintTests
     [Fact]
     public void WelcomeDialogsAndExportShowOnlyTheirRealDefaultAndCancelRoutes() => StaTestHost.Run(() =>
     {
+        using var motion = new ShortcutMotionTestScope();
         using var language = UiText.UseLanguage("en-US");
         var welcome = new WelcomeWindow(new HotkeySettings(), AfterCaptureAction.Editor);
         var dialog = new ThemedDialog("Message", "Title", MessageBoxButton.OKCancel, MessageBoxResult.OK);
@@ -126,7 +134,7 @@ public sealed class SurfaceShortcutHintTests
             Invoke(export, "SetWorking", true);
             Button cancel = Descendants(exportRoot).OfType<Button>().Single(button => AutomationProperties.GetAcceleratorKey(button) == "Esc");
             Assert.Empty(AutomationProperties.GetAcceleratorKey(close));
-            CheckStates(exportRoot, export.Width, [cancel]);
+            CheckStates(exportRoot, export.Width, [cancel, save, close]);
             Invoke(export, "SetWorking", false);
             CheckStates(exportRoot, export.Width, [close]);
         }
@@ -160,9 +168,13 @@ public sealed class SurfaceShortcutHintTests
             foreach (ButtonBase command in commands)
             {
                 Grid face = Assert.IsType<Grid>(command.Content);
-                TextBlock hint = Assert.IsType<TextBlock>(face.Children[1]);
+                TextBlock hint = Assert.IsAssignableFrom<TextBlock>(face.Children[1]);
                 Assert.Equal(AutomationProperties.GetAcceleratorKey(command), hint.Text);
-                Assert.Equal(reveal ? Visibility.Visible : Visibility.Collapsed, hint.Visibility);
+                ShortcutMotionTestScope.AssertState(hint, reveal);
+                var primary = Assert.IsAssignableFrom<FrameworkElement>(face.Children[0]);
+                var shift = Assert.IsType<TransformGroup>(primary.RenderTransform).Children.OfType<TranslateTransform>().Single();
+                Assert.Equal(reveal ? 0 : ShortcutRevealMotion.PrimaryRestOffset, shift.Y);
+                if (hint.Text.Length == 0) Assert.Equal(0, face.MinWidth);
                 if (resting.TryGetValue(command, out Size previous)) Assert.Equal(previous, command.RenderSize);
                 else resting.Add(command, command.RenderSize);
                 Assert.True(command.ActualHeight >= 36);

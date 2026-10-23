@@ -1,6 +1,7 @@
 using System.IO;
 using Microsoft.Extensions.Logging.Abstractions;
 using MyCapture.App.Gallery;
+using MyCapture.Core.Capture;
 using MyCapture.Core.Localization;
 using MyCapture.Core.Queue;
 using MyCapture.Core.Settings;
@@ -73,6 +74,40 @@ public sealed class GallerySearchRefinementTests
         Assert.Equal(UiText.Get("Library.Empty.NoCaptures"), vm.EmptyStateTitle);
         Assert.Equal(UiText.Get("Library.Empty.Hint"), vm.EmptyStateText);
         Assert.False(vm.CanResetEmptySearch);
+    }
+
+    [Theory]
+    [InlineData("ko", "사이트")]
+    [InlineData("en", "Site")]
+    public void SourceGeneratedHostQueryFiltersTheGalleryAndShowsALocalizedCondition(string language, string fieldLabel)
+    {
+        using var culture = UiText.UseLanguage(language);
+        var (queue, _, vm) = Create();
+        var source = new CaptureRecord { SourcePageUrl = "https://www.GitHub.com/owner/repo?token=private#anchor" };
+        var sameHost = new CaptureRecord { SourcePageUrl = "https://github.com/other" };
+        queue.Add(source);
+        queue.Add(sameHost);
+        foreach (string url in new[]
+        {
+            "https://notgithub.com/", "https://other.example/?redirect=https://github.com",
+            "https://other.example/github.com", "https://docs.github.com/",
+        }) queue.Add(new CaptureRecord { SourcePageUrl = url });
+
+        vm.SearchQuery = CaptureProvenance.FromRecord(source).SearchQuery;
+
+        Assert.Equal("host:github.com", vm.SearchQuery);
+        Assert.Equal(fieldLabel, UiText.Get("Library.Search.Field.Host"));
+        GallerySearchCondition condition = Assert.Single(vm.SearchConditions);
+        Assert.Equal(UiText.Format("Library.Search.Condition", fieldLabel, "github.com"), condition.Label);
+        GalleryItemViewModel[] matches = vm.Groups.SelectMany(group => group.Items).ToArray();
+        Assert.Equal(new[] { source.Id, sameHost.Id }.Order(), matches.Select(item => item.Id).Order());
+        Assert.All(matches, item => Assert.Equal(GallerySearchMatchText.Describe(CaptureMatchField.SourcePageUrl), item.SearchMatchText));
+        Assert.Equal(2, vm.VisibleCount);
+        Assert.Equal(4, vm.SearchHiddenCount);
+
+        vm.RemoveSearchCondition(condition.Index);
+        Assert.Empty(vm.SearchConditions);
+        Assert.Equal(6, vm.VisibleCount);
     }
 
     [Fact]
@@ -150,8 +185,8 @@ public sealed class GallerySearchRefinementTests
     {
         using var culture = UiText.UseLanguage(language);
         var (_, _, vm) = Create();
-        vm.SearchQuery = "app:a title:a tag:a text:a url:a folder:a type:image pinned:yes date:2026-10 -a";
-        Assert.Equal(10, vm.SearchConditions.Count);
+        vm.SearchQuery = "app:a title:a tag:a text:a url:a host:a folder:a type:image pinned:yes date:2026-10 -a";
+        Assert.Equal(11, vm.SearchConditions.Count);
         foreach (GallerySearchCondition chip in vm.SearchConditions) Assert.NotEmpty(chip.RemoveToolTip);
         foreach (CaptureMatchField field in Enum.GetValues<CaptureMatchField>())
             Assert.NotEmpty(GallerySearchMatchText.Describe(field));

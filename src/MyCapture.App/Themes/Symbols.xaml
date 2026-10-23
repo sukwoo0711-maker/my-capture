@@ -62,9 +62,9 @@
     <!-- Image rotation: a picture under a half-turn arrow, so the command reads as "turn the
          image" rather than as a third history arrow beside Undo and Redo. -->
     <PathGeometry x:Key="Icon.RotateLeft"
-                  Figures="M7,8.75 H13 A1,1 0 0 1 14,9.75 V16 A1,1 0 0 1 13,17 H7 A1,1 0 0 1 6,16 V9.75 A1,1 0 0 1 7,8.75 Z M17,10.75 A7,7 0 0 0 3,10.75 M1,8.75 L3,10.75 L5,8.75" />
+                  Figures="M8.5,8 H15 A1,1 0 0 1 16,9 V16 A1,1 0 0 1 15,17 H8.5 A1,1 0 0 1 7.5,16 V9 A1,1 0 0 1 8.5,8 Z M11.5,3.5 A7.5,7.5 0 0 0 4,11 M1.75,8.75 L4,11 L6.25,8.75" />
     <PathGeometry x:Key="Icon.RotateRight"
-                  Figures="M13,8.75 H7 A1,1 0 0 0 6,9.75 V16 A1,1 0 0 0 7,17 H13 A1,1 0 0 0 14,16 V9.75 A1,1 0 0 0 13,8.75 Z M3,10.75 A7,7 0 0 1 17,10.75 M19,8.75 L17,10.75 L15,8.75" />
+                  Figures="M11.5,8 H5 A1,1 0 0 0 4,9 V16 A1,1 0 0 0 5,17 H11.5 A1,1 0 0 0 12.5,16 V9 A1,1 0 0 0 11.5,8 Z M8.5,3.5 A7.5,7.5 0 0 1 16,11 M13.75,8.75 L16,11 L18.25,8.75" />
     <PathGeometry x:Key="Icon.Delete"
                   Figures="M3.75,5.75 L16.25,5.75 M7.5,5.75 L7.5,3.75 L12.5,3.75 L12.5,5.75 M5.25,5.75 L6,16.25 L14,16.25 L14.75,5.75 M8.25,8.25 L8.5,13.75 M11.75,8.25 L11.5,13.75" />
     <PathGeometry x:Key="Icon.Copy"

@@ -40,18 +40,7 @@ internal sealed class SliderValueEntry
         // Numbers only: a Hangul-mode IME must not hold a composition in this box.
         InputMethod.SetIsInputMethodEnabled(Box, false);
         AutomationProperties.SetName(Box, automationName);
-        var unitText = new TextBlock
-        {
-            Text = unit,
-            FontSize = 12,
-            Margin = new Thickness(4, 0, 0, 0),
-            VerticalAlignment = VerticalAlignment.Center,
-        };
-        unitText.SetResourceReference(TextBlock.ForegroundProperty, "Text.Secondary");
-        var element = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
-        element.Children.Add(Box);
-        element.Children.Add(unitText);
-        Element = element;
+        Element = NumberStepperField.CreateValueField(Box, unit);
 
         Box.PreviewTextInput += (_, e) => e.Handled = !IsNumberText(e.Text);
         Box.PreviewKeyDown += (_, e) =>
@@ -69,6 +58,19 @@ internal sealed class SliderValueEntry
                 Revert();
                 Finished?.Invoke(this, EventArgs.Empty);
             }
+            else if (e.Key is Key.Up or Key.Down or Key.PageUp or Key.PageDown or Key.Home or Key.End)
+            {
+                e.Handled = true;
+                if (e.Key == Key.Home) Apply(_slider.Minimum);
+                else if (e.Key == Key.End) Apply(_slider.Maximum);
+                else Step(e.Key switch { Key.Up => 1, Key.Down => -1, Key.PageUp => 5, _ => -5 });
+            }
+        };
+        Element.PreviewMouseWheel += (_, e) =>
+        {
+            if (!Box.IsKeyboardFocusWithin || e.Delta == 0) return;
+            e.Handled = true;
+            Step(Math.Sign(e.Delta));
         };
         Box.LostKeyboardFocus += (_, _) => Commit();
         // The range can move (a thick dashed stroke starts at 6), so the hint is read when used.
@@ -135,6 +137,24 @@ internal sealed class SliderValueEntry
             return false;
         }
 
+        Apply(value);
+        if (clamped) Clamped?.Invoke(this, value);
+        return true;
+    }
+
+    /// <summary>Applies a pending number and its step as one slider change and one undo item.</summary>
+    internal void Step(int steps)
+    {
+        double tick = _slider.IsSnapToTickEnabled ? _slider.TickFrequency : 0;
+        double value = TryParse(Box.Text, _slider.Minimum, _slider.Maximum, tick, out double typed, out _)
+            ? typed : _slider.Value;
+        double step = _slider.SmallChange > 0 ? _slider.SmallChange : tick > 0 ? tick : 1;
+        double requested = value + (steps * step);
+        if (TryParse(Format(requested), _slider.Minimum, _slider.Maximum, tick, out double snapped, out _)) Apply(snapped);
+    }
+
+    private void Apply(double value)
+    {
         _applying = true;
         try
         {
@@ -146,8 +166,6 @@ internal sealed class SliderValueEntry
         }
 
         Show();
-        if (clamped) Clamped?.Invoke(this, value);
-        return true;
     }
 
     /// <summary>Discards the typed text and shows the slider's value again.</summary>

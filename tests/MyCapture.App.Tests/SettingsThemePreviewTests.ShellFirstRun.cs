@@ -139,9 +139,9 @@ public sealed partial class SettingsThemePreviewTests
     }
 
     /// <summary>
-    /// Measures what opening the tray menu costs on the UI thread: the entries with every check
-    /// the shell makes when the menu opens, and the themed menu laid out at its open size. The
-    /// popup itself is not opened, so nothing appears on the desktop.
+    /// Measures what opening the tray menu costs on the UI thread with deterministic clipboard
+    /// availability, and the themed menu laid out at its open size. Native query time is excluded.
+    /// The popup itself is not opened, so nothing appears on the desktop.
     /// </summary>
     /// <remarks>
     /// Runs only when <c>MYCAPTURE_TRAY_MENU_PERF</c> names an output file; the median of the
@@ -166,12 +166,15 @@ public sealed partial class SettingsThemePreviewTests
                 () => { }, () => { }, () => { }, () => { }, () => { }, () => { });
             HotkeySettings keys = NewInstallDefaults.Create().Hotkeys;
             using var presenter = new ThemedShellPresenter(() => false);
+            // A deterministic availability check keeps these measurements off the user's clipboard.
+            Func<bool> clipboardHasContent = static () => MyCapture.App.Pinning.ClipboardAvailability.HasPinnableContent(
+                static _ => true, static () => 0);
             // Interleaved with the same menu built without the pin commands and the clipboard
             // check (the earlier menu's size), so machine load affects both sides alike.
             var variants = new (string Name, Func<IReadOnlyList<ThemedShellPresenter.MenuEntry>> Build)[]
             {
                 ("without-pin-commands", () => TrayMenuLayout.Build(commands, keys, canRestoreClosedPin: false, scrollingActive: false)),
-                ("as-opened", () => BuildTrayMenuForOpen(commands, keys)),
+                ("as-opened", () => BuildTrayMenuForOpen(commands, keys, clipboardHasContent)),
             };
             var samples = variants.ToDictionary(variant => variant.Name, _ => new List<double>());
             for (int round = 0; round < 43; round++)
@@ -191,23 +194,24 @@ public sealed partial class SettingsThemePreviewTests
                 }
             }
             long checkStart = System.Diagnostics.Stopwatch.GetTimestamp();
-            for (int i = 0; i < 10000; i++) _ = MyCapture.App.Pinning.ClipboardAvailability.HasPinnableContent();
+            for (int i = 0; i < 10000; i++) _ = clipboardHasContent();
             double checkMicroseconds = System.Diagnostics.Stopwatch.GetElapsedTime(checkStart).TotalMilliseconds * 1000 / 10000;
             var invariant = System.Globalization.CultureInfo.InvariantCulture;
             foreach ((string name, List<double> values) in samples)
             {
                 values.Sort();
                 File.AppendAllText(output, string.Create(invariant,
-                    $"{label}/{name}\tmedian_ms={values[values.Count / 2]:0.000}\trounds={values.Count}\tclipboard_check_us={checkMicroseconds:0.00}{Environment.NewLine}"));
+                    $"{label}/{name}\tmedian_ms={values[values.Count / 2]:0.000}\trounds={values.Count}\tclipboard_check_us={checkMicroseconds:0.00}\tclipboard_query=injected{Environment.NewLine}"));
             }
         }
         finally { application.Shutdown(); }
     }
 
-    /// <summary>The entries exactly as the shell builds them each time the menu opens, clipboard check included.</summary>
-    private static IReadOnlyList<ThemedShellPresenter.MenuEntry> BuildTrayMenuForOpen(TrayMenuCommands commands, HotkeySettings keys) =>
+    /// <summary>The shell's menu entries with clipboard availability supplied by the fixture.</summary>
+    private static IReadOnlyList<ThemedShellPresenter.MenuEntry> BuildTrayMenuForOpen(
+        TrayMenuCommands commands, HotkeySettings keys, Func<bool> clipboardHasContent) =>
         TrayMenuLayout.Build(commands with { PinClipboard = () => { }, HideOrShowAllPins = () => { } }, keys,
-            new TrayMenuState(false, false, MyCapture.App.Pinning.ClipboardAvailability.HasPinnableContent(), 0, false));
+            new TrayMenuState(false, false, clipboardHasContent(), 0, false));
 
     /// <summary>
     /// Every shortcut the shell can point at has a recorder in Settings, and ShowShortcut opens the

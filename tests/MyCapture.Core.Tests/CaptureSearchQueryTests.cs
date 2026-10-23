@@ -11,6 +11,8 @@ public sealed class CaptureSearchQueryTests
     [InlineData("tag", "태그", CaptureSearchField.Tag)]
     [InlineData("text", "글자", CaptureSearchField.Text)]
     [InlineData("url", "주소", CaptureSearchField.Url)]
+    [InlineData("host", "호스트", CaptureSearchField.Host)]
+    [InlineData("site", "사이트", CaptureSearchField.Host)]
     [InlineData("folder", "폴더", CaptureSearchField.Folder)]
     [InlineData("type", "종류", CaptureSearchField.Type)]
     [InlineData("pinned", "보관", CaptureSearchField.Pinned)]
@@ -39,6 +41,12 @@ public sealed class CaptureSearchQueryTests
     [InlineData("text:\"매출 월\"", false)]
     [InlineData("url:example.test", true)]
     [InlineData("주소:EXAMPLE", true)]
+    [InlineData("host:example.test", true)]
+    [InlineData("호스트:WWW.EXAMPLE.TEST", true)]
+    [InlineData("사이트:example.test", true)]
+    [InlineData("site:sub.example.test", false)]
+    [InlineData("host:example", false)]
+    [InlineData("-host:example.test", false)]
     [InlineData("folder:reports", true)]
     [InlineData("폴더:보고서", true)]
     [InlineData("type:image", true)]
@@ -82,6 +90,66 @@ public sealed class CaptureSearchQueryTests
         CaptureSearchQuery query = CaptureSearchQuery.Parse(text);
         Assert.Equal(expected, query.IsMatch(record, "업무/보고서"));
         Assert.Equal(expected, query.TryMatch(record, out _, "업무/보고서"));
+    }
+
+    [Theory]
+    [InlineData("https://github.com/project", true)]
+    [InlineData("https://www.github.com/project", true)]
+    [InlineData("https://GitHub.com/project", true)]
+    [InlineData("https://github.com:8443/project", true)]
+    [InlineData("https://notgithub.com/", false)]
+    [InlineData("https://other.example/?redirect=https://github.com", false)]
+    [InlineData("https://other.example/github.com", false)]
+    [InlineData("https://docs.github.com/project", false)]
+    [InlineData("https://github.com.other.example/project", false)]
+    [InlineData("file:///github.com", false)]
+    [InlineData("not a URL", false)]
+    [InlineData("", false)]
+    public void HostSearchUsesOnlyTheExactNormalizedHostAndReportsUrlAttribution(string url, bool expected)
+    {
+        var record = new CaptureRecord { SourcePageUrl = url };
+        CaptureSearchQuery query = CaptureSearchQuery.Parse("host:WWW.GITHUB.COM");
+        Assert.Equal(expected, query.IsMatch(record));
+        Assert.Equal(expected, query.TryMatch(record, out CaptureMatchField fields));
+        Assert.Equal(expected ? CaptureMatchField.SourcePageUrl : CaptureMatchField.None, fields);
+        Assert.Equal(!expected, CaptureSearchQuery.Parse("-호스트:github.com").TryMatch(record, out fields));
+        Assert.Equal(CaptureMatchField.None, fields);
+    }
+
+    [Theory]
+    [InlineData("bücher.example", "https://xn--bcher-kva.example/page")]
+    [InlineData("xn--bcher-kva.example", "https://bücher.example/page")]
+    [InlineData("WWW.BÜCHER.EXAMPLE", "https://www.xn--bcher-kva.example/page")]
+    [InlineData("127.0.0.1", "http://127.0.0.1/page")]
+    [InlineData("[::1]", "http://[::1]/page")]
+    [InlineData("::1", "http://[::1]/page")]
+    public void HostSearchNormalizesInternationalAndIpHosts(string host, string url)
+    {
+        Assert.True(CaptureSearchQuery.Parse("host:" + host).IsMatch(new CaptureRecord { SourcePageUrl = url }));
+    }
+
+    [Theory]
+    [InlineData("github.com/path")]
+    [InlineData("github.com?query=value")]
+    [InlineData("github.com#fragment")]
+    [InlineData("user@github.com")]
+    [InlineData("github.com:443")]
+    [InlineData("https://github.com")]
+    public void HostSearchRejectsValuesThatContainMoreThanAHost(string host)
+    {
+        Assert.False(CaptureSearchQuery.Parse("host:" + host).IsMatch(new CaptureRecord { SourcePageUrl = "https://github.com/" }));
+    }
+
+    [Theory]
+    [InlineData("https://notgithub.com/")]
+    [InlineData("https://other.example/?redirect=https://github.com")]
+    [InlineData("https://other.example/github.com")]
+    public void UrlSearchStillMatchesSubstringsAnywhereInTheAddress(string url)
+    {
+        var record = new CaptureRecord { SourcePageUrl = url };
+        Assert.True(CaptureSearchQuery.Parse("url:github.com").IsMatch(record));
+        Assert.True(CaptureSearchQuery.Parse("주소:github.com").TryMatch(record, out CaptureMatchField fields));
+        Assert.Equal(CaptureMatchField.SourcePageUrl, fields);
     }
 
     [Fact]

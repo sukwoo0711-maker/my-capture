@@ -712,7 +712,9 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
                 selection.BitmapRegion,
                 selection.SelectedBitmap,
                 privacyRedactionService: PrivacyRedactionService,
-                sourceWindowTitle: selection.SourceTitle);
+                sourceWindowTitle: selection.SourceTitle,
+                provenance: CaptureSelectionProvenance.Current(selection),
+                pendingProvenance: CaptureSelectionProvenance.Pending(selection));
             _activeEditor = editor;
             if (CaptureMonitor(selection) is { } monitor) editor.PlaceOnMonitor(monitor);
             // Done leaves the screen once the clipboard holds the result; the save finishes behind

@@ -138,9 +138,10 @@ public sealed partial class SettingsThemePreviewTests
                 sections.Select(name => ((TextBlock)((Panel)window.FindName(name)).Children[0]).Text));
             foreach (string name in sections.SkipLast(1)) Assert.Equal(24, ((FrameworkElement)window.FindName(name)).Margin.Bottom);
             string privacy = ((TextBlock)window.FindName("PrivacyModelText")).Text;
-            Assert.Contains("13 MB", privacy, StringComparison.Ordinal);
+            Assert.Contains("102 MB", privacy, StringComparison.Ordinal);
             Assert.Contains("ModelScope", privacy, StringComparison.Ordinal);
-            Assert.Contains("67 MB", privacy, StringComparison.Ordinal);
+            Assert.DoesNotContain("164", privacy, StringComparison.Ordinal);
+            Assert.DoesNotContain("Qualcomm", privacy, StringComparison.Ordinal);
             Assert.Equal(Visibility.Collapsed, ((Button)window.FindName("StorePageAction")).Visibility);
             Assert.True(((Button)window.FindName("StoreRatingButton")).IsVisible);
 

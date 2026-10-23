@@ -74,8 +74,22 @@ internal sealed partial class AnnotationEditorControl
             _swatchPanel.Children.Add(button);
         }
         panel.Children.Add(_swatchPanel);
-        _customColorButton = PropertyButton("+", UiText.Get("EditorProperty_CustomColor"));
-        _customColorButton.FontSize = 18;
+        var customDot = new Ellipse
+        {
+            Width = 18, Height = 18, StrokeThickness = 1,
+            StrokeDashArray = new DoubleCollection { 2, 2 },
+        };
+        customDot.SetResourceReference(Shape.StrokeProperty, "Border.Control");
+        var customGlyph = new Grid { Width = 26, Height = 26 };
+        customGlyph.Children.Add(customDot);
+        var plus = new TextBlock
+        {
+            Text = "+", FontSize = 12, HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        plus.SetResourceReference(TextBlock.ForegroundProperty, "Text.Primary");
+        customGlyph.Children.Add(plus);
+        _customColorButton = PropertyButton(customGlyph, UiText.Get("EditorProperty_CustomColor"));
         AutomationProperties.SetAutomationId(_customColorButton, "AnnotationCustomColorOpen");
         _customColorButton.ToolTip = UiText.Get("EditorProperty_CustomColorHint");
         AutomationProperties.SetHelpText(_customColorButton, UiText.Get("EditorProperty_CustomColorHint"));
@@ -201,6 +215,7 @@ internal sealed partial class AnnotationEditorControl
     /// </remarks>
     private void UpdateColorSwatches()
     {
+        if (_swatchPanel is null) return;
         ColorRgba current = CurrentPropertyColor();
         foreach (Button button in _swatchPanel.Children.OfType<Button>())
         {
@@ -217,7 +232,7 @@ internal sealed partial class AnnotationEditorControl
     private FrameworkElement BuildThicknessSection()
     {
         var panel = PropertyGroup("AnnotationThicknessProperties");
-        panel.Children.Add(PropertyLabel(UiText.Get("Text_70EC2D232B4F")));
+        panel.Children.Add(PropertyLabel(UiText.Get("EditorProperty_StrokeWidthLabel")));
         // The existing slider owns range, snapping and change notification. Its number box
         // and step buttons are the visible control; the right panel's duplicate track is gone.
         _thicknessSlider = new Slider
@@ -230,28 +245,12 @@ internal sealed partial class AnnotationEditorControl
         InputMethod.SetIsInputMethodEnabled(_thicknessSlider, false);
         SliderValueEntry entry = ValueEntry(_thicknessSlider, UiText.Get("Editor_UnitPx"), UiText.Get("Text_70EC2D232B4F"));
         AutomationProperties.SetAutomationId(entry.Box, "AnnotationThicknessValue");
-        Button decrease = PropertyButton("−", UiText.Get("EditorProperty_ThicknessDecrease"));
-        Button increase = PropertyButton("+", UiText.Get("EditorProperty_ThicknessIncrease"));
-        AutomationProperties.SetAutomationId(decrease, "AnnotationThicknessDecrease");
-        AutomationProperties.SetAutomationId(increase, "AnnotationThicknessIncrease");
-        decrease.Click += (_, _) => _thicknessSlider.Value = Math.Max(_thicknessSlider.Minimum, _thicknessSlider.Value - 1);
-        increase.Click += (_, _) => _thicknessSlider.Value = Math.Min(_thicknessSlider.Maximum, _thicknessSlider.Value + 1);
-        entry.Box.PreviewKeyDown += (_, e) =>
-        {
-            if (Keyboard.Modifiers != ModifierKeys.None || e.Key is not (Key.Up or Key.Down)) return;
-            e.Handled = true;
-            // Combine a pending typed value and the step into a single property change.
-            // Committing first would put two entries on a multi-selection's undo stack.
-            double value = SliderValueEntry.TryParse(entry.Box.Text, _thicknessSlider.Minimum,
-                _thicknessSlider.Maximum, _thicknessSlider.TickFrequency, out double typed, out bool wasClamped)
-                ? typed : _thicknessSlider.Value;
-            _thicknessSlider.Value = Math.Clamp(value + (e.Key == Key.Up ? 1 : -1),
-                _thicknessSlider.Minimum, _thicknessSlider.Maximum);
-            entry.Revert();
-        };
-        panel.Children.Add(decrease);
-        panel.Children.Add(entry.Element);
-        panel.Children.Add(increase);
+        var stepper = new NumberStepperField(_thicknessSlider, entry,
+            UiText.Get("EditorProperty_ThicknessDecrease"), UiText.Get("EditorProperty_ThicknessIncrease"));
+        AutomationProperties.SetAutomationId(stepper.Element, "AnnotationThicknessField");
+        AutomationProperties.SetAutomationId(stepper.DecreaseButton, "AnnotationThicknessDecrease");
+        AutomationProperties.SetAutomationId(stepper.IncreaseButton, "AnnotationThicknessIncrease");
+        panel.Children.Add(stepper.Element);
         _thicknessSlider.ValueChanged += (_, args) =>
         {
             if (_syncingInspector) return;
@@ -271,7 +270,7 @@ internal sealed partial class AnnotationEditorControl
             Minimum = SettingsRanges.MosaicBlockSize.Min, Maximum = SettingsRanges.MosaicBlockSize.Max,
             Value = Math.Clamp(_mosaicBlockSize, SettingsRanges.MosaicBlockSize.Min, SettingsRanges.MosaicBlockSize.Max),
             SmallChange = 1, LargeChange = 4, TickFrequency = 1, IsSnapToTickEnabled = true,
-            Width = 96, MinHeight = 32, Margin = new Thickness(8, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center,
+            Width = 64, MinHeight = 32, Margin = new Thickness(8, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center,
         };
         AutomationName(_mosaicSlider, UiText.Get("EditorProperty_MosaicStrength"));
         panel.Children.Add(ValueEntry(_mosaicSlider, UiText.Get("Editor_UnitPx"), UiText.Get("EditorProperty_MosaicStrength")).Element);

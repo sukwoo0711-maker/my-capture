@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
+using System.ComponentModel;
 using System.Text.Json;
 using MyCapture.Core.Serialization;
 using System.Text.Json.Serialization;
@@ -33,6 +34,15 @@ public sealed class AnnotationDocument
 
     private static readonly JsonSerializerOptions ReadableSerializerOptions = JsonDefaults.Readable;
 
+    private ObservableCollection<AnnotationItem> _items = [];
+    private readonly Dictionary<TextAnnotation, int> _stepSubscriptions = [];
+
+    public AnnotationDocument() => _items.CollectionChanged += OnStepItemsChanged;
+
+    /// <summary>Revision of the inputs used to find the next step number.</summary>
+    [JsonIgnore]
+    public long StepNumberRevision { get; private set; }
+
     public int SchemaVersion { get; set; } = CurrentSchemaVersion;
 
     /// <summary>
@@ -51,7 +61,70 @@ public sealed class AnnotationDocument
     /// Items in paint order. Index order is authoritative; <see cref="AnnotationItem.ZIndex"/>
     /// is a persisted mirror used to restore order across a load.
     /// </summary>
-    public ObservableCollection<AnnotationItem> Items { get; init; } = [];
+    public ObservableCollection<AnnotationItem> Items
+    {
+        get => _items;
+        init
+        {
+            _items.CollectionChanged -= OnStepItemsChanged;
+            ClearStepSubscriptions();
+            _items = value ?? [];
+            _items.CollectionChanged += OnStepItemsChanged;
+            foreach (AnnotationItem item in _items) SubscribeStepItem(item);
+            StepNumberRevision++;
+        }
+    }
+
+    private void OnStepItemsChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        StepNumberRevision++;
+        if (e.Action == NotifyCollectionChangedAction.Reset)
+        {
+            ClearStepSubscriptions();
+            foreach (AnnotationItem item in _items) SubscribeStepItem(item);
+            return;
+        }
+        if (e.OldItems is not null)
+            foreach (AnnotationItem item in e.OldItems) UnsubscribeStepItem(item);
+        if (e.NewItems is not null)
+            foreach (AnnotationItem item in e.NewItems) SubscribeStepItem(item);
+    }
+
+    private void SubscribeStepItem(AnnotationItem item)
+    {
+        if (item is not TextAnnotation text) return;
+        if (_stepSubscriptions.TryGetValue(text, out int count))
+            _stepSubscriptions[text] = count + 1;
+        else
+        {
+            _stepSubscriptions.Add(text, 1);
+            text.PropertyChanged += OnStepItemChanged;
+        }
+    }
+
+    private void UnsubscribeStepItem(AnnotationItem item)
+    {
+        if (item is not TextAnnotation text || !_stepSubscriptions.TryGetValue(text, out int count)) return;
+        if (count > 1) _stepSubscriptions[text] = count - 1;
+        else
+        {
+            _stepSubscriptions.Remove(text);
+            text.PropertyChanged -= OnStepItemChanged;
+        }
+    }
+
+    private void ClearStepSubscriptions()
+    {
+        foreach (TextAnnotation text in _stepSubscriptions.Keys) text.PropertyChanged -= OnStepItemChanged;
+        _stepSubscriptions.Clear();
+    }
+
+    private void OnStepItemChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (string.IsNullOrEmpty(e.PropertyName)
+            || e.PropertyName is nameof(TextAnnotation.Text) or nameof(TextAnnotation.IsStepNumber))
+            StepNumberRevision++;
+    }
 
     [JsonIgnore]
     public bool IsEmpty => Items.Count == 0;

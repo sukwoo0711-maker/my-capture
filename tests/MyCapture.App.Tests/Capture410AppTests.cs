@@ -326,6 +326,7 @@ public sealed class Capture410AppTests
         var editor = Editor();
         Assert.True(Field<AnnotationEditorSurface>(editor, "_surface").DipPerPixel > 1);
         editor.ApplyMosaic(new RectD(32, 24, 96, 72), blockSize: 12);
+        EditorMosaicAsyncTests.WaitFor(editor.MosaicOperationsSettledAsync());
         var controller = Field<AnnotationEditorController>(editor, "_controller");
         ImageAnnotation patch = Assert.IsType<ImageAnnotation>(controller.Document.Items[^1]);
         Assert.Equal(new RectD(32, 24, 96, 72), patch.Rect);

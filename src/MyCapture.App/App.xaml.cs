@@ -1,4 +1,4 @@
-﻿using System.IO;
+using System.IO;
 using System.Threading;
 using System.Windows;
 using System.Windows.Threading;
@@ -72,6 +72,7 @@ public partial class App : Application
     private GalleryWindow? _galleryWindow;
     private PinManager? _pins;
     private IOcrService? _ocrService;
+    private readonly OcrModelPreparation _ocrModelPreparation = new();
     private OcrResultPresenter? _ocrPresenter;
     private IPrivacyRedactionService? _privacyRedactionService;
     private SettingsWindow? _settingsWindow;
@@ -221,8 +222,8 @@ public partial class App : Application
             _services.GetRequiredService<ILogger<GitHubIssueImageUploadService>>());
 
         _ocrService = _services.GetRequiredService<IOcrService>();
-        // Only the Accurate and Most accurate qualities use the downloaded model. Everyone else never
-        // downloads it; a later switch to those qualities downloads it on first use (NeuralOcrEngine).
+        // Accurate uses downloaded PP-OCR models, including settings migrated from Enhanced.
+        // Switching to Accurate also prepares missing models before the next recognition.
         if (OcrQualityProfile.UseNeuralModel(_settings.Ocr.Quality)) StartOcrModelDownload();
         _automaticIndexer = new OcrIndexingService(
             _galleryController!, _ocrService, record => _queue!.GetDirectory(record),
@@ -283,6 +284,7 @@ public partial class App : Application
         _shellPresenter.ForegroundDismissed += () => _overlay?.NoteForegroundDismissal();
         AnnotationEditorPreferences.Read = () => _settings!.Annotation;
         ShortcutPresentation.ReadEnabled = () => _settings!.General.AlwaysShowShortcutHints;
+        ShortcutRevealMotion.Initialize();
         AnnotationEditorPreferences.ReadShowSourceWindowTitle = () => _settings!.Export.ShowSourceWindowTitle;
         AnnotationEditorPreferences.Write = RememberEditorPreferences;
         _tray.CaptureRequested += (_, _) => HandleCaptureRequested();
@@ -392,7 +394,10 @@ public partial class App : Application
             updated =>
             {
                 Hotkey previousCapture = _settings!.Hotkeys.Capture;
-                _settings = updated; ShortcutPresentation.Refresh(); _pins?.TrimClosedHistory();
+                bool previousShortcutHints = _settings.General.AlwaysShowShortcutHints;
+                _settings = updated;
+                if (previousShortcutHints != updated.General.AlwaysShowShortcutHints) ShortcutPresentation.Refresh();
+                _pins?.TrimClosedHistory();
                 AnnounceCaptureKeyChange(previousCapture, updated.Hotkeys.Capture);
                 QueueWelcomeResidentAnnouncement();
             },
@@ -1125,7 +1130,8 @@ public partial class App : Application
             _pendingRecord.Tags = UiText.Get("Capture.WebpageTag");
         Task<bool>? automaticClipboardCopy = _commit is not null
             ? _commit.CopyCapturedRegionAsync(e.SelectedBitmap, e.SourceTitle,
-                _pendingRecord.InitialRenderShowsSourceWindowTitle, _pendingRecord.SourcePageUrl)
+                _pendingRecord.InitialRenderShowsSourceWindowTitle, _pendingRecord.SourcePageUrl,
+                Core.Capture.CaptureProvenance.FromRecord(_pendingRecord), CaptureSelectionProvenance.Pending(e))
             : null;
         try
         {
@@ -1198,7 +1204,8 @@ public partial class App : Application
             try
             {
                 copied = await (automaticClipboardCopy ?? _commit.CopyCapturedRegionAsync(e.SelectedBitmap,
-                    e.SourceTitle, _pendingRecord.InitialRenderShowsSourceWindowTitle, _pendingRecord.SourcePageUrl));
+                    e.SourceTitle, _pendingRecord.InitialRenderShowsSourceWindowTitle, _pendingRecord.SourcePageUrl,
+                    Core.Capture.CaptureProvenance.FromRecord(_pendingRecord), CaptureSelectionProvenance.Pending(e)));
             }
             catch (Exception ex)
             {
@@ -1315,8 +1322,9 @@ public partial class App : Application
                 return rendered;
             }
             var actions = new QuickAccessImageActions(Render,
-                bitmap => ClipboardImageService.CopyImageAsync(bitmap, record.SourcePageUrl),
-                bitmap => _pins?.PinImage(bitmap),
+                bitmap => ClipboardImageService.CopyImageWithProvenanceAsync(bitmap, record.SourcePageUrl,
+                    Core.Capture.CaptureProvenance.FromRecord(record)),
+                bitmap => _pins?.PinImage(bitmap, Core.Capture.CaptureProvenance.FromRecord(record)),
                 async bitmap => (await saver.QuickSaveAsync(bitmap, record.SourcePageUrl)).Status == PinSaveStatus.Saved,
                 record.SourcePageUrl, new GalleryDragExportService(_queue));
             card = new QuickAccessWindow(image,
@@ -1780,7 +1788,7 @@ public partial class App : Application
         // A re-edit commit finalises against the same record; keep the tray count in sync.
         ConfigureEngagementWindow(window);
         window.CaptureChanged += (_, _) => _tray?.SetCaptureCount(_queue?.Count ?? 0);
-        window.FloatRequested += (_, image) => _pins?.PinImage(image);
+        window.FloatRequested += (_, source) => _pins?.PinImage(source.Image, source.Provenance);
         // Header toolbar commands mirror the tray entries so capture/recording are reachable
         // without the global hotkeys or the tray icon.
         window.CaptureRegionRequested = () => HandleCaptureRequested();
@@ -1842,27 +1850,43 @@ public partial class App : Application
         // Keep the tray state in sync after an apply (a hotkey collision flips it to Error).
         window.Applied += (_, _) => RestoreTrayAfterCapture();
         window.Applied += OnPinSessionSettingsApplied;
+        OcrQuality lastOcrQuality = _settings.Ocr.Quality;
+        window.Applied += (_, _) =>
+        {
+            OcrQuality quality = _settings?.Ocr.Quality ?? OcrQuality.Fast;
+            if (lastOcrQuality != quality)
+            {
+                lastOcrQuality = quality;
+                // A quality without PP-OCR no longer needs the models being prepared.
+                _ocrModelPreparation.CancelForQuality(quality);
+                if (OcrQualityProfile.UseNeuralModel(quality))
+                    StartOcrModelDownload(isBackground: false);
+            }
+        };
 
         _settingsWindow = window;
         return window;
     }
 
-    private void StartOcrModelDownload()
+    private void StartOcrModelDownload(bool isBackground = true, bool deferForBatterySaver = false)
     {
-        if (_services is null)
+        if (_services is null || _shutdownRequested)
         {
             return;
         }
 
         OcrModelStore store = _services.GetRequiredService<OcrModelStore>();
-        _ = Task.Run(async () =>
+        OcrQuality quality = OcrQualityNames.Normalize(_settings?.Ocr.Quality ?? OcrQuality.Fast);
+        var download = new OcrModelDownloadCoordinator(store, new WindowsOcrDownloadEnvironment());
+        _ = _ocrModelPreparation.StartAsync(async token =>
         {
             try
             {
                 // Download only. Session creation stays on the first Accurate OCR so a
                 // native ONNX fault during startup cannot take down the tray process.
-                await store.EnsureAsync(CancellationToken.None).ConfigureAwait(false);
+                await download.EnsureAsync(quality, isBackground, token, deferForBatterySaver).ConfigureAwait(false);
             }
+            catch (OperationCanceledException) when (token.IsCancellationRequested) { }
             catch (Exception ex)
             {
                 _log?.LogWarning(ex, "Background OCR model download failed");
@@ -2246,12 +2270,8 @@ public partial class App : Application
         services.AddSingleton(serviceProvider => new OcrModelStore(
             serviceProvider.GetRequiredService<AppPaths>(),
             serviceProvider.GetRequiredService<ILogger<OcrModelStore>>()));
-        services.AddSingleton(serviceProvider => new SuperResolutionEngine(
-            serviceProvider.GetRequiredService<OcrModelStore>(),
-            serviceProvider.GetRequiredService<ILogger<SuperResolutionEngine>>()));
         services.AddSingleton(serviceProvider => new NeuralOcrEngine(
             serviceProvider.GetRequiredService<OcrModelStore>(),
-            serviceProvider.GetRequiredService<SuperResolutionEngine>(),
             serviceProvider.GetRequiredService<ILogger<NeuralOcrEngine>>()));
         services.AddSingleton<WindowsOcrService>();
         services.AddSingleton<IOcrService>(serviceProvider => new CaptureOcrService(
@@ -2338,6 +2358,8 @@ public partial class App : Application
 
     protected override void OnExit(ExitEventArgs e)
     {
+        // Stop a model download in progress; completed, verified model files stay.
+        _ocrModelPreparation.Close();
         _quickAccess?.Close();
         if (_preferenceSaveTimer?.IsEnabled == true) FlushEditorPreferences();
         if (_services?.GetService<SettingsStore>() is { } store

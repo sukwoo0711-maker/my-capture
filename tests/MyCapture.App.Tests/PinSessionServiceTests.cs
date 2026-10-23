@@ -7,6 +7,7 @@ using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using Microsoft.Extensions.Logging.Abstractions;
 using MyCapture.App.Pinning;
+using MyCapture.Core.Capture;
 using MyCapture.Core.Pin;
 using MyCapture.Core.Primitives;
 using MyCapture.Core.Settings;
@@ -39,6 +40,10 @@ public sealed class PinSessionServiceTests
                         15, 10, 1.5, 0.7, null));
                     manager.RestoreSessionPin(new PinManager.ClosedPin(
                         PinContent.FromImage(Image(), "https://example.com/image"), 20, 12, 2, 0.6, null));
+                    manager.RestoreSessionPin(new PinManager.ClosedPin(
+                        PinContent.FromImage(Image(), provenance: CaptureProvenance.Create(
+                            documentPath: @"C:\specs\사양서.xlsx", appName: "Excel",
+                            appExecutablePath: @"C:\Office\EXCEL.EXE", windowTitle: "사양서 - Excel")), 20, 12, 2, 0.6, null));
                     manager.HideOrShowAll();
                     service.SaveNow();
                 }
@@ -58,17 +63,18 @@ public sealed class PinSessionServiceTests
                 Wait(restore.RestoreAsync());
 
                 IReadOnlyList<PinManager.ClosedPin> after = manager.SnapshotOpenPins();
-                Assert.Equal(3, after.Count);
+                Assert.Equal(4, after.Count);
                 Assert.Equal(0, created);
                 Assert.Equal(0, manager.ClosedCount);
                 Assert.False(manager.AreHidden);
-                Assert.Equal(3, decodeThreads.Count);
+                Assert.Equal(4, decodeThreads.Count);
                 Assert.All(decodeThreads, thread => Assert.NotEqual(uiThread, thread));
                 for (int i = 0; i < before.Count; i++)
                 {
                     Assert.Equal(before[i].Content.Kind, after[i].Content.Kind);
                     Assert.Equal(before[i].Content.OriginalText, after[i].Content.OriginalText);
                     Assert.Equal(before[i].Content.SourcePageUrl, after[i].Content.SourcePageUrl);
+                    Assert.Equal(before[i].Content.Provenance, after[i].Content.Provenance);
                     Assert.Equal(before[i].Content.UsesDeviceIndependentPixels, after[i].Content.UsesDeviceIndependentPixels);
                     Assert.Equal(before[i].ImageWidthDip, after[i].ImageWidthDip);
                     Assert.Equal(before[i].ImageHeightDip, after[i].ImageHeightDip);

@@ -169,10 +169,10 @@ public sealed class GallerySelectAllTests(ITestOutputHelper output)
 
     /// <summary>
     /// Tile properties the legacy select-all refresh raises once per tile: the baseline the
-    /// current path (which raises none) is compared against. 26 since the card's metadata
-    /// line (MetadataCaption) joined the refreshed metadata.
+    /// current path (which raises none) is compared against. 32 includes the previous 26,
+    /// the five source-badge properties, and SourcePageDisplayText.
     /// </summary>
-    private const long LegacyMetadataPerTile = 26;
+    private const long LegacyMetadataPerTile = 32;
 
     [Fact]
     public void SelectAllCostOnProductionFixtures()

@@ -21,6 +21,7 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\..\src\MyCapture.App\MyCapture.App.csproj" />
+    <Compile Include="..\..\..\tests\Shared\RecordingClipboard.cs" Link="RecordingClipboard.cs" />
   </ItemGroup>
 
   <ItemGroup>
