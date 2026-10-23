@@ -79,11 +79,14 @@ jobs:
             & $tool analyze $dump.FullName -c "setclrpath $publish" -c 'clrthreads' -c 'clrstack -all' -c 'exit' *> $out
             Write-Host "== $($dump.FullName) ($([math]::Round($dump.Length / 1MB)) MB) =="
             Get-Content $out | Out-Host
+            $native = Join-Path $dump.DirectoryName ($dump.BaseName + '-native-report.txt')
             if ($cdb) {
-              $native = Join-Path $dump.DirectoryName ($dump.BaseName + '-native-report.txt')
               & $cdb.FullName -z $dump.FullName -c '.symfix; .reload; ~* kn 40; q' *> $native
               Get-Content $native | Out-Host
             }
+            $state = Join-Path $dump.DirectoryName ($dump.BaseName + '-dispatcher-report.txt')
+            .\.github\diag\read-dispatcher-state.ps1 -Dump $dump.FullName -Publish $publish -Out $state -NativeReport $native
+            Get-Content $state | Out-Host
           }
 
       - name: Upload probe evidence
