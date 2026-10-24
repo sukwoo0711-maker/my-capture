@@ -4,6 +4,7 @@ using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using Microsoft.Extensions.Logging.Abstractions;
+using MyCapture.App.Diagnostics;
 using MyCapture.App.Gallery;
 using MyCapture.App.Settings;
 using MyCapture.App.Themes;
@@ -229,11 +230,11 @@ public sealed partial class SettingsThemePreviewTests
     private static void SaveSettingsCopyImage(Window window, string name)
     {
         if (Environment.GetEnvironmentVariable("MYCAPTURE_SETTINGS_COPY_EVIDENCE") is not { Length: > 0 } directory) return;
-        Directory.CreateDirectory(directory);
+        string root = DiagnosticOutputPaths.Create(directory);
         string phase = Environment.GetEnvironmentVariable("MYCAPTURE_SETTINGS_COPY_PHASE") ?? "after";
         var encoder = new PngBitmapEncoder();
         encoder.Frames.Add(BitmapFrame.Create(RenderEditorWindow(window)));
-        using var file = File.Create(Path.Combine(directory, $"{name}-{phase}.png"));
+        using var file = File.Create(DiagnosticOutputPaths.Child(root, $"{name}-{phase}.png"));
         encoder.Save(file);
     }
 }
