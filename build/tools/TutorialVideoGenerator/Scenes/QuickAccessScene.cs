@@ -44,7 +44,6 @@ internal sealed class QuickAccessScene : TutorialScene
     private Point _cardOrigin;
     private bool _cardClosed, _active, _noteActive, _pasted;
     private int _copies;
-    private CaptureFlightPicture? _flight;
 
     // The card's success marks keep their pressed action's check on the wall clock; the clip ends it on video time.
     private static readonly System.Reflection.FieldInfo SuccessMarksField =
@@ -64,10 +63,6 @@ internal sealed class QuickAccessScene : TutorialScene
             // Wired like App does; the clip never presses T, and nothing reads or writes the clipboard.
             copyText: () => Task.FromResult(new TextCaptureOutcome(TextCaptureStatus.Unavailable, null, 0)));
         _card.Closed += (_, _) => _cardClosed = true;
-        // The capture lifts off the page and flies into this card (CaptureFlight.Land): the card
-        // stays clear, and its preview hidden, until the flight starts.
-        _card.PrepareLanding();
-        _flight = new CaptureFlightPicture(_captured, StageRegionRect, new Rect(0, 0, Stage.Width, Stage.SceneHeight));
         // The card's content, detached from its never-shown window (see remarks).
         var surface = (UIElement)_card.Content;
         _card.Content = null;
@@ -88,14 +83,11 @@ internal sealed class QuickAccessScene : TutorialScene
 
     internal override string Provenance =>
         "Real QuickAccessWindow content (large preview, labeled Edit, icon actions, Keep open toggle, status line, countdown) laid out "
-        + "detached; placed by QuickAccessWindow.Position, timed by Advance and driven by HandleShortcut. The capture lifts and flies into "
-        + "the card on video time (CaptureFlightDecoration surface with CaptureFlight.LiftFrame/FlightFrame; the card's landing fade and "
-        + "preview reveal), and Copy's success check ends after QuickAccessWindow.SuccessCheckTime of video time. Copy calls a fake delegate "
+        + "detached; placed by QuickAccessWindow.Position, timed by Advance and driven by HandleShortcut. Copy's success check ends "
+        + "after QuickAccessWindow.SuccessCheckTime of video time. Copy calls a fake delegate "
         + "(no clipboard). The captured page, note app and taskbar are synthetic.";
 
     private static RectD StageRegion => new(BrowserClient.X + Region.X, BrowserClient.Y + Toolbar + Region.Y, Region.Width, Region.Height);
-
-    private static Rect StageRegionRect => new(StageRegion.X, StageRegion.Y, StageRegion.Width, StageRegion.Height);
 
     // Below the text, where a click puts the caret at the end of the note.
     private static PointD NoteBody => new(NoteClient.X + 170, NoteClient.Y + 262);
@@ -103,11 +95,7 @@ internal sealed class QuickAccessScene : TutorialScene
     private TutorialStoryboard BuildStory(PointD start)
     {
         var story = new TutorialStoryboard(start);
-        // The capture lifts off the page, then flies into the card as it shows; the card then
-        // counts down for 32 frames before Alt+Q, as it did before the flight.
-        int flight = CaptureFlightPicture.FlightFrames;
-        story.Motion("lift", CaptureFlightPicture.LiftFrames, start, start).Motion("flight", flight, start, start)
-            .Motion("appear", 32 - flight, start, start);
+        story.Motion("appear", 32, start, start);
         story.Hold("alt-q", 1.6);
         Point keep = _keepButton.TranslatePoint(new Point(_keepButton.ActualWidth / 2, _keepButton.ActualHeight / 2), _cardRoot);
         story.Move("keep-move", new PointD(_cardOrigin.X + keep.X, _cardOrigin.Y + keep.Y), 12)
@@ -129,17 +117,11 @@ internal sealed class QuickAccessScene : TutorialScene
         Taskbar.Draw(dc, Korean, LibraryFixture.Now);
         DrawBrowser(dc);
         DrawNote(dc);
-        double ms = frame.Step * CaptureFlightPicture.FrameMs;
-        if (!_cardClosed && frame.Segment != "lift")
+        if (!_cardClosed)
         {
             Detached.Layout(_cardRoot, _card.Width);
             Detached.Draw(dc, _cardRoot, _cardOrigin);
         }
-
-        if (frame.Segment == "lift") _flight!.DrawLift(dc, ms);
-        else if (frame.Segment == "flight")
-            _flight!.DrawFlight(dc, CaptureFlightPicture.PreviewBounds(_card, _cardRoot, _cardOrigin), ms,
-                CaptureFlightPicture.LiftFrames * CaptureFlightPicture.FrameMs);
 
         (string caption, string key) = Caption(frame.Segment);
         if (frame.Pressed) Stage.DrawClick(dc, frame.Cursor, frame.Progress);
@@ -152,24 +134,6 @@ internal sealed class QuickAccessScene : TutorialScene
     {
         switch (frame.Segment)
         {
-            case "lift":
-                // The card is not shown yet: it neither draws nor counts down.
-                return;
-            case "flight":
-                // The card shows as the flight starts and fades in over 100 ms; its preview appears
-                // under the image on the frame the image lands.
-                double ms = frame.Step * CaptureFlightPicture.FrameMs;
-                if (frame.IsFirst) _card.BeginLandingFade();
-                _card.SurfaceForTest.Opacity = CaptureFlightPicture.CardOpacity(ms);
-                if (CaptureFlightPicture.Landed(ms)) _card.RevealPreview();
-                break;
-            case "appear" when _card.IsLanding:
-                // The image has gone; the card's own preview stays.
-                if (_card.PreviewForTest.Opacity < 1) throw new InvalidOperationException("The flight ended before it landed in the card.");
-                _card.CompleteLanding();
-                _flight?.Dispose();
-                _flight = null;
-                break;
             case "alt-q" when !_active:
                 // Alt+Q: the card takes the keyboard; focus moves to its first command and the
                 // countdown pauses while the keyboard is on the card.
@@ -239,7 +203,7 @@ internal sealed class QuickAccessScene : TutorialScene
 
     private (string Caption, string Key) Caption(string segment) => segment switch
     {
-        "lift" or "flight" or "appear" => (L($"캡처하면 {Ui("QuickAccess.Title")} 카드가 나타남", "After a capture, the quick access card appears"), ""),
+        "appear" => (L($"캡처하면 {Ui("QuickAccess.Title")} 카드가 나타남", "After a capture, the quick access card appears"), ""),
         "alt-q" => (L($"{Hint(ShortcutScope.QuickAccess, "Activate")}: 키보드로 카드 사용", $"{Hint(ShortcutScope.QuickAccess, "Activate")}: control the card from the keyboard"),
             Hint(ShortcutScope.QuickAccess, "Activate")),
         "keep-move" or "keep-on" or "kept" or "keep-off" => (Ui("QuickAccess.KeepName"), ""),
@@ -252,7 +216,6 @@ internal sealed class QuickAccessScene : TutorialScene
 
     public override void Dispose()
     {
-        _flight?.Dispose();
         if (!_cardClosed)
         {
             try { _card.Close(); }
