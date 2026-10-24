@@ -4038,7 +4038,7 @@ Delete {1} {1:plural:subfolder|subfolders}, {2} {2:plural:image|images}, and {3}
   <data name="EditorFlow_CommandBarName" xml:space="preserve"><value>Editing commands</value></data>
   <data name="SettingsUx_AlwaysShowShortcutHints" xml:space="preserve"><value>Always show shortcut keys</value></data>
   <data name="SettingsUx_AlwaysShowShortcutHintsHint" xml:space="preserve"><value>When off, shortcut keys appear under buttons only while Alt is held.</value></data>
-  <data name="EditorFlow_CopyHint" xml:space="preserve"><value>Copy the edited image to the clipboard</value></data>
+  <data name="EditorFlow_CopyHint" xml:space="preserve"><value>Copy to the clipboard, save to the library and close</value></data>
   <data name="EditorFlow_CropBarName" xml:space="preserve"><value>Crop commands</value></data>
   <data name="EditorFlow_SelectionCleared" xml:space="preserve"><value>Selection cleared</value></data>
   <data name="EditorFlow_Selected" xml:space="preserve"><value>Selected: {0}</value></data>
