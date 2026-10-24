@@ -135,6 +135,14 @@ public sealed class CaptureFlightTests
     });
 
     [Fact]
+    public void NoLiftWhenTheImageCannotBeKeptOutOfCaptures() => RunFlight(motion: true, (_, _, image, _) =>
+    {
+        // A lifted image that a capture could see would end up in the next screenshot.
+        CaptureFlightDecoration.ApplyCaptureExclusion = _ => false;
+        Assert.Null(CaptureFlight.TryLift(image, SourceOn(), () => 0));
+    });
+
+    [Fact]
     public void LiftsOnItsSourceAndFliesIntoTheLandingCard() => RunFlight(motion: true, (monitor, clock, image, router) =>
     {
         CaptureFlight flight = Assert.IsType<CaptureFlight>(CaptureFlight.TryLift(image, SourceOn(), () => clock.Now));
@@ -392,6 +400,7 @@ public sealed class CaptureFlightTests
             Func<bool> previousRemote = CaptureFlight.ReadRemoteSession;
             Func<bool> previousLayered = CaptureFlight.ReadLayeredSupport;
             Func<IReadOnlyList<MonitorInfo>> previousMonitors = CaptureFlight.ReadMonitors;
+            Func<Window, bool> previousExclusion = CaptureFlightDecoration.ApplyCaptureExclusion;
             // A display far off the visible desktop, at the primary display's scale.
             MonitorInfo display = Monitor(-32000, -32000, 2400, 1600, MonitorEnumerator.GetPrimary().Dpi);
             using var router = new ReceiptKeyboardRouter(_ => new NoHotkeys());
@@ -401,6 +410,9 @@ public sealed class CaptureFlightTests
                 CaptureFlight.ReadRemoteSession = () => false;
                 CaptureFlight.ReadLayeredSupport = () => true;
                 CaptureFlight.ReadMonitors = () => [display];
+                // Hosted runners cannot always exclude a layered window from capture; the flight's
+                // own steps are under test here, not the operating system's display affinity.
+                CaptureFlightDecoration.ApplyCaptureExclusion = _ => true;
                 body(display, new ManualClock(), Image(800, 500), router);
             }
             finally
@@ -409,6 +421,7 @@ public sealed class CaptureFlightTests
                 CaptureFlight.ReadRemoteSession = previousRemote;
                 CaptureFlight.ReadLayeredSupport = previousLayered;
                 CaptureFlight.ReadMonitors = previousMonitors;
+                CaptureFlightDecoration.ApplyCaptureExclusion = previousExclusion;
             }
         });
 
