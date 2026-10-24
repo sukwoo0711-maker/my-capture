@@ -580,8 +580,10 @@ internal sealed partial class AnnotationEditorControl : Grid
     {
         foreach (EditorTool tool in Enum.GetValues<EditorTool>()) _shortcutActions[tool.ToString()] = () => SelectTool(tool);
         _shortcutActions["Done"] = () => Commit(EditorCommitAction.Done);
-        // Copy keeps the live edit and history available; Done follows the final save path.
-        _shortcutActions["Copy"] = () => Commit(EditorCommitAction.CopyToClipboard);
+        // Owner decision (2026-10-12 real-device feedback, restored 2026-10-25 after 4.6.0 split
+        // it): copying is how people finish an edit, so Copy and Ctrl+C save, copy and close
+        // like Done. Do not turn this into a copy-only command without asking the owner.
+        _shortcutActions["Copy"] = () => Commit(EditorCommitAction.Done);
         _shortcutActions["Save"] = () => Commit(EditorCommitAction.QuickSave);
         _shortcutActions["SaveAs"] = () => Commit(EditorCommitAction.SaveAs);
         _shortcutActions["Privacy"] = () => _ = ApplyPrivacyRedactionsAsync();
@@ -1813,7 +1815,7 @@ internal sealed partial class AnnotationEditorControl : Grid
         Button save = BuildSaveOverflowMenu();
         Button copy = IconTextButton(
             UiText.Get("Text_37B3D3B11B26"), UiText.Get("EditorFlow_CopyHint"), "Icon.Copy", FallbackCopy,
-            () => Commit(EditorCommitAction.CopyToClipboard));
+            () => Commit(EditorCommitAction.Done));
         copy.SetResourceReference(FrameworkElement.StyleProperty, "Button.Secondary");
         Button done = IconTextButton(
             UiText.Get("Text_727333AB0740"), UiText.Get("EditorFlow_DoneHint"), "Icon.Check", FallbackCheck,
