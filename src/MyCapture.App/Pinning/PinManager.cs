@@ -52,6 +52,8 @@ internal enum PasteResult
 internal sealed class PinManager
 {
     private readonly List<PinWindow> _pins = [];
+    // Closed pins whose exit is still on the screen; their windows close when it ends.
+    private readonly List<PinWindow> _leaving = [];
     private readonly Dictionary<PinWindow, long> _openedOrders = [];
     private readonly Dictionary<PinWindow, long> _restoredOpenedOrders = [];
     private long _nextOpenedOrder;
@@ -59,7 +61,7 @@ internal sealed class PinManager
     private bool _recordClosedPins = true;
     private readonly Func<PinSettings> _settings;
     private readonly PinImageSaveService? _saveService;
-    private readonly Func<BitmapSource, string?, string?, CaptureProvenance?, Task<bool>> _copyImageAsync;
+    private readonly Func<BitmapSource, string?, string?, CaptureProvenance?, ClipboardImageService.PngCache?, Task<bool>> _copyImageAsync;
     private readonly Func<string, Task<bool>> _copyTextAsync;
     private readonly ILogger _log;
 
@@ -80,8 +82,8 @@ internal sealed class PinManager
         : this(
             settings,
             saveService,
-            static (image, sourceUrl, text, provenance) => ClipboardImageService.CopyImageWithTextAsync(
-                image, sourceUrl, text, writeData: null, provenance),
+            static (image, sourceUrl, text, provenance, cache) => ClipboardImageService.CopyImageWithTextAsync(
+                image, sourceUrl, text, writeData: null, provenance, pngCache: cache),
             ClipboardImageService.CopyTextAsync,
             log)
     {
@@ -127,6 +129,17 @@ internal sealed class PinManager
         Func<PinSettings> settings,
         PinImageSaveService? saveService,
         Func<BitmapSource, string?, string?, CaptureProvenance?, Task<bool>> copyImageAsync,
+        Func<string, Task<bool>> copyTextAsync,
+        ILogger log)
+        : this(settings, saveService, (image, sourceUrl, text, provenance, _) => copyImageAsync(image, sourceUrl, text, provenance), copyTextAsync, log)
+    {
+        ArgumentNullException.ThrowIfNull(copyImageAsync);
+    }
+
+    internal PinManager(
+        Func<PinSettings> settings,
+        PinImageSaveService? saveService,
+        Func<BitmapSource, string?, string?, CaptureProvenance?, ClipboardImageService.PngCache?, Task<bool>> copyImageAsync,
         Func<string, Task<bool>> copyTextAsync,
         ILogger log)
     {
@@ -517,7 +530,10 @@ internal sealed class PinManager
         pin.SaveRequested += OnPinSaveRequested;
         pin.RestoreClosedRequested += (_, _) => RestoreLastClosed();
         pin.CanRestoreClosedPin = () => CanRestoreClosed;
-        pin.Closed += (_, _) => OnPinClosed(pin);
+        // The history, the session and the lists change when a close starts; a user close only
+        // leaves its pixels on the screen for the exit, and the window itself goes later.
+        pin.CloseStarted += (_, _) => OnPinClosed(pin);
+        pin.Closed += (_, _) => _leaving.Remove(pin);
         pin.ViewStateChanged += NotifyOpenPinsChanged;
         pin.ContentChanged += NotifyOpenPinsChanged;
 
@@ -541,6 +557,7 @@ internal sealed class PinManager
         _pins.Remove(pin);
         _openedOrders.Remove(pin);
         _restoredOpenedOrders.Remove(pin);
+        _leaving.Add(pin);
         NotifyOpenPinsChanged();
         if (!_recordClosedPins)
         {
@@ -702,10 +719,15 @@ internal sealed class PinManager
         return index >= 0 ? _pins[index] : null;
     }
 
-    /// <summary>Closes every open pin.</summary>
+    /// <summary>Closes every open pin at once, and ends any exit a closed pin is still playing.</summary>
     internal void CloseAll()
     {
-        // Copy first: closing raises Closed, which mutates _pins.
+        foreach (PinWindow leaving in _leaving.ToArray())
+        {
+            leaving.CompleteExit();
+        }
+
+        // Copy first: closing raises CloseStarted, which mutates _pins.
         foreach (PinWindow pin in _pins.ToArray())
         {
             pin.Close();
@@ -721,7 +743,7 @@ internal sealed class PinManager
         try
         {
             copied = await _copyImageAsync(request.Image, request.SourcePageUrl, request.OriginalText,
-                (sender as PinWindow)?.Provenance);
+                (sender as PinWindow)?.Provenance, (sender as PinWindow)?.ClipboardCache);
         }
         catch (Exception ex)
         {
@@ -845,7 +867,7 @@ internal sealed class PinManager
     }
 
     /// <summary>
-    /// Drops any pin that has already closed. The <c>Closed</c> handler normally removes a
+    /// Drops any pin that has already closed. The <c>CloseStarted</c> handler normally removes a
     /// pin immediately; this is a belt-and-braces sweep in case a close raced a query.
     /// </summary>
     private void Prune()

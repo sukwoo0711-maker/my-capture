@@ -18,7 +18,7 @@ namespace MyCapture.App.Tests;
 /// <summary>
 /// The recording editor's pointer and keyboard model after the third real-device round: a
 /// click on the trim strip seeks and leaves the arrow keys to the playhead, only a handle the
-/// user took hold of answers to ←/→, Tab is never trapped, Space always plays, and new layers
+/// user took hold of answers to ←/→, Tab is never trapped, Space on the canvas plays, and new layers
 /// get their default length even at the end of the kept range.
 /// </summary>
 public sealed class VideoEditorUxInteractionTests
@@ -177,7 +177,7 @@ public sealed class VideoEditorUxInteractionTests
             editor = OpenReadyEditor(root, 10_000, show: true);
             Assert.False(editor.PlayButtonShowsPauseForTest);
 
-            // The window sees Space before any focused button does.
+            // With focus on the window, Space controls playback.
             var space = KeyPress(editor, Key.Space);
             editor.RaiseEvent(space);
             Assert.True(space.Handled);

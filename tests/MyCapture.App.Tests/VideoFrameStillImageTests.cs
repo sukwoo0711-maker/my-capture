@@ -117,7 +117,8 @@ public sealed class VideoFrameStillImageTests(ITestOutputHelper output)
             AssertStill(expected, Assert.Single(copied), "clipboard");
             int expectedCount = BrightMask(expected).Count(value => value);
             output.WriteLine($"turns={turns}, annotated={annotated}, action={action}, expected subtitle pixels={expectedCount}");
-            if (action is "CopyOnly" or "Copy")
+            // Copy finishes like Done (the owner's decision); only the copy-only commit stays open.
+            if (action == "CopyOnly")
             {
                 Assert.Empty(queue.Records);
                 Assert.Null(videoResult);

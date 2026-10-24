@@ -409,7 +409,8 @@ public sealed class GeneralSettings : IJsonOnDeserializing
     public bool NotifyOnQuickSave { get; set; } = true;
 
     /// <summary>
-    /// Play the system shutter sound on a successful capture.
+    /// Play the app's short shutter sound at the moment a still capture is taken, before it is
+    /// saved or copied. Off by default.
     /// </summary>
     public bool PlayCaptureSound { get; set; }
 
