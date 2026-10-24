@@ -39,4 +39,21 @@ public sealed class MediaElementPreviewEngineTests
         double element,
         double playerLength) =>
         Assert.False(MediaElementPreviewEngine.IsMediaEndedReport(observed, element, playerLength));
+
+    [Theory]
+    // The element read as positioned, and one 100 ns tick short of it.
+    [InlineData(600 + Tolerance, 600 + Tolerance)]
+    [InlineData(1500.0099, 1500 + Tolerance)]
+    [InlineData(2533.267, 2533.267)]
+    public void AReadAtTheElementPosition_HasLanded(double observed, double element) =>
+        Assert.True(MediaElementPreviewEngine.HasLanded(observed, element));
+
+    [Theory]
+    // Seeks that stopped past their position after the stream ran to its end, under load.
+    [InlineData(600.51, 600 + Tolerance)]
+    [InlineData(602.536, 600 + Tolerance)]
+    [InlineData(688.141, 600 + Tolerance)]
+    [InlineData(1499.9, 1500 + Tolerance)]
+    public void AReadAwayFromTheElementPosition_HasNotLanded(double observed, double element) =>
+        Assert.False(MediaElementPreviewEngine.HasLanded(observed, element));
 }

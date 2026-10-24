@@ -56,10 +56,30 @@ internal sealed class MediaElementPreviewEngine : IVideoPreviewEngine
             : DispatcherPriority.Render;
         (double observedMs, bool ended) = await PositionAsync(position, observedPriority, cancellationToken)
             .ConfigureAwait(false);
-        if (ended)
+        int seeks = 1;
+        int reopens = 0;
+        while (true)
         {
-            await ReopenAsync(cancellationToken).ConfigureAwait(false);
-            (observedMs, _) = await PositionAsync(position, observedPriority, cancellationToken)
+            if (ended)
+            {
+                // A seek into the last frame can end the stream again right after a reopen.
+                if (reopens == MaxReopens)
+                {
+                    break;
+                }
+
+                reopens++;
+                await ReopenAsync(cancellationToken).ConfigureAwait(false);
+            }
+            else if (request.Mode != PreviewSeekMode.Exact
+                || HasLanded(observedMs, position)
+                || seeks >= MaxExactSeeks)
+            {
+                break;
+            }
+
+            seeks++;
+            (observedMs, ended) = await PositionAsync(position, observedPriority, cancellationToken)
                 .ConfigureAwait(false);
         }
 
@@ -87,6 +107,24 @@ internal sealed class MediaElementPreviewEngine : IVideoPreviewEngine
         && Math.Abs(elementPositionMs - playerLengthMs) >= LengthReportToleranceMs;
 
     /// <summary>
+    /// Whether a paused seek landed where it was asked to, within the 100 ns sample clock. After
+    /// the stream has run to or near its end (a playback, or the brief playback with which WPF
+    /// presents a paused seek into the last frame), the next paused seek can stop past its
+    /// position, by milliseconds under load and by more than a frame at worst; asking again lands it.
+    /// </summary>
+    internal static bool HasLanded(double observedMs, double elementPositionMs) =>
+        Math.Abs(observedMs - elementPositionMs) <= LandingToleranceMs;
+
+    // One 100 ns tick early is the player's rounding (see PresentationToleranceMs), not a miss.
+    private const double LandingToleranceMs = 0.001;
+
+    // An exact seek is asked again at most twice; each try takes one dispatcher round trip.
+    private const int MaxExactSeeks = 3;
+
+    // Each reopen takes a few hundred milliseconds; one more covers the stream ending again.
+    private const int MaxReopens = 2;
+
+    /// <summary>
     /// Test hook: the next read is taken as the media-ended report. The state itself comes from a
     /// race inside Windows Media Player that no test can start on demand.
     /// </summary>
@@ -94,6 +132,15 @@ internal sealed class MediaElementPreviewEngine : IVideoPreviewEngine
 
     /// <summary>How many times the clip was opened again to leave the media-ended state.</summary>
     internal int ReopenCountForTest { get; private set; }
+
+    /// <summary>How many reads were the player's own media-ended report, not an injected one.</summary>
+    internal int EndedReportCountForTest { get; private set; }
+
+    /// <summary>Test hook: the next read is taken as a seek that stopped 3 ms past its position.</summary>
+    internal bool MissNextLandingForTest { get; set; }
+
+    /// <summary>How many times the element was positioned, counting each repeated try.</summary>
+    internal int PositionCountForTest { get; private set; }
 
     // The ended report is the player's length itself, to the 100 ns tick.
     private const double LengthReportToleranceMs = 0.001;
@@ -112,6 +159,7 @@ internal sealed class MediaElementPreviewEngine : IVideoPreviewEngine
             () =>
             {
                 ObjectDisposedException.ThrowIf(_disposed, this);
+                PositionCountForTest++;
                 StudioRangeVideoEffect.PositionRequested(_media);
                 _media.Pause();
                 _media.Position = TimeSpan.FromMilliseconds(position);
@@ -126,9 +174,15 @@ internal sealed class MediaElementPreviewEngine : IVideoPreviewEngine
             {
                 observedMs = _media.Position.TotalMilliseconds;
                 // An element that never opened also reads zero; only an opened clip has ended.
-                ended = _media.HasVideo
-                    && (IsMediaEndedReport(observedMs, position, PlayerLengthMs()) || TreatNextReadAsEndedForTest);
+                bool report = _media.HasVideo && IsMediaEndedReport(observedMs, position, PlayerLengthMs());
+                EndedReportCountForTest += report ? 1 : 0;
+                ended = report || (_media.HasVideo && TreatNextReadAsEndedForTest);
                 TreatNextReadAsEndedForTest = false;
+                if (MissNextLandingForTest)
+                {
+                    MissNextLandingForTest = false;
+                    observedMs += 3;
+                }
             },
             observedPriority,
             cancellationToken).Task.ConfigureAwait(false);
