@@ -20,6 +20,19 @@ public enum MotionSpeed
     Deliberate,
 }
 
+/// <summary>How a floating window leaves the screen (<see cref="FluidMotion.BeginExit"/>).</summary>
+public enum ExitMotion
+{
+    /// <summary>Fades and drops 6 DIP: the window entrance played backwards.</summary>
+    FadeDown,
+
+    /// <summary>Fades and slides 8 DIP right: a card docked at the screen's right edge.</summary>
+    FadeRight,
+
+    /// <summary>Fades and shrinks to 0.97 around the centre: a pin landing played backwards.</summary>
+    Shrink,
+}
+
 /// <summary>
 /// Small, cancellable motion primitives shared by the desktop chrome.
 /// </summary>
@@ -127,10 +140,18 @@ public static class FluidMotion
             typeof(int),
             typeof(FluidMotion));
 
+    // The pending close of a window whose exit is playing; CompleteExit runs it early.
+    private static readonly DependencyProperty ExitFinishProperty =
+        DependencyProperty.RegisterAttached(
+            "ExitFinish",
+            typeof(Action),
+            typeof(FluidMotion));
+
     [ThreadStatic]
     private static bool? s_animationsEnabledOverrideForTest;
 
-    private const double PressedScale = 0.985;
+    // 0.97 moves a 90-DIP button edge 1.4 DIP: the smallest press a fingertip notices.
+    private const double PressedScale = 0.97;
 
     // An 18px glyph needs a deeper press than a whole button to read as pressed at all.
     private const double PressedGlyphScale = 0.9;
@@ -326,6 +347,118 @@ public static class FluidMotion
             TranslateTransform.YProperty,
             settle,
             HandoffBehavior.SnapshotAndReplace);
+    }
+
+    /// <summary>
+    /// Plays a short exit on a floating window's content, then runs <paramref name="close"/>.
+    /// </summary>
+    /// <remarks>
+    /// The window stops taking input at once, so callers change their own state immediately and
+    /// only the pixels linger. <paramref name="close"/> runs synchronously when Windows animation
+    /// effects are off, the window is hidden, or it is not layered (an opaque window would fade
+    /// its content into its own background instead of the desktop). A second request while the
+    /// exit plays is ignored; <see cref="CompleteExit"/> finishes it early. After
+    /// <paramref name="close"/> the content is restored, so a window that hides can show again.
+    /// </remarks>
+    internal static void BeginExit(Window window, ExitMotion motion, Action close, Duration? duration = null)
+    {
+        if (window.GetValue(ExitFinishProperty) is Action)
+        {
+            return;
+        }
+
+        if (!AnimationsEnabled || !window.IsVisible || !window.AllowsTransparency
+            || window.Content is not FrameworkElement surface)
+        {
+            close();
+            return;
+        }
+
+        InvalidateQueuedWindowEntrance(window);
+        surface.BeginAnimation(UIElement.OpacityProperty, null);
+        ResetWindowEntranceTransform(surface);
+
+        Duration length = duration ?? FastDuration;
+        bool hitTestable = window.IsHitTestVisible;
+        window.IsHitTestVisible = false;
+
+        // A screen-owned transform is kept; only an unowned root gets the drop, slide or shrink.
+        Transform? owned = null;
+        if (surface.ReadLocalValue(UIElement.RenderTransformProperty) == DependencyProperty.UnsetValue)
+        {
+            if (motion == ExitMotion.Shrink)
+            {
+                var scale = new ScaleTransform(1, 1);
+                surface.RenderTransformOrigin = new Point(0.5, 0.5);
+                var shrink = new DoubleAnimation(1, 0.97, length) { EasingFunction = StandardEasing };
+                scale.BeginAnimation(ScaleTransform.ScaleXProperty, shrink);
+                scale.BeginAnimation(ScaleTransform.ScaleYProperty, shrink);
+                owned = scale;
+            }
+            else
+            {
+                var shift = new TranslateTransform();
+                var move = new DoubleAnimation(0, motion == ExitMotion.FadeRight ? 8 : 6, length) { EasingFunction = StandardEasing };
+                shift.BeginAnimation(
+                    motion == ExitMotion.FadeRight ? TranslateTransform.XProperty : TranslateTransform.YProperty,
+                    move);
+                owned = shift;
+            }
+
+            surface.RenderTransform = owned;
+        }
+
+        var fallback = new DispatcherTimer(DispatcherPriority.Normal, window.Dispatcher)
+        {
+            // Completed never fires while the window cannot render (locked session, minimised
+            // owner); the close still happens shortly after the exit would have ended.
+            Interval = length.TimeSpan + TimeSpan.FromMilliseconds(250),
+        };
+        bool finished = false;
+        void Finish()
+        {
+            if (finished)
+            {
+                return;
+            }
+
+            finished = true;
+            fallback.Stop();
+            window.ClearValue(ExitFinishProperty);
+            try
+            {
+                close();
+            }
+            finally
+            {
+                surface.BeginAnimation(UIElement.OpacityProperty, null);
+                if (owned is not null && ReferenceEquals(surface.RenderTransform, owned))
+                {
+                    surface.ClearValue(UIElement.RenderTransformProperty);
+                }
+
+                window.IsHitTestVisible = hitTestable;
+            }
+        }
+
+        window.SetValue(ExitFinishProperty, (Action)Finish);
+        fallback.Tick += (_, _) => Finish();
+        var fade = new DoubleAnimation(surface.Opacity, 0, length) { EasingFunction = StandardEasing };
+        fade.Completed += (_, _) => Finish();
+        surface.BeginAnimation(UIElement.OpacityProperty, fade, HandoffBehavior.SnapshotAndReplace);
+        fallback.Start();
+    }
+
+    /// <summary>Whether <see cref="BeginExit"/> is playing on this window.</summary>
+    internal static bool IsExiting(Window window) => window.GetValue(ExitFinishProperty) is Action;
+
+    /// <summary>Ends a playing exit now (shutdown, a capture starting): its close runs at once.</summary>
+    internal static void CompleteExit(Window window)
+    {
+        if (window.GetValue(ExitFinishProperty) is Action finish)
+        {
+            finish();
+        }
     }
 
     private static void ResetWindowEntranceTransform(FrameworkElement? surface)

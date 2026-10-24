@@ -6,6 +6,7 @@ using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
+using System.Windows.Media.Animation;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using MyCapture.App.Themes;
@@ -51,6 +52,11 @@ internal sealed class QuickAccessWindow : Window
     private bool _keyboardAccess;
     private readonly Image _preview;
     private readonly Border _previewSurface;
+    private readonly Border _surface;
+    private readonly Dictionary<Button, SuccessMark> _successMarks = [];
+    private bool _closed;
+    private bool _landing;
+    private bool _landingFadeStarted;
     private DpiScale _previewDpi = new(1, 1);
     private readonly TextBlock _firstUseTip = new() { TextWrapping = TextWrapping.Wrap, Margin = new Thickness(2, 6, 2, 6) };
     private readonly TextBlock _dimensions = new() { VerticalAlignment = VerticalAlignment.Center };
@@ -64,6 +70,18 @@ internal sealed class QuickAccessWindow : Window
     private readonly Dictionary<string, Action> _actions = [];
     internal IReadOnlyDictionary<string, Action> ShortcutActions => _actions;
     internal static readonly TimeSpan Lifetime = TimeSpan.FromSeconds(6);
+
+    /// <summary>How long a pressed action's icon shows a check after it succeeds.</summary>
+    internal static readonly TimeSpan SuccessCheckTime = TimeSpan.FromSeconds(1.2);
+
+    // A card receiving a flying capture fades in without the shared entrance's settle.
+    private static readonly Duration LandingFadeDuration = new(TimeSpan.FromMilliseconds(100));
+
+    // The status check redraws over 200 ms; the status text keeps the success colour for 150 ms
+    // and then fades back over 500 ms.
+    private static readonly Duration CheckDrawDuration = new(TimeSpan.FromMilliseconds(200));
+    private static readonly TimeSpan SuccessTintHold = TimeSpan.FromMilliseconds(150);
+    private static readonly Duration SuccessTintFade = new(TimeSpan.FromMilliseconds(500));
     private const double StatusLineHeight = 16;
     internal static DispatcherOperation Schedule(Dispatcher dispatcher, Action show) =>
         dispatcher.BeginInvoke(DispatcherPriority.ContextIdle, show);
@@ -114,7 +132,7 @@ internal sealed class QuickAccessWindow : Window
         }
         SetResourceReference(ForegroundProperty, "Text.Primary");
         var panel = new StackPanel { Margin = new Thickness(8) };
-        var close = Button("Dialog.Close", Close);
+        var close = Button("Dialog.Close", RequestClose);
         close.Content = Glyph("Icon.Close");
         CommandButtonPresentation.Apply(close, compact: true);
         close.Width = close.Height = close.MinWidth = close.MinHeight = 36;
@@ -197,14 +215,14 @@ internal sealed class QuickAccessWindow : Window
                 ShowStatus(UserFacingError.GetMessage(error) ?? FailureText("Edit"), FeedbackKind.ActionRequired);
                 return;
             }
-            Close();
+            RequestClose();
         };
         _actions["Pin"] = async () => await RunAsync("Pin", async () => { await pin(); return true; }, "QuickAccess.Pinning", "QuickAccess.Pinned");
         _actions["Save"] = async () => await RunAsync("Save", save, "QuickAccess.Saving", "QuickAccess.Saved");
         _actions["CopyText"] = async () => await RunCoreAsync("CopyText",
             async () => DescribeTextOutcome(copyText is null ? new TextCaptureOutcome(TextCaptureStatus.Unavailable, null, 0) : await copyText()),
             "QuickAccess.CopyingText");
-        _actions["Close"] = Close;
+        _actions["Close"] = RequestClose;
         _actions["Activate"] = () => ActivateForKeyboard();
         var actions = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Center };
         foreach (string action in ActionOrder)
@@ -233,7 +251,7 @@ internal sealed class QuickAccessWindow : Window
             _actionButtons[action] = button;
             actions.Children.Add(button);
         }
-        var libraryButton = Button("QuickAccess.Library", () => { library(); Close(); });
+        var libraryButton = Button("QuickAccess.Library", () => { library(); RequestClose(); });
         CommandButtonPresentation.Apply(libraryButton, compact: true);
         libraryButton.SetResourceReference(StyleProperty, "Button.Ghost");
         libraryButton.Height = libraryButton.MinHeight = 36;
@@ -256,12 +274,15 @@ internal sealed class QuickAccessWindow : Window
         _progressReveal.Tick += (_, _) => RevealProgress();
         _remaining.Margin = new Thickness(0, 6, 0, 0);
         panel.Children.Add(_remaining);
-        var surface = new Border { Child = panel, Margin = new Thickness(AllowsTransparency ? 8 : 0),
+        var surface = _surface = new Border { Child = panel, Margin = new Thickness(AllowsTransparency ? 8 : 0),
             CornerRadius = new CornerRadius(AllowsTransparency ? 12 : 0), BorderThickness = new Thickness(1) };
         surface.SetResourceReference(Border.BackgroundProperty, "Surface.Floating");
         surface.SetResourceReference(Border.BorderBrushProperty, "Border.Subtle");
         if (AllowsTransparency) surface.SetResourceReference(EffectProperty, "Shadow.Card");
         Content = surface;
+        // The implicit Window style, which carries the shared entrance, does not reach a subclass.
+        // A card receiving a flying capture replaces it with its own fade (PrepareLanding).
+        FluidMotion.SetWindowEntrance(this, true);
         ToolTip = UiText.Get("Onboard_QuickCardTip");
         if (_keyboardRouter is not null)
         {
@@ -294,7 +315,9 @@ internal sealed class QuickAccessWindow : Window
         SizeChanged += (_, _) => { if (IsLoaded && IsVisible && _placementMonitor is { } monitor) PlaceOnMonitor(monitor); };
         Closed += (_, _) =>
         {
+            _closed = true;
             _timer.Stop(); _progressReveal.Stop();
+            foreach (SuccessMark mark in _successMarks.Values) mark.Timer.Stop();
             if (_keyboardRouter is not null)
             {
                 _keyboardRouter.RegistrationChanged -= RefreshSharedActivationHint;
@@ -345,7 +368,8 @@ internal sealed class QuickAccessWindow : Window
         LostMouseCapture += (_, _) => cardDrag = null;
         PreviewKeyDown += (_, e) =>
         {
-            if (!_keyboardAccess || !IsKeyboardFocusWithin) return;
+            // A leaving card no longer acts on keys; they belong to the window under it.
+            if (!_keyboardAccess || !IsKeyboardFocusWithin || FluidMotion.IsExiting(this)) return;
             _keyboardInteracting = true;
             e.Handled = HandleShortcut(e.Key == Key.System ? e.SystemKey : e.Key, Keyboard.Modifiers);
         };
@@ -427,7 +451,7 @@ internal sealed class QuickAccessWindow : Window
 
     internal bool ActivateForKeyboard()
     {
-        if (!IsVisible) return false;
+        if (!IsVisible || FluidMotion.IsExiting(this)) return false;
         EnableKeyboardAccess();
         if (!Activate()) return false;
         return MoveFocus(new TraversalRequest(FocusNavigationDirection.First));
@@ -482,8 +506,116 @@ internal sealed class QuickAccessWindow : Window
     internal void DismissForCapture(Action foregroundDismissed)
     {
         if (!IsVisible) return;
-        Close();
+        // The next capture must not photograph the card, so it goes at once, even mid-exit.
+        CloseNow();
         foregroundDismissed();
+    }
+
+    /// <summary>
+    /// Closes the card as the user asked (Esc, close, Edit, Library, or the countdown ending): its
+    /// countdown and activation key stop at once, and only its pixels fade down over 83 ms
+    /// (<see cref="FluidMotion.BeginExit"/>); it closes at once when motion is off.
+    /// </summary>
+    internal void RequestClose()
+    {
+        if (_closed || FluidMotion.IsExiting(this)) return;
+        _timer.Stop();
+        _progressReveal.Stop();
+        UpdateActivationHotkey();
+        if (_landing)
+        {
+            // The card leaves with its preview, and the flight ends (CaptureFlight watches for the
+            // exit). A card that has not started to fade in stays clear while it leaves.
+            _landing = false;
+            _preview.Opacity = 1;
+        }
+        FluidMotion.BeginExit(this, ExitMotion.FadeDown, () => { if (!_closed) Close(); });
+    }
+
+    /// <summary>Closes at once, finishing an exit in progress: a newer card or a capture replaces this one.</summary>
+    internal void CloseNow()
+    {
+        if (_closed) return;
+        if (FluidMotion.IsExiting(this)) FluidMotion.CompleteExit(this);
+        else Close();
+    }
+
+    /// <summary>
+    /// Prepares the card, before it is shown, to receive a capture flying into its preview
+    /// (<see cref="CaptureFlight"/>): no shared entrance; the card stays clear until the flight
+    /// starts (<see cref="BeginLandingFade"/>) and the preview until the image lands
+    /// (<see cref="RevealPreview"/>). The card takes input and counts down meanwhile.
+    /// </summary>
+    internal void PrepareLanding()
+    {
+        if (IsVisible) return;
+        _landing = true;
+        _landingFadeStarted = false;
+        FluidMotion.SetWindowEntrance(this, false);
+        _surface.Opacity = 0;
+        _preview.Opacity = 0;
+    }
+
+    /// <summary>The landing card fades in, opacity only, over 100 ms; at once when motion is off.</summary>
+    internal void BeginLandingFade()
+    {
+        if (!_landing || _landingFadeStarted) return;
+        _landingFadeStarted = true;
+        _surface.BeginAnimation(OpacityProperty, null);
+        _surface.Opacity = 1;
+        if (!FluidMotion.AnimationsEnabled || !IsVisible) return;
+        var fade = new DoubleAnimation(0, 1, LandingFadeDuration)
+        {
+            EasingFunction = FluidMotion.SoftLandingEasing,
+            FillBehavior = FillBehavior.Stop,
+        };
+        _surface.BeginAnimation(OpacityProperty, fade, HandoffBehavior.SnapshotAndReplace);
+    }
+
+    /// <summary>The flying image has landed: the card's own preview takes its place.</summary>
+    internal void RevealPreview() => _preview.Opacity = 1;
+
+    /// <summary>
+    /// Ends a landing: the preview shows at once. A card whose flight never started enters with
+    /// the shared entrance instead, like any other floating window.
+    /// </summary>
+    internal void CompleteLanding()
+    {
+        if (!_landing) return;
+        _landing = false;
+        _preview.Opacity = 1;
+        if (_landingFadeStarted) return;
+        _landingFadeStarted = true;
+        _surface.BeginAnimation(OpacityProperty, null);
+        _surface.Opacity = 1;
+        FluidMotion.SetWindowEntrance(this, true);
+    }
+
+    /// <summary>Whether the card is receiving a flying capture.</summary>
+    internal bool IsLanding => _landing;
+
+    /// <summary>
+    /// Where the preview image is drawn, in virtual-desktop physical pixels; null while the card
+    /// is not on screen.
+    /// </summary>
+    internal Rect? PreviewScreenBounds
+    {
+        get
+        {
+            if (!IsVisible || _preview.ActualWidth <= 0 || _preview.ActualHeight <= 0
+                || PresentationSource.FromVisual(_preview) is null) return null;
+            try
+            {
+                // An Image draws its uniformly scaled source over exactly its render size.
+                Point topLeft = _preview.PointToScreen(new Point(0, 0));
+                Point bottomRight = _preview.PointToScreen(new Point(_preview.ActualWidth, _preview.ActualHeight));
+                return new Rect(topLeft, bottomRight);
+            }
+            catch (InvalidOperationException)
+            {
+                return null;
+            }
+        }
     }
 
     internal void PlaceOnMonitor(MonitorInfo monitor)
@@ -516,11 +648,32 @@ internal sealed class QuickAccessWindow : Window
         // A failure keeps the card until the user closes it or a retry succeeds.
         if (IsKept || interacting || _heldForFailure) return;
         _elapsed += time;
-        UpdateRemaining();
-        if (_elapsed >= Lifetime) Close();
+        // Glide to the new value over the interval just counted, so the bar shrinks continuously
+        // and stops where it is when the countdown pauses.
+        UpdateRemaining(time, null);
+        if (_elapsed >= Lifetime) RequestClose();
     }
 
-    private void UpdateRemaining() => _remaining.Value = Math.Max(0, 100 * (1 - _elapsed.TotalSeconds / Lifetime.TotalSeconds));
+    /// <summary>
+    /// Shows the remaining time on the bar. With motion it glides there over <paramref name="glide"/>
+    /// (linear when <paramref name="easing"/> is null); otherwise, while the card is hidden or the
+    /// bar is indeterminate, it steps. The bar's base value is always the exact remaining time.
+    /// </summary>
+    private void UpdateRemaining(TimeSpan glide = default, IEasingFunction? easing = null)
+    {
+        double value = Math.Max(0, 100 * (1 - _elapsed.TotalSeconds / Lifetime.TotalSeconds));
+        double from = _remaining.Value;
+        _remaining.BeginAnimation(RangeBase.ValueProperty, null);
+        _remaining.Value = value;
+        if (glide <= TimeSpan.Zero || from == value || !FluidMotion.AnimationsEnabled || !IsVisible
+            || _remaining.IsIndeterminate) return;
+        var slide = new DoubleAnimation(from, value, new Duration(glide))
+        {
+            EasingFunction = easing,
+            FillBehavior = FillBehavior.Stop,
+        };
+        _remaining.BeginAnimation(RangeBase.ValueProperty, slide, HandoffBehavior.SnapshotAndReplace);
+    }
 
     private Button Button(string key, Action action)
     {
@@ -583,7 +736,12 @@ internal sealed class QuickAccessWindow : Window
         if (!_running.Add(action)) return;
         Button? button = _actionButtons.GetValueOrDefault(action);
         bool refocus = button?.IsKeyboardFocused == true;
-        if (button is not null) button.IsEnabled = false;
+        if (button is not null)
+        {
+            button.IsEnabled = false;
+            // The previous result no longer stands while the action runs again.
+            HideSuccessCheck(button);
+        }
         ShowStatus(UiText.Get(progress), FeedbackKind.Progress);
         if (_running.Count == 1) _progressReveal.Start();
         string message;
@@ -605,7 +763,150 @@ internal sealed class QuickAccessWindow : Window
 
         if (refocus && IsActive) button!.Focus();
         ShowStatus(message, kind);
+        if (kind == FeedbackKind.Confirmation && !_closed) ConfirmSuccess(button);
     }
+
+    /// <summary>
+    /// Marks a success the card may already have been showing (feel bench 2-B): the status check
+    /// redraws over 200 ms, the status text briefly takes the success colour, and the pressed
+    /// action's icon becomes a check for <see cref="SuccessCheckTime"/>. The check on the action is
+    /// state and shows without motion too; the redraw and the colour are motion only.
+    /// </summary>
+    private void ConfirmSuccess(Button? button)
+    {
+        bool animate = FluidMotion.AnimationsEnabled && IsVisible;
+        if (animate && _statusGlyph.Data is { } check)
+        {
+            StrokeDrawMotion.Play(_statusGlyph, check, CheckDrawDuration);
+            TintStatusText();
+        }
+        if (button is not null) ShowSuccessCheck(button);
+    }
+
+    private void TintStatusText()
+    {
+        if (TryFindResource("State.Success") is not SolidColorBrush success
+            || TryFindResource("Text.Primary") is not SolidColorBrush rest) return;
+        var tint = new SolidColorBrush(success.Color);
+        var fade = new ColorAnimation(success.Color, rest.Color, SuccessTintFade)
+        {
+            BeginTime = SuccessTintHold,
+            EasingFunction = FluidMotion.SoftLandingEasing,
+        };
+        fade.Completed += (_, _) =>
+        {
+            // A newer status has already replaced the tint with its own colour.
+            if (ReferenceEquals(_status.Foreground, tint)) _status.SetResourceReference(TextBlock.ForegroundProperty, "Text.Primary");
+        };
+        _status.Foreground = tint;
+        tint.BeginAnimation(SolidColorBrush.ColorProperty, fade);
+    }
+
+    /// <summary>The pressed action's icon becomes a check, or keeps it for another full period.</summary>
+    private void ShowSuccessCheck(Button button)
+    {
+        if (ActionIcon(button) is not { } icon) return;
+        if (!_successMarks.TryGetValue(button, out SuccessMark? mark))
+        {
+            mark = new SuccessMark(new DispatcherTimer(DispatcherPriority.Normal, Dispatcher) { Interval = SuccessCheckTime });
+            mark.Timer.Tick += (_, _) => HideSuccessCheck(button);
+            _successMarks[button] = mark;
+        }
+        mark.Timer.Stop();
+        mark.Timer.Start();
+        if (mark.Original is not null) return;
+        mark.Original = icon.Data;
+        Crossfade(icon, mark.Original);
+        icon.Data = TryFindResource("Icon.Check") as Geometry ?? CheckGlyph;
+        icon.SetResourceReference(SymbolIcon.StrokeProperty, "State.Success");
+    }
+
+    /// <summary>The action's own icon returns.</summary>
+    private void HideSuccessCheck(Button button)
+    {
+        if (!_successMarks.TryGetValue(button, out SuccessMark? mark)) return;
+        mark.Timer.Stop();
+        if (mark.Original is not { } original) return;
+        mark.Original = null;
+        if (ActionIcon(button) is not { } icon) return;
+        if (!_closed) Crossfade(icon, icon.Data);
+        icon.Data = original;
+        icon.SetResourceReference(SymbolIcon.StrokeProperty, "Text.Primary");
+    }
+
+    /// <summary>
+    /// Crossfades an action icon over 83 ms from <paramref name="leaving"/>, drawn by a short-lived
+    /// copy on top, to whatever the icon shows next. Nothing moves when motion is off or the card
+    /// is not on screen; the copy shares the icon's transforms, so Alt feedback keeps both aligned.
+    /// </summary>
+    private void Crossfade(SymbolIcon icon, Geometry? leaving)
+    {
+        if (!FluidMotion.AnimationsEnabled || !IsVisible || leaving is null || icon.Parent is not Grid face) return;
+        var ghost = new SymbolIcon
+        {
+            Data = leaving, Size = icon.Size, StrokeThickness = icon.StrokeThickness, Margin = icon.Margin,
+            HorizontalAlignment = icon.HorizontalAlignment, VerticalAlignment = icon.VerticalAlignment,
+            RenderTransform = icon.RenderTransform, RenderTransformOrigin = icon.RenderTransformOrigin,
+            IsHitTestVisible = false, Focusable = false,
+        };
+        ghost.Stroke = icon.Stroke;
+        Grid.SetRow(ghost, Grid.GetRow(icon));
+        Grid.SetColumn(ghost, Grid.GetColumn(icon));
+        face.Children.Add(ghost);
+        var fadeOut = new DoubleAnimation(1, 0, FluidMotion.FastDuration) { EasingFunction = FluidMotion.StandardEasing };
+        fadeOut.Completed += (_, _) => face.Children.Remove(ghost);
+        ghost.BeginAnimation(OpacityProperty, fadeOut);
+        icon.BeginAnimation(OpacityProperty, new DoubleAnimation(0, 1, FluidMotion.FastDuration)
+        {
+            EasingFunction = FluidMotion.StandardEasing,
+            FillBehavior = FillBehavior.Stop,
+        });
+    }
+
+    /// <summary>The symbol on an icon action's face, inside the shortcut caption layout once loaded.</summary>
+    private static SymbolIcon? ActionIcon(Button button) => button.Content switch
+    {
+        SymbolIcon icon => icon,
+        Grid { Name: "CommandButtonFace", Children.Count: > 0 } face => face.Children[0] as SymbolIcon,
+        _ => null,
+    };
+
+    // Symbols.xaml Icon.Check, for a card whose theme resources are not loaded.
+    private static readonly Geometry CheckGlyph = Frozen(Geometry.Parse("M3.75,10.25 L8.15,14.65 L16.25,5.35"));
+
+    /// <summary>An action whose icon shows a check, with the icon it replaced.</summary>
+    private sealed class SuccessMark(DispatcherTimer timer)
+    {
+        internal DispatcherTimer Timer { get; } = timer;
+
+        internal Geometry? Original { get; set; }
+    }
+
+    /// <summary>Test hook: whether the action's icon shows the success check.</summary>
+    internal bool ShowsSuccessCheckForTest(string action) =>
+        _actionButtons.TryGetValue(action, out Button? button)
+        && _successMarks.TryGetValue(button, out SuccessMark? mark) && mark.Original is not null;
+
+    /// <summary>Test hook: the success check period ends now for every action.</summary>
+    internal void ElapseSuccessCheckForTest()
+    {
+        foreach (Button button in _successMarks.Keys.ToArray()) HideSuccessCheck(button);
+    }
+
+    /// <summary>Test hook: the status glyph, its outline drawing in after a success.</summary>
+    internal SymbolIcon StatusGlyphForTest => _statusGlyph;
+
+    /// <summary>Test hook: the status text's brush, briefly the success colour after a success.</summary>
+    internal Brush StatusForegroundForTest => _status.Foreground;
+
+    /// <summary>Test hook: the countdown bar.</summary>
+    internal ProgressBar RemainingBarForTest => _remaining;
+
+    /// <summary>Test hook: the card's surface, which the entrance, landing and exit fade.</summary>
+    internal Border SurfaceForTest => _surface;
+
+    /// <summary>Test hook: the preview image, hidden while a capture flies into it.</summary>
+    internal Image PreviewForTest => _preview;
 
     /// <summary>
     /// Shows the status line. A success keeps the card for at least
@@ -614,6 +915,7 @@ internal sealed class QuickAccessWindow : Window
     private void ShowStatus(string text, FeedbackKind kind)
     {
         _statusKind = kind;
+        StrokeDrawMotion.Stop(_statusGlyph);
         KoreanWordWrap.SetText(_status, text);
         _status.ToolTip = text;
         bool failed = FeedbackTiming.StaysUntilDismissed(kind);
@@ -636,7 +938,8 @@ internal sealed class QuickAccessWindow : Window
             {
                 TimeSpan hold = Lifetime - FeedbackTiming.HoldAfterResult;
                 if (_elapsed > hold) _elapsed = hold;
-                UpdateRemaining();
+                // A refilled bar rises over the shared 167 ms token instead of jumping.
+                UpdateRemaining(FluidMotion.NormalDuration.TimeSpan, FluidMotion.StandardEasing);
             }
         }
 
@@ -659,6 +962,7 @@ internal sealed class QuickAccessWindow : Window
         // Reduced motion keeps a steady neutral bar; the status text already says what is running.
         _progressShown = true;
         _remaining.Visibility = Visibility.Visible;
+        _remaining.BeginAnimation(RangeBase.ValueProperty, null);
         _remaining.SetResourceReference(ForegroundProperty, "Border.Strong");
         _remaining.IsIndeterminate = FluidMotion.AnimationsEnabled;
         if (!FluidMotion.AnimationsEnabled) _remaining.Value = 100;

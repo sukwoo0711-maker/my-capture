@@ -36,6 +36,9 @@ internal sealed class ThemedShellPresenter(Func<bool> suppressNotification, Func
         new(WindowsFeatureSupport.WindowCornerRadiusDip(Environment.OSVersion.Version.Build));
 
     private Window? _toast;
+    private CardKind _toastCard;
+    // Cards that are already dismissed but still playing their exit.
+    private readonly List<Window> _leaving = [];
     private ReceiptKeyboardSession? _receiptKeyboardSession;
     internal bool HasNotification => _toast is not null;
     internal event Action? NotificationDismissed;
@@ -71,7 +74,7 @@ internal sealed class ThemedShellPresenter(Func<bool> suppressNotification, Func
     /// </param>
     internal void ShowNotification(string title, string message, TrayBalloonKind kind, bool answersCommand)
     {
-        Dismiss();
+        DismissFor(CardKind.Notice);
         if (!answersCommand && suppressNotification()) return;
         var content = new StackPanel();
         content.Children.Add(Heading(title));
@@ -82,18 +85,18 @@ internal sealed class ThemedShellPresenter(Func<bool> suppressNotification, Func
         Window window = CreateNotificationWindow(content, title, new Thickness(20));
         window.SourceInitialized += (_, _) => CaptureWindowExclusion.TryApply(window);
         PlaceOnPointerMonitor(window);
-        Present(window, KindOf(kind), title + " " + message);
+        Present(window, CardKind.Notice, KindOf(kind), title + " " + message);
     }
 
     internal void ShowColorCopy(ColorCopyFeedback feedback)
     {
-        Dismiss();
+        DismissFor(CardKind.ColorCopy);
         if ((suppressColorCopy ?? suppressNotification)()) return;
         Window window = CreateNotificationWindow(CreateColorCopyContent(feedback),
             UiText.Get("Tools_ColorPicker"), new Thickness(20));
         window.SourceInitialized += (_, _) => CaptureWindowExclusion.TryApply(window);
         PlaceOnPointerMonitor(window);
-        Present(window, FeedbackKind.Confirmation, feedback.Message);
+        Present(window, CardKind.ColorCopy, FeedbackKind.Confirmation, feedback.Message);
     }
 
     internal static FrameworkElement CreateColorCopyContent(ColorCopyFeedback feedback)
@@ -127,7 +130,7 @@ internal sealed class ThemedShellPresenter(Func<bool> suppressNotification, Func
     /// Shows a notification window for its kind's display time from <see cref="FeedbackTiming"/>.
     /// Pointing at it or keyboard focus inside it pauses the countdown, and Esc closes it.
     /// </summary>
-    private void Present(Window window, FeedbackKind kind, string announcement)
+    private void Present(Window window, CardKind card, FeedbackKind kind, string announcement)
     {
         window.KeyDown += (_, e) =>
         {
@@ -136,6 +139,7 @@ internal sealed class ThemedShellPresenter(Func<bool> suppressNotification, Func
             e.Handled = true;
         };
         TrackNotification(window);
+        _toastCard = card;
         _countdown ??= new FeedbackCountdown(window.Dispatcher,
             () => _toast is { } toast && (toast.IsMouseOver || toast.IsKeyboardFocusWithin), Dismiss);
         _toastKind = kind;
@@ -171,11 +175,11 @@ internal sealed class ThemedShellPresenter(Func<bool> suppressNotification, Func
 
     internal bool ShowCaptureReceipt(string message, Action openLibrary, string? tip = null, Action? pin = null, bool answersCommand = false, string? actionTooltip = null)
     {
-        Dismiss();
+        DismissFor(CardKind.Receipt);
         if (!answersCommand && suppressNotification()) return false;
         Window window = CreateCaptureReceipt(message, openLibrary, tip, pin, actionTooltip);
         PlaceOnPointerMonitor(window);
-        Present(window, FeedbackKind.Confirmation, tip is null ? message : message + " " + tip);
+        Present(window, CardKind.Receipt, FeedbackKind.Confirmation, tip is null ? message : message + " " + tip);
         return true;
     }
 
@@ -532,7 +536,26 @@ internal sealed class ThemedShellPresenter(Func<bool> suppressNotification, Func
         _ => FeedbackKind.Result,
     };
 
-    internal void Dismiss()
+    /// <summary>
+    /// Closes the card on screen (its timeout, its close button, Esc or one of its actions) and the
+    /// tray menu. The card is gone at once for everyone who asks; only its pixels leave with the
+    /// shared exit, sliding toward the screen edge it is docked at.
+    /// </summary>
+    internal void Dismiss() => Dismiss(immediate: false);
+
+    // The kinds of card the presenter shows. A newer card of the kind on screen replaces it at
+    // once; a card of another kind lets the old one play its exit while the new one enters.
+    private enum CardKind
+    {
+        Notice,
+        ColorCopy,
+        Receipt,
+        Action,
+    }
+
+    private void DismissFor(CardKind next) => Dismiss(immediate: _toast is not null && _toastCard == next);
+
+    private void Dismiss(bool immediate)
     {
         _countdown?.Stop();
         Window? toast = _toast;
@@ -543,7 +566,7 @@ internal sealed class ThemedShellPresenter(Func<bool> suppressNotification, Func
         if (toast is not null)
         {
             keyboardRouter?.Remove(toast);
-            toast.Close();
+            Leave(toast, immediate);
             session?.Return(returnTo);
             NotificationDismissed?.Invoke();
         }
@@ -551,10 +574,30 @@ internal sealed class ThemedShellPresenter(Func<bool> suppressNotification, Func
         _menu = null;
     }
 
+    // Every card docks at the bottom right of its monitor, so it leaves to the right. Without
+    // Windows animations, or as an opaque window, it closes at once.
+    private void Leave(Window card, bool immediate)
+    {
+        if (immediate)
+        {
+            card.Close();
+            return;
+        }
+
+        _leaving.Add(card);
+        card.Closed += (_, _) => _leaving.Remove(card);
+        FluidMotion.BeginExit(card, ExitMotion.FadeRight, card.Close);
+    }
+
+    /// <summary>Test hook: dismissed cards whose exit is still on the screen.</summary>
+    internal IReadOnlyList<Window> LeavingCardsForTest => _leaving;
+
     internal void DismissForCapture()
     {
-        bool visible = _toast?.IsVisible == true || _menu?.IsOpen == true;
-        Dismiss();
+        bool visible = _toast?.IsVisible == true || _menu?.IsOpen == true || _leaving.Count > 0;
+        Dismiss(immediate: true);
+        // A card still playing its exit leaves now, before the capture's first frame.
+        foreach (Window card in _leaving.ToArray()) FluidMotion.CompleteExit(card);
         if (ShortcutHelpWindow.DismissForCapture() || visible) ForegroundDismissed?.Invoke();
     }
     public void Dispose() => DismissForCapture();
@@ -568,11 +611,25 @@ internal sealed class ThemedShellPresenter(Func<bool> suppressNotification, Func
         TrayBalloonKind kind = TrayBalloonKind.Information, bool answersCommand = false)
     {
         ArgumentNullException.ThrowIfNull(action);
-        Dismiss();
+        DismissFor(CardKind.Action);
         if (!answersCommand && suppressNotification()) return;
         Window window = CreateActionNotification(title, message, actionLabel, action);
         PlaceOnPointerMonitor(window);
-        Present(window, KindOf(kind), title + " " + message);
+        Present(window, CardKind.Action, KindOf(kind), title + " " + message);
+    }
+
+    /// <summary>
+    /// The card an editor quick save shows while "Notify after quick save" is on: Saved, the file's
+    /// name and a way to its folder. It answers the save command, so an open capture session does
+    /// not hold it back.
+    /// </summary>
+    internal void ShowQuickSaved(string path, Action<string> openFolder)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(path);
+        ArgumentNullException.ThrowIfNull(openFolder);
+        string folder = System.IO.Path.GetDirectoryName(path) ?? path;
+        ShowActionNotification(UiText.Get("QuickAccess.Saved"), System.IO.Path.GetFileName(path),
+            UiText.Get("QuickAccess.OpenFolder"), () => openFolder(folder), answersCommand: true);
     }
 
     /// <summary>

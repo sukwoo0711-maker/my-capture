@@ -612,7 +612,7 @@ internal sealed partial class GalleryWindow : Window
                 if (tile.IsImage)
                 {
                     e.Handled = true;
-                    await CopyRenderedAsync(tile);
+                    if (await CopyRenderedAsync(tile)) ConfirmCopy(source: null);
                 }
                 break;
             case Key.T when tile.IsImage:
@@ -755,7 +755,7 @@ internal sealed partial class GalleryWindow : Window
         if (ResolveTileFromCommand(sender) is GalleryItemViewModel tile)
         {
             e.Handled = true;
-            await CopyRenderedAsync(tile);
+            if (await CopyRenderedAsync(tile)) ConfirmCopy(sender);
         }
     }
 
@@ -905,7 +905,8 @@ internal sealed partial class GalleryWindow : Window
     ];
 
     // Plain confirmations; every other line carries a count, a hint or a cause to read.
-    private static readonly string[] ConfirmationStatusKeys = ["Library.SourcePage.Copied", "Library.Source.PathCopied"];
+    private static readonly string[] ConfirmationStatusKeys =
+        ["Library.SourcePage.Copied", "Library.Source.PathCopied", "Library.Image.Copied"];
 
     // Export lines that the outcome replaces.
     private static readonly string[] ProgressStatusKeys =
@@ -1058,22 +1059,23 @@ internal sealed partial class GalleryWindow : Window
         }
     }
 
-    private async Task CopyRenderedAsync(GalleryItemViewModel tile)
+    /// <summary>Copies the capture's rendered image; true once it is on the clipboard.</summary>
+    private async Task<bool> CopyRenderedAsync(GalleryItemViewModel tile)
     {
         if (!tile.IsImage)
         {
-            return;
+            return false;
         }
 
         if (!EnsureRecordReady(tile.Id))
         {
-            return;
+            return false;
         }
 
         CaptureRecord? record = _controller.Find(tile.Id);
         if (record is null)
         {
-            return;
+            return false;
         }
 
         // Copy the flattened rendered.png so the clipboard carries the annotated result. This
@@ -1083,7 +1085,7 @@ internal sealed partial class GalleryWindow : Window
         if (rendered is null)
         {
             ShowStatus(UiText.Get("Text_3BF4FEA88C51"));
-            return;
+            return false;
         }
 
         try
@@ -1092,7 +1094,10 @@ internal sealed partial class GalleryWindow : Window
                     MyCapture.Core.Capture.CaptureProvenance.FromRecord(record)))
             {
                 ShowStatus(UiText.Get("Text_75425A6D9BE8"));
+                return false;
             }
+
+            return true;
         }
         catch (Exception ex)
         {
@@ -1100,6 +1105,7 @@ internal sealed partial class GalleryWindow : Window
             // clipboard provider failure escape into WPF's message pump.
             _log.LogWarning(ex, "Could not copy gallery capture {Id} to the clipboard", record.Id);
             ShowStatus(UiText.Get("Text_75425A6D9BE8"));
+            return false;
         }
     }
 
