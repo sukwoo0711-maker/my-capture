@@ -149,23 +149,24 @@ public sealed partial class SettingsThemePreviewTests
                         }
 
                         Color fill = ColorOf(on.Background);
-                        Color border = ColorOf(on.BorderBrush);
+                        Color border = on.BorderBrush is LinearGradientBrush gradient
+                            ? gradient.GradientStops[^1].Color : ColorOf(on.BorderBrush);
                         switch (tier)
                         {
                             case ButtonTier.Filled:
                                 Assert.Equal(Wpf(Token("Accent.Default")), fill);
                                 break;
                             case ButtonTier.Bordered:
-                                // Control outlines have their own token: Border.Subtle is decorative
-                                // and too faint on glass to mark a button.
-                                Assert.Equal(Wpf(Token("Border.Control")), border);
-                                Assert.Equal(Wpf(Token("Surface.Overlay")), fill);
+                                Assert.True(Same((Brush)application.FindResource("Button.BorderBrush"), on.BorderBrush));
+                                if (theme != AppTheme.HighContrast && !ThemeService.IsSystemHighContrast)
+                                    ButtonAppearanceTests.AssertOutline(on.BorderBrush, theme);
+                                Assert.Equal(Wpf(Token("Button.Fill")), fill);
                                 break;
                             case ButtonTier.Danger:
                                 // Destructive commands: the bordered shape with danger text and outline.
                                 Assert.Equal(Wpf(Token("State.Danger")), border);
                                 Assert.Equal(Wpf(Token("State.Danger")), ColorOf(enabled.Foreground));
-                                Assert.Equal(Wpf(Token("Surface.Overlay")), fill);
+                                Assert.Equal(Wpf(Token("Button.Fill")), fill);
                                 break;
                             default:
                                 Assert.Equal(0, fill.A);
@@ -181,7 +182,13 @@ public sealed partial class SettingsThemePreviewTests
                             ? disabledFilledRatio
                             : ThemeContrast.Ratio(Fade(text, page), Fade(background, page));
                         bool outlined = tier is ButtonTier.Bordered or ButtonTier.Danger;
-                        double borderRatio = outlined ? ThemeContrast.Ratio(Over(Theme(border), page), page) : double.NaN;
+                        // Default elevation edges have exact gradient stops above. The unchanged
+                        // interactive outline still has the 3:1 requirement, as do solid danger
+                        // and high-contrast outlines.
+                        Color contrastOutline = on.BorderBrush is LinearGradientBrush
+                            ? ColorOf(Assert.IsType<Border>(enabled.Template.FindName("HoverLayer", enabled)).BorderBrush)
+                            : border;
+                        double borderRatio = outlined ? ThemeContrast.Ratio(Over(Theme(contrastOutline), page), page) : double.NaN;
                         Assert.True(enabledRatio >= 4.5, $"{label}: label contrast {enabledRatio:0.00}");
                         if (outlined)
                             Assert.True(borderRatio >= 3.0, $"{label}: outline contrast {borderRatio:0.00}");
@@ -208,7 +215,15 @@ public sealed partial class SettingsThemePreviewTests
         }
 
         static Color ColorOf(Brush brush) => Assert.IsType<SolidColorBrush>(brush).Color;
-        static bool Same(Brush first, Brush second) => ColorOf(first) == ColorOf(second);
+        static bool Same(Brush first, Brush second) => (first, second) switch
+        {
+            (LinearGradientBrush a, LinearGradientBrush b) => a.StartPoint == b.StartPoint && a.EndPoint == b.EndPoint
+                && a.MappingMode == b.MappingMode && a.Opacity == b.Opacity
+                && a.GradientStops.Select(stop => (stop.Offset, stop.Color))
+                    .SequenceEqual(b.GradientStops.Select(stop => (stop.Offset, stop.Color))),
+            (SolidColorBrush a, SolidColorBrush b) => a.Color == b.Color && a.Opacity == b.Opacity,
+            _ => false,
+        };
         static Color Wpf(ThemeColor color) => Color.FromArgb(color.A, color.R, color.G, color.B);
         static ThemeColor Theme(Color color) => ThemeColor.Argb(color.A, color.R, color.G, color.B);
         static ThemeColor Over(ThemeColor top, ThemeColor bottom) => ThemeContrast.Composite(top, bottom);

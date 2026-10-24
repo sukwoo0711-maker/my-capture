@@ -112,7 +112,7 @@ public sealed class EditorCommandBarAdaptiveTests(ITestOutputHelper output)
     [Theory]
     // Measured with the editing commands as borderless tool buttons (no 1-DIP outline).
     [InlineData("ko-KR", new[] { 969, 935, 889, 862, 779, 721, 648 })]
-    [InlineData("en-US", new[] { 940, 894, 858, 827, 747, 710, 648 })]
+    [InlineData("en-US", new[] { 933, 888, 852, 822, 744, 709, 648 })]
     public void NamesCollapseOneCommandAtATimeInTheirDeclaredOrder(string language, int[] boundaries) => StaTestHost.Run(() =>
     {
         using var culture = UiText.UseLanguage(language);

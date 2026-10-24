@@ -147,6 +147,20 @@
     <SolidColorBrush x:Key="Border.Strong" Color="{StaticResource Primitive.Warm600}" />
     <SolidColorBrush x:Key="Border.Hover" Color="Transparent" />
     <SolidColorBrush x:Key="Border.Focus" Color="{StaticResource Primitive.Warm100}" />
+    <!-- Button chrome is inset inside the unchanged command hit target. -->
+    <SolidColorBrush x:Key="Button.Fill" Color="#25323C" />
+    <LinearGradientBrush x:Key="Button.BorderBrush" StartPoint="0,0" EndPoint="0,1">
+        <GradientStop Color="#3A4853" Offset="0" />
+        <GradientStop Color="#3A4853" Offset="0.8" />
+        <GradientStop Color="#1E2830" Offset="1" />
+    </LinearGradientBrush>
+    <FontWeight x:Key="Button.FontWeight">Normal</FontWeight>
+    <Thickness x:Key="Button.ChromeInset">0,4,0,4</Thickness>
+    <Thickness x:Key="Button.ChromeInset.Compact">0,2,0,2</Thickness>
+    <Thickness x:Key="Button.FocusInset">1,5,1,5</Thickness>
+    <Thickness x:Key="Button.FocusInset.Compact">1,3,1,3</Thickness>
+    <Thickness x:Key="Button.PrimaryFocusInset">2,6,2,6</Thickness>
+    <Thickness x:Key="Button.PrimaryFocusInset.Compact">2,4,2,4</Thickness>
     <SolidColorBrush x:Key="Pin.Frame" Color="#E24F47" />
     <!-- The one recording red: region frame, compact bar dot and the region selector's cue.
          Status words stay State.Danger, which keeps text contrast on the floating bar. -->

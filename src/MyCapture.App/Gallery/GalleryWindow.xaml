@@ -174,6 +174,41 @@
             </Grid>
         </DataTemplate>
 
+        <Style x:Key="Gallery.SourceBadge" TargetType="Button" BasedOn="{StaticResource Button.GhostCompact}">
+            <Setter Property="Height" Value="22" />
+            <Setter Property="MinHeight" Value="22" />
+            <Setter Property="MaxWidth" Value="130" />
+            <Setter Property="Padding" Value="6,1" />
+            <Setter Property="Foreground" Value="{DynamicResource Text.Secondary}" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding IsMouseOver, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" Value="True">
+                    <Setter Property="Height" Value="{DynamicResource CommandButton.Height.Compact}" />
+                    <Setter Property="MinHeight" Value="26" />
+                    <Setter Property="MaxWidth" Value="200" />
+                    <Setter Property="Padding" Value="6,3" />
+                    <Setter Property="Foreground" Value="{DynamicResource Text.Primary}" />
+                    <Setter Property="BorderThickness" Value="1" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding IsKeyboardFocusWithin, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" Value="True">
+                    <Setter Property="Height" Value="{DynamicResource CommandButton.Height.Compact}" />
+                    <Setter Property="MinHeight" Value="26" />
+                    <Setter Property="MaxWidth" Value="200" />
+                    <Setter Property="Padding" Value="6,3" />
+                    <Setter Property="Foreground" Value="{DynamicResource Text.Primary}" />
+                    <Setter Property="BorderThickness" Value="1" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding IsSelected}" Value="True">
+                    <Setter Property="Height" Value="{DynamicResource CommandButton.Height.Compact}" />
+                    <Setter Property="MinHeight" Value="26" />
+                    <Setter Property="MaxWidth" Value="200" />
+                    <Setter Property="Padding" Value="6,3" />
+                    <Setter Property="Foreground" Value="{DynamicResource Text.Primary}" />
+                    <Setter Property="BorderThickness" Value="1" />
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+
         <DataTemplate x:Key="Gallery.TileTemplate" DataType="{x:Type gallery:GalleryItemViewModel}">
             <!-- Contain preserves screenshot text and edges; overlays keep a fixed DIP size. -->
             <Border x:Name="TileCard" Background="{DynamicResource Surface.Raised}"
@@ -187,32 +222,40 @@
                     <Border x:Name="TilePreview" Background="{DynamicResource Surface.Sunken}" ClipToBounds="True"
                             Height="{Binding ActualWidth, RelativeSource={RelativeSource Self}, Converter={StaticResource Gallery.ThumbnailHeight}}">
                         <Grid>
-                            <Image Source="{Binding Thumbnail}" Stretch="Uniform"
+                            <!-- A thumbnail that arrives after the card is on screen fades in; a cached one does not. -->
+                            <gallery:GalleryThumbnailImage Source="{Binding Thumbnail}" Stretch="Uniform"
                                    RenderOptions.BitmapScalingMode="HighQuality" AutomationProperties.Name="{Binding AccessibleName}" />
-                            <Button x:Name="SourceBadge" Style="{StaticResource Button.GhostCompact}"
-                                    gallery:GallerySourceBadge.Provenance="{Binding SourceProvenance}"
-                                    AutomationProperties.AutomationId="LibrarySourceBadge"
-                                    HorizontalAlignment="Left" VerticalAlignment="Bottom" HorizontalContentAlignment="Stretch"
-                                    Margin="5" Padding="6,3" MinWidth="0" MinHeight="26" MaxWidth="200"
-                                    FontSize="{DynamicResource FontSize.Caption}"
-                                    Background="{DynamicResource Surface.Floating}" Foreground="{DynamicResource Text.Primary}"
-                                    BorderBrush="{DynamicResource Border.Subtle}" BorderThickness="1"
-                                    Visibility="{Binding HasSourceBadge, Converter={StaticResource BoolToVisibility}}" />
                             <TextBlock Text="{Binding PreviewUnavailableText}" Margin="6" TextWrapping="Wrap" TextAlignment="Center"
                                        FontSize="{DynamicResource FontSize.Caption}" Foreground="{DynamicResource Text.Secondary}"
                                        HorizontalAlignment="Center" VerticalAlignment="Center"
                                        Visibility="{Binding IsBroken, Converter={StaticResource BoolToVisibility}}" />
-                            <Border x:Name="VideoBadge" HorizontalAlignment="Right" VerticalAlignment="Bottom"
-                                    Margin="5" Padding="5,2" CornerRadius="4" Background="{DynamicResource Surface.Raised}"
-                                    IsHitTestVisible="False" Visibility="{Binding IsVideo, Converter={StaticResource BoolToVisibility}}">
-                                <StackPanel Orientation="Horizontal">
-                                    <themes:SymbolIcon Size="12" Data="{StaticResource Icon.Play}" Margin="0,0,4,0"
-                                                       Fill="{DynamicResource Text.Primary}" Stroke="{DynamicResource Text.Primary}" />
-                                    <TextBlock Text="{Binding DurationCaption}" FontSize="{DynamicResource FontSize.Caption}"
-                                               Foreground="{DynamicResource Text.Primary}" />
-                                </StackPanel>
-                            </Border>
-                            <!-- Opacity preserves tab stops; entering the tile reveals every action. -->
+                            <Grid VerticalAlignment="Bottom">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <Button x:Name="SourceBadge" Style="{StaticResource Gallery.SourceBadge}"
+                                        gallery:GallerySourceBadge.Provenance="{Binding SourceProvenance}"
+                                        AutomationProperties.AutomationId="LibrarySourceBadge"
+                                        HorizontalAlignment="Left" VerticalAlignment="Bottom" HorizontalContentAlignment="Stretch"
+                                        Margin="5" MinWidth="0"
+                                        FontSize="{DynamicResource FontSize.Caption}"
+                                        Background="{DynamicResource Surface.Floating}"
+                                        BorderBrush="{DynamicResource Border.Subtle}"
+                                        Visibility="{Binding HasSourceBadge, Converter={StaticResource BoolToVisibility}}" />
+                                <Border x:Name="VideoBadge" Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Bottom"
+                                        Margin="5" Padding="5,2" CornerRadius="4" Background="{DynamicResource Surface.Raised}"
+                                        IsHitTestVisible="False" Visibility="{Binding IsVideo, Converter={StaticResource BoolToVisibility}}">
+                                    <StackPanel Orientation="Horizontal">
+                                        <themes:SymbolIcon Size="12" Data="{StaticResource Icon.Play}" Margin="0,0,4,0"
+                                                           Fill="{DynamicResource Text.Primary}" Stroke="{DynamicResource Text.Primary}" />
+                                        <TextBlock Text="{Binding DurationCaption}" FontSize="{DynamicResource FontSize.Caption}"
+                                                   Foreground="{DynamicResource Text.Primary}" />
+                                    </StackPanel>
+                                </Border>
+                            </Grid>
+                            <!-- Opacity preserves tab stops; entering the tile reveals every action. The actions
+                                 fade over Motion.Fast with the card's hover wash and take input at once. -->
                             <Border x:Name="TileActions" HorizontalAlignment="Right" VerticalAlignment="Top"
                                     Margin="4" Padding="2" CornerRadius="5"
                                     Background="{DynamicResource Surface.Floating}"
@@ -221,17 +264,18 @@
                                     <Style TargetType="Border">
                                         <Setter Property="Opacity" Value="0" />
                                         <Setter Property="IsHitTestVisible" Value="False" />
+                                        <Setter Property="themes:FluidMotion.Transition" Value="Fast" />
                                         <Style.Triggers>
                                             <DataTrigger Binding="{Binding IsMouseOver, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" Value="True">
-                                                <Setter Property="Opacity" Value="1" />
+                                                <Setter Property="themes:FluidMotion.FadeTo" Value="1" />
                                                 <Setter Property="IsHitTestVisible" Value="True" />
                                             </DataTrigger>
                                             <DataTrigger Binding="{Binding IsKeyboardFocusWithin, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" Value="True">
-                                                <Setter Property="Opacity" Value="1" />
+                                                <Setter Property="themes:FluidMotion.FadeTo" Value="1" />
                                                 <Setter Property="IsHitTestVisible" Value="True" />
                                             </DataTrigger>
                                             <DataTrigger Binding="{Binding IsSelected}" Value="True">
-                                                <Setter Property="Opacity" Value="1" />
+                                                <Setter Property="themes:FluidMotion.FadeTo" Value="1" />
                                                 <Setter Property="IsHitTestVisible" Value="True" />
                                             </DataTrigger>
                                         </Style.Triggers>
@@ -254,10 +298,17 @@
                                         <themes:SymbolIcon Size="16" Data="{StaticResource Icon.Pin}" Fill="Transparent"
                                                            Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
                                     </Button>
+                                    <!-- A copy that succeeds turns the glyph into a check for a moment (GalleryCopyFeedback). -->
                                     <Button ToolTip="{loc:Text Text_59D43391538F}" AutomationProperties.Name="{loc:Text Text_42A667BC71B0}"
                                             Click="OnCopyClick" Visibility="{Binding IsImage, Converter={StaticResource BoolToVisibility}}">
-                                        <themes:SymbolIcon Size="16" Data="{StaticResource Icon.Copy}" Fill="Transparent"
-                                                           Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
+                                        <Grid>
+                                            <themes:SymbolIcon Size="16" Data="{StaticResource Icon.Copy}" Fill="Transparent"
+                                                               gallery:GalleryCopyFeedback.Part="Glyph" themes:FluidMotion.FadeTo="1"
+                                                               Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
+                                            <themes:SymbolIcon Size="16" Data="{StaticResource Icon.Check}" Fill="Transparent" Opacity="0"
+                                                               gallery:GalleryCopyFeedback.Part="Check"
+                                                               Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
+                                        </Grid>
                                     </Button>
                                     <Button ToolTip="{Binding EditToolTip}" AutomationProperties.Name="{loc:Text Text_1003CFC78E66}" Click="OnEditClick">
                                         <themes:SymbolIcon Size="16" Data="{StaticResource Icon.Edit}" Fill="Transparent"
@@ -483,32 +534,40 @@
                     <Border x:Name="TilePreview" Background="{DynamicResource Surface.Sunken}" ClipToBounds="True"
                             Height="{Binding ActualWidth, RelativeSource={RelativeSource Self}, Converter={StaticResource Gallery.ThumbnailHeight}}">
                         <Grid>
-                            <Image Source="{Binding Thumbnail}" Stretch="Uniform"
+                            <!-- A thumbnail that arrives after the card is on screen fades in; a cached one does not. -->
+                            <gallery:GalleryThumbnailImage Source="{Binding Thumbnail}" Stretch="Uniform"
                                    RenderOptions.BitmapScalingMode="HighQuality" AutomationProperties.Name="{Binding AccessibleName}" />
-                            <Button x:Name="SourceBadge" Style="{StaticResource Button.GhostCompact}"
-                                    gallery:GallerySourceBadge.Provenance="{Binding SourceProvenance}"
-                                    AutomationProperties.AutomationId="LibrarySourceBadge"
-                                    HorizontalAlignment="Left" VerticalAlignment="Bottom" HorizontalContentAlignment="Stretch"
-                                    Margin="5" Padding="6,3" MinWidth="0" MinHeight="26" MaxWidth="200"
-                                    FontSize="{DynamicResource FontSize.Caption}"
-                                    Background="{DynamicResource Surface.Floating}" Foreground="{DynamicResource Text.Primary}"
-                                    BorderBrush="{DynamicResource Border.Subtle}" BorderThickness="1"
-                                    Visibility="{Binding HasSourceBadge, Converter={StaticResource BoolToVisibility}}" />
                             <TextBlock Text="{Binding PreviewUnavailableText}" Margin="6" TextWrapping="Wrap" TextAlignment="Center"
                                        FontSize="{DynamicResource FontSize.Caption}" Foreground="{DynamicResource Text.Secondary}"
                                        HorizontalAlignment="Center" VerticalAlignment="Center"
                                        Visibility="{Binding IsBroken, Converter={StaticResource BoolToVisibility}}" />
-                            <Border x:Name="VideoBadge" HorizontalAlignment="Right" VerticalAlignment="Bottom"
-                                    Margin="5" Padding="5,2" CornerRadius="4" Background="{DynamicResource Surface.Raised}"
-                                    IsHitTestVisible="False" Visibility="{Binding IsVideo, Converter={StaticResource BoolToVisibility}}">
-                                <StackPanel Orientation="Horizontal">
-                                    <themes:SymbolIcon Size="12" Data="{StaticResource Icon.Play}" Margin="0,0,4,0"
-                                                       Fill="{DynamicResource Text.Primary}" Stroke="{DynamicResource Text.Primary}" />
-                                    <TextBlock Text="{Binding DurationCaption}" FontSize="{DynamicResource FontSize.Caption}"
-                                               Foreground="{DynamicResource Text.Primary}" />
-                                </StackPanel>
-                            </Border>
-                            <!-- Opacity preserves tab stops; entering the tile reveals every action. -->
+                            <Grid VerticalAlignment="Bottom">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <Button x:Name="SourceBadge" Style="{StaticResource Gallery.SourceBadge}"
+                                        gallery:GallerySourceBadge.Provenance="{Binding SourceProvenance}"
+                                        AutomationProperties.AutomationId="LibrarySourceBadge"
+                                        HorizontalAlignment="Left" VerticalAlignment="Bottom" HorizontalContentAlignment="Stretch"
+                                        Margin="5" MinWidth="0"
+                                        FontSize="{DynamicResource FontSize.Caption}"
+                                        Background="{DynamicResource Surface.Floating}"
+                                        BorderBrush="{DynamicResource Border.Subtle}"
+                                        Visibility="{Binding HasSourceBadge, Converter={StaticResource BoolToVisibility}}" />
+                                <Border x:Name="VideoBadge" Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Bottom"
+                                        Margin="5" Padding="5,2" CornerRadius="4" Background="{DynamicResource Surface.Raised}"
+                                        IsHitTestVisible="False" Visibility="{Binding IsVideo, Converter={StaticResource BoolToVisibility}}">
+                                    <StackPanel Orientation="Horizontal">
+                                        <themes:SymbolIcon Size="12" Data="{StaticResource Icon.Play}" Margin="0,0,4,0"
+                                                           Fill="{DynamicResource Text.Primary}" Stroke="{DynamicResource Text.Primary}" />
+                                        <TextBlock Text="{Binding DurationCaption}" FontSize="{DynamicResource FontSize.Caption}"
+                                                   Foreground="{DynamicResource Text.Primary}" />
+                                    </StackPanel>
+                                </Border>
+                            </Grid>
+                            <!-- Opacity preserves tab stops; entering the tile reveals every action. The actions
+                                 fade over Motion.Fast with the card's hover wash and take input at once. -->
                             <Border x:Name="TileActions" HorizontalAlignment="Right" VerticalAlignment="Top"
                                     Margin="4" Padding="2" CornerRadius="5"
                                     Background="{DynamicResource Surface.Floating}"
@@ -517,17 +576,18 @@
                                     <Style TargetType="Border">
                                         <Setter Property="Opacity" Value="0" />
                                         <Setter Property="IsHitTestVisible" Value="False" />
+                                        <Setter Property="themes:FluidMotion.Transition" Value="Fast" />
                                         <Style.Triggers>
                                             <DataTrigger Binding="{Binding IsMouseOver, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" Value="True">
-                                                <Setter Property="Opacity" Value="1" />
+                                                <Setter Property="themes:FluidMotion.FadeTo" Value="1" />
                                                 <Setter Property="IsHitTestVisible" Value="True" />
                                             </DataTrigger>
                                             <DataTrigger Binding="{Binding IsKeyboardFocusWithin, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" Value="True">
-                                                <Setter Property="Opacity" Value="1" />
+                                                <Setter Property="themes:FluidMotion.FadeTo" Value="1" />
                                                 <Setter Property="IsHitTestVisible" Value="True" />
                                             </DataTrigger>
                                             <DataTrigger Binding="{Binding IsSelected}" Value="True">
-                                                <Setter Property="Opacity" Value="1" />
+                                                <Setter Property="themes:FluidMotion.FadeTo" Value="1" />
                                                 <Setter Property="IsHitTestVisible" Value="True" />
                                             </DataTrigger>
                                         </Style.Triggers>
@@ -550,10 +610,17 @@
                                         <themes:SymbolIcon Size="16" Data="{StaticResource Icon.Pin}" Fill="Transparent"
                                                            Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
                                     </Button>
+                                    <!-- A copy that succeeds turns the glyph into a check for a moment (GalleryCopyFeedback). -->
                                     <Button ToolTip="{loc:Text Text_59D43391538F}" AutomationProperties.Name="{loc:Text Text_42A667BC71B0}"
                                             Click="OnCopyClick" Visibility="{Binding IsImage, Converter={StaticResource BoolToVisibility}}">
-                                        <themes:SymbolIcon Size="16" Data="{StaticResource Icon.Copy}" Fill="Transparent"
-                                                           Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
+                                        <Grid>
+                                            <themes:SymbolIcon Size="16" Data="{StaticResource Icon.Copy}" Fill="Transparent"
+                                                               gallery:GalleryCopyFeedback.Part="Glyph" themes:FluidMotion.FadeTo="1"
+                                                               Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
+                                            <themes:SymbolIcon Size="16" Data="{StaticResource Icon.Check}" Fill="Transparent" Opacity="0"
+                                                               gallery:GalleryCopyFeedback.Part="Check"
+                                                               Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
+                                        </Grid>
                                     </Button>
                                     <Button ToolTip="{Binding EditToolTip}" AutomationProperties.Name="{loc:Text Text_1003CFC78E66}" Click="OnEditClick">
                                         <themes:SymbolIcon Size="16" Data="{StaticResource Icon.Edit}" Fill="Transparent"
@@ -2073,8 +2140,14 @@
                                         ToolTip="{loc:Text Text_59D43391538F}" AutomationProperties.Name="{loc:Text Text_42A667BC71B0}"
                                         Click="OnCopyClick">
                                     <StackPanel Orientation="Horizontal">
-                                        <themes:SymbolIcon Size="16" Data="{StaticResource Icon.Copy}"
-                                              Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" Fill="Transparent" VerticalAlignment="Center" />
+                                        <Grid VerticalAlignment="Center">
+                                            <themes:SymbolIcon Size="16" Data="{StaticResource Icon.Copy}"
+                                                  gallery:GalleryCopyFeedback.Part="Glyph" themes:FluidMotion.FadeTo="1"
+                                                  Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" Fill="Transparent" />
+                                            <themes:SymbolIcon Size="16" Data="{StaticResource Icon.Check}" Opacity="0"
+                                                  gallery:GalleryCopyFeedback.Part="Check"
+                                                  Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" Fill="Transparent" />
+                                        </Grid>
                                         <TextBlock Text="{loc:Text QuickAccess.Copy}" Margin="6,0,0,0" VerticalAlignment="Center" />
                                     </StackPanel>
                                 </Button>
