@@ -1162,6 +1162,7 @@ public partial class App : Application
             // are pinned or this image alone exceeds the configured capacity.
             _currentEditSession = _commit.BeginEditSession(_pendingRecord);
             _currentRecord = await _persistence.PersistPendingOriginalAsync(_pendingRecord, e.SelectedBitmap);
+            ReceiptTimeline.Mark?.Invoke("save-resumed");
         }
         catch (Exception ex)
         {
@@ -1225,6 +1226,7 @@ public partial class App : Application
                 copied = await (automaticClipboardCopy ?? _commit.CopyCapturedRegionAsync(e.SelectedBitmap,
                     e.SourceTitle, _pendingRecord.InitialRenderShowsSourceWindowTitle, _pendingRecord.SourcePageUrl,
                     Core.Capture.CaptureProvenance.FromRecord(_pendingRecord), CaptureSelectionProvenance.Pending(e)));
+                ReceiptTimeline.Mark?.Invoke("copy-resumed");
             }
             catch (Exception ex)
             {
@@ -1294,6 +1296,7 @@ public partial class App : Application
                     CancelCaptureFlight(selected);
                 }
             }));
+            ReceiptTimeline.Mark?.Invoke("card-scheduled");
         }
         CompleteWelcomeCaptureAnnouncement();
     }
@@ -1337,6 +1340,7 @@ public partial class App : Application
                 // The flight is decoration; the capture goes on without it.
                 _log?.LogWarning(ex, "Could not lift the capture toward its receipt card");
             }
+            ReceiptTimeline.Mark?.Invoke(_captureFlight is null ? "lift-none" : "lift-shown");
         }));
     }
 
@@ -1417,11 +1421,14 @@ public partial class App : Application
                     : null, copiedToClipboard: copiedToClipboard,
                 firstCaptureTip: _settings.General.FirstCaptureTipShown ? null : UiText.Get("Onboard_FirstCaptureTip"),
                 keyboardRouter: _receiptKeyboard);
+            ReceiptTimeline.Mark?.Invoke("card-constructed");
             card.Closed += (_, _) => { _overlay?.NoteForegroundDismissal(); lease.Dispose(); if (ReferenceEquals(_quickAccess, card)) _quickAccess = null; _storeRating?.NotifyFlowEnded(); };
             _quickAccess = card;
             // The lifted capture flies into this card; without one the card uses its usual entrance.
             flight?.Land(card);
+            ReceiptTimeline.Mark?.Invoke("card-show");
             card.Show();
+            ReceiptTimeline.Mark?.Invoke("card-shown");
             if (FirstUseTips.ShowCaptureOnce(_settings.General, () => { })) SaveFirstUseTips();
         }
         catch (Exception ex)

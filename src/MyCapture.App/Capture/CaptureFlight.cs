@@ -3,6 +3,7 @@ using System.Windows;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
+using MyCapture.App.Diagnostics;
 using MyCapture.App.Themes;
 using MyCapture.Core.Primitives;
 using MyCapture.Platform.Display;
@@ -182,6 +183,7 @@ internal sealed class CaptureFlight
     internal void Finish()
     {
         if (_phase == Phase.Done) return;
+        ReceiptTimeline.Mark?.Invoke("flight-finished");
         _phase = Phase.Done;
         _deadline.Stop();
         StopRendering();
@@ -227,6 +229,7 @@ internal sealed class CaptureFlight
                     // next frame, so for one frame both are drawn and never neither.
                     card.RevealPreview();
                     _phase = Phase.Arrived;
+                    ReceiptTimeline.Mark?.Invoke("flight-arrived");
                 }
                 break;
 
@@ -284,6 +287,7 @@ internal sealed class CaptureFlight
 
             _successor = successor;
             _phase = Phase.HandingOver;
+            ReceiptTimeline.Mark?.Invoke("flight-handover");
             successor.ContentRendered += OnSuccessorRendered;
         }
         catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException)
@@ -305,6 +309,7 @@ internal sealed class CaptureFlight
 
     private void StartFlying()
     {
+        ReceiptTimeline.Mark?.Invoke("flight-start");
         _phase = Phase.Flying;
         _phaseStart = _clock();
         // Frames stop while nothing renders (a locked session); the card still lands shortly after.
@@ -319,6 +324,7 @@ internal sealed class CaptureFlight
     /// <summary>The card enters with its usual entrance and the lifted image fades away.</summary>
     private void SkipFlight()
     {
+        ReceiptTimeline.Mark?.Invoke("flight-skipped");
         if (_card is { } card)
         {
             card.Closed -= OnCardClosed;
