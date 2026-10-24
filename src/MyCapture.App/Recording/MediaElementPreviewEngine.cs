@@ -56,6 +56,13 @@ internal sealed class MediaElementPreviewEngine : IVideoPreviewEngine
             : DispatcherPriority.Render;
         (double observedMs, bool ended) = await PositionAsync(position, observedPriority, cancellationToken)
             .ConfigureAwait(false);
+        bool nearEnd = DurationMs - position < EndStretchMs;
+        if (nearEnd)
+        {
+            _settleNextSeek = true;
+        }
+
+        bool settle = request.Mode == PreviewSeekMode.Exact && !nearEnd && _settleNextSeek;
         int seeks = 1;
         int reopens = 0;
         while (true)
@@ -71,11 +78,31 @@ internal sealed class MediaElementPreviewEngine : IVideoPreviewEngine
                 reopens++;
                 await ReopenAsync(cancellationToken).ConfigureAwait(false);
             }
-            else if (request.Mode != PreviewSeekMode.Exact
-                || HasLanded(observedMs, position)
-                || seeks >= MaxExactSeeks)
+            else if (request.Mode != PreviewSeekMode.Exact)
             {
                 break;
+            }
+            else
+            {
+                if (settle && HasLanded(observedMs, position))
+                {
+                    (observedMs, ended) = await SettleAsync(position, observedPriority, cancellationToken)
+                        .ConfigureAwait(false);
+                    if (ended)
+                    {
+                        continue;
+                    }
+
+                    if (HasLanded(observedMs, position))
+                    {
+                        _settleNextSeek = false;
+                    }
+                }
+
+                if (HasLanded(observedMs, position) || seeks >= MaxExactSeeks)
+                {
+                    break;
+                }
             }
 
             seeks++;
@@ -118,6 +145,27 @@ internal sealed class MediaElementPreviewEngine : IVideoPreviewEngine
     // One 100 ns tick early is the player's rounding (see PresentationToleranceMs), not a miss.
     private const double LandingToleranceMs = 0.001;
 
+    /// <summary>
+    /// The stream ran to its end. After that, WPF holds the player internally stopped, and the
+    /// first paused seek from there presents the right frame but leaves the player stopped past
+    /// the position (3 to 74 ms on loaded runners): the brief playback that fetches the frame is
+    /// not undone. Its first read still shows the requested position, so that seek is watched
+    /// until the position stays put, and asked again if it moved.
+    /// </summary>
+    internal void StreamReachedEnd() => _settleNextSeek = true;
+
+    // Set by the end of the stream, a seek into its last stretch included (the brief playback
+    // can reach the end), and cleared by a watched seek elsewhere that stayed where it landed.
+    private volatile bool _settleNextSeek;
+
+    // A seek this close to the end can end the stream while WPF fetches its frame.
+    private const double EndStretchMs = 200;
+
+    // The position counts as settled once it reads the same this long.
+    private static readonly TimeSpan SettlePoll = TimeSpan.FromMilliseconds(15);
+    private const int SettleStableReads = 4;
+    private static readonly TimeSpan SettleLimit = TimeSpan.FromMilliseconds(600);
+
     // An exact seek is asked again at most twice; each try takes one dispatcher round trip.
     private const int MaxExactSeeks = 3;
 
@@ -141,6 +189,9 @@ internal sealed class MediaElementPreviewEngine : IVideoPreviewEngine
 
     /// <summary>How many times the element was positioned, counting each repeated try.</summary>
     internal int PositionCountForTest { get; private set; }
+
+    /// <summary>How many reads were watched until the position stayed put.</summary>
+    internal int SettleCountForTest { get; private set; }
 
     // The ended report is the player's length itself, to the 100 ns tick.
     private const double LengthReportToleranceMs = 0.001;
@@ -187,6 +238,36 @@ internal sealed class MediaElementPreviewEngine : IVideoPreviewEngine
             observedPriority,
             cancellationToken).Task.ConfigureAwait(false);
         return (observedMs, ended);
+    }
+
+    // Reads until the position stays the same for SettleStableReads polls, or SettleLimit.
+    private async Task<(double ObservedMs, bool Ended)> SettleAsync(
+        double position,
+        DispatcherPriority observedPriority,
+        CancellationToken cancellationToken)
+    {
+        var watch = System.Diagnostics.Stopwatch.StartNew();
+        double last = double.NaN;
+        bool ended = false;
+        int stable = 0;
+        while (stable < SettleStableReads && watch.Elapsed < SettleLimit)
+        {
+            await Task.Delay(SettlePoll, cancellationToken).ConfigureAwait(false);
+            double now = 0;
+            await _dispatcher.InvokeAsync(
+                () =>
+                {
+                    now = _media.Position.TotalMilliseconds;
+                    ended = _media.HasVideo && IsMediaEndedReport(now, position, PlayerLengthMs());
+                },
+                observedPriority,
+                cancellationToken).Task.ConfigureAwait(false);
+            stable = Math.Abs(now - last) < LandingToleranceMs ? stable + 1 : 0;
+            last = now;
+        }
+
+        SettleCountForTest++;
+        return (last, ended);
     }
 
     // MediaElement reports no duration when the player's whole-second length is zero.
