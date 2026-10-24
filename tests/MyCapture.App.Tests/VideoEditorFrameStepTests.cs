@@ -1,4 +1,5 @@
 using System.IO;
+using System.Reflection;
 using System.Windows;
 using Microsoft.Extensions.Logging.Abstractions;
 using MyCapture.App.Recording;
@@ -46,6 +47,86 @@ public sealed class VideoEditorFrameStepTests
         times.Add((33 * frameMs) + 9);                 // two frames inside one nominal slot
         for (int slot = 35; slot < 45; slot++) times.Add(slot * frameMs);
         StepThrough(fps, times, constantRate: false);
+    });
+
+    /// <summary>
+    /// A playhead left just before a frame boundary, as an overview click or a pause during
+    /// playback leaves it. Windows Media Player ignores a paused seek that close to where it stands
+    /// and keeps its picture for one that close to the position it was last given, so the next
+    /// frame, and the seek back across the boundary, kept showing the frame before.
+    /// </summary>
+    [Fact]
+    public void ASeekJustAcrossAFrameBoundaryShowsTheFrameOnTheOtherSide() => StaTestHost.Run(() =>
+    {
+        const int fps = 15;
+        string dir = OwnedTestDirectory.Create("mc-frame-boundary-");
+        VideoEditorWindow? editor = null;
+        try
+        {
+            string clip = Path.Combine(dir, "clip.mp4");
+            FrameIndexClip.Encode(clip, 320, 180, fps, FrameIndexClip.Constant(fps, 38));
+            double containerMs = MediaFoundationVideoFrameReader.ReadContainerDurationMs(clip);
+            editor = new VideoEditorWindow(
+                new RecordingResult(clip, containerMs, fps, 38, 320, 180),
+                AppPaths.CreateForRoot(dir),
+                NullLoggerFactory.Instance)
+            {
+                WindowStartupLocation = WindowStartupLocation.Manual,
+                Left = -10000, Top = -10000, Width = 1000, Height = 700,
+                ShowActivated = false, ShowInTaskbar = false,
+            };
+            editor.Show();
+            DateTime deadline = DateTime.UtcNow.AddSeconds(15);
+            while (!editor.IsMediaReadyForTest && !editor.HasMediaFailedForTest && DateTime.UtcNow < deadline)
+                RangePatternClip.Pump(TimeSpan.FromMilliseconds(20));
+            Assert.True(editor.IsMediaReadyForTest, editor.MediaFailureForTest);
+
+            using var export = new MediaFoundationVideoFrameReader(clip);
+            var failures = new List<string>();
+            MethodInfo seek = typeof(VideoEditorWindow).GetMethod("Seek", BindingFlags.Instance | BindingFlags.NonPublic)!;
+
+            void Check(string step, int expectedFrame)
+            {
+                double playhead = editor!.TimelineForTest.PlayheadMs;
+                DecodedVideoFrame decoded = export.ReadFrameAt(playhead);
+                int expected = FrameIndexClip.Read(decoded.Pixels, decoded.Width, decoded.Height, decoded.Stride);
+                Assert.Equal(expectedFrame, expected);
+                int shown = WaitForFrame(editor, expected);
+                if (shown != expected)
+                {
+                    failures.Add($"{step}: playhead {playhead:F3} ms shows frame {shown}, the export takes {expected}");
+                }
+
+                double presented = editor.PreviewSeekCoordinatorForTest.PresentedPositionMs;
+                if (Math.Abs(presented - playhead) > 0.5)
+                {
+                    failures.Add($"{step}: the preview reported {presented:F3} ms for {playhead:F3} ms");
+                }
+            }
+
+            foreach (int frame in new[] { 10, 19, 23 })
+            {
+                double boundary = frame * 1000.0 / fps;
+                foreach (double before in new[] { 0.3, 0.6, 0.9 })
+                {
+                    seek.Invoke(editor, [boundary - 30]);
+                    Check($"away from frame {frame}", frame - 1);
+                    seek.Invoke(editor, [boundary - before]);
+                    Check($"{before} ms before frame {frame}", frame - 1);
+                    editor.ShortcutActions["NextFrame"]();
+                    Check($"next frame from {before} ms before frame {frame}", frame);
+                    seek.Invoke(editor, [boundary - before]);
+                    Check($"back to {before} ms before frame {frame}", frame - 1);
+                }
+            }
+
+            Assert.True(failures.Count == 0, string.Join(Environment.NewLine, failures));
+        }
+        finally
+        {
+            editor?.Close();
+            OwnedTestDirectory.Delete(dir);
+        }
     });
 
     private static void StepThrough(int fps, IReadOnlyList<double> timestamps, bool constantRate)

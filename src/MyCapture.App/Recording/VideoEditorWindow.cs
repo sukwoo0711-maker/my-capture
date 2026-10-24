@@ -272,7 +272,7 @@ internal sealed partial class VideoEditorWindow : Window
         _layerCanvas.BoundsChanged += (_, _) => { _overlayPreview.InvalidateVisual(); _draftSession?.Changed(); };
         _layerCanvas.InteractionCompleted += (_, _) => CompleteLayerInteraction();
         _layerCanvas.LayerActivated += (_, _) => EditSelectedOverlay();
-        _previewEngine = new MediaElementPreviewEngine(_media);
+        _previewEngine = new MediaElementPreviewEngine(_media, recording.Fps);
         _previewSeeks = new PreviewSeekCoordinator(previewEngine ?? _previewEngine, recording.Fps);
         _playMedia = playMedia ?? _media.Play;
         _previewSeeks.PositionRequested += OnPreviewPositionRequested;

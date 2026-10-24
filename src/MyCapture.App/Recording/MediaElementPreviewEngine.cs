@@ -22,14 +22,27 @@ internal sealed class MediaElementPreviewEngine : IVideoPreviewEngine
     /// </summary>
     internal const double PresentationToleranceMs = 0.01;
 
+    /// <summary>
+    /// How far apart Windows Media Player needs two paused seeks to act on the second. It stops a
+    /// paused seek up to a millisecond past its position (0 to 0.99 ms, before and after playback),
+    /// ignores a seek that moves it by less than about a millisecond (0.9 ms ignored, 1.2 ms
+    /// moved), and keeps the frame it shows for a seek about that close to the position it was
+    /// last given. Across a frame boundary either one left the preview on the frame before.
+    /// </summary>
+    internal const double SeekResolutionMs = 2;
+
     private readonly MediaElement _media;
     private readonly Dispatcher _dispatcher;
+    private readonly double _frameMs;
+    // The element position this engine set last; dispatcher-owned, NaN until known.
+    private double _lastPositionMs = double.NaN;
     private bool _disposed;
 
-    internal MediaElementPreviewEngine(MediaElement media)
+    internal MediaElementPreviewEngine(MediaElement media, int fps)
     {
         _media = media ?? throw new ArgumentNullException(nameof(media));
         _dispatcher = media.Dispatcher;
+        _frameMs = FrameStepCalculator.FrameDurationMs(fps);
     }
 
     /// <summary>Clip length; a seek at the very end is not moved past it.</summary>
@@ -42,6 +55,56 @@ internal sealed class MediaElementPreviewEngine : IVideoPreviewEngine
         return target + PresentationToleranceMs < DurationMs ? target + PresentationToleranceMs : target;
     }
 
+    /// <summary>
+    /// Where to position the element for <paramref name="positionMs"/>: there, unless the player
+    /// would not act on it, then at the nearest position in the same frame that is at least
+    /// <see cref="SeekResolutionMs"/> from where the player stands and from where it was last
+    /// positioned. Any position in a frame presents that frame. While the player stands where it
+    /// was last positioned, a seek within that frame needs no new frame and is left as it is.
+    /// </summary>
+    internal static double SeparatedPositionMs(
+        double positionMs,
+        double currentMs,
+        double lastPositionMs,
+        double frameMs,
+        double durationMs)
+    {
+        if (!(frameMs > 0) || (IsApart(positionMs, currentMs) && IsApart(positionMs, lastPositionMs)))
+        {
+            return positionMs;
+        }
+
+        double frameStart = Math.Floor(positionMs / frameMs) * frameMs;
+        if (Math.Floor(lastPositionMs / frameMs) * frameMs == frameStart && HasLanded(currentMs, lastPositionMs))
+        {
+            return positionMs;
+        }
+
+        double first = frameStart + PresentationToleranceMs;
+        double last = Math.Min(frameStart + frameMs, durationMs) - PresentationToleranceMs;
+        for (double offset = SeekResolutionMs; offset < frameMs; offset += SeekResolutionMs)
+        {
+            if (Fits(positionMs + offset))
+            {
+                return positionMs + offset;
+            }
+
+            if (Fits(positionMs - offset))
+            {
+                return positionMs - offset;
+            }
+        }
+
+        return positionMs;
+
+        bool Fits(double candidate) =>
+            candidate >= first && candidate <= last
+            && IsApart(candidate, currentMs) && IsApart(candidate, lastPositionMs);
+    }
+
+    // An unknown (NaN) position is apart from every other.
+    private static bool IsApart(double aMs, double bMs) => !(Math.Abs(aMs - bMs) < SeekResolutionMs);
+
     public async ValueTask<PresentedPreviewFrame> SeekAsync(
         PreviewSeekRequest request,
         CancellationToken cancellationToken)
@@ -49,13 +112,15 @@ internal sealed class MediaElementPreviewEngine : IVideoPreviewEngine
         ObjectDisposedException.ThrowIf(_disposed, this);
         cancellationToken.ThrowIfCancellationRequested();
 
-        double position = PresentationPositionMs(request.TargetPositionMs);
-        double bias = position - Math.Max(0, request.TargetPositionMs);
+        double target = Math.Max(0, request.TargetPositionMs);
         DispatcherPriority observedPriority = request.Mode == PreviewSeekMode.Exact
             ? DispatcherPriority.ApplicationIdle
             : DispatcherPriority.Render;
-        (double observedMs, bool ended) = await PositionAsync(position, observedPriority, cancellationToken)
-            .ConfigureAwait(false);
+        (double position, double observedMs, bool ended) = await PositionAsync(
+            PresentationPositionMs(target),
+            separate: true,
+            observedPriority,
+            cancellationToken).ConfigureAwait(false);
         bool nearEnd = DurationMs - position < EndStretchMs;
         if (nearEnd)
         {
@@ -106,11 +171,15 @@ internal sealed class MediaElementPreviewEngine : IVideoPreviewEngine
             }
 
             seeks++;
-            (observedMs, ended) = await PositionAsync(position, observedPriority, cancellationToken)
+            // The same position again: after a miss the frame is presented and only the player's
+            // clock ran on, and after a reopen the player stands on its first frame.
+            (_, observedMs, ended) = await PositionAsync(position, separate: false, observedPriority, cancellationToken)
                 .ConfigureAwait(false);
         }
 
-        double presentedMs = Math.Max(0, observedMs - bias);
+        // A landing within the player's resolution shows the requested frame; the rest is where
+        // the player's clock stopped, which can already be in the next frame's time.
+        double presentedMs = HasLanded(observedMs, position) ? target : Math.Max(0, observedMs - (position - target));
         int presentedFrame = request.TargetFrameIndex;
         return new PresentedPreviewFrame(
             request.Generation,
@@ -134,16 +203,17 @@ internal sealed class MediaElementPreviewEngine : IVideoPreviewEngine
         && Math.Abs(elementPositionMs - playerLengthMs) >= LengthReportToleranceMs;
 
     /// <summary>
-    /// Whether a paused seek landed where it was asked to, within the 100 ns sample clock. After
-    /// the stream has run to or near its end (a playback, or the brief playback with which WPF
-    /// presents a paused seek into the last frame), the next paused seek can stop past its
+    /// Whether a paused seek landed where it was asked to, within the player's resolution
+    /// (<see cref="SeekResolutionMs"/>): closer than that, asking again does not move the player.
+    /// After the stream has run to or near its end (a playback, or the brief playback with which
+    /// WPF presents a paused seek into the last frame), the next paused seek can stop past its
     /// position, by milliseconds under load and by more than a frame at worst; asking again lands it.
     /// </summary>
     internal static bool HasLanded(double observedMs, double elementPositionMs) =>
-        Math.Abs(observedMs - elementPositionMs) <= LandingToleranceMs;
+        Math.Abs(observedMs - elementPositionMs) <= SeekResolutionMs;
 
-    // One 100 ns tick early is the player's rounding (see PresentationToleranceMs), not a miss.
-    private const double LandingToleranceMs = 0.001;
+    // Two reads are the same position to the 100 ns sample clock.
+    private const double ReadingToleranceMs = 0.001;
 
     /// <summary>
     /// The stream ran to its end. After that, WPF holds the player internally stopped, and the
@@ -200,9 +270,11 @@ internal sealed class MediaElementPreviewEngine : IVideoPreviewEngine
     private static readonly TimeSpan ReopenTimeout = TimeSpan.FromSeconds(5);
 
     // InvokeAsync is intentional even when already on the UI thread: decoder work must not run
-    // in the MouseMove call stack that produced the visual intent.
-    private async Task<(double ObservedMs, bool Ended)> PositionAsync(
+    // in the MouseMove call stack that produced the visual intent. Returns the element position
+    // set, which with separate is the SeparatedPositionMs of the one asked for.
+    private async Task<(double PositionMs, double ObservedMs, bool Ended)> PositionAsync(
         double position,
+        bool separate,
         DispatcherPriority observedPriority,
         CancellationToken cancellationToken)
     {
@@ -211,9 +283,16 @@ internal sealed class MediaElementPreviewEngine : IVideoPreviewEngine
             {
                 ObjectDisposedException.ThrowIf(_disposed, this);
                 PositionCountForTest++;
+                if (separate)
+                {
+                    position = SeparatedPositionMs(
+                        position, _media.Position.TotalMilliseconds, _lastPositionMs, _frameMs, DurationMs);
+                }
+
                 StudioRangeVideoEffect.PositionRequested(_media);
                 _media.Pause();
                 _media.Position = TimeSpan.FromMilliseconds(position);
+                _lastPositionMs = position;
             },
             DispatcherPriority.Background,
             cancellationToken).Task.ConfigureAwait(false);
@@ -237,7 +316,7 @@ internal sealed class MediaElementPreviewEngine : IVideoPreviewEngine
             },
             observedPriority,
             cancellationToken).Task.ConfigureAwait(false);
-        return (observedMs, ended);
+        return (position, observedMs, ended);
     }
 
     // Reads until the position stays the same for SettleStableReads polls, or SettleLimit.
@@ -262,7 +341,7 @@ internal sealed class MediaElementPreviewEngine : IVideoPreviewEngine
                 },
                 observedPriority,
                 cancellationToken).Task.ConfigureAwait(false);
-            stable = Math.Abs(now - last) < LandingToleranceMs ? stable + 1 : 0;
+            stable = Math.Abs(now - last) < ReadingToleranceMs ? stable + 1 : 0;
             last = now;
         }
 
@@ -303,6 +382,7 @@ internal sealed class MediaElementPreviewEngine : IVideoPreviewEngine
                 _media.Source = source;
                 _media.Play();
                 _media.Pause();
+                _lastPositionMs = double.NaN;
             },
             DispatcherPriority.Background,
             cancellationToken).Task.ConfigureAwait(false);
