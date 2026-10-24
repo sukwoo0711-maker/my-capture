@@ -352,6 +352,10 @@ try {
     Copy-Item -LiteralPath $portable -Destination $payload -Force
 
     $setupProject = Join-Path $repo 'src\MyCapture.Setup\MyCapture.Setup.csproj'
+    # The publish above restores only the app projects. A fresh checkout has no Setup assets file, and a
+    # PC without the .NET Framework 4.8 Developer Pack needs the reference-assembly package from restore.
+    & dotnet restore $setupProject
+    if ($LASTEXITCODE -ne 0) { throw "Setup restore failed: $LASTEXITCODE" }
     & dotnet build $setupProject -c Release --no-restore -m:1 -nr:false -p:UseSharedCompilation=false -p:Deterministic=true
     if ($LASTEXITCODE -ne 0) { throw "Setup build failed: $LASTEXITCODE" }
     $setupOutput = Join-Path $repo 'src\MyCapture.Setup\bin\Release\net48'
