@@ -6,7 +6,7 @@
 
 <a href="https://apps.microsoft.com/detail/9PB33MC095VR?cid=gh-readme"><img src="https://get.microsoft.com/images/ko%20dark.svg" width="200" alt="Microsoft Store에서 받기"></a>
 
-광고·계정 없이 무료이고 회사 업무에도 씁니다. 캡처와 글자 인식은 이 PC 안에서 처리하며, 소스 코드는 이 저장소에 MIT 라이선스로 공개되어 있습니다. Windows 11과 Windows 10 버전 22H2(x64)에서 실행하며, ARM64 PC에서는 Windows 11이 필요합니다. 소개 페이지는 <https://mimiloaf.com/mycapture/>입니다.
+광고·계정 없이 무료이고 회사 업무에도 씁니다. 캡처와 글자 인식, 번역은 이 PC 안에서 처리하며, 소스 코드는 이 저장소에 MIT 라이선스로 공개되어 있습니다. Windows 11과 Windows 10 버전 22H2(x64)에서 실행하며, ARM64 PC에서는 Windows 11이 필요합니다. 소개 페이지는 <https://mimiloaf.com/mycapture/>입니다.
 
 새 버전이 있으면 앱에서 알려 줍니다. Store와 GitHub 설치형은 **업데이트**로 설치하고, 포터블은 릴리스 페이지에서 새 ZIP을 받습니다. 자동 확인은 **설정 > 정보 > 새 버전 자동 확인**에서 끌 수 있습니다. 배포 형식별 동작과 연결 주소는 [업데이트 안내](docs/install.md#업데이트)에 있습니다.
 
@@ -16,7 +16,7 @@
 
 **코드를 덮지 않는 핀 조작.** 핀 위에서 `Ctrl+휠`을 굴리면 투명도가 20–100%로 바뀌고, 오른쪽 클릭 메뉴의 '뒤 창 클릭 허용'을 켜면 핀이 떠 있는 자리에서도 아래 창을 클릭해 입력합니다. 휠로 10–800% 확대·축소합니다. `Shift+F3`으로 핀을 모두 숨기거나 다시 보이고, 앱을 다시 실행하면 열려 있던 핀이 다시 뜹니다. 최근 닫은 핀은 20개까지 위치·배율·투명도 그대로 다시 엽니다. 핀은 작업 표시줄과 `Alt+Tab` 목록에 나타나지 않습니다.
 
-**이미지 속 글자 복사.** 데이터시트나 웹 문서를 캡처한 이미지 핀도 `Ctrl+더블클릭`하면 이 PC에서 한국어·영어 글자를 인식해 복사합니다. `Ctrl+Shift+C`로 캡처하면 캡처가 클립보드에 복사되므로, 이어서 `F3`을 누르면 그 캡처가 핀이 됩니다. 이미지 속 표는 CSV·Markdown·탭 구분 형식으로 복사합니다.
+**이미지 속 글자 복사.** 데이터시트나 웹 문서를 캡처한 이미지 핀도 `Ctrl+더블클릭`하면 이 PC에서 한국어·영어 글자를 인식해 복사합니다. `Ctrl+Shift+C`로 캡처하면 캡처가 클립보드에 복사되므로, 이어서 `F3`을 누르면 그 캡처가 핀이 됩니다. 이미지 속 표는 CSV·Markdown·탭 구분 형식으로 복사합니다. 텍스트 인식 결과 창의 **번역** 보기는 영어 문단과 표 칸을 이 PC에서 한국어로 옮겨 원문 옆에 번호를 붙여 보여 줍니다. 번역 모델(약 247 MB)은 처음 번역을 켤 때 한 번 내려받으며, 설정에서 삭제할 수 있습니다.
 
 **창 제목과 글자로 찾는 라이브러리.** 캡처할 때 창 제목을 함께 저장하고, 이미지 속 글자는 이 PC에서 인식해 둡니다. 파일 이름이나 오류 메시지의 한 구절로 캡처를 찾을 수 있고, 녹화한 MP4도 같은 라이브러리에서 재생합니다.
 
@@ -61,7 +61,7 @@
 - [기능과 화면](docs/features.md): 전체 기능 목록과 화면
 - [설치와 배포](docs/install.md): Store 설치본과 GitHub 릴리스의 설치 파일·포터블 ZIP, `SHA256SUMS.txt` 확인, 설치 로그와 종료 코드, 사용자 데이터 위치, 개인정보와 네트워크
 - [소스에서 빌드](docs/build.md): .NET 10 SDK 준비, 빌드와 테스트, 자체 진단(self-test)
-- [4.7.0 릴리스 노트](docs/releases/4.7.0-release-notes.md)와 [이전 릴리스 노트](docs/releases/)
+- [4.8.0 릴리스 노트](docs/releases/4.8.0-release-notes.md)와 [이전 릴리스 노트](docs/releases/)
 - [지원](https://github.com/sukwoo0711-maker/mycapture-support)과 [개인정보처리방침](https://mimiloaf.com/mycapture/privacy/)
 - [소개 페이지](https://mimiloaf.com/mycapture/)와 게시자 [Mimiloaf](https://mimiloaf.com/). 메일 문의는 [support@mimiloaf.com](mailto:support@mimiloaf.com)으로 보내 주십시오.
 
@@ -81,7 +81,7 @@ A Windows pinning tool that keeps your Excel spec table and go-to code snippets 
 
 <a href="https://apps.microsoft.com/detail/9PB33MC095VR?cid=gh-readme"><img src="https://get.microsoft.com/images/en-us%20dark.svg" width="200" alt="Get it from Microsoft Store"></a>
 
-Free, including for work, with no ads and no account. Capture and text recognition run on this PC, and the source code is in this repository under the MIT License. MyCapture runs on Windows 11 and Windows 10 version 22H2 (x64); ARM64 PCs need Windows 11. Website: <https://mimiloaf.com/en/mycapture/>
+Free, including for work, with no ads and no account. Capture, text recognition and translation run on this PC, and the source code is in this repository under the MIT License. MyCapture runs on Windows 11 and Windows 10 version 22H2 (x64); ARM64 PCs need Windows 11. Website: <https://mimiloaf.com/en/mycapture/>
 
 The app automatically checks for new versions and shows an update notice. **Update** installs the new version for Store and GitHub setup installs; portable copies open the release page for a new ZIP. Turn off automatic checks in **Settings > About > Check for new versions automatically**. See [update behavior and network destinations](docs/install.md#english-summary).
 
@@ -91,7 +91,7 @@ The app automatically checks for new versions and shows an update notice. **Upda
 
 **Pins that stay out of your way.** `Ctrl`+wheel over a pin sets its opacity from 20 to 100%, and Click through to windows behind in its right-click menu lets you click and type in the window underneath. The wheel zooms from 10 to 800%. `Shift+F3` hides or shows all pins, pins that are open when you quit come back at the next launch, and up to 20 recently closed pins reopen with their position, zoom and opacity. Pins stay out of the taskbar and the `Alt+Tab` list.
 
-**Text out of images.** Ctrl+double-click an image pin, such as a datasheet or a web page you captured, to copy its Korean or English text, recognized on this PC. A `Ctrl+Shift+C` capture goes to the clipboard, so `F3` right after it pins the capture. Tables in images can be copied as CSV, Markdown or tab-separated text.
+**Text out of images.** Ctrl+double-click an image pin, such as a datasheet or a web page you captured, to copy its Korean or English text, recognized on this PC. A `Ctrl+Shift+C` capture goes to the clipboard, so `F3` right after it pins the capture. Tables in images can be copied as CSV, Markdown or tab-separated text. The **Translate** view of the text recognition window translates English paragraphs and table cells into Korean on this PC and lists them numbered beside the original. The translation model (about 247 MB) is downloaded once when you first turn translation on, and can be deleted in Settings.
 
 **A library you search by window title and text.** Each capture keeps the title of the window it came from, and the text in the image is recognized on this PC. Find a capture by a file name or a phrase from an error message; screen recordings play in the same library.
 

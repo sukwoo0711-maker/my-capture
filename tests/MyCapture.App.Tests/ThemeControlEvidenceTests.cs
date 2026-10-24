@@ -57,16 +57,18 @@ public sealed class ThemeControlEvidenceTests
                 sheets.Add(image);
                 Save(image, $"controls-{name}.png");
 
-                Color outline = ((SolidColorBrush)secondaryChrome.BorderBrush).Color;
                 Color decorative = ((SolidColorBrush)card.BorderBrush).Color;
                 if (system is not null)
                 {
+                    Color outline = Assert.IsType<SolidColorBrush>(secondaryChrome.BorderBrush).Color;
                     Assert.Equal(system[SystemColorRole.ButtonText], outline);
                     Assert.Equal(system[SystemColorRole.WindowText], decorative);
                 }
                 else if (theme != AppTheme.HighContrast)
                 {
-                    Assert.NotEqual(outline, decorative);
+                    ButtonAppearanceTests.AssertOutline(secondaryChrome.BorderBrush, theme);
+                    Assert.All(((LinearGradientBrush)secondaryChrome.BorderBrush).GradientStops,
+                        stop => Assert.NotEqual(stop.Color, decorative));
                 }
             }
 

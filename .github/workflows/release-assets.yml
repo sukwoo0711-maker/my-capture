@@ -14,6 +14,8 @@ concurrency:
 jobs:
   verify-required-assets:
     name: Verify six required GitHub release assets
+    # Model-file releases such as translation-models-1 carry no app assets; only v* releases are checked.
+    if: startsWith(github.event.release.tag_name, 'v')
     runs-on: windows-latest
     timeout-minutes: 10
     defaults:

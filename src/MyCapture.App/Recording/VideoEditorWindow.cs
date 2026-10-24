@@ -6,6 +6,7 @@ using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Data;
 using System.Windows.Input;
 using System.Windows.Interop;
@@ -109,7 +110,6 @@ internal sealed partial class VideoEditorWindow : Window
     private readonly MediaExportProgressRow _saveProgress = new();
     private readonly List<Control> _editControls = [];
     private Grid _controlRows = null!;
-    private DispatcherTimer? _loadProgressTimer;
     private DispatcherTimer? _openTimeoutTimer;
     private readonly DispatcherTimer _playbackTimer;
     private CancellationTokenSource? _operationCts;
@@ -117,6 +117,8 @@ internal sealed partial class VideoEditorWindow : Window
 
     private double _durationMs;
     private bool _mediaReady;
+    private bool _keyboardNavigation = true;
+    private bool _trimInputsInvalid;
     private bool _mediaOpened;
     private bool _mediaFailed;
     private bool _closing;
@@ -272,7 +274,7 @@ internal sealed partial class VideoEditorWindow : Window
         _layerCanvas.BoundsChanged += (_, _) => { _overlayPreview.InvalidateVisual(); _draftSession?.Changed(); };
         _layerCanvas.InteractionCompleted += (_, _) => CompleteLayerInteraction();
         _layerCanvas.LayerActivated += (_, _) => EditSelectedOverlay();
-        _previewEngine = new MediaElementPreviewEngine(_media);
+        _previewEngine = new MediaElementPreviewEngine(_media, recording.Fps);
         _previewSeeks = new PreviewSeekCoordinator(previewEngine ?? _previewEngine, recording.Fps);
         _playMedia = playMedia ?? _media.Play;
         _previewSeeks.PositionRequested += OnPreviewPositionRequested;
@@ -370,7 +372,7 @@ internal sealed partial class VideoEditorWindow : Window
         AutomationProperties.SetLiveSetting(_statusLabel, AutomationLiveSetting.Polite);
         _loadingLabel = new TextBlock
         {
-            Text = UiText.Get("Text_DA09CBABFC1E"),
+            Text = UiText.Get("Text_831103D5C64B"),
             Foreground = TryBrush("Text.Primary", Colors.White),
             FontSize = 15,
             FontWeight = FontWeights.SemiBold,
@@ -418,6 +420,7 @@ internal sealed partial class VideoEditorWindow : Window
         KeyDown += OnKeyDown;
         PreviewKeyDown += OnPreviewImeKeyDown;
         PreviewKeyDown += OnPreviewSpaceKeyDown;
+        PreviewMouseDown += OnPreviewPointerDown;
         _hangulRelay = new HangulShortcutRelay(this,
             () => _mediaReady && Keyboard.FocusedElement is not System.Windows.Controls.Primitives.TextBoxBase,
             HandleShortcut);
@@ -565,33 +568,8 @@ internal sealed partial class VideoEditorWindow : Window
 
     private void StartLoadProgress()
     {
-        // Local files have no real download percentage, so animate an indeterminate-but-honest
-        // percentage from MediaElement.DownloadProgress/BufferingProgress, and guarantee the UI
-        // never gets stuck on "loading": if MediaOpened has not fired within a timeout, fall
-        // back to the known recording duration and open anyway.
-        _loadProgressTimer = new DispatcherTimer(DispatcherPriority.Normal) { Interval = TimeSpan.FromMilliseconds(80) };
-        int synthetic = 5;
-        _loadProgressTimer.Tick += (_, _) =>
-        {
-            if (_mediaReady || _mediaFailed)
-            {
-                return;
-            }
-
-            double dl = _media.DownloadProgress;      // 0..1, jumps to 1 for local files
-            double buf = _media.BufferingProgress;     // 0..1
-            int pct = (int)Math.Round(Math.Max(dl, buf) * 100.0);
-            if (pct <= 0)
-            {
-                // No real signal for a local file yet: creep a synthetic value so the user sees motion.
-                synthetic = Math.Min(90, synthetic + 5);
-                pct = synthetic;
-            }
-
-            _loadingLabel.Text = UiText.Format("Text_7E6DD424D331", pct);
-        };
-        _loadProgressTimer.Start();
-
+        // The recording is a local file: download/buffering percentages do not measure
+        // readiness. Keep the loading message until the existing open or failure path runs.
         _openTimeoutTimer = new DispatcherTimer(DispatcherPriority.Normal) { Interval = OpenTimeoutForTest };
         _openTimeoutTimer.Tick += (_, _) =>
         {
@@ -965,7 +943,15 @@ internal sealed partial class VideoEditorWindow : Window
             };
             AutomationProperties.SetName(input, name);
             AutomationProperties.SetHelpText(input, UiText.Get("Video.SourceTimeHint"));
-            input.PreviewKeyDown += (_, e) => { if (e.Key == Key.Enter) { e.Handled = true; ApplyTrimInputs(); } };
+            input.PreviewKeyDown += (_, e) =>
+            {
+                if (e.Key == Key.Enter) { e.Handled = true; ApplyTrimInputs(); }
+                else if (e.Key == Key.Escape && Keyboard.Modifiers == ModifierKeys.None)
+                {
+                    e.Handled = true;
+                    RefreshTrimInputs();
+                }
+            };
             input.LostFocus += (_, _) => ApplyTrimInputs();
             inputRow.Children.Add(input); range.Children.Add(inputRow); _editControls.Add(input);
             return input;
@@ -1153,7 +1139,7 @@ internal sealed partial class VideoEditorWindow : Window
         AutomationProperties.SetHelpText(_detailToggle, UiText.Get("VideoEditorUx_DetailsHelp"));
         _detailToggle.Checked += (_, _) => ApplyDetailsVisibility();
         _detailToggle.Unchecked += (_, _) => ApplyDetailsVisibility();
-        // Space keeps its existing playback contract; Enter activates the disclosure.
+        // Space follows the window rule for buttons (toggle after Tab, playback after a click); Enter also enters the opened details.
         _detailToggle.PreviewKeyDown += (_, args) =>
         {
             if (args.Key == Key.Enter)
@@ -1338,8 +1324,6 @@ internal sealed partial class VideoEditorWindow : Window
 
     private void StopLoadTimers()
     {
-        _loadProgressTimer?.Stop();
-        _loadProgressTimer = null;
         _openTimeoutTimer?.Stop();
         _openTimeoutTimer = null;
     }
@@ -1820,19 +1804,13 @@ internal sealed partial class VideoEditorWindow : Window
     {
         _draftSession?.Changed();
         if (_syncingTrim) return;
-        if (_editDocument.RemovedRanges.Count > 0)
+        if (!HasKeptContentInTrimRange(_timeline.InMs, _timeline.OutMs))
         {
-            VideoCutTimeline source = VideoCutTimeline.Create(0, _durationMs, _editDocument.RemovedRanges);
-            double minimum = Math.Min(TrimSelection.MinimumSpanMs, _timeline.OutMs - _timeline.InMs);
-            if (!source.KeptRanges.Any(range => Math.Min(range.EndMs, _timeline.OutMs)
-                - Math.Max(range.StartMs, _timeline.InMs) >= minimum - 1e-7))
-            {
-                // Recovery's all-cut fallback is for malformed files, never an implicit
-                // restoration of a user's deleted content during a handle/keyboard edit.
-                SynchronizeTrim();
-                UpdateStatusForMode();
-                return;
-            }
+            // Recovery's all-cut fallback is for malformed files, never an implicit
+            // restoration of a user's deleted content during a handle/keyboard edit.
+            SynchronizeTrim();
+            UpdateStatusForMode();
+            return;
         }
         bool changed = _editDocument.TrimInMs != _timeline.InMs || _editDocument.TrimOutMs != _timeline.OutMs;
         if (changed && _trimInteractionBefore is null) RememberEdit();
@@ -1842,6 +1820,15 @@ internal sealed partial class VideoEditorWindow : Window
         RefreshTrimInputs();
         UpdateStatusForMode();
         UpdateTrimPreviewBadge();
+    }
+
+    private bool HasKeptContentInTrimRange(double start, double end)
+    {
+        if (_editDocument.RemovedRanges.Count == 0) return true;
+        VideoCutTimeline source = VideoCutTimeline.Create(0, _durationMs, _editDocument.RemovedRanges);
+        double minimum = Math.Min(TrimSelection.MinimumSpanMs, end - start);
+        return source.KeptRanges.Any(range => Math.Min(range.EndMs, end)
+            - Math.Max(range.StartMs, start) >= minimum - 1e-7);
     }
 
     private void CompleteTrimInteraction()
@@ -1867,7 +1854,12 @@ internal sealed partial class VideoEditorWindow : Window
         if (_trimInInput is null) return;
         _trimInInput.Text = VideoTimecode.Format(_timeline.InMs);
         _trimOutInput.Text = VideoTimecode.Format(_timeline.OutMs);
+        bool hadError = _trimInputsInvalid;
+        _trimInputsInvalid = false;
+        SetTrimInputError(_trimInInput, false);
+        SetTrimInputError(_trimOutInput, false);
         RefreshTrimSummary();
+        if (hadError) UpdateStatusForMode();
     }
 
     private void ApplyTrimInputs()
@@ -1875,15 +1867,27 @@ internal sealed partial class VideoEditorWindow : Window
         // A focus change can also mean the window is closing; never touch a closed media
         // element, and do not stop playback just because the field lost focus.
         if (!_mediaReady || _operationRunning || _closing) return;
-        if (!TryReadTrimInput(_trimInInput.Text, _timeline.InMs, out double start)
-            || !TryReadTrimInput(_trimOutInput.Text, _timeline.OutMs, out double end)
-            || !_timeline.SetTrimRange(start, end))
+        bool validStart = TryReadTrimInput(_trimInInput.Text, _timeline.InMs, out double start)
+            && start >= 0 && start <= _durationMs;
+        bool validEnd = TryReadTrimInput(_trimOutInput.Text, _timeline.OutMs, out double end)
+            && end >= 0 && end <= _durationMs;
+        if (!validStart || !validEnd || !HasKeptContentInTrimRange(start, end) || !_timeline.SetTrimRange(start, end))
         {
+            _trimInputsInvalid = true;
+            // A bad value belongs to its field; an invalid pair belongs to both fields.
+            SetTrimInputError(_trimInInput, !validStart || validEnd);
+            SetTrimInputError(_trimOutInput, !validEnd || validStart);
             _statusLabel.Text = UiText.Get("Video.TrimInputInvalid");
-            RefreshTrimInputs();
             return;
         }
         RefreshTrimInputs();
+    }
+
+    private static void SetTrimInputError(TextBox input, bool invalid)
+    {
+        string error = invalid ? UiText.Get("Video.TrimInputInvalid") : string.Empty;
+        AutomationProperties.SetItemStatus(input, error);
+        AutomationProperties.SetHelpText(input, invalid ? error : UiText.Get("Video.SourceTimeHint"));
     }
 
     /// <summary>
@@ -2816,7 +2820,8 @@ internal sealed partial class VideoEditorWindow : Window
 
     private void OnKeyDown(object? sender, KeyEventArgs e)
     {
-        if (!_mediaReady || Keyboard.FocusedElement is TextBox) return;
+        if (!_mediaReady || Keyboard.FocusedElement is TextBoxBase
+            || (e.Key == Key.Space && FocusedControlOwnsSpace())) return;
         // Hangul mode reports I, O, E and G as ImeProcessed; outside a text box they are shortcuts.
         Key key = ShortcutInput.Resolve(e.Key, e.ImeProcessedKey,
             Keyboard.FocusedElement is System.Windows.Controls.Primitives.TextBoxBase);
@@ -2833,18 +2838,36 @@ internal sealed partial class VideoEditorWindow : Window
     /// while a Korean IME is in Hangul mode. Handling it here keeps it from the IME as well.
     /// </remarks>
     /// <summary>
-    /// Space is play/pause everywhere outside text input. Without this a focused button (the
-    /// one just clicked, say "start here") would take Space as a click and repeat itself.
+    /// Keyboard navigation gives controls their usual Space action. A pointer-clicked ordinary
+    /// button still leaves Space to playback, so "start here" is not repeated accidentally.
     /// </summary>
     private void OnPreviewSpaceKeyDown(object? sender, KeyEventArgs e)
     {
+        if (e.Key != Key.Space) _keyboardNavigation = true;
         if (e.Key != Key.Space || Keyboard.Modifiers != ModifierKeys.None || !_mediaReady
-            || Keyboard.FocusedElement is System.Windows.Controls.Primitives.TextBoxBase)
+            || FocusedControlOwnsSpace())
         {
             return;
         }
 
         e.Handled = HandleShortcut(Key.Space, ModifierKeys.None);
+    }
+
+    private void OnPreviewPointerDown(object? sender, MouseButtonEventArgs e) => _keyboardNavigation = false;
+
+    private bool FocusedControlOwnsSpace()
+    {
+        DependencyObject? focused = Keyboard.FocusedElement as DependencyObject;
+        while (focused is not null && !ReferenceEquals(focused, this))
+        {
+            if (focused is TextBoxBase or PasswordBox or Selector or ComboBoxItem or RangeBase)
+                return true;
+            // Toggles and check boxes are buttons too: a clicked one must not repeat itself on Space.
+            if (focused is ButtonBase) return _keyboardNavigation;
+            focused = focused is Visual or System.Windows.Media.Media3D.Visual3D
+                ? VisualTreeHelper.GetParent(focused) : LogicalTreeHelper.GetParent(focused);
+        }
+        return false;
     }
 
     private void OnPreviewImeKeyDown(object? sender, KeyEventArgs e)
@@ -2870,6 +2893,11 @@ internal sealed partial class VideoEditorWindow : Window
         if (_undoButton is not null) _undoButton.IsEnabled = _undo.Count > 0;
         if (_redoButton is not null) _redoButton.IsEnabled = _redo.Count > 0;
         _statusLabel.Foreground = TryBrush("Text.Secondary", Colors.LightGray);
+        if (_trimInputsInvalid)
+        {
+            _statusLabel.Text = UiText.Get("Video.TrimInputInvalid");
+            return;
+        }
         string kept = TrimPresentation.Clock(_cutTimeline.OutputDurationMs);
         if (_timeline.IsTrimDragging)
         {
@@ -3004,6 +3032,7 @@ internal sealed partial class VideoEditorWindow : Window
         KeyDown -= OnKeyDown;
         PreviewKeyDown -= OnPreviewImeKeyDown;
         PreviewKeyDown -= OnPreviewSpaceKeyDown;
+        PreviewMouseDown -= OnPreviewPointerDown;
         _hwndSource?.RemoveHook(OnWindowMessage);
         _hwndSource = null;
         Closing -= OnClosingInternal;

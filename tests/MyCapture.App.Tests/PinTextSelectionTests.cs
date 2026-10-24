@@ -330,7 +330,7 @@ public sealed class PinTextSelectionTests
     });
 
     [Fact]
-    public void WheelScrollsSelectionThenZoomsAtBoundaryAndControlChangesOpacity() => StaTestHost.Run(() =>
+    public void WheelScrollsSelectionAndStopsAtBoundaryWhileControlAndZoomKeysStillWork() => StaTestHost.Run(() =>
     {
         string text = string.Join("\r\n", Enumerable.Range(0, 80).Select(index => $"line {index}"));
         var pin = new PinWindow(PinContent.FromText(Image(), text, false), State(), 200, 150);
@@ -350,8 +350,52 @@ public sealed class PinTextSelectionTests
             textBox.ScrollToEnd();
             pin.UpdateLayout();
             Wheel(pin, -120);
-            Assert.True(pin.State.Zoom < 1);
+            Assert.Equal(1, pin.State.Zoom);
+            Press(pin, Key.OemPlus);
+            Assert.True(pin.State.Zoom > 1);
+            Press(pin, Key.OemMinus);
+            Assert.Equal(1, pin.State.Zoom, precision: 5);
+            Press(pin, Key.OemPlus);
+            Press(pin, Key.D0);
+            Assert.Equal(1, pin.State.Zoom);
             Assert.True(pin.IsTextSelectionMode);
+        }
+        finally { pin.Close(); }
+    });
+
+    [Fact]
+    public void SmallSelectionWheelDeltasAccumulateWithoutChangingZoom() => StaTestHost.Run(() =>
+    {
+        string text = string.Join("\r\n", Enumerable.Range(0, 80).Select(index => $"line {index}"));
+        var pin = new PinWindow(PinContent.FromText(Image(), text, false), State(), 200, 150);
+        try
+        {
+            pin.Show();
+            Press(pin, Key.F2);
+            pin.UpdateLayout();
+            TextBox textBox = pin.TextSelectionForTest!.TextBox!;
+            for (int index = 0; index < 7; index++) Wheel(pin, -15);
+            pin.UpdateLayout();
+            Assert.Equal(0, textBox.VerticalOffset);
+            Wheel(pin, -15);
+            pin.UpdateLayout();
+            double oneNotch = textBox.VerticalOffset;
+            Assert.True(oneNotch > 0);
+            Wheel(pin, -240);
+            pin.UpdateLayout();
+            Assert.Equal(oneNotch * 3, textBox.VerticalOffset, precision: 5);
+            Wheel(pin, 60);
+            Wheel(pin, -60);
+            pin.UpdateLayout();
+            Assert.Equal(oneNotch * 3, textBox.VerticalOffset, precision: 5);
+            Assert.Equal(1, pin.State.Zoom);
+            textBox.ScrollToHome();
+            pin.UpdateLayout();
+            Wheel(pin, 120);
+            Assert.Equal(1, pin.State.Zoom);
+            Press(pin, Key.Escape);
+            Wheel(pin, -120);
+            Assert.True(pin.State.Zoom < 1);
         }
         finally { pin.Close(); }
     });

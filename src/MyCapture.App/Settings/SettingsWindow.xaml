@@ -932,6 +932,23 @@
                                   AutomationProperties.Name="{loc:Text Text_695F77F44D69}"
                                   IsChecked="{Binding CacheResults}" />
 
+                        <!-- The translation model is downloaded from the OCR window's translation view and deleted here. -->
+                        <TextBlock Style="{StaticResource Settings.GroupHeading}" Text="{loc:Text SettingsUx_TranslationHeading}" />
+                        <StackPanel Style="{StaticResource Settings.Field}">
+                            <TextBlock Style="{StaticResource Settings.Label}" Text="{loc:Text Settings_TranslationModel}" />
+                            <TextBlock Style="{StaticResource Settings.Description}" Text="{loc:Text Settings_TranslationModelHint}" />
+                            <DockPanel Margin="0,6,0,0" HorizontalAlignment="Left" LastChildFill="True">
+                                <Button x:Name="TranslationModelDelete" DockPanel.Dock="Right" Style="{StaticResource Button.Secondary}"
+                                        Margin="12,0,0,0" MinWidth="120"
+                                        Content="{loc:Text Settings_TranslationDelete}"
+                                        AutomationProperties.Name="{loc:Text Settings_TranslationDelete}"
+                                        Click="OnDeleteTranslationModel" />
+                                <TextBlock x:Name="TranslationModelStatus" VerticalAlignment="Center" TextWrapping="Wrap"
+                                           Foreground="{DynamicResource Text.Primary}"
+                                           AutomationProperties.Name="{loc:Text Settings_TranslationModel}" />
+                            </DockPanel>
+                        </StackPanel>
+
                         <TextBlock Style="{StaticResource Settings.GroupHeading}" Text="{loc:Text SettingsUx_ShortcutHintsHeading}" />
                         <CheckBox x:Name="AlwaysShowShortcutHintsCheck" Style="{StaticResource Settings.CheckBox}"
                                   Content="{loc:Text SettingsUx_AlwaysShowShortcutHints}"
@@ -1312,6 +1329,7 @@
                             <TextBlock Style="{StaticResource About.Heading}" Text="{loc:Text About_PrivacyHeading}" />
                             <TextBlock x:Name="PrivacyLocalText" Style="{StaticResource About.Body}" Text="{loc:Text About_PrivacyLocal}" />
                             <TextBlock x:Name="PrivacyModelText" Style="{StaticResource About.Body}" />
+                            <TextBlock x:Name="PrivacyTranslationText" Style="{StaticResource About.Body}" />
                             <TextBlock x:Name="PrivacyUpdateText" Style="{StaticResource About.Body}" Visibility="Collapsed" Text="{loc:Text About_PrivacyUpdates}" />
                             <TextBlock x:Name="PrivacyGitHubText" Style="{StaticResource About.Body}" Margin="0" Text="{loc:Text About_PrivacyGitHub}" />
                         </StackPanel>

@@ -10,6 +10,7 @@ using MyCapture.App.Themes;
 using MyCapture.Core.Platform;
 using MyCapture.Core.Settings;
 using MyCapture.Ocr;
+using MyCapture.Ocr.Translation;
 
 namespace MyCapture.App.Settings;
 
@@ -27,6 +28,7 @@ internal sealed partial class SettingsWindow
     private void InitializeAbout()
     {
         PrivacyModelText.Text = UiText.Format("About_PrivacyModel", OcrModelMegabytes);
+        PrivacyTranslationText.Text = UiText.Format("About_PrivacyTranslation", TranslationModelCatalog.TotalMegabytes);
         OcrQualityHintText.Text = OcrQualityDescription;
     }
 

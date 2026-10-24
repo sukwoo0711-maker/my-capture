@@ -93,6 +93,128 @@ public sealed class QuickAccessFeedbackTests : KoreanCaptionTest
     });
 
     [Fact]
+    public Task SaveFailureSurvivesALateCopySuccess() => RunStaAsync(async () =>
+    {
+        var save = new TaskCompletionSource<bool>();
+        var copy = new TaskCompletionSource<bool>();
+        QuickAccessWindow card = Card();
+        int closed = 0;
+        card.Closed += (_, _) => closed++;
+        try
+        {
+            Task saving = card.RunAsync("Save", () => save.Task, "QuickAccess.Saving", "QuickAccess.Saved");
+            Task copying = card.RunAsync("Copy", () => copy.Task, "QuickAccess.Copying", "QuickAccess.Copied");
+            save.SetResult(false);
+            await saving;
+            Assert.Equal(QuickAccessWindow.FailureText("Save"), card.StatusForTest.Text);
+            copy.SetResult(true);
+            await copying;
+
+            Assert.Equal((QuickAccessWindow.FailureText("Save"), FeedbackKind.ActionRequired, true, false), card.StatusForTest);
+            card.Advance(TimeSpan.FromHours(1), interacting: false);
+            Assert.Equal(0, closed);
+            Assert.Contains("held=True", card.TimeoutStateForTest, StringComparison.Ordinal);
+        }
+        finally { card.Close(); }
+    });
+
+    [Fact]
+    public Task SaveFailureAfterCopySuccessHoldsTheCard() => RunStaAsync(async () =>
+    {
+        var save = new TaskCompletionSource<bool>();
+        var copy = new TaskCompletionSource<bool>();
+        QuickAccessWindow card = Card();
+        int closed = 0;
+        card.Closed += (_, _) => closed++;
+        try
+        {
+            Task saving = card.RunAsync("Save", () => save.Task, "QuickAccess.Saving", "QuickAccess.Saved");
+            Task copying = card.RunAsync("Copy", () => copy.Task, "QuickAccess.Copying", "QuickAccess.Copied");
+            copy.SetResult(true);
+            await copying;
+            Assert.Equal(UiText.Get("QuickAccess.Copied"), card.StatusForTest.Text);
+            save.SetResult(false);
+            await saving;
+
+            Assert.Equal((QuickAccessWindow.FailureText("Save"), FeedbackKind.ActionRequired, true, false), card.StatusForTest);
+            card.Advance(TimeSpan.FromHours(1), interacting: false);
+            Assert.Equal(0, closed);
+            Assert.Contains("held=True", card.TimeoutStateForTest, StringComparison.Ordinal);
+        }
+        finally { card.Close(); }
+    });
+
+    [Fact]
+    public Task SaveFailureStaysDuringRetryAndClearsOnlyWhenRetrySucceeds() => RunStaAsync(async () =>
+    {
+        var save = new TaskCompletionSource<bool>();
+        var retry = new TaskCompletionSource<bool>();
+        QuickAccessWindow card = Card();
+        int closed = 0;
+        card.Closed += (_, _) => closed++;
+        try
+        {
+            card.Advance(TimeSpan.FromSeconds(5), interacting: false);
+            Task saving = card.RunAsync("Save", () => save.Task, "QuickAccess.Saving", "QuickAccess.Saved");
+            save.SetResult(false);
+            await saving;
+            Task retrying = card.RunAsync("Save", () => retry.Task, "QuickAccess.Saving", "QuickAccess.Saved");
+            Assert.Equal(QuickAccessWindow.FailureText("Save"), card.StatusForTest.Text);
+            card.Advance(TimeSpan.FromHours(1), interacting: false);
+            Assert.Equal(0, closed);
+
+            retry.SetResult(true);
+            await retrying;
+            Assert.Equal((UiText.Get("QuickAccess.Saved"), FeedbackKind.Confirmation, true, false), card.StatusForTest);
+            Assert.Contains("held=False", card.TimeoutStateForTest, StringComparison.Ordinal);
+            Assert.Equal(FeedbackTiming.HoldAfterResult, card.RemainingForTest);
+            card.Advance(FeedbackTiming.HoldAfterResult, interacting: false);
+            Assert.Equal(1, closed);
+        }
+        finally { if (closed == 0) card.Close(); }
+    });
+
+    [Fact]
+    public Task AnotherActionsProgressAndSuccessKeepTheFailureAndHideTheCountdown() => RunStaAsync(async () =>
+    {
+        var copy = new TaskCompletionSource<bool>();
+        QuickAccessWindow card = Card();
+        try
+        {
+            await card.RunAsync("Save", () => Task.FromResult(false), "QuickAccess.Saving", "QuickAccess.Saved");
+            Task copying = card.RunAsync("Copy", () => copy.Task, "QuickAccess.Copying", "QuickAccess.Copied");
+            card.ElapseProgressDelayForTest();
+            Assert.Equal((QuickAccessWindow.FailureText("Save"), FeedbackKind.ActionRequired, true, true), card.StatusForTest);
+            copy.SetResult(true);
+            await copying;
+
+            Assert.Equal((QuickAccessWindow.FailureText("Save"), FeedbackKind.ActionRequired, true, false), card.StatusForTest);
+            ProgressBar remaining = Assert.Single(QuickAccessDetachedFixture.Descendants((System.Windows.DependencyObject)card.Content).OfType<ProgressBar>());
+            Assert.Equal(System.Windows.Visibility.Hidden, remaining.Visibility);
+        }
+        finally { card.Close(); }
+    });
+
+    [Fact]
+    public Task RetryingOneFailureDoesNotClearAnotherFailure() => RunStaAsync(async () =>
+    {
+        QuickAccessWindow card = Card();
+        try
+        {
+            await card.RunAsync("Save", () => Task.FromResult(false), "QuickAccess.Saving", "QuickAccess.Saved");
+            await card.RunAsync("Copy", () => Task.FromResult(false), "QuickAccess.Copying", "QuickAccess.Copied");
+            await card.RunAsync("Copy", () => Task.FromResult(true), "QuickAccess.Copying", "QuickAccess.Copied");
+            Assert.Equal(QuickAccessWindow.FailureText("Save"), card.StatusForTest.Text);
+            Assert.Contains("held=True", card.TimeoutStateForTest, StringComparison.Ordinal);
+
+            await card.RunAsync("Save", () => Task.FromResult(true), "QuickAccess.Saving", "QuickAccess.Saved");
+            Assert.Equal(UiText.Get("QuickAccess.Saved"), card.StatusForTest.Text);
+            Assert.Contains("held=False", card.TimeoutStateForTest, StringComparison.Ordinal);
+        }
+        finally { card.Close(); }
+    });
+
+    [Fact]
     public Task KeepsALongerRemainingTimeAfterAResult() => RunStaAsync(async () =>
     {
         QuickAccessWindow card = Card();

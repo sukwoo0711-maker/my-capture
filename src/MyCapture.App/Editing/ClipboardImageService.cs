@@ -44,12 +44,13 @@ internal static class ClipboardImageService
         CopyImageWithTextAsync(bitmap, sourceUrl, originalText, writeData: null);
 
     internal static async Task<bool> CopyImageWithTextAsync(BitmapSource bitmap, string? sourceUrl, string? originalText, Action<IDataObject>? writeData,
-        CaptureProvenance? provenance = null, Task<CaptureProvenance>? pendingProvenance = null)
+        CaptureProvenance? provenance = null, Task<CaptureProvenance>? pendingProvenance = null,
+        Func<BitmapSource, string?, byte[]>? encodePng = null, PngCache? pngCache = null)
     {
         ArgumentNullException.ThrowIfNull(bitmap);
 
         BitmapSource frozen = Freeze(bitmap);
-        return await RunCopySerializedAsync(() => CopyFrozenAsync(frozen, sourceUrl, originalText, writeData, provenance, pendingProvenance)).ConfigureAwait(false);
+        return await RunCopySerializedAsync(() => CopyFrozenAsync(frozen, sourceUrl, originalText, writeData, provenance, pendingProvenance, encodePng, pngCache)).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -80,12 +81,15 @@ internal static class ClipboardImageService
     }
 
     private static async Task<bool> CopyFrozenAsync(BitmapSource frozen, string? sourceUrl, string? originalText, Action<IDataObject>? writeData,
-        CaptureProvenance? provenance, Task<CaptureProvenance>? pendingProvenance)
+        CaptureProvenance? provenance, Task<CaptureProvenance>? pendingProvenance,
+        Func<BitmapSource, string?, byte[]>? encodePng, PngCache? pngCache)
     {
         byte[] pngBytes;
         try
         {
-            pngBytes = await Task.Run(() => ImageCodec.EncodePng(frozen, sourceUrl)).ConfigureAwait(false);
+            Func<BitmapSource, string?, byte[]> encode = encodePng ?? ImageCodec.EncodePng;
+            pngBytes = await Task.Run(() => pngCache is null
+                ? encode(frozen, sourceUrl) : pngCache.GetOrEncode(frozen, sourceUrl, encode)).ConfigureAwait(false);
         }
         catch (Exception ex) when (ex is IOException
                                    or InvalidOperationException
@@ -196,5 +200,62 @@ internal static class ClipboardImageService
         BitmapSource copy = bitmap.Clone();
         copy.Freeze();
         return copy;
+    }
+
+    /// <summary>One pin's PNG, released on image replacement or close; clipboard tokens are never cached.</summary>
+    internal sealed class PngCache : IDisposable
+    {
+        private readonly object _gate = new();
+        private BitmapSource? _image;
+        private string? _sourceUrl;
+        private byte[]? _bytes;
+        private int _generation;
+        private bool _disposed;
+
+        internal int ByteCount { get { lock (_gate) return _bytes?.Length ?? 0; } }
+
+        internal byte[] GetOrEncode(BitmapSource image, string? sourceUrl, Func<BitmapSource, string?, byte[]> encode)
+        {
+            int generation;
+            lock (_gate)
+            {
+                if (!_disposed && ReferenceEquals(image, _image) && sourceUrl == _sourceUrl && _bytes is { } cached)
+                    return cached;
+                generation = _generation;
+            }
+
+            byte[] bytes = encode(image, sourceUrl);
+            lock (_gate)
+            {
+                // Closing or rerendering during an encode must not retain the old payload.
+                if (!_disposed && generation == _generation)
+                {
+                    _image = image;
+                    _sourceUrl = sourceUrl;
+                    _bytes = bytes;
+                }
+            }
+            return bytes;
+        }
+
+        internal void Clear()
+        {
+            lock (_gate)
+            {
+                _generation++;
+                _image = null;
+                _sourceUrl = null;
+                _bytes = null;
+            }
+        }
+
+        public void Dispose()
+        {
+            lock (_gate)
+            {
+                _disposed = true;
+                Clear();
+            }
+        }
     }
 }

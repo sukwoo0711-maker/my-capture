@@ -98,8 +98,11 @@ public sealed class VideoEditorMediaEndedRecoveryTests
 
     /// <summary>
     /// After a playback to the end, WPF holds the player stopped, and the first paused seek from
-    /// there shows the right frame but leaves the player past the position. That seek is watched
-    /// until the position stays put; seeks before the end are not.
+    /// there shows the right frame but leaves the player past the position (3 to 74 ms on loaded
+    /// runners). That seek is watched until the position stays put; seeks before the end, and
+    /// after a watched seek landed, are not. Any paused seek stops up to a millisecond past its
+    /// position and a seek closer than that does not move the player, so the landing is checked
+    /// to the player's resolution.
     /// </summary>
     [Fact]
     public void FirstSeekAfterPlaybackEnd_StaysAtTheRequestedPosition() => StaTestHost.Run(() =>
@@ -132,20 +135,26 @@ public sealed class VideoEditorMediaEndedRecoveryTests
             Assert.True(started && !editor.PlayButtonShowsPauseForTest, "playback did not run to the end");
             RangePatternClip.Pump(TimeSpan.FromMilliseconds(300));
 
+            int watched = -1;
             foreach (double target in new[] { 600.0, 1234.5 })
             {
                 Check(editor, export, failures, "after end", target);
                 RangePatternClip.Pump(TimeSpan.FromMilliseconds(300));
                 double stopped = editor.MediaForTest.Position.TotalMilliseconds;
                 double position = target + MediaElementPreviewEngine.PresentationToleranceMs;
-                if (Math.Abs(stopped - position) > 0.5)
+                if (Math.Abs(stopped - position) > MediaElementPreviewEngine.SeekResolutionMs)
                 {
                     failures.Add($"after end: the player stopped at {stopped:F3} ms for {position:F3} ms");
                 }
+
+                watched = watched < 0 ? engine.SettleCountForTest : watched;
             }
 
             Assert.True(failures.Count == 0, string.Join(Environment.NewLine, failures));
-            Assert.True(engine.SettleCountForTest >= 1, "the first seek after the end was not watched");
+            Assert.True(watched >= 1, "the first seek after the end was not watched");
+            Assert.True(
+                engine.SettleCountForTest == watched,
+                $"the seek after a watched landing was watched again ({engine.SettleCountForTest - watched} more)");
         }
         finally
         {

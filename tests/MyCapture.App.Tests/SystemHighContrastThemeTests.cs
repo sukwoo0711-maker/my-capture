@@ -115,7 +115,7 @@ public sealed class SystemHighContrastThemeTests
         button.ApplyTemplate();
         var chrome = (Border)button.Template.FindName("Chrome", button);
         var ring = (Border)button.Template.FindName("FocusRing", button);
-        Assert.NotEqual(NightSky[SystemColorRole.ButtonText], ((SolidColorBrush)chrome.BorderBrush).Color);
+        AssertAppOutline();
 
         bool contrast = true;
         Dispatcher dispatcher = Dispatcher.CurrentDispatcher;
@@ -130,12 +130,27 @@ public sealed class SystemHighContrastThemeTests
         contrast = false;
         ThemeService.ScheduleSystemThemeRefresh(dispatcher, resources, () => contrast);
         dispatcher.Invoke(DispatcherPriority.ApplicationIdle, new Action(() => { }));
-        // ThemeService.Current is process-wide and other tests may switch it meanwhile, so the
-        // restored outline is checked as "an app palette's control outline", not one value.
-        Color restored = ((SolidColorBrush)chrome.BorderBrush).Color;
-        Assert.Contains(Enum.GetValues<AppTheme>(), palette => ToColor(ThemeCatalog.ColorsFor(palette)["Border.Control"]) == restored);
-        Assert.NotEqual(NightSky[SystemColorRole.ButtonText], restored);
+        AssertAppOutline();
         Assert.Equal(new Thickness(2), ring.BorderThickness);
+
+        void AssertAppOutline()
+        {
+            Assert.Same(resources["Button.BorderBrush"], chrome.BorderBrush);
+            // The current palette is process-wide; accept its exact light/dark gradient or
+            // the unchanged solid outline of the app's explicit high-contrast palette.
+            if (chrome.BorderBrush is LinearGradientBrush gradient)
+            {
+                bool light = gradient.GradientStops[0].Color == Color.FromRgb(0xE2, 0xE6, 0xEC);
+                ButtonAppearanceTests.AssertOutline(gradient, light ? AppTheme.GlassLight : AppTheme.Midnight);
+                Assert.All(gradient.GradientStops, stop => Assert.NotEqual(NightSky[SystemColorRole.ButtonText], stop.Color));
+            }
+            else
+            {
+                Color outline = Assert.IsType<SolidColorBrush>(chrome.BorderBrush).Color;
+                Assert.Equal(ToColor(ThemeCatalog.ColorsFor(AppTheme.HighContrast)["Border.Control"]), outline);
+                Assert.NotEqual(NightSky[SystemColorRole.ButtonText], outline);
+            }
+        }
     });
 
     [Fact]

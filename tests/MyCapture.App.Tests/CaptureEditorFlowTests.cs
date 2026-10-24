@@ -91,21 +91,17 @@ public sealed class CaptureEditorFlowTests
 
             bool handled = editor.HandleShortcut(Key.C, ModifierKeys.Control);
 
-            // Ctrl+C copies the edit while keeping it available for further work.
+            // Ctrl+C finishes the edit like Done: save, copy and close (the owner's decision).
             Assert.True(handled);
             Assert.NotNull(requested);
-            Assert.Null(completed);
-            Assert.True(editor.IsHitTestVisible);
-            Assert.Equal(EditorCommitAction.CopyToClipboard, requested!.Action);
+            Assert.Same(requested, completed);
+            Assert.Equal(EditorCommitAction.Done, requested!.Action);
             Assert.Equal(frame.ScreenBounds, requested.Frame.ScreenBounds);
             Assert.Equal(frame.Monitor, requested.Frame.Monitor);
             Assert.Equal(frame.DpiScale, requested.Frame.DpiScale);
             Assert.Equal(frame.ElapsedMilliseconds, requested.Frame.ElapsedMilliseconds);
             Assert.Equal(sourceRegion, requested.BitmapRegion);
             Assert.Same(selectedBitmap, requested.SelectedBitmap);
-            Assert.True(editor.HandleShortcut(Key.Enter, ModifierKeys.Control));
-            Assert.Same(requested, completed);
-            Assert.Equal(EditorCommitAction.Done, completed!.Action);
 
             // The window opens on the pointer's monitor and is sized for it. The reported desktop has a
             // landscape primary and a 768 x 1366 portrait secondary; the pointer may be on either.

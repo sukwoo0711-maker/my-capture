@@ -21,6 +21,9 @@
 
   <ItemGroup>
     <None Update="Fixtures\video-shorter-than-audio.mp4" CopyToOutputDirectory="PreserveNewest" />
+    <None Update="Fixtures\opus-mt-en-ko-source.spm" CopyToOutputDirectory="PreserveNewest" />
+    <None Update="Fixtures\opus-mt-en-ko-source-spm-cases.json" CopyToOutputDirectory="PreserveNewest" />
+    <None Update="Fixtures\opus-mt-en-ko-probe-translations.json" CopyToOutputDirectory="PreserveNewest" />
     <Page Remove="Fixtures\VioletIntegrationBaseline.xaml" />
     <EmbeddedResource Include="Fixtures\VioletIntegrationBaseline.xaml" LogicalName="AccentFixture.VioletIntegrationBaseline.xaml" />
     <!-- Use the exact product markup in isolated theme fixtures, with its static

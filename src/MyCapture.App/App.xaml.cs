@@ -21,6 +21,7 @@ using MyCapture.Core.Privacy;
 using MyCapture.Core.Settings;
 using MyCapture.Core.Storage;
 using MyCapture.Ocr;
+using MyCapture.Ocr.Translation;
 using MyCapture.Platform.Capture;
 using MyCapture.Platform.Display;
 using MyCapture.Platform.Shell;
@@ -250,7 +251,8 @@ public partial class App : Application
             _ocrService,
             Dispatcher,
             SetOcrBusy,
-            _services.GetRequiredService<ILogger<OcrResultPresenter>>());
+            _services.GetRequiredService<ILogger<OcrResultPresenter>>(),
+            _services.GetRequiredService<TextTranslationService>());
         // The editor's text command recognises its current image in the shared result window.
         TextRecognitionRoute.IsAvailable = () => _ocrService?.IsAvailable == true;
         TextRecognitionRoute.Show = (image, context) => _ocrPresenter?.ShowRecognized(
@@ -1946,6 +1948,9 @@ public partial class App : Application
         ConfigureLegacyImportWindow(window);
         window.StoreReviewOpened = () => _storeRating?.NoteManualReviewOpened();
         window.FileLog = _fileLog;
+        TextTranslationService translation = _services.GetRequiredService<TextTranslationService>();
+        window.DeleteTranslationModel = translation.DeleteModelAsync;
+        window.TranslationModelBytes = () => _services.GetRequiredService<TranslationModelStore>().InstalledBytes;
 
         // Keep the tray state in sync after an apply (a hotkey collision flips it to Error).
         window.Applied += (_, _) => RestoreTrayAfterCapture();
@@ -2374,6 +2379,13 @@ public partial class App : Application
             serviceProvider.GetRequiredService<OcrModelStore>(),
             serviceProvider.GetRequiredService<ILogger<NeuralOcrEngine>>()));
         services.AddSingleton<WindowsOcrService>();
+        // Translation stays off until the user turns it on in the OCR window; nothing downloads before.
+        services.AddSingleton(serviceProvider => new TranslationModelStore(
+            serviceProvider.GetRequiredService<AppPaths>(),
+            serviceProvider.GetRequiredService<ILogger<TranslationModelStore>>()));
+        services.AddSingleton(serviceProvider => new TextTranslationService(
+            serviceProvider.GetRequiredService<TranslationModelStore>(),
+            serviceProvider.GetRequiredService<ILogger<TextTranslationService>>()));
         services.AddSingleton<IOcrService>(serviceProvider => new CaptureOcrService(
             serviceProvider.GetRequiredService<WindowsOcrService>(),
             serviceProvider.GetRequiredService<NeuralOcrEngine>(),

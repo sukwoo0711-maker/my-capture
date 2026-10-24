@@ -11,6 +11,7 @@ using System.Windows.Media.Imaging;
 using System.Windows.Shapes;
 using System.Windows.Threading;
 using MyCapture.App.Themes;
+using MyCapture.App.Editing;
 using MyCapture.App.Sources;
 using MyCapture.Core.Capture;
 using MyCapture.Core.Pin;
@@ -77,6 +78,9 @@ internal sealed class PinWindow : Window
     private readonly TextBlock _feedbackText;
     private readonly Button _feedbackDismiss;
     private readonly FeedbackCountdown _feedbackCountdown;
+    private readonly FeedbackCountdown _progressReveal;
+    private string? _pendingProgress;
+    private static int _selectionHintShown;
     private FeedbackKind _feedbackKind;
     private (string Text, FeedbackKind Kind)? _heldFeedback;
     private int _feedbackGeneration;
@@ -253,6 +257,11 @@ internal sealed class PinWindow : Window
             Dispatcher,
             () => _feedback.IsMouseOver || _feedback.IsKeyboardFocusWithin,
             OnFeedbackExpired);
+        _progressReveal = new FeedbackCountdown(Dispatcher, static () => false, RevealProgress);
+        IsVisibleChanged += (_, args) =>
+        {
+            if (args.NewValue is false) CancelPendingProgress();
+        };
 
         // Tracks the double-click interval without modifying the clipboard on a single click.
         // Ctrl+C copies the image and retained source; Ctrl+double-click copies only text.
@@ -498,6 +507,8 @@ internal sealed class PinWindow : Window
     /// </summary>
     internal PinContent PinnedContent => _content;
 
+    internal ClipboardImageService.PngCache ClipboardCache { get; } = new();
+
     /// <summary>
     /// Where this pin was on the virtual desktop when it began closing, or
     /// <see langword="null"/> when it closed before it had a native window.
@@ -557,6 +568,16 @@ internal sealed class PinWindow : Window
 
     /// <summary>Test hook: spends display time as the countdown's clock would.</summary>
     internal void AdvanceFeedbackForTest(TimeSpan elapsed) => _feedbackCountdown.Advance(elapsed);
+
+    internal void AdvanceProgressForTest(TimeSpan elapsed) => _progressReveal.Advance(elapsed);
+    internal bool IsProgressPendingForTest => _pendingProgress is not null;
+    internal TimeSpan? FeedbackRemainingForTest => _feedbackCountdown.Remaining;
+    internal Action<UIElement, string, FeedbackKind, string> AnnounceFeedback { get; set; } = FeedbackTiming.Announce;
+    internal static int SelectionHintShownForTest
+    {
+        get => Volatile.Read(ref _selectionHintShown);
+        set => Interlocked.Exchange(ref _selectionHintShown, value);
+    }
 
     /// <summary>
     /// Test hook: fires the feedback auto-hide logic immediately, without waiting for the
@@ -658,6 +679,7 @@ internal sealed class PinWindow : Window
     internal void HidePin()
     {
         _state.IsHidden = true;
+        CancelPendingProgress();
         StopLandingEffect();
         LeaveTextSelection(restoreFocus: false);
         HideHoverBar();
@@ -740,6 +762,7 @@ internal sealed class PinWindow : Window
         if (_isClosed || !_content.CanRerender) return;
         PinContent rendered = _content.RenderedAt(scale);
         if (ReferenceEquals(rendered, _content)) return;
+        ClipboardCache.Clear();
         _content = rendered;
         _imageElement.Source = rendered.Image;
         UpdateImageRasterLayout();
@@ -1114,8 +1137,9 @@ internal sealed class PinWindow : Window
 
     internal void HandleMouseWheel(MouseWheelEventArgs e, ModifierKeys modifiers)
     {
-        if (!modifiers.HasFlag(ModifierKeys.Control) && _textSelection?.TryScroll(e.Delta) == true)
+        if (!modifiers.HasFlag(ModifierKeys.Control) && _textSelection is { } selection)
         {
+            selection.TryScroll(e.Delta);
             e.Handled = true;
             return;
         }
@@ -1287,11 +1311,14 @@ internal sealed class PinWindow : Window
         _chrome.Children.Insert(1, selection);
         if (_selectTextItem is not null) _selectTextItem.IsChecked = true;
         SelectionFocus.Enter(this, selection);
-        ShowFeedback(UiText.Get("Pin_SelectTextStarted"), FeedbackKind.Result);
+        bool firstEntry = Interlocked.Exchange(ref _selectionHintShown, 1) == 0;
+        ShowFeedback(UiText.Get("Pin_SelectTextStarted"),
+            firstEntry ? FeedbackKind.Result : FeedbackKind.Confirmation);
     }
 
     private void LeaveTextSelection(bool restoreFocus = true)
     {
+        CancelPendingProgress();
         if (_textSelection is null) return;
         _chrome.Children.Remove(_textSelection);
         _textSelection = null;
@@ -1707,12 +1734,43 @@ internal sealed class PinWindow : Window
         // OCR/clipboard completions can arrive after Close detached the timer's stop handler.
         // Never restart that timer or animate a window whose lifetime has ended.
         if (_isClosed) return;
-        if (kind != FeedbackKind.Echo)
+        if (kind == FeedbackKind.Progress)
         {
+            // Work that finishes within the reveal delay reports only its result.
+            CancelPendingProgress();
+            if (_state.IsHidden) return;
+            _pendingProgress = text;
+            _progressReveal.Start(FeedbackTiming.ProgressRevealDelay);
+            return;
+        }
+        if (kind == FeedbackKind.Echo)
+        {
+            // A readout passes over progress that has not appeared yet, as it does over shown progress.
+            if (_pendingProgress is { } pending) _heldFeedback = (pending, FeedbackKind.Progress);
+            CancelPendingProgress();
+        }
+        else
+        {
+            CancelPendingProgress();
             _heldFeedback = FeedbackTiming.DisplayTime(kind) is null ? (text, kind) : null;
         }
 
         PresentFeedback(text, kind, announce: true);
+    }
+
+    private void CancelPendingProgress()
+    {
+        _pendingProgress = null;
+        _progressReveal.Stop();
+    }
+
+    private void RevealProgress()
+    {
+        string? text = _pendingProgress;
+        CancelPendingProgress();
+        if (text is null || _isClosed || _state.IsHidden) return;
+        _heldFeedback = (text, FeedbackKind.Progress);
+        PresentFeedback(text, FeedbackKind.Progress, announce: true);
     }
 
     private void PresentFeedback(string text, FeedbackKind kind, bool announce)
@@ -1741,7 +1799,7 @@ internal sealed class PinWindow : Window
 
         // Every message restarts the countdown, so the latest text gets its full display time.
         _feedbackCountdown.Start(FeedbackTiming.DisplayTime(kind, overContent: true));
-        if (announce) FeedbackTiming.Announce(_feedbackText, text, kind, "MyCapture.Pin.Feedback");
+        if (announce && IsVisible) AnnounceFeedback(_feedbackText, text, kind, "MyCapture.Pin.Feedback");
     }
 
     private void OnFeedbackExpired()
@@ -1957,6 +2015,8 @@ internal sealed class PinWindow : Window
         StartClosing();
         // A direct close during an exit (close all, app exit) ends it; its deferred close is moot.
         FluidMotion.CompleteExit(this);
+        ClipboardCache.Dispose();
+        CancelPendingProgress();
         StopLandingEffect();
         EndDrag();
         _feedbackCountdown.Stop();
