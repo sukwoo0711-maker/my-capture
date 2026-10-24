@@ -454,6 +454,11 @@ internal sealed class PinManager
     /// Closes every pin at app exit without recording them and discards the restore history,
     /// after the optional open-pin session has been saved by the app.
     /// </summary>
+    /// <remarks>
+    /// Exit only. It neither checks the session save nor leaves a way to reopen the pins, so a
+    /// switch between pin boards must not reuse it; such a switch keeps the live pins open until a
+    /// complete save passes <see cref="PinSessionStore.VerifyReadBack"/>.
+    /// </remarks>
     internal void CloseAllForExit()
     {
         _recordClosedPins = false;

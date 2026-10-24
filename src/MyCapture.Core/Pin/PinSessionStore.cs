@@ -4,6 +4,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using MyCapture.Core.Primitives;
 using MyCapture.Core.Storage;
 
@@ -37,6 +38,79 @@ public sealed record PinSessionSnapshot(PinSessionPin Pin, byte[]? PngBytes, boo
 
 public sealed record PinSessionLoadResult(IReadOnlyList<PinSessionSnapshot> Pins, bool ManifestUnreadable);
 
+/// <summary>How a session save ended. Only <see cref="Committed"/> replaced the saved session.</summary>
+public enum PinSessionSaveOutcome
+{
+    /// <summary>The manifest was replaced. It can still omit requested records.</summary>
+    Committed,
+    /// <summary>The caller's commit check withdrew the save; the previous session was kept.</summary>
+    Canceled,
+    /// <summary>The saved manifest could not be read, so it was kept instead of being overwritten.</summary>
+    ManifestUnreadable,
+    /// <summary>A storage or encoding failure stopped the save; the previous session was kept.</summary>
+    Failed,
+    /// <summary>
+    /// The app stopped waiting. The previous session normally remains, but a write that had
+    /// already passed its final check can still land.
+    /// </summary>
+    TimedOut,
+    /// <summary>Nothing was saved because session restore is off or the app is closing.</summary>
+    NotRun,
+}
+
+/// <summary>Why a requested record is not in the session a save committed.</summary>
+public enum PinSessionMissingReason
+{
+    /// <summary>The save did not replace the session, so none of its records were saved.</summary>
+    NotCommitted,
+    Invalid,
+    /// <summary>The record fell outside the pin count or image byte limit.</summary>
+    OverLimit,
+    /// <summary>The record had no valid PNG and no saved image for its content.</summary>
+    ImageUnavailable,
+    /// <summary>Its image could not be read back for reuse or written.</summary>
+    ImageWriteFailed,
+    /// <summary>Its image could not be encrypted.</summary>
+    ProtectionFailed,
+}
+
+public sealed record PinSessionMissingPin(Guid PinId, PinSessionMissingReason Reason);
+
+/// <summary>Exactly which requested records one save left in the session.</summary>
+/// <param name="Generation">
+/// The store's commit generation after the save. It changes whenever that store replaces or
+/// clears the session and is never reused by another store in the process.
+/// </param>
+/// <param name="RequestedCount">Requested records; windows showing the same content share a pin ID.</param>
+/// <param name="SavedPinIds">One ID per saved record in stacking order; empty unless committed.</param>
+/// <param name="MissingPins">Every requested record the committed session lacks, with its reason.</param>
+public sealed record PinSessionSaveResult(
+    PinSessionSaveOutcome Outcome,
+    long Generation,
+    int RequestedCount,
+    IReadOnlyList<Guid> SavedPinIds,
+    IReadOnlyList<PinSessionMissingPin> MissingPins)
+{
+    public bool ManifestCommitted => Outcome == PinSessionSaveOutcome.Committed;
+
+    /// <summary>
+    /// Every requested record is in the committed session. Closing or replacing the live pins also
+    /// needs <see cref="PinSessionStore.VerifyReadBack"/>; see <see cref="PinSessionStore.SaveDetailed"/>.
+    /// </summary>
+    public bool IsComplete => ManifestCommitted && MissingPins.Count == 0 && SavedPinIds.Count == RequestedCount;
+
+    /// <summary>A save that left the previous session in place, so none of its records were saved.</summary>
+    public static PinSessionSaveResult NotCommitted(PinSessionSaveOutcome outcome, long generation,
+        IEnumerable<Guid> requested)
+    {
+        if (outcome == PinSessionSaveOutcome.Committed) throw new ArgumentOutOfRangeException(nameof(outcome));
+        ArgumentNullException.ThrowIfNull(requested);
+        PinSessionMissingPin[] missing = requested
+            .Select(id => new PinSessionMissingPin(id, PinSessionMissingReason.NotCommitted)).ToArray();
+        return new(outcome, generation, missing.Length, [], missing);
+    }
+}
+
 /// <summary>Persists the opt-in open-pin session without depending on WPF.</summary>
 public sealed class PinSessionStore
 {
@@ -60,6 +134,8 @@ public sealed class PinSessionStore
         }
     };
     private static readonly uint[] CrcTable = CreateCrcTable();
+    // One sequence for every store, so a result from one board's store cannot verify against another's.
+    private static long s_lastGeneration;
     private readonly string _root;
     private readonly ILogger _log;
     private readonly int _maxPins;
@@ -70,6 +146,7 @@ public sealed class PinSessionStore
     private Dictionary<Guid, long> _committedImageLengths = [];
     private bool _manifestUnreadable;
     private bool _manifestProtected;
+    private long _generation;
 
     public PinSessionStore(string root, ILogger log,
         int maxPins = DefaultMaxPins, long maxPngBytes = DefaultMaxPngBytes)
@@ -85,8 +162,12 @@ public sealed class PinSessionStore
 
     public int MaxPins => _maxPins;
     public long MaxPngBytes => _maxPngBytes;
+    /// <summary>Read without the save lock, so a caller that stopped waiting for a save can still report it.</summary>
+    public long Generation => Interlocked.Read(ref _generation);
     internal Func<Guid, long>? ReadImageLengthForTest { get; set; }
     internal Action? BeforeManifestCommitForTest { get; set; }
+    internal Action<Guid>? BeforeImageProtectForTest { get; set; }
+    internal Action<Guid>? BeforeImageWriteForTest { get; set; }
 
     public IReadOnlyList<PinSessionSnapshot> Load() => LoadDetailed().Pins;
 
@@ -187,22 +268,42 @@ public sealed class PinSessionStore
         }
     }
 
-    public bool Save(IReadOnlyList<PinSessionSnapshot> pins, Func<bool>? canCommit = null)
+    /// <summary>Test shorthand: true only means the manifest was replaced, possibly without some pins.</summary>
+    internal bool Save(IReadOnlyList<PinSessionSnapshot> pins, Func<bool>? canCommit = null) =>
+        SaveDetailed(pins, canCommit).ManifestCommitted;
+
+    /// <summary>
+    /// Replaces the saved session with the requested records that can be kept and reports exactly
+    /// which ones the committed manifest holds and why any others are missing.
+    /// </summary>
+    /// <remarks>
+    /// A committed save can be partial: invalid records, records over the count or byte limit and
+    /// records whose image cannot be written are left out. A caller that would close or replace the
+    /// live pins it saved, such as a switch between pin boards, keeps every one of them open unless
+    /// the result <see cref="PinSessionSaveResult.IsComplete"/> and <see cref="VerifyReadBack"/> then
+    /// confirms it from disk. After any other result the live pins may be the only copy.
+    /// </remarks>
+    public PinSessionSaveResult SaveDetailed(IReadOnlyList<PinSessionSnapshot> pins, Func<bool>? canCommit = null)
     {
         ArgumentNullException.ThrowIfNull(pins);
         lock (_gate)
         {
             var writtenImages = new HashSet<Guid>();
+            var failures = new PinSessionMissingReason?[pins.Count];
+            PinSessionSaveResult? result = null;
             bool committed = false;
             try
             {
-                if (canCommit?.Invoke() == false || _manifestUnreadable) return false;
-                if (_committedReferences is null && !TryReadManifest(out _)) return false;
-                if (canCommit?.Invoke() == false) return false;
+                if (canCommit?.Invoke() == false) return NotCommitted(pins, PinSessionSaveOutcome.Canceled);
+                if (_manifestUnreadable) return NotCommitted(pins, PinSessionSaveOutcome.ManifestUnreadable);
+                if (_committedReferences is null && !TryReadManifest(out _))
+                    return NotCommitted(pins, PinSessionSaveOutcome.ManifestUnreadable);
+                if (canCommit?.Invoke() == false) return NotCommitted(pins, PinSessionSaveOutcome.Canceled);
                 ValidatedFilePaths.CreateDirectory(_root);
                 var saved = new List<(int Index, PinSessionPin Pin)>();
                 var retainedImages = new HashSet<Guid>();
                 var retainedLengths = new Dictionary<Guid, long>();
+                var imageFailures = new Dictionary<Guid, PinSessionMissingReason>();
                 long totalBytes = 0;
                 int budgetSkipped = 0;
                 foreach (int i in NewestFirst(pins.Select(snapshot => snapshot.Pin).ToList())
@@ -213,13 +314,17 @@ public sealed class PinSessionStore
                     if (!IsValid(pin))
                     {
                         _log.LogWarning("Skipped an invalid open pin record.");
+                        failures[i] = PinSessionMissingReason.Invalid;
                         continue;
                     }
                     if (saved.Count >= _maxPins)
                     {
                         budgetSkipped++;
+                        failures[i] = PinSessionMissingReason.OverLimit;
                         continue;
                     }
+                    // The step that can still fail, so a skipped pin reports why it was left out.
+                    PinSessionMissingReason step = PinSessionMissingReason.ImageWriteFailed;
                     try
                     {
                         if (!retainedImages.Contains(pin.Id))
@@ -256,27 +361,39 @@ public sealed class PinSessionStore
                             if (!reuse)
                             {
                                 if (snapshot.PngBytes is null || !IsPng(snapshot.PngBytes))
+                                {
+                                    step = PinSessionMissingReason.ImageUnavailable;
                                     throw new InvalidDataException("The pin has no valid PNG to save.");
+                                }
                                 length = snapshot.PngBytes.LongLength;
                             }
                             if (length > _maxPngBytes - totalBytes)
                             {
                                 budgetSkipped++;
+                                failures[i] = PinSessionMissingReason.OverLimit;
+                                imageFailures.TryAdd(pin.Id, PinSessionMissingReason.OverLimit);
                                 continue;
                             }
                             if (!reuse || legacyBytes is not null)
                             {
-                                if (canCommit?.Invoke() == false) return false;
+                                if (canCommit?.Invoke() == false) return NotCommitted(pins, PinSessionSaveOutcome.Canceled);
                                 string path = ImagePath(pin.Id);
+                                step = PinSessionMissingReason.ProtectionFailed;
+                                BeforeImageProtectForTest?.Invoke(pin.Id);
                                 byte[] protectedBytes = PinSessionProtection.Protect(legacyBytes ?? snapshot.PngBytes!,
                                     PinSessionFilePurpose.Image);
-                                try { AtomicFile.WriteExportBytes(path, protectedBytes); }
+                                step = PinSessionMissingReason.ImageWriteFailed;
+                                try
+                                {
+                                    BeforeImageWriteForTest?.Invoke(pin.Id);
+                                    AtomicFile.WriteExportBytes(path, protectedBytes);
+                                }
                                 catch (Exception ex) when (legacyBytes is not null && IsTransientReadFailure(ex))
                                 {
                                     // A readable legacy file can still deny replacement. Do not commit
                                     // a manifest that drops its record just because migration is blocked.
                                     _log.LogWarning("Could not migrate a saved pin image ({FailureType}).", ex.GetType().Name);
-                                    return false;
+                                    return NotCommitted(pins, PinSessionSaveOutcome.Failed);
                                 }
                                 writtenImages.Add(pin.Id);
                                 RememberImage(pin.Id, path, length, isProtected: true);
@@ -290,36 +407,79 @@ public sealed class PinSessionStore
                     catch (Exception ex) when (IsStorageFailure(ex))
                     {
                         _log.LogWarning("Could not save pin {PinId}; skipped this pin ({FailureType}).", pin.Id, ex.GetType().Name);
+                        // A window sharing content whose image already failed reports that cause, not its missing PNG.
+                        if (step == PinSessionMissingReason.ImageUnavailable
+                            && imageFailures.TryGetValue(pin.Id, out PinSessionMissingReason earlier)) step = earlier;
+                        failures[i] = step;
+                        imageFailures.TryAdd(pin.Id, step);
                     }
                 }
                 List<PinSessionPin> orderedPins = saved.OrderBy(item => item.Index).Select(item => item.Pin).ToList();
                 // Commit the references only after their images exist; clean orphans only
                 // after the atomic replacement succeeds, keeping the old session recoverable.
-                if (canCommit?.Invoke() == false) return false;
+                if (canCommit?.Invoke() == false) return NotCommitted(pins, PinSessionSaveOutcome.Canceled);
                 if (!AtomicFile.TryWriteExportBytes(FilePath(ManifestName, ".json"),
                     PinSessionProtection.Protect(JsonSerializer.SerializeToUtf8Bytes(
                         new SessionManifest(SchemaVersion, orderedPins, retainedLengths), JsonOptions), PinSessionFilePurpose.Manifest), () =>
                     {
                         BeforeManifestCommitForTest?.Invoke();
                         return canCommit?.Invoke() != false;
-                    })) return false;
+                    })) return NotCommitted(pins, PinSessionSaveOutcome.Canceled);
                 committed = true;
                 _committedReferences = retainedImages;
                 _committedImageLengths = retainedLengths;
                 _manifestProtected = true;
+                PinSessionMissingPin[] missing = Enumerable.Range(0, pins.Count)
+                    .Where(index => failures[index] is not null)
+                    .Select(index => new PinSessionMissingPin(pins[index].Pin?.Id ?? Guid.Empty, failures[index]!.Value))
+                    .ToArray();
+                result = new(PinSessionSaveOutcome.Committed, NextGeneration(), pins.Count,
+                    orderedPins.Select(pin => pin.Id).ToArray(), missing);
                 LogBudgetSkipped(budgetSkipped);
                 CleanupFiles(retainedImages, clear: false);
-                return true;
+                return result;
             }
             catch (Exception ex) when (IsStorageFailure(ex))
             {
                 _log.LogWarning("Could not save the open-pin session ({FailureType}).", ex.GetType().Name);
-                return committed;
+                return result ?? NotCommitted(pins, PinSessionSaveOutcome.Failed);
             }
             finally
             {
                 if (!committed) CleanupFailedSaveImages(writtenImages);
             }
+        }
+    }
+
+    /// <summary>
+    /// Reads the session back with a separate reader. True only when <paramref name="result"/> is a
+    /// complete save that is still this store's latest commit and every saved record has a
+    /// readable image, so the live pins it describes may be closed or replaced.
+    /// </summary>
+    /// <remarks>
+    /// It decrypts every saved image, so call it off the UI thread. A carried record whose image
+    /// cannot be decrypted, for example after a Windows profile change, keeps it false.
+    /// </remarks>
+    public bool VerifyReadBack(PinSessionSaveResult result)
+    {
+        ArgumentNullException.ThrowIfNull(result);
+        // Checked before the lock too, so a result that cannot verify never waits behind a stalled save.
+        if (!result.IsComplete || result.Generation != Generation) return false;
+        lock (_gate)
+        {
+            if (result.Generation != Generation) return false;
+            // A failed verification read must not block this store's later saves the way its own reads do,
+            // nor log as if a session were being restored.
+            PinSessionLoadResult loaded;
+            try { loaded = new PinSessionStore(_root, NullLogger.Instance, _maxPins, _maxPngBytes).LoadDetailed(); }
+            catch (Exception ex) when (IsStorageFailure(ex))
+            {
+                _log.LogWarning("Could not read back the saved pin session ({FailureType}).", ex.GetType().Name);
+                return false;
+            }
+            return !loaded.ManifestUnreadable
+                && loaded.Pins.Select(entry => entry.Pin.Id).SequenceEqual(result.SavedPinIds)
+                && loaded.Pins.All(entry => entry.PngBytes is not null && !entry.ProtectionPending);
         }
     }
 
@@ -396,6 +556,8 @@ public sealed class PinSessionStore
     {
         lock (_gate)
         {
+            // Even a partial clear can remove the manifest, so no earlier commit verifies afterwards.
+            NextGeneration();
             try
             {
                 bool success = CleanupFiles([], clear: true);
@@ -584,6 +746,16 @@ public sealed class PinSessionStore
             return !_manifestUnreadable;
         }
     }
+
+    private long NextGeneration()
+    {
+        long next = Interlocked.Increment(ref s_lastGeneration);
+        Interlocked.Exchange(ref _generation, next);
+        return next;
+    }
+
+    private PinSessionSaveResult NotCommitted(IReadOnlyList<PinSessionSnapshot> pins, PinSessionSaveOutcome outcome) =>
+        PinSessionSaveResult.NotCommitted(outcome, Generation, pins.Select(snapshot => snapshot?.Pin?.Id ?? Guid.Empty));
 
     private void CleanupFailedSaveImages(HashSet<Guid> writtenImages)
     {

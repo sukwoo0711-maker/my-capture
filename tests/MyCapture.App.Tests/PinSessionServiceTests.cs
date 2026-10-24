@@ -1,6 +1,7 @@
 using System.IO;
 using System.Diagnostics;
 using System.Reflection;
+using System.Security.Cryptography;
 using System.Text;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
@@ -960,15 +961,73 @@ public sealed class PinSessionServiceTests
                 service.SynchronousSaveTimeout = TimeSpan.FromMilliseconds(100);
                 var elapsed = Stopwatch.StartNew();
 
-                service.SaveNow();
+                PinSessionSaveResult timedOut = service.SaveNow();
 
                 Assert.InRange(elapsed.Elapsed, TimeSpan.FromMilliseconds(50), TimeSpan.FromSeconds(2));
+                Assert.Equal(PinSessionSaveOutcome.TimedOut, timedOut.Outcome);
+                Assert.False(timedOut.IsComplete);
+                Assert.Equal(2, timedOut.RequestedCount);
+                Assert.Empty(timedOut.SavedPinIds);
+                Assert.All(timedOut.MissingPins, missing => Assert.Equal(PinSessionMissingReason.NotCommitted, missing.Reason));
                 release.Set();
                 Wait(service.PendingWorkForTest);
                 Assert.Equal(original, Assert.Single(store.Load()).Pin);
+                Assert.False(store.VerifyReadBack(timedOut));
                 Assert.Equal(2, calls);
             }
             finally { release.Set(); Wait(service.PendingWorkForTest); manager.CloseAllForExit(); }
+        });
+    }
+
+    [Fact]
+    public void ExitSave_TimeoutWhileTheStoreHoldsItsLock_ReportsTimedOutWithoutWaitingForTheStore()
+    {
+        StaTestHost.Run(() =>
+        {
+            using var workspace = new TempWorkspace();
+            var settings = new PinSettings { RestoreOpenPinsOnLaunch = true };
+            var store = new PinSessionStore(workspace.Paths.PinSessionRoot, NullLogger.Instance);
+            var manager = new PinManager(() => settings, NullLogger.Instance);
+            using var entered = new ManualResetEventSlim();
+            using var release = new ManualResetEventSlim();
+            using var service = Create(manager, store, settings);
+            try
+            {
+                Wait(service.RestoreAsync());
+                manager.PinRenderedText(Image(), "previous", false);
+                service.SaveNow();
+                PinSessionPin original = Assert.Single(store.Load()).Pin;
+                store.BeforeManifestCommitForTest = () =>
+                {
+                    entered.Set();
+                    Assert.True(release.Wait(TimeSpan.FromSeconds(10)));
+                };
+                manager.PinRenderedText(Image(), "new", false);
+                _ = service.FlushDebounceForTest();
+                Assert.True(entered.Wait(TimeSpan.FromSeconds(10)));
+                service.SynchronousSaveTimeout = TimeSpan.FromMilliseconds(100);
+                var elapsed = Stopwatch.StartNew();
+
+                PinSessionSaveResult timedOut = service.SaveNow();
+
+                Assert.InRange(elapsed.Elapsed, TimeSpan.FromMilliseconds(50), TimeSpan.FromSeconds(2));
+                Assert.Equal(PinSessionSaveOutcome.TimedOut, timedOut.Outcome);
+                Assert.Equal(2, timedOut.RequestedCount);
+                // Checking the result does not wait behind the stalled write either.
+                Task<bool> verify = Task.Run(() => store.VerifyReadBack(timedOut));
+                Assert.True(verify.Wait(TimeSpan.FromSeconds(2)));
+                Assert.False(verify.Result);
+                release.Set();
+                Wait(service.PendingWorkForTest);
+                Assert.Equal(original, Assert.Single(store.Load()).Pin);
+            }
+            finally
+            {
+                release.Set();
+                Wait(service.PendingWorkForTest);
+                store.BeforeManifestCommitForTest = null;
+                manager.CloseAllForExit();
+            }
         });
     }
 
@@ -1066,6 +1125,207 @@ public sealed class PinSessionServiceTests
             }
             finally { manager.CloseAllForExit(); }
         });
+    }
+
+    [Fact]
+    public void SaveNow_ReportsACompleteSaveThatReadsBack()
+    {
+        StaTestHost.Run(() =>
+        {
+            using var workspace = new TempWorkspace();
+            var settings = new PinSettings { RestoreOpenPinsOnLaunch = true };
+            var store = new PinSessionStore(workspace.Paths.PinSessionRoot, NullLogger.Instance);
+            var manager = new PinManager(() => settings, NullLogger.Instance);
+            using var service = Create(manager, store, settings);
+            try
+            {
+                Wait(service.RestoreAsync());
+                manager.PinRenderedText(Image(), "text", false);
+                manager.PinImage(Image());
+
+                PinSessionSaveResult result = service.SaveNow();
+
+                Assert.Equal(PinSessionSaveOutcome.Committed, result.Outcome);
+                Assert.True(result.IsComplete);
+                Assert.Equal(2, result.RequestedCount);
+                Assert.Empty(result.MissingPins);
+                Assert.Equal(store.Load().Select(entry => entry.Pin.Id), result.SavedPinIds);
+                Assert.True(store.VerifyReadBack(result));
+            }
+            finally { manager.CloseAllForExit(); }
+        });
+    }
+
+    [Theory]
+    [InlineData(PinSessionMissingReason.ImageWriteFailed)]
+    [InlineData(PinSessionMissingReason.ProtectionFailed)]
+    public void SaveNow_PartialSaveNamesTheMissingPinAndRestartRestoresOnlyTheSavedOne(PinSessionMissingReason failure)
+    {
+        StaTestHost.Run(() =>
+        {
+            using var workspace = new TempWorkspace();
+            var settings = new PinSettings { RestoreOpenPinsOnLaunch = true };
+            var store = new PinSessionStore(workspace.Paths.PinSessionRoot, NullLogger.Instance);
+            FailFirstImage(store, failure);
+            var manager = new PinManager(() => settings, NullLogger.Instance);
+            try
+            {
+                using (var service = Create(manager, store, settings))
+                {
+                    Wait(service.RestoreAsync());
+                    manager.PinRenderedText(Image(), "older", false);
+                    manager.PinRenderedText(Image(), "newest", false);
+
+                    PinSessionSaveResult partial = service.SaveNow();
+
+                    Assert.Equal(PinSessionSaveOutcome.Committed, partial.Outcome);
+                    Assert.False(partial.IsComplete);
+                    Assert.Equal(2, partial.RequestedCount);
+                    PinSessionMissingPin missing = Assert.Single(partial.MissingPins);
+                    Assert.Equal(failure, missing.Reason);
+                    PinSessionSnapshot saved = Assert.Single(store.Load());
+                    Assert.Equal("older", saved.Pin.OriginalText);
+                    Assert.Equal(saved.Pin.Id, Assert.Single(partial.SavedPinIds));
+                    Assert.NotEqual(saved.Pin.Id, missing.PinId);
+                    Assert.False(store.VerifyReadBack(partial));
+                    Assert.Equal(2, manager.Count);
+                    Assert.Equal(0, manager.ClosedCount);
+                }
+                manager.CloseAllForExit();
+
+                using var restarted = Create(manager,
+                    new PinSessionStore(workspace.Paths.PinSessionRoot, NullLogger.Instance), settings);
+                Wait(restarted.RestoreAsync());
+
+                Assert.Equal("older", Assert.Single(manager.SnapshotOpenPins()).Content.OriginalText);
+                Assert.Equal(0, manager.ClosedCount);
+            }
+            finally { manager.CloseAllForExit(); }
+        });
+    }
+
+    /// <summary>
+    /// The contract for a caller that would close or replace live pins, such as a pin board switch:
+    /// the pins stay open until a save is complete and reads back.
+    /// </summary>
+    [Fact]
+    public void LivePins_MayBeReplacedOnlyAfterACompleteSaveReadsBack()
+    {
+        StaTestHost.Run(() =>
+        {
+            using var workspace = new TempWorkspace();
+            var settings = new PinSettings { RestoreOpenPinsOnLaunch = true };
+            var store = new PinSessionStore(workspace.Paths.PinSessionRoot, NullLogger.Instance);
+            FailFirstImage(store, PinSessionMissingReason.ImageWriteFailed);
+            var manager = new PinManager(() => settings, NullLogger.Instance);
+            try
+            {
+                using (var service = Create(manager, store, settings))
+                {
+                    Wait(service.RestoreAsync());
+                    manager.PinRenderedText(Image(), "older", false);
+                    manager.PinRenderedText(Image(), "newest", false);
+
+                    PinSessionSaveResult partial = service.SaveNow();
+                    Assert.True(partial.ManifestCommitted);
+                    Assert.False(store.VerifyReadBack(partial));
+
+                    PinSessionSaveResult retried = service.SaveNow();
+                    Assert.True(retried.IsComplete);
+                    Assert.True(store.VerifyReadBack(retried));
+                }
+                manager.CloseAllForExit();
+
+                using var restarted = Create(manager,
+                    new PinSessionStore(workspace.Paths.PinSessionRoot, NullLogger.Instance), settings);
+                Wait(restarted.RestoreAsync());
+
+                Assert.Equal(new[] { "newest", "older" },
+                    manager.SnapshotOpenPins().Select(pin => pin.Content.OriginalText).Order());
+            }
+            finally { manager.CloseAllForExit(); }
+        });
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void SaveNow_ReportsOlderPinsOverTheSessionLimit(bool limitBytes)
+    {
+        StaTestHost.Run(() =>
+        {
+            using var workspace = new TempWorkspace();
+            var settings = new PinSettings { RestoreOpenPinsOnLaunch = true };
+            var store = new PinSessionStore(workspace.Paths.PinSessionRoot, NullLogger.Instance,
+                maxPins: limitBytes ? PinSessionStore.DefaultMaxPins : 1,
+                maxPngBytes: limitBytes ? ImageCodec.EncodePng(Image()).LongLength : PinSessionStore.DefaultMaxPngBytes);
+            var manager = new PinManager(() => settings, NullLogger.Instance);
+            using var service = Create(manager, store, settings);
+            try
+            {
+                Wait(service.RestoreAsync());
+                manager.PinRenderedText(Image(), "older", false);
+                manager.PinRenderedText(Image(), "newest", false);
+
+                PinSessionSaveResult result = service.SaveNow();
+
+                Assert.Equal(PinSessionSaveOutcome.Committed, result.Outcome);
+                Assert.False(result.IsComplete);
+                Assert.Equal(2, result.RequestedCount);
+                Assert.Equal(PinSessionMissingReason.OverLimit, Assert.Single(result.MissingPins).Reason);
+                PinSessionSnapshot saved = Assert.Single(store.Load());
+                Assert.Equal("newest", saved.Pin.OriginalText);
+                Assert.Equal(saved.Pin.Id, Assert.Single(result.SavedPinIds));
+                Assert.False(store.VerifyReadBack(result));
+                Assert.Equal(2, manager.Count);
+            }
+            finally { manager.CloseAllForExit(); }
+        });
+    }
+
+    [Fact]
+    public void SaveNow_ReportsNotRunWhileRestoreIsOffAndAfterDispose()
+    {
+        StaTestHost.Run(() =>
+        {
+            using var workspace = new TempWorkspace();
+            var settings = new PinSettings();
+            var store = new PinSessionStore(workspace.Paths.PinSessionRoot, NullLogger.Instance);
+            var manager = new PinManager(() => settings, NullLogger.Instance);
+            PinSessionService service = Create(manager, store, settings);
+            try
+            {
+                manager.PinRenderedText(Image(), "not saved", false);
+
+                PinSessionSaveResult off = service.SaveNow();
+                service.Dispose();
+                PinSessionSaveResult disposed = service.SaveNow();
+
+                Assert.All(new[] { off, disposed }, result =>
+                {
+                    Assert.Equal(PinSessionSaveOutcome.NotRun, result.Outcome);
+                    Assert.False(result.IsComplete);
+                    Assert.False(store.VerifyReadBack(result));
+                });
+                Assert.False(Directory.Exists(workspace.Paths.PinSessionRoot));
+            }
+            finally { service.Dispose(); manager.CloseAllForExit(); }
+        });
+    }
+
+    // Fails only the first image the store protects or writes: the newest pin, which it saves first.
+    private static void FailFirstImage(PinSessionStore store, PinSessionMissingReason failure)
+    {
+        int attempts = 0;
+        Action<Guid> failFirst = _ =>
+        {
+            if (Interlocked.Increment(ref attempts) != 1) return;
+            if (failure == PinSessionMissingReason.ProtectionFailed)
+                throw new CryptographicException("fixture protection failure");
+            throw new IOException("fixture image write failure");
+        };
+        if (failure == PinSessionMissingReason.ProtectionFailed) store.BeforeImageProtectForTest = failFirst;
+        else store.BeforeImageWriteForTest = failFirst;
     }
 
     private static void PumpUntil(Func<bool> completed)
