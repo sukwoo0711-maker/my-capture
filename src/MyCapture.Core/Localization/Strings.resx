@@ -4030,7 +4030,7 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="EditorFlow_CommandBarName" xml:space="preserve"><value>편집 명령</value></data>
   <data name="SettingsUx_AlwaysShowShortcutHints" xml:space="preserve"><value>단축키 항상 표시</value></data>
   <data name="SettingsUx_AlwaysShowShortcutHintsHint" xml:space="preserve"><value>끄면 Alt를 누르는 동안에만 버튼 아래에 단축키가 표시됩니다.</value></data>
-  <data name="EditorFlow_CopyHint" xml:space="preserve"><value>편집한 이미지를 클립보드에 복사</value></data>
+  <data name="EditorFlow_CopyHint" xml:space="preserve"><value>클립보드에 복사하고 라이브러리에 저장한 뒤 닫기</value></data>
   <data name="EditorFlow_CropBarName" xml:space="preserve"><value>자르기 명령</value></data>
   <data name="EditorFlow_SelectionCleared" xml:space="preserve"><value>선택 해제됨</value></data>
   <data name="EditorFlow_Selected" xml:space="preserve"><value>선택: {0}</value></data>
