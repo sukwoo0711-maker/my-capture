@@ -53,6 +53,36 @@ public sealed class CaptureFlightTests
         }
     }
 
+    [Fact]
+    public void LiftFadesItsShadowInOnTheSourceAndTheFlightTakesOffFromIt()
+    {
+        // At release the image covers its source exactly and has no shadow yet.
+        CaptureFlightFrame released = CaptureFlight.LiftFrame(Source, 0, 1.5);
+        Assert.Equal(Source, released.Image);
+        Assert.Equal(0, released.ShadowOpacity, 6);
+        Assert.Equal(CaptureFlight.LiftBlurDip * 1.5, released.ShadowBlur, 6);
+        Assert.Equal(CaptureFlight.LiftOffsetDip * 1.5, released.ShadowOffset, 6);
+        Assert.Equal(1, released.Opacity);
+
+        // The shadow fades in over 167 ms, quadratic ease-out, and then rests.
+        Assert.Equal(1 - Math.Pow(1 - 0.5, 2), CaptureFlight.LiftLevel(167 / 2.0), 6);
+        Assert.Equal(1, CaptureFlight.LiftLevel(167), 6);
+        Assert.Equal(1, CaptureFlight.LiftLevel(400), 6);
+        Assert.Equal(CaptureFlight.LiftShadowOpacity, CaptureFlight.LiftFrame(Source, 400, 1.5).ShadowOpacity, 6);
+        Assert.Equal(0.5, CaptureFlight.LiftFrame(Source, 400, 1.5, opacity: 0.5).Opacity, 6);
+
+        // A flight that starts mid-lift starts from the lift's own picture.
+        foreach (double ms in new[] { 0d, 40, 120, 400 })
+        {
+            CaptureFlightFrame lift = CaptureFlight.LiftFrame(Source, ms, 1.5);
+            CaptureFlightFrame takeOff = CaptureFlight.FlightFrame(Source, Target, 0, 1.5, CaptureFlight.LiftLevel(ms));
+            Assert.Equal(lift, takeOff);
+        }
+
+        // The card has faded in completely before the image lands in it.
+        Assert.True(QuickAccessWindow.LandingFadeDuration.TimeSpan < FluidMotion.DeliberateDuration.TimeSpan);
+    }
+
     [Theory]
     [InlineData(true, false, true, true)]
     [InlineData(false, false, true, false)]

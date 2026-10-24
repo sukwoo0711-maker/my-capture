@@ -57,6 +57,7 @@ internal sealed class CountdownWindow : Window
     private readonly ScaleTransform _leavingScale = new(1, 1);
     private readonly Shapes.Path _ring;
     private readonly double _ringLength;
+    private readonly Border _panel;
     private readonly int _seconds;
     private int _remaining;
     private int _digitChange;
@@ -174,7 +175,7 @@ internal sealed class CountdownWindow : Window
             Margin = new Thickness(0, 8, 0, 0),
         });
 
-        Content = new Border
+        Content = _panel = new Border
         {
             Background = Application.Current?.TryFindResource("Surface.Floating") as Brush
                 ?? new SolidColorBrush(Color.FromArgb(0xEE, 0x15, 0x1E, 0x2B)),
@@ -284,6 +285,66 @@ internal sealed class CountdownWindow : Window
 
     private static DoubleAnimation Settle(double from, double to, Duration duration, IEasingFunction easing) =>
         new(from, to, duration) { EasingFunction = easing, FillBehavior = FillBehavior.Stop };
+
+    /// <summary>
+    /// Poses the countdown as its motion shows it <paramref name="intoSecond"/> after
+    /// <paramref name="remaining"/> appeared: the new digit landing over the fading previous one and
+    /// the ring running down (<see cref="PlayDigit"/>, <see cref="RestartRing"/>). At zero it is that
+    /// far into the shrinking exit (<see cref="FluidMotion.BeginExit"/>), the last digit at rest over
+    /// the empty ring. Nothing is animated and the Windows animation setting does not apply: the
+    /// tutorial clip generator draws the countdown on video time with this. A posed window is a
+    /// picture and is not shown afterwards.
+    /// </summary>
+    internal void PoseAt(int remaining, TimeSpan intoSecond)
+    {
+        _remaining = Math.Clamp(remaining, 0, _seconds);
+        double ms = Math.Max(0, intoSecond.TotalMilliseconds);
+        _digitChange++;
+        _label.BeginAnimation(OpacityProperty, null);
+        _labelScale.BeginAnimation(ScaleTransform.ScaleXProperty, null);
+        _labelScale.BeginAnimation(ScaleTransform.ScaleYProperty, null);
+        _leaving.BeginAnimation(OpacityProperty, null);
+        _leavingScale.BeginAnimation(ScaleTransform.ScaleXProperty, null);
+        _leavingScale.BeginAnimation(ScaleTransform.ScaleYProperty, null);
+        _ring.BeginAnimation(Shapes.Shape.StrokeDashOffsetProperty, null);
+        _panel.BeginAnimation(OpacityProperty, null);
+
+        if (_remaining == 0)
+        {
+            // Elapsed: the value stays on the last digit and the ring's run down holds its end.
+            _label.Text = FormatText(1);
+            _label.Opacity = 1;
+            _labelScale.ScaleX = _labelScale.ScaleY = 1;
+            _leaving.Text = string.Empty;
+            _leaving.Opacity = 0;
+            _leavingScale.ScaleX = _leavingScale.ScaleY = 1;
+            _ring.StrokeDashOffset = _ringLength + 1;
+            double exit = Eased(FluidMotion.StandardEasing, ms, FluidMotion.FastDuration);
+            double shrink = 1 + ((FluidMotion.ShrinkExitScale - 1) * exit);
+            _panel.Opacity = 1 - exit;
+            _panel.RenderTransformOrigin = new Point(0.5, 0.5);
+            _panel.RenderTransform = new ScaleTransform(shrink, shrink);
+            return;
+        }
+
+        _panel.Opacity = 1;
+        _panel.ClearValue(RenderTransformProperty);
+        _label.Text = FormatText(_remaining);
+        _label.Opacity = Eased(FluidMotion.SoftLandingEasing, ms, FluidMotion.NormalDuration);
+        double land = Eased(FluidMotion.StandardEasing, ms, LandingDuration);
+        _labelScale.ScaleX = _labelScale.ScaleY = LandingScale + ((1 - LandingScale) * land);
+        // The first digit lands with the window; every later one over the previous value.
+        bool fading = _remaining < _seconds && ms < FluidMotion.FastDuration.TimeSpan.TotalMilliseconds;
+        double fade = Eased(FluidMotion.StandardEasing, ms, FluidMotion.FastDuration);
+        _leaving.Text = fading ? FormatText(_remaining + 1) : string.Empty;
+        _leaving.Opacity = fading ? 1 - fade : 0;
+        _leavingScale.ScaleX = _leavingScale.ScaleY = fading ? 1 + ((LeavingScale - 1) * fade) : 1;
+        // Linear over the second, one stroke thickness past empty (RestartRing).
+        _ring.StrokeDashOffset = (_ringLength + 1) * Math.Clamp(ms / _timer.Interval.TotalMilliseconds, 0, 1);
+    }
+
+    private static double Eased(IEasingFunction easing, double ms, Duration duration) =>
+        easing.Ease(Math.Clamp(ms / duration.TimeSpan.TotalMilliseconds, 0, 1));
 
     /// <summary>
     /// Forces a UI Automation live-region event for the countdown label. WPF exposes
