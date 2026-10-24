@@ -1949,7 +1949,29 @@ public partial class App : Application
                 }
             }));
         }));
+
+        // The pins likewise: the first transparent window costs about 150 ms more than later pins, and
+        // a pin opened while no other window is open rebuilds WPF's rendering; one kept hidden window
+        // covers both (PinWindowPrewarm). This longer idle block waits a little, so it never lands in
+        // the entrance of a window shown at launch.
+        var pinPrewarm = new DispatcherTimer(DispatcherPriority.ApplicationIdle, Dispatcher) { Interval = PinPrewarmDelay };
+        pinPrewarm.Tick += (_, _) =>
+        {
+            if (_overlay?.IsActive == true) return;
+            pinPrewarm.Stop();
+            try
+            {
+                PinWindowPrewarm.Run();
+            }
+            catch (Exception ex)
+            {
+                _log?.LogDebug(ex, "Pin window prewarm failed");
+            }
+        };
+        pinPrewarm.Start();
     }
+
+    private static readonly TimeSpan PinPrewarmDelay = TimeSpan.FromSeconds(2);
 
     private void StartActivationListener()
     {

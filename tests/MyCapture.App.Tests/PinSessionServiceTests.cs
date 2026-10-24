@@ -29,6 +29,9 @@ public sealed class PinSessionServiceTests
             var settings = new PinSettings { RestoreOpenPinsOnLaunch = true };
             var store = new PinSessionStore(workspace.Paths.PinSessionRoot, NullLogger.Instance);
             var manager = new PinManager(() => settings, NullLogger.Instance);
+            // Stacking follows opening order: a pin under the pointer shows its hover bar between
+            // restored pins, and the owned bar raises it, wherever the desktop's pointer rests.
+            manager.ReadPinOrderForTest = handles => handles;
             const string text = "\t한글\tvalue  \r\n  끝\t\r\n";
             try
             {
@@ -359,6 +362,75 @@ public sealed class PinSessionServiceTests
                 Assert.Equal(2, store.Load().Count);
             }
             finally { release.Set(); manager.CloseAllForExit(); }
+        });
+    }
+
+    [Fact]
+    public void Restore_OpensOnePinPerDispatcherTurn_SoRenderPriorityWorkRunsBetweenPins()
+    {
+        StaTestHost.Run(() =>
+        {
+            using var workspace = new TempWorkspace();
+            var settings = new PinSettings { RestoreOpenPinsOnLaunch = true };
+            var store = new PinSessionStore(workspace.Paths.PinSessionRoot, NullLogger.Instance);
+            Seed(store, count: 3);
+            var manager = new PinManager(() => settings, NullLogger.Instance);
+            var renderedBefore = new List<int>();
+            int rendered = 0;
+            manager.ShowPinForTest = (_, show) =>
+            {
+                show();
+                renderedBefore.Add(rendered);
+                // A frame this pin asks for must come before the next pin opens.
+                Dispatcher.CurrentDispatcher.BeginInvoke(DispatcherPriority.Render, new Action(() => rendered++));
+            };
+            try
+            {
+                using var service = Create(manager, store, settings);
+                Wait(service.RestoreAsync());
+                Assert.Equal(3, manager.Count);
+                Assert.Equal([0, 1, 2], renderedBefore);
+            }
+            finally { manager.CloseAllForExit(); }
+        });
+    }
+
+    [Fact]
+    public void ExitSaveBetweenRestoredPins_KeepsEverySavedPinExactlyOnce()
+    {
+        StaTestHost.Run(() =>
+        {
+            using var workspace = new TempWorkspace();
+            var settings = new PinSettings { RestoreOpenPinsOnLaunch = true };
+            var store = new PinSessionStore(workspace.Paths.PinSessionRoot, NullLogger.Instance);
+            Seed(store, count: 3);
+            Guid[] saved = store.Load().Select(entry => entry.Pin.Id).Order().ToArray();
+            var manager = new PinManager(() => settings, NullLogger.Instance);
+            PinSessionService? service = null;
+            int shown = 0;
+            manager.ShowPinForTest = (_, show) =>
+            {
+                show();
+                if (++shown != 1) return;
+                // The app exits after the first restored pin and before the second.
+                Dispatcher.CurrentDispatcher.BeginInvoke(DispatcherPriority.Normal, new Action(() =>
+                {
+                    service!.SaveNow();
+                    service.Dispose();
+                }));
+            };
+            try
+            {
+                service = Create(manager, store, settings);
+                Wait(service.RestoreAsync());
+                Assert.Equal(1, manager.Count);
+                Assert.Equal(saved, store.Load().Select(entry => entry.Pin.Id).Order().ToArray());
+            }
+            finally
+            {
+                service?.Dispose();
+                manager.CloseAllForExit();
+            }
         });
     }
 

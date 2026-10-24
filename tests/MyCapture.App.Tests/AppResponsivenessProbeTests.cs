@@ -73,6 +73,18 @@ public sealed class AppResponsivenessProbeTests
         if (Environment.GetEnvironmentVariable(SectionVariable) is { Length: > 0 } section)
         {
             string folder = DiagnosticOutputPaths.Create(DiagnosticOutputPaths.Child(output, section));
+            if (section == "pin-open")
+            {
+                await PinOpenProbe.RunChildrenAsync(folder);
+                File.WriteAllText(DiagnosticOutputPaths.Child(folder, "probe-completed.txt"), "PASS");
+                return;
+            }
+            if (PinOpenProbe.IsChildSection(section))
+            {
+                PinOpenProbe.RunOnStaThread(section, folder);
+                File.WriteAllText(DiagnosticOutputPaths.Child(folder, "probe-completed.txt"), "PASS");
+                return;
+            }
             AppResponsivenessProbe.RunOnStaThread(section, folder, DiagnosticOutputPaths.Child(folder, "probe-completed.txt"),
                 Environment.GetEnvironmentVariable(LibraryVariable));
             return;
@@ -110,7 +122,7 @@ public sealed class AppResponsivenessProbeTests
             : requested.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
     }
 
-    private static async Task<(int ExitCode, string Console)> RunChildAsync(string section, string? library)
+    internal static async Task<(int ExitCode, string Console)> RunChildAsync(string section, string? library, string? output = null)
     {
         string runtimeRoot = new DirectoryInfo(RuntimeEnvironment.GetRuntimeDirectory()).Parent!.Parent!.Parent!.FullName;
         string dotnet = Path.Combine(runtimeRoot, "dotnet.exe");
@@ -127,6 +139,7 @@ public sealed class AppResponsivenessProbeTests
             + "." + nameof(MeasureAppResponsiveness));
         start.ArgumentList.Add("--Logger:console;verbosity=normal");
         start.Environment[SectionVariable] = section;
+        if (output is not null) start.Environment[OutputVariable] = output;
         if (library is not null) start.Environment[LibraryVariable] = library;
         start.Environment["DOTNET_CLI_UI_LANGUAGE"] = "en";
         using Process child = Process.Start(start) ?? throw new IOException("Could not start the app probe process.");
