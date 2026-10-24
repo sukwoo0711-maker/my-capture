@@ -1583,7 +1583,6 @@ internal sealed class TwoLineTimeline : ContentControl, IDisposable
                 double majorMs = CoarseIntervalMs;
                 double minorMs = majorMs / 4.0;
                 int minorCount = Math.Max(1, (int)Math.Ceiling(_durationMs / minorMs));
-                double labelRight = double.NegativeInfinity;
                 for (int index = 0; index <= minorCount; index++)
                 {
                     double time = Math.Min(_durationMs, index * minorMs);
@@ -1593,22 +1592,14 @@ internal sealed class TwoLineTimeline : ContentControl, IDisposable
                     // marks the bottom edge; both are translucent hairlines.
                     DrawLine(dc, major ? _overviewMajorTickPen : _overviewMinorTickPen, x,
                         major ? trackTop : trackBottom - 6, x, trackBottom);
-                    if (major)
-                    {
-                        // A ruler along the top lane; the handle chips draw over it. A label
-                        // that would run into the previous one (the clip end) is left out.
-                        FormattedText label = Format(FormatTickLabel(time), 10, semiBold: false, _textSecondary);
-                        double left = Math.Clamp(x + 3, 3, Math.Max(3, width - label.Width - 3));
-                        if (left >= labelRight + 6)
-                        {
-                            dc.DrawText(label, new Point(left, 2));
-                            labelRight = left + label.Width;
-                        }
-                    }
                 }
                 break;
 
             case TimelineRenderLayer.Range:
+                // Label visibility depends on the moving chips. Keep it in the range layer
+                // so a trim change redraws text without redrawing the filmstrip or tick lines.
+                ChipLayout chips = LayoutChips(width);
+                DrawOverviewRulerLabels(dc, width, chips);
                 if (_detailVisible)
                 {
                     DrawZoomLane(dc, width, trackBottom, height);
@@ -1625,7 +1616,6 @@ internal sealed class TwoLineTimeline : ContentControl, IDisposable
                 DrawSegments(dc, width, trackTop, trackBottom, overview: true);
                 if (_trimModeEnabled)
                 {
-                    ChipLayout chips = LayoutChips(width);
                     DrawTrimHandle(dc, trimInX, chips.In.Top, trackBottom, TrimHandle.In);
                     DrawTrimHandle(dc, trimOutX, chips.Out.Top, trackBottom, TrimHandle.Out);
                     DrawChip(dc, chips.In, chips.InText, TrimHandle.In);
@@ -1637,6 +1627,24 @@ internal sealed class TwoLineTimeline : ContentControl, IDisposable
                 DrawPlayhead(dc, OverviewMsToPx(_playheadMs, width), trackTop, height);
                 DrawPointerFeedback(dc, _overview, width, height, overview: true);
                 break;
+        }
+    }
+
+    private void DrawOverviewRulerLabels(DrawingContext dc, double width, ChipLayout chips)
+    {
+        double majorMs = CoarseIntervalMs;
+        int minorCount = Math.Max(1, (int)Math.Ceiling(_durationMs / (majorMs / 4.0)));
+        double labelRight = double.NegativeInfinity;
+        for (int index = 0; index <= minorCount; index += 4)
+        {
+            double time = Math.Min(_durationMs, index * majorMs / 4.0);
+            FormattedText label = Format(FormatTickLabel(time), 10, semiBold: false, _textSecondary);
+            double left = Math.Clamp(OverviewMsToPx(time, width) + 3, 3, Math.Max(3, width - label.Width - 3));
+            var bounds = new Rect(left, 2, label.Width, label.Height);
+            if (left < labelRight + 6) continue;
+            labelRight = bounds.Right;
+            if (_trimModeEnabled && (bounds.IntersectsWith(chips.In) || bounds.IntersectsWith(chips.Out))) continue;
+            dc.DrawText(label, bounds.TopLeft);
         }
     }
 
