@@ -45,6 +45,11 @@ internal sealed class QuickAccessScene : TutorialScene
     private bool _cardClosed, _active, _noteActive, _pasted;
     private int _copies;
 
+    // The card's success marks keep their pressed action's check on the wall clock; the clip ends it on video time.
+    private static readonly System.Reflection.FieldInfo SuccessMarksField =
+        typeof(QuickAccessWindow).GetField("_successMarks", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)
+        ?? throw new MissingFieldException(nameof(QuickAccessWindow), "_successMarks");
+
     internal QuickAccessScene(string id, string language) : base(id, language)
     {
         _page = Fixtures.Checklist(Korean, (int)BrowserClient.Width, (int)(BrowserClient.Height - Toolbar));
@@ -78,7 +83,8 @@ internal sealed class QuickAccessScene : TutorialScene
 
     internal override string Provenance =>
         "Real QuickAccessWindow content (large preview, labeled Edit, icon actions, Keep open toggle, status line, countdown) laid out "
-        + "detached; placed by QuickAccessWindow.Position, timed by Advance and driven by HandleShortcut. Copy calls a fake delegate "
+        + "detached; placed by QuickAccessWindow.Position, timed by Advance and driven by HandleShortcut. Copy's success check ends "
+        + "after QuickAccessWindow.SuccessCheckTime of video time. Copy calls a fake delegate "
         + "(no clipboard). The captured page, note app and taskbar are synthetic.";
 
     private static RectD StageRegion => new(BrowserClient.X + Region.X, BrowserClient.Y + Toolbar + Region.Y, Region.Width, Region.Height);
@@ -94,7 +100,9 @@ internal sealed class QuickAccessScene : TutorialScene
         Point keep = _keepButton.TranslatePoint(new Point(_keepButton.ActualWidth / 2, _keepButton.ActualHeight / 2), _cardRoot);
         story.Move("keep-move", new PointD(_cardOrigin.X + keep.X, _cardOrigin.Y + keep.Y), 12)
             .Click("keep-on").Hold("kept", 0.8).Click("keep-off");
-        story.Hold("copy", 2.2);
+        // Copy's icon shows a check for SuccessCheckTime, then its own icon returns.
+        double check = QuickAccessWindow.SuccessCheckTime.TotalSeconds;
+        story.Hold("copy", check).Hold("copied", 2.2 - check);
         story.Move("note-move", NoteBody, 18).Click("note-click");
         story.Motion("paste-wait", 10, NoteBody, NoteBody);
         story.Motion("paste", 30, NoteBody, NoteBody);
@@ -135,6 +143,14 @@ internal sealed class QuickAccessScene : TutorialScene
             case "copy" when _copies == 0:
                 ShortcutDefinition copy = ShortcutCatalog.Get(ShortcutScope.QuickAccess, "Copy");
                 if (!_card.HandleShortcut(copy.Key, copy.Modifiers)) throw new InvalidOperationException($"{copy.Hint} did not run the card's Copy.");
+                // The check is state and shows with motion off too; its period runs on video time.
+                foreach (object mark in ((System.Collections.IDictionary)SuccessMarksField.GetValue(_card)!).Values)
+                    ((System.Windows.Threading.DispatcherTimer)mark.GetType().GetProperty("Timer", System.Reflection.BindingFlags.Instance
+                        | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Public)!.GetValue(mark)!).Stop();
+                if (!_card.ShowsSuccessCheckForTest("Copy")) throw new InvalidOperationException("Copy's icon did not turn into a check.");
+                break;
+            case "copied" when frame.IsFirst && _card.ShowsSuccessCheckForTest("Copy"):
+                _card.ElapseSuccessCheckForTest();
                 break;
             case "keep-on" when frame.IsLast:
                 _card.IsKept = true;
@@ -191,7 +207,7 @@ internal sealed class QuickAccessScene : TutorialScene
         "alt-q" => (L($"{Hint(ShortcutScope.QuickAccess, "Activate")}: 키보드로 카드 사용", $"{Hint(ShortcutScope.QuickAccess, "Activate")}: control the card from the keyboard"),
             Hint(ShortcutScope.QuickAccess, "Activate")),
         "keep-move" or "keep-on" or "kept" or "keep-off" => (Ui("QuickAccess.KeepName"), ""),
-        "copy" => (L($"{Hint(ShortcutScope.QuickAccess, "Copy")}: {Ui("QuickAccess.Copy")} · 카드에 {Ui("QuickAccess.Copied")} 표시",
+        "copy" or "copied" => (L($"{Hint(ShortcutScope.QuickAccess, "Copy")}: {Ui("QuickAccess.Copy")} · 카드에 {Ui("QuickAccess.Copied")} 표시",
             $"{Hint(ShortcutScope.QuickAccess, "Copy")}: {Ui("QuickAccess.Copy")} · the card shows {Ui("QuickAccess.Copied")}"), Hint(ShortcutScope.QuickAccess, "Copy")),
         "note-move" or "note-click" or "paste-wait" => (L("붙여 넣을 곳 클릭", "Click where to paste"), ""),
         "paste" => (L("Ctrl+V로 붙여 넣기", "Paste with Ctrl+V"), "Ctrl+V"),

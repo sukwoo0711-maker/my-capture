@@ -95,7 +95,10 @@ internal sealed class PinWindow : Window
     private int _lastDragCursorX = int.MinValue;
     private int _lastDragCursorY = int.MinValue;
     private IntPtr _handle;
+    // Closed as far as anyone can tell: set when a close starts, even while its exit still plays.
     private bool _isClosed;
+    private bool _closeStarted;
+    private bool _windowClosed;
     private bool _saveInProgress;
     private MenuItem? _restoreClosedItem;
     private MenuItem? _clickThroughItem;
@@ -395,7 +398,7 @@ internal sealed class PinWindow : Window
             double target = AdjustOpacity(opacity - _state.Opacity);
             ShowFeedback(UiText.Format("Text_C740003A2150", target * 100));
         };
-        bar.CloseRequested += Close;
+        bar.CloseRequested += CloseWithExit;
         bar.MouseEnter += (_, _) => _hoverHideTimer.Stop();
         bar.MouseLeave += (_, _) => ScheduleHoverBarHide();
         bar.SizeChanged += (_, _) => PlaceHoverBar();
@@ -765,13 +768,90 @@ internal sealed class PinWindow : Window
         _imageClip.RadiusX = _imageClip.RadiusY = Math.Max(0, FrameCornerRadiusDip - FrameClipInsetDip) / zoom;
     }
 
+    /// <summary>How long a pin takes to leave after the user closes it: its landing played backwards.</summary>
+    internal static readonly TimeSpan ExitDuration = TimeSpan.FromMilliseconds(120);
+
+    /// <summary>
+    /// Keeps a leaving pin out of screen captures, so a capture that starts during its exit never
+    /// shows a pin the user already closed. Where Windows refuses, the pin closes at once instead.
+    /// Tests substitute a recorder.
+    /// </summary>
+    internal static Func<IntPtr, bool> ExcludeLeavingPinFromCapture { get; set; } =
+        MyCapture.App.Capture.CaptureWindowExclusion.TryApply;
+
+    /// <summary>
+    /// Raised once when the pin begins to close, before any exit plays and while its placement is
+    /// known; <see cref="Window.Closed"/> follows when the window itself is gone.
+    /// </summary>
+    internal event EventHandler? CloseStarted;
+
+    /// <summary>
+    /// Closes the pin the way a user close does (its close button, Esc or Delete, a double-click
+    /// when that setting is on, or its menu): the close happens now, so the placement, the
+    /// "reopen closed pin" history, the open-pin session and every list are already right, and
+    /// only the pixels linger. The pin shrinks to 0.97 and fades over <see cref="ExitDuration"/>
+    /// without taking input, and its hover bar fades with it over the fast token. Without
+    /// Windows animations, or when the leaving pin cannot be kept out of a capture, it closes at once.
+    /// </summary>
+    internal void CloseWithExit()
+    {
+        if (_isClosed) return;
+        StartClosing();
+        if (!FluidMotion.AnimationsEnabled || !IsVisible || _handle == IntPtr.Zero
+            || !ExcludeLeavingPinFromCapture(_handle))
+        {
+            Close();
+            return;
+        }
+
+        FluidMotion.BeginExit(this, ExitMotion.Shrink, CloseLeftWindow, ExitDuration);
+        if (!FluidMotion.IsExiting(this)) return;
+
+        // The frame owns its scale transform (the exit keeps a transform a screen owns), so the
+        // pin shrinks itself alongside the shared fade.
+        var shrink = new DoubleAnimation(1, 0.97, ExitDuration) { EasingFunction = FluidMotion.StandardEasing };
+        _pinScale.BeginAnimation(ScaleTransform.ScaleXProperty, shrink);
+        _pinScale.BeginAnimation(ScaleTransform.ScaleYProperty, shrink);
+        _hoverBar?.Leave();
+    }
+
+    /// <summary>Ends a playing exit now (close all, app exit): the window closes at once.</summary>
+    internal void CompleteExit() => FluidMotion.CompleteExit(this);
+
+    /// <summary>Whether the pin has closed but its exit is still on the screen.</summary>
+    internal bool IsLeaving => FluidMotion.IsExiting(this);
+
+    // The exit's deferred close; the window may already have been closed directly meanwhile.
+    private void CloseLeftWindow()
+    {
+        if (!_windowClosed) Close();
+    }
+
+    // Everything a close changes happens here, once, at its start: an exit only delays pixels.
+    private void StartClosing()
+    {
+        if (_closeStarted) return;
+        _closeStarted = true;
+        // Snapshot while the native window still exists and nothing has moved it.
+        ClosedPlacement = CaptureClosedPlacement();
+        _isClosed = true;
+        StopLandingEffect();
+        EndDrag();
+        _feedbackCountdown.Stop();
+        _ctrlClickTimer.Stop();
+        _zoomSettleTimer.Stop();
+        _hoverHideTimer.Stop();
+        if (ContextMenu is { IsOpen: true } menu) menu.IsOpen = false;
+        CloseStarted?.Invoke(this, EventArgs.Empty);
+    }
+
     protected override void OnClosing(System.ComponentModel.CancelEventArgs e)
     {
         base.OnClosing(e);
         if (!e.Cancel)
         {
-            // Snapshot while the native window still exists; Closed fires after it is gone.
-            ClosedPlacement = CaptureClosedPlacement();
+            // A direct close (close all, app exit) starts and ends in this one call.
+            StartClosing();
         }
     }
 
@@ -935,7 +1015,7 @@ internal sealed class PinWindow : Window
             // Plain double-click closes the pin only when the setting says so, matching Snipaste.
             if (_settings().CloseOnDoubleClick)
             {
-                Close();
+                CloseWithExit();
                 e.Handled = true;
                 return;
             }
@@ -1072,6 +1152,13 @@ internal sealed class PinWindow : Window
     protected override void OnPreviewKeyDown(KeyEventArgs e)
     {
         base.OnPreviewKeyDown(e);
+        // A closed pin that is still leaving takes no keys: its close has already happened.
+        if (_isClosed)
+        {
+            e.Handled = true;
+            return;
+        }
+
         // Text controls consume Copy and navigation before the bubbling window handler.
         if (IsTextSelectionMode) HandleKeyDown(e, Keyboard.Modifiers);
     }
@@ -1103,7 +1190,7 @@ internal sealed class PinWindow : Window
                     break;
                 }
 
-                Close();
+                CloseWithExit();
                 e.Handled = true;
                 break;
 
@@ -1783,7 +1870,7 @@ internal sealed class PinWindow : Window
             RestoreClosedGesture());
         _restoreClosedItem.IsEnabled = false;
         menu.Items.Add(_restoreClosedItem);
-        menu.Items.Add(MenuItemFor(UiText.Get("Dialog.Close"), (_, _) => Close(), iconResourceKey: "Icon.Close", inputGestureText: "Esc"));
+        menu.Items.Add(MenuItemFor(UiText.Get("Dialog.Close"), (_, _) => CloseWithExit(), iconResourceKey: "Icon.Close", inputGestureText: "Esc"));
         menu.Items.Add(MenuItemFor(UiText.Get("Text_E657405F6B2D"), (_, _) => CloseAllRequested?.Invoke(this, EventArgs.Empty), iconResourceKey: "Icon.Close"));
         menu.Opened += (_, _) => RefreshRestoreClosedMenuItem();
 
@@ -1866,7 +1953,10 @@ internal sealed class PinWindow : Window
 
     protected override void OnClosed(EventArgs e)
     {
-        _isClosed = true;
+        _windowClosed = true;
+        StartClosing();
+        // A direct close during an exit (close all, app exit) ends it; its deferred close is moot.
+        FluidMotion.CompleteExit(this);
         StopLandingEffect();
         EndDrag();
         _feedbackCountdown.Stop();

@@ -10,6 +10,7 @@ using MyCapture.App.Editing;
 using MyCapture.App.Gallery;
 using MyCapture.App.Ocr;
 using MyCapture.App.Recording;
+using MyCapture.Core.Capture;
 using MyCapture.Core.Queue;
 using MyCapture.Core.Settings;
 using MyCapture.Core.Storage;
@@ -131,19 +132,28 @@ internal sealed class LibraryFixture : IDisposable
 
     // ---- Records ---------------------------------------------------------------------------
 
-    private sealed record Sample(string Key, string Title, string Source, CaptureFolder? Folder, int MinutesAgo, BitmapSource Image);
+    /// <summary>A capture: <paramref name="Source"/> is its window title, <paramref name="From"/> the page or app the product recorded.</summary>
+    private sealed record Sample(string Key, string Title, string Source, CaptureProvenance From, CaptureFolder? Folder, int MinutesAgo, BitmapSource Image);
+
+    private static CaptureProvenance AppSource(string name) => CaptureProvenance.Create(appName: name);
+
+    private static CaptureProvenance PageSource(string url) => CaptureProvenance.Create(url: url, appName: "Microsoft Edge");
 
     private IEnumerable<Sample> Samples()
     {
-        // Oldest first: the queue lists the newest at the head.
-        yield return new("palette", L("색상 팔레트", "Color palette"), "Figma", ReferenceFolder, 146, Palette());
-        yield return new("signin", L("로그인 화면 시안", "Sign-in screen draft"), "Figma", ReferenceFolder, 128, SignIn());
-        yield return new("api", L("API 응답 예시", "API response sample"), "Windows Terminal", DevelopmentFolder, 114, Api());
-        yield return new("build", L("빌드 오류 로그", "Build error log"), "Windows Terminal", DevelopmentFolder, 101, BuildLog());
-        yield return new("schedule", L("배포 일정", "Release schedule"), L("일정 - Microsoft Edge", "Calendar - Microsoft Edge"), null, 89, Schedule());
-        yield return new("checklist", L("릴리스 체크리스트", "Release checklist"), L("릴리스 준비 - Microsoft Edge", "Release prep - Microsoft Edge"), null, 65, Checklist());
-        yield return new("dashboard", L("매출 대시보드", "Sales dashboard"), "Northwind Analytics - Microsoft Edge", null, 41, Dashboard());
-        yield return new("meeting", L("주간 회의 메모", "Weekly meeting notes"), L("메모", "Notes"), null, 17, Meeting());
+        // Oldest first: the queue lists the newest at the head. Every card carries the source badge
+        // the product shows for a capture with a known page or app, and two pairs share a source.
+        yield return new("palette", L("색상 팔레트", "Color palette"), "Figma", AppSource("Figma"), ReferenceFolder, 146, Palette());
+        yield return new("signin", L("로그인 화면 시안", "Sign-in screen draft"), "Figma", AppSource("Figma"), ReferenceFolder, 128, SignIn());
+        yield return new("api", L("API 응답 예시", "API response sample"), "Windows Terminal", AppSource("Windows Terminal"), DevelopmentFolder, 114, Api());
+        yield return new("build", L("빌드 오류 로그", "Build error log"), "Windows Terminal", AppSource("Windows Terminal"), DevelopmentFolder, 101, BuildLog());
+        yield return new("schedule", L("배포 일정", "Release schedule"), L("일정 - Microsoft Edge", "Calendar - Microsoft Edge"),
+            PageSource("https://calendar.example.com/release"), null, 89, Schedule());
+        yield return new("checklist", L("릴리스 체크리스트", "Release checklist"), L("릴리스 준비 - Microsoft Edge", "Release prep - Microsoft Edge"),
+            Fixtures.ChecklistSource, null, 65, Checklist());
+        yield return new("dashboard", L("매출 대시보드", "Sales dashboard"), "Northwind Analytics - Microsoft Edge",
+            PageSource("https://analytics.example.com/northwind/sales"), null, 41, Dashboard());
+        yield return new("meeting", L("주간 회의 메모", "Weekly meeting notes"), L("메모", "Notes"), AppSource(L("메모", "Notes")), null, 17, Meeting());
     }
 
     private void AddRecord(Sample sample)
@@ -155,6 +165,7 @@ internal sealed class LibraryFixture : IDisposable
             Height = sample.Image.PixelHeight,
             Title = sample.Title,
             SourceWindowTitle = sample.Source,
+            SourcePageUrl = sample.From.Url,
             CreatedAt = Now.AddMinutes(-sample.MinutesAgo),
             UpdatedAt = Now.AddMinutes(-sample.MinutesAgo),
             OcrText = sample.Title,
@@ -162,6 +173,7 @@ internal sealed class LibraryFixture : IDisposable
             TotalBytes = png.LongLength * 3,
             FolderId = sample.Folder?.Id,
         };
+        record.SetSourceDetails(new CaptureSourceDetails(sample.From.AppName, sample.From.AppExecutablePath, sample.From.DocumentPath));
         Queue.Add(record);
         string directory = Queue.GetDirectory(record);
         Directory.CreateDirectory(directory);

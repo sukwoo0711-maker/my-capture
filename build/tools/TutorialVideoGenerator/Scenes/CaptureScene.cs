@@ -9,6 +9,7 @@ using MyCapture.App;
 using MyCapture.App.Capture;
 using MyCapture.App.Editing;
 using MyCapture.App.Recording;
+using MyCapture.App.Themes;
 using MyCapture.Core.Primitives;
 using MyCapture.Core.Recording;
 using MyCapture.Core.Settings;
@@ -56,7 +57,15 @@ internal sealed class CaptureScene : TutorialScene
     private BitmapSource? _notification;
     private RecordingControlWindow? _recording;
     private bool? _recordingPreviewPaused;
+    private bool _recordingSaved;
     private PointD _dragStart;
+    private CaptureFlightPicture? _flight;
+    private string? _liftedBy;
+    private CountdownWindow? _countdown;
+    private FrameworkElement? _countdownPanel;
+
+    /// <summary>The delayed capture's wait (the tray command's default delay).</summary>
+    private const int DelaySeconds = 3;
 
     internal CaptureScene(string id, string language) : base(id, language)
     {
@@ -67,7 +76,10 @@ internal sealed class CaptureScene : TutorialScene
 
     internal override string Provenance =>
         "Real CaptureOverlayView (mode bar, magnifier, guides, window highlight, text mode, colour toast) over a frozen synthetic desktop; "
-        + "real tray menu (ThemedShellPresenter.CreateMenu), CountdownWindow, RecordingControlWindow, action notification, "
+        + "real tray menu (ThemedShellPresenter.CreateMenu), CountdownWindow posed on video time (PoseAt: landing digits, ring, shrinking exit), "
+        + "RecordingControlWindow (recording, then its Saved bar through PreviewSavedForTest), action notification, "
+        + "the capture lifting and flying into the card (CaptureFlightDecoration surface with CaptureFlight.LiftFrame/FlightFrame on video time, "
+        + "QuickAccessWindow landing fade and preview reveal), "
         + "detached QuickAccessWindow followed by its Edit shortcut, AnnotationEditorWindow and VideoEditorWindow. Desktop apps, taskbar and the auto-scrolled document are synthetic; "
         + "no screen, clipboard, OCR, file or recording transaction runs.";
 
@@ -84,29 +96,34 @@ internal sealed class CaptureScene : TutorialScene
             case "capture-region":
                 story.Hold("desktop", 0.9).Hold("overlay", 1.2);
                 Drag(story, new PointD(NoteClient.X + 14, NoteClient.Y + 6), new PointD(Terminal.Right + 14, Terminal.Bottom + 12));
-                story.Hold("selected", 0.5);
-                CaptureResult(story);
+                CaptureResult(story, liftedBy: "drag");
                 break;
             case "capture-window":
                 story.Hold("desktop", 0.8).Move("point", new PointD(NoteClient.X + 380, NoteClient.Y + 210)).Hold("pointed", 1.0);
-                story.Hold("shortcut", 0.8);
-                CaptureResult(story);
+                story.Hold("shortcut", 0.4);
+                CaptureResult(story, liftedBy: "shortcut");
                 break;
             case "capture-fullscreen":
                 TrayRoute(story, "Text_65BB6610ACA0");
-                CaptureResult(story);
+                CaptureResult(story, liftedBy: "command");
                 break;
             case "capture-delay":
                 TrayRoute(story, "Text_38FF9B0AA541");
-                story.Hold("countdown-3", 1.0).Hold("countdown-2", 1.0).Hold("countdown-1", 1.0).Hold("overlay", 0.6);
+                // Each second is drawn frame by frame: the digit lands and the ring runs down
+                // (CountdownWindow.PoseAt); at zero the panel shrinks away before the selector opens.
+                for (int remaining = DelaySeconds; remaining > 0; remaining--)
+                    story.Motion($"countdown-{remaining}", TutorialStoryboard.Fps, story.End, story.End);
+                story.Motion("countdown-0", (int)Math.Ceiling(FluidMotion.FastDuration.TimeSpan.TotalMilliseconds / CaptureFlightPicture.FrameMs),
+                    story.End, story.End);
+                story.Hold("overlay", 0.6);
                 Drag(story, new PointD(NoteClient.X + 14, NoteClient.Y + 6), new PointD(Terminal.Right + 14, Terminal.Bottom + 12), frames: 26);
-                story.Hold("selected", 0.3);
-                CaptureResult(story);
+                CaptureResult(story, liftedBy: "drag");
                 break;
             case "capture-scroll":
                 story.Hold("desktop", 0.8).Move("point", new PointD(NoteClient.X + 300, NoteClient.Y + 200)).Hold("pointed", 0.8);
                 story.Hold("shortcut", 0.6).Motion("scrolling", 50, story.End, story.End).Hold("scrolled", 0.4);
-                CaptureResult(story);
+                // A scrolling capture was never on screen as one piece: its card shows without a flight.
+                CaptureResult(story, liftedBy: null);
                 break;
             case "color-copy":
                 story.Hold("overlay", 1.2).Move("approach", new PointD(Swatch.X + 14, Swatch.Y + 16)).Hold("pixel", 1.4).Hold("copy-key", 0.2).Hold("copied", 1.6);
@@ -124,7 +141,8 @@ internal sealed class CaptureScene : TutorialScene
                 story.Hold("ready", 0.8);
                 story.Move("start-move", RecordingButton(primary: true, state: "ready")).Click("start");
                 for (int second = 0; second < 3; second++) story.Hold("recording", 1.0);
-                story.Move("stop-move", RecordingButton(primary: true, state: "recording")).Click("stop").Hold("video", 0.4);
+                // The bar shows Saved once the clip is in the library, until the editor is on screen.
+                story.Move("stop-move", RecordingButton(primary: true, state: "recording")).Click("stop").Hold("saved", 0.6).Hold("video", 0.4);
                 break;
             case "record-pause":
                 story.Hold("recording", 1.0).Hold("recording", 0.6).Move("pause-move", RecordingButton(primary: false, state: "recording")).Click("pause");
@@ -136,11 +154,27 @@ internal sealed class CaptureScene : TutorialScene
         return story.Finish("result", 11);
     }
 
-    private static void CaptureResult(TutorialStoryboard story) =>
-        story.Hold("card", 1.2).Hold("activate-card", 0.7).Hold("edit-key", 0.4).Hold("editor", 0.4);
+    /// <summary>
+    /// The card, then explicit editing. A capture that was on screen as one piece first lifts off
+    /// where it was taken, right after <paramref name="liftedBy"/> took it, and flies into the card
+    /// (App.LiftCaptureForQuickAccess, CaptureFlight); the card shows for 1.2 s either way.
+    /// </summary>
+    private void CaptureResult(TutorialStoryboard story, string? liftedBy)
+    {
+        _liftedBy = liftedBy;
+        double card = 1.2;
+        if (liftedBy is not null)
+        {
+            int flight = CaptureFlightPicture.FlightFrames;
+            story.Motion("lift", CaptureFlightPicture.LiftFrames, story.End, story.End).Motion("flight", flight, story.End, story.End);
+            card -= flight / (double)TutorialStoryboard.Fps;
+        }
+
+        story.Hold("card", card).Hold("activate-card", 0.7).Hold("edit-key", 0.4).Hold("editor", 0.4);
+    }
 
     private static bool IsCaptureResult(string segment) =>
-        segment is "card" or "activate-card" or "edit-key" or "editor" or "result";
+        segment is "lift" or "flight" or "card" or "activate-card" or "edit-key" or "editor" or "result";
 
     private void Drag(TutorialStoryboard story, PointD from, PointD to, int frames = 34)
     {
@@ -177,7 +211,8 @@ internal sealed class CaptureScene : TutorialScene
                 break;
             case "capture-region":
             case "capture-delay":
-                if (segment is "desktop" or "tray-move" or "tray-click" or "tray" or "to-more" or "submenu" or "to-command" or "command" or "countdown-3" or "countdown-2" or "countdown-1")
+                if (segment is "desktop" or "tray-move" or "tray-click" or "tray" or "to-more" or "submenu" or "to-command" or "command"
+                    || segment.StartsWith("countdown-", StringComparison.Ordinal))
                     DrawDesktopPhase(dc, frame);
                 else if (IsCaptureResult(segment)) DrawCaptureResult(dc, frame, CaptureRegion());
                 else
@@ -306,7 +341,8 @@ internal sealed class CaptureScene : TutorialScene
         }
         else if (segment.StartsWith("countdown-", StringComparison.Ordinal))
         {
-            BitmapSource card = Countdown(int.Parse(segment[^1..], System.Globalization.CultureInfo.InvariantCulture));
+            int remaining = int.Parse(segment["countdown-".Length..], System.Globalization.CultureInfo.InvariantCulture);
+            BitmapSource card = Countdown(remaining, frame.Step * CaptureFlightPicture.FrameMs);
             double w = card.PixelWidth / Stage.Scale, h = card.PixelHeight / Stage.Scale;
             dc.DrawImage(card, new Rect((SceneWidth - w) / 2, (SceneHeight - h) / 2, w, h));
         }
@@ -375,12 +411,22 @@ internal sealed class CaptureScene : TutorialScene
         return new PointD(bounds.X + item.X + Math.Min(item.Width / 2, 70), bounds.Y + item.Y + item.Height / 2);
     }
 
-    private BitmapSource Countdown(int seconds)
+    /// <summary>
+    /// The countdown <paramref name="ms"/> into the second where <paramref name="remaining"/> shows
+    /// (zero: into its exit), posed by the product on video time. One never-shown window serves the
+    /// whole countdown; its panel is laid out and drawn on its own.
+    /// </summary>
+    private BitmapSource Countdown(int remaining, double ms)
     {
-        var window = new CountdownWindow(seconds);
-        var content = (FrameworkElement)window.Content;
-        window.Content = null;
-        window.Close();
+        if (_countdown is null)
+        {
+            _countdown = new CountdownWindow(DelaySeconds);
+            _countdownPanel = (FrameworkElement)_countdown.Content;
+            _countdown.Content = null;
+        }
+
+        _countdown.PoseAt(remaining, TimeSpan.FromMilliseconds(ms));
+        FrameworkElement content = _countdownPanel!;
         content.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
         content.Arrange(new Rect(content.DesiredSize));
         content.UpdateLayout();
@@ -505,6 +551,20 @@ internal sealed class CaptureScene : TutorialScene
             _receipt.Content = null;
             _receiptRoot = new Border { Width = _receipt.Width, Child = content };
             _receiptRoot.SetResourceReference(System.Windows.Documents.TextElement.ForegroundProperty, "Text.Primary");
+            if (frame.Segment == "lift")
+            {
+                // The capture lifts as the selector closes; the card that will receive it stays
+                // clear, and its preview hidden, until the flight (CaptureFlight.Land).
+                _receipt.PrepareLanding();
+                _flight = new CaptureFlightPicture(image, region!.Value, new Rect(0, 0, SceneWidth, SceneHeight));
+            }
+        }
+
+        if (frame.Segment == "lift")
+        {
+            dc.DrawImage(_desktop, new Rect(0, 0, SceneWidth, SceneHeight));
+            _flight!.DrawLift(dc, frame.Step * CaptureFlightPicture.FrameMs);
+            return;
         }
 
         if (frame.Segment is "editor" or "result")
@@ -531,10 +591,32 @@ internal sealed class CaptureScene : TutorialScene
                 System.Windows.Automation.AutomationProperties.GetName(button) == Ui("Dialog.Close"));
             FocusLook.Apply(close);
         }
+
+        // The card shows as the flight starts: it fades in over 100 ms, and its preview appears
+        // under the image on the frame the image lands; on the next frame the image is gone.
+        double? flightMs = null;
+        if (frame.Segment == "flight")
+        {
+            if (frame.IsFirst) _receipt.BeginLandingFade();
+            flightMs = frame.Step * CaptureFlightPicture.FrameMs;
+            _receipt.SurfaceForTest.Opacity = CaptureFlightPicture.CardOpacity(flightMs.Value);
+            if (CaptureFlightPicture.Landed(flightMs.Value)) _receipt.RevealPreview();
+        }
+        else if (_receipt.IsLanding)
+        {
+            if (_receipt.PreviewForTest.Opacity < 1) throw new InvalidOperationException("The flight ended before it landed in the card.");
+            _receipt.CompleteLanding();
+            _flight?.Dispose();
+            _flight = null;
+        }
+
         _receipt.Advance(TimeSpan.FromSeconds(frame.Repeat / (double)TutorialStoryboard.Fps),
             interacting: frame.Segment is "activate-card" or "edit-key");
         dc.DrawImage(_desktop, new Rect(0, 0, SceneWidth, SceneHeight));
         Detached.Draw(dc, _receiptRoot!, placed.TopLeft);
+        if (flightMs is { } ms)
+            _flight!.DrawFlight(dc, CaptureFlightPicture.PreviewBounds(_receipt, _receiptRoot!, placed.TopLeft), ms,
+                CaptureFlightPicture.LiftFrames * CaptureFlightPicture.FrameMs);
     }
 
     private void DrawEditor(DrawingContext dc, Rect? region)
@@ -544,8 +626,11 @@ internal sealed class CaptureScene : TutorialScene
             BitmapSource image = region is { } r ? Crop(r) : ScrolledDocument();
             if (_overlayHost is not null) { _overlayHost.Dispose(); _overlayHost = null; }
             var pixels = new RectD(0, 0, image.PixelWidth, image.PixelHeight);
+            // A capture names the app of the window it came from; a whole monitor has no source
+            // (CaptureOverlayWindow.ResolveSelectionSource), so full screen opens without the chip.
             _editor = new AnnotationEditorWindow(new FrozenFrame(image, pixels, null, 0), pixels, image,
-                sourceWindowTitle: L("릴리스 메모 - 메모장", "Release notes - Notepad"));
+                sourceWindowTitle: L("릴리스 메모 - 메모장", "Release notes - Notepad"),
+                provenance: Id == "capture-fullscreen" ? null : Fixtures.NotepadSource(Korean));
             _editorHost = new OffscreenWindow(_editor, 940, 448);
             _editor.Editor.ShowCaptureReceipt(copiedToClipboard: true);
             Stage.Pump(40);
@@ -686,6 +771,12 @@ internal sealed class CaptureScene : TutorialScene
     private void DrawRecording(DrawingContext dc, TutorialFramePlan frame)
     {
         string segment = frame.Segment;
+        if (segment == "saved")
+        {
+            DrawRecordingSaved(dc);
+            return;
+        }
+
         // The timer counts recorded time only: it shows the seconds recorded before this picture.
         bool recording, paused = false;
         if (_feature == "record-region")
@@ -719,6 +810,29 @@ internal sealed class CaptureScene : TutorialScene
 
     private double _recordingSeconds;
 
+    /// <summary>
+    /// The bar once the clip is in the library (RegionRecordingCoordinator.ShowSaved): the full bar
+    /// of a stopped session with the Saved check, the recorded time and pause disabled, until the
+    /// editor is on screen. The wider bar is a fresh detached surface (see DrawRecording), and
+    /// PreviewSavedForTest stops its wall-clock fallback; the editor follows on video time.
+    /// </summary>
+    private void DrawRecordingSaved(DrawingContext dc)
+    {
+        if (!_recordingSaved)
+        {
+            _recording?.Close();
+            _recording = null;
+            RecordingControlWindow window = RecordingControls();
+            window.PreviewSavedForTest(TimeSpan.FromSeconds(Math.Floor(_recordingSeconds)));
+            if (!window.IsSaved) throw new InvalidOperationException("The recording bar did not show Saved.");
+            _recordingSaved = true;
+        }
+
+        dc.DrawImage(_desktop, new Rect(0, 0, SceneWidth, SceneHeight));
+        (BitmapSource picture, Point origin) = RecordingPicture();
+        dc.DrawImage(picture, new Rect(origin.X, origin.Y, picture.PixelWidth / Stage.Scale, picture.PixelHeight / Stage.Scale));
+    }
+
     private readonly Dictionary<(bool Primary, string State), string> _buttonLabels = [];
 
     private void DrawVideoEditor(DrawingContext dc)
@@ -751,11 +865,13 @@ internal sealed class CaptureScene : TutorialScene
     private (string Caption, string Key) Caption(TutorialFramePlan frame)
     {
         string s = frame.Segment;
+        // The lift is the step that took the capture, still under way; the card's caption starts with the flight.
+        if (s == "lift") s = _liftedBy ?? throw new InvalidOperationException("A lift follows the step that took the capture.");
         if (_feature.StartsWith("capture-", StringComparison.Ordinal) && IsCaptureResult(s))
         {
             return s switch
             {
-                "card" => (Ui("QuickAccess.Title") + " · " + Ui("QuickAccess.Copied"), ""),
+                "card" or "flight" => (Ui("QuickAccess.Title") + " · " + Ui("QuickAccess.Copied"), ""),
                 "activate-card" => (Ui("Onboard_QuickCardTip"), Hint(ShortcutScope.QuickAccess, "Activate")),
                 "edit-key" => (Ui("QuickAccess.Edit"), Hint(ShortcutScope.QuickAccess, "Edit")),
                 _ => (Ui("QuickAccess.Edit"), ""),
@@ -769,7 +885,7 @@ internal sealed class CaptureScene : TutorialScene
             {
                 "desktop" => (L($"{region} 시작", $"Start {region}"), ""),
                 "overlay" or "approach" => (L("캡처 선택 화면", "The capture selector opens"), ""),
-                "drag" or "selected" => (L("캡처할 부분을 드래그", "Drag over the area to capture"), ""),
+                "drag" => (L("캡처할 부분을 드래그", "Drag over the area to capture"), ""),
                 _ => (Ui("QuickAccess.Title"), ""),
             },
             "capture-window" => s switch
@@ -790,8 +906,8 @@ internal sealed class CaptureScene : TutorialScene
                 "desktop" or "tray-move" or "tray-click" => (L("알림 영역의 MyCapture 아이콘을 오른쪽 클릭", "Right-click the MyCapture icon in the notification area"), ""),
                 "tray" or "to-more" or "submenu" or "to-command" or "command" =>
                     (L($"{more} › {Ui("Text_38FF9B0AA541")} 선택", $"{more} › {Ui("Text_38FF9B0AA541")}"), ""),
-                "countdown-3" or "countdown-2" or "countdown-1" => (L("대기 시간 동안 캡처할 화면 준비", "Prepare the screen during the countdown"), ""),
-                "overlay" or "approach" or "drag" or "selected" => (L("선택 화면이 나타나면 영역을 드래그", "When the selector appears, drag the area"), ""),
+                _ when s.StartsWith("countdown-", StringComparison.Ordinal) => (L("대기 시간 동안 캡처할 화면 준비", "Prepare the screen during the countdown"), ""),
+                "overlay" or "approach" or "drag" => (L("선택 화면이 나타나면 영역을 드래그", "When the selector appears, drag the area"), ""),
                 _ => (Ui("QuickAccess.Title"), ""),
             },
             "capture-scroll" => s switch
@@ -825,6 +941,7 @@ internal sealed class CaptureScene : TutorialScene
                     $"Click {ButtonText(true, "ready")} in the recording controls"), ""),
                 "recording" or "stop-move" => (L("녹화 중 · 화면을 조작", "Recording · work on the screen"), ""),
                 "stop" => (L($"{ButtonText(true, "recording")} 선택", $"Click {ButtonText(true, "recording")}"), ""),
+                "saved" => (L($"{Ui("RecordingStatus_Saved")} · 이어서 동영상 편집기가 열림", $"{Ui("RecordingStatus_Saved")} · the video editor opens next"), ""),
                 _ => (L("동영상 편집기에서 결과 확인", "Review it in the video editor"), ""),
             },
             _ => s switch
@@ -846,6 +963,8 @@ internal sealed class CaptureScene : TutorialScene
         _editorHost?.Dispose();
         if (!_editRequested) _receipt?.Close();
         _videoHost?.Dispose();
+        _flight?.Dispose();
+        _countdown?.Close();
         try { _recording?.Close(); } catch (InvalidOperationException) { }
         foreach (IDisposable owned in Enumerable.Reverse(_owned)) owned.Dispose();
     }

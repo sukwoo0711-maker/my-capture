@@ -22,7 +22,11 @@ public sealed class CountdownWindowAccessibilityTests : KoreanCaptionTest
             {
                 Border frame = Assert.IsType<Border>(window.Content);
                 StackPanel content = Assert.IsType<StackPanel>(frame.Child);
-                TextBlock[] labels = content.Children.OfType<TextBlock>().ToArray();
+                // The digit shares its place with the ring and the previous digit; the live value
+                // is the first text there.
+                Grid digit = Assert.IsType<Grid>(content.Children[0]);
+                TextBlock[] labels = digit.Children.OfType<TextBlock>().Take(1)
+                    .Concat(content.Children.OfType<TextBlock>()).ToArray();
 
                 Assert.Equal(3, labels.Length);
                 Assert.Equal("3", labels[0].Text);
