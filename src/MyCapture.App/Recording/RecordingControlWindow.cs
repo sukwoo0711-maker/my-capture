@@ -417,6 +417,23 @@ internal sealed class RecordingControlWindow : Window
         UpdateRegionFrameBrush(_regionFrame);
     }
 
+    /// <summary>
+    /// Evidence hook: the bar as it shows a recording of <paramref name="elapsed"/> that has stopped
+    /// and is in the library (<see cref="ShowSaved"/>), without a recorder, a library or the
+    /// <see cref="SavedHoldLimit"/> fallback that would close it.
+    /// </summary>
+    internal void PreviewSavedForTest(TimeSpan elapsed)
+    {
+        PreviewRecordingForTest(paused: false, elapsed);
+        // What StopRecording leaves once the recorder has finished: no pause, the saving status.
+        _stopping = true;
+        _finished = true;
+        _pauseButton.IsEnabled = false;
+        ShowCompletionStatus(UiText.Get("Text_528544494302"));
+        ShowSaved();
+        _savedHold?.Stop();
+    }
+
     private void UpdateSessionButtons()
     {
         bool beforeRecording = !IsRecording && !_previewRecording && !_stopping && !_completionPending && !_finished;

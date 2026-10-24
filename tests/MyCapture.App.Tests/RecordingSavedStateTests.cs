@@ -61,6 +61,37 @@ public sealed class RecordingSavedStateTests
     });
 
     [Fact]
+    public void SavedPreviewIsTheStoppedBarWithItsRecordedTimeAndStays() => Run("ko-KR", motion: false, window =>
+    {
+        int closed = 0;
+        window.Closed += (_, _) => closed++;
+        window.SavedHoldLimit = TimeSpan.FromMilliseconds(30);
+
+        window.PreviewSavedForTest(TimeSpan.FromSeconds(3));
+
+        // The full bar of a finished session, not the compact recording pill: Saved is spelled out.
+        Assert.True(window.IsSaved);
+        TextBlock status = Field<TextBlock>(window, "_statusText");
+        SymbolIcon indicator = Field<SymbolIcon>(window, "_recordingIndicator");
+        Assert.Equal("저장됨", status.Text);
+        Assert.Equal(Visibility.Visible, status.Visibility);
+        Assert.Equal(Visibility.Visible, indicator.Visibility);
+        Assert.Same(typeof(RecordingControlWindow).GetField("CheckGlyph", BindingFlags.Static | BindingFlags.NonPublic)!
+            .GetValue(null), indicator.Data);
+        Assert.Equal("00:03", Field<TextBlock>(window, "_timerText").Text);
+        Assert.Equal(Visibility.Collapsed, window.PrimaryButtonForTest.Visibility);
+        Assert.Equal(Visibility.Collapsed, Field<ProgressBar>(window, "_completionProgress").Visibility);
+        Assert.Equal(Visibility.Visible, window.PauseButtonForTest.Visibility);
+        Assert.False(window.PauseButtonForTest.IsEnabled);
+        Assert.Equal(Visibility.Collapsed, window.CancelButtonForTest.Visibility);
+        Assert.False(window.MoreButtonForTest.IsEnabled);
+
+        // A preview stays until its owner closes it.
+        Pump(window.Dispatcher, 200);
+        Assert.Equal(0, closed);
+    });
+
+    [Fact]
     public void SavedLeavesOnItsOwnWhenNoEditorComes() => Run("ko-KR", motion: false, window =>
     {
         int closed = 0;
