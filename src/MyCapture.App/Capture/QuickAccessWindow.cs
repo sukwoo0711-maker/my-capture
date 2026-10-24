@@ -790,10 +790,10 @@ internal sealed class QuickAccessWindow : Window
         }
 
         if (refocus && IsActive) button!.Focus();
-        ShowActionResult(action, message, kind);
+        ShowActionResult(action, message, kind, button);
     }
 
-    private void ShowActionResult(string action, string message, FeedbackKind kind)
+    private void ShowActionResult(string action, string message, FeedbackKind kind, Button? button = null)
     {
         bool failed = FeedbackTiming.StaysUntilDismissed(kind);
         bool resolved = false;
