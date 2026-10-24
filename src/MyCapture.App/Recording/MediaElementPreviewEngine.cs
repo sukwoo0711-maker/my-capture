@@ -267,6 +267,7 @@ internal sealed class MediaElementPreviewEngine : IVideoPreviewEngine
         }
 
         SettleCountForTest++;
+        EndedReportCountForTest += ended ? 1 : 0;
         return (last, ended);
     }
 
