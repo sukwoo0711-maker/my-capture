@@ -222,7 +222,8 @@
                     <Border x:Name="TilePreview" Background="{DynamicResource Surface.Sunken}" ClipToBounds="True"
                             Height="{Binding ActualWidth, RelativeSource={RelativeSource Self}, Converter={StaticResource Gallery.ThumbnailHeight}}">
                         <Grid>
-                            <Image Source="{Binding Thumbnail}" Stretch="Uniform"
+                            <!-- A thumbnail that arrives after the card is on screen fades in; a cached one does not. -->
+                            <gallery:GalleryThumbnailImage Source="{Binding Thumbnail}" Stretch="Uniform"
                                    RenderOptions.BitmapScalingMode="HighQuality" AutomationProperties.Name="{Binding AccessibleName}" />
                             <TextBlock Text="{Binding PreviewUnavailableText}" Margin="6" TextWrapping="Wrap" TextAlignment="Center"
                                        FontSize="{DynamicResource FontSize.Caption}" Foreground="{DynamicResource Text.Secondary}"
@@ -253,7 +254,8 @@
                                     </StackPanel>
                                 </Border>
                             </Grid>
-                            <!-- Opacity preserves tab stops; entering the tile reveals every action. -->
+                            <!-- Opacity preserves tab stops; entering the tile reveals every action. The actions
+                                 fade over Motion.Fast with the card's hover wash and take input at once. -->
                             <Border x:Name="TileActions" HorizontalAlignment="Right" VerticalAlignment="Top"
                                     Margin="4" Padding="2" CornerRadius="5"
                                     Background="{DynamicResource Surface.Floating}"
@@ -262,17 +264,18 @@
                                     <Style TargetType="Border">
                                         <Setter Property="Opacity" Value="0" />
                                         <Setter Property="IsHitTestVisible" Value="False" />
+                                        <Setter Property="themes:FluidMotion.Transition" Value="Fast" />
                                         <Style.Triggers>
                                             <DataTrigger Binding="{Binding IsMouseOver, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" Value="True">
-                                                <Setter Property="Opacity" Value="1" />
+                                                <Setter Property="themes:FluidMotion.FadeTo" Value="1" />
                                                 <Setter Property="IsHitTestVisible" Value="True" />
                                             </DataTrigger>
                                             <DataTrigger Binding="{Binding IsKeyboardFocusWithin, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" Value="True">
-                                                <Setter Property="Opacity" Value="1" />
+                                                <Setter Property="themes:FluidMotion.FadeTo" Value="1" />
                                                 <Setter Property="IsHitTestVisible" Value="True" />
                                             </DataTrigger>
                                             <DataTrigger Binding="{Binding IsSelected}" Value="True">
-                                                <Setter Property="Opacity" Value="1" />
+                                                <Setter Property="themes:FluidMotion.FadeTo" Value="1" />
                                                 <Setter Property="IsHitTestVisible" Value="True" />
                                             </DataTrigger>
                                         </Style.Triggers>
@@ -295,10 +298,17 @@
                                         <themes:SymbolIcon Size="16" Data="{StaticResource Icon.Pin}" Fill="Transparent"
                                                            Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
                                     </Button>
+                                    <!-- A copy that succeeds turns the glyph into a check for a moment (GalleryCopyFeedback). -->
                                     <Button ToolTip="{loc:Text Text_59D43391538F}" AutomationProperties.Name="{loc:Text Text_42A667BC71B0}"
                                             Click="OnCopyClick" Visibility="{Binding IsImage, Converter={StaticResource BoolToVisibility}}">
-                                        <themes:SymbolIcon Size="16" Data="{StaticResource Icon.Copy}" Fill="Transparent"
-                                                           Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
+                                        <Grid>
+                                            <themes:SymbolIcon Size="16" Data="{StaticResource Icon.Copy}" Fill="Transparent"
+                                                               gallery:GalleryCopyFeedback.Part="Glyph" themes:FluidMotion.FadeTo="1"
+                                                               Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
+                                            <themes:SymbolIcon Size="16" Data="{StaticResource Icon.Check}" Fill="Transparent" Opacity="0"
+                                                               gallery:GalleryCopyFeedback.Part="Check"
+                                                               Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
+                                        </Grid>
                                     </Button>
                                     <Button ToolTip="{Binding EditToolTip}" AutomationProperties.Name="{loc:Text Text_1003CFC78E66}" Click="OnEditClick">
                                         <themes:SymbolIcon Size="16" Data="{StaticResource Icon.Edit}" Fill="Transparent"
@@ -524,7 +534,8 @@
                     <Border x:Name="TilePreview" Background="{DynamicResource Surface.Sunken}" ClipToBounds="True"
                             Height="{Binding ActualWidth, RelativeSource={RelativeSource Self}, Converter={StaticResource Gallery.ThumbnailHeight}}">
                         <Grid>
-                            <Image Source="{Binding Thumbnail}" Stretch="Uniform"
+                            <!-- A thumbnail that arrives after the card is on screen fades in; a cached one does not. -->
+                            <gallery:GalleryThumbnailImage Source="{Binding Thumbnail}" Stretch="Uniform"
                                    RenderOptions.BitmapScalingMode="HighQuality" AutomationProperties.Name="{Binding AccessibleName}" />
                             <TextBlock Text="{Binding PreviewUnavailableText}" Margin="6" TextWrapping="Wrap" TextAlignment="Center"
                                        FontSize="{DynamicResource FontSize.Caption}" Foreground="{DynamicResource Text.Secondary}"
@@ -555,7 +566,8 @@
                                     </StackPanel>
                                 </Border>
                             </Grid>
-                            <!-- Opacity preserves tab stops; entering the tile reveals every action. -->
+                            <!-- Opacity preserves tab stops; entering the tile reveals every action. The actions
+                                 fade over Motion.Fast with the card's hover wash and take input at once. -->
                             <Border x:Name="TileActions" HorizontalAlignment="Right" VerticalAlignment="Top"
                                     Margin="4" Padding="2" CornerRadius="5"
                                     Background="{DynamicResource Surface.Floating}"
@@ -564,17 +576,18 @@
                                     <Style TargetType="Border">
                                         <Setter Property="Opacity" Value="0" />
                                         <Setter Property="IsHitTestVisible" Value="False" />
+                                        <Setter Property="themes:FluidMotion.Transition" Value="Fast" />
                                         <Style.Triggers>
                                             <DataTrigger Binding="{Binding IsMouseOver, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" Value="True">
-                                                <Setter Property="Opacity" Value="1" />
+                                                <Setter Property="themes:FluidMotion.FadeTo" Value="1" />
                                                 <Setter Property="IsHitTestVisible" Value="True" />
                                             </DataTrigger>
                                             <DataTrigger Binding="{Binding IsKeyboardFocusWithin, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" Value="True">
-                                                <Setter Property="Opacity" Value="1" />
+                                                <Setter Property="themes:FluidMotion.FadeTo" Value="1" />
                                                 <Setter Property="IsHitTestVisible" Value="True" />
                                             </DataTrigger>
                                             <DataTrigger Binding="{Binding IsSelected}" Value="True">
-                                                <Setter Property="Opacity" Value="1" />
+                                                <Setter Property="themes:FluidMotion.FadeTo" Value="1" />
                                                 <Setter Property="IsHitTestVisible" Value="True" />
                                             </DataTrigger>
                                         </Style.Triggers>
@@ -597,10 +610,17 @@
                                         <themes:SymbolIcon Size="16" Data="{StaticResource Icon.Pin}" Fill="Transparent"
                                                            Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
                                     </Button>
+                                    <!-- A copy that succeeds turns the glyph into a check for a moment (GalleryCopyFeedback). -->
                                     <Button ToolTip="{loc:Text Text_59D43391538F}" AutomationProperties.Name="{loc:Text Text_42A667BC71B0}"
                                             Click="OnCopyClick" Visibility="{Binding IsImage, Converter={StaticResource BoolToVisibility}}">
-                                        <themes:SymbolIcon Size="16" Data="{StaticResource Icon.Copy}" Fill="Transparent"
-                                                           Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
+                                        <Grid>
+                                            <themes:SymbolIcon Size="16" Data="{StaticResource Icon.Copy}" Fill="Transparent"
+                                                               gallery:GalleryCopyFeedback.Part="Glyph" themes:FluidMotion.FadeTo="1"
+                                                               Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
+                                            <themes:SymbolIcon Size="16" Data="{StaticResource Icon.Check}" Fill="Transparent" Opacity="0"
+                                                               gallery:GalleryCopyFeedback.Part="Check"
+                                                               Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
+                                        </Grid>
                                     </Button>
                                     <Button ToolTip="{Binding EditToolTip}" AutomationProperties.Name="{loc:Text Text_1003CFC78E66}" Click="OnEditClick">
                                         <themes:SymbolIcon Size="16" Data="{StaticResource Icon.Edit}" Fill="Transparent"
@@ -2120,8 +2140,14 @@
                                         ToolTip="{loc:Text Text_59D43391538F}" AutomationProperties.Name="{loc:Text Text_42A667BC71B0}"
                                         Click="OnCopyClick">
                                     <StackPanel Orientation="Horizontal">
-                                        <themes:SymbolIcon Size="16" Data="{StaticResource Icon.Copy}"
-                                              Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" Fill="Transparent" VerticalAlignment="Center" />
+                                        <Grid VerticalAlignment="Center">
+                                            <themes:SymbolIcon Size="16" Data="{StaticResource Icon.Copy}"
+                                                  gallery:GalleryCopyFeedback.Part="Glyph" themes:FluidMotion.FadeTo="1"
+                                                  Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" Fill="Transparent" />
+                                            <themes:SymbolIcon Size="16" Data="{StaticResource Icon.Check}" Opacity="0"
+                                                  gallery:GalleryCopyFeedback.Part="Check"
+                                                  Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" Fill="Transparent" />
+                                        </Grid>
                                         <TextBlock Text="{loc:Text QuickAccess.Copy}" Margin="6,0,0,0" VerticalAlignment="Center" />
                                     </StackPanel>
                                 </Button>

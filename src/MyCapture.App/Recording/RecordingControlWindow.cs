@@ -417,6 +417,23 @@ internal sealed class RecordingControlWindow : Window
         UpdateRegionFrameBrush(_regionFrame);
     }
 
+    /// <summary>
+    /// Evidence hook: the bar as it shows a recording of <paramref name="elapsed"/> that has stopped
+    /// and is in the library (<see cref="ShowSaved"/>), without a recorder, a library or the
+    /// <see cref="SavedHoldLimit"/> fallback that would close it.
+    /// </summary>
+    internal void PreviewSavedForTest(TimeSpan elapsed)
+    {
+        PreviewRecordingForTest(paused: false, elapsed);
+        // What StopRecording leaves once the recorder has finished: no pause, the saving status.
+        _stopping = true;
+        _finished = true;
+        _pauseButton.IsEnabled = false;
+        ShowCompletionStatus(UiText.Get("Text_528544494302"));
+        ShowSaved();
+        _savedHold?.Stop();
+    }
+
     private void UpdateSessionButtons()
     {
         bool beforeRecording = !IsRecording && !_previewRecording && !_stopping && !_completionPending && !_finished;
@@ -438,7 +455,52 @@ internal sealed class RecordingControlWindow : Window
     {
         CloseWallClock();
         _completionPending = false;
+        _savedHold?.Stop();
         Close();
+    }
+
+    private static readonly Color SuccessFallback = Color.FromRgb(0x45, 0xD6, 0xA2);
+    private bool _saved;
+    private bool _windowClosed;
+    private DispatcherTimer? _savedHold;
+
+    /// <summary>How long Saved waits for an editor that does not come before the bar leaves anyway.</summary>
+    internal TimeSpan SavedHoldLimit { get; set; } = TimeSpan.FromSeconds(2);
+
+    /// <summary>Whether the bar shows that the clip is saved.</summary>
+    internal bool IsSaved => _saved;
+
+    /// <summary>
+    /// The clip is in the library: a check and "Saved" in the success colour replace the progress
+    /// and the disabled Saving button. The bar stays until the editor is on screen
+    /// (<see cref="LeaveAfterSaved"/>), or <see cref="SavedHoldLimit"/> when no editor comes.
+    /// </summary>
+    internal void ShowSaved()
+    {
+        if (_saved) return;
+        _saved = true;
+        _completionPending = false;
+        _showTimeAvailable = false;
+        _completionProgress.Visibility = Visibility.Collapsed;
+        _primaryButton.Visibility = Visibility.Collapsed;
+        _statusText.Text = UiText.Get("RecordingStatus_Saved");
+        _statusText.Foreground = TryBrush("State.Success", SuccessFallback);
+        AnnounceStatus();
+        _savedHold = new DispatcherTimer(DispatcherPriority.Normal, Dispatcher) { Interval = SavedHoldLimit };
+        _savedHold.Tick += (_, _) => LeaveAfterSaved();
+        _savedHold.Start();
+    }
+
+    /// <summary>Leaves with the shared exit, a fade and a short drop, once the editor is on screen.</summary>
+    internal void LeaveAfterSaved()
+    {
+        _savedHold?.Stop();
+        _savedHold = null;
+        FluidMotion.BeginExit(this, ExitMotion.FadeDown, () =>
+        {
+            // The window may have been closed directly while the exit played.
+            if (!_windowClosed) CompleteAndClose();
+        });
     }
 
     private Border BuildRegionFrame()
@@ -1337,10 +1399,21 @@ internal sealed class RecordingControlWindow : Window
         _statusText.FontSize = CompactSession && _paused ? 12 : 13;
         _statusText.VerticalAlignment = CompactSession && _paused ? VerticalAlignment.Bottom : VerticalAlignment.Center;
         _timerText.VerticalAlignment = CompactSession && _paused ? VerticalAlignment.Top : VerticalAlignment.Center;
-        _recordingIndicator.Visibility = CompactSession ? Visibility.Visible : Visibility.Collapsed;
-        _recordingIndicator.Data = _paused ? PauseGlyph : RecordGlyph;
-        // The dot is a mark, not text, so it takes the one recording red the region frame uses.
-        _recordingIndicator.SetResourceReference(SymbolIcon.FillProperty, _paused ? "Text.Primary" : "Recording.Live");
+        _recordingIndicator.Visibility = CompactSession || _saved ? Visibility.Visible : Visibility.Collapsed;
+        if (_saved)
+        {
+            // The check is a stroke on the symbol grid; the record and pause marks are fills.
+            _recordingIndicator.Data = CheckGlyph;
+            _recordingIndicator.ClearValue(SymbolIcon.FillProperty);
+            _recordingIndicator.StrokeThickness = SymbolIcon.GridStrokeThickness;
+            _recordingIndicator.Stroke = TryBrush("State.Success", SuccessFallback);
+        }
+        else
+        {
+            _recordingIndicator.Data = _paused ? PauseGlyph : RecordGlyph;
+            // The dot is a mark, not text, so it takes the one recording red the region frame uses.
+            _recordingIndicator.SetResourceReference(SymbolIcon.FillProperty, _paused ? "Text.Primary" : "Recording.Live");
+        }
         AutomationProperties.SetName(_recordingIndicator, _statusText.Text);
         AutomationProperties.SetHelpText(_recordingIndicator, help ?? string.Empty);
         _recordingIndicator.ToolTip = help;
@@ -1409,6 +1482,7 @@ internal sealed class RecordingControlWindow : Window
 
     protected override void OnClosed(EventArgs e)
     {
+        _windowClosed = true;
         SystemParameters.StaticPropertyChanged -= OnSystemMotionChanged;
         Loaded -= OnMotionLoaded;
         Unloaded -= OnMotionUnloaded;
@@ -1421,6 +1495,10 @@ internal sealed class RecordingControlWindow : Window
         _dpiLayoutOperation?.Abort();
         _countdownTimer?.Stop();
         _elapsedTimer?.Stop();
+        _savedHold?.Stop();
+        _savedHold = null;
+        // A direct close while Saved is leaving (app exit) ends the exit; its close is then moot.
+        FluidMotion.CompleteExit(this);
 
         if (_recorder is not null)
         {

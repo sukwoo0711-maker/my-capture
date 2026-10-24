@@ -3308,6 +3308,7 @@ Open the library or Settings from the tray menu.</value></data>
   <data name="Library.Source.ShowAll" xml:space="preserve"><value>Show all</value></data>
   <data name="Library.Source.ShowLess" xml:space="preserve"><value>Show less</value></data>
   <data name="Library.Source.PathCopied" xml:space="preserve"><value>Path copied</value></data>
+  <data name="Library.Image.Copied" xml:space="preserve"><value>Image copied</value></data>
   <data name="Library.Source.CopyPathFailed" xml:space="preserve"><value>Could not copy the path. Please try again.</value></data>
   <data name="Library.Source.OpenFolderFailed" xml:space="preserve"><value>Could not open the folder.</value></data>
   <data name="Library.Source.FolderMissing" xml:space="preserve"><value>The folder could not be found. It may have been moved or deleted.</value></data>
@@ -3329,6 +3330,8 @@ Open the library or Settings from the tray menu.</value></data>
   <data name="QuickAccess.Saved" xml:space="preserve"><value>Saved</value></data>
   <data name="QuickAccess.Saving" xml:space="preserve"><value>Saving…</value></data>
   <data name="QuickAccess.Sound" xml:space="preserve"><value>Play capture sound</value></data>
+  <data name="QuickAccess.NotifyOnQuickSave" xml:space="preserve"><value>Notify after quick save</value></data>
+  <data name="QuickAccess.OpenFolder" xml:space="preserve"><value>Open folder</value></data>
   <data name="QuickAccess.Title" xml:space="preserve"><value>Capture quick access</value></data>
   <data name="QuickAccess.CopyText" xml:space="preserve"><value>Copy text</value></data>
   <data name="QuickAccess.CopyingText" xml:space="preserve"><value>Recognizing text…</value></data>
@@ -3547,6 +3550,7 @@ Delete {1} {1:plural:subfolder|subfolders}, {2} {2:plural:image|images}, and {3}
   <data name="RecordingPause_Status" xml:space="preserve"><value>Paused</value></data>
   <data name="RecordingPause_StatusHelp" xml:space="preserve"><value>Select Resume to continue recording, or press Esc or select Stop to finish it.</value></data>
   <data name="RecordingStatus_StopHelp" xml:space="preserve"><value>Press Esc or select Stop to finish the recording.</value></data>
+  <data name="RecordingStatus_Saved" xml:space="preserve"><value>Saved</value></data>
   <data name="RecordingPause_State" xml:space="preserve"><value>Paused</value></data>
   <data name="PinRestore_Command" xml:space="preserve"><value>Reopen closed pin</value></data>
   <data name="PinRestore_CommandHelp" xml:space="preserve"><value>Reopens the most recently closed pin at its last position, zoom, and opacity.</value></data>

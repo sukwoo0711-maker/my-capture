@@ -113,6 +113,12 @@ internal sealed partial class GalleryWindow
     /// Moves the captures to the Recycle Bin as one batch and reports the result on the status
     /// line with Undo. The view is rebuilt before the result appears, so no blank tile is left.
     /// </summary>
+    /// <remarks>
+    /// With Windows animation effects on, the deleted cards on screen fade and shrink while the
+    /// move runs (it never waits for them), the view is rebuilt once both have finished, the
+    /// remaining cards slide into the gap and the result rises into the status line
+    /// (<see cref="GalleryDeleteMotion"/>). With them off the view is rebuilt as soon as the move ends.
+    /// </remarks>
     internal async Task DeleteCapturesAsync(IEnumerable<Guid> ids, bool entireLibrary = false)
     {
         if (_deleteInProgress) return;
@@ -121,10 +127,14 @@ internal sealed partial class GalleryWindow
         _deleteInProgress = true;
         string? status = null;
         Guid? undo = null;
+        bool motion = false;
+        GalleryCardExit exit = GalleryCardExit.None;
         try
         {
             if (!(ConfirmDelete ?? ConfirmDeleteWithDialog)(targets.Length, entireLibrary)) return;
             CloseInlinePlayer(); // MediaElement must release its source before directory cleanup.
+            motion = DeleteMotionEnabled;
+            if (motion) exit = BeginDeleteExit(targets);
             foreach (Guid id in targets) _viewModel.FindTile(id)?.SetThumbnailLoadingEnabled(false);
             Func<Guid, bool> canRemove = id => !_commitService.IsRecordBusy(id) && !_videoLibrary.IsBusy(id);
             Guid batch = Guid.NewGuid();
@@ -136,7 +146,13 @@ internal sealed partial class GalleryWindow
                 count => LibraryPermanentDeletion.Confirm(this, count),
                 remaining => _queue.RemoveManyPermanentlyAsync(remaining, canRemove));
             status = DeleteStatus(targets.Length, result, permanent);
-            if (result.RemovedCount > 0 && _controller.Recovery is not null) undo = batch;
+            if (result.RemovedCount > 0 && _controller.Recovery is not null)
+            {
+                // Recorded as soon as the move lands; the cards' fade never delays what Undo restores.
+                undo = batch;
+                _undoBatch = batch;
+                _queue.LibraryUndo.Record(LibraryUndoKind.Delete, () => UndoDeleteAsync(batch));
+            }
         }
         catch (Exception ex)
         {
@@ -145,23 +161,28 @@ internal sealed partial class GalleryWindow
         }
         finally
         {
+            // The deleted cards finish leaving before the grid closes up behind them.
+            await exit.Completion;
+            GalleryCardLayout? before = motion ? CaptureCardLayout() : null;
             _deleteInProgress = false;
             _viewModel.Refresh();
+            exit.Reset();
             _viewModel.SetThumbnailLoadingEnabled(IsVisible);
             RaiseCaptureChanged();
+            if (before is not null) PlayReflow(before);
         }
 
         if (status is null) return;
-        if (undo is { } restorable)
+        if (undo is not null)
         {
-            _undoBatch = restorable;
-            _queue.LibraryUndo.Record(LibraryUndoKind.Delete, () => UndoDeleteAsync(restorable));
             ShowActionStatus(status, UiText.Get("LibraryUndo_Action"), UiText.Get("LibraryUndo_ActionName"), UndoLibraryAsync);
         }
         else
         {
             ShowActionStatus(status);
         }
+
+        if (motion) RiseActionStatus();
     }
 
     /// <summary>

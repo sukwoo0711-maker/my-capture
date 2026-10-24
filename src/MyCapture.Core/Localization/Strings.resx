@@ -3308,6 +3308,7 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="Library.Source.ShowAll" xml:space="preserve"><value>전체 보기</value></data>
   <data name="Library.Source.ShowLess" xml:space="preserve"><value>접기</value></data>
   <data name="Library.Source.PathCopied" xml:space="preserve"><value>경로 복사됨</value></data>
+  <data name="Library.Image.Copied" xml:space="preserve"><value>이미지 복사됨</value></data>
   <data name="Library.Source.CopyPathFailed" xml:space="preserve"><value>경로를 복사하지 못했습니다. 다시 시도하십시오.</value></data>
   <data name="Library.Source.OpenFolderFailed" xml:space="preserve"><value>폴더를 열지 못했습니다.</value></data>
   <data name="Library.Source.FolderMissing" xml:space="preserve"><value>폴더를 찾을 수 없습니다. 옮겨졌거나 삭제되었을 수 있습니다.</value></data>
@@ -3329,6 +3330,8 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="QuickAccess.Saved" xml:space="preserve"><value>저장됨</value></data>
   <data name="QuickAccess.Saving" xml:space="preserve"><value>저장 중…</value></data>
   <data name="QuickAccess.Sound" xml:space="preserve"><value>캡처 완료 소리</value></data>
+  <data name="QuickAccess.NotifyOnQuickSave" xml:space="preserve"><value>빠른 저장 뒤 알림</value></data>
+  <data name="QuickAccess.OpenFolder" xml:space="preserve"><value>폴더 열기</value></data>
   <data name="QuickAccess.Title" xml:space="preserve"><value>캡처 빠른 작업</value></data>
   <data name="QuickAccess.CopyText" xml:space="preserve"><value>텍스트 복사</value></data>
   <data name="QuickAccess.CopyingText" xml:space="preserve"><value>텍스트 인식 중…</value></data>
@@ -3547,6 +3550,7 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="RecordingPause_Status" xml:space="preserve"><value>일시 정지됨</value></data>
   <data name="RecordingPause_StatusHelp" xml:space="preserve"><value>재개를 누르면 이어서 녹화하고, Esc 키나 중지를 누르면 녹화를 끝냅니다.</value></data>
   <data name="RecordingStatus_StopHelp" xml:space="preserve"><value>Esc 키나 중지를 누르면 녹화를 끝냅니다.</value></data>
+  <data name="RecordingStatus_Saved" xml:space="preserve"><value>저장됨</value></data>
   <data name="RecordingPause_State" xml:space="preserve"><value>일시 정지됨</value></data>
   <data name="PinRestore_Command" xml:space="preserve"><value>닫은 핀 다시 열기</value></data>
   <data name="PinRestore_CommandHelp" xml:space="preserve"><value>가장 최근에 닫은 핀을 마지막 위치, 배율, 불투명도로 다시 엽니다.</value></data>
