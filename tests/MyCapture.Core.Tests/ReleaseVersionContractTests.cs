@@ -6,7 +6,7 @@ using Xunit;
 namespace MyCapture.Core.Tests;
 
 /// <summary>
-/// Keeps the 4.6.0 stable version and its Windows binary version aligned across MSBuild, packaging
+/// Keeps the 4.7.0 stable version and its Windows binary version aligned across MSBuild, packaging
 /// and installer validation.
 /// </summary>
 public sealed class ReleaseVersionContractTests
@@ -39,14 +39,14 @@ public sealed class ReleaseVersionContractTests
         XDocument props = XDocument.Parse(Read("Directory.Build.props"));
         XDocument manifest = XDocument.Parse(Read("src/MyCapture.App/app.manifest"));
 
-        Assert.Equal("4.6.0", Assert.Single(props.Descendants("Version")).Value);
-        Assert.Equal("4.6.0.0", Assert.Single(props.Descendants("FileVersion")).Value);
-        Assert.Equal("4.6.0.0", Assert.Single(props.Descendants("AssemblyVersion")).Value);
+        Assert.Equal("4.7.0", Assert.Single(props.Descendants("Version")).Value);
+        Assert.Equal("4.7.0.0", Assert.Single(props.Descendants("FileVersion")).Value);
+        Assert.Equal("4.7.0.0", Assert.Single(props.Descendants("AssemblyVersion")).Value);
 
         XElement identity = Assert.Single(
             manifest.Descendants(),
             element => element.Name.LocalName == "assemblyIdentity");
-        Assert.Equal("4.6.0.0", identity.Attribute("version")?.Value);
+        Assert.Equal("4.7.0.0", identity.Attribute("version")?.Value);
     }
 
     [Fact]
@@ -58,8 +58,8 @@ public sealed class ReleaseVersionContractTests
 
         // The shipping default is the GA version. A release candidate must never be the default
         // again, otherwise an operator who forgets -Version publishes a prerelease by accident.
-        Assert.Contains("[string]$Version = '4.6.0'", package, StringComparison.Ordinal);
-        Assert.Contains("[string]$Version = '4.6.0',", hostile, StringComparison.Ordinal);
+        Assert.Contains("[string]$Version = '4.7.0'", package, StringComparison.Ordinal);
+        Assert.Contains("[string]$Version = '4.7.0',", hostile, StringComparison.Ordinal);
         Assert.DoesNotContain("$Version = '1.7.0-rc.1'", package, StringComparison.Ordinal);
         Assert.DoesNotContain("$Version = '1.7.0-rc.1'", hostile, StringComparison.Ordinal);
 
@@ -268,6 +268,16 @@ public sealed class ReleaseVersionContractTests
         Assert.Contains(
             @"Invoke-CheckedTest .\build\tests\installer-bootstrap-tests.ps1",
             workflow, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void PackagedValidation_RunsForEveryReleaseTagAndOnDemand()
+    {
+        // It ran only for a retired v1.8.0 branch, so no release from 4.0.0 to 4.5.2 was validated.
+        string workflow = Read(".github/workflows/packaged-validation.yml").Replace("\r\n", "\n", StringComparison.Ordinal);
+        Assert.Contains("  push:\n    tags:\n      - 'v*'\n  workflow_dispatch:\n", workflow, StringComparison.Ordinal);
+        Assert.DoesNotContain("branches:", workflow, StringComparison.Ordinal);
+        Assert.Contains("$env:GITHUB_REF_NAME -cne \"v$version\"", workflow, StringComparison.Ordinal);
     }
 
     [Fact]

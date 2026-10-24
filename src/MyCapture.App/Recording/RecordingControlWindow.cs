@@ -157,8 +157,7 @@ internal sealed class RecordingControlWindow : Window
         ShowInTaskbar = false;
         Topmost = true;
         WindowStartupLocation = WindowStartupLocation.Manual;
-        UseLayoutRounding = true;
-        SnapsToDevicePixels = true;
+        StandardWindowTheme.ApplyFloatingText(this);
 
         _root = new Canvas { Background = Brushes.Transparent };
         _regionFrame = BuildRegionFrame();
@@ -491,7 +490,7 @@ internal sealed class RecordingControlWindow : Window
     {
         var frame = new AccessibleRegionFrame
         {
-            BorderBrush = TryBrush("Accent.Default", Colors.OrangeRed),
+            BorderBrush = TryBrush("Recording.Live", Colors.OrangeRed),
             BorderThickness = new Thickness(BorderThicknessPx),
             Background = Brushes.Transparent,
             CornerRadius = new CornerRadius(AllowsTransparency ? 2 : 0),
@@ -1148,7 +1147,7 @@ internal sealed class RecordingControlWindow : Window
             ? CreatePausedFrameBrush()
             : frame.IsKeyboardFocusWithin
                 ? TryBrush("Border.Focus", Colors.White)
-                : TryBrush("Accent.Default", Colors.OrangeRed);
+                : TryBrush("Recording.Live", Colors.OrangeRed);
     }
 
     /// <summary>
@@ -1395,7 +1394,8 @@ internal sealed class RecordingControlWindow : Window
         else
         {
             _recordingIndicator.Data = _paused ? PauseGlyph : RecordGlyph;
-            _recordingIndicator.SetResourceReference(SymbolIcon.FillProperty, _paused ? "Text.Primary" : "State.Danger");
+            // The dot is a mark, not text, so it takes the one recording red the region frame uses.
+            _recordingIndicator.SetResourceReference(SymbolIcon.FillProperty, _paused ? "Text.Primary" : "Recording.Live");
         }
         AutomationProperties.SetName(_recordingIndicator, _statusText.Text);
         AutomationProperties.SetHelpText(_recordingIndicator, help ?? string.Empty);

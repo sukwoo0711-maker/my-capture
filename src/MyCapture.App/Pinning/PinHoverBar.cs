@@ -64,6 +64,7 @@ internal sealed class PinHoverBar : Window
         SizeToContent = SizeToContent.WidthAndHeight;
         WindowStartupLocation = WindowStartupLocation.Manual;
         FluidMotion.SetWindowEntrance(this, false);
+        StandardWindowTheme.ApplyFloatingText(this);
         AutomationProperties.SetName(this, UiText.Get("Onboard_PinBarName"));
 
         CopyButton = BarButton(SymbolGeometry("Icon.Copy"), UiText.Get("QuickAccess.Copy"), "Ctrl+C");

@@ -4638,4 +4638,8 @@ Overwrite these shortcuts? You can change this later in Settings → Shortcuts.<
   <data name="Source.OpenAutomation" xml:space="preserve"><value>Source: {0}, open</value></data>
   <data name="Source.AppMissing" xml:space="preserve"><value>The source app could not be found.</value></data>
   <data name="Source.AppOpenFailed" xml:space="preserve"><value>The source app could not be opened.</value></data>
+  <data name="About_DiagnosticsBundle" xml:space="preserve"><value>Save diagnostics bundle</value></data>
+  <data name="About_DiagnosticsBundleHelp" xml:space="preserve"><value>Saves recent logs and diagnostics in one ZIP file. Captures, clipboard contents, window titles and file paths are not included, and nothing is sent automatically.</value></data>
+  <data name="About_DiagnosticsBundleSaved" xml:space="preserve"><value>Diagnostics bundle saved</value></data>
+  <data name="About_DiagnosticsBundleFilter" xml:space="preserve"><value>Diagnostics bundle (*.zip)|*.zip</value></data>
 </root>

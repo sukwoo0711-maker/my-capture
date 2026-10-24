@@ -107,7 +107,7 @@ public sealed class SystemThemeTests
                 Assert.Equal(expected, ThemeService.EffectiveTheme);
                 Assert.Equal(ToColor(ThemeCatalog.ColorsFor(expected)["Surface.Base"]), ((SolidColorBrush)resources["Surface.Base"]).Color);
                 Assert.Equal(new Thickness(2), resources["Focus.RingThickness"]);
-                Assert.Equal(ToColor(ThemeCatalog.ColorsFor(expected)["State.Danger"]), ((SolidColorBrush)RecordingSelectionCue.Resolve()).Color);
+                Assert.Equal(ToColor(ThemeCatalog.ColorsFor(expected)["Recording.Live"]), ((SolidColorBrush)RecordingSelectionCue.Resolve()).Color);
                 Assert.Equal(ToColor(ThemeCatalog.ColorsFor(expected)["Text.Primary"]), ((SolidColorBrush)CaptureGuidePalette.Resolve()["CaptureGuide.Text"]).Color);
             }
         }

@@ -201,6 +201,8 @@ public sealed class ErrorRecoveryAndDangerTests
         var dialog = new GalleryFolderDeletionDialog("Review", new CaptureFolderDeletionPreview(3, 2, 4, 1));
         Show(dialog);
         Assert.Same(dialog.FindResource("Button.Danger"), dialog.DeleteButton.Style);
+        // The safe default is not painted in the red accent fill beside the delete action.
+        Assert.Same(dialog.FindResource("Button.Secondary"), dialog.CancelButton.Style);
         Assert.Equal(DependencyProperty.UnsetValue, dialog.DeleteButton.ReadLocalValue(Control.ForegroundProperty));
         SaveEvidence(dialog, $"folder-delete-{language}");
         dialog.Close();
@@ -216,6 +218,8 @@ public sealed class ErrorRecoveryAndDangerTests
             MessageBoxButton.OKCancel, MessageBoxResult.Cancel, okLabel: UiText.Get("LibrarySelection_PermanentDelete"), destructive: true);
         Show(permanent);
         Assert.Same(permanent.FindResource("Button.Danger"), ActionButtons(permanent)[0].Style);
+        Assert.Same(permanent.FindResource("Button.Secondary"), ActionButtons(permanent)[1].Style);
+        Assert.True(ActionButtons(permanent)[1].IsDefault, "Enter still cancels a permanent deletion.");
         SaveEvidence(permanent, $"permanent-delete-{language}");
         permanent.Close();
 
