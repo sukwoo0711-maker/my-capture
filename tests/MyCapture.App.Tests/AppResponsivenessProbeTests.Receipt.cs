@@ -42,7 +42,9 @@ namespace MyCapture.App.Tests;
 /// capture (after the app's launch prewarm) and ten warm ones, motion on. The
 /// <c>receipt-first-*</c> sections run the same captures but call the App's own
 /// <c>ShowQuickAccess</c> right after the selector has closed (on the dispatcher turn after the lift),
-/// suppressing the scheduled show: a simulation of a card shown first, the product unchanged.
+/// suppressing the scheduled show: a simulation of a card shown first, the product unchanged. The
+/// <c>receipt-ab-*</c> sections alternate the two in one process after a cold current-path capture
+/// (ten warm captures each), so a busy desktop loads both alike.
 /// </para>
 /// <para>
 /// The App is the real class without its shell (as <c>CaptureLibraryFirstTests</c> builds it): the
@@ -99,6 +101,9 @@ internal sealed partial class AppResponsivenessProbe
     private void RunReceipt()
     {
         bool cardFirst = _section.StartsWith("receipt-first-", StringComparison.Ordinal);
+        // receipt-ab-*: after the cold capture (current path), warm captures alternate card first and
+        // current, so both see the same load from whatever else this desktop runs meanwhile.
+        bool alternate = _section.StartsWith("receipt-ab-", StringComparison.Ordinal);
         string kind = _section[(_section.LastIndexOf('-') + 1)..];
         (int frameWidth, int frameHeight, RectD? part) = kind switch
         {
@@ -111,7 +116,7 @@ internal sealed partial class AppResponsivenessProbe
         RectD region = part ?? new RectD(0, 0, frameWidth, frameHeight);
         bool whole = part is null;
         _size = $"{(int)region.Width}x{(int)region.Height}" + (whole ? " (full screen)" : $" on {frameWidth}x{frameHeight}");
-        _variant = cardFirst ? "card first (simulated)" : "current";
+        _variant = alternate ? "alternating: card first odd / current even" : cardFirst ? "card first (simulated)" : "current";
 
         uint dpi = Ui(() => MonitorEnumerator.GetPrimary().Dpi);
         // A display far off the visible desktop, at the primary display's scale, that the card and the
@@ -178,9 +183,10 @@ internal sealed partial class AppResponsivenessProbe
             if (editorPrewarm is not null) Ui(() => editorPrewarm.Invoke(null, null));
             WaitIdle();
 
-            for (int index = 0; index <= 10; index++)
+            for (int index = 0; index <= (alternate ? 20 : 10); index++)
             {
-                ReceiptCapture capture = MeasureReceipt(shell, frame, region, whole, monitor, cardFirst, index);
+                bool first = alternate ? index % 2 == 1 : cardFirst;
+                ReceiptCapture capture = MeasureReceipt(shell, frame, region, whole, monitor, first, index);
                 captures.Add(capture);
                 _delay.Wait(400);
                 // As the next capture command does before its selector opens.
@@ -223,7 +229,7 @@ internal sealed partial class AppResponsivenessProbe
         bool cardFirst, int index)
     {
         string kind = index == 0 ? "cold" : "warm";
-        var capture = new ReceiptCapture(index, kind);
+        var capture = new ReceiptCapture(index, kind, cardFirst);
         var overlayRendered = new ManualResetEventSlim();
 
         // The selector over its frozen frame, as CaptureOverlayCoordinator.ShowOverlay wires it, shown
@@ -270,7 +276,7 @@ internal sealed partial class AppResponsivenessProbe
         switch (stage)
         {
             case "card-scheduled":
-                if (shell.CardFirst)
+                if (capture.CardFirst)
                 {
                     // The simulated card is already up: the scheduled show finds a newer receipt and does nothing.
                     shell.SuppressScheduledShow();
@@ -462,10 +468,10 @@ internal sealed partial class AppResponsivenessProbe
     private void WriteReceiptResults(List<ReceiptCapture> captures)
     {
         var csv = new StringBuilder();
-        csv.AppendLine("section,size,variant,index,kind," + string.Join(",", ReceiptStages) + ",notes");
+        csv.AppendLine("section,size,variant,index,kind,capture_variant," + string.Join(",", ReceiptStages) + ",notes");
         foreach (ReceiptCapture c in captures)
         {
-            csv.AppendLine(string.Join(",", _section, Q(_size), Q(_variant), c.Index, c.Kind,
+            csv.AppendLine(string.Join(",", _section, Q(_size), Q(_variant), c.Index, c.Kind, c.Variant,
                 string.Join(",", ReceiptStages.Select(stage => c.Ms(stage) is double ms ? F(ms) : "")), Q(string.Join("; ", c.Notes))));
         }
 
@@ -481,12 +487,33 @@ internal sealed partial class AppResponsivenessProbe
 
         File.WriteAllText(DiagnosticOutputPaths.Child(_output, "receipt-dispatcher.csv"), ops.ToString(), new UTF8Encoding(true));
 
-        ReceiptCapture[] warm = captures.Where(c => c.Index > 0).ToArray();
-        ReceiptCapture? cold = captures.FirstOrDefault(c => c.Index == 0);
         var md = new StringBuilder();
         md.AppendLine($"# 캡처 확정 → 빠른 작업 카드: {_section}");
         md.AppendLine();
-        md.AppendLine($"크기 {_size}, {_variant}. 시각은 선택 확정(CompleteSelection 시작) 기준 ms. 첫 행은 새 프로세스의 첫 캡처, 나머지는 같은 프로세스의 따뜻한 캡처 {warm.Length}회의 중앙값과 p95(가장 가까운 순위).");
+        foreach (IGrouping<bool, ReceiptCapture> group in captures.Where(c => c.Index > 0).GroupBy(c => c.CardFirst))
+            WriteReceiptGroup(md, group.ToArray(), captures.FirstOrDefault(c => c.Index == 0 && c.CardFirst == group.Key));
+
+        md.AppendLine();
+        md.AppendLine("## 따로 잰 부분(유휴 UI 스레드, 3회)");
+        md.AppendLine();
+        md.AppendLine("| 부분 | 1회 | 2회 | 3회 |");
+        md.AppendLine("| --- | ---: | ---: | ---: |");
+        foreach (var pair in _recorder.Breakdown.Where(pair => pair.Key.Size == _size && pair.Key.Variant == _variant))
+            md.AppendLine($"| {pair.Key.Item.Replace("|", "/")} | {string.Join(" | ", pair.Value.Select(F))} |");
+
+        md.AppendLine();
+        md.AppendLine("## 메모");
+        md.AppendLine();
+        foreach (ReceiptCapture c in captures) md.AppendLine($"- #{c.Index + 1} {c.Kind} {c.Variant}: {string.Join("; ", c.Notes)}");
+        File.WriteAllText(DiagnosticOutputPaths.Child(_output, "receipt-summary.md"), md.ToString(), new UTF8Encoding(false));
+    }
+
+    private void WriteReceiptGroup(StringBuilder md, ReceiptCapture[] warm, ReceiptCapture? cold)
+    {
+        string variant = warm[0].Variant;
+        md.AppendLine($"## {variant}");
+        md.AppendLine();
+        md.AppendLine($"크기 {_size}, {variant}. 시각은 선택 확정(CompleteSelection 시작) 기준 ms. '처음'은 새 프로세스의 첫 캡처{(cold is null ? "(이 변형에는 없음)" : "")}, 나머지는 같은 프로세스의 따뜻한 캡처 {warm.Length}회의 중앙값과 p95(가장 가까운 순위).");
         md.AppendLine();
         md.AppendLine("| 단계 | 처음 | 중앙값 | p95 | n |");
         md.AppendLine("| --- | ---: | ---: | ---: | ---: |");
@@ -504,7 +531,7 @@ internal sealed partial class AppResponsivenessProbe
         foreach ((string name, string from, string to) in ReceiptIntervals)
         {
             // A simulated card-first show has no scheduled turn of its own.
-            if (from == "card-scheduled" && _variant != "current") continue;
+            if (from == "card-scheduled" && warm[0].CardFirst) continue;
             double[] values = warm.Select(c => c.Between(from, to)).OfType<double>().ToArray();
             double? first = cold?.Between(from, to);
             if (values.Length == 0 && first is null) continue;
@@ -534,7 +561,7 @@ internal sealed partial class AppResponsivenessProbe
 
             if (windows == 0) continue;
             md.AppendLine();
-            md.AppendLine($"## {title}");
+            md.AppendLine($"### {title}");
             md.AppendLine();
             md.AppendLine("| 작업 | 우선순위 | 평균 ms(포함) | 평균 횟수 |");
             md.AppendLine("| --- | --- | ---: | ---: |");
@@ -543,18 +570,6 @@ internal sealed partial class AppResponsivenessProbe
         }
 
         md.AppendLine();
-        md.AppendLine("## 따로 잰 부분(유휴 UI 스레드, 3회)");
-        md.AppendLine();
-        md.AppendLine("| 부분 | 1회 | 2회 | 3회 |");
-        md.AppendLine("| --- | ---: | ---: | ---: |");
-        foreach (var pair in _recorder.Breakdown.Where(pair => pair.Key.Size == _size && pair.Key.Variant == _variant))
-            md.AppendLine($"| {pair.Key.Item.Replace("|", "/")} | {string.Join(" | ", pair.Value.Select(F))} |");
-
-        md.AppendLine();
-        md.AppendLine("## 메모");
-        md.AppendLine();
-        foreach (ReceiptCapture c in captures) md.AppendLine($"- #{c.Index + 1} {c.Kind}: {string.Join("; ", c.Notes)}");
-        File.WriteAllText(DiagnosticOutputPaths.Child(_output, "receipt-summary.md"), md.ToString(), new UTF8Encoding(false));
 
         static string Cell(double? value) => value is double v ? F(v) : "-";
     }
@@ -696,13 +711,15 @@ internal sealed partial class AppResponsivenessProbe
 
     private sealed record ReceiptOperation(string Name, string Priority, long Start, long End);
 
-    private sealed class ReceiptCapture(int index, string kind)
+    private sealed class ReceiptCapture(int index, string kind, bool cardFirst)
     {
         private readonly ConcurrentDictionary<string, long> _stages = new();
         private readonly Dictionary<DispatcherOperation, (string Name, long Start)> _running = new(ReferenceEqualityComparer.Instance);
 
         internal int Index { get; } = index;
         internal string Kind { get; } = kind;
+        internal bool CardFirst { get; } = cardFirst;
+        internal string Variant => CardFirst ? "card first" : "current";
         internal long Start { get; private set; }
         internal List<ReceiptOperation> Operations { get; } = [];
         internal List<string> Notes { get; } = [];
@@ -827,8 +844,6 @@ internal sealed partial class AppResponsivenessProbe
             };
             Set("_overlay", _coordinator);
         }
-
-        internal bool CardFirst => _probe._variant.StartsWith("card first", StringComparison.Ordinal);
 
         internal DispatcherOperation? LastContextIdle { get; set; }
 
