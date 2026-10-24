@@ -122,7 +122,7 @@ Get-AppxPackage MyCapture.LocalTest | Remove-AppxPackage
   - 첫 제출은 비공개 대상으로 올려 직접 설치해 보는 것을 권장합니다. 한 번 공개로 게시하면 비공개로 되돌릴 수 없습니다.
 - **속성**
   - 범주는 생산성 또는 사진 및 비디오를 고릅니다.
-  - 개인정보처리방침 URL에는 `https://mimiloaf.com/mycapture/privacy/`를 넣습니다(2026-10-24 제출 17부터). Win32 앱은 개인정보처리방침이 항상 필요합니다(정책 10.5.1). 방침을 고칠 때는 지원 저장소의 `PRIVACY.md`를 수정하고, mimiloaf-site에서 `node tools/sync-privacy.mjs`로 사이트 페이지를 다시 만들어 배포합니다.
+  - 개인정보처리방침 URL에는 `https://mimiloaf.com/mycapture/privacy/`를 넣습니다(2026-10-24 제출 17부터). Win32 앱은 개인정보처리방침이 항상 필요합니다(정책 10.5.1). 방침을 고칠 때는 지원 저장소의 `PRIVACY.md`를 수정하고, mimiloaf 저장소(`C:\GitRepositories\mimiLoaf`, GitHub `sukwoo0711-maker/mimiloaf`)에서 `node tools/sync-privacy.mjs`로 사이트 페이지를 다시 만들어 배포합니다.
 - **연령 등급**: IARC 설문에 답합니다. 사용자 간 소통이나 구매 기능은 없습니다.
 - **패키지**: `.msix` 파일을 올립니다.
 - **제출 옵션**: 제한 기능 `runFullTrust`의 사용 사유를 적습니다. 문구는 [`listing.md`](listing.md)에 있습니다.
