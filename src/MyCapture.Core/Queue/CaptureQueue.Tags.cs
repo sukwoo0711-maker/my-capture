@@ -95,6 +95,12 @@ public sealed partial class CaptureQueue
         }
         Task completion = Task.WhenAll(corrections);
         try { await completion; }
-        catch { throw completion.Exception!; }
+        catch
+        {
+            // Task.WhenAll lists faults in the order their completions are observed, and adjacent publication
+            // jobs finish on different threads. Report them in enqueue order instead.
+            throw new AggregateException(corrections.Where(task => task.IsFaulted)
+                .SelectMany(task => task.Exception!.InnerExceptions));
+        }
     }
 }
