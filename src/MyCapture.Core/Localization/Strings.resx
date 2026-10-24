@@ -3267,7 +3267,7 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="Library.Organize.Hint" xml:space="preserve"><value>제목과 태그를 붙이면 검색으로 찾을 수 있습니다. 이 PC에만 저장되며 이미지와 인식한 텍스트는 바뀌지 않습니다.</value></data>
   <data name="Library.Organize.Name" xml:space="preserve"><value>제목</value></data>
   <data name="Library.Organize.Tags" xml:space="preserve"><value>태그</value></data>
-  <data name="Library.Organize.TagsHint" xml:space="preserve"><value>쉼표로 구분해 최대 12개, 태그당 32자까지 입력하십시오. 제목·태그만으로 자동 정리가 방지되지는 않습니다. 중요한 캡처는 보관을 사용하십시오.</value></data>
+  <data name="Library.Organize.TagsHint" xml:space="preserve"><value>쉼표로 구분해 최대 12개, 태그당 32자까지 입력하십시오. 제목과 태그를 붙여도 자동 삭제는 막지 못합니다. 중요한 캡처는 보관함에 넣으십시오.</value></data>
   <data name="Library.Organize.Saved" xml:space="preserve"><value>제목·태그 저장됨 · 검색에 반영됨</value></data>
   <data name="Library.Organize.Missing" xml:space="preserve"><value>라이브러리에 없는 캡처입니다. 입력한 내용은 이 창에 남아 있습니다.</value></data>
   <data name="Library.Organize.Invalid" xml:space="preserve"><value>제목 140자, 태그 최대 12개·각 32자 이내로 입력하십시오. 제어 문자는 사용할 수 없습니다.</value></data>
@@ -3276,7 +3276,7 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="Library.Action.Save" xml:space="preserve"><value>저장</value></data>
   <data name="Library.Archive.Title" xml:space="preserve"><value>선택한 캡처를 새 ZIP으로 내보내기</value></data>
   <data name="Library.Archive.Action" xml:space="preserve"><value>ZIP 내보내기</value></data>
-  <data name="Library.Archive.Hint" xml:space="preserve"><value>편집한 PNG·현재 MP4와 폴더 구조를 포함하며, 파일명에는 캡처 제목이 사용됩니다. PNG의 출처 URL은 '출처 URL 포함' 선택 시 포함됩니다. 별도 원본 이미지·인식 텍스트·태그·설정 파일은 제외합니다. 이미지에 보이는 내용은 유지됩니다.</value></data>
+  <data name="Library.Archive.Hint" xml:space="preserve"><value>편집한 PNG·현재 MP4와 폴더 구조를 포함하며, 파일명에는 캡처 제목이 사용됩니다. PNG의 출처 주소는 '출처 주소 포함' 선택 시 포함됩니다. 별도 원본 이미지·인식 텍스트·태그·설정 파일은 제외합니다. 이미지에 보이는 내용은 유지됩니다.</value></data>
   <data name="Library.Archive.Preparing" xml:space="preserve"><value>선택한 캡처의 안전한 복사본을 준비하고 있습니다…</value></data>
   <data name="Library.Archive.Progress" xml:space="preserve"><value>{1}개 중 {0}개 내보내는 중…</value></data>
   <data name="Library.Archive.Done" xml:space="preserve"><value>{0}개 파일을 내보냈습니다. 라이브러리 원본은 그대로 유지됩니다.</value></data>
@@ -4077,6 +4077,7 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="Onboard_StepNumber" xml:space="preserve"><value>{0}단계</value></data>
   <data name="Onboard_AfterCaptureTitle" xml:space="preserve"><value>캡처한 다음</value></data>
   <data name="Welcome_FirstCaptureTitle" xml:space="preserve"><value>한 번 캡처해 보십시오</value></data>
+  <data name="Welcome_PinClipboardHint" xml:space="preserve"><value>복사한 표와 코드는 {0} 키로 핀에 띄웁니다.</value></data>
   <data name="Welcome_Skip" xml:space="preserve"><value>건너뛰기</value></data>
   <data name="Onboard_FirstCaptureTip" xml:space="preserve"><value>다른 창 위에 띄우려면 P</value></data>
   <data name="Onboard_ReceiptKeyboard" xml:space="preserve"><value>Alt+Q로 선택 · Tab 이동 · Enter 실행</value></data>
@@ -4337,7 +4338,7 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="Library.Import.Source" xml:space="preserve"><value>가져온 파일</value></data>
   <data name="ExportOptions.Title" xml:space="preserve"><value>내보내기 옵션</value></data>
   <data name="ExportOptions.Continue" xml:space="preserve"><value>다음</value></data>
-  <data name="ExportOptions.SourceUrl" xml:space="preserve"><value>출처 URL 포함</value></data>
+  <data name="ExportOptions.SourceUrl" xml:space="preserve"><value>출처 주소 포함</value></data>
   <data name="ExportOptions.Preset" xml:space="preserve"><value>프리셋</value></data>
   <data name="ExportOptions.Preset.Last" xml:space="preserve"><value>마지막 설정</value></data>
   <data name="ExportOptions.Preset.Original" xml:space="preserve"><value>원본</value></data>
@@ -4625,15 +4626,15 @@ F3  클립보드를 핀으로 띄우기
   <data name="Update_OpenReleaseHelp" xml:space="preserve"><value>브라우저에서 새 버전의 다운로드 페이지를 엽니다.</value></data>
   <data name="Welcome_AccurateOcr" xml:space="preserve"><value>정확한 한국어 글자 인식</value></data>
   <data name="Welcome_AccurateOcrHelp" xml:space="preserve"><value>모델 약 {0} MB를 한 번만 뒤에서 내려받습니다. ‘빠름’보다 인식이 조금 느리며, 설정에서 바꿀 수 있습니다.</value></data>
-  <data name="Source.Open" xml:space="preserve"><value>원본 열기</value></data>
+  <data name="Source.Open" xml:space="preserve"><value>출처 열기</value></data>
   <data name="Source.CopyUrl" xml:space="preserve"><value>주소 복사</value></data>
   <data name="Source.CopyPath" xml:space="preserve"><value>경로 복사</value></data>
   <data name="Source.OpenLocation" xml:space="preserve"><value>파일 위치 열기</value></data>
   <data name="Source.ShowSame" xml:space="preserve"><value>같은 출처 캡처 보기</value></data>
   <data name="Source.Label" xml:space="preserve"><value>출처: {0}</value></data>
   <data name="Source.OpenAutomation" xml:space="preserve"><value>출처: {0}, 열기</value></data>
-  <data name="Source.AppMissing" xml:space="preserve"><value>원본 앱을 찾을 수 없습니다.</value></data>
-  <data name="Source.AppOpenFailed" xml:space="preserve"><value>원본 앱을 열 수 없습니다.</value></data>
+  <data name="Source.AppMissing" xml:space="preserve"><value>출처 앱을 찾을 수 없습니다.</value></data>
+  <data name="Source.AppOpenFailed" xml:space="preserve"><value>출처 앱을 열 수 없습니다.</value></data>
   <data name="About_DiagnosticsBundle" xml:space="preserve"><value>진단 묶음 저장</value></data>
   <data name="About_DiagnosticsBundleHelp" xml:space="preserve"><value>최근 로그와 진단 정보를 ZIP 파일 하나로 저장합니다. 캡처 내용, 클립보드, 창 제목, 파일 경로는 포함하지 않으며 자동으로 전송하지 않습니다.</value></data>
   <data name="About_DiagnosticsBundleSaved" xml:space="preserve"><value>진단 묶음 저장 완료</value></data>
