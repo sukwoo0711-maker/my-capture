@@ -144,6 +144,8 @@ public sealed class StorePackagePathTests
         Assert.Equal(@"C:\Users\u\AppData\Local\Packages\MyCapture_pfn\LocalState\settings.json", paths.SettingsFile);
         Assert.Equal(@"C:\Users\u\AppData\Local\Packages\MyCapture_pfn\LocalState\captures", paths.CapturesRoot);
         Assert.Equal(@"C:\Users\u\AppData\Local\Packages\MyCapture_pfn\LocalCache\ocr-models", paths.OcrModelsRoot);
+        Assert.Equal(@"C:\Users\u\AppData\Local\Packages\MyCapture_pfn\LocalCache\translation-models",
+            paths.TranslationModelsRoot);
         Assert.Equal(@"C:\Users\u\Pictures\Captures", paths.QuickSaveRoot);
     }
 
