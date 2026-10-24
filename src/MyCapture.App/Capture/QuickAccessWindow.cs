@@ -438,12 +438,9 @@ internal sealed class QuickAccessWindow : Window
         return true;
     }
 
-    internal void EndPreviewGesture(Point position)
-    {
-        bool clicked = _dragArmed && !ExceedsPreviewDragThreshold(position);
-        _dragArmed = false;
-        if (clicked && !_keyboardAccess) ActivateForKeyboard();
-    }
+    // A click on the thumbnail keeps the external app in the foreground (4.0.2 contract,
+    // HotfixUxSelfTest): the user pastes there next. Alt+Q or the card body enters keyboard mode.
+    internal void EndPreviewGesture(Point position) => _dragArmed = false;
 
     /// <summary>A command glyph on the shared 20x20 grid: close and the five actions.</summary>
     private SymbolIcon Glyph(string key)

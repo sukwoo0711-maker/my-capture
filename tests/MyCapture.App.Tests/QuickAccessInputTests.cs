@@ -34,7 +34,7 @@ public sealed class QuickAccessInputTests
     });
 
     [Fact]
-    public void PreviewClickThenPRunsPin() => StaTestHost.Run(() =>
+    public void PreviewClickKeepsTheCardOutOfKeyboardMode() => StaTestHost.Run(() =>
     {
         int pinned = 0;
         QuickAccessWindow card = Card(pin: () => pinned++);
@@ -44,9 +44,9 @@ public sealed class QuickAccessInputTests
             Image preview = Preview(card);
             RaiseMouseButton(preview, UIElement.MouseLeftButtonDownEvent);
             RaiseMouseButton(preview, UIElement.MouseLeftButtonUpEvent);
-            Assert.True(card.IsKeyboardFocusWithin);
-            Assert.True(EditorKeysTests.Press(card, Key.P, ime: false));
-            Assert.Equal(1, pinned);
+            Assert.False(card.IsKeyboardFocusWithin);
+            Assert.False(EditorKeysTests.Press(card, Key.P, ime: false));
+            Assert.Equal(0, pinned);
         }
         finally { card.Close(); }
     });
@@ -77,7 +77,7 @@ public sealed class QuickAccessInputTests
     });
 
     [Fact]
-    public void PreviewMovementBelowThresholdStillEntersKeyboardMode() => StaTestHost.Run(() =>
+    public void PreviewMovementBelowThresholdIsAClickThatKeepsForeground() => StaTestHost.Run(() =>
     {
         QuickAccessWindow card = Card();
         try
@@ -88,7 +88,7 @@ public sealed class QuickAccessInputTests
             card.BeginPreviewGesture(default);
             Assert.False(card.TryBeginPreviewDrag(end));
             card.EndPreviewGesture(end);
-            Assert.True(card.IsKeyboardFocusWithin);
+            Assert.False(card.IsKeyboardFocusWithin);
         }
         finally { card.Close(); }
     });
