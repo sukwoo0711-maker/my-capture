@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Interop;
 using System.Windows.Media;
@@ -208,8 +209,9 @@ public sealed class CaptureFlightTests
     [Fact]
     public void AFullScreenCaptureFliesInItsOwnWindowAboveTheCard() => RunFlight(motion: true, (_, clock, _, router) =>
     {
-        // Smaller than any real desktop, which bounds how large a window can be.
-        MonitorInfo monitor = Monitor(-32000, -32000, 1200, 800, MonitorEnumerator.GetPrimary().Dpi);
+        // No larger than this desktop allows a window to be (a hosted runner's is 1024 x 768).
+        MonitorInfo monitor = Monitor(-32000, -32000, Math.Min(1200, MaxWindow.Width), Math.Min(800, MaxWindow.Height),
+            MonitorEnumerator.GetPrimary().Dpi);
         CaptureFlight.ReadMonitors = () => [monitor];
         BitmapSource screen = Image((int)monitor.Bounds.Width, (int)monitor.Bounds.Height);
         CaptureFlight flight = CaptureFlight.TryLift(screen, monitor.Bounds, () => clock.Now)!;
@@ -349,9 +351,21 @@ public sealed class CaptureFlightTests
         Assert.Equal(expected.Height, actual.Height, 6);
     }
 
-    // Off the visible desktop, on a test display the flight treats as real. Larger than the
-    // card's preview at any scale, so the image shrinks on its way.
-    private static RectD SourceOn() => new(-31600, -31700, 800, 500);
+    // Off the visible desktop, on a test display the flight treats as real. Wider than the card's
+    // preview (about 320 DIP) at the display's scale, so the image shrinks on its way; small enough
+    // that the window over it and the card stays inside the largest window a 1024 x 768 hosted
+    // runner allows, since Windows will not size a window beyond SM_CXMAXTRACK/SM_CYMAXTRACK.
+    private static RectD SourceOn()
+    {
+        double scale = MonitorEnumerator.GetPrimary().Dpi / 96.0;
+        return new(-31800, -31850, Math.Round(480 * scale), Math.Round(300 * scale));
+    }
+
+    /// <summary>The largest window this desktop allows, in physical pixels.</summary>
+    private static (double Width, double Height) MaxWindow => (GetSystemMetrics(59), GetSystemMetrics(60));
+
+    [DllImport("user32.dll")]
+    private static extern int GetSystemMetrics(int index);
 
     private static MonitorInfo Monitor(double left, double top, double width, double height, uint dpi) =>
         new("TEST" + left, new RectD(left, top, width, height), new RectD(left, top, width, height - 40), dpi, false);
@@ -413,7 +427,7 @@ public sealed class CaptureFlightTests
                 // Hosted runners cannot always exclude a layered window from capture; the flight's
                 // own steps are under test here, not the operating system's display affinity.
                 CaptureFlightDecoration.ApplyCaptureExclusion = _ => true;
-                body(display, new ManualClock(), Image(800, 500), router);
+                body(display, new ManualClock(), Image((int)SourceOn().Width, (int)SourceOn().Height), router);
             }
             finally
             {
