@@ -12,7 +12,6 @@ Usage: python make_shutter.py [output.wav]   (standard library only)
 import math
 import random
 import struct
-import sys
 import wave
 from pathlib import Path
 
@@ -109,8 +108,9 @@ def write(path, samples):
 
 
 def main():
-    default = Path(__file__).resolve().parents[3] / "src" / "MyCapture.App" / "Assets" / "Sounds" / "shutter.wav"
-    target = Path(sys.argv[1]) if len(sys.argv) > 1 else default
+    # Always the committed asset: the script takes no output path, so nothing outside the
+    # repository can be written through it.
+    target = Path(__file__).resolve().parents[3] / "src" / "MyCapture.App" / "Assets" / "Sounds" / "shutter.wav"
     samples = synthesise()
     write(target, samples)
     peak = max(abs(s) for s in samples)
