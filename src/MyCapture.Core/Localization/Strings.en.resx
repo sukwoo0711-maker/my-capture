@@ -1481,10 +1481,6 @@ This cannot be undone.</value>
     <value>Delete selection (Delete)</value>
     <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
   </data>
-  <data name="Text_7E6DD424D331" xml:space="preserve">
-    <value>Loading video… {0}%</value>
-    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
-  </data>
   <data name="Text_7F2ED132EA3B" xml:space="preserve">
     <value>Repeat last region shortcut</value>
     <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
@@ -2552,10 +2548,6 @@ This cannot be undone.</value>
   <data name="Text_D9FC5F981274" xml:space="preserve">
     <value>MyCapture — Edit image</value>
     <comment>src\MyCapture.App\Gallery\GalleryEditorWindow.cs</comment>
-  </data>
-  <data name="Text_DA09CBABFC1E" xml:space="preserve">
-    <value>Loading video… 0%</value>
-    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
   </data>
   <data name="Text_DA9B79FCBFC8" xml:space="preserve">
     <value>GIF quality and size</value>
