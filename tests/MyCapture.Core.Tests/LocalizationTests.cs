@@ -13,6 +13,30 @@ namespace MyCapture.Core.Tests;
 public sealed class LocalizationTests
 {
     [Theory]
+    [InlineData("Source.Open", "출처 열기", "Open source")]
+    [InlineData("Source.AppMissing", "출처 앱을 찾을 수 없습니다.", "The source app could not be found.")]
+    [InlineData("Source.AppOpenFailed", "출처 앱을 열 수 없습니다.", "The source app could not be opened.")]
+    [InlineData("ExportOptions.SourceUrl", "출처 주소 포함", "Include source URL")]
+    [InlineData("Welcome_PinClipboardHint", "복사한 표와 코드는 {0} 키로 핀에 띄웁니다.", "Pin copied tables and code with {0}.")]
+    [InlineData("Library.Organize.TagsHint", "쉼표로 구분해 최대 12개, 태그당 32자까지 입력하십시오. 제목과 태그를 붙여도 자동 삭제는 막지 못합니다. 중요한 캡처는 보관함에 넣으십시오.", "Separate tags with commas. Up to 12 tags, 32 characters each. Titles and tags do not prevent automatic deletion. Move important captures to Kept.")]
+    public void SettingsAndSourceCopyMatchesTheReviewedMeaning(string key, string korean, string english)
+    {
+        using (UiText.UseLanguage("ko-KR")) Assert.Equal(korean, UiText.Get(key));
+        using (UiText.UseLanguage("en-US")) Assert.Equal(english, UiText.Get(key));
+    }
+
+    [Fact]
+    public void ArchiveHintQuotesTheCurrentSourceAddressOption()
+    {
+        using var scope = UiText.UseLanguage("ko-KR");
+        string hint = UiText.Get("Library.Archive.Hint");
+        Assert.Contains("PNG의 출처 주소는", hint, StringComparison.Ordinal);
+        Assert.Contains("'" + UiText.Get("ExportOptions.SourceUrl") + "'", hint, StringComparison.Ordinal);
+        Assert.Contains("별도 원본 이미지", hint, StringComparison.Ordinal);
+        Assert.Equal("주소 복사", UiText.Get("Source.CopyUrl"));
+    }
+
+    [Theory]
     [InlineData("", "ko-KR", "ko-KR")]
     [InlineData("", "en-US", "en")]
     [InlineData("", "ja-JP", "en")]

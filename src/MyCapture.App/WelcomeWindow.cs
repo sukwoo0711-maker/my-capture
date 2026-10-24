@@ -8,6 +8,7 @@ using MyCapture.App.Themes;
 using MyCapture.Core.Queue;
 using MyCapture.Core.Settings;
 using MyCapture.Ocr;
+using MyCapture.Platform.Display;
 
 namespace MyCapture.App;
 
@@ -45,6 +46,11 @@ internal sealed class WelcomeWindow : Window
         SetResourceReference(BackgroundProperty, "Surface.Base");
         SetResourceReference(ForegroundProperty, "Text.Primary");
         WindowStartupLocation = WindowStartupLocation.CenterScreen;
+        SourceInitialized += (_, _) =>
+        {
+            MonitorInfo monitor = MonitorEnumerator.GetFromCursor();
+            LimitToWorkArea(monitor);
+        };
 
         var title = new TextBlock
         {
@@ -56,6 +62,19 @@ internal sealed class WelcomeWindow : Window
         FrameworkElement captureKeys = CaptureKeys(keys.Capture);
         captureKeys.HorizontalAlignment = HorizontalAlignment.Center;
         captureKeys.Margin = new Thickness(0, 0, 0, 28);
+
+        var pinHint = new TextBlock
+        {
+            FontSize = 12, TextAlignment = TextAlignment.Center, TextWrapping = TextWrapping.Wrap,
+            Margin = new Thickness(0, 0, 0, 20),
+            Visibility = keys.PasteToScreen.IsAssigned ? Visibility.Visible : Visibility.Collapsed,
+        };
+        if (keys.PasteToScreen.IsAssigned)
+        {
+            KoreanWordWrap.Show(pinHint, UiText.Format("Welcome_PinClipboardHint", keys.PasteToScreen.ToString()));
+            captureKeys.Margin = new Thickness(0, 0, 0, 12);
+        }
+        pinHint.SetResourceReference(TextBlock.ForegroundProperty, "Text.Secondary");
 
         TryNowButton = new Button { Content = UiText.Get("Onboard_TryNow"), IsDefault = true };
         TryNowButton.SetResourceReference(StyleProperty, "Button.Primary");
@@ -143,10 +162,22 @@ internal sealed class WelcomeWindow : Window
         var root = new StackPanel { Margin = new Thickness(24, 28, 24, 20) };
         root.Children.Add(title);
         root.Children.Add(captureKeys);
+        root.Children.Add(pinHint);
         root.Children.Add(actions);
         root.Children.Add(footer);
-        Content = root;
+        Content = new ScrollViewer
+        {
+            Content = root, VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+            HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
+        };
         Loaded += (_, _) => TryNowButton.Focus();
+    }
+
+    internal void LimitToWorkArea(MonitorInfo monitor)
+    {
+        double scale = monitor.ScaleFactor > 0 ? monitor.ScaleFactor : 1;
+        MaxWidth = Math.Max(1, monitor.WorkArea.Width / scale);
+        MaxHeight = Math.Max(1, monitor.WorkArea.Height / scale);
     }
 
     internal WelcomeOutcome Outcome { get; private set; } = WelcomeOutcome.Closed;
