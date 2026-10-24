@@ -40,6 +40,9 @@ internal sealed class EditorScene : TutorialScene
     private string _typed = string.Empty;
     private PointD _dragStart;
     private readonly PointD _plannedImageOrigin, _plannedImageUnit;
+    private BitmapSource? _savedNotice;
+    private Rect _savedNoticeBounds, _openFolderBounds;
+    private PointD _openFolder;
 
     internal EditorScene(string id, string language) : base(id, language)
     {
@@ -71,12 +74,45 @@ internal sealed class EditorScene : TutorialScene
         _toolKey = tool.Command.Length == 0 ? string.Empty : Hint(ShortcutScope.Annotation, tool.Command);
         _plannedImageOrigin = Image(0, 0);
         _plannedImageUnit = Image(1, 1);
+        if (_feature == "save") BuildSavedNotice();
         Story = BuildStory();
     }
 
     internal override string Provenance =>
         "Real AnnotationEditorWindow (command bar, tool rail, property bar above the canvas, crop mode, status line with the page's source chip, tool cursors) over a synthetic page; "
-        + "tools, rotation, crop and commits run through the editor's own handlers. Explorer and note windows are synthetic.";
+        + "tools, rotation, crop and commits run through the editor's own handlers. A quick save is followed by the product's Saved notification "
+        + "(ThemedShellPresenter.CreateActionNotification with ShowQuickSaved's title, file name and Open folder, placed by NotificationBounds; "
+        + "its action never runs). Explorer and note windows are synthetic.";
+
+    /// <summary>The quick-save file the clip's save writes: QuickSaveNaming's default pattern for the page's window.</summary>
+    private string SavedFileName => QuickSaveNaming.BuildStem(QuickSaveNaming.DefaultPattern,
+        new DateTimeOffset(2026, 10, 13, 9, 30, 12, TimeSpan.FromHours(9)), L("릴리스 준비", "Release prep")) + ".png";
+
+    /// <summary>
+    /// The card App.AnnounceQuickSave shows after an editor quick save while "Notify after quick
+    /// save" is on (the new-install default): ThemedShellPresenter.ShowQuickSaved's Saved, the
+    /// file's name and Open folder, built by CreateActionNotification at its window width and
+    /// natural height and placed where NotificationBounds puts it. The window is never shown and
+    /// its action never runs; the clip draws the folder it would open.
+    /// </summary>
+    private void BuildSavedNotice()
+    {
+        var presenter = new ThemedShellPresenter(() => false);
+        Window card = presenter.CreateActionNotification(Ui("QuickAccess.Saved"), SavedFileName, Ui("QuickAccess.OpenFolder"), () => { });
+        var content = (UIElement)card.Content;
+        card.Content = null;
+        var root = new Border { Width = card.Width, Child = content };
+        root.SetResourceReference(System.Windows.Documents.TextElement.ForegroundProperty, "Text.Primary");
+        Detached.Layout(root, card.Width);
+        _savedNotice = Stage.Picture(root.ActualWidth, root.ActualHeight, drawing => Detached.Draw(drawing, root, new Point(), pad: 0));
+        _savedNoticeBounds = ThemedShellPresenter.NotificationBounds(new RectD(0, 0, Stage.Width, Stage.SceneHeight), 1,
+            root.ActualWidth, root.ActualHeight);
+        Button open = OffscreenWindow.Descendants(root).OfType<Button>().First(button => AutomationProperties.GetName(button) == Ui("QuickAccess.OpenFolder"));
+        Point topLeft = open.TranslatePoint(new Point(), root);
+        _openFolderBounds = new Rect(_savedNoticeBounds.X + topLeft.X, _savedNoticeBounds.Y + topLeft.Y, open.ActualWidth, open.ActualHeight);
+        _openFolder = new PointD(_openFolderBounds.X + _openFolderBounds.Width / 2, _openFolderBounds.Y + _openFolderBounds.Height / 2);
+        card.Close();
+    }
 
     private static AnnotationDocument Finished(BitmapSource image)
     {
@@ -177,7 +213,9 @@ internal sealed class EditorScene : TutorialScene
                 story.Move("command-right", Of(ByAutomationId("EditorRotateRight"))).Click("rotate-right").Hold("rotated-right", 1.4);
                 break;
             case "save":
-                story.Hold("review", 1.0).Hold("save-key", 0.3).Hold("saving", 0.8).Hold("closed", 0.6);
+                // The editor closes and the Saved notification names the file; its Open folder shows it.
+                story.Hold("review", 1.0).Hold("save-key", 0.3).Hold("saving", 0.8).Hold("closed", 1.8);
+                story.Move("folder-move", _openFolder).Click("folder-click");
                 break;
             case "copy":
                 // Copy only fills the clipboard and the editor stays open (Done saves and closes), so
@@ -234,12 +272,18 @@ internal sealed class EditorScene : TutorialScene
             Stage.DrawWindow(dc, client, ClientOrigin, _window.Title);
             if (_noteFront) DrawNote(dc, pasted: frame.Segment is "pasted" or "result");
         }
+        else if (_savedNotice is not null && frame.Segment is "closed" or "folder-move" or "folder-click")
+            dc.DrawImage(_savedNotice, _savedNoticeBounds);
         else DrawExplorer(dc);
 
         (string caption, string key) = Caption(frame);
         if (frame.Pressed) Stage.DrawClick(dc, cursor, frame.Progress);
-        bool keyboardOnly = _feature is "save" && frame.Segment is not "open";
-        if (!keyboardOnly) DrawPointer(dc, cursor);
+        // Save is a key press in the editor; the pointer comes back for the notification once it has closed.
+        bool keyboardOnly = _feature is "save" && frame.Segment is "review" or "save-key" or "saving";
+        // The notification's buttons take the shared button style's hand.
+        if (_closed && frame.Segment is "folder-move" or "folder-click" && _openFolderBounds.Contains(new Point(cursor.X, cursor.Y)))
+            Stage.DrawPointer(dc, cursor, Stage.PointerKind.Hand);
+        else if (!keyboardOnly) DrawPointer(dc, cursor);
         Stage.DrawCaption(dc, caption, key);
     }
 
@@ -390,8 +434,7 @@ internal sealed class EditorScene : TutorialScene
         Stage.Text(dc, L("이름", "Name"), client.X + 24, client.Y + 54, 12, Brushes.Gray);
         Stage.Text(dc, L("수정한 날짜", "Date modified"), client.X + 470, client.Y + 54, 12, Brushes.Gray);
         dc.DrawRectangle(new SolidColorBrush(Color.FromRgb(0x33, 0x38, 0x44)), null, new Rect(client.X + 12, client.Y + 74, client.Width - 24, 1));
-        string name = QuickSaveNaming.BuildStem(QuickSaveNaming.DefaultPattern, new DateTimeOffset(2026, 10, 13, 9, 30, 12, TimeSpan.FromHours(9)),
-            L("릴리스 준비", "Release prep")) + ".png";
+        string name = SavedFileName;
         var row = new Rect(client.X + 12, client.Y + 82, client.Width - 24, 76);
         dc.DrawRoundedRectangle(new SolidColorBrush(Color.FromRgb(0x2F, 0x3D, 0x5C)), null, row, 4, 4);
         dc.DrawImage(_image, new Rect(row.X + 10, row.Y + 8, 120, 60));
@@ -450,6 +493,8 @@ internal sealed class EditorScene : TutorialScene
                 {
                     "open" or "review" => (L("편집한 이미지 확인", "Review the edited image"), ""),
                     "save-key" or "saving" => (L($"{save}: 빠른 저장 폴더에 바로 저장", $"{save} saves straight to the quick-save folder"), save),
+                    "closed" or "folder-move" or "folder-click" => (L($"{Ui("QuickAccess.Saved")} 알림에 파일 이름 표시 · {Ui("QuickAccess.OpenFolder")}로 위치 확인",
+                        $"The {Ui("QuickAccess.Saved")} notice names the file · {Ui("QuickAccess.OpenFolder")} shows it"), ""),
                     _ => (L($"PNG 저장됨 · 다른 위치는 {Hint(ShortcutScope.Annotation, "SaveAs")}", $"PNG saved · {Hint(ShortcutScope.Annotation, "SaveAs")} chooses another place"), ""),
                 };
             case "copy":
