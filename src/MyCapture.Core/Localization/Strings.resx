@@ -3897,7 +3897,7 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="About_LastChecked" xml:space="preserve"><value>마지막 확인 {0:HH:mm} · {1}</value></data>
   <data name="About_UpToDate" xml:space="preserve"><value>최신 버전</value></data>
   <data name="About_PrivacyHeading" xml:space="preserve"><value>개인정보</value></data>
-  <data name="About_PrivacyLocal" xml:space="preserve"><value>캡처와 텍스트 인식은 이 PC에서 처리합니다.</value></data>
+  <data name="About_PrivacyLocal" xml:space="preserve"><value>캡처, 텍스트 인식, 번역은 이 PC에서 처리합니다.</value></data>
   <data name="About_PrivacyModel" xml:space="preserve"><value>정확 품질은 텍스트 인식 모델(약 {0} MB)을 ModelScope에서 내려받습니다. 이미지는 전송하지 않습니다.</value></data>
   <data name="About_PrivacyGitHub" xml:space="preserve"><value>GitHub 업로드는 실행할 때만 공개 이슈에 올립니다.</value></data>
   <data name="About_PrivacyUpdates" xml:space="preserve"><value>새 버전 자동 확인이 켜져 있으면 하루에 한 번 새 버전 정보를 확인합니다.</value></data>
@@ -4638,4 +4638,47 @@ F3  클립보드를 핀으로 띄우기
   <data name="About_DiagnosticsBundleHelp" xml:space="preserve"><value>최근 로그와 진단 정보를 ZIP 파일 하나로 저장합니다. 캡처 내용, 클립보드, 창 제목, 파일 경로는 포함하지 않으며 자동으로 전송하지 않습니다.</value></data>
   <data name="About_DiagnosticsBundleSaved" xml:space="preserve"><value>진단 묶음 저장 완료</value></data>
   <data name="About_DiagnosticsBundleFilter" xml:space="preserve"><value>진단 묶음 (*.zip)|*.zip</value></data>
+  <data name="Translate_Tab" xml:space="preserve"><value>번역</value></data>
+  <data name="Translate_Direction" xml:space="preserve"><value>영어 → 한국어</value></data>
+  <data name="Translate_Summary" xml:space="preserve"><value>영어 → 한국어 · 블록 {0}개</value></data>
+  <data name="Translate_SummaryOne" xml:space="preserve"><value>영어 → 한국어 · 블록 1개</value></data>
+  <data name="Translate_CopyWithSource" xml:space="preserve"><value>원문과 함께 복사</value></data>
+  <data name="Translate_CopyHelp" xml:space="preserve"><value>번역을 클립보드에 복사합니다</value></data>
+  <data name="Translate_List" xml:space="preserve"><value>번역 목록</value></data>
+  <data name="Translate_Checking" xml:space="preserve"><value>번역 모델 확인 중</value></data>
+  <data name="Translate_OffTitle" xml:space="preserve"><value>번역 꺼짐</value></data>
+  <data name="Translate_OffBody" xml:space="preserve"><value>번역을 켜면 영어를 한국어로 옮기는 번역 모델(약 {0} MB)을 한 번 내려받습니다. 번역은 이 PC 안에서 실행하며, 이미지와 글자는 외부로 보내지 않습니다. 모델은 설정에서 삭제할 수 있습니다.</value></data>
+  <data name="Translate_TurnOn" xml:space="preserve"><value>번역 켜기 ({0} MB)</value></data>
+  <data name="Translate_Downloading" xml:space="preserve"><value>번역 모델 내려받는 중</value></data>
+  <data name="Translate_DownloadingBody" xml:space="preserve"><value>창을 닫거나 취소하면 내려받기를 멈춥니다. 다 받은 파일은 다음에 다시 받지 않습니다.</value></data>
+  <data name="Translate_DownloadProgress" xml:space="preserve"><value>{0} / {1} MB</value></data>
+  <data name="Translate_DownloadFailed" xml:space="preserve"><value>내려받기 실패</value></data>
+  <data name="Translate_Retry" xml:space="preserve"><value>다시 시도</value></data>
+  <data name="Translate_Progress" xml:space="preserve"><value>번역 중 · {0}/{1}</value></data>
+  <data name="Translate_OnThisPc" xml:space="preserve"><value>번역은 이 PC 안에서 실행합니다.</value></data>
+  <data name="Translate_NothingTitle" xml:space="preserve"><value>번역할 영어 없음</value></data>
+  <data name="Translate_NothingBody" xml:space="preserve"><value>식별자·숫자만 있는 칸과 영어가 아닌 글자는 번역하지 않습니다.</value></data>
+  <data name="Translate_Cancelled" xml:space="preserve"><value>번역 취소됨</value></data>
+  <data name="Translate_Again" xml:space="preserve"><value>다시 번역</value></data>
+  <data name="Translate_FailedTitle" xml:space="preserve"><value>번역 실패</value></data>
+  <data name="Translate_LoadFailed" xml:space="preserve"><value>번역 모델을 열지 못했습니다. 설정에서 모델을 삭제한 뒤 다시 내려받으십시오.</value></data>
+  <data name="Translate_ErrorNetwork" xml:space="preserve"><value>네트워크에 연결할 수 없습니다. 연결을 확인한 뒤 다시 시도하십시오.</value></data>
+  <data name="Translate_ErrorDiskFull" xml:space="preserve"><value>디스크 공간이 부족합니다. {0} MB 이상 확보한 뒤 다시 시도하십시오.</value></data>
+  <data name="Translate_ErrorCorrupt" xml:space="preserve"><value>내려받은 파일이 손상되었습니다. 다시 시도하십시오.</value></data>
+  <data name="Translate_ErrorDisk" xml:space="preserve"><value>번역 모델을 저장할 수 없습니다. 저장 공간과 권한을 확인하십시오.</value></data>
+  <data name="Translate_SourceName" xml:space="preserve"><value>원문 {0}</value></data>
+  <data name="Translate_TranslationName" xml:space="preserve"><value>번역 {0}</value></data>
+  <data name="Translate_BlockName" xml:space="preserve"><value>블록 {0}</value></data>
+  <data name="Translate_WarningMissing" xml:space="preserve"><value>번역에 없는 원문 값: {0}</value></data>
+  <data name="Translate_WarningInvented" xml:space="preserve"><value>원문에 없는 값: {0}</value></data>
+  <data name="SettingsUx_TranslationHeading" xml:space="preserve"><value>번역</value></data>
+  <data name="Settings_TranslationModel" xml:space="preserve"><value>번역 모델</value></data>
+  <data name="Settings_TranslationModelHint" xml:space="preserve"><value>텍스트 인식 결과 창의 번역 보기에서 영어를 한국어로 옮깁니다. 번역은 이 PC 안에서 실행합니다. 모델은 번역 보기에서 번역을 처음 켤 때 내려받습니다.</value></data>
+  <data name="Settings_TranslationInstalled" xml:space="preserve"><value>설치됨 · {0} MB</value></data>
+  <data name="Settings_TranslationNotInstalled" xml:space="preserve"><value>설치 안 됨</value></data>
+  <data name="Settings_TranslationDelete" xml:space="preserve"><value>모델 삭제</value></data>
+  <data name="Settings_TranslationDeleteConfirm" xml:space="preserve"><value>번역 모델({0} MB)을 삭제하시겠습니까? 다시 번역하려면 모델을 다시 내려받아야 합니다.</value></data>
+  <data name="Settings_TranslationDeleted" xml:space="preserve"><value>번역 모델 삭제됨</value></data>
+  <data name="Settings_TranslationDeleteFailed" xml:space="preserve"><value>번역 모델을 삭제하지 못했습니다.</value></data>
+  <data name="About_PrivacyTranslation" xml:space="preserve"><value>번역은 처음 켤 때 번역 모델(약 {0} MB)을 GitHub에서 내려받습니다. 번역할 글자는 전송하지 않습니다.</value></data>
 </root>

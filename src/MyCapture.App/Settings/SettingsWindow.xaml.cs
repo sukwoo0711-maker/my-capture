@@ -48,6 +48,7 @@ internal sealed partial class SettingsWindow : Window
 
         InitializeComponent();
         InitializeAbout();
+        InitializeTranslationModel();
         InitializeUpdates();
         InitializeStoreRating();
         InitializePrintScreenGuide();

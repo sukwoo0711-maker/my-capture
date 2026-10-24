@@ -2,6 +2,7 @@ using System.Windows.Threading;
 using System.Windows.Media.Imaging;
 using Microsoft.Extensions.Logging;
 using MyCapture.Ocr;
+using MyCapture.Ocr.Translation;
 
 namespace MyCapture.App.Ocr;
 
@@ -73,14 +74,15 @@ internal sealed class OcrResultPresenter : IDisposable
         IOcrService service,
         Dispatcher dispatcher,
         Action<bool> setBusy,
-        ILogger log)
+        ILogger log,
+        ITextTranslator? translator = null)
     {
         _service = service ?? throw new ArgumentNullException(nameof(service));
         _dispatcher = dispatcher ?? throw new ArgumentNullException(nameof(dispatcher));
         _setBusy = setBusy ?? throw new ArgumentNullException(nameof(setBusy));
         _log = log ?? throw new ArgumentNullException(nameof(log));
 
-        _window = new OcrResultWindow();
+        _window = new OcrResultWindow { Translator = translator };
         _window.RerunRequested += (_, _) => Rerun();
         _window.GeometryRequested += (_, _) => Rerun();
         _window.Dismissed += (_, _) =>

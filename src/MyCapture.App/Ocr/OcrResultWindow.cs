@@ -398,8 +398,10 @@ internal sealed partial class OcrResultWindow : Window
         }
         string? command = ShortcutCatalog.Match(ShortcutScope.Ocr, e.Key, Keyboard.Modifiers);
         if (command == "Copy" && _tableGrid.IsKeyboardFocusWithin && _tableGrid.SelectedCells.Count > 0) return;
-        // Preserve native selected-text copy; the button / unselected Ctrl+C copies all.
-        if (command == "Copy" && _textBox.IsKeyboardFocusWithin && _textBox.SelectionLength > 0) return;
+        // Preserve native selected-text copy (the result text or one translation); the button /
+        // unselected Ctrl+C copies all.
+        if (command == "Copy" && Keyboard.FocusedElement is TextBox { SelectionLength: > 0 } focused
+            && (focused == _textBox || _translationPanel.IsAncestorOf(focused))) return;
         e.Handled = ShortcutCatalog.Execute(ShortcutScope.Ocr, e.Key, Keyboard.Modifiers, _shortcutActions);
     }
 
@@ -409,11 +411,14 @@ internal sealed partial class OcrResultWindow : Window
         if (!_allowClose)
         {
             e.Cancel = true;
+            // Closing ends a model download or a translation like the cancel button does.
+            ResetTranslation();
             Hide();
             Dismissed?.Invoke(this, EventArgs.Empty);
             return;
         }
 
+        CancelTranslationWork();
         base.OnClosing(e);
     }
 
