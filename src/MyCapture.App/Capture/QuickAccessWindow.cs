@@ -38,8 +38,9 @@ internal sealed class QuickAccessWindow : Window
     private readonly DispatcherTimer _progressReveal = new() { Interval = FeedbackTiming.ProgressRevealDelay };
     private readonly HashSet<string> _running = [];
     private readonly Dictionary<string, Button> _actionButtons = [];
+    private readonly List<(string Action, string Message)> _failures = [];
     private FeedbackKind _statusKind = FeedbackKind.Echo;
-    private bool _heldForFailure;
+    private bool IsHeldForFailure => _failures.Count > 0;
     private bool _progressShown;
     private TimeSpan _elapsed;
     private long _lastTick;
@@ -70,7 +71,7 @@ internal sealed class QuickAccessWindow : Window
     internal bool IsKept { get => _keep.IsChecked == true; set => _keep.IsChecked = value; }
     internal bool CanActivateByHotkey => IsVisible && _timer.IsEnabled && !IsKept;
     internal bool IsPointerOver => IsVisible && WindowStyleFacade.IsPointerOverWindow(new WindowInteropHelper(this).Handle);
-    internal string TimeoutStateForTest => $"enabled={_timer.IsEnabled}; elapsed={_elapsed.TotalSeconds:0.000}; keep={IsKept}; keyboard={_keyboardInteracting}/{IsKeyboardFocusWithin}; busy={IsBusy}; held={_heldForFailure}";
+    internal string TimeoutStateForTest => $"enabled={_timer.IsEnabled}; elapsed={_elapsed.TotalSeconds:0.000}; keep={IsKept}; keyboard={_keyboardInteracting}/{IsKeyboardFocusWithin}; busy={IsBusy}; held={IsHeldForFailure}";
 
     /// <summary>Test hook: the status line, its kind, and whether the progress indicator runs.</summary>
     internal (string Text, FeedbackKind Kind, bool Visible, bool Progress) StatusForTest =>
@@ -168,15 +169,13 @@ internal sealed class QuickAccessWindow : Window
         ShortToolTip(_keep);
         Grid.SetColumn(_keep, 2); receipt.Children.Add(_keep);
         panel.Children.Add(receipt);
-        preview.MouseLeftButtonDown += (_, e) => { _dragStart = e.GetPosition(preview); _dragArmed = true; };
-        preview.MouseLeftButtonUp += (_, _) => _dragArmed = false;
+        preview.MouseLeftButtonDown += (_, e) => BeginPreviewGesture(e.GetPosition(preview));
+        preview.MouseLeftButtonUp += (_, e) => EndPreviewGesture(e.GetPosition(preview));
         preview.MouseMove += async (_, e) =>
         {
             Point p = e.GetPosition(preview);
-            if (!_dragArmed || _running.Contains("Drag") || e.LeftButton != MouseButtonState.Pressed
-                || (Math.Abs(p.X - _dragStart.X) < SystemParameters.MinimumHorizontalDragDistance
-                    && Math.Abs(p.Y - _dragStart.Y) < SystemParameters.MinimumVerticalDragDistance)) return;
-            _dragArmed = false;
+            if (_running.Contains("Drag") || e.LeftButton != MouseButtonState.Pressed
+                || !TryBeginPreviewDrag(p)) return;
             await RunAsync("Drag", async () =>
             {
                 string path = await export();
@@ -194,7 +193,7 @@ internal sealed class QuickAccessWindow : Window
             catch (Exception error) when (error is not OutOfMemoryException)
             {
                 // The card stays with the reason, so the user can retry instead of losing it.
-                ShowStatus(UserFacingError.GetMessage(error) ?? FailureText("Edit"), FeedbackKind.ActionRequired);
+                ShowActionResult("Edit", UserFacingError.GetMessage(error) ?? FailureText("Edit"), FeedbackKind.ActionRequired);
                 return;
             }
             Close();
@@ -347,7 +346,7 @@ internal sealed class QuickAccessWindow : Window
         {
             if (!_keyboardAccess || !IsKeyboardFocusWithin) return;
             _keyboardInteracting = true;
-            e.Handled = HandleShortcut(e.Key == Key.System ? e.SystemKey : e.Key, Keyboard.Modifiers);
+            e.Handled = HandleKeyDown(e, Keyboard.Modifiers);
         };
         Deactivated += (_, _) =>
         {
@@ -392,6 +391,35 @@ internal sealed class QuickAccessWindow : Window
         _keyboardRouter?.IsRegisteredFor(this) == true ? "Onboard_QuickCardTip" : "Onboard_QuickCardTipNoHotkey");
 
     internal bool HandleShortcut(Key key, ModifierKeys modifiers) => ShortcutCatalog.Execute(ShortcutScope.QuickAccess, key, modifiers, _actions);
+
+    internal static Key ResolveShortcutKey(KeyEventArgs e) =>
+        ShortcutInput.Resolve(e.Key == Key.System ? e.SystemKey : e.Key, e.ImeProcessedKey, textInputFocused: false);
+
+    internal bool HandleKeyDown(KeyEventArgs e, ModifierKeys modifiers) => HandleShortcut(ResolveShortcutKey(e), modifiers);
+
+    internal void BeginPreviewGesture(Point position)
+    {
+        _dragStart = position;
+        _dragArmed = true;
+    }
+
+    private bool ExceedsPreviewDragThreshold(Point position) =>
+        Math.Abs(position.X - _dragStart.X) >= SystemParameters.MinimumHorizontalDragDistance
+        || Math.Abs(position.Y - _dragStart.Y) >= SystemParameters.MinimumVerticalDragDistance;
+
+    internal bool TryBeginPreviewDrag(Point position)
+    {
+        if (!_dragArmed || !ExceedsPreviewDragThreshold(position)) return false;
+        _dragArmed = false;
+        return true;
+    }
+
+    internal void EndPreviewGesture(Point position)
+    {
+        bool clicked = _dragArmed && !ExceedsPreviewDragThreshold(position);
+        _dragArmed = false;
+        if (clicked && !_keyboardAccess) ActivateForKeyboard();
+    }
 
     /// <summary>A command glyph on the shared 20x20 grid: close and the five actions.</summary>
     private SymbolIcon Glyph(string key)
@@ -514,7 +542,7 @@ internal sealed class QuickAccessWindow : Window
     internal void Advance(TimeSpan time, bool interacting)
     {
         // A failure keeps the card until the user closes it or a retry succeeds.
-        if (IsKept || interacting || _heldForFailure) return;
+        if (IsKept || interacting || IsHeldForFailure) return;
         _elapsed += time;
         UpdateRemaining();
         if (_elapsed >= Lifetime) Close();
@@ -584,7 +612,7 @@ internal sealed class QuickAccessWindow : Window
         Button? button = _actionButtons.GetValueOrDefault(action);
         bool refocus = button?.IsKeyboardFocused == true;
         if (button is not null) button.IsEnabled = false;
-        ShowStatus(UiText.Get(progress), FeedbackKind.Progress);
+        if (!IsHeldForFailure) ShowStatus(UiText.Get(progress), FeedbackKind.Progress);
         if (_running.Count == 1) _progressReveal.Start();
         string message;
         FeedbackKind kind;
@@ -604,6 +632,25 @@ internal sealed class QuickAccessWindow : Window
         }
 
         if (refocus && IsActive) button!.Focus();
+        ShowActionResult(action, message, kind);
+    }
+
+    private void ShowActionResult(string action, string message, FeedbackKind kind)
+    {
+        bool failed = FeedbackTiming.StaysUntilDismissed(kind);
+        bool resolved = false;
+        if (failed || kind == FeedbackKind.Confirmation)
+            resolved = _failures.RemoveAll(failure => failure.Action == action) > 0;
+        if (failed) _failures.Add((action, message));
+
+        // Only a successful retry of the failed action can release its failure. Other
+        // results are announced without replacing the retry instruction on the card.
+        if (IsHeldForFailure && !failed)
+        {
+            if (resolved) ShowStatus(_failures[^1].Message, FeedbackKind.ActionRequired);
+            FeedbackTiming.Announce(_status, message, kind, "MyCapture.QuickAccess.Status");
+            return;
+        }
         ShowStatus(message, kind);
     }
 
@@ -629,9 +676,8 @@ internal sealed class QuickAccessWindow : Window
         _statusRow.Visibility = Visibility.Visible;
         if (kind != FeedbackKind.Progress)
         {
-            _heldForFailure = failed;
             // While held, the countdown bar would promise a close that is not coming.
-            _remaining.Visibility = failed && !IsBusy ? Visibility.Hidden : Visibility.Visible;
+            _remaining.Visibility = IsHeldForFailure && !IsBusy ? Visibility.Hidden : Visibility.Visible;
             if (!failed)
             {
                 TimeSpan hold = Lifetime - FeedbackTiming.HoldAfterResult;
@@ -671,6 +717,7 @@ internal sealed class QuickAccessWindow : Window
         _remaining.IsIndeterminate = false;
         _remaining.SetResourceReference(ForegroundProperty, "Border.Strong");
         UpdateRemaining();
+        _remaining.Visibility = IsHeldForFailure ? Visibility.Hidden : Visibility.Visible;
         if (_statusKind == FeedbackKind.Progress) _statusRow.Visibility = Visibility.Collapsed;
     }
 }
