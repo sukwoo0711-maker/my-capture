@@ -128,6 +128,7 @@ internal static class WorkspaceTheme
         }
         // Surface.Hover was just replaced; the folder card's wash aliases the new brush.
         ThemeService.ApplyFolderHoverResources(resources, contrast: false);
+        ThemeService.ApplyButtonResources(resources, palette, contrast: false);
         ThemeBrushes.Refresh(resources);
     }
 }

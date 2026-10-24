@@ -205,8 +205,42 @@ internal static class ThemeService
         // High contrast follows the user's system palette without a translucent wash.
         ApplyCropResources(resources, contrast);
         CaptureGuidePalette.Apply(resources, theme, captureGuideColor, contrast, accent);
+        ApplyButtonResources(resources, theme, contrast);
         ThemeBrushes.Refresh(resources);
         ShortcutRevealMotion.SettleAll();
+    }
+
+    internal static void ApplyButtonResources(ResourceDictionary resources, AppTheme theme, bool contrast)
+    {
+        bool highContrast = contrast || theme == AppTheme.HighContrast;
+        bool light = AppThemeNames.IsLight(theme);
+        if (highContrast) resources["Button.Fill"] = resources["Surface.Overlay"];
+        else SetBrush(resources, "Button.Fill", light ? Colors.White : Color.FromRgb(0x25, 0x32, 0x3C));
+        resources["Button.FontWeight"] = highContrast ? FontWeights.SemiBold : FontWeights.Normal;
+        resources["Button.ChromeInset"] = highContrast ? new Thickness(0) : new Thickness(0, 4, 0, 4);
+        resources["Button.ChromeInset.Compact"] = highContrast ? new Thickness(0) : new Thickness(0, 2, 0, 2);
+        resources["Button.FocusInset"] = highContrast ? new Thickness(1) : new Thickness(1, 5, 1, 5);
+        resources["Button.FocusInset.Compact"] = highContrast ? new Thickness(1) : new Thickness(1, 3, 1, 3);
+        resources["Button.PrimaryFocusInset"] = highContrast ? new Thickness(2) : new Thickness(2, 6, 2, 6);
+        resources["Button.PrimaryFocusInset.Compact"] = highContrast ? new Thickness(2) : new Thickness(2, 4, 2, 4);
+        if (highContrast)
+        {
+            resources["Button.BorderBrush"] = resources["Border.Control"];
+            return;
+        }
+
+        Color top = (Color)ColorConverter.ConvertFromString(light ? "#E2E6EC" : "#3A4853");
+        Color bottom = (Color)ColorConverter.ConvertFromString(light ? "#B8C0CB" : "#1E2830");
+        var border = new LinearGradientBrush
+        {
+            StartPoint = new Point(0, 0), EndPoint = new Point(0, 1),
+            GradientStops = new GradientStopCollection
+            {
+                new GradientStop(top, 0), new GradientStop(top, 0.8), new GradientStop(bottom, 1),
+            },
+        };
+        border.Freeze();
+        resources["Button.BorderBrush"] = border;
     }
 
     /// <summary>The system colour of <paramref name="role"/>, always opaque.</summary>
