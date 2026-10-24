@@ -156,6 +156,9 @@ public static class FluidMotion
     // An 18px glyph needs a deeper press than a whole button to read as pressed at all.
     private const double PressedGlyphScale = 0.9;
 
+    /// <summary>The scale an <see cref="ExitMotion.Shrink"/> exit ends at, around the window's centre.</summary>
+    internal const double ShrinkExitScale = 0.97;
+
     public static void SetWindowEntrance(DependencyObject element, bool value) =>
         element.SetValue(WindowEntranceProperty, value);
 
@@ -390,7 +393,7 @@ public static class FluidMotion
             {
                 var scale = new ScaleTransform(1, 1);
                 surface.RenderTransformOrigin = new Point(0.5, 0.5);
-                var shrink = new DoubleAnimation(1, 0.97, length) { EasingFunction = StandardEasing };
+                var shrink = new DoubleAnimation(1, ShrinkExitScale, length) { EasingFunction = StandardEasing };
                 scale.BeginAnimation(ScaleTransform.ScaleXProperty, shrink);
                 scale.BeginAnimation(ScaleTransform.ScaleYProperty, shrink);
                 owned = scale;

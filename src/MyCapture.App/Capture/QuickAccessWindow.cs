@@ -74,8 +74,8 @@ internal sealed class QuickAccessWindow : Window
     /// <summary>How long a pressed action's icon shows a check after it succeeds.</summary>
     internal static readonly TimeSpan SuccessCheckTime = TimeSpan.FromSeconds(1.2);
 
-    // A card receiving a flying capture fades in without the shared entrance's settle.
-    private static readonly Duration LandingFadeDuration = new(TimeSpan.FromMilliseconds(100));
+    /// <summary>A card receiving a flying capture fades in without the shared entrance's settle.</summary>
+    internal static readonly Duration LandingFadeDuration = new(TimeSpan.FromMilliseconds(100));
 
     // The status check redraws over 200 ms; the status text keeps the success colour for 150 ms
     // and then fades back over 500 ms.

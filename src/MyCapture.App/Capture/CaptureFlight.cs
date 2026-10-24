@@ -374,12 +374,17 @@ internal sealed class CaptureFlight
 
     private void OnRendering(object? sender, EventArgs e) => Tick();
 
-    /// <summary>The lifted image at rest on its source, its shadow fading in.</summary>
-    private CaptureFlightFrame LiftFrame(double elapsedMs, double opacity) => new(
-        ToRect(Source), LiftBlurDip * _scale, LiftOffsetDip * _scale, LiftShadowOpacity * LiftLevel(elapsedMs), opacity);
+    private CaptureFlightFrame LiftFrame(double elapsedMs, double opacity) => LiftFrame(ToRect(Source), elapsedMs, _scale, opacity);
 
-    // The lift's shadow fades in over the shared 167 ms token.
-    private static double LiftLevel(double elapsedMs)
+    /// <summary>
+    /// The image lifted <paramref name="elapsedMs"/> ago, at rest on <paramref name="source"/>
+    /// (physical pixels at <paramref name="scale"/>), its shadow fading in.
+    /// </summary>
+    internal static CaptureFlightFrame LiftFrame(Rect source, double elapsedMs, double scale, double opacity = 1) => new(
+        source, LiftBlurDip * scale, LiftOffsetDip * scale, LiftShadowOpacity * LiftLevel(elapsedMs), opacity);
+
+    /// <summary>How far the lift's shadow has faded in, 0 to 1, over the shared 167 ms token.</summary>
+    internal static double LiftLevel(double elapsedMs)
     {
         double t = Math.Clamp(elapsedMs / FluidMotion.NormalDuration.TimeSpan.TotalMilliseconds, 0, 1);
         return FluidMotion.SoftLandingEasing.Ease(t);
