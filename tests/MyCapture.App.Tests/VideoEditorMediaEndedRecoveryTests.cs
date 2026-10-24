@@ -1,4 +1,5 @@
 using System.IO;
+using System.Reflection;
 using System.Windows;
 using Microsoft.Extensions.Logging.Abstractions;
 using MyCapture.App.Recording;
@@ -86,6 +87,65 @@ public sealed class VideoEditorMediaEndedRecoveryTests
                 $"the missed landing was positioned {engine.PositionCountForTest - positioned} time(s), not asked again");
             Assert.True(failures.Count == 0, string.Join(Environment.NewLine, failures));
             Assert.Equal(engine.EndedReportCountForTest, engine.ReopenCountForTest);
+        }
+        finally
+        {
+            editor?.Close();
+            RangePatternClip.Pump(TimeSpan.FromMilliseconds(50));
+            OwnedTestDirectory.Delete(dir);
+        }
+    });
+
+    /// <summary>
+    /// After a playback to the end, WPF holds the player stopped, and the first paused seek from
+    /// there shows the right frame but leaves the player past the position. That seek is watched
+    /// until the position stays put; seeks before the end are not.
+    /// </summary>
+    [Fact]
+    public void FirstSeekAfterPlaybackEnd_StaysAtTheRequestedPosition() => StaTestHost.Run(() =>
+    {
+        string dir = OwnedTestDirectory.Create("mc-media-after-end-");
+        VideoEditorWindow? editor = null;
+        try
+        {
+            string clip = EncodeClip(dir, out double containerMs);
+            editor = OpenEditor(clip, containerMs, dir);
+            MediaElementPreviewEngine engine = editor.PreviewEngineForTest;
+            using var export = new MediaFoundationVideoFrameReader(clip);
+            var failures = new List<string>();
+
+            Check(editor, export, failures, "before", 1500);
+            Assert.Equal(0, engine.SettleCountForTest);
+
+            typeof(VideoEditorWindow).GetMethod("Seek", BindingFlags.Instance | BindingFlags.NonPublic)!
+                .Invoke(editor, [1800.0]);
+            RangePatternClip.Pump(TimeSpan.FromMilliseconds(200));
+            editor.ShortcutActions["Play"]();
+            DateTime until = DateTime.UtcNow.AddSeconds(5);
+            bool started = false;
+            while (DateTime.UtcNow < until && !(started && !editor.PlayButtonShowsPauseForTest))
+            {
+                started |= editor.PlayButtonShowsPauseForTest;
+                RangePatternClip.Pump(TimeSpan.FromMilliseconds(5));
+            }
+
+            Assert.True(started && !editor.PlayButtonShowsPauseForTest, "playback did not run to the end");
+            RangePatternClip.Pump(TimeSpan.FromMilliseconds(300));
+
+            foreach (double target in new[] { 600.0, 1234.5 })
+            {
+                Check(editor, export, failures, "after end", target);
+                RangePatternClip.Pump(TimeSpan.FromMilliseconds(300));
+                double stopped = editor.MediaForTest.Position.TotalMilliseconds;
+                double position = target + MediaElementPreviewEngine.PresentationToleranceMs;
+                if (Math.Abs(stopped - position) > 0.5)
+                {
+                    failures.Add($"after end: the player stopped at {stopped:F3} ms for {position:F3} ms");
+                }
+            }
+
+            Assert.True(failures.Count == 0, string.Join(Environment.NewLine, failures));
+            Assert.True(engine.SettleCountForTest >= 1, "the first seek after the end was not watched");
         }
         finally
         {

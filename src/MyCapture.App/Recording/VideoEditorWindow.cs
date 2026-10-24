@@ -1358,6 +1358,7 @@ internal sealed partial class VideoEditorWindow : Window
 
     private void OnMediaEnded(object? sender, RoutedEventArgs e)
     {
+        _previewEngine.StreamReachedEnd();
         _media.Pause();
         _isPlaying = false;
         _playbackTimer.Stop();
@@ -1570,6 +1571,12 @@ internal sealed partial class VideoEditorWindow : Window
         }
         if (decision.Action == PreviewCutAction.Stop)
         {
+            if (_durationMs - decision.SourceTimeMs <= 0.5)
+            {
+                // Paused at the last frame, the player has usually reached the end of the stream.
+                _previewEngine.StreamReachedEnd();
+            }
+
             if (_cutTimeline.RemovedRanges.Count > 0)
             {
                 SettleCutPlaybackEnd();
