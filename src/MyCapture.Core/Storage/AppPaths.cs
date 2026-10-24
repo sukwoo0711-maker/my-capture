@@ -26,12 +26,14 @@ public sealed class AppPaths
 {
     public const string AppFolderName = "MyCapture";
 
-    private AppPaths(string dataRoot, string capturesRoot, string quickSaveRoot, string ocrModelsRoot)
+    private AppPaths(string dataRoot, string capturesRoot, string quickSaveRoot, string ocrModelsRoot,
+        string translationModelsRoot)
     {
         DataRoot = CanonicalizeRoot(dataRoot, nameof(dataRoot));
         CapturesRoot = CanonicalizeRoot(capturesRoot, nameof(capturesRoot));
         QuickSaveRoot = CanonicalizeRoot(quickSaveRoot, nameof(quickSaveRoot));
         OcrModelsRoot = CanonicalizeRoot(ocrModelsRoot, nameof(ocrModelsRoot));
+        TranslationModelsRoot = CanonicalizeRoot(translationModelsRoot, nameof(translationModelsRoot));
     }
 
     /// <summary>
@@ -54,6 +56,12 @@ public sealed class AppPaths
     /// profiles do not copy tens of megabytes of ONNX weights.
     /// </summary>
     public string OcrModelsRoot { get; }
+
+    /// <summary>
+    /// Downloaded offline translation models, fetched only when translation is turned on.
+    /// Kept under local app data for the same reason as <see cref="OcrModelsRoot"/>.
+    /// </summary>
+    public string TranslationModelsRoot { get; }
 
     public string SettingsFile => Path.Combine(DataRoot, "settings.json");
 
@@ -91,15 +99,17 @@ public sealed class AppPaths
         string localAppData = Environment.GetFolderPath(
             Environment.SpecialFolder.LocalApplicationData,
             Environment.SpecialFolderOption.Create);
-        string ocrModelsRoot = Path.Combine(
-            string.IsNullOrEmpty(localAppData) ? dataRoot : Path.Combine(localAppData, AppFolderName),
-            "ocr-models");
+        // Downloaded models fall back to the data root when local app data cannot be resolved.
+        string modelsBase = string.IsNullOrEmpty(localAppData)
+            ? dataRoot
+            : Path.Combine(localAppData, AppFolderName);
 
         return new AppPaths(
             dataRoot: dataRoot,
             capturesRoot: Path.Combine(dataRoot, "captures"),
             quickSaveRoot: Path.Combine(quickSaveBase, "Captures"),
-            ocrModelsRoot: ocrModelsRoot);
+            ocrModelsRoot: Path.Combine(modelsBase, "ocr-models"),
+            translationModelsRoot: Path.Combine(modelsBase, "translation-models"));
     }
 
     /// <summary>
@@ -117,7 +127,8 @@ public sealed class AppPaths
             dataRoot: localState,
             capturesRoot: Path.Combine(localState, "captures"),
             quickSaveRoot: Path.Combine(string.IsNullOrEmpty(pictures) ? localState : pictures, "Captures"),
-            ocrModelsRoot: Path.Combine(localCache, "ocr-models"));
+            ocrModelsRoot: Path.Combine(localCache, "ocr-models"),
+            translationModelsRoot: Path.Combine(localCache, "translation-models"));
     }
 
     /// <summary>
@@ -131,7 +142,8 @@ public sealed class AppPaths
             dataRoot: root,
             capturesRoot: Path.Combine(root, "captures"),
             quickSaveRoot: Path.Combine(root, "quicksave"),
-            ocrModelsRoot: Path.Combine(root, "ocr-models"));
+            ocrModelsRoot: Path.Combine(root, "ocr-models"),
+            translationModelsRoot: Path.Combine(root, "translation-models"));
     }
 
     /// <summary>
@@ -141,13 +153,13 @@ public sealed class AppPaths
     public AppPaths WithCapturesRoot(string capturesRoot)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(capturesRoot);
-        return new AppPaths(DataRoot, capturesRoot, QuickSaveRoot, OcrModelsRoot);
+        return new AppPaths(DataRoot, capturesRoot, QuickSaveRoot, OcrModelsRoot, TranslationModelsRoot);
     }
 
     public AppPaths WithQuickSaveRoot(string quickSaveRoot)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(quickSaveRoot);
-        return new AppPaths(DataRoot, CapturesRoot, quickSaveRoot, OcrModelsRoot);
+        return new AppPaths(DataRoot, CapturesRoot, quickSaveRoot, OcrModelsRoot, TranslationModelsRoot);
     }
 
     /// <summary>

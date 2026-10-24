@@ -3,7 +3,7 @@ using System.Text;
 
 namespace MyCapture.Ocr;
 
-public enum OcrExtractionMode { Table, Code, Text }
+public enum OcrExtractionMode { Table, Code, Text, Translation }
 
 public sealed record OcrTableCell(string Text, OcrRect Bounds, OcrRect Region);
 public sealed record OcrTableRow(IReadOnlyList<OcrTableCell> Cells);

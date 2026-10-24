@@ -14,6 +14,7 @@ MyCapture의 공식 배포 경로는 Microsoft Store 하나입니다. 이 문서
 | 로그인 시 자동 시작 | HKCU `Run` 키, 기본 켜짐 | 매니페스트 시작 작업(`MyCaptureStartup`). 설치 직후 꺼져 있고, 첫 실행 화면의 선택(기본 선택됨)을 적용 |
 | 설정·라이브러리 | `%APPDATA%\MyCapture` | `%LOCALAPPDATA%\Packages\<패키지 패밀리 이름>\LocalState` |
 | OCR 모델 | `%LOCALAPPDATA%\MyCapture\ocr-models` | 같은 패키지 폴더의 `LocalCache\ocr-models` |
+| 번역 모델(번역을 켠 경우만) | `%LOCALAPPDATA%\MyCapture\translation-models` | 같은 패키지 폴더의 `LocalCache\translation-models` |
 | 드래그 내보내기 임시 파일 | `%TEMP%\MyCapture\DragExports` | 같은 패키지 폴더의 `TempState\MyCapture\DragExports` |
 | 빠른 저장 | `사진\Captures` | 같음 |
 | 평가 요청 | 없음 | 성공한 캡처 10회와 최초 실행 후 3일이 지나면 앱 안 평가 안내를 한 번만 표시하고, 사용자가 평가를 고를 때만 Microsoft Store 평가 창을 엶. 설정 > 정보 탭에 "Microsoft Store에서 평가" 버튼 |
