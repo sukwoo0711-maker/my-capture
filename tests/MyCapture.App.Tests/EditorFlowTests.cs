@@ -238,37 +238,30 @@ public sealed class EditorFlowTests
 
     // ---- Copy and Done -----------------------------------------------------------------
 
+    // The owner decided in real-device testing (2026-10-12) that Copy and Ctrl+C finish the edit:
+    // save, copy and close like Done. 4.6.0 split them into a copy-only command by mistake; this
+    // was restored on 2026-10-25. Do not change it without asking the owner.
     [Fact]
-    public void CopyKeepsTheEditorAndHistoryUntilDone() => StaTestHost.Run(() =>
+    public void CopyAndCtrlCFinishTheEditLikeDone_OwnerDecision() => StaTestHost.Run(() =>
     {
         using var language = UiText.UseLanguage("ko-KR");
         using EditorWindowHost host = EditorWindowHost.Create();
         AddRectangle(Controller(host.Editor));
-        var results = new Queue<bool>([false, true, true]);
+        var results = new Queue<bool>([false, true]);
         var actions = new List<EditorCommitAction>();
         host.Window.CommitRequested = result => { actions.Add(result.Action); return Task.FromResult(results.Dequeue()); };
         int completed = 0;
         host.Window.Committed += (_, _) => completed++;
-        Assert.Equal("편집한 이미지를 클립보드에 복사 (Ctrl+C)", Command(host.Editor, "EditorFlowCopy").ToolTip);
+        Assert.Equal("클립보드에 복사하고 라이브러리에 저장한 뒤 닫기 (Ctrl+C)", Command(host.Editor, "EditorFlowCopy").ToolTip);
 
-        // A failed copy reports the clipboard failure and leaves the edit available.
+        // A failed save keeps the editor open for a retry, as Done does.
         ClickCommand(host.Editor, "EditorFlowCopy");
-        Assert.Equal(UiText.Get("Text_3D1E714B56CA"), host.Editor.StatusText);
+        Assert.Equal(UiText.Get("Text_06F58809C083"), host.Editor.StatusText);
         Assert.True(host.Window.IsVisible);
         Assert.True(host.Editor.IsHitTestVisible);
 
         Assert.True(host.Editor.HandleShortcut(Key.C, ModifierKeys.Control));
-        Assert.Equal(new[] { EditorCommitAction.CopyToClipboard, EditorCommitAction.CopyToClipboard }, actions);
-        Assert.Equal(UiText.Get("EditorFlow_Copied"), host.Editor.StatusText);
-        Assert.Equal(0, completed);
-        Assert.True(host.Window.IsVisible);
-        Assert.True(host.Editor.IsHitTestVisible);
-        Assert.True(Controller(host.Editor).PerformUndo());
-        Assert.Empty(Controller(host.Editor).Document.Items);
-        Assert.True(Controller(host.Editor).PerformRedo());
-        Assert.Single(Controller(host.Editor).Document.Items);
-        ClickCommand(host.Editor, "EditorFlowDone");
-        Assert.Equal(EditorCommitAction.Done, actions[^1]);
+        Assert.Equal(new[] { EditorCommitAction.Done, EditorCommitAction.Done }, actions);
         Assert.Equal(1, completed);
     });
 
