@@ -174,6 +174,41 @@
             </Grid>
         </DataTemplate>
 
+        <Style x:Key="Gallery.SourceBadge" TargetType="Button" BasedOn="{StaticResource Button.GhostCompact}">
+            <Setter Property="Height" Value="22" />
+            <Setter Property="MinHeight" Value="22" />
+            <Setter Property="MaxWidth" Value="130" />
+            <Setter Property="Padding" Value="6,1" />
+            <Setter Property="Foreground" Value="{DynamicResource Text.Secondary}" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding IsMouseOver, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" Value="True">
+                    <Setter Property="Height" Value="{DynamicResource CommandButton.Height.Compact}" />
+                    <Setter Property="MinHeight" Value="26" />
+                    <Setter Property="MaxWidth" Value="200" />
+                    <Setter Property="Padding" Value="6,3" />
+                    <Setter Property="Foreground" Value="{DynamicResource Text.Primary}" />
+                    <Setter Property="BorderThickness" Value="1" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding IsKeyboardFocusWithin, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" Value="True">
+                    <Setter Property="Height" Value="{DynamicResource CommandButton.Height.Compact}" />
+                    <Setter Property="MinHeight" Value="26" />
+                    <Setter Property="MaxWidth" Value="200" />
+                    <Setter Property="Padding" Value="6,3" />
+                    <Setter Property="Foreground" Value="{DynamicResource Text.Primary}" />
+                    <Setter Property="BorderThickness" Value="1" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding IsSelected}" Value="True">
+                    <Setter Property="Height" Value="{DynamicResource CommandButton.Height.Compact}" />
+                    <Setter Property="MinHeight" Value="26" />
+                    <Setter Property="MaxWidth" Value="200" />
+                    <Setter Property="Padding" Value="6,3" />
+                    <Setter Property="Foreground" Value="{DynamicResource Text.Primary}" />
+                    <Setter Property="BorderThickness" Value="1" />
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+
         <DataTemplate x:Key="Gallery.TileTemplate" DataType="{x:Type gallery:GalleryItemViewModel}">
             <!-- Contain preserves screenshot text and edges; overlays keep a fixed DIP size. -->
             <Border x:Name="TileCard" Background="{DynamicResource Surface.Raised}"
@@ -189,29 +224,35 @@
                         <Grid>
                             <Image Source="{Binding Thumbnail}" Stretch="Uniform"
                                    RenderOptions.BitmapScalingMode="HighQuality" AutomationProperties.Name="{Binding AccessibleName}" />
-                            <Button x:Name="SourceBadge" Style="{StaticResource Button.GhostCompact}"
-                                    gallery:GallerySourceBadge.Provenance="{Binding SourceProvenance}"
-                                    AutomationProperties.AutomationId="LibrarySourceBadge"
-                                    HorizontalAlignment="Left" VerticalAlignment="Bottom" HorizontalContentAlignment="Stretch"
-                                    Margin="5" Padding="6,3" MinWidth="0" MinHeight="26" MaxWidth="200"
-                                    FontSize="{DynamicResource FontSize.Caption}"
-                                    Background="{DynamicResource Surface.Floating}" Foreground="{DynamicResource Text.Primary}"
-                                    BorderBrush="{DynamicResource Border.Subtle}" BorderThickness="1"
-                                    Visibility="{Binding HasSourceBadge, Converter={StaticResource BoolToVisibility}}" />
                             <TextBlock Text="{Binding PreviewUnavailableText}" Margin="6" TextWrapping="Wrap" TextAlignment="Center"
                                        FontSize="{DynamicResource FontSize.Caption}" Foreground="{DynamicResource Text.Secondary}"
                                        HorizontalAlignment="Center" VerticalAlignment="Center"
                                        Visibility="{Binding IsBroken, Converter={StaticResource BoolToVisibility}}" />
-                            <Border x:Name="VideoBadge" HorizontalAlignment="Right" VerticalAlignment="Bottom"
-                                    Margin="5" Padding="5,2" CornerRadius="4" Background="{DynamicResource Surface.Raised}"
-                                    IsHitTestVisible="False" Visibility="{Binding IsVideo, Converter={StaticResource BoolToVisibility}}">
-                                <StackPanel Orientation="Horizontal">
-                                    <themes:SymbolIcon Size="12" Data="{StaticResource Icon.Play}" Margin="0,0,4,0"
-                                                       Fill="{DynamicResource Text.Primary}" Stroke="{DynamicResource Text.Primary}" />
-                                    <TextBlock Text="{Binding DurationCaption}" FontSize="{DynamicResource FontSize.Caption}"
-                                               Foreground="{DynamicResource Text.Primary}" />
-                                </StackPanel>
-                            </Border>
+                            <Grid VerticalAlignment="Bottom">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <Button x:Name="SourceBadge" Style="{StaticResource Gallery.SourceBadge}"
+                                        gallery:GallerySourceBadge.Provenance="{Binding SourceProvenance}"
+                                        AutomationProperties.AutomationId="LibrarySourceBadge"
+                                        HorizontalAlignment="Left" VerticalAlignment="Bottom" HorizontalContentAlignment="Stretch"
+                                        Margin="5" MinWidth="0"
+                                        FontSize="{DynamicResource FontSize.Caption}"
+                                        Background="{DynamicResource Surface.Floating}"
+                                        BorderBrush="{DynamicResource Border.Subtle}"
+                                        Visibility="{Binding HasSourceBadge, Converter={StaticResource BoolToVisibility}}" />
+                                <Border x:Name="VideoBadge" Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Bottom"
+                                        Margin="5" Padding="5,2" CornerRadius="4" Background="{DynamicResource Surface.Raised}"
+                                        IsHitTestVisible="False" Visibility="{Binding IsVideo, Converter={StaticResource BoolToVisibility}}">
+                                    <StackPanel Orientation="Horizontal">
+                                        <themes:SymbolIcon Size="12" Data="{StaticResource Icon.Play}" Margin="0,0,4,0"
+                                                           Fill="{DynamicResource Text.Primary}" Stroke="{DynamicResource Text.Primary}" />
+                                        <TextBlock Text="{Binding DurationCaption}" FontSize="{DynamicResource FontSize.Caption}"
+                                                   Foreground="{DynamicResource Text.Primary}" />
+                                    </StackPanel>
+                                </Border>
+                            </Grid>
                             <!-- Opacity preserves tab stops; entering the tile reveals every action. -->
                             <Border x:Name="TileActions" HorizontalAlignment="Right" VerticalAlignment="Top"
                                     Margin="4" Padding="2" CornerRadius="5"
@@ -485,29 +526,35 @@
                         <Grid>
                             <Image Source="{Binding Thumbnail}" Stretch="Uniform"
                                    RenderOptions.BitmapScalingMode="HighQuality" AutomationProperties.Name="{Binding AccessibleName}" />
-                            <Button x:Name="SourceBadge" Style="{StaticResource Button.GhostCompact}"
-                                    gallery:GallerySourceBadge.Provenance="{Binding SourceProvenance}"
-                                    AutomationProperties.AutomationId="LibrarySourceBadge"
-                                    HorizontalAlignment="Left" VerticalAlignment="Bottom" HorizontalContentAlignment="Stretch"
-                                    Margin="5" Padding="6,3" MinWidth="0" MinHeight="26" MaxWidth="200"
-                                    FontSize="{DynamicResource FontSize.Caption}"
-                                    Background="{DynamicResource Surface.Floating}" Foreground="{DynamicResource Text.Primary}"
-                                    BorderBrush="{DynamicResource Border.Subtle}" BorderThickness="1"
-                                    Visibility="{Binding HasSourceBadge, Converter={StaticResource BoolToVisibility}}" />
                             <TextBlock Text="{Binding PreviewUnavailableText}" Margin="6" TextWrapping="Wrap" TextAlignment="Center"
                                        FontSize="{DynamicResource FontSize.Caption}" Foreground="{DynamicResource Text.Secondary}"
                                        HorizontalAlignment="Center" VerticalAlignment="Center"
                                        Visibility="{Binding IsBroken, Converter={StaticResource BoolToVisibility}}" />
-                            <Border x:Name="VideoBadge" HorizontalAlignment="Right" VerticalAlignment="Bottom"
-                                    Margin="5" Padding="5,2" CornerRadius="4" Background="{DynamicResource Surface.Raised}"
-                                    IsHitTestVisible="False" Visibility="{Binding IsVideo, Converter={StaticResource BoolToVisibility}}">
-                                <StackPanel Orientation="Horizontal">
-                                    <themes:SymbolIcon Size="12" Data="{StaticResource Icon.Play}" Margin="0,0,4,0"
-                                                       Fill="{DynamicResource Text.Primary}" Stroke="{DynamicResource Text.Primary}" />
-                                    <TextBlock Text="{Binding DurationCaption}" FontSize="{DynamicResource FontSize.Caption}"
-                                               Foreground="{DynamicResource Text.Primary}" />
-                                </StackPanel>
-                            </Border>
+                            <Grid VerticalAlignment="Bottom">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <Button x:Name="SourceBadge" Style="{StaticResource Gallery.SourceBadge}"
+                                        gallery:GallerySourceBadge.Provenance="{Binding SourceProvenance}"
+                                        AutomationProperties.AutomationId="LibrarySourceBadge"
+                                        HorizontalAlignment="Left" VerticalAlignment="Bottom" HorizontalContentAlignment="Stretch"
+                                        Margin="5" MinWidth="0"
+                                        FontSize="{DynamicResource FontSize.Caption}"
+                                        Background="{DynamicResource Surface.Floating}"
+                                        BorderBrush="{DynamicResource Border.Subtle}"
+                                        Visibility="{Binding HasSourceBadge, Converter={StaticResource BoolToVisibility}}" />
+                                <Border x:Name="VideoBadge" Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Bottom"
+                                        Margin="5" Padding="5,2" CornerRadius="4" Background="{DynamicResource Surface.Raised}"
+                                        IsHitTestVisible="False" Visibility="{Binding IsVideo, Converter={StaticResource BoolToVisibility}}">
+                                    <StackPanel Orientation="Horizontal">
+                                        <themes:SymbolIcon Size="12" Data="{StaticResource Icon.Play}" Margin="0,0,4,0"
+                                                           Fill="{DynamicResource Text.Primary}" Stroke="{DynamicResource Text.Primary}" />
+                                        <TextBlock Text="{Binding DurationCaption}" FontSize="{DynamicResource FontSize.Caption}"
+                                                   Foreground="{DynamicResource Text.Primary}" />
+                                    </StackPanel>
+                                </Border>
+                            </Grid>
                             <!-- Opacity preserves tab stops; entering the tile reveals every action. -->
                             <Border x:Name="TileActions" HorizontalAlignment="Right" VerticalAlignment="Top"
                                     Margin="4" Padding="2" CornerRadius="5"

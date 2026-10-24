@@ -47,6 +47,7 @@ internal sealed partial class SettingsWindow : Window
         _showSaveFailureMessage = showSaveFailureMessage ?? (_ => { });
 
         InitializeComponent();
+        MonitorWindowPlacement.KeepOnPointerMonitor(this, marginDip: 0);
         InitializeAbout();
         InitializeUpdates();
         InitializeStoreRating();
