@@ -59,7 +59,7 @@ internal sealed class PinManager
     private bool _recordClosedPins = true;
     private readonly Func<PinSettings> _settings;
     private readonly PinImageSaveService? _saveService;
-    private readonly Func<BitmapSource, string?, string?, CaptureProvenance?, Task<bool>> _copyImageAsync;
+    private readonly Func<BitmapSource, string?, string?, CaptureProvenance?, ClipboardImageService.PngCache?, Task<bool>> _copyImageAsync;
     private readonly Func<string, Task<bool>> _copyTextAsync;
     private readonly ILogger _log;
 
@@ -80,8 +80,8 @@ internal sealed class PinManager
         : this(
             settings,
             saveService,
-            static (image, sourceUrl, text, provenance) => ClipboardImageService.CopyImageWithTextAsync(
-                image, sourceUrl, text, writeData: null, provenance),
+            static (image, sourceUrl, text, provenance, cache) => ClipboardImageService.CopyImageWithTextAsync(
+                image, sourceUrl, text, writeData: null, provenance, pngCache: cache),
             ClipboardImageService.CopyTextAsync,
             log)
     {
@@ -127,6 +127,17 @@ internal sealed class PinManager
         Func<PinSettings> settings,
         PinImageSaveService? saveService,
         Func<BitmapSource, string?, string?, CaptureProvenance?, Task<bool>> copyImageAsync,
+        Func<string, Task<bool>> copyTextAsync,
+        ILogger log)
+        : this(settings, saveService, (image, sourceUrl, text, provenance, _) => copyImageAsync(image, sourceUrl, text, provenance), copyTextAsync, log)
+    {
+        ArgumentNullException.ThrowIfNull(copyImageAsync);
+    }
+
+    internal PinManager(
+        Func<PinSettings> settings,
+        PinImageSaveService? saveService,
+        Func<BitmapSource, string?, string?, CaptureProvenance?, ClipboardImageService.PngCache?, Task<bool>> copyImageAsync,
         Func<string, Task<bool>> copyTextAsync,
         ILogger log)
     {
@@ -716,7 +727,7 @@ internal sealed class PinManager
         try
         {
             copied = await _copyImageAsync(request.Image, request.SourcePageUrl, request.OriginalText,
-                (sender as PinWindow)?.Provenance);
+                (sender as PinWindow)?.Provenance, (sender as PinWindow)?.ClipboardCache);
         }
         catch (Exception ex)
         {
