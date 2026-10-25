@@ -112,6 +112,8 @@ internal sealed class MediaElementPreviewEngine : IVideoPreviewEngine
         ObjectDisposedException.ThrowIf(_disposed, this);
         cancellationToken.ThrowIfCancellationRequested();
 
+        // This seek positions the element again, so a watch of the last one has nothing left to do.
+        await StopWatchAsync().ConfigureAwait(false);
         double target = Math.Max(0, request.TargetPositionMs);
         DispatcherPriority observedPriority = request.Mode == PreviewSeekMode.Exact
             ? DispatcherPriority.ApplicationIdle
@@ -127,7 +129,7 @@ internal sealed class MediaElementPreviewEngine : IVideoPreviewEngine
             _settleNextSeek = true;
         }
 
-        bool settle = request.Mode == PreviewSeekMode.Exact && !nearEnd && _settleNextSeek;
+        bool watch = request.Mode == PreviewSeekMode.Exact && !nearEnd && _settleNextSeek;
         int seeks = 1;
         int reopens = 0;
         while (true)
@@ -143,31 +145,11 @@ internal sealed class MediaElementPreviewEngine : IVideoPreviewEngine
                 reopens++;
                 await ReopenAsync(cancellationToken).ConfigureAwait(false);
             }
-            else if (request.Mode != PreviewSeekMode.Exact)
+            else if (request.Mode != PreviewSeekMode.Exact
+                || HasLanded(observedMs, position)
+                || seeks >= MaxExactSeeks)
             {
                 break;
-            }
-            else
-            {
-                if (settle && HasLanded(observedMs, position))
-                {
-                    (observedMs, ended) = await SettleAsync(position, observedPriority, cancellationToken)
-                        .ConfigureAwait(false);
-                    if (ended)
-                    {
-                        continue;
-                    }
-
-                    if (HasLanded(observedMs, position))
-                    {
-                        _settleNextSeek = false;
-                    }
-                }
-
-                if (HasLanded(observedMs, position) || seeks >= MaxExactSeeks)
-                {
-                    break;
-                }
             }
 
             seeks++;
@@ -175,6 +157,11 @@ internal sealed class MediaElementPreviewEngine : IVideoPreviewEngine
             // clock ran on, and after a reopen the player stands on its first frame.
             (_, observedMs, ended) = await PositionAsync(position, separate: false, observedPriority, cancellationToken)
                 .ConfigureAwait(false);
+        }
+
+        if (watch && !ended && HasLanded(observedMs, position))
+        {
+            StartWatch(position, observedPriority);
         }
 
         // A landing within the player's resolution shows the requested frame; the rest is where
@@ -220,13 +207,33 @@ internal sealed class MediaElementPreviewEngine : IVideoPreviewEngine
     /// first paused seek from there presents the right frame but leaves the player stopped past
     /// the position (3 to 74 ms on loaded runners): the brief playback that fetches the frame is
     /// not undone. Its first read still shows the requested position, so that seek is watched
-    /// until the position stays put, and asked again if it moved.
+    /// until the position stays put, and asked again if it moved. The watch runs after the frame
+    /// is reported: waiting for it held the release after a scrub into the last stretch for 108 to
+    /// 140 ms on a desktop and 184 to 189 ms on runners, against about 15 ms for other seeks.
+    /// A playback start waits for it (<see cref="WhenSettledAsync"/>), and the next seek ends it.
     /// </summary>
     internal void StreamReachedEnd() => _settleNextSeek = true;
+
+    /// <summary>
+    /// Completes when the watch of the last seek, if one runs, has ended: the player then stands
+    /// where the seek asked, so playback starts there.
+    /// </summary>
+    internal Task WhenSettledAsync()
+    {
+        lock (_watchGate)
+        {
+            return _watch;
+        }
+    }
 
     // Set by the end of the stream, a seek into its last stretch included (the brief playback
     // can reach the end), and cleared by a watched seek elsewhere that stayed where it landed.
     private volatile bool _settleNextSeek;
+
+    // The watch of the last watched seek and its cancellation, under _watchGate.
+    private readonly object _watchGate = new();
+    private Task _watch = Task.CompletedTask;
+    private CancellationTokenSource? _watchCancel;
 
     // A seek this close to the end can end the stream while WPF fetches its frame.
     private const double EndStretchMs = 200;
@@ -319,6 +326,95 @@ internal sealed class MediaElementPreviewEngine : IVideoPreviewEngine
         return (position, observedMs, ended);
     }
 
+    private void StartWatch(double position, DispatcherPriority priority)
+    {
+        var cancel = new CancellationTokenSource();
+        Task watch = RunWatchAsync(position, priority, cancel.Token);
+        lock (_watchGate)
+        {
+            _watch = watch;
+            _watchCancel = cancel;
+        }
+    }
+
+    // Ends the watch of the last seek if it still runs; a failure it met surfaces here once.
+    private async Task StopWatchAsync()
+    {
+        Task watch;
+        CancellationTokenSource? cancel;
+        lock (_watchGate)
+        {
+            watch = _watch;
+            cancel = _watchCancel;
+            _watchCancel = null;
+        }
+
+        if (cancel is null)
+        {
+            return;
+        }
+
+        cancel.Cancel();
+        try
+        {
+            await watch.ConfigureAwait(false);
+        }
+        finally
+        {
+            cancel.Dispose();
+        }
+    }
+
+    private async Task RunWatchAsync(double position, DispatcherPriority priority, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await WatchAsync(position, priority, cancellationToken).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            // A later seek took over the element, or the editor's dispatcher shut down.
+        }
+        catch (ObjectDisposedException)
+        {
+            // The editor closed.
+        }
+    }
+
+    // See StreamReachedEnd: reads until the position stays put and asks again if it moved.
+    private async Task WatchAsync(double position, DispatcherPriority priority, CancellationToken cancellationToken)
+    {
+        int seeks = 1;
+        int reopens = 0;
+        while (true)
+        {
+            (double observedMs, bool ended) = await SettleAsync(position, priority, cancellationToken)
+                .ConfigureAwait(false);
+            if (ended)
+            {
+                if (reopens == MaxReopens)
+                {
+                    return;
+                }
+
+                reopens++;
+                await ReopenAsync(cancellationToken).ConfigureAwait(false);
+            }
+            else if (HasLanded(observedMs, position))
+            {
+                _settleNextSeek = false;
+                return;
+            }
+            else if (seeks >= MaxExactSeeks)
+            {
+                return;
+            }
+
+            seeks++;
+            _ = await PositionAsync(position, separate: false, priority, cancellationToken).ConfigureAwait(false);
+        }
+    }
+
     // Reads until the position stays the same for SettleStableReads polls, or SettleLimit.
     private async Task<(double ObservedMs, bool Ended)> SettleAsync(
         double position,
@@ -406,5 +502,12 @@ internal sealed class MediaElementPreviewEngine : IVideoPreviewEngine
         }
     }
 
-    public void Dispose() => _disposed = true;
+    public void Dispose()
+    {
+        _disposed = true;
+        lock (_watchGate)
+        {
+            _watchCancel?.Cancel();
+        }
+    }
 }

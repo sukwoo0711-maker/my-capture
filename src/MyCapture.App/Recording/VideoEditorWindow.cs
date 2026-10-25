@@ -1412,6 +1412,8 @@ internal sealed partial class VideoEditorWindow : Window
         {
             // Reconcile queued seeks before starting playback; their engine pauses the media.
             await _previewSeeks.RequestExactAsync(position);
+            // After the stream ended, the player can stop past that seek; play from where it is put back.
+            await _previewEngine.WhenSettledAsync();
             await Dispatcher.InvokeAsync(() =>
             {
                 if (version != _playRequestVersion || !_playRequested || !IsLoaded) { return; }
@@ -1621,6 +1623,7 @@ internal sealed partial class VideoEditorWindow : Window
             // The coordinator serializes decoder access. Its completion is best-effort;
             // subsequent ticks observe the actual landing before publishing new overlays.
             await _previewSeeks.RequestExactAsync(targetMs);
+            await _previewEngine.WhenSettledAsync();
             if (version != _playRequestVersion || !_isPlaying || _closing) return;
             _playMedia();
         }
