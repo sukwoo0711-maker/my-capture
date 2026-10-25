@@ -332,10 +332,13 @@ public sealed class ReleaseVersionContractTests
             .Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries)
             .Where(line => line.TrimStart().StartsWith("uses:", StringComparison.Ordinal))
             .ToArray();
-        Assert.Equal(3, actions.Length);
+        Assert.Equal(6, actions.Length);
         Assert.Equal(
             new[]
             {
+                "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+                "actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68",
+                "actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9",
                 "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
                 "actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68",
                 "actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9",

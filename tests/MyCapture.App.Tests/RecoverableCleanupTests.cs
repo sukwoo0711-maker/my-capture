@@ -27,6 +27,28 @@ public sealed class RecoverableCleanupTests
     }
 
     [Fact]
+    public void LongPathFileMoveAndRestorePreserveIdentityAndBytes()
+    {
+        string root = OwnedTestDirectory.Create("mc-cleanup-long-path-");
+        try
+        {
+            string parent = Path.Combine(root, new string('a', 90), new string('b', 90), new string('c', 90));
+            Directory.CreateDirectory(parent);
+            string file = Path.Combine(parent, "sentinel.txt");
+            Assert.True(file.Length > 320);
+            File.WriteAllText(file, "long path bytes");
+            var trash = new RecoverableFileRemoval();
+            CleanupReceipt receipt = trash.RecycleFile(file);
+            Assert.False(File.Exists(file));
+            Assert.Equal("long path bytes", File.ReadAllText(receipt.RecycledPath));
+            trash.RestoreFile(receipt);
+            Assert.Equal(receipt.Identity, trash.GetIdentity(file));
+            Assert.Equal("long path bytes", File.ReadAllText(file));
+        }
+        finally { OwnedTestDirectory.Delete(root); }
+    }
+
+    [Fact]
     public void JunctionMoveAndRestoreLeaveItsTargetUntouched()
     {
         string root = OwnedTestDirectory.Create("mc-cleanup-junction-");

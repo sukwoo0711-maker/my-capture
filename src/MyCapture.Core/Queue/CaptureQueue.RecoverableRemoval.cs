@@ -142,8 +142,8 @@ public sealed partial class CaptureQueue
     }
 
     /// <summary>
-    /// Deletes the captures from disk after the user explicitly confirmed it for items Windows
-    /// could not move to the Recycle Bin. Without a connected removal service this is the
+    /// Compatibility entry point for older callers. Connected removal services recycle captures
+    /// before changing the index. Without a connected removal service this is the
     /// standalone index removal, whose <see cref="Evicted"/> handler owns the files.
     /// </summary>
     public Task<CaptureBatchRemovalResult> RemoveManyPermanentlyAsync(IEnumerable<Guid> ids,
@@ -183,7 +183,7 @@ public sealed partial class CaptureQueue
         var completions = new List<(CaptureRecord Record, ICaptureRemovalTransaction Transaction)>();
         CaptureBatchRemovalResult result = await RemoveFromIndexAsync(ids, canRemove, cancellationToken, reason, completions);
         if (completions.Count == 0) return result;
-        // File deletion for permanent removals runs after the publication slot is released and
+        // Deferred cleanup runs after the publication slot is released and
         // off the owner thread, so eviction never delays a capture save or the UI.
         int pending = await Task.Run(() => completions.Count(item => !TryComplete(item.Transaction, item.Record)));
         return pending == 0 ? result : result with { CleanupPendingCount = result.CleanupPendingCount + pending };

@@ -79,7 +79,7 @@ public sealed class RecoverableFileRemoval
     public string GetIdentity(string path)
     {
         path = ValidatePath(path);
-        using SafeFileHandle handle = CreateFileW(path, 0, 7, 0, 3, 0x02200000, 0);
+        using SafeFileHandle handle = CreateFileW(NativePath(path), 0, 7, 0, 3, 0x02200000, 0);
         if (handle.IsInvalid || !GetFileInformationByHandle(handle, out FileInformation info))
             throw new IOException("Could not verify the filesystem identity.", Marshal.GetExceptionForHR(Marshal.GetHRForLastWin32Error()));
         return $"{info.VolumeSerial:X8}:{info.IndexHigh:X8}{info.IndexLow:X8}";
@@ -122,7 +122,7 @@ public sealed class RecoverableFileRemoval
                     throw new IOException("The Shell did not confirm a recoverable Recycle Bin move.");
                 var receipt = new CleanupReceipt(path, sink.RecycledPath, identity, sink.IdList, directory);
                 if (Exists(path) || !Exists(receipt.RecycledPath) || GetIdentity(receipt.RecycledPath) != identity
-                    || !string.Equals(ReadDeletedOriginalPath(receipt.RecycledPath), path, StringComparison.OrdinalIgnoreCase))
+                    || !PathsEqual(ReadDeletedOriginalPath(receipt.RecycledPath), path))
                     throw new IOException("The Recycle Bin item did not match the original filesystem object.");
                 return receipt;
             }
@@ -164,7 +164,7 @@ public sealed class RecoverableFileRemoval
                 Guid itemId = typeof(IShellItem).GUID;
                 Marshal.ThrowExceptionForHR(SHCreateItemWithParent(root, folder, child, ref itemId, out item));
                 if (!string.Equals(GetPath(item), receipt.RecycledPath, StringComparison.OrdinalIgnoreCase)
-                    || !string.Equals(ReadDeletedOriginalPath(receipt.RecycledPath), original, StringComparison.OrdinalIgnoreCase))
+                    || !PathsEqual(ReadDeletedOriginalPath(receipt.RecycledPath), original))
                     throw new IOException("The exact Shell Recycle Bin identity did not match.");
                 DiagnosticStageForTest?.Invoke("restore:namespace-lookup-end");
                 Guid contextId = typeof(IContextMenu).GUID;
@@ -249,7 +249,7 @@ public sealed class RecoverableFileRemoval
                         Marshal.ThrowExceptionForHR(SHCreateItemWithParent(root, folder, child, ref itemId, out candidate));
                         string path = GetPath(candidate);
                         if (recycledPath is not null && !string.Equals(path, recycledPath, StringComparison.OrdinalIgnoreCase)) continue;
-                        if (!string.Equals(ReadDeletedOriginalPath(path), originalPath, StringComparison.OrdinalIgnoreCase)) continue;
+                        if (!PathsEqual(ReadDeletedOriginalPath(path), originalPath)) continue;
                         if ((directory ? !Directory.Exists(path) : !File.Exists(path)) || GetIdentity(path) != identity) continue;
                         DiagnosticStageForTest?.Invoke("lookup:exact-child-identity-matched");
                         return new CleanupReceipt(originalPath, path, identity, GetIdList(candidate), directory);
@@ -291,7 +291,7 @@ public sealed class RecoverableFileRemoval
             // Redirected Windows profiles are supported. Resolve the parent by handle while
             // retaining the final component itself (which may be an owned link).
             string parent = Path.GetDirectoryName(path)!;
-            using SafeFileHandle handle = CreateFileW(parent, 0, 7, 0, 3, 0x02000000, 0);
+            using SafeFileHandle handle = CreateFileW(NativePath(parent), 0, 7, 0, 3, 0x02000000, 0);
             if (handle.IsInvalid) throw new IOException("Cannot resolve the cleanup parent.");
             var buffer = new System.Text.StringBuilder(32768);
             uint length = GetFinalPathNameByHandleW(handle, buffer, (uint)buffer.Capacity, 0);
@@ -303,6 +303,17 @@ public sealed class RecoverableFileRemoval
         }
         return path;
     }
+
+    // Native handle validation must support long staging paths even when the caller's
+    // process manifest does not opt into Win32 long paths.
+    private static string NativePath(string path) => path.StartsWith(@"\\?\", StringComparison.Ordinal)
+        ? path : path.StartsWith(@"\\", StringComparison.Ordinal)
+            ? @"\\?\UNC\" + path.Substring(2) : @"\\?\" + path;
+
+    // The Shell records long original paths with the extended prefix in $I metadata.
+    // Compare the same native spelling while preserving the independent identity check.
+    private static bool PathsEqual(string left, string right) =>
+        string.Equals(NativePath(left), NativePath(right), StringComparison.OrdinalIgnoreCase);
 
     private static bool Exists(string path) => File.Exists(path) || Directory.Exists(path);
     internal static T RunShellOperation<T>(Func<T> run)
