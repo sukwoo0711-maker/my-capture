@@ -178,6 +178,9 @@ public sealed class InstallerIntegrationTests
         using (var f = new Fixture())
         {
             string worker = Path.Combine(f.Temp, FileRemoval.WorkerPrefix + Guid.NewGuid().ToString("N"));
+            if (!string.Equals(worker, Path.GetFullPath(worker), StringComparison.OrdinalIgnoreCase)
+                || !worker.StartsWith(Path.GetFullPath(f.Root).TrimEnd('\\') + "\\", StringComparison.OrdinalIgnoreCase))
+                throw new IOException("Foreign-worker test escaped its fixture root.");
             Directory.CreateDirectory(worker);
             string file = Path.Combine(worker, "cleanup.json");
             File.WriteAllText(file, "preserve foreign worker");
