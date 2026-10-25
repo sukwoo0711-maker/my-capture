@@ -180,7 +180,7 @@ internal sealed class VideoExportCalculation : IDisposable
 
     public void Dispose()
     {
-        // Size-calculation renders are app-owned scratch files: delete them, do not recycle.
+        // Recycle only the size-calculation renders owned by this operation.
         try
         {
             global::MyCapture.Core.Storage.RecoverableFileRemoval.DeleteFile(OwnedPath("standard"));

@@ -76,7 +76,7 @@ jobs:
       - name: Test x86 setup boundaries
         shell: powershell
         run: |
-          dotnet test tests/MyCapture.Setup.Tests/MyCapture.Setup.Tests.csproj -c Release -p:Platform=x86 -p:VSTestPlatform=x86 --artifacts-path artifacts/ci-setup-x86 --filter "FullyQualifiedName~X86ArchitectureTests|FullyQualifiedName~SetupContractsTests.Manifest|FullyQualifiedName~SetupContractsTests.Host|FullyQualifiedName~SetupContractsTests.RuntimeProbe" --logger "trx;LogFileName=setup-x86.trx" --results-directory artifacts/ci-x86/results
+          dotnet test tests/MyCapture.Setup.Tests/MyCapture.Setup.Tests.csproj -c Release -p:Platform=x86 -p:VSTestPlatform=x86 --artifacts-path artifacts/ci-setup-x86 --filter "FullyQualifiedName~X86ArchitectureTests|FullyQualifiedName~CompanionCleanupCannotTargetAnotherWorkerDirectory|FullyQualifiedName~SetupContractsTests.Manifest|FullyQualifiedName~SetupContractsTests.Host|FullyQualifiedName~SetupContractsTests.RuntimeProbe" --logger "trx;LogFileName=setup-x86.trx" --results-directory artifacts/ci-x86/results
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Publish self-contained x86 app
         shell: powershell

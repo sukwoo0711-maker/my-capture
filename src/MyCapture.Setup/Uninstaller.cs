@@ -175,11 +175,23 @@ public static class Uninstaller
     }
     private static void RemoveOwnWorkerFiles(string directory, SetupLog log)
     {
-        // A running executable cannot delete its own image. Delete the other worker files now;
-        // the next setup or uninstall run deletes the remaining folder after this process exits.
+        // Derive the cleanup scope from this running image, not from a request argument.
+        string ownDirectory = Path.GetFullPath(Path.GetDirectoryName(Program.Executable)!).TrimEnd('\\');
+        string temporaryRoot = Path.GetFullPath(Path.GetTempPath()).TrimEnd('\\') + "\\";
+        if (!PathSafety.Equal(directory, ownDirectory)
+            || !ownDirectory.StartsWith(temporaryRoot, StringComparison.OrdinalIgnoreCase)
+            || !FileRemoval.IsWorkerName(Path.GetFileName(ownDirectory)))
+        {
+            log.Write("WARN", "Cleanup companion files are outside this running worker; preserved.");
+            return;
+        }
+        PathSafety.NoLinks(ownDirectory);
+        // Its running image remains until a later setup can recycle the whole worker folder.
         foreach (string name in FileRemoval.WorkerFiles.Skip(1))
         {
-            string path = Path.Combine(directory, name);
+            string path = Path.GetFullPath(Path.Combine(ownDirectory, name));
+            if (!path.StartsWith(ownDirectory + "\\", StringComparison.OrdinalIgnoreCase))
+                throw new IOException("Cleanup companion escaped its worker directory.");
             try { if (File.Exists(path)) { File.SetAttributes(path, FileAttributes.Normal); global::MyCapture.Core.Storage.RecoverableFileRemoval.DeleteFile(path); } }
             catch (Exception e) { log.Write("WARN", "Could not delete cleanup worker file " + path + ": " + e.Message); }
         }

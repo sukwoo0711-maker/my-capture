@@ -172,6 +172,24 @@ public sealed class Fixture : IDisposable
 
 public sealed class InstallerIntegrationTests
 {
+    [Fact]
+    public void CompanionCleanupCannotTargetAnotherWorkerDirectory()
+    {
+        using (var f = new Fixture())
+        {
+            string worker = Path.Combine(f.Temp, FileRemoval.WorkerPrefix + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(worker);
+            string file = Path.Combine(worker, "cleanup.json");
+            File.WriteAllText(file, "preserve foreign worker");
+            var method = typeof(Uninstaller).GetMethod("RemoveOwnWorkerFiles",
+                System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)!;
+            var log = new SetupLog(Path.Combine(f.Root, "foreign-worker.log"), f.Root, true, true);
+            method.Invoke(null, new object[] { worker, log });
+            Assert.Equal("preserve foreign worker", File.ReadAllText(file));
+            Assert.Contains("preserved", Fixture.ReadShared(log.Path!));
+        }
+    }
+
     [Theory]
     [InlineData(true, false, false, true)]
     [InlineData(false, false, false, false)]

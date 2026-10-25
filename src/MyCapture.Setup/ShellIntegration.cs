@@ -100,9 +100,13 @@ public static class ShellIntegration
     {
         Options.ValidateTestTargets(manifest.TestRegistryKey, manifest.TestStartMenu);
         info ??= _ => { };
-        string menu = manifest.TestStartMenu ?? DefaultMenu;
+        string menu = Path.GetFullPath(manifest.TestStartMenu ?? DefaultMenu).TrimEnd('\\');
+        string menuBoundary = Path.GetFullPath(manifest.TestStartMenu is null
+            ? Environment.GetFolderPath(Environment.SpecialFolder.Programs) : Path.GetTempPath()).TrimEnd('\\') + "\\";
         try
         {
+            if (!menu.StartsWith(menuBoundary, StringComparison.OrdinalIgnoreCase))
+                throw new IOException("Start Menu cleanup escaped its approved parent.");
             PathSafety.NotLink(menu);
             foreach (string name in new[] { "MyCapture.lnk", "Uninstall MyCapture.lnk" })
             {
