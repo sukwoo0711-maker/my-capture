@@ -65,7 +65,7 @@ public sealed class ErrorRecoveryAndDangerTests
             Assert.Equal(path, UserFacingError.FindPath(error));
             Assert.Equal(folder, ThemedDialog.SaveLocationFor(error));
         }
-        finally { Directory.Delete(folder, recursive: true); }
+        finally { global::MyCapture.Core.Storage.RecoverableFileRemoval.DeleteDirectory(folder, recursive: true); }
     }
 
     [Fact]
@@ -82,7 +82,7 @@ public sealed class ErrorRecoveryAndDangerTests
             Assert.Null(ThemedDialog.SaveLocationFor(new IOException("x"), Path.Combine(folder, "missing", "a.png")));
             Assert.Null(ThemedDialog.SaveLocationFor(new IOException("no path")));
         }
-        finally { Directory.Delete(folder, recursive: true); }
+        finally { global::MyCapture.Core.Storage.RecoverableFileRemoval.DeleteDirectory(folder, recursive: true); }
     }
 
     [Theory]
@@ -126,7 +126,7 @@ public sealed class ErrorRecoveryAndDangerTests
         finally
         {
             ThemedDialog.OpenFolder = previous;
-            Directory.Delete(folder, recursive: true);
+            global::MyCapture.Core.Storage.RecoverableFileRemoval.DeleteDirectory(folder, recursive: true);
         }
     });
 

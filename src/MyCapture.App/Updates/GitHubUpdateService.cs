@@ -154,8 +154,8 @@ public sealed class GitHubUpdateService : IUpdateService
             }
 
             // Exact unique asset names
-            string expectedSetupName = $"MyCapture-{latest.ToNormalizedString()}-win-x64-setup.exe";
-            const string expectedChecksumName = "SHA256SUMS.txt";
+            string expectedSetupName = UpdatePaths.InstallerName(latest);
+            string expectedChecksumName = UpdatePaths.ChecksumName;
 
             GitHubAssetDto? setupAsset = GetExactUniqueAsset(release.Assets, expectedSetupName, out UpdateErrorKind? setupErr, out string? setupMsg);
             if (setupAsset is null)
@@ -627,7 +627,7 @@ public sealed class GitHubUpdateService : IUpdateService
             return UpdateErrorKind.InvalidReleaseData;
         }
 
-        string expectedSetupName = $"MyCapture-{package.Version.ToNormalizedString()}-win-x64-setup.exe";
+        string expectedSetupName = UpdatePaths.InstallerName(package.Version);
         if (!string.Equals(package.SetupAssetName, expectedSetupName, StringComparison.Ordinal) ||
             package.SetupAssetName.Contains('/') ||
             package.SetupAssetName.Contains('\\') ||
@@ -668,9 +668,9 @@ public sealed class GitHubUpdateService : IUpdateService
             return UpdateErrorKind.InvalidUrl;
         }
 
-        if (!string.Equals(checksumFile, "SHA256SUMS.txt", StringComparison.Ordinal))
+        if (!string.Equals(checksumFile, UpdatePaths.ChecksumName, StringComparison.Ordinal))
         {
-            message = $"Checksum URL filename '{checksumFile}' is not 'SHA256SUMS.txt'.";
+            message = $"Checksum URL filename '{checksumFile}' is not '{UpdatePaths.ChecksumName}'.";
             return UpdateErrorKind.InvalidUrl;
         }
 
@@ -712,7 +712,7 @@ public sealed class GitHubUpdateService : IUpdateService
             return UpdateErrorKind.InvalidUrl;
         }
 
-        if (!GitHubUrlValidator.IsValidDownloadUri(package.ChecksumDownloadUrl, _options.RepositoryOwner, _options.RepositoryName, checksumTag, "SHA256SUMS.txt"))
+        if (!GitHubUrlValidator.IsValidDownloadUri(package.ChecksumDownloadUrl, _options.RepositoryOwner, _options.RepositoryName, checksumTag, UpdatePaths.ChecksumName))
         {
             message = $"Package checksum download URL '{package.ChecksumDownloadUrl}' failed security validation.";
             return UpdateErrorKind.InvalidUrl;
@@ -758,7 +758,7 @@ public sealed class GitHubUpdateService : IUpdateService
                         continue;
                     }
 
-                    File.Delete(filePath);
+                    global::MyCapture.Core.Storage.RecoverableFileRemoval.DeleteFile(filePath);
                 }
                 catch
                 {
@@ -767,7 +767,7 @@ public sealed class GitHubUpdateService : IUpdateService
 
             try
             {
-                Directory.Delete(sessionDirectory, recursive: false);
+                global::MyCapture.Core.Storage.RecoverableFileRemoval.DeleteDirectory(sessionDirectory, recursive: false);
             }
             catch
             {

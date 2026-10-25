@@ -114,9 +114,9 @@ public sealed partial class LegacyLibraryMigrationTests
         fixture.SaveSource();
         switch (kind)
         {
-            case "missing-original": File.Delete(fixture.SourceQueue.GetFilePath(bad, CaptureFileNames.Original)); break;
-            case "annotations-without-layers": File.Delete(fixture.SourceQueue.GetFilePath(bad, CaptureFileNames.Layers)); break;
-            case "missing-asset": File.Delete(fixture.SourceQueue.GetFilePath(bad, "asset-01.png")); break;
+            case "missing-original": global::MyCapture.Core.Storage.RecoverableFileRemoval.DeleteFile(fixture.SourceQueue.GetFilePath(bad, CaptureFileNames.Original)); break;
+            case "annotations-without-layers": global::MyCapture.Core.Storage.RecoverableFileRemoval.DeleteFile(fixture.SourceQueue.GetFilePath(bad, CaptureFileNames.Layers)); break;
+            case "missing-asset": global::MyCapture.Core.Storage.RecoverableFileRemoval.DeleteFile(fixture.SourceQueue.GetFilePath(bad, "asset-01.png")); break;
             case "corrupt-layers": File.WriteAllText(fixture.SourceQueue.GetFilePath(bad, CaptureFileNames.Layers), "{torn"); break;
             case "corrupt-settings": File.WriteAllText(fixture.SourcePaths.SettingsFile, "{torn"); break;
             case "torn-index-with-backup": fixture.SourceQueue.Save(); File.WriteAllText(fixture.SourcePaths.IndexFile, "{torn"); break;

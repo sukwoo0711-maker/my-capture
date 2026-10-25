@@ -6,7 +6,7 @@ using System.Threading;
 
 namespace MyCapture.Setup;
 
-/// <summary>Permanent deletion with the retry schedules of the PowerShell installer at 4769935.</summary>
+/// <summary>Recoverable recycling with the retry schedules of the PowerShell installer at 4769935.</summary>
 public static class FileRemoval
 {
     public const string WorkerPrefix = ".MyCapture-uninstall-cleanup-";
@@ -17,13 +17,13 @@ public static class FileRemoval
     // uninstall-cleanup.ps1 Remove-Target: thirty attempts, min(1000, 150 + 75 x attempt) ms.
     public static int UninstallRetryDelay(int attempt) => Math.Min(1000, 150 + attempt * 75);
 
-    /// <summary>Remove-Item -Recurse -Force: read-only entries are cleared; links are removed, never traversed.</summary>
+    /// <summary>Recycles an owned directory; read-only entries are cleared and links are never traversed.</summary>
     public static void DeleteTree(string path)
     {
         var root = new DirectoryInfo(path);
         if (!root.Exists) return;
         Prepare(root);
-        root.Delete(true);
+        global::MyCapture.Core.Storage.RecoverableFileRemoval.DeleteDirectory(root.FullName, recursive: true);
     }
     public static void DeleteDirectoryWithRetry(string path, Action<int>? sleep = null)
     {
@@ -80,9 +80,9 @@ public static class FileRemoval
                 {
                     PathSafety.NotLink(entry);
                     File.SetAttributes(entry, FileAttributes.Normal);
-                    File.Delete(entry);
+                    global::MyCapture.Core.Storage.RecoverableFileRemoval.DeleteFile(entry);
                 }
-                Directory.Delete(directory, false);
+                global::MyCapture.Core.Storage.RecoverableFileRemoval.DeleteDirectory(directory, false);
                 info("Removed a previous cleanup worker folder: " + directory);
             }
             catch (Exception e) { info("Kept a cleanup worker folder that is in use or inaccessible: " + directory + " (" + e.Message + ")"); }
@@ -90,7 +90,7 @@ public static class FileRemoval
     }
     private static void Prepare(DirectoryInfo directory)
     {
-        // A link (including the root) is never traversed or changed; DirectoryInfo.Delete removes only the link.
+        // A link (including the root) is never traversed or changed; recycling moves only the link.
         if ((directory.Attributes & FileAttributes.ReparsePoint) != 0) return;
         if ((directory.Attributes & FileAttributes.ReadOnly) != 0) directory.Attributes &= ~FileAttributes.ReadOnly;
         foreach (var entry in directory.EnumerateFileSystemInfos())
@@ -99,7 +99,7 @@ public static class FileRemoval
             {
                 // .NET Framework's recursive delete reports a nested junction as access denied
                 // (it tries to unmount it as a volume), so remove nested directory links first.
-                if ((child.Attributes & FileAttributes.ReparsePoint) != 0) child.Delete(false);
+                if ((child.Attributes & FileAttributes.ReparsePoint) != 0) global::MyCapture.Core.Storage.RecoverableFileRemoval.DeleteDirectory(child.FullName);
                 else Prepare(child);
             }
             else if ((entry.Attributes & FileAttributes.ReadOnly) != 0) entry.Attributes &= ~FileAttributes.ReadOnly;

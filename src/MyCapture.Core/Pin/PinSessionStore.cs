@@ -665,7 +665,7 @@ public sealed class PinSessionStore
             try
             {
                 string path = FilePath(name, Path.GetExtension(name));
-                File.Delete(path);
+                global::MyCapture.Core.Storage.RecoverableFileRemoval.DeleteFile(path);
                 if (image) _knownImages.Remove(Guid.ParseExact(Path.GetFileNameWithoutExtension(name), "N"));
             }
             catch (Exception ex) when (IsStorageFailure(ex))
@@ -766,7 +766,7 @@ public sealed class PinSessionStore
             if (_committedReferences.Contains(id)) continue;
             try
             {
-                File.Delete(ImagePath(id));
+                global::MyCapture.Core.Storage.RecoverableFileRemoval.DeleteFile(ImagePath(id));
                 _knownImages.Remove(id);
             }
             catch (Exception ex) when (IsStorageFailure(ex))

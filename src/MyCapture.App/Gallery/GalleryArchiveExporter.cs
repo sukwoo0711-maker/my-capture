@@ -54,7 +54,7 @@ internal static class GalleryArchiveExporter
         {
             if (ownsStage)
             {
-                try { File.Delete(stage); }
+                try { global::MyCapture.Core.Storage.RecoverableFileRemoval.DeleteFile(stage); }
                 catch (IOException) { }
                 catch (UnauthorizedAccessException) { }
             }

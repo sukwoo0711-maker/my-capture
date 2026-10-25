@@ -43,5 +43,5 @@ finally {
     $env:MYCAPTURE_DATA_ROOT = $previousData
     # Delete the junction itself first, never its target, then this test's own fixture root.
     if ($link -and (Test-Path -LiteralPath $link)) { [IO.Directory]::Delete($link, $false) }
-    Remove-Item -LiteralPath $testRoot -Recurse -Force
+    Remove-TestItem -Path $testRoot
 }

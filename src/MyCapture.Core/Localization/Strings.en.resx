@@ -4678,4 +4678,7 @@ Overwrite these shortcuts? You can change this later in Settings → Shortcuts.<
   <data name="Settings_TranslationDeleted" xml:space="preserve"><value>Translation model deleted</value></data>
   <data name="Settings_TranslationDeleteFailed" xml:space="preserve"><value>Couldn't delete the translation model.</value></data>
   <data name="About_PrivacyTranslation" xml:space="preserve"><value>Translation downloads its model (about {0} MB) from GitHub when you first turn it on. Text to translate is never sent.</value></data>
+  <data name="Settings.OcrQualityHint.X86" xml:space="preserve"><value>The 32-bit edition uses Windows OCR with image scaling, contrast and rotation preprocessing according to the quality setting.</value></data>
+  <data name="Settings.OcrQualityAccurate.X86" xml:space="preserve"><value>Accurate (Windows OCR with preprocessing)</value></data>
+  <data name="Settings.TranslationUnavailable.X86" xml:space="preserve"><value>Translation is available in the 64-bit edition.</value></data>
 </root>

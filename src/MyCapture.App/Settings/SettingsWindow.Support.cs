@@ -20,7 +20,7 @@ internal sealed partial class SettingsWindow
     internal static int OcrModelMegabytes => OcrModelCatalog.DownloadMegabytesFor(OcrQuality.Accurate);
 
     internal static string OcrQualityDescription =>
-        UiText.Format("SettingsUx_OcrQualityHint", OcrModelMegabytes);
+        AppArchitecture.IsX86 ? UiText.Get("Settings.OcrQualityHint.X86") : UiText.Format("SettingsUx_OcrQualityHint", OcrModelMegabytes);
 
     internal Action<string> OpenSupportPage { get; set; } = uri => { if (!SupportDiagnostics.TryOpenUri(uri)) throw new InvalidOperationException(UiText.Get("Support_OpenFailed")); };
     internal Action<string> CopySupportText { get; set; } = text => ClipboardWriter.SetText(text);
@@ -30,6 +30,13 @@ internal sealed partial class SettingsWindow
         PrivacyModelText.Text = UiText.Format("About_PrivacyModel", OcrModelMegabytes);
         PrivacyTranslationText.Text = UiText.Format("About_PrivacyTranslation", TranslationModelCatalog.TotalMegabytes);
         OcrQualityHintText.Text = OcrQualityDescription;
+        if (AppArchitecture.IsX86)
+        {
+            PrivacyModelText.Text = OcrQualityDescription;
+            PrivacyTranslationText.Text = UiText.Get("Settings.TranslationUnavailable.X86");
+            foreach (System.Windows.Controls.ComboBoxItem item in OcrQualitySelector.Items.OfType<System.Windows.Controls.ComboBoxItem>())
+                if (Equals(item.Tag, "accurate")) item.Content = UiText.Get("Settings.OcrQualityAccurate.X86");
+        }
     }
 
     /// <summary>The diagnostics a report starts with: versions, DPI and recent errors, never paths or addresses.</summary>

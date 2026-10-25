@@ -5,6 +5,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using MyCapture.App.Updates;
+using MyCapture.Core.Platform;
 using Xunit;
 
 namespace MyCapture.App.Tests;
@@ -53,7 +54,7 @@ public sealed class GitHubUpdateServiceTests
             var version = new UpdateVersion(major, minor, patch);
             byte[] bytes = [1, 2, 3, 4];
             string name = UpdatePaths.InstallerName(version);
-            using var client = CreateMockClient(request => request.RequestUri!.AbsolutePath.EndsWith("SHA256SUMS.txt", StringComparison.Ordinal)
+            using var client = CreateMockClient(request => request.RequestUri!.AbsolutePath.EndsWith(UpdatePaths.ChecksumName, StringComparison.Ordinal)
                 ? CreateStringResponse(HttpStatusCode.OK, $"{ComputeSha256(bytes)}  {name}\n")
                 : new HttpResponseMessage(HttpStatusCode.OK) { Content = new ByteArrayContent(bytes) });
             using var service = new GitHubUpdateService(client);
@@ -150,7 +151,7 @@ public sealed class GitHubUpdateServiceTests
         Assert.NotNull(result.PackageInfo);
         Assert.Equal(new UpdateVersion(1, 8, 0), result.PackageInfo.Version);
         Assert.Equal("v1.8.0", result.PackageInfo.ReleaseTag);
-        Assert.Equal("MyCapture-1.8.0-win-x64-setup.exe", result.PackageInfo.SetupAssetName);
+        Assert.Equal($"MyCapture-1.8.0-{AppArchitecture.RuntimeIdentifier}-setup.exe", result.PackageInfo.SetupAssetName);
     }
 
     [Theory]
@@ -230,7 +231,7 @@ public sealed class GitHubUpdateServiceTests
     public async Task CheckForUpdate_WhenSetupUrlIsForeignRepo_ReturnsInvalidUrl()
     {
         var current = new UpdateVersion(1, 7, 0);
-        string foreignUrl = "https://github.com/evil-attacker/evil-repo/releases/download/v1.8.0/MyCapture-1.8.0-win-x64-setup.exe";
+        string foreignUrl = $"https://github.com/evil-attacker/evil-repo/releases/download/v1.8.0/MyCapture-1.8.0-{AppArchitecture.RuntimeIdentifier}-setup.exe";
         string json = CreateReleaseJson("v1.8.0", setupUrl: foreignUrl);
         using var httpClient = CreateMockClient(_ => CreateStringResponse(HttpStatusCode.OK, json));
         using var service = new GitHubUpdateService(httpClient);
@@ -245,7 +246,7 @@ public sealed class GitHubUpdateServiceTests
     public async Task CheckForUpdate_WhenSetupUrlTargetsCdnDirectly_ReturnsInvalidUrl()
     {
         var current = new UpdateVersion(1, 7, 0);
-        string cdnUrl = "https://objects.githubusercontent.com/github-production-release-asset/MyCapture-1.8.0-win-x64-setup.exe";
+        string cdnUrl = $"https://objects.githubusercontent.com/github-production-release-asset/MyCapture-1.8.0-{AppArchitecture.RuntimeIdentifier}-setup.exe";
         string json = CreateReleaseJson("v1.8.0", setupUrl: cdnUrl);
         using var httpClient = CreateMockClient(_ => CreateStringResponse(HttpStatusCode.OK, json));
         using var service = new GitHubUpdateService(httpClient);
@@ -337,14 +338,14 @@ public sealed class GitHubUpdateServiceTests
             var version = new UpdateVersion(1, 8, 0);
             byte[] installerBytes = Encoding.UTF8.GetBytes("Fake installer binary content");
             string wrongHash = "0000000000000000000000000000000000000000000000000000000000000000";
-            string setupName = "MyCapture-1.8.0-win-x64-setup.exe";
+            string setupName = $"MyCapture-1.8.0-{AppArchitecture.RuntimeIdentifier}-setup.exe";
             string checksumContent = $"{wrongHash}  {setupName}\n";
 
             var package = CreateValidPackage(version, setupSize: installerBytes.Length);
 
             using var httpClient = CreateMockClient(req =>
             {
-                if (req.RequestUri!.AbsolutePath.EndsWith("SHA256SUMS.txt", StringComparison.OrdinalIgnoreCase))
+                if (req.RequestUri!.AbsolutePath.EndsWith(UpdatePaths.ChecksumName, StringComparison.OrdinalIgnoreCase))
                 {
                     return CreateStringResponse(HttpStatusCode.OK, checksumContent);
                 }
@@ -375,7 +376,7 @@ public sealed class GitHubUpdateServiceTests
             var version = new UpdateVersion(1, 8, 0);
             byte[] installerBytes = Encoding.UTF8.GetBytes("Short payload");
             string hash = ComputeSha256(installerBytes);
-            string setupName = "MyCapture-1.8.0-win-x64-setup.exe";
+            string setupName = $"MyCapture-1.8.0-{AppArchitecture.RuntimeIdentifier}-setup.exe";
             string checksumContent = $"{hash}  {setupName}\n";
 
             // Declare size 1000, but deliver fewer bytes
@@ -383,7 +384,7 @@ public sealed class GitHubUpdateServiceTests
 
             using var httpClient = CreateMockClient(req =>
             {
-                if (req.RequestUri!.AbsolutePath.EndsWith("SHA256SUMS.txt", StringComparison.OrdinalIgnoreCase))
+                if (req.RequestUri!.AbsolutePath.EndsWith(UpdatePaths.ChecksumName, StringComparison.OrdinalIgnoreCase))
                 {
                     return CreateStringResponse(HttpStatusCode.OK, checksumContent);
                 }
@@ -412,10 +413,10 @@ public sealed class GitHubUpdateServiceTests
         try
         {
             var version = new UpdateVersion(1, 8, 0);
-            string setupName = "MyCapture-1.8.0-win-x64-setup.exe";
+            string setupName = $"MyCapture-1.8.0-{AppArchitecture.RuntimeIdentifier}-setup.exe";
             var setupUrl = new Uri($"https://github.com/sukwoo0711-maker/my-capture/releases/download/v1.8.0/{setupName}");
             // Mismatched checksum URL tag v1.7.0 vs setup URL tag v1.8.0
-            var checksumUrl = new Uri("https://github.com/sukwoo0711-maker/my-capture/releases/download/v1.7.0/SHA256SUMS.txt");
+            var checksumUrl = new Uri($"https://github.com/sukwoo0711-maker/my-capture/releases/download/v1.7.0/{UpdatePaths.ChecksumName}");
 
             var package = new UpdatePackageInfo(
                 version: version,
@@ -451,10 +452,10 @@ public sealed class GitHubUpdateServiceTests
         try
         {
             var version = new UpdateVersion(1, 8, 0);
-            string setupName = "MyCapture-1.8.0-win-x64-setup.exe";
+            string setupName = $"MyCapture-1.8.0-{AppArchitecture.RuntimeIdentifier}-setup.exe";
             // Setup URL path ends with foreign.exe instead of setupName
             var setupUrl = new Uri("https://github.com/sukwoo0711-maker/my-capture/releases/download/v1.8.0/foreign.exe");
-            var checksumUrl = new Uri("https://github.com/sukwoo0711-maker/my-capture/releases/download/v1.8.0/SHA256SUMS.txt");
+            var checksumUrl = new Uri($"https://github.com/sukwoo0711-maker/my-capture/releases/download/v1.8.0/{UpdatePaths.ChecksumName}");
 
             var package = new UpdatePackageInfo(
                 version: version,
@@ -490,10 +491,10 @@ public sealed class GitHubUpdateServiceTests
         try
         {
             var version = new UpdateVersion(1, 8, 0);
-            string setupName = "MyCapture-1.8.0-win-x64-setup.exe";
+            string setupName = $"MyCapture-1.8.0-{AppArchitecture.RuntimeIdentifier}-setup.exe";
             // Tag v2.0.0 does not match package version 1.8.0
             var setupUrl = new Uri($"https://github.com/sukwoo0711-maker/my-capture/releases/download/v2.0.0/{setupName}");
-            var checksumUrl = new Uri("https://github.com/sukwoo0711-maker/my-capture/releases/download/v2.0.0/SHA256SUMS.txt");
+            var checksumUrl = new Uri($"https://github.com/sukwoo0711-maker/my-capture/releases/download/v2.0.0/{UpdatePaths.ChecksumName}");
 
             var package = new UpdatePackageInfo(
                 version: version,
@@ -531,20 +532,20 @@ public sealed class GitHubUpdateServiceTests
             var version = new UpdateVersion(1, 8, 0);
             byte[] installerBytes = Encoding.UTF8.GetBytes("Synthetic installer content for CDN redirect test");
             string hash = ComputeSha256(installerBytes);
-            string setupName = "MyCapture-1.8.0-win-x64-setup.exe";
+            string setupName = $"MyCapture-1.8.0-{AppArchitecture.RuntimeIdentifier}-setup.exe";
             string checksumContent = $"{hash}  {setupName}\n";
 
             var package = CreateValidPackage(version, setupSize: installerBytes.Length);
 
             using var httpClient = CreateMockClient(req =>
             {
-                if (req.RequestUri!.Host == "github.com" && req.RequestUri.AbsolutePath.EndsWith("SHA256SUMS.txt"))
+                if (req.RequestUri!.Host == "github.com" && req.RequestUri.AbsolutePath.EndsWith(UpdatePaths.ChecksumName))
                 {
                     var redirect = new HttpResponseMessage(HttpStatusCode.Found);
-                    redirect.Headers.Location = new Uri("https://objects.githubusercontent.com/checksums/SHA256SUMS.txt");
+                    redirect.Headers.Location = new Uri($"https://objects.githubusercontent.com/checksums/{UpdatePaths.ChecksumName}");
                     return redirect;
                 }
-                if (req.RequestUri.Host == "objects.githubusercontent.com" && req.RequestUri.AbsolutePath.EndsWith("SHA256SUMS.txt"))
+                if (req.RequestUri.Host == "objects.githubusercontent.com" && req.RequestUri.AbsolutePath.EndsWith(UpdatePaths.ChecksumName))
                 {
                     return CreateStringResponse(HttpStatusCode.OK, checksumContent);
                 }
@@ -595,10 +596,10 @@ public sealed class GitHubUpdateServiceTests
 
             using var httpClient = CreateMockClient(req =>
             {
-                if (req.RequestUri!.AbsolutePath.EndsWith("SHA256SUMS.txt"))
+                if (req.RequestUri!.AbsolutePath.EndsWith(UpdatePaths.ChecksumName))
                 {
                     var redirect = new HttpResponseMessage(HttpStatusCode.Found);
-                    redirect.Headers.Location = new Uri("http://objects.githubusercontent.com/insecure/SHA256SUMS.txt");
+                    redirect.Headers.Location = new Uri($"http://objects.githubusercontent.com/insecure/{UpdatePaths.ChecksumName}");
                     return redirect;
                 }
                 return new HttpResponseMessage(HttpStatusCode.OK);
@@ -656,7 +657,7 @@ public sealed class GitHubUpdateServiceTests
             var version = new UpdateVersion(1, 8, 0);
             byte[] installerBytes = Encoding.UTF8.GetBytes("Installer bytes");
             string hash = ComputeSha256(installerBytes);
-            string setupName = "MyCapture-1.8.0-win-x64-setup.exe";
+            string setupName = $"MyCapture-1.8.0-{AppArchitecture.RuntimeIdentifier}-setup.exe";
             string checksumContent = $"{hash}  {setupName}\n";
             var package = CreateValidPackage(version, setupSize: installerBytes.Length);
 
@@ -664,7 +665,7 @@ public sealed class GitHubUpdateServiceTests
 
             using var httpClient = CreateMockClient(req =>
             {
-                if (req.RequestUri!.AbsolutePath.EndsWith("SHA256SUMS.txt", StringComparison.OrdinalIgnoreCase))
+                if (req.RequestUri!.AbsolutePath.EndsWith(UpdatePaths.ChecksumName, StringComparison.OrdinalIgnoreCase))
                 {
                     return CreateStringResponse(HttpStatusCode.OK, checksumContent);
                 }
@@ -783,8 +784,8 @@ public sealed class GitHubUpdateServiceTests
         string? customChecksumName = null)
     {
         string normalized = UpdateVersion.TryParse(tagName, out var v) ? v.Value.ToNormalizedString() : tagName;
-        string setupName = customSetupName ?? $"MyCapture-{normalized}-win-x64-setup.exe";
-        string checksumName = customChecksumName ?? "SHA256SUMS.txt";
+        string setupName = customSetupName ?? $"MyCapture-{normalized}-{AppArchitecture.RuntimeIdentifier}-setup.exe";
+        string checksumName = customChecksumName ?? UpdatePaths.ChecksumName;
         string defaultSetupUrl = $"https://github.com/sukwoo0711-maker/my-capture/releases/download/{tagName}/{setupName}";
         string defaultChecksumUrl = $"https://github.com/sukwoo0711-maker/my-capture/releases/download/{tagName}/{checksumName}";
 
@@ -846,9 +847,9 @@ public sealed class GitHubUpdateServiceTests
     private static UpdatePackageInfo CreateValidPackage(UpdateVersion version, long setupSize = 50, string? releaseTag = null)
     {
         string tag = releaseTag ?? $"v{version.ToNormalizedString()}";
-        string setupName = $"MyCapture-{version.ToNormalizedString()}-win-x64-setup.exe";
+        string setupName = $"MyCapture-{version.ToNormalizedString()}-{AppArchitecture.RuntimeIdentifier}-setup.exe";
         var setupUrl = new Uri($"https://github.com/sukwoo0711-maker/my-capture/releases/download/{tag}/{setupName}");
-        var checksumUrl = new Uri($"https://github.com/sukwoo0711-maker/my-capture/releases/download/{tag}/SHA256SUMS.txt");
+        var checksumUrl = new Uri($"https://github.com/sukwoo0711-maker/my-capture/releases/download/{tag}/{UpdatePaths.ChecksumName}");
         var releaseUrl = new Uri($"https://github.com/sukwoo0711-maker/my-capture/releases/tag/{tag}");
 
         return new UpdatePackageInfo(

@@ -11,7 +11,7 @@
     <SatelliteResourceLanguages>ko-KR;en</SatelliteResourceLanguages>
     <!-- Keep the release RID in project.assets.json after an ordinary solution restore so
          the self-contained package can later be reproduced without another restore. -->
-    <RuntimeIdentifiers>win-x64</RuntimeIdentifiers>
+    <RuntimeIdentifiers>win-x64;win-x86</RuntimeIdentifiers>
   </PropertyGroup>
 
   <ItemGroup>

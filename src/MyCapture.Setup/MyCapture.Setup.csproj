@@ -19,4 +19,7 @@
     <!-- Tests substitute the updater boundary folders without touching real system folders. -->
     <InternalsVisibleTo Include="MyCapture.Setup.Tests" />
   </ItemGroup>
+  <ItemGroup>
+    <Compile Include="..\Shared\RecoverableFileRemoval.cs" Link="Storage\RecoverableFileRemoval.cs" />
+  </ItemGroup>
 </Project>

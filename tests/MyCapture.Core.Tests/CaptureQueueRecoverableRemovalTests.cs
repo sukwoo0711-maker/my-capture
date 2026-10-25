@@ -55,10 +55,10 @@ public sealed class CaptureQueueRecoverableRemovalTests
     [InlineData("retention-age", true)]
     [InlineData("item-limit", true)]
     [InlineData("byte-limit", true)]
-    [InlineData(CaptureQueue.ManualPermanentReason, true)]
+    [InlineData(CaptureQueue.ManualPermanentReason, false)]
     [InlineData("manual", false)]
     [InlineData("manual-batch", false)]
-    public void OnlyEvictionAndConfirmedPermanentDeletionSkipTheRecycleBin(string reason, bool permanent) =>
+    public void OnlyAutomaticEvictionDefersCleanupUntilAfterIndexPublication(string reason, bool permanent) =>
         Assert.Equal(permanent, CaptureQueue.IsPermanentRemovalReason(reason));
 
     [Fact]

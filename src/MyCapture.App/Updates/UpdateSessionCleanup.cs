@@ -19,10 +19,10 @@ internal static class UpdateSessionCleanup
                 // Revalidate immediately before deleting exact known files. Never recurse into
                 // a session directory; unknown content stays in place.
                 if (!TryGetFiles(session, out string[] files)) continue;
-                foreach (string file in files) File.Delete(file);
+                foreach (string file in files) global::MyCapture.Core.Storage.RecoverableFileRemoval.DeleteFile(file);
                 UpdateInstaller.AssertNoReparsePoints(session);
                 if (Directory.EnumerateFileSystemEntries(session).Any()) continue;
-                Directory.Delete(session, recursive: false);
+                global::MyCapture.Core.Storage.RecoverableFileRemoval.DeleteDirectory(session, recursive: false);
                 removed++;
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }

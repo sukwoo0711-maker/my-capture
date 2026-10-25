@@ -34,11 +34,13 @@ public sealed class OfflineDeploymentContractTests
     private static string RepositoryPath(string relativePath) =>
         Path.Combine(RepositoryRoot(), relativePath.Replace('/', Path.DirectorySeparatorChar));
 
-    [Fact]
-    public void WinX64PublishProfile_IsExplicitlySelfContainedAndUntrimmed()
+    [Theory]
+    [InlineData("x64")]
+    [InlineData("x86")]
+    public void PublishProfile_IsExplicitlySelfContainedAndUntrimmed(string architecture)
     {
         string path = RepositoryPath(
-            "src/MyCapture.App/Properties/PublishProfiles/win-x64-self-contained.pubxml");
+            $"src/MyCapture.App/Properties/PublishProfiles/win-{architecture}-self-contained.pubxml");
         Assert.True(File.Exists(path), $"Required publish profile is missing: {path}");
 
         XDocument document = XDocument.Load(path);
@@ -47,7 +49,7 @@ public sealed class OfflineDeploymentContractTests
             .Single(element => element.Name.LocalName == name)
             .Value;
 
-        Assert.Equal("win-x64", Property("RuntimeIdentifier"));
+        Assert.Equal("win-" + architecture, Property("RuntimeIdentifier"));
         Assert.Equal("true", Property("SelfContained"));
         Assert.Equal("true", Property("PublishSelfContained"));
         Assert.Equal("true", Property("UseAppHost"));
@@ -61,7 +63,7 @@ public sealed class OfflineDeploymentContractTests
     {
         string package = File.ReadAllText(RepositoryPath("build/package.ps1"));
 
-        Assert.Contains("-p:PublishProfile=win-x64-self-contained", package, StringComparison.Ordinal);
+        Assert.Contains("-p:PublishProfile=$runtime-self-contained", package, StringComparison.Ordinal);
         Assert.Contains("Assert-SelfContainedPublish $publish", package, StringComparison.Ordinal);
         Assert.Contains("coreclr.dll", package, StringComparison.Ordinal);
         Assert.Contains("hostfxr.dll", package, StringComparison.Ordinal);

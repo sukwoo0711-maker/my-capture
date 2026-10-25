@@ -144,7 +144,7 @@ internal static class StudioRangeCalibrationProbe
     {
         try
         {
-            Directory.Delete(directory, recursive: true);
+            global::MyCapture.Core.Storage.RecoverableFileRemoval.DeleteDirectory(directory, recursive: true);
             return true;
         }
         catch (DirectoryNotFoundException)

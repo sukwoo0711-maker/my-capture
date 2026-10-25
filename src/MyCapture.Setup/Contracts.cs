@@ -79,8 +79,8 @@ public sealed class PackageManifest
     {
         if (SchemaVersion != 1 || Product != "MyCapture") Fail("Installer manifest schema or product is invalid.");
         if (Version == null || !Regex.IsMatch(Version, SemVerPattern)) Fail("Installer manifest version is invalid.");
-        if (Runtime != "win-x64" || Architecture != "x64" || !SelfContained || !Offline || MinimumWindowsBuild < 19045)
-            Fail("Manifest must describe an offline self-contained win-x64 payload for build 19045 or later.");
+        if ((Architecture != "x64" && Architecture != "x86") || Runtime != "win-" + Architecture || !SelfContained || !Offline || MinimumWindowsBuild < 19045)
+            Fail("Manifest must describe an offline self-contained win-x64 or win-x86 payload for build 19045 or later.");
         if (Files == null || Files.Length != FileCount || FileCount < 1 || FileCount > (installed ? 10003 : 10000)) Fail("Payload file count is invalid.");
         long total = 0;
         long installedBootstrapBytes = 0; int installedBootstrapCount = 0;

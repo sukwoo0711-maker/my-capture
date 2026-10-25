@@ -35,8 +35,8 @@ public sealed record DeletedLibraryOverview(IReadOnlyList<DeletedLibraryEntry> R
 public sealed record LibraryBatchRestoreResult(int Restored, int Failed);
 
 /// <summary>
-/// The Recycle Bin holds only captures the user deletes from the library. Automatic capacity
-/// and retention eviction, and a confirmed permanent deletion, delete files from disk instead.
+/// Manual deletion records an in-app undo receipt. Automatic eviction also recycles its files
+/// after index publication, without adding entries to the library's undo menu.
 /// Durable capture identities survive both application restart and Shell recycling.
 /// </summary>
 public sealed class RecoverableLibraryService
@@ -157,7 +157,7 @@ public sealed class RecoverableLibraryService
     /// <summary>
     /// Removes journals that can no longer restore anything (restores reconciled into the index,
     /// and items emptied from the Recycle Bin) and keeps at most <see cref="MaxJournalEntries"/>
-    /// of the newest. Journals are app-owned and deleted directly. Runs off the queue owner, so
+    /// of the newest. Retired journals move to the Recycle Bin. Runs off the queue owner, so
     /// it never reads the index itself; the owner passes the tokens it reconciled.
     /// </summary>
     internal int PurgeJournal(IReadOnlySet<Guid>? reconciled = null)
@@ -199,7 +199,7 @@ public sealed class RecoverableLibraryService
             if (dot != 32 || !Guid.TryParseExact(name[..dot], "N", out Guid token)
                 || name[dot..] is not (".recycled.json" or ".restored.json")
                 || File.Exists(JournalPath(token, "intent"))) continue;
-            try { File.Delete(file); }
+            try { global::MyCapture.Core.Storage.RecoverableFileRemoval.DeleteFile(file); }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
         }
         return purged;
@@ -243,10 +243,9 @@ public sealed class RecoverableLibraryService
     }
 
     /// <summary>
-    /// Deletes an evicted or permanently deleted capture directory after the index stopped
+    /// Recycles an evicted capture directory after the index stopped
     /// naming it. <see cref="CaptureQueue.GetDirectory"/> already confined the path to the
-    /// captures root without links below it; .NET's recursive delete removes nested links
-    /// themselves and never descends into their targets.
+    /// captures root without links below it. Nested links move without entering their targets.
     /// </summary>
     private bool DeleteCaptureDirectory(Guid id, string? directory)
     {
@@ -257,7 +256,7 @@ public sealed class RecoverableLibraryService
             _log.LogWarning("Capture {Id} directory became a link; leaving it in place", id);
             return false;
         }
-        Directory.Delete(directory, recursive: true);
+        global::MyCapture.Core.Storage.RecoverableFileRemoval.DeleteDirectory(directory, recursive: true);
         return !Directory.Exists(directory);
     }
 
@@ -686,7 +685,7 @@ public sealed class RecoverableLibraryService
             foreach (string phase in new[] { "intent", "recycled", "restored" })
             {
                 string file = JournalPath(token, phase);
-                if (File.Exists(file)) File.Delete(file);
+                if (File.Exists(file)) global::MyCapture.Core.Storage.RecoverableFileRemoval.DeleteFile(file);
             }
         }
     }

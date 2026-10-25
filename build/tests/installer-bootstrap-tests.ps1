@@ -43,6 +43,6 @@ finally {
     $env:MYCAPTURE_DATA_ROOT = $previousData
     # Remove only this test's own uniquely named fixture root, as installer-hostile-tests does.
     if (Test-Path -LiteralPath $root) {
-        Remove-Item -LiteralPath $root -Recurse -Force -ErrorAction SilentlyContinue
+        Remove-TestItem -Path $root
     }
 }

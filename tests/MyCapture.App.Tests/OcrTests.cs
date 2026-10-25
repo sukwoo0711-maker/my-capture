@@ -468,7 +468,7 @@ public sealed class OcrTests
         Assert.Equal(4.0, accurate.UpscaleFactor);
         Assert.True(accurate.EnhanceContrast);
         Assert.True(accurate.SearchRotatedOrientations);
-        Assert.True(accurate.UseNeuralModel);
+        Assert.Equal(MyCapture.Core.Platform.AppArchitecture.SupportsNeuralOcr, accurate.UseNeuralModel);
         Assert.False(accurate.LocalCorrection);
 
         settings.Quality = OcrQuality.Fast;
@@ -487,7 +487,7 @@ public sealed class OcrTests
         Assert.Equal(4.0, enhanced.UpscaleFactor);
         Assert.True(enhanced.EnhanceContrast);
         Assert.True(enhanced.SearchRotatedOrientations);
-        Assert.True(enhanced.UseNeuralModel);
+        Assert.Equal(MyCapture.Core.Platform.AppArchitecture.SupportsNeuralOcr, enhanced.UseNeuralModel);
         Assert.False(enhanced.LocalCorrection);
         Assert.False(enhanced.UseSuperResolution);
     }

@@ -1,3 +1,4 @@
+using MyCapture.Core.Platform;
 using System.IO;
 using System.Windows.Media.Imaging;
 using Microsoft.Extensions.Logging;
@@ -36,7 +37,7 @@ internal sealed class NeuralOcrEngine : IDisposable
     /// </summary>
     internal Task ModelVerificationTask { get; }
 
-    internal bool CanRun => _store.HasRequiredModels;
+    internal bool CanRun => AppArchitecture.SupportsNeuralOcr && _store.HasRequiredModels;
 
     internal bool IsReady
     {
@@ -52,6 +53,7 @@ internal sealed class NeuralOcrEngine : IDisposable
     internal async Task<OcrResult> RecognizeAsync(OcrRequest request, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
+        if (!AppArchitecture.SupportsNeuralOcr) return OcrResult.Unavailable(UiText.Get("Text_D6580A6EEFB2"));
         if (!await _store.EnsureAsync(cancellationToken).ConfigureAwait(false))
         {
             return OcrResult.Unavailable(UiText.Get("Text_D6580A6EEFB2"));
@@ -121,6 +123,7 @@ internal sealed class NeuralOcrEngine : IDisposable
 
     internal bool TryInitialize()
     {
+        if (!AppArchitecture.SupportsNeuralOcr) return false;
         lock (_sync)
         {
             if (_engine is not null)

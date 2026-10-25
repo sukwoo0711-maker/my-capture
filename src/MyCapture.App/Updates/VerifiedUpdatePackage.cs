@@ -122,7 +122,7 @@ public sealed class VerifiedUpdatePackage
                         continue;
                     }
 
-                    File.Delete(filePath);
+                    global::MyCapture.Core.Storage.RecoverableFileRemoval.DeleteFile(filePath);
                 }
                 catch
                 {
@@ -133,7 +133,7 @@ public sealed class VerifiedUpdatePackage
             // Remove the staging session directory only if empty (non-recursive)
             try
             {
-                Directory.Delete(StagingDirectory, recursive: false);
+                global::MyCapture.Core.Storage.RecoverableFileRemoval.DeleteDirectory(StagingDirectory, recursive: false);
             }
             catch
             {

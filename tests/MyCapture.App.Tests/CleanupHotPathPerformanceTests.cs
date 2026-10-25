@@ -220,6 +220,6 @@ public sealed class CleanupHotPathPerformanceTests
             || !directory.Name.StartsWith("mc-cleanup-perf-", StringComparison.Ordinal)
             || (directory.Attributes & FileAttributes.ReparsePoint) != 0)
             throw new IOException("Refusing to delete a directory this benchmark did not create.");
-        directory.Delete(recursive: true);
+        global::MyCapture.Core.Storage.RecoverableFileRemoval.DeleteDirectory(directory.FullName, recursive: true);
     }
 }
