@@ -205,7 +205,12 @@ internal sealed partial class GalleryWindow
 
     private void OnLibraryItemsKeyDown(object sender, KeyEventArgs e)
     {
-        if (e.Handled || IsNavigationTextInput(e.OriginalSource as DependencyObject)) return;
+        if (e.Handled) return;
+        // The content toolbar shares this surface for layout, but its controls keep their
+        // own keyboard/context-menu handling instead of opening the canvas menu.
+        for (DependencyObject? current = e.OriginalSource as DependencyObject; current is not null; current = GetParent(current))
+            if (ReferenceEquals(current, LibraryContentCommandBar)) return;
+        if (IsNavigationTextInput(e.OriginalSource as DependencyObject)) return;
         Key key = e.Key == Key.System ? e.SystemKey : e.Key;
         if (key == Key.A && Keyboard.Modifiers == ModifierKeys.Control)
         {

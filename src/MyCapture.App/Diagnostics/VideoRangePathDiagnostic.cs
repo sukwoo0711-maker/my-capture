@@ -64,7 +64,7 @@ internal static class VideoRangePathDiagnostic
 
     internal static string FormatOptions(VideoRangePathOptions? options) => options is null ? "unavailable"
         : options.Gallery is { } g
-            ? $"open={g.OpenMode}, frame={g.FrameHeightDip?.ToString("F2", CultureInfo.InvariantCulture) ?? "220(product)"}DIP, "
+            ? $"open={g.OpenMode}, frame={g.FrameHeightDip?.ToString("F2", CultureInfo.InvariantCulture) ?? "flexible(product)"}DIP, "
                 + $"exclusion={g.CaptureExclusion}, rounded-clip={g.RoundedClip}, product-window={g.ProductWindowStyle}"
             : $"{options.Variant}, target-scale={options.TargetScale?.ToString("F3", CultureInfo.InvariantCulture) ?? "product(1100x760)"}";
 

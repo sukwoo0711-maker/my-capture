@@ -1,6 +1,8 @@
 using System.IO;
 using System.Windows;
+using System.Windows.Automation;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Threading;
 using Microsoft.Extensions.Logging;
@@ -13,7 +15,7 @@ using MyCapture.Platform.Recording;
 namespace MyCapture.App.Gallery;
 
 /// <summary>
-/// A small always-on-top video player window. Replaces the in-sidebar inline player so
+/// A resizable always-on-top video player window. Replaces the in-sidebar inline player so
 /// playback no longer duplicates the card's play affordance or overlaps the details panel.
 /// </summary>
 internal sealed class GalleryVideoPlayerWindow : Window
@@ -30,8 +32,9 @@ internal sealed class GalleryVideoPlayerWindow : Window
     };
     private readonly Slider _seek = new() { Minimum = 0, Maximum = 1, Value = 0, IsMoveToPointEnabled = true, Margin = new Thickness(0, 10, 0, 0) };
     private readonly Button _playButton = new() { MinWidth = 76, Style = (Style)Application.Current.Resources["Button.Primary"] };
-    private readonly TextBlock _status = new() { VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(10, 0, 0, 0) };
-    private readonly TextBlock _time = new() { FontFamily = (System.Windows.Media.FontFamily)Application.Current.Resources["Font.Mono"] };
+    private readonly ToggleButton _fullScreenButton = new() { Style = (Style)Application.Current.Resources["ToggleButton.Tool"] };
+    private readonly TextBlock _status = new() { VerticalAlignment = VerticalAlignment.Center, TextWrapping = TextWrapping.Wrap };
+    private readonly TextBlock _time = new() { FontFamily = (System.Windows.Media.FontFamily)Application.Current.Resources["Font.Mono"], VerticalAlignment = VerticalAlignment.Center };
     private readonly TextBlock _title = new()
     {
         Style = (Style)Application.Current.Resources["Text.MutedBlock"],
@@ -45,6 +48,11 @@ internal sealed class GalleryVideoPlayerWindow : Window
     private bool _autoPlayPending;
     private Guid _videoId;
     private Task<VideoSourceInfo>? _sourceProbe;
+    private bool _fullScreen;
+    private Rect _windowedBounds;
+    private WindowState _windowedState;
+    private WindowStyle _windowedStyle;
+    private ResizeMode _windowedResizeMode;
 
     internal event EventHandler? PlayerClosed;
 
@@ -55,8 +63,10 @@ internal sealed class GalleryVideoPlayerWindow : Window
         _log = log;
         DiagnosticOptions = diagnosticOptions;
         Title = "MyCapture";
-        Width = 420;
-        SizeToContent = SizeToContent.Height;
+        Width = 720;
+        Height = 520;
+        SizeToContent = SizeToContent.Manual;
+        ConstrainToWorkArea(SystemParameters.WorkArea);
         ShowInTaskbar = false;
         ShowActivated = false;
         Topmost = true;
@@ -83,34 +93,51 @@ internal sealed class GalleryVideoPlayerWindow : Window
         Grid.SetColumn(close, 1);
         header.Children.Add(close);
 
-        var controls = new Grid { Margin = new Thickness(0, 7, 0, 0) };
-        controls.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        controls.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        controls.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        Grid.SetColumn(_playButton, 0);
+        string fullScreenLabel = UiText.Get("CaptureGuide2_FullScreen");
+        _fullScreenButton.Content = fullScreenLabel;
+        _fullScreenButton.ToolTip = $"{fullScreenLabel} (F11)";
+        AutomationProperties.SetName(_fullScreenButton, fullScreenLabel);
+        AutomationProperties.SetAcceleratorKey(_fullScreenButton, "F11");
+        _fullScreenButton.Click += (_, _) => SetFullScreen(_fullScreenButton.IsChecked == true);
+
+        // Wrapping the transport keeps every action and the complete timecode reachable
+        // on narrow windows and at large text sizes.
+        var controls = new WrapPanel { Margin = new Thickness(0, 7, 0, 0) };
+        _playButton.Margin = new Thickness(0, 0, 8, 0);
+        _fullScreenButton.Margin = new Thickness(0, 0, 8, 0);
+        _status.Margin = new Thickness(0, 0, 8, 0);
         controls.Children.Add(_playButton);
+        controls.Children.Add(_fullScreenButton);
         _status.Text = UiText.Get("Text_6E86D1A85620");
-        Grid.SetColumn(_status, 1);
         controls.Children.Add(_status);
-        Grid.SetColumn(_time, 2);
         controls.Children.Add(_time);
 
-        var root = new StackPanel();
-        var frame = new Border { Height = 220, Background = System.Windows.Media.Brushes.Black, CornerRadius = new CornerRadius(8), ClipToBounds = true, Child = _video };
+        var root = new Grid();
+        root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        root.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+        root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        var frame = new Border { Background = System.Windows.Media.Brushes.Black, CornerRadius = new CornerRadius(8), ClipToBounds = true, Child = _video };
         if (diagnosticOptions?.FrameHeightDip is { } height)
         {
+            // Explicit diagnostic sizes remain fixed so their colour-range comparisons
+            // can still isolate physical presentation scale.
             frame.Height = height;
             Width = height * 16 / 9 + 44; // Padding and non-client width; diagnostic clips are 16:9.
+            SizeToContent = SizeToContent.Height;
         }
         if (diagnosticOptions?.RoundedClip == false)
         {
             frame.CornerRadius = new CornerRadius(0);
             frame.ClipToBounds = false;
         }
+        var transport = new StackPanel();
+        transport.Children.Add(_seek);
+        transport.Children.Add(controls);
+        Grid.SetRow(frame, 1);
+        Grid.SetRow(transport, 2);
         root.Children.Add(header);
         root.Children.Add(frame);
-        root.Children.Add(_seek);
-        root.Children.Add(controls);
+        root.Children.Add(transport);
         Content = new Border { Padding = new Thickness(14), Child = root };
 
         StandardWindowTheme.Apply(this);
@@ -123,6 +150,9 @@ internal sealed class GalleryVideoPlayerWindow : Window
         _playButton.Click += (_, _) => { if (_mediaReady) SetPlayback(!_playing); };
         _seek.ValueChanged += OnSeekChanged;
         _timer.Tick += (_, _) => UpdatePosition();
+        PreviewKeyDown += OnPreviewKeyDown;
+        SetStatusPlaying(false);
+        UpdateTime();
         if (diagnosticOptions?.CaptureExclusion != false)
             SourceInitialized += (_, _) => CaptureWindowExclusion.TryApply(this);
         // Clearing the probe also tells a MediaOpened still awaiting it that the window is gone.
@@ -180,8 +210,72 @@ internal sealed class GalleryVideoPlayerWindow : Window
 
     internal new void Show()
     {
+        if (!IsLoaded && DiagnosticOptions is null && double.IsFinite(Left) && double.IsFinite(Top))
+        {
+            Rect work = SystemParameters.WorkArea;
+            // Off-screen diagnostic hosts deliberately keep their placement. Product
+            // callers anchor the player inside this work area before showing it.
+            if (work.IntersectsWith(new Rect(Left, Top, Width, Height))) ConstrainToWorkArea(work);
+        }
         base.Show();
         _timer.Start();
+    }
+
+    internal void ConstrainToWorkArea(Rect work)
+    {
+        double width = Math.Max(1, work.Width);
+        double height = Math.Max(1, work.Height);
+        MinWidth = Math.Min(360, width);
+        MinHeight = Math.Min(300, height);
+        Width = Math.Clamp(Width, MinWidth, width);
+        Height = Math.Clamp(Height, MinHeight, height);
+        if (double.IsFinite(Left)) Left = Math.Clamp(Left, work.Left, work.Right - Width);
+        if (double.IsFinite(Top)) Top = Math.Clamp(Top, work.Top, work.Bottom - Height);
+    }
+
+    private void OnPreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        if (Keyboard.Modifiers != ModifierKeys.None) return;
+        if (e.Key == Key.F11)
+        {
+            if (!e.IsRepeat) SetFullScreen(!_fullScreen);
+            e.Handled = true;
+        }
+        else if (e.Key == Key.Escape && _fullScreen)
+        {
+            SetFullScreen(false);
+            e.Handled = true;
+        }
+    }
+
+    private void SetFullScreen(bool fullScreen)
+    {
+        if (_fullScreen == fullScreen) return;
+        if (fullScreen)
+        {
+            _windowedState = WindowState;
+            _windowedBounds = WindowState == WindowState.Normal
+                ? new Rect(Left, Top, ActualWidth, ActualHeight) : RestoreBounds;
+            _windowedStyle = WindowStyle;
+            _windowedResizeMode = ResizeMode;
+            WindowState = WindowState.Normal;
+            WindowStyle = WindowStyle.None;
+            ResizeMode = ResizeMode.NoResize;
+            WindowState = WindowState.Maximized;
+        }
+        else
+        {
+            WindowState = WindowState.Normal;
+            WindowStyle = _windowedStyle;
+            ResizeMode = _windowedResizeMode;
+            Left = _windowedBounds.Left;
+            Top = _windowedBounds.Top;
+            Width = _windowedBounds.Width;
+            Height = _windowedBounds.Height;
+            WindowState = _windowedState;
+        }
+        _fullScreen = fullScreen;
+        _fullScreenButton.IsChecked = fullScreen;
     }
 
     private async void OnMediaOpened(object sender, RoutedEventArgs e)
