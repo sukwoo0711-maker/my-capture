@@ -464,12 +464,14 @@ public sealed class VideoRangeDiagnosticTests
             var player = new GalleryVideoPlayerWindow();
             try
             {
-                Assert.Null(player.DiagnosticOptions); Assert.Equal(420, player.Width);
+                Assert.Null(player.DiagnosticOptions);
+                Assert.InRange(player.Width, Math.Min(360, SystemParameters.WorkArea.Width), 720);
+                Assert.InRange(player.Height, Math.Min(300, SystemParameters.WorkArea.Height), 520);
                 Assert.True(player.Topmost); Assert.Equal(WindowStyle.ToolWindow, player.WindowStyle);
                 Assert.False(player.ShowInTaskbar); Assert.False(player.ShowActivated);
-                Assert.Equal(SizeToContent.Height, player.SizeToContent);
+                Assert.Equal(SizeToContent.Manual, player.SizeToContent);
                 var frame = Assert.IsType<Border>(player.MediaForDiagnostic.Parent);
-                Assert.Equal(220, frame.Height); Assert.Equal(new CornerRadius(8), frame.CornerRadius); Assert.True(frame.ClipToBounds);
+                Assert.True(double.IsNaN(frame.Height)); Assert.Equal(new CornerRadius(8), frame.CornerRadius); Assert.True(frame.ClipToBounds);
                 Assert.True(new GalleryPlayerDiagnosticOptions().CaptureExclusion);
                 Assert.False(player.IsMediaReadyForDiagnostic); Assert.False(player.IsPlayingForDiagnostic);
                 Assert.Null(player.MediaForDiagnostic.Source); Assert.Null(StudioRangeVideoEffect.VerificationFor(player.MediaForDiagnostic));

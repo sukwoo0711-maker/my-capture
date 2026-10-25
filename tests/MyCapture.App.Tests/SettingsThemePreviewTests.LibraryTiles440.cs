@@ -62,8 +62,8 @@ public sealed partial class SettingsThemePreviewTests
             });
 
     [Fact]
-    public Task LibraryTiles440_ActionsRevealOnHoverFocusAndSelectionWithAccessibleNames() =>
-        RunIsolated(nameof(LibraryTiles440_ActionsRevealOnHoverFocusAndSelectionWithAccessibleNames), () =>
+    public Task LibraryTiles440_ActionsRevealOnHoverAndFocusWhileSelectionStaysQuietWithAccessibleNames() =>
+        RunIsolated(nameof(LibraryTiles440_ActionsRevealOnHoverAndFocusWhileSelectionStaysQuietWithAccessibleNames), () =>
         {
             var application = CreateLibraryMotionApplication();
             bool? previous = FluidMotion.AnimationsEnabledOverrideForTest;
@@ -172,16 +172,30 @@ public sealed partial class SettingsThemePreviewTests
 
         fixture.ViewModel.Select(id);
         SettleGalleryLayout(window);
-        Assert.Equal(1, actions.Opacity);
-        Assert.True(actions.IsHitTestVisible);
+        // Selection retains its outline without obscuring the preview with idle commands.
+        Assert.Equal(0, actions.Opacity);
+        Assert.False(actions.IsHitTestVisible);
         var selected = Assert.IsType<Border>(item.Template.FindName("SelectedLayer", item));
         Assert.Equal(new Thickness(2), selected.BorderThickness);
         Assert.Same(window.FindResource("Text.Primary"), selected.BorderBrush);
+        SetLibraryTileState440(item, "IsMouseOver", true);
+        SettleGalleryLayout(window);
+        Assert.Equal(1, actions.Opacity);
+        Assert.True(actions.IsHitTestVisible);
+        SetLibraryTileState440(item, "IsMouseOver", false);
+        SettleGalleryLayout(window);
+        Assert.Equal(0, actions.Opacity);
+        Assert.False(actions.IsHitTestVisible);
         SetLibraryTileState440(item, "IsKeyboardFocusWithin", true);
         SettleGalleryLayout(window);
+        Assert.Equal(1, actions.Opacity);
+        Assert.True(actions.IsHitTestVisible);
         Assert.Equal(1, focus.Opacity);
         Assert.Same(window.FindResource("Text.Primary"), selected.BorderBrush);
         SetLibraryTileState440(item, "IsKeyboardFocusWithin", false);
+        SettleGalleryLayout(window);
+        Assert.Equal(0, actions.Opacity);
+        Assert.False(actions.IsHitTestVisible);
 
         FrameworkElement preview = Descendants(item).OfType<FrameworkElement>().Single(element => element.Name == "TilePreview");
         Assert.InRange(Math.Abs(preview.ActualWidth * 10d / 16 - preview.ActualHeight), 0, 1);

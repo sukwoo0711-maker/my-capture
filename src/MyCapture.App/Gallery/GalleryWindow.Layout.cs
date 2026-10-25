@@ -15,7 +15,7 @@ internal sealed partial class GalleryWindow
     {
         ArchiveOverflowMenu.SetBinding(IsEnabledProperty, new System.Windows.Data.Binding(nameof(IsEnabled)) { Source = ArchiveExportButton });
         MoveOverflowMenu.SetBinding(IsEnabledProperty, new System.Windows.Data.Binding(nameof(IsEnabled)) { Source = MoveCapturesButton });
-        LibraryCommandBar.SizeChanged += (_, _) => FitSelectionCommands();
+        LibraryContentCommandBar.SizeChanged += (_, _) => FitSelectionCommands();
         Loaded += (_, _) => FitSelectionCommands();
         _viewModel.PropertyChanged += (_, e) =>
         {
@@ -31,7 +31,7 @@ internal sealed partial class GalleryWindow
         MoveCapturesButton.Visibility = Visibility.Visible;
         ArchiveOverflowMenu.Visibility = Visibility.Collapsed;
         MoveOverflowMenu.Visibility = Visibility.Collapsed;
-        if (!_viewModel.HasSelection || LibraryCommandBar.ActualWidth <= 0) return;
+        if (!_viewModel.HasSelection || LibraryContentCommandBar.ActualWidth <= 0) return;
 
         double WidthOf(FrameworkElement element)
         {
@@ -40,9 +40,8 @@ internal sealed partial class GalleryWindow
             return element.DesiredSize.Width;
         }
 
-        // Keep a useful search field while secondary commands move into the existing menu.
-        double available = LibraryCommandBar.ActualWidth - WidthOf(CompactCaptureCommands)
-            - WidthOf(MoreCommandsButton) - SearchField.Margin.Left - SearchField.Margin.Right - 160;
+        // Selection commands use only the content toolbar; capture and search never change width.
+        double available = LibraryContentCommandBar.ActualWidth - WidthOf(MoreCommandsButton);
         foreach ((Button button, MenuItem menu) in new[]
         {
             (ArchiveExportButton, ArchiveOverflowMenu),
@@ -120,9 +119,11 @@ internal sealed partial class GalleryWindow
                 - RowsList.Padding.Left - RowsList.Padding.Right - SystemParameters.VerticalScrollBarWidth;
         }
 
-        // The themed scrollbar's own width; the system metric only when the template has none.
+        // WPF's template can impose a larger minimum than the themed width (17 versus
+        // 16 DIP). Reserve that actual track even when the scrollbar is collapsed.
         double scrollBar = scroll.Template?.FindName("PART_VerticalScrollBar", scroll) is ScrollBar bar
-            && !double.IsNaN(bar.Width) && bar.Width > 0 ? bar.Width : SystemParameters.VerticalScrollBarWidth;
+            && !double.IsNaN(bar.Width) && bar.Width > 0
+                ? Math.Max(bar.Width, bar.MinWidth) : SystemParameters.VerticalScrollBarWidth;
         return scroll.ActualWidth - scroll.Padding.Left - scroll.Padding.Right - scrollBar;
     }
 

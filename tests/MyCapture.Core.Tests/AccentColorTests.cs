@@ -32,8 +32,9 @@ public sealed class AccentColorTests(ITestOutputHelper output)
         {
             var colors = ThemeCatalog.ColorsFor(theme, AppAccent.Red);
             output.WriteLine($"{theme}: foreground {colors["Accent.Cool"]}, indicator {colors["Accent.Indicator"]}");
-            Assert.Equal(ThemeColor.Rgb(0xE0, 0x45, 0x3C), colors["Accent.Default"]);
-            Assert.Equal(ThemeColor.Rgb(0xF3, 0x5B, 0x4D), colors["Accent.Hover"]);
+            Assert.Equal(ThemeColor.Rgb(0xC9, 0x35, 0x2C), colors["Accent.Default"]);
+            Assert.Equal(ThemeColor.Rgb(0xBD, 0x31, 0x29), colors["Accent.Hover"]);
+            Assert.Equal(ThemeColor.Rgb(0xFF, 0xFF, 0xFF), colors["Text.OnAccent"]);
             Check(colors["Overlay.HandleStroke"], colors["Overlay.HandleFill"], 3, $"{theme} handle");
             foreach (string surface in new[] { "Surface.Canvas", "Surface.Base", "Surface.Raised", "Surface.Overlay",
                          "Surface.Floating", "Surface.Sunken", "Surface.Hover", "Surface.Pressed", "Accent.Subtle" })

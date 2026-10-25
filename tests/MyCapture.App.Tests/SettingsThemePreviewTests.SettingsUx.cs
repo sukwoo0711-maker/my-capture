@@ -185,7 +185,7 @@ public sealed partial class SettingsThemePreviewTests
                     foreach (string name in new[] { "CancelButton" })
                     {
                         Button action = Assert.IsType<Button>(window.FindName(name));
-                        Assert.Equal(44, action.ActualHeight, 1);
+                        Assert.Equal(32, action.ActualHeight, 1);
                         Assert.Equal(new Thickness(10, 4, 10, 4), action.Padding);
                     }
                     TabItem[] items = tabs.Items.OfType<TabItem>().ToArray();

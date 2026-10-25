@@ -10,7 +10,7 @@
 
 새 버전이 있으면 앱에서 알려 줍니다. Store와 GitHub 설치형은 **업데이트**로 설치하고, 포터블은 릴리스 페이지에서 새 ZIP을 받습니다. 자동 확인은 **설정 > 정보 > 새 버전 자동 확인**에서 끌 수 있습니다. 배포 형식별 동작과 연결 주소는 [업데이트 안내](docs/install.md#업데이트)에 있습니다.
 
-32비트(x86) 호환판은 Windows 기본 OCR을 사용합니다. AI OCR과 로컬 번역은 64비트판에서 사용할 수 있습니다. x86 설치·포터블 패키지는 GitHub 배포용이며 Store 패키지는 x64입니다.
+Windows 10 버전 22H2의 32비트(x86) 호환판은 Windows 기본 OCR을 사용합니다. AI OCR과 로컬 번역은 64비트판에서 사용할 수 있습니다. x86 설치·포터블 패키지는 GitHub 배포용이며 Store 패키지는 x64입니다.
 
 ## 기본 캡처 도구와 다른 점
 
@@ -63,7 +63,7 @@
 - [기능과 화면](docs/features.md): 전체 기능 목록과 화면
 - [설치와 배포](docs/install.md): Store 설치본과 GitHub 릴리스의 설치 파일·포터블 ZIP, `SHA256SUMS.txt` 확인, 설치 로그와 종료 코드, 사용자 데이터 위치, 개인정보와 네트워크
 - [소스에서 빌드](docs/build.md): .NET 10 SDK 준비, 빌드와 테스트, 자체 진단(self-test)
-- [4.8.0 릴리스 노트](docs/releases/4.8.0-release-notes.md)와 [이전 릴리스 노트](docs/releases/)
+- [4.8.2 릴리스 노트](docs/releases/4.8.2-release-notes.md)와 [이전 릴리스 노트](docs/releases/)
 - [지원](https://github.com/sukwoo0711-maker/mycapture-support)과 [개인정보처리방침](https://mimiloaf.com/mycapture/privacy/)
 - [소개 페이지](https://mimiloaf.com/mycapture/)와 게시자 [Mimiloaf](https://mimiloaf.com/). 메일 문의는 [support@mimiloaf.com](mailto:support@mimiloaf.com)으로 보내 주십시오.
 
@@ -86,6 +86,8 @@ A Windows pinning tool that keeps your Excel spec table and go-to code snippets 
 Free, including for work, with no ads and no account. Capture, text recognition and translation run on this PC, and the source code is in this repository under the MIT License. MyCapture runs on Windows 11 and Windows 10 version 22H2 (x64 or x86); ARM64 PCs need Windows 11. Website: <https://mimiloaf.com/en/mycapture/>
 
 The app automatically checks for new versions and shows an update notice. **Update** installs the new version for Store and GitHub setup installs; portable copies open the release page for a new ZIP. Turn off automatic checks in **Settings > About > Check for new versions automatically**. See [update behavior and network destinations](docs/install.md#english-summary).
+
+The 32-bit (x86) compatibility edition for Windows 10 version 22H2 uses Windows OCR. AI OCR and local translation are available in the x64 edition. GitHub provides x64 and x86 setup and portable packages; the Store package is x64.
 
 ### What it adds to Snipping Tool
 

@@ -8,7 +8,7 @@ using MyCapture.App.Themes;
 namespace MyCapture.App;
 
 /// <summary>
-/// Alt feedback owns inner render transforms and opacity. Only an icon-only command's width
+/// Alt feedback commits inner render transforms and opacity together. An icon-only command's width
 /// follows it, within the space its command bar already holds for the revealed caption.
 /// </summary>
 internal static class ShortcutRevealMotion
@@ -22,35 +22,14 @@ internal static class ShortcutRevealMotion
     internal const double CornerIconOffset = -5;
     internal const double CornerCaptionScale = 0.8;
     internal const double CaptionEntranceOffset = 4;
-    internal const double CaptionExitOffset = 2;
-    internal const int AEntranceMilliseconds = 120;
-    internal const int AExitMilliseconds = 100;
-    internal const int AOpacityInMilliseconds = 83;
-    internal const int AOpacityOutMilliseconds = 67;
-    internal const int BEntranceMilliseconds = 160;
-    internal const int BExitMilliseconds = 120;
-    internal const int BOpacityDelayMilliseconds = 20;
-    internal const int BOpacityInMilliseconds = 100;
-    internal const int BOpacityOutMilliseconds = 80;
-    internal const int ReducedFadeMilliseconds = 83;
-    // A widening command's chord appears over the last part of the widening and leaves before
-    // the face narrows, so no frame shows it clipped.
-    internal const int WideningCaptionDelayPercent = 55;
-    internal const int WideningCaptionOutMilliseconds = 40;
-    private static readonly Point AControl1 = new(0, 0);
-    private static readonly Point AControl2 = new(0, 1);
-    private static readonly Point BControl1 = new(0.2, 0.15);
-    private static readonly Point BControl2 = new(0.25, 1);
-    private static readonly Point BOpacityControl1 = new(0.2, 0);
-    private static readonly Point BOpacityControl2 = new(0, 1);
-
-    // Initialized once by app startup; tests can select a profile on their own STA thread.
+    // Keep existing diagnostic profile selections readable. Alt feedback now commits one
+    // complete face immediately for every profile, including reduced-motion preferences.
     internal static string Profile { get; } = ParseProfile(Environment.GetEnvironmentVariable("MYCAPTURE_ALT_MOTION"));
     internal static string ParseProfile(string? value) => value?.ToUpperInvariant() is "B" or "C" ? value.ToUpperInvariant() : "A";
     internal static void Initialize() => _ = Profile;
+    // Existing geometry test scopes use this switch; production feedback is also synchronous.
     [ThreadStatic] internal static bool SettleImmediatelyForTest;
     [ThreadStatic] internal static string? ProfileForTest;
-    [ThreadStatic] internal static Action<AnimationClock>? AnimationClockCreatedForTest;
     [ThreadStatic] private static List<WeakReference<Face>>? s_faces;
     [ThreadStatic] private static int s_registrationsSincePrune;
 
@@ -121,14 +100,14 @@ internal static class ShortcutRevealMotion
 
     internal static void ResetPrimary(FrameworkElement primary)
     {
-        Animate(Shift(primary), TranslateTransform.YProperty, PrimaryRestOffset, 0);
+        Settle(Shift(primary), TranslateTransform.YProperty, PrimaryRestOffset);
         FrameworkElement? icon = primary is StackPanel row
             ? row.Children.OfType<FrameworkElement>().FirstOrDefault(child => child is not TextBlock)
             : primary is TextBlock ? null : primary;
         if (icon?.GetValue(ScaleProperty) is ScaleTransform scale)
         {
-            Animate(scale, ScaleTransform.ScaleXProperty, 1, 0);
-            Animate(scale, ScaleTransform.ScaleYProperty, 1, 0);
+            Settle(scale, ScaleTransform.ScaleXProperty, 1);
+            Settle(scale, ScaleTransform.ScaleYProperty, 1);
         }
     }
 
@@ -199,92 +178,36 @@ internal static class ShortcutRevealMotion
         internal void Update(bool animate)
         {
             bool revealed = ShortcutPresentation.IsRevealed(caption);
-            animate &= caption.IsLoaded && !SettleImmediatelyForTest && ShortcutPresentation.ReadEnabled?.Invoke() != true;
-            // Faces inside collapsed groups (hidden properties, the inactive command mode) settle directly.
-            animate &= caption.IsVisible;
-            string profile = ProfileForTest ?? Profile;
-            bool reduced = profile == "C" || !FluidMotion.AnimationsEnabled;
-            int move = !animate || reduced ? 0 : profile == "B"
-                ? revealed ? BEntranceMilliseconds : BExitMilliseconds
-                : revealed ? AEntranceMilliseconds : AExitMilliseconds;
-            Point c1 = profile == "B" ? BControl1 : AControl1;
-            Point c2 = profile == "B" ? BControl2 : AControl2;
+            // A held key is a current state, not a transition to wait through. Commit the
+            // icon, available caption width and opacity together before the next render.
+            // This also prevents a short tap or reversal from leaving a partly open face.
             if (PrimaryShift is not null)
             {
-                Animate(PrimaryShift, TranslateTransform.XProperty, Corner && revealed ? CornerIconOffset : 0, move, c1, c2);
-                Animate(PrimaryShift, TranslateTransform.YProperty, Corner ? revealed ? CornerIconOffset : 0 : revealed ? 0 : PrimaryRestOffset, move, c1, c2);
+                Settle(PrimaryShift, TranslateTransform.XProperty, Corner && revealed ? CornerIconOffset : 0);
+                Settle(PrimaryShift, TranslateTransform.YProperty, Corner ? revealed ? CornerIconOffset : 0 : revealed ? 0 : PrimaryRestOffset);
             }
             if (IconScale is not null)
             {
                 double scale = revealed ? Corner ? CornerIconScale : CommandIconScale : 1;
-                Animate(IconScale, ScaleTransform.ScaleXProperty, scale, move, c1, c2);
-                Animate(IconScale, ScaleTransform.ScaleYProperty, scale, move, c1, c2);
+                Settle(IconScale, ScaleTransform.ScaleXProperty, scale);
+                Settle(IconScale, ScaleTransform.ScaleYProperty, scale);
             }
             if (CaptionScale is not null)
             {
-                Animate(CaptionScale, ScaleTransform.ScaleXProperty, revealed ? 1 : CornerCaptionScale, move, c1, c2);
-                Animate(CaptionScale, ScaleTransform.ScaleYProperty, revealed ? 1 : CornerCaptionScale, move, c1, c2);
+                Settle(CaptionScale, ScaleTransform.ScaleXProperty, revealed ? 1 : CornerCaptionScale);
+                Settle(CaptionScale, ScaleTransform.ScaleYProperty, revealed ? 1 : CornerCaptionScale);
             }
-            bool widens = !Corner && animate && CommandButtonPresentation.Widens(caption);
-            if (!Corner) Animate(caption, WidthProgressProperty, revealed ? 1 : 0, move, c1, c2,
-                widens && !revealed && !reduced ? WideningCaptionOutMilliseconds : 0);
-            // A fresh entrance starts at +4. A reversal retains its currently rendered value.
-            if (animate && !reduced && !Corner && revealed && caption.Opacity == 0
-                && (!_captionShift.HasAnimatedProperties || _captionShift.Y == CaptionExitOffset))
-                Animate(_captionShift, TranslateTransform.YProperty, CaptionEntranceOffset, 0);
-            double captionOffset = Corner || reduced || revealed ? 0 : animate ? CaptionExitOffset : CaptionEntranceOffset;
-            Animate(_captionShift, TranslateTransform.YProperty, captionOffset, move, c1, c2);
-            int fade = !animate ? 0 : reduced ? ReducedFadeMilliseconds : profile == "B"
-                ? revealed ? BOpacityInMilliseconds : BOpacityOutMilliseconds
-                : revealed ? AOpacityInMilliseconds : AOpacityOutMilliseconds;
-            bool splineOpacity = profile == "B" && revealed && !reduced;
-            int fadeDelay = animate && splineOpacity ? BOpacityDelayMilliseconds : 0;
-            if (widens && revealed && !reduced)
-            {
-                fadeDelay = move * WideningCaptionDelayPercent / 100;
-                fade = move - fadeDelay;
-            }
-            else if (widens && !revealed) fade = reduced ? 0 : WideningCaptionOutMilliseconds;
-            Animate(caption, UIElement.OpacityProperty, revealed ? 1 : 0, fade,
-                splineOpacity ? BOpacityControl1 : null, splineOpacity ? BOpacityControl2 : null, fadeDelay);
+            if (!Corner) Settle(caption, WidthProgressProperty, revealed ? 1 : 0);
+            Settle(_captionShift, TranslateTransform.YProperty, Corner || revealed ? 0 : CaptionEntranceOffset);
+            Settle(caption, UIElement.OpacityProperty, revealed ? 1 : 0);
         }
     }
 
-    internal static void Animate(IAnimatable target, DependencyProperty property, double to, int milliseconds,
-        Point? control1 = null, Point? control2 = null, int delay = 0)
+    private static void Settle(IAnimatable target, DependencyProperty property, double value)
     {
         var owner = (DependencyObject)target;
-        double from = (double)owner.GetValue(property);
-        if (milliseconds == 0 || from.Equals(to))
-        {
-            // Most faces are already at their resting values during construction. Avoid
-            // creating animation storage or invalidating layout/render for those values.
-            if (from.Equals(to) && !target.HasAnimatedProperties) return;
-            target.BeginAnimation(property, null);
-            owner.SetValue(property, to);
-            return;
-        }
-        // Preserve the sampled value before the new clock's first render tick and during B's
-        // delay. Replacing the existing clock directly also preserves WPF's handoff snapshot.
-        owner.SetValue(property, from);
-        var animation = new DoubleAnimationUsingKeyFrames
-        {
-            BeginTime = TimeSpan.FromMilliseconds(delay),
-            FillBehavior = FillBehavior.HoldEnd,
-        };
-        animation.KeyFrames.Add(new DiscreteDoubleKeyFrame(from, KeyTime.FromTimeSpan(TimeSpan.Zero)));
-        var end = KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(milliseconds));
-        animation.KeyFrames.Add(control1 is { } first && control2 is { } second
-            ? new SplineDoubleKeyFrame(to, end, new KeySpline(first, second))
-            : new LinearDoubleKeyFrame(to, end));
-        if (AnimationClockCreatedForTest is { } clockCreated)
-        {
-            // Let midpoint tests pause and seek the real animation, including its key splines,
-            // without relying on how promptly the dispatcher can schedule a render tick.
-            var clock = (AnimationClock)animation.CreateClock(true);
-            target.ApplyAnimationClock(property, clock, HandoffBehavior.SnapshotAndReplace);
-            clockCreated(clock);
-        }
-        else target.BeginAnimation(property, animation, HandoffBehavior.SnapshotAndReplace);
+        if (((double)owner.GetValue(property)).Equals(value) && !target.HasAnimatedProperties) return;
+        target.BeginAnimation(property, null);
+        owner.SetValue(property, value);
     }
 }

@@ -66,6 +66,7 @@ public sealed partial class VideoEditorTimeReadoutTests : KoreanCaptionTest
         finally
         {
             editor?.Close();
+            OwnedTestDirectory.WaitForMediaFilesReleased(root);
             OwnedTestDirectory.Delete(root);
         }
     });
@@ -106,6 +107,7 @@ public sealed partial class VideoEditorTimeReadoutTests : KoreanCaptionTest
         finally
         {
             editor?.Close();
+            OwnedTestDirectory.WaitForMediaFilesReleased(root);
             OwnedTestDirectory.Delete(root);
         }
     });

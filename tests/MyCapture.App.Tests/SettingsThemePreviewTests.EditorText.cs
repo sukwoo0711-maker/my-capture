@@ -107,11 +107,11 @@ public sealed partial class SettingsThemePreviewTests
             Drain(window);
 
             Assert.Equal(3, controller.Document.Items.OfType<TextAnnotation>().Count());
-            // Under the real theme (display-mode window text, themed TextBox template) the live
-            // box still lays out with ideal metrics and puts its first glyph on the caption origin.
+            // Under the real theme (the window's text formatting, themed TextBox template) the live
+            // box lays out with ideal metrics and puts its first glyph on the caption origin.
             var live = (TextBox)active.GetValue(editor)!;
             var surface = (AnnotationEditorSurface)typeof(AnnotationEditorControl).GetField("_surface", flags)!.GetValue(editor)!;
-            Assert.Equal(TextFormattingMode.Display, TextOptions.GetTextFormattingMode(window));
+            Assert.Equal(MyCapture.App.Themes.ThemeFonts.Formatting, TextOptions.GetTextFormattingMode(window));
             Assert.Equal(TextFormattingMode.Ideal, TextOptions.GetTextFormattingMode(live));
             Point glyph = live.TranslatePoint(live.GetRectFromCharacterIndex(0).TopLeft, surface);
             Point origin = surface.ToSurfacePoint(new PointD(40, 200));

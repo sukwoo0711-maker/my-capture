@@ -1082,7 +1082,11 @@ public partial class App : Application
 
     private void DismissQuickAccessForCapture()
     {
+        // The capture command will be refused while this capture's card is in front and its save
+        // still runs; that card is the answer (ReportCaptureBlock), so it stays.
+        if (IsQuickAccessFirstAnsweringCapture()) return;
         _latestReceipt = null;
+        CancelQuickAccessFirst();
         // A capture still flying into its card lands at once; the next capture never waits for it.
         _pendingLift = null;
         _captureFlight?.Finish();
@@ -1124,7 +1128,8 @@ public partial class App : Application
     {
         // Every still capture (region release, window click, full screen, a delayed capture, a
         // finished scroll) arrives here as soon as its image exists, before anything is saved or
-        // copied: the shutter answers the gesture itself, and the capture lifts off the screen.
+        // copied: the shutter answers the gesture itself, the capture lifts off the screen, and its
+        // quick access card shows on the next turn and receives it (card first, ShowQuickAccessFirst).
         if (_settings?.General.PlayCaptureSound == true) CaptureShutterSound.Play();
         LiftCaptureForQuickAccess(e);
         _log?.LogInformation(
@@ -1153,6 +1158,8 @@ public partial class App : Application
                 _pendingRecord.InitialRenderShowsSourceWindowTitle, _pendingRecord.SourcePageUrl,
                 Core.Capture.CaptureProvenance.FromRecord(_pendingRecord), CaptureSelectionProvenance.Pending(e))
             : null;
+        // The card shows on the turn after the lift, while the save and copy run (card first).
+        QuickAccessFirst? first = automaticClipboardCopy is not null ? ShowQuickAccessFirst(e, automaticClipboardCopy) : null;
         try
         {
             if (_persistence is null || _commit is null)
@@ -1163,6 +1170,7 @@ public partial class App : Application
             // are pinned or this image alone exceeds the configured capacity.
             _currentEditSession = _commit.BeginEditSession(_pendingRecord);
             _currentRecord = await _persistence.PersistPendingOriginalAsync(_pendingRecord, e.SelectedBitmap);
+            ReceiptTimeline.Mark?.Invoke("save-resumed");
         }
         catch (Exception ex)
         {
@@ -1170,11 +1178,15 @@ public partial class App : Application
             _currentRecord = null;
             _currentEditSession = null;
             _log?.LogError(ex, "Could not persist the captured original");
-            _tray?.ShowBalloon(
-                UiText.Get("Text_4033027EAEDB"),
-                LibrarySaveFailureMessage(_settings?.General.AfterCapture ?? AfterCaptureAction.Editor, ex),
-                TrayBalloonKind.Error);
+            string title = UiText.Get("Text_4033027EAEDB");
+            string message = LibrarySaveFailureMessage(_settings?.General.AfterCapture ?? AfterCaptureAction.Editor, ex);
+            // A card already on screen says why itself; only without one does the notification.
+            if (first is null || !ShowQuickAccessFirstFailure(first, title, message))
+                ShowCaptureNotice(title, message, TrayBalloonKind.Error);
         }
+
+        // A card shown first takes the saved capture now, while the copy may still run.
+        bool receiptTaken = first is not null && _currentRecord is { } saved && BindQuickAccessFirst(first, saved);
 
         if (lateSource is not null)
             _sourceBackfillTask = BackfillLateSourceAsync(_pendingRecord, published: _currentRecord is not null, lateSource);
@@ -1226,6 +1238,7 @@ public partial class App : Application
                 copied = await (automaticClipboardCopy ?? _commit.CopyCapturedRegionAsync(e.SelectedBitmap,
                     e.SourceTitle, _pendingRecord.InitialRenderShowsSourceWindowTitle, _pendingRecord.SourcePageUrl,
                     Core.Capture.CaptureProvenance.FromRecord(_pendingRecord), CaptureSelectionProvenance.Pending(e)));
+                ReceiptTimeline.Mark?.Invoke("copy-resumed");
             }
             catch (Exception ex)
             {
@@ -1236,14 +1249,17 @@ public partial class App : Application
             }
 
             copiedToClipboard = copied;
-            if (!copied)
+            if (first is not null) ReportCopyToQuickAccessFirst(first, copied);
+            // A card that showed this failure offers the retry itself (C), as long as its capture
+            // was saved; otherwise the notification names where to retry.
+            if (!copied && first is not { CopyFailureShown: true, SaveFailed: false })
             {
                 string message = _currentRecord is null
                     ? UiText.Get("Text_4048C8E18C61")
                     : UiText.Get("Text_9E0860CEAEC2");
                 try
                 {
-                    _tray?.ShowBalloon(
+                    ShowCaptureNotice(
                         UiText.Get("Text_422F61DDCB7C"),
                         message,
                         TrayBalloonKind.Warning,
@@ -1265,7 +1281,8 @@ public partial class App : Application
         // copied result counts toward the Store rating request; a save or copy failure resets it.
         _storeRating?.RecordCapture(succeeded: _currentRecord is not null && copiedToClipboard);
         if (_services is null || _currentRecord is null) CancelCaptureFlight(e.SelectedBitmap);
-        if (_services is not null && _currentRecord is { } receipt)
+        // Without a card shown first (another mode, a text capture), the receipt shows once saved and copied.
+        if (_services is not null && _currentRecord is { } receipt && !receiptTaken)
         {
             _latestReceipt = receipt.Id;
             var selected = e.SelectedBitmap;
@@ -1295,6 +1312,7 @@ public partial class App : Application
                     CancelCaptureFlight(selected);
                 }
             }));
+            ReceiptTimeline.Mark?.Invoke("card-scheduled");
         }
         CompleteWelcomeCaptureAnnouncement();
     }
@@ -1316,8 +1334,8 @@ public partial class App : Application
         _captureFlight?.Finish();
         _captureFlight = null;
         _pendingLift = null;
-        // The same conditions as the card itself (_services, the after-capture mode); whether the
-        // save succeeds is known only later, and a failed one lets the image fade away.
+        // The same conditions as the card itself (_services, the after-capture mode). The card shown
+        // first takes the image even when the save then fails; without a card, the image fades away.
         if (_services is null || e.TextCapture || _scrollCancellation is not null
             || _settings?.General.AfterCapture != AfterCaptureAction.QuickAccess) return;
         System.Windows.Media.Imaging.BitmapSource image = e.SelectedBitmap;
@@ -1329,6 +1347,7 @@ public partial class App : Application
             // A newer capture, or this one failing, has already taken its place.
             if (!ReferenceEquals(_pendingLift, image)) return;
             _pendingLift = null;
+            ReceiptTimeline.Mark?.Invoke("lift-start");
             try
             {
                 _captureFlight = CaptureFlight.TryLift(image, source);
@@ -1338,6 +1357,7 @@ public partial class App : Application
                 // The flight is decoration; the capture goes on without it.
                 _log?.LogWarning(ex, "Could not lift the capture toward its receipt card");
             }
+            ReceiptTimeline.Mark?.Invoke(_captureFlight is null ? "lift-none" : "lift-shown");
         }));
     }
 
@@ -1383,46 +1403,21 @@ public partial class App : Application
         IDisposable lease = _queue.AcquireEvictionLease(record.Id);
         try
         {
-            var saver = new PinImageSaveService(() => _settings!, () => _capturePaths!,
-                _services.GetRequiredService<ILogger<PinImageSaveService>>(), _commit.RememberExportOptions);
             QuickAccessWindow? card = null;
-            async Task<System.Windows.Media.Imaging.BitmapSource> Render()
-            {
-                using IDisposable actionLease = _queue.AcquireEvictionLease(record.Id);
-                var rendered = ReferenceEquals(_currentRecord, record) && _overlay?.CurrentEditor is { } editor
-                    ? await editor.RenderCurrentImageAsync()
-                    : await Task.Run(() => MyCapture.Platform.Imaging.ImageCodec.TryLoad(_queue.GetFilePath(record, CaptureFileNames.Rendered))
-                        ?? throw new IOException("The current rendered capture is unavailable."));
-                if (card?.IsVisible == true) card.UpdatePreview(rendered);
-                return rendered;
-            }
-            var actions = new QuickAccessImageActions(Render,
-                bitmap => ClipboardImageService.CopyImageWithProvenanceAsync(bitmap, record.SourcePageUrl,
-                    Core.Capture.CaptureProvenance.FromRecord(record)),
-                bitmap => _pins?.PinImage(bitmap, Core.Capture.CaptureProvenance.FromRecord(record)),
-                async bitmap => (await saver.QuickSaveAsync(bitmap, record.SourcePageUrl)).Status == PinSaveStatus.Saved,
-                record.SourcePageUrl, new GalleryDragExportService(_queue));
-            card = new QuickAccessWindow(image,
-                actions.CopyAsync,
-                () =>
-                {
-                    if (ReferenceEquals(_currentRecord, record) && _overlay?.ActivateCurrent() == true) return;
-                    EnsureGalleryWindow()?.OpenCapture(record.Id, edit: true);
-                },
-                actions.PinAsync,
-                actions.SaveAsync,
-                () => EnsureGalleryWindow()?.OpenCapture(record.Id, edit: false),
-                actions.ExportAsync, capturedRegion: region, targetMonitor: monitor,
-                copyText: _textCapture is { } textCapture
-                    ? async () => await textCapture.RecognizeAndCopyAsync(await Render(), CancellationToken.None)
-                    : null, copiedToClipboard: copiedToClipboard,
+            QuickAccessCardActions actions = CreateQuickAccessActions(record, () => card);
+            card = new QuickAccessWindow(image, actions.Copy, actions.Edit, actions.Pin, actions.Save, actions.Library,
+                actions.Export, capturedRegion: region, targetMonitor: monitor, copyText: actions.CopyText,
+                copiedToClipboard: copiedToClipboard,
                 firstCaptureTip: _settings.General.FirstCaptureTipShown ? null : UiText.Get("Onboard_FirstCaptureTip"),
                 keyboardRouter: _receiptKeyboard);
+            ReceiptTimeline.Mark?.Invoke("card-constructed");
             card.Closed += (_, _) => { _overlay?.NoteForegroundDismissal(); lease.Dispose(); if (ReferenceEquals(_quickAccess, card)) _quickAccess = null; _storeRating?.NotifyFlowEnded(); };
             _quickAccess = card;
             // The lifted capture flies into this card; without one the card uses its usual entrance.
             flight?.Land(card);
+            ReceiptTimeline.Mark?.Invoke("card-show");
             card.Show();
+            ReceiptTimeline.Mark?.Invoke("card-shown");
             if (FirstUseTips.ShowCaptureOnce(_settings.General, () => { })) SaveFirstUseTips();
         }
         catch (Exception ex)
@@ -1431,6 +1426,49 @@ public partial class App : Application
             lease.Dispose();
             _log?.LogWarning(ex, "Could not show the optional capture receipt");
         }
+    }
+
+    /// <summary>
+    /// The card's actions on a saved capture. Each renders the capture's current image (the open
+    /// editor's, or its rendered file) under its own eviction lease and shows it in
+    /// <paramref name="card"/>'s preview.
+    /// </summary>
+    private QuickAccessCardActions CreateQuickAccessActions(CaptureRecord record, Func<QuickAccessWindow?> card)
+    {
+        CaptureQueue queue = _queue ?? throw new InvalidOperationException("The capture library is unavailable.");
+        CaptureCommitService commit = _commit ?? throw new InvalidOperationException("Capture persistence is unavailable.");
+        ServiceProvider services = _services ?? throw new InvalidOperationException("The app services are unavailable.");
+        var saver = new PinImageSaveService(() => _settings!, () => _capturePaths!,
+            services.GetRequiredService<ILogger<PinImageSaveService>>(), commit.RememberExportOptions);
+        async Task<System.Windows.Media.Imaging.BitmapSource> Render()
+        {
+            using IDisposable actionLease = queue.AcquireEvictionLease(record.Id);
+            var rendered = ReferenceEquals(_currentRecord, record) && _overlay?.CurrentEditor is { } editor
+                ? await editor.RenderCurrentImageAsync()
+                : await Task.Run(() => MyCapture.Platform.Imaging.ImageCodec.TryLoad(queue.GetFilePath(record, CaptureFileNames.Rendered))
+                    ?? throw new IOException("The current rendered capture is unavailable."));
+            if (card() is { IsVisible: true } shown) shown.UpdatePreview(rendered);
+            return rendered;
+        }
+        var actions = new QuickAccessImageActions(Render,
+            bitmap => ClipboardImageService.CopyImageWithProvenanceAsync(bitmap, record.SourcePageUrl,
+                Core.Capture.CaptureProvenance.FromRecord(record)),
+            bitmap => _pins?.PinImage(bitmap, Core.Capture.CaptureProvenance.FromRecord(record)),
+            async bitmap => (await saver.QuickSaveAsync(bitmap, record.SourcePageUrl)).Status == PinSaveStatus.Saved,
+            record.SourcePageUrl, new GalleryDragExportService(queue));
+        return new QuickAccessCardActions(actions.CopyAsync,
+            () =>
+            {
+                if (ReferenceEquals(_currentRecord, record) && _overlay?.ActivateCurrent() == true) return;
+                EnsureGalleryWindow()?.OpenCapture(record.Id, edit: true);
+            },
+            actions.PinAsync,
+            actions.SaveAsync,
+            () => EnsureGalleryWindow()?.OpenCapture(record.Id, edit: false),
+            actions.ExportAsync,
+            _textCapture is { } textCapture
+                ? async () => await textCapture.RecognizeAndCopyAsync(await Render(), CancellationToken.None)
+                : null);
     }
 
     /// <summary>

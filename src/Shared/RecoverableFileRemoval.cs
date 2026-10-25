@@ -121,8 +121,10 @@ public sealed class RecoverableFileRemoval
                 if (aborted || sink.Result < 0 || sink.RecycledPath is null || sink.IdList is null)
                     throw new IOException("The Shell did not confirm a recoverable Recycle Bin move.");
                 var receipt = new CleanupReceipt(path, sink.RecycledPath, identity, sink.IdList, directory);
+                string deletedOriginalPath = ReadDeletedOriginalPathWhenReady(receipt.RecycledPath);
+                // Recheck the exact object after waiting for its metadata to become readable.
                 if (Exists(path) || !Exists(receipt.RecycledPath) || GetIdentity(receipt.RecycledPath) != identity
-                    || !PathsEqual(ReadDeletedOriginalPath(receipt.RecycledPath), path))
+                    || !PathsEqual(deletedOriginalPath, path))
                     throw new IOException("The Recycle Bin item did not match the original filesystem object.");
                 return receipt;
             }
@@ -261,6 +263,27 @@ public sealed class RecoverableFileRemoval
             }
             finally { Release(items); Release(folder); Release(desktop); if (root != 0) Marshal.FreeCoTaskMem(root); }
         });
+    }
+
+    // A completed move can briefly leave this exact receipt's metadata sharing-locked.
+    // Retry only that read, never the Shell operation or unrelated Recycle Bin entries.
+    internal string ReadDeletedOriginalPathWhenReady(string recycledPath)
+    {
+        var elapsed = Stopwatch.StartNew();
+        TimeSpan budget = TimeSpan.FromSeconds(1);
+        TimeSpan interval = TimeSpan.FromMilliseconds(25);
+        while (true)
+        {
+            try { return ReadDeletedOriginalPath(recycledPath); }
+            catch (IOException error) when (error.HResult == unchecked((int)0x80070020))
+            {
+                TimeSpan remaining = budget - elapsed.Elapsed;
+                if (remaining <= TimeSpan.Zero) throw;
+                DiagnosticStageForTest?.Invoke("recycle:metadata-sharing-retry");
+                Thread.Sleep(remaining < interval ? remaining : interval);
+                if (elapsed.Elapsed >= budget) throw;
+            }
+        }
     }
 
     // Read-only validation of Windows' v1/v2 Recycle Bin identity metadata. Never edit
