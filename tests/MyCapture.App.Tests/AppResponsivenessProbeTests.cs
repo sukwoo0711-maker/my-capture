@@ -64,7 +64,8 @@ public sealed class AppResponsivenessProbeTests
     private const string LibraryVariable = "MYCAPTURE_APP_PERF_CHILD_LIBRARY";
 
     internal static readonly string[] DefaultSections =
-        ["capture", "editor-open", "editor-open-prewarmed", "done", "startup-1000", "startup-5000", "library-1000", "library-5000"];
+        ["capture", "editor-open", "editor-open-prewarmed", "done", "startup-1000", "startup-5000", "library-1000", "library-5000",
+            "receipt-region", "receipt-1080", "receipt-1440", "receipt-4k"];
 
     [AppPerfFact]
     public async Task MeasureAppResponsiveness()
@@ -168,7 +169,7 @@ internal sealed class AppPerfFactAttribute : FactAttribute
 /// One section of the app probe, driven from a background "input" thread while the STA thread runs
 /// its dispatcher, with the editor probe's heartbeat and dispatcher-operation tracking.
 /// </summary>
-internal sealed class AppResponsivenessProbe
+internal sealed partial class AppResponsivenessProbe
 {
     private const BindingFlags Private = BindingFlags.Instance | BindingFlags.NonPublic;
     private const double PointerPaceMs = 8;
@@ -233,10 +234,14 @@ internal sealed class AppResponsivenessProbe
         _environment.Add("Section: " + _section);
         var hang = new HangContext(_output, NativeStacks.CurrentThreadId(), _jit,
             () => WriteReport(new TimeoutException("The UI thread stopped responding; the probe wrote hang-*.txt and ended itself.")));
+        // The receipt sections time the dispatcher's own idle order: an 8 ms Input-priority beat would
+        // sit in front of the card's ContextIdle turn, so they run without it.
+        bool beat = !IsReceiptSection(_section);
         using (var tracker = new DispatcherOperationTracker(_ui, _recorder))
-        using (var heartbeat = new UiHeartbeat(_ui, _recorder, tracker, hang, sampleStacks: false))
+        using (UiHeartbeat? heartbeat = beat ? new UiHeartbeat(_ui, _recorder, tracker, hang, sampleStacks: false) : null)
         {
-            _environment.Add("Heartbeat timer: " + (heartbeat.HighResolution ? "high-resolution waitable timer, 8 ms" : "Thread.Sleep(8) fallback"));
+            _environment.Add(heartbeat is null ? "Heartbeat: off (receipt section)"
+                : "Heartbeat timer: " + (heartbeat.HighResolution ? "high-resolution waitable timer, 8 ms" : "Thread.Sleep(8) fallback"));
             var frame = new DispatcherFrame();
             var driver = new Thread(() =>
             {
@@ -261,7 +266,7 @@ internal sealed class AppResponsivenessProbe
             driver.Start();
             Dispatcher.PushFrame(frame);
             driver.Join();
-            heartbeat.Stop();
+            heartbeat?.Stop();
         }
 
         AnnotationEditorPreferences.Read = null;
@@ -310,6 +315,7 @@ internal sealed class AppResponsivenessProbe
             case "editor-open": RunEditorOpen(prewarm: false); break;
             case "editor-open-prewarmed": RunEditorOpen(prewarm: true); break;
             case "done": RunDone(); break;
+            case var receipt when IsReceiptSection(receipt): RunReceipt(); break;
             default:
                 int count = LibrarySize(_section) ?? throw new ArgumentException("Unknown app probe section: " + _section);
                 if (_section.StartsWith("startup-", StringComparison.Ordinal)) RunStartup(count);
@@ -1340,6 +1346,14 @@ internal static class ProbeJoin
             {
                 // One heading level down: each section's title becomes a second-level heading.
                 foreach (string line in File.ReadAllLines(summary, Encoding.UTF8))
+                    md.AppendLine(line.StartsWith('#') ? "#" + line : line);
+            }
+
+            string receipt = Path.Combine(folder, "receipt-summary.md");
+            if (File.Exists(receipt))
+            {
+                md.AppendLine();
+                foreach (string line in File.ReadAllLines(receipt, Encoding.UTF8))
                     md.AppendLine(line.StartsWith('#') ? "#" + line : line);
             }
             else
