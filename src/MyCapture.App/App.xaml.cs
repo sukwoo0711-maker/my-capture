@@ -1331,6 +1331,7 @@ public partial class App : Application
             // A newer capture, or this one failing, has already taken its place.
             if (!ReferenceEquals(_pendingLift, image)) return;
             _pendingLift = null;
+            ReceiptTimeline.Mark?.Invoke("lift-start");
             try
             {
                 _captureFlight = CaptureFlight.TryLift(image, source);

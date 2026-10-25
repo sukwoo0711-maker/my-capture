@@ -44,7 +44,11 @@ namespace MyCapture.App.Tests;
 /// <c>ShowQuickAccess</c> right after the selector has closed (on the dispatcher turn after the lift),
 /// suppressing the scheduled show: a simulation of a card shown first, the product unchanged. The
 /// <c>receipt-ab-*</c> sections alternate the two in one process after a cold current-path capture
-/// (ten warm captures each), so a busy desktop loads both alike.
+/// (ten warm captures each), so a busy desktop loads both alike. The <c>receipt-tray-*</c> sections take
+/// the current path while the tray's hidden message window (an HwndSource the App holds from launch for
+/// the tray icon and hotkeys) exists, as in the App; the other sections leave it out. The
+/// <c>receipt-parts-*</c> sections take no capture and time only the parts below, six times each,
+/// including a 30 s idle keeper variant.
 /// </para>
 /// <para>
 /// The App is the real class without its shell (as <c>CaptureLibraryFirstTests</c> builds it): the
@@ -72,7 +76,7 @@ internal sealed partial class AppResponsivenessProbe
     private static readonly string[] ReceiptStages =
     [
         "overlay-hidden", "handler-entered", "handler-returned", "overlay-closed", "commit-op-end",
-        "lift-affinity-start", "lift-affinity-end", "lift-shown", "lift-none", "lift-rendered",
+        "lift-start", "lift-affinity-start", "lift-affinity-end", "lift-shown", "lift-none", "lift-rendered",
         "original-written", "save-published", "save-resumed", "clipboard-data-ready", "copy-resumed",
         "card-scheduled", "handler-task-done", "card-op-start", "card-constructed", "card-show", "card-hwnd-ready", "card-loaded", "card-shown",
         "card-first-rendering", "card-content-rendered",
@@ -89,6 +93,8 @@ internal sealed partial class AppResponsivenessProbe
         ("  Show → Loaded (HWND, layout, Loaded handler)", "card-show", "card-loaded"),
         ("  Loaded → SourceInitialized handlers done (no-activate, exclusion)", "card-loaded", "card-hwnd-ready"),
         ("  → Show returns", "card-hwnd-ready", "card-shown"),
+        ("lift: op start → HWND ready (constructor, EnsureHandle up to SourceInitialized)", "lift-start", "lift-affinity-start"),
+        ("lift: op start → shown", "lift-start", "lift-shown"),
         ("lift: SetWindowDisplayAffinity", "lift-affinity-start", "lift-affinity-end"),
         ("Show → first Rendering", "card-shown", "card-first-rendering"),
         ("Show → ContentRendered", "card-shown", "card-content-rendered"),
@@ -104,6 +110,11 @@ internal sealed partial class AppResponsivenessProbe
         // receipt-ab-*: after the cold capture (current path), warm captures alternate card first and
         // current, so both see the same load from whatever else this desktop runs meanwhile.
         bool alternate = _section.StartsWith("receipt-ab-", StringComparison.Ordinal);
+        // receipt-parts-*: no captures, only the parts below, six times each.
+        bool partsOnly = _section.StartsWith("receipt-parts-", StringComparison.Ordinal);
+        // receipt-tray-*: the tray's hidden message window (NativeMessageWindow) is held from launch, as
+        // the App holds it; the other sections leave it out.
+        bool tray = _section.StartsWith("receipt-tray", StringComparison.Ordinal);
         string kind = _section[(_section.LastIndexOf('-') + 1)..];
         (int frameWidth, int frameHeight, RectD? part) = kind switch
         {
@@ -117,6 +128,7 @@ internal sealed partial class AppResponsivenessProbe
         bool whole = part is null;
         _size = $"{(int)region.Width}x{(int)region.Height}" + (whole ? " (full screen)" : $" on {frameWidth}x{frameHeight}");
         _variant = alternate ? "alternating: card first odd / current even" : cardFirst ? "card first (simulated)" : "current";
+        if (tray) _variant += ", tray message window held";
 
         uint dpi = Ui(() => MonitorEnumerator.GetPrimary().Dpi);
         // A display far off the visible desktop, at the primary display's scale, that the card and the
@@ -149,6 +161,8 @@ internal sealed partial class AppResponsivenessProbe
         Func<IReadOnlyList<MonitorInfo>> previousMonitors = CaptureFlight.ReadMonitors;
         Func<Window, bool> previousExclusion = CaptureFlightDecoration.ApplyCaptureExclusion;
         ReceiptShell shell = Ui(() => new ReceiptShell(root, this));
+        // As App.InitializeShell creates it through the tray and hotkey services, before any capture.
+        NativeMessageWindow? trayWindow = tray ? Ui(() => new NativeMessageWindow()) : null;
         var captures = new List<ReceiptCapture>();
         DispatcherHookEventHandler posted = (_, e) => { if (e.Operation.Priority == DispatcherPriority.ContextIdle) shell.LastContextIdle = e.Operation; };
         DispatcherHookEventHandler started = (_, e) => _receipt?.OperationStarted(e.Operation);
@@ -183,7 +197,7 @@ internal sealed partial class AppResponsivenessProbe
             if (editorPrewarm is not null) Ui(() => editorPrewarm.Invoke(null, null));
             WaitIdle();
 
-            for (int index = 0; index <= (alternate ? 20 : 10); index++)
+            for (int index = 0; index <= (partsOnly ? -1 : alternate ? 20 : 10); index++)
             {
                 bool first = alternate ? index % 2 == 1 : cardFirst;
                 ReceiptCapture capture = MeasureReceipt(shell, frame, region, whole, monitor, first, index);
@@ -197,7 +211,9 @@ internal sealed partial class AppResponsivenessProbe
 
             try
             {
-                ReceiptBreakdown(frame, region, monitor);
+                // The parts start with nothing open; the tray window is one of their variants.
+                if (trayWindow is not null) Ui(trayWindow.Dispose);
+                ReceiptBreakdown(frame, region, monitor, partsOnly ? 6 : 3);
             }
             catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception)
             {
@@ -209,6 +225,7 @@ internal sealed partial class AppResponsivenessProbe
             Ui(() =>
             {
                 ReceiptTimeline.Mark = null;
+                trayWindow?.Dispose();
                 _ui.Hooks.OperationPosted -= posted;
                 _ui.Hooks.OperationStarted -= started;
                 _ui.Hooks.OperationCompleted -= finished;
@@ -316,7 +333,7 @@ internal sealed partial class AppResponsivenessProbe
     /// Window creation is timed with no other probe window open, as after the selector closes, and
     /// again while one plain window stays open off the desktop.
     /// </summary>
-    private void ReceiptBreakdown(FrozenFrame frame, RectD region, MonitorInfo monitor)
+    private void ReceiptBreakdown(FrozenFrame frame, RectD region, MonitorInfo monitor, int rounds)
     {
         _recorder.Step = "breakdown: receipt parts";
         var source = new RectD(frame.ScreenBounds.Left + region.Left, frame.ScreenBounds.Top + region.Top, region.Width, region.Height);
@@ -324,31 +341,45 @@ internal sealed partial class AppResponsivenessProbe
         using var router = new ReceiptKeyboardRouter(_ => new ReceiptShell.NoHotkeys());
         try
         {
-            for (int round = 0; round < 3; round++)
+            for (int round = 0; round < rounds; round++)
             {
                 long begin = Stopwatch.GetTimestamp();
                 BitmapSource crop = Ui(() => ScreenCaptureEngine.Crop(frame, region));
                 AddReceiptPart("ScreenCaptureEngine.Crop", Ms(begin));
                 (RectD bounds, double scale) = CaptureFlight.PlanBounds(new Rect(source.Left, source.Top, source.Width, source.Height), [monitor])!.Value;
 
-                foreach (bool keepAlive in new[] { false, true })
+                foreach (KeepVariant variant in KeepVariants)
                 {
-                    string when = keepAlive ? " [another window open]" : " [no other window]";
-                    Window? keep = null;
-                    if (keepAlive)
+                    // The 30 s idle variant runs only where the parts run alone.
+                    if (variant == KeepVariant.HwndSourceLayeredIdle && rounds < 6) continue;
+                    string when = " [" + KeepLabel(variant) + "]";
+                    Action? closeKeep = null;
+                    Ui(() =>
                     {
-                        Ui(() =>
+                        switch (variant)
                         {
-                            keep = new Window
-                            {
-                                WindowStyle = WindowStyle.None, ResizeMode = ResizeMode.NoResize, ShowInTaskbar = false, ShowActivated = false,
-                                WindowStartupLocation = WindowStartupLocation.Manual, Left = -32000, Top = -32000, Width = 8, Height = 8,
-                            };
-                            keep.Show();
-                        });
-                        WaitIdle();
-                        _delay.Wait(100);
-                    }
+                            case KeepVariant.None:
+                                break;
+                            case KeepVariant.TrayMessageWindow:
+                                var tray = new NativeMessageWindow();
+                                closeKeep = tray.Dispose;
+                                break;
+                            case KeepVariant.HwndSourceLayered or KeepVariant.HwndSourcePlain or KeepVariant.HwndSourceLayeredIdle:
+                                HwndSource source = OpenKeepSource(variant != KeepVariant.HwndSourcePlain);
+                                closeKeep = source.Dispose;
+                                break;
+                            default:
+                                Window window = OpenKeep(variant);
+                                closeKeep = window.Close;
+                                break;
+                        }
+                    });
+                    WaitIdle();
+                    _delay.Wait(variant == KeepVariant.HwndSourceLayeredIdle ? 30_000 : 100);
+                    // What the process holds with only this window open (none: nothing open at all).
+                    (long privateBytes, long workingSet) = Ui(ProcessMemory);
+                    AddReceiptMemory("memory: private bytes" + when, privateBytes);
+                    AddReceiptMemory("memory: working set" + when, workingSet);
 
                     try
                     {
@@ -436,7 +467,7 @@ internal sealed partial class AppResponsivenessProbe
                     }
                     finally
                     {
-                        if (keep is not null) Ui(keep.Close);
+                        if (closeKeep is not null) Ui(closeKeep);
                         WaitIdle();
                     }
                 }
@@ -462,6 +493,119 @@ internal sealed partial class AppResponsivenessProbe
     }
 
     private void AddReceiptPart(string item, double ms) => _recorder.AddBreakdown(_size, _variant, item + " ms", ms);
+
+    private void AddReceiptMemory(string item, long bytes) => _recorder.AddBreakdown(_size, _variant, item + " KiB", bytes / 1024.0);
+
+    /// <summary>Private bytes and working set after a full collection, so managed garbage does not count.</summary>
+    private static (long PrivateBytes, long WorkingSet) ProcessMemory()
+    {
+        GC.Collect();
+        GC.WaitForPendingFinalizers();
+        GC.Collect();
+        using Process process = Process.GetCurrentProcess();
+        return (process.PrivateMemorySize64, process.WorkingSet64);
+    }
+
+    /// <summary>What else is open while a part of the receipt is timed.</summary>
+    private enum KeepVariant
+    {
+        /// <summary>Nothing: the resident app after the selector has closed.</summary>
+        None,
+
+        /// <summary>A plain window, shown off the desktop for the whole measurement.</summary>
+        VisiblePlain,
+
+        /// <summary>A plain window shown once without activation, then hidden.</summary>
+        HiddenPlain,
+
+        /// <summary>A plain window whose handle exists but which was never shown.</summary>
+        HandleOnlyPlain,
+
+        /// <summary>A transparent layered window shown once without activation, then hidden.</summary>
+        HiddenLayered,
+
+        /// <summary>A transparent layered window whose handle exists but which was never shown.</summary>
+        HandleOnlyLayered,
+
+        /// <summary>A bare hidden layered HwndSource (no Window), never shown.</summary>
+        HwndSourceLayered,
+
+        /// <summary>A bare hidden plain HwndSource (no Window), never shown.</summary>
+        HwndSourcePlain,
+
+        /// <summary>The bare hidden layered HwndSource, after 30 s of idle before the parts.</summary>
+        HwndSourceLayeredIdle,
+
+        /// <summary>
+        /// The tray's and hotkeys' hidden message window (<see cref="NativeMessageWindow"/>, an HwndSource
+        /// of no size), which the app holds from launch and the receipt shell leaves out.
+        /// </summary>
+        TrayMessageWindow,
+    }
+
+    private static readonly KeepVariant[] KeepVariants = Enum.GetValues<KeepVariant>();
+
+    private static string KeepLabel(KeepVariant variant) => variant switch
+    {
+        KeepVariant.None => "no other window",
+        KeepVariant.VisiblePlain => "another window open",
+        KeepVariant.HiddenPlain => "hidden plain window, shown once",
+        KeepVariant.HandleOnlyPlain => "plain window, handle only",
+        KeepVariant.HiddenLayered => "hidden layered window, shown once",
+        KeepVariant.HandleOnlyLayered => "layered window, handle only",
+        KeepVariant.HwndSourceLayered => "hidden layered HwndSource",
+        KeepVariant.HwndSourcePlain => "hidden plain HwndSource",
+        KeepVariant.HwndSourceLayeredIdle => "hidden layered HwndSource, 30 s idle",
+        KeepVariant.TrayMessageWindow => "tray message window",
+        _ => variant.ToString(),
+    };
+
+    /// <summary>A never-shown HwndSource beyond the desktop's top-left corner: a WPF render target without a Window.</summary>
+    private static HwndSource OpenKeepSource(bool layered)
+    {
+        const int Popup = unchecked((int)0x80000000), ToolWindow = 0x80, NoActivate = 0x08000000;
+        var source = new HwndSource(new HwndSourceParameters("MyCapture probe keeper")
+        {
+            WindowStyle = Popup, ExtendedWindowStyle = ToolWindow | NoActivate,
+            PositionX = -32000, PositionY = -32000, Width = 1, Height = 1, UsesPerPixelOpacity = layered,
+        });
+        return source;
+    }
+
+    /// <summary>
+    /// The window that stays open while the parts are timed, built like a render keeper: tiny,
+    /// beyond the desktop's top-left corner, never activated, outside the taskbar.
+    /// </summary>
+    private static Window OpenKeep(KeepVariant variant)
+    {
+        var keep = new Window
+        {
+            WindowStyle = WindowStyle.None, ResizeMode = ResizeMode.NoResize, ShowInTaskbar = false, ShowActivated = false,
+            WindowStartupLocation = WindowStartupLocation.Manual, Left = -32000, Top = -32000, Width = 8, Height = 8,
+        };
+        if (variant is KeepVariant.HiddenLayered or KeepVariant.HandleOnlyLayered)
+        {
+            keep.AllowsTransparency = true;
+            keep.Background = Brushes.Transparent;
+            keep.Opacity = 0;
+        }
+
+        switch (variant)
+        {
+            case KeepVariant.VisiblePlain:
+                keep.Show();
+                break;
+            case KeepVariant.HiddenPlain or KeepVariant.HiddenLayered:
+                keep.Show();
+                keep.Hide();
+                break;
+            default:
+                _ = new WindowInteropHelper(keep).EnsureHandle();
+                break;
+        }
+
+        return keep;
+    }
 
     // ---- Results -----------------------------------------------------------------------------
 
@@ -493,13 +637,15 @@ internal sealed partial class AppResponsivenessProbe
         foreach (IGrouping<bool, ReceiptCapture> group in captures.Where(c => c.Index > 0).GroupBy(c => c.CardFirst))
             WriteReceiptGroup(md, group.ToArray(), captures.FirstOrDefault(c => c.Index == 0 && c.CardFirst == group.Key));
 
+        var parts = _recorder.Breakdown.Where(pair => pair.Key.Size == _size && pair.Key.Variant == _variant).ToArray();
+        int rounds = parts.Length == 0 ? 0 : parts.Max(pair => pair.Value.Count);
         md.AppendLine();
-        md.AppendLine("## 따로 잰 부분(유휴 UI 스레드, 3회)");
+        md.AppendLine($"## 따로 잰 부분(유휴 UI 스레드, {rounds}회)");
         md.AppendLine();
-        md.AppendLine("| 부분 | 1회 | 2회 | 3회 |");
-        md.AppendLine("| --- | ---: | ---: | ---: |");
-        foreach (var pair in _recorder.Breakdown.Where(pair => pair.Key.Size == _size && pair.Key.Variant == _variant))
-            md.AppendLine($"| {pair.Key.Item.Replace("|", "/")} | {string.Join(" | ", pair.Value.Select(F))} |");
+        md.AppendLine("| 부분 | 중앙값 | " + string.Join(" | ", Enumerable.Range(1, rounds).Select(round => $"{round}회")) + " |");
+        md.AppendLine("| --- | ---: | " + string.Join(" | ", Enumerable.Repeat("---:", rounds)) + " |");
+        foreach (var pair in parts)
+            md.AppendLine($"| {pair.Key.Item.Replace("|", "/")} | {F(Median(pair.Value.ToArray())!.Value)} | {string.Join(" | ", pair.Value.Select(F))} |");
 
         md.AppendLine();
         md.AppendLine("## 메모");
