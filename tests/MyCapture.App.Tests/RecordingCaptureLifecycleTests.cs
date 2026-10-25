@@ -4,7 +4,6 @@ using System.Runtime.InteropServices;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Windows;
-using System.Windows.Media;
 using System.Windows.Threading;
 using Microsoft.Extensions.Logging.Abstractions;
 using MyCapture.App.Capture;
@@ -203,32 +202,89 @@ public sealed class RecordingCaptureLifecycleTests
 
     [DllImport("user32.dll")]
     private static extern uint GetGuiResources(IntPtr process, uint flags);
+
+    [Fact]
+    public void SyntheticSurface_RepeatedLifetimesReleaseTheNativeWindowAndBrush() => StaTestHost.Run(() =>
+    {
+        using (var warm = new SyntheticCaptureFixture()) { }
+        using Process process = Process.GetCurrentProcess();
+        uint before = GetGuiResources(process.Handle, 0);
+        for (int attempt = 0; attempt < 4; attempt++)
+        {
+            using var fixture = new SyntheticCaptureFixture();
+            IntPtr window = fixture.WindowHandleForTest;
+            Assert.True(IsWindow(window));
+            // Construction already checks every captured pixel against the solid colour.
+            fixture.Dispose();
+            fixture.Dispose();
+            Assert.False(IsWindow(window));
+        }
+        uint after = GetGuiResources(process.Handle, 0);
+        Assert.True((long)after - before <= 2, $"Native fixture GDI resources grew from {before} to {after}.");
+    });
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool IsWindow(IntPtr window);
 }
 
 internal sealed class SyntheticCaptureFixture : IDisposable
 {
-    private readonly Window _window;
+    private const uint ExtendedStyle = 0x00000008 | 0x00000080 | 0x08000000; // TOPMOST, TOOLWINDOW, NOACTIVATE.
+    private static readonly WindowProcedure Procedure = DefWindowProc;
+    private readonly string _className = "MyCapture.SyntheticCapture." + Guid.NewGuid().ToString("N");
+    private readonly IntPtr _instance = GetModuleHandle(null);
+    private IntPtr _window;
+    private IntPtr _unregisteredBrush;
+    private bool _classRegistered;
     internal ScreenCaptureEngine Engine { get; } = new(NullLogger<ScreenCaptureEngine>.Instance);
     internal RectD Region { get; }
+    internal IntPtr WindowHandleForTest => _window;
 
     internal SyntheticCaptureFixture()
     {
-        _window = new Window { Width = 700, Height = 500, Left = 100, Top = 100,
-            WindowStyle = WindowStyle.None, ResizeMode = ResizeMode.NoResize, ShowInTaskbar = false,
-            Topmost = true, ShowActivated = false, Background = new SolidColorBrush(Color.FromRgb(18, 90, 166)) };
-        _window.Show();
-        _window.UpdateLayout();
-        Pump(120);
-        Point origin = _window.PointToScreen(new Point(20, 20));
-        Region = new RectD(origin.X, origin.Y, 320, 240);
-        try { WaitForPresentedFixture(); }
-        catch { _window.Close(); throw; }
+        try
+        {
+            // A class background brush is painted synchronously by DefWindowProc. This fixture
+            // needs native desktop pixels, not WPF's asynchronous composition of a solid scene.
+            // A plain WPF Window also inherits the app style, whose ModernWindowChrome replaces
+            // its background with Surface.Base when earlier tests have loaded app resources.
+            _unregisteredBrush = CreateSolidBrush(18 | (90u << 8) | (166u << 16));
+            if (_unregisteredBrush == IntPtr.Zero) ThrowNativeFailure("CreateSolidBrush");
+            var windowClass = new NativeWindowClass
+            {
+                Size = (uint)Marshal.SizeOf<NativeWindowClass>(), Procedure = Procedure,
+                Instance = _instance, Background = _unregisteredBrush, ClassName = _className,
+            };
+            if (RegisterClassEx(ref windowClass) == 0) ThrowNativeFailure("RegisterClassEx");
+            _classRegistered = true;
+            // The registered class owns this brush; UnregisterClass releases it.
+            _unregisteredBrush = IntPtr.Zero;
+            _window = CreateWindowEx(ExtendedStyle, _className, string.Empty, 0x80000000, // WS_POPUP.
+                100, 100, 700, 500, IntPtr.Zero, IntPtr.Zero, _instance, IntPtr.Zero);
+            if (_window == IntPtr.Zero) ThrowNativeFailure("CreateWindowEx");
+            PresentFixture();
+            var origin = new NativePoint { X = 20, Y = 20 };
+            if (!ClientToScreen(_window, ref origin)) ThrowNativeFailure("ClientToScreen");
+            Region = new RectD(origin.X, origin.Y, 320, 240);
+            WaitForPresentedFixture();
+        }
+        catch { Dispose(); throw; }
+    }
+
+    private void PresentFixture()
+    {
+        // Raise only the owned fixture, without activating it or changing input focus.
+        if (!SetWindowPos(_window, new IntPtr(-1), 100, 100, 700, 500, 0x0010 | 0x0040)) // NOACTIVATE, SHOWWINDOW.
+            ThrowNativeFailure("SetWindowPos");
+        if (!RedrawWindow(_window, IntPtr.Zero, IntPtr.Zero, 0x0001 | 0x0004 | 0x0100)) // INVALIDATE, ERASE, UPDATENOW.
+            ThrowNativeFailure("RedrawWindow");
     }
 
     private void WaitForPresentedFixture()
     {
-        // UpdateLayout and a fixed pump do not prove that DWM has presented this
-        // window. Capture comparisons must start with the known fixture pixels.
+        // Synchronous GDI paint still needs DWM presentation. Capture comparisons
+        // must start with every pixel of the known fixture, never another surface.
         byte[] expected = new byte[320 * 240 * 4];
         for (int i = 0; i < expected.Length; i += 4)
         {
@@ -241,10 +297,16 @@ internal sealed class SyntheticCaptureFixture : IDisposable
         var elapsed = Stopwatch.StartNew();
         do
         {
+            PresentFixture();
             Engine.CaptureRegionInto(Region, false, observed, 1280);
             if (observed.AsSpan().SequenceEqual(expected)) return;
             Pump(20);
         } while (elapsed.Elapsed < TimeSpan.FromSeconds(5));
+        bool hasBounds = GetWindowRect(_window, out NativeRect bounds);
+        Console.Error.WriteLine($"Owned capture fixture: boundsAvailable={hasBounds}, "
+            + $"bounds={bounds.Left},{bounds.Top},{bounds.Right},{bounds.Bottom}, "
+            + $"visible={IsWindowVisible(_window)}, topmost={(GetWindowLong(_window, -20) & 0x00000008) != 0}, "
+            + $"region={Region}.");
         Assert.Equal(expected, observed);
     }
 
@@ -257,5 +319,89 @@ internal sealed class SyntheticCaptureFixture : IDisposable
         Dispatcher.PushFrame(frame);
     }
 
-    public void Dispose() => _window.Close();
+    public void Dispose()
+    {
+        if (_window != IntPtr.Zero)
+        {
+            if (!DestroyWindow(_window)) ThrowNativeFailure("DestroyWindow");
+            _window = IntPtr.Zero;
+        }
+        if (_classRegistered)
+        {
+            if (!UnregisterClass(_className, _instance)) ThrowNativeFailure("UnregisterClass");
+            _classRegistered = false;
+        }
+        if (_unregisteredBrush != IntPtr.Zero)
+        {
+            if (!DeleteObject(_unregisteredBrush)) ThrowNativeFailure("DeleteObject");
+            _unregisteredBrush = IntPtr.Zero;
+        }
+    }
+
+    private static void ThrowNativeFailure(string operation) =>
+        throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error(), $"Synthetic capture fixture {operation} failed.");
+
+    [UnmanagedFunctionPointer(CallingConvention.Winapi)]
+    private delegate IntPtr WindowProcedure(IntPtr window, uint message, IntPtr wParam, IntPtr lParam);
+
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    private struct NativeWindowClass
+    {
+        public uint Size;
+        public uint Style;
+        public WindowProcedure Procedure;
+        public int ClassExtra;
+        public int WindowExtra;
+        public IntPtr Instance;
+        public IntPtr Icon;
+        public IntPtr Cursor;
+        public IntPtr Background;
+        public string? MenuName;
+        public string ClassName;
+        public IntPtr SmallIcon;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct NativePoint { public int X; public int Y; }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct NativeRect { public int Left; public int Top; public int Right; public int Bottom; }
+
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    private static extern IntPtr GetModuleHandle(string? moduleName);
+    [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    private static extern ushort RegisterClassEx(ref NativeWindowClass windowClass);
+    [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool UnregisterClass(string className, IntPtr instance);
+    [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    private static extern IntPtr CreateWindowEx(uint extendedStyle, string className, string title, uint style,
+        int x, int y, int width, int height, IntPtr parent, IntPtr menu, IntPtr instance, IntPtr parameter);
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    private static extern IntPtr DefWindowProc(IntPtr window, uint message, IntPtr wParam, IntPtr lParam);
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool SetWindowPos(IntPtr window, IntPtr insertAfter, int x, int y, int width, int height, uint flags);
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool RedrawWindow(IntPtr window, IntPtr updateRect, IntPtr updateRegion, uint flags);
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool ClientToScreen(IntPtr window, ref NativePoint point);
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool GetWindowRect(IntPtr window, out NativeRect rect);
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool IsWindowVisible(IntPtr window);
+    [DllImport("user32.dll", EntryPoint = "GetWindowLongW")]
+    private static extern uint GetWindowLong(IntPtr window, int index);
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool DestroyWindow(IntPtr window);
+    [DllImport("gdi32.dll", SetLastError = true)]
+    private static extern IntPtr CreateSolidBrush(uint colour);
+    [DllImport("gdi32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool DeleteObject(IntPtr handle);
 }
