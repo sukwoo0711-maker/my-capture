@@ -31,6 +31,7 @@ internal sealed class PinTextSelectionView : Grid
     private bool _dragSelecting;
     private Point _dragPoint;
     private double _zoom = 1;
+    private long _wheelDelta;
 
     internal PinTextSelectionView(PinContent content)
     {
@@ -208,9 +209,13 @@ internal sealed class PinTextSelectionView : Grid
     internal bool TryScroll(int delta)
     {
         if (delta == 0) return false;
+        _wheelDelta += delta;
+        long notches = _wheelDelta / 120;
+        _wheelDelta %= 120;
+        if (notches == 0) return false;
         ScrollViewer? scroll = FindDescendant<ScrollViewer>(TextBox as DependencyObject ?? TableGrid);
         if (scroll is null) return false;
-        double direction = delta > 0 ? -1 : 1;
+        double direction = -notches;
         if ((direction < 0 && scroll.VerticalOffset > 0)
             || (direction > 0 && scroll.VerticalOffset < scroll.ScrollableHeight))
         {

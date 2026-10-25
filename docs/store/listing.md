@@ -103,18 +103,17 @@ MyCapture는 코딩하는 동안 엑셀 사양 표와 자주 쓰는 코드를 �
 8. 공유하기 전에 단계 번호와 화살표를 넣고, 이메일·토큰·카드번호를 Ctrl+Shift+R로 가린 화면입니다.
 9. 영역·창·전체 화면 캡처, 클립보드 복사, 이미지 속 글자 복사는 Windows 캡처 도구와 같습니다. 영역 녹화는 소리 없이 화면만 기록합니다. 여기에 원문을 보관하는 표·코드 핀, 반투명·클릭 허용 핀, 닫은 핀 다시 열기, 스크롤 캡처가 더해집니다.
 
-### 이 버전의 새로운 기능 (4.7.0)
+### 이 버전의 새로운 기능 (4.8.0)
 
-입력 한도는 1,500자입니다. 4.6.0(제출 16)이 게시된 뒤 제출하므로 4.7.0의 변경만 적습니다.
+입력 한도는 1,500자입니다. 4.7.0이 게시된 뒤 제출하므로 4.7.0 이후의 변경만 적습니다.
 
-- 새 버전이 나오면 앱이 알려 주고, 카드의 '업데이트'로 바로 설치합니다. 설정 > 정보에서 자동 확인을 끌 수 있습니다.
-- 편집기 단추는 평소 아이콘을 크게 보여 주고, Alt를 누르는 동안 단축키가 나타납니다. Alt만 눌렀다 뗀 뒤 다음 키가 무시되던 문제도 고쳤습니다.
-- 도구를 바꿔도 이미지 크기가 흔들리지 않고, 회전 단추(Q·W)를 자르기 옆에 두었습니다. 창이 좁아지면 명령 이름을 하나씩 숨깁니다.
-- 웹 페이지나 앱에서 찍은 캡처에 출처를 표시하고, 같은 출처의 캡처를 모아 봅니다.
-- '정확' 품질의 글자 인식이 두 엔진을 함께 써서 한국어 화면 글자를 더 정확하게 읽고, 짧은 줄을 빠뜨리지 않습니다.
-- 툴팁이 열려 있는 동안 재생 위치 표시나 자동 저장이 멈추던 문제를 고쳤습니다.
-- 삭제 확인의 기본 단추와 메뉴 구분선, 녹화 빨강을 정리했습니다.
-- 설정 > 정보의 '진단 묶음 저장'으로 이 PC에만 남는 기록을 문의에 첨부할 수 있습니다.
+- 텍스트 인식 결과 창에 번역 보기를 더했습니다. 영어 문단과 표 칸을 이 PC 안에서 한국어로 옮깁니다. 기본으로 꺼져 있고, 켤 때 모델(약 247MB)을 한 번 내려받습니다.
+- 캡처하면 찍은 영역이 빠른 작업 카드로 날아가 앉고, 라이브러리에서 삭제하면 남은 캡처가 빈자리를 채웁니다. 움직임은 Windows 애니메이션 효과 설정을 따릅니다.
+- 지연 캡처 카운트다운에 고리가 생겼고, 라이브러리에서 복사하면 단추 안에 '복사됨' 표시가 잠깐 나타납니다.
+- 편집기의 Ctrl+C와 [복사]가 다시 클립보드 복사와 저장을 한 뒤 편집기를 닫습니다.
+- 핀에서 같은 원문을 반복 복사하는 속도를 높였고, 글자 선택 중 휠이 핀 배율을 바꾸지 않습니다.
+- 녹화 편집기에서 가짜 불러오기 진행률을 없앴고, Tab으로 옮긴 단추를 Space로 누릅니다. 잘못 입력한 구간 값은 지우지 않으며, 재생이 끝난 뒤 미리 보기가 요청한 위치에 섭니다.
+- 보조 버튼이 표면에서 살짝 뜬 모양이 되었고, 1080p 200% 화면에서도 설정 창이 작업 영역에 맞게 열립니다.
 
 ### 검색어
 
@@ -198,18 +197,17 @@ Enter them in screenshot order. Each caption is 200 characters or fewer.
 8. Step numbers and an arrow added before sharing, with an email address, token and card number covered by Ctrl+Shift+R.
 9. Like Snipping Tool, MyCapture captures, copies to the clipboard and extracts text. It adds table and code pins with original text, click-through pins and scrolling capture; recording is silent.
 
-### What's new in this version (4.7.0)
+### What's new in this version (4.8.0)
 
-Limit: 1,500 characters. 4.6.0 (submission 16) is published, so this lists only the 4.7.0 changes.
+Limit: 1,500 characters. 4.7.0 is published, so this lists only the changes after 4.7.0.
 
-- MyCapture tells you when a new version is available, and Update on the card installs it. Turn off automatic checks in Settings > About.
-- Editor buttons show larger icons, and shortcut keys appear while you hold Alt. Fixed keys being ignored after pressing Alt alone.
-- The image no longer resizes when you switch tools, and rotate buttons (Q, W) sit next to Crop. In narrow windows, command names hide one at a time.
-- Captures from a web page or app show their source, and you can view all captures from the same source.
-- Text recognition at Accurate combines two engines to read Korean screen text more accurately and no longer drops short lines.
-- Fixed the playback position and autosave pausing while a tooltip was open.
-- Cleaner delete confirmations, menu separators and recording red.
-- Save diagnostics in Settings > About to attach local logs to a support request.
+- Text recognition results can be translated from English to Korean on this PC in a new Translate view. Off by default; turning it on downloads a model (about 247 MB) once.
+- A capture flies to the quick-access card, and captures fill the gap after a library delete. Motion follows Windows animation settings.
+- The delayed-capture countdown has a ring, and Copy in the library briefly shows a check.
+- Ctrl+C and Copy in the editor again copy, save and close the editor.
+- Repeated copies of pin text are faster, and the wheel no longer zooms a pin while you select text.
+- Video editor: no fake loading percentage, Space presses a Tab-focused button, invalid trim values are kept.
+- Secondary buttons look slightly raised, and Settings fits the work area at 1080p and 200% scale.
 
 ### Search terms
 

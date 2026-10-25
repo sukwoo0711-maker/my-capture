@@ -1257,6 +1257,263 @@ public sealed class PinSessionStoreTests
         Assert.False(store.HasImage(Guid.Empty));
     }
 
+    [Fact]
+    public void SaveDetailed_CompleteSaveReportsEveryRecordAndReadsBack()
+    {
+        using var workspace = new TempWorkspace();
+        PinSessionStore store = CreateStore(workspace);
+        PinSessionSnapshot first = Snapshot();
+        PinSessionSnapshot sameContent = first with { Pin = first.Pin with { Zoom = 2.25 } };
+        PinSessionSnapshot code = CodeSnapshot();
+
+        PinSessionSaveResult result = store.SaveDetailed([first, sameContent, code]);
+
+        Assert.Equal(PinSessionSaveOutcome.Committed, result.Outcome);
+        Assert.True(result.IsComplete);
+        Assert.Equal(3, result.RequestedCount);
+        Assert.Equal(new[] { first.Pin.Id, first.Pin.Id, code.Pin.Id }, result.SavedPinIds);
+        Assert.Empty(result.MissingPins);
+        Assert.True(result.Generation > 0);
+        Assert.Equal(result.Generation, store.Generation);
+        Assert.True(store.VerifyReadBack(result));
+        Assert.Equal(result.SavedPinIds, CreateStore(workspace).Load().Select(pin => pin.Pin.Id));
+    }
+
+    [Theory]
+    [InlineData("write")]
+    [InlineData("locked")]
+    public void SaveDetailed_OneImageWriteFailureCommitsTheOtherPinsAsAPartialSave(string failure)
+    {
+        using var workspace = new TempWorkspace();
+        PinSessionStore store = CreateStore(workspace);
+        PinSessionSnapshot kept = WithOpeningOrder(1);
+        PinSessionSnapshot failed = WithOpeningOrder(2);
+        string failedPath = ImagePath(workspace, failed.Pin.Id);
+        FileStream? held = null;
+        if (failure == "write")
+        {
+            store.BeforeImageWriteForTest = id =>
+            {
+                if (id == failed.Pin.Id) throw new IOException("fixture write failure");
+            };
+        }
+        else
+        {
+            // Another process holds a stale file where this pin's image belongs.
+            Directory.CreateDirectory(workspace.Paths.PinSessionRoot);
+            File.WriteAllBytes(failedPath, Png);
+            held = new FileStream(failedPath, FileMode.Open, FileAccess.Read, FileShare.None);
+        }
+        PinSessionSaveResult partial;
+        using (held) partial = store.SaveDetailed([kept, failed]);
+
+        Assert.Equal(PinSessionSaveOutcome.Committed, partial.Outcome);
+        Assert.False(partial.IsComplete);
+        Assert.Equal(2, partial.RequestedCount);
+        Assert.Equal(new[] { kept.Pin.Id }, partial.SavedPinIds);
+        Assert.Equal(new PinSessionMissingPin(failed.Pin.Id, PinSessionMissingReason.ImageWriteFailed),
+            Assert.Single(partial.MissingPins));
+        Assert.False(store.VerifyReadBack(partial));
+        Assert.Equal(kept.Pin, Assert.Single(CreateStore(workspace).Load()).Pin);
+        Assert.Empty(Directory.GetFiles(workspace.Paths.PinSessionRoot, "*.tmp"));
+
+        store.BeforeImageWriteForTest = null;
+        PinSessionSaveResult retried = store.SaveDetailed([kept with { PngBytes = null }, failed]);
+        Assert.True(retried.IsComplete);
+        Assert.True(store.VerifyReadBack(retried));
+        Assert.Equal(new[] { kept.Pin, failed.Pin }, CreateStore(workspace).Load().Select(pin => pin.Pin));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void SaveDetailed_ReportsRecordsOverTheCountOrByteLimit(bool limitBytes)
+    {
+        using var workspace = new TempWorkspace();
+        PinSessionSnapshot[] pins = [WithOpeningOrder(3), WithOpeningOrder(1), WithOpeningOrder(2)];
+        var store = new PinSessionStore(workspace.Paths.PinSessionRoot, NullLogger.Instance,
+            maxPins: limitBytes ? 50 : 2,
+            maxPngBytes: limitBytes ? 2L * Png.Length : PinSessionStore.DefaultMaxPngBytes);
+
+        PinSessionSaveResult result = store.SaveDetailed(pins);
+
+        Assert.Equal(PinSessionSaveOutcome.Committed, result.Outcome);
+        Assert.False(result.IsComplete);
+        Assert.Equal(3, result.RequestedCount);
+        Assert.Equal(new[] { pins[0].Pin.Id, pins[2].Pin.Id }, result.SavedPinIds);
+        Assert.Equal(new PinSessionMissingPin(pins[1].Pin.Id, PinSessionMissingReason.OverLimit),
+            Assert.Single(result.MissingPins));
+        Assert.False(store.VerifyReadBack(result));
+        Assert.Equal(result.SavedPinIds, store.Load().Select(pin => pin.Pin.Id));
+    }
+
+    [Fact]
+    public void SaveDetailed_WindowsSharingAFailedImageReportTheFailureNotAMissingPng()
+    {
+        using var workspace = new TempWorkspace();
+        PinSessionStore store = CreateStore(workspace);
+        PinSessionSnapshot newest = WithOpeningOrder(2);
+        // The app sends the PNG only with the newest window that shows this content.
+        PinSessionSnapshot olderWindow = newest with { Pin = newest.Pin with { OpenedOrder = 1, Zoom = 2 }, PngBytes = null };
+        store.BeforeImageWriteForTest = _ => throw new IOException("fixture write failure");
+
+        PinSessionSaveResult result = store.SaveDetailed([olderWindow, newest]);
+
+        Assert.Equal(PinSessionSaveOutcome.Committed, result.Outcome);
+        Assert.Empty(result.SavedPinIds);
+        Assert.Equal(new[]
+        {
+            new PinSessionMissingPin(newest.Pin.Id, PinSessionMissingReason.ImageWriteFailed),
+            new PinSessionMissingPin(newest.Pin.Id, PinSessionMissingReason.ImageWriteFailed),
+        }, result.MissingPins);
+    }
+
+    [Fact]
+    public void SaveDetailed_ProtectionFailureLeavesOnlyThatPinOut()
+    {
+        using var workspace = new TempWorkspace();
+        PinSessionStore store = CreateStore(workspace);
+        PinSessionSnapshot kept = WithOpeningOrder(1);
+        PinSessionSnapshot unprotected = WithOpeningOrder(2);
+        store.BeforeImageProtectForTest = id =>
+        {
+            if (id == unprotected.Pin.Id) throw new CryptographicException("fixture protection failure");
+        };
+
+        PinSessionSaveResult result = store.SaveDetailed([kept, unprotected]);
+
+        Assert.Equal(PinSessionSaveOutcome.Committed, result.Outcome);
+        Assert.False(result.IsComplete);
+        Assert.Equal(new[] { kept.Pin.Id }, result.SavedPinIds);
+        Assert.Equal(new PinSessionMissingPin(unprotected.Pin.Id, PinSessionMissingReason.ProtectionFailed),
+            Assert.Single(result.MissingPins));
+        Assert.False(File.Exists(ImagePath(workspace, unprotected.Pin.Id)));
+        Assert.False(store.VerifyReadBack(result));
+        Assert.Equal(kept.Pin, Assert.Single(CreateStore(workspace).Load()).Pin);
+    }
+
+    [Fact]
+    public void SaveDetailed_ReportsInvalidAndImagelessRecordsInRequestOrder()
+    {
+        using var workspace = new TempWorkspace();
+        PinSessionStore store = CreateStore(workspace);
+        PinSessionSnapshot invalid = Snapshot();
+        invalid = invalid with { Pin = invalid.Pin with { Zoom = double.NaN } };
+        PinSessionSnapshot good = Snapshot();
+        PinSessionSnapshot imageless = Snapshot() with { PngBytes = null };
+
+        PinSessionSaveResult result = store.SaveDetailed([invalid, good, imageless]);
+
+        Assert.Equal(PinSessionSaveOutcome.Committed, result.Outcome);
+        Assert.Equal(new[] { good.Pin.Id }, result.SavedPinIds);
+        Assert.Equal(new[]
+        {
+            new PinSessionMissingPin(invalid.Pin.Id, PinSessionMissingReason.Invalid),
+            new PinSessionMissingPin(imageless.Pin.Id, PinSessionMissingReason.ImageUnavailable),
+        }, result.MissingPins);
+        Assert.Equal(result.RequestedCount, result.SavedPinIds.Count + result.MissingPins.Count);
+        Assert.False(result.IsComplete);
+    }
+
+    [Theory]
+    [InlineData(PinSessionSaveOutcome.Canceled)]
+    [InlineData(PinSessionSaveOutcome.ManifestUnreadable)]
+    [InlineData(PinSessionSaveOutcome.Failed)]
+    public void SaveDetailed_UncommittedSaveReportsEveryRecordMissingAndKeepsTheSession(PinSessionSaveOutcome outcome)
+    {
+        using var workspace = new TempWorkspace();
+        PinSessionSnapshot original = Snapshot();
+        PinSessionStore seed = CreateStore(workspace);
+        PinSessionSaveResult committed = seed.SaveDetailed([original]);
+        byte[] manifest = File.ReadAllBytes(ManifestPath(workspace));
+        PinSessionStore store = outcome == PinSessionSaveOutcome.ManifestUnreadable ? CreateStore(workspace) : seed;
+        long generation = store.Generation;
+        PinSessionSnapshot[] requested = [original with { PngBytes = null }, Snapshot()];
+
+        PinSessionSaveResult result;
+        if (outcome == PinSessionSaveOutcome.Canceled) result = store.SaveDetailed(requested, canCommit: () => false);
+        else
+        {
+            // An exclusive handle makes the manifest unreadable; a shared one only blocks its replacement.
+            FileShare share = outcome == PinSessionSaveOutcome.ManifestUnreadable ? FileShare.None : FileShare.Read;
+            using var held = new FileStream(ManifestPath(workspace), FileMode.Open, FileAccess.Read, share);
+            result = store.SaveDetailed(requested);
+        }
+
+        Assert.Equal(outcome, result.Outcome);
+        Assert.False(result.ManifestCommitted);
+        Assert.False(result.IsComplete);
+        Assert.Equal(2, result.RequestedCount);
+        Assert.Empty(result.SavedPinIds);
+        Assert.Equal(requested.Select(pin => new PinSessionMissingPin(pin.Pin.Id, PinSessionMissingReason.NotCommitted)),
+            result.MissingPins);
+        Assert.Equal(generation, result.Generation);
+        Assert.Equal(generation, store.Generation);
+        Assert.False(store.VerifyReadBack(result));
+        Assert.Equal(manifest, File.ReadAllBytes(ManifestPath(workspace)));
+        Assert.Equal(ImagePath(workspace, original.Pin.Id),
+            Assert.Single(Directory.GetFiles(workspace.Paths.PinSessionRoot, "*.png")));
+        Assert.True(seed.VerifyReadBack(committed));
+    }
+
+    [Fact]
+    public void VerifyReadBack_RequiresTheLatestCommitOfThisStore()
+    {
+        using var workspace = new TempWorkspace();
+        PinSessionStore store = CreateStore(workspace);
+        PinSessionSnapshot pin = Snapshot();
+        PinSessionSaveResult first = store.SaveDetailed([pin]);
+        PinSessionSaveResult second = store.SaveDetailed([pin with { PngBytes = null, Pin = pin.Pin with { Zoom = 3 } }]);
+
+        Assert.True(first.IsComplete);
+        Assert.True(second.Generation > first.Generation);
+        // The same pin is on disk, but with the later presentation, not what the first save wrote.
+        Assert.False(store.VerifyReadBack(first));
+        Assert.False(CreateStore(workspace).VerifyReadBack(second));
+        // Another store holding the same content, such as another pin board, has its own commits.
+        using var otherWorkspace = new TempWorkspace();
+        PinSessionStore other = CreateStore(otherWorkspace);
+        Assert.True(other.SaveDetailed([pin]).IsComplete);
+        Assert.False(other.VerifyReadBack(second));
+        Assert.False(store.VerifyReadBack(other.SaveDetailed([pin with { PngBytes = null }])));
+        Assert.True(store.VerifyReadBack(second));
+
+        Assert.True(store.Clear());
+
+        Assert.True(store.Generation > second.Generation);
+        Assert.False(store.VerifyReadBack(second));
+    }
+
+    [Fact]
+    public void VerifyReadBack_RequiresEveryImageToReadBackWithoutBlockingLaterSaves()
+    {
+        using var workspace = new TempWorkspace();
+        PinSessionStore store = CreateStore(workspace);
+        PinSessionSnapshot pin = Snapshot();
+        Assert.True(store.SaveDetailed([pin]).IsComplete);
+        string path = ImagePath(workspace, pin.Pin.Id);
+        PinSessionSaveResult carried;
+        using (new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.None))
+        {
+            // The record keeps its committed image, which cannot be read back yet.
+            carried = store.SaveDetailed([pin with { PngBytes = null }]);
+            Assert.True(carried.IsComplete);
+            Assert.False(store.VerifyReadBack(carried));
+        }
+        Assert.True(store.VerifyReadBack(carried));
+
+        byte[] saved = File.ReadAllBytes(path);
+        File.WriteAllBytes(path, CorruptEnvelope(saved, "blob", PinSessionFilePurpose.Image));
+        Assert.False(store.VerifyReadBack(carried));
+        File.WriteAllBytes(path, saved);
+        using (new FileStream(ManifestPath(workspace), FileMode.Open, FileAccess.Read, FileShare.None))
+            Assert.False(store.VerifyReadBack(carried));
+
+        PinSessionSaveResult later = store.SaveDetailed([pin with { PngBytes = null }]);
+        Assert.True(later.IsComplete);
+        Assert.True(store.VerifyReadBack(later));
+    }
+
     private static PinSessionStore CreateStore(TempWorkspace workspace) =>
         new(workspace.Paths.PinSessionRoot, NullLogger.Instance);
 

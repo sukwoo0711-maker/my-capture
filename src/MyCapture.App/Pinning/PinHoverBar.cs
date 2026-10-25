@@ -242,6 +242,29 @@ internal sealed class PinHoverBar : Window
         });
     }
 
+    /// <summary>
+    /// Fades out over the fast token while its pin leaves, taking no more clicks; hides at once when
+    /// Windows animations are off or the bar is opaque. The pin's close then closes it.
+    /// </summary>
+    internal void Leave()
+    {
+        IsHitTestVisible = false;
+        if (_opacityMenu is { IsOpen: true } opacity) opacity.IsOpen = false;
+        if (SourceButton.ContextMenu is { IsOpen: true } source) source.IsOpen = false;
+        if (!IsVisible) return;
+        if (!AllowsTransparency || !FluidMotion.AnimationsEnabled)
+        {
+            Hide();
+            return;
+        }
+
+        BeginAnimation(OpacityProperty, new DoubleAnimation(0, FluidMotion.FastDuration)
+        {
+            EasingFunction = FluidMotion.StandardEasing,
+            FillBehavior = FillBehavior.HoldEnd,
+        }, HandoffBehavior.SnapshotAndReplace);
+    }
+
     private void OpenOpacityMenu()
     {
         if (_opacityMenu is { IsOpen: true }) return;

@@ -1481,10 +1481,6 @@ This cannot be undone.</value>
     <value>Delete selection (Delete)</value>
     <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
   </data>
-  <data name="Text_7E6DD424D331" xml:space="preserve">
-    <value>Loading video… {0}%</value>
-    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
-  </data>
   <data name="Text_7F2ED132EA3B" xml:space="preserve">
     <value>Repeat last region shortcut</value>
     <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
@@ -2553,10 +2549,6 @@ This cannot be undone.</value>
     <value>MyCapture — Edit image</value>
     <comment>src\MyCapture.App\Gallery\GalleryEditorWindow.cs</comment>
   </data>
-  <data name="Text_DA09CBABFC1E" xml:space="preserve">
-    <value>Loading video… 0%</value>
-    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
-  </data>
   <data name="Text_DA9B79FCBFC8" xml:space="preserve">
     <value>GIF quality and size</value>
     <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
@@ -3267,7 +3259,7 @@ Open the library or Settings from the tray menu.</value></data>
   <data name="Library.Organize.Hint" xml:space="preserve"><value>Add a title and tags to find it with search. Stored on this PC; the image and recognized text are unchanged.</value></data>
   <data name="Library.Organize.Name" xml:space="preserve"><value>Title</value></data>
   <data name="Library.Organize.Tags" xml:space="preserve"><value>Tags</value></data>
-  <data name="Library.Organize.TagsHint" xml:space="preserve"><value>Separate tags with commas. Up to 12 tags, 32 characters each. A title or tag does not prevent automatic cleanup; use Keep to retain important captures.</value></data>
+  <data name="Library.Organize.TagsHint" xml:space="preserve"><value>Separate tags with commas. Up to 12 tags, 32 characters each. Titles and tags do not prevent automatic deletion. Move important captures to Kept.</value></data>
   <data name="Library.Organize.Saved" xml:space="preserve"><value>Title and tags saved · Included in search</value></data>
   <data name="Library.Organize.Missing" xml:space="preserve"><value>This capture is no longer in the library. Your draft has not been discarded.</value></data>
   <data name="Library.Organize.Invalid" xml:space="preserve"><value>Use a title up to 140 characters and up to 12 tags of 32 characters. Control characters are not allowed.</value></data>
@@ -3316,6 +3308,7 @@ Open the library or Settings from the tray menu.</value></data>
   <data name="Library.Source.ShowAll" xml:space="preserve"><value>Show all</value></data>
   <data name="Library.Source.ShowLess" xml:space="preserve"><value>Show less</value></data>
   <data name="Library.Source.PathCopied" xml:space="preserve"><value>Path copied</value></data>
+  <data name="Library.Image.Copied" xml:space="preserve"><value>Image copied</value></data>
   <data name="Library.Source.CopyPathFailed" xml:space="preserve"><value>Could not copy the path. Please try again.</value></data>
   <data name="Library.Source.OpenFolderFailed" xml:space="preserve"><value>Could not open the folder.</value></data>
   <data name="Library.Source.FolderMissing" xml:space="preserve"><value>The folder could not be found. It may have been moved or deleted.</value></data>
@@ -3337,6 +3330,8 @@ Open the library or Settings from the tray menu.</value></data>
   <data name="QuickAccess.Saved" xml:space="preserve"><value>Saved</value></data>
   <data name="QuickAccess.Saving" xml:space="preserve"><value>Saving…</value></data>
   <data name="QuickAccess.Sound" xml:space="preserve"><value>Play capture sound</value></data>
+  <data name="QuickAccess.NotifyOnQuickSave" xml:space="preserve"><value>Notify after quick save</value></data>
+  <data name="QuickAccess.OpenFolder" xml:space="preserve"><value>Open folder</value></data>
   <data name="QuickAccess.Title" xml:space="preserve"><value>Capture quick access</value></data>
   <data name="QuickAccess.CopyText" xml:space="preserve"><value>Copy text</value></data>
   <data name="QuickAccess.CopyingText" xml:space="preserve"><value>Recognizing text…</value></data>
@@ -3555,6 +3550,7 @@ Delete {1} {1:plural:subfolder|subfolders}, {2} {2:plural:image|images}, and {3}
   <data name="RecordingPause_Status" xml:space="preserve"><value>Paused</value></data>
   <data name="RecordingPause_StatusHelp" xml:space="preserve"><value>Select Resume to continue recording, or press Esc or select Stop to finish it.</value></data>
   <data name="RecordingStatus_StopHelp" xml:space="preserve"><value>Press Esc or select Stop to finish the recording.</value></data>
+  <data name="RecordingStatus_Saved" xml:space="preserve"><value>Saved</value></data>
   <data name="RecordingPause_State" xml:space="preserve"><value>Paused</value></data>
   <data name="PinRestore_Command" xml:space="preserve"><value>Reopen closed pin</value></data>
   <data name="PinRestore_CommandHelp" xml:space="preserve"><value>Reopens the most recently closed pin at its last position, zoom, and opacity.</value></data>
@@ -4038,7 +4034,7 @@ Delete {1} {1:plural:subfolder|subfolders}, {2} {2:plural:image|images}, and {3}
   <data name="EditorFlow_CommandBarName" xml:space="preserve"><value>Editing commands</value></data>
   <data name="SettingsUx_AlwaysShowShortcutHints" xml:space="preserve"><value>Always show shortcut keys</value></data>
   <data name="SettingsUx_AlwaysShowShortcutHintsHint" xml:space="preserve"><value>When off, shortcut keys appear under buttons only while Alt is held.</value></data>
-  <data name="EditorFlow_CopyHint" xml:space="preserve"><value>Copy the edited image to the clipboard</value></data>
+  <data name="EditorFlow_CopyHint" xml:space="preserve"><value>Copy to the clipboard, save to the library and close</value></data>
   <data name="EditorFlow_CropBarName" xml:space="preserve"><value>Crop commands</value></data>
   <data name="EditorFlow_SelectionCleared" xml:space="preserve"><value>Selection cleared</value></data>
   <data name="EditorFlow_Selected" xml:space="preserve"><value>Selected: {0}</value></data>
@@ -4077,6 +4073,7 @@ Delete {1} {1:plural:subfolder|subfolders}, {2} {2:plural:image|images}, and {3}
   <data name="Onboard_StepNumber" xml:space="preserve"><value>Step {0}</value></data>
   <data name="Onboard_AfterCaptureTitle" xml:space="preserve"><value>After a capture</value></data>
   <data name="Welcome_FirstCaptureTitle" xml:space="preserve"><value>Try your first capture</value></data>
+  <data name="Welcome_PinClipboardHint" xml:space="preserve"><value>Pin copied tables and code with {0}.</value></data>
   <data name="Welcome_Skip" xml:space="preserve"><value>Skip</value></data>
   <data name="Onboard_FirstCaptureTip" xml:space="preserve"><value>Press P to pin it above other windows</value></data>
   <data name="Onboard_ReceiptKeyboard" xml:space="preserve"><value>Alt+Q to focus · Tab to move · Enter to run</value></data>
