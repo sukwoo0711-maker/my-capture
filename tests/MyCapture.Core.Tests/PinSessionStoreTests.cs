@@ -1168,29 +1168,33 @@ public sealed class PinSessionStoreTests
         using var saveInsideGate = new ManualResetEventSlim();
         using var releaseSave = new ManualResetEventSlim();
         using var clearStarted = new ManualResetEventSlim();
-        Task<bool> save = Task.Run(() => store.Save([Snapshot()], canCommit: () =>
+        // These synchronous workers must contend on the store gate, not wait for a pool slot.
+        Task<bool> save = Task.Factory.StartNew(() => store.Save([Snapshot()], canCommit: () =>
         {
             saveInsideGate.Set();
             return releaseSave.Wait(TimeSpan.FromSeconds(5));
-        }));
-        Assert.True(saveInsideGate.Wait(TimeSpan.FromSeconds(5)));
-        Task<bool> clear = Task.Run(() =>
-        {
-            clearStarted.Set();
-            return store.Clear();
-        });
+        }), CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default);
+        Task<bool>? clear = null;
         try
         {
+            Assert.True(saveInsideGate.Wait(TimeSpan.FromSeconds(5)));
+            clear = Task.Factory.StartNew(() =>
+            {
+                clearStarted.Set();
+                return store.Clear();
+            }, CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default);
             Assert.True(clearStarted.Wait(TimeSpan.FromSeconds(5)));
             Assert.False(clear.IsCompleted);
         }
         finally
         {
             releaseSave.Set();
+            if (clear is null) await save;
+            else await Task.WhenAll(save, clear);
         }
 
         Assert.True(await save);
-        Assert.True(await clear);
+        Assert.True(await clear!);
         Assert.Empty(Directory.EnumerateFileSystemEntries(workspace.Paths.PinSessionRoot));
     }
 

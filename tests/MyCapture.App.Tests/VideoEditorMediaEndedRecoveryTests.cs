@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.IO;
 using System.Reflection;
 using System.Windows;
@@ -297,12 +298,25 @@ public sealed class VideoEditorMediaEndedRecoveryTests
     {
         PreviewSeekCoordinator coordinator = editor.PreviewSeekCoordinatorForTest;
         MediaElementPreviewEngine engine = editor.PreviewEngineForTest;
-        long generation = coordinator.RequestExact(target);
-        DateTime until = DateTime.UtcNow.AddSeconds(10);
-        while (coordinator.PresentedGeneration != generation && DateTime.UtcNow < until)
-            RangePatternClip.Pump(TimeSpan.FromMilliseconds(5));
-        (int Watches, int Positions) atPresentation = (engine.SettleCountForTest, engine.PositionCountForTest);
-        if (coordinator.PresentedGeneration != generation)
+        var presentations = new ConcurrentDictionary<long, (int Watches, int Positions)>();
+        void OnPresented(PresentedPreviewFrame frame) =>
+            presentations.TryAdd(frame.Generation, (engine.SettleCountForTest, engine.PositionCountForTest));
+        (int Watches, int Positions) atPresentation;
+        bool presented;
+        DateTime until;
+        coordinator.PreviewPresented += OnPresented;
+        try
+        {
+            long generation = coordinator.RequestExact(target);
+            until = DateTime.UtcNow.AddSeconds(10);
+            // A delayed dispatcher pump can also run the watch's later repositioning. Capture
+            // these counters at the report itself, not when the test next observes its generation.
+            while (!presentations.ContainsKey(generation) && DateTime.UtcNow < until)
+                RangePatternClip.Pump(TimeSpan.FromMilliseconds(5));
+            presented = presentations.TryGetValue(generation, out atPresentation);
+        }
+        finally { coordinator.PreviewPresented -= OnPresented; }
+        if (!presented)
         {
             failures.Add($"{step}: the seek to {target:F3} ms was not presented");
             return atPresentation;
