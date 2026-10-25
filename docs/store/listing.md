@@ -105,15 +105,15 @@ MyCapture는 코딩하는 동안 엑셀 사양 표와 자주 쓰는 코드를 �
 
 ### 이 버전의 새로운 기능 (4.8.2)
 
-입력 한도는 1,500자입니다. 4.7.0이 게시된 뒤 제출하므로 4.7.0 이후의 변경만 적습니다.
+입력 한도는 1,500자이며, 아래 본문은 800자 이내입니다. 4.8.0은 공개하지 않았으므로 4.7.0 이후의 변경을 함께 적습니다.
 
-- 텍스트 인식 결과 창에 번역 보기를 더했습니다. 영어 문단과 표 칸을 이 PC 안에서 한국어로 옮깁니다. 기본으로 꺼져 있고, 켤 때 모델(약 247MB)을 한 번 내려받습니다.
-- 캡처하면 찍은 영역이 빠른 작업 카드로 날아가 앉고, 라이브러리에서 삭제하면 남은 캡처가 빈자리를 채웁니다. 움직임은 Windows 애니메이션 효과 설정을 따릅니다.
-- 지연 캡처 카운트다운에 고리가 생겼고, 라이브러리에서 복사하면 단추 안에 '복사됨' 표시가 잠깐 나타납니다.
-- 편집기의 Ctrl+C와 [복사]가 다시 클립보드 복사와 저장을 한 뒤 편집기를 닫습니다.
-- 핀에서 같은 원문을 반복 복사하는 속도를 높였고, 글자 선택 중 휠이 핀 배율을 바꾸지 않습니다.
-- 녹화 편집기에서 가짜 불러오기 진행률을 없앴고, Tab으로 옮긴 단추를 Space로 누릅니다. 잘못 입력한 구간 값은 지우지 않으며, 재생이 끝난 뒤 미리 보기가 요청한 위치에 섭니다.
-- 화면 글꼴을 Pretendard로 바꾸고 단추 모양을 정리했으며, 1080p 200% 화면에서도 설정 창이 작업 영역에 맞게 열립니다.
+- 텍스트 인식 결과에 번역 보기를 더했습니다. 영어 문단과 표 칸을 이 PC에서 한국어로 옮깁니다. 기본은 꺼짐이며, 켤 때 모델(약 247 MB)을 한 번 내려받습니다.
+- 저장·복사가 끝나기 전에 빠른 작업 카드를 먼저 띄우고, 진행 상태와 결과를 이어서 표시합니다.
+- 편집기 Alt 단축키 표시가 반복 입력과 마우스 이동에도 일정하게 동작합니다.
+- 라이브러리의 캡처·검색 행과 선택 작업 행을 나눴습니다. 선택해도 캡처 라벨과 검색 칸 위치가 유지됩니다.
+- 동영상 재생 창 크기에 맞춰 영상이 커집니다. F11로 전체 화면을 켜고 Esc로 이전 창으로 돌아옵니다.
+- Pretendard 글꼴, 짙은 빨강 주 단추, 32 DIP 일반 단추를 적용했습니다.
+- 편집기의 Ctrl+C와 복사가 저장 후 창을 닫으며, 핀 원문 반복 복사와 녹화 편집기의 정확한 프레임 탐색이 빨라졌습니다.
 
 ### 검색어
 
@@ -199,15 +199,15 @@ Enter them in screenshot order. Each caption is 200 characters or fewer.
 
 ### What's new in this version (4.8.2)
 
-Limit: 1,500 characters. 4.7.0 is published, so this lists only the changes after 4.7.0.
+Limit: 1,500 characters; the text below is under 800. Version 4.8.0 was not published, so this covers changes since 4.7.0.
 
-- Text recognition results can be translated from English to Korean on this PC in a new Translate view. Off by default; turning it on downloads a model (about 247 MB) once.
-- A capture flies to the quick-access card, and captures fill the gap after a library delete. Motion follows Windows animation settings.
-- The delayed-capture countdown has a ring, and Copy in the library briefly shows a check.
-- Ctrl+C and Copy in the editor again copy, save and close the editor.
-- Repeated copies of pin text are faster, and the wheel no longer zooms a pin while you select text.
-- Video editor: no fake loading percentage, Space presses a Tab-focused button, invalid trim values are kept.
-- The interface uses the Pretendard font with refined buttons, and Settings fits the work area at 1080p and 200% scale.
+- Translate recognized English text and tables into Korean on this PC. Off by default; enabling it downloads a 247 MB model once.
+- The quick-access card appears before saving and copying finish, then shows their progress and results.
+- Alt shortcut hints stay consistent across repeated presses and pointer movement.
+- Separate capture/search and selection rows keep library controls in place.
+- Video fits its resizable window. F11 enters full screen; Esc restores the window.
+- Pretendard UI text, dark-red primary buttons and 32-DIP standard buttons.
+- Ctrl+C and Copy save and close the editor. Faster repeated pin-text copying and exact video seeking.
 
 ### Search terms
 

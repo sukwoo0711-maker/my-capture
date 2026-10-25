@@ -96,6 +96,8 @@ public partial class App
                 _overlay?.NoteForegroundDismissal();
                 first.Lease?.Dispose();
                 first.Lease = null;
+                first.Card = null;
+                if (ReferenceEquals(_quickAccessFirst, first)) _quickAccessFirst = null;
                 if (ReferenceEquals(_quickAccess, shown)) _quickAccess = null;
                 _storeRating?.NotifyFlowEnded();
             };

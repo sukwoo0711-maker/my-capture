@@ -323,6 +323,69 @@ public sealed class QuickAccessCardFirstTests : KoreanCaptionTest
         Assert.Contains(saved.Id, evicted);
     });
 
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
+    public void ClosingTheCardReleasesItsCaptureStateWhileSavingCopyingAndAfterCompletion(bool savedBeforeClose, bool copiedBeforeClose) => StaTestHost.Run(() =>
+    {
+        using var shell = new Shell();
+        var copy = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        shell.CopyResult = copy.Task;
+        Task handler = shell.Select();
+        shell.RunSendTurn();
+        QuickAccessWindow card = Assert.IsType<QuickAccessWindow>(shell.Card);
+        object first = shell.CardFirstState!;
+        Assert.NotNull(first);
+        Assert.Null(shell.Flight);
+        if (savedBeforeClose) shell.PumpUntil(() => !card.IsPending);
+        else Assert.True(card.IsPending);
+        if (copiedBeforeClose)
+        {
+            copy.SetResult(true);
+            shell.Wait(handler);
+        }
+
+        card.CloseNow();
+
+        Assert.Null(shell.Card);
+        Assert.Null(shell.CardFirstState);
+        Assert.Null(first.GetType().GetProperty("Card", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(first));
+        // Any unfinished save and copy finish without restoring the dismissed card or its root.
+        if (!copiedBeforeClose) copy.SetResult(true);
+        shell.Wait(handler);
+        shell.RunIdleTurns();
+        Assert.Null(shell.Card);
+        Assert.Null(shell.CardFirstState);
+        Assert.Single(shell.Queue.Records);
+        Assert.Equal(1, shell.Settings.StoreRating.SuccessfulCaptureCount);
+        Assert.Empty(shell.Notices);
+    });
+
+    [Fact]
+    public void ClosingThePreviousCardPreservesItsReplacementCaptureState() => StaTestHost.Run(() =>
+    {
+        using var shell = new Shell();
+        shell.Wait(shell.Select());
+        QuickAccessWindow previous = Assert.IsType<QuickAccessWindow>(shell.Card);
+        object first = shell.CardFirstState!;
+        Assert.NotNull(first);
+
+        Task handler = shell.Select();
+        shell.RunSendTurn();
+
+        QuickAccessWindow replacement = Assert.IsType<QuickAccessWindow>(shell.Card);
+        Assert.NotSame(previous, replacement);
+        Assert.False(previous.IsOpen);
+        Assert.NotNull(shell.CardFirstState);
+        Assert.NotSame(first, shell.CardFirstState);
+        Assert.Null(first.GetType().GetProperty("Card", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(first));
+        shell.Wait(handler);
+        Assert.Same(replacement, shell.Card);
+        Assert.False(replacement.IsPending);
+        Assert.Equal(Assert.IsType<CaptureRecord>(shell.CurrentRecord).Id, shell.LatestReceipt);
+    });
+
     [Fact]
     public void ASaveFailureTurnsTheCardIntoTheFailureWithoutASecondNotification() => StaTestHost.Run(() =>
     {
@@ -720,6 +783,7 @@ public sealed class QuickAccessCardFirstTests : KoreanCaptionTest
         internal int CopyCalls { get; private set; }
         internal List<(string Title, string Message)> Notices { get; } = [];
         internal QuickAccessWindow? Card => (QuickAccessWindow?)Get("_quickAccess");
+        internal object? CardFirstState => Get("_quickAccessFirst");
         internal CaptureFlight? Flight => (CaptureFlight?)Get("_captureFlight");
         internal CaptureRecord? CurrentRecord => (CaptureRecord?)Get("_currentRecord");
         internal CaptureRecord? PendingRecord => (CaptureRecord?)Get("_pendingRecord");

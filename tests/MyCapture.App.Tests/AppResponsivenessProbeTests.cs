@@ -1342,7 +1342,8 @@ internal static class ProbeJoin
             }
 
             string summary = Path.Combine(folder, "app-responsiveness-summary.md");
-            if (File.Exists(summary))
+            bool hasSummary = File.Exists(summary);
+            if (hasSummary)
             {
                 // One heading level down: each section's title becomes a second-level heading.
                 foreach (string line in File.ReadAllLines(summary, Encoding.UTF8))
@@ -1356,7 +1357,7 @@ internal static class ProbeJoin
                 foreach (string line in File.ReadAllLines(receipt, Encoding.UTF8))
                     md.AppendLine(line.StartsWith('#') ? "#" + line : line);
             }
-            else
+            else if (!hasSummary)
             {
                 md.AppendLine($"## {section}");
                 md.AppendLine();
@@ -1368,5 +1369,41 @@ internal static class ProbeJoin
 
         File.WriteAllText(Path.Combine(output, "app-responsiveness.csv"), csv.ToString(), new UTF8Encoding(true));
         File.WriteAllText(Path.Combine(output, "app-responsiveness-summary.md"), md.ToString(), new UTF8Encoding(false));
+    }
+}
+
+public sealed class ProbeJoinTests
+{
+    [Theory]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    [InlineData(true, true)]
+    [InlineData(false, false)]
+    public void MissingResultsAreReportedOnlyWhenNeitherSummaryExists(bool hasSummary, bool hasReceipt)
+    {
+        string output = TestRecycleBin.CreateTempSubdirectory("mycapture-probe-join-").FullName;
+        try
+        {
+            string section = Path.Combine(output, "capture");
+            Directory.CreateDirectory(section);
+            File.WriteAllText(Path.Combine(section, "app-responsiveness.csv"), "scenario,elapsed\ncapture,12\n");
+            if (hasSummary)
+                File.WriteAllText(Path.Combine(section, "app-responsiveness-summary.md"), "# Capture summary\nCapture results\n");
+            if (hasReceipt)
+                File.WriteAllText(Path.Combine(section, "receipt-summary.md"), "# Receipt summary\nReceipt results\n");
+
+            ProbeJoin.Write(output, ["capture"]);
+
+            string joined = File.ReadAllText(Path.Combine(output, "app-responsiveness-summary.md"));
+            Assert.Equal(hasSummary, joined.Contains("## Capture summary", StringComparison.Ordinal));
+            Assert.Equal(hasReceipt, joined.Contains("## Receipt summary", StringComparison.Ordinal));
+            Assert.Equal(!hasSummary && !hasReceipt, joined.Contains("결과 없음(probe-child-console.txt 참조).", StringComparison.Ordinal));
+            Assert.Equal($"section,scenario,elapsed{Environment.NewLine}capture,capture,12{Environment.NewLine}",
+                File.ReadAllText(Path.Combine(output, "app-responsiveness.csv")));
+        }
+        finally
+        {
+            TestRecycleBin.DeleteDirectory(output, recursive: true);
+        }
     }
 }
