@@ -274,10 +274,6 @@
                                                 <Setter Property="themes:FluidMotion.FadeTo" Value="1" />
                                                 <Setter Property="IsHitTestVisible" Value="True" />
                                             </DataTrigger>
-                                            <DataTrigger Binding="{Binding IsSelected}" Value="True">
-                                                <Setter Property="themes:FluidMotion.FadeTo" Value="1" />
-                                                <Setter Property="IsHitTestVisible" Value="True" />
-                                            </DataTrigger>
                                         </Style.Triggers>
                                     </Style>
                                 </Border.Style>
@@ -583,10 +579,6 @@
                                                 <Setter Property="IsHitTestVisible" Value="True" />
                                             </DataTrigger>
                                             <DataTrigger Binding="{Binding IsKeyboardFocusWithin, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" Value="True">
-                                                <Setter Property="themes:FluidMotion.FadeTo" Value="1" />
-                                                <Setter Property="IsHitTestVisible" Value="True" />
-                                            </DataTrigger>
-                                            <DataTrigger Binding="{Binding IsSelected}" Value="True">
                                                 <Setter Property="themes:FluidMotion.FadeTo" Value="1" />
                                                 <Setter Property="IsHitTestVisible" Value="True" />
                                             </DataTrigger>
@@ -1458,9 +1450,7 @@
       </ResourceDictionary>
     </Window.Resources>
 
-    <!-- The window title lives only in the native title bar, which ModernWindowChrome paints with
-         the same Surface.Base as this body. The first body row is the command bar on that same
-         base with no divider, so title bar, commands and the navigation pane read as one surface. -->
+    <!-- Global capture and search stay in place while the content command row changes selection state. -->
     <Grid x:Name="LibraryRoot" Margin="12,4,12,6" Background="Transparent" AllowDrop="True"
           DragEnter="OnLibraryDragOver" DragOver="OnLibraryDragOver" DragLeave="OnLibraryDragLeave" Drop="OnLibraryDrop">
         <Grid.RowDefinitions>
@@ -1470,89 +1460,66 @@
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
-        <!-- One command bar of fixed height. Capture stays on the left; the right side swaps between
-             library commands and the selection's commands in place, so selecting never pushes the
-             library down. Shortcuts are in tooltips, the search sits between the two groups. -->
-        <Grid x:Name="LibraryCommandBar" Grid.Row="0" Height="48" Margin="0,0,0,6"
-              AutomationProperties.Name="{loc:Text LibraryUx_CommandBarName}">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="Auto" />
-                <ColumnDefinition Width="*" />
-                <ColumnDefinition Width="Auto" />
-            </Grid.ColumnDefinitions>
+        <Border x:Name="LibraryGlobalCommandSurface" Grid.Row="0" Padding="8,0" Margin="0,0,0,8"
+                Background="{DynamicResource Surface.Raised}" BorderBrush="{DynamicResource Border.Subtle}" BorderThickness="0,0,0,1">
+            <Grid x:Name="LibraryCommandBar" Height="48"
+                  AutomationProperties.Name="{loc:Text LibraryUx_CommandBarName}">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
 
-            <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
-                <!-- Labelled capture commands while nothing is selected: capture is the one filled button. -->
-                <StackPanel x:Name="CaptureCommands" Orientation="Horizontal">
-                    <StackPanel.Style>
-                        <Style TargetType="StackPanel">
-                            <Style.Triggers>
-                                <DataTrigger Binding="{Binding HasSelection}" Value="True">
-                                    <Setter Property="Visibility" Value="Collapsed" />
-                                </DataTrigger>
-                            </Style.Triggers>
-                        </Style>
-                    </StackPanel.Style>
-                    <Button x:Name="CaptureRegionButton" Style="{StaticResource Button.Primary}" Margin="3,0"
-                            VerticalAlignment="Center"
-                            AutomationProperties.Name="{loc:Text Text_2C20ADDA2018}"
-                            Click="OnCaptureRegionClick">
-                        <StackPanel Orientation="Horizontal">
-                            <themes:SymbolIcon Size="16" Data="{StaticResource Icon.Capture}"
-                                  Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" Fill="Transparent" />
-                            <TextBlock Text="{loc:Text Text_2C20ADDA2018}" Margin="{DynamicResource CommandButton.IconLabelGap}" VerticalAlignment="Center" />
-                        </StackPanel>
-                    </Button>
-                    <Button x:Name="RecordRegionButton" Style="{StaticResource LibraryUx.CommandButton}"
-                            AutomationProperties.Name="{loc:Text Text_4F5AF20FAA6E}"
-                            Click="OnRecordRegionClick">
-                        <StackPanel Orientation="Horizontal">
-                            <themes:SymbolIcon Size="16" Data="{StaticResource Icon.Record}"
-                                  Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
-                            <TextBlock Text="{loc:Text Text_4F5AF20FAA6E}" Margin="{DynamicResource CommandButton.IconLabelGap}" VerticalAlignment="Center" />
-                        </StackPanel>
-                    </Button>
-                </StackPanel>
-                <!-- With a selection the item's Edit is the filled button, so capture becomes two icons. -->
-                <StackPanel x:Name="CompactCaptureCommands" Orientation="Horizontal"
-                            Visibility="{Binding HasSelection, Converter={StaticResource BoolToVisibility}}">
-                    <Button x:Name="CaptureRegionIconButton" Style="{StaticResource LibraryUx.CommandIcon}"
-                            AutomationProperties.Name="{loc:Text Text_2C20ADDA2018}" Click="OnCaptureRegionClick">
-                        <themes:SymbolIcon Size="16" Data="{StaticResource Icon.Capture}" Style="{StaticResource LibraryUx.CommandGlyph}" />
-                    </Button>
-                    <Button x:Name="RecordRegionIconButton" Style="{StaticResource LibraryUx.CommandIcon}"
-                            AutomationProperties.Name="{loc:Text Text_4F5AF20FAA6E}" Click="OnRecordRegionClick">
-                        <themes:SymbolIcon Size="16" Data="{StaticResource Icon.Record}" Style="{StaticResource LibraryUx.CommandGlyph}"
-                              Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
-                    </Button>
-                </StackPanel>
-            </StackPanel>
+                <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                    <!-- Keep labelled capture commands available in every selection state. -->
+                    <StackPanel x:Name="CaptureCommands" Orientation="Horizontal">
+                        <Button x:Name="CaptureRegionButton" Style="{StaticResource Button.Primary}" Margin="3,0"
+                                VerticalAlignment="Center"
+                                AutomationProperties.Name="{loc:Text Text_2C20ADDA2018}"
+                                Click="OnCaptureRegionClick">
+                            <StackPanel Orientation="Horizontal">
+                                <themes:SymbolIcon Size="16" Data="{StaticResource Icon.Capture}"
+                                      Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" Fill="Transparent" />
+                                <TextBlock Text="{loc:Text Text_2C20ADDA2018}" Margin="{DynamicResource CommandButton.IconLabelGap}" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </Button>
+                        <Button x:Name="RecordRegionButton" Style="{StaticResource LibraryUx.CommandButton}"
+                                AutomationProperties.Name="{loc:Text Text_4F5AF20FAA6E}"
+                                Click="OnRecordRegionClick">
+                            <StackPanel Orientation="Horizontal">
+                                <themes:SymbolIcon Size="16" Data="{StaticResource Icon.Record}"
+                                      Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
+                                <TextBlock Text="{loc:Text Text_4F5AF20FAA6E}" Margin="{DynamicResource CommandButton.IconLabelGap}" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </Button>
+                    </StackPanel>
 
-            <!-- An input boundary, not a decorative card line: it takes the control outline, hands it
-                 over to the stronger outline on hover (the two fade, like the shared TextBox), and takes
-                 the focus colour at once while the search box inside has keyboard focus. -->
-            <Grid x:Name="SearchField" Grid.Column="1" Margin="6,0,12,0"
-                  MaxWidth="560" VerticalAlignment="Center" HorizontalAlignment="Stretch">
-                <!-- Transparent hit surface; each fading chrome copy draws its fill and edge together. -->
-                <Border x:Name="SearchWell" Style="{StaticResource Card.Sunken}" BorderBrush="Transparent" Background="Transparent" />
-                <Border x:Name="SearchEdge" BorderThickness="1" CornerRadius="{DynamicResource Radius.Lg}" SnapsToDevicePixels="True">
-                    <Border.Style>
-                        <Style TargetType="Border" BasedOn="{StaticResource LibraryUx.RestEdge}">
-                            <Setter Property="BorderBrush" Value="{DynamicResource Border.Control}" />
-                            <Setter Property="Background" Value="{DynamicResource Surface.Sunken}" />
-                            <Style.Triggers>
-                                <DataTrigger Binding="{Binding IsMouseOver, ElementName=SearchField}" Value="True">
-                                    <Setter Property="themes:FluidMotion.FadeTo" Value="0" />
-                                </DataTrigger>
-                                <!-- Focus keeps this edge whole, so the outline never dims while the pointer crosses it. -->
-                                <DataTrigger Binding="{Binding IsKeyboardFocusWithin, ElementName=SearchField}" Value="True">
-                                    <Setter Property="BorderBrush" Value="{DynamicResource Border.Focus}" />
-                                    <Setter Property="themes:FluidMotion.FadeTo" Value="1" />
-                                </DataTrigger>
-                            </Style.Triggers>
-                        </Style>
-                    </Border.Style>
-                </Border>
+                </StackPanel>
+
+                <!-- An input boundary, not a decorative card line: it takes the control outline, hands it
+                     over to the stronger outline on hover (the two fade, like the shared TextBox), and takes
+                     the focus colour at once while the search box inside has keyboard focus. -->
+                <Grid x:Name="SearchField" Grid.Column="1" Margin="6,0,12,0"
+                      MaxWidth="560" VerticalAlignment="Center" HorizontalAlignment="Stretch">
+                    <!-- Transparent hit surface; each fading chrome copy draws its fill and edge together. -->
+                    <Border x:Name="SearchWell" Style="{StaticResource Card.Sunken}" BorderBrush="Transparent" Background="Transparent" />
+                    <Border x:Name="SearchEdge" BorderThickness="1" CornerRadius="{DynamicResource Radius.Lg}" SnapsToDevicePixels="True">
+                        <Border.Style>
+                            <Style TargetType="Border" BasedOn="{StaticResource LibraryUx.RestEdge}">
+                                <Setter Property="BorderBrush" Value="{DynamicResource Border.Control}" />
+                                <Setter Property="Background" Value="{DynamicResource Surface.Sunken}" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsMouseOver, ElementName=SearchField}" Value="True">
+                                        <Setter Property="themes:FluidMotion.FadeTo" Value="0" />
+                                    </DataTrigger>
+                                    <!-- Focus keeps this edge whole, so the outline never dims while the pointer crosses it. -->
+                                    <DataTrigger Binding="{Binding IsKeyboardFocusWithin, ElementName=SearchField}" Value="True">
+                                        <Setter Property="BorderBrush" Value="{DynamicResource Border.Focus}" />
+                                        <Setter Property="themes:FluidMotion.FadeTo" Value="1" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Border.Style>
+                    </Border>
                 <Border x:Name="SearchHoverLayer" BorderThickness="1" CornerRadius="{DynamicResource Radius.Lg}">
                     <Border.Style>
                         <Style TargetType="Border" BasedOn="{StaticResource StateLayer}">
@@ -1596,9 +1563,6 @@
                                 <Setter Property="Text" Value="{Binding FittedText, RelativeSource={RelativeSource Self}}" />
                                 <Setter Property="Visibility" Value="Collapsed" />
                                 <Style.Triggers>
-                                    <DataTrigger Binding="{Binding HasSelection}" Value="True">
-                                        <Setter Property="Text" Value="{loc:Text Text_4B8D541EBE6D}" />
-                                    </DataTrigger>
                                     <DataTrigger Binding="{Binding Text, ElementName=SearchBox}" Value="">
                                         <Setter Property="Visibility" Value="Visible" />
                                     </DataTrigger>
@@ -1609,86 +1573,9 @@
                 </Grid>
             </Grid>
 
-            <!-- Right side: the library commands or the selection's commands, then More, which stays
-                 in place either way so restoring and the library folder are reachable with a selection. -->
-            <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
-            <!-- Library commands (nothing selected). -->
-            <StackPanel x:Name="LibraryCommands" Orientation="Horizontal" VerticalAlignment="Center">
-                <StackPanel.Style>
-                    <Style TargetType="StackPanel">
-                        <Style.Triggers>
-                            <DataTrigger Binding="{Binding HasSelection}" Value="True">
-                                <Setter Property="Visibility" Value="Collapsed" />
-                            </DataTrigger>
-                        </Style.Triggers>
-                    </Style>
-                </StackPanel.Style>
-                <ComboBox x:Name="SortBox" Width="132" Margin="2,0,4,0" VerticalAlignment="Center"
-                          AutomationProperties.Name="{loc:Text Folder410.Sort}" ToolTip="{loc:Text Folder410.Sort}"
-                          SelectedIndex="{Binding SortIndex, Mode=TwoWay}">
-                    <ComboBoxItem Content="{loc:Text Folder410.Newest}" />
-                    <ComboBoxItem Content="{loc:Text Folder410.Oldest}" />
-                    <ComboBoxItem Content="{loc:Text Folder410.ByName}" />
-                </ComboBox>
-            </StackPanel>
 
-            <!-- Selection commands, in the same place. -->
-            <StackPanel x:Name="SelectionCommands" Orientation="Horizontal" VerticalAlignment="Center"
-                        AutomationProperties.Name="{loc:Text LibraryUx_SelectionBarName}"
-                        Visibility="{Binding HasSelection, Converter={StaticResource BoolToVisibility}}">
-                <Button x:Name="ClearSelectionButton" Style="{StaticResource LibraryUx.CommandIcon}"
-                        ToolTip="{loc:Text LibraryUx_ClearSelectionHint}" AutomationProperties.Name="{loc:Text LibraryUx_ClearSelection}"
-                        Click="OnClearSelectionClick">
-                    <themes:SymbolIcon Size="16" Data="{StaticResource Icon.Close}" Style="{StaticResource LibraryUx.CommandGlyph}" />
-                </Button>
-                <TextBlock x:Name="SelectionCountLabel" Text="{Binding SelectionText}" VerticalAlignment="Center" Margin="2,0,10,0"
-                           FontWeight="SemiBold" AutomationProperties.LiveSetting="Polite" />
-                <Border Style="{StaticResource LibraryUx.CommandSeparator}" />
-                <Button x:Name="ArchiveExportButton" Content="{loc:Text Library.Archive.Action}" Style="{StaticResource LibraryUx.CommandButton}"
-                        Click="OnExportArchiveClick" ToolTip="{loc:Text Library.Archive.Hint}" />
-                <Button x:Name="CompareSelectedButton" Content="{loc:Text Gallery.Compare}" Style="{StaticResource LibraryUx.CommandButton}"
-                        Visibility="{Binding CanCompareSelected, Converter={StaticResource BoolToVisibility}}"
-                        Command="{x:Static gallery:GalleryWindow.CompareCommand}" />
-                <Button x:Name="MoveCapturesButton" Content="{loc:Text Folder410.MoveCaptures}" Style="{StaticResource LibraryUx.CommandButton}"
-                        Click="OnMoveCapturesClick" ToolTip="{loc:Text LibraryUx_MoveHint}" />
-                <Button x:Name="DeleteSelectedButton" Content="{loc:Text LibrarySelection_Delete}" Style="{StaticResource LibraryUx.CommandButton}"
-                        Click="OnDeleteSelectedClick" ToolTip="{loc:Text LibraryUx_DeleteHint}" />
-            </StackPanel>
-            <Button x:Name="MoreCommandsButton" Style="{StaticResource LibraryUx.CommandIcon}"
-                    ToolTip="{loc:Text Text_5E8959D18390}" AutomationProperties.Name="{loc:Text Text_5E8959D18390}"
-                    Click="OnMoreCommandsClick">
-                <themes:SymbolIcon Size="16" Data="{StaticResource Icon.More}" Style="{StaticResource LibraryUx.CommandGlyph}"
-                      Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
-                <Button.ContextMenu>
-                    <ContextMenu DataContext="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}">
-                        <MenuItem x:Name="ArchiveOverflowMenu" Header="{loc:Text Library.Archive.Action}" Click="OnExportArchiveClick"
-                                  Visibility="Collapsed" />
-                        <MenuItem x:Name="MoveOverflowMenu" Header="{loc:Text Folder410.MoveCaptures}" Click="OnMoveCapturesClick"
-                                  InputGestureText="M" Visibility="Collapsed" />
-                        <MenuItem x:Name="ContactSheetMenu" Header="{loc:Text ContactSheet.Action}" Click="OnContactSheetClick"
-                                  Visibility="{Binding HasSelection, Converter={StaticResource BoolToVisibility}}" />
-                        <MenuItem x:Name="BatchTagsMenu" Header="{loc:Text Library.Tags.Edit}" Click="OnBatchTagsClick"
-                                  Visibility="{Binding HasSelection, Converter={StaticResource BoolToVisibility}}" />
-                        <MenuItem x:Name="ReduceSelectedMenu" Header="{loc:Text LibrarySelection_Reduce}" Click="OnReducedExportClick"
-                                  CommandParameter="{Binding SingleSelectedTile}"
-                                  Visibility="{Binding CanReduceSelected, Converter={StaticResource BoolToVisibility}}" />
-                        <MenuItem x:Name="GifSelectedMenu" Header="{loc:Text LibrarySelection_Gif}" Click="OnGifMenuClick"
-                                  CommandParameter="{Binding SingleSelectedTile}"
-                                  Visibility="{Binding CanGifSelected, Converter={StaticResource BoolToVisibility}}" />
-                        <Separator Visibility="{Binding HasSelection, Converter={StaticResource BoolToVisibility}}" />
-                        <MenuItem x:Name="NewFolderOverflowMenu" Header="{loc:Text Folder410.NewFolder}"
-                                  InputGestureText="Ctrl+Shift+N" Click="OnNewFolderClick" />
-                        <MenuItem x:Name="ImportMenu" Header="{loc:Text Library.Import.Command}" Click="OnImportClick" />
-                        <MenuItem x:Name="RestoreDeletedMenu" Header="{loc:Text LibraryRecovery_Recent}" />
-                        <MenuItem x:Name="OpenLibraryFolderMenu" Header="{loc:Text LibraryFolder_OpenLibrary}" Click="OnOpenLibraryFolderClick" />
-                        <Separator />
-                        <MenuItem Header="{loc:Text LibrarySelection_ClearHint}" Click="OnClearLibraryClick"
-                                  Foreground="{DynamicResource Text.Primary}" />
-                    </ContextMenu>
-                </Button.ContextMenu>
-            </Button>
-            </StackPanel>
         </Grid>
+        </Border>
 
         <StackPanel Grid.Row="1">
             <DockPanel Margin="6,0,6,8" LastChildFill="True"
@@ -1760,8 +1647,9 @@
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
 
-            <!-- Navigation pane on the window base, like the title bar above it. -->
-            <Grid x:Name="GalleryFilterRail" Margin="0,0,10,0" AutomationProperties.Name="{loc:Text LibraryUx_NavName}"
+            <Border x:Name="LibraryNavigationSurface" Grid.Column="0" IsHitTestVisible="False"
+                    Background="{DynamicResource Surface.Base}" BorderBrush="{DynamicResource Border.Subtle}" BorderThickness="0,0,1,0" />
+            <Grid x:Name="GalleryFilterRail" Margin="0,8,12,0" AutomationProperties.Name="{loc:Text LibraryUx_NavName}"
                   SizeChanged="OnTagNavigationSizeChanged">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto" />
@@ -1969,17 +1857,106 @@
             </Grid>
 
 
-            <Grid x:Name="LibraryItemsSurface" Grid.Column="1" Background="Transparent"
+            <Grid x:Name="LibraryItemsSurface" Grid.Column="1" Margin="12,0,8,0" Background="{DynamicResource Surface.Sunken}"
                   ContextMenu="{StaticResource Gallery.EmptyContextMenu}"
                   PreviewKeyDown="OnLibraryItemsKeyDown" PreviewMouseRightButtonDown="OnLibraryItemsRightButtonDown">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
                     <RowDefinition Height="*" />
                 </Grid.RowDefinitions>
 
+                <!-- A stable content toolbar keeps list geometry unchanged as selection changes.
+                     Its overflow menu retains every secondary command at narrow widths. -->
+                <Grid x:Name="LibraryContentCommandBar" Height="48" Margin="0,0,0,8"
+                      Background="{DynamicResource Surface.Raised}"
+                      AutomationProperties.Name="{loc:Text LibraryUx_CommandBarName}">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <Grid>
+                        <!-- Library commands (nothing selected). -->
+                        <StackPanel x:Name="LibraryCommands" Orientation="Horizontal" VerticalAlignment="Center">
+                            <StackPanel.Style>
+                                <Style TargetType="StackPanel">
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding HasSelection}" Value="True">
+                                            <Setter Property="Visibility" Value="Collapsed" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </StackPanel.Style>
+                            <ComboBox x:Name="SortBox" Width="132" Margin="6,0,4,0" VerticalAlignment="Center"
+                                      AutomationProperties.Name="{loc:Text Folder410.Sort}" ToolTip="{loc:Text Folder410.Sort}"
+                                      SelectedIndex="{Binding SortIndex, Mode=TwoWay}">
+                                <ComboBoxItem Content="{loc:Text Folder410.Newest}" />
+                                <ComboBoxItem Content="{loc:Text Folder410.Oldest}" />
+                                <ComboBoxItem Content="{loc:Text Folder410.ByName}" />
+                            </ComboBox>
+                        </StackPanel>
+
+                        <!-- Selection commands, in the same place. -->
+                        <StackPanel x:Name="SelectionCommands" Orientation="Horizontal" VerticalAlignment="Center"
+                                    AutomationProperties.Name="{loc:Text LibraryUx_SelectionBarName}"
+                                    Visibility="{Binding HasSelection, Converter={StaticResource BoolToVisibility}}">
+                            <Button x:Name="ClearSelectionButton" Style="{StaticResource LibraryUx.CommandIcon}"
+                                    ToolTip="{loc:Text LibraryUx_ClearSelectionHint}" AutomationProperties.Name="{loc:Text LibraryUx_ClearSelection}"
+                                    Click="OnClearSelectionClick">
+                                <themes:SymbolIcon Size="16" Data="{StaticResource Icon.Close}" Style="{StaticResource LibraryUx.CommandGlyph}" />
+                            </Button>
+                            <TextBlock x:Name="SelectionCountLabel" Text="{Binding SelectionText}" MaxWidth="120" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" Margin="2,0,10,0"
+                                       FontWeight="SemiBold" AutomationProperties.LiveSetting="Polite" />
+                            <Border Style="{StaticResource LibraryUx.CommandSeparator}" />
+                            <Button x:Name="ArchiveExportButton" Content="{loc:Text Library.Archive.Action}" Style="{StaticResource LibraryUx.CommandButton}"
+                                    Click="OnExportArchiveClick" ToolTip="{loc:Text Library.Archive.Hint}" />
+                            <Button x:Name="CompareSelectedButton" Content="{loc:Text Gallery.Compare}" Style="{StaticResource LibraryUx.CommandButton}"
+                                    Visibility="{Binding CanCompareSelected, Converter={StaticResource BoolToVisibility}}"
+                                    Command="{x:Static gallery:GalleryWindow.CompareCommand}" />
+                            <Button x:Name="MoveCapturesButton" Content="{loc:Text Folder410.MoveCaptures}" Style="{StaticResource LibraryUx.CommandButton}"
+                                    Click="OnMoveCapturesClick" ToolTip="{loc:Text LibraryUx_MoveHint}" />
+                            <Button x:Name="DeleteSelectedButton" Content="{loc:Text LibrarySelection_Delete}" Style="{StaticResource LibraryUx.CommandButton}"
+                                    Click="OnDeleteSelectedClick" ToolTip="{loc:Text LibraryUx_DeleteHint}" />
+                        </StackPanel>
+                    </Grid>
+                    <Button x:Name="MoreCommandsButton" Grid.Column="1" Style="{StaticResource LibraryUx.CommandIcon}"
+                            ToolTip="{loc:Text Text_5E8959D18390}" AutomationProperties.Name="{loc:Text Text_5E8959D18390}"
+                            Click="OnMoreCommandsClick">
+                        <themes:SymbolIcon Size="16" Data="{StaticResource Icon.More}" Style="{StaticResource LibraryUx.CommandGlyph}"
+                              Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
+                        <Button.ContextMenu>
+                            <ContextMenu DataContext="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}">
+                                <MenuItem x:Name="ArchiveOverflowMenu" Header="{loc:Text Library.Archive.Action}" Click="OnExportArchiveClick"
+                                          Visibility="Collapsed" />
+                                <MenuItem x:Name="MoveOverflowMenu" Header="{loc:Text Folder410.MoveCaptures}" Click="OnMoveCapturesClick"
+                                          InputGestureText="M" Visibility="Collapsed" />
+                                <MenuItem x:Name="ContactSheetMenu" Header="{loc:Text ContactSheet.Action}" Click="OnContactSheetClick"
+                                          Visibility="{Binding HasSelection, Converter={StaticResource BoolToVisibility}}" />
+                                <MenuItem x:Name="BatchTagsMenu" Header="{loc:Text Library.Tags.Edit}" Click="OnBatchTagsClick"
+                                          Visibility="{Binding HasSelection, Converter={StaticResource BoolToVisibility}}" />
+                                <MenuItem x:Name="ReduceSelectedMenu" Header="{loc:Text LibrarySelection_Reduce}" Click="OnReducedExportClick"
+                                          CommandParameter="{Binding SingleSelectedTile}"
+                                          Visibility="{Binding CanReduceSelected, Converter={StaticResource BoolToVisibility}}" />
+                                <MenuItem x:Name="GifSelectedMenu" Header="{loc:Text LibrarySelection_Gif}" Click="OnGifMenuClick"
+                                          CommandParameter="{Binding SingleSelectedTile}"
+                                          Visibility="{Binding CanGifSelected, Converter={StaticResource BoolToVisibility}}" />
+                                <Separator Visibility="{Binding HasSelection, Converter={StaticResource BoolToVisibility}}" />
+                                <MenuItem x:Name="NewFolderOverflowMenu" Header="{loc:Text Folder410.NewFolder}"
+                                          InputGestureText="Ctrl+Shift+N" Click="OnNewFolderClick" />
+                                <MenuItem x:Name="ImportMenu" Header="{loc:Text Library.Import.Command}" Click="OnImportClick" />
+                                <MenuItem x:Name="RestoreDeletedMenu" Header="{loc:Text LibraryRecovery_Recent}" />
+                                <MenuItem x:Name="OpenLibraryFolderMenu" Header="{loc:Text LibraryFolder_OpenLibrary}" Click="OnOpenLibraryFolderClick" />
+                                <Separator />
+                                <MenuItem Header="{loc:Text LibrarySelection_ClearHint}" Click="OnClearLibraryClick"
+                                          Foreground="{DynamicResource Text.Primary}" />
+                            </ContextMenu>
+                        </Button.ContextMenu>
+                    </Button>
+                </Grid>
+
                 <!-- Location header inside a folder or date: the way back and the name on the left,
                      the folder's "save new captures here" switch at the right end. -->
-                <Grid x:Name="LocationHeader" Height="44" Margin="2,0,0,4" ClipToBounds="True"
+                <Grid x:Name="LocationHeader" Grid.Row="1" Height="44" Margin="2,0,0,4" ClipToBounds="True"
                       Visibility="{Binding ShowLocationHeader, Converter={StaticResource BoolToVisibility}}">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" />
@@ -2003,7 +1980,7 @@
                               Visibility="{Binding ShowSaveHere, Converter={StaticResource BoolToVisibility}}" />
                 </Grid>
 
-                <Border x:Name="ImportOverlay" Grid.Row="1" Panel.ZIndex="10" Visibility="Collapsed"
+                <Border x:Name="ImportOverlay" Grid.Row="2" Panel.ZIndex="10" Visibility="Collapsed"
                         IsHitTestVisible="False" Background="{DynamicResource Surface.Raised}"
                         BorderBrush="{DynamicResource Text.Secondary}" BorderThickness="1"
                         CornerRadius="{StaticResource Radius.Lg}" Padding="24">
@@ -2019,12 +1996,12 @@
                                 Style="{StaticResource Button.Secondary}" />
                     </StackPanel>
                 </Border>
-                <ListBox x:Name="RowsList" Grid.Row="1"
+                <ListBox x:Name="RowsList" Grid.Row="2"
                          Style="{StaticResource Gallery.RowsList}"
                          ItemsSource="{Binding Rows}"
                          SizeChanged="OnRowsListSizeChanged" />
 
-                <Border Grid.Row="1" HorizontalAlignment="Center" VerticalAlignment="Center"
+                <Border Grid.Row="2" HorizontalAlignment="Center" VerticalAlignment="Center"
                         Style="{StaticResource Card}" Padding="42,30"
                         Visibility="{Binding IsEmpty, Converter={StaticResource BoolToVisibility}}">
                     <StackPanel MaxWidth="380">
@@ -2049,8 +2026,8 @@
             <!-- After the library content, so Tab follows the visual order: pane, content, details.
                  The selected capture's preview, title and main commands stay at the top; only the
                  information below them scrolls, and nothing inside it scrolls on its own. -->
-            <Border x:Name="GalleryDetailsRail" Grid.Column="2" Width="48" Margin="8,0,0,0" Padding="7" Visibility="Collapsed"
-                    Background="{DynamicResource Surface.Raised}" CornerRadius="{StaticResource Radius.Lg}"
+            <Border x:Name="GalleryDetailsRail" Grid.Column="2" Width="48" Padding="7" Visibility="Collapsed"
+                    Background="{DynamicResource Surface.Raised}" BorderBrush="{DynamicResource Border.Subtle}" BorderThickness="1,0,0,0"
                     AutomationProperties.Name="{loc:Text Workspace.Details}">
                 <Button x:Name="ShowDetailsButton" Style="{StaticResource Button.Icon.Compact}" VerticalAlignment="Top"
                         ToolTip="{loc:Text LibraryUx_DetailsShow}" AutomationProperties.Name="{loc:Text LibraryUx_DetailsShow}"
@@ -2058,8 +2035,8 @@
                     <themes:SymbolIcon Size="16" Data="{StaticResource LibraryUx.Icon.DetailsPane}" Style="{StaticResource LibraryUx.CommandGlyph}" />
                 </Button>
             </Border>
-            <Border x:Name="GalleryDetailsPanel" Grid.Column="2" Width="232" Margin="8,0,0,0" Padding="16"
-                    Background="{DynamicResource Surface.Raised}" CornerRadius="{StaticResource Radius.Lg}"
+            <Border x:Name="GalleryDetailsPanel" Grid.Column="2" Width="232" Padding="16"
+                    Background="{DynamicResource Surface.Raised}" BorderBrush="{DynamicResource Border.Subtle}" BorderThickness="1,0,0,0"
                     AutomationProperties.Name="{loc:Text Workspace.Details}">
                 <Grid>
                     <Grid.RowDefinitions>

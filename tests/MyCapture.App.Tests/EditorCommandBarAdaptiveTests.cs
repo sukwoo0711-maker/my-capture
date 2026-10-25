@@ -45,6 +45,7 @@ public sealed class EditorCommandBarAdaptiveTests(ITestOutputHelper output)
                 {
                     always = persistent;
                     ShortcutPresentation.SetAltRevealed(host.Window, reveal);
+                    ShortcutPresentation.Refresh();
                     host.Window.Dispatcher.Invoke(System.Windows.Threading.DispatcherPriority.ApplicationIdle, new Action(host.Window.UpdateLayout));
                     var bar = Descendants(host.Editor).OfType<CommandGroupsPanel>().Single(panel => panel.IsVisible);
                     var left = (FrameworkElement)bar.Children[0];

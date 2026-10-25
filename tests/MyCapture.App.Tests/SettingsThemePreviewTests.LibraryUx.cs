@@ -26,7 +26,7 @@ using Xunit;
 namespace MyCapture.App.Tests;
 
 /// <summary>
-/// The library's single command bar, navigation pane, location header, folder cards and capture
+/// The library's global/content command bars, navigation pane, location header, folder cards and capture
 /// drops, rendered from the real GalleryWindow BAML. Set MYCAPTURE_LIBRARY_UX_EVIDENCE to a
 /// directory to also save PNG evidence; the caption strip on those images is drawn with the
 /// colour ModernWindowChrome.ResolveChrome hands to DWM, because RenderTargetBitmap cannot
@@ -143,6 +143,7 @@ public sealed partial class SettingsThemePreviewTests
             Assert.DoesNotContain(Descendants(window).OfType<TextBlock>(), text => text.IsVisible
                 && (text.Text == UiText.Get("Text_37AD4F28D422") || text.Text == UiText.Get("Text_13036A090EBA")));
             var commandBar = (FrameworkElement)window.FindName("LibraryCommandBar");
+            var contentCommandBar = (FrameworkElement)window.FindName("LibraryContentCommandBar");
             Assert.Equal(48, commandBar.ActualHeight, 1);
             Button capture = VisibleButtonNamed(window, UiText.Get("Text_2C20ADDA2018"));
             Assert.Same(window.FindResource("Button.Primary"), capture.Style);
@@ -155,8 +156,10 @@ public sealed partial class SettingsThemePreviewTests
                 AssertInsideClient(element, client, label);
             AssertNotTrimmed(placeholder, label);
             AssertDefaultSearchPlaceholder(window, label);
-            AssertSameRow(commandBar, capture, search, (FrameworkElement)window.FindName("SortBox"));
+            AssertSameRow(commandBar, capture, search);
+            AssertSameRow(contentCommandBar, (FrameworkElement)window.FindName("SortBox"), (FrameworkElement)window.FindName("MoreCommandsButton"));
             AssertLibraryCommandHeights(commandBar);
+            AssertLibraryCommandHeights(contentCommandBar);
 
             // Navigation pane: icon items with counts instead of radio buttons and sentences.
             RadioButton[] views = Descendants(window).OfType<RadioButton>().Where(button => button.IsVisible).ToArray();
@@ -199,11 +202,12 @@ public sealed partial class SettingsThemePreviewTests
             Assert.Equal(language == "ko-KR" ? "폴더 디자인 시안, 캡처 2개" : "Folder 디자인 시안, Captures: 2",
                 AutomationProperties.GetName(designCard));
 
-            // Selecting swaps the right side of the same bar; nothing below moves.
+            // Selecting swaps only the content commands; global controls and the viewport do not move.
             var workspace = (FrameworkElement)window.FindName("GalleryWorkspace");
             double workspaceTop = workspace.TranslatePoint(new Point(), client).Y;
             ScrollViewer scroll = Descendants(rowsList).OfType<ScrollViewer>().First();
             double viewport = scroll.ViewportHeight;
+            Rect searchBounds = search.TransformToAncestor(client).TransformBounds(new Rect(search.RenderSize));
             vm.Select(f.Records[0].Id);
             SettleGalleryLayout(window);
             Assert.Equal(48, commandBar.ActualHeight, 1);
@@ -212,12 +216,19 @@ public sealed partial class SettingsThemePreviewTests
             var selection = (FrameworkElement)window.FindName("SelectionCommands");
             Assert.True(selection.IsVisible);
             AssertLibraryCommandHeights(commandBar);
+            AssertLibraryCommandHeights(contentCommandBar);
+            Assert.Equal(48, contentCommandBar.ActualHeight, 1);
+            AssertSameRow(contentCommandBar, selection, (FrameworkElement)window.FindName("MoreCommandsButton"));
+            Assert.Equal(searchBounds, search.TransformToAncestor(client).TransformBounds(new Rect(search.RenderSize)));
             Assert.False(((FrameworkElement)window.FindName("LibraryCommands")).IsVisible);
-            // Capture stays one click away as an icon while the selection owns the bar.
-            Assert.Equal("CaptureRegionIconButton", VisibleButtonNamed(window, UiText.Get("Text_2C20ADDA2018")).Name);
-            // One filled button: the selected capture's Edit in the details panel.
-            Assert.Single(Descendants(window).OfType<Button>(), button => button.IsVisible
-                && ReferenceEquals(button.Style, window.FindResource("Button.Primary")));
+            // Global capture remains labelled while the selected item retains its own Edit action.
+            Assert.Same(capture, VisibleButtonNamed(window, UiText.Get("Text_2C20ADDA2018")));
+            Assert.Equal("CaptureRegionButton", capture.Name);
+            Button[] primaryActions = Descendants(window).OfType<Button>().Where(button => button.IsVisible
+                && ReferenceEquals(button.Style, window.FindResource("Button.Primary"))).ToArray();
+            Assert.Equal(2, primaryActions.Length);
+            Assert.Contains(capture, primaryActions);
+            Assert.Contains((Button)window.FindName("DetailsEditButton"), primaryActions);
             foreach (Button button in Descendants(selection).OfType<Button>().Where(button => button.IsVisible))
                 AssertInsideClient(button, client, label);
             AssertNotTrimmed((TextBlock)window.FindName("SelectionCountLabel"), label);
