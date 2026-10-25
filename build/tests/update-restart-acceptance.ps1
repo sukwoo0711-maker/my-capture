@@ -4,6 +4,8 @@ param(
     [string]$ExpectedSourceCommit = '',
     # Retained for existing workflow callers; the installer no longer needs a reader tool.
     [string]$DotNetPath = '',
+    # Inspect the candidate's exact seed files without installing. Execute always uses this mode.
+    [switch]$StagedBootstrap,
     [switch]$Execute
 )
 
@@ -109,7 +111,13 @@ foreach ($required in @('MyCaptureSetup.exe', 'MyCaptureSetup.exe.config', 'SETU
 }
 foreach ($bootstrap in $manifest.BootstrapFiles) {
     Assert-True ([string]$bootstrap.Path -in @('MyCaptureSetup.exe', 'MyCaptureSetup.exe.config', 'SETUP-HELP.txt')) 'Unexpected installer bootstrap name.'
-    $bootstrapPath = Get-SetupBootstrapSource ([string]$bootstrap.Path)
+    # Packaging can use a different Platform/intermediate path than the solution build.
+    # Validate the files the seed process actually launches, including in preflight-only mode.
+    $bootstrapPath = if ($Execute -or $StagedBootstrap) {
+        Join-Path (Join-Path $artifacts 'installer-stage') ([string]$bootstrap.Path)
+    }
+    else { Get-SetupBootstrapSource ([string]$bootstrap.Path) }
+    Assert-NoOutputLinks $bootstrapPath
     Assert-True ((Get-FileHash -LiteralPath $bootstrapPath -Algorithm SHA256).Hash -eq [string]$bootstrap.Sha256 -and
         (Get-Item -LiteralPath $bootstrapPath).Length -eq [long]$bootstrap.Bytes) 'Seed installer source does not match the candidate bootstrap inventory.'
 }

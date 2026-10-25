@@ -114,6 +114,7 @@ jobs:
             Invoke-CheckedTest .\build\tests\installer-compatibility-tests.ps1
             Invoke-CheckedTest .\build\tests\update-preservation-tests.ps1
             Invoke-CheckedTest .\build\tests\update-restart-preflight-tests.ps1
+            Invoke-CheckedTest .\build\tests\update-restart-bootstrap-tests.ps1
             Invoke-CheckedTest .\build\tests\update-restart-acceptance.ps1 @('-ArtifactRoot', "artifacts/release/$env:PACKAGE_VERSION", '-ExpectedSourceCommit', $env:EXPECTED_SOURCE_SHA, '-DotNetPath', (Get-Command dotnet).Source, '-Execute')
           }
           finally { Stop-Transcript | Out-Null }
