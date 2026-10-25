@@ -39,20 +39,20 @@ namespace MyCapture.App.Tests;
 /// <c>receipt-1440</c> and <c>receipt-4k</c> (whole 1920 x 1080, 3440 x 1440 and 3840 x 2160 frames).
 /// A frame larger than the desktop's largest window (SM_CXMAXTRACK/SM_CYMAXTRACK) cannot fly: its
 /// lift placement fails, as it would on such a desktop. Each child process takes one cold
-/// capture (after the app's launch prewarm) and ten warm ones, motion on. The
-/// <c>receipt-first-*</c> sections run the same captures but call the App's own
-/// <c>ShowQuickAccess</c> right after the selector has closed (on the dispatcher turn after the lift),
-/// suppressing the scheduled show: a simulation of a card shown first, the product unchanged. The
-/// <c>receipt-ab-*</c> sections alternate the two in one process after a cold current-path capture
-/// (ten warm captures each), so a busy desktop loads both alike. The <c>receipt-tray-*</c>,
-/// <c>receipt-trayfirst-*</c> and <c>receipt-traycardab-*</c> sections hold the tray's hidden message
-/// window (an HwndSource the App holds from launch for the tray icon and hotkeys), as in the App; the
-/// other sections leave it out. In that tray shell, <c>receipt-tray-*</c> takes the current path,
-/// <c>receipt-trayfirst-*</c> the card-first simulation for every capture (so each mode has a cold first
-/// capture of its own process), and <c>receipt-traycardab-*</c> a cold current-path capture and then
-/// forty warm ones alternating card first and current; these three time the captures only, without the
-/// parts. The <c>receipt-parts-*</c> sections take no capture and time only the parts below, six times
-/// each, including a 30 s idle keeper variant.
+/// capture (after the app's launch prewarm) and ten warm ones, motion on, through the product as built:
+/// the card shows first, on the dispatcher turn after the lift, while the save and copy run. The
+/// <c>receipt-save-*</c> sections take the earlier ordering instead, the card shown once the save and copy
+/// have finished (the App's test-only <c>ShowsCardAfterSaveForTest</c>), and the <c>receipt-ab-*</c>
+/// sections alternate the two in one process after a cold card-first capture (ten warm captures each),
+/// so a busy desktop loads both alike. The <c>receipt-tray-*</c>, <c>receipt-traysave-*</c> and
+/// <c>receipt-traycardab-*</c> sections hold the tray's hidden message window (an HwndSource the App
+/// holds from launch for the tray icon and hotkeys), as in the App; the other sections leave it out. In
+/// that tray shell, <c>receipt-tray-*</c> takes card first and <c>receipt-traysave-*</c> the earlier
+/// ordering for every capture (so each has a cold first capture of its own process, and twenty warm
+/// ones), and <c>receipt-traycardab-*</c> a cold card-first capture and then forty warm ones alternating
+/// card first and the earlier ordering; these three time the captures only, without the parts. The
+/// <c>receipt-parts-*</c> sections take no capture and time only the parts below, six times each,
+/// including a 30 s idle keeper variant.
 /// </para>
 /// <para>
 /// The App is the real class without its shell (as <c>CaptureLibraryFirstTests</c> builds it): the
@@ -79,11 +79,11 @@ internal sealed partial class AppResponsivenessProbe
     /// <summary>Stage columns, in path order; times are milliseconds after the selection was confirmed.</summary>
     private static readonly string[] ReceiptStages =
     [
-        "overlay-hidden", "handler-entered", "handler-returned", "overlay-closed", "commit-op-end",
+        "overlay-hidden", "handler-entered", "card-first-scheduled", "handler-returned", "overlay-closed", "commit-op-end",
         "lift-start", "lift-affinity-start", "lift-affinity-end", "lift-shown", "lift-none", "lift-rendered",
         "original-written", "save-published", "save-resumed", "clipboard-data-ready", "copy-resumed",
         "card-scheduled", "handler-task-done", "card-op-start", "card-constructed", "card-show", "card-hwnd-ready", "card-loaded", "card-shown",
-        "card-first-rendering", "card-content-rendered",
+        "card-first-rendering", "card-content-rendered", "card-bound", "card-copy-reported",
         "flight-handover", "flight-start", "flight-arrived", "flight-skipped", "flight-finished",
     ];
 
@@ -92,6 +92,9 @@ internal sealed partial class AppResponsivenessProbe
         ("save (handler → save-resumed)", "handler-entered", "save-resumed"),
         ("copy (handler → copy-resumed)", "handler-entered", "copy-resumed"),
         ("ContextIdle wait (scheduled → card op)", "card-scheduled", "card-op-start"),
+        ("card first: Send turn wait (scheduled → card op)", "card-first-scheduled", "card-op-start"),
+        ("card first: actions disabled (card shown → saved capture bound)", "card-shown", "card-bound"),
+        ("card first: 복사 중… on screen (card shown → copy reported)", "card-shown", "card-copy-reported"),
         ("card constructor", "card-op-start", "card-constructed"),
         ("Land + Show call", "card-constructed", "card-shown"),
         ("  Show → Loaded (HWND, layout, Loaded handler)", "card-show", "card-loaded"),
@@ -110,12 +113,13 @@ internal sealed partial class AppResponsivenessProbe
 
     private void RunReceipt()
     {
-        // receipt-trayfirst-* and receipt-traycardab-* are receipt-first-* and receipt-ab-* in the tray shell.
+        // receipt-traysave-* and receipt-traycardab-* are receipt-save-* and receipt-ab-* in the tray shell.
         bool trayCardAlternate = _section.StartsWith("receipt-traycardab-", StringComparison.Ordinal);
-        bool cardFirst = _section.StartsWith("receipt-first-", StringComparison.Ordinal)
-            || _section.StartsWith("receipt-trayfirst-", StringComparison.Ordinal);
-        // receipt-ab-*: after the cold capture (current path), warm captures alternate card first and
-        // current, so both see the same load from whatever else this desktop runs meanwhile.
+        // receipt-save-*: the earlier ordering, the card shown once the save and copy have finished.
+        bool saveFirst = _section.StartsWith("receipt-save-", StringComparison.Ordinal)
+            || _section.StartsWith("receipt-traysave-", StringComparison.Ordinal);
+        // receipt-ab-*: after the cold capture (card first), warm captures alternate card first and the
+        // earlier ordering, so both see the same load from whatever else this desktop runs meanwhile.
         bool alternate = _section.StartsWith("receipt-ab-", StringComparison.Ordinal) || trayCardAlternate;
         // receipt-parts-*: no captures, only the parts below, six times each.
         bool partsOnly = _section.StartsWith("receipt-parts-", StringComparison.Ordinal);
@@ -124,7 +128,7 @@ internal sealed partial class AppResponsivenessProbe
         bool tray = _section.StartsWith("receipt-tray", StringComparison.Ordinal);
         // The tray shell's card-first study times the captures only.
         bool parts = partsOnly || !tray;
-        int warm = partsOnly ? -1 : trayCardAlternate ? 40 : alternate ? 20 : 10;
+        int warm = partsOnly ? -1 : trayCardAlternate ? 40 : alternate || tray ? 20 : 10;
         string kind = _section[(_section.LastIndexOf('-') + 1)..];
         (int frameWidth, int frameHeight, RectD? part) = kind switch
         {
@@ -137,7 +141,7 @@ internal sealed partial class AppResponsivenessProbe
         RectD region = part ?? new RectD(0, 0, frameWidth, frameHeight);
         bool whole = part is null;
         _size = $"{(int)region.Width}x{(int)region.Height}" + (whole ? " (full screen)" : $" on {frameWidth}x{frameHeight}");
-        _variant = alternate ? "alternating: card first odd / current even" : cardFirst ? "card first (simulated)" : "current";
+        _variant = alternate ? "alternating: card first odd / save first even" : saveFirst ? "save first (earlier ordering)" : "card first";
         if (tray) _variant += ", tray message window held";
 
         uint dpi = Ui(() => MonitorEnumerator.GetPrimary().Dpi);
@@ -209,8 +213,9 @@ internal sealed partial class AppResponsivenessProbe
 
             for (int index = 0; index <= warm; index++)
             {
-                bool first = alternate ? index % 2 == 1 : cardFirst;
-                ReceiptCapture capture = MeasureReceipt(shell, frame, region, whole, monitor, first, index);
+                bool first = alternate ? index % 2 == 1 || index == 0 : !saveFirst;
+                Ui(() => shell.ShowsCardAfterSave = !first);
+                ReceiptCapture capture = MeasureReceipt(shell, frame, region, whole, first, index);
                 captures.Add(capture);
                 _delay.Wait(400);
                 // As the next capture command does before its selector opens.
@@ -255,8 +260,7 @@ internal sealed partial class AppResponsivenessProbe
         WriteReceiptResults(captures);
     }
 
-    private ReceiptCapture MeasureReceipt(ReceiptShell shell, FrozenFrame frame, RectD region, bool whole, MonitorInfo monitor,
-        bool cardFirst, int index)
+    private ReceiptCapture MeasureReceipt(ReceiptShell shell, FrozenFrame frame, RectD region, bool whole, bool cardFirst, int index)
     {
         string kind = index == 0 ? "cold" : "warm";
         var capture = new ReceiptCapture(index, kind, cardFirst);
@@ -278,9 +282,6 @@ internal sealed partial class AppResponsivenessProbe
             capture.Begin();
             overlay.CompleteSelection(region, null, false, whole);
             capture.Mark("commit-op-end");
-            // The card-first simulation: on the dispatcher turn after the lift (same priority, posted
-            // later), the App's own ShowQuickAccess for the pending record, before the save and copy.
-            if (cardFirst) _ui.BeginInvoke(DispatcherPriority.Send, new Action(() => shell.ShowCardFirst(capture, monitor)));
         }, idle: false);
 
         var timeout = Stopwatch.StartNew();
@@ -307,15 +308,8 @@ internal sealed partial class AppResponsivenessProbe
         switch (stage)
         {
             case "card-scheduled":
-                if (capture.CardFirst)
-                {
-                    // The simulated card is already up: the scheduled show finds a newer receipt and does nothing.
-                    shell.SuppressScheduledShow();
-                }
-                else
-                {
-                    capture.CardOperation = shell.LastContextIdle;
-                }
+                // The earlier ordering's ContextIdle turn; card first marks its own turn (card-op-start).
+                capture.CardOperation = shell.LastContextIdle;
                 break;
 
             case "lift-shown":
@@ -890,7 +884,7 @@ internal sealed partial class AppResponsivenessProbe
         internal int Index { get; } = index;
         internal string Kind { get; } = kind;
         internal bool CardFirst { get; } = cardFirst;
-        internal string Variant => CardFirst ? "card first" : "current";
+        internal string Variant => CardFirst ? "card first" : "save first";
         internal long Start { get; private set; }
         internal List<ReceiptOperation> Operations { get; } = [];
         internal List<string> Notes { get; } = [];
@@ -1052,23 +1046,12 @@ internal sealed partial class AppResponsivenessProbe
         internal void DismissQuickAccessForCapture() =>
             typeof(App).GetMethod("DismissQuickAccessForCapture", Instance)!.Invoke(_app, null);
 
-        internal void ShowCardFirst(ReceiptCapture capture, MonitorInfo monitor)
+        /// <summary>The earlier ordering (the card once saved and copied) instead of card first.</summary>
+        internal bool ShowsCardAfterSave
         {
-            capture.Mark("card-op-start");
-            if (_selection is not { } e || Get("_pendingRecord") is not CaptureRecord record)
-            {
-                capture.Notes.Add("card-first: no pending record");
-                return;
-            }
-
-            Set("_latestReceipt", (Guid?)record.Id);
-            var region = new RectD(e.Frame.ScreenBounds.Left + e.BitmapRegion.Left, e.Frame.ScreenBounds.Top + e.BitmapRegion.Top,
-                e.BitmapRegion.Width, e.BitmapRegion.Height);
-            // Not yet copied: the card says so at once (a card-first design would say 복사 중… here).
-            typeof(App).GetMethod("ShowQuickAccess", Instance)!.Invoke(_app, [record, e.SelectedBitmap, region, e.Frame.Monitor ?? monitor, false]);
+            get => _app.ShowsCardAfterSaveForTest;
+            set => _app.ShowsCardAfterSaveForTest = value;
         }
-
-        internal void SuppressScheduledShow() => Set("_latestReceipt", (Guid?)Guid.NewGuid());
 
         internal void WatchLift(ReceiptCapture capture)
         {
@@ -1091,7 +1074,7 @@ internal sealed partial class AppResponsivenessProbe
         internal string Describe()
         {
             var card = Get("_quickAccess") as QuickAccessWindow;
-            string status = card is null ? "no card" : $"card status {card.StatusForTest.Text}, landing {card.IsLanding}";
+            string status = card is null ? "no card" : $"card status {card.StatusForTest.Text}, pending {card.IsPending}, landing {card.IsLanding}";
             return $"{status}; {_overlayWindow}; {_liftWindow ?? "no lift window"}; library {_queue.Count}";
         }
 
