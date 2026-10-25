@@ -120,11 +120,12 @@ internal sealed class WelcomeWindow : Window
         };
         AutomationProperties.SetName(AccurateOcrCheck, UiText.Get("Welcome_AccurateOcr"));
         AutomationProperties.SetHelpText(AccurateOcrCheck, FirstRunOcrChoice.Description);
-        AccurateOcrHelp = new TextBlock
+        // Wraps between words: WPF otherwise breaks between any two Hangul syllables.
+        AccurateOcrHelp = KoreanWordWrap.Show(new TextBlock
         {
-            Text = FirstRunOcrChoice.Description, FontSize = 12, TextWrapping = TextWrapping.Wrap,
+            FontSize = 12, TextWrapping = TextWrapping.Wrap,
             Margin = new Thickness(28, 0, 0, 0),
-        };
+        }, FirstRunOcrChoice.Description);
         AccurateOcrHelp.SetResourceReference(TextBlock.ForegroundProperty, "Text.Secondary");
 
         ShortcutsLink = new Hyperlink(new Run(UiText.Get("Help.Settings")));
