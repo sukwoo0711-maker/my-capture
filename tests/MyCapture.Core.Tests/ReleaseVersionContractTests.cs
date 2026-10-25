@@ -281,7 +281,7 @@ public sealed class ReleaseVersionContractTests
     }
 
     [Fact]
-    public void PublishedGitHubReleases_MustIncludeTheSixRequiredAssets()
+    public void PublishedGitHubReleases_MustIncludeTheTwelveRequiredX64AndX86Assets()
     {
         string required = Read("build/required-release-assets.ps1");
         string verify = Read("build/verify-github-release.ps1");
@@ -297,12 +297,21 @@ public sealed class ReleaseVersionContractTests
                      "release-manifest.json",
                      "SHA256SUMS.txt",
                      "README-OFFLINE.txt",
+                     "MyCapture-$Version-win-x86-setup.exe",
+                     "MyCapture-$Version-win-x86-portable.zip",
+                     "installer-manifest-win-x86.json",
+                     "release-manifest-win-x86.json",
+                     "SHA256SUMS-win-x86.txt",
+                     "README-OFFLINE-win-x86.txt",
                  })
         {
             Assert.Contains(name, required, StringComparison.Ordinal);
         }
 
         Assert.Contains("Get-RequiredReleaseAssetNames", verify, StringComparison.Ordinal);
+        Assert.Contains("Get-RequiredReleaseAssetNames -Version $version -IncludeX86:$IncludeX86", verify, StringComparison.Ordinal);
+        Assert.Contains("Get-RequiredReleaseAssetNames -Version $Version -IncludeX86:$IncludeX86", publish, StringComparison.Ordinal);
+        Assert.Contains("-Tag $tag -Repository $Repository -IncludeX86:$IncludeX86", publish, StringComparison.Ordinal);
         Assert.Contains("releases/tags/", verify, StringComparison.Ordinal);
         Assert.Contains("NO_COLOR", verify, StringComparison.Ordinal);
         Assert.Contains(".draft", verify, StringComparison.Ordinal);
@@ -313,6 +322,11 @@ public sealed class ReleaseVersionContractTests
         Assert.Contains("release:", workflow.Replace("\r\n", "\n", StringComparison.Ordinal), StringComparison.Ordinal);
         Assert.Contains("types: [published]", workflow, StringComparison.Ordinal);
         Assert.Contains("verify-github-release.ps1", workflow, StringComparison.Ordinal);
+        string verificationCommand = Assert.Single(
+            workflow.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries),
+            line => line.TrimStart().StartsWith(@".\build\verify-github-release.ps1 ", StringComparison.Ordinal));
+        Assert.EndsWith(" -IncludeX86", verificationCommand.Trim(), StringComparison.Ordinal);
+        Assert.Contains("name: Verify twelve required GitHub release assets (x64 and x86)", workflow, StringComparison.Ordinal);
         Assert.Contains("permissions:\n  contents: read", workflow.Replace("\r\n", "\n", StringComparison.Ordinal), StringComparison.Ordinal);
         Assert.DoesNotContain(": write", workflow, StringComparison.Ordinal);
         Assert.Contains("actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1", workflow, StringComparison.Ordinal);
