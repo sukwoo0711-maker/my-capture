@@ -119,9 +119,11 @@ internal sealed partial class GalleryWindow
                 - RowsList.Padding.Left - RowsList.Padding.Right - SystemParameters.VerticalScrollBarWidth;
         }
 
-        // The themed scrollbar's own width; the system metric only when the template has none.
+        // WPF's template can impose a larger minimum than the themed width (17 versus
+        // 16 DIP). Reserve that actual track even when the scrollbar is collapsed.
         double scrollBar = scroll.Template?.FindName("PART_VerticalScrollBar", scroll) is ScrollBar bar
-            && !double.IsNaN(bar.Width) && bar.Width > 0 ? bar.Width : SystemParameters.VerticalScrollBarWidth;
+            && !double.IsNaN(bar.Width) && bar.Width > 0
+                ? Math.Max(bar.Width, bar.MinWidth) : SystemParameters.VerticalScrollBarWidth;
         return scroll.ActualWidth - scroll.Padding.Left - scroll.Padding.Right - scrollBar;
     }
 

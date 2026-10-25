@@ -221,6 +221,31 @@ internal sealed class SyntheticCaptureFixture : IDisposable
         Pump(120);
         Point origin = _window.PointToScreen(new Point(20, 20));
         Region = new RectD(origin.X, origin.Y, 320, 240);
+        try { WaitForPresentedFixture(); }
+        catch { _window.Close(); throw; }
+    }
+
+    private void WaitForPresentedFixture()
+    {
+        // UpdateLayout and a fixed pump do not prove that DWM has presented this
+        // window. Capture comparisons must start with the known fixture pixels.
+        byte[] expected = new byte[320 * 240 * 4];
+        for (int i = 0; i < expected.Length; i += 4)
+        {
+            expected[i] = 166;
+            expected[i + 1] = 90;
+            expected[i + 2] = 18;
+            expected[i + 3] = 255;
+        }
+        byte[] observed = new byte[expected.Length];
+        var elapsed = Stopwatch.StartNew();
+        do
+        {
+            Engine.CaptureRegionInto(Region, false, observed, 1280);
+            if (observed.AsSpan().SequenceEqual(expected)) return;
+            Pump(20);
+        } while (elapsed.Elapsed < TimeSpan.FromSeconds(5));
+        Assert.Equal(expected, observed);
     }
 
     internal static void Pump(int milliseconds)

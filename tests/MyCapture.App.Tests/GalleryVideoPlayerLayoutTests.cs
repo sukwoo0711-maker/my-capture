@@ -22,28 +22,47 @@ public sealed class GalleryVideoPlayerLayoutTests
             {
                 player.Show();
                 var frame = Assert.IsType<Border>(player.MediaForDiagnostic.Parent);
-                double previousHeight = 0;
-                double previousWidth = 0;
+                Size smallVideoSize = default;
                 foreach ((double width, double height) in new[] { (420d, 360d), (1000d, 750d), (1400d, 900d) })
                 {
                     player.Width = width;
                     player.Height = height;
                     FlushLayout(player);
-                    Assert.True(frame.ActualHeight > previousHeight + 100,
-                        $"Video height {frame.ActualHeight} after {previousHeight} at {width} x {height}.");
-                    Assert.True(frame.ActualWidth > previousWidth + 100);
-                    Assert.True(double.IsNaN(frame.Height));
-                    Assert.Equal(Stretch.Uniform, player.MediaForDiagnostic.Stretch);
-                    Assert.Equal(SizeToContent.Manual, player.SizeToContent);
-                    AssertTransportInside(player);
-                    previousHeight = frame.ActualHeight;
-                    previousWidth = frame.ActualWidth;
+                    AssertVideoFillsRemainingSpace(player, new Size(width, height));
+                    if (smallVideoSize == default) smallVideoSize = frame.RenderSize;
                 }
+                Assert.True(frame.ActualHeight > smallVideoSize.Height && frame.ActualWidth > smallVideoSize.Width,
+                    $"Video did not grow from {smallVideoSize} to {frame.RenderSize}. " + DescribeLayout(player, new Size(1400, 900)));
                 player.Width = 420;
                 player.Height = 360;
                 FlushLayout(player);
-                Assert.InRange(frame.ActualHeight, 100, previousHeight - 100);
-                AssertTransportInside(player);
+                AssertVideoFillsRemainingSpace(player, new Size(420, 360));
+                DpiScale dpi = VisualTreeHelper.GetDpi(player);
+                Assert.InRange(Math.Abs(frame.ActualHeight - smallVideoSize.Height), 0, 1 / dpi.DpiScaleY);
+                Assert.InRange(Math.Abs(frame.ActualWidth - smallVideoSize.Width), 0, 1 / dpi.DpiScaleX);
+            }
+            finally { player.Close(); }
+        });
+
+    [Fact]
+    public Task AWindowSizeLimitStillGivesTheVideoAllAvailableSpace() => RunIsolated(
+        nameof(AWindowSizeLimitStillGivesTheVideoAllAvailableSpace), () =>
+        {
+            GalleryVideoPlayerWindow player = CreatePlayer();
+            try
+            {
+                // Exercise the same boundary as a hosted desktop limiting native window size,
+                // even when the local monitor can accommodate the requested 1400 x 900 window.
+                player.MaxWidth = Math.Min(720, SystemParameters.WorkArea.Width);
+                player.MaxHeight = Math.Min(520, SystemParameters.WorkArea.Height);
+                player.Show();
+                player.Width = 1400;
+                player.Height = 900;
+                FlushLayout(player);
+                DpiScale dpi = VisualTreeHelper.GetDpi(player);
+                Assert.InRange(player.ActualWidth, 1, player.MaxWidth + 1 / dpi.DpiScaleX);
+                Assert.InRange(player.ActualHeight, 1, player.MaxHeight + 1 / dpi.DpiScaleY);
+                AssertVideoFillsRemainingSpace(player, new Size(1400, 900));
             }
             finally { player.Close(); }
         });
@@ -147,6 +166,39 @@ public sealed class GalleryVideoPlayerLayoutTests
 
     private static void FlushLayout(Window player) =>
         player.Dispatcher.Invoke(DispatcherPriority.ApplicationIdle, new Action(player.UpdateLayout));
+
+    private static void AssertVideoFillsRemainingSpace(GalleryVideoPlayerWindow player, Size requested)
+    {
+        var content = Assert.IsType<Border>(player.Content);
+        var frame = Assert.IsType<Border>(player.MediaForDiagnostic.Parent);
+        var layout = Assert.IsType<Grid>(frame.Parent);
+        FrameworkElement header = Assert.Single(layout.Children.OfType<FrameworkElement>(), child => Grid.GetRow(child) == 0);
+        FrameworkElement transport = Assert.Single(layout.Children.OfType<FrameworkElement>(), child => Grid.GetRow(child) == 2);
+        // Native sizing can clamp the request. The video must fill the actual client space
+        // left by the header and transport, including when the transport wraps.
+        double expectedWidth = content.ActualWidth - content.Padding.Left - content.Padding.Right;
+        double expectedHeight = content.ActualHeight - content.Padding.Top - content.Padding.Bottom
+            - header.ActualHeight - transport.ActualHeight;
+        Assert.True(expectedWidth > 0 && expectedHeight > 0,
+            $"No video space remains: {expectedWidth} x {expectedHeight}. " + DescribeLayout(player, requested));
+        Rect actual = frame.TransformToAncestor(content).TransformBounds(new Rect(frame.RenderSize));
+        var expected = new Rect(content.Padding.Left, content.Padding.Top + header.ActualHeight, expectedWidth, expectedHeight);
+        DpiScale dpi = VisualTreeHelper.GetDpi(player);
+        string diagnostic = $"Video {actual}; remaining client {expected}. " + DescribeLayout(player, requested);
+        Assert.True(Math.Abs(actual.X - expected.X) <= 1 / dpi.DpiScaleX
+            && Math.Abs(actual.Width - expected.Width) <= 1 / dpi.DpiScaleX
+            && Math.Abs(actual.Y - expected.Y) <= 1 / dpi.DpiScaleY
+            && Math.Abs(actual.Height - expected.Height) <= 1 / dpi.DpiScaleY, diagnostic);
+        Assert.True(double.IsNaN(frame.Height));
+        Assert.Equal(Stretch.Uniform, player.MediaForDiagnostic.Stretch);
+        Assert.Equal(SizeToContent.Manual, player.SizeToContent);
+        AssertTransportInside(player);
+    }
+
+    private static string DescribeLayout(GalleryVideoPlayerWindow player, Size requested) =>
+        $"Requested {requested}; window {player.RenderSize}; client {((FrameworkElement)player.Content).RenderSize}; "
+        + $"work area {SystemParameters.WorkArea}; maximum track {SystemParameters.MaximumWindowTrackWidth} x {SystemParameters.MaximumWindowTrackHeight}; "
+        + $"DPI scale {VisualTreeHelper.GetDpi(player).DpiScaleX} x {VisualTreeHelper.GetDpi(player).DpiScaleY}.";
 
     private static KeyEventArgs Press(Window player, Key key)
     {

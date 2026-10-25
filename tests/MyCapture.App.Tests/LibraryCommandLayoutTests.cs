@@ -47,7 +47,7 @@ public sealed class LibraryCommandLayoutTests
         root.RowDefinitions.Add(new RowDefinition());
         root.Children.Add(header);
         Grid.SetRow(commands, 1);
-        commands.Width = width - 24 - 224 - 232 - 20;
+        commands.Width = width - 24 - 224 - 232 - 16;
         commands.HorizontalAlignment = HorizontalAlignment.Left;
         root.Children.Add(commands);
         var list = new Border();

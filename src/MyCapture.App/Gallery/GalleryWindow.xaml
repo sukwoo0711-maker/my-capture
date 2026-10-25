@@ -1857,7 +1857,7 @@
             </Grid>
 
 
-            <Grid x:Name="LibraryItemsSurface" Grid.Column="1" Margin="12,0,8,0" Background="{DynamicResource Surface.Sunken}"
+            <Grid x:Name="LibraryItemsSurface" Grid.Column="1" Margin="8,0,8,0" Background="{DynamicResource Surface.Sunken}"
                   ContextMenu="{StaticResource Gallery.EmptyContextMenu}"
                   PreviewKeyDown="OnLibraryItemsKeyDown" PreviewMouseRightButtonDown="OnLibraryItemsRightButtonDown">
                 <Grid.RowDefinitions>

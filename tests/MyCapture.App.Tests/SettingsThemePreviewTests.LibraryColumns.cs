@@ -1,6 +1,7 @@
 using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Media;
 using MyCapture.App.Gallery;
 using MyCapture.App.Themes;
@@ -77,7 +78,8 @@ public sealed partial class SettingsThemePreviewTests
             ScrollViewer scroll = Descendants(rowsList).OfType<ScrollViewer>().First();
 
             // The minimum window with the details pane open fits two full cards that share its width.
-            Assert.Equal(2, vm.ColumnCount);
+            Assert.True(vm.ColumnCount == 2,
+                $"Minimum root needs two columns; actual {vm.ColumnCount}, window {window.ActualWidth}, client {((FrameworkElement)window.Content).ActualWidth}, rows {rowsList.ActualWidth}, scroll {scroll.ActualWidth}, viewport {scroll.ViewportWidth}");
             AssertCardsInsideLibrary(rowsList, scroll, vm, "minimum root");
             SaveLibraryUxEvidence(window, AppTheme.Glass, "columns-minimum-root-glass-ko-KR.png");
 
@@ -295,9 +297,9 @@ public sealed partial class SettingsThemePreviewTests
         double track = compact ? GalleryRowBuilder.MinCompactTileTrackWidth : GalleryRowBuilder.MinTileTrackWidth;
         int max = compact ? GalleryRowBuilder.CompactMaxColumns : GalleryRowBuilder.MaxColumns;
         // The library's scrolling area grows one DIP for every DIP the window grows; the themed
-        // vertical scrollbar (16 DIPs) is always reserved when the column count is chosen.
+        // vertical scrollbar track is always reserved when the column count is chosen.
         double chrome = window.ActualWidth - scroll.ActualWidth;
-        const double reserve = 16;
+        double reserve = scroll.ActualWidth - LibraryUsableWidth(scroll);
         var widths = new SortedSet<double>();
         for (int columns = 1; columns <= max; columns++)
             foreach (double delta in new[] { -1d, 0, 1 })
@@ -306,6 +308,16 @@ public sealed partial class SettingsThemePreviewTests
             widths.Add(width);
         foreach (double width in widths.Where(width => width >= window.MinWidth))
             yield return width;
+    }
+
+    private static double LibraryUsableWidth(ScrollViewer scroll)
+    {
+        // The default Windows scrollbar is 17 DIP; a supplied theme can set another width.
+        // Measure the loaded template and reserve the same track when it is collapsed.
+        var bar = Assert.IsAssignableFrom<ScrollBar>(scroll.Template.FindName("PART_VerticalScrollBar", scroll));
+        double reserve = bar.ActualWidth > 0 ? bar.ActualWidth
+            : !double.IsNaN(bar.Width) && bar.Width > 0 ? Math.Max(bar.Width, bar.MinWidth) : SystemParameters.VerticalScrollBarWidth;
+        return scroll.ActualWidth - scroll.Padding.Left - scroll.Padding.Right - reserve;
     }
 
     /// <summary>
@@ -355,8 +367,8 @@ public sealed partial class SettingsThemePreviewTests
         }
 
         // As many columns as minimum tracks fit beside the reserved scrollbar, and not one more.
-        double usable = scroll.ActualWidth - 16;
-        Assert.True(vm.ColumnCount * track <= usable + 0.5, $"{label}: {vm.ColumnCount} columns do not fit {usable:0.#} DIP");
+        double usable = LibraryUsableWidth(scroll);
+        Assert.True(vm.ColumnCount * track <= usable + 0.5, $"{label}: {vm.ColumnCount} columns do not fit {usable:0.#} DIP (scroll {scroll.ActualWidth}, viewport {scroll.ViewportWidth})");
         Assert.True(vm.ColumnCount == max || (vm.ColumnCount + 1) * track > usable - 0.5,
             $"{label}: {vm.ColumnCount} columns leave room for another card in {usable:0.#} DIP");
         GalleryTileRow? fullest = vm.Rows.OfType<GalleryTileRow>().MaxBy(row => row.Tiles.Count);
