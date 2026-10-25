@@ -44,11 +44,15 @@ namespace MyCapture.App.Tests;
 /// <c>ShowQuickAccess</c> right after the selector has closed (on the dispatcher turn after the lift),
 /// suppressing the scheduled show: a simulation of a card shown first, the product unchanged. The
 /// <c>receipt-ab-*</c> sections alternate the two in one process after a cold current-path capture
-/// (ten warm captures each), so a busy desktop loads both alike. The <c>receipt-tray-*</c> sections take
-/// the current path while the tray's hidden message window (an HwndSource the App holds from launch for
-/// the tray icon and hotkeys) exists, as in the App; the other sections leave it out. The
-/// <c>receipt-parts-*</c> sections take no capture and time only the parts below, six times each,
-/// including a 30 s idle keeper variant.
+/// (ten warm captures each), so a busy desktop loads both alike. The <c>receipt-tray-*</c>,
+/// <c>receipt-trayfirst-*</c> and <c>receipt-traycardab-*</c> sections hold the tray's hidden message
+/// window (an HwndSource the App holds from launch for the tray icon and hotkeys), as in the App; the
+/// other sections leave it out. In that tray shell, <c>receipt-tray-*</c> takes the current path,
+/// <c>receipt-trayfirst-*</c> the card-first simulation for every capture (so each mode has a cold first
+/// capture of its own process), and <c>receipt-traycardab-*</c> a cold current-path capture and then
+/// forty warm ones alternating card first and current; these three time the captures only, without the
+/// parts. The <c>receipt-parts-*</c> sections take no capture and time only the parts below, six times
+/// each, including a 30 s idle keeper variant.
 /// </para>
 /// <para>
 /// The App is the real class without its shell (as <c>CaptureLibraryFirstTests</c> builds it): the
@@ -106,15 +110,21 @@ internal sealed partial class AppResponsivenessProbe
 
     private void RunReceipt()
     {
-        bool cardFirst = _section.StartsWith("receipt-first-", StringComparison.Ordinal);
+        // receipt-trayfirst-* and receipt-traycardab-* are receipt-first-* and receipt-ab-* in the tray shell.
+        bool trayCardAlternate = _section.StartsWith("receipt-traycardab-", StringComparison.Ordinal);
+        bool cardFirst = _section.StartsWith("receipt-first-", StringComparison.Ordinal)
+            || _section.StartsWith("receipt-trayfirst-", StringComparison.Ordinal);
         // receipt-ab-*: after the cold capture (current path), warm captures alternate card first and
         // current, so both see the same load from whatever else this desktop runs meanwhile.
-        bool alternate = _section.StartsWith("receipt-ab-", StringComparison.Ordinal);
+        bool alternate = _section.StartsWith("receipt-ab-", StringComparison.Ordinal) || trayCardAlternate;
         // receipt-parts-*: no captures, only the parts below, six times each.
         bool partsOnly = _section.StartsWith("receipt-parts-", StringComparison.Ordinal);
         // receipt-tray-*: the tray's hidden message window (NativeMessageWindow) is held from launch, as
         // the App holds it; the other sections leave it out.
         bool tray = _section.StartsWith("receipt-tray", StringComparison.Ordinal);
+        // The tray shell's card-first study times the captures only.
+        bool parts = partsOnly || !tray;
+        int warm = partsOnly ? -1 : trayCardAlternate ? 40 : alternate ? 20 : 10;
         string kind = _section[(_section.LastIndexOf('-') + 1)..];
         (int frameWidth, int frameHeight, RectD? part) = kind switch
         {
@@ -197,7 +207,7 @@ internal sealed partial class AppResponsivenessProbe
             if (editorPrewarm is not null) Ui(() => editorPrewarm.Invoke(null, null));
             WaitIdle();
 
-            for (int index = 0; index <= (partsOnly ? -1 : alternate ? 20 : 10); index++)
+            for (int index = 0; index <= warm; index++)
             {
                 bool first = alternate ? index % 2 == 1 : cardFirst;
                 ReceiptCapture capture = MeasureReceipt(shell, frame, region, whole, monitor, first, index);
@@ -211,9 +221,12 @@ internal sealed partial class AppResponsivenessProbe
 
             try
             {
-                // The parts start with nothing open; the tray window is one of their variants.
-                if (trayWindow is not null) Ui(trayWindow.Dispose);
-                ReceiptBreakdown(frame, region, monitor, partsOnly ? 6 : 3);
+                if (parts)
+                {
+                    // The parts start with nothing open; the tray window is one of their variants.
+                    if (trayWindow is not null) Ui(trayWindow.Dispose);
+                    ReceiptBreakdown(frame, region, monitor, partsOnly ? 6 : 3);
+                }
             }
             catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception)
             {
@@ -281,6 +294,7 @@ internal sealed partial class AppResponsivenessProbe
         foreach (string stage in ReceiptStages)
             if (capture.Ms(stage) is double ms) s.Extra[stage] = ms;
         capture.Notes.Add(Ui(shell.Describe));
+        capture.Notes.Add(Ui(DescribeKeeper));
         s.Notes = string.Join("; ", capture.Notes);
         return capture;
     }
@@ -326,6 +340,17 @@ internal sealed partial class AppResponsivenessProbe
 
     [DllImport("user32.dll")]
     private static extern int GetSystemMetrics(int index);
+
+    /// <summary>
+    /// Whether this thread holds the app's render keeper during the capture, read by name so the note
+    /// stays right in a build without it.
+    /// </summary>
+    private static string DescribeKeeper()
+    {
+        PropertyInfo? source = typeof(App).Assembly.GetType("MyCapture.App.Threading.RenderKeepAlive")
+            ?.GetProperty("SourceForTest", BindingFlags.Static | BindingFlags.NonPublic);
+        return source is null ? "render keeper absent" : source.GetValue(null) is null ? "render keeper off" : "render keeper on";
+    }
 
     /// <summary>
     /// The pieces of the lift, the card's Show and the save and copy, timed one at a time, three
