@@ -9,6 +9,7 @@ using System.Windows.Controls;
 using System.Windows.Documents;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
+using MyCapture.App.Themes;
 using MyCapture.Core.Localization;
 using MyCapture.Core.Settings;
 using MyCapture.Core.Storage;
@@ -131,7 +132,7 @@ public sealed class WelcomeOcrChoiceTests
             string expected = UiText.Format("Welcome_AccurateOcrHelp", (int)Math.Ceiling(bytes / 1_000_000d));
             Assert.Equal(expected, AutomationProperties.GetHelpText(welcome.AccurateOcrCheck));
             Assert.Equal(expected, welcome.AccurateOcrCheck.ToolTip);
-            Assert.Equal(expected, welcome.AccurateOcrHelp.Text);
+            Assert.Equal(expected, KoreanWordWrap.Strip(welcome.AccurateOcrHelp.Text));
             Assert.Contains("102 MB", expected, StringComparison.Ordinal);
             Assert.DoesNotContain("164", expected, StringComparison.Ordinal);
             Assert.DoesNotContain("Qualcomm", expected, StringComparison.Ordinal);

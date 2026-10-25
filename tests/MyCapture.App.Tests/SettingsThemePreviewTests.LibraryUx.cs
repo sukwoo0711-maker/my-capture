@@ -430,7 +430,8 @@ public sealed partial class SettingsThemePreviewTests
         Assert.NotEmpty(buttons);
         foreach (Button button in buttons)
         {
-            Assert.Equal(44, button.ActualHeight, 1);
+            // Library commands have no shortcut line, so they take the 32-DIP plain button height.
+            Assert.Equal(32, button.ActualHeight, 1);
             Assert.Equal(new Thickness(10, 4, 10, 4), button.Padding);
         }
     }

@@ -41,7 +41,7 @@ public sealed class EditorLazyInspectorTests
                     AnnotationEditorControl editor = window.Editor;
                     Assert.Same(application.FindResource("Window.Standard"), window.Style);
                     Assert.Equal((double)application.FindResource("FontSize.Body"), TextElement.GetFontSize(editor));
-                    Assert.Equal(TextFormattingMode.Display, TextOptions.GetTextFormattingMode(editor));
+                    Assert.Equal(ThemeFonts.Formatting, TextOptions.GetTextFormattingMode(editor));
                     Assert.True(editor.UseLayoutRounding);
                     Assert.True(editor.SnapsToDevicePixels);
                     // The real window supplies inheritance/resources before native Show. Layout
@@ -51,7 +51,8 @@ public sealed class EditorLazyInspectorTests
                     Assert.Equal(1, editor.InspectorBudgetCacheHitCount);
 
                     int measurements = editor.InspectorBudgetMeasureCount;
-                    TextOptions.SetTextFormattingMode(editor, TextFormattingMode.Ideal);
+                    // Another formatting mode measures the inspector again.
+                    TextOptions.SetTextFormattingMode(editor, TextFormattingMode.Display);
                     Layout(editor);
                     Assert.Equal(measurements + 1, editor.InspectorBudgetMeasureCount);
                     Assert.Equal(11, editor.InspectorCreatedGroupCount);
