@@ -125,7 +125,7 @@ public sealed class VideoEditorMediaEndedRecoveryTests
             foreach (double target in new[] { 600.0, 1234.5 })
             {
                 int before = engine.SettleCountForTest;
-                int atPresentation = Check(editor, export, failures, "after end", target);
+                int atPresentation = Check(editor, export, failures, "after end", target).Watches;
                 if (atPresentation != before)
                 {
                     failures.Add($"after end: the seek to {target:F3} ms was presented after {atPresentation - before} watch(es) ended");
@@ -147,6 +147,42 @@ public sealed class VideoEditorMediaEndedRecoveryTests
             Assert.True(
                 engine.SettleCountForTest == watched,
                 $"the seek after a watched landing was watched again ({engine.SettleCountForTest - watched} more)");
+        }
+        finally
+        {
+            editor?.Close();
+            RangePatternClip.Pump(TimeSpan.FromMilliseconds(50));
+            OwnedTestDirectory.Delete(dir);
+        }
+    });
+
+    /// <summary>
+    /// The first seek after a playback to the end can read past its position at once, as on the
+    /// runners after a scrub into the last stretch. It reports its frame without asking again first;
+    /// asking again is the watch's job, after the frame is reported.
+    /// </summary>
+    [Fact]
+    public void AFirstSeekAfterTheEndThatReadsPastIt_ReportsItsFrameWithoutWaiting() => StaTestHost.Run(() =>
+    {
+        string dir = OwnedTestDirectory.Create("mc-media-past-after-end-");
+        VideoEditorWindow? editor = null;
+        try
+        {
+            string clip = EncodeClip(dir, out double containerMs);
+            editor = OpenEditor(clip, containerMs, dir);
+            MediaElementPreviewEngine engine = editor.PreviewEngineForTest;
+            using var export = new MediaFoundationVideoFrameReader(clip);
+            var failures = new List<string>();
+
+            PlayToTheEnd(editor);
+            int positioned = engine.PositionCountForTest;
+            engine.MissNextLandingForTest = true;
+            (int watches, int positions) = Check(editor, export, failures, "read past after end", 600);
+            Assert.True(failures.Count == 0, string.Join(Environment.NewLine, failures));
+            Assert.True(
+                positions - positioned == 1,
+                $"the seek was positioned {positions - positioned} time(s) before its frame was reported");
+            Assert.True(engine.SettleCountForTest > watches, "the seek that read past its position was not watched");
         }
         finally
         {
@@ -249,9 +285,10 @@ public sealed class VideoEditorMediaEndedRecoveryTests
 
     /// <summary>
     /// Seeks, checks the report and the frame on screen once any position watch has ended, and
-    /// returns how many watches had ended when the seek was presented.
+    /// returns how many watches had ended and how often the element was positioned when the seek
+    /// was presented.
     /// </summary>
-    private static int Check(
+    private static (int Watches, int Positions) Check(
         VideoEditorWindow editor,
         MediaFoundationVideoFrameReader export,
         List<string> failures,
@@ -264,11 +301,11 @@ public sealed class VideoEditorMediaEndedRecoveryTests
         DateTime until = DateTime.UtcNow.AddSeconds(10);
         while (coordinator.PresentedGeneration != generation && DateTime.UtcNow < until)
             RangePatternClip.Pump(TimeSpan.FromMilliseconds(5));
-        int watchesAtPresentation = engine.SettleCountForTest;
+        (int Watches, int Positions) atPresentation = (engine.SettleCountForTest, engine.PositionCountForTest);
         if (coordinator.PresentedGeneration != generation)
         {
             failures.Add($"{step}: the seek to {target:F3} ms was not presented");
-            return watchesAtPresentation;
+            return atPresentation;
         }
 
         Task watch = engine.WhenSettledAsync();
@@ -301,6 +338,6 @@ public sealed class VideoEditorMediaEndedRecoveryTests
             failures.Add($"{step}: the preview shows frame {shown} at {target:F3} ms, the export takes {expected}");
         }
 
-        return watchesAtPresentation;
+        return atPresentation;
     }
 }

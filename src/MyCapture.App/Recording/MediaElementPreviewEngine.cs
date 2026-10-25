@@ -123,12 +123,15 @@ internal sealed class MediaElementPreviewEngine : IVideoPreviewEngine
             separate: true,
             observedPriority,
             cancellationToken).ConfigureAwait(false);
+        FirstReadOffsetForTest = observedMs - position;
         bool nearEnd = DurationMs - position < EndStretchMs;
         if (nearEnd)
         {
             _settleNextSeek = true;
         }
 
+        // After the end of the stream the first seek presents its frame, though its first read can
+        // already show the player past the position; the watch puts the player back afterwards.
         bool watch = request.Mode == PreviewSeekMode.Exact && !nearEnd && _settleNextSeek;
         int seeks = 1;
         int reopens = 0;
@@ -146,6 +149,7 @@ internal sealed class MediaElementPreviewEngine : IVideoPreviewEngine
                 await ReopenAsync(cancellationToken).ConfigureAwait(false);
             }
             else if (request.Mode != PreviewSeekMode.Exact
+                || watch
                 || HasLanded(observedMs, position)
                 || seeks >= MaxExactSeeks)
             {
@@ -159,14 +163,16 @@ internal sealed class MediaElementPreviewEngine : IVideoPreviewEngine
                 .ConfigureAwait(false);
         }
 
-        if (watch && !ended && HasLanded(observedMs, position))
+        if (watch && !ended)
         {
             StartWatch(position, observedPriority);
         }
 
         // A landing within the player's resolution shows the requested frame; the rest is where
         // the player's clock stopped, which can already be in the next frame's time.
-        double presentedMs = HasLanded(observedMs, position) ? target : Math.Max(0, observedMs - (position - target));
+        double presentedMs = (watch && !ended) || HasLanded(observedMs, position)
+            ? target
+            : Math.Max(0, observedMs - (position - target));
         int presentedFrame = request.TargetFrameIndex;
         return new PresentedPreviewFrame(
             request.Generation,
@@ -206,11 +212,12 @@ internal sealed class MediaElementPreviewEngine : IVideoPreviewEngine
     /// The stream ran to its end. After that, WPF holds the player internally stopped, and the
     /// first paused seek from there presents the right frame but leaves the player stopped past
     /// the position (3 to 74 ms on loaded runners): the brief playback that fetches the frame is
-    /// not undone. Its first read still shows the requested position, so that seek is watched
-    /// until the position stays put, and asked again if it moved. The watch runs after the frame
-    /// is reported: waiting for it held the release after a scrub into the last stretch for 108 to
-    /// 140 ms on a desktop and 184 to 189 ms on runners, against about 15 ms for other seeks.
-    /// A playback start waits for it (<see cref="WhenSettledAsync"/>), and the next seek ends it.
+    /// not undone. Its first read can still show the requested position, so that seek is watched
+    /// until the position stays put, and asked again if it moved. The seek reports its frame at
+    /// once, even when its first read already shows the player past it, and the watch runs after
+    /// that: waiting for it held the release after a scrub into the last stretch for 108 to 140 ms
+    /// on a desktop and 184 to 189 ms on runners, against about 15 ms for other seeks. A playback
+    /// start waits for the watch (<see cref="WhenSettledAsync"/>), and the next seek ends it.
     /// </summary>
     internal void StreamReachedEnd() => _settleNextSeek = true;
 
@@ -269,6 +276,9 @@ internal sealed class MediaElementPreviewEngine : IVideoPreviewEngine
 
     /// <summary>How many reads were watched until the position stayed put.</summary>
     internal int SettleCountForTest { get; private set; }
+
+    /// <summary>How far past the element position the first read of the last seek was.</summary>
+    internal double FirstReadOffsetForTest { get; private set; }
 
     // The ended report is the player's length itself, to the 100 ns tick.
     private const double LengthReportToleranceMs = 0.001;
