@@ -301,7 +301,7 @@ public sealed class VideoCompositionIntegrationTests
     [Fact]
     public void MediaFoundationInteropLayouts_MatchX64NativeAbi()
     {
-        Assert.Equal(24, MediaFoundationVideoFrameReader.NativePropVariantSize);
+        Assert.Equal(IntPtr.Size == 4 ? 16 : 24, MediaFoundationVideoFrameReader.NativePropVariantSize);
         (int size, int fractionOffset, int valueOffset) =
             MediaFoundationVideoFrameReader.NativeVideoOffsetLayout;
         Assert.Equal(4, size);

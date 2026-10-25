@@ -164,7 +164,7 @@ public sealed class Fixture : IDisposable
         Environment.SetEnvironmentVariable("MYCAPTURE_DATA_ROOT", previousData);
         Registry.CurrentUser.DeleteSubKeyTree(Key, false);
         DeleteEmptyTestKeyParent(testKeyParentExisted);
-        // Permanent deletion of this fixture's own TEMP root. A failure fails the test.
+        // Recycle this fixture's own TEMP root. Failure preserves the fixture and fails the test.
         try { FileRemoval.DeleteDirectoryWithRetry(Root); }
         catch (Exception e) { throw new IOException("Cleanup failed; test fixture retained at " + Root, e); }
     }
@@ -377,7 +377,7 @@ public sealed class InstallerIntegrationTests
             File.WriteAllText(Path.Combine(stage, "MyCapture.exe"), "verified replacement");
             // install.ps1 Preserve-UserInstallFiles: without a marker only installer names are owned.
             SetupContractsTests.Code(20, () => PathSafety.PreserveUserFiles(f.Install, stage));
-            File.Delete(Path.Combine(stage, "notes.txt"));
+            global::MyCapture.Core.Storage.RecoverableFileRemoval.DeleteFile(Path.Combine(stage, "notes.txt"));
             File.WriteAllText(Path.Combine(f.Install, "install-manifest.json"), "{\"Product\":\"MyCapture\"}");
             Assert.Equal(f.Install, PathSafety.InstallRoot(f.Install, f.Manifest));
             // An existing marker must be a valid inventory (Read-And-ValidateManifest, exit 14).

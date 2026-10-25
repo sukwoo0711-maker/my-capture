@@ -160,7 +160,7 @@ internal sealed class VideoExportCalculation : IDisposable
         finally
         {
             // The staged sibling is this export's own partial copy, never the user's file.
-            if (File.Exists(temporary)) File.Delete(temporary);
+            if (File.Exists(temporary)) global::MyCapture.Core.Storage.RecoverableFileRemoval.DeleteFile(temporary);
         }
     }
 
@@ -183,9 +183,9 @@ internal sealed class VideoExportCalculation : IDisposable
         // Size-calculation renders are app-owned scratch files: delete them, do not recycle.
         try
         {
-            File.Delete(OwnedPath("standard"));
-            File.Delete(OwnedPath("reduced"));
-            _directory.Delete(); // Never recursively remove unexpected files.
+            global::MyCapture.Core.Storage.RecoverableFileRemoval.DeleteFile(OwnedPath("standard"));
+            global::MyCapture.Core.Storage.RecoverableFileRemoval.DeleteFile(OwnedPath("reduced"));
+            global::MyCapture.Core.Storage.RecoverableFileRemoval.DeleteDirectory(_directory.FullName); // Never recursively remove unexpected files.
         }
         catch (IOException) { }
         catch (UnauthorizedAccessException) { }

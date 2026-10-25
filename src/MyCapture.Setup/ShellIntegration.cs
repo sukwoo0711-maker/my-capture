@@ -113,13 +113,13 @@ public static class ShellIntegration
                 string expected = Path.Combine(root, name == "MyCapture.lnk" ? "MyCapture.exe" : "MyCaptureUninstall.exe");
                 if (PathSafety.Equal(target, expected) || (name == "Uninstall MyCapture.lnk" && PathSafety.Equal(target, Path.Combine(root, "uninstall.cmd"))))
                 {
-                    File.Delete(link);
+                    global::MyCapture.Core.Storage.RecoverableFileRemoval.DeleteFile(link);
                     info("Removed owned shortcut: " + name);
                 }
                 else info("Preserved modified shortcut: " + name);
             }
             // The folder itself is removed only when nothing else remains in it.
-            if (Directory.Exists(menu) && !Directory.EnumerateFileSystemEntries(menu).Any()) Directory.Delete(menu, false);
+            if (Directory.Exists(menu) && !Directory.EnumerateFileSystemEntries(menu).Any()) global::MyCapture.Core.Storage.RecoverableFileRemoval.DeleteDirectory(menu, false);
         }
         catch (Exception e) { warning("Could not clean Start Menu shortcuts: " + e.Message); }
         try

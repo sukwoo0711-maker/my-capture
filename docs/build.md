@@ -55,3 +55,13 @@ Start-Process -Wait -FilePath $exe -ArgumentList '--selftest-video-editor', $out
 ```
 
 녹화 self-test는 설정과 관계없이 자동 방식(Windows Graphics Capture 우선)으로 녹화하며, 환경 변수 `MYCAPTURE_RECORDING_BACKEND`를 `gdi` 또는 `wgc`로 지정하면 그 방식으로 실행합니다. 셸 self-test는 실제 전역 단축키를 등록하므로 다른 MyCapture 인스턴스와 단축키 도구를 먼저 종료하는 편이 좋습니다. OCR 결과는 설치된 Windows 언어 팩에 영향을 받을 수 있습니다.
+
+## Windows 10 32비트 호환판
+
+Windows 10 22H2(build 19045) 이상에서 사용할 x86판은 Windows 기본 OCR을 사용하며 AI OCR·로컬 번역 모델을 내려받지 않습니다. x64판의 기존 Windows 10 지원과 AI 기능은 유지합니다.
+
+```powershell
+dotnet publish src/MyCapture.App/MyCapture.App.csproj -c Release -r win-x86 -p:Platform=x86 -p:PublishProfile=win-x86-self-contained --self-contained true -o artifacts/local-win-x86
+```
+
+정식 패키지는 깨끗한 커밋에서 `build/package.ps1 -Version 4.8.0 -Architecture x64` 다음 `build/package.ps1 -Version 4.8.0 -Architecture x86` 순서로 생성합니다. x86 산출물은 `artifacts/release/4.8.0/win-x86`에 저장됩니다. 두 아키텍처를 함께 게시·검증할 때에는 해당 스크립트의 `-IncludeX86` 옵션을 사용합니다. x86 체크섬 파일 이름은 `SHA256SUMS-win-x86.txt`입니다. 이미 있는 산출물은 자동으로 지우지 않으므로 재생성 전에 보존하거나 휴지통으로 이동합니다.

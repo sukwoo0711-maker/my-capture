@@ -2778,7 +2778,7 @@ internal sealed partial class VideoEditorWindow : Window
 
             if (File.Exists(fullPath))
             {
-                File.Delete(fullPath);
+                global::MyCapture.Core.Storage.RecoverableFileRemoval.DeleteFile(fullPath);
             }
         }
         catch (IOException)

@@ -9,8 +9,8 @@ public sealed record EditDraft(Guid SessionId, long Revision, string Kind, strin
 
 /// <summary>
 /// Immutable revisions become recoverable only after their durable ready marker exists.
-/// Drafts are app-owned working copies: a retired session is deleted from disk, never moved to
-/// the user's Recycle Bin. A video draft references its immutable library original by path and
+/// Retired draft sessions move to the Recycle Bin. A video draft references its immutable
+/// library original by path and
 /// hash instead of copying it.
 /// </summary>
 public sealed class EditDraftStore
@@ -19,7 +19,7 @@ public sealed class EditDraftStore
     private readonly Action<string> _deleteSessionDirectory;
     private readonly Action<string, string> _publishReadyMarker;
 
-    /// <param name="deleteSessionDirectory">Test seam that replaces the direct deletion of a
+    /// <param name="deleteSessionDirectory">Test seam that replaces the recycling of a
     /// retired session directory. Production omits it.</param>
     /// <param name="publishReadyMarker">Test seam that replaces the atomic rename of a revision's
     /// durable <c>ready.pending</c> marker to <c>ready.json</c>. Production omits it.</param>
@@ -140,26 +140,9 @@ public sealed class EditDraftStore
         _deleteSessionDirectory(directory);
     }
 
-    /// <summary>
-    /// Deletes a retired session. Revisions and blobs go first and the tombstone last, so an
-    /// interrupted deletion can never make a retired revision recoverable again. A link inside
-    /// the session is removed itself; its target is never entered.
-    /// </summary>
+    /// <summary>Recycles a retired session as one item, preserving its tombstone on failure.</summary>
     private static void DeleteSessionDirectory(string directory)
-    {
-        string tombstone = Path.Combine(directory, "retired");
-        foreach (string child in Directory.GetDirectories(directory))
-        {
-            if ((File.GetAttributes(child) & FileAttributes.ReparsePoint) != 0) Directory.Delete(child);
-            else Directory.Delete(child, recursive: true);
-        }
-        foreach (string file in Directory.GetFiles(directory))
-        {
-            if (!string.Equals(file, tombstone, StringComparison.OrdinalIgnoreCase)) File.Delete(file);
-        }
-        File.Delete(tombstone);
-        Directory.Delete(directory);
-    }
+        => RecoverableFileRemoval.DeleteDirectory(directory, recursive: true);
 
     public bool IsRetired(Guid session) => File.Exists(Path.Combine(SessionPath(session), "retired"));
 

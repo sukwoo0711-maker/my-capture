@@ -216,7 +216,7 @@ internal sealed class GalleryContactSheetDialog : Window
             acceptingProgress = false;
             if (created)
             {
-                try { await Task.Run(() => File.Delete(stage)); }
+                try { await Task.Run(() => global::MyCapture.Core.Storage.RecoverableFileRemoval.DeleteFile(stage)); }
                 catch (Exception ex) when (IsExportError(ex))
                 { _status.Text = UiText.Format("ContactSheet.StageRetained", stage); }
             }

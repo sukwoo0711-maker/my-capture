@@ -182,7 +182,7 @@ public static class PathSafety
             Directory.CreateDirectory(parent);
             string probe = Path.Combine(parent, ".mycapture-write-probe-" + Guid.NewGuid().ToString("N"));
             using (var stream = File.Open(probe, FileMode.CreateNew, FileAccess.Write, FileShare.None)) stream.WriteByte(1);
-            File.Delete(probe);
+            global::MyCapture.Core.Storage.RecoverableFileRemoval.DeleteFile(probe);
         }
         catch (Exception e) { throw new SetupException(12, "Install location is not writable: " + parent + " (" + e.Message + ")"); }
     }

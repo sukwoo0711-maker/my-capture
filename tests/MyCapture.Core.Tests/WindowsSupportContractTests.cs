@@ -117,7 +117,7 @@ public sealed class WindowsSupportContractTests
 
         Assert.Contains($"MinimumWindowsRelease = '{WindowsSupportPolicy.MinimumReleaseName}'", package, StringComparison.Ordinal);
         Assert.Matches($@"MinimumArm64EmulationBuild\s*=\s*{WindowsSupportPolicy.MinimumArm64EmulationBuild}\b", package);
-        Assert.Contains("Arm64Support = 'Windows 11 ARM64 via x64 emulation'", package, StringComparison.Ordinal);
+        Assert.Contains("Arm64Support = \"Windows 11 ARM64 via $Architecture emulation\"", package, StringComparison.Ordinal);
     }
 
     [Fact]

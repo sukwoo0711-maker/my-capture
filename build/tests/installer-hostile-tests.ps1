@@ -1,4 +1,4 @@
-﻿[CmdletBinding()]
+[CmdletBinding()]
 param(
     [string]$Version = '4.8.0',
     [string]$ArtifactRoot = ''
@@ -116,7 +116,7 @@ function Invoke-Uninstaller([string]$ExecutablePath, [string]$LogPath) {
 }
 
 function New-ZipWithEntries([string]$Path, [string[]]$Names) {
-    if (Test-Path -LiteralPath $Path) { Remove-Item -LiteralPath $Path -Force }
+    if (Test-Path -LiteralPath $Path) { Remove-TestItem -Path $Path }
     $file = [IO.File]::Open($Path, [IO.FileMode]::CreateNew, [IO.FileAccess]::ReadWrite, [IO.FileShare]::None)
     $archive = New-Object IO.Compression.ZipArchive($file, [IO.Compression.ZipArchiveMode]::Create, $false)
     try {
@@ -393,10 +393,10 @@ catch { Write-Output ('TEST_FAILURE=' + $_.Exception.Message); throw }
 finally {
     $env:MYCAPTURE_DATA_ROOT = $previousDataRoot
     if (Test-Path -LiteralPath $tempRoot) {
-        Remove-Item -LiteralPath $tempRoot -Recurse -Force -ErrorAction SilentlyContinue
+        Remove-TestItem -Path $tempRoot
     }
     if ($syntheticRoot -and (Test-Path -LiteralPath $syntheticRoot)) {
-        Remove-Item -LiteralPath $syntheticRoot -Recurse -Force -ErrorAction SilentlyContinue
+        Remove-TestItem -Path $syntheticRoot
     }
 }
 

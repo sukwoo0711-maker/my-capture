@@ -412,8 +412,8 @@ public sealed partial class LegacyLibraryMigrationTests
     public async Task UnrecognizedCaptureFolderWithoutAnyIndex_ReportsMissingIndex()
     {
         using var fixture = new Fixture(); CaptureRecord record = fixture.AddSourceImage("No sidecar"); fixture.SaveSource();
-        File.Delete(fixture.SourcePaths.IndexFile);
-        File.Delete(fixture.SourceQueue.GetFilePath(record, CaptureFileNames.Meta));
+        global::MyCapture.Core.Storage.RecoverableFileRemoval.DeleteFile(fixture.SourcePaths.IndexFile);
+        global::MyCapture.Core.Storage.RecoverableFileRemoval.DeleteFile(fixture.SourceQueue.GetFilePath(record, CaptureFileNames.Meta));
         LegacyMigrationScan scan = await new LegacyLibraryMigrationService().ScanAsync(fixture.SourcePaths.DataRoot, fixture.TargetPaths);
         Assert.Equal(LegacyMigrationScanStatus.Failed, scan.Status); Assert.Equal("MissingIndex", scan.ErrorCode);
     }

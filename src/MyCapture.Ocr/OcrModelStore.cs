@@ -1,3 +1,4 @@
+using MyCapture.Core.Platform;
 using System.Collections.Concurrent;
 using System.IO;
 using System.Net.Http;
@@ -41,7 +42,7 @@ internal sealed class OcrModelStore
         _computeHash = computeHash ?? throw new ArgumentNullException(nameof(computeHash));
     }
 
-    internal bool HasRequiredModels => OcrModelCatalog.Required.All(IsPresent);
+    internal bool HasRequiredModels => AppArchitecture.SupportsNeuralOcr && OcrModelCatalog.Required.All(IsPresent);
 
     internal string PathFor(OcrModelFile file) => Path.Combine(_paths.OcrModelsRoot, file.FileName);
 
@@ -49,7 +50,7 @@ internal sealed class OcrModelStore
     /// Checks and prepares one model on a worker, including the initial verification.
     /// </summary>
     internal Task EnsureFileAsync(OcrModelFile file, CancellationToken cancellationToken) =>
-        Task.Run(() => EnsureFileCoreAsync(file, cancellationToken));
+        AppArchitecture.SupportsNeuralOcr ? Task.Run(() => EnsureFileCoreAsync(file, cancellationToken)) : Task.CompletedTask;
 
     private async Task EnsureFileCoreAsync(OcrModelFile file, CancellationToken cancellationToken)
     {
@@ -129,7 +130,7 @@ internal sealed class OcrModelStore
     /// Warms verification of installed models without downloading or delaying construction.
     /// A missing or unreadable model does not prevent the remaining models from being checked.
     /// </summary>
-    internal Task PreVerifyInstalledModelsAsync() => Task.Run(() =>
+    internal Task PreVerifyInstalledModelsAsync() => !AppArchitecture.SupportsNeuralOcr ? Task.CompletedTask : Task.Run(() =>
     {
         foreach (OcrModelFile file in OcrModelCatalog.Required.Concat(OcrModelCatalog.Optional))
         {
@@ -166,7 +167,7 @@ internal sealed class OcrModelStore
             try
             {
                 if (!File.Exists(path)) continue;
-                File.Delete(path);
+                global::MyCapture.Core.Storage.RecoverableFileRemoval.DeleteFile(path);
                 InvalidateVerification(path);
                 _log.LogInformation("Removed retired super-resolution model file {File}", name);
             }
@@ -188,7 +189,7 @@ internal sealed class OcrModelStore
     /// Starts preparation on a worker before performing any file or hash work.
     /// </summary>
     internal Task<bool> EnsureAsync(CancellationToken cancellationToken) =>
-        Task.Run(() => EnsureCoreAsync(cancellationToken));
+        AppArchitecture.SupportsNeuralOcr ? Task.Run(() => EnsureCoreAsync(cancellationToken)) : Task.FromResult(false);
 
     private async Task<bool> EnsureCoreAsync(CancellationToken cancellationToken)
     {
@@ -372,7 +373,7 @@ internal sealed class OcrModelStore
         {
             if (File.Exists(path))
             {
-                File.Delete(path);
+                global::MyCapture.Core.Storage.RecoverableFileRemoval.DeleteFile(path);
             }
         }
         catch (IOException)

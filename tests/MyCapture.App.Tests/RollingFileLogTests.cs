@@ -102,7 +102,7 @@ public sealed class RollingFileLogTests
             Assert.True(log.Flush(TimeSpan.FromSeconds(5)));
             Assert.True(File.Exists(folder));
 
-            File.Delete(folder);
+            global::MyCapture.Core.Storage.RecoverableFileRemoval.DeleteFile(folder);
             now += TimeSpan.FromSeconds(31);
             log.Append(SafeLogLine.Format(now, LogLevel.Information, "MyCapture.App.App", 9, "Resumed", null));
             log.Dispose();

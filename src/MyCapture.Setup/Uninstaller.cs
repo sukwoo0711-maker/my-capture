@@ -180,7 +180,7 @@ public static class Uninstaller
         foreach (string name in FileRemoval.WorkerFiles.Skip(1))
         {
             string path = Path.Combine(directory, name);
-            try { if (File.Exists(path)) { File.SetAttributes(path, FileAttributes.Normal); File.Delete(path); } }
+            try { if (File.Exists(path)) { File.SetAttributes(path, FileAttributes.Normal); global::MyCapture.Core.Storage.RecoverableFileRemoval.DeleteFile(path); } }
             catch (Exception e) { log.Write("WARN", "Could not delete cleanup worker file " + path + ": " + e.Message); }
         }
         log.Write("INFO", "Cleanup worker folder retained until the next MyCapture setup or uninstall run: " + directory);

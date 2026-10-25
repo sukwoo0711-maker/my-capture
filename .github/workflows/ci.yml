@@ -56,3 +56,41 @@ jobs:
             build/logs/test.log
           if-no-files-found: warn
           retention-days: 14
+
+  x86-compatibility:
+    name: Windows x86 build and compatibility tests
+    runs-on: windows-latest
+    timeout-minutes: 25
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up .NET from global.json
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+      - name: Test x86 app boundaries
+        shell: powershell
+        run: |
+          dotnet test tests/MyCapture.App.Tests/MyCapture.App.Tests.csproj -c Release -r win-x86 -p:Platform=x86 -p:SelfContained=true --artifacts-path artifacts/ci-x86 --filter "FullyQualifiedName~X86CompatibilityTests|FullyQualifiedName~RecoverableCleanupTests|FullyQualifiedName~HostRequirementGateTests|FullyQualifiedName~GitHubUpdateServiceTests.CheckForUpdate|FullyQualifiedName~OcrTests.Factory_AppliesQualityStageToRequest|FullyQualifiedName~UpdatePathsTests.NumericVersionDeterminesInstallerName" --logger "trx;LogFileName=app-x86.trx" --results-directory artifacts/ci-x86/results
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Test x86 setup boundaries
+        shell: powershell
+        run: |
+          dotnet test tests/MyCapture.Setup.Tests/MyCapture.Setup.Tests.csproj -c Release -p:Platform=x86 -p:VSTestPlatform=x86 --artifacts-path artifacts/ci-setup-x86 --filter "FullyQualifiedName~X86ArchitectureTests|FullyQualifiedName~SetupContractsTests.Manifest|FullyQualifiedName~SetupContractsTests.Host|FullyQualifiedName~SetupContractsTests.RuntimeProbe" --logger "trx;LogFileName=setup-x86.trx" --results-directory artifacts/ci-x86/results
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Publish self-contained x86 app
+        shell: powershell
+        run: |
+          dotnet publish src/MyCapture.App/MyCapture.App.csproj -c Release -r win-x86 --self-contained true -p:Platform=x86 -p:PublishProfile=win-x86-self-contained --artifacts-path artifacts/ci-x86 -o artifacts/ci-x86/publish
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $bytes = [IO.File]::ReadAllBytes((Join-Path $PWD 'artifacts/ci-x86/publish/MyCapture.exe'))
+          $offset = [BitConverter]::ToInt32($bytes, 0x3c)
+          if ([BitConverter]::ToUInt16($bytes, $offset + 4) -ne 0x014c) { throw 'Published app is not x86.' }
+      - name: Upload x86 test results
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: ci-x86-test-results-${{ github.sha }}-${{ github.run_attempt }}
+          path: artifacts/ci-x86/results/*.trx
+          if-no-files-found: warn
+          retention-days: 14

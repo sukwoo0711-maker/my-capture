@@ -7,7 +7,7 @@ namespace MyCapture.Core.Queue;
 /// <summary>
 /// A removal prepared before the index changes. A user deletion has already moved the capture
 /// to the Recycle Bin, and <see cref="Rollback"/> restores its exact original directory. A
-/// permanent removal (automatic eviction, or a confirmed permanent deletion) changes nothing
+/// deferred removal (automatic eviction) changes nothing
 /// until <see cref="Complete"/>, which runs only after the index stops naming the capture.
 /// </summary>
 public interface ICaptureRemovalTransaction
@@ -21,7 +21,7 @@ public interface ICaptureRemovalTransaction
 
 public sealed partial class CaptureQueue
 {
-    /// <summary>A confirmed permanent deletion after Windows refused a Recycle Bin move.</summary>
+    /// <summary>Legacy request name; removal still requires recoverable recycling.</summary>
     public const string ManualPermanentReason = "manual-permanent";
 
     /// <summary>Capacity and retention eviction run without a user request.</summary>
@@ -29,12 +29,11 @@ public sealed partial class CaptureQueue
         reason is "capacity" or "retention-age" or "item-limit" or "byte-limit";
 
     /// <summary>
-    /// Automatic eviction exists to free disk space, and a confirmed permanent deletion is
-    /// the user's explicit choice; both delete files. Every other removal is a user deletion
-    /// that goes to the Recycle Bin.
+    /// Automatic eviction publishes its index change before recoverable cleanup. Other requests
+    /// recycle first, so a refused move preserves both the capture and its index entry.
     /// </summary>
     public static bool IsPermanentRemovalReason(string reason) =>
-        IsAutomaticRemovalReason(reason) || reason == ManualPermanentReason;
+        IsAutomaticRemovalReason(reason);
 
     private readonly HashSet<Guid> _removalReservations = [];
     private int _automaticLeaseReleaseDepth;
@@ -219,8 +218,7 @@ public sealed partial class CaptureQueue
                     }
                     catch (RecycleBinUnavailableException ex)
                     {
-                        // Nothing moved or deleted. The caller may ask the user about a
-                        // permanent deletion; it never happens implicitly.
+                        // Nothing moved. Preserve the capture when Windows cannot recycle it.
                         _log.LogWarning(ex, "Capture {Id} cannot be moved to the Recycle Bin; keeping it", record.Id);
                         unavailable.Add(record.Id);
                     }

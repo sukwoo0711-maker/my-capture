@@ -873,9 +873,8 @@ public sealed partial class MediaFoundationVideoFrameReader : IDisposable
          checked((int)Marshal.OffsetOf<NativeVideoOffset>(nameof(NativeVideoOffset.Fraction))),
          checked((int)Marshal.OffsetOf<NativeVideoOffset>(nameof(NativeVideoOffset.Value))));
 
-    // The solution is x64-only. Native PROPVARIANT is 24 bytes on x64 because its union includes
-    // pointer/count pairs, even though this reader currently consumes only VT_I8 and VT_UI8.
-    [StructLayout(LayoutKind.Explicit, Size = 24)]
+    // The count/pointer union member supplies native alignment: 16 bytes on x86, 24 on x64.
+    [StructLayout(LayoutKind.Explicit)]
     private struct PropVariant
     {
         [FieldOffset(0)] public ushort VariantType;
@@ -884,12 +883,20 @@ public sealed partial class MediaFoundationVideoFrameReader : IDisposable
         [FieldOffset(6)] private ushort _reserved3;
         [FieldOffset(8)] public long Int64Value;
         [FieldOffset(8)] public ulong UInt64Value;
+        [FieldOffset(8)] private CountedPointer _countedPointer;
 
         internal static PropVariant FromInt64(long value) => new()
         {
             VariantType = VariantInt64,
             Int64Value = value,
         };
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct CountedPointer
+    {
+        public uint Count;
+        public IntPtr Pointer;
     }
 
     [StructLayout(LayoutKind.Sequential, Pack = 2)]

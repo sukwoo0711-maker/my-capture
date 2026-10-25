@@ -1567,7 +1567,7 @@ internal sealed class VideoLibraryService
 
             if (File.Exists(path))
             {
-                File.Delete(path);
+                global::MyCapture.Core.Storage.RecoverableFileRemoval.DeleteFile(path);
             }
 
             return !PathExists(path);
@@ -1588,7 +1588,7 @@ internal sealed class VideoLibraryService
         {
             if (Directory.Exists(directory) && !Directory.EnumerateFileSystemEntries(directory).Any())
             {
-                Directory.Delete(directory);
+                global::MyCapture.Core.Storage.RecoverableFileRemoval.DeleteDirectory(directory);
             }
         }
         catch (IOException)

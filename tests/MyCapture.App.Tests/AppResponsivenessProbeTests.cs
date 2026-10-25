@@ -83,7 +83,7 @@ public sealed class AppResponsivenessProbeTests
         {
             string folder = DiagnosticOutputPaths.Create(DiagnosticOutputPaths.Child(output, name));
             string receipt = DiagnosticOutputPaths.Child(folder, "probe-completed.txt");
-            if (File.Exists(receipt)) File.Delete(receipt);
+            if (File.Exists(receipt)) global::MyCapture.Core.Storage.RecoverableFileRemoval.DeleteFile(receipt);
             string? library = AppResponsivenessProbe.LibrarySize(name) is int count ? ProbeLibrary.Create(count) : null;
             try
             {

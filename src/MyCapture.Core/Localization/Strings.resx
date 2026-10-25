@@ -4678,4 +4678,7 @@ F3  클립보드를 핀으로 띄우기
   <data name="Settings_TranslationDeleted" xml:space="preserve"><value>번역 모델 삭제됨</value></data>
   <data name="Settings_TranslationDeleteFailed" xml:space="preserve"><value>번역 모델을 삭제하지 못했습니다.</value></data>
   <data name="About_PrivacyTranslation" xml:space="preserve"><value>번역은 처음 켤 때 번역 모델(약 {0} MB)을 GitHub에서 내려받습니다. 번역할 글자는 전송하지 않습니다.</value></data>
+  <data name="Settings.OcrQualityHint.X86" xml:space="preserve"><value>32비트판은 Windows OCR을 사용합니다. 정확도 설정에 따라 이미지 확대·대비·회전 보정을 적용합니다.</value></data>
+  <data name="Settings.OcrQualityAccurate.X86" xml:space="preserve"><value>정확하게 (Windows OCR·전처리)</value></data>
+  <data name="Settings.TranslationUnavailable.X86" xml:space="preserve"><value>번역은 64비트판에서 사용할 수 있습니다.</value></data>
 </root>

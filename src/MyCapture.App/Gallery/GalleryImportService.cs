@@ -20,7 +20,7 @@ internal static class GalleryImportService
             try
             {
                 // Only the unpublished managed copy reaches this callback; the source is untouched.
-                if (Directory.Exists(directory)) Directory.Delete(directory, recursive: true);
+                if (Directory.Exists(directory)) global::MyCapture.Core.Storage.RecoverableFileRemoval.DeleteDirectory(directory, recursive: true);
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             { log.LogWarning(ex, "Incomplete import remains in its managed directory because cleanup failed"); }

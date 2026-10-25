@@ -1,3 +1,4 @@
+using MyCapture.Core.Platform;
 using System.IO;
 using System.Threading;
 using System.Windows;
@@ -252,7 +253,7 @@ public partial class App : Application
             Dispatcher,
             SetOcrBusy,
             _services.GetRequiredService<ILogger<OcrResultPresenter>>(),
-            _services.GetRequiredService<TextTranslationService>());
+            AppArchitecture.SupportsNeuralOcr ? _services.GetRequiredService<TextTranslationService>() : null);
         // The editor's text command recognises its current image in the shared result window.
         TextRecognitionRoute.IsAvailable = () => _ocrService?.IsAvailable == true;
         TextRecognitionRoute.Show = (image, context) => _ocrPresenter?.ShowRecognized(
@@ -1975,6 +1976,7 @@ public partial class App : Application
 
     private void StartOcrModelDownload(bool isBackground = true, bool deferForBatterySaver = false)
     {
+        if (!AppArchitecture.SupportsNeuralOcr) return;
         if (_services is null || _shutdownRequested)
         {
             return;

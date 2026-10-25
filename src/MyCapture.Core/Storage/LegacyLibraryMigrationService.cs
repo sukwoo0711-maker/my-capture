@@ -21,8 +21,7 @@ namespace MyCapture.Core.Storage;
 /// below the current captures root, so publication writes only the index and no second copy
 /// of the library ever exists. A record's <c>meta.json</c> is written after its payload is
 /// complete; nothing in that folder is visible until the index names it. Canceled, failed and
-/// interrupted operations delete that folder and their journal directly (app-owned files never
-/// go to the Recycle Bin).</para>
+/// interrupted operations recycle that folder and their journal.</para>
 /// <para><b>Identity.</b> A legacy capture id is imported at most once into a library. Receipts
 /// map legacy ids to the ids they produced, so OCR, edits, moves or deletion in the Store library,
 /// and title, folder or payload changes in the legacy library, are all reported as already
@@ -713,7 +712,7 @@ public sealed class LegacyLibraryMigrationService : ILegacyLibraryMigrationServi
         DeleteTree(ValidatedFilePaths.DirectoryWithinRoot(root, ImportDirectoryPrefix + operationName));
     }
 
-    /// <summary>Deletes app-owned files directly; a linked entry is removed without following it.</summary>
+    /// <summary>Recycles app-owned files; a linked entry moves without following its target.</summary>
     private static void DeleteTree(string directory)
     {
         var info = new DirectoryInfo(directory);
@@ -722,9 +721,9 @@ public sealed class LegacyLibraryMigrationService : ILegacyLibraryMigrationServi
         foreach (FileSystemInfo entry in info.EnumerateFileSystemInfos())
         {
             if (entry is DirectoryInfo child && (child.Attributes & FileAttributes.ReparsePoint) == 0) DeleteTree(child.FullName);
-            else entry.Delete();
+            else RecoverableFileRemoval.DeleteEntry(entry);
         }
-        info.Delete();
+        RecoverableFileRemoval.DeleteDirectory(info.FullName);
     }
 
     private static void TryCreateMarker(string directory)
@@ -735,7 +734,7 @@ public sealed class LegacyLibraryMigrationService : ILegacyLibraryMigrationServi
 
     private static void TryDeleteFile(string path)
     {
-        try { File.Delete(path); }
+        try { global::MyCapture.Core.Storage.RecoverableFileRemoval.DeleteFile(path); }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException) { }
     }
 
