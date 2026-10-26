@@ -4,6 +4,7 @@ using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using MyCapture.App.Capture;
+using MyCapture.App.Diagnostics;
 using MyCapture.App.Ocr;
 using MyCapture.App.Themes;
 using MyCapture.Core.Localization;
@@ -36,7 +37,8 @@ public sealed class UxPolish490EvidenceTests
     [MemberData(nameof(CardCases))]
     public void QuickAccessCardRenders(string language, double dpi, double textScale) => StaTestHost.Run(() =>
     {
-        if (Folder is not { } folder) return;
+        if (Folder is not { } requested) return;
+        string folder = DiagnosticOutputPaths.Create(requested);
         using var culture = UiText.UseLanguage(language);
         using var motion = new ShortcutMotionTestScope();
         BitmapSource bitmap = QuickAccessLabelFixture.Sample();
@@ -49,9 +51,8 @@ public sealed class UxPolish490EvidenceTests
             QuickAccessLabelFixture.ApplyTextScale(host, textScale);
             QuickAccessLabelFixture.RealIcons(card, host);
             QuickAccessLabelFixture.Relayout(host, card.Width, dpi);
-            Directory.CreateDirectory(folder);
             QuickAccessLabelFixture.SavePng(host, dpi,
-                Path.Combine(folder, $"quick-card-{language}-dpi{dpi * 96:0}-text{textScale:0.0}-{Phase}.png"));
+                DiagnosticOutputPaths.Child(folder, $"quick-card-{language}-dpi{dpi * 96:0}-text{textScale:0.0}-{Phase}.png"));
             // The same card while Alt shows each action's key.
             foreach (Button button in card.ActionButtonsForTest)
                 button.RaiseEvent(new RoutedEventArgs(FrameworkElement.LoadedEvent));
@@ -59,7 +60,7 @@ public sealed class UxPolish490EvidenceTests
             host.Dispatcher.Invoke(System.Windows.Threading.DispatcherPriority.ApplicationIdle, new Action(() => { }));
             QuickAccessLabelFixture.Relayout(host, card.Width, dpi);
             QuickAccessLabelFixture.SavePng(host, dpi,
-                Path.Combine(folder, $"quick-card-{language}-dpi{dpi * 96:0}-text{textScale:0.0}-alt-{Phase}.png"));
+                DiagnosticOutputPaths.Child(folder, $"quick-card-{language}-dpi{dpi * 96:0}-text{textScale:0.0}-alt-{Phase}.png"));
         }
         finally { card.Close(); }
     });
@@ -69,7 +70,8 @@ public sealed class UxPolish490EvidenceTests
     [InlineData("en")]
     public void OcrTranslationTabRenders(string language) => Ocr410Fixture.RunSta(() =>
     {
-        if (Folder is not { } folder) return;
+        if (Folder is not { } requested) return;
+        string folder = DiagnosticOutputPaths.Create(requested);
         using var culture = UiText.UseLanguage(language);
         var translator = new OcrTranslationWindowTests.FakeTranslator();
         (BitmapSource image, OcrResult result) = TranslationFixture.RegisterTableWithImage();
@@ -85,8 +87,7 @@ public sealed class UxPolish490EvidenceTests
             var bitmap = new RenderTargetBitmap((int)Math.Ceiling(window.ActualWidth), (int)Math.Ceiling(window.ActualHeight),
                 96, 96, PixelFormats.Pbgra32);
             bitmap.Render(window);
-            Directory.CreateDirectory(folder);
-            Ocr410Fixture.Save(bitmap, Path.Combine(folder, $"ocr-translation-{language}-{Phase}.png"));
+            Ocr410Fixture.Save(bitmap, DiagnosticOutputPaths.Child(folder, $"ocr-translation-{language}-{Phase}.png"));
         }
         finally { window.CloseForExit(); }
     });

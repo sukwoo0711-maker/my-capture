@@ -7,6 +7,7 @@ using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using MyCapture.App.Capture;
+using MyCapture.App.Diagnostics;
 using MyCapture.App.Themes;
 using MyCapture.Core.Localization;
 using Xunit;
@@ -197,9 +198,9 @@ public sealed class QuickAccessActionLabelTests
 
     private static void SaveMeasurements(string name, object measurements)
     {
-        if (Environment.GetEnvironmentVariable("MYCAPTURE_UXPOLISH_EVIDENCE") is not { Length: > 0 } folder) return;
-        Directory.CreateDirectory(folder);
-        File.WriteAllText(Path.Combine(folder, name),
+        if (Environment.GetEnvironmentVariable("MYCAPTURE_UXPOLISH_EVIDENCE") is not { Length: > 0 } requested) return;
+        string folder = DiagnosticOutputPaths.Create(requested);
+        File.WriteAllText(DiagnosticOutputPaths.Child(folder, name),
             JsonSerializer.Serialize(measurements, new JsonSerializerOptions { WriteIndented = true }).Replace(",\r\n", ",\n"));
     }
 }
