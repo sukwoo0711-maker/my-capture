@@ -102,6 +102,7 @@ public sealed partial class SettingsThemePreviewTests
                             var edge = (Border)selected.Template.FindName("SelectedLayer", selected);
                             PumpLibraryUntil(window, () => edge.Opacity >= 0.99, "selected card outline");
                             Assert.Equal(((SolidColorBrush)box.Background).Color, ((SolidColorBrush)edge.BorderBrush).Color);
+                            Assert.Equal(new Thickness(2), edge.BorderThickness);
                             AssertInsideClient(selected, (FrameworkElement)window.Content, theme.ToString());
                             TextBlock title = Descendants(selected).OfType<TextBlock>().Single(text => text.Name == "TileTitle");
                             TextBlock time = Descendants(selected).OfType<TextBlock>().Single(text => text.Name == "TileMetadataText");
@@ -153,10 +154,49 @@ public sealed partial class SettingsThemePreviewTests
                         Assert.NotNull(Assert.IsType<Image>(imagePreview.Content).Source);
                         imagePreview.Close();
                         Assert.True(window.IsVisible);
+                        model.NavigateTo(CaptureFolderScope.All);
+                        var created = PumpUiTask(window, () => model.CreateFolderAsync("선택 상태", CaptureFolderScope.All));
+                        SettleGalleryLayout(window);
+                        Button selectedFolder = FolderCardButtons(rows).Single(button => ((GalleryFolderCardViewModel)button.DataContext).FolderId == created.Id);
+                        Assert.Equal(new Thickness(2), selectedFolder.BorderThickness);
+                        Assert.Equal(((SolidColorBrush)window.FindResource("Accent.Default")).Color, ((SolidColorBrush)selectedFolder.BorderBrush).Color);
+                        AssertVisibleSelectionMark(selectedFolder, window);
+                        TreeViewItem selectedNode = Descendants((TreeView)window.FindName("FolderTree")).OfType<TreeViewItem>()
+                            .Single(item => item.DataContext is GalleryFolderNode node && node.FolderId == created.Id);
+                        AssertSelectedNavigationOutline(selectedNode, window);
+                        SaveLibraryUxEvidence(window, theme, $"selection-folder-{theme}.png");
+                        ((Expander)window.FindName("DateSection")).IsExpanded = true;
+                        model.NavigateTo(model.FolderNodes[0].Scope);
+                        SettleGalleryLayout(window);
+                        ListBoxItem selectedDate = Descendants((ListBox)window.FindName("DateList")).OfType<ListBoxItem>().Single(item => item.IsSelected);
+                        AssertSelectedNavigationOutline(selectedDate, window);
+                        PumpLibraryUntil(window, () => Descendants((TreeView)window.FindName("FolderTree")).OfType<TreeViewItem>()
+                            .All(item => !item.IsSelected && ((Border)item.Template.FindName("SelectedLayer", item)).Opacity <= 0.01), "previous folder selection cleared");
+                        SaveLibraryUxEvidence(window, theme, $"selection-date-{theme}.png");
                     }
                     finally { window.CloseForExit(); }
                 }
             }
             finally { application.Shutdown(); }
         });
+
+    private static void AssertSelectedNavigationOutline(Control selected, Window window)
+    {
+        var border = (Border)selected.Template.FindName("SelectedLayer", selected);
+        PumpLibraryUntil(window, () => border.Opacity >= 0.99, "selected navigation outline");
+        Assert.Equal(new Thickness(2), border.BorderThickness);
+        Assert.Equal(((SolidColorBrush)window.FindResource("Accent.Default")).Color, ((SolidColorBrush)border.BorderBrush).Color);
+        AssertVisibleSelectionMark(selected, window);
+    }
+
+    private static void AssertVisibleSelectionMark(DependencyObject selected, Window window)
+    {
+        CheckBox check = Descendants(selected).OfType<CheckBox>().Single(control => control.IsVisible);
+        Assert.True(check.IsChecked);
+        var box = (Border)check.Template.FindName("SelectionBox", check);
+        var mark = (Path)check.Template.FindName("SelectionCheck", check);
+        Assert.True(mark.IsVisible);
+        Assert.Equal(((SolidColorBrush)window.FindResource("Accent.Default")).Color, ((SolidColorBrush)box.Background).Color);
+        Assert.Equal(((SolidColorBrush)window.FindResource("Text.OnAccent")).Color, ((SolidColorBrush)mark.Stroke).Color);
+    }
 }

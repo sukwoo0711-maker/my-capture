@@ -133,6 +133,9 @@ public sealed class AccentUsagePolicyTests
     [InlineData("Gallery.SelectionCheckBox", "<Trigger Property=\"IsChecked\" Value=\"True\"><Setter TargetName=\"SelectionBox\" Property=\"Background\" Value=\"{DynamicResource Accent.Default}\" /></Trigger>")]
     [InlineData("Gallery.SelectionCheckBox", "<Trigger Property=\"IsChecked\" Value=\"True\"><Setter TargetName=\"SelectionBox\" Property=\"BorderBrush\" Value=\"{DynamicResource Accent.Default}\" /></Trigger>")]
     [InlineData("Gallery.TileRowList", "<Border x:Name=\"SelectedLayer\" BorderBrush=\"{DynamicResource Accent.Default}\" />")]
+    [InlineData("LibraryUx.TreeItem", "<Border x:Name=\"SelectedLayer\" BorderBrush=\"{DynamicResource Accent.Default}\" />")]
+    [InlineData("LibraryUx.DateItem", "<Border x:Name=\"SelectedLayer\" BorderBrush=\"{DynamicResource Accent.Default}\" />")]
+    [InlineData("Gallery.FolderStripButton", "<DataTrigger Binding=\"{Binding IsSelected}\" Value=\"True\"><Setter Property=\"BorderBrush\" Value=\"{DynamicResource Accent.Default}\" /></DataTrigger>")]
     public void LibrarySelectionAllowanceDoesNotAuthorizeOtherStylesOrFiles(string style, string part)
     {
         string source = $$"""
@@ -151,9 +154,14 @@ public sealed class AccentUsagePolicyTests
         XElement owner = attribute.Parent!;
         string? style = owner.AncestorsAndSelf().Where(element => element.Name.LocalName == "Style")
             .Select(element => (string?)element.Attribute(names + "Key")).FirstOrDefault(key => key is not null);
-        if (style == "Gallery.TileRowList")
+        if (style is "Gallery.TileRowList" or "LibraryUx.TreeItem" or "LibraryUx.DateItem")
             return owner.Name.LocalName == "Border" && (string?)owner.Attribute(names + "Name") == "SelectedLayer"
                 && attribute.Name.LocalName == "BorderBrush" && attribute.Value == "{DynamicResource Accent.Default}";
+        if (style == "Gallery.FolderStripButton")
+            return owner.Name.LocalName == "Setter" && (string?)owner.Attribute("Property") == "BorderBrush"
+                && attribute.Name.LocalName == "Value" && attribute.Value == "{DynamicResource Accent.Default}"
+                && owner.Parent is { } folderTrigger && folderTrigger.Name.LocalName == "DataTrigger"
+                && (string?)folderTrigger.Attribute("Binding") == "{Binding IsSelected}" && (string?)folderTrigger.Attribute("Value") == "True";
         if (style != "Gallery.SelectionCheckBox") return false;
         if (owner.Name.LocalName == "Path")
             return (string?)owner.Attribute(names + "Name") == "SelectionCheck" && attribute.Name.LocalName == "Stroke"

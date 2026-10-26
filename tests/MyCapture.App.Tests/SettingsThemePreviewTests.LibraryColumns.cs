@@ -28,7 +28,11 @@ public sealed partial class SettingsThemePreviewTests
     public Task LibraryColumns_WideLayoutIsCoveredWhenTheDesktopCapsTheWindow() =>
         RunLibraryColumnTest(nameof(LibraryColumns_WideLayoutIsCoveredWhenTheDesktopCapsTheWindow), constrainWindow: true);
 
-    private Task RunLibraryColumnTest(string testName, bool constrainWindow) =>
+    [Fact]
+    public Task LibraryColumns_ChangingViewsAfterMixedWindowAndClientWidthsKeepsCardsInside() =>
+        RunLibraryColumnTest(nameof(LibraryColumns_ChangingViewsAfterMixedWindowAndClientWidthsKeepsCardsInside), constrainWindow: false, maximumWidth: 1044);
+
+    private Task RunLibraryColumnTest(string testName, bool constrainWindow, double? maximumWidth = null) =>
         RunIsolated(testName, () =>
         {
             var application = new Application { ShutdownMode = ShutdownMode.OnExplicitShutdown };
@@ -41,7 +45,7 @@ public sealed partial class SettingsThemePreviewTests
             try
             {
                 using var scope = UiText.UseLanguage("ko-KR");
-                VerifyLibraryColumns(constrainWindow);
+                VerifyLibraryColumns(constrainWindow, maximumWidth);
             }
             finally
             {
@@ -50,7 +54,7 @@ public sealed partial class SettingsThemePreviewTests
             }
         });
 
-    private static void VerifyLibraryColumns(bool constrainWindow)
+    private static void VerifyLibraryColumns(bool constrainWindow, double? maximumWidth)
     {
         ThemeService.Apply(AppTheme.Glass);
         LibraryUxFixture f = CreateLibraryUxFixture("mc-library-columns-");
@@ -71,6 +75,7 @@ public sealed partial class SettingsThemePreviewTests
             window.Width = window.MinWidth;
             window.Height = window.MinHeight;
             if (constrainWindow) window.MaxWidth = window.MinWidth;
+            if (maximumWidth.HasValue) window.MaxWidth = maximumWidth.Value;
             window.Show();
             window.SetDetailsPaneOpen(true);
             var rowsList = (ListBox)window.FindName("RowsList");

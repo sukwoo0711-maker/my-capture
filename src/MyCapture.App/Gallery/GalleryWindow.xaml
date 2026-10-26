@@ -756,10 +756,11 @@
             <Setter Property="FontSize" Value="{DynamicResource FontSize.Body}" />
             <Setter Property="Margin" Value="8" />
             <Setter Property="Padding" Value="10,6" />
+            <Setter Property="BorderThickness" Value="2" />
             <Setter Property="HorizontalContentAlignment" Value="Stretch" />
             <Style.Triggers>
-                <DataTrigger Binding="{Binding IsSelected}" Value="True"><Setter Property="BorderBrush" Value="{DynamicResource Border.Focus}" /></DataTrigger>
                 <DataTrigger Binding="{Binding IsDropAvailable}" Value="True"><Setter Property="BorderBrush" Value="{DynamicResource Accent.Folder}" /></DataTrigger>
+                <DataTrigger Binding="{Binding IsSelected}" Value="True"><Setter Property="BorderBrush" Value="{DynamicResource Accent.Default}" /></DataTrigger>
                 <DataTrigger Binding="{Binding IsDropTarget}" Value="True"><Setter Property="Background" Value="{DynamicResource Surface.Selected}" /><Setter Property="BorderThickness" Value="2" /></DataTrigger>
             </Style.Triggers>
         </Style>
@@ -769,11 +770,17 @@
                     Click="OnFolderCardClick" PreviewKeyDown="OnFolderCardKeyDown">
                 <Grid>
                     <Grid.ColumnDefinitions><ColumnDefinition Width="Auto" /><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
-                    <themes:SymbolIcon StrokeThickness="0" Size="16" Data="{StaticResource LibraryUx.Icon.Folder}" Fill="{DynamicResource Accent.Folder}" VerticalAlignment="Center" />
+                    <themes:SymbolIcon x:Name="FolderGlyph" StrokeThickness="0" Size="16" Data="{StaticResource LibraryUx.Icon.Folder}" Fill="{DynamicResource Accent.Folder}" VerticalAlignment="Center" />
+                    <CheckBox Style="{StaticResource Gallery.SelectionCheckBox}" IsChecked="{Binding IsSelected, Mode=OneWay}"
+                              Visibility="{Binding IsSelected, Converter={StaticResource BoolToVisibility}}" Width="18" MinHeight="18"
+                              IsHitTestVisible="False" Focusable="False" IsTabStop="False" />
                     <TextBlock Grid.Column="1" Text="{Binding Name}" Margin="8,0" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
                     <TextBlock Grid.Column="2" Text="{Binding CaptureCount}" Foreground="{DynamicResource Text.Secondary}" VerticalAlignment="Center" />
                 </Grid>
             </Button>
+            <DataTemplate.Triggers>
+                <DataTrigger Binding="{Binding IsSelected}" Value="True"><Setter TargetName="FolderGlyph" Property="Visibility" Value="Hidden" /></DataTrigger>
+            </DataTemplate.Triggers>
         </DataTemplate>
 
         <DataTemplate x:Key="Gallery.FolderRowTemplate" DataType="{x:Type gallery:GalleryFolderRow}">
@@ -788,6 +795,7 @@
         <Style x:Key="Gallery.RowContainer" TargetType="ListBoxItem">
             <Setter Property="Margin" Value="0" />
             <Setter Property="Padding" Value="0" />
+            <Setter Property="MaxWidth" Value="{Binding ActualWidth, RelativeSource={RelativeSource AncestorType=ScrollContentPresenter}}" />
             <Setter Property="HorizontalContentAlignment" Value="Stretch" />
             <Setter Property="Focusable" Value="False" />
             <Setter Property="Template">
@@ -951,7 +959,7 @@
                                 <Border x:Name="Chrome" Background="Transparent" BorderBrush="Transparent" BorderThickness="1"
                                         CornerRadius="{DynamicResource Radius.Md}" />
                                 <Border x:Name="HoverLayer" Style="{StaticResource LibraryUx.HoverWash}" BorderThickness="1" />
-                                <Border x:Name="SelectedLayer" Style="{StaticResource LibraryUx.SelectedWash}" BorderThickness="1" />
+                                <Border x:Name="SelectedLayer" Style="{StaticResource LibraryUx.SelectedWash}" BorderBrush="{DynamicResource Accent.Default}" BorderThickness="2" />
                                 <Border x:Name="Indicator" Style="{StaticResource StatePart.Normal}" Width="3" Height="16" Margin="1,0,0,0"
                                         HorizontalAlignment="Left" VerticalAlignment="Center"
                                         Background="{DynamicResource Text.Primary}" CornerRadius="{DynamicResource Radius.Pill}"
@@ -1010,12 +1018,18 @@
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
-                <themes:SymbolIcon StrokeThickness="0" Size="16" Data="{StaticResource LibraryUx.Icon.Folder}"
+                <themes:SymbolIcon x:Name="FolderGlyph" StrokeThickness="0" Size="16" Data="{StaticResource LibraryUx.Icon.Folder}"
                       Fill="{DynamicResource Accent.Folder}" VerticalAlignment="Center" />
+                <CheckBox Style="{StaticResource Gallery.SelectionCheckBox}" IsChecked="{Binding IsSelected, Mode=OneWay}"
+                          Visibility="{Binding IsSelected, Converter={StaticResource BoolToVisibility}}" Width="18" MinHeight="18"
+                          IsHitTestVisible="False" Focusable="False" IsTabStop="False" />
                 <TextBlock Grid.Column="1" Text="{Binding Name}" ToolTip="{Binding Caption}" Margin="8,0,8,0"
                            VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
                 <TextBlock Grid.Column="2" Text="{Binding Count}" Style="{StaticResource LibraryUx.NavCount}" />
             </Grid>
+            <HierarchicalDataTemplate.Triggers>
+                <DataTrigger Binding="{Binding IsSelected}" Value="True"><Setter TargetName="FolderGlyph" Property="Visibility" Value="Hidden" /></DataTrigger>
+            </HierarchicalDataTemplate.Triggers>
         </HierarchicalDataTemplate>
 
         <DataTemplate x:Key="LibraryUx.DateItemTemplate" DataType="{x:Type gallery:GalleryFolderNode}">
@@ -1025,11 +1039,17 @@
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
-                <themes:SymbolIcon Size="20" Data="{StaticResource LibraryUx.Icon.Calendar}" Style="{StaticResource LibraryUx.NavGlyph}" />
+                <themes:SymbolIcon x:Name="DateGlyph" Size="20" Data="{StaticResource LibraryUx.Icon.Calendar}" Style="{StaticResource LibraryUx.NavGlyph}" />
+                <CheckBox Style="{StaticResource Gallery.SelectionCheckBox}" IsChecked="{Binding IsSelected, Mode=OneWay}"
+                          Visibility="{Binding IsSelected, Converter={StaticResource BoolToVisibility}}" Width="18" MinHeight="18"
+                          IsHitTestVisible="False" Focusable="False" IsTabStop="False" />
                 <TextBlock Grid.Column="1" Text="{Binding Name}" Margin="8,0,8,0" VerticalAlignment="Center"
                            TextTrimming="CharacterEllipsis" />
                 <TextBlock Grid.Column="2" Text="{Binding Count}" Style="{StaticResource LibraryUx.NavCount}" />
             </Grid>
+            <DataTemplate.Triggers>
+                <DataTrigger Binding="{Binding IsSelected}" Value="True"><Setter TargetName="DateGlyph" Property="Visibility" Value="Hidden" /></DataTrigger>
+            </DataTemplate.Triggers>
         </DataTemplate>
 
         <Style x:Key="LibraryUx.DateItem" TargetType="ListBoxItem">
@@ -1048,7 +1068,7 @@
                             <Border x:Name="Chrome" Background="Transparent" BorderBrush="Transparent" BorderThickness="1"
                                     CornerRadius="{DynamicResource Radius.Md}" />
                             <Border x:Name="HoverLayer" Style="{StaticResource LibraryUx.HoverWash}" BorderThickness="1" />
-                            <Border x:Name="SelectedLayer" Style="{StaticResource LibraryUx.SelectedWash}" BorderThickness="1" />
+                            <Border x:Name="SelectedLayer" Style="{StaticResource LibraryUx.SelectedWash}" BorderBrush="{DynamicResource Accent.Default}" BorderThickness="2" />
                             <Border x:Name="Indicator" Style="{StaticResource StatePart.Normal}" Width="3" Height="16" Margin="1,0,0,0"
                                     HorizontalAlignment="Left" VerticalAlignment="Center"
                                     Background="{DynamicResource Text.Primary}" CornerRadius="{DynamicResource Radius.Pill}"
