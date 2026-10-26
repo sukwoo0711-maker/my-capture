@@ -110,22 +110,29 @@ public partial class App : Application
         // Diagnostics intentionally run before the ownership gate. Capture hardware
         // can be tested beside a normal resident instance; the shell test will report
         // hotkey conflicts if the normal instance already owns them.
-        if (TryRunSelfTest(e.Args))
+        // The resident probe runs the whole resident app against an isolated data root beside any
+        // normal instance; nothing it does may reach the user's clipboard.
+        s_residentProbe = ResidentProbeOptions.TryParse(e.Args);
+        if (s_residentProbe is not null)
+            ClipboardWriter.InstallTestOverride((_, _) => { }, _ => { }, () => 0, (_, _) => true);
+
+        if (s_residentProbe is null && TryRunSelfTest(e.Args))
         {
             return;
         }
 
         // A sign-in launch stays quiet after the one-time shortcut question. The Store build's startup task carries no command line,
         // so its activation kind stands in for the Run key's --background switch.
-        bool quietLaunch = FindSwitch(e.Args, StartupRegistrationService.BackgroundSwitch) >= 0 ||
+        bool quietLaunch = s_residentProbe is not null || FindSwitch(e.Args, StartupRegistrationService.BackgroundSwitch) >= 0 ||
             MyCapture.Core.Platform.AppPackage.IsStartupTaskActivation();
 
         // Publish the signal before claiming ownership: a second launch can queue
         // activation even while the first process is loading a large library.
-        _activationSignal = new EventWaitHandle(false, EventResetMode.AutoReset, ActivationEventName);
+        string instanceSuffix = s_residentProbe?.InstanceSuffix ?? string.Empty;
+        _activationSignal = new EventWaitHandle(false, EventResetMode.AutoReset, ActivationEventName + instanceSuffix);
         _singleInstanceMutex = new Mutex(
             initiallyOwned: true,
-            SingleInstanceMutexName,
+            SingleInstanceMutexName + instanceSuffix,
             out bool isFirstInstance);
 
         if (!isFirstInstance)
@@ -155,7 +162,7 @@ public partial class App : Application
             _log = _services.GetRequiredService<ILogger<App>>();
             CaptureWindowExclusion.Logger = _log;
             _log.LogInformation("MyCapture starting up");
-            await RecoverLegacyImportBeforeLoadAsync();
+            if (s_residentProbe is null) await RecoverLegacyImportBeforeLoadAsync();
             InitializeShell(quietLaunch, FindSwitch(e.Args, SettingsCommandLineSwitch) >= 0);
             StartActivationListener();
         }
@@ -167,7 +174,8 @@ public partial class App : Application
             return;
         }
 
-        _ = OfferLegacyImportAfterLaunchAsync(quietLaunch);
+        if (s_residentProbe is { } probe) _ = RunResidentProbeAsync(probe);
+        else _ = OfferLegacyImportAfterLaunchAsync(quietLaunch);
     }
 
     /// <summary>The settings said first run when this process started; the welcome follows consent.</summary>
@@ -184,6 +192,7 @@ public partial class App : Application
         }
 
         _settings = _services.GetRequiredService<SettingsStore>().Load();
+        if (s_residentProbe is not null) ApplyResidentProbeSettings(_settings);
         UiText.Configure(_settings.General.Language);
         ThemeService.ApplyFromSettings(_settings.General);
 
@@ -375,7 +384,8 @@ public partial class App : Application
         // because another program claimed a chord first.
         _tray.Initialize();
         _tray.SetCaptureCount(_queue?.Count ?? 0);
-        _hotkeys.Initialize(_settings.Hotkeys);
+        // The probe runs beside the user's own instance, which owns the global shortcuts.
+        if (s_residentProbe is null) _hotkeys.Initialize(_settings.Hotkeys);
 
         // Launch-at-login: reconcile a stale/moved Run entry to this build's path on
         // startup, best-effort. Never mutates the Run key on this machine during tests
@@ -385,7 +395,7 @@ public partial class App : Application
         _startupService = _services.GetRequiredService<IStartupRegistration>();
         try
         {
-            if (!_launchedFirstRun) _ = _startupService.ReconcileOnStartup(_settings.General.LaunchAtLogin);
+            if (!_launchedFirstRun && s_residentProbe is null) _ = _startupService.ReconcileOnStartup(_settings.General.LaunchAtLogin);
             if (_startupService is PackagedStartupRegistration)
             {
                 _settings.General.LaunchAtLogin = _startupService.IsEnabled();
@@ -413,10 +423,10 @@ public partial class App : Application
             _hotkeys,
             _startupService,
             _services.GetRequiredService<ILogger<SettingsApplyService>>());
-        InitializeStoreRating();
+        if (s_residentProbe is null) InitializeStoreRating();
         PrepareCapturePersistenceForExitAsync = PreparePendingCaptureForExitAsync;
         PrepareStoreUpdateProtection = PrepareAndHoldStoreUpdateAsync;
-        InitializeUpdates();
+        if (s_residentProbe is null) InitializeUpdates();
         _initialLibraryRecoveryTask = RecoverLibraryStateAsync();
         _initialEditRecoveryTask = InitializeEditRecoveryAsync();
         _ = ResumeMaintenanceAfterInitialRecoveryAsync();
@@ -2403,7 +2413,8 @@ public partial class App : Application
         services.AddSingleton(serviceProvider => new CaptureOverlayCoordinator(
             serviceProvider.GetRequiredService<ScreenCaptureEngine>(),
             serviceProvider.GetRequiredService<WindowCandidateService>(),
-            serviceProvider.GetRequiredService<ILogger<CaptureOverlayCoordinator>>()));
+            serviceProvider.GetRequiredService<ILogger<CaptureOverlayCoordinator>>(),
+            acquireFrame: s_residentProbe is null ? null : AcquireProbeFrame));
         services.AddSingleton<NativeMessageWindow>();
         services.AddSingleton(new TrayIconAssets(
             Path.Combine(AppContext.BaseDirectory, "Assets", "tray-idle.ico"),
@@ -2457,6 +2468,7 @@ public partial class App : Application
     private static AppPaths ResolveAppPaths()
     {
         const string dataRootVariable = "MYCAPTURE_DATA_ROOT";
+        if (s_residentProbe is { } probe) return AppPaths.CreateForRoot(probe.DataRoot);
         string? overrideRoot = Environment.GetEnvironmentVariable(dataRootVariable);
         return string.IsNullOrWhiteSpace(overrideRoot)
             ? AppPaths.CreateDefault()

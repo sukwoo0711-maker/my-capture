@@ -406,6 +406,10 @@ internal sealed class QuickAccessWindow : Window
         Closed += (_, _) =>
         {
             _closed = true;
+            // Whoever still holds a closed card (the app's last flight, an action's continuation)
+            // must not keep its capture's record actions or its preview source alive through it.
+            _preview.Source = null;
+            _captureActions = null;
             _timer.Stop(); _progressReveal.Stop();
             foreach (SuccessMark mark in _successMarks.Values) mark.Timer.Stop();
             if (_keyboardRouter is not null)
