@@ -4067,13 +4067,13 @@ Delete {1} {1:plural:subfolder|subfolders}, {2} {2:plural:image|images}, and {3}
   <data name="EditRecovery_Detail" xml:space="preserve"><value>{0} · {1} × {2}</value></data>
   <data name="EditRecovery_TimeFormat" xml:space="preserve"><value>MMM d, HH:mm</value><comment>.NET custom date and time format for when a draft was saved.</comment></data>
   <data name="EditRecovery_RowAction" xml:space="preserve"><value>{0}: {1}</value></data>
-  <data name="Onboard_TryNow" xml:space="preserve"><value>Try it now</value></data>
+  <data name="Onboard_TryNow" xml:space="preserve"><value>Capture region</value></data>
   <data name="Onboard_TryNowHelp" xml:space="preserve"><value>Closes this window and starts a region capture.</value></data>
   <data name="Onboard_StepsName" xml:space="preserve"><value>Getting started</value></data>
   <data name="Onboard_StepNumber" xml:space="preserve"><value>Step {0}</value></data>
   <data name="Onboard_AfterCaptureTitle" xml:space="preserve"><value>After a capture</value></data>
   <data name="Welcome_FirstCaptureTitle" xml:space="preserve"><value>Try your first capture</value></data>
-  <data name="Welcome_PinClipboardHint" xml:space="preserve"><value>Pin copied tables and code with {0}.</value></data>
+  <data name="Welcome_PinClipboardHint" xml:space="preserve"><value>Press {0} to keep copied tables and code above other windows for reference.</value></data>
   <data name="Welcome_Skip" xml:space="preserve"><value>Skip</value></data>
   <data name="Onboard_FirstCaptureTip" xml:space="preserve"><value>Press P to pin it above other windows</value></data>
   <data name="Onboard_ReceiptKeyboard" xml:space="preserve"><value>Alt+Q to focus · Tab to move · Enter to run</value></data>
@@ -4687,4 +4687,7 @@ Overwrite these shortcuts? You can change this later in Settings → Shortcuts.<
   <data name="LibraryUx_DragOutMixed" xml:space="preserve"><value>Drop outside the window to export PNG and MP4 files</value></data>
   <data name="Settings_DefaultFont" xml:space="preserve"><value>Restore default font</value></data>
   <data name="Settings_FontScope" xml:space="preserve"><value>Applies to new text. Existing text keeps its font.</value></data>
+  <data name="App.CurrentVersion" xml:space="preserve"><value>Version {0}</value></data>
+  <data name="Welcome_CaptureInstruction" xml:space="preserve"><value>Select Capture region, then drag to choose the area to capture.</value></data>
+  <data name="Settings.QuickSaveDirectoryHint" xml:space="preserve"><value>Leave blank to use the last saved folder, or the default capture folder before the first save.</value></data>
 </root>

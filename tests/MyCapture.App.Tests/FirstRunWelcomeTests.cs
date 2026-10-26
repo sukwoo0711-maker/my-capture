@@ -65,11 +65,11 @@ public sealed class FirstRunWelcomeTests
 
             Button[] buttons = Descendants(welcome).OfType<Button>().ToArray();
             Assert.Equal([welcome.TryNowButton, welcome.SkipButton], buttons);
-            Assert.Equal("지금 해 보기", welcome.TryNowButton.Content);
+            Assert.Equal("영역 캡처", welcome.TryNowButton.Content);
             Assert.Equal("건너뛰기", welcome.SkipButton.Content);
             Assert.True(welcome.TryNowButton.IsDefault);
             Assert.True(welcome.SkipButton.IsCancel);
-            Assert.Equal("지금 해 보기", AutomationProperties.GetName(welcome.TryNowButton));
+            Assert.Equal("영역 캡처", AutomationProperties.GetName(welcome.TryNowButton));
             Assert.Equal("건너뛰기", AutomationProperties.GetName(welcome.SkipButton));
             Assert.Equal(UiText.Get("Onboard_TryNowHelp"), AutomationProperties.GetHelpText(welcome.TryNowButton));
             Assert.Contains("Enter", Assert.IsType<string>(welcome.TryNowButton.ToolTip), StringComparison.Ordinal);
@@ -95,7 +95,7 @@ public sealed class FirstRunWelcomeTests
         var unassigned = new WelcomeWindow(new HotkeySettings { Capture = Hotkey.None, OpenLibrary = Hotkey.None }, AfterCaptureAction.Editor);
         try
         {
-            Assert.Equal("Try it now", unassigned.TryNowButton.Content);
+            Assert.Equal("Capture region", unassigned.TryNowButton.Content);
             Assert.Equal("Skip", unassigned.SkipButton.Content);
             Assert.Empty(Descendants(unassigned).OfType<WrapPanel>());
             Assert.Contains(Descendants(unassigned).OfType<TextBlock>(), text => text.Text == "Try your first capture");
@@ -118,6 +118,8 @@ public sealed class FirstRunWelcomeTests
         var welcome = new WelcomeWindow(new HotkeySettings(), action);
         try
         {
+            Assert.Contains(Descendants(welcome).OfType<TextBlock>(), text =>
+                KoreanWordWrap.Strip(text.Text) == UiText.Get("Welcome_CaptureInstruction"));
             string[] paragraphs = ["Onboard_AfterCaptureEditor", "Onboard_AfterCaptureQuickAccess", "Onboard_AfterCaptureClipboard", "Onboard_TrayBody"];
             foreach (string key in paragraphs)
                 Assert.DoesNotContain(Descendants(welcome).OfType<TextBlock>(), text =>

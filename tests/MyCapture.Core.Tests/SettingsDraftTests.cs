@@ -90,7 +90,7 @@ public sealed class SettingsDraftTests
         Assert.Equal("fast", draft.OcrQuality);
         Assert.Equal("F9", draft.UploadGitHubImageHotkey);
         Assert.False(string.IsNullOrWhiteSpace(draft.CapturesDirectoryOverride));
-        Assert.False(string.IsNullOrWhiteSpace(draft.QuickSaveDirectoryOverride));
+        Assert.Equal(string.Empty, draft.QuickSaveDirectoryOverride);
     }
 
     [Fact]

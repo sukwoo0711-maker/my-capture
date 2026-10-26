@@ -82,6 +82,7 @@ public static class AppSettingsClone
     {
         LastImageExport = s.LastImageExport with { },
         QuickSaveDirectoryOverride = s.QuickSaveDirectoryOverride,
+        LastSaveDirectory = s.LastSaveDirectory,
         CopyToClipboardOnQuickSave = s.CopyToClipboardOnQuickSave,
         FileNamePattern = s.FileNamePattern,
         PreserveTransparency = s.PreserveTransparency,

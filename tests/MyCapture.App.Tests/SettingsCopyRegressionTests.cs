@@ -37,10 +37,10 @@ public sealed class SettingsCopyRegressionTests
     }
 
     [Theory]
-    [InlineData("ko-KR", HotkeyModifiers.None, Hotkey.VkF3, "복사한 표와 코드는 F3 키로 핀에 띄웁니다.")]
-    [InlineData("en-US", HotkeyModifiers.None, Hotkey.VkF3, "Pin copied tables and code with F3.")]
-    [InlineData("ko-KR", HotkeyModifiers.Control, 0x4B, "복사한 표와 코드는 Ctrl+K 키로 핀에 띄웁니다.")]
-    [InlineData("en-US", HotkeyModifiers.Control, 0x4B, "Pin copied tables and code with Ctrl+K.")]
+    [InlineData("ko-KR", HotkeyModifiers.None, Hotkey.VkF3, "복사한 표와 코드를 F3 키로 다른 창 위에 띄워 참고할 수 있습니다.")]
+    [InlineData("en-US", HotkeyModifiers.None, Hotkey.VkF3, "Press F3 to keep copied tables and code above other windows for reference.")]
+    [InlineData("ko-KR", HotkeyModifiers.Control, 0x4B, "복사한 표와 코드를 Ctrl+K 키로 다른 창 위에 띄워 참고할 수 있습니다.")]
+    [InlineData("en-US", HotkeyModifiers.Control, 0x4B, "Press Ctrl+K to keep copied tables and code above other windows for reference.")]
     public void WelcomeUsesTheAssignedPinShortcut(string language, HotkeyModifiers modifiers, uint key, string expected) => StaTestHost.Run(() =>
     {
         using var scope = UiText.UseLanguage(language);
@@ -63,7 +63,8 @@ public sealed class SettingsCopyRegressionTests
         try
         {
             Assert.DoesNotContain(FirstRunWelcomeTests.Descendants(welcome).OfType<TextBlock>(),
-                text => text.Visibility == Visibility.Visible && text.Text.Contains("Pin copied", StringComparison.Ordinal));
+                text => text.Visibility == Visibility.Visible
+                    && text.Text.Contains("copied tables and code above other windows", StringComparison.Ordinal));
             Assert.DoesNotContain(FirstRunWelcomeTests.Descendants(welcome).OfType<TextBlock>(), text => text.Text.Contains("F3", StringComparison.Ordinal));
         }
         finally { welcome.Close(); }

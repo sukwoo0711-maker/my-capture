@@ -132,6 +132,8 @@ public sealed class SettingsApplyService
         next.Updates.DismissedVersion = previous.Updates.DismissedVersion;
         // Preserve concurrent exports unless the draft explicitly resets or imports options.
         if (!applyExportOptions) next.Export.LastImageExport = previous.Export.LastImageExport;
+        // A Save As completed while this draft was open; destination history is live state.
+        next.Export.LastSaveDirectory = previous.Export.LastSaveDirectory;
         // Nor the capture start-guide count; a selector opened meanwhile may have advanced it.
         next.Capture.StartGuideShownCount = previous.Capture.StartGuideShownCount;
         next.General.FirstCaptureTipShown = previous.General.FirstCaptureTipShown;

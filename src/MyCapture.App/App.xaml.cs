@@ -211,11 +211,12 @@ public partial class App : Application
 
         InitializeQueue();
 
+        CaptureCommitService pinCommit = _commit ?? throw new InvalidOperationException("Capture commit service is unavailable.");
         var pinSaveService = new PinImageSaveService(
             () => _settings!,
             () => _capturePaths ?? _services.GetRequiredService<AppPaths>(),
             _services.GetRequiredService<ILogger<PinImageSaveService>>(),
-            _commit!.RememberExportOptions);
+            pinCommit.RememberExportOptions, pinCommit.ExportLocation, pinCommit.RememberSavedExport);
         _pins = new PinManager(
             () => _settings!.Pin,
             pinSaveService,
@@ -1439,7 +1440,8 @@ public partial class App : Application
         CaptureCommitService commit = _commit ?? throw new InvalidOperationException("Capture persistence is unavailable.");
         ServiceProvider services = _services ?? throw new InvalidOperationException("The app services are unavailable.");
         var saver = new PinImageSaveService(() => _settings!, () => _capturePaths!,
-            services.GetRequiredService<ILogger<PinImageSaveService>>(), commit.RememberExportOptions);
+            services.GetRequiredService<ILogger<PinImageSaveService>>(), commit.RememberExportOptions,
+            commit.ExportLocation, commit.RememberSavedExport);
         async Task<System.Windows.Media.Imaging.BitmapSource> Render()
         {
             using IDisposable actionLease = queue.AcquireEvictionLease(record.Id);
@@ -1736,7 +1738,7 @@ public partial class App : Application
             () => paths,
             _services.GetRequiredService<ILogger<CaptureCommitService>>());
         _commit.PersistExportSettings = () => _services.GetRequiredService<SettingsStore>().SaveInBackground(
-            _settings!.DeepClone(), "Could not persist the last export options");
+            _settings!.DeepClone(), "Could not persist image export preferences");
         _commit.QuickSaved += path => _ = Dispatcher.BeginInvoke(new Action(() => AnnounceQuickSave(path)));
         _videoLibrary = new MyCapture.App.Recording.VideoLibraryService(
             queue,
