@@ -6,6 +6,7 @@ using System.Windows;
 using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using MyCapture.App.Diagnostics;
 using Xunit;
 using Xunit.Abstractions;
 
@@ -22,9 +23,7 @@ public sealed class LaunchVisibilityEvidenceTests(ITestOutputHelper output)
     [InlineData(true)]
     public async Task ActualNoticeHasReadableTextAndSystemColors(bool secondary)
     {
-        string folder = Path.GetFullPath(Environment.GetEnvironmentVariable(OutputVariable)!);
-        Directory.CreateDirectory(folder);
-        string name = secondary ? "secondary-notice" : "starting-notice";
+        string folder = DiagnosticOutputPaths.Create(Environment.GetEnvironmentVariable(OutputVariable)!);
         using var visible = new ManualResetEventSlim();
         var surface = new NativeLaunchSurface(secondary);
         using var status = secondary
@@ -81,13 +80,18 @@ public sealed class LaunchVisibilityEvidenceTests(ITestOutputHelper output)
             // Snapshot all HWND-dependent data before disk I/O: the secondary notice lasts 2s.
             status.Complete();
             await status.Completion.WaitAsync(TimeSpan.FromSeconds(3));
-            string png = Path.Combine(folder, name + ".png");
+            string png = secondary
+                ? DiagnosticOutputPaths.Child(folder, "secondary-notice.png")
+                : DiagnosticOutputPaths.Child(folder, "starting-notice.png");
             var encoder = new PngBitmapEncoder();
             encoder.Frames.Add(BitmapFrame.Create(captured));
             using (var file = new FileStream(png, FileMode.Create, FileAccess.Write)) encoder.Save(file);
             output.WriteLine("PrintWindow(PW_RENDERFULLCONTENT): {0}", png);
 
-            File.WriteAllText(Path.Combine(folder, name + ".json"), JsonSerializer.Serialize(new
+            string json = secondary
+                ? DiagnosticOutputPaths.Child(folder, "secondary-notice.json")
+                : DiagnosticOutputPaths.Child(folder, "starting-notice.json");
+            File.WriteAllText(json, JsonSerializer.Serialize(new
             {
                 text = text.ToString(), font = font.FaceName, fontHeight = font.Height,
                 textColor, backgroundColor, highContrast = (highContrast.Flags & 1) != 0,
