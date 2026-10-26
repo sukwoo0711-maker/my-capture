@@ -107,6 +107,7 @@ internal sealed partial class OcrResultWindow : Window
         _textBox = new TextBox
         {
             IsReadOnly = true,
+            IsUndoEnabled = false,
             AcceptsReturn = true,
             TextWrapping = TextWrapping.Wrap,
             VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
@@ -411,14 +412,13 @@ internal sealed partial class OcrResultWindow : Window
         if (!_allowClose)
         {
             e.Cancel = true;
-            // Closing ends a model download or a translation like the cancel button does.
-            ResetTranslation();
+            ReleaseResult();
             Hide();
             Dismissed?.Invoke(this, EventArgs.Empty);
             return;
         }
 
-        CancelTranslationWork();
+        ReleaseResult();
         base.OnClosing(e);
     }
 
