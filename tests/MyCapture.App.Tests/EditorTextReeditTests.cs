@@ -289,7 +289,7 @@ public sealed class EditorTextReeditTests
         Assert.Equal(box.Text.Length, box.CaretIndex);
         Assert.Equal(FontWeights.Bold, box.FontWeight);
         Assert.Equal(FontStyles.Italic, box.FontStyle);
-        Assert.Equal(original.FontFamily, box.FontFamily.Source);
+        Assert.Same(FontCatalog.Resolve(original.FontFamily), box.FontFamily);
         Assert.Equal(original.FontSize * surface.DipPerPixel, box.FontSize);
         Assert.Equal(original.RotationDegrees, Assert.IsType<RotateTransform>(box.RenderTransform).Angle);
         Assert.Equal(UiText.Get("EditorText_Editing"), editor.StatusText);

@@ -825,7 +825,8 @@
 
                         <!-- Shared recommendations; the final choice opens the installed list.
                              A previously saved family remains selected even outside the recommendations. -->
-                        <settings:SettingsField Header="{loc:Text Settings_FontName}">
+                        <settings:SettingsField Header="{loc:Text Settings_FontName}" Note="{loc:Text Settings_FontScope}">
+                            <StackPanel>
                             <ComboBox x:Name="FontFamilyBox" Width="220" HorizontalAlignment="Left"
                                       SelectedValuePath="Value"
                                       IsTextSearchEnabled="True" TextSearch.TextPath="Label"
@@ -840,6 +841,10 @@
                                     </ItemsPanelTemplate>
                                 </ComboBox.ItemsPanel>
                             </ComboBox>
+                            <Button x:Name="DefaultFontButton" Content="{loc:Text Settings_DefaultFont}"
+                                    Margin="0,6,0,0" HorizontalAlignment="Left" Click="OnDefaultFontClick"
+                                    AutomationProperties.Name="{loc:Text Settings_DefaultFont}" />
+                            </StackPanel>
                         </settings:SettingsField>
 
                         <settings:SettingsField Header="{loc:Text Text_9B59CBE34062}" Hint="{loc:Text SettingsRange_Mosaic}">

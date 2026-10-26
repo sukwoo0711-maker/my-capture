@@ -1,5 +1,7 @@
 using System.IO;
+using System.Globalization;
 using System.Windows;
+using System.Windows.Markup;
 using System.Windows.Media;
 
 namespace MyCapture.App.Themes;
@@ -43,6 +45,9 @@ public static class ThemeFonts
     {
         TextOptions.SetTextFormattingMode(element, Formatting);
         TextOptions.SetTextRenderingMode(element, Rendering);
+        TextOptions.SetTextHintingMode(element, TextHintingMode.Fixed);
+        if (element is FrameworkElement frameworkElement)
+            frameworkElement.Language = XmlLanguage.GetLanguage(CultureInfo.CurrentUICulture.IetfLanguageTag);
         Editing.LiteralShaping.Apply(element);
     }
 

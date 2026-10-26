@@ -4685,4 +4685,6 @@ F3  클립보드를 핀으로 띄우기
   <data name="LibraryUx_DragOutImage" xml:space="preserve"><value>창 밖에 놓으면 PNG 파일로 내보내기</value></data>
   <data name="LibraryUx_DragOutVideo" xml:space="preserve"><value>창 밖에 놓으면 MP4 파일로 내보내기</value></data>
   <data name="LibraryUx_DragOutMixed" xml:space="preserve"><value>창 밖에 놓으면 PNG·MP4 파일로 내보내기</value></data>
+  <data name="Settings_DefaultFont" xml:space="preserve"><value>기본 글꼴로 복원</value></data>
+  <data name="Settings_FontScope" xml:space="preserve"><value>새 텍스트에 적용합니다. 기존 텍스트의 글꼴은 유지됩니다.</value></data>
 </root>

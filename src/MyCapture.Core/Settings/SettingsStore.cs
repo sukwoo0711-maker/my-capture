@@ -435,7 +435,7 @@ public sealed class SettingsStore
 
         if (string.IsNullOrWhiteSpace(s.Annotation.FontFamily))
         {
-            s.Annotation.FontFamily = "Malgun Gothic";
+            s.Annotation.FontFamily = AnnotationDefaults.DefaultFontFamily;
         }
 
         s.Annotation.RecentFontFamilies = s.Annotation.RecentFontFamilies

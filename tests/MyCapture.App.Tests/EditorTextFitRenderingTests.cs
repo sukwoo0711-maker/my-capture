@@ -311,7 +311,9 @@ public sealed class EditorTextFitRenderingTests
         text.Text,
         CultureInfo.CurrentUICulture,
         FlowDirection.LeftToRight,
-        new Typeface(new FontFamily(text.FontFamily), text.Italic ? FontStyles.Italic : FontStyles.Normal,
+        new Typeface(text.FontFamily == "Pretendard"
+                ? new FontFamily(new Uri(FontCatalog.BundledFontRoot, UriKind.Absolute), "./Pretendard/#Pretendard")
+                : new FontFamily(text.FontFamily), text.Italic ? FontStyles.Italic : FontStyles.Normal,
             text.Bold ? FontWeights.Bold : FontWeights.Normal, FontStretches.Normal),
         Math.Max(1, text.FontSize),
         text.Foreground.ToBrush(),
