@@ -28,6 +28,8 @@ internal static class ClipboardMarkdownRenderer
     private static readonly Regex TaskItem = Pattern(@"^\[(?<done>[ xX])\]\s+(?<body>.*)$");
     private static readonly Regex SeparatorCell = Pattern(@"^:?-{3,}:?$");
     private static readonly Regex CodeStatement = Pattern(@"^\s*(?:(?:import|using|namespace|class|def|function|const|let|var)\s+|[\w.$]+\([^\r\n]*\)\s*;?\s*$|#!)");
+    // Comment markers, block-comment lines, preprocessor lines and lines that end like a statement or block.
+    private static readonly Regex CodeSyntaxLine = Pattern(@"^\s*(?:/{2,3}|/\*|\*/|\*[ \t]+@\w|\*[ \t]*$|#(?:include|define|if|ifdef|pragma|region)\b|@\w+(?:\(.*\))?\s*$|\}[;,)]*\s*$)|;\s*$|\{\s*$");
     private static readonly Regex InlinePattern = Pattern(
         @"(?<escape>\\[\x21-\x2f\x3a-\x40\x5b-\x60\x7b-\x7e])|(?<code>`[^`\r\n]+`)|(?<strong>\*\*(?:\\[^\r\n]|[^*\\\r\n])+\*\*|__(?:\\[^\r\n]|[^_\\\r\n])+__)|(?<strike>~~(?:\\[^\r\n]|[^~\\\r\n])+~~)|(?<emphasis>\*(?:\\[^\r\n]|[^*\\\r\n])+\*|_(?:\\[^\r\n]|[^_\\\r\n])+_)|(?<link>!?\[(?<label>(?:\\[^\r\n]|[^\]\\\r\n])+)\]\((?<destination>(?:\\[^\r\n]|[^\s)\\\r\n])+)\))");
     private static readonly Regex MermaidDeclaration = Pattern(
@@ -99,8 +101,10 @@ internal static class ClipboardMarkdownRenderer
         string inspected = Limit(sourceText, MaxPreviewCharacters);
         List<SourceLine> lines = ReadLines(inspected);
         if (IsPureMermaid(lines)) return true;
-        bool hasHeadingContext = lines.Count(line => !string.IsNullOrWhiteSpace(line.Text)) >= 2
-            && !lines.Any(line => CodeStatement.IsMatch(line.Text));
+        // Code outside fenced blocks is a source file, not a document: its comment markers, bullets and
+        // `>` operators must not read as lists, quotes or headings. Code inside a fence is just a block.
+        bool sourceCode = HasCodeOutsideFences(lines);
+        bool hasHeadingContext = lines.Count(line => !string.IsNullOrWhiteSpace(line.Text)) >= 2 && !sourceCode;
         int listItems = 0;
         int quoteLines = 0;
         for (int index = 0; index < lines.Count; index++)
@@ -112,11 +116,30 @@ internal static class ClipboardMarkdownRenderer
                 if (lines.Skip(index + 1).Any(next => IsClosingFence(next.Text, marker, length))) return true;
             }
             if (index + 1 < lines.Count && TryTableHeader(line, lines[index + 1].Text, out _)) return true;
+            if (sourceCode) continue;
             if (ListItemPattern.IsMatch(line) && ++listItems >= 2) return true;
             if (line.TrimStart().StartsWith("> ", StringComparison.Ordinal) && ++quoteLines >= 2) return true;
             if (TaskItem.IsMatch(line.TrimStart().TrimStart('-', '+', '*').TrimStart())) return true;
             // Inline punctuation alone is not enough evidence to change a plain-text pin.
             // An explicit Markdown clipboard language signal is handled separately.
+        }
+        return false;
+    }
+
+    private static bool HasCodeOutsideFences(List<SourceLine> lines)
+    {
+        char marker = '\0';
+        int fenceLength = 0;
+        foreach (SourceLine line in lines)
+        {
+            if (marker != '\0')
+            {
+                if (IsClosingFence(line.Text, marker, fenceLength)) marker = '\0';
+                continue;
+            }
+            if (TryFence(line.Text, out marker, out fenceLength)) continue;
+            marker = '\0';
+            if (CodeStatement.IsMatch(line.Text) || CodeSyntaxLine.IsMatch(line.Text)) return true;
         }
         return false;
     }
@@ -178,31 +201,47 @@ internal static class ClipboardMarkdownRenderer
         // short-lived STA; the selectable RichTextBox belongs only to the UI-lived F2 view.
         document.Background = null;
         DocumentPaginator paginator = ((IDocumentPaginatorSource)document).DocumentPaginator;
-        paginator.PageSize = new Size(PageWidthDip, PageHeightDip);
+        int pageHeight = PageHeightDip;
+        paginator.PageSize = new Size(PageWidthDip, pageHeight);
         var pages = new List<DocumentPage>();
         try
         {
-            int maximumPages = (int)Math.Ceiling((double)MaxPreviewHeightDip / PageHeightDip);
             bool continued = sourceText.Length > MaxPreviewCharacters || formattingLimit;
-            for (int index = 0; index <= maximumPages; index++)
+            void Paginate()
             {
-                DocumentPage page = paginator.GetPage(index);
-                if (ReferenceEquals(page, DocumentPage.Missing)) break;
-                if (index == maximumPages)
+                int maximumPages = (int)Math.Ceiling((double)MaxPreviewHeightDip / pageHeight);
+                for (int index = 0; index <= maximumPages; index++)
                 {
-                    continued = true;
-                    page.Dispose();
-                    break;
+                    DocumentPage page = paginator.GetPage(index);
+                    if (ReferenceEquals(page, DocumentPage.Missing)) break;
+                    if (index == maximumPages)
+                    {
+                        continued = true;
+                        page.Dispose();
+                        break;
+                    }
+                    pages.Add(page);
                 }
-                pages.Add(page);
+            }
+            Paginate();
+            if (pages.Count > 1)
+            {
+                // A diagram or table that does not fit the rest of a short page jumps to the next one and
+                // leaves a blank gap. A document longer than one short page is laid out on one tall page.
+                foreach (DocumentPage page in pages) page.Dispose();
+                pages.Clear();
+                continued = sourceText.Length > MaxPreviewCharacters || formattingLimit;
+                pageHeight = MaxPreviewHeightDip;
+                paginator.PageSize = new Size(PageWidthDip, pageHeight);
+                Paginate();
             }
             var whitePage = new DrawingVisual();
             using (DrawingContext drawing = whitePage.RenderOpen())
-                drawing.DrawRectangle(Brushes.White, null, new Rect(0, 0, PageWidthDip, PageHeightDip));
-            var lastPreview = new RenderTargetBitmap(PageWidthDip, PageHeightDip, 96, 96, PixelFormats.Pbgra32);
+                drawing.DrawRectangle(Brushes.White, null, new Rect(0, 0, PageWidthDip, pageHeight));
+            var lastPreview = new RenderTargetBitmap(PageWidthDip, pageHeight, 96, 96, PixelFormats.Pbgra32);
             lastPreview.Render(whitePage);
             if (pages.Count > 0) lastPreview.Render(pages[^1].Visual);
-            int naturalHeight = Math.Max(0, pages.Count - 1) * PageHeightDip + MeasurePaintedHeight(lastPreview);
+            int naturalHeight = Math.Max(0, pages.Count - 1) * pageHeight + MeasurePaintedHeight(lastPreview);
             continued |= naturalHeight > MaxPreviewHeightDip;
             int contentHeight = Math.Min(naturalHeight, MaxPreviewHeightDip - (continued ? ContinuationHeightDip : 0));
             int height = contentHeight + (continued ? ContinuationHeightDip : 0);
@@ -232,9 +271,9 @@ internal static class ClipboardMarkdownRenderer
                     drawing.DrawRectangle(new VisualBrush(pages[index].Visual)
                     {
                         ViewboxUnits = BrushMappingMode.Absolute,
-                        Viewbox = new Rect(0, 0, PageWidthDip, PageHeightDip),
+                        Viewbox = new Rect(0, 0, PageWidthDip, pageHeight),
                         Stretch = Stretch.Fill,
-                    }, null, new Rect(0, index * PageHeightDip, PageWidthDip, PageHeightDip));
+                    }, null, new Rect(0, index * pageHeight, PageWidthDip, pageHeight));
                 }
                 drawing.Pop();
                 if (continued)
@@ -270,7 +309,7 @@ internal static class ClipboardMarkdownRenderer
                 {
                     int pixel = row * stride + column;
                     if (pixels[pixel] != 255 || pixels[pixel + 1] != 255 || pixels[pixel + 2] != 255)
-                        return Math.Clamp(top + row + 1 + 20, 80, 900);
+                        return Math.Clamp(top + row + 1 + 20, 80, bitmap.PixelHeight);
                 }
             bottom = top;
         }
@@ -366,12 +405,20 @@ internal static class ClipboardMarkdownRenderer
                 var group = new TableRowGroup();
                 table.RowGroups.Add(group);
                 group.Rows.Add(MakeTableRow(headers, headers.Length, true));
+                // Columns share the width by their longest text, so a name or a path is not broken into letters.
+                var longest = new int[headers.Length];
+                for (int column = 0; column < headers.Length; column++) longest[column] = headers[column].Length;
                 index += 2;
                 while (index < lines.Count && lines[index].Text.Contains('|') && !string.IsNullOrWhiteSpace(lines[index].Text))
                 {
-                    group.Rows.Add(MakeTableRow(SplitCells(lines[index].Text), headers.Length, false));
+                    string[] cells = SplitCells(lines[index].Text);
+                    for (int column = 0; column < headers.Length && column < cells.Length; column++)
+                        longest[column] = Math.Max(longest[column], cells[column].Length);
+                    group.Rows.Add(MakeTableRow(cells, headers.Length, false));
                     index++;
                 }
+                for (int column = 0; column < headers.Length; column++)
+                    table.Columns[column].Width = new GridLength(Math.Clamp(longest[column] + 3, 11, 42), GridUnitType.Star);
                 document.Blocks.Add(table);
                 continue;
             }

@@ -92,33 +92,51 @@ internal sealed partial class PinTranslationService(ITextTranslator translator,
 
     private async Task<PinTranslationResult?> TranslatePlanAsync(PinTranslationPlan plan, PinContent content, CancellationToken cancellationToken)
     {
-        IReadOnlyList<string> sources = plan.Sources;
-        IReadOnlyList<TranslatedText> translated = await _translator.TranslateAsync(sources, null, cancellationToken)
+        // A piece is translated sentence by sentence, so one sentence that fails the value checks (a date
+        // the model rewrote, a dropped number) stays in the source language while its neighbours translate.
+        // Markdown lines keep their inline syntax together and are translated whole.
+        PlanPiece[] pieces = [.. plan.Pieces.Where(static piece => piece.Translate)];
+        var units = new List<string>();
+        var unitCounts = new int[pieces.Length];
+        for (int index = 0; index < pieces.Length; index++)
+        {
+            string[] sentences = pieces[index].Kind == PlanKind.MarkdownLine ? [pieces[index].Source]
+                : [.. TranslationSegmenter.Sentences(pieces[index].Source)];
+            if (sentences.Length == 0) sentences = [pieces[index].Source];
+            unitCounts[index] = sentences.Length;
+            units.AddRange(sentences);
+        }
+
+        IReadOnlyList<TranslatedText> translated = await _translator.TranslateAsync(units, null, cancellationToken)
             .ConfigureAwait(false);
         cancellationToken.ThrowIfCancellationRequested();
-        if (translated.Count != sources.Count)
+        if (translated.Count != units.Count)
             throw new InvalidOperationException("The translator returned an incomplete pin result.");
 
-        var accepted = new string?[sources.Count];
+        var accepted = new string?[pieces.Length];
         bool needsReview = false;
-        int index = 0;
-        foreach (PlanPiece piece in plan.Pieces.Where(static piece => piece.Translate))
+        int unit = 0;
+        for (int index = 0; index < pieces.Length; index++)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            TranslatedText result = translated[index];
-            if (!string.Equals(result.Source, piece.Source, StringComparison.Ordinal)
-                || string.IsNullOrWhiteSpace(result.Text))
+            var parts = new List<string>(unitCounts[index]);
+            bool any = false;
+            for (int offset = 0; offset < unitCounts[index]; offset++, unit++)
             {
-                throw new InvalidOperationException("The translator returned a missing or mismatched pin result.");
+                TranslatedText result = translated[unit];
+                if (!string.Equals(result.Source, units[unit], StringComparison.Ordinal))
+                    throw new InvalidOperationException("The translator returned a missing or mismatched pin result.");
+                // Keep the sentence context, including values and inline syntax, and check them afterwards.
+                // The model's value checker does not detect broken Markdown or a changed diagram label.
+                // An empty answer is not a translation: that sentence keeps its source text.
+                string text = (result.Text ?? string.Empty).ReplaceLineEndings(" ").Trim();
+                bool safe = text.Length > 0 && !result.NeedsReview && PreservesProtectedValues(units[unit], text)
+                    && (pieces[index].Kind != PlanKind.MarkdownLine || PreservesMarkdown(units[unit], text));
+                needsReview |= !safe;
+                any |= safe;
+                parts.Add(safe ? text : units[unit]);
             }
-            // Keep the sentence context, including values and inline syntax, and check them afterwards.
-            // The model's value checker does not detect broken Markdown or a changed diagram label.
-            string text = result.Text.ReplaceLineEndings(" ").Trim();
-            bool safe = !result.NeedsReview && PreservesProtectedValues(piece.Source, text)
-                && (piece.Kind != PlanKind.MarkdownLine || PreservesMarkdown(piece.Source, text));
-            accepted[index] = safe ? text : null;
-            needsReview |= !safe;
-            index++;
+            accepted[index] = any ? string.Join(" ", parts) : null;
         }
 
         string output = plan.Assemble(accepted);

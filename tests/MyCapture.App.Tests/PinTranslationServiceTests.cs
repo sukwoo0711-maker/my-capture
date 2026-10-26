@@ -69,13 +69,24 @@ public sealed class PinTranslationServiceTests
     [Fact]
     public async Task Prose_JoinsHardWrappedPdfLinesAndHyphenatedWordsBeforeTranslating()
     {
-        const string source = "The configuration of the system requires careful at-\r\ntention to the settings and the con-\r\nfiguration files used by the service.\r\n\r\nA second paragraph stays separate.";
+        const string source = "The configuration of the system requires careful at-\r\ntention to the settings, the network and the con-\r\nfiguration files used by the service.\r\n\r\nA second paragraph stays separate.";
         var translator = new FakeTranslator(text => "번역:" + text);
         PinTranslationResult result = Assert.IsType<PinTranslationResult>(await new PinTranslationService(translator)
             .TranslateAsync(await CreateContent(source), CancellationToken.None));
-        Assert.Equal(["The configuration of the system requires careful attention to the settings and the configuration files used by the service.",
+        Assert.Equal(["The configuration of the system requires careful attention to the settings, the network and the configuration files used by the service.",
             "A second paragraph stays separate."], Assert.Single(translator.Calls));
-        Assert.Equal("번역:The configuration of the system requires careful attention to the settings and the configuration files used by the service.\r\n\r\n번역:A second paragraph stays separate.", result.Content.OriginalText);
+        Assert.Equal("번역:The configuration of the system requires careful attention to the settings, the network and the configuration files used by the service.\r\n\r\n번역:A second paragraph stays separate.", result.Content.OriginalText);
+    }
+
+    [Fact]
+    public async Task AnEmptyAnswerKeepsThatSentenceInItsSourceLanguageAndTheRestTranslates()
+    {
+        const string source = "Read the guide before you start.\nSave the document before closing the window.";
+        var translator = new FakeTranslator(text => text.StartsWith("Read", StringComparison.Ordinal) ? "" : "창을 닫기 전에 문서를 저장합니다.");
+        PinTranslationResult result = Assert.IsType<PinTranslationResult>(await new PinTranslationService(translator)
+            .TranslateAsync(await CreateContent(source), CancellationToken.None));
+        Assert.Equal("Read the guide before you start.\n창을 닫기 전에 문서를 저장합니다.", result.Content.OriginalText);
+        Assert.True(result.NeedsReview);
     }
 
     [Fact]

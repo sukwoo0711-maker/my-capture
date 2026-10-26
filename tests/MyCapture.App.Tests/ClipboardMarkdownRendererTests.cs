@@ -53,7 +53,24 @@ public sealed class ClipboardMarkdownRendererTests
     [InlineData("using System;\nclass Example { int x = 1; }")]
     [InlineData("<script>alert('example')</script><img src='https://example.invalid/a'>")]
     [InlineData("A\tB\n1\t2")]
+    [InlineData("/**\n * Adds two numbers.\n * @param {number} a\n * @param {number} b\n */\nfunction add(a, b) {\n  return a + b;\n}")]
+    [InlineData("// - first\n// - second\nlet items = [];\nitems.push(1);")]
+    [InlineData("- item one\n- item two\nconst total = 3;")]
     public void DoesNotClassifyOrdinaryTextOrCodeAsMarkdown(string source) => Assert.False(ClipboardMarkdownRenderer.IsMarkdown(source));
+
+    [Fact]
+    public void TallDiagramFollowsTheTextWithoutABlankPageBreakGap() => StaTestHost.Run(() =>
+    {
+        string text = string.Join("\n\n", Enumerable.Range(1, 17).Select(static n => "Paragraph number " + n + " of the document."))
+            + "\n\n```mermaid\nflowchart TD\nA-->B\n```\n";
+        var diagram = BitmapSource.Create(592, 700, 96, 96, PixelFormats.Bgra32, null, new byte[592 * 700 * 4], 592 * 4);
+        diagram.Freeze();
+        BitmapSource rendered = ClipboardMarkdownRenderer.Render(text, 1,
+            new Dictionary<int, MermaidRenderResult> { [0] = new MermaidRenderResult(diagram, null) });
+        // About 550 DIP of text and a 700 DIP diagram. A diagram that did not fit the rest of a 900 DIP page used
+        // to start on the next page and leave a gap of several hundred DIPs.
+        Assert.InRange(rendered.Height, 1200, 1450);
+    });
 
     [Theory]
     [InlineData("flowchart TD\n A --> B")]

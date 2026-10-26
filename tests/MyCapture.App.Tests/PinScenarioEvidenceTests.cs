@@ -47,6 +47,12 @@ public sealed class PinScenarioEvidenceTests
         new("T15", "T15-long-english-2000.txt", true, "text"),
         new("A6-ko", "A6-korean-two-lines.txt", true, "text"),
         new("A6-en", "A6-plain-english-two-lines.txt", true, "text"),
+        new("A6-bullet", "A6-single-bullet.txt", true, "text"),
+        new("A6-asterisk", "A6-single-asterisk.txt", true, "text"),
+        new("A4", "A4-markdown-with-mermaid.md", true, "text"),
+        new("A5-py", "A5-python-code.py", true, "text"),
+        new("A3-seq", "A3-mermaid-sequence.mmd", true, "text"),
+        new("A1", "마크다운-핀.md", true, "text"),
     ];
 
     [Fact]
@@ -131,6 +137,13 @@ public sealed class PinScenarioEvidenceTests
         if (decision.Availability != PinTranslationAvailability.Translatable) return;
 
         ITextTranslator translator = decision.Direction == PinTranslationDirection.EnglishToKorean ? enKo : koEn;
+        if (scenario.Id is "T9" or "T14" or "T15" or "T6" or "A6-en" && pin.OriginalText is { } diagnosed)
+        {
+            // Why a sentence stays in the source language: what the engine kept or invented.
+            string[] sentences = [.. diagnosed.Split('\n').SelectMany(static line => TranslationSegmenter.Sentences(line.Trim())).Take(60)];
+            IReadOnlyList<TranslatedText> parts = await translator.TranslateAsync(sentences, null, CancellationToken.None);
+            row["sentences"] = parts.Select(static part => new { source = part.Source, translated = part.Text, missing = part.Missing, invented = part.Invented }).ToArray();
+        }
         var service = new PinTranslationService(translator, decision.Direction);
         var watch = Stopwatch.StartNew();
         PinTranslationResult? result = recognized is null
