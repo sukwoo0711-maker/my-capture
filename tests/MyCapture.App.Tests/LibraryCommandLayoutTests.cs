@@ -47,7 +47,7 @@ public sealed class LibraryCommandLayoutTests
         root.RowDefinitions.Add(new RowDefinition());
         root.Children.Add(header);
         Grid.SetRow(commands, 1);
-        commands.Width = width - 24 - 224 - 232 - 16;
+        commands.Width = width - 24 - 184 - 232 - 16;
         commands.HorizontalAlignment = HorizontalAlignment.Left;
         root.Children.Add(commands);
         var list = new Border();
@@ -58,23 +58,25 @@ public sealed class LibraryCommandLayoutTests
         Button capture = Named<Button>(header, "CaptureRegionButton");
         Button record = Named<Button>(header, "RecordRegionButton");
         TextBox search = Named<TextBox>(header, "SearchBox");
-        ComboBox sort = Named<ComboBox>(commands, "SortBox");
         Rect captureBefore = Bounds(capture, root), recordBefore = Bounds(record, root), searchBefore = Bounds(search, root);
         Rect listBefore = Bounds(list, root), commandsBefore = Bounds(commands, root);
         Assert.True(search.ActualWidth >= 400, $"{language}/{width}/{theme}: search collapsed to {search.ActualWidth}");
         Assert.True(capture.ActualWidth >= 64 && record.ActualWidth >= 64);
         Assert.Contains(Descendants(capture).OfType<TextBlock>(), text => text.Text == UiText.Get("Text_2C20ADDA2018"));
         Assert.Contains(Descendants(record).OfType<TextBlock>(), text => text.Text == UiText.Get("Text_4F5AF20FAA6E"));
-        Assert.Equal(Visibility.Visible, Named<StackPanel>(commands, "LibraryCommands").Visibility);
-        Assert.Equal(Visibility.Collapsed, Named<StackPanel>(commands, "SelectionCommands").Visibility);
+        Assert.Equal(Visibility.Visible, Named<StackPanel>(commands, "SelectionCommands").Visibility);
+        Assert.False(Named<Button>(commands, "KeepSelectedButton").IsEnabled);
+        ComboBox sort = Named<ComboBox>(commands, "SortBox");
+        Assert.Equal(Visibility.Visible, sort.Visibility);
+        Assert.True(sort.Focusable && sort.IsTabStop);
+        sort.SelectedIndex = 2;
 
         search.Text = "review";
-        sort.SelectedIndex = 2;
         model.HasSelection = true;
         Layout(root);
 
         Assert.Equal(Visibility.Visible, Named<StackPanel>(header, "CaptureCommands").Visibility);
-        Assert.Equal(Visibility.Collapsed, Named<StackPanel>(commands, "LibraryCommands").Visibility);
+        Assert.True(Named<Button>(commands, "KeepSelectedButton").IsEnabled);
         Assert.Equal(Visibility.Visible, Named<StackPanel>(commands, "SelectionCommands").Visibility);
         Assert.Equal(captureBefore, Bounds(capture, root));
         Assert.Equal(recordBefore, Bounds(record, root));
@@ -96,6 +98,7 @@ public sealed class LibraryCommandLayoutTests
 
         model.HasSelection = false;
         Layout(root);
+        Assert.False(Named<Button>(commands, "KeepSelectedButton").IsEnabled);
         Assert.Equal(2, sort.SelectedIndex);
         Assert.Equal("review", search.Text);
         Assert.Equal(listBefore, Bounds(list, root));
@@ -118,13 +121,14 @@ public sealed class LibraryCommandLayoutTests
         Assert.Equal("1,0,0,0", (string?)Named(product, "GalleryDetailsRail").Attribute("BorderThickness"));
         foreach ((string name, string handler) in new[]
         {
-            ("ArchiveExportButton", "OnExportArchiveClick"), ("ArchiveOverflowMenu", "OnExportArchiveClick"),
-            ("MoveCapturesButton", "OnMoveCapturesClick"), ("MoveOverflowMenu", "OnMoveCapturesClick"),
-            ("DeleteSelectedButton", "OnDeleteSelectedClick"), ("ClearSelectionButton", "OnClearSelectionClick"),
+            ("ArchiveOverflowMenu", "OnExportArchiveClick"), ("MoveOverflowMenu", "OnMoveCapturesClick"),
+            ("DeleteSelectedMenu", "OnDeleteSelectedClick"), ("ClearSelectionButton", "OnClearSelectionClick"),
+            ("EditSelectedButton", "OnEditClick"), ("PreviewSelectedButton", "OnPreviewSelectedClick"),
+            ("KeepSelectedButton", "OnKeepSelectedClick"),
             ("MoreCommandsButton", "OnMoreCommandsClick"), ("ImportMenu", "OnImportClick"),
         })
             Assert.Equal(handler, (string?)Named(commands, name).Attribute("Click"));
-        Assert.Equal("{x:Static gallery:GalleryWindow.CompareCommand}", (string?)Named(commands, "CompareSelectedButton").Attribute("Command"));
+        Assert.Equal("{x:Static gallery:GalleryWindow.CompareCommand}", (string?)Named(commands, "CompareSelectedMenu").Attribute("Command"));
         Assert.Equal("OnSearchTextChanged", (string?)Named(global, "SearchBox").Attribute("TextChanged"));
         Assert.Equal("OnLibraryItemsKeyDown", (string?)content.Attribute("PreviewKeyDown"));
         Assert.Equal("2", (string?)Named(content, "RowsList").Attribute("Grid.Row"));

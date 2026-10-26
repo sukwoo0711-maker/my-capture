@@ -96,7 +96,7 @@ public sealed class SettingsCopyRegressionTests
     });
 
     [Fact]
-    public void SourceIconKeepsItsSizeWhileTileActionsRequireHoverOrFocus()
+    public void SourceIconAndFooterActionsNeverCoverThePreview()
     {
         using Stream stream = typeof(SettingsCopyRegressionTests).Assembly.GetManifestResourceStream("GalleryFixture.Window.xaml")!;
         XDocument document = XDocument.Load(stream);
@@ -104,11 +104,6 @@ public sealed class SettingsCopyRegressionTests
         XNamespace x = "http://schemas.microsoft.com/winfx/2006/xaml";
         XElement style = Assert.Single(document.Descendants(p + "Style"), node => (string?)node.Attribute(x + "Key") == "Gallery.SourceBadge");
         AssertSetters(style, "32", "32", "32", "Text.Secondary", "0");
-        string[] interactionBindings =
-        [
-            "{Binding IsMouseOver, RelativeSource={RelativeSource AncestorType=ListBoxItem}}",
-            "{Binding IsKeyboardFocusWithin, RelativeSource={RelativeSource AncestorType=ListBoxItem}}",
-        ];
         Assert.Empty(style.Descendants(p + "DataTrigger"));
         XElement[] triggers = style.Descendants(p + "Trigger").ToArray();
         Assert.Equal(new[] { "IsMouseOver", "IsKeyboardFocused" },
@@ -126,23 +121,12 @@ public sealed class SettingsCopyRegressionTests
             Assert.Equal("{StaticResource Gallery.SourceBadge}", (string?)badge.Attribute("Style"));
             foreach (string property in new[] { "Height", "MinHeight", "MaxWidth", "Foreground", "BorderThickness" })
                 Assert.Null(badge.Attribute(property));
-            XElement actions = Assert.Single(template.Descendants(p + "Border"), node => (string?)node.Attribute(x + "Name") == "TileActions");
-            XElement actionsStyle = Assert.Single(actions.Element(p + "Border.Style")!.Elements(p + "Style"));
-            Dictionary<string, string> defaults = actionsStyle.Elements(p + "Setter").ToDictionary(
-                node => (string)node.Attribute("Property")!, node => (string)node.Attribute("Value")!);
-            Assert.Equal("0", defaults["Opacity"]);
-            Assert.Equal("False", defaults["IsHitTestVisible"]);
-            Assert.Equal("Fast", defaults["themes:FluidMotion.Transition"]);
-            XElement[] actionTriggers = actionsStyle.Descendants(p + "DataTrigger").ToArray();
-            Assert.Equal(interactionBindings, actionTriggers.Select(trigger => (string?)trigger.Attribute("Binding")));
-            foreach (XElement trigger in actionTriggers)
-            {
-                Assert.Equal("True", (string?)trigger.Attribute("Value"));
-                Dictionary<string, string> values = trigger.Elements(p + "Setter").ToDictionary(
-                    node => (string)node.Attribute("Property")!, node => (string)node.Attribute("Value")!);
-                Assert.Equal("1", values["themes:FluidMotion.FadeTo"]);
-                Assert.Equal("True", values["IsHitTestVisible"]);
-            }
+            Assert.DoesNotContain(template.Descendants(p + "Border"),
+                node => (string?)node.Attribute(x + "Name") == "TileActions");
+            XElement preview = Assert.Single(template.Descendants(p + "Border"),
+                node => (string?)node.Attribute(x + "Name") == "TilePreview");
+            Assert.DoesNotContain(preview.Descendants(), node => node == badge);
+            Assert.Empty(preview.Descendants(p + "Button"));
             XElement video = Assert.Single(template.Descendants(p + "Border"), node => (string?)node.Attribute(x + "Name") == "VideoBadge");
             Assert.NotSame(badge.Parent, video.Parent);
             Assert.Equal("1", (string?)video.Attribute("Grid.Column"));

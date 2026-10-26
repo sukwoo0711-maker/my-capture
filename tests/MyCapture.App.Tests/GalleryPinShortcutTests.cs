@@ -125,13 +125,26 @@ public sealed class GalleryPinShortcutTests
                     item => AutomationProperties.GetName(item) == UiText.Get("LibraryUx_KeepToggleName"));
                 Assert.Equal("P", pin.InputGestureText);
                 Assert.Equal("K", keep.InputGestureText);
+                Assert.Same(pin, menu.Items[0]);
+                var selectedPin = (MenuItem)window.FindName("FloatSelectedMenu");
+                var more = (Button)window.FindName("MoreCommandsButton");
+                more.ContextMenu.PlacementTarget = more;
+                more.ContextMenu.IsOpen = true;
+                window.UpdateLayout();
+                Assert.Same(selectedPin, more.ContextMenu.Items[0]);
+                Assert.Equal("P", selectedPin.InputGestureText);
+                Assert.True(selectedPin.IsEnabled);
+                Assert.Same(fixture.Model.FindTile(fixture.Second.Id), selectedPin.CommandParameter);
+                selectedPin.RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
+                Assert.Equal(2, floated.Count);
+                more.ContextMenu.IsOpen = false;
 
                 // Menu and keyboard share rendering and target selection, even when
                 // the menu's ambient DataContext refers to another image.
                 pin.DataContext = fixture.Model.FindTile(fixture.First.Id);
                 pin.CommandParameter = fixture.Model.FindTile(fixture.Second.Id);
                 pin.RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
-                Assert.Equal(2, floated.Count);
+                Assert.Equal(3, floated.Count);
                 Assert.All(floated, bitmap => Assert.Equal(3, bitmap.PixelWidth));
                 Assert.All(sources, source => Assert.Equal(fixture.Second.SourceDocumentPath, source.DocumentPath));
                 Assert.False(fixture.Second.IsPinned);

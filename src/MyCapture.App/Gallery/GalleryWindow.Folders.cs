@@ -480,7 +480,7 @@ internal sealed partial class GalleryWindow
         using var cancellation = new CancellationTokenSource();
         _archiveCancellation = cancellation;
         using var activity = _queue.Activities.Start(zip ? LibraryActivityKind.ZipExport : LibraryActivityKind.FolderExport, cancellation.Cancel);
-        ArchiveExportButton.IsEnabled = false; ArchiveCancelButton.Visibility = Visibility.Collapsed;
+        FitSelectionCommands(); ArchiveCancelButton.Visibility = Visibility.Collapsed;
         ShowActionStatus(string.Empty);
         try
         {
@@ -505,7 +505,7 @@ internal sealed partial class GalleryWindow
         }
         finally
         {
-            _archiveCancellation = null; ArchiveExportButton.IsEnabled = true;
+            _archiveCancellation = null; FitSelectionCommands();
             ArchiveCancelButton.Visibility = Visibility.Collapsed;
         }
     }

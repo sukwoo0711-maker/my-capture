@@ -241,6 +241,7 @@ internal sealed partial class GalleryWindow : Window
 
     protected override void OnClosing(System.ComponentModel.CancelEventArgs e)
     {
+        _imagePreview?.Close();
         // A normal close returns to the tray; only an explicit exit is allowed through.
         if (!_allowClose)
         {
@@ -596,6 +597,10 @@ internal sealed partial class GalleryWindow : Window
                 break;
             case Key.Delete:
                 ConfirmDeleteMany(_viewModel.Selection.SelectedIds, false);
+                e.Handled = true;
+                break;
+            case Key.Space when Keyboard.Modifiers == ModifierKeys.None:
+                ShowPreview(tile);
                 e.Handled = true;
                 break;
             case Key.Space:

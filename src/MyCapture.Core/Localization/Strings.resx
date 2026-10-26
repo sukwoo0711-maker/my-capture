@@ -4692,4 +4692,8 @@ F3  클립보드를 핀으로 띄우기
   <data name="Settings.QuickSaveDirectoryHint" xml:space="preserve"><value>빠른 저장은 항상 이 폴더에 저장합니다. 비워 두면 기본 캡처 폴더를 사용합니다.</value></data>
   <data name="Pin.ClickThroughOff" xml:space="preserve"><value>클릭 허용 끄기</value></data>
   <data name="Pin.ClickThroughIntro" xml:space="preserve"><value>여기를 누르면 다시 끕니다</value></data>
+  <data name="EditorFlow_CopyAndClose" xml:space="preserve"><value>복사하고 닫기</value></data>
+  <data name="LibraryUx_NoSelection" xml:space="preserve"><value>선택 없음</value></data>
+  <data name="LibraryUx_Preview" xml:space="preserve"><value>미리보기</value></data>
+  <data name="LibraryUx_PreviewHint" xml:space="preserve"><value>미리보기 (Space)</value></data>
 </root>

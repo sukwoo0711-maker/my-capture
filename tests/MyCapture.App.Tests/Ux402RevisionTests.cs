@@ -39,14 +39,17 @@ public sealed class Ux402RevisionTests
         }
         else
         {
-            var button = Descendants(editor).OfType<Button>().Single(candidate => AutomationProperties.GetAcceleratorKey(candidate)
-                == ShortcutCatalog.Get(ShortcutScope.Annotation, command).Hint);
+            var button = command == "Save"
+                ? Descendants(editor).OfType<Button>().Single(candidate => AutomationProperties.GetAcceleratorKey(candidate)
+                    == ShortcutCatalog.Get(ShortcutScope.Annotation, command).Hint)
+                : Descendants(editor).OfType<Button>().Single(candidate => AutomationProperties.GetAutomationId(candidate) == "EditorFlowDone");
             if (command == "Save")
                 button.ContextMenu!.Items.OfType<MenuItem>().Single(item => item.InputGestureText == "Ctrl+S")
                     .RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
             else button.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
         }
         Assert.NotNull(result);
+        if (!keyboard && command != "Save") Assert.Equal(EditorCommitAction.Done, result.Action);
         Assert.Equal(200, result.Document.CanvasWidth); Assert.Equal(100, result.Document.CanvasHeight);
         Assert.Equal(200, result.SelectedBitmap.PixelWidth); Assert.Equal(100, result.SelectedBitmap.PixelHeight);
         Assert.Null(editor.PendingCrop);

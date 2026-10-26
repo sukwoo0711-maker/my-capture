@@ -142,7 +142,7 @@ public sealed class EditorFlowTests
         AddRectangle(Controller(host.Editor));
         int asked = 0;
         host.Window.ConfirmClose = () => { asked++; return EditorCloseChoice.Cancel; };
-        if (titleBar) SendCloseCommand(host.Window); else ClickCommand(host.Editor, "EditorFlowCancel");
+        if (titleBar) SendCloseCommand(host.Window); else host.Window.RequestClose();
         Drain(host.Editor);
         Assert.Equal(1, asked);
         Assert.True(host.Window.IsVisible);
@@ -252,10 +252,10 @@ public sealed class EditorFlowTests
         host.Window.CommitRequested = result => { actions.Add(result.Action); return Task.FromResult(results.Dequeue()); };
         int completed = 0;
         host.Window.Committed += (_, _) => completed++;
-        Assert.Equal("클립보드에 복사하고 라이브러리에 저장한 뒤 닫기 (Ctrl+C)", Command(host.Editor, "EditorFlowCopy").ToolTip);
+        Assert.Equal("클립보드에 복사하고 라이브러리에 저장한 뒤 닫기 (Ctrl+C)", Command(host.Editor, "EditorFlowDone").ToolTip);
 
         // A failed save keeps the editor open for a retry, as Done does.
-        ClickCommand(host.Editor, "EditorFlowCopy");
+        ClickCommand(host.Editor, "EditorFlowDone");
         Assert.Equal(UiText.Get("Text_06F58809C083"), host.Editor.StatusText);
         Assert.True(host.Window.IsVisible);
         Assert.True(host.Editor.IsHitTestVisible);
@@ -274,16 +274,14 @@ public sealed class EditorFlowTests
         Assert.Equal("파일로 저장", AutomationProperties.GetName(save));
         Assert.Contains(Descendants(save).OfType<TextBlock>(), text => text.Text == "파일로 저장");
         Assert.Equal("이미지를 파일로 저장 (Ctrl+S)", save.ToolTip);
-        Assert.Equal("라이브러리에 저장하고 클립보드에 복사한 뒤 닫기 (Ctrl+Enter)", Command(host.Editor, "EditorFlowDone").ToolTip);
-        Button cancel = Command(host.Editor, "EditorFlowCancel");
-        Assert.Equal("편집기 닫기", cancel.ToolTip);
-        Assert.Equal(string.Empty, AutomationProperties.GetAcceleratorKey(cancel));
+        Assert.Equal("클립보드에 복사하고 라이브러리에 저장한 뒤 닫기 (Ctrl+C)", Command(host.Editor, "EditorFlowDone").ToolTip);
+        Assert.Equal("복사하고 닫기", AutomationProperties.GetName(Command(host.Editor, "EditorFlowDone")));
 
         // Finishing commands in WinUI order: the action, then the way out.
         string[] order = Descendants(host.Editor).OfType<Button>()
             .Select(AutomationProperties.GetAutomationId)
             .Where(id => id is "EditorFlowSaveToFile" or "EditorFlowCopy" or "EditorFlowDone" or "EditorFlowCancel").ToArray();
-        Assert.Equal(new[] { "EditorFlowSaveToFile", "EditorFlowCopy", "EditorFlowDone", "EditorFlowCancel" }, order);
+        Assert.Equal(new[] { "EditorFlowSaveToFile", "EditorFlowDone" }, order);
     });
 
     // ---- Crop mode --------------------------------------------------------------------

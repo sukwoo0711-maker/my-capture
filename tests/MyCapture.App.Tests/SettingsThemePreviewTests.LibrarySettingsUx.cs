@@ -365,15 +365,16 @@ public sealed partial class SettingsThemePreviewTests
             using (UiText.UseLanguage("en-US"))
                 Assert.Equal("No captures yet", library.ViewModel.EmptyStateTitle);
 
-            // The first capture brings the details pane back.
+            // The first capture reveals the details rail without taking space from the grid.
             var record = new CaptureRecord { Width = 160, Height = 100, CreatedAt = DateTimeOffset.Now, UpdatedAt = DateTimeOffset.Now };
             library.Queue.Add(record);
             Directory.CreateDirectory(library.Queue.GetDirectory(record));
             File.WriteAllBytes(library.Queue.GetFilePath(record, CaptureFileNames.Original), [1]);
             window.RefreshFromQueue();
             SettleLibrary(window);
-            Assert.True(((FrameworkElement)window.FindName("GalleryDetailsPanel")).IsVisible);
-            Assert.True(window.IsDetailsPaneOpen);
+            Assert.False(((FrameworkElement)window.FindName("GalleryDetailsPanel")).IsVisible);
+            Assert.True(((FrameworkElement)window.FindName("GalleryDetailsRail")).IsVisible);
+            Assert.False(window.IsDetailsPaneOpen);
         }
         finally
         {

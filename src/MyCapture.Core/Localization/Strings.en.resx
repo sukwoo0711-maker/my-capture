@@ -4692,4 +4692,8 @@ Overwrite these shortcuts? You can change this later in Settings → Shortcuts.<
   <data name="Settings.QuickSaveDirectoryHint" xml:space="preserve"><value>Quick save always uses this folder. Leave blank to use the default capture folder.</value></data>
   <data name="Pin.ClickThroughOff" xml:space="preserve"><value>Turn off click-through</value></data>
   <data name="Pin.ClickThroughIntro" xml:space="preserve"><value>Click here to turn it off</value></data>
+  <data name="EditorFlow_CopyAndClose" xml:space="preserve"><value>Copy and close</value></data>
+  <data name="LibraryUx_NoSelection" xml:space="preserve"><value>No selection</value></data>
+  <data name="LibraryUx_Preview" xml:space="preserve"><value>Preview</value></data>
+  <data name="LibraryUx_PreviewHint" xml:space="preserve"><value>Preview (Space)</value></data>
 </root>

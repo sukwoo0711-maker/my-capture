@@ -9,13 +9,19 @@ namespace MyCapture.App.Gallery;
 
 internal sealed partial class GalleryWindow
 {
-    private bool _detailsPaneOpen = true;
+    private bool _detailsPaneOpen;
+
+    private void OnContentCommandBarSizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        if (SelectionCommands is null || SortCommands is null) return;
+        bool wrap = SelectionCommands.DesiredSize.Width + SortCommands.DesiredSize.Width + 16 > LibraryContentCommandBar.ActualWidth;
+        Grid.SetRow(SelectionCommands, wrap ? 1 : 0);
+        Grid.SetColumnSpan(SelectionCommands, wrap ? 2 : 1);
+    }
 
     private void InitializeCommandBarLayout()
     {
-        ArchiveOverflowMenu.SetBinding(IsEnabledProperty, new System.Windows.Data.Binding(nameof(IsEnabled)) { Source = ArchiveExportButton });
-        MoveOverflowMenu.SetBinding(IsEnabledProperty, new System.Windows.Data.Binding(nameof(IsEnabled)) { Source = MoveCapturesButton });
-        LibraryContentCommandBar.SizeChanged += (_, _) => FitSelectionCommands();
+        LibraryContentCommandBar.SizeChanged += OnContentCommandBarSizeChanged;
         Loaded += (_, _) => FitSelectionCommands();
         _viewModel.PropertyChanged += (_, e) =>
         {
@@ -27,32 +33,8 @@ internal sealed partial class GalleryWindow
 
     private void FitSelectionCommands()
     {
-        ArchiveExportButton.Visibility = Visibility.Visible;
-        MoveCapturesButton.Visibility = Visibility.Visible;
-        ArchiveOverflowMenu.Visibility = Visibility.Collapsed;
-        MoveOverflowMenu.Visibility = Visibility.Collapsed;
-        if (!_viewModel.HasSelection || LibraryContentCommandBar.ActualWidth <= 0) return;
-
-        double WidthOf(FrameworkElement element)
-        {
-            element.InvalidateMeasure();
-            element.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
-            return element.DesiredSize.Width;
-        }
-
-        // Selection commands use only the content toolbar; capture and search never change width.
-        double available = LibraryContentCommandBar.ActualWidth - WidthOf(MoreCommandsButton);
-        foreach ((Button button, MenuItem menu) in new[]
-        {
-            (ArchiveExportButton, ArchiveOverflowMenu),
-            (MoveCapturesButton, MoveOverflowMenu),
-        })
-        {
-            if (WidthOf(SelectionCommands) <= available) break;
-            if (button.IsKeyboardFocusWithin) MoreCommandsButton.Focus();
-            button.Visibility = Visibility.Collapsed;
-            menu.Visibility = Visibility.Visible;
-        }
+        ArchiveOverflowMenu.IsEnabled = _archiveCancellation is null && _viewModel.HasSelection;
+        MoveOverflowMenu.IsEnabled = _viewModel.HasSelection;
     }
 
     /// <summary>

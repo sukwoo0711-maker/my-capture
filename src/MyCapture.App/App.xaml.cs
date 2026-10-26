@@ -346,6 +346,7 @@ public partial class App : Application
         _launchedFirstRun = _settings.General.IsFirstRun;
         _hotkeys.Pressed += OnGlobalHotkeyPressed;
         _overlay.SelectionPersistRequested = e => _capturePersistenceTask = OnCaptureSelectionCompletedAsync(e);
+        _overlay.EditorScreenCaptureRequested = e => _capturePersistenceTask = SaveEditorScreenCaptureAsync(e);
         _overlay.OpenEditorAfterCapture = () => AfterCaptureBehavior.Resolve(_settings!.General.AfterCapture, _currentRecord is not null) == AfterCaptureAction.Editor;
         _overlay.OriginalNeedsRecovery = () => _currentRecord is null && _pendingRecord is not null;
         _overlay.DraftRecord = () => _currentRecord is { } record && _currentEditSession is { } session
@@ -784,7 +785,7 @@ public partial class App : Application
 
         try
         {
-            if (!await PrepareRetakeAsync(UiText.Get("Text_096A13A757DB"))) { CompleteWelcomeCaptureAnnouncement(); return; }
+            if (!await PrepareRetakeAsync(UiText.Get("Text_096A13A757DB"), preserveEditor: true)) { CompleteWelcomeCaptureAnnouncement(); return; }
             _tray?.SetState(TrayIconState.Capturing);
             // Start reserves the session immediately; full-desktop acquisition runs off the UI
             // thread and reports asynchronous failures through TransitionFailed on this dispatcher.
@@ -792,7 +793,7 @@ public partial class App : Application
                 _settings.Capture.IncludeCursor,
                 _settings.Capture.AbortOnFocusLoss,
                 _settings.Capture.ShowMagnifier,
-                _settings.Capture.ShowSelectionGrid);
+                _settings.Capture.ShowSelectionGrid, preserveEditor: true);
         }
         catch (Exception ex)
         {
