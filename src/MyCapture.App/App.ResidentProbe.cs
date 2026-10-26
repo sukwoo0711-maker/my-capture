@@ -64,45 +64,19 @@ public partial class App
             await recorder.AuditAsync("start");
             foreach (string scenario in probe.Scenarios)
             {
-                switch (scenario)
+                try
                 {
-                    case "capture":
-                        await ProbeCaptureToCardAsync(recorder, "capture", dwellMs: 1200);
-                        await recorder.SettleAsync("capture closed", probe.SettleSeconds);
-                        await recorder.AuditAsync("capture closed");
-                        break;
-                    case "editor-4k":
-                        await ProbeEditorAsync(recorder);
-                        await recorder.SettleAsync("editor-4k closed", probe.SettleSeconds);
-                        await recorder.AuditAsync("editor-4k closed");
-                        break;
-                    case "capture-30":
-                        for (int round = 1; round <= 30; round++)
-                        {
-                            await ProbeCaptureToCardAsync(recorder, "capture-30", dwellMs: 400);
-                            if (round % 10 == 0) recorder.Sample($"capture-30 after {round}", 0);
-                        }
-                        await recorder.SettleAsync("capture-30 closed", probe.SettleSeconds);
-                        await recorder.AuditAsync("capture-30 closed");
-                        break;
-                    case "library":
-                        await ProbeLibraryAsync(recorder);
-                        await recorder.SettleAsync("library closed", probe.SettleSeconds);
-                        await recorder.AuditAsync("library closed");
-                        break;
-                    case "ocr":
-                        await ProbeOcrAsync(recorder);
-                        await recorder.SettleAsync("ocr closed", probe.SettleSeconds);
-                        await recorder.AuditAsync("ocr closed");
-                        break;
-                    case "pins-10":
-                        await ProbePinsAsync(recorder);
-                        await recorder.SettleAsync("pins-10 closed", probe.SettleSeconds,
-                            () => $"closed-pin history {(_pins?.ClosedRetainedBytes ?? 0) / 1048576.0:0.0} MB in {_pins?.ClosedCount ?? 0}");
-                        await recorder.AuditAsync("pins-10 closed");
-                        break;
-                    default:
-                        throw new ArgumentException("Unknown resident probe scenario: " + scenario);
+                    await RunResidentProbeScenarioAsync(probe, recorder, scenario);
+                }
+                catch (Exception ex) when (ex is TimeoutException or InvalidOperationException)
+                {
+                    // One step that could not finish (a loaded desktop, a window that never showed) is
+                    // reported, and the steps after it are still measured from a quiet app.
+                    recorder.Fail(new InvalidOperationException($"Scenario {scenario} did not finish.", ex));
+                    exitCode = 1;
+                    _overlay?.Cancel();
+                    _quickAccess?.CloseNow();
+                    await Task.Delay(TimeSpan.FromSeconds(probe.Quick ? 2 : 10));
                 }
             }
         }
@@ -117,6 +91,50 @@ public partial class App
         recorder.Dispose();
         _pins?.CloseAll();
         Shutdown(exitCode);
+    }
+
+    private async Task RunResidentProbeScenarioAsync(ResidentProbeOptions probe, ResidentProbeRecorder recorder, string scenario)
+    {
+        switch (scenario)
+        {
+            case "capture":
+                await ProbeCaptureToCardAsync(recorder, "capture", dwellMs: 1200);
+                await recorder.SettleAsync("capture closed", probe.SettleSeconds);
+                await recorder.AuditAsync("capture closed");
+                break;
+            case "editor-4k":
+                await ProbeEditorAsync(recorder);
+                await recorder.SettleAsync("editor-4k closed", probe.SettleSeconds);
+                await recorder.AuditAsync("editor-4k closed");
+                break;
+            case "capture-30":
+                for (int round = 1; round <= 30; round++)
+                {
+                    await ProbeCaptureToCardAsync(recorder, "capture-30", dwellMs: 400);
+                    if (round % 10 == 0) recorder.Sample($"capture-30 after {round}", 0);
+                }
+                await recorder.SettleAsync("capture-30 closed", probe.SettleSeconds);
+                await recorder.AuditAsync("capture-30 closed");
+                break;
+            case "library":
+                await ProbeLibraryAsync(recorder);
+                await recorder.SettleAsync("library closed", probe.SettleSeconds);
+                await recorder.AuditAsync("library closed");
+                break;
+            case "ocr":
+                await ProbeOcrAsync(recorder);
+                await recorder.SettleAsync("ocr closed", probe.SettleSeconds);
+                await recorder.AuditAsync("ocr closed");
+                break;
+            case "pins-10":
+                await ProbePinsAsync(recorder);
+                await recorder.SettleAsync("pins-10 closed", probe.SettleSeconds,
+                    () => $"closed-pin history {(_pins?.ClosedRetainedBytes ?? 0) / 1048576.0:0.0} MB in {_pins?.ClosedCount ?? 0}");
+                await recorder.AuditAsync("pins-10 closed");
+                break;
+            default:
+                throw new ArgumentException("Unknown resident probe scenario: " + scenario);
+        }
     }
 
     private CaptureOverlayWindow? ProbeOverlay => _overlay is null ? null : ProbeActiveOverlay.GetValue(_overlay) as CaptureOverlayWindow;
@@ -202,7 +220,7 @@ public partial class App
                 if (!_overlay.StartWithSelection(frame, new RectD(0, 0, 3840, 2160), "Resident probe"))
                     throw new InvalidOperationException("The editor did not start.");
                 frame = null!;
-                await ProbeWaitAsync(() => editorMs >= 0, 15_000, "editor shown");
+                await ProbeWaitAsync(() => editorMs >= 0, 60_000, "editor shown");
             }
             finally { CompositionTarget.Rendering -= rendering; }
             recorder.Time("editor-4k: capture → editor shown", editorMs);

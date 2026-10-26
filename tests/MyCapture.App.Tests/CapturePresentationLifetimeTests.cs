@@ -36,6 +36,7 @@ public sealed class CapturePresentationLifetimeTests
     {
         (QuickAccessWindow card, WeakReference owner) = CloseCard(monitor, router);
         Assert.False(card.IsOpen);
+        Assert.False(card.IsPending);
         Assert.Null(card.PreviewForTest.Source);
         AssertCollected([owner]);
         GC.KeepAlive(card);
