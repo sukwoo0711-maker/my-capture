@@ -294,6 +294,12 @@ public sealed class ImageExportDestinationTests
         AppPaths paths = RetainedPaths();
         DirectoryInfo remembered = Directory.CreateDirectory(Path.Combine(paths.DataRoot, "remembered"));
         Assert.StartsWith(paths.DataRoot + Path.DirectorySeparatorChar, remembered.FullName, StringComparison.OrdinalIgnoreCase);
+        // Windows may add the auto-inherited DACL flag on its first ACL write. Establish
+        // the restoration baseline after that normalization, without changing any rules.
+        var normalizedAccess = new DirectorySecurity();
+        normalizedAccess.SetSecurityDescriptorSddlForm(remembered.GetAccessControl()
+            .GetSecurityDescriptorSddlForm(AccessControlSections.Access), AccessControlSections.Access);
+        remembered.SetAccessControl(normalizedAccess);
         string originalAccess = remembered.GetAccessControl()
             .GetSecurityDescriptorSddlForm(AccessControlSections.Access);
         DirectorySecurity deniedAccess = remembered.GetAccessControl();
