@@ -159,11 +159,26 @@ internal sealed class PinClickThroughHandle : Window
         _hint.Hide();
     }
 
-    internal static RectD Placement(RectD pin, double scale)
+    internal static RectD Placement(RectD pin, RectD workArea, double scale)
     {
         double size = Diameter * scale;
         double gap = EdgeGap * scale;
-        return new RectD(pin.Right - size - gap, pin.Top + gap, size, size);
+        double left = Math.Max(pin.Left, workArea.Left);
+        double top = Math.Max(pin.Top, workArea.Top);
+        double right = Math.Min(pin.Right, workArea.Right);
+        double bottom = Math.Min(pin.Bottom, workArea.Bottom);
+        // Prefer the visible part of the pin. If it no longer intersects the work area,
+        // keep recovery available on the nearest monitor instead.
+        RectD visible = right > left && bottom > top
+            ? new RectD(left, top, right - left, bottom - top)
+            : pin;
+        double x = Math.Clamp(visible.Right - size - gap, visible.Left, Math.Max(visible.Left, visible.Right - size));
+        double y = Math.Clamp(visible.Top + gap, visible.Top, Math.Max(visible.Top, visible.Bottom - size));
+        // A sliver of pin may be smaller than the target; preserving the complete target
+        // inside the work area takes priority over its inset and containment in that sliver.
+        x = Math.Clamp(x, workArea.Left, Math.Max(workArea.Left, workArea.Right - size));
+        y = Math.Clamp(y, workArea.Top, Math.Max(workArea.Top, workArea.Bottom - size));
+        return new RectD(x, y, size, size);
     }
 
     internal void Place()
@@ -177,7 +192,9 @@ internal sealed class PinClickThroughHandle : Window
         try
         {
             double scale = VisualTreeHelper.GetDpi(pin).DpiScaleX;
-            RectD target = Placement(new RectD(left, top, right - left, bottom - top), scale);
+            // MonitorFromWindow selects the intersecting monitor (largest overlap when spanning).
+            RectD work = pin.ReadWorkArea(new WindowInteropHelper(pin).Handle);
+            RectD target = Placement(new RectD(left, top, right - left, bottom - top), work, scale);
             // Move preserves hidden state and never activates. WPF owns DIP sizing across monitors.
             PhysicalWindowPositioner.Move(hwnd, target);
             if (_hint.IsVisible)
@@ -185,7 +202,6 @@ internal sealed class PinClickThroughHandle : Window
                 _hint.UpdateLayout();
                 double width = _hint.ActualWidth * scale;
                 double height = _hint.ActualHeight * scale;
-                RectD work = pin.ReadWorkArea(new WindowInteropHelper(pin).Handle);
                 double x = Math.Clamp(target.Left - width - EdgeGap * scale, work.Left, Math.Max(work.Left, work.Right - width));
                 double y = Math.Clamp(target.Top, work.Top, Math.Max(work.Top, work.Bottom - height));
                 PhysicalWindowPositioner.Move(new WindowInteropHelper(_hint).Handle, new RectD(x, y, width, height));
@@ -238,7 +254,7 @@ internal sealed class PinClickThroughHandle : Window
     [DllImport("gdi32.dll")] [return: MarshalAs(UnmanagedType.Bool)] private static extern bool DeleteObject(IntPtr value);
 }
 
-/// <summary>Shared first-use/hover text. Its separate HWND passes clicks through, including over other apps.</summary>
+/// <summary>Shared capture-excluded first-use/hover text, with cross-process click-through in layered mode.</summary>
 internal sealed class PinClickThroughHint : Window
 {
     internal PinClickThroughHint(Window owner)
@@ -275,8 +291,10 @@ internal sealed class PinClickThroughHint : Window
     private IntPtr PassiveHitTest(IntPtr hwnd, int message, IntPtr wParam, IntPtr lParam, ref bool handled)
     {
         if (message != 0x0084) return IntPtr.Zero;
-        // An opaque tooltip cannot use layered cross-process hit testing. Retire it as soon as
-        // the pointer reaches it so it never becomes a persistent obstacle to the app underneath.
+        // HTTRANSPARENT only forwards hit testing within this UI thread. WS_EX_TRANSPARENT
+        // alone changes paint order; adding WS_EX_LAYERED would break capture exclusion on
+        // the fallback systems. Retire the hint on pointer entry, but the first cross-process
+        // click is not guaranteed to reach the app underneath in opaque mode.
         Dispatcher.BeginInvoke(DispatcherPriority.Input, new Action(Hide));
         handled = true;
         return new IntPtr(-1); // HTTRANSPARENT

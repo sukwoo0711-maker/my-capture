@@ -52,6 +52,8 @@ public sealed class PinClickThroughHandleTests
             Assert.False(WindowStyleFacade.IsClickThrough(new WindowInteropHelper(one).Handle));
             Assert.True(one.IsCaptureExcluded);
             Assert.True(one.HintForTest.IsCaptureExcluded);
+            Assert.Equal(layered, one.HintForTest.AllowsTransparency);
+            Assert.Equal(layered, WindowStyleFacade.IsClickThrough(new WindowInteropHelper(one.HintForTest).Handle));
             Assert.Contains(one, scope.Excluded);
             Assert.Contains(one.HintForTest, scope.Excluded);
             // The existing bottom message still carries the keyboard and tray way back.
@@ -111,12 +113,112 @@ public sealed class PinClickThroughHandleTests
     public void PlacementUsesPhysicalMonitorCoordinatesAndSixDipInset(double scale)
     {
         var pin = new RectD(-1750, -400, 720 * scale, 360 * scale);
-        RectD handle = PinClickThroughHandle.Placement(pin, scale);
+        RectD handle = PinClickThroughHandle.Placement(pin, new RectD(-1920, -1080, 3840, 2120), scale);
         Assert.Equal(24 * scale, handle.Width);
         Assert.Equal(24 * scale, handle.Height);
         Assert.Equal(6 * scale, pin.Right - handle.Right);
         Assert.Equal(6 * scale, handle.Top - pin.Top);
     }
+
+    [Theory]
+    [InlineData(1860, 100, 1, 1890, 106, 24)]
+    [InlineData(1860, 100, 1.5, 1875, 109, 36)]
+    [InlineData(-420, 100, 1, 30, 106, 24)]
+    [InlineData(-420, 100, 1.5, 15, 109, 36)]
+    [InlineData(100, -220, 1, 550, 6, 24)]
+    [InlineData(100, -220, 1.5, 535, 9, 36)]
+    [InlineData(100, 1010, 1, 550, 1016, 24)]
+    [InlineData(100, 1010, 1.5, 535, 1004, 36)]
+    [InlineData(1910, 100, 1, 1896, 106, 24)]
+    [InlineData(1910, 100, 1.5, 1884, 109, 36)]
+    public void PlacementKeepsTheWholeTargetOnTheWorkAreaWhenThePinIsClipped(
+        double left, double top, double scale, double expectedLeft, double expectedTop, double expectedSize)
+    {
+        // Fixed physical-pixel expectations are independent of product placement calculations.
+        var work = new RectD(0, 0, 1920, 1040);
+        RectD handle = PinClickThroughHandle.Placement(new RectD(left, top, 480, 280), work, scale);
+        Assert.Equal(new RectD(expectedLeft, expectedTop, expectedSize, expectedSize), handle);
+        Assert.InRange(handle.Left, work.Left, work.Right - handle.Width);
+        Assert.InRange(handle.Top, work.Top, work.Bottom - handle.Height);
+    }
+
+    [Theory]
+    [InlineData(1, -30, -974, 24)]
+    [InlineData(1.5, -45, -971, 36)]
+    public void PlacementUsesTheIntersectingNegativeCoordinateMonitor(
+        double scale, double expectedLeft, double expectedTop, double expectedSize)
+    {
+        RectD handle = PinClickThroughHandle.Placement(new RectD(-60, -980, 480, 280),
+            new RectD(-1920, -1080, 1920, 1040), scale);
+        Assert.Equal(new RectD(expectedLeft, expectedTop, expectedSize, expectedSize), handle);
+    }
+
+    [Fact]
+    public void PlaceUsesThePinsWorkAreaForAClippedPhysicalWindow() => StaTestHost.Run(() =>
+    {
+        using var scope = new HandleScope();
+        PinWindow pin = Pin(new PinSettings());
+        try
+        {
+            pin.Show(); Drain();
+            var (left, top, right, bottom) = pin.PhysicalBounds;
+            double scale = VisualTreeHelper.GetDpi(pin).DpiScaleX;
+            double monitorRight = left + 60 * scale;
+            // Model a monitor edge cutting across the pin, entirely off the shared desktop.
+            pin.ReadWorkArea = _ => new RectD(left - 1000, top - 1000, 1000 + 60 * scale, 2000);
+            pin.ApplyClickThrough(true); Drain();
+            PinClickThroughHandle handle = pin.ClickThroughHandleForTest!;
+            var actual = WindowStyleFacade.GetWindowBounds(new WindowInteropHelper(handle).Handle);
+            Assert.InRange(Math.Abs(actual.Left - (monitorRight - 30 * scale)), 0, 1);
+            Assert.InRange(Math.Abs(actual.Top - (top + 6 * scale)), 0, 1);
+            Assert.True(actual.Right <= monitorRight);
+        }
+        finally { pin.Close(); }
+    });
+
+    [Fact]
+    public void ShowDuringAnimatedHideImmediatelyRestoresTheClickThroughHandle() => StaTestHost.Run(() =>
+    {
+        using var scope = new HandleScope();
+        FluidMotion.AnimationsEnabledOverrideForTest = true;
+        var settings = new PinSettings();
+        PinWindow pin = Pin(settings);
+        try
+        {
+            pin.Show(); Drain();
+            pin.ApplyClickThrough(true);
+            PinClickThroughHandle handle = pin.ClickThroughHandleForTest!;
+            Assert.True(handle.IsVisible);
+            Assert.Equal(1, settings.ClickThroughHintShownCount);
+            pin.HidePin();
+            Assert.True(pin.IsVisible); // The pin remains visible until the fade completes.
+            Assert.True(pin.State.IsHidden);
+            Assert.False(handle.IsVisible);
+            Assert.False(handle.HintForTest.IsVisible);
+
+            pin.ShowPin(); // Do not pump: IsVisibleChanged cannot rescue this path.
+            Assert.False(pin.State.IsHidden);
+            Assert.True(pin.IsVisible);
+            Assert.Same(handle, pin.ClickThroughHandleForTest);
+            Assert.True(handle.IsVisible);
+            Assert.False(handle.HintForTest.IsVisible);
+            Assert.Equal(1, settings.ClickThroughHintShownCount);
+
+            var frame = new DispatcherFrame();
+            var timer = new DispatcherTimer(DispatcherPriority.Background)
+            {
+                Interval = FluidMotion.FastDuration.TimeSpan + TimeSpan.FromMilliseconds(100),
+            };
+            timer.Tick += (_, _) => frame.Continue = false;
+            timer.Start();
+            try { Dispatcher.PushFrame(frame); }
+            finally { timer.Stop(); }
+            Assert.True(pin.IsVisible);
+            Assert.True(handle.IsVisible);
+            AssertPosition(pin, handle);
+        }
+        finally { pin.Close(); }
+    });
 
     [Fact]
     public void IntroductionIsSharedAcrossPinsOnlyThreeTimesAndDoesNotRepeatOnShow() => StaTestHost.Run(() =>
@@ -236,6 +338,7 @@ public sealed class PinClickThroughHandleTests
     public void ShortcutToggleAndAutomationInvokeUseTheSameHandleWithoutRepeatingTheIntroduction() => StaTestHost.Run(() =>
     {
         using var scope = new HandleScope();
+        using var language = UiText.UseLanguage("ko-KR");
         var settings = new PinSettings();
         PinWindow pin = Pin(settings);
         try
@@ -286,10 +389,10 @@ public sealed class PinClickThroughHandleTests
     private static void AssertPosition(PinWindow pin, PinClickThroughHandle handle)
     {
         var (left, top, right, bottom) = pin.PhysicalBounds;
-        RectD expected = PinClickThroughHandle.Placement(new RectD(left, top, right - left, bottom - top), VisualTreeHelper.GetDpi(pin).DpiScaleX);
+        double scale = VisualTreeHelper.GetDpi(pin).DpiScaleX;
         var actual = WindowStyleFacade.GetWindowBounds(new WindowInteropHelper(handle).Handle);
-        Assert.InRange(Math.Abs(actual.Left - expected.Left), 0, 1);
-        Assert.InRange(Math.Abs(actual.Top - expected.Top), 0, 1);
+        Assert.InRange(Math.Abs(actual.Left - (right - 30 * scale)), 0, 1);
+        Assert.InRange(Math.Abs(actual.Top - (top + 6 * scale)), 0, 1);
     }
 
     internal static PinWindow Pin(PinSettings settings) => new(PinContent.FromImage(Image()), new PinViewState(480, 280, 1, 1, .1), -10000, -10000, () => settings)

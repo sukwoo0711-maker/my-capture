@@ -100,7 +100,8 @@ public sealed class PinClickThroughHandleEvidenceTests
             var hint = (Border)handle.HintForTest.Content;
             handle.HintForTest.Content = null;
 
-            RectD handleRect = PinClickThroughHandle.Placement(new RectD(0, 0, width, height), 1);
+            var panelBounds = new RectD(0, 0, width, height);
+            RectD handleRect = PinClickThroughHandle.Placement(panelBounds, panelBounds, 1);
             var canvas = new Canvas
             {
                 Width = width + 2 * Margin,

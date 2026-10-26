@@ -761,6 +761,8 @@ internal sealed class PinWindow : Window
         _state.IsHidden = false;
         _chrome.BeginAnimation(UIElement.OpacityProperty, null);
         Show();
+        // Show() need not change IsVisible when it interrupts the hide animation.
+        UpdateClickThroughHandle();
         Topmost = true;
         AnimatePinReveal();
     }
