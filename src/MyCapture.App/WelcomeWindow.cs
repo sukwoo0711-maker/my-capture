@@ -159,7 +159,7 @@ internal sealed class WelcomeWindow : Window
             BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(8), Visibility = Visibility.Collapsed,
         };
         _notice.SetResourceReference(Border.BackgroundProperty, "Surface.Raised");
-        _notice.SetResourceReference(Border.BorderBrushProperty, "Border.Accent");
+        _notice.SetResourceReference(Border.BorderBrushProperty, "Text.Primary");
         DockPanel.SetDock(_notice, Dock.Bottom);
 
         _preview = new WelcomeTutorialPreview(_options);
@@ -501,7 +501,7 @@ internal sealed class WelcomeWindow : Window
         for (int index = 0; index < _progressSegments.Length; index++)
         {
             // Done and current steps are filled; the steps still to come are outlined, which also reads in high contrast.
-            if (finish || index < number) _progressSegments[index].SetResourceReference(Border.BackgroundProperty, "Accent.Default");
+            if (finish || index < number) _progressSegments[index].SetResourceReference(Border.BackgroundProperty, "Text.Primary");
             else _progressSegments[index].Background = Brushes.Transparent;
         }
 
@@ -759,10 +759,10 @@ internal sealed class WelcomeWindow : Window
         {
             var ring = new Border
             {
-                Width = size, Height = size, Child = child, CornerRadius = new CornerRadius(10), BorderThickness = new Thickness(3),
+                Width = size, Height = size, Child = child, CornerRadius = new CornerRadius(10), BorderThickness = new Thickness(2),
                 Margin = new Thickness(3),
             };
-            ring.SetResourceReference(Border.BorderBrushProperty, "Accent.Default");
+            ring.SetResourceReference(Border.BorderBrushProperty, "Text.Primary");
             return ring;
         }
 
@@ -789,7 +789,7 @@ internal sealed class WelcomeWindow : Window
         // A caret from the flyout down to the ^ button.
         var caret = new Polygon { Points = [new Point(0, 0), new Point(16, 0), new Point(8, 9)], Margin = new Thickness(0, 2, 0, 2),
             HorizontalAlignment = HorizontalAlignment.Center };
-        caret.SetResourceReference(Shape.FillProperty, "Accent.Default");
+        caret.SetResourceReference(Shape.FillProperty, "Text.Primary");
         Grid.SetRow(caret, 1); Grid.SetColumn(caret, 1);
         grid.Children.Add(caret);
 
