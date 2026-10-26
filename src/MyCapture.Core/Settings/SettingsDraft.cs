@@ -750,7 +750,9 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
         _useCurrentFolderForNewCaptures = s.Queue.UseCurrentFolderForNewCaptures;
         _defaultCaptureFolderId = s.Queue.DefaultCaptureFolderId;
 
-        _quickSaveDirectoryOverride = s.Export.QuickSaveDirectoryOverride ?? string.Empty;
+        _quickSaveDirectoryOverride = DisplayDirectory(
+            s.Export.QuickSaveDirectoryOverride,
+            AppPaths.CreateDefault().QuickSaveRoot);
         _preservedLastSaveDirectory = s.Export.LastSaveDirectory;
         _gitHubIssueUrl = GitHubIssueImageUrl.TryNormalize(s.GitHub.IssueUrl, out string issueUrl)
             ? issueUrl
@@ -967,7 +969,9 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
             },
             Export =
             {
-                QuickSaveDirectoryOverride = _quickSaveDirectoryOverride.Trim(),
+                QuickSaveDirectoryOverride = PersistDirectory(
+                    _quickSaveDirectoryOverride,
+                    AppPaths.CreateDefault().QuickSaveRoot),
                 LastSaveDirectory = _preservedLastSaveDirectory,
                 CopyToClipboardOnQuickSave = _copyToClipboardOnQuickSave,
                 ShowSourceWindowTitle = _showSourceWindowTitle,

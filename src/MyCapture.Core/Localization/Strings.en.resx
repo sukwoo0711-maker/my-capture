@@ -4689,7 +4689,6 @@ Overwrite these shortcuts? You can change this later in Settings → Shortcuts.<
   <data name="Settings_FontScope" xml:space="preserve"><value>Applies to new text. Existing text keeps its font.</value></data>
   <data name="App.CurrentVersion" xml:space="preserve"><value>Version {0}</value></data>
   <data name="Welcome_CaptureInstruction" xml:space="preserve"><value>Select Capture region, then drag to choose the area to capture.</value></data>
-  <data name="Settings.QuickSaveDirectoryHint" xml:space="preserve"><value>Leave blank to use the last saved folder, or the default capture folder before the first save.</value></data>
   <data name="Onboarding.Replay" xml:space="preserve"><value>First-use guide</value></data>
   <data name="Onboarding.Ready" xml:space="preserve"><value>Finish</value></data>
   <data name="Onboarding.CaptureLabel" xml:space="preserve"><value>Capture</value></data>
@@ -4732,4 +4731,5 @@ Overwrite these shortcuts? You can change this later in Settings → Shortcuts.<
   <data name="Onboarding.TrayLocation" xml:space="preserve"><value>The MyCapture icon is inside the ^ button.</value></data>
   <data name="Onboarding.TrayIconName" xml:space="preserve"><value>MyCapture icon</value></data>
   <data name="Onboarding.AboutBody" xml:space="preserve"><value>Three steps to try capture, pin and the library.</value></data>
+  <data name="Settings.QuickSaveDirectoryHint" xml:space="preserve"><value>Quick save always uses this folder. Leave blank to use the default capture folder.</value></data>
 </root>
