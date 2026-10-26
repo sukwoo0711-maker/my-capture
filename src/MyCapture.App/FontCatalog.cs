@@ -6,6 +6,8 @@ using System.Windows.Controls;
 using System.Windows.Data;
 using System.Windows.Markup;
 using System.Windows.Media;
+using MyCapture.App.Themes;
+using MyCapture.Core.Settings;
 
 namespace MyCapture.App;
 
@@ -32,18 +34,19 @@ internal static class FontCatalog
     };
 
     internal static FontFamily Resolve(string? name) => Resolved.GetOrAdd(
-        string.IsNullOrWhiteSpace(name) ? "Malgun Gothic" : name.Trim(), CreateFamily);
+        string.IsNullOrWhiteSpace(name) ? AnnotationDefaults.DefaultFontFamily : name.Trim(), CreateFamily);
 
     private static FontFamily CreateFamily(string name)
     {
-        if (!Bundled.TryGetValue(name, out string? folder)) return new FontFamily(name);
+        if (!Bundled.TryGetValue(name, out string? folder)) return new FontFamily($"{name}, Malgun Gothic, Segoe UI");
         string canonical = Bundled.Keys.First(key => string.Equals(key, name, StringComparison.OrdinalIgnoreCase));
         // The bundled files sit beside the app (see the project file). A copy missing them falls
         // back to an installed family of the same name rather than to a broken source.
-        if (!Directory.Exists(Path.Combine(BundledFontRoot, folder))) return new FontFamily(canonical);
+        if (!Directory.Exists(Path.Combine(BundledFontRoot, folder))) return new FontFamily($"{canonical}, Malgun Gothic, Segoe UI");
         string source = $"./{folder}/#{canonical}";
         if (canonical is "Maple Mono" or "JetBrains Mono")
             source += ", ./D2Coding/#D2Coding";
+        source += ", Malgun Gothic, Segoe UI";
         return new FontFamily(new Uri(BundledFontRoot, UriKind.Absolute), source);
     }
 
@@ -90,8 +93,8 @@ internal static class FontCatalog
             else if (!optional) result.Add(new FontChoice(name,
                 culture.TwoLetterISOLanguageName == "ko" && name == "Malgun Gothic" ? "맑은 고딕" : name));
         }
-        Add("Malgun Gothic");
         Add("Pretendard");
+        Add("Malgun Gothic");
         Add("D2Coding");
         Add("Maple Mono");
         Add("JetBrains Mono");
@@ -125,8 +128,46 @@ internal static class FontCatalog
     {
         var label = new FrameworkElementFactory(typeof(TextBlock));
         label.SetBinding(TextBlock.TextProperty, new Binding(nameof(FontChoice.Label)));
-        label.SetBinding(TextBlock.FontFamilyProperty, new Binding(nameof(FontChoice.PreviewFamily)));
+        label.SetValue(TextBlock.FontFamilyProperty, ThemeFonts.Ui);
+        label.SetValue(TextBlock.FontSizeProperty, 14d);
         label.SetValue(TextBlock.TextTrimmingProperty, TextTrimming.CharacterEllipsis);
-        return new DataTemplate { VisualTree = label };
+        label.SetValue(FrameworkElement.MaxWidthProperty, 200d);
+        label.SetValue(FrameworkElement.VerticalAlignmentProperty, VerticalAlignment.Center);
+        var sample = new FrameworkElementFactory(typeof(TextBlock), "FontSample");
+        sample.SetValue(TextBlock.TextProperty, "가 Aa 123");
+        sample.SetBinding(TextBlock.FontFamilyProperty, new Binding(nameof(FontChoice.PreviewFamily)));
+        sample.SetValue(TextBlock.FontSizeProperty, 14d);
+        sample.SetValue(FrameworkElement.MarginProperty, new Thickness(12, 0, 0, 0));
+        sample.SetValue(UIElement.VisibilityProperty, Visibility.Collapsed);
+        var panel = new FrameworkElementFactory(typeof(DockPanel));
+        panel.SetValue(TextOptions.TextFormattingModeProperty, ThemeFonts.Formatting);
+        panel.SetValue(TextOptions.TextRenderingModeProperty, ThemeFonts.Rendering);
+        panel.SetValue(TextOptions.TextHintingModeProperty, TextHintingMode.Fixed);
+        sample.SetValue(DockPanel.DockProperty, Dock.Right);
+        panel.AppendChild(sample);
+        panel.AppendChild(label);
+        var template = new DataTemplate { VisualTree = panel };
+        var expanded = new DataTrigger
+        {
+            Binding = new Binding
+            {
+                RelativeSource = new RelativeSource(RelativeSourceMode.TemplatedParent),
+                Converter = new FontItemContainerConverter(),
+            },
+            Value = true,
+        };
+        expanded.Setters.Add(new Setter(UIElement.VisibilityProperty, Visibility.Visible, "FontSample"));
+        template.Triggers.Add(expanded);
+        var more = new DataTrigger { Binding = new Binding(nameof(FontChoice.IsMore)), Value = true };
+        more.Setters.Add(new Setter(UIElement.VisibilityProperty, Visibility.Collapsed, "FontSample"));
+        template.Triggers.Add(more);
+        return template;
+    }
+
+    private sealed class FontItemContainerConverter : IValueConverter
+    {
+        public object Convert(object value, Type targetType, object parameter, CultureInfo culture) =>
+            value is ComboBoxItem or FrameworkElement { TemplatedParent: ComboBoxItem };
+        public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture) => throw new NotSupportedException();
     }
 }

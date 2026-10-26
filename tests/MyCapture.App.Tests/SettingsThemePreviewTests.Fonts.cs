@@ -69,9 +69,12 @@ public sealed partial class SettingsThemePreviewTests
                             preview.Content = choice;
                             preview.Measure(new Size(220, 80));
                             preview.Arrange(new Rect(preview.DesiredSize));
-                            TextBlock label = Assert.Single(Descendants(preview).OfType<TextBlock>());
+                            TextBlock label = Assert.Single(Descendants(preview).OfType<TextBlock>(), text => text.Text == choice.Label);
                             Assert.Equal(choice.Label, label.Text);
-                            Assert.Same(choice.PreviewFamily, label.FontFamily);
+                            Assert.Same(ThemeFonts.Ui, label.FontFamily);
+                            TextBlock sample = Assert.Single(Descendants(preview).OfType<TextBlock>(), text => text.Text == "가 Aa 123");
+                            Assert.Same(choice.PreviewFamily, sample.FontFamily);
+                            Assert.Equal(Visibility.Collapsed, sample.Visibility);
                         }
                         SaveEvidence(window, $"settings-fonts-{language}.png");
                         RenderFontSearchEvidence(window, language);
@@ -80,6 +83,9 @@ public sealed partial class SettingsThemePreviewTests
                         Assert.Equal("Private Font", Draft(window).FontFamily);
                         Assert.Equal("Private Font", fonts.SelectedValue);
                         Assert.True(fonts.IsDropDownOpen);
+                        var firstItem = Assert.IsType<ComboBoxItem>(fonts.ItemContainerGenerator.ContainerFromIndex(0));
+                        TextBlock expandedSample = Assert.Single(Descendants(firstItem).OfType<TextBlock>(), text => text.Text == "가 Aa 123");
+                        Assert.Equal(Visibility.Visible, expandedSample.Visibility);
                         Assert.Equal(FontCatalog.ChoicesFor("Private Font", FontCatalog.AvailableFonts(UiText.Culture)), fonts.Items.Cast<FontChoice>());
                         Assert.DoesNotContain(fonts.Items.Cast<FontChoice>(), font => font.IsMore);
                         FontChoice installed = fonts.Items.Cast<FontChoice>().First(font => font.Value != "Private Font");
@@ -88,6 +94,14 @@ public sealed partial class SettingsThemePreviewTests
                         fonts.SelectedItem = fonts.Items.Cast<FontChoice>().Single(font => font.Value == "Maple Mono");
                         Assert.Equal("Maple Mono", Draft(window).FontFamily);
                         fonts.IsDropDownOpen = false;
+                        string savedSize = Draft(window).FontSize;
+                        ((Button)window.FindName("DefaultFontButton")).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                        Drain(window);
+                        Assert.Equal("Pretendard", Draft(window).FontFamily);
+                        Assert.Equal("Pretendard", fonts.SelectedValue);
+                        Assert.Equal(savedSize, Draft(window).FontSize);
+                        Assert.Equal("Private Font", saved.Annotation.FontFamily);
+                        SaveEvidence(window, $"settings-default-font-{language}.png");
                     }
                     finally { window.CloseForExit(); }
                 }

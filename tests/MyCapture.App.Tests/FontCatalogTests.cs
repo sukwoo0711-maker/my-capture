@@ -20,9 +20,10 @@ public sealed class FontCatalogTests
     {
         var culture = CultureInfo.GetCultureInfo(language);
         var absent = FontCatalog.BuildRecommended(culture, []);
-        Assert.Equal(new[] { "Malgun Gothic", "Pretendard", "D2Coding", "Maple Mono", "JetBrains Mono", "Consolas", "Segoe UI", "" },
+        Assert.Equal(new[] { "Pretendard", "Malgun Gothic", "D2Coding", "Maple Mono", "JetBrains Mono", "Consolas", "Segoe UI", "" },
             absent.Select(font => font.Value));
-        Assert.Equal(first, absent[0].Label);
+        Assert.Equal("Pretendard", absent[0].Label);
+        Assert.Equal(first, absent[1].Label);
         Assert.Equal(more, absent[^1].Label);
         Assert.True(absent[^1].IsMore);
         Assert.All(absent, font => Assert.Equal(font.Label, font.ToString()));
@@ -30,7 +31,7 @@ public sealed class FontCatalogTests
             new("Cascadia Code", "Cascadia Code"), new("Source Code Pro", "Source Code Pro"),
             new("NanumGothicCoding", language == "ko-KR" ? "나눔고딕코딩" : "NanumGothicCoding"), new("Noto Sans KR", "Noto Sans KR")];
         var present = FontCatalog.BuildRecommended(culture, optional);
-        Assert.Equal(new[] { "Malgun Gothic", "Pretendard", "D2Coding", "Maple Mono", "JetBrains Mono", "Cascadia Mono", "Consolas",
+        Assert.Equal(new[] { "Pretendard", "Malgun Gothic", "D2Coding", "Maple Mono", "JetBrains Mono", "Cascadia Mono", "Consolas",
             "Segoe UI", "Fira Code", "Cascadia Code", "Source Code Pro", "NanumGothicCoding", "Noto Sans KR", "" }, present.Select(font => font.Value));
         Assert.Equal(optional[4].Label, present[11].Label);
         Assert.Equal("maple mono", FontCatalog.ChoicesFor("maple mono", present)[3].Value);
@@ -121,6 +122,25 @@ public sealed class FontCatalogTests
             Assert.Contains("Copyright", license, StringComparison.Ordinal);
         }
     }
+
+    [Theory]
+    [InlineData("Consolas")]
+    [InlineData("Missing font for fallback test")]
+    public void MissingKoreanGlyphsUseAnExplicitReadableFallback(string family) => StaTestHost.Run(() =>
+    {
+        var text = new TextAnnotation { Text = "한글", FontFamily = family, FontSize = 14, AutoSize = true };
+        var drawing = new DrawingGroup();
+        using (DrawingContext context = drawing.Open()) context.DrawText(TextAnnotationLayout.Format(text, 1), new Point());
+        GlyphRun[] runs = Glyphs(drawing).ToArray();
+        Assert.NotEmpty(runs);
+        Assert.All(runs, run =>
+        {
+            Assert.Contains("Malgun Gothic", run.GlyphTypeface.FamilyNames.Values);
+            Assert.DoesNotContain((ushort)0, run.GlyphIndices);
+        });
+        Assert.Equal(family, text.FontFamily);
+        Assert.Same(FontCatalog.Resolve("Pretendard"), FontCatalog.Resolve(null));
+    });
 
     private static IEnumerable<GlyphRun> Glyphs(Drawing drawing)
     {

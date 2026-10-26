@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Threading;
+using MyCapture.Core.Settings;
 
 namespace MyCapture.App.Settings;
 
@@ -75,5 +76,11 @@ internal sealed partial class SettingsWindow
             return;
         }
         _draft.FontFamily = choice.Value;
+    }
+
+    private void OnDefaultFontClick(object sender, RoutedEventArgs e)
+    {
+        _draft.FontFamily = AnnotationDefaults.DefaultFontFamily;
+        SyncFontFamilyBox();
     }
 }

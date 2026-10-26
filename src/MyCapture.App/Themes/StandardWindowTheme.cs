@@ -11,6 +11,7 @@ internal static class StandardWindowTheme
     internal static void Apply(Window window)
     {
         ArgumentNullException.ThrowIfNull(window);
+        ThemeFonts.ApplyText(window);
 
         // A keyed Window style can be assigned to any subclass; unlike an implicit Window
         // style, WPF will not discard it merely because the runtime type is more specific.

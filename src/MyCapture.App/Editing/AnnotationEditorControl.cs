@@ -238,7 +238,7 @@ internal sealed partial class AnnotationEditorControl : Grid
         _controller.ApplyFillTransparency(double.IsFinite(defaults.FillTransparency) ? Math.Clamp(defaults.FillTransparency, 0, 100) : 100);
         _controller.DefaultFontSize = double.IsFinite(defaults.FontSize)
             ? Math.Clamp(defaults.FontSize, SettingsRanges.FontSize.Min, SettingsRanges.FontSize.Max) : 18;
-        _controller.DefaultFontFamily = string.IsNullOrWhiteSpace(defaults.FontFamily) ? "Malgun Gothic" : defaults.FontFamily;
+        _controller.DefaultFontFamily = string.IsNullOrWhiteSpace(defaults.FontFamily) ? AnnotationDefaults.DefaultFontFamily : defaults.FontFamily;
         _defaultTextBold = defaults.TextBold;
         _defaultTextBackground = defaults.TextBackground;
         _defaultTextOutline = defaults.TextOutline;
@@ -1155,6 +1155,7 @@ internal sealed partial class AnnotationEditorControl : Grid
             MinWidth = 0,
             MinHeight = 0,
             FontFamily = FontCatalog.Resolve(annotation.FontFamily),
+            Language = System.Windows.Markup.XmlLanguage.GetLanguage(CultureInfo.CurrentUICulture.IetfLanguageTag),
             FontSize = Math.Max(1, annotation.FontSize * dipPerPixel),
             FontWeight = annotation.Bold ? FontWeights.Bold : FontWeights.Normal,
             FontStyle = annotation.Italic ? FontStyles.Italic : FontStyles.Normal,
@@ -1162,9 +1163,9 @@ internal sealed partial class AnnotationEditorControl : Grid
             // TextBox does not draw the caption's outline; keep unplated text readable while editing.
             Background = annotation.Background.A > 0 ? annotation.Background.ToBrush()
                 : luma > 140 ? Brushes.Black : Brushes.White,
-            Opacity = annotation.Opacity,
-            BorderBrush = Brush("Border.Control", Color.FromRgb(0x56, 0x67, 0x7F)),
-            BorderThickness = new Thickness(1),
+            Template = CaptionTextBoxTemplate.Value,
+            CaretBrush = luma > 140 ? Brushes.White : Brushes.Black,
+            BorderThickness = new Thickness(2),
             AcceptsReturn = true,
             TextWrapping = TextWrapping.NoWrap,
             VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
@@ -1173,6 +1174,7 @@ internal sealed partial class AnnotationEditorControl : Grid
         // The committed caption is drawn with ideal glyph metrics (FormattedText). The editor
         // window's display-mode text would space and wrap the live copy differently.
         TextOptions.SetTextFormattingMode(textBox, TextFormattingMode.Ideal);
+        TextOptions.SetTextRenderingMode(textBox, TextRenderingMode.Grayscale);
         // Pretendard would otherwise show "0x02D9" as "0×02D9" and "->" as an arrow while typing.
         if (LiteralShaping.Applies(annotation.FontFamily)) LiteralShaping.Apply(textBox);
         AutomationName(textBox, UiText.Get("Text_FAC754F72C25"));
@@ -1287,7 +1289,10 @@ internal sealed partial class AnnotationEditorControl : Grid
         TextLayout fit = LiveTextLayout(editing, box.Text ?? string.Empty);
         Rect target = _surface.ToSurfaceRect(fit.Rect);
         double chrome = 2 * _liveTextInset.X;
-        box.MinWidth = chrome + Math.Max(1, editing.FontSize * dipPerPixel);
+        double minimumWidth = chrome + Math.Max(1, editing.FontSize * dipPerPixel);
+        double availableWidth = Math.Max(minimumWidth, _overlayCanvas.ActualWidth - target.Left + _liveTextInset.X);
+        box.MinWidth = fit.AutoSize ? Math.Max(minimumWidth, Math.Min(160, availableWidth)) : minimumWidth;
+        box.MinHeight = 32;
         if (fit.AutoSize)
         {
             box.TextWrapping = TextWrapping.NoWrap;
@@ -1312,6 +1317,27 @@ internal sealed partial class AnnotationEditorControl : Grid
         string.Equals(text.Text, content, StringComparison.Ordinal)
             ? TextLayout.Of(text)
             : _controller.FitText(text, content, text.FontSize, text.AutoSize, text.Rect);
+
+    private static readonly Lazy<ControlTemplate> CaptionTextBoxTemplate = new(() =>
+    {
+        var template = (ControlTemplate)System.Windows.Markup.XamlReader.Parse(
+            """
+            <ControlTemplate TargetType="TextBox"
+                             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+                <Grid>
+                    <Border Background="{TemplateBinding Background}" BorderBrush="Black"
+                            BorderThickness="{TemplateBinding BorderThickness}" />
+                    <Border Margin="1" BorderBrush="White" BorderThickness="1" IsHitTestVisible="False" />
+                    <Border BorderThickness="{TemplateBinding BorderThickness}">
+                        <ScrollViewer x:Name="PART_ContentHost" />
+                    </Border>
+                </Grid>
+            </ControlTemplate>
+            """);
+        template.Seal();
+        return template;
+    });
 
     internal enum CaptionScrollBarSide { Right, Left, Overlay }
 

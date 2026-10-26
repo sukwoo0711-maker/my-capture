@@ -110,7 +110,7 @@ public sealed class EditorChromeAndTextInspectorTests : KoreanCaptionTest
             Assert.Null(Controller(host.Editor).Selected);
             ComboBox fonts = Field<ComboBox>(host.Editor, "_textFontFamily");
             Assert.True(fonts.IsVisible);
-            family = fonts.Items.Cast<FontChoice>().First(font => !font.IsMore && font.Value != "Malgun Gothic").Value;
+            family = fonts.Items.Cast<FontChoice>().First(font => !font.IsMore && font.Value != Controller(host.Editor).DefaultFontFamily).Value;
             fonts.SelectedItem = fonts.Items.Cast<FontChoice>().Single(font => font.Value == family);
             Field<Slider>(host.Editor, "_fontSizeSlider").Value = 32;
             Toggle(host.Editor, "_textBold", true);
@@ -185,7 +185,10 @@ public sealed class EditorChromeAndTextInspectorTests : KoreanCaptionTest
             preview.Measure(new Size(240, 100));
             preview.Arrange(new Rect(preview.DesiredSize));
             TextBlock label = Assert.Single(Tree<TextBlock>(preview), text => text.Text == family.Label);
-            Assert.Same(family.PreviewFamily, label.FontFamily);
+            Assert.Same(MyCapture.App.Themes.ThemeFonts.Ui, label.FontFamily);
+            TextBlock sample = Assert.Single(Tree<TextBlock>(preview), text => text.Text == "가 Aa 123");
+            Assert.Same(family.PreviewFamily, sample.FontFamily);
+            Assert.Equal(Visibility.Collapsed, sample.Visibility);
         }
     });
 

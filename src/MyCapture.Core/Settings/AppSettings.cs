@@ -306,6 +306,8 @@ public sealed class PinSettings
 
 public sealed class AnnotationDefaults
 {
+    public const string DefaultFontFamily = "Pretendard";
+
     public string LastTool { get; set; } = "Rectangle";
     public MyCapture.Core.Annotations.AnnotationStrokeStyle StrokeStyle { get; set; }
     public double FillTransparency { get; set; } = 100;
@@ -317,7 +319,7 @@ public sealed class AnnotationDefaults
 
     public double FontSize { get; set; } = 18;
 
-    public string FontFamily { get; set; } = "Malgun Gothic";
+    public string FontFamily { get; set; } = DefaultFontFamily;
 
     public bool TextBold { get; set; }
 

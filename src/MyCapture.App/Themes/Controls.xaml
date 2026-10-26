@@ -41,6 +41,7 @@
              alternates would show 0x1F as 0×1F (see ThemeFonts). -->
         <Setter Property="TextOptions.TextFormattingMode" Value="Ideal" />
         <Setter Property="TextOptions.TextRenderingMode" Value="Grayscale" />
+        <Setter Property="TextOptions.TextHintingMode" Value="Fixed" />
         <Setter Property="Typography.StandardLigatures" Value="False" />
         <Setter Property="Typography.ContextualAlternates" Value="False" />
         <Setter Property="Typography.ContextualLigatures" Value="False" />
@@ -969,6 +970,7 @@
         <Setter Property="FontFamily" Value="{DynamicResource Font.Ui}" />
         <Setter Property="TextOptions.TextFormattingMode" Value="Ideal" />
         <Setter Property="TextOptions.TextRenderingMode" Value="Grayscale" />
+        <Setter Property="TextOptions.TextHintingMode" Value="Fixed" />
         <Setter Property="Typography.StandardLigatures" Value="False" />
         <Setter Property="Typography.ContextualAlternates" Value="False" />
         <Setter Property="Typography.ContextualLigatures" Value="False" />
@@ -981,6 +983,7 @@
         <Setter Property="FontFamily" Value="{DynamicResource Font.Ui}" />
         <Setter Property="TextOptions.TextFormattingMode" Value="Ideal" />
         <Setter Property="TextOptions.TextRenderingMode" Value="Grayscale" />
+        <Setter Property="TextOptions.TextHintingMode" Value="Fixed" />
         <Setter Property="Typography.StandardLigatures" Value="False" />
         <Setter Property="Typography.ContextualAlternates" Value="False" />
         <Setter Property="Typography.ContextualLigatures" Value="False" />
