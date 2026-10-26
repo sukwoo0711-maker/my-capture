@@ -98,6 +98,8 @@ internal sealed class PinPreviewSession : IDisposable
             Title = "MyCapture 미리보기", Width = 660, Height = 650,
             MinWidth = 480, MinHeight = 480, WindowStartupLocation = WindowStartupLocation.CenterScreen,
         };
+        window.SetResourceReference(Control.BackgroundProperty, "Surface.Base");
+        window.SetResourceReference(Control.ForegroundProperty, "Text.Primary");
         var layout = new Grid { Margin = new Thickness(20) };
         layout.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         layout.RowDefinitions.Add(new RowDefinition { Height = new GridLength(2, GridUnitType.Star) });
@@ -105,14 +107,23 @@ internal sealed class PinPreviewSession : IDisposable
         layout.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         layout.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
         var sourceLabel = new Label { Content = "원문", Padding = new Thickness(0, 0, 0, 8) };
+        sourceLabel.SetResourceReference(Control.ForegroundProperty, "Text.Primary");
         layout.Children.Add(sourceLabel);
         TextBox markdownSource = CreateSourceBox(SampleSource, "Consolas");
         TextBox englishSource = CreateSourceBox(EnglishSampleSource, "Segoe UI");
         PreviewCopyCommands.Attach(markdownSource, _copies);
         PreviewCopyCommands.Attach(englishSource, _copies);
         var sources = new TabControl();
+        sources.SetResourceReference(Control.BackgroundProperty, "Surface.Base");
+        sources.SetResourceReference(Control.ForegroundProperty, "Text.Primary");
         sources.Items.Add(new TabItem { Header = "Markdown", Content = markdownSource });
         sources.Items.Add(new TabItem { Header = "영어", Content = englishSource });
+        foreach (TabItem tab in sources.Items)
+        {
+            tab.SetResourceReference(FrameworkElement.StyleProperty, "Tab.Help");
+            tab.SetResourceReference(Control.BackgroundProperty, "Surface.Raised");
+            tab.SetResourceReference(Control.ForegroundProperty, "Text.Primary");
+        }
         sources.SelectedIndex = 0;
         sourceLabel.Target = markdownSource;
         sources.SelectionChanged += (_, _) => sourceLabel.Target = sources.SelectedIndex == 0 ? markdownSource : englishSource;
@@ -124,6 +135,7 @@ internal sealed class PinPreviewSession : IDisposable
         Grid.SetRow(actions, 2);
         layout.Children.Add(actions);
         var copyLabel = new Label { Content = "복사 결과", Padding = new Thickness(0, 0, 0, 8) };
+        copyLabel.SetResourceReference(Control.ForegroundProperty, "Text.Primary");
         Grid.SetRow(copyLabel, 3);
         layout.Children.Add(copyLabel);
         var result = new TextBox
