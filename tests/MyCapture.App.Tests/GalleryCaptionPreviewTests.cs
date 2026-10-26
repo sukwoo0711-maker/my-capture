@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.IO;
 using System.Windows;
 using System.Windows.Automation;
@@ -49,13 +50,16 @@ public sealed class GalleryCaptionPreviewTests
             new() { Title = "앱", SourceAppName = "Claude", SourceWindowTitle = "사용성 검토" },
             new() { Title = "메모" },
         ];
-        string sample = Environment.GetEnvironmentVariable("MYCAPTURE_GALLERY_SAMPLE") ?? "missing-synthetic-preview.jpg";
+        var thumbnail = BitmapSource.Create(320, 180, 96, 96, PixelFormats.Bgr24, null, new byte[320 * 180 * 3], 320 * 3);
+        thumbnail.Freeze();
+        var loader = new GalleryThumbnailLoader((_, _) => thumbnail);
         foreach (CaptureRecord record in records)
         {
             record.IsPinned = true;
             record.HasAnnotations = true;
             record.CreatedAt = new DateTimeOffset(2026, 10, 26, 12, 0, 0, TimeSpan.FromHours(9));
-            var tile = new GalleryItemViewModel(record, _ => sample, 320);
+            var tile = new GalleryItemViewModel(record, _ => "synthetic-preview", 320);
+            tile.ConfigureAsyncLoading(loader, Dispatcher.CurrentDispatcher);
             tile.SetFolderBadge(("제품 기획 자료", "작업/제품 기획 자료"));
             row.Items.Add(tile);
         }
@@ -64,15 +68,14 @@ public sealed class GalleryCaptionPreviewTests
         {
             window.Show();
             Drain(window);
-            if (File.Exists(sample))
+            long started = Stopwatch.GetTimestamp();
+            while (row.Items.Cast<GalleryItemViewModel>().Any(tile => tile.Thumbnail is null)
+                && Stopwatch.GetElapsedTime(started) < TimeSpan.FromSeconds(15))
             {
-                for (int attempt = 0; attempt < 40 && row.Items.Cast<GalleryItemViewModel>().Any(tile => tile.Thumbnail is null); attempt++)
-                {
-                    Thread.Sleep(25);
-                    Drain(window);
-                }
-                Assert.All(row.Items.Cast<GalleryItemViewModel>(), tile => Assert.NotNull(tile.Thumbnail));
+                Thread.Sleep(25);
+                Drain(window);
             }
+            Assert.All(row.Items.Cast<GalleryItemViewModel>(), tile => Assert.NotNull(tile.Thumbnail));
             for (int index = 0; index < records.Length; index++)
             {
                 var item = Assert.IsType<ListBoxItem>(row.ItemContainerGenerator.ContainerFromIndex(index));
