@@ -117,6 +117,7 @@ public static class AppSettingsClone
 
     private static PinSettings Clone(PinSettings s) => new()
     {
+        ClickThroughHintShownCount = s.ClickThroughHintShownCount,
         CloseOnDoubleClick = s.CloseOnDoubleClick,
         RestoreOpenPinsOnLaunch = s.RestoreOpenPinsOnLaunch,
         CtrlClickDebounceMs = s.CtrlClickDebounceMs,

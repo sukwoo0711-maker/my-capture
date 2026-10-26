@@ -267,6 +267,9 @@ public sealed class CaptureSettings
 
 public sealed class PinSettings
 {
+    /// <summary>First-use recovery hints already shown, shared across pins and launches.</summary>
+    public int ClickThroughHintShownCount { get; set => field = Math.Clamp(value, 0, 3); }
+
     /// <summary>Close the pinned window on double-click.</summary>
     public bool CloseOnDoubleClick { get; set; } = true;
 
