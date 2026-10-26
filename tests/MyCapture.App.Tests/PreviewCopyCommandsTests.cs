@@ -2,8 +2,10 @@ using System.Reflection;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
-using System.Windows.Threading;
 using MyCapture.App.Preview;
+using MyCapture.App.Pinning;
+using MyCapture.Core.Settings;
+using MyCapture.Platform.Shell;
 using Xunit;
 
 namespace MyCapture.App.Tests;
@@ -85,35 +87,72 @@ public sealed class PreviewCopyCommandsTests
     });
 
     [Fact]
-    public void EveryPreviewHostTextBoxHasTheMemoryCommandBoundary() => StaTestHost.Run(() =>
+    public void HumanPreviewHostHasNoNativeEditingCommandsAndUsesOnlyInjectedPinInput() => StaTestHost.Run(() =>
     {
-        using var session = new PinPreviewSession(new PreviewLaunchOptions(@"C:\SyntheticPreview\profile", "synthetic"),
-            Dispatcher.CurrentDispatcher);
-        // Build the host controls only. Start() would create a profile and named handles.
-        var window = Assert.IsType<Window>(typeof(PinPreviewSession)
-            .GetMethod("CreateWindow", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(session, null));
+        int reads = 0;
+        int writes = 0;
+        var clipboard = new PreviewClipboardAccess(
+            () => { reads++; return Task.FromResult(ClipboardImageReader.PinReadAttempt.NoContent()); },
+            (_, _, _, _, _) => { writes++; throw new InvalidOperationException("No clipboard image write expected."); },
+            _ => { writes++; throw new InvalidOperationException("No clipboard text write expected."); });
+        var registrar = new FakeRegistrar();
+        using var input = new PreviewPinInput(registrar, async () =>
+        {
+            await clipboard.ReadWhileActiveAsync(() => true);
+            return PasteResult.NoSupportedContent;
+        });
+        // Construct only controls. No session Start(), native registration or user profile exists.
+        var window = new PinPreviewWindow(input);
         try
         {
-            var layout = Assert.IsType<Grid>(window.Content);
-            var tabs = Assert.Single(layout.Children.OfType<TabControl>());
-            TextBox[] inputs = tabs.Items.OfType<TabItem>().Select(tab => Assert.IsType<TextBox>(tab.Content)).ToArray();
-            TextBox result = Assert.Single(layout.Children.OfType<TextBox>());
-            Assert.Equal(2, inputs.Length);
-            inputs[0].SelectAll();
-            Execute(inputs[0], ApplicationCommands.Copy);
-            Assert.Equal(inputs[0].Text, result.Text);
-            inputs[1].SelectAll();
-            Execute(inputs[1], ApplicationCommands.Paste);
-            Assert.Equal(inputs[0].Text, inputs[1].Text);
-            result.SelectAll();
-            Assert.True(CanExecute(result, ApplicationCommands.Copy));
-            Assert.False(CanExecute(result, ApplicationCommands.Cut));
-            Assert.False(CanExecute(result, ApplicationCommands.Paste));
-            foreach (TextBox editor in inputs.Append(result)) Assert.Equal(3, editor.ContextMenu.Items.Count);
+            Assert.Equal(0, reads);
+            Assert.Empty(registrar.Attempts);
+            input.RegisterShortcut();
+            Assert.Equal(PreviewPinInput.Primary, Assert.Single(registrar.Attempts));
+            DependencyObject[] controls = Descendants(window).ToArray();
+            Assert.Empty(controls.OfType<TextBox>());
+            Assert.Empty(controls.OfType<TabControl>());
+            Assert.Contains(controls.OfType<TextBlock>(), text => text.Text == "활성 단축키 · F3");
+            Button pin = Assert.Single(controls.OfType<Button>(), button => Equals(button.Content, "클립보드 핀"));
+            Button close = Assert.Single(controls.OfType<Button>(), button => Equals(button.Content, "종료"));
+            Assert.True(close.IsEnabled);
+            Assert.True(pin.IsEnabled);
+            pin.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            Assert.Equal(1, reads);
+            Assert.Equal(0, writes);
+            Assert.Contains(controls.OfType<TextBlock>(), text => text.Text == "텍스트나 이미지를 복사한 후 다시 시도하십시오.");
+            Assert.True(input.HandleMessage(PreviewPinInput.WmHotkey, PreviewPinInput.HotkeyId));
+            Assert.True(input.LastPinTask.IsCompletedSuccessfully);
+            Assert.Equal(2, reads);
+            Assert.Equal(0, writes);
+            Assert.True(pin.IsEnabled);
         }
         finally { window.Close(); }
     });
 
+    private static IEnumerable<DependencyObject> Descendants(DependencyObject parent)
+    {
+        foreach (object child in LogicalTreeHelper.GetChildren(parent))
+        {
+            if (child is not DependencyObject control) continue;
+            yield return control;
+            foreach (DependencyObject descendant in Descendants(control)) yield return descendant;
+        }
+    }
+
+    private sealed class FakeRegistrar : IHotkeyRegistrar
+    {
+        internal List<Hotkey> Attempts { get; } = [];
+        public bool TryRegister(int id, Hotkey hotkey, out int errorCode, out string errorMessage)
+        {
+            Assert.Equal(PreviewPinInput.HotkeyId, id);
+            Attempts.Add(hotkey);
+            errorCode = 0;
+            errorMessage = string.Empty;
+            return true;
+        }
+        public void Unregister(int id) => Assert.Equal(PreviewPinInput.HotkeyId, id);
+    }
     private static TextBox Editor(PreviewCopyBuffer buffer, string text)
     {
         var editor = new TextBox { Text = text, AcceptsReturn = true };

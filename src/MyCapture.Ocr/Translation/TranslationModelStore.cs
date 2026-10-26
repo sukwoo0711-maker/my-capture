@@ -80,8 +80,9 @@ internal sealed class TranslationModelStore
     private readonly SemaphoreSlim _gate = new(1, 1);
     private readonly ConcurrentDictionary<string, VerificationState> _verification = new(StringComparer.OrdinalIgnoreCase);
 
-    internal TranslationModelStore(AppPaths paths, ILogger<TranslationModelStore> log)
-        : this(paths, CreateClient(), log)
+    internal TranslationModelStore(AppPaths paths, ILogger<TranslationModelStore> log,
+        TranslationDirection direction = TranslationDirection.EnglishToKorean)
+        : this(paths, CreateClient(), log, direction: direction)
     {
     }
 
@@ -91,7 +92,8 @@ internal sealed class TranslationModelStore
     /// </summary>
     internal TranslationModelStore(AppPaths paths, HttpClient http, ILogger log,
         IReadOnlyList<TranslationModelFile>? files = null, TimeSpan? stallTimeout = null,
-        Func<string, long>? availableFreeSpace = null)
+        Func<string, long>? availableFreeSpace = null,
+        TranslationDirection direction = TranslationDirection.EnglishToKorean)
     {
         ArgumentNullException.ThrowIfNull(paths);
         _http = http ?? throw new ArgumentNullException(nameof(http));
@@ -100,10 +102,17 @@ internal sealed class TranslationModelStore
         if (_stallTimeout <= TimeSpan.Zero)
             throw new ArgumentOutOfRangeException(nameof(stallTimeout), "The stall timeout must be positive.");
         _availableFreeSpace = availableFreeSpace ?? QueryFreeSpace;
-        Files = ValidateFiles(files ?? TranslationModelCatalog.Files);
+        TranslationModelCatalog.Definition model = TranslationModelCatalog.For(direction);
+        Direction = direction;
+        ModelFiles = model.ModelFiles;
+        Files = ValidateFiles(files ?? model.Files);
         TotalBytes = Files.Sum(file => file.Bytes);
-        ModelDirectory = Path.Combine(paths.TranslationModelsRoot, TranslationModelCatalog.FolderName);
+        ModelDirectory = Path.Combine(paths.TranslationModelsRoot, model.FolderName);
     }
+
+    internal TranslationDirection Direction { get; }
+
+    internal MarianModelFiles ModelFiles { get; }
 
     internal string ModelDirectory { get; }
 

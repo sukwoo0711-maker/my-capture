@@ -5,7 +5,7 @@ using MyCapture.App.Themes;
 
 namespace MyCapture.App.Pinning;
 
-internal enum PinTranslationState { Unavailable, Available, Checking, ModelNeeded, Downloading, Translating, Translated, Failed }
+internal enum PinTranslationState { Unavailable, Available, Disabled, Recognizing, Checking, ModelNeeded, Downloading, Translating, Translated, Failed }
 
 internal sealed partial class PinWindow
 {
@@ -13,9 +13,16 @@ internal sealed partial class PinWindow
     private PinContent? _translationResult;
     private bool _showingTranslation;
     private bool _translationNeedsReview;
+    private string? _translationReviewMessage;
     private long _translationDownloadBytes;
     private bool _showingMarkdownSource;
     private PinContent? _markdownSourceContent;
+    private string? _recognizedOriginalText;
+    private string? _translationDisabledReason;
+    private string? _translationTargetLanguage;
+    internal string? OriginalCopyText => _originalText ?? _recognizedOriginalText;
+    internal PinContent CurrentDisplayContent => _content;
+    internal event Action? MermaidDisplayChanged;
     internal PinTranslationState TranslationState { get; private set; }
     internal bool IsShowingTranslation => _showingTranslation;
     internal string? DisplayedText => _content.OriginalText;
@@ -24,6 +31,27 @@ internal sealed partial class PinWindow
     internal Func<long, bool>? ConfirmTranslationModelDownload { get; set; }
     internal bool IsShowingMarkdownSource => _showingMarkdownSource;
     private PinContent DisplayContent => _showingMarkdownSource ? _markdownSourceContent! : _content;
+
+    internal void RetainRecognizedOriginal(string source) => _recognizedOriginalText ??= source;
+
+    internal void SetTranslationDisabled(string reason)
+    {
+        _translationDisabledReason = reason;
+        SetTranslationState(PinTranslationState.Disabled);
+    }
+
+    internal void SetTranslationTarget(string target)
+    {
+        if (_translationTargetLanguage == target) return;
+        if (_showingTranslation) SetTranslationDisplay(false);
+        _translationTargetLanguage = target;
+        _translationResult = null;
+        _translationOriginal = null;
+        _translationNeedsReview = false;
+        _translationReviewMessage = null;
+        _translationDisabledReason = null;
+        TranslationState = PinTranslationState.Unavailable;
+    }
 
     // Persist the source and offer translation when reopened. A Korean preview must never be
     // saved beside an English payload as if they were the same clipboard representation.
@@ -51,27 +79,34 @@ internal sealed partial class PinWindow
         if (_isClosed) return;
         TranslationState = state;
         _translationDownloadBytes = downloadBytes;
-        if (state is PinTranslationState.Translating or PinTranslationState.Downloading)
-            ShowFeedback(UiText.Get(state == PinTranslationState.Downloading ? "Pin_TranslationDownloading" : "Pin_Translating"), FeedbackKind.Progress);
+        if (state is PinTranslationState.Translating or PinTranslationState.Downloading or PinTranslationState.Recognizing)
+            ShowFeedback(UiText.Get(state == PinTranslationState.Downloading ? "Pin_TranslationDownloading"
+                : state == PinTranslationState.Recognizing ? "Pin_TranslationRecognizing" : "Pin_Translating"), FeedbackKind.Progress);
         else if (state == PinTranslationState.Failed)
             ShowFeedback(UiText.Get("Pin_TranslationFailed"), FeedbackKind.ActionRequired);
-        else if (state is PinTranslationState.Unavailable or PinTranslationState.Available)
+        else if (state is PinTranslationState.Unavailable or PinTranslationState.Available
+            or PinTranslationState.Disabled or PinTranslationState.ModelNeeded)
             DismissFeedback();
         RefreshTranslationActions();
     }
 
-    internal void ApplyTranslation(PinContent translated, bool needsReview)
+    internal void ApplyTranslation(PinContent translated, bool needsReview, string? reviewMessage = null)
     {
         ArgumentNullException.ThrowIfNull(translated);
         if (_isClosed) return;
         _translationOriginal ??= _content;
+        if (translated.IsMarkdown && _translationOriginal.MermaidResults is { } diagrams
+            && ClipboardMarkdownRenderer.ExtractMermaidBlocks(translated.OriginalText!).Select(block => block.Source)
+                .SequenceEqual(ClipboardMarkdownRenderer.ExtractMermaidBlocks(_translationOriginal.OriginalText!).Select(block => block.Source)))
+            translated = translated.WithMermaidResults(diagrams, MermaidDisplayScale);
         _translationResult = translated;
         _translationNeedsReview = needsReview;
+        _translationReviewMessage = needsReview ? reviewMessage : null;
         TranslationState = PinTranslationState.Translated;
         // Don't replace text under an active selection. The language action remains available.
         if (!IsTextSelectionMode && !_showingMarkdownSource) SetTranslationDisplay(true);
         else RefreshTranslationActions();
-        ShowFeedback(UiText.Get(needsReview ? "Pin_TranslationReview" : "Pin_Translated"),
+        ShowFeedback(_translationReviewMessage ?? UiText.Get(needsReview ? "Pin_TranslationReview" : "Pin_Translated"),
             needsReview ? FeedbackKind.Warning : FeedbackKind.Confirmation);
     }
 
@@ -83,13 +118,21 @@ internal sealed partial class PinWindow
         EndDrag();
         PinContent next = translated ? _translationResult : _translationOriginal;
         _showingTranslation = translated;
-        _content = next.WithProvenance(_content.Provenance).RenderedAt(VisualTreeHelper.GetDpi(this).DpiScaleX);
+        if (!translated && _translationReviewMessage is { } review && _feedbackKind == FeedbackKind.Warning
+            && _feedbackText.Text == review)
+        {
+            _feedbackCountdown.Stop();
+            HideFeedback(immediate: true);
+        }
+        _content = next.WithProvenance(_content.Provenance).RenderedAt(next.MermaidResults is not null
+            ? MermaidDisplayScale : VisualTreeHelper.GetDpi(this).DpiScaleX);
         ClipboardCache.Clear();
         _imageElement.Source = _content.Image;
         // Keep position, frame, zoom and opacity stable when changing languages.
         _chrome.Background = translated ? Brushes.White : null;
         UpdateImageRasterLayout();
         RefreshTranslationActions();
+        MermaidDisplayChanged?.Invoke();
     }
 
     internal void InvokeTranslationAction()
@@ -107,17 +150,21 @@ internal sealed partial class PinWindow
     }
 
     private string TranslationActionLabel => UiText.Get(_showingTranslation
-        ? "Pin_TranslationOriginal" : "Pin_TranslationKorean");
+        ? "Pin_TranslationOriginal" : "Pin_Translate");
 
-    private string TranslationActionHelp => UiText.Get(TranslationState switch
+    private string TranslationActionHelp => TranslationState == PinTranslationState.Disabled
+        ? _translationDisabledReason ?? UiText.Get("Pin_TranslationNoText")
+        : _showingTranslation && _translationNeedsReview && _translationReviewMessage is { } review
+            ? review : UiText.Get(TranslationState switch
     {
         PinTranslationState.ModelNeeded => "Pin_TranslationInstall",
         PinTranslationState.Failed => "Pin_TranslationRetry",
         PinTranslationState.Downloading => "Pin_TranslationDownloading",
+        PinTranslationState.Recognizing => "Pin_TranslationRecognizing",
         PinTranslationState.Checking or PinTranslationState.Translating => "Pin_Translating",
-        _ when _showingTranslation && _translationNeedsReview => "Pin_TranslationSourceReview",
+        _ when _showingTranslation && _translationNeedsReview && !TranslationSourceContent.IsMarkdown => "Pin_TranslationSourceReview",
         _ when _showingTranslation => "Pin_TranslationOriginal",
-        _ => "Pin_TranslationKorean",
+        _ => "Pin_Translate",
     });
 
     private bool TranslationActionEnabled => TranslationState is PinTranslationState.Available or PinTranslationState.Translated
@@ -148,8 +195,18 @@ internal sealed partial class PinWindow
         if (TranslationState == PinTranslationState.Unavailable) return;
         var action = MenuItemFor(TranslationActionLabel, (_, _) => InvokeTranslationAction());
         action.IsEnabled = TranslationActionEnabled;
+        action.ToolTip = TranslationActionHelp;
+        ToolTipService.SetShowOnDisabled(action, true);
         menu.Items.Add(action);
+        if (_translationResult?.OriginalText is not null)
+            menu.Items.Add(MenuItemFor(UiText.Get("Pin_CopyTranslation"), (_, _) => CopyTranslationText()));
         menu.Items.Add(new Separator());
+    }
+
+    internal void CopyTranslationText()
+    {
+        if (_isClosed || _translationResult?.OriginalText is not { } text) return;
+        OriginalTextCopyRequested?.Invoke(this, text);
     }
 
     internal void SetMarkdownSourceDisplay(bool source)

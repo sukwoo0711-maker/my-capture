@@ -21,6 +21,8 @@ internal static class ClipboardTextRenderer
     private const int Dpi = 96;
     private const int MaxBitmapWidth = 1200;
     private const int MaxBitmapHeight = 900;
+    private const int MaxTranslationHeight = 8192;
+    private const int MaxTranslationPixels = 16_000_000;
 
     private const int PlainMinimumWidth = 240;
     private const int PlainMinimumHeight = 80;
@@ -86,6 +88,7 @@ internal static class ClipboardTextRenderer
 
     private static BitmapSource RenderPlainText(string sourceText, double scale, bool borderless = false)
     {
+        int maximumHeight = borderless ? MaxTranslationHeight : MaxBitmapHeight;
         string preview = CreatePlainPreview(sourceText).Replace("\t", "    ", StringComparison.Ordinal);
         FormattedText? text = preview.Length == 0
             ? null
@@ -93,7 +96,7 @@ internal static class ClipboardTextRenderer
                 preview,
                 PlainFontSize,
                 MaxBitmapWidth - (PlainHorizontalPadding * 2),
-                MaxBitmapHeight - (PlainVerticalPadding * 2),
+                maximumHeight - (PlainVerticalPadding * 2),
                 singleLine: false);
 
         if (text is not null)
@@ -114,7 +117,15 @@ internal static class ClipboardTextRenderer
         int height = Math.Clamp(
             (int)Math.Ceiling(measuredHeight + (PlainVerticalPadding * 2)),
             PlainMinimumHeight,
-            MaxBitmapHeight);
+            maximumHeight);
+
+        if (borderless)
+        {
+            // Keep complete long paragraphs visible without unbounded high-DPI allocation.
+            scale = Math.Min(scale, Math.Sqrt(MaxTranslationPixels / ((double)width * height)));
+            while (Math.Ceiling(width * scale) * Math.Ceiling(height * scale) > MaxTranslationPixels)
+                scale *= 0.999;
+        }
 
         var visual = CreateVisual();
         using (DrawingContext drawing = visual.RenderOpen())

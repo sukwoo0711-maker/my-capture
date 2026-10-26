@@ -1,6 +1,8 @@
 using System.Text;
+using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using System.Text.Unicode;
 using MyCapture.App.Threading;
 using MyCapture.Core.Pin;
 using MyCapture.Ocr.Translation;
@@ -14,21 +16,27 @@ internal sealed record PinTranslationResult(PinContent Content, bool NeedsReview
 /// syntax retain sentence context; a result is applied only after their preservation is checked.
 /// The caller retains the original pin and owns model preparation and operation cancellation.
 /// </summary>
-internal sealed partial class PinTranslationService(ITextTranslator translator)
+internal sealed partial class PinTranslationService(ITextTranslator translator, string targetLanguage = "ko", bool preserveLineBreaks = false)
 {
+    private static readonly JsonSerializerOptions JsonTextOptions = new()
+    {
+        Encoder = JavaScriptEncoder.Create(UnicodeRanges.All),
+    };
     private readonly ITextTranslator _translator = translator ?? throw new ArgumentNullException(nameof(translator));
+    private readonly string _targetLanguage = PinLanguagePolicy.NormalizeTarget(targetLanguage);
+    private readonly bool _preserveLineBreaks = preserveLineBreaks;
 
-    internal static bool CanTranslate(PinContent content)
+    internal static bool CanTranslate(PinContent content, string targetLanguage = "ko")
     {
         ArgumentNullException.ThrowIfNull(content);
-        return CreatePlan(content).Any(piece => piece.Translate);
+        return CreatePlan(content, PinLanguagePolicy.NormalizeTarget(targetLanguage)).Any(piece => piece.Translate);
     }
 
     internal async Task<PinTranslationResult?> TranslateAsync(PinContent content, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(content);
         cancellationToken.ThrowIfCancellationRequested();
-        List<Piece> pieces = CreatePlan(content);
+        List<Piece> pieces = CreatePlan(content, _targetLanguage, _preserveLineBreaks);
         string[] sources = pieces.Where(piece => piece.Translate).Select(piece => piece.Text).ToArray();
         if (sources.Length == 0) return null;
 
@@ -41,12 +49,24 @@ internal sealed partial class PinTranslationService(ITextTranslator translator)
         var output = new StringBuilder(content.OriginalText!.Length);
         int index = 0;
         bool needsReview = false;
+        var runs = new List<PinCodeRun>();
+        void Append(Piece piece, string text)
+        {
+            int start = output.Length;
+            output.Append(text);
+            if (piece.Color is { } color && text.Length > 0)
+            {
+                if (runs.LastOrDefault() is { } previous && previous.Start + previous.Length == start && previous.Color == color)
+                    runs[^1] = previous with { Length = previous.Length + text.Length };
+                else runs.Add(new PinCodeRun(start, text.Length, color));
+            }
+        }
         foreach (Piece piece in pieces)
         {
             cancellationToken.ThrowIfCancellationRequested();
             if (!piece.Translate)
             {
-                output.Append(piece.Text);
+                Append(piece, piece.Text);
                 continue;
             }
 
@@ -59,40 +79,70 @@ internal sealed partial class PinTranslationService(ITextTranslator translator)
             // Preserve the complete sentence context, including values and inline formatting.
             // The model's value checker does not detect broken Markdown; validate both here.
             string text = result.Text.ReplaceLineEndings(" ").Trim();
-            bool safe = !result.NeedsReview && PreservesProtectedValues(piece.Text, text)
-                && (!content.IsMarkdown || PreservesMarkdown(piece.Text, text));
+            ProtectedTokenCheck beforeRepair = ProtectedTokens.Check(piece.Text, text);
+            (text, _) = ProtectedTokens.Repair(piece.Text, text);
+            bool safe = !result.NeedsReview && beforeRepair.Altered.Count == 0 && beforeRepair.Invented.Count == 0
+                && PreservesProtectedValues(piece.Text, text)
+                && (!piece.Markdown || PreservesMarkdown(piece.Text, text))
+                && (!piece.Comment || !text.Contains("*/", StringComparison.Ordinal));
             needsReview |= !safe;
-            output.Append(safe ? text : piece.Text);
+            string value = safe ? text : piece.Text;
+            Append(piece, piece.JsonString ? JsonSerializer.Serialize(value, JsonTextOptions)[1..^1]
+                : piece.MermaidLabel && safe ? EscapeMermaidLabel(value) : value);
         }
 
         string renderedText = output.ToString();
+        if (IsJson(content.OriginalText!))
+        {
+            using JsonDocument validated = JsonDocument.Parse(renderedText);
+        }
+        bool isCode = content.TextStyle == PinTextStyle.Code || pieces.Any(piece => piece.Color is not null);
+        PinCodeDocument? code = isCode && renderedText.Length <= PinCodeDocument.MaxOriginalTextLength
+            ? new PinCodeDocument(renderedText, runs.Count <= PinCodeDocument.MaxRunCount ? runs : [],
+                content.CodeDocument?.Background ?? "#1E1E1E", content.CodeDocument?.Foreground ?? "#DCDCDC") : null;
+        bool isTable = content.Kind == PinContentKind.Table;
+        bool sameDiagrams = ClipboardMarkdownRenderer.ExtractMermaidBlocks(content.OriginalText!).Select(block => block.Source)
+            .SequenceEqual(ClipboardMarkdownRenderer.ExtractMermaidBlocks(renderedText).Select(block => block.Source), StringComparer.Ordinal);
+        var diagrams = sameDiagrams ? content.MermaidResults : null;
         cancellationToken.ThrowIfCancellationRequested();
         var image = await StaThreadTask.RunAsync(() =>
         {
             cancellationToken.ThrowIfCancellationRequested();
-            return content.IsMarkdown
-                ? ClipboardMarkdownRenderer.Render(renderedText)
+            return code is not null ? ClipboardCodeRenderer.Render(code)
+                : content.IsMarkdown ? ClipboardMarkdownRenderer.Render(renderedText, 1, diagrams)
+                : isTable ? ClipboardTextRenderer.Render(renderedText, true)
                 : ClipboardTextRenderer.RenderTranslation(renderedText);
         }, "MyCapture translated pin render").ConfigureAwait(false);
         cancellationToken.ThrowIfCancellationRequested();
-        PinContent translatedContent = content.IsMarkdown
+        PinContent translatedContent = code is not null ? PinContent.FromCode(image, renderedText, code, content.Provenance)
+            : content.IsMarkdown
             ? PinContent.FromMarkdown(image, renderedText, content.Provenance)
-            : PinContent.FromText(image, renderedText, false, content.Provenance) with { BorderlessText = true };
-        return new PinTranslationResult(translatedContent with { PendingProvenance = content.PendingProvenance }, needsReview);
+            : PinContent.FromText(image, renderedText, isTable, content.Provenance) with { BorderlessText = !isTable };
+        return new PinTranslationResult(translatedContent with
+        {
+            PendingProvenance = content.PendingProvenance,
+            MermaidResults = diagrams,
+        }, needsReview);
     }
 
-    private static List<Piece> CreatePlan(PinContent content)
+    private static List<Piece> CreatePlan(PinContent content, string target, bool preserveLines = false)
     {
         var pieces = new List<Piece>();
-        if (content.Kind != PinContentKind.Text || content.TextStyle == PinTextStyle.Code
+        if (content.Kind == PinContentKind.Image || target is not ("ko" or "en")
             || string.IsNullOrWhiteSpace(content.OriginalText)) return pieces;
         string source = content.OriginalText;
-        if (IsJson(source)) return pieces;
+        if (IsJson(source)) return JsonPlan(source, target);
+        if (content.TextStyle == PinTextStyle.Code || (!content.IsMarkdown && source.Split(['\r', '\n']).Any(IsCodeLine)))
+            return CodePlan(content, target);
+        if (content.Kind == PinContentKind.Table) return TablePlan(source, target);
+        if (ClipboardMarkdownRenderer.ExtractMermaidBlocks(source) is [var diagram]
+            && string.Equals(diagram.Source, source, StringComparison.Ordinal)) return MermaidPlan(source, target);
         if (!source.Contains('\r') && !source.Contains('\n') && StandalonePath().IsMatch(source)) return pieces;
-        if (!content.IsMarkdown && source.Split(['\r', '\n']).Any(IsCodeLine)) return pieces;
+        if (!content.IsMarkdown && !preserveLines) source = JoinPdfLines(source);
 
         char fence = '\0';
         int fenceLength = 0;
+        bool mermaid = false;
         int start = 0;
         while (start < source.Length)
         {
@@ -108,6 +158,7 @@ internal sealed partial class PinTranslationService(ITextTranslator translator)
                 {
                     fence = trimmed[0];
                     fenceLength = run;
+                    mermaid = trimmed[run..].Trim().Equals("mermaid", StringComparison.OrdinalIgnoreCase);
                 }
                 else if (trimmed[0] == fence && run >= fenceLength && string.IsNullOrWhiteSpace(trimmed[run..]))
                 {
@@ -115,6 +166,7 @@ internal sealed partial class PinTranslationService(ITextTranslator translator)
                 }
                 Literal(pieces, line);
             }
+            else if (fence != '\0' && mermaid) AddMermaidLine(pieces, line, target);
             else if (fence != '\0' || IsCodeLine(line)
                 || (content.IsMarkdown && (IsMarkdownLiteralLine(line) || IsIndentedCode(line))))
             {
@@ -123,11 +175,13 @@ internal sealed partial class PinTranslationService(ITextTranslator translator)
             else if (content.IsMarkdown)
             {
                 Literal(pieces, prefix.Value);
-                AddTranslatable(pieces, line[prefix.Length..]);
+                string body = line[prefix.Length..];
+                if (body.Contains('|')) AddMarkdownCells(pieces, body, target);
+                else AddTranslatable(pieces, body, target, markdown: true);
             }
             else
             {
-                AddTranslatable(pieces, line);
+                AddPlainProse(pieces, line, target);
             }
 
             int next = end;
@@ -146,6 +200,8 @@ internal sealed partial class PinTranslationService(ITextTranslator translator)
         IReadOnlyList<ProtectedSpan> protectedSpans = ProtectedTokens.Find(source);
         IEnumerable<string> values = protectedSpans.Select(span => span.Text)
             .Concat(AdditionalLiteral().Matches(source)
+                .Select(match => match.Value.TrimEnd('.', ',', ';', ':', ')', ']', '}')))
+            .Concat(PinLanguagePolicy.AddressesAndPlaceholders().Matches(source)
                 .Select(match => match.Value.TrimEnd('.', ',', ';', ':', ')', ']', '}')))
             .Where(value => value.Length > 0);
         foreach (string value in values.Distinct(StringComparer.Ordinal))
@@ -223,6 +279,11 @@ internal sealed partial class PinTranslationService(ITextTranslator translator)
                     if (destinationEnd >= 0)
                     {
                         if (c == '!') syntax.Add("image:" + text[index..(destinationEnd + 1)]);
+                        else if (open == '[' && destinationEnd == close + 2)
+                        {
+                            // A collapsed reference uses the visible label as its destination ID.
+                            syntax.Add("reference:" + text[index..(destinationEnd + 1)]);
+                        }
                         else
                         {
                             syntax.Add("link:" + text[close..(destinationEnd + 1)]);
@@ -231,6 +292,14 @@ internal sealed partial class PinTranslationService(ITextTranslator translator)
                         index = destinationEnd + 1;
                         continue;
                     }
+                }
+                if (close >= 0)
+                {
+                    // Shortcut reference labels are IDs too. Preserve ambiguous bracket text
+                    // conservatively instead of accepting a translation that disconnects a link.
+                    syntax.Add("reference:" + text[index..(close + 1)]);
+                    index = close + 1;
+                    continue;
                 }
             }
             if (c is '*' or '_' or '~')
@@ -261,17 +330,40 @@ internal sealed partial class PinTranslationService(ITextTranslator translator)
         return emphasis.Count == 0;
     }
 
-    private static void AddTranslatable(List<Piece> pieces, string text)
+    private static void AddTranslatable(List<Piece> pieces, string text, string target,
+        bool markdown = false, bool json = false, bool comment = false, bool mermaid = false, string? color = null)
     {
         int start = 0, end = text.Length;
         while (start < end && char.IsWhiteSpace(text[start])) start++;
         while (end > start && char.IsWhiteSpace(text[end - 1])) end--;
-        Literal(pieces, text[..start]);
+        AddLiteral(pieces, text[..start], json, color);
         string prose = text[start..end];
-        if (TranslationBlocks.IsEnglishToTranslate(AdditionalLiteral().Replace(prose, " ")))
-            pieces.Add(new Piece(prose, true));
-        else Literal(pieces, prose);
-        Literal(pieces, text[end..]);
+        string languageText = PinLanguagePolicy.WithoutProtectedText(prose);
+        if (languageText.Any(PinLanguagePolicy.IsKorean) && languageText.Any(PinLanguagePolicy.IsLatin))
+        {
+            int segment = 0, language = 0;
+            for (int position = 0; position < languageText.Length; position++)
+            {
+                int current = PinLanguagePolicy.IsKorean(languageText[position]) ? 1 : PinLanguagePolicy.IsLatin(languageText[position]) ? 2 : 0;
+                if (current == 0) continue;
+                if (language != 0 && current != language)
+                {
+                    AddTranslatable(pieces, prose[segment..position], target, markdown, json, comment, mermaid, color);
+                    segment = position;
+                }
+                language = current;
+            }
+            AddTranslatable(pieces, prose[segment..], target, markdown, json, comment, mermaid, color);
+        }
+        else if (PinLanguagePolicy.Assess(prose, target).CanTranslate)
+            pieces.Add(new Piece(prose, true, json, markdown, comment, mermaid, color));
+        else AddLiteral(pieces, prose, json, color);
+        AddLiteral(pieces, text[end..], json, color);
+    }
+
+    private static void AddLiteral(List<Piece> pieces, string text, bool json = false, string? color = null)
+    {
+        if (text.Length > 0) pieces.Add(new Piece(json ? JsonSerializer.Serialize(text, JsonTextOptions)[1..^1] : text, false, Color: color));
     }
 
     private static void Literal(List<Piece> pieces, string text)
@@ -328,7 +420,8 @@ internal sealed partial class PinTranslationService(ITextTranslator translator)
         return -1;
     }
 
-    private sealed record Piece(string Text, bool Translate);
+    private sealed record Piece(string Text, bool Translate, bool JsonString = false, bool Markdown = false,
+        bool Comment = false, bool MermaidLabel = false, string? Color = null);
 
     [GeneratedRegex(@"^\s*(?:(?:(?:using|import|from|namespace|class|struct|interface|public|private|protected|internal|const|let|var|def|function|return)\b[^\r\n]*[;{}=])|(?:[\w.$]+\([^\r\n]*\)\s*;?)|(?:[\w.$]+\s*(?:=>|:=|=(?!=))[^\r\n]*)|(?:[{}\[\],;]+))\s*$", RegexOptions.CultureInvariant)]
     private static partial Regex CodeLine();

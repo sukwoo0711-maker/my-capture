@@ -69,12 +69,15 @@ internal sealed record PinContent
     // Translation fills the existing pin frame, whose chrome already supplies its border.
     internal bool BorderlessText { get; init; }
 
+    internal IReadOnlyDictionary<int, MermaidRenderResult>? MermaidResults { get; init; }
+
     internal PinContent WithProvenance(CaptureProvenance provenance) =>
         new(Image, Kind, OriginalText, SourcePageUrl, UsesDeviceIndependentPixels,
             TextStyle, CodeDocument, LayoutWidthDip, LayoutHeightDip, provenance)
         {
             PendingProvenance = PendingProvenance,
             BorderlessText = BorderlessText,
+            MermaidResults = MermaidResults,
         };
 
     internal bool HasOriginalText => OriginalText is not null;
@@ -119,6 +122,8 @@ internal sealed record PinContent
         + ClosedPinMemory.EstimateTextBytes(Provenance.BadgeText)
         + ClosedPinMemory.EstimateTextBytes(Provenance.Tooltip)
         + ClosedPinMemory.EstimateTextBytes(Provenance.SearchQuery)
+        + (MermaidResults?.Values.Sum(static result => result.Image is { } image
+            ? ClosedPinMemory.EstimatePixelBytes(image.PixelWidth, image.PixelHeight, image.Format.BitsPerPixel) : 0) ?? 0)
         + (CodeDocument is null ? 0
             : ClosedPinMemory.EstimateTextBytes(CodeDocument.DisplayText)
                 + ClosedPinMemory.EstimateTextBytes(CodeDocument.Background)
@@ -189,7 +194,7 @@ internal sealed record PinContent
         BitmapSource image = TextStyle switch
         {
             PinTextStyle.Code => ClipboardCodeRenderer.Render(CodeDocument!, scale),
-            PinTextStyle.Markdown => ClipboardMarkdownRenderer.Render(OriginalText!, scale),
+            PinTextStyle.Markdown => ClipboardMarkdownRenderer.Render(OriginalText!, scale, MermaidResults),
             PinTextStyle.PlainText when BorderlessText => ClipboardTextRenderer.RenderTranslation(OriginalText!, scale),
             _ => ClipboardTextRenderer.Render(OriginalText!, TextStyle == PinTextStyle.Grid, scale),
         };
@@ -198,6 +203,22 @@ internal sealed record PinContent
         {
             PendingProvenance = PendingProvenance,
             BorderlessText = BorderlessText,
+            MermaidResults = MermaidResults,
+        };
+    }
+
+    internal PinContent WithMermaidResults(IReadOnlyDictionary<int, MermaidRenderResult> results, double scale)
+    {
+        if (!IsMarkdown || OriginalText is null) return this;
+        // Snapshot the dictionary: later diagram completions must not mutate a saved frame.
+        var snapshot = new Dictionary<int, MermaidRenderResult>(results);
+        BitmapSource image = ClipboardMarkdownRenderer.Render(OriginalText, scale, snapshot);
+        return new(image, Kind, OriginalText, SourcePageUrl, UsesDeviceIndependentPixels,
+            TextStyle, CodeDocument, provenance: Provenance)
+        {
+            PendingProvenance = PendingProvenance,
+            BorderlessText = BorderlessText,
+            MermaidResults = snapshot,
         };
     }
 

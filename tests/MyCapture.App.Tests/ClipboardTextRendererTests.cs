@@ -77,6 +77,33 @@ public sealed class ClipboardTextRendererTests
     private static BitmapSource RenderOnSta(string sourceText, bool isTabularContent) =>
         RunSta(() => ClipboardTextRenderer.Render(sourceText, isTabularContent));
 
+    [Fact]
+    public void LongTranslationIncludesLastLineBeyondTheOrdinaryPreviewHeight() => RunSta(() =>
+    {
+        string prefix = string.Concat(Enumerable.Repeat("번역된 문장을 표시합니다.\n", 60));
+        BitmapSource first = ClipboardTextRenderer.RenderTranslation(prefix + "마지막 문장 END-015");
+        BitmapSource second = ClipboardTextRenderer.RenderTranslation(prefix + "다른 마지막 문장 END-999");
+        Assert.True(first.IsFrozen);
+        Assert.InRange(first.Height, 1400, 8192);
+        Assert.Equal(first.PixelHeight, second.PixelHeight);
+        byte[] firstPixels = CopyPixels(first), secondPixels = CopyPixels(second);
+        int lastRows = (int)(first.PixelWidth * 4 * 50);
+        Assert.False(firstPixels.AsSpan(firstPixels.Length - lastRows)
+            .SequenceEqual(secondPixels.AsSpan(secondPixels.Length - lastRows)));
+        return true;
+    });
+
+    [Fact]
+    public void LongTranslationAtHighDpiCapsPixelsWithoutDroppingLogicalLines() => RunSta(() =>
+    {
+        string source = string.Concat(Enumerable.Repeat(new string('문', 80) + "\n", 150));
+        BitmapSource image = ClipboardTextRenderer.RenderTranslation(source, 8);
+        Assert.True(image.IsFrozen);
+        Assert.True((long)image.PixelWidth * image.PixelHeight <= 16_000_000);
+        Assert.InRange(image.Height, 3500, 8193);
+        return true;
+    });
+
     private static T RunSta<T>(Func<T> action)
     {
         ArgumentNullException.ThrowIfNull(action);

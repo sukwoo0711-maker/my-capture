@@ -25,7 +25,7 @@ internal interface ITextTranslator
 }
 
 /// <summary>
-/// English to Korean translation of recognized text, entirely on this PC. The model loads on
+/// Translation between English and Korean using the selected store, entirely on this PC. The model loads on
 /// first use and is released after a quiet minute, because its sessions hold about half a
 /// gigabyte. Translations are cached per segment, so switching views does not translate again.
 /// Every segment is repaired against its source with <see cref="ProtectedTokens.Repair"/>, and
@@ -56,7 +56,7 @@ internal sealed class TextTranslationService : ITextTranslator, IDisposable
     private volatile bool _disposed;
 
     internal TextTranslationService(TranslationModelStore store, ILogger<TextTranslationService> log)
-        : this(store, () => MarianTranslator.Load(store.ModelDirectory, TranslationModelCatalog.ModelFiles,
+        : this(store, () => MarianTranslator.Load(store.ModelDirectory, store.ModelFiles,
             MarianTranslator.DefaultThreads), log, TimeSpan.FromMinutes(1))
     {
     }

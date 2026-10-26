@@ -8,7 +8,7 @@ internal sealed record TranslationModelFile(string FileName, string Uri, string 
 
 /// <summary>
 /// Pinned files of the offline English-to-Korean model (OPUS-MT tc-big, int8). They are downloaded
-/// only when the user turns translation on and are never part of the installer. The three graphs
+/// only when the user turns translation on. The isolated preview can pre-seed model files. The three graphs
 /// share their weights through the four weights files, written by
 /// build/tools/translation-model/dedupe_opus_onnx.py; the tokenizer files are unchanged.
 /// </summary>
@@ -46,6 +46,41 @@ internal static class TranslationModelCatalog
 
     internal static int TotalMegabytes => (int)Math.Ceiling(TotalBytes / 1_000_000d);
 
+    /// <summary>One model's isolated storage folder and the files its engine consumes.</summary>
+    internal sealed record Definition(string FolderName, IReadOnlyList<TranslationModelFile> Files, MarianModelFiles ModelFiles)
+    {
+        internal long TotalBytes => Files.Sum(file => file.Bytes);
+    }
+
+    private const string KoreanToEnglishOnnxBase =
+        "https://huggingface.co/Xenova/opus-mt-ko-en/resolve/d9fa1ac6008242100fecb4fff9b0a5917a1be81f/";
+    private const string KoreanToEnglishTokenizerBase =
+        "https://huggingface.co/Helsinki-NLP/opus-mt-ko-en/resolve/e42d1f41b66194e6d10512f8a27bebc1f4f5097e/";
+
+    internal static Definition EnglishToKorean { get; } = new(FolderName, Files, ModelFiles);
+
+    /// <summary>Unmodified upstream int8 graphs and tokenizer, pinned to immutable revisions.</summary>
+    internal static Definition KoreanToEnglish { get; } = new("opus-mt-ko-en-1",
+    [
+        new("opus-mt-ko-en-encoder.onnx", KoreanToEnglishOnnxBase + "onnx/encoder_model_quantized.onnx",
+            "210E1D2CB5B457CDEEFFE288099CC9D1DF9F13C35DC3D39FDE4BA252AF877380", 52_899_741),
+        new("opus-mt-ko-en-decoder.onnx", KoreanToEnglishOnnxBase + "onnx/decoder_model_quantized.onnx",
+            "0C961EA33A62EA84E73C9EC94C0737E65D06B5F73A7D0398B018FBBB7262D929", 59_842_101),
+        new("opus-mt-ko-en-decoder-with-past.onnx", KoreanToEnglishOnnxBase + "onnx/decoder_with_past_model_quantized.onnx",
+            "196BD1705AE0EAC256F1A9AB8C82C243DECDAD124C5ACE67FE073D9E0FC6956E", 56_570_637),
+        new("opus-mt-ko-en-source.spm", KoreanToEnglishTokenizerBase + "source.spm",
+            "C9496F7C2BE9AECB84C751AE9F35A875915DDE8E3892F652A5C76811AB2A0F49", 841_805),
+        new("opus-mt-ko-en-vocab.json", KoreanToEnglishTokenizerBase + "vocab.json",
+            "D42E3838E7ED0E43785FA013EF22AB4D382248CDF4E959C46A2B48DB5EB019E9", 1_719_866),
+    ], new("opus-mt-ko-en-encoder.onnx", "opus-mt-ko-en-decoder.onnx", "opus-mt-ko-en-decoder-with-past.onnx",
+        "opus-mt-ko-en-source.spm", "opus-mt-ko-en-vocab.json", SourceTokenVocabulary: "opus-mt-ko-en-vocab.json"));
+
+    internal static Definition For(TranslationDirection direction) => direction switch
+    {
+        TranslationDirection.EnglishToKorean => EnglishToKorean,
+        TranslationDirection.KoreanToEnglish => KoreanToEnglish,
+        _ => throw new ArgumentOutOfRangeException(nameof(direction)),
+    };
     private static TranslationModelFile Asset(string fileName, string sha256, long bytes) =>
         new(fileName, DownloadBase + fileName, sha256, bytes);
 }

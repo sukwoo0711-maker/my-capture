@@ -4690,7 +4690,7 @@ F3  클립보드를 핀으로 띄우기
   <data name="Pin_MarkdownSourceView" xml:space="preserve"><value>Markdown 원문 보기</value></data>
   <data name="Pin_MarkdownRenderedView" xml:space="preserve"><value>Markdown 서식 보기</value></data>
   <data name="Pin_TranslationInstallAction" xml:space="preserve"><value>설치</value></data>
-  <data name="Pin_TranslationConsent" xml:space="preserve"><value>한국어 번역 모델 {0} MB를 내려받습니다.
+  <data name="Pin_TranslationConsent" xml:space="preserve"><value>번역 모델 {0} MB를 내려받습니다.
 글은 PC 밖으로 나가지 않습니다.
 
 설치하시겠습니까?</value></data>
@@ -4698,7 +4698,7 @@ F3  클립보드를 핀으로 띄우기
     <value>번역 모델 설치</value>
   </data>
   <data name="Pin_TranslationModelNeeded" xml:space="preserve">
-    <value>한국어 번역 모델 {0} MB 설치가 필요합니다.</value>
+    <value>번역 모델 {0} MB 설치가 필요합니다.</value>
   </data>
   <data name="Pin_Translating" xml:space="preserve">
     <value>번역 중</value>
@@ -4713,8 +4713,9 @@ F3  클립보드를 핀으로 띄우기
     <value>번역 재시도</value>
   </data>
   <data name="Pin_Translated" xml:space="preserve">
-    <value>한국어 번역됨</value>
+    <value>번역됨</value>
   </data>
+  <data name="Pin_TranslationOcrLanguageReview" xml:space="preserve"><value>인식 언어가 원문과 달라 원문 확인이 필요합니다.</value></data>
   <data name="Pin_TranslationReview" xml:space="preserve">
     <value>번역문의 수치·기호를 원문과 확인하십시오.</value>
   </data>
@@ -4727,4 +4728,12 @@ F3  클립보드를 핀으로 띄우기
   <data name="Pin_TranslationKorean" xml:space="preserve">
     <value>한국어</value>
   </data>
+  <data name="Pin_Translate" xml:space="preserve"><value>번역</value></data>
+  <data name="Pin_CopyTranslation" xml:space="preserve"><value>번역문 복사</value></data>
+  <data name="Pin_TranslationAlreadyKorean" xml:space="preserve"><value>이미 한국어입니다</value></data>
+  <data name="Pin_TranslationAlreadyEnglish" xml:space="preserve"><value>이미 영어입니다</value></data>
+  <data name="Pin_TranslationUnsupportedLanguage" xml:space="preserve"><value>한국어와 영어만 번역할 수 있습니다</value></data>
+  <data name="Pin_TranslationNoText" xml:space="preserve"><value>번역할 글이 없습니다</value></data>
+  <data name="Pin_TranslationRecognizing" xml:space="preserve"><value>이미지에서 글자 읽는 중</value></data>
+  <data name="Pin_TranslationOcrUnavailable" xml:space="preserve"><value>이 PC에서 이미지의 글자를 읽을 수 없습니다</value></data>
 </root>

@@ -14,6 +14,57 @@ namespace MyCapture.App.Tests;
 public sealed class ClipboardMarkdownDeliveryTests
 {
     [Theory]
+    [InlineData(null)]
+    [InlineData("<div>Copied Markdown</div>")]
+    [InlineData("<pre style='background-color:#123456'><code class='language-markdown'>Copied Markdown</code></pre>")]
+    public async Task RequiredKoreanReleaseSampleRendersImmediatelyAndRetainsExactOriginal(string? html)
+    {
+        const string source = "# 배포 전 확인\r\n\r\n변경 내용을 **한눈에 확인**합니다.\r\n\r\n- [x] 빌드 확인\r\n- [ ] 최종 화면 확인\r\n\r\n> 원문은 그대로 보존합니다.\r\n\r\n| 항목 | 상태 |\r\n| --- | --- |\r\n| Markdown | 자동 렌더링 |\r\n| 코드 | 원문 유지 |\r\n\r\n```js\r\nconst timeout = 5000;\r\n```\r\n";
+        Assert.True(ClipboardMarkdownRenderer.IsMarkdown(source));
+        var captured = await Capture(source, html);
+        var completed = await ClipboardImageReader.CompletePinAttemptAsync(captured, _ => null,
+            (_, _) => throw new InvalidOperationException("The required sample must use Markdown."),
+            _ => throw new InvalidOperationException("No clipboard reread is needed."));
+        Assert.True(completed.Content!.IsMarkdown);
+        Assert.Equal(source, completed.Content.OriginalText);
+        Assert.True(completed.Content.Image.IsFrozen);
+        if (captured.HasExplicitMarkdown) Assert.Null(captured.CodePreview);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("<pre class='language-mermaid'>flowchart TD</pre>")]
+    public async Task PureMermaidUsesImmediatePlaceholderThroughTheMarkdownPipeline(string? html)
+    {
+        const string source = "flowchart TD\r\n A[복사] --> B[핀]\r\n";
+        var captured = await Capture(source, html);
+        var completed = await ClipboardImageReader.CompletePinAttemptAsync(captured, _ => null,
+            (_, _) => throw new InvalidOperationException("Mermaid must use the diagram placeholder."),
+            _ => throw new InvalidOperationException("No clipboard reread is needed."));
+        Assert.True(completed.Content!.IsMarkdown);
+        Assert.Equal(source, completed.Content.OriginalText);
+        Assert.True(completed.Content.Image.IsFrozen);
+        Assert.Equal(source, Assert.Single(ClipboardMarkdownRenderer.ExtractMermaidBlocks(source)).Source);
+    }
+
+    [Fact]
+    public async Task ExcelTabularTextKeepsTheExistingTablePath()
+    {
+        const string source = "항목\t상태\r\nMarkdown\t완료\r\n";
+        var captured = await Capture(source, "<table><tr><td>항목</td><td>상태</td></tr><tr><td>Markdown</td><td>완료</td></tr></table>");
+        var completed = await ClipboardImageReader.CompletePinAttemptAsync(captured, _ => null,
+            (text, table) =>
+            {
+                Assert.True(table);
+                return StaThreadTask.RunAsync(() => ClipboardTextRenderer.Render(text, table));
+            },
+            _ => throw new InvalidOperationException("No clipboard reread is needed."),
+            _ => throw new InvalidOperationException("Excel must keep the table renderer."));
+        Assert.False(completed.Content!.IsMarkdown);
+        Assert.Equal(source, completed.Content.OriginalText);
+    }
+
+    [Theory]
     [InlineData("# Title")]
     [InlineData("**Ready**")]
     [InlineData("Read [the guide](https://example.com).")]
@@ -60,6 +111,87 @@ public sealed class ClipboardMarkdownDeliveryTests
         Assert.Equal(source, completed.Content.OriginalText);
         Assert.True(completed.Content.CanRerender);
         Assert.True(completed.Content.Image.IsFrozen);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("<div># Release<br><br><b>Ready</b></div>")]
+    [InlineData("<pre class='language-markdown'># Release\n\n**Ready**</pre>")]
+    public async Task MarkdownSourceAndPng_RepinsAsMarkdownWithExactSource(string? html)
+    {
+        const string source = "# Release\r\n\r\n**Ready**\r\n\r\n- [x] 완료\r\n";
+        var (captured, _) = await CaptureWithPng(source, html);
+        Assert.NotEmpty(captured.PngBytes!);
+        var completed = await ClipboardImageReader.CompletePinAttemptAsync(captured,
+            _ => throw new InvalidOperationException("Retained Markdown must take priority over its PNG."),
+            (_, _) => throw new InvalidOperationException("Markdown must use its renderer."),
+            _ => throw new InvalidOperationException("No clipboard reread is needed."));
+        Assert.True(completed.Content!.IsMarkdown);
+        Assert.Equal(source, completed.Content.OriginalText);
+        Assert.True(completed.Content.CanRerender);
+        Assert.True(completed.Content.Image.IsFrozen);
+    }
+
+    [Theory]
+    [InlineData("A photograph of the release team.")]
+    [InlineData("# A single comment")]
+    [InlineData("**Ready**")]
+    public async Task PngAndOrdinaryOrAmbiguousCaption_RemainsAnImage(string source)
+    {
+        var (captured, picture) = await CaptureWithPng(source, null);
+        var completed = await ClipboardImageReader.CompletePinAttemptAsync(captured, _ => picture,
+            (_, _) => throw new InvalidOperationException("The copied picture must remain the visual."),
+            _ => throw new InvalidOperationException("No clipboard reread is needed."),
+            _ => throw new InvalidOperationException("A caption must not select Markdown."));
+        Assert.Equal(PinContentKind.Image, completed.Content!.Kind);
+        Assert.Same(picture, completed.Content.Image);
+    }
+
+    [Fact]
+    public async Task ExcelPictureAndMarkdownLikeCellText_KeepsTablePictureAndExactSource()
+    {
+        const string source = "# Release\t상태\r\n**Ready**\t완료\r\n";
+        var (captured, picture) = await CaptureWithPng(source,
+            "<table><tr><td># Release</td><td>상태</td></tr><tr><td>**Ready**</td><td>완료</td></tr></table>");
+        Assert.True(captured.IsTabularText);
+        var completed = await ClipboardImageReader.CompletePinAttemptAsync(captured, _ => picture,
+            (_, _) => throw new InvalidOperationException("Excel must retain its copied picture."),
+            _ => throw new InvalidOperationException("No clipboard reread is needed."),
+            _ => throw new InvalidOperationException("Excel cells must not select Markdown."));
+        Assert.Equal(PinContentKind.Table, completed.Content!.Kind);
+        Assert.False(completed.Content.IsMarkdown);
+        Assert.Equal(source, completed.Content.OriginalText);
+        Assert.Equal(picture.PixelWidth, completed.Content.Image.PixelWidth);
+        Assert.Equal(picture.PixelHeight, completed.Content.Image.PixelHeight);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task CodeHtmlWithPng_DoesNotBecomeMarkdownWhenSourceLooksLikeMarkdown(bool previewUnavailable)
+    {
+        const string source = "# Release\n\n**Ready**";
+        var (captured, picture) = await CaptureWithPng(source,
+            "<pre style='background-color:#123456'><code class='language-python'># Release\n\n**Ready**</code></pre>");
+        Assert.True(captured.HasCodeHtml);
+        Assert.NotNull(captured.CodePreview);
+        if (previewUnavailable) captured = captured with { CodePreview = null, CodeDocument = null };
+        var completed = await ClipboardImageReader.CompletePinAttemptAsync(captured, _ => picture,
+            (_, _) => throw new InvalidOperationException("Use the code preview or picture."),
+            _ => throw new InvalidOperationException("No clipboard reread is needed."),
+            _ => throw new InvalidOperationException("Explicit code HTML must not select Markdown."));
+        Assert.False(completed.Content!.IsMarkdown);
+        if (previewUnavailable)
+        {
+            Assert.Equal(PinContentKind.Image, completed.Content.Kind);
+            Assert.Same(picture, completed.Content.Image);
+        }
+        else
+        {
+            Assert.Equal(PinTextStyle.Code, completed.Content.TextStyle);
+            Assert.Same(captured.CodePreview, completed.Content.Image);
+            Assert.Equal(source, completed.Content.OriginalText);
+        }
     }
 
     [Theory]
@@ -170,4 +302,21 @@ public sealed class ClipboardMarkdownDeliveryTests
         if (html is not null) data.SetData(DataFormats.Html, html);
         return ClipboardImageReader.CaptureFrom(data, 41, () => null);
     }, "Markdown clipboard fixture");
+
+    private static Task<(ClipboardImageReader.CapturedAttempt Captured, BitmapSource Picture)> CaptureWithPng(
+        string text, string? html) => StaThreadTask.RunAsync(() =>
+    {
+        BitmapSource picture = BitmapSource.Create(2, 2, 96, 96, PixelFormats.Bgra32, null,
+            new byte[] { 30, 60, 90, 255, 90, 60, 30, 255, 20, 40, 80, 255, 80, 40, 20, 255 }, 8);
+        picture.Freeze();
+        var encoder = new PngBitmapEncoder();
+        encoder.Frames.Add(BitmapFrame.Create(picture));
+        using var png = new System.IO.MemoryStream();
+        encoder.Save(png);
+        var data = new DataObject();
+        data.SetData(DataFormats.UnicodeText, text);
+        data.SetData("PNG", png.ToArray(), false);
+        if (html is not null) data.SetData(DataFormats.Html, html);
+        return (ClipboardImageReader.CaptureFrom(data, 42, () => null), picture);
+    }, "Markdown and PNG clipboard fixture");
 }

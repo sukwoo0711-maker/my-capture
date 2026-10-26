@@ -16,13 +16,14 @@ internal interface ISentenceTranslator : IDisposable
 
 /// <summary>File names of one Marian model inside its folder.</summary>
 internal sealed record MarianModelFiles(
-    string Encoder, string Decoder, string DecoderWithPast, string SourceVocabulary, string TargetVocabulary);
+    string Encoder, string Decoder, string DecoderWithPast, string SourceVocabulary, string TargetVocabulary,
+    string? SourceTokenVocabulary = null);
 
 /// <summary>
-/// OPUS-MT tc-big English to Korean as ONNX: the encoder, the first-step decoder and the decoder
+/// OPUS-MT English/Korean translation as ONNX: the encoder, the first-step decoder and the decoder
 /// that reuses the key/value cache, with greedy decoding over a batch. The source side has its
-/// own SentencePiece vocabulary ("sepvoc") whose piece ids feed the encoder directly; vocab.json
-/// is the target vocabulary only. The merged decoder (an If node choosing the cache branch) is
+/// own SentencePiece vocabulary ("sepvoc") for en-ko, or mapped shared-vocabulary ids for ko-en; vocab.json
+/// supplies the target vocabulary. The merged decoder (an If node choosing the cache branch) is
 /// not used: its int8 weights were dequantized at every step and ran three to four times slower.
 /// </summary>
 internal sealed class MarianTranslator : ISentenceTranslator
@@ -36,6 +37,7 @@ internal sealed class MarianTranslator : ISentenceTranslator
     private readonly InferenceSession _decoder;
     private readonly InferenceSession _decoderWithPast;
     private readonly SentencePieceModel _source;
+    private readonly MarianSourceVocabulary _sourceVocabulary;
     private readonly string?[] _targetPieces;
     private readonly int _targetEos;
     private readonly int _targetUnknown;
@@ -44,12 +46,13 @@ internal sealed class MarianTranslator : ISentenceTranslator
     private readonly string[] _decoderWithPastOutputs;
 
     private MarianTranslator(InferenceSession encoder, InferenceSession decoder, InferenceSession decoderWithPast,
-        SentencePieceModel source, TargetVocabulary target)
+        SentencePieceModel source, MarianSourceVocabulary sourceVocabulary, TargetVocabulary target)
     {
         _encoder = encoder;
         _decoder = decoder;
         _decoderWithPast = decoderWithPast;
         _source = source;
+        _sourceVocabulary = sourceVocabulary;
         _targetPieces = target.Pieces;
         _targetEos = target.EndOfSentence;
         _targetUnknown = target.Unknown;
@@ -68,7 +71,8 @@ internal sealed class MarianTranslator : ISentenceTranslator
         OnnxRuntimeInitialization.Shared.EnsureInitialized();
         SentencePieceModel source = SentencePieceModel.Load(Path.Combine(directory, files.SourceVocabulary));
         TargetVocabulary target = TargetVocabulary.Load(Path.Combine(directory, files.TargetVocabulary));
-        if (source.EndOfSentenceId < 0) throw new InvalidDataException("The source vocabulary has no end-of-sentence piece.");
+        MarianSourceVocabulary sourceVocabulary = MarianSourceVocabulary.Load(source,
+            files.SourceTokenVocabulary is { } sourceTokenVocabulary ? Path.Combine(directory, sourceTokenVocabulary) : null);
 
         using var options = new SessionOptions
         {
@@ -83,7 +87,7 @@ internal sealed class MarianTranslator : ISentenceTranslator
             encoder = new InferenceSession(Path.Combine(directory, files.Encoder), options);
             decoder = new InferenceSession(Path.Combine(directory, files.Decoder), options);
             decoderWithPast = new InferenceSession(Path.Combine(directory, files.DecoderWithPast), options);
-            return new MarianTranslator(encoder, decoder, decoderWithPast, source, target);
+            return new MarianTranslator(encoder, decoder, decoderWithPast, source, sourceVocabulary, target);
         }
         catch
         {
@@ -104,15 +108,7 @@ internal sealed class MarianTranslator : ISentenceTranslator
         return [.. Generate(sources, cancellationToken).Select(Decode)];
     }
 
-    private int[] EncodeSource(string text)
-    {
-        int[] pieces = _source.EncodeToIds(text);
-        int length = Math.Min(pieces.Length, MaxSourceTokens - 1);
-        var ids = new int[length + 1];
-        pieces.AsSpan(0, length).CopyTo(ids);
-        ids[length] = _source.EndOfSentenceId;
-        return ids;
-    }
+    private int[] EncodeSource(string text) => _sourceVocabulary.Encode(text, MaxSourceTokens);
 
     private List<int>[] Generate(IReadOnlyList<int[]> sources, CancellationToken cancellationToken)
     {

@@ -125,6 +125,7 @@ internal sealed partial class PinWindow : Window
     {
         ArgumentNullException.ThrowIfNull(content);
         _content = content;
+        _mermaidMonitorScale = content.Image.DpiX / 96;
         _contentKind = content.Kind;
         _originalText = content.OriginalText;
         SourcePageUrl = content.SourcePageUrl;
@@ -762,6 +763,7 @@ internal sealed partial class PinWindow : Window
     internal void RerenderForDisplayScale(double scale)
     {
         if (_isClosed || !_content.CanRerender) return;
+        _mermaidMonitorScale = scale;
         PinContent rendered = _content.RenderedAt(scale);
         PinContent? renderedSource = _markdownSourceContent?.RenderedAt(scale);
         if (ReferenceEquals(rendered, _content) && ReferenceEquals(renderedSource, _markdownSourceContent)) return;
@@ -1294,7 +1296,7 @@ internal sealed partial class PinWindow : Window
             LeaveTextSelection();
             return;
         }
-        if (_originalText is null)
+        if (DisplayContent.OriginalText is null)
         {
             ShowFeedback(UiText.Get("Pin_SelectTextImageHint"), FeedbackKind.Result);
             return;
@@ -1486,13 +1488,9 @@ internal sealed partial class PinWindow : Window
             OriginalTextCopyRequested?.Invoke(this, selection);
             return;
         }
-        if (TranslationSourceContent.IsMarkdown)
-        {
-            RequestOriginalTextCopy();
-            return;
-        }
         ShowFeedback(UiText.Get("Text_4C160257F02C"), FeedbackKind.Progress);
-        CopyRequested?.Invoke(this, new PinImageCopyRequest(_image, SourcePageUrl, _content.OriginalText));
+        CopyRequested?.Invoke(this, new PinImageCopyRequest(DisplayContent.Image, SourcePageUrl,
+            IsShowingTranslation ? _content.OriginalText : OriginalCopyText));
     }
 
     private void RequestOcr()
@@ -1505,7 +1503,7 @@ internal sealed partial class PinWindow : Window
     {
         _ctrlClickTimer.Stop();
         if (IsTextSelectionMode) return;
-        if (_originalText is not null)
+        if (OriginalCopyText is not null)
         {
             RequestOriginalTextCopy();
             return;
@@ -1516,13 +1514,13 @@ internal sealed partial class PinWindow : Window
 
     private void RequestOriginalTextCopy()
     {
-        if (_originalText is null)
+        if (OriginalCopyText is null)
         {
             return;
         }
 
         ShowFeedback(UiText.Get("Text_BDB7C68F7452"), FeedbackKind.Progress);
-        OriginalTextCopyRequested?.Invoke(this, _originalText);
+        OriginalTextCopyRequested?.Invoke(this, OriginalCopyText);
     }
 
     private void RequestSave(PinSaveMode mode)
@@ -1890,7 +1888,7 @@ internal sealed partial class PinWindow : Window
             (_, _) => CopyImageToClipboard(),
             iconResourceKey: "Icon.Copy",
             inputGestureText: "Ctrl+C"));
-        if (_originalText is not null)
+        if (OriginalCopyText is not null)
         {
             menu.Items.Add(MenuItemFor(
                 UiText.Get("Text_976A6C92B870"),
@@ -1902,6 +1900,7 @@ internal sealed partial class PinWindow : Window
                 (_, _) => ToggleTextSelection(), inputGestureText: "F2");
             _selectTextItem.IsCheckable = true;
             _selectTextItem.IsChecked = IsTextSelectionMode;
+            _selectTextItem.IsEnabled = DisplayContent.OriginalText is not null;
             menu.Items.Add(_selectTextItem);
         }
         else

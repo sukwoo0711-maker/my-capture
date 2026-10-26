@@ -73,6 +73,8 @@ public partial class App : Application
     private GalleryReeditLoader? _reeditLoader;
     private GalleryWindow? _galleryWindow;
     private PinManager? _pins;
+    private MermaidRenderer? _mermaidRenderer;
+    private TextTranslationService? _koreanToEnglishTranslator;
     private IOcrService? _ocrService;
     private readonly OcrModelPreparation _ocrModelPreparation = new();
     private OcrResultPresenter? _ocrPresenter;
@@ -224,14 +226,25 @@ public partial class App : Application
             pinSaveService,
             _services.GetRequiredService<ILogger<PinManager>>());
         _pins.PinCreated += ShowFirstPinTip;
-        if (AppArchitecture.SupportsNeuralOcr)
-            _pins.ConfigureTranslation(_services.GetRequiredService<TextTranslationService>());
+        _ = PinRenderWarmup.StartAsync();
+        _mermaidRenderer = new MermaidRenderer(
+            Path.Combine(_services.GetRequiredService<AppPaths>().DataRoot, "mermaid-browser"), Dispatcher,
+            _services.GetRequiredService<ILogger<MermaidRenderer>>());
+        _pins.ConfigureMermaid(_mermaidRenderer);
         InitializePinSession();
         _gitHubUpload = new GitHubIssueImageUploadService(
             () => _settings!,
             _services.GetRequiredService<ILogger<GitHubIssueImageUploadService>>());
 
         _ocrService = _services.GetRequiredService<IOcrService>();
+        if (AppArchitecture.SupportsNeuralOcr)
+            _pins.ConfigureTranslation(target => target == "en"
+                ? _koreanToEnglishTranslator ??= new TextTranslationService(new TranslationModelStore(
+                    _services.GetRequiredService<AppPaths>(), _services.GetRequiredService<ILogger<TranslationModelStore>>(),
+                    TranslationDirection.KoreanToEnglish), _services.GetRequiredService<ILogger<TextTranslationService>>())
+                : _services.GetRequiredService<TextTranslationService>(),
+                recognize: (content, target, token) => _ocrService.RecognizeAsync(
+                    PinTranslationOcr.CreateRequest(content.Image, target, _settings!.Ocr), token));
         // Accurate uses downloaded PP-OCR models, including settings migrated from Enhanced.
         // Switching to Accurate also prepares missing models before the next recognition.
         if (OcrQualityProfile.UseNeuralModel(_settings.Ocr.Quality)) StartOcrModelDownload();
@@ -411,6 +424,7 @@ public partial class App : Application
                 _settings = updated;
                 if (previousShortcutHints != updated.General.AlwaysShowShortcutHints) ShortcutPresentation.Refresh();
                 _pins?.TrimClosedHistory();
+                _pins?.RefreshTranslationAvailability();
                 AnnounceCaptureKeyChange(previousCapture, updated.Hotkeys.Capture);
                 QueueWelcomeResidentAnnouncement();
             },
@@ -2570,6 +2584,7 @@ public partial class App : Application
         try
         {
             _pins?.CloseAllForExit();
+            _mermaidRenderer?.Dispose();
         }
         catch (InvalidOperationException)
         {
@@ -2612,6 +2627,7 @@ public partial class App : Application
         }
 
         _services?.Dispose();
+        _koreanToEnglishTranslator?.Dispose();
         // Last: services log while they dispose. Dispose writes every queued line first.
         _fileLog?.Dispose();
 

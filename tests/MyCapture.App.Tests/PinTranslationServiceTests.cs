@@ -17,9 +17,6 @@ public sealed class PinTranslationServiceTests
     [InlineData("hello@example.com")]
     [InlineData("123.5 MHz 42 2026-10-27")]
     [InlineData("이미 한국어로 작성한 문장입니다.")]
-    [InlineData("{\"message\":\"Hello world\"}")]
-    [InlineData("[\"Hello world\",\"Read this guide\"]")]
-    [InlineData("var text = \"Hello world\";\n// Read the documentation")]
     [InlineData("console.log(\"Hello world\");")]
     public async Task NonProse_IsNotSentToTheTranslator(string text)
     {
@@ -33,13 +30,13 @@ public sealed class PinTranslationServiceTests
     }
 
     [Fact]
-    public async Task ImagesAndTables_AreNotEligible()
+    public async Task ImagesNeedOcrAndTablesAreEligibleThroughTheirCellText()
     {
         PinContent text = await CreateContent("Hello world");
         PinContent image = PinContent.FromImage(text.Image);
         PinContent table = PinContent.FromText(text.Image, "English text\tAnother column", true);
         Assert.False(PinTranslationService.CanTranslate(image));
-        Assert.False(PinTranslationService.CanTranslate(table));
+        Assert.True(PinTranslationService.CanTranslate(table));
     }
 
     [Fact]
@@ -76,8 +73,11 @@ public sealed class PinTranslationServiceTests
         string[] calls = Assert.Single(translator.Calls);
         Assert.Contains("Welcome aboard", calls);
         Assert.Contains("Read **the guide** and `config.json` before [opening settings](https://example.com/a_(b)?x=1).", calls);
-        Assert.Contains("| Column name | Details |", calls);
-        Assert.Contains("| First value | Use 42 MHz |", calls);
+        Assert.Contains("Column name", calls);
+        Assert.Contains("Details", calls);
+        Assert.Contains("First value", calls);
+        Assert.Contains("Use 42 MHz", calls);
+        Assert.DoesNotContain(calls, text => text.Contains('|'));
         Assert.DoesNotContain(calls, text => text.Contains("Do not translate", StringComparison.Ordinal)
             || text.Contains("---", StringComparison.Ordinal));
         Assert.True(result.Content.Image.IsFrozen);

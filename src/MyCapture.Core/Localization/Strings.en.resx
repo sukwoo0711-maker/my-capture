@@ -4690,7 +4690,7 @@ Overwrite these shortcuts? You can change this later in Settings → Shortcuts.<
   <data name="Pin_MarkdownSourceView" xml:space="preserve"><value>View Markdown source</value></data>
   <data name="Pin_MarkdownRenderedView" xml:space="preserve"><value>View rendered Markdown</value></data>
   <data name="Pin_TranslationInstallAction" xml:space="preserve"><value>Install</value></data>
-  <data name="Pin_TranslationConsent" xml:space="preserve"><value>The Korean translation model is a {0} MB download.
+  <data name="Pin_TranslationConsent" xml:space="preserve"><value>The translation model is a {0} MB download.
 Your text stays on this PC.
 
 Install the model?</value></data>
@@ -4698,7 +4698,7 @@ Install the model?</value></data>
     <value>Install translation model</value>
   </data>
   <data name="Pin_TranslationModelNeeded" xml:space="preserve">
-    <value>Install the {0} MB Korean translation model to translate this pin.</value>
+    <value>Install the {0} MB translation model to translate this pin.</value>
   </data>
   <data name="Pin_Translating" xml:space="preserve">
     <value>Translating</value>
@@ -4713,8 +4713,9 @@ Install the model?</value></data>
     <value>Retry translation</value>
   </data>
   <data name="Pin_Translated" xml:space="preserve">
-    <value>Translated to Korean</value>
+    <value>Translated</value>
   </data>
+  <data name="Pin_TranslationOcrLanguageReview" xml:space="preserve"><value>The recognition language differs from the source. Check the original image.</value></data>
   <data name="Pin_TranslationReview" xml:space="preserve">
     <value>Check the translation’s numbers and symbols against the original.</value>
   </data>
@@ -4727,4 +4728,12 @@ Install the model?</value></data>
   <data name="Pin_TranslationKorean" xml:space="preserve">
     <value>Korean</value>
   </data>
+  <data name="Pin_Translate" xml:space="preserve"><value>Translate</value></data>
+  <data name="Pin_CopyTranslation" xml:space="preserve"><value>Copy translation</value></data>
+  <data name="Pin_TranslationAlreadyKorean" xml:space="preserve"><value>Already in Korean</value></data>
+  <data name="Pin_TranslationAlreadyEnglish" xml:space="preserve"><value>Already in English</value></data>
+  <data name="Pin_TranslationUnsupportedLanguage" xml:space="preserve"><value>Only Korean and English can be translated</value></data>
+  <data name="Pin_TranslationNoText" xml:space="preserve"><value>No text to translate</value></data>
+  <data name="Pin_TranslationRecognizing" xml:space="preserve"><value>Reading text from image</value></data>
+  <data name="Pin_TranslationOcrUnavailable" xml:space="preserve"><value>Text recognition is unavailable on this PC</value></data>
 </root>

@@ -22,24 +22,39 @@ public sealed class PinMarkdownInteractionTests
     {
         PinWindow pin = NewPin();
         string? copied = null;
+        PinImageCopyRequest? copiedImage = null;
         int imageCopies = 0;
         pin.OriginalTextCopyRequested += (_, text) => copied = text;
-        pin.CopyRequested += (_, _) => imageCopies++;
+        pin.CopyRequested += (_, image) => { imageCopies++; copiedImage = image; };
         try
         {
             Press(pin, Key.C, ModifierKeys.Control);
-            Assert.Equal(Source, copied);
+            Assert.Null(copied);
+            Assert.Equal(Source, copiedImage!.Value.OriginalText);
+            Assert.Same(pin.PinnedContent.Image, copiedImage.Value.Image);
+            pin.SimulateCtrlDoubleClickForTest();
+            Assert.Equal(System.Text.Encoding.UTF8.GetBytes(Source), System.Text.Encoding.UTF8.GetBytes(copied!));
             pin.SetMarkdownSourceDisplay(true);
             copied = null;
             Press(pin, Key.C, ModifierKeys.Control);
+            Assert.Null(copied);
+            Assert.Equal(Source, copiedImage.Value.OriginalText);
+            Assert.NotSame(pin.PinnedContent.Image, copiedImage.Value.Image);
+            pin.SimulateCtrlDoubleClickForTest();
             Assert.Equal(Source, copied);
             pin.SetMarkdownSourceDisplay(false);
             pin.ApplyTranslation(Content(Korean), false);
             Assert.True(pin.IsShowingTranslation);
             copied = null;
             Press(pin, Key.C, ModifierKeys.Control);
+            Assert.Null(copied);
+            Assert.Equal(Korean, copiedImage.Value.OriginalText);
+            Assert.NotSame(pin.PinnedContent.Image, copiedImage.Value.Image);
+            pin.SimulateCtrlDoubleClickForTest();
             Assert.Equal(Source, copied);
-            Assert.Equal(0, imageCopies);
+            pin.CopyTranslationText();
+            Assert.Equal(Korean, copied);
+            Assert.Equal(3, imageCopies);
             Assert.True(pin.PinnedContent.IsMarkdown);
             Assert.Equal(Source, pin.PinnedContent.OriginalText);
         }
