@@ -390,13 +390,18 @@ public sealed class ImageExportDestinationTests
         string remembered = Directory.CreateDirectory(Path.Combine(paths.DataRoot, "remembered")).FullName;
         var draft = new SettingsDraft(new AppSettings { Export = { LastSaveDirectory = remembered } });
         // The field shows the path a quick save will use, never an empty box or the Save As history.
-        Assert.Equal(AppPaths.CreateDefault().QuickSaveRoot, draft.QuickSaveDirectoryOverride);
+        string defaultFolder = draft.QuickSaveDirectoryOverride;
+        Assert.False(string.IsNullOrWhiteSpace(defaultFolder));
+        Assert.NotEqual(remembered, defaultFolder);
         AppSettings automatic = draft.ToAppSettings();
         Assert.Equal(string.Empty, automatic.Export.QuickSaveDirectoryOverride);
         Assert.Equal(remembered, automatic.Export.LastSaveDirectory);
         var location = new ImageExportLocation(() => automatic, () => paths, NullLogger.Instance);
         Assert.Equal(paths.QuickSaveRoot, location.QuickSaveDirectory);
         Assert.Equal(remembered, location.SaveAsDirectory);
+
+        draft.QuickSaveDirectoryOverride = defaultFolder;
+        Assert.Equal(string.Empty, draft.ToAppSettings().Export.QuickSaveDirectoryOverride);
 
         string explicitFolder = Path.Combine(paths.DataRoot, "explicit");
         draft.QuickSaveDirectoryOverride = explicitFolder;

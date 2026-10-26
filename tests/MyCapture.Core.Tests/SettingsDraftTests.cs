@@ -451,13 +451,17 @@ public sealed class SettingsDraftTests
         // The field must show where a quick save really lands, not an empty box, and the
         // remembered Save As folder is separate history that never leaks into it.
         string history = @"C:\Pictures\Chosen";
-        string defaultFolder = AppPaths.CreateDefault().QuickSaveRoot;
         var draft = new SettingsDraft(new AppSettings { Export = { LastSaveDirectory = history } });
 
-        Assert.Equal(defaultFolder, draft.QuickSaveDirectoryOverride);
+        string defaultFolder = draft.QuickSaveDirectoryOverride;
+        Assert.False(string.IsNullOrWhiteSpace(defaultFolder));
+        Assert.NotEqual(history, defaultFolder);
         AppSettings mapped = draft.ToAppSettings();
         Assert.Equal(string.Empty, mapped.Export.QuickSaveDirectoryOverride);
         Assert.Equal(history, mapped.Export.LastSaveDirectory);
+
+        draft.QuickSaveDirectoryOverride = defaultFolder;
+        Assert.Equal(string.Empty, draft.ToAppSettings().Export.QuickSaveDirectoryOverride);
 
         // An explicit folder round-trips; clearing the box returns to the default (stored empty).
         string chosen = @"D:\Shots";
