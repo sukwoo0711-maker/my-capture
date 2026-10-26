@@ -310,7 +310,8 @@ public partial class App : Application
             ShortcutHelpWindow.ShowHelp, () => _ = RequestSafeShutdownAsync(),
             PinClipboard: HandlePasteToScreen, HideOrShowAllPins: () => _pins?.HideOrShowAll(),
             ClearClickThrough: () => _pins?.ClearClickThroughAll(), ContactSupport: SupportWindow.ShowSupport,
-            ActivateOpenPin: pin => _pins?.ActivateOpenPin(pin), InstallUpdate: () => _ = InstallKnownUpdateAsync());
+            ActivateOpenPin: pin => _pins?.ActivateOpenPin(pin), InstallUpdate: () => _ = InstallKnownUpdateAsync(),
+            FirstUseGuide: ShowOnboardingAgain);
         _tray.MenuPresenter = () => _shellPresenter.ShowMenu(TrayMenuLayout.Build(trayCommands, _settings!.Hotkeys,
             new TrayMenuState(_pins?.CanRestoreClosed == true, _scrollCancellation is not null,
                 ClipboardAvailability.HasPinnableContent(), _pins?.Count ?? 0, _pins?.AreHidden == true,
@@ -1345,6 +1346,7 @@ public partial class App : Application
             }));
             ReceiptTimeline.Mark?.Invoke("card-scheduled");
         }
+        _onboardingCaptureEnded?.Invoke(_currentRecord is not null, copiedToClipboard);
         CompleteWelcomeCaptureAnnouncement();
     }
 
@@ -1960,6 +1962,7 @@ public partial class App : Application
 
         // A re-edit commit finalises against the same record; keep the tray count in sync.
         ConfigureEngagementWindow(window);
+        window.Activated += (_, _) => _onboardingWindow?.NotifyLibraryOpened();
         window.CaptureChanged += (_, _) => _tray?.SetCaptureCount(_queue?.Count ?? 0);
         window.FloatRequested += (_, source) => _pins?.PinImage(source.Image, source.Provenance);
         // Header toolbar commands mirror the tray entries so capture/recording are reachable
@@ -2017,6 +2020,7 @@ public partial class App : Application
 
         ConfigureEngagementWindow(window);
         ConfigureLegacyImportWindow(window);
+        window.FirstUseGuideRequested += (_, _) => ShowOnboardingAgain();
         window.StoreReviewOpened = () => _storeRating?.NoteManualReviewOpened();
         window.FileLog = _fileLog;
         TextTranslationService translation = _services.GetRequiredService<TextTranslationService>();
