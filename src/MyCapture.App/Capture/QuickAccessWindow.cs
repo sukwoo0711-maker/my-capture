@@ -296,32 +296,18 @@ internal sealed class QuickAccessWindow : Window
         };
         _actions["Close"] = RequestClose;
         _actions["Activate"] = () => ActivateForKeyboard();
-        var actions = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Center };
+        var actions = new QuickAccessActionPanel();
         foreach (string action in ActionOrder)
         {
             Button button = Button("QuickAccess." + action, _actions[action]);
-            CommandButtonPresentation.Apply(button, compact: true);
-            button.Height = button.MinHeight = 36;
-            button.Margin = new Thickness(2, 0, 2, 0);
-            button.Padding = new Thickness(6, 0, 6, 0);
-            if (action == "Edit")
-            {
-                button.Content = new TextBlock { Text = UiText.Get("QuickAccess.Edit") };
-                button.MinWidth = 60;
-                button.SetResourceReference(StyleProperty, "Button.Primary");
-            }
-            else
-            {
-                button.Content = Glyph(action == "CopyText" ? "Icon.Ocr" : "Icon." + action);
-                button.Width = button.MinWidth = 36;
-                button.SetResourceReference(StyleProperty, "Button.Ghost");
-            }
+            button.SetResourceReference(StyleProperty, action == "Edit" ? "Button.Primary" : "Button.Ghost");
             string key = ShortcutCatalog.Get(ShortcutScope.QuickAccess, action).Hint;
             button.ToolTip = AutomationProperties.GetName(button) + "  " + key;
             AutomationProperties.SetAcceleratorKey(button, key);
             ShortToolTip(button);
             _actionButtons[action] = button;
-            actions.Children.Add(button);
+            actions.AddAction(button, Glyph(action == "CopyText" ? "Icon.Ocr" : "Icon." + action),
+                UiText.Get(action == "CopyText" ? "QuickAccess.TextLabel" : "QuickAccess." + action));
         }
         var libraryButton = _libraryButton = Button("QuickAccess.Library", () =>
         {
@@ -329,12 +315,12 @@ internal sealed class QuickAccessWindow : Window
             bound.Library();
             RequestClose();
         });
-        CommandButtonPresentation.Apply(libraryButton, compact: true);
         libraryButton.SetResourceReference(StyleProperty, "Button.Ghost");
-        libraryButton.Height = libraryButton.MinHeight = 36;
-        libraryButton.Padding = new Thickness(4, 0, 4, 0);
-        libraryButton.Margin = new Thickness(2, 0, 0, 0);
-        actions.Children.Add(libraryButton); panel.Children.Add(actions);
+        // With the names hidden the icon is all there is, so the name is also its tooltip.
+        libraryButton.ToolTip = AutomationProperties.GetName(libraryButton);
+        ShortToolTip(libraryButton);
+        actions.AddAction(libraryButton, Glyph("Icon.Library"), UiText.Get("QuickAccess.Library"));
+        panel.Children.Add(actions);
         _firstUseTip.SetResourceReference(TextBlock.FontSizeProperty, "FontSize.Caption");
         _firstUseTip.SetResourceReference(TextBlock.ForegroundProperty, "Text.Secondary");
         _firstUseTip.Text = firstCaptureTip ?? string.Empty;
@@ -1081,7 +1067,12 @@ internal sealed class QuickAccessWindow : Window
     private static SymbolIcon? ActionIcon(Button button) => button.Content switch
     {
         SymbolIcon icon => icon,
-        Grid { Name: "CommandButtonFace", Children.Count: > 0 } face => face.Children[0] as SymbolIcon,
+        Grid { Name: "CommandButtonFace", Children.Count: > 0 } face => face.Children[0] switch
+        {
+            SymbolIcon icon => icon,
+            StackPanel => QuickAccessActionPanel.IconOf(button),
+            _ => null,
+        },
         _ => null,
     };
 

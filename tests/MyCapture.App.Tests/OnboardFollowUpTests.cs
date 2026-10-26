@@ -13,14 +13,14 @@ using Xunit;
 
 namespace MyCapture.App.Tests;
 
-/// <summary>The receipt labels its primary action and gives every icon an accessible name.</summary>
+/// <summary>The receipt names every action under its icon and gives every icon an accessible name.</summary>
 public sealed class QuickAccessCardLabelTests
 {
     [Theory]
-    [InlineData("ko", new[] { "편집", "핀", "저장", "텍스트 복사", "복사" }, "자동으로 닫지 않음", "자동으로 닫지 않음")]
-    [InlineData("en", new[] { "Edit", "Pin", "Save", "Copy text", "Copy" }, "Keep open", "Keep open")]
-    public void EditHasAVisibleNameAndSecondaryIconsRetainTheirAccessibleNames(string language, string[] names,
-        string keepName, string keepTip) =>
+    [InlineData("ko", new[] { "편집", "핀", "저장", "텍스트 복사", "복사" }, new[] { "편집", "핀", "저장", "텍스트", "복사" }, "자동으로 닫지 않음", "자동으로 닫지 않음")]
+    [InlineData("en", new[] { "Edit", "Pin", "Save", "Copy text", "Copy" }, new[] { "Edit", "Pin", "Save", "Text", "Copy" }, "Keep open", "Keep open")]
+    public void EveryActionHasAVisibleNameUnderItsIconAndKeepsItsAccessibleName(string language, string[] names,
+        string[] visibleNames, string keepName, string keepTip) =>
         StaTestHost.Run(() =>
         {
             using var culture = UiText.UseLanguage(language);
@@ -31,8 +31,11 @@ public sealed class QuickAccessCardLabelTests
             {
                 IReadOnlyList<Button> actions = card.ActionButtonsForTest;
                 Assert.Equal(names, actions.Select(AutomationProperties.GetName));
-                Assert.Equal(names[0], Assert.IsType<TextBlock>(actions[0].Content).Text);
-                Assert.All(actions.Skip(1), button => Assert.IsType<SymbolIcon>(button.Content));
+                // Each action is an icon with its short name below it; the first stays the primary action.
+                Assert.Equal(visibleNames, actions.Select(button => Assert.IsType<TextBlock>(QuickAccessActionPanel.LabelOf(button)).Text));
+                Assert.All(actions, button => Assert.IsType<SymbolIcon>(QuickAccessLabelFixture.IconOf(button)));
+                Assert.Equal(UiText.Get("QuickAccess.Library"), QuickAccessActionPanel.LabelOf(card.LibraryButtonForTest)!.Text);
+                Assert.IsType<SymbolIcon>(QuickAccessLabelFixture.IconOf(card.LibraryButtonForTest));
                 // The key is not written on the face; it is the tooltip's and the accelerator key's.
                 Assert.All(actions, button => Assert.False(string.IsNullOrEmpty(AutomationProperties.GetAcceleratorKey(button))));
                 ToggleButton keepToggle = card.KeepToggleForTest;
@@ -54,7 +57,7 @@ public sealed class QuickAccessCardLabelTests
     [Theory]
     [InlineData("ko")]
     [InlineData("en")]
-    public void PrimaryActionNameAndSecondaryIconsFitWithoutClipping(string language) => StaTestHost.Run(() =>
+    public void ActionNamesAndIconsFitWithoutClippingWhetherOrNotAltShowsTheKeys(string language) => StaTestHost.Run(() =>
     {
         using var motion = new ShortcutMotionTestScope();
         using var culture = UiText.UseLanguage(language);
@@ -82,7 +85,9 @@ public sealed class QuickAccessCardLabelTests
                 else restingHeight = host.ActualHeight;
                 foreach (Button button in card.ActionButtonsForTest)
                 {
-                    Assert.Equal(36, button.ActualHeight);
+                    // The name is under the icon, so the action is taller than an icon-only command.
+                    Assert.Equal(QuickAccessLabelFixture.ExpectedActionHeight(button), button.ActualHeight, 2);
+                    Assert.True(button.ActualHeight > 36);
                     if (restingSizes.TryGetValue(button, out Size size)) Assert.Equal(size, button.RenderSize);
                     else restingSizes.Add(button, button.RenderSize);
                     Grid face = Assert.IsType<Grid>(button.Content);
@@ -92,7 +97,8 @@ public sealed class QuickAccessCardLabelTests
                     Rect bounds = face.TransformToAncestor(button).TransformBounds(new Rect(face.RenderSize));
                     Assert.True(bounds.Left >= -0.5 && bounds.Top >= -0.5 && bounds.Right <= button.ActualWidth + 0.5
                         && bounds.Bottom <= button.ActualHeight + 0.5, $"{language}: button content is clipped: {bounds}");
-                    if (SurfaceShortcutHintTests.PrimaryContent(button) is not TextBlock name) continue;
+                    TextBlock name = Assert.IsType<TextBlock>(QuickAccessActionPanel.LabelOf(button));
+                    Assert.Equal(Visibility.Visible, name.Visibility);
                     var probe = new TextBlock
                     {
                         Text = name.Text, FontFamily = name.FontFamily, FontSize = name.FontSize,

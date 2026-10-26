@@ -24,7 +24,7 @@ public sealed class ThemeResourceAvailabilityTests : KoreanCaptionTest
         "Icon.Select", "Icon.Rectangle", "Icon.Arrow", "Icon.Pen", "Icon.Text", "Icon.Image",
         "Icon.Undo", "Icon.Redo", "Icon.Delete", "Icon.Copy", "Icon.Check", "Icon.Close",
         "Icon.Save", "Icon.SaveAs", "Icon.ChevronDown", "Icon.More", "Icon.Settings", "Icon.Capture",
-        "Icon.Shortcuts", "Icon.Storage", "Icon.Export", "Icon.Pin", "Icon.Edit", "Icon.Ocr", "Icon.Search",
+        "Icon.Shortcuts", "Icon.Storage", "Icon.Library", "Icon.Export", "Icon.Pin", "Icon.Edit", "Icon.Ocr", "Icon.Search",
         "Icon.ZoomIn", "Icon.ZoomOut", "Icon.Play", "Icon.Pause", "Icon.First", "Icon.Last",
         "Icon.Rewind", "Icon.FastForward", "Icon.StepBack", "Icon.StepForward", "Icon.FitAll", "Icon.Trim", "Icon.Split",
     ];

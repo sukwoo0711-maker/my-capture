@@ -608,10 +608,10 @@
 
                         <Border Style="{StaticResource Settings.InfoCard}" Margin="0,8,0,16">
                             <StackPanel>
-                                <TextBlock Text="{loc:Text Text_D116685C040E}" Style="{StaticResource Text.Section}" />
+                                <TextBlock Text="{loc:Text Text_D116685C040E}" Style="{StaticResource Settings.Label}" />
                                 <TextBlock Margin="0,4,0,0"
                                            Style="{StaticResource Text.MutedBlock}"
-                                           Text="{Binding CaptureHotkey, StringFormat={loc:Text Text_756622E6954E}}" />
+                                           themes:KoreanWordWrap.Text="{Binding CaptureHotkey, StringFormat={loc:Text Text_756622E6954E}}" />
                             </StackPanel>
                         </Border>
 
@@ -702,10 +702,10 @@
                     <StackPanel Grid.IsSharedSizeScope="True">
                         <Border Style="{StaticResource Settings.InfoCard}" Margin="0,0,0,16">
                             <StackPanel>
-                                <TextBlock Text="{loc:Text Text_93EB8FA7F9BC}" Style="{StaticResource Text.Section}" />
+                                <TextBlock Text="{loc:Text Text_93EB8FA7F9BC}" Style="{StaticResource Settings.Label}" />
                                 <TextBlock Margin="0,4,0,0"
                                            Style="{StaticResource Text.MutedBlock}"
-                                           Text="{loc:Text Text_2F12FF262AAC}" />
+                                           themes:KoreanWordWrap.Text="{loc:Text Text_2F12FF262AAC}" />
                             </StackPanel>
                         </Border>
 
@@ -1428,7 +1428,7 @@
                 <ItemsControl x:Name="ErrorList" Margin="0,4,0,0">
                     <ItemsControl.ItemTemplate>
                         <DataTemplate>
-                            <TextBlock Text="{Binding}"
+                            <TextBlock themes:KoreanWordWrap.Text="{Binding}"
                                        Foreground="{DynamicResource Text.Primary}"
                                        FontSize="{StaticResource FontSize.Caption}"
                                        TextWrapping="Wrap"
