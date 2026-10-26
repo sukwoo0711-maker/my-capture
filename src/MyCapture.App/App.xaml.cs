@@ -115,6 +115,8 @@ public partial class App : Application
         s_residentProbe = ResidentProbeOptions.TryParse(e.Args);
         if (s_residentProbe is not null)
             ClipboardWriter.InstallTestOverride((_, _) => { }, _ => { }, () => 0, (_, _) => true);
+        if (s_residentProbe?.SoftwareRender == true)
+            System.Windows.Media.RenderOptions.ProcessRenderMode = System.Windows.Interop.RenderMode.SoftwareOnly;
 
         if (s_residentProbe is null && TryRunSelfTest(e.Args))
         {
@@ -1790,6 +1792,7 @@ public partial class App : Application
     private async void RunAutomaticIndexing()
     {
         _indexingRequested = true;
+        if (s_residentProbe?.SkipIndexing == true) return;
         if (_indexingRunning || _automaticIndexer is null || _indexingCancellation.IsCancellationRequested || _legacyImportPreparing)
         {
             return;

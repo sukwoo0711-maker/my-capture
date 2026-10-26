@@ -32,6 +32,8 @@ internal sealed class ResidentProbeOptions
     internal const string ScenarioSwitch = "--resident-scenarios";
     internal const string QuickSwitch = "--resident-quick";
     internal const string AuditSwitch = "--resident-audit";
+    internal const string NoIndexingSwitch = "--resident-no-indexing";
+    internal const string SoftwareRenderSwitch = "--resident-software-render";
 
     internal static readonly string[] AllScenarios = ["capture", "editor-4k", "capture-30", "library", "ocr", "pins-10"];
 
@@ -49,6 +51,12 @@ internal sealed class ResidentProbeOptions
     /// release table never uses it.
     /// </summary>
     internal bool Audit { get; }
+
+    /// <summary>Diagnostic only: the library's automatic OCR indexing never starts.</summary>
+    internal bool SkipIndexing { get; private init; }
+
+    /// <summary>Diagnostic only: WPF renders in software, to tell render-device memory from the app's own.</summary>
+    internal bool SoftwareRender { get; private init; }
 
     internal string Output { get; }
 
@@ -79,7 +87,11 @@ internal sealed class ResidentProbeOptions
             : AllScenarios;
         bool quick = Array.Exists(args, argument => string.Equals(argument, QuickSwitch, StringComparison.OrdinalIgnoreCase));
         bool audit = Array.Exists(args, argument => string.Equals(argument, AuditSwitch, StringComparison.OrdinalIgnoreCase));
-        return new ResidentProbeOptions(DiagnosticOutputPaths.Create(output), scenarios, quick, audit);
+        return new ResidentProbeOptions(DiagnosticOutputPaths.Create(output), scenarios, quick, audit)
+        {
+            SkipIndexing = Array.Exists(args, argument => string.Equals(argument, NoIndexingSwitch, StringComparison.OrdinalIgnoreCase)),
+            SoftwareRender = Array.Exists(args, argument => string.Equals(argument, SoftwareRenderSwitch, StringComparison.OrdinalIgnoreCase)),
+        };
     }
 }
 

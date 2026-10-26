@@ -14,6 +14,7 @@ from __future__ import annotations
 import argparse
 import datetime as _dt
 import json
+import math
 import os
 import statistics
 import subprocess
@@ -112,8 +113,9 @@ def run_once(exe: Path, out: Path, quick: bool, scenarios: str | None, temp: str
 
 
 def p95(values: list[float]) -> float:
+    """Nearest-rank 95th percentile: with fewer than 20 values it is the largest one."""
     ordered = sorted(values)
-    return ordered[int((len(ordered) - 1) * 0.95)] if ordered else float("nan")
+    return ordered[max(0, math.ceil(0.95 * len(ordered)) - 1)] if ordered else float("nan")
 
 
 def summarize(label: str, exe: str, runs: list[dict]) -> dict:
