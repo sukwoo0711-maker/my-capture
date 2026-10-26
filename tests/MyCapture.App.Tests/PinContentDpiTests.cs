@@ -10,6 +10,25 @@ namespace MyCapture.App.Tests;
 
 public sealed class PinContentDpiTests
 {
+    [Fact]
+    public async Task TranslatedText_KeepsCleanBackgroundAfterProvenanceAndDpiChanges()
+    {
+        await StaThreadTask.RunAsync(() =>
+        {
+            const string text = "창을 닫기 전에 저장합니다.";
+            PinContent content = PinContent.FromText(ClipboardTextRenderer.RenderTranslation(text), text, false)
+                with { BorderlessText = true };
+            PinContent rendered = content.WithProvenance(content.Provenance).RenderedAt(2);
+            byte[] corner = new byte[4];
+            rendered.Image.CopyPixels(new Int32Rect(0, 0, 1, 1), corner, 4, 0);
+            Assert.Equal(new byte[] { 255, 255, 255, 255 }, corner);
+            Assert.Equal(content.LayoutWidthDip, rendered.LayoutWidthDip);
+            Assert.Equal(content.LayoutHeightDip, rendered.LayoutHeightDip);
+            Assert.Equal(text, rendered.OriginalText);
+            return true;
+        }, "translated pin DPI background test");
+    }
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]

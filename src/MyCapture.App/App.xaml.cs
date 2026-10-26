@@ -107,6 +107,9 @@ public partial class App : Application
             return;
         }
 
+        // Explicit preview mode never initializes the resident shell or the user's stores.
+        if (TryStartPinPreview(e.Args)) return;
+
         // Diagnostics intentionally run before the ownership gate. Capture hardware
         // can be tested beside a normal resident instance; the shell test will report
         // hotkey conflicts if the normal instance already owns them.
@@ -221,6 +224,8 @@ public partial class App : Application
             pinSaveService,
             _services.GetRequiredService<ILogger<PinManager>>());
         _pins.PinCreated += ShowFirstPinTip;
+        if (AppArchitecture.SupportsNeuralOcr)
+            _pins.ConfigureTranslation(_services.GetRequiredService<TextTranslationService>());
         InitializePinSession();
         _gitHubUpload = new GitHubIssueImageUploadService(
             () => _settings!,
@@ -2419,7 +2424,7 @@ public partial class App : Application
             serviceProvider.GetRequiredService<OcrModelStore>(),
             serviceProvider.GetRequiredService<ILogger<NeuralOcrEngine>>()));
         services.AddSingleton<WindowsOcrService>();
-        // Translation stays off until the user turns it on in the OCR window; nothing downloads before.
+        // OCR and text pins share the local translator; model downloads require an explicit install action.
         services.AddSingleton(serviceProvider => new TranslationModelStore(
             serviceProvider.GetRequiredService<AppPaths>(),
             serviceProvider.GetRequiredService<ILogger<TranslationModelStore>>()));
@@ -2510,6 +2515,7 @@ public partial class App : Application
 
     protected override void OnExit(ExitEventArgs e)
     {
+        _pinPreview?.Dispose();
         _updateTimer?.Stop();
         _updates?.Dispose();
         // Stop a model download in progress; completed, verified model files stay.

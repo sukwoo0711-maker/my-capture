@@ -85,6 +85,10 @@ internal static class ClipboardImageReader
 
         internal PinCodeDocument? CodeDocument { get; init; }
 
+        internal bool HasCodeHtml { get; init; }
+
+        internal bool HasExplicitMarkdown { get; init; }
+
         internal CaptureProvenance? Provenance { get; init; }
 
         internal Task<CaptureProvenance>? PendingProvenance { get; init; }
@@ -181,7 +185,8 @@ internal static class ClipboardImageReader
         CapturedAttempt captured,
         Func<byte[], BitmapSource?> decodePng,
         Func<string, bool, Task<BitmapSource>> renderText,
-        Func<uint, Task<CapturedAttempt>> captureSameGenerationFallback)
+        Func<uint, Task<CapturedAttempt>> captureSameGenerationFallback,
+        Func<string, Task<BitmapSource>>? renderMarkdown = null)
     {
         ArgumentNullException.ThrowIfNull(decodePng);
         ArgumentNullException.ThrowIfNull(renderText);
@@ -190,6 +195,13 @@ internal static class ClipboardImageReader
         if (captured.ShouldRetry || captured.Outcome.Status == ClipboardImageStatus.Busy)
         {
             return PinReadAttempt.Busy();
+        }
+
+        if (captured.HasExplicitMarkdown && !captured.IsTabularText && HasSourceText(captured))
+        {
+            PinContent? markdown = await TryRenderTextAsync(captured, renderText, renderMarkdown).ConfigureAwait(false);
+            if (markdown is not null)
+                return PinReadAttempt.Success(markdown with { PendingProvenance = captured.PendingProvenance });
         }
 
         if (captured.CodePreview is not null && captured.OriginalText is not null)
@@ -232,7 +244,7 @@ internal static class ClipboardImageReader
 
         if (HasSourceText(captured))
         {
-            PinContent? text = await TryRenderTextAsync(captured, renderText).ConfigureAwait(false);
+            PinContent? text = await TryRenderTextAsync(captured, renderText, renderMarkdown).ConfigureAwait(false);
             if (text is not null)
             {
                 return PinReadAttempt.Success(text with { PendingProvenance = captured.PendingProvenance });
@@ -319,8 +331,9 @@ internal static class ClipboardImageReader
                 isTabularText,
                 clipboardSequence,
                 systemImageFallback);
+        string? html = TryGetClipboardString(data, DataFormats.Html, false);
         PinCodeDocument? codeDocument = originalText is not null && !isTabularText
-            ? ClipboardCodeRenderer.TryParse(originalText, TryGetClipboardString(data, DataFormats.Html, false))
+            ? ClipboardCodeRenderer.TryParse(originalText, html)
             : null;
         BitmapSource? codePreview = null;
         if (codeDocument is not null)
@@ -339,6 +352,8 @@ internal static class ClipboardImageReader
         {
             CodeDocument = codeDocument,
             CodePreview = codePreview,
+            HasCodeHtml = ClipboardCodeRenderer.IsCodeHtml(html),
+            HasExplicitMarkdown = ClipboardMarkdownRenderer.IsExplicitMarkdownHtml(html),
             Provenance = provenance.Source,
             PendingProvenance = provenance.Pending,
         };
@@ -431,7 +446,8 @@ internal static class ClipboardImageReader
 
     private static async Task<PinContent?> TryRenderTextAsync(
         CapturedAttempt captured,
-        Func<string, bool, Task<BitmapSource>> renderText)
+        Func<string, bool, Task<BitmapSource>> renderText,
+        Func<string, Task<BitmapSource>>? renderMarkdown = null)
     {
         string? originalText = captured.OriginalText;
         if (string.IsNullOrWhiteSpace(originalText))
@@ -441,6 +457,21 @@ internal static class ClipboardImageReader
 
         try
         {
+            if (!captured.IsTabularText && (!captured.HasCodeHtml || captured.HasExplicitMarkdown)
+                && (captured.HasExplicitMarkdown || ClipboardMarkdownRenderer.IsMarkdown(originalText)))
+            {
+                try
+                {
+                    BitmapSource markdown = await (renderMarkdown is null
+                        ? StaThreadTask.RunAsync(() => ClipboardMarkdownRenderer.Render(originalText), "MyCapture clipboard Markdown renderer")
+                        : renderMarkdown(originalText)).ConfigureAwait(false);
+                    return PinContent.FromMarkdown(markdown, originalText, captured.Provenance);
+                }
+                catch (Exception ex) when (IsRecoverableTextFormatException(ex))
+                {
+                    // Keep the exact source and existing plain preview when formatting fails.
+                }
+            }
             BitmapSource rendered = await renderText(originalText, captured.IsTabularText)
                 .ConfigureAwait(false);
             return PinContent.FromText(rendered, originalText, captured.IsTabularText, captured.Provenance);

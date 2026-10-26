@@ -49,7 +49,7 @@ internal enum PasteResult
 /// only pins that are still open, to reopen them at the next launch.
 /// </para>
 /// </remarks>
-internal sealed class PinManager
+internal sealed partial class PinManager
 {
     private readonly List<PinWindow> _pins = [];
     // Closed pins whose exit is still on the screen; their windows close when it ends.
@@ -536,6 +536,7 @@ internal sealed class PinManager
         pin.Closed += (_, _) => _leaving.Remove(pin);
         pin.ViewStateChanged += NotifyOpenPinsChanged;
         pin.ContentChanged += NotifyOpenPinsChanged;
+        AttachTranslation(pin);
 
         _pins.Add(pin);
         _openedOrders.Add(pin, ++_nextOpenedOrder);

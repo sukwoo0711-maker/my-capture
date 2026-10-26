@@ -66,13 +66,22 @@ internal sealed record PinContent
     /// <summary>The source lookup detached from this pin's clipboard token, if still pending.</summary>
     internal Task<CaptureProvenance>? PendingProvenance { get; init; }
 
+    // Translation fills the existing pin frame, whose chrome already supplies its border.
+    internal bool BorderlessText { get; init; }
+
     internal PinContent WithProvenance(CaptureProvenance provenance) =>
         new(Image, Kind, OriginalText, SourcePageUrl, UsesDeviceIndependentPixels,
-            TextStyle, CodeDocument, LayoutWidthDip, LayoutHeightDip, provenance);
+            TextStyle, CodeDocument, LayoutWidthDip, LayoutHeightDip, provenance)
+        {
+            PendingProvenance = PendingProvenance,
+            BorderlessText = BorderlessText,
+        };
 
     internal bool HasOriginalText => OriginalText is not null;
 
     internal PinTextStyle? TextStyle { get; }
+
+    internal bool IsMarkdown => TextStyle == PinTextStyle.Markdown;
 
     internal PinCodeDocument? CodeDocument { get; }
 
@@ -82,7 +91,7 @@ internal sealed record PinContent
     internal double LayoutHeightDip { get; }
 
     internal bool CanRerender => UsesDeviceIndependentPixels && OriginalText is not null
-        && (TextStyle is PinTextStyle.PlainText or PinTextStyle.Grid
+        && (TextStyle is PinTextStyle.PlainText or PinTextStyle.Grid or PinTextStyle.Markdown
             || (TextStyle == PinTextStyle.Code && CodeDocument is not null));
 
     /// <summary>
@@ -159,6 +168,13 @@ internal sealed record PinContent
             usesDeviceIndependentPixels: true, textStyle: PinTextStyle.Code, codeDocument: document, provenance: provenance);
     }
 
+    internal static PinContent FromMarkdown(BitmapSource image, string originalText, CaptureProvenance? provenance = null)
+    {
+        ArgumentNullException.ThrowIfNull(originalText);
+        return new(image, PinContentKind.Text, originalText, sourcePageUrl: string.Empty,
+            usesDeviceIndependentPixels: true, textStyle: PinTextStyle.Markdown, provenance: provenance);
+    }
+
     /// <summary>Re-rasterises only locally authored text, retaining no reference to the old bitmap.</summary>
     internal PinContent RenderedAt(double scale)
     {
@@ -170,13 +186,18 @@ internal sealed record PinContent
             return this;
         }
 
-        BitmapSource image = TextStyle == PinTextStyle.Code
-            ? ClipboardCodeRenderer.Render(CodeDocument!, scale)
-            : ClipboardTextRenderer.Render(OriginalText!, TextStyle == PinTextStyle.Grid, scale);
+        BitmapSource image = TextStyle switch
+        {
+            PinTextStyle.Code => ClipboardCodeRenderer.Render(CodeDocument!, scale),
+            PinTextStyle.Markdown => ClipboardMarkdownRenderer.Render(OriginalText!, scale),
+            PinTextStyle.PlainText when BorderlessText => ClipboardTextRenderer.RenderTranslation(OriginalText!, scale),
+            _ => ClipboardTextRenderer.Render(OriginalText!, TextStyle == PinTextStyle.Grid, scale),
+        };
         return new(image, Kind, OriginalText, SourcePageUrl, UsesDeviceIndependentPixels,
             TextStyle, CodeDocument, LayoutWidthDip, LayoutHeightDip, Provenance)
         {
             PendingProvenance = PendingProvenance,
+            BorderlessText = BorderlessText,
         };
     }
 

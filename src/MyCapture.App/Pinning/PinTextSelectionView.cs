@@ -4,6 +4,7 @@ using System.Windows.Automation;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Data;
+using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
@@ -123,6 +124,29 @@ internal sealed class PinTextSelectionView : Grid
                 Children.Add(_tableLimit);
             }
         }
+        else if (content.IsMarkdown)
+        {
+            MarkdownBox = new RichTextBox(ClipboardMarkdownRenderer.CreateDocument(_original))
+            {
+                Style = null,
+                IsReadOnly = true,
+                IsReadOnlyCaretVisible = true,
+                IsDocumentEnabled = false,
+                Background = Brushes.White,
+                Foreground = Brushes.Black,
+                BorderThickness = new Thickness(0),
+                Padding = new Thickness(0),
+                HorizontalScrollBarVisibility = ScrollBarVisibility.Auto,
+                VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+                SelectionBrush = SystemColors.HighlightBrush,
+                SelectionTextBrush = SystemColors.HighlightTextBrush,
+                SelectionOpacity = 1,
+                IsUndoEnabled = false,
+            };
+            AutomationProperties.SetName(MarkdownBox, UiText.Get("Pin_SelectText"));
+            BindPinContextMenu(MarkdownBox);
+            Children.Add(MarkdownBox);
+        }
         else
         {
             (string display, _characterStarts, _characterEnds) = CreateDisplayText(_original);
@@ -155,6 +179,7 @@ internal sealed class PinTextSelectionView : Grid
     }
 
     internal TextBox? TextBox { get; }
+    internal RichTextBox? MarkdownBox { get; }
     internal DataGrid? TableGrid { get; }
 
     internal string? SelectedOriginalText
@@ -162,6 +187,17 @@ internal sealed class PinTextSelectionView : Grid
         get
         {
             if (_table is not null) return _table.SelectedText;
+            if (MarkdownBox is { } markdown)
+            {
+                if (markdown.Selection.IsEmpty) return null;
+                // RichTextBox.SelectAll normalizes its endpoints to text insertion positions,
+                // inside the first/last Paragraph rather than the outer document boundaries.
+                var first = markdown.Document.ContentStart.GetInsertionPosition(LogicalDirection.Forward);
+                var last = markdown.Document.ContentEnd.GetInsertionPosition(LogicalDirection.Backward);
+                if (markdown.Selection.Start.CompareTo(first) <= 0
+                    && markdown.Selection.End.CompareTo(last) >= 0) return _original;
+                return markdown.Selection.Text;
+            }
             if (TextBox is not { SelectionLength: > 0 } textBox) return null;
             int start = Math.Min(textBox.SelectionStart, _characterStarts.Length);
             int end = Math.Min(textBox.SelectionStart + textBox.SelectionLength, _characterEnds.Length);
@@ -173,12 +209,14 @@ internal sealed class PinTextSelectionView : Grid
     internal void FocusSelection()
     {
         if (TextBox is not null) TextBox.Focus();
+        else if (MarkdownBox is not null) MarkdownBox.Focus();
         else TableGrid?.Focus();
     }
 
     internal void SetZoom(double zoom)
     {
         _zoom = double.IsFinite(zoom) && zoom > 0 ? zoom : 1;
+        if (MarkdownBox is not null) MarkdownBox.LayoutTransform = new ScaleTransform(_zoom, _zoom);
         if (TextBox is not null)
         {
             double paddingX = _isCode ? ClipboardCodeRenderer.HorizontalPaddingDip : 24;
@@ -213,7 +251,7 @@ internal sealed class PinTextSelectionView : Grid
         long notches = _wheelDelta / 120;
         _wheelDelta %= 120;
         if (notches == 0) return false;
-        ScrollViewer? scroll = FindDescendant<ScrollViewer>(TextBox as DependencyObject ?? TableGrid);
+        ScrollViewer? scroll = FindDescendant<ScrollViewer>(TextBox as DependencyObject ?? (DependencyObject?)MarkdownBox ?? TableGrid);
         if (scroll is null) return false;
         double direction = -notches;
         if ((direction < 0 && scroll.VerticalOffset > 0)
@@ -239,6 +277,7 @@ internal sealed class PinTextSelectionView : Grid
             SelectCells(0, 0, _table.Rows.Count - 1, _table.ColumnCount - 1);
             _table.SelectAll();
         }
+        else if (MarkdownBox is not null) MarkdownBox.SelectAll();
         else TextBox?.SelectAll();
     }
 
