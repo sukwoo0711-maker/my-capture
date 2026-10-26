@@ -74,6 +74,8 @@ internal sealed class QuickAccessWindow : Window
     private readonly TextBlock _detail = new() { TextWrapping = TextWrapping.Wrap, Margin = new Thickness(2, 0, 2, 6), Visibility = Visibility.Collapsed };
     // Null until the capture is saved (a card shown first) and for good when the save failed.
     private QuickAccessCardActions? _captureActions;
+    // The card closed with its capture bound and let go of the actions; it is not pending again.
+    private bool _actionsReleased;
     private bool _captureFailed;
     // The automatic copy is still running: the status says 복사 중… until it reports.
     private bool _copyPending;
@@ -107,7 +109,7 @@ internal sealed class QuickAccessWindow : Window
     /// <see cref="BindCapture"/> or <see cref="ShowCaptureFailure"/>, the actions that need the
     /// saved capture are unavailable.
     /// </summary>
-    internal bool IsPending => _captureActions is null && !_captureFailed;
+    internal bool IsPending => _captureActions is null && !_captureFailed && !_actionsReleased;
 
     /// <summary>The capture shown could not be saved; the card says why and keeps its actions unavailable.</summary>
     internal bool HasCaptureFailed => _captureFailed;
@@ -406,6 +408,11 @@ internal sealed class QuickAccessWindow : Window
         Closed += (_, _) =>
         {
             _closed = true;
+            // Whoever still holds a closed card (the app's last flight, an action's continuation)
+            // must not keep its capture's record actions or its preview source alive through it.
+            _preview.Source = null;
+            _actionsReleased = _captureActions is not null;
+            _captureActions = null;
             _timer.Stop(); _progressReveal.Stop();
             foreach (SuccessMark mark in _successMarks.Values) mark.Timer.Stop();
             if (_keyboardRouter is not null)
