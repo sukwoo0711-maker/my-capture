@@ -244,7 +244,13 @@ public sealed partial class SettingsThemePreviewTests
             {
                 RoutedEvent = Keyboard.KeyDownEvent,
             };
-            firstTile.RaiseEvent(escape);
+            Assert.True(window.IsAncestorOf(firstTile), "Escape must originate from the currently realized card.");
+            Assert.True(vm.HasSelection);
+            using (var modifiers = new ThreadKeyboardModifierScope())
+            {
+                Assert.Equal(ModifierKeys.None, Keyboard.Modifiers);
+                firstTile.RaiseEvent(escape);
+            }
             Assert.True(escape.Handled);
             Assert.False(vm.HasSelection);
             SettleGalleryLayout(window);
