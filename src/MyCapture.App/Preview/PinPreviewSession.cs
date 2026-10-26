@@ -19,7 +19,7 @@ namespace MyCapture.App.Preview;
 internal sealed class PinPreviewSession : IDisposable
 {
     internal const string SampleSource = "# Release checklist\n\n- [x] Build verified\n- [ ] Payment flow\n\nReview before release.\n\n```ts\nconst timeoutMs = 5000;\n```";
-    internal const string EnglishSampleSource = "The update takes about two minutes.\nIncrease the timeout from 5000 ms to 30000 ms.\nSave your work before closing the window.";
+    internal const string EnglishSampleSource = "The update takes about 2 minutes.\nIncrease the timeout from 5000 ms to 30000 ms.\nSave your work before closing the window.";
     private readonly PreviewLaunchOptions _options;
     private readonly Dispatcher _dispatcher;
     private readonly AppSettings _settings = PreviewLaunchOptions.CreateSettings();
