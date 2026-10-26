@@ -25,6 +25,9 @@ internal sealed class OcrImageOverlay : FrameworkElement
         new FrameworkPropertyMetadata(Brushes.White, FrameworkPropertyMetadataOptions.AffectsRender));
     internal Brush RegionBrush { get => (Brush)GetValue(RegionBrushProperty); set => SetValue(RegionBrushProperty, value); }
     private BitmapSource? _image;
+    // Retained WPF drawing commands can outlive the window's last render. Clear this
+    // mutable drawing on dismissal so those commands cannot keep the old pixels alive.
+    private readonly ImageDrawing _imageDrawing = new();
     private IReadOnlyList<OcrRect> _regions = [];
     private IReadOnlyList<string> _labels = [];
     private int? _highlightedRegion;
@@ -68,6 +71,7 @@ internal sealed class OcrImageOverlay : FrameworkElement
     internal void SetImage(BitmapSource? image)
     {
         _image = image;
+        _imageDrawing.ImageSource = image;
         _dragStart = null;
         if (IsMouseCaptured) ReleaseMouseCapture();
         InvalidateVisual();
@@ -101,7 +105,8 @@ internal sealed class OcrImageOverlay : FrameworkElement
         if (_image is null) return;
         OcrRect fit = FittedImage;
         if (!OcrGeometry.IsValid(fit)) return;
-        drawing.DrawImage(_image, Rect(fit));
+        _imageDrawing.Rect = Rect(fit);
+        drawing.DrawDrawing(_imageDrawing);
         Brush brush = SystemParameters.HighContrast ? SystemColors.HighlightBrush : RegionBrush;
         Brush halo = SystemParameters.HighContrast ? SystemColors.WindowBrush : (Brush)GetValue(RegionHaloBrushProperty);
         var pen = new Pen(brush, 1);

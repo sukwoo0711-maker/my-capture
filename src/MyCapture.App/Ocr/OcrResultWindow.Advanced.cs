@@ -234,6 +234,13 @@ internal sealed partial class OcrResultWindow
             _modeChosen = false;
             _geometryRequested = false;
         }
+        ClearAdvancedResult();
+        _tabs.IsEnabled = false;
+        RefreshAdvancedView();
+    }
+
+    private void ClearAdvancedResult()
+    {
         _result = null;
         _allExtraction = null;
         _currentExtraction = null;
@@ -244,6 +251,18 @@ internal sealed partial class OcrResultWindow
         _imageOverlay.SetSelection(null, notify: false);
         _imageOverlay.SetRegions([]);
         SetSourceImage(null);
+    }
+
+    /// <summary>Keep the reusable controls, but release the dismissed capture and its derived results.</summary>
+    internal void ReleaseResult()
+    {
+        _deferredSelection = null;
+        _modeChosen = false;
+        _geometryRequested = false;
+        ClearAdvancedResult();
+        _status.Text = string.Empty;
+        _rerunButton.IsEnabled = false;
+        _copyButton.IsEnabled = false;
         _tabs.IsEnabled = false;
         RefreshAdvancedView();
     }

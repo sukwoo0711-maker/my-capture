@@ -32,6 +32,7 @@ internal sealed class OcrResultPresenter : IDisposable
     private readonly OcrResultWindow _window;
 
     private CancellationTokenSource? _inFlight;
+    private CancellationTokenSource? _cachedImageLoad;
     private Func<OcrRequest>? _currentRequestFactory;
     private string _currentContext = string.Empty;
     private Action<OcrResult>? _onFreshResult;
@@ -90,8 +91,7 @@ internal sealed class OcrResultPresenter : IDisposable
             // Dismissing a busy reusable window is a real user cancellation, not merely a visual
             // hide. Clearing ownership before signalling cancellation also prevents a late result
             // from showing and activating the window again.
-            CancelInFlight();
-            _setBusy(false);
+            ReleasePresentation();
         };
     }
 
@@ -157,6 +157,7 @@ internal sealed class OcrResultPresenter : IDisposable
         // Cancel any prior request before starting a new one.
         CancelInFlight();
 
+        long version = _presentationVersion;
         OcrRequest request;
         try
         {
@@ -165,6 +166,7 @@ internal sealed class OcrResultPresenter : IDisposable
         catch (Exception ex)
         {
             _log.LogWarning(ex, "Could not build the OCR request");
+            if (_disposed || version != _presentationVersion) return;
             // Run() may just have cancelled a previous owner. Its late completion is intentionally
             // ignored, so this boundary must release the tray busy state itself.
             _setBusy(false);
@@ -172,10 +174,17 @@ internal sealed class OcrResultPresenter : IDisposable
             return;
         }
 
+        // A request factory can synchronously dismiss or replace this presentation.
+        if (_disposed || version != _presentationVersion) return;
         var cts = new CancellationTokenSource();
         _inFlight = cts;
 
         _window.ShowBusy(_currentContext, preserveSelection);
+        if (!ReferenceEquals(_inFlight, cts))
+        {
+            cts.Dispose();
+            return;
+        }
         _setBusy(true);
 
         _ = RecognizeAsync(request, cts, preserveSelection);
@@ -224,28 +233,52 @@ internal sealed class OcrResultPresenter : IDisposable
                 }
             }
 
-            _inFlight = null;
+            // Showing a result can synchronously request geometry and start a new run.
+            if (ReferenceEquals(_inFlight, cts)) _inFlight = null;
             cts.Dispose();
         }));
     }
 
     private async Task LoadCachedImageAsync(Func<OcrRequest> requestFactory, long version)
     {
+        var cancellation = new CancellationTokenSource();
+        _cachedImageLoad = cancellation;
+        CancellationToken token = cancellation.Token;
         try
         {
             OcrRequest request = requestFactory();
-            BitmapSource? source = await OcrSourceSnapshot.LoadAsync(request, CancellationToken.None)
+            BitmapSource? source = await OcrSourceSnapshot.LoadAsync(request, token)
                 .ConfigureAwait(false);
-            _ = _dispatcher.BeginInvoke(DispatcherPriority.Normal, new Action(() =>
+            await _dispatcher.InvokeAsync(() =>
             {
-                if (!_disposed && version == _presentationVersion) _window.SetSourceImage(source);
-            }));
+                if (!_disposed && version == _presentationVersion && !token.IsCancellationRequested)
+                    _window.SetSourceImage(source);
+            }, DispatcherPriority.Normal, token).Task.ConfigureAwait(false);
         }
+        catch (OperationCanceledException) when (token.IsCancellationRequested) { }
         catch (Exception error)
         {
             // The cached text remains usable if its source was moved or removed.
             _log.LogWarning(error, "Could not load the cached OCR image");
         }
+        finally
+        {
+            // This method can finish on a decoder thread; ownership stays on the dispatcher.
+            _ = _dispatcher.BeginInvoke(DispatcherPriority.Normal, new Action(() =>
+            {
+                if (ReferenceEquals(_cachedImageLoad, cancellation)) _cachedImageLoad = null;
+                cancellation.Dispose();
+            }));
+        }
+    }
+
+    private void ReleasePresentation()
+    {
+        _currentRequestFactory = null;
+        _currentContext = string.Empty;
+        _onFreshResult = null;
+        CancelInFlight();
+        _setBusy(false);
     }
 
     private void CancelInFlight()
@@ -253,6 +286,9 @@ internal sealed class OcrResultPresenter : IDisposable
         _presentationVersion++;
         CancellationTokenSource? previous = _inFlight;
         _inFlight = null;
+        CancellationTokenSource? cachedImage = _cachedImageLoad;
+        _cachedImageLoad = null;
+        cachedImage?.Cancel();
         if (previous is not null)
         {
             try
@@ -274,7 +310,8 @@ internal sealed class OcrResultPresenter : IDisposable
         }
 
         _disposed = true;
-        CancelInFlight();
+        ReleasePresentation();
+        _window.ReleaseResult();
 
         try
         {
