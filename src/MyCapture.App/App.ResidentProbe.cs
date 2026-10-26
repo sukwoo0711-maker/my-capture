@@ -5,6 +5,7 @@ using System.Windows;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
+using Microsoft.Extensions.DependencyInjection;
 using MyCapture.App.Capture;
 using MyCapture.App.Diagnostics;
 using MyCapture.App.Editing;
@@ -14,6 +15,7 @@ using MyCapture.Core.Settings;
 using MyCapture.Ocr;
 using MyCapture.Platform.Capture;
 using MyCapture.Platform.Display;
+using MyCapture.Platform.Shell;
 
 namespace MyCapture.App;
 
@@ -62,11 +64,21 @@ public partial class App
             await Task.WhenAll(_initialLibraryRecoveryTask, _initialEditRecoveryTask);
             await recorder.SettleAsync("start", probe.StartSeconds);
             await recorder.AuditAsync("start");
+            bool measuredIdleRelease = false;
+            bool capturedForIdle = false;
             foreach (string scenario in probe.Scenarios)
             {
                 try
                 {
+                    if (probe.MeasureIdleRelease && scenario == "editor-4k" && !capturedForIdle)
+                        await ProbeCaptureToCardAsync(recorder, "idle preparation", dwellMs: 1200);
                     await RunResidentProbeScenarioAsync(probe, recorder, scenario);
+                    if (scenario is "capture" or "capture-30") capturedForIdle = true;
+                    if (probe.MeasureIdleRelease && scenario == "editor-4k")
+                    {
+                        await ProbeIdleReleaseAsync(probe, recorder);
+                        measuredIdleRelease = true;
+                    }
                 }
                 catch (Exception ex) when (ex is TimeoutException or InvalidOperationException)
                 {
@@ -79,6 +91,14 @@ public partial class App
                     await Task.Delay(TimeSpan.FromSeconds(probe.Quick ? 2 : 10));
                 }
             }
+            if (probe.MeasureIdleRelease && !measuredIdleRelease)
+            {
+                // A custom scenario list still gets the same capture/card/4K-editor preparation.
+                await ProbeCaptureToCardAsync(recorder, "idle preparation", dwellMs: 1200);
+                await ProbeEditorAsync(recorder);
+                await ProbeIdleReleaseAsync(probe, recorder);
+            }
+            CheckResidentIdleFailures();
         }
         catch (Exception ex)
         {
@@ -180,6 +200,9 @@ public partial class App
     private async Task<double> ProbeShortcutToSelectorAsync()
     {
         long started = Stopwatch.GetTimestamp();
+        // Include synchronous device restoration in the shortcut timing, before a Rendering
+        // subscription itself can wake WPF's render path.
+        BeforeResidentUse();
         double selectorMs = -1;
         EventHandler rendering = (_, _) =>
         {
@@ -199,6 +222,7 @@ public partial class App
     /// <summary>A 3840 x 2160 capture opened in the editor, closed, then the next shortcut at once.</summary>
     private async Task ProbeEditorAsync(ResidentProbeRecorder recorder)
     {
+        BeforeResidentUse();
         if (_overlay is null || _settings is null) throw new InvalidOperationException("The capture shell is unavailable.");
         AfterCaptureAction previous = _settings.General.AfterCapture;
         _settings.General.AfterCapture = AfterCaptureAction.Editor;
@@ -265,6 +289,7 @@ public partial class App
 
     private async Task ProbeOcrAsync(ResidentProbeRecorder recorder)
     {
+        BeforeResidentUse();
         if (_ocrPresenter is null || _settings is null) throw new InvalidOperationException("OCR is unavailable.");
         BitmapSource image = ResidentProbeImages.Text(1600, 900,
         [
@@ -291,6 +316,7 @@ public partial class App
 
     private async Task ProbePinsAsync(ResidentProbeRecorder recorder)
     {
+        BeforeResidentUse();
         if (_pins is null) throw new InvalidOperationException("Pins are unavailable.");
         long started = Stopwatch.GetTimestamp();
         for (int index = 0; index < 5; index++) _pins.PinImage(ResidentProbeImages.Pattern(1920, 1080, index));
@@ -306,6 +332,59 @@ public partial class App
         recorder.Sample("pins-10 open", 0);
         _pins.CloseAll();
         await ProbeWaitAsync(() => _pins.Count == 0, 10_000, "pins closed");
+    }
+
+    private async Task ProbeIdleReleaseAsync(ResidentProbeOptions probe, ResidentProbeRecorder recorder)
+    {
+        // Restart the idle interval after the final editor/selector closure, without a forced GC.
+        BeforeResidentUse();
+        NativeMessageWindow shell = _services!.GetRequiredService<NativeMessageWindow>();
+        IntPtr shellHandle = shell.Handle;
+        var wait = Stopwatch.StartNew();
+        TimeSpan lastVisible = TimeSpan.Zero;
+        TimeSpan threshold = TimeSpan.FromSeconds(probe.IdleSeconds);
+        recorder.Sample("idle release before", 0);
+        while (true)
+        {
+            CheckResidentIdleFailures();
+            bool visible = ResidentWindowActivity.HasVisibleProcessWindow();
+            if (visible) lastVisible = wait.Elapsed;
+            TimeSpan inputIdle = ResidentWindowActivity.InputIdleTime();
+            _residentRenderIdle?.Poll(visible, inputIdle);
+            if (!visible && wait.Elapsed - lastVisible >= threshold && inputIdle >= threshold
+                && (_residentRenderIdle is null || _residentRenderIdle.IsReleased)) break;
+            if (wait.Elapsed > threshold + TimeSpan.FromSeconds(Math.Max(60, probe.IdleSeconds)))
+                throw new TimeoutException("Resident idle release did not reach a quiet interval; check visible windows and desktop input.");
+            await Task.Delay(100);
+        }
+        recorder.Time("idle release: actual quiet wait", wait.Elapsed.TotalMilliseconds);
+        string? Detail() => $"variant={probe.IdleRelease}; released={_residentRenderIdle?.IsReleased == true}; "
+            + $"wait={wait.Elapsed.TotalSeconds:0.000}s; shell unchanged={shell.Handle == shellHandle}; "
+            + $"keepalive={shell.IsRenderKeepAlivePresent}";
+        recorder.Sample("idle release threshold", probe.IdleSeconds, Detail());
+        // WPF sends device/channel destruction to its render thread. Give it the same natural
+        // drain interval in every variant, with no Rendering subscription and no forced GC.
+        await recorder.SettleAsync("idle release", [0, 1, 3], Detail);
+        CheckResidentIdleFailures();
+        if (ResidentWindowActivity.HasVisibleProcessWindow()
+            || (_residentRenderIdle is not null && !_residentRenderIdle.IsReleased))
+            throw new InvalidOperationException("A window interrupted the idle-release measurement.");
+        if (shell.Handle != shellHandle) throw new InvalidOperationException("Idle release replaced the shell HWND.");
+        int restores = _residentRenderIdle?.RestoreCount ?? 0;
+        foreach (string name in new[] { "idle release: first capture", "idle release: second capture" })
+        {
+            double selectorMs = await ProbeShortcutToSelectorAsync();
+            recorder.Time(name + ": shortcut → selector first frame", selectorMs);
+            recorder.Time(name + ": synthetic desktop grab (inside the selector timing)", s_lastProbeAcquisitionMs);
+            if (_residentRenderIdle?.IsReleased == true)
+                throw new InvalidOperationException("The selector was shown before the render path was restored.");
+            _overlay!.Cancel();
+            await ProbeWaitAsync(() => _overlay.IsActive != true, 10_000, "post-release selector cancelled");
+        }
+        if (_residentRenderIdle is not null && _residentRenderIdle.RestoreCount != restores + 1)
+            throw new InvalidOperationException("The first post-release capture did not restore exactly once.");
+        if (shell.Handle != shellHandle) throw new InvalidOperationException("Restoration replaced the shell HWND.");
+        CheckResidentIdleFailures();
     }
 
     private static async Task ProbeWaitAsync(Func<bool> done, int timeoutMs, string what)

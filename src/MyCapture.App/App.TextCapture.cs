@@ -60,6 +60,7 @@ public partial class App
     /// </summary>
     private async void HandleCaptureTextRequested()
     {
+        BeforeResidentUse();
         DismissQuickAccessForCapture();
         _log?.LogInformation("Text capture requested");
         if (_overlay is null || _settings is null)

@@ -166,6 +166,7 @@ public partial class App : Application
             _log.LogInformation("MyCapture starting up");
             if (s_residentProbe is null) await RecoverLegacyImportBeforeLoadAsync();
             InitializeShell(quietLaunch, FindSwitch(e.Args, SettingsCommandLineSwitch) >= 0);
+            InitializeResidentRenderIdle();
             StartActivationListener();
         }
         catch (Exception ex)
@@ -444,6 +445,7 @@ public partial class App : Application
 
     private void OnGlobalHotkeyPressed(object? sender, GlobalHotkeyPressedEventArgs e)
     {
+        BeforeResidentUse();
         if (_storeInstallationPending || _preparingExit)
         {
             // Capture commands say why they wait; the other commands stay quiet until the app is free.
@@ -549,6 +551,7 @@ public partial class App : Application
     /// </summary>
     private void HandleRestoreClosedPin()
     {
+        BeforeResidentUse();
         if (_pins is null)
         {
             return;
@@ -673,6 +676,7 @@ public partial class App : Application
     /// </summary>
     private async void HandlePasteToScreen()
     {
+        BeforeResidentUse();
         if (_storeInstallationPending || _preparingExit) return;
         if (_pins is null || _pasteToScreenInFlight)
         {
@@ -757,6 +761,7 @@ public partial class App : Application
 
     private async void HandleCaptureRequested()
     {
+        BeforeResidentUse();
         DismissQuickAccessForCapture();
         _log?.LogInformation("Region capture requested");
         if (_overlay is null || _settings is null)
@@ -795,6 +800,7 @@ public partial class App : Application
     /// </summary>
     private async void HandleCaptureFullScreen()
     {
+        BeforeResidentUse();
         if (_advancedCapture is null || !await GuardStillCaptureAsync(UiText.Get("Text_254C836B9ED2")))
         {
             return;
@@ -810,6 +816,7 @@ public partial class App : Application
     /// </summary>
     private async void HandleCaptureWindow()
     {
+        BeforeResidentUse();
         if (_advancedCapture is null || !await GuardStillCaptureAsync(UiText.Get("Text_36458FABBDBB")))
         {
             return;
@@ -825,6 +832,7 @@ public partial class App : Application
     /// </summary>
     private async void HandleRepeatLastRegion()
     {
+        BeforeResidentUse();
         if (_advancedCapture is null || !await GuardStillCaptureAsync(UiText.Get("Text_92E815063265")))
         {
             return;
@@ -848,6 +856,7 @@ public partial class App : Application
     /// <param name="delaySeconds">The selector's ⋯ menu picks 3, 5 or 10; otherwise the setting applies.</param>
     private async void HandleDelayedCapture(int? delaySeconds = null)
     {
+        BeforeResidentUse();
         if (_settings is null || !await GuardStillCaptureAsync(UiText.Get("Text_38476EDDA50B")))
         {
             return;
@@ -925,6 +934,7 @@ public partial class App : Application
     /// </remarks>
     private async void HandleScrollingCapture()
     {
+        BeforeResidentUse();
         if (_advancedCapture is null)
         {
             return;
@@ -1587,6 +1597,7 @@ public partial class App : Application
     /// </summary>
     private async void HandleRecordRegion()
     {
+        BeforeResidentUse();
         if (_recorder is null) return;
         string mode = UiText.Get("Text_4F5AF20FAA6E");
         if (_storeInstallationPending || _preparingExit)
@@ -1882,6 +1893,7 @@ public partial class App : Application
 
     private void HandleGalleryRequested()
     {
+        BeforeResidentUse();
         if (_storeInstallationPending || _preparingExit) return;
         _log?.LogInformation("Gallery activation requested");
 
@@ -1955,6 +1967,7 @@ public partial class App : Application
 
     private void HandleSettingsRequested()
     {
+        BeforeResidentUse();
         if (_preparingExit) return;
         if (_storeInstallationPending)
         {
@@ -2418,7 +2431,8 @@ public partial class App : Application
             serviceProvider.GetRequiredService<WindowCandidateService>(),
             serviceProvider.GetRequiredService<ILogger<CaptureOverlayCoordinator>>(),
             acquireFrame: s_residentProbe is null ? null : AcquireProbeFrame));
-        services.AddSingleton<NativeMessageWindow>();
+        services.AddSingleton(_ => new NativeMessageWindow(
+            separateRenderKeepAlive: s_residentProbe?.IdleRelease == ResidentIdleReleaseVariant.KeepAlive));
         services.AddSingleton(new TrayIconAssets(
             Path.Combine(AppContext.BaseDirectory, "Assets", "tray-idle.ico"),
             Path.Combine(AppContext.BaseDirectory, "Assets", "tray-capturing.ico"),
@@ -2525,6 +2539,7 @@ public partial class App : Application
 
     protected override void OnExit(ExitEventArgs e)
     {
+        if (!StopResidentRenderIdle()) e.ApplicationExitCode = 2;
         _updateTimer?.Stop();
         _updates?.Dispose();
         // Stop a model download in progress; completed, verified model files stay.

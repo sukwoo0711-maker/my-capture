@@ -34,6 +34,8 @@ internal sealed class ResidentProbeOptions
     internal const string AuditSwitch = "--resident-audit";
     internal const string NoIndexingSwitch = "--resident-no-indexing";
     internal const string SoftwareRenderSwitch = "--resident-software-render";
+    internal const string IdleReleaseSwitch = "--resident-idle-release";
+    internal const string IdleSecondsSwitch = "--resident-idle-seconds";
 
     internal static readonly string[] AllScenarios = ["capture", "editor-4k", "capture-30", "library", "ocr", "pins-10"];
 
@@ -57,6 +59,10 @@ internal sealed class ResidentProbeOptions
 
     /// <summary>Diagnostic only: WPF renders in software, to tell render-device memory from the app's own.</summary>
     internal bool SoftwareRender { get; private init; }
+
+    internal ResidentIdleReleaseVariant IdleRelease { get; private init; }
+    internal int IdleSeconds { get; private init; } = 180;
+    internal bool MeasureIdleRelease { get; private init; }
 
     internal string Output { get; }
 
@@ -87,11 +93,47 @@ internal sealed class ResidentProbeOptions
             : AllScenarios;
         bool quick = Array.Exists(args, argument => string.Equals(argument, QuickSwitch, StringComparison.OrdinalIgnoreCase));
         bool audit = Array.Exists(args, argument => string.Equals(argument, AuditSwitch, StringComparison.OrdinalIgnoreCase));
+        var idle = ParseIdleRelease(args);
+        bool software = Array.Exists(args, argument => string.Equals(argument, SoftwareRenderSwitch, StringComparison.OrdinalIgnoreCase));
+        if (software && idle.Variant != ResidentIdleReleaseVariant.None)
+            throw new ArgumentException("Do not combine --resident-software-render with an idle-release candidate.");
         return new ResidentProbeOptions(DiagnosticOutputPaths.Create(output), scenarios, quick, audit)
         {
             SkipIndexing = Array.Exists(args, argument => string.Equals(argument, NoIndexingSwitch, StringComparison.OrdinalIgnoreCase)),
-            SoftwareRender = Array.Exists(args, argument => string.Equals(argument, SoftwareRenderSwitch, StringComparison.OrdinalIgnoreCase)),
+            SoftwareRender = software,
+            IdleRelease = idle.Variant,
+            IdleSeconds = idle.Seconds,
+            MeasureIdleRelease = idle.Requested,
         };
+    }
+
+    internal static (ResidentIdleReleaseVariant Variant, int Seconds, bool Requested) ParseIdleRelease(string[] args)
+    {
+        string? Value(string name)
+        {
+            for (int i = 0; i < args.Length; i++)
+            {
+                if (args[i].StartsWith(name + "=", StringComparison.OrdinalIgnoreCase)) return args[i][(name.Length + 1)..];
+                if (string.Equals(args[i], name, StringComparison.OrdinalIgnoreCase))
+                    return i + 1 < args.Length && !args[i + 1].StartsWith("--", StringComparison.Ordinal)
+                        ? args[i + 1] : throw new ArgumentException("Missing value for " + name);
+            }
+            return null;
+        }
+        string? variant = Value(IdleReleaseSwitch);
+        ResidentIdleReleaseVariant parsed = variant?.ToLowerInvariant() switch
+        {
+            null or "none" => ResidentIdleReleaseVariant.None,
+            "processmode" => ResidentIdleReleaseVariant.ProcessMode,
+            "keepalive" => ResidentIdleReleaseVariant.KeepAlive,
+            _ => throw new ArgumentException("Unknown resident idle-release variant: " + variant),
+        };
+        string? seconds = Value(IdleSecondsSwitch);
+        int threshold = 180;
+        if (seconds is not null && (!int.TryParse(seconds, NumberStyles.None, CultureInfo.InvariantCulture, out threshold)
+            || threshold is < 1 or > 3600))
+            throw new ArgumentException("Resident idle seconds must be between 1 and 3600.");
+        return (parsed, threshold, variant is not null);
     }
 }
 
@@ -372,6 +414,9 @@ internal sealed class ResidentProbeRecorder : IDisposable
                 Monitors = MonitorEnumerator.GetAll().Select(monitor =>
                     $"{monitor.Bounds.Width}x{monitor.Bounds.Height}@{monitor.Dpi}{(monitor.IsPrimary ? " primary" : "")}").ToArray(),
                 _options.Quick,
+                IdleReleaseVariant = _options.IdleRelease.ToString().ToLowerInvariant(),
+                _options.IdleSeconds,
+                _options.MeasureIdleRelease,
                 Scenarios = _options.Scenarios,
                 Rows = _rows,
                 Timings = _timings,
