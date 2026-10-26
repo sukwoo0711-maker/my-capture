@@ -117,6 +117,7 @@ public partial class App
             }
         };
         welcome.Show();
+        WindowForeground.BringForward(welcome);
     }
 
     /// <summary>

@@ -197,10 +197,7 @@ internal sealed partial class GalleryWindow : Window
             WindowState = WindowState.Normal;
         }
 
-        _ = Activate();
-        Topmost = true;
-        Topmost = false;
-        _ = Focus();
+        WindowForeground.BringForward(this);
         ShowPendingRetentionNotice();
     }
 
