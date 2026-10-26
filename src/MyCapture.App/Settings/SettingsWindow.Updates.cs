@@ -1,4 +1,3 @@
-using System.Reflection;
 using System.Windows;
 using System.Windows.Automation;
 using Microsoft.Extensions.Logging;
@@ -66,8 +65,7 @@ internal sealed partial class SettingsWindow
     /// <summary>The time a finished check is stamped with. Tests pin it.</summary>
     internal Func<DateTimeOffset> StoreCheckClock { get; set; } = () => DateTimeOffset.Now;
 
-    private static UpdateVersion CurrentUpdateVersion => UpdateVersion.FromVersion(
-        Assembly.GetExecutingAssembly().GetName().Version ?? new Version(0, 0, 0));
+    private static UpdateVersion CurrentUpdateVersion => ApplicationVersion.Current;
 
     private void InitializeUpdates()
     {

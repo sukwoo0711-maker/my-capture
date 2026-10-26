@@ -200,9 +200,12 @@ public sealed class ExportSettings
     public ImageExportOptions LastImageExport { get; set => field = (value ?? new()).Normalize(); } = new();
 
     /// <summary>
-    /// Destination for quick save. Empty means the default location.
+    /// Fixed destination for quick save. Empty means the default capture folder.
     /// </summary>
     public string QuickSaveDirectoryOverride { get; set; } = string.Empty;
+
+    /// <summary>The folder of the last successful image Save As export. Only the starting folder of Save As dialogs; quick save ignores it.</summary>
+    public string LastSaveDirectory { get; set; } = string.Empty;
 
     /// <summary>
     /// Legacy persisted preference retained for settings-file compatibility. Edited images are

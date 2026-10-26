@@ -4067,13 +4067,13 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="EditRecovery_Detail" xml:space="preserve"><value>{0} · {1} × {2}</value></data>
   <data name="EditRecovery_TimeFormat" xml:space="preserve"><value>M월 d일 HH:mm</value><comment>.NET custom date and time format for when a draft was saved.</comment></data>
   <data name="EditRecovery_RowAction" xml:space="preserve"><value>{0}: {1}</value></data>
-  <data name="Onboard_TryNow" xml:space="preserve"><value>지금 해 보기</value></data>
+  <data name="Onboard_TryNow" xml:space="preserve"><value>영역 캡처</value></data>
   <data name="Onboard_TryNowHelp" xml:space="preserve"><value>이 창을 닫고 영역 캡처를 시작합니다.</value></data>
   <data name="Onboard_StepsName" xml:space="preserve"><value>시작 안내</value></data>
   <data name="Onboard_StepNumber" xml:space="preserve"><value>{0}단계</value></data>
   <data name="Onboard_AfterCaptureTitle" xml:space="preserve"><value>캡처한 다음</value></data>
   <data name="Welcome_FirstCaptureTitle" xml:space="preserve"><value>한 번 캡처해 보십시오</value></data>
-  <data name="Welcome_PinClipboardHint" xml:space="preserve"><value>복사한 표와 코드는 {0} 키로 핀에 띄웁니다.</value></data>
+  <data name="Welcome_PinClipboardHint" xml:space="preserve"><value>복사한 표와 코드를 {0} 키로 다른 창 위에 띄워 참고할 수 있습니다.</value></data>
   <data name="Welcome_Skip" xml:space="preserve"><value>건너뛰기</value></data>
   <data name="Onboard_FirstCaptureTip" xml:space="preserve"><value>다른 창 위에 띄우려면 P</value></data>
   <data name="Onboard_ReceiptKeyboard" xml:space="preserve"><value>Alt+Q로 선택 · Tab 이동 · Enter 실행</value></data>
@@ -4687,4 +4687,7 @@ F3  클립보드를 핀으로 띄우기
   <data name="LibraryUx_DragOutMixed" xml:space="preserve"><value>창 밖에 놓으면 PNG·MP4 파일로 내보내기</value></data>
   <data name="Settings_DefaultFont" xml:space="preserve"><value>기본 글꼴로 복원</value></data>
   <data name="Settings_FontScope" xml:space="preserve"><value>새 텍스트에 적용합니다. 기존 텍스트의 글꼴은 유지됩니다.</value></data>
+  <data name="App.CurrentVersion" xml:space="preserve"><value>버전 {0}</value></data>
+  <data name="Welcome_CaptureInstruction" xml:space="preserve"><value>영역 캡처를 누른 뒤 마우스로 드래그하여 캡처할 영역을 선택합니다.</value></data>
+  <data name="Settings.QuickSaveDirectoryHint" xml:space="preserve"><value>빠른 저장은 항상 이 폴더에 저장합니다. 비워 두면 기본 캡처 폴더를 사용합니다.</value></data>
 </root>

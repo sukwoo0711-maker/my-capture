@@ -100,6 +100,14 @@ internal sealed class WelcomeWindow : Window
         actions.Children.Add(TryNowButton);
         actions.Children.Add(SkipButton);
 
+        var captureHint = KoreanWordWrap.Show(new TextBlock
+        {
+            FontSize = 13, TextAlignment = TextAlignment.Center, TextWrapping = TextWrapping.Wrap,
+            Margin = new Thickness(0, 0, 0, 20),
+        }, UiText.Get("Welcome_CaptureInstruction"));
+        captureHint.SetResourceReference(TextBlock.ForegroundProperty, "Text.Secondary");
+        captureKeys.Margin = new Thickness(0, 0, 0, 12);
+
         // The shell applies this choice after the welcome closes, before it opens the next surface.
         StartAtSignInCheck = new CheckBox
         {
@@ -163,6 +171,7 @@ internal sealed class WelcomeWindow : Window
         var root = new StackPanel { Margin = new Thickness(24, 28, 24, 20) };
         root.Children.Add(title);
         root.Children.Add(captureKeys);
+        root.Children.Add(captureHint);
         root.Children.Add(pinHint);
         root.Children.Add(actions);
         root.Children.Add(footer);

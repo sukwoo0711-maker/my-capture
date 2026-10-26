@@ -106,6 +106,7 @@ internal sealed partial class GalleryWindow : Window
         _log = log ?? throw new ArgumentNullException(nameof(log));
 
         InitializeComponent();
+        CurrentVersionLabel.Text = ApplicationVersion.DisplayText;
         CommandBindings.Add(new CommandBinding(CompareCommand, OnCompareExecuted, (_, e) =>
         {
             e.CanExecute = !_imagePreparationInProgress && _viewModel.CanCompareSelected;
@@ -1255,8 +1256,9 @@ internal sealed partial class GalleryWindow : Window
                 return;
             }
             _ = ImageReductionExportDialog.Show(this, image,
-                Path.Combine(_paths.QuickSaveRoot, GalleryDragExportService.BuildBaseFileName(DateTimeOffset.Now)),
-                record.SourcePageUrl, _commitService.LastExportOptions, _commitService.RememberExportOptions);
+                Path.Combine(_commitService.ExportLocation.SaveAsDirectory, GalleryDragExportService.BuildBaseFileName(DateTimeOffset.Now)),
+                record.SourcePageUrl, _commitService.LastExportOptions, _commitService.RememberExportOptions,
+                _commitService.RememberSavedExport);
         }
         catch (Exception ex)
         {

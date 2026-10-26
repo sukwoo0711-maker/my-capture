@@ -106,6 +106,7 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
 
     // ----- Export -----
     private string _quickSaveDirectoryOverride = string.Empty;
+    private string _preservedLastSaveDirectory = string.Empty;
     private bool _copyToClipboardOnQuickSave;
     private bool _showSourceWindowTitle;
     private string _fileNamePattern = string.Empty;
@@ -752,6 +753,7 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
         _quickSaveDirectoryOverride = DisplayDirectory(
             s.Export.QuickSaveDirectoryOverride,
             AppPaths.CreateDefault().QuickSaveRoot);
+        _preservedLastSaveDirectory = s.Export.LastSaveDirectory;
         _gitHubIssueUrl = GitHubIssueImageUrl.TryNormalize(s.GitHub.IssueUrl, out string issueUrl)
             ? issueUrl
             : GitHubIssueImageUrl.DefaultIssueUrl;
@@ -970,6 +972,7 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
                 QuickSaveDirectoryOverride = PersistDirectory(
                     _quickSaveDirectoryOverride,
                     AppPaths.CreateDefault().QuickSaveRoot),
+                LastSaveDirectory = _preservedLastSaveDirectory,
                 CopyToClipboardOnQuickSave = _copyToClipboardOnQuickSave,
                 ShowSourceWindowTitle = _showSourceWindowTitle,
                 LastImageExport = _lastImageExport with { },
