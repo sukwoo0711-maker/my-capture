@@ -4,7 +4,7 @@
 
 <img src="docs/media/readme-demo-ko.gif" width="720" alt="코드 위에 반투명하게 띄운 엑셀 레지스터 표 핀, Ctrl+더블클릭으로 원문을 복사해 에디터에 붙여 넣은 #if·#define 구문 핀, 뒤 창 클릭을 허용해 아래 터미널에 입력하는 핀이 차례로 나오는 장면">
 
-<a href="https://apps.microsoft.com/detail/9PB33MC095VR?cid=gh-readme"><img src="https://get.microsoft.com/images/ko%20dark.svg" width="200" alt="Microsoft Store에서 받기"></a>
+<a href="https://apps.microsoft.com/detail/9PB33MC095VR?referrer=appbadge&amp;cid=gh-readme&amp;mode=full"><img src="https://get.microsoft.com/images/ko%20dark.svg" width="200" alt="Microsoft Store에서 받기"></a>
 
 광고·계정 없이 무료이고 회사 업무에도 씁니다. 캡처와 글자 인식, 번역은 이 PC 안에서 처리하며, 소스 코드는 이 저장소에 MIT 라이선스로 공개되어 있습니다. Windows 11과 Windows 10 버전 22H2(x64·x86)에서 실행하며, ARM64 PC에서는 Windows 11이 필요합니다. 소개 페이지는 <https://mimiloaf.com/mycapture/>입니다.
 
@@ -81,7 +81,7 @@ A Windows pinning tool that keeps your Excel spec table and go-to code snippets 
 
 <img src="docs/media/readme-demo-en.gif" width="720" alt="A translucent Excel register table pinned above code, an #if/#define snippet pin whose original text is copied with Ctrl+double-click and pasted into the editor, and a click-through pin above a terminal">
 
-<a href="https://apps.microsoft.com/detail/9PB33MC095VR?cid=gh-readme"><img src="https://get.microsoft.com/images/en-us%20dark.svg" width="200" alt="Get it from Microsoft Store"></a>
+<a href="https://apps.microsoft.com/detail/9PB33MC095VR?referrer=appbadge&amp;cid=gh-readme&amp;mode=full"><img src="https://get.microsoft.com/images/en-us%20dark.svg" width="200" alt="Get it from Microsoft Store"></a>
 
 Free, including for work, with no ads and no account. Capture, text recognition and translation run on this PC, and the source code is in this repository under the MIT License. MyCapture runs on Windows 11 and Windows 10 version 22H2 (x64 or x86); ARM64 PCs need Windows 11. Website: <https://mimiloaf.com/en/mycapture/>
 
