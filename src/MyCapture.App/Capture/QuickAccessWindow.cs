@@ -852,8 +852,8 @@ internal sealed class QuickAccessWindow : Window
 
     private Button Button(string key, Action action)
     {
-        var button = new Button { Content = UiText.Get(key), Focusable = false };
-        CommandButtonPresentation.Apply(button);
+        // Every caller supplies the final content and applies the compact presentation.
+        var button = new Button { Focusable = false };
         _keyboardTargets.Add(button);
         AutomationProperties.SetAutomationId(button, key);
         AutomationProperties.SetName(button, UiText.Get(key));

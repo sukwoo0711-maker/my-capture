@@ -72,17 +72,30 @@ internal sealed class QuickAccessActionPanel : Panel
     {
         foreach ((Button button, TextBlock label) in _actions)
         {
-            if (label.Visibility != visibility) label.Visibility = visibility;
-            // Each candidate is measured from the name up. WPF re-measures a changed element only
-            // through its own queue, and the template elements between the face and the button keep
-            // their last size, so every one of them is invalidated here, as a label change elsewhere is.
-            for (DependencyObject? node = label; node is UIElement element; node = VisualTreeHelper.GetParent(node))
+            if (label.Visibility != visibility)
             {
-                element.InvalidateMeasure();
-                if (ReferenceEquals(node, button)) break;
+                label.Visibility = visibility;
+                label.InvalidateMeasure();
+                button.InvalidateMeasure();
             }
-            button.InvalidateMeasure();
+
+            // Candidate sizes are needed synchronously, before WPF drains its layout queue.
+            // Propagate real dirtiness from any descendant (including the shortcut caption),
+            // without invalidating an unchanged name just because another branch changed.
+            PropagateMeasureInvalidation(button);
         }
+    }
+
+    private static bool PropagateMeasureInvalidation(DependencyObject node)
+    {
+        bool invalid = node is UIElement current && !current.IsMeasureValid;
+        int count = VisualTreeHelper.GetChildrenCount(node);
+        for (int index = 0; index < count; index++)
+            invalid |= PropagateMeasureInvalidation(VisualTreeHelper.GetChild(node, index));
+
+        if (invalid && node is UIElement element && element.IsMeasureValid)
+            element.InvalidateMeasure();
+        return invalid;
     }
 
     private Size MeasureActions()
