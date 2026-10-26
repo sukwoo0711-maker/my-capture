@@ -445,8 +445,8 @@ public sealed class ImageExportDestinationTests
     private static AppPaths RetainedPaths()
     {
         // Retain these tiny fixtures: cleanup must be an explicit, recoverable trash operation.
-        string root = Environment.GetEnvironmentVariable("MYCAPTURE_TEST_RETAIN_ROOT")
-            ?? Path.Combine(Path.GetTempPath(), "MyCapture.RetainedTests");
+        // Keep their root code-owned instead of accepting filesystem paths from the environment.
+        string root = Path.Combine(AppContext.BaseDirectory, "RetainedTestFixtures");
         string path = Directory.CreateDirectory(Path.Combine(root, nameof(ImageExportDestinationTests), Guid.NewGuid().ToString("N"))).FullName;
         return AppPaths.CreateForRoot(path);
     }
