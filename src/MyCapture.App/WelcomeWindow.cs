@@ -486,6 +486,8 @@ internal sealed class WelcomeWindow : Window
     private void RenderStep()
     {
         bool finish = CurrentStep == WelcomeStep.Finish;
+        SkipButton.Visibility = finish ? Visibility.Collapsed : Visibility.Visible;
+        SkipButton.IsTabStop = !finish;
         int number = Math.Min((int)CurrentStep, 3);
         string label = UiText.Get(CurrentStep switch
         {
@@ -564,6 +566,7 @@ internal sealed class WelcomeWindow : Window
         {
             WelcomeStep.Capture => "Onboarding.CaptureHint",
             WelcomeStep.Pin when !_practiceCopied => "Onboarding.CopyHint",
+            WelcomeStep.Pin when !_pinAvailable => "Onboarding.PinButtonInstruction",
             WelcomeStep.Pin => "Onboarding.PinHint",
             _ => "Onboarding.LibraryHint",
         };

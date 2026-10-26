@@ -4703,7 +4703,7 @@ Overwrite these shortcuts? You can change this later in Settings → Shortcuts.<
   <data name="Onboarding.PressPin" xml:space="preserve"><value>Press {0}.</value></data>
   <data name="Onboarding.PinButtonInstruction" xml:space="preserve"><value>Select the button below to pin it.</value></data>
   <data name="Onboarding.LibraryTitle" xml:space="preserve"><value>Every capture is saved in the library</value></data>
-  <data name="Onboarding.LibraryInstruction" xml:space="preserve"><value>Open it from the icon inside ^ on the taskbar.</value></data>
+  <data name="Onboarding.LibraryInstruction" xml:space="preserve"><value>Open it from the MyCapture icon inside ^ on the taskbar.</value></data>
   <data name="Onboarding.LibraryInstructionKey" xml:space="preserve"><value>Press this key or use the icon inside ^ on the taskbar.</value></data>
   <data name="Onboarding.FinishTitle" xml:space="preserve"><value>You are ready</value></data>
   <data name="Onboarding.FinishInstruction" xml:space="preserve"><value>Check the settings below, then get started.</value></data>

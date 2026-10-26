@@ -44,7 +44,7 @@ public sealed class OnboardingGuideTests
         guide.LibraryRequested += (_, _) => library++;
         try
         {
-            // 1/3: the configured key as large key caps, one primary button, always Skip, and a table to drag over.
+            // 1/3: the configured key as large key caps, one primary button, Skip, and a table to drag over.
             Assert.Equal(WelcomeStep.Capture, guide.CurrentStep);
             Assert.Equal("1 / 3 · 캡처", guide.ProgressText);
             Assert.Equal("화면의 일부를 캡처합니다", guide.TitleText);
@@ -110,6 +110,8 @@ public sealed class OnboardingGuideTests
             guide.NotifyLibraryOpened();
             Assert.Equal(WelcomeStep.Finish, guide.CurrentStep);
             Assert.Equal("시작하기", guide.TryNowButton.Content);
+            Assert.Equal(Visibility.Collapsed, guide.SkipButton.Visibility);
+            Assert.False(guide.SkipButton.IsTabStop);
             Assert.True(guide.PreferencesShown);
             Assert.True(guide.StartAtSignIn);
             Assert.Contains(Descendants(guide).OfType<TextBlock>(), text =>
@@ -216,26 +218,44 @@ public sealed class OnboardingGuideTests
     });
 
     [Fact]
-    public void ASkipOnEveryStepClosesLikeTheOldWelcomeAndEscapeIsSkip() => StaTestHost.Run(() =>
+    public void SkipClosesThePracticeStepsAndEscapeAndWindowCloseStillWorkOnEveryStep() => StaTestHost.Run(() =>
     {
         using var language = UiText.UseLanguage("ko-KR");
         foreach (WelcomeStep step in Enum.GetValues<WelcomeStep>())
         {
-            WelcomeWindow guide = Create(new FakeClipboard());
-            AdvanceTo(guide, step);
-            guide.Show();
-            Click(guide.SkipButton);
-            Assert.Equal(WelcomeOutcome.Closed, guide.Outcome);
-            Assert.Equal(AfterWelcome.OpenLibrary, FirstRunPlan.Next(guide.Outcome));
-        }
+            if (step != WelcomeStep.Finish)
+            {
+                WelcomeWindow guide = Create(new FakeClipboard());
+                AdvanceTo(guide, step);
+                guide.Show();
+                Assert.True(guide.SkipButton.IsVisible);
+                Click(guide.SkipButton);
+                Assert.False(guide.IsVisible);
+                Assert.Equal(WelcomeOutcome.Closed, guide.Outcome);
+                Assert.Equal(AfterWelcome.OpenLibrary, FirstRunPlan.Next(guide.Outcome));
+            }
 
-        WelcomeWindow escape = Create(new FakeClipboard());
-        escape.Show();
-        escape.RaiseEvent(new KeyEventArgs(Keyboard.PrimaryDevice, PresentationSource.FromVisual(escape)!, 0, Key.Escape)
-        {
-            RoutedEvent = Keyboard.PreviewKeyDownEvent,
-        });
-        Assert.Equal(WelcomeOutcome.Closed, escape.Outcome);
+            WelcomeWindow escape = Create(new FakeClipboard());
+            AdvanceTo(escape, step);
+            escape.Show();
+            var escapeKey = new KeyEventArgs(Keyboard.PrimaryDevice, PresentationSource.FromVisual(escape)!, 0, Key.Escape)
+            {
+                RoutedEvent = Keyboard.PreviewKeyDownEvent,
+            };
+            escape.RaiseEvent(escapeKey);
+            Assert.True(escapeKey.Handled);
+            Assert.False(escape.IsVisible);
+            Assert.Equal(WelcomeOutcome.Closed, escape.Outcome);
+            Assert.Equal(AfterWelcome.OpenLibrary, FirstRunPlan.Next(escape.Outcome));
+
+            WelcomeWindow windowClose = Create(new FakeClipboard());
+            AdvanceTo(windowClose, step);
+            windowClose.Show();
+            windowClose.Close();
+            Assert.False(windowClose.IsVisible);
+            Assert.Equal(WelcomeOutcome.Closed, windowClose.Outcome);
+            Assert.Equal(AfterWelcome.OpenLibrary, FirstRunPlan.Next(windowClose.Outcome));
+        }
 
         WelcomeWindow settings = Create(new FakeClipboard());
         AdvanceTo(settings, WelcomeStep.Finish);
@@ -272,16 +292,55 @@ public sealed class OnboardingGuideTests
             Click(guide.TryNowButton);
             Assert.False(guide.KeyShown);
             Assert.Equal("아래 버튼을 눌러 핀을 띄우십시오.", guide.InstructionText);
+            guide.ShowRetryHint();
+            Assert.Equal("아래 버튼을 눌러 핀을 띄우십시오.", guide.RetryHintText);
             Assert.Equal("핀 만들기", guide.TryNowButton.Content);
             guide.NotifyPinCreated();
             Assert.False(guide.KeyShown);
-            Assert.Equal("작업 표시줄 오른쪽 ^ 안의 아이콘으로 엽니다.", guide.InstructionText);
+            Assert.Equal("작업 표시줄 ^ 안의 MyCapture 아이콘으로 엽니다.", guide.InstructionText);
             Assert.Equal("라이브러리 열기", guide.TryNowButton.Content);
 
             // The shell reports the shortcuts again after a repair: the keys come back on the step that uses them.
             guide.UpdateShortcutAvailability(capture: true, pin: true, library: true);
             Assert.True(guide.KeyShown);
             Assert.Equal("이 키나 작업 표시줄 ^ 안의 아이콘으로 엽니다.", guide.InstructionText);
+        }
+        finally { guide.Close(); }
+    });
+
+    [Theory]
+    [InlineData("ko-KR", "아래 버튼을 누른 뒤 표 위를 드래그하십시오.", "먼저 아래 버튼으로 연습용 표를 복사하십시오.",
+        "아래 버튼을 눌러 핀을 띄우십시오.", "작업 표시줄 ^ 안의 MyCapture 아이콘으로 엽니다.")]
+    [InlineData("en-US", "Select the button below, then drag over the table.", "First, copy the practice table with the button below.",
+        "Select the button below to pin it.", "Open it from the MyCapture icon inside ^ on the taskbar.")]
+    public void UnassignedShortcutsUseButtonAndTrayInstructionsInBothLanguages(string culture, string capture, string copy, string pin, string library) => StaTestHost.Run(() =>
+    {
+        using var language = UiText.UseLanguage(culture);
+        // Fresh installs leave the library shortcut unassigned.
+        HotkeySettings defaults = NewInstallDefaults.Create().Hotkeys;
+        Assert.Equal(Hotkey.None, defaults.OpenLibrary);
+        defaults.Capture = Hotkey.None;
+        defaults.PasteToScreen = Hotkey.None;
+        WelcomeWindow guide = Create(new FakeClipboard(), keys: defaults);
+        try
+        {
+            Assert.False(guide.KeyShown);
+            Assert.Equal(capture, guide.InstructionText);
+            guide.NotifyCaptureCompleted(copied: true);
+            Assert.False(guide.KeyShown);
+            Assert.Equal(copy, guide.InstructionText);
+            Click(guide.TryNowButton);
+            Assert.False(guide.KeyShown);
+            Assert.Equal(pin, guide.InstructionText);
+            guide.ShowRetryHint();
+            Assert.Equal(pin, guide.RetryHintText);
+            guide.NotifyPinCreated();
+            Assert.False(guide.KeyShown);
+            Assert.True(guide.TrayDiagramShown);
+            Assert.Equal(library, guide.InstructionText);
+            guide.UpdateShortcutAvailability(capture: true, pin: true, library: true);
+            Assert.False(guide.KeyShown);
+            Assert.Equal(library, guide.InstructionText);
         }
         finally { guide.Close(); }
     });
@@ -601,7 +660,11 @@ public sealed class OnboardingGuideTests
             AdvanceTo(guide, WelcomeStep.Finish);
             Assert.True(guide.TryNowButton.IsDefault);
             Assert.True(guide.SkipButton.IsCancel);
-            Assert.All(new Control[] { guide.TryNowButton, guide.SkipButton, guide.StartAtSignInCheck, guide.AccurateOcrCheck },
+            Assert.Equal(Visibility.Collapsed, guide.SkipButton.Visibility);
+            Assert.False(guide.SkipButton.IsTabStop);
+            var actions = Assert.IsType<StackPanel>(LogicalTreeHelper.GetParent(guide.TryNowButton));
+            Assert.Same(guide.TryNowButton, Assert.Single(actions.Children.OfType<Button>(), button => button.Visibility == Visibility.Visible));
+            Assert.All(new Control[] { guide.TryNowButton, guide.StartAtSignInCheck, guide.AccurateOcrCheck },
                 control => Assert.True(control.Focusable && control.IsTabStop));
             Assert.True(KeyboardNavigation.GetTabIndex(guide.Scroller) < KeyboardNavigation.GetTabIndex(FooterOf(guide)));
         }

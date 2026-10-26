@@ -92,10 +92,18 @@ public sealed class OnboardingGuideEvidenceTests
     {
         double scale = dpi / 96.0;
         var monitor = new MonitorInfo("\\\\.\\DISPLAY1", new RectD(0, 0, workArea.Width, workArea.Height + 40), workArea, dpi, IsPrimary: true);
-        foreach (WelcomeStep step in Enum.GetValues<WelcomeStep>())
+        (WelcomeStep Step, bool NoLibraryKey)[] scenes =
+        [
+            (WelcomeStep.Capture, false), (WelcomeStep.Pin, false), (WelcomeStep.Library, false),
+            (WelcomeStep.Finish, false), (WelcomeStep.Library, true),
+        ];
+        foreach ((WelcomeStep step, bool noLibraryKey) in scenes)
         {
             var clipboard = new OnboardingGuideTests.FakeClipboard();
-            WelcomeWindow guide = OnboardingGuideTests.Create(clipboard, new WelcomeOptions { ReducedMotion = true, TextScale = textScale, MonitorProvider = () => monitor });
+            HotkeySettings? keys = noLibraryKey ? NewInstallDefaults.Create().Hotkeys : null;
+            if (noLibraryKey) Assert.Equal(Hotkey.None, keys!.OpenLibrary);
+            WelcomeWindow guide = OnboardingGuideTests.Create(clipboard,
+                new WelcomeOptions { ReducedMotion = true, TextScale = textScale, MonitorProvider = () => monitor }, keys);
             guide.WindowStartupLocation = WindowStartupLocation.Manual;
             guide.Left = -10000; guide.Top = -10000; guide.ShowActivated = false; guide.ShowInTaskbar = false;
             guide.LimitToWorkArea(monitor);
@@ -104,12 +112,19 @@ public sealed class OnboardingGuideEvidenceTests
                 OnboardingGuideTests.AdvanceTo(guide, step);
                 guide.Show();
                 Drain(guide);
-                string label = $"{set} {language} {themeName} step{(int)step}";
+                string suffix = noLibraryKey ? "-no-key" : string.Empty;
+                string label = $"{set} {language} {themeName} step{(int)step}{suffix}";
+                if (noLibraryKey)
+                {
+                    Check(!guide.KeyShown, label + ": an unassigned library shortcut must not be shown");
+                    Check(guide.TrayDiagramShown, label + ": the tray path must remain visible");
+                    Check(guide.InstructionText == UiText.Get("Onboarding.LibraryInstruction"), label + ": use the tray-only instruction");
+                }
                 AssertFits(guide, label, log);
 
                 if (root is null) continue;
                 string directory = Directory.CreateDirectory(Path.Combine(root, set)).FullName;
-                SaveBitmap(Render(guide, scale), Path.Combine(directory, $"step{(int)step}-{step.ToString().ToLowerInvariant()}-{language}-{themeName}.png"));
+                SaveBitmap(Render(guide, scale), Path.Combine(directory, $"step{(int)step}-{step.ToString().ToLowerInvariant()}{suffix}-{language}-{themeName}.png"));
                 // The second face of the pin step: the practice table copied and the key waiting.
                 if (step == WelcomeStep.Pin && !guide.PracticeCopied)
                 {
@@ -144,8 +159,16 @@ public sealed class OnboardingGuideEvidenceTests
                 $"{label}: {element.GetType().Name} spans {bounds.Left:0}..{bounds.Right:0} in a {scroll.ViewportWidth:0} wide column");
         }
 
-        // The footer is outside the scrolling content, so the primary and Skip buttons never leave the window.
-        foreach (Button button in new[] { guide.TryNowButton, guide.SkipButton })
+        // The primary is always visible. Skip is available during practice, and absent on Finish.
+        bool finish = guide.CurrentStep == WelcomeStep.Finish;
+        Check(guide.TryNowButton.IsVisible, label + ": the primary action must be visible");
+        Check(guide.SkipButton.Visibility == (finish ? Visibility.Collapsed : Visibility.Visible), label + ": Skip visibility");
+        Check(guide.SkipButton.IsTabStop == !finish, label + ": Skip tab navigation");
+        if (finish) Check(!guide.SkipButton.IsVisible, label + ": Finish must not show Skip");
+        else Check(guide.SkipButton.IsVisible, label + ": practice must show Skip");
+        // The footer stays outside the scrolling content; every available action must fit.
+        Button[] buttons = finish ? [guide.TryNowButton] : [guide.TryNowButton, guide.SkipButton];
+        foreach (Button button in buttons)
         {
             Check(button.IsVisible, label);
             Rect bounds = button.TransformToAncestor(content).TransformBounds(new Rect(0, 0, button.ActualWidth, button.ActualHeight));

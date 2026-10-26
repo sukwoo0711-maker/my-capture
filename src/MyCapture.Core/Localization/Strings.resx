@@ -4703,7 +4703,7 @@ F3  클립보드를 핀으로 띄우기
   <data name="Onboarding.PressPin" xml:space="preserve"><value>{0} 키를 누르십시오.</value></data>
   <data name="Onboarding.PinButtonInstruction" xml:space="preserve"><value>아래 버튼을 눌러 핀을 띄우십시오.</value></data>
   <data name="Onboarding.LibraryTitle" xml:space="preserve"><value>모든 캡처는 라이브러리에 모입니다</value></data>
-  <data name="Onboarding.LibraryInstruction" xml:space="preserve"><value>작업 표시줄 오른쪽 ^ 안의 아이콘으로 엽니다.</value></data>
+  <data name="Onboarding.LibraryInstruction" xml:space="preserve"><value>작업 표시줄 ^ 안의 MyCapture 아이콘으로 엽니다.</value></data>
   <data name="Onboarding.LibraryInstructionKey" xml:space="preserve"><value>이 키나 작업 표시줄 ^ 안의 아이콘으로 엽니다.</value></data>
   <data name="Onboarding.FinishTitle" xml:space="preserve"><value>준비가 끝났습니다</value></data>
   <data name="Onboarding.FinishInstruction" xml:space="preserve"><value>아래 설정을 확인한 뒤 시작하십시오.</value></data>
