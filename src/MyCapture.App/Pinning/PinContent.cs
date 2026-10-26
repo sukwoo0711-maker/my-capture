@@ -71,14 +71,21 @@ internal sealed record PinContent
 
     internal IReadOnlyDictionary<int, MermaidRenderResult>? MermaidResults { get; init; }
 
+    /// <summary>The same content once its source lookup has resolved: no lookup is pending any more.</summary>
     internal PinContent WithProvenance(CaptureProvenance provenance) =>
         new(Image, Kind, OriginalText, SourcePageUrl, UsesDeviceIndependentPixels,
             TextStyle, CodeDocument, LayoutWidthDip, LayoutHeightDip, provenance)
         {
-            PendingProvenance = PendingProvenance,
             BorderlessText = BorderlessText,
             MermaidResults = MermaidResults,
         };
+
+    /// <summary>
+    /// Another view of the same pin (the original beside its translation) showing the pin's current source.
+    /// A lookup still pending for the pin stays pending, so closing the pin before it ends loses nothing.
+    /// </summary>
+    internal PinContent WithCurrentProvenance(CaptureProvenance provenance) =>
+        WithProvenance(provenance) with { PendingProvenance = PendingProvenance };
 
     internal bool HasOriginalText => OriginalText is not null;
 

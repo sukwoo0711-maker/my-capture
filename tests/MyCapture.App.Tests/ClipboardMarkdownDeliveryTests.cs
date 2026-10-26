@@ -255,7 +255,8 @@ public sealed class ClipboardMarkdownDeliveryTests
         PinContent original = PinContent.FromMarkdown(ClipboardMarkdownRenderer.Render(source), source)
             with { PendingProvenance = pending.Task };
         CaptureProvenance interim = CaptureProvenance.Create(url: "https://example.test/interim");
-        PinContent snapshot = original.WithProvenance(interim);
+        // A view of the same pin (the original beside its translation) keeps the lookup that is still pending.
+        PinContent snapshot = original.WithCurrentProvenance(interim);
         Assert.Same(original.Image, snapshot.Image);
         Assert.Same(pending.Task, snapshot.PendingProvenance);
         Assert.False(snapshot.PendingProvenance!.IsCompleted);

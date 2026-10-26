@@ -63,7 +63,9 @@ public sealed class ClipboardMarkdownRendererTests
     {
         string text = string.Join("\n\n", Enumerable.Range(1, 17).Select(static n => "Paragraph number " + n + " of the document."))
             + "\n\n```mermaid\nflowchart TD\nA-->B\n```\n";
-        var diagram = BitmapSource.Create(592, 700, 96, 96, PixelFormats.Bgra32, null, new byte[592 * 700 * 4], 592 * 4);
+        var opaque = new byte[592 * 700 * 4];
+        for (int index = 0; index < opaque.Length; index += 4) opaque[index + 2] = opaque[index + 3] = 255;
+        var diagram = BitmapSource.Create(592, 700, 96, 96, PixelFormats.Bgra32, null, opaque, 592 * 4);
         diagram.Freeze();
         BitmapSource rendered = ClipboardMarkdownRenderer.Render(text, 1,
             new Dictionary<int, MermaidRenderResult> { [0] = new MermaidRenderResult(diagram, null) });
@@ -264,7 +266,8 @@ public sealed class ClipboardMarkdownRendererTests
     [Fact]
     public async Task DiagramsAfterLongProseRemainVisibleAcrossComposedPages()
     {
-        string source = "# Diagram review\n" + string.Concat(Enumerable.Range(1, 20).Select(index => $"Review line {index}\n"))
+        // More than one 900 DIP page of prose, so the first diagram sits beyond the first page boundary.
+        string source = "# Diagram review\n" + string.Concat(Enumerable.Range(1, 32).Select(index => $"Review line {index}\n"))
             + "```mermaid\r\nflowchart TD\r\n A --> B\r\n```\r\n"
             + "```mermaid\nsequenceDiagram\n Alice->>Bob: Hello\n```\nRetained final paragraph";
         await StaThreadTask.RunAsync(() =>

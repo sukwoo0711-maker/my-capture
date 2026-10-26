@@ -110,7 +110,7 @@ internal sealed partial class PinTranslationService(ITextTranslator translator,
         IReadOnlyList<TranslatedText> translated = await _translator.TranslateAsync(units, null, cancellationToken)
             .ConfigureAwait(false);
         cancellationToken.ThrowIfCancellationRequested();
-        if (translated.Count != units.Count)
+        if (translated.Count != units.Count || translated.All(static result => string.IsNullOrWhiteSpace(result.Text)))
             throw new InvalidOperationException("The translator returned an incomplete pin result.");
 
         var accepted = new string?[pieces.Length];

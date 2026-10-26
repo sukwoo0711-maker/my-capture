@@ -38,7 +38,7 @@ internal sealed partial class PinWindow
     // Persist the source and offer translation when reopened. A translated preview must never be
     // saved beside the source payload as if they were the same clipboard representation.
     internal PinContent TranslationSourceContent => _translationOriginal is null ? _content
-        : _translationOriginal.WithProvenance(_content.Provenance);
+        : _translationOriginal.WithCurrentProvenance(_content.Provenance);
 
     /// <summary>The content whose diagrams the pin is showing: the translation while it is shown.</summary>
     internal PinContent DisplayedDocumentContent => _showingTranslation && _translationResult is not null
@@ -122,7 +122,7 @@ internal sealed partial class PinWindow
         EndDrag();
         PinContent next = translated ? _translationResult : _translationOriginal;
         _showingTranslation = translated;
-        _content = next.WithProvenance(_content.Provenance).RenderedAt(next.MermaidResults is not null
+        _content = next.WithCurrentProvenance(_content.Provenance).RenderedAt(next.MermaidResults is not null
             ? MermaidDisplayScale : VisualTreeHelper.GetDpi(this).DpiScaleX);
         ClipboardCache.Clear();
         _imageElement.Source = _content.Image;
