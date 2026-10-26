@@ -95,28 +95,28 @@ public sealed class SettingsCopyRegressionTests
     });
 
     [Fact]
-    public void SourceBadgeKeepsSelectionEmphasisWhileTileActionsRequireHoverOrFocus()
+    public void SourceIconKeepsItsSizeWhileTileActionsRequireHoverOrFocus()
     {
         using Stream stream = typeof(SettingsCopyRegressionTests).Assembly.GetManifestResourceStream("GalleryFixture.Window.xaml")!;
         XDocument document = XDocument.Load(stream);
         XNamespace p = "http://schemas.microsoft.com/winfx/2006/xaml/presentation";
         XNamespace x = "http://schemas.microsoft.com/winfx/2006/xaml";
         XElement style = Assert.Single(document.Descendants(p + "Style"), node => (string?)node.Attribute(x + "Key") == "Gallery.SourceBadge");
-        AssertSetters(style, "22", "22", "130", "Text.Secondary", "0");
+        AssertSetters(style, "32", "32", "32", "Text.Secondary", "0");
         string[] interactionBindings =
         [
             "{Binding IsMouseOver, RelativeSource={RelativeSource AncestorType=ListBoxItem}}",
             "{Binding IsKeyboardFocusWithin, RelativeSource={RelativeSource AncestorType=ListBoxItem}}",
         ];
-        XElement[] triggers = style.Descendants(p + "DataTrigger").ToArray();
-        Assert.Equal(3, triggers.Length);
-        // Selected captures keep readable source context without leaving an action cluster over every thumbnail.
-        Assert.Equal(interactionBindings.Append("{Binding IsSelected}"),
-            triggers.Select(trigger => (string?)trigger.Attribute("Binding")));
+        Assert.Empty(style.Descendants(p + "DataTrigger"));
+        XElement[] triggers = style.Descendants(p + "Trigger").ToArray();
+        Assert.Equal(new[] { "IsMouseOver", "IsKeyboardFocused" },
+            triggers.Select(trigger => (string?)trigger.Attribute("Property")));
         foreach (XElement trigger in triggers)
         {
             Assert.Equal("True", (string?)trigger.Attribute("Value"));
-            AssertSetters(trigger, "{DynamicResource CommandButton.Height.Compact}", "26", "200", "Text.Primary", "1");
+            Assert.DoesNotContain(trigger.Elements(p + "Setter"),
+                setter => (string?)setter.Attribute("Property") is "Height" or "Width" or "MaxWidth" or "Padding");
         }
         foreach (string key in new[] { "Gallery.TileTemplate", "Gallery.CompactTileTemplate" })
         {
@@ -143,7 +143,7 @@ public sealed class SettingsCopyRegressionTests
                 Assert.Equal("True", values["IsHitTestVisible"]);
             }
             XElement video = Assert.Single(template.Descendants(p + "Border"), node => (string?)node.Attribute(x + "Name") == "VideoBadge");
-            Assert.Same(badge.Parent, video.Parent);
+            Assert.NotSame(badge.Parent, video.Parent);
             Assert.Equal("1", (string?)video.Attribute("Grid.Column"));
         }
 

@@ -422,7 +422,11 @@ internal sealed partial class GalleryWindow : Window
         bool shift = Keyboard.Modifiers.HasFlag(ModifierKeys.Shift);
         _collapseOnRelease = !control && !shift && tile.IsSelected;
         if (!_collapseOnRelease) _viewModel.Select(tile.Id, control, shift);
-        if (sender is ListBox list && list.ItemContainerGenerator.ContainerFromItem(tile) is ListBoxItem item) item.Focus();
+        if (sender is ListBox list && list.ItemContainerGenerator.ContainerFromItem(tile) is ListBoxItem item)
+        {
+            GalleryCaptionPreview.Close(item);
+            item.Focus();
+        }
         e.Handled = true; // Inner single-row ListBox must never collapse the shared selection.
         if (!tile.IsSelected) return;
         if (e.ClickCount == 2)
@@ -757,6 +761,12 @@ internal sealed partial class GalleryWindow : Window
             e.Handled = true;
             if (await CopyRenderedAsync(tile)) ConfirmCopy(sender);
         }
+    }
+
+    private void OnShowDragHelpClick(object sender, RoutedEventArgs e)
+    {
+        if (ResolveTileFromCommand(sender) is { } tile) ShowStatus(tile.ExportToolTip);
+        e.Handled = true;
     }
 
     private void OnMoreClick(object sender, RoutedEventArgs e)

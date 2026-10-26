@@ -126,6 +126,8 @@
                       Click="OnGifMenuClick" />
             <MenuItem Header="{loc:Text Folder410.MoveCaptures}" CommandParameter="{Binding}"
                       InputGestureText="M" Click="OnMoveCapturesClick" />
+            <MenuItem Header="{loc:Text LibraryUx_DragHelp}" CommandParameter="{Binding}"
+                      Click="OnShowDragHelpClick" />
             <MenuItem Header="{loc:Text Library.Tags.Edit}" CommandParameter="{Binding}" Click="OnBatchTagsClick" />
             <Separator />
             <MenuItem Header="{loc:Text ExportReduction_Title}"
@@ -175,37 +177,23 @@
         </DataTemplate>
 
         <Style x:Key="Gallery.SourceBadge" TargetType="Button" BasedOn="{StaticResource Button.GhostCompact}">
-            <Setter Property="Height" Value="22" />
-            <Setter Property="MinHeight" Value="22" />
-            <Setter Property="MaxWidth" Value="130" />
-            <Setter Property="Padding" Value="6,1" />
+            <Setter Property="Width" Value="32" />
+            <Setter Property="Height" Value="32" />
+            <Setter Property="MinWidth" Value="32" />
+            <Setter Property="MinHeight" Value="32" />
+            <Setter Property="MaxWidth" Value="32" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="ToolTipService.InitialShowDelay" Value="600" />
+            <Setter Property="ToolTipService.ShowDuration" Value="120000" />
             <Setter Property="Foreground" Value="{DynamicResource Text.Secondary}" />
             <Setter Property="BorderThickness" Value="0" />
             <Style.Triggers>
-                <DataTrigger Binding="{Binding IsMouseOver, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" Value="True">
-                    <Setter Property="Height" Value="{DynamicResource CommandButton.Height.Compact}" />
-                    <Setter Property="MinHeight" Value="26" />
-                    <Setter Property="MaxWidth" Value="200" />
-                    <Setter Property="Padding" Value="6,3" />
+                <Trigger Property="IsMouseOver" Value="True">
                     <Setter Property="Foreground" Value="{DynamicResource Text.Primary}" />
-                    <Setter Property="BorderThickness" Value="1" />
-                </DataTrigger>
-                <DataTrigger Binding="{Binding IsKeyboardFocusWithin, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" Value="True">
-                    <Setter Property="Height" Value="{DynamicResource CommandButton.Height.Compact}" />
-                    <Setter Property="MinHeight" Value="26" />
-                    <Setter Property="MaxWidth" Value="200" />
-                    <Setter Property="Padding" Value="6,3" />
+                </Trigger>
+                <Trigger Property="IsKeyboardFocused" Value="True">
                     <Setter Property="Foreground" Value="{DynamicResource Text.Primary}" />
-                    <Setter Property="BorderThickness" Value="1" />
-                </DataTrigger>
-                <DataTrigger Binding="{Binding IsSelected}" Value="True">
-                    <Setter Property="Height" Value="{DynamicResource CommandButton.Height.Compact}" />
-                    <Setter Property="MinHeight" Value="26" />
-                    <Setter Property="MaxWidth" Value="200" />
-                    <Setter Property="Padding" Value="6,3" />
-                    <Setter Property="Foreground" Value="{DynamicResource Text.Primary}" />
-                    <Setter Property="BorderThickness" Value="1" />
-                </DataTrigger>
+                </Trigger>
             </Style.Triggers>
         </Style>
 
@@ -234,15 +222,6 @@
                                     <ColumnDefinition Width="*" />
                                     <ColumnDefinition Width="Auto" />
                                 </Grid.ColumnDefinitions>
-                                <Button x:Name="SourceBadge" Style="{StaticResource Gallery.SourceBadge}"
-                                        gallery:GallerySourceBadge.Provenance="{Binding SourceProvenance}"
-                                        AutomationProperties.AutomationId="LibrarySourceBadge"
-                                        HorizontalAlignment="Left" VerticalAlignment="Bottom" HorizontalContentAlignment="Stretch"
-                                        Margin="5" MinWidth="0"
-                                        FontSize="{DynamicResource FontSize.Caption}"
-                                        Background="{DynamicResource Surface.Floating}"
-                                        BorderBrush="{DynamicResource Border.Subtle}"
-                                        Visibility="{Binding HasSourceBadge, Converter={StaticResource BoolToVisibility}}" />
                                 <Border x:Name="VideoBadge" Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Bottom"
                                         Margin="5" Padding="5,2" CornerRadius="4" Background="{DynamicResource Surface.Raised}"
                                         IsHitTestVisible="False" Visibility="{Binding IsVideo, Converter={StaticResource BoolToVisibility}}">
@@ -320,9 +299,13 @@
                             </Border>
                         </Grid>
                     </Border>
-                    <StackPanel x:Name="TileInformation" Grid.Row="1" Margin="7,5,7,4">
+                    <Grid x:Name="TileInformation" Grid.Row="1" Margin="7,5,7,4">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel>
                         <Grid>
-                            <TextBlock x:Name="TileTitle" Text="{Binding Caption}"
+                            <TextBlock x:Name="TileTitle" Text="{Binding Caption}" gallery:GalleryCaptionPreview.IsEnabled="True"
                                        Foreground="{DynamicResource Text.Primary}" FontWeight="SemiBold"
                                        FontSize="{DynamicResource FontSize.Body}" TextTrimming="CharacterEllipsis">
                                 <TextBlock.Style>
@@ -372,10 +355,22 @@
                                 </Border>
                             </Grid>
                         </Grid>
-                    </StackPanel>
+                        </StackPanel>
+                        <Button x:Name="SourceBadge" Grid.Column="1" Style="{StaticResource Gallery.SourceBadge}"
+                                gallery:GallerySourceBadge.Provenance="{Binding SourceProvenance}"
+                                AutomationProperties.AutomationId="LibrarySourceBadge"
+                                HorizontalAlignment="Right" VerticalAlignment="Center" Margin="4,0,0,0"
+                                Visibility="{Binding HasSourceBadge, Converter={StaticResource BoolToVisibility}}" />
+                    </Grid>
                 </Grid>
             </Border>
             <DataTemplate.Triggers>
+                <DataTrigger Binding="{Binding HasSourceBadge}" Value="True">
+                    <Setter TargetName="MetadataTextColumn" Property="Width" Value="*" />
+                    <Setter TargetName="MetadataBadgeColumn" Property="Width" Value="Auto" />
+                    <Setter TargetName="FolderBadge" Property="MaxWidth" Value="64" />
+                    <Setter TargetName="FolderBadge" Property="ClipToBounds" Value="True" />
+                </DataTrigger>
                 <!-- Time keeps its measured width. Search and expiry messages use the
                      remaining space and expose the complete text in their tooltip. -->
                 <DataTrigger Binding="{Binding HasSearchMatch}" Value="True">
@@ -424,27 +419,9 @@
                         <Setter Property="Margin" Value="0" />
                         <Setter Property="Padding" Value="0" />
                         <Setter Property="AutomationProperties.Name" Value="{Binding AccessibleName}" />
+                        <Setter Property="AutomationProperties.HelpText" Value="{Binding ExportToolTip}" />
                         <Setter Property="ContextMenu" Value="{StaticResource Gallery.TileContextMenu}" />
                         <Setter Property="gallery:GalleryCaptionPreview.IsEnabled" Value="True" />
-                        <Setter Property="ToolTipService.InitialShowDelay" Value="350" />
-                        <Setter Property="ToolTipService.ShowDuration" Value="120000" />
-                        <Setter Property="ToolTip">
-                            <Setter.Value>
-                                <ToolTip MaxWidth="420" Placement="Bottom"
-                                         DataContext="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}">
-                                    <StackPanel>
-                                        <ScrollViewer MaxHeight="300" HorizontalScrollBarVisibility="Disabled"
-                                                      VerticalScrollBarVisibility="Auto"
-                                                      Visibility="{Binding HasCaption, Converter={StaticResource BoolToVisibility}}">
-                                            <TextBlock Text="{Binding Caption}" TextWrapping="Wrap"
-                                                       FontWeight="SemiBold" Margin="0,0,0,6" />
-                                        </ScrollViewer>
-                                        <TextBlock Text="{Binding ExportToolTip}" TextWrapping="Wrap"
-                                                   Foreground="{DynamicResource Text.Secondary}" />
-                                    </StackPanel>
-                                </ToolTip>
-                            </Setter.Value>
-                        </Setter>
                         <Setter Property="FocusVisualStyle" Value="{x:Null}" />
                         <Setter Property="Template">
                             <Setter.Value>
@@ -542,15 +519,6 @@
                                     <ColumnDefinition Width="*" />
                                     <ColumnDefinition Width="Auto" />
                                 </Grid.ColumnDefinitions>
-                                <Button x:Name="SourceBadge" Style="{StaticResource Gallery.SourceBadge}"
-                                        gallery:GallerySourceBadge.Provenance="{Binding SourceProvenance}"
-                                        AutomationProperties.AutomationId="LibrarySourceBadge"
-                                        HorizontalAlignment="Left" VerticalAlignment="Bottom" HorizontalContentAlignment="Stretch"
-                                        Margin="5" MinWidth="0"
-                                        FontSize="{DynamicResource FontSize.Caption}"
-                                        Background="{DynamicResource Surface.Floating}"
-                                        BorderBrush="{DynamicResource Border.Subtle}"
-                                        Visibility="{Binding HasSourceBadge, Converter={StaticResource BoolToVisibility}}" />
                                 <Border x:Name="VideoBadge" Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Bottom"
                                         Margin="5" Padding="5,2" CornerRadius="4" Background="{DynamicResource Surface.Raised}"
                                         IsHitTestVisible="False" Visibility="{Binding IsVideo, Converter={StaticResource BoolToVisibility}}">
@@ -628,9 +596,13 @@
                             </Border>
                         </Grid>
                     </Border>
-                    <StackPanel x:Name="TileInformation" Grid.Row="1" Margin="7,5,7,4">
+                    <Grid x:Name="TileInformation" Grid.Row="1" Margin="7,5,7,4">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel>
                         <Grid>
-                            <TextBlock x:Name="TileTitle" Text="{Binding Caption}"
+                            <TextBlock x:Name="TileTitle" Text="{Binding Caption}" gallery:GalleryCaptionPreview.IsEnabled="True"
                                        Foreground="{DynamicResource Text.Primary}" FontWeight="SemiBold"
                                        FontSize="{DynamicResource FontSize.Caption}" TextTrimming="CharacterEllipsis">
                                 <TextBlock.Style>
@@ -680,10 +652,22 @@
                                 </Border>
                             </Grid>
                         </Grid>
-                    </StackPanel>
+                        </StackPanel>
+                        <Button x:Name="SourceBadge" Grid.Column="1" Style="{StaticResource Gallery.SourceBadge}"
+                                gallery:GallerySourceBadge.Provenance="{Binding SourceProvenance}"
+                                AutomationProperties.AutomationId="LibrarySourceBadge"
+                                HorizontalAlignment="Right" VerticalAlignment="Center" Margin="4,0,0,0"
+                                Visibility="{Binding HasSourceBadge, Converter={StaticResource BoolToVisibility}}" />
+                    </Grid>
                 </Grid>
             </Border>
             <DataTemplate.Triggers>
+                <DataTrigger Binding="{Binding HasSourceBadge}" Value="True">
+                    <Setter TargetName="MetadataTextColumn" Property="Width" Value="*" />
+                    <Setter TargetName="MetadataBadgeColumn" Property="Width" Value="Auto" />
+                    <Setter TargetName="FolderBadge" Property="MaxWidth" Value="20" />
+                    <Setter TargetName="FolderBadge" Property="ClipToBounds" Value="True" />
+                </DataTrigger>
                 <!-- Time keeps its measured width. Search and expiry messages use the
                      remaining space and expose the complete text in their tooltip. -->
                 <DataTrigger Binding="{Binding HasSearchMatch}" Value="True">

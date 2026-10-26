@@ -4681,4 +4681,8 @@ Overwrite these shortcuts? You can change this later in Settings → Shortcuts.<
   <data name="Settings.OcrQualityHint.X86" xml:space="preserve"><value>The 32-bit edition uses Windows OCR with image scaling, contrast and rotation preprocessing according to the quality setting.</value></data>
   <data name="Settings.OcrQualityAccurate.X86" xml:space="preserve"><value>Accurate (Windows OCR with preprocessing)</value></data>
   <data name="Settings.TranslationUnavailable.X86" xml:space="preserve"><value>Translation is available in the 64-bit edition.</value></data>
+  <data name="LibraryUx_DragHelp" xml:space="preserve"><value>Drag help</value></data>
+  <data name="LibraryUx_DragOutImage" xml:space="preserve"><value>Drop outside the window to export PNG files</value></data>
+  <data name="LibraryUx_DragOutVideo" xml:space="preserve"><value>Drop outside the window to export MP4 files</value></data>
+  <data name="LibraryUx_DragOutMixed" xml:space="preserve"><value>Drop outside the window to export PNG and MP4 files</value></data>
 </root>
