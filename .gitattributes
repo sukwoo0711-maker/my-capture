@@ -1,0 +1,5 @@
+# Preserve the upstream bytes recorded by the dependency integrity manifest.
+src/MyCapture.App/Assets/Mermaid/mermaid.min.js -text
+src/MyCapture.App/Assets/Mermaid/LICENSE-*.txt -text
+src/MyCapture.App/Assets/Mermaid/licenses/*.txt -text
+src/MyCapture.App/Assets/Translation/LICENSE-*.txt -text
