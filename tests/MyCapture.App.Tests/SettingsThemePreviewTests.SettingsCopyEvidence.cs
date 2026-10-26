@@ -146,14 +146,18 @@ public sealed partial class SettingsThemePreviewTests
                         foreach (bool selected in new[] { false, true, false })
                         {
                             tile.IsSelected = selected; Drain(window);
-                            Assert.Equal(selected ? (double)application.FindResource("CommandButton.Height.Compact") : 22, source.ActualHeight);
-                            Assert.Equal(selected ? 26 : 22, source.MinHeight);
-                            Assert.Equal(selected ? 200 : 130, source.MaxWidth);
-                            Assert.Equal(new Thickness(selected ? 1 : 0), source.BorderThickness);
-                            Assert.Same(application.FindResource(selected ? "Text.Primary" : "Text.Secondary"), source.Foreground);
+                            Assert.Equal(32, source.ActualHeight);
+                            Assert.Equal(32, source.ActualWidth);
+                            Assert.Equal(32, source.MinHeight);
+                            Assert.Equal(32, source.MaxWidth);
+                            Assert.Equal(new Thickness(0), source.BorderThickness);
+                            Assert.Same(application.FindResource("Text.Secondary"), source.Foreground);
                             Rect left = source.TransformToAncestor(item).TransformBounds(new Rect(source.RenderSize));
                             Rect right = video.TransformToAncestor(item).TransformBounds(new Rect(video.RenderSize));
-                            Assert.True(left.Right <= right.Left, $"{key}: {left} overlaps {right}");
+                            Assert.False(left.IntersectsWith(right), $"{key}: {left} overlaps {right}");
+                            Border preview = Descendants(item).OfType<Border>().Single(border => border.Name == "TilePreview");
+                            Rect imageBounds = preview.TransformToAncestor(item).TransformBounds(new Rect(preview.RenderSize));
+                            Assert.False(left.IntersectsWith(imageBounds));
                             Assert.True(source.ActualWidth > 0 && video.ActualWidth > 0);
                             Assert.InRange(right.Right, 1, item.ActualWidth);
                         }

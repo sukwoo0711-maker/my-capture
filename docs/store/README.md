@@ -47,11 +47,11 @@ MyCapture의 공식 배포 경로는 Microsoft Store 하나입니다. 이 문서
 | Store 주소 | https://apps.microsoft.com/detail/9PB33MC095VR |
 | `Package/Identity/Name` | `sukwoo0711.MyCapture` |
 | `Package/Identity/Publisher` | `CN=2BAAF359-E7FC-4D15-9E24-F3262AD74474` |
-| `Package/Properties/PublisherDisplayName` | `sukwoo0711` (게시자 표시 이름을 바꾸면 그 이름) |
+| `Package/Properties/PublisherDisplayName` | `Mimiloaf` (2026-10-26 Partner Center 확인) |
 | 패키지 패밀리 이름 | `sukwoo0711.MyCapture_n98e1tgx2qxb2` |
 | 추가로 예약한 이름 | `MyCapture - 캡처·가리기·핀`, `MyCapture - Screenshot, Redact & Pin` (2026-10-20) |
 
-- **게시자 표시 이름**: Store의 게시자 표시는 계정의 게시자 표시 이름이고, 패키지의 `PublisherDisplayName`은 그 이름과 같아야 업로드됩니다. 계정 설정 > Legal info > Contact info의 Publisher name에서 `MyCapture`로 바꿀 수 있지만, 바꾸면 계정이 추가 검토를 받고 이후 패키지를 새 이름으로 다시 만들어 제출해야 합니다(`-PublisherDisplayName 'MyCapture'`). 인증 중인 제출의 패키지는 이전 이름으로 빌드되었으므로 그 제출이 게시된 뒤에 바꿉니다. 패키지 ID(`Package/Identity/Name`, 패키지 패밀리 이름)는 바뀌지 않습니다.
+- **게시자 표시 이름**: 패키지의 `PublisherDisplayName`은 Partner Center에 등록된 이름과 같아야 업로드됩니다. 현재 이름은 `Mimiloaf`입니다. 이후 계정의 게시자 이름이 변경되면 승인된 이름을 다시 확인하고 패키지에 적용합니다. 패키지 ID(`Package/Identity/Name`, 패키지 패밀리 이름)는 바뀌지 않습니다.
 - **추가로 예약한 이름**: Store 정책 10.1.1은 제품 이름에 설명 문구와 키워드를 넣지 못하게 하므로 목록 제품 이름은 `MyCapture`로 둡니다. 예약은 3개월 안에 제출에서 쓰지 않으면 풀릴 수 있습니다.
 
 ## 2. 패키지 만들기
@@ -61,7 +61,7 @@ MyCapture의 공식 배포 경로는 Microsoft Store 하나입니다. 이 문서
 ```powershell
 .\build\package.ps1 -Version 4.1.1
 .\build\run-packaged-self-tests.ps1 -PublishRoot .\artifacts\release\4.1.1\publish-win-x64
-.\build\package-store.ps1 -Version 4.1.1 -IdentityName 'sukwoo0711.MyCapture' -Publisher 'CN=2BAAF359-E7FC-4D15-9E24-F3262AD74474' -PublisherDisplayName 'sukwoo0711'
+.\build\package-store.ps1 -Version 4.1.1 -IdentityName 'sukwoo0711.MyCapture' -Publisher 'CN=2BAAF359-E7FC-4D15-9E24-F3262AD74474' -PublisherDisplayName 'Mimiloaf'
 ```
 
 - **결과물**: `artifacts\store\<버전>\` 아래에 다음 파일이 생깁니다.
@@ -79,8 +79,8 @@ MyCapture의 공식 배포 경로는 Microsoft Store 하나입니다. 이 문서
 GitHub ZIP/설치 프로그램이 필요 없는 다음 Store 배포에는 `package.ps1 -StoreOnly`를 사용할 수 있습니다. 같은 self-contained 게시·법적 고지·파일 inventory 검사를 수행하고 필수 self-test 8종을 실행한 뒤 ZIP 압축과 IExpress 생성을 건너뜁니다. 실행 중인 MyCapture가 있으면 검사 gate가 중단됩니다. 기존 출력은 보존하므로 새 버전의 깨끗한 소스에서 실행합니다.
 
 ```powershell
-.\build\package.ps1 -Version 4.1.1 -StoreOnly
-.\build\package-store.ps1 -Version 4.1.1 -PublishDir .\artifacts\store-publish\4.1.1\publish-win-x64 -IdentityName 'sukwoo0711.MyCapture' -Publisher 'CN=2BAAF359-E7FC-4D15-9E24-F3262AD74474' -PublisherDisplayName 'sukwoo0711'
+.\build\package.ps1 -Version 4.8.5 -StoreOnly
+.\build\package-store.ps1 -Version 4.8.5 -PublishDir .\artifacts\store-publish\4.8.5\publish-win-x64 -IdentityName 'sukwoo0711.MyCapture' -Publisher 'CN=2BAAF359-E7FC-4D15-9E24-F3262AD74474' -PublisherDisplayName 'Mimiloaf'
 ```
 
 `package-store.ps1`은 두 게시 경로 모두에서 인접한 `release-manifest.json`의 clean source SHA·버전·x64 런타임·전체 파일 크기/해시를 확인합니다. Store 전용 경로는 저장된 8종 결과 JSON과 보고서 해시도 다시 확인합니다. 동일 버전이라도 소스나 게시 파일이 달라지면 패키징을 중단합니다. 기존 GitHub release 경로와 필수 installer 검사는 유지됩니다.

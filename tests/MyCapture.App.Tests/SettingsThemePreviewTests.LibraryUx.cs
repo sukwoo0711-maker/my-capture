@@ -267,9 +267,11 @@ public sealed partial class SettingsThemePreviewTests
             Assert.Equal(UiText.Format("LibraryUx_DropMoveTo", "제품리뷰", 2), ((TextBlock)window.FindName("DragHintText")).Text);
             AssertInsideClient(hint, client, label);
             SaveLibraryUxEvidence(window, theme, $"after-drag-{file}.png");
-            // A tile is not a drop target: the highlight and hint go away.
             Assert.False(window.PreviewFolderDrop(firstTile, payload, pointer).CanDrop);
             Assert.False(((GalleryFolderCardViewModel)emptyCard.DataContext).IsDropTarget);
+            Assert.True(hint.IsVisible);
+            Assert.Equal(UiText.Get("LibraryUx_DragOutImage"), ((TextBlock)window.FindName("DragHintText")).Text);
+            Assert.False(window.PreviewFolderDrop(firstTile, payload with { Owner = Guid.NewGuid() }, pointer).CanDrop);
             Assert.False(hint.IsVisible);
             Assert.True(PumpUiTask(window, () => window.DropAsync(emptyName, payload)));
             // The rows are rebuilt because the dropped captures leave this view; the cards' view

@@ -4,12 +4,25 @@ using MyCapture.App.Gallery;
 using MyCapture.Core.Queue;
 using MyCapture.Core.Settings;
 using MyCapture.Core.Storage;
+using MyCapture.Core.Localization;
 using Xunit;
 
 namespace MyCapture.App.Tests;
 
 public sealed class GalleryVideoTests : KoreanCaptionTest
 {
+    [Theory]
+    [InlineData("ko-KR")]
+    [InlineData("en-US")]
+    public void DragFeedbackNamesTheActualExportFormats(string language)
+    {
+        using var scope = UiText.UseLanguage(language);
+        var image = new CaptureRecord { MediaKind = CaptureMediaKind.Image };
+        var video = new CaptureRecord { MediaKind = CaptureMediaKind.Video };
+        Assert.Equal(UiText.Get("LibraryUx_DragOutImage"), GalleryWindow.DragExportHint([image]));
+        Assert.Equal(UiText.Get("LibraryUx_DragOutVideo"), GalleryWindow.DragExportHint([video]));
+        Assert.Equal(UiText.Get("LibraryUx_DragOutMixed"), GalleryWindow.DragExportHint([image, video]));
+    }
     [Fact]
     public void VideoTile_ExposesPlaybackEditGifAndDurationSemantics()
     {

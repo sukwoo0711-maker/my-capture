@@ -205,9 +205,9 @@ public sealed partial class SettingsThemePreviewTests
         Assert.Equal(TextTrimming.CharacterEllipsis, title.TextTrimming);
         Assert.Equal(TextWrapping.NoWrap, title.TextWrapping);
         Assert.Equal(vm.Caption, title.Text);
-        Assert.Null(title.ToolTip);
-        var captionTip = Assert.IsType<ToolTip>(item.ToolTip);
-        captionTip.PlacementTarget = item;
+        Assert.Null(item.ToolTip);
+        var captionTip = Assert.IsType<ToolTip>(title.ToolTip);
+        captionTip.PlacementTarget = title;
         try
         {
             captionTip.IsOpen = true;

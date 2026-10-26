@@ -103,17 +103,15 @@ MyCapture는 코딩하는 동안 엑셀 사양 표와 자주 쓰는 코드를 �
 8. 공유하기 전에 단계 번호와 화살표를 넣고, 이메일·토큰·카드번호를 Ctrl+Shift+R로 가린 화면입니다.
 9. 영역·창·전체 화면 캡처, 클립보드 복사, 이미지 속 글자 복사는 Windows 캡처 도구와 같습니다. 영역 녹화는 소리 없이 화면만 기록합니다. 여기에 원문을 보관하는 표·코드 핀, 반투명·클릭 허용 핀, 닫은 핀 다시 열기, 스크롤 캡처가 더해집니다.
 
-### 이 버전의 새로운 기능 (4.8.2)
+### 이 버전의 새로운 기능 (4.8.5)
 
-입력 한도는 1,500자이며, 아래 본문은 800자 이내입니다. 4.8.0은 공개하지 않았으므로 4.7.0 이후의 변경을 함께 적습니다.
+입력 한도는 1,500자입니다.
 
-- 텍스트 인식 결과에 번역 보기를 더했습니다. 영어 문단과 표 칸을 이 PC에서 한국어로 옮깁니다. 기본은 꺼짐이며, 켤 때 모델(약 247 MB)을 한 번 내려받습니다.
-- 저장·복사가 끝나기 전에 빠른 작업 카드를 먼저 띄우고, 진행 상태와 결과를 이어서 표시합니다.
-- 편집기 Alt 단축키 표시가 반복 입력과 마우스 이동에도 일정하게 동작합니다.
-- 라이브러리의 캡처·검색 행과 선택 작업 행을 나눴습니다. 선택해도 캡처 라벨과 검색 칸 위치가 유지됩니다.
-- 동영상 재생 창 크기에 맞춰 영상이 커집니다. F11로 전체 화면을 켜고 Esc로 이전 창으로 돌아옵니다.
-- Pretendard 글꼴, 짙은 빨강 주 단추, 32 DIP 일반 단추를 적용했습니다.
-- 편집기의 Ctrl+C와 복사가 저장 후 창을 닫으며, 핀 원문 반복 복사와 녹화 편집기의 정확한 프레임 탐색이 빨라졌습니다.
+- 라이브러리 이미지 카드에서 반복되던 끌기 안내를 없앴습니다. 필요한 경우 카드 메뉴의 끌기 안내에서 확인할 수 있습니다.
+- 출처를 이미지 아래의 작은 아이콘으로 표시합니다. 아이콘에 포인터를 올리거나 키보드 초점을 두면 상세 정보를 확인할 수 있습니다.
+- 긴 제목은 제목 영역에 포인터를 올리거나 키보드로 카드를 선택할 때 펼쳐집니다. 이미지 위를 지나가거나 클릭할 때에는 팝업이 열리지 않습니다.
+- 설명을 Esc로 닫을 수 있으며, 좁은 카드와 큰 글자 설정에서 출처·상태·동영상 배지가 겹치지 않도록 조정했습니다.
+- OCR 결과 창을 닫은 뒤 남는 메모리와 Windows 기본 OCR의 이미지 준비 부담을 줄였습니다.
 
 ### 검색어
 
@@ -197,17 +195,15 @@ Enter them in screenshot order. Each caption is 200 characters or fewer.
 8. Step numbers and an arrow added before sharing, with an email address, token and card number covered by Ctrl+Shift+R.
 9. Like Snipping Tool, MyCapture captures, copies to the clipboard and extracts text. It adds table and code pins with original text, click-through pins and scrolling capture; recording is silent.
 
-### What's new in this version (4.8.2)
+### What's new in this version (4.8.5)
 
-Limit: 1,500 characters; the text below is under 800. Version 4.8.0 was not published, so this covers changes since 4.7.0.
+Limit: 1,500 characters.
 
-- Translate recognized English text and tables into Korean on this PC. Off by default; enabling it downloads a 247 MB model once.
-- The quick-access card appears before saving and copying finish, then shows their progress and results.
-- Alt shortcut hints stay consistent across repeated presses and pointer movement.
-- Separate capture/search and selection rows keep library controls in place.
-- Video fits its resizable window. F11 enters full screen; Esc restores the window.
-- Pretendard UI text, dark-red primary buttons and 32-DIP standard buttons.
-- Ctrl+C and Copy save and close the editor. Faster repeated pin-text copying and exact video seeking.
+- Removed the repeated drag tutorial from library image cards. Drag help remains available in the card menu.
+- Source information now uses a small icon below the image. Hover over the icon or focus it with the keyboard to see details.
+- Long titles expand when hovering over the title or selecting the card with the keyboard, not when passing over or clicking the image.
+- Press Esc to dismiss details. Source, status and video badges stay apart on narrow cards and with larger text.
+- Reduced retained memory after closing OCR results and the image preparation work for Windows OCR.
 
 ### Search terms
 
