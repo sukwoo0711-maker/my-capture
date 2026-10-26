@@ -145,7 +145,7 @@ public sealed class QuickAccessReceiptLayoutTests
             Button close = Assert.Single(buttons, button => AutomationProperties.GetName(button) == UiText.Get("Dialog.Close"));
             Assert.Equal("Esc", AutomationProperties.GetAcceleratorKey(close));
             Button library = Assert.Single(buttons, button => AutomationProperties.GetName(button) == UiText.Get("QuickAccess.Library"));
-            Assert.Equal(UiText.Get("QuickAccess.Library"), library.Content);
+            Assert.Equal(UiText.Get("QuickAccess.Library"), Assert.IsType<TextBlock>(QuickAccessActionPanel.LabelOf(library)).Text);
 
             FrameworkElement[] controls = [.. card.ActionButtonsForTest, library, close, card.KeepToggleForTest];
             foreach (FrameworkElement control in controls)

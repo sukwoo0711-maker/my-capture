@@ -3334,6 +3334,7 @@ Open the library or Settings from the tray menu.</value></data>
   <data name="QuickAccess.OpenFolder" xml:space="preserve"><value>Open folder</value></data>
   <data name="QuickAccess.Title" xml:space="preserve"><value>Capture quick access</value></data>
   <data name="QuickAccess.CopyText" xml:space="preserve"><value>Copy text</value></data>
+  <data name="QuickAccess.TextLabel" xml:space="preserve"><value>Text</value></data>
   <data name="QuickAccess.CopyingText" xml:space="preserve"><value>Recognizing text…</value></data>
   <data name="QuickAccess.TextCopied" xml:space="preserve"><value>Text copied</value></data>
   <data name="QuickAccess.CopyFailed" xml:space="preserve"><value>Could not copy · Press {0} to retry</value></data>
@@ -4639,6 +4640,7 @@ Overwrite these shortcuts? You can change this later in Settings → Shortcuts.<
   <data name="Translate_Direction" xml:space="preserve"><value>English → Korean</value></data>
   <data name="Translate_Summary" xml:space="preserve"><value>English → Korean · {0} blocks</value></data>
   <data name="Translate_SummaryOne" xml:space="preserve"><value>English → Korean · 1 block</value></data>
+  <data name="Translate_Copy" xml:space="preserve"><value>Copy translation</value></data>
   <data name="Translate_CopyWithSource" xml:space="preserve"><value>Copy with original</value></data>
   <data name="Translate_CopyHelp" xml:space="preserve"><value>Copies the translations to the clipboard</value></data>
   <data name="Translate_List" xml:space="preserve"><value>Translations</value></data>

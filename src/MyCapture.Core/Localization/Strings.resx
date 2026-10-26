@@ -3334,6 +3334,7 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="QuickAccess.OpenFolder" xml:space="preserve"><value>폴더 열기</value></data>
   <data name="QuickAccess.Title" xml:space="preserve"><value>캡처 빠른 작업</value></data>
   <data name="QuickAccess.CopyText" xml:space="preserve"><value>텍스트 복사</value></data>
+  <data name="QuickAccess.TextLabel" xml:space="preserve"><value>텍스트</value></data>
   <data name="QuickAccess.CopyingText" xml:space="preserve"><value>텍스트 인식 중…</value></data>
   <data name="QuickAccess.TextCopied" xml:space="preserve"><value>텍스트 복사됨</value></data>
   <data name="QuickAccess.CopyFailed" xml:space="preserve"><value>복사하지 못했습니다 · {0}로 다시 시도</value></data>
@@ -4639,6 +4640,7 @@ F3  클립보드를 핀으로 띄우기
   <data name="Translate_Direction" xml:space="preserve"><value>영어 → 한국어</value></data>
   <data name="Translate_Summary" xml:space="preserve"><value>영어 → 한국어 · 블록 {0}개</value></data>
   <data name="Translate_SummaryOne" xml:space="preserve"><value>영어 → 한국어 · 블록 1개</value></data>
+  <data name="Translate_Copy" xml:space="preserve"><value>번역 복사</value></data>
   <data name="Translate_CopyWithSource" xml:space="preserve"><value>원문과 함께 복사</value></data>
   <data name="Translate_CopyHelp" xml:space="preserve"><value>번역을 클립보드에 복사합니다</value></data>
   <data name="Translate_List" xml:space="preserve"><value>번역 목록</value></data>

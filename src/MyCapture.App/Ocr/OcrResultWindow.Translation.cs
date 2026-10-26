@@ -54,7 +54,16 @@ internal sealed partial class OcrResultWindow
             StartTranslationWork(CheckAndTranslateAsync);
         };
         _translationPanel.CancelRequested += (_, _) => _translationWork?.Cancel();
-        _translationPanel.CopyWithSourceRequested += (_, _) => CopyValue(_translationPanel.CopyWithSourceText);
+        _translationPanel.ContentChanged += (_, _) =>
+        {
+            // The panel also changes during retries, cancellation and stale-result resets.
+            if (_copyButton is null || _plainExportButton is null || ExtractionMode != OcrExtractionMode.Translation) return;
+            _textBox.Text = _translationPanel.CopyText;
+            bool hasContent = _textBox.Text.Length > 0;
+            _copyButton.IsEnabled = hasContent;
+            _copyWithSourceButton.IsEnabled = hasContent;
+            _plainExportButton.IsEnabled = hasContent;
+        };
         _translationPanel.BlockFocused += (_, index) => HighlightBlock(index);
         return _translationPanel;
     }
@@ -179,10 +188,6 @@ internal sealed partial class OcrResultWindow
         if (ExtractionMode == OcrExtractionMode.Translation)
         {
             ShowTranslationRegions();
-            _textBox.Text = _translationPanel.CopyText;
-            bool hasContent = _textBox.Text.Length > 0;
-            _copyButton.IsEnabled = hasContent;
-            _plainExportButton.IsEnabled = hasContent;
         }
     }
 

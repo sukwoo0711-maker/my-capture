@@ -65,11 +65,14 @@ public sealed class OcrResultSummaryTests
 
             Button copy = Descendants(window).OfType<Button>().Single(button => AutomationProperties.GetName(button) == UiText.Get("Text_20CF6A996B4D"));
             var footer = (WrapPanel)copy.Parent;
-            string[] order = [.. footer.Children.OfType<Button>().Select(FaceLabel)];
+            // The shown buttons; copy with the original belongs to the translation tab and stays hidden here.
+            Button[] buttons = [.. footer.Children.OfType<Button>().Where(button => button.Visibility == Visibility.Visible)];
+            string[] order = [.. buttons.Select(FaceLabel)];
             Assert.Equal(["복사", "텍스트 내보내기", "다시 인식"], order);
+            Assert.Equal(Visibility.Collapsed, footer.Children.OfType<Button>()
+                .Single(button => AutomationProperties.GetName(button) == UiText.Get("Translate_CopyWithSource")).Visibility);
             Assert.Equal(0, footer.Children.IndexOf(copy));
             // One primary in the group; export is the secondary, rerun the quiet one.
-            Button[] buttons = [.. footer.Children.OfType<Button>()];
             Assert.Same(window.FindResource("Button.Primary"), buttons[0].Style);
             Assert.Same(window.FindResource("Button.Secondary"), buttons[1].Style);
             Assert.Same(window.FindResource("Button.Ghost"), buttons[2].Style);
