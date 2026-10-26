@@ -22,6 +22,51 @@ public sealed class CaptureOverlayCoordinatorTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
+    public void CaptureOverEditorPreservesTheEditorAndUsesSeparatePersistence(bool cancel) => RunSta(() =>
+    {
+        using var coordinator = Coordinator(_ => Frame());
+        coordinator.ReadPageUrls = _ => Task.FromResult<IReadOnlyDictionary<IntPtr, BrowserDocumentSnapshot>>(new Dictionary<IntPtr, BrowserDocumentSnapshot>());
+        coordinator.ReadWindowSources = null;
+        CaptureOverlayWindow? selector = null;
+        coordinator.ApplyCaptureExclusion = window => { if (window is CaptureOverlayWindow overlay) selector = overlay; return true; };
+        int originalWrites = 0, screenshotWrites = 0, originalClosed = 0;
+        coordinator.SelectionPersistRequested = _ => { originalWrites++; return Task.CompletedTask; };
+        coordinator.EditorScreenCaptureRequested = _ => { screenshotWrites++; return Task.CompletedTask; };
+        coordinator.OverlayClosed += (_, _) => originalClosed++;
+        Assert.True(coordinator.StartWithSelection(Frame(), new RectD(0, 0, 32, 20)));
+        PumpUntil(() => coordinator.CurrentEditor?.IsLoaded == true);
+        AnnotationEditorControl original = coordinator.CurrentEditor!;
+        var window = (AnnotationEditorWindow)Window.GetWindow(original);
+        EditorKeysTests.Invoke(original, "PlaceTextBox", new PointD(2, 2));
+        EditorKeysTests.Field<System.Windows.Controls.TextBox>(original, "_activeTextBox").Text = "보존할 편집";
+        EditorKeysTests.Invoke(original, "CommitActiveText");
+        Assert.Single(original.CreateCurrentImageSnapshot().Items);
+        window.ConfirmClose = () => throw new InvalidOperationException("Capture must not ask to discard the editor.");
+        try
+        {
+            coordinator.Start(false, false, false, preserveEditor: true);
+            PumpUntil(() => coordinator.LastPreparationForTest.IsCompleted);
+            Assert.NotNull(selector);
+            Assert.Same(original, coordinator.CurrentEditor);
+            Assert.True(window.IsVisible);
+            Assert.Equal(CaptureBlock.Selecting, CaptureGuard.Find(coordinator.WithSession(new()), false));
+            if (cancel) coordinator.Cancel();
+            else Assert.True(Assert.IsType<CaptureOverlayView>(selector.Content).CaptureFullScreen());
+            PumpUntil(() => coordinator.CanRetake);
+            Assert.Same(original, coordinator.CurrentEditor);
+            Assert.True(window.IsVisible);
+            Assert.Equal(1, originalWrites);
+            Assert.Equal(cancel ? 0 : 1, screenshotWrites);
+            Assert.Equal(0, originalClosed);
+            Assert.Single(original.CreateCurrentImageSnapshot().Items);
+            Assert.True(original.HasUnsavedChanges);
+        }
+        finally { window.ConfirmClose = () => EditorCloseChoice.DontSave; }
+    });
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
     public void PendingColorCopyBlocksReleasedDragAndQueuedConfirmationWithoutRecording(bool releaseBeforeCopy) => RunSta(() =>
     {
         CaptureOverlayWindow? overlay = null;

@@ -4687,4 +4687,8 @@ Overwrite these shortcuts? You can change this later in Settings → Shortcuts.<
   <data name="LibraryUx_DragOutMixed" xml:space="preserve"><value>Drop outside the window to export PNG and MP4 files</value></data>
   <data name="Settings_DefaultFont" xml:space="preserve"><value>Restore default font</value></data>
   <data name="Settings_FontScope" xml:space="preserve"><value>Applies to new text. Existing text keeps its font.</value></data>
+  <data name="EditorFlow_CopyAndClose" xml:space="preserve"><value>Copy and close</value></data>
+  <data name="LibraryUx_NoSelection" xml:space="preserve"><value>No selection</value></data>
+  <data name="LibraryUx_Preview" xml:space="preserve"><value>Preview</value></data>
+  <data name="LibraryUx_PreviewHint" xml:space="preserve"><value>Preview (Space)</value></data>
 </root>

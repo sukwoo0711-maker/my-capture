@@ -269,9 +269,9 @@ public sealed class GalleryCaptionPreviewTests
             { RoutedEvent = Mouse.MouseLeaveEvent });
             Assert.True(tip.IsOpen);
             // Source badges can precede the action row and be collapsed for this fixture.
-            // Exercise the original keyboard-reachable Float action and its own hint.
+            // Exercise the keyboard-reachable footer menu and its own hint.
             Button actionButton = Assert.Single(Descendants(first).OfType<Button>(),
-                button => AutomationProperties.GetName(button) == UiText.Get("Gallery.Float"));
+                button => AutomationProperties.GetName(button) == UiText.Get("Text_5E8959D18390"));
             Assert.True(actionButton.IsVisible && actionButton.Focusable && actionButton.IsTabStop);
             RaiseFocusChange(first, actionButton);
             Assert.False(tip.IsOpen); // Action buttons retain their own hints.

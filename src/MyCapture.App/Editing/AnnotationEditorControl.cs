@@ -1147,6 +1147,9 @@ internal sealed partial class AnnotationEditorControl : Grid
         double dipPerPixel = Math.Max(double.Epsilon, _surface.DipPerPixel);
         ColorRgba foreground = annotation.Foreground;
         double luma = 0.299 * foreground.R + 0.587 * foreground.G + 0.114 * foreground.B;
+        Color background = annotation.Background.A > 0
+            ? Color.FromArgb(255, annotation.Background.R, annotation.Background.G, annotation.Background.B)
+            : luma > 140 ? Colors.Black : Colors.White;
         var textBox = new TextBox
         {
             Text = annotation.Text,
@@ -1161,10 +1164,10 @@ internal sealed partial class AnnotationEditorControl : Grid
             FontStyle = annotation.Italic ? FontStyles.Italic : FontStyles.Normal,
             Foreground = annotation.Foreground.ToBrush(),
             // TextBox does not draw the caption's outline; keep unplated text readable while editing.
-            Background = annotation.Background.A > 0 ? annotation.Background.ToBrush()
-                : luma > 140 ? Brushes.Black : Brushes.White,
+            Background = new SolidColorBrush(background),
             Template = CaptionTextBoxTemplate.Value,
-            CaretBrush = luma > 140 ? Brushes.White : Brushes.Black,
+            CaretBrush = 0.299 * background.R + 0.587 * background.G + 0.114 * background.B > 140
+                ? Brushes.Black : Brushes.White,
             BorderThickness = new Thickness(2),
             AcceptsReturn = true,
             TextWrapping = TextWrapping.NoWrap,
@@ -1330,7 +1333,9 @@ internal sealed partial class AnnotationEditorControl : Grid
                             BorderThickness="{TemplateBinding BorderThickness}" />
                     <Border Margin="1" BorderBrush="White" BorderThickness="1" IsHitTestVisible="False" />
                     <Border BorderThickness="{TemplateBinding BorderThickness}">
-                        <ScrollViewer x:Name="PART_ContentHost" />
+                        <AdornerDecorator>
+                            <ScrollViewer x:Name="PART_ContentHost" />
+                        </AdornerDecorator>
                     </Border>
                 </Grid>
             </ControlTemplate>
@@ -1837,44 +1842,29 @@ internal sealed partial class AnnotationEditorControl : Grid
         left.Children.Add(_copyTextButton);
 
         var right = CommandRow();
-        right.Children.Add(Separator());
         Button save = BuildSaveOverflowMenu();
-        Button copy = IconTextButton(
-            UiText.Get("Text_37B3D3B11B26"), UiText.Get("EditorFlow_CopyHint"), "Icon.Copy", FallbackCopy,
-            () => Commit(EditorCommitAction.Done));
-        copy.SetResourceReference(FrameworkElement.StyleProperty, "Button.Secondary");
         Button done = IconTextButton(
-            UiText.Get("Text_727333AB0740"), UiText.Get("EditorFlow_DoneHint"), "Icon.Check", FallbackCheck,
+            UiText.Get("EditorFlow_CopyAndClose"), UiText.Get("EditorFlow_CopyHint"), "Icon.Copy", FallbackCopy,
             () => Commit(EditorCommitAction.Done));
         done.SetResourceReference(FrameworkElement.StyleProperty, "Button.Primary");
         CommandButtonPresentation.KeepLabel(done);
-        // Esc no longer closes, so Cancel carries no shortcut; it closes like the title bar does.
-        Button cancel = IconTextButton(UiText.Get("Text_BE876433993A"), UiText.Get("EditorFlow_CancelHint"), "Icon.Close", FallbackClose, RequestClose);
-        AutomationProperties.SetAutomationId(cancel, "EditorFlowCancel");
+        CommandButtonPresentation.KeepLabel(save);
         AutomationProperties.SetAutomationId(done, "EditorFlowDone");
-        AutomationProperties.SetAutomationId(copy, "EditorFlowCopy");
         right.Children.Add(save);
-        right.Children.Add(copy);
-        right.Children.Add(Separator());
         right.Children.Add(done);
-        right.Children.Add(cancel);
 
         foreach (var (button, command, borderless) in new[] { (_undoButton, "Undo", true), (_redoButton, "Redo", true),
-            (crop, "Crop", true), (_redactButton, "Privacy", true), (save, "Save", false), (copy, "Copy", false), (done, "Done", false) })
+            (crop, "Crop", true), (_redactButton, "Privacy", true), (save, "Save", false), (done, "Copy", false) })
         {
             CommandButton(button, borderless, ShortcutScope.Annotation, command);
         }
 
-        CommandButton(cancel, borderless: true);
         CommandButton(_copyTextButton, borderless: true);
         CommandButtonPresentation.AlwaysIcon(_undoButton);
         CommandButtonPresentation.AlwaysIcon(_redoButton);
         // A narrow bar hides names one at a time: first where the icon alone is unmistakable,
         // last where it could be taken for a tool (the T and the mosaic grid on the tool rail).
-        CommandButtonPresentation.CollapseOrder(cancel, 1);
         CommandButtonPresentation.CollapseOrder(crop, 2);
-        CommandButtonPresentation.CollapseOrder(copy, 3);
-        CommandButtonPresentation.CollapseOrder(save, 4);
         CommandButtonPresentation.CollapseOrder(_redactButton, 5);
         CommandButtonPresentation.CollapseOrder(_copyTextButton, 6);
         var panel = new CommandGroupsPanel { Children = { left, right } };

@@ -108,26 +108,25 @@ public sealed partial class SettingsThemePreviewTests
                             }
                             AssertNotTrimmed(meta, language + "/compact" + compact + "/font" + scale);
                             GalleryCardRowPanel panel = Descendants(rows).OfType<GalleryCardRowPanel>().First(candidate => Descendants(candidate).Contains(item));
-                            Assert.Equal(compact ? 144 : 204, panel.BaseCardHeight);
+                            Assert.Equal(compact ? 160 : 220, panel.BaseCardHeight);
                             Assert.True(panel.BaseCardHeight < (compact ? 174 : 234));
                             if (scale > 1) Assert.True(card.ActualHeight > GalleryCardRowPanel.CardHeightFor(card.ActualWidth, panel.BaseCardWidth, panel.BaseCardHeight, panel.HeightPerWidth));
                             Assert.NotEmpty(FolderCardButtons(rows));
                             foreach (Button folderCard in FolderCardButtons(rows))
                             {
-                                Assert.Equal(card.ActualHeight, folderCard.ActualHeight, 1);
+                                Assert.True(folderCard.ActualHeight < card.ActualHeight);
+                                Assert.Empty(Descendants(folderCard).OfType<Image>());
                                 foreach (TextBlock label in Descendants(folderCard).OfType<TextBlock>().Where(text => text.IsVisible))
                                 {
                                     Point edge = label.TranslatePoint(new Point(0, label.ActualHeight), folderCard);
                                     Assert.True(edge.Y <= folderCard.ActualHeight + 1, "Folder text stays inside its compacted card");
                                 }
-                                if (((GalleryFolderCardViewModel)folderCard.DataContext).HasPreview) continue;
-                                Border folderPreview = Descendants(folderCard).OfType<Border>().Single(border => border.ClipToBounds);
-                                foreach (FrameworkElement part in Descendants(folderPreview).OfType<FrameworkElement>()
+                                foreach (FrameworkElement part in Descendants(folderCard).OfType<FrameworkElement>()
                                     .Where(element => element is TextBlock or SymbolIcon && element.IsVisible))
                                 {
-                                    Point top = part.TranslatePoint(new Point(), folderPreview);
-                                    Assert.True(top.Y >= -1 && top.Y + part.ActualHeight <= folderPreview.ActualHeight + 1,
-                                        $"{language}/{compact}/{scale}: empty folder {part.GetType().Name} at {top.Y:0.#}+{part.ActualHeight:0.#} must fit preview {folderPreview.ActualHeight:0.#}");
+                                    Point top = part.TranslatePoint(new Point(), folderCard);
+                                    Assert.True(top.Y >= -1 && top.Y + part.ActualHeight <= folderCard.ActualHeight + 1,
+                                        $"{language}/{compact}/{scale}: folder content must fit its strip");
                                 }
                             }
                             tile.RenameDraft = UiText.Get("Library453.Rename") + " sample";

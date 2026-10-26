@@ -75,38 +75,14 @@ public sealed partial class SettingsThemePreviewTests
             Assert.True(fadingOnArrival, "a thumbnail that arrives on a shown card fades in");
             PumpLibraryUntil(window, () => !picture.IsFading, "feel: thumbnail settled");
 
-            // The tile actions fade with the card's hover over Motion.Fast and take input at once.
-            Border actions = Descendants(first).OfType<Border>().Single(border => border.Name == "TileActions");
-            Assert.Equal(0, actions.Opacity);
-            Assert.Equal(MotionSpeed.Fast, FluidMotion.GetTransition(actions));
-            SetLibraryTileState440(first, "IsMouseOver", true);
-            SettleGalleryLayout(window);
-            Assert.Equal(1, (double)actions.GetAnimationBaseValue(UIElement.OpacityProperty));
-            Assert.True(actions.HasAnimatedProperties);
-            Assert.True(actions.IsHitTestVisible);
-            SetLibraryTileState440(first, "IsMouseOver", false);
-            SettleGalleryLayout(window);
-            Assert.Equal(0, (double)actions.GetAnimationBaseValue(UIElement.OpacityProperty));
-            Assert.False(actions.IsHitTestVisible);
-
-            // The tile's copy button shows a check and reads "복사됨" for 1.2 s; nothing else opens.
+            Assert.DoesNotContain(Descendants(first).OfType<Border>(), border => border.Name == "TileActions");
             CaptureRecord copied = library.Records[0];
             File.Copy(library.Queue.GetFilePath(copied, CaptureFileNames.Original),
                 library.Queue.GetFilePath(copied, CaptureFileNames.Rendered), overwrite: true);
             string copyName = UiText.Get("Text_42A667BC71B0");
-            Button copy = Descendants(first).OfType<Button>().Single(button => AutomationProperties.GetName(button) == copyName);
             long writes = RecordingClipboard.WriteCount;
             string statusBefore = status.Text;
-            PumpUiTask(window, () => { copy.RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent)); return Task.FromResult(true); });
-            PumpLibraryUntil(window, () => GalleryCopyFeedback.IsConfirming(copy), "feel: copy check");
-            Assert.Equal(writes + 1, RecordingClipboard.WriteCount);
-            Assert.Equal("복사됨", AutomationProperties.GetName(copy));
-            Assert.Equal("복사됨", copy.ToolTip);
-            Assert.Equal(statusBefore, status.Text);
-            Assert.Empty(Application.Current.Windows.OfType<ThemedDialog>());
-            PumpLibraryUntil(window, () => !GalleryCopyFeedback.IsConfirming(copy), "feel: copy check ends");
-            Assert.Equal(copyName, AutomationProperties.GetName(copy));
-            Assert.Equal(UiText.Get("Text_59D43391538F"), copy.ToolTip);
+            window.SetDetailsPaneOpen(true);
 
             // The details pane's copy button confirms the same way, until it shows no capture.
             library.ViewModel.Select(copied.Id);
@@ -114,15 +90,20 @@ public sealed partial class SettingsThemePreviewTests
             var detailsCopy = (Button)window.FindName("DetailsCopyButton");
             PumpUiTask(window, () => { detailsCopy.RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent)); return Task.FromResult(true); });
             PumpLibraryUntil(window, () => GalleryCopyFeedback.IsConfirming(detailsCopy), "feel: details copy check");
-            Assert.Equal(writes + 2, RecordingClipboard.WriteCount);
+            Assert.Equal(writes + 1, RecordingClipboard.WriteCount);
             Assert.Equal("복사됨", AutomationProperties.GetName(detailsCopy));
+            Assert.Equal("복사됨", detailsCopy.ToolTip);
+            Assert.Equal(statusBefore, status.Text);
+            Assert.Empty(Application.Current.Windows.OfType<ThemedDialog>());
             library.ViewModel.ClearSelection();
             SettleGalleryLayout(window);
             Assert.False(GalleryCopyFeedback.IsConfirming(detailsCopy));
             Assert.Equal(copyName, AutomationProperties.GetName(detailsCopy));
+            Assert.Equal(UiText.Get("Text_59D43391538F"), detailsCopy.ToolTip);
             Assert.Equal(statusBefore, status.Text);
 
             // A copy without a button (the card's menu) confirms on the status line instead.
+            first = FeelCard(window, copied.Id);
             ContextMenu menu = Assert.IsType<ContextMenu>(first.ContextMenu);
             menu.PlacementTarget = first;
             SettleGalleryLayout(window);
@@ -130,8 +111,9 @@ public sealed partial class SettingsThemePreviewTests
             Assert.Same(first.DataContext, menuCopy.CommandParameter);
             PumpUiTask(window, () => { menuCopy.RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent)); return Task.FromResult(true); });
             PumpLibraryUntil(window, () => status.Text == "이미지 복사됨", "feel: menu copy status");
-            Assert.Equal(writes + 3, RecordingClipboard.WriteCount);
+            Assert.Equal(writes + 2, RecordingClipboard.WriteCount);
             Assert.Equal(FeedbackKind.Confirmation, window.ActionStatusKindForTest);
+            Assert.Empty(Application.Current.Windows.OfType<ThemedDialog>());
             menu.ClearValue(ContextMenu.PlacementTargetProperty);
 
             // Delete: the card leaves while its capture moves away; the view waits for both.

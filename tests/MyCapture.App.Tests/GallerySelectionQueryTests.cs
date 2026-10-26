@@ -100,7 +100,8 @@ public sealed class GallerySelectionQueryTests(ITestOutputHelper output)
         static void Verify(GalleryViewModel vm)
         {
             Assert.Equal(vm.Selection.SelectedIds.Count > 0, vm.HasSelection);
-            Assert.Equal(UiText.Format("LibrarySelection_Count", vm.Selection.SelectedIds.Count), vm.SelectionText);
+            Assert.Equal(vm.HasSelection ? UiText.Format("LibrarySelection_Count", vm.Selection.SelectedIds.Count)
+                : UiText.Get("LibraryUx_NoSelection"), vm.SelectionText);
             Assert.Same(OriginalSingleTile(vm), vm.SingleSelectedTile);
             Assert.Equal(OriginalSingleTile(vm)?.IsImage == true, vm.CanReduceSelected);
             Assert.Equal(OriginalSingleTile(vm)?.IsVideo == true, vm.CanGifSelected);
@@ -108,7 +109,7 @@ public sealed class GallerySelectionQueryTests(ITestOutputHelper output)
     }
 
     [Fact]
-    public void SelectionBindingQueriesAllocateLessThanOriginalProjectionOnTheSameFixtures()
+    public void SelectionBindingQueriesAllocateLessThanProjectedReferenceWithTheSameLabels()
     {
         const int iterations = 2000;
         var results = new List<object>();
@@ -123,10 +124,10 @@ public sealed class GallerySelectionQueryTests(ITestOutputHelper output)
                 {
                     vm.Selection.Clear();
                     if (selected > 0) vm.Selection.SelectGroup(ids.Take(selected), control: false);
-                    Assert.Equal(OriginalBindings(vm), CurrentBindings(vm));
+                    Assert.Equal(ProjectedBindings(vm), CurrentBindings(vm));
                     for (int warmup = 0; warmup < 100; warmup++)
-                    { OriginalBindings(vm); CurrentBindings(vm); }
-                    var before = Measure(() => OriginalBindings(vm), iterations);
+                    { ProjectedBindings(vm); CurrentBindings(vm); }
+                    var before = Measure(() => ProjectedBindings(vm), iterations);
                     var after = Measure(() => CurrentBindings(vm), iterations);
                     Assert.Equal(before.Checksum, after.Checksum);
                     Assert.True(after.Bytes < before.Bytes,
@@ -156,13 +157,15 @@ public sealed class GallerySelectionQueryTests(ITestOutputHelper output)
         return new Measurement(GC.GetAllocatedBytesForCurrentThread() - allocated, stopwatch.Elapsed.TotalMilliseconds, checksum);
     }
 
-    // These are the exact getter formulas at c437af1; SelectedTiles itself is unchanged.
+    // Keep the pre-optimization tile projection; the reference labels follow the accepted UX.
     private static GalleryItemViewModel? OriginalSingleTile(GalleryViewModel vm) =>
         vm.SelectedTiles.Count == 1 ? vm.SelectedTiles[0] : null;
 
-    private static int OriginalBindings(GalleryViewModel vm) =>
+    private static int ProjectedBindings(GalleryViewModel vm) =>
         (vm.Selection.SelectedIds.Count > 0 ? 1 : 0)
-        + UiText.Format("LibrarySelection_Count", vm.Selection.SelectedIds.Count).Length
+        + (vm.Selection.SelectedIds.Count > 0
+            ? UiText.Format("LibrarySelection_Count", vm.Selection.SelectedIds.Count)
+            : UiText.Get("LibraryUx_NoSelection")).Length
         + (OriginalSingleTile(vm) is null ? 0 : 1)
         + (OriginalSingleTile(vm)?.IsImage == true ? 1 : 0)
         + (OriginalSingleTile(vm)?.IsVideo == true ? 1 : 0);

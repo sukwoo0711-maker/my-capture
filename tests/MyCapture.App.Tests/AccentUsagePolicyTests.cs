@@ -18,7 +18,7 @@ public sealed class AccentUsagePolicyTests
     ];
 
     [Fact]
-    public void AccentConsumersAreLimitedToPrimaryActionsPinFramesRecordingAndUserArtwork()
+    public void AccentConsumersAreLimitedToApprovedActionsLibrarySelectionPinFramesRecordingAndUserArtwork()
     {
         string root = RepositoryRoot();
         var failures = new List<string>();
@@ -80,7 +80,7 @@ public sealed class AccentUsagePolicyTests
                 bool primary = file == "src/MyCapture.App/Themes/Controls.xaml" && style is "Button.Primary" or "Icon.Symbol.OnAccent";
                 bool brand = file == "src/MyCapture.App/Themes/Controls.xaml" && attribute.Parent.AncestorsAndSelf()
                     .Any(e => ((string?)e.Attribute(x + "Key")) is "Brand.Mark" or "Brand.Mark16");
-                if (AccentKey.IsMatch(attribute.Value) && !primary)
+                if (AccentKey.IsMatch(attribute.Value) && !primary && !IsApprovedLibrarySelection(file, attribute, x))
                     yield return $"{file}:{((IXmlLineInfo)attribute).LineNumber}: accent outside primary style: {attribute.Value}";
                 else if (HasBrandLiteral(attribute.Value) && !brand)
                     yield return $"{file}:{((IXmlLineInfo)attribute).LineNumber}: literal brand color outside brand mark: {attribute.Value}";
@@ -126,6 +126,43 @@ public sealed class AccentUsagePolicyTests
             };
             if (!allowed) yield return $"{file}:{index + 1}: {(accent ? "accent token" : "literal brand color")} outside allow-list: {line}";
         }
+    }
+
+    [Theory]
+    [InlineData("Gallery.SelectionCheckBox", "<Path x:Name=\"SelectionCheck\" Stroke=\"{DynamicResource Text.OnAccent}\" />")]
+    [InlineData("Gallery.SelectionCheckBox", "<Trigger Property=\"IsChecked\" Value=\"True\"><Setter TargetName=\"SelectionBox\" Property=\"Background\" Value=\"{DynamicResource Accent.Default}\" /></Trigger>")]
+    [InlineData("Gallery.SelectionCheckBox", "<Trigger Property=\"IsChecked\" Value=\"True\"><Setter TargetName=\"SelectionBox\" Property=\"BorderBrush\" Value=\"{DynamicResource Accent.Default}\" /></Trigger>")]
+    [InlineData("Gallery.TileRowList", "<Border x:Name=\"SelectedLayer\" BorderBrush=\"{DynamicResource Accent.Default}\" />")]
+    public void LibrarySelectionAllowanceDoesNotAuthorizeOtherStylesOrFiles(string style, string part)
+    {
+        string source = $$"""
+            <ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+              <Style x:Key="{{style}}">{{part}}</Style>
+            </ResourceDictionary>
+            """;
+        Assert.Empty(FindViolations("src/MyCapture.App/Gallery/GalleryWindow.xaml", source));
+        Assert.Single(FindViolations("src/MyCapture.App/Gallery/GalleryWindow.xaml", source.Replace(style, "Unexpected.Selection", StringComparison.Ordinal)));
+        Assert.Single(FindViolations("src/MyCapture.App/Unexpected.xaml", source));
+    }
+
+    private static bool IsApprovedLibrarySelection(string file, XAttribute attribute, XNamespace names)
+    {
+        if (file != "src/MyCapture.App/Gallery/GalleryWindow.xaml") return false;
+        XElement owner = attribute.Parent!;
+        string? style = owner.AncestorsAndSelf().Where(element => element.Name.LocalName == "Style")
+            .Select(element => (string?)element.Attribute(names + "Key")).FirstOrDefault(key => key is not null);
+        if (style == "Gallery.TileRowList")
+            return owner.Name.LocalName == "Border" && (string?)owner.Attribute(names + "Name") == "SelectedLayer"
+                && attribute.Name.LocalName == "BorderBrush" && attribute.Value == "{DynamicResource Accent.Default}";
+        if (style != "Gallery.SelectionCheckBox") return false;
+        if (owner.Name.LocalName == "Path")
+            return (string?)owner.Attribute(names + "Name") == "SelectionCheck" && attribute.Name.LocalName == "Stroke"
+                && attribute.Value == "{DynamicResource Text.OnAccent}";
+        return owner.Name.LocalName == "Setter" && (string?)owner.Attribute("TargetName") == "SelectionBox"
+            && (string?)owner.Attribute("Property") is "Background" or "BorderBrush"
+            && attribute.Name.LocalName == "Value" && attribute.Value == "{DynamicResource Accent.Default}"
+            && owner.Parent is { } trigger && trigger.Name.LocalName == "Trigger"
+            && (string?)trigger.Attribute("Property") == "IsChecked" && (string?)trigger.Attribute("Value") == "True";
     }
 
     private static bool HasBrandLiteral(string text)
