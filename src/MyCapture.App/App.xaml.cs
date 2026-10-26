@@ -45,6 +45,9 @@ public partial class App : Application
 
     private Mutex? _singleInstanceMutex;
     private EventWaitHandle? _activationSignal;
+    private ResidentReadySignal? _residentReady;
+    private LaunchStatusPresentation? _launchStatus;
+    private LaunchTimingLog? _launchTiming;
     private RegisteredWaitHandle? _activationWait;
     private ServiceProvider? _services;
     private ILogger<App>? _log;
@@ -90,6 +93,7 @@ public partial class App : Application
 
     protected override async void OnStartup(StartupEventArgs e)
     {
+        _launchTiming = new LaunchTimingLog();
         base.OnStartup(e);
         UiText.Configure(null);
         // Before any window: a tooltip's default show duration would otherwise stop every
@@ -117,8 +121,8 @@ public partial class App : Application
 
         // A sign-in launch stays quiet after the one-time shortcut question. The Store build's startup task carries no command line,
         // so its activation kind stands in for the Run key's --background switch.
-        bool quietLaunch = FindSwitch(e.Args, StartupRegistrationService.BackgroundSwitch) >= 0 ||
-            MyCapture.Core.Platform.AppPackage.IsStartupTaskActivation();
+        bool startupTask = MyCapture.Core.Platform.AppPackage.IsStartupTaskActivation();
+        bool quietLaunch = FindSwitch(e.Args, StartupRegistrationService.BackgroundSwitch) >= 0 || startupTask;
 
         // Publish the signal before claiming ownership: a second launch can queue
         // activation even while the first process is loading a large library.
@@ -130,14 +134,29 @@ public partial class App : Application
 
         if (!isFirstInstance)
         {
+            _launchTiming.Activation(LaunchActivationKind.Secondary);
+            // The secondary needs only the privacy-safe log; it must not construct shell services.
+            AttachEarlyLaunchLog();
             if (!quietLaunch)
             {
                 NativeMessageWindow.AllowResidentForegroundActivation();
                 _activationSignal.Set();
             }
+            if (ResidentReadySignal.NeedsSecondaryNotice(quietLaunch, ResidentReadySignal.IsReady()))
+            {
+                _launchStatus = LaunchStatusPresentation.Secondary(
+                    () => _launchTiming.FirstVisible(LaunchVisibleKind.SecondaryNotice));
+                await _launchStatus.Completion;
+            }
             Shutdown(0);
             return;
         }
+
+        _residentReady = new ResidentReadySignal();
+        _launchTiming.Activation(startupTask ? LaunchActivationKind.StartupTask
+            : quietLaunch ? LaunchActivationKind.Background : LaunchActivationKind.Regular);
+        _launchStatus = LaunchStatusPresentation.Start(quietLaunch,
+            () => _launchTiming.FirstVisible(LaunchVisibleKind.Starting));
 
         DispatcherUnhandledException += OnDispatcherUnhandledException;
         AppDomain.CurrentDomain.UnhandledException += OnDomainUnhandledException;
@@ -145,22 +164,31 @@ public partial class App : Application
         EventManager.RegisterClassHandler(typeof(Window), FrameworkElement.LoadedEvent,
             new RoutedEventHandler((sender, _) =>
             {
-                if (sender is Window window) MyCapture.App.Themes.WindowIdentity.Attach(window);
+                if (sender is Window window)
+                {
+                    MyCapture.App.Themes.WindowIdentity.Attach(window);
+                    ObserveLaunchWindow(window);
+                }
             }));
 
         try
         {
             _services = BuildServiceProvider();
             _fileLog = _services.GetRequiredService<RollingFileLog>();
+            _launchTiming.Attach(_fileLog.Append);
             _log = _services.GetRequiredService<ILogger<App>>();
             CaptureWindowExclusion.Logger = _log;
             _log.LogInformation("MyCapture starting up");
             await RecoverLegacyImportBeforeLoadAsync();
             InitializeShell(quietLaunch, FindSwitch(e.Args, SettingsCommandLineSwitch) >= 0);
             StartActivationListener();
+            _residentReady.MarkReady();
+            _launchStatus.Complete();
         }
         catch (Exception ex)
         {
+            _launchStatus?.Complete();
+            AttachEarlyLaunchLog();
             _log?.LogCritical(ex, "Could not initialize the resident shell");
             MyCapture.App.Themes.ThemedDialog.StartupFailure(ex);
             Shutdown(2);
@@ -2512,6 +2540,9 @@ public partial class App : Application
 
     protected override void OnExit(ExitEventArgs e)
     {
+        _launchStatus?.Complete();
+        _residentReady?.Dispose();
+        _residentReady = null;
         _updateTimer?.Stop();
         _updates?.Dispose();
         // Stop a model download in progress; completed, verified model files stay.
@@ -2610,6 +2641,7 @@ public partial class App : Application
         _services?.Dispose();
         // Last: services log while they dispose. Dispose writes every queued line first.
         _fileLog?.Dispose();
+        _launchFallbackLog?.Dispose();
 
         if (_singleInstanceMutex is not null)
         {

@@ -42,6 +42,7 @@ internal sealed class WelcomeWindow : Window
         SizeToContent = SizeToContent.Height;
         ResizeMode = ResizeMode.NoResize;
         StandardWindowTheme.Apply(this);
+        ContentRendered += (_, _) => WindowForeground.BringForward(this);
         SourceInitialized += (_, _) => CaptureWindowExclusion.DisableTransitions(this);
         SetResourceReference(BackgroundProperty, "Surface.Base");
         SetResourceReference(ForegroundProperty, "Text.Primary");
