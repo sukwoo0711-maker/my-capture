@@ -4687,10 +4687,10 @@ F3  클립보드를 핀으로 띄우기
   <data name="LibraryUx_DragOutMixed" xml:space="preserve"><value>창 밖에 놓으면 PNG·MP4 파일로 내보내기</value></data>
   <data name="Settings_DefaultFont" xml:space="preserve"><value>기본 글꼴로 복원</value></data>
   <data name="Settings_FontScope" xml:space="preserve"><value>새 텍스트에 적용합니다. 기존 텍스트의 글꼴은 유지됩니다.</value></data>
-  <data name="Pin_MarkdownSourceView" xml:space="preserve"><value>Markdown 원문 보기</value></data>
-  <data name="Pin_MarkdownRenderedView" xml:space="preserve"><value>Markdown 서식 보기</value></data>
+  <data name="Pin_MarkdownSourceView" xml:space="preserve"><value>원문 보기</value></data>
+  <data name="Pin_MarkdownRenderedView" xml:space="preserve"><value>서식 보기</value></data>
   <data name="Pin_TranslationInstallAction" xml:space="preserve"><value>설치</value></data>
-  <data name="Pin_TranslationConsent" xml:space="preserve"><value>한국어 번역 모델 {0} MB를 내려받습니다.
+  <data name="Pin_TranslationConsent" xml:space="preserve"><value>{1} 번역 모델 {0} MB를 내려받습니다.
 글은 PC 밖으로 나가지 않습니다.
 
 설치하시겠습니까?</value></data>
@@ -4698,7 +4698,7 @@ F3  클립보드를 핀으로 띄우기
     <value>번역 모델 설치</value>
   </data>
   <data name="Pin_TranslationModelNeeded" xml:space="preserve">
-    <value>한국어 번역 모델 {0} MB 설치가 필요합니다.</value>
+    <value>{1} 번역 모델 {0} MB 설치가 필요합니다.</value>
   </data>
   <data name="Pin_Translating" xml:space="preserve">
     <value>번역 중</value>
@@ -4712,19 +4712,24 @@ F3  클립보드를 핀으로 띄우기
   <data name="Pin_TranslationRetry" xml:space="preserve">
     <value>번역 재시도</value>
   </data>
-  <data name="Pin_Translated" xml:space="preserve">
-    <value>한국어 번역됨</value>
-  </data>
   <data name="Pin_TranslationReview" xml:space="preserve">
     <value>번역문의 수치·기호를 원문과 확인하십시오.</value>
-  </data>
-  <data name="Pin_TranslationSourceReview" xml:space="preserve">
-    <value>원문 확인</value>
   </data>
   <data name="Pin_TranslationOriginal" xml:space="preserve">
     <value>원문</value>
   </data>
-  <data name="Pin_TranslationKorean" xml:space="preserve">
-    <value>한국어</value>
-  </data>
+  <data name="Pin_Translate" xml:space="preserve"><value>번역</value></data>
+  <data name="Pin_TranslateHelp" xml:space="preserve"><value>번역. 이 PC 안에서 실행하며 번역 품질은 제한적입니다.</value></data>
+  <data name="Pin_TranslationOriginalHelp" xml:space="preserve"><value>원문으로 돌아갑니다.</value></data>
+  <data name="Pin_TranslationReviewHelp" xml:space="preserve"><value>원문으로 돌아갑니다. 번역문의 수치·기호를 원문과 대조하십시오.</value></data>
+  <data name="Pin_TranslatedKorean" xml:space="preserve"><value>한국어로 번역됨</value></data>
+  <data name="Pin_TranslatedEnglish" xml:space="preserve"><value>영어로 번역됨</value></data>
+  <data name="Pin_LanguageKorean" xml:space="preserve"><value>한국어</value></data>
+  <data name="Pin_LanguageEnglish" xml:space="preserve"><value>영어</value></data>
+  <data name="Pin_AlreadyKorean" xml:space="preserve"><value>이미 한국어입니다.</value></data>
+  <data name="Pin_AlreadyEnglish" xml:space="preserve"><value>이미 영어입니다.</value></data>
+  <data name="Pin_TranslationUnsupportedLanguage" xml:space="preserve"><value>한국어와 영어만 번역합니다.</value></data>
+  <data name="Pin_TranslationModelPreparing" xml:space="preserve"><value>번역 모델 준비 중</value></data>
+  <data name="Pin_TranslationNoText" xml:space="preserve"><value>이미지에서 글자를 찾지 못했습니다.</value></data>
+  <data name="Pin_CopyTranslation" xml:space="preserve"><value>번역문 복사</value></data>
 </root>

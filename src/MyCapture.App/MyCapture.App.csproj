@@ -34,6 +34,7 @@
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
     <PackageReference Include="Microsoft.Extensions.Logging" />
     <PackageReference Include="Microsoft.Extensions.Logging.Debug" />
+    <PackageReference Include="Microsoft.Web.WebView2" />
     <PackageReference Include="RapidOcrNet" />
   </ItemGroup>
 
@@ -56,5 +57,8 @@
          files through DirectWrite's own file loader instead of a managed resource stream. -->
     <None Update="Assets\Fonts\**\*.ttf;Assets\Fonts\**\*.otf;Assets\Fonts\**\*.ttc;Assets\Fonts\**\OFL.txt"
           CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Update="Assets\Mermaid\**\*" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

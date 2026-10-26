@@ -181,22 +181,173 @@ public sealed class PinTranslationIntegrationTests : KoreanCaptionTest
     });
 
     [Fact]
-    public Task KoreanAndTablePinsDoNotOfferOrStartTranslation() => RunAsync(async () =>
+    public Task KoreanPinInAKoreanAppIsDisabledWithAReasonAndNeverTranslates() => RunAsync(async () =>
     {
         var translator = new FakeTranslator();
         PinManager manager = Manager(translator);
         try
         {
             PinWindow korean = manager.PinRenderedText(Image(), Korean, false);
-            PinWindow table = manager.PinRenderedText(Image(), "Name\tValue\r\nFirst\tSecond", true);
-            foreach (PinWindow pin in new[] { korean, table })
-            {
-                Assert.Equal(PinTranslationState.Unavailable, pin.TranslationState);
-                pin.InvokeTranslationAction();
-                await pin.TranslationWork;
-            }
+            Assert.Equal(PinTranslationState.Disabled, korean.TranslationState);
+            Assert.Equal("이미 한국어입니다.", korean.TranslationDisabledHelp);
+            korean.InvokeTranslationAction();
+            await korean.TranslationWork;
+            Assert.Equal(PinTranslationState.Disabled, korean.TranslationState);
             Assert.Equal(0, translator.InstallChecks);
             Assert.Equal(0, translator.Translations);
+        }
+        finally { manager.CloseAll(); }
+    });
+
+    [Fact]
+    public Task JapanesePinIsDisabledWithTheUnsupportedLanguageReason() => RunAsync(async () =>
+    {
+        var translator = new FakeTranslator();
+        PinManager manager = Manager(translator);
+        try
+        {
+            PinWindow pin = manager.PinRenderedText(Image(), "今日は天気がいいので、公園を散歩します。", false);
+            Assert.Equal(PinTranslationState.Disabled, pin.TranslationState);
+            Assert.Equal(UiText.Get("Pin_TranslationUnsupportedLanguage"), pin.TranslationDisabledHelp);
+            pin.InvokeTranslationAction();
+            await pin.TranslationWork;
+            Assert.Equal(0, translator.Translations);
+        }
+        finally { manager.CloseAll(); }
+    });
+
+    [Fact]
+    public Task TablePinTranslatesCellTextAndKeepsEveryTab() => RunAsync(async () =>
+    {
+        var translator = new FakeTranslator();
+        PinManager manager = Manager(translator);
+        try
+        {
+            const string source = "Name\tValue\t12\r\nFirst\tSecond\t2026-10-27";
+            PinWindow table = manager.PinRenderedText(Image(), source, true);
+            Assert.Equal(PinTranslationState.Available, table.TranslationState);
+            table.InvokeTranslationAction();
+            await table.TranslationWork;
+            Assert.True(table.IsShowingTranslation);
+            string[] rows = table.DisplayedText!.Split("\r\n");
+            Assert.Equal([Korean, Korean, "12"], rows[0].Split('\t'));
+            Assert.Equal([Korean, Korean, "2026-10-27"], rows[1].Split('\t'));
+            Assert.Equal(source, table.OriginalText);
+        }
+        finally { manager.CloseAll(); }
+    });
+
+    [Fact]
+    public Task EnglishAppTranslatesAKoreanPinToEnglishAndDisablesAnEnglishPin() => RunAsync(async () =>
+    {
+        using var language = UiText.UseLanguage("en-US");
+        var translator = new FakeTranslator { Result = English };
+        PinManager manager = Manager(translator);
+        try
+        {
+            PinWindow pin = manager.PinRenderedText(Image(), Korean, false);
+            Assert.Equal(PinTranslationState.Available, pin.TranslationState);
+            pin.InvokeTranslationAction();
+            await pin.TranslationWork;
+            Assert.Equal(English, pin.DisplayedText);
+            Assert.Equal(Korean, pin.OriginalText);
+            Assert.Equal([Korean], Assert.Single(translator.Sources));
+            pin.InvokeTranslationAction();
+            Assert.Equal(Korean, pin.DisplayedText);
+            PinWindow english = manager.PinRenderedText(Image(), English, false);
+            Assert.Equal(PinTranslationState.Disabled, english.TranslationState);
+            Assert.Equal("Already in English.", english.TranslationDisabledHelp);
+        }
+        finally { manager.CloseAll(); }
+    });
+
+    [Fact]
+    public Task ADirectionWithoutAModelIsDisabledUntilItIsPrepared() => RunAsync(async () =>
+    {
+        using var language = UiText.UseLanguage("en-US");
+        var translator = new FakeTranslator();
+        var manager = new PinManager(() => new PinSettings(), NullLogger.Instance)
+        {
+            ShowPinForTest = static (_, _) => { },
+            ActivatePinForTest = static _ => { },
+        };
+        manager.ConfigureTranslation(direction => direction == PinTranslationDirection.EnglishToKorean ? translator : null);
+        try
+        {
+            PinWindow pin = manager.PinRenderedText(Image(), Korean, false);
+            Assert.Equal(PinTranslationState.Disabled, pin.TranslationState);
+            Assert.Equal("Translation model is being prepared", pin.TranslationDisabledHelp);
+            pin.InvokeTranslationAction();
+            await pin.TranslationWork;
+            Assert.Equal(0, translator.InstallChecks);
+        }
+        finally { manager.CloseAll(); }
+    });
+
+    [Fact]
+    public Task PicturePinIsReadByTheRecognizerTranslatedAndReturnsToThePicture() => RunAsync(async () =>
+    {
+        var translator = new FakeTranslator();
+        PinManager manager = Manager(translator);
+        int reads = 0;
+        manager.ConfigureImageTranslation((_, _) =>
+        {
+            reads++;
+            return Task.FromResult<string?>("Save the document before closing.\nOpen the settings window.");
+        });
+        try
+        {
+            PinWindow pin = manager.PinImage(Image());
+            Assert.Equal(PinTranslationState.Available, pin.TranslationState);
+            var frame = (pin.Width, pin.Height);
+            pin.InvokeTranslationAction();
+            await pin.TranslationWork;
+            Assert.Equal(1, reads);
+            Assert.True(pin.IsShowingTranslation);
+            Assert.NotNull(pin.DisplayedText);
+            Assert.Equal(PinContentKind.Image, pin.PinnedContent.Kind);
+            pin.InvokeTranslationAction();
+            Assert.False(pin.IsShowingTranslation);
+            Assert.Null(pin.DisplayedText);
+            Assert.Equal(frame, (pin.Width, pin.Height));
+            pin.InvokeTranslationAction();
+            Assert.True(pin.IsShowingTranslation);
+            Assert.Equal(1, reads);
+        }
+        finally { manager.CloseAll(); }
+    });
+
+    [Fact]
+    public Task PicturePinThatIsAlreadyInTheTargetLanguageNeverLoadsAModel() => RunAsync(async () =>
+    {
+        var translator = new FakeTranslator { Installed = false };
+        PinManager manager = Manager(translator);
+        manager.ConfigureImageTranslation((_, _) => Task.FromResult<string?>(Korean));
+        try
+        {
+            PinWindow pin = manager.PinImage(Image());
+            pin.InvokeTranslationAction();
+            await pin.TranslationWork;
+            Assert.Equal(PinTranslationState.Disabled, pin.TranslationState);
+            Assert.Equal(0, translator.InstallChecks);
+            Assert.False(pin.IsShowingTranslation);
+        }
+        finally { manager.CloseAll(); }
+    });
+
+    [Fact]
+    public Task CopyUsesTheVisibleTextWhileTheSourceTextStaysTheOriginal() => RunAsync(async () =>
+    {
+        var translator = new FakeTranslator();
+        PinManager manager = Manager(translator);
+        try
+        {
+            PinWindow pin = manager.PinRenderedText(Image(), English, false);
+            Assert.Equal(English, pin.VisibleText);
+            pin.InvokeTranslationAction();
+            await pin.TranslationWork;
+            Assert.Equal(Korean, pin.VisibleText);
+            Assert.Equal(English, pin.OriginalText);
         }
         finally { manager.CloseAll(); }
     });
@@ -213,7 +364,7 @@ public sealed class PinTranslationIntegrationTests : KoreanCaptionTest
             PinWindow pin = manager.PinRenderedText(Image(), English, false);
             Assert.Equal(PinTranslationState.Unavailable, pin.TranslationState);
             Assert.DoesNotContain(pin.ContextMenu.Items.OfType<System.Windows.Controls.MenuItem>(),
-                item => Equals(item.Header, UiText.Get("Pin_TranslationKorean")));
+                item => Equals(item.Header, UiText.Get("Pin_Translate")));
         }
         finally { manager.CloseAll(); }
     });
@@ -234,6 +385,8 @@ public sealed class PinTranslationIntegrationTests : KoreanCaptionTest
     {
         internal bool Installed = true;
         internal bool Fail;
+        internal string Result = Korean;
+        internal List<IReadOnlyList<string>> Sources = [];
         internal int Downloads;
         internal int Translations;
         internal int InstallChecks;
@@ -255,10 +408,11 @@ public sealed class PinTranslationIntegrationTests : KoreanCaptionTest
             IProgress<TranslationProgress>? progress, CancellationToken cancellationToken)
         {
             Translations++;
+            Sources.Add(sources);
             Started.TrySetResult(true);
             if (Delayed is { } wait) await wait.Task;
             if (Fail) throw new InvalidOperationException("Synthetic inference failure.");
-            return sources.Select(source => new TranslatedText(source, Korean, [], [])).ToArray();
+            return sources.Select(source => new TranslatedText(source, Result, [], [])).ToArray();
         }
     }
 

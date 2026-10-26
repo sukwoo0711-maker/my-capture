@@ -1,8 +1,5 @@
-using System.IO;
 using System.Threading;
 using System.Windows;
-using System.Windows.Controls;
-using System.Windows.Media;
 using System.Windows.Threading;
 using Microsoft.Extensions.Logging.Abstractions;
 using MyCapture.App.Diagnostics;
@@ -10,12 +7,13 @@ using MyCapture.App.Pinning;
 using MyCapture.App.Themes;
 using MyCapture.Core.Platform;
 using MyCapture.Core.Settings;
+using MyCapture.Ocr;
 using MyCapture.Ocr.Translation;
 using MyCapture.Platform.Shell;
 
 namespace MyCapture.App.Preview;
 
-/// <summary>A user-operated pin host with no resident shell, profile store or global shortcuts.</summary>
+/// <summary>A separate-profile pin host using real clipboard I/O and its own global shortcut lease.</summary>
 internal sealed class PinPreviewSession : IDisposable
 {
     internal const string SampleSource = "# Release checklist\n\n- [x] Build verified\n- [ ] Payment flow\n\nReview before release.\n\n```ts\nconst timeoutMs = 5000;\n```";
@@ -23,14 +21,18 @@ internal sealed class PinPreviewSession : IDisposable
     private readonly PreviewLaunchOptions _options;
     private readonly Dispatcher _dispatcher;
     private readonly AppSettings _settings = PreviewLaunchOptions.CreateSettings();
-    private readonly PreviewCopyBuffer _copies = new();
+    private readonly PreviewClipboardAccess _clipboard = PreviewClipboardAccess.SystemClipboard;
     private Mutex? _mutex;
     private EventWaitHandle? _activation;
     private RegisteredWaitHandle? _activationWait;
     private bool _ownsMutex;
     private volatile bool _disposed;
     private PinManager? _pins;
-    private TextTranslationService? _translator;
+    private MermaidRenderer? _mermaidRenderer;
+    private PinTranslationEngines? _translators;
+    private MyCapture.Ocr.IOcrService? _ocr;
+    private NativeMessageWindow? _messageWindow;
+    private PreviewPinInput? _input;
 
     internal PinPreviewSession(PreviewLaunchOptions options, Dispatcher dispatcher)
     {
@@ -43,35 +45,55 @@ internal sealed class PinPreviewSession : IDisposable
 
     internal bool Start()
     {
-        // This checks junctions before creating the one explicitly supplied preview root.
+        // Check junctions before creating the explicitly supplied preview root.
         DiagnosticOutputPaths.Create(_options.ProfileRoot);
         _activation = new EventWaitHandle(false, EventResetMode.AutoReset, _options.ActivationName);
         _mutex = new Mutex(true, _options.MutexName, out _ownsMutex);
         if (!_ownsMutex)
         {
-            NativeMessageWindow.AllowResidentForegroundActivation();
             _activation.Set();
             return false;
         }
 
         UiText.Configure(_settings.General.Language);
+        _ = PinRenderWarmup.StartAsync();
         ThemeService.ApplyFromSettings(_settings.General);
-        _pins = new PinManager(() => _settings.Pin, saveService: null,
-            (_, _, text) => _copies.CopyTextAsync(text ?? string.Empty),
-            _copies.CopyTextAsync, NullLogger.Instance);
-        _pins.BeforeShowForTest = pin => pin.OpenSource = static _ => Task.FromResult(string.Empty);
+        var saveService = new PinImageSaveService(() => _settings, () => _options.Paths,
+            NullLogger<PinImageSaveService>.Instance);
+        _pins = _clipboard.CreateManager(() => _settings.Pin, saveService);
+        _mermaidRenderer = new MermaidRenderer(
+            DiagnosticOutputPaths.Child(_options.ProfileRoot, "mermaid-browser"), _dispatcher);
+        _pins.ConfigureMermaid(_mermaidRenderer);
         if (AppArchitecture.SupportsNeuralOcr)
         {
-            // Only this profile's verified model files are visible. No model is read until
-            // the user invokes the normal translation action on a pin.
+            // Only this profile's models are visible, and loading remains a manual pin action.
             string models = DiagnosticOutputPaths.Child(_options.ProfileRoot, "translation-models");
             _ = DiagnosticOutputPaths.Child(models, TranslationModelCatalog.FolderName);
             var store = new TranslationModelStore(_options.Paths, NullLogger<TranslationModelStore>.Instance);
-            _translator = new TextTranslationService(store, NullLogger<TextTranslationService>.Instance);
-            _pins.ConfigureTranslation(_translator);
+            var englishToKorean = new TextTranslationService(store, NullLogger<TextTranslationService>.Instance);
+            TextTranslationService? koreanToEnglish = null;
+            if (TranslationModelCatalog.KoreanToEnglish.IsPublished)
+            {
+                var koreanStore = new TranslationModelStore(_options.Paths, NullLogger<TranslationModelStore>.Instance,
+                    TranslationModelCatalog.KoreanToEnglish);
+                koreanToEnglish = new TextTranslationService(koreanStore, NullLogger<TextTranslationService>.Instance,
+                    TranslationModelCatalog.KoreanToEnglish.ModelFiles);
+            }
+            _translators = new PinTranslationEngines(englishToKorean, koreanToEnglish);
+            _pins.ConfigureTranslation(_translators.For);
+            // A picture pin is read with Windows OCR, on this PC, when the user asks to translate it.
+            _ocr = new WindowsOcrService(NullLogger<WindowsOcrService>.Instance);
+            _pins.ConfigureImageTranslation((image, token) => PinTranslationEngines.RecognizeAsync(
+                _ocr, image, _settings.Ocr, token));
         }
-        Window = CreateWindow();
+        _messageWindow = new NativeMessageWindow();
+        _input = new PreviewPinInput(new NativeHotkeyRegistrar(_messageWindow.Handle),
+            () => _pins.PasteFromClipboardAsync(() => _clipboard.ReadWhileActiveAsync(() => !_disposed)));
+        _messageWindow.MessageReceived += OnNativeMessage;
+        Window = new PinPreviewWindow(_input);
+        Window.Closed += (_, _) => Dispose();
         WindowIdentity.Attach(Window);
+        _input.RegisterShortcut();
         _activationWait = ThreadPool.RegisterWaitForSingleObject(_activation, (_, _) =>
         {
             if (_disposed || _dispatcher.HasShutdownStarted) return;
@@ -91,98 +113,12 @@ internal sealed class PinPreviewSession : IDisposable
         return true;
     }
 
-    private Window CreateWindow()
+    private void OnNativeMessage(object? sender, NativeWindowMessageEventArgs args)
     {
-        var window = new Window
-        {
-            Title = "MyCapture 미리보기", Width = 660, Height = 650,
-            MinWidth = 480, MinHeight = 480, WindowStartupLocation = WindowStartupLocation.CenterScreen,
-        };
-        window.SetResourceReference(Control.BackgroundProperty, "Surface.Base");
-        window.SetResourceReference(Control.ForegroundProperty, "Text.Primary");
-        var layout = new Grid { Margin = new Thickness(20) };
-        layout.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-        layout.RowDefinitions.Add(new RowDefinition { Height = new GridLength(2, GridUnitType.Star) });
-        layout.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-        layout.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-        layout.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
-        var sourceLabel = new Label { Content = "원문", Padding = new Thickness(0, 0, 0, 8) };
-        sourceLabel.SetResourceReference(Control.ForegroundProperty, "Text.Primary");
-        layout.Children.Add(sourceLabel);
-        TextBox markdownSource = CreateSourceBox(SampleSource, "Consolas");
-        TextBox englishSource = CreateSourceBox(EnglishSampleSource, "Segoe UI");
-        PreviewCopyCommands.Attach(markdownSource, _copies);
-        PreviewCopyCommands.Attach(englishSource, _copies);
-        var sources = new TabControl();
-        sources.SetResourceReference(Control.BackgroundProperty, "Surface.Base");
-        sources.SetResourceReference(Control.ForegroundProperty, "Text.Primary");
-        sources.Items.Add(new TabItem { Header = "Markdown", Content = markdownSource });
-        sources.Items.Add(new TabItem { Header = "영어", Content = englishSource });
-        foreach (TabItem tab in sources.Items)
-        {
-            tab.SetResourceReference(FrameworkElement.StyleProperty, "Tab.Help");
-            tab.SetResourceReference(Control.BackgroundProperty, "Surface.Raised");
-            tab.SetResourceReference(Control.ForegroundProperty, "Text.Primary");
-        }
-        sources.SelectedIndex = 0;
-        sourceLabel.Target = markdownSource;
-        sources.SelectionChanged += (_, _) => sourceLabel.Target = sources.SelectedIndex == 0 ? markdownSource : englishSource;
-        Grid.SetRow(sources, 1);
-        layout.Children.Add(sources);
-        var actions = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 12, 0, 12) };
-        AddOpenButton(actions, () => sources.SelectedIndex == 0
-            ? (markdownSource.Text, true) : (englishSource.Text, false));
-        Grid.SetRow(actions, 2);
-        layout.Children.Add(actions);
-        var copyLabel = new Label { Content = "복사 결과", Padding = new Thickness(0, 0, 0, 8) };
-        copyLabel.SetResourceReference(Control.ForegroundProperty, "Text.Primary");
-        Grid.SetRow(copyLabel, 3);
-        layout.Children.Add(copyLabel);
-        var result = new TextBox
-        {
-            IsReadOnly = true, AcceptsReturn = true, TextWrapping = TextWrapping.Wrap,
-            VerticalScrollBarVisibility = ScrollBarVisibility.Auto, FontSize = 15, Padding = new Thickness(10),
-        };
-        PreviewCopyCommands.Attach(result, _copies);
-        copyLabel.Target = result;
-        _copies.Changed += text => result.Text = text;
-        Grid.SetRow(result, 4);
-        layout.Children.Add(result);
-        window.Content = layout;
-        return window;
+        if (_input?.HandleMessage(args.Message, args.WParam) == true) args.Handled = true;
     }
 
-    private static TextBox CreateSourceBox(string source, string font) => new()
-    {
-        Text = source, AcceptsReturn = true, AcceptsTab = true, TextWrapping = TextWrapping.Wrap,
-        VerticalScrollBarVisibility = ScrollBarVisibility.Auto, FontFamily = new FontFamily(font),
-        FontSize = 15, Padding = new Thickness(10),
-    };
-
-    private void AddOpenButton(Panel panel, Func<(string Text, bool Markdown)> readSource)
-    {
-        var button = new Button { Content = "핀 열기", Padding = new Thickness(14, 8, 14, 8) };
-        button.SetResourceReference(FrameworkElement.StyleProperty, "Button.Primary");
-        button.Click += async (_, _) =>
-        {
-            (string text, bool markdown) = readSource();
-            if (_disposed || _pins is null || string.IsNullOrWhiteSpace(text)) return;
-            button.IsEnabled = false;
-            try
-            {
-                PinContent content = CreateContent(text, markdown);
-                // The injected reader is mandatory: no Windows clipboard API is used.
-                await _pins.PasteFromClipboardAsync(() => Task.FromResult(ClipboardImageReader.PinReadAttempt.Success(content)));
-            }
-            catch (Exception error) when (error is ArgumentException or InvalidOperationException or IOException)
-            {
-                ThemedDialog.Show("핀을 열 수 없습니다.", "MyCapture 미리보기", MessageBoxButton.OK, MessageBoxImage.Error);
-            }
-            finally { if (!_disposed) button.IsEnabled = true; }
-        };
-        panel.Children.Add(button);
-    }
-
+    // Kept for deterministic renderer fixtures; the human host always reads the Windows clipboard.
     internal static PinContent CreateContent(string source, bool markdown) => markdown
         ? PinContent.FromMarkdown(ClipboardMarkdownRenderer.Render(source), source)
         : PinContent.FromText(ClipboardTextRenderer.Render(source, false), source, false);
@@ -192,8 +128,12 @@ internal sealed class PinPreviewSession : IDisposable
         if (_disposed) return;
         _disposed = true;
         _activationWait?.Unregister(null);
+        _input?.Dispose();
+        if (_messageWindow is not null) _messageWindow.MessageReceived -= OnNativeMessage;
+        _messageWindow?.Dispose();
         _pins?.CloseAllForExit();
-        _translator?.Dispose();
+        _mermaidRenderer?.Dispose();
+        _translators?.Dispose();
         _activation?.Dispose();
         if (_ownsMutex) _mutex?.ReleaseMutex();
         _mutex?.Dispose();

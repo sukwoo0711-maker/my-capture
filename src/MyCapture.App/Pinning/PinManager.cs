@@ -543,6 +543,7 @@ internal sealed partial class PinManager
         pin.ShowActivated = activate;
         BeforeShowForTest?.Invoke(pin);
         ShowPinWindow(pin, pin.Show);
+        AttachMermaid(pin);
         if (landing) pin.StartLandingEffect();
         if (activate)
         {

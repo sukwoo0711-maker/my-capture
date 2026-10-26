@@ -125,6 +125,7 @@ internal sealed partial class PinWindow : Window
     {
         ArgumentNullException.ThrowIfNull(content);
         _content = content;
+        _mermaidMonitorScale = content.Image.DpiX / 96;
         _contentKind = content.Kind;
         _originalText = content.OriginalText;
         SourcePageUrl = content.SourcePageUrl;
@@ -762,6 +763,7 @@ internal sealed partial class PinWindow : Window
     internal void RerenderForDisplayScale(double scale)
     {
         if (_isClosed || !_content.CanRerender) return;
+        _mermaidMonitorScale = scale;
         PinContent rendered = _content.RenderedAt(scale);
         PinContent? renderedSource = _markdownSourceContent?.RenderedAt(scale);
         if (ReferenceEquals(rendered, _content) && ReferenceEquals(renderedSource, _markdownSourceContent)) return;
@@ -777,7 +779,19 @@ internal sealed partial class PinWindow : Window
 
     private void UpdateImageRasterLayout()
     {
-        if (!_content.CanRerender) return;
+        if (!_content.CanRerender)
+        {
+            // A picture that returns after its translated document was shown fills its frame again.
+            if (_imageElement.Stretch != Stretch.Fill)
+            {
+                _imageElement.Stretch = Stretch.Fill;
+                _imageElement.HorizontalAlignment = HorizontalAlignment.Stretch;
+                _imageElement.VerticalAlignment = VerticalAlignment.Stretch;
+                _imageElement.LayoutTransform = Transform.Identity;
+                if (_imageClip is not null) UpdateImageClip(_imageElement.RenderSize);
+            }
+            return;
+        }
         // The outward-rounded raster may contain a partial DIP of padding. Let the
         // viewport clip it instead of stretching every glyph to fit that rounding.
         _imageElement.Stretch = Stretch.None;
@@ -1486,19 +1500,16 @@ internal sealed partial class PinWindow : Window
             OriginalTextCopyRequested?.Invoke(this, selection);
             return;
         }
-        if (TranslationSourceContent.IsMarkdown)
-        {
-            RequestOriginalTextCopy();
-            return;
-        }
         ShowFeedback(UiText.Get("Text_4C160257F02C"), FeedbackKind.Progress);
-        CopyRequested?.Invoke(this, new PinImageCopyRequest(_image, SourcePageUrl, _content.OriginalText));
+        // Ctrl+C copies what the pin shows: the translation while it is shown, with its picture.
+        CopyRequested?.Invoke(this, new PinImageCopyRequest(DisplayContent.Image, SourcePageUrl, VisibleText));
     }
 
     private void RequestOcr()
     {
         ShowFeedback(UiText.Get("Text_15A871A266BE"), FeedbackKind.Progress);
-        OcrRequested?.Invoke(this, _image);
+        // The picture that was copied, even while its translation is shown.
+        OcrRequested?.Invoke(this, TranslationSourceContent.Image);
     }
 
     private void HandleCtrlDoubleClick()

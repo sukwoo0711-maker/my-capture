@@ -17,9 +17,6 @@ public sealed class PinTranslationServiceTests
     [InlineData("hello@example.com")]
     [InlineData("123.5 MHz 42 2026-10-27")]
     [InlineData("이미 한국어로 작성한 문장입니다.")]
-    [InlineData("{\"message\":\"Hello world\"}")]
-    [InlineData("[\"Hello world\",\"Read this guide\"]")]
-    [InlineData("var text = \"Hello world\";\n// Read the documentation")]
     [InlineData("console.log(\"Hello world\");")]
     public async Task NonProse_IsNotSentToTheTranslator(string text)
     {
@@ -33,13 +30,62 @@ public sealed class PinTranslationServiceTests
     }
 
     [Fact]
-    public async Task ImagesAndTables_AreNotEligible()
+    public async Task TablesAreEligibleAndPicturesAreDecidedByTheirRecognizedText()
     {
         PinContent text = await CreateContent("Hello world");
         PinContent image = PinContent.FromImage(text.Image);
         PinContent table = PinContent.FromText(text.Image, "English text\tAnother column", true);
-        Assert.False(PinTranslationService.CanTranslate(image));
-        Assert.False(PinTranslationService.CanTranslate(table));
+        Assert.True(PinTranslationService.CanTranslate(table));
+        // A picture's language is known only after its text is read: the command stays on until then.
+        Assert.Equal(PinTranslationAvailability.Translatable, PinTranslationService.Evaluate(image, true).Availability);
+        Assert.Equal(PinTranslationAvailability.AlreadyTargetLanguage, PinTranslationService.Evaluate("이미 한국어로 작성한 문장입니다.", true).Availability);
+        Assert.Equal(PinTranslationAvailability.UnsupportedLanguage, PinTranslationService.Evaluate("今日は天気がいいので散歩します。", true).Availability);
+        Assert.Equal(PinTranslationDirection.KoreanToEnglish, PinTranslationService.Evaluate("창을 닫기 전에 문서를 저장합니다.", false).Direction);
+    }
+
+    [Fact]
+    public async Task Json_TranslatesOnlyStringValuesAndStaysValidJson()
+    {
+        const string source = "{\"message\": \"Hello world\", \"count\": 3, \"url\": \"https://example.com/a\", \"items\": [\"Read this guide\", true, null]}";
+        var translator = new FakeTranslator(text => text == "Hello world" ? "안녕 \"세상\"" : "안내를 읽으십시오.");
+        PinTranslationResult result = Assert.IsType<PinTranslationResult>(await new PinTranslationService(translator)
+            .TranslateAsync(await CreateContent(source), CancellationToken.None));
+        Assert.Equal(["Hello world", "Read this guide"], Assert.Single(translator.Calls));
+        Assert.Equal("{\"message\": \"안녕 \\\"세상\\\"\", \"count\": 3, \"url\": \"https://example.com/a\", \"items\": [\"안내를 읽으십시오.\", true, null]}", result.Content.OriginalText);
+        using System.Text.Json.JsonDocument parsed = System.Text.Json.JsonDocument.Parse(result.Content.OriginalText!);
+        Assert.Equal("안녕 \"세상\"", parsed.RootElement.GetProperty("message").GetString());
+    }
+
+    [Fact]
+    public async Task Code_TranslatesCommentsOnlyAndNeverStringsOrStatements()
+    {
+        const string source = "var text = \"Hello world\"; // Read the documentation first\nvar url = \"http://example.com/a//b\";\n// Save the document before closing\nint count = 3;";
+        var translator = new FakeTranslator(text => text.StartsWith("Read", StringComparison.Ordinal) ? "먼저 문서를 읽으십시오." : "닫기 전에 문서를 저장하십시오.");
+        PinTranslationResult result = Assert.IsType<PinTranslationResult>(await new PinTranslationService(translator)
+            .TranslateAsync(await CreateContent(source), CancellationToken.None));
+        Assert.Equal("var text = \"Hello world\"; // 먼저 문서를 읽으십시오.\nvar url = \"http://example.com/a//b\";\n// 닫기 전에 문서를 저장하십시오.\nint count = 3;", result.Content.OriginalText);
+    }
+
+    [Fact]
+    public async Task Prose_JoinsHardWrappedPdfLinesAndHyphenatedWordsBeforeTranslating()
+    {
+        const string source = "The configuration of the system requires careful at-\r\ntention to the settings and the con-\r\nfiguration files used by the service.\r\n\r\nA second paragraph stays separate.";
+        var translator = new FakeTranslator(text => "번역:" + text);
+        PinTranslationResult result = Assert.IsType<PinTranslationResult>(await new PinTranslationService(translator)
+            .TranslateAsync(await CreateContent(source), CancellationToken.None));
+        Assert.Equal(["The configuration of the system requires careful attention to the settings and the configuration files used by the service.",
+            "A second paragraph stays separate."], Assert.Single(translator.Calls));
+        Assert.Equal("번역:The configuration of the system requires careful attention to the settings and the configuration files used by the service.\r\n\r\n번역:A second paragraph stays separate.", result.Content.OriginalText);
+    }
+
+    [Fact]
+    public async Task KoreanToEnglish_TranslatesKoreanTextAndKeepsEnglishAndNumbers()
+    {
+        const string source = "서버 응답 시간이 3.5초를 초과했습니다.\n업데이트는 약 2분 정도 걸립니다.";
+        var translator = new FakeTranslator(text => text.Contains("3.5", StringComparison.Ordinal) ? "The server response time exceeded 3.5 seconds." : "The update takes about 2 minutes.");
+        PinTranslationResult result = Assert.IsType<PinTranslationResult>(await new PinTranslationService(translator, PinTranslationDirection.KoreanToEnglish)
+            .TranslateAsync(await CreateContent(source), CancellationToken.None));
+        Assert.Equal("The server response time exceeded 3.5 seconds.\nThe update takes about 2 minutes.", result.Content.OriginalText);
     }
 
     [Fact]
@@ -76,8 +122,11 @@ public sealed class PinTranslationServiceTests
         string[] calls = Assert.Single(translator.Calls);
         Assert.Contains("Welcome aboard", calls);
         Assert.Contains("Read **the guide** and `config.json` before [opening settings](https://example.com/a_(b)?x=1).", calls);
-        Assert.Contains("| Column name | Details |", calls);
-        Assert.Contains("| First value | Use 42 MHz |", calls);
+        // Table cells are translated one by one; pipes and the alignment row never reach the model.
+        Assert.Contains("Column name", calls);
+        Assert.Contains("Details", calls);
+        Assert.Contains("First value", calls);
+        Assert.Contains("Use 42 MHz", calls);
         Assert.DoesNotContain(calls, text => text.Contains("Do not translate", StringComparison.Ordinal)
             || text.Contains("---", StringComparison.Ordinal));
         Assert.True(result.Content.Image.IsFrozen);

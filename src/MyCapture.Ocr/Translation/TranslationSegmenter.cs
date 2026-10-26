@@ -17,7 +17,8 @@ internal static partial class TranslationSegmenter
         "corp", "jan", "feb", "mar", "apr", "jun", "jul", "aug", "sep", "sept", "oct", "nov", "dec",
     };
 
-    [GeneratedRegex(@"[.!?][""')\]]*\s+(?=[""'(\[]?[A-Z0-9])", RegexOptions.CultureInvariant)]
+    // A Korean sentence also ends at "다. " followed by Hangul, so a Korean paragraph splits like an English one.
+    [GeneratedRegex(@"[.!?][""')\]]*\s+(?=[""'(\[]?[A-Z0-9가-힯])", RegexOptions.CultureInvariant)]
     private static partial Regex SentenceEnd();
 
     [GeneratedRegex(@"(?<word>[A-Za-z]+(?:\.[A-Za-z]+)*)[""')\]]*\s*$", RegexOptions.CultureInvariant)]

@@ -26,7 +26,7 @@ public partial class App
             MainWindow = _pinPreview.Window;
             MainWindow!.Closed += (_, _) => Shutdown(0);
         }
-        catch (Exception error) when (error is ArgumentException or IOException or UnauthorizedAccessException or InvalidOperationException)
+        catch (Exception error) when (error is ArgumentException or IOException or UnauthorizedAccessException or InvalidOperationException or System.ComponentModel.Win32Exception)
         {
             _pinPreview?.Dispose();
             ThemedDialog.Show("미리보기를 시작할 수 없습니다. 별도의 로컬 프로필 경로를 확인하십시오.",

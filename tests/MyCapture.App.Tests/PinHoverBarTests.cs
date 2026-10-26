@@ -256,7 +256,7 @@ public sealed class PinHoverBarTests
         var bar = new PinHoverBar(source ? CaptureProvenance.Create(url: "https://example.com") : null);
         try
         {
-            bar.SetTranslationAction(true, true, UiText.Get("Pin_TranslationKorean"), "Translate on this PC");
+            bar.SetTranslationAction(true, true, UiText.Get("Pin_Translate"), "Translate on this PC");
             Assert.Equal(budget, bar.LabeledWidthBudget);
             var actions = new[] { bar.TranslationButton, bar.CopyButton, bar.SaveButton, bar.OpacityButton };
             TextBlock Caption(Button button) => Assert.Single(

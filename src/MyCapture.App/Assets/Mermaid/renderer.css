@@ -1,0 +1,4 @@
+html,body { margin:0; padding:0; background:white; overflow:hidden; }
+body { font-family:"Segoe UI","Malgun Gothic",sans-serif; }
+#diagram { display:inline-block; padding:12px; box-sizing:content-box; }
+#diagram svg { display:block; max-width:none !important; }

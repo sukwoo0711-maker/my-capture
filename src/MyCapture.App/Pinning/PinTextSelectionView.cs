@@ -126,7 +126,7 @@ internal sealed class PinTextSelectionView : Grid
         }
         else if (content.IsMarkdown)
         {
-            MarkdownBox = new RichTextBox(ClipboardMarkdownRenderer.CreateDocument(_original))
+            MarkdownBox = new RichTextBox(ClipboardMarkdownRenderer.CreateDocument(_original, content.MermaidResults))
             {
                 Style = null,
                 IsReadOnly = true,

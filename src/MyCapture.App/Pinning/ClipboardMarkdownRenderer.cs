@@ -3,6 +3,7 @@ using System.Net;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Documents;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
@@ -16,14 +17,21 @@ internal static class ClipboardMarkdownRenderer
     private const int MaxDocumentLines = 8_192;
     private const int MaxPreviewCharacters = 16_384;
     private const int MaxColumns = 24;
+    private const int PageWidthDip = 640;
+    private const int PageHeightDip = 900;
+    private const int MaxPreviewHeightDip = 8_192;
+    private const int MaxPreviewPixels = 16_000_000;
+    private const int ContinuationHeightDip = 32;
     private static readonly Regex Heading = Pattern(@"^ {0,3}(#{1,6})\s+(\S.*)$");
     private static readonly Regex ClosingHeading = Pattern(@"\s+#+\s*$");
-    private static readonly Regex ListItemPattern = Pattern(@"^\s{0,12}(?:(?<bullet>[-+*])|(?<number>\d{1,6})[.)])\s+(?<body>.+)$");
+    private static readonly Regex ListItemPattern = Pattern(@"^(?<indent>[ \t]{0,64})(?:(?<bullet>[-+*])|(?<number>\d{1,6})[.)])[ \t]+(?<body>.+)$");
     private static readonly Regex TaskItem = Pattern(@"^\[(?<done>[ xX])\]\s+(?<body>.*)$");
     private static readonly Regex SeparatorCell = Pattern(@"^:?-{3,}:?$");
     private static readonly Regex CodeStatement = Pattern(@"^\s*(?:(?:import|using|namespace|class|def|function|const|let|var)\s+|[\w.$]+\([^\r\n]*\)\s*;?\s*$|#!)");
     private static readonly Regex InlinePattern = Pattern(
-        @"(?<escape>\\[\x21-\x2f\x3a-\x40\x5b-\x60\x7b-\x7e])|(?<code>`[^`\r\n]+`)|(?<strong>\*\*(?:\\[^\r\n]|[^*\\\r\n])+\*\*|__(?:\\[^\r\n]|[^_\\\r\n])+__)|(?<emphasis>\*(?:\\[^\r\n]|[^*\\\r\n])+\*|_(?:\\[^\r\n]|[^_\\\r\n])+_)|(?<link>!?\[(?<label>(?:\\[^\r\n]|[^\]\\\r\n])+)\]\((?<destination>(?:\\[^\r\n]|[^\s)\\\r\n])+)\))");
+        @"(?<escape>\\[\x21-\x2f\x3a-\x40\x5b-\x60\x7b-\x7e])|(?<code>`[^`\r\n]+`)|(?<strong>\*\*(?:\\[^\r\n]|[^*\\\r\n])+\*\*|__(?:\\[^\r\n]|[^_\\\r\n])+__)|(?<strike>~~(?:\\[^\r\n]|[^~\\\r\n])+~~)|(?<emphasis>\*(?:\\[^\r\n]|[^*\\\r\n])+\*|_(?:\\[^\r\n]|[^_\\\r\n])+_)|(?<link>!?\[(?<label>(?:\\[^\r\n]|[^\]\\\r\n])+)\]\((?<destination>(?:\\[^\r\n]|[^\s)\\\r\n])+)\))");
+    private static readonly Regex MermaidDeclaration = Pattern(
+        @"^(?:(?:flowchart|graph)[ \t]+(?:TB|TD|BT|RL|LR)(?:[ \t]*;.*)?[ \t]*|(?:sequenceDiagram|classDiagram|stateDiagram(?:-v2)?|erDiagram|gantt|mindmap|timeline|journey|gitGraph|quadrantChart|requirementDiagram|C4Context|C4Container|C4Component|C4Dynamic|C4Deployment|block-beta|packet-beta|architecture-beta|sankey-beta|xychart-beta)[ \t]*|pie(?:[ \t]+(?:showData(?:[ \t]+title.*)?|title.*))?[ \t]*)$");
     private static readonly Regex HtmlToken = new(
         "<!--[\\s\\S]*?-->|<(?:(?:\"[^\"]*\")|(?:'[^']*')|[^'\">])*>",
         RegexOptions.CultureInvariant | RegexOptions.NonBacktracking, TimeSpan.FromMilliseconds(100));
@@ -63,7 +71,8 @@ internal static class ClipboardMarkdownRenderer
                     foreach (string language in languages)
                     {
                         if (language.Equals("markdown", StringComparison.OrdinalIgnoreCase)
-                            || language.Equals("md", StringComparison.OrdinalIgnoreCase)) markdown = true;
+                            || language.Equals("md", StringComparison.OrdinalIgnoreCase)
+                            || language.Equals("mermaid", StringComparison.OrdinalIgnoreCase)) markdown = true;
                         // A fragment containing mixed/other language containers is ambiguous.
                         else return false;
                     }
@@ -89,6 +98,7 @@ internal static class ClipboardMarkdownRenderer
         ArgumentNullException.ThrowIfNull(sourceText);
         string inspected = Limit(sourceText, MaxPreviewCharacters);
         List<SourceLine> lines = ReadLines(inspected);
+        if (IsPureMermaid(lines)) return true;
         bool hasHeadingContext = lines.Count(line => !string.IsNullOrWhiteSpace(line.Text)) >= 2
             && !lines.Any(line => CodeStatement.IsMatch(line.Text));
         int listItems = 0;
@@ -111,48 +121,138 @@ internal static class ClipboardMarkdownRenderer
         return false;
     }
 
+    /// <summary>Returns exact diagram bodies, indexed in document order, without executing any content.</summary>
+    internal static IReadOnlyList<MarkdownMermaidBlock> ExtractMermaidBlocks(string source)
+    {
+        ArgumentNullException.ThrowIfNull(source);
+        if (source.Length > MaxDocumentCharacters) return [];
+        List<SourceLine> lines = ReadLines(source, MaxDocumentLines + 1);
+        if (lines.Count > MaxDocumentLines) return [];
+        if (IsPureMermaid(lines)) return [new MarkdownMermaidBlock(0, source)];
+        var blocks = new List<MarkdownMermaidBlock>();
+        for (int index = 0; index < lines.Count; index++)
+        {
+            if (!TryFence(lines[index].Text, out char marker, out int length)) continue;
+            bool mermaid = IsMermaidFence(lines[index].Text, length);
+            int start = lines[index].End;
+            index++;
+            while (index < lines.Count && !IsClosingFence(lines[index].Text, marker, length)) index++;
+            int end = index < lines.Count ? lines[index].Start : lines[^1].End;
+            if (mermaid) blocks.Add(new MarkdownMermaidBlock(blocks.Count, source[start..end]));
+        }
+        return blocks;
+    }
+
+    private static bool IsPureMermaid(List<SourceLine> lines)
+    {
+        string? first = lines.Select(line => line.Text.Trim().TrimStart('\uFEFF'))
+            .FirstOrDefault(line => line.Length > 0 && !line.StartsWith("%%", StringComparison.Ordinal));
+        return first is not null && MermaidDeclaration.IsMatch(first);
+    }
+
+    private static bool IsMermaidFence(string line, int markerLength) =>
+        line.TrimStart()[markerLength..].Trim().Equals("mermaid", StringComparison.OrdinalIgnoreCase);
+
     /// <remarks>Call on an STA thread. The returned bitmap can be used across threads.</remarks>
     internal static BitmapSource Render(string sourceText) => Render(sourceText, 1);
 
-    internal static BitmapSource Render(string sourceText, double scale)
+    internal static BitmapSource Render(string sourceText, double scale) => Render(sourceText, scale, null);
+
+    internal static BitmapSource Render(string sourceText, double scale,
+        IReadOnlyDictionary<int, MermaidRenderResult>? results)
     {
         ArgumentNullException.ThrowIfNull(sourceText);
         ClipboardTextRenderer.ValidateScale(scale);
-        FlowDocument document = CreateDocument(Limit(sourceText, MaxPreviewCharacters));
+        FlowDocument document = CreateDocument(Limit(sourceText, MaxPreviewCharacters), results);
+        bool formattingLimit = sourceText.Length > MaxDocumentCharacters
+            || ReadLines(sourceText, MaxDocumentLines + 1).Count > MaxDocumentLines;
+        if (formattingLimit)
+        {
+            // The extractor deliberately avoids unbounded browser work. Match that decision
+            // here instead of showing a diagram placeholder which can never complete.
+            document.Blocks.Clear();
+            document.Blocks.Add(MakeCodeBlock(Limit(sourceText, MaxPreviewCharacters)));
+        }
+        KeepKoreanWordsTogether(document.Blocks);
         // A paginator has no text-input host or TSF attachment. Rendering happens on a
         // short-lived STA; the selectable RichTextBox belongs only to the UI-lived F2 view.
         document.Background = null;
         DocumentPaginator paginator = ((IDocumentPaginatorSource)document).DocumentPaginator;
-        paginator.PageSize = new Size(640, 900);
-        using DocumentPage page = paginator.GetPage(0);
-        var background = new DrawingVisual();
-        using (DrawingContext drawing = background.RenderOpen())
-            drawing.DrawRectangle(Brushes.White, null, new Rect(0, 0, 640, 900));
-        // The paginator visual includes its entire page in its bounds, even for one line.
-        // Measure painted content at a stable 96 DPI so the logical size also stays stable
-        // when the pin moves between monitors. Scan strips rather than a second full buffer.
-        var preview = new RenderTargetBitmap(640, 900, 96, 96, PixelFormats.Pbgra32);
-        preview.Render(background);
-        preview.Render(page.Visual);
-        int height = MeasurePaintedHeight(preview);
-        if (scale == 1)
+        paginator.PageSize = new Size(PageWidthDip, PageHeightDip);
+        var pages = new List<DocumentPage>();
+        try
         {
-            if (height == preview.PixelHeight)
+            int maximumPages = (int)Math.Ceiling((double)MaxPreviewHeightDip / PageHeightDip);
+            bool continued = sourceText.Length > MaxPreviewCharacters || formattingLimit;
+            for (int index = 0; index <= maximumPages; index++)
             {
-                preview.Freeze();
-                return preview;
+                DocumentPage page = paginator.GetPage(index);
+                if (ReferenceEquals(page, DocumentPage.Missing)) break;
+                if (index == maximumPages)
+                {
+                    continued = true;
+                    page.Dispose();
+                    break;
+                }
+                pages.Add(page);
             }
-            // Copy the crop so a short pin does not retain the full-height page buffer.
-            var cropped = new WriteableBitmap(new CroppedBitmap(preview, new Int32Rect(0, 0, 640, height)));
-            cropped.Freeze();
-            return cropped;
+            var whitePage = new DrawingVisual();
+            using (DrawingContext drawing = whitePage.RenderOpen())
+                drawing.DrawRectangle(Brushes.White, null, new Rect(0, 0, PageWidthDip, PageHeightDip));
+            var lastPreview = new RenderTargetBitmap(PageWidthDip, PageHeightDip, 96, 96, PixelFormats.Pbgra32);
+            lastPreview.Render(whitePage);
+            if (pages.Count > 0) lastPreview.Render(pages[^1].Visual);
+            int naturalHeight = Math.Max(0, pages.Count - 1) * PageHeightDip + MeasurePaintedHeight(lastPreview);
+            continued |= naturalHeight > MaxPreviewHeightDip;
+            int contentHeight = Math.Min(naturalHeight, MaxPreviewHeightDip - (continued ? ContinuationHeightDip : 0));
+            int height = contentHeight + (continued ? ContinuationHeightDip : 0);
+            double rasterScale = Math.Min(scale, Math.Sqrt((double)MaxPreviewPixels / (PageWidthDip * height)));
+            int pixelWidth = checked((int)Math.Ceiling(PageWidthDip * rasterScale));
+            int pixelHeight = checked((int)Math.Ceiling(height * rasterScale));
+            while ((long)pixelWidth * pixelHeight > MaxPreviewPixels)
+            {
+                rasterScale *= 0.9999;
+                pixelWidth = checked((int)Math.Ceiling(PageWidthDip * rasterScale));
+                pixelHeight = checked((int)Math.Ceiling(height * rasterScale));
+            }
+            if (pages.Count <= 1 && !continued && rasterScale == 1)
+            {
+                // Keep the common short-note path free of visual-brush composition.
+                var cropped = new WriteableBitmap(new CroppedBitmap(lastPreview, new Int32Rect(0, 0, PageWidthDip, height)));
+                cropped.Freeze();
+                return cropped;
+            }
+            var composed = new DrawingVisual();
+            using (DrawingContext drawing = composed.RenderOpen())
+            {
+                drawing.DrawRectangle(Brushes.White, null, new Rect(0, 0, PageWidthDip, height));
+                drawing.PushClip(new RectangleGeometry(new Rect(0, 0, PageWidthDip, contentHeight)));
+                for (int index = 0; index < pages.Count; index++)
+                {
+                    drawing.DrawRectangle(new VisualBrush(pages[index].Visual)
+                    {
+                        ViewboxUnits = BrushMappingMode.Absolute,
+                        Viewbox = new Rect(0, 0, PageWidthDip, PageHeightDip),
+                        Stretch = Stretch.Fill,
+                    }, null, new Rect(0, index * PageHeightDip, PageWidthDip, PageHeightDip));
+                }
+                drawing.Pop();
+                if (continued)
+                {
+                    var note = new FormattedText("나머지 내용은 F2에서 확인합니다.", CultureInfo.GetCultureInfo("ko-KR"),
+                        FlowDirection.LeftToRight, new Typeface("Segoe UI"), 13, Brushes.DimGray, rasterScale);
+                    drawing.DrawText(note, new Point(24, contentHeight + 8));
+                }
+            }
+            var bitmap = new RenderTargetBitmap(pixelWidth, pixelHeight, 96 * rasterScale, 96 * rasterScale, PixelFormats.Pbgra32);
+            bitmap.Render(composed);
+            bitmap.Freeze();
+            return bitmap;
         }
-        var bitmap = new RenderTargetBitmap(checked((int)Math.Ceiling(640 * scale)),
-            checked((int)Math.Ceiling(height * scale)), 96 * scale, 96 * scale, PixelFormats.Pbgra32);
-        bitmap.Render(background);
-        bitmap.Render(page.Visual);
-        bitmap.Freeze();
-        return bitmap;
+        finally
+        {
+            foreach (DocumentPage page in pages) page.Dispose();
+        }
     }
 
     private static int MeasurePaintedHeight(BitmapSource bitmap)
@@ -179,7 +279,8 @@ internal static class ClipboardMarkdownRenderer
 
     /// <summary>Creates a fresh selectable document; fenced Paragraph.Tag holds the exact code body.</summary>
     /// <remarks>Call on the owning UI/STA thread. The caller retains the unmodified original text.</remarks>
-    internal static FlowDocument CreateDocument(string sourceText)
+    internal static FlowDocument CreateDocument(string sourceText,
+        IReadOnlyDictionary<int, MermaidRenderResult>? results = null)
     {
         ArgumentNullException.ThrowIfNull(sourceText);
         var document = new FlowDocument
@@ -206,30 +307,42 @@ internal static class ClipboardMarkdownRenderer
             document.Blocks.Add(new Paragraph(new Run(sourceText)));
             return document;
         }
+        if (IsPureMermaid(lines))
+        {
+            AddMermaidBlock(document.Blocks, new MarkdownMermaidBlock(0, source), results);
+            return document;
+        }
         int index = 0;
+        int mermaidIndex = 0;
         while (index < lines.Count)
         {
             string line = lines[index].Text;
             if (string.IsNullOrWhiteSpace(line)) { index++; continue; }
             if (TryFence(line, out char fence, out int fenceLength))
             {
+                bool mermaid = IsMermaidFence(line, fenceLength);
                 int bodyStart = lines[index].End;
                 index++;
                 while (index < lines.Count && !IsClosingFence(lines[index].Text, fence, fenceLength)) index++;
                 int bodyEnd = index < lines.Count ? lines[index].Start : lines[^1].End;
                 string code = source[bodyStart..bodyEnd];
-                var codeBlock = new Paragraph(new Run(code))
-                {
-                    Tag = code,
-                    FontFamily = new FontFamily("Consolas"),
-                    FontSize = 14,
-                    Background = Brushes.WhiteSmoke,
-                    Padding = new Thickness(12),
-                    Margin = new Thickness(0, 5, 0, 12),
-                    KeepTogether = false,
-                };
-                document.Blocks.Add(codeBlock);
+                if (mermaid) AddMermaidBlock(document.Blocks, new MarkdownMermaidBlock(mermaidIndex++, code), results);
+                else document.Blocks.Add(MakeCodeBlock(code));
                 if (index < lines.Count) index++;
+                continue;
+            }
+            if (IsHorizontalRule(line))
+            {
+                document.Blocks.Add(new Paragraph
+                {
+                    Tag = MarkdownBlockKind.HorizontalRule,
+                    BorderBrush = Brushes.LightGray,
+                    BorderThickness = new Thickness(0, 0, 0, 1),
+                    FontSize = 1,
+                    LineHeight = 1,
+                    Margin = new Thickness(0, 8, 0, 12),
+                });
+                index++;
                 continue;
             }
             Match heading = Heading.Match(line);
@@ -265,27 +378,7 @@ internal static class ClipboardMarkdownRenderer
             Match item = ListItemPattern.Match(line);
             if (item.Success)
             {
-                bool ordered = item.Groups["number"].Success;
-                var list = new System.Windows.Documents.List
-                {
-                    MarkerStyle = ordered ? TextMarkerStyle.Decimal : TextMarkerStyle.Disc,
-                    Margin = new Thickness(0, 0, 0, 10),
-                    Padding = new Thickness(23, 0, 0, 0),
-                    StartIndex = ordered ? Math.Max(1, int.Parse(item.Groups["number"].Value, CultureInfo.InvariantCulture)) : 1,
-                };
-                while (index < lines.Count && (item = ListItemPattern.Match(lines[index].Text)).Success
-                    && item.Groups["number"].Success == ordered)
-                {
-                    string body = item.Groups["body"].Value;
-                    Match task = TaskItem.Match(body);
-                    if (task.Success)
-                    {
-                        body = (task.Groups["done"].Value == " " ? "☐ " : "☑ ") + task.Groups["body"].Value;
-                    }
-                    list.ListItems.Add(new ListItem(MakeParagraph(body)));
-                    index++;
-                }
-                document.Blocks.Add(list);
+                document.Blocks.Add(MakeList(lines, ref index));
                 continue;
             }
             if (line.TrimStart().StartsWith(">", StringComparison.Ordinal))
@@ -313,6 +406,157 @@ internal static class ClipboardMarkdownRenderer
         return document;
     }
 
+    private static Paragraph MakeCodeBlock(string code) => new(new Run(code))
+    {
+        Tag = code,
+        FontFamily = new FontFamily("Consolas"),
+        FontSize = 14,
+        Background = Brushes.WhiteSmoke,
+        Padding = new Thickness(12),
+        Margin = new Thickness(0, 5, 0, 12),
+        KeepTogether = false,
+    };
+
+    private static void AddMermaidBlock(BlockCollection blocks, MarkdownMermaidBlock block,
+        IReadOnlyDictionary<int, MermaidRenderResult>? results)
+    {
+        if (results is null || !results.TryGetValue(block.Index, out MermaidRenderResult? result))
+        {
+            blocks.Add(new Paragraph(new Run("그리는 중"))
+            {
+                Tag = block,
+                Foreground = Brushes.DimGray,
+                Background = Brushes.WhiteSmoke,
+                Padding = new Thickness(12),
+                Margin = new Thickness(0, 5, 0, 12),
+            });
+            return;
+        }
+        if (result.Image is { } bitmap && bitmap.Width > 0 && bitmap.Height > 0)
+        {
+            double fit = Math.Min(1, Math.Min(592 / bitmap.Width, 700 / bitmap.Height));
+            var image = new Image
+            {
+                Source = bitmap,
+                Width = bitmap.Width * fit,
+                Height = bitmap.Height * fit,
+                Stretch = Stretch.Uniform,
+                HorizontalAlignment = HorizontalAlignment.Left,
+                IsHitTestVisible = false,
+                Focusable = false,
+            };
+            blocks.Add(new BlockUIContainer(image) { Tag = block, Margin = new Thickness(0, 5, 0, 12) });
+            return;
+        }
+        blocks.Add(MakeCodeBlock(block.Source));
+        blocks.Add(new Paragraph(new Run("그림을 표시할 수 없어 원문을 보여줍니다."))
+        {
+            Foreground = Brushes.DimGray,
+            FontSize = 13,
+            Margin = new Thickness(0, 0, 0, 12),
+        });
+    }
+
+    private static System.Windows.Documents.List MakeList(List<SourceLine> lines, ref int index)
+    {
+        Match first = ListItemPattern.Match(lines[index].Text);
+        bool ordered = first.Groups["number"].Success;
+        bool tasks = TaskItem.IsMatch(first.Groups["body"].Value);
+        int indent = ListIndent(first);
+        var list = new System.Windows.Documents.List
+        {
+            MarkerStyle = tasks ? TextMarkerStyle.None : ordered ? TextMarkerStyle.Decimal : TextMarkerStyle.Disc,
+            Margin = new Thickness(0, 0, 0, 8),
+            Padding = new Thickness(tasks ? 4 : 23, 0, 0, 0),
+            StartIndex = ordered ? Math.Max(1, int.Parse(first.Groups["number"].Value, CultureInfo.InvariantCulture)) : 1,
+        };
+        while (index < lines.Count)
+        {
+            Match match = ListItemPattern.Match(lines[index].Text);
+            if (!match.Success || IsHorizontalRule(lines[index].Text) || ListIndent(match) < indent) break;
+            if (ListIndent(match) > indent)
+            {
+                if (list.ListItems.LastListItem is null) break;
+                list.ListItems.LastListItem.Blocks.Add(MakeList(lines, ref index));
+                continue;
+            }
+            if (match.Groups["number"].Success != ordered || TaskItem.IsMatch(match.Groups["body"].Value) != tasks) break;
+            string body = match.Groups["body"].Value;
+            Match task = TaskItem.Match(body);
+            Paragraph paragraph = MakeParagraph(task.Success ? task.Groups["body"].Value : body);
+            if (task.Success)
+            {
+                // A text glyph remains selectable and has no interactive checkbox state.
+                var box = new Run(task.Groups["done"].Value == " " ? "☐ " : "☑ ")
+                {
+                    FontFamily = new FontFamily("Segoe UI Symbol"),
+                };
+                if (paragraph.Inlines.FirstInline is { } firstInline) paragraph.Inlines.InsertBefore(firstInline, box);
+                else paragraph.Inlines.Add(box);
+            }
+            list.ListItems.Add(new ListItem(paragraph));
+            index++;
+        }
+        return list;
+    }
+
+    private static int ListIndent(Match match) => match.Groups["indent"].Value.Sum(character => character == '\t' ? 4 : 1);
+
+    private static bool IsHorizontalRule(string line)
+    {
+        string trimmed = line.Trim();
+        if (trimmed.Length < 3 || trimmed[0] is not ('-' or '*' or '_')) return false;
+        char marker = trimmed[0];
+        return trimmed.Count(character => character == marker) >= 3
+            && trimmed.All(character => character == marker || character is ' ' or '\t');
+    }
+
+    private static void KeepKoreanWordsTogether(BlockCollection blocks)
+    {
+        foreach (Block block in blocks.Cast<Block>().ToArray())
+            switch (block)
+            {
+                case Paragraph paragraph when paragraph.Tag is not string:
+                    KeepWordsInInlines(paragraph.Inlines);
+                    break;
+                case Section section:
+                    KeepKoreanWordsTogether(section.Blocks);
+                    break;
+                case System.Windows.Documents.List list:
+                    foreach (ListItem item in list.ListItems.Cast<ListItem>().ToArray()) KeepKoreanWordsTogether(item.Blocks);
+                    break;
+                case Table table:
+                    foreach (TableRowGroup group in table.RowGroups.Cast<TableRowGroup>().ToArray())
+                    foreach (TableRow row in group.Rows.Cast<TableRow>().ToArray())
+                    foreach (TableCell cell in row.Cells.Cast<TableCell>().ToArray()) KeepKoreanWordsTogether(cell.Blocks);
+                    break;
+            }
+    }
+
+    private static void KeepWordsInInlines(InlineCollection inlines)
+    {
+        foreach (Inline inline in inlines.Cast<Inline>().ToArray())
+        {
+            if (inline.FontFamily.Source == "Consolas") continue;
+            if (inline is Span span) { KeepWordsInInlines(span.Inlines); continue; }
+            if (inline is not Run run || !run.Text.Any(IsHangul)) continue;
+            // Only the disposable bitmap document receives nonbreaking hints. Selectable
+            // documents, exact source copies, HTML and fenced/inline code stay unchanged.
+            var text = new StringBuilder(run.Text.Length * 2);
+            for (int index = 0; index < run.Text.Length; index++)
+            {
+                char current = run.Text[index];
+                text.Append(current);
+                if (index + 1 < run.Text.Length && (IsHangul(current) || IsHangul(run.Text[index + 1]))
+                    && char.IsLetterOrDigit(current) && char.IsLetterOrDigit(run.Text[index + 1])) text.Append('\u2060');
+            }
+            run.Text = text.ToString();
+        }
+    }
+
+    private static bool IsHangul(char character) => character is >= '\uAC00' and <= '\uD7AF'
+        or >= '\u1100' and <= '\u11FF' or >= '\u3130' and <= '\u318F';
+
     /// <summary>Produces safe fragment HTML from the same document; call on an STA thread.</summary>
     internal static string ToHtml(string sourceText)
     {
@@ -325,6 +569,12 @@ internal static class ClipboardMarkdownRenderer
     {
         switch (block)
         {
+            case Paragraph { Tag: MarkdownBlockKind.HorizontalRule }:
+                html.Append("<hr>");
+                break;
+            case Paragraph { Tag: MarkdownMermaidBlock pending }:
+                html.Append("<pre><code>").Append(WebUtility.HtmlEncode(pending.Source)).Append("</code></pre>");
+                break;
             case Paragraph { Tag: string code }:
                 html.Append("<pre style=\"font-family:Consolas,monospace;background-color:#f5f5f5;padding:12px;white-space:pre-wrap\"><code>");
                 html.Append(WebUtility.HtmlEncode(code)).Append("</code></pre>");
@@ -377,7 +627,7 @@ internal static class ClipboardMarkdownRenderer
         if (inline is Run run) { html.Append(WebUtility.HtmlEncode(run.Text)); return; }
         if (inline is LineBreak) { html.Append("<br>"); return; }
         if (inline is not Span span) return;
-        string tag = span switch { Bold => "strong", Italic => "em", _ => "span" };
+        string tag = span switch { Bold => "strong", Italic => "em", _ when span.TextDecorations == TextDecorations.Strikethrough => "del", _ => "span" };
         html.Append('<').Append(tag);
         if (span.FontFamily.Source == "Consolas") html.Append(" style=\"font-family:Consolas,monospace;background-color:#f5f5f5\"");
         html.Append('>');
@@ -398,13 +648,14 @@ internal static class ClipboardMarkdownRenderer
                 paragraph.Inlines.Add(new Span(new Run(match.Value[1..^1])) { FontFamily = new FontFamily("Consolas"), Background = Brushes.WhiteSmoke });
             }
             else if (match.Groups["strong"].Success) paragraph.Inlines.Add(new Bold(new Run(UnescapePunctuation(match.Value[2..^2]))));
+            else if (match.Groups["strike"].Success) paragraph.Inlines.Add(new Span(new Run(UnescapePunctuation(match.Value[2..^2]))) { TextDecorations = TextDecorations.Strikethrough });
             else if (match.Groups["emphasis"].Success) paragraph.Inlines.Add(new Italic(new Run(UnescapePunctuation(match.Value[1..^1]))));
             else
             {
                 // Display destinations but never construct navigation-capable Hyperlink or Image objects.
                 string label = UnescapePunctuation(match.Groups["label"].Value);
                 string destination = UnescapePunctuation(match.Groups["destination"].Value);
-                paragraph.Inlines.Add(new Run(label + " (" + destination + ")") { Foreground = Brushes.SteelBlue });
+                paragraph.Inlines.Add(new Run(label + " (" + destination + ")") { Foreground = Brushes.SteelBlue, TextDecorations = TextDecorations.Underline });
             }
             offset = match.Index + match.Length;
         }
@@ -510,5 +761,6 @@ internal static class ClipboardMarkdownRenderer
     }
 
     private static Regex Pattern(string pattern) => new(pattern, RegexOptions.CultureInvariant | RegexOptions.NonBacktracking, TimeSpan.FromMilliseconds(100));
+    private enum MarkdownBlockKind { HorizontalRule }
     private readonly record struct SourceLine(string Text, int Start, int End);
 }

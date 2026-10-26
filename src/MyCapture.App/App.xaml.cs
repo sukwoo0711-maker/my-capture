@@ -73,6 +73,7 @@ public partial class App : Application
     private GalleryReeditLoader? _reeditLoader;
     private GalleryWindow? _galleryWindow;
     private PinManager? _pins;
+    private MermaidRenderer? _mermaidRenderer;
     private IOcrService? _ocrService;
     private readonly OcrModelPreparation _ocrModelPreparation = new();
     private OcrResultPresenter? _ocrPresenter;
@@ -224,8 +225,18 @@ public partial class App : Application
             pinSaveService,
             _services.GetRequiredService<ILogger<PinManager>>());
         _pins.PinCreated += ShowFirstPinTip;
+        _ = PinRenderWarmup.StartAsync();
+        _mermaidRenderer = new MermaidRenderer(
+            Path.Combine(_services.GetRequiredService<AppPaths>().DataRoot, "mermaid-browser"), Dispatcher,
+            _services.GetRequiredService<ILogger<MermaidRenderer>>());
+        _pins.ConfigureMermaid(_mermaidRenderer);
         if (AppArchitecture.SupportsNeuralOcr)
-            _pins.ConfigureTranslation(_services.GetRequiredService<TextTranslationService>());
+        {
+            _pins.ConfigureTranslation(_services.GetRequiredService<PinTranslationEngines>().For);
+            // A picture pin reads its text with the app's recognizer when the user asks to translate it.
+            _pins.ConfigureImageTranslation((image, token) => PinTranslationEngines.RecognizeAsync(
+                _ocrService, image, _settings?.Ocr ?? new MyCapture.Core.Settings.OcrSettings(), token));
+        }
         InitializePinSession();
         _gitHubUpload = new GitHubIssueImageUploadService(
             () => _settings!,
@@ -2431,6 +2442,19 @@ public partial class App : Application
         services.AddSingleton(serviceProvider => new TextTranslationService(
             serviceProvider.GetRequiredService<TranslationModelStore>(),
             serviceProvider.GetRequiredService<ILogger<TextTranslationService>>()));
+        services.AddSingleton(serviceProvider =>
+        {
+            // The Korean-to-English model is offered once its files are published in the catalog.
+            TextTranslationService? koreanToEnglish = null;
+            if (TranslationModelCatalog.KoreanToEnglish.IsPublished)
+            {
+                var store = new TranslationModelStore(serviceProvider.GetRequiredService<AppPaths>(),
+                    serviceProvider.GetRequiredService<ILogger<TranslationModelStore>>(), TranslationModelCatalog.KoreanToEnglish);
+                koreanToEnglish = new TextTranslationService(store,
+                    serviceProvider.GetRequiredService<ILogger<TextTranslationService>>(), TranslationModelCatalog.KoreanToEnglish.ModelFiles);
+            }
+            return new PinTranslationEngines(serviceProvider.GetRequiredService<TextTranslationService>(), koreanToEnglish);
+        });
         services.AddSingleton<IOcrService>(serviceProvider => new CaptureOcrService(
             serviceProvider.GetRequiredService<WindowsOcrService>(),
             serviceProvider.GetRequiredService<NeuralOcrEngine>(),
@@ -2570,6 +2594,7 @@ public partial class App : Application
         try
         {
             _pins?.CloseAllForExit();
+            _mermaidRenderer?.Dispose();
         }
         catch (InvalidOperationException)
         {

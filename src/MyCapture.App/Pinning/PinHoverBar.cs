@@ -71,7 +71,7 @@ internal sealed class PinHoverBar : Window
         AutomationProperties.SetName(this, UiText.Get("Onboard_PinBarName"));
 
         CopyButton = BarButton(SymbolGeometry("Icon.Copy"), UiText.Get("QuickAccess.Copy"), "Ctrl+C");
-        TranslationButton = BarButton(TranslationGlyph, UiText.Get("Pin_TranslationKorean"), key: null);
+        TranslationButton = BarButton(TranslationGlyph, UiText.Get("Pin_Translate"), key: null);
         TranslationButton.Visibility = Visibility.Collapsed;
         TranslationButton.Click += (_, _) => TranslationRequested?.Invoke();
         SaveButton = BarButton(SymbolGeometry("Icon.Save"), UiText.Get("QuickAccess.Save"), "Ctrl+S");

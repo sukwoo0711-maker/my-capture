@@ -212,6 +212,16 @@ internal static class ClipboardImageReader
             return PinReadAttempt.Success(code with { PendingProvenance = captured.PendingProvenance });
         }
 
+        // A Markdown pin publishes its exact source alongside its bitmap. Prefer that source
+        // when pinning it again, while retaining Excel pictures and editor-specific styling.
+        if (!captured.IsTabularText && !captured.HasCodeHtml && HasSourceText(captured)
+            && ClipboardMarkdownRenderer.IsMarkdown(captured.OriginalText!))
+        {
+            PinContent? markdown = await TryRenderTextAsync(captured, renderText, renderMarkdown).ConfigureAwait(false);
+            if (markdown is not null)
+                return PinReadAttempt.Success(markdown with { PendingProvenance = captured.PendingProvenance });
+        }
+
         ReadAttempt image = await CompleteCapturedAttemptWithFallbackAsync(
             captured,
             decodePng,
@@ -332,7 +342,10 @@ internal static class ClipboardImageReader
                 clipboardSequence,
                 systemImageFallback);
         string? html = TryGetClipboardString(data, DataFormats.Html, false);
-        PinCodeDocument? codeDocument = originalText is not null && !isTabularText
+        bool hasExplicitMarkdown = ClipboardMarkdownRenderer.IsExplicitMarkdownHtml(html);
+        // A named Markdown/Mermaid container uses the document renderer below. Avoid
+        // building a discarded editor bitmap on the clipboard's UI-thread capture path.
+        PinCodeDocument? codeDocument = originalText is not null && !isTabularText && !hasExplicitMarkdown
             ? ClipboardCodeRenderer.TryParse(originalText, html)
             : null;
         BitmapSource? codePreview = null;
@@ -353,7 +366,7 @@ internal static class ClipboardImageReader
             CodeDocument = codeDocument,
             CodePreview = codePreview,
             HasCodeHtml = ClipboardCodeRenderer.IsCodeHtml(html),
-            HasExplicitMarkdown = ClipboardMarkdownRenderer.IsExplicitMarkdownHtml(html),
+            HasExplicitMarkdown = hasExplicitMarkdown,
             Provenance = provenance.Source,
             PendingProvenance = provenance.Pending,
         };
