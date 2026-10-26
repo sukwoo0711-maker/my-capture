@@ -4134,7 +4134,7 @@ Delete {1} {1:plural:subfolder|subfolders}, {2} {2:plural:image|images}, and {3}
   <data name="Onboard_PinWheelDown" xml:space="preserve"><value>Ctrl+wheel down</value></data>
   <data name="Onboard_PinWheelUp" xml:space="preserve"><value>Ctrl+wheel up</value></data>
   <data name="Onboard_PinAllowClickThrough" xml:space="preserve"><value>Click through to windows behind</value></data>
-  <data name="Onboard_PinAllowClickThroughHelp" xml:space="preserve"><value>Sends mouse input to the window behind. Turn off: {0}</value></data>
+  <data name="Onboard_PinAllowClickThroughHelp" xml:space="preserve"><value>Sends mouse input to the window behind. Click the handle at the pin's top-right corner to turn it off. Turn off: {0}</value></data>
   <data name="Onboard_PinClickThroughOn" xml:space="preserve"><value>Click through to windows behind: on
 Turn off: {0}</value></data>
   <data name="Onboard_PinClickThroughOff" xml:space="preserve"><value>Click through to windows behind: off</value></data>

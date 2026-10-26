@@ -4134,7 +4134,7 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="Onboard_PinWheelDown" xml:space="preserve"><value>Ctrl+휠 아래</value></data>
   <data name="Onboard_PinWheelUp" xml:space="preserve"><value>Ctrl+휠 위</value></data>
   <data name="Onboard_PinAllowClickThrough" xml:space="preserve"><value>뒤 창 클릭 허용</value></data>
-  <data name="Onboard_PinAllowClickThroughHelp" xml:space="preserve"><value>마우스 입력을 뒤에 있는 창으로 보냅니다. 해제: {0}</value></data>
+  <data name="Onboard_PinAllowClickThroughHelp" xml:space="preserve"><value>마우스 입력을 뒤에 있는 창으로 보냅니다. 핀 오른쪽 위 손잡이를 누르면 바로 끕니다. 해제: {0}</value></data>
   <data name="Onboard_PinClickThroughOn" xml:space="preserve"><value>뒤 창 클릭 허용 켜짐
 해제: {0}</value></data>
   <data name="Onboard_PinClickThroughOff" xml:space="preserve"><value>뒤 창 클릭 허용 꺼짐</value></data>
