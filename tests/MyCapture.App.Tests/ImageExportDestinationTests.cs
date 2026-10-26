@@ -77,7 +77,7 @@ public sealed class ImageExportDestinationTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task QuickSave_UsesRememberedFolderUnlessFixedOverrideExists_WithoutChangingHistory(bool fixedOverride)
+    public async Task QuickSave_UsesFixedOverrideOrDefaultFolder_IgnoringSaveAsHistory(bool fixedOverride)
     {
         AppPaths paths = RetainedPaths();
         string remembered = Directory.CreateDirectory(Path.Combine(paths.DataRoot, "remembered")).FullName;
@@ -96,9 +96,11 @@ public sealed class ImageExportDestinationTests
             announcedPath = path;
         };
         Assert.True(await service.CommitAsync(null, Result(EditorCommitAction.QuickSave)));
-        string expected = fixedOverride ? configured : remembered;
+        // The remembered Save As folder only seeds Save As dialogs; quick save never follows it.
+        string expected = fixedOverride ? configured : paths.QuickSaveRoot;
         Assert.Equal(expected, Path.GetDirectoryName(announcedPath));
         Assert.Single(Directory.EnumerateFiles(expected, "*.png"));
+        Assert.Empty(Directory.EnumerateFiles(remembered));
         Assert.Equal(remembered, settings.Export.LastSaveDirectory);
         Assert.Equal(0, saves);
     }
@@ -154,6 +156,26 @@ public sealed class ImageExportDestinationTests
         Assert.Equal(settings.Export.QuickSaveDirectoryOverride, Path.GetDirectoryName(quick.Path));
         Assert.Equal(Path.GetDirectoryName(chosen), settings.Export.LastSaveDirectory);
         Assert.Equal(1, saves);
+    }
+
+    [Fact]
+    public async Task PinQuickSave_WithoutOverrideStaysInDefaultFolderAfterSaveAsElsewhere()
+    {
+        AppPaths paths = RetainedPaths();
+        var settings = new AppSettings();
+        CaptureCommitService commit = Editor(settings, paths);
+        var pin = new PinImageSaveService(() => settings, () => paths, NullLogger<PinImageSaveService>.Instance,
+            commit.RememberExportOptions, commit.ExportLocation, commit.RememberSavedExport);
+        string chosen = Path.Combine(paths.DataRoot, "pin-elsewhere", "capture.png");
+        pin.SaveAsPrompt = (_, _) => chosen;
+
+        Assert.Equal(PinSaveStatus.Saved, (await pin.SaveAsAsync(Image(), null)).Status);
+        Assert.Equal(Path.GetDirectoryName(chosen), settings.Export.LastSaveDirectory);
+
+        PinSaveResult quick = await pin.QuickSaveAsync(Image());
+        Assert.Equal(PinSaveStatus.Saved, quick.Status);
+        Assert.Equal(paths.QuickSaveRoot, Path.GetDirectoryName(quick.Path));
+        Assert.Single(Directory.EnumerateFiles(Path.GetDirectoryName(chosen)!, "*.png"));
     }
 
     [Fact]
@@ -282,7 +304,7 @@ public sealed class ImageExportDestinationTests
 
         Assert.True(File.Exists(Path.Combine(remembered, "retained-marker.txt")));
         Assert.Equal(remembered, commit.ExportLocation.SaveAsDirectory);
-        Assert.Equal(fixedOverride ? settings.Export.QuickSaveDirectoryOverride : remembered,
+        Assert.Equal(fixedOverride ? settings.Export.QuickSaveDirectoryOverride : paths.QuickSaveRoot,
             commit.ExportLocation.QuickSaveDirectory);
     }
 
@@ -347,7 +369,7 @@ public sealed class ImageExportDestinationTests
 
         Assert.Empty(Directory.GetFileSystemEntries(remembered.FullName));
         Assert.Equal(remembered.FullName, commit.ExportLocation.SaveAsDirectory);
-        Assert.Equal(fixedOverride ? settings.Export.QuickSaveDirectoryOverride : remembered.FullName,
+        Assert.Equal(fixedOverride ? settings.Export.QuickSaveDirectoryOverride : paths.QuickSaveRoot,
             commit.ExportLocation.QuickSaveDirectory);
     }
 
@@ -362,25 +384,93 @@ public sealed class ImageExportDestinationTests
     }
 
     [Fact]
-    public void SettingsDraft_DistinguishesAutomaticLocationFromExplicitFolder()
+    public void SettingsDraft_ShowsTheRealQuickSaveFolderAndKeepsSaveAsHistoryOutOfIt()
     {
         AppPaths paths = RetainedPaths();
         string remembered = Directory.CreateDirectory(Path.Combine(paths.DataRoot, "remembered")).FullName;
         var draft = new SettingsDraft(new AppSettings { Export = { LastSaveDirectory = remembered } });
-        Assert.Equal(string.Empty, draft.QuickSaveDirectoryOverride);
-        Assert.Equal(string.Empty, draft.ToAppSettings().Export.QuickSaveDirectoryOverride);
-        var location = new ImageExportLocation(() => draft.ToAppSettings(), () => paths, NullLogger.Instance);
-        Assert.Equal(remembered, location.QuickSaveDirectory);
-        string defaultFolder = paths.QuickSaveRoot;
-        draft.QuickSaveDirectoryOverride = defaultFolder;
-        Assert.Equal(defaultFolder, draft.ToAppSettings().Export.QuickSaveDirectoryOverride);
-        Assert.Equal(defaultFolder, location.QuickSaveDirectory);
-        var reopened = new SettingsDraft(draft.ToAppSettings());
-        Assert.Equal(defaultFolder, reopened.QuickSaveDirectoryOverride);
+        // The field shows the path a quick save will use, never an empty box or the Save As history.
+        Assert.Equal(AppPaths.CreateDefault().QuickSaveRoot, draft.QuickSaveDirectoryOverride);
+        AppSettings automatic = draft.ToAppSettings();
+        Assert.Equal(string.Empty, automatic.Export.QuickSaveDirectoryOverride);
+        Assert.Equal(remembered, automatic.Export.LastSaveDirectory);
+        var location = new ImageExportLocation(() => automatic, () => paths, NullLogger.Instance);
+        Assert.Equal(paths.QuickSaveRoot, location.QuickSaveDirectory);
+        Assert.Equal(remembered, location.SaveAsDirectory);
+
+        string explicitFolder = Path.Combine(paths.DataRoot, "explicit");
+        draft.QuickSaveDirectoryOverride = explicitFolder;
+        AppSettings configured = draft.ToAppSettings();
+        Assert.Equal(explicitFolder, configured.Export.QuickSaveDirectoryOverride);
+        var explicitLocation = new ImageExportLocation(() => configured, () => paths, NullLogger.Instance);
+        Assert.Equal(explicitFolder, explicitLocation.QuickSaveDirectory);
+        Assert.Equal(remembered, explicitLocation.SaveAsDirectory);
+        var reopened = new SettingsDraft(configured);
+        Assert.Equal(explicitFolder, reopened.QuickSaveDirectoryOverride);
         reopened.QuickSaveDirectoryOverride = " ";
-        Assert.Equal(string.Empty, reopened.ToAppSettings().Export.QuickSaveDirectoryOverride);
-        var clearedLocation = new ImageExportLocation(() => reopened.ToAppSettings(), () => paths, NullLogger.Instance);
-        Assert.Equal(remembered, clearedLocation.QuickSaveDirectory);
+        AppSettings cleared = reopened.ToAppSettings();
+        Assert.Equal(string.Empty, cleared.Export.QuickSaveDirectoryOverride);
+        Assert.Equal(paths.QuickSaveRoot, new ImageExportLocation(() => cleared, () => paths, NullLogger.Instance).QuickSaveDirectory);
+    }
+
+    [Fact]
+    public void UnreachableRememberedFolderDoesNotBlockSaveAsAndFallsBackToDefault()
+    {
+        AppPaths paths = RetainedPaths();
+        string share = @"\\offline-share.invalid\captures";
+        var settings = new AppSettings { Export = { LastSaveDirectory = share } };
+        using var hang = new ManualResetEventSlim(false);
+        int probes = 0;
+        // Default (~300 ms) timeout on purpose: this models a disconnected share whose open
+        // would otherwise block the UI thread for as long as the OS retries.
+        var location = new ImageExportLocation(() => settings, () => paths, NullLogger.Instance, null,
+            _ =>
+            {
+                Interlocked.Increment(ref probes);
+                hang.Wait(TimeSpan.FromSeconds(30));
+                return true;
+            });
+        try
+        {
+            var elapsed = System.Diagnostics.Stopwatch.StartNew();
+            Assert.Equal(paths.QuickSaveRoot, location.SaveAsDirectory);
+            Assert.Equal(paths.QuickSaveRoot, location.SaveAsDirectory);
+            elapsed.Stop();
+
+            Assert.True(elapsed.Elapsed < TimeSpan.FromSeconds(10), $"Save As blocked for {elapsed.Elapsed}.");
+            Assert.Equal(1, Volatile.Read(ref probes)); // The stuck probe is reused, not stacked.
+            Assert.Equal(share, settings.Export.LastSaveDirectory); // History survives for a reconnect.
+            Assert.Equal(paths.QuickSaveRoot, location.QuickSaveDirectory);
+        }
+        finally { hang.Set(); }
+    }
+
+    [Fact]
+    public void RememberedFolderThatAnswersLateIsUsedOnceItIsReachableAgain()
+    {
+        AppPaths paths = RetainedPaths();
+        string share = Path.Combine(paths.DataRoot, "late-share");
+        var settings = new AppSettings { Export = { LastSaveDirectory = share } };
+        using var reachable = new ManualResetEventSlim(false);
+        var location = new ImageExportLocation(() => settings, () => paths, NullLogger.Instance, null,
+            _ => reachable.Wait(TimeSpan.FromSeconds(30)), TimeSpan.FromMilliseconds(50));
+
+        Assert.Equal(paths.QuickSaveRoot, location.SaveAsDirectory);
+        reachable.Set();
+        // Every later call probes again, so the folder resumes without restarting the app.
+        Assert.True(SpinWait.SpinUntil(() => location.SaveAsDirectory == share, TimeSpan.FromSeconds(10)));
+    }
+
+    [Fact]
+    public void FaultingProbeFallsBackToDefaultInsteadOfThrowing()
+    {
+        AppPaths paths = RetainedPaths();
+        var settings = new AppSettings { Export = { LastSaveDirectory = paths.DataRoot } };
+        var location = new ImageExportLocation(() => settings, () => paths, NullLogger.Instance, null,
+            _ => throw new InvalidOperationException("probe unavailable"));
+
+        Assert.Equal(paths.QuickSaveRoot, location.SaveAsDirectory);
+        Assert.Equal(paths.DataRoot, settings.Export.LastSaveDirectory);
     }
 
     [Fact]

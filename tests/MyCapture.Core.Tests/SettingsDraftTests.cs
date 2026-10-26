@@ -1,5 +1,6 @@
 using MyCapture.Core.Recording;
 using MyCapture.Core.Settings;
+using MyCapture.Core.Storage;
 using Xunit;
 
 namespace MyCapture.Core.Tests;
@@ -90,7 +91,7 @@ public sealed class SettingsDraftTests
         Assert.Equal("fast", draft.OcrQuality);
         Assert.Equal("F9", draft.UploadGitHubImageHotkey);
         Assert.False(string.IsNullOrWhiteSpace(draft.CapturesDirectoryOverride));
-        Assert.Equal(string.Empty, draft.QuickSaveDirectoryOverride);
+        Assert.False(string.IsNullOrWhiteSpace(draft.QuickSaveDirectoryOverride));
     }
 
     [Fact]
@@ -442,6 +443,32 @@ public sealed class SettingsDraftTests
         AppSettings mapped = draft.ToAppSettings();
         Assert.Equal(string.Empty, mapped.Queue.CapturesDirectoryOverride);
         Assert.Equal(string.Empty, mapped.Export.QuickSaveDirectoryOverride);
+    }
+
+    [Fact]
+    public void QuickSaveFolder_ShowsTheRealDefaultPathAndNeverTheSaveAsHistory()
+    {
+        // The field must show where a quick save really lands, not an empty box, and the
+        // remembered Save As folder is separate history that never leaks into it.
+        string history = @"C:\Pictures\Chosen";
+        string defaultFolder = AppPaths.CreateDefault().QuickSaveRoot;
+        var draft = new SettingsDraft(new AppSettings { Export = { LastSaveDirectory = history } });
+
+        Assert.Equal(defaultFolder, draft.QuickSaveDirectoryOverride);
+        AppSettings mapped = draft.ToAppSettings();
+        Assert.Equal(string.Empty, mapped.Export.QuickSaveDirectoryOverride);
+        Assert.Equal(history, mapped.Export.LastSaveDirectory);
+
+        // An explicit folder round-trips; clearing the box returns to the default (stored empty).
+        string chosen = @"D:\Shots";
+        draft.QuickSaveDirectoryOverride = chosen;
+        mapped = draft.ToAppSettings();
+        Assert.Equal(chosen, mapped.Export.QuickSaveDirectoryOverride);
+        var reopened = new SettingsDraft(mapped);
+        Assert.Equal(chosen, reopened.QuickSaveDirectoryOverride);
+        reopened.QuickSaveDirectoryOverride = "  ";
+        Assert.Equal(string.Empty, reopened.ToAppSettings().Export.QuickSaveDirectoryOverride);
+        Assert.Equal(history, reopened.ToAppSettings().Export.LastSaveDirectory);
     }
 }
 

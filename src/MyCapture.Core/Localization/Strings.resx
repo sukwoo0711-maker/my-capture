@@ -4689,5 +4689,5 @@ F3  클립보드를 핀으로 띄우기
   <data name="Settings_FontScope" xml:space="preserve"><value>새 텍스트에 적용합니다. 기존 텍스트의 글꼴은 유지됩니다.</value></data>
   <data name="App.CurrentVersion" xml:space="preserve"><value>버전 {0}</value></data>
   <data name="Welcome_CaptureInstruction" xml:space="preserve"><value>영역 캡처를 누른 뒤 마우스로 드래그하여 캡처할 영역을 선택합니다.</value></data>
-  <data name="Settings.QuickSaveDirectoryHint" xml:space="preserve"><value>비워 두면 마지막으로 저장한 폴더를 사용합니다. 저장 기록이 없으면 기본 캡처 폴더를 사용합니다.</value></data>
+  <data name="Settings.QuickSaveDirectoryHint" xml:space="preserve"><value>빠른 저장은 항상 이 폴더에 저장합니다. 비워 두면 기본 캡처 폴더를 사용합니다.</value></data>
 </root>
