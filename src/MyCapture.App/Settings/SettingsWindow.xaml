@@ -1308,6 +1308,15 @@
                             </Style>
                         </StackPanel.Resources>
 
+                        <StackPanel x:Name="AboutGuideSection" Style="{StaticResource About.Section}">
+                            <Button x:Name="FirstUseGuideButton" Content="{loc:Text Onboarding.Replay}"
+                                    AutomationProperties.Name="{loc:Text Onboarding.Replay}"
+                                    Style="{StaticResource Button.Secondary}" HorizontalAlignment="Left"
+                                    MinWidth="140" Margin="0,0,0,6" Click="OnFirstUseGuide" />
+                            <TextBlock Style="{StaticResource Settings.Description}" Margin="0"
+                                       Text="{loc:Text Onboarding.AboutBody}" />
+                        </StackPanel>
+
                         <!-- Updates -->
                         <StackPanel x:Name="AboutUpdatesSection" Style="{StaticResource About.Section}">
                             <TextBlock Style="{StaticResource About.Heading}" Text="{loc:Text About_UpdatesHeading}" />

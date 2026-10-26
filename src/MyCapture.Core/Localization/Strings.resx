@@ -4690,4 +4690,46 @@ F3  클립보드를 핀으로 띄우기
   <data name="App.CurrentVersion" xml:space="preserve"><value>버전 {0}</value></data>
   <data name="Welcome_CaptureInstruction" xml:space="preserve"><value>영역 캡처를 누른 뒤 마우스로 드래그하여 캡처할 영역을 선택합니다.</value></data>
   <data name="Settings.QuickSaveDirectoryHint" xml:space="preserve"><value>비워 두면 마지막으로 저장한 폴더를 사용합니다. 저장 기록이 없으면 기본 캡처 폴더를 사용합니다.</value></data>
+  <data name="Onboarding.Replay" xml:space="preserve"><value>처음 사용 안내</value></data>
+  <data name="Onboarding.Ready" xml:space="preserve"><value>마무리</value></data>
+  <data name="Onboarding.CaptureLabel" xml:space="preserve"><value>캡처</value></data>
+  <data name="Onboarding.PinLabel" xml:space="preserve"><value>핀</value></data>
+  <data name="Onboarding.LibraryLabel" xml:space="preserve"><value>다시 찾기</value></data>
+  <data name="Onboarding.ProgressName" xml:space="preserve"><value>3단계 중 {0}단계: {1}</value></data>
+  <data name="Onboarding.CaptureTitle" xml:space="preserve"><value>화면의 일부를 캡처합니다</value></data>
+  <data name="Onboarding.CaptureInstruction" xml:space="preserve"><value>아래 버튼을 누른 뒤 표 위를 드래그하십시오.</value></data>
+  <data name="Onboarding.CaptureInstructionKey" xml:space="preserve"><value>이 키나 아래 버튼을 누른 뒤 표 위를 드래그하십시오.</value></data>
+  <data name="Onboarding.PinTitle" xml:space="preserve"><value>복사한 표나 코드를 다른 창 위에 띄워 둡니다</value></data>
+  <data name="Onboarding.PinInstruction" xml:space="preserve"><value>먼저 아래 버튼으로 연습용 표를 복사하십시오.</value></data>
+  <data name="Onboarding.PressPin" xml:space="preserve"><value>{0} 키를 누르십시오.</value></data>
+  <data name="Onboarding.PinButtonInstruction" xml:space="preserve"><value>아래 버튼을 눌러 핀을 띄우십시오.</value></data>
+  <data name="Onboarding.LibraryTitle" xml:space="preserve"><value>모든 캡처는 라이브러리에 모입니다</value></data>
+  <data name="Onboarding.LibraryInstruction" xml:space="preserve"><value>작업 표시줄 오른쪽 ^ 안의 아이콘으로 엽니다.</value></data>
+  <data name="Onboarding.LibraryInstructionKey" xml:space="preserve"><value>이 키나 작업 표시줄 ^ 안의 아이콘으로 엽니다.</value></data>
+  <data name="Onboarding.FinishTitle" xml:space="preserve"><value>준비가 끝났습니다</value></data>
+  <data name="Onboarding.FinishInstruction" xml:space="preserve"><value>아래 설정을 확인한 뒤 시작하십시오.</value></data>
+  <data name="Onboarding.ReplayNote" xml:space="preserve"><value>이 안내는 트레이 메뉴의 ‘처음 사용 안내’에서 다시 볼 수 있습니다.</value></data>
+  <data name="Onboarding.StartCapture" xml:space="preserve"><value>영역 캡처 시작</value></data>
+  <data name="Onboarding.CopyPractice" xml:space="preserve"><value>연습용 표 복사</value></data>
+  <data name="Onboarding.CreatePin" xml:space="preserve"><value>핀 만들기</value></data>
+  <data name="Onboarding.OpenLibrary" xml:space="preserve"><value>라이브러리 열기</value></data>
+  <data name="Onboarding.Start" xml:space="preserve"><value>시작하기</value></data>
+  <data name="Onboarding.CaptureCopied" xml:space="preserve"><value>캡처했습니다. 클립보드에도 복사했습니다.</value></data>
+  <data name="Onboarding.Captured" xml:space="preserve"><value>캡처했습니다. 클립보드에는 복사하지 못했습니다.</value></data>
+  <data name="Onboarding.CaptureRetry" xml:space="preserve"><value>캡처하지 않았습니다. 다시 시도하십시오.</value></data>
+  <data name="Onboarding.CaptureHint" xml:space="preserve"><value>버튼을 누른 뒤 표 위를 드래그하십시오.</value></data>
+  <data name="Onboarding.CopyRetry" xml:space="preserve"><value>복사하지 못했습니다. 버튼을 다시 누르십시오.</value></data>
+  <data name="Onboarding.PracticeCopied" xml:space="preserve"><value>복사했습니다. 이제 핀을 띄울 수 있습니다.</value></data>
+  <data name="Onboarding.CopyHint" xml:space="preserve"><value>‘연습용 표 복사’ 버튼을 누르십시오.</value></data>
+  <data name="Onboarding.PinHint" xml:space="preserve"><value>키가 반응하지 않으면 ‘핀 만들기’ 버튼을 누르십시오.</value></data>
+  <data name="Onboarding.PinClose" xml:space="preserve"><value>핀을 띄웠습니다. Esc 키 또는 핀의 닫기로 닫을 수 있습니다.</value></data>
+  <data name="Onboarding.LibraryHint" xml:space="preserve"><value>‘라이브러리 열기’ 버튼을 누르십시오.</value></data>
+  <data name="Onboarding.PracticeLabel" xml:space="preserve"><value>연습용 표</value></data>
+  <data name="Onboarding.TableItem" xml:space="preserve"><value>항목</value></data>
+  <data name="Onboarding.TableSpec" xml:space="preserve"><value>사양</value></data>
+  <data name="Onboarding.TableMemory" xml:space="preserve"><value>메모리</value></data>
+  <data name="Onboarding.TableStorage" xml:space="preserve"><value>저장 장치</value></data>
+  <data name="Onboarding.TrayLocation" xml:space="preserve"><value>MyCapture 아이콘은 ^ 단추 안에 있습니다.</value></data>
+  <data name="Onboarding.TrayIconName" xml:space="preserve"><value>MyCapture 아이콘</value></data>
+  <data name="Onboarding.AboutBody" xml:space="preserve"><value>캡처, 핀, 라이브러리를 직접 해 보는 3단계 안내입니다.</value></data>
 </root>
