@@ -36,6 +36,22 @@ internal sealed partial class GalleryWindow
         e.Handled = true;
     }
 
+    private void OnPreviewMenuClick(object sender, RoutedEventArgs e)
+    {
+        if (ResolveTileFromCommand(sender) is { } tile) ShowPreview(tile);
+    }
+
+    private void OnSourceDetailsMenuClick(object sender, RoutedEventArgs e)
+    {
+        if (ResolveTileFromCommand(sender) is { HasSourceBadge: true } tile) ShowSourceDetails(tile);
+    }
+
+    private void OnSameSourceMenuClick(object sender, RoutedEventArgs e)
+    {
+        if (ResolveTileFromCommand(sender) is { HasSourceBadge: true } tile && tile.SourceSearchQuery.Length > 0)
+            SearchSource(tile.SourceSearchQuery);
+    }
+
     internal void ShowSourceDetails(GalleryItemViewModel tile)
     {
         _viewModel.Select(tile.Id);

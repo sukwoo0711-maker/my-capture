@@ -127,6 +127,95 @@ public sealed partial class SettingsThemePreviewTests
         });
 
     [Fact]
+    public Task LibraryOverhaul_CardMenuHasTheDecidedGroupsAndIconsAndRefreshesOnEveryOpen() =>
+        RunIsolated(nameof(LibraryOverhaul_CardMenuHasTheDecidedGroupsAndIconsAndRefreshesOnEveryOpen), () =>
+        {
+            Application application = CreateLibraryMotionApplication();
+            foreach (string language in new[] { "ko-KR", "en-US" })
+            {
+                using var scope = UiText.UseLanguage(language);
+                LibraryUxFixture f = CreateLibraryUxFixture("mc-overhaul-menu-");
+                f.Records[2].MediaKind = CaptureMediaKind.Video;
+                f.Records[0].SourcePageUrl = "https://example.com/source";
+                f.ViewModel.Refresh();
+                GalleryWindow window = f.Window;
+                try
+                {
+                    window.Show(); SettleGalleryLayout(window);
+                    var rows = (ListBox)window.FindName("RowsList");
+                    GalleryItemViewModel image = f.ViewModel.FindTile(f.Records[0].Id)!, kept = f.ViewModel.FindTile(f.Records[1].Id)!,
+                        video = f.ViewModel.FindTile(f.Records[2].Id)!, plain = f.ViewModel.FindTile(f.Records[3].Id)!;
+                    ContextMenu menu = window.TileMenu;
+                    string[] Visible() => menu.Items.Cast<Control>().Where(item => item.Visibility == Visibility.Visible)
+                        .Select(item => item is Separator ? "-" : (string)((MenuItem)item).Header).ToArray();
+                    void Open(GalleryItemViewModel tile)
+                    {
+                        window.OpenTileMenu(RealizedCard(rows, tile.Id), System.Windows.Controls.Primitives.PlacementMode.Bottom);
+                        menu.IsOpen = false;
+                    }
+                    string T(string key) => UiText.Get(key);
+
+                    // An image without a source: the five groups in the decided order.
+                    f.ViewModel.ClearSelection();
+                    Open(plain);
+                    Assert.Equal([T("Gallery.Float"), T("Text_42A667BC71B0"), T("Text_854582314EBD"), "-",
+                        T("Text_1003CFC78E66"), T("LibraryUx_Preview"), "-",
+                        T("LibraryUx_Keep"), T("Library453.Rename"), T("Folder410.MoveCaptures"), T("Library.Tags.Edit"), "-",
+                        T("ExportReduction_Title"), "-", T("Text_6139B6C3ED73")], Visible());
+                    string[] gestures = menu.Items.OfType<MenuItem>().Where(item => item.Visibility == Visibility.Visible).Select(item => item.InputGestureText).ToArray();
+                    Assert.Equal(["P", "Ctrl+C", "T", "Enter", "Space", "K", "F2", "M", "", "", "Del"], gestures);
+                    // Icons only in the first group and on Delete; the drag guide is gone.
+                    Assert.Equal([T("Gallery.Float"), T("Text_42A667BC71B0"), T("Text_854582314EBD"), T("Text_6139B6C3ED73")],
+                        menu.Items.OfType<MenuItem>().Where(item => item.Icon is not null).Select(item => (string)item.Header));
+                    Assert.DoesNotContain(menu.Items.OfType<MenuItem>(), item => Equals(item.Header, T("LibraryUx_DragHelp")));
+
+                    // With a source, its details and "same source" are in the menu for keyboard users.
+                    Open(image);
+                    Assert.Contains(T("LibraryUx_SourceDetails"), Visible());
+                    Assert.Contains(T("Source.ShowSame"), Visible());
+                    Open(plain);
+                    Assert.DoesNotContain(T("LibraryUx_SourceDetails"), Visible());
+
+                    // A video: no media group, GIF export instead of image export, no Enter gesture on edit.
+                    Open(video);
+                    Assert.Equal([T("Text_1003CFC78E66"), T("LibraryUx_Preview"), "-",
+                        T("LibraryUx_Keep"), T("Library453.Rename"), T("Folder410.MoveCaptures"), T("Library.Tags.Edit"), "-",
+                        T("Text_D44617983641"), "-", T("Text_6139B6C3ED73")], Visible());
+                    Assert.Equal(string.Empty, menu.Items.OfType<MenuItem>().Single(item => Equals(item.Tag, "Edit")).InputGestureText);
+
+                    // The keep label follows what the command will do to the selection the card belongs to.
+                    f.ViewModel.ClearSelection();
+                    Assert.True(kept.IsPinned);
+                    Open(kept); Assert.Contains(T("LibraryUx_Unkeep"), Visible());
+                    Open(plain); Assert.Contains(T("LibraryUx_Keep"), Visible());
+                    f.ViewModel.Select(kept.Id); f.ViewModel.Select(plain.Id, control: true);
+                    Open(plain); Assert.Contains(T("LibraryUx_Keep"), Visible());        // mixed: keeps the rest
+                    f.ViewModel.ClearSelection(); f.ViewModel.Select(kept.Id);
+                    Open(kept); Assert.Contains(T("LibraryUx_Unkeep"), Visible());      // all kept: releases
+                    Open(plain); Assert.Contains(T("LibraryUx_Keep"), Visible());       // outside the selection: its own target
+
+                    // Compare only for exactly two selected images, on one of them.
+                    f.ViewModel.ClearSelection();
+                    Open(plain); Assert.DoesNotContain(T("Gallery.Compare"), Visible());
+                    f.ViewModel.Select(plain.Id); f.ViewModel.Select(kept.Id, control: true);
+                    Open(plain); Assert.Contains(T("Gallery.Compare"), Visible());
+                    f.ViewModel.Select(image.Id, control: true);
+                    Open(plain); Assert.DoesNotContain(T("Gallery.Compare"), Visible());
+                    f.ViewModel.ClearSelection(); f.ViewModel.Select(plain.Id); f.ViewModel.Select(kept.Id, control: true);
+                    Open(image); Assert.DoesNotContain(T("Gallery.Compare"), Visible()); // the card is outside the pair
+
+                    // A closed menu holds no card.
+                    window.OpenTileMenu(RealizedCard(rows, plain.Id), System.Windows.Controls.Primitives.PlacementMode.Bottom);
+                    Assert.NotNull(menu.PlacementTarget);
+                    menu.IsOpen = false;
+                    PumpLibraryUntil(window, () => menu.PlacementTarget is null, "the closed menu lets go of its card");
+                }
+                finally { window.CloseForExit(); }
+            }
+            application.Shutdown();
+        });
+
+    [Fact]
     public Task LibraryOverhaul_GridIsOneTabStopAndEntersWhereTheUserLeft() =>
         RunIsolated(nameof(LibraryOverhaul_GridIsOneTabStopAndEntersWhereTheUserLeft), () =>
         {

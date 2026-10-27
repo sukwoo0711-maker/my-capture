@@ -4744,4 +4744,5 @@ F3  클립보드를 핀으로 띄우기
   <data name="LibraryUx_RateAction" xml:space="preserve"><value>평가하기</value></data>
   <data name="LibraryUx_SelectCard" xml:space="preserve"><value>{0} 선택</value></data>
   <data name="LibraryUx_PinHint" xml:space="preserve"><value>핀으로 띄우기 (P)</value></data>
+  <data name="LibraryUx_SourceDetails" xml:space="preserve"><value>출처 상세</value></data>
 </root>

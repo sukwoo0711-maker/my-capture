@@ -667,12 +667,6 @@ internal sealed partial class GalleryWindow : Window
         }
     }
 
-    private void OnShowDragHelpClick(object sender, RoutedEventArgs e)
-    {
-        if (ResolveTileFromCommand(sender) is { } tile) ShowStatus(tile.ExportToolTip);
-        e.Handled = true;
-    }
-
     private void OnMoreClick(object sender, RoutedEventArgs e)
     {
         // The More button opens the library's card menu on a normal left click. The menu's

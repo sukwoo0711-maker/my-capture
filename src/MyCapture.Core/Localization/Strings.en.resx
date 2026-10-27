@@ -4744,4 +4744,5 @@ Overwrite these shortcuts? You can change this later in Settings → Shortcuts.<
   <data name="LibraryUx_RateAction" xml:space="preserve"><value>Rate</value></data>
   <data name="LibraryUx_SelectCard" xml:space="preserve"><value>Select {0}</value></data>
   <data name="LibraryUx_PinHint" xml:space="preserve"><value>Pin to screen (P)</value></data>
+  <data name="LibraryUx_SourceDetails" xml:space="preserve"><value>Source details</value></data>
 </root>

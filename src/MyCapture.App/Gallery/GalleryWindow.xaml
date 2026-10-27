@@ -131,25 +131,22 @@
              outside the visual tree. -->
         <ContextMenu x:Key="Gallery.TileContextMenu"
                      DataContext="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}">
-            <MenuItem Header="{loc:Text Gallery.Float}" CommandParameter="{Binding}" Click="OnFloatClick" InputGestureText="P"
+            <!-- 1. What leaves the library for somewhere else: the only group whose commands carry icons (and Delete). -->
+            <MenuItem Tag="Pin" Header="{loc:Text Gallery.Float}" CommandParameter="{Binding}" Click="OnFloatClick" InputGestureText="P"
                       AutomationProperties.Name="{loc:Text Gallery.Float}"
-                      Visibility="{Binding IsImage, Converter={StaticResource BoolToVisibility}}" />
-            <MenuItem Header="{loc:Text Text_42A667BC71B0}" CommandParameter="{Binding}" Click="OnCopyClick" InputGestureText="Ctrl+C"
+                      Visibility="{Binding IsImage, Converter={StaticResource BoolToVisibility}}">
+                <MenuItem.Icon>
+                    <themes:SymbolIcon Size="16" Data="{StaticResource Icon.Pin}" Stroke="{DynamicResource Text.Secondary}" Fill="Transparent" />
+                </MenuItem.Icon>
+            </MenuItem>
+            <MenuItem Tag="Copy" Header="{loc:Text Text_42A667BC71B0}" CommandParameter="{Binding}" Click="OnCopyClick" InputGestureText="Ctrl+C"
                       AutomationProperties.Name="{loc:Text Text_42A667BC71B0}"
-                      Visibility="{Binding IsImage, Converter={StaticResource BoolToVisibility}}" />
-            <MenuItem Header="{loc:Text Text_1003CFC78E66}" CommandParameter="{Binding}" Click="OnEditClick" InputGestureText="{Binding EditGestureText}"
-                      AutomationProperties.Name="{loc:Text Text_1003CFC78E66}" />
-            <MenuItem Header="{loc:Text Library453.Rename}" CommandParameter="{Binding}" Click="OnRenameCaptureClick"
-                      InputGestureText="F2" AutomationProperties.Name="{loc:Text Library453.Rename}" />
-            <MenuItem Header="{loc:Text Gallery.Compare}"
-                      Command="{x:Static gallery:GalleryWindow.CompareCommand}"
-                      CommandTarget="{Binding PlacementTarget, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
-            <MenuItem Header="{Binding IsPinned, Converter={StaticResource PinLabel}}"
-                      CommandParameter="{Binding}"
-                      AutomationProperties.Name="{loc:Text LibraryUx_KeepToggleName}"
-                      InputGestureText="K"
-                      Click="OnPinMenuClick" />
-            <MenuItem Header="{loc:Text Text_854582314EBD}"
+                      Visibility="{Binding IsImage, Converter={StaticResource BoolToVisibility}}">
+                <MenuItem.Icon>
+                    <themes:SymbolIcon Size="16" Data="{StaticResource Icon.Copy}" Stroke="{DynamicResource Text.Secondary}" Fill="Transparent" />
+                </MenuItem.Icon>
+            </MenuItem>
+            <MenuItem Tag="Recognize" Header="{loc:Text Text_854582314EBD}"
                       CommandParameter="{Binding}"
                       AutomationProperties.Name="{loc:Text Text_854582314EBD}"
                       InputGestureText="T"
@@ -160,24 +157,50 @@
                           Stroke="{DynamicResource Text.Secondary}" Fill="Transparent" />
                 </MenuItem.Icon>
             </MenuItem>
-            <MenuItem Header="{loc:Text Text_D44617983641}"
+            <Separator Tag="SeparatorMedia" />
+            <!-- 2. Looking at the capture. -->
+            <MenuItem Tag="Edit" Header="{loc:Text Text_1003CFC78E66}" CommandParameter="{Binding}" Click="OnEditClick" InputGestureText="{Binding EditGestureText}"
+                      AutomationProperties.Name="{loc:Text Text_1003CFC78E66}" />
+            <MenuItem Tag="Preview" Header="{loc:Text LibraryUx_Preview}" CommandParameter="{Binding}" Click="OnPreviewMenuClick" InputGestureText="Space"
+                      AutomationProperties.Name="{loc:Text LibraryUx_Preview}" />
+            <MenuItem Tag="Compare" Header="{loc:Text Gallery.Compare}"
+                      Command="{x:Static gallery:GalleryWindow.CompareCommand}"
+                      CommandTarget="{Binding PlacementTarget, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+            <!-- A card's source glyph skips Tab, so its actions are here for keyboard users. -->
+            <MenuItem Tag="SourceDetails" Header="{loc:Text LibraryUx_SourceDetails}" CommandParameter="{Binding}" Click="OnSourceDetailsMenuClick"
+                      AutomationProperties.Name="{loc:Text LibraryUx_SourceDetails}"
+                      Visibility="{Binding HasSourceBadge, Converter={StaticResource BoolToVisibility}}" />
+            <MenuItem Tag="SameSource" Header="{loc:Text Source.ShowSame}" CommandParameter="{Binding}" Click="OnSameSourceMenuClick"
+                      AutomationProperties.Name="{loc:Text Source.ShowSame}"
+                      Visibility="{Binding HasSourceBadge, Converter={StaticResource BoolToVisibility}}" />
+            <Separator />
+            <!-- 3. Organizing: keep (a whole selection together), rename, move, tag. -->
+            <MenuItem Tag="Keep" Header="{loc:Text LibraryUx_Keep}"
+                      CommandParameter="{Binding}"
+                      AutomationProperties.Name="{loc:Text LibraryUx_KeepToggleName}"
+                      InputGestureText="K"
+                      Click="OnPinMenuClick" />
+            <MenuItem Tag="Rename" Header="{loc:Text Library453.Rename}" CommandParameter="{Binding}" Click="OnRenameCaptureClick"
+                      InputGestureText="F2" AutomationProperties.Name="{loc:Text Library453.Rename}" />
+            <MenuItem Tag="Move" Header="{loc:Text Folder410.MoveCaptures}" CommandParameter="{Binding}"
+                      InputGestureText="M" Click="OnMoveCapturesClick" />
+            <MenuItem Tag="Tags" Header="{loc:Text Library.Tags.Edit}" CommandParameter="{Binding}" Click="OnBatchTagsClick" />
+            <Separator />
+            <!-- 4. Export. -->
+            <MenuItem Tag="ExportImage" Header="{loc:Text ExportReduction_Title}"
+                      CommandParameter="{Binding}"
+                      AutomationProperties.Name="{loc:Text ExportReduction_Title}"
+                      Visibility="{Binding IsImage, Converter={StaticResource BoolToVisibility}}"
+                      Click="OnReducedExportClick" />
+            <MenuItem Tag="ExportGif" Header="{loc:Text Text_D44617983641}"
                       CommandParameter="{Binding}"
                       AutomationProperties.Name="{loc:Text Text_D44617983641}"
                       InputGestureText="G"
                       Visibility="{Binding IsVideo, Converter={StaticResource BoolToVisibility}}"
                       Click="OnGifMenuClick" />
-            <MenuItem Header="{loc:Text Folder410.MoveCaptures}" CommandParameter="{Binding}"
-                      InputGestureText="M" Click="OnMoveCapturesClick" />
-            <MenuItem Header="{loc:Text LibraryUx_DragHelp}" CommandParameter="{Binding}"
-                      Click="OnShowDragHelpClick" />
-            <MenuItem Header="{loc:Text Library.Tags.Edit}" CommandParameter="{Binding}" Click="OnBatchTagsClick" />
             <Separator />
-            <MenuItem Header="{loc:Text ExportReduction_Title}"
-                      CommandParameter="{Binding}"
-                      AutomationProperties.Name="{loc:Text ExportReduction_Title}"
-                      Visibility="{Binding IsImage, Converter={StaticResource BoolToVisibility}}"
-                      Click="OnReducedExportClick" />
-            <MenuItem Header="{loc:Text Text_6139B6C3ED73}"
+            <!-- 5. Delete, alone at the end. -->
+            <MenuItem Tag="Delete" Header="{loc:Text Text_6139B6C3ED73}"
                       CommandParameter="{Binding}"
                       AutomationProperties.Name="{loc:Text Text_6139B6C3ED73}"
                       InputGestureText="Del"

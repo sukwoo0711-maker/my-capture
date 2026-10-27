@@ -49,6 +49,34 @@ internal sealed partial class GalleryWindow
         ContextMenu menu = TileMenu;
         menu.PlacementTarget = target;
         menu.Placement = placement;
+        if (target.DataContext is GalleryItemViewModel opened) PrepareTileMenu(menu, opened);
         menu.IsOpen = true;
+    }
+
+    /// <summary>
+    /// Brings the shared menu up to date for the card it opens on: the keep label (it keeps or releases the whole
+    /// selection the card belongs to), whether compare is possible (exactly two images selected, this card one of
+    /// them) and which groups show. Every open does it; nothing from the last open is kept.
+    /// </summary>
+    internal void PrepareTileMenu(ContextMenu menu, GalleryItemViewModel tile)
+    {
+        IReadOnlyList<GalleryItemViewModel> targets = CommandTargets(tile);
+        foreach (MenuItem item in menu.Items.OfType<MenuItem>())
+        {
+            switch (item.Tag as string)
+            {
+                case "Keep":
+                    item.Header = UiText.Get(targets.Count > 0 && targets.All(target => target.IsPinned) ? "LibraryUx_Unkeep" : "LibraryUx_Keep");
+                    break;
+                case "Compare":
+                    item.Visibility = _viewModel.CanCompareSelected && _viewModel.Selection.Contains(tile.Id)
+                        ? Visibility.Visible : Visibility.Collapsed;
+                    break;
+            }
+        }
+
+        // The media group is empty for a video, so its separator goes with it.
+        foreach (Separator separator in menu.Items.OfType<Separator>().Where(candidate => candidate.Tag as string == "SeparatorMedia"))
+            separator.Visibility = tile.IsImage ? Visibility.Visible : Visibility.Collapsed;
     }
 }
