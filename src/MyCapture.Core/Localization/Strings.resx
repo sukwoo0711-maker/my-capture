@@ -4740,4 +4740,23 @@ F3  클립보드를 핀으로 띄우기
   <data name="LibraryUx_NoSelection" xml:space="preserve"><value>선택 없음</value></data>
   <data name="LibraryUx_Preview" xml:space="preserve"><value>미리보기</value></data>
   <data name="LibraryUx_PreviewHint" xml:space="preserve"><value>미리보기 (Space)</value></data>
+  <data name="CaptureRatio_Help" xml:space="preserve"><value>영역의 가로세로 비율을 고정하거나 정해진 크기로 놓습니다.</value></data>
+  <data name="CaptureRatio_Changed" xml:space="preserve"><value>비율: {0}</value></data>
+  <data name="CaptureRatio_FixedSize" xml:space="preserve"><value>크기 고정 {0}</value></data>
+  <data name="CaptureRatio_FixedHint" xml:space="preserve"><value>방향키로 옮기고 Enter로 확정합니다.</value></data>
+  <data name="CaptureRatio_HelpLabel" xml:space="preserve"><value>선택 중 비율 고정 전환</value></data>
+  <data name="Stamp_Name" xml:space="preserve"><value>도장</value></data>
+  <data name="Stamp_Place" xml:space="preserve"><value>도장 찍기</value></data>
+  <data name="Stamp_ToolTip" xml:space="preserve"><value>도장 찍기 — 오른쪽 버튼으로 설정 (S)</value></data>
+  <data name="Stamp_Change" xml:space="preserve"><value>도장 이미지 바꾸기…</value></data>
+  <data name="Stamp_Opacity" xml:space="preserve"><value>불투명도</value></data>
+  <data name="Stamp_OpacityPercent" xml:space="preserve"><value>{0}%</value></data>
+  <data name="Stamp_Remove" xml:space="preserve"><value>도장 지우기</value></data>
+  <data name="Stamp_PickerTitle" xml:space="preserve"><value>도장 이미지 선택</value></data>
+  <data name="Stamp_Changed" xml:space="preserve"><value>도장 이미지 변경됨</value></data>
+  <data name="Stamp_OpacitySet" xml:space="preserve"><value>도장 불투명도 {0}%</value></data>
+  <data name="Stamp_Removed" xml:space="preserve"><value>도장 이미지 삭제됨 · 이미 넣은 도장은 그대로 유지됨</value></data>
+  <data name="Stamp_SaveFailed" xml:space="preserve"><value>도장 이미지를 저장하지 못했습니다.</value></data>
+  <data name="Stamp_Unreadable" xml:space="preserve"><value>도장 이미지를 읽을 수 없습니다. 다시 등록해 주십시오.</value></data>
+  <data name="Stamp_Unavailable" xml:space="preserve"><value>이 화면에서는 도장을 사용할 수 없습니다.</value></data>
 </root>

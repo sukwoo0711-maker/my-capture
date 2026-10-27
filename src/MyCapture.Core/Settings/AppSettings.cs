@@ -349,6 +349,69 @@ public sealed class AnnotationDefaults
 
     /// <summary>Strength used by the blur tool: a Gaussian radius in image pixels.</summary>
     public int BlurRadius { get; set; } = MyCapture.Core.Annotations.BlurAnnotation.DefaultRadius;
+
+    /// <summary>Where and how the reusable logo stamp is placed. Never null.</summary>
+    public StampSettings Stamp { get; set => field = value ?? new(); } = new();
+}
+
+/// <summary>
+/// How the editor's reusable stamp (a logo or blog name registered once) is placed and drawn.
+/// </summary>
+/// <remarks>
+/// The picture itself lives in a file under the app's data folder; whether one is registered is
+/// decided by that file, not by a flag here, so a settings file copied to another PC cannot claim
+/// a picture that is not there. The placement is relative to the canvas (see
+/// <see cref="MyCapture.Core.Annotations.StampLayout"/>).
+/// </remarks>
+public sealed class StampSettings
+{
+    /// <summary>The opacities offered by the stamp menu, in percent.</summary>
+    public static readonly IReadOnlyList<int> OpacityChoices = [100, 70, 50, 30];
+
+    public const int MinOpacityPercent = 10;
+
+    public MyCapture.Core.Annotations.StampAnchor Anchor { get; set; } = MyCapture.Core.Annotations.StampAnchor.BottomRight;
+
+    /// <summary>Distance to the left or right edge, in canvas pixels, for anchors on that side.</summary>
+    public double MarginX { get; set; } = MyCapture.Core.Annotations.StampLayout.DefaultMargin;
+
+    /// <summary>Distance to the top or bottom edge, in canvas pixels, for anchors on that side.</summary>
+    public double MarginY { get; set; } = MyCapture.Core.Annotations.StampLayout.DefaultMargin;
+
+    /// <summary>The stamp's width as a fraction of the canvas width.</summary>
+    public double WidthFraction { get; set; } = MyCapture.Core.Annotations.StampLayout.DefaultWidthFraction;
+
+    /// <summary>How opaque the placed stamp is, in percent.</summary>
+    public int OpacityPercent { get; set; } = 100;
+
+    /// <summary>
+    /// Repairs values a hand-edited or imported file could hold, silently: this is bookkeeping the
+    /// editor writes itself, not a setting the user is shown.
+    /// </summary>
+    public void Normalize()
+    {
+        if (!Enum.IsDefined(Anchor)) Anchor = MyCapture.Core.Annotations.StampAnchor.BottomRight;
+        MarginX = Repair(MarginX, 0, MyCapture.Core.Annotations.StampLayout.MaxMargin, MyCapture.Core.Annotations.StampLayout.DefaultMargin);
+        MarginY = Repair(MarginY, 0, MyCapture.Core.Annotations.StampLayout.MaxMargin, MyCapture.Core.Annotations.StampLayout.DefaultMargin);
+        WidthFraction = Repair(
+            WidthFraction,
+            MyCapture.Core.Annotations.StampLayout.MinWidthFraction,
+            MyCapture.Core.Annotations.StampLayout.MaxWidthFraction,
+            MyCapture.Core.Annotations.StampLayout.DefaultWidthFraction);
+        OpacityPercent = Math.Clamp(OpacityPercent, MinOpacityPercent, 100);
+    }
+
+    public StampSettings Clone() => new()
+    {
+        Anchor = Anchor,
+        MarginX = MarginX,
+        MarginY = MarginY,
+        WidthFraction = WidthFraction,
+        OpacityPercent = OpacityPercent,
+    };
+
+    private static double Repair(double value, double min, double max, double fallback) =>
+        double.IsFinite(value) ? Math.Clamp(value, min, max) : fallback;
 }
 
 public sealed class OcrSettings
