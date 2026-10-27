@@ -212,41 +212,31 @@ public sealed class RecoverableLibraryServiceTests
     }
 
     [Fact]
-    public async Task RecycleRefusal_DeletesPermanentlyOnlyAfterAnExplicitYes()
+    public async Task RecycleRefusal_NeverPromptsOrInvokesPermanentDeletion()
     {
         int prompts = 0, deletions = 0;
         Task<CaptureBatchRemovalResult> Delete(IReadOnlyList<Guid> ids) { deletions++; return Task.FromResult(new CaptureBatchRemovalResult(ids.Count, 0)); }
         Assert.Null(await LibraryPermanentDeletion.ResolveAsync([], _ => { prompts++; return true; }, Delete));
-        Assert.Equal(0, prompts);
-        Guid[] refused = [Guid.NewGuid(), Guid.NewGuid()];
-        Assert.Null(await LibraryPermanentDeletion.ResolveAsync(refused, count => { prompts++; Assert.Equal(2, count); return false; }, Delete));
-        Assert.Equal(0, deletions);
-        var result = await LibraryPermanentDeletion.ResolveAsync(refused, _ => { prompts++; return true; }, Delete);
-        Assert.Equal(2, result!.RemovedCount);
-        Assert.Equal((2, 1), (prompts, deletions));
-        using (UiText.UseLanguage("ko-KR"))
-        {
-            Assert.Equal("영구 삭제", UiText.Get("LibrarySelection_PermanentDelete"));
-            Assert.EndsWith("복원할 수 없습니다.", UiText.Format("LibrarySelection_RecycleUnavailableMessage", 2));
-        }
+        Assert.Null(await LibraryPermanentDeletion.ResolveAsync([Guid.NewGuid()], _ => { prompts++; return true; }, Delete));
+        Assert.Equal((0, 0), (prompts, deletions));
     }
 
     [Fact]
-    public async Task ConfirmedPermanentDelete_RemovesFilesWithoutTheRecycleBinOrAJournal()
+    public async Task LegacyPermanentRequest_PreservesFilesWhenRecyclingIsUnavailable()
     {
         var fixture = new Fixture(); fixture.Trash.RecycleUnavailable = true;
         CaptureBatchRemovalResult refused = await fixture.Queue.RemoveManyAsync([fixture.Record.Id]);
         CaptureBatchRemovalResult result = await fixture.Queue.RemoveManyPermanentlyAsync(refused.RecycleUnavailableIds);
-        Assert.Equal(1, result.RemovedCount);
+        Assert.Equal(0, result.RemovedCount);
         Assert.Equal(0, result.CleanupPendingCount);
-        Assert.Null(fixture.Queue.Find(fixture.Record.Id));
-        Assert.False(Directory.Exists(fixture.Original));
+        Assert.NotNull(fixture.Queue.Find(fixture.Record.Id));
+        Assert.True(Directory.Exists(fixture.Original));
         Assert.Equal(0, fixture.Trash.Moves);
         Assert.Empty(fixture.JournalFiles());
     }
 
     [Fact]
-    public async Task FolderDelete_WhenWindowsCannotRecycle_ReportsAndPermanentPassRemovesTheFolder()
+    public async Task FolderDelete_WhenWindowsCannotRecycle_PreservesFolderOnLegacyRetry()
     {
         var fixture = new Fixture(); fixture.Trash.RecycleUnavailable = true;
         CaptureFolder folder = await fixture.Queue.CreateFolderAsync("Fixture folder");
@@ -258,9 +248,9 @@ public sealed class RecoverableLibraryServiceTests
         Assert.NotNull(fixture.Queue.FindFolder(folder.Id));
         CaptureFolderDeletionResult permanent = await fixture.Queue.DeleteFolderScopeAsync(scope,
             id => refused.RecycleUnavailableIds.Contains(id), permanent: true);
-        Assert.Equal(1, permanent.RemovedFolders);
-        Assert.Equal(1, permanent.RemovedCaptures);
-        Assert.False(Directory.Exists(fixture.Original));
+        Assert.Equal(0, permanent.RemovedFolders);
+        Assert.Equal(0, permanent.RemovedCaptures);
+        Assert.True(Directory.Exists(fixture.Original));
         Assert.Equal(0, fixture.Trash.Moves);
     }
 
@@ -310,7 +300,7 @@ public sealed class RecoverableLibraryServiceTests
     {
         var fixture = new Fixture(); Assert.True(fixture.Queue.Remove(fixture.Record.Id));
         Assert.Single(fixture.Service.RecentDeleted());
-        Directory.Delete(fixture.Trash.Receipt!.RecycledPath, recursive: true); // the user emptied the bin
+        global::MyCapture.Core.Storage.RecoverableFileRemoval.DeleteDirectory(fixture.Trash.Receipt!.RecycledPath, recursive: true); // the user emptied the bin
         Assert.Empty(fixture.Service.RecentDeleted());
         await fixture.Service.RecoverInterruptedRestoresAsync();
         Assert.Empty(fixture.JournalFiles());

@@ -63,7 +63,7 @@ public sealed class SetupStrings
         switch (exitCode)
         {
             case ExitCodes.UnsupportedOs: return Text("Windows 10 22H2 이상의 데스크톱 환경에서 실행하십시오.", "Run setup on Windows 10 22H2 or later with a desktop environment.");
-            case ExitCodes.Architecture: return Text("64비트 Windows 또는 Windows 11 ARM64에서 실행하십시오.", "Run setup on 64-bit Windows or Windows 11 ARM64.");
+            case ExitCodes.Architecture: return Text("PC의 시스템 종류에 맞는 32비트 또는 64비트 설치 파일을 사용하십시오.", "Use the 32-bit or 64-bit installer that matches this PC.");
             case ExitCodes.UnsafePath: return Text("설치 폴더에 접근할 수 없습니다. 폴더 위치와 접근 권한을 확인하십시오.", "The installation folder is unavailable. Check its location and your access permissions.");
             case ExitCodes.Disk: return Text("디스크 여유 공간을 확인한 뒤 다시 실행하십시오.", "Check the available disk space, then run setup again.");
             case ExitCodes.Integrity: return Text("설치 파일이 손상되었거나 누락되었습니다. 다시 다운로드하십시오.", "Setup files are damaged or missing. Download the installer again.");

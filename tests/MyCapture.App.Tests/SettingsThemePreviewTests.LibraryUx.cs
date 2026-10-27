@@ -26,7 +26,7 @@ using Xunit;
 namespace MyCapture.App.Tests;
 
 /// <summary>
-/// The library's single command bar, navigation pane, location header, folder cards and capture
+/// The library's global/content command bars, navigation pane, location header, folder cards and capture
 /// drops, rendered from the real GalleryWindow BAML. Set MYCAPTURE_LIBRARY_UX_EVIDENCE to a
 /// directory to also save PNG evidence; the caption strip on those images is drawn with the
 /// colour ModernWindowChrome.ResolveChrome hands to DWM, because RenderTargetBitmap cannot
@@ -133,9 +133,7 @@ public sealed partial class SettingsThemePreviewTests
                 }
             }
             var rowsList = (ListBox)window.FindName("RowsList");
-            Button[] cards = PumpLibraryUntil(window, () => FolderCardButtons(rowsList).Length == 2
-                && FolderCardButtons(rowsList).All(card => !((GalleryFolderCardViewModel)card.DataContext).HasPreview
-                    || Descendants(card).OfType<Image>().Single().Source is not null), label + ": folder cards");
+            Button[] cards = PumpLibraryUntil(window, () => FolderCardButtons(rowsList).Length == 2, label + ": folder cards");
             var client = (FrameworkElement)window.Content;
             int rootColumns = vm.ColumnCount;
 
@@ -143,6 +141,7 @@ public sealed partial class SettingsThemePreviewTests
             Assert.DoesNotContain(Descendants(window).OfType<TextBlock>(), text => text.IsVisible
                 && (text.Text == UiText.Get("Text_37AD4F28D422") || text.Text == UiText.Get("Text_13036A090EBA")));
             var commandBar = (FrameworkElement)window.FindName("LibraryCommandBar");
+            var contentCommandBar = (FrameworkElement)window.FindName("LibraryContentCommandBar");
             Assert.Equal(48, commandBar.ActualHeight, 1);
             Button capture = VisibleButtonNamed(window, UiText.Get("Text_2C20ADDA2018"));
             Assert.Same(window.FindResource("Button.Primary"), capture.Style);
@@ -151,12 +150,15 @@ public sealed partial class SettingsThemePreviewTests
             var placeholder = (TextBlock)window.FindName("SearchPlaceholderText");
             foreach (FrameworkElement element in new FrameworkElement[]
                      { capture, search, placeholder, (FrameworkElement)window.FindName("NewFolderPaneButton"),
-                       (FrameworkElement)window.FindName("SortBox"), (FrameworkElement)window.FindName("MoreCommandsButton") })
+                       (FrameworkElement)window.FindName("EditSelectedButton"), (FrameworkElement)window.FindName("MoreCommandsButton") })
                 AssertInsideClient(element, client, label);
             AssertNotTrimmed(placeholder, label);
             AssertDefaultSearchPlaceholder(window, label);
-            AssertSameRow(commandBar, capture, search, (FrameworkElement)window.FindName("SortBox"));
+            AssertSameRow(commandBar, capture, search);
+            AssertSameRow(contentCommandBar, (FrameworkElement)window.FindName("EditSelectedButton"), (FrameworkElement)window.FindName("MoreCommandsButton"));
+            AssertSameRow(contentCommandBar, (FrameworkElement)window.FindName("SortBox"), (FrameworkElement)window.FindName("MoreCommandsButton"));
             AssertLibraryCommandHeights(commandBar);
+            AssertLibraryCommandHeights(contentCommandBar);
 
             // Navigation pane: icon items with counts instead of radio buttons and sentences.
             RadioButton[] views = Descendants(window).OfType<RadioButton>().Where(button => button.IsVisible).ToArray();
@@ -187,8 +189,8 @@ public sealed partial class SettingsThemePreviewTests
             if (scale > 0) Assert.Equal(scale, VisualTreeHelper.GetDpi(tileCard).DpiScaleX);
             double fullCardWidth = tileCard.ActualWidth;
             Assert.Equal(tileCard.ActualWidth, designCard.ActualWidth, 1);
-            Assert.Equal(tileCard.ActualHeight, designCard.ActualHeight, 1);
-            Assert.Same(window.FindResource("Surface.Folder"), designCard.Background);
+            Assert.True(designCard.ActualHeight < tileCard.ActualHeight);
+            Assert.Empty(Descendants(designCard).OfType<Image>());
             Assert.NotEqual(((SolidColorBrush)window.FindResource("Surface.Raised")).Color,
                 ((SolidColorBrush)window.FindResource("Surface.Folder")).Color);
             Assert.Equal(firstTile.TranslatePoint(new Point(), rowsList).X + 8,
@@ -199,11 +201,12 @@ public sealed partial class SettingsThemePreviewTests
             Assert.Equal(language == "ko-KR" ? "폴더 디자인 시안, 캡처 2개" : "Folder 디자인 시안, Captures: 2",
                 AutomationProperties.GetName(designCard));
 
-            // Selecting swaps the right side of the same bar; nothing below moves.
+            // Selecting swaps only the content commands; global controls and the viewport do not move.
             var workspace = (FrameworkElement)window.FindName("GalleryWorkspace");
             double workspaceTop = workspace.TranslatePoint(new Point(), client).Y;
             ScrollViewer scroll = Descendants(rowsList).OfType<ScrollViewer>().First();
             double viewport = scroll.ViewportHeight;
+            Rect searchBounds = search.TransformToAncestor(client).TransformBounds(new Rect(search.RenderSize));
             vm.Select(f.Records[0].Id);
             SettleGalleryLayout(window);
             Assert.Equal(48, commandBar.ActualHeight, 1);
@@ -212,12 +215,19 @@ public sealed partial class SettingsThemePreviewTests
             var selection = (FrameworkElement)window.FindName("SelectionCommands");
             Assert.True(selection.IsVisible);
             AssertLibraryCommandHeights(commandBar);
-            Assert.False(((FrameworkElement)window.FindName("LibraryCommands")).IsVisible);
-            // Capture stays one click away as an icon while the selection owns the bar.
-            Assert.Equal("CaptureRegionIconButton", VisibleButtonNamed(window, UiText.Get("Text_2C20ADDA2018")).Name);
-            // One filled button: the selected capture's Edit in the details panel.
-            Assert.Single(Descendants(window).OfType<Button>(), button => button.IsVisible
-                && ReferenceEquals(button.Style, window.FindResource("Button.Primary")));
+            AssertLibraryCommandHeights(contentCommandBar);
+            Assert.Equal(44, contentCommandBar.ActualHeight, 1);
+            AssertSameRow(contentCommandBar, selection, (FrameworkElement)window.FindName("MoreCommandsButton"));
+            Assert.Equal(searchBounds, search.TransformToAncestor(client).TransformBounds(new Rect(search.RenderSize)));
+            Assert.True(((Button)window.FindName("EditSelectedButton")).IsEnabled);
+            // Global capture remains labelled while the selected item retains its own Edit action.
+            Assert.Same(capture, VisibleButtonNamed(window, UiText.Get("Text_2C20ADDA2018")));
+            Assert.Equal("CaptureRegionButton", capture.Name);
+            Button[] primaryActions = Descendants(window).OfType<Button>().Where(button => button.IsVisible
+                && ReferenceEquals(button.Style, window.FindResource("Button.Primary"))).ToArray();
+            Assert.Single(primaryActions);
+            Assert.Contains(capture, primaryActions);
+            Assert.False(((Button)window.FindName("DetailsEditButton")).IsVisible);
             foreach (Button button in Descendants(selection).OfType<Button>().Where(button => button.IsVisible))
                 AssertInsideClient(button, client, label);
             AssertNotTrimmed((TextBlock)window.FindName("SelectionCountLabel"), label);
@@ -226,14 +236,21 @@ public sealed partial class SettingsThemePreviewTests
             clear.RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent, clear));
             SettleGalleryLayout(window);
             Assert.False(vm.HasSelection);
-            Assert.True(((FrameworkElement)window.FindName("LibraryCommands")).IsVisible);
+            Assert.True(selection.IsVisible);
+            Assert.False(((Button)window.FindName("EditSelectedButton")).IsEnabled);
             // Escape from a capture clears the selection the same way.
             vm.Select(f.Records[0].Id);
             var escape = new KeyEventArgs(Keyboard.PrimaryDevice, PresentationSource.FromVisual(window)!, Environment.TickCount, Key.Escape)
             {
                 RoutedEvent = Keyboard.KeyDownEvent,
             };
-            firstTile.RaiseEvent(escape);
+            Assert.True(window.IsAncestorOf(firstTile), "Escape must originate from the currently realized card.");
+            Assert.True(vm.HasSelection);
+            using (var modifiers = new ThreadKeyboardModifierScope())
+            {
+                Assert.Equal(ModifierKeys.None, Keyboard.Modifiers);
+                firstTile.RaiseEvent(escape);
+            }
             Assert.True(escape.Handled);
             Assert.False(vm.HasSelection);
             SettleGalleryLayout(window);
@@ -256,9 +273,11 @@ public sealed partial class SettingsThemePreviewTests
             Assert.Equal(UiText.Format("LibraryUx_DropMoveTo", "제품리뷰", 2), ((TextBlock)window.FindName("DragHintText")).Text);
             AssertInsideClient(hint, client, label);
             SaveLibraryUxEvidence(window, theme, $"after-drag-{file}.png");
-            // A tile is not a drop target: the highlight and hint go away.
             Assert.False(window.PreviewFolderDrop(firstTile, payload, pointer).CanDrop);
             Assert.False(((GalleryFolderCardViewModel)emptyCard.DataContext).IsDropTarget);
+            Assert.True(hint.IsVisible);
+            Assert.Equal(UiText.Get("LibraryUx_DragOutImage"), ((TextBlock)window.FindName("DragHintText")).Text);
+            Assert.False(window.PreviewFolderDrop(firstTile, payload with { Owner = Guid.NewGuid() }, pointer).CanDrop);
             Assert.False(hint.IsVisible);
             Assert.True(PumpUiTask(window, () => window.DropAsync(emptyName, payload)));
             // The rows are rebuilt because the dropped captures leave this view; the cards' view
@@ -327,7 +346,7 @@ public sealed partial class SettingsThemePreviewTests
             var compactRow = (GalleryCardRowPanel)rowParent;
             Assert.True(compactRow.Columns > 0, $"{label}: compact row columns {compactRow.Columns}");
             double expectedHeight = GalleryCardRowPanel.CardHeightFor(
-                compactRow.ActualWidth / compactRow.Columns - compactRow.CardInset, 148, 144, 0.625);
+                compactRow.ActualWidth / compactRow.Columns - compactRow.CardInset, 148, 160, 0.625);
             // The row's proportional height is authored in DIPs, then WPF rounds it to pixels.
             Assert.Equal(Math.Round(expectedHeight * cardScale) / cardScale, compactCard.ActualHeight, 3);
             Assert.True(vm.ColumnCount > rootColumns, $"{label}: {vm.ColumnCount} compact columns, {rootColumns} at the root");
@@ -344,7 +363,8 @@ public sealed partial class SettingsThemePreviewTests
                     .SingleOrDefault(card => ((GalleryFolderCardViewModel)card.DataContext).FolderId == final.Id),
                 card => card is not null, label + ": compact subfolder card");
             Assert.Equal(compactCard.ActualWidth, subfolder.ActualWidth, 1);
-            Assert.Equal(compactCard.ActualHeight, subfolder.ActualHeight, 1);
+            Assert.True(subfolder.ActualHeight < compactCard.ActualHeight);
+            Assert.Empty(Descendants(subfolder).OfType<Image>());
             Assert.Equal(compactTile.TranslatePoint(new Point(), rowsList).X + 8, subfolder.TranslatePoint(new Point(), rowsList).X, 1);
             foreach (TextBlock text in Descendants(subfolder).OfType<TextBlock>().Where(text => text.IsVisible))
                 AssertNotTrimmed(text, label);
@@ -430,7 +450,8 @@ public sealed partial class SettingsThemePreviewTests
         Assert.NotEmpty(buttons);
         foreach (Button button in buttons)
         {
-            Assert.Equal(44, button.ActualHeight, 1);
+            // Library commands have no shortcut line, so they take the 32-DIP plain button height.
+            Assert.Equal(32, button.ActualHeight, 1);
             Assert.Equal(new Thickness(10, 4, 10, 4), button.Padding);
         }
     }

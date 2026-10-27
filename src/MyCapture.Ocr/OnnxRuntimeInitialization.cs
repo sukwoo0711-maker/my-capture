@@ -1,3 +1,4 @@
+using MyCapture.Core.Platform;
 using Microsoft.ML.OnnxRuntime;
 
 namespace MyCapture.Ocr;
@@ -20,5 +21,9 @@ internal sealed class OnnxRuntimeInitialization
         }, LazyThreadSafetyMode.ExecutionAndPublication);
     }
 
-    internal void EnsureInitialized() => _ = _initialized.Value;
+    internal void EnsureInitialized()
+    {
+        if (!AppArchitecture.SupportsNeuralOcr) throw new PlatformNotSupportedException("Neural models require the x64 application.");
+        _ = _initialized.Value;
+    }
 }

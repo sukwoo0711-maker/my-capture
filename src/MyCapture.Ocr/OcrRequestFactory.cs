@@ -1,5 +1,6 @@
 using System.Windows.Media.Imaging;
 using MyCapture.Core.Settings;
+using MyCapture.Core.Platform;
 
 namespace MyCapture.Ocr;
 
@@ -18,9 +19,9 @@ public static class OcrRequestFactory
             settings.PreferredLanguages,
             searchRotatedOrientations ?? OcrQualityProfile.SearchRotatedOrientations(settings.Quality),
             OcrQualityProfile.EnhanceContrast(settings.Quality),
-            OcrQualityProfile.UseNeuralModel(settings.Quality),
+            AppArchitecture.SupportsNeuralOcr && OcrQualityProfile.UseNeuralModel(settings.Quality),
             OcrQualityProfile.LocalCorrection(settings.Quality),
-            OcrQualityProfile.UseSuperResolution(settings.Quality));
+            AppArchitecture.SupportsNeuralOcr && OcrQualityProfile.UseSuperResolution(settings.Quality));
     }
 
     public static OcrRequest FromBitmap(
@@ -35,8 +36,8 @@ public static class OcrRequestFactory
             settings.PreferredLanguages,
             searchRotatedOrientations ?? OcrQualityProfile.SearchRotatedOrientations(settings.Quality),
             OcrQualityProfile.EnhanceContrast(settings.Quality),
-            OcrQualityProfile.UseNeuralModel(settings.Quality),
+            AppArchitecture.SupportsNeuralOcr && OcrQualityProfile.UseNeuralModel(settings.Quality),
             OcrQualityProfile.LocalCorrection(settings.Quality),
-            OcrQualityProfile.UseSuperResolution(settings.Quality));
+            AppArchitecture.SupportsNeuralOcr && OcrQualityProfile.UseSuperResolution(settings.Quality));
     }
 }

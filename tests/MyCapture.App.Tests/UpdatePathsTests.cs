@@ -36,7 +36,7 @@ public sealed class UpdatePathsTests
     [Fact]
     public void NumericVersionDeterminesInstallerName()
     {
-        Assert.Equal("MyCapture-1.8.0-win-x64-setup.exe", UpdatePaths.InstallerName(new UpdateVersion(1, 8, 0)));
+        Assert.Equal($"MyCapture-1.8.0-{MyCapture.Core.Platform.AppArchitecture.RuntimeIdentifier}-setup.exe", UpdatePaths.InstallerName(new UpdateVersion(1, 8, 0)));
         Assert.Throws<IOException>(() => UpdatePaths.InstallerName(new UpdateVersion(1, 8, 0, "../../other")));
     }
 

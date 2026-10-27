@@ -50,7 +50,7 @@ internal static class DiagnosticBundle
         {
             if (ownsStage)
             {
-                try { File.Delete(stage); }
+                try { global::MyCapture.Core.Storage.RecoverableFileRemoval.DeleteFile(stage); }
                 catch (IOException) { }
                 catch (UnauthorizedAccessException) { }
             }

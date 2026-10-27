@@ -2,7 +2,8 @@
 function Get-RequiredReleaseAssetNames {
     param(
         [Parameter(Mandatory = $true)]
-        [string]$Version
+        [string]$Version,
+        [switch]$IncludeX86
     )
 
     @(
@@ -13,4 +14,14 @@ function Get-RequiredReleaseAssetNames {
         'SHA256SUMS.txt',
         'README-OFFLINE.txt'
     )
+    if ($IncludeX86) {
+        @(
+            "MyCapture-$Version-win-x86-setup.exe",
+            "MyCapture-$Version-win-x86-portable.zip",
+            'installer-manifest-win-x86.json',
+            'release-manifest-win-x86.json',
+            'SHA256SUMS-win-x86.txt',
+            'README-OFFLINE-win-x86.txt'
+        )
+    }
 }

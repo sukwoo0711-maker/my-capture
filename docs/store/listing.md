@@ -103,17 +103,19 @@ MyCapture는 코딩하는 동안 엑셀 사양 표와 자주 쓰는 코드를 �
 8. 공유하기 전에 단계 번호와 화살표를 넣고, 이메일·토큰·카드번호를 Ctrl+Shift+R로 가린 화면입니다.
 9. 영역·창·전체 화면 캡처, 클립보드 복사, 이미지 속 글자 복사는 Windows 캡처 도구와 같습니다. 영역 녹화는 소리 없이 화면만 기록합니다. 여기에 원문을 보관하는 표·코드 핀, 반투명·클릭 허용 핀, 닫은 핀 다시 열기, 스크롤 캡처가 더해집니다.
 
-### 이 버전의 새로운 기능 (4.8.0)
+### 이 버전의 새로운 기능 (4.9.0)
 
-입력 한도는 1,500자입니다. 4.7.0이 게시된 뒤 제출하므로 4.7.0 이후의 변경만 적습니다.
+입력 한도는 1,500자입니다.
 
-- 텍스트 인식 결과 창에 번역 보기를 더했습니다. 영어 문단과 표 칸을 이 PC 안에서 한국어로 옮깁니다. 기본으로 꺼져 있고, 켤 때 모델(약 247MB)을 한 번 내려받습니다.
-- 캡처하면 찍은 영역이 빠른 작업 카드로 날아가 앉고, 라이브러리에서 삭제하면 남은 캡처가 빈자리를 채웁니다. 움직임은 Windows 애니메이션 효과 설정을 따릅니다.
-- 지연 캡처 카운트다운에 고리가 생겼고, 라이브러리에서 복사하면 단추 안에 '복사됨' 표시가 잠깐 나타납니다.
-- 편집기의 Ctrl+C와 [복사]가 다시 클립보드 복사와 저장을 한 뒤 편집기를 닫습니다.
-- 핀에서 같은 원문을 반복 복사하는 속도를 높였고, 글자 선택 중 휠이 핀 배율을 바꾸지 않습니다.
-- 녹화 편집기에서 가짜 불러오기 진행률을 없앴고, Tab으로 옮긴 단추를 Space로 누릅니다. 잘못 입력한 구간 값은 지우지 않으며, 재생이 끝난 뒤 미리 보기가 요청한 위치에 섭니다.
-- 보조 버튼이 표면에서 살짝 뜬 모양이 되었고, 1080p 200% 화면에서도 설정 창이 작업 영역에 맞게 열립니다.
+- 처음 사용 안내에서 캡처, 핀 띄우기, 라이브러리에서 다시 찾기를 차례로 익힐 수 있습니다. 트레이 메뉴와 설정에서 안내를 다시 볼 수 있습니다.
+- 라이브러리의 폴더 행과 3열 카드를 정리했습니다. 상세 정보는 필요할 때 열며, 선택한 항목과 고정된 선택 작업 막대를 쉽게 확인할 수 있습니다.
+- 편집기 오른쪽 위에 ‘파일로 저장’과 ‘복사하고 닫기’를 배치하고, 글자 입력 커서를 더 잘 보이게 했습니다.
+- 편집 중에도 영역 캡처 단축키를 사용할 수 있습니다. 편집 내용은 유지하고 새 캡처는 라이브러리에 저장하며 클립보드에 복사합니다.
+- ‘다른 이름으로 저장’은 마지막 저장 폴더를 기억합니다. 빠른 저장은 설정에서 지정한 폴더를 계속 사용합니다.
+- 클릭 허용 핀의 오른쪽 위 손잡이로 클릭 허용을 바로 끌 수 있습니다. 처음 세 번은 안내를 표시합니다.
+- 첫 화면의 캡처·핀 설명을 다듬고 라이브러리와 설정 아래에 버전을 표시합니다. 빠른 작업 단추의 이름, ‘번역 복사’, 한국어 안내 줄바꿈도 정리했습니다.
+- 시작이 늦어질 때 ‘시작 중’을 표시하고 처음 열린 창이 앞에 나타나도록 개선했습니다.
+- 캡처 카드와 캡처 전환 효과를 닫은 뒤 쓰던 메모리를 더 빨리 돌려주고, 단축키를 누른 뒤 선택 화면이 뜨는 시간을 줄였습니다.
 
 ### 검색어
 
@@ -197,17 +199,19 @@ Enter them in screenshot order. Each caption is 200 characters or fewer.
 8. Step numbers and an arrow added before sharing, with an email address, token and card number covered by Ctrl+Shift+R.
 9. Like Snipping Tool, MyCapture captures, copies to the clipboard and extracts text. It adds table and code pins with original text, click-through pins and scrolling capture; recording is silent.
 
-### What's new in this version (4.8.0)
+### What's new in this version (4.9.0)
 
-Limit: 1,500 characters. 4.7.0 is published, so this lists only the changes after 4.7.0.
+Limit: 1,500 characters.
 
-- Text recognition results can be translated from English to Korean on this PC in a new Translate view. Off by default; turning it on downloads a model (about 247 MB) once.
-- A capture flies to the quick-access card, and captures fill the gap after a library delete. Motion follows Windows animation settings.
-- The delayed-capture countdown has a ring, and Copy in the library briefly shows a check.
-- Ctrl+C and Copy in the editor again copy, save and close the editor.
-- Repeated copies of pin text are faster, and the wheel no longer zooms a pin while you select text.
-- Video editor: no fake loading percentage, Space presses a Tab-focused button, invalid trim values are kept.
-- Secondary buttons look slightly raised, and Settings fits the work area at 1080p and 200% scale.
+- A first-use guide walks you through capturing, pinning and finding items in the library. Open it again from the tray menu or Settings.
+- The library has compact folder rows and a three-column card layout. Open details when needed, with clearer selection marks and a fixed selection action bar.
+- Save to file and Copy and close are at the top right of the editor. The cursor is easier to see while typing text.
+- Use the region capture shortcut while editing. Your edits stay in place; the new capture is saved to the library and copied to the clipboard.
+- Save as remembers the last folder you used. Quick save continues to use the folder set in Settings.
+- Click the handle at the top right of a click-through pin to turn click-through off. A hint appears the first three times.
+- Clearer capture and pin guidance on the first screen, with the version shown below the library and Settings. Quick-action buttons have names, the translation tab shows Copy translation, and Korean guidance wraps more naturally.
+- A Starting indicator appears when launch takes longer, and the first window comes to the front.
+- Capture cards and capture transitions give back the memory they used sooner after closing, and the selection screen appears faster after you press the shortcut.
 
 ### Search terms
 

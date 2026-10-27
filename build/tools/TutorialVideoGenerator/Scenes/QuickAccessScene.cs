@@ -82,7 +82,7 @@ internal sealed class QuickAccessScene : TutorialScene
     }
 
     internal override string Provenance =>
-        "Real QuickAccessWindow content (large preview, labeled Edit, icon actions, Keep open toggle, status line, countdown) laid out "
+        "Real QuickAccessWindow content (large preview, an icon with its name for every action, Keep open toggle, status line, countdown) laid out "
         + "detached; placed by QuickAccessWindow.Position, timed by Advance and driven by HandleShortcut. Copy's success check ends "
         + "after QuickAccessWindow.SuccessCheckTime of video time. Copy calls a fake delegate "
         + "(no clipboard). The captured page, note app and taskbar are synthetic.";

@@ -164,7 +164,7 @@ public sealed class Fixture : IDisposable
         Environment.SetEnvironmentVariable("MYCAPTURE_DATA_ROOT", previousData);
         Registry.CurrentUser.DeleteSubKeyTree(Key, false);
         DeleteEmptyTestKeyParent(testKeyParentExisted);
-        // Permanent deletion of this fixture's own TEMP root. A failure fails the test.
+        // Recycle this fixture's own TEMP root. Failure preserves the fixture and fails the test.
         try { FileRemoval.DeleteDirectoryWithRetry(Root); }
         catch (Exception e) { throw new IOException("Cleanup failed; test fixture retained at " + Root, e); }
     }
@@ -172,6 +172,27 @@ public sealed class Fixture : IDisposable
 
 public sealed class InstallerIntegrationTests
 {
+    [Fact]
+    public void CompanionCleanupCannotTargetAnotherWorkerDirectory()
+    {
+        using (var f = new Fixture())
+        {
+            string worker = Path.Combine(f.Temp, FileRemoval.WorkerPrefix + Guid.NewGuid().ToString("N"));
+            if (!string.Equals(worker, Path.GetFullPath(worker), StringComparison.OrdinalIgnoreCase)
+                || !worker.StartsWith(Path.GetFullPath(f.Root).TrimEnd('\\') + "\\", StringComparison.OrdinalIgnoreCase))
+                throw new IOException("Foreign-worker test escaped its fixture root.");
+            Directory.CreateDirectory(worker);
+            string file = Path.Combine(worker, "cleanup.json");
+            File.WriteAllText(file, "preserve foreign worker");
+            var method = typeof(Uninstaller).GetMethod("RemoveOwnWorkerFiles",
+                System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)!;
+            var log = new SetupLog(Path.Combine(f.Root, "foreign-worker.log"), f.Root, true, true);
+            method.Invoke(null, new object[] { worker, log });
+            Assert.Equal("preserve foreign worker", File.ReadAllText(file));
+            Assert.Contains("preserved", Fixture.ReadShared(log.Path!));
+        }
+    }
+
     [Theory]
     [InlineData(true, false, false, true)]
     [InlineData(false, false, false, false)]
@@ -377,7 +398,7 @@ public sealed class InstallerIntegrationTests
             File.WriteAllText(Path.Combine(stage, "MyCapture.exe"), "verified replacement");
             // install.ps1 Preserve-UserInstallFiles: without a marker only installer names are owned.
             SetupContractsTests.Code(20, () => PathSafety.PreserveUserFiles(f.Install, stage));
-            File.Delete(Path.Combine(stage, "notes.txt"));
+            global::MyCapture.Core.Storage.RecoverableFileRemoval.DeleteFile(Path.Combine(stage, "notes.txt"));
             File.WriteAllText(Path.Combine(f.Install, "install-manifest.json"), "{\"Product\":\"MyCapture\"}");
             Assert.Equal(f.Install, PathSafety.InstallRoot(f.Install, f.Manifest));
             // An existing marker must be a valid inventory (Read-And-ValidateManifest, exit 14).

@@ -234,6 +234,13 @@ internal sealed partial class OcrResultWindow
             _modeChosen = false;
             _geometryRequested = false;
         }
+        ClearAdvancedResult();
+        _tabs.IsEnabled = false;
+        RefreshAdvancedView();
+    }
+
+    private void ClearAdvancedResult()
+    {
         _result = null;
         _allExtraction = null;
         _currentExtraction = null;
@@ -244,6 +251,18 @@ internal sealed partial class OcrResultWindow
         _imageOverlay.SetSelection(null, notify: false);
         _imageOverlay.SetRegions([]);
         SetSourceImage(null);
+    }
+
+    /// <summary>Keep the reusable controls, but release the dismissed capture and its derived results.</summary>
+    internal void ReleaseResult()
+    {
+        _deferredSelection = null;
+        _modeChosen = false;
+        _geometryRequested = false;
+        ClearAdvancedResult();
+        _status.Text = string.Empty;
+        _rerunButton.IsEnabled = false;
+        _copyButton.IsEnabled = false;
         _tabs.IsEnabled = false;
         RefreshAdvancedView();
     }
@@ -288,7 +307,9 @@ internal sealed partial class OcrResultWindow
         _textBox.Visibility = table || translation ? Visibility.Collapsed : Visibility.Visible;
         _tableActions.Visibility = table ? Visibility.Visible : Visibility.Collapsed;
         _copyButton.Visibility = table ? Visibility.Collapsed : Visibility.Visible;
-        AutomationProperties.SetName(_copyButton, UiText.Get(translation ? "Translate_CopyHelp" : "Text_20CF6A996B4D"));
+        SetCopyButtonLabel(translation ? "Translate_Copy" : "Text_37B3D3B11B26",
+            translation ? "Translate_CopyHelp" : "Text_20CF6A996B4D");
+        _copyWithSourceButton.Visibility = translation ? Visibility.Visible : Visibility.Collapsed;
         _plainExportButton.Visibility = table ? Visibility.Collapsed : Visibility.Visible;
         _joinLines.Visibility = mode == OcrExtractionMode.Text ? Visibility.Visible : Visibility.Collapsed;
         _firstRowHeader.Visibility = table ? Visibility.Visible : Visibility.Collapsed;
@@ -310,6 +331,7 @@ internal sealed partial class OcrResultWindow
         };
         bool hasContent = _textBox.Text.Length > 0;
         _copyButton.IsEnabled = hasContent;
+        _copyWithSourceButton.IsEnabled = translation && hasContent;
         _plainExportButton.IsEnabled = hasContent;
         _tableActions.IsEnabled = hasContent;
         _codeBadge.Text = _currentExtraction is null ? "" : CodeBadge(_currentExtraction.Code);
@@ -325,6 +347,19 @@ internal sealed partial class OcrResultWindow
             OcrExtractionMode.Code => _allExtraction.Code.Regions,
             _ => _allExtraction.Paragraphs.Select(paragraph => paragraph.Bounds),
         });
+    }
+
+    /// <summary>The primary button names what it copies in this view: the text, or only the translation.</summary>
+    private void SetCopyButtonLabel(string labelKey, string helpKey)
+    {
+        string label = UiText.Get(labelKey);
+        if (_copyButton.Content is Grid { Name: "CommandButtonFace", Children.Count: > 0 } face
+            && face.Children[0] is TextBlock text) text.Text = label;
+        else _copyButton.Content = label;
+        AutomationProperties.SetName(_copyButton, UiText.Get(helpKey));
+        // The tooltip says what the button does now, with the same key.
+        _copyButton.ClearValue(FrameworkElement.ToolTipProperty);
+        ShortcutPresentation.Describe(_copyButton, ShortcutScope.Ocr, "Copy");
     }
 
     private void PopulateTable(OcrTable table)

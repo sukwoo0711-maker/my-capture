@@ -106,7 +106,7 @@ public sealed class EditorPreferenceBackgroundSaveTests
 
     [Theory]
     [InlineData(false, "Could not save editor preferences")]
-    [InlineData(true, "Could not persist the last export options")]
+    [InlineData(true, "Could not persist image export preferences")]
     public void PreferencePaths_LogOneWarningWithoutThrowingIntoDispatcher(bool export, string message) => StaTestHost.Run(() =>
     {
         var logger = new WarningLogger();

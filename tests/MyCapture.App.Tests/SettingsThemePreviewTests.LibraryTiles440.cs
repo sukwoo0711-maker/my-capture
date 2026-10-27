@@ -62,8 +62,8 @@ public sealed partial class SettingsThemePreviewTests
             });
 
     [Fact]
-    public Task LibraryTiles440_ActionsRevealOnHoverFocusAndSelectionWithAccessibleNames() =>
-        RunIsolated(nameof(LibraryTiles440_ActionsRevealOnHoverFocusAndSelectionWithAccessibleNames), () =>
+    public Task LibraryTiles440_FooterActionsStayVisibleAndMenusKeepAccessibleNames() =>
+        RunIsolated(nameof(LibraryTiles440_FooterActionsStayVisibleAndMenusKeepAccessibleNames), () =>
         {
             var application = CreateLibraryMotionApplication();
             bool? previous = FluidMotion.AnimationsEnabledOverrideForTest;
@@ -120,67 +120,33 @@ public sealed partial class SettingsThemePreviewTests
                 .FirstOrDefault(candidate => candidate.DataContext is GalleryItemViewModel tile && tile.Id == id),
             candidate => candidate is not null, "realized capture tile");
         var vm = (GalleryItemViewModel)item.DataContext;
-        Border actions = Descendants(item).OfType<Border>().Single(border => border.Name == "TileActions");
         Assert.False(vm.IsSelected);
-        Assert.Equal(0, actions.Opacity);
-        Assert.False(actions.IsHitTestVisible);
-        Assert.Equal(Visibility.Visible, actions.Visibility);
-
-        Button[] buttons = Descendants(actions).OfType<Button>().Where(button => button.IsVisible).ToArray();
-        Assert.Equal(vm.IsImage ? 4 : 2, buttons.Length);
-        string[] names = buttons.Select(AutomationProperties.GetName).ToArray();
-        Assert.All(names, name => Assert.False(string.IsNullOrWhiteSpace(name)));
-        Assert.Equal(names.Length, names.Distinct().Count());
-        Assert.DoesNotContain(UiText.Get("Text_89D4979D7596"), names);
-        Assert.Contains(UiText.Get("Text_1003CFC78E66"), names);
-        Assert.Contains(UiText.Get("Text_5E8959D18390"), names);
-        if (vm.IsImage)
-        {
-            Assert.Contains(UiText.Get("Gallery.Float"), names);
-            Assert.Contains(UiText.Get("Text_42A667BC71B0"), names);
-        }
-        foreach (Button button in buttons)
-        {
-            Assert.True(button.Focusable);
-            Assert.True(button.IsTabStop);
-            Assert.True(button.ActualWidth >= 24 && button.ActualHeight >= 24);
-            Assert.NotNull(button.ToolTip);
-        }
-        Button edit = buttons.Single(button => AutomationProperties.GetName(button) == UiText.Get("Text_1003CFC78E66"));
-        Assert.Equal(vm.IsImage ? UiText.Get("Text_0400CF56D074") : UiText.Get("Gallery.EditVideoHint"), edit.ToolTip);
-
+        Assert.DoesNotContain(Descendants(item).OfType<Border>(), border => border.Name == "TileActions");
+        Button more = Descendants(item).OfType<Button>().Single(button =>
+            AutomationProperties.GetName(button) == UiText.Get("Text_5E8959D18390"));
+        Assert.True(more.IsVisible && more.Focusable && more.IsTabStop);
+        Assert.True(more.ActualWidth >= 24 && more.ActualHeight >= 24);
+        Assert.NotNull(more.ToolTip);
         SetLibraryTileState440(item, "IsMouseOver", true);
         SettleGalleryLayout(window);
-        Assert.Equal(1, actions.Opacity);
-        Assert.True(actions.IsHitTestVisible);
+        Assert.True(more.IsVisible && more.IsHitTestVisible);
         SetLibraryTileState440(item, "IsMouseOver", false);
-        SettleGalleryLayout(window);
-        Assert.Equal(0, actions.Opacity);
-        Assert.False(actions.IsHitTestVisible);
-
         SetLibraryTileState440(item, "IsKeyboardFocusWithin", true);
         SettleGalleryLayout(window);
-        Assert.Equal(1, actions.Opacity);
-        Assert.True(actions.IsHitTestVisible);
         var focus = Assert.IsType<Border>(item.Template.FindName("FocusRing", item));
         Assert.Same(window.FindResource("Text.Primary"), focus.BorderBrush);
         Assert.Equal(1, focus.Opacity);
         SetLibraryTileState440(item, "IsKeyboardFocusWithin", false);
-        SettleGalleryLayout(window);
-        Assert.Equal(0, actions.Opacity);
-        Assert.False(actions.IsHitTestVisible);
-
         fixture.ViewModel.Select(id);
         SettleGalleryLayout(window);
-        Assert.Equal(1, actions.Opacity);
-        Assert.True(actions.IsHitTestVisible);
         var selected = Assert.IsType<Border>(item.Template.FindName("SelectedLayer", item));
         Assert.Equal(new Thickness(2), selected.BorderThickness);
-        Assert.Same(window.FindResource("Text.Primary"), selected.BorderBrush);
+        Assert.Same(window.FindResource("Accent.Default"), selected.BorderBrush);
+        Assert.True(more.IsVisible);
         SetLibraryTileState440(item, "IsKeyboardFocusWithin", true);
         SettleGalleryLayout(window);
         Assert.Equal(1, focus.Opacity);
-        Assert.Same(window.FindResource("Text.Primary"), selected.BorderBrush);
+        Assert.Same(window.FindResource("Accent.Default"), selected.BorderBrush);
         SetLibraryTileState440(item, "IsKeyboardFocusWithin", false);
 
         FrameworkElement preview = Descendants(item).OfType<FrameworkElement>().Single(element => element.Name == "TilePreview");
@@ -191,9 +157,9 @@ public sealed partial class SettingsThemePreviewTests
         Assert.Equal(TextTrimming.CharacterEllipsis, title.TextTrimming);
         Assert.Equal(TextWrapping.NoWrap, title.TextWrapping);
         Assert.Equal(vm.Caption, title.Text);
-        Assert.Null(title.ToolTip);
-        var captionTip = Assert.IsType<ToolTip>(item.ToolTip);
-        captionTip.PlacementTarget = item;
+        Assert.Null(item.ToolTip);
+        var captionTip = Assert.IsType<ToolTip>(title.ToolTip);
+        captionTip.PlacementTarget = title;
         try
         {
             captionTip.IsOpen = true;
@@ -217,19 +183,33 @@ public sealed partial class SettingsThemePreviewTests
         Assert.Same(window.FindResource("Surface.Sunken"), keepBadge.Background);
         Assert.Equal(compact, Descendants(item).OfType<Border>().Any(border => border.Name == "CompactTileCard"));
 
-        Button more = buttons.Single(button => AutomationProperties.GetName(button) == UiText.Get("Text_5E8959D18390"));
         ContextMenu menu = Assert.IsType<ContextMenu>(more.ContextMenu);
         menu.PlacementTarget = more;
         menu.DataContext = vm;
+        menu.IsOpen = true;
+        SettleGalleryLayout(window);
         MenuItem editMenu = menu.Items.OfType<MenuItem>()
             .Single(entry => AutomationProperties.GetName(entry) == UiText.Get("Text_1003CFC78E66"));
+        MenuItem[] accessibleCommands = menu.Items.OfType<MenuItem>().Where(entry => entry.IsVisible
+            && !string.IsNullOrWhiteSpace(AutomationProperties.GetName(entry))).ToArray();
+        string[] names = accessibleCommands.Select(AutomationProperties.GetName).ToArray();
+        Assert.Equal(names.Length, names.Distinct().Count());
+        Assert.Contains(UiText.Get("Text_1003CFC78E66"), names);
+        Assert.DoesNotContain(UiText.Get("Text_89D4979D7596"), names);
+        if (vm.IsImage)
+        {
+            Assert.Contains(UiText.Get("Gallery.Float"), names);
+            Assert.Contains(UiText.Get("Text_42A667BC71B0"), names);
+        }
+        Assert.All(accessibleCommands, entry => Assert.True(entry.Focusable));
         Assert.Equal(vm.IsImage ? "Enter" : string.Empty, editMenu.InputGestureText);
         Assert.Contains(menu.Items.OfType<MenuItem>(), entry => entry.InputGestureText == "Delete"
             && !string.IsNullOrWhiteSpace(AutomationProperties.GetName(entry)));
         Assert.NotNull(item.ContextMenu);
+        menu.IsOpen = false;
         fixture.ViewModel.ClearSelection();
         SettleGalleryLayout(window);
-        Assert.Equal(0, actions.Opacity);
+        Assert.True(more.IsVisible);
     }
 
     [Fact]

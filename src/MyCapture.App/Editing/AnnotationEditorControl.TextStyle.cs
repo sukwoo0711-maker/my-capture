@@ -23,7 +23,7 @@ internal sealed partial class AnnotationEditorControl
         {
             MinHeight = 32,
             Width = 160,
-            FontSize = 12,
+            FontSize = 14,
             VerticalAlignment = VerticalAlignment.Center,
             MaxDropDownHeight = 320,
             IsTextSearchEnabled = true,

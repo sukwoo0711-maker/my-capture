@@ -175,7 +175,7 @@ internal static partial class StoreScreenshotSelfTest
             // A file still held by a closing window only leaves the folder behind; it is not a failure.
             try
             {
-                if (Directory.Exists(_fixtures)) Directory.Delete(_fixtures, recursive: true);
+                if (Directory.Exists(_fixtures)) global::MyCapture.Core.Storage.RecoverableFileRemoval.DeleteDirectory(_fixtures, recursive: true);
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {

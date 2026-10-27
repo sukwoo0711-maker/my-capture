@@ -46,24 +46,32 @@ public sealed class ButtonAppearanceTests
             }
         }
 
+        // A plain button is 32 DIP and draws its chrome edge to edge; the 44 and 36 DIP command
+        // heights keep the chrome inset inside their hit target.
         foreach (string style in new[] { "Button.Secondary", "Button.Command", "Button.Ghost", "Button.Primary", "Button.Danger" })
-        foreach (bool compact in new[] { false, true })
+        foreach (string tier in new[] { "Plain", "Standard", "Compact" })
         {
             var button = new Button { Content = "저장", Resources = resources, Style = (Style)resources[style], Width = 100 };
+            bool compact = tier == "Compact";
+            if (tier == "Standard")
+            {
+                button.SetResourceReference(FrameworkElement.HeightProperty, "CommandButton.Height.Standard");
+                button.SetResourceReference(FrameworkElement.MinHeightProperty, "CommandButton.Height.Standard");
+            }
             if (compact)
             {
                 button.SetResourceReference(FrameworkElement.HeightProperty, "CommandButton.Height.Compact");
                 button.SetResourceReference(FrameworkElement.MinHeightProperty, "Size.HitTarget.Compact");
                 button.SetResourceReference(Control.PaddingProperty, "CommandButton.Padding.Compact");
             }
-            double height = compact ? 36 : 44;
-            double inset = contrast ? 0 : compact ? 2 : 4;
+            double height = tier switch { "Standard" => 44, "Compact" => 36, _ => 32 };
+            double inset = contrast ? 0 : tier switch { "Standard" => 4, "Compact" => 2, _ => 0 };
             double focusGap = style == "Button.Primary" ? 2 : 1;
             button.ApplyTemplate();
             button.Measure(new Size(100, height));
             button.Arrange(new Rect(0, 0, 100, height));
             Assert.Equal(height, button.Height);
-            Assert.Equal(compact ? 32 : style == "Button.Command" ? 44 : 36, button.MinHeight);
+            Assert.Equal(compact ? 32 : height, button.MinHeight);
             Assert.Equal(height, button.ActualHeight);
             Assert.Equal(compact ? new Thickness(10, 0, 10, 0) : new Thickness(10, 4, 10, 4), button.Padding);
             Assert.Equal(contrast || style is "Button.Primary" or "Button.Danger" ? FontWeights.SemiBold : FontWeights.Normal, button.FontWeight);

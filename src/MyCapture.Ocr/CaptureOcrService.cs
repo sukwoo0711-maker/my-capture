@@ -1,3 +1,4 @@
+using MyCapture.Core.Platform;
 using System.Diagnostics;
 using System.Windows.Media.Imaging;
 using Microsoft.Extensions.Logging;
@@ -58,7 +59,7 @@ public sealed class CaptureOcrService : IOcrService
     {
         get
         {
-            if (!_neuralIsReady())
+            if (!AppArchitecture.SupportsNeuralOcr || !_neuralIsReady())
             {
                 return _windows.SupportedLanguages;
             }
@@ -77,6 +78,8 @@ public sealed class CaptureOcrService : IOcrService
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(request);
+        if (!AppArchitecture.SupportsNeuralOcr)
+            return await _windows.RecognizeAsync(request, cancellationToken).ConfigureAwait(false);
 
         if (_enableDualEngine && request.UseNeuralModel)
         {
@@ -203,7 +206,7 @@ public sealed class CaptureOcrService : IOcrService
     {
         try
         {
-            return _neuralCanRun();
+            return AppArchitecture.SupportsNeuralOcr && _neuralCanRun();
         }
         catch (Exception ex)
         {

@@ -218,9 +218,9 @@ internal sealed class EditorScene : TutorialScene
                 story.Move("folder-move", _openFolder).Click("folder-click");
                 break;
             case "copy":
-                // Copy finishes like Done (the owner's decision): save, copy and close, then paste
-                // into the note app left on screen.
-                story.Move("command", Of(ByAutomationId("EditorFlowCopy"))).Click("copy").Hold("copying", 0.8).Hold("closed", 0.6);
+                // Copy and close is the one finishing command (the owner's decision): save, copy and
+                // close, then paste into the note app left on screen.
+                story.Move("command", Of(ByAutomationId("EditorFlowDone"))).Click("copy").Hold("copying", 0.8).Hold("closed", 0.6);
                 story.Move("note", new PointD(330, 300)).Click("note-click").Hold("paste-key", 0.6).Hold("pasted", 0.4);
                 break;
         }
@@ -347,7 +347,7 @@ internal sealed class EditorScene : TutorialScene
                 BeginCommit(() => Press(ShortcutScope.Annotation, "Save"));
                 break;
             case "copy" when frame.IsLast:
-                BeginCommit(() => ((Button)ByAutomationId("EditorFlowCopy")).RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent)));
+                BeginCommit(() => ((Button)ByAutomationId("EditorFlowDone")).RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent)));
                 break;
             case "closed" when _commit is not null:
                 _commit.TrySetResult(true);
@@ -495,7 +495,7 @@ internal sealed class EditorScene : TutorialScene
                     _ => (L($"PNG 저장됨 · 다른 위치는 {Hint(ShortcutScope.Annotation, "SaveAs")}", $"PNG saved · {Hint(ShortcutScope.Annotation, "SaveAs")} chooses another place"), ""),
                 };
             case "copy":
-                string copy = Hint(ShortcutScope.Annotation, "Copy"), copyLabel = Ui("Text_37B3D3B11B26");
+                string copy = Hint(ShortcutScope.Annotation, "Copy"), copyLabel = Ui("EditorFlow_CopyAndClose");
                 return segment switch
                 {
                     "open" or "command" => (L($"{copyLabel} 선택 또는 {copy}", $"Click {copyLabel} or press {copy}"), copy),

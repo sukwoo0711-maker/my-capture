@@ -34,14 +34,19 @@ internal sealed partial class OcrResultWindow : Window
     private readonly TextBox _textBox;
     private readonly LiveTextBlock _status;
     private readonly Button _copyButton;
+    private readonly Button _copyWithSourceButton;
     private readonly Button _rerunButton;
 
     private bool _allowClose;
     private readonly Dictionary<string, Action> _shortcutActions = [];
     internal IReadOnlyDictionary<string, Action> ShortcutActions => _shortcutActions;
 
+    /// <summary>Asks where to save exported text; null when the user cancels. Tests replace the dialog.</summary>
+    internal Func<string?> TextExportPathChooser { get; set; }
+
     internal OcrResultWindow()
     {
+        TextExportPathChooser = ChooseTextExportPath;
         StandardWindowTheme.Apply(this);
 
         Title = UiText.Get("Text_7CD1B787C3E6");
@@ -107,6 +112,7 @@ internal sealed partial class OcrResultWindow : Window
         _textBox = new TextBox
         {
             IsReadOnly = true,
+            IsUndoEnabled = false,
             AcceptsReturn = true,
             TextWrapping = TextWrapping.Wrap,
             VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
@@ -156,6 +162,17 @@ internal sealed partial class OcrResultWindow : Window
         _copyButton.Margin = new Thickness(0, 0, 8, 0);
         _copyButton.Click += (_, _) => CopyText();
         buttons.Children.Add(_copyButton);
+
+        _copyWithSourceButton = MakeButton(UiText.Get("Translate_CopyWithSource"), UiText.Get("Translate_CopyWithSource"));
+        _copyWithSourceButton.SetResourceReference(FrameworkElement.StyleProperty, "Button.Secondary");
+        _copyWithSourceButton.Margin = new Thickness(0, 0, 8, 0);
+        _copyWithSourceButton.Visibility = Visibility.Collapsed;
+        _copyWithSourceButton.Click += (_, _) =>
+        {
+            if (ExtractionMode == OcrExtractionMode.Translation)
+                CopyValue(_translationPanel.CopyWithSourceText);
+        };
+        buttons.Children.Add(_copyWithSourceButton);
 
         // Export writes the same text to a picked .txt file (UTF-8, no BOM).
         var exportButton = MakeButton(UiText.Get("Ocr_ExportText"), UiText.Get("Ocr_ExportText"));
@@ -352,40 +369,43 @@ internal sealed partial class OcrResultWindow : Window
         return UiText.Culture.TwoLetterISOLanguageName == "en" ? neutral.EnglishName : neutral.NativeName;
     }
 
-    private void CopyText() => CopyValue(_textBox.Text);
+    private string ActiveText => ExtractionMode == OcrExtractionMode.Translation ? _translationPanel.CopyText : _textBox.Text;
+
+    private void CopyText() => CopyValue(ActiveText);
 
     /// <summary>Saves the recognised text to a UTF-8 .txt file the user picks.</summary>
     private void ExportText()
     {
-        if (string.IsNullOrEmpty(_textBox.Text))
+        string text = ActiveText;
+        if (string.IsNullOrEmpty(text))
         {
             _status.Text = UiText.Get("Ocr_ExportNone");
             return;
         }
 
-        var dialog = new Microsoft.Win32.SaveFileDialog
-        {
-            Title = UiText.Get("Ocr_ExportText"),
-            Filter = "Text (*.txt)|*.txt",
-            DefaultExt = ".txt",
-            AddExtension = true,
-            OverwritePrompt = true,
-            FileName = $"MyCapture-OCR-{DateTime.Now:yyyyMMdd-HHmmss}.txt",
-        };
-        if (dialog.ShowDialog(this) != true)
-        {
-            return;
-        }
+        string? path = TextExportPathChooser();
+        if (path is null) return;
 
         try
         {
-            File.WriteAllText(dialog.FileName, _textBox.Text, new System.Text.UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
-            _status.Text = UiText.Get("Ocr_ExportDone") + " " + dialog.FileName;
+            File.WriteAllText(path, text, new System.Text.UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+            _status.Text = UiText.Get("Ocr_ExportDone") + " " + path;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
             _status.Text = UiText.Get("Text_75425A6D9BE8") + " " + MyCapture.App.Themes.ThemedDialog.RecoveryMessage(ex);
         }
+    }
+
+    private string? ChooseTextExportPath()
+    {
+        var dialog = new Microsoft.Win32.SaveFileDialog
+        {
+            Title = UiText.Get("Ocr_ExportText"), Filter = "Text (*.txt)|*.txt", DefaultExt = ".txt",
+            AddExtension = true, OverwritePrompt = true,
+            FileName = $"MyCapture-OCR-{DateTime.Now:yyyyMMdd-HHmmss}.txt",
+        };
+        return dialog.ShowDialog(this) == true ? dialog.FileName : null;
     }
 
     private void OnPreviewKeyDown(object sender, KeyEventArgs e)
@@ -411,14 +431,13 @@ internal sealed partial class OcrResultWindow : Window
         if (!_allowClose)
         {
             e.Cancel = true;
-            // Closing ends a model download or a translation like the cancel button does.
-            ResetTranslation();
+            ReleaseResult();
             Hide();
             Dismissed?.Invoke(this, EventArgs.Empty);
             return;
         }
 
-        CancelTranslationWork();
+        ReleaseResult();
         base.OnClosing(e);
     }
 

@@ -10,9 +10,10 @@ namespace MyCapture.Core.Tests;
 public sealed class EditorTextPreferencesTests
 {
     [Theory]
-    [InlineData("{}")]
-    [InlineData("""{"annotation":{"fontFamily":"Malgun Gothic","fontSize":18}}""")]
-    public void OlderSettings_KeepTextDefaultsWhenNewFieldsAreAbsent(string json)
+    [InlineData("{}", "Pretendard")]
+    [InlineData("""{"annotation":{"fontFamily":"Malgun Gothic","fontSize":18}}""", "Malgun Gothic")]
+    [InlineData("""{"annotation":{"fontFamily":"Yet R","fontSize":18}}""", "Yet R")]
+    public void OlderSettings_KeepTextDefaultsWhenNewFieldsAreAbsent(string json, string expectedFamily)
     {
         AppSettings settings = JsonSerializer.Deserialize<AppSettings>(json, JsonDefaults.Readable)!;
 
@@ -20,7 +21,7 @@ public sealed class EditorTextPreferencesTests
         Assert.False(settings.Annotation.TextBackground);
         Assert.True(settings.Annotation.TextOutline);
         Assert.Empty(settings.Annotation.RecentFontFamilies);
-        Assert.Equal("Malgun Gothic", settings.Annotation.FontFamily);
+        Assert.Equal(expectedFamily, settings.Annotation.FontFamily);
         Assert.Equal(18, settings.Annotation.FontSize);
         Assert.Equal(4, settings.SchemaVersion);
     }
@@ -108,6 +109,7 @@ public sealed class EditorTextPreferencesTests
 
         Assert.True(draft.HasUnappliedChanges);
         AnnotationDefaults reset = draft.ToAppSettings().Annotation;
+        Assert.Equal("Pretendard", reset.FontFamily);
         Assert.False(reset.TextBold);
         Assert.False(reset.TextBackground);
         Assert.True(reset.TextOutline);

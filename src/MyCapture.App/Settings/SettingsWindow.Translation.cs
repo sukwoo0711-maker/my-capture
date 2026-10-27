@@ -1,3 +1,4 @@
+using MyCapture.Core.Platform;
 using System.Globalization;
 using System.IO;
 using System.Windows;
@@ -39,6 +40,12 @@ internal sealed partial class SettingsWindow
 
     internal void RefreshTranslationModel()
     {
+        if (AppArchitecture.IsX86)
+        {
+            TranslationModelStatus.Text = UiText.Get("Settings.TranslationUnavailable.X86");
+            TranslationModelDelete.IsEnabled = false;
+            return;
+        }
         long bytes = InstalledTranslationBytes();
         TranslationModelStatus.Text = bytes > 0
             ? UiText.Format("Settings_TranslationInstalled", Megabytes(bytes))

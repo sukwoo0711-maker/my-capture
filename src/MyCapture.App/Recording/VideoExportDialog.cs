@@ -853,7 +853,7 @@ internal sealed class VideoExportDialog : Window
 
     private static void TryDelete(string path)
     {
-        try { if (File.Exists(path)) File.Delete(path); }
+        try { if (File.Exists(path)) global::MyCapture.Core.Storage.RecoverableFileRemoval.DeleteFile(path); }
         catch (IOException) { }
         catch (UnauthorizedAccessException) { }
     }

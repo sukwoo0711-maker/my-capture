@@ -20,7 +20,6 @@ internal sealed class OcrTranslationPanel : Grid
     internal enum ViewState { Idle, Checking, ModelNeeded, Downloading, DownloadFailed, Translating, Translated, NothingToTranslate, Cancelled, Failed }
 
     private readonly TextBlock _heading;
-    private readonly Button _copyWithSource;
     private readonly StackPanel _message;
     private readonly TextBlock _messageTitle;
     private readonly TextBlock _messageBody;
@@ -40,16 +39,6 @@ internal sealed class OcrTranslationPanel : Grid
         AutomationProperties.SetName(this, UiText.Get("Translate_Tab"));
 
         var header = new DockPanel { Margin = new Thickness(16, 12, 12, 6), LastChildFill = true };
-        _copyWithSource = new Button
-        {
-            Content = UiText.Get("Translate_CopyWithSource"), Visibility = Visibility.Collapsed,
-            Margin = new Thickness(8, 0, 0, 0),
-        };
-        _copyWithSource.SetResourceReference(StyleProperty, "Button.GhostCompact");
-        AutomationProperties.SetName(_copyWithSource, UiText.Get("Translate_CopyWithSource"));
-        _copyWithSource.Click += (_, _) => CopyWithSourceRequested?.Invoke(this, EventArgs.Empty);
-        DockPanel.SetDock(_copyWithSource, Dock.Right);
-        header.Children.Add(_copyWithSource);
         _heading = new TextBlock
         {
             Text = UiText.Get("Translate_Direction"), VerticalAlignment = VerticalAlignment.Center,
@@ -112,7 +101,7 @@ internal sealed class OcrTranslationPanel : Grid
 
     internal event EventHandler? CancelRequested;
 
-    internal event EventHandler? CopyWithSourceRequested;
+    internal event EventHandler? ContentChanged;
 
     /// <summary>The block under the pointer or keyboard focus, as an index into <see cref="Results"/>.</summary>
     internal event EventHandler<int>? BlockFocused;
@@ -167,12 +156,12 @@ internal sealed class OcrTranslationPanel : Grid
         _results = results;
         State = ViewState.Translated;
         Announce(_heading, results.Count == 1 ? UiText.Get("Translate_SummaryOne") : UiText.Format("Translate_Summary", results.Count));
-        _copyWithSource.Visibility = results.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
         _message.Visibility = Visibility.Collapsed;
         _items.Children.Clear();
         for (int index = 0; index < results.Count; index++) _items.Children.Add(BuildItem(results[index], index));
         _scroller.ScrollToTop();
         _scroller.Visibility = Visibility.Visible;
+        ContentChanged?.Invoke(this, EventArgs.Empty);
     }
 
     /// <summary>Brings a block into view, such as the one picked on the original image.</summary>
@@ -189,7 +178,6 @@ internal sealed class OcrTranslationPanel : Grid
         _results = [];
         _items.Children.Clear();
         _scroller.Visibility = Visibility.Collapsed;
-        _copyWithSource.Visibility = Visibility.Collapsed;
         _heading.Text = UiText.Get("Translate_Direction");
         _message.Visibility = state == ViewState.Idle ? Visibility.Collapsed : Visibility.Visible;
         Announce(_messageTitle, title);
@@ -205,6 +193,7 @@ internal sealed class OcrTranslationPanel : Grid
         _primaryAction.Visibility = primary is null ? Visibility.Collapsed : Visibility.Visible;
         if (primary is not null) AutomationProperties.SetName(_primaryAction, primary);
         _cancel.Visibility = cancel ? Visibility.Visible : Visibility.Collapsed;
+        ContentChanged?.Invoke(this, EventArgs.Empty);
     }
 
     private FrameworkElement BuildItem(TranslatedBlock result, int index)

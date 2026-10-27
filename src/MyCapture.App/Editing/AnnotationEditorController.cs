@@ -120,7 +120,7 @@ internal sealed class AnnotationEditorController
     internal AnnotationStrokeStyle StrokeStyle { get; private set; }
     internal double FillTransparency { get; private set; } = 100;
     internal double DefaultFontSize { get; set; } = 18;
-    internal string DefaultFontFamily { get; set; } = "Malgun Gothic";
+    internal string DefaultFontFamily { get; set; } = AnnotationDefaults.DefaultFontFamily;
 
     /// <summary>Blur strength applied to new blur layers, in image pixels.</summary>
     internal int BlurRadius { get; private set; } = BlurAnnotation.DefaultRadius;

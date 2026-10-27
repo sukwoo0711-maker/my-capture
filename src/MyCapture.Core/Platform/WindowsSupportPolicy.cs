@@ -50,9 +50,10 @@ public static class WindowsSupportPolicy
     /// <summary>One-line statement of the requirement, used by installer and UI messages.</summary>
     public static string DescribeRequirement() => string.Format(
         CultureInfo.InvariantCulture,
-        "{0} (build {1}) or later, x64, is required.",
+        "{0} (build {1}) or later, {2}, is required.",
         MinimumReleaseName,
-        MinimumBuild);
+        MinimumBuild,
+        AppArchitecture.Name);
 
     /// <summary>Message for a host that does not meet the requirement.</summary>
     public static string DescribeUnsupportedHost(Version? osVersion)

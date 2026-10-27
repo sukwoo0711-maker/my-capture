@@ -12,6 +12,8 @@ namespace MyCapture.App.Gallery;
 /// <summary>Realized cards render cached provenance without looking up files, applications or icons.</summary>
 public static class GallerySourceBadge
 {
+    private static readonly DependencyProperty DismissedProperty = DependencyProperty.RegisterAttached(
+        "Dismissed", typeof(bool), typeof(GallerySourceBadge), new PropertyMetadata(false));
     private static readonly DependencyProperty ActionsProperty = DependencyProperty.RegisterAttached(
         "Actions", typeof(CaptureSourceActions), typeof(GallerySourceBadge), new PropertyMetadata(null));
 
@@ -42,31 +44,42 @@ public static class GallerySourceBadge
         button.Click += OnClick;
         button.PreviewMouseDoubleClick -= OnPreviewDoubleClick;
         button.PreviewMouseDoubleClick += OnPreviewDoubleClick;
-        button.ToolTip = provenance.Tooltip;
+        ClosePreview(button);
+        button.SetValue(DismissedProperty, false);
+        var tip = new ToolTip
+        {
+            Content = new TextBlock { Text = provenance.Tooltip, TextWrapping = TextWrapping.Wrap, MaxWidth = 360 },
+            Placement = PlacementMode.Bottom,
+        };
+        button.ToolTip = tip;
+        GalleryToolTip.DismissOnEscape(button, tip, () =>
+        {
+            button.SetValue(DismissedProperty, true);
+            tip.IsOpen = false;
+        });
+        button.GotKeyboardFocus -= OnGotKeyboardFocus;
+        button.GotKeyboardFocus += OnGotKeyboardFocus;
+        button.LostKeyboardFocus -= OnLostKeyboardFocus;
+        button.LostKeyboardFocus += OnLostKeyboardFocus;
+        button.PreviewKeyDown -= OnPreviewKeyDown;
+        button.PreviewKeyDown += OnPreviewKeyDown;
+        button.Unloaded -= OnUnloaded;
+        button.Unloaded += OnUnloaded;
+        button.MouseLeave -= OnMouseLeave;
+        button.MouseLeave += OnMouseLeave;
+        button.ToolTipOpening -= OnToolTipOpening;
+        button.ToolTipOpening += OnToolTipOpening;
         AutomationProperties.SetHelpText(button, provenance.Tooltip);
-        AutomationProperties.SetName(button, UiText.Format(provenance.CanOpen
-            ? "Source.OpenAutomation" : "Source.Label", provenance.BadgeText));
+        AutomationProperties.SetName(button, UiText.Format("Source.Label", provenance.BadgeText));
 
-        var content = new Grid();
-        content.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        content.ColumnDefinitions.Add(new ColumnDefinition());
-        content.Children.Add(new TextBlock
+        button.Content = new TextBlock
         {
             Text = SourceChip.GlyphFor(provenance.Kind),
             FontFamily = new FontFamily("Segoe Fluent Icons, Segoe MDL2 Assets"),
-            FontSize = 12,
+            FontSize = 16,
             VerticalAlignment = VerticalAlignment.Center,
-            Margin = new Thickness(0, 0, 4, 0),
-        });
-        var label = new TextBlock
-        {
-            Text = provenance.BadgeText,
-            TextTrimming = TextTrimming.CharacterEllipsis,
-            VerticalAlignment = VerticalAlignment.Center,
+            HorizontalAlignment = HorizontalAlignment.Center,
         };
-        Grid.SetColumn(label, 1);
-        content.Children.Add(label);
-        button.Content = content;
         button.ContextMenu = SourceChip.CreateMenu(provenance, status, search, actions);
     }
 
@@ -74,7 +87,14 @@ public static class GallerySourceBadge
     {
         e.Handled = true;
         var button = (Button)sender;
+        ClosePreview(button);
         CaptureProvenance provenance = GetProvenance(button);
+        if (Window.GetWindow(button) is GalleryWindow sourceGallery
+            && button.DataContext is GalleryItemViewModel tile)
+        {
+            sourceGallery.ShowSourceDetails(tile);
+            return;
+        }
         if (!provenance.CanOpen)
         {
             ShowMenu(button);
@@ -88,6 +108,53 @@ public static class GallerySourceBadge
     }
 
     private static void OnPreviewDoubleClick(object sender, MouseButtonEventArgs e) => e.Handled = true;
+
+    private static void OnGotKeyboardFocus(object sender, KeyboardFocusChangedEventArgs e)
+    {
+        if (sender is Button button && ReferenceEquals(e.NewFocus, button))
+            ShowForFocus(button, InputManager.Current.MostRecentInputDevice is KeyboardDevice
+                && Mouse.LeftButton != MouseButtonState.Pressed);
+    }
+
+    internal static void ShowForFocus(Button button, bool keyboardInput)
+    {
+        if (keyboardInput && !(bool)button.GetValue(DismissedProperty)
+            && GetProvenance(button).HasSource && button.ToolTip is ToolTip tip)
+        {
+            tip.PlacementTarget = button;
+            GalleryToolTip.OpenForKeyboard(tip);
+        }
+    }
+
+    private static void OnLostKeyboardFocus(object sender, KeyboardFocusChangedEventArgs e)
+    {
+        ClosePreview((Button)sender);
+        ((Button)sender).SetValue(DismissedProperty, false);
+    }
+    private static void OnMouseLeave(object sender, MouseEventArgs e)
+    {
+        var button = (Button)sender;
+        button.SetValue(DismissedProperty, false);
+        if (button.ToolTip is ToolTip tip) GalleryToolTip.CloseKeyboardPreview(tip);
+    }
+    private static void OnToolTipOpening(object sender, ToolTipEventArgs e)
+    {
+        if ((bool)((Button)sender).GetValue(DismissedProperty)) e.Handled = true;
+    }
+    private static void OnUnloaded(object sender, RoutedEventArgs e) => ClosePreview((Button)sender);
+
+    private static void OnPreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key != Key.Escape || ((Button)sender).ToolTip is not ToolTip { IsOpen: true }) return;
+        ((Button)sender).SetValue(DismissedProperty, true);
+        ClosePreview((Button)sender);
+        e.Handled = true;
+    }
+
+    private static void ClosePreview(Button button)
+    {
+        if (button.ToolTip is ToolTip tip) tip.IsOpen = false;
+    }
 
     private static void ShowMenu(Button button)
     {

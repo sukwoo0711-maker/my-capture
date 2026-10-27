@@ -95,11 +95,13 @@ public sealed partial class SettingsThemePreviewTests
                     };
                     try
                     {
+                        // The choices are on the guide's last step; it scrolls inside a short work area.
+                        OnboardingGuideTests.AdvanceTo(welcome, WelcomeStep.Finish);
                         welcome.Show();
                         welcome.LimitToWorkArea(new MonitorInfo("small", new RectD(0, 0, 1920, 768), new RectD(0, 0, 1920, 720), 192, true));
                         Drain(welcome);
                         Assert.InRange(welcome.ActualHeight, 1, 360);
-                        var scroll = Assert.IsType<ScrollViewer>(welcome.Content);
+                        ScrollViewer scroll = welcome.Scroller;
                         scroll.ScrollToEnd(); Drain(welcome);
                         Rect bottom = welcome.AccurateOcrHelp.TransformToAncestor(scroll).TransformBounds(new Rect(welcome.AccurateOcrHelp.RenderSize));
                         Assert.InRange(bottom.Bottom, 1, scroll.ActualHeight + 1);
@@ -146,14 +148,18 @@ public sealed partial class SettingsThemePreviewTests
                         foreach (bool selected in new[] { false, true, false })
                         {
                             tile.IsSelected = selected; Drain(window);
-                            Assert.Equal(selected ? (double)application.FindResource("CommandButton.Height.Compact") : 22, source.ActualHeight);
-                            Assert.Equal(selected ? 26 : 22, source.MinHeight);
-                            Assert.Equal(selected ? 200 : 130, source.MaxWidth);
-                            Assert.Equal(new Thickness(selected ? 1 : 0), source.BorderThickness);
-                            Assert.Same(application.FindResource(selected ? "Text.Primary" : "Text.Secondary"), source.Foreground);
+                            Assert.Equal(32, source.ActualHeight);
+                            Assert.Equal(32, source.ActualWidth);
+                            Assert.Equal(32, source.MinHeight);
+                            Assert.Equal(32, source.MaxWidth);
+                            Assert.Equal(new Thickness(0), source.BorderThickness);
+                            Assert.Same(application.FindResource("Text.Secondary"), source.Foreground);
                             Rect left = source.TransformToAncestor(item).TransformBounds(new Rect(source.RenderSize));
                             Rect right = video.TransformToAncestor(item).TransformBounds(new Rect(video.RenderSize));
-                            Assert.True(left.Right <= right.Left, $"{key}: {left} overlaps {right}");
+                            Assert.False(left.IntersectsWith(right), $"{key}: {left} overlaps {right}");
+                            Border preview = Descendants(item).OfType<Border>().Single(border => border.Name == "TilePreview");
+                            Rect imageBounds = preview.TransformToAncestor(item).TransformBounds(new Rect(preview.RenderSize));
+                            Assert.False(left.IntersectsWith(imageBounds));
                             Assert.True(source.ActualWidth > 0 && video.ActualWidth > 0);
                             Assert.InRange(right.Right, 1, item.ActualWidth);
                         }

@@ -170,11 +170,14 @@ public sealed class EditorRotationAndTextTests
         });
     }
 
-    [Fact]
-    public void LiveTextBox_DrawsPretendardTechnicalTextAsTyped()
+    [Theory]
+    [InlineData("ko-KR")]
+    [InlineData("en-US")]
+    public void LiveTextBox_DrawsPretendardTechnicalTextAsTyped(string language)
     {
         StaTestHost.Run(() =>
         {
+            System.Globalization.CultureInfo.CurrentUICulture = System.Globalization.CultureInfo.GetCultureInfo(language);
             using EditorHost host = EditorHost.Create(Solid(640, 200, 0x20), 640, 200);
             host.Window.UpdateLayout();
             Field<AnnotationEditorController>(host.Editor, "_controller").DefaultFontFamily = "Pretendard";
@@ -187,6 +190,8 @@ public sealed class EditorRotationAndTextTests
             // The features that would show "0x02D9" as "0×02D9" and "->" as an arrow are off,
             // as in the committed caption.
             TextBox box = FindLiveTextBox(host.Editor);
+            Assert.Equal(System.Globalization.CultureInfo.CurrentUICulture.IetfLanguageTag, box.Language.IetfLanguageTag, ignoreCase: true);
+            Assert.Equal(TextRenderingMode.Grayscale, TextOptions.GetTextRenderingMode(box));
             Assert.False(System.Windows.Documents.Typography.GetStandardLigatures(box));
             Assert.False(System.Windows.Documents.Typography.GetContextualAlternates(box));
             Assert.False(System.Windows.Documents.Typography.GetContextualLigatures(box));
@@ -207,10 +212,10 @@ public sealed class EditorRotationAndTextTests
             string? Tier(Button button) => StyleKey(button);
 
             // Editing commands are borderless tools; Copy is a bordered output; Done is the fill.
-            foreach (string tool in new[] { "Capture410Crop", "EditorFlowCopyText", "EditorFlowCancel" })
+            foreach (string tool in new[] { "Capture410Crop", "EditorFlowCopyText" })
                 Assert.Equal("Button.Ghost", Tier(Command(tool)));
             Assert.Equal("Button.Primary", Tier(Command("EditorFlowDone")));
-            Assert.NotEqual("Button.Ghost", Tier(Command("EditorFlowCopy")));
+            Assert.NotEqual("Button.Ghost", Tier(Command("EditorFlowSaveToFile")));
         });
     }
 

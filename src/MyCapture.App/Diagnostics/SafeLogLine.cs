@@ -74,6 +74,27 @@ internal static partial class SafeLogLine
         Begin(new StringBuilder(64), utc, LogLevel.Warning)
             .Append(" log dropped=").Append(count.ToString(CultureInfo.InvariantCulture)).ToString();
 
+    internal static string LaunchActivation(DateTimeOffset utc, LaunchActivationKind kind) =>
+        Begin(new StringBuilder(96), utc, LogLevel.Information).Append(" launch activation=")
+            .Append(kind switch
+            {
+                LaunchActivationKind.Regular => "regular",
+                LaunchActivationKind.Background => "background",
+                LaunchActivationKind.StartupTask => "startup-task",
+                LaunchActivationKind.Secondary => "secondary",
+                _ => Unknown,
+            }).ToString();
+
+    internal static string LaunchFirstVisible(DateTimeOffset utc, LaunchVisibleKind kind, long milliseconds) =>
+        Begin(new StringBuilder(96), utc, LogLevel.Information).Append(" launch first-visible=")
+            .Append(kind switch
+            {
+                LaunchVisibleKind.Starting => "starting",
+                LaunchVisibleKind.SecondaryNotice => "secondary-notice",
+                LaunchVisibleKind.Presentation => "presentation",
+                _ => Unknown,
+            }).Append(" elapsed-ms=").Append(Math.Max(0, milliseconds).ToString(CultureInfo.InvariantCulture)).ToString();
+
     /// <summary>Eight lowercase hex digits of the template's SHA-256; stable across builds and machines.</summary>
     internal static string TemplateId(string template) =>
         Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(template)).AsSpan(0, 4));

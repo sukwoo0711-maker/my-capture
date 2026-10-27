@@ -200,9 +200,12 @@ public sealed class ExportSettings
     public ImageExportOptions LastImageExport { get; set => field = (value ?? new()).Normalize(); } = new();
 
     /// <summary>
-    /// Destination for quick save. Empty means the default location.
+    /// Fixed destination for quick save. Empty means the default capture folder.
     /// </summary>
     public string QuickSaveDirectoryOverride { get; set; } = string.Empty;
+
+    /// <summary>The folder of the last successful image Save As export. Only the starting folder of Save As dialogs; quick save ignores it.</summary>
+    public string LastSaveDirectory { get; set; } = string.Empty;
 
     /// <summary>
     /// Legacy persisted preference retained for settings-file compatibility. Edited images are
@@ -267,6 +270,9 @@ public sealed class CaptureSettings
 
 public sealed class PinSettings
 {
+    /// <summary>First-use recovery hints already shown, shared across pins and launches.</summary>
+    public int ClickThroughHintShownCount { get; set => field = Math.Clamp(value, 0, 3); }
+
     /// <summary>Close the pinned window on double-click.</summary>
     public bool CloseOnDoubleClick { get; set; } = true;
 
@@ -306,6 +312,8 @@ public sealed class PinSettings
 
 public sealed class AnnotationDefaults
 {
+    public const string DefaultFontFamily = "Pretendard";
+
     public string LastTool { get; set; } = "Rectangle";
     public MyCapture.Core.Annotations.AnnotationStrokeStyle StrokeStyle { get; set; }
     public double FillTransparency { get; set; } = 100;
@@ -317,7 +325,7 @@ public sealed class AnnotationDefaults
 
     public double FontSize { get; set; } = 18;
 
-    public string FontFamily { get; set; } = "Malgun Gothic";
+    public string FontFamily { get; set; } = DefaultFontFamily;
 
     public bool TextBold { get; set; }
 

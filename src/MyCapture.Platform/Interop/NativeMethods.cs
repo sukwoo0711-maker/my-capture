@@ -492,11 +492,25 @@ internal static partial class NativeMethods
     [LibraryImport("user32.dll")]
     internal static partial short GetAsyncKeyState(int virtKey);
 
+    internal static IntPtr GetWindowLongPtr(IntPtr hWnd, int index) => IntPtr.Size == 8
+        ? GetWindowLongPtr64(hWnd, index)
+        : new IntPtr(GetWindowLong32(hWnd, index));
+
     [LibraryImport("user32.dll", EntryPoint = "GetWindowLongPtrW")]
-    internal static partial IntPtr GetWindowLongPtr(IntPtr hWnd, int index);
+    private static partial IntPtr GetWindowLongPtr64(IntPtr hWnd, int index);
+
+    [LibraryImport("user32.dll", EntryPoint = "GetWindowLongW")]
+    private static partial int GetWindowLong32(IntPtr hWnd, int index);
+
+    internal static IntPtr SetWindowLongPtr(IntPtr hWnd, int index, IntPtr newLong) => IntPtr.Size == 8
+        ? SetWindowLongPtr64(hWnd, index, newLong)
+        : new IntPtr(SetWindowLong32(hWnd, index, newLong.ToInt32()));
 
     [LibraryImport("user32.dll", EntryPoint = "SetWindowLongPtrW", SetLastError = true)]
-    internal static partial IntPtr SetWindowLongPtr(IntPtr hWnd, int index, IntPtr newLong);
+    private static partial IntPtr SetWindowLongPtr64(IntPtr hWnd, int index, IntPtr newLong);
+
+    [LibraryImport("user32.dll", EntryPoint = "SetWindowLongW", SetLastError = true)]
+    private static partial int SetWindowLong32(IntPtr hWnd, int index, int newLong);
 
     /// <summary>SWP flags used when re-applying styles without moving/resizing.</summary>
     internal const uint SWP_NOMOVE = 0x0002;

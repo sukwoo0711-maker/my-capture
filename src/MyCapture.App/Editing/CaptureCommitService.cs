@@ -35,7 +35,6 @@ internal sealed class CaptureCommitService
 {
     private readonly CapturePersistenceService _persistence;
     private readonly Func<AppSettings> _settings;
-    private readonly Func<AppPaths> _paths;
     private readonly ILogger<CaptureCommitService> _log;
     private readonly Func<BitmapSource, string?, CaptureProvenance?, Task<CaptureProvenance>?, Task<bool>> _copyImageAsync;
 
@@ -48,8 +47,9 @@ internal sealed class CaptureCommitService
     {
         _persistence = persistence ?? throw new ArgumentNullException(nameof(persistence));
         _settings = settings ?? throw new ArgumentNullException(nameof(settings));
-        _paths = paths ?? throw new ArgumentNullException(nameof(paths));
+        ArgumentNullException.ThrowIfNull(paths);
         _log = log ?? throw new ArgumentNullException(nameof(log));
+        ExportLocation = new ImageExportLocation(settings, paths, log, () => PersistExportSettings?.Invoke());
         _copyImageAsync = copyImageAsync is null
             ? (image, url, provenance, pending) => ClipboardImageService.CopyImageWithProvenanceAsync(image, url, provenance, pendingProvenance: pending)
             : (image, url, _, _) => copyImageAsync(image, url);
@@ -73,12 +73,22 @@ internal sealed class CaptureCommitService
     internal event Action<string>? QuickSaved;
 
     internal Action? PersistExportSettings { get; set; }
+    internal ImageExportLocation ExportLocation { get; }
     internal ImageExportOptions LastExportOptions => _settings().Export.LastImageExport;
+    internal void RememberSavedExport(string path, ImageExportOptions options)
+    {
+        // Publish the folder and options in one ordered settings snapshot, after the file exists.
+        _settings().Export.LastImageExport = options;
+        ExportLocation.RememberSavedPath(path, persistEvenIfUnchanged: true);
+    }
+
     internal void RememberExportOptions(ImageExportOptions options)
     {
         _settings().Export.LastImageExport = options;
         try { PersistExportSettings?.Invoke(); }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException
+                                   or InvalidOperationException or System.Text.Json.JsonException
+                                   or System.Security.Cryptography.CryptographicException)
         { _log.LogWarning(ex, "Could not persist the last export options"); }
     }
 
@@ -204,7 +214,7 @@ internal sealed class CaptureCommitService
                     }
 
                     if (!await TrySavePngAsync(flattened, chosen, options, exportRecord?.SourcePageUrl)) return false;
-                    RememberExportOptions(options);
+                    RememberSavedExport(chosen, options);
                     return true;
                 });
                 if (!exported)
@@ -302,14 +312,14 @@ internal sealed class CaptureCommitService
 
     private bool ShowReducedExport(BitmapSource flattened, CaptureRecord? record)
     {
-        string directory = ResolveQuickSaveDirectory();
+        string directory = ExportLocation.SaveAsDirectory;
         string stem = BuildExportStem(record);
         string suggested = QuickSaveNaming.ResolvePath(directory, stem, ".png");
         return ReducedExportPrompt is not null
             ? ReducedExportPrompt(flattened, suggested)
             : ImageReductionExportDialog.Show(System.Windows.Application.Current?.Windows
                 .OfType<System.Windows.Window>().FirstOrDefault(window => window.IsActive), flattened, suggested,
-                record?.SourcePageUrl, LastExportOptions, RememberExportOptions);
+                record?.SourcePageUrl, LastExportOptions, RememberExportOptions, RememberSavedExport);
     }
 
     internal static BitmapSource Flatten(
@@ -430,8 +440,7 @@ internal sealed class CaptureCommitService
 
     private string ResolveQuickSaveDirectory()
     {
-        string overridePath = _settings().Export.QuickSaveDirectoryOverride;
-        return string.IsNullOrWhiteSpace(overridePath) ? _paths().QuickSaveRoot : overridePath;
+        return ExportLocation.QuickSaveDirectory;
     }
 
     private string BuildExportStem(CaptureRecord? record) => QuickSaveNaming.BuildStem(
@@ -439,7 +448,7 @@ internal sealed class CaptureCommitService
 
     private (string Path, ImageExportOptions Options)? ResolveSaveAsDestination(CaptureRecord? record)
     {
-        string directory = ResolveQuickSaveDirectory();
+        string directory = ExportLocation.SaveAsDirectory;
         string stem = BuildExportStem(record);
         string suggested = QuickSaveNaming.ResolvePath(directory, stem, ".png");
 

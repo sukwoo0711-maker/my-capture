@@ -94,7 +94,7 @@ public partial class App
 
     private void ShowFirstRunWelcome()
     {
-        var welcome = new WelcomeWindow(_settings!.Hotkeys, _settings.General.AfterCapture, _settings.Queue.ImageRetentionHours);
+        var welcome = CreateOnboardingWindow(replay: false);
         welcome.Closed += (_, _) =>
         {
             StartAtSignInOutcome? startup = ApplyWelcomeStartAtSignIn(welcome.StartAtSignIn);
@@ -117,6 +117,7 @@ public partial class App
             }
         };
         welcome.Show();
+        WindowForeground.BringForward(welcome);
     }
 
     /// <summary>

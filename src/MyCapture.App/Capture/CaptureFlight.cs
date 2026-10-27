@@ -3,6 +3,7 @@ using System.Windows;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
+using MyCapture.App.Diagnostics;
 using MyCapture.App.Themes;
 using MyCapture.Core.Primitives;
 using MyCapture.Platform.Display;
@@ -78,7 +79,7 @@ internal sealed class CaptureFlight
     private readonly double _scale;
     private readonly double _liftedAt;
     private readonly DispatcherTimer _deadline;
-    private CaptureFlightDecoration _window;
+    private CaptureFlightDecoration? _window;
     private CaptureFlightDecoration? _successor;
     private QuickAccessWindow? _card;
     private Phase _phase = Phase.Lifted;
@@ -97,8 +98,11 @@ internal sealed class CaptureFlight
         _deadline.Tick += OnDeadline;
     }
 
-    /// <summary>The captured image; the card that receives the flight shows this same image.</summary>
-    internal BitmapSource Image { get; }
+    /// <summary>
+    /// The captured image; the card that receives the flight shows this same image. Null once the
+    /// flight has ended, so a finished flight the app still holds keeps no pixels.
+    /// </summary>
+    internal BitmapSource? Image { get; private set; }
 
     /// <summary>Where the image was taken, in virtual-desktop physical pixels.</summary>
     internal RectD Source { get; }
@@ -182,6 +186,7 @@ internal sealed class CaptureFlight
     internal void Finish()
     {
         if (_phase == Phase.Done) return;
+        ReceiptTimeline.Mark?.Invoke("flight-finished");
         _phase = Phase.Done;
         _deadline.Stop();
         StopRendering();
@@ -193,7 +198,12 @@ internal sealed class CaptureFlight
         }
         _successor?.Close();
         _successor = null;
-        if (!_window.IsClosed) _window.Close();
+        if (_window is { IsClosed: false } window) window.Close();
+        // The app keeps its latest flight until the next capture. A finished flight lets go of the
+        // image, its closed windows and the card, so none of them outlives what is on screen.
+        _window = null;
+        _card = null;
+        Image = null;
     }
 
     /// <summary>Applies the frame for the clock's current time; the live clock calls this every frame.</summary>
@@ -212,7 +222,7 @@ internal sealed class CaptureFlight
 
             case Phase.Flying:
                 if (_card is not { IsVisible: true } card || FluidMotion.IsExiting(card)
-                    || card.PreviewScreenBounds is not { } target || !Contains(_window.Bounds, target))
+                    || card.PreviewScreenBounds is not { } target || _window is not { } window || !Contains(window.Bounds, target))
                 {
                     // The card left or moved away from where the image can reach: land at once.
                     Finish();
@@ -227,6 +237,7 @@ internal sealed class CaptureFlight
                     // next frame, so for one frame both are drawn and never neither.
                     card.RevealPreview();
                     _phase = Phase.Arrived;
+                    ReceiptTimeline.Mark?.Invoke("flight-arrived");
                 }
                 break;
 
@@ -256,6 +267,7 @@ internal sealed class CaptureFlight
             return;
         }
 
+        if (_window is not { } lifted || Image is not { } image) return;
         try
         {
             if (_card.PreviewScreenBounds is not { } target
@@ -265,16 +277,16 @@ internal sealed class CaptureFlight
                 return;
             }
 
-            if (Contains(_window.Bounds, plan.Bounds))
+            if (Contains(lifted.Bounds, plan.Bounds))
             {
                 // The card was shown after the lift window: put the image back on top before it moves.
-                _window.Raise();
+                lifted.Raise();
                 StartFlying();
                 return;
             }
 
-            var successor = new CaptureFlightDecoration(Image, plan.Bounds, plan.Scale);
-            successor.Draw(_window.Frame);
+            var successor = new CaptureFlightDecoration(image, plan.Bounds, plan.Scale);
+            successor.Draw(lifted.Frame);
             if (!successor.ShowDecoration())
             {
                 successor.Close();
@@ -284,6 +296,7 @@ internal sealed class CaptureFlight
 
             _successor = successor;
             _phase = Phase.HandingOver;
+            ReceiptTimeline.Mark?.Invoke("flight-handover");
             successor.ContentRendered += OnSuccessorRendered;
         }
         catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException)
@@ -297,7 +310,7 @@ internal sealed class CaptureFlight
         if (sender is CaptureFlightDecoration successor) successor.ContentRendered -= OnSuccessorRendered;
         if (_phase != Phase.HandingOver || _successor is not { } next) return;
         // The new window shows the image where the lift window does; the lift window can go.
-        _window.Close();
+        _window?.Close();
         _window = next;
         _successor = null;
         StartFlying();
@@ -305,6 +318,7 @@ internal sealed class CaptureFlight
 
     private void StartFlying()
     {
+        ReceiptTimeline.Mark?.Invoke("flight-start");
         _phase = Phase.Flying;
         _phaseStart = _clock();
         // Frames stop while nothing renders (a locked session); the card still lands shortly after.
@@ -319,6 +333,7 @@ internal sealed class CaptureFlight
     /// <summary>The card enters with its usual entrance and the lifted image fades away.</summary>
     private void SkipFlight()
     {
+        ReceiptTimeline.Mark?.Invoke("flight-skipped");
         if (_card is { } card)
         {
             card.Closed -= OnCardClosed;
@@ -356,7 +371,7 @@ internal sealed class CaptureFlight
 
     private void OnCardClosed(object? sender, EventArgs e) => Finish();
 
-    private void Draw(CaptureFlightFrame frame) => _window.Draw(frame);
+    private void Draw(CaptureFlightFrame frame) => _window?.Draw(frame);
 
     private void StartRendering()
     {

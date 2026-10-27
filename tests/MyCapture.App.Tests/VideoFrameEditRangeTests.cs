@@ -124,6 +124,7 @@ public sealed class VideoFrameEditRangeTests
             editor?.Close();
             StudioRangeVideoEffect.Calibration = previous;
             StudioRangeVideoEffect.HardwareShaderAvailable = previousHardware;
+            OwnedTestDirectory.WaitForMediaFilesReleased(root);
             OwnedTestDirectory.Delete(root);
         }
     });
@@ -149,7 +150,12 @@ public sealed class VideoFrameEditRangeTests
                 Assert.Equal((int)(time * 30 / 1000), FrameIndexClip.Read(frame));
             }
         }
-        finally { editor?.Close(); OwnedTestDirectory.Delete(root); }
+        finally
+        {
+            editor?.Close();
+            OwnedTestDirectory.WaitForMediaFilesReleased(root);
+            OwnedTestDirectory.Delete(root);
+        }
     });
 
     [Fact]
@@ -185,7 +191,12 @@ public sealed class VideoFrameEditRangeTests
             frame = Assert.IsAssignableFrom<BitmapSource>(task.GetAwaiter().GetResult());
             Assert.Equal(Pixels(VideoFrameRenderPipeline.RenderSingleFrame(clip, 600, 320, 180)), Pixels(frame));
         }
-        finally { editor?.Close(); OwnedTestDirectory.Delete(root); }
+        finally
+        {
+            editor?.Close();
+            OwnedTestDirectory.WaitForMediaFilesReleased(root);
+            OwnedTestDirectory.Delete(root);
+        }
     });
 
     private static void AssertEndpoints(BitmapSource bitmap, int blackX, int blackY, int whiteX, int whiteY)

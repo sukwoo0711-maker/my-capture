@@ -59,7 +59,7 @@ internal sealed class VideoScene : TutorialScene
     {
         _feature = id["video-".Length..];
         _work = Path.Combine(Program.WorkFolder, $"{id}.{language}");
-        if (Directory.Exists(_work)) Directory.Delete(_work, recursive: true);
+        if (Directory.Exists(_work)) global::MyCapture.Core.Storage.RecoverableFileRemoval.DeleteDirectory(_work, recursive: true);
         Directory.CreateDirectory(_work);
         string name = "MyCapture_20261013_093012.mp4";
         _recording = CreateRecording(Path.Combine(_work, name), Korean);
@@ -701,7 +701,7 @@ internal sealed class VideoScene : TutorialScene
         _dialogHost?.Dispose();
         _host.Dispose();
         Stage.Pump(100);
-        try { Directory.Delete(_work, recursive: true); }
+        try { global::MyCapture.Core.Storage.RecoverableFileRemoval.DeleteDirectory(_work, recursive: true); }
         catch (IOException) { }
         catch (UnauthorizedAccessException) { }
     }

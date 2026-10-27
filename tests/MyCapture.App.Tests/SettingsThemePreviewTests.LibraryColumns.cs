@@ -1,6 +1,7 @@
 using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Media;
 using MyCapture.App.Gallery;
 using MyCapture.App.Themes;
@@ -27,7 +28,11 @@ public sealed partial class SettingsThemePreviewTests
     public Task LibraryColumns_WideLayoutIsCoveredWhenTheDesktopCapsTheWindow() =>
         RunLibraryColumnTest(nameof(LibraryColumns_WideLayoutIsCoveredWhenTheDesktopCapsTheWindow), constrainWindow: true);
 
-    private Task RunLibraryColumnTest(string testName, bool constrainWindow) =>
+    [Fact]
+    public Task LibraryColumns_ChangingViewsAfterMixedWindowAndClientWidthsKeepsCardsInside() =>
+        RunLibraryColumnTest(nameof(LibraryColumns_ChangingViewsAfterMixedWindowAndClientWidthsKeepsCardsInside), constrainWindow: false, maximumWidth: 1044);
+
+    private Task RunLibraryColumnTest(string testName, bool constrainWindow, double? maximumWidth = null) =>
         RunIsolated(testName, () =>
         {
             var application = new Application { ShutdownMode = ShutdownMode.OnExplicitShutdown };
@@ -40,7 +45,7 @@ public sealed partial class SettingsThemePreviewTests
             try
             {
                 using var scope = UiText.UseLanguage("ko-KR");
-                VerifyLibraryColumns(constrainWindow);
+                VerifyLibraryColumns(constrainWindow, maximumWidth);
             }
             finally
             {
@@ -49,7 +54,7 @@ public sealed partial class SettingsThemePreviewTests
             }
         });
 
-    private static void VerifyLibraryColumns(bool constrainWindow)
+    private static void VerifyLibraryColumns(bool constrainWindow, double? maximumWidth)
     {
         ThemeService.Apply(AppTheme.Glass);
         LibraryUxFixture f = CreateLibraryUxFixture("mc-library-columns-");
@@ -70,14 +75,17 @@ public sealed partial class SettingsThemePreviewTests
             window.Width = window.MinWidth;
             window.Height = window.MinHeight;
             if (constrainWindow) window.MaxWidth = window.MinWidth;
+            if (maximumWidth.HasValue) window.MaxWidth = maximumWidth.Value;
             window.Show();
+            window.SetDetailsPaneOpen(true);
             var rowsList = (ListBox)window.FindName("RowsList");
             vm.Refresh();
             PumpLibraryUntil(window, () => FolderCardButtons(rowsList).Length == 2, "library columns: folder cards");
             ScrollViewer scroll = Descendants(rowsList).OfType<ScrollViewer>().First();
 
             // The minimum window with the details pane open fits two full cards that share its width.
-            Assert.Equal(2, vm.ColumnCount);
+            Assert.True(vm.ColumnCount == 2,
+                $"Minimum root needs two columns; actual {vm.ColumnCount}, window {window.ActualWidth}, client {((FrameworkElement)window.Content).ActualWidth}, rows {rowsList.ActualWidth}, scroll {scroll.ActualWidth}, viewport {scroll.ViewportWidth}");
             AssertCardsInsideLibrary(rowsList, scroll, vm, "minimum root");
             SaveLibraryUxEvidence(window, AppTheme.Glass, "columns-minimum-root-glass-ko-KR.png");
 
@@ -112,8 +120,8 @@ public sealed partial class SettingsThemePreviewTests
                     if (keyboard) Assert.True(showDetails.IsKeyboardFocused, "focus must move to the rail's show button");
                     AssertInsideClient(showDetails, client, pane);
                     Assert.Equal(UiText.Get("LibraryUx_DetailsShow"), AutomationProperties.GetName(showDetails));
-                    // The two cards take the width the pane gave back instead of leaving it empty.
-                    Assert.Equal(2, vm.ColumnCount);
+                    // Hiding details leaves enough space for a third card.
+                    Assert.Equal(3, vm.ColumnCount);
                     AssertCardsInsideLibrary(rowsList, scroll, vm, $"minimum root, {pane}");
                     SaveLibraryUxEvidence(window, AppTheme.Glass, "columns-minimum-root-details-hidden-glass-ko-KR.png");
                 }
@@ -295,9 +303,9 @@ public sealed partial class SettingsThemePreviewTests
         double track = compact ? GalleryRowBuilder.MinCompactTileTrackWidth : GalleryRowBuilder.MinTileTrackWidth;
         int max = compact ? GalleryRowBuilder.CompactMaxColumns : GalleryRowBuilder.MaxColumns;
         // The library's scrolling area grows one DIP for every DIP the window grows; the themed
-        // vertical scrollbar (16 DIPs) is always reserved when the column count is chosen.
+        // vertical scrollbar track is always reserved when the column count is chosen.
         double chrome = window.ActualWidth - scroll.ActualWidth;
-        const double reserve = 16;
+        double reserve = scroll.ActualWidth - LibraryUsableWidth(scroll);
         var widths = new SortedSet<double>();
         for (int columns = 1; columns <= max; columns++)
             foreach (double delta in new[] { -1d, 0, 1 })
@@ -306,6 +314,16 @@ public sealed partial class SettingsThemePreviewTests
             widths.Add(width);
         foreach (double width in widths.Where(width => width >= window.MinWidth))
             yield return width;
+    }
+
+    private static double LibraryUsableWidth(ScrollViewer scroll)
+    {
+        // The default Windows scrollbar is 17 DIP; a supplied theme can set another width.
+        // Measure the loaded template and reserve the same track when it is collapsed.
+        var bar = Assert.IsAssignableFrom<ScrollBar>(scroll.Template.FindName("PART_VerticalScrollBar", scroll));
+        double reserve = bar.ActualWidth > 0 ? bar.ActualWidth
+            : !double.IsNaN(bar.Width) && bar.Width > 0 ? Math.Max(bar.Width, bar.MinWidth) : SystemParameters.VerticalScrollBarWidth;
+        return scroll.ActualWidth - scroll.Padding.Left - scroll.Padding.Right - reserve;
     }
 
     /// <summary>
@@ -319,7 +337,7 @@ public sealed partial class SettingsThemePreviewTests
         bool compact = vm.IsCompactLayout;
         double track = compact ? GalleryRowBuilder.MinCompactTileTrackWidth : GalleryRowBuilder.MinTileTrackWidth;
         int max = compact ? GalleryRowBuilder.CompactMaxColumns : GalleryRowBuilder.MaxColumns;
-        (double baseWidth, double baseHeight, double slope) = compact ? (148d, 144d, 0.625) : (244d, 204d, 0.625);
+        (double baseWidth, double baseHeight, double slope) = compact ? (148d, 160d, 0.625) : (244d, 220d, 0.625);
         // The visible card: a capture card inside its selection outline, or a folder card button.
         FrameworkElement[] cards = Descendants(rowsList).OfType<FrameworkElement>()
             .Where(element => element.IsVisible && (element is Border { Name: "TileCard" or "CompactTileCard" }
@@ -334,7 +352,9 @@ public sealed partial class SettingsThemePreviewTests
                 $"{label}: a card spans {left:0.#}..{right:0.#} in a {scroll.ViewportWidth:0.#}-DIP library ({vm.ColumnCount} columns)");
             Assert.True(card.ActualWidth >= track - GalleryRowBuilder.CardInset - 1,
                 $"{label}: a {card.ActualWidth:0.#}-DIP card is narrower than the {track - GalleryRowBuilder.CardInset}-DIP minimum");
-            Assert.Equal(GalleryCardRowPanel.CardHeightFor(card.ActualWidth, baseWidth, baseHeight, slope), card.ActualHeight, 1.5);
+            double expectedHeight = card is Button { DataContext: GalleryFolderCardViewModel }
+                ? 40 : GalleryCardRowPanel.CardHeightFor(card.ActualWidth, baseWidth, baseHeight, slope);
+            Assert.Equal(expectedHeight, card.ActualHeight, 1.5);
             foreach (Button command in Descendants(card).OfType<Button>().Where(button => button.IsVisible))
             {
                 double commandRight = command.TranslatePoint(new Point(command.ActualWidth, 0), scroll).X;
@@ -355,8 +375,8 @@ public sealed partial class SettingsThemePreviewTests
         }
 
         // As many columns as minimum tracks fit beside the reserved scrollbar, and not one more.
-        double usable = scroll.ActualWidth - 16;
-        Assert.True(vm.ColumnCount * track <= usable + 0.5, $"{label}: {vm.ColumnCount} columns do not fit {usable:0.#} DIP");
+        double usable = LibraryUsableWidth(scroll);
+        Assert.True(vm.ColumnCount * track <= usable + 0.5, $"{label}: {vm.ColumnCount} columns do not fit {usable:0.#} DIP (scroll {scroll.ActualWidth}, viewport {scroll.ViewportWidth})");
         Assert.True(vm.ColumnCount == max || (vm.ColumnCount + 1) * track > usable - 0.5,
             $"{label}: {vm.ColumnCount} columns leave room for another card in {usable:0.#} DIP");
         GalleryTileRow? fullest = vm.Rows.OfType<GalleryTileRow>().MaxBy(row => row.Tiles.Count);

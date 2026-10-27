@@ -97,9 +97,9 @@ internal sealed class OwnedImageExportStage : IImageExportStage
         try
         {
             AssertOwnedPath();
-            if (_fileCreated) _file.Delete();
+            if (_fileCreated) global::MyCapture.Core.Storage.RecoverableFileRemoval.DeleteFile(_file.FullName);
             // Nonrecursive deletion refuses to remove any unexpected files in the directory.
-            _directory.Delete();
+            global::MyCapture.Core.Storage.RecoverableFileRemoval.DeleteDirectory(_directory.FullName);
         }
         catch (IOException) { }
         catch (UnauthorizedAccessException) { }

@@ -130,10 +130,11 @@ public sealed partial class SettingsThemePreviewTests
             var banner = (FrameworkElement)window.FindName("OcrCoverageBanner");
             Assert.False(banner.IsVisible, language + ": the complete-coverage fixture must not show the OCR banner");
 
-            // Nothing selected: capture, search, new folder, sort and more share one row and fit.
+            // Global capture/search and content sort/more occupy two stable command rows.
             var bar = (FrameworkElement)window.FindName("LibraryCommandBar");
-            ComboBox sort = Descendants(window).OfType<ComboBox>()
-                .Single(box => AutomationProperties.GetName(box) == UiText.Get("Folder410.Sort"));
+            var contentBar = (FrameworkElement)window.FindName("LibraryContentCommandBar");
+            var edit = (Button)window.FindName("EditSelectedButton");
+            var sort = (ComboBox)window.FindName("SortBox");
             var searchBox = (TextBox)window.FindName("SearchBox");
             var searchField = (FrameworkElement)window.FindName("SearchField");
             var placeholder = (TextBlock)window.FindName("SearchPlaceholderText");
@@ -143,9 +144,12 @@ public sealed partial class SettingsThemePreviewTests
             var newFolder = (Button)window.FindName("NewFolderPaneButton");
             AssertInsideClient(newFolder, client, language);
             var more = (Button)window.FindName("MoreCommandsButton");
-            foreach (FrameworkElement element in new FrameworkElement[] { capture, record, searchBox, placeholder, sort, more })
+            foreach (FrameworkElement element in new FrameworkElement[] { capture, record, searchBox, placeholder, edit, more })
                 AssertInsideClient(element, client, language);
-            AssertSameRow(bar, capture, record, searchField, sort, more);
+            AssertSameRow(bar, capture, record, searchField);
+            AssertSameRow(contentBar, edit, more);
+            AssertSameRow(contentBar, sort, more);
+            Assert.True(contentBar.TranslatePoint(new Point(), client).Y >= bar.TranslatePoint(new Point(), client).Y + bar.ActualHeight);
             // The root hint switches to compact text at minimum width; folder hints may still ellipsize.
             Assert.Equal(TextTrimming.CharacterEllipsis, placeholder.TextTrimming);
             AssertNotTrimmed(placeholder, language);
@@ -153,9 +157,13 @@ public sealed partial class SettingsThemePreviewTests
             foreach (TextBlock label in new[] { capture, record }.SelectMany(button => Descendants(button).OfType<TextBlock>()))
                 AssertNotTrimmed(label, language);
             // Tab order follows the visual order: capture, search, then the library commands.
-            AssertLeftToRight(client, record, searchField, sort);
+            AssertLeftToRight(client, record, searchField);
+            AssertLeftToRight(client, edit, more);
             AssertLeftToRight(client, sort, more);
             double barHeight = bar.ActualHeight;
+            double contentBarHeight = contentBar.ActualHeight;
+            Rect searchBounds = searchField.TransformToAncestor(client).TransformBounds(new Rect(searchField.RenderSize));
+            string searchHint = placeholder.Text;
             var workspace = (FrameworkElement)window.FindName("GalleryWorkspace");
             double workspaceTop = workspace.TranslatePoint(new Point(), client).Y;
 
@@ -165,10 +173,29 @@ public sealed partial class SettingsThemePreviewTests
             var selection = (Panel)window.FindName("SelectionCommands");
             Button[] visibleActions = selection.Children.OfType<Button>().Where(button => button.IsVisible).ToArray();
             SaveLibraryUxEvidence(window, AppTheme.Midnight, $"minimum-window-selection-{language}.png");
-            Assert.Equal(4, visibleActions.Length); // clear, ZIP, move, delete
-            var compare = (Button)window.FindName("CompareSelectedButton");
-            Assert.Equal(Visibility.Collapsed, compare.Visibility);
-            Assert.Same(window.FindName("MoveCapturesButton"), visibleActions[2]);
+            AssertSelectionActionsReachable(window, compareVisible: false);
+            var compare = (MenuItem)window.FindName("CompareSelectedMenu");
+            Assert.False(compare.IsEnabled);
+            Assert.Same(window.FindName("ClearSelectionButton"), visibleActions[0]);
+            Assert.Same(window.FindName("KeepSelectedButton"), visibleActions[^1]);
+            // Apps must reach the toolbar button's own menu, not the canvas menu.
+            // WPF opens keyboard context menus during InputManager.PostProcessInput;
+            // RaiseEvent alone only visits the routed handlers and cannot open that menu.
+            more.Focus();
+            bool contextMenuOpeningRaised = false;
+            more.ContextMenuOpening += (_, _) => contextMenuOpeningRaised = true;
+            var menuKeyDown = new KeyEventArgs(Keyboard.PrimaryDevice, PresentationSource.FromVisual(window), 0, Key.Apps)
+                { RoutedEvent = Keyboard.PreviewKeyDownEvent, Source = more };
+            InputManager.Current.ProcessInput(menuKeyDown);
+            Assert.False(menuKeyDown.Handled);
+            InputManager.Current.ProcessInput(new KeyEventArgs(Keyboard.PrimaryDevice, PresentationSource.FromVisual(window), 0, Key.Apps)
+                { RoutedEvent = Keyboard.KeyUpEvent, Source = more });
+            SettleGalleryLayout(window);
+            Assert.True(contextMenuOpeningRaised);
+            Assert.True(more.ContextMenu!.IsOpen);
+            Assert.Same(more, more.ContextMenu.PlacementTarget);
+            Assert.Same(vm, more.ContextMenu.DataContext);
+            more.ContextMenu.IsOpen = false;
             window.Dispatcher.Invoke(() => more.RaiseEvent(new RoutedEventArgs(Button.ClickEvent)));
             SettleGalleryLayout(window);
             var overflow = more.ContextMenu!;
@@ -183,34 +210,39 @@ public sealed partial class SettingsThemePreviewTests
             Assert.Same(vm.SingleSelectedTile, ((MenuItem)window.FindName("ReduceSelectedMenu")).CommandParameter);
             Assert.Equal(Visibility.Collapsed, ((MenuItem)window.FindName("GifSelectedMenu")).Visibility);
             overflow.IsOpen = false;
-            Assert.Equal(UiText.Get("Text_4B8D541EBE6D"), placeholder.Text);
+            Assert.Equal(searchHint, placeholder.Text);
             // More stays after them, so restoring deleted captures is reachable with a selection.
             foreach (FrameworkElement element in visibleActions.Append<FrameworkElement>(placeholder).Append(more))
                 AssertInsideClient(element, client, language);
             AssertLeftToRight(client, visibleActions[^1], more);
-            AssertSameRow(bar, visibleActions.Cast<FrameworkElement>().Append(searchField)
-                .Append((Button)window.FindName("CaptureRegionIconButton")).ToArray());
-            AssertLeftToRight(client, (Button)window.FindName("RecordRegionIconButton"), searchField, visibleActions[0]);
+            AssertSameRow(contentBar, visibleActions.Cast<FrameworkElement>().Append(more).ToArray());
+            AssertSameRow(bar, capture, record, searchField);
+            Assert.True(capture.IsVisible && record.IsVisible);
+            Assert.Null(window.FindName("CaptureRegionIconButton"));
+            Assert.Null(window.FindName("RecordRegionIconButton"));
+            Assert.Equal(searchBounds, searchField.TransformToAncestor(client).TransformBounds(new Rect(searchField.RenderSize)));
+            AssertLeftToRight(client, record, searchField);
             AssertNotTrimmed(placeholder, language);
             AssertNotTrimmed((TextBlock)window.FindName("SelectionCountLabel"), language);
             foreach (Button button in visibleActions.Skip(1))
                 AssertNotTrimmed(Descendants(button).OfType<TextBlock>().Single(), language);
             Assert.Equal(barHeight, bar.ActualHeight, 1);
+            Assert.Equal(contentBarHeight, contentBar.ActualHeight, 1);
             Assert.Equal(workspaceTop, workspace.TranslatePoint(new Point(), client).Y, 1);
 
             // Comparing two images shares the selection with PDF export and the earlier lanes.
             GalleryItemViewModel second = vm.Groups.SelectMany(group => group.Items).Skip(1).First();
             vm.Select(second.Id, control: true);
             SettleGalleryLayout(window);
-            Assert.True(compare.IsVisible);
-            Assert.True(GalleryWindow.CompareCommand.CanExecute(null, compare));
-            Assert.Equal(5, selection.Children.OfType<Button>().Count(button => button.IsVisible));
+            Assert.True(compare.IsEnabled);
+            Assert.True(GalleryWindow.CompareCommand.CanExecute(null, window));
+            AssertSelectionActionsReachable(window, compareVisible: true);
             foreach (Button button in selection.Children.OfType<Button>().Where(button => button.IsVisible))
                 AssertInsideClient(button, client, language);
             vm.Select(second.Id, control: true);
             SettleGalleryLayout(window);
-            Assert.Equal(Visibility.Collapsed, compare.Visibility);
-            Assert.False(GalleryWindow.CompareCommand.CanExecute(null, compare));
+            Assert.False(compare.IsEnabled);
+            Assert.False(GalleryWindow.CompareCommand.CanExecute(null, window));
 
             ListBox rows = (ListBox)window.FindName("RowsList");
             ScrollViewer scroll = Descendants(rows).OfType<ScrollViewer>().First();
@@ -260,7 +292,8 @@ public sealed partial class SettingsThemePreviewTests
                 Assert.True(left >= -0.5 && left + item.ActualWidth <= scroll.ViewportWidth + 0.5,
                     $"{language}: a compact card spans {left:0.#}..{left + item.ActualWidth:0.#} in a {scroll.ViewportWidth:0.#}-DIP viewport");
                 Button[] tileActions = Descendants(item).OfType<Button>().Where(button => button.IsVisible).ToArray();
-                Assert.Equal(4, tileActions.Length);
+                Assert.Single(tileActions);
+                Assert.Equal(UiText.Get("Text_5E8959D18390"), AutomationProperties.GetName(tileActions[0]));
                 foreach (Button action in tileActions)
                     AssertInsideClient(action, client, language);
             }
@@ -403,6 +436,20 @@ public sealed partial class SettingsThemePreviewTests
         Assert.InRange(topLeft.Y, -0.5, client.ActualHeight + 0.5);
         Assert.InRange(bottomRight.X, 0, client.ActualWidth + 0.5);
         Assert.InRange(bottomRight.Y, 0, client.ActualHeight + 0.5);
+    }
+
+    private static void AssertSelectionActionsReachable(GalleryWindow window, bool compareVisible)
+    {
+        Assert.True(((Button)window.FindName("ClearSelectionButton")).IsVisible);
+        Assert.True(((Button)window.FindName("KeepSelectedButton")).IsVisible);
+        Assert.Equal(compareVisible, ((MenuItem)window.FindName("CompareSelectedMenu")).IsEnabled);
+        foreach (string menuName in new[] { "ArchiveOverflowMenu", "MoveOverflowMenu", "DeleteSelectedMenu" })
+        {
+            var menu = (MenuItem)window.FindName(menuName);
+            Assert.Equal(Visibility.Visible, menu.Visibility);
+            Assert.True(menu.IsEnabled);
+            Assert.False(string.IsNullOrWhiteSpace((string)menu.Header));
+        }
     }
 
     private static void AssertLeftToRight(FrameworkElement client, params FrameworkElement[] elements)

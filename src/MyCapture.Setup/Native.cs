@@ -23,7 +23,7 @@ public static class WindowsHost
     }
     private static int ReadRelease()
     {
-        using (var baseKey = RegistryKey.OpenBaseKey(RegistryHive.LocalMachine, RegistryView.Registry64))
+        using (var baseKey = RegistryKey.OpenBaseKey(RegistryHive.LocalMachine, Environment.Is64BitOperatingSystem ? RegistryView.Registry64 : RegistryView.Registry32))
         using (var key = baseKey.OpenSubKey(@"SOFTWARE\Microsoft\NET Framework Setup\NDP\v4\Full"))
             return Convert.ToInt32(key?.GetValue("Release", 0));
     }
@@ -48,7 +48,7 @@ public static class WindowsHost
         catch (System.Security.SecurityException) { }
         catch (UnauthorizedAccessException) { }
         Validate(Environment.OSVersion.Platform == PlatformID.Win32NT, Environment.OSVersion.Version.Major,
-            build, installation, 0x8664, manifest.MinimumWindowsBuild);
+            build, installation, 0x8664, manifest.MinimumWindowsBuild, manifest.Architecture);
         ushort native;
         try
         {
@@ -57,15 +57,17 @@ public static class WindowsHost
         }
         catch (EntryPointNotFoundException) { throw new SetupException(19, "The required Windows architecture API is unavailable."); }
         Validate(Environment.OSVersion.Platform == PlatformID.Win32NT, Environment.OSVersion.Version.Major,
-            build, installation, native, manifest.MinimumWindowsBuild);
+            build, installation, native, manifest.MinimumWindowsBuild, manifest.Architecture);
     }
-    public static void Validate(bool windows, int major, int build, string installation, ushort native, int minimum)
+    public static void Validate(bool windows, int major, int build, string installation, ushort native, int minimum, string architecture = "x64")
     {
         if (!windows || major < 10 || build < Math.Max(19045, minimum) ||
             installation.IndexOf("Core", StringComparison.OrdinalIgnoreCase) >= 0 || installation.IndexOf("Nano", StringComparison.OrdinalIgnoreCase) >= 0)
             throw new SetupException(10, "Windows 10 version 22H2 (build 19045) or later with Desktop Experience is required; detected " + build + " " + installation + ".");
-        if ((native != 0x8664 && native != 0xAA64) || (native == 0xAA64 && build < 22000))
-            throw new SetupException(11, "This x64 package requires x64 Windows, or Windows 11 ARM64 (build 22000) for x64 emulation.");
+        if ((architecture != "x64" && architecture != "x86") ||
+            (native != 0x8664 && native != 0xAA64 && !(architecture == "x86" && native == 0x014c)) ||
+            (native == 0xAA64 && build < 22000))
+            throw new SetupException(11, "The package architecture requires matching Windows or supported Windows 11 ARM64 emulation.");
     }
     public static void Popup(bool success, string message, bool uninstall = false) =>
         MessageBoxW(IntPtr.Zero, message, uninstall ? "MyCapture Uninstall" : "MyCapture Setup", success ? 0x40u : 0x10u);
@@ -74,7 +76,7 @@ public static class WindowsHost
         string help = Path.Combine(Path.GetTempPath(), "MyCapture-Setup-Help.txt");
         try { PathSafety.NotLink(help); File.Copy(Path.Combine(directory, "SETUP-HELP.txt"), help, true); } catch { }
         return "A required Windows component (.NET Framework 4.8 / System.IO.Compression) is unavailable.\r\n" +
-            "Use MyCapture-<version>-win-x64-portable.zip or the Microsoft Store version.\r\n" +
+            "Use MyCapture-<version>-win-" + (Environment.Is64BitProcess ? "x64" : "x86") + "-portable.zip or the Microsoft Store version.\r\n" +
             "https://apps.microsoft.com/detail/9PB33MC095VR\r\nHelp: " + help + "\r\nLog: " + log;
     }
     [DllImport("kernel32.dll", SetLastError = true)] private static extern bool IsWow64Process2(IntPtr process, out ushort processMachine, out ushort nativeMachine);

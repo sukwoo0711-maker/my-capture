@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.IO;
 using System.Text.RegularExpressions;
+using MyCapture.Core.Platform;
 
 namespace MyCapture.App.Updates;
 
@@ -23,6 +24,7 @@ internal static class UpdatePaths
         return true;
     }
 
+    internal static string ChecksumName => AppArchitecture.IsX86 ? "SHA256SUMS-win-x86.txt" : "SHA256SUMS.txt";
     internal static string SessionName(UpdateVersion version)
     {
         _ = InstallerName(version); // Apply the same stable numeric version policy.
@@ -30,12 +32,15 @@ internal static class UpdatePaths
             $"update-{version.Major}.{version.Minor}.{version.Patch}-{Guid.NewGuid():N}");
     }
 
-    internal static string InstallerName(UpdateVersion version)
+    internal static string InstallerName(UpdateVersion version, string? architecture = null)
     {
+        architecture ??= AppArchitecture.Name;
+        if (architecture is not ("x86" or "x64"))
+            throw new IOException("Unsupported update architecture.");
         if (version.IsPrerelease || version.Major < 0 || version.Minor < 0 || version.Patch < 0)
             throw new IOException("Only stable numeric update versions can be staged.");
         return string.Create(CultureInfo.InvariantCulture,
-            $"MyCapture-{version.Major}.{version.Minor}.{version.Patch}-win-x64-setup.exe");
+            $"MyCapture-{version.Major}.{version.Minor}.{version.Patch}-win-{architecture}-setup.exe");
     }
 
     internal static string CanonicalRoot(string root)

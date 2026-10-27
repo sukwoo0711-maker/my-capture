@@ -43,6 +43,7 @@ internal sealed class ImageReductionExportDialog : Window
     private readonly string? _sourcePageUrl;
     private readonly ImageExportOptionsPanel _options;
     private readonly Action<ImageExportOptions>? _remember;
+    private readonly Action<string, ImageExportOptions>? _rememberSavedExport;
     private Task<byte[]>? _original;
     private ImageExportResult? _result;
     private IImageExportStage? _stage;
@@ -55,11 +56,13 @@ internal sealed class ImageReductionExportDialog : Window
     private Point? _dragStart;
 
     internal ImageReductionExportDialog(BitmapSource image, string suggestedPngPath, string? sourcePageUrl = null,
-        ImageExportOptions? options = null, Action<ImageExportOptions>? remember = null)
+        ImageExportOptions? options = null, Action<ImageExportOptions>? remember = null,
+        Action<string, ImageExportOptions>? rememberSavedExport = null)
     {
         _image = image.IsFrozen ? image : image.Clone();
         if (!_image.IsFrozen) _image.Freeze();
         _suggestedPath = suggestedPngPath;
+        _rememberSavedExport = rememberSavedExport;
         _sourcePageUrl = sourcePageUrl;
         options ??= new();
         _remember = remember;
@@ -189,9 +192,10 @@ internal sealed class ImageReductionExportDialog : Window
     private const double StaleOpacity = 0.55;
 
     internal static bool Show(Window? owner, BitmapSource frozenImage, string suggestedPngPath, string? sourcePageUrl = null,
-        ImageExportOptions? options = null, Action<ImageExportOptions>? remember = null)
+        ImageExportOptions? options = null, Action<ImageExportOptions>? remember = null,
+        Action<string, ImageExportOptions>? rememberSavedExport = null)
     {
-        var dialog = new ImageReductionExportDialog(frozenImage, suggestedPngPath, sourcePageUrl, options, remember);
+        var dialog = new ImageReductionExportDialog(frozenImage, suggestedPngPath, sourcePageUrl, options, remember, rememberSavedExport);
         if (owner is not null && owner.IsVisible) dialog.Owner = owner;
         return dialog.ShowDialog() == true;
     }
@@ -323,6 +327,15 @@ internal sealed class ImageReductionExportDialog : Window
     /// <summary>The target the prepared export was calculated for.</summary>
     internal int? PreparedTargetForTest => _result?.TargetReductionPercent;
 
+    /// <summary>Publish prepared bytes before remembering either the destination or the options.</summary>
+    internal static async Task WritePreparedExportAsync(string path, byte[] bytes, ImageExportOptions options,
+        Action<ImageExportOptions>? remember, Action<string, ImageExportOptions>? rememberSavedExport)
+    {
+        await Task.Run(() => AtomicFile.WriteExportBytes(path, bytes));
+        if (rememberSavedExport is not null) rememberSavedExport(path, options);
+        else remember?.Invoke(options);
+    }
+
     private async Task SaveAsync()
     {
         ImageExportResult? result = _result;
@@ -352,8 +365,8 @@ internal sealed class ImageReductionExportDialog : Window
                 };
                 if (dialog.ShowDialog(this) != true) return false;
                 if (_closed) return false;
-                await Task.Run(() => AtomicFile.WriteExportBytes(dialog.FileName, result.Bytes));
-                _remember?.Invoke(_options.Read((int)_target.Value));
+                await WritePreparedExportAsync(dialog.FileName, result.Bytes, _options.Read((int)_target.Value),
+                    _remember, _rememberSavedExport);
                 return true;
             });
             if (saved && !_closed) DialogResult = true;

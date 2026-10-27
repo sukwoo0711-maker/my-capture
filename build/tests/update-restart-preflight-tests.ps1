@@ -98,11 +98,11 @@ try {
 finally {
     # Exact generated files only; no recursive caller-path deletion.
     foreach ($name in @('MyCapture.exe', 'MyCapture.dll')) {
-        Remove-Item -LiteralPath (Join-Path (Join-Path $root 'publish-win-x64') $name) -Force -ErrorAction SilentlyContinue
+        Remove-TestItem -Path (Join-Path (Join-Path $root 'publish-win-x64') $name)
     }
     [IO.Directory]::Delete((Join-Path $root 'publish-win-x64'), $false)
     foreach ($name in @('MyCapture-1.8.0-win-x64-setup.exe', 'MyCapture-1.8.0-win-x64-portable.zip', 'installer-manifest.json', 'release-manifest.json', 'SHA256SUMS.txt')) {
-        Remove-Item -LiteralPath (Join-Path $root $name) -Force -ErrorAction SilentlyContinue
+        Remove-TestItem -Path (Join-Path $root $name)
     }
     [IO.Directory]::Delete($root, $false)
 }

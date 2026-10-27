@@ -1,3 +1,4 @@
+using MyCapture.Core.Platform;
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.IO;
@@ -122,13 +123,13 @@ internal sealed class TranslationModelStore
     /// after its length or timestamp changes, so repeated checks are cheap; the first check in a
     /// process hashes the whole model, so callers on the UI thread use <see cref="IsInstalledAsync"/>.
     /// </summary>
-    internal bool IsInstalled => AreAllVerified(CancellationToken.None);
+    internal bool IsInstalled => AppArchitecture.SupportsNeuralOcr && AreAllVerified(CancellationToken.None);
 
     /// <summary>
     /// Runs the <see cref="IsInstalled"/> check on a worker.
     /// </summary>
     internal Task<bool> IsInstalledAsync(CancellationToken cancellationToken) =>
-        Task.Run(() => AreAllVerified(cancellationToken), cancellationToken);
+        AppArchitecture.SupportsNeuralOcr ? Task.Run(() => AreAllVerified(cancellationToken), cancellationToken) : Task.FromResult(false);
 
     /// <summary>
     /// Bytes on disk of the catalog files present in the model folder, whatever their size.
@@ -160,7 +161,8 @@ internal sealed class TranslationModelStore
     /// Cancellation removes the partial file and keeps the files already completed.
     /// </summary>
     internal Task DownloadAsync(IProgress<TranslationDownloadProgress>? progress, CancellationToken cancellationToken) =>
-        Task.Run(() => DownloadCoreAsync(progress, cancellationToken));
+        AppArchitecture.SupportsNeuralOcr ? Task.Run(() => DownloadCoreAsync(progress, cancellationToken))
+            : Task.FromException(new PlatformNotSupportedException("Translation requires the x64 application."));
 
     /// <summary>
     /// Removes the catalog files and leftover partial downloads on a worker, then the model
@@ -487,7 +489,7 @@ internal sealed class TranslationModelStore
                     _log.LogWarning(error, "Could not remove a partial translation model download");
             }
             if (!Directory.EnumerateFileSystemEntries(ModelDirectory).Any())
-                Directory.Delete(ModelDirectory);
+                global::MyCapture.Core.Storage.RecoverableFileRemoval.DeleteDirectory(ModelDirectory);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
@@ -521,7 +523,7 @@ internal sealed class TranslationModelStore
     {
         try
         {
-            if (File.Exists(path)) File.Delete(path);
+            if (File.Exists(path)) global::MyCapture.Core.Storage.RecoverableFileRemoval.DeleteFile(path);
             return null;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)

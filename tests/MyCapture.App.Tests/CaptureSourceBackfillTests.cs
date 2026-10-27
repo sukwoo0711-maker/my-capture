@@ -162,7 +162,7 @@ public sealed class CaptureSourceBackfillTests
             Queue.Evicted += (_, e) =>
             {
                 string directory = Queue.GetDirectory(e.Record);
-                if (Directory.Exists(directory)) Directory.Delete(directory, recursive: true);
+                if (Directory.Exists(directory)) global::MyCapture.Core.Storage.RecoverableFileRemoval.DeleteDirectory(directory, recursive: true);
             };
             Persistence = new CapturePersistenceService(Queue, _paths, () => _settings.Queue,
                 NullLogger<CapturePersistenceService>.Instance);

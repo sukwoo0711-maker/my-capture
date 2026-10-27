@@ -9,6 +9,7 @@ using System.Windows.Controls;
 using System.Windows.Documents;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
+using MyCapture.App.Themes;
 using MyCapture.Core.Localization;
 using MyCapture.Core.Settings;
 using MyCapture.Core.Storage;
@@ -131,13 +132,14 @@ public sealed class WelcomeOcrChoiceTests
             string expected = UiText.Format("Welcome_AccurateOcrHelp", (int)Math.Ceiling(bytes / 1_000_000d));
             Assert.Equal(expected, AutomationProperties.GetHelpText(welcome.AccurateOcrCheck));
             Assert.Equal(expected, welcome.AccurateOcrCheck.ToolTip);
-            Assert.Equal(expected, welcome.AccurateOcrHelp.Text);
+            Assert.Equal(expected, KoreanWordWrap.Strip(welcome.AccurateOcrHelp.Text));
             Assert.Contains("102 MB", expected, StringComparison.Ordinal);
             Assert.DoesNotContain("164", expected, StringComparison.Ordinal);
             Assert.DoesNotContain("Qualcomm", expected, StringComparison.Ordinal);
             Assert.Equal(32, welcome.AccurateOcrCheck.MinHeight);
-            Assert.Equal(12, welcome.AccurateOcrCheck.FontSize);
-            Assert.Equal(560, welcome.Width);
+            // The guide's type is one step larger than the single-screen welcome's 12, and the window is wider for the clip.
+            Assert.Equal(14, welcome.AccurateOcrCheck.FontSize);
+            Assert.Equal(WelcomeWindow.DefaultWidth, welcome.Width);
             welcome.AccurateOcrCheck.IsChecked = false;
             Assert.False(welcome.UseAccurateOcr);
         }
@@ -203,6 +205,9 @@ public sealed class WelcomeOcrChoiceTests
     {
         using var language = UiText.UseLanguage(locale);
         WelcomeOutcome outcome = (WelcomeOutcome)outcomeValue;
+        // TryCapture and DismissedForCapture are no longer produced by the window: a capture runs while the guide
+        // stays open. Their old triggers are covered below as "the choice still applies when the guide closes later".
+        bool legacy = outcome is WelcomeOutcome.TryCapture or WelcomeOutcome.DismissedForCapture;
         var settings = new AppSettings();
         var window = new WelcomeWindow(settings.Hotkeys, settings.General.AfterCapture,
             ocrEnvironment: new WelcomeOcrTestEnvironment())
@@ -220,14 +225,25 @@ public sealed class WelcomeOcrChoiceTests
             switch (outcome)
             {
                 case WelcomeOutcome.TryCapture:
-                    window.TryNowButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent)); break;
+                    window.TryNowButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                    Assert.True(window.IsVisible);
+                    Assert.Equal(0, saves);
+                    window.Close();
+                    break;
                 case WelcomeOutcome.OpenSettings:
                     window.ShortcutsLink.RaiseEvent(new RoutedEventArgs(Hyperlink.ClickEvent)); break;
                 case WelcomeOutcome.DismissedForCapture:
-                    window.DismissForCapture(); break;
+                    window.DismissForCapture();
+                    Assert.True(window.IsVisible);
+                    Assert.Equal(0, saves);
+                    window.Close();
+                    break;
+                case WelcomeOutcome.Completed:
+                    OnboardingGuideTests.AdvanceTo(window, WelcomeStep.Finish);
+                    window.TryNowButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent)); break;
                 default: window.Close(); break;
             }
-            Assert.Equal(outcome, window.Outcome);
+            Assert.Equal(legacy ? WelcomeOutcome.Closed : outcome, window.Outcome);
             Assert.Equal(1, saves);
             Assert.Equal(selected ? 1 : 0, downloads);
             Assert.Equal(selected ? OcrQuality.Accurate : OcrQuality.Fast, settings.Ocr.Quality);
