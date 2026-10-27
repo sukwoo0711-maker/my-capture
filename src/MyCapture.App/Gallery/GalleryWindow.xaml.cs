@@ -773,7 +773,14 @@ internal sealed partial class GalleryWindow : Window
         "Library.SourcePage.OpenFailed", "Library.SourcePage.CopyFailed",
         "Library.Source.OpenFolderFailed", "Library.Source.CopyPathFailed",
         "LibrarySelection_DeleteFailed",
+        // Commands that could not run (they used to open a message box).
+        "Gallery.Compare.LoadFailed", "Gallery.FloatFailed", "GalleryImageChanged", "Text_3BF4FEA88C51", "Text_51F5EF959148",
+        "Text_5F310F33AB12", "Text_75425A6D9BE8", "Text_884F73809F89", "Text_BCA2A41F7456", "Text_2618DA07C831",
+        "Text_7C821231A673", "Text_EC7FF66E22C9",
     ];
+
+    // Hints that something is already being done; they leave after the result time.
+    private static readonly string[] WarningStatusKeys = ["Text_E20E28D53DCE", "Text_EC81AD6B5A75", "Text_63F240FA482C", "Text_733011719B1C"];
 
     // Plain confirmations; every other line carries a count, a hint or a cause to read.
     private static readonly string[] ConfirmationStatusKeys =
@@ -834,6 +841,7 @@ internal sealed partial class GalleryWindow : Window
             return MyCapture.App.Themes.FeedbackKind.ActionRequired;
         }
 
+        if (WarningStatusKeys.Any(key => text == UiText.Get(key))) return MyCapture.App.Themes.FeedbackKind.Warning;
         if (ProgressStatusKeys.Any(key => MatchesFormat(text, key))) return MyCapture.App.Themes.FeedbackKind.Progress;
         return ConfirmationStatusKeys.Any(key => text == UiText.Get(key))
             ? MyCapture.App.Themes.FeedbackKind.Confirmation
@@ -1386,12 +1394,16 @@ internal sealed partial class GalleryWindow : Window
     private static GalleryItemViewModel? ResolveTileFromCommand(object? source) => source switch
     {
         MenuItem { CommandParameter: GalleryItemViewModel tile } => tile,
+        ButtonBase { CommandParameter: GalleryItemViewModel tile } => tile,
         FrameworkElement { DataContext: GalleryItemViewModel tile } => tile,
         _ => null,
     };
 
-    private void ShowStatus(string message) =>
-        MyCapture.App.Themes.ThemedDialog.Show(this, message, "MyCapture", MessageBoxButton.OK, MessageBoxImage.Information);
+    /// <summary>
+    /// A message about a command that did not run goes to the status line, never into a modal box over the cards it is
+    /// about. A failure stays until it is dismissed; a "try again later" hint leaves with the next result.
+    /// </summary>
+    private void ShowStatus(string message) => ShowActionStatus(message);
 
     private void RaiseCaptureChanged() => CaptureChanged?.Invoke(this, EventArgs.Empty);
 }

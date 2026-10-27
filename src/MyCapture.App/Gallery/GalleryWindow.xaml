@@ -1689,12 +1689,13 @@
                     <RowDefinition Height="*" />
                 </Grid.RowDefinitions>
 
-                <!-- A stable content toolbar keeps list geometry unchanged as selection changes.
-                     Its overflow menu retains every secondary command at narrow widths. -->
+                <!-- A stable one-row content toolbar keeps list geometry unchanged as selection changes: at narrow widths
+                     the command labels collapse to icons (then the count and sort narrow) instead of wrapping to a second row,
+                     and its overflow menu retains every secondary command. -->
                 <Grid x:Name="LibraryContentCommandBar" Margin="0,0,0,8"
                       Background="{DynamicResource Surface.Raised}"
                       AutomationProperties.Name="{loc:Text LibraryUx_CommandBarName}">
-                    <Grid.RowDefinitions><RowDefinition Height="44" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
+                    <Grid.RowDefinitions><RowDefinition Height="44" /></Grid.RowDefinitions>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="Auto" />
@@ -1708,12 +1709,54 @@
                         </Button>
                         <TextBlock x:Name="SelectionCountLabel" Text="{Binding SelectionText}" Width="96" TextTrimming="CharacterEllipsis"
                                    VerticalAlignment="Center" Margin="2,0,8,0" FontWeight="SemiBold" AutomationProperties.LiveSetting="Polite" />
-                        <Button x:Name="EditSelectedButton" Content="{loc:Text Text_1003CFC78E66}" Style="{StaticResource LibraryUx.CommandButton}"
-                                IsEnabled="{Binding HasSingleSelection}" CommandParameter="{Binding SingleSelectedTile}" Click="OnEditClick" />
-                        <Button x:Name="PreviewSelectedButton" Content="{loc:Text LibraryUx_Preview}" Style="{StaticResource LibraryUx.CommandButton}"
-                                IsEnabled="{Binding HasSingleSelection}" Click="OnPreviewSelectedClick" ToolTip="{loc:Text LibraryUx_PreviewHint}" />
-                        <Button x:Name="KeepSelectedButton" Content="{loc:Text LibraryUx_Keep}" Style="{StaticResource LibraryUx.CommandButton}"
-                                IsEnabled="{Binding HasSelection}" Click="OnKeepSelectedClick" />
+                        <!-- The commands follow the card menu's order: pin, copy, edit, preview, keep. Each has its icon and its
+                             label; when the bar is too narrow the labels go first (see FitContentToolbar), and the names and
+                             tooltips stay. -->
+                        <Button x:Name="FloatSelectedButton" Style="{StaticResource LibraryUx.CommandButton}"
+                                IsEnabled="{Binding CanReduceSelected}" CommandParameter="{Binding SingleSelectedTile}" Click="OnFloatClick"
+                                ToolTip="{loc:Text LibraryUx_PinHint}" AutomationProperties.Name="{loc:Text Gallery.Float}">
+                            <StackPanel Orientation="Horizontal">
+                                <themes:SymbolIcon Size="16" Data="{StaticResource Icon.Pin}" Style="{StaticResource LibraryUx.CommandGlyph}" Fill="Transparent" />
+                                <TextBlock x:Name="FloatSelectedLabel" Text="{loc:Text QuickAccess.Pin}" Margin="{DynamicResource CommandButton.IconLabelGap}" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </Button>
+                        <Button x:Name="CopySelectedButton" Style="{StaticResource LibraryUx.CommandButton}"
+                                IsEnabled="{Binding CanReduceSelected}" CommandParameter="{Binding SingleSelectedTile}" Click="OnCopyClick"
+                                ToolTip="{loc:Text Text_59D43391538F}" AutomationProperties.Name="{loc:Text Text_42A667BC71B0}">
+                            <StackPanel Orientation="Horizontal">
+                                <Grid VerticalAlignment="Center">
+                                    <themes:SymbolIcon Size="16" Data="{StaticResource Icon.Copy}" Style="{StaticResource LibraryUx.CommandGlyph}" Fill="Transparent"
+                                                       gallery:GalleryCopyFeedback.Part="Glyph" themes:FluidMotion.FadeTo="1" />
+                                    <themes:SymbolIcon Size="16" Data="{StaticResource Icon.Check}" Style="{StaticResource LibraryUx.CommandGlyph}" Fill="Transparent"
+                                                       Opacity="0" gallery:GalleryCopyFeedback.Part="Check" />
+                                </Grid>
+                                <TextBlock x:Name="CopySelectedLabel" Text="{loc:Text QuickAccess.Copy}" Margin="{DynamicResource CommandButton.IconLabelGap}" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </Button>
+                        <Button x:Name="EditSelectedButton" Style="{StaticResource LibraryUx.CommandButton}"
+                                IsEnabled="{Binding HasSingleSelection}" CommandParameter="{Binding SingleSelectedTile}" Click="OnEditClick"
+                                ToolTip="{loc:Text LibraryUx_EditHint}" AutomationProperties.Name="{loc:Text Text_1003CFC78E66}">
+                            <StackPanel Orientation="Horizontal">
+                                <themes:SymbolIcon Size="16" Data="{StaticResource Icon.Edit}" Style="{StaticResource LibraryUx.CommandGlyph}" Fill="Transparent" />
+                                <TextBlock x:Name="EditSelectedLabel" Text="{loc:Text Text_1003CFC78E66}" Margin="{DynamicResource CommandButton.IconLabelGap}" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </Button>
+                        <Button x:Name="PreviewSelectedButton" Style="{StaticResource LibraryUx.CommandButton}"
+                                IsEnabled="{Binding HasSingleSelection}" Click="OnPreviewSelectedClick" ToolTip="{loc:Text LibraryUx_PreviewHint}"
+                                AutomationProperties.Name="{loc:Text LibraryUx_Preview}">
+                            <StackPanel Orientation="Horizontal">
+                                <themes:SymbolIcon Size="16" Data="{StaticResource Icon.Image}" Style="{StaticResource LibraryUx.CommandGlyph}" Fill="Transparent" />
+                                <TextBlock x:Name="PreviewSelectedLabel" Text="{loc:Text LibraryUx_Preview}" Margin="{DynamicResource CommandButton.IconLabelGap}" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </Button>
+                        <Button x:Name="KeepSelectedButton" Style="{StaticResource LibraryUx.CommandButton}"
+                                IsEnabled="{Binding HasSelection}" Click="OnKeepSelectedClick" ToolTip="{loc:Text LibraryUx_KeepHint}"
+                                AutomationProperties.Name="{loc:Text LibraryUx_Keep}">
+                            <StackPanel Orientation="Horizontal">
+                                <themes:SymbolIcon Size="16" Data="{StaticResource LibraryUx.Icon.Kept}" Style="{StaticResource LibraryUx.CommandGlyph}" Fill="Transparent" />
+                                <TextBlock x:Name="KeepSelectedLabel" Text="{loc:Text LibraryUx_Keep}" Margin="{DynamicResource CommandButton.IconLabelGap}" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </Button>
                     </StackPanel>
                     <StackPanel x:Name="SortCommands" Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
                     <ComboBox x:Name="SortBox" Width="112" Margin="8,0,4,0" SelectedIndex="{Binding SortIndex, Mode=TwoWay}"
@@ -1727,26 +1770,32 @@
                               Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
                         <Button.ContextMenu>
                             <ContextMenu DataContext="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}">
+                                <!-- The same groups as a card's menu, for the selection: send, look, organize, export, delete; then the
+                                     library's own commands. -->
                                 <MenuItem x:Name="FloatSelectedMenu" Header="{loc:Text Gallery.Float}" InputGestureText="P"
                                           IsEnabled="{Binding CanReduceSelected}" CommandParameter="{Binding SingleSelectedTile}"
                                           AutomationProperties.Name="{loc:Text Gallery.Float}" Click="OnFloatClick" />
-                                <MenuItem x:Name="ArchiveOverflowMenu" Header="{loc:Text Library.Archive.Action}" Click="OnExportArchiveClick" />
-                                <MenuItem x:Name="MoveOverflowMenu" Header="{loc:Text Folder410.MoveCaptures}" Click="OnMoveCapturesClick"
-                                          InputGestureText="M" />
+                                <Separator />
                                 <MenuItem x:Name="CompareSelectedMenu" Header="{loc:Text Gallery.Compare}" IsEnabled="{Binding CanCompareSelected}" Command="{x:Static gallery:GalleryWindow.CompareCommand}"
                                           CommandTarget="{Binding PlacementTarget, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
-                                <MenuItem x:Name="DeleteSelectedMenu" Header="{loc:Text LibrarySelection_Delete}" IsEnabled="{Binding HasSelection}" Click="OnDeleteSelectedClick" />
-                                <MenuItem x:Name="ContactSheetMenu" Header="{loc:Text ContactSheet.Action}" Click="OnContactSheetClick"
-                                          Visibility="{Binding HasSelection, Converter={StaticResource BoolToVisibility}}" />
+                                <Separator />
+                                <MenuItem x:Name="MoveOverflowMenu" Header="{loc:Text Folder410.MoveCaptures}" Click="OnMoveCapturesClick"
+                                          InputGestureText="M" />
                                 <MenuItem x:Name="BatchTagsMenu" Header="{loc:Text Library.Tags.Edit}" Click="OnBatchTagsClick"
                                           Visibility="{Binding HasSelection, Converter={StaticResource BoolToVisibility}}" />
+                                <Separator />
                                 <MenuItem x:Name="ReduceSelectedMenu" Header="{loc:Text LibrarySelection_Reduce}" Click="OnReducedExportClick"
                                           CommandParameter="{Binding SingleSelectedTile}"
                                           Visibility="{Binding CanReduceSelected, Converter={StaticResource BoolToVisibility}}" />
                                 <MenuItem x:Name="GifSelectedMenu" Header="{loc:Text LibrarySelection_Gif}" Click="OnGifMenuClick"
                                           CommandParameter="{Binding SingleSelectedTile}"
                                           Visibility="{Binding CanGifSelected, Converter={StaticResource BoolToVisibility}}" />
-                                <Separator Visibility="{Binding HasSelection, Converter={StaticResource BoolToVisibility}}" />
+                                <MenuItem x:Name="ArchiveOverflowMenu" Header="{loc:Text Library.Archive.Action}" Click="OnExportArchiveClick" />
+                                <MenuItem x:Name="ContactSheetMenu" Header="{loc:Text ContactSheet.Action}" Click="OnContactSheetClick"
+                                          Visibility="{Binding HasSelection, Converter={StaticResource BoolToVisibility}}" />
+                                <Separator />
+                                <MenuItem x:Name="DeleteSelectedMenu" Header="{loc:Text LibrarySelection_Delete}" IsEnabled="{Binding HasSelection}" InputGestureText="Del" Click="OnDeleteSelectedClick" />
+                                <Separator />
                                 <MenuItem x:Name="NewFolderOverflowMenu" Header="{loc:Text Folder410.NewFolder}"
                                           InputGestureText="Ctrl+Shift+N" Click="OnNewFolderClick" />
                                 <MenuItem x:Name="ImportMenu" Header="{loc:Text Library.Import.Command}" Click="OnImportClick" />

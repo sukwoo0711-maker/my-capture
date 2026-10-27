@@ -11,18 +11,66 @@ internal sealed partial class GalleryWindow
 {
     private bool _detailsPaneOpen;
 
+    /// <summary>How much of the content toolbar's detail is shown (see <see cref="FitContentToolbar"/>).</summary>
+    internal enum ToolbarDensity
+    {
+        /// <summary>Icon and label on each command.</summary>
+        Labelled,
+
+        /// <summary>Icons only; names and tooltips stay.</summary>
+        IconsOnly,
+
+        /// <summary>Icons only, a narrower selection count and sort box.</summary>
+        Compact,
+    }
+
+    private ToolbarDensity _toolbarDensity;
+
+    internal ToolbarDensity ContentToolbarDensity => _toolbarDensity;
+
     private void OnContentCommandBarSizeChanged(object sender, SizeChangedEventArgs e)
     {
-        if (SelectionCommands is null || SortCommands is null) return;
-        bool wrap = SelectionCommands.DesiredSize.Width + SortCommands.DesiredSize.Width + 16 > LibraryContentCommandBar.ActualWidth;
-        Grid.SetRow(SelectionCommands, wrap ? 1 : 0);
-        Grid.SetColumnSpan(SelectionCommands, wrap ? 2 : 1);
+        if (e.WidthChanged) FitContentToolbar();
+    }
+
+    /// <summary>
+    /// Fits the toolbar to its width without ever wrapping to a second row: the five commands show icon and label
+    /// while that fits; otherwise the labels go (icons keep their names and tooltips); otherwise the selection count
+    /// and the sort box narrow too. The rule is checked when the window loads, is shown, changes DPI or width
+    /// (which the details pane opening or closing does) and when the language or text size changes, and it never
+    /// changes the bar's height, so a selection never moves the list.
+    /// </summary>
+    internal void FitContentToolbar()
+    {
+        if (SelectionCommands is null || SortCommands is null || LibraryContentCommandBar.ActualWidth <= 0) return;
+        double available = LibraryContentCommandBar.ActualWidth;
+        foreach (ToolbarDensity density in new[] { ToolbarDensity.Labelled, ToolbarDensity.IconsOnly, ToolbarDensity.Compact })
+        {
+            ApplyToolbarDensity(density);
+            var probe = new Size(double.PositiveInfinity, LibraryContentCommandBar.RowDefinitions[0].ActualHeight);
+            SelectionCommands.Measure(probe);
+            SortCommands.Measure(probe);
+            if (SelectionCommands.DesiredSize.Width + SortCommands.DesiredSize.Width <= available) break;
+        }
+    }
+
+    private void ApplyToolbarDensity(ToolbarDensity density)
+    {
+        _toolbarDensity = density;
+        Visibility label = density == ToolbarDensity.Labelled ? Visibility.Visible : Visibility.Collapsed;
+        foreach (TextBlock text in new[] { FloatSelectedLabel, CopySelectedLabel, EditSelectedLabel, PreviewSelectedLabel, KeepSelectedLabel })
+            text.Visibility = label;
+        SelectionCountLabel.Width = density == ToolbarDensity.Compact ? 60 : 96;
+        SelectionCountLabel.ToolTip = density == ToolbarDensity.Compact ? _viewModel.SelectionText : null;
+        SortBox.Width = density == ToolbarDensity.Compact ? 92 : 112;
     }
 
     private void InitializeCommandBarLayout()
     {
         LibraryContentCommandBar.SizeChanged += OnContentCommandBarSizeChanged;
-        Loaded += (_, _) => FitSelectionCommands();
+        Loaded += (_, _) => { FitSelectionCommands(); FitContentToolbar(); };
+        DpiChanged += (_, _) => FitContentToolbar();
+        IsVisibleChanged += (_, _) => { if (IsVisible) FitContentToolbar(); };
         _viewModel.PropertyChanged += (_, e) =>
         {
             if (e.PropertyName is null or "" or nameof(GalleryViewModel.HasSelection)
@@ -35,6 +83,15 @@ internal sealed partial class GalleryWindow
     {
         ArchiveOverflowMenu.IsEnabled = _archiveCancellation is null && _viewModel.HasSelection;
         MoveOverflowMenu.IsEnabled = _viewModel.HasSelection;
+        // Keep says what it will do to the selection: keep it, or release it when every card in it is kept.
+        bool release = _viewModel.HasSelection && _viewModel.SelectedTiles.All(tile => tile.IsPinned);
+        string keep = UiText.Get(release ? "LibraryUx_Unkeep" : "LibraryUx_Keep");
+        KeepSelectedLabel.Text = keep;
+        System.Windows.Automation.AutomationProperties.SetName(KeepSelectedButton, keep);
+        KeepSelectedButton.ToolTip = UiText.Get(release ? "LibraryUx_Unkeep" : "LibraryUx_KeepHint");
+        if (SelectionCountLabel.ToolTip is not null) SelectionCountLabel.ToolTip = _viewModel.SelectionText;
+        // "보관 해제" is wider than "보관": the bar is fitted again for the new label.
+        FitContentToolbar();
     }
 
     /// <summary>

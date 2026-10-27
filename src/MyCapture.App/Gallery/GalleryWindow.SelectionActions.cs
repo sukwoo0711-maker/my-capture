@@ -103,35 +103,17 @@ internal sealed partial class GalleryWindow
         preview.Activate();
     }
 
+    /// <summary>The toolbar's keep works like the K key and the menu: the whole selection, kept or released together.</summary>
     private async void OnKeepSelectedClick(object sender, RoutedEventArgs e) =>
-        await Dispatcher.InvokeAsync(KeepSelectedAsync).Task.Unwrap();
-
-    private async Task KeepSelectedAsync()
-    {
-        if (_keepingSelection) return;
-        GalleryItemViewModel[] targets = _viewModel.SelectedTiles.Where(tile => !tile.IsPinned).ToArray();
-        if (targets.Any(tile => !EnsureRecordReady(tile.Id))) return;
-        _keepingSelection = true;
-        KeepSelectedButton.SetCurrentValue(IsEnabledProperty, false);
-        try
+        // Started inside a dispatcher operation, so every continuation returns to the window's thread.
+        await Dispatcher.InvokeAsync(async () =>
         {
-            foreach (GalleryItemViewModel tile in targets)
+            KeepSelectedButton.SetCurrentValue(IsEnabledProperty, false);
+            try { await ToggleKeepAsync(_viewModel.SelectedTiles); }
+            finally
             {
-                if (_controller.Find(tile.Id) is { IsManuallyPinned: false })
-                    await _queue.ToggleLibraryPinAsync(tile.Id);
-                tile.RaiseMetaChanged();
+                KeepSelectedButton.SetCurrentValue(IsEnabledProperty, _viewModel.HasSelection);
+                FitSelectionCommands();
             }
-            _viewModel.Refresh();
-            RaiseCaptureChanged();
-        }
-        catch (Exception)
-        {
-            ShowActionStatus(UiText.Get("Library.Organize.Failed"));
-        }
-        finally
-        {
-            _keepingSelection = false;
-            KeepSelectedButton.SetCurrentValue(IsEnabledProperty, _viewModel.HasSelection);
-        }
-    }
+        }).Task.Unwrap();
 }

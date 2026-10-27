@@ -145,9 +145,9 @@ public sealed partial class SettingsThemePreviewTests
                         Assert.False(fixture.Records[4].IsManuallyPinned);
                         keep.RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));
                         PumpLibraryUntil(window, () => fixture.Records[4].IsManuallyPinned && keep.IsEnabled, "kept folder capture");
+                        // Keep works like the K key and the menu: when every selected capture is kept, it releases them.
                         keep.RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));
-                        SettleGalleryLayout(window);
-                        Assert.True(fixture.Records[4].IsManuallyPinned);
+                        PumpLibraryUntil(window, () => !fixture.Records[4].IsManuallyPinned && keep.IsEnabled, "released folder capture");
                         preview.RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));
                         SettleGalleryLayout(window);
                         Window imagePreview = Assert.Single(window.OwnedWindows.Cast<Window>());

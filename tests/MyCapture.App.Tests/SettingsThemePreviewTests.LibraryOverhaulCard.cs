@@ -256,6 +256,129 @@ public sealed partial class SettingsThemePreviewTests
         });
 
     [Fact]
+    public Task LibraryOverhaul_ToolbarMirrorsTheCardMenuAndFitsOneRowAtEveryWidth() =>
+        RunIsolated(nameof(LibraryOverhaul_ToolbarMirrorsTheCardMenuAndFitsOneRowAtEveryWidth), () =>
+        {
+            Application application = CreateLibraryMotionApplication();
+            FluidMotion.AnimationsEnabledOverrideForTest = false;
+            var failures = new List<string>();
+            var densities = new HashSet<string>();
+            try
+            {
+                foreach (string language in new[] { "ko-KR", "en-US" })
+                foreach (AppTheme theme in new[] { AppTheme.Midnight, AppTheme.HighContrast })
+                foreach (double textScale in new[] { 1d, 1.5d })
+                {
+                    using var scope = UiText.UseLanguage(language);
+                    ThemeService.Apply(theme);
+                    LibraryUxFixture f = CreateLibraryUxFixture("mc-overhaul-toolbar-");
+                    GalleryWindow window = f.Window;
+                    window.Resources["FontSize.Body"] = 14d * textScale;
+                    window.Resources["FontSize.Caption"] = 12d * textScale;
+                    try
+                    {
+                        window.Show();
+                        var bar = (FrameworkElement)window.FindName("LibraryContentCommandBar");
+                        var rows = (ListBox)window.FindName("RowsList");
+                        string[] names = ["FloatSelectedButton", "CopySelectedButton", "EditSelectedButton", "PreviewSelectedButton", "KeepSelectedButton"];
+                        foreach (double width in new[] { 980d, 1100d, 1280d, 1500d })
+                        foreach (bool details in new[] { true, false })
+                        {
+                            window.Width = width;
+                            window.SetDetailsPaneOpen(details);
+                            string label = $"{language}/{theme}/text{textScale}/{width}/details{details}";
+                            double top = double.NaN;
+                            foreach (int selected in new[] { 0, 1, 2 })
+                            {
+                                f.ViewModel.ClearSelection();
+                                for (int index = 0; index < selected; index++) f.ViewModel.Select(f.Records[index].Id, control: index > 0);
+                                SettleGalleryLayout(window);
+                                // One row, whatever the selection: the list never moves.
+                                double rowsTop = rows.TranslatePoint(new Point(), window).Y;
+                                if (double.IsNaN(top)) top = rowsTop;
+                                else if (Math.Abs(top - rowsTop) > 0.5) failures.Add($"{label}: the list moved from {top} to {rowsTop} with {selected} selected");
+                                if (Math.Abs(bar.ActualHeight - 44) > 0.5) failures.Add($"{label}: the toolbar is {bar.ActualHeight} tall");
+                                var buttons = names.Select(name => (Button)window.FindName(name)).ToArray();
+                                // The decided order, left to right.
+                                double[] lefts = buttons.Select(button => button.TranslatePoint(new Point(), bar).X).ToArray();
+                                if (!lefts.SequenceEqual(lefts.Order())) failures.Add($"{label}: the commands are out of order {string.Join(",", lefts)}");
+                                var sort = (FrameworkElement)window.FindName("SortBox");
+                                var more = (FrameworkElement)window.FindName("MoreCommandsButton");
+                                foreach (FrameworkElement part in buttons.Cast<FrameworkElement>().Append(sort).Append(more).Append((FrameworkElement)window.FindName("SelectionCountLabel")))
+                                {
+                                    Rect bounds = new(part.TranslatePoint(new Point(), bar), part.RenderSize);
+                                    if (bounds.Right > bar.ActualWidth + 0.5 || bounds.Left < -0.5 || bounds.Top < -0.5 || bounds.Bottom > bar.ActualHeight + 0.5)
+                                        failures.Add($"{label}/{selected}: {part.Name} {bounds} leaves the toolbar {bar.RenderSize} (density {window.ContentToolbarDensity})");
+                                }
+                                if (more.TranslatePoint(new Point(), bar).X < sort.TranslatePoint(new Point(), bar).X + sort.ActualWidth - 0.5)
+                                    failures.Add($"{label}: the sort box overlaps More");
+                                // Names and tooltips stay whatever is shown.
+                                foreach (Button button in buttons)
+                                    if (string.IsNullOrWhiteSpace(System.Windows.Automation.AutomationProperties.GetName(button)) || button.ToolTip is null)
+                                        failures.Add($"{label}: {button.Name} lost its name or tooltip");
+                                densities.Add($"{window.ContentToolbarDensity}");
+                                bool labelled = window.ContentToolbarDensity == GalleryWindow.ToolbarDensity.Labelled;
+                                if (((FrameworkElement)window.FindName("EditSelectedLabel")).IsVisible != labelled) failures.Add($"{label}: labels and density disagree");
+                            }
+                        }
+                    }
+                    finally { window.CloseForExit(); }
+                }
+            }
+            finally
+            {
+                FluidMotion.AnimationsEnabledOverrideForTest = null;
+                ThemeService.Apply(AppTheme.Midnight);
+                application.Shutdown();
+            }
+            Assert.True(failures.Count == 0, string.Join(Environment.NewLine, failures.Distinct().Take(30)));
+            // The matrix really exercised the collapse: labels at ample widths, icons (and the compact bar) where narrow.
+            Assert.True(densities.Count >= 2 && densities.Contains("Labelled"), string.Join(",", densities));
+        });
+
+    [Fact]
+    public Task LibraryOverhaul_CommandMessagesGoToTheStatusLineNotAModalBox() =>
+        RunIsolated(nameof(LibraryOverhaul_CommandMessagesGoToTheStatusLineNotAModalBox), () =>
+        {
+            Application application = CreateLibraryMotionApplication();
+            FluidMotion.AnimationsEnabledOverrideForTest = false;
+            using var scope = UiText.UseLanguage("ko-KR");
+            LibraryUxFixture f = CreateLibraryUxFixture("mc-overhaul-status-");
+            GalleryWindow window = f.Window;
+            try
+            {
+                window.Show(); SettleGalleryLayout(window);
+                var status = (TextBlock)window.FindName("LibraryActionStatus");
+                var show = typeof(GalleryWindow).GetMethod("ShowStatus", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!;
+                // A command that could not run: on the status line, kept until dismissed (and read out once).
+                foreach (string key in new[] { "Gallery.FloatFailed", "Gallery.Compare.LoadFailed", "Text_75425A6D9BE8", "Text_BCA2A41F7456" })
+                {
+                    show.Invoke(window, [UiText.Get(key)]);
+                    Assert.Equal(UiText.Get(key), status.Text);
+                    Assert.Equal(FeedbackKind.ActionRequired, window.ActionStatusKindForTest);
+                    Assert.True(window.IsActionStatusDismissibleForTest);
+                    Assert.Empty(Application.Current.Windows.OfType<ThemedDialog>());
+                    window.AdvanceActionStatusForTest(TimeSpan.FromMinutes(5));
+                    Assert.Equal(UiText.Get(key), status.Text);
+                }
+                // "Already being saved": a hint that leaves with the result time.
+                show.Invoke(window, [UiText.Get("Text_E20E28D53DCE")]);
+                Assert.Equal(FeedbackKind.Warning, window.ActionStatusKindForTest);
+                Assert.False(window.IsActionStatusDismissibleForTest);
+                window.AdvanceActionStatusForTest(FeedbackTiming.Result);
+                Assert.Equal(string.Empty, status.Text);
+                Assert.Empty(Application.Current.Windows.OfType<ThemedDialog>());
+                // It is a polite live region.
+                Assert.Equal(System.Windows.Automation.AutomationLiveSetting.Polite, System.Windows.Automation.AutomationProperties.GetLiveSetting(status));
+            }
+            finally
+            {
+                FluidMotion.AnimationsEnabledOverrideForTest = null;
+                window.CloseForExit(); application.Shutdown();
+            }
+        });
+
+    [Fact]
     public Task LibraryOverhaul_GridIsOneTabStopAndEntersWhereTheUserLeft() =>
         RunIsolated(nameof(LibraryOverhaul_GridIsOneTabStopAndEntersWhereTheUserLeft), () =>
         {
