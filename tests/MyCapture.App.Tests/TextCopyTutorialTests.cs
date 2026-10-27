@@ -245,15 +245,28 @@ public sealed class TextCopyTutorialTests
             var view = ShortcutHelpSearchTests.View(help);
             view.Search.Text = UiText.Get("TextCapture_Title");
             Border[] rows = view.VisibleResults();
-            Assert.Equal(3, rows.Length);
+            Assert.Equal(4, rows.Length);
+            Border directCapture = Assert.Single(rows, row => Texts(row)[0].Text == UiText.Get("TextCapture_Title")
+                && Texts(row)[1].Text == UiText.Get("Help.Capture"));
+            Assert.Contains(FirstRunWelcomeTests.Descendants(directCapture).OfType<WrapPanel>(),
+                keys => AutomationProperties.GetName(keys) == UiText.Get("Hotkey.Unassigned"));
+            Border selectionCapture = Assert.Single(rows, row => Texts(row)[0].Text == UiText.Get("TextCapture_HelpToggle")
+                && Texts(row)[1].Text == UiText.Get("Help.Capture"));
+            Assert.Contains(FirstRunWelcomeTests.Descendants(selectionCapture).OfType<WrapPanel>(),
+                keys => AutomationProperties.GetName(keys) == "T / Shift+T");
             Border originalText = Assert.Single(rows, row => Texts(row)[0].Text == UiText.Get("Text_976A6C92B870"));
             Assert.Equal(UiText.Get("Text_33EFD44366A7"), Texts(originalText)[1].Text);
             Assert.Contains(FirstRunWelcomeTests.Descendants(originalText).OfType<WrapPanel>(),
                 keys => AutomationProperties.GetName(keys) == "Ctrl+C / " + UiText.Get("Text_C7011B8D345C"));
             Assert.Empty(FirstRunWelcomeTests.Descendants(originalText).OfType<Button>());
+            Border quickAccess = Assert.Single(rows, row => Texts(row)[0].Text == UiText.Get("QuickAccess.CopyText")
+                && Texts(row)[1].Text == UiText.Get("Help.QuickAccess"));
+            Assert.Contains(FirstRunWelcomeTests.Descendants(quickAccess).OfType<WrapPanel>(),
+                keys => AutomationProperties.GetName(keys) == "T");
+            Assert.Empty(FirstRunWelcomeTests.Descendants(quickAccess).OfType<Button>());
             Button[] tutorials = rows.SelectMany(FirstRunWelcomeTests.Descendants).OfType<Button>().ToArray();
             Assert.Equal(2, tutorials.Length);
-            Assert.All(rows.Where(row => !ReferenceEquals(row, originalText)),
+            Assert.All(new[] { directCapture, selectionCapture },
                 row => Assert.Single(FirstRunWelcomeTests.Descendants(row).OfType<Button>()));
             Assert.All(tutorials, button =>
             {
