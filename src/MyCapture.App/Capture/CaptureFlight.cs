@@ -86,11 +86,15 @@ internal sealed class CaptureFlight
     private double _phaseStart;
     private bool _rendering;
 
+    /// <summary>Actual capture exclusion of each decoration that has left the screen.</summary>
+    internal event Action<bool>? SurfaceDismissed;
+
     private CaptureFlight(BitmapSource image, RectD source, CaptureFlightDecoration window, double scale, Func<double> clock)
     {
         Image = image;
         Source = source;
         _window = window;
+        window.Closed += OnDecorationClosed;
         _scale = scale;
         _clock = clock;
         _liftedAt = clock();
@@ -286,6 +290,7 @@ internal sealed class CaptureFlight
             }
 
             var successor = new CaptureFlightDecoration(image, plan.Bounds, plan.Scale);
+            successor.Closed += OnDecorationClosed;
             successor.Draw(lifted.Frame);
             if (!successor.ShowDecoration())
             {
@@ -371,6 +376,13 @@ internal sealed class CaptureFlight
 
     private void OnCardClosed(object? sender, EventArgs e) => Finish();
 
+    private void OnDecorationClosed(object? sender, EventArgs e)
+    {
+        if (sender is not CaptureFlightDecoration window) return;
+        window.Closed -= OnDecorationClosed;
+        if (window.WasShown) SurfaceDismissed?.Invoke(window.IsCaptureExcluded);
+    }
+
     private void Draw(CaptureFlightFrame frame) => _window?.Draw(frame);
 
     private void StartRendering()
@@ -439,9 +451,17 @@ internal sealed class CaptureFlight
         double scale = crossed[0].ScaleFactor;
         if (!double.IsFinite(scale) || scale <= 0 || crossed.Any(monitor => monitor.ScaleFactor != scale)) return null;
 
-        Rect room = path;
-        double margin = Math.Ceiling(MarginDip * scale);
-        room.Inflate(margin, margin);
+        // The feather is a finite stack of contours, not a WPF blur effect. Its outermost
+        // contour extends by blur horizontally and blur +/- offset vertically. Allow the
+        // peak shadow from the start so a landing inside the lifted image can keep the same
+        // HWND. Keep one physical pixel for antialiasing. Bounds stay fixed during animation.
+        double blur = PeakBlurDip * scale;
+        double offset = PeakOffsetDip * scale;
+        double side = Math.Ceiling(blur) + 1;
+        double above = Math.Ceiling(blur - offset) + 1;
+        double below = Math.Ceiling(blur + offset) + 1;
+        Rect room = new(path.Left - side, path.Top - above,
+            path.Width + 2 * side, path.Height + above + below);
         // The shadow stays on the displays the image crosses: a full-screen capture needs no room
         // beyond its display, and a neighbouring display never widens the window.
         Rect desk = ToRect(crossed[0].Bounds);
@@ -449,11 +469,18 @@ internal sealed class CaptureFlight
         room.Intersect(desk);
         if (room.IsEmpty || room.Width <= 0 || room.Height <= 0) return null;
         RectD bounds = new RectD(room.X, room.Y, room.Width, room.Height).ToPixelBounds();
+        // Surface allocation is smaller, but keep the existing eligibility contract: this
+        // change must not enable an animation previously skipped for its size or mixed DPI.
+        Rect legacyRoom = path;
+        double legacyMargin = Math.Ceiling(MarginDip * scale);
+        legacyRoom.Inflate(legacyMargin, legacyMargin);
+        legacyRoom.Intersect(desk);
+        RectD eligibility = new RectD(legacyRoom.X, legacyRoom.Y, legacyRoom.Width, legacyRoom.Height).ToPixelBounds();
         // One window has one scale: no part of it may lie on a display of another scale (displays
         // the image crosses can enclose another one in an L-shaped layout).
-        if (monitors.Any(monitor => monitor.ScaleFactor != scale && Overlaps(ToRect(monitor.Bounds), ToRect(bounds))))
+        if (monitors.Any(monitor => monitor.ScaleFactor != scale && Overlaps(ToRect(monitor.Bounds), ToRect(eligibility))))
             return null;
-        if (bounds.Width * bounds.Height > MaxSurfacePixels) return null;
+        if (eligibility.Width * eligibility.Height > MaxSurfacePixels) return null;
         return (bounds, scale);
     }
 

@@ -117,6 +117,8 @@ internal sealed class QuickAccessWindow : Window
     /// <summary>On screen and not leaving, so a result it shows is seen.</summary>
     internal bool IsOpen => !_closed && IsVisible && !FluidMotion.IsExiting(this);
 
+    internal bool IsCaptureExcluded => CaptureWindowExclusion.WasApplied(this);
+
     // The card does not close itself while its capture or the automatic copy has yet to report.
     private bool IsAwaitingCapture => IsPending || _copyPending;
 

@@ -506,8 +506,8 @@ internal sealed class PinWindow : Window
     internal Func<bool>? CanRestoreClosedPin { get; set; }
 
     /// <summary>
-    /// The immutable content this pin shows. A restored pin reuses the same instance, so its
-    /// frozen source pixels and retained text are exactly what the closed pin had.
+    /// The immutable content this pin shows. Closed pins are decoded losslessly on reopen;
+    /// their source pixels and retained text have the same values as before closing.
     /// </summary>
     internal PinContent PinnedContent => _content;
 
@@ -559,6 +559,9 @@ internal sealed class PinWindow : Window
 
     /// <summary>Whether this pin has been closed and should be pruned by the manager.</summary>
     internal bool IsClosed => _isClosed;
+
+    internal bool IsInteractionActive => !_isClosed
+        && (_dragging || IsMouseCaptureWithin || IsTextSelectionMode || ContextMenu?.IsOpen == true);
 
     /// <summary>Test hook: whether the bottom feedback overlay is currently visible.</summary>
     internal bool IsFeedbackVisible => _feedback.Visibility == Visibility.Visible;

@@ -41,11 +41,13 @@ internal sealed class ResidentProbeOptions
     /// memory or time so a differential run shows what it costs: <c>no-overlay-prewarm</c>,
     /// <c>no-editor-prewarm</c>, <c>no-engine-prewarm</c>, <c>no-flight</c> (no lifted capture flying into
     /// the card), <c>frame-cached</c> (synthetic frames built like the real grab, BitmapSource.Create Bgr32,
-    /// instead of a frozen WriteableBitmap). Never used for the release table.
+    /// instead of a frozen WriteableBitmap), <c>no-reader-prewarm</c> (skip production reader prewarm).
+    /// The old <c>prewarm-readers</c> flag is accepted as a no-op since warming is now the default;
+    /// <c>no-reader-prewarm</c> wins when both are supplied. Never used for the release table.
     /// </summary>
     internal static readonly string[] KnownVariants =
         ["no-overlay-prewarm", "no-editor-prewarm", "no-engine-prewarm", "no-flight", "frame-cached",
-         "sw-selector", "sw-card", "sw-flight", "sw-editor", "prewarm-selector-hwnd", "prewarm-readers"];
+         "sw-selector", "sw-card", "sw-flight", "sw-editor", "prewarm-selector-hwnd", "prewarm-readers", "no-reader-prewarm"];
 
     internal static readonly string[] AllScenarios = ["capture", "editor-4k", "capture-30", "library", "ocr", "pins-10"];
 
@@ -230,6 +232,7 @@ internal sealed class ResidentProbeRecorder : IDisposable
     private readonly ResidentProbeOptions _options;
     private readonly Dispatcher _dispatcher;
     private readonly Process _process = Process.GetCurrentProcess();
+    private readonly ResidentProbeWorkingSet _workingSet = new();
     private readonly Stopwatch _clock = Stopwatch.StartNew();
     private readonly object _gate = new();
     private readonly List<double> _latency = [];
@@ -259,7 +262,11 @@ internal sealed class ResidentProbeRecorder : IDisposable
 
     internal sealed record Row(string Step, int AtSeconds, double ElapsedSeconds, double WorkingSetMb, double PrivateMb,
         double ManagedMb, double GcHeapMb, double GcCommittedMb, int GdiHandles, int UserHandles, int Handles, int Threads,
-        double CpuPercent, double UiP95Ms, double UiMaxMs, int UiSamples, int Gen0, int Gen1, int Gen2, string? Detail);
+        double CpuPercent, double UiP95Ms, double UiMaxMs, int UiSamples, int Gen0, int Gen1, int Gen2, string? Detail)
+    {
+        public double? PrivateWorkingSetMb { get; init; }
+        public string? PrivateWorkingSetError { get; init; }
+    }
 
     internal sealed record Timing(string Name, double Milliseconds);
 
@@ -267,7 +274,11 @@ internal sealed class ResidentProbeRecorder : IDisposable
 
     /// <summary>One shortcut → selector run: its <see cref="SelectorTimeline"/> marks from the handler call.</summary>
     internal sealed record Breakdown(string Name, int Index, double SelectorMs, double SinceLastDismissalMs,
-        IReadOnlyList<Mark> Marks);
+        IReadOnlyList<Mark> Marks)
+    {
+        public double? RenderThreadCompleteMs { get; init; }
+        public string? RenderThreadCompleteError { get; init; }
+    }
 
     internal void AddBreakdown(Breakdown breakdown)
     {
@@ -418,13 +429,18 @@ internal sealed class ResidentProbeRecorder : IDisposable
             _latency.Clear();
         }
         GCMemoryInfo gc = GC.GetGCMemoryInfo();
+        (long? privateWorkingSet, string? workingSetError) = _workingSet.Read(_process.Handle, _process.WorkingSet64);
         var row = new Row(step, atSeconds, wall / 1000, Mb(_process.WorkingSet64), Mb(_process.PrivateMemorySize64),
             Mb(GC.GetTotalMemory(false)), Mb(gc.HeapSizeBytes), Mb(gc.TotalCommittedBytes),
             (int)GetGuiResources(_process.Handle, 0), (int)GetGuiResources(_process.Handle, 1), _process.HandleCount,
             _process.Threads.Count, Math.Round(cpuPercent, 3),
             latency.Length == 0 ? 0 : Math.Round(latency[(int)Math.Floor((latency.Length - 1) * 0.95)], 2),
             latency.Length == 0 ? 0 : Math.Round(latency[^1], 2), latency.Length,
-            GC.CollectionCount(0), GC.CollectionCount(1), GC.CollectionCount(2), detail);
+            GC.CollectionCount(0), GC.CollectionCount(1), GC.CollectionCount(2), detail)
+        {
+            PrivateWorkingSetMb = privateWorkingSet is { } residentBytes ? Mb(residentBytes) : null,
+            PrivateWorkingSetError = workingSetError,
+        };
         lock (_gate) _rows.Add(row);
         return row;
     }
@@ -477,6 +493,12 @@ internal sealed class ResidentProbeRecorder : IDisposable
                 Notes = _notes,
                 Failures = _failures,
                 Breakdowns = _breakdowns,
+                MetricDefinitions = new
+                {
+                    PrivateWorkingSetMb = "QueryWorkingSet nonshared resident pages; null and PrivateWorkingSetError when unavailable",
+                    SelectorMs = "Shortcut handler to first CompositionTarget.Rendering tick with selector frame attached",
+                    RenderThreadCompleteMs = "Shortcut handler to diagnostic MediaContext.CompleteRender return after first Rendering; render-thread upper bound, not physical display latency",
+                },
                 Audits = _audits,
             };
         }

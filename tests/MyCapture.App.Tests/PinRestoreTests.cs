@@ -88,15 +88,17 @@ public sealed class PinRestoreTests : KoreanCaptionTest
 
                 Assert.Equal(1, manager.ClosedCount);
                 Assert.True(manager.CanRestoreClosed);
-                Assert.Equal(37L * 23 * 4, manager.ClosedRetainedBytes);
+                PinHistoryTestSupport.Await(manager.LastClosedEncodingForTest);
+                Assert.InRange(manager.ClosedRetainedBytes, 1, (37L * 23 * 4) - 1);
 
-                PinWindow? restored = manager.RestoreLastClosed();
+                PinWindow? restored = PinHistoryTestSupport.Restore(manager);
 
                 Assert.NotNull(restored);
                 Assert.NotSame(pin, restored);
                 Assert.False(restored!.IsClosed);
-                Assert.Same(pin.PinnedContent, restored.PinnedContent);
-                Assert.Same(source, restored.PinnedContent.Image);
+                Assert.NotSame(pin.PinnedContent, restored.PinnedContent);
+                Assert.NotSame(source, restored.PinnedContent.Image);
+                PinHistoryTestSupport.EqualPixels(source, restored.PinnedContent.Image);
                 Assert.True(restored.PinnedContent.Image.IsFrozen);
                 Assert.Equal(1.5, restored.State.Zoom, 6);
                 Assert.Equal(0.6, restored.State.Opacity, 6);
@@ -134,9 +136,9 @@ public sealed class PinRestoreTests : KoreanCaptionTest
                 second.Close();
                 Assert.Equal(2, manager.ClosedCount);
 
-                Assert.Same(secondContent, manager.RestoreLastClosed()!.PinnedContent);
-                Assert.Same(firstContent, manager.RestoreLastClosed()!.PinnedContent);
-                Assert.Null(manager.RestoreLastClosed());
+                PinHistoryTestSupport.EqualPixels(secondContent.Image, PinHistoryTestSupport.Restore(manager)!.PinnedContent.Image);
+                PinHistoryTestSupport.EqualPixels(firstContent.Image, PinHistoryTestSupport.Restore(manager)!.PinnedContent.Image);
+                Assert.Null(PinHistoryTestSupport.Restore(manager));
                 Assert.False(manager.CanRestoreClosed);
             }
             finally
@@ -158,7 +160,7 @@ public sealed class PinRestoreTests : KoreanCaptionTest
 
                 Assert.Equal(0, manager.ClosedCount);
                 Assert.False(manager.CanRestoreClosed);
-                Assert.Null(manager.RestoreLastClosed());
+                Assert.Null(PinHistoryTestSupport.Restore(manager));
                 Assert.Equal(0, manager.Count);
             }
             finally
@@ -190,9 +192,10 @@ public sealed class PinRestoreTests : KoreanCaptionTest
                 settings.ClosedWindowRestoreLimit = 1;
                 manager.TrimClosedHistory();
                 Assert.Equal(1, manager.ClosedCount);
-                Assert.Equal(30L * 10 * 4, manager.ClosedRetainedBytes);
-                Assert.Same(newest, manager.RestoreLastClosed()!.PinnedContent);
-                Assert.Null(manager.RestoreLastClosed());
+                PinHistoryTestSupport.Await(manager.LastClosedEncodingForTest);
+                Assert.InRange(manager.ClosedRetainedBytes, 1, (30L * 10 * 4) - 1);
+                PinHistoryTestSupport.EqualPixels(newest.Image, PinHistoryTestSupport.Restore(manager)!.PinnedContent.Image);
+                Assert.Null(PinHistoryTestSupport.Restore(manager));
                 Assert.NotSame(middle, newest);
             }
             finally
@@ -226,7 +229,7 @@ public sealed class PinRestoreTests : KoreanCaptionTest
                 Assert.Equal(0, manager.Count);
                 Assert.Equal(0, manager.ClosedCount);
                 Assert.Equal(0, manager.ClosedRetainedBytes);
-                Assert.Null(manager.RestoreLastClosed());
+                Assert.Null(PinHistoryTestSupport.Restore(manager));
             }
             finally
             {
@@ -249,7 +252,7 @@ public sealed class PinRestoreTests : KoreanCaptionTest
                 Assert.False(closed.Bounds.IsEmpty);
                 Assert.False(string.IsNullOrEmpty(closed.DeviceName));
 
-                PinWindow restored = manager.RestoreLastClosed()!;
+                PinWindow restored = PinHistoryTestSupport.Restore(manager)!;
                 PinDisplayArea[] displays = MonitorEnumerator.GetAll()
                     .Select(m => new PinDisplayArea(m.DeviceName, m.Bounds, m.WorkArea, m.ScaleFactor))
                     .ToArray();
@@ -287,9 +290,10 @@ public sealed class PinRestoreTests : KoreanCaptionTest
                 long expectedBytes = pin.PinnedContent.EstimatedRetainedBytes;
                 Assert.Equal((64L * 48 * 4) + (source.Length * 2), expectedBytes);
                 pin.Close();
-                Assert.Equal(expectedBytes, manager.ClosedRetainedBytes);
+                PinHistoryTestSupport.Await(manager.LastClosedEncodingForTest);
+                Assert.InRange(manager.ClosedRetainedBytes, source.Length * 2, expectedBytes - 1);
 
-                PinWindow restored = manager.RestoreLastClosed()!;
+                PinWindow restored = PinHistoryTestSupport.Restore(manager)!;
 
                 Assert.Equal(PinContentKind.Table, restored.ContentKind);
                 Assert.Equal(source, restored.OriginalText);
@@ -313,7 +317,7 @@ public sealed class PinRestoreTests : KoreanCaptionTest
             {
                 BitmapSource source = SolidImage(37, 23);
                 manager.PinImage(source).Close();
-                PinWindow restored = manager.RestoreLastClosed()!;
+                PinWindow restored = PinHistoryTestSupport.Restore(manager)!;
 
                 BitmapSource? saved = null;
                 BitmapSource? copied = null;
@@ -328,9 +332,9 @@ public sealed class PinRestoreTests : KoreanCaptionTest
                 copy.RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
                 restored.SimulateCtrlDoubleClickForTest();
 
-                Assert.Same(source, saved);
-                Assert.Same(source, copied);
-                Assert.Same(source, recognized);
+                PinHistoryTestSupport.EqualPixels(source, Assert.IsAssignableFrom<BitmapSource>(saved));
+                PinHistoryTestSupport.EqualPixels(source, Assert.IsAssignableFrom<BitmapSource>(copied));
+                PinHistoryTestSupport.EqualPixels(source, Assert.IsAssignableFrom<BitmapSource>(recognized));
             }
             finally
             {
@@ -365,6 +369,8 @@ public sealed class PinRestoreTests : KoreanCaptionTest
                 Assert.True(item.IsEnabled);
 
                 item.RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
+                Assert.NotNull(manager.LastRestoreOperationForTest);
+                PinHistoryTestSupport.Await(manager.LastRestoreOperationForTest!);
 
                 // The only remembered pin was reopened: two pins are open again, none remain.
                 Assert.Equal(2, manager.Count);

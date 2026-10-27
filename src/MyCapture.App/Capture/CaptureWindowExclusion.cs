@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Runtime.InteropServices;
+using System.Runtime.CompilerServices;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;
@@ -13,6 +14,15 @@ namespace MyCapture.App.Capture;
 
 internal static class CaptureWindowExclusion
 {
+    private sealed class AppliedResult { internal bool Succeeded; }
+    private static readonly ConditionalWeakTable<Window, AppliedResult> Applied = new();
+
+    internal static bool WasApplied(Window window) =>
+        Applied.TryGetValue(window, out AppliedResult? result) && result.Succeeded;
+
+    internal static void RecordResult(Window window, bool succeeded) =>
+        Applied.GetValue(window, static _ => new AppliedResult()).Succeeded = succeeded;
+
     private static Func<bool> s_layeredWindowProbe = ProbeLayeredWindow;
     private static Lazy<bool> s_supportsLayeredWindows = CreateCapabilityCache();
 
@@ -86,7 +96,9 @@ internal static class CaptureWindowExclusion
     {
         window.Dispatcher.VerifyAccess();
         IntPtr handle = new WindowInteropHelper(window).EnsureHandle();
-        return TryApply(handle);
+        bool succeeded = TryApply(handle);
+        RecordResult(window, succeeded);
+        return succeeded;
     }
 
     internal static bool TryApply(IntPtr handle) =>

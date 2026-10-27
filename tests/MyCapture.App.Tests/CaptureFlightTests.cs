@@ -98,11 +98,32 @@ public sealed class CaptureFlightTests
         MonitorInfo display = Monitor(0, 0, 1920, 1080, 144);
         (RectD bounds, double scale) = CaptureFlight.PlanBounds(Rect.Union(Source, Target), [display])!.Value;
         Assert.Equal(1.5, scale);
-        Assert.Equal(new RectD(100 - 72, 200 - 72, 760 + 144, 570 + 144), bounds);
+        Assert.Equal(new RectD(100 - 49, 200 - 28, 760 + 98, 570 + 28 + 70), bounds);
 
         // A full-screen capture needs no room beyond its display.
         (RectD full, _) = CaptureFlight.PlanBounds(new Rect(0, 0, 1920, 1080), [display])!.Value;
         Assert.Equal(new RectD(0, 0, 1920, 1080), full);
+    }
+
+    [Theory]
+    [InlineData(1)]
+    [InlineData(1.5)]
+    [InlineData(2)]
+    public void TightSurfacesContainEveryShadowContourAtEveryFlightStage(double scale)
+    {
+        MonitorInfo display = Monitor(0, 0, 1920, 1080, (uint)(96 * scale));
+        RectD bounds = CaptureFlight.PlanBounds(Rect.Union(Source, Target), [display])!.Value.Bounds;
+        for (int step = 0; step <= 1000; step++)
+        {
+            CaptureFlightFrame frame = CaptureFlight.FlightFrame(Source, Target, step / 1000d, scale);
+            Rect shadow = frame.Image;
+            shadow.Offset(0, frame.ShadowOffset);
+            shadow.Inflate(frame.ShadowBlur, frame.ShadowBlur);
+            Assert.True(bounds.Left <= shadow.Left && bounds.Top <= shadow.Top
+                && bounds.Right >= shadow.Right && bounds.Bottom >= shadow.Bottom);
+        }
+        Rect path = Rect.Union(Source, Target);
+        Assert.True(bounds.Width * bounds.Height < (path.Width + 96 * scale) * (path.Height + 96 * scale));
     }
 
     [Fact]
@@ -123,6 +144,19 @@ public sealed class CaptureFlightTests
         Assert.Equal(new RectD(0, 0, 3840, 2160), whole);
         Assert.NotNull(CaptureFlight.PlanBounds(new Rect(3000, 0, 1680, 2160), [first, second]));
         Assert.Null(CaptureFlight.PlanBounds(new Rect(1000, 0, 4000, 2160), [first, second]));
+    }
+
+    [Fact]
+    public void SmallerSurfacesDoNotEnablePreviouslySkippedFlights()
+    {
+        // The old 48-DIP envelope exceeds the cap; the new allocation alone would fit.
+        Assert.Null(CaptureFlight.PlanBounds(new Rect(200, 200, 4000, 1950),
+            [Monitor(0, 0, 5000, 3000, 96)]));
+        // The old envelope touches the differently scaled upper-right display in this L.
+        // The tighter top shadow margin does not, but eligibility must remain unchanged.
+        Assert.Null(CaptureFlight.PlanBounds(new Rect(1800, 1100, 300, 200),
+            [Monitor(0, 0, 1920, 2160, 96), Monitor(1920, 1080, 1920, 1080, 96),
+                Monitor(1920, 0, 1920, 1080, 144)]));
     }
 
     [Fact]
@@ -275,6 +309,8 @@ public sealed class CaptureFlightTests
     {
         CaptureFlight flight = CaptureFlight.TryLift(image, SourceOn(), () => clock.Now)!;
         CaptureFlightDecoration lift = flight.WindowForTest!;
+        var exclusions = new List<bool>();
+        flight.SurfaceDismissed += exclusions.Add;
         clock.Now = 300;
         flight.Cancel();
         Assert.False(flight.IsDone);
@@ -285,6 +321,8 @@ public sealed class CaptureFlightTests
         flight.Tick();
         Assert.True(flight.IsDone);
         Assert.True(lift.IsClosed);
+        Assert.Equal([true], exclusions);
+        Assert.Null(lift.Content);
 
         CaptureFlight next = CaptureFlight.TryLift(image, SourceOn(), () => clock.Now)!;
         CaptureFlightDecoration nextLift = next.WindowForTest!;

@@ -1,4 +1,6 @@
+using System.Diagnostics;
 using System.Windows;
+using System.Windows.Threading;
 using System.Windows.Media.Imaging;
 using Microsoft.Extensions.Logging;
 using MyCapture.App.Editing;
@@ -43,7 +45,7 @@ internal enum PasteResult
 /// Every pin that closes (Esc, Delete, double-click, its menu, or close all) is remembered
 /// in a <see cref="ClosedPinHistory{T}"/> bounded by
 /// <see cref="PinSettings.ClosedWindowRestoreLimit"/> and a byte budget, and
-/// <see cref="RestoreLastClosed"/> reopens the newest one with its original content and last
+/// <see cref="RestoreLastClosedAsync"/> reopens the newest one with its original content and last
 /// placement. Hiding with Shift+F3 is not a close and is never recorded. The history is
 /// memory-only and is discarded when the app exits. The separate opt-in session store saves
 /// only pins that are still open, to reopen them at the next launch.
@@ -57,7 +59,12 @@ internal sealed class PinManager
     private readonly Dictionary<PinWindow, long> _openedOrders = [];
     private readonly Dictionary<PinWindow, long> _restoredOpenedOrders = [];
     private long _nextOpenedOrder;
-    private readonly ClosedPinHistory<ClosedPin> _closed;
+    private readonly ClosedPinHistory<EncodedClosedPin> _closed;
+    private readonly Dispatcher _dispatcher = Dispatcher.CurrentDispatcher;
+    private readonly SemaphoreSlim _restoreGate = new(1, 1);
+    private int _pendingEncodes;
+    private int _pendingRestores;
+    private int _restoreGeneration;
     private bool _recordClosedPins = true;
     private readonly Func<PinSettings> _settings;
     private readonly PinImageSaveService? _saveService;
@@ -148,7 +155,7 @@ internal sealed class PinManager
         _copyImageAsync = copyImageAsync ?? throw new ArgumentNullException(nameof(copyImageAsync));
         _copyTextAsync = copyTextAsync ?? throw new ArgumentNullException(nameof(copyTextAsync));
         _log = log ?? throw new ArgumentNullException(nameof(log));
-        _closed = new ClosedPinHistory<ClosedPin>(() => _settings().ClosedWindowRestoreLimit);
+        _closed = new ClosedPinHistory<EncodedClosedPin>(() => _settings().ClosedWindowRestoreLimit);
     }
 
     /// <summary>
@@ -165,10 +172,28 @@ internal sealed class PinManager
         PinClosedPlacement? Placement,
         long OpenedOrder = 0);
 
+    private sealed record EncodedClosedPin(
+        Task<EncodedPinContent> Content,
+        double ImageWidthDip,
+        double ImageHeightDip,
+        double Zoom,
+        double Opacity,
+        PinClosedPlacement? Placement);
+
+    internal bool IsInteractionActive => _pendingEncodes > 0 || _pendingRestores > 0
+        || _pins.Any(pin => pin.IsInteractionActive);
+
+    internal event Action? BackgroundWorkEnded;
+
+    internal Task LastClosedEncodingForTest { get; private set; } = Task.CompletedTask;
+    internal Task? LastRestoreOperationForTest { get; private set; }
+    internal Func<PinContent, byte[]?, EncodedPinContent>? EncodeClosedForTest { get; set; }
+    internal Func<EncodedPinContent, PinContent>? DecodeClosedForTest { get; set; }
+
     /// <summary>Number of closed pins that can currently be reopened.</summary>
     internal int ClosedCount => _closed.Count;
 
-    /// <summary>Whether <see cref="RestoreLastClosed"/> has anything to reopen.</summary>
+    /// <summary>Whether <see cref="RestoreLastClosedAsync"/> has anything to reopen.</summary>
     internal bool CanRestoreClosed => _closed.Count > 0;
 
     /// <summary>Estimated bytes held by the closed-pin history, for tests and diagnostics.</summary>
@@ -394,21 +419,52 @@ internal sealed class PinManager
     /// longer shows that position.
     /// </summary>
     /// <returns>The reopened pin, or <see langword="null"/> when nothing can be restored.</returns>
-    internal PinWindow? RestoreLastClosed()
+    internal async Task<PinWindow?> RestoreLastClosedAsync()
     {
-        if (!_closed.TryPop(out ClosedPin? closed))
+        _dispatcher.VerifyAccess();
+        if (!_closed.TryPop(out EncodedClosedPin? closed))
         {
             _log.LogInformation("Restore closed pin: nothing to restore");
             return null;
         }
 
-        PinWindow pin = RestorePin(closed, activate: true);
-        _log.LogInformation(
-            "Restored a closed {Kind} pin at zoom {Zoom:0.##} ({Remaining} more restorable)",
-            closed.Content.Kind,
-            pin.State.Zoom,
-            _closed.Count);
-        return pin;
+        int generation = _restoreGeneration;
+        _pendingRestores++;
+        var total = Stopwatch.StartNew();
+        await _restoreGate.WaitAsync().ConfigureAwait(false);
+        try
+        {
+            EncodedPinContent encoded = await closed.Content.ConfigureAwait(false);
+            var decode = Stopwatch.StartNew();
+            PinContent content = await Task.Run(() => DecodeClosedForTest?.Invoke(encoded) ?? encoded.Decode()).ConfigureAwait(false);
+            decode.Stop();
+            return await _dispatcher.InvokeAsync(() =>
+            {
+                if (generation != _restoreGeneration) return null;
+                var snapshot = new ClosedPin(content, closed.ImageWidthDip, closed.ImageHeightDip,
+                    closed.Zoom, closed.Opacity, closed.Placement);
+                PinWindow pin = RestorePin(snapshot, activate: true);
+                _log.LogInformation(
+                    "Restored a closed {Kind} pin: decode {DecodeMs:0.##} ms, reopen {ReopenMs:0.##} ms, encoded {Bytes} bytes ({Remaining} more restorable)",
+                    encoded.Kind, decode.Elapsed.TotalMilliseconds, total.Elapsed.TotalMilliseconds,
+                    encoded.Png.LongLength, _closed.Count);
+                return pin;
+            });
+        }
+        catch (Exception ex)
+        {
+            _log.LogWarning(ex, "Could not reopen a closed pin");
+            throw;
+        }
+        finally
+        {
+            _restoreGate.Release();
+            await _dispatcher.InvokeAsync(() =>
+            {
+                _pendingRestores--;
+                if (_pendingRestores == 0 && _pendingEncodes == 0) BackgroundWorkEnded?.Invoke();
+            });
+        }
     }
 
     /// <summary>Reopens a saved open pin without activation, guidance, or closed-history changes.</summary>
@@ -530,7 +586,7 @@ internal sealed class PinManager
         pin.OriginalTextCopyRequested += OnPinOriginalTextCopyRequested;
         pin.OcrRequested += (_, source) => OcrRequested?.Invoke(pin, source);
         pin.SaveRequested += OnPinSaveRequested;
-        pin.RestoreClosedRequested += (_, _) => RestoreLastClosed();
+        pin.RestoreClosedRequested += (_, _) => LastRestoreOperationForTest = RestoreClosedFromMenuAsync();
         pin.CanRestoreClosedPin = () => CanRestoreClosed;
         // The history, the session and the lists change when a close starts; a user close only
         // leaves its pixels on the screen for the exit, and the window itself goes later.
@@ -562,26 +618,67 @@ internal sealed class PinManager
         _restoredOpenedOrders.Remove(pin);
         _leaving.Add(pin);
         NotifyOpenPinsChanged();
-        if (!_recordClosedPins)
+        if (!_recordClosedPins || _closed.Limit == 0)
         {
             return;
         }
 
         PinViewState state = pin.State;
-        var entry = new ClosedPin(
-            pin.PinnedContent,
+        PinContent content = pin.PinnedContent;
+        byte[]? cached = content.EncodedPng ?? pin.ClipboardCache.TryGetEncoded(content.Image, content.SourcePageUrl);
+        // The task owns the frozen source only until PNG encoding finishes. Its result has no
+        // bitmap/window references; closing order is reserved before any background work completes.
+        Func<PinContent, byte[]?, EncodedPinContent> encode = EncodeClosedForTest ?? EncodedPinContent.Encode;
+        Task<EncodedPinContent> encoding = cached is not null
+            ? Task.FromResult(EncodedPinContent.Encode(content, cached))
+            : Task.Run(() => encode(content, null));
+        var entry = new EncodedClosedPin(
+            encoding,
             state.ImageWidthDip,
             state.ImageHeightDip,
             state.Zoom,
             state.Opacity,
             pin.ClosedPlacement);
-        if (_closed.Push(entry, pin.PinnedContent.EstimatedRetainedBytes))
+        long initialBytes = cached is not null ? encoding.Result.RetainedBytes : content.EstimatedRetainedBytes;
+        if (_closed.Push(entry, initialBytes))
         {
             _log.LogInformation("Remembered a closed {Kind} pin ({Count} restorable)", pin.PinnedContent.Kind, _closed.Count);
         }
         else
         {
             _log.LogInformation("Closed {Kind} pin not kept for restore (disabled or over the memory budget)", pin.PinnedContent.Kind);
+        }
+        _pendingEncodes++;
+        LastClosedEncodingForTest = ObserveEncodingAsync(entry);
+    }
+
+    private async Task RestoreClosedFromMenuAsync()
+    {
+        // A completed Task<PinWindow> retained by the menu/test seam would keep that window
+        // and its decoded image alive even after it closed again. Retain completion only.
+        try { await RestoreLastClosedAsync(); }
+        catch (Exception ex) { _log.LogWarning(ex, "Closed-pin menu restore failed"); }
+    }
+
+    private async Task ObserveEncodingAsync(EncodedClosedPin entry)
+    {
+        try
+        {
+            EncodedPinContent encoded = await entry.Content.ConfigureAwait(false);
+            await _dispatcher.InvokeAsync(() => _closed.UpdateRetainedBytes(entry, encoded.RetainedBytes));
+        }
+        catch (Exception ex)
+        {
+            _log.LogWarning(ex, "Could not encode a closed pin for restore");
+            await _dispatcher.InvokeAsync(() => _closed.Remove(entry));
+        }
+        finally
+        {
+            await _dispatcher.InvokeAsync(() =>
+            {
+                _pendingEncodes--;
+                if (_pendingRestores == 0 && _pendingEncodes == 0) BackgroundWorkEnded?.Invoke();
+            });
         }
     }
 
@@ -725,6 +822,7 @@ internal sealed class PinManager
     /// <summary>Closes every open pin at once, and ends any exit a closed pin is still playing.</summary>
     internal void CloseAll()
     {
+        _restoreGeneration++;
         foreach (PinWindow leaving in _leaving.ToArray())
         {
             leaving.CompleteExit();

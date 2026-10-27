@@ -33,9 +33,6 @@ public partial class App
     private static readonly FieldInfo ProbeActiveEditor =
         typeof(CaptureOverlayCoordinator).GetField("_activeEditor", BindingFlags.Instance | BindingFlags.NonPublic)!;
 
-    private static readonly FieldInfo ProbeLastDismissal =
-        typeof(CaptureOverlayCoordinator).GetField("_lastPresentationDismissedTick", BindingFlags.Instance | BindingFlags.NonPublic)!;
-
     private readonly Dictionary<string, int> _probeBreakdownIndex = [];
 
     private static readonly PropertyInfo? ProbeOperationName =
@@ -66,7 +63,8 @@ public partial class App
     /// <summary>
     /// Diagnostic variants of a deeper selector prewarm, run once at idle after launch:
     /// <c>prewarm-selector-hwnd</c> builds a hidden selector window and its HWND (never shown) and closes
-    /// it; <c>prewarm-readers</c> runs the page and application readers once over the current windows.
+    /// it. Reader prewarm is now the production default; the old <c>prewarm-readers</c> flag remains
+    /// accepted for old probe scripts but does not run it a second time.
     /// </summary>
     private void RunProbePrewarmVariants(ResidentProbeOptions probe)
     {
@@ -77,12 +75,6 @@ public partial class App
             var window = new CaptureOverlayWindow(desktop, abortOnFocusLoss: false, showMagnifier: true);
             _ = new System.Windows.Interop.WindowInteropHelper(window).EnsureHandle();
             window.Close();
-        }
-        if (probe.Has("prewarm-readers"))
-        {
-            IReadOnlyList<WindowCandidate> windows = _services.GetRequiredService<WindowCandidateService>().GetCandidates(desktop);
-            _ = _overlay.ReadPageUrls(windows);
-            _ = _overlay.ReadWindowSources?.Invoke(windows);
         }
     }
 
@@ -247,7 +239,7 @@ public partial class App
     /// </summary>
     private async Task<double> ProbeShortcutToSelectorAsync(ResidentProbeRecorder recorder, string name)
     {
-        long dismissed = _overlay is null ? long.MinValue : (long)ProbeLastDismissal.GetValue(_overlay)!;
+        long dismissed = _overlay?.LastPresentationDismissalTick ?? long.MinValue;
         double sinceDismissal = dismissed == long.MinValue ? -1 : Environment.TickCount64 - dismissed;
         var marks = new List<ResidentProbeRecorder.Mark>(32);
         long started = Stopwatch.GetTimestamp();
@@ -257,6 +249,10 @@ public partial class App
             lock (marks) marks.Add(new ResidentProbeRecorder.Mark(stage, Math.Round(at, 2), Environment.CurrentManagedThreadId));
         };
         double selectorMs = -1;
+        double? renderThreadCompleteMs = null;
+        string? renderThreadCompleteError = null;
+        bool renderMeasurementFinished = false;
+        DispatcherOperation? renderWait = null;
         int ticks = 0;
         EventHandler rendering = (_, _) =>
         {
@@ -267,14 +263,27 @@ public partial class App
                 // At the first dispatcher turn after this render pass (Show returning): block until the
                 // render thread has finished every committed frame, the first selector frame included.
                 // The mark is then an upper bound for that frame's present.
-                _ = Dispatcher.BeginInvoke(DispatcherPriority.Send, new Action(() =>
+                renderWait = Dispatcher.BeginInvoke(DispatcherPriority.Send, new Action(() =>
                 {
                     SelectorTimeline.Mark?.Invoke("render-wait-start");
-                    if (ProbeCompleteRender is { } completeRender && ProbeMediaContextFrom?.Invoke(null, [Dispatcher]) is { } context)
+                    try
                     {
+                        if (ProbeCompleteRender is not { } completeRender
+                            || ProbeMediaContextFrom?.Invoke(null, [Dispatcher]) is not { } context)
+                        {
+                            renderThreadCompleteError = "WPF MediaContext.CompleteRender is unavailable";
+                            return;
+                        }
                         completeRender.Invoke(context, null);
+                        renderThreadCompleteMs = Stopwatch.GetElapsedTime(started).TotalMilliseconds;
                         SelectorTimeline.Mark?.Invoke("render-thread-complete");
                     }
+                    catch (Exception error) when (error is TargetInvocationException or MemberAccessException or InvalidOperationException)
+                    {
+                        renderThreadCompleteError = error.GetBaseException().Message;
+                        SelectorTimeline.Mark?.Invoke("render-thread-complete-unavailable");
+                    }
+                    finally { renderMeasurementFinished = true; }
                 }));
             }
             else if (selectorMs >= 0 && ticks++ < 12)
@@ -315,7 +324,7 @@ public partial class App
             var waited = Stopwatch.StartNew();
             while (waited.ElapsedMilliseconds < 1000)
             {
-                lock (marks) if (marks.Exists(mark => mark.Name == "content-rendered")) break;
+                lock (marks) if (renderMeasurementFinished && marks.Exists(mark => mark.Name == "content-rendered")) break;
                 await Task.Delay(5);
             }
         }
@@ -325,11 +334,19 @@ public partial class App
             Dispatcher.Hooks.OperationStarted -= operationStarted;
             Dispatcher.Hooks.OperationCompleted -= operationCompleted;
             Dispatcher.Hooks.OperationAborted -= operationCompleted;
+            if (renderWait?.Status == DispatcherOperationStatus.Pending) renderWait.Abort();
             SelectorTimeline.Mark = null;
         }
         int index = _probeBreakdownIndex.TryGetValue(name, out int previous) ? previous + 1 : 1;
         _probeBreakdownIndex[name] = index;
-        lock (marks) recorder.AddBreakdown(new ResidentProbeRecorder.Breakdown(name, index, Math.Round(selectorMs, 2), sinceDismissal, marks.ToArray()));
+        if (renderThreadCompleteMs is { } completeMs)
+            recorder.Time(name + ": shortcut → selector render thread complete (upper bound)", completeMs);
+        lock (marks) recorder.AddBreakdown(new ResidentProbeRecorder.Breakdown(name, index, Math.Round(selectorMs, 2), sinceDismissal, marks.ToArray())
+        {
+            RenderThreadCompleteMs = renderThreadCompleteMs is { } measured ? Math.Round(measured, 2) : null,
+            RenderThreadCompleteError = renderThreadCompleteError
+                ?? (renderThreadCompleteMs is null ? "Render completion was not observed before the probe ended" : null),
+        });
         return selectorMs;
     }
 

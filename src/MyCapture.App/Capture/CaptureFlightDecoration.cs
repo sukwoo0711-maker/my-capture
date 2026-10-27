@@ -55,6 +55,8 @@ internal sealed class CaptureFlightDecoration : Window
 
     internal bool IsClosed { get; private set; }
 
+    internal bool WasShown { get; private set; }
+
     /// <summary>What the window draws now, in virtual-desktop physical pixels.</summary>
     internal CaptureFlightFrame Frame => _surface.Frame;
 
@@ -64,6 +66,7 @@ internal sealed class CaptureFlightDecoration : Window
         if (IsClosed) return false;
         IntPtr handle = new WindowInteropHelper(this).EnsureHandle();
         if (!IsCaptureExcluded) return false;
+        WasShown = true;
         Show();
         // GetWindowRect is authoritative, not WPF Left/Top, which use a different logical
         // coordinate plane on mixed-DPI desktops.
@@ -124,12 +127,16 @@ internal sealed class CaptureFlightDecoration : Window
         _source?.RemoveHook(NoActivateHook);
         _source = null;
         SourceInitialized -= OnSourceInitialized;
+        // Closing destroys the layered HWND. Detach its visual and pixels too, even when a
+        // diagnostic or event subscriber retains the closed Window until its next sample.
+        _surface.ReleaseResources();
+        Content = null;
         base.OnClosed(e);
     }
 
     private sealed class FlightSurface : FrameworkElement
     {
-        private readonly BitmapSource _image;
+        private BitmapSource? _image;
         private readonly Point _origin;
 
         internal FlightSurface(BitmapSource image, Point origin)
@@ -142,6 +149,13 @@ internal sealed class CaptureFlightDecoration : Window
         internal CaptureFlightFrame Frame { get; set; }
 
         internal DpiScale Dpi { get; set; } = new(1, 1);
+
+        internal void ReleaseResources()
+        {
+            _image = null;
+            Frame = default;
+            InvalidateVisual();
+        }
 
         protected override void OnRender(DrawingContext drawing)
         {

@@ -178,6 +178,7 @@ public partial class App : Application
                 {
                     MyCapture.App.Themes.WindowIdentity.Attach(window);
                     ObserveLaunchWindow(window);
+                    ObserveIdleMemoryWindow(window);
                 }
             }));
 
@@ -231,6 +232,7 @@ public partial class App : Application
         _hotkeys = _services.GetRequiredService<GlobalHotkeyService>();
         HotkeyRecorder.CanRegister = chord => _hotkeys.CanRegister(chord);
         _overlay = _services.GetRequiredService<CaptureOverlayCoordinator>();
+        _overlay.SessionStarted += CancelIdleMemoryReclamation;
         // Begin the one-pixel GDI/WPF warm-up before library loading and OCR setup,
         // giving first capture a head start without blocking shell initialization.
         StartCapturePrewarm();
@@ -263,6 +265,12 @@ public partial class App : Application
             _services.GetRequiredService<ILogger<PinManager>>());
         _pins.PinCreated += ShowFirstPinTip;
         _pins.ClickThroughHintShown += SaveFirstUseTips;
+        _pins.BackgroundWorkEnded += ScheduleIdleMemoryReclamation;
+        _pins.OpenPinsChanged += () =>
+        {
+            if (_pins.IsInteractionActive) CancelIdleMemoryReclamation();
+            else ScheduleIdleMemoryReclamation();
+        };
         InitializePinSession();
         _gitHubUpload = new GitHubIssueImageUploadService(
             () => _settings!,
@@ -332,7 +340,7 @@ public partial class App : Application
                 UpdateBusy: _updates?.IsBusy == true)));
         // A capture started from the tray menu races the menu's dismissal; the coordinator
         // uses this to decide whether the frozen frame must wait it out.
-        _shellPresenter.ForegroundDismissed += () => _overlay?.NoteForegroundDismissal();
+        _shellPresenter.CaptureSurfaceDismissed += excluded => _overlay?.NoteForegroundDismissal(excluded);
         AnnotationEditorPreferences.Read = () => _settings!.Annotation;
         ShortcutPresentation.ReadEnabled = () => _settings!.General.AlwaysShowShortcutHints;
         ShortcutRevealMotion.Initialize();
@@ -358,8 +366,8 @@ public partial class App : Application
             new System.Windows.Input.KeyEventHandler(OnQuickAccessKeyboardRequested));
         _launchedFirstRun = _settings.General.IsFirstRun;
         _hotkeys.Pressed += OnGlobalHotkeyPressed;
-        _overlay.SelectionPersistRequested = e => _capturePersistenceTask = OnCaptureSelectionCompletedAsync(e);
-        _overlay.EditorScreenCaptureRequested = e => _capturePersistenceTask = SaveEditorScreenCaptureAsync(e);
+        _overlay.SelectionPersistRequested = e => _capturePersistenceTask = ObserveMemoryWorkAsync(OnCaptureSelectionCompletedAsync(e));
+        _overlay.EditorScreenCaptureRequested = e => _capturePersistenceTask = ObserveMemoryWorkAsync(SaveEditorScreenCaptureAsync(e));
         _overlay.OpenEditorAfterCapture = () => AfterCaptureBehavior.Resolve(_settings!.General.AfterCapture, _currentRecord is not null) == AfterCaptureAction.Editor;
         _overlay.OriginalNeedsRecovery = () => _currentRecord is null && _pendingRecord is not null;
         _overlay.DraftRecord = () => _currentRecord is { } record && _currentEditSession is { } session
@@ -375,6 +383,7 @@ public partial class App : Application
             CompleteWelcomeCaptureAnnouncement();
             _storeRating?.NotifyFlowEnded();
             RequestLibraryMaintenance();
+            ScheduleIdleMemoryReclamation();
         };
         _overlay.CommitRequested = HandleCommitAsync;
         // The selector's record switch and ⋯ menu run the same commands as the tray and the hotkeys.
@@ -477,6 +486,7 @@ public partial class App : Application
 
     private void OnGlobalHotkeyPressed(object? sender, GlobalHotkeyPressedEventArgs e)
     {
+        CancelIdleMemoryReclamation();
         if (_storeInstallationPending || _preparingExit)
         {
             // Capture commands say why they wait; the other commands stay quiet until the app is free.
@@ -580,7 +590,7 @@ public partial class App : Application
     /// Reopens the most recently closed pin. With nothing to reopen, a quiet notice explains
     /// why instead of the command silently doing nothing.
     /// </summary>
-    private void HandleRestoreClosedPin()
+    private async void HandleRestoreClosedPin()
     {
         if (_pins is null)
         {
@@ -589,7 +599,8 @@ public partial class App : Application
 
         try
         {
-            if (_pins.RestoreLastClosed() is null)
+            CancelIdleMemoryReclamation();
+            if (await _pins.RestoreLastClosedAsync() is null)
             {
                 _tray?.ShowBalloon(
                     UiText.Get("PinRestore_NothingTitle"),
@@ -1131,6 +1142,7 @@ public partial class App : Application
 
     private void DismissQuickAccessForCapture()
     {
+        CancelIdleMemoryReclamation();
         // The capture command will be refused while this capture's card is in front and its save
         // still runs; that card is the answer (ReportCaptureBlock), so it stays.
         if (IsQuickAccessFirstAnsweringCapture()) return;
@@ -1140,7 +1152,8 @@ public partial class App : Application
         _pendingLift = null;
         _captureFlight?.Finish();
         _captureFlight = null;
-        _quickAccess?.DismissForCapture(() => _overlay?.NoteForegroundDismissal());
+        if (_quickAccess is { } card)
+            card.DismissForCapture(() => _overlay?.NoteForegroundDismissal(card.IsCaptureExcluded));
         // Load the shutter while the user selects, so the release plays it without delay.
         if (_settings?.General.PlayCaptureSound == true) CaptureShutterSound.Prepare();
     }
@@ -1401,6 +1414,8 @@ public partial class App : Application
             try
             {
                 _captureFlight = CaptureFlight.TryLift(image, source);
+                if (_captureFlight is { } flight)
+                    flight.SurfaceDismissed += excluded => _overlay?.NoteForegroundDismissal(excluded);
             }
             catch (Exception ex) when (ex is not OutOfMemoryException)
             {
@@ -1439,6 +1454,11 @@ public partial class App : Application
         {
             _log?.LogWarning(ex, "Could not add late source details to the capture");
         }
+        finally
+        {
+            if (!Dispatcher.HasShutdownStarted)
+                _ = Dispatcher.BeginInvoke(DispatcherPriority.ContextIdle, new Action(ScheduleIdleMemoryReclamation));
+        }
     }
 
     private void ShowQuickAccess(CaptureRecord record, System.Windows.Media.Imaging.BitmapSource image,
@@ -1461,7 +1481,7 @@ public partial class App : Application
                 firstCaptureTip: _settings.General.FirstCaptureTipShown ? null : UiText.Get("Onboard_FirstCaptureTip"),
                 keyboardRouter: _receiptKeyboard);
             ReceiptTimeline.Mark?.Invoke("card-constructed");
-            card.Closed += (_, _) => { _overlay?.NoteForegroundDismissal(); lease.Dispose(); if (ReferenceEquals(_quickAccess, card)) _quickAccess = null; _storeRating?.NotifyFlowEnded(); };
+            card.Closed += (_, _) => { _overlay?.NoteForegroundDismissal(card.IsCaptureExcluded); lease.Dispose(); if (ReferenceEquals(_quickAccess, card)) _quickAccess = null; _storeRating?.NotifyFlowEnded(); };
             _quickAccess = card;
             // The lifted capture flies into this card; without one the card uses its usual entrance.
             flight?.Land(card);
@@ -1837,6 +1857,7 @@ public partial class App : Application
             return;
         }
         _indexingRunning = true;
+        CancelIdleMemoryReclamation();
         try
         {
             while (_indexingRequested && !_indexingCancellation.IsCancellationRequested && !_legacyImportPreparing)
@@ -1857,6 +1878,7 @@ public partial class App : Application
         finally
         {
             _indexingRunning = false;
+            ScheduleIdleMemoryReclamation();
         }
     }
 
@@ -1904,6 +1926,9 @@ public partial class App : Application
     /// <summary>Flips the tray to Busy during recognition and restores the prior state after.</summary>
     private void SetOcrBusy(bool busy)
     {
+        _ocrMemoryBusy = busy;
+        if (busy) CancelIdleMemoryReclamation();
+        else ScheduleIdleMemoryReclamation();
         if (_tray is null)
         {
             return;
@@ -1922,6 +1947,7 @@ public partial class App : Application
     private void HandleGalleryRequested()
     {
         if (_storeInstallationPending || _preparingExit) return;
+        CancelIdleMemoryReclamation();
         _log?.LogInformation("Gallery activation requested");
 
         GalleryWindow? window = EnsureGalleryWindow();
@@ -2129,7 +2155,15 @@ public partial class App : Application
                 _log?.LogDebug(ex, "Capture selector prewarm failed");
             }
 
-            // Diagnostic variants only (resident probe): what a deeper selector prewarm would save.
+            // Reader/window-list first use runs on its own idle turn, after shell startup.
+            _ = Dispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle, new Action(() =>
+            {
+                if (_shutdownRequested || _overlay?.IsActive == true || _preparingAdvancedCapture
+                    || s_residentProbe?.Has("no-reader-prewarm") == true) return;
+                _ = PrewarmCaptureReadersAsync();
+            }));
+
+            // Preserve the probe's deeper selector variant.
             if (s_residentProbe is { } probe) RunProbePrewarmVariants(probe);
 
             // The editor's first open after a capture likewise, on a later idle turn of its own.
@@ -2148,6 +2182,23 @@ public partial class App : Application
         }));
     }
 
+    private async Task PrewarmCaptureReadersAsync()
+    {
+        if (_services is null || _overlay is null) return;
+        try
+        {
+            await CaptureReaderPrewarm.RunAsync(
+                () => _services.GetRequiredService<WindowCandidateService>()
+                    .GetCandidates(MonitorEnumerator.GetVirtualDesktopBounds()),
+                windows => _overlay.ReadPageUrls(windows),
+                _overlay.ReadWindowSources is { } readApplications ? windows => readApplications(windows) : null);
+        }
+        catch (Exception ex)
+        {
+            _log?.LogDebug(ex, "Capture source reader prewarm failed");
+        }
+    }
+
     private void StartActivationListener()
     {
         _activationWait = ThreadPool.RegisterWaitForSingleObject(_activationSignal!, (_, _) =>
@@ -2163,6 +2214,13 @@ public partial class App : Application
 
     private bool TryRunSelfTest(string[] args)
     {
+        int exclusionIndex = FindSwitch(args, CaptureExclusionSelfTest.CommandLineSwitch);
+        if (exclusionIndex >= 0)
+        {
+            string output = OutputDirectoryAfter(args, exclusionIndex, "mycapture-capture-exclusion");
+            return RunSelfTest(output, CaptureExclusionSelfTest.ReportName, CaptureExclusionSelfTest.Run);
+        }
+
         if (FindSwitch(args, VideoRangeDiagnosticPlan.CommandLineSwitch) >= 0
             || FindSwitch(args, VideoRangeDiagnosticPlan.ChildSwitch) >= 0)
         {
@@ -2570,6 +2628,8 @@ public partial class App : Application
 
     protected override void OnExit(ExitEventArgs e)
     {
+        _memoryReclamationStopped = true;
+        CancelIdleMemoryReclamation();
         _launchStatus?.Complete();
         _residentReady?.Dispose();
         _residentReady = null;

@@ -164,7 +164,7 @@ public sealed class PinCoreFlowTests
             Assert.True(textPin.ShowActivated);
             Assert.Equal([capturePin, textPin], activated);
             clipboardPin.Close();
-            PinWindow restored = Assert.IsType<PinWindow>(manager.RestoreLastClosed());
+            PinWindow restored = Assert.IsType<PinWindow>(PinHistoryTestSupport.Restore(manager));
             Assert.True(restored.ShowActivated);
             Assert.Equal([capturePin, textPin, restored], activated);
         }
