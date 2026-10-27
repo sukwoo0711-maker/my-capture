@@ -99,6 +99,10 @@ internal sealed class PinSessionService : IDisposable
         }
         _restoring = true;
         _pendingRead ??= Task.Run(_store.LoadDetailed);
+        // While the session is read and decoded, pay the first pin window's one-time cost here,
+        // so it does not stall the frames between the first restored pins.
+        try { PinWindowPrewarm.Run(); }
+        catch (Exception ex) { _log.LogDebug(ex, "Pin window prewarm failed"); }
         return RestoreCoreAsync(_pendingRead, _generation);
     }
 
@@ -147,30 +151,46 @@ internal sealed class PinSessionService : IDisposable
                 }
                 return (Pins: result, Corrupt: corrupt);
             }).ConfigureAwait(false);
-            await _dispatcher.InvokeAsync(() =>
+            Consume(decoded.Corrupt, generation);
+            // One pin per dispatcher turn, so the pins already shown keep rendering between them.
+            // Every turn leaves the session consistent for an exit save: a pin is open or still carried.
+            foreach ((PinSessionPin pin, PinContent content, long length) in decoded.Pins)
             {
-                if (!IsGenerationCurrent(generation) || !_enabled) return;
-                var consumed = decoded.Corrupt;
-                foreach ((PinSessionPin pin, PinContent content, long length) in decoded.Pins)
+                bool current = await _dispatcher.InvokeAsync(() =>
                 {
+                    if (!IsRestoreCurrent(generation)) return false;
                     try
                     {
                         _identities.Add(content, new ContentIdentity(pin.Id) { EncodedLength = length });
                         _pins.RestoreSessionPin(new PinManager.ClosedPin(content, pin.ImageWidthDip,
                             pin.ImageHeightDip, pin.Zoom, pin.Opacity, pin.Placement, pin.OpenedOrder));
-                        consumed.Add(pin.Id);
+                        Consume([pin.Id], generation);
                     }
                     catch (Exception ex) { _log.LogWarning("Could not reopen saved pin {PinId} ({FailureType})", pin.Id, ex.GetType().Name); }
-                }
-                lock (_stateGate) _unrestored = _unrestored.Where(entry => !consumed.Contains(entry.Pin.Id)).ToArray();
-                FinishRestore();
-            }, DispatcherPriority.Background);
+                    return true;
+                }, DispatcherPriority.Background);
+                if (!current) return;
+            }
+            await _dispatcher.InvokeAsync(() => { if (IsRestoreCurrent(generation)) FinishRestore(); }, DispatcherPriority.Background);
         }
         catch (Exception ex)
         {
             _log.LogWarning("Could not restore the open-pin session ({FailureType})", ex.GetType().Name);
             if (!_dispatcher.HasShutdownStarted)
                 await _dispatcher.InvokeAsync(() => { if (IsGenerationCurrent(generation)) FinishRestore(); });
+        }
+    }
+
+    private bool IsRestoreCurrent(int generation) => IsGenerationCurrent(generation) && _enabled;
+
+    /// <summary>Drops reopened or undecodable records from the carried-forward session.</summary>
+    private void Consume(IReadOnlyCollection<Guid> ids, int generation)
+    {
+        if (ids.Count == 0) return;
+        lock (_stateGate)
+        {
+            if (IsGenerationCurrent(generation))
+                _unrestored = _unrestored.Where(entry => !ids.Contains(entry.Pin.Id)).ToArray();
         }
     }
 
