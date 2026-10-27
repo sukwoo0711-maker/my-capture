@@ -86,7 +86,7 @@ public sealed class Ux402InteractionTests
         {
             window.Show(); window.UpdateLayout();
             var tools = Descendants(window).OfType<ToggleButton>().Where(button => AutomationProperties.GetAcceleratorKey(button).Length > 0).ToArray();
-            // Every tool but Crop, plus the stamp command beside Image.
+            // Every tool but Crop, whose single entry point is now the command bar, plus the stamp command beside Image.
             Assert.Equal(Enum.GetValues<EditorTool>().Length, tools.Length);
             Assert.Single(tools, button => AutomationProperties.GetAcceleratorKey(button)
                 == ShortcutCatalog.Get(ShortcutScope.Annotation, "Stamp").Hint);

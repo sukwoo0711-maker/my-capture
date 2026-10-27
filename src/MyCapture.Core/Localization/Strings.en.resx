@@ -4740,6 +4740,11 @@ Overwrite these shortcuts? You can change this later in Settings → Shortcuts.<
   <data name="LibraryUx_NoSelection" xml:space="preserve"><value>No selection</value></data>
   <data name="LibraryUx_Preview" xml:space="preserve"><value>Preview</value></data>
   <data name="LibraryUx_PreviewHint" xml:space="preserve"><value>Preview (Space)</value></data>
+  <data name="CaptureRatio_Help" xml:space="preserve"><value>Lock the region's aspect ratio or place a fixed size.</value></data>
+  <data name="CaptureRatio_Changed" xml:space="preserve"><value>Ratio: {0}</value></data>
+  <data name="CaptureRatio_FixedSize" xml:space="preserve"><value>Fixed size {0}</value></data>
+  <data name="CaptureRatio_FixedHint" xml:space="preserve"><value>Move with the arrow keys and press Enter to confirm.</value></data>
+  <data name="CaptureRatio_HelpLabel" xml:space="preserve"><value>Switch aspect ratio lock while selecting</value></data>
   <data name="Stamp_Name" xml:space="preserve"><value>Stamp</value></data>
   <data name="Stamp_Place" xml:space="preserve"><value>Place stamp</value></data>
   <data name="Stamp_ToolTip" xml:space="preserve"><value>Place stamp — right-click for options (S)</value></data>
@@ -4754,11 +4759,6 @@ Overwrite these shortcuts? You can change this later in Settings → Shortcuts.<
   <data name="Stamp_SaveFailed" xml:space="preserve"><value>The stamp image could not be saved.</value></data>
   <data name="Stamp_Unreadable" xml:space="preserve"><value>The stamp image cannot be read. Please register it again.</value></data>
   <data name="Stamp_Unavailable" xml:space="preserve"><value>The stamp is not available here.</value></data>
-  <data name="CaptureRatio_Help" xml:space="preserve"><value>Lock the region's aspect ratio or place a fixed size.</value></data>
-  <data name="CaptureRatio_Changed" xml:space="preserve"><value>Ratio: {0}</value></data>
-  <data name="CaptureRatio_FixedSize" xml:space="preserve"><value>Fixed size {0}</value></data>
-  <data name="CaptureRatio_FixedHint" xml:space="preserve"><value>Move with the arrow keys and press Enter to confirm.</value></data>
-  <data name="CaptureRatio_HelpLabel" xml:space="preserve"><value>Switch aspect ratio lock while selecting</value></data>
   <data name="Help.QuickAccess" xml:space="preserve">
     <value>Quick access</value>
   </data>
