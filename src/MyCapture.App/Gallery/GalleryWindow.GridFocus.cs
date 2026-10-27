@@ -44,12 +44,34 @@ internal sealed partial class GalleryWindow
     private static bool IsKeyboardEntry() =>
         InputManager.Current.MostRecentInputDevice is KeyboardDevice && Mouse.LeftButton != MouseButtonState.Pressed;
 
+    /// <summary>Tab leaves the whole grid, including when arrows put focus on a non-Tab-stop card.</summary>
+    private void OnRowsListPreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Handled || e.Key != Key.Tab || ReferenceEquals(e.OriginalSource, RowsList)
+            || Keyboard.Modifiers is not (ModifierKeys.None or ModifierKeys.Shift)) return;
+        // Starting reverse traversal from a descendant would visit the list's own Tab stop and
+        // immediately re-enter its remembered card. Start from that single boundary instead.
+        var direction = Keyboard.Modifiers == ModifierKeys.Shift
+            ? FocusNavigationDirection.Previous : FocusNavigationDirection.Next;
+        e.Handled = RowsList.MoveFocus(new TraversalRequest(direction));
+    }
+
     /// <summary>
     /// Puts keyboard focus on the card the user left, or the best card or folder card to start from. False
     /// when the grid has nothing to focus.
     /// </summary>
     internal bool FocusGridEntry()
     {
+        GalleryFolderCardViewModel[] folders = _viewModel.Rows.OfType<GalleryFolderRow>().SelectMany(row => row.Folders).ToArray();
+        // The remembered kind wins over every fallback. A selected capture must not steal re-entry
+        // from the folder card the user actually left in this mixed grid.
+        if (_lastActiveFolder is { } lastFolder
+            && folders.FirstOrDefault(folder => folder.FolderId == lastFolder) is { } rememberedFolder)
+        {
+            FocusFolderCard(rememberedFolder);
+            return true;
+        }
+
         GalleryTileRow[] tileRows = _viewModel.Rows.OfType<GalleryTileRow>().Where(row => row.Tiles.Count > 0).ToArray();
         IEnumerable<GalleryItemViewModel> tiles = tileRows.SelectMany(row => row.Tiles);
         GalleryItemViewModel? target =
@@ -65,9 +87,7 @@ internal sealed partial class GalleryWindow
             return true;
         }
 
-        GalleryFolderCardViewModel[] folders = _viewModel.Rows.OfType<GalleryFolderRow>().SelectMany(row => row.Folders).ToArray();
-        GalleryFolderCardViewModel? card = (_lastActiveFolder is { } folder ? folders.FirstOrDefault(candidate => candidate.FolderId == folder) : null)
-            ?? folders.FirstOrDefault();
+        GalleryFolderCardViewModel? card = folders.FirstOrDefault();
         if (card is null) return false;
         FocusFolderCard(card);
         return true;
@@ -98,11 +118,16 @@ internal sealed partial class GalleryWindow
         _ = Dispatcher.BeginInvoke(DispatcherPriority.Loaded, new Action(() => FocusTile(RowsList, tile)));
     }
 
-    /// <summary>The heading directly above <paramref name="tile"/>'s row, when no folder cards sit between them.</summary>
-    private bool TryFocusDayHeadingAbove(GalleryItemViewModel tile)
+    /// <summary>The day heading directly above a capture or folder card's row.</summary>
+    private bool TryFocusDayHeadingAbove(object card)
     {
         List<GalleryRow> rows = _viewModel.Rows.ToList();
-        int index = rows.FindIndex(row => row is GalleryTileRow tiles && tiles.Tiles.Contains(tile));
+        int index = rows.FindIndex(row => row switch
+        {
+            GalleryTileRow tiles when card is GalleryItemViewModel tile => tiles.Tiles.Contains(tile),
+            GalleryFolderRow folders when card is GalleryFolderCardViewModel folder => folders.Folders.Contains(folder),
+            _ => false,
+        });
         if (index <= 0 || rows[index - 1] is not GalleryHeaderRow header) return false;
         RowsList.ScrollIntoView(header);
         _ = Dispatcher.BeginInvoke(DispatcherPriority.Loaded, new Action(() => FocusDayHeading(RowsList, header)));

@@ -206,6 +206,9 @@ internal sealed partial class GalleryWindow
     /// <summary>Moves the arrow-key focus to the neighbouring card and selects it as a click would.</summary>
     private void NavigateTiles(GalleryItemViewModel tile, Key key, bool control, bool shift)
     {
+        // A heading is the nearest target when it directly precedes this row, even if a folder
+        // from an earlier day is the next card returned by the card-only vertical navigation.
+        if (key == Key.Up && !control && !shift && TryFocusDayHeadingAbove(tile)) return;
         // Plain Up/Down can leave the tiles for the folder cards above them; range
         // selection with Ctrl or Shift stays on tiles.
         if (key is Key.Up or Key.Down && !control && !shift
@@ -218,8 +221,6 @@ internal sealed partial class GalleryWindow
 
         GalleryItemViewModel? next = GallerySelectionNavigation.FindNeighbor(_viewModel.Rows, tile,
             key is Key.Up or Key.Down, key is Key.Left or Key.Up ? -1 : 1);
-        // Up from the first row of a day goes to that day's heading, which is not a Tab stop.
-        if (key == Key.Up && !control && !shift && TryFocusDayHeadingAbove(tile)) return;
         if (next is null) return;
         _viewModel.Select(next.Id, control, shift);
         GalleryTileRow? row = _viewModel.Rows.OfType<GalleryTileRow>().FirstOrDefault(r => r.Tiles.Contains(next));

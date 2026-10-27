@@ -829,13 +829,14 @@ public sealed class GalleryTests : KoreanCaptionTest
 
     [Theory]
     [InlineData(0, 1)]        // before first layout → minimum
-    [InlineData(167, 1)]      // narrower than one compact track: still one card
-    [InlineData(335, 1)]      // one DIP short of two 168-DIP tracks
-    [InlineData(336, 2)]      // two compact cards
+    [InlineData(191, 1)]      // narrower than one compact track: still one card
+    [InlineData(383, 1)]      // one DIP short of two 192-DIP tracks
+    [InlineData(384, 2)]      // two compact cards
     [InlineData(458, 2)]      // the minimum window with the details pane open: two compact cards, two full cards
-    [InlineData(760, 4)]      // the default window's content width: four instead of three
+    [InlineData(767, 3)]      // just below four compact tracks
+    [InlineData(768, 4)]      // four compact cards instead of three full cards
     [InlineData(1000, 5)]     // where four full cards fit
-    [InlineData(2520, 15)]    // fifteen compact tracks
+    [InlineData(2880, 15)]    // fifteen compact tracks
     [InlineData(4000, 15)]    // clamped to the compact maximum
     public void ColumnCountForWidth_CompactFolderCardsUseMoreColumns(double width, int expected)
     {
@@ -862,7 +863,35 @@ public sealed class GalleryTests : KoreanCaptionTest
                 Assert.True(width / columns - GalleryRowBuilder.CardInset < track * 1.5 - GalleryRowBuilder.CardInset,
                     $"{width} DIP in {columns} columns makes {width / columns - GalleryRowBuilder.CardInset:0.#}-DIP cards");
         }
-        Assert.Equal(compact ? 152 : 208, track - GalleryRowBuilder.CardInset);
+        Assert.Equal(compact ? 176 : 208, track - GalleryRowBuilder.CardInset);
+    }
+
+    [Fact]
+    public async Task SearchReasonOnlyWidensRowsThatNeedFolderNames()
+    {
+        AppPaths paths = AppPaths.CreateForRoot(NewRoot());
+        var queue = NewQueue(paths, new QueueSettings());
+        var folder = await queue.CreateFolderAsync("Review");
+        AddSyntheticRecord(queue, DateTimeOffset.Now, "local capture");
+        CaptureRecord filed = AddSyntheticRecord(queue, DateTimeOffset.Now.AddMinutes(-1), "archived capture");
+        filed.FolderId = folder.Id;
+        var vm = new GalleryViewModel(NewController(queue), _ => "missing-synthetic-preview.png", 160);
+        vm.SetMetadataMinimumTrackWidths(
+            GalleryRowBuilder.CardTrackFor(60, false), GalleryRowBuilder.CardTrackFor(60, true),
+            GalleryRowBuilder.CardTrackFor(60, false, withFolderReason: true),
+            GalleryRowBuilder.CardTrackFor(60, true, withFolderReason: true));
+        vm.SetColumnCountForWidth(672);
+        Assert.Equal(3, vm.ColumnCount);
+        vm.SearchQuery = "local";
+        Assert.False(Assert.Single(vm.Groups.SelectMany(group => group.Items)).HasFolderBadge);
+        Assert.Equal(3, vm.ColumnCount);
+        vm.SearchQuery = "archived";
+        Assert.True(Assert.Single(vm.Groups.SelectMany(group => group.Items)).HasFolderBadge);
+        Assert.Equal(2, vm.ColumnCount);
+        vm.SearchQuery = "local";
+        Assert.Equal(3, vm.ColumnCount);
+        vm.SearchQuery = string.Empty;
+        Assert.Equal(3, vm.ColumnCount);
     }
 
     [Theory]

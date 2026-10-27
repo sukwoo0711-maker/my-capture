@@ -141,7 +141,7 @@ public sealed partial class SettingsThemePreviewTests
                     try
                     {
                         bool virtualLayout = false;
-                        foreach (double width in LibrarySweepWidths(window, scroll, vm.IsCompactLayout).ToArray())
+                        foreach (double width in LibrarySweepWidths(window, scroll, vm).ToArray())
                         {
                             if (!virtualLayout)
                             {
@@ -298,9 +298,11 @@ public sealed partial class SettingsThemePreviewTests
     /// Window widths from the minimum up: each column boundary, one DIP either side of it, and a
     /// coarse sweep in between. The caller covers desktop-capped widths in the loaded content.
     /// </summary>
-    private static IEnumerable<double> LibrarySweepWidths(Window window, ScrollViewer scroll, bool compact)
+    private static IEnumerable<double> LibrarySweepWidths(Window window, ScrollViewer scroll, GalleryViewModel vm)
     {
-        double track = compact ? GalleryRowBuilder.MinCompactTileTrackWidth : GalleryRowBuilder.MinTileTrackWidth;
+        bool compact = vm.IsCompactLayout;
+        // The layout's own minimum: the text size and a filed search result can raise the base track.
+        double track = vm.MinimumTrackWidth;
         int max = compact ? GalleryRowBuilder.CompactMaxColumns : GalleryRowBuilder.MaxColumns;
         // The library's scrolling area grows one DIP for every DIP the window grows; the themed
         // vertical scrollbar track is always reserved when the column count is chosen.
@@ -335,7 +337,7 @@ public sealed partial class SettingsThemePreviewTests
     private static void AssertCardsInsideLibrary(ListBox rowsList, ScrollViewer scroll, GalleryViewModel vm, string label)
     {
         bool compact = vm.IsCompactLayout;
-        double track = compact ? GalleryRowBuilder.MinCompactTileTrackWidth : GalleryRowBuilder.MinTileTrackWidth;
+        double track = vm.MinimumTrackWidth;
         int max = compact ? GalleryRowBuilder.CompactMaxColumns : GalleryRowBuilder.MaxColumns;
         (double baseWidth, double baseHeight, double slope) = compact ? (148d, 160d, 0.625) : (244d, 220d, 0.625);
         // The visible card: a capture card inside its selection outline, or a folder card button.

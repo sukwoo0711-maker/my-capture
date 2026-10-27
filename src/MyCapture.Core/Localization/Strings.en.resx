@@ -4617,7 +4617,8 @@ Overwrite these shortcuts? You can change this later in Settings → Shortcuts.<
   <data name="Update_DownloadingPercent" xml:space="preserve"><value>Downloading update {0}%</value></data>
   <data name="Update_Verifying" xml:space="preserve"><value>Verifying update</value></data>
   <data name="Update_Preparing" xml:space="preserve"><value>Preparing installation</value></data>
-  <data name="Update_InstallFailed" xml:space="preserve"><value>The update could not be installed. Try again in Settings &gt; About.</value></data>
+  <data name="Update_InstallFailed" xml:space="preserve"><value>The update could not be installed.</value></data>
+  <data name="Update_RetryAction" xml:space="preserve"><value>Retry</value></data>
   <data name="Update_CheckHelp" xml:space="preserve"><value>Checks GitHub for a new version of this app.</value></data>
   <data name="Update_InstallHelp" xml:space="preserve"><value>Saves your work, then installs the new version.</value></data>
   <data name="Update_OpenReleaseHelp" xml:space="preserve"><value>Opens the download page for the new version in your browser.</value></data>

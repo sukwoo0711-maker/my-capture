@@ -205,6 +205,7 @@ internal sealed partial class GalleryWindow
             case Key.Up:
             case Key.Down:
                 e.Handled = true;
+                if (e.Key == Key.Up && TryFocusDayHeadingAbove(card)) break;
                 object? target = GallerySelectionNavigation.FindVertical(_viewModel.Rows, card, e.Key == Key.Up ? -1 : 1);
                 if (target is GalleryFolderCardViewModel above) FocusFolderCard(above);
                 else if (target is GalleryItemViewModel tile)

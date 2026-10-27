@@ -35,6 +35,7 @@ internal sealed partial class GalleryWindow
     }
 
     private Action? _installUpdate;
+    private Action? _dismissUpdate;
     private LibraryNoticeState? _notice;
     private FeedbackCountdown? _noticeCountdown;
 
@@ -45,7 +46,7 @@ internal sealed partial class GalleryWindow
     internal bool IsUpdateAvailableShown => UpdateAvailableButton.Visibility == Visibility.Visible;
 
     /// <summary>True while a notice is on the status bar.</summary>
-    internal bool IsNoticeVisible => LibraryNotice.Visibility == Visibility.Visible;
+    internal bool IsNoticeVisible => IsVisible && WindowState != WindowState.Minimized && LibraryNotice.IsVisible;
 
     /// <summary>True while <paramref name="text"/> is the notice waiting for, or on, the status bar.</summary>
     internal bool HasNotice(string text) => _notice?.Text == text;
@@ -62,6 +63,17 @@ internal sealed partial class GalleryWindow
 
     /// <summary>Spends notice time as the countdown's clock would.</summary>
     internal void AdvanceNoticeForTest(TimeSpan elapsed) => _noticeCountdown?.Advance(elapsed);
+
+    internal TimeSpan? NoticeRemainingForTest => _noticeCountdown?.Remaining;
+
+    private void InitializeLibraryNotices()
+    {
+        IsVisibleChanged += (_, _) => RefreshNotice();
+        StateChanged += (_, _) => RefreshNotice();
+        // Effective visibility can change after the window's event, as WPF updates its descendants.
+        LibraryNotice.IsVisibleChanged += (_, _) => RecordNoticeShown();
+        Closed += (_, _) => ClearNotice();
+    }
 
     /// <summary>
     /// Offers a notice. It shows at once when the status line is free; otherwise it waits behind the result
@@ -99,7 +111,8 @@ internal sealed partial class GalleryWindow
     private bool RefreshNotice()
     {
         if (LibraryNotice is null) return false;
-        if (_notice is not { } notice || !string.IsNullOrEmpty(LibraryActionStatus.Text))
+        if (_notice is not { } notice || !IsVisible || WindowState == WindowState.Minimized
+            || !string.IsNullOrEmpty(LibraryActionStatus.Text))
         {
             LibraryNotice.Visibility = Visibility.Collapsed;
             return false;
@@ -121,14 +134,20 @@ internal sealed partial class GalleryWindow
             FluidMotion.SetFadeTo(LibraryNotice, 1);
         }
 
-        if (!notice.WasShown)
+        RecordNoticeShown();
+        return IsNoticeVisible;
+    }
+
+    private void RecordNoticeShown()
+    {
+        if (IsNoticeVisible && string.IsNullOrEmpty(LibraryActionStatus.Text)
+            && _notice is { WasShown: false } notice)
         {
             notice.WasShown = true;
             FeedbackTiming.Announce(LibraryNoticeText, notice.Text, FeedbackKind.Result, "MyCapture.Library.Notice");
             notice.Shown?.Invoke();
         }
 
-        return true;
     }
 
     private void OnNoticeActionClick(object sender, RoutedEventArgs e)
@@ -139,9 +158,10 @@ internal sealed partial class GalleryWindow
     }
 
     /// <summary>Replaces the version text with a button that installs the update.</summary>
-    internal void SetUpdateAvailable(string label, string toolTip, bool enabled, Action install)
+    internal void SetUpdateAvailable(string label, string toolTip, bool enabled, Action install, Action? dismiss = null)
     {
         _installUpdate = install;
+        _dismissUpdate = dismiss;
         // One trimmed line, so a long label never widens the status bar past the column's limit.
         UpdateAvailableButton.Content = new TextBlock { Text = label, TextTrimming = TextTrimming.CharacterEllipsis };
         UpdateAvailableButton.ToolTip = toolTip;
@@ -149,6 +169,7 @@ internal sealed partial class GalleryWindow
         AutomationProperties.SetHelpText(UpdateAvailableButton, toolTip);
         UpdateAvailableButton.IsEnabled = enabled;
         UpdateAvailableButton.Visibility = Visibility.Visible;
+        UpdateDismissButton.Visibility = dismiss is null ? Visibility.Collapsed : Visibility.Visible;
         CurrentVersionLabel.Visibility = Visibility.Collapsed;
     }
 
@@ -156,11 +177,15 @@ internal sealed partial class GalleryWindow
     internal void ClearUpdateAvailable()
     {
         _installUpdate = null;
+        _dismissUpdate = null;
         UpdateAvailableButton.Visibility = Visibility.Collapsed;
+        UpdateDismissButton.Visibility = Visibility.Collapsed;
         CurrentVersionLabel.Visibility = Visibility.Visible;
     }
 
     private void OnUpdateAvailableClick(object sender, RoutedEventArgs e) => _installUpdate?.Invoke();
+
+    private void OnUpdateDismissClick(object sender, RoutedEventArgs e) => _dismissUpdate?.Invoke();
 
     private void OnStatusBarSizeChanged(object sender, SizeChangedEventArgs e)
     {

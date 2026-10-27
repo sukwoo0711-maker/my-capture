@@ -29,6 +29,7 @@ internal sealed partial class GalleryWindow
         var metrics = (font, FontFamily.Source, UiText.Culture.Name, dpi.DpiScaleX, TextOptions.GetTextFormattingMode(this));
         if (_metadataTextMetrics == metrics) return;
         _metadataTextMetrics = metrics;
+        Resources["Gallery.SearchFolderBadgeWidth"] = GalleryRowBuilder.SearchFolderBadgeWidthFor(font);
         var probe = new TextBlock { FontSize = font, FontFamily = FontFamily };
         TextOptions.SetTextFormattingMode(probe, metrics.Item5);
         VisualTreeHelper.SetRootDpi(probe, dpi);
@@ -41,8 +42,10 @@ internal sealed partial class GalleryWindow
             timeWidth = Math.Max(timeWidth, probe.DesiredSize.Width);
         }
         _viewModel.SetMetadataMinimumTrackWidths(
-            GalleryRowBuilder.CardTrackFor(Math.Ceiling(timeWidth), compact: false),
-            GalleryRowBuilder.CardTrackFor(Math.Ceiling(timeWidth), compact: true));
+            GalleryRowBuilder.CardTrackFor(Math.Ceiling(timeWidth), compact: false, captionFontSize: font),
+            GalleryRowBuilder.CardTrackFor(Math.Ceiling(timeWidth), compact: true, captionFontSize: font),
+            GalleryRowBuilder.CardTrackFor(Math.Ceiling(timeWidth), compact: false, captionFontSize: font, withFolderReason: true),
+            GalleryRowBuilder.CardTrackFor(Math.Ceiling(timeWidth), compact: true, captionFontSize: font, withFolderReason: true));
     }
 
     private GalleryItemViewModel? _renamingTile;

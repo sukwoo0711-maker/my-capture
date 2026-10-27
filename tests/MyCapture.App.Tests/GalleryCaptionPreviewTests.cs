@@ -37,12 +37,15 @@ public sealed class GalleryCaptionPreviewTests
         window.SetResourceReference(Window.BackgroundProperty, "Surface.Base");
         window.Resources["FontSize.Body"] = 14 * textScale;
         window.Resources["FontSize.Caption"] = 12 * textScale;
+        double minimumTrack = MinimumCardTrack(window, compact, 12 * textScale, withFolderReason: true);
         var row = new ListBox
         {
             Style = (Style)window.FindResource(compact ? "Gallery.CompactTileRowList" : "Gallery.TileRowList"),
             VerticalAlignment = VerticalAlignment.Top, Margin = new Thickness(24),
-            Width = compact ? 656 : 1040,
+            Width = Math.Max(compact ? 768 : 1040, 4 * minimumTrack),
         };
+        window.Width = row.Width + 64;
+        window.Height = Math.Max(420, minimumTrack + 100);
         CaptureRecord[] records =
         [
             new() { Title = LongCaption, SourcePageUrl = "https://example.com/design?token=private" },
@@ -118,8 +121,14 @@ public sealed class GalleryCaptionPreviewTests
                 Assert.True(metadata.ActualWidth >= 8);
                 Assert.Equal(tile.TimeCaption, metadata.Text);
                 Assert.True(caption.IsVisible && caption.Text == tile.SearchMatchText, "The search match shows beside the badges, and the time stays");
+                AssertReadableCaption(window, item, caption);
+                Assert.True(badges.IsVisible);
+                Assert.True(Descendants(item).OfType<Border>().Single(part => part.Name == "FolderBadge").IsVisible);
+                Assert.False(Descendants(item).OfType<Border>().Single(part => part.Name == "KeepBadge").IsVisible);
+                Assert.False(Descendants(item).OfType<Border>().Single(part => part.Name == "EditedBadge").IsVisible);
                 tile.SetSearchMatch(false, CaptureMatchField.None);
                 Drain(window);
+                Assert.True(badges.IsVisible);
                 Size before = item.RenderSize;
                 var tip = Assert.IsType<ToolTip>(source.ToolTip);
                 Assert.False(tip.IsOpen);
@@ -161,6 +170,147 @@ public sealed class GalleryCaptionPreviewTests
         }
         finally { window.Close(); }
     });
+
+    [Theory]
+    [InlineData(false, "ko-KR", 1.0)]
+    [InlineData(true, "ko-KR", 1.0)]
+    [InlineData(false, "en-US", 1.0)]
+    [InlineData(true, "en-US", 1.0)]
+    [InlineData(false, "ko-KR", 1.5)]
+    [InlineData(true, "ko-KR", 1.5)]
+    [InlineData(false, "en-US", 1.5)]
+    [InlineData(true, "en-US", 1.5)]
+    [InlineData(false, "ko-KR", 2.0)]
+    [InlineData(true, "ko-KR", 2.0)]
+    [InlineData(false, "en-US", 2.0)]
+    [InlineData(true, "en-US", 2.0)]
+    public void SearchReasonStaysReadableAtTheMinimumCardWidth(bool compact, string languageName, double textScale) => StaTestHost.Run(() =>
+    {
+        using var language = UiText.UseLanguage(languageName);
+        var window = new Window { Height = 420, ShowInTaskbar = false, ShowActivated = false };
+        LoadProductTemplates(window);
+        FluidMotion.SetWindowEntrance(window, false);
+        window.SetResourceReference(Window.BackgroundProperty, "Surface.Base");
+        window.Resources["FontSize.Body"] = 14 * textScale;
+        window.Resources["FontSize.Caption"] = 12 * textScale;
+        double track = MinimumCardTrack(window, compact, 12 * textScale, withFolderReason: true);
+        window.Width = track + 64;
+        // Enlarged text raises the minimum card width and its proportional preview height. Keep
+        // the whole footer in this screenshot fixture without relaxing the minimum-width check.
+        window.Height = Math.Max(420, track + 100);
+        var row = new ListBox
+        {
+            Style = (Style)window.FindResource(compact ? "Gallery.CompactTileRowList" : "Gallery.TileRowList"),
+            Width = track, Margin = new Thickness(16), VerticalAlignment = VerticalAlignment.Top,
+        };
+        var record = new CaptureRecord
+        {
+            Title = LongCaption, SourcePageUrl = "https://example.com/design", IsPinned = true,
+            HasAnnotations = true, FolderId = Guid.NewGuid(),
+            CreatedAt = new DateTimeOffset(2026, 10, 26, 12, 58, 0, TimeSpan.FromHours(9)),
+        };
+        var tile = new GalleryItemViewModel(record, _ => "synthetic-preview", 320);
+        tile.SetFolderBadge(("제품 기획 자료", "작업/제품 기획 자료"));
+        tile.SetSearchMatch(true, CaptureMatchField.Title);
+        var thumbnail = BitmapSource.Create(320, 180, 96, 96, PixelFormats.Bgr24, null, new byte[320 * 180 * 3], 320 * 3);
+        thumbnail.Freeze();
+        tile.ConfigureAsyncLoading(new GalleryThumbnailLoader((_, _) => thumbnail), Dispatcher.CurrentDispatcher);
+        row.Items.Add(tile);
+        window.Content = row;
+        try
+        {
+            window.Show();
+            Drain(window);
+            var item = Assert.IsType<ListBoxItem>(row.ItemContainerGenerator.ContainerFromIndex(0));
+            Border card = Descendants(item).OfType<Border>().Single(part => part.Name == "TileCard");
+            Assert.Equal(track - GalleryRowBuilder.CardInset, card.ActualWidth, 1);
+            if (textScale == 1) Assert.Equal(276, card.ActualWidth, 1);
+            TextBlock caption = Descendants(item).OfType<TextBlock>().Single(part => part.Name == "TileMetadataText");
+            Assert.True(caption.IsVisible);
+            Assert.Equal(tile.SearchMatchText, caption.Text);
+            AssertReadableCaption(window, item, caption);
+            Rect captionBounds = new(caption.TranslatePoint(new Point(), window), caption.RenderSize);
+            Rect cardBounds = new(card.TranslatePoint(new Point(), window), card.RenderSize);
+            Border folderBadge = Descendants(item).OfType<Border>().Single(part => part.Name == "FolderBadge");
+            Assert.True(folderBadge.IsVisible);
+            TextBlock folderName = Descendants(folderBadge).OfType<TextBlock>().Single();
+            Assert.Equal(tile.FolderBadge, folderName.Text);
+            Assert.Equal(TextTrimming.CharacterEllipsis, folderName.TextTrimming);
+            AssertReadableText(window, item, folderName, Math.Max(48, folderName.FontSize * 4), "folder name");
+            Assert.EndsWith(UiText.Format("LibraryUx_InFolderAccessible", "작업/제품 기획 자료"),
+                AutomationProperties.GetName(item), StringComparison.Ordinal);
+            Rect folderBounds = new(folderBadge.TranslatePoint(new Point(), window), folderBadge.RenderSize);
+            Assert.True(cardBounds.Contains(folderBounds));
+            Rect folderOverlap = Rect.Intersect(captionBounds, folderBounds);
+            Assert.True(folderOverlap.IsEmpty || folderOverlap.Width == 0 || folderOverlap.Height == 0);
+            Assert.False(Descendants(item).OfType<Border>().Single(part => part.Name == "KeepBadge").IsVisible);
+            Assert.False(Descendants(item).OfType<Border>().Single(part => part.Name == "EditedBadge").IsVisible);
+            foreach (string name in new[] { "SourceBadge", "PinButton", "CopyButton", "MoreButton" })
+            {
+                Button button = Descendants(item).OfType<Button>().Single(part => part.Name == name);
+                Assert.True(button.IsVisible, name);
+                Rect bounds = new(button.TranslatePoint(new Point(), window), button.RenderSize);
+                Assert.True(cardBounds.Contains(bounds), $"{name} leaves the card: {bounds} / {cardBounds}");
+                // Adjacent Grid columns share an edge; Rect.IntersectsWith also returns true for that
+                // zero-area intersection. Fail only when the rendered areas actually overlap.
+                Rect overlap = Rect.Intersect(captionBounds, bounds);
+                Assert.True(overlap.IsEmpty || overlap.Width == 0 || overlap.Height == 0,
+                    $"{name} overlaps the search reason: {bounds} / {captionBounds}; intersection {overlap}");
+            }
+            TextBlock time = Descendants(item).OfType<TextBlock>().Single(part => part.Name == "TileTime");
+            Assert.Equal(tile.TimeCaption, time.Text);
+            Assert.True(time.ActualWidth > 0);
+            Assert.True(time.TranslatePoint(new Point(), window).Y < captionBounds.Top);
+            SaveEvidence(window, null, $"gallery-search-{(compact ? "compact" : "full")}-{languageName}-{textScale:0.0}.png");
+            tile.SetSearchMatch(false, CaptureMatchField.None);
+            Drain(window);
+            Assert.False(caption.IsVisible);
+            Assert.True(Descendants(item).OfType<Grid>().Single(part => part.Name == "TileStatusBadges").IsVisible);
+            Assert.True(folderBadge.IsVisible);
+            Assert.True(Descendants(item).OfType<Border>().Single(part => part.Name == "KeepBadge").IsVisible);
+            Assert.True(Descendants(item).OfType<Border>().Single(part => part.Name == "EditedBadge").IsVisible);
+        }
+        finally { window.Close(); }
+    });
+
+    private static double MinimumCardTrack(Window window, bool compact, double captionFontSize, bool withFolderReason = false)
+    {
+        window.Resources["Gallery.SearchFolderBadgeWidth"] = GalleryRowBuilder.SearchFolderBadgeWidthFor(captionFontSize);
+        var probe = new TextBlock { FontFamily = window.FontFamily, FontSize = captionFontSize };
+        double timeWidth = 0;
+        for (int hour = 0; hour < 24; hour++)
+        {
+            probe.Text = new DateTime(2000, 1, 1, hour, 58, 0).ToString("t", UiText.Culture);
+            probe.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+            timeWidth = Math.Max(timeWidth, probe.DesiredSize.Width);
+        }
+        return Math.Max(compact ? GalleryRowBuilder.MinCompactTileTrackWidth : GalleryRowBuilder.MinTileTrackWidth,
+            GalleryRowBuilder.CardTrackFor(Math.Ceiling(timeWidth), compact, captionFontSize, withFolderReason));
+    }
+
+    private static void AssertReadableCaption(Window window, ListBoxItem item, TextBlock caption) =>
+        AssertReadableText(window, item, caption, Math.Max(48, caption.FontSize * 4), "search reason");
+
+    private static void AssertReadableText(Window window, ListBoxItem item, TextBlock caption, double minimum, string subject)
+    {
+        Assert.True(caption.ActualWidth >= minimum - 0.5,
+            $"The {subject} has only {caption.ActualWidth:0.#} DIP; needs {minimum:0.#}");
+        Rect visible = new(caption.TranslatePoint(new Point(), window), caption.RenderSize);
+        Border card = Descendants(item).OfType<Border>().Single(part => part.Name == "TileCard");
+        visible.Intersect(new Rect(card.TranslatePoint(new Point(), window), card.RenderSize));
+        for (DependencyObject? ancestor = caption; ancestor is FrameworkElement element; ancestor = VisualTreeHelper.GetParent(element))
+        {
+            if (element.ClipToBounds)
+                visible.Intersect(new Rect(element.TranslatePoint(new Point(), window), element.RenderSize));
+            if (LayoutInformation.GetLayoutClip(element) is { } clip)
+                visible.Intersect(element.TransformToAncestor(window).TransformBounds(clip.Bounds));
+            if (ReferenceEquals(element, window)) break;
+        }
+        Assert.True(!visible.IsEmpty && visible.Width >= minimum - 0.5,
+            $"The {subject} is clipped to {visible.Width:0.#} DIP; needs {minimum:0.#}");
+        Assert.True(visible.Height >= caption.ActualHeight - 0.5,
+            $"The {subject} is vertically clipped to {visible.Height:0.#} DIP; needs {caption.ActualHeight:0.#}");
+    }
 
     [Fact]
     public void FullCaptionPopupWrapsWithoutMovingCardsAndClosesCleanly() => StaTestHost.Run(() =>
@@ -371,7 +521,7 @@ public sealed class GalleryCaptionPreviewTests
         CopyNamespaces(product, combined);
         // Import the card's local motion wash as well as its overflow menu and folder badge.
         // Every entry comes from product markup; the fixture preserves the real state layers.
-        string[] keys = ["Gallery.ThumbnailHeight", "LibraryUx.HoverWash", "Gallery.IconButton", "Gallery.SelectionCheckBox", "Gallery.TileContextMenu", "LibraryUx.Icon.Folder", "LibraryUx.Icon.Kept", "Gallery.FolderBadge",
+        string[] keys = ["Gallery.ThumbnailHeight", "Gallery.SearchFolderBadgeWidth", "LibraryUx.HoverWash", "Gallery.IconButton", "Gallery.SelectionCheckBox", "Gallery.TileContextMenu", "LibraryUx.Icon.Folder", "LibraryUx.Icon.Kept", "Gallery.FolderBadge",
             "Gallery.FolderBadgeContent", "Gallery.SourceBadge", "Gallery.TileTemplate", "Gallery.TileRowList",
             "Gallery.CompactTileRowList"];
         foreach (XElement entry in product.Element(p + "Window.Resources")!.Element(p + "ResourceDictionary")!.Elements()

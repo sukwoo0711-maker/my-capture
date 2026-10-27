@@ -83,7 +83,8 @@ public partial class App
             // A still-pending completion notice remains available on the next return.
             if (notice.Kind == EngagementNoticeKind.UpdateCompleted) notice.Hide();
             notice.ShowUpdateAvailable(installation.AvailableVersion, installation.IsBusy,
-                installation.StatusText ?? SettingsWindow.StoreUpdateStatusText(installation.Snapshot.Phase));
+                installation.StatusText ?? SettingsWindow.StoreUpdateStatusText(installation.Snapshot.Phase),
+                failed: installation.Snapshot.Phase == StoreUpdatePhase.Failed);
             return true;
         }
         if (_settings?.StoreUpdate.CompletionNoticeVersion is { } complete)

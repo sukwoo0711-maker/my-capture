@@ -13,7 +13,8 @@ namespace MyCapture.App.Gallery;
 /// </para>
 /// <para>
 /// A tile row holds at most <see cref="ColumnCountForWidth"/> tiles: as many minimum tracks as
-/// fit, two even at the minimum window with the details pane open. The tracks are fluid:
+/// fit, two even at the minimum window with the details pane open (a search that lists filed captures
+/// may use one wide column there, so each card keeps its folder name and match reason readable). The tracks are fluid:
 /// <see cref="GalleryCardRowPanel"/> divides the row's whole width between them, so the cards grow
 /// until another column fits instead of leaving an empty band. Each date group emits one header
 /// row followed by however many tile rows its tiles fill; a partial final row keeps its remaining
@@ -29,7 +30,7 @@ public static class GalleryRowBuilder
     /// </summary>
     /// <remarks>
     /// 208 still fits the card's two lines (the title and the time; the 24-DIP source glyph, a status badge and
-    /// the three 28-DIP commands), and two tracks fit the library at the window's minimum width with the
+    /// the three 28-DIP commands, or a readable search reason in place of status badges), and two tracks fit the library at the window's minimum width with the
     /// details pane open. With two or more columns a card therefore stays between 208 and 320 DIPs wide before
     /// a further column is added. <see cref="CardTrackFor"/> raises the track when the time or the text needs more.
     /// </remarks>
@@ -37,18 +38,25 @@ public static class GalleryRowBuilder
 
     /// <summary>
     /// The narrowest track a card needs for the capture time in the UI language (the widest of the day, in DIPs):
-    /// the title line needs a readable title and the time, the second line the 24-DIP source glyph, one 20-DIP
-    /// status badge and the three 28-DIP commands. A full card also reserves a 20-DIP folder glyph.
+    /// the title line needs a readable title and the time; the second line keeps the source glyph, a caption
+    /// at least four ems wide and the three commands. Kept/edited badges yield to a nonempty caption; a filed
+    /// search result also reserves its readable folder name. The time
+    /// and commands share a column, so its larger width must fit on both lines.
     /// </summary>
-    public static double CardTrackFor(double timeWidth, bool compact)
+    public static double CardTrackFor(double timeWidth, bool compact, double captionFontSize = 12, bool withFolderReason = false)
     {
         // The track's 16-DIP inset, the card edge (2) and the text margins (8 and 6).
         const double chrome = 16 + 2 + 14;
-        const double minimumTitle = 64, titleGap = 8, source = 24, badge = 20, commands = 3 * 28, folderGlyph = 20;
+        const double minimumTitle = 64, titleGap = 8, source = 24 + 4, commands = 3 * 28, folderGlyph = 20;
         double firstLine = chrome + minimumTitle + titleGap + timeWidth;
-        double secondLine = chrome + source + badge + commands;
-        return Math.Max(firstLine, secondLine) + (compact ? 0 : folderGlyph);
+        double minimumCaption = Math.Max(48, captionFontSize * 4);
+        double secondLine = chrome + source + minimumCaption + Math.Max(commands, timeWidth)
+            + (withFolderReason ? SearchFolderBadgeWidthFor(captionFontSize) + 4 : 0);
+        return Math.Max(firstLine, secondLine) + (compact || withFolderReason ? 0 : folderGlyph);
     }
+
+    /// <summary>The search folder badge keeps its icon/padding and at least four ems of readable name.</summary>
+    public static double SearchFolderBadgeWidthFor(double captionFontSize) => Math.Max(96, captionFontSize * 8);
 
     /// <summary>
     /// One card per row when two do not fit, so a narrow window never clips a card or its commands.
@@ -60,12 +68,11 @@ public static class GalleryRowBuilder
 
     /// <summary>The narrowest track of a compact card inside an opened folder.</summary>
     /// <remarks>
-    /// A compact card is at least 152 DIPs wide (about 70% of a full card) plus the same 16 DIPs
-    /// around it, so a folder shows more of its captures per row than the library root does. 152 holds a
-    /// readable title beside the widest capture time in either language, and the second row's source glyph,
-    /// one badge and three 28-DIP commands (<see cref="CardTrackFor"/> raises it for larger text).
+    /// A compact card is at least 176 DIPs wide plus the same 16 DIPs around it, so a folder can show more
+    /// captures per row than the library root. This keeps a 48-DIP search reason beside the source glyph
+    /// and three commands; <see cref="CardTrackFor"/> raises it for larger text or a wider localized time.
     /// </remarks>
-    public const double MinCompactTileTrackWidth = 168.0;
+    public const double MinCompactTileTrackWidth = 192.0;
 
     /// <summary>The compact grid's cap: about as wide as <see cref="MaxColumns"/> full tiles.</summary>
     public const int CompactMaxColumns = 15;

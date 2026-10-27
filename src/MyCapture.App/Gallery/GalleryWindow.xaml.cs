@@ -128,6 +128,7 @@ internal sealed partial class GalleryWindow : Window
         // Bubbling, so a tile's open caption hint or a menu consumes Escape first.
         KeyDown += OnLibraryKeyDown;
         InitializeActionStatus();
+        InitializeLibraryNotices();
         InitializeRecovery();
         InitializeLibraryExtras();
         InitializeEmptyLibrary();

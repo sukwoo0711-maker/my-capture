@@ -472,7 +472,7 @@ public sealed partial class SettingsThemePreviewTests
                                 Border card = Descendants(item).OfType<Border>().Single(border => border.Name == "TileCard");
                                 Rect cardBounds = new(card.TranslatePoint(new Point(), window), card.RenderSize);
                                 var rects = new List<(string Name, Rect Rect)>();
-                                foreach (string name in new[] { "TileTitle", "TileTime", "SourceBadge", "PinButton", "CopyButton", "MoreButton", "TileMetadataText", "KeepBadge", "FolderBadge" })
+                                foreach (string name in new[] { "TileTitle", "TileTime", "SourceBadge", "PinButton", "CopyButton", "MoreButton", "TileMetadataText", "KeepBadge", "EditedBadge", "FolderBadge" })
                                     if (Descendants(item).OfType<FrameworkElement>().FirstOrDefault(element => element.Name == name) is { IsVisible: true } part)
                                         rects.Add((name, new Rect(part.TranslatePoint(new Point(), window), part.RenderSize)));
                                 foreach (Border badge in Descendants(item).OfType<Border>().Where(b => b.IsVisible && b.Name.Length == 0 && Equals(b.ToolTip, UiText.Get("Text_2C64DDA4D878"))))

@@ -4617,7 +4617,8 @@ F3  클립보드를 핀으로 띄우기
   <data name="Update_DownloadingPercent" xml:space="preserve"><value>업데이트 내려받는 중 {0}%</value></data>
   <data name="Update_Verifying" xml:space="preserve"><value>업데이트 확인 중</value></data>
   <data name="Update_Preparing" xml:space="preserve"><value>설치 준비 중</value></data>
-  <data name="Update_InstallFailed" xml:space="preserve"><value>업데이트를 설치하지 못했습니다. 설정 &gt; 정보에서 다시 시도하십시오.</value></data>
+  <data name="Update_InstallFailed" xml:space="preserve"><value>업데이트를 설치하지 못했습니다.</value></data>
+  <data name="Update_RetryAction" xml:space="preserve"><value>다시 시도</value></data>
   <data name="Update_CheckHelp" xml:space="preserve"><value>GitHub에서 이 앱의 새 버전을 확인합니다.</value></data>
   <data name="Update_InstallHelp" xml:space="preserve"><value>작업을 저장한 뒤 새 버전을 설치합니다.</value></data>
   <data name="Update_OpenReleaseHelp" xml:space="preserve"><value>브라우저에서 새 버전의 다운로드 페이지를 엽니다.</value></data>
