@@ -801,6 +801,7 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
         _preservedTextOutline = s.Annotation.TextOutline;
         _preservedRecentFontFamilies = [.. s.Annotation.RecentFontFamilies];
         _preservedRecentColors = [.. s.Annotation.RecentColors];
+        _preservedStamp = s.Annotation.Stamp.Clone();
         _preservedColorFormat = s.Capture.ColorFormat;
         _preservedPreserveTransparency = s.Export.PreserveTransparency;
         _language = s.General.Language;
@@ -862,6 +863,8 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
         B(_preservedTextBold), B(_preservedTextBackground), B(_preservedTextOutline),
         string.Join(";", _preservedRecentFontFamilies),
         string.Join(";", _preservedRecentColors.Select(color => color.ToString())),
+        _preservedStamp.Anchor.ToString(), Dbl(_preservedStamp.MarginX), Dbl(_preservedStamp.MarginY),
+        Dbl(_preservedStamp.WidthFraction), Int(_preservedStamp.OpacityPercent),
     ];
 
     private static string B(bool value) => value ? "1" : "0";
@@ -1015,6 +1018,7 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
                 HighlighterAlpha = (byte)ParseInt(_highlighterAlpha),
                 RecentColors = [.. _preservedRecentColors],
                 BlurRadius = ParseInt(_blurRadius),
+                Stamp = _preservedStamp.Clone(),
             },
         };
 
@@ -1505,6 +1509,7 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
     private bool _preservedTextOutline = true;
     private List<string> _preservedRecentFontFamilies = [];
     private List<Primitives.ColorRgba> _preservedRecentColors = [];
+    private StampSettings _preservedStamp = new();
     private ColorFormat _preservedColorFormat;
     private bool _preservedPreserveTransparency;
     private string _language = string.Empty;
