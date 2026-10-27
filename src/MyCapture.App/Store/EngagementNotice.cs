@@ -25,7 +25,10 @@ internal interface IEngagementNotice
     bool IsShown { get; }
 
     void ShowInvitation();
-    void ShowUpdateCompleted(string version);
+
+    /// <summary>Shows "updated to X". Returns whether it is on screen now; a surface that had to defer it returns
+    /// false, and the shell then keeps the completion for its next return instead of consuming it.</summary>
+    bool ShowUpdateCompleted(string version);
     void ShowUpdateAvailable(string? version, bool busy = false, string? status = null);
     void Hide();
 }
@@ -101,12 +104,13 @@ internal sealed class EngagementNotice : Grid, IEngagementNotice
         Reveal();
     }
 
-    public void ShowUpdateCompleted(string version)
+    public bool ShowUpdateCompleted(string version)
     {
         Kind = EngagementNoticeKind.UpdateCompleted;
         _message.Text = UiText.Format("StoreUpdate_CompletedVersion", DisplayVersion(version));
         _review.Visibility = Visibility.Collapsed;
         Reveal();
+        return true;
     }
 
     public void ShowUpdateAvailable(string? version, bool busy = false, string? status = null)
@@ -157,8 +161,8 @@ internal sealed class EngagementNotice : Grid, IEngagementNotice
 
 /// <summary>
 /// The library's update and rating notices. Nothing floats over the cards: "updated to X" and the
-/// rating invitation are status-line messages that fade by themselves, and an available update is
-/// a small button in the status bar where the version number is.
+/// rating invitation are neutral one-line notices in their own status-bar slot (never replacing a delete's
+/// Undo), and an available update is a small button in the status bar where the version number is.
 /// </summary>
 internal sealed class LibraryEngagementNotice(GalleryWindow library) : IEngagementNotice
 {
@@ -171,26 +175,28 @@ internal sealed class LibraryEngagementNotice(GalleryWindow library) : IEngageme
 
     public bool IsShown => Kind == EngagementNoticeKind.UpdateAvailable
         ? library.IsUpdateAvailableShown
-        : _statusText is not null && library.ActionStatusText == _statusText;
+        : _statusText is not null && library.HasNotice(_statusText);
 
     public void ShowInvitation()
     {
         if (IsShown && Kind > EngagementNoticeKind.Rating) return;
         Kind = EngagementNoticeKind.Rating;
         _statusText = UiText.Get("StoreRating_InviteMessage");
-        library.ShowEngagementStatus(_statusText, UiText.Get("LibraryUx_RateAction"), () =>
+        library.ShowNotice(_statusText, UiText.Get("LibraryUx_RateAction"), () =>
         {
             ReviewChosen?.Invoke();
             Kind = EngagementNoticeKind.None;
-            return Task.CompletedTask;
-        });
+        }, GalleryWindow.InvitationLifetime, expired: () => Kind = EngagementNoticeKind.None);
     }
 
-    public void ShowUpdateCompleted(string version)
+    public bool ShowUpdateCompleted(string version)
     {
         Kind = EngagementNoticeKind.UpdateCompleted;
         _statusText = UiText.Format("StoreUpdate_CompletedVersion", EngagementNotice.DisplayVersion(version));
-        library.ShowEngagementStatus(_statusText);
+        // Consumed only once it was really shown: the notice may have to wait behind a result.
+        return library.ShowNotice(_statusText, null, null, GalleryWindow.UpdateDoneLifetime,
+            shown: () => ClosedByUser?.Invoke(EngagementNoticeKind.UpdateCompleted),
+            expired: () => Kind = EngagementNoticeKind.None);
     }
 
     public void ShowUpdateAvailable(string? version, bool busy = false, string? status = null)
@@ -207,6 +213,7 @@ internal sealed class LibraryEngagementNotice(GalleryWindow library) : IEngageme
     public void Hide()
     {
         if (Kind == EngagementNoticeKind.UpdateAvailable) library.ClearUpdateAvailable();
+        else if (_statusText is not null && library.HasNotice(_statusText)) library.ClearNotice();
         Kind = EngagementNoticeKind.None;
         _statusText = null;
     }

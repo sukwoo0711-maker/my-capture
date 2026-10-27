@@ -197,46 +197,77 @@ public sealed partial class SettingsThemePreviewTests
                 Assert.Equal(new[] { a.Id, b.Id }.Order(), f.ViewModel.Selection.SelectedIds.Order());
                 RightClick(RealizedCard(rows, c.Id));
                 Assert.Equal([c.Id], f.ViewModel.Selection.SelectedIds);
+
+                // The Menu key and the More button follow the same rule as the right click.
+                ContextMenu menu = window.TileMenu;
+                f.ViewModel.Select(a.Id); f.ViewModel.Select(b.Id, control: true);
+                Assert.True(PressLibraryKey(RealizedCard(rows, a.Id), Key.Apps).Handled);
+                Assert.True(menu.IsOpen);
+                Assert.Equal(new[] { a.Id, b.Id }.Order(), f.ViewModel.Selection.SelectedIds.Order());
+                menu.IsOpen = false;
+                PumpLibraryUntil(window, () => menu.PlacementTarget is null, "the closed menu lets go of its card");
+                Assert.True(PressLibraryKey(RealizedCard(rows, c.Id), Key.Apps).Handled);
+                Assert.Equal([c.Id], f.ViewModel.Selection.SelectedIds);
+                menu.IsOpen = false;
+                f.ViewModel.Select(a.Id); f.ViewModel.Select(b.Id, control: true);
+                Button more = Descendants(RealizedCard(rows, c.Id)).OfType<Button>().Single(button =>
+                    System.Windows.Automation.AutomationProperties.GetName(button) == UiText.Get("Text_5E8959D18390"));
+                more.RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));
+                Assert.Equal([c.Id], f.ViewModel.Selection.SelectedIds);
+                menu.IsOpen = false;
             }
             finally { window.CloseForExit(); application.Shutdown(); }
         });
 
     [Fact]
-    public Task LibraryOverhaul_FolderCardsTakeMoveAndDeleteKeys() =>
-        RunIsolated(nameof(LibraryOverhaul_FolderCardsTakeMoveAndDeleteKeys), () =>
+    public Task LibraryOverhaul_FolderCardsTakeMoveAndDeleteKeysForTheFocusedCard() =>
+        RunIsolated(nameof(LibraryOverhaul_FolderCardsTakeMoveAndDeleteKeysForTheFocusedCard), () =>
         {
             Application application = CreateLibraryMotionApplication();
             using var scope = UiText.UseLanguage("ko-KR");
             LibraryUxFixture f = CreateLibraryUxFixture("mc-overhaul-folderkeys-");
+            // A folder inside the open folder: the commands must reach this card, not the folder the library shows.
+            CaptureFolder child = f.Queue.CreateFolderAsync("child-folder", f.Design.Id).GetAwaiter().GetResult();
+            f.ViewModel.Refresh();
             GalleryWindow window = f.Window;
             SynchronizationContext? previous = SynchronizationContext.Current;
             SynchronizationContext.SetSynchronizationContext(new DispatcherSynchronizationContext(application.Dispatcher));
             try
             {
                 window.Show(); SettleGalleryLayout(window);
-                Button card = FolderCardButtons(window).First();
-                var opened = new List<string>();
-                foreach ((Key key, Type dialog) in new[] { (Key.M, typeof(GalleryFolderEditDialog)), (Key.Delete, typeof(GalleryFolderDeletionDialog)) })
+                f.ViewModel.NavigateTo(CaptureFolderScope.ForFolder(f.Design.Id));
+                Button card = PumpLibraryUntil(window, () => FolderCardButtons(window)
+                    .FirstOrDefault(button => ((GalleryFolderCardViewModel)button.DataContext).FolderId == child.Id), found => found is not null, "child folder card");
+                string childPath = f.Queue.GetFolderDisplayPath(child.Id);
+
+                void Drive(Key key, bool ime, Action<Window> inspect)
                 {
+                    bool inspected = false;
                     window.Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(() =>
                     {
-                        Window shown = application.Windows.Cast<Window>().Single(candidate => candidate.GetType() == dialog);
-                        opened.Add(dialog.Name);
-                        shown.DialogResult = false;
+                        Window dialog = application.Windows.Cast<Window>().Single(candidate => candidate is GalleryFolderEditDialog or GalleryFolderDeletionDialog);
+                        inspect(dialog);
+                        inspected = true;
+                        dialog.DialogResult = false;
                     }));
-                    Assert.True(PressLibraryKey(card, key).Handled);
-                    PumpLibraryUntil(window, () => opened.Count > 0, key + " dialog");
-                    Assert.Equal([dialog.Name], opened);
-                    opened.Clear();
+                    Assert.True(PressLibraryKey(card, key, ime).Handled);
+                    PumpLibraryUntil(window, () => inspected, key + " dialog");
                 }
-                // Hangul mode M (ㅡ) reaches the same command.
-                window.Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(() =>
+
+                // Move: the destinations leave out the card's own folder but offer the folder the library shows.
+                foreach (bool ime in new[] { false, true })
                 {
-                    opened.Add("move");
-                    application.Windows.Cast<Window>().Single(candidate => candidate is GalleryFolderEditDialog).DialogResult = false;
-                }));
-                Assert.True(PressLibraryKey(card, Key.M, ime: true).Handled);
-                PumpLibraryUntil(window, () => opened.Count > 0, "Hangul move dialog");
+                    Drive(Key.M, ime, dialog =>
+                    {
+                        var choices = ((ListBox)((GalleryFolderEditDialog)dialog).Input).Items.Cast<object>()
+                            .Select(item => item.GetType().GetProperty("Name")!.GetValue(item)!.ToString()!).ToArray();
+                        Assert.DoesNotContain(choices, name => name.EndsWith(childPath, StringComparison.Ordinal));
+                        Assert.Contains(choices, name => name.EndsWith(f.Queue.GetFolderDisplayPath(f.Design.Id), StringComparison.Ordinal));
+                    });
+                }
+                // Delete: the confirmation names the card's folder.
+                Drive(Key.Delete, ime: false, dialog =>
+                    Assert.Contains(childPath, string.Concat(Descendants(dialog).OfType<TextBlock>().Select(text => text.Text))));
             }
             finally
             {
@@ -245,8 +276,66 @@ public sealed partial class SettingsThemePreviewTests
         });
 
     [Fact]
-    public Task LibraryOverhaul_NoticesLiveOnTheStatusBarAndNeverCoverCards() =>
-        RunIsolated(nameof(LibraryOverhaul_NoticesLiveOnTheStatusBarAndNeverCoverCards), () =>
+    public Task LibraryOverhaul_RenameBoxKeepsEveryKeyAndContentKeysSkipTheToolbar() =>
+        RunIsolated(nameof(LibraryOverhaul_RenameBoxKeepsEveryKeyAndContentKeysSkipTheToolbar), () =>
+        {
+            Application application = CreateLibraryMotionApplication();
+            using var scope = UiText.UseLanguage("ko-KR");
+            LibraryUxFixture f = CreateLibraryUxFixture("mc-overhaul-renamebox-");
+            GalleryWindow window = f.Window;
+            SynchronizationContext? previous = SynchronizationContext.Current;
+            SynchronizationContext.SetSynchronizationContext(new DispatcherSynchronizationContext(application.Dispatcher));
+            try
+            {
+                window.Show(); SettleGalleryLayout(window);
+                var rows = (ListBox)window.FindName("RowsList");
+                GalleryItemViewModel tile = f.ViewModel.FindTile(f.Records[0].Id)!;
+                var commands = new List<GalleryKeyCommand>();
+                var deletes = new List<int>();
+                window.KeyCommandHookForTest = command => { commands.Add(command); return true; };
+                window.ConfirmDelete = (count, _) => { deletes.Add(count); return false; };
+                f.ViewModel.Select(tile.Id);
+                var begin = window.BeginCaptureRenameAsync(tile);
+                PumpLibraryUntil(window, () => begin.IsCompleted, "rename begins");
+                TextBox input = PumpLibraryUntil(window, () => Descendants(rows).OfType<TextBox>()
+                    .FirstOrDefault(box => box.Name == "TileRenameInput" && ReferenceEquals(box.DataContext, tile)), box => box is { IsVisible: true }, "rename box");
+
+                // Every key a text box uses stays with it: nothing is handled, deleted or run as a command.
+                foreach (Key key in new[] { Key.Delete, Key.F2, Key.Space, Key.A, Key.C, Key.P, Key.K, Key.M, Key.T, Key.G,
+                    Key.Left, Key.Right, Key.Up, Key.Down, Key.Apps })
+                    Assert.False(PressLibraryKey(input, key).Handled, key.ToString());
+                Assert.False(PressLibraryKey(input, Key.P, ime: true).Handled);
+                Assert.Empty(commands);
+                Assert.Empty(deletes);
+                Assert.True(tile.IsRenaming);
+                // Enter and Esc are the box's own: it commits or cancels, and the content handler never saw them.
+                Assert.True(PressLibraryKey(input, Key.Escape).Handled);
+                Assert.False(tile.IsRenaming);
+                Assert.Empty(commands);
+                Assert.Empty(deletes);
+
+                // Keys that start in the content toolbar belong to its controls.
+                var toolbar = (FrameworkElement)window.FindName("LibraryContentCommandBar");
+                var preview = (Button)window.FindName("PreviewSelectedButton");
+                Assert.False(PressLibraryKey(preview, Key.Delete).Handled);
+                Assert.False(PressLibraryKey(preview, Key.P).Handled);
+                Assert.Empty(commands);
+                Assert.Empty(deletes);
+                // The same keys from a card do run.
+                window.KeyCommandHookForTest = null;
+                Assert.True(PressLibraryKey(RealizedCard(rows, tile.Id), Key.Delete).Handled);
+                Assert.Equal([1], deletes);
+            }
+            finally
+            {
+                window.KeyCommandHookForTest = null; window.ConfirmDelete = null;
+                window.CloseForExit(); SynchronizationContext.SetSynchronizationContext(previous); application.Shutdown();
+            }
+        });
+
+    [Fact]
+    public Task LibraryOverhaul_NoticesLiveOnTheStatusBarInTheirOwnSlot() =>
+        RunIsolated(nameof(LibraryOverhaul_NoticesLiveOnTheStatusBarInTheirOwnSlot), () =>
         {
             Application application = CreateLibraryMotionApplication();
             FluidMotion.AnimationsEnabledOverrideForTest = false;
@@ -260,62 +349,102 @@ public sealed partial class SettingsThemePreviewTests
                     window.Show(); SettleGalleryLayout(window);
                     var notice = new MyCapture.App.Store.LibraryEngagementNotice(window);
                     int reviews = 0, installs = 0;
+                    var consumed = new List<MyCapture.App.Store.EngagementNoticeKind>();
                     notice.ReviewChosen = () => reviews++;
                     notice.UpdateChosen = () => installs++;
+                    notice.ClosedByUser = kind => consumed.Add(kind);
                     var status = (TextBlock)window.FindName("LibraryActionStatus");
                     var version = (TextBlock)window.FindName("CurrentVersionLabel");
                     var update = (Button)window.FindName("UpdateAvailableButton");
                     var rows = (ListBox)window.FindName("RowsList");
                     var bar = (FrameworkElement)window.FindName("LibraryStatusBar");
+                    var slot = (FrameworkElement)window.FindName("LibraryNotice");
+                    var noticeText = (TextBlock)window.FindName("LibraryNoticeText");
+                    string UpdateLabel() => ((TextBlock)update.Content).Text;
 
-                    // No card is ever added over the library's content.
-                    void AssertNoCardCoversTheLibrary()
+                    // No card is ever added over the library's content, and the bar keeps its height.
+                    double barHeight = bar.ActualHeight;
+                    void AssertNoCardCoversTheLibrary(bool sameHeight = true)
                     {
                         SettleGalleryLayout(window);
                         Assert.Empty(Descendants(window).OfType<MyCapture.App.Store.EngagementNotice>());
                         Rect rowsBounds = new(rows.TranslatePoint(new Point(), window), rows.RenderSize);
-                        foreach (FrameworkElement shown in new FrameworkElement[] { status, update, version }.Where(element => element.IsVisible))
+                        Rect barBounds = new(bar.TranslatePoint(new Point(), window), bar.RenderSize);
+                        foreach (FrameworkElement shown in new FrameworkElement[] { slot, update, version }.Where(element => element.IsVisible))
                         {
                             Rect bounds = new(shown.TranslatePoint(new Point(), window), shown.RenderSize);
                             Assert.False(bounds.IntersectsWith(rowsBounds), $"{shown.Name} covers the cards");
-                            Assert.True(new Rect(bar.TranslatePoint(new Point(), window), bar.RenderSize).Contains(bounds), shown.Name);
+                            Assert.True(barBounds.Contains(bounds), $"{shown.Name}: {bounds} in {barBounds}");
                         }
+                        // A result's Undo button is taller than the bar's line; notices and the update button are not.
+                        if (sameHeight) Assert.Equal(barHeight, bar.ActualHeight, 1);
                     }
 
-                    // "Updated to X": a result on the status line that fades by itself.
-                    notice.ShowUpdateCompleted("4.9.0.0");
-                    Assert.Equal(UiText.Format("StoreUpdate_CompletedVersion", "4.9.0"), status.Text);
+                    // "Updated to X": a neutral one-line notice that goes away by itself and is consumed once shown.
+                    Assert.True(notice.ShowUpdateCompleted("4.9.0.0"));
+                    Assert.Equal(UiText.Format("StoreUpdate_CompletedVersion", "4.9.0"), window.NoticeTextForTest);
+                    Assert.Equal([MyCapture.App.Store.EngagementNoticeKind.UpdateCompleted], consumed);
                     Assert.True(notice.IsShown);
-                    Assert.Equal(FeedbackKind.Result, window.ActionStatusKindForTest);
-                    Assert.False(window.IsActionStatusDismissibleForTest);
-                    AssertNoCardCoversTheLibrary();
-                    window.AdvanceActionStatusForTest(FeedbackTiming.Result);
                     Assert.Equal(string.Empty, status.Text);
+                    Assert.Same(window.FindResource("Text.Secondary"), noticeText.Foreground);
+                    Assert.Equal(TextWrapping.NoWrap, noticeText.TextWrapping);
+                    AssertNoCardCoversTheLibrary();
+                    window.AdvanceNoticeForTest(GalleryWindow.UpdateDoneLifetime);
+                    Assert.False(window.IsNoticeVisible);
                     Assert.False(notice.IsShown);
 
-                    // The rating invitation: a status-line message with its action beside it.
+                    // The rating invitation: its own slot, with its action beside it.
                     notice.ShowInvitation();
-                    Assert.Equal(UiText.Get("StoreRating_InviteMessage"), status.Text);
-                    Assert.Equal(UiText.Get("LibraryUx_RateAction"), window.StatusActionLabelForTest);
+                    Assert.Equal(UiText.Get("StoreRating_InviteMessage"), window.NoticeTextForTest);
+                    Assert.Equal(UiText.Get("LibraryUx_RateAction"), window.NoticeActionForTest);
                     AssertNoCardCoversTheLibrary();
-                    window.InvokeStatusActionForTest().GetAwaiter().GetResult();
+                    window.InvokeNoticeActionForTest();
                     Assert.Equal(1, reviews);
-                    Assert.Equal(string.Empty, window.StatusActionLabelForTest);
+                    Assert.False(window.IsNoticeVisible);
 
-                    // An available update: a persistent button in place of the version text.
+                    // A result with its follow-up wins the line: the notice waits and Undo stays intact.
+                    notice.ShowInvitation();
+                    Assert.True(window.IsNoticeVisible);
+                    int undone = 0;
+                    window.ShowEngagementStatusForTest("3개를 휴지통으로 옮김", "실행 취소", () => { undone++; return Task.CompletedTask; });
+                    Assert.False(window.IsNoticeVisible);
+                    Assert.True(notice.IsShown, "the invitation is still pending");
+                    Assert.Equal("실행 취소", window.StatusActionLabelForTest);
+                    AssertNoCardCoversTheLibrary(sameHeight: false);
+                    // A notice that arrives while the line is busy waits too, and does not erase the follow-up.
+                    Assert.False(notice.ShowUpdateCompleted("4.9.2.0"));
+                    Assert.Equal([MyCapture.App.Store.EngagementNoticeKind.UpdateCompleted], consumed);
+                    Assert.Equal("실행 취소", window.StatusActionLabelForTest);
+                    window.InvokeStatusActionForTest().GetAwaiter().GetResult();
+                    Assert.Equal(1, undone);
+                    // When the line empties, the waiting notice appears and is consumed only then.
+                    window.ExpireActionStatus();
+                    Assert.True(window.IsNoticeVisible);
+                    Assert.Equal(UiText.Format("StoreUpdate_CompletedVersion", "4.9.2"), window.NoticeTextForTest);
+                    Assert.Equal([MyCapture.App.Store.EngagementNoticeKind.UpdateCompleted, MyCapture.App.Store.EngagementNoticeKind.UpdateCompleted], consumed);
+                    notice.Hide();
+
+                    // Long text is trimmed to one line inside the bar, never growing it.
+                    window.ShowNotice(new string('W', 400), "action", () => { }, GalleryWindow.InvitationLifetime);
+                    AssertNoCardCoversTheLibrary();
+                    Assert.True(slot.ActualWidth <= bar.ActualWidth * 0.8);
+                    window.ClearNotice();
+
+                    // An available update: a persistent, bounded button in place of the version text.
                     Assert.True(version.IsVisible);
                     notice.ShowUpdateAvailable("4.9.1.0");
                     Assert.True(notice.IsShown && update.IsVisible && !version.IsVisible);
-                    Assert.Equal(UiText.Format("LibraryUx_UpdateAvailable", "4.9.1"), update.Content);
+                    Assert.Equal(UiText.Format("LibraryUx_UpdateAvailable", "4.9.1"), UpdateLabel());
                     Assert.Equal(UiText.Format("Update_AvailableVersion", "4.9.1"), update.ToolTip);
-                    Assert.Equal(update.Content, System.Windows.Automation.AutomationProperties.GetName(update));
+                    Assert.Equal(UpdateLabel(), System.Windows.Automation.AutomationProperties.GetName(update));
                     AssertNoCardCoversTheLibrary();
                     update.RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));
                     Assert.Equal(1, installs);
-                    // Installing: the status replaces the label and the button waits.
-                    notice.ShowUpdateAvailable("4.9.1.0", busy: true, status: UiText.Get("StoreUpdate_StateChecking"));
-                    Assert.Equal(UiText.Get("StoreUpdate_StateChecking"), update.Content);
+                    // Installing: the status replaces the label and the button waits; a long one stays bounded.
+                    notice.ShowUpdateAvailable("4.9.1.0", busy: true, status: new string('X', 300));
                     Assert.False(update.IsEnabled);
+                    AssertNoCardCoversTheLibrary();
+                    Assert.True(update.ActualWidth <= 200.5);
                     notice.Hide();
                     SettleGalleryLayout(window);
                     Assert.True(version.IsVisible && !update.IsVisible);

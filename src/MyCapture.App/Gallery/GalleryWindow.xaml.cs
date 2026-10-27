@@ -865,6 +865,8 @@ internal sealed partial class GalleryWindow : Window
     {
         string text = LibraryActionStatus.Text;
         SyncStatusAction();
+        // A result or its follow-up takes the line; a waiting notice returns when the line is empty again.
+        RefreshNotice();
         MyCapture.App.Themes.FeedbackKind previous = _statusKind;
         _statusKind = string.IsNullOrEmpty(text) ? MyCapture.App.Themes.FeedbackKind.Echo : ClassifyActionStatus(text);
         bool dismissible = !string.IsNullOrEmpty(text) && MyCapture.App.Themes.FeedbackTiming.StaysUntilDismissed(_statusKind);

@@ -76,6 +76,22 @@ internal sealed partial class GalleryWindow
     /// selection takes the commands that work on many (keep, move, delete), as in File Explorer.
     /// A letter is read through <see cref="ShortcutInput.Resolve"/>, so it works in Hangul mode.
     /// </summary>
+    /// <remarks>
+    /// <para>Order of a key press (WPF runs the preview stage from the window down):</para>
+    /// <list type="number">
+    /// <item>Window PreviewKeyDown: Esc cancels a drag in preparation; Alt+Left/Right and Backspace navigate the
+    /// library's history (not while a text box has focus).</item>
+    /// <item>This handler, on the content area, before the focused control sees the key. It does nothing while a
+    /// text box (the rename box, the search box) or an editable combo has focus, for every key: Del, Ctrl+C,
+    /// Ctrl+A, Enter, Esc, F2 and the letters all belong to the text box. It does nothing for keys that start in
+    /// the content toolbar, and the card commands only run for keys that start in the card grid; a folder card
+    /// has its own handler (open, move, delete). Enter, Space and the arrows are left to a focused button.</item>
+    /// <item>Window KeyDown: Esc clears a selection, then dismisses a failure on the status line; the input
+    /// bindings Ctrl+F (search), Ctrl+Z (undo), F2 (rename the focused folder or capture) and Ctrl+Shift+N (new
+    /// folder) run for anything that did not handle the key. Ctrl or Shift with an arrow extends the selection
+    /// here (see <see cref="GalleryKeyMap"/>); Space with Ctrl or Shift toggles the card, plain Space previews it.</item>
+    /// </list>
+    /// </remarks>
     private async void OnLibraryItemsKeyDown(object sender, KeyEventArgs e)
     {
         if (e.Handled) return;
@@ -94,7 +110,7 @@ internal sealed partial class GalleryWindow
                 OnSelectAllVisibleClick(sender, e);
                 return;
             case GalleryKeyCommand.ContextMenu:
-                OpenFocusedCardMenu();
+                OpenFocusedCardMenu(source);
                 e.Handled = true;
                 return;
         }
@@ -218,9 +234,9 @@ internal sealed partial class GalleryWindow
     }
 
     /// <summary>Opens the menu of the card that has focus, else the menu of the empty grid.</summary>
-    private void OpenFocusedCardMenu()
+    private void OpenFocusedCardMenu(DependencyObject? source)
     {
-        FrameworkElement target = FindLibraryCard(Keyboard.FocusedElement as DependencyObject) ?? RowsList;
+        FrameworkElement target = FindLibraryCard(source) ?? FindLibraryCard(Keyboard.FocusedElement as DependencyObject) ?? RowsList;
         if (target is ListBoxItem)
         {
             OpenTileMenu(target, PlacementMode.Bottom);

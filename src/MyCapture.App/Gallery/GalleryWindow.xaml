@@ -1969,15 +1969,19 @@
 
         <!-- Status line: the library summary and the last action's result, which fades out on its own. -->
         <Grid x:Name="LibraryStatusBar" Grid.Row="3" MinHeight="26" Margin="4,6,2,0"
+              SizeChanged="OnStatusBarSizeChanged"
               AutomationProperties.Name="{loc:Text LibraryUx_StatusName}">
+            <!-- Widths: the summary takes at most 55% of the bar (see OnStatusBarSizeChanged) and the version or
+                 update button at most 200 DIPs, so a long folder name or update label never squeezes the message
+                 out; a notice is one trimmed line, so it never grows the bar. -->
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition x:Name="SummaryColumn" Width="Auto" />
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="Auto" />
-                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" MaxWidth="200" />
             </Grid.ColumnDefinitions>
-            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+            <StackPanel Orientation="Horizontal" VerticalAlignment="Center" ClipToBounds="True">
                 <TextBlock x:Name="SummaryLabel" Text="{Binding SummaryText}" Style="{StaticResource StatusBar.Text}"
                            Foreground="{DynamicResource Text.Muted}" AutomationProperties.Name="{Binding SummaryText}" />
                 <TextBlock Text="  ·  " Style="{StaticResource StatusBar.Text}" Foreground="{DynamicResource Text.Muted}" />
@@ -2002,6 +2006,17 @@
                                Style="{StaticResource StatusBar.Text}" />
                 </StackPanel>
             </StackPanel>
+            <!-- A notice (update done, rating invitation) has a slot of its own, so it can never replace a result's
+                 follow-up such as Undo: it shows only while the line above is empty, in a neutral colour. -->
+            <DockPanel x:Name="LibraryNotice" Grid.Column="1" Margin="16,0,0,0" HorizontalAlignment="Right"
+                       VerticalAlignment="Center" Visibility="Collapsed" LastChildFill="True">
+                <Button x:Name="LibraryNoticeAction" DockPanel.Dock="Right" Style="{StaticResource Button.GhostCompact}"
+                        Height="24" MinHeight="24" Padding="8,0" VerticalAlignment="Center" FontWeight="SemiBold" Margin="8,0,0,0"
+                        Click="OnNoticeActionClick" />
+                <TextBlock x:Name="LibraryNoticeText" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" TextAlignment="Right"
+                           VerticalAlignment="Center" Foreground="{DynamicResource Text.Secondary}"
+                           FontSize="{StaticResource FontSize.Caption}" AutomationProperties.LiveSetting="Polite" />
+            </DockPanel>
             <TextBlock x:Name="LibraryActionStatus" Grid.Column="1" Margin="16,0,0,0" TextWrapping="Wrap" TextAlignment="Right"
                        HorizontalAlignment="Right" VerticalAlignment="Center"
                        Foreground="{DynamicResource Text.Secondary}" FontSize="{StaticResource FontSize.Caption}"
@@ -2036,7 +2051,7 @@
             <!-- An available update: a small button that takes the version text's place until the update is
                  installed. Nothing floats over the cards. -->
             <Button x:Name="UpdateAvailableButton" Grid.Column="4" Margin="12,0,0,0" Visibility="Collapsed"
-                    Style="{StaticResource Button.GhostCompact}" FontSize="{StaticResource FontSize.Caption}"
+                    Height="24" MinHeight="24" MaxWidth="188" Padding="8,0" Style="{StaticResource Button.GhostCompact}" FontSize="{StaticResource FontSize.Caption}"
                     FontWeight="SemiBold" VerticalAlignment="Center" Click="OnUpdateAvailableClick" />
         </Grid>
 

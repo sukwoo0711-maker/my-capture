@@ -89,10 +89,14 @@ public partial class App
         if (_settings?.StoreUpdate.CompletionNoticeVersion is { } complete)
         {
             HideOtherEngagementNotices(window);
-            notice.ShowUpdateCompleted(complete);
-            // Shown once; the next return moves on to an available update or the invitation.
-            _settings.StoreUpdate.CompletionNoticeVersion = null;
-            SaveEngagementState();
+            // Shown once, and consumed only when it really was shown: a surface that has to wait (the library
+            // behind a result) consumes it through ClosedByUser when it appears. The next return moves on to
+            // an available update or the invitation.
+            if (notice.ShowUpdateCompleted(complete))
+            {
+                _settings.StoreUpdate.CompletionNoticeVersion = null;
+                SaveEngagementState();
+            }
             return true;
         }
         if (_updates is { HasAvailableUpdate: true } updates
