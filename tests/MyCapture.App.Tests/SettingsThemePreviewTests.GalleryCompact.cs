@@ -291,9 +291,11 @@ public sealed partial class SettingsThemePreviewTests
                 double left = item.TranslatePoint(new Point(), scroll).X;
                 Assert.True(left >= -0.5 && left + item.ActualWidth <= scroll.ViewportWidth + 0.5,
                     $"{language}: a compact card spans {left:0.#}..{left + item.ActualWidth:0.#} in a {scroll.ViewportWidth:0.#}-DIP viewport");
-                Button[] tileActions = Descendants(item).OfType<Button>().Where(button => button.IsVisible).ToArray();
-                Assert.Single(tileActions);
-                Assert.Equal(UiText.Get("Text_5E8959D18390"), AutomationProperties.GetName(tileActions[0]));
+                // A capture card carries its pin, copy and more commands (a video has only More).
+                Button[] tileActions = Descendants(item).OfType<Button>().Where(button => button.IsVisible
+                    && button.Name is "PinButton" or "CopyButton" or "MoreButton").ToArray();
+                Assert.Equal(((GalleryItemViewModel)item.DataContext).IsImage ? 3 : 1, tileActions.Length);
+                Assert.Equal(UiText.Get("Text_5E8959D18390"), AutomationProperties.GetName(tileActions[^1]));
                 foreach (Button action in tileActions)
                     AssertInsideClient(action, client, language);
             }

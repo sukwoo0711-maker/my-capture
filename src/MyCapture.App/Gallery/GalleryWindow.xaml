@@ -219,11 +219,13 @@
         </DataTemplate>
 
         <Style x:Key="Gallery.SourceBadge" TargetType="Button" BasedOn="{StaticResource Button.GhostCompact}">
-            <Setter Property="Width" Value="32" />
-            <Setter Property="Height" Value="32" />
-            <Setter Property="MinWidth" Value="32" />
-            <Setter Property="MinHeight" Value="32" />
-            <Setter Property="MaxWidth" Value="32" />
+            <Setter Property="Width" Value="24" />
+            <Setter Property="Height" Value="24" />
+            <Setter Property="MinWidth" Value="24" />
+            <Setter Property="MinHeight" Value="24" />
+            <Setter Property="MaxWidth" Value="24" />
+            <Setter Property="IsTabStop" Value="False" />
+            <Setter Property="Cursor" Value="Arrow" />
             <Setter Property="Padding" Value="0" />
             <Setter Property="ToolTipService.InitialShowDelay" Value="600" />
             <Setter Property="ToolTipService.ShowDuration" Value="120000" />
@@ -240,6 +242,72 @@
         </Style>
 
         <DataTemplate x:Key="Gallery.TileTemplate" DataType="{x:Type gallery:GalleryItemViewModel}">
+            <DataTemplate.Resources>
+                <gallery:GalleryCardNameConverter x:Key="Card.SelectionName" Format="LibraryUx_SelectCard" />
+                <gallery:HasTextConverter x:Key="Card.HasText" />
+                <!-- The selection box over the thumbnail's top left: a 32 x 32 target around a 20 x 20 box,
+                     6 DIPs in from the corner. Opaque fill and edge, so it reads over any image; no shadow or
+                     effect. It is hidden (and out of the pointer's way, but not of UI Automation) until the card
+                     is hovered, selected, keyboard-focused, or something is selected. -->
+                <Style x:Key="Card.SelectionBox" TargetType="CheckBox">
+                    <Setter Property="Width" Value="32" />
+                    <Setter Property="Height" Value="32" />
+                    <Setter Property="HorizontalAlignment" Value="Left" />
+                    <Setter Property="VerticalAlignment" Value="Top" />
+                    <Setter Property="Opacity" Value="0" />
+                    <Setter Property="IsHitTestVisible" Value="False" />
+                    <Setter Property="IsTabStop" Value="False" />
+                    <!-- Never a focus target: a hidden box must not become an invisible stop for the keyboard
+                         or a screen reader's cursor. A click, a touch and UI Automation's Toggle still work. -->
+                    <Setter Property="Focusable" Value="False" />
+                    <Setter Property="Cursor" Value="Arrow" />
+                    <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+                    <Setter Property="Template">
+                        <Setter.Value>
+                            <ControlTemplate TargetType="CheckBox">
+                                <Grid Background="Transparent">
+                                    <Border x:Name="SelectionBox" Width="20" Height="20" CornerRadius="5" BorderThickness="1" SnapsToDevicePixels="True"
+                                            Background="{DynamicResource Surface.Raised}" BorderBrush="{DynamicResource Border.Control}">
+                                        <Path x:Name="SelectionCheck" Data="{StaticResource Icon.Check}" Visibility="Collapsed"
+                                              Stroke="{DynamicResource Text.OnAccent}" StrokeThickness="2"
+                                              StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" />
+                                    </Border>
+                                </Grid>
+                                <ControlTemplate.Triggers>
+                                    <Trigger Property="IsMouseOver" Value="True">
+                                        <Setter TargetName="SelectionBox" Property="BorderBrush" Value="{DynamicResource Border.Focus}" />
+                                    </Trigger>
+                                    <Trigger Property="IsChecked" Value="True">
+                                        <Setter TargetName="SelectionBox" Property="Background" Value="{DynamicResource Accent.Default}" />
+                                        <Setter TargetName="SelectionBox" Property="BorderBrush" Value="{DynamicResource Accent.Default}" />
+                                        <Setter TargetName="SelectionCheck" Property="Visibility" Value="Visible" />
+                                    </Trigger>
+                                </ControlTemplate.Triggers>
+                            </ControlTemplate>
+                        </Setter.Value>
+                    </Setter>
+                </Style>
+                <!-- Pin, copy and more: always on the card, quiet until the pointer is over them. They skip Tab
+                     (the grid is one Tab stop); the keys and Shift+F10 reach the same commands. -->
+                <Style x:Key="Card.Action" TargetType="Button" BasedOn="{StaticResource Button.GhostCompact}">
+                    <Setter Property="Width" Value="28" />
+                    <Setter Property="Height" Value="28" />
+                    <Setter Property="MinWidth" Value="28" />
+                    <Setter Property="MinHeight" Value="28" />
+                    <Setter Property="Padding" Value="0" />
+                    <Setter Property="IsTabStop" Value="False" />
+                    <Setter Property="Cursor" Value="Arrow" />
+                    <Setter Property="Foreground" Value="{DynamicResource Text.Secondary}" />
+                    <Style.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter Property="Foreground" Value="{DynamicResource Text.Primary}" />
+                        </Trigger>
+                        <Trigger Property="IsKeyboardFocused" Value="True">
+                            <Setter Property="Foreground" Value="{DynamicResource Text.Primary}" />
+                        </Trigger>
+                    </Style.Triggers>
+                </Style>
+            </DataTemplate.Resources>
             <!-- Contain preserves screenshot text and edges; overlays keep a fixed DIP size. -->
             <Border x:Name="TileCard" Background="{DynamicResource Surface.Raised}"
                     BorderBrush="{DynamicResource Border.Subtle}" BorderThickness="1"
@@ -275,17 +343,19 @@
                                     </StackPanel>
                                 </Border>
                             </Grid>
+                            <CheckBox x:Name="SelectBox" Style="{StaticResource Card.SelectionBox}" IsChecked="{Binding IsSelected, Mode=OneWay}"
+                                      Click="OnTileCheckClick" Checked="OnTileCheckToggled" Unchecked="OnTileCheckToggled"
+                                      AutomationProperties.Name="{Binding ContextLabel, Converter={StaticResource Card.SelectionName}}" />
                         </Grid>
                     </Border>
-                    <Grid x:Name="TileInformation" Grid.Row="1" Margin="7,5,7,4">
+                    <!-- Row 1: the title and, at its right end, when the capture was taken. Row 2: where it came
+                         from, what is known about it, and the card's three commands. -->
+                    <Grid x:Name="TileInformation" Grid.Row="1" Margin="8,8,6,8">
                         <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto" /><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
-                        <CheckBox Style="{StaticResource Gallery.SelectionCheckBox}" IsChecked="{Binding IsSelected, Mode=OneWay}" Click="OnTileCheckClick" Margin="0,0,8,0"
-                                  VerticalAlignment="Center" AutomationProperties.Name="{Binding AccessibleName}" />
-                        <StackPanel Grid.Column="1">
-                        <Grid>
+                        <Grid Grid.ColumnSpan="2" Margin="0,0,8,2" VerticalAlignment="Center">
                             <TextBlock x:Name="TileTitle" Text="{Binding Caption}" gallery:GalleryCaptionPreview.IsEnabled="True"
                                        Foreground="{DynamicResource Text.Primary}" FontWeight="SemiBold"
                                        FontSize="{DynamicResource FontSize.Body}" TextTrimming="CharacterEllipsis">
@@ -306,61 +376,95 @@
                                      Visibility="{Binding IsRenaming, Converter={StaticResource BoolToVisibility}}"
                                      PreviewKeyDown="OnCaptureRenameKeyDown" LostKeyboardFocus="OnCaptureRenameLostFocus" />
                         </Grid>
-                        </StackPanel>
-                        <Grid x:Name="TileMetadata" Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="2" Margin="0,3,0,0">
+                        <TextBlock x:Name="TileTime" Grid.Column="2" Text="{Binding TimeCaption}" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,0,2"
+                                   FontSize="{DynamicResource FontSize.Caption}" Foreground="{DynamicResource Text.Secondary}" />
+                        <Button x:Name="SourceBadge" Grid.Row="1" Style="{StaticResource Gallery.SourceBadge}"
+                                gallery:GallerySourceBadge.Provenance="{Binding SourceProvenance}"
+                                AutomationProperties.AutomationId="LibrarySourceBadge"
+                                HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,4,0"
+                                Visibility="{Binding HasSourceBadge, Converter={StaticResource BoolToVisibility}}" />
+                        <Grid x:Name="TileMetadata" Grid.Row="1" Grid.Column="1" VerticalAlignment="Center" ClipToBounds="True">
                             <Grid.ColumnDefinitions>
-                                <ColumnDefinition x:Name="MetadataTextColumn" Width="Auto" /><ColumnDefinition x:Name="MetadataBadgeColumn" Width="*" />
+                                <ColumnDefinition Width="Auto" /><ColumnDefinition Width="*" />
                             </Grid.ColumnDefinitions>
-                            <TextBlock x:Name="TileMetadataText" Text="{Binding MetadataCaption}"
-                                       FontSize="{DynamicResource FontSize.Caption}" VerticalAlignment="Center"
-                                       Foreground="{DynamicResource Text.Secondary}" TextTrimming="CharacterEllipsis"
-                                       ToolTip="{Binding MetadataCaption}" />
-                            <Grid x:Name="TileStatusBadges" Grid.Column="1" Margin="4,0,0,0" HorizontalAlignment="Right">
+                            <Grid x:Name="TileStatusBadges" HorizontalAlignment="Left" ClipToBounds="True">
                                 <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="Auto" /><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="Auto" /><ColumnDefinition Width="Auto" /><ColumnDefinition Width="Auto" />
                                 </Grid.ColumnDefinitions>
-                                <Border x:Name="KeepBadge" Padding="4,1" CornerRadius="3"
+                                <Border x:Name="KeepBadge" Padding="4,1" CornerRadius="3" Margin="0,0,4,0"
                                         Background="{DynamicResource Surface.Sunken}" ToolTip="{loc:Text LibraryUx_KeptBadge}"
                                         AutomationProperties.Name="{loc:Text LibraryUx_KeptBadge}"
                                         Visibility="{Binding IsPinned, Converter={StaticResource BoolToVisibility}}">
                                     <themes:SymbolIcon Size="12" Data="{DynamicResource LibraryUx.Icon.Kept}" Stroke="{DynamicResource Text.Secondary}" Fill="Transparent" />
                                 </Border>
-                                <Border x:Name="FolderBadge" Grid.Column="1" Style="{StaticResource Gallery.FolderBadge}"
-                                        Padding="4,1" CornerRadius="3" HorizontalAlignment="Left" MaxWidth="120"
-                                        MinWidth="20" IsHitTestVisible="True" ToolTip="{Binding FolderBadge}">
-                                    <ContentPresenter Content="{Binding}" ContentTemplate="{StaticResource Gallery.FolderBadgeContent}" />
-                                </Border>
-                                <Border Grid.Column="2" Padding="4,1" CornerRadius="3" Background="{DynamicResource Surface.Sunken}"
+                                <Border Grid.Column="1" Padding="4,1" CornerRadius="3" Margin="0,0,4,0" Background="{DynamicResource Surface.Sunken}"
                                         ToolTip="{loc:Text Text_2C64DDA4D878}" AutomationProperties.Name="{loc:Text Text_2C64DDA4D878}"
                                         Visibility="{Binding HasAnnotations, Converter={StaticResource BoolToVisibility}}">
                                     <themes:SymbolIcon Size="12" Data="{StaticResource Icon.Edit}" Stroke="{DynamicResource Text.Secondary}" Fill="Transparent" />
                                 </Border>
+                                <Border x:Name="FolderBadge" Grid.Column="2" Style="{StaticResource Gallery.FolderBadge}"
+                                        Padding="4,1" CornerRadius="3" HorizontalAlignment="Left" MaxWidth="96"
+                                        MinWidth="20" IsHitTestVisible="True" ToolTip="{Binding FolderBadge}">
+                                    <ContentPresenter Content="{Binding}" ContentTemplate="{StaticResource Gallery.FolderBadgeContent}" />
+                                </Border>
                             </Grid>
+                            <!-- A search match or an approaching deletion, in the room the badges leave. -->
+                            <TextBlock x:Name="TileMetadataText" Grid.Column="1" Text="{Binding MetadataCaption}"
+                                       FontSize="{DynamicResource FontSize.Caption}" VerticalAlignment="Center"
+                                       Foreground="{DynamicResource Text.Secondary}" TextTrimming="CharacterEllipsis"
+                                       ToolTip="{Binding MetadataCaption}"
+                                       Visibility="{Binding MetadataCaption, Converter={StaticResource Card.HasText}}" />
                         </Grid>
-                        <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
-                        <Border Width="24" Height="32" Cursor="SizeAll" ToolTip="{Binding ExportToolTip}" ToolTipService.InitialShowDelay="600">
-                            <themes:SymbolIcon Data="{StaticResource Icon.DragHandle}" Size="20" Foreground="{DynamicResource Text.Secondary}" />
-                        </Border>
-                        <Button x:Name="SourceBadge" Style="{StaticResource Gallery.SourceBadge}"
-                                gallery:GallerySourceBadge.Provenance="{Binding SourceProvenance}"
-                                AutomationProperties.AutomationId="LibrarySourceBadge"
-                                HorizontalAlignment="Right" VerticalAlignment="Center" Margin="4,0,0,0"
-                                Visibility="{Binding HasSourceBadge, Converter={StaticResource BoolToVisibility}}" />
-                        <Button Width="28" Height="32" MinWidth="28" Padding="0" Style="{StaticResource Button.GhostCompact}"
-                                ToolTip="{loc:Text LibraryUx_TileMoreHint}" AutomationProperties.Name="{loc:Text Text_5E8959D18390}"
-                                Click="OnMoreClick">
-                            <themes:SymbolIcon Size="16" Data="{StaticResource Icon.More}" Fill="{DynamicResource Text.Secondary}" Stroke="{DynamicResource Text.Secondary}" />
-                        </Button>
+                        <StackPanel Grid.Row="1" Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                            <Button x:Name="PinButton" Style="{StaticResource Card.Action}" Click="OnFloatClick"
+                                    ToolTip="{loc:Text LibraryUx_PinHint}" AutomationProperties.Name="{loc:Text Gallery.Float}"
+                                    Visibility="{Binding IsImage, Converter={StaticResource BoolToVisibility}}">
+                                <themes:SymbolIcon Size="16" Data="{StaticResource Icon.Pin}" Fill="Transparent"
+                                                   Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
+                            </Button>
+                            <Button x:Name="CopyButton" Style="{StaticResource Card.Action}" Click="OnCopyClick"
+                                    ToolTip="{loc:Text Text_59D43391538F}" AutomationProperties.Name="{loc:Text Text_42A667BC71B0}"
+                                    Visibility="{Binding IsImage, Converter={StaticResource BoolToVisibility}}">
+                                <Grid VerticalAlignment="Center">
+                                    <themes:SymbolIcon Size="16" Data="{StaticResource Icon.Copy}" Fill="Transparent"
+                                                       gallery:GalleryCopyFeedback.Part="Glyph" themes:FluidMotion.FadeTo="1"
+                                                       Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
+                                    <themes:SymbolIcon Size="16" Data="{StaticResource Icon.Check}" Opacity="0" Fill="Transparent"
+                                                       gallery:GalleryCopyFeedback.Part="Check"
+                                                       Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
+                                </Grid>
+                            </Button>
+                            <Button x:Name="MoreButton" Style="{StaticResource Card.Action}" Click="OnMoreClick"
+                                    ToolTip="{loc:Text LibraryUx_TileMoreHint}" AutomationProperties.Name="{loc:Text Text_5E8959D18390}">
+                                <themes:SymbolIcon Size="16" Data="{StaticResource Icon.More}" Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                                                   Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
+                            </Button>
                         </StackPanel>
                     </Grid>
                 </Grid>
             </Border>
             <DataTemplate.Triggers>
-                <DataTrigger Binding="{Binding HasSourceBadge}" Value="True">
-                    <Setter TargetName="MetadataTextColumn" Property="Width" Value="*" />
-                    <Setter TargetName="MetadataBadgeColumn" Property="Width" Value="Auto" />
-                    <Setter TargetName="FolderBadge" Property="MaxWidth" Value="64" />
-                    <Setter TargetName="FolderBadge" Property="ClipToBounds" Value="True" />
+                <!-- The selection box shows while the card is hovered, selected or keyboard-focused, and on every
+                     card while anything is selected; it fades in over the fast motion token. -->
+                <DataTrigger Binding="{Binding IsMouseOver, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" Value="True">
+                    <Setter TargetName="SelectBox" Property="themes:FluidMotion.FadeTo" Value="1" />
+                    <Setter TargetName="SelectBox" Property="IsHitTestVisible" Value="True" />
+                </DataTrigger>
+                <Trigger SourceName="TileCard" Property="gallery:GalleryCardInput.SelectionActive" Value="True">
+                    <Setter TargetName="SelectBox" Property="themes:FluidMotion.FadeTo" Value="1" />
+                    <Setter TargetName="SelectBox" Property="IsHitTestVisible" Value="True" />
+                </Trigger>
+                <Trigger SourceName="TileCard" Property="gallery:GalleryCardInput.ShowsKeyboardFocus" Value="True">
+                    <Setter TargetName="SelectBox" Property="themes:FluidMotion.FadeTo" Value="1" />
+                    <Setter TargetName="SelectBox" Property="IsHitTestVisible" Value="True" />
+                </Trigger>
+                <DataTrigger Binding="{Binding IsSelected}" Value="True">
+                    <Setter TargetName="SelectBox" Property="themes:FluidMotion.FadeTo" Value="1" />
+                    <Setter TargetName="SelectBox" Property="IsHitTestVisible" Value="True" />
+                </DataTrigger>
+                <!-- A search match or retention message leaves the badges a little less room. -->
+                <DataTrigger Binding="{Binding MetadataCaption, Converter={StaticResource Card.HasText}}" Value="True">
+                    <Setter TargetName="TileStatusBadges" Property="MaxWidth" Value="76" />
                 </DataTrigger>
                 <!-- A card in an opened folder: a smaller title and narrower folder badge. -->
                 <Trigger SourceName="TileCard" Property="gallery:GalleryCardStyle.IsCompact" Value="True">
@@ -368,25 +472,6 @@
                     <Setter TargetName="TileRenameInput" Property="FontSize" Value="{DynamicResource FontSize.Caption}" />
                     <Setter TargetName="FolderBadge" Property="MaxWidth" Value="48" />
                 </Trigger>
-                <MultiDataTrigger>
-                    <MultiDataTrigger.Conditions>
-                        <Condition Binding="{Binding HasSourceBadge}" Value="True" />
-                        <Condition Binding="{Binding (gallery:GalleryCardStyle.IsCompact), ElementName=TileCard}" Value="True" />
-                    </MultiDataTrigger.Conditions>
-                    <Setter TargetName="FolderBadge" Property="MaxWidth" Value="20" />
-                </MultiDataTrigger>
-                <!-- Time keeps its measured width. Search and expiry messages use the
-                     remaining space and expose the complete text in their tooltip. -->
-                <DataTrigger Binding="{Binding HasSearchMatch}" Value="True">
-                    <Setter TargetName="MetadataTextColumn" Property="Width" Value="*" />
-                    <Setter TargetName="MetadataBadgeColumn" Property="Width" Value="Auto" />
-                    <Setter TargetName="TileStatusBadges" Property="MaxWidth" Value="104" />
-                </DataTrigger>
-                <DataTrigger Binding="{Binding IsExpiringSoon}" Value="True">
-                    <Setter TargetName="MetadataTextColumn" Property="Width" Value="*" />
-                    <Setter TargetName="MetadataBadgeColumn" Property="Width" Value="Auto" />
-                    <Setter TargetName="TileStatusBadges" Property="MaxWidth" Value="104" />
-                </DataTrigger>
             </DataTemplate.Triggers>
         </DataTemplate>
 
@@ -425,6 +510,8 @@
                         <Setter Property="AutomationProperties.Name" Value="{Binding AccessibleName}" />
                         <Setter Property="AutomationProperties.HelpText" Value="{Binding ExportToolTip}" />
                         <Setter Property="gallery:GalleryCaptionPreview.IsEnabled" Value="True" />
+                        <Setter Property="gallery:GalleryCardInput.Track" Value="True" />
+                        <Setter Property="IsTabStop" Value="False" />
                         <Setter Property="FocusVisualStyle" Value="{x:Null}" />
                         <Setter Property="Template">
                             <Setter.Value>
@@ -460,8 +547,9 @@
                                             <Setter TargetName="SelectedLayer" Property="themes:FluidMotion.FadeTo" Value="1" />
                                             <Setter TargetName="HoverLayer" Property="themes:FluidMotion.FadeTo" Value="0" />
                                         </DataTrigger>
-                                        <!-- Focus recolours the fixed edge at once, on the layers too. -->
-                                        <Trigger Property="IsKeyboardFocusWithin" Value="True">
+                                        <!-- Keyboard focus recolours the fixed edge at once, on the layers too. A click also
+                                             focuses the card, but only the keyboard draws the ring. -->
+                                        <Trigger Property="gallery:GalleryCardInput.ShowsKeyboardFocus" Value="True">
                                             <Setter TargetName="FocusRing" Property="Opacity" Value="1" />
                                             <Setter TargetName="Outline" Property="BorderBrush" Value="{DynamicResource Border.Focus}" />
                                             <Setter TargetName="HoverLayer" Property="BorderBrush" Value="{DynamicResource Border.Focus}" />
@@ -482,7 +570,7 @@
                     <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="*" />
                 </Grid.ColumnDefinitions>
-                <Button Content="{Binding Heading}" Style="{StaticResource Button.Secondary}" Click="OnDayClick" AutomationProperties.Name="{Binding Heading}" ToolTip="{loc:Text LibrarySelection_SelectDay}" />
+                <Button Content="{Binding Heading}" Style="{StaticResource Button.Secondary}" Click="OnDayClick" IsTabStop="False" PreviewKeyDown="OnDayKeyDown" AutomationProperties.Name="{Binding Heading}" ToolTip="{loc:Text LibrarySelection_SelectDay}" />
                 <Border Grid.Column="1" Height="1" Margin="14,0,0,0"
                         Background="{DynamicResource Border.Subtle}"
                         VerticalAlignment="Center" />
@@ -626,6 +714,7 @@
 
 
         <Style x:Key="Gallery.FolderStripButton" TargetType="Button" BasedOn="{StaticResource Button.Secondary}">
+            <Setter Property="IsTabStop" Value="False" />
             <Setter Property="Height" Value="Auto" />
             <Setter Property="FontSize" Value="{DynamicResource FontSize.Body}" />
             <Setter Property="Margin" Value="8" />
@@ -713,6 +802,7 @@
             <Setter Property="VirtualizingStackPanel.VirtualizationMode" Value="Recycling" />
             <Setter Property="VirtualizingPanel.ScrollUnit" Value="Pixel" />
             <Setter Property="KeyboardNavigation.DirectionalNavigation" Value="Contained" />
+            <Setter Property="gallery:GalleryCardInput.SelectionActive" Value="{Binding HasSelection}" />
             <Setter Property="ItemContainerStyle" Value="{StaticResource Gallery.RowContainer}" />
             <Setter Property="ItemsPanel">
                 <Setter.Value>
@@ -1681,7 +1771,8 @@
                 </Border>
                 <ListBox x:Name="RowsList" Grid.Row="2"
                          Style="{StaticResource Gallery.RowsList}"
-                         ItemsSource="{Binding Rows}"
+                         ItemsSource="{Binding Rows}" IsTabStop="True"
+                         GotKeyboardFocus="OnRowsListGotKeyboardFocus"
                          ContextMenuOpening="OnTileContextMenuOpening"
                          SizeChanged="OnRowsListSizeChanged" />
 

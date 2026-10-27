@@ -28,11 +28,27 @@ public static class GalleryRowBuilder
     /// count is the number of these that fit; the cards then share the leftover width.
     /// </summary>
     /// <remarks>
-    /// 208 still fits the card's five commands, and two tracks fit the library at the window's
-    /// minimum width with the details pane open. With two or more columns a card therefore stays
-    /// between 208 and 320 DIPs wide before a further column is added.
+    /// 208 still fits the card's two lines (the title and the time; the 24-DIP source glyph, a status badge and
+    /// the three 28-DIP commands), and two tracks fit the library at the window's minimum width with the
+    /// details pane open. With two or more columns a card therefore stays between 208 and 320 DIPs wide before
+    /// a further column is added. <see cref="CardTrackFor"/> raises the track when the time or the text needs more.
     /// </remarks>
     public const double MinTileTrackWidth = 224.0;
+
+    /// <summary>
+    /// The narrowest track a card needs for the capture time in the UI language (the widest of the day, in DIPs):
+    /// the title line needs a readable title and the time, the second line the 24-DIP source glyph, one 20-DIP
+    /// status badge and the three 28-DIP commands. A full card also reserves a 20-DIP folder glyph.
+    /// </summary>
+    public static double CardTrackFor(double timeWidth, bool compact)
+    {
+        // The track's 16-DIP inset, the card edge (2) and the text margins (8 and 6).
+        const double chrome = 16 + 2 + 14;
+        const double minimumTitle = 64, titleGap = 8, source = 24, badge = 20, commands = 3 * 28, folderGlyph = 20;
+        double firstLine = chrome + minimumTitle + titleGap + timeWidth;
+        double secondLine = chrome + source + badge + commands;
+        return Math.Max(firstLine, secondLine) + (compact ? 0 : folderGlyph);
+    }
 
     /// <summary>
     /// One card per row when two do not fit, so a narrow window never clips a card or its commands.
@@ -44,10 +60,12 @@ public static class GalleryRowBuilder
 
     /// <summary>The narrowest track of a compact card inside an opened folder.</summary>
     /// <remarks>
-    /// A compact card is at least 134 DIPs wide (about 60% of a full card) plus the same 16 DIPs
-    /// around it, so a folder shows more of its captures per row than the library root does.
+    /// A compact card is at least 152 DIPs wide (about 70% of a full card) plus the same 16 DIPs
+    /// around it, so a folder shows more of its captures per row than the library root does. 152 holds a
+    /// readable title beside the widest capture time in either language, and the second row's source glyph,
+    /// one badge and three 28-DIP commands (<see cref="CardTrackFor"/> raises it for larger text).
     /// </remarks>
-    public const double MinCompactTileTrackWidth = 150.0;
+    public const double MinCompactTileTrackWidth = 168.0;
 
     /// <summary>The compact grid's cap: about as wide as <see cref="MaxColumns"/> full tiles.</summary>
     public const int CompactMaxColumns = 15;

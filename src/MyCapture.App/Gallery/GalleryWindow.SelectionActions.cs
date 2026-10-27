@@ -2,6 +2,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Threading;
 using MyCapture.App.Themes;
 using MyCapture.Core.Queue;
 using MyCapture.Platform.Imaging;
@@ -13,10 +14,25 @@ internal sealed partial class GalleryWindow
     private bool _keepingSelection;
     private Window? _imagePreview;
 
+    // A click and UI Automation's Toggle both reach the box, by different routes: a click raises Click (after the
+    // box toggled itself, which raises Checked or Unchecked first), Toggle raises only Checked or Unchecked. The
+    // selection changes once either way.
+    private bool _checkToggleDone;
+
+    private void OnTileCheckToggled(object sender, RoutedEventArgs e)
+    {
+        // The model's own changes also toggle the box; they already agree with the card.
+        if (sender is not CheckBox { DataContext: GalleryItemViewModel tile } box || (box.IsChecked == true) == tile.IsSelected) return;
+        _viewModel.Select(tile.Id, control: true, shift: Keyboard.Modifiers.HasFlag(ModifierKeys.Shift));
+        _checkToggleDone = true;
+        _ = Dispatcher.BeginInvoke(DispatcherPriority.Input, new Action(() => _checkToggleDone = false));
+    }
+
     private void OnTileCheckClick(object sender, RoutedEventArgs e)
     {
-        if (sender is FrameworkElement { DataContext: GalleryItemViewModel tile })
+        if (!_checkToggleDone && sender is FrameworkElement { DataContext: GalleryItemViewModel tile })
             _viewModel.Select(tile.Id, control: true, shift: Keyboard.Modifiers.HasFlag(ModifierKeys.Shift));
+        _checkToggleDone = false;
         e.Handled = true;
     }
 

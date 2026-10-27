@@ -149,10 +149,10 @@ public sealed partial class SettingsThemePreviewTests
                         foreach (bool selected in new[] { false, true, false })
                         {
                             tile.IsSelected = selected; Drain(window);
-                            Assert.Equal(32, source.ActualHeight);
-                            Assert.Equal(32, source.ActualWidth);
-                            Assert.Equal(32, source.MinHeight);
-                            Assert.Equal(32, source.MaxWidth);
+                            Assert.Equal(24, source.ActualHeight);
+                            Assert.Equal(24, source.ActualWidth);
+                            Assert.Equal(24, source.MinHeight);
+                            Assert.Equal(24, source.MaxWidth);
                             Assert.Equal(new Thickness(0), source.BorderThickness);
                             Assert.Same(application.FindResource("Text.Secondary"), source.Foreground);
                             Rect left = source.TransformToAncestor(item).TransformBounds(new Rect(source.RenderSize));

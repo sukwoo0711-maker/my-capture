@@ -218,6 +218,8 @@ internal sealed partial class GalleryWindow
 
         GalleryItemViewModel? next = GallerySelectionNavigation.FindNeighbor(_viewModel.Rows, tile,
             key is Key.Up or Key.Down, key is Key.Left or Key.Up ? -1 : 1);
+        // Up from the first row of a day goes to that day's heading, which is not a Tab stop.
+        if (key == Key.Up && !control && !shift && TryFocusDayHeadingAbove(tile)) return;
         if (next is null) return;
         _viewModel.Select(next.Id, control, shift);
         GalleryTileRow? row = _viewModel.Rows.OfType<GalleryTileRow>().FirstOrDefault(r => r.Tiles.Contains(next));

@@ -40,10 +40,9 @@ internal sealed partial class GalleryWindow
             probe.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
             timeWidth = Math.Max(timeWidth, probe.DesiredSize.Width);
         }
-        // Two 20-DIP status glyph badges, the 4-DIP gap, 16-DIP card text inset,
-        // and 16-DIP track inset; full views also reserve a 20-DIP folder glyph.
-        // The existing minimum tracks still win at ordinary text sizes.
-        _viewModel.SetMetadataMinimumTrackWidths(Math.Ceiling(timeWidth) + 96, Math.Ceiling(timeWidth) + 76);
+        _viewModel.SetMetadataMinimumTrackWidths(
+            GalleryRowBuilder.CardTrackFor(Math.Ceiling(timeWidth), compact: false),
+            GalleryRowBuilder.CardTrackFor(Math.Ceiling(timeWidth), compact: true));
     }
 
     private GalleryItemViewModel? _renamingTile;

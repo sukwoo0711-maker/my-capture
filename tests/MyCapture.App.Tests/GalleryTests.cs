@@ -829,13 +829,13 @@ public sealed class GalleryTests : KoreanCaptionTest
 
     [Theory]
     [InlineData(0, 1)]        // before first layout → minimum
-    [InlineData(149, 1)]      // narrower than one compact track: still one card
-    [InlineData(299, 1)]      // one DIP short of two 150-DIP tracks
-    [InlineData(300, 2)]      // two compact cards
-    [InlineData(458, 3)]      // the minimum window with the details pane open: three compact cards, two full cards
-    [InlineData(760, 5)]      // the default window's content width: five instead of three
-    [InlineData(1000, 6)]     // where four full cards fit
-    [InlineData(2250, 15)]    // fifteen compact tracks
+    [InlineData(167, 1)]      // narrower than one compact track: still one card
+    [InlineData(335, 1)]      // one DIP short of two 168-DIP tracks
+    [InlineData(336, 2)]      // two compact cards
+    [InlineData(458, 2)]      // the minimum window with the details pane open: two compact cards, two full cards
+    [InlineData(760, 4)]      // the default window's content width: four instead of three
+    [InlineData(1000, 5)]     // where four full cards fit
+    [InlineData(2520, 15)]    // fifteen compact tracks
     [InlineData(4000, 15)]    // clamped to the compact maximum
     public void ColumnCountForWidth_CompactFolderCardsUseMoreColumns(double width, int expected)
     {
@@ -862,7 +862,7 @@ public sealed class GalleryTests : KoreanCaptionTest
                 Assert.True(width / columns - GalleryRowBuilder.CardInset < track * 1.5 - GalleryRowBuilder.CardInset,
                     $"{width} DIP in {columns} columns makes {width / columns - GalleryRowBuilder.CardInset:0.#}-DIP cards");
         }
-        Assert.Equal(compact ? 134 : 208, track - GalleryRowBuilder.CardInset);
+        Assert.Equal(compact ? 152 : 208, track - GalleryRowBuilder.CardInset);
     }
 
     [Theory]

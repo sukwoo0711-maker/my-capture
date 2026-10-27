@@ -120,7 +120,7 @@ public sealed class SettingsCopyRegressionTests
         XNamespace p = "http://schemas.microsoft.com/winfx/2006/xaml/presentation";
         XNamespace x = "http://schemas.microsoft.com/winfx/2006/xaml";
         XElement style = Assert.Single(document.Descendants(p + "Style"), node => (string?)node.Attribute(x + "Key") == "Gallery.SourceBadge");
-        AssertSetters(style, "32", "32", "32", "Text.Secondary", "0");
+        AssertSetters(style, "24", "24", "24", "Text.Secondary", "0");
         Assert.Empty(style.Descendants(p + "DataTrigger"));
         XElement[] triggers = style.Descendants(p + "Trigger").ToArray();
         Assert.Equal(new[] { "IsMouseOver", "IsKeyboardFocused" },

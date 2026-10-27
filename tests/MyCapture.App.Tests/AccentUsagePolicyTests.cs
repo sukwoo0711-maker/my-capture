@@ -132,6 +132,8 @@ public sealed class AccentUsagePolicyTests
     [InlineData("Gallery.SelectionCheckBox", "<Path x:Name=\"SelectionCheck\" Stroke=\"{DynamicResource Text.OnAccent}\" />")]
     [InlineData("Gallery.SelectionCheckBox", "<Trigger Property=\"IsChecked\" Value=\"True\"><Setter TargetName=\"SelectionBox\" Property=\"Background\" Value=\"{DynamicResource Accent.Default}\" /></Trigger>")]
     [InlineData("Gallery.SelectionCheckBox", "<Trigger Property=\"IsChecked\" Value=\"True\"><Setter TargetName=\"SelectionBox\" Property=\"BorderBrush\" Value=\"{DynamicResource Accent.Default}\" /></Trigger>")]
+    [InlineData("Card.SelectionBox", "<Path x:Name=\"SelectionCheck\" Stroke=\"{DynamicResource Text.OnAccent}\" />")]
+    [InlineData("Card.SelectionBox", "<Trigger Property=\"IsChecked\" Value=\"True\"><Setter TargetName=\"SelectionBox\" Property=\"Background\" Value=\"{DynamicResource Accent.Default}\" /></Trigger>")]
     [InlineData("Gallery.TileRowList", "<Border x:Name=\"SelectedLayer\" BorderBrush=\"{DynamicResource Accent.Default}\" />")]
     [InlineData("LibraryUx.TreeItem", "<Border x:Name=\"SelectedLayer\" BorderBrush=\"{DynamicResource Accent.Default}\" />")]
     [InlineData("LibraryUx.DateItem", "<Border x:Name=\"SelectedLayer\" BorderBrush=\"{DynamicResource Accent.Default}\" />")]
@@ -162,7 +164,8 @@ public sealed class AccentUsagePolicyTests
                 && attribute.Name.LocalName == "Value" && attribute.Value == "{DynamicResource Accent.Default}"
                 && owner.Parent is { } folderTrigger && folderTrigger.Name.LocalName == "DataTrigger"
                 && (string?)folderTrigger.Attribute("Binding") == "{Binding IsSelected}" && (string?)folderTrigger.Attribute("Value") == "True";
-        if (style != "Gallery.SelectionCheckBox") return false;
+        // The card's own selection box is the same approved role as the list-and-tree check box.
+        if (style is not ("Gallery.SelectionCheckBox" or "Card.SelectionBox")) return false;
         if (owner.Name.LocalName == "Path")
             return (string?)owner.Attribute(names + "Name") == "SelectionCheck" && attribute.Name.LocalName == "Stroke"
                 && attribute.Value == "{DynamicResource Text.OnAccent}";

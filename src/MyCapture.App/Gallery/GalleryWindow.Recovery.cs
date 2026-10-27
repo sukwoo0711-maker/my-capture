@@ -125,6 +125,7 @@ internal sealed partial class GalleryWindow
         Guid[] targets = ids.Distinct().ToArray();
         if (targets.Length == 0) return;
         _deleteInProgress = true;
+        bool hadGridFocus = RowsList.IsKeyboardFocusWithin;
         string? status = null;
         Guid? undo = null;
         bool motion = false;
@@ -170,6 +171,9 @@ internal sealed partial class GalleryWindow
             _viewModel.SetThumbnailLoadingEnabled(IsVisible);
             RaiseCaptureChanged();
             if (before is not null) PlayReflow(before);
+            // The focused card may be gone: focus returns to the grid's entry card instead of the window.
+            // After the reflow was planned, so scrolling a card into view cannot change what moved.
+            RestoreGridFocus(hadGridFocus);
         }
 
         if (status is null) return;

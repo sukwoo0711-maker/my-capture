@@ -86,8 +86,8 @@ public sealed class GalleryCaptionPreviewTests
                     Assert.False(source.IsVisible);
                     continue;
                 }
-                Assert.Equal(32, source.ActualWidth);
-                Assert.Equal(32, source.ActualHeight);
+                Assert.Equal(24, source.ActualWidth);
+                Assert.Equal(24, source.ActualHeight);
                 Rect iconBounds = new(source.TranslatePoint(new Point(), window), source.RenderSize);
                 Rect imageBounds = new(preview.TranslatePoint(new Point(), window), preview.RenderSize);
                 Assert.False(iconBounds.IntersectsWith(imageBounds));
@@ -100,8 +100,12 @@ public sealed class GalleryCaptionPreviewTests
                     Assert.True(itemBounds.Contains(bounds), $"Status badge escapes card: {badge.Name}: {bounds} / {itemBounds}");
                     Assert.False(bounds.IntersectsWith(iconBounds), $"Status badge overlaps source: {badge.Name}");
                 }
-                TextBlock metadata = Assert.Single(Descendants(item).OfType<TextBlock>(), text => text.Name == "TileMetadataText");
-                Assert.True(metadata.ActualWidth >= 8, $"Metadata lost all space: {metadata.ActualWidth}");
+                // The time always has its place at the title's right; the second line's caption (a search match
+                // or a retention message) shares the row with the badges only when there is one.
+                TextBlock metadata = Assert.Single(Descendants(item).OfType<TextBlock>(), text => text.Name == "TileTime");
+                TextBlock caption = Assert.Single(Descendants(item).OfType<TextBlock>(), text => text.Name == "TileMetadataText");
+                Assert.True(metadata.ActualWidth >= 8, $"The time lost all space: {metadata.ActualWidth}");
+                Assert.False(caption.IsVisible);
                 var tile = Assert.IsType<GalleryItemViewModel>(item.DataContext);
                 tile.SetSearchMatch(true, CaptureMatchField.Title);
                 Drain(window);
@@ -112,6 +116,8 @@ public sealed class GalleryCaptionPreviewTests
                     Assert.False(bounds.IntersectsWith(iconBounds), $"Search badge overlaps source: {badge.Name}");
                 }
                 Assert.True(metadata.ActualWidth >= 8);
+                Assert.Equal(tile.TimeCaption, metadata.Text);
+                Assert.True(caption.IsVisible && caption.Text == tile.SearchMatchText, "The search match shows beside the badges, and the time stays");
                 tile.SetSearchMatch(false, CaptureMatchField.None);
                 Drain(window);
                 Size before = item.RenderSize;
@@ -127,7 +133,7 @@ public sealed class GalleryCaptionPreviewTests
                 Drain(window);
                 Assert.True(tip.IsOpen);
                 Assert.Equal(before, item.RenderSize);
-                Assert.Equal(32, source.ActualWidth);
+                Assert.Equal(24, source.ActualWidth);
                 Assert.DoesNotContain("private", Assert.IsType<TextBlock>(tip.Content).Text);
                 var escape = new KeyEventArgs(Keyboard.PrimaryDevice, PresentationSource.FromVisual(window), Environment.TickCount, Key.Escape)
                 { RoutedEvent = Keyboard.PreviewKeyDownEvent, Source = row };
@@ -272,7 +278,8 @@ public sealed class GalleryCaptionPreviewTests
             // Exercise the keyboard-reachable footer menu and its own hint.
             Button actionButton = Assert.Single(Descendants(first).OfType<Button>(),
                 button => AutomationProperties.GetName(button) == UiText.Get("Text_5E8959D18390"));
-            Assert.True(actionButton.IsVisible && actionButton.Focusable && actionButton.IsTabStop);
+            // The grid is one Tab stop: a card's buttons are focusable (a click) but not stops of their own.
+            Assert.True(actionButton.IsVisible && actionButton.Focusable && !actionButton.IsTabStop);
             RaiseFocusChange(first, actionButton);
             Assert.False(tip.IsOpen); // Action buttons retain their own hints.
             Assert.NotNull(actionButton.ToolTip);
@@ -373,7 +380,7 @@ public sealed class GalleryCaptionPreviewTests
             var copy = new XElement(entry);
             // Event handlers belong to GalleryWindow and are irrelevant to the unchanged
             // card visuals. Keep all production bindings, templates and sizing intact.
-            foreach (XAttribute handler in copy.DescendantsAndSelf().Attributes().Where(attribute => attribute.Name.LocalName is "Click" or "PreviewKeyDown" or "LostKeyboardFocus").ToArray()) handler.Remove();
+            foreach (XAttribute handler in copy.DescendantsAndSelf().Attributes().Where(attribute => attribute.Name.LocalName is "Click" or "Checked" or "Unchecked" or "PreviewKeyDown" or "LostKeyboardFocus").ToArray()) handler.Remove();
             // x:Shared is honoured only in compiled dictionaries; XamlReader rejects it.
             copy.Attribute(x + "Shared")?.Remove();
             // Product types used as elements (the card row panel) keep the window's

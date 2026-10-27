@@ -366,6 +366,7 @@ internal sealed partial class GalleryWindow
     private void MoveCaptures(Guid[] ids)
     {
         if (_foldersBusy || ids.Length == 0) return;
+        bool hadGridFocus = RowsList.IsKeyboardFocusWithin;
         _foldersBusy = true;
         try
         {
@@ -378,7 +379,7 @@ internal sealed partial class GalleryWindow
             dialog.Owner = this;
             if (dialog.ShowDialog() == true) RaiseCaptureChanged();
         }
-        finally { _foldersBusy = false; _viewModel.Refresh(); }
+        finally { _foldersBusy = false; _viewModel.Refresh(); RestoreGridFocus(hadGridFocus); }
     }
 
     private async void OnDeleteFolderClick(object sender, RoutedEventArgs e)
