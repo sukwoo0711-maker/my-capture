@@ -1830,7 +1830,7 @@ internal sealed partial class AnnotationEditorControl : Grid
         _rotationCommands = BuildRotationCommands();
 
         // The single way into crop; the ratio and automatic margin finder live in that mode.
-        Button crop = IconTextButton(UiText.Get("Tools_Crop"), UiText.Get("EditorFlow_CropHint"), "Icon.Crop", FallbackCrop,
+        Button crop = IconTextButton(UiText.Get("Tools_Crop"), UiText.Get("Tools_Crop"), "Icon.Crop", FallbackCrop,
             () => { SelectTool(EditorTool.Crop); Focus(); });
         AutomationProperties.SetAutomationId(crop, "Capture410Crop");
         left.Children.Add(crop);
@@ -1875,11 +1875,13 @@ internal sealed partial class AnnotationEditorControl : Grid
         right.Children.Add(done);
 
         foreach (var (button, command, borderless) in new[] { (_undoButton, "Undo", true), (_redoButton, "Redo", true),
-            (crop, "Crop", true), (_redactButton, "Privacy", true), (save, "Save", false), (done, "Copy", false) })
+            (crop, "Crop", true), (_redactButton, "Privacy", true), (done, "Copy", false) })
         {
             CommandButton(button, borderless, ShortcutScope.Annotation, command);
         }
 
+        CommandButton(save, borderless: false);
+        done.ToolTip = $"{UiText.Get("EditorFlow_CopyHint")} ({ShortcutCatalog.Hints(ShortcutScope.Annotation, "Copy", "Done")})";
         CommandButton(_copyTextButton, borderless: true);
         CommandButtonPresentation.AlwaysIcon(_undoButton);
         CommandButtonPresentation.AlwaysIcon(_redoButton);
@@ -2148,7 +2150,7 @@ internal sealed partial class AnnotationEditorControl : Grid
         ToolGroup(groups,
             (EditorTool.Text, UiText.Get("Text_258AD4B095A1"), UiText.Get("Text_B3711BAFCD9C"), "Icon.Text", FallbackText),
             (EditorTool.StepNumber, UiText.Get("Tools.StepNumber"), UiText.Get("EditorUx_StepNumberToolTip"), "Icon.StepNumber", () => Geometry.Parse("M3,3 H17 V17 H3 Z M8,7 L10,5 V15 M7,15 H13")));
-        // The purpose sentence lives on the tool (tooltip and help text), not in the panel.
+        // Keep the purpose sentence in accessibility help; tooltips use the shared name/key form.
         AutomationProperties.SetHelpText(_toolButtons[EditorTool.StepNumber], UiText.Get("EditorUx_StepNumberInstruction"));
         ToolGroup(groups,
             (EditorTool.Mosaic, UiText.Get("Text_3F8046019B32"), UiText.Get("Text_3F8046019B33"), "Icon.Mosaic", FallbackMosaic),
@@ -2267,7 +2269,7 @@ internal sealed partial class AnnotationEditorControl : Grid
             UiText.Get("Text_0DED92FCE6B0"));
         _deleteButton.ToolTip = UiText.Get("Text_7DFFA4D81765");
         AutomationProperties.SetAutomationId(_deleteButton, "AnnotationDeleteSelection");
-        AutomationProperties.SetAcceleratorKey(_deleteButton, "Delete");
+        AutomationProperties.SetAcceleratorKey(_deleteButton, ShortcutCatalog.Get(ShortcutScope.Annotation, "Delete").Hint);
         PreserveEditorMouseFocus(_deleteButton);
         _deleteButton.Click += (_, _) => DeleteSelected();
         _deleteButton.HorizontalAlignment = HorizontalAlignment.Left;
@@ -2779,7 +2781,7 @@ internal sealed partial class AnnotationEditorControl : Grid
         var button = new ToggleButton
         {
             Content = BuildIcon(iconResourceKey, fallbackGeometry, 20),
-            ToolTip = tool is EditorTool.StepNumber or EditorTool.Blur ? tooltip : label,
+            ToolTip = label,
             Width = 40, Height = 38, MinHeight = 0, MinWidth = 0, Padding = new Thickness(2), Margin = new Thickness(0, 1, 0, 1),
         };
         button.SetResourceReference(FrameworkElement.StyleProperty, "Rail.ToolButton");

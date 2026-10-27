@@ -1478,7 +1478,7 @@ This cannot be undone.</value>
     <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
   </data>
   <data name="Text_7DFFA4D81765" xml:space="preserve">
-    <value>Delete selection (Delete)</value>
+    <value>Delete selection (Del)</value>
     <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
   </data>
   <data name="Text_7F2ED132EA3B" xml:space="preserve">
@@ -4232,7 +4232,7 @@ Turn off: {0}</value></data>
   <data name="Tutorial.image-save.Step2" xml:space="preserve"><value>2. Press Ctrl+S to save.</value></data>
   <data name="Tutorial.image-save.Step3" xml:space="preserve"><value>3. To save another file, press Ctrl+Shift+S and choose the destination.</value></data>
   <data name="Tutorial.image-copy.Step1" xml:space="preserve"><value>1. Edit the image and review the result.</value></data>
-  <data name="Tutorial.image-copy.Step2" xml:space="preserve"><value>2. Press Ctrl+C to copy the edited image. The editor stays open; press Done (Ctrl+Enter) to save and close.</value></data>
+  <data name="Tutorial.image-copy.Step2" xml:space="preserve"><value>2. Use Copy and close (Ctrl+C) to save the edited image, copy it to the clipboard, and close. While typing text, Ctrl+C copies text; Ctrl+Enter finishes the edit.</value></data>
   <data name="Tutorial.image-copy.Step3" xml:space="preserve"><value>3. Press Ctrl+V in another app to paste the image.</value></data>
   <data name="Tutorial.folder-create.Step1" xml:space="preserve"><value>1. Open the library.</value></data>
   <data name="Tutorial.folder-create.Step2" xml:space="preserve"><value>2. Press Ctrl+Shift+N and enter a name for the new folder.</value></data>
@@ -4759,4 +4759,112 @@ Overwrite these shortcuts? You can change this later in Settings → Shortcuts.<
   <data name="CaptureRatio_FixedSize" xml:space="preserve"><value>Fixed size {0}</value></data>
   <data name="CaptureRatio_FixedHint" xml:space="preserve"><value>Move with the arrow keys and press Enter to confirm.</value></data>
   <data name="CaptureRatio_HelpLabel" xml:space="preserve"><value>Switch aspect ratio lock while selecting</value></data>
+  <data name="Help.QuickAccess" xml:space="preserve">
+    <value>Quick access</value>
+  </data>
+  <data name="Shortcuts.DoneInText" xml:space="preserve">
+    <value>Copy and close, including while typing text</value>
+  </data>
+  <data name="Shortcuts.EditText" xml:space="preserve">
+    <value>Edit selected text</value>
+  </data>
+  <data name="Shortcuts.Privacy" xml:space="preserve">
+    <value>Hide personal information</value>
+  </data>
+  <data name="Shortcuts.StepBack" xml:space="preserve">
+    <value>Cancel current action / clear selection</value>
+  </data>
+  <data name="Shortcuts.Undo" xml:space="preserve">
+    <value>Undo</value>
+  </data>
+  <data name="Shortcuts.Redo" xml:space="preserve">
+    <value>Redo</value>
+  </data>
+  <data name="Shortcuts.SelectAll" xml:space="preserve">
+    <value>Select all</value>
+  </data>
+  <data name="Shortcuts.Duplicate" xml:space="preserve">
+    <value>Duplicate selection</value>
+  </data>
+  <data name="Shortcuts.BringForward" xml:space="preserve">
+    <value>Bring forward</value>
+  </data>
+  <data name="Shortcuts.SendBackward" xml:space="preserve">
+    <value>Send backward</value>
+  </data>
+  <data name="Shortcuts.DeleteSelection" xml:space="preserve">
+    <value>Delete selection</value>
+  </data>
+  <data name="Shortcuts.Move1" xml:space="preserve">
+    <value>Move selection by 1 px</value>
+  </data>
+  <data name="Shortcuts.Move10" xml:space="preserve">
+    <value>Move selection by 10 px</value>
+  </data>
+  <data name="Shortcuts.CropMove1" xml:space="preserve">
+    <value>Move crop by 1 px</value>
+  </data>
+  <data name="Shortcuts.CropMove10" xml:space="preserve">
+    <value>Move crop by 10 px</value>
+  </data>
+  <data name="Shortcuts.CaptureConfirm" xml:space="preserve">
+    <value>Capture selected area</value>
+  </data>
+  <data name="Shortcuts.CaptureCancel" xml:space="preserve">
+    <value>Cancel capture</value>
+  </data>
+  <data name="Shortcuts.CaptureAll" xml:space="preserve">
+    <value>Select entire screen</value>
+  </data>
+  <data name="Shortcuts.SelectionMove1" xml:space="preserve">
+    <value>Move capture area by 1 px</value>
+  </data>
+  <data name="Shortcuts.SelectionMove10" xml:space="preserve">
+    <value>Move capture area by 10 px</value>
+  </data>
+  <data name="Shortcuts.SelectionResize1" xml:space="preserve">
+    <value>Resize capture area by 1 px</value>
+  </data>
+  <data name="Shortcuts.SelectionResize10" xml:space="preserve">
+    <value>Resize capture area by 10 px</value>
+  </data>
+  <data name="Shortcuts.LibraryCopy" xml:space="preserve">
+    <value>Copy image</value>
+  </data>
+  <data name="Shortcuts.LibraryOpen" xml:space="preserve">
+    <value>Re-edit image / play video</value>
+  </data>
+  <data name="Shortcuts.LibraryPreview" xml:space="preserve">
+    <value>Preview</value>
+  </data>
+  <data name="Shortcuts.LibraryText" xml:space="preserve">
+    <value>Recognize text (images)</value>
+  </data>
+  <data name="Shortcuts.LibraryGif" xml:space="preserve">
+    <value>Export GIF (videos)</value>
+  </data>
+  <data name="Shortcuts.ContextMenu" xml:space="preserve">
+    <value>Selection menu</value>
+  </data>
+  <data name="Shortcuts.Search" xml:space="preserve">
+    <value>Search</value>
+  </data>
+  <data name="Shortcuts.Back" xml:space="preserve">
+    <value>Previous folder</value>
+  </data>
+  <data name="Shortcuts.Forward" xml:space="preserve">
+    <value>Next folder</value>
+  </data>
+  <data name="Shortcuts.MouseNavigation" xml:space="preserve">
+    <value>Previous / next folder</value>
+  </data>
+  <data name="Shortcuts.MouseButtons" xml:space="preserve">
+    <value>Mouse back / forward</value>
+  </data>
+  <data name="Shortcuts.LibraryDrag" xml:space="preserve">
+    <value>Drag to a folder or out to export</value>
+  </data>
+  <data name="Shortcuts.Drag" xml:space="preserve">
+    <value>Mouse drag</value>
+  </data>
 </root>

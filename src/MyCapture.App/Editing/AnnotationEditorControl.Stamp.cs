@@ -82,7 +82,7 @@ internal sealed partial class AnnotationEditorControl
         var button = new RailCommandButton
         {
             Content = BuildIcon("Icon.Stamp", FallbackStamp, 20),
-            ToolTip = UiText.Get("Stamp_ToolTip"),
+            ToolTip = label,
             Width = 40, Height = 38, MinHeight = 0, MinWidth = 0, Padding = new Thickness(2), Margin = new Thickness(0, 1, 0, 1),
         };
         button.SetResourceReference(FrameworkElement.StyleProperty, "Rail.ToolButton");

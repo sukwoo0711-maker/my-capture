@@ -95,7 +95,7 @@ public sealed partial class SettingsThemePreviewTests
                         view.Search.Text = "Ctrl+C";
                         Drain(help);
                         Border[] rows = view.VisibleResults();
-                        Assert.Equal(3, rows.Length);
+                        Assert.Equal(5, rows.Length);
                         Border originalText = Assert.Single(rows, row => Descendants(row).OfType<TextBlock>()
                             .Any(text => text.Text == UiText.Get("Text_976A6C92B870")));
                         Assert.Empty(Descendants(originalText).OfType<Button>());
@@ -103,6 +103,13 @@ public sealed partial class SettingsThemePreviewTests
                             keys => AutomationProperties.GetName(keys) == "Ctrl+C / " + UiText.Get("Text_C7011B8D345C"));
                         foreach (Border row in rows.Where(row => !ReferenceEquals(row, originalText)))
                         {
+                            var textColumn = Assert.IsType<Grid>(row.Child).Children.OfType<StackPanel>().Single();
+                            string category = textColumn.Children.OfType<TextBlock>().Single().Text;
+                            if (category == UiText.Get("Workspace.Library") || category == UiText.Get("Help.QuickAccess"))
+                            {
+                                Assert.Empty(TutorialButtons(row));
+                                continue;
+                            }
                             Button button = Assert.Single(TutorialButtons(row));
                             VerifyTutorialButton(help, button, (string)button.Tag);
                             VerifyTutorialRouting(help, [button]);
