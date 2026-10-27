@@ -180,12 +180,21 @@ internal sealed partial class GalleryWindow
     {
         if (sender is not FrameworkElement { DataContext: GalleryFolderCardViewModel card }
             || Keyboard.Modifiers != ModifierKeys.None) return;
-        switch (e.Key)
+        // Read through ShortcutInput like the capture cards, so M works in Hangul mode too.
+        switch (ShortcutInput.Resolve(e.Key, e.ImeProcessedKey, textInputFocused: false))
         {
             case Key.Enter:
             case Key.Space:
                 e.Handled = true;
                 await OpenFolderCardAsync(card, fromKeyboard: true);
+                break;
+            case Key.M:
+                e.Handled = true;
+                OnMoveFolderClick(card, new RoutedEventArgs());
+                break;
+            case Key.Delete:
+                e.Handled = true;
+                OnDeleteFolderClick(card, new RoutedEventArgs());
                 break;
             case Key.Left:
             case Key.Right:
@@ -349,12 +358,14 @@ internal sealed partial class GalleryWindow
 
     private void OnMoveCapturesClick(object sender, RoutedEventArgs e)
     {
-        if (_foldersBusy) return;
         GalleryItemViewModel? targeted = sender is MenuItem { CommandParameter: GalleryItemViewModel menuTile }
             ? menuTile : null;
-        Guid[] ids = targeted is not null && !_viewModel.Selection.Contains(targeted.Id)
-            ? [targeted.Id] : _viewModel.Selection.SelectedIds.ToArray();
-        if (ids.Length == 0) return;
+        MoveCaptures(CommandTargets(targeted).Select(tile => tile.Id).ToArray());
+    }
+
+    private void MoveCaptures(Guid[] ids)
+    {
+        if (_foldersBusy || ids.Length == 0) return;
         _foldersBusy = true;
         try
         {

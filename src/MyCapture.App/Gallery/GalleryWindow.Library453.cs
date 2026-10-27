@@ -190,7 +190,11 @@ internal sealed partial class GalleryWindow
     {
         // A blank click makes the canvas the keyboard context for the next menu-key invocation.
         // Child capture and folder menus retain WPF's normal right-click routing.
-        if (FindLibraryCard(e.OriginalSource as DependencyObject) is null) RowsList.Focus();
+        FrameworkElement? card = FindLibraryCard(e.OriginalSource as DependencyObject);
+        if (card is null) { RowsList.Focus(); return; }
+        // As in File Explorer, a right click on a card outside the selection selects only that card.
+        if (card.DataContext is GalleryItemViewModel tile && !_viewModel.Selection.Contains(tile.Id))
+            _viewModel.Select(tile.Id);
     }
 
     internal static FrameworkElement? FindLibraryCard(DependencyObject? source)
@@ -201,28 +205,5 @@ internal sealed partial class GalleryWindow
             if (current is Button { DataContext: GalleryFolderCardViewModel } folder) return folder;
         }
         return null;
-    }
-
-    private void OnLibraryItemsKeyDown(object sender, KeyEventArgs e)
-    {
-        if (e.Handled) return;
-        // The content toolbar shares this surface for layout, but its controls keep their
-        // own keyboard/context-menu handling instead of opening the canvas menu.
-        for (DependencyObject? current = e.OriginalSource as DependencyObject; current is not null; current = GetParent(current))
-            if (ReferenceEquals(current, LibraryContentCommandBar)) return;
-        if (IsNavigationTextInput(e.OriginalSource as DependencyObject)) return;
-        Key key = e.Key == Key.System ? e.SystemKey : e.Key;
-        if (key == Key.A && Keyboard.Modifiers == ModifierKeys.Control)
-        {
-            OnSelectAllVisibleClick(sender, e);
-            return;
-        }
-        if (key != Key.Apps && !(key == Key.F10 && Keyboard.Modifiers == ModifierKeys.Shift)) return;
-        FrameworkElement target = FindLibraryCard(Keyboard.FocusedElement as DependencyObject) ?? RowsList;
-        ContextMenu menu = target.ContextMenu ?? LibraryItemsSurface.ContextMenu;
-        menu.PlacementTarget = target;
-        menu.Placement = PlacementMode.Bottom;
-        menu.IsOpen = true;
-        e.Handled = true;
     }
 }

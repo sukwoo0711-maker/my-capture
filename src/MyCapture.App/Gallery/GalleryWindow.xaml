@@ -120,7 +120,7 @@
             <MenuItem Header="{loc:Text Folder410.ZipExport}" CommandParameter="{Binding}" Click="OnExportFolderZipClick" />
             <Separator />
             <MenuItem Header="{Binding DeleteLabel, FallbackValue={loc:Text Folder410.Delete}}" CommandParameter="{Binding}"
-                      InputGestureText="Delete" Foreground="{DynamicResource Text.Primary}"
+                      InputGestureText="Del" Foreground="{DynamicResource Text.Primary}"
                       Click="OnDeleteFolderClick" />
         </ContextMenu>
 
@@ -179,7 +179,7 @@
             <MenuItem Header="{loc:Text Text_6139B6C3ED73}"
                       CommandParameter="{Binding}"
                       AutomationProperties.Name="{loc:Text Text_6139B6C3ED73}"
-                      InputGestureText="Delete"
+                      InputGestureText="Del"
                       Foreground="{DynamicResource Text.Primary}"
                       Click="OnDeleteMenuClick">
                 <MenuItem.Icon>
@@ -479,7 +479,6 @@
         <DataTemplate x:Key="Gallery.TileRowTemplate" DataType="{x:Type gallery:GalleryTileRow}">
             <ListBox Style="{StaticResource Gallery.TileRowList}"
                      ItemsSource="{Binding Tiles}"
-                     PreviewKeyDown="OnTileKeyDown"
                      PreviewMouseLeftButtonDown="OnTileMouseLeftButtonDown"
                      MouseDoubleClick="OnTileDoubleClick" />
         </DataTemplate>
@@ -638,7 +637,6 @@
         <DataTemplate x:Key="Gallery.CompactTileRowTemplate" DataType="{x:Type gallery:GalleryTileRow}">
             <ListBox Style="{StaticResource Gallery.CompactTileRowList}"
                      ItemsSource="{Binding Tiles}"
-                     PreviewKeyDown="OnTileKeyDown"
                      PreviewMouseLeftButtonDown="OnTileMouseLeftButtonDown"
                      MouseDoubleClick="OnTileDoubleClick" />
         </DataTemplate>

@@ -537,102 +537,6 @@ internal sealed partial class GalleryWindow : Window
         }
     }
 
-    private async void OnTileKeyDown(object sender, KeyEventArgs e)
-    {
-        if (IsInsideButton(e.OriginalSource)
-            || IsNavigationTextInput(e.OriginalSource as DependencyObject)
-            || IsNavigationTextInput(Keyboard.FocusedElement as DependencyObject)) return;
-        GalleryItemViewModel? tile = ResolveTileFromTree(e.OriginalSource) ?? _viewModel.SingleSelectedTile;
-        if (tile is null)
-        {
-            return;
-        }
-
-        switch (e.Key)
-        {
-            case Key.A when Keyboard.Modifiers.HasFlag(ModifierKeys.Control):
-                _viewModel.SelectAllVisible();
-                e.Handled = true;
-                break;
-            // Plain Up/Down can leave the tiles for the folder cards above them; range
-            // selection with Ctrl or Shift stays on tiles.
-            case Key.Up or Key.Down when Keyboard.Modifiers == ModifierKeys.None
-                && GallerySelectionNavigation.FindVertical(_viewModel.Rows, tile,
-                    e.Key == Key.Up ? -1 : 1) is GalleryFolderCardViewModel card:
-                FocusFolderCard(card);
-                e.Handled = true;
-                break;
-            case Key.Left:
-            case Key.Right:
-            case Key.Up:
-            case Key.Down:
-                GalleryItemViewModel? next = GallerySelectionNavigation.FindNeighbor(_viewModel.Rows, tile,
-                    e.Key is Key.Up or Key.Down, e.Key is Key.Left or Key.Up ? -1 : 1);
-                if (next is not null)
-                {
-                    _viewModel.Select(next.Id, Keyboard.Modifiers.HasFlag(ModifierKeys.Control), Keyboard.Modifiers.HasFlag(ModifierKeys.Shift));
-                    GalleryTileRow? row = _viewModel.Rows.OfType<GalleryTileRow>().FirstOrDefault(r => r.Tiles.Contains(next));
-                    if (row is not null)
-                    {
-                        RowsList.ScrollIntoView(row);
-                        _ = Dispatcher.BeginInvoke(DispatcherPriority.Loaded, new Action(() => FocusTile(RowsList, next)));
-                    }
-                }
-                e.Handled = true;
-                break;
-            case Key.Enter:
-                if (tile.IsVideo)
-                {
-                    PrepareVideoPlayer(tile, autoPlay: true);
-                }
-                else
-                {
-                    OpenReedit(tile);
-                }
-                e.Handled = true;
-                break;
-            case Key.M when Keyboard.Modifiers == ModifierKeys.None:
-                OnMoveCapturesClick(this, new RoutedEventArgs());
-                e.Handled = true;
-                break;
-            case Key.Delete:
-                ConfirmDeleteMany(_viewModel.Selection.SelectedIds, false);
-                e.Handled = true;
-                break;
-            case Key.Space when Keyboard.Modifiers == ModifierKeys.None:
-                ShowPreview(tile);
-                e.Handled = true;
-                break;
-            case Key.Space:
-                _viewModel.Select(tile.Id, Keyboard.Modifiers.HasFlag(ModifierKeys.Control), Keyboard.Modifiers.HasFlag(ModifierKeys.Shift));
-                e.Handled = true;
-                break;
-            case Key.P when Keyboard.Modifiers == ModifierKeys.None && tile.IsImage:
-                FloatTile(tile);
-                e.Handled = true;
-                break;
-            case Key.K when Keyboard.Modifiers == ModifierKeys.None:
-                TogglePin(tile);
-                e.Handled = true;
-                break;
-            case Key.C when Keyboard.Modifiers.HasFlag(ModifierKeys.Control):
-                if (tile.IsImage)
-                {
-                    e.Handled = true;
-                    if (await CopyRenderedAsync(tile)) ConfirmCopy(source: null);
-                }
-                break;
-            case Key.T when tile.IsImage:
-                RecognizeText(tile);
-                e.Handled = true;
-                break;
-            case Key.G when tile.IsVideo:
-                OpenVideoEditor(tile, exportGifWhenReady: true);
-                e.Handled = true;
-                break;
-        }
-    }
-
     // ---- Floating video player ------------------------------------------------------
 
     /// <summary>
@@ -713,14 +617,6 @@ internal sealed partial class GalleryWindow : Window
         }
     }
 
-    private void OnPinClick(object sender, RoutedEventArgs e)
-    {
-        if (ResolveTile(sender) is GalleryItemViewModel tile)
-        {
-            TogglePin(tile);
-        }
-    }
-
     private void OnFloatClick(object sender, RoutedEventArgs e)
     {
         if (ResolveTileFromCommand(sender) is not GalleryItemViewModel tile || !tile.IsImage)
@@ -779,6 +675,8 @@ internal sealed partial class GalleryWindow : Window
         // the tile as CommandParameter, so the subsequent action resolves the correct record.
         if (sender is Button { ContextMenu: { } menu } button)
         {
+            // As a right click does: a card outside the selection becomes the selection first.
+            if (button.DataContext is GalleryItemViewModel tile && !_viewModel.Selection.Contains(tile.Id)) _viewModel.Select(tile.Id);
             menu.PlacementTarget = button;
             menu.Placement = PlacementMode.Bottom;
             menu.IsOpen = true;
@@ -806,54 +704,19 @@ internal sealed partial class GalleryWindow : Window
     {
         if (ResolveTileFromCommand(sender) is GalleryItemViewModel tile)
         {
-            ConfirmAndDelete(tile);
+            ConfirmDeleteMany(CommandTargets(tile).Select(target => target.Id).ToArray(), false);
         }
     }
 
-    private void OnDeleteClick(object sender, RoutedEventArgs e)
-    {
-        e.Handled = true;
-        if (ResolveTile(sender) is GalleryItemViewModel tile)
-        {
-            ConfirmAndDelete(tile);
-        }
-    }
-
-    private void OnPinMenuClick(object sender, RoutedEventArgs e)
+    private async void OnPinMenuClick(object sender, RoutedEventArgs e)
     {
         if (ResolveTileFromCommand(sender) is GalleryItemViewModel tile)
         {
-            TogglePin(tile);
+            await ToggleKeepAsync(CommandTargets(tile));
         }
     }
 
     // ---- Actions -------------------------------------------------------------------
-
-    private async void TogglePin(GalleryItemViewModel tile)
-    {
-        if (!EnsureRecordReady(tile.Id))
-        {
-            return;
-        }
-
-        bool? pinned;
-        try { pinned = await _queue.ToggleLibraryPinAsync(tile.Id); }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException or AggregateException)
-        { ShowActionStatus(UiText.Get("Library.Organize.Failed")); return; }
-        if (pinned is null)
-        {
-            return;
-        }
-
-        tile.RaiseMetaChanged();
-        _viewModel.Refresh();
-        RaiseCaptureChanged();
-    }
-
-    private void ConfirmAndDelete(GalleryItemViewModel tile)
-    {
-        ConfirmDeleteMany([tile.Id], false);
-    }
 
     private void OnDeleteSelectedClick(object sender, RoutedEventArgs e) => ConfirmDeleteMany(_viewModel.Selection.SelectedIds, false);
     private void OnClearLibraryClick(object sender, RoutedEventArgs e) => ConfirmDeleteMany(_controller.Records.Select(r => r.Id).ToArray(), true);

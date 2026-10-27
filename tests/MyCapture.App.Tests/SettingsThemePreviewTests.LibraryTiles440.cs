@@ -203,7 +203,7 @@ public sealed partial class SettingsThemePreviewTests
         }
         Assert.All(accessibleCommands, entry => Assert.True(entry.Focusable));
         Assert.Equal(vm.IsImage ? "Enter" : string.Empty, editMenu.InputGestureText);
-        Assert.Contains(menu.Items.OfType<MenuItem>(), entry => entry.InputGestureText == "Delete"
+        Assert.Contains(menu.Items.OfType<MenuItem>(), entry => entry.InputGestureText == "Del"
             && !string.IsNullOrWhiteSpace(AutomationProperties.GetName(entry)));
         Assert.NotNull(item.ContextMenu);
         menu.IsOpen = false;
