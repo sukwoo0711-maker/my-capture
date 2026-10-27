@@ -1,6 +1,7 @@
 # Forward and reverse installation compatibility with the installer from commit 4769935.
-# The legacy fixture changes only its execution-policy argument and real-shell cleanup calls;
-# manifest parsing, ownership, extraction, transaction, deletion and uninstall integrity stay intact.
+# The legacy fixture adapts policy arguments, shell isolation and file removal for this host.
+# Manifest parsing, ownership, extraction, transaction and uninstall integrity stay intact;
+# file removal uses verified Recycle Bin moves confined to this test's TEMP fixture.
 [CmdletBinding()]
 param()
 Set-StrictMode -Version 2.0
@@ -14,6 +15,7 @@ $previousData = $env:MYCAPTURE_DATA_ROOT
 $previousSession = $env:MYCAPTURE_UPDATE_SESSION
 $env:MYCAPTURE_DATA_ROOT = Join-Path $root 'isolated-data'
 $env:MYCAPTURE_UPDATE_SESSION = $null
+$fixtureSucceeded = $false
 $keys = New-Object 'System.Collections.Generic.List[string]'
 $testKeyParent = 'Software\MyCapture.SetupTests'
 $parentKey = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey($testKeyParent)
@@ -59,6 +61,74 @@ function Wait-Removed([string]$Install, [string]$Log, [bool]$NewWorker = $false)
         if ($null -ne $worker) { $worker.Dispose() }
     }
 }
+$legacyRemovalPrelude = @'
+# Development-only adapter: every removal remains inside this unique fixture and is recoverable.
+$script:LegacyFixtureRoot = '__LEGACY_FIXTURE_ROOT__'
+[Reflection.Assembly]::LoadFrom('__LEGACY_SETUP_ASSEMBLY__') | Out-Null
+function Remove-LegacyFixtureItem {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)][string]$LiteralPath,
+        [switch]$Recurse,
+        [switch]$Force
+    )
+    $fixture = [IO.Path]::GetFullPath($script:LegacyFixtureRoot).TrimEnd('\')
+    $tempRoot = [IO.Path]::GetFullPath([IO.Path]::GetTempPath()).TrimEnd('\')
+    if (-not [string]::Equals([IO.Path]::GetDirectoryName($fixture), $tempRoot, [StringComparison]::OrdinalIgnoreCase) -or
+        [IO.Path]::GetFileName($fixture) -cnotmatch '\AMyCapture-compatibility-[a-f0-9]{32}\z') {
+        throw "Invalid legacy fixture root: $fixture"
+    }
+    if (-not [IO.Path]::IsPathRooted($LiteralPath)) { throw "Legacy removal requires an absolute path: $LiteralPath" }
+    $full = [IO.Path]::GetFullPath($LiteralPath).TrimEnd('\')
+    if (-not $full.StartsWith($fixture + '\', [StringComparison]::OrdinalIgnoreCase)) {
+        throw "Legacy removal must remain inside its fixture: $full"
+    }
+    if (-not (Test-Path -LiteralPath $full -ErrorAction Stop)) { return }
+    # Reject links in the target, every ancestor, and descendants before touching any attributes.
+    $current = $full
+    while ($current) {
+        $entry = Get-Item -LiteralPath $current -Force -ErrorAction Stop
+        if (($entry.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+            throw "Legacy removal refuses a link: $current"
+        }
+        $current = [IO.Path]::GetDirectoryName($current)
+    }
+    $target = Get-Item -LiteralPath $full -Force -ErrorAction Stop
+    $entries = New-Object 'System.Collections.Generic.List[System.IO.FileSystemInfo]'
+    $entries.Add($target)
+    if ($target.PSIsContainer) {
+        $pending = New-Object 'System.Collections.Generic.Stack[string]'
+        $pending.Push($full)
+        while ($pending.Count -gt 0) {
+            $directory = $pending.Pop()
+            foreach ($child in @(Get-ChildItem -LiteralPath $directory -Force -ErrorAction Stop)) {
+                if (-not $child.FullName.StartsWith($full + '\', [StringComparison]::OrdinalIgnoreCase) -or
+                    ($child.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+                    throw "Legacy removal refuses an unsafe descendant: $($child.FullName)"
+                }
+                $entries.Add($child)
+                if ($child.PSIsContainer) { $pending.Push($child.FullName) }
+            }
+        }
+        if (-not $Recurse -and $entries.Count -ne 1) { throw "Legacy nonrecursive removal requires an empty directory: $full" }
+    }
+    if ($Force) {
+        foreach ($entry in $entries) {
+            if (($entry.Attributes -band [IO.FileAttributes]::ReadOnly) -ne 0) {
+                [IO.File]::SetAttributes($entry.FullName, ($entry.Attributes -band (-bnot [IO.FileAttributes]::ReadOnly)))
+            }
+        }
+    }
+    $recycler = New-Object MyCapture.Core.Storage.RecoverableFileRemoval
+    $identity = $recycler.GetIdentity($full)
+    if ($target.PSIsContainer) {
+        [MyCapture.Core.Storage.RecoverableFileRemoval]::DeleteDirectory($full, [bool]$Recurse, $identity)
+    }
+    else { [MyCapture.Core.Storage.RecoverableFileRemoval]::DeleteFile($full, $identity) }
+    if (Test-Path -LiteralPath $full -ErrorAction Stop) { throw "Legacy recycle did not remove its original path: $full" }
+}
+'@
+$legacyRemovalPrelude = $legacyRemovalPrelude.Replace('__LEGACY_FIXTURE_ROOT__', $root.Replace("'", "''")).Replace('__LEGACY_SETUP_ASSEMBLY__', $setupTestExe.Replace("'", "''"))
 try {
     New-SyntheticSetupPackage $package
     $manifest = Get-Content -LiteralPath (Join-Path $package 'installer-manifest.json') -Raw -Encoding UTF8 | ConvertFrom-Json
@@ -75,7 +145,33 @@ try {
         try { $text = $process.StandardOutput.ReadToEnd(); $process.WaitForExit(); Assert-True ($process.ExitCode -eq 0) "Cannot read legacy $name" }
         finally { $process.Dispose() }
         if ($name.EndsWith('.ps1')) {
-            # Legacy deletion statements run unchanged (permanent deletion with their own retries).
+            # Preserve the old ownership checks, retry loops, rollback and manifest validation.
+            # Only the final filesystem removal primitive changes to verified recycling.
+            $replacements = switch ($name) {
+                'install.ps1' { @(
+                    @('[IO.File]::Delete($probe)', 'Remove-LegacyFixtureItem -LiteralPath $probe'),
+                    @('Remove-Item -LiteralPath $Path -Recurse -Force -ErrorAction Stop', 'Remove-LegacyFixtureItem -LiteralPath $Path -Recurse -Force -ErrorAction Stop')
+                ) }
+                'uninstall.ps1' { @(
+                    @('Remove-Item -LiteralPath $cleanupCopy -Force -ErrorAction SilentlyContinue', 'Remove-LegacyFixtureItem -LiteralPath $cleanupCopy -Force -ErrorAction SilentlyContinue'),
+                    @('$cleanupCopy = Join-Path ([IO.Path]::GetTempPath())', '$cleanupCopy = Join-Path $script:LegacyFixtureRoot')
+                ) }
+                'uninstall-cleanup.ps1' { @(
+                    @('Remove-Item -LiteralPath $Root -Recurse -Force -ErrorAction Stop', 'Remove-LegacyFixtureItem -LiteralPath $Root -Recurse -Force -ErrorAction Stop'),
+                    @('Remove-Item -LiteralPath $self -Force -ErrorAction SilentlyContinue', 'Remove-LegacyFixtureItem -LiteralPath $self -Force -ErrorAction SilentlyContinue'),
+                    @('[IO.File]::Delete($path)', 'Remove-LegacyFixtureItem -LiteralPath $path'),
+                    @('[IO.Directory]::Delete($startMenu, $false)', 'Remove-LegacyFixtureItem -LiteralPath $startMenu')
+                ) }
+                default { throw "Unexpected legacy PowerShell fixture: $name" }
+            }
+            foreach ($replacement in $replacements) {
+                Assert-True ($text.Contains($replacement[0])) "Missing legacy removal contract in ${name}: $($replacement[0])"
+                $text = $text.Replace($replacement[0], $replacement[1])
+            }
+            Assert-True (-not [regex]::IsMatch($text, '(?i)\bRemove-Item\s+-LiteralPath\b|\[(?:System\.)?IO\.(?:File|Directory)\]\s*::\s*Delete\s*\(')) "Unadapted permanent file removal in legacy $name"
+            $strictMarker = 'Set-StrictMode -Version 2.0'
+            Assert-True ([regex]::Matches($text, [regex]::Escape($strictMarker)).Count -eq 1) "Missing or duplicated strict-mode boundary in legacy $name"
+            $text = $text.Replace($strictMarker, $legacyRemovalPrelude + [Environment]::NewLine + $strictMarker)
             # The old uninstaller has no shell-target options. Seed it with NoShellIntegration,
             # and suppress only its real-shell cleanup calls in this isolated test fixture.
             $text = [regex]::Replace($text, '(?m)^    Remove-Owned(?:StartupValue|Shortcuts|UninstallKey)\s*$', '    # Shell cleanup is isolated out for the legacy NoShellIntegration fixture.')
@@ -151,8 +247,9 @@ try {
     $log = Join-Path $root 'reverse-uninstall.log'
     Invoke-Legacy (Join-Path $install 'uninstall.ps1') @('-Quiet', '-LogPath', $log)
     Wait-Removed $install $log
+    $fixtureSucceeded = $true
     Write-Output 'INSTALLER_COMPATIBILITY_TESTS=PASS (legacy -> new direct/receipt -> uninstall; new -> legacy -> uninstall)'
-    Write-Output 'LEGACY_ISOLATION: NoShellIntegration; policy arguments removed; legacy deletion unchanged; real shell cleanup calls suppressed. Legacy real registry/shortcut rewriting is not exercised.'
+    Write-Output 'LEGACY_ISOLATION: NoShellIntegration; policy arguments removed; fixture-scoped verified recycling; real shell cleanup calls suppressed. Legacy real registry/shortcut rewriting is not exercised.'
 }
 catch {
     Write-Output ('TEST_FAILURE=' + $_.Exception.Message)
@@ -170,5 +267,6 @@ finally {
             if ($empty) { [Microsoft.Win32.Registry]::CurrentUser.DeleteSubKey($testKeyParent, $false) }
         }
     }
-    Remove-TestItem $root
+    if ($fixtureSucceeded) { Remove-TestItem $root }
+    else { Write-Output "FIXTURE_PRESERVED=$root" }
 }

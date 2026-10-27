@@ -27,6 +27,24 @@ namespace MyCapture.App.Tests;
 public sealed class CaptureLibraryFirstTests
 {
     [Fact]
+    public void EditorScreenCaptureKeepsOriginalRecordAndEditLease() => StaTestHost.Run(() =>
+    {
+        using var fixture = new Fixture();
+        fixture.Settings.General.PlayCaptureSound = false;
+        fixture.Wait(fixture.Select(fixture.Selection));
+        CaptureRecord? original = fixture.CurrentRecord;
+        IDisposable? lease = fixture.CurrentEditSession;
+        int copiedBefore = fixture.CopiedImages.Count;
+        fixture.Wait(fixture.SelectEditorScreen(fixture.Selection));
+        Assert.Same(original, fixture.CurrentRecord);
+        Assert.Same(lease, fixture.CurrentEditSession);
+        Assert.Equal(2, fixture.Queue.Count);
+        Assert.Equal(copiedBefore + 1, fixture.CopiedImages.Count);
+        Assert.NotNull(original);
+        Assert.True(fixture.Persistence.IsBusy(original.Id));
+    });
+
+    [Fact]
     public void CompletingWelcomeCaptureWithoutInitializedShellIsSafe() => StaTestHost.Run(() =>
     {
         var app = (App)RuntimeHelpers.GetUninitializedObject(typeof(App));
@@ -667,6 +685,8 @@ public sealed class CaptureLibraryFirstTests
 
         internal Task Select(CaptureSelectionCompletedEventArgs selection) =>
             (Task)typeof(App).GetMethod("OnCaptureSelectionCompletedAsync", Flags)!.Invoke(_app, [selection])!;
+        internal Task SelectEditorScreen(CaptureSelectionCompletedEventArgs selection) =>
+            (Task)typeof(App).GetMethod("SaveEditorScreenCaptureAsync", Flags)!.Invoke(_app, [selection])!;
         internal Task<bool> Commit(AnnotationEditingResult result) =>
             (Task<bool>)typeof(App).GetMethod("HandleCommitAsync", Flags)!.Invoke(_app, [result])!;
         internal AnnotationEditingResult Result(AnnotationDocument document, EditorCommitAction action) =>

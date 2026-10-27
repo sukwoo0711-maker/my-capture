@@ -292,8 +292,6 @@ public sealed class ShortcutAltRevealTests
     [InlineData("down", true)]
     [InlineData("up", false)]
     [InlineData("up", true)]
-    [InlineData("move", false)]
-    [InlineData("move", true)]
     [InlineData("wheel", false)]
     [InlineData("wheel", true)]
     public void MouseInputDismissesWithoutConsumingInputOrRevealingOnRepeat(string input, bool handled) => StaTestHost.Run(() =>
@@ -318,6 +316,72 @@ public sealed class ShortcutAltRevealTests
         finally { window.Close(); }
     });
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void PointerMovementKeepsEveryHeldAltGestureVisibleInOwnerAndFollowingSurface(bool handled) => StaTestHost.Run(() =>
+    {
+        using var motion = new ShortcutMotionTestScope();
+        var owner = new HintWindow();
+        var surface = new HintWindow { ShowActivated = false };
+        try
+        {
+            TextBlock caption = AddCaption(owner);
+            ShortcutPresentation.FollowOwner(surface, owner);
+            TextBlock surfaceCaption = AddCaption(surface);
+            var popupTarget = new MenuItem { Header = "Command" };
+            for (int attempt = 0; attempt < 20; attempt++)
+            {
+                Key alt = attempt % 2 == 0 ? Key.LeftAlt : Key.RightAlt;
+                Assert.False(RaiseKey(owner, alt, isDown: true, system: true).Handled);
+                foreach (HintWindow target in new[] { owner, surface })
+                {
+                    MouseEventArgs move = CreateMouse("move", handled);
+                    target.RaiseEvent(move);
+                    Assert.Equal(handled, move.Handled);
+                }
+                foreach (RoutedEvent routedEvent in new[] { Mouse.PreviewMouseMoveEvent, Mouse.MouseMoveEvent })
+                {
+                    MouseEventArgs move = CreateMouse("move", handled);
+                    move.RoutedEvent = routedEvent;
+                    move.Source = popupTarget;
+                    InputManager.Current.ProcessInput(move);
+                    Assert.Equal(handled, move.Handled);
+                    ShortcutMotionTestScope.AssertState(caption, true);
+                    ShortcutMotionTestScope.AssertState(surfaceCaption, true);
+                }
+                RaiseKey(owner, alt, isDown: true, system: true, repeat: true);
+                ShortcutMotionTestScope.AssertState(caption, true);
+                KeyEventArgs release = CreateKey(alt, Keyboard.KeyUpEvent, system: true);
+                release.Source = popupTarget;
+                InputManager.Current.ProcessInput(release);
+                ShortcutMotionTestScope.AssertState(caption, false);
+                ShortcutMotionTestScope.AssertState(surfaceCaption, false);
+            }
+        }
+        finally { surface.Close(); owner.Close(); }
+    });
+
+    [Theory]
+    [InlineData(Key.Tab)]
+    [InlineData(Key.Space)]
+    [InlineData(Key.F4)]
+    public void SystemChordsDismissHintsWithoutConsumingTheCommand(Key command) => StaTestHost.Run(() =>
+    {
+        using var motion = new ShortcutMotionTestScope();
+        var window = new HintWindow();
+        try
+        {
+            TextBlock caption = AddCaption(window);
+            RaiseKey(window, Key.LeftAlt, isDown: true, system: true);
+            Assert.False(RaiseKey(window, command, isDown: true, system: true).Handled);
+            ShortcutMotionTestScope.AssertState(caption, false);
+            RaiseKey(window, Key.LeftAlt, isDown: false, system: true);
+            RaiseKey(window, Key.LeftAlt, isDown: true, system: true);
+            ShortcutMotionTestScope.AssertState(caption, true);
+        }
+        finally { window.Close(); }
+    });
     [Fact]
     public void LayoutCursorQueriesDoNotDismissTheCurrentAltGesture() => StaTestHost.Run(() =>
     {
@@ -392,7 +456,6 @@ public sealed class ShortcutAltRevealTests
     [Theory]
     [InlineData("down")]
     [InlineData("up")]
-    [InlineData("move")]
     [InlineData("wheel")]
     public void SurfaceMouseInputDismissesItsOwnerButClosingSurfaceLeavesTheOwnerGestureIntact(string input) => StaTestHost.Run(() =>
     {

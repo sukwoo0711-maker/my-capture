@@ -1102,7 +1102,7 @@ internal sealed class CapturePersistenceService
                     if (File.Exists(file.TargetPath))
                     {
                         // This transaction created the file; rolling it back removes it.
-                        File.Delete(file.TargetPath);
+                        global::MyCapture.Core.Storage.RecoverableFileRemoval.DeleteFile(file.TargetPath);
                     }
 
                     continue;
@@ -1989,8 +1989,7 @@ internal sealed class CapturePersistenceService
     /// <summary>
     /// Removes an app-owned transaction directory (.cleanup-*, retired stage) from disk. These
     /// hold superseded copies the transaction already replaced, never the user's capture, so
-    /// they are deleted directly instead of filling the user's Recycle Bin on every save.
-    /// .NET's recursive delete removes a nested link itself and never descends into its target.
+    /// they move to the Recycle Bin. Nested links move without entering their targets.
     /// </summary>
     private static void TryDeleteDirectory(string directory)
     {
@@ -1999,7 +1998,7 @@ internal sealed class CapturePersistenceService
             if (Directory.Exists(directory)
                 && (File.GetAttributes(directory) & FileAttributes.ReparsePoint) == 0)
             {
-                Directory.Delete(directory, recursive: true);
+                global::MyCapture.Core.Storage.RecoverableFileRemoval.DeleteDirectory(directory, recursive: true);
             }
         }
         catch (IOException)
@@ -2018,7 +2017,7 @@ internal sealed class CapturePersistenceService
             // titles and URLs; they are deleted, not kept recoverable in the Recycle Bin.
             if (File.Exists(path))
             {
-                File.Delete(path);
+                global::MyCapture.Core.Storage.RecoverableFileRemoval.DeleteFile(path);
             }
         }
         catch (IOException)

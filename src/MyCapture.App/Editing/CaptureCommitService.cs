@@ -35,7 +35,6 @@ internal sealed class CaptureCommitService
 {
     private readonly CapturePersistenceService _persistence;
     private readonly Func<AppSettings> _settings;
-    private readonly Func<AppPaths> _paths;
     private readonly ILogger<CaptureCommitService> _log;
     private readonly Func<BitmapSource, string?, CaptureProvenance?, Task<CaptureProvenance>?, Task<bool>> _copyImageAsync;
 
@@ -48,8 +47,9 @@ internal sealed class CaptureCommitService
     {
         _persistence = persistence ?? throw new ArgumentNullException(nameof(persistence));
         _settings = settings ?? throw new ArgumentNullException(nameof(settings));
-        _paths = paths ?? throw new ArgumentNullException(nameof(paths));
+        ArgumentNullException.ThrowIfNull(paths);
         _log = log ?? throw new ArgumentNullException(nameof(log));
+        ExportLocation = new ImageExportLocation(settings, paths, log, () => PersistExportSettings?.Invoke());
         _copyImageAsync = copyImageAsync is null
             ? (image, url, provenance, pending) => ClipboardImageService.CopyImageWithProvenanceAsync(image, url, provenance, pendingProvenance: pending)
             : (image, url, _, _) => copyImageAsync(image, url);
@@ -65,13 +65,30 @@ internal sealed class CaptureCommitService
     internal Func<ImageExportOptions, ImageExportOptions?>? ExportOptionsPrompt { get; set; }
 
     internal Func<BitmapSource, string, bool>? ReducedExportPrompt { get; set; }
+
+    /// <summary>
+    /// Raised with the written file's path when an editor's Quick Save has written it, before the
+    /// clipboard copy that completes the commit. Runs on the caller's context.
+    /// </summary>
+    internal event Action<string>? QuickSaved;
+
     internal Action? PersistExportSettings { get; set; }
+    internal ImageExportLocation ExportLocation { get; }
     internal ImageExportOptions LastExportOptions => _settings().Export.LastImageExport;
+    internal void RememberSavedExport(string path, ImageExportOptions options)
+    {
+        // Publish the folder and options in one ordered settings snapshot, after the file exists.
+        _settings().Export.LastImageExport = options;
+        ExportLocation.RememberSavedPath(path, persistEvenIfUnchanged: true);
+    }
+
     internal void RememberExportOptions(ImageExportOptions options)
     {
         _settings().Export.LastImageExport = options;
         try { PersistExportSettings?.Invoke(); }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException
+                                   or InvalidOperationException or System.Text.Json.JsonException
+                                   or System.Security.Cryptography.CryptographicException)
         { _log.LogWarning(ex, "Could not persist the last export options"); }
     }
 
@@ -197,7 +214,7 @@ internal sealed class CaptureCommitService
                     }
 
                     if (!await TrySavePngAsync(flattened, chosen, options, exportRecord?.SourcePageUrl)) return false;
-                    RememberExportOptions(options);
+                    RememberSavedExport(chosen, options);
                     return true;
                 });
                 if (!exported)
@@ -214,12 +231,14 @@ internal sealed class CaptureCommitService
                 record = await PersistFinalIfAvailableAsync(
                     record, result.Action, flattened, snapshot, result.ImageAssetBitmaps, editSession, createRecordAsync,
                     replaceOriginal ? result.SelectedBitmap : null);
-                bool quickSaved = await ImageExportTransaction.RunAsync(() => QuickSaveAsync(flattened, record ?? exportRecord));
-                if (!quickSaved)
+                string? quickSavedPath = await ImageExportTransaction.RunAsync(() => QuickSaveAsync(flattened, record ?? exportRecord));
+                if (quickSavedPath is null)
                 {
                     return false;
                 }
 
+                // The file exists whatever the clipboard does next, so it is announced now.
+                AnnounceQuickSave(quickSavedPath);
                 bool quickSaveCopied = await CopyEditedImageAsync(flattened, "Quick save", record ?? exportRecord);
 
                 // Queue persistence is already durable, but Quick Save is an explicit export
@@ -293,14 +312,14 @@ internal sealed class CaptureCommitService
 
     private bool ShowReducedExport(BitmapSource flattened, CaptureRecord? record)
     {
-        string directory = ResolveQuickSaveDirectory();
+        string directory = ExportLocation.SaveAsDirectory;
         string stem = BuildExportStem(record);
         string suggested = QuickSaveNaming.ResolvePath(directory, stem, ".png");
         return ReducedExportPrompt is not null
             ? ReducedExportPrompt(flattened, suggested)
             : ImageReductionExportDialog.Show(System.Windows.Application.Current?.Windows
                 .OfType<System.Windows.Window>().FirstOrDefault(window => window.IsActive), flattened, suggested,
-                record?.SourcePageUrl, LastExportOptions, RememberExportOptions);
+                record?.SourcePageUrl, LastExportOptions, RememberExportOptions, RememberSavedExport);
     }
 
     internal static BitmapSource Flatten(
@@ -344,7 +363,21 @@ internal sealed class CaptureCommitService
         return record;
     }
 
-    private async Task<bool> QuickSaveAsync(BitmapSource flattened, CaptureRecord? record)
+    private void AnnounceQuickSave(string path)
+    {
+        try
+        {
+            QuickSaved?.Invoke(path);
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or IOException)
+        {
+            // The notice is a courtesy; the saved file and the rest of the commit stand.
+            _log.LogWarning(ex, "Could not announce a quick save");
+        }
+    }
+
+    /// <returns>The written file, or <see langword="null"/> when the quick save failed.</returns>
+    private async Task<string?> QuickSaveAsync(BitmapSource flattened, CaptureRecord? record)
     {
         string directory = ResolveQuickSaveDirectory();
         try
@@ -361,7 +394,7 @@ internal sealed class CaptureCommitService
                 return (savedPath, encoded.LongLength);
             });
             _log.LogInformation("Quick-saved {Bytes} bytes to {Path}", bytes, path);
-            return true;
+            return path;
         }
         catch (Exception ex) when (ex is IOException
                                    or UnauthorizedAccessException
@@ -370,7 +403,7 @@ internal sealed class CaptureCommitService
         {
             // Quick save failure must not fail the persist that already succeeded.
             _log.LogWarning(ex, "Quick save to {Directory} failed", directory);
-            return false;
+            return null;
         }
     }
 
@@ -407,8 +440,7 @@ internal sealed class CaptureCommitService
 
     private string ResolveQuickSaveDirectory()
     {
-        string overridePath = _settings().Export.QuickSaveDirectoryOverride;
-        return string.IsNullOrWhiteSpace(overridePath) ? _paths().QuickSaveRoot : overridePath;
+        return ExportLocation.QuickSaveDirectory;
     }
 
     private string BuildExportStem(CaptureRecord? record) => QuickSaveNaming.BuildStem(
@@ -416,7 +448,7 @@ internal sealed class CaptureCommitService
 
     private (string Path, ImageExportOptions Options)? ResolveSaveAsDestination(CaptureRecord? record)
     {
-        string directory = ResolveQuickSaveDirectory();
+        string directory = ExportLocation.SaveAsDirectory;
         string stem = BuildExportStem(record);
         string suggested = QuickSaveNaming.ResolvePath(directory, stem, ".png");
 

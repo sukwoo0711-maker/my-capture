@@ -101,8 +101,13 @@ public static class ShellIntegration
         Options.ValidateTestTargets(manifest.TestRegistryKey, manifest.TestStartMenu);
         info ??= _ => { };
         string menu = manifest.TestStartMenu ?? DefaultMenu;
+        string menuBoundary = Path.GetFullPath(manifest.TestStartMenu is null
+            ? Environment.GetFolderPath(Environment.SpecialFolder.Programs) : Path.GetTempPath()).TrimEnd('\\') + "\\";
         try
         {
+            if (!string.Equals(menu, Path.GetFullPath(menu), StringComparison.OrdinalIgnoreCase)
+                || !menu.StartsWith(menuBoundary, StringComparison.OrdinalIgnoreCase))
+                throw new IOException("Start Menu cleanup escaped its approved parent.");
             PathSafety.NotLink(menu);
             foreach (string name in new[] { "MyCapture.lnk", "Uninstall MyCapture.lnk" })
             {
@@ -113,13 +118,13 @@ public static class ShellIntegration
                 string expected = Path.Combine(root, name == "MyCapture.lnk" ? "MyCapture.exe" : "MyCaptureUninstall.exe");
                 if (PathSafety.Equal(target, expected) || (name == "Uninstall MyCapture.lnk" && PathSafety.Equal(target, Path.Combine(root, "uninstall.cmd"))))
                 {
-                    File.Delete(link);
+                    global::MyCapture.Core.Storage.RecoverableFileRemoval.DeleteFile(link);
                     info("Removed owned shortcut: " + name);
                 }
                 else info("Preserved modified shortcut: " + name);
             }
             // The folder itself is removed only when nothing else remains in it.
-            if (Directory.Exists(menu) && !Directory.EnumerateFileSystemEntries(menu).Any()) Directory.Delete(menu, false);
+            if (Directory.Exists(menu) && !Directory.EnumerateFileSystemEntries(menu).Any()) global::MyCapture.Core.Storage.RecoverableFileRemoval.DeleteDirectory(menu, false);
         }
         catch (Exception e) { warning("Could not clean Start Menu shortcuts: " + e.Message); }
         try

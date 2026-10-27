@@ -87,7 +87,8 @@ public sealed partial class GalleryViewModel : INotifyPropertyChanged
     public IReadOnlyList<GalleryItemViewModel> SelectedTiles => Selection.SelectedIds
         .Select(FindTile).OfType<GalleryItemViewModel>().ToArray();
     public bool HasSelection => Selection.Count > 0;
-    public string SelectionText => UiText.Format("LibrarySelection_Count", Selection.Count);
+    public string SelectionText => HasSelection ? UiText.Format("LibrarySelection_Count", Selection.Count) : UiText.Get("LibraryUx_NoSelection");
+    public bool HasSingleSelection => Selection.Count == 1 && SingleSelectedTile is not null;
     public GalleryItemViewModel? SingleSelectedTile
     {
         get
@@ -145,7 +146,7 @@ public sealed partial class GalleryViewModel : INotifyPropertyChanged
     {
         foreach (GalleryItemViewModel tile in _tileCache.Values) tile.IsSelected = Selection.Contains(tile.Id);
         Raise(nameof(SelectedTiles)); Raise(nameof(HasSelection)); Raise(nameof(SelectionText));
-        Raise(nameof(SingleSelectedTile)); Raise(nameof(CanReduceSelected)); Raise(nameof(CanGifSelected));
+        Raise(nameof(SingleSelectedTile)); Raise(nameof(HasSingleSelection)); Raise(nameof(CanReduceSelected)); Raise(nameof(CanGifSelected));
         bool canCompare = CanCompareSelected;
         if (_publishedCanCompareSelected != canCompare)
         {

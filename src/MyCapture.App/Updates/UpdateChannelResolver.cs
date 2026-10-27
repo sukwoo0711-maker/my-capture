@@ -1,3 +1,4 @@
+using MyCapture.Core.Platform;
 using System.IO;
 using System.Text.Json;
 using MyCapture.Core.Settings;
@@ -38,7 +39,7 @@ internal static class UpdateChannelResolver
                 return UpdateChannel.None;
             using JsonDocument deps = ReadMetadata(sourceRoot, "MyCapture.deps.json");
             return deps.RootElement.GetProperty("runtimeTarget").GetProperty("name").GetString()
-                ?.EndsWith("/win-x64", StringComparison.Ordinal) == true ? UpdateChannel.Portable : UpdateChannel.None;
+                ?.EndsWith("/" + AppArchitecture.RuntimeIdentifier, StringComparison.Ordinal) == true ? UpdateChannel.Portable : UpdateChannel.None;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException or
             KeyNotFoundException or InvalidOperationException or ArgumentException or NotSupportedException)

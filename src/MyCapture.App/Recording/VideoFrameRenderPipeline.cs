@@ -1049,7 +1049,7 @@ internal static class FrameEditLayerRenderer
 /// <summary>Shared WYSIWYG text compositor used by preview, MP4 render and GIF export.</summary>
 internal static class TimedTextOverlayRenderer
 {
-    private static readonly Typeface OverlayTypeface = new(
+    internal static readonly Typeface OverlayTypeface = new(
         new FontFamily("Malgun Gothic"),
         FontStyles.Normal,
         FontWeights.SemiBold,

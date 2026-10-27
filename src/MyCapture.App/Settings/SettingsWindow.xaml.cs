@@ -47,7 +47,10 @@ internal sealed partial class SettingsWindow : Window
         _showSaveFailureMessage = showSaveFailureMessage ?? (_ => { });
 
         InitializeComponent();
+        CurrentVersionLabel.Text = ApplicationVersion.DisplayText;
+        MonitorWindowPlacement.KeepOnPointerMonitor(this, marginDip: 0);
         InitializeAbout();
+        InitializeTranslationModel();
         InitializeUpdates();
         InitializeStoreRating();
         InitializePrintScreenGuide();

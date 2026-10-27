@@ -8,7 +8,8 @@ param(
 
     [string]$Repository = 'sukwoo0711-maker/my-capture',
 
-    [switch]$Latest
+    [switch]$Latest,
+    [switch]$IncludeX86
 )
 
 Set-StrictMode -Version 2.0
@@ -19,9 +20,10 @@ $ErrorActionPreference = 'Stop'
 $repoRoot = [IO.Path]::GetFullPath((Split-Path -Parent $PSScriptRoot))
 $artifactRoot = Join-Path $repoRoot "artifacts\release\$Version"
 $tag = "v$Version"
-$required = @(Get-RequiredReleaseAssetNames -Version $Version)
+$required = @(Get-RequiredReleaseAssetNames -Version $Version -IncludeX86:$IncludeX86)
 $files = @($required | ForEach-Object {
-    $path = Join-Path $artifactRoot $_
+    $assetRoot = if ($_.Contains('win-x86')) { Join-Path $artifactRoot 'win-x86' } else { $artifactRoot }
+    $path = Join-Path $assetRoot $_
     if (-not (Test-Path -LiteralPath $path -PathType Leaf) -or (Get-Item -LiteralPath $path).Length -le 0) {
         throw "Refusing to publish $tag without required local asset: $_"
     }
@@ -54,5 +56,5 @@ if ($LASTEXITCODE -ne 0) {
     throw "GitHub release create failed for $tag."
 }
 
-& (Join-Path $PSScriptRoot 'verify-github-release.ps1') -Tag $tag -Repository $Repository
+& (Join-Path $PSScriptRoot 'verify-github-release.ps1') -Tag $tag -Repository $Repository -IncludeX86:$IncludeX86
 Write-Output "PUBLISHED=$tag"

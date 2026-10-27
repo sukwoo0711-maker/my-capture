@@ -106,6 +106,7 @@ internal sealed partial class GalleryWindow : Window
         _log = log ?? throw new ArgumentNullException(nameof(log));
 
         InitializeComponent();
+        CurrentVersionLabel.Text = ApplicationVersion.DisplayText;
         CommandBindings.Add(new CommandBinding(CompareCommand, OnCompareExecuted, (_, e) =>
         {
             e.CanExecute = !_imagePreparationInProgress && _viewModel.CanCompareSelected;
@@ -197,10 +198,7 @@ internal sealed partial class GalleryWindow : Window
             WindowState = WindowState.Normal;
         }
 
-        _ = Activate();
-        Topmost = true;
-        Topmost = false;
-        _ = Focus();
+        WindowForeground.BringForward(this);
         ShowPendingRetentionNotice();
     }
 
@@ -243,6 +241,7 @@ internal sealed partial class GalleryWindow : Window
 
     protected override void OnClosing(System.ComponentModel.CancelEventArgs e)
     {
+        _imagePreview?.Close();
         // A normal close returns to the tray; only an explicit exit is allowed through.
         if (!_allowClose)
         {
@@ -422,7 +421,11 @@ internal sealed partial class GalleryWindow : Window
         bool shift = Keyboard.Modifiers.HasFlag(ModifierKeys.Shift);
         _collapseOnRelease = !control && !shift && tile.IsSelected;
         if (!_collapseOnRelease) _viewModel.Select(tile.Id, control, shift);
-        if (sender is ListBox list && list.ItemContainerGenerator.ContainerFromItem(tile) is ListBoxItem item) item.Focus();
+        if (sender is ListBox list && list.ItemContainerGenerator.ContainerFromItem(tile) is ListBoxItem item)
+        {
+            GalleryCaptionPreview.Close(item);
+            item.Focus();
+        }
         e.Handled = true; // Inner single-row ListBox must never collapse the shared selection.
         if (!tile.IsSelected) return;
         if (e.ClickCount == 2)
@@ -596,6 +599,10 @@ internal sealed partial class GalleryWindow : Window
                 ConfirmDeleteMany(_viewModel.Selection.SelectedIds, false);
                 e.Handled = true;
                 break;
+            case Key.Space when Keyboard.Modifiers == ModifierKeys.None:
+                ShowPreview(tile);
+                e.Handled = true;
+                break;
             case Key.Space:
                 _viewModel.Select(tile.Id, Keyboard.Modifiers.HasFlag(ModifierKeys.Control), Keyboard.Modifiers.HasFlag(ModifierKeys.Shift));
                 e.Handled = true;
@@ -612,7 +619,7 @@ internal sealed partial class GalleryWindow : Window
                 if (tile.IsImage)
                 {
                     e.Handled = true;
-                    await CopyRenderedAsync(tile);
+                    if (await CopyRenderedAsync(tile)) ConfirmCopy(source: null);
                 }
                 break;
             case Key.T when tile.IsImage:
@@ -755,8 +762,14 @@ internal sealed partial class GalleryWindow : Window
         if (ResolveTileFromCommand(sender) is GalleryItemViewModel tile)
         {
             e.Handled = true;
-            await CopyRenderedAsync(tile);
+            if (await CopyRenderedAsync(tile)) ConfirmCopy(sender);
         }
+    }
+
+    private void OnShowDragHelpClick(object sender, RoutedEventArgs e)
+    {
+        if (ResolveTileFromCommand(sender) is { } tile) ShowStatus(tile.ExportToolTip);
+        e.Handled = true;
     }
 
     private void OnMoreClick(object sender, RoutedEventArgs e)
@@ -852,9 +865,7 @@ internal sealed partial class GalleryWindow : Window
         string capture = UiText.Format("LibraryUx_CommandShortcut", UiText.Get("Text_2C20ADDA2018").Trim(), hotkeys.Capture.ToString());
         string record = UiText.Format("LibraryUx_CommandShortcut", UiText.Get("Text_4F5AF20FAA6E").Trim(), hotkeys.RecordRegion.ToString());
         CaptureRegionButton.ToolTip = capture;
-        CaptureRegionIconButton.ToolTip = capture;
         RecordRegionButton.ToolTip = record;
-        RecordRegionIconButton.ToolTip = record;
     }
 
     private void OnClearSelectionClick(object sender, RoutedEventArgs e)
@@ -905,7 +916,8 @@ internal sealed partial class GalleryWindow : Window
     ];
 
     // Plain confirmations; every other line carries a count, a hint or a cause to read.
-    private static readonly string[] ConfirmationStatusKeys = ["Library.SourcePage.Copied", "Library.Source.PathCopied"];
+    private static readonly string[] ConfirmationStatusKeys =
+        ["Library.SourcePage.Copied", "Library.Source.PathCopied", "Library.Image.Copied"];
 
     // Export lines that the outcome replaces.
     private static readonly string[] ProgressStatusKeys =
@@ -1058,22 +1070,23 @@ internal sealed partial class GalleryWindow : Window
         }
     }
 
-    private async Task CopyRenderedAsync(GalleryItemViewModel tile)
+    /// <summary>Copies the capture's rendered image; true once it is on the clipboard.</summary>
+    private async Task<bool> CopyRenderedAsync(GalleryItemViewModel tile)
     {
         if (!tile.IsImage)
         {
-            return;
+            return false;
         }
 
         if (!EnsureRecordReady(tile.Id))
         {
-            return;
+            return false;
         }
 
         CaptureRecord? record = _controller.Find(tile.Id);
         if (record is null)
         {
-            return;
+            return false;
         }
 
         // Copy the flattened rendered.png so the clipboard carries the annotated result. This
@@ -1083,7 +1096,7 @@ internal sealed partial class GalleryWindow : Window
         if (rendered is null)
         {
             ShowStatus(UiText.Get("Text_3BF4FEA88C51"));
-            return;
+            return false;
         }
 
         try
@@ -1092,7 +1105,10 @@ internal sealed partial class GalleryWindow : Window
                     MyCapture.Core.Capture.CaptureProvenance.FromRecord(record)))
             {
                 ShowStatus(UiText.Get("Text_75425A6D9BE8"));
+                return false;
             }
+
+            return true;
         }
         catch (Exception ex)
         {
@@ -1100,6 +1116,7 @@ internal sealed partial class GalleryWindow : Window
             // clipboard provider failure escape into WPF's message pump.
             _log.LogWarning(ex, "Could not copy gallery capture {Id} to the clipboard", record.Id);
             ShowStatus(UiText.Get("Text_75425A6D9BE8"));
+            return false;
         }
     }
 
@@ -1241,8 +1258,9 @@ internal sealed partial class GalleryWindow : Window
                 return;
             }
             _ = ImageReductionExportDialog.Show(this, image,
-                Path.Combine(_paths.QuickSaveRoot, GalleryDragExportService.BuildBaseFileName(DateTimeOffset.Now)),
-                record.SourcePageUrl, _commitService.LastExportOptions, _commitService.RememberExportOptions);
+                Path.Combine(_commitService.ExportLocation.SaveAsDirectory, GalleryDragExportService.BuildBaseFileName(DateTimeOffset.Now)),
+                record.SourcePageUrl, _commitService.LastExportOptions, _commitService.RememberExportOptions,
+                _commitService.RememberSavedExport);
         }
         catch (Exception ex)
         {

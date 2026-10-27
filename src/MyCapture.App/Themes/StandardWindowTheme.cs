@@ -1,6 +1,5 @@
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Media;
 
 namespace MyCapture.App.Themes;
 
@@ -12,6 +11,7 @@ internal static class StandardWindowTheme
     internal static void Apply(Window window)
     {
         ArgumentNullException.ThrowIfNull(window);
+        ThemeFonts.ApplyText(window);
 
         // A keyed Window style can be assigned to any subclass; unlike an implicit Window
         // style, WPF will not discard it merely because the runtime type is more specific.
@@ -29,9 +29,9 @@ internal static class StandardWindowTheme
 
     /// <summary>
     /// The text settings of <see cref="ResourceKey"/> for floating surfaces that keep their own
-    /// chrome (the pin bar, the recording bar): the UI font, Display text formatting and pixel
-    /// snapping. Their small Korean and Latin text then renders as in the standard windows
-    /// instead of in the default font with Ideal formatting.
+    /// chrome (the pin bar, the recording bar): the UI font, its text formatting and shaping
+    /// (<see cref="ThemeFonts"/>) and pixel snapping. Their small Korean and Latin text then
+    /// renders as in the standard windows instead of in the default font.
     /// </summary>
     /// <remarks>
     /// The capture card does not take it yet: its preview keeps exact aspect at every display
@@ -42,7 +42,7 @@ internal static class StandardWindowTheme
         ArgumentNullException.ThrowIfNull(window);
         if (window.ReadLocalValue(Control.FontFamilyProperty) == DependencyProperty.UnsetValue)
             window.SetResourceReference(Control.FontFamilyProperty, "Font.Ui");
-        TextOptions.SetTextFormattingMode(window, TextFormattingMode.Display);
+        ThemeFonts.ApplyText(window);
         window.UseLayoutRounding = true;
         window.SnapsToDevicePixels = true;
     }

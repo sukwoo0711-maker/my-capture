@@ -3,6 +3,7 @@ using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Automation;
 using System.Windows.Media;
+using MyCapture.App.Themes;
 
 namespace MyCapture.App;
 
@@ -79,6 +80,9 @@ internal static class CommandButtonPresentation
 
     internal static void ReserveHint(ButtonBase button, TextBlock? hint = null)
     {
+        // The face below holds the shortcut line, so a button sized by the shared style takes
+        // the command height instead of the 32-DIP plain button height.
+        ButtonSizing.SetReservesShortcutLine(button, true);
         // An empty caption owns the same render-only motion and fixed-height slot as a
         // keyed face. Keep it visible in the tree so visible commands animate together.
         if (hint is null)
@@ -195,18 +199,25 @@ internal static class CommandButtonPresentation
     private static bool FitCaption(Grid face, TextBlock hint)
     {
         double caption = (double)face.GetValue(CaptionWidthProperty);
-        double minimum = caption, maximum = double.PositiveInfinity;
+        double minimum = caption, maximum = double.PositiveInfinity, step = 0;
         if (face.Parent is ButtonBase button && IsIconOnly(button))
         {
             minimum = 0;
             // Growth starts from the width the resting button already has, so the reveal
             // widens it from the first frame. Captions that fit there never move anything.
             double rest = RestingCaptionWidth(button);
-            if (caption > rest) maximum = rest + (caption - rest) * ShortcutRevealMotion.WidthProgress(hint);
+            if (caption > rest)
+            {
+                maximum = rest + (caption - rest) * ShortcutRevealMotion.WidthProgress(hint);
+                // The caption takes the whole step, not its own width: with Ideal text
+                // formatting that is fractional and would end short of the width the bar reserved.
+                step = maximum;
+            }
         }
-        if (face.MinWidth.Equals(minimum) && hint.MaxWidth.Equals(maximum)) return false;
+        if (face.MinWidth.Equals(minimum) && hint.MaxWidth.Equals(maximum) && hint.MinWidth.Equals(step)) return false;
         face.MinWidth = minimum;
         hint.MaxWidth = maximum;
+        hint.MinWidth = step;
         return true;
     }
 

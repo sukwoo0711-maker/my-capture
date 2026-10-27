@@ -25,7 +25,7 @@ public sealed class EditorCommandBarAdaptiveTests(ITestOutputHelper output)
         bool always = false;
         using var preference = new HintPreference(() => always);
         using EditorWindowHost host = EditorWindowHost.Create();
-        host.Window.Resources = SystemHighContrastThemeTests.LoadTheme();
+        UseShippedTheme(host.Window);
         VisualTreeHelper.SetRootDpi(host.Window, new DpiScale(scale, scale));
         Assert.Equal(680, host.Window.MinWidth);
         foreach (bool crop in new[] { false, true })
@@ -45,6 +45,7 @@ public sealed class EditorCommandBarAdaptiveTests(ITestOutputHelper output)
                 {
                     always = persistent;
                     ShortcutPresentation.SetAltRevealed(host.Window, reveal);
+                    ShortcutPresentation.Refresh();
                     host.Window.Dispatcher.Invoke(System.Windows.Threading.DispatcherPriority.ApplicationIdle, new Action(host.Window.UpdateLayout));
                     var bar = Descendants(host.Editor).OfType<CommandGroupsPanel>().Single(panel => panel.IsVisible);
                     var left = (FrameworkElement)bar.Children[0];
@@ -110,15 +111,16 @@ public sealed class EditorCommandBarAdaptiveTests(ITestOutputHelper output)
     });
 
     [Theory]
-    // Measured with the editing commands as borderless tool buttons (no 1-DIP outline).
-    [InlineData("ko-KR", new[] { 969, 935, 889, 862, 779, 721, 648 })]
-    [InlineData("en-US", new[] { 940, 894, 858, 827, 747, 710, 648 })]
+    // Measured with the editing commands as borderless tool buttons (no 1-DIP outline), in the
+    // shipped UI font (the bundled Pretendard) and its Ideal text formatting.
+    [InlineData("ko-KR", new[] { 793, 752, 705, 640 })]
+    [InlineData("en-US", new[] { 798, 762, 726, 664 })]
     public void NamesCollapseOneCommandAtATimeInTheirDeclaredOrder(string language, int[] boundaries) => StaTestHost.Run(() =>
     {
         using var culture = UiText.UseLanguage(language);
         using var preference = new HintPreference(() => false);
         using EditorWindowHost host = EditorWindowHost.Create();
-        host.Window.Resources = SystemHighContrastThemeTests.LoadTheme();
+        UseShippedTheme(host.Window);
         VisualTreeHelper.SetRootDpi(host.Window, new DpiScale(1, 1));
         // Measure the bar's natural boundary separately from the supported 680-DIP floor.
         // The preceding test verifies the unchanged real minimum and every supported size.
@@ -131,10 +133,10 @@ public sealed class EditorCommandBarAdaptiveTests(ITestOutputHelper output)
         Button[] ordered = Descendants(bar).OfType<Button>()
             .Where(button => (int)button.GetValue(CommandButtonPresentation.CollapseOrderProperty) > 0)
             .OrderBy(button => (int)button.GetValue(CommandButtonPresentation.CollapseOrderProperty)).ToArray();
-        // Cancel, Crop, Copy, Save to file, Auto-redact, Copy text.
-        Assert.Equal(["EditorFlowCancel", "Capture410Crop", "EditorFlowCopy"], ordered.Take(3).Select(AutomationProperties.GetAutomationId));
+        // Crop, Auto-redact, Copy text. Save and Copy-and-close stay labelled.
+        Assert.Equal(["Capture410Crop"], ordered.Take(1).Select(AutomationProperties.GetAutomationId));
         Assert.Equal("EditorFlowCopyText", AutomationProperties.GetAutomationId(ordered[^1]));
-        Assert.Equal(6, ordered.Length);
+        Assert.Equal(3, ordered.Length);
         // How many names a width hides, or null when the bar cannot hold Alt's widths on one row.
         int? Hidden(int width)
         {
@@ -168,6 +170,14 @@ public sealed class EditorCommandBarAdaptiveTests(ITestOutputHelper output)
         }
         Assert.Equal(boundaries, measuredWidths);
     });
+
+    // The theme, UI font and text settings the real editor window takes from Window.Standard.
+    private static void UseShippedTheme(Window window)
+    {
+        window.Resources = SystemHighContrastThemeTests.LoadTheme();
+        window.SetResourceReference(Control.FontFamilyProperty, "Font.Ui");
+        MyCapture.App.Themes.ThemeFonts.ApplyText(window);
+    }
 
     // Stages are chosen for this width: every command as wide as it is while its caption shows.
     private static double RevealedWidth(CommandGroupsPanel bar)

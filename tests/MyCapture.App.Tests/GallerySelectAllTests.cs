@@ -50,9 +50,10 @@ public sealed class GallerySelectAllTests(ITestOutputHelper output)
         for (int i = 0; i < groups.Length; i++) Assert.Same(groups[i], current.Groups[i]);
         for (int i = 0; i < rows.Length; i++) Assert.Same(rows[i], current.Rows[i]);
         Assert.Equal(new[] { nameof(GalleryViewModel.SelectedTiles), nameof(GalleryViewModel.HasSelection),
-            nameof(GalleryViewModel.SelectionText), nameof(GalleryViewModel.SingleSelectedTile),
+            nameof(GalleryViewModel.SelectionText), nameof(GalleryViewModel.SingleSelectedTile), nameof(GalleryViewModel.HasSingleSelection),
             nameof(GalleryViewModel.CanReduceSelected), nameof(GalleryViewModel.CanGifSelected) }, raised);
-        Assert.Equal(UiText.Format("LibrarySelection_Count", current.Selection.SelectedIds.Count), current.SelectionText);
+        Assert.Equal(current.HasSelection ? UiText.Format("LibrarySelection_Count", current.Selection.SelectedIds.Count)
+            : UiText.Get("LibraryUx_NoSelection"), current.SelectionText);
         Assert.All(current.SelectedTiles, tile => Assert.True(tile.IsSelected));
         switch (scenario)
         {

@@ -179,7 +179,7 @@ internal sealed class RollingFileLog : IDisposable
     private void RotateLocked()
     {
         CloseLocked();
-        File.Delete(FilePath(MaximumFiles - 1));
+        global::MyCapture.Core.Storage.RecoverableFileRemoval.DeleteFile(FilePath(MaximumFiles - 1));
         for (int generation = MaximumFiles - 2; generation >= 0; generation--)
         {
             string source = FilePath(generation);

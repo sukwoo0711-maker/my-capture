@@ -1481,10 +1481,6 @@ This cannot be undone.</value>
     <value>Delete selection (Delete)</value>
     <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
   </data>
-  <data name="Text_7E6DD424D331" xml:space="preserve">
-    <value>Loading video… {0}%</value>
-    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
-  </data>
   <data name="Text_7F2ED132EA3B" xml:space="preserve">
     <value>Repeat last region shortcut</value>
     <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
@@ -2553,10 +2549,6 @@ This cannot be undone.</value>
     <value>MyCapture — Edit image</value>
     <comment>src\MyCapture.App\Gallery\GalleryEditorWindow.cs</comment>
   </data>
-  <data name="Text_DA09CBABFC1E" xml:space="preserve">
-    <value>Loading video… 0%</value>
-    <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
-  </data>
   <data name="Text_DA9B79FCBFC8" xml:space="preserve">
     <value>GIF quality and size</value>
     <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
@@ -3267,7 +3259,7 @@ Open the library or Settings from the tray menu.</value></data>
   <data name="Library.Organize.Hint" xml:space="preserve"><value>Add a title and tags to find it with search. Stored on this PC; the image and recognized text are unchanged.</value></data>
   <data name="Library.Organize.Name" xml:space="preserve"><value>Title</value></data>
   <data name="Library.Organize.Tags" xml:space="preserve"><value>Tags</value></data>
-  <data name="Library.Organize.TagsHint" xml:space="preserve"><value>Separate tags with commas. Up to 12 tags, 32 characters each. A title or tag does not prevent automatic cleanup; use Keep to retain important captures.</value></data>
+  <data name="Library.Organize.TagsHint" xml:space="preserve"><value>Separate tags with commas. Up to 12 tags, 32 characters each. Titles and tags do not prevent automatic deletion. Move important captures to Kept.</value></data>
   <data name="Library.Organize.Saved" xml:space="preserve"><value>Title and tags saved · Included in search</value></data>
   <data name="Library.Organize.Missing" xml:space="preserve"><value>This capture is no longer in the library. Your draft has not been discarded.</value></data>
   <data name="Library.Organize.Invalid" xml:space="preserve"><value>Use a title up to 140 characters and up to 12 tags of 32 characters. Control characters are not allowed.</value></data>
@@ -3316,6 +3308,7 @@ Open the library or Settings from the tray menu.</value></data>
   <data name="Library.Source.ShowAll" xml:space="preserve"><value>Show all</value></data>
   <data name="Library.Source.ShowLess" xml:space="preserve"><value>Show less</value></data>
   <data name="Library.Source.PathCopied" xml:space="preserve"><value>Path copied</value></data>
+  <data name="Library.Image.Copied" xml:space="preserve"><value>Image copied</value></data>
   <data name="Library.Source.CopyPathFailed" xml:space="preserve"><value>Could not copy the path. Please try again.</value></data>
   <data name="Library.Source.OpenFolderFailed" xml:space="preserve"><value>Could not open the folder.</value></data>
   <data name="Library.Source.FolderMissing" xml:space="preserve"><value>The folder could not be found. It may have been moved or deleted.</value></data>
@@ -3337,8 +3330,11 @@ Open the library or Settings from the tray menu.</value></data>
   <data name="QuickAccess.Saved" xml:space="preserve"><value>Saved</value></data>
   <data name="QuickAccess.Saving" xml:space="preserve"><value>Saving…</value></data>
   <data name="QuickAccess.Sound" xml:space="preserve"><value>Play capture sound</value></data>
+  <data name="QuickAccess.NotifyOnQuickSave" xml:space="preserve"><value>Notify after quick save</value></data>
+  <data name="QuickAccess.OpenFolder" xml:space="preserve"><value>Open folder</value></data>
   <data name="QuickAccess.Title" xml:space="preserve"><value>Capture quick access</value></data>
   <data name="QuickAccess.CopyText" xml:space="preserve"><value>Copy text</value></data>
+  <data name="QuickAccess.TextLabel" xml:space="preserve"><value>Text</value></data>
   <data name="QuickAccess.CopyingText" xml:space="preserve"><value>Recognizing text…</value></data>
   <data name="QuickAccess.TextCopied" xml:space="preserve"><value>Text copied</value></data>
   <data name="QuickAccess.CopyFailed" xml:space="preserve"><value>Could not copy · Press {0} to retry</value></data>
@@ -3555,6 +3551,7 @@ Delete {1} {1:plural:subfolder|subfolders}, {2} {2:plural:image|images}, and {3}
   <data name="RecordingPause_Status" xml:space="preserve"><value>Paused</value></data>
   <data name="RecordingPause_StatusHelp" xml:space="preserve"><value>Select Resume to continue recording, or press Esc or select Stop to finish it.</value></data>
   <data name="RecordingStatus_StopHelp" xml:space="preserve"><value>Press Esc or select Stop to finish the recording.</value></data>
+  <data name="RecordingStatus_Saved" xml:space="preserve"><value>Saved</value></data>
   <data name="RecordingPause_State" xml:space="preserve"><value>Paused</value></data>
   <data name="PinRestore_Command" xml:space="preserve"><value>Reopen closed pin</value></data>
   <data name="PinRestore_CommandHelp" xml:space="preserve"><value>Reopens the most recently closed pin at its last position, zoom, and opacity.</value></data>
@@ -3897,7 +3894,7 @@ Delete {1} {1:plural:subfolder|subfolders}, {2} {2:plural:image|images}, and {3}
   <data name="About_LastChecked" xml:space="preserve"><value>Last checked {0:HH:mm} · {1}</value></data>
   <data name="About_UpToDate" xml:space="preserve"><value>Up to date</value></data>
   <data name="About_PrivacyHeading" xml:space="preserve"><value>Privacy</value></data>
-  <data name="About_PrivacyLocal" xml:space="preserve"><value>Captures and text recognition are processed on this PC.</value></data>
+  <data name="About_PrivacyLocal" xml:space="preserve"><value>Captures, text recognition and translation are processed on this PC.</value></data>
   <data name="About_PrivacyModel" xml:space="preserve"><value>Accurate downloads text recognition models (about {0} MB) from ModelScope. Images are never sent.</value></data>
   <data name="About_PrivacyGitHub" xml:space="preserve"><value>GitHub upload posts to a public issue only when you run it.</value></data>
   <data name="About_PrivacyUpdates" xml:space="preserve"><value>With automatic checks on, MyCapture looks up new version information once a day.</value></data>
@@ -4038,7 +4035,7 @@ Delete {1} {1:plural:subfolder|subfolders}, {2} {2:plural:image|images}, and {3}
   <data name="EditorFlow_CommandBarName" xml:space="preserve"><value>Editing commands</value></data>
   <data name="SettingsUx_AlwaysShowShortcutHints" xml:space="preserve"><value>Always show shortcut keys</value></data>
   <data name="SettingsUx_AlwaysShowShortcutHintsHint" xml:space="preserve"><value>When off, shortcut keys appear under buttons only while Alt is held.</value></data>
-  <data name="EditorFlow_CopyHint" xml:space="preserve"><value>Copy the edited image to the clipboard</value></data>
+  <data name="EditorFlow_CopyHint" xml:space="preserve"><value>Copy to the clipboard, save to the library and close</value></data>
   <data name="EditorFlow_CropBarName" xml:space="preserve"><value>Crop commands</value></data>
   <data name="EditorFlow_SelectionCleared" xml:space="preserve"><value>Selection cleared</value></data>
   <data name="EditorFlow_Selected" xml:space="preserve"><value>Selected: {0}</value></data>
@@ -4071,12 +4068,13 @@ Delete {1} {1:plural:subfolder|subfolders}, {2} {2:plural:image|images}, and {3}
   <data name="EditRecovery_Detail" xml:space="preserve"><value>{0} · {1} × {2}</value></data>
   <data name="EditRecovery_TimeFormat" xml:space="preserve"><value>MMM d, HH:mm</value><comment>.NET custom date and time format for when a draft was saved.</comment></data>
   <data name="EditRecovery_RowAction" xml:space="preserve"><value>{0}: {1}</value></data>
-  <data name="Onboard_TryNow" xml:space="preserve"><value>Try it now</value></data>
+  <data name="Onboard_TryNow" xml:space="preserve"><value>Capture region</value></data>
   <data name="Onboard_TryNowHelp" xml:space="preserve"><value>Closes this window and starts a region capture.</value></data>
   <data name="Onboard_StepsName" xml:space="preserve"><value>Getting started</value></data>
   <data name="Onboard_StepNumber" xml:space="preserve"><value>Step {0}</value></data>
   <data name="Onboard_AfterCaptureTitle" xml:space="preserve"><value>After a capture</value></data>
   <data name="Welcome_FirstCaptureTitle" xml:space="preserve"><value>Try your first capture</value></data>
+  <data name="Welcome_PinClipboardHint" xml:space="preserve"><value>Press {0} to keep copied tables and code above other windows for reference.</value></data>
   <data name="Welcome_Skip" xml:space="preserve"><value>Skip</value></data>
   <data name="Onboard_FirstCaptureTip" xml:space="preserve"><value>Press P to pin it above other windows</value></data>
   <data name="Onboard_ReceiptKeyboard" xml:space="preserve"><value>Alt+Q to focus · Tab to move · Enter to run</value></data>
@@ -4137,7 +4135,7 @@ Delete {1} {1:plural:subfolder|subfolders}, {2} {2:plural:image|images}, and {3}
   <data name="Onboard_PinWheelDown" xml:space="preserve"><value>Ctrl+wheel down</value></data>
   <data name="Onboard_PinWheelUp" xml:space="preserve"><value>Ctrl+wheel up</value></data>
   <data name="Onboard_PinAllowClickThrough" xml:space="preserve"><value>Click through to windows behind</value></data>
-  <data name="Onboard_PinAllowClickThroughHelp" xml:space="preserve"><value>Sends mouse input to the window behind. Turn off: {0}</value></data>
+  <data name="Onboard_PinAllowClickThroughHelp" xml:space="preserve"><value>Sends mouse input to the window behind. Click the handle at the pin's top-right corner to turn it off. Turn off: {0}</value></data>
   <data name="Onboard_PinClickThroughOn" xml:space="preserve"><value>Click through to windows behind: on
 Turn off: {0}</value></data>
   <data name="Onboard_PinClickThroughOff" xml:space="preserve"><value>Click through to windows behind: off</value></data>
@@ -4638,4 +4636,108 @@ Overwrite these shortcuts? You can change this later in Settings → Shortcuts.<
   <data name="About_DiagnosticsBundleHelp" xml:space="preserve"><value>Saves recent logs and diagnostics in one ZIP file. Captures, clipboard contents, window titles and file paths are not included, and nothing is sent automatically.</value></data>
   <data name="About_DiagnosticsBundleSaved" xml:space="preserve"><value>Diagnostics bundle saved</value></data>
   <data name="About_DiagnosticsBundleFilter" xml:space="preserve"><value>Diagnostics bundle (*.zip)|*.zip</value></data>
+  <data name="Translate_Tab" xml:space="preserve"><value>Translate</value></data>
+  <data name="Translate_Direction" xml:space="preserve"><value>English → Korean</value></data>
+  <data name="Translate_Summary" xml:space="preserve"><value>English → Korean · {0} blocks</value></data>
+  <data name="Translate_SummaryOne" xml:space="preserve"><value>English → Korean · 1 block</value></data>
+  <data name="Translate_Copy" xml:space="preserve"><value>Copy translation</value></data>
+  <data name="Translate_CopyWithSource" xml:space="preserve"><value>Copy with original</value></data>
+  <data name="Translate_CopyHelp" xml:space="preserve"><value>Copies the translations to the clipboard</value></data>
+  <data name="Translate_List" xml:space="preserve"><value>Translations</value></data>
+  <data name="Translate_Checking" xml:space="preserve"><value>Checking the translation model</value></data>
+  <data name="Translate_OffTitle" xml:space="preserve"><value>Translation is off</value></data>
+  <data name="Translate_OffBody" xml:space="preserve"><value>Turning translation on downloads the English-to-Korean translation model (about {0} MB) once. Translation runs on this PC; images and text are not sent anywhere. You can delete the model in Settings.</value></data>
+  <data name="Translate_TurnOn" xml:space="preserve"><value>Turn on translation ({0} MB)</value></data>
+  <data name="Translate_Downloading" xml:space="preserve"><value>Downloading the translation model</value></data>
+  <data name="Translate_DownloadingBody" xml:space="preserve"><value>Closing the window or cancelling stops the download. Files already downloaded are kept for next time.</value></data>
+  <data name="Translate_DownloadProgress" xml:space="preserve"><value>{0} / {1} MB</value></data>
+  <data name="Translate_DownloadFailed" xml:space="preserve"><value>Download failed</value></data>
+  <data name="Translate_Retry" xml:space="preserve"><value>Try again</value></data>
+  <data name="Translate_Progress" xml:space="preserve"><value>Translating · {0}/{1}</value></data>
+  <data name="Translate_OnThisPc" xml:space="preserve"><value>Translation runs on this PC.</value></data>
+  <data name="Translate_NothingTitle" xml:space="preserve"><value>No English to translate</value></data>
+  <data name="Translate_NothingBody" xml:space="preserve"><value>Cells with only identifiers or numbers, and text that is not English, are not translated.</value></data>
+  <data name="Translate_Cancelled" xml:space="preserve"><value>Translation cancelled</value></data>
+  <data name="Translate_Again" xml:space="preserve"><value>Translate again</value></data>
+  <data name="Translate_FailedTitle" xml:space="preserve"><value>Translation failed</value></data>
+  <data name="Translate_LoadFailed" xml:space="preserve"><value>Couldn't open the translation model. Delete it in Settings, then download it again.</value></data>
+  <data name="Translate_ErrorNetwork" xml:space="preserve"><value>Can't connect to the network. Check the connection and try again.</value></data>
+  <data name="Translate_ErrorDiskFull" xml:space="preserve"><value>Not enough disk space. Free up at least {0} MB and try again.</value></data>
+  <data name="Translate_ErrorCorrupt" xml:space="preserve"><value>A downloaded file is damaged. Try again.</value></data>
+  <data name="Translate_ErrorDisk" xml:space="preserve"><value>Can't save the translation model. Check the free space and permissions.</value></data>
+  <data name="Translate_SourceName" xml:space="preserve"><value>Original {0}</value></data>
+  <data name="Translate_TranslationName" xml:space="preserve"><value>Translation {0}</value></data>
+  <data name="Translate_BlockName" xml:space="preserve"><value>Block {0}</value></data>
+  <data name="Translate_WarningMissing" xml:space="preserve"><value>Missing from the translation: {0}</value></data>
+  <data name="Translate_WarningInvented" xml:space="preserve"><value>Not in the original: {0}</value></data>
+  <data name="SettingsUx_TranslationHeading" xml:space="preserve"><value>Translation</value></data>
+  <data name="Settings_TranslationModel" xml:space="preserve"><value>Translation model</value></data>
+  <data name="Settings_TranslationModelHint" xml:space="preserve"><value>Translates English into Korean in the Translate view of the text recognition window. Translation runs on this PC. The model is downloaded when you first turn translation on there.</value></data>
+  <data name="Settings_TranslationInstalled" xml:space="preserve"><value>Installed · {0} MB</value></data>
+  <data name="Settings_TranslationNotInstalled" xml:space="preserve"><value>Not installed</value></data>
+  <data name="Settings_TranslationDelete" xml:space="preserve"><value>Delete model</value></data>
+  <data name="Settings_TranslationDeleteConfirm" xml:space="preserve"><value>Delete the translation model ({0} MB)? To translate again, the model has to be downloaded again.</value></data>
+  <data name="Settings_TranslationDeleted" xml:space="preserve"><value>Translation model deleted</value></data>
+  <data name="Settings_TranslationDeleteFailed" xml:space="preserve"><value>Couldn't delete the translation model.</value></data>
+  <data name="About_PrivacyTranslation" xml:space="preserve"><value>Translation downloads its model (about {0} MB) from GitHub when you first turn it on. Text to translate is never sent.</value></data>
+  <data name="Settings.OcrQualityHint.X86" xml:space="preserve"><value>The 32-bit edition uses Windows OCR with image scaling, contrast and rotation preprocessing according to the quality setting.</value></data>
+  <data name="Settings.OcrQualityAccurate.X86" xml:space="preserve"><value>Accurate (Windows OCR with preprocessing)</value></data>
+  <data name="Settings.TranslationUnavailable.X86" xml:space="preserve"><value>Translation is available in the 64-bit edition.</value></data>
+  <data name="LibraryUx_DragHelp" xml:space="preserve"><value>Drag help</value></data>
+  <data name="LibraryUx_DragOutImage" xml:space="preserve"><value>Drop outside the window to export PNG files</value></data>
+  <data name="LibraryUx_DragOutVideo" xml:space="preserve"><value>Drop outside the window to export MP4 files</value></data>
+  <data name="LibraryUx_DragOutMixed" xml:space="preserve"><value>Drop outside the window to export PNG and MP4 files</value></data>
+  <data name="Settings_DefaultFont" xml:space="preserve"><value>Restore default font</value></data>
+  <data name="Settings_FontScope" xml:space="preserve"><value>Applies to new text. Existing text keeps its font.</value></data>
+  <data name="App.CurrentVersion" xml:space="preserve"><value>Version {0}</value></data>
+  <data name="Welcome_CaptureInstruction" xml:space="preserve"><value>Select Capture region, then drag to choose the area to capture.</value></data>
+  <data name="Onboarding.Replay" xml:space="preserve"><value>First-use guide</value></data>
+  <data name="Onboarding.Ready" xml:space="preserve"><value>Finish</value></data>
+  <data name="Onboarding.CaptureLabel" xml:space="preserve"><value>Capture</value></data>
+  <data name="Onboarding.PinLabel" xml:space="preserve"><value>Pin</value></data>
+  <data name="Onboarding.LibraryLabel" xml:space="preserve"><value>Find again</value></data>
+  <data name="Onboarding.ProgressName" xml:space="preserve"><value>Step {0} of 3: {1}</value></data>
+  <data name="Onboarding.CaptureTitle" xml:space="preserve"><value>Capture part of the screen</value></data>
+  <data name="Onboarding.CaptureInstruction" xml:space="preserve"><value>Select the button below, then drag over the table.</value></data>
+  <data name="Onboarding.CaptureInstructionKey" xml:space="preserve"><value>Press this key or the button below, then drag over the table.</value></data>
+  <data name="Onboarding.PinTitle" xml:space="preserve"><value>Keep a copied table above other windows</value></data>
+  <data name="Onboarding.PinInstruction" xml:space="preserve"><value>First, copy the practice table with the button below.</value></data>
+  <data name="Onboarding.PressPin" xml:space="preserve"><value>Press {0}.</value></data>
+  <data name="Onboarding.PinButtonInstruction" xml:space="preserve"><value>Select the button below to pin it.</value></data>
+  <data name="Onboarding.LibraryTitle" xml:space="preserve"><value>Every capture is saved in the library</value></data>
+  <data name="Onboarding.LibraryInstruction" xml:space="preserve"><value>Open it from the MyCapture icon inside ^ on the taskbar.</value></data>
+  <data name="Onboarding.LibraryInstructionKey" xml:space="preserve"><value>Press this key or use the icon inside ^ on the taskbar.</value></data>
+  <data name="Onboarding.FinishTitle" xml:space="preserve"><value>You are ready</value></data>
+  <data name="Onboarding.FinishInstruction" xml:space="preserve"><value>Check the settings below, then get started.</value></data>
+  <data name="Onboarding.ReplayNote" xml:space="preserve"><value>You can replay this from ‘First-use guide’ in the tray menu.</value></data>
+  <data name="Onboarding.StartCapture" xml:space="preserve"><value>Start region capture</value></data>
+  <data name="Onboarding.CopyPractice" xml:space="preserve"><value>Copy practice table</value></data>
+  <data name="Onboarding.CreatePin" xml:space="preserve"><value>Create pin</value></data>
+  <data name="Onboarding.OpenLibrary" xml:space="preserve"><value>Open library</value></data>
+  <data name="Onboarding.Start" xml:space="preserve"><value>Get started</value></data>
+  <data name="Onboarding.CaptureCopied" xml:space="preserve"><value>Captured. It is also copied to the clipboard.</value></data>
+  <data name="Onboarding.Captured" xml:space="preserve"><value>Captured. It could not be copied to the clipboard.</value></data>
+  <data name="Onboarding.CaptureRetry" xml:space="preserve"><value>Nothing was captured. Try again.</value></data>
+  <data name="Onboarding.CaptureHint" xml:space="preserve"><value>Select the button, then drag over the table.</value></data>
+  <data name="Onboarding.CopyRetry" xml:space="preserve"><value>Could not copy. Select the button again.</value></data>
+  <data name="Onboarding.PracticeCopied" xml:space="preserve"><value>Copied. You can now pin it.</value></data>
+  <data name="Onboarding.CopyHint" xml:space="preserve"><value>Select ‘Copy practice table’.</value></data>
+  <data name="Onboarding.PinHint" xml:space="preserve"><value>If the key does nothing, select ‘Create pin’.</value></data>
+  <data name="Onboarding.PinClose" xml:space="preserve"><value>The pin is up. Close it with Esc or the pin’s Close button.</value></data>
+  <data name="Onboarding.LibraryHint" xml:space="preserve"><value>Select ‘Open library’.</value></data>
+  <data name="Onboarding.PracticeLabel" xml:space="preserve"><value>Practice table</value></data>
+  <data name="Onboarding.TableItem" xml:space="preserve"><value>Item</value></data>
+  <data name="Onboarding.TableSpec" xml:space="preserve"><value>Spec</value></data>
+  <data name="Onboarding.TableMemory" xml:space="preserve"><value>Memory</value></data>
+  <data name="Onboarding.TableStorage" xml:space="preserve"><value>Storage</value></data>
+  <data name="Onboarding.TrayLocation" xml:space="preserve"><value>The MyCapture icon is inside the ^ button.</value></data>
+  <data name="Onboarding.TrayIconName" xml:space="preserve"><value>MyCapture icon</value></data>
+  <data name="Onboarding.AboutBody" xml:space="preserve"><value>Three steps to try capture, pin and the library.</value></data>
+  <data name="Settings.QuickSaveDirectoryHint" xml:space="preserve"><value>Quick save always uses this folder. Leave blank to use the default capture folder.</value></data>
+  <data name="Pin.ClickThroughOff" xml:space="preserve"><value>Turn off click-through</value></data>
+  <data name="Pin.ClickThroughIntro" xml:space="preserve"><value>Click here to turn it off</value></data>
+  <data name="EditorFlow_CopyAndClose" xml:space="preserve"><value>Copy and close</value></data>
+  <data name="LibraryUx_NoSelection" xml:space="preserve"><value>No selection</value></data>
+  <data name="LibraryUx_Preview" xml:space="preserve"><value>Preview</value></data>
+  <data name="LibraryUx_PreviewHint" xml:space="preserve"><value>Preview (Space)</value></data>
 </root>

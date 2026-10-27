@@ -1,15 +1,16 @@
-﻿<Project>
+<Project>
 
   <PropertyGroup>
     <!--
-      Windows 10 22H2 (build 19045) is the x64 host floor. SupportedOSPlatformVersion selects
+      Windows 10 22H2 (build 19045) is the x64 and x86 host floor. SupportedOSPlatformVersion selects
       its shared 19041 API contract; WindowsSupportPolicy and package metadata enforce 19045.
       Keep the 22000 TFM for optional Windows 11 WinRT members, guarded at runtime.
     -->
     <TargetFramework>net10.0-windows10.0.22000.0</TargetFramework>
     <SupportedOSPlatformVersion>10.0.19041.0</SupportedOSPlatformVersion>
-    <Platforms>x64</Platforms>
-    <PlatformTarget>x64</PlatformTarget>
+    <Platforms>x64;x86</Platforms>
+    <PlatformTarget Condition="'$(PlatformTarget)' == '' and ('$(Platform)' == 'x86' or '$(RuntimeIdentifier)' == 'win-x86')">x86</PlatformTarget>
+    <PlatformTarget Condition="'$(PlatformTarget)' == ''">x64</PlatformTarget>
 
     <Nullable>enable</Nullable>
     <LangVersion>latest</LangVersion>
@@ -30,9 +31,9 @@
     <!-- The application and its implementation libraries are shipped together as the
          verified desktop bundle; none is an independently supported NuGet package. -->
     <IsPackable>false</IsPackable>
-    <Version>4.7.0</Version>
-    <FileVersion>4.7.0.0</FileVersion>
-    <AssemblyVersion>4.7.0.0</AssemblyVersion>
+    <Version>4.9.0</Version>
+    <FileVersion>4.9.0.0</FileVersion>
+    <AssemblyVersion>4.9.0.0</AssemblyVersion>
     <Copyright>Copyright (c) 2026 MyCapture contributors</Copyright>
 
     <GenerateDocumentationFile>false</GenerateDocumentationFile>

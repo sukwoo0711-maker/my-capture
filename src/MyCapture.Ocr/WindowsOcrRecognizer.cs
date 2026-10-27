@@ -1,11 +1,8 @@
-using System.IO;
 using System.Runtime.InteropServices;
-using System.Runtime.InteropServices.WindowsRuntime;
 using System.Windows.Media.Imaging;
 using Microsoft.Extensions.Logging;
 using Windows.Globalization;
 using Windows.Graphics.Imaging;
-using Windows.Storage.Streams;
 using WinRtOcrEngine = Windows.Media.Ocr.OcrEngine;
 using WinRtOcrResult = Windows.Media.Ocr.OcrResult;
 using WinRtOcrLine = Windows.Media.Ocr.OcrLine;
@@ -95,7 +92,7 @@ internal sealed class WindowsOcrRecognizer : IOcrRecognizer
         SoftwareBitmap? softwareBitmap = null;
         try
         {
-            softwareBitmap = await DecodeToSoftwareBitmapAsync(preparedBitmap, cancellationToken)
+            softwareBitmap = await WindowsOcrBitmapBridge.CreateAsync(preparedBitmap, cancellationToken)
                 .ConfigureAwait(false);
             if (softwareBitmap is null)
             {
@@ -167,45 +164,4 @@ internal sealed class WindowsOcrRecognizer : IOcrRecognizer
         return new RecognizedText(tag, lines);
     }
 
-    /// <summary>
-    /// Encodes the WPF bitmap to PNG in memory, then decodes it into a BGRA8 SoftwareBitmap the
-    /// OCR engine accepts. Every WinRT stream is disposed.
-    /// </summary>
-    private static async Task<SoftwareBitmap?> DecodeToSoftwareBitmapAsync(
-        BitmapSource bitmap,
-        CancellationToken cancellationToken)
-    {
-        // PNG encoding is CPU/memory intensive for large captures and this recognizer is normally
-        // entered from the UI. The service supplies frozen bitmaps, which are safe to encode on a
-        // worker without retaining dispatcher affinity.
-        byte[] png = await Task.Run(() => EncodePng(bitmap), cancellationToken)
-            .ConfigureAwait(false);
-        cancellationToken.ThrowIfCancellationRequested();
-
-        using var stream = new InMemoryRandomAccessStream();
-        await stream.WriteAsync(png.AsBuffer()).AsTask(cancellationToken).ConfigureAwait(false);
-        stream.Seek(0);
-
-        Windows.Graphics.Imaging.BitmapDecoder decoder =
-            await Windows.Graphics.Imaging.BitmapDecoder.CreateAsync(stream)
-                .AsTask(cancellationToken)
-                .ConfigureAwait(false);
-
-        SoftwareBitmap software = await decoder.GetSoftwareBitmapAsync(
-                BitmapPixelFormat.Bgra8,
-                BitmapAlphaMode.Premultiplied)
-            .AsTask(cancellationToken)
-            .ConfigureAwait(false);
-
-        return software;
-    }
-
-    private static byte[] EncodePng(BitmapSource bitmap)
-    {
-        var encoder = new PngBitmapEncoder { Interlace = PngInterlaceOption.Off };
-        encoder.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(bitmap));
-        using var memory = new MemoryStream();
-        encoder.Save(memory);
-        return memory.ToArray();
-    }
 }

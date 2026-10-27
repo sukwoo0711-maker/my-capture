@@ -114,6 +114,7 @@ public sealed partial class SettingsThemePreviewTests
             window.Height = window.MinHeight;
             FluidMotion.SetWindowEntrance(window, false);
             window.Show();
+            window.SetDetailsPaneOpen(true);
             SettleGalleryLayout(window);
             var details = (Border)window.FindName("GalleryDetailsPanel");
             var metadata = (ScrollViewer)window.FindName("GalleryDetailsScroll");

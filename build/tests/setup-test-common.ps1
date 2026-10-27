@@ -6,11 +6,12 @@ if (-not [IO.File]::Exists($setupTestExe)) { throw 'Build MyCapture.Setup Releas
 [Reflection.Assembly]::LoadFrom($setupTestExe) | Out-Null
 
 function Remove-TestItem([string]$Path) {
-    # Permanently deletes only this test's own fixture under TEMP.
+    # Recycles only this test's own fixture under TEMP; unavailable recycling preserves it.
     $full = [IO.Path]::GetFullPath($Path)
     $temp = [IO.Path]::GetFullPath([IO.Path]::GetTempPath()).TrimEnd('\')
     if (-not $full.StartsWith($temp + '\', [StringComparison]::OrdinalIgnoreCase)) { throw "Test cleanup must remain under TEMP: $full" }
-    if (Test-Path -LiteralPath $full) { Remove-Item -LiteralPath $full -Recurse -Force }
+    if ([IO.Directory]::Exists($full)) { [MyCapture.Core.Storage.RecoverableFileRemoval]::DeleteDirectory($full, $true) }
+    elseif ([IO.File]::Exists($full)) { [MyCapture.Core.Storage.RecoverableFileRemoval]::DeleteFile($full) }
 }
 function Get-SetupBootstrapSource([string]$Name) {
     if ($Name -eq 'SETUP-HELP.txt') { return Join-Path $setupTestRepo 'build\installer\SETUP-HELP.txt' }

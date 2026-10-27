@@ -11,6 +11,7 @@ using System.Windows.Media.Imaging;
 using System.Windows.Shapes;
 using System.Windows.Threading;
 using MyCapture.App.Themes;
+using MyCapture.App.Editing;
 using MyCapture.App.Sources;
 using MyCapture.Core.Capture;
 using MyCapture.Core.Pin;
@@ -77,6 +78,9 @@ internal sealed class PinWindow : Window
     private readonly TextBlock _feedbackText;
     private readonly Button _feedbackDismiss;
     private readonly FeedbackCountdown _feedbackCountdown;
+    private readonly FeedbackCountdown _progressReveal;
+    private string? _pendingProgress;
+    private static int _selectionHintShown;
     private FeedbackKind _feedbackKind;
     private (string Text, FeedbackKind Kind)? _heldFeedback;
     private int _feedbackGeneration;
@@ -85,6 +89,8 @@ internal sealed class PinWindow : Window
     private readonly DispatcherTimer _zoomSettleTimer;
     private readonly DispatcherTimer _hoverHideTimer;
     private PinHoverBar? _hoverBar;
+    private PinClickThroughHandle? _clickThroughHandle;
+    private bool _clickThroughIntroductionPending;
     private double _labeledHoverBarWidth;
 
     private bool _liveZooming;
@@ -95,7 +101,10 @@ internal sealed class PinWindow : Window
     private int _lastDragCursorX = int.MinValue;
     private int _lastDragCursorY = int.MinValue;
     private IntPtr _handle;
+    // Closed as far as anyone can tell: set when a close starts, even while its exit still plays.
     private bool _isClosed;
+    private bool _closeStarted;
+    private bool _windowClosed;
     private bool _saveInProgress;
     private MenuItem? _restoreClosedItem;
     private MenuItem? _clickThroughItem;
@@ -250,6 +259,12 @@ internal sealed class PinWindow : Window
             Dispatcher,
             () => _feedback.IsMouseOver || _feedback.IsKeyboardFocusWithin,
             OnFeedbackExpired);
+        _progressReveal = new FeedbackCountdown(Dispatcher, static () => false, RevealProgress);
+        IsVisibleChanged += (_, args) =>
+        {
+            if (args.NewValue is false) CancelPendingProgress();
+            UpdateClickThroughHandle();
+        };
 
         // Tracks the double-click interval without modifying the clipboard on a single click.
         // Ctrl+C copies the image and retained source; Ctrl+double-click copies only text.
@@ -288,11 +303,12 @@ internal sealed class PinWindow : Window
             if (!_isClosed) ViewStateChanged?.Invoke();
         };
         Deactivated += (_, _) => SetChromeActive(false);
-        LocationChanged += (_, _) => PlaceHoverBar();
+        LocationChanged += (_, _) => { PlaceHoverBar(); _clickThroughHandle?.Place(); };
         SizeChanged += (_, _) =>
         {
             UpdateImageRasterLayout();
             PlaceHoverBar();
+            _clickThroughHandle?.Place();
         };
         PendingProvenanceUpdateForTest = content.PendingProvenance is { } pending
             ? ApplyPendingProvenanceAsync(new WeakReference<PinWindow>(this), pending)
@@ -395,7 +411,7 @@ internal sealed class PinWindow : Window
             double target = AdjustOpacity(opacity - _state.Opacity);
             ShowFeedback(UiText.Format("Text_C740003A2150", target * 100));
         };
-        bar.CloseRequested += Close;
+        bar.CloseRequested += CloseWithExit;
         bar.MouseEnter += (_, _) => _hoverHideTimer.Stop();
         bar.MouseLeave += (_, _) => ScheduleHoverBarHide();
         bar.SizeChanged += (_, _) => PlaceHoverBar();
@@ -495,6 +511,8 @@ internal sealed class PinWindow : Window
     /// </summary>
     internal PinContent PinnedContent => _content;
 
+    internal ClipboardImageService.PngCache ClipboardCache { get; } = new();
+
     /// <summary>
     /// Where this pin was on the virtual desktop when it began closing, or
     /// <see langword="null"/> when it closed before it had a native window.
@@ -554,6 +572,16 @@ internal sealed class PinWindow : Window
 
     /// <summary>Test hook: spends display time as the countdown's clock would.</summary>
     internal void AdvanceFeedbackForTest(TimeSpan elapsed) => _feedbackCountdown.Advance(elapsed);
+
+    internal void AdvanceProgressForTest(TimeSpan elapsed) => _progressReveal.Advance(elapsed);
+    internal bool IsProgressPendingForTest => _pendingProgress is not null;
+    internal TimeSpan? FeedbackRemainingForTest => _feedbackCountdown.Remaining;
+    internal Action<UIElement, string, FeedbackKind, string> AnnounceFeedback { get; set; } = FeedbackTiming.Announce;
+    internal static int SelectionHintShownForTest
+    {
+        get => Volatile.Read(ref _selectionHintShown);
+        set => Interlocked.Exchange(ref _selectionHintShown, value);
+    }
 
     /// <summary>
     /// Test hook: fires the feedback auto-hide logic immediately, without waiting for the
@@ -626,17 +654,63 @@ internal sealed class PinWindow : Window
     /// <summary>Applies click-through by toggling extended window styles via the facade.</summary>
     internal void ApplyClickThrough(bool enabled)
     {
+        bool changed = _state.IsClickThrough != enabled;
         _state.SetClickThrough(enabled);
         if (_handle != IntPtr.Zero)
         {
             WindowStyleFacade.SetClickThrough(_handle, enabled);
         }
 
-        if (enabled) HideHoverBar();
+        if (enabled)
+        {
+            HideHoverBar();
+            if (changed) _clickThroughIntroductionPending = true;
+        }
+        else
+        {
+            _clickThroughIntroductionPending = false;
+        }
+
         // Turning it on carries the key that turns it off again, which needs time to read.
         ShowFeedback(
             enabled ? UiText.Format("Onboard_PinClickThroughOn", ClickThroughRecoveryHint()) : UiText.Get("Onboard_PinClickThroughOff"),
             enabled ? FeedbackKind.Result : FeedbackKind.Confirmation);
+        // The pin is click-transparent, so the way back is a separate excluded target.
+        UpdateClickThroughHandle();
+    }
+
+    internal event Action? ClickThroughHintShown;
+    internal PinClickThroughHandle? ClickThroughHandleForTest => _clickThroughHandle;
+
+    private void UpdateClickThroughHandle()
+    {
+        if (_isClosed || _state.IsHidden || !_state.IsClickThrough || !IsVisible || _handle == IntPtr.Zero)
+        {
+            _clickThroughHandle?.Hide();
+            return;
+        }
+        if (_clickThroughHandle is null)
+        {
+            _clickThroughHandle = new PinClickThroughHandle(this, ClickThroughGesture);
+            _clickThroughHandle.DisableRequested += () => ApplyClickThrough(false);
+        }
+        if (!_clickThroughHandle.IsVisible && !_clickThroughHandle.TryReveal())
+        {
+            // Never show capture controls without exclusion, or leave a newly enabled pin unreachable.
+            ApplyClickThrough(false);
+            return;
+        }
+        _clickThroughHandle.Place();
+        if (_clickThroughIntroductionPending)
+        {
+            _clickThroughIntroductionPending = false;
+            PinSettings settings = _settings();
+            if (settings.ClickThroughHintShownCount < 3 && _clickThroughHandle.ShowIntroduction())
+            {
+                settings.ClickThroughHintShownCount++;
+                ClickThroughHintShown?.Invoke();
+            }
+        }
     }
 
     /// <summary>Toggles click-through and returns the new state.</summary>
@@ -644,7 +718,7 @@ internal sealed class PinWindow : Window
     {
         bool next = !_state.IsClickThrough;
         ApplyClickThrough(next);
-        return next;
+        return _state.IsClickThrough;
     }
 
     /// <summary>The pin's window bounds in physical pixels; empty if not yet shown.</summary>
@@ -655,6 +729,8 @@ internal sealed class PinWindow : Window
     internal void HidePin()
     {
         _state.IsHidden = true;
+        UpdateClickThroughHandle();
+        CancelPendingProgress();
         StopLandingEffect();
         LeaveTextSelection(restoreFocus: false);
         HideHoverBar();
@@ -685,6 +761,8 @@ internal sealed class PinWindow : Window
         _state.IsHidden = false;
         _chrome.BeginAnimation(UIElement.OpacityProperty, null);
         Show();
+        // Show() need not change IsVisible when it interrupts the hide animation.
+        UpdateClickThroughHandle();
         Topmost = true;
         AnimatePinReveal();
     }
@@ -729,6 +807,8 @@ internal sealed class PinWindow : Window
     {
         RerenderForDisplayScale(newDpi.DpiScaleX);
         base.OnDpiChanged(oldDpi, newDpi);
+        _clickThroughHandle?.Place();
+        Dispatcher.BeginInvoke(DispatcherPriority.Loaded, new Action(() => _clickThroughHandle?.Place()));
     }
 
     /// <summary>Changes only the raster; the pin's DIP geometry and interaction state stay intact.</summary>
@@ -737,6 +817,7 @@ internal sealed class PinWindow : Window
         if (_isClosed || !_content.CanRerender) return;
         PinContent rendered = _content.RenderedAt(scale);
         if (ReferenceEquals(rendered, _content)) return;
+        ClipboardCache.Clear();
         _content = rendered;
         _imageElement.Source = rendered.Image;
         UpdateImageRasterLayout();
@@ -765,13 +846,92 @@ internal sealed class PinWindow : Window
         _imageClip.RadiusX = _imageClip.RadiusY = Math.Max(0, FrameCornerRadiusDip - FrameClipInsetDip) / zoom;
     }
 
+    /// <summary>How long a pin takes to leave after the user closes it: its landing played backwards.</summary>
+    internal static readonly TimeSpan ExitDuration = TimeSpan.FromMilliseconds(120);
+
+    /// <summary>
+    /// Keeps a leaving pin out of screen captures, so a capture that starts during its exit never
+    /// shows a pin the user already closed. Where Windows refuses, the pin closes at once instead.
+    /// Tests substitute a recorder.
+    /// </summary>
+    internal static Func<IntPtr, bool> ExcludeLeavingPinFromCapture { get; set; } =
+        MyCapture.App.Capture.CaptureWindowExclusion.TryApply;
+
+    /// <summary>
+    /// Raised once when the pin begins to close, before any exit plays and while its placement is
+    /// known; <see cref="Window.Closed"/> follows when the window itself is gone.
+    /// </summary>
+    internal event EventHandler? CloseStarted;
+
+    /// <summary>
+    /// Closes the pin the way a user close does (its close button, Esc or Delete, a double-click
+    /// when that setting is on, or its menu): the close happens now, so the placement, the
+    /// "reopen closed pin" history, the open-pin session and every list are already right, and
+    /// only the pixels linger. The pin shrinks to 0.97 and fades over <see cref="ExitDuration"/>
+    /// without taking input, and its hover bar fades with it over the fast token. Without
+    /// Windows animations, or when the leaving pin cannot be kept out of a capture, it closes at once.
+    /// </summary>
+    internal void CloseWithExit()
+    {
+        if (_isClosed) return;
+        StartClosing();
+        if (!FluidMotion.AnimationsEnabled || !IsVisible || _handle == IntPtr.Zero
+            || !ExcludeLeavingPinFromCapture(_handle))
+        {
+            Close();
+            return;
+        }
+
+        FluidMotion.BeginExit(this, ExitMotion.Shrink, CloseLeftWindow, ExitDuration);
+        if (!FluidMotion.IsExiting(this)) return;
+
+        // The frame owns its scale transform (the exit keeps a transform a screen owns), so the
+        // pin shrinks itself alongside the shared fade.
+        var shrink = new DoubleAnimation(1, 0.97, ExitDuration) { EasingFunction = FluidMotion.StandardEasing };
+        _pinScale.BeginAnimation(ScaleTransform.ScaleXProperty, shrink);
+        _pinScale.BeginAnimation(ScaleTransform.ScaleYProperty, shrink);
+        _hoverBar?.Leave();
+    }
+
+    /// <summary>Ends a playing exit now (close all, app exit): the window closes at once.</summary>
+    internal void CompleteExit() => FluidMotion.CompleteExit(this);
+
+    /// <summary>Whether the pin has closed but its exit is still on the screen.</summary>
+    internal bool IsLeaving => FluidMotion.IsExiting(this);
+
+    // The exit's deferred close; the window may already have been closed directly meanwhile.
+    private void CloseLeftWindow()
+    {
+        if (!_windowClosed) Close();
+    }
+
+    // Everything a close changes happens here, once, at its start: an exit only delays pixels.
+    private void StartClosing()
+    {
+        if (_closeStarted) return;
+        _closeStarted = true;
+        // Snapshot while the native window still exists and nothing has moved it.
+        ClosedPlacement = CaptureClosedPlacement();
+        _isClosed = true;
+        _clickThroughHandle?.Close();
+        _clickThroughHandle = null;
+        StopLandingEffect();
+        EndDrag();
+        _feedbackCountdown.Stop();
+        _ctrlClickTimer.Stop();
+        _zoomSettleTimer.Stop();
+        _hoverHideTimer.Stop();
+        if (ContextMenu is { IsOpen: true } menu) menu.IsOpen = false;
+        CloseStarted?.Invoke(this, EventArgs.Empty);
+    }
+
     protected override void OnClosing(System.ComponentModel.CancelEventArgs e)
     {
         base.OnClosing(e);
         if (!e.Cancel)
         {
-            // Snapshot while the native window still exists; Closed fires after it is gone.
-            ClosedPlacement = CaptureClosedPlacement();
+            // A direct close (close all, app exit) starts and ends in this one call.
+            StartClosing();
         }
     }
 
@@ -800,6 +960,7 @@ internal sealed class PinWindow : Window
         _ = sender;
         _ = e;
         AnimatePinReveal();
+        UpdateClickThroughHandle();
     }
 
     private void OnSourceInitialized(object? sender, EventArgs e)
@@ -935,7 +1096,7 @@ internal sealed class PinWindow : Window
             // Plain double-click closes the pin only when the setting says so, matching Snipaste.
             if (_settings().CloseOnDoubleClick)
             {
-                Close();
+                CloseWithExit();
                 e.Handled = true;
                 return;
             }
@@ -1034,8 +1195,9 @@ internal sealed class PinWindow : Window
 
     internal void HandleMouseWheel(MouseWheelEventArgs e, ModifierKeys modifiers)
     {
-        if (!modifiers.HasFlag(ModifierKeys.Control) && _textSelection?.TryScroll(e.Delta) == true)
+        if (!modifiers.HasFlag(ModifierKeys.Control) && _textSelection is { } selection)
         {
+            selection.TryScroll(e.Delta);
             e.Handled = true;
             return;
         }
@@ -1072,6 +1234,13 @@ internal sealed class PinWindow : Window
     protected override void OnPreviewKeyDown(KeyEventArgs e)
     {
         base.OnPreviewKeyDown(e);
+        // A closed pin that is still leaving takes no keys: its close has already happened.
+        if (_isClosed)
+        {
+            e.Handled = true;
+            return;
+        }
+
         // Text controls consume Copy and navigation before the bubbling window handler.
         if (IsTextSelectionMode) HandleKeyDown(e, Keyboard.Modifiers);
     }
@@ -1103,7 +1272,7 @@ internal sealed class PinWindow : Window
                     break;
                 }
 
-                Close();
+                CloseWithExit();
                 e.Handled = true;
                 break;
 
@@ -1200,11 +1369,14 @@ internal sealed class PinWindow : Window
         _chrome.Children.Insert(1, selection);
         if (_selectTextItem is not null) _selectTextItem.IsChecked = true;
         SelectionFocus.Enter(this, selection);
-        ShowFeedback(UiText.Get("Pin_SelectTextStarted"), FeedbackKind.Result);
+        bool firstEntry = Interlocked.Exchange(ref _selectionHintShown, 1) == 0;
+        ShowFeedback(UiText.Get("Pin_SelectTextStarted"),
+            firstEntry ? FeedbackKind.Result : FeedbackKind.Confirmation);
     }
 
     private void LeaveTextSelection(bool restoreFocus = true)
     {
+        CancelPendingProgress();
         if (_textSelection is null) return;
         _chrome.Children.Remove(_textSelection);
         _textSelection = null;
@@ -1620,12 +1792,43 @@ internal sealed class PinWindow : Window
         // OCR/clipboard completions can arrive after Close detached the timer's stop handler.
         // Never restart that timer or animate a window whose lifetime has ended.
         if (_isClosed) return;
-        if (kind != FeedbackKind.Echo)
+        if (kind == FeedbackKind.Progress)
         {
+            // Work that finishes within the reveal delay reports only its result.
+            CancelPendingProgress();
+            if (_state.IsHidden) return;
+            _pendingProgress = text;
+            _progressReveal.Start(FeedbackTiming.ProgressRevealDelay);
+            return;
+        }
+        if (kind == FeedbackKind.Echo)
+        {
+            // A readout passes over progress that has not appeared yet, as it does over shown progress.
+            if (_pendingProgress is { } pending) _heldFeedback = (pending, FeedbackKind.Progress);
+            CancelPendingProgress();
+        }
+        else
+        {
+            CancelPendingProgress();
             _heldFeedback = FeedbackTiming.DisplayTime(kind) is null ? (text, kind) : null;
         }
 
         PresentFeedback(text, kind, announce: true);
+    }
+
+    private void CancelPendingProgress()
+    {
+        _pendingProgress = null;
+        _progressReveal.Stop();
+    }
+
+    private void RevealProgress()
+    {
+        string? text = _pendingProgress;
+        CancelPendingProgress();
+        if (text is null || _isClosed || _state.IsHidden) return;
+        _heldFeedback = (text, FeedbackKind.Progress);
+        PresentFeedback(text, FeedbackKind.Progress, announce: true);
     }
 
     private void PresentFeedback(string text, FeedbackKind kind, bool announce)
@@ -1654,7 +1857,7 @@ internal sealed class PinWindow : Window
 
         // Every message restarts the countdown, so the latest text gets its full display time.
         _feedbackCountdown.Start(FeedbackTiming.DisplayTime(kind, overContent: true));
-        if (announce) FeedbackTiming.Announce(_feedbackText, text, kind, "MyCapture.Pin.Feedback");
+        if (announce && IsVisible) AnnounceFeedback(_feedbackText, text, kind, "MyCapture.Pin.Feedback");
     }
 
     private void OnFeedbackExpired()
@@ -1783,7 +1986,7 @@ internal sealed class PinWindow : Window
             RestoreClosedGesture());
         _restoreClosedItem.IsEnabled = false;
         menu.Items.Add(_restoreClosedItem);
-        menu.Items.Add(MenuItemFor(UiText.Get("Dialog.Close"), (_, _) => Close(), iconResourceKey: "Icon.Close", inputGestureText: "Esc"));
+        menu.Items.Add(MenuItemFor(UiText.Get("Dialog.Close"), (_, _) => CloseWithExit(), iconResourceKey: "Icon.Close", inputGestureText: "Esc"));
         menu.Items.Add(MenuItemFor(UiText.Get("Text_E657405F6B2D"), (_, _) => CloseAllRequested?.Invoke(this, EventArgs.Empty), iconResourceKey: "Icon.Close"));
         menu.Opened += (_, _) => RefreshRestoreClosedMenuItem();
 
@@ -1866,7 +2069,12 @@ internal sealed class PinWindow : Window
 
     protected override void OnClosed(EventArgs e)
     {
-        _isClosed = true;
+        _windowClosed = true;
+        StartClosing();
+        // A direct close during an exit (close all, app exit) ends it; its deferred close is moot.
+        FluidMotion.CompleteExit(this);
+        ClipboardCache.Dispose();
+        CancelPendingProgress();
         StopLandingEffect();
         EndDrag();
         _feedbackCountdown.Stop();

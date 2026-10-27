@@ -100,10 +100,9 @@ internal static partial class GalleryExportFiles
             FileInformation info = Information(file);
             long timestamp = ((long)info.LastWriteTimeHigh << 32) | info.LastWriteTimeLow;
             if (cutoff is not null && DateTime.FromFileTimeUtc(timestamp) >= cutoff.Value.UtcDateTime) return;
-            // Delete the validated file object itself, not a path that could name a new object.
-            int delete = 1;
-            if (!SetFileInformationByHandle(file, 4 /* FileDispositionInfo */, ref delete, sizeof(int)))
-                throw NativeError("Could not remove a drag export.");
+            string identity = $"{info.VolumeSerialNumber:X8}:{info.FileIndexHigh:X8}{info.FileIndexLow:X8}";
+            file.Dispose();
+            MyCapture.Core.Storage.RecoverableFileRemoval.DeleteFile(path, identity);
         }
         catch (IOException) { }
         catch (UnauthorizedAccessException) { }
@@ -226,8 +225,4 @@ internal static partial class GalleryExportFiles
     [DllImport("kernel32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool GetFileInformationByHandle(SafeFileHandle file, out FileInformation information);
-    [DllImport("kernel32.dll", SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool SetFileInformationByHandle(SafeFileHandle file, int informationClass,
-        ref int information, int size);
 }

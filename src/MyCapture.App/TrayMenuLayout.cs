@@ -25,7 +25,8 @@ internal sealed record TrayMenuCommands(
     Action? ClearClickThrough = null,
     Action? ContactSupport = null,
     Action<PinWindow>? ActivateOpenPin = null,
-    Action? InstallUpdate = null);
+    Action? InstallUpdate = null,
+    Action? FirstUseGuide = null);
 
 /// <summary>What the tray menu reflects at the moment it opens. Read cheaply on every open.</summary>
 /// <param name="CanRestoreClosedPin">A closed pin can come back.</param>
@@ -129,6 +130,8 @@ internal static class TrayMenuLayout
             entries.Add(new(state.UpdateVersion is { } version ? UiText.Format("Update_TrayInstallVersion", version)
                 : UiText.Get("Update_TrayInstall"), installUpdate, IsEnabled: !state.UpdateBusy));
         entries.Add(new(UiText.Get("Onboard_ShowShortcuts"), commands.Shortcuts, Gesture: ShortcutsGesture));
+        if (commands.FirstUseGuide is { } firstUseGuide)
+            entries.Add(new(UiText.Get("Onboarding.Replay"), firstUseGuide));
         if (commands.ContactSupport is { } contactSupport)
             entries.Add(new(UiText.Get("Support_Title"), contactSupport));
         entries.Add(ThemedShellPresenter.MenuEntry.Separator);

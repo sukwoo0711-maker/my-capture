@@ -176,7 +176,16 @@ public sealed partial class SettingsThemePreviewTests
     private static void AssertCommandBarFits(SettingsWindow window)
     {
         var apply = Assert.IsType<Button>(window.FindName("CancelButton"));
-        var bar = Assert.IsType<StackPanel>(VisualTreeHelper.GetParent(apply));
+        var bar = Assert.IsType<Grid>(VisualTreeHelper.GetParent(apply));
+        var version = Assert.IsType<TextBlock>(window.FindName("CurrentVersionLabel"));
+        Assert.Same(bar, VisualTreeHelper.GetParent(version));
+        Assert.True(version.IsVisible && version.ActualHeight > 0);
+        Assert.Equal(ApplicationVersion.DisplayText, version.Text);
+        AssertFits(window, version);
+        Rect versionBounds = version.TransformToAncestor(bar).TransformBounds(new Rect(version.RenderSize));
+        Rect closeBounds = apply.TransformToAncestor(bar).TransformBounds(new Rect(apply.RenderSize));
+        Assert.True(versionBounds.Right <= closeBounds.Left + 0.5,
+            $"Version {versionBounds} overlaps Close {closeBounds}");
         Button[] buttons = Descendants(bar).OfType<Button>().ToArray();
         Assert.Single(buttons); // The footer has only Close; reset and backup live on About.
         Assert.Same(apply, buttons[0]);

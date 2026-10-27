@@ -45,7 +45,7 @@ internal sealed partial class GalleryWindow
         using var cancellation = new CancellationTokenSource();
         _archiveCancellation = cancellation;
         using var activity = _queue.Activities.Start(LibraryActivityKind.ZipExport, cancellation.Cancel);
-        ArchiveExportButton.IsEnabled = false;
+        FitSelectionCommands();
         ArchiveCancelButton.Visibility = Visibility.Collapsed;
         ShowActionStatus(string.Empty);
         try
@@ -73,7 +73,7 @@ internal sealed partial class GalleryWindow
         finally
         {
             _archiveCancellation = null;
-            ArchiveExportButton.IsEnabled = true;
+            FitSelectionCommands();
             ArchiveCancelButton.Visibility = Visibility.Collapsed;
         }
     }
@@ -162,10 +162,10 @@ internal sealed class GalleryOrganizationDialog : Window
         };
     }
 
-    private static TextBlock Label(string key, double size) => new()
+    private static TextBlock Label(string key, double size) => KoreanWordWrap.Show(new TextBlock
     {
-        Text = UiText.Get(key), FontSize = size, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, 8)
-    };
+        FontSize = size, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, 8)
+    }, UiText.Get(key));
 
     private static TextBox Input(string value, int maxLength, string label)
     {

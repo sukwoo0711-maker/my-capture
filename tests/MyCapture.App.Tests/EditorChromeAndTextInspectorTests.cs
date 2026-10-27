@@ -110,7 +110,7 @@ public sealed class EditorChromeAndTextInspectorTests : KoreanCaptionTest
             Assert.Null(Controller(host.Editor).Selected);
             ComboBox fonts = Field<ComboBox>(host.Editor, "_textFontFamily");
             Assert.True(fonts.IsVisible);
-            family = fonts.Items.Cast<FontChoice>().First(font => !font.IsMore && font.Value != "Malgun Gothic").Value;
+            family = fonts.Items.Cast<FontChoice>().First(font => !font.IsMore && font.Value != Controller(host.Editor).DefaultFontFamily).Value;
             fonts.SelectedItem = fonts.Items.Cast<FontChoice>().Single(font => font.Value == family);
             Field<Slider>(host.Editor, "_fontSizeSlider").Value = 32;
             Toggle(host.Editor, "_textBold", true);
@@ -185,7 +185,10 @@ public sealed class EditorChromeAndTextInspectorTests : KoreanCaptionTest
             preview.Measure(new Size(240, 100));
             preview.Arrange(new Rect(preview.DesiredSize));
             TextBlock label = Assert.Single(Tree<TextBlock>(preview), text => text.Text == family.Label);
-            Assert.Same(family.PreviewFamily, label.FontFamily);
+            Assert.Same(MyCapture.App.Themes.ThemeFonts.Ui, label.FontFamily);
+            TextBlock sample = Assert.Single(Tree<TextBlock>(preview), text => text.Text == "가 Aa 123");
+            Assert.Same(family.PreviewFamily, sample.FontFamily);
+            Assert.Equal(Visibility.Collapsed, sample.Visibility);
         }
     });
 
@@ -358,7 +361,7 @@ public sealed class EditorChromeAndTextInspectorTests : KoreanCaptionTest
         host.Window.Dispatcher.Invoke(System.Windows.Threading.DispatcherPriority.ApplicationIdle, new Action(host.Window.UpdateLayout));
         Border bar = Tree<Border>(host.Editor).Single(border => border.Name == "AnnotationCommandBar");
         Button[] commands = Tree<Button>(bar).Where(button => button.IsVisible).ToArray();
-        Assert.Equal(11, commands.Length);
+        Assert.Equal(9, commands.Length);
         foreach (Button command in commands)
         {
             AssertInside(command, bar);
@@ -414,7 +417,7 @@ public sealed class EditorChromeAndTextInspectorTests : KoreanCaptionTest
                     // Allow inherited bindings and the panel's queued refit to settle before measuring.
                     host.Window.Dispatcher.Invoke(System.Windows.Threading.DispatcherPriority.ApplicationIdle, new Action(host.Window.UpdateLayout));
                     Button[] commands = Tree<Button>(bar).Where(button => button.IsVisible).ToArray();
-                    Assert.Equal(crop ? 5 : 11, commands.Length);
+                    Assert.Equal(crop ? 5 : 9, commands.Length);
                     Assert.Contains(commands, button => !string.IsNullOrEmpty(AutomationProperties.GetAcceleratorKey(button)));
                     Assert.Contains(commands, button => string.IsNullOrEmpty(AutomationProperties.GetAcceleratorKey(button)));
                     foreach (Button button in commands)

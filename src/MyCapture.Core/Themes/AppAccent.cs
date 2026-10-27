@@ -17,15 +17,23 @@ public static class AppAccentNames
 }
 
 /// <summary>Primary actions and floating pin frames retain the brand; selection and focus use neutral ink.</summary>
+/// <remarks>
+/// Primary fills are a deep red with white ink (5.2:1; hover and pressed darken, so the ink keeps
+/// at least that contrast). The brighter <see cref="BrandRed"/> stays on what shows the brand or a
+/// live recording over other apps: the pin outline and the recording frame, dot and cue.
+/// </remarks>
 public static class AccentPalette
 {
+    /// <summary>The pin outline and live-recording red.</summary>
+    public static ThemeColor BrandRed { get; } = ThemeColor.Rgb(0xE0, 0x45, 0x3C);
+
     public static IReadOnlyDictionary<string, ThemeColor> RedOverrides(bool light,
         IReadOnlyDictionary<string, ThemeColor> surfaces)
     {
         ThemeColor ink = surfaces["Text.Primary"];
         ThemeColor selected = surfaces.TryGetValue("Surface.Selected", out ThemeColor value) ? value
             : light ? ThemeColor.Rgb(0xDD, 0xE3, 0xEB) : ThemeColor.Rgb(0x30, 0x36, 0x42);
-        ThemeColor pin = ThemeColor.Rgb(0xE0, 0x45, 0x3C);
+        ThemeColor pin = BrandRed;
         ThemeColor subtle = light ? ThemeColor.Rgb(0xFF, 0xE7, 0xE2) : ThemeColor.Rgb(0x35, 0x1A, 0x1D);
         ThemeColor[] backgrounds = [.. new[] { "Surface.Canvas", "Surface.Base", "Surface.Raised",
             "Surface.Overlay", "Surface.Floating", "Surface.Sunken", "Surface.Hover", "Surface.Pressed" }
@@ -34,11 +42,11 @@ public static class AccentPalette
         return new Dictionary<string, ThemeColor>(StringComparer.Ordinal)
         {
             ["Pin.Frame"] = ClosestPinTone(pin, light, backgrounds),
-            ["Text.OnAccent"] = ThemeColor.Rgb(0x0A, 0x08, 0x18),
-            ["Accent.Default"] = ThemeColor.Rgb(0xE0, 0x45, 0x3C),
-            ["Accent.Hover"] = ThemeColor.Rgb(0xF3, 0x5B, 0x4D),
-            ["Accent.Pressed"] = ThemeColor.Rgb(0xDA, 0x43, 0x3A),
-            ["Accent.Gradient"] = ThemeColor.Rgb(0xE0, 0x45, 0x3C),
+            ["Text.OnAccent"] = ThemeColor.Rgb(0xFF, 0xFF, 0xFF),
+            ["Accent.Default"] = ThemeColor.Rgb(0xC9, 0x35, 0x2C),
+            ["Accent.Hover"] = ThemeColor.Rgb(0xBD, 0x31, 0x29),
+            ["Accent.Pressed"] = ThemeColor.Rgb(0xB3, 0x2E, 0x26),
+            ["Accent.Gradient"] = ThemeColor.Rgb(0xC9, 0x35, 0x2C),
             ["Accent.Subtle"] = selected,
             ["Accent.Cool"] = ink,
             ["Accent.Indicator"] = ink,

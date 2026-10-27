@@ -480,7 +480,7 @@ internal sealed partial class GalleryWindow
         using var cancellation = new CancellationTokenSource();
         _archiveCancellation = cancellation;
         using var activity = _queue.Activities.Start(zip ? LibraryActivityKind.ZipExport : LibraryActivityKind.FolderExport, cancellation.Cancel);
-        ArchiveExportButton.IsEnabled = false; ArchiveCancelButton.Visibility = Visibility.Collapsed;
+        FitSelectionCommands(); ArchiveCancelButton.Visibility = Visibility.Collapsed;
         ShowActionStatus(string.Empty);
         try
         {
@@ -505,7 +505,7 @@ internal sealed partial class GalleryWindow
         }
         finally
         {
-            _archiveCancellation = null; ArchiveExportButton.IsEnabled = true;
+            _archiveCancellation = null; FitSelectionCommands();
             ArchiveCancelButton.Visibility = Visibility.Collapsed;
         }
     }
@@ -730,9 +730,23 @@ internal sealed partial class GalleryWindow
         GalleryDropPlan plan = PlanDrop(over, payload, out object? highlight);
         SetDropHighlight(plan.CanDrop ? highlight : null);
         if (plan.CanDrop) ShowDragHint(plan.Hint, hintPosition);
+        else if (payload is { Captures.Length: > 0 } && payload.Owner == _folderDragOwner
+            && ResolveDropTarget(over).Target is null)
+        {
+            CaptureRecord[] records = payload.Captures.Select(id => _controller.Find(id))
+                .OfType<CaptureRecord>().ToArray();
+            if (records.Length == payload.Captures.Length)
+                ShowDragHint(DragExportHint(records), hintPosition);
+            else DragHint.Visibility = Visibility.Collapsed;
+        }
         else DragHint.Visibility = Visibility.Collapsed;
         return plan;
     }
+
+    internal static string DragExportHint(IReadOnlyCollection<CaptureRecord> records) =>
+        UiText.Get(records.Count > 0 && records.All(record => record.IsImage) ? "LibraryUx_DragOutImage"
+            : records.Count > 0 && records.All(record => record.IsVideo) ? "LibraryUx_DragOutVideo"
+            : "LibraryUx_DragOutMixed");
 
     /// <summary>Moves the payload into the target under <paramref name="over"/>; false when nothing moved.</summary>
     internal async Task<bool> DropAsync(DependencyObject? over, GalleryFolderDragPayload? payload)

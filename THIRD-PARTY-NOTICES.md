@@ -16,10 +16,35 @@ under their own licenses.
 | Microsoft.ML.OnnxRuntime | ONNX inference for RapidOcrNet | MIT | <https://github.com/microsoft/onnxruntime> |
 | SkiaSharp | Image decode/resize for RapidOcrNet | MIT | <https://github.com/mono/SkiaSharp> |
 | PaddleOCR / RapidAI PP-OCRv5 models | Downloaded Korean text detector and recognizer | Apache-2.0 | <https://github.com/PaddlePaddle/PaddleOCR>, <https://github.com/RapidAI/RapidOCR> |
+| OPUS-MT tc-big English–Korean model | Downloaded English-to-Korean translation model (see below) | CC BY 4.0 | <https://huggingface.co/Helsinki-NLP/opus-mt-tc-big-en-ko> |
 
 The portable and installer packages include the authoritative .NET license as
 `DOTNET-LICENSE.txt` and the complete .NET third-party notice set as
 `DOTNET-THIRD-PARTY-NOTICES.txt`.
+
+## Translation model
+
+The Translate view of the text recognition window downloads an English-to-Korean
+translation model when the user turns translation on. The model is not included in the
+installer, the portable ZIP or the Microsoft Store package.
+
+- Work: opus-mt-tc-big-en-ko (OPUS-MT, released 2022-07-28) by the Language Technology
+  Research Group at the University of Helsinki, from
+  <https://huggingface.co/Helsinki-NLP/opus-mt-tc-big-en-ko> at revision
+  `ae8606b7b29a495f31ce679cee2007f536a3a5ce`.
+- License: Creative Commons Attribution 4.0 International,
+  <https://creativecommons.org/licenses/by/4.0/>. The work is provided as is, without
+  warranties.
+- ONNX export with dynamic int8 quantization: noticemkjung,
+  <https://huggingface.co/noticemkjung/opus-mt-tc-big-en-ko-ONNX> at revision
+  `aea67600956847d47609f96b364f33a734007d50` (CC BY 4.0).
+- Changes made for MyCapture: the int8 weights that the encoder, the decoder and the decoder
+  with the key/value cache each carried are stored once in shared external weight files by
+  `build/tools/translation-model/dedupe_opus_onnx.py`; tensor values are unchanged. The
+  source SentencePiece model and the target vocabulary are redistributed unchanged.
+- Reference requested by the model authors: Jörg Tiedemann and Santhosh Thottingal,
+  "OPUS-MT – Building open translation services for the World", EAMT 2020,
+  <https://aclanthology.org/2020.eamt-1.61>.
 
 ## Bundled fonts
 

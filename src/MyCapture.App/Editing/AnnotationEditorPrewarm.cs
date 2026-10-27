@@ -36,11 +36,11 @@ internal static class AnnotationEditorPrewarm
         TextElement.SetFontFamily(editor, Application.Current?.TryFindResource("Font.Ui") as FontFamily
             ?? new FontFamily("Segoe UI"));
         // Window.Standard supplies these inherited values to a real editor. A detached
-        // Grid otherwise measures with 12-DIP text and Ideal formatting instead.
+        // Grid otherwise measures with 12-DIP text and default shaping instead.
         if (Application.Current?.TryFindResource(MyCapture.App.Themes.StandardWindowTheme.ResourceKey) is Style)
         {
             editor.SetResourceReference(TextElement.FontSizeProperty, "FontSize.Body");
-            TextOptions.SetTextFormattingMode(editor, TextFormattingMode.Display);
+            MyCapture.App.Themes.ThemeFonts.ApplyText(editor);
         }
         editor.UseLayoutRounding = true;
         editor.SnapsToDevicePixels = true;

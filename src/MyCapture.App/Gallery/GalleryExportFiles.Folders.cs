@@ -88,10 +88,12 @@ internal static partial class GalleryExportFiles
         {
             if (!published)
             {
-                // Remove only our still-open staging object, even if another destination
-                // appeared. Never release ownership and then delete by the final path.
-                int delete = 1;
-                _ = SetFileInformationByHandle(handle, 4, ref delete, sizeof(int));
+                FileInformation info = Information(handle);
+                string identity = $"{info.VolumeSerialNumber:X8}:{info.FileIndexHigh:X8}{info.FileIndexLow:X8}";
+                output.Dispose();
+                handle.Dispose();
+                try { MyCapture.Core.Storage.RecoverableFileRemoval.DeleteFile(stage, identity); }
+                catch (IOException) { } // Preserve the staging file if it cannot be recycled.
             }
         }
     }
@@ -151,10 +153,10 @@ internal static partial class GalleryExportFiles
             if (directory.IsInvalid) return;
             FileAttributes attributes = (FileAttributes)Information(directory).Attributes;
             if ((attributes & FileAttributes.ReparsePoint) != 0 || (attributes & FileAttributes.Directory) == 0) return;
-            // Kernel deletion succeeds only for an empty regular directory. No path-based
-            // recursive delete, link traversal, or fallback to a user's exported destination.
-            int delete = 1;
-            _ = SetFileInformationByHandle(directory, 4, ref delete, sizeof(int));
+            FileInformation info = Information(directory);
+            string identity = $"{info.VolumeSerialNumber:X8}:{info.FileIndexHigh:X8}{info.FileIndexLow:X8}";
+            directory.Dispose();
+            MyCapture.Core.Storage.RecoverableFileRemoval.DeleteDirectory(path, expectedIdentity: identity);
         }
         catch (IOException) { }
         catch (UnauthorizedAccessException) { }

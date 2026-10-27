@@ -24,14 +24,14 @@ internal static class WindowForeground
         if (window.WindowState == WindowState.Minimized) window.WindowState = WindowState.Normal;
         if (IsEnabled(window))
         {
-            _ = window.Activate();
+            ActivateAndFocus(window);
             return;
         }
 
         if ((WaitingDialog(window) ?? ModalDialog(Application.Current?.Windows.OfType<Window>() ?? [])) is { } dialog)
         {
             if (dialog.WindowState == WindowState.Minimized) dialog.WindowState = WindowState.Normal;
-            _ = dialog.Activate();
+            ActivateAndFocus(dialog);
             return;
         }
 
@@ -41,7 +41,23 @@ internal static class WindowForeground
         if (popup != IntPtr.Zero && popup != handle && IsWindowVisible(popup) && IsWindowEnabled(popup))
             _ = SetForegroundWindow(popup);
         else
+            ActivateAndFocus(window);
+    }
+
+    /// <summary>The gallery's foreground pulse preserves the target's existing topmost policy.</summary>
+    private static void ActivateAndFocus(Window window)
+    {
+        bool originalTopmost = window.Topmost;
+        try
+        {
             _ = window.Activate();
+            window.Topmost = true;
+        }
+        finally
+        {
+            window.Topmost = originalTopmost;
+        }
+        _ = window.Focus();
     }
 
     /// <summary>

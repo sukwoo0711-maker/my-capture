@@ -35,7 +35,7 @@ public partial class App
     internal async Task InitializeEditRecoveryAsync()
     {
         if (DraftStore is not null || _services is null) return;
-        // Drafts are app-owned working copies; retired sessions are deleted, not recycled.
+        // Retired draft sessions move to the Recycle Bin with their durable tombstone.
         DraftStore = new EditDraftStore(Path.Combine(_services.GetRequiredService<AppPaths>().DataRoot, "edit-drafts"));
         IReadOnlyList<(EditDraft Draft, string Directory)> available;
         try { available = await Task.Run(DraftStore.ReadAvailable); }

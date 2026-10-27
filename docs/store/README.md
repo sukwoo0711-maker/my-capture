@@ -14,6 +14,7 @@ MyCapture의 공식 배포 경로는 Microsoft Store 하나입니다. 이 문서
 | 로그인 시 자동 시작 | HKCU `Run` 키, 기본 켜짐 | 매니페스트 시작 작업(`MyCaptureStartup`). 설치 직후 꺼져 있고, 첫 실행 화면의 선택(기본 선택됨)을 적용 |
 | 설정·라이브러리 | `%APPDATA%\MyCapture` | `%LOCALAPPDATA%\Packages\<패키지 패밀리 이름>\LocalState` |
 | OCR 모델 | `%LOCALAPPDATA%\MyCapture\ocr-models` | 같은 패키지 폴더의 `LocalCache\ocr-models` |
+| 번역 모델(번역을 켠 경우만) | `%LOCALAPPDATA%\MyCapture\translation-models` | 같은 패키지 폴더의 `LocalCache\translation-models` |
 | 드래그 내보내기 임시 파일 | `%TEMP%\MyCapture\DragExports` | 같은 패키지 폴더의 `TempState\MyCapture\DragExports` |
 | 빠른 저장 | `사진\Captures` | 같음 |
 | 평가 요청 | 없음 | 성공한 캡처 10회와 최초 실행 후 3일이 지나면 앱 안 평가 안내를 한 번만 표시하고, 사용자가 평가를 고를 때만 Microsoft Store 평가 창을 엶. 설정 > 정보 탭에 "Microsoft Store에서 평가" 버튼 |
@@ -46,11 +47,11 @@ MyCapture의 공식 배포 경로는 Microsoft Store 하나입니다. 이 문서
 | Store 주소 | https://apps.microsoft.com/detail/9PB33MC095VR |
 | `Package/Identity/Name` | `sukwoo0711.MyCapture` |
 | `Package/Identity/Publisher` | `CN=2BAAF359-E7FC-4D15-9E24-F3262AD74474` |
-| `Package/Properties/PublisherDisplayName` | `sukwoo0711` (게시자 표시 이름을 바꾸면 그 이름) |
+| `Package/Properties/PublisherDisplayName` | `Mimiloaf` (2026-10-26 Partner Center 확인) |
 | 패키지 패밀리 이름 | `sukwoo0711.MyCapture_n98e1tgx2qxb2` |
 | 추가로 예약한 이름 | `MyCapture - 캡처·가리기·핀`, `MyCapture - Screenshot, Redact & Pin` (2026-10-20) |
 
-- **게시자 표시 이름**: Store의 게시자 표시는 계정의 게시자 표시 이름이고, 패키지의 `PublisherDisplayName`은 그 이름과 같아야 업로드됩니다. 계정 설정 > Legal info > Contact info의 Publisher name에서 `MyCapture`로 바꿀 수 있지만, 바꾸면 계정이 추가 검토를 받고 이후 패키지를 새 이름으로 다시 만들어 제출해야 합니다(`-PublisherDisplayName 'MyCapture'`). 인증 중인 제출의 패키지는 이전 이름으로 빌드되었으므로 그 제출이 게시된 뒤에 바꿉니다. 패키지 ID(`Package/Identity/Name`, 패키지 패밀리 이름)는 바뀌지 않습니다.
+- **게시자 표시 이름**: 패키지의 `PublisherDisplayName`은 Partner Center에 등록된 이름과 같아야 업로드됩니다. 현재 이름은 `Mimiloaf`입니다. 이후 계정의 게시자 이름이 변경되면 승인된 이름을 다시 확인하고 패키지에 적용합니다. 패키지 ID(`Package/Identity/Name`, 패키지 패밀리 이름)는 바뀌지 않습니다.
 - **추가로 예약한 이름**: Store 정책 10.1.1은 제품 이름에 설명 문구와 키워드를 넣지 못하게 하므로 목록 제품 이름은 `MyCapture`로 둡니다. 예약은 3개월 안에 제출에서 쓰지 않으면 풀릴 수 있습니다.
 
 ## 2. 패키지 만들기
@@ -60,7 +61,7 @@ MyCapture의 공식 배포 경로는 Microsoft Store 하나입니다. 이 문서
 ```powershell
 .\build\package.ps1 -Version 4.1.1
 .\build\run-packaged-self-tests.ps1 -PublishRoot .\artifacts\release\4.1.1\publish-win-x64
-.\build\package-store.ps1 -Version 4.1.1 -IdentityName 'sukwoo0711.MyCapture' -Publisher 'CN=2BAAF359-E7FC-4D15-9E24-F3262AD74474' -PublisherDisplayName 'sukwoo0711'
+.\build\package-store.ps1 -Version 4.1.1 -IdentityName 'sukwoo0711.MyCapture' -Publisher 'CN=2BAAF359-E7FC-4D15-9E24-F3262AD74474' -PublisherDisplayName 'Mimiloaf'
 ```
 
 - **결과물**: `artifacts\store\<버전>\` 아래에 다음 파일이 생깁니다.
@@ -78,8 +79,8 @@ MyCapture의 공식 배포 경로는 Microsoft Store 하나입니다. 이 문서
 GitHub ZIP/설치 프로그램이 필요 없는 다음 Store 배포에는 `package.ps1 -StoreOnly`를 사용할 수 있습니다. 같은 self-contained 게시·법적 고지·파일 inventory 검사를 수행하고 필수 self-test 8종을 실행한 뒤 ZIP 압축과 IExpress 생성을 건너뜁니다. 실행 중인 MyCapture가 있으면 검사 gate가 중단됩니다. 기존 출력은 보존하므로 새 버전의 깨끗한 소스에서 실행합니다.
 
 ```powershell
-.\build\package.ps1 -Version 4.1.1 -StoreOnly
-.\build\package-store.ps1 -Version 4.1.1 -PublishDir .\artifacts\store-publish\4.1.1\publish-win-x64 -IdentityName 'sukwoo0711.MyCapture' -Publisher 'CN=2BAAF359-E7FC-4D15-9E24-F3262AD74474' -PublisherDisplayName 'sukwoo0711'
+.\build\package.ps1 -Version 4.9.0 -StoreOnly
+.\build\package-store.ps1 -Version 4.9.0 -PublishDir .\artifacts\store-publish\4.9.0\publish-win-x64 -IdentityName 'sukwoo0711.MyCapture' -Publisher 'CN=2BAAF359-E7FC-4D15-9E24-F3262AD74474' -PublisherDisplayName 'Mimiloaf'
 ```
 
 `package-store.ps1`은 두 게시 경로 모두에서 인접한 `release-manifest.json`의 clean source SHA·버전·x64 런타임·전체 파일 크기/해시를 확인합니다. Store 전용 경로는 저장된 8종 결과 JSON과 보고서 해시도 다시 확인합니다. 동일 버전이라도 소스나 게시 파일이 달라지면 패키징을 중단합니다. 기존 GitHub release 경로와 필수 installer 검사는 유지됩니다.
@@ -122,7 +123,7 @@ Get-AppxPackage MyCapture.LocalTest | Remove-AppxPackage
   - 첫 제출은 비공개 대상으로 올려 직접 설치해 보는 것을 권장합니다. 한 번 공개로 게시하면 비공개로 되돌릴 수 없습니다.
 - **속성**
   - 범주는 생산성 또는 사진 및 비디오를 고릅니다.
-  - 개인정보처리방침 URL에는 `https://mimiloaf.com/mycapture/privacy/`를 넣습니다(2026-10-24 제출 17부터). Win32 앱은 개인정보처리방침이 항상 필요합니다(정책 10.5.1). 방침을 고칠 때는 지원 저장소의 `PRIVACY.md`를 수정하고, mimiloaf-site에서 `node tools/sync-privacy.mjs`로 사이트 페이지를 다시 만들어 배포합니다.
+  - 개인정보처리방침 URL에는 `https://mimiloaf.com/mycapture/privacy/`를 넣습니다(2026-10-24 제출 17부터). Win32 앱은 개인정보처리방침이 항상 필요합니다(정책 10.5.1). 방침을 고칠 때는 지원 저장소의 `PRIVACY.md`를 수정하고, mimiloaf 저장소(`C:\GitRepositories\mimiLoaf`, GitHub `sukwoo0711-maker/mimiloaf`)에서 `node tools/sync-privacy.mjs`로 사이트 페이지를 다시 만들어 배포합니다.
 - **연령 등급**: IARC 설문에 답합니다. 사용자 간 소통이나 구매 기능은 없습니다.
 - **패키지**: `.msix` 파일을 올립니다.
 - **제출 옵션**: 제한 기능 `runFullTrust`의 사용 사유를 적습니다. 문구는 [`listing.md`](listing.md)에 있습니다.

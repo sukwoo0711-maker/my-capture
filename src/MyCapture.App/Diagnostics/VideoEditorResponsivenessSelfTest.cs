@@ -409,12 +409,19 @@ internal static class VideoEditorResponsivenessSelfTest
             int scrubDecodes = (verification?.Decodes ?? 0) - decodesBeforeScrub;
             long framesAfterInput = timeline.RenderFrameCountForTest;
             Enter("release exact seek", ShortPhaseBudget);
+            MediaElementPreviewEngine previewEngine = editor.PreviewEngineForTest;
+            int positionsBeforeRelease = previewEngine.PositionCountForTest;
             var releaseWatch = Stopwatch.StartNew();
             long finalGeneration = coordinator.RequestExact(clipMs * 0.75);
             bool exactCompleted = PumpUntil(
                 () => coordinator.PresentedGeneration == finalGeneration,
                 TimeSpan.FromSeconds(3));
             releaseWatch.Stop();
+            // After a scrub into the last stretch, the release is the first seek after the stream
+            // may have ended: its first read can show the player past it (watched, not blocked on).
+            Line(string.Create(CultureInfo.InvariantCulture,
+                $"Release exact seek: requested {clipMs * 0.75:0.###}ms, presented {coordinator.PresentedPositionMs:0.###}ms, " +
+                $"first read {previewEngine.FirstReadOffsetForTest:0.###}ms past, positioned {previewEngine.PositionCountForTest - positionsBeforeRelease} time(s)"));
             double pointerP95 = Percentile(pointerLatencies, 0.95);
             double pointerP99 = Percentile(pointerLatencies, 0.99);
             double cycleP50 = Percentile(cycleTimes, 0.50);

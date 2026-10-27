@@ -73,7 +73,7 @@ public sealed class EditorResponsivenessProbeTests
             return;
         }
 
-        if (File.Exists(receipt)) File.Delete(receipt);
+        if (File.Exists(receipt)) global::MyCapture.Core.Storage.RecoverableFileRemoval.DeleteFile(receipt);
         string runtimeRoot = new DirectoryInfo(RuntimeEnvironment.GetRuntimeDirectory()).Parent!.Parent!.Parent!.FullName;
         string dotnet = Path.Combine(runtimeRoot, "dotnet.exe");
         Assert.True(File.Exists(dotnet), "The test runtime must provide its dotnet host.");

@@ -11,7 +11,7 @@
     <SatelliteResourceLanguages>ko-KR;en</SatelliteResourceLanguages>
     <!-- Keep the release RID in project.assets.json after an ordinary solution restore so
          the self-contained package can later be reproduced without another restore. -->
-    <RuntimeIdentifiers>win-x64</RuntimeIdentifiers>
+    <RuntimeIdentifiers>win-x64;win-x86</RuntimeIdentifiers>
   </PropertyGroup>
 
   <ItemGroup>
@@ -40,6 +40,9 @@
   <ItemGroup>
     <None Remove="Assets\app.ico" />
     <Resource Include="Assets\app.ico" />
+    <!-- Optional capture shutter sound, synthesised by build/tools/Sounds/make_shutter.py. -->
+    <None Remove="Assets\Sounds\shutter.wav" />
+    <Resource Include="Assets\Sounds\shutter.wav" />
     <None Update="Assets\tray-idle.ico" CopyToOutputDirectory="PreserveNewest" />
     <None Update="Assets\tray-capturing.ico" CopyToOutputDirectory="PreserveNewest" />
     <None Update="Assets\tray-busy.ico" CopyToOutputDirectory="PreserveNewest" />

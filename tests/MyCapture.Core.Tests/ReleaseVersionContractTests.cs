@@ -6,7 +6,7 @@ using Xunit;
 namespace MyCapture.Core.Tests;
 
 /// <summary>
-/// Keeps the 4.7.0 stable version and its Windows binary version aligned across MSBuild, packaging
+/// Keeps the 4.9.0 stable version and its Windows binary version aligned across MSBuild, packaging
 /// and installer validation.
 /// </summary>
 public sealed class ReleaseVersionContractTests
@@ -39,14 +39,14 @@ public sealed class ReleaseVersionContractTests
         XDocument props = XDocument.Parse(Read("Directory.Build.props"));
         XDocument manifest = XDocument.Parse(Read("src/MyCapture.App/app.manifest"));
 
-        Assert.Equal("4.7.0", Assert.Single(props.Descendants("Version")).Value);
-        Assert.Equal("4.7.0.0", Assert.Single(props.Descendants("FileVersion")).Value);
-        Assert.Equal("4.7.0.0", Assert.Single(props.Descendants("AssemblyVersion")).Value);
+        Assert.Equal("4.9.0", Assert.Single(props.Descendants("Version")).Value);
+        Assert.Equal("4.9.0.0", Assert.Single(props.Descendants("FileVersion")).Value);
+        Assert.Equal("4.9.0.0", Assert.Single(props.Descendants("AssemblyVersion")).Value);
 
         XElement identity = Assert.Single(
             manifest.Descendants(),
             element => element.Name.LocalName == "assemblyIdentity");
-        Assert.Equal("4.7.0.0", identity.Attribute("version")?.Value);
+        Assert.Equal("4.9.0.0", identity.Attribute("version")?.Value);
     }
 
     [Fact]
@@ -58,8 +58,8 @@ public sealed class ReleaseVersionContractTests
 
         // The shipping default is the GA version. A release candidate must never be the default
         // again, otherwise an operator who forgets -Version publishes a prerelease by accident.
-        Assert.Contains("[string]$Version = '4.7.0'", package, StringComparison.Ordinal);
-        Assert.Contains("[string]$Version = '4.7.0',", hostile, StringComparison.Ordinal);
+        Assert.Contains("[string]$Version = '4.9.0'", package, StringComparison.Ordinal);
+        Assert.Contains("[string]$Version = '4.9.0',", hostile, StringComparison.Ordinal);
         Assert.DoesNotContain("$Version = '1.7.0-rc.1'", package, StringComparison.Ordinal);
         Assert.DoesNotContain("$Version = '1.7.0-rc.1'", hostile, StringComparison.Ordinal);
 
@@ -281,7 +281,7 @@ public sealed class ReleaseVersionContractTests
     }
 
     [Fact]
-    public void PublishedGitHubReleases_MustIncludeTheSixRequiredAssets()
+    public void PublishedGitHubReleases_MustIncludeTheTwelveRequiredX64AndX86Assets()
     {
         string required = Read("build/required-release-assets.ps1");
         string verify = Read("build/verify-github-release.ps1");
@@ -297,12 +297,21 @@ public sealed class ReleaseVersionContractTests
                      "release-manifest.json",
                      "SHA256SUMS.txt",
                      "README-OFFLINE.txt",
+                     "MyCapture-$Version-win-x86-setup.exe",
+                     "MyCapture-$Version-win-x86-portable.zip",
+                     "installer-manifest-win-x86.json",
+                     "release-manifest-win-x86.json",
+                     "SHA256SUMS-win-x86.txt",
+                     "README-OFFLINE-win-x86.txt",
                  })
         {
             Assert.Contains(name, required, StringComparison.Ordinal);
         }
 
         Assert.Contains("Get-RequiredReleaseAssetNames", verify, StringComparison.Ordinal);
+        Assert.Contains("Get-RequiredReleaseAssetNames -Version $version -IncludeX86:$IncludeX86", verify, StringComparison.Ordinal);
+        Assert.Contains("Get-RequiredReleaseAssetNames -Version $Version -IncludeX86:$IncludeX86", publish, StringComparison.Ordinal);
+        Assert.Contains("-Tag $tag -Repository $Repository -IncludeX86:$IncludeX86", publish, StringComparison.Ordinal);
         Assert.Contains("releases/tags/", verify, StringComparison.Ordinal);
         Assert.Contains("NO_COLOR", verify, StringComparison.Ordinal);
         Assert.Contains(".draft", verify, StringComparison.Ordinal);
@@ -313,6 +322,11 @@ public sealed class ReleaseVersionContractTests
         Assert.Contains("release:", workflow.Replace("\r\n", "\n", StringComparison.Ordinal), StringComparison.Ordinal);
         Assert.Contains("types: [published]", workflow, StringComparison.Ordinal);
         Assert.Contains("verify-github-release.ps1", workflow, StringComparison.Ordinal);
+        string verificationCommand = Assert.Single(
+            workflow.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries),
+            line => line.TrimStart().StartsWith(@".\build\verify-github-release.ps1 ", StringComparison.Ordinal));
+        Assert.EndsWith(" -IncludeX86", verificationCommand.Trim(), StringComparison.Ordinal);
+        Assert.Contains("name: Verify twelve required GitHub release assets (x64 and x86)", workflow, StringComparison.Ordinal);
         Assert.Contains("permissions:\n  contents: read", workflow.Replace("\r\n", "\n", StringComparison.Ordinal), StringComparison.Ordinal);
         Assert.DoesNotContain(": write", workflow, StringComparison.Ordinal);
         Assert.Contains("actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1", workflow, StringComparison.Ordinal);
@@ -332,10 +346,13 @@ public sealed class ReleaseVersionContractTests
             .Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries)
             .Where(line => line.TrimStart().StartsWith("uses:", StringComparison.Ordinal))
             .ToArray();
-        Assert.Equal(3, actions.Length);
+        Assert.Equal(6, actions.Length);
         Assert.Equal(
             new[]
             {
+                "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+                "actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68",
+                "actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9",
                 "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
                 "actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68",
                 "actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9",

@@ -83,7 +83,11 @@ public sealed partial class SettingsThemePreviewTests
 
                                     // Reproduce the CI failure's actual placeholder allocation, even
                                     // when this machine has different command-label font metrics.
-                                    double runnerWidth = host.ActualWidth + 363.2 - placeholder.ActualWidth;
+                                    var searchBar = (Grid)window.FindName("LibraryCommandBar");
+                                    var field = (FrameworkElement)window.FindName("SearchField");
+                                    double unusedStarWidth = Math.Max(0, searchBar.ColumnDefinitions[1].ActualWidth
+                                        - field.ActualWidth - field.Margin.Left - field.Margin.Right);
+                                    double runnerWidth = host.ActualWidth - unusedStarWidth + 363.2 - placeholder.ActualWidth;
                                     ArrangeSearchHost(host, runnerWidth);
                                     Assert.InRange(placeholder.ActualWidth, 363.2 - 1 / scale, 363.2 + 1 / scale);
                                     AssertSearchPlaceholderFit(window, label + "/CI-363.2");
@@ -95,14 +99,14 @@ public sealed partial class SettingsThemePreviewTests
 
                                     // A compact/full swap must leave the star column and its neighbours fixed.
                                     double fieldWidth = ((FrameworkElement)window.FindName("SearchField")).ActualWidth;
-                                    double sortLeft = ((FrameworkElement)window.FindName("SortBox")).TranslatePoint(new Point(), host).X;
+                                    double captureLeft = ((FrameworkElement)window.FindName("CaptureRegionButton")).TranslatePoint(new Point(), host).X;
                                     var fitting = (LibrarySearchPlaceholder)placeholder;
                                     string original = fitting.FullText;
                                     fitting.SetCurrentValue(LibrarySearchPlaceholder.FullTextProperty, "Search");
                                     ArrangeSearchHost(host, runnerWidth);
                                     Assert.Equal("Search", placeholder.Text);
                                     Assert.Equal(fieldWidth, ((FrameworkElement)window.FindName("SearchField")).ActualWidth, 3);
-                                    Assert.Equal(sortLeft, ((FrameworkElement)window.FindName("SortBox")).TranslatePoint(new Point(), host).X, 3);
+                                    Assert.Equal(captureLeft, ((FrameworkElement)window.FindName("CaptureRegionButton")).TranslatePoint(new Point(), host).X, 3);
                                     fitting.SetCurrentValue(LibrarySearchPlaceholder.FullTextProperty, original);
                                     ArrangeSearchHost(host, runnerWidth);
                                     AssertSearchPlaceholderFit(window, label + "/restored");
@@ -112,7 +116,7 @@ public sealed partial class SettingsThemePreviewTests
                                 SettleGalleryLayout(window);
                                 fixture.ViewModel.Select(fixture.Records[0].Id);
                                 SettleGalleryLayout(window);
-                                Assert.Equal(UiText.Get("Text_4B8D541EBE6D"), placeholder.Text);
+                                AssertSearchPlaceholderFit(window, label + "/selection");
                                 AssertNotTrimmed(placeholder, label + "/selection");
                                 fixture.ViewModel.ClearSelection();
                                 SettleGalleryLayout(window);
@@ -176,8 +180,7 @@ public sealed partial class SettingsThemePreviewTests
     private static void WithHostedSearchCommandBar(GalleryWindow window, Action<Decorator> verify)
     {
         var bar = (Grid)window.FindName("LibraryCommandBar");
-        var parent = (Panel)bar.Parent;
-        int index = parent.Children.IndexOf(bar);
+        var parent = (Decorator)bar.Parent;
         var host = new Decorator
         {
             DataContext = window.DataContext, Resources = window.Resources,
@@ -189,13 +192,13 @@ public sealed partial class SettingsThemePreviewTests
         TextOptions.SetTextFormattingMode(host, TextOptions.GetTextFormattingMode(bar));
         VisualTreeHelper.SetRootDpi(host, VisualTreeHelper.GetDpi(bar));
         NameScope.SetNameScope(host, NameScope.GetNameScope(window));
-        parent.Children.Remove(bar);
+        parent.Child = null;
         host.Child = bar;
         try { verify(host); }
         finally
         {
             host.Child = null;
-            parent.Children.Insert(index, bar);
+            parent.Child = bar;
             SettleGalleryLayout(window);
         }
     }

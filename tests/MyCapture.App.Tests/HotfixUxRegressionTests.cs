@@ -92,6 +92,8 @@ public sealed class HotfixUxRegressionTests
             Assert.All(card.ActionButtonsForTest, button => Assert.False(button.Focusable));
             Assert.False(card.KeepToggleForTest.Focusable);
             card.Advance(TimeSpan.FromSeconds(9), false);
+            // The timeout closes the card; with motion it first fades down over 83 ms.
+            FluidMotion.CompleteExit(card);
             Assert.False(card.IsVisible);
         }
         finally { card.Close(); editor.Close(); }

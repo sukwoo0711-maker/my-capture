@@ -238,7 +238,7 @@ internal sealed partial class AnnotationEditorControl : Grid
         _controller.ApplyFillTransparency(double.IsFinite(defaults.FillTransparency) ? Math.Clamp(defaults.FillTransparency, 0, 100) : 100);
         _controller.DefaultFontSize = double.IsFinite(defaults.FontSize)
             ? Math.Clamp(defaults.FontSize, SettingsRanges.FontSize.Min, SettingsRanges.FontSize.Max) : 18;
-        _controller.DefaultFontFamily = string.IsNullOrWhiteSpace(defaults.FontFamily) ? "Malgun Gothic" : defaults.FontFamily;
+        _controller.DefaultFontFamily = string.IsNullOrWhiteSpace(defaults.FontFamily) ? AnnotationDefaults.DefaultFontFamily : defaults.FontFamily;
         _defaultTextBold = defaults.TextBold;
         _defaultTextBackground = defaults.TextBackground;
         _defaultTextOutline = defaults.TextOutline;
@@ -580,8 +580,10 @@ internal sealed partial class AnnotationEditorControl : Grid
     {
         foreach (EditorTool tool in Enum.GetValues<EditorTool>()) _shortcutActions[tool.ToString()] = () => SelectTool(tool);
         _shortcutActions["Done"] = () => Commit(EditorCommitAction.Done);
-        // Copy keeps the live edit and history available; Done follows the final save path.
-        _shortcutActions["Copy"] = () => Commit(EditorCommitAction.CopyToClipboard);
+        // Owner decision (2026-10-12 real-device feedback, restored 2026-10-25 after 4.6.0 split
+        // it): copying is how people finish an edit, so Copy and Ctrl+C save, copy and close
+        // like Done. Do not turn this into a copy-only command without asking the owner.
+        _shortcutActions["Copy"] = () => Commit(EditorCommitAction.Done);
         _shortcutActions["Save"] = () => Commit(EditorCommitAction.QuickSave);
         _shortcutActions["SaveAs"] = () => Commit(EditorCommitAction.SaveAs);
         _shortcutActions["Privacy"] = () => _ = ApplyPrivacyRedactionsAsync();
@@ -1145,6 +1147,9 @@ internal sealed partial class AnnotationEditorControl : Grid
         double dipPerPixel = Math.Max(double.Epsilon, _surface.DipPerPixel);
         ColorRgba foreground = annotation.Foreground;
         double luma = 0.299 * foreground.R + 0.587 * foreground.G + 0.114 * foreground.B;
+        Color background = annotation.Background.A > 0
+            ? Color.FromArgb(255, annotation.Background.R, annotation.Background.G, annotation.Background.B)
+            : luma > 140 ? Colors.Black : Colors.White;
         var textBox = new TextBox
         {
             Text = annotation.Text,
@@ -1153,16 +1158,17 @@ internal sealed partial class AnnotationEditorControl : Grid
             MinWidth = 0,
             MinHeight = 0,
             FontFamily = FontCatalog.Resolve(annotation.FontFamily),
+            Language = System.Windows.Markup.XmlLanguage.GetLanguage(CultureInfo.CurrentUICulture.IetfLanguageTag),
             FontSize = Math.Max(1, annotation.FontSize * dipPerPixel),
             FontWeight = annotation.Bold ? FontWeights.Bold : FontWeights.Normal,
             FontStyle = annotation.Italic ? FontStyles.Italic : FontStyles.Normal,
             Foreground = annotation.Foreground.ToBrush(),
             // TextBox does not draw the caption's outline; keep unplated text readable while editing.
-            Background = annotation.Background.A > 0 ? annotation.Background.ToBrush()
-                : luma > 140 ? Brushes.Black : Brushes.White,
-            Opacity = annotation.Opacity,
-            BorderBrush = Brush("Border.Control", Color.FromRgb(0x56, 0x67, 0x7F)),
-            BorderThickness = new Thickness(1),
+            Background = new SolidColorBrush(background),
+            Template = CaptionTextBoxTemplate.Value,
+            CaretBrush = 0.299 * background.R + 0.587 * background.G + 0.114 * background.B > 140
+                ? Brushes.Black : Brushes.White,
+            BorderThickness = new Thickness(2),
             AcceptsReturn = true,
             TextWrapping = TextWrapping.NoWrap,
             VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
@@ -1171,6 +1177,7 @@ internal sealed partial class AnnotationEditorControl : Grid
         // The committed caption is drawn with ideal glyph metrics (FormattedText). The editor
         // window's display-mode text would space and wrap the live copy differently.
         TextOptions.SetTextFormattingMode(textBox, TextFormattingMode.Ideal);
+        TextOptions.SetTextRenderingMode(textBox, TextRenderingMode.Grayscale);
         // Pretendard would otherwise show "0x02D9" as "0×02D9" and "->" as an arrow while typing.
         if (LiteralShaping.Applies(annotation.FontFamily)) LiteralShaping.Apply(textBox);
         AutomationName(textBox, UiText.Get("Text_FAC754F72C25"));
@@ -1285,7 +1292,10 @@ internal sealed partial class AnnotationEditorControl : Grid
         TextLayout fit = LiveTextLayout(editing, box.Text ?? string.Empty);
         Rect target = _surface.ToSurfaceRect(fit.Rect);
         double chrome = 2 * _liveTextInset.X;
-        box.MinWidth = chrome + Math.Max(1, editing.FontSize * dipPerPixel);
+        double minimumWidth = chrome + Math.Max(1, editing.FontSize * dipPerPixel);
+        double availableWidth = Math.Max(minimumWidth, _overlayCanvas.ActualWidth - target.Left + _liveTextInset.X);
+        box.MinWidth = fit.AutoSize ? Math.Max(minimumWidth, Math.Min(160, availableWidth)) : minimumWidth;
+        box.MinHeight = 32;
         if (fit.AutoSize)
         {
             box.TextWrapping = TextWrapping.NoWrap;
@@ -1310,6 +1320,29 @@ internal sealed partial class AnnotationEditorControl : Grid
         string.Equals(text.Text, content, StringComparison.Ordinal)
             ? TextLayout.Of(text)
             : _controller.FitText(text, content, text.FontSize, text.AutoSize, text.Rect);
+
+    private static readonly Lazy<ControlTemplate> CaptionTextBoxTemplate = new(() =>
+    {
+        var template = (ControlTemplate)System.Windows.Markup.XamlReader.Parse(
+            """
+            <ControlTemplate TargetType="TextBox"
+                             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+                <Grid>
+                    <Border Background="{TemplateBinding Background}" BorderBrush="Black"
+                            BorderThickness="{TemplateBinding BorderThickness}" />
+                    <Border Margin="1" BorderBrush="White" BorderThickness="1" IsHitTestVisible="False" />
+                    <Border BorderThickness="{TemplateBinding BorderThickness}">
+                        <AdornerDecorator>
+                            <ScrollViewer x:Name="PART_ContentHost" />
+                        </AdornerDecorator>
+                    </Border>
+                </Grid>
+            </ControlTemplate>
+            """);
+        template.Seal();
+        return template;
+    });
 
     internal enum CaptionScrollBarSide { Right, Left, Overlay }
 
@@ -1809,44 +1842,29 @@ internal sealed partial class AnnotationEditorControl : Grid
         left.Children.Add(_copyTextButton);
 
         var right = CommandRow();
-        right.Children.Add(Separator());
         Button save = BuildSaveOverflowMenu();
-        Button copy = IconTextButton(
-            UiText.Get("Text_37B3D3B11B26"), UiText.Get("EditorFlow_CopyHint"), "Icon.Copy", FallbackCopy,
-            () => Commit(EditorCommitAction.CopyToClipboard));
-        copy.SetResourceReference(FrameworkElement.StyleProperty, "Button.Secondary");
         Button done = IconTextButton(
-            UiText.Get("Text_727333AB0740"), UiText.Get("EditorFlow_DoneHint"), "Icon.Check", FallbackCheck,
+            UiText.Get("EditorFlow_CopyAndClose"), UiText.Get("EditorFlow_CopyHint"), "Icon.Copy", FallbackCopy,
             () => Commit(EditorCommitAction.Done));
         done.SetResourceReference(FrameworkElement.StyleProperty, "Button.Primary");
         CommandButtonPresentation.KeepLabel(done);
-        // Esc no longer closes, so Cancel carries no shortcut; it closes like the title bar does.
-        Button cancel = IconTextButton(UiText.Get("Text_BE876433993A"), UiText.Get("EditorFlow_CancelHint"), "Icon.Close", FallbackClose, RequestClose);
-        AutomationProperties.SetAutomationId(cancel, "EditorFlowCancel");
+        CommandButtonPresentation.KeepLabel(save);
         AutomationProperties.SetAutomationId(done, "EditorFlowDone");
-        AutomationProperties.SetAutomationId(copy, "EditorFlowCopy");
         right.Children.Add(save);
-        right.Children.Add(copy);
-        right.Children.Add(Separator());
         right.Children.Add(done);
-        right.Children.Add(cancel);
 
         foreach (var (button, command, borderless) in new[] { (_undoButton, "Undo", true), (_redoButton, "Redo", true),
-            (crop, "Crop", true), (_redactButton, "Privacy", true), (save, "Save", false), (copy, "Copy", false), (done, "Done", false) })
+            (crop, "Crop", true), (_redactButton, "Privacy", true), (save, "Save", false), (done, "Copy", false) })
         {
             CommandButton(button, borderless, ShortcutScope.Annotation, command);
         }
 
-        CommandButton(cancel, borderless: true);
         CommandButton(_copyTextButton, borderless: true);
         CommandButtonPresentation.AlwaysIcon(_undoButton);
         CommandButtonPresentation.AlwaysIcon(_redoButton);
         // A narrow bar hides names one at a time: first where the icon alone is unmistakable,
         // last where it could be taken for a tool (the T and the mosaic grid on the tool rail).
-        CommandButtonPresentation.CollapseOrder(cancel, 1);
         CommandButtonPresentation.CollapseOrder(crop, 2);
-        CommandButtonPresentation.CollapseOrder(copy, 3);
-        CommandButtonPresentation.CollapseOrder(save, 4);
         CommandButtonPresentation.CollapseOrder(_redactButton, 5);
         CommandButtonPresentation.CollapseOrder(_copyTextButton, 6);
         var panel = new CommandGroupsPanel { Children = { left, right } };

@@ -16,16 +16,42 @@ internal sealed class OcrImageOverlay : FrameworkElement
     private static readonly DependencyProperty RegionHaloBrushProperty = DependencyProperty.Register(
         "RegionHaloBrush", typeof(Brush), typeof(OcrImageOverlay),
         new FrameworkPropertyMetadata(Brushes.Black, FrameworkPropertyMetadataOptions.AffectsRender));
+    // Numbered badges use the neutral badge colors; the accent is reserved for primary actions.
+    private static readonly DependencyProperty LabelBrushProperty = DependencyProperty.Register(
+        "LabelBrush", typeof(Brush), typeof(OcrImageOverlay),
+        new FrameworkPropertyMetadata(Brushes.Black, FrameworkPropertyMetadataOptions.AffectsRender));
+    private static readonly DependencyProperty LabelTextBrushProperty = DependencyProperty.Register(
+        "LabelTextBrush", typeof(Brush), typeof(OcrImageOverlay),
+        new FrameworkPropertyMetadata(Brushes.White, FrameworkPropertyMetadataOptions.AffectsRender));
     internal Brush RegionBrush { get => (Brush)GetValue(RegionBrushProperty); set => SetValue(RegionBrushProperty, value); }
     private BitmapSource? _image;
+    // Retained WPF drawing commands can outlive the window's last render. Clear this
+    // mutable drawing on dismissal so those commands cannot keep the old pixels alive.
+    private readonly ImageDrawing _imageDrawing = new();
     private IReadOnlyList<OcrRect> _regions = [];
+    private IReadOnlyList<string> _labels = [];
+    private int? _highlightedRegion;
     private Point? _dragStart;
     private Point _dragEnd;
     private int _activeRegion;
     internal OcrRect? Selection { get; private set; }
     internal BitmapSource? SourceImage => _image;
     internal IReadOnlyList<OcrRect> Regions => _regions;
+    /// <summary>Numbers drawn at the regions' corners, one per region, or none.</summary>
+    internal IReadOnlyList<string> Labels => _labels;
     internal event EventHandler? SelectionChanged;
+
+    /// <summary>A region drawn with a stronger outline, such as the translation block in focus.</summary>
+    internal int? HighlightedRegion
+    {
+        get => _highlightedRegion;
+        set
+        {
+            if (_highlightedRegion == value) return;
+            _highlightedRegion = value;
+            InvalidateVisual();
+        }
+    }
 
     internal OcrImageOverlay()
     {
@@ -35,6 +61,8 @@ internal sealed class OcrImageOverlay : FrameworkElement
         Cursor = Cursors.Cross;
         SetResourceReference(RegionBrushProperty, "Text.Primary");
         SetResourceReference(RegionHaloBrushProperty, "Surface.Raised");
+        SetResourceReference(LabelBrushProperty, "Surface.BadgeStrong");
+        SetResourceReference(LabelTextBrushProperty, "Text.Badge");
         AutomationProperties.SetName(this, UiText.Get("OCR410_OriginalImage"));
         AutomationProperties.SetHelpText(this, UiText.Get("OCR410_SelectionHelp"));
         ToolTip = UiText.Get("OCR410_SelectionHelp");
@@ -43,14 +71,19 @@ internal sealed class OcrImageOverlay : FrameworkElement
     internal void SetImage(BitmapSource? image)
     {
         _image = image;
+        _imageDrawing.ImageSource = image;
         _dragStart = null;
         if (IsMouseCaptured) ReleaseMouseCapture();
         InvalidateVisual();
     }
 
-    internal void SetRegions(IEnumerable<OcrRect> regions)
+    internal void SetRegions(IEnumerable<OcrRect> regions, IReadOnlyList<string>? labels = null)
     {
-        _regions = regions.Where(OcrGeometry.IsValid).ToArray();
+        var kept = regions.Select((region, index) => (Region: region, Label: labels is null || index >= labels.Count ? null : labels[index]))
+            .Where(entry => OcrGeometry.IsValid(entry.Region)).ToArray();
+        _regions = [.. kept.Select(entry => entry.Region)];
+        _labels = labels is null ? [] : [.. kept.Select(entry => entry.Label ?? "")];
+        _highlightedRegion = null;
         _activeRegion = Math.Clamp(_activeRegion, 0, Math.Max(0, _regions.Count - 1));
         InvalidateVisual();
     }
@@ -72,7 +105,8 @@ internal sealed class OcrImageOverlay : FrameworkElement
         if (_image is null) return;
         OcrRect fit = FittedImage;
         if (!OcrGeometry.IsValid(fit)) return;
-        drawing.DrawImage(_image, Rect(fit));
+        _imageDrawing.Rect = Rect(fit);
+        drawing.DrawDrawing(_imageDrawing);
         Brush brush = SystemParameters.HighContrast ? SystemColors.HighlightBrush : RegionBrush;
         Brush halo = SystemParameters.HighContrast ? SystemColors.WindowBrush : (Brush)GetValue(RegionHaloBrushProperty);
         var pen = new Pen(brush, 1);
@@ -81,6 +115,12 @@ internal sealed class OcrImageOverlay : FrameworkElement
             drawing.DrawRectangle(null, new Pen(halo, 3), ViewRect(region, fit));
             drawing.DrawRectangle(null, pen, ViewRect(region, fit));
         }
+        if (_highlightedRegion is int highlighted && highlighted >= 0 && highlighted < _regions.Count)
+        {
+            drawing.DrawRectangle(null, new Pen(halo, 5), ViewRect(_regions[highlighted], fit));
+            drawing.DrawRectangle(null, new Pen(brush, 2.5), ViewRect(_regions[highlighted], fit));
+        }
+        DrawLabels(drawing, fit);
         if (IsKeyboardFocused && _regions.Count > 0)
         {
             var focusPen = new Pen(brush, 2) { DashStyle = DashStyles.Dash };
@@ -98,6 +138,34 @@ internal sealed class OcrImageOverlay : FrameworkElement
             drawing.Pop();
             drawing.DrawRectangle(null, new Pen(halo, 4), rectangle);
             drawing.DrawRectangle(null, new Pen(brush, 2), rectangle);
+        }
+    }
+
+    /// <summary>
+    /// A round number badge just outside each labeled region's top-left corner, so it overlaps the
+    /// outline rather than the first letters; badges stay inside the image.
+    /// </summary>
+    private void DrawLabels(DrawingContext drawing, OcrRect fit)
+    {
+        if (_labels.Count == 0) return;
+        Brush fill = SystemParameters.HighContrast ? SystemColors.HighlightBrush : (Brush)GetValue(LabelBrushProperty);
+        Brush text = SystemParameters.HighContrast ? SystemColors.HighlightTextBrush : (Brush)GetValue(LabelTextBrushProperty);
+        Brush halo = SystemParameters.HighContrast ? SystemColors.WindowBrush : (Brush)GetValue(RegionHaloBrushProperty);
+        double pixelsPerDip = VisualTreeHelper.GetDpi(this).PixelsPerDip;
+        var typeface = new Typeface(TryFindResource("Font.Ui") as FontFamily ?? new FontFamily("Segoe UI"),
+            FontStyles.Normal, FontWeights.SemiBold, FontStretches.Normal);
+        for (int index = 0; index < _regions.Count && index < _labels.Count; index++)
+        {
+            if (string.IsNullOrEmpty(_labels[index])) continue;
+            var number = new FormattedText(_labels[index], System.Globalization.CultureInfo.InvariantCulture,
+                FlowDirection.LeftToRight, typeface, 11, text, pixelsPerDip);
+            double radius = Math.Max(9, number.Width / 2 + 4);
+            Rect region = ViewRect(_regions[index], fit);
+            var center = new Point(
+                Math.Clamp(region.X - radius + 3, fit.X + radius, Math.Max(fit.X + radius, fit.Right - radius)),
+                Math.Clamp(region.Y - radius + 4, fit.Y + radius, Math.Max(fit.Y + radius, fit.Bottom - radius)));
+            drawing.DrawEllipse(fill, new Pen(halo, 1.5), center, radius, radius);
+            drawing.DrawText(number, new Point(center.X - number.Width / 2, center.Y - number.Height / 2));
         }
     }
 

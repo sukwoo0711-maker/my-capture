@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.IO;
 using System.Windows;
 using System.Windows.Automation;
@@ -12,6 +13,7 @@ using System.Xml.Linq;
 using MyCapture.App.Gallery;
 using MyCapture.App.Themes;
 using MyCapture.Core.Localization;
+using MyCapture.Core.Capture;
 using MyCapture.Core.Queue;
 using Xunit;
 
@@ -20,6 +22,139 @@ namespace MyCapture.App.Tests;
 public sealed class GalleryCaptionPreviewTests
 {
     private const string LongCaption = "2026년 3분기 제품 개발 계획과 고객 피드백 검토 — 화면 캡처 라이브러리 사용성 개선 및 최종 검증 결과 보고서 📷 — MyCapture 기능 개선 회의.xlsx";
+
+    [Theory]
+    [InlineData(false, 1.0)]
+    [InlineData(true, 1.0)]
+    [InlineData(false, 2.0)]
+    [InlineData(true, 2.0)]
+    public void SourceIconsStayOutsideImagesAndRevealOnlyOnDemand(bool compact, double textScale) => StaTestHost.Run(() =>
+    {
+        using var language = UiText.UseLanguage("ko-KR");
+        var window = new Window { Width = compact ? 720 : 1100, Height = 420, ShowInTaskbar = false, ShowActivated = false };
+        LoadProductTemplates(window);
+        FluidMotion.SetWindowEntrance(window, false);
+        window.SetResourceReference(Window.BackgroundProperty, "Surface.Base");
+        window.Resources["FontSize.Body"] = 14 * textScale;
+        window.Resources["FontSize.Caption"] = 12 * textScale;
+        var row = new ListBox
+        {
+            Style = (Style)window.FindResource(compact ? "Gallery.CompactTileRowList" : "Gallery.TileRowList"),
+            VerticalAlignment = VerticalAlignment.Top, Margin = new Thickness(24),
+            Width = compact ? 656 : 1040,
+        };
+        CaptureRecord[] records =
+        [
+            new() { Title = LongCaption, SourcePageUrl = "https://example.com/design?token=private" },
+            new() { Title = "문서", SourceAppName = "Excel", SourceDocumentPath = @"C:\Work\사양서.xlsx" },
+            new() { Title = "앱", SourceAppName = "Claude", SourceWindowTitle = "사용성 검토" },
+            new() { Title = "메모" },
+        ];
+        var thumbnail = BitmapSource.Create(320, 180, 96, 96, PixelFormats.Bgr24, null, new byte[320 * 180 * 3], 320 * 3);
+        thumbnail.Freeze();
+        var loader = new GalleryThumbnailLoader((_, _) => thumbnail);
+        foreach (CaptureRecord record in records)
+        {
+            record.IsPinned = true;
+            record.HasAnnotations = true;
+            record.CreatedAt = new DateTimeOffset(2026, 10, 26, 12, 0, 0, TimeSpan.FromHours(9));
+            var tile = new GalleryItemViewModel(record, _ => "synthetic-preview", 320);
+            tile.ConfigureAsyncLoading(loader, Dispatcher.CurrentDispatcher);
+            tile.SetFolderBadge(("제품 기획 자료", "작업/제품 기획 자료"));
+            row.Items.Add(tile);
+        }
+        window.Content = row;
+        try
+        {
+            window.Show();
+            Drain(window);
+            long started = Stopwatch.GetTimestamp();
+            while (row.Items.Cast<GalleryItemViewModel>().Any(tile => tile.Thumbnail is null)
+                && Stopwatch.GetElapsedTime(started) < TimeSpan.FromSeconds(15))
+            {
+                Thread.Sleep(25);
+                Drain(window);
+            }
+            Assert.All(row.Items.Cast<GalleryItemViewModel>(), tile => Assert.NotNull(tile.Thumbnail));
+            for (int index = 0; index < records.Length; index++)
+            {
+                var item = Assert.IsType<ListBoxItem>(row.ItemContainerGenerator.ContainerFromIndex(index));
+                Button source = Assert.Single(Descendants(item).OfType<Button>(), button => button.Name == "SourceBadge");
+                Border preview = Assert.Single(Descendants(item).OfType<Border>(), border => border.Name == "TilePreview");
+                if (index == 3)
+                {
+                    Assert.False(source.IsVisible);
+                    continue;
+                }
+                Assert.Equal(32, source.ActualWidth);
+                Assert.Equal(32, source.ActualHeight);
+                Rect iconBounds = new(source.TranslatePoint(new Point(), window), source.RenderSize);
+                Rect imageBounds = new(preview.TranslatePoint(new Point(), window), preview.RenderSize);
+                Assert.False(iconBounds.IntersectsWith(imageBounds));
+                Rect itemBounds = new(item.TranslatePoint(new Point(), window), item.RenderSize);
+                Assert.True(itemBounds.Contains(iconBounds), $"Source icon escapes card: {iconBounds} / {itemBounds}");
+                Grid badges = Assert.Single(Descendants(item).OfType<Grid>(), grid => grid.Name == "TileStatusBadges");
+                foreach (Border badge in badges.Children.OfType<Border>().Where(badge => badge.IsVisible))
+                {
+                    Rect bounds = new(badge.TranslatePoint(new Point(), window), badge.RenderSize);
+                    Assert.True(itemBounds.Contains(bounds), $"Status badge escapes card: {badge.Name}: {bounds} / {itemBounds}");
+                    Assert.False(bounds.IntersectsWith(iconBounds), $"Status badge overlaps source: {badge.Name}");
+                }
+                TextBlock metadata = Assert.Single(Descendants(item).OfType<TextBlock>(), text => text.Name == "TileMetadataText");
+                Assert.True(metadata.ActualWidth >= 8, $"Metadata lost all space: {metadata.ActualWidth}");
+                var tile = Assert.IsType<GalleryItemViewModel>(item.DataContext);
+                tile.SetSearchMatch(true, CaptureMatchField.Title);
+                Drain(window);
+                foreach (Border badge in badges.Children.OfType<Border>().Where(badge => badge.IsVisible))
+                {
+                    Rect bounds = new(badge.TranslatePoint(new Point(), window), badge.RenderSize);
+                    Assert.True(itemBounds.Contains(bounds));
+                    Assert.False(bounds.IntersectsWith(iconBounds), $"Search badge overlaps source: {badge.Name}");
+                }
+                Assert.True(metadata.ActualWidth >= 8);
+                tile.SetSearchMatch(false, CaptureMatchField.None);
+                Drain(window);
+                Size before = item.RenderSize;
+                var tip = Assert.IsType<ToolTip>(source.ToolTip);
+                Assert.False(tip.IsOpen);
+                item.IsSelected = true;
+                Drain(window);
+                Assert.False(tip.IsOpen);
+                GallerySourceBadge.ShowForFocus(source, false);
+                Assert.False(tip.IsOpen);
+                RaiseFocusChange(null, source);
+                GallerySourceBadge.ShowForFocus(source, true);
+                Drain(window);
+                Assert.True(tip.IsOpen);
+                Assert.Equal(before, item.RenderSize);
+                Assert.Equal(32, source.ActualWidth);
+                Assert.DoesNotContain("private", Assert.IsType<TextBlock>(tip.Content).Text);
+                var escape = new KeyEventArgs(Keyboard.PrimaryDevice, PresentationSource.FromVisual(window), Environment.TickCount, Key.Escape)
+                { RoutedEvent = Keyboard.PreviewKeyDownEvent, Source = row };
+                row.RaiseEvent(escape);
+                Assert.True(escape.Handled);
+                Assert.False(tip.IsOpen);
+                GallerySourceBadge.ShowForFocus(source, true);
+                Assert.False(tip.IsOpen);
+                RaiseFocusChange(source, item);
+                RaiseFocusChange(item, row);
+                Assert.Null(item.ToolTip);
+                Assert.False(TitleTip(item).IsOpen);
+            }
+            SaveEvidence(window, null, $"gallery-source-{(compact ? "compact" : "full")}-{textScale}.png");
+            var first = Assert.IsType<ListBoxItem>(row.ItemContainerGenerator.ContainerFromIndex(0));
+            Button firstSource = Assert.Single(Descendants(first).OfType<Button>(), button => button.Name == "SourceBadge");
+            RaiseFocusChange(row, firstSource);
+            GallerySourceBadge.ShowForFocus(firstSource, true);
+            Drain(window);
+            var activeTip = Assert.IsType<ToolTip>(firstSource.ToolTip);
+            SaveEvidence(window, activeTip, $"gallery-source-focus-{(compact ? "compact" : "full")}-{textScale}.png");
+            GallerySourceBadge.SetProvenance(firstSource, CaptureProvenance.None);
+            Assert.False(activeTip.IsOpen);
+            Assert.Empty(Assert.IsType<TextBlock>(Assert.IsType<ToolTip>(firstSource.ToolTip).Content).Text);
+        }
+        finally { window.Close(); }
+    });
 
     [Fact]
     public void FullCaptionPopupWrapsWithoutMovingCardsAndClosesCleanly() => StaTestHost.Run(() =>
@@ -55,15 +190,22 @@ public sealed class GalleryCaptionPreviewTests
             Point beforeSecond = second.TranslatePoint(new Point(), window);
             TextBlock caption = Assert.Single(Descendants(first).OfType<TextBlock>(), text => text.Text == LongCaption);
             Assert.Equal(TextTrimming.CharacterEllipsis, caption.TextTrimming);
+            Assert.True(GalleryCaptionPreview.IsTruncated(caption));
+            GalleryCaptionPreview.ShowForFocus(first, false);
+            Assert.False(TitleTip(first).IsOpen);
+            Assert.Equal(Assert.IsType<GalleryItemViewModel>(first.DataContext).ExportToolTip,
+                AutomationProperties.GetHelpText(first));
             SaveEvidence(window, null, "gallery-caption-idle.png");
 
-            var tip = Assert.IsType<ToolTip>(first.ToolTip);
+            Assert.Null(first.ToolTip);
+            var tip = TitleTip(first);
             Assert.True(GalleryCaptionPreview.GetIsEnabled(first));
             tip.PlacementTarget = first;
             tip.IsOpen = true;
             Drain(window);
             Assert.True(tip.IsOpen);
             TextBlock expanded = Assert.Single(Descendants(tip).OfType<TextBlock>(), text => text.Text == LongCaption);
+            Assert.Single(Descendants(tip).OfType<TextBlock>());
             Assert.Equal(TextWrapping.Wrap, expanded.TextWrapping);
             Assert.Equal(TextTrimming.None, expanded.TextTrimming);
             // Measure the full text with the popup's actual font. Tooltip text is
@@ -101,25 +243,35 @@ public sealed class GalleryCaptionPreviewTests
             Assert.True(tip.IsOpen);
             var escape = new KeyEventArgs(Keyboard.PrimaryDevice, PresentationSource.FromVisual(window), Environment.TickCount, Key.Escape)
             {
-                RoutedEvent = Keyboard.PreviewKeyDownEvent, Source = first,
+                RoutedEvent = Keyboard.PreviewKeyDownEvent, Source = second,
             };
-            first.RaiseEvent(escape);
+            second.RaiseEvent(escape);
             Assert.True(escape.Handled);
+            Assert.False(tip.IsOpen);
+            GalleryCaptionPreview.ShowForFocus(first, true);
             Assert.False(tip.IsOpen);
             RaiseFocusChange(first, second);
             Drain(window);
-            Assert.True(tip.IsOpen);
-            Assert.Same(second, tip.PlacementTarget);
+            Assert.False(tip.IsOpen);
             first.RaiseEvent(new RoutedEventArgs(FrameworkElement.UnloadedEvent));
-            Assert.True(tip.IsOpen); // An old recycled tile cannot close another tile's hint.
+            Assert.False(tip.IsOpen);
             RaiseFocusChange(second, first);
             Drain(window);
             Assert.True(tip.IsOpen);
-            Assert.Same(first, tip.PlacementTarget);
+            Assert.Same(caption, tip.PlacementTarget);
+            caption.RaiseEvent(new MouseEventArgs(Mouse.PrimaryDevice, Environment.TickCount)
+            { RoutedEvent = Mouse.MouseLeaveEvent });
+            Assert.False(tip.IsOpen);
+            Drain(window);
+            tip.IsOpen = true;
+            Drain(window);
+            caption.RaiseEvent(new MouseEventArgs(Mouse.PrimaryDevice, Environment.TickCount)
+            { RoutedEvent = Mouse.MouseLeaveEvent });
+            Assert.True(tip.IsOpen);
             // Source badges can precede the action row and be collapsed for this fixture.
-            // Exercise the original keyboard-reachable Float action and its own hint.
+            // Exercise the keyboard-reachable footer menu and its own hint.
             Button actionButton = Assert.Single(Descendants(first).OfType<Button>(),
-                button => AutomationProperties.GetName(button) == UiText.Get("Gallery.Float"));
+                button => AutomationProperties.GetName(button) == UiText.Get("Text_5E8959D18390"));
             Assert.True(actionButton.IsVisible && actionButton.Focusable && actionButton.IsTabStop);
             RaiseFocusChange(first, actionButton);
             Assert.False(tip.IsOpen); // Action buttons retain their own hints.
@@ -132,14 +284,13 @@ public sealed class GalleryCaptionPreviewTests
             first.Visibility = Visibility.Visible;
             Drain(window);
 
-            // One shared style tooltip must bind to its current tile, not retain the
-            // previously hovered record. Reopening follows metadata edits as well.
-            tip.PlacementTarget = second;
-            tip.IsOpen = true;
+            var secondTip = TitleTip(second);
+            secondTip.PlacementTarget = second;
+            secondTip.IsOpen = true;
             Drain(window);
-            Assert.Contains(Descendants(tip).OfType<TextBlock>(), text => text.Text == "간단한 메모");
-            Assert.DoesNotContain(Descendants(tip).OfType<TextBlock>(), text => text.Text == LongCaption);
-            tip.IsOpen = false;
+            Assert.Contains(Descendants(secondTip).OfType<TextBlock>(), text => text.Text == "간단한 메모");
+            Assert.DoesNotContain(Descendants(secondTip).OfType<TextBlock>(), text => text.Text == LongCaption);
+            secondTip.IsOpen = false;
             var tile = Assert.IsType<GalleryItemViewModel>(first.DataContext);
             tile.Record.Title = new string('文', 140) + " 📷 끝";
             tile.RaiseMetaChanged();
@@ -187,7 +338,11 @@ public sealed class GalleryCaptionPreviewTests
         {
             RoutedEvent = Keyboard.GotKeyboardFocusEvent,
         });
+        if (next is ListBoxItem item) GalleryCaptionPreview.ShowForFocus(item, true);
     }
+
+    private static ToolTip TitleTip(ListBoxItem item) =>
+        Assert.IsType<ToolTip>(Assert.Single(Descendants(item).OfType<TextBlock>(), text => text.Name == "TileTitle").ToolTip);
 
     private static void LoadProductTemplates(Window window)
     {
@@ -209,8 +364,9 @@ public sealed class GalleryCaptionPreviewTests
         CopyNamespaces(product, combined);
         // Import the card's local motion wash as well as its overflow menu and folder badge.
         // Every entry comes from product markup; the fixture preserves the real state layers.
-        string[] keys = ["Gallery.ThumbnailHeight", "LibraryUx.HoverWash", "Gallery.IconButton", "Gallery.TileContextMenu", "LibraryUx.Icon.Folder", "LibraryUx.Icon.Kept", "Gallery.FolderBadge",
-            "Gallery.FolderBadgeContent", "Gallery.TileTemplate", "Gallery.TileRowList"];
+        string[] keys = ["Gallery.ThumbnailHeight", "LibraryUx.HoverWash", "Gallery.IconButton", "Gallery.SelectionCheckBox", "Gallery.TileContextMenu", "LibraryUx.Icon.Folder", "LibraryUx.Icon.Kept", "Gallery.FolderBadge",
+            "Gallery.FolderBadgeContent", "Gallery.SourceBadge", "Gallery.TileTemplate", "Gallery.TileRowList",
+            "Gallery.CompactTileTemplate", "Gallery.CompactTileRowList"];
         foreach (XElement entry in product.Element(p + "Window.Resources")!.Element(p + "ResourceDictionary")!.Elements()
             .Where(element => keys.Contains((string?)element.Attribute(x + "Key"))))
         {

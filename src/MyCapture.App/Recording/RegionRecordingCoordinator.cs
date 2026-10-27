@@ -141,7 +141,7 @@ internal sealed class RegionRecordingCoordinator
 
         // A stop→finalise→editor transition is in flight: ignore re-triggers so a second
         // hotkey press can never start a brand-new recording from 0 mid-transition. The
-        // host raises a balloon because the control window is already gone at this point.
+        // host raises a notice and the saving bar, while it is still there, comes forward.
         if (_finishing)
         {
             FinishingBusyFeedback?.Invoke();
@@ -445,10 +445,14 @@ internal sealed class RegionRecordingCoordinator
         MyCapture.App.Themes.ThemedDialog.Error(null, UiText.Get("Text_89CF3D468EC1"), e.Exception);
     }
 
-    private void OnControlsClosed(object? sender, EventArgs e)
+    private void OnControlsClosed(object? sender, EventArgs e) => ReleaseControls(sender as RecordingControlWindow);
+
+    // The bar stops belonging to the session when it closes, or when Saved has handed over to
+    // the editor and only its exit is left.
+    private void ReleaseControls(RecordingControlWindow? controls)
     {
         bool finalizedOnClose = false;
-        if (sender is RecordingControlWindow controls)
+        if (controls is not null)
         {
             controls.RecordingFinished -= OnRecordingFinished;
             controls.Cancelled -= OnControlsCancelled;
@@ -520,13 +524,14 @@ internal sealed class RegionRecordingCoordinator
 
         _finishing = true;
         _completionInProgress = true;
-        // Finalisation already finished (RecordingFinished fires after the encoder join),
-        // so the user regains the screen immediately. Validation, thumbnail and library
-        // publication continue with the window gone; a crash or quit mid-tail is recovered
-        // from the publish-ready marker at startup. The tail keeps running with its
-        // continuations on the dispatcher, exactly like the pre-background flow, because
-        // the capture queue's index state is dispatcher-serialised.
-        (sender as RecordingControlWindow)?.CompleteAndClose();
+        // Finalisation already finished (RecordingFinished fires after the encoder join). The
+        // bar stays with its saving status while validation, thumbnail and library publication
+        // run, so the wait before the editor is never silent; its interior is transparent and
+        // passes clicks, so the screen stays usable. A crash or quit mid-tail is recovered from
+        // the publish-ready marker at startup. The tail keeps running with its continuations on
+        // the dispatcher, exactly like the pre-background flow, because the capture queue's
+        // index state is dispatcher-serialised.
+        var controls = sender as RecordingControlWindow;
         VideoLibraryItem item;
         try
         {
@@ -542,10 +547,23 @@ internal sealed class RegionRecordingCoordinator
             _writeSession = null;
             _completionInProgress = false;
             _finishing = false;
-            (sender as RecordingControlWindow)?.CompleteAndClose();
+            controls?.CompleteAndClose();
             MyCapture.App.Themes.ThemedDialog.Error(null, UiText.Get("Text_87B145D16453"), ex);
             EndSessionIfIdle();
             return;
+        }
+
+        if (controls is not null && ReferenceEquals(_controls, controls))
+        {
+            controls.ShowSaved();
+            try
+            {
+                await DrawSavedAsync();
+            }
+            catch (TaskCanceledException) when (_dispatcher.HasShutdownStarted || _dispatcher.HasShutdownFinished)
+            {
+                return;
+            }
         }
 
         try
@@ -576,7 +594,13 @@ internal sealed class RegionRecordingCoordinator
             _ = editor.Activate();
             openLatency.Mark(RecordingOpenStage.EditorOpen);
             LogOpenLatency(openLatency, result);
-            (sender as RecordingControlWindow)?.CompleteAndClose();
+            if (controls is not null)
+            {
+                // The editor is on screen: the session lets go of the bar now and only its exit
+                // is left to play.
+                ReleaseControls(controls);
+                controls.LeaveAfterSaved();
+            }
         }
         catch (Exception ex)
         {
@@ -585,10 +609,32 @@ internal sealed class RegionRecordingCoordinator
             _editor = null;
             _finishing = false;
             _log.LogError(ex, "The recording was saved, but its editor could not be opened");
-            (sender as RecordingControlWindow)?.CompleteAndClose();
+            controls?.CompleteAndClose();
             MyCapture.App.Themes.ThemedDialog.Error(null, UiText.Get("Text_49020661A850"), ex);
             EndSessionIfIdle();
         }
+    }
+
+    /// <summary>
+    /// Lets Saved reach the screen before the editor's construction holds the dispatcher: one
+    /// frame is drawn, or 100 ms pass when nothing can draw (a locked session).
+    /// </summary>
+    private async Task DrawSavedAsync()
+    {
+        var rendering = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        void OnRendering(object? sender, EventArgs e) => rendering.TrySetResult();
+        System.Windows.Media.CompositionTarget.Rendering += OnRendering;
+        try
+        {
+            await Task.WhenAny(rendering.Task, Task.Delay(100));
+        }
+        finally
+        {
+            System.Windows.Media.CompositionTarget.Rendering -= OnRendering;
+        }
+
+        // Rendering is raised just before the frame is drawn; this turn comes after it.
+        await _dispatcher.InvokeAsync(static () => { }, DispatcherPriority.Background);
     }
 
     /// <summary>

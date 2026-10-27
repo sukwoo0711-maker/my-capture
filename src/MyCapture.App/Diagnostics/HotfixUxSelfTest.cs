@@ -162,8 +162,8 @@ internal static class HotfixUxSelfTest
             editor.CommitRequested = value => { committed = value.Action; return Task.FromResult(false); };
             Check("editor Ctrl+C command accepted", editor.Editor.HandleShortcut(Key.C, ModifierKeys.Control));
             Pump(150);
-            // Ctrl+C copies and keeps the editor open; Ctrl+Enter is the closing Done.
-            Check("Ctrl+C reaches editor copy commit, not receipt", committed == EditorCommitAction.CopyToClipboard);
+            // Ctrl+C finishes like Done (copy, save, close), as the owner decided.
+            Check("Ctrl+C reaches editor commit, not receipt", committed == EditorCommitAction.Done);
             // Keep the real dispatcher timer running while editor commands execute.
             var lifetime = Stopwatch.StartNew();
             while (card.IsVisible && lifetime.Elapsed < TimeSpan.FromSeconds(12)) Pump(100);
@@ -281,7 +281,7 @@ internal static class HotfixUxSelfTest
                             () => Task.CompletedTask, () => Task.FromResult(true), () => invoked++, () => Task.FromResult(dragPath)) { IsKept = true };
                         owned.Add(actionCard); actionCard.Show(); Pump(80);
                         var action = CardControl<Button>(actionCard, library ? "QuickAccess.Library" : "QuickAccess.Edit");
-                        Click(inputHandle, action);
+                        Click(inputHandle, action); WaitForExit(actionCard);
                         Check($"{(library ? "library" : "edit")} click invokes action without activating card", invoked == 1 && GetForegroundWindow() == inputHandle && !actionCard.IsVisible);
                     }
                     // Kept cards enter only by a non-action background click.
@@ -337,7 +337,7 @@ internal static class HotfixUxSelfTest
                     bool guarded = false;
                     try { RequireForeground(inputHandle); } catch (InvalidOperationException) { guarded = true; }
                     Check("foreground mismatch aborts injection", guarded);
-                    SendKey(cardHandle, 0x1B); Pump(80);
+                    SendKey(cardHandle, 0x1B); Pump(80); WaitForExit(keyboardCard);
                     Check("focused card Esc closes it", !keyboardCard.IsVisible);
                     external.Activate(); Pump(80);
                     var timed = Card(sample); owned.Add(timed); timed.Show(); Pump(100);
@@ -672,6 +672,13 @@ internal static class HotfixUxSelfTest
         var image = new RenderTargetBitmap(Math.Max(1, (int)Math.Ceiling(client.Width * scale)), Math.Max(1, (int)Math.Ceiling(client.Height * scale)), dpi, dpi, PixelFormats.Pbgra32);
         image.Render(window); ImageCodec.SavePng(image, path);
     }
+    // A closed card fades down over 83 ms (FluidMotion.BeginExit) before its window goes.
+    private static void WaitForExit(Window window)
+    {
+        var watch = Stopwatch.StartNew();
+        while (window.IsVisible && watch.Elapsed < TimeSpan.FromSeconds(1)) Pump(20);
+    }
+
     private static void Pump(int milliseconds)
     {
         var frame = new DispatcherFrame(); var timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(milliseconds) };

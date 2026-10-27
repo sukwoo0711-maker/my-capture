@@ -5,9 +5,8 @@ using System.Security.Cryptography;
 namespace MyCapture.Tests;
 
 /// <summary>
-/// Deletes only fixtures allocated by this test process, after confining the path to an owned
-/// temporary root and refusing links. (Historical name: tests never use the real Recycle Bin;
-/// only the opt-in MYCAPTURE_RECYCLE_CANARY tests exercise it.)
+/// Recycles only fixtures allocated by this test process, after confining the path to an owned
+/// temporary root. Link targets are checked before and after recycling the link itself.
 /// </summary>
 internal static class TestRecycleBin
 {
@@ -130,9 +129,8 @@ internal static class TestRecycleBin
 
     private static void Remove(string path, bool directory, bool link, bool recursive)
     {
-        // Fixtures are this process's own scratch files: they are deleted, never sent to the
-        // user's Recycle Bin. A link is removed itself (non-recursively); its target is untouched.
-        if (!directory) File.Delete(path);
-        else Directory.Delete(path, recursive: recursive && !link);
+        // Windows must confirm a recoverable move. Link targets remain untouched.
+        if (!directory) global::MyCapture.Core.Storage.RecoverableFileRemoval.DeleteFile(path);
+        else global::MyCapture.Core.Storage.RecoverableFileRemoval.DeleteDirectory(path, recursive: recursive && !link);
     }
 }

@@ -1,11 +1,15 @@
 [CmdletBinding()]
 param(
-    [string]$Version = '4.7.0',
-    [switch]$StoreOnly
+    [string]$Version = '4.9.0',
+    [switch]$StoreOnly,
+    [ValidateSet('x64', 'x86')][string]$Architecture = 'x64'
 )
 
 Set-StrictMode -Version 2.0
 $ErrorActionPreference = 'Stop'
+$runtime = "win-$Architecture"
+$metadataSuffix = if ($Architecture -eq 'x86') { '-win-x86' } else { '' }
+if ($StoreOnly -and $Architecture -eq 'x86') { throw 'Store packaging currently requires x64.' }
 
 $semVerPattern = '^(?<major>0|[1-9]\d*)\.(?<minor>0|[1-9]\d*)\.(?<patch>0|[1-9]\d*)(?:-(?<prerelease>(?:0|[1-9]\d*|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*)(?:\.(?:0|[1-9]\d*|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*))*))?$'
 $versionMatch = [regex]::Match($Version, $semVerPattern)
@@ -41,6 +45,8 @@ if (-not $artifactRoot.StartsWith($releaseRoot + '\', [StringComparison]::Ordina
     throw "Refusing to clean an unsafe artifact path: $artifactRoot"
 }
 
+if ($Architecture -eq 'x86') { $artifactRoot = Join-Path $artifactRoot 'win-x86' }
+
 if (-not [string]::IsNullOrWhiteSpace($env:LOCALAPPDATA)) {
     $bootstrapDotnetDir = Join-Path $env:LOCALAPPDATA 'MyCapture\dotnet-sdk'
     $dotnetDir = Join-Path $env:LOCALAPPDATA 'Microsoft\dotnet'
@@ -55,14 +61,14 @@ $env:DOTNET_NOLOGO = '1'
 $env:DOTNET_CLI_TELEMETRY_OPTOUT = '1'
 
 $project = Join-Path $repo 'src\MyCapture.App\MyCapture.App.csproj'
-$publish = Join-Path $artifactRoot 'publish-win-x64'
+$publish = Join-Path $artifactRoot "publish-$runtime"
 $stage = Join-Path $artifactRoot 'installer-stage'
-$portable = Join-Path $artifactRoot "MyCapture-$Version-win-x64-portable.zip"
-$setup = Join-Path $artifactRoot "MyCapture-$Version-win-x64-setup.exe"
-$installerManifestOutput = Join-Path $artifactRoot 'installer-manifest.json'
-$releaseManifestOutput = Join-Path $artifactRoot 'release-manifest.json'
-$shaSumsOutput = Join-Path $artifactRoot 'SHA256SUMS.txt'
-$readmeOutput = Join-Path $artifactRoot 'README-OFFLINE.txt'
+$portable = Join-Path $artifactRoot "MyCapture-$Version-$runtime-portable.zip"
+$setup = Join-Path $artifactRoot "MyCapture-$Version-$runtime-setup.exe"
+$installerManifestOutput = Join-Path $artifactRoot "installer-manifest$metadataSuffix.json"
+$releaseManifestOutput = Join-Path $artifactRoot "release-manifest$metadataSuffix.json"
+$shaSumsOutput = Join-Path $artifactRoot "SHA256SUMS$metadataSuffix.txt"
+$readmeOutput = Join-Path $artifactRoot "README-OFFLINE$metadataSuffix.txt"
 $projectLicense = Join-Path $repo 'LICENSE'
 $thirdPartyIndex = Join-Path $repo 'THIRD-PARTY-NOTICES.md'
 
@@ -268,14 +274,14 @@ function Assert-SelfContainedPublish([string]$PublishRoot) {
     }
 
     $deps = Get-Content -LiteralPath $depsPath -Raw -Encoding UTF8 | ConvertFrom-Json -ErrorAction Stop
-    if ([string]$deps.runtimeTarget.name -notmatch '/win-x64$') {
-        throw "Published deps runtime target is not win-x64: $($deps.runtimeTarget.name)"
+    if (-not ([string]$deps.runtimeTarget.name).EndsWith('/' + $runtime, [StringComparison]::Ordinal)) {
+        throw "Published deps runtime target is not ${runtime}: $($deps.runtimeTarget.name)"
     }
 }
 
 try {
-    & dotnet publish $project -c Release -r win-x64 --self-contained true `
-        -p:PublishProfile=win-x64-self-contained -o $publish `
+    & dotnet publish $project -c Release -r $runtime --self-contained true `
+        "-p:Platform=$Architecture" "-p:PublishProfile=$runtime-self-contained" -o $publish `
         -p:Version=$Version -p:FileVersion=$binaryVersion -p:AssemblyVersion=$binaryVersion `
         -p:SourceRevisionId=$sourceCommit
     if ($LASTEXITCODE -ne 0) { throw "dotnet publish failed: $LASTEXITCODE" }
@@ -328,7 +334,7 @@ try {
         [ordered]@{
             SchemaVersion = 3; Product = 'MyCapture'; Version = $Version
             SourceCommit = $sourceCommit; SourceTreeClean = $true
-            Runtime = 'win-x64'; Architecture = 'x64'; SelfContained = $true
+            Runtime = $runtime; Architecture = $Architecture; SelfContained = $true
             Offline = $true; Unsigned = $true; StoreOnly = $true
             GeneratedUtc = [DateTime]::UtcNow.ToString('O')
             PublishInventory = $inventory; Deliverables = @()
@@ -352,9 +358,13 @@ try {
     Copy-Item -LiteralPath $portable -Destination $payload -Force
 
     $setupProject = Join-Path $repo 'src\MyCapture.Setup\MyCapture.Setup.csproj'
-    & dotnet build $setupProject -c Release --no-restore -m:1 -nr:false -p:UseSharedCompilation=false -p:Deterministic=true
+    # The publish above restores only the app projects. A fresh checkout has no Setup assets file, and a
+    # PC without the .NET Framework 4.8 Developer Pack needs the reference-assembly package from restore.
+    $setupOutput = Join-Path $artifactRoot 'setup-bootstrap'
+    & dotnet restore $setupProject "-p:Platform=$Architecture"
+    if ($LASTEXITCODE -ne 0) { throw "Setup restore failed: $LASTEXITCODE" }
+    & dotnet build $setupProject -c Release --no-restore "-p:Platform=$Architecture" "-p:OutputPath=$setupOutput" -p:AppendTargetFrameworkToOutputPath=false -m:1 -nr:false -p:UseSharedCompilation=false -p:Deterministic=true
     if ($LASTEXITCODE -ne 0) { throw "Setup build failed: $LASTEXITCODE" }
-    $setupOutput = Join-Path $repo 'src\MyCapture.Setup\bin\Release\net48'
     $bootstrapNames = @('MyCaptureSetup.exe', 'MyCaptureSetup.exe.config', 'SETUP-HELP.txt')
     $bootstrapInventory = @()
     foreach ($name in $bootstrapNames) {
@@ -369,8 +379,8 @@ try {
         SchemaVersion = 1
         Product = 'MyCapture'
         Version = $Version
-        Runtime = 'win-x64'
-        Architecture = 'x64'
+        Runtime = $runtime
+        Architecture = $Architecture
         MinimumWindowsBuild = 19045
         SelfContained = $true
         Offline = $true
@@ -442,6 +452,7 @@ FILE4=SETUP-HELP.txt
 "@ | Set-Content -LiteralPath $sed -Encoding ASCII
 
     $iexpressPath = Join-Path $env:SystemRoot 'System32\iexpress.exe'
+    if ($Architecture -eq 'x86' -and [Environment]::Is64BitOperatingSystem) { $iexpressPath = Join-Path $env:SystemRoot 'SysWOW64\iexpress.exe' }
     if (-not (Test-Path -LiteralPath $iexpressPath -PathType Leaf)) { throw "IExpress was not found: $iexpressPath" }
     $iexpress = Start-Process -FilePath $iexpressPath -ArgumentList '/N', '/Q', $sed -WindowStyle Hidden -Wait -PassThru
     if ($iexpress.ExitCode -ne 0 -or -not (Test-Path -LiteralPath $setup -PathType Leaf)) {
@@ -471,8 +482,8 @@ FILE4=SETUP-HELP.txt
         Version = $Version
         SourceCommit = $sourceCommit
         SourceTreeClean = $sourceTreeClean
-        Runtime = 'win-x64'
-        Architecture = 'x64'
+        Runtime = $runtime
+        Architecture = $Architecture
         SelfContained = $true
         Offline = $true
         Unsigned = $true
@@ -480,9 +491,9 @@ FILE4=SETUP-HELP.txt
         Compatibility = [pscustomobject][ordered]@{
             MinimumWindowsBuild = 19045
             MinimumWindowsRelease = 'Windows 10 version 22H2'
-            NativeArchitecture = 'x64'
+            NativeArchitecture = $Architecture
             MinimumArm64EmulationBuild = 22000
-            Arm64Support = 'Windows 11 ARM64 via x64 emulation'
+            Arm64Support = "Windows 11 ARM64 via $Architecture emulation"
             RequiresInternet = $false
             RequiresPreinstalledDotNet = $false
             SetupRequires = 'In-box .NET Framework 4.8 and IExpress'
@@ -490,7 +501,7 @@ FILE4=SETUP-HELP.txt
         }
         Installer = [pscustomobject][ordered]@{
             Format = 'IExpress self-extracting package'
-            Manifest = 'installer-manifest.json'
+            Manifest = Split-Path -Leaf $installerManifestOutput
             Payload = $installerManifest.Payload
             PayloadIntegrity = 'SHA-256 plus exact path, size, and file hash inventory'
             TransactionalInstall = $true
@@ -518,22 +529,22 @@ FILE4=SETUP-HELP.txt
     $sumLines | Set-Content -LiteralPath $shaSumsOutput -Encoding ASCII
 
     @"
-MyCapture $Version - OFFLINE RELEASE (win-x64)
+MyCapture $Version - OFFLINE RELEASE ($runtime)
 ================================================
 
 CONTENTS
-- MyCapture-$Version-win-x64-setup.exe
+- MyCapture-$Version-$runtime-setup.exe
   Per-user transactional installer. Verifies payload and bootstrap SHA-256 hashes,
   rejects unsafe ZIP paths, and rolls back a failed update.
-- MyCapture-$Version-win-x64-portable.zip
+- MyCapture-$Version-$runtime-portable.zip
   Fully self-contained fallback. Extract to a normal local folder and run MyCapture.exe.
 
 OFFLINE / RUNTIME
 - No Internet connection is required.
 - The application includes CoreCLR and WPF; no separate .NET 10 runtime is required.
-- Supported baseline: Windows 10 version 22H2 (build 19045) or later, x64. Earlier Windows
+- Supported baseline: Windows 10 version 22H2 (build 19045) or later, $Architecture. Earlier Windows
   releases are not supported and the installer refuses to run on them.
-- ARM64 requires Windows 11 (build 22000) or later for x64 emulation.
+- ARM64 requires Windows 11 (build 22000) or later for $Architecture emulation.
 - Setup and uninstall use .NET Framework 4.8, included in Windows 10 22H2 and Windows 11.
   IExpress directly launches MyCaptureSetup.exe; setup, update-install and uninstall
   do not run PowerShell or cmd.exe. No administrator rights are required.
@@ -544,7 +555,7 @@ OFFLINE / RUNTIME
   Exit 22 is retired. Logs: %TEMP%\MyCapture-Install-yyyyMMdd-HHmmss-PID.log and
   %TEMP%\MyCapture-Uninstall-yyyyMMdd-HHmmss-PID.log. IExpress/Explorer may not
   surface the child exit code. AppLocker or WDAC can still restrict executable files.
-- Download MyCapture-$Version-win-x64-portable.zip from the same release, extract to a
+- Download MyCapture-$Version-$runtime-portable.zip from the same release, extract to a
   normal local folder and run MyCapture.exe. No administrator rights are required.
   Microsoft Store edition: https://apps.microsoft.com/detail/9PB33MC095VR
 
@@ -554,7 +565,7 @@ INTEGRITY AND SIGNATURE NOTICE
   extracts and launches the unsigned MyCaptureSetup.exe. If you trust the source and
   have verified the hash, More info / Run anyway may be available. If your organization
   blocks execution, use its approved installation channel. Setup does not request UAC.
-- Verify the SHA-256 values in SHA256SUMS.txt through a trusted distribution channel.
+- Verify the SHA-256 values in SHA256SUMS$metadataSuffix.txt through a trusted distribution channel.
 - SHA-256 detects accidental or malicious file changes, but without a signing certificate
   it does not independently prove publisher authenticity.
 

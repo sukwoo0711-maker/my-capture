@@ -1,4 +1,5 @@
 using System.Collections;
+using System.Diagnostics;
 using System.Globalization;
 using System.Windows;
 using System.Windows.Controls.Primitives;
@@ -27,9 +28,10 @@ namespace MyCapture.App.Capture;
 /// <see cref="DetectWindows"/>, hovering highlights the frontmost top-level window and a click
 /// (no drag) selects it; over empty desktop that is the whole monitor under the pointer. The
 /// highlight carries an accent tab naming what a click captures, and the top status lists drag
-/// and click side by side with the one that applies right now filled in. There is still no
-/// snapping or Tab target selection. The owner can also enable C to copy the frozen pixel's
-/// colour and T to switch to text capture.
+/// and click side by side with the one that applies right now filled in. Moving to another window
+/// glides the highlight there over the fast motion token; what a click captures changes at once.
+/// There is still no snapping or Tab target selection. The owner can also enable C to copy the
+/// frozen pixel's colour and T to switch to text capture.
 /// <para>
 /// With <see cref="ShowModeBar"/> the screenshot selector gets a Snipping Tool style mode bar at
 /// the top of the pointer's monitor (region or window, full screen, text, colour, help, cancel) and
@@ -108,7 +110,23 @@ internal sealed class CaptureOverlayView : FrameworkElement
     private RectD? _hoverRegion;
     private bool _hoverWholeMonitor;
     private RectD? _drawnHover;
+    private RectD? _drawnHoverTarget;
     private bool _drawnHoverWholeMonitor;
+    // The highlight glide: _hoverRegion is what a click captures, _shownHover where the reveal clip,
+    // the band and the tab are drawn while they ease towards it.
+    private RectD? _shownHover;
+    private RectD? _glideTarget;
+    private RectD _glideFrom;
+    private TimeSpan _glideStart;
+    private TimeSpan _glideLength;
+    private IEasingFunction? _glideEasing;
+    private bool _gliding;
+    private static readonly Func<TimeSpan> MotionClock = static () => Stopwatch.GetElapsedTime(0);
+    private FormattedText? _tabLabelText;
+    private FormattedText? _tabSizeText;
+    private string? _tabLabel;
+    private (int Width, int Height) _tabTextSize;
+    private string? _tabTargetLabel;
     private IReadOnlyList<MonitorInfo>? _monitors;
     private readonly Func<IReadOnlyList<MonitorInfo>> _readMonitorsOnce;
     private WindowCandidate? _selectedWindow;
@@ -207,6 +225,11 @@ internal sealed class CaptureOverlayView : FrameworkElement
     internal void FlushFeedbackForTest() => _feedbackScheduler.FlushForTest();
     internal RectD? HoverRegionForTest => _hoverRegion;
     internal bool HoverWholeMonitorForTest => _hoverWholeMonitor;
+    internal RectD? ShownHoverForTest => _shownHover;
+    internal bool HoverGlidingForTest => _gliding;
+
+    /// <summary>The clock the highlight glide reads; tests step it.</summary>
+    internal Func<TimeSpan> ReadClock { get; set; } = MotionClock;
     internal string? ToastMessageForTest => _toastMessage;
     internal IReadOnlyList<Rect> ChromeBoundsForTest => _chromeBounds;
     internal Rect? TargetTabForTest => _targetTab;
@@ -520,6 +543,8 @@ internal sealed class CaptureOverlayView : FrameworkElement
         _hoverWindow = _selectedWindow = null;
         _hoverRegion = null;
         _hoverWholeMonitor = false;
+        _shownHover = _glideTarget = null;
+        _gliding = false;
         _monitors = null;
         _copyColorText = null;
         ColorCopied = null;
@@ -1013,6 +1038,7 @@ internal sealed class CaptureOverlayView : FrameworkElement
             StaticRenderCount++;
             BuildGuidePens();
             _instructionText = _anchorText = _precisionText = _sampleText = _coordinateText = _widestCoordinateText = null;
+            _tabLabelText = _tabSizeText = null;
             using (DrawingContext dc = _desktopVisual.RenderOpen())
                 if (_frame?.Bitmap is { } bitmap) dc.DrawImage(bitmap, new Rect(RenderSize));
             using (DrawingContext dc = _dimmerVisual.RenderOpen())
@@ -1027,6 +1053,7 @@ internal sealed class CaptureOverlayView : FrameworkElement
         CaptureSelectorMode mode = Mode;
         RectD? hover = _selection.HasValue ? null : _hoverRegion;
         bool hoverWholeMonitor = hover.HasValue && _hoverWholeMonitor;
+        RectD? shownHover = GlideHover(hover);
         bool chromeMoved = false;
         if (rebuild || _drawnPrecision != _precisionPointer.IsPrecision || _drawnMode != mode
             || _drawnCueState != cue || _drawnCueMonitor != hoverWholeMonitor || _drawnModeBarBounds != _modeBarBounds)
@@ -1042,20 +1069,21 @@ internal sealed class CaptureOverlayView : FrameworkElement
             chromeMoved = !chrome.SequenceEqual(_chromeBounds);
             _chromeBounds = chrome;
         }
-        if (rebuild || chromeMoved || _drawnSelection != _selection || _drawnHover != hover
+        if (rebuild || chromeMoved || _drawnSelection != _selection || _drawnHover != shownHover || _drawnHoverTarget != hover
             || _drawnHoverWholeMonitor != hoverWholeMonitor || _drawnSelectionMode != mode)
         {
             _drawnSelection = _selection;
-            _drawnHover = hover;
+            _drawnHover = shownHover;
+            _drawnHoverTarget = hover;
             _drawnHoverWholeMonitor = hoverWholeMonitor;
             _drawnSelectionMode = mode;
             _targetTab = null;
             _targetLabel = null;
-            RectD? revealed = _selection ?? hover;
+            RectD? revealed = _selection ?? shownHover;
             UpdateRevealedRegion(revealed);
             using DrawingContext dc = _selectionVisual.RenderOpen();
             if (_selection is { } selection) DrawSelection(dc, selection);
-            else if (hover is { } window) DrawDetectedWindow(dc, window, hoverWholeMonitor);
+            else if (shownHover is { } shown && hover is { } window) DrawDetectedWindow(dc, shown, window, hoverWholeMonitor);
         }
         PointD? anchor = _interaction == InteractionMode.Create && _pointerInitialized && !_ended ? _dragAnchor : null;
         if (rebuild || _drawnAnchor != anchor)
@@ -1119,6 +1147,70 @@ internal sealed class CaptureOverlayView : FrameworkElement
         Rect visible = revealed is { } selected
             ? ToDipRect(selected.ClampTo(FrameBounds)) : new Rect(0, 0, 0, 0);
         if (_revealClip.Rect != visible) _revealClip.Rect = visible;
+    }
+
+    /// <summary>
+    /// Where the reveal clip, the band and the tab show the highlighted <paramref name="target"/>.
+    /// A new target glides there from the rectangle on screen over the fast motion token, so the
+    /// highlight follows the pointer from window to window instead of jumping; a new target during
+    /// a glide starts from where the highlight is at that moment.
+    /// </summary>
+    /// <remarks>
+    /// Only the picture moves. The hover a click captures and the tab's words change at once. The
+    /// first highlight, one that follows no highlight, and every highlight with Windows animation
+    /// effects off snap. A glide asks for the next composition frame until it lands; each of those
+    /// frames moves the reveal clip and redraws the selection layer, never the frozen desktop.
+    /// </remarks>
+    private RectD? GlideHover(RectD? target)
+    {
+        if (target is not { } to)
+        {
+            _gliding = false;
+            _shownHover = _glideTarget = null;
+            return null;
+        }
+
+        TimeSpan now = ReadClock();
+        if (_glideTarget != to)
+        {
+            RectD? from = _gliding ? GlideAt(now) : _shownHover;
+            _glideTarget = to;
+            _gliding = from is { } start && start != to && FluidMotion.AnimationsEnabled;
+            if (_gliding)
+            {
+                _glideFrom = from!.Value;
+                _glideStart = now;
+                _glideLength = FluidMotion.FastDuration.TimeSpan;
+                _glideEasing = FluidMotion.StandardEasing;
+            }
+        }
+
+        if (!_gliding)
+        {
+            _shownHover = to;
+            return to;
+        }
+
+        RectD shown = GlideAt(now);
+        _shownHover = shown;
+        if (now - _glideStart >= _glideLength) _gliding = false;
+        else QueueFeedback();
+        return shown;
+    }
+
+    /// <summary>The glide's rectangle at <paramref name="now"/>, on whole frame pixels.</summary>
+    private RectD GlideAt(TimeSpan now)
+    {
+        RectD to = _glideTarget!.Value;
+        double progress = _glideLength > TimeSpan.Zero ? (now - _glideStart) / _glideLength : 1;
+        if (progress >= 1) return to;
+        double eased = _glideEasing?.Ease(Math.Max(0, progress)) ?? progress;
+        RectD from = _glideFrom;
+        double left = Math.Round(from.Left + ((to.Left - from.Left) * eased));
+        double top = Math.Round(from.Top + ((to.Top - from.Top) * eased));
+        double right = Math.Round(from.Right + ((to.Right - from.Right) * eased));
+        double bottom = Math.Round(from.Bottom + ((to.Bottom - from.Bottom) * eased));
+        return new RectD(left, top, right - left, bottom - top);
     }
 
     /// <summary>Short confirmation chip above and to the right of the pointer, clear of the magnifier.</summary>
@@ -1234,11 +1326,12 @@ internal sealed class CaptureOverlayView : FrameworkElement
     /// The window (or whole monitor) a click captures: a three-physical-pixel accent band with a
     /// one-pixel contrast keyline inside it, both within the captured bounds, and an accent tab on
     /// the border saying what a click does and the size it captures. A monitor keeps its tab inside
-    /// that monitor.
+    /// that monitor. The band and the tab are drawn at <paramref name="shown"/>, where the highlight
+    /// glide has got to; the words always name <paramref name="target"/>.
     /// </summary>
-    private void DrawDetectedWindow(DrawingContext dc, RectD pixelRect, bool wholeMonitor)
+    private void DrawDetectedWindow(DrawingContext dc, RectD shown, RectD target, bool wholeMonitor)
     {
-        Rect rect = SnapToPhysicalPixels(pixelRect);
+        Rect rect = SnapToPhysicalPixels(shown);
         if (rect.Width <= 0 || rect.Height <= 0) return;
         double band = _detectedBorderPen.Thickness;
         double keyline = _keylinePen.Thickness;
@@ -1246,12 +1339,23 @@ internal sealed class CaptureOverlayView : FrameworkElement
         // The keyline separates the band from window pixels that happen to match the accent.
         dc.DrawRectangle(null, _keylinePen, Deflate(rect, band + keyline / 2));
 
-        RectD pixels = pixelRect.ToPixelBounds();
+        RectD pixels = target.ToPixelBounds();
         // The same words as the status above and the mode bar: what a click does in this mode.
         string label = UiText.Get(ClickKey(wholeMonitor));
-        string size = $"{(int)pixels.Width} × {(int)pixels.Height}";
-        FormattedText labelText = CreateText(label, _uiTypeface, 12, _accentTextBrush);
-        FormattedText sizeText = CreateText(size, _monoTypeface, 12, _accentTextBrush);
+        (int Width, int Height) captured = ((int)pixels.Width, (int)pixels.Height);
+        // A glide redraws the tab on every frame; its words are laid out once per target.
+        if (_tabLabelText is null || _tabSizeText is null || _tabTextSize != captured
+            || !string.Equals(_tabLabel, label, StringComparison.Ordinal))
+        {
+            string size = $"{captured.Width} × {captured.Height}";
+            _tabLabelText = CreateText(label, _uiTypeface, 12, _accentTextBrush);
+            _tabSizeText = CreateText(size, _monoTypeface, 12, _accentTextBrush);
+            _tabLabel = label;
+            _tabTextSize = captured;
+            _tabTargetLabel = label + "  " + size;
+        }
+        FormattedText labelText = _tabLabelText;
+        FormattedText sizeText = _tabSizeText;
         const double paddingX = 9;
         const double paddingY = 4;
         const double gap = 10;
@@ -1271,7 +1375,7 @@ internal sealed class CaptureOverlayView : FrameworkElement
         dc.Pop();
         _targetTab = tab;
         _targetTabPlacement = placement;
-        _targetLabel = label + "  " + size;
+        _targetLabel = _tabTargetLabel;
     }
 
     private Rect SnapToPhysicalPixels(RectD pixelRect)
@@ -2270,6 +2374,7 @@ internal sealed class CaptureOverlayView : FrameworkElement
         _mutedTextBrush = _guidePalette["CaptureGuide.MutedText"];
         _accentBrush = _guidePalette["CaptureGuide.SelectionBorder"];
         _accentTextBrush = _guidePalette["CaptureGuide.AccentText"];
+        _tabLabelText = _tabSizeText = null;
         _modeBar?.ApplyPalette(_guidePalette);
         _startGuide?.ApplyPalette(_guidePalette);
     }

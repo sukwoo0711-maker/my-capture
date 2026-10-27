@@ -36,7 +36,15 @@
         <Setter Property="FontSize" Value="{DynamicResource FontSize.Body}" />
         <Setter Property="UseLayoutRounding" Value="True" />
         <Setter Property="SnapsToDevicePixels" Value="True" />
-        <Setter Property="TextOptions.TextFormattingMode" Value="Display" />
+        <!-- Pretendard needs Ideal formatting (Display distorts its Hangul strokes) with grayscale
+             antialiasing (ClearType blurs it bold at 100%), and its default ligatures and
+             alternates would show 0x1F as 0×1F (see ThemeFonts). -->
+        <Setter Property="TextOptions.TextFormattingMode" Value="Ideal" />
+        <Setter Property="TextOptions.TextRenderingMode" Value="Grayscale" />
+        <Setter Property="TextOptions.TextHintingMode" Value="Fixed" />
+        <Setter Property="Typography.StandardLigatures" Value="False" />
+        <Setter Property="Typography.ContextualAlternates" Value="False" />
+        <Setter Property="Typography.ContextualLigatures" Value="False" />
         <Setter Property="themes:ModernWindowChrome.Enabled" Value="True" />
         <Setter Property="themes:FluidMotion.WindowEntrance" Value="True" />
     </Style>
@@ -111,6 +119,9 @@
     <!--   Focus: recolour border to primary text + fade in inset focus ring. Thickness fixed.   -->
     <!-- ============================================================= -->
     <sys:Double x:Key="Button.DisabledOpacity">0.46</sys:Double>
+    <!-- A plain button is 32 DIP. A button whose face reserves the Alt shortcut line under its
+         label (CommandButtonPresentation) keeps the command heights 44 / 36. -->
+    <sys:Double x:Key="Button.Height">32</sys:Double>
     <sys:Double x:Key="CommandButton.Height.Standard">44</sys:Double>
     <sys:Double x:Key="CommandButton.Height.Compact">36</sys:Double>
     <sys:Double x:Key="CommandButton.FontSize">14</sys:Double>
@@ -154,17 +165,20 @@
     </Style>
 
     <Style TargetType="{x:Type Button}">
-        <Setter Property="Height" Value="{DynamicResource CommandButton.Height.Standard}" />
+        <!-- Height follows ButtonSizing.RestHeight: Button.Height, or the command height once
+             the face reserves the shortcut line. A style that sets Height keeps its own. -->
+        <Setter Property="themes:ButtonSizing.RestHeight" Value="{DynamicResource Button.Height}" />
+        <Setter Property="Height" Value="{Binding Path=(themes:ButtonSizing.RestHeight), RelativeSource={RelativeSource Self}}" />
         <Setter Property="FontSize" Value="{DynamicResource CommandButton.FontSize}" />
         <Setter Property="Foreground" Value="{DynamicResource Text.Primary}" />
-        <Setter Property="Background" Value="{DynamicResource Surface.Overlay}" />
-        <Setter Property="BorderBrush" Value="{DynamicResource Border.Control}" />
+        <Setter Property="Background" Value="{DynamicResource Button.Fill}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource Button.BorderBrush}" />
         <Setter Property="BorderThickness" Value="1" />
         <Setter Property="Padding" Value="{DynamicResource CommandButton.Padding.Standard}" />
-        <Setter Property="MinHeight" Value="{DynamicResource Size.HitTarget}" />
+        <Setter Property="MinHeight" Value="{Binding Path=(themes:ButtonSizing.RestHeight), RelativeSource={RelativeSource Self}}" />
         <Setter Property="MinWidth" Value="40" />
         <Setter Property="Cursor" Value="Hand" />
-        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="FontWeight" Value="{DynamicResource Button.FontWeight}" />
         <Setter Property="HorizontalContentAlignment" Value="Center" />
         <Setter Property="VerticalContentAlignment" Value="Center" />
         <Setter Property="FocusVisualStyle" Value="{x:Null}" />
@@ -172,8 +186,9 @@
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="{x:Type Button}">
-                    <Grid>
+                    <Grid Background="Transparent">
                         <Border x:Name="Chrome"
+                                Margin="0"
                                 Background="{TemplateBinding Background}"
                                 BorderBrush="{TemplateBinding BorderBrush}"
                                 BorderThickness="{TemplateBinding BorderThickness}"
@@ -182,10 +197,12 @@
                         <!-- Hover strengthens the outline as well as the fill: the layer's own border
                              covers the chrome border while it shows. -->
                         <Border x:Name="HoverLayer"
+                                Margin="0"
                                 Style="{StaticResource StateLayer.Hover}"
                                 BorderBrush="{DynamicResource Border.Strong}"
                                 BorderThickness="{TemplateBinding BorderThickness}" />
                         <Border x:Name="PressedLayer"
+                                Margin="0"
                                 Style="{StaticResource StateLayer.Pressed}"
                                 BorderBrush="{DynamicResource Border.Strong}"
                                 BorderThickness="{TemplateBinding BorderThickness}" />
@@ -205,6 +222,20 @@
                                 Opacity="0" />
                     </Grid>
                     <ControlTemplate.Triggers>
+                        <!-- The 44-DIP command height draws its chrome inset, as 36 does below; a
+                             plain 32-DIP button draws edge to edge. -->
+                        <Trigger Property="Height" Value="44">
+                            <Setter TargetName="Chrome" Property="Margin" Value="{DynamicResource Button.ChromeInset}" />
+                            <Setter TargetName="HoverLayer" Property="Margin" Value="{DynamicResource Button.ChromeInset}" />
+                            <Setter TargetName="PressedLayer" Property="Margin" Value="{DynamicResource Button.ChromeInset}" />
+                            <Setter TargetName="FocusRing" Property="Margin" Value="{DynamicResource Button.FocusInset}" />
+                        </Trigger>
+                        <Trigger Property="Height" Value="36">
+                            <Setter TargetName="Chrome" Property="Margin" Value="{DynamicResource Button.ChromeInset.Compact}" />
+                            <Setter TargetName="HoverLayer" Property="Margin" Value="{DynamicResource Button.ChromeInset.Compact}" />
+                            <Setter TargetName="PressedLayer" Property="Margin" Value="{DynamicResource Button.ChromeInset.Compact}" />
+                            <Setter TargetName="FocusRing" Property="Margin" Value="{DynamicResource Button.FocusInset.Compact}" />
+                        </Trigger>
                         <Trigger Property="IsMouseOver" Value="True">
                             <Setter TargetName="HoverLayer" Property="themes:FluidMotion.FadeTo" Value="1" />
                         </Trigger>
@@ -230,9 +261,15 @@
                 </ControlTemplate>
             </Setter.Value>
         </Setter>
+        <Style.Triggers>
+            <Trigger Property="themes:ButtonSizing.ReservesShortcutLine" Value="True">
+                <Setter Property="themes:ButtonSizing.RestHeight" Value="{DynamicResource CommandButton.Height.Standard}" />
+            </Trigger>
+        </Style.Triggers>
     </Style>
 
     <Style x:Key="Button.Primary" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+        <Setter Property="FontWeight" Value="SemiBold" />
         <Setter Property="Background" Value="{DynamicResource Accent.Default}" />
         <Setter Property="BorderBrush" Value="{DynamicResource Accent.Default}" />
         <Setter Property="Foreground" Value="{DynamicResource Text.OnAccent}" />
@@ -240,8 +277,9 @@
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="{x:Type Button}">
-                    <Grid>
+                    <Grid Background="Transparent">
                         <Border x:Name="Chrome"
+                                Margin="0"
                                 Background="{TemplateBinding Background}"
                                 BorderBrush="{TemplateBinding BorderBrush}"
                                 BorderThickness="{TemplateBinding BorderThickness}"
@@ -250,9 +288,11 @@
                         <!-- The accent fill and its border change together, so these layers cover
                              the whole chrome. -->
                         <Border x:Name="HoverLayer"
+                                Margin="0"
                                 Style="{StaticResource StateLayer}"
                                 Background="{DynamicResource Accent.Hover}" />
                         <Border x:Name="PressedLayer"
+                                Margin="0"
                                 Style="{StaticResource StateLayer}"
                                 Background="{DynamicResource Accent.Pressed}" />
                         <Border BorderThickness="{TemplateBinding BorderThickness}">
@@ -270,6 +310,20 @@
                                 Opacity="0" />
                     </Grid>
                     <ControlTemplate.Triggers>
+                        <!-- The 44-DIP command height draws its chrome inset, as 36 does below; a
+                             plain 32-DIP button draws edge to edge. -->
+                        <Trigger Property="Height" Value="44">
+                            <Setter TargetName="Chrome" Property="Margin" Value="{DynamicResource Button.ChromeInset}" />
+                            <Setter TargetName="HoverLayer" Property="Margin" Value="{DynamicResource Button.ChromeInset}" />
+                            <Setter TargetName="PressedLayer" Property="Margin" Value="{DynamicResource Button.ChromeInset}" />
+                            <Setter TargetName="FocusRing" Property="Margin" Value="{DynamicResource Button.PrimaryFocusInset}" />
+                        </Trigger>
+                        <Trigger Property="Height" Value="36">
+                            <Setter TargetName="Chrome" Property="Margin" Value="{DynamicResource Button.ChromeInset.Compact}" />
+                            <Setter TargetName="HoverLayer" Property="Margin" Value="{DynamicResource Button.ChromeInset.Compact}" />
+                            <Setter TargetName="PressedLayer" Property="Margin" Value="{DynamicResource Button.ChromeInset.Compact}" />
+                            <Setter TargetName="FocusRing" Property="Margin" Value="{DynamicResource Button.PrimaryFocusInset.Compact}" />
+                        </Trigger>
                         <Trigger Property="IsMouseOver" Value="True">
                             <Setter TargetName="HoverLayer" Property="themes:FluidMotion.FadeTo" Value="1" />
                         </Trigger>
@@ -303,17 +357,20 @@
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="{x:Type Button}">
-                    <Grid>
+                    <Grid Background="Transparent">
                         <Border x:Name="Chrome"
+                                Margin="0"
                                 Background="{TemplateBinding Background}"
                                 BorderBrush="{TemplateBinding BorderBrush}"
                                 BorderThickness="{TemplateBinding BorderThickness}"
                                 CornerRadius="{DynamicResource Radius.Md}"
                                 SnapsToDevicePixels="True" />
                         <Border x:Name="HoverLayer"
+                                Margin="0"
                                 Style="{StaticResource StateLayer.Hover}"
                                 BorderThickness="{TemplateBinding BorderThickness}" />
                         <Border x:Name="PressedLayer"
+                                Margin="0"
                                 Style="{StaticResource StateLayer.Pressed}"
                                 BorderThickness="{TemplateBinding BorderThickness}" />
                         <Border BorderThickness="{TemplateBinding BorderThickness}">
@@ -331,6 +388,20 @@
                                 Opacity="0" />
                     </Grid>
                     <ControlTemplate.Triggers>
+                        <!-- The 44-DIP command height draws its chrome inset, as 36 does below; a
+                             plain 32-DIP button draws edge to edge. -->
+                        <Trigger Property="Height" Value="44">
+                            <Setter TargetName="Chrome" Property="Margin" Value="{DynamicResource Button.ChromeInset}" />
+                            <Setter TargetName="HoverLayer" Property="Margin" Value="{DynamicResource Button.ChromeInset}" />
+                            <Setter TargetName="PressedLayer" Property="Margin" Value="{DynamicResource Button.ChromeInset}" />
+                            <Setter TargetName="FocusRing" Property="Margin" Value="{DynamicResource Button.FocusInset}" />
+                        </Trigger>
+                        <Trigger Property="Height" Value="36">
+                            <Setter TargetName="Chrome" Property="Margin" Value="{DynamicResource Button.ChromeInset.Compact}" />
+                            <Setter TargetName="HoverLayer" Property="Margin" Value="{DynamicResource Button.ChromeInset.Compact}" />
+                            <Setter TargetName="PressedLayer" Property="Margin" Value="{DynamicResource Button.ChromeInset.Compact}" />
+                            <Setter TargetName="FocusRing" Property="Margin" Value="{DynamicResource Button.FocusInset.Compact}" />
+                        </Trigger>
                         <!-- Hover and press wash the background only; the tool tier stays borderless. -->
                         <Trigger Property="IsMouseOver" Value="True">
                             <Setter TargetName="HoverLayer" Property="themes:FluidMotion.FadeTo" Value="1" />
@@ -354,24 +425,28 @@
     </Style>
     <!-- Reserve danger text and outline for the destructive confirmation action. -->
     <Style x:Key="Button.Danger" TargetType="Button" BasedOn="{StaticResource Button.Secondary}">
+        <Setter Property="FontWeight" Value="SemiBold" />
         <Setter Property="Foreground" Value="{DynamicResource State.Danger}" />
         <Setter Property="BorderBrush" Value="{DynamicResource State.Danger}" />
         <Setter Property="BorderThickness" Value="1" />
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="{x:Type Button}">
-                    <Grid>
+                    <Grid Background="Transparent">
                         <Border x:Name="Chrome"
+                                Margin="0"
                                 Background="{TemplateBinding Background}"
                                 BorderBrush="{TemplateBinding BorderBrush}"
                                 BorderThickness="{TemplateBinding BorderThickness}"
                                 CornerRadius="{DynamicResource Radius.Md}"
                                 SnapsToDevicePixels="True" />
                         <Border x:Name="HoverLayer"
+                                Margin="0"
                                 Style="{StaticResource StateLayer.Hover}"
                                 BorderBrush="{TemplateBinding BorderBrush}"
                                 BorderThickness="{TemplateBinding BorderThickness}" />
                         <Border x:Name="PressedLayer"
+                                Margin="0"
                                 Style="{StaticResource StateLayer.Pressed}"
                                 BorderBrush="{TemplateBinding BorderBrush}"
                                 BorderThickness="{TemplateBinding BorderThickness}" />
@@ -390,6 +465,20 @@
                                 Opacity="0" />
                     </Grid>
                     <ControlTemplate.Triggers>
+                        <!-- The 44-DIP command height draws its chrome inset, as 36 does below; a
+                             plain 32-DIP button draws edge to edge. -->
+                        <Trigger Property="Height" Value="44">
+                            <Setter TargetName="Chrome" Property="Margin" Value="{DynamicResource Button.ChromeInset}" />
+                            <Setter TargetName="HoverLayer" Property="Margin" Value="{DynamicResource Button.ChromeInset}" />
+                            <Setter TargetName="PressedLayer" Property="Margin" Value="{DynamicResource Button.ChromeInset}" />
+                            <Setter TargetName="FocusRing" Property="Margin" Value="{DynamicResource Button.FocusInset}" />
+                        </Trigger>
+                        <Trigger Property="Height" Value="36">
+                            <Setter TargetName="Chrome" Property="Margin" Value="{DynamicResource Button.ChromeInset.Compact}" />
+                            <Setter TargetName="HoverLayer" Property="Margin" Value="{DynamicResource Button.ChromeInset.Compact}" />
+                            <Setter TargetName="PressedLayer" Property="Margin" Value="{DynamicResource Button.ChromeInset.Compact}" />
+                            <Setter TargetName="FocusRing" Property="Margin" Value="{DynamicResource Button.FocusInset.Compact}" />
+                        </Trigger>
                         <Trigger Property="IsMouseOver" Value="True">
                             <Setter TargetName="HoverLayer" Property="themes:FluidMotion.FadeTo" Value="1" />
                         </Trigger>
@@ -408,11 +497,17 @@
             </Setter.Value>
         </Setter>
     </Style>
+    <!-- A compact bordered button keeps the plain 32-DIP height (never taller than a plain
+         button) with tighter padding; a compact shortcut face takes the compact command height. -->
     <Style x:Key="Button.Compact" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
-        <Setter Property="Height" Value="{DynamicResource CommandButton.Height.Compact}" />
         <Setter Property="MinHeight" Value="{DynamicResource Size.HitTarget.Compact}" />
         <Setter Property="Padding" Value="{DynamicResource CommandButton.Padding.Compact}" />
         <Setter Property="FontSize" Value="{DynamicResource FontSize.Body}" />
+        <Style.Triggers>
+            <Trigger Property="themes:ButtonSizing.ReservesShortcutLine" Value="True">
+                <Setter Property="themes:ButtonSizing.RestHeight" Value="{DynamicResource CommandButton.Height.Compact}" />
+            </Trigger>
+        </Style.Triggers>
     </Style>
     <Style x:Key="Button.GhostCompact" TargetType="Button" BasedOn="{StaticResource Button.Ghost}">
         <Setter Property="Height" Value="{DynamicResource CommandButton.Height.Compact}" />
@@ -421,10 +516,9 @@
         <Setter Property="FontSize" Value="{DynamicResource FontSize.Body}" />
     </Style>
 
-    <!-- Command bars share sizing with action rows; the content helper reserves the hint line. -->
+    <!-- Command bars share sizing with action rows. The height comes from the base style:
+         32 DIP, or 44 DIP once the content helper reserves the shortcut line. -->
     <Style x:Key="Button.Command" TargetType="Button" BasedOn="{StaticResource Button.Secondary}">
-        <Setter Property="Height" Value="{DynamicResource CommandButton.Height.Standard}" />
-        <Setter Property="MinHeight" Value="{DynamicResource CommandButton.Height.Standard}" />
         <Setter Property="Padding" Value="{DynamicResource CommandButton.Padding.Standard}" />
         <Setter Property="FontSize" Value="{DynamicResource CommandButton.FontSize}" />
         <Setter Property="Margin" Value="3,0" />
@@ -872,14 +966,27 @@
         <Setter Property="BorderThickness" Value="{DynamicResource Border.DecorativeThickness}" />
         <Setter Property="Padding" Value="10,7" />
         <Setter Property="FontSize" Value="{DynamicResource FontSize.Caption}" />
+        <!-- A tooltip is its own popup root: give it the UI font and its text settings. -->
+        <Setter Property="FontFamily" Value="{DynamicResource Font.Ui}" />
+        <Setter Property="TextOptions.TextFormattingMode" Value="Ideal" />
+        <Setter Property="TextOptions.TextRenderingMode" Value="Grayscale" />
+        <Setter Property="TextOptions.TextHintingMode" Value="Fixed" />
+        <Setter Property="Typography.StandardLigatures" Value="False" />
+        <Setter Property="Typography.ContextualAlternates" Value="False" />
+        <Setter Property="Typography.ContextualLigatures" Value="False" />
     </Style>
     <Style TargetType="{x:Type ContextMenu}">
         <Setter Property="Background" Value="{DynamicResource Surface.Floating}" />
         <Setter Property="Foreground" Value="{DynamicResource Text.Primary}" />
-        <!-- A menu is its own popup root: without these it takes the system font and Ideal
-             formatting, so its small text would not match the windows it opens from. -->
+        <!-- A menu is its own popup root: without these it takes the system font and default
+             shaping, so its small text would not match the windows it opens from. -->
         <Setter Property="FontFamily" Value="{DynamicResource Font.Ui}" />
-        <Setter Property="TextOptions.TextFormattingMode" Value="Display" />
+        <Setter Property="TextOptions.TextFormattingMode" Value="Ideal" />
+        <Setter Property="TextOptions.TextRenderingMode" Value="Grayscale" />
+        <Setter Property="TextOptions.TextHintingMode" Value="Fixed" />
+        <Setter Property="Typography.StandardLigatures" Value="False" />
+        <Setter Property="Typography.ContextualAlternates" Value="False" />
+        <Setter Property="Typography.ContextualLigatures" Value="False" />
         <Setter Property="UseLayoutRounding" Value="True" />
         <Setter Property="BorderBrush" Value="{DynamicResource Border.Strong}" />
         <Setter Property="BorderThickness" Value="{DynamicResource Border.DecorativeThickness}" />
@@ -1414,8 +1521,9 @@
          Consumers set Content to a themes:SymbolIcon (stroke follows Foreground) and MUST supply
          AutomationProperties.Name + ToolTip for accessibility. -->
     <Style x:Key="Button.Icon" TargetType="Button" BasedOn="{StaticResource Button.Ghost}">
-        <Setter Property="MinWidth" Value="{DynamicResource Size.HitTarget}" />
-        <Setter Property="MinHeight" Value="{DynamicResource Size.HitTarget}" />
+        <!-- Square at the plain button height, so it lines up with named commands beside it. -->
+        <Setter Property="MinWidth" Value="{DynamicResource Button.Height}" />
+        <Setter Property="MinHeight" Value="{DynamicResource Button.Height}" />
         <Setter Property="Padding" Value="6" />
     </Style>
     <Style x:Key="Button.Icon.Compact" TargetType="Button" BasedOn="{StaticResource Button.Icon}">

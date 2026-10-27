@@ -12,11 +12,9 @@
         Width="940" Height="700"
         MinWidth="780" MinHeight="560"
         WindowStartupLocation="CenterScreen"
-        FontFamily="{StaticResource Font.Ui}"
         Background="{DynamicResource Surface.Base}"
         Foreground="{DynamicResource Text.Primary}"
-        UseLayoutRounding="True"
-        TextOptions.TextFormattingMode="Display">
+        UseLayoutRounding="True">
 
     <Window.Resources>
 
@@ -598,6 +596,10 @@
                         <CheckBox Style="{StaticResource Settings.CheckBox}" Content="{loc:Text QuickAccess.Sound}"
                                   AutomationProperties.Name="{loc:Text QuickAccess.Sound}"
                                   IsChecked="{Binding PlayCaptureSound}" />
+                        <CheckBox Style="{StaticResource Settings.CheckBox}"
+                                  Content="{loc:Text QuickAccess.NotifyOnQuickSave}"
+                                  AutomationProperties.Name="{loc:Text QuickAccess.NotifyOnQuickSave}"
+                                  IsChecked="{Binding NotifyOnQuickSave}" />
 
                         <CheckBox Style="{StaticResource Settings.CheckBox}"
                                   Content="{loc:Text Text_4BE214FF10B0}"
@@ -606,10 +608,10 @@
 
                         <Border Style="{StaticResource Settings.InfoCard}" Margin="0,8,0,16">
                             <StackPanel>
-                                <TextBlock Text="{loc:Text Text_D116685C040E}" Style="{StaticResource Text.Section}" />
+                                <TextBlock Text="{loc:Text Text_D116685C040E}" Style="{StaticResource Settings.Label}" />
                                 <TextBlock Margin="0,4,0,0"
                                            Style="{StaticResource Text.MutedBlock}"
-                                           Text="{Binding CaptureHotkey, StringFormat={loc:Text Text_756622E6954E}}" />
+                                           themes:KoreanWordWrap.Text="{Binding CaptureHotkey, StringFormat={loc:Text Text_756622E6954E}}" />
                             </StackPanel>
                         </Border>
 
@@ -700,10 +702,10 @@
                     <StackPanel Grid.IsSharedSizeScope="True">
                         <Border Style="{StaticResource Settings.InfoCard}" Margin="0,0,0,16">
                             <StackPanel>
-                                <TextBlock Text="{loc:Text Text_93EB8FA7F9BC}" Style="{StaticResource Text.Section}" />
+                                <TextBlock Text="{loc:Text Text_93EB8FA7F9BC}" Style="{StaticResource Settings.Label}" />
                                 <TextBlock Margin="0,4,0,0"
                                            Style="{StaticResource Text.MutedBlock}"
-                                           Text="{loc:Text Text_2F12FF262AAC}" />
+                                           themes:KoreanWordWrap.Text="{loc:Text Text_2F12FF262AAC}" />
                             </StackPanel>
                         </Border>
 
@@ -823,7 +825,8 @@
 
                         <!-- Shared recommendations; the final choice opens the installed list.
                              A previously saved family remains selected even outside the recommendations. -->
-                        <settings:SettingsField Header="{loc:Text Settings_FontName}">
+                        <settings:SettingsField Header="{loc:Text Settings_FontName}" Note="{loc:Text Settings_FontScope}">
+                            <StackPanel>
                             <ComboBox x:Name="FontFamilyBox" Width="220" HorizontalAlignment="Left"
                                       SelectedValuePath="Value"
                                       IsTextSearchEnabled="True" TextSearch.TextPath="Label"
@@ -838,6 +841,10 @@
                                     </ItemsPanelTemplate>
                                 </ComboBox.ItemsPanel>
                             </ComboBox>
+                            <Button x:Name="DefaultFontButton" Content="{loc:Text Settings_DefaultFont}"
+                                    Margin="0,6,0,0" HorizontalAlignment="Left" Click="OnDefaultFontClick"
+                                    AutomationProperties.Name="{loc:Text Settings_DefaultFont}" />
+                            </StackPanel>
                         </settings:SettingsField>
 
                         <settings:SettingsField Header="{loc:Text Text_9B59CBE34062}" Hint="{loc:Text SettingsRange_Mosaic}">
@@ -927,6 +934,23 @@
                                   Content="{loc:Text Text_695F77F44D69}"
                                   AutomationProperties.Name="{loc:Text Text_695F77F44D69}"
                                   IsChecked="{Binding CacheResults}" />
+
+                        <!-- The translation model is downloaded from the OCR window's translation view and deleted here. -->
+                        <TextBlock Style="{StaticResource Settings.GroupHeading}" Text="{loc:Text SettingsUx_TranslationHeading}" />
+                        <StackPanel Style="{StaticResource Settings.Field}">
+                            <TextBlock Style="{StaticResource Settings.Label}" Text="{loc:Text Settings_TranslationModel}" />
+                            <TextBlock Style="{StaticResource Settings.Description}" Text="{loc:Text Settings_TranslationModelHint}" />
+                            <DockPanel Margin="0,6,0,0" HorizontalAlignment="Left" LastChildFill="True">
+                                <Button x:Name="TranslationModelDelete" DockPanel.Dock="Right" Style="{StaticResource Button.Secondary}"
+                                        Margin="12,0,0,0" MinWidth="120"
+                                        Content="{loc:Text Settings_TranslationDelete}"
+                                        AutomationProperties.Name="{loc:Text Settings_TranslationDelete}"
+                                        Click="OnDeleteTranslationModel" />
+                                <TextBlock x:Name="TranslationModelStatus" VerticalAlignment="Center" TextWrapping="Wrap"
+                                           Foreground="{DynamicResource Text.Primary}"
+                                           AutomationProperties.Name="{loc:Text Settings_TranslationModel}" />
+                            </DockPanel>
+                        </StackPanel>
 
                         <TextBlock Style="{StaticResource Settings.GroupHeading}" Text="{loc:Text SettingsUx_ShortcutHintsHeading}" />
                         <CheckBox x:Name="AlwaysShowShortcutHintsCheck" Style="{StaticResource Settings.CheckBox}"
@@ -1194,7 +1218,7 @@
 
                         <StackPanel Style="{StaticResource Settings.Field}">
                             <TextBlock Style="{StaticResource Settings.Label}" Text="{loc:Text Text_5A932820414F}" />
-                            <TextBlock Style="{StaticResource Settings.Description}" Text="{loc:Text Text_95B00006092B}" />
+                            <TextBlock Style="{StaticResource Settings.Description}" Text="{loc:Text Settings.QuickSaveDirectoryHint}" />
                             <Grid>
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*" />
@@ -1284,6 +1308,15 @@
                             </Style>
                         </StackPanel.Resources>
 
+                        <StackPanel x:Name="AboutGuideSection" Style="{StaticResource About.Section}">
+                            <Button x:Name="FirstUseGuideButton" Content="{loc:Text Onboarding.Replay}"
+                                    AutomationProperties.Name="{loc:Text Onboarding.Replay}"
+                                    Style="{StaticResource Button.Secondary}" HorizontalAlignment="Left"
+                                    MinWidth="140" Margin="0,0,0,6" Click="OnFirstUseGuide" />
+                            <TextBlock Style="{StaticResource Settings.Description}" Margin="0"
+                                       Text="{loc:Text Onboarding.AboutBody}" />
+                        </StackPanel>
+
                         <!-- Updates -->
                         <StackPanel x:Name="AboutUpdatesSection" Style="{StaticResource About.Section}">
                             <TextBlock Style="{StaticResource About.Heading}" Text="{loc:Text About_UpdatesHeading}" />
@@ -1308,6 +1341,7 @@
                             <TextBlock Style="{StaticResource About.Heading}" Text="{loc:Text About_PrivacyHeading}" />
                             <TextBlock x:Name="PrivacyLocalText" Style="{StaticResource About.Body}" Text="{loc:Text About_PrivacyLocal}" />
                             <TextBlock x:Name="PrivacyModelText" Style="{StaticResource About.Body}" />
+                            <TextBlock x:Name="PrivacyTranslationText" Style="{StaticResource About.Body}" />
                             <TextBlock x:Name="PrivacyUpdateText" Style="{StaticResource About.Body}" Visibility="Collapsed" Text="{loc:Text About_PrivacyUpdates}" />
                             <TextBlock x:Name="PrivacyGitHubText" Style="{StaticResource About.Body}" Margin="0" Text="{loc:Text About_PrivacyGitHub}" />
                         </StackPanel>
@@ -1394,7 +1428,7 @@
                 <ItemsControl x:Name="ErrorList" Margin="0,4,0,0">
                     <ItemsControl.ItemTemplate>
                         <DataTemplate>
-                            <TextBlock Text="{Binding}"
+                            <TextBlock themes:KoreanWordWrap.Text="{Binding}"
                                        Foreground="{DynamicResource Text.Primary}"
                                        FontSize="{StaticResource FontSize.Caption}"
                                        TextWrapping="Wrap"
@@ -1418,11 +1452,17 @@
             </ScrollViewer>
         </Border>
 
-        <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,14,0,0">
-            <Button x:Name="CancelButton" Style="{StaticResource Button.Secondary}"
+        <Grid Grid.Row="3" Margin="0,14,0,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <TextBlock x:Name="CurrentVersionLabel" Foreground="{DynamicResource Text.Muted}"
+                       FontSize="{StaticResource FontSize.Caption}" VerticalAlignment="Center" />
+            <Button x:Name="CancelButton" Grid.Column="1" Style="{StaticResource Button.Secondary}"
                     Content="{loc:Text Dialog.Close}" MinWidth="88"
                     ToolTip="{loc:Text SettingsUx_CloseTip}" AutomationProperties.Name="{loc:Text Dialog.Close}"
                     AutomationProperties.HelpText="{loc:Text SettingsUx_CloseTip}" Click="OnCancel" />
-        </StackPanel>
+        </Grid>
     </Grid>
 </Window>
