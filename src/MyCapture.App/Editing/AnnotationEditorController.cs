@@ -798,7 +798,12 @@ internal sealed class AnnotationEditorController
         return new TextLayout(measured, probe.FontSize, probe.AutoSize);
     }
 
-    internal ImageAnnotation AddImageAnnotation(string assetFileName, int sourceWidth, int sourceHeight, RectD rect)
+    /// <param name="opacity">
+    /// The image's opacity (0..1) from the start, so the add and its look are one undo step. The
+    /// annotation's own <see cref="AnnotationItem.Opacity"/> is used: it is already saved with the
+    /// layer and drawn by the renderer, so no format change is involved.
+    /// </param>
+    internal ImageAnnotation AddImageAnnotation(string assetFileName, int sourceWidth, int sourceHeight, RectD rect, double opacity = 1.0)
     {
         var image = new ImageAnnotation
         {
@@ -806,6 +811,7 @@ internal sealed class AnnotationEditorController
             SourceWidth = sourceWidth,
             SourceHeight = sourceHeight,
             Rect = rect.Normalized(),
+            Opacity = opacity,
         };
 
         _undo.Execute(new AddAnnotationCommand(_document, image));
