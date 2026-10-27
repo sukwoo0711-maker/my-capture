@@ -102,8 +102,13 @@ public static class ThemeCatalog
         };
         var colors = new Dictionary<string, ThemeColor>(source, StringComparer.Ordinal)
         {
-            ["Surface.Selected"] = AppThemeNames.IsLight(value)
-                ? ThemeColor.Rgb(0xDD, 0xE3, 0xEB) : ThemeColor.Rgb(0x30, 0x36, 0x42),
+            ["Surface.Selected"] = value switch
+            {
+                AppTheme.Daylight or AppTheme.GlassLight => ThemeColor.Rgb(0xC2, 0xC8, 0xD4),
+                AppTheme.HighContrast => ThemeColor.Rgb(0x40, 0x46, 0x52),
+                AppTheme.Workspace => ThemeColor.Rgb(0x43, 0x49, 0x55),
+                _ => ThemeColor.Rgb(0x35, 0x3B, 0x47),
+            },
         };
         colors["Surface.Badge"] = colors["Surface.Raised"];
         colors["Surface.BadgeStrong"] = colors["Surface.Raised"];

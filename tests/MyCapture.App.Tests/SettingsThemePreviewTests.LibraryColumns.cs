@@ -28,7 +28,11 @@ public sealed partial class SettingsThemePreviewTests
     public Task LibraryColumns_WideLayoutIsCoveredWhenTheDesktopCapsTheWindow() =>
         RunLibraryColumnTest(nameof(LibraryColumns_WideLayoutIsCoveredWhenTheDesktopCapsTheWindow), constrainWindow: true);
 
-    private Task RunLibraryColumnTest(string testName, bool constrainWindow) =>
+    [Fact]
+    public Task LibraryColumns_ChangingViewsAfterMixedWindowAndClientWidthsKeepsCardsInside() =>
+        RunLibraryColumnTest(nameof(LibraryColumns_ChangingViewsAfterMixedWindowAndClientWidthsKeepsCardsInside), constrainWindow: false, maximumWidth: 1044);
+
+    private Task RunLibraryColumnTest(string testName, bool constrainWindow, double? maximumWidth = null) =>
         RunIsolated(testName, () =>
         {
             var application = new Application { ShutdownMode = ShutdownMode.OnExplicitShutdown };
@@ -41,7 +45,7 @@ public sealed partial class SettingsThemePreviewTests
             try
             {
                 using var scope = UiText.UseLanguage("ko-KR");
-                VerifyLibraryColumns(constrainWindow);
+                VerifyLibraryColumns(constrainWindow, maximumWidth);
             }
             finally
             {
@@ -50,7 +54,7 @@ public sealed partial class SettingsThemePreviewTests
             }
         });
 
-    private static void VerifyLibraryColumns(bool constrainWindow)
+    private static void VerifyLibraryColumns(bool constrainWindow, double? maximumWidth)
     {
         ThemeService.Apply(AppTheme.Glass);
         LibraryUxFixture f = CreateLibraryUxFixture("mc-library-columns-");
@@ -71,7 +75,9 @@ public sealed partial class SettingsThemePreviewTests
             window.Width = window.MinWidth;
             window.Height = window.MinHeight;
             if (constrainWindow) window.MaxWidth = window.MinWidth;
+            if (maximumWidth.HasValue) window.MaxWidth = maximumWidth.Value;
             window.Show();
+            window.SetDetailsPaneOpen(true);
             var rowsList = (ListBox)window.FindName("RowsList");
             vm.Refresh();
             PumpLibraryUntil(window, () => FolderCardButtons(rowsList).Length == 2, "library columns: folder cards");
@@ -114,8 +120,8 @@ public sealed partial class SettingsThemePreviewTests
                     if (keyboard) Assert.True(showDetails.IsKeyboardFocused, "focus must move to the rail's show button");
                     AssertInsideClient(showDetails, client, pane);
                     Assert.Equal(UiText.Get("LibraryUx_DetailsShow"), AutomationProperties.GetName(showDetails));
-                    // The two cards take the width the pane gave back instead of leaving it empty.
-                    Assert.Equal(2, vm.ColumnCount);
+                    // Hiding details leaves enough space for a third card.
+                    Assert.Equal(3, vm.ColumnCount);
                     AssertCardsInsideLibrary(rowsList, scroll, vm, $"minimum root, {pane}");
                     SaveLibraryUxEvidence(window, AppTheme.Glass, "columns-minimum-root-details-hidden-glass-ko-KR.png");
                 }
@@ -331,7 +337,7 @@ public sealed partial class SettingsThemePreviewTests
         bool compact = vm.IsCompactLayout;
         double track = compact ? GalleryRowBuilder.MinCompactTileTrackWidth : GalleryRowBuilder.MinTileTrackWidth;
         int max = compact ? GalleryRowBuilder.CompactMaxColumns : GalleryRowBuilder.MaxColumns;
-        (double baseWidth, double baseHeight, double slope) = compact ? (148d, 144d, 0.625) : (244d, 204d, 0.625);
+        (double baseWidth, double baseHeight, double slope) = compact ? (148d, 160d, 0.625) : (244d, 220d, 0.625);
         // The visible card: a capture card inside its selection outline, or a folder card button.
         FrameworkElement[] cards = Descendants(rowsList).OfType<FrameworkElement>()
             .Where(element => element.IsVisible && (element is Border { Name: "TileCard" or "CompactTileCard" }
@@ -346,7 +352,9 @@ public sealed partial class SettingsThemePreviewTests
                 $"{label}: a card spans {left:0.#}..{right:0.#} in a {scroll.ViewportWidth:0.#}-DIP library ({vm.ColumnCount} columns)");
             Assert.True(card.ActualWidth >= track - GalleryRowBuilder.CardInset - 1,
                 $"{label}: a {card.ActualWidth:0.#}-DIP card is narrower than the {track - GalleryRowBuilder.CardInset}-DIP minimum");
-            Assert.Equal(GalleryCardRowPanel.CardHeightFor(card.ActualWidth, baseWidth, baseHeight, slope), card.ActualHeight, 1.5);
+            double expectedHeight = card is Button { DataContext: GalleryFolderCardViewModel }
+                ? 40 : GalleryCardRowPanel.CardHeightFor(card.ActualWidth, baseWidth, baseHeight, slope);
+            Assert.Equal(expectedHeight, card.ActualHeight, 1.5);
             foreach (Button command in Descendants(card).OfType<Button>().Where(button => button.IsVisible))
             {
                 double commandRight = command.TranslatePoint(new Point(command.ActualWidth, 0), scroll).X;

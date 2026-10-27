@@ -109,7 +109,8 @@ public sealed class ShellFirstRunTests
         {
             Assert.DoesNotContain(FirstRunWelcomeTests.Descendants(welcome).OfType<TextBlock>(), text =>
                 text.Text == previousSentence || AutomationProperties.GetName(text) == previousSentence);
-            Assert.Contains(FirstRunWelcomeTests.Descendants(welcome).OfType<TextBlock>(), text => text.Text == UiText.Get("Welcome_FirstCaptureTitle"));
+            Assert.Contains(FirstRunWelcomeTests.Descendants(welcome).OfType<TextBlock>(), text =>
+                KoreanWordWrap.Strip(text.Text) == UiText.Get("Onboarding.CaptureTitle"));
             Assert.True(welcome.StartAtSignIn);
         }
         finally { welcome.Close(); }

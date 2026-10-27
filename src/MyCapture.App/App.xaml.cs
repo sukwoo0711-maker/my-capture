@@ -45,6 +45,9 @@ public partial class App : Application
 
     private Mutex? _singleInstanceMutex;
     private EventWaitHandle? _activationSignal;
+    private ResidentReadySignal? _residentReady;
+    private LaunchStatusPresentation? _launchStatus;
+    private LaunchTimingLog? _launchTiming;
     private RegisteredWaitHandle? _activationWait;
     private ServiceProvider? _services;
     private ILogger<App>? _log;
@@ -90,6 +93,7 @@ public partial class App : Application
 
     protected override async void OnStartup(StartupEventArgs e)
     {
+        _launchTiming = new LaunchTimingLog();
         base.OnStartup(e);
         UiText.Configure(null);
         // Before any window: a tooltip's default show duration would otherwise stop every
@@ -110,34 +114,59 @@ public partial class App : Application
         // Diagnostics intentionally run before the ownership gate. Capture hardware
         // can be tested beside a normal resident instance; the shell test will report
         // hotkey conflicts if the normal instance already owns them.
-        if (TryRunSelfTest(e.Args))
+        // The resident probe runs the whole resident app against an isolated data root beside any
+        // normal instance; nothing it does may reach the user's clipboard.
+        s_residentProbe = ResidentProbeOptions.TryParse(e.Args);
+        if (s_residentProbe is not null)
+            ClipboardWriter.InstallTestOverride((_, _) => { }, _ => { }, () => 0, (_, _) => true);
+        if (s_residentProbe?.SoftwareRender == true)
+            System.Windows.Media.RenderOptions.ProcessRenderMode = System.Windows.Interop.RenderMode.SoftwareOnly;
+
+        if (s_residentProbe is null && TryRunSelfTest(e.Args))
         {
             return;
         }
 
         // A sign-in launch stays quiet after the one-time shortcut question. The Store build's startup task carries no command line,
         // so its activation kind stands in for the Run key's --background switch.
-        bool quietLaunch = FindSwitch(e.Args, StartupRegistrationService.BackgroundSwitch) >= 0 ||
-            MyCapture.Core.Platform.AppPackage.IsStartupTaskActivation();
+        bool startupTask = MyCapture.Core.Platform.AppPackage.IsStartupTaskActivation();
+        bool quietLaunch = s_residentProbe is not null || FindSwitch(e.Args, StartupRegistrationService.BackgroundSwitch) >= 0 || startupTask;
 
         // Publish the signal before claiming ownership: a second launch can queue
         // activation even while the first process is loading a large library.
-        _activationSignal = new EventWaitHandle(false, EventResetMode.AutoReset, ActivationEventName);
+        string instanceSuffix = s_residentProbe?.InstanceSuffix ?? string.Empty;
+        _activationSignal = new EventWaitHandle(false, EventResetMode.AutoReset, ActivationEventName + instanceSuffix);
         _singleInstanceMutex = new Mutex(
             initiallyOwned: true,
-            SingleInstanceMutexName,
+            SingleInstanceMutexName + instanceSuffix,
             out bool isFirstInstance);
 
         if (!isFirstInstance)
         {
+            _launchTiming.Activation(LaunchActivationKind.Secondary);
+            // The secondary needs only the privacy-safe log; it must not construct shell services.
+            AttachEarlyLaunchLog();
             if (!quietLaunch)
             {
                 NativeMessageWindow.AllowResidentForegroundActivation();
                 _activationSignal.Set();
             }
+            if (ResidentReadySignal.NeedsSecondaryNotice(quietLaunch, ResidentReadySignal.IsReady(ResidentReadySignal.Name + instanceSuffix)))
+            {
+                _launchStatus = LaunchStatusPresentation.Secondary(
+                    () => _launchTiming.FirstVisible(LaunchVisibleKind.SecondaryNotice));
+                await _launchStatus.Completion;
+            }
             Shutdown(0);
             return;
         }
+
+        // The probe's readiness event carries its instance suffix so it never resets the user's own resident signal.
+        _residentReady = new ResidentReadySignal(ResidentReadySignal.Name + instanceSuffix);
+        _launchTiming.Activation(startupTask ? LaunchActivationKind.StartupTask
+            : quietLaunch ? LaunchActivationKind.Background : LaunchActivationKind.Regular);
+        _launchStatus = LaunchStatusPresentation.Start(quietLaunch,
+            () => _launchTiming.FirstVisible(LaunchVisibleKind.Starting));
 
         DispatcherUnhandledException += OnDispatcherUnhandledException;
         AppDomain.CurrentDomain.UnhandledException += OnDomainUnhandledException;
@@ -145,29 +174,39 @@ public partial class App : Application
         EventManager.RegisterClassHandler(typeof(Window), FrameworkElement.LoadedEvent,
             new RoutedEventHandler((sender, _) =>
             {
-                if (sender is Window window) MyCapture.App.Themes.WindowIdentity.Attach(window);
+                if (sender is Window window)
+                {
+                    MyCapture.App.Themes.WindowIdentity.Attach(window);
+                    ObserveLaunchWindow(window);
+                }
             }));
 
         try
         {
             _services = BuildServiceProvider();
             _fileLog = _services.GetRequiredService<RollingFileLog>();
+            _launchTiming.Attach(_fileLog.Append);
             _log = _services.GetRequiredService<ILogger<App>>();
             CaptureWindowExclusion.Logger = _log;
             _log.LogInformation("MyCapture starting up");
-            await RecoverLegacyImportBeforeLoadAsync();
+            if (s_residentProbe is null) await RecoverLegacyImportBeforeLoadAsync();
             InitializeShell(quietLaunch, FindSwitch(e.Args, SettingsCommandLineSwitch) >= 0);
             StartActivationListener();
+            _residentReady.MarkReady();
+            _launchStatus.Complete();
         }
         catch (Exception ex)
         {
+            _launchStatus?.Complete();
+            AttachEarlyLaunchLog();
             _log?.LogCritical(ex, "Could not initialize the resident shell");
             MyCapture.App.Themes.ThemedDialog.StartupFailure(ex);
             Shutdown(2);
             return;
         }
 
-        _ = OfferLegacyImportAfterLaunchAsync(quietLaunch);
+        if (s_residentProbe is { } probe) _ = RunResidentProbeAsync(probe);
+        else _ = OfferLegacyImportAfterLaunchAsync(quietLaunch);
     }
 
     /// <summary>The settings said first run when this process started; the welcome follows consent.</summary>
@@ -184,6 +223,7 @@ public partial class App : Application
         }
 
         _settings = _services.GetRequiredService<SettingsStore>().Load();
+        if (s_residentProbe is not null) ApplyResidentProbeSettings(_settings);
         UiText.Configure(_settings.General.Language);
         ThemeService.ApplyFromSettings(_settings.General);
 
@@ -222,6 +262,7 @@ public partial class App : Application
             pinSaveService,
             _services.GetRequiredService<ILogger<PinManager>>());
         _pins.PinCreated += ShowFirstPinTip;
+        _pins.ClickThroughHintShown += SaveFirstUseTips;
         InitializePinSession();
         _gitHubUpload = new GitHubIssueImageUploadService(
             () => _settings!,
@@ -281,7 +322,8 @@ public partial class App : Application
             ShortcutHelpWindow.ShowHelp, () => _ = RequestSafeShutdownAsync(),
             PinClipboard: HandlePasteToScreen, HideOrShowAllPins: () => _pins?.HideOrShowAll(),
             ClearClickThrough: () => _pins?.ClearClickThroughAll(), ContactSupport: SupportWindow.ShowSupport,
-            ActivateOpenPin: pin => _pins?.ActivateOpenPin(pin), InstallUpdate: () => _ = InstallKnownUpdateAsync());
+            ActivateOpenPin: pin => _pins?.ActivateOpenPin(pin), InstallUpdate: () => _ = InstallKnownUpdateAsync(),
+            FirstUseGuide: ShowOnboardingAgain);
         _tray.MenuPresenter = () => _shellPresenter.ShowMenu(TrayMenuLayout.Build(trayCommands, _settings!.Hotkeys,
             new TrayMenuState(_pins?.CanRestoreClosed == true, _scrollCancellation is not null,
                 ClipboardAvailability.HasPinnableContent(), _pins?.Count ?? 0, _pins?.AreHidden == true,
@@ -317,6 +359,7 @@ public partial class App : Application
         _launchedFirstRun = _settings.General.IsFirstRun;
         _hotkeys.Pressed += OnGlobalHotkeyPressed;
         _overlay.SelectionPersistRequested = e => _capturePersistenceTask = OnCaptureSelectionCompletedAsync(e);
+        _overlay.EditorScreenCaptureRequested = e => _capturePersistenceTask = SaveEditorScreenCaptureAsync(e);
         _overlay.OpenEditorAfterCapture = () => AfterCaptureBehavior.Resolve(_settings!.General.AfterCapture, _currentRecord is not null) == AfterCaptureAction.Editor;
         _overlay.OriginalNeedsRecovery = () => _currentRecord is null && _pendingRecord is not null;
         _overlay.DraftRecord = () => _currentRecord is { } record && _currentEditSession is { } session
@@ -376,7 +419,8 @@ public partial class App : Application
         // because another program claimed a chord first.
         _tray.Initialize();
         _tray.SetCaptureCount(_queue?.Count ?? 0);
-        _hotkeys.Initialize(_settings.Hotkeys);
+        // The probe runs beside the user's own instance, which owns the global shortcuts.
+        if (s_residentProbe is null) _hotkeys.Initialize(_settings.Hotkeys);
 
         // Launch-at-login: reconcile a stale/moved Run entry to this build's path on
         // startup, best-effort. Never mutates the Run key on this machine during tests
@@ -386,7 +430,7 @@ public partial class App : Application
         _startupService = _services.GetRequiredService<IStartupRegistration>();
         try
         {
-            if (!_launchedFirstRun) _ = _startupService.ReconcileOnStartup(_settings.General.LaunchAtLogin);
+            if (!_launchedFirstRun && s_residentProbe is null) _ = _startupService.ReconcileOnStartup(_settings.General.LaunchAtLogin);
             if (_startupService is PackagedStartupRegistration)
             {
                 _settings.General.LaunchAtLogin = _startupService.IsEnabled();
@@ -414,10 +458,10 @@ public partial class App : Application
             _hotkeys,
             _startupService,
             _services.GetRequiredService<ILogger<SettingsApplyService>>());
-        InitializeStoreRating();
+        if (s_residentProbe is null) InitializeStoreRating();
         PrepareCapturePersistenceForExitAsync = PreparePendingCaptureForExitAsync;
         PrepareStoreUpdateProtection = PrepareAndHoldStoreUpdateAsync;
-        InitializeUpdates();
+        if (s_residentProbe is null) InitializeUpdates();
         _initialLibraryRecoveryTask = RecoverLibraryStateAsync();
         _initialEditRecoveryTask = InitializeEditRecoveryAsync();
         _ = ResumeMaintenanceAfterInitialRecoveryAsync();
@@ -755,7 +799,7 @@ public partial class App : Application
 
         try
         {
-            if (!await PrepareRetakeAsync(UiText.Get("Text_096A13A757DB"))) { CompleteWelcomeCaptureAnnouncement(); return; }
+            if (!await PrepareRetakeAsync(UiText.Get("Text_096A13A757DB"), preserveEditor: true)) { CompleteWelcomeCaptureAnnouncement(); return; }
             _tray?.SetState(TrayIconState.Capturing);
             // Start reserves the session immediately; full-desktop acquisition runs off the UI
             // thread and reports asynchronous failures through TransitionFailed on this dispatcher.
@@ -763,7 +807,7 @@ public partial class App : Application
                 _settings.Capture.IncludeCursor,
                 _settings.Capture.AbortOnFocusLoss,
                 _settings.Capture.ShowMagnifier,
-                _settings.Capture.ShowSelectionGrid);
+                _settings.Capture.ShowSelectionGrid, preserveEditor: true);
         }
         catch (Exception ex)
         {
@@ -1315,6 +1359,7 @@ public partial class App : Application
             }));
             ReceiptTimeline.Mark?.Invoke("card-scheduled");
         }
+        _onboardingCaptureEnded?.Invoke(_currentRecord is not null, copiedToClipboard);
         CompleteWelcomeCaptureAnnouncement();
     }
 
@@ -1782,6 +1827,7 @@ public partial class App : Application
     private async void RunAutomaticIndexing()
     {
         _indexingRequested = true;
+        if (s_residentProbe?.SkipIndexing == true) return;
         if (_indexingRunning || _automaticIndexer is null || _indexingCancellation.IsCancellationRequested || _legacyImportPreparing)
         {
             return;
@@ -1930,6 +1976,7 @@ public partial class App : Application
 
         // A re-edit commit finalises against the same record; keep the tray count in sync.
         ConfigureEngagementWindow(window);
+        window.Activated += (_, _) => _onboardingWindow?.NotifyLibraryOpened();
         window.CaptureChanged += (_, _) => _tray?.SetCaptureCount(_queue?.Count ?? 0);
         window.FloatRequested += (_, source) => _pins?.PinImage(source.Image, source.Provenance);
         // Header toolbar commands mirror the tray entries so capture/recording are reachable
@@ -1987,6 +2034,7 @@ public partial class App : Application
 
         ConfigureEngagementWindow(window);
         ConfigureLegacyImportWindow(window);
+        window.FirstUseGuideRequested += (_, _) => ShowOnboardingAgain();
         window.StoreReviewOpened = () => _storeRating?.NoteManualReviewOpened();
         window.FileLog = _fileLog;
         TextTranslationService translation = _services.GetRequiredService<TextTranslationService>();
@@ -2405,7 +2453,8 @@ public partial class App : Application
         services.AddSingleton(serviceProvider => new CaptureOverlayCoordinator(
             serviceProvider.GetRequiredService<ScreenCaptureEngine>(),
             serviceProvider.GetRequiredService<WindowCandidateService>(),
-            serviceProvider.GetRequiredService<ILogger<CaptureOverlayCoordinator>>()));
+            serviceProvider.GetRequiredService<ILogger<CaptureOverlayCoordinator>>(),
+            acquireFrame: s_residentProbe is null ? null : AcquireProbeFrame));
         services.AddSingleton<NativeMessageWindow>();
         services.AddSingleton(new TrayIconAssets(
             Path.Combine(AppContext.BaseDirectory, "Assets", "tray-idle.ico"),
@@ -2459,6 +2508,7 @@ public partial class App : Application
     private static AppPaths ResolveAppPaths()
     {
         const string dataRootVariable = "MYCAPTURE_DATA_ROOT";
+        if (s_residentProbe is { } probe) return AppPaths.CreateForRoot(probe.DataRoot);
         string? overrideRoot = Environment.GetEnvironmentVariable(dataRootVariable);
         return string.IsNullOrWhiteSpace(overrideRoot)
             ? AppPaths.CreateDefault()
@@ -2512,6 +2562,9 @@ public partial class App : Application
 
     protected override void OnExit(ExitEventArgs e)
     {
+        _launchStatus?.Complete();
+        _residentReady?.Dispose();
+        _residentReady = null;
         _updateTimer?.Stop();
         _updates?.Dispose();
         // Stop a model download in progress; completed, verified model files stay.
@@ -2610,6 +2663,7 @@ public partial class App : Application
         _services?.Dispose();
         // Last: services log while they dispose. Dispose writes every queued line first.
         _fileLog?.Dispose();
+        _launchFallbackLog?.Dispose();
 
         if (_singleInstanceMutex is not null)
         {

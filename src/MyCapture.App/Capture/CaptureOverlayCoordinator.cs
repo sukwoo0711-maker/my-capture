@@ -28,6 +28,7 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
     private bool _disposed;
     private CaptureOverlayWindow? _activeOverlay;
     private AnnotationEditorWindow? _activeEditor;
+    private CaptureOverlayCoordinator? _editorScreenCapture;
     private bool _isOpeningEditor;
     private CancellationTokenSource? _openingEditorCts;
 
@@ -68,6 +69,7 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
     internal Func<IReadOnlyList<WindowCandidate>, Task<IReadOnlyDictionary<IntPtr, BrowserDocumentSnapshot>>> ReadPageUrls { get; set; }
 
     internal Func<CaptureSelectionCompletedEventArgs, Task>? SelectionPersistRequested { get; set; }
+    internal Func<CaptureSelectionCompletedEventArgs, Task>? EditorScreenCaptureRequested { get; set; }
 
     /// <summary>
     /// Reads each exposed window's application and Explorer folder around the frozen frame. Tests
@@ -135,20 +137,20 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
     internal Func<AnnotationEditingResult, Task<bool>>? CommitRequested { get; set; }
 
     internal bool IsActive => !_disposed &&
-        (_preparation is not null || _activeOverlay is not null || _activeEditor is not null || _isOpeningEditor);
+        (_preparation is not null || _activeOverlay is not null || _activeEditor is not null || _isOpeningEditor || _editorScreenCapture is not null);
 
     internal Task LastTransitionForTest { get; private set; } = Task.CompletedTask;
     internal Task LastPreparationForTest { get; private set; } = Task.CompletedTask;
 
     internal ScreenCaptureEngine Engine => _captureEngine;
-    internal bool IsSelecting => _preparation is not null || _activeOverlay is not null;
+    internal bool IsSelecting => _preparation is not null || _activeOverlay is not null || _editorScreenCapture?.IsSelecting == true;
     internal AnnotationEditorControl? CurrentEditor => _activeEditor?.Editor;
     internal Task WaitForPresentationDismissalAsync() =>
         NeedsPresentationSettle(Environment.TickCount64, _lastPresentationDismissedTick)
             ? Task.Delay(100) : Task.CompletedTask;
 
     internal bool CanRetake => !_disposed && _activeEditor is { } editor && !IsEditorSaving(editor) && !IsEditorBusy(editor) &&
-        !editor.IsAskingToClose && _preparation is null && !_isOpeningEditor;
+        !editor.IsAskingToClose && _preparation is null && !_isOpeningEditor && _editorScreenCapture is null;
 
     private static bool IsEditorSaving(AnnotationEditorWindow editor) => editor.Editor.IsCommitInProgress || editor.IsSavingToClose;
 
@@ -159,6 +161,7 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
     internal CaptureGuardState WithSession(CaptureGuardState state)
     {
         if (_disposed) return state;
+        if (_editorScreenCapture is { IsActive: true } nested) return nested.WithSession(state);
         AnnotationEditorWindow? editor = _activeEditor;
         return state with
         {
@@ -230,6 +233,7 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
     internal bool BringSelectorForward()
     {
         VerifyDispatcherAccess();
+        if (_editorScreenCapture is { } nested) return nested.BringSelectorForward();
         if (_disposed || _activeOverlay is not { IsVisible: true } overlay) return false;
         _ = overlay.Activate();
         return true;
@@ -239,10 +243,20 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
     internal WindowCandidateService WindowCandidates => _windowCandidates;
 
     internal void Start(bool includeCursor, bool abortOnFocusLoss, bool showMagnifier, bool showSelectionGrid = true,
-        bool textCapture = false)
+        bool textCapture = false, bool preserveEditor = false)
     {
         VerifyDispatcherAccess();
         ObjectDisposedException.ThrowIf(_disposed, this);
+        if (_editorScreenCapture is { } current)
+        {
+            current.ActivateCurrent();
+            return;
+        }
+        if (preserveEditor && CanRetake && EditorScreenCaptureRequested is { } persist)
+        {
+            StartOverEditor(persist, includeCursor, abortOnFocusLoss, showMagnifier, showSelectionGrid);
+            return;
+        }
 
         // Until the selector shows its frozen frame, the preparation ignores new requests.
         if (_isOpeningEditor || (_preparation is not null && _activeOverlay is not { IsVisible: true }))
@@ -298,6 +312,43 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
         if (lastDismissedTick == long.MinValue) return false;
         long elapsed = unchecked(currentTick - lastDismissedTick);
         return elapsed >= 0 && elapsed < PresentationSettleMs;
+    }
+
+    private void StartOverEditor(Func<CaptureSelectionCompletedEventArgs, Task> persist,
+        bool includeCursor, bool abortOnFocusLoss, bool showMagnifier, bool showSelectionGrid)
+    {
+        var nested = new CaptureOverlayCoordinator(_captureEngine, _windowCandidates, _log,
+            _acquireFrame, _desktopBounds, _readWindowCandidates)
+        {
+            SelectionPersistRequested = persist,
+            OpenEditorAfterCapture = () => false,
+            ReadPageUrls = ReadPageUrls,
+            ReadWindowSources = ReadWindowSources,
+            AutoDetectWindows = AutoDetectWindows,
+            ShowShortcutHints = ShowShortcutHints,
+            RequiresCaptureExclusion = RequiresCaptureExclusion,
+            ApplyCaptureExclusion = ApplyCaptureExclusion,
+        };
+        _editorScreenCapture = nested;
+        nested.TransitionFailed += error => TransitionFailed?.Invoke(error);
+        nested.OverlayClosed += (_, _) =>
+        {
+            if (ReferenceEquals(_editorScreenCapture, nested)) _editorScreenCapture = null;
+            nested.Dispose();
+            if (_activeEditor is { IsVisible: true } editor) editor.Activate();
+            EndSessionIfIdle();
+        };
+        try
+        {
+            nested.Start(includeCursor, abortOnFocusLoss, showMagnifier, showSelectionGrid);
+            LastPreparationForTest = nested.LastPreparationForTest;
+        }
+        catch
+        {
+            _editorScreenCapture = null;
+            nested.Dispose();
+            throw;
+        }
     }
 
     /// <summary>Records that an app-owned topmost surface has just left the screen, so the
@@ -584,6 +635,11 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
     internal void Cancel()
     {
         VerifyDispatcherAccess();
+        if (_editorScreenCapture is { } nested)
+        {
+            nested.Cancel();
+            return;
+        }
         if (_preparation is { } preparation) preparation.Cancelled = true;
         _openingEditorCts?.Cancel();
         if (_activeOverlay is not null)
@@ -602,6 +658,8 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
         if (_disposed) return;
         _disposed = true;
         _dispatcher.ShutdownStarted -= OnDispatcherShutdownStarted;
+        _editorScreenCapture?.Dispose();
+        _editorScreenCapture = null;
         Cancel();
         _preparation = null;
     }
@@ -620,6 +678,7 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
 
     internal bool ActivateCurrent()
     {
+        if (_editorScreenCapture is { } nested) return nested.ActivateCurrent();
         Window? active = _activeEditor ?? (Window?)_activeOverlay;
         if (active is null)
         {
@@ -839,7 +898,7 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
 
     private void EndSessionIfIdle()
     {
-        if (!_disposed && _preparation is null && _activeOverlay is null && _activeEditor is null && !_isOpeningEditor)
+        if (!_disposed && _preparation is null && _activeOverlay is null && _activeEditor is null && !_isOpeningEditor && _editorScreenCapture is null)
         {
             _lastPresentationDismissedTick = Environment.TickCount64;
             OverlayClosed?.Invoke(this, EventArgs.Empty);

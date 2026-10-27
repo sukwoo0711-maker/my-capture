@@ -70,8 +70,7 @@ public static class GallerySourceBadge
         button.ToolTipOpening -= OnToolTipOpening;
         button.ToolTipOpening += OnToolTipOpening;
         AutomationProperties.SetHelpText(button, provenance.Tooltip);
-        AutomationProperties.SetName(button, UiText.Format(provenance.CanOpen
-            ? "Source.OpenAutomation" : "Source.Label", provenance.BadgeText));
+        AutomationProperties.SetName(button, UiText.Format("Source.Label", provenance.BadgeText));
 
         button.Content = new TextBlock
         {
@@ -90,6 +89,12 @@ public static class GallerySourceBadge
         var button = (Button)sender;
         ClosePreview(button);
         CaptureProvenance provenance = GetProvenance(button);
+        if (Window.GetWindow(button) is GalleryWindow sourceGallery
+            && button.DataContext is GalleryItemViewModel tile)
+        {
+            sourceGallery.ShowSourceDetails(tile);
+            return;
+        }
         if (!provenance.CanOpen)
         {
             ShowMenu(button);

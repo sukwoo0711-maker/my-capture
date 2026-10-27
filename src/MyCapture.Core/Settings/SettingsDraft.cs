@@ -774,6 +774,7 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
         _zoomStep = Dbl(s.Pin.ZoomStep);
         _ctrlClickDebounceMs = Int(s.Pin.CtrlClickDebounceMs);
         _closedWindowRestoreLimit = Int(s.Pin.ClosedWindowRestoreLimit);
+        _preservedClickThroughHintShownCount = s.Pin.ClickThroughHintShownCount;
 
         _preferredLanguages = string.Join(", ", s.Ocr.PreferredLanguages);
         _ocrQuality = OcrQualityNames.ToSetting(s.Ocr.Quality);
@@ -987,6 +988,7 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
                 ZoomStep = ParseDouble(_zoomStep),
                 CtrlClickDebounceMs = ParseInt(_ctrlClickDebounceMs),
                 ClosedWindowRestoreLimit = ParseInt(_closedWindowRestoreLimit),
+                ClickThroughHintShownCount = _preservedClickThroughHintShownCount,
             },
             Ocr =
             {
@@ -1510,6 +1512,7 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
     private bool _preservedCoreShortcutsAsked;
     private bool _preservedFirstCaptureTipShown;
     private bool _preservedFirstPinTipShown;
+    private int _preservedClickThroughHintShownCount;
     private int _preservedRecordingBitrateBitsPerSecond;
     private double _preservedRecordingCoarseStepSeconds;
 

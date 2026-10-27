@@ -64,4 +64,4 @@ Windows 10 22H2(build 19045) 이상에서 사용할 x86판은 Windows 기본 OCR
 dotnet publish src/MyCapture.App/MyCapture.App.csproj -c Release -r win-x86 -p:Platform=x86 -p:PublishProfile=win-x86-self-contained --self-contained true -o artifacts/local-win-x86
 ```
 
-정식 패키지는 깨끗한 커밋에서 `build/package.ps1 -Version 4.8.5 -Architecture x64` 다음 `build/package.ps1 -Version 4.8.5 -Architecture x86` 순서로 생성합니다. x86 산출물은 `artifacts/release/4.8.5/win-x86`에 저장됩니다. 두 아키텍처를 함께 게시·검증할 때에는 `build/publish-github-release.ps1`과 `build/verify-github-release.ps1`에 각각 `-IncludeX86` 옵션을 전달합니다. x86 체크섬 파일 이름은 `SHA256SUMS-win-x86.txt`입니다. 이미 있는 산출물은 자동으로 지우지 않으므로 재생성 전에 보존하거나 휴지통으로 이동합니다.
+정식 패키지는 깨끗한 커밋에서 `build/package.ps1 -Version 4.9.0 -Architecture x64` 다음 `build/package.ps1 -Version 4.9.0 -Architecture x86` 순서로 생성합니다. x86 산출물은 `artifacts/release/4.9.0/win-x86`에 저장됩니다. 두 아키텍처를 함께 게시·검증할 때에는 `build/publish-github-release.ps1`과 `build/verify-github-release.ps1`에 각각 `-IncludeX86` 옵션을 전달합니다. x86 체크섬 파일 이름은 `SHA256SUMS-win-x86.txt`입니다. 이미 있는 산출물은 자동으로 지우지 않으므로 재생성 전에 보존하거나 휴지통으로 이동합니다.

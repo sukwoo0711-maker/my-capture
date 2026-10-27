@@ -148,9 +148,10 @@ public sealed class QuickAccessMotionTests
             Assert.True(card.ShowsSuccessCheckForTest("Copy"));
             Assert.Same(CheckGeometry, icon.Data);
             Assert.True(icon.HasAnimatedProperties);
-            var face = (Grid)icon.Parent;
-            Assert.Equal(3, face.Children.Count);
-            Assert.True(PumpUntil(() => face.Children.Count == 2 && !StrokeDrawMotion.IsDrawing(glyph)));
+            // The icon's cell holds the icon and, while it crossfades, the copy of the one it replaced.
+            var iconCell = (Grid)icon.Parent;
+            Assert.Equal(2, iconCell.Children.Count);
+            Assert.True(PumpUntil(() => iconCell.Children.Count == 1 && !StrokeDrawMotion.IsDrawing(glyph)));
             Assert.Same(CheckGeometry, glyph.Data);
 
             card.ElapseSuccessCheckForTest();
@@ -173,7 +174,7 @@ public sealed class QuickAccessMotionTests
             Assert.True(card.ShowsSuccessCheckForTest("Save"));
             Assert.Same(CheckGeometry, icon.Data);
             Assert.False(icon.HasAnimatedProperties);
-            Assert.Equal(2, ((Grid)icon.Parent).Children.Count);
+            Assert.Single(((Grid)icon.Parent).Children);
             Assert.False(StrokeDrawMotion.IsDrawing(card.StatusGlyphForTest));
             Assert.Same(restText, card.StatusForegroundForTest);
         }
@@ -233,12 +234,8 @@ public sealed class QuickAccessMotionTests
         button.RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));
     }
 
-    private static SymbolIcon ActionIcon(Button button) => button.Content switch
-    {
-        SymbolIcon icon => icon,
-        Grid face => Assert.IsType<SymbolIcon>(face.Children[0]),
-        _ => throw new Xunit.Sdk.XunitException("The action has no icon."),
-    };
+    private static SymbolIcon ActionIcon(Button button) =>
+        QuickAccessLabelFixture.IconOf(button) ?? throw new Xunit.Sdk.XunitException("The action has no icon.");
 
     private static QuickAccessWindow Card(ReceiptKeyboardRouter router, Func<Task<bool>>? copy = null,
         Func<Task<bool>>? save = null)

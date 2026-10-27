@@ -102,9 +102,7 @@ public sealed partial class SettingsThemePreviewTests
         {
             window.Show();
             var rowsList = (ListBox)window.FindName("RowsList");
-            Button[] cards = PumpLibraryUntil(window, () => FolderCardButtons(rowsList).Length == 2
-                && FolderCardButtons(rowsList).All(card => !((GalleryFolderCardViewModel)card.DataContext).HasPreview
-                    || Descendants(card).OfType<Image>().Single().Source is not null), label + ": folder cards and previews");
+            Button[] cards = PumpLibraryUntil(window, () => FolderCardButtons(rowsList).Length == 2, label + ": folder strips");
 
             // (1) Today: heading, then the folder cards, then today's captures.
             Assert.Equal(GalleryDateGrouping.Resolve(today, today).Heading, Assert.IsType<GalleryHeaderRow>(vm.Rows[0]).Heading);
@@ -133,7 +131,8 @@ public sealed partial class SettingsThemePreviewTests
                 AutomationProperties.GetName(emptyCard));
             Assert.Equal(language == "ko-KR" ? "폴더 디자인 시안, 캡처 2개" : "Folder 디자인 시안, Captures: 2",
                 AutomationProperties.GetName(designCard));
-            Assert.NotNull(Descendants(designCard).OfType<Image>().Single().Source);
+            Assert.Empty(Descendants(designCard).OfType<Image>());
+            Assert.Equal(40, designCard.ActualHeight, 1);
             SaveLibraryFolderEvidence(window, $"library-folder-cards-{theme}-{language}.png");
 
             // (2) Opening a card shows the folder and makes it the new capture destination.

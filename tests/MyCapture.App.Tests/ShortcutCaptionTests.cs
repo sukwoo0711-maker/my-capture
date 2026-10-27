@@ -427,7 +427,9 @@ public sealed class ShortcutCaptionTests
                 host.Arrange(new Rect(0, 0, card.Width, host.DesiredSize.Height));
                 foreach (Button button in actions)
                 {
-                    Assert.Equal(36, button.ActualHeight, 2);
+                    // Each action names itself under its icon, and Alt captions never change its height.
+                    Assert.Equal(QuickAccessLabelFixture.ExpectedActionHeight(button), button.ActualHeight, 2);
+                    Assert.True(button.ActualHeight > 36);
                     string key = AutomationProperties.GetAcceleratorKey(button);
                     Assert.False(string.IsNullOrWhiteSpace(key));
                     Assert.Equal(AutomationProperties.GetName(button) + "  " + key, button.ToolTip);

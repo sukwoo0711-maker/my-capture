@@ -186,6 +186,8 @@ internal sealed class PinManager
     /// <summary>Raised after a new pin is shown; reopening a closed pin does not raise it.</summary>
     internal event Action? PinCreated;
 
+    internal event Action? ClickThroughHintShown;
+
     /// <summary>Raised after pins open, close, or finish changing their saved presentation.</summary>
     internal event Action? OpenPinsChanged;
 
@@ -535,6 +537,7 @@ internal sealed class PinManager
         pin.CloseStarted += (_, _) => OnPinClosed(pin);
         pin.Closed += (_, _) => _leaving.Remove(pin);
         pin.ViewStateChanged += NotifyOpenPinsChanged;
+        pin.ClickThroughHintShown += () => ClickThroughHintShown?.Invoke();
         pin.ContentChanged += NotifyOpenPinsChanged;
 
         _pins.Add(pin);

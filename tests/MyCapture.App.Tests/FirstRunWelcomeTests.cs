@@ -11,8 +11,9 @@ using Xunit;
 namespace MyCapture.App.Tests;
 
 /// <summary>
-/// A first run focuses on trying a capture; the library follows
-/// once it closes, and later launches behave as before.
+/// A first run is a guide that starts with one capture: the library follows once it is skipped or
+/// closed, finishing it opens nothing a second time, and later launches behave as before. The
+/// guide's own steps are in <see cref="OnboardingGuideTests"/>.
 /// </summary>
 public sealed class FirstRunWelcomeTests
 {
@@ -43,7 +44,7 @@ public sealed class FirstRunWelcomeTests
     }
 
     [Fact]
-    public void WelcomeFocusesOnTheConfiguredCaptureAndKeepsBothChoicesInTheFooter() => StaTestHost.Run(() =>
+    public void WelcomeFocusesOnTheConfiguredCaptureAndKeepsBothChoicesOnTheLastStep() => StaTestHost.Run(() =>
     {
         using var language = UiText.UseLanguage("ko-KR");
         var keys = new HotkeySettings { Capture = new Hotkey(HotkeyModifiers.Control | HotkeyModifiers.Shift, 0x43) };
@@ -52,7 +53,9 @@ public sealed class FirstRunWelcomeTests
         {
             Assert.Equal("MyCapture 시작", welcome.Title);
             Assert.DoesNotContain(Descendants(welcome).OfType<TextBlock>(), text => text.Text == welcome.Title);
-            Assert.Contains(Descendants(welcome).OfType<TextBlock>(), text => text.Text == "한 번 캡처해 보십시오");
+            // The first step names one task; the single-screen title it replaces is gone.
+            Assert.Contains(Descendants(welcome).OfType<TextBlock>(), text => KoreanWordWrap.Strip(text.Text) == "화면의 일부를 캡처합니다");
+            Assert.False(welcome.PreferencesShown);
 
             WrapPanel caps = Descendants(welcome).OfType<WrapPanel>().Single();
             Assert.Equal("Ctrl+Shift+C", AutomationProperties.GetName(caps));
@@ -65,13 +68,14 @@ public sealed class FirstRunWelcomeTests
 
             Button[] buttons = Descendants(welcome).OfType<Button>().ToArray();
             Assert.Equal([welcome.TryNowButton, welcome.SkipButton], buttons);
-            Assert.Equal("영역 캡처", welcome.TryNowButton.Content);
+            Assert.Equal("영역 캡처 시작", welcome.TryNowButton.Content);
             Assert.Equal("건너뛰기", welcome.SkipButton.Content);
             Assert.True(welcome.TryNowButton.IsDefault);
             Assert.True(welcome.SkipButton.IsCancel);
-            Assert.Equal("영역 캡처", AutomationProperties.GetName(welcome.TryNowButton));
+            Assert.Equal("영역 캡처 시작", AutomationProperties.GetName(welcome.TryNowButton));
             Assert.Equal("건너뛰기", AutomationProperties.GetName(welcome.SkipButton));
-            Assert.Equal(UiText.Get("Onboard_TryNowHelp"), AutomationProperties.GetHelpText(welcome.TryNowButton));
+            // The button's help is the step's own instruction now, not the old "closes this window" sentence.
+            Assert.Equal(UiText.Get("Onboarding.CaptureInstructionKey"), AutomationProperties.GetHelpText(welcome.TryNowButton));
             Assert.Contains("Enter", Assert.IsType<string>(welcome.TryNowButton.ToolTip), StringComparison.Ordinal);
             Assert.DoesNotContain("Ctrl+Shift+C", Assert.IsType<string>(welcome.TryNowButton.ToolTip), StringComparison.Ordinal);
             Assert.Contains("Esc", Assert.IsType<string>(welcome.SkipButton.ToolTip), StringComparison.Ordinal);
@@ -87,19 +91,24 @@ public sealed class FirstRunWelcomeTests
             Assert.Equal(1, Grid.GetColumn(shortcuts));
             Assert.True(welcome.StartAtSignInCheck.MinHeight >= 24);
             Assert.True(shortcuts.LineHeight >= 24);
+
+            // Both choices moved to the last step, which is the only place they are shown.
+            OnboardingGuideTests.AdvanceTo(welcome, WelcomeStep.Finish);
+            Assert.True(welcome.PreferencesShown);
         }
         finally { welcome.Close(); }
 
-        // An unassigned shortcut remains honest, and the primary button still offers a capture.
+        // An unassigned shortcut remains honest: no key caps, and the primary button still starts the capture.
         using var english = UiText.UseLanguage("en-US");
         var unassigned = new WelcomeWindow(new HotkeySettings { Capture = Hotkey.None, OpenLibrary = Hotkey.None }, AfterCaptureAction.Editor);
         try
         {
-            Assert.Equal("Capture region", unassigned.TryNowButton.Content);
+            Assert.Equal("Start region capture", unassigned.TryNowButton.Content);
             Assert.Equal("Skip", unassigned.SkipButton.Content);
             Assert.Empty(Descendants(unassigned).OfType<WrapPanel>());
-            Assert.Contains(Descendants(unassigned).OfType<TextBlock>(), text => text.Text == "Try your first capture");
-            Assert.Contains(Descendants(unassigned).OfType<TextBlock>(), text => text.Text == UiText.Get("Hotkey.Unassigned"));
+            Assert.Contains(Descendants(unassigned).OfType<TextBlock>(), text => text.Text == "Capture part of the screen");
+            // Without a shortcut the step says only the button path, never a key that does not exist.
+            Assert.Contains(Descendants(unassigned).OfType<TextBlock>(), text => text.Text == UiText.Get("Onboarding.CaptureInstruction"));
             Assert.DoesNotContain(Descendants(unassigned).OfType<TextBlock>(), text => text.Text == UiText.Get("Onboard_CaptureFromTray"));
         }
         finally { unassigned.Close(); }
@@ -119,7 +128,7 @@ public sealed class FirstRunWelcomeTests
         try
         {
             Assert.Contains(Descendants(welcome).OfType<TextBlock>(), text =>
-                KoreanWordWrap.Strip(text.Text) == UiText.Get("Welcome_CaptureInstruction"));
+                KoreanWordWrap.Strip(text.Text) == UiText.Get("Onboarding.CaptureInstructionKey"));
             string[] paragraphs = ["Onboard_AfterCaptureEditor", "Onboard_AfterCaptureQuickAccess", "Onboard_AfterCaptureClipboard", "Onboard_TrayBody"];
             foreach (string key in paragraphs)
                 Assert.DoesNotContain(Descendants(welcome).OfType<TextBlock>(), text =>
@@ -136,7 +145,6 @@ public sealed class FirstRunWelcomeTests
         FluidMotion.AnimationsEnabledOverrideForTest = false;
         try
         {
-            Assert.Equal(WelcomeOutcome.TryCapture, Run(window => window.TryNowButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent))));
             Assert.Equal(WelcomeOutcome.Closed, Run(window => window.SkipButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent))));
             Assert.Equal(WelcomeOutcome.OpenSettings, Run(window => window.ShortcutsLink.RaiseEvent(new RoutedEventArgs(Hyperlink.ClickEvent))));
             Assert.Equal(WelcomeOutcome.Closed, Run(window => window.Close()));
@@ -148,9 +156,39 @@ public sealed class FirstRunWelcomeTests
                 };
                 window.RaiseEvent(escape);
             }));
-            Assert.Equal(WelcomeOutcome.DismissedForCapture, Run(window => window.DismissForCapture()));
+            // The last step's start button is the only way to finish, and it applies the choices.
+            Assert.Equal(WelcomeOutcome.Completed, Run(window =>
+            {
+                OnboardingGuideTests.AdvanceTo(window, WelcomeStep.Finish);
+                window.TryNowButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            }));
+
+            // A capture is taken while the guide stays open (the practice table is in the frozen frame), so neither
+            // its button nor a capture shortcut closes it; they used to close it as TryCapture and DismissedForCapture.
+            AssertStaysOpen(window => window.TryNowButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent)));
+            AssertStaysOpen(window => window.DismissForCapture());
         }
         finally { FluidMotion.AnimationsEnabledOverrideForTest = motion; }
+
+        static void AssertStaysOpen(Action<WelcomeWindow> act)
+        {
+            var window = new WelcomeWindow(new HotkeySettings(), AfterCaptureAction.Editor)
+            {
+                WindowStartupLocation = WindowStartupLocation.Manual,
+                Left = -10000, Top = -10000, ShowActivated = false, ShowInTaskbar = false,
+            };
+            bool closed = false;
+            window.Closed += (_, _) => closed = true;
+            window.Show();
+            try
+            {
+                act(window);
+                Assert.False(closed);
+                Assert.True(window.IsVisible);
+                Assert.True(window.CapturePending);
+            }
+            finally { window.Close(); }
+        }
 
         static WelcomeOutcome Run(Action<WelcomeWindow> leave)
         {

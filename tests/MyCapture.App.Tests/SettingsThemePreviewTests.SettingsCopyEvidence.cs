@@ -95,11 +95,13 @@ public sealed partial class SettingsThemePreviewTests
                     };
                     try
                     {
+                        // The choices are on the guide's last step; it scrolls inside a short work area.
+                        OnboardingGuideTests.AdvanceTo(welcome, WelcomeStep.Finish);
                         welcome.Show();
                         welcome.LimitToWorkArea(new MonitorInfo("small", new RectD(0, 0, 1920, 768), new RectD(0, 0, 1920, 720), 192, true));
                         Drain(welcome);
                         Assert.InRange(welcome.ActualHeight, 1, 360);
-                        var scroll = Assert.IsType<ScrollViewer>(welcome.Content);
+                        ScrollViewer scroll = welcome.Scroller;
                         scroll.ScrollToEnd(); Drain(welcome);
                         Rect bottom = welcome.AccurateOcrHelp.TransformToAncestor(scroll).TransformBounds(new Rect(welcome.AccurateOcrHelp.RenderSize));
                         Assert.InRange(bottom.Bottom, 1, scroll.ActualHeight + 1);
