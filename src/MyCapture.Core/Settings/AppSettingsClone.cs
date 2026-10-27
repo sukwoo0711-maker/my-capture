@@ -145,6 +145,7 @@ public static class AppSettingsClone
         HighlighterAlpha = s.HighlighterAlpha,
         RecentColors = [.. s.RecentColors],
         BlurRadius = s.BlurRadius,
+        Stamp = s.Stamp.Clone(),
     };
 
     private static OcrSettings Clone(OcrSettings s) => new()

@@ -4740,4 +4740,18 @@ Overwrite these shortcuts? You can change this later in Settings → Shortcuts.<
   <data name="LibraryUx_NoSelection" xml:space="preserve"><value>No selection</value></data>
   <data name="LibraryUx_Preview" xml:space="preserve"><value>Preview</value></data>
   <data name="LibraryUx_PreviewHint" xml:space="preserve"><value>Preview (Space)</value></data>
+  <data name="Stamp_Name" xml:space="preserve"><value>Stamp</value></data>
+  <data name="Stamp_Place" xml:space="preserve"><value>Place stamp</value></data>
+  <data name="Stamp_ToolTip" xml:space="preserve"><value>Place stamp — right-click for options (S)</value></data>
+  <data name="Stamp_Change" xml:space="preserve"><value>Change stamp image…</value></data>
+  <data name="Stamp_Opacity" xml:space="preserve"><value>Opacity</value></data>
+  <data name="Stamp_OpacityPercent" xml:space="preserve"><value>{0}%</value></data>
+  <data name="Stamp_Remove" xml:space="preserve"><value>Remove stamp</value></data>
+  <data name="Stamp_PickerTitle" xml:space="preserve"><value>Choose stamp image</value></data>
+  <data name="Stamp_Changed" xml:space="preserve"><value>Stamp image changed</value></data>
+  <data name="Stamp_OpacitySet" xml:space="preserve"><value>Stamp opacity {0}%</value></data>
+  <data name="Stamp_Removed" xml:space="preserve"><value>Stamp image removed · Stamps already placed stay</value></data>
+  <data name="Stamp_SaveFailed" xml:space="preserve"><value>The stamp image could not be saved.</value></data>
+  <data name="Stamp_Unreadable" xml:space="preserve"><value>The stamp image cannot be read. Please register it again.</value></data>
+  <data name="Stamp_Unavailable" xml:space="preserve"><value>The stamp is not available here.</value></data>
 </root>

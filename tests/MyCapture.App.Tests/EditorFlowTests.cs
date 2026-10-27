@@ -472,7 +472,9 @@ public sealed class EditorFlowTests
             {
                 var grid = Assert.IsType<UniformGrid>(children[index]);
                 Assert.Equal(2, grid.Columns);
-                Assert.Equal(groups[index / 2].Count, grid.Children.Count);
+                // The stamp command takes the free cell beside the image tool; it is not a tool.
+                int commands = groups[index / 2].Contains(EditorTool.Image) ? 1 : 0;
+                Assert.Equal(groups[index / 2].Count + commands, grid.Children.Count);
             }
             else
             {

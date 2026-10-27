@@ -98,7 +98,7 @@ internal sealed class ShortcutHelpWindow : Window
                     ("QuickAccess.Title", "Alt+Q"), ("TextCapture_Title", Display(keys.CaptureText)),
                     ("ColorPick_HelpLabel", "C"), ("TextCapture_HelpToggle", "T")]),
                 ("Help.Annotation", [("Text_DC0760235344", "R"), ("Tools.Ellipse", "E"), ("Text_2785CE58DF74", "A"),
-                    ("Text_37DB9D0B1C8E", "P"), ("Tools.Highlighter", "H"), ("Text_258AD4B095A1", "T"), ("Tools.StepNumber", "N"),
+                    ("Text_37DB9D0B1C8E", "P"), ("Tools.Highlighter", "H"), ("Text_258AD4B095A1", "T"), ("Tools.StepNumber", "N"), ("Stamp_Place", "S"),
                     ("Text_3F8046019B32", "M"), ("EditorBlur_Name", "B"), ("Tools_Crop", "X"),
                     ("EditorUx_RotateLeftHint", "Q"), ("EditorUx_RotateRightHint", "W"), ("QuickAccess.Save", "Ctrl+S"), ("QuickAccess.Copy", "Ctrl+C")]),
                 ("Workspace.Library", [("Gallery.Float", "P"), ("LibraryUx_KeepToggleName", "K"),
