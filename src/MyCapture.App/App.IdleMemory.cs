@@ -23,7 +23,8 @@ public partial class App
 
     private void ScheduleIdleMemoryReclamation()
     {
-        if (_idleMemory is null || _memoryReclamationStopped || _shutdownRequested || Dispatcher.HasShutdownStarted) return;
+        if (_idleMemory is null || _memoryReclamationStopped || _shutdownRequested || Dispatcher.HasShutdownStarted
+            || s_residentProbe?.Has("no-idle-gc") == true) return;
         _idleMemory.FlowEnded(Environment.TickCount64);
         _idleMemoryTimer ??= new DispatcherTimer(DispatcherPriority.ContextIdle, Dispatcher)
         {

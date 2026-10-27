@@ -60,6 +60,8 @@ internal sealed class CaptureFlightDecoration : Window
     /// <summary>What the window draws now, in virtual-desktop physical pixels.</summary>
     internal CaptureFlightFrame Frame => _surface.Frame;
 
+    internal DrawingGroup? DrawingForTest => _surface.Drawing;
+
     /// <summary>Shows only after capture exclusion has succeeded, without changing the foreground window.</summary>
     internal bool ShowDecoration()
     {
@@ -138,13 +140,22 @@ internal sealed class CaptureFlightDecoration : Window
     {
         private BitmapSource? _image;
         private readonly Point _origin;
+        private readonly DrawingVisual _drawing = new();
 
         internal FlightSurface(BitmapSource image, Point origin)
         {
             _image = image;
             _origin = origin;
             IsHitTestVisible = false;
+            AddVisualChild(_drawing);
         }
+
+        protected override int VisualChildrenCount => 1;
+
+        protected override Visual GetVisualChild(int index) =>
+            index == 0 ? _drawing : throw new ArgumentOutOfRangeException(nameof(index));
+
+        internal DrawingGroup? Drawing => _drawing.Drawing;
 
         internal CaptureFlightFrame Frame { get; set; }
 
@@ -154,14 +165,17 @@ internal sealed class CaptureFlightDecoration : Window
         {
             _image = null;
             Frame = default;
-            InvalidateVisual();
+            // The HWND has closed, so another OnRender is not guaranteed. Clear the retained
+            // drawing now: it owns the image too, independently of the managed _image field.
+            using (_drawing.RenderOpen()) { }
         }
 
-        protected override void OnRender(DrawingContext drawing)
+        protected override void OnRender(DrawingContext context)
         {
-            base.OnRender(drawing);
+            base.OnRender(context);
+            using DrawingContext drawing = _drawing.RenderOpen();
             CaptureFlightFrame frame = Frame;
-            if (frame.Opacity <= 0 || frame.Image.IsEmpty || frame.Image.Width <= 0 || frame.Image.Height <= 0) return;
+            if (_image is null || frame.Opacity <= 0 || frame.Image.IsEmpty || frame.Image.Width <= 0 || frame.Image.Height <= 0) return;
             // Physical virtual-desktop pixels to this window's DIPs: the image drawn at its source
             // rectangle lands on exactly the pixels it was cut from.
             double sx = 1 / Dpi.DpiScaleX, sy = 1 / Dpi.DpiScaleY;

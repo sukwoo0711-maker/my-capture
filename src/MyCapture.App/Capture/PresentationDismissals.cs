@@ -3,6 +3,8 @@ namespace MyCapture.App.Capture;
 /// <summary>Tracks whether any surface that can enter a grab dismissed in the settle window.</summary>
 internal sealed class PresentationDismissals
 {
+    internal static bool UseLegacySettleForProbe { get; set; }
+
     private long _lastUnexcludedTick = long.MinValue;
     internal long LastDismissedTick { get; private set; } = long.MinValue;
 
@@ -14,7 +16,8 @@ internal sealed class PresentationDismissals
         if (!captureExcluded) _lastUnexcludedTick = tick;
     }
 
-    internal bool NeedsSettle(long tick) => IsRecent(tick, _lastUnexcludedTick);
+    internal bool NeedsSettle(long tick) =>
+        IsRecent(tick, UseLegacySettleForProbe ? LastDismissedTick : _lastUnexcludedTick);
 
     internal static bool IsRecent(long tick, long dismissedTick)
     {

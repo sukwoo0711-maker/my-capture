@@ -43,11 +43,17 @@ internal sealed class ResidentProbeOptions
     /// the card), <c>frame-cached</c> (synthetic frames built like the real grab, BitmapSource.Create Bgr32,
     /// instead of a frozen WriteableBitmap), <c>no-reader-prewarm</c> (skip production reader prewarm).
     /// The old <c>prewarm-readers</c> flag is accepted as a no-op since warming is now the default;
-    /// <c>no-reader-prewarm</c> wins when both are supplied. Never used for the release table.
+    /// <c>no-reader-prewarm</c> wins when both are supplied. <c>legacy-capture-settle</c>,
+    /// <c>no-idle-gc</c>, <c>legacy-flight-bounds</c> and <c>no-private-working-set</c> isolate the
+    /// corresponding performance changes. <c>selector-breakdown</c> adds dispatcher tracing and a
+    /// blocking render-thread flush before selection; <c>receipt-breakdown</c> records receipt marks.
+    /// These diagnostic variants change workload or timing and are never used for the release table.
     /// </summary>
     internal static readonly string[] KnownVariants =
         ["no-overlay-prewarm", "no-editor-prewarm", "no-engine-prewarm", "no-flight", "frame-cached",
-         "sw-selector", "sw-card", "sw-flight", "sw-editor", "prewarm-selector-hwnd", "prewarm-readers", "no-reader-prewarm"];
+         "sw-selector", "sw-card", "sw-flight", "sw-editor", "prewarm-selector-hwnd", "prewarm-readers", "no-reader-prewarm",
+         "legacy-capture-settle", "no-idle-gc", "legacy-flight-bounds", "no-private-working-set",
+         "selector-breakdown", "receipt-breakdown"];
 
     internal static readonly string[] AllScenarios = ["capture", "editor-4k", "capture-30", "library", "ocr", "pins-10"];
 
@@ -106,6 +112,18 @@ internal sealed class ResidentProbeOptions
             : AllScenarios;
         bool quick = Array.Exists(args, argument => string.Equals(argument, QuickSwitch, StringComparison.OrdinalIgnoreCase));
         bool audit = Array.Exists(args, argument => string.Equals(argument, AuditSwitch, StringComparison.OrdinalIgnoreCase));
+        IReadOnlySet<string> variants = ReadVariants(args);
+        return new ResidentProbeOptions(DiagnosticOutputPaths.Create(output), scenarios, quick, audit)
+        {
+            Variants = variants,
+            SkipIndexing = Array.Exists(args, argument => string.Equals(argument, NoIndexingSwitch, StringComparison.OrdinalIgnoreCase)),
+            SoftwareRender = Array.Exists(args, argument => string.Equals(argument, SoftwareRenderSwitch, StringComparison.OrdinalIgnoreCase)),
+        };
+    }
+
+    /// <summary>Pure option validation, before creating the diagnostic output directory.</summary>
+    internal static IReadOnlySet<string> ReadVariants(string[] args)
+    {
         int variantIndex = Array.FindIndex(args, argument => string.Equals(argument, VariantSwitch, StringComparison.OrdinalIgnoreCase));
         var variants = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         if (variantIndex >= 0 && variantIndex + 1 < args.Length)
@@ -117,12 +135,7 @@ internal sealed class ResidentProbeOptions
                 variants.Add(variant);
             }
         }
-        return new ResidentProbeOptions(DiagnosticOutputPaths.Create(output), scenarios, quick, audit)
-        {
-            Variants = variants,
-            SkipIndexing = Array.Exists(args, argument => string.Equals(argument, NoIndexingSwitch, StringComparison.OrdinalIgnoreCase)),
-            SoftwareRender = Array.Exists(args, argument => string.Equals(argument, SoftwareRenderSwitch, StringComparison.OrdinalIgnoreCase)),
-        };
+        return variants;
     }
 }
 
@@ -244,6 +257,7 @@ internal sealed class ResidentProbeRecorder : IDisposable
     private readonly List<(string Step, string Kind, WeakReference Reference)> _tracked = [];
     private readonly List<ResidentProbeMemoryMap.Snapshot> _audits = [];
     private readonly List<Breakdown> _breakdowns = [];
+    private readonly List<ReceiptBreakdown> _receiptBreakdowns = [];
     private TimeSpan _lastCpu;
     private double _lastWallMs;
     private int _pending;
@@ -271,6 +285,14 @@ internal sealed class ResidentProbeRecorder : IDisposable
     internal sealed record Timing(string Name, double Milliseconds);
 
     internal sealed record Mark(string Name, double Milliseconds, int Thread);
+
+    internal sealed record ReceiptBreakdown(string Name, int Index, double CardMs,
+        int Gen0, int Gen1, int Gen2, IReadOnlyList<Mark> Marks);
+
+    internal void AddReceiptBreakdown(ReceiptBreakdown breakdown)
+    {
+        lock (_gate) _receiptBreakdowns.Add(breakdown);
+    }
 
     /// <summary>One shortcut → selector run: its <see cref="SelectorTimeline"/> marks from the handler call.</summary>
     internal sealed record Breakdown(string Name, int Index, double SelectorMs, double SinceLastDismissalMs,
@@ -429,7 +451,9 @@ internal sealed class ResidentProbeRecorder : IDisposable
             _latency.Clear();
         }
         GCMemoryInfo gc = GC.GetGCMemoryInfo();
-        (long? privateWorkingSet, string? workingSetError) = _workingSet.Read(_process.Handle, _process.WorkingSet64);
+        (long? privateWorkingSet, string? workingSetError) = _options.Has("no-private-working-set")
+            ? (null, "Disabled by diagnostic variant")
+            : _workingSet.Read(_process.Handle, _process.WorkingSet64);
         var row = new Row(step, atSeconds, wall / 1000, Mb(_process.WorkingSet64), Mb(_process.PrivateMemorySize64),
             Mb(GC.GetTotalMemory(false)), Mb(gc.HeapSizeBytes), Mb(gc.TotalCommittedBytes),
             (int)GetGuiResources(_process.Handle, 0), (int)GetGuiResources(_process.Handle, 1), _process.HandleCount,
@@ -493,11 +517,13 @@ internal sealed class ResidentProbeRecorder : IDisposable
                 Notes = _notes,
                 Failures = _failures,
                 Breakdowns = _breakdowns,
+                ReceiptBreakdowns = _receiptBreakdowns,
                 MetricDefinitions = new
                 {
                     PrivateWorkingSetMb = "QueryWorkingSet nonshared resident pages; null and PrivateWorkingSetError when unavailable",
                     SelectorMs = "Shortcut handler to first CompositionTarget.Rendering tick with selector frame attached",
                     RenderThreadCompleteMs = "Shortcut handler to diagnostic MediaContext.CompleteRender return after first Rendering; render-thread upper bound, not physical display latency",
+                    ReceiptBreakdowns = "Opt-in receipt marks from selection to first card Rendering; Gen0/1/2 are collection-count deltas over that interval",
                 },
                 Audits = _audits,
             };

@@ -6,6 +6,21 @@ namespace MyCapture.App.Tests;
 public sealed class PresentationDismissalsTests
 {
     [Fact]
+    public void LegacySettleProbeWaitsAfterExcludedSurfacesButStillExpires()
+    {
+        bool previous = PresentationDismissals.UseLegacySettleForProbe;
+        try
+        {
+            PresentationDismissals.UseLegacySettleForProbe = true;
+            var dismissals = new PresentationDismissals();
+            dismissals.Record(1000, captureExcluded: true);
+            Assert.True(dismissals.NeedsSettle(1749));
+            Assert.False(dismissals.NeedsSettle(1750));
+        }
+        finally { PresentationDismissals.UseLegacySettleForProbe = previous; }
+    }
+
+    [Fact]
     public void ShellReportsEachNotificationActualExclusionAtDismissal() => StaTestHost.Run(() =>
     {
         using var shell = new ThemedShellPresenter(() => false);

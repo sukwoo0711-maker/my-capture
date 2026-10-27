@@ -73,6 +73,8 @@ internal sealed class CaptureFlight
     internal static Func<bool> ReadLayeredSupport { get; set; } = () => CaptureWindowExclusion.SupportsLayeredWindows;
     internal static Func<IReadOnlyList<MonitorInfo>> ReadMonitors { get; set; } = MonitorEnumerator.GetAll;
 
+    internal static bool UseLegacyBoundsForProbe { get; set; }
+
     private enum Phase { Lifted, Landing, HandingOver, Flying, Arrived, Leaving, Done }
 
     private readonly Func<double> _clock;
@@ -481,7 +483,7 @@ internal sealed class CaptureFlight
         if (monitors.Any(monitor => monitor.ScaleFactor != scale && Overlaps(ToRect(monitor.Bounds), ToRect(eligibility))))
             return null;
         if (eligibility.Width * eligibility.Height > MaxSurfacePixels) return null;
-        return (bounds, scale);
+        return (UseLegacyBoundsForProbe ? eligibility : bounds, scale);
     }
 
     // Shared edges do not count: a capture ending at a display's edge does not cross the next one.

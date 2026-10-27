@@ -25,6 +25,50 @@ public sealed class CaptureFlightTests
     private static readonly Rect Target = new(700, 650, 160, 120);
 
     [Fact]
+    public void ClosingTheDecorationClearsItsRetainedDrawingWithoutAnotherRender() => StaTestHost.Run(() =>
+    {
+        BitmapSource image = Image(6, 4);
+        var window = new CaptureFlightDecoration(image, new RectD(10, 20, 6, 4), 1);
+        var surface = Assert.IsAssignableFrom<FrameworkElement>(window.Content);
+        try
+        {
+            window.Draw(new CaptureFlightFrame(new Rect(10, 20, 6, 4), 0, 0, 0, 1));
+            surface.Measure(new Size(6, 4));
+            surface.Arrange(new Rect(0, 0, 6, 4));
+            var actual = new RenderTargetBitmap(6, 4, 96, 96, PixelFormats.Pbgra32);
+            actual.Render(surface);
+            Assert.True(ContainsImage(window.DrawingForTest, image));
+
+            // The child visual preserves the old image placement and compositing.
+            var expectedVisual = new DrawingVisual();
+            using (DrawingContext context = expectedVisual.RenderOpen())
+                context.DrawImage(image, new Rect(0, 0, 6, 4));
+            var expected = new RenderTargetBitmap(6, 4, 96, 96, PixelFormats.Pbgra32);
+            expected.Render(expectedVisual);
+            byte[] actualPixels = new byte[6 * 4 * 4];
+            byte[] expectedPixels = new byte[actualPixels.Length];
+            actual.CopyPixels(actualPixels, 6 * 4, 0);
+            expected.CopyPixels(expectedPixels, 6 * 4, 0);
+            Assert.Equal(expectedPixels, actualPixels);
+
+            window.Close();
+            // Both references stay alive. No GC, dispatcher pump or next render is needed.
+            Assert.False(ContainsImage(window.DrawingForTest, image));
+            Assert.True(window.DrawingForTest is null || window.DrawingForTest.Children.Count == 0);
+            Assert.Null(window.Content);
+            GC.KeepAlive(surface);
+        }
+        finally { if (!window.IsClosed) window.Close(); }
+    });
+
+    private static bool ContainsImage(Drawing? drawing, BitmapSource image) => drawing switch
+    {
+        ImageDrawing bitmap => ReferenceEquals(bitmap.ImageSource, image),
+        DrawingGroup group => group.Children.Any(child => ContainsImage(child, image)),
+        _ => false,
+    };
+
+    [Fact]
     public void FlightStartsOnTheSourceLandsOnThePreviewAndLiftsMidway()
     {
         CaptureFlightFrame start = CaptureFlight.FlightFrame(Source, Target, 0, 1.5);
@@ -103,6 +147,23 @@ public sealed class CaptureFlightTests
         // A full-screen capture needs no room beyond its display.
         (RectD full, _) = CaptureFlight.PlanBounds(new Rect(0, 0, 1920, 1080), [display])!.Value;
         Assert.Equal(new RectD(0, 0, 1920, 1080), full);
+    }
+
+    [Fact]
+    public void LegacyBoundsProbeRestoresOnlyThePreviousAllocationEnvelope()
+    {
+        bool previous = CaptureFlight.UseLegacyBoundsForProbe;
+        try
+        {
+            CaptureFlight.UseLegacyBoundsForProbe = true;
+            MonitorInfo display = Monitor(0, 0, 1920, 1080, 144);
+            Rect path = Rect.Union(Source, Target);
+            RectD bounds = CaptureFlight.PlanBounds(path, [display])!.Value.Bounds;
+            Assert.Equal(new RectD(path.Left - 72, path.Top - 72, path.Width + 144, path.Height + 144), bounds);
+            Assert.Null(CaptureFlight.PlanBounds(new Rect(200, 200, 4000, 1950),
+                [Monitor(0, 0, 5000, 3000, 96)]));
+        }
+        finally { CaptureFlight.UseLegacyBoundsForProbe = previous; }
     }
 
     [Theory]

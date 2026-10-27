@@ -34,6 +34,7 @@ public partial class App
         typeof(CaptureOverlayCoordinator).GetField("_activeEditor", BindingFlags.Instance | BindingFlags.NonPublic)!;
 
     private readonly Dictionary<string, int> _probeBreakdownIndex = [];
+    private readonly Dictionary<string, int> _probeReceiptIndex = [];
 
     private static readonly PropertyInfo? ProbeOperationName =
         typeof(DispatcherOperation).GetProperty("Name", BindingFlags.Instance | BindingFlags.NonPublic);
@@ -93,6 +94,8 @@ public partial class App
     {
         var recorder = new ResidentProbeRecorder(probe, Dispatcher);
         int exitCode = 0;
+        PresentationDismissals.UseLegacySettleForProbe = probe.Has("legacy-capture-settle");
+        CaptureFlight.UseLegacyBoundsForProbe = probe.Has("legacy-flight-bounds");
         // Diagnostic variant: no lifted capture flies into the card (CaptureFlight declines without layered windows).
         if (probe.Has("no-flight")) CaptureFlight.ReadLayeredSupport = () => false;
         // Diagnostic variants: chosen kinds of window render in software from their first frame.
@@ -207,11 +210,37 @@ public partial class App
         recorder.Track(name, "selector window", overlay);
         recorder.Track(name, "selector frame", (overlay.Content as CaptureOverlayView)?.Frame);
 
-        long selected = Stopwatch.GetTimestamp();
+        long selected = 0;
         double cardMs = -1;
+        List<ResidentProbeRecorder.Mark>? receiptMarks = s_residentProbe?.Has("receipt-breakdown") == true ? [] : null;
+        int gen0 = 0, gen1 = 0, gen2 = 0;
+        int collected0 = 0, collected1 = 0, collected2 = 0;
+        Action<string>? previousReceiptMark = ReceiptTimeline.Mark;
+        if (receiptMarks is not null)
+        {
+            gen0 = GC.CollectionCount(0);
+            gen1 = GC.CollectionCount(1);
+            gen2 = GC.CollectionCount(2);
+            ReceiptTimeline.Mark = stage =>
+            {
+                if (cardMs >= 0) return;
+                double at = Stopwatch.GetElapsedTime(selected).TotalMilliseconds;
+                lock (receiptMarks) receiptMarks.Add(new ResidentProbeRecorder.Mark(stage, Math.Round(at, 2), Environment.CurrentManagedThreadId));
+            };
+        }
+        selected = Stopwatch.GetTimestamp();
         EventHandler rendering = (_, _) =>
         {
-            if (cardMs < 0 && _quickAccess is { IsVisible: true }) cardMs = Stopwatch.GetElapsedTime(selected).TotalMilliseconds;
+            if (cardMs >= 0 || _quickAccess is not { IsVisible: true }) return;
+            cardMs = Stopwatch.GetElapsedTime(selected).TotalMilliseconds;
+            if (receiptMarks is not null)
+            {
+                collected0 = GC.CollectionCount(0) - gen0;
+                collected1 = GC.CollectionCount(1) - gen1;
+                collected2 = GC.CollectionCount(2) - gen2;
+                lock (receiptMarks) receiptMarks.Add(new ResidentProbeRecorder.Mark(
+                    "card-first-rendering", Math.Round(cardMs, 2), Environment.CurrentManagedThreadId));
+            }
         };
         CompositionTarget.Rendering += rendering;
         try
@@ -219,8 +248,19 @@ public partial class App
             overlay.CompleteSelection(new RectD(160, 120, 1280, 720));
             await ProbeWaitAsync(() => cardMs >= 0, 10_000, "card shown");
         }
-        finally { CompositionTarget.Rendering -= rendering; }
+        finally
+        {
+            CompositionTarget.Rendering -= rendering;
+            if (receiptMarks is not null) ReceiptTimeline.Mark = previousReceiptMark;
+        }
         recorder.Time(name + ": selection → card shown", cardMs);
+        if (receiptMarks is not null)
+        {
+            int index = _probeReceiptIndex.TryGetValue(name, out int previous) ? previous + 1 : 1;
+            _probeReceiptIndex[name] = index;
+            lock (receiptMarks) recorder.AddReceiptBreakdown(new ResidentProbeRecorder.ReceiptBreakdown(
+                name, index, Math.Round(cardMs, 2), collected0, collected1, collected2, receiptMarks.ToArray()));
+        }
         recorder.Track(name, "card", _quickAccess);
         recorder.Track(name, "card image", _quickAccess?.PreviewForTest.Source);
         recorder.Track(name, "flight", _captureFlight);
@@ -233,11 +273,35 @@ public partial class App
     }
 
     /// <summary>
-    /// The capture shortcut's handler until the selector has drawn its frozen frame, with the
-    /// <see cref="SelectorTimeline"/> marks of the way there (kept until the window's first
-    /// ContentRendered, at most one second longer).
+    /// The capture shortcut's handler until its first Rendering observation, matching the release
+    /// baseline. The opt-in selector breakdown also waits for content and render-thread completion.
     /// </summary>
     private async Task<double> ProbeShortcutToSelectorAsync(ResidentProbeRecorder recorder, string name)
+    {
+        if (s_residentProbe?.Has("selector-breakdown") == true)
+            return await ProbeShortcutToSelectorBreakdownAsync(recorder, name);
+
+        // Match the release baseline: select on the first Rendering observation. Dispatcher
+        // tracing, ContentRendered and CompleteRender change the phase at which selection
+        // starts and therefore the subsequent selection-to-card measurement.
+        long started = Stopwatch.GetTimestamp();
+        double selectorMs = -1;
+        EventHandler rendering = (_, _) =>
+        {
+            if (selectorMs < 0 && ProbeOverlay is { IsVisible: true, Content: CaptureOverlayView { Frame: not null } })
+                selectorMs = Stopwatch.GetElapsedTime(started).TotalMilliseconds;
+        };
+        CompositionTarget.Rendering += rendering;
+        try
+        {
+            HandleCaptureRequested();
+            await ProbeWaitAsync(() => selectorMs >= 0, 10_000, "selector first frame");
+        }
+        finally { CompositionTarget.Rendering -= rendering; }
+        return selectorMs;
+    }
+
+    private async Task<double> ProbeShortcutToSelectorBreakdownAsync(ResidentProbeRecorder recorder, string name)
     {
         long dismissed = _overlay?.LastPresentationDismissalTick ?? long.MinValue;
         double sinceDismissal = dismissed == long.MinValue ? -1 : Environment.TickCount64 - dismissed;
