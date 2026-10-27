@@ -225,6 +225,67 @@ public sealed class CaptureRatioPresetTests
     });
 
     [Fact]
+    public void ChoosingTheSameFixedRectangleStartsANewRefitCycle() => StaTestHost.Run(() =>
+    {
+        CaptureOverlayView view = RatioView(() => new PointD(500, 500), frame: BlankFrame(1920, 1080),
+            monitors: [TwoMonitors[0]]);
+        try
+        {
+            view.HandleKeyDown(Overlay.KeyArgs(Key.A), ModifierKeys.Control);
+            Assert.Equal(new RectD(0, 0, 1920, 1080), view.Selection);
+            for (int i = 0; i < 3; i++) view.RaiseEvent(Overlay.KeyArgs(Key.R));
+            var square = new RectD(420, 0, 1080, 1080);
+            Assert.Equal(square, view.Selection);
+
+            MenuItem fixedSquare = view.ModeBarForTest!.CreateRatioMenu().Items.OfType<MenuItem>()
+                .Single(item => (string)item.Header == "1080 × 1080");
+            fixedSquare.RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
+            Assert.Equal(square, view.Selection);
+            view.SelectRatio(SelectionRatio.Free);
+            Assert.Equal(square, view.Selection);
+        }
+        finally { view.ReleaseResources(); }
+    });
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void MovingOrResizingBackToTheSameRectangleDoesNotReviveTheOldRefitBase(bool resize) => StaTestHost.Run(() =>
+    {
+        CaptureOverlayView view = RatioView(() => new PointD(300, 300));
+        try
+        {
+            view.PlaceFixedSize(new FixedSelectionSize(1280, 720));
+            view.SelectRatio(SelectionRatio.Ratio1x1);
+            RectD square = view.Selection!.Value;
+            ModifierKeys modifiers = resize ? ModifierKeys.Shift : ModifierKeys.None;
+            view.HandleKeyDown(Overlay.KeyArgs(Key.Left), modifiers);
+            view.HandleKeyDown(Overlay.KeyArgs(Key.Right), modifiers);
+            Assert.Equal(square, view.Selection);
+            view.SelectRatio(SelectionRatio.Free);
+            Assert.Equal(square, view.Selection);
+        }
+        finally { view.ReleaseResources(); }
+    });
+
+    [Fact]
+    public void SelectAllAfterARefitStartsFromTheNewWholeFrame() => StaTestHost.Run(() =>
+    {
+        CaptureOverlayView view = RatioView(() => new PointD(300, 300));
+        try
+        {
+            view.PlaceFixedSize(new FixedSelectionSize(1080, 1080));
+            view.SelectRatio(SelectionRatio.Ratio16x9);
+            view.HandleKeyDown(Overlay.KeyArgs(Key.A), ModifierKeys.Control);
+            var frame = new RectD(0, 0, 1280, 720);
+            view.SelectRatio(SelectionRatio.Ratio1x1);
+            view.SelectRatio(SelectionRatio.Free);
+            Assert.Equal(frame, view.Selection);
+        }
+        finally { view.ReleaseResources(); }
+    });
+
+    [Fact]
     public void FixedSizeIsCentredOnThePointersMonitorMovedByArrowsAndConfirmedByEnter() => StaTestHost.Run(() =>
     {
         using var language = UiText.UseLanguage("ko-KR");

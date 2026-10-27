@@ -876,7 +876,13 @@ internal sealed class CaptureOverlayView : FrameworkElement
             ? availableSize.Width / PixelWidth : GuidePixelSizeX;
         ApplyGuideScale(CaptureModeBarLayout.ContentScale(GuideArea.Scale, dipPerPixel));
         var unbounded = new Size(double.PositiveInfinity, double.PositiveInfinity);
-        _modeBar?.Measure(unbounded);
+        if (_modeBar is { } bar)
+        {
+            double width = Math.Max(0, (GuideArea.WorkArea.Width * dipPerPixel)
+                - (2 * CaptureModeBarLayout.EdgeMargin * _guideScale));
+            bar.ConstrainWidth(width / _guideScale);
+            bar.Measure(new Size(width, double.PositiveInfinity));
+        }
         _startGuide?.Measure(unbounded);
         return desired;
     }
@@ -963,6 +969,7 @@ internal sealed class CaptureOverlayView : FrameworkElement
         DismissStartGuide();
         _regionOnlySelected = false;
         _windowSelected = true;
+        ResetRefitCycle();
         _selection = null;
         _selectedWindow = null;
         SelectMode(CaptureSelectorMode.Capture);
@@ -1055,6 +1062,12 @@ internal sealed class CaptureOverlayView : FrameworkElement
     private RectD? _refitBase;
     private RectD? _refitResult;
 
+    private void ResetRefitCycle()
+    {
+        _refitBase = null;
+        _refitResult = null;
+    }
+
     /// <summary>
     /// Places a rectangle of exactly <paramref name="size"/> centred on the monitor under the pointer. A
     /// monitor too small for it gets the largest rectangle of the same ratio that fits. The arrow keys move
@@ -1065,6 +1078,7 @@ internal sealed class CaptureOverlayView : FrameworkElement
         if (_ended || _released || _copyingColor || !RatioAvailable) return false;
         CaptureGuideArea monitor = CaptureModeBarLayout.ChooseArea(_monitors ??= ReadMonitors(), ReadCursor(), _screenBounds);
         if (SelectionRatios.PlaceFixed(size, monitor.Bounds, FrameBounds, EvenSelection) is not { } placed) return false;
+        ResetRefitCycle();
         _selection = placed;
         _selectedWindow = null;
         ClearHover();
@@ -1091,6 +1105,7 @@ internal sealed class CaptureOverlayView : FrameworkElement
         if (_ended || _copyingColor) return false;
         RectD monitor = GuideArea.Bounds.ClampTo(FrameBounds).ToPixelBounds();
         if (monitor.Width < MinimumSelectionPixels || monitor.Height < MinimumSelectionPixels) return false;
+        ResetRefitCycle();
         _selection = monitor;
         _selectedWindow = null;
         ClearHover();
@@ -2061,6 +2076,7 @@ internal sealed class CaptureOverlayView : FrameworkElement
                 ClearHover();
             }
 
+            ResetRefitCycle();
             if (PresetSize is { } preset && preset.Width > 0 && preset.Height > 0)
             {
                 // Fixed size: the drag only moves the box's top-left corner. The stored
@@ -2114,6 +2130,7 @@ internal sealed class CaptureOverlayView : FrameworkElement
         _dragAnchor = point;
         _selectedWindow = null;
         _dragBeyondClick = false;
+        ResetRefitCycle();
         // A press on a highlighted window keeps that highlight until the pointer leaves the
         // click threshold; otherwise the free-region drag starts exactly as before.
         _selection = _hoverRegion.HasValue ? null : new RectD(point.X, point.Y, 0, 0);
@@ -2140,6 +2157,7 @@ internal sealed class CaptureOverlayView : FrameworkElement
         PointD rawPoint = UpdatePointer();
         PointD point = ClampEdgePoint(rawPoint);
         _cursorPixel = ClampSamplePoint(rawPoint);
+        ResetRefitCycle();
         if (_hoverRegion is { } windowRegion && !_dragBeyondClick &&
             WindowDetectHitTest.IsClick(_dragAnchor, point, ClickThresholdX, ClickThresholdY))
         {
@@ -2182,7 +2200,9 @@ internal sealed class CaptureOverlayView : FrameworkElement
     /// The selector's keys. Also called by its window for keys that reach the window before the
     /// selector holds keyboard focus.
     /// </summary>
-    internal void HandleKeyDown(KeyEventArgs e)
+    internal void HandleKeyDown(KeyEventArgs e) => HandleKeyDown(e, Keyboard.Modifiers);
+
+    internal void HandleKeyDown(KeyEventArgs e, ModifierKeys modifiers)
     {
         // A Korean IME in Hangul mode reports letters as ImeProcessed; C and T must still work.
         Key key = e.Key == Key.ImeProcessed ? e.ImeProcessedKey : e.Key;
@@ -2219,7 +2239,8 @@ internal sealed class CaptureOverlayView : FrameworkElement
                 ConfirmSelection();
                 e.Handled = true;
                 return;
-            case Key.A when Keyboard.Modifiers.HasFlag(ModifierKeys.Control):
+            case Key.A when modifiers.HasFlag(ModifierKeys.Control):
+                ResetRefitCycle();
                 _selection = FrameBounds;
                 _selectedWindow = null;
                 ClearHover();
@@ -2227,17 +2248,17 @@ internal sealed class CaptureOverlayView : FrameworkElement
                 e.Handled = true;
                 return;
             // Plain C/T only: Shift may be held for precision, Ctrl/Alt chords stay untouched.
-            case Key.C when CopyColorText is not null && IsPlainOrShift(Keyboard.Modifiers):
+            case Key.C when CopyColorText is not null && IsPlainOrShift(modifiers):
                 UpdatePointer();
                 _ = CopyColorAtPointerAsync();
                 e.Handled = true;
                 return;
-            case Key.T when TextCaptureAvailable && IsPlainOrShift(Keyboard.Modifiers):
+            case Key.T when TextCaptureAvailable && IsPlainOrShift(modifiers):
                 TextCaptureMode = !TextCaptureMode;
                 e.Handled = true;
                 return;
             // Plain R only, like C and T: Shift may be held for precision, Ctrl/Alt chords stay untouched.
-            case Key.R when RatioAvailable && IsPlainOrShift(Keyboard.Modifiers):
+            case Key.R when RatioAvailable && IsPlainOrShift(modifiers):
                 SelectRatio(SelectionRatios.Next(_selectionRatio));
                 e.Handled = true;
                 return;
@@ -2245,7 +2266,7 @@ internal sealed class CaptureOverlayView : FrameworkElement
             case Key.Right:
             case Key.Up:
             case Key.Down:
-                NudgeSelection(e.Key, Keyboard.Modifiers);
+                NudgeSelection(e.Key, modifiers);
                 e.Handled = true;
                 return;
         }
@@ -2270,6 +2291,7 @@ internal sealed class CaptureOverlayView : FrameworkElement
         if (_interaction == InteractionMode.Create && !_ended)
         {
             _interaction = InteractionMode.None;
+            ResetRefitCycle();
             _selection = null;
             QueueFeedback();
         }
@@ -2300,6 +2322,7 @@ internal sealed class CaptureOverlayView : FrameworkElement
 
         double step = modifiers.HasFlag(ModifierKeys.Control) ? 10 : 1;
         bool resize = modifiers.HasFlag(ModifierKeys.Shift);
+        ResetRefitCycle();
         _selectedWindow = null;
 
         if (resize && ActiveRatio != SelectionRatio.Free)

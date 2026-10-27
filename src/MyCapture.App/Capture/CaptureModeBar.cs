@@ -1,11 +1,14 @@
 using System.Windows;
 using System.Windows.Automation;
+using System.Windows.Automation.Peers;
+using System.Windows.Automation.Provider;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Data;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Shapes;
+using System.Windows.Threading;
 using MyCapture.App.Themes;
 using MyCapture.Core.Capture;
 
@@ -131,6 +134,9 @@ internal sealed class CaptureModeBar : Border
     private bool _detectWindows = true;
     private bool _canRepeatLastRegion = true;
     private bool _recording;
+    private bool _otherActions;
+    private bool _compactActions;
+    private readonly WrapPanel _items;
 
     internal CaptureModeBar()
     {
@@ -207,15 +213,15 @@ internal sealed class CaptureModeBar : Border
         AutomationProperties.SetName(_cancel, UiText.Get("CaptureGuide2_Cancel"));
 
         _textSeparator = Divider();
-        var items = new StackPanel { Orientation = Orientation.Horizontal };
-        KeyboardNavigation.SetDirectionalNavigation(items, KeyboardNavigationMode.Cycle);
+        _items = new WrapPanel { Orientation = Orientation.Horizontal };
+        KeyboardNavigation.SetDirectionalNavigation(_items, KeyboardNavigationMode.Cycle);
         foreach (UIElement item in new UIElement[]
                  {
                      _kindSwitch, _recordingKindIndicator, _kindSeparator, _capture, _window, _fullScreen, _scroll, _delay,
                      _ratio, _textSeparator, _text, _color, Divider(), _more, _help, _cancel,
                  })
-            items.Children.Add(item);
-        Child = items;
+            _items.Children.Add(item);
+        Child = _items;
         ApplyTexts();
         ShowRatio(SelectionRatio.Free);
     }
@@ -279,6 +285,8 @@ internal sealed class CaptureModeBar : Border
         bool canRepeatLastRegion = true, bool recording = false, bool ratioAvailable = true)
     {
         _recording = recording;
+        _otherActions = otherActions;
+        _compactActions = false;
         _ratio.Visibility = ratioAvailable ? Visibility.Visible : Visibility.Collapsed;
         _detectWindows = detectWindows;
         _canRepeatLastRegion = canRepeatLastRegion;
@@ -295,6 +303,41 @@ internal sealed class CaptureModeBar : Border
         _recordingKindIndicator.Visibility = recording && !otherActions ? Visibility.Visible : Visibility.Collapsed;
         ShowCaptureKind();
         ApplyTexts();
+    }
+
+    /// <summary>Uses the existing more menu for secondary commands on a narrow monitor.</summary>
+    internal void ConstrainWidth(double availableWidth)
+    {
+        // All command faces have fixed widths. Count them before layout so narrowing the bar
+        // needs only its normal measure pass; menus are still created only when opened.
+        double chromeWidth = Padding.Left + Padding.Right + BorderThickness.Left + BorderThickness.Right;
+        double fullWidth = chromeWidth;
+        bool secondaryActions = _otherActions && !_recording;
+        for (int i = 0; i < _items.Children.Count; i++)
+        {
+            var item = (FrameworkElement)_items.Children[i];
+            bool secondary = ReferenceEquals(item, _scroll) || ReferenceEquals(item, _delay);
+            if (secondary ? !secondaryActions : item.Visibility == Visibility.Collapsed) continue;
+            fullWidth += ReferenceEquals(item, _kindSwitch)
+                ? _captureKind.Width + _captureKind.Margin.Left + _captureKind.Margin.Right
+                    + _recordKind.Width + _recordKind.Margin.Left + _recordKind.Margin.Right
+                : item.Width + item.Margin.Left + item.Margin.Right;
+        }
+
+        _compactActions = secondaryActions && fullWidth > availableWidth;
+        Visibility visibility = secondaryActions && !_compactActions ? Visibility.Visible : Visibility.Collapsed;
+        if (_scroll.Visibility != visibility) _scroll.Visibility = visibility;
+        if (_delay.Visibility != visibility) _delay.Visibility = visibility;
+        double contentWidth = fullWidth - chromeWidth;
+        if (_compactActions)
+            contentWidth -= _scroll.Width + _scroll.Margin.Left + _scroll.Margin.Right
+                + _delay.Width + _delay.Margin.Left + _delay.Margin.Right;
+        // Keep the wrapping boundary on the layout pixel grid, rounded up. At 150% a natural
+        // 527-DIP row otherwise rounds down to 526 2/3 during arrange and wraps its last target
+        // below the height measured for one row. Narrower displays still wrap within the bar.
+        double dpi = VisualTreeHelper.GetDpi(this).DpiScaleX;
+        double width = Math.Min(contentWidth, Math.Max(0, availableWidth - chromeWidth));
+        _items.Width = Math.Ceiling(width * dpi) / dpi;
     }
 
     /// <summary>Fills in the current mode without raising <see cref="ModeRequested"/>.</summary>
@@ -367,6 +410,18 @@ internal sealed class CaptureModeBar : Border
     {
         var menu = new ContextMenu { PlacementTarget = _more, Placement = PlacementMode.Bottom, VerticalOffset = 4 };
         AutomationProperties.SetName(menu, UiText.Get("Onboard_BarMore"));
+        if (_compactActions)
+        {
+            menu.Items.Add(MenuItemFor(menu, UiText.Get("Text_4DBA30197C0A"),
+                new CaptureSelectorRequest(CaptureSelectorAction.ScrollingCapture)));
+            var delay = new MenuItem { Header = UiText.Get("CaptureBar_Delay"), MinHeight = 36 };
+            AutomationProperties.SetName(delay, UiText.Get("CaptureBar_Delay"));
+            foreach (int seconds in DelayChoices)
+                delay.Items.Add(MenuItemFor(menu, UiText.Format("Onboard_DelayCapture", seconds),
+                    new CaptureSelectorRequest(CaptureSelectorAction.DelayedCapture, seconds)));
+            menu.Items.Add(delay);
+            menu.Items.Add(new Separator());
+        }
         MenuItem repeat = MenuItemFor(menu, UiText.Get("Text_878A28AF568C"), new CaptureSelectorRequest(CaptureSelectorAction.RepeatLastRegion));
         repeat.IsEnabled = _canRepeatLastRegion;
         menu.Items.Add(repeat);
@@ -535,8 +590,31 @@ internal sealed class CaptureModeBar : Border
     // Shows the ratio lock like a mode button but never flips itself: the selector sets IsChecked from its state.
     private sealed class LockToggle : ToggleButton
     {
+        internal void Activate() => OnClick();
+
+        // This opens a menu; the selected ratio is a separate status, not a toggle action.
+        protected override AutomationPeer OnCreateAutomationPeer() => new LockMenuAutomationPeer(this);
+
         protected override void OnToggle()
         {
+        }
+    }
+
+    private sealed class LockMenuAutomationPeer(LockToggle owner) : ButtonBaseAutomationPeer(owner), IInvokeProvider
+    {
+        protected override string GetClassNameCore() => nameof(Button);
+        protected override AutomationControlType GetAutomationControlTypeCore() => AutomationControlType.Button;
+        public override object? GetPattern(PatternInterface patternInterface) =>
+            patternInterface == PatternInterface.Invoke ? this : base.GetPattern(patternInterface);
+
+        void IInvokeProvider.Invoke()
+        {
+            if (!IsEnabled()) throw new ElementNotEnabledException();
+            var button = (LockToggle)Owner;
+            _ = button.Dispatcher.BeginInvoke(DispatcherPriority.Input, new Action(() =>
+            {
+                if (button.IsEnabled) button.Activate();
+            }));
         }
     }
 
