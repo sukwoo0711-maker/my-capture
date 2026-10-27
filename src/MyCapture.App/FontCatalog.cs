@@ -142,7 +142,7 @@ internal static class FontCatalog
         var panel = new FrameworkElementFactory(typeof(DockPanel));
         panel.SetValue(TextOptions.TextFormattingModeProperty, ThemeFonts.Formatting);
         panel.SetValue(TextOptions.TextRenderingModeProperty, ThemeFonts.Rendering);
-        panel.SetValue(TextOptions.TextHintingModeProperty, TextHintingMode.Fixed);
+        panel.SetValue(TextOptions.TextHintingModeProperty, ThemeFonts.Hinting);
         sample.SetValue(DockPanel.DockProperty, Dock.Right);
         panel.AppendChild(sample);
         panel.AppendChild(label);
