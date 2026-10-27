@@ -244,6 +244,89 @@ public sealed partial class SettingsThemePreviewTests
             }
         });
 
+    [Fact]
+    public Task LibraryOverhaul_NoticesLiveOnTheStatusBarAndNeverCoverCards() =>
+        RunIsolated(nameof(LibraryOverhaul_NoticesLiveOnTheStatusBarAndNeverCoverCards), () =>
+        {
+            Application application = CreateLibraryMotionApplication();
+            FluidMotion.AnimationsEnabledOverrideForTest = false;
+            foreach (string language in new[] { "ko-KR", "en-US" })
+            {
+                using var scope = UiText.UseLanguage(language);
+                LibraryUxFixture f = CreateLibraryUxFixture("mc-overhaul-notices-");
+                GalleryWindow window = f.Window;
+                try
+                {
+                    window.Show(); SettleGalleryLayout(window);
+                    var notice = new MyCapture.App.Store.LibraryEngagementNotice(window);
+                    int reviews = 0, installs = 0;
+                    notice.ReviewChosen = () => reviews++;
+                    notice.UpdateChosen = () => installs++;
+                    var status = (TextBlock)window.FindName("LibraryActionStatus");
+                    var version = (TextBlock)window.FindName("CurrentVersionLabel");
+                    var update = (Button)window.FindName("UpdateAvailableButton");
+                    var rows = (ListBox)window.FindName("RowsList");
+                    var bar = (FrameworkElement)window.FindName("LibraryStatusBar");
+
+                    // No card is ever added over the library's content.
+                    void AssertNoCardCoversTheLibrary()
+                    {
+                        SettleGalleryLayout(window);
+                        Assert.Empty(Descendants(window).OfType<MyCapture.App.Store.EngagementNotice>());
+                        Rect rowsBounds = new(rows.TranslatePoint(new Point(), window), rows.RenderSize);
+                        foreach (FrameworkElement shown in new FrameworkElement[] { status, update, version }.Where(element => element.IsVisible))
+                        {
+                            Rect bounds = new(shown.TranslatePoint(new Point(), window), shown.RenderSize);
+                            Assert.False(bounds.IntersectsWith(rowsBounds), $"{shown.Name} covers the cards");
+                            Assert.True(new Rect(bar.TranslatePoint(new Point(), window), bar.RenderSize).Contains(bounds), shown.Name);
+                        }
+                    }
+
+                    // "Updated to X": a result on the status line that fades by itself.
+                    notice.ShowUpdateCompleted("4.9.0.0");
+                    Assert.Equal(UiText.Format("StoreUpdate_CompletedVersion", "4.9.0"), status.Text);
+                    Assert.True(notice.IsShown);
+                    Assert.Equal(FeedbackKind.Result, window.ActionStatusKindForTest);
+                    Assert.False(window.IsActionStatusDismissibleForTest);
+                    AssertNoCardCoversTheLibrary();
+                    window.AdvanceActionStatusForTest(FeedbackTiming.Result);
+                    Assert.Equal(string.Empty, status.Text);
+                    Assert.False(notice.IsShown);
+
+                    // The rating invitation: a status-line message with its action beside it.
+                    notice.ShowInvitation();
+                    Assert.Equal(UiText.Get("StoreRating_InviteMessage"), status.Text);
+                    Assert.Equal(UiText.Get("LibraryUx_RateAction"), window.StatusActionLabelForTest);
+                    AssertNoCardCoversTheLibrary();
+                    window.InvokeStatusActionForTest().GetAwaiter().GetResult();
+                    Assert.Equal(1, reviews);
+                    Assert.Equal(string.Empty, window.StatusActionLabelForTest);
+
+                    // An available update: a persistent button in place of the version text.
+                    Assert.True(version.IsVisible);
+                    notice.ShowUpdateAvailable("4.9.1.0");
+                    Assert.True(notice.IsShown && update.IsVisible && !version.IsVisible);
+                    Assert.Equal(UiText.Format("LibraryUx_UpdateAvailable", "4.9.1"), update.Content);
+                    Assert.Equal(UiText.Format("Update_AvailableVersion", "4.9.1"), update.ToolTip);
+                    Assert.Equal(update.Content, System.Windows.Automation.AutomationProperties.GetName(update));
+                    AssertNoCardCoversTheLibrary();
+                    update.RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));
+                    Assert.Equal(1, installs);
+                    // Installing: the status replaces the label and the button waits.
+                    notice.ShowUpdateAvailable("4.9.1.0", busy: true, status: UiText.Get("StoreUpdate_StateChecking"));
+                    Assert.Equal(UiText.Get("StoreUpdate_StateChecking"), update.Content);
+                    Assert.False(update.IsEnabled);
+                    notice.Hide();
+                    SettleGalleryLayout(window);
+                    Assert.True(version.IsVisible && !update.IsVisible);
+                    Assert.Equal(MyCapture.App.ApplicationVersion.DisplayText, version.Text);
+                }
+                finally { window.CloseForExit(); }
+            }
+            FluidMotion.AnimationsEnabledOverrideForTest = null;
+            application.Shutdown();
+        });
+
     private static ListBoxItem RealizedCard(ListBox rows, Guid id) => PumpLibraryUntil(
         (Window)Window.GetWindow(rows)!,
         () => Descendants(rows).OfType<ListBoxItem>().FirstOrDefault(item => item.DataContext is GalleryItemViewModel tile && tile.Id == id),

@@ -13,32 +13,31 @@ namespace MyCapture.App;
 
 public partial class App
 {
-    private readonly Dictionary<Window, EngagementNotice> _engagementNotices = [];
+    private readonly Dictionary<Window, IEngagementNotice> _engagementNotices = [];
     private Window? ActiveEngagementWindow() => _engagementNotices.Keys.FirstOrDefault(window => window.IsActive && window.IsVisible);
 
-    /// <summary>Clears the settings window's Apply row; the library keeps its status bar visible.</summary>
-    private const double SettingsFooterInset = 76, LibraryFooterInset = 44;
+    /// <summary>Clears the settings window's Apply row.</summary>
+    private const double SettingsFooterInset = 76;
 
     private void ConfigureEngagementWindow(Window window)
     {
         if (window.Content is not UIElement) return;
-        var notice = new EngagementNotice
+        // The library shows its notices on the status bar; the settings window keeps the card.
+        IEngagementNotice notice = window is GalleryWindow library ? new LibraryEngagementNotice(library) : new EngagementNotice();
+        notice.ReviewChosen = () => _storeRating?.AcceptInvitation();
+        notice.UpdateChosen = () => _ = InstallKnownUpdateAsync(window);
+        notice.ClosedByUser = kind =>
         {
-            ReviewChosen = () => _storeRating?.AcceptInvitation(),
-            UpdateChosen = () => _ = InstallKnownUpdateAsync(window),
-            ClosedByUser = kind =>
+            if (kind == EngagementNoticeKind.UpdateAvailable) _updates?.DismissAvailable();
+            if (kind == EngagementNoticeKind.UpdateCompleted && _settings is not null)
             {
-                if (kind == EngagementNoticeKind.UpdateAvailable) _updates?.DismissAvailable();
-                if (kind == EngagementNoticeKind.UpdateCompleted && _settings is not null)
-                {
-                    _settings.StoreUpdate.CompletionNoticeVersion = null;
-                    SaveEngagementState();
-                }
-            },
+                _settings.StoreUpdate.CompletionNoticeVersion = null;
+                SaveEngagementState();
+            }
         };
         // An overlay, so nothing under the pointer moves when it appears. It stays until closed
         // or acted on; leaving the window does not take it away.
-        EngagementNoticeHost.Attach(window, notice, window is SettingsWindow ? SettingsFooterInset : LibraryFooterInset);
+        if (notice is EngagementNotice card) EngagementNoticeHost.Attach(window, card, SettingsFooterInset);
         _engagementNotices.Add(window, notice);
         // A return counts once the window has stayed active for a moment, never at the instant a
         // click activates it, so the card cannot land under that click.

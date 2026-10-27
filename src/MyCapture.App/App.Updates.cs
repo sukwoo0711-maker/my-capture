@@ -103,7 +103,7 @@ public partial class App
             return true;
         }
         if (notice.Kind == EngagementNoticeKind.UpdateAvailable) notice.Hide();
-        return notice.Visibility == Visibility.Visible;
+        return notice.IsShown;
     }
 
     private void HideOtherEngagementNotices(Window active)

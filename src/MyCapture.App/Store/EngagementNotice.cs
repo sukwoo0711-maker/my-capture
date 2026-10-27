@@ -2,6 +2,7 @@ using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Controls;
 using System.Windows.Threading;
+using MyCapture.App.Gallery;
 using MyCapture.App.Themes;
 using MyCapture.Core.Localization;
 
@@ -10,11 +11,31 @@ namespace MyCapture.App.Store;
 internal enum EngagementNoticeKind { None, Rating, UpdateAvailable, UpdateCompleted }
 
 /// <summary>
+/// What the shell asks of a window's update and rating surface: the settings window shows a card
+/// (<see cref="EngagementNotice"/>), the library its status bar (<see cref="LibraryEngagementNotice"/>).
+/// </summary>
+internal interface IEngagementNotice
+{
+    Action? ReviewChosen { get; set; }
+    Action? UpdateChosen { get; set; }
+    Action<EngagementNoticeKind>? ClosedByUser { get; set; }
+    EngagementNoticeKind Kind { get; }
+
+    /// <summary>True while the surface is showing a notice the user can still see or act on.</summary>
+    bool IsShown { get; }
+
+    void ShowInvitation();
+    void ShowUpdateCompleted(string version);
+    void ShowUpdateAvailable(string? version, bool busy = false, string? status = null);
+    void Hide();
+}
+
+/// <summary>
 /// The update-done and rating card: a floating InfoBar laid over the bottom right of a library or
 /// settings window. It never moves the window's content, fades in with the shared motion tokens
 /// (at once when Windows animations are off) and stays until it is closed or its action is used.
 /// </summary>
-internal sealed class EngagementNotice : Grid
+internal sealed class EngagementNotice : Grid, IEngagementNotice
 {
     /// <summary>Width of the card.</summary>
     internal const double CardWidth = 360;
@@ -61,15 +82,16 @@ internal sealed class EngagementNotice : Grid
         AutomationProperties.SetLiveSetting(_message, AutomationLiveSetting.Polite);
     }
 
-    internal Action? ReviewChosen { get; set; }
-    internal Action? UpdateChosen { get; set; }
-    internal Action<EngagementNoticeKind>? ClosedByUser { get; set; }
-    internal EngagementNoticeKind Kind { get; private set; }
+    public Action? ReviewChosen { get; set; }
+    public Action? UpdateChosen { get; set; }
+    public Action<EngagementNoticeKind>? ClosedByUser { get; set; }
+    public EngagementNoticeKind Kind { get; private set; }
+    public bool IsShown => Visibility == Visibility.Visible;
 
     /// <summary>The message the card shows.</summary>
     internal string Message => _message.Text;
 
-    internal void ShowInvitation()
+    public void ShowInvitation()
     {
         if (Visibility == Visibility.Visible && Kind > EngagementNoticeKind.Rating) return;
         Kind = EngagementNoticeKind.Rating;
@@ -79,7 +101,7 @@ internal sealed class EngagementNotice : Grid
         Reveal();
     }
 
-    internal void ShowUpdateCompleted(string version)
+    public void ShowUpdateCompleted(string version)
     {
         Kind = EngagementNoticeKind.UpdateCompleted;
         _message.Text = UiText.Format("StoreUpdate_CompletedVersion", DisplayVersion(version));
@@ -87,7 +109,7 @@ internal sealed class EngagementNotice : Grid
         Reveal();
     }
 
-    internal void ShowUpdateAvailable(string? version, bool busy = false, string? status = null)
+    public void ShowUpdateAvailable(string? version, bool busy = false, string? status = null)
     {
         if (Visibility == Visibility.Visible && Kind == EngagementNoticeKind.UpdateCompleted) return;
         Kind = EngagementNoticeKind.UpdateAvailable;
@@ -118,7 +140,7 @@ internal sealed class EngagementNotice : Grid
         ClosedByUser?.Invoke(previous);
     }
 
-    internal void Hide() { Visibility = Visibility.Collapsed; Kind = EngagementNoticeKind.None; }
+    public void Hide() { Visibility = Visibility.Collapsed; Kind = EngagementNoticeKind.None; }
 
     private void Reveal()
     {
@@ -130,6 +152,63 @@ internal sealed class EngagementNotice : Grid
         FluidMotion.SetFadeTo(this, 0);
         Opacity = 0;
         FluidMotion.SetFadeTo(this, 1);
+    }
+}
+
+/// <summary>
+/// The library's update and rating notices. Nothing floats over the cards: "updated to X" and the
+/// rating invitation are status-line messages that fade by themselves, and an available update is
+/// a small button in the status bar where the version number is.
+/// </summary>
+internal sealed class LibraryEngagementNotice(GalleryWindow library) : IEngagementNotice
+{
+    private string? _statusText;
+
+    public Action? ReviewChosen { get; set; }
+    public Action? UpdateChosen { get; set; }
+    public Action<EngagementNoticeKind>? ClosedByUser { get; set; }
+    public EngagementNoticeKind Kind { get; private set; }
+
+    public bool IsShown => Kind == EngagementNoticeKind.UpdateAvailable
+        ? library.IsUpdateAvailableShown
+        : _statusText is not null && library.ActionStatusText == _statusText;
+
+    public void ShowInvitation()
+    {
+        if (IsShown && Kind > EngagementNoticeKind.Rating) return;
+        Kind = EngagementNoticeKind.Rating;
+        _statusText = UiText.Get("StoreRating_InviteMessage");
+        library.ShowEngagementStatus(_statusText, UiText.Get("LibraryUx_RateAction"), () =>
+        {
+            ReviewChosen?.Invoke();
+            Kind = EngagementNoticeKind.None;
+            return Task.CompletedTask;
+        });
+    }
+
+    public void ShowUpdateCompleted(string version)
+    {
+        Kind = EngagementNoticeKind.UpdateCompleted;
+        _statusText = UiText.Format("StoreUpdate_CompletedVersion", EngagementNotice.DisplayVersion(version));
+        library.ShowEngagementStatus(_statusText);
+    }
+
+    public void ShowUpdateAvailable(string? version, bool busy = false, string? status = null)
+    {
+        if (IsShown && Kind == EngagementNoticeKind.UpdateCompleted) return;
+        Kind = EngagementNoticeKind.UpdateAvailable;
+        string full = status ?? (version is null ? UiText.Get("Update_StoreAvailable")
+            : UiText.Format("Update_AvailableVersion", EngagementNotice.DisplayVersion(version)));
+        string label = status ?? (version is null ? UiText.Get("Update_Action")
+            : UiText.Format("LibraryUx_UpdateAvailable", EngagementNotice.DisplayVersion(version)));
+        library.SetUpdateAvailable(label, full, enabled: !busy && status is null, () => UpdateChosen?.Invoke());
+    }
+
+    public void Hide()
+    {
+        if (Kind == EngagementNoticeKind.UpdateAvailable) library.ClearUpdateAvailable();
+        Kind = EngagementNoticeKind.None;
+        _statusText = null;
     }
 }
 

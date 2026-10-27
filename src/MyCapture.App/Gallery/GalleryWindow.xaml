@@ -2156,6 +2156,11 @@
             <TextBlock x:Name="CurrentVersionLabel" Grid.Column="4" Margin="12,0,0,0"
                        Style="{StaticResource StatusBar.Text}" Foreground="{DynamicResource Text.Muted}"
                        VerticalAlignment="Center" />
+            <!-- An available update: a small button that takes the version text's place until the update is
+                 installed. Nothing floats over the cards. -->
+            <Button x:Name="UpdateAvailableButton" Grid.Column="4" Margin="12,0,0,0" Visibility="Collapsed"
+                    Style="{StaticResource Button.GhostCompact}" FontSize="{StaticResource FontSize.Caption}"
+                    FontWeight="SemiBold" VerticalAlignment="Center" Click="OnUpdateAvailableClick" />
         </Grid>
 
         <!-- Pointer-side drop label ("제품리뷰 폴더로 이동 · 2개"), like Explorer's "Move to" hint. -->

@@ -4740,4 +4740,6 @@ F3  클립보드를 핀으로 띄우기
   <data name="LibraryUx_NoSelection" xml:space="preserve"><value>선택 없음</value></data>
   <data name="LibraryUx_Preview" xml:space="preserve"><value>미리보기</value></data>
   <data name="LibraryUx_PreviewHint" xml:space="preserve"><value>미리보기 (Space)</value></data>
+  <data name="LibraryUx_UpdateAvailable" xml:space="preserve"><value>업데이트 {0}</value></data>
+  <data name="LibraryUx_RateAction" xml:space="preserve"><value>평가하기</value></data>
 </root>
