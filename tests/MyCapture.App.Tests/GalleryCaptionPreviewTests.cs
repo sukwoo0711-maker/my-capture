@@ -366,7 +366,7 @@ public sealed class GalleryCaptionPreviewTests
         // Every entry comes from product markup; the fixture preserves the real state layers.
         string[] keys = ["Gallery.ThumbnailHeight", "LibraryUx.HoverWash", "Gallery.IconButton", "Gallery.SelectionCheckBox", "Gallery.TileContextMenu", "LibraryUx.Icon.Folder", "LibraryUx.Icon.Kept", "Gallery.FolderBadge",
             "Gallery.FolderBadgeContent", "Gallery.SourceBadge", "Gallery.TileTemplate", "Gallery.TileRowList",
-            "Gallery.CompactTileTemplate", "Gallery.CompactTileRowList"];
+            "Gallery.CompactTileRowList"];
         foreach (XElement entry in product.Element(p + "Window.Resources")!.Element(p + "ResourceDictionary")!.Elements()
             .Where(element => keys.Contains((string?)element.Attribute(x + "Key"))))
         {

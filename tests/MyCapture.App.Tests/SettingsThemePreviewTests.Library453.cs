@@ -76,7 +76,8 @@ public sealed partial class SettingsThemePreviewTests
                             tile.Record.HasAnnotations = true;
                             tile.RefreshThumbnail();
                             SettleGalleryLayout(f.Window);
-                            Border card = Descendants(item).OfType<Border>().Single(border => border.Name == (compact ? "CompactTileCard" : "TileCard"));
+                            Border card = Descendants(item).OfType<Border>().Single(border => border.Name == "TileCard");
+                            Assert.Equal(compact, GalleryCardStyle.GetIsCompact(card));
                             FrameworkElement preview = Descendants(item).OfType<FrameworkElement>().Single(element => element.Name == "TilePreview");
                             Assert.DoesNotContain(Descendants(preview).OfType<TextBlock>(), text => text.Text == tile.TimeCaption);
                             TextBlock meta = Descendants(item).OfType<TextBlock>().Single(text => text.Name == "TileMetadataText");
@@ -279,7 +280,7 @@ public sealed partial class SettingsThemePreviewTests
                 Assert.True(tile.IsRenaming); Assert.EndsWith(((char)1).ToString(), tile.RenameDraft, StringComparison.Ordinal);
                 Assert.Equal("keep, review", record.Tags);
                 window.CancelCaptureRename();
-                ContextMenu tileMenu = Item().ContextMenu!;
+                ContextMenu tileMenu = window.TileMenu;
                 tileMenu.PlacementTarget = Item(); tileMenu.IsOpen = true; SettleGalleryLayout(window);
                 MenuItem rename = tileMenu.Items.OfType<MenuItem>().Single(menu => menu.InputGestureText == "F2");
                 Assert.Equal(UiText.Get("Library453.Rename"), rename.Header);

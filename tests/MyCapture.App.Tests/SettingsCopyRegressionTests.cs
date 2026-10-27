@@ -131,7 +131,7 @@ public sealed class SettingsCopyRegressionTests
             Assert.DoesNotContain(trigger.Elements(p + "Setter"),
                 setter => (string?)setter.Attribute("Property") is "Height" or "Width" or "MaxWidth" or "Padding");
         }
-        foreach (string key in new[] { "Gallery.TileTemplate", "Gallery.CompactTileTemplate" })
+        foreach (string key in new[] { "Gallery.TileTemplate" })
         {
             XElement template = Assert.Single(document.Descendants(p + "DataTemplate"), node => (string?)node.Attribute(x + "Key") == key);
             XElement badge = Assert.Single(template.Descendants(p + "Button"), node => (string?)node.Attribute(x + "Name") == "SourceBadge");

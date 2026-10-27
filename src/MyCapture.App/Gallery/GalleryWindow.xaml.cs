@@ -112,13 +112,15 @@ internal sealed partial class GalleryWindow : Window
             e.CanExecute = !_imagePreparationInProgress && _viewModel.CanCompareSelected;
             e.Handled = true;
         }));
-        Loaded += (_, _) => UpdateCommandShortcuts();
+        Loaded += (_, _) => { UpdateCommandShortcuts(); UpdateMetadataMinimumWidths(); };
+        // The card's text widths change with the display scale, so they are measured again then and
+        // when the window is shown or resized, not on every layout pass.
+        DpiChanged += (_, _) => UpdateMetadataMinimumWidths();
         MyCapture.App.Themes.WorkspaceTheme.Attach(this, MyCapture.App.Themes.WorkspaceRole.Gallery, resourcesLoaded: true);
         _viewModel.EnableAsyncThumbnailLoading(Dispatcher);
         _viewModel.SetThumbnailLoadingEnabled(false);
         DataContext = _viewModel;
         InitializeFolderActions();
-        RowsList.LayoutUpdated += OnMetadataLayoutUpdated;
         PreviewMouseLeftButtonUp += OnDragButtonUp;
         PreviewMouseMove += OnTileMouseMove;
         LostMouseCapture += (_, _) => { if (Mouse.Captured != this) ResetDragGesture(); };
@@ -137,6 +139,7 @@ internal sealed partial class GalleryWindow : Window
             else _hiddenForCapture = false;
             _viewModel.SetThumbnailLoadingEnabled(IsVisible);
             _viewModel.SetLibraryOpen(IsVisible || _hiddenForCapture);
+            if (IsVisible) UpdateMetadataMinimumWidths();
             if (IsVisible && _refreshWhenShown)
             {
                 // Shown without ShowGallery (which refreshes itself): apply what arrived while hidden.
@@ -379,6 +382,8 @@ internal sealed partial class GalleryWindow : Window
         {
             return;
         }
+
+        UpdateMetadataMinimumWidths();
 
         // The view model only rebuilds rows when the resulting column count actually changes,
         // so this fires cheaply on every resize.
@@ -670,16 +675,14 @@ internal sealed partial class GalleryWindow : Window
 
     private void OnMoreClick(object sender, RoutedEventArgs e)
     {
-        // The More button opens its own context menu on a normal left click. The menu's
+        // The More button opens the library's card menu on a normal left click. The menu's
         // DataContext is bound to the button's tile via PlacementTarget, and every item passes
         // the tile as CommandParameter, so the subsequent action resolves the correct record.
-        if (sender is Button { ContextMenu: { } menu } button)
+        if (sender is Button { DataContext: GalleryItemViewModel tile } button)
         {
             // As a right click does: a card outside the selection becomes the selection first.
-            if (button.DataContext is GalleryItemViewModel tile && !_viewModel.Selection.Contains(tile.Id)) _viewModel.Select(tile.Id);
-            menu.PlacementTarget = button;
-            menu.Placement = PlacementMode.Bottom;
-            menu.IsOpen = true;
+            if (!_viewModel.Selection.Contains(tile.Id)) _viewModel.Select(tile.Id);
+            OpenTileMenu(button, PlacementMode.Bottom);
             e.Handled = true;
         }
     }

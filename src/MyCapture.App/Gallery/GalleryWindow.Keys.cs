@@ -221,6 +221,12 @@ internal sealed partial class GalleryWindow
     private void OpenFocusedCardMenu()
     {
         FrameworkElement target = FindLibraryCard(Keyboard.FocusedElement as DependencyObject) ?? RowsList;
+        if (target is ListBoxItem)
+        {
+            OpenTileMenu(target, PlacementMode.Bottom);
+            return;
+        }
+
         ContextMenu menu = target.ContextMenu ?? LibraryItemsSurface.ContextMenu;
         menu.PlacementTarget = target;
         menu.Placement = PlacementMode.Bottom;

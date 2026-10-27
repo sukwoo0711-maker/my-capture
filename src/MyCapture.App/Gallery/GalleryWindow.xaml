@@ -124,11 +124,12 @@
                       Click="OnDeleteFolderClick" />
         </ContextMenu>
 
-        <!-- The capture card's overflow menu, shared by the full and compact cards. It inherits the
-             More button's DataContext (the tile view model) via PlacementTarget, and each item
-             carries the tile as CommandParameter so the handler always resolves the right record
-             even though menu items are outside the visual tree. -->
-        <ContextMenu x:Key="Gallery.TileContextMenu" x:Shared="False"
+        <!-- The capture card's menu: one instance for the whole library, built the first time a menu opens
+             (GalleryWindow.TileMenu.cs), not one per card. It inherits the DataContext of the card or More
+             button it opens from (the tile view model) via PlacementTarget, and each item carries the tile as
+             CommandParameter so the handler always resolves the right record even though menu items are
+             outside the visual tree. -->
+        <ContextMenu x:Key="Gallery.TileContextMenu"
                      DataContext="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}">
             <MenuItem Header="{loc:Text Gallery.Float}" CommandParameter="{Binding}" Click="OnFloatClick" InputGestureText="P"
                       AutomationProperties.Name="{loc:Text Gallery.Float}"
@@ -347,7 +348,7 @@
                                 Visibility="{Binding HasSourceBadge, Converter={StaticResource BoolToVisibility}}" />
                         <Button Width="28" Height="32" MinWidth="28" Padding="0" Style="{StaticResource Button.GhostCompact}"
                                 ToolTip="{loc:Text LibraryUx_TileMoreHint}" AutomationProperties.Name="{loc:Text Text_5E8959D18390}"
-                                ContextMenu="{StaticResource Gallery.TileContextMenu}" Click="OnMoreClick">
+                                Click="OnMoreClick">
                             <themes:SymbolIcon Size="16" Data="{StaticResource Icon.More}" Fill="{DynamicResource Text.Secondary}" Stroke="{DynamicResource Text.Secondary}" />
                         </Button>
                         </StackPanel>
@@ -361,6 +362,19 @@
                     <Setter TargetName="FolderBadge" Property="MaxWidth" Value="64" />
                     <Setter TargetName="FolderBadge" Property="ClipToBounds" Value="True" />
                 </DataTrigger>
+                <!-- A card in an opened folder: a smaller title and narrower folder badge. -->
+                <Trigger SourceName="TileCard" Property="gallery:GalleryCardStyle.IsCompact" Value="True">
+                    <Setter TargetName="TileTitle" Property="FontSize" Value="{DynamicResource FontSize.Caption}" />
+                    <Setter TargetName="TileRenameInput" Property="FontSize" Value="{DynamicResource FontSize.Caption}" />
+                    <Setter TargetName="FolderBadge" Property="MaxWidth" Value="48" />
+                </Trigger>
+                <MultiDataTrigger>
+                    <MultiDataTrigger.Conditions>
+                        <Condition Binding="{Binding HasSourceBadge}" Value="True" />
+                        <Condition Binding="{Binding (gallery:GalleryCardStyle.IsCompact), ElementName=TileCard}" Value="True" />
+                    </MultiDataTrigger.Conditions>
+                    <Setter TargetName="FolderBadge" Property="MaxWidth" Value="20" />
+                </MultiDataTrigger>
                 <!-- Time keeps its measured width. Search and expiry messages use the
                      remaining space and expose the complete text in their tooltip. -->
                 <DataTrigger Binding="{Binding HasSearchMatch}" Value="True">
@@ -410,7 +424,6 @@
                         <Setter Property="Padding" Value="0" />
                         <Setter Property="AutomationProperties.Name" Value="{Binding AccessibleName}" />
                         <Setter Property="AutomationProperties.HelpText" Value="{Binding ExportToolTip}" />
-                        <Setter Property="ContextMenu" Value="{StaticResource Gallery.TileContextMenu}" />
                         <Setter Property="gallery:GalleryCaptionPreview.IsEnabled" Value="True" />
                         <Setter Property="FocusVisualStyle" Value="{x:Null}" />
                         <Setter Property="Template">
@@ -483,146 +496,9 @@
                      MouseDoubleClick="OnTileDoubleClick" />
         </DataTemplate>
 
-        <DataTemplate x:Key="Gallery.CompactTileTemplate" DataType="{x:Type gallery:GalleryItemViewModel}">
-            <!-- Contain preserves screenshot text and edges; overlays keep a fixed DIP size. -->
-            <Border x:Name="CompactTileCard" Background="{DynamicResource Surface.Raised}"
-                    BorderBrush="{DynamicResource Border.Subtle}" BorderThickness="1"
-                    CornerRadius="{StaticResource Radius.Lg}" SnapsToDevicePixels="True">
-                <Grid>
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto" />
-                        <RowDefinition Height="Auto" />
-                    </Grid.RowDefinitions>
-                    <Border x:Name="TilePreview" Background="{DynamicResource Surface.Sunken}" ClipToBounds="True"
-                            Height="{Binding ActualWidth, RelativeSource={RelativeSource Self}, Converter={StaticResource Gallery.ThumbnailHeight}}">
-                        <Grid>
-                            <!-- A thumbnail that arrives after the card is on screen fades in; a cached one does not. -->
-                            <gallery:GalleryThumbnailImage Source="{Binding Thumbnail}" Stretch="Uniform"
-                                   RenderOptions.BitmapScalingMode="HighQuality" AutomationProperties.Name="{Binding AccessibleName}" />
-                            <TextBlock Text="{Binding PreviewUnavailableText}" Margin="6" TextWrapping="Wrap" TextAlignment="Center"
-                                       FontSize="{DynamicResource FontSize.Caption}" Foreground="{DynamicResource Text.Secondary}"
-                                       HorizontalAlignment="Center" VerticalAlignment="Center"
-                                       Visibility="{Binding IsBroken, Converter={StaticResource BoolToVisibility}}" />
-                            <Grid VerticalAlignment="Bottom">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="Auto" />
-                                </Grid.ColumnDefinitions>
-                                <Border x:Name="VideoBadge" Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Bottom"
-                                        Margin="5" Padding="5,2" CornerRadius="4" Background="{DynamicResource Surface.Raised}"
-                                        IsHitTestVisible="False" Visibility="{Binding IsVideo, Converter={StaticResource BoolToVisibility}}">
-                                    <StackPanel Orientation="Horizontal">
-                                        <themes:SymbolIcon Size="12" Data="{StaticResource Icon.Play}" Margin="0,0,4,0"
-                                                           Fill="{DynamicResource Text.Primary}" Stroke="{DynamicResource Text.Primary}" />
-                                        <TextBlock Text="{Binding DurationCaption}" FontSize="{DynamicResource FontSize.Caption}"
-                                                   Foreground="{DynamicResource Text.Primary}" />
-                                    </StackPanel>
-                                </Border>
-                            </Grid>
-                        </Grid>
-                    </Border>
-                    <Grid x:Name="TileInformation" Grid.Row="1" Margin="7,5,7,4">
-                        <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto" /><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" />
-                        </Grid.ColumnDefinitions>
-                        <CheckBox Style="{StaticResource Gallery.SelectionCheckBox}" IsChecked="{Binding IsSelected, Mode=OneWay}" Click="OnTileCheckClick" Margin="0,0,8,0"
-                                  VerticalAlignment="Center" AutomationProperties.Name="{Binding AccessibleName}" />
-                        <StackPanel Grid.Column="1">
-                        <Grid>
-                            <TextBlock x:Name="TileTitle" Text="{Binding Caption}" gallery:GalleryCaptionPreview.IsEnabled="True"
-                                       Foreground="{DynamicResource Text.Primary}" FontWeight="SemiBold"
-                                       FontSize="{DynamicResource FontSize.Caption}" TextTrimming="CharacterEllipsis">
-                                <TextBlock.Style>
-                                    <Style TargetType="TextBlock">
-                                        <Style.Triggers>
-                                            <DataTrigger Binding="{Binding IsRenaming}" Value="True">
-                                                <Setter Property="Visibility" Value="Hidden" />
-                                            </DataTrigger>
-                                        </Style.Triggers>
-                                    </Style>
-                                </TextBlock.Style>
-                            </TextBlock>
-                            <TextBox x:Name="TileRenameInput" Text="{Binding RenameDraft, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                     FontSize="{DynamicResource FontSize.Caption}" Padding="1,0" MinHeight="0" MinWidth="0"
-                                     MaxLength="140" IsReadOnly="{Binding IsRenameSaving}"
-                                     AutomationProperties.Name="{loc:Text Library453.Rename}"
-                                     Visibility="{Binding IsRenaming, Converter={StaticResource BoolToVisibility}}"
-                                     PreviewKeyDown="OnCaptureRenameKeyDown" LostKeyboardFocus="OnCaptureRenameLostFocus" />
-                        </Grid>
-                        </StackPanel>
-                        <Grid x:Name="TileMetadata" Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="2" Margin="0,3,0,0">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition x:Name="MetadataTextColumn" Width="Auto" /><ColumnDefinition x:Name="MetadataBadgeColumn" Width="*" />
-                            </Grid.ColumnDefinitions>
-                            <TextBlock x:Name="TileMetadataText" Text="{Binding MetadataCaption}"
-                                       FontSize="{DynamicResource FontSize.Caption}" VerticalAlignment="Center"
-                                       Foreground="{DynamicResource Text.Secondary}" TextTrimming="CharacterEllipsis"
-                                       ToolTip="{Binding MetadataCaption}" />
-                            <Grid x:Name="TileStatusBadges" Grid.Column="1" Margin="4,0,0,0" HorizontalAlignment="Right">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="Auto" /><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" />
-                                </Grid.ColumnDefinitions>
-                                <Border x:Name="KeepBadge" Padding="4,1" CornerRadius="3"
-                                        Background="{DynamicResource Surface.Sunken}" ToolTip="{loc:Text LibraryUx_KeptBadge}"
-                                        AutomationProperties.Name="{loc:Text LibraryUx_KeptBadge}"
-                                        Visibility="{Binding IsPinned, Converter={StaticResource BoolToVisibility}}">
-                                    <themes:SymbolIcon Size="12" Data="{DynamicResource LibraryUx.Icon.Kept}" Stroke="{DynamicResource Text.Secondary}" Fill="Transparent" />
-                                </Border>
-                                <Border x:Name="FolderBadge" Grid.Column="1" Style="{StaticResource Gallery.FolderBadge}"
-                                        Padding="4,1" CornerRadius="3" HorizontalAlignment="Left" MaxWidth="48"
-                                        MinWidth="20" IsHitTestVisible="True" ToolTip="{Binding FolderBadge}">
-                                    <ContentPresenter Content="{Binding}" ContentTemplate="{StaticResource Gallery.FolderBadgeContent}" />
-                                </Border>
-                                <Border Grid.Column="2" Padding="4,1" CornerRadius="3" Background="{DynamicResource Surface.Sunken}"
-                                        ToolTip="{loc:Text Text_2C64DDA4D878}" AutomationProperties.Name="{loc:Text Text_2C64DDA4D878}"
-                                        Visibility="{Binding HasAnnotations, Converter={StaticResource BoolToVisibility}}">
-                                    <themes:SymbolIcon Size="12" Data="{StaticResource Icon.Edit}" Stroke="{DynamicResource Text.Secondary}" Fill="Transparent" />
-                                </Border>
-                            </Grid>
-                        </Grid>
-                        <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
-                        <Border Width="24" Height="32" Cursor="SizeAll" ToolTip="{Binding ExportToolTip}" ToolTipService.InitialShowDelay="600">
-                            <themes:SymbolIcon Data="{StaticResource Icon.DragHandle}" Size="20" Foreground="{DynamicResource Text.Secondary}" />
-                        </Border>
-                        <Button x:Name="SourceBadge" Style="{StaticResource Gallery.SourceBadge}"
-                                gallery:GallerySourceBadge.Provenance="{Binding SourceProvenance}"
-                                AutomationProperties.AutomationId="LibrarySourceBadge"
-                                HorizontalAlignment="Right" VerticalAlignment="Center" Margin="4,0,0,0"
-                                Visibility="{Binding HasSourceBadge, Converter={StaticResource BoolToVisibility}}" />
-                        <Button Width="28" Height="32" MinWidth="28" Padding="0" Style="{StaticResource Button.GhostCompact}"
-                                ToolTip="{loc:Text LibraryUx_TileMoreHint}" AutomationProperties.Name="{loc:Text Text_5E8959D18390}"
-                                ContextMenu="{StaticResource Gallery.TileContextMenu}" Click="OnMoreClick">
-                            <themes:SymbolIcon Size="16" Data="{StaticResource Icon.More}" Fill="{DynamicResource Text.Secondary}" Stroke="{DynamicResource Text.Secondary}" />
-                        </Button>
-                        </StackPanel>
-                    </Grid>
-                </Grid>
-            </Border>
-            <DataTemplate.Triggers>
-                <DataTrigger Binding="{Binding HasSourceBadge}" Value="True">
-                    <Setter TargetName="MetadataTextColumn" Property="Width" Value="*" />
-                    <Setter TargetName="MetadataBadgeColumn" Property="Width" Value="Auto" />
-                    <Setter TargetName="FolderBadge" Property="MaxWidth" Value="20" />
-                    <Setter TargetName="FolderBadge" Property="ClipToBounds" Value="True" />
-                </DataTrigger>
-                <!-- Time keeps its measured width. Search and expiry messages use the
-                     remaining space and expose the complete text in their tooltip. -->
-                <DataTrigger Binding="{Binding HasSearchMatch}" Value="True">
-                    <Setter TargetName="MetadataTextColumn" Property="Width" Value="*" />
-                    <Setter TargetName="MetadataBadgeColumn" Property="Width" Value="Auto" />
-                    <Setter TargetName="TileStatusBadges" Property="MaxWidth" Value="104" />
-                </DataTrigger>
-                <DataTrigger Binding="{Binding IsExpiringSoon}" Value="True">
-                    <Setter TargetName="MetadataTextColumn" Property="Width" Value="*" />
-                    <Setter TargetName="MetadataBadgeColumn" Property="Width" Value="Auto" />
-                    <Setter TargetName="TileStatusBadges" Property="MaxWidth" Value="104" />
-                </DataTrigger>
-            </DataTemplate.Triggers>
-        </DataTemplate>
-
+        <!-- Compact cards are the same template; the list says so and the card follows (see the template's triggers). -->
         <Style x:Key="Gallery.CompactTileRowList" TargetType="ListBox" BasedOn="{StaticResource Gallery.TileRowList}">
-            <Setter Property="ItemTemplate" Value="{StaticResource Gallery.CompactTileTemplate}" />
+            <Setter Property="gallery:GalleryCardStyle.IsCompact" Value="True" />
             <Setter Property="ItemsPanel">
                 <Setter.Value>
                     <ItemsPanelTemplate>
@@ -1806,6 +1682,7 @@
                 <ListBox x:Name="RowsList" Grid.Row="2"
                          Style="{StaticResource Gallery.RowsList}"
                          ItemsSource="{Binding Rows}"
+                         ContextMenuOpening="OnTileContextMenuOpening"
                          SizeChanged="OnRowsListSizeChanged" />
 
                 <Border Grid.Row="2" HorizontalAlignment="Center" VerticalAlignment="Center"

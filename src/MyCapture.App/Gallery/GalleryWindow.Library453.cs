@@ -1,4 +1,4 @@
-﻿using System.IO;
+using System.IO;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
@@ -13,8 +13,17 @@ internal sealed partial class GalleryWindow
 {
     private (double Font, string Family, string Culture, double Dpi, TextFormattingMode Mode)? _metadataTextMetrics;
 
-    private void OnMetadataLayoutUpdated(object? sender, EventArgs e)
+    /// <summary>How many times the card text widths were checked; scrolling and layout passes must not add to it.</summary>
+    internal int MetadataWidthChecks { get; private set; }
+
+    /// <summary>
+    /// Measures the widest capture time in the UI language and gives the view model the narrowest card track
+    /// that fits it. It runs when the window loads, is shown, is resized or changes DPI and re-measures only
+    /// when the font, language or scale actually differ, so scrolling and ordinary layout never pay for it.
+    /// </summary>
+    private void UpdateMetadataMinimumWidths()
     {
+        MetadataWidthChecks++;
         double font = TryFindResource("FontSize.Caption") is double size ? size : 12;
         DpiScale dpi = VisualTreeHelper.GetDpi(this);
         var metrics = (font, FontFamily.Source, UiText.Culture.Name, dpi.DpiScaleX, TextOptions.GetTextFormattingMode(this));

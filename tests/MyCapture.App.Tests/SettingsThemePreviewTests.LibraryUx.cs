@@ -334,7 +334,8 @@ public sealed partial class SettingsThemePreviewTests
             ListBoxItem compactTile = PumpLibraryUntil(window, () => Descendants(rowsList).OfType<ListBoxItem>()
                     .FirstOrDefault(item => item.DataContext is GalleryItemViewModel tile && tile.Id == f.Records[4].Id),
                 item => item is not null, label + ": compact tile");
-            Border compactCard = Descendants(compactTile).OfType<Border>().Single(border => border.Name == "CompactTileCard");
+            Border compactCard = Descendants(compactTile).OfType<Border>().Single(border => border.Name == "TileCard");
+            Assert.True(GalleryCardStyle.GetIsCompact(compactCard));
             // Smaller than the full card, at the compact card's own proportion.
             Assert.True(compactCard.ActualWidth < fullCardWidth, $"{label}: compact {compactCard.ActualWidth:0.#} DIP, full {fullCardWidth:0.#} DIP");
             double cardScale = VisualTreeHelper.GetDpi(compactCard).DpiScaleY;
@@ -355,7 +356,7 @@ public sealed partial class SettingsThemePreviewTests
             Assert.Equal(((GalleryItemViewModel)compactTile.DataContext).AccessibleName, AutomationProperties.GetName(compactTile));
             Button compactMore = Descendants(compactTile).OfType<Button>()
                 .Single(button => AutomationProperties.GetName(button) == UiText.Get("Text_5E8959D18390"));
-            Assert.NotNull(compactMore.ContextMenu);
+            Assert.NotNull(window.TileMenu);
             AssertInsideClient(compactMore, client, label);
             Assert.False(Descendants(compactTile).OfType<Border>().Single(border => border.Name == "FolderBadge").IsVisible);
             // The subfolder card takes the same compact frame and column grid as the captures.

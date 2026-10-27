@@ -181,9 +181,9 @@ public sealed partial class SettingsThemePreviewTests
         Border keepBadge = Descendants(item).OfType<Border>().Single(border => border.Name == "KeepBadge");
         Assert.Equal(vm.IsPinned, keepBadge.IsVisible);
         Assert.Same(window.FindResource("Surface.Sunken"), keepBadge.Background);
-        Assert.Equal(compact, Descendants(item).OfType<Border>().Any(border => border.Name == "CompactTileCard"));
+        Assert.Equal(compact, GalleryCardStyle.GetIsCompact(Descendants(item).OfType<Border>().Single(border => border.Name == "TileCard")));
 
-        ContextMenu menu = Assert.IsType<ContextMenu>(more.ContextMenu);
+        ContextMenu menu = window.TileMenu;
         menu.PlacementTarget = more;
         menu.DataContext = vm;
         menu.IsOpen = true;
@@ -205,7 +205,7 @@ public sealed partial class SettingsThemePreviewTests
         Assert.Equal(vm.IsImage ? "Enter" : string.Empty, editMenu.InputGestureText);
         Assert.Contains(menu.Items.OfType<MenuItem>(), entry => entry.InputGestureText == "Del"
             && !string.IsNullOrWhiteSpace(AutomationProperties.GetName(entry)));
-        Assert.NotNull(item.ContextMenu);
+        Assert.Null(item.ContextMenu); // the library has one card menu, not one per card
         menu.IsOpen = false;
         fixture.ViewModel.ClearSelection();
         SettleGalleryLayout(window);

@@ -327,6 +327,89 @@ public sealed partial class SettingsThemePreviewTests
             application.Shutdown();
         });
 
+    [Fact]
+    public Task LibraryOverhaul_OneSharedMenuAndNoPerCardWork() =>
+        RunIsolated(nameof(LibraryOverhaul_OneSharedMenuAndNoPerCardWork), () =>
+        {
+            Application application = CreateLibraryMotionApplication();
+            using var scope = UiText.UseLanguage("ko-KR");
+            LibraryUxFixture f = CreateLibraryUxFixture("mc-overhaul-shared-menu-");
+            GalleryWindow window = f.Window;
+            try
+            {
+                window.Show(); SettleGalleryLayout(window);
+                var rows = (ListBox)window.FindName("RowsList");
+                CaptureRecord a = f.Records[0], b = f.Records[2];
+                a.SourcePageUrl = "https://github.com/example/my-capture";
+                f.ViewModel.FindTile(a.Id)!.RaiseMetaChanged();
+                SettleGalleryLayout(window);
+                ListBoxItem first = RealizedCard(rows, a.Id), second = RealizedCard(rows, b.Id);
+
+                // No card, and no card's More button, carries a menu of its own.
+                Assert.All(Descendants(rows).OfType<ListBoxItem>().Where(item => item.DataContext is GalleryItemViewModel),
+                    item => Assert.Null(item.ContextMenu));
+                Assert.All(Descendants(rows).OfType<Button>().Where(button => button.DataContext is GalleryItemViewModel
+                        && System.Windows.Automation.AutomationProperties.GetName(button) == UiText.Get("Text_5E8959D18390")),
+                    button => Assert.Null(button.ContextMenu));
+                // A source badge builds its menu when it is first used.
+                Button badge = Descendants(first).OfType<Button>().Single(button => button.Name == "SourceBadge");
+                Assert.Null(badge.ContextMenu);
+
+                // A right click, the Menu key and the More button all open the same instance, aimed at their card.
+                ContextMenu shared = window.TileMenu;
+                Assert.Same(shared, window.FindResource("Gallery.TileContextMenu"));
+                foreach ((ListBoxItem card, GalleryItemViewModel tile) in new[]
+                         { (first, f.ViewModel.FindTile(a.Id)!), (second, f.ViewModel.FindTile(b.Id)!) })
+                {
+                    ContextMenuEventArgs opening = OpeningArgs(card, keyboard: false);
+                    card.RaiseEvent(opening);
+                    Assert.True(opening.Handled);
+                    Assert.True(shared.IsOpen);
+                    Assert.Same(card, shared.PlacementTarget);
+                    Assert.Same(tile, shared.DataContext);
+                    shared.IsOpen = false;
+                    Button more = Descendants(card).OfType<Button>().Single(button =>
+                        System.Windows.Automation.AutomationProperties.GetName(button) == UiText.Get("Text_5E8959D18390"));
+                    more.RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));
+                    Assert.True(shared.IsOpen);
+                    Assert.Same(more, shared.PlacementTarget);
+                    Assert.Same(tile, shared.DataContext);
+                    shared.IsOpen = false;
+                }
+
+                // The badge menu appears on demand.
+                Assert.NotNull(GallerySourceBadge.EnsureMenu(badge));
+
+                // The card text widths are measured when the window is shown, resized or rescaled, not on
+                // every layout pass: scrolling and relayout never add a check.
+                SettleGalleryLayout(window);
+                int checks = window.MetadataWidthChecks;
+                Assert.True(checks > 0);
+                for (int pass = 0; pass < 12; pass++)
+                {
+                    rows.InvalidateMeasure();
+                    rows.InvalidateArrange();
+                    SettleGalleryLayout(window);
+                    Descendants(rows).OfType<ScrollViewer>().First().ScrollToVerticalOffset(pass * 7);
+                }
+                Assert.Equal(checks, window.MetadataWidthChecks);
+                window.Width += 120;
+                SettleGalleryLayout(window);
+                Assert.True(window.MetadataWidthChecks > checks);
+            }
+            finally { window.CloseForExit(); application.Shutdown(); }
+        });
+
+    // The framework builds these itself when the mouse or the Menu key asks for a menu.
+    private static ContextMenuEventArgs OpeningArgs(UIElement source, bool keyboard)
+    {
+        ConstructorInfo constructor = typeof(ContextMenuEventArgs).GetConstructor(
+            BindingFlags.Instance | BindingFlags.NonPublic, [typeof(object), typeof(bool), typeof(double), typeof(double)])!;
+        var args = (ContextMenuEventArgs)constructor.Invoke([source, true, keyboard ? -1d : 10d, keyboard ? -1d : 10d]);
+        args.RoutedEvent = FrameworkElement.ContextMenuOpeningEvent;
+        return args;
+    }
+
     private static ListBoxItem RealizedCard(ListBox rows, Guid id) => PumpLibraryUntil(
         (Window)Window.GetWindow(rows)!,
         () => Descendants(rows).OfType<ListBoxItem>().FirstOrDefault(item => item.DataContext is GalleryItemViewModel tile && tile.Id == id),
