@@ -118,6 +118,29 @@ public sealed class StampLayoutTests
         }
     }
 
+    [Theory]
+    [InlineData(40, 30, 400, 40, 6, 0.6)]
+    [InlineData(640, 360, 1024, 4, 96, 0.375)]
+    [InlineData(1, 1, 400, 200, 0.15, 0.075)]
+    [InlineData(1, 1, 200, 400, 0.15, 0.3)]
+    public void SubpixelStampEdgesPreserveAspectRatioAndFitEveryAnchor(
+        double canvasWidth, double canvasHeight, double sourceWidth, double sourceHeight,
+        double expectedWidth, double expectedHeight)
+    {
+        foreach (StampAnchor anchor in Enum.GetValues<StampAnchor>())
+        {
+            RectD rect = StampLayout.Place(anchor, Margin, Margin, Fraction, canvasWidth, canvasHeight, sourceWidth, sourceHeight);
+
+            Assert.Equal(expectedWidth, rect.Width, 6);
+            Assert.Equal(expectedHeight, rect.Height, 6);
+            Assert.True(rect.Width > 0 && rect.Height > 0, $"{anchor} collapsed");
+            Assert.True(rect.Width <= sourceWidth && rect.Height <= sourceHeight, $"{anchor} upscaled the picture");
+            Assert.Equal(sourceWidth / sourceHeight, rect.Width / rect.Height, 6);
+            Assert.True(rect.Left >= -1e-9 && rect.Top >= -1e-9, $"{anchor} starts outside");
+            Assert.True(rect.Right <= canvasWidth + 1e-9 && rect.Bottom <= canvasHeight + 1e-9, $"{anchor} ends outside");
+        }
+    }
+
     [Fact]
     public void HugeMarginsAreReducedSoTheStampKeepsRoom()
     {
