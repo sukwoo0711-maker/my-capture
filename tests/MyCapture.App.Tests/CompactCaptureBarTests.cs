@@ -135,15 +135,15 @@ public sealed class CompactCaptureBarTests
             bar.ShowMode(CaptureSelectorMode.Capture);
             bar.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
             bar.Arrange(new Rect(bar.DesiredSize));
-            // Twelve targets now reserve 36 DIPs each so the Alt caption has two lines;
-            // the complete bar still fits within 500 DIPs including separators and chrome.
-            Assert.InRange(bar.DesiredSize.Width, 300, 500);
+            // Thirteen targets (the ratio button joined the twelve) reserve 36 DIPs each so the Alt caption
+            // has two lines; the complete bar still fits within 540 DIPs including separators and chrome.
+            Assert.InRange(bar.DesiredSize.Width, 300, 540);
             foreach ((ButtonBase command, string nameKey) in new (ButtonBase, string)[]
                      {
                          (bar.CaptureKindButton, "Onboard_BarCapture"), (bar.RecordKindButton, "Onboard_BarRecord"),
                          (bar.CaptureButton, "CaptureGuide2_Region"), (bar.WindowButton, "CaptureBar_Window"),
                          (bar.FullScreenButton, "CaptureGuide2_FullScreen"), (bar.ScrollButton, "Text_4DBA30197C0A"),
-                         (bar.DelayButton, "CaptureBar_Delay"), (bar.TextButton, "CaptureGuide2_Text"),
+                         (bar.DelayButton, "CaptureBar_Delay"), (bar.RatioButton, "Crop.Ratio"), (bar.TextButton, "CaptureGuide2_Text"),
                          (bar.ColorButton, "CaptureGuide2_Color"), (bar.MoreButton, "Onboard_BarMore"),
                          (bar.HelpButton, "CaptureGuide2_Help"), (bar.CancelButton, "CaptureGuide2_Cancel"),
                      })

@@ -4754,4 +4754,9 @@ F3  클립보드를 핀으로 띄우기
   <data name="Stamp_SaveFailed" xml:space="preserve"><value>도장 이미지를 저장하지 못했습니다.</value></data>
   <data name="Stamp_Unreadable" xml:space="preserve"><value>도장 이미지를 읽을 수 없습니다. 다시 등록해 주십시오.</value></data>
   <data name="Stamp_Unavailable" xml:space="preserve"><value>이 화면에서는 도장을 사용할 수 없습니다.</value></data>
+  <data name="CaptureRatio_Help" xml:space="preserve"><value>영역의 가로세로 비율을 고정하거나 정해진 크기로 놓습니다.</value></data>
+  <data name="CaptureRatio_Changed" xml:space="preserve"><value>비율: {0}</value></data>
+  <data name="CaptureRatio_FixedSize" xml:space="preserve"><value>크기 고정 {0}</value></data>
+  <data name="CaptureRatio_FixedHint" xml:space="preserve"><value>방향키로 옮기고 Enter로 확정합니다.</value></data>
+  <data name="CaptureRatio_HelpLabel" xml:space="preserve"><value>선택 중 비율 고정 전환</value></data>
 </root>

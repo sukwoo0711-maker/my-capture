@@ -76,7 +76,7 @@ public sealed class CompactCommandFaceClipTests
             Layout(host);
 
             ButtonBase[] buttons = QuickAccessDetachedFixture.Descendants(host).OfType<ButtonBase>().ToArray();
-            Assert.Equal(20, buttons.Length); // Twelve capture commands and eight receipt commands.
+            Assert.Equal(21, buttons.Length); // Thirteen capture commands and eight receipt commands.
             foreach (ButtonBase button in buttons) CommandButtonPresentation.RefreshHint(button);
 
             var failures = new List<string>();

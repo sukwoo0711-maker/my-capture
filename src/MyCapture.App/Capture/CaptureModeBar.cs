@@ -7,6 +7,7 @@ using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Shapes;
 using MyCapture.App.Themes;
+using MyCapture.Core.Capture;
 
 namespace MyCapture.App.Capture;
 
@@ -49,6 +50,8 @@ internal sealed record CaptureSelectorRequest(CaptureSelectorAction Action, int 
 /// An icon-first mode bar at the top of the pointer's monitor. A capture/record switch sits beside
 /// the available selection targets, delay and scrolling commands. The previous region stays in ⋯.
 /// A neutral wash and a text-coloured underline identify the selected kind and mode.
+/// The ratio button opens a menu of aspect-ratio locks and fixed sizes; it carries the same wash and
+/// underline while a ratio is locked.
 /// </summary>
 /// <remarks>
 /// The bar is drawn from the selector's capture-guide palette (all six themes and the guide colour
@@ -96,6 +99,10 @@ internal sealed class CaptureModeBar : Border
         "M10,3.25 A6.75,6.75 0 1 1 9.99,3.25 M10,7.25 A2.75,2.75 0 1 1 9.99,7.25");
     private static readonly Geometry MoreIcon = Geometry.Parse(
         "M5,9 A1,1 0 1 0 4.99,9 M10,9 A1,1 0 1 0 9.99,9 M15,9 A1,1 0 1 0 14.99,9");
+    // A wide frame with two opposite corner brackets: the picture of an aspect ratio.
+    private static readonly Geometry RatioIcon = Geometry.Parse(
+        "M2.75,5.5 L17.25,5.5 L17.25,14.5 L2.75,14.5 Z M6.5,11.25 L6.5,8.5 L9.25,8.5 M13.5,8.75 L13.5,11.5 L10.75,11.5");
+    private static readonly Geometry CheckIcon = Geometry.Parse("M3.75,10.25 L8.15,14.65 L16.25,5.35");
 
     private readonly RadioButton _capture;
     private readonly RadioButton _window;
@@ -106,6 +113,7 @@ internal sealed class CaptureModeBar : Border
     private readonly Button _fullScreen;
     private readonly Button _scroll;
     private readonly Button _delay;
+    private readonly LockToggle _ratio;
     private readonly Button _more;
     private readonly Button _help;
     private readonly Button _cancel;
@@ -116,6 +124,9 @@ internal sealed class CaptureModeBar : Border
     private readonly FrameworkElement _recordingKindIndicator;
     private ContextMenu? _moreMenu;
     private ContextMenu? _delayMenu;
+    private ContextMenu? _ratioMenu;
+    private SelectionRatio _ratioChoice;
+    private bool _ratioShown;
     private bool _syncing;
     private bool _detectWindows = true;
     private bool _canRepeatLastRegion = true;
@@ -133,7 +144,8 @@ internal sealed class CaptureModeBar : Border
         SetResourceReference(BorderBrushProperty, BorderKey);
         AutomationProperties.SetName(this, UiText.Get("CaptureGuide2_BarName"));
 
-        ControlTemplate modeTemplate = CreateTemplate(typeof(RadioButton), checkable: true, subtleCheck: false);
+        // ToggleButton so the ratio button, which is no radio, shares the mode buttons' template.
+        ControlTemplate modeTemplate = CreateTemplate(typeof(ToggleButton), checkable: true, subtleCheck: false);
         ControlTemplate kindTemplate = CreateTemplate(typeof(RadioButton), checkable: true, subtleCheck: true);
         ControlTemplate actionTemplate = CreateTemplate(typeof(Button), checkable: false, subtleCheck: false);
 
@@ -175,6 +187,9 @@ internal sealed class CaptureModeBar : Border
         _fullScreen = ActionButton(FullScreenIcon, UiText.Get("CaptureGuide2_FullScreen"), actionTemplate);
         _scroll = ActionButton(ScrollIcon, null, actionTemplate);
         _delay = ActionButton(DelayIcon, null, actionTemplate);
+        _ratio = new LockToggle { Template = modeTemplate };
+        Decorate(_ratio);
+        _ratio.Content = ButtonContent(_ratio, RatioIcon, null);
         _text = ModeButton(CaptureSelectorMode.Text, TextIcon, new TextBlock { Text = UiText.Get("CaptureGuide2_Text") }, modeTemplate);
         _color = ModeButton(CaptureSelectorMode.Color, ColorIcon, new TextBlock { Text = UiText.Get("CaptureGuide2_Color") }, modeTemplate);
         _more = ActionButton(MoreIcon, label: null, actionTemplate);
@@ -183,6 +198,7 @@ internal sealed class CaptureModeBar : Border
         _fullScreen.Click += (_, _) => FullScreenRequested?.Invoke();
         _scroll.Click += (_, _) => ActionRequested?.Invoke(new CaptureSelectorRequest(CaptureSelectorAction.ScrollingCapture));
         _delay.Click += (_, _) => OpenDelayMenu();
+        _ratio.Click += (_, _) => OpenRatioMenu();
         _more.Click += (_, _) => OpenMoreMenu();
         _help.Click += (_, _) => HelpRequested?.Invoke();
         _cancel.Click += (_, _) => CancelRequested?.Invoke();
@@ -196,11 +212,12 @@ internal sealed class CaptureModeBar : Border
         foreach (UIElement item in new UIElement[]
                  {
                      _kindSwitch, _recordingKindIndicator, _kindSeparator, _capture, _window, _fullScreen, _scroll, _delay,
-                     _textSeparator, _text, _color, Divider(), _more, _help, _cancel,
+                     _ratio, _textSeparator, _text, _color, Divider(), _more, _help, _cancel,
                  })
             items.Children.Add(item);
         Child = items;
         ApplyTexts();
+        ShowRatio(SelectionRatio.Free);
     }
 
     /// <summary>A mode button was chosen by click, keyboard or UI Automation.</summary>
@@ -215,6 +232,12 @@ internal sealed class CaptureModeBar : Border
     internal event Action? HelpRequested;
 
     internal event Action? CancelRequested;
+
+    /// <summary>A lock (or Free) was chosen in the ratio menu.</summary>
+    internal event Action<SelectionRatio>? RatioRequested;
+
+    /// <summary>A fixed size was chosen in the ratio menu.</summary>
+    internal event Action<FixedSelectionSize>? FixedSizeRequested;
 
     internal RadioButton CaptureButton => _capture;
     internal RadioButton WindowButton => _window;
@@ -231,6 +254,9 @@ internal sealed class CaptureModeBar : Border
     internal Button ScrollButton => _scroll;
     internal Button DelayButton => _delay;
 
+    /// <summary>Opens the ratio menu; checked while a ratio is locked.</summary>
+    internal ToggleButton RatioButton => _ratio;
+
     internal Button MoreButton => _more;
 
     internal Button HelpButton => _help;
@@ -240,15 +266,20 @@ internal sealed class CaptureModeBar : Border
     /// <summary>The ⋯ menu while it is open.</summary>
     internal ContextMenu? MoreMenuForTest => _moreMenu;
 
+    /// <summary>The ratio menu while it is open.</summary>
+    internal ContextMenu? RatioMenuForTest => _ratioMenu;
+
     /// <summary>
     /// Shows only what the owner enabled. Without window detection the first mode is a plain region;
     /// text and colour need their owners' handlers; the capture/record switch and the ⋯ menu need an
-    /// owner that runs their commands.
+    /// owner that runs their commands; the ratio button needs a selector whose size is not already fixed
+    /// by a setting.
     /// </summary>
     internal void Configure(bool detectWindows, bool textAvailable, bool colorAvailable, bool otherActions = false,
-        bool canRepeatLastRegion = true, bool recording = false)
+        bool canRepeatLastRegion = true, bool recording = false, bool ratioAvailable = true)
     {
         _recording = recording;
+        _ratio.Visibility = ratioAvailable ? Visibility.Visible : Visibility.Collapsed;
         _detectWindows = detectWindows;
         _canRepeatLastRegion = canRepeatLastRegion;
         _window.Visibility = detectWindows && !recording ? Visibility.Visible : Visibility.Collapsed;
@@ -278,7 +309,24 @@ internal sealed class CaptureModeBar : Border
             _color.IsChecked = mode == CaptureSelectorMode.Color;
         }
         finally { _syncing = false; }
+        // The colour mode picks a pixel, not a region: nothing for a ratio to apply to.
+        _ratio.IsEnabled = mode != CaptureSelectorMode.Color;
     }
+
+    /// <summary>Fills in the current lock, without raising <see cref="RatioRequested"/>.</summary>
+    internal void ShowRatio(SelectionRatio ratio)
+    {
+        // The selector repeats this after every configuration change; only a new lock needs any work.
+        if (_ratioShown && _ratioChoice == ratio) return;
+        _ratioShown = true;
+        _ratioChoice = ratio;
+        _ratio.IsChecked = ratio != SelectionRatio.Free;
+        // Screen readers hear the current lock with the button; sighted users see it in the menu and the readout.
+        AutomationProperties.SetItemStatus(_ratio, RatioName(ratio));
+    }
+
+    internal static string RatioName(SelectionRatio ratio) =>
+        ratio == SelectionRatio.Free ? UiText.Get("Crop.Free") : SelectionRatios.Label(ratio);
 
     /// <summary>Takes the selector's guide brushes, so the bar follows the theme and the guide colour.</summary>
     internal void ApplyPalette(IReadOnlyDictionary<string, Brush> palette)
@@ -335,6 +383,64 @@ internal sealed class CaptureModeBar : Border
         return menu;
     }
 
+    /// <summary>
+    /// The ratio menu: Free and the four locks (the current one checked), then the sizes the selector can
+    /// place. A choice closes the menu and is raised for the owner to apply.
+    /// </summary>
+    internal ContextMenu CreateRatioMenu()
+    {
+        var menu = new ContextMenu { PlacementTarget = _ratio, Placement = PlacementMode.Bottom, VerticalOffset = 4 };
+        AutomationProperties.SetName(menu, UiText.Get("Crop.Ratio"));
+        foreach (SelectionRatio choice in SelectionRatios.All)
+        {
+            string header = RatioName(choice);
+            var item = new MenuItem { Header = header, MinHeight = 36, IsCheckable = true, IsChecked = choice == _ratioChoice };
+            if (item.IsChecked) item.Icon = CheckGlyph();
+            AutomationProperties.SetName(item, header);
+            SelectionRatio picked = choice;
+            item.Click += (_, _) =>
+            {
+                menu.IsOpen = false;
+                RatioRequested?.Invoke(picked);
+            };
+            menu.Items.Add(item);
+        }
+
+        menu.Items.Add(new Separator());
+        foreach (FixedSelectionSize size in SelectionRatios.FixedSizes)
+        {
+            string header = size.ToString();
+            var item = new MenuItem { Header = header, MinHeight = 36 };
+            AutomationProperties.SetName(item, UiText.Format("CaptureRatio_FixedSize", header));
+            FixedSelectionSize picked = size;
+            item.Click += (_, _) =>
+            {
+                menu.IsOpen = false;
+                FixedSizeRequested?.Invoke(picked);
+            };
+            menu.Items.Add(item);
+        }
+
+        return menu;
+    }
+
+    private static SymbolIcon CheckGlyph()
+    {
+        SymbolIcon icon = SymbolIcon.Create(CheckIcon, SymbolIcon.InlineSize);
+        icon.VerticalAlignment = VerticalAlignment.Center;
+        icon.SetResourceReference(SymbolIcon.StrokeProperty, "Text.Primary");
+        return icon;
+    }
+
+    private void OpenRatioMenu()
+    {
+        if (_ratioMenu is { IsOpen: true }) return;
+        ContextMenu menu = CreateRatioMenu();
+        menu.Closed += (_, _) => { if (ReferenceEquals(_ratioMenu, menu)) _ratioMenu = null; };
+        _ratioMenu = menu;
+        menu.IsOpen = true;
+    }
+
     private void OpenDelayMenu()
     {
         if (_delayMenu is { IsOpen: true }) return;
@@ -389,6 +495,8 @@ internal sealed class CaptureModeBar : Border
         Describe(_scroll, "CaptureBar_ScrollHelp", key: null);
         AutomationProperties.SetName(_delay, UiText.Get("CaptureBar_Delay"));
         Describe(_delay, "CaptureBar_DelayHelp", key: null);
+        AutomationProperties.SetName(_ratio, UiText.Get("Crop.Ratio"));
+        Describe(_ratio, "CaptureRatio_Help", "R");
         AutomationProperties.SetName(_text, UiText.Get("CaptureGuide2_Text"));
         Describe(_text, "CaptureGuide2_TextHelp", "T");
         AutomationProperties.SetName(_color, UiText.Get("CaptureGuide2_Color"));
@@ -422,6 +530,14 @@ internal sealed class CaptureModeBar : Border
         }
         if (button is RadioButton radio) radio.IsChecked = true;
         button.RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent, button));
+    }
+
+    // Shows the ratio lock like a mode button but never flips itself: the selector sets IsChecked from its state.
+    private sealed class LockToggle : ToggleButton
+    {
+        protected override void OnToggle()
+        {
+        }
     }
 
     // Region can be requested again when already selected. Its Click owns click activation;
