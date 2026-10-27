@@ -191,7 +191,8 @@ public sealed class SelectionRatiosTests
     [InlineData(1000, 562, SelectionRatio.Ratio16x9, true)]
     [InlineData(1000, 560, SelectionRatio.Ratio16x9, false)]
     [InlineData(1080, 1080, SelectionRatio.Ratio1x1, true)]
-    [InlineData(1080, 1079, SelectionRatio.Ratio1x1, true)]
+    [InlineData(1080, 1079, SelectionRatio.Ratio1x1, false)]
+    [InlineData(1079, 1080, SelectionRatio.Ratio1x1, false)]
     [InlineData(1080, 1078, SelectionRatio.Ratio1x1, false)]
     [InlineData(1440, 1080, SelectionRatio.Ratio4x3, true)]
     [InlineData(1080, 1920, SelectionRatio.Ratio9x16, true)]
@@ -308,6 +309,27 @@ public sealed class SelectionRatiosTests
         Assert.Equal(new RectD(0, 0, 162, 92), resized);
         Assert.Equal(0, resized.Width % 2);
         Assert.Equal(0, resized.Height % 2);
+    }
+
+    [Theory]
+    [InlineData(1919, 1080, 1918, 1078)]
+    [InlineData(1920, 1081, 1920, 1080)]
+    [InlineData(1919, 1079, 1918, 1078)]
+    public void EvenArrowResizeNormalizesOddMatchingSidesBeforeStoppingAtTheFrame(
+        int width, int height, int expectedWidth, int expectedHeight)
+    {
+        var selection = new RectD(0, 0, width, height);
+        Assert.True(SelectionRatios.Matches(width, height, SelectionRatio.Ratio16x9));
+
+        RectD resized = SelectionRatios.Resize(selection, horizontal: true, 1, 1, selection,
+            SelectionRatio.Ratio16x9, evenSize: true);
+
+        Assert.Equal(new RectD(0, 0, expectedWidth, expectedHeight), resized);
+        Assert.Equal(0, resized.Width % 2);
+        Assert.Equal(0, resized.Height % 2);
+        Assert.True(SelectionRatios.Matches((int)resized.Width, (int)resized.Height, SelectionRatio.Ratio16x9));
+        Assert.Equal(resized, SelectionRatios.Resize(resized, horizontal: true, 1, 1, selection,
+            SelectionRatio.Ratio16x9, evenSize: true));
     }
 
     [Theory]

@@ -97,6 +97,9 @@ public static class SelectionRatios
             return false;
         }
 
+        // A square is exact on both the whole-pixel and even-pixel grids.
+        if (ratio == SelectionRatio.Ratio1x1) return width == height;
+
         // Rounding the derived side moves it by at most half a pixel, or a pixel pair when sides are
         // even; in cross-multiplied form that is at most the larger term.
         long error = Math.Abs(((long)height * terms.Width) - ((long)width * terms.Height));
@@ -200,7 +203,9 @@ public static class SelectionRatios
         int unit = evenSize ? 2 : 1;
         int width = (int)area.Width;
         int height = (int)area.Height;
-        if (!Matches(width, height, ratio))
+        // Window and whole-frame selections can have odd sides despite carrying the ratio.
+        // Normalize those before comparing the resize against its starting dimensions.
+        if (!Matches(width, height, ratio) || (evenSize && (width % 2 != 0 || height % 2 != 0)))
         {
             (width, height) = FitContain(terms, area.Width, area.Height, unit);
             if (width == 0)

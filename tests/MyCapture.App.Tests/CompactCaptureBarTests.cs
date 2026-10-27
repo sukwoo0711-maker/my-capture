@@ -18,6 +18,7 @@ using MyCapture.Core.Recording;
 using MyCapture.Core.Settings;
 using MyCapture.Core.Themes;
 using MyCapture.Platform.Capture;
+using MyCapture.Platform.Display;
 using MyCapture.Platform.Recording;
 using Xunit;
 using static MyCapture.App.Tests.CaptureCueEvidenceTests;
@@ -135,9 +136,7 @@ public sealed class CompactCaptureBarTests
             bar.ShowMode(CaptureSelectorMode.Capture);
             bar.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
             bar.Arrange(new Rect(bar.DesiredSize));
-            // Thirteen targets (the ratio button joined the twelve) reserve 36 DIPs each so the Alt caption
-            // has two lines; the complete bar still fits within 540 DIPs including separators and chrome.
-            Assert.InRange(bar.DesiredSize.Width, 300, 540);
+            // Per-monitor fit, including mixed DPI, is checked below using the overlay's real layout.
             foreach ((ButtonBase command, string nameKey) in new (ButtonBase, string)[]
                      {
                          (bar.CaptureKindButton, "Onboard_BarCapture"), (bar.RecordKindButton, "Onboard_BarRecord"),
@@ -190,6 +189,111 @@ public sealed class CompactCaptureBarTests
             ((ISelectionItemProvider)new RadioButtonAutomationPeer(bar.CaptureKindButton)).Select();
             Assert.Equal([new CaptureSelectorRequest(CaptureSelectorAction.Capture)], requests);
             Assert.True(bar.RecordKindButton.IsChecked);
+        }
+    });
+
+    [Theory]
+    [InlineData(1.0, 1.0)]
+    [InlineData(1.25, 1.0)]
+    [InlineData(1.5, 1.0)]
+    [InlineData(1.0, 1.5)]
+    [InlineData(1.25, 1.5)]
+    [InlineData(1.5, 1.5)]
+    [InlineData(2.0, 1.0)]
+    public void EveryCommandFitsThePortraitMonitorAtItsOwnScale(double monitorScale, double overlayScale) => StaTestHost.Run(() =>
+    {
+        var desktop = new RectD(-768, 0, 4208, 1440);
+        var portrait = new RectD(-768, 74, 768, 1366);
+        var view = new CaptureOverlayView(desktop, frame: null, showMagnifier: false)
+        {
+            ReadCursor = () => new PointD(-400, 400),
+            ReadMonitors = () =>
+            [
+                new MonitorInfo("portrait", portrait, portrait, (uint)(monitorScale * 96), false),
+                new MonitorInfo("primary", new RectD(0, 0, 3440, 1440), new RectD(0, 0, 3440, 1400), 96, true),
+            ],
+            DetectWindows = true,
+            TextCaptureAvailable = true,
+            CopyColorText = _ => Task.FromResult(true),
+            OffersOtherActions = true,
+            ShowModeBar = true,
+        };
+        var viewport = new Size(desktop.Width / overlayScale, desktop.Height / overlayScale);
+        var host = new Window
+        {
+            Content = view,
+            Width = viewport.Width,
+            Height = viewport.Height,
+            WindowStyle = WindowStyle.None,
+            ResizeMode = ResizeMode.NoResize,
+            ShowInTaskbar = false,
+            ShowActivated = false,
+            Left = -10000,
+            Top = -10000,
+        };
+        try
+        {
+            // InputHitTest filters invisible trees. A detached layout has no presentation source
+            // and cannot establish whether a user can hit a command, even with valid bounds.
+            host.Show();
+            VisualTreeHelper.SetRootDpi(host, new DpiScale(overlayScale, overlayScale));
+            view.Measure(viewport);
+            view.Arrange(new Rect(viewport));
+            view.UpdateLayout();
+            WindowDetectOverlayTests.Pump();
+            Assert.NotNull(PresentationSource.FromVisual(view));
+            Assert.True(view.IsLoaded && view.IsVisible);
+            CaptureModeBar bar = view.ModeBarForTest!;
+            Rect barBounds = view.ModeBarBoundsForTest!.Value;
+            Assert.InRange(barBounds.Left * overlayScale, 0, 768);
+            Assert.InRange(barBounds.Right * overlayScale, 0, 768);
+            Assert.InRange(barBounds.Top * overlayScale, 74, 1440);
+            Assert.InRange(barBounds.Bottom * overlayScale, 74, 1440);
+            foreach (ButtonBase command in QuickAccessDetachedFixture.Descendants(bar).OfType<ButtonBase>()
+                         .Where(button => button.Visibility == Visibility.Visible))
+            {
+                Assert.True(command.IsVisible && command.IsEnabled && command.IsHitTestVisible);
+                Assert.True(command.ActualWidth > 0 && command.ActualHeight > 0);
+                Rect bounds = command.TransformToAncestor(view).TransformBounds(new Rect(command.RenderSize));
+                Assert.True(bounds.Left * overlayScale >= 0 && bounds.Right * overlayScale <= 768,
+                    $"{AutomationProperties.GetName(command)} leaves the portrait monitor: {bounds}");
+                Assert.True(bounds.Top * overlayScale >= 74 && bounds.Bottom * overlayScale <= 1440);
+                var center = new Point(bounds.Left + bounds.Width / 2, bounds.Top + bounds.Height / 2);
+                var hit = Assert.IsAssignableFrom<DependencyObject>(view.InputHitTest(center));
+                Assert.True(ReferenceEquals(hit, command) || command.IsAncestorOf(hit),
+                    $"{AutomationProperties.GetName(command)} at {bounds}, center {center}, hit {hit.GetType().Name} "
+                    + $"({AutomationProperties.GetName(hit)}); view {view.RenderSize}, scale {view.GuideScaleForTest}, "
+                    + $"bar actual {bar.RenderSize}, desired {bar.DesiredSize}, panel actual {bar.Child.RenderSize}, "
+                    + $"panel width {((FrameworkElement)bar.Child).Width}, desired {bar.Child.DesiredSize}");
+            }
+
+            bool compact = monitorScale >= 1.5;
+            Assert.Equal(compact ? Visibility.Collapsed : Visibility.Visible, bar.ScrollButton.Visibility);
+            Assert.Equal(compact ? Visibility.Collapsed : Visibility.Visible, bar.DelayButton.Visibility);
+            if (compact)
+            {
+                var requests = new List<CaptureSelectorRequest>();
+                bar.ActionRequested += requests.Add;
+                ContextMenu menu = bar.CreateMoreMenu();
+                MenuItem scroll = menu.Items.OfType<MenuItem>().Single(item => (string)item.Header == UiText.Get("Text_4DBA30197C0A"));
+                MenuItem delay = menu.Items.OfType<MenuItem>().Single(item => (string)item.Header == UiText.Get("CaptureBar_Delay"));
+                scroll.RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
+                ((MenuItem)delay.Items[0]).RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
+                Assert.Equal(CaptureSelectorAction.ScrollingCapture, requests[0].Action);
+                Assert.Equal(CaptureSelectorAction.DelayedCapture, requests[1].Action);
+                Assert.Equal(CaptureModeBar.DelayChoices[0], requests[1].DelaySeconds);
+
+                // A wider constraint restores the direct buttons and the original more menu.
+                bar.ConstrainWidth(768);
+                Assert.Equal(Visibility.Visible, bar.ScrollButton.Visibility);
+                Assert.Equal(Visibility.Visible, bar.DelayButton.Visibility);
+                Assert.Single(bar.CreateMoreMenu().Items);
+            }
+        }
+        finally
+        {
+            view.ReleaseResources();
+            host.Close();
         }
     });
 
