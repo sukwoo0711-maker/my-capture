@@ -132,11 +132,13 @@ public sealed class FeatureTutorialTests
             TabControl tabs = ((DockPanel)help.Content).Children.OfType<TabControl>().Single();
             UniformGrid[] rows = tabs.Items.Cast<TabItem>().SelectMany(tab =>
                 ((StackPanel)((ScrollViewer)tab.Content).Content).Children.OfType<UniformGrid>()).ToArray();
-            Assert.Equal(46, rows.Length);
+            Assert.Equal(48, rows.Length);
             Assert.Single(rows, row => ShortcutHelpRowAssertions.Title(row) == UiText.Get("Text_976A6C92B870"));
+            Assert.Single(rows, row => ShortcutHelpRowAssertions.Title(row) == UiText.Get("CaptureRatio_HelpLabel"));
             Assert.Single(rows, row => ShortcutHelpRowAssertions.Title(row) == UiText.Get("Pin_SelectText"));
             Assert.Single(rows, row => ShortcutHelpRowAssertions.Title(row) == UiText.Get("Gallery.Float"));
             Assert.Single(rows, row => ShortcutHelpRowAssertions.Title(row) == UiText.Get("LibraryUx_KeepToggleName"));
+            Assert.Single(rows, row => ShortcutHelpRowAssertions.Title(row) == UiText.Get("Stamp_Place"));
             foreach (UniformGrid row in rows)
             {
                 DockPanel title = Assert.Single(row.Children.OfType<DockPanel>());
@@ -155,10 +157,18 @@ public sealed class FeatureTutorialTests
                     Assert.Equal("F2", AutomationProperties.GetName(keycaps));
                     continue;
                 }
-                if (label.Text == UiText.Get("Gallery.Float") || label.Text == UiText.Get("LibraryUx_KeepToggleName"))
+                // The selector's ratio key has no tutorial animation yet; the row only names the key.
+                if (label.Text == UiText.Get("CaptureRatio_HelpLabel"))
                 {
                     Assert.Empty(title.Children.OfType<Button>());
-                    Assert.Equal(label.Text == UiText.Get("Gallery.Float") ? "P" : "K",
+                    Assert.Equal("R", AutomationProperties.GetName(keycaps));
+                    continue;
+                }
+                if (label.Text == UiText.Get("Gallery.Float") || label.Text == UiText.Get("LibraryUx_KeepToggleName")
+                    || label.Text == UiText.Get("Stamp_Place"))
+                {
+                    Assert.Empty(title.Children.OfType<Button>());
+                    Assert.Equal(label.Text == UiText.Get("Gallery.Float") ? "P" : label.Text == UiText.Get("Stamp_Place") ? "S" : "K",
                         AutomationProperties.GetName(keycaps));
                     continue;
                 }

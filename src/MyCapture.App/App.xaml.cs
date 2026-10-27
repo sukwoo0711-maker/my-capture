@@ -346,6 +346,7 @@ public partial class App : Application
         ShortcutRevealMotion.Initialize();
         AnnotationEditorPreferences.ReadShowSourceWindowTitle = () => _settings!.Export.ShowSourceWindowTitle;
         AnnotationEditorPreferences.Write = RememberEditorPreferences;
+        AnnotationEditorPreferences.StampFolder = () => Path.Combine(_services!.GetRequiredService<AppPaths>().DataRoot, StampStore.FolderName);
         _tray.CaptureRequested += (_, _) => HandleCaptureRequested();
         _tray.CaptureWindowRequested += (_, _) => HandleCaptureWindow();
         _tray.CaptureFullScreenRequested += (_, _) => HandleCaptureFullScreen();
@@ -2648,6 +2649,7 @@ public partial class App : Application
         ShortcutPresentation.ReadEnabled = null;
         AnnotationEditorPreferences.ReadShowSourceWindowTitle = null;
         AnnotationEditorPreferences.Write = null;
+        AnnotationEditorPreferences.StampFolder = null;
         TextRecognitionRoute.Show = null;
         TextRecognitionRoute.IsAvailable = null;
         _shellPresenter?.Dispose();
