@@ -14,6 +14,7 @@ using MyCapture.Core.Settings;
 using MyCapture.Ocr;
 using MyCapture.Platform.Capture;
 using MyCapture.Platform.Display;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace MyCapture.App;
 
@@ -61,6 +62,29 @@ public partial class App
 
     /// <summary>The synthetic grab's own time, part of every shortcut → selector timing.</summary>
     private static double s_lastProbeAcquisitionMs;
+
+    /// <summary>
+    /// Diagnostic variants of a deeper selector prewarm, run once at idle after launch:
+    /// <c>prewarm-selector-hwnd</c> builds a hidden selector window and its HWND (never shown) and closes
+    /// it; <c>prewarm-readers</c> runs the page and application readers once over the current windows.
+    /// </summary>
+    private void RunProbePrewarmVariants(ResidentProbeOptions probe)
+    {
+        if (_overlay is null || _overlay.IsActive || _services is null) return;
+        RectD desktop = MonitorEnumerator.GetVirtualDesktopBounds();
+        if (probe.Has("prewarm-selector-hwnd"))
+        {
+            var window = new CaptureOverlayWindow(desktop, abortOnFocusLoss: false, showMagnifier: true);
+            _ = new System.Windows.Interop.WindowInteropHelper(window).EnsureHandle();
+            window.Close();
+        }
+        if (probe.Has("prewarm-readers"))
+        {
+            IReadOnlyList<WindowCandidate> windows = _services.GetRequiredService<WindowCandidateService>().GetCandidates(desktop);
+            _ = _overlay.ReadPageUrls(windows);
+            _ = _overlay.ReadWindowSources?.Invoke(windows);
+        }
+    }
 
     internal static void ApplyResidentProbeSettings(AppSettings settings)
     {

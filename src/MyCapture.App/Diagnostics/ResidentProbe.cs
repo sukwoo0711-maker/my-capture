@@ -45,7 +45,7 @@ internal sealed class ResidentProbeOptions
     /// </summary>
     internal static readonly string[] KnownVariants =
         ["no-overlay-prewarm", "no-editor-prewarm", "no-engine-prewarm", "no-flight", "frame-cached",
-         "sw-selector", "sw-card", "sw-flight", "sw-editor"];
+         "sw-selector", "sw-card", "sw-flight", "sw-editor", "prewarm-selector-hwnd", "prewarm-readers"];
 
     internal static readonly string[] AllScenarios = ["capture", "editor-4k", "capture-30", "library", "ocr", "pins-10"];
 

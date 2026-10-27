@@ -2129,6 +2129,9 @@ public partial class App : Application
                 _log?.LogDebug(ex, "Capture selector prewarm failed");
             }
 
+            // Diagnostic variants only (resident probe): what a deeper selector prewarm would save.
+            if (s_residentProbe is { } probe) RunProbePrewarmVariants(probe);
+
             // The editor's first open after a capture likewise, on a later idle turn of its own.
             _ = Dispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle, new Action(() =>
             {
