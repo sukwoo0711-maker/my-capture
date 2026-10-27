@@ -587,13 +587,24 @@
             </Setter>
         </Style>
 
+        <!-- A day heading reads as text (semibold, no chrome, a hairline after it), the way a list's group heading
+             does. It stays a Button: clicking selects the day's captures (Ctrl adds), Enter and Space do the same from
+             the keyboard, and screen readers announce a button. -->
+        <Style x:Key="Gallery.DayHeading" TargetType="Button" BasedOn="{StaticResource Button.GhostCompact}">
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="FontSize" Value="{DynamicResource FontSize.Body}" />
+            <Setter Property="Foreground" Value="{DynamicResource Text.Primary}" />
+            <Setter Property="Padding" Value="8,0" />
+            <Setter Property="HorizontalAlignment" Value="Left" />
+        </Style>
+
         <DataTemplate x:Key="Gallery.HeaderRowTemplate" DataType="{x:Type gallery:GalleryHeaderRow}">
             <Grid Margin="8,16,8,8">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="*" />
                 </Grid.ColumnDefinitions>
-                <Button Content="{Binding Heading}" Style="{StaticResource Button.Secondary}" Click="OnDayClick" IsTabStop="False" PreviewKeyDown="OnDayKeyDown" AutomationProperties.Name="{Binding Heading}" ToolTip="{loc:Text LibrarySelection_SelectDay}" />
+                <Button Content="{Binding Heading}" Style="{StaticResource Gallery.DayHeading}" Click="OnDayClick" IsTabStop="False" PreviewKeyDown="OnDayKeyDown" AutomationProperties.Name="{Binding Heading}" ToolTip="{loc:Text LibrarySelection_SelectDay}" />
                 <Border Grid.Column="1" Height="1" Margin="14,0,0,0"
                         Background="{DynamicResource Border.Subtle}"
                         VerticalAlignment="Center" />

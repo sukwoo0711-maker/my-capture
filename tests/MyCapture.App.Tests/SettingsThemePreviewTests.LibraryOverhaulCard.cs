@@ -216,6 +216,46 @@ public sealed partial class SettingsThemePreviewTests
         });
 
     [Fact]
+    public Task LibraryOverhaul_DayHeadingsReadAsTextButOnlyStayButtons() =>
+        RunIsolated(nameof(LibraryOverhaul_DayHeadingsReadAsTextButOnlyStayButtons), () =>
+        {
+            Application application = CreateLibraryMotionApplication();
+            using var scope = UiText.UseLanguage("ko-KR");
+            LibraryUxFixture f = CreateLibraryUxFixture("mc-overhaul-day-");
+            GalleryWindow window = f.Window;
+            try
+            {
+                window.Show(); SettleGalleryLayout(window);
+                var rows = (ListBox)window.FindName("RowsList");
+                Button heading = Descendants(rows).OfType<Button>().First(button => button.DataContext is GalleryHeaderRow);
+                var row = (GalleryHeaderRow)heading.DataContext;
+                // Text to look at: semibold, body size, no fill or edge at rest.
+                Assert.Equal(FontWeights.SemiBold, heading.FontWeight);
+                Assert.Equal((double)window.FindResource("FontSize.Body"), heading.FontSize);
+                Assert.Same(window.FindResource("Text.Primary"), heading.Foreground);
+                Assert.Equal(Colors.Transparent, ((SolidColorBrush)heading.Background).Color);
+                Assert.Equal(Colors.Transparent, ((SolidColorBrush)heading.BorderBrush).Color);
+                Assert.Same(window.FindResource("Gallery.DayHeading"), heading.Style);
+                // A button to use: announced as one, named by its heading, activated by Enter/Space (the Invoke pattern
+                // is what those keys do), with its tooltip, and it selects the day.
+                Assert.Equal(AutomationControlType.Button, UIElementAutomationPeer.CreatePeerForElement(heading).GetAutomationControlType());
+                Assert.Equal(row.Heading, AutomationProperties.GetName(heading));
+                Assert.Equal(UiText.Get("LibrarySelection_SelectDay"), heading.ToolTip);
+                Assert.True(heading.Focusable); Assert.False(heading.IsTabStop);
+                f.ViewModel.ClearSelection();
+                ((IInvokeProvider)UIElementAutomationPeer.CreatePeerForElement(heading).GetPattern(PatternInterface.Invoke)!).Invoke();
+                PumpLibraryUntil(window, () => f.ViewModel.Selection.Count > 0, "the day is selected");
+                Assert.All(f.ViewModel.SelectedTiles, tile => Assert.True(tile.IsSelected));
+                // Down from the heading reaches that day's first row; Up from the first row reaches the heading.
+                var down = new KeyEventArgs(Keyboard.PrimaryDevice, PresentationSource.FromVisual(heading), Environment.TickCount, Key.Down)
+                    { RoutedEvent = Keyboard.PreviewKeyDownEvent, Source = heading };
+                heading.RaiseEvent(down);
+                Assert.True(down.Handled);
+            }
+            finally { window.CloseForExit(); application.Shutdown(); }
+        });
+
+    [Fact]
     public Task LibraryOverhaul_GridIsOneTabStopAndEntersWhereTheUserLeft() =>
         RunIsolated(nameof(LibraryOverhaul_GridIsOneTabStopAndEntersWhereTheUserLeft), () =>
         {
