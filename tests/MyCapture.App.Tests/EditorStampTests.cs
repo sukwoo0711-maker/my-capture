@@ -150,6 +150,60 @@ public sealed class EditorStampTests
     // ---- Registering -----------------------------------------------------------------
 
     [Fact]
+    public void CropThenStampThenCloseWaitsOnlyForThePicture() => StaTestHost.Run(() =>
+    {
+        using var context = new DispatcherContextScope();
+        string root = OwnedTestDirectory.Create("mc-stamp-crop-close-");
+        try
+        {
+            using var stamp = new StampScope(Path.Combine(root, "stamp"));
+            stamp.Register(root, 400, 200);
+            using var host = EditorWindowHost.Create();
+            AnnotationEditorControl editor = host.Editor;
+            AnnotationEditorController controller = Controller(editor);
+            AnnotationImageStore.DecodedFile decoded = AnnotationImageStore.Decode(StampStore.PathIn(stamp.Folder))!;
+            var gate = new TaskCompletionSource<AnnotationImageStore.DecodedFile?>(TaskCreationOptions.RunContinuationsAsynchronously);
+            editor.DecodeImageForInsert = _ => gate.Task;
+            int prompts = 0;
+            int picturesWhenAsked = -1;
+            host.Window.ConfirmClose = () =>
+            {
+                prompts++;
+                picturesWhenAsked = controller.Document.Items.OfType<ImageAnnotation>().Count();
+                return EditorCloseChoice.DontSave;
+            };
+
+            try
+            {
+                Assert.True(Press(editor, Key.X, ime: false));
+                Assert.Equal(EditorTool.Crop, controller.Tool);
+                Assert.True(Press(editor, Key.S, ime: false));
+                Assert.Equal(EditorTool.Select, controller.Tool);
+                Assert.True(editor.IsOnlyReadingPictures);
+                host.Window.RequestClose();
+                Assert.True(host.Window.IsVisible);
+                Assert.Equal(0, prompts);
+
+                gate.SetResult(decoded);
+                PumpUntil(() => !host.Window.IsVisible);
+
+                Assert.False(editor.IsEditingOperationInProgress);
+                Assert.Equal(1, prompts);
+                Assert.Equal(1, picturesWhenAsked);
+                Assert.Equal(DefaultRect, Assert.IsType<ImageAnnotation>(Assert.Single(controller.Document.Items)).Rect);
+            }
+            finally
+            {
+                // Release the held operation even when a regression fails an assertion.
+                if (controller.Tool == EditorTool.Crop) editor.ShortcutActions["Select"]();
+                gate.TrySetResult(decoded);
+                Run(editor.ImageInsertsSettledAsync());
+            }
+        }
+        finally { OwnedTestDirectory.Delete(root); }
+    });
+
+    [Fact]
     public void FirstUseAsksForAPictureStoresACopyAndPlacesItThenNeverAsksAgain() => StaTestHost.Run(() =>
     {
         using var context = new DispatcherContextScope();
@@ -315,6 +369,45 @@ public sealed class EditorStampTests
 
     // ---- Menu ------------------------------------------------------------------------
 
+    [Fact]
+    public void TheFirstContextMenuRequestOpensTheMenuAndPopulatesItLazily() => StaTestHost.Run(() =>
+    {
+        using var context = new DispatcherContextScope();
+        string root = OwnedTestDirectory.Create("mc-stamp-first-menu-");
+        try
+        {
+            using var stamp = new StampScope(Path.Combine(root, "stamp"));
+            int calls = stamp.FolderCalls;
+            using var host = EditorWindowHost.Create();
+            ToggleButton button = host.Editor.StampButton;
+            Assert.Equal(calls, stamp.FolderCalls);
+            Assert.Null(host.Editor.StampMenu);
+            Assert.NotNull(button.ContextMenu);
+            Assert.Empty(button.ContextMenu.Items);
+            bool openingRaised = false;
+            button.ContextMenuOpening += (_, _) => openingRaised = true;
+            button.Focus();
+
+            // InputManager runs WPF's first-open service; calling EnsureStampMenu or raising
+            // Opened ourselves would hide a missing initial ContextMenu on the button.
+            InputManager.Current.ProcessInput(new KeyEventArgs(Keyboard.PrimaryDevice, PresentationSource.FromVisual(host.Window), 0, Key.Apps)
+                { RoutedEvent = Keyboard.PreviewKeyDownEvent, Source = button });
+            InputManager.Current.ProcessInput(new KeyEventArgs(Keyboard.PrimaryDevice, PresentationSource.FromVisual(host.Window), 0, Key.Apps)
+                { RoutedEvent = Keyboard.KeyUpEvent, Source = button });
+
+            try
+            {
+                PumpUntil(() => button.ContextMenu.IsOpen);
+                Assert.True(openingRaised);
+                Assert.Same(button, button.ContextMenu.PlacementTarget);
+                Assert.Same(host.Editor.StampMenu, button.ContextMenu);
+                Assert.Equal(4, button.ContextMenu.Items.OfType<MenuItem>().Count());
+            }
+            finally { button.ContextMenu.IsOpen = false; }
+        }
+        finally { OwnedTestDirectory.Delete(root); }
+    });
+
     [Theory]
     [InlineData("ko-KR", "도장 찍기", "도장 이미지 바꾸기…", "불투명도", "도장 지우기", "100%", "70%", "50%", "30%")]
     [InlineData("en-US", "Place stamp", "Change stamp image…", "Opacity", "Remove stamp", "100%", "70%", "50%", "30%")]
@@ -427,6 +520,96 @@ public sealed class EditorStampTests
             Run(host.Editor.PlaceStampAsync());
             Assert.Equal(1, pickerCalls);
             Assert.Single(controller.Document.Items);
+        }
+        finally { OwnedTestDirectory.Delete(root); }
+    });
+
+    [Fact]
+    public void RemoveIsDisabledAndItsHandlerDoesNothingWhileAReplacementIsDecoding() => StaTestHost.Run(() =>
+    {
+        using var context = new DispatcherContextScope();
+        string root = OwnedTestDirectory.Create("mc-stamp-remove-pending-");
+        try
+        {
+            using var stamp = new StampScope(Path.Combine(root, "stamp"), new AnnotationDefaults
+            {
+                Stamp = new StampSettings { Anchor = StampAnchor.TopLeft, OpacityPercent = 30 },
+            });
+            stamp.Register(root, 400, 200);
+            string other = Path.Combine(root, "other.png");
+            ImageCodec.SavePng(Solid(200, 100, 0x10), other);
+            AnnotationImageStore.DecodedFile decoded = AnnotationImageStore.Decode(other)!;
+            using var host = EditorWindowHost.Create();
+            AnnotationEditorControl editor = host.Editor;
+            ContextMenu menu = editor.EnsureStampMenu();
+            MenuItem remove = menu.Items.OfType<MenuItem>().Last();
+            menu.RaiseEvent(new RoutedEventArgs(ContextMenu.OpenedEvent));
+            Assert.True(remove.IsEnabled);
+            editor.PickStampImagePath = () => other;
+            var gate = new TaskCompletionSource<AnnotationImageStore.DecodedFile?>(TaskCreationOptions.RunContinuationsAsynchronously);
+            editor.DecodeImageForInsert = _ => gate.Task;
+
+            Task change = editor.ChangeStampImageAsync();
+            try
+            {
+                Assert.False(remove.IsEnabled);
+                menu.RaiseEvent(new RoutedEventArgs(ContextMenu.OpenedEvent));
+                Assert.False(remove.IsEnabled);
+                // Bypass the disabled control to verify the handler also rejects stale input.
+                remove.RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
+                Assert.Equal(400, ImageCodec.TryLoad(StampStore.PathIn(stamp.Folder))!.PixelWidth);
+                Assert.Equal(StampAnchor.TopLeft, stamp.Defaults.Stamp.Anchor);
+                Assert.Equal(30, stamp.Defaults.Stamp.OpacityPercent);
+            }
+            finally
+            {
+                gate.TrySetResult(decoded);
+                Run(change);
+            }
+
+            Assert.True(remove.IsEnabled);
+            Assert.Equal(200, ImageCodec.TryLoad(StampStore.PathIn(stamp.Folder))!.PixelWidth);
+            Assert.Equal(StampAnchor.TopLeft, stamp.Defaults.Stamp.Anchor);
+            Assert.Empty(Controller(editor).Document.Items);
+        }
+        finally { OwnedTestDirectory.Delete(root); }
+    });
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void FailedRecyclingKeepsTheRegisteredFileAndSettings(bool unreadable) => StaTestHost.Run(() =>
+    {
+        using var context = new DispatcherContextScope();
+        string root = OwnedTestDirectory.Create("mc-stamp-recycle-failed-");
+        try
+        {
+            using var stamp = new StampScope(Path.Combine(root, "stamp"), new AnnotationDefaults
+            {
+                Stamp = new StampSettings { Anchor = StampAnchor.TopLeft, MarginX = 28, OpacityPercent = 30 },
+            });
+            string path = StampStore.PathIn(stamp.Folder);
+            if (unreadable)
+            {
+                Directory.CreateDirectory(stamp.Folder);
+                File.WriteAllText(path, "damaged");
+            }
+            else stamp.Register(root, 400, 200);
+            byte[] before = File.ReadAllBytes(path);
+            using var host = EditorWindowHost.Create();
+            // Permit decoding but prevent a move to the Recycle Bin. No destructive fallback
+            // may remove this file, and a failed removal must not reset the stamp preferences.
+            using (var held = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read))
+            {
+                if (unreadable) Run(host.Editor.PlaceStampAsync());
+                else ClickMenu(host.Editor, 3);
+
+                Assert.Equal(path, StampStore.RegisteredPath(stamp.Folder));
+                Assert.Equal(before, File.ReadAllBytes(path));
+                Assert.Equal(StampAnchor.TopLeft, stamp.Defaults.Stamp.Anchor);
+                Assert.Equal(28, stamp.Defaults.Stamp.MarginX);
+                Assert.Equal(30, stamp.Defaults.Stamp.OpacityPercent);
+            }
         }
         finally { OwnedTestDirectory.Delete(root); }
     });

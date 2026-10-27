@@ -46,9 +46,6 @@ public static class StampLayout
 
     public const double MaxWidthFraction = 1.0;
 
-    /// <summary>The smallest edge a stamp is laid out with, so a tiny canvas never produces nothing.</summary>
-    private const double MinEdge = 1;
-
     /// <summary>Within this many pixels a rectangle counts as the one the layout produced.</summary>
     public const double SameRectTolerance = 0.5;
 
@@ -62,6 +59,7 @@ public static class StampLayout
     /// picture's own width (a small logo is not blown up) and never so large that the stamp,
     /// with its margins, no longer fits the canvas. A margin on an axis the anchor centres is
     /// not used. Margins larger than a quarter of the canvas are reduced so the stamp keeps room.
+    /// Subpixel edges retain the picture's aspect ratio and keep stamps within tiny canvases.
     /// </remarks>
     public static RectD Place(
         StampAnchor anchor,
@@ -100,9 +98,6 @@ public static class StampLayout
             height = availableHeight;
             width = height * aspect;
         }
-
-        width = Math.Max(MinEdge, width);
-        height = Math.Max(MinEdge, height);
 
         double x = horizontal switch
         {

@@ -1,5 +1,6 @@
 using System.IO;
 using System.Windows.Media.Imaging;
+using MyCapture.Core.Storage;
 using MyCapture.Platform.Imaging;
 
 namespace MyCapture.App.Editing;
@@ -67,17 +68,17 @@ internal static class StampStore
         return (stored.PixelWidth, stored.PixelHeight);
     }
 
-    /// <summary>Removes the stored picture. Returns whether there was one.</summary>
+    /// <summary>Recycles the stored picture. Returns true only after a confirmed recoverable move.</summary>
     internal static bool Delete(string folder)
     {
         string? path = RegisteredPath(folder);
         if (path is null) return false;
         try
         {
-            File.Delete(path);
+            RecoverableFileRemoval.DeleteFile(path);
             return true;
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Runtime.InteropServices.ExternalException)
         {
             return false;
         }

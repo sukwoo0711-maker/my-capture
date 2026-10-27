@@ -90,8 +90,10 @@ internal sealed partial class AnnotationEditorControl
         AttachEditorShortcut(button, ShortcutScope.Annotation, "Stamp", corner: true);
         PreserveEditorMouseFocus(button);
         button.Click += (_, _) => PlaceStampFromUser();
-        // The menu is built when it is first asked for, not when the editor opens.
-        button.ContextMenuOpening += (_, _) => button.ContextMenu = StampContextMenu();
+        // WPF needs a menu before the first opening event. Populate its items only on use;
+        // constructing this empty menu does not look up the registered picture.
+        button.ContextMenu = new ContextMenu { MinWidth = 210 };
+        button.ContextMenuOpening += (_, _) => StampContextMenu();
         _stampButton = button;
         return button;
     }
@@ -102,7 +104,7 @@ internal sealed partial class AnnotationEditorControl
     {
         if (_stampMenu is not null) return _stampMenu;
 
-        var menu = new ContextMenu { MinWidth = 210 };
+        ContextMenu menu = _stampButton.ContextMenu!;
         var place = new MenuItem
         {
             Header = UiText.Get("Stamp_Place"),
@@ -151,7 +153,7 @@ internal sealed partial class AnnotationEditorControl
         string? folder = StampStore.Folder;
         if (_stampRemoveItem is not null)
         {
-            _stampRemoveItem.IsEnabled = folder is not null && StampStore.RegisteredPath(folder) is not null;
+            _stampRemoveItem.IsEnabled = !_stampBusy && folder is not null && StampStore.RegisteredPath(folder) is not null;
         }
 
         int current = StampSettingsNow().OpacityPercent;
@@ -193,6 +195,7 @@ internal sealed partial class AnnotationEditorControl
         }
 
         _stampBusy = true;
+        if (_stampRemoveItem is not null) _stampRemoveItem.IsEnabled = false;
         try
         {
             string? stored = changeImageOnly ? null : StampStore.RegisteredPath(folder);
@@ -202,6 +205,10 @@ internal sealed partial class AnnotationEditorControl
                 picked = PickStampImagePath();
                 if (picked is null) return;
             }
+
+            // As when choosing the image tool, leave an unapplied crop before inserting.
+            // Otherwise the image waits for the crop, and closing waits for that image.
+            if (!changeImageOnly && _crop is not null) SelectTool(EditorTool.Select);
 
             // Reading, saving and adding the picture count as an editing operation, as for any
             // inserted picture: a save or close started meanwhile waits for it.
@@ -224,6 +231,7 @@ internal sealed partial class AnnotationEditorControl
         finally
         {
             _stampBusy = false;
+            if (_stampMenu is not null) RefreshStampMenu();
         }
     }
 
@@ -328,6 +336,7 @@ internal sealed partial class AnnotationEditorControl
     /// </summary>
     private void RemoveStampImage()
     {
+        if (_stampBusy) return;
         if (StampStore.Folder is not { } folder || !StampStore.Delete(folder)) return;
         _placedStamps.Clear();
         RememberPreferences(new StampSettings());
