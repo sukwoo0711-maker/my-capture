@@ -37,6 +37,9 @@ public partial class App
 
     private readonly Dictionary<string, int> _probeBreakdownIndex = [];
 
+    private static readonly PropertyInfo? ProbeOperationName =
+        typeof(DispatcherOperation).GetProperty("Name", BindingFlags.Instance | BindingFlags.NonPublic);
+
     private static readonly Type? ProbeMediaContext =
         typeof(Visual).Assembly.GetType("System.Windows.Media.MediaContext");
 
@@ -256,6 +259,22 @@ public partial class App
             }
         };
         CompositionTarget.Rendering += rendering;
+        // Every dispatcher operation of 2 ms or more on the way, by name and priority: what holds the
+        // UI thread between the frame and the selector's ContentRendered.
+        var operationStarts = new Dictionary<DispatcherOperation, long>();
+        DispatcherHookEventHandler operationStarted = (_, e) => operationStarts[e.Operation] = Stopwatch.GetTimestamp();
+        DispatcherHookEventHandler operationCompleted = (_, e) =>
+        {
+            if (!operationStarts.Remove(e.Operation, out long began)) return;
+            double duration = Stopwatch.GetElapsedTime(began).TotalMilliseconds;
+            if (duration < 2) return;
+            double at = Stopwatch.GetElapsedTime(started, began).TotalMilliseconds;
+            string operation = ProbeOperationName?.GetValue(e.Operation) as string ?? "?";
+            SelectorTimeline.Mark?.Invoke($"op {operation} [{e.Operation.Priority}] from {at:0.0} for {duration:0.0}");
+        };
+        Dispatcher.Hooks.OperationStarted += operationStarted;
+        Dispatcher.Hooks.OperationCompleted += operationCompleted;
+        Dispatcher.Hooks.OperationAborted += operationCompleted;
         try
         {
             HandleCaptureRequested();
@@ -279,6 +298,9 @@ public partial class App
         finally
         {
             CompositionTarget.Rendering -= rendering;
+            Dispatcher.Hooks.OperationStarted -= operationStarted;
+            Dispatcher.Hooks.OperationCompleted -= operationCompleted;
+            Dispatcher.Hooks.OperationAborted -= operationCompleted;
             SelectorTimeline.Mark = null;
         }
         int index = _probeBreakdownIndex.TryGetValue(name, out int previous) ? previous + 1 : 1;

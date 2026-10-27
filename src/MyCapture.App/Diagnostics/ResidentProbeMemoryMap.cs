@@ -21,13 +21,14 @@ internal static class ResidentProbeMemoryMap
     private const ushort HeapRegion = 0x0001, HeapEntryBusy = 0x0004;
 
     internal sealed record Allocation(string Base, double ReservedMb, double CommittedMb, string Protect, string Owner,
-        string Content, int StrideBytes, double HeapBusyMb, long CommittedBytes);
+        string Content, int StrideBytes, double HeapBusyMb, long CommittedBytes, double ResidentMb);
 
     internal sealed record HeapRow(int Index, string Handle, double CommittedMb, double AllocatedMb, double ReservedMb,
         double BusyMb, double FreeMb, int LargeBlocks, double LargeBlocksMb, string Note);
 
     internal sealed record Snapshot(string Step, double CommittedPrivateMb, double MappedMb, double ImageMb,
-        IReadOnlyDictionary<string, double> PrivateByOwnerMb, IReadOnlyList<HeapRow> Heaps,
+        IReadOnlyDictionary<string, double> PrivateByOwnerMb, IReadOnlyDictionary<string, double> ResidentByOwnerMb,
+        IReadOnlyList<HeapRow> Heaps,
         IReadOnlyList<Allocation> Allocations, int SmallAllocations, double SmallAllocationsMb, double ElapsedMs);
 
     private sealed class Group
@@ -40,6 +41,7 @@ internal static class ResidentProbeMemoryMap
         internal readonly List<(long Address, long Size, uint Protect)> Parts = [];
         internal string? Owner;
         internal long HeapBusy;
+        internal long Resident;
     }
 
     /// <summary>Allocations at least this large are listed one by one and fingerprinted.</summary>
@@ -53,6 +55,11 @@ internal static class ResidentProbeMemoryMap
         List<HeapRow> heaps = WalkHeaps(groups);
         foreach (Group group in groups.Where(group => group.Type == MemPrivate && group.Owner is null))
             group.Owner = group.Guard ? "thread stack" : "direct VirtualAlloc";
+        // Every committed private page's residency, before any page is read: committed memory never
+        // touched (or trimmed) is commit charge without RAM. Earlier maps read at most 64 pages a block.
+        var query = new WorkingSetExInformation[4096];
+        foreach (Group group in groups.Where(group => group.Type == MemPrivate && group.Committed > 0))
+            group.Resident = ResidentBytes(group, query);
 
         var allocations = new List<Allocation>();
         byte[] page = new byte[4096];
@@ -65,18 +72,21 @@ internal static class ResidentProbeMemoryMap
                 .OrderByDescending(parts => parts.Sum(part => part.Size)).First().Key;
             allocations.Add(new Allocation("0x" + group.Base.ToString("X", CultureInfo.InvariantCulture), Mb(group.Reserved),
                 Mb(group.Committed), "0x" + protect.ToString("X", CultureInfo.InvariantCulture), group.Owner ?? "?", content,
-                stride, Mb(group.HeapBusy), group.Committed));
+                stride, Mb(group.HeapBusy), group.Committed, Mb(group.Resident)));
         }
 
         Group[] small = groups.Where(group => group.Type == MemPrivate && group.Committed > 0 && group.Committed < ListedBytes).ToArray();
         var byOwner = groups.Where(group => group.Type == MemPrivate && group.Committed > 0)
             .GroupBy(group => OwnerClass(group.Owner))
             .ToDictionary(owners => owners.Key, owners => Mb(owners.Sum(group => group.Committed)));
+        var residentByOwner = groups.Where(group => group.Type == MemPrivate && group.Committed > 0)
+            .GroupBy(group => OwnerClass(group.Owner))
+            .ToDictionary(owners => owners.Key, owners => Mb(owners.Sum(group => group.Resident)));
         return new Snapshot(step,
             Mb(groups.Where(group => group.Type == MemPrivate).Sum(group => group.Committed)),
             Mb(groups.Where(group => group.Type == MemMapped).Sum(group => group.Committed)),
             Mb(groups.Where(group => group.Type == MemImage).Sum(group => group.Committed)),
-            byOwner, heaps, allocations, small.Length, Mb(small.Sum(group => group.Committed)),
+            byOwner, residentByOwner, heaps, allocations, small.Length, Mb(small.Sum(group => group.Committed)),
             Math.Round(watch.Elapsed.TotalMilliseconds, 1));
     }
 
@@ -275,6 +285,28 @@ internal static class ResidentProbeMemoryMap
         if (kind is "synthetic pixels" or "opaque pixels" or "white pixels" or "mostly zeros" && distinct.Count > 8)
             stride = Stride(group, window);
         return ($"{kind} ({stats})" + (stride > 0 ? $", row stride {stride} B = {stride / 4} px" : string.Empty), stride);
+    }
+
+    private static long ResidentBytes(Group group, WorkingSetExInformation[] query)
+    {
+        long resident = 0;
+        int size = Marshal.SizeOf<WorkingSetExInformation>();
+        foreach ((long address, long length, uint protect) in group.Parts)
+        {
+            for (long offset = 0; offset < length; offset += query.Length * 4096L)
+            {
+                int count = (int)Math.Min(query.Length, (length - offset) / 4096);
+                for (int index = 0; index < count; index++)
+                {
+                    query[index].VirtualAddress = new IntPtr(address + offset + index * 4096L);
+                    query[index].VirtualAttributes = UIntPtr.Zero;
+                }
+                if (!QueryWorkingSetEx(GetCurrentProcess(), query, (uint)(count * size))) continue;
+                for (int index = 0; index < count; index++)
+                    if (((ulong)query[index].VirtualAttributes & 1) != 0) resident += 4096;
+            }
+        }
+        return resident;
     }
 
     private static long AddressOfPage(Group group, long pageIndex)

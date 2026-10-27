@@ -325,6 +325,16 @@ internal sealed class ResidentProbeRecorder : IDisposable
             + " | " + CommittedRegions());
         ResidentProbeMemoryMap.Snapshot map = ResidentProbeMemoryMap.Take(step);
         lock (_gate) _audits.Add(map);
+        // What the managed heap gives back when asked to decommit everything it can (.NET 7+).
+        long collectStarted = Stopwatch.GetTimestamp();
+        GC.Collect(2, GCCollectionMode.Aggressive, blocking: true, compacting: true);
+        double collectMs = Stopwatch.GetElapsedTime(collectStarted).TotalMilliseconds;
+        GCMemoryInfo aggressive = GC.GetGCMemoryInfo(GCKind.FullBlocking);
+        double pauseMs = aggressive.PauseDurations.Length > 0 ? aggressive.PauseDurations[0].TotalMilliseconds : -1;
+        GC.WaitForPendingFinalizers();
+        await Task.Delay(500);
+        Sample(step + " after aggressive GC", -2,
+            string.Create(CultureInfo.InvariantCulture, $"GC.Collect(Aggressive) {collectMs:0.0} ms, pause {pauseMs:0.0} ms"));
         await Task.Delay(200);
     }
 
