@@ -27,6 +27,7 @@ public sealed class EditorTextEdgePlacementTests
     [InlineData(640, 360, false)]
     [InlineData(1600, 900, false)]
     [InlineData(640, 360, true)]
+    [InlineData(120, 80, false)]
     public void TextTypedNearEveryEdgeAndCornerCommitsAsTheLiveBoxShowedIt(int sourceWidth, int sourceHeight, bool croppedAndRotated) => StaTestHost.Run(() =>
     {
         string? evidence = Environment.GetEnvironmentVariable("MYCAPTURE_EDGE_TEXT_EVIDENCE");
@@ -63,7 +64,8 @@ public sealed class EditorTextEdgePlacementTests
 
                 RectD shown = LiveGlyphBounds(box, surface);
                 int liveLines = box.LineCount;
-                RectD live = Assert.Single(host.Editor.CreateCurrentImageSnapshot().Items.OfType<TextAnnotation>()).Rect;
+                TextAnnotation liveCaption = Assert.Single(host.Editor.CreateCurrentImageSnapshot().Items.OfType<TextAnnotation>());
+                RectD live = liveCaption.Rect;
                 Point firstGlyph = box.TranslatePoint(box.GetRectFromCharacterIndex(0).TopLeft, surface);
                 Point drawnAt = surface.ToSurfacePoint(new PointD(live.X, live.Y));
                 byte[] livePixels = Pixels(host.Editor.RenderCurrentImageAsync().GetAwaiter().GetResult());
@@ -76,9 +78,22 @@ public sealed class EditorTextEdgePlacementTests
                 Save(evidence, viewport, $"{scenario}-{place}-{(text == Words ? "words" : "lines")}-committed.png");
 
                 if (!Inside(caption.Rect, image)) failures.Add($"{name}: committed box {caption.Rect} leaves the image");
+                if (at.X >= width - 8)
+                {
+                    double minimumWidth = Math.Min(10 * caption.FontSize, width - TextAnnotationLayout.OutlineMargin(caption));
+                    if (caption.Rect.Width < minimumWidth - 0.01)
+                        failures.Add($"{name}: caption width {caption.Rect.Width} is below the readable minimum {minimumWidth}");
+                    if (width < 10 * caption.FontSize && Math.Abs(caption.Rect.Width - minimumWidth) > 0.01)
+                        failures.Add($"{name}: narrow-image width {caption.Rect.Width} differs from the cap {minimumWidth}");
+                }
                 if (!Inside(shown, image, 1)) failures.Add($"{name}: the live box shows glyphs at {shown}, outside the image");
                 if (!Inside(shown, caption.Rect, 1.5)) failures.Add($"{name}: live glyphs {shown} lie outside the committed box {caption.Rect}");
                 if (caption.Rect != live) failures.Add($"{name}: committed box {caption.Rect} differs from the live fit {live}");
+                if (caption.AutoSize != liveCaption.AutoSize
+                    || TextAnnotationLayout.KeyOf(caption, 1) != TextAnnotationLayout.KeyOf(liveCaption, 1))
+                    failures.Add($"{name}: committed text formatting differs from the live fit");
+                if (Math.Abs(box.FontSize / surface.DipPerPixel - caption.FontSize) > 0.01)
+                    failures.Add($"{name}: live and committed font sizes differ");
                 if (Math.Abs(firstGlyph.X - drawnAt.X) > 0.75 || Math.Abs(firstGlyph.Y - drawnAt.Y) > 0.75)
                     failures.Add($"{name}: live first glyph at {firstGlyph}, committed caption draws it at {drawnAt}");
                 if (liveLines != CommittedLines(caption)) failures.Add($"{name}: {liveLines} live lines, {CommittedLines(caption)} committed");
@@ -99,17 +114,17 @@ public sealed class EditorTextEdgePlacementTests
         AnnotationEditorController controller = Controller(host.Editor);
         var probe = new TextAnnotation { FontSize = 18, FontFamily = controller.DefaultFontFamily, AutoSize = true };
 
-        // Too close to the right edge: the one-em wrapping box ends at the edge instead of past it.
+        // Too close to the right edge: a readable ten-em box moves left to end at the edge.
         TextLayout edge = controller.FitText(probe, "abc", 18, autoSize: true, new RectD(636, 100, 18, 25));
         Assert.False(edge.AutoSize);
-        Assert.Equal(18, edge.Rect.Width, 6);
+        Assert.Equal(180, edge.Rect.Width, 6);
         Assert.Equal(640, edge.Rect.Right, 6);
         Assert.Equal(100, edge.Rect.Y);
 
         // With room, the caption keeps its place and wraps at the edge, as before.
-        TextLayout roomy = controller.FitText(probe, Words + " " + Words, 18, autoSize: true, new RectD(500, 100, 18, 25));
+        TextLayout roomy = controller.FitText(probe, Words + " " + Words + " " + Words, 18, autoSize: true, new RectD(400, 100, 18, 25));
         Assert.False(roomy.AutoSize);
-        Assert.Equal(500, roomy.Rect.X);
+        Assert.Equal(400, roomy.Rect.X);
         Assert.Equal(640, roomy.Rect.Right, 6);
 
         // Lines that would run below the image move the caption up; its wrapping does not change.

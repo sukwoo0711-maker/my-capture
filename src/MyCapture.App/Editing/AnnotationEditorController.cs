@@ -773,9 +773,9 @@ internal sealed class AnnotationEditorController
     /// <remarks>
     /// <para>
     /// The caption stays inside the image, which clips what it draws. An auto-size box that would
-    /// run past the image's right edge becomes a fixed-width box ending at that edge (at least one
-    /// em wide), so the caption wraps and grows downward. A box that still reaches past the right
-    /// or bottom edge (that one em, or lines below the image) or starts before the left or top
+    /// run past the image's right edge becomes a fixed-width box at least ten em wide, capped to
+    /// the image width minus the outline margin, so the caption stays readable as it wraps. A box
+    /// that still reaches past the right or bottom edge or starts before the left or top
     /// edge moves just enough to lie inside it. The live editing box takes this same box, so what
     /// is typed near an edge or a corner is exactly what the committed caption shows.
     /// </para>
@@ -804,8 +804,10 @@ internal sealed class AnnotationEditorController
         double anchor = Math.Clamp(rect.X, 0, canvasWidth);
         if (probe.AutoSize && anchor + measured.Width > canvasWidth + 0.01)
         {
+            double minimumWidth = Math.Min(10 * probe.FontSize,
+                Math.Max(1, canvasWidth - TextAnnotationLayout.OutlineMargin(probe)));
             probe.AutoSize = false;
-            probe.Rect = new RectD(rect.X, rect.Y, Math.Max(canvasWidth - anchor, probe.FontSize), rect.Height);
+            probe.Rect = new RectD(rect.X, rect.Y, Math.Max(canvasWidth - anchor, minimumWidth), rect.Height);
             measured = TextFitter?.Invoke(probe) ?? probe.Rect;
         }
 
