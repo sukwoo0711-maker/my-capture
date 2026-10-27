@@ -88,6 +88,9 @@ internal sealed partial class AnnotationEditorControl
         button.SetResourceReference(FrameworkElement.StyleProperty, "Rail.ToolButton");
         AutomationName(button, $"{label} ({ShortcutCatalog.Get(ShortcutScope.Annotation, "Stamp").Hint})");
         AttachEditorShortcut(button, ShortcutScope.Annotation, "Stamp", corner: true);
+        // The plain "name (key)" tooltip hides that the options live on the right button,
+        // so the stamp keeps its longer hint, which still ends with the key.
+        button.ToolTip = UiText.Get("Stamp_ToolTip");
         PreserveEditorMouseFocus(button);
         button.Click += (_, _) => PlaceStampFromUser();
         // WPF needs a menu before the first opening event. Populate its items only on use;

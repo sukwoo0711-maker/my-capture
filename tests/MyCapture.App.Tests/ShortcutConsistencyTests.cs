@@ -105,6 +105,13 @@ public sealed class ShortcutConsistencyTests
             && row.Shortcuts[0].Command is not ("RotateLeft" or "RotateRight")))
         {
             ButtonBase tool = Assert.Single(elements.OfType<ButtonBase>(), item => AutomationProperties.GetAcceleratorKey(item) == row.Keys);
+            if (row.Shortcuts[0].Command == "Stamp")
+            {
+                // The stamp keeps the hint that its options are on the right button; it still names its key last.
+                Assert.Equal(UiText.Get("Stamp_ToolTip"), tool.ToolTip);
+                Assert.EndsWith($" ({row.Keys})", Assert.IsType<string>(tool.ToolTip));
+                continue;
+            }
             Assert.Equal($"{UiText.Get(row.Action)} ({row.Keys})", tool.ToolTip);
         }
     });
