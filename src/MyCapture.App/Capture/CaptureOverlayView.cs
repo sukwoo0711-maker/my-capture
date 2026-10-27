@@ -59,7 +59,23 @@ internal sealed class CaptureOverlayView : FrameworkElement
     /// the rectangle: the drag start seeds a preset-sized box clamped to the frame, so
     /// repeated captures keep identical dimensions.
     /// </summary>
-    internal System.Drawing.Size? PresetSize { get; set; }
+    internal System.Drawing.Size? PresetSize
+    {
+        get => _presetSize;
+        set
+        {
+            if (_presetSize == value) return;
+            _presetSize = value;
+            // A size fixed by a setting leaves nothing for the ratio button and the R key to decide.
+            ConfigureGuides();
+        }
+    }
+
+    private System.Drawing.Size? _presetSize;
+
+    /// <summary>The aspect-ratio lock of this session. Every selector starts Free; nothing persists it.</summary>
+    private SelectionRatio _selectionRatio;
+
     private Brush _dimmerBrush = null!;
     private Brush _chromeBrush = null!;
     private Brush _primaryTextBrush = null!;
@@ -148,6 +164,7 @@ internal sealed class CaptureOverlayView : FrameworkElement
     private bool _copyingColor;
     private CaptureSelectorMode _drawnMode;
     private CaptureSelectorMode _drawnSelectionMode;
+    private SelectionRatio _drawnRatio;
     private bool _drawnCueMonitor;
     private CaptureModeBar? _modeBar;
     private CaptureStartGuideCard? _startGuide;
@@ -243,6 +260,29 @@ internal sealed class CaptureOverlayView : FrameworkElement
     internal bool PointerOverModeBarForTest => _pointerOverBar;
     internal double GuideScaleForTest => _guideScale;
 
+    /// <summary>The size readout last drawn on the selection, "1920 × 1080 · 16:9" and the like.</summary>
+    internal string? ReadoutForTest { get; private set; }
+
+    /// <summary>
+    /// The aspect-ratio lock: a drag, the arrow-key resize and a fixed size follow it, and the R key and the
+    /// mode bar's ratio menu change it. Free until one of them does.
+    /// </summary>
+    internal SelectionRatio Ratio => _selectionRatio;
+
+    /// <summary>
+    /// A ratio can be locked unless the size is fixed by a setting or the colour mode is picking a pixel.
+    /// </summary>
+    private bool RatioAvailable => PresetSize is null && !_colorPickMode;
+
+    /// <summary>The lock that shapes selections now; Free when none is available.</summary>
+    private SelectionRatio ActiveRatio => RatioAvailable ? _selectionRatio : SelectionRatio.Free;
+
+    /// <summary>
+    /// A recording needs even sides for H.264; the recorder trims an odd last row or column, which would
+    /// bend a locked ratio, so the recording selector draws even selections.
+    /// </summary>
+    private bool EvenSelection => RecordingSelection;
+
     /// <summary>
     /// How long the in-overlay copy message stays. The chip follows the pointer the user is aiming
     /// with, so it uses the over-content confirmation time. A failed copy is a warning rather than a
@@ -296,6 +336,8 @@ internal sealed class CaptureOverlayView : FrameworkElement
                 bar.HelpRequested += OnHelpRequested;
                 bar.CancelRequested += RequestCancel;
                 bar.ActionRequested += OnBarActionRequested;
+                bar.RatioRequested += OnRatioRequested;
+                bar.FixedSizeRequested += OnFixedSizeRequested;
                 _modeBar = bar;
                 AddGuideChild(bar);
             }
@@ -307,6 +349,8 @@ internal sealed class CaptureOverlayView : FrameworkElement
                 bar.HelpRequested -= OnHelpRequested;
                 bar.CancelRequested -= RequestCancel;
                 bar.ActionRequested -= OnBarActionRequested;
+                bar.RatioRequested -= OnRatioRequested;
+                bar.FixedSizeRequested -= OnFixedSizeRequested;
                 RemoveGuideChild(bar);
                 _modeBar = null;
                 _modeBarBounds = null;
@@ -559,6 +603,8 @@ internal sealed class CaptureOverlayView : FrameworkElement
             bar.HelpRequested -= OnHelpRequested;
             bar.CancelRequested -= RequestCancel;
             bar.ActionRequested -= OnBarActionRequested;
+            bar.RatioRequested -= OnRatioRequested;
+            bar.FixedSizeRequested -= OnFixedSizeRequested;
         }
         foreach (FrameworkElement child in new FrameworkElement?[] { _modeBar, _startGuide }.OfType<FrameworkElement>())
             RemoveLogicalChild(child);
@@ -781,6 +827,18 @@ internal sealed class CaptureOverlayView : FrameworkElement
             : null;
     }
 
+    /// <summary>
+    /// The same for a locked ratio: the selection the drag showed, whole pixels with the lock's ratio, or
+    /// null when it is smaller than a selection can be. Free is the plain drag above.
+    /// </summary>
+    internal static RectD? ResolveCompletedDrag(PointD start, PointD end, RectD frameBounds, SelectionRatio ratio,
+        bool evenSize = false)
+    {
+        if (ratio == SelectionRatio.Free) return ResolveCompletedDrag(start, end, frameBounds);
+        RectD pixels = SelectionRatios.FitDrag(start, end, frameBounds, ratio, evenSize);
+        return pixels.Width >= MinimumSelectionPixels && pixels.Height >= MinimumSelectionPixels ? pixels : null;
+    }
+
     protected override void OnRender(DrawingContext drawingContext)
     {
         base.OnRender(drawingContext);
@@ -878,8 +936,9 @@ internal sealed class CaptureOverlayView : FrameworkElement
     {
         if (_released) return;
         _modeBar?.Configure(DetectWindows, TextCaptureAvailable, CopyColorText is not null, OffersOtherActions,
-            CanRepeatLastRegion(), RecordingSelection);
+            CanRepeatLastRegion(), RecordingSelection, ratioAvailable: PresetSize is null);
         _modeBar?.ShowMode(Mode, _windowSelected);
+        _modeBar?.ShowRatio(_selectionRatio);
         _startGuide?.Configure(UsesWindowDetection, RecordingSelection);
         _staticDirty = true;
         QueueFeedback();
@@ -934,6 +993,87 @@ internal sealed class CaptureOverlayView : FrameworkElement
         else OpenStartGuide();
         ReturnFocusAfterPointer();
     }
+
+    /// <summary>A lock chosen in the ratio menu. A mouse click hands the keys back to the selector.</summary>
+    private void OnRatioRequested(SelectionRatio ratio)
+    {
+        DismissStartGuide();
+        SelectRatio(ratio);
+        ReturnFocusAfterPointer();
+    }
+
+    /// <summary>
+    /// A fixed size chosen in the ratio menu. Enter confirms the placed rectangle and the arrows move it, so
+    /// the keys leave the menu's button whichever device chose the size.
+    /// </summary>
+    private void OnFixedSizeRequested(FixedSelectionSize size)
+    {
+        DismissStartGuide();
+        if (!PlaceFixedSize(size)) return;
+        _ = Dispatcher.BeginInvoke(DispatcherPriority.Input, new Action(() =>
+        {
+            if (!_ended && !_released) Focus();
+        }));
+    }
+
+    /// <summary>
+    /// Sets the aspect-ratio lock (the R key cycles it, the bar's menu picks it). A selection that exists
+    /// is brought onto the new ratio around its centre, only ever shrinking; a drag in progress follows it
+    /// from its start point. Free leaves a selection as it is. The change is announced as a short message.
+    /// </summary>
+    internal void SelectRatio(SelectionRatio ratio)
+    {
+        if (_ended || _released || !RatioAvailable) return;
+        _selectionRatio = ratio;
+        _modeBar?.ShowRatio(ratio);
+        if (_selection is { } current)
+        {
+            _selectedWindow = null;
+            _selection = _interaction == InteractionMode.Create
+                ? SelectionRatios.FitDrag(_dragAnchor, ClampEdgePoint(UpdatePointer()), FrameBounds, ratio, EvenSelection)
+                : RefitSelection(current, ratio);
+        }
+
+        ShowToast(UiText.Format("CaptureRatio_Changed", CaptureModeBar.RatioName(ratio)), FeedbackKind.Echo, RatioActivity);
+        QueueFeedback();
+    }
+
+    /// <summary>
+    /// Brings a finished selection onto a lock. Cycling with R refits from the selection as it was before
+    /// the first press, not from the previous refit, so a round of ratios does not whittle the selection
+    /// away and Free brings the original back. Any other change to the selection starts afresh.
+    /// </summary>
+    private RectD RefitSelection(RectD current, SelectionRatio ratio)
+    {
+        RectD source = _refitBase is { } origin && _refitResult == current ? origin : current;
+        RectD refit = ratio == SelectionRatio.Free ? source : SelectionRatios.Refit(source, FrameBounds, ratio, EvenSelection);
+        _refitBase = source;
+        _refitResult = refit;
+        return refit;
+    }
+
+    private RectD? _refitBase;
+    private RectD? _refitResult;
+
+    /// <summary>
+    /// Places a rectangle of exactly <paramref name="size"/> centred on the monitor under the pointer. A
+    /// monitor too small for it gets the largest rectangle of the same ratio that fits. The arrow keys move
+    /// the rectangle and Enter confirms it, like a selection made with Ctrl+A; the lock is left as it is.
+    /// </summary>
+    internal bool PlaceFixedSize(FixedSelectionSize size)
+    {
+        if (_ended || _released || _copyingColor || !RatioAvailable) return false;
+        CaptureGuideArea monitor = CaptureModeBarLayout.ChooseArea(_monitors ??= ReadMonitors(), ReadCursor(), _screenBounds);
+        if (SelectionRatios.PlaceFixed(size, monitor.Bounds, FrameBounds, EvenSelection) is not { } placed) return false;
+        _selection = placed;
+        _selectedWindow = null;
+        ClearHover();
+        ShowToast(UiText.Get("CaptureRatio_FixedHint"), FeedbackKind.Result, RatioActivity);
+        QueueFeedback();
+        return true;
+    }
+
+    private const string RatioActivity = "MyCapture.Capture.Ratio";
 
     /// <summary>A mouse click on the bar hands the keys back to the selector; Tab focus stays on the bar.</summary>
     private void ReturnFocusAfterPointer()
@@ -1069,9 +1209,11 @@ internal sealed class CaptureOverlayView : FrameworkElement
             chromeMoved = !chrome.SequenceEqual(_chromeBounds);
             _chromeBounds = chrome;
         }
+        SelectionRatio ratio = ActiveRatio;
         if (rebuild || chromeMoved || _drawnSelection != _selection || _drawnHover != shownHover || _drawnHoverTarget != hover
-            || _drawnHoverWholeMonitor != hoverWholeMonitor || _drawnSelectionMode != mode)
+            || _drawnHoverWholeMonitor != hoverWholeMonitor || _drawnSelectionMode != mode || _drawnRatio != ratio)
         {
+            _drawnRatio = ratio;
             _drawnSelection = _selection;
             _drawnHover = shownHover;
             _drawnHoverTarget = hover;
@@ -1501,9 +1643,19 @@ internal sealed class CaptureOverlayView : FrameworkElement
 
     internal bool GuideStripsArePixelsForTest => _guideStripsArePixels;
 
+    /// <summary>
+    /// "W × H", and "W × H · 16:9" while a ratio is locked and the selection carries it. A selection that
+    /// does not (window highlight, Ctrl+A on a screen of another shape) is not labelled with a ratio it lacks.
+    /// </summary>
+    internal static string FormatReadout(int width, int height, SelectionRatio ratio) =>
+        ratio != SelectionRatio.Free && SelectionRatios.Matches(width, height, ratio)
+            ? $"{width} × {height} · {SelectionRatios.Label(ratio)}"
+            : $"{width} × {height}";
+
     private void DrawDimensionLabel(DrawingContext dc, RectD pixels, Rect selectionDip)
     {
-        string text = $"{(int)pixels.Width} × {(int)pixels.Height}";
+        string text = FormatReadout((int)pixels.Width, (int)pixels.Height, ActiveRatio);
+        ReadoutForTest = text;
         FormattedText formatted = CreateText(text, _monoTypeface, 12, _primaryTextBrush);
         const double paddingX = 9;
         const double paddingY = 5;
@@ -1920,7 +2072,8 @@ internal sealed class CaptureOverlayView : FrameworkElement
             }
             else
             {
-                _selection = RectD.FromCorners(_dragAnchor, edge).ClampTo(FrameBounds);
+                // Free is the plain rectangle between the corners; a locked ratio snaps the free corner to it.
+                _selection = SelectionRatios.FitDrag(_dragAnchor, edge, FrameBounds, ActiveRatio, EvenSelection);
             }
         }
 
@@ -1998,7 +2151,7 @@ internal sealed class CaptureOverlayView : FrameworkElement
         }
         else
         {
-            _selection = ResolveCompletedDrag(_dragAnchor, point, FrameBounds);
+            _selection = ResolveCompletedDrag(_dragAnchor, point, FrameBounds, ActiveRatio, EvenSelection);
         }
         _interaction = InteractionMode.None;
         if (releaseCapture) Mouse.Capture(null);
@@ -2083,6 +2236,11 @@ internal sealed class CaptureOverlayView : FrameworkElement
                 TextCaptureMode = !TextCaptureMode;
                 e.Handled = true;
                 return;
+            // Plain R only, like C and T: Shift may be held for precision, Ctrl/Alt chords stay untouched.
+            case Key.R when RatioAvailable && IsPlainOrShift(Keyboard.Modifiers):
+                SelectRatio(SelectionRatios.Next(_selectionRatio));
+                e.Handled = true;
+                return;
             case Key.Left:
             case Key.Right:
             case Key.Up:
@@ -2144,7 +2302,13 @@ internal sealed class CaptureOverlayView : FrameworkElement
         bool resize = modifiers.HasFlag(ModifierKeys.Shift);
         _selectedWindow = null;
 
-        if (resize)
+        if (resize && ActiveRatio != SelectionRatio.Free)
+        {
+            // Locked: the key moves one side by its step and the other side follows the ratio.
+            _selection = SelectionRatios.Resize(selection, horizontal: key is Key.Left or Key.Right,
+                direction: key is Key.Right or Key.Down ? 1 : -1, step, FrameBounds, ActiveRatio, EvenSelection);
+        }
+        else if (resize)
         {
             double left = selection.Left;
             double top = selection.Top;
@@ -2271,16 +2435,23 @@ internal sealed class CaptureOverlayView : FrameworkElement
         return true;
     }
 
-    private void ShowToast(string message, bool copied)
+    private void ShowToast(string message, bool copied) =>
+        ShowToast(message, copied ? FeedbackKind.Confirmation : FeedbackKind.Warning, "MyCapture.Capture.ColorCopy");
+
+    /// <summary>
+    /// The chip next to the pointer. How long it stays follows its <paramref name="kind"/> (a ratio readout
+    /// is an echo of a value being changed, a hint is a result), and it is announced to screen readers.
+    /// </summary>
+    private void ShowToast(string message, FeedbackKind kind, string activity)
     {
         if (_released || _ended) return;
         _toastMessage = message;
         _toastTimer ??= CreateToastTimer();
         _toastTimer.Stop();
-        _toastTimer.Interval = ToastDuration(copied);
+        _toastTimer.Interval = FeedbackTiming.DisplayTime(kind, overContent: true)!.Value;
         _toastTimer.Start();
         QueueFeedback();
-        FeedbackTiming.Announce(this, message, copied ? FeedbackKind.Confirmation : FeedbackKind.Warning, "MyCapture.Capture.ColorCopy");
+        FeedbackTiming.Announce(this, message, kind, activity);
     }
 
     private DispatcherTimer CreateToastTimer()

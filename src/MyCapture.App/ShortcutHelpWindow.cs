@@ -96,7 +96,7 @@ internal sealed class ShortcutHelpWindow : Window
                     ("Text_66BA5DCDA810", Display(keys.OpenLibrary)), ("Text_36458FABBDBB", Display(keys.CaptureWindow)),
                     ("Text_254C836B9ED2", Display(keys.CaptureFullScreen)), ("Hotkey.Scroll", Display(keys.ScrollingCapture)), ("Hotkey.Delay", Display(keys.DelayedCapture)),
                     ("QuickAccess.Title", "Alt+Q"), ("TextCapture_Title", Display(keys.CaptureText)),
-                    ("ColorPick_HelpLabel", "C"), ("TextCapture_HelpToggle", "T")]),
+                    ("ColorPick_HelpLabel", "C"), ("TextCapture_HelpToggle", "T"), ("CaptureRatio_HelpLabel", "R")]),
                 ("Help.Annotation", [("Text_DC0760235344", "R"), ("Tools.Ellipse", "E"), ("Text_2785CE58DF74", "A"),
                     ("Text_37DB9D0B1C8E", "P"), ("Tools.Highlighter", "H"), ("Text_258AD4B095A1", "T"), ("Tools.StepNumber", "N"),
                     ("Text_3F8046019B32", "M"), ("EditorBlur_Name", "B"), ("Tools_Crop", "X"),
