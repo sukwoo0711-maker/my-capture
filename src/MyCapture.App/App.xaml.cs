@@ -790,7 +790,9 @@ public partial class App : Application
 
     private async void HandleCaptureRequested()
     {
+        SelectorTimeline.Mark?.Invoke("handler");
         DismissQuickAccessForCapture();
+        SelectorTimeline.Mark?.Invoke("card-dismissed");
         _log?.LogInformation("Region capture requested");
         if (_overlay is null || _settings is null)
         {
@@ -800,7 +802,9 @@ public partial class App : Application
         try
         {
             if (!await PrepareRetakeAsync(UiText.Get("Text_096A13A757DB"), preserveEditor: true)) { CompleteWelcomeCaptureAnnouncement(); return; }
+            SelectorTimeline.Mark?.Invoke("guard-passed");
             _tray?.SetState(TrayIconState.Capturing);
+            SelectorTimeline.Mark?.Invoke("tray-state");
             // Start reserves the session immediately; full-desktop acquisition runs off the UI
             // thread and reports asynchronous failures through TransitionFailed on this dispatcher.
             _overlay.Start(
@@ -2097,7 +2101,7 @@ public partial class App : Application
         }
 
         ScreenCaptureEngine captureEngine = _services.GetRequiredService<ScreenCaptureEngine>();
-        _ = Task.Run(() =>
+        if (s_residentProbe?.Has("no-engine-prewarm") != true) _ = Task.Run(() =>
         {
             try
             {
@@ -2117,7 +2121,8 @@ public partial class App : Application
             if (_overlay?.IsActive == true) return;
             try
             {
-                CaptureOverlayPrewarm.Run(MonitorEnumerator.GetVirtualDesktopBounds());
+                if (s_residentProbe?.Has("no-overlay-prewarm") != true)
+                    CaptureOverlayPrewarm.Run(MonitorEnumerator.GetVirtualDesktopBounds());
             }
             catch (Exception ex)
             {
@@ -2130,7 +2135,7 @@ public partial class App : Application
                 if (_overlay?.IsActive == true) return;
                 try
                 {
-                    AnnotationEditorPrewarm.Run();
+                    if (s_residentProbe?.Has("no-editor-prewarm") != true) AnnotationEditorPrewarm.Run();
                 }
                 catch (Exception ex)
                 {

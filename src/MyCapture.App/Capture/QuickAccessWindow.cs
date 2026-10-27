@@ -375,6 +375,7 @@ internal sealed class QuickAccessWindow : Window
             CaptureWindowExclusion.DisableTransitions(this);
             HwndSource.FromHwnd(hwnd)?.AddHook(NoActivateHook);
             if (excludeFromCapture) CaptureWindowExclusion.TryApply(this);
+            MyCapture.App.Diagnostics.ResidentProbeWindowHook.SourceInitialized?.Invoke(this);
         };
         Loaded += (_, _) =>
         {

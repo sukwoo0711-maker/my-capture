@@ -32,11 +32,26 @@ public partial class App
     private static readonly FieldInfo ProbeActiveEditor =
         typeof(CaptureOverlayCoordinator).GetField("_activeEditor", BindingFlags.Instance | BindingFlags.NonPublic)!;
 
+    private static readonly FieldInfo ProbeLastDismissal =
+        typeof(CaptureOverlayCoordinator).GetField("_lastPresentationDismissedTick", BindingFlags.Instance | BindingFlags.NonPublic)!;
+
+    private readonly Dictionary<string, int> _probeBreakdownIndex = [];
+
+    private static readonly Type? ProbeMediaContext =
+        typeof(Visual).Assembly.GetType("System.Windows.Media.MediaContext");
+
+    private static readonly MethodInfo? ProbeMediaContextFrom =
+        ProbeMediaContext?.GetMethod("From", BindingFlags.Static | BindingFlags.NonPublic | BindingFlags.Public, [typeof(Dispatcher)]);
+
+    private static readonly MethodInfo? ProbeCompleteRender =
+        ProbeMediaContext?.GetMethod("CompleteRender", BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public, Type.EmptyTypes);
+
     /// <summary>Reads the virtual desktop as the selector would, without its pixels.</summary>
     private static FrozenFrame AcquireProbeFrame(bool includeCursor)
     {
         long started = Stopwatch.GetTimestamp();
-        FrozenFrame frame = ResidentProbeImages.DesktopFrame(MonitorEnumerator.GetVirtualDesktopBounds(), Environment.TickCount & 0xFF);
+        FrozenFrame frame = ResidentProbeImages.DesktopFrame(MonitorEnumerator.GetVirtualDesktopBounds(), Environment.TickCount & 0xFF,
+            s_residentProbe?.Has("frame-cached") == true);
         s_lastProbeAcquisitionMs = Stopwatch.GetElapsedTime(started).TotalMilliseconds;
         return frame;
     }
@@ -59,6 +74,26 @@ public partial class App
     {
         var recorder = new ResidentProbeRecorder(probe, Dispatcher);
         int exitCode = 0;
+        // Diagnostic variant: no lifted capture flies into the card (CaptureFlight declines without layered windows).
+        if (probe.Has("no-flight")) CaptureFlight.ReadLayeredSupport = () => false;
+        // Diagnostic variants: chosen kinds of window render in software from their first frame.
+        if (probe.Variants.Any(variant => variant.StartsWith("sw-", StringComparison.Ordinal)))
+        {
+            ResidentProbeWindowHook.SourceInitialized = window =>
+            {
+                bool software = window switch
+                {
+                    CaptureOverlayWindow => probe.Has("sw-selector"),
+                    QuickAccessWindow => probe.Has("sw-card"),
+                    CaptureFlightDecoration => probe.Has("sw-flight"),
+                    AnnotationEditorWindow => probe.Has("sw-editor"),
+                    _ => false,
+                };
+                if (software && System.Windows.Interop.HwndSource.FromHwnd(new System.Windows.Interop.WindowInteropHelper(window).Handle)
+                        is { CompositionTarget: { } target })
+                    target.RenderMode = System.Windows.Interop.RenderMode.SoftwareOnly;
+            };
+        }
         try
         {
             await Task.WhenAll(_initialLibraryRecoveryTask, _initialEditRecoveryTask);
@@ -146,7 +181,7 @@ public partial class App
     /// <summary>The capture shortcut, the selector's first frame, a region, the card, and the card closed.</summary>
     private async Task ProbeCaptureToCardAsync(ResidentProbeRecorder recorder, string name, int dwellMs)
     {
-        double selectorMs = await ProbeShortcutToSelectorAsync();
+        double selectorMs = await ProbeShortcutToSelectorAsync(recorder, name);
         recorder.Time(name + ": shortcut → selector first frame", selectorMs);
         recorder.Time(name + ": synthetic desktop grab (inside the selector timing)", s_lastProbeAcquisitionMs);
         CaptureOverlayWindow overlay = ProbeOverlay ?? throw new InvalidOperationException("The selector did not open.");
@@ -178,23 +213,77 @@ public partial class App
             10_000, "card closed");
     }
 
-    /// <summary>The capture shortcut's handler until the selector has drawn its frozen frame.</summary>
-    private async Task<double> ProbeShortcutToSelectorAsync()
+    /// <summary>
+    /// The capture shortcut's handler until the selector has drawn its frozen frame, with the
+    /// <see cref="SelectorTimeline"/> marks of the way there (kept until the window's first
+    /// ContentRendered, at most one second longer).
+    /// </summary>
+    private async Task<double> ProbeShortcutToSelectorAsync(ResidentProbeRecorder recorder, string name)
     {
+        long dismissed = _overlay is null ? long.MinValue : (long)ProbeLastDismissal.GetValue(_overlay)!;
+        double sinceDismissal = dismissed == long.MinValue ? -1 : Environment.TickCount64 - dismissed;
+        var marks = new List<ResidentProbeRecorder.Mark>(32);
         long started = Stopwatch.GetTimestamp();
+        SelectorTimeline.Mark = stage =>
+        {
+            double at = Stopwatch.GetElapsedTime(started).TotalMilliseconds;
+            lock (marks) marks.Add(new ResidentProbeRecorder.Mark(stage, Math.Round(at, 2), Environment.CurrentManagedThreadId));
+        };
         double selectorMs = -1;
+        int ticks = 0;
         EventHandler rendering = (_, _) =>
         {
             if (selectorMs < 0 && ProbeOverlay is { IsVisible: true, Content: CaptureOverlayView { Frame: not null } })
+            {
                 selectorMs = Stopwatch.GetElapsedTime(started).TotalMilliseconds;
+                SelectorTimeline.Mark?.Invoke("probe-first-rendering-tick");
+                // At the first dispatcher turn after this render pass (Show returning): block until the
+                // render thread has finished every committed frame, the first selector frame included.
+                // The mark is then an upper bound for that frame's present.
+                _ = Dispatcher.BeginInvoke(DispatcherPriority.Send, new Action(() =>
+                {
+                    SelectorTimeline.Mark?.Invoke("render-wait-start");
+                    if (ProbeCompleteRender is { } completeRender && ProbeMediaContextFrom?.Invoke(null, [Dispatcher]) is { } context)
+                    {
+                        completeRender.Invoke(context, null);
+                        SelectorTimeline.Mark?.Invoke("render-thread-complete");
+                    }
+                }));
+            }
+            else if (selectorMs >= 0 && ticks++ < 12)
+            {
+                SelectorTimeline.Mark?.Invoke("rendering-tick");
+            }
         };
         CompositionTarget.Rendering += rendering;
         try
         {
             HandleCaptureRequested();
+            if (ProbeOverlay is { } shownOverlay)
+            {
+                shownOverlay.Loaded += (_, _) => SelectorTimeline.Mark?.Invoke("window-loaded");
+                if (shownOverlay.Content is FrameworkElement view)
+                    view.Loaded += (_, _) => SelectorTimeline.Mark?.Invoke("view-loaded");
+            }
             await ProbeWaitAsync(() => selectorMs >= 0, 10_000, "selector first frame");
+            SelectorTimeline.Mark?.Invoke("probe-resumed");
+            _ = Dispatcher.BeginInvoke(DispatcherPriority.Input, new Action(() => SelectorTimeline.Mark?.Invoke("dispatcher-input-reached")));
+            _ = Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(() => SelectorTimeline.Mark?.Invoke("dispatcher-background-reached")));
+            var waited = Stopwatch.StartNew();
+            while (waited.ElapsedMilliseconds < 1000)
+            {
+                lock (marks) if (marks.Exists(mark => mark.Name == "content-rendered")) break;
+                await Task.Delay(5);
+            }
         }
-        finally { CompositionTarget.Rendering -= rendering; }
+        finally
+        {
+            CompositionTarget.Rendering -= rendering;
+            SelectorTimeline.Mark = null;
+        }
+        int index = _probeBreakdownIndex.TryGetValue(name, out int previous) ? previous + 1 : 1;
+        _probeBreakdownIndex[name] = index;
+        lock (marks) recorder.AddBreakdown(new ResidentProbeRecorder.Breakdown(name, index, Math.Round(selectorMs, 2), sinceDismissal, marks.ToArray()));
         return selectorMs;
     }
 
@@ -208,7 +297,8 @@ public partial class App
         {
             DismissQuickAccessForCapture();
             RectD desktop = MonitorEnumerator.GetVirtualDesktopBounds();
-            FrozenFrame frame = ResidentProbeImages.DesktopFrame(new RectD(desktop.Left, desktop.Top, 3840, 2160), 7);
+            FrozenFrame frame = ResidentProbeImages.DesktopFrame(new RectD(desktop.Left, desktop.Top, 3840, 2160), 7,
+                s_residentProbe?.Has("frame-cached") == true);
             long started = Stopwatch.GetTimestamp();
             double editorMs = -1;
             EventHandler rendering = (_, _) =>
@@ -236,7 +326,7 @@ public partial class App
         finally { _settings.General.AfterCapture = previous; }
 
         // The complaint: the next capture right after an editor closed.
-        double selectorMs = await ProbeShortcutToSelectorAsync();
+        double selectorMs = await ProbeShortcutToSelectorAsync(recorder, "editor-4k next");
         recorder.Time("editor-4k: closed → next shortcut → selector first frame", selectorMs);
         _overlay.Cancel();
         await ProbeWaitAsync(() => _overlay.IsActive != true, 10_000, "selector cancelled");

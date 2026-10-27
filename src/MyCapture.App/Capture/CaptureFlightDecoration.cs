@@ -96,6 +96,7 @@ internal sealed class CaptureFlightDecoration : Window
         IsCaptureExcluded = ApplyCaptureExclusion(this);
         _source = HwndSource.FromHwnd(handle);
         _source?.AddHook(NoActivateHook);
+        MyCapture.App.Diagnostics.ResidentProbeWindowHook.SourceInitialized?.Invoke(this);
     }
 
     private static IntPtr NoActivateHook(IntPtr hwnd, int message, IntPtr wParam, IntPtr lParam, ref bool handled)

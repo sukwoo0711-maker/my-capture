@@ -34,6 +34,18 @@ internal sealed class ResidentProbeOptions
     internal const string AuditSwitch = "--resident-audit";
     internal const string NoIndexingSwitch = "--resident-no-indexing";
     internal const string SoftwareRenderSwitch = "--resident-software-render";
+    internal const string VariantSwitch = "--resident-variant";
+
+    /// <summary>
+    /// Diagnostic variants (<c>--resident-variant a,b</c>), each removing one suspected owner of retained
+    /// memory or time so a differential run shows what it costs: <c>no-overlay-prewarm</c>,
+    /// <c>no-editor-prewarm</c>, <c>no-engine-prewarm</c>, <c>no-flight</c> (no lifted capture flying into
+    /// the card), <c>frame-cached</c> (synthetic frames built like the real grab, BitmapSource.Create Bgr32,
+    /// instead of a frozen WriteableBitmap). Never used for the release table.
+    /// </summary>
+    internal static readonly string[] KnownVariants =
+        ["no-overlay-prewarm", "no-editor-prewarm", "no-engine-prewarm", "no-flight", "frame-cached",
+         "sw-selector", "sw-card", "sw-flight", "sw-editor"];
 
     internal static readonly string[] AllScenarios = ["capture", "editor-4k", "capture-30", "library", "ocr", "pins-10"];
 
@@ -57,6 +69,11 @@ internal sealed class ResidentProbeOptions
 
     /// <summary>Diagnostic only: WPF renders in software, to tell render-device memory from the app's own.</summary>
     internal bool SoftwareRender { get; private init; }
+
+    /// <summary>Diagnostic only: the differential variants of <see cref="KnownVariants"/> this run applies.</summary>
+    internal IReadOnlySet<string> Variants { get; private init; } = new HashSet<string>();
+
+    internal bool Has(string variant) => Variants.Contains(variant);
 
     internal string Output { get; }
 
@@ -87,8 +104,20 @@ internal sealed class ResidentProbeOptions
             : AllScenarios;
         bool quick = Array.Exists(args, argument => string.Equals(argument, QuickSwitch, StringComparison.OrdinalIgnoreCase));
         bool audit = Array.Exists(args, argument => string.Equals(argument, AuditSwitch, StringComparison.OrdinalIgnoreCase));
+        int variantIndex = Array.FindIndex(args, argument => string.Equals(argument, VariantSwitch, StringComparison.OrdinalIgnoreCase));
+        var variants = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        if (variantIndex >= 0 && variantIndex + 1 < args.Length)
+        {
+            foreach (string variant in args[variantIndex + 1].Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+            {
+                if (!KnownVariants.Contains(variant, StringComparer.OrdinalIgnoreCase))
+                    throw new ArgumentException("Unknown resident probe variant: " + variant);
+                variants.Add(variant);
+            }
+        }
         return new ResidentProbeOptions(DiagnosticOutputPaths.Create(output), scenarios, quick, audit)
         {
+            Variants = variants,
             SkipIndexing = Array.Exists(args, argument => string.Equals(argument, NoIndexingSwitch, StringComparison.OrdinalIgnoreCase)),
             SoftwareRender = Array.Exists(args, argument => string.Equals(argument, SoftwareRenderSwitch, StringComparison.OrdinalIgnoreCase)),
         };
@@ -98,10 +127,45 @@ internal sealed class ResidentProbeOptions
 /// <summary>Synthetic desktop pixels with the native back-buffer ownership of a real screen grab.</summary>
 internal static class ResidentProbeImages
 {
-    internal static FrozenFrame DesktopFrame(RectD screenBounds, int seed)
+    internal static FrozenFrame DesktopFrame(RectD screenBounds, int seed, bool cached = false)
     {
         int width = Math.Max(1, (int)screenBounds.Width), height = Math.Max(1, (int)screenBounds.Height);
-        return new FrozenFrame(Pattern(width, height, seed), screenBounds, null, 0);
+        return new FrozenFrame(cached ? CachedPattern(width, height, seed) : Pattern(width, height, seed), screenBounds, null, 0);
+    }
+
+    /// <summary>
+    /// The same pixels built the way the real grab builds its frame (ScreenCaptureEngine.FromTopDownBgrx):
+    /// rows in native memory copied once by BitmapSource.Create into a frozen Bgr32 bitmap, with no
+    /// WriteableBitmap and no dispatcher on the worker thread.
+    /// </summary>
+    internal static BitmapSource CachedPattern(int width, int height, int seed)
+    {
+        int stride = width * 4;
+        byte[] row = new byte[stride];
+        IntPtr bits = Marshal.AllocHGlobal(checked(stride * height));
+        try
+        {
+            int band = -1;
+            for (int y = 0; y < height; y++)
+            {
+                if (y / 8 != band)
+                {
+                    band = y / 8;
+                    for (int x = 0; x < width; x++)
+                    {
+                        row[x * 4] = (byte)(70 + (x / 24 + y / 24 + seed) % 150);
+                        row[x * 4 + 1] = (byte)(90 + (x / 48 + seed) % 120);
+                        row[x * 4 + 2] = (byte)(120 + (y / 40) % 110);
+                        row[x * 4 + 3] = 255;
+                    }
+                }
+                Marshal.Copy(row, 0, IntPtr.Add(bits, y * stride), stride);
+            }
+            BitmapSource bitmap = BitmapSource.Create(width, height, 96, 96, PixelFormats.Bgr32, null, bits, stride * height, stride);
+            bitmap.Freeze();
+            return bitmap;
+        }
+        finally { Marshal.FreeHGlobal(bits); }
     }
 
     internal static BitmapSource Pattern(int width, int height, int seed)
@@ -175,6 +239,8 @@ internal sealed class ResidentProbeRecorder : IDisposable
     private readonly List<string> _failures = [];
     private readonly List<string> _notes = [];
     private readonly List<(string Step, string Kind, WeakReference Reference)> _tracked = [];
+    private readonly List<ResidentProbeMemoryMap.Snapshot> _audits = [];
+    private readonly List<Breakdown> _breakdowns = [];
     private TimeSpan _lastCpu;
     private double _lastWallMs;
     private int _pending;
@@ -196,6 +262,17 @@ internal sealed class ResidentProbeRecorder : IDisposable
         double CpuPercent, double UiP95Ms, double UiMaxMs, int UiSamples, int Gen0, int Gen1, int Gen2, string? Detail);
 
     internal sealed record Timing(string Name, double Milliseconds);
+
+    internal sealed record Mark(string Name, double Milliseconds, int Thread);
+
+    /// <summary>One shortcut → selector run: its <see cref="SelectorTimeline"/> marks from the handler call.</summary>
+    internal sealed record Breakdown(string Name, int Index, double SelectorMs, double SinceLastDismissalMs,
+        IReadOnlyList<Mark> Marks);
+
+    internal void AddBreakdown(Breakdown breakdown)
+    {
+        lock (_gate) _breakdowns.Add(breakdown);
+    }
 
     private void PostLatencyProbe()
     {
@@ -246,6 +323,9 @@ internal sealed class ResidentProbeRecorder : IDisposable
         lock (_gate) alive = _tracked.Where(item => item.Reference.IsAlive).Select(item => item.Step + ":" + item.Kind).ToArray();
         Sample(step + " after forced GC", -1, (alive.Length == 0 ? "nothing tracked alive" : "alive: " + string.Join(", ", alive))
             + " | " + CommittedRegions());
+        ResidentProbeMemoryMap.Snapshot map = ResidentProbeMemoryMap.Take(step);
+        lock (_gate) _audits.Add(map);
+        await Task.Delay(200);
     }
 
     /// <summary>
@@ -348,6 +428,12 @@ internal sealed class ResidentProbeRecorder : IDisposable
             TimeSpan wait = TimeSpan.FromSeconds(at) - started.Elapsed;
             if (wait > TimeSpan.Zero) await Task.Delay(wait);
             Sample(step, at, detail?.Invoke());
+            // Audit: the map as the step left it too, before the natural release of the next seconds.
+            if (_options.Audit && at == 0 && step != "start")
+            {
+                ResidentProbeMemoryMap.Snapshot map = ResidentProbeMemoryMap.Take(step + " @0");
+                lock (_gate) _audits.Add(map);
+            }
         }
     }
 
@@ -372,11 +458,16 @@ internal sealed class ResidentProbeRecorder : IDisposable
                 Monitors = MonitorEnumerator.GetAll().Select(monitor =>
                     $"{monitor.Bounds.Width}x{monitor.Bounds.Height}@{monitor.Dpi}{(monitor.IsPrimary ? " primary" : "")}").ToArray(),
                 _options.Quick,
+                _options.Audit,
+                Variants = _options.Variants.Order().ToArray(),
+                _options.SoftwareRender,
                 Scenarios = _options.Scenarios,
                 Rows = _rows,
                 Timings = _timings,
                 Notes = _notes,
                 Failures = _failures,
+                Breakdowns = _breakdowns,
+                Audits = _audits,
             };
         }
         File.WriteAllText(DiagnosticOutputPaths.Child(_options.Output, "resident-probe.json"),

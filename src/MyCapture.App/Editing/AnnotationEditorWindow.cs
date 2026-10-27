@@ -286,6 +286,7 @@ internal partial class AnnotationEditorWindow : Window
         // The caption close button, Alt+F4, the system menu and the taskbar all arrive as
         // SC_CLOSE before WM_CLOSE; only those user closes are confirmed.
         HwndSource.FromHwnd(new WindowInteropHelper(this).Handle)?.AddHook(OnWindowMessage);
+        MyCapture.App.Diagnostics.ResidentProbeWindowHook.SourceInitialized?.Invoke(this);
     }
 
     private IntPtr OnWindowMessage(IntPtr hwnd, int message, IntPtr wParam, IntPtr lParam, ref bool handled)

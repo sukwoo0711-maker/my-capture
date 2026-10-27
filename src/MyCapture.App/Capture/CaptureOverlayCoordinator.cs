@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Windows;
 using System.Windows.Threading;
 using Microsoft.Extensions.Logging;
+using MyCapture.App.Diagnostics;
 using MyCapture.App.Editing;
 using MyCapture.App.Ocr;
 using MyCapture.App.Themes;
@@ -247,6 +248,7 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
     {
         VerifyDispatcherAccess();
         ObjectDisposedException.ThrowIf(_disposed, this);
+        SelectorTimeline.Mark?.Invoke("start");
         if (_editorScreenCapture is { } current)
         {
             current.ActivateCurrent();
@@ -291,11 +293,15 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
             // page and application read is tied to these identities, and the selection's source is
             // chosen from them.
             preparation.SourceWindows = _readWindowCandidates(desktop);
+            SelectorTimeline.Mark?.Invoke("windows-read");
             bool settle = NeedsPresentationSettle(Environment.TickCount64, _lastPresentationDismissedTick);
+            if (settle) SelectorTimeline.Mark?.Invoke("settle-required");
             // The reads and the grab start before the selector window is built, so building it
             // overlaps the grab instead of preceding it. The window stays hidden until its frame exists.
             LastPreparationForTest = AcquireAndShowAsync(preparation, includeCursor, settle);
+            SelectorTimeline.Mark?.Invoke("acquire-started");
             ShowOverlay(desktop, abortOnFocusLoss, showMagnifier, preparation.Elapsed, frame: null, showSelectionGrid);
+            SelectorTimeline.Mark?.Invoke("hidden-window-ready");
         }
         catch
         {
@@ -379,7 +385,9 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
             (FrozenFrame capturedFrame, Task<IReadOnlyList<WindowCandidate>> sourceWindows) = await CapturePageContext.AcquireFrameAsync(preparation.SourceWindows, () =>
             {
                 if (preparation.Cancelled) throw new OperationCanceledException();
+                SelectorTimeline.Mark?.Invoke("grab-start");
                 FrozenFrame acquired = _acquireFrame(includeCursor);
+                SelectorTimeline.Mark?.Invoke("grab-done");
                 if (!acquired.Bitmap.IsFrozen)
                     throw new InvalidOperationException("Capture acquisition must return a frozen bitmap.");
                 return acquired;
@@ -464,6 +472,7 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
         Task<IReadOnlyList<WindowCandidate>>? confirmedWindows)
     {
         VerifyDispatcherAccess();
+        SelectorTimeline.Mark?.Invoke("frame-dispatched");
         if (!ReferenceEquals(_preparation, preparation)) return false;
         try
         {
@@ -476,11 +485,14 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
                 overlay.SourceWindows = preparation.SourceWindows;
                 if (confirmedWindows is not null) overlay.AwaitSourceDetails(confirmedWindows);
                 overlay.AttachFrame(acquired);
+                SelectorTimeline.Mark?.Invoke("frame-attached");
                 if (!overlay.IsVisible)
                 {
                     PrepareWindow(overlay);
                     overlay.Show();
+                    SelectorTimeline.Mark?.Invoke("shown");
                     _ = overlay.Activate();
+                    SelectorTimeline.Mark?.Invoke("activated");
                 }
 
                 return true;
@@ -517,6 +529,7 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
         var overlay = frame is null
             ? new CaptureOverlayWindow(screenBounds, abortOnFocusLoss, showMagnifier, showSelectionGrid: showSelectionGrid)
             : new CaptureOverlayWindow(frame, abortOnFocusLoss, showMagnifier, showSelectionGrid);
+        SelectorTimeline.Mark?.Invoke("window-constructed");
         _activeOverlay = overlay;
         overlay.SourceWindows = _preparation?.SourceWindows ?? [];
         overlay.DetectWindows = AutoDetectWindows();
@@ -552,6 +565,7 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
         try
         {
             bool excluded = ApplyCaptureExclusion(overlay);
+            SelectorTimeline.Mark?.Invoke("hwnd-created-exclusion-applied");
             if (RequiresCaptureExclusion?.Invoke() == true && !excluded)
             {
                 throw new InvalidOperationException(UiText.Get("Text_D1F0DAEAA780"));
