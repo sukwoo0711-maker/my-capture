@@ -311,6 +311,7 @@ internal sealed partial class AnnotationEditorControl : Grid
             _imageInsertCts?.Dispose();
             _imageInsertCts = null;
             _hangulNoticeTimer?.Stop();
+            RememberStampPlacement();
             _blurCache.Clear();
         };
 
@@ -580,6 +581,7 @@ internal sealed partial class AnnotationEditorControl : Grid
     {
         foreach (EditorTool tool in Enum.GetValues<EditorTool>()) _shortcutActions[tool.ToString()] = () => SelectTool(tool);
         _shortcutActions["Done"] = () => Commit(EditorCommitAction.Done);
+        _shortcutActions["Stamp"] = PlaceStampFromUser;
         // Owner decision (2026-10-12 real-device feedback, restored 2026-10-25 after 4.6.0 split
         // it): copying is how people finish an edit, so Copy and Ctrl+C save, copy and close
         // like Done. Do not turn this into a copy-only command without asking the owner.
@@ -1604,12 +1606,19 @@ internal sealed partial class AnnotationEditorControl : Grid
     /// exit paths wait for it, exactly as they found the synchronous insert already done.
     /// </para>
     /// </remarks>
-    internal async Task InsertImageFileAsync(string path, PointD image)
+    internal Task InsertImageFileAsync(string path, PointD image) =>
+        WhilePendingImageAsync(() => InsertPendingImageAsync(path, image));
+
+    /// <summary>
+    /// Runs <paramref name="work"/> as a picked picture not yet added or dropped, so a commit or
+    /// close started meanwhile waits for it (see <see cref="ImageInsertsSettledAsync"/>).
+    /// </summary>
+    private async Task WhilePendingImageAsync(Func<Task> work)
     {
         _pendingImageInserts++;
         try
         {
-            await InsertPendingImageAsync(path, image);
+            await work();
         }
         finally
         {
@@ -1621,7 +1630,7 @@ internal sealed partial class AnnotationEditorControl : Grid
         }
     }
 
-    private async Task InsertPendingImageAsync(string path, PointD image)
+    private async Task InsertPendingImageAsync(string path, PointD image, bool asStamp = false)
     {
         CancellationToken closed = (_imageInsertCts ??= new CancellationTokenSource()).Token;
         var geometry = (_controller.RotationTurns, _controller.CropOrigin, _canvasWidth, _canvasHeight);
@@ -1652,6 +1661,13 @@ internal sealed partial class AnnotationEditorControl : Grid
 
         if (decoded is null)
         {
+            if (asStamp)
+            {
+                // The stored stamp is damaged, not a file the user just picked.
+                ForgetUnreadableStamp();
+                return;
+            }
+
             ReportUnreadableImage();
             // Back to the select tool, as before, but never by discarding a crop frame that a
             // commit waiting for this picture is about to apply.
@@ -1668,6 +1684,11 @@ internal sealed partial class AnnotationEditorControl : Grid
         BitmapSource bitmap = loaded.Bitmap;
         int sourceWidth = bitmap.PixelWidth;
         int sourceHeight = bitmap.PixelHeight;
+        if (asStamp)
+        {
+            AddStampAnnotation(loaded.AssetFileName, bitmap);
+            return;
+        }
 
         // Fit the image to at most a third of the current canvas, preserving aspect ratio,
         // centred on the click. The canvas tracks rotation and crop; the original capture
@@ -2133,6 +2154,8 @@ internal sealed partial class AnnotationEditorControl : Grid
             (EditorTool.Mosaic, UiText.Get("Text_3F8046019B32"), UiText.Get("Text_3F8046019B33"), "Icon.Mosaic", FallbackMosaic),
             (EditorTool.Blur, UiText.Get("EditorBlur_Name"), UiText.Get("EditorBlur_ToolTip"), "Icon.Blur", FallbackBlur));
         ToolGroup(groups, (EditorTool.Image, UiText.Get("Text_302BAE127938"), UiText.Get("Text_93D363BDFEA5"), "Icon.Image", FallbackImage));
+        // The stamp command takes the free cell beside the image tool: it is a command, not a mode.
+        ((Panel)groups.Children[^1]).Children.Add(BuildStampButton());
 
         var panel = new Border { Name = "AnnotationToolRail", Child = groups };
         panel.SetResourceReference(FrameworkElement.StyleProperty, "Rail.Panel");
@@ -2148,7 +2171,7 @@ internal sealed partial class AnnotationEditorControl : Grid
         panel.SizeChanged += (_, _) =>
         {
             var compact = panel.ActualHeight < regularHeight;
-            foreach (var button in _toolButtons.Values)
+            foreach (var button in _toolButtons.Values.Append(_stampButton))
             {
                 button.Margin = new Thickness(0, compact ? 0 : 1, 0, compact ? 0 : 1);
             }
@@ -3020,7 +3043,7 @@ internal sealed partial class AnnotationEditorControl : Grid
         if (cancelledCrop) SetStatus(UiText.Get("Crop.Cancelled"));
     }
 
-    private void RememberPreferences()
+    private void RememberPreferences(StampSettings? stamp = null)
     {
         if (!_preferencesReady || AnnotationEditorPreferences.Write is null) return;
         AnnotationDefaults previous = AnnotationEditorPreferences.Read?.Invoke() ?? new AnnotationDefaults();
@@ -3034,6 +3057,7 @@ internal sealed partial class AnnotationEditorControl : Grid
             RecentFontFamilies = [.. _recentFontFamilies],
             MosaicBlockSize = _mosaicBlockSize, HighlighterAlpha = previous.HighlighterAlpha,
             RecentColors = [.. previous.RecentColors], BlurRadius = _controller.BlurRadius,
+            Stamp = stamp ?? previous.Stamp.Clone(),
         });
     }
 
@@ -3649,6 +3673,7 @@ internal sealed partial class AnnotationEditorControl : Grid
 
         AnnotationDocument document = _controller.Document;
         document.NormalizeZIndices();
+        RememberStampPlacement();
 
         // Flatten exactly what the editor showed: the surface's base already carries any
         // rotation and crop, and committing the untouched selection would place transformed
