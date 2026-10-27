@@ -155,9 +155,9 @@ public sealed class CaptureCueOverlayTests
             {
                 CaptureModeBar bar = view.ModeBarForTest!;
                 var captions = Descendants(bar).OfType<System.Windows.Controls.TextBlock>().Where(text => text.Text.Length > 0).ToArray();
-                Assert.Equal(new[] { "T", "C", "Esc" }, captions.Select(text => text.Text));
+                Assert.Equal(new[] { "R", "T", "C", "Esc" }, captions.Select(text => text.Text));
                 Size restingSize = bar.RenderSize;
-                FrameworkElement[] commands = [bar.TextButton, bar.ColorButton, bar.CancelButton];
+                FrameworkElement[] commands = [bar.RatioButton, bar.TextButton, bar.ColorButton, bar.CancelButton];
                 Size[] restingCommands = commands.Select(command => command.RenderSize).ToArray();
                 foreach (bool revealed in new[] { false, true, false })
                 {
@@ -167,7 +167,7 @@ public sealed class CaptureCueOverlayTests
                     AssertAllCommandFaces(bar, revealed);
                     Assert.All(captions, caption => ShortcutMotionTestScope.AssertState(caption, revealed));
                     string[] visibleText = captions.Where(text => text.Opacity > 0).Select(text => text.Text).ToArray();
-                    if (revealed) Assert.Equal(new[] { "T", "C", "Esc" }, visibleText);
+                    if (revealed) Assert.Equal(new[] { "R", "T", "C", "Esc" }, visibleText);
                     else Assert.Empty(visibleText);
                     Assert.Equal(restingSize, bar.RenderSize);
                     Assert.Equal(restingCommands, commands.Select(command => command.RenderSize));
@@ -227,8 +227,8 @@ public sealed class CaptureCueOverlayTests
             Render(view);
             CaptureModeBar bar = view.ModeBarForTest!;
             var captions = Descendants(bar).OfType<System.Windows.Controls.TextBlock>().Where(text => text.Text.Length > 0).ToArray();
-            FrameworkElement[] commands = [bar.TextButton, bar.ColorButton, bar.CancelButton];
-            Assert.Equal(new[] { "T", "C", "Esc" }, captions.Select(caption => caption.Text));
+            FrameworkElement[] commands = [bar.RatioButton, bar.TextButton, bar.ColorButton, bar.CancelButton];
+            Assert.Equal(new[] { "R", "T", "C", "Esc" }, captions.Select(caption => caption.Text));
             Size initialSize = bar.RenderSize;
             Size[] commandSizes = commands.Select(command => command.RenderSize).ToArray();
             foreach (bool alwaysShow in new[] { false, true, false })
