@@ -558,6 +558,8 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
         overlay.ShowStartGuide = ClaimStartGuide();
         overlay.ClaimKeyPanel = ClaimKeyPanel;
         overlay.ReadPasteToScreenHotkey = ReadPasteToScreenHotkey;
+        // F3 pins the chosen region (ConfirmSelectionAsPin), except while an editor is open for a retake.
+        overlay.PinSelectionAvailable = _editorScreenCapture is null && _activeEditor is null;
         overlay.SelectionCompleted += OnOverlaySelectionCompleted;
         overlay.ActionRequested += OnOverlayActionRequested;
         overlay.Closed += OnOverlayClosed;
