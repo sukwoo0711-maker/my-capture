@@ -824,31 +824,27 @@ internal sealed partial class AnnotationEditorControl : Grid
     /// (<paramref name="originX"/>, <paramref name="originY"/>).
     /// </summary>
     /// <remarks>
-    /// The block averages read only pixels inside the region, so a 32bpp base yields exactly
-    /// the bytes a whole-image copy would hold there, without copying the rest of the image
-    /// on every mosaic. Any other format, or a region the base does not fully contain, keeps
-    /// the whole-image copy and its four-byte addressing, so the patch bytes never change.
+    /// The block averages read only pixels inside the region, so a base that contains it
+    /// yields exactly the bytes a whole-image read would hold there, without reading the rest
+    /// of the image on every mosaic. A region the base does not fully contain reads the whole
+    /// image. Both go through <see cref="ReadBgraPixels"/>, so a Bgr24 base reopened from the
+    /// library averages its own colours instead of three-byte pixels read as four.
     /// </remarks>
     private static byte[] ReadMosaicSource(BitmapSource bitmap, int x, int y, int width, int height,
         out int stride, out int originX, out int originY)
     {
-        if (bitmap.Format.BitsPerPixel == 32 && x >= 0 && y >= 0
-            && x + width <= bitmap.PixelWidth && y + height <= bitmap.PixelHeight)
+        if (x >= 0 && y >= 0 && x + width <= bitmap.PixelWidth && y + height <= bitmap.PixelHeight)
         {
             stride = width * 4;
             originX = x;
             originY = y;
-            byte[] region = new byte[stride * height];
-            bitmap.CopyPixels(new Int32Rect(x, y, width, height), region, stride, 0);
-            return region;
+            return ReadBgraPixels(bitmap, x, y, width, height);
         }
 
         stride = bitmap.PixelWidth * 4;
         originX = 0;
         originY = 0;
-        byte[] source = new byte[stride * bitmap.PixelHeight];
-        bitmap.CopyPixels(source, stride, 0);
-        return source;
+        return ReadBgraPixels(bitmap, 0, 0, bitmap.PixelWidth, bitmap.PixelHeight);
     }
 
     internal CropGrip? EdgeCropGripAt(PointD image)
@@ -1516,7 +1512,7 @@ internal sealed partial class AnnotationEditorControl : Grid
         int width = (int)Math.Ceiling(normalized.Width);
         int height = (int)Math.Ceiling(normalized.Height);
         int cropStride = width * 4;
-        byte[] crop = ReadCropPixels(cropBase, x, y, width, height);
+        byte[] crop = ReadBgraPixels(cropBase, x, y, width, height);
 
         var cropped = BitmapSource.Create(
             width,
@@ -3159,7 +3155,7 @@ internal sealed partial class AnnotationEditorControl : Grid
         }
 
         int cropStride = width * 4;
-        byte[] crop = ReadCropPixels(baseBitmap, x, y, width, height);
+        byte[] crop = ReadBgraPixels(baseBitmap, x, y, width, height);
 
         var cropped = BitmapSource.Create(
             width,
@@ -3174,27 +3170,38 @@ internal sealed partial class AnnotationEditorControl : Grid
         SwapBaseBitmap(cropped, new RectD(0, 0, width, height));
     }
 
-    private static byte[] ReadCropPixels(BitmapSource bitmap, int x, int y, int width, int height)
+    /// <summary>
+    /// The base pixels inside <paramref name="x"/>, <paramref name="y"/>,
+    /// <paramref name="width"/>, <paramref name="height"/> as Bgra32 rows of
+    /// <c>width * 4</c> bytes, for a crop and for the mosaic averages.
+    /// </summary>
+    /// <remarks>
+    /// Bgra32 and Pbgra32 keep their raw channel bytes. Bgr32 keeps its colour bytes and
+    /// becomes opaque: its fourth byte is undefined, not alpha. Any other format is converted.
+    /// A capture reopened from the library is a 24-bit PNG (Bgr24), and reading its
+    /// three-byte pixels four bytes at a time skewed and striped every crop of it.
+    /// Only the region is read or converted, never the whole image.
+    /// </remarks>
+    private static byte[] ReadBgraPixels(BitmapSource bitmap, int x, int y, int width, int height)
     {
-        int cropStride = width * 4;
-        byte[] crop = new byte[cropStride * height];
-        if (bitmap.Format.BitsPerPixel == 32)
+        int stride = width * 4;
+        byte[] pixels = new byte[stride * height];
+        var region = new Int32Rect(x, y, width, height);
+        PixelFormat format = bitmap.Format;
+        if (format == PixelFormats.Bgra32 || format == PixelFormats.Pbgra32 || format == PixelFormats.Bgr32)
         {
-            // Read only the selected pixels, including on history restoration. Keep the
-            // raw channel bytes: the crop's existing output format and DPI stay unchanged.
-            bitmap.CopyPixels(new Int32Rect(x, y, width, height), crop, cropStride, 0);
+            bitmap.CopyPixels(region, pixels, stride, 0);
+            if (format == PixelFormats.Bgr32)
+            {
+                for (int alpha = 3; alpha < pixels.Length; alpha += 4) pixels[alpha] = 255;
+            }
         }
         else
         {
-            // Preserve the existing four-byte addressing for other source formats. A
-            // format correction would change pixels and is separate from this optimization.
-            int stride = bitmap.PixelWidth * 4;
-            byte[] source = new byte[stride * bitmap.PixelHeight];
-            bitmap.CopyPixels(source, stride, 0);
-            for (int row = 0; row < height; row++)
-                Buffer.BlockCopy(source, ((y + row) * stride) + (x * 4), crop, row * cropStride, cropStride);
+            new FormatConvertedBitmap(new CroppedBitmap(bitmap, region), PixelFormats.Bgra32, null, 0)
+                .CopyPixels(pixels, stride, 0);
         }
-        return crop;
+        return pixels;
     }
 
     private void RefreshHistoryButtons()
