@@ -42,13 +42,54 @@ public sealed partial class SettingsThemePreviewTests
     [InlineData(Key.K, ModifierKeys.Control | ModifierKeys.Shift, GalleryKeyCommand.None)]
     [InlineData(Key.M, ModifierKeys.Windows, GalleryKeyCommand.None)]
     [InlineData(Key.Enter, ModifierKeys.Control, GalleryKeyCommand.None)]
-    [InlineData(Key.Enter, ModifierKeys.Alt, GalleryKeyCommand.None)]
+    [InlineData(Key.Enter, ModifierKeys.Alt, GalleryKeyCommand.Info)]
+    [InlineData(Key.Enter, ModifierKeys.Alt | ModifierKeys.Control, GalleryKeyCommand.None)]
     [InlineData(Key.Delete, ModifierKeys.Shift, GalleryKeyCommand.None)]
     [InlineData(Key.C, ModifierKeys.None, GalleryKeyCommand.None)]
     [InlineData(Key.C, ModifierKeys.Control | ModifierKeys.Shift, GalleryKeyCommand.None)]
     [InlineData(Key.Left, ModifierKeys.Alt, GalleryKeyCommand.None)]
     public void LibraryKeyMap_RequiresExactlyTheModifiersOfEachCommand(Key key, ModifierKeys modifiers, GalleryKeyCommand expected) =>
         Assert.Equal(expected, GalleryKeyMap.Resolve(key, modifiers));
+
+    [Fact]
+    public Task LibraryOverhaul_InfoShortcutUsesSelectionAndKeepsTextInputUntouched() =>
+        RunIsolated(nameof(LibraryOverhaul_InfoShortcutUsesSelectionAndKeepsTextInputUntouched), () =>
+        {
+            Application application = CreateLibraryMotionApplication();
+            LibraryUxFixture f = CreateLibraryUxFixture("mc-overhaul-info-");
+            GalleryWindow window = f.Window;
+            try
+            {
+                window.Show(); SettleGalleryLayout(window);
+                var rows = (ListBox)window.FindName("RowsList");
+                CaptureRecord a = f.Records[0], b = f.Records[2], outside = f.Records[3];
+                f.ViewModel.Select(a.Id); f.ViewModel.Select(b.Id, control: true);
+                GalleryItemViewModel outsideTile = f.ViewModel.FindTile(outside.Id)!;
+                Assert.Equal(window.KeyboardDetailsSources(null), window.KeyboardDetailsSources(outsideTile));
+                Assert.Equal(2, window.KeyboardDetailsSources(outsideTile).Count);
+                Assert.Single(window.DetailsSources(outsideTile));
+                f.ViewModel.ClearSelection();
+                Assert.Single(window.KeyboardDetailsSources(outsideTile));
+                Assert.Empty(window.KeyboardDetailsSources(null));
+                f.ViewModel.Select(a.Id);
+                var commands = new List<GalleryKeyCommand>();
+                window.KeyCommandHookForTest = command => { commands.Add(command); return true; };
+                ListBoxItem card = RealizedCard(rows, a.Id);
+                card.Focus();
+                using (var modifiers = new ThreadKeyboardModifierScope(ModifierKeys.Alt))
+                    Assert.True(PressLibraryKey(card, Key.Enter).Handled);
+                Assert.Equal([GalleryKeyCommand.Info], commands);
+                var search = (TextBox)window.FindName("SearchBox");
+                Assert.True(search.Focus());
+                using (var modifiers = new ThreadKeyboardModifierScope(ModifierKeys.Alt))
+                    Assert.False(PressLibraryKey(search, Key.Enter).Handled);
+                Assert.Single(commands);
+                MenuItem info = Assert.Single(window.TileMenu.Items.OfType<MenuItem>(), item => item.Tag as string == "MediaInfo");
+                Assert.Equal("Alt+Enter", info.InputGestureText);
+                Assert.Equal(ShortcutCatalog.Get(ShortcutScope.Library, "Info").Hint, info.InputGestureText);
+            }
+            finally { window.KeyCommandHookForTest = null; window.CloseForExit(); application.Shutdown(); }
+        });
 
     [Theory]
     [InlineData(Key.P, GalleryKeyCommand.Float)]

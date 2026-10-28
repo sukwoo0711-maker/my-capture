@@ -113,6 +113,7 @@ internal static class ShortcutCatalog
             ("Back", Key.Back, "Backspace") })
             Add(ShortcutScope.Library, command, key, hint);
         Add(ShortcutScope.Library, "Copy", Key.C, "Ctrl+C", ModifierKeys.Control);
+        Add(ShortcutScope.Library, "Info", Key.Enter, "Alt+Enter", ModifierKeys.Alt);
         Add(ShortcutScope.Library, "Menu", Key.F10, "Shift+F10", ModifierKeys.Shift);
         Add(ShortcutScope.Library, "Undo", Key.Z, "Ctrl+Z", ModifierKeys.Control);
         Add(ShortcutScope.Library, "Search", Key.F, "Ctrl+F", ModifierKeys.Control);
@@ -169,7 +170,7 @@ internal static class ShortcutCatalog
                 Row("Shortcuts.SelectionMove1", "Move"), Row("Shortcuts.SelectionMove10", "MoveFast"),
                 Row("Shortcuts.SelectionResize1", "Resize"), Row("Shortcuts.SelectionResize10", "ResizeFast")],
             ShortcutScope.Library => [Row("Gallery.Float", "Pin"), Row("Shortcuts.LibraryCopy", "Copy"),
-                Row("Shortcuts.LibraryOpen", "Open"), Row("Shortcuts.LibraryPreview", "Preview"),
+                Row("Shortcuts.LibraryOpen", "Open"), Row("Shortcuts.LibraryPreview", "Preview"), Row("MediaInfo.Title", "Info"),
                 Row("Folder410.Rename", "Rename"), Row("LibraryUx_KeepToggleName", "Keep"),
                 Row("Folder410.MoveCaptures", "Move"), Row("Shortcuts.LibraryText", "Text"), Row("Shortcuts.LibraryGif", "Gif"),
                 Row("Folder410.Delete", "Delete"), Row("Shortcuts.ContextMenu", "Menu"), Row("Shortcuts.Undo", "Undo"),

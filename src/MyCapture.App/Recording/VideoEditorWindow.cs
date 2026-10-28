@@ -16,10 +16,12 @@ using System.Windows.Threading;
 using Microsoft.Extensions.Logging;
 using Microsoft.Win32;
 using MyCapture.App.Editing;
+using MyCapture.App.Media;
 using MyCapture.App.Ocr;
 using MyCapture.App.Themes;
 using MyCapture.App.Threading;
 using MyCapture.Core.Primitives;
+using MyCapture.Core.Capture;
 using MyCapture.Core.Recording;
 using MyCapture.Core.Storage;
 using MyCapture.Platform.Capture;
@@ -114,6 +116,10 @@ internal sealed partial class VideoEditorWindow : Window
     private readonly DispatcherTimer _playbackTimer;
     private CancellationTokenSource? _operationCts;
     private Task<VideoSourceInfo>? _sourceInfo;
+    private CancellationTokenSource? _sourceFileSizeCts;
+    private long? _sourceFileSize;
+    internal Task SourceFileSizeReadTask { get; private set; } = Task.CompletedTask;
+    internal Func<string?, CancellationToken, Task<long?>> SourceFileSizeReader { get; set; } = MediaFileSizeReader.ReadAsync;
 
     private double _durationMs;
     private bool _mediaReady;
@@ -534,6 +540,8 @@ internal sealed partial class VideoEditorWindow : Window
 
     private void OnLoadedInternal(object? sender, RoutedEventArgs e)
     {
+        _sourceFileSizeCts = new CancellationTokenSource();
+        SourceFileSizeReadTask = ReadSourceFileSizeAsync(_sourceFileSizeCts.Token);
         // Set the source only after the window (and the MediaElement's visual tree) is loaded.
         // A MediaElement asked to open before it is connected to a rendered tree can silently
         // never raise MediaOpened for a short clip — the reported "2s video won't load" case.
@@ -553,6 +561,22 @@ internal sealed partial class VideoEditorWindow : Window
         }
 
         StartLoadProgress();
+    }
+
+    private async Task ReadSourceFileSizeAsync(CancellationToken token)
+    {
+        try
+        {
+            long? size = await SourceFileSizeReader(_recording.OutputPath, token).ConfigureAwait(false);
+            if (token.IsCancellationRequested || Dispatcher.HasShutdownStarted) return;
+            await Dispatcher.InvokeAsync(() =>
+            {
+                if (_closing || token.IsCancellationRequested) return;
+                _sourceFileSize = size;
+                RefreshIdentityDetails(_durationMs > 0 ? _durationMs : _recording.DurationMs);
+            });
+        }
+        catch (OperationCanceledException) when (token.IsCancellationRequested) { }
     }
 
     /// <summary>
@@ -706,15 +730,6 @@ internal sealed partial class VideoEditorWindow : Window
         AutomationProperties.SetName(bar, UiText.Get("VideoEditorUx_CommandBarName"));
         _identityDetails = new TextBlock { FontSize = 12 };
         var editing = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
-        editing.Children.Add(MyCapture.App.Capture.CaptureCommandMenu.CreateButton());
-        Button mediaInfo = MediaExportVisuals.Button(this, UiText.Get("MediaInfo.Title"));
-        mediaInfo.Name = "MediaInfo";
-        CommandButtonPresentation.Apply(mediaInfo);
-        mediaInfo.ToolTip = UiText.Get("MediaInfo.Title");
-        AutomationProperties.SetName(mediaInfo, UiText.Get("MediaInfo.Title"));
-        mediaInfo.Click += async (_, _) => await MyCapture.App.Media.MediaDetailsWindow.ShowAsync(this,
-            [new(_recording.OutputPath, _recording.Width, _recording.Height, _durationMs > 0 ? _durationMs : _recording.DurationMs)]);
-        editing.Children.Add(mediaInfo);
         _undoButton = MakeTransportIcon("Icon.Undo", UiText.Get("Text_CE706412FA75"), "Button.Ghost", () => RestoreEdit(false));
         _redoButton = MakeTransportIcon("Icon.Redo", UiText.Get("Text_078C44D5A66E"), "Button.Ghost", () => RestoreEdit(true));
         editing.Children.Add(_undoButton);
@@ -756,6 +771,7 @@ internal sealed partial class VideoEditorWindow : Window
         AutomationProperties.SetHelpText(export, UiText.Get("VideoEditorUx_ExportHelp"));
         export.Click += (_, _) => OpenExport();
         _editControls.Add(saveEdits); _editControls.Add(export);
+        output.Children.Add(MyCapture.App.Capture.CaptureCommandMenu.CreateSplitButton());
         output.Children.Add(export); output.Children.Add(saveEdits);
         bar.Children.Add(new CommandGroupsPanel { Children = { editing, output } });
         BuildMoreToolsMenu();
@@ -792,6 +808,9 @@ internal sealed partial class VideoEditorWindow : Window
         detail.Click += (_, _) => _timeline.SetDetailVisible(detail.IsChecked);
         menu.Opened += (_, _) => detail.IsChecked = _timeline.DetailVisible;
         menu.Items.Add(detail);
+        menu.Items.Add(new Separator());
+        MenuItem mediaInfo = AddView("MediaInfo.Title", null, ShowMediaDetails);
+        mediaInfo.Name = "MediaInfo";
         _moreToolsButton.ContextMenu = menu;
 
         void Add(Control tool, Action action, string? command = null)
@@ -823,6 +842,9 @@ internal sealed partial class VideoEditorWindow : Window
     {
         if (_moreToolsButton.ContextMenu is { } menu) menu.IsOpen = true;
     }
+
+    private async void ShowMediaDetails() => await MediaDetailsWindow.ShowAsync(this,
+        [new(_recording.OutputPath, _recording.Width, _recording.Height, _durationMs > 0 ? _durationMs : _recording.DurationMs)]);
 
     private Border BuildDetailsPanel()
     {
@@ -908,6 +930,7 @@ internal sealed partial class VideoEditorWindow : Window
     {
         _identityDetails.Text = UiText.Format("VideoEditorUx_HeaderDetails",
             TrimPresentation.Clock(durationMs), _recording.Width, _recording.Height, _recording.Fps);
+        if (_sourceFileSize is { } bytes) _identityDetails.Text += " · " + MediaDetailsFormatter.FileSize(bytes);
         _identityDetails.ToolTip = RecordingHealth();
         if (_positionChip is not null) _positionChip.ToolTip = _identityDetails.Text + Environment.NewLine + RecordingHealth();
     }
@@ -3023,6 +3046,9 @@ internal sealed partial class VideoEditorWindow : Window
     {
         FinishDraftRecovery();
         _closing = true;
+        _sourceFileSizeCts?.Cancel();
+        _sourceFileSizeCts?.Dispose();
+        _sourceFileSizeCts = null;
         CancellationTokenSource? operation = Interlocked.Exchange(ref _operationCts, null);
         try
         {

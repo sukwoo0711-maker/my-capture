@@ -296,12 +296,14 @@ internal sealed partial class AnnotationEditorControl : Grid
 
         Loaded += (_, _) =>
         {
+            StartSourceFileSizeRead();
             ResetMosaicAfterLoad();
             UpdateResponsiveLayout();
             Focus();
         };
         Unloaded += (_, _) =>
         {
+            UnloadSourceFileSize();
             CancelPendingMosaics();
             _autoTrimCts?.Cancel();
             _redactionCts?.Cancel();
@@ -2760,7 +2762,7 @@ internal sealed partial class AnnotationEditorControl : Grid
         // mode, leaving the 680-DIP editing toolbar and its shortcut labels intact.
         var commands = new StackPanel { Name = "AnnotationStatusCommands", Orientation = Orientation.Horizontal,
             VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(6, 0, 0, 0) };
-        commands.Children.Add(MyCapture.App.Capture.CaptureCommandMenu.CreateButton(compact: true));
+        commands.Children.Add(MyCapture.App.Capture.CaptureCommandMenu.CreateSplitButton(compact: true));
         commands.Children.Add(BuildMediaInfoButton(compact: true));
         Grid.SetColumn(commands, 3);
         grid.Children.Add(commands);
@@ -3121,7 +3123,7 @@ internal sealed partial class AnnotationEditorControl : Grid
         _autoTrimCts?.Cancel();
         _imageStore.PruneToReachable(_controller.Document, _controller.Undo);
         SyncBaseBitmapWithDocument();
-        _dimensionsText.Text = UiText.Format("Text_009548FC2109", _canvasWidth, _canvasHeight);
+        RefreshDimensionsText();
         if (_crop is not null)
         {
             // A rotation (or undo) inside crop mode changes the canvas: start the frame over on

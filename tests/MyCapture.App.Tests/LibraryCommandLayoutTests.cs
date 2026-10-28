@@ -62,7 +62,13 @@ public sealed class LibraryCommandLayoutTests
         Rect listBefore = Bounds(list, root), commandsBefore = Bounds(commands, root);
         Assert.True(search.ActualWidth >= 400, $"{language}/{width}/{theme}: search collapsed to {search.ActualWidth}");
         Assert.True(capture.ActualWidth >= 64 && record.ActualWidth >= 64);
-        Assert.Contains(Descendants(capture).OfType<TextBlock>(), text => text.Text == UiText.Get("CaptureEntry.NewCapture"));
+        Assert.Contains(Descendants(capture).OfType<TextBlock>(), text => text.Text == UiText.Get("Text_2C20ADDA2018"));
+        Button captureOptions = Named<Button>(header, "CaptureOptionsButton");
+        Assert.True(captureOptions.Focusable && captureOptions.IsTabStop);
+        Assert.Equal(UiText.Get("CaptureEntry.MoreOptions"), System.Windows.Automation.AutomationProperties.GetName(captureOptions));
+        Assert.Equal(SplitButtonPart.Main, ButtonSizing.GetSplitPart(capture));
+        Assert.Equal(SplitButtonPart.Options, ButtonSizing.GetSplitPart(captureOptions));
+        Assert.Equal(Bounds(capture, root).Right, Bounds(captureOptions, root).Left, 1);
         Assert.Contains(Descendants(record).OfType<TextBlock>(), text => text.Text == UiText.Get("Text_4F5AF20FAA6E"));
         Assert.Equal(Visibility.Visible, Named<StackPanel>(commands, "SelectionCommands").Visibility);
         Assert.False(Named<Button>(commands, "KeepSelectedButton").IsEnabled);
@@ -130,6 +136,8 @@ public sealed class LibraryCommandLayoutTests
             Assert.Equal(handler, (string?)Named(commands, name).Attribute("Click"));
         Assert.Equal("{x:Static gallery:GalleryWindow.CompareCommand}", (string?)Named(commands, "CompareSelectedMenu").Attribute("Command"));
         Assert.Equal("OnSearchTextChanged", (string?)Named(global, "SearchBox").Attribute("TextChanged"));
+        Assert.Equal("OnCaptureRegionClick", (string?)Named(global, "CaptureRegionButton").Attribute("Click"));
+        Assert.Equal("OnNewCaptureClick", (string?)Named(global, "CaptureOptionsButton").Attribute("Click"));
         Assert.Equal("OnLibraryItemsKeyDown", (string?)content.Attribute("PreviewKeyDown"));
         Assert.Equal("2", (string?)Named(content, "RowsList").Attribute("Grid.Row"));
         Assert.Equal("2", (string?)Named(content, "ImportOverlay").Attribute("Grid.Row"));

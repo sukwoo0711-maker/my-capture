@@ -21,9 +21,11 @@ internal sealed partial class GalleryWindow
         {
             if (_tileMenu is not null) return _tileMenu;
             _tileMenu = (ContextMenu)FindResource("Gallery.TileContextMenu");
-            var info = new MenuItem { Tag = "MediaInfo", Header = UiText.Get("MediaInfo.Title") };
+            var info = new MenuItem { Tag = "MediaInfo", Header = UiText.Get("MediaInfo.Title"),
+                InputGestureText = ShortcutCatalog.Get(ShortcutScope.Library, "Info").Hint };
             info.SetBinding(MenuItem.CommandParameterProperty, new Binding());
             AutomationProperties.SetName(info, UiText.Get("MediaInfo.Title"));
+            AutomationProperties.SetAcceleratorKey(info, info.InputGestureText);
             info.Click += OnMediaDetailsClick;
             int index = _tileMenu.Items.OfType<MenuItem>().FirstOrDefault(item => item.Tag as string == "Preview") is { } preview
                 ? _tileMenu.Items.IndexOf(preview) + 1 : 0;

@@ -120,7 +120,8 @@ public sealed class CaptureInfoEvidenceTests
             Settle(window);
             BitmapSource bar = Top(Snapshot(window), 150);
             Save(output, $"library-command-bar-ko-KR-96dpi-{phase}.png", bar);
-            FrameworkElement anchor = (FrameworkElement)window.FindName("CaptureRegionButton");
+            FrameworkElement anchor = (FrameworkElement?)window.FindName("CaptureOptionsButton")
+                ?? (FrameworkElement)window.FindName("CaptureRegionButton");
             RenderCaptureMenu(output, $"library-capture-menu-ko-KR-96dpi-{phase}.png", anchor, bar);
 
             ListBoxItem firstCard = Card(window, first.Id);
@@ -205,12 +206,13 @@ public sealed class CaptureInfoEvidenceTests
                 {
                     editor.Show();
                     SetDpi(editor);
+                    WaitForSourceFileSize(editor.Editor);
                     Settle(editor);
                     BitmapSource bottom = Bottom(Snapshot(editor), 120);
                     Save(output, $"image-editor-bottom-{width}-ko-KR-96dpi-{phase}.png", bottom);
                     if (width == 1180)
                     {
-                        Button? anchor = Descendants(editor).OfType<Button>().FirstOrDefault(button => button.Name == "NewCapture");
+                        Button? anchor = CaptureMenuAnchor(editor);
                         if (anchor is null) Skipped("image-editor-capture-menu", "the new capture button is absent");
                         else RenderCaptureMenu(output, $"image-editor-capture-menu-ko-KR-96dpi-{phase}.png", anchor, bottom);
                     }
@@ -241,12 +243,28 @@ public sealed class CaptureInfoEvidenceTests
             SetDpi(editor);
             PumpUntil(() => editor.IsMediaReadyForTest || editor.HasMediaFailedForTest, TimeSpan.FromSeconds(20));
             Assert.True(editor.IsMediaReadyForTest, editor.MediaFailureForTest);
+            WaitForSourceFileSize(editor);
             Settle(editor);
             BitmapSource bar = Top(Snapshot(editor), 120);
             Save(output, $"video-editor-command-bar-920x680-ko-KR-96dpi-{phase}.png", bar);
-            Button? anchor = Descendants(editor).OfType<Button>().FirstOrDefault(button => button.Name == "NewCapture");
+            Button? anchor = CaptureMenuAnchor(editor);
             if (anchor is null) Skipped("video-editor-capture-menu", "the new capture button is absent");
             else RenderCaptureMenu(output, $"video-editor-capture-menu-ko-KR-96dpi-{phase}.png", anchor, bar);
+            Button? more = Descendants(editor).OfType<Button>().FirstOrDefault(button => button.Name == "VideoMoreTools");
+            if (more?.ContextMenu is { } moreMenu)
+            {
+                more.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                try
+                {
+                    Assert.True(moreMenu.IsOpen);
+                    Settle(moreMenu);
+                    if (typeof(VideoEditorWindow).GetProperty("SourceFileSizeReadTask", Members) is not null)
+                        Assert.Contains(moreMenu.Items.OfType<MenuItem>(), item => Equals(item.Header, UiText.Get("MediaInfo.Title")));
+                    Save(output, $"video-editor-more-menu-ko-KR-96dpi-{phase}.png", Compose(bar, Snapshot(moreMenu)));
+                }
+                finally { moreMenu.IsOpen = false; }
+            }
+            RenderVideoIdentityTooltip(output, phase, editor);
         }
         finally
         {
@@ -255,6 +273,37 @@ public sealed class CaptureInfoEvidenceTests
             FluidMotion.AnimationsEnabledOverrideForTest = null;
             OwnedTestDirectory.Delete(root);
         }
+    }
+
+    private static Button? CaptureMenuAnchor(DependencyObject owner) =>
+        Descendants(owner).OfType<Button>().FirstOrDefault(button => button.Name == "CaptureOptions")
+        ?? Descendants(owner).OfType<Button>().FirstOrDefault(button => button.Name == "NewCapture");
+
+    private static void WaitForSourceFileSize(object owner)
+    {
+        // New property is optional so the same evidence file runs on the 4.10.0 base.
+        if (owner.GetType().GetProperty("SourceFileSizeReadTask", Members)?.GetValue(owner) is not Task read) return;
+        PumpUntil(() => read.IsCompleted);
+        read.GetAwaiter().GetResult();
+    }
+
+    private static void RenderVideoIdentityTooltip(string output, string phase, VideoEditorWindow editor)
+    {
+        FrameworkElement? position = Descendants(editor).OfType<FrameworkElement>()
+            .FirstOrDefault(element => element.Name == "VideoPositionChip");
+        if (position?.ToolTip is not string details) return;
+        var tooltip = new ToolTip { Content = details, PlacementTarget = position, Placement = PlacementMode.Bottom };
+        tooltip.IsOpen = true;
+        try
+        {
+            Settle(tooltip);
+            Rect bounds = position.TransformToAncestor(editor).TransformBounds(new Rect(position.RenderSize));
+            BitmapSource window = Snapshot(editor);
+            var chip = new CroppedBitmap(window, new Int32Rect((int)Math.Floor(bounds.X), (int)Math.Floor(bounds.Y),
+                (int)Math.Ceiling(bounds.Width), (int)Math.Ceiling(bounds.Height)));
+            Save(output, $"video-editor-details-tooltip-ko-KR-96dpi-{phase}.png", Compose(chip, Snapshot(tooltip)));
+        }
+        finally { tooltip.IsOpen = false; }
     }
 
     private static void RenderDetails(string output, string phase)

@@ -14,7 +14,12 @@ internal sealed partial class GalleryWindow
     {
         if (_mediaDetailsOpening || ResolveTileFromCommand(sender) is not { } tile) return;
         e.Handled = true;
-        IReadOnlyList<MediaDetailsSource> sources = DetailsSources(tile);
+        await ShowMediaDetailsAsync(DetailsSources(tile));
+    }
+
+    private async Task ShowMediaDetailsAsync(IReadOnlyList<MediaDetailsSource> sources)
+    {
+        if (_mediaDetailsOpening || sources.Count == 0) return;
         _mediaDetailsOpening = true;
         try { await MediaDetailsWindow.ShowAsync(this, sources); }
         finally { _mediaDetailsOpening = false; }
@@ -23,6 +28,9 @@ internal sealed partial class GalleryWindow
     // CommandTargets has the same selected-card rule as all other context-menu commands.
     internal IReadOnlyList<MediaDetailsSource> DetailsSources(GalleryItemViewModel tile) =>
         CommandTargets(tile).Select(DetailsSource).ToArray();
+
+    internal IReadOnlyList<MediaDetailsSource> KeyboardDetailsSources(GalleryItemViewModel? focused) =>
+        KeyTargets(focused).Select(DetailsSource).ToArray();
 
     private MediaDetailsSource DetailsSource(GalleryItemViewModel tile) => new(
         _queue.GetFilePath(tile.Record, tile.IsVideo ? CaptureFileNames.VideoRendered : CaptureFileNames.Rendered),

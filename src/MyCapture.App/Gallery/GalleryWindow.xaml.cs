@@ -717,7 +717,7 @@ internal sealed partial class GalleryWindow : Window
     private void UpdateCommandShortcuts()
     {
         HotkeySettings hotkeys = ReadHotkeys();
-        string capture = UiText.Get("CaptureEntry.NewCapture");
+        string capture = UiText.Format("LibraryUx_CommandShortcut", UiText.Get("Text_2C20ADDA2018").Trim(), hotkeys.Capture.ToString());
         string record = UiText.Format("LibraryUx_CommandShortcut", UiText.Get("Text_4F5AF20FAA6E").Trim(), hotkeys.RecordRegion.ToString());
         CaptureRegionButton.ToolTip = capture;
         RecordRegionButton.ToolTip = record;

@@ -171,6 +171,7 @@
         <Setter Property="themes:ButtonSizing.RestHeight" Value="{DynamicResource Button.Height}" />
         <Setter Property="Height" Value="{Binding Path=(themes:ButtonSizing.RestHeight), RelativeSource={RelativeSource Self}}" />
         <Setter Property="FontSize" Value="{DynamicResource CommandButton.FontSize}" />
+        <Setter Property="themes:ButtonSizing.CornerRadius" Value="{DynamicResource Radius.Md}" />
         <Setter Property="Foreground" Value="{DynamicResource Text.Primary}" />
         <Setter Property="Background" Value="{DynamicResource Button.Fill}" />
         <Setter Property="BorderBrush" Value="{DynamicResource Button.BorderBrush}" />
@@ -193,18 +194,20 @@
                                 Background="{TemplateBinding Background}"
                                 BorderBrush="{TemplateBinding BorderBrush}"
                                 BorderThickness="{TemplateBinding BorderThickness}"
-                                CornerRadius="{DynamicResource Radius.Md}"
+                                CornerRadius="{Binding Path=(themes:ButtonSizing.ChromeCornerRadius), RelativeSource={RelativeSource TemplatedParent}}"
                                 SnapsToDevicePixels="True" />
                         <!-- Hover strengthens the outline as well as the fill: the layer's own border
                              covers the chrome border while it shows. -->
                         <Border x:Name="HoverLayer"
                                 Margin="0"
                                 Style="{StaticResource StateLayer.Hover}"
+                                CornerRadius="{Binding Path=(themes:ButtonSizing.ChromeCornerRadius), RelativeSource={RelativeSource TemplatedParent}}"
                                 BorderBrush="{DynamicResource Border.Strong}"
                                 BorderThickness="{TemplateBinding BorderThickness}" />
                         <Border x:Name="PressedLayer"
                                 Margin="0"
                                 Style="{StaticResource StateLayer.Pressed}"
+                                CornerRadius="{Binding Path=(themes:ButtonSizing.ChromeCornerRadius), RelativeSource={RelativeSource TemplatedParent}}"
                                 BorderBrush="{DynamicResource Border.Strong}"
                                 BorderThickness="{TemplateBinding BorderThickness}" />
                         <Border BorderThickness="{TemplateBinding BorderThickness}">
@@ -284,17 +287,19 @@
                                 Background="{TemplateBinding Background}"
                                 BorderBrush="{TemplateBinding BorderBrush}"
                                 BorderThickness="{TemplateBinding BorderThickness}"
-                                CornerRadius="{DynamicResource Radius.Md}"
+                                CornerRadius="{Binding Path=(themes:ButtonSizing.ChromeCornerRadius), RelativeSource={RelativeSource TemplatedParent}}"
                                 SnapsToDevicePixels="True" />
                         <!-- The accent fill and its border change together, so these layers cover
                              the whole chrome. -->
                         <Border x:Name="HoverLayer"
                                 Margin="0"
                                 Style="{StaticResource StateLayer}"
+                                CornerRadius="{Binding Path=(themes:ButtonSizing.ChromeCornerRadius), RelativeSource={RelativeSource TemplatedParent}}"
                                 Background="{DynamicResource Accent.Hover}" />
                         <Border x:Name="PressedLayer"
                                 Margin="0"
                                 Style="{StaticResource StateLayer}"
+                                CornerRadius="{Binding Path=(themes:ButtonSizing.ChromeCornerRadius), RelativeSource={RelativeSource TemplatedParent}}"
                                 Background="{DynamicResource Accent.Pressed}" />
                         <Border BorderThickness="{TemplateBinding BorderThickness}">
                             <ContentPresenter Margin="{TemplateBinding Padding}"

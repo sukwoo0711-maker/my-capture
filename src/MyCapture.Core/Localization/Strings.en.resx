@@ -4876,6 +4876,7 @@ Overwrite these shortcuts? You can change this later in Settings → Shortcuts.<
     <value>Mouse drag</value>
   </data>
   <data name="CaptureEntry.NewCapture" xml:space="preserve"><value>New capture</value></data>
+  <data name="CaptureEntry.MoreOptions" xml:space="preserve"><value>More capture options</value></data>
   <data name="CaptureEntry.Region" xml:space="preserve"><value>Region capture</value></data>
   <data name="CaptureEntry.FullScreen" xml:space="preserve"><value>Full screen</value></data>
   <data name="CaptureEntry.Window" xml:space="preserve"><value>Window capture</value></data>

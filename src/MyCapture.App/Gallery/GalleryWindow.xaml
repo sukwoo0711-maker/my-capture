@@ -1316,15 +1316,25 @@
                 <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
                     <!-- Keep labelled capture commands available in every selection state. -->
                     <StackPanel x:Name="CaptureCommands" Orientation="Horizontal">
-                        <Button x:Name="CaptureRegionButton" Style="{StaticResource Button.Primary}" Margin="3,0"
+                        <Button x:Name="CaptureRegionButton" Style="{StaticResource Button.Primary}" Margin="3,0,0,0"
                                 VerticalAlignment="Center"
-                                AutomationProperties.Name="{loc:Text CaptureEntry.NewCapture}"
-                                Click="OnNewCaptureClick">
+                                themes:ButtonSizing.SplitPart="Main"
+                                AutomationProperties.Name="{loc:Text Text_2C20ADDA2018}"
+                                Click="OnCaptureRegionClick">
                             <StackPanel Orientation="Horizontal">
                                 <themes:SymbolIcon Size="16" Data="{StaticResource Icon.Capture}"
                                       Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" Fill="Transparent" />
-                                <TextBlock Text="{loc:Text CaptureEntry.NewCapture}" Margin="{DynamicResource CommandButton.IconLabelGap}" VerticalAlignment="Center" />
+                                <TextBlock Text="{loc:Text Text_2C20ADDA2018}" Margin="{DynamicResource CommandButton.IconLabelGap}" VerticalAlignment="Center" />
                             </StackPanel>
+                        </Button>
+                        <Button x:Name="CaptureOptionsButton" Style="{StaticResource Button.Primary}" Margin="0,0,3,0"
+                                MinWidth="28" Padding="5,0" VerticalAlignment="Center"
+                                themes:ButtonSizing.SplitPart="Options"
+                                ToolTip="{loc:Text CaptureEntry.MoreOptions}"
+                                AutomationProperties.Name="{loc:Text CaptureEntry.MoreOptions}"
+                                Click="OnNewCaptureClick">
+                            <themes:SymbolIcon Size="16" Data="{StaticResource Icon.ChevronDown}"
+                                  Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" Fill="Transparent" />
                         </Button>
                         <Button x:Name="RecordRegionButton" Style="{StaticResource LibraryUx.CommandButton}"
                                 AutomationProperties.Name="{loc:Text Text_4F5AF20FAA6E}"

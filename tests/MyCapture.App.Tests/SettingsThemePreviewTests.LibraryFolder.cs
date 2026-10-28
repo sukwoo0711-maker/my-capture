@@ -159,19 +159,22 @@ public sealed partial class SettingsThemePreviewTests
 
             // A capture keeps the library visible and still belongs to the open folder.
             Button captureButton = Descendants(window).OfType<Button>()
-                .Single(button => button.IsVisible && AutomationProperties.GetName(button) == UiText.Get("CaptureEntry.NewCapture"));
-            bool captureRequested = false;
+                .Single(button => button.IsVisible && AutomationProperties.GetName(button) == UiText.Get("Text_2C20ADDA2018"));
+            int captureRequests = 0;
             window.CaptureRegionRequested += () =>
             {
                 Assert.True(window.IsVisible);
-                captureRequested = true;
+                captureRequests++;
             };
             captureButton.RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent, captureButton));
-            ContextMenu menu = Assert.IsType<ContextMenu>(captureButton.ContextMenu);
-            MenuItem regionCapture = menu.Items.Cast<MenuItem>().Single(item =>
-                Equals(item.Tag, MyCapture.Platform.Shell.GlobalHotkeyCommand.CaptureRegion));
-            regionCapture.RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
-            PumpLibraryUntil(window, () => captureRequested, label + ": capture requested while visible");
+            Assert.Equal(1, captureRequests);
+            Assert.Null(captureButton.ContextMenu);
+            var options = (Button)window.FindName("CaptureOptionsButton");
+            options.RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent, options));
+            ContextMenu menu = Assert.IsType<ContextMenu>(options.ContextMenu);
+            Assert.True(menu.IsOpen);
+            Assert.Equal(1, captureRequests);
+            menu.IsOpen = false;
             Assert.True(window.IsVisible);
             Assert.Equal(empty.Id, queue.BrowsingCaptureFolderId);
             Assert.Equal(empty.Id, AddLibraryFolderCapture(queue, today, "Inside folder", colors[0]).FolderId);

@@ -4876,6 +4876,7 @@ F3  클립보드를 핀으로 띄우기
     <value>마우스로 끌기</value>
   </data>
   <data name="CaptureEntry.NewCapture" xml:space="preserve"><value>새 캡처</value></data>
+  <data name="CaptureEntry.MoreOptions" xml:space="preserve"><value>캡처 방법 더 보기</value></data>
   <data name="CaptureEntry.Region" xml:space="preserve"><value>영역 캡처</value></data>
   <data name="CaptureEntry.FullScreen" xml:space="preserve"><value>전체 화면</value></data>
   <data name="CaptureEntry.Window" xml:space="preserve"><value>창 캡처</value></data>

@@ -144,7 +144,7 @@ internal sealed partial class AnnotationEditorControl
         _controller.RestoreDraftGeometry(turns, JsonSerializer.Deserialize<PointD>(origin, JsonDefaults.Compact));
         _rotationTurns = _controller.RotationTurns;
         SwapBaseBitmap(current, new RectD(0, 0, current.PixelWidth, current.PixelHeight));
-        _dimensionsText.Text = UiText.Format("Text_009548FC2109", _canvasWidth, _canvasHeight);
+        RefreshDimensionsText();
     }
     internal void ReportDraftFailure() => SetStatus(UiText.Get("EditRecovery_SaveFailed"));
 }

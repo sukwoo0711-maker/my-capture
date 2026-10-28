@@ -140,6 +140,7 @@ public sealed class EditorCommandBarAdaptiveTests(ITestOutputHelper output)
             editor.ShowCaptureBlocked(new string('W', 120));
             Grid footer = Descendants(editor).OfType<Grid>().Single(grid => grid.Name == "AnnotationStatusBar");
             Button capture = Descendants(footer).OfType<Button>().Single(button => button.Name == "NewCapture");
+            Button options = Descendants(footer).OfType<Button>().Single(button => button.Name == "CaptureOptions");
             Button info = Descendants(footer).OfType<Button>().Single(button => button.Name == "MediaInfo");
             foreach (bool crop in new[] { false, true })
             {
@@ -148,6 +149,15 @@ public sealed class EditorCommandBarAdaptiveTests(ITestOutputHelper output)
                 {
                     ShortcutPresentation.SetAltRevealed(window, reveal);
                     window.Dispatcher.Invoke(System.Windows.Threading.DispatcherPriority.ApplicationIdle, new Action(window.UpdateLayout));
+                    Assert.Same(capture.Style, info.Style);
+                    Assert.Equal(36, capture.ActualHeight);
+                    Assert.Equal(36, info.ActualHeight);
+                    Assert.Equal(36, options.ActualHeight);
+                    Assert.True(options.IsVisible && options.IsEnabled && options.Focusable && options.IsTabStop);
+                    Assert.Equal(UiText.Get("CaptureEntry.MoreOptions"), AutomationProperties.GetName(options));
+                    Rect captureBounds = capture.TransformToAncestor(footer).TransformBounds(new Rect(capture.RenderSize));
+                    Rect optionsBounds = options.TransformToAncestor(footer).TransformBounds(new Rect(options.RenderSize));
+                    Assert.InRange(optionsBounds.Left - captureBounds.Right, 0, .5);
                     foreach ((Button button, string key) in new[] { (capture, "CaptureEntry.NewCapture"), (info, "MediaInfo.Title") })
                     {
                         Assert.True(button.IsVisible && button.IsEnabled && button.Focusable && button.IsTabStop);
