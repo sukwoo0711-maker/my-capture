@@ -456,6 +456,13 @@ public sealed class GeneralSettings : IJsonOnDeserializing
     public bool FirstCaptureTipShown { get; set; }
     public bool FirstPinTipShown { get; set; }
 
+    /// <summary>Shared presentation count for editor and dismissed-card library-location tips.</summary>
+    public int SavedLocationTipCount
+    {
+        get;
+        set => field = Math.Clamp(value, 0, FirstUseTips.SavedLocationLimit);
+    }
+
     /// <summary>Legacy file compatibility. Command visibility uses <see cref="AlwaysShowShortcutHints"/>.</summary>
     public bool ShowShortcutHints { get; set; } = true;
 

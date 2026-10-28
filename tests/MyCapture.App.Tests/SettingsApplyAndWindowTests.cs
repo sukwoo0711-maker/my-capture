@@ -172,6 +172,8 @@ public sealed class SettingsApplyAndWindowTests : KoreanCaptionTest
             var draft = new SettingsDraft(live) { MaxItems = "450" };
             FirstUseTips.ShowCaptureOnce(live.General, () => { });
             FirstUseTips.ShowPinOnce(live.General, () => { });
+            Assert.True(FirstUseTips.ShowSavedLocation(live.General, () => true));
+            Assert.True(FirstUseTips.ShowSavedLocation(live.General, () => true));
             draft.AutoCheckUpdates = false;
             DateTimeOffset checkedAt = new(2026, 10, 22, 14, 2, 0, TimeSpan.Zero);
             live.Updates.LastCheckUtc = checkedAt;
@@ -179,6 +181,7 @@ public sealed class SettingsApplyAndWindowTests : KoreanCaptionTest
             AppSettings stale = draft.ToAppSettings();
             Assert.False(stale.General.FirstCaptureTipShown);
             Assert.False(stale.General.FirstPinTipShown);
+            Assert.Equal(0, stale.General.SavedLocationTipCount);
             Assert.Null(stale.Updates.LastCheckUtc);
             Assert.Null(stale.Updates.DismissedVersion);
 
@@ -194,6 +197,7 @@ public sealed class SettingsApplyAndWindowTests : KoreanCaptionTest
             {
                 Assert.True(settings.General.FirstCaptureTipShown);
                 Assert.True(settings.General.FirstPinTipShown);
+                Assert.Equal(2, settings.General.SavedLocationTipCount);
                 Assert.Equal(450, settings.Queue.MaxItems);
                 Assert.False(settings.Updates.AutoCheck);
                 Assert.Equal(checkedAt, settings.Updates.LastCheckUtc);

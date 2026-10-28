@@ -10,6 +10,8 @@ using MyCapture.App.Capture;
 using MyCapture.App.Diagnostics;
 using MyCapture.App.Themes;
 using MyCapture.Core.Localization;
+using MyCapture.Core.Primitives;
+using MyCapture.Platform.Display;
 using Xunit;
 
 namespace MyCapture.App.Tests;
@@ -27,7 +29,7 @@ public sealed class QuickAccessActionLabelTests
     {
         foreach (string language in new[] { "ko", "en" })
         foreach (double dpi in new[] { 1.0, 1.5 })
-        foreach (double textScale in new[] { 1.0, 1.5 })
+        foreach (double textScale in new[] { 1.0, 1.5, 2.0 })
             yield return [language, dpi, textScale];
     }
 
@@ -64,6 +66,7 @@ public sealed class QuickAccessActionLabelTests
             double labeled = LabeledWidth(panel, host, card.Width, dpi);
             Assert.True(labeled <= available == shown, $"{language}: names need {labeled:0.###} of {available:0.###} DIP, shown={shown}");
             if (textScale == 1) Assert.True(shown, $"{language}: the names need {labeled:0.#} of {available:0.#} DIP at normal text size");
+            if (textScale == 2) Assert.False(shown);
             Assert.Same(host.FindResource("Button.Primary"), buttons[0].Style);
             Assert.All(buttons.Skip(1), button => Assert.Same(host.FindResource("Button.Ghost"), button.Style));
 
@@ -128,6 +131,43 @@ public sealed class QuickAccessActionLabelTests
                 CardHeight = Math.Round(host.ActualHeight, 2), Actions = measurements,
             });
             Assert.True(image.PixelWidth > 0);
+        }
+        finally { card.Close(); }
+    });
+
+    [Theory]
+    [InlineData("ko", 1.0)]
+    [InlineData("en", 1.0)]
+    [InlineData("ko", 1.5)]
+    [InlineData("en", 1.5)]
+    [InlineData("ko", 2.0)]
+    [InlineData("en", 2.0)]
+    public void TinyCaptureReservesTheNamedActionRowInsteadOfShrinkingToItsPreview(string language, double dpi) => StaTestHost.Run(() =>
+    {
+        using var culture = UiText.UseLanguage(language);
+        using var motion = new ShortcutMotionTestScope();
+        BitmapSource tiny = BitmapSource.Create(1, 1, 96, 96, PixelFormats.Bgra32, null, new byte[4], 4);
+        tiny.Freeze();
+        var monitor = new MonitorInfo("test", new RectD(0, 0, 1366, 768), new RectD(0, 0, 1366, 728),
+            (uint)(96 * dpi), true);
+        var card = new QuickAccessWindow(tiny, () => Task.FromResult(true), () => { }, () => Task.CompletedTask,
+            () => Task.FromResult(true), () => { }, () => Task.FromResult("unused.png"), targetMonitor: monitor);
+        try
+        {
+            Border host = QuickAccessDetachedFixture.Layout(card, dpi);
+            QuickAccessLabelFixture.ApplyTextScale(host, 1);
+            QuickAccessLabelFixture.RealIcons(card, host);
+            QuickAccessLabelFixture.Relayout(host, card.Width, dpi);
+            var panel = Assert.Single(QuickAccessDetachedFixture.Descendants(host).OfType<QuickAccessActionPanel>());
+            Assert.Equal(card.AllowsTransparency ? 344 : 328, card.MinWidth);
+            Assert.Equal(card.MinWidth, card.Width);
+            Assert.Equal(QuickAccessActionPanel.MinimumDefaultTextWidth, ((FrameworkElement)panel.Parent).ActualWidth);
+            Assert.True(panel.NamesShown);
+            Assert.All(card.ActionButtonsForTest.Append(card.LibraryButtonForTest), button =>
+                Assert.Equal(Visibility.Visible, QuickAccessActionPanel.LabelOf(button)!.Visibility));
+            Assert.InRange(card.PreviewForTest.ActualWidth * dpi, 0.01, 2.00001);
+            Assert.True(card.Width * dpi <= monitor.WorkArea.Width);
+            Assert.False(card.IsVisible);
         }
         finally { card.Close(); }
     });

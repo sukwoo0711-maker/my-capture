@@ -3420,6 +3420,9 @@ Open the library or Settings from the tray menu.</value></data>
   <data name="Capture.AfterClipboard" xml:space="preserve"><value>Copy to clipboard only</value></data>
   <data name="Capture.CopiedAndSaved" xml:space="preserve"><value>Copied to clipboard · Saved to library</value></data>
   <data name="Capture.Saved" xml:space="preserve"><value>Saved to library</value></data>
+  <data name="SavedLocation.Title" xml:space="preserve"><value>Saved to the library</value></data>
+  <data name="SavedLocation.Hotkey" xml:space="preserve"><value>Press {0} to open the library.</value></data>
+  <data name="SavedLocation.NotificationArea" xml:space="preserve"><value>Open the library from the MyCapture icon in the notification area.</value></data>
   <data name="Shortcuts.ShowHints" xml:space="preserve"><value>Show shortcuts on buttons</value></data>
   <data name="Crop.Ratio" xml:space="preserve"><value>Aspect ratio</value></data>
   <data name="Crop.Free" xml:space="preserve"><value>Free</value></data>

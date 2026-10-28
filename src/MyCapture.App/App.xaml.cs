@@ -1482,7 +1482,14 @@ public partial class App : Application
                 firstCaptureTip: _settings.General.FirstCaptureTipShown ? null : UiText.Get("Onboard_FirstCaptureTip"),
                 keyboardRouter: _receiptKeyboard);
             ReceiptTimeline.Mark?.Invoke("card-constructed");
-            card.Closed += (_, _) => { _overlay?.NoteForegroundDismissal(card.IsCaptureExcluded); lease.Dispose(); if (ReferenceEquals(_quickAccess, card)) _quickAccess = null; _storeRating?.NotifyFlowEnded(); };
+            card.Closed += (_, _) =>
+            {
+                _overlay?.NoteForegroundDismissal(card.IsCaptureExcluded);
+                lease.Dispose();
+                if (ReferenceEquals(_quickAccess, card)) _quickAccess = null;
+                ShowSavedLocationAfterCard(card, record);
+                _storeRating?.NotifyFlowEnded();
+            };
             _quickAccess = card;
             // The lifted capture flies into this card; without one the card uses its usual entrance.
             flight?.Land(card);
@@ -1810,6 +1817,7 @@ public partial class App : Application
         _commit.PersistExportSettings = () => _services.GetRequiredService<SettingsStore>().SaveInBackground(
             _settings!.DeepClone(), "Could not persist image export preferences");
         _commit.QuickSaved += path => _ = Dispatcher.BeginInvoke(new Action(() => AnnounceQuickSave(path)));
+        SubscribeSavedLocationReceipt(_commit);
         _videoLibrary = new MyCapture.App.Recording.VideoLibraryService(
             queue,
             paths,

@@ -72,6 +72,15 @@ internal sealed class CaptureCommitService
     /// </summary>
     internal event Action<string>? QuickSaved;
 
+    /// <summary>
+    /// A finishing edit succeeded, including its library save and required export/copy.
+    /// Both editor hosts use this service; recovery exports without a library record do not announce.
+    /// </summary>
+    internal event Action<CaptureRecord>? FinishingCommitCompleted;
+
+    internal static bool IsFinishingCommit(EditorCommitAction action) =>
+        action is EditorCommitAction.Done or EditorCommitAction.QuickSave or EditorCommitAction.SaveAs;
+
     internal Action? PersistExportSettings { get; set; }
     internal ImageExportLocation ExportLocation { get; }
     internal ImageExportOptions LastExportOptions => _settings().Export.LastImageExport;
@@ -222,10 +231,10 @@ internal sealed class CaptureCommitService
                     return false;
                 }
 
-                await PersistFinalIfAvailableAsync(
+                record = await PersistFinalIfAvailableAsync(
                     record, result.Action, flattened, snapshot, result.ImageAssetBitmaps, editSession, createRecordAsync,
                     replaceOriginal ? result.SelectedBitmap : null);
-                return await CopyEditedImageAsync(flattened, "Save As", exportRecord);
+                return CompleteCommit(record, result.Action, await CopyEditedImageAsync(flattened, "Save As", exportRecord));
 
             case EditorCommitAction.QuickSave:
                 record = await PersistFinalIfAvailableAsync(
@@ -244,7 +253,7 @@ internal sealed class CaptureCommitService
                 // Queue persistence is already durable, but Quick Save is an explicit export
                 // request. Keep the editor open when that request fails so the user sees the
                 // failure and can choose another destination instead of losing the retry path.
-                return quickSaveCopied;
+                return CompleteCommit(record, result.Action, quickSaveCopied);
 
             case EditorCommitAction.CopyToClipboard:
                 // Copy is the editor's secondary action: the edited pixels go to the clipboard
@@ -273,14 +282,14 @@ internal sealed class CaptureCommitService
                 // the result the editor may leave the screen (CopiedToClipboard); the commit still
                 // completes only when both have, with the save's failure first.
                 var admitted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-                Task persisting = PersistFinalIfAvailableAsync(
+                Task<CaptureRecord?> persisting = PersistFinalIfAvailableAsync(
                     record, result.Action, flattened, snapshot, result.ImageAssetBitmaps, editSession, createRecordAsync,
                     replaceOriginal ? result.SelectedBitmap : null, () => admitted.TrySetResult());
                 if (await Task.WhenAny(admitted.Task, persisting) != admitted.Task)
                 {
                     // Refused (rethrown here, without a copy) or no record to save into.
-                    await persisting;
-                    return await CopyEditedImageAsync(flattened, "Done", exportRecord);
+                    record = await persisting;
+                    return CompleteCommit(record, result.Action, await CopyEditedImageAsync(flattened, "Done", exportRecord));
                 }
 
                 Task<bool> copying = CopyEditedImageAsync(flattened, "Done", exportRecord);
@@ -290,11 +299,25 @@ internal sealed class CaptureCommitService
                 }
                 finally
                 {
-                    await persisting;
+                    record = await persisting;
                 }
 
-                return await copying;
+                return CompleteCommit(record, result.Action, await copying);
         }
+    }
+
+    private bool CompleteCommit(CaptureRecord? savedRecord, EditorCommitAction action, bool succeeded)
+    {
+        if (succeeded && savedRecord is not null && IsFinishingCommit(action))
+        {
+            try { FinishingCommitCompleted?.Invoke(savedRecord); }
+            catch (Exception ex)
+            {
+                // A courtesy receipt cannot turn a completed save into a failed commit.
+                _log.LogWarning(ex, "Could not announce a completed library edit");
+            }
+        }
+        return succeeded;
     }
 
     private async Task<bool> CopyEditedImageAsync(BitmapSource flattened, string operation, CaptureRecord? source = null)
