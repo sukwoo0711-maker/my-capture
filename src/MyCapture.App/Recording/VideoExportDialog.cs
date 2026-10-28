@@ -44,11 +44,11 @@ internal sealed class VideoExportDialog : Window
     private readonly SegmentedChoice _sizePreset;
     private readonly Slider _target = new() { Minimum = 0, Maximum = 90, TickFrequency = 1, IsSnapToTickEnabled = true };
     private readonly TextBlock _targetLabel = new();
-    private readonly ComboBox _quality = OptionList();
+    private readonly ComboBox _quality = OptionList(compactSelection: true);
     private readonly ComboBox _frameRate = OptionList();
     private readonly TextBlock _frameRateCap = new() { TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 4, 0, 0) };
     private readonly ComboBox _speed = OptionList();
-    private readonly ComboBox _shareTarget = OptionList();
+    private readonly ComboBox _shareTarget = OptionList(compactSelection: true);
     private readonly TextBlock _estimate = new() { TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 14, 0, 0) };
     private readonly Image _preview = new() { Height = 150, Stretch = Stretch.Uniform, Visibility = Visibility.Collapsed, Margin = new Thickness(0, 12, 0, 0), HorizontalAlignment = HorizontalAlignment.Left };
     private readonly GifPreviewPanel _samplePanel;
@@ -147,27 +147,34 @@ internal sealed class VideoExportDialog : Window
         _settings.Children.Add(_mp4);
 
         foreach (GifExportQuality quality in GifSharePolicy.Presets)
-            _quality.Items.Add(new OptionItem(QualityText(quality), quality));
+            _quality.Items.Add(new OptionItem(QualityText(quality), quality) { SelectionText = QualitySelectionText(quality) });
         _quality.SelectedIndex = 0;
         _quality.ToolTip = UiText.Get("MediaExport_GifLimits");
         foreach (double speed in GifSharePolicy.Speeds)
             _speed.Items.Add(new OptionItem(SpeedText(speed), speed));
         _speed.SelectedIndex = 1;
         foreach (GifShareTarget shareTarget in GifSharePolicy.Targets)
-            _shareTarget.Items.Add(new OptionItem(UiText.Get(shareTarget.LabelKey), shareTarget));
+            _shareTarget.Items.Add(new OptionItem(UiText.Get(shareTarget.LabelKey), shareTarget)
+            {
+                SelectionText = shareTarget.Bytes is long bytes
+                    ? UiText.Format("GifExport_TargetSize", bytes / 1_000_000d)
+                    : UiText.Get(shareTarget.LabelKey),
+            });
         _shareTarget.SelectedIndex = GifSharePolicy.DefaultTargetIndex;
-        var options = new Grid();
-        AddOption(options, 0, 5, "MediaExport_GifPreset", _quality);
-        AddOption(options, 1, 3, "MediaExport_Speed", _speed);
-        AddOption(options, 2, 5, "GifPreview_Target", _shareTarget);
-        _gif.Children.Add(options);
-        _frameRate.Items.Add(new OptionItem(UiText.Get("GifExport_FrameRatePreset"), 0));
+        _frameRate.Items.Add(new OptionItem(UiText.Format("GifExport_FrameRatePreset", GifSharePolicy.Presets[0].FramesPerSecond), 0));
         foreach (int fps in GifExportQuality.FrameRates)
-            _frameRate.Items.Add(new OptionItem($"{fps} fps", fps));
+            _frameRate.Items.Add(new OptionItem(UiText.Format("GifExport_FrameRateValue", fps), fps));
         _frameRate.SelectedIndex = 0;
-        var cadenceOptions = new Grid();
-        AddOption(cadenceOptions, 0, 1, "GifExport_FrameRate", _frameRate);
-        _gif.Children.Add(cadenceOptions);
+        var options = new Grid();
+        options.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        options.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        options.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        options.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        AddOption(options, 0, 0, "MediaExport_GifPreset", _quality);
+        AddOption(options, 0, 1, "GifExport_FrameRate", _frameRate);
+        AddOption(options, 1, 0, "MediaExport_Speed", _speed);
+        AddOption(options, 1, 1, "GifPreview_Target", _shareTarget);
+        _gif.Children.Add(options);
         _frameRateCap.SetResourceReference(TextBlock.ForegroundProperty, "Text.Secondary");
         _gif.Children.Add(_frameRateCap);
         // Longer ranges show a 3 s window; the user can move it to the moment that matters.
@@ -331,28 +338,49 @@ internal sealed class VideoExportDialog : Window
     private static void AddText(Panel panel, string text) => panel.Children.Add(new TextBlock
     { Text = text, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 8, 0, 6) });
 
-    private static void AddOption(Grid grid, int column, double weight, string labelKey, ComboBox combo)
+    private static void AddOption(Grid grid, int row, int column, string labelKey, ComboBox combo)
     {
-        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(weight, GridUnitType.Star) });
-        var cell = new StackPanel { Margin = new Thickness(column == 0 ? 0 : 6, 0, column == 2 ? 0 : 6, 0) };
+        var cell = new StackPanel { Margin = new Thickness(column == 0 ? 0 : 6, 0, column == 1 ? 0 : 6, 0) };
         var label = new TextBlock { Text = UiText.Get(labelKey), TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 8, 0, 6) };
         cell.Children.Add(label);
         cell.Children.Add(combo);
         AutomationProperties.SetName(combo, label.Text);
+        Grid.SetRow(cell, row);
         Grid.SetColumn(cell, column);
         grid.Children.Add(cell);
     }
 
     /// <summary>A combo box whose item captions can change (the 권장 mark) while selected.</summary>
-    private static ComboBox OptionList()
+    private static ComboBox OptionList(bool compactSelection = false)
     {
         var text = new FrameworkElementFactory(typeof(TextBlock));
-        text.SetBinding(TextBlock.TextProperty, new Binding(nameof(OptionItem.Text)));
+        if (compactSelection)
+        {
+            var style = new Style(typeof(TextBlock));
+            style.Setters.Add(new Setter(TextBlock.TextProperty, new Binding(nameof(OptionItem.Text))));
+            // A popup item carries the descriptive preset name. The closed selection keeps
+            // the existing compact size/recommendation caption, with no competing frame rate.
+            var closed = new DataTrigger
+            {
+                Binding = new Binding { RelativeSource = new RelativeSource(RelativeSourceMode.FindAncestor, typeof(ComboBoxItem), 1) },
+                Value = null,
+            };
+            closed.Setters.Add(new Setter(TextBlock.TextProperty, new Binding(nameof(OptionItem.SelectionText))));
+            style.Triggers.Add(closed);
+            text.SetValue(TextBlock.StyleProperty, style);
+        }
+        else text.SetBinding(TextBlock.TextProperty, new Binding(nameof(OptionItem.Text)));
         text.SetValue(TextBlock.TextTrimmingProperty, TextTrimming.CharacterEllipsis);
         return new ComboBox { MinHeight = 36, ItemTemplate = new DataTemplate { VisualTree = text } };
     }
 
-    private static string QualityText(GifExportQuality quality) => $"{quality.LongEdge}px · {quality.FramesPerSecond} fps";
+    private static string QualityText(GifExportQuality quality) => UiText.Get(
+        quality == GifExportQuality.Standard ? "Text_A492D3026996"
+        : quality == GifSharePolicy.SharpLowRate ? "GifPreview_PresetSharpLowRate"
+        : quality == GifExportQuality.Compact ? "Text_21281475C002"
+        : "Text_19FE9B81012C");
+
+    private static string QualitySelectionText(GifExportQuality quality) => $"{quality.LongEdge}px";
 
     /// <summary>
     /// Explains the trade the recommended preset actually makes. The motion class only orders
@@ -409,6 +437,8 @@ internal sealed class VideoExportDialog : Window
     private void Changed()
     {
         _settingsRevision++;
+        var preset = (GifExportQuality)((OptionItem)_quality.SelectedItem).Value;
+        ((OptionItem)_frameRate.Items[0]).Text = UiText.Format("GifExport_FrameRatePreset", preset.FramesPerSecond);
         bool gif = IsGif;
         _mp4.Visibility = gif ? Visibility.Collapsed : Visibility.Visible;
         _gif.Visibility = gif ? Visibility.Visible : Visibility.Collapsed;
@@ -674,6 +704,9 @@ internal sealed class VideoExportDialog : Window
     /// <summary>Refreshes the summary line, the one-line recommendation and the 권장 mark.</summary>
     private void UpdateGuidance()
     {
+        string targetDescription = ((OptionItem)_shareTarget.SelectedItem).Text;
+        _shareTarget.ToolTip = targetDescription;
+        AutomationProperties.SetHelpText(_shareTarget, targetDescription);
         _recommendation = null;
         double span = SpanMs;
         if (!IsGif)
@@ -708,9 +741,11 @@ internal sealed class VideoExportDialog : Window
         }
         double effective = EffectiveFrameRate;
         _estimate.Text += UiText.Format("GifExport_FrameRateSummary", effective * speed);
-        _frameRateCap.Text = effective < quality.FramesPerSecond
-            ? UiText.Format("GifExport_FrameRateCapped", quality.FramesPerSecond, effective, effective * speed)
-            : string.Empty;
+        double sourceRate = _recording.Fps > 0 ? _recording.Fps : 10;
+        _frameRateCap.Text = effective >= quality.FramesPerSecond ? string.Empty
+            : sourceRate <= 50 / speed
+                ? UiText.Format("GifExport_FrameRateCapped", sourceRate, effective)
+                : UiText.Format("GifExport_FrameRateCappedSpeed", effective);
         _frameRateCap.Visibility = _frameRateCap.Text.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
 
         if (_measurements.Count == 0)
@@ -786,7 +821,12 @@ internal sealed class VideoExportDialog : Window
     {
         string suffix = " · " + UiText.Get("GifPreview_Recommended");
         foreach (OptionItem item in _quality.Items)
-            item.Text = QualityText((GifExportQuality)item.Value) + (Equals(item.Value, quality) ? suffix : string.Empty);
+        {
+            var preset = (GifExportQuality)item.Value;
+            string marker = Equals(item.Value, quality) ? suffix : string.Empty;
+            item.Text = QualityText(preset) + marker;
+            item.SelectionText = QualitySelectionText(preset) + marker;
+        }
     }
 
     private void ApplyRecommendation()
@@ -1089,6 +1129,7 @@ internal sealed class VideoExportDialog : Window
     private sealed class OptionItem(string text, object value) : INotifyPropertyChanged
     {
         private string _text = text;
+        private string _selectionText = text;
 
         public event PropertyChangedEventHandler? PropertyChanged;
 
@@ -1106,5 +1147,16 @@ internal sealed class VideoExportDialog : Window
         }
 
         public override string ToString() => _text;
+
+        public string SelectionText
+        {
+            get => _selectionText;
+            set
+            {
+                if (_selectionText == value) return;
+                _selectionText = value;
+                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(SelectionText)));
+            }
+        }
     }
 }
