@@ -9,6 +9,9 @@ param(
     [string]$Repository = 'sukwoo0711-maker/my-capture',
 
     [switch]$Latest,
+    # A test build stays a stable release but leaves 'Latest', which the in-app update check
+    # reads, on the previous version.
+    [switch]$NotLatest,
     [switch]$IncludeX86
 )
 
@@ -46,9 +49,16 @@ if ($releaseExists) {
     throw "Release $tag already exists. Refusing to overwrite it."
 }
 
+if ($Latest -and $NotLatest) {
+    throw 'Choose either -Latest or -NotLatest.'
+}
+
 $latestArgs = @()
 if ($Latest) {
     $latestArgs += '--latest'
+}
+elseif ($NotLatest) {
+    $latestArgs += '--latest=false'
 }
 
 gh release create $tag --repo $Repository --title "MyCapture $Version" --notes-file $NotesFile @latestArgs @files
