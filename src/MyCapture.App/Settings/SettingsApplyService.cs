@@ -138,6 +138,7 @@ public sealed class SettingsApplyService
         next.Capture.StartGuideShownCount = previous.Capture.StartGuideShownCount;
         next.General.FirstCaptureTipShown = previous.General.FirstCaptureTipShown;
         next.General.FirstPinTipShown = previous.General.FirstPinTipShown;
+        next.General.PinSizeTipShown = previous.General.PinSizeTipShown;
         next.Pin.ClickThroughHintShownCount = previous.Pin.ClickThroughHintShownCount;
         ReconcileFolderDestination(next.Queue, _queue, applyFolderDestination);
         var messages = new List<string>();

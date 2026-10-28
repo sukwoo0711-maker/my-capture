@@ -455,6 +455,7 @@ public sealed class GeneralSettings : IJsonOnDeserializing
 
     public bool FirstCaptureTipShown { get; set; }
     public bool FirstPinTipShown { get; set; }
+    public bool PinSizeTipShown { get; set; }
 
     /// <summary>Legacy file compatibility. Command visibility uses <see cref="AlwaysShowShortcutHints"/>.</summary>
     public bool ShowShortcutHints { get; set; } = true;

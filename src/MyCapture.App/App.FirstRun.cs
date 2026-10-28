@@ -398,12 +398,17 @@ public partial class App
 
     private void ShowFirstPinTip()
     {
-        if (_settings is null || _shellPresenter is null || _hotkeys?.Failures.Count > 0 || _settings.General.FirstPinTipShown) return;
-        Hotkey hotkey = _settings.Hotkeys.HideAllPins;
-        string text = hotkey.IsAssigned ? UiText.Format("Onboard_FirstPinTip", hotkey) : UiText.Get("Onboard_FirstPinTipUnassigned");
-        if (_shellPresenter.ShowCaptureReceipt(text, () => HandleShortcutSettingsRequested(nameof(SettingsDraft.HideAllPinsHotkey)),
-                answersCommand: true, actionTooltip: UiText.Get("Help.Settings"))
-            && FirstUseTips.ShowPinOnce(_settings.General, () => { })) SaveFirstUseTips();
+        if (_settings is null || _shellPresenter is null || _hotkeys?.Failures.Count > 0) return;
+        if (FirstUseTips.ShowNextPinTip(_settings.General, tip =>
+        {
+            Hotkey hotkey = _settings.Hotkeys.HideAllPins;
+            string text = tip == PinFirstUseTip.Size ? UiText.Get("Onboard_PinSizeTip")
+                : hotkey.IsAssigned ? UiText.Format("Onboard_FirstPinTip", hotkey) : UiText.Get("Onboard_FirstPinTipUnassigned");
+            return _shellPresenter.ShowCaptureReceipt(text,
+                tip == PinFirstUseTip.Size ? HandleSettingsRequested
+                    : () => HandleShortcutSettingsRequested(nameof(SettingsDraft.HideAllPinsHotkey)),
+                answersCommand: true, actionTooltip: UiText.Get("Help.Settings"));
+        })) SaveFirstUseTips();
     }
 
 }

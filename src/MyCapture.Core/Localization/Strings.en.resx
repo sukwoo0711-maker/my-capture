@@ -4082,6 +4082,7 @@ Delete {1} {1:plural:subfolder|subfolders}, {2} {2:plural:image|images}, and {3}
   <data name="Onboard_FirstCaptureToastTip" xml:space="preserve"><value>Pin above other windows</value></data>
   <data name="Onboard_PinFailed" xml:space="preserve"><value>Could not create the pin.</value></data>
   <data name="Onboard_FirstPinTip" xml:space="preserve"><value>Press {0} to hide or show all pins.</value></data>
+  <data name="Onboard_PinSizeTip" xml:space="preserve"><value>Wheel or drag the edge: size · Ctrl+wheel: opacity · Esc: close</value></data>
   <data name="Onboard_FirstPinTipUnassigned" xml:space="preserve"><value>Assign a shortcut in Settings to hide or show all pins.</value></data>
   <data name="Onboard_ResidentTip" xml:space="preserve"><value>MyCapture keeps running in the notification area.</value></data>
   <data name="QuickAccess.InitialSaved" xml:space="preserve"><value>Saved</value></data>
@@ -4125,7 +4126,7 @@ Delete {1} {1:plural:subfolder|subfolders}, {2} {2:plural:image|images}, and {3}
   <data name="Onboard_RecordMoreHelp" xml:space="preserve"><value>Choose whether the recording shows the current time.</value></data>
   <data name="Onboard_RecordShowTime" xml:space="preserve"><value>Show time</value></data>
   <data name="Onboard_RecordAreaTip" xml:space="preserve"><value>Recording area {0}</value></data>
-  <data name="Onboard_PinTip" xml:space="preserve"><value>Drag: move · Wheel: zoom · Right-click: menu</value></data>
+  <data name="Onboard_PinTip" xml:space="preserve"><value>Drag: move · Wheel or edge: size · Right-click: menu</value></data>
   <data name="Onboard_PinBarName" xml:space="preserve"><value>Pin tools</value></data>
   <data name="Onboard_PinOpacity" xml:space="preserve"><value>Opacity</value></data>
   <data name="Onboard_PinZoomIn" xml:space="preserve"><value>Zoom in</value></data>

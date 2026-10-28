@@ -4082,6 +4082,7 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="Onboard_FirstCaptureToastTip" xml:space="preserve"><value>핀으로 다른 창 위에 표시</value></data>
   <data name="Onboard_PinFailed" xml:space="preserve"><value>핀을 만들지 못했습니다.</value></data>
   <data name="Onboard_FirstPinTip" xml:space="preserve"><value>{0}으로 모든 핀을 숨기거나 다시 보일 수 있습니다.</value></data>
+  <data name="Onboard_PinSizeTip" xml:space="preserve"><value>휠 또는 테두리 끌기: 크기 · Ctrl+휠: 투명도 · Esc: 닫기</value></data>
   <data name="Onboard_FirstPinTipUnassigned" xml:space="preserve"><value>모든 핀 표시 단축키는 설정에서 지정할 수 있습니다.</value></data>
   <data name="Onboard_ResidentTip" xml:space="preserve"><value>MyCapture는 알림 영역에서 계속 실행됩니다.</value></data>
   <data name="QuickAccess.InitialSaved" xml:space="preserve"><value>저장됨</value></data>
@@ -4125,7 +4126,7 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="Onboard_RecordMoreHelp" xml:space="preserve"><value>녹화 영역에 현재 시각을 표시할지 고릅니다.</value></data>
   <data name="Onboard_RecordShowTime" xml:space="preserve"><value>시각 표시</value></data>
   <data name="Onboard_RecordAreaTip" xml:space="preserve"><value>녹화 영역 {0}</value></data>
-  <data name="Onboard_PinTip" xml:space="preserve"><value>드래그: 이동 · 휠: 확대·축소 · 오른쪽 클릭: 메뉴</value></data>
+  <data name="Onboard_PinTip" xml:space="preserve"><value>드래그: 이동 · 휠·테두리: 크기 · 오른쪽 클릭: 메뉴</value></data>
   <data name="Onboard_PinBarName" xml:space="preserve"><value>핀 도구</value></data>
   <data name="Onboard_PinOpacity" xml:space="preserve"><value>투명도</value></data>
   <data name="Onboard_PinZoomIn" xml:space="preserve"><value>확대</value></data>

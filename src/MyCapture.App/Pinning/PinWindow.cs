@@ -95,6 +95,11 @@ internal sealed class PinWindow : Window
 
     private bool _liveZooming;
     private bool _dragging;
+    private PinResizeEdge _resizeEdge;
+    private RectD _resizeStartBounds;
+    private double _resizeStartZoom;
+    private DpiScale _resizeStartDpi;
+    private (int X, int Y) _resizeStartCursor;
     private Point _dragAnchor;
     private RectD? _dragDesktop;
     private double _dragGrabMarginPx;
@@ -293,6 +298,7 @@ internal sealed class PinWindow : Window
         };
         MouseLeave += (_, _) =>
         {
+            if (!_dragging) Cursor = null;
             SetChromeHover(false);
             ScheduleHoverBarHide();
         };
@@ -666,6 +672,8 @@ internal sealed class PinWindow : Window
 
         if (enabled)
         {
+            EndDrag();
+            Cursor = null;
             HideHoverBar();
             if (changed) _clickThroughIntroductionPending = true;
         }
@@ -808,14 +816,19 @@ internal sealed class PinWindow : Window
 
     protected override void OnDpiChanged(DpiScale oldDpi, DpiScale newDpi)
     {
-        RerenderForDisplayScale(newDpi.DpiScaleX);
+        RerenderForDisplayScale(_liveZooming ? newDpi.DpiScaleX : ZoomRasterScale(newDpi.DpiScaleX, _state.Zoom));
         base.OnDpiChanged(oldDpi, newDpi);
         _clickThroughHandle?.Place();
         Dispatcher.BeginInvoke(DispatcherPriority.Loaded, new Action(() => _clickThroughHandle?.Place()));
+        if (_resizeEdge != PinResizeEdge.None)
+            Dispatcher.BeginInvoke(DispatcherPriority.Loaded, new Action(() =>
+            {
+                if (_dragging && _resizeEdge != PinResizeEdge.None) ResizeToCursor();
+            }));
     }
 
     /// <summary>Changes only the raster; the pin's DIP geometry and interaction state stay intact.</summary>
-    internal void RerenderForDisplayScale(double scale)
+    internal void RerenderForDisplayScale(double scale, bool notify = true)
     {
         if (_isClosed || !_content.CanRerender) return;
         PinContent rendered = _content.RenderedAt(scale);
@@ -824,7 +837,7 @@ internal sealed class PinWindow : Window
         _content = rendered;
         _imageElement.Source = rendered.Image;
         UpdateImageRasterLayout();
-        ViewStateChanged?.Invoke();
+        if (notify) ViewStateChanged?.Invoke();
     }
 
     internal void SimulateDpiChangeForTest(double scale) => RerenderForDisplayScale(scale);
@@ -1066,12 +1079,25 @@ internal sealed class PinWindow : Window
         Math.Max(0, size.Width - (2 * FrameClipInsetDip)),
         Math.Max(0, size.Height - (2 * FrameClipInsetDip)));
 
-    // ----- Mouse: drag to move, wheel to zoom, Ctrl+wheel opacity -----
+    // ----- Mouse: interior drag to move, edge drag/wheel to zoom, Ctrl+wheel opacity -----
+
+    internal PinResizeEdge ResizeEdgeAt(Point point) =>
+        _isClosed || _state.IsClickThrough || IsTextSelectionMode || _dragInput.Modifiers.HasFlag(ModifierKeys.Control)
+            ? PinResizeEdge.None : PinResize.HitTest(point.X, point.Y, Width, Height);
+
+    internal static Cursor? ResizeCursor(PinResizeEdge edge) => edge switch
+    {
+        PinResizeEdge.Left or PinResizeEdge.Right => Cursors.SizeWE,
+        PinResizeEdge.Top or PinResizeEdge.Bottom => Cursors.SizeNS,
+        PinResizeEdge.TopLeft or PinResizeEdge.BottomRight => Cursors.SizeNWSE,
+        PinResizeEdge.TopRight or PinResizeEdge.BottomLeft => Cursors.SizeNESW,
+        _ => null,
+    };
 
     protected override void OnMouseLeftButtonDown(MouseButtonEventArgs e)
     {
         base.OnMouseLeftButtonDown(e);
-        if (IsTextSelectionMode) return;
+        if (_isClosed || _state.IsClickThrough || IsTextSelectionMode) return;
 
         bool ctrl = _dragInput.Modifiers.HasFlag(ModifierKeys.Control);
 
@@ -1115,6 +1141,16 @@ internal sealed class PinWindow : Window
             {
                 Point anchor = _dragInput.LocalAnchor(e, this);
                 DpiScale dpi = VisualTreeHelper.GetDpi(this);
+                _resizeEdge = ResizeEdgeAt(anchor);
+                if (_resizeEdge != PinResizeEdge.None)
+                {
+                    (int left, int top, _, _) = PhysicalBounds;
+                    _resizeStartBounds = new RectD(left, top, Width * dpi.DpiScaleX, Height * dpi.DpiScaleY);
+                    _resizeStartZoom = _state.Zoom;
+                    _resizeStartDpi = dpi;
+                    _resizeStartCursor = _dragInput.CursorPosition;
+                    Cursor = ResizeCursor(_resizeEdge);
+                }
                 _dragAnchor = new Point(anchor.X * dpi.DpiScaleX, anchor.Y * dpi.DpiScaleY);
                 _dragDesktop = MonitorEnumerator.GetVirtualDesktopBounds();
                 _dragGrabMarginPx = GrabMarginDip * dpi.DpiScaleX;
@@ -1135,6 +1171,7 @@ internal sealed class PinWindow : Window
         base.OnMouseMove(e);
         if (!_dragging)
         {
+            Cursor = ResizeCursor(ResizeEdgeAt(e.GetPosition(this)));
             return;
         }
 
@@ -1152,7 +1189,24 @@ internal sealed class PinWindow : Window
 
         _lastDragCursorX = cursorX;
         _lastDragCursorY = cursorY;
+        if (_resizeEdge != PinResizeEdge.None)
+        {
+            ResizeToCursor();
+            return;
+        }
         MovePhysical(cursorX - _dragAnchor.X, cursorY - _dragAnchor.Y);
+    }
+
+    private void ResizeToCursor()
+    {
+        (int x, int y) = _dragInput.CursorPosition;
+        DpiScale dpi = VisualTreeHelper.GetDpi(this);
+        PinGeometry.Placement placement = PinResize.Calculate(_resizeStartBounds, _resizeStartZoom,
+            _resizeEdge, x - _resizeStartCursor.X, y - _resizeStartCursor.Y,
+            dpi.DpiScaleX / _resizeStartDpi.DpiScaleX, dpi.DpiScaleY / _resizeStartDpi.DpiScaleY,
+            _state.ImageWidthDip * dpi.DpiScaleX, _state.ImageHeightDip * dpi.DpiScaleY,
+            dpi.DpiScaleX, dpi.DpiScaleY);
+        ApplyZoom(placement.Zoom, placement.Left, placement.Top, physicalPosition: true);
     }
 
     protected override void OnMouseLeftButtonUp(MouseButtonEventArgs e)
@@ -1175,6 +1229,8 @@ internal sealed class PinWindow : Window
     {
         bool wasDragging = _dragging;
         _dragging = false;
+        _resizeEdge = PinResizeEdge.None;
+        Cursor = null;
         _dragDesktop = null;
         _lastDragCursorX = int.MinValue;
         _lastDragCursorY = int.MinValue;
@@ -1449,9 +1505,19 @@ internal sealed class PinWindow : Window
         (double newLeft, double newTop) = PinGeometry.AnchorTopLeftForZoom(
             Left, Top, oldZoom, newZoom, pointerXDip, pointerYDip);
 
+        ApplyZoom(newZoom, newLeft, newTop);
+    }
+
+    private void ApplyZoom(double zoom, double left, double top, bool physicalPosition = false)
+    {
+        double newZoom = _state.SetZoom(zoom);
         Width = _state.WidthDip;
         Height = _state.HeightDip;
-        ApplyPositionKeepingGrabbable(newLeft, newTop);
+        if (physicalPosition)
+            // Move changes only the physical origin; WPF owns the DIP size above.
+            PhysicalWindowPositioner.Move(_handle, new RectD(left, top, Width, Height));
+        else
+            ApplyPositionKeepingGrabbable(left, top);
         BeginLiveZoom();
         ShowFeedback($"{newZoom * 100:0}%");
     }
@@ -1501,10 +1567,15 @@ internal sealed class PinWindow : Window
 
     internal bool IsLiveZoomingForTest => _liveZooming;
 
+    internal static double ZoomRasterScale(double displayScale, double zoom) =>
+        Math.Min(8, displayScale * Math.Max(1, zoom));
+
     private void CommitCrispZoom()
     {
         bool wasZooming = _liveZooming;
         _liveZooming = false;
+        if (wasZooming && !_isClosed && _content.CanRerender)
+            RerenderForDisplayScale(ZoomRasterScale(VisualTreeHelper.GetDpi(this).DpiScaleX, _state.Zoom), notify: false);
         _imageElement.CacheMode = null;
         RenderOptions.SetBitmapScalingMode(_imageElement, BitmapScalingMode.HighQuality);
         _imageElement.InvalidateVisual();

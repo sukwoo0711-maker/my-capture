@@ -163,6 +163,7 @@ public static class AppSettingsClone
         AfterCapture = s.AfterCapture,
         FirstCaptureTipShown = s.FirstCaptureTipShown,
         FirstPinTipShown = s.FirstPinTipShown,
+        PinSizeTipShown = s.PinSizeTipShown,
         ShowShortcutHints = s.ShowShortcutHints,
         AlwaysShowShortcutHints = s.AlwaysShowShortcutHints,
         ShortcutHintsRevision = s.ShortcutHintsRevision,
