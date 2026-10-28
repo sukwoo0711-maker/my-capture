@@ -112,8 +112,10 @@ public partial class App : Application
             return;
         }
 
+#if DEBUG
         // Explicit preview mode never initializes the resident shell or the user's stores.
         if (TryStartPinPreview(e.Args)) return;
+#endif
 
         // Diagnostics intentionally run before the ownership gate. Capture hardware
         // can be tested beside a normal resident instance; the shell test will report
@@ -2663,7 +2665,9 @@ public partial class App : Application
         _launchStatus?.Complete();
         _residentReady?.Dispose();
         _residentReady = null;
+#if DEBUG
         _pinPreview?.Dispose();
+#endif
         _updateTimer?.Stop();
         _updates?.Dispose();
         // Stop a model download in progress; completed, verified model files stay.

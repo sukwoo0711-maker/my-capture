@@ -145,7 +145,8 @@ public sealed class PinSessionShutdownTests
     /// <summary>
     /// Closing for exit skips and then clears the closed-pin history, so only app shutdown may use it.
     /// A pin board switch closes live pins only after a complete save reads back. The pin preview
-    /// host runs its own PinManager in a separate process and shuts it down the same way on exit.
+    /// host (Debug builds only) runs its own PinManager in a separate process and shuts it down the
+    /// same way on exit.
     /// </summary>
     [Fact]
     public void ProductCode_ClosesAllPinsForExitOnlyFromAppShutdown()

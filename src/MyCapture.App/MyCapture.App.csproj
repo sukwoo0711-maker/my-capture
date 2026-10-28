@@ -61,4 +61,10 @@
   <ItemGroup>
     <None Update="Assets\Mermaid\**\*" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
+
+  <!-- The pin preview host (the preview-pin switch) is a development and review tool; only Debug builds compile it. -->
+  <ItemGroup Condition="'$(Configuration)' != 'Debug'">
+    <Compile Remove="Preview\**\*.cs" />
+    <Compile Remove="App.Preview.cs" />
+  </ItemGroup>
 </Project>
