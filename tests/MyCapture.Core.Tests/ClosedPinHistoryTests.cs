@@ -9,6 +9,38 @@ namespace MyCapture.Core.Tests;
 /// </summary>
 public sealed class ClosedPinHistoryTests
 {
+    [Fact]
+    public void AsyncCompressionChangesBytesWithoutChangingClosingOrder()
+    {
+        var history = NewHistory();
+        var first = new Entry("first");
+        var second = new Entry("second");
+        history.Push(first, 100);
+        history.Push(second, 200);
+        Assert.True(history.UpdateRetainedBytes(second, 20));
+        Assert.True(history.UpdateRetainedBytes(first, 10));
+        Assert.Equal(30, history.RetainedBytes);
+        Assert.Equal(["second", "first"], PopAll(history));
+        Assert.False(history.UpdateRetainedBytes(second, 20));
+        Assert.Equal(0, history.RetainedBytes);
+    }
+
+    [Fact]
+    public void FailedOrOverBudgetEncodingRemovesOnlyThatEntry()
+    {
+        var history = NewHistory(maxBytes: 100);
+        var first = new Entry("first");
+        var second = new Entry("second");
+        history.Push(first, 10);
+        history.Push(second, 10);
+        Assert.False(history.UpdateRetainedBytes(first, 101));
+        Assert.Equal(10, history.RetainedBytes);
+        Assert.True(history.Remove(second));
+        Assert.False(history.Remove(second));
+        Assert.Equal(0, history.RetainedBytes);
+        Assert.Equal(0, history.Count);
+    }
+
     private sealed record Entry(string Name);
 
     private static ClosedPinHistory<Entry> NewHistory(int limit = 20, long maxBytes = ClosedPinMemory.DefaultMaxRetainedBytes) =>

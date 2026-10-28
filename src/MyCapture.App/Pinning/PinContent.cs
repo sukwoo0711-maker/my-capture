@@ -37,6 +37,8 @@ internal sealed record PinContent
         CaptureProvenance? provenance = null)
     {
         Image = image ?? throw new ArgumentNullException(nameof(image));
+        RasterDpiX = image.DpiX;
+        RasterDpiY = image.DpiY;
         Kind = kind;
         OriginalText = originalText;
         SourcePageUrl = sourcePageUrl;
@@ -49,6 +51,14 @@ internal sealed record PinContent
     }
 
     internal BitmapSource Image { get; }
+
+    /// <summary>The exact PNG used to decode this image, when already available.</summary>
+    internal byte[]? EncodedPng { get; init; }
+
+    // PNG's integer pixels-per-meter resolution rounds the original DPI. Keep the precise
+    // raster scale so a same-monitor reopen does not mistake that rounding for a DPI change.
+    internal double RasterDpiX { get; init; }
+    internal double RasterDpiY { get; init; }
 
     internal PinContentKind Kind { get; }
 
@@ -68,7 +78,8 @@ internal sealed record PinContent
 
     internal PinContent WithProvenance(CaptureProvenance provenance) =>
         new(Image, Kind, OriginalText, SourcePageUrl, UsesDeviceIndependentPixels,
-            TextStyle, CodeDocument, LayoutWidthDip, LayoutHeightDip, provenance);
+            TextStyle, CodeDocument, LayoutWidthDip, LayoutHeightDip, provenance)
+        { EncodedPng = EncodedPng, RasterDpiX = RasterDpiX, RasterDpiY = RasterDpiY };
 
     internal bool HasOriginalText => OriginalText is not null;
 
@@ -129,9 +140,11 @@ internal sealed record PinContent
         bool usesDeviceIndependentPixels,
         PinTextStyle? textStyle = null,
         PinCodeDocument? codeDocument = null,
-        CaptureProvenance? provenance = null) =>
+        CaptureProvenance? provenance = null,
+        double? layoutWidthDip = null,
+        double? layoutHeightDip = null) =>
         new(image, kind, originalText, sourcePageUrl, usesDeviceIndependentPixels, textStyle, codeDocument,
-            provenance: provenance);
+            layoutWidthDip, layoutHeightDip, provenance);
 
     /// <summary>Text or a table that MyCapture rendered itself from the retained source string.</summary>
     internal static PinContent FromText(BitmapSource image, string originalText, bool isTable, CaptureProvenance? provenance = null)
@@ -164,8 +177,8 @@ internal sealed record PinContent
     {
         if (!CanRerender) return this;
         ClipboardTextRenderer.ValidateScale(scale);
-        if (Math.Abs(Image.DpiX - (96 * scale)) < 0.000001
-            && Math.Abs(Image.DpiY - (96 * scale)) < 0.000001)
+        if (Math.Abs(RasterDpiX - (96 * scale)) < 0.000001
+            && Math.Abs(RasterDpiY - (96 * scale)) < 0.000001)
         {
             return this;
         }

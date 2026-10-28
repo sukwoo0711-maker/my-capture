@@ -841,13 +841,23 @@ internal sealed class CaptureOverlayView : FrameworkElement
 
     protected override void OnRender(DrawingContext drawingContext)
     {
+        bool marked = _frame is not null && !_renderMarked && Diagnostics.SelectorTimeline.Mark is not null;
+        if (marked) Diagnostics.SelectorTimeline.Mark!("view-render-start");
         base.OnRender(drawingContext);
         // Hit testing stays on this element. Pixel content lives in retained child visuals;
         // moving the pointer never reopens the full-desktop drawing command list.
         drawingContext.DrawRectangle(Brushes.Transparent, null, new Rect(RenderSize));
         _feedbackScheduler.CancelPending();
         RenderLayers();
+        if (marked)
+        {
+            _renderMarked = true;
+            Diagnostics.SelectorTimeline.Mark?.Invoke("view-render-done");
+        }
     }
+
+    /// <summary>The resident probe's breakdown marks only this view's first render with a frame.</summary>
+    private bool _renderMarked, _measureMarked;
 
     protected override void OnRenderSizeChanged(SizeChangedInfo sizeInfo)
     {
@@ -870,6 +880,11 @@ internal sealed class CaptureOverlayView : FrameworkElement
 
     protected override Size MeasureOverride(Size availableSize)
     {
+        if (!_measureMarked && Diagnostics.SelectorTimeline.Mark is { } mark)
+        {
+            _measureMarked = true;
+            mark("view-first-measure");
+        }
         Size desired = base.MeasureOverride(availableSize);
         if (_modeBar is null && _startGuide is null) return desired;
         double dipPerPixel = availableSize.Width > 0 && !double.IsInfinity(availableSize.Width)

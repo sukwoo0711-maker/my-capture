@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Windows;
 using System.Windows.Threading;
 using Microsoft.Extensions.Logging;
+using MyCapture.App.Diagnostics;
 using MyCapture.App.Editing;
 using MyCapture.App.Ocr;
 using MyCapture.App.Themes;
@@ -33,12 +34,10 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
     private CancellationTokenSource? _openingEditorCts;
 
     /// <summary>
-    /// Tick of the last time an app-owned topmost surface (capture overlay, editor, tray
-    /// menu) left the screen. The frozen frame must not photograph its dismissal, so a
-    /// capture that starts within <see cref="PresentationSettleMs"/> still waits briefly;
-    /// cold captures skip the wait entirely.
+    /// Unexcluded dismissals need time to leave composition. Excluded dismissals do not
+    /// delay the grab, and never mask an earlier unexcluded dismissal in the same window.
     /// </summary>
-    private long _lastPresentationDismissedTick = long.MinValue;
+    private PresentationDismissals _presentationDismissals = new();
 
     /// <summary>How long after a dismissal a capture still waits out the presentation.</summary>
     internal const int PresentationSettleMs = 750;
@@ -133,6 +132,7 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
 
     /// <summary>Raised when the complete selector/editor session has ended.</summary>
     internal event EventHandler? OverlayClosed;
+    internal event Action? SessionStarted;
 
     internal Func<AnnotationEditingResult, Task<bool>>? CommitRequested { get; set; }
 
@@ -146,7 +146,7 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
     internal bool IsSelecting => _preparation is not null || _activeOverlay is not null || _editorScreenCapture?.IsSelecting == true;
     internal AnnotationEditorControl? CurrentEditor => _activeEditor?.Editor;
     internal Task WaitForPresentationDismissalAsync() =>
-        NeedsPresentationSettle(Environment.TickCount64, _lastPresentationDismissedTick)
+        _presentationDismissals.NeedsSettle(Environment.TickCount64)
             ? Task.Delay(100) : Task.CompletedTask;
 
     internal bool CanRetake => !_disposed && _activeEditor is { } editor && !IsEditorSaving(editor) && !IsEditorBusy(editor) &&
@@ -247,6 +247,7 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
     {
         VerifyDispatcherAccess();
         ObjectDisposedException.ThrowIf(_disposed, this);
+        SelectorTimeline.Mark?.Invoke("start");
         if (_editorScreenCapture is { } current)
         {
             current.ActivateCurrent();
@@ -282,6 +283,7 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
             TextCapture = textCapture && TextCaptureRequested is not null,
         };
         _preparation = preparation;
+        SessionStarted?.Invoke();
         _log.LogInformation("Capture frame acquisition requested");
         try
         {
@@ -291,11 +293,15 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
             // page and application read is tied to these identities, and the selection's source is
             // chosen from them.
             preparation.SourceWindows = _readWindowCandidates(desktop);
-            bool settle = NeedsPresentationSettle(Environment.TickCount64, _lastPresentationDismissedTick);
+            SelectorTimeline.Mark?.Invoke("windows-read");
+            bool settle = _presentationDismissals.NeedsSettle(Environment.TickCount64);
+            if (settle) SelectorTimeline.Mark?.Invoke("settle-required");
             // The reads and the grab start before the selector window is built, so building it
             // overlaps the grab instead of preceding it. The window stays hidden until its frame exists.
             LastPreparationForTest = AcquireAndShowAsync(preparation, includeCursor, settle);
+            SelectorTimeline.Mark?.Invoke("acquire-started");
             ShowOverlay(desktop, abortOnFocusLoss, showMagnifier, preparation.Elapsed, frame: null, showSelectionGrid);
+            SelectorTimeline.Mark?.Invoke("hidden-window-ready");
         }
         catch
         {
@@ -306,13 +312,7 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
     }
 
     internal static bool NeedsPresentationSettle(long currentTick, long lastDismissedTick)
-    {
-        // The never-dismissed sentinel must not participate in elapsed-time arithmetic:
-        // subtracting long.MinValue wraps negative and used to delay every first capture.
-        if (lastDismissedTick == long.MinValue) return false;
-        long elapsed = unchecked(currentTick - lastDismissedTick);
-        return elapsed >= 0 && elapsed < PresentationSettleMs;
-    }
+        => PresentationDismissals.IsRecent(currentTick, lastDismissedTick);
 
     private void StartOverEditor(Func<CaptureSelectionCompletedEventArgs, Task> persist,
         bool includeCursor, bool abortOnFocusLoss, bool showMagnifier, bool showSelectionGrid)
@@ -329,6 +329,8 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
             RequiresCaptureExclusion = RequiresCaptureExclusion,
             ApplyCaptureExclusion = ApplyCaptureExclusion,
         };
+        nested._presentationDismissals = _presentationDismissals;
+        nested.SessionStarted += () => SessionStarted?.Invoke();
         _editorScreenCapture = nested;
         nested.TransitionFailed += error => TransitionFailed?.Invoke(error);
         nested.OverlayClosed += (_, _) =>
@@ -351,9 +353,13 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
         }
     }
 
-    /// <summary>Records that an app-owned topmost surface has just left the screen, so the
-    /// next capture waits out its dismissal instead of photographing it.</summary>
-    internal void NoteForegroundDismissal() => _lastPresentationDismissedTick = Environment.TickCount64;
+    /// <summary>Unknown or unexcluded surfaces retain the conservative presentation wait.</summary>
+    internal long LastPresentationDismissalTick => _presentationDismissals.LastDismissedTick;
+
+    internal void NoteForegroundDismissal() => NoteForegroundDismissal(captureExcluded: false);
+
+    internal void NoteForegroundDismissal(bool captureExcluded) =>
+        _presentationDismissals.Record(Environment.TickCount64, captureExcluded);
 
     private Task AcquireAndShowAsync(CapturePreparation preparation, bool includeCursor, bool settlePresentation) =>
         AcquirePreparedFrameAsync(preparation, includeCursor, settlePresentation).ContinueWith(acquired =>
@@ -379,7 +385,9 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
             (FrozenFrame capturedFrame, Task<IReadOnlyList<WindowCandidate>> sourceWindows) = await CapturePageContext.AcquireFrameAsync(preparation.SourceWindows, () =>
             {
                 if (preparation.Cancelled) throw new OperationCanceledException();
+                SelectorTimeline.Mark?.Invoke("grab-start");
                 FrozenFrame acquired = _acquireFrame(includeCursor);
+                SelectorTimeline.Mark?.Invoke("grab-done");
                 if (!acquired.Bitmap.IsFrozen)
                     throw new InvalidOperationException("Capture acquisition must return a frozen bitmap.");
                 return acquired;
@@ -464,6 +472,7 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
         Task<IReadOnlyList<WindowCandidate>>? confirmedWindows)
     {
         VerifyDispatcherAccess();
+        SelectorTimeline.Mark?.Invoke("frame-dispatched");
         if (!ReferenceEquals(_preparation, preparation)) return false;
         try
         {
@@ -476,11 +485,14 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
                 overlay.SourceWindows = preparation.SourceWindows;
                 if (confirmedWindows is not null) overlay.AwaitSourceDetails(confirmedWindows);
                 overlay.AttachFrame(acquired);
+                SelectorTimeline.Mark?.Invoke("frame-attached");
                 if (!overlay.IsVisible)
                 {
                     PrepareWindow(overlay);
                     overlay.Show();
+                    SelectorTimeline.Mark?.Invoke("shown");
                     _ = overlay.Activate();
+                    SelectorTimeline.Mark?.Invoke("activated");
                 }
 
                 return true;
@@ -517,6 +529,7 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
         var overlay = frame is null
             ? new CaptureOverlayWindow(screenBounds, abortOnFocusLoss, showMagnifier, showSelectionGrid: showSelectionGrid)
             : new CaptureOverlayWindow(frame, abortOnFocusLoss, showMagnifier, showSelectionGrid);
+        SelectorTimeline.Mark?.Invoke("window-constructed");
         _activeOverlay = overlay;
         overlay.SourceWindows = _preparation?.SourceWindows ?? [];
         overlay.DetectWindows = AutoDetectWindows();
@@ -552,6 +565,8 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
         try
         {
             bool excluded = ApplyCaptureExclusion(overlay);
+            CaptureWindowExclusion.RecordResult(overlay, excluded);
+            SelectorTimeline.Mark?.Invoke("hwnd-created-exclusion-applied");
             if (RequiresCaptureExclusion?.Invoke() == true && !excluded)
             {
                 throw new InvalidOperationException(UiText.Get("Text_D1F0DAEAA780"));
@@ -751,6 +766,7 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
         var transition = new CancellationTokenSource();
         _openingEditorCts = transition;
         _isOpeningEditor = true;
+        SessionStarted?.Invoke();
         try
         {
             if (SelectionPersistRequested is not null)
@@ -864,6 +880,7 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
     {
         if (sender is CaptureOverlayWindow overlay)
         {
+            NoteForegroundDismissal(CaptureWindowExclusion.WasApplied(overlay));
             overlay.SelectionCompleted -= OnOverlaySelectionCompleted;
             overlay.ActionRequested -= OnOverlayActionRequested;
             overlay.Closed -= OnOverlayClosed;
@@ -884,6 +901,8 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
     {
         if (sender is AnnotationEditorWindow editor)
         {
+            // Editors retain the wait even when recording temporarily applies exclusion.
+            NoteForegroundDismissal(captureExcluded: false);
             editor.Committed -= OnEditorCommitted;
             editor.Cancelled -= OnEditorCancelled;
             editor.Closed -= OnEditorClosed;
@@ -900,7 +919,6 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
     {
         if (!_disposed && _preparation is null && _activeOverlay is null && _activeEditor is null && !_isOpeningEditor && _editorScreenCapture is null)
         {
-            _lastPresentationDismissedTick = Environment.TickCount64;
             OverlayClosed?.Invoke(this, EventArgs.Empty);
             // A command chosen on the selector starts on a later turn, after the session has ended:
             // the app's own guards then see no active selector, and its frame waits out this dismissal.

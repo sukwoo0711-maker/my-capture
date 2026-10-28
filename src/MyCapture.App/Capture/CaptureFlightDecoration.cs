@@ -55,8 +55,12 @@ internal sealed class CaptureFlightDecoration : Window
 
     internal bool IsClosed { get; private set; }
 
+    internal bool WasShown { get; private set; }
+
     /// <summary>What the window draws now, in virtual-desktop physical pixels.</summary>
     internal CaptureFlightFrame Frame => _surface.Frame;
+
+    internal DrawingGroup? DrawingForTest => _surface.Drawing;
 
     /// <summary>Shows only after capture exclusion has succeeded, without changing the foreground window.</summary>
     internal bool ShowDecoration()
@@ -64,6 +68,7 @@ internal sealed class CaptureFlightDecoration : Window
         if (IsClosed) return false;
         IntPtr handle = new WindowInteropHelper(this).EnsureHandle();
         if (!IsCaptureExcluded) return false;
+        WasShown = true;
         Show();
         // GetWindowRect is authoritative, not WPF Left/Top, which use a different logical
         // coordinate plane on mixed-DPI desktops.
@@ -96,6 +101,7 @@ internal sealed class CaptureFlightDecoration : Window
         IsCaptureExcluded = ApplyCaptureExclusion(this);
         _source = HwndSource.FromHwnd(handle);
         _source?.AddHook(NoActivateHook);
+        MyCapture.App.Diagnostics.ResidentProbeWindowHook.SourceInitialized?.Invoke(this);
     }
 
     private static IntPtr NoActivateHook(IntPtr hwnd, int message, IntPtr wParam, IntPtr lParam, ref bool handled)
@@ -123,30 +129,53 @@ internal sealed class CaptureFlightDecoration : Window
         _source?.RemoveHook(NoActivateHook);
         _source = null;
         SourceInitialized -= OnSourceInitialized;
+        // Closing destroys the layered HWND. Detach its visual and pixels too, even when a
+        // diagnostic or event subscriber retains the closed Window until its next sample.
+        _surface.ReleaseResources();
+        Content = null;
         base.OnClosed(e);
     }
 
     private sealed class FlightSurface : FrameworkElement
     {
-        private readonly BitmapSource _image;
+        private BitmapSource? _image;
         private readonly Point _origin;
+        private readonly DrawingVisual _drawing = new();
 
         internal FlightSurface(BitmapSource image, Point origin)
         {
             _image = image;
             _origin = origin;
             IsHitTestVisible = false;
+            AddVisualChild(_drawing);
         }
+
+        protected override int VisualChildrenCount => 1;
+
+        protected override Visual GetVisualChild(int index) =>
+            index == 0 ? _drawing : throw new ArgumentOutOfRangeException(nameof(index));
+
+        internal DrawingGroup? Drawing => _drawing.Drawing;
 
         internal CaptureFlightFrame Frame { get; set; }
 
         internal DpiScale Dpi { get; set; } = new(1, 1);
 
-        protected override void OnRender(DrawingContext drawing)
+        internal void ReleaseResources()
         {
-            base.OnRender(drawing);
+            _image = null;
+            Frame = default;
+            // The HWND has closed, so another OnRender is not guaranteed. Clear the retained
+            // drawing now: it owns the image too, independently of the managed _image field.
+            using (_drawing.RenderOpen()) { }
+        }
+
+        protected override void OnRender(DrawingContext context)
+        {
+            base.OnRender(context);
+            using DrawingContext drawing = _drawing.RenderOpen();
             CaptureFlightFrame frame = Frame;
-            if (frame.Opacity <= 0 || frame.Image.IsEmpty || frame.Image.Width <= 0 || frame.Image.Height <= 0) return;
+            if (_image is null || frame.Opacity <= 0 || frame.Image.IsEmpty || frame.Image.Width <= 0 || frame.Image.Height <= 0) return;
             // Physical virtual-desktop pixels to this window's DIPs: the image drawn at its source
             // rectangle lands on exactly the pixels it was cut from.
             double sx = 1 / Dpi.DpiScaleX, sy = 1 / Dpi.DpiScaleY;

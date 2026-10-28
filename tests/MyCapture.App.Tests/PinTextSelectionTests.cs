@@ -195,9 +195,9 @@ public sealed class PinTextSelectionTests
             Press(pin, Key.F2);
             Assert.Same(original, pin.PinnedContent);
             pin.Close();
-            PinWindow restored = Assert.IsType<PinWindow>(manager.RestoreLastClosed());
+            PinWindow restored = Assert.IsType<PinWindow>(PinHistoryTestSupport.Restore(manager));
             Assert.False(restored.IsTextSelectionMode);
-            Assert.Same(original, restored.PinnedContent);
+            PinHistoryTestSupport.EqualPixels(original.Image, restored.PinnedContent.Image);
             Assert.Equal(Source, restored.OriginalText);
         }
         finally { manager.CloseAllForExit(); }

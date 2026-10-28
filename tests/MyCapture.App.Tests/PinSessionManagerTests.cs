@@ -205,8 +205,8 @@ public sealed class PinSessionManagerTests
             PinContent last = manager.SnapshotOpenPins()[2].Content;
             manager.CloseAll();
             Assert.Equal(3, manager.ClosedCount);
-            PinWindow closedRestore = manager.RestoreLastClosed()!;
-            Assert.Same(last, closedRestore.PinnedContent);
+            PinWindow closedRestore = PinHistoryTestSupport.Restore(manager)!;
+            PinHistoryTestSupport.EqualPixels(last.Image, closedRestore.PinnedContent.Image);
             Assert.True(closedRestore.ShowActivated);
             Assert.Equal(2, manager.ClosedCount);
             Assert.Equal(0, created);

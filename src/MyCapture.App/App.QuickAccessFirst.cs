@@ -93,7 +93,7 @@ public partial class App
             QuickAccessWindow shown = card;
             shown.Closed += (_, _) =>
             {
-                _overlay?.NoteForegroundDismissal();
+                _overlay?.NoteForegroundDismissal(shown.IsCaptureExcluded);
                 first.Lease?.Dispose();
                 first.Lease = null;
                 first.Card = null;

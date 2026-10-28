@@ -79,7 +79,7 @@ public sealed class PinExitTests
         Assert.Null(pin.HoverBarForTest);
         Assert.False(bar.IsVisible);
 
-        PinWindow restored = Assert.IsType<PinWindow>(manager.RestoreLastClosed());
+        PinWindow restored = Assert.IsType<PinWindow>(PinHistoryTestSupport.Restore(manager));
         Assert.False(restored.IsClosed);
         Assert.Equal(1, manager.Count);
     });
