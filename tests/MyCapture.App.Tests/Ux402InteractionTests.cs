@@ -86,8 +86,10 @@ public sealed class Ux402InteractionTests
         {
             window.Show(); window.UpdateLayout();
             var tools = Descendants(window).OfType<ToggleButton>().Where(button => AutomationProperties.GetAcceleratorKey(button).Length > 0).ToArray();
-            // Every tool but Crop, whose single entry point is now the command bar.
-            Assert.Equal(Enum.GetValues<EditorTool>().Length - 1, tools.Length);
+            // Every tool but Crop, whose single entry point is now the command bar, plus the stamp command beside Image.
+            Assert.Equal(Enum.GetValues<EditorTool>().Length, tools.Length);
+            Assert.Single(tools, button => AutomationProperties.GetAcceleratorKey(button)
+                == ShortcutCatalog.Get(ShortcutScope.Annotation, "Stamp").Hint);
             foreach (var button in tools)
             {
                 Rect bounds = button.TransformToAncestor(window).TransformBounds(new Rect(button.RenderSize));
@@ -125,7 +127,9 @@ public sealed class Ux402InteractionTests
                 Assert.True(handlers[entry.Scope].ContainsKey(entry.Command), entry.ToString());
                 Assert.Equal(entry.Command, ShortcutCatalog.Match(entry.Scope, entry.Key, entry.Modifiers));
             }
-            Assert.Null(ShortcutCatalog.Match(ShortcutScope.QuickAccess, Key.C, ModifierKeys.Control));
+            Assert.Equal("Copy", ShortcutCatalog.Match(ShortcutScope.QuickAccess, Key.C, ModifierKeys.Control));
+            Assert.Equal("Save", ShortcutCatalog.Match(ShortcutScope.QuickAccess, Key.S, ModifierKeys.Control));
+            Assert.Null(ShortcutCatalog.Match(ShortcutScope.QuickAccess, Key.C, ModifierKeys.Control | ModifierKeys.Shift));
             // Ctrl+A selects all annotations; bare A still selects the Arrow tool.
             Assert.Equal("SelectAll", ShortcutCatalog.Match(ShortcutScope.Annotation, Key.A, ModifierKeys.Control));
             Assert.Equal("Arrow", ShortcutCatalog.Match(ShortcutScope.Annotation, Key.A, ModifierKeys.None));

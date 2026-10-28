@@ -212,10 +212,10 @@ public sealed class EditorRotationAndTextTests
             string? Tier(Button button) => StyleKey(button);
 
             // Editing commands are borderless tools; Copy is a bordered output; Done is the fill.
-            foreach (string tool in new[] { "Capture410Crop", "EditorFlowCopyText", "EditorFlowCancel" })
+            foreach (string tool in new[] { "Capture410Crop", "EditorFlowCopyText" })
                 Assert.Equal("Button.Ghost", Tier(Command(tool)));
             Assert.Equal("Button.Primary", Tier(Command("EditorFlowDone")));
-            Assert.NotEqual("Button.Ghost", Tier(Command("EditorFlowCopy")));
+            Assert.NotEqual("Button.Ghost", Tier(Command("EditorFlowSaveToFile")));
         });
     }
 

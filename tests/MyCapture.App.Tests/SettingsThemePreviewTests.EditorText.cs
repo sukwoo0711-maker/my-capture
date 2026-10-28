@@ -110,6 +110,8 @@ public sealed partial class SettingsThemePreviewTests
             // Under the real theme (the window's text formatting, themed TextBox template) the live
             // box lays out with ideal metrics and puts its first glyph on the caption origin.
             var live = (TextBox)active.GetValue(editor)!;
+            live.CaretIndex = live.Text.Length;
+            Drain(window);
             var surface = (AnnotationEditorSurface)typeof(AnnotationEditorControl).GetField("_surface", flags)!.GetValue(editor)!;
             Assert.Equal(MyCapture.App.Themes.ThemeFonts.Formatting, TextOptions.GetTextFormattingMode(window));
             Assert.Equal(TextFormattingMode.Ideal, TextOptions.GetTextFormattingMode(live));

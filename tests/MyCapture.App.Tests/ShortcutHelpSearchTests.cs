@@ -28,9 +28,14 @@ public sealed class ShortcutHelpSearchTests
         UniformGrid[] rows = panel.Children.OfType<UniformGrid>().ToArray();
         (string Label, string Shortcut)[] expected =
         [
-            ("Gallery.Float", "P"), ("LibraryUx_KeepToggleName", "K"),
-            ("Folder410.MoveCaptures", "M"), ("Folder410.Delete", "Del"),
-            ("Folder410.NewFolder", "Ctrl+Shift+N"), ("Folder410.Rename", "F2"),
+            ("Gallery.Float", "P"), ("Shortcuts.LibraryCopy", "Ctrl+C"),
+            ("Shortcuts.LibraryOpen", "Enter"), ("Shortcuts.LibraryPreview", "Space"),
+            ("Folder410.Rename", "F2"), ("LibraryUx_KeepToggleName", "K"), ("Folder410.MoveCaptures", "M"),
+            ("Shortcuts.LibraryText", "T"), ("Shortcuts.LibraryGif", "G"), ("Folder410.Delete", "Del"),
+            ("Shortcuts.ContextMenu", "Menu / Shift+F10"), ("Shortcuts.Undo", "Ctrl+Z"),
+            ("Shortcuts.Search", "Ctrl+F"), ("Folder410.NewFolder", "Ctrl+Shift+N"),
+            ("Shortcuts.Back", "Backspace / Alt+←"), ("Shortcuts.Forward", "Alt+→"), ("Shortcuts.SelectAll", "Ctrl+A"),
+            ("Shortcuts.MouseNavigation", UiText.Get("Shortcuts.MouseButtons")), ("Shortcuts.LibraryDrag", UiText.Get("Shortcuts.Drag")),
         ];
         Assert.Equal(expected.Select(entry => UiText.Get(entry.Label)), rows.Select(ShortcutHelpRowAssertions.Title));
         Assert.Equal(expected.Select(entry => entry.Shortcut), rows.Select(row =>
@@ -39,9 +44,9 @@ public sealed class ShortcutHelpSearchTests
         view.Search.Text = category;
         help.UpdateLayout();
         Border[] results = view.VisibleResults();
-        Assert.Equal(7, results.Length);
+        Assert.Equal(20, results.Length);
         Border[] libraryResults = results.Where(row => Texts(row)[1].Text == category).ToArray();
-        Assert.Equal(6, libraryResults.Length);
+        Assert.Equal(19, libraryResults.Length);
         Assert.Equal(expected.Select(entry => UiText.Get(entry.Label)), libraryResults.Select(row => Texts(row)[0].Text));
         Border openLibrary = Assert.Single(results, row => Texts(row)[1].Text != category);
         Assert.Equal(UiText.Get("Text_66BA5DCDA810"), Texts(openLibrary)[0].Text);
@@ -72,13 +77,14 @@ public sealed class ShortcutHelpSearchTests
     {
         view.Tabs.SelectedIndex = 0;
 
-        // F2 renames a folder and selects pin text, even while the capture tab is open.
+        // F2 edits annotation text, renames a library item and selects pin text across tabs.
         view.Search.Text = "F2";
         help.UpdateLayout();
         Assert.Equal(Visibility.Collapsed, view.Tabs.Visibility);
         Assert.Equal(Visibility.Visible, view.ResultsView.Visibility);
         Border[] f2Results = view.VisibleResults();
-        Assert.Equal(2, f2Results.Length);
+        Assert.Equal(3, f2Results.Length);
+        Assert.Single(f2Results, row => Texts(row)[0].Text == UiText.Get("Shortcuts.EditText"));
         Border folder = Assert.Single(f2Results, row => Texts(row)[0].Text == UiText.Get("Folder410.Rename"));
         Assert.Equal(UiText.Get("Folder410.Rename"), Texts(folder)[0].Text);
         TextBlock category = Texts(folder)[1];
@@ -87,7 +93,7 @@ public sealed class ShortcutHelpSearchTests
         Assert.Equal(new Thickness(12, 4, 12, 4), folder.Padding);
         Assert.True(folder.ActualHeight >= 36, $"A result row is {folder.ActualHeight} high.");
         Assert.Equal(Visibility.Visible, view.Count.Visibility);
-        Assert.Equal(UiText.Format("Help.SearchCount", 2), view.Count.Text);
+        Assert.Equal(UiText.Format("Help.SearchCount", 3), view.Count.Text);
         Assert.Equal(AutomationLiveSetting.Polite, AutomationProperties.GetLiveSetting(view.Count));
         Border selection = Assert.Single(f2Results, row => Texts(row)[0].Text == UiText.Get("Pin_SelectText"));
         Assert.Equal(UiText.Get("Text_33EFD44366A7"), Texts(selection)[1].Text);
@@ -98,17 +104,20 @@ public sealed class ShortcutHelpSearchTests
         Assert.Single(view.VisibleResults());
         Assert.Equal(UiText.Format("Help.SearchCountOne", 1), view.Count.Text);
 
-        // Copy appears on two tabs, plus the pin's exact-source alternative.
+        // Copy includes the editor, library, both pin routes and the quick-access alias.
         view.Search.Text = "Ctrl+C";
         Border[] copies = view.VisibleResults();
-        Assert.Equal(3, copies.Length);
-        Assert.Equal(new[] { UiText.Get("Help.Annotation"), UiText.Get("Text_33EFD44366A7"), UiText.Get("Text_33EFD44366A7") }, copies.Select(row => Texts(row)[1].Text));
-        Assert.All(copies.Take(2), row => Assert.Contains(FirstRunWelcomeTests.Descendants(row).OfType<WrapPanel>(),
+        Assert.Equal(5, copies.Length);
+        Assert.Equal(new[] { UiText.Get("Help.Annotation"), UiText.Get("Workspace.Library"), UiText.Get("Text_33EFD44366A7"),
+            UiText.Get("Text_33EFD44366A7"), UiText.Get("Help.QuickAccess") }, copies.Select(row => Texts(row)[1].Text));
+        Assert.All(copies.Take(3), row => Assert.Contains(FirstRunWelcomeTests.Descendants(row).OfType<WrapPanel>(),
             keys => AutomationProperties.GetName(keys) == "Ctrl+C"));
-        Assert.Equal(UiText.Get("Text_976A6C92B870"), Texts(copies[2])[0].Text);
-        Assert.Contains(FirstRunWelcomeTests.Descendants(copies[2]).OfType<WrapPanel>(),
+        Assert.Equal(UiText.Get("Text_976A6C92B870"), Texts(copies[3])[0].Text);
+        Assert.Contains(FirstRunWelcomeTests.Descendants(copies[3]).OfType<WrapPanel>(),
             keys => AutomationProperties.GetName(keys) == "Ctrl+C / " + UiText.Get("Text_C7011B8D345C"));
-        Assert.Equal(UiText.Format("Help.SearchCount", 3), view.Count.Text);
+        Assert.Contains(FirstRunWelcomeTests.Descendants(copies[4]).OfType<WrapPanel>(),
+            keys => AutomationProperties.GetName(keys) == "C / Ctrl+C");
+        Assert.Equal(UiText.Format("Help.SearchCount", 5), view.Count.Text);
 
         // A category name finds its commands too.
         view.Search.Text = UiText.Get("Help.Video");
@@ -198,7 +207,7 @@ public sealed class ShortcutHelpSearchTests
     public void TabsKeepTheirRowsAndNamesWhileTheSearchIsEmpty() => WithHelp((help, view) =>
     {
         Assert.Equal(UiText.Get("Help.Search"), AutomationProperties.GetName(view.Search));
-        Assert.Equal(5, view.Tabs.Items.Count);
+        Assert.Equal(6, view.Tabs.Items.Count);
         Assert.All(view.Tabs.Items.OfType<TabItem>(), tab => Assert.True(tab.Focusable));
         Assert.Equal(Visibility.Collapsed, view.ResultsView.Visibility);
         Assert.Empty(view.VisibleResults());

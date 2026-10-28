@@ -2,6 +2,7 @@ using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Input;
 using System.Windows.Interop;
+using MyCapture.App.Diagnostics;
 using MyCapture.App.Themes;
 using MyCapture.Core.Capture;
 using MyCapture.Core.Primitives;
@@ -279,6 +280,11 @@ internal sealed class CaptureOverlayWindow : Window
         // PlaceTopmost uses SWP_SHOWWINDOW, so never call it while still hidden.
         // ContentRendered reasserts physical placement after the authorized Show.
         _view.OwnWindowHandle = new WindowInteropHelper(this).Handle;
+        SelectorTimeline.Mark?.Invoke("source-initialized");
+        ResidentProbeWindowHook.SourceInitialized?.Invoke(this);
+        // The resident probe's breakdown: the window messages Show sends synchronously, in order.
+        if (SelectorTimeline.Mark is not null && HwndSource.FromHwnd(_view.OwnWindowHandle) is { } source)
+            source.AddHook(MarkMessages);
         if (IsVisible) PlacePhysicalBounds();
     }
 
@@ -308,10 +314,12 @@ internal sealed class CaptureOverlayWindow : Window
     {
         // WPF can perform one final DPI/layout adjustment after SourceInitialized. Reassert the
         // virtual-desktop physical rectangle before accepting input so mixed-DPI edges stay exact.
+        SelectorTimeline.Mark?.Invoke("content-rendered");
         PlacePhysicalBounds();
         _view.Focus();
         _ = Activate();
         _view.InitializePointer();
+        SelectorTimeline.Mark?.Invoke("content-rendered-handled");
     }
 
     /// <summary>
@@ -322,6 +330,7 @@ internal sealed class CaptureOverlayWindow : Window
     /// </summary>
     private void OnActivated(object? sender, EventArgs e)
     {
+        SelectorTimeline.Mark?.Invoke("activated-event");
         if (!_completed && IsVisible && !_takingForeground && !IsForeground())
         {
             _takingForeground = true;
@@ -332,6 +341,19 @@ internal sealed class CaptureOverlayWindow : Window
     }
 
     private bool _takingForeground;
+
+    private int _markedMessages;
+
+    private IntPtr MarkMessages(IntPtr hwnd, int message, IntPtr wParam, IntPtr lParam, ref bool handled)
+    {
+        if (SelectorTimeline.Mark is { } mark && _markedMessages < 48 && message is 0x0003 or 0x0005 or 0x0006 or 0x0007
+                or 0x000F or 0x0014 or 0x0018 or 0x001C or 0x0046 or 0x0047 or 0x0085 or 0x0086 or 0x0281 or 0x0282 or 0x02E0)
+        {
+            _markedMessages++;
+            mark("msg-0x" + message.ToString("X4", System.Globalization.CultureInfo.InvariantCulture));
+        }
+        return IntPtr.Zero;
+    }
 
     /// <summary>Whether this window is the system foreground window; replaced in tests.</summary>
     internal Func<bool> IsForeground { get; set; }

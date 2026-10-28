@@ -83,7 +83,7 @@ public sealed class EditorHeavyOperationTests
             foreach (int block in new[] { SettingsRanges.MosaicBlockSize.Min, 7, 12, SettingsRanges.MosaicBlockSize.Max })
             {
                 int itemsBefore = controller.Document.Items.Count;
-                byte[]? expected = LegacyMosaic(visible, region, block, out int x, out int y, out int pw, out int ph);
+                byte[]? expected = ReferenceMosaic(visible, region, block, out int x, out int y, out int pw, out int ph);
                 editor.ApplyMosaic(region, block);
                 EditorMosaicAsyncTests.WaitFor(editor.MosaicOperationsSettledAsync());
                 Assert.Same(visible, editor.DisplayedBitmap);
@@ -106,9 +106,9 @@ public sealed class EditorHeavyOperationTests
             }
     }
 
-    // The pre-change implementation, kept as an independent byte reference: it copies the
-    // whole base and addresses it with four-byte pixels whatever the source format.
-    private static byte[]? LegacyMosaic(BitmapSource mosaicBase, RectD region, int blockSize,
+    // An independent byte reference: it reads the whole base as four-byte BGRA (Bgr24 and Bgr32
+    // converted first, an opaque format gaining alpha 255) and averages every block from it.
+    private static byte[]? ReferenceMosaic(BitmapSource mosaicBase, RectD region, int blockSize,
         out int x, out int y, out int width, out int height)
     {
         RectD normalized = region.Normalized().ClampTo(new RectD(0, 0, mosaicBase.PixelWidth, mosaicBase.PixelHeight));
@@ -120,7 +120,7 @@ public sealed class EditorHeavyOperationTests
         int step = Math.Clamp(blockSize, SettingsRanges.MosaicBlockSize.Min, SettingsRanges.MosaicBlockSize.Max);
         int stride = mosaicBase.PixelWidth * 4;
         byte[] source = new byte[stride * mosaicBase.PixelHeight];
-        mosaicBase.CopyPixels(source, stride, 0);
+        EditorCropRoiTests.FourByte(mosaicBase).CopyPixels(source, stride, 0);
         int patchStride = width * 4;
         byte[] patch = new byte[patchStride * height];
         for (int by = 0; by < height; by += step)
@@ -175,7 +175,7 @@ public sealed class EditorHeavyOperationTests
         controller.Undo.Changed += (_, _) => { refreshes++; atRefresh = editor.DisplayedBitmap; };
         var region = new RectD(oriented.PixelWidth - 26.4, oriented.PixelHeight - 18.7, 29, 23);
         RectD pixels = region.Normalized().ClampTo(new RectD(0, 0, oriented.PixelWidth, oriented.PixelHeight)).ToPixelBounds();
-        BitmapSource expected = LegacyCrop(oriented, (int)pixels.X, (int)pixels.Y, (int)pixels.Width, (int)pixels.Height);
+        BitmapSource expected = ReferenceCrop(oriented, (int)pixels.X, (int)pixels.Y, (int)pixels.Width, (int)pixels.Height);
 
         editor.ApplyCrop(region);
 
@@ -213,7 +213,7 @@ public sealed class EditorHeavyOperationTests
         Assert.Equal(0, refreshes);
         Assert.False(controller.CanUndo);
         Assert.NotSame(source, editor.DisplayedBitmap);
-        AssertBitmap(LegacyCrop(source, 0, 0, 41, 29), editor.DisplayedBitmap);
+        AssertBitmap(ReferenceCrop(source, 0, 0, 41, 29), editor.DisplayedBitmap);
     });
 
     // ---- Image insertion -----------------------------------------------------------
@@ -870,11 +870,11 @@ public sealed class EditorHeavyOperationTests
         return image;
     }
 
-    private static BitmapSource LegacyCrop(BitmapSource source, int x, int y, int width, int height)
+    private static BitmapSource ReferenceCrop(BitmapSource source, int x, int y, int width, int height)
     {
         int stride = source.PixelWidth * 4;
         byte[] full = new byte[stride * source.PixelHeight];
-        source.CopyPixels(full, stride, 0);
+        EditorCropRoiTests.FourByte(source).CopyPixels(full, stride, 0);
         int cropStride = width * 4;
         byte[] crop = new byte[cropStride * height];
         for (int row = 0; row < height; row++)

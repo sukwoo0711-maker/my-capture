@@ -180,12 +180,21 @@ internal sealed partial class GalleryWindow
     {
         if (sender is not FrameworkElement { DataContext: GalleryFolderCardViewModel card }
             || Keyboard.Modifiers != ModifierKeys.None) return;
-        switch (e.Key)
+        // Read through ShortcutInput like the capture cards, so M works in Hangul mode too.
+        switch (ShortcutInput.Resolve(e.Key, e.ImeProcessedKey, textInputFocused: false))
         {
             case Key.Enter:
             case Key.Space:
                 e.Handled = true;
                 await OpenFolderCardAsync(card, fromKeyboard: true);
+                break;
+            case Key.M:
+                e.Handled = true;
+                OnMoveFolderClick(card, new RoutedEventArgs());
+                break;
+            case Key.Delete:
+                e.Handled = true;
+                OnDeleteFolderClick(card, new RoutedEventArgs());
                 break;
             case Key.Left:
             case Key.Right:
@@ -196,6 +205,7 @@ internal sealed partial class GalleryWindow
             case Key.Up:
             case Key.Down:
                 e.Handled = true;
+                if (e.Key == Key.Up && TryFocusDayHeadingAbove(card)) break;
                 object? target = GallerySelectionNavigation.FindVertical(_viewModel.Rows, card, e.Key == Key.Up ? -1 : 1);
                 if (target is GalleryFolderCardViewModel above) FocusFolderCard(above);
                 else if (target is GalleryItemViewModel tile)
@@ -349,12 +359,15 @@ internal sealed partial class GalleryWindow
 
     private void OnMoveCapturesClick(object sender, RoutedEventArgs e)
     {
-        if (_foldersBusy) return;
         GalleryItemViewModel? targeted = sender is MenuItem { CommandParameter: GalleryItemViewModel menuTile }
             ? menuTile : null;
-        Guid[] ids = targeted is not null && !_viewModel.Selection.Contains(targeted.Id)
-            ? [targeted.Id] : _viewModel.Selection.SelectedIds.ToArray();
-        if (ids.Length == 0) return;
+        MoveCaptures(CommandTargets(targeted).Select(tile => tile.Id).ToArray());
+    }
+
+    private void MoveCaptures(Guid[] ids)
+    {
+        if (_foldersBusy || ids.Length == 0) return;
+        bool hadGridFocus = RowsList.IsKeyboardFocusWithin;
         _foldersBusy = true;
         try
         {
@@ -367,7 +380,7 @@ internal sealed partial class GalleryWindow
             dialog.Owner = this;
             if (dialog.ShowDialog() == true) RaiseCaptureChanged();
         }
-        finally { _foldersBusy = false; _viewModel.Refresh(); }
+        finally { _foldersBusy = false; _viewModel.Refresh(); RestoreGridFocus(hadGridFocus); }
     }
 
     private async void OnDeleteFolderClick(object sender, RoutedEventArgs e)
@@ -480,7 +493,7 @@ internal sealed partial class GalleryWindow
         using var cancellation = new CancellationTokenSource();
         _archiveCancellation = cancellation;
         using var activity = _queue.Activities.Start(zip ? LibraryActivityKind.ZipExport : LibraryActivityKind.FolderExport, cancellation.Cancel);
-        ArchiveExportButton.IsEnabled = false; ArchiveCancelButton.Visibility = Visibility.Collapsed;
+        FitSelectionCommands(); ArchiveCancelButton.Visibility = Visibility.Collapsed;
         ShowActionStatus(string.Empty);
         try
         {
@@ -505,7 +518,7 @@ internal sealed partial class GalleryWindow
         }
         finally
         {
-            _archiveCancellation = null; ArchiveExportButton.IsEnabled = true;
+            _archiveCancellation = null; FitSelectionCommands();
             ArchiveCancelButton.Visibility = Visibility.Collapsed;
         }
     }

@@ -1,5 +1,6 @@
 using MyCapture.Core.Recording;
 using MyCapture.Core.Settings;
+using MyCapture.Core.Storage;
 using Xunit;
 
 namespace MyCapture.Core.Tests;
@@ -442,6 +443,36 @@ public sealed class SettingsDraftTests
         AppSettings mapped = draft.ToAppSettings();
         Assert.Equal(string.Empty, mapped.Queue.CapturesDirectoryOverride);
         Assert.Equal(string.Empty, mapped.Export.QuickSaveDirectoryOverride);
+    }
+
+    [Fact]
+    public void QuickSaveFolder_ShowsTheRealDefaultPathAndNeverTheSaveAsHistory()
+    {
+        // The field must show where a quick save really lands, not an empty box, and the
+        // remembered Save As folder is separate history that never leaks into it.
+        string history = @"C:\Pictures\Chosen";
+        var draft = new SettingsDraft(new AppSettings { Export = { LastSaveDirectory = history } });
+
+        string defaultFolder = draft.QuickSaveDirectoryOverride;
+        Assert.False(string.IsNullOrWhiteSpace(defaultFolder));
+        Assert.NotEqual(history, defaultFolder);
+        AppSettings mapped = draft.ToAppSettings();
+        Assert.Equal(string.Empty, mapped.Export.QuickSaveDirectoryOverride);
+        Assert.Equal(history, mapped.Export.LastSaveDirectory);
+
+        draft.QuickSaveDirectoryOverride = defaultFolder;
+        Assert.Equal(string.Empty, draft.ToAppSettings().Export.QuickSaveDirectoryOverride);
+
+        // An explicit folder round-trips; clearing the box returns to the default (stored empty).
+        string chosen = @"D:\Shots";
+        draft.QuickSaveDirectoryOverride = chosen;
+        mapped = draft.ToAppSettings();
+        Assert.Equal(chosen, mapped.Export.QuickSaveDirectoryOverride);
+        var reopened = new SettingsDraft(mapped);
+        Assert.Equal(chosen, reopened.QuickSaveDirectoryOverride);
+        reopened.QuickSaveDirectoryOverride = "  ";
+        Assert.Equal(string.Empty, reopened.ToAppSettings().Export.QuickSaveDirectoryOverride);
+        Assert.Equal(history, reopened.ToAppSettings().Export.LastSaveDirectory);
     }
 }
 

@@ -351,7 +351,7 @@ public sealed class EditorUxTests
         Assert.Equal(string.Empty, editor.StatusText);
 
         ToggleButton button = Field<Dictionary<EditorTool, ToggleButton>>(editor, "_toolButtons")[EditorTool.StepNumber];
-        Assert.Equal("단계 번호 — 클릭할 때마다 1, 2, 3… 순서 번호를 붙입니다 (N)", button.ToolTip);
+        Assert.Equal("단계 번호 (N)", button.ToolTip);
         Assert.Equal(purpose, AutomationProperties.GetHelpText(button));
         Assert.Equal("단계 번호 도구 (N)", AutomationProperties.GetName(button));
 

@@ -33,9 +33,11 @@ public sealed partial class SettingsThemePreviewTests
                     };
                     try
                     {
+                        // The choices are on the guide's last step.
+                        OnboardingGuideTests.AdvanceTo(welcome, WelcomeStep.Finish);
                         welcome.Show();
                         Drain(welcome);
-                        Assert.Equal(560, welcome.Width);
+                        Assert.Equal(WelcomeWindow.DefaultWidth, welcome.Width);
                         Assert.True(welcome.UseAccurateOcr);
                         TextBlock label = Descendants(welcome.AccurateOcrCheck).OfType<TextBlock>()
                             .Single(text => text.Text == UiText.Get("Welcome_AccurateOcr"));

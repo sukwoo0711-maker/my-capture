@@ -523,10 +523,10 @@ public sealed class PinLandingDecorationTests
             Assert.False(restored.LandingStarted);
             Assert.Null(restored.LandingDecoration);
             restored.Close();
-            PinWindow reopened = Assert.IsType<PinWindow>(manager.RestoreLastClosed());
+            PinWindow reopened = Assert.IsType<PinWindow>(PinHistoryTestSupport.Restore(manager));
             Assert.True(reopened.LandingStarted);
             Assert.IsType<PinLandingDecoration>(reopened.LandingDecoration);
-            Assert.Same(content, reopened.PinnedContent);
+            PinHistoryTestSupport.EqualPixels(content.Image, reopened.PinnedContent.Image);
             manager.HideOrShowAll();
             Assert.Null(reopened.LandingDecoration);
             manager.HideOrShowAll();

@@ -63,15 +63,17 @@ public sealed class GalleryPinShortcutTests
                 Assert.Equal(0, changes);
                 Assert.Equal(selection, fixture.Model.Selection.SelectedIds);
 
-                // Keep toggles on and off without opening another screen pin.
+                // Keep follows the selection, as in File Explorer: with both images selected the key keeps
+                // both, and keeping again releases both, without opening another screen pin.
                 Assert.True(PressTile(imageTile, Key.K).Handled);
                 PumpUntil(window, () => changes == 1);
                 Assert.True(fixture.Second.IsPinned);
-                Assert.False(fixture.First.IsPinned);
+                Assert.True(fixture.First.IsPinned);
                 Assert.Single(floated);
                 Assert.True(PressTile(FindTile(window, fixture.Second.Id), Key.K).Handled);
                 PumpUntil(window, () => changes == 2);
                 Assert.False(fixture.Second.IsPinned);
+                Assert.False(fixture.First.IsPinned);
                 Assert.Single(floated);
 
                 Assert.False(PressTile(FindTile(window, fixture.Video.Id), Key.P).Handled);
@@ -125,13 +127,26 @@ public sealed class GalleryPinShortcutTests
                     item => AutomationProperties.GetName(item) == UiText.Get("LibraryUx_KeepToggleName"));
                 Assert.Equal("P", pin.InputGestureText);
                 Assert.Equal("K", keep.InputGestureText);
+                Assert.Same(pin, menu.Items[0]);
+                var selectedPin = (MenuItem)window.FindName("FloatSelectedMenu");
+                var more = (Button)window.FindName("MoreCommandsButton");
+                more.ContextMenu.PlacementTarget = more;
+                more.ContextMenu.IsOpen = true;
+                window.UpdateLayout();
+                Assert.Same(selectedPin, more.ContextMenu.Items[0]);
+                Assert.Equal("P", selectedPin.InputGestureText);
+                Assert.True(selectedPin.IsEnabled);
+                Assert.Same(fixture.Model.FindTile(fixture.Second.Id), selectedPin.CommandParameter);
+                selectedPin.RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
+                Assert.Equal(2, floated.Count);
+                more.ContextMenu.IsOpen = false;
 
                 // Menu and keyboard share rendering and target selection, even when
                 // the menu's ambient DataContext refers to another image.
                 pin.DataContext = fixture.Model.FindTile(fixture.First.Id);
                 pin.CommandParameter = fixture.Model.FindTile(fixture.Second.Id);
                 pin.RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
-                Assert.Equal(2, floated.Count);
+                Assert.Equal(3, floated.Count);
                 Assert.All(floated, bitmap => Assert.Equal(3, bitmap.PixelWidth));
                 Assert.All(sources, source => Assert.Equal(fixture.Second.SourceDocumentPath, source.DocumentPath));
                 Assert.False(fixture.Second.IsPinned);
@@ -170,7 +185,7 @@ public sealed class GalleryPinShortcutTests
     }
 
     private static void InvokeTileKeyDown(GalleryWindow window, KeyEventArgs args) =>
-        typeof(GalleryWindow).GetMethod("OnTileKeyDown", BindingFlags.Instance | BindingFlags.NonPublic)!
+        typeof(GalleryWindow).GetMethod("OnLibraryItemsKeyDown", BindingFlags.Instance | BindingFlags.NonPublic)!
             .Invoke(window, [window, args]);
 
     private static void PumpUntil(GalleryWindow window, Func<bool> completed)

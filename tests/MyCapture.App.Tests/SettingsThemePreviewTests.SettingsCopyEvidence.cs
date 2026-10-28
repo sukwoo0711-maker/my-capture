@@ -95,11 +95,13 @@ public sealed partial class SettingsThemePreviewTests
                     };
                     try
                     {
+                        // The choices are on the guide's last step; it scrolls inside a short work area.
+                        OnboardingGuideTests.AdvanceTo(welcome, WelcomeStep.Finish);
                         welcome.Show();
                         welcome.LimitToWorkArea(new MonitorInfo("small", new RectD(0, 0, 1920, 768), new RectD(0, 0, 1920, 720), 192, true));
                         Drain(welcome);
                         Assert.InRange(welcome.ActualHeight, 1, 360);
-                        var scroll = Assert.IsType<ScrollViewer>(welcome.Content);
+                        ScrollViewer scroll = welcome.Scroller;
                         scroll.ScrollToEnd(); Drain(welcome);
                         Rect bottom = welcome.AccurateOcrHelp.TransformToAncestor(scroll).TransformBounds(new Rect(welcome.AccurateOcrHelp.RenderSize));
                         Assert.InRange(bottom.Bottom, 1, scroll.ActualHeight + 1);
@@ -128,14 +130,15 @@ public sealed partial class SettingsThemePreviewTests
             LibraryUxFixture fixture = CreateLibraryUxFixture("mc-settings-copy-video-");
             try
             {
-                foreach ((string key, double width) in new[] { ("Gallery.TileTemplate", 208d), ("Gallery.CompactTileTemplate", 134d) })
+                foreach ((bool compact, double width) in new[] { (false, 208d), (true, 134d) })
                 {
                     var record = new CaptureRecord { MediaKind = CaptureMediaKind.Video, DurationMs = 3_665_000,
                         SourcePageUrl = "https://github.com/example/my-capture", Width = 1920, Height = 1080 };
                     var tile = new GalleryItemViewModel(record, _ => "missing-thumbnail.jpg", 320);
                     var item = new ListBoxItem { Content = tile, DataContext = tile,
-                        ContentTemplate = (DataTemplate)fixture.Window.FindResource(key), Width = width,
+                        ContentTemplate = (DataTemplate)fixture.Window.FindResource("Gallery.TileTemplate"), Width = width,
                         Padding = new Thickness(0), HorizontalContentAlignment = HorizontalAlignment.Stretch };
+                    GalleryCardStyle.SetIsCompact(item, compact);
                     var window = new Window { Content = item, Width = 350, Height = 300, ShowActivated = false,
                         ShowInTaskbar = false, WindowStartupLocation = WindowStartupLocation.Manual, Left = -10000, Top = -10000 };
                     try
@@ -146,15 +149,15 @@ public sealed partial class SettingsThemePreviewTests
                         foreach (bool selected in new[] { false, true, false })
                         {
                             tile.IsSelected = selected; Drain(window);
-                            Assert.Equal(32, source.ActualHeight);
-                            Assert.Equal(32, source.ActualWidth);
-                            Assert.Equal(32, source.MinHeight);
-                            Assert.Equal(32, source.MaxWidth);
+                            Assert.Equal(24, source.ActualHeight);
+                            Assert.Equal(24, source.ActualWidth);
+                            Assert.Equal(24, source.MinHeight);
+                            Assert.Equal(24, source.MaxWidth);
                             Assert.Equal(new Thickness(0), source.BorderThickness);
                             Assert.Same(application.FindResource("Text.Secondary"), source.Foreground);
                             Rect left = source.TransformToAncestor(item).TransformBounds(new Rect(source.RenderSize));
                             Rect right = video.TransformToAncestor(item).TransformBounds(new Rect(video.RenderSize));
-                            Assert.False(left.IntersectsWith(right), $"{key}: {left} overlaps {right}");
+                            Assert.False(left.IntersectsWith(right), $"{(compact ? "compact" : "full")}: {left} overlaps {right}");
                             Border preview = Descendants(item).OfType<Border>().Single(border => border.Name == "TilePreview");
                             Rect imageBounds = preview.TransformToAncestor(item).TransformBounds(new Rect(preview.RenderSize));
                             Assert.False(left.IntersectsWith(imageBounds));
@@ -200,16 +203,17 @@ public sealed partial class SettingsThemePreviewTests
                     CaptureRecord record = fixture.Records[0];
                     record.SourcePageUrl = "https://github.com/example/my-capture";
                     var board = new StackPanel { Margin = new Thickness(16), Orientation = Orientation.Horizontal };
-                    foreach ((string key, double width) in new[] { ("Gallery.TileTemplate", 208d), ("Gallery.CompactTileTemplate", 134d) })
+                    foreach ((bool compact, double width) in new[] { (false, 208d), (true, 134d) })
                     {
                         var tile = new GalleryItemViewModel(record,
                             _ => fixture.Queue.GetFilePath(record, CaptureFileNames.Thumbnail), 320);
                         var item = new ListBoxItem
                         {
-                            Content = tile, DataContext = tile, ContentTemplate = (DataTemplate)fixture.Window.FindResource(key),
+                            Content = tile, DataContext = tile, ContentTemplate = (DataTemplate)fixture.Window.FindResource("Gallery.TileTemplate"),
                             Width = width, Padding = new Thickness(0), Margin = new Thickness(8),
                             HorizontalContentAlignment = HorizontalAlignment.Stretch,
                         };
+                        GalleryCardStyle.SetIsCompact(item, compact);
                         board.Children.Add(item);
                     }
                     var window = new Window { Content = board, Width = 430, Height = 340 };

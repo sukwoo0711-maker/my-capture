@@ -89,6 +89,8 @@ internal sealed partial class PinWindow : Window
     private readonly DispatcherTimer _zoomSettleTimer;
     private readonly DispatcherTimer _hoverHideTimer;
     private PinHoverBar? _hoverBar;
+    private PinClickThroughHandle? _clickThroughHandle;
+    private bool _clickThroughIntroductionPending;
     private double _labeledHoverBarWidth;
 
     private bool _liveZooming;
@@ -262,6 +264,7 @@ internal sealed partial class PinWindow : Window
         IsVisibleChanged += (_, args) =>
         {
             if (args.NewValue is false) CancelPendingProgress();
+            UpdateClickThroughHandle();
         };
 
         // Tracks the double-click interval without modifying the clipboard on a single click.
@@ -301,11 +304,12 @@ internal sealed partial class PinWindow : Window
             if (!_isClosed) ViewStateChanged?.Invoke();
         };
         Deactivated += (_, _) => SetChromeActive(false);
-        LocationChanged += (_, _) => PlaceHoverBar();
+        LocationChanged += (_, _) => { PlaceHoverBar(); _clickThroughHandle?.Place(); };
         SizeChanged += (_, _) =>
         {
             UpdateImageRasterLayout();
             PlaceHoverBar();
+            _clickThroughHandle?.Place();
         };
         PendingProvenanceUpdateForTest = content.PendingProvenance is { } pending
             ? ApplyPendingProvenanceAsync(new WeakReference<PinWindow>(this), pending)
@@ -505,8 +509,8 @@ internal sealed partial class PinWindow : Window
     internal Func<bool>? CanRestoreClosedPin { get; set; }
 
     /// <summary>
-    /// The immutable content this pin shows. A restored pin reuses the same instance, so its
-    /// frozen source pixels and retained text are exactly what the closed pin had.
+    /// The immutable content this pin shows. Closed pins are decoded losslessly on reopen;
+    /// their source pixels and retained text have the same values as before closing.
     /// </summary>
     internal PinContent PinnedContent => TranslationSourceContent;
 
@@ -558,6 +562,9 @@ internal sealed partial class PinWindow : Window
 
     /// <summary>Whether this pin has been closed and should be pruned by the manager.</summary>
     internal bool IsClosed => _isClosed;
+
+    internal bool IsInteractionActive => !_isClosed
+        && (_dragging || IsMouseCaptureWithin || IsTextSelectionMode || ContextMenu?.IsOpen == true);
 
     /// <summary>Test hook: whether the bottom feedback overlay is currently visible.</summary>
     internal bool IsFeedbackVisible => _feedback.Visibility == Visibility.Visible;
@@ -653,17 +660,63 @@ internal sealed partial class PinWindow : Window
     /// <summary>Applies click-through by toggling extended window styles via the facade.</summary>
     internal void ApplyClickThrough(bool enabled)
     {
+        bool changed = _state.IsClickThrough != enabled;
         _state.SetClickThrough(enabled);
         if (_handle != IntPtr.Zero)
         {
             WindowStyleFacade.SetClickThrough(_handle, enabled);
         }
 
-        if (enabled) HideHoverBar();
+        if (enabled)
+        {
+            HideHoverBar();
+            if (changed) _clickThroughIntroductionPending = true;
+        }
+        else
+        {
+            _clickThroughIntroductionPending = false;
+        }
+
         // Turning it on carries the key that turns it off again, which needs time to read.
         ShowFeedback(
             enabled ? UiText.Format("Onboard_PinClickThroughOn", ClickThroughRecoveryHint()) : UiText.Get("Onboard_PinClickThroughOff"),
             enabled ? FeedbackKind.Result : FeedbackKind.Confirmation);
+        // The pin is click-transparent, so the way back is a separate excluded target.
+        UpdateClickThroughHandle();
+    }
+
+    internal event Action? ClickThroughHintShown;
+    internal PinClickThroughHandle? ClickThroughHandleForTest => _clickThroughHandle;
+
+    private void UpdateClickThroughHandle()
+    {
+        if (_isClosed || _state.IsHidden || !_state.IsClickThrough || !IsVisible || _handle == IntPtr.Zero)
+        {
+            _clickThroughHandle?.Hide();
+            return;
+        }
+        if (_clickThroughHandle is null)
+        {
+            _clickThroughHandle = new PinClickThroughHandle(this, ClickThroughGesture);
+            _clickThroughHandle.DisableRequested += () => ApplyClickThrough(false);
+        }
+        if (!_clickThroughHandle.IsVisible && !_clickThroughHandle.TryReveal())
+        {
+            // Never show capture controls without exclusion, or leave a newly enabled pin unreachable.
+            ApplyClickThrough(false);
+            return;
+        }
+        _clickThroughHandle.Place();
+        if (_clickThroughIntroductionPending)
+        {
+            _clickThroughIntroductionPending = false;
+            PinSettings settings = _settings();
+            if (settings.ClickThroughHintShownCount < 3 && _clickThroughHandle.ShowIntroduction())
+            {
+                settings.ClickThroughHintShownCount++;
+                ClickThroughHintShown?.Invoke();
+            }
+        }
     }
 
     /// <summary>Toggles click-through and returns the new state.</summary>
@@ -671,7 +724,7 @@ internal sealed partial class PinWindow : Window
     {
         bool next = !_state.IsClickThrough;
         ApplyClickThrough(next);
-        return next;
+        return _state.IsClickThrough;
     }
 
     /// <summary>The pin's window bounds in physical pixels; empty if not yet shown.</summary>
@@ -682,6 +735,7 @@ internal sealed partial class PinWindow : Window
     internal void HidePin()
     {
         _state.IsHidden = true;
+        UpdateClickThroughHandle();
         CancelPendingProgress();
         StopLandingEffect();
         LeaveTextSelection(restoreFocus: false);
@@ -713,6 +767,8 @@ internal sealed partial class PinWindow : Window
         _state.IsHidden = false;
         _chrome.BeginAnimation(UIElement.OpacityProperty, null);
         Show();
+        // Show() need not change IsVisible when it interrupts the hide animation.
+        UpdateClickThroughHandle();
         Topmost = true;
         AnimatePinReveal();
     }
@@ -757,6 +813,8 @@ internal sealed partial class PinWindow : Window
     {
         RerenderForDisplayScale(newDpi.DpiScaleX);
         base.OnDpiChanged(oldDpi, newDpi);
+        _clickThroughHandle?.Place();
+        Dispatcher.BeginInvoke(DispatcherPriority.Loaded, new Action(() => _clickThroughHandle?.Place()));
     }
 
     /// <summary>Changes only the raster; the pin's DIP geometry and interaction state stay intact.</summary>
@@ -876,6 +934,8 @@ internal sealed partial class PinWindow : Window
         // Snapshot while the native window still exists and nothing has moved it.
         ClosedPlacement = CaptureClosedPlacement();
         _isClosed = true;
+        _clickThroughHandle?.Close();
+        _clickThroughHandle = null;
         StopLandingEffect();
         EndDrag();
         _feedbackCountdown.Stop();
@@ -921,6 +981,7 @@ internal sealed partial class PinWindow : Window
         _ = sender;
         _ = e;
         AnimatePinReveal();
+        UpdateClickThroughHandle();
     }
 
     private void OnSourceInitialized(object? sender, EventArgs e)

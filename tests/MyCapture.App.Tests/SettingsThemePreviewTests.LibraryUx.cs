@@ -36,7 +36,14 @@ public sealed partial class SettingsThemePreviewTests
 {
     [Fact]
     public Task LibraryUx_CommandBarNavigationFolderCardsAndCaptureDrops() =>
-        RunIsolated(nameof(LibraryUx_CommandBarNavigationFolderCardsAndCaptureDrops), () =>
+        RunLibraryUxTest(nameof(LibraryUx_CommandBarNavigationFolderCardsAndCaptureDrops), constrainWindow: false);
+
+    [Fact]
+    public Task LibraryUx_CommandBarAndFolderCardsWhenTheDesktopCapsTheWindow() =>
+        RunLibraryUxTest(nameof(LibraryUx_CommandBarAndFolderCardsWhenTheDesktopCapsTheWindow), constrainWindow: true);
+
+    private Task RunLibraryUxTest(string testName, bool constrainWindow) =>
+        RunIsolated(testName, () =>
         {
             var application = new Application { ShutdownMode = ShutdownMode.OnExplicitShutdown };
             foreach (string name in new[] { "Tokens", "Symbols", "Controls" })
@@ -54,8 +61,8 @@ public sealed partial class SettingsThemePreviewTests
                          })
                 {
                     using var scope = UiText.UseLanguage(language);
-                    VerifyLibraryUx(language, theme);
-                    VerifyLibraryUx(language, theme, 1.25);
+                    VerifyLibraryUx(language, theme, constrainWindow: constrainWindow);
+                    VerifyLibraryUx(language, theme, 1.25, constrainWindow);
                 }
             }
             finally
@@ -112,14 +119,15 @@ public sealed partial class SettingsThemePreviewTests
         return new LibraryUxFixture(window, vm, queue, empty, design, records);
     }
 
-    private static void VerifyLibraryUx(string language, AppTheme theme, double scale = 0)
+    private static void VerifyLibraryUx(string language, AppTheme theme, double scale = 0, bool constrainWindow = false)
     {
         string label = $"{language}/{theme}/{scale}";
-        string file = $"{AppThemeNames.ToSetting(theme)}-{language}-dpi{scale}";
+        string file = $"{AppThemeNames.ToSetting(theme)}-{language}-dpi{scale}{(constrainWindow ? "-capped" : string.Empty)}";
         ThemeService.Apply(theme);
         LibraryUxFixture f = CreateLibraryUxFixture("mc-library-ux-");
         GalleryWindow window = f.Window;
         GalleryViewModel vm = f.ViewModel;
+        if (constrainWindow) window.MaxWidth = 1044;
         try
         {
             window.Show();
@@ -133,9 +141,7 @@ public sealed partial class SettingsThemePreviewTests
                 }
             }
             var rowsList = (ListBox)window.FindName("RowsList");
-            Button[] cards = PumpLibraryUntil(window, () => FolderCardButtons(rowsList).Length == 2
-                && FolderCardButtons(rowsList).All(card => !((GalleryFolderCardViewModel)card.DataContext).HasPreview
-                    || Descendants(card).OfType<Image>().Single().Source is not null), label + ": folder cards");
+            Button[] cards = PumpLibraryUntil(window, () => FolderCardButtons(rowsList).Length == 2, label + ": folder cards");
             var client = (FrameworkElement)window.Content;
             int rootColumns = vm.ColumnCount;
 
@@ -152,11 +158,12 @@ public sealed partial class SettingsThemePreviewTests
             var placeholder = (TextBlock)window.FindName("SearchPlaceholderText");
             foreach (FrameworkElement element in new FrameworkElement[]
                      { capture, search, placeholder, (FrameworkElement)window.FindName("NewFolderPaneButton"),
-                       (FrameworkElement)window.FindName("SortBox"), (FrameworkElement)window.FindName("MoreCommandsButton") })
+                       (FrameworkElement)window.FindName("EditSelectedButton"), (FrameworkElement)window.FindName("MoreCommandsButton") })
                 AssertInsideClient(element, client, label);
             AssertNotTrimmed(placeholder, label);
             AssertDefaultSearchPlaceholder(window, label);
             AssertSameRow(commandBar, capture, search);
+            AssertSameRow(contentCommandBar, (FrameworkElement)window.FindName("EditSelectedButton"), (FrameworkElement)window.FindName("MoreCommandsButton"));
             AssertSameRow(contentCommandBar, (FrameworkElement)window.FindName("SortBox"), (FrameworkElement)window.FindName("MoreCommandsButton"));
             AssertLibraryCommandHeights(commandBar);
             AssertLibraryCommandHeights(contentCommandBar);
@@ -190,8 +197,8 @@ public sealed partial class SettingsThemePreviewTests
             if (scale > 0) Assert.Equal(scale, VisualTreeHelper.GetDpi(tileCard).DpiScaleX);
             double fullCardWidth = tileCard.ActualWidth;
             Assert.Equal(tileCard.ActualWidth, designCard.ActualWidth, 1);
-            Assert.Equal(tileCard.ActualHeight, designCard.ActualHeight, 1);
-            Assert.Same(window.FindResource("Surface.Folder"), designCard.Background);
+            Assert.True(designCard.ActualHeight < tileCard.ActualHeight);
+            Assert.Empty(Descendants(designCard).OfType<Image>());
             Assert.NotEqual(((SolidColorBrush)window.FindResource("Surface.Raised")).Color,
                 ((SolidColorBrush)window.FindResource("Surface.Folder")).Color);
             Assert.Equal(firstTile.TranslatePoint(new Point(), rowsList).X + 8,
@@ -217,18 +224,18 @@ public sealed partial class SettingsThemePreviewTests
             Assert.True(selection.IsVisible);
             AssertLibraryCommandHeights(commandBar);
             AssertLibraryCommandHeights(contentCommandBar);
-            Assert.Equal(48, contentCommandBar.ActualHeight, 1);
+            Assert.Equal(44, contentCommandBar.ActualHeight, 1);
             AssertSameRow(contentCommandBar, selection, (FrameworkElement)window.FindName("MoreCommandsButton"));
             Assert.Equal(searchBounds, search.TransformToAncestor(client).TransformBounds(new Rect(search.RenderSize)));
-            Assert.False(((FrameworkElement)window.FindName("LibraryCommands")).IsVisible);
+            Assert.True(((Button)window.FindName("EditSelectedButton")).IsEnabled);
             // Global capture remains labelled while the selected item retains its own Edit action.
             Assert.Same(capture, VisibleButtonNamed(window, UiText.Get("Text_2C20ADDA2018")));
             Assert.Equal("CaptureRegionButton", capture.Name);
             Button[] primaryActions = Descendants(window).OfType<Button>().Where(button => button.IsVisible
                 && ReferenceEquals(button.Style, window.FindResource("Button.Primary"))).ToArray();
-            Assert.Equal(2, primaryActions.Length);
+            Assert.Single(primaryActions);
             Assert.Contains(capture, primaryActions);
-            Assert.Contains((Button)window.FindName("DetailsEditButton"), primaryActions);
+            Assert.False(((Button)window.FindName("DetailsEditButton")).IsVisible);
             foreach (Button button in Descendants(selection).OfType<Button>().Where(button => button.IsVisible))
                 AssertInsideClient(button, client, label);
             AssertNotTrimmed((TextBlock)window.FindName("SelectionCountLabel"), label);
@@ -237,14 +244,21 @@ public sealed partial class SettingsThemePreviewTests
             clear.RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent, clear));
             SettleGalleryLayout(window);
             Assert.False(vm.HasSelection);
-            Assert.True(((FrameworkElement)window.FindName("LibraryCommands")).IsVisible);
+            Assert.True(selection.IsVisible);
+            Assert.False(((Button)window.FindName("EditSelectedButton")).IsEnabled);
             // Escape from a capture clears the selection the same way.
             vm.Select(f.Records[0].Id);
             var escape = new KeyEventArgs(Keyboard.PrimaryDevice, PresentationSource.FromVisual(window)!, Environment.TickCount, Key.Escape)
             {
                 RoutedEvent = Keyboard.KeyDownEvent,
             };
-            firstTile.RaiseEvent(escape);
+            Assert.True(window.IsAncestorOf(firstTile), "Escape must originate from the currently realized card.");
+            Assert.True(vm.HasSelection);
+            using (var modifiers = new ThreadKeyboardModifierScope())
+            {
+                Assert.Equal(ModifierKeys.None, Keyboard.Modifiers);
+                firstTile.RaiseEvent(escape);
+            }
             Assert.True(escape.Handled);
             Assert.False(vm.HasSelection);
             SettleGalleryLayout(window);
@@ -328,7 +342,33 @@ public sealed partial class SettingsThemePreviewTests
             ListBoxItem compactTile = PumpLibraryUntil(window, () => Descendants(rowsList).OfType<ListBoxItem>()
                     .FirstOrDefault(item => item.DataContext is GalleryItemViewModel tile && tile.Id == f.Records[4].Id),
                 item => item is not null, label + ": compact tile");
-            Border compactCard = Descendants(compactTile).OfType<Border>().Single(border => border.Name == "CompactTileCard");
+            Border compactCard = Descendants(compactTile).OfType<Border>().Single(border => border.Name == "TileCard");
+            Assert.True(GalleryCardStyle.GetIsCompact(compactCard));
+            SaveLibraryUxEvidence(window, theme, $"compact-width-{file}.png");
+            // At the granted width both modes can need the same column count to keep readable
+            // metadata. Opening a short folder must still never make its cards wider.
+            Assert.True(compactCard.ActualWidth <= fullCardWidth + 0.5,
+                $"{label}: compact {compactCard.ActualWidth:0.#} DIP, full {fullCardWidth:0.#} DIP at granted {window.ActualWidth:0.#}");
+            Assert.Equal(GalleryRowBuilder.ColumnCountForWidth(LibraryUsableWidth(scroll), compact: true,
+                minimumTrackWidth: vm.MinimumTrackWidth), vm.ColumnCount);
+            AssertCardsInsideLibrary(rowsList, scroll, vm, label + ": granted folder width");
+            if (window.ActualWidth < 1280 - 0.5)
+            {
+                // Keep the original wide-layout density assertions too, on the same loaded
+                // content, as in LibraryColumns' desktop-capped sweep.
+                client.Width = 1280 - (window.ActualWidth - client.ActualWidth);
+                SettleGalleryLayout(window);
+                Assert.Equal(client.Width, client.ActualWidth, 0.5);
+                vm.NavigateTo(CaptureFolderScope.All);
+                SettleGalleryLayout(window);
+                rootColumns = vm.ColumnCount;
+                fullCardWidth = Descendants(RealizedCard(rowsList, f.Records[0].Id)).OfType<Border>()
+                    .Single(border => border.Name == "TileCard").ActualWidth;
+                vm.NavigateTo(CaptureFolderScope.ForFolder(f.Design.Id));
+                SettleGalleryLayout(window);
+                compactTile = RealizedCard(rowsList, f.Records[4].Id);
+                compactCard = Descendants(compactTile).OfType<Border>().Single(border => border.Name == "TileCard");
+            }
             // Smaller than the full card, at the compact card's own proportion.
             Assert.True(compactCard.ActualWidth < fullCardWidth, $"{label}: compact {compactCard.ActualWidth:0.#} DIP, full {fullCardWidth:0.#} DIP");
             double cardScale = VisualTreeHelper.GetDpi(compactCard).DpiScaleY;
@@ -340,7 +380,7 @@ public sealed partial class SettingsThemePreviewTests
             var compactRow = (GalleryCardRowPanel)rowParent;
             Assert.True(compactRow.Columns > 0, $"{label}: compact row columns {compactRow.Columns}");
             double expectedHeight = GalleryCardRowPanel.CardHeightFor(
-                compactRow.ActualWidth / compactRow.Columns - compactRow.CardInset, 148, 144, 0.625);
+                compactRow.ActualWidth / compactRow.Columns - compactRow.CardInset, 148, 160, 0.625);
             // The row's proportional height is authored in DIPs, then WPF rounds it to pixels.
             Assert.Equal(Math.Round(expectedHeight * cardScale) / cardScale, compactCard.ActualHeight, 3);
             Assert.True(vm.ColumnCount > rootColumns, $"{label}: {vm.ColumnCount} compact columns, {rootColumns} at the root");
@@ -349,7 +389,7 @@ public sealed partial class SettingsThemePreviewTests
             Assert.Equal(((GalleryItemViewModel)compactTile.DataContext).AccessibleName, AutomationProperties.GetName(compactTile));
             Button compactMore = Descendants(compactTile).OfType<Button>()
                 .Single(button => AutomationProperties.GetName(button) == UiText.Get("Text_5E8959D18390"));
-            Assert.NotNull(compactMore.ContextMenu);
+            Assert.NotNull(window.TileMenu);
             AssertInsideClient(compactMore, client, label);
             Assert.False(Descendants(compactTile).OfType<Border>().Single(border => border.Name == "FolderBadge").IsVisible);
             // The subfolder card takes the same compact frame and column grid as the captures.
@@ -357,7 +397,8 @@ public sealed partial class SettingsThemePreviewTests
                     .SingleOrDefault(card => ((GalleryFolderCardViewModel)card.DataContext).FolderId == final.Id),
                 card => card is not null, label + ": compact subfolder card");
             Assert.Equal(compactCard.ActualWidth, subfolder.ActualWidth, 1);
-            Assert.Equal(compactCard.ActualHeight, subfolder.ActualHeight, 1);
+            Assert.True(subfolder.ActualHeight < compactCard.ActualHeight);
+            Assert.Empty(Descendants(subfolder).OfType<Image>());
             Assert.Equal(compactTile.TranslatePoint(new Point(), rowsList).X + 8, subfolder.TranslatePoint(new Point(), rowsList).X, 1);
             foreach (TextBlock text in Descendants(subfolder).OfType<TextBlock>().Where(text => text.IsVisible))
                 AssertNotTrimmed(text, label);

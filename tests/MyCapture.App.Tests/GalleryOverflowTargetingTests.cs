@@ -38,6 +38,20 @@ public sealed class GalleryOverflowTargetingTests
     }
 
     [Fact]
+    public void ToolbarButtonResolvesTheSelectedTileFromItsCommandParameter_NotTheWindowDataContext()
+    {
+        StaTestHost.Run(() =>
+        {
+            GalleryItemViewModel selected = Tile(Guid.NewGuid());
+            // The toolbar's pin, copy and edit buttons sit under the library's own DataContext and carry the
+            // selected capture as their command parameter.
+            var button = new Button { DataContext = new object(), CommandParameter = selected };
+            Assert.Same(selected, InvokeResolveTileFromCommand(button));
+            Assert.Null(InvokeResolveTileFromCommand(new Button { DataContext = new object() }));
+        });
+    }
+
+    [Fact]
     public void OverflowMenuItemFallsBackToDataContextWhenNoCommandParameter()
     {
         StaTestHost.Run(() =>

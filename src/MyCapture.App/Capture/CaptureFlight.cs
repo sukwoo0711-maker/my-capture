@@ -73,24 +73,30 @@ internal sealed class CaptureFlight
     internal static Func<bool> ReadLayeredSupport { get; set; } = () => CaptureWindowExclusion.SupportsLayeredWindows;
     internal static Func<IReadOnlyList<MonitorInfo>> ReadMonitors { get; set; } = MonitorEnumerator.GetAll;
 
+    internal static bool UseLegacyBoundsForProbe { get; set; }
+
     private enum Phase { Lifted, Landing, HandingOver, Flying, Arrived, Leaving, Done }
 
     private readonly Func<double> _clock;
     private readonly double _scale;
     private readonly double _liftedAt;
     private readonly DispatcherTimer _deadline;
-    private CaptureFlightDecoration _window;
+    private CaptureFlightDecoration? _window;
     private CaptureFlightDecoration? _successor;
     private QuickAccessWindow? _card;
     private Phase _phase = Phase.Lifted;
     private double _phaseStart;
     private bool _rendering;
 
+    /// <summary>Actual capture exclusion of each decoration that has left the screen.</summary>
+    internal event Action<bool>? SurfaceDismissed;
+
     private CaptureFlight(BitmapSource image, RectD source, CaptureFlightDecoration window, double scale, Func<double> clock)
     {
         Image = image;
         Source = source;
         _window = window;
+        window.Closed += OnDecorationClosed;
         _scale = scale;
         _clock = clock;
         _liftedAt = clock();
@@ -98,8 +104,11 @@ internal sealed class CaptureFlight
         _deadline.Tick += OnDeadline;
     }
 
-    /// <summary>The captured image; the card that receives the flight shows this same image.</summary>
-    internal BitmapSource Image { get; }
+    /// <summary>
+    /// The captured image; the card that receives the flight shows this same image. Null once the
+    /// flight has ended, so a finished flight the app still holds keeps no pixels.
+    /// </summary>
+    internal BitmapSource? Image { get; private set; }
 
     /// <summary>Where the image was taken, in virtual-desktop physical pixels.</summary>
     internal RectD Source { get; }
@@ -195,7 +204,12 @@ internal sealed class CaptureFlight
         }
         _successor?.Close();
         _successor = null;
-        if (!_window.IsClosed) _window.Close();
+        if (_window is { IsClosed: false } window) window.Close();
+        // The app keeps its latest flight until the next capture. A finished flight lets go of the
+        // image, its closed windows and the card, so none of them outlives what is on screen.
+        _window = null;
+        _card = null;
+        Image = null;
     }
 
     /// <summary>Applies the frame for the clock's current time; the live clock calls this every frame.</summary>
@@ -214,7 +228,7 @@ internal sealed class CaptureFlight
 
             case Phase.Flying:
                 if (_card is not { IsVisible: true } card || FluidMotion.IsExiting(card)
-                    || card.PreviewScreenBounds is not { } target || !Contains(_window.Bounds, target))
+                    || card.PreviewScreenBounds is not { } target || _window is not { } window || !Contains(window.Bounds, target))
                 {
                     // The card left or moved away from where the image can reach: land at once.
                     Finish();
@@ -259,6 +273,7 @@ internal sealed class CaptureFlight
             return;
         }
 
+        if (_window is not { } lifted || Image is not { } image) return;
         try
         {
             if (_card.PreviewScreenBounds is not { } target
@@ -268,16 +283,17 @@ internal sealed class CaptureFlight
                 return;
             }
 
-            if (Contains(_window.Bounds, plan.Bounds))
+            if (Contains(lifted.Bounds, plan.Bounds))
             {
                 // The card was shown after the lift window: put the image back on top before it moves.
-                _window.Raise();
+                lifted.Raise();
                 StartFlying();
                 return;
             }
 
-            var successor = new CaptureFlightDecoration(Image, plan.Bounds, plan.Scale);
-            successor.Draw(_window.Frame);
+            var successor = new CaptureFlightDecoration(image, plan.Bounds, plan.Scale);
+            successor.Closed += OnDecorationClosed;
+            successor.Draw(lifted.Frame);
             if (!successor.ShowDecoration())
             {
                 successor.Close();
@@ -301,7 +317,7 @@ internal sealed class CaptureFlight
         if (sender is CaptureFlightDecoration successor) successor.ContentRendered -= OnSuccessorRendered;
         if (_phase != Phase.HandingOver || _successor is not { } next) return;
         // The new window shows the image where the lift window does; the lift window can go.
-        _window.Close();
+        _window?.Close();
         _window = next;
         _successor = null;
         StartFlying();
@@ -362,7 +378,14 @@ internal sealed class CaptureFlight
 
     private void OnCardClosed(object? sender, EventArgs e) => Finish();
 
-    private void Draw(CaptureFlightFrame frame) => _window.Draw(frame);
+    private void OnDecorationClosed(object? sender, EventArgs e)
+    {
+        if (sender is not CaptureFlightDecoration window) return;
+        window.Closed -= OnDecorationClosed;
+        if (window.WasShown) SurfaceDismissed?.Invoke(window.IsCaptureExcluded);
+    }
+
+    private void Draw(CaptureFlightFrame frame) => _window?.Draw(frame);
 
     private void StartRendering()
     {
@@ -430,9 +453,17 @@ internal sealed class CaptureFlight
         double scale = crossed[0].ScaleFactor;
         if (!double.IsFinite(scale) || scale <= 0 || crossed.Any(monitor => monitor.ScaleFactor != scale)) return null;
 
-        Rect room = path;
-        double margin = Math.Ceiling(MarginDip * scale);
-        room.Inflate(margin, margin);
+        // The feather is a finite stack of contours, not a WPF blur effect. Its outermost
+        // contour extends by blur horizontally and blur +/- offset vertically. Allow the
+        // peak shadow from the start so a landing inside the lifted image can keep the same
+        // HWND. Keep one physical pixel for antialiasing. Bounds stay fixed during animation.
+        double blur = PeakBlurDip * scale;
+        double offset = PeakOffsetDip * scale;
+        double side = Math.Ceiling(blur) + 1;
+        double above = Math.Ceiling(blur - offset) + 1;
+        double below = Math.Ceiling(blur + offset) + 1;
+        Rect room = new(path.Left - side, path.Top - above,
+            path.Width + 2 * side, path.Height + above + below);
         // The shadow stays on the displays the image crosses: a full-screen capture needs no room
         // beyond its display, and a neighbouring display never widens the window.
         Rect desk = ToRect(crossed[0].Bounds);
@@ -440,12 +471,19 @@ internal sealed class CaptureFlight
         room.Intersect(desk);
         if (room.IsEmpty || room.Width <= 0 || room.Height <= 0) return null;
         RectD bounds = new RectD(room.X, room.Y, room.Width, room.Height).ToPixelBounds();
+        // Surface allocation is smaller, but keep the existing eligibility contract: this
+        // change must not enable an animation previously skipped for its size or mixed DPI.
+        Rect legacyRoom = path;
+        double legacyMargin = Math.Ceiling(MarginDip * scale);
+        legacyRoom.Inflate(legacyMargin, legacyMargin);
+        legacyRoom.Intersect(desk);
+        RectD eligibility = new RectD(legacyRoom.X, legacyRoom.Y, legacyRoom.Width, legacyRoom.Height).ToPixelBounds();
         // One window has one scale: no part of it may lie on a display of another scale (displays
         // the image crosses can enclose another one in an L-shaped layout).
-        if (monitors.Any(monitor => monitor.ScaleFactor != scale && Overlaps(ToRect(monitor.Bounds), ToRect(bounds))))
+        if (monitors.Any(monitor => monitor.ScaleFactor != scale && Overlaps(ToRect(monitor.Bounds), ToRect(eligibility))))
             return null;
-        if (bounds.Width * bounds.Height > MaxSurfacePixels) return null;
-        return (bounds, scale);
+        if (eligibility.Width * eligibility.Height > MaxSurfacePixels) return null;
+        return (UseLegacyBoundsForProbe ? eligibility : bounds, scale);
     }
 
     // Shared edges do not count: a capture ending at a display's edge does not cross the next one.

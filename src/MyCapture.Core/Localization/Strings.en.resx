@@ -1478,7 +1478,7 @@ This cannot be undone.</value>
     <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
   </data>
   <data name="Text_7DFFA4D81765" xml:space="preserve">
-    <value>Delete selection (Delete)</value>
+    <value>Delete selection (Del)</value>
     <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
   </data>
   <data name="Text_7F2ED132EA3B" xml:space="preserve">
@@ -3334,6 +3334,7 @@ Open the library or Settings from the tray menu.</value></data>
   <data name="QuickAccess.OpenFolder" xml:space="preserve"><value>Open folder</value></data>
   <data name="QuickAccess.Title" xml:space="preserve"><value>Capture quick access</value></data>
   <data name="QuickAccess.CopyText" xml:space="preserve"><value>Copy text</value></data>
+  <data name="QuickAccess.TextLabel" xml:space="preserve"><value>Text</value></data>
   <data name="QuickAccess.CopyingText" xml:space="preserve"><value>Recognizing text…</value></data>
   <data name="QuickAccess.TextCopied" xml:space="preserve"><value>Text copied</value></data>
   <data name="QuickAccess.CopyFailed" xml:space="preserve"><value>Could not copy · Press {0} to retry</value></data>
@@ -4067,13 +4068,13 @@ Delete {1} {1:plural:subfolder|subfolders}, {2} {2:plural:image|images}, and {3}
   <data name="EditRecovery_Detail" xml:space="preserve"><value>{0} · {1} × {2}</value></data>
   <data name="EditRecovery_TimeFormat" xml:space="preserve"><value>MMM d, HH:mm</value><comment>.NET custom date and time format for when a draft was saved.</comment></data>
   <data name="EditRecovery_RowAction" xml:space="preserve"><value>{0}: {1}</value></data>
-  <data name="Onboard_TryNow" xml:space="preserve"><value>Try it now</value></data>
+  <data name="Onboard_TryNow" xml:space="preserve"><value>Capture region</value></data>
   <data name="Onboard_TryNowHelp" xml:space="preserve"><value>Closes this window and starts a region capture.</value></data>
   <data name="Onboard_StepsName" xml:space="preserve"><value>Getting started</value></data>
   <data name="Onboard_StepNumber" xml:space="preserve"><value>Step {0}</value></data>
   <data name="Onboard_AfterCaptureTitle" xml:space="preserve"><value>After a capture</value></data>
   <data name="Welcome_FirstCaptureTitle" xml:space="preserve"><value>Try your first capture</value></data>
-  <data name="Welcome_PinClipboardHint" xml:space="preserve"><value>Pin copied tables and code with {0}.</value></data>
+  <data name="Welcome_PinClipboardHint" xml:space="preserve"><value>Press {0} to keep copied tables and code above other windows for reference.</value></data>
   <data name="Welcome_Skip" xml:space="preserve"><value>Skip</value></data>
   <data name="Onboard_FirstCaptureTip" xml:space="preserve"><value>Press P to pin it above other windows</value></data>
   <data name="Onboard_ReceiptKeyboard" xml:space="preserve"><value>Alt+Q to focus · Tab to move · Enter to run</value></data>
@@ -4134,7 +4135,7 @@ Delete {1} {1:plural:subfolder|subfolders}, {2} {2:plural:image|images}, and {3}
   <data name="Onboard_PinWheelDown" xml:space="preserve"><value>Ctrl+wheel down</value></data>
   <data name="Onboard_PinWheelUp" xml:space="preserve"><value>Ctrl+wheel up</value></data>
   <data name="Onboard_PinAllowClickThrough" xml:space="preserve"><value>Click through to windows behind</value></data>
-  <data name="Onboard_PinAllowClickThroughHelp" xml:space="preserve"><value>Sends mouse input to the window behind. Turn off: {0}</value></data>
+  <data name="Onboard_PinAllowClickThroughHelp" xml:space="preserve"><value>Sends mouse input to the window behind. Click the handle at the pin's top-right corner to turn it off. Turn off: {0}</value></data>
   <data name="Onboard_PinClickThroughOn" xml:space="preserve"><value>Click through to windows behind: on
 Turn off: {0}</value></data>
   <data name="Onboard_PinClickThroughOff" xml:space="preserve"><value>Click through to windows behind: off</value></data>
@@ -4231,7 +4232,7 @@ Turn off: {0}</value></data>
   <data name="Tutorial.image-save.Step2" xml:space="preserve"><value>2. Press Ctrl+S to save.</value></data>
   <data name="Tutorial.image-save.Step3" xml:space="preserve"><value>3. To save another file, press Ctrl+Shift+S and choose the destination.</value></data>
   <data name="Tutorial.image-copy.Step1" xml:space="preserve"><value>1. Edit the image and review the result.</value></data>
-  <data name="Tutorial.image-copy.Step2" xml:space="preserve"><value>2. Press Ctrl+C to copy the edited image. The editor stays open; press Done (Ctrl+Enter) to save and close.</value></data>
+  <data name="Tutorial.image-copy.Step2" xml:space="preserve"><value>2. Use Copy and close (Ctrl+C) to save the edited image, copy it to the clipboard, and close. While typing text, Ctrl+C copies text; Ctrl+Enter finishes the edit.</value></data>
   <data name="Tutorial.image-copy.Step3" xml:space="preserve"><value>3. Press Ctrl+V in another app to paste the image.</value></data>
   <data name="Tutorial.folder-create.Step1" xml:space="preserve"><value>1. Open the library.</value></data>
   <data name="Tutorial.folder-create.Step2" xml:space="preserve"><value>2. Press Ctrl+Shift+N and enter a name for the new folder.</value></data>
@@ -4616,7 +4617,8 @@ Overwrite these shortcuts? You can change this later in Settings → Shortcuts.<
   <data name="Update_DownloadingPercent" xml:space="preserve"><value>Downloading update {0}%</value></data>
   <data name="Update_Verifying" xml:space="preserve"><value>Verifying update</value></data>
   <data name="Update_Preparing" xml:space="preserve"><value>Preparing installation</value></data>
-  <data name="Update_InstallFailed" xml:space="preserve"><value>The update could not be installed. Try again in Settings &gt; About.</value></data>
+  <data name="Update_InstallFailed" xml:space="preserve"><value>The update could not be installed.</value></data>
+  <data name="Update_RetryAction" xml:space="preserve"><value>Retry</value></data>
   <data name="Update_CheckHelp" xml:space="preserve"><value>Checks GitHub for a new version of this app.</value></data>
   <data name="Update_InstallHelp" xml:space="preserve"><value>Saves your work, then installs the new version.</value></data>
   <data name="Update_OpenReleaseHelp" xml:space="preserve"><value>Opens the download page for the new version in your browser.</value></data>
@@ -4639,6 +4641,7 @@ Overwrite these shortcuts? You can change this later in Settings → Shortcuts.<
   <data name="Translate_Direction" xml:space="preserve"><value>English → Korean</value></data>
   <data name="Translate_Summary" xml:space="preserve"><value>English → Korean · {0} blocks</value></data>
   <data name="Translate_SummaryOne" xml:space="preserve"><value>English → Korean · 1 block</value></data>
+  <data name="Translate_Copy" xml:space="preserve"><value>Copy translation</value></data>
   <data name="Translate_CopyWithSource" xml:space="preserve"><value>Copy with original</value></data>
   <data name="Translate_CopyHelp" xml:space="preserve"><value>Copies the translations to the clipboard</value></data>
   <data name="Translate_List" xml:space="preserve"><value>Translations</value></data>
@@ -4732,4 +4735,189 @@ Install the model?</value></data>
   <data name="Pin_TranslationModelPreparing" xml:space="preserve"><value>Translation model is being prepared</value></data>
   <data name="Pin_TranslationNoText" xml:space="preserve"><value>No text was found in the image.</value></data>
   <data name="Pin_CopyTranslation" xml:space="preserve"><value>Copy translation</value></data>
+  <data name="App.CurrentVersion" xml:space="preserve"><value>Version {0}</value></data>
+  <data name="Welcome_CaptureInstruction" xml:space="preserve"><value>Select Capture region, then drag to choose the area to capture.</value></data>
+  <data name="Onboarding.Replay" xml:space="preserve"><value>First-use guide</value></data>
+  <data name="Onboarding.Ready" xml:space="preserve"><value>Finish</value></data>
+  <data name="Onboarding.CaptureLabel" xml:space="preserve"><value>Capture</value></data>
+  <data name="Onboarding.PinLabel" xml:space="preserve"><value>Pin</value></data>
+  <data name="Onboarding.LibraryLabel" xml:space="preserve"><value>Find again</value></data>
+  <data name="Onboarding.ProgressName" xml:space="preserve"><value>Step {0} of 3: {1}</value></data>
+  <data name="Onboarding.CaptureTitle" xml:space="preserve"><value>Capture part of the screen</value></data>
+  <data name="Onboarding.CaptureInstruction" xml:space="preserve"><value>Select the button below, then drag over the table.</value></data>
+  <data name="Onboarding.CaptureInstructionKey" xml:space="preserve"><value>Press this key or the button below, then drag over the table.</value></data>
+  <data name="Onboarding.PinTitle" xml:space="preserve"><value>Keep a copied table above other windows</value></data>
+  <data name="Onboarding.PinInstruction" xml:space="preserve"><value>First, copy the practice table with the button below.</value></data>
+  <data name="Onboarding.PressPin" xml:space="preserve"><value>Press {0}.</value></data>
+  <data name="Onboarding.PinButtonInstruction" xml:space="preserve"><value>Select the button below to pin it.</value></data>
+  <data name="Onboarding.LibraryTitle" xml:space="preserve"><value>Every capture is saved in the library</value></data>
+  <data name="Onboarding.LibraryInstruction" xml:space="preserve"><value>Open it from the MyCapture icon inside ^ on the taskbar.</value></data>
+  <data name="Onboarding.LibraryInstructionKey" xml:space="preserve"><value>Press this key or use the icon inside ^ on the taskbar.</value></data>
+  <data name="Onboarding.FinishTitle" xml:space="preserve"><value>You are ready</value></data>
+  <data name="Onboarding.FinishInstruction" xml:space="preserve"><value>Check the settings below, then get started.</value></data>
+  <data name="Onboarding.ReplayNote" xml:space="preserve"><value>You can replay this from ‘First-use guide’ in the tray menu.</value></data>
+  <data name="Onboarding.StartCapture" xml:space="preserve"><value>Start region capture</value></data>
+  <data name="Onboarding.CopyPractice" xml:space="preserve"><value>Copy practice table</value></data>
+  <data name="Onboarding.CreatePin" xml:space="preserve"><value>Create pin</value></data>
+  <data name="Onboarding.OpenLibrary" xml:space="preserve"><value>Open library</value></data>
+  <data name="Onboarding.Start" xml:space="preserve"><value>Get started</value></data>
+  <data name="Onboarding.CaptureCopied" xml:space="preserve"><value>Captured. It is also copied to the clipboard.</value></data>
+  <data name="Onboarding.Captured" xml:space="preserve"><value>Captured. It could not be copied to the clipboard.</value></data>
+  <data name="Onboarding.CaptureRetry" xml:space="preserve"><value>Nothing was captured. Try again.</value></data>
+  <data name="Onboarding.CaptureHint" xml:space="preserve"><value>Select the button, then drag over the table.</value></data>
+  <data name="Onboarding.CopyRetry" xml:space="preserve"><value>Could not copy. Select the button again.</value></data>
+  <data name="Onboarding.PracticeCopied" xml:space="preserve"><value>Copied. You can now pin it.</value></data>
+  <data name="Onboarding.CopyHint" xml:space="preserve"><value>Select ‘Copy practice table’.</value></data>
+  <data name="Onboarding.PinHint" xml:space="preserve"><value>If the key does nothing, select ‘Create pin’.</value></data>
+  <data name="Onboarding.PinClose" xml:space="preserve"><value>The pin is up. Close it with Esc or the pin’s Close button.</value></data>
+  <data name="Onboarding.LibraryHint" xml:space="preserve"><value>Select ‘Open library’.</value></data>
+  <data name="Onboarding.PracticeLabel" xml:space="preserve"><value>Practice table</value></data>
+  <data name="Onboarding.TableItem" xml:space="preserve"><value>Item</value></data>
+  <data name="Onboarding.TableSpec" xml:space="preserve"><value>Spec</value></data>
+  <data name="Onboarding.TableMemory" xml:space="preserve"><value>Memory</value></data>
+  <data name="Onboarding.TableStorage" xml:space="preserve"><value>Storage</value></data>
+  <data name="Onboarding.TrayLocation" xml:space="preserve"><value>The MyCapture icon is inside the ^ button.</value></data>
+  <data name="Onboarding.TrayIconName" xml:space="preserve"><value>MyCapture icon</value></data>
+  <data name="Onboarding.AboutBody" xml:space="preserve"><value>Three steps to try capture, pin and the library.</value></data>
+  <data name="Settings.QuickSaveDirectoryHint" xml:space="preserve"><value>Quick save always uses this folder. Leave blank to use the default capture folder.</value></data>
+  <data name="Pin.ClickThroughOff" xml:space="preserve"><value>Turn off click-through</value></data>
+  <data name="Pin.ClickThroughIntro" xml:space="preserve"><value>Click here to turn it off</value></data>
+  <data name="EditorFlow_CopyAndClose" xml:space="preserve"><value>Copy and close</value></data>
+  <data name="LibraryUx_NoSelection" xml:space="preserve"><value>No selection</value></data>
+  <data name="LibraryUx_Preview" xml:space="preserve"><value>Preview</value></data>
+  <data name="LibraryUx_PreviewHint" xml:space="preserve"><value>Preview (Space)</value></data>
+  <data name="LibraryUx_UpdateAvailable" xml:space="preserve"><value>Update {0}</value></data>
+  <data name="LibraryUx_RateAction" xml:space="preserve"><value>Rate</value></data>
+  <data name="LibraryUx_SelectCard" xml:space="preserve"><value>Select {0}</value></data>
+  <data name="LibraryUx_PinHint" xml:space="preserve"><value>Pin to screen (P)</value></data>
+  <data name="LibraryUx_SourceDetails" xml:space="preserve"><value>Source details</value></data>
+  <data name="LibraryUx_EditHint" xml:space="preserve"><value>Edit again (Enter)</value></data>
+  <data name="LibraryUx_KeepHint" xml:space="preserve"><value>Keep (K)</value></data>
+  <data name="CaptureRatio_Help" xml:space="preserve"><value>Lock the region's aspect ratio or place a fixed size.</value></data>
+  <data name="CaptureRatio_Changed" xml:space="preserve"><value>Ratio: {0}</value></data>
+  <data name="CaptureRatio_FixedSize" xml:space="preserve"><value>Fixed size {0}</value></data>
+  <data name="CaptureRatio_FixedHint" xml:space="preserve"><value>Move with the arrow keys and press Enter to confirm.</value></data>
+  <data name="CaptureRatio_HelpLabel" xml:space="preserve"><value>Switch aspect ratio lock while selecting</value></data>
+  <data name="Stamp_Name" xml:space="preserve"><value>Stamp</value></data>
+  <data name="Stamp_Place" xml:space="preserve"><value>Place stamp</value></data>
+  <data name="Stamp_ToolTip" xml:space="preserve"><value>Place stamp — right-click for options (S)</value></data>
+  <data name="Stamp_Change" xml:space="preserve"><value>Change stamp image…</value></data>
+  <data name="Stamp_Opacity" xml:space="preserve"><value>Opacity</value></data>
+  <data name="Stamp_OpacityPercent" xml:space="preserve"><value>{0}%</value></data>
+  <data name="Stamp_Remove" xml:space="preserve"><value>Remove stamp</value></data>
+  <data name="Stamp_PickerTitle" xml:space="preserve"><value>Choose stamp image</value></data>
+  <data name="Stamp_Changed" xml:space="preserve"><value>Stamp image changed</value></data>
+  <data name="Stamp_OpacitySet" xml:space="preserve"><value>Stamp opacity {0}%</value></data>
+  <data name="Stamp_Removed" xml:space="preserve"><value>Stamp image removed · Stamps already placed stay</value></data>
+  <data name="Stamp_SaveFailed" xml:space="preserve"><value>The stamp image could not be saved.</value></data>
+  <data name="Stamp_Unreadable" xml:space="preserve"><value>The stamp image cannot be read. Please register it again.</value></data>
+  <data name="Stamp_Unavailable" xml:space="preserve"><value>The stamp is not available here.</value></data>
+  <data name="Help.QuickAccess" xml:space="preserve">
+    <value>Quick access</value>
+  </data>
+  <data name="Shortcuts.DoneInText" xml:space="preserve">
+    <value>Copy and close, including while typing text</value>
+  </data>
+  <data name="Shortcuts.EditText" xml:space="preserve">
+    <value>Edit selected text</value>
+  </data>
+  <data name="Shortcuts.Privacy" xml:space="preserve">
+    <value>Hide personal information</value>
+  </data>
+  <data name="Shortcuts.StepBack" xml:space="preserve">
+    <value>Cancel current action / clear selection</value>
+  </data>
+  <data name="Shortcuts.Undo" xml:space="preserve">
+    <value>Undo</value>
+  </data>
+  <data name="Shortcuts.Redo" xml:space="preserve">
+    <value>Redo</value>
+  </data>
+  <data name="Shortcuts.SelectAll" xml:space="preserve">
+    <value>Select all</value>
+  </data>
+  <data name="Shortcuts.Duplicate" xml:space="preserve">
+    <value>Duplicate selection</value>
+  </data>
+  <data name="Shortcuts.BringForward" xml:space="preserve">
+    <value>Bring forward</value>
+  </data>
+  <data name="Shortcuts.SendBackward" xml:space="preserve">
+    <value>Send backward</value>
+  </data>
+  <data name="Shortcuts.DeleteSelection" xml:space="preserve">
+    <value>Delete selection</value>
+  </data>
+  <data name="Shortcuts.Move1" xml:space="preserve">
+    <value>Move selection by 1 px</value>
+  </data>
+  <data name="Shortcuts.Move10" xml:space="preserve">
+    <value>Move selection by 10 px</value>
+  </data>
+  <data name="Shortcuts.CropMove1" xml:space="preserve">
+    <value>Move crop by 1 px</value>
+  </data>
+  <data name="Shortcuts.CropMove10" xml:space="preserve">
+    <value>Move crop by 10 px</value>
+  </data>
+  <data name="Shortcuts.CaptureConfirm" xml:space="preserve">
+    <value>Capture selected area</value>
+  </data>
+  <data name="Shortcuts.CaptureCancel" xml:space="preserve">
+    <value>Cancel capture</value>
+  </data>
+  <data name="Shortcuts.CaptureAll" xml:space="preserve">
+    <value>Select entire screen</value>
+  </data>
+  <data name="Shortcuts.SelectionMove1" xml:space="preserve">
+    <value>Move capture area by 1 px</value>
+  </data>
+  <data name="Shortcuts.SelectionMove10" xml:space="preserve">
+    <value>Move capture area by 10 px</value>
+  </data>
+  <data name="Shortcuts.SelectionResize1" xml:space="preserve">
+    <value>Resize capture area by 1 px</value>
+  </data>
+  <data name="Shortcuts.SelectionResize10" xml:space="preserve">
+    <value>Resize capture area by 10 px</value>
+  </data>
+  <data name="Shortcuts.LibraryCopy" xml:space="preserve">
+    <value>Copy image</value>
+  </data>
+  <data name="Shortcuts.LibraryOpen" xml:space="preserve">
+    <value>Re-edit image / play video</value>
+  </data>
+  <data name="Shortcuts.LibraryPreview" xml:space="preserve">
+    <value>Preview</value>
+  </data>
+  <data name="Shortcuts.LibraryText" xml:space="preserve">
+    <value>Recognize text (images)</value>
+  </data>
+  <data name="Shortcuts.LibraryGif" xml:space="preserve">
+    <value>Export GIF (videos)</value>
+  </data>
+  <data name="Shortcuts.ContextMenu" xml:space="preserve">
+    <value>Selection menu</value>
+  </data>
+  <data name="Shortcuts.Search" xml:space="preserve">
+    <value>Search</value>
+  </data>
+  <data name="Shortcuts.Back" xml:space="preserve">
+    <value>Previous folder</value>
+  </data>
+  <data name="Shortcuts.Forward" xml:space="preserve">
+    <value>Next folder</value>
+  </data>
+  <data name="Shortcuts.MouseNavigation" xml:space="preserve">
+    <value>Previous / next folder</value>
+  </data>
+  <data name="Shortcuts.MouseButtons" xml:space="preserve">
+    <value>Mouse back / forward</value>
+  </data>
+  <data name="Shortcuts.LibraryDrag" xml:space="preserve">
+    <value>Drag to a folder or out to export</value>
+  </data>
+  <data name="Shortcuts.Drag" xml:space="preserve">
+    <value>Mouse drag</value>
+  </data>
 </root>

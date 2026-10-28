@@ -88,8 +88,10 @@ public sealed class GalleryCardRowPanel : Panel
     public static double CardHeightFor(double cardWidth, double baseWidth, double baseHeight, double heightPerWidth) =>
         Math.Max(1, Math.Round(baseHeight + (cardWidth - baseWidth) * heightPerWidth));
 
-    // Three caption lines cover the folder's kind/count and the capture's metadata. Extra
-    // leading keeps both row types aligned when the shared text tokens are enlarged.
+    // A card's footer is two rows: the title with the time at its right (as tall as the larger of the two
+    // lines), then the 28-DIP row of source glyph, badges and commands (taller only when its caption text
+    // outgrows 28 DIPs). Enlarged text tokens therefore add the title line's growth and, only past a caption
+    // line of 28 DIPs, the second row's. A folder card has one line and is unaffected.
     public static readonly DependencyProperty TitleFontSizeProperty = DependencyProperty.Register(
         nameof(TitleFontSize), typeof(double), typeof(GalleryCardRowPanel),
         new FrameworkPropertyMetadata(14.0, FrameworkPropertyMetadataOptions.AffectsMeasure));
@@ -104,7 +106,7 @@ public sealed class GalleryCardRowPanel : Panel
     public double BaseTitleFontSize { get => (double)GetValue(BaseTitleFontSizeProperty); set => SetValue(BaseTitleFontSizeProperty, value); }
 
     private double TextHeightGrowth => Math.Ceiling(Math.Max(0, TitleFontSize - BaseTitleFontSize) * 1.5
-        + Math.Max(0, CaptionFontSize - 12) * 3);
+        + Math.Max(0, CaptionFontSize * 1.4 - 28));
 
     private int ColumnCount => Columns > 0 ? Columns : Math.Max(1, InternalChildren.Count);
 

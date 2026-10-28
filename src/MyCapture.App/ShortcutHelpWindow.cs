@@ -95,21 +95,20 @@ internal sealed class ShortcutHelpWindow : Window
                     ("RecordingPauseHotkey_Command", Display(keys.PauseRecording)),
                     ("Text_66BA5DCDA810", Display(keys.OpenLibrary)), ("Text_36458FABBDBB", Display(keys.CaptureWindow)),
                     ("Text_254C836B9ED2", Display(keys.CaptureFullScreen)), ("Hotkey.Scroll", Display(keys.ScrollingCapture)), ("Hotkey.Delay", Display(keys.DelayedCapture)),
-                    ("QuickAccess.Title", "Alt+Q"), ("TextCapture_Title", Display(keys.CaptureText)),
-                    ("ColorPick_HelpLabel", "C"), ("TextCapture_HelpToggle", "T")]),
-                ("Help.Annotation", [("Text_DC0760235344", "R"), ("Tools.Ellipse", "E"), ("Text_2785CE58DF74", "A"),
-                    ("Text_37DB9D0B1C8E", "P"), ("Tools.Highlighter", "H"), ("Text_258AD4B095A1", "T"), ("Tools.StepNumber", "N"),
-                    ("Text_3F8046019B32", "M"), ("EditorBlur_Name", "B"), ("Tools_Crop", "X"),
-                    ("EditorUx_RotateLeftHint", "Q"), ("EditorUx_RotateRightHint", "W"), ("QuickAccess.Save", "Ctrl+S"), ("QuickAccess.Copy", "Ctrl+C")]),
-                ("Workspace.Library", [("Gallery.Float", "P"), ("LibraryUx_KeepToggleName", "K"),
-                    ("Folder410.MoveCaptures", "M"), ("Folder410.Delete", "Del"),
-                    ("Folder410.NewFolder", "Ctrl+Shift+N"), ("Folder410.Rename", "F2")]),
-                ("Help.Video", [("Help.Play", "Space"), ("Help.Frame", FrameStepKeys), ("Video.TrimIn", "I"), ("Video.TrimOut", "O"), ("Help.Gif", "G")]),
+                    ("QuickAccess.Title", ShortcutCatalog.Hints(ShortcutScope.QuickAccess, "Activate")), ("TextCapture_Title", Display(keys.CaptureText)),
+                    .. CatalogRows(ShortcutScope.Selector)]),
+                ("Help.Annotation", [.. CatalogRows(ShortcutScope.Annotation), .. CatalogRows(ShortcutScope.Crop)]),
+                ("Workspace.Library", CatalogRows(ShortcutScope.Library)),
+                ("Help.Video", [("Help.Play", ShortcutCatalog.Hints(ShortcutScope.Video, "Play")), ("Help.Frame", FrameStepKeys),
+                    ("Video.TrimIn", ShortcutCatalog.Hints(ShortcutScope.Video, "In")), ("Video.TrimOut", ShortcutCatalog.Hints(ShortcutScope.Video, "Out")),
+                    ("Help.Gif", ShortcutCatalog.Hints(ShortcutScope.Video, "Gif"))]),
                 ("Text_33EFD44366A7", [("Text_1FBCF51E2FF5", Display(keys.PasteToScreen)), ("Text_4FED89116C1F", Display(keys.HideAllPins)),
                     ("Onboard_PinAllowClickThrough", Display(keys.ToggleClickThrough)), ("Onboard_TrayReopenPin", Display(keys.RestoreClosedPin)),
-                    ("QuickAccess.Copy", "Ctrl+C"), ("Text_976A6C92B870", "Ctrl+C / " + UiText.Get("Text_C7011B8D345C")),
-                    ("Pin_SelectText", "F2"),
-                    ("QuickAccess.Save", "Ctrl+S"), ("Dialog.Close", "Esc")]),
+                    ("QuickAccess.Copy", ShortcutCatalog.Hints(ShortcutScope.Pin, "Copy")),
+                    ("Text_976A6C92B870", ShortcutCatalog.Hints(ShortcutScope.Pin, "Copy") + " / " + UiText.Get("Text_C7011B8D345C")),
+                    ("Pin_SelectText", ShortcutCatalog.Hints(ShortcutScope.Pin, "SelectText")),
+                    ("QuickAccess.Save", ShortcutCatalog.Hints(ShortcutScope.Pin, "Save")), ("Dialog.Close", ShortcutCatalog.Hints(ShortcutScope.Pin, "Close"))]),
+                ("Help.QuickAccess", CatalogRows(ShortcutScope.QuickAccess)),
             ];
             var matches = new List<(string Search, FrameworkElement Row)>();
             foreach (var section in sections)
@@ -198,6 +197,9 @@ internal sealed class ShortcutHelpWindow : Window
     /// </summary>
     internal static string FrameStepKeys =>
         $"{ShortcutCatalog.Get(ShortcutScope.Video, "PreviousFrame").Hint} / {ShortcutCatalog.Get(ShortcutScope.Video, "NextFrame").Hint}";
+
+    private static (string Action, string Keys)[] CatalogRows(ShortcutScope scope) =>
+        ShortcutCatalog.Help(scope).Select(row => (row.Action, row.Keys)).ToArray();
 
     internal static void ShowHelp()
     {

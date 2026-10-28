@@ -244,13 +244,15 @@ public sealed class EditorTextFitRenderingTests
             Assert.Equal(TextFormattingMode.Ideal, TextOptions.GetTextFormattingMode(box));
             Assert.Equal(wrapping, box.TextWrapping);
             Point glyph = box.TranslatePoint(box.GetRectFromCharacterIndex(0).TopLeft, surface);
-            Point expected = surface.ToSurfacePoint(at);
-            Assert.True(Math.Abs(glyph.X - expected.X) <= 0.75 && Math.Abs(glyph.Y - expected.Y) <= 0.75,
-                $"First glyph at {glyph}, committed caption at {expected}.");
             int liveLines = box.LineCount;
 
             Invoke(host.Editor, "CommitActiveText");
             TextAnnotation caption = Controller(host.Editor).Document.Items.OfType<TextAnnotation>().Last();
+            // A caption started near the right edge moves left to stay inside the image, so compare
+            // with where the committed caption draws rather than with the click.
+            Point expected = surface.ToSurfacePoint(new PointD(caption.Rect.X, caption.Rect.Y));
+            Assert.True(Math.Abs(glyph.X - expected.X) <= 0.75 && Math.Abs(glyph.Y - expected.Y) <= 0.75,
+                $"First glyph at {glyph}, committed caption at {expected}.");
             var single = (TextAnnotation)caption.Clone();
             single.Text = "가";
             single.AutoSize = true;

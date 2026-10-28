@@ -82,6 +82,7 @@ public static class AppSettingsClone
     {
         LastImageExport = s.LastImageExport with { },
         QuickSaveDirectoryOverride = s.QuickSaveDirectoryOverride,
+        LastSaveDirectory = s.LastSaveDirectory,
         CopyToClipboardOnQuickSave = s.CopyToClipboardOnQuickSave,
         FileNamePattern = s.FileNamePattern,
         PreserveTransparency = s.PreserveTransparency,
@@ -117,6 +118,7 @@ public static class AppSettingsClone
 
     private static PinSettings Clone(PinSettings s) => new()
     {
+        ClickThroughHintShownCount = s.ClickThroughHintShownCount,
         CloseOnDoubleClick = s.CloseOnDoubleClick,
         RestoreOpenPinsOnLaunch = s.RestoreOpenPinsOnLaunch,
         CtrlClickDebounceMs = s.CtrlClickDebounceMs,
@@ -143,6 +145,7 @@ public static class AppSettingsClone
         HighlighterAlpha = s.HighlighterAlpha,
         RecentColors = [.. s.RecentColors],
         BlurRadius = s.BlurRadius,
+        Stamp = s.Stamp.Clone(),
     };
 
     private static OcrSettings Clone(OcrSettings s) => new()

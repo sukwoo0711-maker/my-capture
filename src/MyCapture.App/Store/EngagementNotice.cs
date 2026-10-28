@@ -2,6 +2,7 @@ using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Controls;
 using System.Windows.Threading;
+using MyCapture.App.Gallery;
 using MyCapture.App.Themes;
 using MyCapture.Core.Localization;
 
@@ -10,11 +11,34 @@ namespace MyCapture.App.Store;
 internal enum EngagementNoticeKind { None, Rating, UpdateAvailable, UpdateCompleted }
 
 /// <summary>
+/// What the shell asks of a window's update and rating surface: the settings window shows a card
+/// (<see cref="EngagementNotice"/>), the library its status bar (<see cref="LibraryEngagementNotice"/>).
+/// </summary>
+internal interface IEngagementNotice
+{
+    Action? ReviewChosen { get; set; }
+    Action? UpdateChosen { get; set; }
+    Action<EngagementNoticeKind>? ClosedByUser { get; set; }
+    EngagementNoticeKind Kind { get; }
+
+    /// <summary>True while the surface is showing a notice the user can still see or act on.</summary>
+    bool IsShown { get; }
+
+    void ShowInvitation();
+
+    /// <summary>Shows "updated to X". Returns whether it is on screen now; a surface that had to defer it returns
+    /// false, and the shell then keeps the completion for its next return instead of consuming it.</summary>
+    bool ShowUpdateCompleted(string version);
+    void ShowUpdateAvailable(string? version, bool busy = false, string? status = null, bool failed = false);
+    void Hide();
+}
+
+/// <summary>
 /// The update-done and rating card: a floating InfoBar laid over the bottom right of a library or
 /// settings window. It never moves the window's content, fades in with the shared motion tokens
 /// (at once when Windows animations are off) and stays until it is closed or its action is used.
 /// </summary>
-internal sealed class EngagementNotice : Grid
+internal sealed class EngagementNotice : Grid, IEngagementNotice
 {
     /// <summary>Width of the card.</summary>
     internal const double CardWidth = 360;
@@ -61,15 +85,16 @@ internal sealed class EngagementNotice : Grid
         AutomationProperties.SetLiveSetting(_message, AutomationLiveSetting.Polite);
     }
 
-    internal Action? ReviewChosen { get; set; }
-    internal Action? UpdateChosen { get; set; }
-    internal Action<EngagementNoticeKind>? ClosedByUser { get; set; }
-    internal EngagementNoticeKind Kind { get; private set; }
+    public Action? ReviewChosen { get; set; }
+    public Action? UpdateChosen { get; set; }
+    public Action<EngagementNoticeKind>? ClosedByUser { get; set; }
+    public EngagementNoticeKind Kind { get; private set; }
+    public bool IsShown => Visibility == Visibility.Visible;
 
     /// <summary>The message the card shows.</summary>
     internal string Message => _message.Text;
 
-    internal void ShowInvitation()
+    public void ShowInvitation()
     {
         if (Visibility == Visibility.Visible && Kind > EngagementNoticeKind.Rating) return;
         Kind = EngagementNoticeKind.Rating;
@@ -79,22 +104,23 @@ internal sealed class EngagementNotice : Grid
         Reveal();
     }
 
-    internal void ShowUpdateCompleted(string version)
+    public bool ShowUpdateCompleted(string version)
     {
         Kind = EngagementNoticeKind.UpdateCompleted;
         _message.Text = UiText.Format("StoreUpdate_CompletedVersion", DisplayVersion(version));
         _review.Visibility = Visibility.Collapsed;
         Reveal();
+        return true;
     }
 
-    internal void ShowUpdateAvailable(string? version, bool busy = false, string? status = null)
+    public void ShowUpdateAvailable(string? version, bool busy = false, string? status = null, bool failed = false)
     {
         if (Visibility == Visibility.Visible && Kind == EngagementNoticeKind.UpdateCompleted) return;
         Kind = EngagementNoticeKind.UpdateAvailable;
         _message.Text = status ?? (version is null ? UiText.Get("Update_StoreAvailable")
             : UiText.Format("Update_AvailableVersion", DisplayVersion(version)));
-        SetAction(UiText.Get("Update_Action"), !busy);
-        _review.Visibility = status is null ? Visibility.Visible : Visibility.Collapsed;
+        SetAction(UiText.Get(failed ? "Update_RetryAction" : "Update_Action"), !busy);
+        _review.Visibility = status is null || failed ? Visibility.Visible : Visibility.Collapsed;
         Reveal();
     }
 
@@ -118,7 +144,7 @@ internal sealed class EngagementNotice : Grid
         ClosedByUser?.Invoke(previous);
     }
 
-    internal void Hide() { Visibility = Visibility.Collapsed; Kind = EngagementNoticeKind.None; }
+    public void Hide() { Visibility = Visibility.Collapsed; Kind = EngagementNoticeKind.None; }
 
     private void Reveal()
     {
@@ -130,6 +156,100 @@ internal sealed class EngagementNotice : Grid
         FluidMotion.SetFadeTo(this, 0);
         Opacity = 0;
         FluidMotion.SetFadeTo(this, 1);
+    }
+}
+
+/// <summary>
+/// The library's update and rating notices. Nothing floats over the cards: "updated to X" and the
+/// rating invitation are neutral one-line notices in their own status-bar slot (never replacing a delete's
+/// Undo), and an available update is a small button in the status bar where the version number is.
+/// </summary>
+internal sealed class LibraryEngagementNotice(GalleryWindow library) : IEngagementNotice
+{
+    private string? _statusText;
+    private long _generation;
+
+    public Action? ReviewChosen { get; set; }
+    public Action? UpdateChosen { get; set; }
+    public Action<EngagementNoticeKind>? ClosedByUser { get; set; }
+    public EngagementNoticeKind Kind { get; private set; }
+
+    public bool IsShown => Kind == EngagementNoticeKind.UpdateAvailable
+        ? library.IsUpdateAvailableShown
+        : _statusText is not null && library.HasNotice(_statusText);
+
+    public void ShowInvitation()
+    {
+        if (IsShown && Kind > EngagementNoticeKind.Rating) return;
+        Hide();
+        Kind = EngagementNoticeKind.Rating;
+        long generation = _generation;
+        _statusText = UiText.Get("StoreRating_InviteMessage");
+        library.ShowNotice(_statusText, UiText.Get("LibraryUx_RateAction"), () =>
+        {
+            if (generation != _generation) return;
+            FinishNotice();
+            ReviewChosen?.Invoke();
+        }, GalleryWindow.InvitationLifetime, expired: () =>
+        {
+            if (generation == _generation) FinishNotice();
+        });
+    }
+
+    public bool ShowUpdateCompleted(string version)
+    {
+        Hide();
+        Kind = EngagementNoticeKind.UpdateCompleted;
+        long generation = _generation;
+        _statusText = UiText.Format("StoreUpdate_CompletedVersion", EngagementNotice.DisplayVersion(version));
+        // Consumed only once it was really shown: the notice may have to wait behind a result.
+        return library.ShowNotice(_statusText, null, null, GalleryWindow.UpdateDoneLifetime,
+            shown: () =>
+            {
+                if (generation == _generation) ClosedByUser?.Invoke(EngagementNoticeKind.UpdateCompleted);
+            },
+            expired: () =>
+            {
+                if (generation == _generation) FinishNotice();
+            });
+    }
+
+    public void ShowUpdateAvailable(string? version, bool busy = false, string? status = null, bool failed = false)
+    {
+        if (IsShown && Kind == EngagementNoticeKind.UpdateCompleted) return;
+        // A rating's action and countdown belong to the previous state, including a deferred invitation.
+        library.ClearNotice();
+        _statusText = null;
+        _generation++;
+        Kind = EngagementNoticeKind.UpdateAvailable;
+        string full = status ?? (version is null ? UiText.Get("Update_StoreAvailable")
+            : UiText.Format("Update_AvailableVersion", EngagementNotice.DisplayVersion(version)));
+        bool retry = failed && !busy;
+        string label = retry ? UiText.Get("Update_RetryAction") : status ?? (version is null ? UiText.Get("Update_Action")
+            : UiText.Format("LibraryUx_UpdateAvailable", EngagementNotice.DisplayVersion(version)));
+        library.SetUpdateAvailable(label, full, enabled: !busy && (status is null || retry),
+            () => UpdateChosen?.Invoke(), dismiss: retry ? Dismiss : null);
+    }
+
+    public void Hide()
+    {
+        _generation++;
+        library.ClearUpdateAvailable();
+        library.ClearNotice();
+        FinishNotice();
+    }
+
+    private void FinishNotice()
+    {
+        Kind = EngagementNoticeKind.None;
+        _statusText = null;
+    }
+
+    private void Dismiss()
+    {
+        EngagementNoticeKind previous = Kind;
+        Hide();
+        ClosedByUser?.Invoke(previous);
     }
 }
 

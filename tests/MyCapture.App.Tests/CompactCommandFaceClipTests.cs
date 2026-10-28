@@ -56,11 +56,10 @@ public sealed class CompactCommandFaceClipTests
             ThemeService.ApplyResources(AppTheme.Midnight, cardContent.Resources, systemHighContrast: contrast);
             // The app's Application resources exist when its constructor resolves these icons.
             // This detached fixture loads the same resources afterward, without an Application.
-            foreach (Button action in card.ActionButtonsForTest.Skip(1))
-            {
-                string command = AutomationProperties.GetAutomationId(action)["QuickAccess.".Length..];
-                Assert.IsType<SymbolIcon>(action.Content).Data = (Geometry)cardContent.Resources["Icon." + (command == "CopyText" ? "Ocr" : command)];
-            }
+            // Every action, including the library, shows an icon above its name.
+            Assert.All(card.ActionButtonsForTest.Append(card.LibraryButtonForTest),
+                action => Assert.IsType<SymbolIcon>(QuickAccessLabelFixture.IconOf(action)));
+            QuickAccessLabelFixture.RealIcons(card, cardContent);
             Button close = Assert.Single(QuickAccessDetachedFixture.Descendants(cardContent).OfType<Button>(),
                 button => AutomationProperties.GetAutomationId(button) == "Dialog.Close");
             Assert.IsType<SymbolIcon>(close.Content).Data = (Geometry)cardContent.Resources["Icon.Close"];
@@ -77,12 +76,13 @@ public sealed class CompactCommandFaceClipTests
             Layout(host);
 
             ButtonBase[] buttons = QuickAccessDetachedFixture.Descendants(host).OfType<ButtonBase>().ToArray();
-            Assert.Equal(20, buttons.Length); // Twelve capture commands and eight receipt commands.
+            Assert.Equal(21, buttons.Length); // Thirteen capture commands and eight receipt commands.
             foreach (ButtonBase button in buttons) CommandButtonPresentation.RefreshHint(button);
 
             var failures = new List<string>();
             var measurements = new List<object>();
             string caseName = $"{language}-{(contrast ? "contrast" : "normal")}-{scale.ToString("0.0", CultureInfo.InvariantCulture)}";
+            double? namedHeight = null;
             foreach (bool revealed in new[] { false, true, false })
             {
                 ShortcutPresentation.SetAltRevealed(host, revealed);
@@ -97,7 +97,15 @@ public sealed class CompactCommandFaceClipTests
                     var caption = Assert.IsAssignableFrom<TextBlock>(face.Children[1]);
                     ShortcutMotionTestScope.AssertState(caption, revealed);
                     string name = $"{(bar.Holds(button) ? "capture" : "receipt")}:{AutomationProperties.GetName(button)}";
-                    Assert.Equal(36, button.ActualHeight, 2);
+                    // Capture commands are 36 tall; a receipt action that shows its name is taller by the name,
+                    // and every one of them keeps that height whether or not Alt shows its key.
+                    if (button is Button action && QuickAccessActionPanel.LabelOf(action) is { Visibility: Visibility.Visible })
+                    {
+                        Assert.True(button.ActualHeight > 36, name);
+                        Assert.Equal(namedHeight ??= button.ActualHeight, button.ActualHeight, 2);
+                        Assert.Equal(QuickAccessLabelFixture.ExpectedActionHeight(action), button.ActualHeight, 2);
+                    }
+                    else Assert.Equal(36, button.ActualHeight, 2);
                     foreach (FrameworkElement ink in QuickAccessDetachedFixture.Descendants(face)
                                  .OfType<FrameworkElement>().Where(element => element is SymbolIcon or TextBlock))
                     {
@@ -150,7 +158,7 @@ public sealed class CompactCommandFaceClipTests
 
     // DrawingGroup.Bounds already applies the group's clip. Walking its leaves preserves the
     // original ink (including pen width and glyph overhang) so a clipped drawing cannot pass.
-    private static Rect UnclippedDrawingBounds(Drawing? drawing)
+    internal static Rect UnclippedDrawingBounds(Drawing? drawing)
     {
         if (drawing is not DrawingGroup group) return drawing?.Bounds ?? Rect.Empty;
         Rect bounds = Rect.Empty;
@@ -158,7 +166,7 @@ public sealed class CompactCommandFaceClipTests
         return bounds.IsEmpty ? bounds : group.Transform?.TransformBounds(bounds) ?? bounds;
     }
 
-    private static void CheckClips(FrameworkElement ink, Rect bounds, FrameworkElement host, string name, List<string> failures)
+    internal static void CheckClips(FrameworkElement ink, Rect bounds, FrameworkElement host, string name, List<string> failures)
     {
         for (DependencyObject? current = ink; current is Visual ancestor; current = VisualTreeHelper.GetParent(current))
         {

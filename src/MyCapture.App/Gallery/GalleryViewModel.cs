@@ -81,13 +81,17 @@ public sealed partial class GalleryViewModel : INotifyPropertyChanged
     private bool _rowsCompact;
     private double _fullMetadataTrackWidth;
     private double _compactMetadataTrackWidth;
+    private double _fullFolderReasonTrackWidth;
+    private double _compactFolderReasonTrackWidth;
+    private bool _hasFolderReason;
     private bool _publishedCanCompareSelected;
 
     public GallerySelection Selection { get; } = new();
     public IReadOnlyList<GalleryItemViewModel> SelectedTiles => Selection.SelectedIds
         .Select(FindTile).OfType<GalleryItemViewModel>().ToArray();
     public bool HasSelection => Selection.Count > 0;
-    public string SelectionText => UiText.Format("LibrarySelection_Count", Selection.Count);
+    public string SelectionText => HasSelection ? UiText.Format("LibrarySelection_Count", Selection.Count) : UiText.Get("LibraryUx_NoSelection");
+    public bool HasSingleSelection => Selection.Count == 1 && SingleSelectedTile is not null;
     public GalleryItemViewModel? SingleSelectedTile
     {
         get
@@ -145,7 +149,7 @@ public sealed partial class GalleryViewModel : INotifyPropertyChanged
     {
         foreach (GalleryItemViewModel tile in _tileCache.Values) tile.IsSelected = Selection.Contains(tile.Id);
         Raise(nameof(SelectedTiles)); Raise(nameof(HasSelection)); Raise(nameof(SelectionText));
-        Raise(nameof(SingleSelectedTile)); Raise(nameof(CanReduceSelected)); Raise(nameof(CanGifSelected));
+        Raise(nameof(SingleSelectedTile)); Raise(nameof(HasSingleSelection)); Raise(nameof(CanReduceSelected)); Raise(nameof(CanGifSelected));
         bool canCompare = CanCompareSelected;
         if (_publishedCanCompareSelected != canCompare)
         {
@@ -295,6 +299,7 @@ public sealed partial class GalleryViewModel : INotifyPropertyChanged
         var seenFolders = new HashSet<Guid>();
         FolderCardIndex? folderIndex = null;
         var badges = new Dictionary<Guid, (string Name, string Path)?>();
+        bool hasFolderReason = false;
 
         _groups.Clear();
         foreach (GalleryGroupedRecords group in grouped)
@@ -309,6 +314,7 @@ public sealed partial class GalleryViewModel : INotifyPropertyChanged
                 // every listed capture is in the location shown, so none does.
                 tile.SetFolderBadge(record.FolderId is { } folderId && folderId != _scope.FolderId
                     ? FolderBadgeFor(folderId, badges) : null);
+                hasFolderReason |= tile.HasFolderBadge && !string.IsNullOrEmpty(tile.MetadataCaption);
                 tiles.Add(tile);
                 seenTiles.Add(record.Id);
             }
@@ -339,13 +345,15 @@ public sealed partial class GalleryViewModel : INotifyPropertyChanged
         }
 
         // An opened folder lays out the smaller cards in more columns from the same width.
-        bool layoutChanged = IsCompactLayout != _rowsCompact;
+        bool compactChanged = IsCompactLayout != _rowsCompact;
+        bool layoutChanged = compactChanged || hasFolderReason != _hasFolderReason;
         if (layoutChanged)
         {
             _rowsCompact = IsCompactLayout;
+            _hasFolderReason = hasFolderReason;
             int columns = MetadataColumnCountForWidth(_availableWidth);
             if (columns != _columnCount) { _columnCount = columns; Raise(nameof(ColumnCount)); }
-            Raise(nameof(IsCompactLayout));
+            if (compactChanged) Raise(nameof(IsCompactLayout));
         }
         RebuildRows(layoutChanged);
 
@@ -365,16 +373,34 @@ public sealed partial class GalleryViewModel : INotifyPropertyChanged
         RefreshTags();
     }
 
-    internal void SetMetadataMinimumTrackWidths(double full, double compact)
+    internal void SetMetadataMinimumTrackWidths(double full, double compact, double fullFolderReason = 0, double compactFolderReason = 0)
     {
-        if (_fullMetadataTrackWidth == full && _compactMetadataTrackWidth == compact) return;
+        if (_fullMetadataTrackWidth == full && _compactMetadataTrackWidth == compact
+            && _fullFolderReasonTrackWidth == fullFolderReason && _compactFolderReasonTrackWidth == compactFolderReason) return;
         _fullMetadataTrackWidth = full;
         _compactMetadataTrackWidth = compact;
+        _fullFolderReasonTrackWidth = fullFolderReason;
+        _compactFolderReasonTrackWidth = compactFolderReason;
         SetColumnCountForWidth(_availableWidth);
     }
 
-    private int MetadataColumnCountForWidth(double width) => GalleryRowBuilder.ColumnCountForWidth(width,
-        _rowsCompact, _rowsCompact ? _compactMetadataTrackWidth : _fullMetadataTrackWidth);
+    /// <summary>
+    /// The narrowest track of the current layout: the base minimum, raised for the text size and,
+    /// while a filed capture shows a reason, for its folder name beside that reason.
+    /// </summary>
+    internal double MinimumTrackWidth
+    {
+        get
+        {
+            double minimum = _rowsCompact ? _compactMetadataTrackWidth : _fullMetadataTrackWidth;
+            if (_hasFolderReason)
+                minimum = Math.Max(minimum, _rowsCompact ? _compactFolderReasonTrackWidth : _fullFolderReasonTrackWidth);
+            return Math.Max(_rowsCompact ? GalleryRowBuilder.MinCompactTileTrackWidth : GalleryRowBuilder.MinTileTrackWidth, minimum);
+        }
+    }
+
+    private int MetadataColumnCountForWidth(double width) =>
+        GalleryRowBuilder.ColumnCountForWidth(width, _rowsCompact, MinimumTrackWidth);
 
     /// <summary>
     /// Updates the tiles-per-row from the current gallery width and, only when that count

@@ -16,6 +16,10 @@ public static class GallerySourceBadge
         "Dismissed", typeof(bool), typeof(GallerySourceBadge), new PropertyMetadata(false));
     private static readonly DependencyProperty ActionsProperty = DependencyProperty.RegisterAttached(
         "Actions", typeof(CaptureSourceActions), typeof(GallerySourceBadge), new PropertyMetadata(null));
+    // The badge's menu is built when it is first needed (a right click or the click of a source
+    // without a page to open), not for every card that scrolls into view.
+    private static readonly DependencyProperty MenuFactoryProperty = DependencyProperty.RegisterAttached(
+        "MenuFactory", typeof(Func<ContextMenu>), typeof(GallerySourceBadge), new PropertyMetadata(null));
 
     public static readonly DependencyProperty ProvenanceProperty = DependencyProperty.RegisterAttached(
         "Provenance", typeof(CaptureProvenance), typeof(GallerySourceBadge),
@@ -70,8 +74,7 @@ public static class GallerySourceBadge
         button.ToolTipOpening -= OnToolTipOpening;
         button.ToolTipOpening += OnToolTipOpening;
         AutomationProperties.SetHelpText(button, provenance.Tooltip);
-        AutomationProperties.SetName(button, UiText.Format(provenance.CanOpen
-            ? "Source.OpenAutomation" : "Source.Label", provenance.BadgeText));
+        AutomationProperties.SetName(button, UiText.Format("Source.Label", provenance.BadgeText));
 
         button.Content = new TextBlock
         {
@@ -81,7 +84,28 @@ public static class GallerySourceBadge
             VerticalAlignment = VerticalAlignment.Center,
             HorizontalAlignment = HorizontalAlignment.Center,
         };
-        button.ContextMenu = SourceChip.CreateMenu(provenance, status, search, actions);
+        button.ContextMenu = null;
+        button.SetValue(MenuFactoryProperty, (Func<ContextMenu>)(() => SourceChip.CreateMenu(provenance, status, search, actions)));
+        button.ContextMenuOpening -= OnContextMenuOpening;
+        button.ContextMenuOpening += OnContextMenuOpening;
+    }
+
+    /// <summary>Builds the badge's menu if it has not been built yet; null when the badge has none to show.</summary>
+    internal static ContextMenu? EnsureMenu(Button button)
+    {
+        if (button.ContextMenu is null && button.GetValue(MenuFactoryProperty) is Func<ContextMenu> factory)
+            button.ContextMenu = factory();
+        return button.ContextMenu;
+    }
+
+    private static void OnContextMenuOpening(object sender, ContextMenuEventArgs e)
+    {
+        var button = (Button)sender;
+        e.Handled = true;
+        if (EnsureMenu(button) is not { HasItems: true } menu) return;
+        menu.PlacementTarget = button;
+        menu.Placement = e.CursorLeft < 0 ? PlacementMode.Bottom : PlacementMode.MousePoint;
+        menu.IsOpen = true;
     }
 
     private static async void OnClick(object sender, RoutedEventArgs e)
@@ -90,6 +114,12 @@ public static class GallerySourceBadge
         var button = (Button)sender;
         ClosePreview(button);
         CaptureProvenance provenance = GetProvenance(button);
+        if (Window.GetWindow(button) is GalleryWindow sourceGallery
+            && button.DataContext is GalleryItemViewModel tile)
+        {
+            sourceGallery.ShowSourceDetails(tile);
+            return;
+        }
         if (!provenance.CanOpen)
         {
             ShowMenu(button);
@@ -153,7 +183,7 @@ public static class GallerySourceBadge
 
     private static void ShowMenu(Button button)
     {
-        if (button.ContextMenu is not { HasItems: true } menu) return;
+        if (EnsureMenu(button) is not { HasItems: true } menu) return;
         menu.PlacementTarget = button;
         menu.Placement = PlacementMode.Bottom;
         menu.IsOpen = true;

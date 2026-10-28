@@ -79,6 +79,7 @@ public sealed class PinSessionSettingsTests
                 InitialOpacity = 0.75,
                 ClosedWindowRestoreLimit = 5,
                 ZoomStep = 0.2,
+                ClickThroughHintShownCount = 2,
             },
         };
         var defaults = new PinSettings();

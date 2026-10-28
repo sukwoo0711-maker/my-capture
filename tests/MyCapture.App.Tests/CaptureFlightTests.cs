@@ -25,6 +25,50 @@ public sealed class CaptureFlightTests
     private static readonly Rect Target = new(700, 650, 160, 120);
 
     [Fact]
+    public void ClosingTheDecorationClearsItsRetainedDrawingWithoutAnotherRender() => StaTestHost.Run(() =>
+    {
+        BitmapSource image = Image(6, 4);
+        var window = new CaptureFlightDecoration(image, new RectD(10, 20, 6, 4), 1);
+        var surface = Assert.IsAssignableFrom<FrameworkElement>(window.Content);
+        try
+        {
+            window.Draw(new CaptureFlightFrame(new Rect(10, 20, 6, 4), 0, 0, 0, 1));
+            surface.Measure(new Size(6, 4));
+            surface.Arrange(new Rect(0, 0, 6, 4));
+            var actual = new RenderTargetBitmap(6, 4, 96, 96, PixelFormats.Pbgra32);
+            actual.Render(surface);
+            Assert.True(ContainsImage(window.DrawingForTest, image));
+
+            // The child visual preserves the old image placement and compositing.
+            var expectedVisual = new DrawingVisual();
+            using (DrawingContext context = expectedVisual.RenderOpen())
+                context.DrawImage(image, new Rect(0, 0, 6, 4));
+            var expected = new RenderTargetBitmap(6, 4, 96, 96, PixelFormats.Pbgra32);
+            expected.Render(expectedVisual);
+            byte[] actualPixels = new byte[6 * 4 * 4];
+            byte[] expectedPixels = new byte[actualPixels.Length];
+            actual.CopyPixels(actualPixels, 6 * 4, 0);
+            expected.CopyPixels(expectedPixels, 6 * 4, 0);
+            Assert.Equal(expectedPixels, actualPixels);
+
+            window.Close();
+            // Both references stay alive. No GC, dispatcher pump or next render is needed.
+            Assert.False(ContainsImage(window.DrawingForTest, image));
+            Assert.True(window.DrawingForTest is null || window.DrawingForTest.Children.Count == 0);
+            Assert.Null(window.Content);
+            GC.KeepAlive(surface);
+        }
+        finally { if (!window.IsClosed) window.Close(); }
+    });
+
+    private static bool ContainsImage(Drawing? drawing, BitmapSource image) => drawing switch
+    {
+        ImageDrawing bitmap => ReferenceEquals(bitmap.ImageSource, image),
+        DrawingGroup group => group.Children.Any(child => ContainsImage(child, image)),
+        _ => false,
+    };
+
+    [Fact]
     public void FlightStartsOnTheSourceLandsOnThePreviewAndLiftsMidway()
     {
         CaptureFlightFrame start = CaptureFlight.FlightFrame(Source, Target, 0, 1.5);
@@ -98,11 +142,49 @@ public sealed class CaptureFlightTests
         MonitorInfo display = Monitor(0, 0, 1920, 1080, 144);
         (RectD bounds, double scale) = CaptureFlight.PlanBounds(Rect.Union(Source, Target), [display])!.Value;
         Assert.Equal(1.5, scale);
-        Assert.Equal(new RectD(100 - 72, 200 - 72, 760 + 144, 570 + 144), bounds);
+        Assert.Equal(new RectD(100 - 49, 200 - 28, 760 + 98, 570 + 28 + 70), bounds);
 
         // A full-screen capture needs no room beyond its display.
         (RectD full, _) = CaptureFlight.PlanBounds(new Rect(0, 0, 1920, 1080), [display])!.Value;
         Assert.Equal(new RectD(0, 0, 1920, 1080), full);
+    }
+
+    [Fact]
+    public void LegacyBoundsProbeRestoresOnlyThePreviousAllocationEnvelope()
+    {
+        bool previous = CaptureFlight.UseLegacyBoundsForProbe;
+        try
+        {
+            CaptureFlight.UseLegacyBoundsForProbe = true;
+            MonitorInfo display = Monitor(0, 0, 1920, 1080, 144);
+            Rect path = Rect.Union(Source, Target);
+            RectD bounds = CaptureFlight.PlanBounds(path, [display])!.Value.Bounds;
+            Assert.Equal(new RectD(path.Left - 72, path.Top - 72, path.Width + 144, path.Height + 144), bounds);
+            Assert.Null(CaptureFlight.PlanBounds(new Rect(200, 200, 4000, 1950),
+                [Monitor(0, 0, 5000, 3000, 96)]));
+        }
+        finally { CaptureFlight.UseLegacyBoundsForProbe = previous; }
+    }
+
+    [Theory]
+    [InlineData(1)]
+    [InlineData(1.5)]
+    [InlineData(2)]
+    public void TightSurfacesContainEveryShadowContourAtEveryFlightStage(double scale)
+    {
+        MonitorInfo display = Monitor(0, 0, 1920, 1080, (uint)(96 * scale));
+        RectD bounds = CaptureFlight.PlanBounds(Rect.Union(Source, Target), [display])!.Value.Bounds;
+        for (int step = 0; step <= 1000; step++)
+        {
+            CaptureFlightFrame frame = CaptureFlight.FlightFrame(Source, Target, step / 1000d, scale);
+            Rect shadow = frame.Image;
+            shadow.Offset(0, frame.ShadowOffset);
+            shadow.Inflate(frame.ShadowBlur, frame.ShadowBlur);
+            Assert.True(bounds.Left <= shadow.Left && bounds.Top <= shadow.Top
+                && bounds.Right >= shadow.Right && bounds.Bottom >= shadow.Bottom);
+        }
+        Rect path = Rect.Union(Source, Target);
+        Assert.True(bounds.Width * bounds.Height < (path.Width + 96 * scale) * (path.Height + 96 * scale));
     }
 
     [Fact]
@@ -123,6 +205,19 @@ public sealed class CaptureFlightTests
         Assert.Equal(new RectD(0, 0, 3840, 2160), whole);
         Assert.NotNull(CaptureFlight.PlanBounds(new Rect(3000, 0, 1680, 2160), [first, second]));
         Assert.Null(CaptureFlight.PlanBounds(new Rect(1000, 0, 4000, 2160), [first, second]));
+    }
+
+    [Fact]
+    public void SmallerSurfacesDoNotEnablePreviouslySkippedFlights()
+    {
+        // The old 48-DIP envelope exceeds the cap; the new allocation alone would fit.
+        Assert.Null(CaptureFlight.PlanBounds(new Rect(200, 200, 4000, 1950),
+            [Monitor(0, 0, 5000, 3000, 96)]));
+        // The old envelope touches the differently scaled upper-right display in this L.
+        // The tighter top shadow margin does not, but eligibility must remain unchanged.
+        Assert.Null(CaptureFlight.PlanBounds(new Rect(1800, 1100, 300, 200),
+            [Monitor(0, 0, 1920, 2160, 96), Monitor(1920, 1080, 1920, 1080, 96),
+                Monitor(1920, 0, 1920, 1080, 144)]));
     }
 
     [Fact]
@@ -275,6 +370,8 @@ public sealed class CaptureFlightTests
     {
         CaptureFlight flight = CaptureFlight.TryLift(image, SourceOn(), () => clock.Now)!;
         CaptureFlightDecoration lift = flight.WindowForTest!;
+        var exclusions = new List<bool>();
+        flight.SurfaceDismissed += exclusions.Add;
         clock.Now = 300;
         flight.Cancel();
         Assert.False(flight.IsDone);
@@ -285,6 +382,8 @@ public sealed class CaptureFlightTests
         flight.Tick();
         Assert.True(flight.IsDone);
         Assert.True(lift.IsClosed);
+        Assert.Equal([true], exclusions);
+        Assert.Null(lift.Content);
 
         CaptureFlight next = CaptureFlight.TryLift(image, SourceOn(), () => clock.Now)!;
         CaptureFlightDecoration nextLift = next.WindowForTest!;

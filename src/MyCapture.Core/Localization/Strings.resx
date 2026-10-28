@@ -1478,7 +1478,7 @@
     <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
   </data>
   <data name="Text_7DFFA4D81765" xml:space="preserve">
-    <value>선택 항목 삭제 (Delete)</value>
+    <value>선택 항목 삭제 (Del)</value>
     <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
   </data>
   <data name="Text_7F2ED132EA3B" xml:space="preserve">
@@ -3334,6 +3334,7 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="QuickAccess.OpenFolder" xml:space="preserve"><value>폴더 열기</value></data>
   <data name="QuickAccess.Title" xml:space="preserve"><value>캡처 빠른 작업</value></data>
   <data name="QuickAccess.CopyText" xml:space="preserve"><value>텍스트 복사</value></data>
+  <data name="QuickAccess.TextLabel" xml:space="preserve"><value>텍스트</value></data>
   <data name="QuickAccess.CopyingText" xml:space="preserve"><value>텍스트 인식 중…</value></data>
   <data name="QuickAccess.TextCopied" xml:space="preserve"><value>텍스트 복사됨</value></data>
   <data name="QuickAccess.CopyFailed" xml:space="preserve"><value>복사하지 못했습니다 · {0}로 다시 시도</value></data>
@@ -4067,13 +4068,13 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="EditRecovery_Detail" xml:space="preserve"><value>{0} · {1} × {2}</value></data>
   <data name="EditRecovery_TimeFormat" xml:space="preserve"><value>M월 d일 HH:mm</value><comment>.NET custom date and time format for when a draft was saved.</comment></data>
   <data name="EditRecovery_RowAction" xml:space="preserve"><value>{0}: {1}</value></data>
-  <data name="Onboard_TryNow" xml:space="preserve"><value>지금 해 보기</value></data>
+  <data name="Onboard_TryNow" xml:space="preserve"><value>영역 캡처</value></data>
   <data name="Onboard_TryNowHelp" xml:space="preserve"><value>이 창을 닫고 영역 캡처를 시작합니다.</value></data>
   <data name="Onboard_StepsName" xml:space="preserve"><value>시작 안내</value></data>
   <data name="Onboard_StepNumber" xml:space="preserve"><value>{0}단계</value></data>
   <data name="Onboard_AfterCaptureTitle" xml:space="preserve"><value>캡처한 다음</value></data>
   <data name="Welcome_FirstCaptureTitle" xml:space="preserve"><value>한 번 캡처해 보십시오</value></data>
-  <data name="Welcome_PinClipboardHint" xml:space="preserve"><value>복사한 표와 코드는 {0} 키로 핀에 띄웁니다.</value></data>
+  <data name="Welcome_PinClipboardHint" xml:space="preserve"><value>복사한 표와 코드를 {0} 키로 다른 창 위에 띄워 참고할 수 있습니다.</value></data>
   <data name="Welcome_Skip" xml:space="preserve"><value>건너뛰기</value></data>
   <data name="Onboard_FirstCaptureTip" xml:space="preserve"><value>다른 창 위에 띄우려면 P</value></data>
   <data name="Onboard_ReceiptKeyboard" xml:space="preserve"><value>Alt+Q로 선택 · Tab 이동 · Enter 실행</value></data>
@@ -4134,7 +4135,7 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="Onboard_PinWheelDown" xml:space="preserve"><value>Ctrl+휠 아래</value></data>
   <data name="Onboard_PinWheelUp" xml:space="preserve"><value>Ctrl+휠 위</value></data>
   <data name="Onboard_PinAllowClickThrough" xml:space="preserve"><value>뒤 창 클릭 허용</value></data>
-  <data name="Onboard_PinAllowClickThroughHelp" xml:space="preserve"><value>마우스 입력을 뒤에 있는 창으로 보냅니다. 해제: {0}</value></data>
+  <data name="Onboard_PinAllowClickThroughHelp" xml:space="preserve"><value>마우스 입력을 뒤에 있는 창으로 보냅니다. 핀 오른쪽 위 손잡이를 누르면 바로 끕니다. 해제: {0}</value></data>
   <data name="Onboard_PinClickThroughOn" xml:space="preserve"><value>뒤 창 클릭 허용 켜짐
 해제: {0}</value></data>
   <data name="Onboard_PinClickThroughOff" xml:space="preserve"><value>뒤 창 클릭 허용 꺼짐</value></data>
@@ -4231,7 +4232,7 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="Tutorial.image-save.Step2" xml:space="preserve"><value>2. Ctrl+S를 눌러 저장합니다.</value></data>
   <data name="Tutorial.image-save.Step3" xml:space="preserve"><value>3. 다른 파일로 저장하려면 Ctrl+Shift+S로 저장 위치를 선택합니다.</value></data>
   <data name="Tutorial.image-copy.Step1" xml:space="preserve"><value>1. 이미지를 편집하고 결과를 확인합니다.</value></data>
-  <data name="Tutorial.image-copy.Step2" xml:space="preserve"><value>2. Ctrl+C를 누르면 편집한 이미지를 클립보드에 복사합니다. 편집기는 열린 채로 남고, 완료(Ctrl+Enter)를 누르면 저장한 뒤 닫습니다.</value></data>
+  <data name="Tutorial.image-copy.Step2" xml:space="preserve"><value>2. 복사하고 닫기(Ctrl+C)를 누르면 편집한 이미지를 저장하고 클립보드에 복사한 뒤 닫습니다. 텍스트 입력 중에는 Ctrl+C로 텍스트를 복사하고, Ctrl+Enter로 편집을 마칩니다.</value></data>
   <data name="Tutorial.image-copy.Step3" xml:space="preserve"><value>3. 다른 앱에서 Ctrl+V를 눌러 이미지를 붙여 넣습니다.</value></data>
   <data name="Tutorial.folder-create.Step1" xml:space="preserve"><value>1. 라이브러리를 엽니다.</value></data>
   <data name="Tutorial.folder-create.Step2" xml:space="preserve"><value>2. Ctrl+Shift+N을 눌러 새 폴더 이름을 입력합니다.</value></data>
@@ -4616,7 +4617,8 @@ F3  클립보드를 핀으로 띄우기
   <data name="Update_DownloadingPercent" xml:space="preserve"><value>업데이트 내려받는 중 {0}%</value></data>
   <data name="Update_Verifying" xml:space="preserve"><value>업데이트 확인 중</value></data>
   <data name="Update_Preparing" xml:space="preserve"><value>설치 준비 중</value></data>
-  <data name="Update_InstallFailed" xml:space="preserve"><value>업데이트를 설치하지 못했습니다. 설정 &gt; 정보에서 다시 시도하십시오.</value></data>
+  <data name="Update_InstallFailed" xml:space="preserve"><value>업데이트를 설치하지 못했습니다.</value></data>
+  <data name="Update_RetryAction" xml:space="preserve"><value>다시 시도</value></data>
   <data name="Update_CheckHelp" xml:space="preserve"><value>GitHub에서 이 앱의 새 버전을 확인합니다.</value></data>
   <data name="Update_InstallHelp" xml:space="preserve"><value>작업을 저장한 뒤 새 버전을 설치합니다.</value></data>
   <data name="Update_OpenReleaseHelp" xml:space="preserve"><value>브라우저에서 새 버전의 다운로드 페이지를 엽니다.</value></data>
@@ -4639,6 +4641,7 @@ F3  클립보드를 핀으로 띄우기
   <data name="Translate_Direction" xml:space="preserve"><value>영어 → 한국어</value></data>
   <data name="Translate_Summary" xml:space="preserve"><value>영어 → 한국어 · 블록 {0}개</value></data>
   <data name="Translate_SummaryOne" xml:space="preserve"><value>영어 → 한국어 · 블록 1개</value></data>
+  <data name="Translate_Copy" xml:space="preserve"><value>번역 복사</value></data>
   <data name="Translate_CopyWithSource" xml:space="preserve"><value>원문과 함께 복사</value></data>
   <data name="Translate_CopyHelp" xml:space="preserve"><value>번역을 클립보드에 복사합니다</value></data>
   <data name="Translate_List" xml:space="preserve"><value>번역 목록</value></data>
@@ -4732,4 +4735,189 @@ F3  클립보드를 핀으로 띄우기
   <data name="Pin_TranslationModelPreparing" xml:space="preserve"><value>번역 모델 준비 중</value></data>
   <data name="Pin_TranslationNoText" xml:space="preserve"><value>이미지에서 글자를 찾지 못했습니다.</value></data>
   <data name="Pin_CopyTranslation" xml:space="preserve"><value>번역문 복사</value></data>
+  <data name="App.CurrentVersion" xml:space="preserve"><value>버전 {0}</value></data>
+  <data name="Welcome_CaptureInstruction" xml:space="preserve"><value>영역 캡처를 누른 뒤 마우스로 드래그하여 캡처할 영역을 선택합니다.</value></data>
+  <data name="Onboarding.Replay" xml:space="preserve"><value>처음 사용 안내</value></data>
+  <data name="Onboarding.Ready" xml:space="preserve"><value>마무리</value></data>
+  <data name="Onboarding.CaptureLabel" xml:space="preserve"><value>캡처</value></data>
+  <data name="Onboarding.PinLabel" xml:space="preserve"><value>핀</value></data>
+  <data name="Onboarding.LibraryLabel" xml:space="preserve"><value>다시 찾기</value></data>
+  <data name="Onboarding.ProgressName" xml:space="preserve"><value>3단계 중 {0}단계: {1}</value></data>
+  <data name="Onboarding.CaptureTitle" xml:space="preserve"><value>화면의 일부를 캡처합니다</value></data>
+  <data name="Onboarding.CaptureInstruction" xml:space="preserve"><value>아래 버튼을 누른 뒤 표 위를 드래그하십시오.</value></data>
+  <data name="Onboarding.CaptureInstructionKey" xml:space="preserve"><value>이 키나 아래 버튼을 누른 뒤 표 위를 드래그하십시오.</value></data>
+  <data name="Onboarding.PinTitle" xml:space="preserve"><value>복사한 표나 코드를 다른 창 위에 띄워 둡니다</value></data>
+  <data name="Onboarding.PinInstruction" xml:space="preserve"><value>먼저 아래 버튼으로 연습용 표를 복사하십시오.</value></data>
+  <data name="Onboarding.PressPin" xml:space="preserve"><value>{0} 키를 누르십시오.</value></data>
+  <data name="Onboarding.PinButtonInstruction" xml:space="preserve"><value>아래 버튼을 눌러 핀을 띄우십시오.</value></data>
+  <data name="Onboarding.LibraryTitle" xml:space="preserve"><value>모든 캡처는 라이브러리에 모입니다</value></data>
+  <data name="Onboarding.LibraryInstruction" xml:space="preserve"><value>작업 표시줄 ^ 안의 MyCapture 아이콘으로 엽니다.</value></data>
+  <data name="Onboarding.LibraryInstructionKey" xml:space="preserve"><value>이 키나 작업 표시줄 ^ 안의 아이콘으로 엽니다.</value></data>
+  <data name="Onboarding.FinishTitle" xml:space="preserve"><value>준비가 끝났습니다</value></data>
+  <data name="Onboarding.FinishInstruction" xml:space="preserve"><value>아래 설정을 확인한 뒤 시작하십시오.</value></data>
+  <data name="Onboarding.ReplayNote" xml:space="preserve"><value>이 안내는 트레이 메뉴의 ‘처음 사용 안내’에서 다시 볼 수 있습니다.</value></data>
+  <data name="Onboarding.StartCapture" xml:space="preserve"><value>영역 캡처 시작</value></data>
+  <data name="Onboarding.CopyPractice" xml:space="preserve"><value>연습용 표 복사</value></data>
+  <data name="Onboarding.CreatePin" xml:space="preserve"><value>핀 만들기</value></data>
+  <data name="Onboarding.OpenLibrary" xml:space="preserve"><value>라이브러리 열기</value></data>
+  <data name="Onboarding.Start" xml:space="preserve"><value>시작하기</value></data>
+  <data name="Onboarding.CaptureCopied" xml:space="preserve"><value>캡처했습니다. 클립보드에도 복사했습니다.</value></data>
+  <data name="Onboarding.Captured" xml:space="preserve"><value>캡처했습니다. 클립보드에는 복사하지 못했습니다.</value></data>
+  <data name="Onboarding.CaptureRetry" xml:space="preserve"><value>캡처하지 않았습니다. 다시 시도하십시오.</value></data>
+  <data name="Onboarding.CaptureHint" xml:space="preserve"><value>버튼을 누른 뒤 표 위를 드래그하십시오.</value></data>
+  <data name="Onboarding.CopyRetry" xml:space="preserve"><value>복사하지 못했습니다. 버튼을 다시 누르십시오.</value></data>
+  <data name="Onboarding.PracticeCopied" xml:space="preserve"><value>복사했습니다. 이제 핀을 띄울 수 있습니다.</value></data>
+  <data name="Onboarding.CopyHint" xml:space="preserve"><value>‘연습용 표 복사’ 버튼을 누르십시오.</value></data>
+  <data name="Onboarding.PinHint" xml:space="preserve"><value>키가 반응하지 않으면 ‘핀 만들기’ 버튼을 누르십시오.</value></data>
+  <data name="Onboarding.PinClose" xml:space="preserve"><value>핀을 띄웠습니다. Esc 키 또는 핀의 닫기로 닫을 수 있습니다.</value></data>
+  <data name="Onboarding.LibraryHint" xml:space="preserve"><value>‘라이브러리 열기’ 버튼을 누르십시오.</value></data>
+  <data name="Onboarding.PracticeLabel" xml:space="preserve"><value>연습용 표</value></data>
+  <data name="Onboarding.TableItem" xml:space="preserve"><value>항목</value></data>
+  <data name="Onboarding.TableSpec" xml:space="preserve"><value>사양</value></data>
+  <data name="Onboarding.TableMemory" xml:space="preserve"><value>메모리</value></data>
+  <data name="Onboarding.TableStorage" xml:space="preserve"><value>저장 장치</value></data>
+  <data name="Onboarding.TrayLocation" xml:space="preserve"><value>MyCapture 아이콘은 ^ 단추 안에 있습니다.</value></data>
+  <data name="Onboarding.TrayIconName" xml:space="preserve"><value>MyCapture 아이콘</value></data>
+  <data name="Onboarding.AboutBody" xml:space="preserve"><value>캡처, 핀, 라이브러리를 직접 해 보는 3단계 안내입니다.</value></data>
+  <data name="Settings.QuickSaveDirectoryHint" xml:space="preserve"><value>빠른 저장은 항상 이 폴더에 저장합니다. 비워 두면 기본 캡처 폴더를 사용합니다.</value></data>
+  <data name="Pin.ClickThroughOff" xml:space="preserve"><value>클릭 허용 끄기</value></data>
+  <data name="Pin.ClickThroughIntro" xml:space="preserve"><value>여기를 누르면 다시 끕니다</value></data>
+  <data name="EditorFlow_CopyAndClose" xml:space="preserve"><value>복사하고 닫기</value></data>
+  <data name="LibraryUx_NoSelection" xml:space="preserve"><value>선택 없음</value></data>
+  <data name="LibraryUx_Preview" xml:space="preserve"><value>미리보기</value></data>
+  <data name="LibraryUx_PreviewHint" xml:space="preserve"><value>미리보기 (Space)</value></data>
+  <data name="LibraryUx_UpdateAvailable" xml:space="preserve"><value>업데이트 {0}</value></data>
+  <data name="LibraryUx_RateAction" xml:space="preserve"><value>평가하기</value></data>
+  <data name="LibraryUx_SelectCard" xml:space="preserve"><value>{0} 선택</value></data>
+  <data name="LibraryUx_PinHint" xml:space="preserve"><value>핀으로 띄우기 (P)</value></data>
+  <data name="LibraryUx_SourceDetails" xml:space="preserve"><value>출처 상세</value></data>
+  <data name="LibraryUx_EditHint" xml:space="preserve"><value>다시 편집 (Enter)</value></data>
+  <data name="LibraryUx_KeepHint" xml:space="preserve"><value>보관 (K)</value></data>
+  <data name="CaptureRatio_Help" xml:space="preserve"><value>영역의 가로세로 비율을 고정하거나 정해진 크기로 놓습니다.</value></data>
+  <data name="CaptureRatio_Changed" xml:space="preserve"><value>비율: {0}</value></data>
+  <data name="CaptureRatio_FixedSize" xml:space="preserve"><value>크기 고정 {0}</value></data>
+  <data name="CaptureRatio_FixedHint" xml:space="preserve"><value>방향키로 옮기고 Enter로 확정합니다.</value></data>
+  <data name="CaptureRatio_HelpLabel" xml:space="preserve"><value>선택 중 비율 고정 전환</value></data>
+  <data name="Stamp_Name" xml:space="preserve"><value>도장</value></data>
+  <data name="Stamp_Place" xml:space="preserve"><value>도장 찍기</value></data>
+  <data name="Stamp_ToolTip" xml:space="preserve"><value>도장 찍기 — 오른쪽 버튼으로 설정 (S)</value></data>
+  <data name="Stamp_Change" xml:space="preserve"><value>도장 이미지 바꾸기…</value></data>
+  <data name="Stamp_Opacity" xml:space="preserve"><value>불투명도</value></data>
+  <data name="Stamp_OpacityPercent" xml:space="preserve"><value>{0}%</value></data>
+  <data name="Stamp_Remove" xml:space="preserve"><value>도장 지우기</value></data>
+  <data name="Stamp_PickerTitle" xml:space="preserve"><value>도장 이미지 선택</value></data>
+  <data name="Stamp_Changed" xml:space="preserve"><value>도장 이미지 변경됨</value></data>
+  <data name="Stamp_OpacitySet" xml:space="preserve"><value>도장 불투명도 {0}%</value></data>
+  <data name="Stamp_Removed" xml:space="preserve"><value>도장 이미지 삭제됨 · 이미 넣은 도장은 그대로 유지됨</value></data>
+  <data name="Stamp_SaveFailed" xml:space="preserve"><value>도장 이미지를 저장하지 못했습니다.</value></data>
+  <data name="Stamp_Unreadable" xml:space="preserve"><value>도장 이미지를 읽을 수 없습니다. 다시 등록해 주십시오.</value></data>
+  <data name="Stamp_Unavailable" xml:space="preserve"><value>이 화면에서는 도장을 사용할 수 없습니다.</value></data>
+  <data name="Help.QuickAccess" xml:space="preserve">
+    <value>빠른 작업</value>
+  </data>
+  <data name="Shortcuts.DoneInText" xml:space="preserve">
+    <value>텍스트 입력 중에도 복사하고 닫기</value>
+  </data>
+  <data name="Shortcuts.EditText" xml:space="preserve">
+    <value>선택한 텍스트 편집</value>
+  </data>
+  <data name="Shortcuts.Privacy" xml:space="preserve">
+    <value>개인정보 가리기</value>
+  </data>
+  <data name="Shortcuts.StepBack" xml:space="preserve">
+    <value>현재 작업 취소·선택 해제</value>
+  </data>
+  <data name="Shortcuts.Undo" xml:space="preserve">
+    <value>실행 취소</value>
+  </data>
+  <data name="Shortcuts.Redo" xml:space="preserve">
+    <value>다시 실행</value>
+  </data>
+  <data name="Shortcuts.SelectAll" xml:space="preserve">
+    <value>모두 선택</value>
+  </data>
+  <data name="Shortcuts.Duplicate" xml:space="preserve">
+    <value>선택 항목 복제</value>
+  </data>
+  <data name="Shortcuts.BringForward" xml:space="preserve">
+    <value>한 단계 앞으로</value>
+  </data>
+  <data name="Shortcuts.SendBackward" xml:space="preserve">
+    <value>한 단계 뒤로</value>
+  </data>
+  <data name="Shortcuts.DeleteSelection" xml:space="preserve">
+    <value>선택 항목 삭제</value>
+  </data>
+  <data name="Shortcuts.Move1" xml:space="preserve">
+    <value>선택 항목 1px 이동</value>
+  </data>
+  <data name="Shortcuts.Move10" xml:space="preserve">
+    <value>선택 항목 10px 이동</value>
+  </data>
+  <data name="Shortcuts.CropMove1" xml:space="preserve">
+    <value>자르기 영역 1px 이동</value>
+  </data>
+  <data name="Shortcuts.CropMove10" xml:space="preserve">
+    <value>자르기 영역 10px 이동</value>
+  </data>
+  <data name="Shortcuts.CaptureConfirm" xml:space="preserve">
+    <value>선택 영역 캡처</value>
+  </data>
+  <data name="Shortcuts.CaptureCancel" xml:space="preserve">
+    <value>캡처 취소</value>
+  </data>
+  <data name="Shortcuts.CaptureAll" xml:space="preserve">
+    <value>화면 전체 선택</value>
+  </data>
+  <data name="Shortcuts.SelectionMove1" xml:space="preserve">
+    <value>캡처 영역 1px 이동</value>
+  </data>
+  <data name="Shortcuts.SelectionMove10" xml:space="preserve">
+    <value>캡처 영역 10px 이동</value>
+  </data>
+  <data name="Shortcuts.SelectionResize1" xml:space="preserve">
+    <value>캡처 영역 크기 1px 조절</value>
+  </data>
+  <data name="Shortcuts.SelectionResize10" xml:space="preserve">
+    <value>캡처 영역 크기 10px 조절</value>
+  </data>
+  <data name="Shortcuts.LibraryCopy" xml:space="preserve">
+    <value>이미지 복사</value>
+  </data>
+  <data name="Shortcuts.LibraryOpen" xml:space="preserve">
+    <value>이미지 다시 편집·동영상 재생</value>
+  </data>
+  <data name="Shortcuts.LibraryPreview" xml:space="preserve">
+    <value>미리보기</value>
+  </data>
+  <data name="Shortcuts.LibraryText" xml:space="preserve">
+    <value>텍스트 인식 (이미지)</value>
+  </data>
+  <data name="Shortcuts.LibraryGif" xml:space="preserve">
+    <value>GIF 내보내기 (동영상)</value>
+  </data>
+  <data name="Shortcuts.ContextMenu" xml:space="preserve">
+    <value>선택 항목 메뉴</value>
+  </data>
+  <data name="Shortcuts.Search" xml:space="preserve">
+    <value>검색</value>
+  </data>
+  <data name="Shortcuts.Back" xml:space="preserve">
+    <value>이전 폴더</value>
+  </data>
+  <data name="Shortcuts.Forward" xml:space="preserve">
+    <value>다음 폴더</value>
+  </data>
+  <data name="Shortcuts.MouseNavigation" xml:space="preserve">
+    <value>이전·다음 폴더</value>
+  </data>
+  <data name="Shortcuts.MouseButtons" xml:space="preserve">
+    <value>마우스 뒤로 / 앞으로</value>
+  </data>
+  <data name="Shortcuts.LibraryDrag" xml:space="preserve">
+    <value>끌어서 폴더로 옮기기·파일로 내보내기</value>
+  </data>
+  <data name="Shortcuts.Drag" xml:space="preserve">
+    <value>마우스로 끌기</value>
+  </data>
 </root>

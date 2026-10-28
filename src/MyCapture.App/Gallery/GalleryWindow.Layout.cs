@@ -9,14 +9,81 @@ namespace MyCapture.App.Gallery;
 
 internal sealed partial class GalleryWindow
 {
-    private bool _detailsPaneOpen = true;
+    private bool _detailsPaneOpen;
+
+    /// <summary>How much of the content toolbar's detail is shown (see <see cref="FitContentToolbar"/>).</summary>
+    internal enum ToolbarDensity
+    {
+        /// <summary>Icon and label on each command.</summary>
+        Labelled,
+
+        /// <summary>Icons only; names and tooltips stay.</summary>
+        IconsOnly,
+
+        /// <summary>Icons only, a narrower selection count and sort box.</summary>
+        Compact,
+    }
+
+    private ToolbarDensity _toolbarDensity;
+
+    internal ToolbarDensity ContentToolbarDensity => _toolbarDensity;
+
+    private void OnContentCommandBarSizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        if (e.WidthChanged) FitContentToolbar();
+    }
+
+    /// <summary>
+    /// Fits the toolbar to its width without ever wrapping to a second row: the five commands show icon and label
+    /// while that fits; otherwise the labels go (icons keep their names and tooltips); otherwise the selection count
+    /// and the sort box narrow too. The rule is checked when the window loads, is shown, changes DPI or width
+    /// (which the details pane opening or closing does) and when the language or text size changes, and it never
+    /// changes the bar's height, so a selection never moves the list.
+    /// </summary>
+    internal void FitContentToolbar()
+    {
+        if (SelectionCommands is null || SortCommands is null || LibraryContentCommandBar.ActualWidth <= 0) return;
+        double available = LibraryContentCommandBar.ActualWidth;
+        foreach (ToolbarDensity density in new[] { ToolbarDensity.Labelled, ToolbarDensity.IconsOnly, ToolbarDensity.Compact })
+        {
+            ApplyToolbarDensity(density);
+            var probe = new Size(double.PositiveInfinity, LibraryContentCommandBar.RowDefinitions[0].ActualHeight);
+            // A label's Visibility/Text invalidates its own measure immediately, but WPF propagates that
+            // to its templated button and the outer panel later. A repeated fit at the same width must
+            // not accept Labelled using cached icon-only sizes. Refresh just these small toolbar trees
+            // before measuring; a full UpdateLayout here would re-enter the window's SizeChanged path.
+            InvalidateToolbarMeasure(SelectionCommands);
+            InvalidateToolbarMeasure(SortCommands);
+            SelectionCommands.Measure(probe);
+            SortCommands.Measure(probe);
+            if (SelectionCommands.DesiredSize.Width + SortCommands.DesiredSize.Width <= available) break;
+        }
+    }
+
+    private static void InvalidateToolbarMeasure(DependencyObject element)
+    {
+        for (int index = 0; index < VisualTreeHelper.GetChildrenCount(element); index++)
+            InvalidateToolbarMeasure(VisualTreeHelper.GetChild(element, index));
+        if (element is UIElement visual) visual.InvalidateMeasure();
+    }
+
+    private void ApplyToolbarDensity(ToolbarDensity density)
+    {
+        _toolbarDensity = density;
+        Visibility label = density == ToolbarDensity.Labelled ? Visibility.Visible : Visibility.Collapsed;
+        foreach (TextBlock text in new[] { FloatSelectedLabel, CopySelectedLabel, EditSelectedLabel, PreviewSelectedLabel, KeepSelectedLabel })
+            text.Visibility = label;
+        SelectionCountLabel.Width = density == ToolbarDensity.Compact ? 60 : 96;
+        SelectionCountLabel.ToolTip = density == ToolbarDensity.Compact ? _viewModel.SelectionText : null;
+        SortBox.Width = density == ToolbarDensity.Compact ? 92 : 112;
+    }
 
     private void InitializeCommandBarLayout()
     {
-        ArchiveOverflowMenu.SetBinding(IsEnabledProperty, new System.Windows.Data.Binding(nameof(IsEnabled)) { Source = ArchiveExportButton });
-        MoveOverflowMenu.SetBinding(IsEnabledProperty, new System.Windows.Data.Binding(nameof(IsEnabled)) { Source = MoveCapturesButton });
-        LibraryContentCommandBar.SizeChanged += (_, _) => FitSelectionCommands();
-        Loaded += (_, _) => FitSelectionCommands();
+        LibraryContentCommandBar.SizeChanged += OnContentCommandBarSizeChanged;
+        Loaded += (_, _) => { FitSelectionCommands(); FitContentToolbar(); };
+        DpiChanged += (_, _) => FitContentToolbar();
+        IsVisibleChanged += (_, _) => { if (IsVisible) FitContentToolbar(); };
         _viewModel.PropertyChanged += (_, e) =>
         {
             if (e.PropertyName is null or "" or nameof(GalleryViewModel.HasSelection)
@@ -27,32 +94,17 @@ internal sealed partial class GalleryWindow
 
     private void FitSelectionCommands()
     {
-        ArchiveExportButton.Visibility = Visibility.Visible;
-        MoveCapturesButton.Visibility = Visibility.Visible;
-        ArchiveOverflowMenu.Visibility = Visibility.Collapsed;
-        MoveOverflowMenu.Visibility = Visibility.Collapsed;
-        if (!_viewModel.HasSelection || LibraryContentCommandBar.ActualWidth <= 0) return;
-
-        double WidthOf(FrameworkElement element)
-        {
-            element.InvalidateMeasure();
-            element.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
-            return element.DesiredSize.Width;
-        }
-
-        // Selection commands use only the content toolbar; capture and search never change width.
-        double available = LibraryContentCommandBar.ActualWidth - WidthOf(MoreCommandsButton);
-        foreach ((Button button, MenuItem menu) in new[]
-        {
-            (ArchiveExportButton, ArchiveOverflowMenu),
-            (MoveCapturesButton, MoveOverflowMenu),
-        })
-        {
-            if (WidthOf(SelectionCommands) <= available) break;
-            if (button.IsKeyboardFocusWithin) MoreCommandsButton.Focus();
-            button.Visibility = Visibility.Collapsed;
-            menu.Visibility = Visibility.Visible;
-        }
+        ArchiveOverflowMenu.IsEnabled = _archiveCancellation is null && _viewModel.HasSelection;
+        MoveOverflowMenu.IsEnabled = _viewModel.HasSelection;
+        // Keep says what it will do to the selection: keep it, or release it when every card in it is kept.
+        bool release = _viewModel.HasSelection && _viewModel.SelectedTiles.All(tile => tile.IsPinned);
+        string keep = UiText.Get(release ? "LibraryUx_Unkeep" : "LibraryUx_Keep");
+        KeepSelectedLabel.Text = keep;
+        System.Windows.Automation.AutomationProperties.SetName(KeepSelectedButton, keep);
+        KeepSelectedButton.ToolTip = UiText.Get(release ? "LibraryUx_Unkeep" : "LibraryUx_KeepHint");
+        if (SelectionCountLabel.ToolTip is not null) SelectionCountLabel.ToolTip = _viewModel.SelectionText;
+        // "보관 해제" is wider than "보관": the bar is fitted again for the new label.
+        FitContentToolbar();
     }
 
     /// <summary>

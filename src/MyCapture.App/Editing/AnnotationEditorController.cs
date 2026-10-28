@@ -771,10 +771,18 @@ internal sealed class AnnotationEditorController
     /// and the box <paramref name="rect"/> (its top-left, and its width when not auto-size).
     /// </summary>
     /// <remarks>
-    /// An auto-size box that would run past the image's right edge becomes a fixed-width box
-    /// ending at that edge (at least one em wide), so the caption wraps and grows downward
-    /// instead of leaving the image. Typing, committing and changing the size all follow this
-    /// rule; moving does not refit, so a caption renders the same wherever it is dragged.
+    /// <para>
+    /// The caption stays inside the image, which clips what it draws. An auto-size box that would
+    /// run past the image's right edge becomes a fixed-width box at least ten em wide, capped to
+    /// the image width minus the outline margin, so the caption stays readable as it wraps. A box
+    /// that still reaches past the right or bottom edge or starts before the left or top
+    /// edge moves just enough to lie inside it. The live editing box takes this same box, so what
+    /// is typed near an edge or a corner is exactly what the committed caption shows.
+    /// </para>
+    /// <para>
+    /// Typing, committing and changing the size all follow this rule; moving does not refit, so a
+    /// caption renders the same wherever it is dragged.
+    /// </para>
     /// </remarks>
     internal TextLayout FitText(
         TextAnnotation text, string content, double fontSize, bool autoSize, RectD rect, bool keepInsideImage = true)
@@ -786,19 +794,34 @@ internal sealed class AnnotationEditorController
         probe.AutoSize = autoSize && !text.IsStepNumber;
         probe.Rect = rect;
         RectD measured = TextFitter?.Invoke(probe) ?? rect;
-
-        if (probe.AutoSize && keepInsideImage && _document.CanvasWidth > 0
-            && measured.Right > _document.CanvasWidth + 0.01)
+        double canvasWidth = _document.CanvasWidth, canvasHeight = _document.CanvasHeight;
+        if (!keepInsideImage || text.IsStepNumber || canvasWidth <= 0 || canvasHeight <= 0)
         {
+            return new TextLayout(measured, probe.FontSize, probe.AutoSize);
+        }
+
+        // A box that starts outside the image wraps from the edge it moves to.
+        double anchor = Math.Clamp(rect.X, 0, canvasWidth);
+        if (probe.AutoSize && anchor + measured.Width > canvasWidth + 0.01)
+        {
+            double minimumWidth = Math.Min(10 * probe.FontSize,
+                Math.Max(1, canvasWidth - TextAnnotationLayout.OutlineMargin(probe)));
             probe.AutoSize = false;
-            probe.Rect = new RectD(rect.X, rect.Y, Math.Max(_document.CanvasWidth - rect.X, probe.FontSize), rect.Height);
+            probe.Rect = new RectD(rect.X, rect.Y, Math.Max(canvasWidth - anchor, minimumWidth), rect.Height);
             measured = TextFitter?.Invoke(probe) ?? probe.Rect;
         }
 
-        return new TextLayout(measured, probe.FontSize, probe.AutoSize);
+        double left = Math.Max(0, Math.Min(measured.X, canvasWidth - measured.Width));
+        double top = Math.Max(0, Math.Min(measured.Y, canvasHeight - measured.Height));
+        return new TextLayout(measured with { X = left, Y = top }, probe.FontSize, probe.AutoSize);
     }
 
-    internal ImageAnnotation AddImageAnnotation(string assetFileName, int sourceWidth, int sourceHeight, RectD rect)
+    /// <param name="opacity">
+    /// The image's opacity (0..1) from the start, so the add and its look are one undo step. The
+    /// annotation's own <see cref="AnnotationItem.Opacity"/> is used: it is already saved with the
+    /// layer and drawn by the renderer, so no format change is involved.
+    /// </param>
+    internal ImageAnnotation AddImageAnnotation(string assetFileName, int sourceWidth, int sourceHeight, RectD rect, double opacity = 1.0)
     {
         var image = new ImageAnnotation
         {
@@ -806,6 +829,7 @@ internal sealed class AnnotationEditorController
             SourceWidth = sourceWidth,
             SourceHeight = sourceHeight,
             Rect = rect.Normalized(),
+            Opacity = opacity,
         };
 
         _undo.Execute(new AddAnnotationCommand(_document, image));

@@ -433,6 +433,9 @@ public sealed class SettingsStore
             s.Annotation.BlurRadius, SettingsRanges.BlurRadius.Min, SettingsRanges.BlurRadius.Max,
             nameof(AnnotationDefaults.BlurRadius), warnings);
 
+        // Editor bookkeeping (stamp placement), repaired without a warning.
+        s.Annotation.Stamp.Normalize();
+
         if (string.IsNullOrWhiteSpace(s.Annotation.FontFamily))
         {
             s.Annotation.FontFamily = AnnotationDefaults.DefaultFontFamily;

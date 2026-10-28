@@ -191,7 +191,7 @@ public sealed class PinMarkdownInteractionTests
             pin.ApplyTranslation(Content(Korean), false);
             pin.SetMarkdownSourceDisplay(true);
             pin.Close();
-            PinWindow restored = Assert.IsType<PinWindow>(manager.RestoreLastClosed());
+            PinWindow restored = Assert.IsType<PinWindow>(PinHistoryTestSupport.Restore(manager));
             Assert.True(restored.PinnedContent.IsMarkdown);
             Assert.Equal(Source, restored.PinnedContent.OriginalText);
             Assert.Equal(Source, restored.DisplayedText);

@@ -48,6 +48,7 @@ Windows 10 버전 22H2의 32비트(x86) 호환판은 Windows 기본 OCR을 사�
 | 라이브러리 열기 | 설정에서 지정(예: `Ctrl+Shift+Z`) | 이미지와 동영상을 함께 조회하고 동영상을 창 안에서 재생 |
 | 클립보드 이미지를 GitHub 첨부 URL로 | 설정에서 지정(예: `F9`) | 설정한 이슈 Write 칸에 붙여 넣고 user-attachments URL을 복사 |
 | 편집기 개인정보 가리기 | `Ctrl+Shift+R` | 편집기 안에서. 이 PC에서 인식한 개인정보 후보를 편집 가능한 가림막으로 추가 |
+| 편집기 도장 찍기 | `S` | 편집기 안에서. 한 번 등록한 로고나 블로그 이름을 등록한 위치에 일반 이미지로 추가. 처음에는 이미지 파일을 고르고, 오른쪽 클릭 메뉴에서 이미지 변경, 불투명도, 지우기 |
 | 편집기 빠른 저장 | `Ctrl+S` | 편집기 안에서. PNG 저장 후 편집된 이미지를 클립보드에 복사 |
 | 편집기 다른 이름으로 저장 | `Ctrl+Shift+S` | 편집기 안에서. PNG 저장 후 편집된 이미지를 클립보드에 복사 |
 | 핀 이미지 빠른 저장 | `Ctrl+S` | 핀에 포커스가 있을 때 원본 PNG 저장 |
@@ -63,7 +64,7 @@ Windows 10 버전 22H2의 32비트(x86) 호환판은 Windows 기본 OCR을 사�
 - [기능과 화면](docs/features.md): 전체 기능 목록과 화면
 - [설치와 배포](docs/install.md): Store 설치본과 GitHub 릴리스의 설치 파일·포터블 ZIP, `SHA256SUMS.txt` 확인, 설치 로그와 종료 코드, 사용자 데이터 위치, 개인정보와 네트워크
 - [소스에서 빌드](docs/build.md): .NET 10 SDK 준비, 빌드와 테스트, 자체 진단(self-test)
-- [4.8.5 릴리스 노트](docs/releases/4.8.5-release-notes.md)와 [이전 릴리스 노트](docs/releases/)
+- [4.10.0 릴리스 노트](docs/releases/4.10.0-release-notes.md)와 [이전 릴리스 노트](docs/releases/)
 - [지원](https://github.com/sukwoo0711-maker/mycapture-support)과 [개인정보처리방침](https://mimiloaf.com/mycapture/privacy/)
 - [소개 페이지](https://mimiloaf.com/mycapture/)와 게시자 [Mimiloaf](https://mimiloaf.com/). 메일 문의는 [support@mimiloaf.com](mailto:support@mimiloaf.com)으로 보내 주십시오.
 
@@ -125,6 +126,7 @@ A click-through pin does not take clicks, so press `Shift+F3` twice or choose Tu
 | Open the library | Assign in Settings (for example `Ctrl+Shift+Z`) |
 | Turn the clipboard image into a GitHub attachment URL | Assign in Settings (for example `F9`) |
 | Redact personal data (in the editor) | `Ctrl+Shift+R` |
+| Place your logo stamp (in the editor) | `S` (the first time you choose the picture; right-click the button for change, opacity and remove) |
 | Save the editor image or the focused pin | `Ctrl+S` |
 | Save as | `Ctrl+Shift+S` |
 

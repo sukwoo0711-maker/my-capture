@@ -106,18 +106,21 @@ internal sealed partial class GalleryWindow : Window
         _log = log ?? throw new ArgumentNullException(nameof(log));
 
         InitializeComponent();
+        CurrentVersionLabel.Text = ApplicationVersion.DisplayText;
         CommandBindings.Add(new CommandBinding(CompareCommand, OnCompareExecuted, (_, e) =>
         {
             e.CanExecute = !_imagePreparationInProgress && _viewModel.CanCompareSelected;
             e.Handled = true;
         }));
-        Loaded += (_, _) => UpdateCommandShortcuts();
+        Loaded += (_, _) => { UpdateCommandShortcuts(); UpdateMetadataMinimumWidths(); };
+        // The card's text widths change with the display scale, so they are measured again then and
+        // when the window is shown or resized, not on every layout pass.
+        DpiChanged += (_, _) => UpdateMetadataMinimumWidths();
         MyCapture.App.Themes.WorkspaceTheme.Attach(this, MyCapture.App.Themes.WorkspaceRole.Gallery, resourcesLoaded: true);
         _viewModel.EnableAsyncThumbnailLoading(Dispatcher);
         _viewModel.SetThumbnailLoadingEnabled(false);
         DataContext = _viewModel;
         InitializeFolderActions();
-        RowsList.LayoutUpdated += OnMetadataLayoutUpdated;
         PreviewMouseLeftButtonUp += OnDragButtonUp;
         PreviewMouseMove += OnTileMouseMove;
         LostMouseCapture += (_, _) => { if (Mouse.Captured != this) ResetDragGesture(); };
@@ -125,6 +128,7 @@ internal sealed partial class GalleryWindow : Window
         // Bubbling, so a tile's open caption hint or a menu consumes Escape first.
         KeyDown += OnLibraryKeyDown;
         InitializeActionStatus();
+        InitializeLibraryNotices();
         InitializeRecovery();
         InitializeLibraryExtras();
         InitializeEmptyLibrary();
@@ -136,6 +140,7 @@ internal sealed partial class GalleryWindow : Window
             else _hiddenForCapture = false;
             _viewModel.SetThumbnailLoadingEnabled(IsVisible);
             _viewModel.SetLibraryOpen(IsVisible || _hiddenForCapture);
+            if (IsVisible) UpdateMetadataMinimumWidths();
             if (IsVisible && _refreshWhenShown)
             {
                 // Shown without ShowGallery (which refreshes itself): apply what arrived while hidden.
@@ -197,10 +202,7 @@ internal sealed partial class GalleryWindow : Window
             WindowState = WindowState.Normal;
         }
 
-        _ = Activate();
-        Topmost = true;
-        Topmost = false;
-        _ = Focus();
+        WindowForeground.BringForward(this);
         ShowPendingRetentionNotice();
     }
 
@@ -243,6 +245,7 @@ internal sealed partial class GalleryWindow : Window
 
     protected override void OnClosing(System.ComponentModel.CancelEventArgs e)
     {
+        _imagePreview?.Close();
         // A normal close returns to the tray; only an explicit exit is allowed through.
         if (!_allowClose)
         {
@@ -380,6 +383,8 @@ internal sealed partial class GalleryWindow : Window
         {
             return;
         }
+
+        UpdateMetadataMinimumWidths();
 
         // The view model only rebuilds rows when the resulting column count actually changes,
         // so this fires cheaply on every resize.
@@ -538,98 +543,6 @@ internal sealed partial class GalleryWindow : Window
         }
     }
 
-    private async void OnTileKeyDown(object sender, KeyEventArgs e)
-    {
-        if (IsInsideButton(e.OriginalSource)
-            || IsNavigationTextInput(e.OriginalSource as DependencyObject)
-            || IsNavigationTextInput(Keyboard.FocusedElement as DependencyObject)) return;
-        GalleryItemViewModel? tile = ResolveTileFromTree(e.OriginalSource) ?? _viewModel.SingleSelectedTile;
-        if (tile is null)
-        {
-            return;
-        }
-
-        switch (e.Key)
-        {
-            case Key.A when Keyboard.Modifiers.HasFlag(ModifierKeys.Control):
-                _viewModel.SelectAllVisible();
-                e.Handled = true;
-                break;
-            // Plain Up/Down can leave the tiles for the folder cards above them; range
-            // selection with Ctrl or Shift stays on tiles.
-            case Key.Up or Key.Down when Keyboard.Modifiers == ModifierKeys.None
-                && GallerySelectionNavigation.FindVertical(_viewModel.Rows, tile,
-                    e.Key == Key.Up ? -1 : 1) is GalleryFolderCardViewModel card:
-                FocusFolderCard(card);
-                e.Handled = true;
-                break;
-            case Key.Left:
-            case Key.Right:
-            case Key.Up:
-            case Key.Down:
-                GalleryItemViewModel? next = GallerySelectionNavigation.FindNeighbor(_viewModel.Rows, tile,
-                    e.Key is Key.Up or Key.Down, e.Key is Key.Left or Key.Up ? -1 : 1);
-                if (next is not null)
-                {
-                    _viewModel.Select(next.Id, Keyboard.Modifiers.HasFlag(ModifierKeys.Control), Keyboard.Modifiers.HasFlag(ModifierKeys.Shift));
-                    GalleryTileRow? row = _viewModel.Rows.OfType<GalleryTileRow>().FirstOrDefault(r => r.Tiles.Contains(next));
-                    if (row is not null)
-                    {
-                        RowsList.ScrollIntoView(row);
-                        _ = Dispatcher.BeginInvoke(DispatcherPriority.Loaded, new Action(() => FocusTile(RowsList, next)));
-                    }
-                }
-                e.Handled = true;
-                break;
-            case Key.Enter:
-                if (tile.IsVideo)
-                {
-                    PrepareVideoPlayer(tile, autoPlay: true);
-                }
-                else
-                {
-                    OpenReedit(tile);
-                }
-                e.Handled = true;
-                break;
-            case Key.M when Keyboard.Modifiers == ModifierKeys.None:
-                OnMoveCapturesClick(this, new RoutedEventArgs());
-                e.Handled = true;
-                break;
-            case Key.Delete:
-                ConfirmDeleteMany(_viewModel.Selection.SelectedIds, false);
-                e.Handled = true;
-                break;
-            case Key.Space:
-                _viewModel.Select(tile.Id, Keyboard.Modifiers.HasFlag(ModifierKeys.Control), Keyboard.Modifiers.HasFlag(ModifierKeys.Shift));
-                e.Handled = true;
-                break;
-            case Key.P when Keyboard.Modifiers == ModifierKeys.None && tile.IsImage:
-                FloatTile(tile);
-                e.Handled = true;
-                break;
-            case Key.K when Keyboard.Modifiers == ModifierKeys.None:
-                TogglePin(tile);
-                e.Handled = true;
-                break;
-            case Key.C when Keyboard.Modifiers.HasFlag(ModifierKeys.Control):
-                if (tile.IsImage)
-                {
-                    e.Handled = true;
-                    if (await CopyRenderedAsync(tile)) ConfirmCopy(source: null);
-                }
-                break;
-            case Key.T when tile.IsImage:
-                RecognizeText(tile);
-                e.Handled = true;
-                break;
-            case Key.G when tile.IsVideo:
-                OpenVideoEditor(tile, exportGifWhenReady: true);
-                e.Handled = true;
-                break;
-        }
-    }
-
     // ---- Floating video player ------------------------------------------------------
 
     /// <summary>
@@ -710,14 +623,6 @@ internal sealed partial class GalleryWindow : Window
         }
     }
 
-    private void OnPinClick(object sender, RoutedEventArgs e)
-    {
-        if (ResolveTile(sender) is GalleryItemViewModel tile)
-        {
-            TogglePin(tile);
-        }
-    }
-
     private void OnFloatClick(object sender, RoutedEventArgs e)
     {
         if (ResolveTileFromCommand(sender) is not GalleryItemViewModel tile || !tile.IsImage)
@@ -763,22 +668,16 @@ internal sealed partial class GalleryWindow : Window
         }
     }
 
-    private void OnShowDragHelpClick(object sender, RoutedEventArgs e)
-    {
-        if (ResolveTileFromCommand(sender) is { } tile) ShowStatus(tile.ExportToolTip);
-        e.Handled = true;
-    }
-
     private void OnMoreClick(object sender, RoutedEventArgs e)
     {
-        // The More button opens its own context menu on a normal left click. The menu's
+        // The More button opens the library's card menu on a normal left click. The menu's
         // DataContext is bound to the button's tile via PlacementTarget, and every item passes
         // the tile as CommandParameter, so the subsequent action resolves the correct record.
-        if (sender is Button { ContextMenu: { } menu } button)
+        if (sender is Button { DataContext: GalleryItemViewModel tile } button)
         {
-            menu.PlacementTarget = button;
-            menu.Placement = PlacementMode.Bottom;
-            menu.IsOpen = true;
+            // As a right click does: a card outside the selection becomes the selection first.
+            if (!_viewModel.Selection.Contains(tile.Id)) _viewModel.Select(tile.Id);
+            OpenTileMenu(button, PlacementMode.Bottom);
             e.Handled = true;
         }
     }
@@ -803,54 +702,19 @@ internal sealed partial class GalleryWindow : Window
     {
         if (ResolveTileFromCommand(sender) is GalleryItemViewModel tile)
         {
-            ConfirmAndDelete(tile);
+            ConfirmDeleteMany(CommandTargets(tile).Select(target => target.Id).ToArray(), false);
         }
     }
 
-    private void OnDeleteClick(object sender, RoutedEventArgs e)
-    {
-        e.Handled = true;
-        if (ResolveTile(sender) is GalleryItemViewModel tile)
-        {
-            ConfirmAndDelete(tile);
-        }
-    }
-
-    private void OnPinMenuClick(object sender, RoutedEventArgs e)
+    private async void OnPinMenuClick(object sender, RoutedEventArgs e)
     {
         if (ResolveTileFromCommand(sender) is GalleryItemViewModel tile)
         {
-            TogglePin(tile);
+            await ToggleKeepAsync(CommandTargets(tile));
         }
     }
 
     // ---- Actions -------------------------------------------------------------------
-
-    private async void TogglePin(GalleryItemViewModel tile)
-    {
-        if (!EnsureRecordReady(tile.Id))
-        {
-            return;
-        }
-
-        bool? pinned;
-        try { pinned = await _queue.ToggleLibraryPinAsync(tile.Id); }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException or AggregateException)
-        { ShowActionStatus(UiText.Get("Library.Organize.Failed")); return; }
-        if (pinned is null)
-        {
-            return;
-        }
-
-        tile.RaiseMetaChanged();
-        _viewModel.Refresh();
-        RaiseCaptureChanged();
-    }
-
-    private void ConfirmAndDelete(GalleryItemViewModel tile)
-    {
-        ConfirmDeleteMany([tile.Id], false);
-    }
 
     private void OnDeleteSelectedClick(object sender, RoutedEventArgs e) => ConfirmDeleteMany(_viewModel.Selection.SelectedIds, false);
     private void OnClearLibraryClick(object sender, RoutedEventArgs e) => ConfirmDeleteMany(_controller.Records.Select(r => r.Id).ToArray(), true);
@@ -910,7 +774,14 @@ internal sealed partial class GalleryWindow : Window
         "Library.SourcePage.OpenFailed", "Library.SourcePage.CopyFailed",
         "Library.Source.OpenFolderFailed", "Library.Source.CopyPathFailed",
         "LibrarySelection_DeleteFailed",
+        // Commands that could not run (they used to open a message box).
+        "Gallery.Compare.LoadFailed", "Gallery.FloatFailed", "GalleryImageChanged", "Text_3BF4FEA88C51", "Text_51F5EF959148",
+        "Text_5F310F33AB12", "Text_75425A6D9BE8", "Text_884F73809F89", "Text_BCA2A41F7456", "Text_2618DA07C831",
+        "Text_7C821231A673", "Text_EC7FF66E22C9",
     ];
+
+    // Hints that something is already being done; they leave after the result time.
+    private static readonly string[] WarningStatusKeys = ["Text_E20E28D53DCE", "Text_EC81AD6B5A75", "Text_63F240FA482C", "Text_733011719B1C"];
 
     // Plain confirmations; every other line carries a count, a hint or a cause to read.
     private static readonly string[] ConfirmationStatusKeys =
@@ -971,6 +842,7 @@ internal sealed partial class GalleryWindow : Window
             return MyCapture.App.Themes.FeedbackKind.ActionRequired;
         }
 
+        if (WarningStatusKeys.Any(key => text == UiText.Get(key))) return MyCapture.App.Themes.FeedbackKind.Warning;
         if (ProgressStatusKeys.Any(key => MatchesFormat(text, key))) return MyCapture.App.Themes.FeedbackKind.Progress;
         return ConfirmationStatusKeys.Any(key => text == UiText.Get(key))
             ? MyCapture.App.Themes.FeedbackKind.Confirmation
@@ -996,6 +868,8 @@ internal sealed partial class GalleryWindow : Window
     {
         string text = LibraryActionStatus.Text;
         SyncStatusAction();
+        // A result or its follow-up takes the line; a waiting notice returns when the line is empty again.
+        RefreshNotice();
         MyCapture.App.Themes.FeedbackKind previous = _statusKind;
         _statusKind = string.IsNullOrEmpty(text) ? MyCapture.App.Themes.FeedbackKind.Echo : ClassifyActionStatus(text);
         bool dismissible = !string.IsNullOrEmpty(text) && MyCapture.App.Themes.FeedbackTiming.StaysUntilDismissed(_statusKind);
@@ -1255,8 +1129,9 @@ internal sealed partial class GalleryWindow : Window
                 return;
             }
             _ = ImageReductionExportDialog.Show(this, image,
-                Path.Combine(_paths.QuickSaveRoot, GalleryDragExportService.BuildBaseFileName(DateTimeOffset.Now)),
-                record.SourcePageUrl, _commitService.LastExportOptions, _commitService.RememberExportOptions);
+                Path.Combine(_commitService.ExportLocation.SaveAsDirectory, GalleryDragExportService.BuildBaseFileName(DateTimeOffset.Now)),
+                record.SourcePageUrl, _commitService.LastExportOptions, _commitService.RememberExportOptions,
+                _commitService.RememberSavedExport);
         }
         catch (Exception ex)
         {
@@ -1520,12 +1395,16 @@ internal sealed partial class GalleryWindow : Window
     private static GalleryItemViewModel? ResolveTileFromCommand(object? source) => source switch
     {
         MenuItem { CommandParameter: GalleryItemViewModel tile } => tile,
+        ButtonBase { CommandParameter: GalleryItemViewModel tile } => tile,
         FrameworkElement { DataContext: GalleryItemViewModel tile } => tile,
         _ => null,
     };
 
-    private void ShowStatus(string message) =>
-        MyCapture.App.Themes.ThemedDialog.Show(this, message, "MyCapture", MessageBoxButton.OK, MessageBoxImage.Information);
+    /// <summary>
+    /// A message about a command that did not run goes to the status line, never into a modal box over the cards it is
+    /// about. A failure stays until it is dismissed; a "try again later" hint leaves with the next result.
+    /// </summary>
+    private void ShowStatus(string message) => ShowActionStatus(message);
 
     private void RaiseCaptureChanged() => CaptureChanged?.Invoke(this, EventArgs.Empty);
 }

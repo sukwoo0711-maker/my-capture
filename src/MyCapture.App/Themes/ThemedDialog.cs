@@ -374,6 +374,6 @@ internal sealed class ThemedDialog : Window
         bool keepTopmost = Application.Current?.Windows.OfType<Window>()
             .Any(window => window.IsVisible && window.Topmost) == true;
         dialog.Topmost = keepTopmost || icon == MessageBoxImage.Error;
-        dialog.ContentRendered += (_, _) => { dialog.Activate(); dialog.Topmost = keepTopmost; };
+        dialog.ContentRendered += (_, _) => { dialog.Topmost = keepTopmost; WindowForeground.BringForward(dialog); };
     }
 }

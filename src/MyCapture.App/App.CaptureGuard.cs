@@ -69,14 +69,16 @@ public partial class App
     private Task WaitForEditorFinishedAsync() => _overlay?.WaitForEditorFinishedAsync() ?? Task.CompletedTask;
 
     /// <summary>
-    /// Region and text capture replace an idle capture editor, asking first about unsaved edits.
+    /// Text capture can replace an idle editor; region capture can preserve it for a screen capture.
     /// True when the capture may start; otherwise the user is shown why it did not.
     /// </summary>
-    private async Task<bool> PrepareRetakeAsync(string mode)
+    private async Task<bool> PrepareRetakeAsync(string mode, bool preserveEditor = false)
     {
         if (_overlay is not { } overlay) return false;
         await WaitForEditorFinishedAsync();
-        CaptureBlock block = await CaptureGuard.PrepareAsync(overlay.CanRetake, CheckStillCapture, overlay.CloseEditorForRetakeAsync);
+        CaptureBlock block = preserveEditor
+            ? CheckStillCapture(allowRetake: overlay.CanRetake)
+            : await CaptureGuard.PrepareAsync(overlay.CanRetake, CheckStillCapture, overlay.CloseEditorForRetakeAsync);
         if (block == CaptureBlock.None) return true;
         ReportCaptureBlock(block, mode);
         return false;

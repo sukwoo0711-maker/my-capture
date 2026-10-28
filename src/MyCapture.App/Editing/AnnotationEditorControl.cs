@@ -311,6 +311,7 @@ internal sealed partial class AnnotationEditorControl : Grid
             _imageInsertCts?.Dispose();
             _imageInsertCts = null;
             _hangulNoticeTimer?.Stop();
+            RememberStampPlacement();
             _blurCache.Clear();
         };
 
@@ -580,6 +581,7 @@ internal sealed partial class AnnotationEditorControl : Grid
     {
         foreach (EditorTool tool in Enum.GetValues<EditorTool>()) _shortcutActions[tool.ToString()] = () => SelectTool(tool);
         _shortcutActions["Done"] = () => Commit(EditorCommitAction.Done);
+        _shortcutActions["Stamp"] = PlaceStampFromUser;
         // Owner decision (2026-10-12 real-device feedback, restored 2026-10-25 after 4.6.0 split
         // it): copying is how people finish an edit, so Copy and Ctrl+C save, copy and close
         // like Done. Do not turn this into a copy-only command without asking the owner.
@@ -824,31 +826,27 @@ internal sealed partial class AnnotationEditorControl : Grid
     /// (<paramref name="originX"/>, <paramref name="originY"/>).
     /// </summary>
     /// <remarks>
-    /// The block averages read only pixels inside the region, so a 32bpp base yields exactly
-    /// the bytes a whole-image copy would hold there, without copying the rest of the image
-    /// on every mosaic. Any other format, or a region the base does not fully contain, keeps
-    /// the whole-image copy and its four-byte addressing, so the patch bytes never change.
+    /// The block averages read only pixels inside the region, so a base that contains it
+    /// yields exactly the bytes a whole-image read would hold there, without reading the rest
+    /// of the image on every mosaic. A region the base does not fully contain reads the whole
+    /// image. Both go through <see cref="ReadBgraPixels"/>, so a Bgr24 base reopened from the
+    /// library averages its own colours instead of three-byte pixels read as four.
     /// </remarks>
     private static byte[] ReadMosaicSource(BitmapSource bitmap, int x, int y, int width, int height,
         out int stride, out int originX, out int originY)
     {
-        if (bitmap.Format.BitsPerPixel == 32 && x >= 0 && y >= 0
-            && x + width <= bitmap.PixelWidth && y + height <= bitmap.PixelHeight)
+        if (x >= 0 && y >= 0 && x + width <= bitmap.PixelWidth && y + height <= bitmap.PixelHeight)
         {
             stride = width * 4;
             originX = x;
             originY = y;
-            byte[] region = new byte[stride * height];
-            bitmap.CopyPixels(new Int32Rect(x, y, width, height), region, stride, 0);
-            return region;
+            return ReadBgraPixels(bitmap, x, y, width, height);
         }
 
         stride = bitmap.PixelWidth * 4;
         originX = 0;
         originY = 0;
-        byte[] source = new byte[stride * bitmap.PixelHeight];
-        bitmap.CopyPixels(source, stride, 0);
-        return source;
+        return ReadBgraPixels(bitmap, 0, 0, bitmap.PixelWidth, bitmap.PixelHeight);
     }
 
     internal CropGrip? EdgeCropGripAt(PointD image)
@@ -1147,6 +1145,9 @@ internal sealed partial class AnnotationEditorControl : Grid
         double dipPerPixel = Math.Max(double.Epsilon, _surface.DipPerPixel);
         ColorRgba foreground = annotation.Foreground;
         double luma = 0.299 * foreground.R + 0.587 * foreground.G + 0.114 * foreground.B;
+        Color background = annotation.Background.A > 0
+            ? Color.FromArgb(255, annotation.Background.R, annotation.Background.G, annotation.Background.B)
+            : luma > 140 ? Colors.Black : Colors.White;
         var textBox = new TextBox
         {
             Text = annotation.Text,
@@ -1161,10 +1162,10 @@ internal sealed partial class AnnotationEditorControl : Grid
             FontStyle = annotation.Italic ? FontStyles.Italic : FontStyles.Normal,
             Foreground = annotation.Foreground.ToBrush(),
             // TextBox does not draw the caption's outline; keep unplated text readable while editing.
-            Background = annotation.Background.A > 0 ? annotation.Background.ToBrush()
-                : luma > 140 ? Brushes.Black : Brushes.White,
+            Background = new SolidColorBrush(background),
             Template = CaptionTextBoxTemplate.Value,
-            CaretBrush = luma > 140 ? Brushes.White : Brushes.Black,
+            CaretBrush = 0.299 * background.R + 0.587 * background.G + 0.114 * background.B > 140
+                ? Brushes.Black : Brushes.White,
             BorderThickness = new Thickness(2),
             AcceptsReturn = true,
             TextWrapping = TextWrapping.NoWrap,
@@ -1330,7 +1331,9 @@ internal sealed partial class AnnotationEditorControl : Grid
                             BorderThickness="{TemplateBinding BorderThickness}" />
                     <Border Margin="1" BorderBrush="White" BorderThickness="1" IsHitTestVisible="False" />
                     <Border BorderThickness="{TemplateBinding BorderThickness}">
-                        <ScrollViewer x:Name="PART_ContentHost" />
+                        <AdornerDecorator>
+                            <ScrollViewer x:Name="PART_ContentHost" />
+                        </AdornerDecorator>
                     </Border>
                 </Grid>
             </ControlTemplate>
@@ -1511,7 +1514,7 @@ internal sealed partial class AnnotationEditorControl : Grid
         int width = (int)Math.Ceiling(normalized.Width);
         int height = (int)Math.Ceiling(normalized.Height);
         int cropStride = width * 4;
-        byte[] crop = ReadCropPixels(cropBase, x, y, width, height);
+        byte[] crop = ReadBgraPixels(cropBase, x, y, width, height);
 
         var cropped = BitmapSource.Create(
             width,
@@ -1599,12 +1602,19 @@ internal sealed partial class AnnotationEditorControl : Grid
     /// exit paths wait for it, exactly as they found the synchronous insert already done.
     /// </para>
     /// </remarks>
-    internal async Task InsertImageFileAsync(string path, PointD image)
+    internal Task InsertImageFileAsync(string path, PointD image) =>
+        WhilePendingImageAsync(() => InsertPendingImageAsync(path, image));
+
+    /// <summary>
+    /// Runs <paramref name="work"/> as a picked picture not yet added or dropped, so a commit or
+    /// close started meanwhile waits for it (see <see cref="ImageInsertsSettledAsync"/>).
+    /// </summary>
+    private async Task WhilePendingImageAsync(Func<Task> work)
     {
         _pendingImageInserts++;
         try
         {
-            await InsertPendingImageAsync(path, image);
+            await work();
         }
         finally
         {
@@ -1616,7 +1626,7 @@ internal sealed partial class AnnotationEditorControl : Grid
         }
     }
 
-    private async Task InsertPendingImageAsync(string path, PointD image)
+    private async Task InsertPendingImageAsync(string path, PointD image, bool asStamp = false)
     {
         CancellationToken closed = (_imageInsertCts ??= new CancellationTokenSource()).Token;
         var geometry = (_controller.RotationTurns, _controller.CropOrigin, _canvasWidth, _canvasHeight);
@@ -1647,6 +1657,13 @@ internal sealed partial class AnnotationEditorControl : Grid
 
         if (decoded is null)
         {
+            if (asStamp)
+            {
+                // The stored stamp is damaged, not a file the user just picked.
+                ForgetUnreadableStamp();
+                return;
+            }
+
             ReportUnreadableImage();
             // Back to the select tool, as before, but never by discarding a crop frame that a
             // commit waiting for this picture is about to apply.
@@ -1663,6 +1680,11 @@ internal sealed partial class AnnotationEditorControl : Grid
         BitmapSource bitmap = loaded.Bitmap;
         int sourceWidth = bitmap.PixelWidth;
         int sourceHeight = bitmap.PixelHeight;
+        if (asStamp)
+        {
+            AddStampAnnotation(loaded.AssetFileName, bitmap);
+            return;
+        }
 
         // Fit the image to at most a third of the current canvas, preserving aspect ratio,
         // centred on the click. The canvas tracks rotation and crop; the original capture
@@ -1804,7 +1826,7 @@ internal sealed partial class AnnotationEditorControl : Grid
         _rotationCommands = BuildRotationCommands();
 
         // The single way into crop; the ratio and automatic margin finder live in that mode.
-        Button crop = IconTextButton(UiText.Get("Tools_Crop"), UiText.Get("EditorFlow_CropHint"), "Icon.Crop", FallbackCrop,
+        Button crop = IconTextButton(UiText.Get("Tools_Crop"), UiText.Get("Tools_Crop"), "Icon.Crop", FallbackCrop,
             () => { SelectTool(EditorTool.Crop); Focus(); });
         AutomationProperties.SetAutomationId(crop, "Capture410Crop");
         left.Children.Add(crop);
@@ -1837,44 +1859,31 @@ internal sealed partial class AnnotationEditorControl : Grid
         left.Children.Add(_copyTextButton);
 
         var right = CommandRow();
-        right.Children.Add(Separator());
         Button save = BuildSaveOverflowMenu();
-        Button copy = IconTextButton(
-            UiText.Get("Text_37B3D3B11B26"), UiText.Get("EditorFlow_CopyHint"), "Icon.Copy", FallbackCopy,
-            () => Commit(EditorCommitAction.Done));
-        copy.SetResourceReference(FrameworkElement.StyleProperty, "Button.Secondary");
         Button done = IconTextButton(
-            UiText.Get("Text_727333AB0740"), UiText.Get("EditorFlow_DoneHint"), "Icon.Check", FallbackCheck,
+            UiText.Get("EditorFlow_CopyAndClose"), UiText.Get("EditorFlow_CopyHint"), "Icon.Copy", FallbackCopy,
             () => Commit(EditorCommitAction.Done));
         done.SetResourceReference(FrameworkElement.StyleProperty, "Button.Primary");
         CommandButtonPresentation.KeepLabel(done);
-        // Esc no longer closes, so Cancel carries no shortcut; it closes like the title bar does.
-        Button cancel = IconTextButton(UiText.Get("Text_BE876433993A"), UiText.Get("EditorFlow_CancelHint"), "Icon.Close", FallbackClose, RequestClose);
-        AutomationProperties.SetAutomationId(cancel, "EditorFlowCancel");
+        CommandButtonPresentation.KeepLabel(save);
         AutomationProperties.SetAutomationId(done, "EditorFlowDone");
-        AutomationProperties.SetAutomationId(copy, "EditorFlowCopy");
         right.Children.Add(save);
-        right.Children.Add(copy);
-        right.Children.Add(Separator());
         right.Children.Add(done);
-        right.Children.Add(cancel);
 
         foreach (var (button, command, borderless) in new[] { (_undoButton, "Undo", true), (_redoButton, "Redo", true),
-            (crop, "Crop", true), (_redactButton, "Privacy", true), (save, "Save", false), (copy, "Copy", false), (done, "Done", false) })
+            (crop, "Crop", true), (_redactButton, "Privacy", true), (done, "Copy", false) })
         {
             CommandButton(button, borderless, ShortcutScope.Annotation, command);
         }
 
-        CommandButton(cancel, borderless: true);
+        CommandButton(save, borderless: false);
+        done.ToolTip = $"{UiText.Get("EditorFlow_CopyHint")} ({ShortcutCatalog.Hints(ShortcutScope.Annotation, "Copy", "Done")})";
         CommandButton(_copyTextButton, borderless: true);
         CommandButtonPresentation.AlwaysIcon(_undoButton);
         CommandButtonPresentation.AlwaysIcon(_redoButton);
         // A narrow bar hides names one at a time: first where the icon alone is unmistakable,
         // last where it could be taken for a tool (the T and the mosaic grid on the tool rail).
-        CommandButtonPresentation.CollapseOrder(cancel, 1);
         CommandButtonPresentation.CollapseOrder(crop, 2);
-        CommandButtonPresentation.CollapseOrder(copy, 3);
-        CommandButtonPresentation.CollapseOrder(save, 4);
         CommandButtonPresentation.CollapseOrder(_redactButton, 5);
         CommandButtonPresentation.CollapseOrder(_copyTextButton, 6);
         var panel = new CommandGroupsPanel { Children = { left, right } };
@@ -2137,12 +2146,14 @@ internal sealed partial class AnnotationEditorControl : Grid
         ToolGroup(groups,
             (EditorTool.Text, UiText.Get("Text_258AD4B095A1"), UiText.Get("Text_B3711BAFCD9C"), "Icon.Text", FallbackText),
             (EditorTool.StepNumber, UiText.Get("Tools.StepNumber"), UiText.Get("EditorUx_StepNumberToolTip"), "Icon.StepNumber", () => Geometry.Parse("M3,3 H17 V17 H3 Z M8,7 L10,5 V15 M7,15 H13")));
-        // The purpose sentence lives on the tool (tooltip and help text), not in the panel.
+        // Keep the purpose sentence in accessibility help; tooltips use the shared name/key form.
         AutomationProperties.SetHelpText(_toolButtons[EditorTool.StepNumber], UiText.Get("EditorUx_StepNumberInstruction"));
         ToolGroup(groups,
             (EditorTool.Mosaic, UiText.Get("Text_3F8046019B32"), UiText.Get("Text_3F8046019B33"), "Icon.Mosaic", FallbackMosaic),
             (EditorTool.Blur, UiText.Get("EditorBlur_Name"), UiText.Get("EditorBlur_ToolTip"), "Icon.Blur", FallbackBlur));
         ToolGroup(groups, (EditorTool.Image, UiText.Get("Text_302BAE127938"), UiText.Get("Text_93D363BDFEA5"), "Icon.Image", FallbackImage));
+        // The stamp command takes the free cell beside the image tool: it is a command, not a mode.
+        ((Panel)groups.Children[^1]).Children.Add(BuildStampButton());
 
         var panel = new Border { Name = "AnnotationToolRail", Child = groups };
         panel.SetResourceReference(FrameworkElement.StyleProperty, "Rail.Panel");
@@ -2158,7 +2169,7 @@ internal sealed partial class AnnotationEditorControl : Grid
         panel.SizeChanged += (_, _) =>
         {
             var compact = panel.ActualHeight < regularHeight;
-            foreach (var button in _toolButtons.Values)
+            foreach (var button in _toolButtons.Values.Append(_stampButton))
             {
                 button.Margin = new Thickness(0, compact ? 0 : 1, 0, compact ? 0 : 1);
             }
@@ -2254,7 +2265,7 @@ internal sealed partial class AnnotationEditorControl : Grid
             UiText.Get("Text_0DED92FCE6B0"));
         _deleteButton.ToolTip = UiText.Get("Text_7DFFA4D81765");
         AutomationProperties.SetAutomationId(_deleteButton, "AnnotationDeleteSelection");
-        AutomationProperties.SetAcceleratorKey(_deleteButton, "Delete");
+        AutomationProperties.SetAcceleratorKey(_deleteButton, ShortcutCatalog.Get(ShortcutScope.Annotation, "Delete").Hint);
         PreserveEditorMouseFocus(_deleteButton);
         _deleteButton.Click += (_, _) => DeleteSelected();
         _deleteButton.HorizontalAlignment = HorizontalAlignment.Left;
@@ -2766,7 +2777,7 @@ internal sealed partial class AnnotationEditorControl : Grid
         var button = new ToggleButton
         {
             Content = BuildIcon(iconResourceKey, fallbackGeometry, 20),
-            ToolTip = tool is EditorTool.StepNumber or EditorTool.Blur ? tooltip : label,
+            ToolTip = label,
             Width = 40, Height = 38, MinHeight = 0, MinWidth = 0, Padding = new Thickness(2), Margin = new Thickness(0, 1, 0, 1),
         };
         button.SetResourceReference(FrameworkElement.StyleProperty, "Rail.ToolButton");
@@ -3030,7 +3041,7 @@ internal sealed partial class AnnotationEditorControl : Grid
         if (cancelledCrop) SetStatus(UiText.Get("Crop.Cancelled"));
     }
 
-    private void RememberPreferences()
+    private void RememberPreferences(StampSettings? stamp = null)
     {
         if (!_preferencesReady || AnnotationEditorPreferences.Write is null) return;
         AnnotationDefaults previous = AnnotationEditorPreferences.Read?.Invoke() ?? new AnnotationDefaults();
@@ -3044,6 +3055,7 @@ internal sealed partial class AnnotationEditorControl : Grid
             RecentFontFamilies = [.. _recentFontFamilies],
             MosaicBlockSize = _mosaicBlockSize, HighlighterAlpha = previous.HighlighterAlpha,
             RecentColors = [.. previous.RecentColors], BlurRadius = _controller.BlurRadius,
+            Stamp = stamp ?? previous.Stamp.Clone(),
         });
     }
 
@@ -3169,7 +3181,7 @@ internal sealed partial class AnnotationEditorControl : Grid
         }
 
         int cropStride = width * 4;
-        byte[] crop = ReadCropPixels(baseBitmap, x, y, width, height);
+        byte[] crop = ReadBgraPixels(baseBitmap, x, y, width, height);
 
         var cropped = BitmapSource.Create(
             width,
@@ -3184,27 +3196,38 @@ internal sealed partial class AnnotationEditorControl : Grid
         SwapBaseBitmap(cropped, new RectD(0, 0, width, height));
     }
 
-    private static byte[] ReadCropPixels(BitmapSource bitmap, int x, int y, int width, int height)
+    /// <summary>
+    /// The base pixels inside <paramref name="x"/>, <paramref name="y"/>,
+    /// <paramref name="width"/>, <paramref name="height"/> as Bgra32 rows of
+    /// <c>width * 4</c> bytes, for a crop and for the mosaic averages.
+    /// </summary>
+    /// <remarks>
+    /// Bgra32 and Pbgra32 keep their raw channel bytes. Bgr32 keeps its colour bytes and
+    /// becomes opaque: its fourth byte is undefined, not alpha. Any other format is converted.
+    /// A capture reopened from the library is a 24-bit PNG (Bgr24), and reading its
+    /// three-byte pixels four bytes at a time skewed and striped every crop of it.
+    /// Only the region is read or converted, never the whole image.
+    /// </remarks>
+    private static byte[] ReadBgraPixels(BitmapSource bitmap, int x, int y, int width, int height)
     {
-        int cropStride = width * 4;
-        byte[] crop = new byte[cropStride * height];
-        if (bitmap.Format.BitsPerPixel == 32)
+        int stride = width * 4;
+        byte[] pixels = new byte[stride * height];
+        var region = new Int32Rect(x, y, width, height);
+        PixelFormat format = bitmap.Format;
+        if (format == PixelFormats.Bgra32 || format == PixelFormats.Pbgra32 || format == PixelFormats.Bgr32)
         {
-            // Read only the selected pixels, including on history restoration. Keep the
-            // raw channel bytes: the crop's existing output format and DPI stay unchanged.
-            bitmap.CopyPixels(new Int32Rect(x, y, width, height), crop, cropStride, 0);
+            bitmap.CopyPixels(region, pixels, stride, 0);
+            if (format == PixelFormats.Bgr32)
+            {
+                for (int alpha = 3; alpha < pixels.Length; alpha += 4) pixels[alpha] = 255;
+            }
         }
         else
         {
-            // Preserve the existing four-byte addressing for other source formats. A
-            // format correction would change pixels and is separate from this optimization.
-            int stride = bitmap.PixelWidth * 4;
-            byte[] source = new byte[stride * bitmap.PixelHeight];
-            bitmap.CopyPixels(source, stride, 0);
-            for (int row = 0; row < height; row++)
-                Buffer.BlockCopy(source, ((y + row) * stride) + (x * 4), crop, row * cropStride, cropStride);
+            new FormatConvertedBitmap(new CroppedBitmap(bitmap, region), PixelFormats.Bgra32, null, 0)
+                .CopyPixels(pixels, stride, 0);
         }
-        return crop;
+        return pixels;
     }
 
     private void RefreshHistoryButtons()
@@ -3659,6 +3682,7 @@ internal sealed partial class AnnotationEditorControl : Grid
 
         AnnotationDocument document = _controller.Document;
         document.NormalizeZIndices();
+        RememberStampPlacement();
 
         // Flatten exactly what the editor showed: the surface's base already carries any
         // rotation and crop, and committing the untouched selection would place transformed
