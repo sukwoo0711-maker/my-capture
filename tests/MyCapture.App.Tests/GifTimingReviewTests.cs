@@ -142,7 +142,10 @@ public sealed class GifTimingReviewTests
         var document = VideoEditDocument.CreateFor(320, 180, 2_000);
         document.TrimInMs = 999;
         document.TextOverlays = [new() { Text = "edge", StartMs = 0, EndMs = 1_000 }];
-        Assert.Throws<GifExportLimitException>(() => AnimatedGifExporter.BuildFrameSchedule(document));
+        GifFrameSchedule schedule = AnimatedGifExporter.BuildFrameSchedule(document);
+        TimedTextOverlay collapsed = Assert.Single(schedule.QuantizedTextOverlays);
+        Assert.Equal(collapsed.StartMs, collapsed.EndMs);
+        Assert.All(schedule.SourceTimesMs, source => Assert.False(collapsed.IsActiveAt(source)));
         var recording = new RecordingResult("never-opened-review.mp4", 2_000, 30, 60, 320, 180);
         var dialog = new VideoExportDialog(recording, document, NullLoggerFactory.Instance, gif: startAsGif);
         try
