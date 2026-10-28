@@ -86,7 +86,7 @@ internal sealed class GifPreviewSample : IDisposable
         try
         {
             double elapsed = stopwatch.Elapsed.TotalMilliseconds;
-            GifSampleFrames frames = GifSampleDecoder.Decode(calculation.ResultPath, cancellationToken);
+            GifSampleFrames frames = GifSampleDecoder.Decode(calculation.ResultPath, cancellationToken, fitToMemoryBudget: true);
             double motion = GifMotionAnalysis.ChangedFraction(
                 frames,
                 GifMotionAnalysis.LumaThreshold,

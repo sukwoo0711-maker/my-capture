@@ -99,15 +99,39 @@ internal static class GifSampleDecoder
     internal const int MaximumFrames = 400;
     internal const long MaximumDecodedBytes = 128L * 1024 * 1024;
 
+    /// <summary>Full BGRA snapshots that fit beside the three working canvases.</summary>
+    internal static int FrameCapacity(int pixelWidth, int pixelHeight)
+    {
+        if (pixelWidth <= 0 || pixelHeight <= 0)
+        {
+            return 0;
+        }
+
+        long pixels = (long)pixelWidth * pixelHeight;
+        if (pixels > MaximumDecodedBytes / 4)
+        {
+            return 0;
+        }
+
+        return (int)Math.Clamp((MaximumDecodedBytes / (pixels * 4)) - 3, 0, MaximumFrames);
+    }
+
     private const int DisposeToBackground = 2;
     private const int DisposeToPrevious = 3;
 
     /// <summary>Decodes on the calling STA thread and returns frozen frames only.</summary>
-    internal static GifSampleFrames Decode(string path, CancellationToken cancellationToken = default)
+    internal static GifSampleFrames Decode(string path, CancellationToken cancellationToken = default, bool fitToMemoryBudget = false) =>
+        Decode(File.ReadAllBytes(path), cancellationToken, fitToMemoryBudget);
+
+    /// <summary>
+    /// Decodes detached bytes. Preview callers may retain fewer display snapshots when layer
+    /// or cut boundaries add images beyond the planned cadence; all images are still composited.
+    /// </summary>
+    internal static GifSampleFrames Decode(byte[] data, CancellationToken cancellationToken = default, bool fitToMemoryBudget = false)
     {
         // The sample is a few megabytes. Reading it whole releases the owned staging file
         // before decoding, so cancellation or disposal never waits on an open handle.
-        using var stream = new MemoryStream(File.ReadAllBytes(path), writable: false);
+        using var stream = new MemoryStream(data, writable: false);
         var decoder = new GifBitmapDecoder(stream, BitmapCreateOptions.PreservePixelFormat | BitmapCreateOptions.IgnoreColorProfile, BitmapCacheOption.OnDemand);
         if (decoder.Frames.Count == 0)
         {
@@ -121,19 +145,21 @@ internal static class GifSampleDecoder
             throw new InvalidDataException("The GIF reports an empty canvas.");
         }
 
-        // Worst-case composited BGRA snapshots plus working canvases. Keep the file for
-        // export, but fail the preview clearly before allocating hundreds of full frames.
-        if (decoder.Frames.Count > MaximumFrames
-            || (long)width * height * 4 * (decoder.Frames.Count + 3L) > MaximumDecodedBytes)
+        // Worst-case composited BGRA snapshots plus working canvases. Strict decoding
+        // rejects oversized animations; preview decoding retains fewer snapshots below.
+        int capacity = FrameCapacity(width, height);
+        if (capacity == 0 || (!fitToMemoryBudget && decoder.Frames.Count > capacity))
         {
             throw new GifExportLimitException(UiText.Get("GifExport_PreviewMemoryLimit"));
         }
 
         int canvasStride = checked(width * 4);
         byte[] canvas = new byte[checked(canvasStride * height)];
-        int count = Math.Min(decoder.Frames.Count, MaximumFrames);
-        var frames = new List<BitmapSource>(count);
-        var delays = new List<int>(count);
+        int count = decoder.Frames.Count;
+        int snapshotStep = fitToMemoryBudget ? (int)Math.Ceiling((double)count / capacity) : 1;
+        int snapshotCount = (int)Math.Ceiling((double)count / snapshotStep);
+        var frames = new List<BitmapSource>(snapshotCount);
+        var delays = new List<int>(snapshotCount);
         for (int index = 0; index < count; index++)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -153,19 +179,39 @@ internal static class GifSampleDecoder
 
             byte[]? restore = disposal == DisposeToPrevious ? (byte[])canvas.Clone() : null;
             bool replacesCanvas = left == 0 && top == 0 && frameWidth == width && frameHeight == height && IsOpaque(pixels);
+            bool retainSnapshot = index % snapshotStep == 0;
             if (replacesCanvas)
             {
                 Buffer.BlockCopy(pixels, 0, canvas, 0, canvas.Length);
                 // A full opaque indexed frame keeps its palette form: a quarter of the memory.
-                frames.Add(IsIndexed(frame.Format) ? DetachedCopy(frame) : Snapshot(canvas, width, height));
+                if (retainSnapshot)
+                {
+                    frames.Add(IsIndexed(frame.Format) ? DetachedCopy(frame) : Snapshot(canvas, width, height));
+                }
             }
             else
             {
                 Composite(pixels, frameWidth, frameHeight, left, top, canvas, width, height);
-                frames.Add(Snapshot(canvas, width, height));
+                if (retainSnapshot)
+                {
+                    frames.Add(Snapshot(canvas, width, height));
+                }
             }
 
-            delays.Add(ReadInt(metadata, "/grctlext/Delay") ?? 0);
+            int delay = ReadInt(metadata, "/grctlext/Delay") ?? 0;
+            if (snapshotStep > 1)
+            {
+                delay = (int)(GifPlaybackTimeline.DisplayMs(delay) / 10);
+            }
+
+            if (retainSnapshot)
+            {
+                delays.Add(delay);
+            }
+            else
+            {
+                delays[^1] += delay;
+            }
             if (disposal == DisposeToBackground)
             {
                 Clear(canvas, width, height, left, top, frameWidth, frameHeight);

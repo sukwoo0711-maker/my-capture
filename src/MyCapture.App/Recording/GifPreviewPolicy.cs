@@ -61,7 +61,7 @@ internal static class GifPreviewSampling
     /// representative single place for the size estimate; the exporter seeks to the keyframe
     /// before the sample, so a later position costs no more than the start.
     /// </summary>
-    internal static GifSampleWindow Plan(double trimInMs, double trimOutMs, double playbackSpeed, double position = CentrePosition, double framesPerSecond = 10)
+    internal static GifSampleWindow Plan(double trimInMs, double trimOutMs, double playbackSpeed, double position = CentrePosition, double framesPerSecond = 10, int pixelWidth = 0, int pixelHeight = 0)
     {
         if (!double.IsFinite(trimInMs) || !double.IsFinite(trimOutMs) || trimOutMs <= trimInMs)
         {
@@ -74,9 +74,20 @@ internal static class GifPreviewSampling
         }
 
         double span = trimOutMs - trimInMs;
-        // Retain at most the old 60-frame cadence budget as fps increases. Shorter samples
-        // keep editor opening responsive; full exports still stream the complete range.
-        double maximum = Math.Min(MaximumSourceMs, 60_000 / Math.Max(1, framesPerSecond));
+        // The display decoder retains full-size snapshots. Share its capacity calculation so
+        // a valid export never exceeds the preview budget merely because its canvas is large.
+        int frameBudget = 60;
+        if (pixelWidth > 0 && pixelHeight > 0)
+        {
+            frameBudget = Math.Min(frameBudget, GifSampleDecoder.FrameCapacity(pixelWidth, pixelHeight));
+            if (frameBudget == 0)
+            {
+                throw new GifExportLimitException(UiText.Get("GifExport_PreviewMemoryLimit"));
+            }
+        }
+
+        double rate = double.IsFinite(framesPerSecond) && framesPerSecond > 0 ? framesPerSecond : 10;
+        double maximum = Math.Min(MaximumSourceMs, Math.Floor(frameBudget * 100.0 / rate) * 10);
         if (span <= maximum)
         {
             return new GifSampleWindow(trimInMs, trimOutMs, true);
@@ -88,16 +99,16 @@ internal static class GifPreviewSampling
         return new GifSampleWindow(start, Math.Min(trimOutMs, start + sample), false);
     }
 
-    internal static GifSampleWindow Plan(VideoEditDocument document, double playbackSpeed, double position = CentrePosition, double framesPerSecond = 10)
+    internal static GifSampleWindow Plan(VideoEditDocument document, double playbackSpeed, double position = CentrePosition, double framesPerSecond = 10, int pixelWidth = 0, int pixelHeight = 0)
     {
         ArgumentNullException.ThrowIfNull(document);
         VideoCutTimeline timeline = document.CreateTimeline();
         if (timeline.RemovedRanges.Count == 0)
         {
-            return Plan(timeline.StartMs, timeline.EndMs, playbackSpeed, position, framesPerSecond);
+            return Plan(timeline.StartMs, timeline.EndMs, playbackSpeed, position, framesPerSecond, pixelWidth, pixelHeight);
         }
 
-        return MapWindow(timeline, Plan(0, timeline.OutputDurationMs, playbackSpeed, position, framesPerSecond));
+        return MapWindow(timeline, Plan(0, timeline.OutputDurationMs, playbackSpeed, position, framesPerSecond, pixelWidth, pixelHeight));
     }
 
     private static GifSampleWindow MapWindow(VideoCutTimeline timeline, GifSampleWindow output)
@@ -189,37 +200,37 @@ internal static class GifPreviewSampling
     }
 
     /// <summary>
-    /// Scheduled frames before identical frames merge: the fixed cadence on the
-    /// centisecond grid plus every text or image layer start and end that falls between cadence
-    /// boundaries.
+    /// Cheap upper bound before colliding boundaries or identical frames merge. Work and
+    /// memory depend on layer count, never on clip length or the number of scheduled images.
     /// </summary>
     /// <param name="layers">Layer intervals relative to the start of the range.</param>
-    internal static int EstimateFrameCount(double spanMs, int framesPerSecond, IReadOnlyList<(double StartMs, double EndMs)>? layers = null)
+    internal static int EstimateFrameCount(double spanMs, double framesPerSecond, IReadOnlyList<(double StartMs, double EndMs)>? layers = null, double playbackSpeed = 1)
     {
-        if (!double.IsFinite(spanMs) || spanMs <= 0 || framesPerSecond <= 0)
+        if (!double.IsFinite(spanMs) || spanMs <= 0 || !double.IsFinite(framesPerSecond) || framesPerSecond <= 0
+            || !double.IsFinite(playbackSpeed) || playbackSpeed <= 0)
         {
             return 0;
         }
 
-        int total = Math.Max(1, (int)Math.Round(spanMs / 10, MidpointRounding.AwayFromZero));
-        var boundaries = new SortedSet<int> { 0, total };
-        for (int index = 1; ; index++)
-        {
-            int boundary = (int)Math.Round(index * 100.0 / framesPerSecond, MidpointRounding.AwayFromZero);
-            if (boundary >= total) break;
-            boundaries.Add(boundary);
-        }
+        double total = Math.Max(1, Math.Round(spanMs / 10, MidpointRounding.AwayFromZero));
+        double rate = Math.Min(framesPerSecond, 50 / playbackSpeed);
+        double cadence = Math.Max(1, Math.Ceiling((total - 0.5) * rate / 100));
+        var additional = new HashSet<double>();
         foreach ((double startMs, double endMs) in layers ?? [])
         {
             foreach (double edge in new[] { startMs, endMs })
             {
                 if (!double.IsFinite(edge)) continue;
-                int boundary = Math.Clamp((int)Math.Round(edge / 10, MidpointRounding.AwayFromZero), 0, total);
-                boundaries.Add(boundary);
+                double boundary = Math.Clamp(Math.Round(edge / 10, MidpointRounding.AwayFromZero), 0, total);
+                if (boundary <= 0 || boundary >= total) continue;
+                double index = Math.Round(boundary * rate / 100, MidpointRounding.AwayFromZero);
+                if (index < cadence && Math.Round(index * 100 / rate, MidpointRounding.AwayFromZero) == boundary) continue;
+                additional.Add(boundary);
             }
         }
 
-        return Math.Min(boundaries.Count - 1, Math.Max(1, total / 2));
+        double maximum = Math.Max(1, Math.Floor(Math.Round(spanMs / playbackSpeed / 10, MidpointRounding.AwayFromZero) / 2));
+        return (int)Math.Min(int.MaxValue, Math.Min(cadence + additional.Count, maximum));
     }
 
     /// <summary>Layer intervals and cut boundaries on the output clock used by the GIF schedule.</summary>
@@ -248,12 +259,10 @@ internal static class GifPreviewSampling
     {
         if (measurements.TryGetValue(quality, out GifPresetMeasurement? measurement)
             && measurement.Quality == quality
-            && double.IsFinite(fullSourceMs) && fullSourceMs > 0
-            && measurement.SourceMs >= fullSourceMs - 0.5
-            && measurement.Segments.Count == 1)
+            && measurement.IsWholeRange(fullSourceMs))
         {
             GifMeasuredSegment segment = measurement.Segments[0];
-            if (segment.StartsRange && segment.SourceMs >= fullSourceMs - 0.5 && segment.Size.Images > 0)
+            if (segment.Size.Images > 0)
             {
                 return segment.Size.Images;
             }
@@ -295,6 +304,15 @@ internal sealed record GifPresetMeasurement(
 {
     /// <summary>The segments with their block sizes, when they were read; see <see cref="GifSizeEstimator"/>.</summary>
     internal IReadOnlyList<GifMeasuredSegment> Segments { get; init; } = [];
+
+    /// <summary>Only one encode from the range start can be the full export's exact bytes.</summary>
+    internal bool IsWholeRange(double fullSourceMs) =>
+        double.IsFinite(fullSourceMs) && fullSourceMs > 0
+        && Segments.Count == 1
+        && Segments[0].StartsRange
+        && Math.Abs(SourceMs - fullSourceMs) <= 0.5
+        && Math.Abs(Segments[0].SourceMs - fullSourceMs) <= 0.5
+        && Bytes == Segments[0].Size.Bytes;
 
     /// <summary>A measurement of one rendered segment.</summary>
     /// <param name="startsRange">Whether the segment begins exactly at the start of the kept range.</param>
@@ -479,9 +497,10 @@ internal sealed record GifEstimateCalibration(
 /// </summary>
 internal static class GifSizeEstimator
 {
-    /// <summary>Estimate from bytes alone, without block sizes: plain proportional scaling.</summary>
+    /// <summary>Estimate from one encoded sample, without block sizes: plain proportional scaling.</summary>
     internal static GifSizeEstimate FromSample(long sampleBytes, double sampleSourceMs, double fullSourceMs, GifEstimateCalibration? calibration = null) =>
-        FromMeasurement(new GifPresetMeasurement(GifExportQuality.Standard, sampleBytes, sampleSourceMs, 0), fullSourceMs, calibration);
+        FromMeasurement(GifPresetMeasurement.Of(GifExportQuality.Standard,
+            new GifSegmentSize(sampleBytes, 0, 0, 0), sampleSourceMs, 0, startsRange: true), fullSourceMs, calibration);
 
     /// <summary>Estimate of the whole range from a measurement; see the class remarks.</summary>
     internal static GifSizeEstimate FromMeasurement(GifPresetMeasurement measurement, double fullSourceMs, GifEstimateCalibration? calibration = null)
@@ -498,14 +517,21 @@ internal static class GifSizeEstimator
             throw new ArgumentOutOfRangeException(nameof(fullSourceMs));
         }
 
-        if (measurement.SourceMs >= fullSourceMs - 0.5)
+        if (measurement.IsWholeRange(fullSourceMs))
         {
             return GifSizeEstimate.Exact(measurement.Bytes);
         }
 
         calibration ??= GifEstimateCalibration.Default;
         double expected = ExpectedBytes(measurement, fullSourceMs);
-        double uncovered = 1 - (measurement.SourceMs / fullSourceMs);
+        double uncovered = Math.Clamp(1 - (measurement.SourceMs / fullSourceMs), 0, 1);
+        if (measurement.Segments.Count > 1)
+        {
+            // Independent encodes reset their canvas and duplicate their heads. Even if their
+            // durations add up to the whole range, those starts leave continuous encoding unknown.
+            double independentHeads = measurement.Segments.Where(segment => !segment.StartsRange).Sum(segment => segment.HeadMs);
+            uncovered = Math.Max(uncovered, Math.Clamp(independentHeads / fullSourceMs, 0, 1));
+        }
         double repaints = calibration.RepaintMargin * uncovered * FirstImageOf(measurement);
         return new GifSizeEstimate(
             ToBytes((expected * (1 - (calibration.LowMargin * uncovered))) - repaints),

@@ -343,8 +343,8 @@ internal static class AnimatedGifExporter
             seamSourceTimes[boundary] = segment.StartMs;
         }
 
-        // GIF stores output timing on a 10 ms grid, but the first frame after a cut must
-        // come from the exact next source segment even when its output seam rounds down.
+        // A retained cut boundary samples the exact next source segment even when its
+        // output seam rounds down. Colliding boundaries may coalesce later within one frame.
         double SourceAtBoundary(int boundary) => seamSourceTimes.TryGetValue(boundary, out double sourceTime)
             ? sourceTime
             : cadenceTimes.TryGetValue(boundary, out double cadenceTime)
@@ -424,45 +424,60 @@ internal static class AnimatedGifExporter
         }
 
         int outputTotal = Math.Max(2, checked((int)Math.Round(durationMs / playbackSpeed / 10, MidpointRounding.AwayFromZero)));
-        int[] candidates = boundaries.Where(boundary => boundary < totalCentiseconds).ToArray();
-        var ordered = new List<int>();
-        if (candidates.Length <= outputTotal / 2)
+        // Each interior group represents nearby source events at one output instant. Its bounds
+        // are the intersection of every member's +/- 1 cs window. Even a dense run can
+        // therefore never push an earlier caption progressively further back. Including
+        // source/output rounding, the error stays within one effective output frame.
+        var points = new List<(int Boundary, int Output, int Lower, int Upper)> { (0, 0, 0, 0) };
+        double maximumShiftCs = Math.Floor((1_000 / effectiveRate / playbackSpeed - 5 / playbackSpeed - 5) / 10);
+        foreach (int boundary in boundaries.Where(value => value > 0 && value < totalCentiseconds))
         {
-            ordered.AddRange(candidates);
-        }
-        else
-        {
-            // Only overfull schedules need to drop samples. Normally nearby layer/cut
-            // boundaries can borrow a centisecond from a neighbour and stay visible.
-            int previous = -2;
-            foreach (int boundary in candidates)
+            int desired = checked((int)Math.Round(boundary / playbackSpeed, MidpointRounding.AwayFromZero));
+            // A fractional tail may round to the playback endpoint. If giving it 2 cs
+            // would show it too early, coalesce it with that endpoint (no final image).
+            if (desired - (outputTotal - 2) > maximumShiftCs) continue;
+            int lower = Math.Max(0, Math.Min(outputTotal - 2, desired - 1));
+            int upper = Math.Min(outputTotal - 2, desired + 1);
+            int position = Math.Clamp(desired, lower, upper);
+
+            // Prefer the event's own instant (especially the first image after a cut).
+            // Borrow only within the already established local bounds, never globally.
+            bool added = false;
+            for (; position <= upper; position++)
             {
-                int output = checked((int)Math.Round(boundary / playbackSpeed, MidpointRounding.AwayFromZero));
-                if (output - previous < 2 || outputTotal - output < 2) continue;
-                ordered.Add(boundary);
-                previous = output;
+                int next = position;
+                int firstMoved = points.Count;
+                bool fits = true;
+                for (int index = points.Count - 1; index >= 0 && points[index].Output > next - 2; index--)
+                {
+                    next -= 2;
+                    if (next < points[index].Lower) { fits = false; break; }
+                    firstMoved = index;
+                }
+                if (!fits) continue;
+                for (int index = firstMoved; index < points.Count; index++)
+                    points[index] = points[index] with { Output = position - 2 * (points.Count - index) };
+                points.Add((boundary, position, lower, upper));
+                added = true;
+                break;
+            }
+            if (!added)
+            {
+                // Apply all colliding changes together using the latest source state.
+                // A sub-frame layer may disappear, but its neighbours keep their times.
+                var previous = points[^1];
+                lower = Math.Max(lower, previous.Lower);
+                upper = Math.Min(upper, previous.Upper);
+                points[^1] = (boundary, Math.Clamp(previous.Output, lower, upper), lower, upper);
             }
         }
-        var outputBoundaries = new List<int> { 0 };
-        for (int index = 1; index < ordered.Count; index++)
-        {
-            int desired = checked((int)Math.Round(ordered[index] / playbackSpeed, MidpointRounding.AwayFromZero));
-            outputBoundaries.Add(desired);
-        }
-        outputBoundaries.Add(outputTotal);
-        // Make room backwards first: a cadence immediately before a cut can move earlier
-        // instead of delaying the first frame of the next kept segment.
-        for (int index = ordered.Count - 1; index > 0; index--)
-            outputBoundaries[index] = Math.Min(outputBoundaries[index], outputBoundaries[index + 1] - 2);
-        for (int index = 1; index < ordered.Count; index++)
-            outputBoundaries[index] = Math.Max(outputBoundaries[index], outputBoundaries[index - 1] + 2);
-        int frameCount = ordered.Count;
+        int frameCount = points.Count;
         var sourceTimes = new double[frameCount];
         var delays = new int[frameCount];
         for (int index = 0; index < frameCount; index++)
         {
-            sourceTimes[index] = SourceAtBoundary(ordered[index]);
-            delays[index] = outputBoundaries[index + 1] - outputBoundaries[index];
+            sourceTimes[index] = SourceAtBoundary(points[index].Boundary);
+            delays[index] = (index + 1 < frameCount ? points[index + 1].Output : outputTotal) - points[index].Output;
         }
 
         return new GifFrameSchedule(sourceTimes, delays, quantizedOverlays, quantizedFrameLayers);
