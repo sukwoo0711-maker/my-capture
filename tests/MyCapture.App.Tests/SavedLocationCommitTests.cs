@@ -77,6 +77,8 @@ public sealed class SavedLocationCommitTests
     [InlineData((int)EditorCommitAction.QuickSave, true)]
     [InlineData((int)EditorCommitAction.SaveAs, false)]
     [InlineData((int)EditorCommitAction.SaveAs, true)]
+    [InlineData((int)EditorCommitAction.Pin, false)]
+    [InlineData((int)EditorCommitAction.Pin, true)]
     public void FinishingCommitAnnouncesDurableRecordForCaptureAndLibraryEdit(int value, bool libraryEdit) => StaTestHost.Run(() =>
     {
         using var fixture = new Fixture();
@@ -126,6 +128,7 @@ public sealed class SavedLocationCommitTests
     [InlineData((int)EditorCommitAction.Done)]
     [InlineData((int)EditorCommitAction.QuickSave)]
     [InlineData((int)EditorCommitAction.SaveAs)]
+    [InlineData((int)EditorCommitAction.Pin)]
     public void FailedClipboardDoesNotAnnounceFinishingCommit(int value) => StaTestHost.Run(() =>
     {
         using var fixture = new Fixture(copySucceeds: false);

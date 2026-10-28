@@ -79,7 +79,7 @@ internal sealed class CaptureCommitService
     internal event Action<CaptureRecord>? FinishingCommitCompleted;
 
     internal static bool IsFinishingCommit(EditorCommitAction action) =>
-        action is EditorCommitAction.Done or EditorCommitAction.QuickSave or EditorCommitAction.SaveAs;
+        action is EditorCommitAction.Done or EditorCommitAction.Pin or EditorCommitAction.QuickSave or EditorCommitAction.SaveAs;
 
     internal Action? PersistExportSettings { get; set; }
     internal Action<BitmapSource, CaptureProvenance>? PinImage { get; set; }
@@ -221,7 +221,8 @@ internal sealed class CaptureCommitService
                     catch (Exception noticeError) when (noticeError is not OutOfMemoryException)
                     { _log.LogWarning(noticeError, "Could not report the pin failure"); }
                 }
-                return true;
+                // The edit is saved and copied whether or not the pin opened.
+                return CompleteCommit(record, result.Action, true);
 
             case EditorCommitAction.SaveAs:
                 // Choose the destination before persisting so a cancel keeps the editor open
