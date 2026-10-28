@@ -386,7 +386,8 @@ public sealed class PinTranslationPlannerMermaidTests
     [Fact]
     public void Sequence_messages_keep_participants_arrows_and_activation_markers()
     {
-        string text = Translate(Sequence, static label => label.ToUpperInvariant());
+        // The raw-string source follows the checkout's line endings; the plan keeps them as given.
+        string text = Translate(Sequence, static label => label.ToUpperInvariant()).ReplaceLineEndings("\n");
         Assert.Contains("    U->>+S: SEND THE CREDENTIALS\n", text);
         Assert.Contains("    S-->>-U: RETURN A TOKEN\n", text);
         Assert.Contains("    U-)S: FIRE AND FORGET\n", text);
@@ -432,7 +433,7 @@ public sealed class PinTranslationPlannerMermaidTests
     {
         PinTranslationPlan plan = Plan(ErDiagram);
         Assert.Equal(["is billed"], plan.Sources);
-        Assert.Contains("INVOICE : \"IS BILLED\"\n", plan.Assemble(["IS BILLED"]));
+        Assert.Contains("INVOICE : \"IS BILLED\"\n", plan.Assemble(["IS BILLED"]).ReplaceLineEndings("\n"));
     }
 
     [Fact]

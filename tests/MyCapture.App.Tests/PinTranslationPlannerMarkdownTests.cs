@@ -504,7 +504,8 @@ public sealed class PinTranslationPlannerMarkdownTests
                 "Press the hotkey", "Open the document."],
             plan.Sources);
         Assert.Contains(plan.Pieces, static piece => piece.Kind == PlanKind.MermaidLabel);
-        string text = plan.Assemble([.. plan.Sources.Select(static source => source.ToUpperInvariant())]);
+        // The raw-string source follows the checkout's line endings; the plan keeps them as given.
+        string text = plan.Assemble([.. plan.Sources.Select(static source => source.ToUpperInvariant())]).ReplaceLineEndings("\n");
         Assert.Contains("```mermaid\nflowchart LR\n", text);
         Assert.Contains("copy[COPY TEXT]", text);
         Assert.Contains("~~~~mermaid\nsequenceDiagram\n", text);
