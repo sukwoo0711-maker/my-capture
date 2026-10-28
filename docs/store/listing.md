@@ -103,19 +103,14 @@ MyCapture는 코딩하는 동안 엑셀 사양 표와 자주 쓰는 코드를 �
 8. 공유하기 전에 단계 번호와 화살표를 넣고, 이메일·토큰·카드번호를 Ctrl+Shift+R로 가린 화면입니다.
 9. 영역·창·전체 화면 캡처, 클립보드 복사, 이미지 속 글자 복사는 Windows 캡처 도구와 같습니다. 영역 녹화는 소리 없이 화면만 기록합니다. 여기에 원문을 보관하는 표·코드 핀, 반투명·클릭 허용 핀, 닫은 핀 다시 열기, 스크롤 캡처가 더해집니다.
 
-### 이 버전의 새로운 기능 (4.9.0)
+### 이 버전의 새로운 기능 (4.9.1)
 
 입력 한도는 1,500자입니다.
 
-- 처음 사용 안내에서 캡처, 핀 띄우기, 라이브러리에서 다시 찾기를 차례로 익힐 수 있습니다. 트레이 메뉴와 설정에서 안내를 다시 볼 수 있습니다.
-- 라이브러리의 폴더 행과 3열 카드를 정리했습니다. 상세 정보는 필요할 때 열며, 선택한 항목과 고정된 선택 작업 막대를 쉽게 확인할 수 있습니다.
-- 편집기 오른쪽 위에 ‘파일로 저장’과 ‘복사하고 닫기’를 배치하고, 글자 입력 커서를 더 잘 보이게 했습니다.
-- 편집 중에도 영역 캡처 단축키를 사용할 수 있습니다. 편집 내용은 유지하고 새 캡처는 라이브러리에 저장하며 클립보드에 복사합니다.
-- ‘다른 이름으로 저장’은 마지막 저장 폴더를 기억합니다. 빠른 저장은 설정에서 지정한 폴더를 계속 사용합니다.
-- 클릭 허용 핀의 오른쪽 위 손잡이로 클릭 허용을 바로 끌 수 있습니다. 처음 세 번은 안내를 표시합니다.
-- 첫 화면의 캡처·핀 설명을 다듬고 라이브러리와 설정 아래에 버전을 표시합니다. 빠른 작업 단추의 이름, ‘번역 복사’, 한국어 안내 줄바꿈도 정리했습니다.
-- 시작이 늦어질 때 ‘시작 중’을 표시하고 처음 열린 창이 앞에 나타나도록 개선했습니다.
-- 캡처 카드와 캡처 전환 효과를 닫은 뒤 쓰던 메모리를 더 빨리 돌려주고, 단축키를 누른 뒤 선택 화면이 뜨는 시간을 줄였습니다.
+- 라이브러리나 캡처 카드의 ‘편집’으로 연 이미지를 자르면 색이 줄무늬로 바뀌고 글자가 찌그러지던 문제를 고쳤습니다. 같은 이미지에 넣는 모자이크도 원래 색으로 적용됩니다.
+- 영역을 선택할 때 R 키나 비율 단추로 16:9, 4:3, 1:1, 9:16 비율을 맞추거나 1920 × 1080 같은 고정 크기를 고를 수 있습니다. 녹화 영역을 선택할 때에도 사용할 수 있습니다.
+- 편집기에서 로고 이미지를 도장으로 한 번 등록하면 S 키로 같은 자리에 찍을 수 있습니다.
+- 4.9.0의 처음 사용 안내, 라이브러리 3열 카드와 선택 작업 막대, 편집기의 ‘파일로 저장’과 ‘복사하고 닫기’, 편집 중 영역 캡처, 클릭 허용 핀의 해제 손잡이, 시작 반응과 메모리 개선도 포함합니다.
 
 ### 검색어
 
@@ -199,19 +194,14 @@ Enter them in screenshot order. Each caption is 200 characters or fewer.
 8. Step numbers and an arrow added before sharing, with an email address, token and card number covered by Ctrl+Shift+R.
 9. Like Snipping Tool, MyCapture captures, copies to the clipboard and extracts text. It adds table and code pins with original text, click-through pins and scrolling capture; recording is silent.
 
-### What's new in this version (4.9.0)
+### What's new in this version (4.9.1)
 
 Limit: 1,500 characters.
 
-- A first-use guide walks you through capturing, pinning and finding items in the library. Open it again from the tray menu or Settings.
-- The library has compact folder rows and a three-column card layout. Open details when needed, with clearer selection marks and a fixed selection action bar.
-- Save to file and Copy and close are at the top right of the editor. The cursor is easier to see while typing text.
-- Use the region capture shortcut while editing. Your edits stay in place; the new capture is saved to the library and copied to the clipboard.
-- Save as remembers the last folder you used. Quick save continues to use the folder set in Settings.
-- Click the handle at the top right of a click-through pin to turn click-through off. A hint appears the first three times.
-- Clearer capture and pin guidance on the first screen, with the version shown below the library and Settings. Quick-action buttons have names, the translation tab shows Copy translation, and Korean guidance wraps more naturally.
-- A Starting indicator appears when launch takes longer, and the first window comes to the front.
-- Capture cards and capture transitions give back the memory they used sooner after closing, and the selection screen appears faster after you press the shortcut.
+- Fixed cropping an image opened from the library or with Edit on a capture card, which turned colors into stripes and squeezed text. A mosaic on such an image now uses its original colors too.
+- While selecting a region, press R or use the ratio button to keep 16:9, 4:3, 1:1 or 9:16, or choose a fixed size such as 1920 × 1080. This also works when selecting a recording area.
+- Register a logo image as a stamp once in the editor, then press S to place it in the same spot.
+- Also includes 4.9.0: the first-use guide, the three-column library with a selection action bar, Save to file and Copy and close in the editor, region capture while editing, the click-through pin handle, and faster launch with lower memory use.
 
 ### Search terms
 
