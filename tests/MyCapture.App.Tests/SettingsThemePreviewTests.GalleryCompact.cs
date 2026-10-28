@@ -115,7 +115,11 @@ public sealed partial class SettingsThemePreviewTests
         CaptureFolder review = queue.CreateFolderAsync("Review").GetAwaiter().GetResult();
         BitmapSource sample = BitmapSource.Create(4, 3, 96, 96, PixelFormats.Bgra32, null, new byte[4 * 3 * 4], 4 * 4);
         byte[] png = ImageCodec.EncodePng(sample);
-        DateTimeOffset now = DateTimeOffset.Now;
+        // Anchor the samples at 17:00 yesterday, not at the current time: the library groups
+        // cards by day, so samples taken from "now" fall into different day groups through
+        // the day and change how many cards the viewport holds. This keeps the 3/3/4/2 day
+        // split the layout assertions were written against, with every sample in the past.
+        DateTimeOffset now = new(DateTime.Today.AddHours(-7));
         for (int index = 0; index < 12; index++)
         {
             var record = new CaptureRecord
