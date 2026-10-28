@@ -728,7 +728,16 @@ internal sealed partial class VideoEditorWindow : Window
     {
         var bar = new Grid { Name = "VideoEditorCommandBar", Margin = new Thickness(0, 0, 0, 6) };
         AutomationProperties.SetName(bar, UiText.Get("VideoEditorUx_CommandBarName"));
-        _identityDetails = new TextBlock { FontSize = 12 };
+        bar.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        bar.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        _identityDetails = new TextBlock
+        {
+            Name = "VideoHeaderDetails", FontSize = 12, Margin = new Thickness(3, 3, 3, 0),
+            TextTrimming = TextTrimming.CharacterEllipsis,
+        };
+        _identityDetails.SetResourceReference(TextBlock.ForegroundProperty, "Text.Secondary");
+        Grid.SetRow(_identityDetails, 1);
+        bar.Children.Add(_identityDetails);
         var editing = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
         _undoButton = MakeTransportIcon("Icon.Undo", UiText.Get("Text_CE706412FA75"), "Button.Ghost", () => RestoreEdit(false));
         _redoButton = MakeTransportIcon("Icon.Redo", UiText.Get("Text_078C44D5A66E"), "Button.Ghost", () => RestoreEdit(true));

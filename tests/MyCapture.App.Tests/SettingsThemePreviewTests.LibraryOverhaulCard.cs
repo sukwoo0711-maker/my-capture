@@ -163,7 +163,7 @@ public sealed partial class SettingsThemePreviewTests
                         T("LibraryUx_Keep"), T("Library453.Rename"), T("Folder410.MoveCaptures"), T("Library.Tags.Edit"), "-",
                         T("ExportReduction_Title"), "-", T("Text_6139B6C3ED73")], Visible());
                     string[] gestures = menu.Items.OfType<MenuItem>().Where(item => item.Visibility == Visibility.Visible).Select(item => item.InputGestureText).ToArray();
-                    Assert.Equal(["P", "Ctrl+C", "T", "Enter", "Space", "", "K", "F2", "M", "", "", "Del"], gestures);
+                    Assert.Equal(["P", "Ctrl+C", "T", "Enter", "Space", "Alt+Enter", "K", "F2", "M", "", "", "Del"], gestures);
                     // Icons only in the first group and on Delete; the drag guide is gone.
                     Assert.Equal([T("Gallery.Float"), T("Text_42A667BC71B0"), T("Text_854582314EBD"), T("Text_6139B6C3ED73")],
                         menu.Items.OfType<MenuItem>().Where(item => item.Icon is not null).Select(item => (string)item.Header));

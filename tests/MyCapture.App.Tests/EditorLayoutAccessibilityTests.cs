@@ -158,6 +158,13 @@ public sealed class EditorLayoutAccessibilityTests : KoreanCaptionTest
                         "An icon-only button is missing a tooltip.");
                 }
             }
+            foreach (string name in new[] { "NewCapture", "CaptureOptions" })
+            {
+                Button capture = Assert.Single(FindDescendants<Button>(host.Editor), button => button.Name == name);
+                Assert.False(string.IsNullOrWhiteSpace(AutomationProperties.GetName(capture)));
+                Assert.False(string.IsNullOrWhiteSpace(Assert.IsType<string>(capture.ToolTip)));
+                Assert.True(capture.Focusable && capture.IsTabStop);
+            }
         });
     }
 
@@ -304,7 +311,10 @@ public sealed class EditorLayoutAccessibilityTests : KoreanCaptionTest
             return true;
         }
 
-        int count = VisualTreeHelper.GetChildrenCount(root);
+        // Grid's logical tree also contains RowDefinition/ColumnDefinition objects.
+        // They remain part of the logical walk but are not valid VisualTreeHelper roots.
+        int count = root is Visual or System.Windows.Media.Media3D.Visual3D
+            ? VisualTreeHelper.GetChildrenCount(root) : 0;
         for (int i = 0; i < count; i++)
         {
             if (ContainsText(VisualTreeHelper.GetChild(root, i)))

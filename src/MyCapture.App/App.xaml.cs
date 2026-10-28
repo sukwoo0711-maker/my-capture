@@ -1208,24 +1208,10 @@ public partial class App : Application
         // an otherwise successfully captured image from the library.
         // Page and application details still being read never hold back the save: they are added
         // to this same capture once read (BackfillSourceAsync).
-        Task<CaptureSelectionSource>? lateSource = e.PendingSource;
-        CaptureSelectionSource source = lateSource is { IsCompletedSuccessfully: true } read
-            ? read.Result
-            : new CaptureSelectionSource(e.SourceTitle, e.SourcePageUrl, e.SourceDetails);
-        if (lateSource?.IsCompleted == true) lateSource = null;
-        _pendingRecord = CapturePersistenceService.CreatePendingRecord(e.SelectedBitmap,
-            e.Frame.DpiScale, e.SourceTitle, e.Frame.Monitor?.DeviceName ?? string.Empty,
-            initialRenderShowsSourceWindowTitle: _settings?.Export.ShowSourceWindowTitle == true,
-            sourcePageUrl: source.PageUrl, sourceDetails: source.Details);
-        if (_pendingRecord.SourcePageUrl.Length > 0)
-            _pendingRecord.Tags = UiText.Get("Capture.WebpageTag");
-        Task<bool>? automaticClipboardCopy = _commit is not null
-            ? _commit.CopyCapturedRegionAsync(e.SelectedBitmap, e.SourceTitle,
-                _pendingRecord.InitialRenderShowsSourceWindowTitle, _pendingRecord.SourcePageUrl,
-                Core.Capture.CaptureProvenance.FromRecord(_pendingRecord), CaptureSelectionProvenance.Pending(e))
-            : null;
-        // The card shows on the turn after the lift, while the save and copy run (card first).
-        QuickAccessFirst? first = automaticClipboardCopy is not null ? ShowQuickAccessFirst(e, automaticClipboardCopy) : null;
+        CaptureDelivery delivery = BeginCaptureDelivery(e);
+        _pendingRecord = delivery.Pending;
+        Task<CaptureSelectionSource>? lateSource = delivery.LateSource;
+        QuickAccessFirst? first = delivery.First;
         try
         {
             if (_persistence is null || _commit is null)
@@ -1243,12 +1229,7 @@ public partial class App : Application
             _currentEditSession?.Dispose();
             _currentRecord = null;
             _currentEditSession = null;
-            _log?.LogError(ex, "Could not persist the captured original");
-            string title = UiText.Get("Text_4033027EAEDB");
-            string message = LibrarySaveFailureMessage(_settings?.General.AfterCapture ?? AfterCaptureAction.Editor, ex);
-            // A card already on screen says why itself; only without one does the notification.
-            if (first is null || !ShowQuickAccessFirstFailure(first, title, message))
-                ShowCaptureNotice(title, message, TrayBalloonKind.Error);
+            ReportCaptureSaveFailure(first, ex);
         }
 
         // A card shown first takes the saved capture now, while the copy may still run.
@@ -1257,92 +1238,11 @@ public partial class App : Application
         if (lateSource is not null)
             _sourceBackfillTask = BackfillLateSourceAsync(_pendingRecord, published: _currentRecord is not null, lateSource);
 
-        try
-        {
-            // Repeat history is intentionally limited to explicit manual region selections.
-            // Advanced full/window/scroll captures carry RecordForRepeat=false because their
-            // synthetic frame coordinates are not a reusable screen rectangle.
-            if (e.RecordForRepeat && _lastRegions is not null)
-            {
-                var screenRegion = new Core.Primitives.RectD(
-                    e.Frame.ScreenBounds.Left + e.BitmapRegion.Left,
-                    e.Frame.ScreenBounds.Top + e.BitmapRegion.Top,
-                    e.BitmapRegion.Width,
-                    e.BitmapRegion.Height)
-                    .ToPixelBounds();
-                MonitorInfo? monitor = e.Frame.Monitor
-                    ?? MonitorEnumerator.GetAll().FirstOrDefault(candidate =>
-                        screenRegion.Left >= candidate.Bounds.Left
-                        && screenRegion.Top >= candidate.Bounds.Top
-                        && screenRegion.Right <= candidate.Bounds.Right
-                        && screenRegion.Bottom <= candidate.Bounds.Bottom);
-                _lastRegions.Record(monitor is null
-                    ? RegionHistoryEntry.Legacy(screenRegion)
-                    : new RegionHistoryEntry(
-                        screenRegion,
-                        monitor.DeviceName,
-                        monitor.Bounds,
-                        monitor.Dpi));
-            }
+        RecordManualCaptureRegion(e);
+        try { _tray?.SetCaptureCount(_queue?.Count ?? 0); }
+        catch (Exception ex) { _log?.LogWarning(ex, "Could not update tray count"); }
 
-            _tray?.SetCaptureCount(_queue?.Count ?? 0);
-        }
-        catch (Exception ex)
-        {
-            // Optional repeat history or shell feedback must not invalidate a durable image.
-            _log?.LogWarning(ex, "Could not update capture history or tray count");
-        }
-
-        // Every capture starts one clipboard operation alongside persistence and
-        // joins that same operation before presenting the result.
-        bool copiedToClipboard = false;
-        if (_commit is not null)
-        {
-            bool copied = false;
-            try
-            {
-                copied = await (automaticClipboardCopy ?? _commit.CopyCapturedRegionAsync(e.SelectedBitmap,
-                    e.SourceTitle, _pendingRecord.InitialRenderShowsSourceWindowTitle, _pendingRecord.SourcePageUrl,
-                    Core.Capture.CaptureProvenance.FromRecord(_pendingRecord), CaptureSelectionProvenance.Pending(e)));
-                ReceiptTimeline.Mark?.Invoke("copy-resumed");
-            }
-            catch (Exception ex)
-            {
-                // The shared clipboard service normally converts OLE/encoding failures to a
-                // false result. Keep this final boundary so an unexpected integration failure
-                // still cannot unwind the already durable capture or suppress the editor.
-                _log?.LogWarning(ex, "Automatic region-capture clipboard copy failed unexpectedly");
-            }
-
-            copiedToClipboard = copied;
-            if (first is not null) ReportCopyToQuickAccessFirst(first, copied);
-            // A card that showed this failure offers the retry itself (C), as long as its capture
-            // was saved; otherwise the notification names where to retry.
-            if (!copied && first is not { CopyFailureShown: true, SaveFailed: false })
-            {
-                string message = _currentRecord is null
-                    ? UiText.Get("Text_4048C8E18C61")
-                    : UiText.Get("Text_9E0860CEAEC2");
-                try
-                {
-                    ShowCaptureNotice(
-                        UiText.Get("Text_422F61DDCB7C"),
-                        message,
-                        TrayBalloonKind.Warning,
-                        playSound: false);
-                }
-                catch (Exception ex)
-                {
-                    // A shell-notification failure must not suppress the editor after the
-                    // durable capture and clipboard attempt have already completed.
-                    _log?.LogWarning(ex, "Could not show automatic clipboard failure notification");
-                }
-            }
-
-            // Capturing opens the editor and copies the result, but does not also
-            // create a persistent floating window. F3 remains the explicit paste-to-screen
-            // action when the user actually wants a pin.
-        }
+        bool copiedToClipboard = await CompleteCaptureCopyAsync(delivery, _currentRecord);
         // Region, window, full-screen and scrolling captures all complete here. Only a durable,
         // copied result counts toward the Store rating request; a save or copy failure resets it.
         _storeRating?.RecordCapture(succeeded: _currentRecord is not null && copiedToClipboard);

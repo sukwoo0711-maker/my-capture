@@ -245,6 +245,21 @@ public sealed class CaptureInfoEvidenceTests
             Assert.True(editor.IsMediaReadyForTest, editor.MediaFailureForTest);
             WaitForSourceFileSize(editor);
             Settle(editor);
+            if (typeof(VideoEditorWindow).GetProperty("SourceFileSizeReadTask", Members) is not null)
+            {
+                var details = Assert.IsType<TextBlock>(typeof(VideoEditorWindow).GetField("_identityDetails", Members)!.GetValue(editor));
+                FrameworkElement commands = Descendants(editor).OfType<FrameworkElement>()
+                    .Single(element => element.Name == "VideoEditorCommandBar");
+                Assert.Contains(details, Descendants(commands));
+                Assert.True(details.IsVisible && details.ActualHeight > 0 && details.ActualWidth > 0);
+                Type formatter = typeof(CaptureRecord).Assembly.GetType("MyCapture.Core.Capture.MediaDetailsFormatter")!;
+                string expectedSize = (string)formatter.GetMethod("FileSize", Members)!.Invoke(null,
+                    [new decimal(new FileInfo(recording.OutputPath).Length)])!;
+                Assert.EndsWith(" · " + expectedSize, details.Text);
+                Rect bounds = details.TransformToAncestor(editor).TransformBounds(new Rect(details.RenderSize));
+                Assert.True(bounds.Top >= 0 && bounds.Bottom <= 120 && bounds.Left >= 0 && bounds.Right <= editor.ActualWidth,
+                    $"Visible video facts must fit the header evidence crop: {bounds}");
+            }
             BitmapSource bar = Top(Snapshot(editor), 120);
             Save(output, $"video-editor-command-bar-920x680-ko-KR-96dpi-{phase}.png", bar);
             Button? anchor = CaptureMenuAnchor(editor);

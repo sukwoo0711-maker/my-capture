@@ -55,15 +55,16 @@ public partial class App
     /// Schedules the card of a capture that will show one, on the turn after its lift; null when the
     /// capture shows no card first (another mode, a text capture, no library).
     /// </summary>
-    private QuickAccessFirst? ShowQuickAccessFirst(CaptureSelectionCompletedEventArgs e, Task<bool> copy)
+    private QuickAccessFirst? ShowQuickAccessFirst(CaptureSelectionCompletedEventArgs e, Task<bool> copy, bool preserveEditor = false)
     {
         CancelQuickAccessFirst();
         // The conditions of the card after the save (ShowQuickAccess); a scrolling capture shows it without a flight.
         if (ShowsCardAfterSaveForTest || _services is null || _queue is null || _commit is null || e.TextCapture
-            || _settings?.General.AfterCapture != AfterCaptureAction.QuickAccess) return null;
+            || (!preserveEditor && _settings?.General.AfterCapture != AfterCaptureAction.QuickAccess)) return null;
         var region = new RectD(e.Frame.ScreenBounds.Left + e.BitmapRegion.Left,
             e.Frame.ScreenBounds.Top + e.BitmapRegion.Top, e.BitmapRegion.Width, e.BitmapRegion.Height);
-        var first = new QuickAccessFirst(e.SelectedBitmap, region, e.Frame.Monitor ?? MonitorEnumerator.GetFromCursor());
+        var first = new QuickAccessFirst(e.SelectedBitmap, region, e.Frame.Monitor ?? MonitorEnumerator.GetFromCursor())
+            { PreserveEditor = preserveEditor };
         _quickAccessFirst = first;
         // Posted after the lift at the same priority, so the card follows it on the next turn, before the
         // save's and the copy's continuations (Normal priority).
@@ -114,6 +115,11 @@ public partial class App
             ReceiptTimeline.Mark?.Invoke("card-show");
             shown.Show();
             ReceiptTimeline.Mark?.Invoke("card-shown");
+            if (first.DeferredSaveFailure is { } failure)
+            {
+                first.DeferredSaveFailure = null;
+                ShowQuickAccessFirstFailure(first, failure.Title, failure.Message);
+            }
             if (copied is null) _ = ObserveQuickAccessFirstCopyAsync(first, copy);
         }
         catch (Exception ex)
@@ -165,6 +171,13 @@ public partial class App
     private bool ShowQuickAccessFirstFailure(QuickAccessFirst first, string title, string message)
     {
         first.SaveFailed = true;
+        if (first.PreserveEditor && first.Phase == QuickAccessFirstPhase.Scheduled)
+        {
+            // This path keeps another editor, so retain this new image's pending card even
+            // when storage fails before the next dispatcher turn can display it.
+            first.DeferredSaveFailure = (title, message);
+            return false; // The usual failure notice is still delivered immediately.
+        }
         // A card whose turn has not come does not show at all.
         if (first.Phase == QuickAccessFirstPhase.Scheduled) first.Phase = QuickAccessFirstPhase.Cancelled;
         if (first.Phase != QuickAccessFirstPhase.Shown || first.Card is not { IsOpen: true } card
@@ -260,6 +273,10 @@ public partial class App
         internal MonitorInfo Monitor { get; } = monitor;
 
         internal QuickAccessFirstPhase Phase { get; set; }
+
+        internal bool PreserveEditor { get; init; }
+
+        internal (string Title, string Message)? DeferredSaveFailure { get; set; }
 
         internal QuickAccessWindow? Card { get; set; }
 

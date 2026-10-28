@@ -34,7 +34,12 @@ public sealed class VideoEditorUxLayoutTests
             var bar = Assert.Single(Descendants((DependencyObject)editor.Content).OfType<Grid>(), grid => grid.Name == "VideoEditorCommandBar");
             TextBlock[] texts = Descendants(bar).OfType<TextBlock>().Where(text => text.IsVisible).ToArray();
             Assert.DoesNotContain(texts, text => text.Text == "동영상 편집");
-            Assert.DoesNotContain(texts, text => text.Text == "동영상 0:10.000 · 640×360 · 30fps");
+            TextBlock details = Assert.Single(texts, text => text.Name == "VideoHeaderDetails");
+            Assert.StartsWith("동영상 0:10.000 · 640×360 · 30fps", details.Text);
+            Assert.True(details.ActualHeight > 0);
+            var commands = Assert.Single(Descendants(bar).OfType<MyCapture.App.Editing.CommandGroupsPanel>());
+            Assert.True(details.TranslatePoint(default, bar).Y >= commands.TranslatePoint(default, bar).Y + commands.ActualHeight);
+            Assert.True(details.TranslatePoint(default, bar).Y + details.ActualHeight <= bar.ActualHeight + .5);
         }
         finally
         {

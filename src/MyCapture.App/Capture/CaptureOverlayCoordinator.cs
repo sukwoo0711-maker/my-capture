@@ -21,10 +21,6 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
     private readonly Func<bool, FrozenFrame> _acquireFrame;
     private readonly Func<RectD> _desktopBounds;
     private readonly Func<RectD, IReadOnlyList<WindowCandidate>> _readWindowCandidates;
-    // Nothing on screen waits for these reads, so a read that finds the previous capture's probe
-    // still running waits for it within its own deadline instead of giving up at once.
-    private readonly BrowserPageUrlService _pageUrls = new(waitForBusyProbe: true);
-    private readonly WindowSourceService _windowSources = new(waitForBusyProbe: true);
     private CapturePreparation? _preparation;
     private bool _disposed;
     private CaptureOverlayWindow? _activeOverlay;
@@ -49,6 +45,21 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
         Func<bool, FrozenFrame>? acquireFrame = null,
         Func<RectD>? desktopBounds = null,
         Func<RectD, IReadOnlyList<WindowCandidate>>? readWindowCandidates = null)
+        : this(captureEngine, windowCandidates, log, acquireFrame, desktopBounds, readWindowCandidates,
+            new BrowserPageUrlService(waitForBusyProbe: true).ReadAsync,
+            new WindowSourceService(waitForBusyProbe: true).ReadAsync)
+    {
+    }
+
+    private CaptureOverlayCoordinator(
+        ScreenCaptureEngine captureEngine,
+        WindowCandidateService windowCandidates,
+        ILogger<CaptureOverlayCoordinator> log,
+        Func<bool, FrozenFrame>? acquireFrame,
+        Func<RectD>? desktopBounds,
+        Func<RectD, IReadOnlyList<WindowCandidate>>? readWindowCandidates,
+        Func<IReadOnlyList<WindowCandidate>, Task<IReadOnlyDictionary<IntPtr, BrowserDocumentSnapshot>>> readPageUrls,
+        Func<IReadOnlyList<WindowCandidate>, Task<IReadOnlyDictionary<IntPtr, WindowSourceSnapshot>>>? readWindowSources)
     {
         _captureEngine = captureEngine ?? throw new ArgumentNullException(nameof(captureEngine));
         _windowCandidates = windowCandidates ?? throw new ArgumentNullException(nameof(windowCandidates));
@@ -58,8 +69,10 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
         _readWindowCandidates = readWindowCandidates ?? windowCandidates.GetCandidates;
         _dispatcher = Application.Current?.Dispatcher ?? Dispatcher.CurrentDispatcher;
         _dispatcher.ShutdownStarted += OnDispatcherShutdownStarted;
-        ReadWindowSources = _windowSources.ReadAsync;
-        ReadPageUrls = _pageUrls.ReadAsync;
+        // Nested captures retain the parent's readers directly. Only a root coordinator creates
+        // the default services; their probes never block the frozen-frame presentation.
+        ReadWindowSources = readWindowSources;
+        ReadPageUrls = readPageUrls;
     }
 
     /// <summary>
@@ -346,12 +359,10 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
     private CaptureOverlayCoordinator CreateCaptureOverEditor(Func<CaptureSelectionCompletedEventArgs, Task> persist)
     {
         var nested = new CaptureOverlayCoordinator(_captureEngine, _windowCandidates, _log,
-            _acquireFrame, _desktopBounds, _readWindowCandidates)
+            _acquireFrame, _desktopBounds, _readWindowCandidates, ReadPageUrls, ReadWindowSources)
         {
             SelectionPersistRequested = persist,
             OpenEditorAfterCapture = () => false,
-            ReadPageUrls = ReadPageUrls,
-            ReadWindowSources = ReadWindowSources,
             AutoDetectWindows = AutoDetectWindows,
             ShowShortcutHints = ShowShortcutHints,
             RequiresCaptureExclusion = RequiresCaptureExclusion,

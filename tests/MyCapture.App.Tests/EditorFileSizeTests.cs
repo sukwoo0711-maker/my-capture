@@ -115,7 +115,7 @@ public sealed class EditorFileSizeTests
     [InlineData("ko-KR", 25_480_397L, "24.3 MB")]
     [InlineData("en-US", 0L, "0 B")]
     [InlineData("ko-KR", null, null)]
-    public void VideoFactsGainSizeAfterOpeningWithoutChangingTheExistingDetailsLocation(string language, long? bytes, string? size) => StaTestHost.Run(() =>
+    public void VideoHeaderShowsSizeAfterOpeningWithoutWaitingForTheRead(string language, long? bytes, string? size) => StaTestHost.Run(() =>
     {
         using var culture = UiText.UseLanguage(language);
         VideoEditorWindow editor = CreateVideoEditor();
@@ -133,9 +133,16 @@ public sealed class EditorFileSizeTests
             pending.SetResult(bytes);
             Finish(editor.SourceFileSizeReadTask);
             if (size is not null) expected += " · " + size;
-            Assert.Equal(expected, Field<TextBlock>(editor, "_identityDetails").Text);
+            TextBlock details = Field<TextBlock>(editor, "_identityDetails");
+            Assert.Equal(expected, details.Text);
             Assert.StartsWith(expected + Environment.NewLine, Assert.IsType<string>(Field<Border>(editor, "_positionChip").ToolTip));
-            Assert.DoesNotContain(Descendants(editor), child => ReferenceEquals(child, Field<TextBlock>(editor, "_identityDetails")));
+            editor.UpdateLayout();
+            var header = Assert.Single(Descendants(editor).OfType<Grid>(), grid => grid.Name == "VideoEditorCommandBar");
+            Assert.Contains(Descendants(header), child => ReferenceEquals(child, details));
+            Assert.True(details.IsVisible && details.ActualWidth > 0 && details.ActualHeight > 0);
+            Rect bounds = details.TransformToAncestor(header).TransformBounds(new Rect(details.RenderSize));
+            Assert.True(bounds.Left >= 0 && bounds.Right <= header.ActualWidth + .5
+                && bounds.Top >= 0 && bounds.Bottom <= header.ActualHeight + .5);
         }
         finally { editor.Close(); }
     });

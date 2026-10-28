@@ -47,7 +47,9 @@ public sealed class CaptureOverlayCoordinatorTests
         CaptureOverlayWindow? selector = null;
         coordinator.ReadPageUrls = _ => Task.FromResult<IReadOnlyDictionary<IntPtr, BrowserDocumentSnapshot>>(
             new Dictionary<IntPtr, BrowserDocumentSnapshot>());
-        coordinator.ReadWindowSources = null;
+        coordinator.ReadWindowSources = surface == "library"
+            ? _ => Task.FromResult<IReadOnlyDictionary<IntPtr, WindowSourceSnapshot>>(new Dictionary<IntPtr, WindowSourceSnapshot>())
+            : null;
         coordinator.ApplyCaptureExclusion = window => { selector = (CaptureOverlayWindow)window; return true; };
         coordinator.SelectionPersistRequested = _ => { normalWrites++; return Task.CompletedTask; };
         // App wires this path to durable separate persistence, its usual clipboard copy and a
@@ -78,6 +80,11 @@ public sealed class CaptureOverlayCoordinatorTests
             Assert.False(coordinator.CanAcceptSelection);
             Assert.Equal(0, normalWrites);
             Assert.Equal(1, separateWrites);
+            var nested = Assert.IsType<CaptureOverlayCoordinator>(typeof(CaptureOverlayCoordinator)
+                .GetField("_editorScreenCapture", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!
+                .GetValue(coordinator));
+            Assert.Same(coordinator.ReadPageUrls, nested.ReadPageUrls);
+            Assert.Same(coordinator.ReadWindowSources, nested.ReadWindowSources);
             Assert.Equal(0, afterCaptureReads);
             Assert.Equal(0, ended);
             Assert.True(started > 0);

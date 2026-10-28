@@ -174,7 +174,7 @@ public sealed class EditorLargeTextViewportTests
         var caption = new TextAnnotation
         {
             Text = string.Concat(Enumerable.Repeat("한글 줄바꿈과 소수 폭을 유지합니다 abcXYZ😀 ", 100)),
-            // Keep the projected width fractional after the wider canvas's new fit scale.
+            // A controlled fractional width is chosen after the actual viewport is measured.
             Rect = new RectD(left, 40, 800 - left - 1.4, 40),
             FontSize = 18,
             AutoSize = false,
@@ -186,6 +186,14 @@ public sealed class EditorLargeTextViewportTests
         host.Window.Width = windowWidth;
         host.Window.UpdateLayout();
         Assert.True(host.Window.UseLayoutRounding);
+        AnnotationEditorSurface surface = Field<AnnotationEditorSurface>(host.Editor, "_surface");
+        double dpi = VisualTreeHelper.GetDpi(surface).DpiScaleX;
+        double dipPerImagePixel = surface.ToSurfaceRect(new RectD(0, 0, 1, 1)).Width;
+        // Footer commands reserve their compact height, which can make this 4:3 image
+        // height-limited. Do not rely on one particular monitor/window fit scale.
+        double fractionalDipWidth = (Math.Floor(surface.ToSurfaceRect(caption.Rect).Width * dpi) - .35) / dpi;
+        caption.Rect = new RectD(caption.Rect.Left, caption.Rect.Top, fractionalDipWidth / dipPerImagePixel, caption.Rect.Height);
+        caption.Rect = TextAnnotationLayout.Measure(caption);
         AnnotationEditorController controller = Controller(host.Editor);
         controller.SetSelected(caption);
         string before = controller.Document.ToJson();

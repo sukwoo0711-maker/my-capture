@@ -42,6 +42,7 @@ public sealed class CaptureLibraryFirstTests
         Assert.Equal(copiedBefore + 1, fixture.CopiedImages.Count);
         Assert.NotNull(original);
         Assert.True(fixture.Persistence.IsBusy(original.Id));
+        Assert.Null(fixture.LatestReceipt); // No shell services: delivery must not schedule a receipt.
     });
 
     [Fact]
@@ -326,10 +327,10 @@ public sealed class CaptureLibraryFirstTests
                 recordForRepeat: false)),
             RequiresCaptureExclusion = () => true,
         };
-        AnnotationEditorWindow? editor = null;
-        coordinator.ApplyCaptureExclusion = window =>
+        bool durableBeforeOpen = false;
+        coordinator.OpenEditorAfterCapture = () =>
         {
-            editor = Assert.IsType<AnnotationEditorWindow>(window);
+            Assert.Null(coordinator.CurrentEditor);
             CaptureRecord record = Assert.Single(fixture.Queue.Records);
             Assert.Equal(Pixels(fixture.Frame.Bitmap), Pixels(ImageCodec.TryLoad(
                 fixture.Queue.GetFilePath(record, CaptureFileNames.Original))!));
@@ -338,17 +339,15 @@ public sealed class CaptureLibraryFirstTests
             Assert.NotEmpty(fixture.CopiedImages);
             Assert.Equal(Pixels(fixture.CopiedImages[^1]), Pixels(ImageCodec.TryLoad(
                 fixture.Queue.GetFilePath(record, CaptureFileNames.Rendered))!));
-            window.WindowStartupLocation = WindowStartupLocation.Manual;
-            window.Left = -10000;
-            window.Top = -10000;
-            window.ShowActivated = false;
+            durableBeforeOpen = true;
             return true;
         };
         try
         {
             Assert.True(coordinator.StartWithSelection(fixture.Frame, fixture.Region, "매출.xlsx - Excel"));
             PumpUntil(() => coordinator.LastTransitionForTest.IsCompleted);
-            Assert.NotNull(editor);
+            Assert.True(durableBeforeOpen);
+            var editor = Assert.IsType<AnnotationEditorWindow>(Window.GetWindow(coordinator.CurrentEditor!));
             Assert.True(editor.Editor.HandleShortcut(Key.Escape, ModifierKeys.None));
             var reloaded = new CaptureQueue(fixture.Paths, fixture.Settings.Queue, NullLogger<CaptureQueue>.Instance);
             reloaded.Load();
@@ -356,6 +355,8 @@ public sealed class CaptureLibraryFirstTests
             Assert.NotEqual(Pixels(fixture.Frame.Bitmap), Pixels(ImageCodec.TryLoad(
                 reloaded.GetFilePath(saved, CaptureFileNames.Rendered))!));
             Assert.False(saved.HasAnnotations);
+            Assert.Equal(Pixels(fixture.Frame.Bitmap), Pixels(ImageCodec.TryLoad(
+                reloaded.GetFilePath(saved, CaptureFileNames.Original))!));
         }
         finally
         {
@@ -440,7 +441,7 @@ public sealed class CaptureLibraryFirstTests
             entered.Set();
             if (!release.Wait(TimeSpan.FromSeconds(10))) throw new TimeoutException();
         };
-        AnnotationEditorWindow? editor = null;
+        bool durableBeforeOpen = false;
         using var coordinator = new CaptureOverlayCoordinator(
             new ScreenCaptureEngine(NullLogger<ScreenCaptureEngine>.Instance),
             new WindowCandidateService(NullLogger<WindowCandidateService>.Instance),
@@ -448,30 +449,29 @@ public sealed class CaptureLibraryFirstTests
         {
             SelectionPersistRequested = fixture.Select,
             RequiresCaptureExclusion = () => true,
-            ApplyCaptureExclusion = window =>
+        };
+        coordinator.OpenEditorAfterCapture = () =>
             {
-                editor = Assert.IsType<AnnotationEditorWindow>(window);
+                Assert.Null(coordinator.CurrentEditor);
                 CaptureRecord record = Assert.Single(fixture.Queue.Records);
                 Assert.True(File.Exists(fixture.Paths.IndexFile));
                 Assert.True(File.Exists(fixture.Queue.GetFilePath(record, CaptureFileNames.Original)));
                 Assert.True(File.Exists(Path.Combine(fixture.Queue.GetDirectory(record), "meta.json")));
                 Assert.False(File.Exists(fixture.Queue.GetFilePath(record, CaptureFileNames.OriginalPending)));
-                window.WindowStartupLocation = WindowStartupLocation.Manual;
-                window.Left = -10000;
-                window.Top = -10000;
-                window.ShowActivated = false;
+                durableBeforeOpen = true;
                 return true;
-            },
-        };
+            };
         try
         {
             Assert.True(coordinator.StartWithSelection(fixture.Frame, fixture.Region, "매출.xlsx - Excel"));
             PumpUntil(() => entered.IsSet);
-            Assert.Null(editor);
+            Assert.Null(coordinator.CurrentEditor);
+            Assert.False(durableBeforeOpen);
             Assert.False(coordinator.LastTransitionForTest.IsCompleted);
             release.Set();
             PumpUntil(() => coordinator.LastTransitionForTest.IsCompleted);
-            Assert.NotNull(editor);
+            Assert.True(durableBeforeOpen);
+            var editor = Assert.IsType<AnnotationEditorWindow>(Window.GetWindow(coordinator.CurrentEditor!));
             // Esc steps back inside the editor and never closes it.
             Assert.True(editor.Editor.HandleShortcut(Key.Escape, ModifierKeys.None));
             Assert.True(editor.IsVisible);
@@ -482,7 +482,10 @@ public sealed class CaptureLibraryFirstTests
             Assert.False(coordinator.IsActive);
             var reloaded = new CaptureQueue(fixture.Paths, new QueueSettings(), NullLogger<CaptureQueue>.Instance);
             reloaded.Load();
-            Assert.Equal("매출.xlsx - Excel", Assert.Single(reloaded.Records).SourceWindowTitle);
+            CaptureRecord saved = Assert.Single(reloaded.Records);
+            Assert.Equal("매출.xlsx - Excel", saved.SourceWindowTitle);
+            Assert.Equal(Pixels(fixture.Frame.Bitmap), Pixels(ImageCodec.TryLoad(
+                reloaded.GetFilePath(saved, CaptureFileNames.Original))!));
         }
         finally
         {
@@ -661,6 +664,7 @@ public sealed class CaptureLibraryFirstTests
         internal CaptureRecord? CurrentRecord => (CaptureRecord?)Get("_currentRecord");
         internal CaptureRecord PendingRecord => (CaptureRecord)Get("_pendingRecord")!;
         internal IDisposable? CurrentEditSession => (IDisposable?)Get("_currentEditSession");
+        internal Guid? LatestReceipt => (Guid?)Get("_latestReceipt");
 
         internal Fixture(QueueSettings? queueSettings = null)
         {
