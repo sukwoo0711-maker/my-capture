@@ -46,7 +46,7 @@ public sealed class GifPreviewPolicyTests
     }
 
     [Fact]
-    public void SampleDocument_KeepsLayersInsideAndDropsEdgeSliversThatQuantizationWouldReject()
+    public void SampleDocument_KeepsLayersInsideAndDropsEdgeSliversThatQuantizationWouldCoalesce()
     {
         VideoEditDocument document = VideoEditDocument.CreateFor(1920, 1080, 20_000);
         document.TextOverlays.Add(new TimedTextOverlay { Text = "inside", StartMs = 9_000, EndMs = 10_000 });
@@ -64,12 +64,15 @@ public sealed class GifPreviewPolicyTests
         Assert.Equal(4, document.TextOverlays.Count);
         Assert.Equal((0d, 20_000d), (document.TrimInMs, document.TrimOutMs));
         Assert.NotSame(document.TextOverlays[0], sample.TextOverlays[0]);
-        // The naive trim keeps the 4 ms sliver, which the exporter's schedule rejects.
+        // A naive trim keeps the 4 ms sliver; the full exporter safely coalesces it.
         VideoEditDocument naive = document.Clone();
         naive.TrimInMs = window.StartMs;
         naive.TrimOutMs = window.EndMs;
         naive.FrameEditLayers.Clear();
-        Assert.Throws<GifExportLimitException>(() => AnimatedGifExporter.BuildFrameSchedule(naive));
+        GifFrameSchedule schedule = AnimatedGifExporter.BuildFrameSchedule(naive);
+        TimedTextOverlay collapsed = Assert.Single(schedule.QuantizedTextOverlays, overlay => overlay.Text == "sliver");
+        Assert.Equal(collapsed.StartMs, collapsed.EndMs);
+        Assert.All(schedule.SourceTimesMs, source => Assert.False(collapsed.IsActiveAt(source)));
         // The kept 30 ms edge layer quantizes to three centiseconds and schedules normally.
         _ = AnimatedGifExporter.BuildFrameSchedule(sample);
     }

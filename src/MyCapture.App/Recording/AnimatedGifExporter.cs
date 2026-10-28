@@ -373,14 +373,13 @@ internal static class AnimatedGifExporter
                     MidpointRounding.AwayFromZero)),
                 0,
                 totalCentiseconds);
-            if (endCs <= startCs)
+            if (endCs > startCs)
             {
-                throw new GifExportLimitException(
-                    UiText.Get("Text_6D9F1A20DDCC"));
+                _ = boundaries.Add(startCs);
+                _ = boundaries.Add(endCs);
             }
-
-            _ = boundaries.Add(startCs);
-            _ = boundaries.Add(endCs);
+            // A valid sub-centisecond interval can round to one instant. Keep its
+            // identity as an inactive half-open interval, without adding a frame.
             TimedTextOverlay adjusted = overlay.Clone();
             adjusted.StartMs = SourceAtBoundary(startCs);
             adjusted.EndMs = SourceAtBoundary(endCs);
@@ -409,14 +408,12 @@ internal static class AnimatedGifExporter
                     MidpointRounding.AwayFromZero)),
                 0,
                 totalCentiseconds);
-            if (endCs <= startCs)
+            if (endCs > startCs)
             {
-                throw new GifExportLimitException(
-                    UiText.Get("Text_F2F36C2D52F6"));
+                _ = boundaries.Add(startCs);
+                _ = boundaries.Add(endCs);
             }
-
-            _ = boundaries.Add(startCs);
-            _ = boundaries.Add(endCs);
+            // Match text: coincident quantized endpoints are an inactive layer.
             FrameEditLayer adjusted = layer.Clone();
             adjusted.StartMs = SourceAtBoundary(startCs);
             adjusted.EndMs = SourceAtBoundary(endCs);
@@ -468,6 +465,17 @@ internal static class AnimatedGifExporter
                 var previous = points[^1];
                 lower = Math.Max(lower, previous.Lower);
                 upper = Math.Min(upper, previous.Upper);
+                if (lower > upper)
+                {
+                    // Away from the end, disjoint ordered +/- 1 cs windows always
+                    // leave room to insert at 'desired'. Thus this can only be the
+                    // clipped tail: its last allowed image is outputTotal - 2, one
+                    // cs after the previous group. Coalesce with the endpoint instead
+                    // of moving that group outside a member's window. The tail guard
+                    // above guarantees this endpoint is within maximumShiftCs of
+                    // desired (which is at least outputTotal - 1 here).
+                    continue;
+                }
                 points[^1] = (boundary, Math.Clamp(previous.Output, lower, upper), lower, upper);
             }
         }

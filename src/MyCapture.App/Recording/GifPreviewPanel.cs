@@ -228,7 +228,15 @@ internal sealed class GifPreviewPanel : Border
     internal void Stop()
     {
         _player.Pause();
-        _originalCancellation?.Cancel();
+        CancellationTokenSource? cancellation = _originalCancellation;
+        if (cancellation is not null)
+        {
+            // Release the pending frame immediately: a decoder can finish cancelling
+            // after comparison is opened again, even for a single-image sample.
+            _originalCancellation = null;
+            _originalFrame = -1;
+            cancellation.Cancel();
+        }
         UpdatePlayButton();
     }
 
@@ -283,16 +291,19 @@ internal sealed class GifPreviewPanel : Border
         try
         {
             BitmapSource original = await _renderOriginal(sample, index, cancellation.Token);
-            if (cancellation.IsCancellationRequested || !ReferenceEquals(sample, _sample) || _originalFrame != index) return;
+            if (cancellation.IsCancellationRequested || !ReferenceEquals(_originalCancellation, cancellation)
+                || !ReferenceEquals(sample, _sample) || _originalFrame != index) return;
             _original.Source = original;
             _originalCaption.Text = UiText.Get("GifPreview_Original");
         }
         catch (OperationCanceledException)
         {
+            if (ReferenceEquals(_originalCancellation, cancellation)) _originalFrame = -1;
         }
         catch (Exception error)
         {
-            if (ReferenceEquals(sample, _sample) && _originalFrame == index)
+            if (ReferenceEquals(_originalCancellation, cancellation)
+                && ReferenceEquals(sample, _sample) && _originalFrame == index)
             {
                 _originalFrame = -1;
                 _originalCaption.Text = UiText.Format("GifPreview_Failed", error.Message);
