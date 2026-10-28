@@ -458,12 +458,20 @@ public sealed partial class SettingsThemePreviewTests
 
     [Fact]
     public Task LibraryOverhaul_OneSharedMenuAndNoPerCardWork() =>
-        RunIsolated(nameof(LibraryOverhaul_OneSharedMenuAndNoPerCardWork), () =>
+        RunSharedLibraryMenuTest(nameof(LibraryOverhaul_OneSharedMenuAndNoPerCardWork), constrainWindow: false);
+
+    [Fact]
+    public Task LibraryOverhaul_SharedMenuAndMetadataChecksWhenTheDesktopCapsTheWindow() =>
+        RunSharedLibraryMenuTest(nameof(LibraryOverhaul_SharedMenuAndMetadataChecksWhenTheDesktopCapsTheWindow), constrainWindow: true);
+
+    private Task RunSharedLibraryMenuTest(string testName, bool constrainWindow) =>
+        RunIsolated(testName, () =>
         {
             Application application = CreateLibraryMotionApplication();
             using var scope = UiText.UseLanguage("ko-KR");
             LibraryUxFixture f = CreateLibraryUxFixture("mc-overhaul-shared-menu-");
             GalleryWindow window = f.Window;
+            if (constrainWindow) window.MaxWidth = 1044;
             try
             {
                 window.Show(); SettleGalleryLayout(window);
@@ -522,9 +530,19 @@ public sealed partial class SettingsThemePreviewTests
                     Descendants(rows).OfType<ScrollViewer>().First().ScrollToVerticalOffset(pass * 7);
                 }
                 Assert.Equal(checks, window.MetadataWidthChecks);
+                double grantedWidth = window.ActualWidth;
                 window.Width += 120;
                 SettleGalleryLayout(window);
-                Assert.True(window.MetadataWidthChecks > checks);
+                if (Math.Abs(window.ActualWidth - grantedWidth) < 0.5)
+                {
+                    // A request beyond the desktop limit is not a resize and must not do work.
+                    Assert.Equal(checks, window.MetadataWidthChecks);
+                    window.Width = Math.Max(window.MinWidth, grantedWidth - 120);
+                    SettleGalleryLayout(window);
+                }
+                Assert.True(Math.Abs(window.ActualWidth - grantedWidth) > 0.5,
+                    $"The resize probe did not change the granted width {grantedWidth}.");
+                Assert.True(window.MetadataWidthChecks > checks, "A real window resize must recheck metadata widths.");
             }
             finally { window.CloseForExit(); application.Shutdown(); }
         });

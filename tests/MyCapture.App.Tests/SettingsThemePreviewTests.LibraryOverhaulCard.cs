@@ -257,7 +257,14 @@ public sealed partial class SettingsThemePreviewTests
 
     [Fact]
     public Task LibraryOverhaul_ToolbarMirrorsTheCardMenuAndFitsOneRowAtEveryWidth() =>
-        RunIsolated(nameof(LibraryOverhaul_ToolbarMirrorsTheCardMenuAndFitsOneRowAtEveryWidth), () =>
+        RunLibraryToolbarWidthTest(nameof(LibraryOverhaul_ToolbarMirrorsTheCardMenuAndFitsOneRowAtEveryWidth), constrainWindow: false);
+
+    [Fact]
+    public Task LibraryOverhaul_ToolbarFitsWhenTheDesktopCapsTheWindow() =>
+        RunLibraryToolbarWidthTest(nameof(LibraryOverhaul_ToolbarFitsWhenTheDesktopCapsTheWindow), constrainWindow: true);
+
+    private Task RunLibraryToolbarWidthTest(string testName, bool constrainWindow) =>
+        RunIsolated(testName, () =>
         {
             Application application = CreateLibraryMotionApplication();
             FluidMotion.AnimationsEnabledOverrideForTest = false;
@@ -277,48 +284,83 @@ public sealed partial class SettingsThemePreviewTests
                     window.Resources["FontSize.Caption"] = 12d * textScale;
                     try
                     {
+                        if (constrainWindow) window.MaxWidth = window.MinWidth;
                         window.Show();
                         var bar = (FrameworkElement)window.FindName("LibraryContentCommandBar");
                         var rows = (ListBox)window.FindName("RowsList");
+                        var client = (FrameworkElement)window.Content;
+                        double originalClientWidth = client.Width;
                         string[] names = ["FloatSelectedButton", "CopySelectedButton", "EditSelectedButton", "PreviewSelectedButton", "KeepSelectedButton"];
                         foreach (double width in new[] { 980d, 1100d, 1280d, 1500d })
                         foreach (bool details in new[] { true, false })
                         {
                             window.Width = width;
                             window.SetDetailsPaneOpen(details);
-                            string label = $"{language}/{theme}/text{textScale}/{width}/details{details}";
-                            double top = double.NaN;
-                            foreach (int selected in new[] { 0, 1, 2 })
+                            SettleGalleryLayout(window);
+                            double windowChrome = window.ActualWidth - client.ActualWidth;
+                            void CheckToolbar(string layout)
                             {
-                                f.ViewModel.ClearSelection();
-                                for (int index = 0; index < selected; index++) f.ViewModel.Select(f.Records[index].Id, control: index > 0);
-                                SettleGalleryLayout(window);
-                                // One row, whatever the selection: the list never moves.
-                                double rowsTop = rows.TranslatePoint(new Point(), window).Y;
-                                if (double.IsNaN(top)) top = rowsTop;
-                                else if (Math.Abs(top - rowsTop) > 0.5) failures.Add($"{label}: the list moved from {top} to {rowsTop} with {selected} selected");
-                                if (Math.Abs(bar.ActualHeight - 44) > 0.5) failures.Add($"{label}: the toolbar is {bar.ActualHeight} tall");
-                                var buttons = names.Select(name => (Button)window.FindName(name)).ToArray();
-                                // The decided order, left to right.
-                                double[] lefts = buttons.Select(button => button.TranslatePoint(new Point(), bar).X).ToArray();
-                                if (!lefts.SequenceEqual(lefts.Order())) failures.Add($"{label}: the commands are out of order {string.Join(",", lefts)}");
-                                var sort = (FrameworkElement)window.FindName("SortBox");
-                                var more = (FrameworkElement)window.FindName("MoreCommandsButton");
-                                foreach (FrameworkElement part in buttons.Cast<FrameworkElement>().Append(sort).Append(more).Append((FrameworkElement)window.FindName("SelectionCountLabel")))
+                                double top = double.NaN;
+                                foreach (int selected in new[] { 0, 1, 2, -1 })
                                 {
-                                    Rect bounds = new(part.TranslatePoint(new Point(), bar), part.RenderSize);
-                                    if (bounds.Right > bar.ActualWidth + 0.5 || bounds.Left < -0.5 || bounds.Top < -0.5 || bounds.Bottom > bar.ActualHeight + 0.5)
-                                        failures.Add($"{label}/{selected}: {part.Name} {bounds} leaves the toolbar {bar.RenderSize} (density {window.ContentToolbarDensity})");
+                                    f.ViewModel.ClearSelection();
+                                    for (int index = 0; index < selected; index++) f.ViewModel.Select(f.Records[index].Id, control: index > 0);
+                                    // A kept-only selection changes Keep to the wider Release label without resizing.
+                                    if (selected == -1) f.ViewModel.Select(f.Records[1].Id);
+                                    SettleGalleryLayout(window);
+                                    if (layout == "window" && constrainWindow && language == "en-US" && theme == AppTheme.Midnight && textScale == 1
+                                        && width == 1100 && details && selected == 2)
+                                        SaveLibraryUxEvidence(window, theme, "toolbar-capped.png");
+                                    string label = $"{language}/{theme}/text{textScale}/requested{width}/granted{window.ActualWidth}/client{client.ActualWidth}/{layout}/details{details}";
+                                    if (constrainWindow) Assert.InRange(window.ActualWidth, window.MinWidth - 0.5, window.MinWidth + 0.5);
+                                    // One row, whatever the selection: the list never moves.
+                                    double rowsTop = rows.TranslatePoint(new Point(), window).Y;
+                                    if (double.IsNaN(top)) top = rowsTop;
+                                    else if (Math.Abs(top - rowsTop) > 0.5) failures.Add($"{label}: the list moved from {top} to {rowsTop} with {selected} selected");
+                                    if (Math.Abs(bar.ActualHeight - 44) > 0.5) failures.Add($"{label}: the toolbar is {bar.ActualHeight} tall");
+                                    var buttons = names.Select(name => (Button)window.FindName(name)).ToArray();
+                                    // The decided order, left to right.
+                                    double[] lefts = buttons.Select(button => button.TranslatePoint(new Point(), bar).X).ToArray();
+                                    if (!lefts.SequenceEqual(lefts.Order())) failures.Add($"{label}: the commands are out of order {string.Join(",", lefts)}");
+                                    var sort = (FrameworkElement)window.FindName("SortBox");
+                                    var more = (FrameworkElement)window.FindName("MoreCommandsButton");
+                                    foreach (FrameworkElement part in buttons.Cast<FrameworkElement>().Append(sort).Append(more).Append((FrameworkElement)window.FindName("SelectionCountLabel")))
+                                    {
+                                        Rect bounds = new(part.TranslatePoint(new Point(), bar), part.RenderSize);
+                                        if (bounds.Right > bar.ActualWidth + 0.5 || bounds.Left < -0.5 || bounds.Top < -0.5 || bounds.Bottom > bar.ActualHeight + 0.5)
+                                            failures.Add($"{label}/{selected}: {part.Name} {bounds} leaves the toolbar {bar.RenderSize} (density {window.ContentToolbarDensity})");
+                                    }
+                                    if (more.TranslatePoint(new Point(), bar).X < sort.TranslatePoint(new Point(), bar).X + sort.ActualWidth - 0.5)
+                                        failures.Add($"{label}: the sort box overlaps More");
+                                    if (buttons.Any(button => button.TranslatePoint(new Point(button.ActualWidth, 0), bar).X > sort.TranslatePoint(new Point(), bar).X + 0.5))
+                                        failures.Add($"{label}/{selected}: a selection command overlaps the sort box (density {window.ContentToolbarDensity})");
+                                    // Names and tooltips stay whatever is shown.
+                                    foreach (Button button in buttons)
+                                        if (string.IsNullOrWhiteSpace(System.Windows.Automation.AutomationProperties.GetName(button)) || button.ToolTip is null)
+                                            failures.Add($"{label}: {button.Name} lost its name or tooltip");
+                                    densities.Add($"{window.ContentToolbarDensity}");
+                                    bool labelled = window.ContentToolbarDensity == GalleryWindow.ToolbarDensity.Labelled;
+                                    if (((FrameworkElement)window.FindName("EditSelectedLabel")).IsVisible != labelled) failures.Add($"{label}: labels and density disagree");
                                 }
-                                if (more.TranslatePoint(new Point(), bar).X < sort.TranslatePoint(new Point(), bar).X + sort.ActualWidth - 0.5)
-                                    failures.Add($"{label}: the sort box overlaps More");
-                                // Names and tooltips stay whatever is shown.
-                                foreach (Button button in buttons)
-                                    if (string.IsNullOrWhiteSpace(System.Windows.Automation.AutomationProperties.GetName(button)) || button.ToolTip is null)
-                                        failures.Add($"{label}: {button.Name} lost its name or tooltip");
-                                densities.Add($"{window.ContentToolbarDensity}");
-                                bool labelled = window.ContentToolbarDensity == GalleryWindow.ToolbarDensity.Labelled;
-                                if (((FrameworkElement)window.FindName("EditSelectedLabel")).IsVisible != labelled) failures.Add($"{label}: labels and density disagree");
+                            }
+                            // Check the actual narrow desktop first, then retain the wide-layout coverage
+                            // using the same loaded client when the HWND cannot reach the requested width.
+                            CheckToolbar("window");
+                            if (Math.Abs(window.ActualWidth - width) > 0.5)
+                            {
+                                try
+                                {
+                                    double expectedClientWidth = width - windowChrome;
+                                    client.Width = expectedClientWidth;
+                                    SettleGalleryLayout(window);
+                                    Assert.InRange(client.ActualWidth, expectedClientWidth - 0.5, expectedClientWidth + 0.5);
+                                    CheckToolbar("virtual client");
+                                }
+                                finally
+                                {
+                                    client.Width = originalClientWidth;
+                                    SettleGalleryLayout(window);
+                                }
                             }
                         }
                     }

@@ -845,7 +845,9 @@
             <Setter Property="Background" Value="Transparent" />
             <Setter Property="BorderThickness" Value="0" />
             <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Disabled" />
-            <Setter Property="ScrollViewer.VerticalScrollBarVisibility" Value="Auto" />
+            <!-- Keep the track reserved in the actual layout as well as the column budget.
+                 A short folder must not widen its compact cards when scrolling is unnecessary. -->
+            <Setter Property="ScrollViewer.VerticalScrollBarVisibility" Value="Visible" />
             <Setter Property="ScrollViewer.CanContentScroll" Value="True" />
             <Setter Property="VirtualizingStackPanel.IsVirtualizing" Value="True" />
             <Setter Property="VirtualizingStackPanel.VirtualizationMode" Value="Recycling" />

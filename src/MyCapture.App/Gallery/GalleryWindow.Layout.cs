@@ -48,10 +48,23 @@ internal sealed partial class GalleryWindow
         {
             ApplyToolbarDensity(density);
             var probe = new Size(double.PositiveInfinity, LibraryContentCommandBar.RowDefinitions[0].ActualHeight);
+            // A label's Visibility/Text invalidates its own measure immediately, but WPF propagates that
+            // to its templated button and the outer panel later. A repeated fit at the same width must
+            // not accept Labelled using cached icon-only sizes. Refresh just these small toolbar trees
+            // before measuring; a full UpdateLayout here would re-enter the window's SizeChanged path.
+            InvalidateToolbarMeasure(SelectionCommands);
+            InvalidateToolbarMeasure(SortCommands);
             SelectionCommands.Measure(probe);
             SortCommands.Measure(probe);
             if (SelectionCommands.DesiredSize.Width + SortCommands.DesiredSize.Width <= available) break;
         }
+    }
+
+    private static void InvalidateToolbarMeasure(DependencyObject element)
+    {
+        for (int index = 0; index < VisualTreeHelper.GetChildrenCount(element); index++)
+            InvalidateToolbarMeasure(VisualTreeHelper.GetChild(element, index));
+        if (element is UIElement visual) visual.InvalidateMeasure();
     }
 
     private void ApplyToolbarDensity(ToolbarDensity density)

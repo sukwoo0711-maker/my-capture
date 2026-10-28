@@ -47,6 +47,43 @@ public sealed partial class SettingsThemePreviewTests
         });
 
     [Fact]
+    public Task GalleryCompact_IconCommandsFitWhenTheDetailsPaneNarrowsTheToolbar() =>
+        RunIsolated(nameof(GalleryCompact_IconCommandsFitWhenTheDetailsPaneNarrowsTheToolbar), () =>
+        {
+            var application = CreateGalleryTestApplication();
+            try
+            {
+                foreach (string language in new[] { "ko-KR", "en-US" })
+                {
+                    using var scope = UiText.UseLanguage(language);
+                    LibraryUxFixture f = CreateLibraryUxFixture("mc-gallery-icon-commands-");
+                    GalleryWindow window = f.Window;
+                    try
+                    {
+                        window.Width = window.MaxWidth = window.MinWidth;
+                        window.Height = window.MinHeight;
+                        window.Show();
+                        window.SetDetailsPaneOpen(true);
+                        f.ViewModel.Select(f.Records[0].Id);
+                        SettleGalleryLayout(window);
+                        Assert.NotEqual(GalleryWindow.ToolbarDensity.Labelled, window.ContentToolbarDensity);
+                        var bar = (FrameworkElement)window.FindName("LibraryContentCommandBar");
+                        Assert.Equal(44, bar.ActualHeight, 1);
+                        foreach (string name in new[] { "FloatSelectedButton", "CopySelectedButton", "EditSelectedButton", "PreviewSelectedButton", "KeepSelectedButton" })
+                        {
+                            var button = (Button)window.FindName(name);
+                            Assert.True(button.IsVisible);
+                            AssertInsideClient(button, bar, language);
+                            AssertLibraryCommandContent(window, button, bar, language);
+                        }
+                    }
+                    finally { window.CloseForExit(); }
+                }
+            }
+            finally { application.Shutdown(); }
+        });
+
+    [Fact]
     public Task GalleryNavigation_CreationRevealsVirtualizedFolderAndAncestor() =>
         RunIsolated(nameof(GalleryNavigation_CreationRevealsVirtualizedFolderAndAncestor), () =>
         {
@@ -225,7 +262,7 @@ public sealed partial class SettingsThemePreviewTests
             AssertNotTrimmed(placeholder, language);
             AssertNotTrimmed((TextBlock)window.FindName("SelectionCountLabel"), language);
             foreach (Button button in visibleActions.Skip(1))
-                AssertNotTrimmed(Descendants(button).OfType<TextBlock>().Single(), language);
+                AssertLibraryCommandContent(window, button, contentBar, language);
             Assert.Equal(barHeight, bar.ActualHeight, 1);
             Assert.Equal(contentBarHeight, contentBar.ActualHeight, 1);
             Assert.Equal(workspaceTop, workspace.TranslatePoint(new Point(), client).Y, 1);
@@ -233,6 +270,10 @@ public sealed partial class SettingsThemePreviewTests
             // Comparing two images shares the selection with PDF export and the earlier lanes.
             GalleryItemViewModel second = vm.Groups.SelectMany(group => group.Items).Skip(1).First();
             vm.Select(second.Id, control: true);
+            Assert.True(vm.CanCompareSelected);
+            Assert.True(GalleryWindow.CompareCommand.CanExecute(null, window));
+            // Programmatic selection has no mouse/key input to schedule WPF's command requery.
+            CommandManager.InvalidateRequerySuggested();
             SettleGalleryLayout(window);
             Assert.True(compare.IsEnabled);
             Assert.True(GalleryWindow.CompareCommand.CanExecute(null, window));
@@ -240,6 +281,7 @@ public sealed partial class SettingsThemePreviewTests
             foreach (Button button in selection.Children.OfType<Button>().Where(button => button.IsVisible))
                 AssertInsideClient(button, client, language);
             vm.Select(second.Id, control: true);
+            CommandManager.InvalidateRequerySuggested();
             SettleGalleryLayout(window);
             Assert.False(compare.IsEnabled);
             Assert.False(GalleryWindow.CompareCommand.CanExecute(null, window));
@@ -438,6 +480,22 @@ public sealed partial class SettingsThemePreviewTests
         Assert.InRange(topLeft.Y, -0.5, client.ActualHeight + 0.5);
         Assert.InRange(bottomRight.X, 0, client.ActualWidth + 0.5);
         Assert.InRange(bottomRight.Y, 0, client.ActualHeight + 0.5);
+    }
+
+    private static void AssertLibraryCommandContent(GalleryWindow window, Button button, FrameworkElement bar, string language)
+    {
+        TextBlock text = Descendants(button).OfType<TextBlock>().Single();
+        Assert.Equal(window.ContentToolbarDensity == GalleryWindow.ToolbarDensity.Labelled, text.IsVisible);
+        if (text.IsVisible) AssertNotTrimmed(text, language);
+        // Copy also owns an initially transparent checkmark for its completion feedback.
+        SymbolIcon icon = Assert.Single(Descendants(button).OfType<SymbolIcon>(), glyph => glyph.IsVisible && glyph.Opacity > 0);
+        Assert.True(icon.ActualWidth >= 16 && icon.ActualHeight >= 16,
+            $"{language}: {button.Name} must keep its visible icon.");
+        Rect iconBounds = new(icon.TranslatePoint(new Point(), button), icon.RenderSize);
+        Assert.True(new Rect(button.RenderSize).Contains(iconBounds), $"{button.Name}: {iconBounds}");
+        AssertInsideClient(icon, bar, language);
+        Assert.False(string.IsNullOrWhiteSpace(AutomationProperties.GetName(button)));
+        Assert.NotNull(button.ToolTip);
     }
 
     private static void AssertSelectionActionsReachable(GalleryWindow window, bool compareVisible)

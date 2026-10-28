@@ -24,11 +24,13 @@ public sealed class GalleryCaptionPreviewTests
     private const string LongCaption = "2026년 3분기 제품 개발 계획과 고객 피드백 검토 — 화면 캡처 라이브러리 사용성 개선 및 최종 검증 결과 보고서 📷 — MyCapture 기능 개선 회의.xlsx";
 
     [Theory]
-    [InlineData(false, 1.0)]
-    [InlineData(true, 1.0)]
-    [InlineData(false, 2.0)]
-    [InlineData(true, 2.0)]
-    public void SourceIconsStayOutsideImagesAndRevealOnlyOnDemand(bool compact, double textScale) => StaTestHost.Run(() =>
+    [InlineData(false, 1.0, false)]
+    [InlineData(true, 1.0, false)]
+    [InlineData(false, 2.0, false)]
+    [InlineData(true, 2.0, false)]
+    [InlineData(false, 2.0, true)]
+    [InlineData(true, 2.0, true)]
+    public void SourceIconsStayOutsideImagesAndRevealOnlyOnDemand(bool compact, double textScale, bool constrainWindow) => StaTestHost.Run(() =>
     {
         using var language = UiText.UseLanguage("ko-KR");
         var window = new Window { Width = compact ? 720 : 1100, Height = 420, ShowInTaskbar = false, ShowActivated = false };
@@ -46,6 +48,7 @@ public sealed class GalleryCaptionPreviewTests
         };
         window.Width = row.Width + 64;
         window.Height = Math.Max(420, minimumTrack + 100);
+        if (constrainWindow) window.MaxWidth = 1024;
         CaptureRecord[] records =
         [
             new() { Title = LongCaption, SourcePageUrl = "https://example.com/design?token=private" },
@@ -66,7 +69,15 @@ public sealed class GalleryCaptionPreviewTests
             tile.SetFolderBadge(("제품 기획 자료", "작업/제품 기획 자료"));
             row.Items.Add(tile);
         }
-        window.Content = row;
+        // This template fixture puts four provenance variants in one row. A hosted desktop can
+        // cap the HWND below that row's requested width; reveal each card in the granted viewport.
+        // The real library instead chooses fewer columns (covered by LibraryColumns).
+        var viewport = new ScrollViewer
+        {
+            Content = row, HorizontalScrollBarVisibility = ScrollBarVisibility.Auto,
+            VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+        };
+        window.Content = viewport;
         try
         {
             window.Show();
@@ -82,6 +93,8 @@ public sealed class GalleryCaptionPreviewTests
             for (int index = 0; index < records.Length; index++)
             {
                 var item = Assert.IsType<ListBoxItem>(row.ItemContainerGenerator.ContainerFromIndex(index));
+                item.BringIntoView();
+                Drain(window);
                 Button source = Assert.Single(Descendants(item).OfType<Button>(), button => button.Name == "SourceBadge");
                 Border preview = Assert.Single(Descendants(item).OfType<Border>(), border => border.Name == "TilePreview");
                 if (index == 3)
@@ -158,6 +171,8 @@ public sealed class GalleryCaptionPreviewTests
             }
             SaveEvidence(window, null, $"gallery-source-{(compact ? "compact" : "full")}-{textScale}.png");
             var first = Assert.IsType<ListBoxItem>(row.ItemContainerGenerator.ContainerFromIndex(0));
+            first.BringIntoView();
+            Drain(window);
             Button firstSource = Assert.Single(Descendants(first).OfType<Button>(), button => button.Name == "SourceBadge");
             RaiseFocusChange(row, firstSource);
             GallerySourceBadge.ShowForFocus(firstSource, true);
@@ -296,6 +311,7 @@ public sealed class GalleryCaptionPreviewTests
         Assert.True(caption.ActualWidth >= minimum - 0.5,
             $"The {subject} has only {caption.ActualWidth:0.#} DIP; needs {minimum:0.#}");
         Rect visible = new(caption.TranslatePoint(new Point(), window), caption.RenderSize);
+        visible.Intersect(new Rect(new Point(), window.RenderSize));
         Border card = Descendants(item).OfType<Border>().Single(part => part.Name == "TileCard");
         visible.Intersect(new Rect(card.TranslatePoint(new Point(), window), card.RenderSize));
         for (DependencyObject? ancestor = caption; ancestor is FrameworkElement element; ancestor = VisualTreeHelper.GetParent(element))
