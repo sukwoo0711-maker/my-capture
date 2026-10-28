@@ -67,7 +67,8 @@ public sealed class FirstRunWelcomeTests
             });
 
             Button[] buttons = Descendants(welcome).OfType<Button>().ToArray();
-            Assert.Equal([welcome.TryNowButton, welcome.SkipButton], buttons);
+            Assert.Equal([welcome.TryNowButton, welcome.SkipButton, welcome.ChangeShortcutButton, welcome.SkipStepButton], buttons);
+            Assert.False(welcome.ConflictShown);
             Assert.Equal("영역 캡처 시작", welcome.TryNowButton.Content);
             Assert.Equal("건너뛰기", welcome.SkipButton.Content);
             Assert.True(welcome.TryNowButton.IsDefault);
@@ -133,7 +134,8 @@ public sealed class FirstRunWelcomeTests
             foreach (string key in paragraphs)
                 Assert.DoesNotContain(Descendants(welcome).OfType<TextBlock>(), text =>
                     text.Text == UiText.Get(key) || AutomationProperties.GetName(text) == UiText.Get(key));
-            Assert.Equal(2, Descendants(welcome).OfType<Button>().Count());
+            Assert.Equal(4, Descendants(welcome).OfType<Button>().Count());
+            Assert.False(welcome.ConflictShown);
         }
         finally { welcome.Close(); }
     });

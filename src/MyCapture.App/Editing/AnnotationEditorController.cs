@@ -65,6 +65,9 @@ internal sealed class AnnotationEditorController
     /// <summary>Raised when the selected item changes, so the style bar can refresh.</summary>
     internal event EventHandler? SelectionChanged;
 
+    /// <summary>A non-degenerate arrow was drawn and committed by a pointer gesture.</summary>
+    internal event Action? UserArrowAdded;
+
     internal AnnotationDocument Document => _document;
 
     internal UndoStack Undo => _undo;
@@ -1254,6 +1257,7 @@ internal sealed class AnnotationEditorController
         // an area with boxes does not have to re-select the tool for every one. The shape
         // is still selected for immediate inspector edits; the next press starts fresh.
         SetSelected(draft);
+        if (draft is PolylineAnnotation) UserArrowAdded?.Invoke();
     }
 
     private void CommitPen()

@@ -6,6 +6,8 @@ namespace MyCapture.App;
 internal sealed class WelcomeOptions
 {
     internal bool Replay { get; init; }
+    internal bool ShowCoreShortcutsConsent { get; init; }
+    internal bool FeaturePractice { get; init; }
     internal bool? StartAtSignIn { get; init; }
     internal bool? UseAccurateOcr { get; init; }
     internal IWelcomeClipboard? Clipboard { get; init; }
@@ -39,4 +41,4 @@ internal sealed class WelcomeClipboard : IWelcomeClipboard
     }
 }
 
-internal enum WelcomeStep { Capture = 1, Pin = 2, Library = 3, Finish = 4 }
+internal enum WelcomeStep { Consent = 0, Capture = 1, Draw = 2, Pin = 3, Resize = 4, Library = 5, Finish = 6 }

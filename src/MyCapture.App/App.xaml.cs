@@ -502,6 +502,7 @@ public partial class App : Application
             recorder.Accept(recorded);
             return;
         }
+        _onboardingWindow?.NotifyHotkeyFired(e.Command);
         switch (e.Command)
         {
             case GlobalHotkeyCommand.ScrollingCapture:
@@ -1833,7 +1834,10 @@ public partial class App : Application
             () => paths,
             _services.GetRequiredService<ILogger<CaptureCommitService>>());
         _commit.PinImage = (image, provenance) =>
-            (_pins ?? throw new InvalidOperationException("Pinning is unavailable.")).PinImage(image, provenance);
+        {
+            var pin = (_pins ?? throw new InvalidOperationException("Pinning is unavailable.")).PinImage(image, provenance);
+            _onboardingWindow?.NotifyEditorPinCreated(pin.PracticeId);
+        };
         _commit.PinFailed = NotifyPinFailed;
         _commit.PersistExportSettings = () => _services.GetRequiredService<SettingsStore>().SaveInBackground(
             _settings!.DeepClone(), "Could not persist image export preferences");
@@ -1981,7 +1985,10 @@ public partial class App : Application
         _log?.LogInformation("Gallery activation requested");
 
         GalleryWindow? window = EnsureGalleryWindow();
-        window?.ShowGallery();
+        if (_onboardingWindow?.CurrentStep == WelcomeStep.Library && _onboardingCaptureId is { } id)
+            window?.OpenCapture(id, edit: false);
+        else window?.ShowGallery();
+        if (window?.IsVisible == true) _onboardingWindow?.NotifyLibraryOpened();
     }
 
     /// <summary>

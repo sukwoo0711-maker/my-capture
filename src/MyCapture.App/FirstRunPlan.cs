@@ -17,6 +17,8 @@ internal enum AfterWelcome
     OpenSettings,
 }
 
+internal enum PracticeCloseRoute { Normal, Ignore, CompleteFirstRunAtExit, ContinueWelcome }
+
 /// <summary>What became of the welcome's start-at-sign-in choice.</summary>
 /// <param name="Enabled">Windows will start MyCapture at sign-in; the setting records exactly this.</param>
 /// <param name="Notice">Why the requested state could not be reached, worded for the user; null when it was.</param>
@@ -32,6 +34,11 @@ internal sealed record StartAtSignInOutcome(bool Enabled, string? Notice);
 /// </summary>
 internal static class FirstRunPlan
 {
+    internal static PracticeCloseRoute AfterPracticeClose(bool firstRun, WelcomeStep step, bool shutdown) =>
+        shutdown ? firstRun && step != WelcomeStep.Consent
+            ? PracticeCloseRoute.CompleteFirstRunAtExit : PracticeCloseRoute.Ignore
+        : firstRun && step == WelcomeStep.Consent ? PracticeCloseRoute.ContinueWelcome : PracticeCloseRoute.Normal;
+
     internal static LaunchPresentation ForLaunch(bool isFirstRun, bool quietLaunch, bool openSettings, bool coreShortcutsAsked = true) => !coreShortcutsAsked
         ? new LaunchPresentation(ShowWelcome: false, OpenLibrary: false, ShowCoreShortcuts: true)
         : isFirstRun

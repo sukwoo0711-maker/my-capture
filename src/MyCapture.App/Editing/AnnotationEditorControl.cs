@@ -227,6 +227,7 @@ internal sealed partial class AnnotationEditorControl : Grid
 
         var undo = new UndoStack();
         _controller = new AnnotationEditorController(document, undo) { TextFitter = TextAnnotationLayout.Measure };
+        _controller.UserArrowAdded += PracticeSignals.NotifyArrowAdded;
         _controller.BaseWidthAtZeroTurns = selectedBitmap.PixelWidth;
         _controller.BaseHeightAtZeroTurns = selectedBitmap.PixelHeight;
         AnnotationDefaults defaults = AnnotationEditorPreferences.Read?.Invoke() ?? new AnnotationDefaults();
@@ -593,6 +594,11 @@ internal sealed partial class AnnotationEditorControl : Grid
     private void BuildShortcutActions()
     {
         foreach (EditorTool tool in Enum.GetValues<EditorTool>()) _shortcutActions[tool.ToString()] = () => SelectTool(tool);
+        _shortcutActions[nameof(EditorTool.Arrow)] = () =>
+        {
+            SelectTool(EditorTool.Arrow);
+            PracticeSignals.NotifyArrowShortcutFired();
+        };
         _shortcutActions["Done"] = () => Commit(EditorCommitAction.Done);
         _shortcutActions["Stamp"] = PlaceStampFromUser;
         // Owner decision (2026-10-12 real-device feedback, restored 2026-10-25 after 4.6.0 split

@@ -502,6 +502,12 @@ internal sealed class PinWindow : Window
     /// <summary>Raised after movement or zoom settles, or opacity or stacking order changes.</summary>
     internal event Action? ViewStateChanged;
 
+    /// <summary>Stable identity of this live pin, independent of its captured image.</summary>
+    internal Guid PracticeId { get; } = Guid.NewGuid();
+
+    /// <summary>An effective zoom change caused by a user gesture or zoom command.</summary>
+    internal event Action<Guid>? UserZoomChanged;
+
     /// <summary>Raised when a source lookup enriches the retained content and its saved session.</summary>
     internal event Action? ContentChanged;
 
@@ -1199,6 +1205,7 @@ internal sealed class PinWindow : Window
 
     private void ResizeToCursor()
     {
+        double oldZoom = _state.Zoom;
         (int x, int y) = _dragInput.CursorPosition;
         DpiScale dpi = VisualTreeHelper.GetDpi(this);
         PinGeometry.Placement placement = PinResize.Calculate(_resizeStartBounds, _resizeStartZoom,
@@ -1207,6 +1214,7 @@ internal sealed class PinWindow : Window
             _state.ImageWidthDip * dpi.DpiScaleX, _state.ImageHeightDip * dpi.DpiScaleY,
             dpi.DpiScaleX, dpi.DpiScaleY);
         ApplyZoom(placement.Zoom, placement.Left, placement.Top, physicalPosition: true);
+        if (Math.Abs(_state.Zoom - oldZoom) >= 1e-9) UserZoomChanged?.Invoke(PracticeId);
     }
 
     protected override void OnMouseLeftButtonUp(MouseButtonEventArgs e)
@@ -1506,6 +1514,7 @@ internal sealed class PinWindow : Window
             Left, Top, oldZoom, newZoom, pointerXDip, pointerYDip);
 
         ApplyZoom(newZoom, newLeft, newTop);
+        UserZoomChanged?.Invoke(PracticeId);
     }
 
     private void ApplyZoom(double zoom, double left, double top, bool physicalPosition = false)
@@ -1540,6 +1549,7 @@ internal sealed class PinWindow : Window
         ApplyPositionKeepingGrabbable(newLeft, newTop);
         BeginLiveZoom();
         ShowFeedback("100%");
+        if (Math.Abs(newZoom - oldZoom) >= 1e-9) UserZoomChanged?.Invoke(PracticeId);
     }
 
     private void BeginLiveZoom()

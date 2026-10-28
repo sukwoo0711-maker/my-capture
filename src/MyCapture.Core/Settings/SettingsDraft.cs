@@ -815,6 +815,7 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
         _preservedFirstCaptureTipShown = s.General.FirstCaptureTipShown;
         _preservedFirstPinTipShown = s.General.FirstPinTipShown;
         _preservedPinSizeTipShown = s.General.PinSizeTipShown;
+        _preservedPracticeRevisionOffered = s.General.PracticeRevisionOffered;
         _preservedSavedLocationTipCount = s.General.SavedLocationTipCount;
         _preservedRecordingBitrateBitsPerSecond = s.Recording.BitrateBitsPerSecond;
         _preservedRecordingCoarseStepSeconds = s.Recording.CoarseStepSeconds;
@@ -833,6 +834,7 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
     {
         AppSettings defaults = NewInstallDefaults.Create();
         defaults.Hotkeys.CoreShortcutsAsked = _preservedCoreShortcutsAsked;
+        defaults.General.PracticeRevisionOffered = _preservedPracticeRevisionOffered;
         ReplaceValues(defaults);
     }
 
@@ -854,6 +856,7 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
         _repeatLastRegionHotkey, _captureWindowHotkey, _captureFullScreenHotkey, _recordRegionHotkey,
         _scrollingCaptureHotkey, _delayedCaptureHotkey, _uploadGitHubImageHotkey, _restoreClosedPinHotkey,
         _captureTextHotkey, _pauseRecordingHotkey, B(_forceCoreShortcuts), B(_preservedCoreShortcutsAsked),
+        Int(_preservedPracticeRevisionOffered),
         _maxItems, _maxGiB, _thumbnailLongEdge, _capturesDirectoryOverride, _imageRetentionHours, _folderFilePrefix,
         B(_useCurrentFolderForNewCaptures), _defaultCaptureFolderId?.ToString() ?? string.Empty,
         _gitHubIssueUrl, _gitHubToken,
@@ -913,6 +916,7 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
                 FirstCaptureTipShown = _preservedFirstCaptureTipShown,
                 FirstPinTipShown = _preservedFirstPinTipShown,
                 PinSizeTipShown = _preservedPinSizeTipShown,
+                PracticeRevisionOffered = _preservedPracticeRevisionOffered,
                 SavedLocationTipCount = _preservedSavedLocationTipCount,
             },
             Capture =
@@ -1526,6 +1530,7 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
     private string _language = string.Empty;
     private bool _preservedIsFirstRun;
     private bool _preservedCoreShortcutsAsked;
+    private int _preservedPracticeRevisionOffered;
     private bool _preservedFirstCaptureTipShown;
     private bool _preservedFirstPinTipShown;
     private bool _preservedPinSizeTipShown;

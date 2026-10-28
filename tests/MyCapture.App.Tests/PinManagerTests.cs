@@ -3,6 +3,7 @@ using System.IO;
 using System.Threading;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
@@ -100,6 +101,34 @@ public sealed class PinManagerTests : KoreanCaptionTest
 
     private static PinManager NewManager() =>
         new(() => new PinSettings(), NullLogger.Instance);
+
+    [Fact]
+    public void UserZoomSignalIdentifiesThePinAndUnsubscribesWhenItCloses() => RunSta(() =>
+    {
+        var manager = new PinManager(() => new PinSettings { ClosedWindowRestoreLimit = 0 }, NullLogger.Instance);
+        var changedPins = new List<Guid>();
+        manager.UserZoomChanged += changedPins.Add;
+        try
+        {
+            PinWindow first = manager.PinImage(SolidImage());
+            PinWindow second = manager.PinImage(SolidImage());
+            Assert.NotEqual(first.PracticeId, second.PracticeId);
+            Assert.Empty(changedPins);
+            second.State.SetZoom(1.5);
+            Assert.Empty(changedPins);
+            second.HandleMouseWheel(new MouseWheelEventArgs(Mouse.PrimaryDevice, 0, 120)
+                { RoutedEvent = Mouse.MouseWheelEvent }, ModifierKeys.None);
+            Assert.Equal(new[] { second.PracticeId }, changedPins);
+            first.HandleMouseWheel(new MouseWheelEventArgs(Mouse.PrimaryDevice, 0, 120)
+                { RoutedEvent = Mouse.MouseWheelEvent }, ModifierKeys.None);
+            Assert.Equal(new[] { second.PracticeId, first.PracticeId }, changedPins);
+            second.Close();
+            var observers = typeof(PinWindow).GetField("UserZoomChanged",
+                System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!.GetValue(second);
+            Assert.Null(observers);
+        }
+        finally { manager.CloseAll(); }
+    });
 
     [Fact]
     public void PinImage_IncrementsCount()

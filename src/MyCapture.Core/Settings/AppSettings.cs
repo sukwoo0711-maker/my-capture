@@ -462,6 +462,9 @@ public sealed class GeneralSettings : IJsonOnDeserializing
     public bool FirstPinTipShown { get; set; }
     public bool PinSizeTipShown { get; set; }
 
+    /// <summary>Newest practice revision already presented on this installation.</summary>
+    public int PracticeRevisionOffered { get; set => field = Math.Max(0, value); }
+
     /// <summary>Shared presentation count for editor and dismissed-card library-location tips.</summary>
     public int SavedLocationTipCount
     {

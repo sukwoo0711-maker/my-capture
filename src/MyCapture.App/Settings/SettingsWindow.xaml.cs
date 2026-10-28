@@ -321,6 +321,7 @@ internal sealed partial class SettingsWindow : Window
             // Exports never carry the GitHub PAT, so the import must not wipe the live one.
             imported.GitHub.Token = current.GitHub.Token;
             imported.Hotkeys.CoreShortcutsAsked = current.Hotkeys.CoreShortcutsAsked;
+            imported.General.PracticeRevisionOffered = current.General.PracticeRevisionOffered;
             // The whole-draft notification schedules validation and saving after replacement completes.
             _legacySettingsDraft = null;
             _legacyProtectedBaseline = null;

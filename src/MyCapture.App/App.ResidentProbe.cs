@@ -84,6 +84,7 @@ public partial class App
         settings.General.IsFirstRun = false;
         // An unanswered core-shortcut question would stay open for the whole run and change idle.
         settings.Hotkeys.CoreShortcutsAsked = true;
+        settings.General.PracticeRevisionOffered = PracticeOffer.CurrentRevision;
         settings.General.FirstCaptureTipShown = true;
         settings.General.AfterCapture = AfterCaptureAction.QuickAccess;
         settings.General.LaunchAtLogin = false;

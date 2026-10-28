@@ -40,6 +40,8 @@ public sealed class PinEdgeResizeTests
     {
         var input = new ResizeInput();
         var pin = NewPin(input);
+        var changedPins = new List<Guid>();
+        pin.UserZoomChanged += changedPins.Add;
         try
         {
             pin.Show();
@@ -51,6 +53,8 @@ public sealed class PinEdgeResizeTests
             input.Delta(pin, x * (before.Right - before.Left), y * (before.Bottom - before.Top));
             pin.UpdateLayout();
             Assert.InRange(pin.State.Zoom, 1.99, 2.01);
+            Assert.NotEmpty(changedPins);
+            Assert.All(changedPins, id => Assert.Equal(pin.PracticeId, id));
             Assert.Equal(pin.State.WidthDip, pin.Width);
             Assert.Equal(pin.State.HeightDip, pin.Height);
             Assert.True(pin.IsLiveZoomingForTest);
@@ -76,6 +80,8 @@ public sealed class PinEdgeResizeTests
     {
         var input = new ResizeInput();
         var pin = NewPin(input);
+        int userZooms = 0;
+        pin.UserZoomChanged += _ => userZooms++;
         try
         {
             pin.Show();
@@ -88,7 +94,37 @@ public sealed class PinEdgeResizeTests
             Assert.Equal(before.Left + 35, after.Left);
             Assert.Equal(before.Top + 24, after.Top);
             Assert.Equal(1, pin.State.Zoom);
+            Assert.Equal(0, userZooms);
             input.Up(pin);
+        }
+        finally { pin.Close(); }
+    });
+
+    [Fact]
+    public void UserZoomSignalIgnoresProgrammaticZoomOpacityAndUnchangedWheel() => StaTestHost.Run(() =>
+    {
+        var pin = NewPin(new ResizeInput());
+        var changedPins = new List<Guid>();
+        pin.UserZoomChanged += changedPins.Add;
+        try
+        {
+            pin.Show();
+            pin.State.SetZoom(1.2);
+            typeof(PinWindow).GetMethod("ApplyZoom", BindingFlags.Instance | BindingFlags.NonPublic)!
+                .Invoke(pin, [1.4, pin.Left, pin.Top, false]);
+            Assert.Empty(changedPins);
+            pin.HandleMouseWheel(new MouseWheelEventArgs(Mouse.PrimaryDevice, 0, 120)
+                { RoutedEvent = Mouse.MouseWheelEvent }, ModifierKeys.Control);
+            pin.HandleMouseWheel(new MouseWheelEventArgs(Mouse.PrimaryDevice, 0, 60)
+                { RoutedEvent = Mouse.MouseWheelEvent }, ModifierKeys.None);
+            Assert.Empty(changedPins);
+            pin.HandleMouseWheel(new MouseWheelEventArgs(Mouse.PrimaryDevice, 0, 120)
+                { RoutedEvent = Mouse.MouseWheelEvent }, ModifierKeys.None);
+            Assert.Equal(new[] { pin.PracticeId }, changedPins);
+            pin.State.SetZoom(double.MaxValue);
+            pin.HandleMouseWheel(new MouseWheelEventArgs(Mouse.PrimaryDevice, 0, 120)
+                { RoutedEvent = Mouse.MouseWheelEvent }, ModifierKeys.None);
+            Assert.Equal(new[] { pin.PracticeId }, changedPins);
         }
         finally { pin.Close(); }
     });

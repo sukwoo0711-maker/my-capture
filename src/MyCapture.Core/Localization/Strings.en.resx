@@ -4724,6 +4724,36 @@ Overwrite these shortcuts? You can change this later in Settings → Shortcuts.<
   <data name="Onboarding.CaptureLabel" xml:space="preserve"><value>Capture</value></data>
   <data name="Onboarding.PinLabel" xml:space="preserve"><value>Pin</value></data>
   <data name="Onboarding.LibraryLabel" xml:space="preserve"><value>Find again</value></data>
+  <data name="Practice.ConsentLabel" xml:space="preserve"><value>Prepare to practise</value></data>
+  <data name="Practice.Start" xml:space="preserve"><value>Start practice</value></data>
+  <data name="Practice.KeepCurrent" xml:space="preserve"><value>Practise with current keys</value></data>
+  <data name="Practice.ProgressName" xml:space="preserve"><value>Step {0} of {1}: {2}</value></data>
+  <data name="Practice.DrawLabel" xml:space="preserve"><value>Draw</value></data>
+  <data name="Practice.ResizeLabel" xml:space="preserve"><value>Resize</value></data>
+  <data name="Practice.DrawTitle" xml:space="preserve"><value>Draw one arrow</value></data>
+  <data name="Practice.DrawInstruction" xml:space="preserve"><value>Open Edit on the capture card, press A, then drag. Arrowheads can be End, Both, or None.</value></data>
+  <data name="Practice.PinTitle" xml:space="preserve"><value>Pin the edited image</value></data>
+  <data name="Practice.PinInstruction" xml:space="preserve"><value>Press {0} in the editor. The image with your arrow opens as a pin.</value></data>
+  <data name="Practice.FeaturePinInstruction" xml:space="preserve"><value>Open the editor, then press {0}. The edited image opens as a pin.</value></data>
+  <data name="Practice.PinInstructionNoKey" xml:space="preserve"><value>Select Pin in the editor. You can also assign a shortcut with Change key.</value></data>
+  <data name="Practice.PinHint" xml:space="preserve"><value>Open the editor, then select Pin or press the pin shortcut.</value></data>
+  <data name="Practice.ResizeTitle" xml:space="preserve"><value>Make the pin bigger</value></data>
+  <data name="Practice.ResizeInstruction" xml:space="preserve"><value>Scroll up over the pin you just created, or drag its border outward.</value></data>
+  <data name="Practice.OpenEditor" xml:space="preserve"><value>Open editor</value></data>
+  <data name="Practice.WaitResize" xml:space="preserve"><value>Waiting for resize</value></data>
+  <data name="Practice.ArrowAdded" xml:space="preserve"><value>Arrow added.</value></data>
+  <data name="Practice.EditorPinned" xml:space="preserve"><value>The edited image is pinned.</value></data>
+  <data name="Practice.Resized" xml:space="preserve"><value>Pin resized.</value></data>
+  <data name="Practice.FinishInstruction" xml:space="preserve"><value>Press F1 on the selection screen to view the shortcut panel.</value></data>
+  <data name="Practice.ChangeKey" xml:space="preserve"><value>Change key</value></data>
+  <data name="Practice.AssignKey" xml:space="preserve"><value>Assign another key</value></data>
+  <data name="Practice.KeyConflict" xml:space="preserve"><value>Another program is using this key.</value></data>
+  <data name="Practice.KeyPressed" xml:space="preserve"><value>Key pressed</value></data>
+  <data name="Practice.ResizeInput" xml:space="preserve"><value>Wheel · border</value></data>
+  <data name="Practice.TrayInput" xml:space="preserve"><value>Notification-area icon</value></data>
+  <data name="Practice.OfferTitle" xml:space="preserve"><value>Practise new features</value></data>
+  <data name="Practice.OfferBody" xml:space="preserve"><value>Would you like to practise the new features for one minute?</value></data>
+  <data name="Practice.OfferAction" xml:space="preserve"><value>Practise</value></data>
   <data name="Onboarding.ProgressName" xml:space="preserve"><value>Step {0} of 3: {1}</value></data>
   <data name="Onboarding.CaptureTitle" xml:space="preserve"><value>Capture part of the screen</value></data>
   <data name="Onboarding.CaptureInstruction" xml:space="preserve"><value>Select the button below, then drag over the table.</value></data>

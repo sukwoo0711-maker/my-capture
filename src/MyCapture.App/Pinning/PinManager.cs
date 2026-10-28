@@ -212,6 +212,9 @@ internal sealed class PinManager
     /// <summary>Raised after a new pin is shown; reopening a closed pin does not raise it.</summary>
     internal event Action? PinCreated;
 
+    /// <summary>Forwards only user zoom changes and identifies the exact live pin.</summary>
+    internal event Action<Guid>? UserZoomChanged;
+
     internal event Action? ClickThroughHintShown;
 
     /// <summary>Raised after pins open, close, or finish changing their saved presentation.</summary>
@@ -612,6 +615,7 @@ internal sealed class PinManager
         pin.CloseStarted += (_, _) => OnPinClosed(pin);
         pin.Closed += (_, _) => _leaving.Remove(pin);
         pin.ViewStateChanged += NotifyOpenPinsChanged;
+        pin.UserZoomChanged += OnUserZoomChanged;
         pin.ClickThroughHintShown += () => ClickThroughHintShown?.Invoke();
         pin.ContentChanged += NotifyOpenPinsChanged;
 
@@ -630,8 +634,22 @@ internal sealed class PinManager
         NotifyOpenPinsChanged();
     }
 
+    private void OnUserZoomChanged(Guid pinId)
+    {
+        if (UserZoomChanged is not { } handlers) return;
+        foreach (Action<Guid> handler in handlers.GetInvocationList())
+        {
+            try { handler(pinId); }
+            catch (Exception error) when (error is not OutOfMemoryException)
+            {
+                _log.LogWarning(error, "Could not notify a user-zoom observer");
+            }
+        }
+    }
+
     private void OnPinClosed(PinWindow pin)
     {
+        pin.UserZoomChanged -= OnUserZoomChanged;
         _pins.Remove(pin);
         _openedOrders.Remove(pin);
         _restoredOpenedOrders.Remove(pin);
