@@ -9,8 +9,13 @@ using System.Windows.Threading;
 using Microsoft.Extensions.Logging.Abstractions;
 using MyCapture.App.Capture;
 using MyCapture.App.Editing;
+using MyCapture.App.Gallery;
+using MyCapture.App.Recording;
 using MyCapture.App.Themes;
+using MyCapture.Core.Annotations;
 using MyCapture.Core.Primitives;
+using MyCapture.Core.Queue;
+using MyCapture.Core.Settings;
 using MyCapture.Platform.Capture;
 using MyCapture.Platform.Display;
 using Xunit;
@@ -43,6 +48,218 @@ public sealed class CaptureOverlayCoordinatorTests
         PumpUntil(() => coordinator.LastTransitionForTest.IsCompleted);
         Assert.False(coordinator.IsActive);
         Assert.Null(coordinator.CurrentEditor);
+    });
+
+    [Theory]
+    [InlineData("video", false, AfterCaptureAction.Editor)]
+    [InlineData("video", false, AfterCaptureAction.ClipboardOnly)]
+    [InlineData("video", true, AfterCaptureAction.Editor)]
+    [InlineData("video", true, AfterCaptureAction.ClipboardOnly)]
+    [InlineData("reedit", false, AfterCaptureAction.Editor)]
+    [InlineData("reedit", false, AfterCaptureAction.ClipboardOnly)]
+    [InlineData("reedit", true, AfterCaptureAction.Editor)]
+    [InlineData("reedit", true, AfterCaptureAction.ClipboardOnly)]
+    [InlineData("library", false, AfterCaptureAction.Editor)]
+    [InlineData("library", false, AfterCaptureAction.ClipboardOnly)]
+    [InlineData("library", true, AfterCaptureAction.Editor)]
+    [InlineData("library", true, AfterCaptureAction.ClipboardOnly)]
+    public void CaptureOverAnotherVisibleWindowUsesSeparateReceiptDelivery(
+        string surface, bool advanced, AfterCaptureAction afterCapture) => RunSta(() =>
+    {
+        using var coordinator = Coordinator(_ => Frame());
+        Window existing = OpenPreservedWindow(surface);
+        int normalWrites = 0, separateWrites = 0, afterCaptureReads = 0, ended = 0, started = 0;
+        var saved = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        CaptureOverlayWindow? selector = null;
+        coordinator.ReadPageUrls = _ => Task.FromResult<IReadOnlyDictionary<IntPtr, BrowserDocumentSnapshot>>(
+            new Dictionary<IntPtr, BrowserDocumentSnapshot>());
+        coordinator.ReadWindowSources = surface == "library"
+            ? _ => Task.FromResult<IReadOnlyDictionary<IntPtr, WindowSourceSnapshot>>(new Dictionary<IntPtr, WindowSourceSnapshot>())
+            : null;
+        coordinator.ApplyCaptureExclusion = window => { selector = (CaptureOverlayWindow)window; return true; };
+        coordinator.SelectionPersistRequested = _ => { normalWrites++; return Task.CompletedTask; };
+        // App wires this path to durable separate persistence, its usual clipboard copy and a
+        // forced quick-access receipt. It must win over both normal after-capture preferences.
+        coordinator.EditorScreenCaptureRequested = _ => { separateWrites++; return saved.Task; };
+        coordinator.OpenEditorAfterCapture = () => { afterCaptureReads++; return afterCapture == AfterCaptureAction.Editor; };
+        coordinator.SessionStarted += () => started++;
+        coordinator.OverlayClosed += (_, _) => ended++;
+        if (surface == "library")
+            coordinator.HasVisiblePreservedWindow = () => existing.IsVisible && existing.WindowState != WindowState.Minimized;
+        else
+            Assert.True(CaptureEditorRegistry.HasVisibleEditor);
+        try
+        {
+            Assert.Null(coordinator.CurrentEditor);
+            if (advanced)
+                Assert.True(coordinator.StartWithSelection(Frame(), new RectD(0, 0, 8, 8), string.Empty,
+                    recordForRepeat: false, preserveEditor: true));
+            else
+            {
+                coordinator.Start(false, false, false, preserveEditor: true);
+                PumpUntil(() => coordinator.LastPreparationForTest.IsCompleted);
+                Assert.True(Assert.IsType<CaptureOverlayView>(selector!.Content).CaptureFullScreen());
+            }
+            Assert.True(existing.IsVisible);
+            Assert.Null(coordinator.CurrentEditor);
+            Assert.True(coordinator.IsActive);
+            Assert.False(coordinator.CanAcceptSelection);
+            Assert.Equal(0, normalWrites);
+            Assert.Equal(1, separateWrites);
+            var nested = Assert.IsType<CaptureOverlayCoordinator>(typeof(CaptureOverlayCoordinator)
+                .GetField("_editorScreenCapture", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!
+                .GetValue(coordinator));
+            Assert.Same(coordinator.ReadPageUrls, nested.ReadPageUrls);
+            Assert.Same(coordinator.ReadWindowSources, nested.ReadWindowSources);
+            Assert.Equal(0, afterCaptureReads);
+            Assert.Equal(0, ended);
+            Assert.True(started > 0);
+
+            // There is no coordinator-owned editor or visible selector during the write.
+            Assert.False(coordinator.StartWithSelection(Frame(), new RectD(0, 0, 8, 8), string.Empty,
+                recordForRepeat: false, preserveEditor: true));
+            Assert.Equal(1, separateWrites);
+            Assert.Equal(0, normalWrites);
+            saved.SetResult();
+            PumpUntil(() => !coordinator.IsActive);
+            Assert.Equal(1, ended);
+            Assert.True(coordinator.CanAcceptSelection);
+            Assert.True(existing.IsVisible);
+            Assert.Null(coordinator.CurrentEditor);
+            Assert.Equal(0, afterCaptureReads);
+            if (existing is VideoEditorWindow video)
+            {
+                Assert.True(video.HasUnsavedEditsForTest);
+                Assert.Equal(1_000, video.TimelineForTest.InMs);
+                Assert.Equal(9_000, video.TimelineForTest.OutMs);
+            }
+            if (existing is GalleryEditorWindow reedit)
+                Assert.True(reedit.Editor.HasUnsavedChanges);
+        }
+        finally
+        {
+            saved.TrySetResult();
+            PumpUntil(() => !coordinator.IsActive);
+            if (existing is AnnotationEditorWindow image) image.ConfirmClose = () => EditorCloseChoice.DontSave;
+            existing.Close();
+        }
+    });
+
+    [Fact]
+    public void HiddenAndMinimizedRegisteredEditorsDoNotForceReceiptButKeepGuardState() => RunSta(() =>
+    {
+        var editor = (GalleryEditorWindow)OpenPreservedWindow("reedit");
+        try
+        {
+            Assert.True(CaptureEditorRegistry.HasVisibleEditor);
+            editor.WindowState = WindowState.Minimized;
+            Assert.False(CaptureEditorRegistry.HasVisibleEditor);
+            Assert.True(CaptureEditorRegistry.WithEditors(new()).EditorOpen);
+            editor.WindowState = WindowState.Normal;
+            editor.Hide();
+            Assert.False(CaptureEditorRegistry.HasVisibleEditor);
+            Assert.True(CaptureEditorRegistry.WithEditors(new()).EditorOpen);
+        }
+        finally { editor.ConfirmClose = () => EditorCloseChoice.DontSave; editor.Close(); }
+        Assert.False(CaptureEditorRegistry.HasVisibleEditor);
+        Assert.False(CaptureEditorRegistry.WithEditors(new()).EditorOpen);
+    });
+
+    private static Window OpenPreservedWindow(string surface)
+    {
+        if (surface == "video")
+        {
+            VideoEditorWindow video = VideoEditorUxTrimTests.OpenReadyEditor(
+                Path.Combine(AppContext.BaseDirectory, "capture-delivery-in-memory"), 10_000, show: true);
+            Assert.True(video.TimelineForTest.SetTrimRange(1_000, 9_000));
+            Assert.True(video.HasUnsavedEditsForTest);
+            video.UnsavedEditsPromptForTest = () => throw new InvalidOperationException("Capture must keep the video editor.");
+            return video;
+        }
+        Window window;
+        if (surface == "reedit")
+        {
+            FrozenFrame frame = Frame();
+            var record = new CaptureRecord { Width = 32, Height = 20 };
+            var context = new GalleryReeditContext(record, frame, new RectD(0, 0, 32, 20), frame.Bitmap,
+                AnnotationDocument.CreateFor(32, 20), new Dictionary<string, BitmapSource>());
+            window = new GalleryEditorWindow(context);
+        }
+        else window = new Window { Width = 300, Height = 200 };
+        window.WindowStartupLocation = WindowStartupLocation.Manual;
+        window.Left = -10_000; window.Top = -10_000;
+        window.ShowActivated = false; window.ShowInTaskbar = false;
+        window.Show();
+        PumpUntil(() => window.IsLoaded);
+        if (window is GalleryEditorWindow image)
+        {
+            Assert.True(EditorKeysTests.Press(image, System.Windows.Input.Key.Q, ime: false));
+            Assert.True(image.Editor.HasUnsavedChanges);
+            image.ConfirmClose = () => throw new InvalidOperationException("Capture must keep the library re-edit window.");
+        }
+        return window;
+    }
+
+    [Fact]
+    public void AdvancedCaptureOverEditorPreservesUnsavedWorkAndUsesSeparatePersistence() => RunSta(() =>
+    {
+        using var coordinator = Coordinator(_ => Frame());
+        int originalWrites = 0, screenshotWrites = 0, closed = 0;
+        var saved = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        coordinator.SelectionPersistRequested = _ => { originalWrites++; return Task.CompletedTask; };
+        coordinator.EditorScreenCaptureRequested = _ => { screenshotWrites++; return saved.Task; };
+        coordinator.OverlayClosed += (_, _) => closed++;
+        Assert.True(coordinator.StartWithSelection(Frame(), new RectD(0, 0, 16, 12)));
+        PumpUntil(() => coordinator.CurrentEditor?.IsLoaded == true);
+        AnnotationEditorControl original = coordinator.CurrentEditor!;
+        var editor = (AnnotationEditorWindow)Window.GetWindow(original);
+        Assert.True(EditorKeysTests.Press(editor, System.Windows.Input.Key.Q, ime: false));
+        Assert.True(original.HasUnsavedChanges);
+        editor.ConfirmClose = () => throw new InvalidOperationException("A new capture must keep the editor.");
+        try
+        {
+            Assert.True(coordinator.CanAcceptSelection);
+            Assert.True(coordinator.StartWithSelection(Frame(), new RectD(0, 0, 8, 8), string.Empty,
+                recordForRepeat: false, preserveEditor: true));
+            Assert.False(coordinator.CanAcceptSelection);
+            Assert.Same(original, coordinator.CurrentEditor);
+            Assert.True(editor.IsVisible);
+            Assert.Equal(1, originalWrites);
+            Assert.Equal(1, screenshotWrites);
+            saved.SetResult();
+            PumpUntil(() => coordinator.LastTransitionForTest.IsCompleted);
+            Assert.True(coordinator.CanAcceptSelection);
+            Assert.Same(original, coordinator.CurrentEditor);
+            Assert.True(original.HasUnsavedChanges);
+            Assert.Equal(0, closed);
+        }
+        finally { saved.TrySetResult(); editor.ConfirmClose = () => EditorCloseChoice.DontSave; }
+    });
+
+    [Fact]
+    public void TextCaptureOverEditorKeepsTextModeAndDoesNotPersistOrReplaceTheEditor() => RunSta(() =>
+    {
+        using var coordinator = Coordinator(_ => Frame());
+        coordinator.ReadPageUrls = _ => Task.FromResult<IReadOnlyDictionary<IntPtr, BrowserDocumentSnapshot>>(new Dictionary<IntPtr, BrowserDocumentSnapshot>());
+        coordinator.ReadWindowSources = null;
+        CaptureOverlayWindow? selector = null;
+        coordinator.ApplyCaptureExclusion = window => { if (window is CaptureOverlayWindow overlay) selector = overlay; return true; };
+        int persisted = 0, recognised = 0;
+        coordinator.EditorScreenCaptureRequested = _ => { persisted++; return Task.CompletedTask; };
+        coordinator.TextCaptureRequested = selection => { Assert.True(selection.TextCapture); recognised++; };
+        Assert.True(coordinator.StartWithSelection(Frame(), new RectD(0, 0, 16, 12)));
+        PumpUntil(() => coordinator.CurrentEditor?.IsLoaded == true);
+        AnnotationEditorControl original = coordinator.CurrentEditor!;
+        var editor = (AnnotationEditorWindow)Window.GetWindow(original);
+        coordinator.Start(false, false, false, textCapture: true, preserveEditor: true);
+        PumpUntil(() => coordinator.LastPreparationForTest.IsCompleted);
+        Assert.True(selector!.TextCaptureMode);
+        Assert.True(Assert.IsType<CaptureOverlayView>(selector.Content).CaptureFullScreen());
+        PumpUntil(() => coordinator.CanRetake);
+        Assert.Equal(1, recognised);
+        Assert.Equal(0, persisted);
+        Assert.Same(original, coordinator.CurrentEditor);
+        Assert.True(editor.IsVisible);
     });
 
     [Theory]

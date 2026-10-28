@@ -88,6 +88,13 @@ internal partial class AnnotationEditorWindow : Window
 
         ContentRendered += OnContentRendered;
         InitializeDraftRecovery();
+        MyCapture.App.Capture.CaptureEditorRegistry.Track(this, static editor => new MyCapture.App.Capture.CaptureGuardState
+        {
+            EditorOpen = true,
+            EditorAsking = editor.IsAskingToClose,
+            EditorSaving = editor.IsSavingToClose || editor.Editor.IsCommitInProgress,
+            EditorBusy = editor.IsCloseInProgress || editor.Editor.IsEditingOperationInProgress || editor.HasOpenDialog,
+        });
     }
 
     private readonly Size _desiredSize;

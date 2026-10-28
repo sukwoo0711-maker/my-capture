@@ -98,6 +98,46 @@ public sealed class CaptureGuardTests
     }
 
     [Theory]
+    [InlineData(GlobalHotkeyCommand.CaptureRegion)]
+    [InlineData(GlobalHotkeyCommand.CaptureText)]
+    [InlineData(GlobalHotkeyCommand.CaptureFullScreen)]
+    [InlineData(GlobalHotkeyCommand.CaptureWindow)]
+    [InlineData(GlobalHotkeyCommand.RepeatLastRegion)]
+    [InlineData(GlobalHotkeyCommand.DelayedCapture)]
+    [InlineData(GlobalHotkeyCommand.ScrollingCapture)]
+    [InlineData(GlobalHotkeyCommand.RecordRegion)]
+    public void EveryCaptureCommand_PreservesIdleEditorsAndBlocksAskingSavingOrBusy(GlobalHotkeyCommand command)
+    {
+        var idle = new CaptureGuardState { EditorOpen = true };
+        Assert.Equal(CaptureBlock.None, CaptureGuard.Find(idle, command));
+        Assert.Equal(CaptureBlock.EditorAsking, CaptureGuard.Find(idle with { EditorAsking = true }, command));
+        Assert.Equal(CaptureBlock.EditorSaving, CaptureGuard.Find(idle with { EditorSaving = true }, command));
+        Assert.Equal(CaptureBlock.EditorBusy, CaptureGuard.Find(idle with { EditorBusy = true }, command));
+        Assert.Equal(CaptureBlock.Selecting, CaptureGuard.Find(idle with { Selecting = true }, command));
+        Assert.Equal(CaptureBlock.RecordingBusy, CaptureGuard.Find(idle with { RecordingActive = true }, command));
+    }
+
+    [Fact]
+    public void RegisteredEditors_ContributeLiveStateAndReleaseItOnClose() => StaTestHost.Run(() =>
+    {
+        var editor = new Window { Width = 100, Height = 80, ShowInTaskbar = false, ShowActivated = false };
+        var editing = new CaptureGuardState { EditorOpen = true };
+        CaptureEditorRegistry.Track(editor, _ => editing);
+        Assert.False(CaptureEditorRegistry.WithEditors(default).EditorOpen);
+        try
+        {
+            editor.Show();
+            PumpUntil(() => editor.IsLoaded);
+            Assert.Equal(CaptureBlock.None, CaptureGuard.Find(CaptureEditorRegistry.WithEditors(default), GlobalHotkeyCommand.RecordRegion));
+            editing = editing with { EditorSaving = true };
+            Assert.Equal(CaptureBlock.EditorSaving, CaptureGuard.Find(CaptureEditorRegistry.WithEditors(default), GlobalHotkeyCommand.RecordRegion));
+            Assert.True(CaptureEditorRegistry.WithEditors(new CaptureGuardState { Selecting = true }).Selecting);
+        }
+        finally { editor.Close(); }
+        Assert.False(CaptureEditorRegistry.WithEditors(default).EditorOpen);
+    });
+
+    [Theory]
     [InlineData(true, false, false, nameof(CaptureBlock.EditorAsking))]
     [InlineData(false, true, false, nameof(CaptureBlock.EditorSaving))]
     [InlineData(false, false, true, nameof(CaptureBlock.EditorBusy))]
@@ -403,19 +443,18 @@ public sealed class CaptureGuardTests
     {
         SynchronizationContext? previous = SynchronizationContext.Current;
         SynchronizationContext.SetSynchronizationContext(new DispatcherSynchronizationContext(Dispatcher.CurrentDispatcher));
-        Window? created = null;
         using var coordinator = new CaptureOverlayCoordinator(
             new ScreenCaptureEngine(NullLogger<ScreenCaptureEngine>.Instance),
             new WindowCandidateService(NullLogger<WindowCandidateService>.Instance),
             NullLogger<CaptureOverlayCoordinator>.Instance, _ => (acquire ?? Frame)(), () => new RectD(0, 0, 32, 20));
         coordinator.RequiresCaptureExclusion = () => true;
-        coordinator.ApplyCaptureExclusion = window => { created ??= window; return true; };
+        coordinator.ApplyCaptureExclusion = _ => true;
         coordinator.CommitRequested = commit;
         try
         {
             Assert.True(coordinator.StartWithSelection(Frame(), new RectD(0, 0, 8, 8)));
             PumpUntil(() => coordinator.LastTransitionForTest.IsCompleted);
-            var editor = Assert.IsType<AnnotationEditorWindow>(created);
+            var editor = Assert.IsType<AnnotationEditorWindow>(Window.GetWindow(coordinator.CurrentEditor!));
             Assert.True(EditorKeysTests.Press(editor, Key.Q, ime: false));
             Assert.True(editor.Editor.HasUnsavedChanges);
             Assert.True(coordinator.CanRetake);

@@ -278,7 +278,7 @@
     <comment>src\MyCapture.App\Editing\AnnotationEditorWindow.cs</comment>
   </data>
   <data name="Text_19FE9B81012C" xml:space="preserve">
-    <value>최소 용량 · 480px / 5fps</value>
+    <value>최소 용량 · 480px</value>
     <comment>src\MyCapture.App\Recording\GifExportQuality.cs</comment>
   </data>
   <data name="Text_1A8F33AE9F00" xml:space="preserve">
@@ -358,7 +358,7 @@
     <comment>src\MyCapture.App\Ocr\OcrResultWindow.cs</comment>
   </data>
   <data name="Text_21281475C002" xml:space="preserve">
-    <value>작게 · 640px / 10fps</value>
+    <value>작게 · 640px</value>
     <comment>src\MyCapture.App\Recording\GifExportQuality.cs</comment>
   </data>
   <data name="Text_21AAACA9783A" xml:space="preserve">
@@ -1865,7 +1865,7 @@
     <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
   </data>
   <data name="Text_A492D3026996" xml:space="preserve">
-    <value>표준 · 960px / 10fps</value>
+    <value>표준 · 960px</value>
     <comment>src\MyCapture.App\Recording\GifExportQuality.cs</comment>
   </data>
   <data name="Text_A4B69FAF0C11" xml:space="preserve">
@@ -3086,7 +3086,7 @@
   <data name="MediaExport_DimensionsKept" xml:space="preserve"><value>해상도와 프레임 속도는 유지합니다. 감소율은 목표이며, 실제 크기는 계산 후 확인하십시오. 화질이 낮아질 수 있습니다.</value></data>
   <data name="MediaExport_GifLimits" xml:space="preserve"><value>GIF는 프레임이 많아질수록 파일이 커집니다. 긴 변과 프레임 속도를 선택하십시오. 소리는 포함되지 않습니다.</value></data>
   <data name="Recording.FinishingBusy" xml:space="preserve"><value>녹화 저장을 마무리하는 중입니다. 잠시 후 다시 시도하십시오.</value></data>
-  <data name="MediaExport_GifPreset" xml:space="preserve"><value>GIF 크기 및 프레임 속도</value></data>
+  <data name="MediaExport_GifPreset" xml:space="preserve"><value>GIF 크기</value></data>
   <data name="MediaExport_Speed" xml:space="preserve"><value>재생 속도</value></data>
   <data name="MediaExport_Calculate" xml:space="preserve"><value>결과 계산</value></data>
   <data name="MediaExport_Close" xml:space="preserve"><value>닫기</value></data>
@@ -3428,6 +3428,7 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="SavedLocation.Title" xml:space="preserve"><value>라이브러리에 저장됨</value></data>
   <data name="SavedLocation.Hotkey" xml:space="preserve"><value>{0} 키로 라이브러리를 엽니다.</value></data>
   <data name="SavedLocation.NotificationArea" xml:space="preserve"><value>알림 영역의 MyCapture 아이콘에서 라이브러리를 엽니다.</value></data>
+  <data name="Capture.CopyFailedRecapture" xml:space="preserve"><value>캡처를 복사하지 못했습니다. 다시 캡처하십시오.</value></data>
   <data name="Shortcuts.ShowHints" xml:space="preserve"><value>버튼에 단축키 표시</value></data>
   <data name="Crop.Ratio" xml:space="preserve"><value>비율</value></data>
   <data name="Crop.Free" xml:space="preserve"><value>자유</value></data>
@@ -3660,7 +3661,7 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="GifPreview_SizeKb" xml:space="preserve"><value>{0:N0}KB</value></data>
   <data name="GifPreview_Target20" xml:space="preserve"><value>20MB · Discord 무료</value></data>
   <data name="GifPreview_TargetNone" xml:space="preserve"><value>제한 없음</value></data>
-  <data name="GifPreview_PresetSharpLowRate" xml:space="preserve"><value>선명하게 · 저속</value></data>
+  <data name="GifPreview_PresetSharpLowRate" xml:space="preserve"><value>선명하게 · 960px</value></data>
   <data name="GifPreview_SamplePosition" xml:space="preserve"><value>샘플 위치</value></data>
   <data name="GifPreview_SamplePositionValue" xml:space="preserve"><value>샘플 위치: {0:N1}초부터</value></data>
   <data name="GifPreview_AdviceCurrentNoLimit" xml:space="preserve"><value>현재 설정이 권장 설정입니다. 크기 제한이 없으며 예상 크기는 {0}입니다.</value></data>
@@ -4614,7 +4615,7 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
     <value>텍스트 색인 중</value>
   </data>
   <data name="CaptureBlocked_Editor" xml:space="preserve"><value>편집 중인 캡처가 있어 새 캡처를 시작하지 않았습니다.</value></data>
-  <data name="CaptureBlocked_EditorRecording" xml:space="preserve"><value>편집 중인 캡처가 있어 녹화를 시작하지 않았습니다.</value></data>
+  <data name="CaptureBlocked_EditorRecording" xml:space="preserve"><value>편집기의 확인이나 작업이 끝난 뒤 녹화를 시작할 수 있습니다.</value></data>
   <data name="CaptureBlocked_EditorSaveFailed" xml:space="preserve"><value>편집 중인 캡처를 저장하지 못해 새 캡처를 시작하지 않았습니다.</value></data>
   <data name="CaptureBlocked_Scrolling" xml:space="preserve"><value>스크롤 캡처가 끝날 때까지 시작할 수 없습니다.</value></data>
   <data name="CaptureBlocked_Updating" xml:space="preserve"><value>업데이트나 가져오기가 끝날 때까지 시작할 수 없습니다.</value></data>
@@ -4932,4 +4933,38 @@ F3  편집·선택 중인 그림 또는 클립보드 핀
   <data name="Shortcuts.Drag" xml:space="preserve">
     <value>마우스로 끌기</value>
   </data>
+  <data name="CaptureEntry.NewCapture" xml:space="preserve"><value>새 캡처</value></data>
+  <data name="CaptureEntry.MoreOptions" xml:space="preserve"><value>캡처 방법 더 보기</value></data>
+  <data name="CaptureEntry.Region" xml:space="preserve"><value>영역 캡처</value></data>
+  <data name="CaptureEntry.FullScreen" xml:space="preserve"><value>전체 화면</value></data>
+  <data name="CaptureEntry.Window" xml:space="preserve"><value>창 캡처</value></data>
+  <data name="CaptureEntry.Recording" xml:space="preserve"><value>화면 녹화</value></data>
+  <data name="MediaInfo.Title" xml:space="preserve"><value>정보</value></data>
+  <data name="MediaInfo.FileSize" xml:space="preserve"><value>파일 크기</value></data>
+  <data name="MediaInfo.CanvasSize" xml:space="preserve"><value>캔버스 크기</value></data>
+  <data name="MediaInfo.Resolution" xml:space="preserve"><value>해상도</value></data>
+  <data name="MediaInfo.Duration" xml:space="preserve"><value>길이</value></data>
+  <data name="MediaInfo.Format" xml:space="preserve"><value>형식</value></data>
+  <data name="MediaInfo.Created" xml:space="preserve"><value>만든 시각</value></data>
+  <data name="MediaInfo.Modified" xml:space="preserve"><value>수정 시각</value></data>
+  <data name="MediaInfo.Location" xml:space="preserve"><value>저장 위치</value></data>
+  <data name="MediaInfo.Count" xml:space="preserve"><value>선택 항목</value></data>
+  <data name="MediaInfo.CountValue" xml:space="preserve"><value>{0}개</value></data>
+  <data name="MediaInfo.TotalSize" xml:space="preserve"><value>전체 크기</value></data>
+  <data name="MediaInfo.ReadableSize" xml:space="preserve"><value>확인된 파일 크기</value></data>
+  <data name="MediaInfo.UnavailableCount" xml:space="preserve"><value>{0}개 파일의 정보를 읽지 못했습니다.</value></data>
+  <data name="MediaInfo.Unavailable" xml:space="preserve"><value>확인 불가</value></data>
+  <data name="MediaInfo.ReadFailed" xml:space="preserve"><value>파일 정보를 읽지 못했습니다.</value></data>
+  <data name="MediaInfo.Unsaved" xml:space="preserve"><value>저장 전</value></data>
+  <data name="MediaInfo.SizeValue" xml:space="preserve"><value>{0} ({1}바이트)</value></data>
+  <data name="GifExport_FrameRate" xml:space="preserve"><value>프레임 속도</value></data>
+  <data name="GifExport_FrameRateCapped" xml:space="preserve"><value>원본이 {0:0.##}fps라 {1:0.##}fps로 만듭니다.</value></data>
+  <data name="GifExport_FrameRateCappedSpeed" xml:space="preserve"><value>재생 속도 때문에 {0:0.##}fps로 만듭니다.</value></data>
+  <data name="GifExport_FrameRatePreset" xml:space="preserve"><value>자동 · {0:0.##}fps</value></data>
+  <data name="GifExport_FrameRateValue" xml:space="preserve"><value>{0:0.##}fps</value></data>
+  <data name="GifExport_TargetSize" xml:space="preserve"><value>{0:0.#}MB</value></data>
+  <data name="GifExport_FrameRateSummary" xml:space="preserve"><value> · {0:0.##}fps</value></data>
+  <data name="GifExport_PreviewMemoryLimit" xml:space="preserve"><value>미리보기 메모리 한도에 도달했습니다. 크기 또는 선택 구간을 줄이십시오.</value></data>
+  <data name="GifExport_SavedSize" xml:space="preserve"><value>저장됨 · {0} · {1}</value></data>
+  <data name="GifExport_SizeEstimate" xml:space="preserve"><value>예상 크기 약 {0} ({3}) · {1:N0}프레임 · 재생 {2:N1}초</value></data>
 </root>

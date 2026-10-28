@@ -157,20 +157,25 @@ public sealed partial class SettingsThemePreviewTests
             Assert.Contains(FlattenFolderNodes(vm.FolderNodes), node => node.FolderId == empty.Id && node.IsSelected);
             SaveLibraryFolderEvidence(window, $"library-folder-destination-{theme}-{language}.png");
 
-            // The header capture button hides the library without closing it: the capture it
-            // starts still belongs to the open folder.
-            // The labelled or, with a selection, the icon form of capture: whichever is visible.
+            // A capture keeps the library visible and still belongs to the open folder.
             Button captureButton = Descendants(window).OfType<Button>()
                 .Single(button => button.IsVisible && AutomationProperties.GetName(button) == UiText.Get("Text_2C20ADDA2018"));
-            bool captureRequested = false;
+            int captureRequests = 0;
             window.CaptureRegionRequested += () =>
             {
-                Assert.False(window.IsVisible);
-                captureRequested = true;
+                Assert.True(window.IsVisible);
+                captureRequests++;
             };
             captureButton.RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent, captureButton));
-            PumpLibraryUntil(window, () => !window.IsVisible, label + ": hidden for capture");
-            PumpLibraryUntil(window, () => captureRequested, label + ": capture requested after hiding");
+            Assert.Equal(1, captureRequests);
+            Assert.Null(captureButton.ContextMenu);
+            var options = (Button)window.FindName("CaptureOptionsButton");
+            options.RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent, options));
+            ContextMenu menu = Assert.IsType<ContextMenu>(options.ContextMenu);
+            Assert.True(menu.IsOpen);
+            Assert.Equal(1, captureRequests);
+            menu.IsOpen = false;
+            Assert.True(window.IsVisible);
             Assert.Equal(empty.Id, queue.BrowsingCaptureFolderId);
             Assert.Equal(empty.Id, AddLibraryFolderCapture(queue, today, "Inside folder", colors[0]).FolderId);
 

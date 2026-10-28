@@ -46,7 +46,7 @@ public sealed class GifPreviewPolicyTests
     }
 
     [Fact]
-    public void SampleDocument_KeepsLayersInsideAndDropsEdgeSliversThatQuantizationWouldReject()
+    public void SampleDocument_KeepsLayersInsideAndDropsEdgeSliversThatQuantizationWouldCoalesce()
     {
         VideoEditDocument document = VideoEditDocument.CreateFor(1920, 1080, 20_000);
         document.TextOverlays.Add(new TimedTextOverlay { Text = "inside", StartMs = 9_000, EndMs = 10_000 });
@@ -64,12 +64,15 @@ public sealed class GifPreviewPolicyTests
         Assert.Equal(4, document.TextOverlays.Count);
         Assert.Equal((0d, 20_000d), (document.TrimInMs, document.TrimOutMs));
         Assert.NotSame(document.TextOverlays[0], sample.TextOverlays[0]);
-        // The naive trim keeps the 4 ms sliver, which the exporter's schedule rejects.
+        // A naive trim keeps the 4 ms sliver; the full exporter safely coalesces it.
         VideoEditDocument naive = document.Clone();
         naive.TrimInMs = window.StartMs;
         naive.TrimOutMs = window.EndMs;
         naive.FrameEditLayers.Clear();
-        Assert.Throws<GifExportLimitException>(() => AnimatedGifExporter.BuildFrameSchedule(naive));
+        GifFrameSchedule schedule = AnimatedGifExporter.BuildFrameSchedule(naive);
+        TimedTextOverlay collapsed = Assert.Single(schedule.QuantizedTextOverlays, overlay => overlay.Text == "sliver");
+        Assert.Equal(collapsed.StartMs, collapsed.EndMs);
+        Assert.All(schedule.SourceTimesMs, source => Assert.False(collapsed.IsActiveAt(source)));
         // The kept 30 ms edge layer quantizes to three centiseconds and schedules normally.
         _ = AnimatedGifExporter.BuildFrameSchedule(sample);
     }
@@ -149,7 +152,10 @@ public sealed class GifPreviewPolicyTests
         Assert.False(scaled.IsExact);
         Assert.Equal((long)Math.Round(4_000_000 * factor), scaled.ExpectedBytes);
         Assert.True(scaled.LowBytes < scaled.ExpectedBytes && scaled.HighBytes > scaled.ExpectedBytes);
-        Assert.Equal(GifSizeEstimate.Exact(4_000_000), GifSizeEstimator.FromOtherPreset(measured, GifExportQuality.Standard, 1920, 1080, 20_000));
+        Assert.False(GifSizeEstimator.FromOtherPreset(measured, GifExportQuality.Standard, 1920, 1080, 20_000).IsExact);
+        GifPresetMeasurement whole = GifPresetMeasurement.Of(GifExportQuality.Standard,
+            new GifSegmentSize(4_000_000, 0, 0, 0), 20_000, 0.5, startsRange: true);
+        Assert.Equal(GifSizeEstimate.Exact(4_000_000), GifSizeEstimator.FromOtherPreset(whole, GifExportQuality.Standard, 1920, 1080, 20_000));
         Assert.Equal(10_000, GifSizeEstimator.EstimateCalculationMs(measured, 20_000));
     }
 
@@ -186,12 +192,15 @@ public sealed class GifPreviewPolicyTests
         GifPresetMeasurement led = centre.Including(new GifSegmentSize(600_000, 300_000, 550_000, 0.5), 1_000, startsRange: true);
         Assert.Equal(600_000 + (long)Math.Round(300_000 / 1_500.0 * 19_000), GifSizeEstimator.FromMeasurement(led, 20_000, tight).ExpectedBytes);
 
-        // Without block sizes it is the plain proportional estimate, and a whole-range
-        // measurement stays exact.
+        // Without block sizes it is the plain proportional estimate. Changing the summed
+        // duration alone does not turn a centre sample into a full-range encode.
         GifPresetMeasurement plain = centre.Including(500_000, 1_000);
         Assert.Empty(plain.Segments);
         Assert.Equal(GifSizeEstimator.FromSample(1_500_000, 4_000, 15_000), GifSizeEstimator.FromMeasurement(plain, 15_000));
-        Assert.Equal(GifSizeEstimate.Exact(1_000_000), GifSizeEstimator.FromMeasurement(centre with { SourceMs = 15_000 }, 15_000));
+        Assert.False(GifSizeEstimator.FromMeasurement(centre with { SourceMs = 15_000 }, 15_000).IsExact);
+        GifPresetMeasurement whole = GifPresetMeasurement.Of(GifExportQuality.Standard,
+            new GifSegmentSize(1_000_000, 400_000, 700_000, 0.5), 15_000, 0, startsRange: true);
+        Assert.Equal(GifSizeEstimate.Exact(1_000_000), GifSizeEstimator.FromMeasurement(whole, 15_000));
     }
 
     [Fact]

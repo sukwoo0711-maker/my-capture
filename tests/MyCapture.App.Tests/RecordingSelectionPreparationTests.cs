@@ -19,6 +19,56 @@ namespace MyCapture.App.Tests;
 public sealed class RecordingSelectionPreparationTests
 {
     [Fact]
+    public void ACompletedVideoEditorKeepsUnsavedEditsWhileAnotherRecordingStarts() => StaTestHost.Run(() =>
+    {
+        string root = OwnedTestDirectory.Create("mc-record-over-editor-");
+        RegionRecordingCoordinator recorder = Create(root);
+        VideoEditorWindow? editor = null;
+        Window? selector = null;
+        int acquired = 0;
+        const System.Reflection.BindingFlags flags = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic;
+        try
+        {
+            editor = VideoEditorUxTrimTests.OpenReadyEditor(root, 10000, show: true);
+            Assert.True(editor.TimelineForTest.SetTrimRange(1000, 9000));
+            Assert.True(editor.HasUnsavedEditsForTest);
+            editor.UnsavedEditsPromptForTest = () => throw new InvalidOperationException("Recording must keep the old editor.");
+            typeof(RegionRecordingCoordinator).GetField("_editor", flags)!.SetValue(recorder, editor);
+            recorder.ExcludeSelectionWindow = window => { selector = window; return true; };
+            recorder.AcquireSelectionFrame = () => { Interlocked.Increment(ref acquired); return Frame(); };
+            Assert.True(recorder.IsActive);
+            Assert.False(recorder.HasRecordingSession);
+
+            // A busy completed editor still blocks the recording command.
+            typeof(VideoEditorWindow).GetField("_operationRunning", flags)!.SetValue(editor, true);
+            recorder.Toggle();
+            Assert.Equal(0, acquired);
+            Assert.False(recorder.HasRecordingSession);
+            typeof(VideoEditorWindow).GetField("_operationRunning", flags)!.SetValue(editor, false);
+
+            recorder.Toggle();
+            PumpUntil(() => recorder.LastSelectionPreparation.IsCompleted);
+            Assert.Equal(1, acquired);
+            Assert.True(recorder.HasRecordingSession);
+            Assert.True(selector!.IsVisible);
+            Assert.True(editor.IsVisible);
+            Assert.True(editor.HasUnsavedEditsForTest);
+            Assert.Equal(1000, editor.TimelineForTest.InMs, precision: 3);
+            Assert.Equal(9000, editor.TimelineForTest.OutMs, precision: 3);
+            editor.Close();
+            Assert.True(recorder.HasRecordingSession);
+            Assert.True(selector.IsVisible);
+        }
+        finally
+        {
+            recorder.CancelRegionSelection();
+            PumpUntil(() => recorder.LastSelectionPreparation.IsCompleted);
+            editor?.Close();
+            OwnedTestDirectory.Delete(root);
+        }
+    });
+
+    [Fact]
     public void LibraryHideConfirmationPrecedesOverlayCreationAndFrozenFrameAcquisition() => StaTestHost.Run(() =>
     {
         string root = OwnedTestDirectory.Create("mc-library-record-selection-");

@@ -34,7 +34,7 @@ internal sealed class GifPreviewPanel : Border
     private readonly Button _play = new();
     private readonly Path _playIcon = new() { Width = 16, Height = 16, Stretch = Stretch.Uniform, Margin = new Thickness(0, 0, 6, 0) };
     private readonly TextBlock _playText = new() { VerticalAlignment = VerticalAlignment.Center };
-    private readonly Slider _position = new() { Minimum = 0, Maximum = 0, SmallChange = 1, LargeChange = 5, IsSnapToTickEnabled = true, TickFrequency = 1, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(10, 0, 10, 0) };
+    private readonly Slider _position = new() { Minimum = 0, Maximum = 0, MinWidth = 64, SmallChange = 1, LargeChange = 5, IsSnapToTickEnabled = true, TickFrequency = 1, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(10, 0, 10, 0) };
     private readonly TextBlock _frameLabel = new() { VerticalAlignment = VerticalAlignment.Center, MinWidth = 64 };
     private readonly ToggleButton _compare = new() { Margin = new Thickness(8, 0, 0, 0) };
     private readonly ToggleButton _actualSize = new() { Margin = new Thickness(6, 0, 0, 0) };
@@ -93,6 +93,8 @@ internal sealed class GifPreviewPanel : Border
         {
             controls.ColumnDefinitions.Add(new ColumnDefinition { Width = width });
         }
+        controls.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        controls.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
 
         _play.SetResourceReference(StyleProperty, "Button.Secondary");
         CommandButtonPresentation.Apply(_play, compact: true);
@@ -124,6 +126,25 @@ internal sealed class GifPreviewPanel : Border
         AddAt(controls, _frameLabel, 2);
         AddAt(controls, _compare, 3);
         AddAt(controls, _actualSize, 4);
+        bool wrappedControls = false;
+        controls.LayoutUpdated += (_, _) =>
+        {
+            if (controls.ActualWidth <= 0) return;
+            double needed = _play.DesiredSize.Width + _frameLabel.DesiredSize.Width
+                + _compare.DesiredSize.Width + _actualSize.DesiredSize.Width
+                + _position.MinWidth + _position.Margin.Left + _position.Margin.Right;
+            bool wrap = needed > controls.ActualWidth + 0.5;
+            if (wrap == wrappedControls) return;
+            wrappedControls = wrap;
+            // Preserve a usable seek bar at narrow widths or enlarged text sizes. The
+            // image viewport stays fixed; comparison controls use a second row only as needed.
+            Grid.SetColumnSpan(_position, wrap ? 3 : 1);
+            Grid.SetColumn(_frameLabel, wrap ? 4 : 2);
+            Grid.SetRow(_compare, wrap ? 1 : 0);
+            Grid.SetRow(_actualSize, wrap ? 1 : 0);
+            _compare.Margin = new Thickness(8, wrap ? 6 : 0, 0, 0);
+            _actualSize.Margin = new Thickness(6, wrap ? 6 : 0, 0, 0);
+        };
         root.Children.Add(controls);
         Child = root;
 
@@ -207,7 +228,15 @@ internal sealed class GifPreviewPanel : Border
     internal void Stop()
     {
         _player.Pause();
-        _originalCancellation?.Cancel();
+        CancellationTokenSource? cancellation = _originalCancellation;
+        if (cancellation is not null)
+        {
+            // Release the pending frame immediately: a decoder can finish cancelling
+            // after comparison is opened again, even for a single-image sample.
+            _originalCancellation = null;
+            _originalFrame = -1;
+            cancellation.Cancel();
+        }
         UpdatePlayButton();
     }
 
@@ -262,16 +291,19 @@ internal sealed class GifPreviewPanel : Border
         try
         {
             BitmapSource original = await _renderOriginal(sample, index, cancellation.Token);
-            if (cancellation.IsCancellationRequested || !ReferenceEquals(sample, _sample) || _originalFrame != index) return;
+            if (cancellation.IsCancellationRequested || !ReferenceEquals(_originalCancellation, cancellation)
+                || !ReferenceEquals(sample, _sample) || _originalFrame != index) return;
             _original.Source = original;
             _originalCaption.Text = UiText.Get("GifPreview_Original");
         }
         catch (OperationCanceledException)
         {
+            if (ReferenceEquals(_originalCancellation, cancellation)) _originalFrame = -1;
         }
         catch (Exception error)
         {
-            if (ReferenceEquals(sample, _sample) && _originalFrame == index)
+            if (ReferenceEquals(_originalCancellation, cancellation)
+                && ReferenceEquals(sample, _sample) && _originalFrame == index)
             {
                 _originalFrame = -1;
                 _originalCaption.Text = UiText.Format("GifPreview_Failed", error.Message);

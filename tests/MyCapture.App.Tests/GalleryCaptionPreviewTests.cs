@@ -546,7 +546,7 @@ public sealed class GalleryCaptionPreviewTests
             var copy = new XElement(entry);
             // Event handlers belong to GalleryWindow and are irrelevant to the unchanged
             // card visuals. Keep all production bindings, templates and sizing intact.
-            foreach (XAttribute handler in copy.DescendantsAndSelf().Attributes().Where(attribute => attribute.Name.LocalName is "Click" or "Checked" or "Unchecked" or "PreviewKeyDown" or "LostKeyboardFocus").ToArray()) handler.Remove();
+            foreach (XAttribute handler in copy.DescendantsAndSelf().Attributes().Where(attribute => attribute.Name.LocalName is "Click" or "Checked" or "Unchecked" or "PreviewKeyDown" or "LostKeyboardFocus" or "ToolTipOpening").ToArray()) handler.Remove();
             // x:Shared is honoured only in compiled dictionaries; XamlReader rejects it.
             copy.Attribute(x + "Shared")?.Remove();
             // Product types used as elements (the card row panel) keep the window's

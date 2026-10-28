@@ -298,12 +298,14 @@ internal sealed partial class AnnotationEditorControl : Grid
 
         Loaded += (_, _) =>
         {
+            StartSourceFileSizeRead();
             ResetMosaicAfterLoad();
             UpdateResponsiveLayout();
             Focus();
         };
         Unloaded += (_, _) =>
         {
+            UnloadSourceFileSize();
             CancelPendingMosaics();
             _autoTrimCts?.Cancel();
             _redactionCts?.Cancel();
@@ -2724,9 +2726,11 @@ internal sealed partial class AnnotationEditorControl : Grid
 
     private UIElement BuildStatusBar()
     {
-        var grid = new Grid { MinHeight = _provenance.HasSource || _pendingProvenance is not null ? 26 : 0 };
-        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto, MaxWidth = 332 });
+        var grid = new Grid { Name = "AnnotationStatusBar" };
+        var sourceColumn = new ColumnDefinition { Width = new GridLength(0), MaxWidth = 332 };
+        grid.ColumnDefinitions.Add(sourceColumn);
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
 
         var source = new Border { Visibility = Visibility.Collapsed, Margin = new Thickness(0, 0, 12, 0) };
@@ -2737,6 +2741,7 @@ internal sealed partial class AnnotationEditorControl : Grid
                 ? MyCapture.App.Sources.SourceChip.CreateButton(provenance, message => SetStatus(message))
                 : null;
             source.Visibility = provenance.HasSource ? Visibility.Visible : Visibility.Collapsed;
+            sourceColumn.Width = provenance.HasSource ? new GridLength(1, GridUnitType.Star) : new GridLength(0);
         }
         ShowSource(_provenance);
         if (_pendingProvenance is { } pending) _ = ShowConfirmedSourceAsync(pending);
@@ -2782,6 +2787,15 @@ internal sealed partial class AnnotationEditorControl : Grid
         dimensions.SetResourceReference(TextBlock.ForegroundProperty, "Text.Secondary");
         Grid.SetColumn(dimensions, 2);
         grid.Children.Add(dimensions);
+
+        // These window-wide commands stay in the existing footer through both edit and crop
+        // mode, leaving the 680-DIP editing toolbar and its shortcut labels intact.
+        var commands = new StackPanel { Name = "AnnotationStatusCommands", Orientation = Orientation.Horizontal,
+            VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(6, 0, 0, 0) };
+        commands.Children.Add(MyCapture.App.Capture.CaptureCommandMenu.CreateSplitButton(compact: true));
+        commands.Children.Add(BuildMediaInfoButton(compact: true));
+        Grid.SetColumn(commands, 3);
+        grid.Children.Add(commands);
 
         return ThemedBorder(new Border
         {
@@ -3140,7 +3154,7 @@ internal sealed partial class AnnotationEditorControl : Grid
         _autoTrimCts?.Cancel();
         _imageStore.PruneToReachable(_controller.Document, _controller.Undo);
         SyncBaseBitmapWithDocument();
-        _dimensionsText.Text = UiText.Format("Text_009548FC2109", _canvasWidth, _canvasHeight);
+        RefreshDimensionsText();
         if (_crop is not null)
         {
             // A rotation (or undo) inside crop mode changes the canvas: start the frame over on

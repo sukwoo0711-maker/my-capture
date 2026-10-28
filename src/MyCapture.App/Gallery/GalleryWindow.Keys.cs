@@ -16,6 +16,7 @@ public enum GalleryKeyCommand
     Navigate,
     Open,
     Preview,
+    Info,
     ToggleSelect,
     Float,
     Keep,
@@ -28,7 +29,7 @@ public enum GalleryKeyCommand
 
 /// <summary>
 /// The library's single-key shortcuts. Every key requires exactly its own modifiers: a plain
-/// letter is a command, and Ctrl+T or Alt+Enter are not.
+/// letter is a command, while Alt+Enter opens information for the selection.
 /// </summary>
 public static class GalleryKeyMap
 {
@@ -36,6 +37,7 @@ public static class GalleryKeyMap
     {
         switch (key)
         {
+            case Key.Enter when modifiers == ModifierKeys.Alt: return GalleryKeyCommand.Info;
             case Key.A when modifiers == ModifierKeys.Control: return GalleryKeyCommand.SelectAll;
             case Key.C when modifiers == ModifierKeys.Control: return GalleryKeyCommand.Copy;
             case Key.Apps when modifiers == ModifierKeys.None:
@@ -146,6 +148,12 @@ internal sealed partial class GalleryWindow
             case GalleryKeyCommand.Preview when tile is not null:
                 ShowPreview(tile);
                 e.Handled = true;
+                break;
+            case GalleryKeyCommand.Info:
+                IReadOnlyList<MyCapture.App.Media.MediaDetailsSource> details = KeyboardDetailsSources(focused);
+                if (details.Count == 0) break;
+                e.Handled = true;
+                await ShowMediaDetailsAsync(details);
                 break;
             case GalleryKeyCommand.ToggleSelect when tile is not null:
                 _viewModel.Select(tile.Id, control, shift);
