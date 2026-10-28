@@ -13,6 +13,7 @@ using MyCapture.App.Gallery;
 using MyCapture.App.Settings;
 using MyCapture.App.Themes;
 using MyCapture.Core.Annotations;
+using MyCapture.Core.Localization;
 using MyCapture.Core.Primitives;
 using MyCapture.Core.Queue;
 using MyCapture.Core.Serialization;
@@ -26,7 +27,7 @@ namespace MyCapture.App.Tests;
 public sealed class ReleaseUxInteractionTests
 {
     [Fact]
-    public void HelpUsesConfiguredKeysAndSearchFiltersAcrossFiveTabsIncludingLibrary()
+    public void HelpUsesConfiguredKeysAndSearchFiltersAcrossSixTabsIncludingLibrary()
     {
         Sta(() =>
         {
@@ -37,19 +38,49 @@ public sealed class ReleaseUxInteractionTests
                 var help = new ShortcutHelpWindow();
                 var root = Assert.IsType<DockPanel>(help.Content);
                 var tabs = root.Children.OfType<TabControl>().Single();
-                Assert.Equal(5, tabs.Items.Count);
+                Assert.Equal(6, tabs.Items.Count);
+                Assert.Equal(new[] { "Help.Capture", "Help.Annotation", "Workspace.Library", "Help.Video", "Text_33EFD44366A7", "Help.QuickAccess" }
+                    .Select(UiText.Get), tabs.Items.OfType<TabItem>().Select(tab => (string)tab.Header));
                 var library = Assert.IsType<StackPanel>(Assert.IsType<ScrollViewer>(((TabItem)tabs.Items[2]).Content).Content);
-                Assert.Equal(new[] { "P", "K", "M", "Del", "Ctrl+Shift+N", "F2" }, library.Children.OfType<UniformGrid>()
-                    .SelectMany(row => row.Children.OfType<WrapPanel>()).Select(System.Windows.Automation.AutomationProperties.GetName));
+                Assert.Equal(ShortcutCatalog.Help(ShortcutScope.Library).Select(row => (UiText.Get(row.Action), row.Keys)),
+                    library.Children.OfType<UniformGrid>().Select(row => (ShortcutHelpRowAssertions.Title(row), ShortcutHelpRowAssertions.Keys(row))));
+                // The catalog renders the tab, so also pin the library keys the help has always listed.
+                string[] libraryKeys = library.Children.OfType<UniformGrid>().Select(ShortcutHelpRowAssertions.Keys).ToArray();
+                foreach (string key in new[] { "P", "K", "M", "Del", "Ctrl+Shift+N", "F2" })
+                    Assert.Contains(libraryKeys, keys => keys.Split(" / ").Contains(key));
                 var capture = Assert.IsType<StackPanel>(Assert.IsType<ScrollViewer>(((TabItem)tabs.Items[0]).Content).Content);
                 Assert.Contains(capture.Children.OfType<UniformGrid>(), row => row.Children.OfType<WrapPanel>().Any(t => System.Windows.Automation.AutomationProperties.GetName(t) == "Ctrl+F8"));
                 // A search shows one list across every tab instead of filtering the selected one.
-                root.Children.OfType<Grid>().Single().Children.OfType<TextBox>().Single().Text = "Ctrl+F8";
+                var search = root.Children.OfType<Grid>().Single().Children.OfType<TextBox>().Single();
+                search.Text = "Ctrl+F8";
                 Assert.Equal(Visibility.Collapsed, tabs.Visibility);
                 var results = Assert.IsType<StackPanel>(root.Children.OfType<ScrollViewer>().Single().Content);
                 Border match = Assert.Single(results.Children.OfType<Border>(), row => row.Visibility == Visibility.Visible);
                 Assert.Contains(FirstRunWelcomeTests.Descendants(match).OfType<WrapPanel>(),
                     keys => System.Windows.Automation.AutomationProperties.GetName(keys) == "Ctrl+F8");
+                foreach (TabItem tab in tabs.Items)
+                {
+                    // Search must include the full category even when a different tab is selected.
+                    tabs.SelectedIndex = (tabs.Items.IndexOf(tab) + 1) % tabs.Items.Count;
+                    string category = (string)tab.Header;
+                    search.Text = category;
+                    Assert.Equal(Visibility.Collapsed, tabs.Visibility);
+                    var panel = Assert.IsType<StackPanel>(Assert.IsType<ScrollViewer>(tab.Content).Content);
+                    UniformGrid[] expectedRows = panel.Children.OfType<UniformGrid>().ToArray();
+                    Assert.NotEmpty(expectedRows);
+                    var visible = results.Children.OfType<Border>().Where(row => row.Visibility == Visibility.Visible)
+                        .Select(row =>
+                        {
+                            TextBlock[] texts = FirstRunWelcomeTests.Descendants(row).OfType<TextBlock>().ToArray();
+                            string keys = System.Windows.Automation.AutomationProperties.GetName(
+                                Assert.Single(FirstRunWelcomeTests.Descendants(row).OfType<WrapPanel>()));
+                            return (Title: texts[0].Text, Category: texts[1].Text, Keys: keys);
+                        }).ToArray();
+                    Assert.Equal(expectedRows.Select(row => (ShortcutHelpRowAssertions.Title(row), ShortcutHelpRowAssertions.Keys(row))),
+                        visible.Where(row => row.Category == category).Select(row => (row.Title, row.Keys)));
+                    Assert.All(visible, row => Assert.True($"{row.Title} {row.Keys} {row.Category}"
+                        .Contains(category, StringComparison.CurrentCultureIgnoreCase)));
+                }
                 help.Close();
                 // The first-run welcome moved to its own window (FirstRunWelcomeTests); it still
                 // shows the configured capture keys.

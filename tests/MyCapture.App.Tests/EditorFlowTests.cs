@@ -252,7 +252,7 @@ public sealed class EditorFlowTests
         host.Window.CommitRequested = result => { actions.Add(result.Action); return Task.FromResult(results.Dequeue()); };
         int completed = 0;
         host.Window.Committed += (_, _) => completed++;
-        Assert.Equal("클립보드에 복사하고 라이브러리에 저장한 뒤 닫기 (Ctrl+C)", Command(host.Editor, "EditorFlowDone").ToolTip);
+        Assert.Equal("클립보드에 복사하고 라이브러리에 저장한 뒤 닫기 (Ctrl+C / Ctrl+Enter)", Command(host.Editor, "EditorFlowDone").ToolTip);
 
         // A failed save keeps the editor open for a retry, as Done does.
         ClickCommand(host.Editor, "EditorFlowDone");
@@ -273,8 +273,8 @@ public sealed class EditorFlowTests
         Button save = Command(host.Editor, "EditorFlowSaveToFile");
         Assert.Equal("파일로 저장", AutomationProperties.GetName(save));
         Assert.Contains(Descendants(save).OfType<TextBlock>(), text => text.Text == "파일로 저장");
-        Assert.Equal("이미지를 파일로 저장 (Ctrl+S)", save.ToolTip);
-        Assert.Equal("클립보드에 복사하고 라이브러리에 저장한 뒤 닫기 (Ctrl+C)", Command(host.Editor, "EditorFlowDone").ToolTip);
+        Assert.Equal("이미지를 파일로 저장", save.ToolTip);
+        Assert.Equal("클립보드에 복사하고 라이브러리에 저장한 뒤 닫기 (Ctrl+C / Ctrl+Enter)", Command(host.Editor, "EditorFlowDone").ToolTip);
         Assert.Equal("복사하고 닫기", AutomationProperties.GetName(Command(host.Editor, "EditorFlowDone")));
 
         // Finishing commands in WinUI order: the action, then the way out.

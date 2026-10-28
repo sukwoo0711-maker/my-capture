@@ -33,6 +33,8 @@
     <EmbeddedResource Include="..\..\src\MyCapture.App\Themes\Controls.xaml" LogicalName="ThemeFixture.Controls.xaml" />
     <EmbeddedResource Include="..\..\src\MyCapture.App\Gallery\GalleryWindow.xaml" LogicalName="GalleryFixture.Window.xaml" />
     <EmbeddedResource Include="..\..\src\MyCapture.App\Settings\SettingsWindow.xaml" LogicalName="SettingsFixture.Window.xaml" />
+    <EmbeddedResource Include="..\..\src\MyCapture.App\ShortcutHelpWindow.cs" LogicalName="ShortcutFixture.Help.cs" />
+    <EmbeddedResource Include="..\..\src\MyCapture.App\TutorialCatalog.cs" LogicalName="ShortcutFixture.Tutorial.cs" />
   </ItemGroup>
 
   <ItemGroup>

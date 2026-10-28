@@ -66,8 +66,8 @@ public sealed class EditorCompactInspectorControlTests
     });
 
     [Theory]
-    [InlineData("ko-KR", "선택 항목 삭제", "선택 항목 삭제 (Delete)")]
-    [InlineData("en-US", "Delete selection", "Delete selection (Delete)")]
+    [InlineData("ko-KR", "선택 항목 삭제", "선택 항목 삭제 (Del)")]
+    [InlineData("en-US", "Delete selection", "Delete selection (Del)")]
     public void TrashIconIsLastAfterADividerAndDeletesTheSelectionWithOneUndo(
         string language, string name, string tooltip) => StaTestHost.Run(() =>
     {
@@ -82,7 +82,7 @@ public sealed class EditorCompactInspectorControlTests
         Assert.Equal("AnnotationDeleteSelection", AutomationProperties.GetAutomationId(delete));
         Assert.Equal(name, AutomationProperties.GetName(delete));
         Assert.Equal(tooltip, delete.ToolTip);
-        Assert.Equal("Delete", AutomationProperties.GetAcceleratorKey(delete));
+        Assert.Equal("Del", AutomationProperties.GetAcceleratorKey(delete));
         Assert.Equal(32, delete.ActualWidth);
         Assert.Equal(32, delete.ActualHeight);
         Assert.True(delete.Focusable && delete.IsTabStop);

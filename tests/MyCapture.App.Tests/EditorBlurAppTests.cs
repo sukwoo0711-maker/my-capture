@@ -255,7 +255,7 @@ public sealed class EditorBlurAppTests : KoreanCaptionTest
         ToggleButton button = Descendants(editor).OfType<ToggleButton>()
             .Single(candidate => AutomationProperties.GetName(candidate) == "블러 도구 (B)");
         Assert.True(button.IsChecked);
-        Assert.Equal("블러로 가릴 영역을 드래그하십시오 (B)", button.ToolTip);
+        Assert.Equal("블러 (B)", button.ToolTip);
         Assert.Equal("B", AutomationProperties.GetAcceleratorKey(button));
 
         Assert.Equal(Visibility.Visible, Field<FrameworkElement>(editor, "_blurSection").Visibility);

@@ -40,8 +40,8 @@ public sealed class Ux402RevisionTests
         else
         {
             var button = command == "Save"
-                ? Descendants(editor).OfType<Button>().Single(candidate => AutomationProperties.GetAcceleratorKey(candidate)
-                    == ShortcutCatalog.Get(ShortcutScope.Annotation, command).Hint)
+                ? Descendants(editor).OfType<Button>().Single(candidate => AutomationProperties.GetAutomationId(candidate)
+                    == "EditorFlowSaveToFile")
                 : Descendants(editor).OfType<Button>().Single(candidate => AutomationProperties.GetAutomationId(candidate) == "EditorFlowDone");
             if (command == "Save")
                 button.ContextMenu!.Items.OfType<MenuItem>().Single(item => item.InputGestureText == "Ctrl+S")
