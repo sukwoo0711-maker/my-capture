@@ -113,8 +113,8 @@ public sealed class EditorCommandBarAdaptiveTests(ITestOutputHelper output)
     [Theory]
     // Measured with the editing commands as borderless tool buttons (no 1-DIP outline), in the
     // shipped UI font (the bundled Pretendard) and its Ideal text formatting.
-    [InlineData("ko-KR", new[] { 793, 752, 705, 640 })]
-    [InlineData("en-US", new[] { 798, 762, 726, 664 })]
+    [InlineData("ko-KR", new[] { 855, 814, 767, 702, 682, 605 })]
+    [InlineData("en-US", new[] { 867, 831, 795, 733, 706, 625 })]
     public void NamesCollapseOneCommandAtATimeInTheirDeclaredOrder(string language, int[] boundaries) => StaTestHost.Run(() =>
     {
         using var culture = UiText.UseLanguage(language);
@@ -133,10 +133,10 @@ public sealed class EditorCommandBarAdaptiveTests(ITestOutputHelper output)
         Button[] ordered = Descendants(bar).OfType<Button>()
             .Where(button => (int)button.GetValue(CommandButtonPresentation.CollapseOrderProperty) > 0)
             .OrderBy(button => (int)button.GetValue(CommandButtonPresentation.CollapseOrderProperty)).ToArray();
-        // Crop, Auto-redact, Copy text. Save and Copy-and-close stay labelled.
+        // Crop, Auto-redact, Copy text, Pin, then Save. Done keeps its name.
         Assert.Equal(["Capture410Crop"], ordered.Take(1).Select(AutomationProperties.GetAutomationId));
-        Assert.Equal("EditorFlowCopyText", AutomationProperties.GetAutomationId(ordered[^1]));
-        Assert.Equal(3, ordered.Length);
+        Assert.Equal("EditorFlowSaveToFile", AutomationProperties.GetAutomationId(ordered[^1]));
+        Assert.Equal(5, ordered.Length);
         // How many names a width hides, or null when the bar cannot hold Alt's widths on one row.
         int? Hidden(int width)
         {

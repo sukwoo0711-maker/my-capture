@@ -4,6 +4,7 @@ using System.Windows.Threading;
 using System.Windows.Media.Imaging;
 using Microsoft.Extensions.Logging;
 using MyCapture.App.Editing;
+using MyCapture.App.Themes;
 using MyCapture.Core.Capture;
 using MyCapture.Core.Pin;
 using MyCapture.Core.Primitives;
@@ -337,16 +338,26 @@ internal sealed class PinManager
         return OpenPin(PinContent.FromImage(image, provenance: provenance), activate: true);
     }
 
+    /// <summary>Places the captured pixels back at their physical screen origin, at 100%.</summary>
+    internal PinWindow PinImageAtRegion(BitmapSource image, CaptureProvenance provenance, RectD region)
+    {
+        MonitorInfo monitor = MonitorWindowPlacement.MonitorFor(
+            ReadRestoreMonitorsForTest?.Invoke() ?? MonitorEnumerator.GetAll(), region)
+            ?? ReadPlacementMonitorForTest?.Invoke() ?? MonitorEnumerator.GetFromCursor();
+        return OpenPin(PinContent.FromImage(image, provenance: provenance), activate: true,
+            screenOrigin: region, captureMonitor: monitor);
+    }
+
     /// <summary>
     /// Opens an already-rendered text or table pin while retaining its exact Unicode source.
     /// </summary>
     internal PinWindow PinRenderedText(BitmapSource image, string originalText, bool isTable) =>
         OpenPin(PinContent.FromText(image, originalText, isTable), activate: true);
 
-    private PinWindow OpenPin(PinContent content, bool activate)
+    private PinWindow OpenPin(PinContent content, bool activate, RectD? screenOrigin = null, MonitorInfo? captureMonitor = null)
     {
         PinSettings settings = _settings();
-        MonitorInfo monitor = ReadPlacementMonitorForTest?.Invoke() ?? MonitorEnumerator.GetFromCursor();
+        MonitorInfo monitor = captureMonitor ?? ReadPlacementMonitorForTest?.Invoke() ?? MonitorEnumerator.GetFromCursor();
         double scale = monitor.ScaleFactor <= 0 ? 1.0 : monitor.ScaleFactor;
 
         // Captured images and pictures published by other applications (including a
@@ -382,19 +393,27 @@ internal sealed class PinManager
         var state = new PinViewState(
             imageWidthDip,
             imageHeightDip,
-            placement.Zoom,
+            screenOrigin.HasValue ? 1 : placement.Zoom,
             settings.InitialOpacity,
             settings.ZoomStep);
 
         var pin = new PinWindow(content, state, placement.Left, placement.Top, _settings);
+        if (screenOrigin is { } origin)
+            pin.PlaceAtPhysicalOnShow(new RectD(origin.Left, origin.Top, image.PixelWidth, image.PixelHeight));
         AttachAndShow(pin, activate);
+        if (screenOrigin.HasValue)
+        {
+            bool placed = pin.ApplyRestorePlacement();
+            pin.CompleteRestorePlacement();
+            if (!placed) throw new InvalidOperationException("Could not place the captured pin at its selected screen position.");
+        }
 
         _log.LogInformation(
             "Pinned {Width}x{Height} {Kind} at zoom {Zoom:0.##} ({Count} pin(s) open)",
             image.PixelWidth,
             image.PixelHeight,
             content.Kind,
-            placement.Zoom,
+            state.Zoom,
             _pins.Count);
 
         if (PinCreated is { } handlers)

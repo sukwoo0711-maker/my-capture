@@ -197,7 +197,11 @@ internal partial class AnnotationEditorWindow : Window
     }
 
     // Only the persistence/export consumer sees timed text; Committed retains the text-free video layer input.
-    internal MyCapture.App.Recording.VideoFrameStillImage? FrameStillImage { get; set; }
+    internal MyCapture.App.Recording.VideoFrameStillImage? FrameStillImage
+    {
+        get;
+        set { field = value; _editor.AllowsPin = value is null; }
+    }
 
     internal event EventHandler<AnnotationEditingResult>? Committed;
 

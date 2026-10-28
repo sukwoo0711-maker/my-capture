@@ -112,7 +112,7 @@ internal sealed partial class AnnotationEditorControl
     {
         FrameworkElement[] groups = [_colorSection, _thicknessSection, _shapeStyleSection, _fillSection,
             _stepSection, _fontFamilySection, _fontSizeSection, _textStyleSection, _blurSection,
-            _mosaicSection, _cropSection, _deleteButton];
+            _mosaicSection, _cropSection, _deleteButton, _arrowHeadSection];
         var sizes = new Size[groups.Length];
         // A validation message is part of the crop configuration even before a value is invalid.
         var errors = _cropInputErrors.Values.Select(error => (error.Message, error.Message.Visibility)).ToArray();
@@ -149,11 +149,11 @@ internal sealed partial class AnnotationEditorControl
         [
             [0, 5, 6, 7, 11], // text
             [0, 6, 11], // number
-            [0, 1, 11], [0, 1, 2, 3, 11], // pen/line/shape
+            [0, 1, 11], [0, 1, 12, 11], [0, 1, 2, 3, 11], // pen/line/shape
             [8, 11], // blur
             [11], // image
         ];
-        int[][] defaults = [[], [0, 1], [0, 1, 2, 3], [0, 5, 6, 7], [0, 4], [8], [9]];
+        int[][] defaults = [[], [0, 1], [0, 1, 12], [0, 1, 2, 3], [0, 5, 6, 7], [0, 4], [8], [9]];
         double maximum = WrappedHeight([10]);
         foreach (int[] configuration in defaults) maximum = Math.Max(maximum, WrappedHeight(configuration));
         foreach (int[] configuration in selections) maximum = Math.Max(maximum, WrappedHeight(configuration));

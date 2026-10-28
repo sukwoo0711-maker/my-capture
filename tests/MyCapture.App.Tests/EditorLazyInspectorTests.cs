@@ -55,7 +55,7 @@ public sealed class EditorLazyInspectorTests
                     TextOptions.SetTextFormattingMode(editor, TextFormattingMode.Display);
                     Layout(editor);
                     Assert.Equal(measurements + 1, editor.InspectorBudgetMeasureCount);
-                    Assert.Equal(11, editor.InspectorCreatedGroupCount);
+                    Assert.Equal(12, editor.InspectorCreatedGroupCount);
                 }
                 finally { window.Close(); }
             });
@@ -104,7 +104,7 @@ public sealed class EditorLazyInspectorTests
             AnnotationEditorControl first = Create(labelStyle);
             AssertDeferred(first);
             Layout(first);
-            Assert.Equal(11, first.InspectorCreatedGroupCount);
+            Assert.Equal(12, first.InspectorCreatedGroupCount);
             Assert.Equal(0, first.InspectorBudgetCacheHitCount);
 
             AnnotationEditorControl second = Create(labelStyle);
@@ -142,6 +142,7 @@ public sealed class EditorLazyInspectorTests
     [InlineData("Mosaic", "mosaic", 1)]
     [InlineData("StepNumber", "color step", 2)]
     [InlineData("Rectangle", "color thickness shapeStyle fill", 4)]
+    [InlineData("Arrow", "color thickness arrowHead", 3)]
     public void FirstToolUseBuildsOnlyItsGroupsAndKeepsFocusAndAutomation(string tool, string groups, int count) =>
         StaTestHost.Run(() => WithSelectDefault(() =>
         {
@@ -181,7 +182,7 @@ public sealed class EditorLazyInspectorTests
     [InlineData("number", "color fontSize", 2)]
     [InlineData("shape", "color thickness shapeStyle fill", 4)]
     [InlineData("pen", "color thickness", 2)]
-    [InlineData("line", "color thickness", 2)]
+    [InlineData("line", "color thickness arrowHead", 3)]
     [InlineData("blur", "blur", 1)]
     [InlineData("image", "", 0)]
     public void FirstSelectionBuildsOnlyApplicableGroups(string kind, string groups, int count) =>
@@ -223,7 +224,7 @@ public sealed class EditorLazyInspectorTests
     private static void AssertGroups(AnnotationEditorControl editor, string groups)
     {
         var expected = groups.Split(' ', StringSplitOptions.RemoveEmptyEntries).ToHashSet();
-        foreach (string group in new[] { "color", "thickness", "shapeStyle", "fill", "step", "fontFamily", "fontSize", "textStyle", "blur", "mosaic", "crop" })
+        foreach (string group in new[] { "color", "thickness", "shapeStyle", "arrowHead", "fill", "step", "fontFamily", "fontSize", "textStyle", "blur", "mosaic", "crop" })
             Assert.Equal(expected.Contains(group) ? Visibility.Visible : Visibility.Collapsed,
                 Field<FrameworkElement>(editor, "_" + group + "Section").Visibility);
     }

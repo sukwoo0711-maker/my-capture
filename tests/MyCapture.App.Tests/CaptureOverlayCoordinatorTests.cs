@@ -19,6 +19,32 @@ namespace MyCapture.App.Tests;
 
 public sealed class CaptureOverlayCoordinatorTests
 {
+    [Fact]
+    public void PinConfirmationPersistsBeforeEndingWithoutOpeningEditor() => RunSta(() =>
+    {
+        using var coordinator = Coordinator(_ => Frame());
+        coordinator.ReadWindowSources = null;
+        coordinator.ReadPageUrls = _ => Task.FromResult<IReadOnlyDictionary<IntPtr, BrowserDocumentSnapshot>>(new Dictionary<IntPtr, BrowserDocumentSnapshot>());
+        CaptureOverlayWindow? selector = null;
+        coordinator.ApplyCaptureExclusion = window => { selector = (CaptureOverlayWindow)window; return true; };
+        var saved = new TaskCompletionSource();
+        CaptureSelectionCompletedEventArgs? selection = null;
+        coordinator.SelectionPersistRequested = value => { selection = value; return saved.Task; };
+        coordinator.OpenEditorAfterCapture = () => throw new InvalidOperationException("Pin must bypass editor presentation.");
+        coordinator.Start(false, false, false);
+        PumpUntil(() => coordinator.LastPreparationForTest.IsCompleted);
+        var view = Assert.IsType<CaptureOverlayView>(selector!.Content);
+        view.HandleKeyDown(WindowDetectOverlayTests.KeyArgs(System.Windows.Input.Key.A), System.Windows.Input.ModifierKeys.Control);
+        coordinator.ConfirmSelectionAsPin();
+        Assert.NotNull(selection);
+        Assert.True(selection.PinRequested);
+        Assert.True(coordinator.IsActive);
+        saved.SetResult();
+        PumpUntil(() => coordinator.LastTransitionForTest.IsCompleted);
+        Assert.False(coordinator.IsActive);
+        Assert.Null(coordinator.CurrentEditor);
+    });
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
@@ -50,6 +76,9 @@ public sealed class CaptureOverlayCoordinatorTests
             Assert.Same(original, coordinator.CurrentEditor);
             Assert.True(window.IsVisible);
             Assert.Equal(CaptureBlock.Selecting, CaptureGuard.Find(coordinator.WithSession(new()), false));
+            coordinator.ConfirmSelectionAsPin();
+            Assert.Equal(0, screenshotWrites);
+            Assert.True(selector!.IsVisible);
             if (cancel) coordinator.Cancel();
             else Assert.True(Assert.IsType<CaptureOverlayView>(selector.Content).CaptureFullScreen());
             PumpUntil(() => coordinator.CanRetake);

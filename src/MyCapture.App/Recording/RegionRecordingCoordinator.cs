@@ -131,6 +131,8 @@ internal sealed class RegionRecordingCoordinator
         || _writeSession is not null
         || _finishing;
 
+    internal bool IsSelecting => _selectionPreparation is not null || _selectionOverlay is not null;
+
     /// <summary>
     /// Entry point for the Ctrl+Shift+X command. If a recording is already running,
     /// the control window stops it (toggle behaviour); otherwise a new region is chosen.

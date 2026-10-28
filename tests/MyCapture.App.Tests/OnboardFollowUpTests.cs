@@ -145,8 +145,8 @@ public sealed class ShortcutHelpFrameKeysTests
 
     /// <summary>The pin tab is named like the settings group, and F3 says what it pins.</summary>
     [Theory]
-    [InlineData("ko-KR", "핀", "클립보드를 핀으로 띄우기")]
-    [InlineData("en-US", "Pins", "Pin clipboard to screen")]
+    [InlineData("ko-KR", "핀", "편집·선택 중인 그림 또는 클립보드 핀")]
+    [InlineData("en-US", "Pins", "Pin the edited image, selection or clipboard")]
     public void PinTabNamesThePinsAndF3SaysItPinsTheClipboard(string language, string tab, string pasteToScreen) =>
         StaTestHost.Run(() =>
         {

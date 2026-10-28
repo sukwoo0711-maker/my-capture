@@ -330,7 +330,7 @@
     <comment>src\MyCapture.Core\Settings\SettingsStore.cs</comment>
   </data>
   <data name="Text_1FBCF51E2FF5" xml:space="preserve">
-    <value>클립보드를 핀으로 띄우기</value>
+    <value>편집·선택 중인 그림 또는 클립보드 핀</value>
     <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
   </data>
   <data name="Text_1FBF8C644D76" xml:space="preserve">
@@ -2064,7 +2064,7 @@
     <comment>src\MyCapture.App\Pinning\PinWindow.cs</comment>
   </data>
   <data name="Text_B53D43740F41" xml:space="preserve">
-    <value>클립보드를 핀으로 띄우기 단축키</value>
+    <value>편집·선택 중인 그림 또는 클립보드 핀 단축키</value>
     <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
   </data>
   <data name="Text_B62C5C65821E" xml:space="preserve">
@@ -3359,6 +3359,10 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="EditorProperty_Hex" xml:space="preserve"><value>HEX 색상</value></data>
   <data name="EditorProperty_FillTransparency" xml:space="preserve"><value>내부 투명도</value></data>
   <data name="EditorProperty_StrokeWidthLabel" xml:space="preserve"><value>선 두께</value></data>
+  <data name="EditorProperty_ArrowHead" xml:space="preserve"><value>머리</value></data>
+  <data name="EditorProperty_ArrowHeadEnd" xml:space="preserve"><value>끝</value></data>
+  <data name="EditorProperty_ArrowHeadBoth" xml:space="preserve"><value>양쪽</value></data>
+  <data name="EditorProperty_ArrowHeadNone" xml:space="preserve"><value>없음</value></data>
   <data name="EditorProperty_StrokeStyleLabel" xml:space="preserve"><value>선 종류</value></data>
   <data name="EditorProperty_SelectedColor" xml:space="preserve"><value>선택됨</value></data>
   <data name="EditorProperty_ThicknessDecrease" xml:space="preserve"><value>선 두께 줄이기</value></data>
@@ -4039,6 +4043,7 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="SettingsUx_AlwaysShowShortcutHints" xml:space="preserve"><value>단축키 항상 표시</value></data>
   <data name="SettingsUx_AlwaysShowShortcutHintsHint" xml:space="preserve"><value>끄면 Alt를 누르는 동안에만 버튼 아래에 단축키가 표시됩니다.</value></data>
   <data name="EditorFlow_CopyHint" xml:space="preserve"><value>클립보드에 복사하고 라이브러리에 저장한 뒤 닫기</value></data>
+  <data name="EditorFlow_PinHint" xml:space="preserve"><value>편집한 그림을 핀으로 띄우고 편집을 마칩니다.</value></data>
   <data name="EditorFlow_CropBarName" xml:space="preserve"><value>자르기 명령</value></data>
   <data name="EditorFlow_SelectionCleared" xml:space="preserve"><value>선택 해제됨</value></data>
   <data name="EditorFlow_Selected" xml:space="preserve"><value>선택: {0}</value></data>
@@ -4262,9 +4267,9 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="Tutorial.video-gif-export.Step1" xml:space="preserve"><value>1. 동영상 편집기에서 내보낼 구간을 확인합니다.</value></data>
   <data name="Tutorial.video-gif-export.Step2" xml:space="preserve"><value>2. G를 눌러 GIF 내보내기를 열고 옵션과 미리보기를 확인합니다.</value></data>
   <data name="Tutorial.video-gif-export.Step3" xml:space="preserve"><value>3. 내보내기를 누르고 저장할 파일 위치를 선택합니다.</value></data>
-  <data name="Tutorial.pin-clipboard.Unassigned" xml:space="preserve"><value>설정의 단축키에서 클립보드를 핀으로 띄우기 단축키를 지정한 뒤 사용합니다.</value></data>
+  <data name="Tutorial.pin-clipboard.Unassigned" xml:space="preserve"><value>설정의 단축키에서 핀 단축키를 지정한 뒤 사용합니다.</value></data>
   <data name="Tutorial.pin-clipboard.Step1" xml:space="preserve"><value>1. 이미지나 텍스트를 클립보드에 복사합니다.</value></data>
-  <data name="Tutorial.pin-clipboard.Step2" xml:space="preserve"><value>2. 지정된 클립보드를 핀으로 띄우기 단축키를 누릅니다.</value></data>
+  <data name="Tutorial.pin-clipboard.Step2" xml:space="preserve"><value>2. 지정된 핀 단축키를 누릅니다. 편집기에서는 편집한 그림을, 캡처 선택 화면에서는 선택 영역을 핀으로 띄웁니다.</value></data>
   <data name="Tutorial.pin-clipboard.Step3" xml:space="preserve"><value>3. 핀을 드래그하여 옮깁니다. Esc를 누르면 핀을 닫습니다.</value></data>
   <data name="Tutorial.pin-hide-all.Unassigned" xml:space="preserve"><value>설정의 단축키에서 핀 모두 숨기기 단축키를 지정한 뒤 사용합니다.</value></data>
   <data name="Tutorial.pin-hide-all.Step1" xml:space="preserve"><value>1. 화면에 핀을 띄웁니다.</value></data>
@@ -4602,7 +4607,7 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
 Ctrl+Shift+C  영역 캡처
 Ctrl+Shift+X  영역 녹화 시작/중지
 Ctrl+Shift+Z  라이브러리 열기
-F3  클립보드를 핀으로 띄우기
+F3  편집·선택 중인 그림 또는 클립보드 핀
 
 다른 프로그램이 같은 키를 쓰고 있어도 MyCapture가 먼저 처리합니다. MyCapture가 실행 중인 동안에는 파일 탐색기의 F3 검색, 편집기의 Ctrl+Shift+Z 다시 실행처럼 다른 프로그램의 같은 단축키가 동작하지 않습니다.
 
