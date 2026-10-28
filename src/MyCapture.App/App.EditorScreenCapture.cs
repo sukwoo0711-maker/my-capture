@@ -3,6 +3,8 @@ using MyCapture.App.Capture;
 using MyCapture.App.Editing;
 using MyCapture.App.Themes;
 using MyCapture.Platform.Shell;
+using MyCapture.Platform.Display;
+using System.Windows.Threading;
 
 namespace MyCapture.App;
 
@@ -31,6 +33,14 @@ public partial class App
                 Core.Capture.CaptureProvenance.FromRecord(pending), CaptureSelectionProvenance.Pending(selection));
             _tray?.SetCaptureCount(_queue?.Count ?? 0);
             _overlay?.CurrentEditor?.ShowCaptureBlocked(UiText.Get(copied ? "Capture.CopiedAndSaved" : "Capture.Saved"));
+            _latestReceipt = record.Id;
+            var region = new Core.Primitives.RectD(selection.Frame.ScreenBounds.Left + selection.BitmapRegion.Left,
+                selection.Frame.ScreenBounds.Top + selection.BitmapRegion.Top,
+                selection.BitmapRegion.Width, selection.BitmapRegion.Height);
+            MonitorInfo monitor = selection.Frame.Monitor ?? MonitorEnumerator.GetFromCursor();
+            // The selector and its persistence transition finish before the receipt is shown.
+            _ = Dispatcher.BeginInvoke(DispatcherPriority.ContextIdle, new Action(() =>
+                ShowQuickAccess(record, selection.SelectedBitmap, region, monitor, copied, preserveEditor: true)));
             _log?.LogInformation("Captured editor screen as a separate library record {RecordId}", record.Id);
         }
         catch (Exception error)

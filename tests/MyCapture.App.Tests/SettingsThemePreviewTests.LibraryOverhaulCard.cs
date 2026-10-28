@@ -159,11 +159,11 @@ public sealed partial class SettingsThemePreviewTests
                     f.ViewModel.ClearSelection();
                     Open(plain);
                     Assert.Equal([T("Gallery.Float"), T("Text_42A667BC71B0"), T("Text_854582314EBD"), "-",
-                        T("Text_1003CFC78E66"), T("LibraryUx_Preview"), "-",
+                        T("Text_1003CFC78E66"), T("LibraryUx_Preview"), T("MediaInfo.Title"), "-",
                         T("LibraryUx_Keep"), T("Library453.Rename"), T("Folder410.MoveCaptures"), T("Library.Tags.Edit"), "-",
                         T("ExportReduction_Title"), "-", T("Text_6139B6C3ED73")], Visible());
                     string[] gestures = menu.Items.OfType<MenuItem>().Where(item => item.Visibility == Visibility.Visible).Select(item => item.InputGestureText).ToArray();
-                    Assert.Equal(["P", "Ctrl+C", "T", "Enter", "Space", "K", "F2", "M", "", "", "Del"], gestures);
+                    Assert.Equal(["P", "Ctrl+C", "T", "Enter", "Space", "", "K", "F2", "M", "", "", "Del"], gestures);
                     // Icons only in the first group and on Delete; the drag guide is gone.
                     Assert.Equal([T("Gallery.Float"), T("Text_42A667BC71B0"), T("Text_854582314EBD"), T("Text_6139B6C3ED73")],
                         menu.Items.OfType<MenuItem>().Where(item => item.Icon is not null).Select(item => (string)item.Header));
@@ -178,7 +178,7 @@ public sealed partial class SettingsThemePreviewTests
 
                     // A video: no media group, GIF export instead of image export, no Enter gesture on edit.
                     Open(video);
-                    Assert.Equal([T("Text_1003CFC78E66"), T("LibraryUx_Preview"), "-",
+                    Assert.Equal([T("Text_1003CFC78E66"), T("LibraryUx_Preview"), T("MediaInfo.Title"), "-",
                         T("LibraryUx_Keep"), T("Library453.Rename"), T("Folder410.MoveCaptures"), T("Library.Tags.Edit"), "-",
                         T("Text_D44617983641"), "-", T("Text_6139B6C3ED73")], Visible());
                     Assert.Equal(string.Empty, menu.Items.OfType<MenuItem>().Single(item => Equals(item.Tag, "Edit")).InputGestureText);
@@ -190,6 +190,13 @@ public sealed partial class SettingsThemePreviewTests
                     Open(plain); Assert.Contains(T("LibraryUx_Keep"), Visible());
                     f.ViewModel.Select(kept.Id); f.ViewModel.Select(plain.Id, control: true);
                     Open(plain); Assert.Contains(T("LibraryUx_Keep"), Visible());        // mixed: keeps the rest
+                    // Information applies to the same whole selection, with file paths prepared lazily.
+                    Assert.Equal(2, window.DetailsSources(plain).Count);
+                    Assert.Single(window.DetailsSources(video));
+                    Assert.All(window.DetailsSources(plain), source => Assert.True(System.IO.Path.IsPathFullyQualified(source.FilePath!)));
+                    Assert.All(window.DetailsSources(plain), source => Assert.True(source.ReadImageDimensions));
+                    Assert.False(Assert.Single(window.DetailsSources(video)).ReadImageDimensions);
+                    Assert.Single(menu.Items.OfType<MenuItem>(), item => Equals(item.Tag, "MediaInfo"));
                     f.ViewModel.ClearSelection(); f.ViewModel.Select(kept.Id);
                     Open(kept); Assert.Contains(T("LibraryUx_Unkeep"), Visible());      // all kept: releases
                     Open(plain); Assert.Contains(T("LibraryUx_Keep"), Visible());       // outside the selection: its own target

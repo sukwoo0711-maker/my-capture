@@ -4587,7 +4587,7 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
     <value>텍스트 색인 중</value>
   </data>
   <data name="CaptureBlocked_Editor" xml:space="preserve"><value>편집 중인 캡처가 있어 새 캡처를 시작하지 않았습니다.</value></data>
-  <data name="CaptureBlocked_EditorRecording" xml:space="preserve"><value>편집 중인 캡처가 있어 녹화를 시작하지 않았습니다.</value></data>
+  <data name="CaptureBlocked_EditorRecording" xml:space="preserve"><value>편집기의 확인이나 작업이 끝난 뒤 녹화를 시작할 수 있습니다.</value></data>
   <data name="CaptureBlocked_EditorSaveFailed" xml:space="preserve"><value>편집 중인 캡처를 저장하지 못해 새 캡처를 시작하지 않았습니다.</value></data>
   <data name="CaptureBlocked_Scrolling" xml:space="preserve"><value>스크롤 캡처가 끝날 때까지 시작할 수 없습니다.</value></data>
   <data name="CaptureBlocked_Updating" xml:space="preserve"><value>업데이트나 가져오기가 끝날 때까지 시작할 수 없습니다.</value></data>
@@ -4875,4 +4875,27 @@ F3  클립보드를 핀으로 띄우기
   <data name="Shortcuts.Drag" xml:space="preserve">
     <value>마우스로 끌기</value>
   </data>
+  <data name="CaptureEntry.NewCapture" xml:space="preserve"><value>새 캡처</value></data>
+  <data name="CaptureEntry.Region" xml:space="preserve"><value>영역 캡처</value></data>
+  <data name="CaptureEntry.FullScreen" xml:space="preserve"><value>전체 화면</value></data>
+  <data name="CaptureEntry.Window" xml:space="preserve"><value>창 캡처</value></data>
+  <data name="CaptureEntry.Recording" xml:space="preserve"><value>화면 녹화</value></data>
+  <data name="MediaInfo.Title" xml:space="preserve"><value>정보</value></data>
+  <data name="MediaInfo.FileSize" xml:space="preserve"><value>파일 크기</value></data>
+  <data name="MediaInfo.CanvasSize" xml:space="preserve"><value>캔버스 크기</value></data>
+  <data name="MediaInfo.Resolution" xml:space="preserve"><value>해상도</value></data>
+  <data name="MediaInfo.Duration" xml:space="preserve"><value>길이</value></data>
+  <data name="MediaInfo.Format" xml:space="preserve"><value>형식</value></data>
+  <data name="MediaInfo.Created" xml:space="preserve"><value>만든 시각</value></data>
+  <data name="MediaInfo.Modified" xml:space="preserve"><value>수정 시각</value></data>
+  <data name="MediaInfo.Location" xml:space="preserve"><value>저장 위치</value></data>
+  <data name="MediaInfo.Count" xml:space="preserve"><value>선택 항목</value></data>
+  <data name="MediaInfo.CountValue" xml:space="preserve"><value>{0}개</value></data>
+  <data name="MediaInfo.TotalSize" xml:space="preserve"><value>전체 크기</value></data>
+  <data name="MediaInfo.ReadableSize" xml:space="preserve"><value>확인된 파일 크기</value></data>
+  <data name="MediaInfo.UnavailableCount" xml:space="preserve"><value>{0}개 파일의 정보를 읽지 못했습니다.</value></data>
+  <data name="MediaInfo.Unavailable" xml:space="preserve"><value>확인 불가</value></data>
+  <data name="MediaInfo.ReadFailed" xml:space="preserve"><value>파일 정보를 읽지 못했습니다.</value></data>
+  <data name="MediaInfo.Unsaved" xml:space="preserve"><value>저장 전</value></data>
+  <data name="MediaInfo.SizeValue" xml:space="preserve"><value>{0} ({1}바이트)</value></data>
 </root>

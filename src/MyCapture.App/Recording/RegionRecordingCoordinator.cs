@@ -131,6 +131,10 @@ internal sealed class RegionRecordingCoordinator
         || _writeSession is not null
         || _finishing;
 
+    /// <summary>A completed editor does not occupy the recorder's start/stop slot.</summary>
+    internal bool HasRecordingSession => _selectionPreparation is not null || _selectionOverlay is not null
+        || _controls is not null || _writeSession is not null || _finishing || _completionInProgress;
+
     /// <summary>
     /// Entry point for the Ctrl+Shift+X command. If a recording is already running,
     /// the control window stops it (toggle behaviour); otherwise a new region is chosen.
@@ -156,13 +160,38 @@ internal sealed class RegionRecordingCoordinator
             return;
         }
 
-        if (IsActive)
+        if (HasRecordingSession)
         {
             ActivateExisting();
             return;
         }
 
+        if (_editor is { IsCaptureBusy: true })
+        {
+            ActivateExisting();
+            return;
+        }
+
+        PreserveCompletedEditor();
+
         StartRegionSelection();
+    }
+
+    /// <summary>The old editor keeps its document and edit lease while a new recording starts.</summary>
+    private void PreserveCompletedEditor()
+    {
+        if (_editor is not { } editor) return;
+        VideoEditSession? session = _videoEditSession;
+        _editor = null;
+        _videoEditSession = null;
+        editor.Closed -= OnEditorClosed;
+        void Release(object? sender, EventArgs e)
+        {
+            editor.Closed -= Release;
+            editor.FrameImageCaptured -= OnFrameImageCaptured;
+            session?.Dispose();
+        }
+        editor.Closed += Release;
     }
 
     /// <summary>

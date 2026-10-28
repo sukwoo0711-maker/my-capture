@@ -102,7 +102,7 @@ internal sealed class OverlayAdvancedCaptureEnvironment : IAdvancedCaptureEnviro
             : entry.ResolveForMonitor(current.Bounds, current.Dpi);
     }
 
-    public bool CanOpenEditor => !_coordinator.IsActive;
+    public bool CanOpenEditor => _coordinator.CanAcceptSelection;
 
     public bool OpenEditor(AdvancedSelection selection) =>
         _coordinator.StartWithSelection(
@@ -112,7 +112,8 @@ internal sealed class OverlayAdvancedCaptureEnvironment : IAdvancedCaptureEnviro
             selection.RecordForRepeat,
             selection.SourcePageUrl,
             selection.SourceDetails,
-            selection.PendingSource);
+            selection.PendingSource,
+            preserveEditor: true);
 
     private static bool Contains(RectD outer, RectD inner) =>
         inner.Left >= outer.Left

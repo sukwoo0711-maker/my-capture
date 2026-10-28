@@ -230,6 +230,11 @@ internal sealed partial class VideoEditorWindow : Window
 
         WorkspaceTheme.Attach(this, WorkspaceRole.VideoEditor);
         StandardWindowTheme.Apply(this);
+        MyCapture.App.Capture.CaptureEditorRegistry.Track(this, static editor => new MyCapture.App.Capture.CaptureGuardState
+        {
+            EditorOpen = true,
+            EditorBusy = editor.IsCaptureBusy,
+        });
 
         // The title names the task first: this window edits a recorded video, not an image.
         Title = UiText.Get("VideoEditorUx_WindowTitle");
@@ -693,12 +698,23 @@ internal sealed partial class VideoEditorWindow : Window
         return root;
     }
 
+    internal bool IsCaptureBusy => _operationRunning || _extractingFrame || _closing || _closeRequested || !WindowForeground.IsEnabled(this);
+
     private Grid BuildCommandBar()
     {
         var bar = new Grid { Name = "VideoEditorCommandBar", Margin = new Thickness(0, 0, 0, 6) };
         AutomationProperties.SetName(bar, UiText.Get("VideoEditorUx_CommandBarName"));
         _identityDetails = new TextBlock { FontSize = 12 };
         var editing = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
+        editing.Children.Add(MyCapture.App.Capture.CaptureCommandMenu.CreateButton());
+        Button mediaInfo = MediaExportVisuals.Button(this, UiText.Get("MediaInfo.Title"));
+        mediaInfo.Name = "MediaInfo";
+        CommandButtonPresentation.Apply(mediaInfo);
+        mediaInfo.ToolTip = UiText.Get("MediaInfo.Title");
+        AutomationProperties.SetName(mediaInfo, UiText.Get("MediaInfo.Title"));
+        mediaInfo.Click += async (_, _) => await MyCapture.App.Media.MediaDetailsWindow.ShowAsync(this,
+            [new(_recording.OutputPath, _recording.Width, _recording.Height, _durationMs > 0 ? _durationMs : _recording.DurationMs)]);
+        editing.Children.Add(mediaInfo);
         _undoButton = MakeTransportIcon("Icon.Undo", UiText.Get("Text_CE706412FA75"), "Button.Ghost", () => RestoreEdit(false));
         _redoButton = MakeTransportIcon("Icon.Redo", UiText.Get("Text_078C44D5A66E"), "Button.Ghost", () => RestoreEdit(true));
         editing.Children.Add(_undoButton);

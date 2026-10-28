@@ -111,6 +111,68 @@ public sealed class EditorCommandBarAdaptiveTests(ITestOutputHelper output)
     });
 
     [Theory]
+    [InlineData("ko-KR", false)]
+    [InlineData("en-US", false)]
+    [InlineData("ko-KR", true)]
+    [InlineData("en-US", true)]
+    public void FooterCaptureAndInfoRemainLabelledAtMinimumWidthInBothModes(string language, bool withSource) => StaTestHost.Run(() =>
+    {
+        using var culture = UiText.UseLanguage(language);
+        using var motion = new ShortcutMotionTestScope();
+        using var preference = new HintPreference(() => false);
+        var bitmap = Solid(640, 360, 0x30);
+        var region = new MyCapture.Core.Primitives.RectD(0, 0, bitmap.PixelWidth, bitmap.PixelHeight);
+        var provenance = withSource
+            ? MyCapture.Core.Capture.CaptureProvenance.Create(documentPath: @"C:\Documents\A long document title that must share space with feedback and capture commands.pdf")
+            : MyCapture.Core.Capture.CaptureProvenance.None;
+        var window = new AnnotationEditorWindow(new MyCapture.Platform.Capture.FrozenFrame(bitmap, region, null, 0), region, bitmap,
+            provenance: provenance)
+        {
+            WindowStartupLocation = WindowStartupLocation.Manual,
+            Left = -4000, Top = -4000, Width = 680, Height = 640,
+            ShowActivated = false, ShowInTaskbar = false,
+        };
+        try
+        {
+            UseShippedTheme(window);
+            window.Show();
+            AnnotationEditorControl editor = window.Editor;
+            editor.ShowCaptureBlocked(new string('W', 120));
+            Grid footer = Descendants(editor).OfType<Grid>().Single(grid => grid.Name == "AnnotationStatusBar");
+            Button capture = Descendants(footer).OfType<Button>().Single(button => button.Name == "NewCapture");
+            Button info = Descendants(footer).OfType<Button>().Single(button => button.Name == "MediaInfo");
+            foreach (bool crop in new[] { false, true })
+            {
+                if (crop) Assert.True(editor.HandleShortcut(System.Windows.Input.Key.X, System.Windows.Input.ModifierKeys.None));
+                foreach (bool reveal in new[] { false, true, false })
+                {
+                    ShortcutPresentation.SetAltRevealed(window, reveal);
+                    window.Dispatcher.Invoke(System.Windows.Threading.DispatcherPriority.ApplicationIdle, new Action(window.UpdateLayout));
+                    foreach ((Button button, string key) in new[] { (capture, "CaptureEntry.NewCapture"), (info, "MediaInfo.Title") })
+                    {
+                        Assert.True(button.IsVisible && button.IsEnabled && button.Focusable && button.IsTabStop);
+                        Assert.Equal(UiText.Get(key), AutomationProperties.GetName(button));
+                        Assert.Contains(Descendants(button).OfType<TextBlock>(), text => text.IsVisible && text.Text == UiText.Get(key));
+                        Rect bounds = button.TransformToAncestor(editor).TransformBounds(new Rect(button.RenderSize));
+                        Assert.True(bounds.Left >= 0 && bounds.Top >= 0 && bounds.Right <= editor.ActualWidth + .5
+                            && bounds.Bottom <= editor.ActualHeight + .5, $"{language}/{crop}/{withSource}: {button.Name} {bounds}");
+                    }
+                    Rect[] cells = footer.Children.OfType<FrameworkElement>().Where(child => child.IsVisible && child.ActualWidth > 0)
+                        .Select(child => child.TransformToAncestor(footer).TransformBounds(new Rect(child.RenderSize))).ToArray();
+                    for (int first = 0; first < cells.Length; first++)
+                    {
+                        Assert.True(cells[first].Left >= 0 && cells[first].Right <= footer.ActualWidth + .5);
+                        for (int second = first + 1; second < cells.Length; second++)
+                            Assert.False(cells[first].IntersectsWith(cells[second]), $"Footer cells overlap: {cells[first]} / {cells[second]}");
+                    }
+                    Assert.Equal(new string('W', 120), editor.StatusText);
+                }
+            }
+        }
+        finally { window.Close(); }
+    });
+
+    [Theory]
     // Measured with the editing commands as borderless tool buttons (no 1-DIP outline), in the
     // shipped UI font (the bundled Pretendard) and its Ideal text formatting.
     [InlineData("ko-KR", new[] { 793, 752, 705, 640 })]

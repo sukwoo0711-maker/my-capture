@@ -402,6 +402,7 @@
                                      PreviewKeyDown="OnCaptureRenameKeyDown" LostKeyboardFocus="OnCaptureRenameLostFocus" />
                         </Grid>
                         <TextBlock x:Name="TileTime" Grid.Column="2" Text="{Binding TimeCaption}" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,0,2"
+                                   ToolTip="{loc:Text MediaInfo.Title}" ToolTipOpening="OnMediaDetailsToolTipOpening"
                                    FontSize="{DynamicResource FontSize.Caption}" Foreground="{DynamicResource Text.Secondary}" />
                         <Button x:Name="SourceBadge" Grid.Row="1" Style="{StaticResource Gallery.SourceBadge}"
                                 gallery:GallerySourceBadge.Provenance="{Binding SourceProvenance}"
@@ -437,7 +438,7 @@
                             <TextBlock x:Name="TileMetadataText" Grid.Column="1" Text="{Binding MetadataCaption}"
                                        FontSize="{DynamicResource FontSize.Caption}" VerticalAlignment="Center"
                                        Foreground="{DynamicResource Text.Secondary}" TextTrimming="CharacterEllipsis"
-                                       ToolTip="{Binding MetadataCaption}"
+                                       ToolTip="{Binding MetadataCaption}" ToolTipOpening="OnMediaDetailsToolTipOpening"
                                        Visibility="{Binding MetadataCaption, Converter={StaticResource Card.HasText}}" />
                         </Grid>
                         <StackPanel Grid.Row="1" Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
@@ -1317,12 +1318,12 @@
                     <StackPanel x:Name="CaptureCommands" Orientation="Horizontal">
                         <Button x:Name="CaptureRegionButton" Style="{StaticResource Button.Primary}" Margin="3,0"
                                 VerticalAlignment="Center"
-                                AutomationProperties.Name="{loc:Text Text_2C20ADDA2018}"
-                                Click="OnCaptureRegionClick">
+                                AutomationProperties.Name="{loc:Text CaptureEntry.NewCapture}"
+                                Click="OnNewCaptureClick">
                             <StackPanel Orientation="Horizontal">
                                 <themes:SymbolIcon Size="16" Data="{StaticResource Icon.Capture}"
                                       Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" Fill="Transparent" />
-                                <TextBlock Text="{loc:Text Text_2C20ADDA2018}" Margin="{DynamicResource CommandButton.IconLabelGap}" VerticalAlignment="Center" />
+                                <TextBlock Text="{loc:Text CaptureEntry.NewCapture}" Margin="{DynamicResource CommandButton.IconLabelGap}" VerticalAlignment="Center" />
                             </StackPanel>
                         </Button>
                         <Button x:Name="RecordRegionButton" Style="{StaticResource LibraryUx.CommandButton}"

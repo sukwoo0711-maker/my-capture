@@ -19,6 +19,68 @@ namespace MyCapture.App.Tests;
 
 public sealed class CaptureOverlayCoordinatorTests
 {
+    [Fact]
+    public void AdvancedCaptureOverEditorPreservesUnsavedWorkAndUsesSeparatePersistence() => RunSta(() =>
+    {
+        using var coordinator = Coordinator(_ => Frame());
+        int originalWrites = 0, screenshotWrites = 0, closed = 0;
+        var saved = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        coordinator.SelectionPersistRequested = _ => { originalWrites++; return Task.CompletedTask; };
+        coordinator.EditorScreenCaptureRequested = _ => { screenshotWrites++; return saved.Task; };
+        coordinator.OverlayClosed += (_, _) => closed++;
+        Assert.True(coordinator.StartWithSelection(Frame(), new RectD(0, 0, 16, 12)));
+        PumpUntil(() => coordinator.CurrentEditor?.IsLoaded == true);
+        AnnotationEditorControl original = coordinator.CurrentEditor!;
+        var editor = (AnnotationEditorWindow)Window.GetWindow(original);
+        Assert.True(EditorKeysTests.Press(editor, System.Windows.Input.Key.Q, ime: false));
+        Assert.True(original.HasUnsavedChanges);
+        editor.ConfirmClose = () => throw new InvalidOperationException("A new capture must keep the editor.");
+        try
+        {
+            Assert.True(coordinator.CanAcceptSelection);
+            Assert.True(coordinator.StartWithSelection(Frame(), new RectD(0, 0, 8, 8), string.Empty,
+                recordForRepeat: false, preserveEditor: true));
+            Assert.False(coordinator.CanAcceptSelection);
+            Assert.Same(original, coordinator.CurrentEditor);
+            Assert.True(editor.IsVisible);
+            Assert.Equal(1, originalWrites);
+            Assert.Equal(1, screenshotWrites);
+            saved.SetResult();
+            PumpUntil(() => coordinator.LastTransitionForTest.IsCompleted);
+            Assert.True(coordinator.CanAcceptSelection);
+            Assert.Same(original, coordinator.CurrentEditor);
+            Assert.True(original.HasUnsavedChanges);
+            Assert.Equal(0, closed);
+        }
+        finally { saved.TrySetResult(); editor.ConfirmClose = () => EditorCloseChoice.DontSave; }
+    });
+
+    [Fact]
+    public void TextCaptureOverEditorKeepsTextModeAndDoesNotPersistOrReplaceTheEditor() => RunSta(() =>
+    {
+        using var coordinator = Coordinator(_ => Frame());
+        coordinator.ReadPageUrls = _ => Task.FromResult<IReadOnlyDictionary<IntPtr, BrowserDocumentSnapshot>>(new Dictionary<IntPtr, BrowserDocumentSnapshot>());
+        coordinator.ReadWindowSources = null;
+        CaptureOverlayWindow? selector = null;
+        coordinator.ApplyCaptureExclusion = window => { if (window is CaptureOverlayWindow overlay) selector = overlay; return true; };
+        int persisted = 0, recognised = 0;
+        coordinator.EditorScreenCaptureRequested = _ => { persisted++; return Task.CompletedTask; };
+        coordinator.TextCaptureRequested = selection => { Assert.True(selection.TextCapture); recognised++; };
+        Assert.True(coordinator.StartWithSelection(Frame(), new RectD(0, 0, 16, 12)));
+        PumpUntil(() => coordinator.CurrentEditor?.IsLoaded == true);
+        AnnotationEditorControl original = coordinator.CurrentEditor!;
+        var editor = (AnnotationEditorWindow)Window.GetWindow(original);
+        coordinator.Start(false, false, false, textCapture: true, preserveEditor: true);
+        PumpUntil(() => coordinator.LastPreparationForTest.IsCompleted);
+        Assert.True(selector!.TextCaptureMode);
+        Assert.True(Assert.IsType<CaptureOverlayView>(selector.Content).CaptureFullScreen());
+        PumpUntil(() => coordinator.CanRetake);
+        Assert.Equal(1, recognised);
+        Assert.Equal(0, persisted);
+        Assert.Same(original, coordinator.CurrentEditor);
+        Assert.True(editor.IsVisible);
+    });
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]

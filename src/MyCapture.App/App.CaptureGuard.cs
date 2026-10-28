@@ -27,17 +27,17 @@ public partial class App
             CaptureStarting = _preparingAdvancedCapture,
             Countdown = _activeCountdown is not null,
             ScrollingCapture = _scrollCancellation is not null,
-            RecordingActive = _recorder?.IsActive == true,
+            RecordingActive = _recorder?.HasRecordingSession == true,
             RecordingCanCaptureStill = _recorder?.CanCaptureStill == true,
         };
-        return _overlay?.WithSession(state) ?? state;
+        return CaptureEditorRegistry.WithEditors(_overlay?.WithSession(state) ?? state);
     }
 
     /// <summary>
     /// Clears the receipt card and shell surfaces a new capture would photograph, then returns the
     /// first blocker. Nothing is cleared while the app is updating or exiting.
     /// </summary>
-    private CaptureBlock CheckStillCapture(bool allowRetake)
+    private CaptureBlock CheckStillCapture(GlobalHotkeyCommand command)
     {
         CaptureGuardState state = ReadCaptureGuardState();
         if (!state.AppUpdating && !state.AppExiting)
@@ -46,19 +46,19 @@ public partial class App
             _shellPresenter?.DismissForCapture();
         }
 
-        return CaptureGuard.Find(state, allowRetake);
+        return CaptureGuard.Find(state, command);
     }
 
     /// <summary>
     /// True when a still capture may start; otherwise the user is shown why it did not. A capture
     /// editor whose save finishes out of sight is waited for first: the user already sees it closed.
     /// </summary>
-    private async Task<bool> GuardStillCaptureAsync(string mode)
+    private async Task<bool> GuardStillCaptureAsync(GlobalHotkeyCommand command)
     {
         await WaitForEditorFinishedAsync();
-        CaptureBlock block = CheckStillCapture(allowRetake: false);
+        CaptureBlock block = CheckStillCapture(command);
         if (block == CaptureBlock.None) return true;
-        ReportCaptureBlock(block, mode);
+        ReportCaptureBlock(block, CaptureCommandTitle(command) ?? "MyCapture");
         return false;
     }
 
@@ -67,22 +67,6 @@ public partial class App
     /// finishes; then once the editor has closed, or has come back because the save failed.
     /// </summary>
     private Task WaitForEditorFinishedAsync() => _overlay?.WaitForEditorFinishedAsync() ?? Task.CompletedTask;
-
-    /// <summary>
-    /// Text capture can replace an idle editor; region capture can preserve it for a screen capture.
-    /// True when the capture may start; otherwise the user is shown why it did not.
-    /// </summary>
-    private async Task<bool> PrepareRetakeAsync(string mode, bool preserveEditor = false)
-    {
-        if (_overlay is not { } overlay) return false;
-        await WaitForEditorFinishedAsync();
-        CaptureBlock block = preserveEditor
-            ? CheckStillCapture(allowRetake: overlay.CanRetake)
-            : await CaptureGuard.PrepareAsync(overlay.CanRetake, CheckStillCapture, overlay.CloseEditorForRetakeAsync);
-        if (block == CaptureBlock.None) return true;
-        ReportCaptureBlock(block, mode);
-        return false;
-    }
 
     /// <summary>Shows why a capture command did not start.</summary>
     /// <param name="mode">The command's name, the title of a notice.</param>

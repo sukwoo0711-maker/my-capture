@@ -62,7 +62,7 @@ public sealed class LibraryCommandLayoutTests
         Rect listBefore = Bounds(list, root), commandsBefore = Bounds(commands, root);
         Assert.True(search.ActualWidth >= 400, $"{language}/{width}/{theme}: search collapsed to {search.ActualWidth}");
         Assert.True(capture.ActualWidth >= 64 && record.ActualWidth >= 64);
-        Assert.Contains(Descendants(capture).OfType<TextBlock>(), text => text.Text == UiText.Get("Text_2C20ADDA2018"));
+        Assert.Contains(Descendants(capture).OfType<TextBlock>(), text => text.Text == UiText.Get("CaptureEntry.NewCapture"));
         Assert.Contains(Descendants(record).OfType<TextBlock>(), text => text.Text == UiText.Get("Text_4F5AF20FAA6E"));
         Assert.Equal(Visibility.Visible, Named<StackPanel>(commands, "SelectionCommands").Visibility);
         Assert.False(Named<Button>(commands, "KeepSelectedButton").IsEnabled);

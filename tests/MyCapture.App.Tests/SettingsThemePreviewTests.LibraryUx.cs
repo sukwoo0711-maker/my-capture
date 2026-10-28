@@ -151,9 +151,9 @@ public sealed partial class SettingsThemePreviewTests
             var commandBar = (FrameworkElement)window.FindName("LibraryCommandBar");
             var contentCommandBar = (FrameworkElement)window.FindName("LibraryContentCommandBar");
             Assert.Equal(48, commandBar.ActualHeight, 1);
-            Button capture = VisibleButtonNamed(window, UiText.Get("Text_2C20ADDA2018"));
+            Button capture = VisibleButtonNamed(window, UiText.Get("CaptureEntry.NewCapture"));
             Assert.Same(window.FindResource("Button.Primary"), capture.Style);
-            Assert.Contains("Ctrl+Shift", Assert.IsType<string>(capture.ToolTip), StringComparison.Ordinal);
+            Assert.Equal(UiText.Get("CaptureEntry.NewCapture"), Assert.IsType<string>(capture.ToolTip));
             var search = (TextBox)window.FindName("SearchBox");
             var placeholder = (TextBlock)window.FindName("SearchPlaceholderText");
             foreach (FrameworkElement element in new FrameworkElement[]
@@ -229,7 +229,7 @@ public sealed partial class SettingsThemePreviewTests
             Assert.Equal(searchBounds, search.TransformToAncestor(client).TransformBounds(new Rect(search.RenderSize)));
             Assert.True(((Button)window.FindName("EditSelectedButton")).IsEnabled);
             // Global capture remains labelled while the selected item retains its own Edit action.
-            Assert.Same(capture, VisibleButtonNamed(window, UiText.Get("Text_2C20ADDA2018")));
+            Assert.Same(capture, VisibleButtonNamed(window, UiText.Get("CaptureEntry.NewCapture")));
             Assert.Equal("CaptureRegionButton", capture.Name);
             Button[] primaryActions = Descendants(window).OfType<Button>().Where(button => button.IsVisible
                 && ReferenceEquals(button.Style, window.FindResource("Button.Primary"))).ToArray();

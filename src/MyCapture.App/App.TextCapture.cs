@@ -69,7 +69,7 @@ public partial class App
 
         try
         {
-            if (!await PrepareRetakeAsync(UiText.Get("TextCapture_Title"))) return;
+            if (!await GuardStillCaptureAsync(GlobalHotkeyCommand.CaptureText)) return;
             _tray?.SetState(TrayIconState.Capturing);
             // The pointer would only add noise to recognition, so text capture never draws it.
             _overlay.Start(
@@ -77,7 +77,7 @@ public partial class App
                 _settings.Capture.AbortOnFocusLoss,
                 _settings.Capture.ShowMagnifier,
                 _settings.Capture.ShowSelectionGrid,
-                textCapture: true);
+                textCapture: true, preserveEditor: true);
         }
         catch (Exception ex)
         {

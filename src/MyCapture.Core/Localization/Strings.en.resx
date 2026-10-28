@@ -4587,7 +4587,7 @@ Turn off: {0}</value></data>
     <value>Indexing text</value>
   </data>
   <data name="CaptureBlocked_Editor" xml:space="preserve"><value>A capture is open in the editor, so a new capture was not started.</value></data>
-  <data name="CaptureBlocked_EditorRecording" xml:space="preserve"><value>A capture is open in the editor, so recording was not started.</value></data>
+  <data name="CaptureBlocked_EditorRecording" xml:space="preserve"><value>Recording can start after the editor finishes its prompt or operation.</value></data>
   <data name="CaptureBlocked_EditorSaveFailed" xml:space="preserve"><value>The capture in the editor could not be saved, so a new capture was not started.</value></data>
   <data name="CaptureBlocked_Scrolling" xml:space="preserve"><value>Cannot start until the scrolling capture finishes.</value></data>
   <data name="CaptureBlocked_Updating" xml:space="preserve"><value>Cannot start until the update or import finishes.</value></data>
@@ -4875,4 +4875,27 @@ Overwrite these shortcuts? You can change this later in Settings → Shortcuts.<
   <data name="Shortcuts.Drag" xml:space="preserve">
     <value>Mouse drag</value>
   </data>
+  <data name="CaptureEntry.NewCapture" xml:space="preserve"><value>New capture</value></data>
+  <data name="CaptureEntry.Region" xml:space="preserve"><value>Region capture</value></data>
+  <data name="CaptureEntry.FullScreen" xml:space="preserve"><value>Full screen</value></data>
+  <data name="CaptureEntry.Window" xml:space="preserve"><value>Window capture</value></data>
+  <data name="CaptureEntry.Recording" xml:space="preserve"><value>Screen recording</value></data>
+  <data name="MediaInfo.Title" xml:space="preserve"><value>Info</value></data>
+  <data name="MediaInfo.FileSize" xml:space="preserve"><value>File size</value></data>
+  <data name="MediaInfo.CanvasSize" xml:space="preserve"><value>Canvas size</value></data>
+  <data name="MediaInfo.Resolution" xml:space="preserve"><value>Resolution</value></data>
+  <data name="MediaInfo.Duration" xml:space="preserve"><value>Duration</value></data>
+  <data name="MediaInfo.Format" xml:space="preserve"><value>Format</value></data>
+  <data name="MediaInfo.Created" xml:space="preserve"><value>Created</value></data>
+  <data name="MediaInfo.Modified" xml:space="preserve"><value>Modified</value></data>
+  <data name="MediaInfo.Location" xml:space="preserve"><value>Location</value></data>
+  <data name="MediaInfo.Count" xml:space="preserve"><value>Selection</value></data>
+  <data name="MediaInfo.CountValue" xml:space="preserve"><value>{0} items</value></data>
+  <data name="MediaInfo.TotalSize" xml:space="preserve"><value>Total size</value></data>
+  <data name="MediaInfo.ReadableSize" xml:space="preserve"><value>Available file size</value></data>
+  <data name="MediaInfo.UnavailableCount" xml:space="preserve"><value>Could not read information for {0} files.</value></data>
+  <data name="MediaInfo.Unavailable" xml:space="preserve"><value>Unavailable</value></data>
+  <data name="MediaInfo.ReadFailed" xml:space="preserve"><value>Could not read the file information.</value></data>
+  <data name="MediaInfo.Unsaved" xml:space="preserve"><value>Not saved</value></data>
+  <data name="MediaInfo.SizeValue" xml:space="preserve"><value>{0} ({1} bytes)</value></data>
 </root>

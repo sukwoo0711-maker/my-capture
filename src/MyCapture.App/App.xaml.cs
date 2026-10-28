@@ -369,6 +369,7 @@ public partial class App : Application
         _hotkeys.Pressed += OnGlobalHotkeyPressed;
         _overlay.SelectionPersistRequested = e => _capturePersistenceTask = ObserveMemoryWorkAsync(OnCaptureSelectionCompletedAsync(e));
         _overlay.EditorScreenCaptureRequested = e => _capturePersistenceTask = ObserveMemoryWorkAsync(SaveEditorScreenCaptureAsync(e));
+        _overlay.EditorSourcePath = () => _currentRecord is { } record ? _queue?.GetFilePath(record, CaptureFileNames.Original) : null;
         _overlay.OpenEditorAfterCapture = () => AfterCaptureBehavior.Resolve(_settings!.General.AfterCapture, _currentRecord is not null) == AfterCaptureAction.Editor;
         _overlay.OriginalNeedsRecovery = () => _currentRecord is null && _pendingRecord is not null;
         _overlay.DraftRecord = () => _currentRecord is { } record && _currentEditSession is { } session
@@ -492,7 +493,7 @@ public partial class App : Application
         {
             // Capture commands say why they wait; the other commands stay quiet until the app is free.
             if (CaptureCommandTitle(e.Command) is { } mode)
-                ReportCaptureBlock(CaptureGuard.Find(ReadCaptureGuardState(), allowRetake: false), mode,
+                ReportCaptureBlock(CaptureGuard.Find(ReadCaptureGuardState(), e.Command), mode,
                     recording: e.Command == GlobalHotkeyCommand.RecordRegion);
             return;
         }
@@ -813,7 +814,7 @@ public partial class App : Application
 
         try
         {
-            if (!await PrepareRetakeAsync(UiText.Get("Text_096A13A757DB"), preserveEditor: true)) { CompleteWelcomeCaptureAnnouncement(); return; }
+            if (!await GuardStillCaptureAsync(GlobalHotkeyCommand.CaptureRegion)) { CompleteWelcomeCaptureAnnouncement(); return; }
             SelectorTimeline.Mark?.Invoke("guard-passed");
             _tray?.SetState(TrayIconState.Capturing);
             SelectorTimeline.Mark?.Invoke("tray-state");
@@ -844,7 +845,7 @@ public partial class App : Application
     /// </summary>
     private async void HandleCaptureFullScreen()
     {
-        if (_advancedCapture is null || !await GuardStillCaptureAsync(UiText.Get("Text_254C836B9ED2")))
+        if (_advancedCapture is null || !await GuardStillCaptureAsync(GlobalHotkeyCommand.CaptureFullScreen))
         {
             return;
         }
@@ -859,7 +860,7 @@ public partial class App : Application
     /// </summary>
     private async void HandleCaptureWindow()
     {
-        if (_advancedCapture is null || !await GuardStillCaptureAsync(UiText.Get("Text_36458FABBDBB")))
+        if (_advancedCapture is null || !await GuardStillCaptureAsync(GlobalHotkeyCommand.CaptureWindow))
         {
             return;
         }
@@ -874,7 +875,7 @@ public partial class App : Application
     /// </summary>
     private async void HandleRepeatLastRegion()
     {
-        if (_advancedCapture is null || !await GuardStillCaptureAsync(UiText.Get("Text_92E815063265")))
+        if (_advancedCapture is null || !await GuardStillCaptureAsync(GlobalHotkeyCommand.RepeatLastRegion))
         {
             return;
         }
@@ -897,7 +898,7 @@ public partial class App : Application
     /// <param name="delaySeconds">The selector's ⋯ menu picks 3, 5 or 10; otherwise the setting applies.</param>
     private async void HandleDelayedCapture(int? delaySeconds = null)
     {
-        if (_settings is null || !await GuardStillCaptureAsync(UiText.Get("Text_38476EDDA50B")))
+        if (_settings is null || !await GuardStillCaptureAsync(GlobalHotkeyCommand.DelayedCapture))
         {
             return;
         }
@@ -999,7 +1000,7 @@ public partial class App : Application
             return;
         }
 
-        if (!await GuardStillCaptureAsync(UiText.Get("Text_4B4D91FFC215")))
+        if (!await GuardStillCaptureAsync(GlobalHotkeyCommand.ScrollingCapture))
         {
             return;
         }
@@ -1463,11 +1464,12 @@ public partial class App : Application
     }
 
     private void ShowQuickAccess(CaptureRecord record, System.Windows.Media.Imaging.BitmapSource image,
-        Core.Primitives.RectD region, MonitorInfo monitor, bool copiedToClipboard)
+        Core.Primitives.RectD region, MonitorInfo monitor, bool copiedToClipboard, bool preserveEditor = false)
     {
         if (_latestReceipt != record.Id) return;
         if (_preparingAdvancedCapture || _overlay?.IsSelecting == true) return;
-        if (_queue is null || _commit is null || _services is null || _settings?.General.AfterCapture != AfterCaptureAction.QuickAccess) return;
+        if (_queue is null || _commit is null || _services is null || _settings is null
+            || (!preserveEditor && _settings.General.AfterCapture != AfterCaptureAction.QuickAccess)) return;
         // The newer card replaces the older one at once, without its exit.
         _quickAccess?.CloseNow();
         CaptureFlight? flight = _captureFlight is { } lifted && ReferenceEquals(lifted.Image, image) ? lifted : null;
@@ -1651,14 +1653,15 @@ public partial class App : Application
         string mode = UiText.Get("Text_4F5AF20FAA6E");
         if (_storeInstallationPending || _preparingExit)
         {
-            ReportCaptureBlock(CaptureGuard.Find(ReadCaptureGuardState(), allowRetake: false), mode, recording: true);
+            ReportCaptureBlock(CaptureGuard.Find(ReadCaptureGuardState(), GlobalHotkeyCommand.RecordRegion), mode, recording: true);
             return;
         }
 
-        if (!_recorder.IsActive) await WaitForEditorFinishedAsync();
+        if (!_recorder.HasRecordingSession) await WaitForEditorFinishedAsync();
+        DismissQuickAccessForCapture();
         _shellPresenter?.DismissForCapture();
         // A running recording stops or reports its own state; a new one waits for a still capture in progress.
-        if (!_recorder.IsActive && CaptureGuard.Find(ReadCaptureGuardState(), allowRetake: false) is var block and not CaptureBlock.None)
+        if (!_recorder.HasRecordingSession && CaptureGuard.Find(ReadCaptureGuardState(), GlobalHotkeyCommand.RecordRegion) is var block and not CaptureBlock.None)
         {
             ReportCaptureBlock(block, mode, recording: true);
             return;
