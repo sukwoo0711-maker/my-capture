@@ -33,7 +33,7 @@ public partial class App
                 _sourceBackfillTask = Task.WhenAll(_sourceBackfillTask,
                     BackfillLateSourceAsync(delivery.Pending, published: record is not null, lateSource));
             RecordManualCaptureRegion(selection);
-            bool copied = await CompleteCaptureCopyAsync(delivery, record);
+            bool copied = await CompleteCaptureCopyAsync(delivery, record, opensCaptureEditor: false);
             try { _tray?.SetCaptureCount(_queue?.Count ?? 0); }
             catch (Exception error) { _log?.LogWarning(error, "Could not update tray count"); }
             if (record is null) return;

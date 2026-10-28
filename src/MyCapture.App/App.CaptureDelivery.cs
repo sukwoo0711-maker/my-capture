@@ -50,7 +50,8 @@ public partial class App
         }
     }
 
-    private async Task<bool> CompleteCaptureCopyAsync(CaptureDelivery delivery, CaptureRecord? saved)
+    private async Task<bool> CompleteCaptureCopyAsync(CaptureDelivery delivery, CaptureRecord? saved,
+        bool opensCaptureEditor)
     {
         if (delivery.Copy is null) return false;
         bool copied = false;
@@ -66,7 +67,11 @@ public partial class App
         if (delivery.First is { } first) ReportCopyToQuickAccessFirst(first, copied);
         if (!copied && delivery.First is not { CopyFailureShown: true, SaveFailed: false })
         {
-            string message = UiText.Get(saved is null ? "Text_4048C8E18C61" : "Text_9E0860CEAEC2");
+            // A preserved editor belongs to an older image, so its Copy command cannot
+            // recover this capture. Only point to an editor that will own this result.
+            string message = UiText.Get(opensCaptureEditor
+                ? saved is null ? "Text_4048C8E18C61" : "Text_9E0860CEAEC2"
+                : "Capture.CopyFailedRecapture");
             try { ShowCaptureNotice(UiText.Get("Text_422F61DDCB7C"), message, TrayBalloonKind.Warning, playSound: false); }
             catch (Exception error) { _log?.LogWarning(error, "Could not show automatic clipboard failure notification"); }
         }

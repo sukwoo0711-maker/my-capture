@@ -1242,7 +1242,9 @@ public partial class App : Application
         try { _tray?.SetCaptureCount(_queue?.Count ?? 0); }
         catch (Exception ex) { _log?.LogWarning(ex, "Could not update tray count"); }
 
-        bool copiedToClipboard = await CompleteCaptureCopyAsync(delivery, _currentRecord);
+        // The normal path keeps its 4.10.0 notice; only a capture over a preserved window
+        // (whose editor belongs to an older image) points to capturing again.
+        bool copiedToClipboard = await CompleteCaptureCopyAsync(delivery, _currentRecord, opensCaptureEditor: true);
         // Region, window, full-screen and scrolling captures all complete here. Only a durable,
         // copied result counts toward the Store rating request; a save or copy failure resets it.
         _storeRating?.RecordCapture(succeeded: _currentRecord is not null && copiedToClipboard);

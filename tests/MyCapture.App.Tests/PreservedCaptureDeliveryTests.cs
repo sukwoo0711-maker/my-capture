@@ -68,6 +68,99 @@ public sealed class PreservedCaptureDeliveryTests : KoreanCaptionTest
     });
 
     [Theory]
+    [InlineData("ko-KR", "캡처를 복사하지 못했습니다. 다시 캡처하십시오.")]
+    [InlineData("en-US", "Could not copy the capture. Capture it again.")]
+    public void FailedSaveAndCopyOverAnEditorPointsToRecaptureAndKeepsTheOriginalUntouched(string language, string expected) => StaTestHost.Run(() =>
+    {
+        using var culture = UiText.UseLanguage(language);
+        using var shell = new Shell();
+        using var coordinator = new CaptureOverlayCoordinator(new ScreenCaptureEngine(NullLogger<ScreenCaptureEngine>.Instance),
+            new WindowCandidateService(NullLogger<WindowCandidateService>.Instance), NullLogger<CaptureOverlayCoordinator>.Instance)
+        {
+            SelectionPersistRequested = shell.SelectNormal,
+            EditorScreenCaptureRequested = shell.SelectSeparate,
+        };
+        shell.Set("_overlay", coordinator);
+        AnnotationEditorWindow? editor = null;
+        var copy = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        try
+        {
+            Assert.True(coordinator.StartWithSelection(shell.Frame, new RectD(0, 0, 64, 48), "image A"));
+            shell.Wait(coordinator.LastTransitionForTest);
+            editor = Assert.IsType<AnnotationEditorWindow>(Window.GetWindow(coordinator.CurrentEditor!));
+            EditorKeysTests.Invoke(editor.Editor, "PlaceTextBox", new PointD(2, 2));
+            EditorKeysTests.Field<System.Windows.Controls.TextBox>(editor.Editor, "_activeTextBox").Text = "Keep image A";
+            EditorKeysTests.Invoke(editor.Editor, "CommitActiveText");
+            string document = editor.Editor.CreateCurrentImageSnapshot().ToJson();
+            CaptureRecord original = Assert.IsType<CaptureRecord>(shell.Get("_currentRecord"));
+            object session = Assert.IsAssignableFrom<IDisposable>(shell.Get("_currentEditSession"));
+            object pending = shell.Get("_pendingRecord")!;
+            byte[] originalBytes = File.ReadAllBytes(shell.Queue.GetFilePath(original, CaptureFileNames.Original));
+            int asked = 0;
+            editor.ConfirmClose = () => { asked++; return EditorCloseChoice.Cancel; };
+            coordinator.OpenEditorAfterCapture = () => throw new InvalidOperationException("Capture B must not replace image A's editor.");
+            shell.Persistence.BeforeRecordMetadataCommit = _ => throw new IOException("synthetic image B save failure");
+            shell.CopyResult = copy.Task;
+
+            Assert.True(coordinator.StartWithSelection(shell.Frame, new RectD(30, 40, 64, 48), "image B", recordForRepeat: true, preserveEditor: true));
+            shell.PumpUntil(() => shell.Card?.HasCaptureFailed == true);
+            QuickAccessWindow card = Assert.IsType<QuickAccessWindow>(shell.Card);
+            Assert.False(coordinator.LastTransitionForTest.IsCompleted);
+            copy.SetResult(false);
+            shell.Wait(coordinator.LastTransitionForTest);
+            shell.Pump();
+
+            Assert.Equal((UiText.Get("Text_422F61DDCB7C"), expected), Assert.Single(shell.Notices));
+            Assert.Same(card, shell.Card);
+            Assert.True(card.IsOpen && card.HasCaptureFailed);
+            Assert.All(card.ActionButtonsForTest, button => Assert.False(button.IsEnabled));
+            Assert.Equal(1, shell.CardsShown);
+            Assert.Equal(2, shell.CopyCalls);
+            Assert.Same(editor.Editor, coordinator.CurrentEditor);
+            Assert.True(editor.IsVisible && editor.Editor.HasUnsavedChanges);
+            Assert.Equal(0, asked);
+            Assert.Equal(document, editor.Editor.CreateCurrentImageSnapshot().ToJson());
+            Assert.Same(original, shell.Get("_currentRecord"));
+            Assert.Same(session, shell.Get("_currentEditSession"));
+            Assert.Same(pending, shell.Get("_pendingRecord"));
+            Assert.True(shell.Persistence.IsBusy(original.Id));
+            Assert.Equal(originalBytes, File.ReadAllBytes(shell.Queue.GetFilePath(original, CaptureFileNames.Original)));
+            CaptureRecord failed = Assert.Single(shell.Queue.Records, record => record.Id != original.Id);
+            Assert.True(shell.Persistence.IsWriteInProgress(failed.Id));
+        }
+        finally
+        {
+            copy.TrySetResult(false);
+            shell.Wait(coordinator.LastTransitionForTest);
+            if (editor is not null) editor.ConfirmClose = () => EditorCloseChoice.DontSave;
+            coordinator.Dispose();
+            shell.Set("_overlay", null);
+        }
+    });
+
+    [Theory]
+    [InlineData(AfterCaptureAction.Editor, true, "Text_9E0860CEAEC2")]
+    [InlineData(AfterCaptureAction.QuickAccess, true, "Text_9E0860CEAEC2")]
+    [InlineData(AfterCaptureAction.ClipboardOnly, true, "Text_9E0860CEAEC2")]
+    [InlineData(AfterCaptureAction.Editor, false, "Text_4048C8E18C61")]
+    [InlineData(AfterCaptureAction.QuickAccess, false, "Text_4048C8E18C61")]
+    [InlineData(AfterCaptureAction.ClipboardOnly, false, "Text_4048C8E18C61")]
+    public void NormalCaptureCopyFailureKeepsTodaysNoticeInEveryMode(AfterCaptureAction mode, bool saveSucceeds, string noticeKey) => StaTestHost.Run(() =>
+    {
+        using var shell = new Shell();
+        shell.Settings.General.AfterCapture = mode;
+        shell.App.ShowsCardAfterSaveForTest = true; // Exercise notification fallback with no retry card yet.
+        shell.CopyResult = Task.FromResult(false);
+        if (!saveSucceeds)
+            shell.Persistence.BeforeRecordMetadataCommit = _ => throw new IOException("synthetic original save failure");
+        shell.Wait(shell.SelectNormal(shell.Selection(new RectD(0, 0, 64, 48))));
+        Assert.Equal(saveSucceeds, shell.Get("_currentRecord") is not null);
+        Assert.Equal((UiText.Get("Text_422F61DDCB7C"), UiText.Get(noticeKey)),
+            Assert.Single(shell.Notices, notice => notice.Title == UiText.Get("Text_422F61DDCB7C")));
+        Assert.Equal(1, shell.CopyCalls);
+    });
+
+    [Theory]
     [InlineData(false)]
     [InlineData(true)]
     public void FailedMetadataPublicationKeepsTheSameRecoverableOriginalInBothDeliveryPaths(bool preserveEditor) => StaTestHost.Run(() =>

@@ -192,11 +192,12 @@ public sealed class ShellRetakeWindowTests
         // Preserve this fixture; no Shell operation is performed.
         using var coordinator = Create(Frame);
         coordinator.EditorScreenCaptureRequested = _ => { separateWrites++; return Task.CompletedTask; };
+        AnnotationEditorWindow? annotation = null;
         try
         {
             coordinator.StartWithSelection(Frame(), new RectD(0, 0, 8, 8));
             PumpUntil(() => coordinator.LastTransitionForTest.IsCompleted);
-            var annotation = EditorWindow(coordinator);
+            annotation = EditorWindow(coordinator);
             Guid draftId = Guid.NewGuid();
             annotation.AdoptRecoveredDraft(store, draftId, 1);
             AddAnnotation(annotation);
@@ -230,10 +231,24 @@ public sealed class ShellRetakeWindowTests
         }
         finally
         {
-            if (coordinator.CurrentEditor is { } current)
-                ((AnnotationEditorWindow)Window.GetWindow(current)).ConfirmClose = () => EditorCloseChoice.DontSave;
-            coordinator.Cancel();
-            SynchronizationContext.SetSynchronizationContext(previous);
+            try
+            {
+                AnnotationEditorWindow? closing = annotation;
+                if (closing is not null) closing.ConfirmClose = () => EditorCloseChoice.DontSave;
+                coordinator.Cancel();
+                // An assertion may fail while a nested capture still owns Cancel. Dispose
+                // it as well so the original editor closes before its dispatcher is released.
+                coordinator.Dispose();
+                if (closing is not null)
+                {
+                    Task finalization = (Task)typeof(AnnotationEditorWindow)
+                        .GetField("_draftFinalization", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(closing)!;
+                    PumpUntil(() => finalization.IsCompleted);
+                    finalization.GetAwaiter().GetResult();
+                    Assert.False(closing.IsVisible);
+                }
+            }
+            finally { SynchronizationContext.SetSynchronizationContext(previous); }
         }
     });
 
