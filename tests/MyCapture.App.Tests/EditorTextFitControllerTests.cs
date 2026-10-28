@@ -93,7 +93,7 @@ public sealed class EditorTextFitControllerTests
         Assert.True(fits.AutoSize);
         Assert.Equal(791, fits.Rect.Right, 6);
         Assert.False(wraps.AutoSize);
-        Assert.Equal(new RectD(700, 100, 100, (2 * 22.5) + 1), wraps.Rect);
+        Assert.Equal(new RectD(620, 100, 180, 22.5 + 1), wraps.Rect);
     }
 
     [Fact]
@@ -104,20 +104,32 @@ public sealed class EditorTextFitControllerTests
 
         c.ApplyFontSize(36);
 
-        // 10 characters at 18 px each no longer fit in the 100 px left before the edge.
+        // The 100 px left before the edge is too narrow: use ten em and move left.
         Assert.False(caption.AutoSize);
-        Assert.Equal(new RectD(700, 10, 100, (2 * 45) + 1), caption.Rect);
+        Assert.Equal(new RectD(440, 10, 360, 45 + 1), caption.Rect);
     }
 
     [Fact]
-    public void CaptionStartedTooCloseToTheEdgeStillGetsOneEm()
+    public void CaptionStartedTooCloseToTheEdgeGetsTenEmAndMovesLeft()
     {
         AnnotationEditorController c = NewController(out _, out _);
 
         TextAnnotation caption = Caption(c, new PointD(795, 10), "abc");
 
         Assert.False(caption.AutoSize);
-        Assert.Equal(18, caption.Rect.Width, 6);
+        Assert.Equal(new RectD(620, 10, 180, 22.5 + 1), caption.Rect);
+    }
+
+    [Fact]
+    public void CaptionMinimumWrapWidthIsCappedToANarrowImage()
+    {
+        AnnotationDocument document = AnnotationDocument.CreateFor(120, 80);
+        var c = new AnnotationEditorController(document, new UndoStack()) { TextFitter = FakeMeasure };
+
+        TextAnnotation caption = Caption(c, new PointD(116, 10), "abc");
+
+        Assert.False(caption.AutoSize);
+        Assert.Equal(new RectD(1.5, 10, 118.5, 22.5 + 1), caption.Rect);
     }
 
     [Fact]
@@ -307,7 +319,7 @@ public sealed class EditorTextFitControllerTests
         c.PointerUp(new PointD(wrapped.Center.X - 500, wrapped.Center.Y));
 
         Assert.False(caption.AutoSize);
-        Assert.Equal(new RectD(200, 100, wrapped.Width, wrapped.Height), caption.Rect);
+        Assert.Equal(new RectD(120, 100, wrapped.Width, wrapped.Height), caption.Rect);
         Assert.True(c.PerformUndo());
         Assert.Equal(wrapped, caption.Rect);
         Assert.Equal(18, caption.FontSize);
