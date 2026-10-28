@@ -174,7 +174,9 @@ public sealed class AnimatedGifWriterTests
         var updates = new List<GifFrameUpdate>();
         using (var writer = new AnimatedGifWriter(output, 10, 8, 10, leaveOpen: true))
         {
-            foreach ((BitmapSource frame, int delay) in new[] { (red, 7), (red, 3), (blue, 10), (blue, 10), (blue, 4), (red, 1) })
+            // Exported delays must survive browsers' 0/1 cs clamp; merging still sums
+            // every input delay exactly, including the minimum supported 2 cs frame.
+            foreach ((BitmapSource frame, int delay) in new[] { (red, 7), (red, 3), (blue, 10), (blue, 10), (blue, 4), (red, 2) })
             {
                 updates.Add(writer.AddFrame(frame, delay));
             }
@@ -185,8 +187,8 @@ public sealed class AnimatedGifWriterTests
 
         Assert.Equal([false, true, false, true, true, false], updates.Select(update => update.IsUnchanged));
         ParsedAnimation parsed = ParseAnimation(output.ToArray());
-        Assert.Equal([10, 24, 1], parsed.FrameDelays);
-        Assert.Equal(35, parsed.FrameDelays.Sum());
+        Assert.Equal([10, 24, 2], parsed.FrameDelays);
+        Assert.Equal(36, parsed.FrameDelays.Sum());
         Assert.All(parsed.Disposals, disposal => Assert.Equal(1, disposal));
     });
 

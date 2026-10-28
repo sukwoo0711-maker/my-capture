@@ -59,6 +59,13 @@ public sealed partial class SettingsThemePreviewTests
                 GifPreviewFixtureClips.Kind.Mixed, 1280, 720, 15, 12_000);
             VerifyGifPreviewLongRange(longer);
         }
+        catch (Exception error)
+        {
+            // Preserve the assertion/decoder evidence if the host also rejects the
+            // recoverable fixture cleanup in finally (for example in a restricted sandbox).
+            Console.WriteLine("GIF preview body failed before cleanup: " + error);
+            throw;
+        }
         finally
         {
             FluidMotion.AnimationsEnabledOverrideForTest = motion;

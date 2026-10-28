@@ -97,6 +97,7 @@ internal static class GifSampleDecoder
 {
     /// <summary>Bounds preview memory even if a caller passes an unexpectedly long GIF.</summary>
     internal const int MaximumFrames = 400;
+    internal const long MaximumDecodedBytes = 128L * 1024 * 1024;
 
     private const int DisposeToBackground = 2;
     private const int DisposeToPrevious = 3;
@@ -118,6 +119,14 @@ internal static class GifSampleDecoder
         if (width <= 0 || height <= 0)
         {
             throw new InvalidDataException("The GIF reports an empty canvas.");
+        }
+
+        // Worst-case composited BGRA snapshots plus working canvases. Keep the file for
+        // export, but fail the preview clearly before allocating hundreds of full frames.
+        if (decoder.Frames.Count > MaximumFrames
+            || (long)width * height * 4 * (decoder.Frames.Count + 3L) > MaximumDecodedBytes)
+        {
+            throw new GifExportLimitException(UiText.Get("GifExport_PreviewMemoryLimit"));
         }
 
         int canvasStride = checked(width * 4);

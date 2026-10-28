@@ -61,7 +61,7 @@ internal static class GifPreviewSampling
     /// representative single place for the size estimate; the exporter seeks to the keyframe
     /// before the sample, so a later position costs no more than the start.
     /// </summary>
-    internal static GifSampleWindow Plan(double trimInMs, double trimOutMs, double playbackSpeed, double position = CentrePosition)
+    internal static GifSampleWindow Plan(double trimInMs, double trimOutMs, double playbackSpeed, double position = CentrePosition, double framesPerSecond = 10)
     {
         if (!double.IsFinite(trimInMs) || !double.IsFinite(trimOutMs) || trimOutMs <= trimInMs)
         {
@@ -74,27 +74,30 @@ internal static class GifPreviewSampling
         }
 
         double span = trimOutMs - trimInMs;
-        if (span <= MaximumSourceMs)
+        // Retain at most the old 60-frame cadence budget as fps increases. Shorter samples
+        // keep editor opening responsive; full exports still stream the complete range.
+        double maximum = Math.Min(MaximumSourceMs, 60_000 / Math.Max(1, framesPerSecond));
+        if (span <= maximum)
         {
             return new GifSampleWindow(trimInMs, trimOutMs, true);
         }
 
-        double sample = Math.Clamp(TargetPlaybackMs * playbackSpeed, MinimumSourceMs, MaximumSourceMs);
+        double sample = Math.Clamp(TargetPlaybackMs * playbackSpeed, Math.Min(MinimumSourceMs, maximum), maximum);
         double fraction = double.IsFinite(position) ? Math.Clamp(position, 0, 1) : CentrePosition;
         double start = trimInMs + (Math.Round((span - sample) * fraction / 10, MidpointRounding.AwayFromZero) * 10);
         return new GifSampleWindow(start, Math.Min(trimOutMs, start + sample), false);
     }
 
-    internal static GifSampleWindow Plan(VideoEditDocument document, double playbackSpeed, double position = CentrePosition)
+    internal static GifSampleWindow Plan(VideoEditDocument document, double playbackSpeed, double position = CentrePosition, double framesPerSecond = 10)
     {
         ArgumentNullException.ThrowIfNull(document);
         VideoCutTimeline timeline = document.CreateTimeline();
         if (timeline.RemovedRanges.Count == 0)
         {
-            return Plan(timeline.StartMs, timeline.EndMs, playbackSpeed, position);
+            return Plan(timeline.StartMs, timeline.EndMs, playbackSpeed, position, framesPerSecond);
         }
 
-        return MapWindow(timeline, Plan(0, timeline.OutputDurationMs, playbackSpeed, position));
+        return MapWindow(timeline, Plan(0, timeline.OutputDurationMs, playbackSpeed, position, framesPerSecond));
     }
 
     private static GifSampleWindow MapWindow(VideoCutTimeline timeline, GifSampleWindow output)
@@ -199,20 +202,24 @@ internal static class GifPreviewSampling
         }
 
         int total = Math.Max(1, (int)Math.Round(spanMs / 10, MidpointRounding.AwayFromZero));
-        int cadence = Math.Max(1, 100 / framesPerSecond);
-        int frames = (total + cadence - 1) / cadence;
-        var extra = new HashSet<int>();
+        var boundaries = new SortedSet<int> { 0, total };
+        for (int index = 1; ; index++)
+        {
+            int boundary = (int)Math.Round(index * 100.0 / framesPerSecond, MidpointRounding.AwayFromZero);
+            if (boundary >= total) break;
+            boundaries.Add(boundary);
+        }
         foreach ((double startMs, double endMs) in layers ?? [])
         {
             foreach (double edge in new[] { startMs, endMs })
             {
                 if (!double.IsFinite(edge)) continue;
                 int boundary = Math.Clamp((int)Math.Round(edge / 10, MidpointRounding.AwayFromZero), 0, total);
-                if (boundary > 0 && boundary < total && boundary % cadence != 0) extra.Add(boundary);
+                boundaries.Add(boundary);
             }
         }
 
-        return frames + extra.Count;
+        return Math.Min(boundaries.Count - 1, Math.Max(1, total / 2));
     }
 
     /// <summary>Layer intervals and cut boundaries on the output clock used by the GIF schedule.</summary>
@@ -236,7 +243,8 @@ internal static class GifPreviewSampling
         double fullSourceMs,
         GifExportQuality quality,
         IReadOnlyDictionary<GifExportQuality, GifPresetMeasurement> measurements,
-        IReadOnlyList<(double StartMs, double EndMs)>? layers = null)
+        IReadOnlyList<(double StartMs, double EndMs)>? layers = null,
+        int? scheduledFrames = null)
     {
         if (measurements.TryGetValue(quality, out GifPresetMeasurement? measurement)
             && measurement.Quality == quality
@@ -251,7 +259,7 @@ internal static class GifPreviewSampling
             }
         }
 
-        return EstimateFrameCount(fullSourceMs, quality.FramesPerSecond, layers);
+        return scheduledFrames ?? EstimateFrameCount(fullSourceMs, quality.FramesPerSecond, layers);
     }
 
     private static bool Keep(double startMs, double endMs, GifSampleWindow window, VideoCutTimeline timeline)

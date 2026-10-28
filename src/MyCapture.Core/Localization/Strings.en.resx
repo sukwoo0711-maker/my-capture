@@ -4875,4 +4875,11 @@ Overwrite these shortcuts? You can change this later in Settings → Shortcuts.<
   <data name="Shortcuts.Drag" xml:space="preserve">
     <value>Mouse drag</value>
   </data>
+  <data name="GifExport_FrameRate" xml:space="preserve"><value>Frame rate</value></data>
+  <data name="GifExport_FrameRateCapped" xml:space="preserve"><value>Selected {0:0.##} fps · Applied {1:0.##} fps for source and speed · Playback {2:0.##} fps</value></data>
+  <data name="GifExport_FrameRatePreset" xml:space="preserve"><value>Preset default</value></data>
+  <data name="GifExport_FrameRateSummary" xml:space="preserve"><value> · {0:0.##} fps</value></data>
+  <data name="GifExport_PreviewMemoryLimit" xml:space="preserve"><value>Preview memory limit reached. Reduce the size or selected range.</value></data>
+  <data name="GifExport_SavedSize" xml:space="preserve"><value>Saved · {0} · {1}</value></data>
+  <data name="GifExport_SizeEstimate" xml:space="preserve"><value>Estimated size about {0} ({3}) · {1:N0} frames · playback {2:N1}s</value></data>
 </root>
