@@ -114,10 +114,12 @@ internal static class AnimatedGifExporter
             recording.Height,
             sourceDurationMs);
 
-        GifFrameSchedule schedule = BuildFrameSchedule(document, playbackSpeed, quality.FramesPerSecond);
-        IReadOnlyList<double>? decodeSuperset = cache is null
+        GifFrameSchedule schedule = BuildFrameSchedule(document, playbackSpeed, quality.FramesPerSecond, recording.Fps);
+        // Keep the inexpensive legacy superset for 5/10 fps. Higher rates reuse only their
+        // exact encoded sequence, subject to the unchanged encoded byte budget.
+        IReadOnlyList<double>? decodeSuperset = cache is null || quality.FramesPerSecond > FramesPerSecond
             ? null
-            : BuildFrameSchedule(document, 1.0, FramesPerSecond).SourceTimesMs;
+            : BuildFrameSchedule(document, 1.0, FramesPerSecond, recording.Fps).SourceTimesMs;
 
         (int width, int height) = FitWithin(recording.Width, recording.Height, quality.LongEdge);
         (int baseWidth, int baseHeight) = FitWithin(recording.Width, recording.Height, MaximumLongEdge);
@@ -288,17 +290,19 @@ internal static class AnimatedGifExporter
     }
 
     /// <summary>
-    /// Builds a 10fps base cadence plus every timed-text boundary. GIF delays are quantized to
-    /// centiseconds, so text starts/ends within 5ms of the requested source time instead of being
-    /// shifted to the next 100ms video sample.
+    /// Quantizes cumulative boundaries, never individual delays: 30 fps therefore totals
+    /// 100 cs/second rather than 90. Source sampling keeps its unrounded times so 30 fps input
+    /// does not sample the same video frame twice at 0 and 30 ms. Boundaries closer than 2 cs
+    /// are coalesced; total playback stays within 1 cs, including speed and cut changes.
     /// </summary>
     internal static GifFrameSchedule BuildFrameSchedule(
         VideoEditDocument document,
         double playbackSpeed = 1.0,
-        int framesPerSecond = FramesPerSecond)
+        int framesPerSecond = FramesPerSecond,
+        double sourceFramesPerSecond = double.PositiveInfinity)
     {
         ArgumentNullException.ThrowIfNull(document);
-        if (framesPerSecond is not (5 or 10))
+        if (!GifExportQuality.FrameRates.Contains(framesPerSecond))
         {
             throw new ArgumentOutOfRangeException(nameof(framesPerSecond));
         }
@@ -317,12 +321,15 @@ internal static class AnimatedGifExporter
                 durationMs / 10.0,
                 MidpointRounding.AwayFromZero)));
         var boundaries = new SortedSet<int> { 0, totalCentiseconds };
-        int cadenceCentiseconds = 100 / framesPerSecond;
-        for (int boundary = cadenceCentiseconds;
-             boundary < totalCentiseconds;
-             boundary += cadenceCentiseconds)
+        double effectiveRate = GifExportQuality.EffectiveFrameRate(framesPerSecond, sourceFramesPerSecond, playbackSpeed);
+        var cadenceTimes = new Dictionary<int, double>();
+        for (int index = 1; ; index++)
         {
+            double timeMs = index * 1000.0 / effectiveRate;
+            int boundary = checked((int)Math.Round(timeMs / 10, MidpointRounding.AwayFromZero));
+            if (boundary >= totalCentiseconds) break;
             _ = boundaries.Add(boundary);
+            cadenceTimes[boundary] = timeline.ToSourceTime(timeMs);
         }
 
         var seamSourceTimes = new Dictionary<int, double>();
@@ -336,11 +343,13 @@ internal static class AnimatedGifExporter
             seamSourceTimes[boundary] = segment.StartMs;
         }
 
-        // GIF stores output timing on a 10 ms grid, but the first frame after a cut must
-        // come from the exact next source segment even when its output seam rounds down.
+        // A retained cut boundary samples the exact next source segment even when its
+        // output seam rounds down. Colliding boundaries may coalesce later within one frame.
         double SourceAtBoundary(int boundary) => seamSourceTimes.TryGetValue(boundary, out double sourceTime)
             ? sourceTime
-            : timeline.ToSourceTime(boundary * 10.0);
+            : cadenceTimes.TryGetValue(boundary, out double cadenceTime)
+                ? cadenceTime
+                : timeline.ToSourceTime(boundary * 10.0);
 
         var quantizedOverlays = new List<TimedTextOverlay>();
         foreach (TimedTextOverlay overlay in document.TextOverlays)
@@ -414,26 +423,61 @@ internal static class AnimatedGifExporter
             quantizedFrameLayers.Add(adjusted);
         }
 
-        int frameCount = boundaries.Count - 1;
+        int outputTotal = Math.Max(2, checked((int)Math.Round(durationMs / playbackSpeed / 10, MidpointRounding.AwayFromZero)));
+        // Each interior group represents nearby source events at one output instant. Its bounds
+        // are the intersection of every member's +/- 1 cs window. Even a dense run can
+        // therefore never push an earlier caption progressively further back. Including
+        // source/output rounding, the error stays within one effective output frame.
+        var points = new List<(int Boundary, int Output, int Lower, int Upper)> { (0, 0, 0, 0) };
+        double maximumShiftCs = Math.Floor((1_000 / effectiveRate / playbackSpeed - 5 / playbackSpeed - 5) / 10);
+        foreach (int boundary in boundaries.Where(value => value > 0 && value < totalCentiseconds))
+        {
+            int desired = checked((int)Math.Round(boundary / playbackSpeed, MidpointRounding.AwayFromZero));
+            // A fractional tail may round to the playback endpoint. If giving it 2 cs
+            // would show it too early, coalesce it with that endpoint (no final image).
+            if (desired - (outputTotal - 2) > maximumShiftCs) continue;
+            int lower = Math.Max(0, Math.Min(outputTotal - 2, desired - 1));
+            int upper = Math.Min(outputTotal - 2, desired + 1);
+            int position = Math.Clamp(desired, lower, upper);
 
-        int[] ordered = boundaries.ToArray();
+            // Prefer the event's own instant (especially the first image after a cut).
+            // Borrow only within the already established local bounds, never globally.
+            bool added = false;
+            for (; position <= upper; position++)
+            {
+                int next = position;
+                int firstMoved = points.Count;
+                bool fits = true;
+                for (int index = points.Count - 1; index >= 0 && points[index].Output > next - 2; index--)
+                {
+                    next -= 2;
+                    if (next < points[index].Lower) { fits = false; break; }
+                    firstMoved = index;
+                }
+                if (!fits) continue;
+                for (int index = firstMoved; index < points.Count; index++)
+                    points[index] = points[index] with { Output = position - 2 * (points.Count - index) };
+                points.Add((boundary, position, lower, upper));
+                added = true;
+                break;
+            }
+            if (!added)
+            {
+                // Apply all colliding changes together using the latest source state.
+                // A sub-frame layer may disappear, but its neighbours keep their times.
+                var previous = points[^1];
+                lower = Math.Max(lower, previous.Lower);
+                upper = Math.Min(upper, previous.Upper);
+                points[^1] = (boundary, Math.Clamp(previous.Output, lower, upper), lower, upper);
+            }
+        }
+        int frameCount = points.Count;
         var sourceTimes = new double[frameCount];
         var delays = new int[frameCount];
-        int previousOutputBoundary = 0;
         for (int index = 0; index < frameCount; index++)
         {
-            sourceTimes[index] = SourceAtBoundary(ordered[index]);
-            int outputBoundary = Math.Max(
-                previousOutputBoundary + 1,
-                checked((int)Math.Round(
-                    ordered[index + 1] / playbackSpeed,
-                    MidpointRounding.AwayFromZero)));
-            delays[index] = outputBoundary - previousOutputBoundary;
-            previousOutputBoundary = outputBoundary;
-            if (delays[index] <= 0)
-            {
-                throw new InvalidOperationException("GIF frame schedule contains a non-positive delay.");
-            }
+            sourceTimes[index] = SourceAtBoundary(points[index].Boundary);
+            delays[index] = (index + 1 < frameCount ? points[index + 1].Output : outputTotal) - points[index].Output;
         }
 
         return new GifFrameSchedule(sourceTimes, delays, quantizedOverlays, quantizedFrameLayers);

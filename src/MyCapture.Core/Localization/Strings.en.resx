@@ -278,7 +278,7 @@
     <comment>src\MyCapture.App\Editing\AnnotationEditorWindow.cs</comment>
   </data>
   <data name="Text_19FE9B81012C" xml:space="preserve">
-    <value>Smallest · 480 px / 5 fps</value>
+    <value>Smallest · 480 px</value>
     <comment>src\MyCapture.App\Recording\GifExportQuality.cs</comment>
   </data>
   <data name="Text_1A8F33AE9F00" xml:space="preserve">
@@ -358,7 +358,7 @@
     <comment>src\MyCapture.App\Ocr\OcrResultWindow.cs</comment>
   </data>
   <data name="Text_21281475C002" xml:space="preserve">
-    <value>Small · 640 px / 10 fps</value>
+    <value>Small · 640 px</value>
     <comment>src\MyCapture.App\Recording\GifExportQuality.cs</comment>
   </data>
   <data name="Text_21AAACA9783A" xml:space="preserve">
@@ -1865,7 +1865,7 @@ This cannot be undone.</value>
     <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
   </data>
   <data name="Text_A492D3026996" xml:space="preserve">
-    <value>Standard · 960 px / 10 fps</value>
+    <value>Standard · 960 px</value>
     <comment>src\MyCapture.App\Recording\GifExportQuality.cs</comment>
   </data>
   <data name="Text_A4B69FAF0C11" xml:space="preserve">
@@ -3086,7 +3086,7 @@ Actual reduction {2}% · {3}</value></data>
   <data name="MediaExport_DimensionsKept" xml:space="preserve"><value>Resolution and frame rate stay unchanged. The reduction is a target; calculate to see the actual size. Quality may decrease.</value></data>
   <data name="MediaExport_GifLimits" xml:space="preserve"><value>GIF files grow with the frame count. Choose the long edge and frame rate. Sound is not included.</value></data>
   <data name="Recording.FinishingBusy" xml:space="preserve"><value>Finishing the recording save. Please try again shortly.</value></data>
-  <data name="MediaExport_GifPreset" xml:space="preserve"><value>GIF size and frame rate</value></data>
+  <data name="MediaExport_GifPreset" xml:space="preserve"><value>GIF size</value></data>
   <data name="MediaExport_Speed" xml:space="preserve"><value>Playback speed</value></data>
   <data name="MediaExport_Calculate" xml:space="preserve"><value>Calculate result</value></data>
   <data name="MediaExport_Close" xml:space="preserve"><value>Close</value></data>
@@ -3652,7 +3652,7 @@ Delete {1} {1:plural:subfolder|subfolders}, {2} {2:plural:image|images}, and {3}
   <data name="GifPreview_SizeKb" xml:space="preserve"><value>{0:N0} KB</value></data>
   <data name="GifPreview_Target20" xml:space="preserve"><value>20 MB · Discord free</value></data>
   <data name="GifPreview_TargetNone" xml:space="preserve"><value>No limit</value></data>
-  <data name="GifPreview_PresetSharpLowRate" xml:space="preserve"><value>Sharp, low frame rate</value></data>
+  <data name="GifPreview_PresetSharpLowRate" xml:space="preserve"><value>Sharp · 960 px</value></data>
   <data name="GifPreview_SamplePosition" xml:space="preserve"><value>Sample position</value></data>
   <data name="GifPreview_SamplePositionValue" xml:space="preserve"><value>Sample position: from {0:N1} s</value></data>
   <data name="GifPreview_AdviceCurrentNoLimit" xml:space="preserve"><value>The current setting is recommended. There is no size limit, and the estimated size is {0}.</value></data>
@@ -4899,4 +4899,14 @@ Overwrite these shortcuts? You can change this later in Settings → Shortcuts.<
   <data name="MediaInfo.ReadFailed" xml:space="preserve"><value>Could not read the file information.</value></data>
   <data name="MediaInfo.Unsaved" xml:space="preserve"><value>Not saved</value></data>
   <data name="MediaInfo.SizeValue" xml:space="preserve"><value>{0} ({1} bytes)</value></data>
+  <data name="GifExport_FrameRate" xml:space="preserve"><value>Frame rate</value></data>
+  <data name="GifExport_FrameRateCapped" xml:space="preserve"><value>Made at {1:0.##} fps because the source is {0:0.##} fps.</value></data>
+  <data name="GifExport_FrameRateCappedSpeed" xml:space="preserve"><value>Made at {0:0.##} fps because of the playback speed.</value></data>
+  <data name="GifExport_FrameRatePreset" xml:space="preserve"><value>Auto · {0:0.##} fps</value></data>
+  <data name="GifExport_FrameRateValue" xml:space="preserve"><value>{0:0.##} fps</value></data>
+  <data name="GifExport_TargetSize" xml:space="preserve"><value>{0:0.#} MB</value></data>
+  <data name="GifExport_FrameRateSummary" xml:space="preserve"><value> · {0:0.##} fps</value></data>
+  <data name="GifExport_PreviewMemoryLimit" xml:space="preserve"><value>Preview memory limit reached. Reduce the size or selected range.</value></data>
+  <data name="GifExport_SavedSize" xml:space="preserve"><value>Saved · {0} · {1}</value></data>
+  <data name="GifExport_SizeEstimate" xml:space="preserve"><value>Estimated size about {0} ({3}) · {1:N0} frames · playback {2:N1}s</value></data>
 </root>

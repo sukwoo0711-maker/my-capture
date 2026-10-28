@@ -232,7 +232,11 @@ internal static class GifExportEngine
         }
 
         int threads = options.ResolveWorkerThreads();
-        var encodedForCache = cache is not null ? new GifFrameUpdate[total] : null;
+        // Enforce the encoded budget during collection, not only in StoreEncoded after
+        // every payload has already been retained. High-fps/long exports otherwise grow
+        // without bound despite the final cache being limited to 64 MiB.
+        long encodedCacheBytes = (long)total * 64;
+        var encodedForCache = cache?.CanHoldEncoded(encodedCacheBytes) == true ? new GifFrameUpdate[total] : null;
         var decodedForCache = buildDecodedCache ? new GifSourceFrame[decodeTimes.Count] : null;
         VideoFrameCompositor? compositor = null;
         int written = 0;
@@ -269,7 +273,11 @@ internal static class GifExportEngine
                         result.Candidate);
                     if (encodedForCache is not null)
                     {
-                        encodedForCache[result.Output] = update;
+                        encodedCacheBytes += update.Payload.Length;
+                        if (cache!.CanHoldEncoded(encodedCacheBytes))
+                            encodedForCache[result.Output] = update;
+                        else
+                            encodedForCache = null; // Release collected payloads; keep streaming.
                     }
 
                     written++;

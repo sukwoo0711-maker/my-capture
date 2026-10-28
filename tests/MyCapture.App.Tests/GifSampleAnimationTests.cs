@@ -39,7 +39,7 @@ public sealed class GifSampleAnimationTests
             {
                 writer.AddFrame(Solid(16, 12, 255, 0, 0), 10);
                 writer.AddFrame(Solid(16, 12, 0, 0, 255), 20);
-                writer.AddFrame(Solid(16, 12, 0, 255, 0), 1);
+                writer.AddFrame(Solid(16, 12, 0, 255, 0), 2);
                 writer.Complete();
             }
 
@@ -47,14 +47,32 @@ public sealed class GifSampleAnimationTests
             TestRecycleBin.DeleteFile(path); // Decoded frames must not need the file.
 
             Assert.Equal((16, 12), (frames.PixelWidth, frames.PixelHeight));
-            Assert.Equal(new[] { 10, 20, 1 }, frames.DelaysCentiseconds);
-            Assert.Equal(400, frames.Timeline.TotalMs);
+            Assert.Equal(new[] { 10, 20, 2 }, frames.DelaysCentiseconds);
+            Assert.Equal(320, frames.Timeline.TotalMs);
             Assert.All(frames.Frames, frame => Assert.True(frame.IsFrozen));
             Assert.Equal(new[] { (255, 0, 0), (0, 0, 255), (0, 255, 0) },
                 frames.Frames.Select(frame => Pixel(frame, 8, 6)).Select(p => ((int)p.R, (int)p.G, (int)p.B)));
             Assert.Equal(1.0, GifMotionAnalysis.ChangedFraction(frames), 6);
         }
         finally { OwnedTestDirectory.Delete(root); }
+    });
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    public void Decoder_ReadsExternalBrowserClampedDelays(int delay) => RunSta(() =>
+    {
+        // Product writes require >= 2 cs. External GIFs can still contain 0/1 cs;
+        // construct that format directly instead of violating the writer contract.
+        byte[] bytes = BuildGif(2, 1,
+            new TestFrame(0, 0, 2, 1, [0, 0], Disposal: 1, Transparent: null, Delay: 10),
+            new TestFrame(0, 0, 2, 1, [1, 1], Disposal: 1, Transparent: null, Delay: delay));
+        GifSampleFrames frames = GifSampleDecoder.Decode(bytes);
+        Assert.Equal(new[] { 10, delay }, frames.DelaysCentiseconds);
+        Assert.Equal(200, frames.Timeline.TotalMs);
+        Assert.All(frames.Frames, frame => Assert.True(frame.IsFrozen));
+        Assert.Equal(Color.FromRgb(255, 0, 0), Pixel(frames.Frames[0], 0, 0));
+        Assert.Equal(Color.FromRgb(0, 255, 0), Pixel(frames.Frames[1], 0, 0));
     });
 
     [Fact]
