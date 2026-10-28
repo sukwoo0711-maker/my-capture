@@ -246,6 +246,38 @@ internal sealed class CaptureOverlayWindow : Window
         set => _view.ShowStartGuide = value;
     }
 
+    internal bool ShowKeyPanel
+    {
+        get => _view.ShowKeyPanel;
+        set => _view.ShowKeyPanel = value;
+    }
+
+    internal Func<bool, bool>? ClaimKeyPanel
+    {
+        set
+        {
+            _view.StartGuideClaimedForKeyPanel = _view.ShowStartGuide;
+            _view.ClaimKeyPanel = value;
+        }
+    }
+
+    internal Func<MyCapture.Core.Settings.Hotkey>? ReadPasteToScreenHotkey
+    {
+        set => _view.ReadPasteToScreenHotkey = value;
+    }
+
+    internal MyCapture.Core.Settings.Hotkey PasteToScreenHotkey
+    {
+        get => _view.PasteToScreenHotkey;
+        set => _view.PasteToScreenHotkey = value;
+    }
+
+    internal bool PinSelectionAvailable
+    {
+        get => _view.PinSelectionAvailable;
+        set => _view.PinSelectionAvailable = value;
+    }
+
     /// <summary>The bar's capture/record switch and ⋯ menu; the owner runs <see cref="ActionRequested"/>.</summary>
     internal bool OffersOtherActions
     {
@@ -322,6 +354,9 @@ internal sealed class CaptureOverlayWindow : Window
         _ = Activate();
         _view.InitializePointer();
         SelectorTimeline.Mark?.Invoke("content-rendered-handled");
+        // ContentRendered is after the first presented frame. Even the discovery chip is built later.
+        _ = Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Background,
+            new Action(_view.NotifyFirstFramePresented));
     }
 
     /// <summary>
@@ -422,6 +457,7 @@ internal sealed class CaptureOverlayWindow : Window
         }
 
         _completed = true;
+        _view.EndSelection();
         _view.EndPointerInteraction();
         if (GeometrySelectionCompleted is { } geometryCompleted)
         {
@@ -521,6 +557,7 @@ internal sealed class CaptureOverlayWindow : Window
     {
         if (_completed) return;
         _completed = true;
+        _view.EndSelection();
         Hide();
         try { ActionRequested?.Invoke(this, request); }
         finally { Close(); }
@@ -543,6 +580,7 @@ internal sealed class CaptureOverlayWindow : Window
         }
 
         _completed = true;
+        _view.EndSelection();
         SelectionCancelled?.Invoke(this, EventArgs.Empty);
         Close();
     }

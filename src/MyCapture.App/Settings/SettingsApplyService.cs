@@ -136,6 +136,7 @@ public sealed class SettingsApplyService
         next.Export.LastSaveDirectory = previous.Export.LastSaveDirectory;
         // Nor the capture start-guide count; a selector opened meanwhile may have advanced it.
         next.Capture.StartGuideShownCount = previous.Capture.StartGuideShownCount;
+        next.Capture.KeyPanelShownCount = previous.Capture.KeyPanelShownCount;
         next.General.FirstCaptureTipShown = previous.General.FirstCaptureTipShown;
         next.General.FirstPinTipShown = previous.General.FirstPinTipShown;
         next.General.PinSizeTipShown = previous.General.PinSizeTipShown;

@@ -100,6 +100,8 @@ public static class AppSettingsClone
         AbortOnFocusLoss = s.AbortOnFocusLoss,
         RegionHistoryLimit = s.RegionHistoryLimit,
         StartGuideShownCount = s.StartGuideShownCount,
+        KeyPanelShownCount = s.KeyPanelShownCount,
+        AlwaysShowKeyPanel = s.AlwaysShowKeyPanel,
     };
 
     private static Recording.RecordingSettings Clone(Recording.RecordingSettings s) => new()

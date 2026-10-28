@@ -21,6 +21,7 @@ public sealed class ResidentProbeMetricsTests
     [InlineData("no-private-working-set")]
     [InlineData("selector-breakdown")]
     [InlineData("receipt-breakdown")]
+    [InlineData("no-key-panel")]
     public void AttributionVariantsAreExplicitAndIndependentlySelectable(string variant)
     {
         IReadOnlySet<string> selected = ResidentProbeOptions.ReadVariants(["--resident-variant", variant.ToUpperInvariant()]);

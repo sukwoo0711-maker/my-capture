@@ -46,14 +46,18 @@ public sealed class CaptureStartGuideApplyTests
         var apply = new SettingsApplyService(store, () => published, next => published = next, null, hotkeys, startup, NullLogger.Instance);
 
         published.Capture.StartGuideShownCount = 1;
+        published.Capture.KeyPanelShownCount = 2;
         var draft = new SettingsDraft(published) { DelaySeconds = "5" };
         // Two selectors open while the settings window is still open.
         published.Capture.StartGuideShownCount = 3;
+        published.Capture.KeyPanelShownCount = 5;
 
         SettingsApplyResult result = apply.Apply(draft.ToAppSettings());
         Assert.True(result.Saved);
         Assert.Equal(5, published.Capture.DelaySeconds);
         Assert.Equal(3, published.Capture.StartGuideShownCount);
         Assert.Equal(3, store.Load().Capture.StartGuideShownCount);
+        Assert.Equal(5, published.Capture.KeyPanelShownCount);
+        Assert.Equal(5, store.Load().Capture.KeyPanelShownCount);
     });
 }

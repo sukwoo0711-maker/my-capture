@@ -7,6 +7,7 @@ using MyCapture.App.Editing;
 using MyCapture.App.Ocr;
 using MyCapture.App.Themes;
 using MyCapture.Core.Primitives;
+using MyCapture.Core.Settings;
 using MyCapture.Platform.Capture;
 using MyCapture.Platform.Display;
 
@@ -93,6 +94,8 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
     /// showings and persists them (Capture.StartGuideShownCount); off unless the app wires it.
     /// </summary>
     internal Func<bool> ClaimStartGuide { get; set; } = () => false;
+    internal Func<bool, bool> ClaimKeyPanel { get; set; } = _ => false;
+    internal Func<Hotkey> ReadPasteToScreenHotkey { get; set; } = () => Hotkey.None;
 
     /// <summary>
     /// Runs the existing command for the bar's record switch and ⋯ menu (recording selector, delayed
@@ -553,6 +556,8 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
         overlay.CanRepeatLastRegion = CanRepeatLastRegion;
         overlay.OffersOtherActions = SelectorActionRequested is not null;
         overlay.ShowStartGuide = ClaimStartGuide();
+        overlay.ClaimKeyPanel = ClaimKeyPanel;
+        overlay.ReadPasteToScreenHotkey = ReadPasteToScreenHotkey;
         overlay.SelectionCompleted += OnOverlaySelectionCompleted;
         overlay.ActionRequested += OnOverlayActionRequested;
         overlay.Closed += OnOverlayClosed;

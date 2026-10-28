@@ -624,6 +624,10 @@
                                   Content="{loc:Text Settings.ShowSelectionGrid}"
                                   AutomationProperties.Name="{loc:Text Settings.ShowSelectionGrid}"
                                   IsChecked="{Binding ShowSelectionGrid}" />
+                        <CheckBox x:Name="AlwaysShowKeyPanelCheck" Style="{StaticResource Settings.CheckBox}"
+                                  Content="{loc:Text Settings.AlwaysShowKeyPanel}"
+                                  AutomationProperties.Name="{loc:Text Settings.AlwaysShowKeyPanel}"
+                                  IsChecked="{Binding AlwaysShowKeyPanel}" />
 
                         <CheckBox x:Name="AutoDetectWindowsCheck" Style="{StaticResource Settings.CheckBox}"
                                   Content="{loc:Text WindowDetect_Setting}"

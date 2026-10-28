@@ -3283,6 +3283,7 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="Library.Empty.NoResults" xml:space="preserve"><value>일치하는 캡처가 없습니다</value></data>
   <data name="Capture.LibrarySaveFailed" xml:space="preserve"><value>라이브러리에 저장하지 못했습니다. 편집창에서 저장을 눌러 다시 시도하십시오. {0}</value></data>
   <data name="Settings.ShowSelectionGrid" xml:space="preserve"><value>드래그 전 커서 보조선 표시</value></data>
+  <data name="Settings.AlwaysShowKeyPanel" xml:space="preserve"><value>선택 화면에 단축키 안내판 항상 표시</value></data>
   <data name="Library.SourcePage.Label" xml:space="preserve"><value>원본 웹페이지</value></data>
   <data name="Library.SourcePage.Open" xml:space="preserve"><value>페이지 열기</value></data>
   <data name="Library.SourcePage.Copy" xml:space="preserve"><value>주소 복사</value></data>
@@ -3774,6 +3775,23 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="LibraryFolder_KeepAfterClose" xml:space="preserve"><value>라이브러리를 닫아도 마지막 폴더에 새 캡처 저장</value></data>
   <data name="LibraryFolder_EmptyFolderSavesHere" xml:space="preserve"><value>새 캡처를 이 폴더에 저장합니다. 기존 캡처는 끌어 넣을 수 있습니다.</value></data>
   <data name="CaptureGuide2_BarName" xml:space="preserve"><value>캡처 방법</value></data>
+  <data name="CaptureKeyPanel.Title" xml:space="preserve"><value>단축키 안내</value></data>
+  <data name="CaptureKeyPanel.Drag" xml:space="preserve"><value>드래그</value></data>
+  <data name="CaptureKeyPanel.Click" xml:space="preserve"><value>클릭</value></data>
+  <data name="CaptureKeyPanel.Region" xml:space="preserve"><value>영역 선택</value></data>
+  <data name="CaptureKeyPanel.Window" xml:space="preserve"><value>창 선택</value></data>
+  <data name="CaptureKeyPanel.Move" xml:space="preserve"><value>1픽셀 이동 · Ctrl과 함께 10픽셀</value></data>
+  <data name="CaptureKeyPanel.Resize" xml:space="preserve"><value>크기 1픽셀 조정 · Ctrl과 함께 10픽셀</value></data>
+  <data name="CaptureKeyPanel.All" xml:space="preserve"><value>화면 전체 선택</value></data>
+  <data name="CaptureKeyPanel.Ratio" xml:space="preserve"><value>비율 바꾸기</value></data>
+  <data name="CaptureKeyPanel.Color" xml:space="preserve"><value>색상 복사</value></data>
+  <data name="CaptureKeyPanel.Text" xml:space="preserve"><value>텍스트 복사로 전환</value></data>
+  <data name="CaptureKeyPanel.Image" xml:space="preserve"><value>이미지 캡처로 전환</value></data>
+  <data name="CaptureKeyPanel.Pin" xml:space="preserve"><value>고른 영역을 핀으로</value></data>
+  <data name="CaptureKeyPanel.ConfirmCancel" xml:space="preserve"><value>확정 · 취소</value></data>
+  <data name="CaptureKeyPanel.Cancel" xml:space="preserve"><value>취소</value></data>
+  <data name="CaptureKeyPanel.Hide" xml:space="preserve"><value>안내판 숨기기</value></data>
+  <data name="CaptureKeyPanel.Show" xml:space="preserve"><value>안내판 보기</value></data>
   <data name="CaptureGuide2_Region" xml:space="preserve"><value>영역 선택</value></data>
   <data name="CaptureGuide2_RegionOnly" xml:space="preserve"><value>영역 선택</value></data>
   <data name="CaptureBar_Window" xml:space="preserve"><value>창 선택</value></data>

@@ -118,6 +118,7 @@ public partial class App
         }
         try
         {
+            CaptureOverlayView.SuppressKeyPanelForProbe = probe.Has("no-key-panel");
             await Task.WhenAll(_initialLibraryRecoveryTask, _initialEditRecoveryTask);
             await recorder.SettleAsync("start", probe.StartSeconds);
             await recorder.AuditAsync("start");
@@ -143,6 +144,10 @@ public partial class App
         {
             recorder.Fail(ex);
             exitCode = 1;
+        }
+        finally
+        {
+            CaptureOverlayView.SuppressKeyPanelForProbe = false;
         }
 
         try { recorder.Write(); }

@@ -266,6 +266,10 @@ public sealed class CaptureSettings
     /// button shows it again at any time. Bookkeeping only: the settings window never edits it.
     /// </summary>
     public int StartGuideShownCount { get; set; }
+
+    public int KeyPanelShownCount { get; set; }
+
+    public bool AlwaysShowKeyPanel { get; set; }
 }
 
 public sealed class PinSettings
