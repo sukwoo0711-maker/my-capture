@@ -11,6 +11,8 @@ namespace MyCapture.App.Capture;
 // controller and its control types are absent from every field and property signature here.
 internal sealed partial class CaptureOverlayView
 {
+    // Diagnostic only, enabled within an isolated resident-probe run and reset when it ends.
+    internal static bool SuppressKeyPanelForProbe { get; set; }
     private bool _firstFramePresented;
     private bool _keyPanelRequested;
     private bool? _keyPanelUserOverride;
@@ -57,7 +59,7 @@ internal sealed partial class CaptureOverlayView
     {
         if (_released || _ended || _firstFramePresented) return;
         _firstFramePresented = true;
-        if (RecordingSelection) return;
+        if (RecordingSelection || SuppressKeyPanelForProbe) return;
         bool automatic = ClaimKeyPanel?.Invoke(StartGuideClaimedForKeyPanel) == true;
         ClaimKeyPanel = null;
         _keyPanelRequested = _keyPanelUserOverride ?? (_keyPanelRequested || automatic);
@@ -67,7 +69,7 @@ internal sealed partial class CaptureOverlayView
     [MethodImpl(MethodImplOptions.NoInlining)]
     private void CreateKeyPanelAfterFrame()
     {
-        if (!_firstFramePresented || _released || _ended || RecordingSelection || _keyPanelUpdate is not null) return;
+        if (!_firstFramePresented || _released || _ended || RecordingSelection || SuppressKeyPanelForProbe || _keyPanelUpdate is not null) return;
         if (ReadPasteToScreenHotkey is { } read) _pasteToScreenHotkey = read();
         CaptureKeyPanelController.Attach(this);
     }
@@ -112,6 +114,30 @@ internal sealed partial class CaptureOverlayView
         _keyPanelPaletteChanged = palette;
         _keyPanelRelease = release;
         _keyPanelElement = element;
+    }
+
+    // Selection callbacks can open another window before this overlay raises Closed.
+    // Release the deferred UI at the terminal boundary, even while the owner retains the view.
+    internal void EndSelection()
+    {
+        _ended = true;
+        ReleaseKeyPanel();
+    }
+
+    private void ReleaseKeyPanel()
+    {
+        _keyPanelRelease?.Invoke();
+        _keyPanelUpdate = _keyPanelPaletteChanged = _keyPanelRelease = null;
+        _keyPanelElement = null;
+        _deferredGuideChildren = null;
+        ClaimKeyPanel = null;
+        ReadPasteToScreenHotkey = null;
+        _pasteToScreenHotkey = null;
+        _keyPanelUserOverride = null;
+        _keyPanelRequested = _pinSelectionAvailable = _firstFramePresented = false;
+        StartGuideClaimedForKeyPanel = false;
+        KeyPanelBoundsForTest = null;
+        _dimensionLabelBounds = null;
     }
 
     internal void AddDeferredGuide(FrameworkElement element)

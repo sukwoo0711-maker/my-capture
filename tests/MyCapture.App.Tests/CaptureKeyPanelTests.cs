@@ -1,5 +1,6 @@
 using System.IO;
 using System.Reflection;
+using System.Runtime.CompilerServices;
 using System.Windows;
 using System.Windows.Automation.Peers;
 using System.Windows.Controls;
@@ -7,6 +8,7 @@ using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using System.Windows.Threading;
 using Microsoft.Extensions.Logging.Abstractions;
 using MyCapture.App.Capture;
 using MyCapture.App.Themes;
@@ -25,6 +27,194 @@ namespace MyCapture.App.Tests;
 
 public sealed class CaptureKeyPanelTests(ITestOutputHelper output)
 {
+    [Theory]
+    [InlineData("confirm")]
+    [InlineData("cancel")]
+    [InlineData("action")]
+    [InlineData("release")]
+    public void TerminalViewEventsReleasePanelRowsControllerAndPeersBeforeHandoff(string terminal) => StaTestHost.Run(() =>
+    {
+        var view = NewView();
+        try
+        {
+            view.OffersOtherActions = true;
+            var references = BuildPanelReferences(view);
+            int callbacks = 0;
+            void VerifyHandoff() { AssertPanelReleased(view); callbacks++; }
+            view.SelectionConfirmed += (_, _) => VerifyHandoff();
+            view.CancelRequested += (_, _) => VerifyHandoff();
+            view.ActionRequested += (_, _) => VerifyHandoff();
+            switch (terminal)
+            {
+                case "confirm":
+                    view.HandleKeyDown(Overlay.KeyArgs(Key.A), ModifierKeys.Control);
+                    view.HandleKeyDown(Overlay.KeyArgs(Key.Enter), ModifierKeys.None);
+                    break;
+                case "cancel": view.HandleKeyDown(Overlay.KeyArgs(Key.Escape), ModifierKeys.None); break;
+                case "action": view.ModeBarForTest!.RecordKindButton.IsChecked = true; break;
+                case "release": view.ReleaseResources(); break;
+            }
+            Assert.Equal(terminal == "release" ? 0 : 1, callbacks);
+            AssertPanelReleased(view);
+            view.NotifyFirstFramePresented();
+            AssertPanelReleased(view);
+            AssertCollected(references);
+            GC.KeepAlive(view);
+        }
+        finally { view.ReleaseResources(); }
+    });
+
+    [Theory]
+    [InlineData("capture")]
+    [InlineData("geometry")]
+    [InlineData("cancel")]
+    [InlineData("close")]
+    [InlineData("action")]
+    public void WindowTerminalPathsReleasePanelWhileTheWindowIsStillRetained(string terminal) => StaTestHost.Run(() =>
+    {
+        var window = new CaptureOverlayWindow(Desktop(), false, showMagnifier: false);
+        var view = Assert.IsType<CaptureOverlayView>(window.Content);
+        if (terminal == "action") { window.ShowModeBar = true; window.OffersOtherActions = true; }
+        try
+        {
+            var references = BuildPanelReferences(view);
+            int callbacks = 0;
+            void VerifyHandoff() { AssertPanelReleased(view); callbacks++; }
+            window.SelectionCompleted += (_, _) => VerifyHandoff();
+            window.SelectionCancelled += (_, _) => VerifyHandoff();
+            window.ActionRequested += (_, _) => VerifyHandoff();
+            if (terminal == "geometry") window.GeometrySelectionCompleted = _ => VerifyHandoff();
+            if (terminal is "capture" or "geometry") window.CompleteSelection(new RectD(100, 100, 200, 150));
+            else if (terminal == "cancel")
+                typeof(CaptureOverlayWindow).GetMethod("Cancel", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(window, null);
+            else if (terminal == "action") view.ModeBarForTest!.RecordKindButton.IsChecked = true;
+            else window.Close();
+            Assert.Equal(terminal == "close" ? 0 : 1, callbacks);
+            AssertPanelReleased(view);
+            AssertCollected(references);
+            GC.KeepAlive(window);
+            GC.KeepAlive(view);
+        }
+        finally { window.Close(); }
+    });
+
+    [Fact]
+    public void TheNextSelectorRebuildsOnlyAfterItsOwnFirstFrame() => StaTestHost.Run(() =>
+    {
+        var first = NewView();
+        var second = NewView();
+        try
+        {
+            var references = BuildPanelReferences(first);
+            first.HandleKeyDown(Overlay.KeyArgs(Key.Escape), ModifierKeys.None);
+            AssertPanelReleased(first);
+            second.ShowKeyPanel = true;
+            Render(second);
+            Assert.False(second.FirstFramePresentedForTest);
+            Assert.Null(second.KeyPanelForTest);
+            second.NotifyFirstFramePresented();
+            Assert.NotNull(second.KeyPanelForTest);
+            Assert.True(second.FirstFramePresentedForTest);
+            AssertCollected(references);
+            GC.KeepAlive(first);
+        }
+        finally { first.ReleaseResources(); second.ReleaseResources(); }
+    });
+
+    [Fact]
+    public void NoKeyPanelProbeVariantSkipsAutomaticAndExplicitPanelCreation() => StaTestHost.Run(() =>
+    {
+        bool previous = CaptureOverlayView.SuppressKeyPanelForProbe;
+        var view = NewView();
+        try
+        {
+            var variants = MyCapture.App.Diagnostics.ResidentProbeOptions.ReadVariants(["--resident-variant", "no-key-panel"]);
+            CaptureOverlayView.SuppressKeyPanelForProbe = variants.Contains("no-key-panel");
+            view.ClaimKeyPanel = _ => throw new InvalidOperationException("The no-panel probe must not consume a showing.");
+            view.ReadPasteToScreenHotkey = () => throw new InvalidOperationException("The no-panel probe must not prepare panel content.");
+            view.ShowKeyPanel = true;
+            Render(view);
+            view.NotifyFirstFramePresented();
+            view.HandleKeyDown(Overlay.KeyArgs(Key.F1), ModifierKeys.None);
+            view.HandleKeyDown(Overlay.KeyArgs(Key.F1), ModifierKeys.None);
+            view.ModeBarForTest!.HelpButton.RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));
+            view.DismissStartGuide();
+            Assert.Null(view.KeyPanelForTest);
+            Assert.Null(ReadPanelField(view, "_keyPanelUpdate"));
+            Assert.Null(ReadPanelField(view, "_deferredGuideChildren"));
+        }
+        finally { view.ReleaseResources(); CaptureOverlayView.SuppressKeyPanelForProbe = previous; }
+        var normal = NewView();
+        try
+        {
+            normal.ShowKeyPanel = true;
+            Render(normal);
+            normal.NotifyFirstFramePresented();
+            Assert.NotNull(normal.KeyPanelForTest);
+        }
+        finally { normal.ReleaseResources(); }
+    });
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static (string Name, WeakReference Reference)[] BuildPanelReferences(CaptureOverlayView view)
+    {
+        view.ShowKeyPanel = true;
+        Render(view);
+        view.NotifyFirstFramePresented();
+        Assert.NotNull(view.KeyPanelForTest);
+        var references = new List<(string, WeakReference)>();
+        var update = Assert.IsType<Action>(ReadPanelField(view, "_keyPanelUpdate"));
+        references.Add(("controller", new WeakReference(update.Target!)));
+        CaptureKeyPanel[] panels = LogicalTreeHelper.GetChildren(view).OfType<CaptureKeyPanel>().ToArray();
+        Assert.Equal(2, panels.Length);
+        foreach (CaptureKeyPanel panel in panels)
+        {
+            references.Add(("panel", new WeakReference(panel)));
+            references.Add(("row text cache", new WeakReference(panel.RowTexts)));
+            foreach (FrameworkElement row in Assert.IsType<StackPanel>(panel.Child).Children)
+            {
+                references.Add(("row", new WeakReference(row)));
+                references.Add(("row peer", new WeakReference(UIElementAutomationPeer.CreatePeerForElement(row)!)));
+            }
+            AutomationPeer peer = UIElementAutomationPeer.CreatePeerForElement(panel)!;
+            _ = peer.GetChildren();
+            references.Add(("panel peer", new WeakReference(peer)));
+        }
+        return references.ToArray();
+    }
+
+    private static object? ReadPanelField(CaptureOverlayView view, string name) =>
+        typeof(CaptureOverlayView).GetField(name, BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(view);
+
+    private static void AssertPanelReleased(CaptureOverlayView view)
+    {
+        Assert.Null(view.KeyPanelForTest);
+        Assert.Null(view.KeyPanelBoundsForTest);
+        Assert.False(view.ShowKeyPanel);
+        Assert.False(view.FirstFramePresentedForTest);
+        Assert.Null(view.ClaimKeyPanel);
+        Assert.Null(view.ReadPasteToScreenHotkey);
+        foreach (string name in new[] { "_keyPanelUpdate", "_keyPanelPaletteChanged", "_keyPanelRelease", "_keyPanelElement", "_deferredGuideChildren", "_pasteToScreenHotkey", "_keyPanelUserOverride" })
+            Assert.Null(ReadPanelField(view, name));
+        Assert.Empty(LogicalTreeHelper.GetChildren(view).OfType<CaptureKeyPanel>());
+        for (int i = 0; i < VisualTreeHelper.GetChildrenCount(view); i++)
+            Assert.IsNotType<CaptureKeyPanel>(VisualTreeHelper.GetChild(view, i));
+    }
+
+    private static void AssertCollected((string Name, WeakReference Reference)[] references)
+    {
+        for (int i = 0; i < 2; i++)
+        {
+            var frame = new DispatcherFrame();
+            _ = Dispatcher.CurrentDispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle, new Action(() => frame.Continue = false));
+            Dispatcher.PushFrame(frame);
+            GC.Collect();
+            GC.WaitForPendingFinalizers();
+            GC.Collect();
+        }
+        Assert.All(references, item => Assert.False(item.Reference.IsAlive, item.Name + " survived selector teardown."));
+    }
+
     [Theory]
     [InlineData("ko-KR", 1)]
     [InlineData("en-US", 1)]

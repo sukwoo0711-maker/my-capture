@@ -455,6 +455,7 @@ internal sealed class CaptureOverlayWindow : Window
         }
 
         _completed = true;
+        _view.EndSelection();
         _view.EndPointerInteraction();
         if (GeometrySelectionCompleted is { } geometryCompleted)
         {
@@ -553,6 +554,7 @@ internal sealed class CaptureOverlayWindow : Window
     {
         if (_completed) return;
         _completed = true;
+        _view.EndSelection();
         Hide();
         try { ActionRequested?.Invoke(this, request); }
         finally { Close(); }
@@ -575,6 +577,7 @@ internal sealed class CaptureOverlayWindow : Window
         }
 
         _completed = true;
+        _view.EndSelection();
         SelectionCancelled?.Invoke(this, EventArgs.Empty);
         Close();
     }

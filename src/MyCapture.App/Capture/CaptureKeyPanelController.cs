@@ -96,6 +96,8 @@ internal sealed class CaptureKeyPanelController
     {
         if (_ready is not null) _view.RemoveDeferredGuide(_ready);
         if (_selection is not null) _view.RemoveDeferredGuide(_selection);
+        _ready?.ReleaseResources();
+        _selection?.ReleaseResources();
         _active = _ready = _selection = null;
     }
 }

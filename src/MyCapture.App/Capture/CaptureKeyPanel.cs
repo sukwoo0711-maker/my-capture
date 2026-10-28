@@ -122,6 +122,24 @@ internal sealed class CaptureKeyPanel : Border
     }
 
     protected override AutomationPeer OnCreateAutomationPeer() => new PanelPeer(this);
+
+    internal void ReleaseResources()
+    {
+        Visibility = Visibility.Collapsed;
+        _context = null;
+        RowTexts = [];
+        _rows.Children.Clear();
+        Child = null;
+        Resources.Clear();
+        ClearValue(BackgroundProperty);
+        ClearValue(BorderBrushProperty);
+        ClearValue(TextElement.FontFamilyProperty);
+        ClearValue(RenderTransformProperty);
+        // Do not create an automation peer during teardown. If one exists, discard its rows.
+        if (UIElementAutomationPeer.FromElement(this) is { } peer)
+            peer.ResetChildrenCache();
+    }
+
     private sealed class PanelPeer(CaptureKeyPanel owner) : FrameworkElementAutomationPeer(owner)
     {
         protected override string GetClassNameCore() => nameof(CaptureKeyPanel);

@@ -608,10 +608,7 @@ internal sealed partial class CaptureOverlayView : FrameworkElement
             bar.RatioRequested -= OnRatioRequested;
             bar.FixedSizeRequested -= OnFixedSizeRequested;
         }
-        _keyPanelRelease?.Invoke();
-        _keyPanelUpdate = _keyPanelPaletteChanged = _keyPanelRelease = null;
-        _keyPanelElement = null;
-        _deferredGuideChildren = null;
+        ReleaseKeyPanel();
         foreach (FrameworkElement child in new FrameworkElement?[] { _modeBar, _startGuide }.OfType<FrameworkElement>())
             RemoveLogicalChild(child);
         _modeBar = null;
@@ -1005,7 +1002,7 @@ internal sealed partial class CaptureOverlayView : FrameworkElement
         if (_ended || _copyingColor || !OffersOtherActions) return;
         if (RecordingSelection && request.Action != CaptureSelectorAction.Capture) return;
         DismissStartGuide();
-        _ended = true;
+        EndSelection();
         EndPointerInteraction();
         ActionRequested?.Invoke(this, request);
     }
@@ -2413,7 +2410,7 @@ internal sealed partial class CaptureOverlayView : FrameworkElement
             return;
         }
 
-        _ended = true;
+        EndSelection();
         EndPointerInteraction();
         SelectionConfirmed?.Invoke(this, new RegionSelectionEventArgs(pixels)
         {
@@ -2535,7 +2532,7 @@ internal sealed partial class CaptureOverlayView : FrameworkElement
             return;
         }
 
-        _ended = true;
+        EndSelection();
         EndPointerInteraction();
         CancelRequested?.Invoke(this, EventArgs.Empty);
     }
