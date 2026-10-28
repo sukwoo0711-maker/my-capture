@@ -37,6 +37,11 @@
     <EmbeddedResource Include="..\..\src\MyCapture.App\TutorialCatalog.cs" LogicalName="ShortcutFixture.Tutorial.cs" />
   </ItemGroup>
 
+  <!-- The pin preview host is compiled only in Debug builds of the app, so are its tests. -->
+  <ItemGroup Condition="'$(Configuration)' != 'Debug'">
+    <Compile Remove="PreviewCopyCommandsTests.cs;PreviewLaunchOptionsTests.cs;PreviewPinInputTests.cs" />
+  </ItemGroup>
+
   <ItemGroup>
     <PackageReference Include="xunit" />
     <PackageReference Include="xunit.runner.visualstudio" />

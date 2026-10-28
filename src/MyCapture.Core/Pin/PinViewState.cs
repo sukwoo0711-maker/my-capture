@@ -36,9 +36,18 @@ public sealed class PinViewState
         _zoomStep = zoomStep <= 0 ? 0.1 : zoomStep;
     }
 
-    public double ImageWidthDip { get; }
+    public double ImageWidthDip { get; private set; }
 
-    public double ImageHeightDip { get; }
+    public double ImageHeightDip { get; private set; }
+
+    /// <summary>Replaces an asynchronous preview's natural size, preserving user zoom and opacity.</summary>
+    public void ReplaceImageSize(double widthDip, double heightDip)
+    {
+        if (!double.IsFinite(widthDip) || !double.IsFinite(heightDip) || widthDip <= 0 || heightDip <= 0)
+            throw new ArgumentOutOfRangeException(nameof(widthDip));
+        ImageWidthDip = widthDip;
+        ImageHeightDip = heightDip;
+    }
 
     public double Zoom { get; private set; }
 

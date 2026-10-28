@@ -144,7 +144,9 @@ public sealed class PinSessionShutdownTests
 
     /// <summary>
     /// Closing for exit skips and then clears the closed-pin history, so only app shutdown may use it.
-    /// A pin board switch closes live pins only after a complete save reads back.
+    /// A pin board switch closes live pins only after a complete save reads back. The pin preview
+    /// host (Debug builds only) runs its own PinManager in a separate process and shuts it down the
+    /// same way on exit.
     /// </summary>
     [Fact]
     public void ProductCode_ClosesAllPinsForExitOnlyFromAppShutdown()
@@ -159,8 +161,9 @@ public sealed class PinSessionShutdownTests
                 && !item.line.Contains("void CloseAllForExit(", StringComparison.Ordinal))
             .Select(item => $"{Path.GetRelativePath(root, item.file)}:{item.index + 1}")
             .ToArray();
-        string use = Assert.Single(uses);
-        Assert.StartsWith(Path.Combine("src", "MyCapture.App", "App.xaml.cs"), use);
+        Assert.Equal(
+            [Path.Combine("src", "MyCapture.App", "App.xaml.cs"), Path.Combine("src", "MyCapture.App", "Preview", "PinPreviewSession.cs")],
+            uses.Select(static use => use[..use.LastIndexOf(':')]).Order(StringComparer.Ordinal).ToArray());
     }
 
     private static Task Isolated(string name, Action verify) =>

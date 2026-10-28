@@ -52,7 +52,7 @@ internal enum PasteResult
 /// only pins that are still open, to reopen them at the next launch.
 /// </para>
 /// </remarks>
-internal sealed class PinManager
+internal sealed partial class PinManager
 {
     private readonly List<PinWindow> _pins = [];
     // Closed pins whose exit is still on the screen; their windows close when it ends.
@@ -618,12 +618,14 @@ internal sealed class PinManager
         pin.UserZoomChanged += OnUserZoomChanged;
         pin.ClickThroughHintShown += () => ClickThroughHintShown?.Invoke();
         pin.ContentChanged += NotifyOpenPinsChanged;
+        AttachTranslation(pin);
 
         _pins.Add(pin);
         _openedOrders.Add(pin, ++_nextOpenedOrder);
         pin.ShowActivated = activate;
         BeforeShowForTest?.Invoke(pin);
         ShowPinWindow(pin, pin.Show);
+        AttachMermaid(pin);
         if (landing) pin.StartLandingEffect();
         if (activate)
         {

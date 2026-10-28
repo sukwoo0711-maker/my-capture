@@ -76,6 +76,7 @@ public partial class App : Application
     private GalleryReeditLoader? _reeditLoader;
     private GalleryWindow? _galleryWindow;
     private PinManager? _pins;
+    private MermaidRenderer? _mermaidRenderer;
     private IOcrService? _ocrService;
     private readonly OcrModelPreparation _ocrModelPreparation = new();
     private OcrResultPresenter? _ocrPresenter;
@@ -110,6 +111,11 @@ public partial class App : Application
         {
             return;
         }
+
+#if DEBUG
+        // Explicit preview mode never initializes the resident shell or the user's stores.
+        if (TryStartPinPreview(e.Args)) return;
+#endif
 
         // Diagnostics intentionally run before the ownership gate. Capture hardware
         // can be tested beside a normal resident instance; the shell test will report
@@ -264,6 +270,18 @@ public partial class App : Application
             pinSaveService,
             _services.GetRequiredService<ILogger<PinManager>>());
         _pins.PinCreated += ShowFirstPinTip;
+        _ = PinRenderWarmup.StartAsync();
+        _mermaidRenderer = new MermaidRenderer(
+            Path.Combine(_services.GetRequiredService<AppPaths>().DataRoot, "mermaid-browser"), Dispatcher,
+            _services.GetRequiredService<ILogger<MermaidRenderer>>());
+        _pins.ConfigureMermaid(_mermaidRenderer);
+        if (AppArchitecture.SupportsNeuralOcr)
+        {
+            _pins.ConfigureTranslation(_services.GetRequiredService<PinTranslationEngines>().For);
+            // A picture pin reads its text with the app's recognizer when the user asks to translate it.
+            _pins.ConfigureImageTranslation((image, token) => PinTranslationEngines.RecognizeAsync(
+                _ocrService, image, _settings?.Ocr ?? new MyCapture.Core.Settings.OcrSettings(), token));
+        }
         _pins.ClickThroughHintShown += SaveFirstUseTips;
         _pins.BackgroundWorkEnded += ScheduleIdleMemoryReclamation;
         _pins.OpenPinsChanged += () =>
@@ -2480,13 +2498,26 @@ public partial class App : Application
             serviceProvider.GetRequiredService<OcrModelStore>(),
             serviceProvider.GetRequiredService<ILogger<NeuralOcrEngine>>()));
         services.AddSingleton<WindowsOcrService>();
-        // Translation stays off until the user turns it on in the OCR window; nothing downloads before.
+        // OCR and text pins share the local translator; model downloads require an explicit install action.
         services.AddSingleton(serviceProvider => new TranslationModelStore(
             serviceProvider.GetRequiredService<AppPaths>(),
             serviceProvider.GetRequiredService<ILogger<TranslationModelStore>>()));
         services.AddSingleton(serviceProvider => new TextTranslationService(
             serviceProvider.GetRequiredService<TranslationModelStore>(),
             serviceProvider.GetRequiredService<ILogger<TextTranslationService>>()));
+        services.AddSingleton(serviceProvider =>
+        {
+            // The Korean-to-English model is offered once its files are published in the catalog.
+            TextTranslationService? koreanToEnglish = null;
+            if (TranslationModelCatalog.KoreanToEnglish.IsPublished)
+            {
+                var store = new TranslationModelStore(serviceProvider.GetRequiredService<AppPaths>(),
+                    serviceProvider.GetRequiredService<ILogger<TranslationModelStore>>(), TranslationModelCatalog.KoreanToEnglish);
+                koreanToEnglish = new TextTranslationService(store,
+                    serviceProvider.GetRequiredService<ILogger<TextTranslationService>>(), TranslationModelCatalog.KoreanToEnglish.ModelFiles);
+            }
+            return new PinTranslationEngines(serviceProvider.GetRequiredService<TextTranslationService>(), koreanToEnglish);
+        });
         services.AddSingleton<IOcrService>(serviceProvider => new CaptureOcrService(
             serviceProvider.GetRequiredService<WindowsOcrService>(),
             serviceProvider.GetRequiredService<NeuralOcrEngine>(),
@@ -2577,6 +2608,9 @@ public partial class App : Application
         _launchStatus?.Complete();
         _residentReady?.Dispose();
         _residentReady = null;
+#if DEBUG
+        _pinPreview?.Dispose();
+#endif
         _updateTimer?.Stop();
         _updates?.Dispose();
         // Stop a model download in progress; completed, verified model files stay.
@@ -2633,6 +2667,7 @@ public partial class App : Application
         try
         {
             _pins?.CloseAllForExit();
+            _mermaidRenderer?.Dispose();
         }
         catch (InvalidOperationException)
         {

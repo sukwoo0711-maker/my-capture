@@ -40,7 +40,7 @@ namespace MyCapture.App.Pinning;
 /// <see cref="BitmapScalingMode.HighQuality"/> so scaled pins stay crisp.
 /// </para>
 /// </remarks>
-internal sealed class PinWindow : Window
+internal sealed partial class PinWindow : Window
 {
     private const double GrabMarginDip = 24.0;
     private const double OpacityStep = 0.1;
@@ -132,6 +132,7 @@ internal sealed class PinWindow : Window
     {
         ArgumentNullException.ThrowIfNull(content);
         _content = content;
+        _mermaidMonitorScale = content.Image.DpiX / 96;
         _contentKind = content.Kind;
         _originalText = content.OriginalText;
         SourcePageUrl = content.SourcePageUrl;
@@ -409,6 +410,8 @@ internal sealed class PinWindow : Window
         var bar = new PinHoverBar(Provenance) { ReadOpacity = () => _state.Opacity };
         if (attachOwner) bar.Owner = this;
         bar.CopyRequested += CopyImageToClipboard;
+        bar.TranslationRequested += InvokeTranslationAction;
+        RefreshTranslationButton(bar);
         bar.SaveRequested += () => RequestSave(PinSaveMode.QuickSave);
         bar.SourceRequested += () => LastSourceOperationForTest = OpenSourceAsync();
         RefreshSourceMenu(bar);
@@ -465,7 +468,7 @@ internal sealed class PinWindow : Window
             bar.UpdateLayout();
             _labeledHoverBarWidth = bar.ActualWidth;
         }
-        bar.Compact = Width < _labeledHoverBarWidth + (PinHoverBar.EdgeGap * 4);
+        bar.Compact = bar.NeedsCompact(Width, _labeledHoverBarWidth);
         bar.UpdateLayout();
         DpiScale dpi = VisualTreeHelper.GetDpi(this);
         (int left, int top, int right, int bottom) = WindowStyleFacade.GetWindowBounds(_handle);
@@ -521,7 +524,7 @@ internal sealed class PinWindow : Window
     /// The immutable content this pin shows. Closed pins are decoded losslessly on reopen;
     /// their source pixels and retained text have the same values as before closing.
     /// </summary>
-    internal PinContent PinnedContent => _content;
+    internal PinContent PinnedContent => TranslationSourceContent;
 
     internal ClipboardImageService.PngCache ClipboardCache { get; } = new();
 
@@ -837,11 +840,14 @@ internal sealed class PinWindow : Window
     internal void RerenderForDisplayScale(double scale, bool notify = true)
     {
         if (_isClosed || !_content.CanRerender) return;
+        _mermaidMonitorScale = scale;
         PinContent rendered = _content.RenderedAt(scale);
-        if (ReferenceEquals(rendered, _content)) return;
+        PinContent? renderedSource = _markdownSourceContent?.RenderedAt(scale);
+        if (ReferenceEquals(rendered, _content) && ReferenceEquals(renderedSource, _markdownSourceContent)) return;
         ClipboardCache.Clear();
         _content = rendered;
-        _imageElement.Source = rendered.Image;
+        _markdownSourceContent = renderedSource;
+        _imageElement.Source = DisplayContent.Image;
         UpdateImageRasterLayout();
         if (notify) ViewStateChanged?.Invoke();
     }
@@ -850,19 +856,31 @@ internal sealed class PinWindow : Window
 
     private void UpdateImageRasterLayout()
     {
-        if (!_content.CanRerender) return;
+        if (!_content.CanRerender)
+        {
+            // A picture that returns after its translated document was shown fills its frame again.
+            if (_imageElement.Stretch != Stretch.Fill)
+            {
+                _imageElement.Stretch = Stretch.Fill;
+                _imageElement.HorizontalAlignment = HorizontalAlignment.Stretch;
+                _imageElement.VerticalAlignment = VerticalAlignment.Stretch;
+                _imageElement.LayoutTransform = Transform.Identity;
+                if (_imageClip is not null) UpdateImageClip(_imageElement.RenderSize);
+            }
+            return;
+        }
         // The outward-rounded raster may contain a partial DIP of padding. Let the
         // viewport clip it instead of stretching every glyph to fit that rounding.
         _imageElement.Stretch = Stretch.None;
         _imageElement.HorizontalAlignment = HorizontalAlignment.Left;
         _imageElement.VerticalAlignment = VerticalAlignment.Top;
-        _imageElement.LayoutTransform = new ScaleTransform(_state.Zoom, _state.Zoom);
+        _imageElement.LayoutTransform = new ScaleTransform(_state.Zoom * TranslationFitScale, _state.Zoom * TranslationFitScale);
         if (_imageClip is not null) UpdateImageClip(_imageElement.RenderSize);
     }
 
     private void UpdateImageClip(Size imageSize)
     {
-        double zoom = _content.CanRerender ? _state.Zoom : 1;
+        double zoom = _content.CanRerender ? _state.Zoom * TranslationFitScale : 1;
         Rect bounds = ImageClipBounds(_content.CanRerender ? new Size(_state.WidthDip, _state.HeightDip) : imageSize);
         _imageClip.Rect = new Rect(bounds.X / zoom, bounds.Y / zoom, bounds.Width / zoom, bounds.Height / zoom);
         _imageClip.RadiusX = _imageClip.RadiusY = Math.Max(0, FrameCornerRadiusDip - FrameClipInsetDip) / zoom;
@@ -1424,14 +1442,14 @@ internal sealed class PinWindow : Window
         _ctrlClickTimer.Stop();
         EndDrag();
         HideHoverBar();
-        var selection = new PinTextSelectionView(_content);
+        var selection = new PinTextSelectionView(DisplayContent);
         var clip = new RectangleGeometry(ImageClipBounds(new Size(Width, Height)),
             Math.Max(0, FrameCornerRadiusDip - FrameClipInsetDip),
             Math.Max(0, FrameCornerRadiusDip - FrameClipInsetDip));
         selection.Clip = clip;
         selection.SizeChanged += (_, args) => clip.Rect = ImageClipBounds(args.NewSize);
         selection.ContextMenu = ContextMenu;
-        selection.SetZoom(_state.Zoom);
+        selection.SetZoom(_state.Zoom * TranslationFitScale);
         _textSelection = selection;
         _chrome.Children.Insert(1, selection);
         if (_selectTextItem is not null) _selectTextItem.IsChecked = true;
@@ -1554,7 +1572,7 @@ internal sealed class PinWindow : Window
 
     private void BeginLiveZoom()
     {
-        _textSelection?.SetZoom(_state.Zoom);
+        _textSelection?.SetZoom(_state.Zoom * TranslationFitScale);
         _liveZooming = true;
         RenderOptions.SetBitmapScalingMode(_imageElement, BitmapScalingMode.LowQuality);
         _imageElement.CacheMode ??= new BitmapCache { RenderAtScale = 1, EnableClearType = false, SnapsToDevicePixels = true };
@@ -1625,13 +1643,15 @@ internal sealed class PinWindow : Window
             return;
         }
         ShowFeedback(UiText.Get("Text_4C160257F02C"), FeedbackKind.Progress);
-        CopyRequested?.Invoke(this, new PinImageCopyRequest(_image, SourcePageUrl, _originalText));
+        // Ctrl+C copies what the pin shows: the translation while it is shown, with its picture.
+        CopyRequested?.Invoke(this, new PinImageCopyRequest(DisplayContent.Image, SourcePageUrl, VisibleText));
     }
 
     private void RequestOcr()
     {
         ShowFeedback(UiText.Get("Text_15A871A266BE"), FeedbackKind.Progress);
-        OcrRequested?.Invoke(this, _image);
+        // The picture that was copied, even while its translation is shown.
+        OcrRequested?.Invoke(this, TranslationSourceContent.Image);
     }
 
     private void HandleCtrlDoubleClick()
@@ -1677,7 +1697,7 @@ internal sealed class PinWindow : Window
         ShowFeedback(
             mode == PinSaveMode.SaveAs ? UiText.Get("Text_B53B72EF2371") : UiText.Get("Text_88DAAEEDFE4C"),
             FeedbackKind.Progress);
-        handler.Invoke(this, new PinSaveRequestedEventArgs(mode, _image, SourcePageUrl));
+        handler.Invoke(this, new PinSaveRequestedEventArgs(mode, DisplayContent.Image, SourcePageUrl));
     }
 
     private double AdjustOpacity(double delta)
@@ -2003,6 +2023,9 @@ internal sealed class PinWindow : Window
     {
         var menu = new ContextMenu();
 
+        AddTranslationMenuItem(menu);
+        AddMarkdownViewMenuItem(menu);
+
         menu.Items.Add(MenuItemFor(
             UiText.Get("Text_A81F975C401F"),
             (_, _) => RequestSave(PinSaveMode.SaveAs),
@@ -2031,6 +2054,7 @@ internal sealed class PinWindow : Window
             _selectTextItem = MenuItemFor(UiText.Get("Pin_SelectText"),
                 (_, _) => ToggleTextSelection(), inputGestureText: "F2");
             _selectTextItem.IsCheckable = true;
+            _selectTextItem.IsChecked = IsTextSelectionMode;
             menu.Items.Add(_selectTextItem);
         }
         else
@@ -2075,6 +2099,7 @@ internal sealed class PinWindow : Window
         menu.Opened += (_, _) => RefreshRestoreClosedMenuItem();
 
         ContextMenu = menu;
+        if (_textSelection is not null) _textSelection.ContextMenu = menu;
     }
 
     /// <summary>

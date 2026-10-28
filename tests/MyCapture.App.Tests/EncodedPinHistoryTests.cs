@@ -9,6 +9,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using MyCapture.App.Editing;
 using MyCapture.App.Pinning;
 using MyCapture.Core.Capture;
+using MyCapture.Core.Pin;
 using MyCapture.Core.Settings;
 using MyCapture.Platform.Imaging;
 using Xunit;
@@ -228,6 +229,36 @@ public sealed class EncodedPinHistoryTests(ITestOutputHelper output)
             Assert.Equal(0, manager.ClosedRetainedBytes);
         }
         finally { manager.CloseAllForExit(); }
+    });
+
+    [Fact]
+    public void ClosedTranslationViewReopensWithoutItsOwnBorder() => StaTestHost.Run(() =>
+    {
+        const string text = "번역문은 핀 테두리 안을 채웁니다.";
+        PinContent translation = PinContent.FromText(ClipboardTextRenderer.RenderTranslation(text), text, isTable: false)
+            with { BorderlessText = true };
+
+        PinContent reopened = EncodedPinContent.Encode(translation).Decode();
+
+        Assert.True(reopened.BorderlessText);
+        PinHistoryTestSupport.EqualPixels(ClipboardTextRenderer.RenderTranslation(text, 2), reopened.RenderedAt(2).Image);
+    });
+
+    [Fact]
+    public void ClosedMarkdownPinLeavesDiagramBitmapsOutOfItsBudget() => StaTestHost.Run(() =>
+    {
+        const string source = "```mermaid\ngraph TD; A-->B\n```";
+        BitmapSource diagram = Image(40, 30);
+        PinContent markdown = PinContent.FromMarkdown(ClipboardMarkdownRenderer.Render(source), source)
+            .WithMermaidResults(new Dictionary<int, MermaidRenderResult> { [0] = new(diagram, null) }, 1);
+
+        EncodedPinContent encoded = EncodedPinContent.Encode(markdown);
+
+        Assert.Equal(ClosedPinMemory.EstimatePixelBytes(40, 30, diagram.Format.BitsPerPixel), markdown.MermaidPixelBytes);
+        Assert.Equal(markdown.EstimatedRetainedBytes - markdown.MermaidPixelBytes - ClosedPinMemory.EstimatePixelBytes(
+            markdown.Image.PixelWidth, markdown.Image.PixelHeight, markdown.Image.Format.BitsPerPixel), encoded.MetadataBytes);
+        // The PNG keeps the diagram's pixels; the reopened pin renders the diagram again instead of holding the bitmap.
+        Assert.Null(encoded.Decode().MermaidResults);
     });
 
     [Fact]

@@ -61,6 +61,13 @@ internal sealed class TextTranslationService : ITextTranslator, IDisposable
     {
     }
 
+    /// <summary>A service for another translation direction's model.</summary>
+    internal TextTranslationService(TranslationModelStore store, ILogger<TextTranslationService> log, MarianModelFiles files)
+        : this(store, () => MarianTranslator.Load(store.ModelDirectory, files, MarianTranslator.DefaultThreads), log,
+            TimeSpan.FromMinutes(1))
+    {
+    }
+
     internal TextTranslationService(TranslationModelStore store, Func<ISentenceTranslator> loadEngine, ILogger log,
         TimeSpan idleRelease)
     {
