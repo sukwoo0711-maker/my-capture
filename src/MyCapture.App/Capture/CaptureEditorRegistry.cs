@@ -9,24 +9,32 @@ namespace MyCapture.App.Capture;
 internal static class CaptureEditorRegistry
 {
     [ThreadStatic]
-    private static List<Func<CaptureGuardState?>>? _readers;
+    private static List<Registration>? _readers;
+
+    private sealed record Registration(Func<CaptureGuardState?> ReadState, Func<bool> IsVisible);
 
     internal static void Track<T>(T editor, Func<T, CaptureGuardState> readState) where T : Window
     {
         var reference = new WeakReference<T>(editor);
         CaptureGuardState? Read() => reference.TryGetTarget(out T? window) && window.IsLoaded
             ? readState(window) : null;
-        List<Func<CaptureGuardState?>> readers = _readers ??= [];
-        readers.Add(Read);
-        editor.Closed += (_, _) => readers.Remove(Read);
+        bool IsVisible() => reference.TryGetTarget(out T? window) && window.IsVisible
+            && window.WindowState != WindowState.Minimized;
+        var registration = new Registration(Read, IsVisible);
+        List<Registration> readers = _readers ??= [];
+        readers.Add(registration);
+        editor.Closed += (_, _) => readers.Remove(registration);
     }
+
+    // Delivery policy only: hidden/minimized editors still contribute their busy state to the guard.
+    internal static bool HasVisibleEditor => _readers?.Any(reader => reader.IsVisible()) == true;
 
     internal static CaptureGuardState WithEditors(CaptureGuardState state)
     {
         if (_readers is null) return state;
-        foreach (Func<CaptureGuardState?> read in _readers)
+        foreach (Registration reader in _readers)
         {
-            if (read() is not { } editor) continue;
+            if (reader.ReadState() is not { } editor) continue;
             state = state with
             {
                 EditorOpen = state.EditorOpen || editor.EditorOpen,

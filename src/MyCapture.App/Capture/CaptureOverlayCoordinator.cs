@@ -80,6 +80,13 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
     internal Func<bool> OpenEditorAfterCapture { get; set; } = () => true;
     internal Func<bool> OriginalNeedsRecovery { get; set; } = () => false;
 
+    /// <summary>
+    /// Existing visible editors/library keep their work on screen. A capture started over them uses
+    /// separate persistence and a receipt, regardless of the normal after-capture preference.
+    /// This reads only tracked managed window state; no desktop enumeration or rendering occurs.
+    /// </summary>
+    internal Func<bool> HasVisiblePreservedWindow { get; set; } = () => CaptureEditorRegistry.HasVisibleEditor;
+
     /// <summary>The persisted capture the editor saves to; its drafts recover onto that capture.</summary>
     internal Func<(Guid Id, long ContentRevision)?>? DraftRecord { get; set; }
 
@@ -154,6 +161,8 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
         !editor.IsAskingToClose && _preparation is null && !_isOpeningEditor && _editorScreenCapture is null;
 
     internal bool CanAcceptSelection => !IsActive || (CanRetake && EditorScreenCaptureRequested is not null);
+
+    private bool CanCaptureOverPreservedWindow => CanRetake || (!IsActive && HasVisiblePreservedWindow());
 
     private static bool IsEditorSaving(AnnotationEditorWindow editor) => editor.Editor.IsCommitInProgress || editor.IsSavingToClose;
 
@@ -256,7 +265,7 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
             current.ActivateCurrent();
             return;
         }
-        if (preserveEditor && CanRetake && EditorScreenCaptureRequested is { } persist)
+        if (preserveEditor && CanCaptureOverPreservedWindow && EditorScreenCaptureRequested is { } persist)
         {
             StartOverEditor(persist, includeCursor, abortOnFocusLoss, showMagnifier, showSelectionGrid, textCapture);
             return;
@@ -628,7 +637,15 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
         VerifyDispatcherAccess();
         ObjectDisposedException.ThrowIf(_disposed, this);
 
-        if (preserveEditor && CanRetake && EditorScreenCaptureRequested is { } persist)
+        // A nested capture can be persisting after its selector has closed, with no window to
+        // activate. It still owns the capture session and must reject a second advanced capture.
+        if (_editorScreenCapture is { } current)
+        {
+            current.ActivateCurrent();
+            return false;
+        }
+
+        if (preserveEditor && CanCaptureOverPreservedWindow && EditorScreenCaptureRequested is { } persist)
         {
             CaptureOverlayCoordinator nested = CreateCaptureOverEditor(persist);
             try

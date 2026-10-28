@@ -19,11 +19,15 @@ internal sealed record MediaDetails(MediaDetailsSource Source, string FilePath, 
 /// <summary>Called only on an explicit information action or a tooltip opening, never on card creation.</summary>
 internal static class MediaDetailsReader
 {
-    internal static Task<IReadOnlyList<MediaDetails>> ReadAsync(IReadOnlyList<MediaDetailsSource> sources) =>
-        Task.Run<IReadOnlyList<MediaDetails>>(() => sources.Select(Read).ToArray());
+    internal static Task<IReadOnlyList<MediaDetails>> ReadAsync(IReadOnlyList<MediaDetailsSource> sources,
+        CancellationToken cancellationToken = default) =>
+        Task.Run<IReadOnlyList<MediaDetails>>(() => sources.Select(source =>
+            Read(source, cancellationToken, readImageDimensions: sources.Count == 1)).ToArray(), cancellationToken);
 
-    internal static MediaDetails Read(MediaDetailsSource source)
+    internal static MediaDetails Read(MediaDetailsSource source, CancellationToken cancellationToken = default,
+        bool readImageDimensions = true)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         string path = FullPath(source.FilePath);
         string fallback = FullPath(source.FallbackFilePath);
         bool usingFallback = fallback.Length > 0 && !File.Exists(path) && File.Exists(fallback);
@@ -34,32 +38,37 @@ internal static class MediaDetailsReader
         if (path.Length == 0) return new(source, path, null, null, null, width, height, format, false);
         try
         {
+            cancellationToken.ThrowIfCancellationRequested();
             var file = new FileInfo(path);
             if (!file.Exists) return new(source, path, null, null, null, width, height, format, true);
             // A library record's duration belongs to its render. If only the original remains, read
             // that file's video-track header instead of attaching the edited duration to it.
-            if (usingFallback && format == "MP4" && source.DurationMs is not null)
+            if (format == "MP4" && (usingFallback || source.DurationMs is null))
             {
                 double? duration = null;
                 try
                 {
+                    cancellationToken.ThrowIfCancellationRequested();
                     using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
-                    duration = Mp4VideoTrackDuration.ReadMilliseconds(stream);
+                    cancellationToken.ThrowIfCancellationRequested();
+                    duration = Mp4VideoTrackDuration.ReadMilliseconds(stream, cancellationToken);
                 }
-                catch (Exception ex) when (ex is IOException or NotSupportedException or UnauthorizedAccessException) { }
+                catch (Exception ex) when (IsUnreadableMedia(ex)) { }
                 source = source with { DurationMs = duration ?? double.NaN };
             }
-            if ((width <= 0 || height <= 0) && format is "PNG" or "JPEG" or "GIF" or "BMP" or "TIFF" or "TIF")
+            if (readImageDimensions && (width <= 0 || height <= 0) && format is "PNG" or "JPEG" or "GIF" or "BMP" or "TIFF" or "TIF")
             {
                 try
                 {
+                    cancellationToken.ThrowIfCancellationRequested();
                     using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+                    cancellationToken.ThrowIfCancellationRequested();
                     BitmapFrame frame = BitmapFrame.Create(stream, BitmapCreateOptions.DelayCreation, BitmapCacheOption.None);
                     width = frame.PixelWidth; height = frame.PixelHeight;
                 }
-                catch (Exception ex) when (ex is IOException or NotSupportedException or FileFormatException
-                    or ArgumentException or InvalidOperationException or System.Runtime.InteropServices.COMException or OverflowException) { }
+                catch (Exception ex) when (IsUnreadableMedia(ex)) { }
             }
+            cancellationToken.ThrowIfCancellationRequested();
             return new(source, path, file.Length, file.CreationTime, file.LastWriteTime, width, height, format, false);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Security.SecurityException)
@@ -67,6 +76,12 @@ internal static class MediaDetailsReader
             return new(source, path, null, null, null, width, height, format, true);
         }
     }
+
+    // A bad media header must not discard readable file facts or fail a whole selection.
+    private static bool IsUnreadableMedia(Exception exception) => exception is IOException or InvalidDataException
+        or NotSupportedException or FileFormatException or ArgumentException or InvalidOperationException
+        or System.Runtime.InteropServices.COMException or OverflowException or UnauthorizedAccessException
+        or System.Security.SecurityException;
 
     private static string FullPath(string? path)
     {

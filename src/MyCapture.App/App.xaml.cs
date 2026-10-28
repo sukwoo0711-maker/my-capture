@@ -369,6 +369,8 @@ public partial class App : Application
         _hotkeys.Pressed += OnGlobalHotkeyPressed;
         _overlay.SelectionPersistRequested = e => _capturePersistenceTask = ObserveMemoryWorkAsync(OnCaptureSelectionCompletedAsync(e));
         _overlay.EditorScreenCaptureRequested = e => _capturePersistenceTask = ObserveMemoryWorkAsync(SaveEditorScreenCaptureAsync(e));
+        _overlay.HasVisiblePreservedWindow = () => CaptureEditorRegistry.HasVisibleEditor
+            || _galleryWindow is { IsVisible: true, WindowState: not WindowState.Minimized };
         _overlay.EditorSourcePath = () => _currentRecord is { } record ? _queue?.GetFilePath(record, CaptureFileNames.Original) : null;
         _overlay.OpenEditorAfterCapture = () => AfterCaptureBehavior.Resolve(_settings!.General.AfterCapture, _currentRecord is not null) == AfterCaptureAction.Editor;
         _overlay.OriginalNeedsRecovery = () => _currentRecord is null && _pendingRecord is not null;

@@ -8,6 +8,7 @@ namespace MyCapture.App.Gallery;
 internal sealed partial class GalleryWindow
 {
     private bool _mediaDetailsOpening;
+    private MediaDetailsToolTipLoader? _mediaDetailsTooltips;
 
     private async void OnMediaDetailsClick(object sender, RoutedEventArgs e)
     {
@@ -36,9 +37,11 @@ internal sealed partial class GalleryWindow
         // Updating the tooltip's content leaves the existing time/caption and card layout untouched.
         var tooltip = new ToolTip { Content = UiText.Get("LibraryRecovery_Loading") };
         target.SetCurrentValue(ToolTipProperty, tooltip);
-        IReadOnlyList<MediaDetails> details = await MediaDetailsReader.ReadAsync([DetailsSource(tile)]);
-        if (!ReferenceEquals(target.DataContext, tile) || !ReferenceEquals(target.ToolTip, tooltip)) return;
-        string facts = MediaDetailsWindow.TooltipText(details[0]);
-        tooltip.Content = tile.MetadataCaption.Length > 0 ? tile.MetadataCaption + Environment.NewLine + facts : facts;
+        _mediaDetailsTooltips ??= new MediaDetailsToolTipLoader(this);
+        await _mediaDetailsTooltips.LoadAsync(target, tile, tooltip, DetailsSource(tile), details =>
+        {
+            string facts = MediaDetailsWindow.TooltipText(details);
+            tooltip.Content = tile.MetadataCaption.Length > 0 ? tile.MetadataCaption + Environment.NewLine + facts : facts;
+        });
     }
 }
