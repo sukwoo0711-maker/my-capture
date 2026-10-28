@@ -44,9 +44,11 @@ public partial class App
     /// <summary>The synthetic grab's own time, part of every shortcut → selector timing.</summary>
     private static double s_lastProbeAcquisitionMs;
 
-    private static void ApplyResidentProbeSettings(AppSettings settings)
+    internal static void ApplyResidentProbeSettings(AppSettings settings)
     {
         settings.General.IsFirstRun = false;
+        // An unanswered core-shortcut question would stay open for the whole run and change idle.
+        settings.Hotkeys.CoreShortcutsAsked = true;
         settings.General.FirstCaptureTipShown = true;
         settings.General.AfterCapture = AfterCaptureAction.QuickAccess;
         settings.General.LaunchAtLogin = false;
