@@ -4617,7 +4617,8 @@ Overwrite these shortcuts? You can change this later in Settings → Shortcuts.<
   <data name="Update_DownloadingPercent" xml:space="preserve"><value>Downloading update {0}%</value></data>
   <data name="Update_Verifying" xml:space="preserve"><value>Verifying update</value></data>
   <data name="Update_Preparing" xml:space="preserve"><value>Preparing installation</value></data>
-  <data name="Update_InstallFailed" xml:space="preserve"><value>The update could not be installed. Try again in Settings &gt; About.</value></data>
+  <data name="Update_InstallFailed" xml:space="preserve"><value>The update could not be installed.</value></data>
+  <data name="Update_RetryAction" xml:space="preserve"><value>Retry</value></data>
   <data name="Update_CheckHelp" xml:space="preserve"><value>Checks GitHub for a new version of this app.</value></data>
   <data name="Update_InstallHelp" xml:space="preserve"><value>Saves your work, then installs the new version.</value></data>
   <data name="Update_OpenReleaseHelp" xml:space="preserve"><value>Opens the download page for the new version in your browser.</value></data>
@@ -4740,6 +4741,13 @@ Overwrite these shortcuts? You can change this later in Settings → Shortcuts.<
   <data name="LibraryUx_NoSelection" xml:space="preserve"><value>No selection</value></data>
   <data name="LibraryUx_Preview" xml:space="preserve"><value>Preview</value></data>
   <data name="LibraryUx_PreviewHint" xml:space="preserve"><value>Preview (Space)</value></data>
+  <data name="LibraryUx_UpdateAvailable" xml:space="preserve"><value>Update {0}</value></data>
+  <data name="LibraryUx_RateAction" xml:space="preserve"><value>Rate</value></data>
+  <data name="LibraryUx_SelectCard" xml:space="preserve"><value>Select {0}</value></data>
+  <data name="LibraryUx_PinHint" xml:space="preserve"><value>Pin to screen (P)</value></data>
+  <data name="LibraryUx_SourceDetails" xml:space="preserve"><value>Source details</value></data>
+  <data name="LibraryUx_EditHint" xml:space="preserve"><value>Edit again (Enter)</value></data>
+  <data name="LibraryUx_KeepHint" xml:space="preserve"><value>Keep (K)</value></data>
   <data name="CaptureRatio_Help" xml:space="preserve"><value>Lock the region's aspect ratio or place a fixed size.</value></data>
   <data name="CaptureRatio_Changed" xml:space="preserve"><value>Ratio: {0}</value></data>
   <data name="CaptureRatio_FixedSize" xml:space="preserve"><value>Fixed size {0}</value></data>

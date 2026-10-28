@@ -124,30 +124,31 @@ public sealed partial class SettingsThemePreviewTests
         Assert.DoesNotContain(Descendants(item).OfType<Border>(), border => border.Name == "TileActions");
         Button more = Descendants(item).OfType<Button>().Single(button =>
             AutomationProperties.GetName(button) == UiText.Get("Text_5E8959D18390"));
-        Assert.True(more.IsVisible && more.Focusable && more.IsTabStop);
+        // The grid is one Tab stop: the buttons are focusable by a click and reached by keys, not by Tab.
+        Assert.True(more.IsVisible && more.Focusable && !more.IsTabStop);
         Assert.True(more.ActualWidth >= 24 && more.ActualHeight >= 24);
         Assert.NotNull(more.ToolTip);
         SetLibraryTileState440(item, "IsMouseOver", true);
         SettleGalleryLayout(window);
         Assert.True(more.IsVisible && more.IsHitTestVisible);
         SetLibraryTileState440(item, "IsMouseOver", false);
-        SetLibraryTileState440(item, "IsKeyboardFocusWithin", true);
+        GalleryCardInput.SetKeyboardFocusVisibleForTest(item, true);
         SettleGalleryLayout(window);
         var focus = Assert.IsType<Border>(item.Template.FindName("FocusRing", item));
         Assert.Same(window.FindResource("Text.Primary"), focus.BorderBrush);
         Assert.Equal(1, focus.Opacity);
-        SetLibraryTileState440(item, "IsKeyboardFocusWithin", false);
+        GalleryCardInput.SetKeyboardFocusVisibleForTest(item, false);
         fixture.ViewModel.Select(id);
         SettleGalleryLayout(window);
         var selected = Assert.IsType<Border>(item.Template.FindName("SelectedLayer", item));
         Assert.Equal(new Thickness(2), selected.BorderThickness);
         Assert.Same(window.FindResource("Accent.Default"), selected.BorderBrush);
         Assert.True(more.IsVisible);
-        SetLibraryTileState440(item, "IsKeyboardFocusWithin", true);
+        GalleryCardInput.SetKeyboardFocusVisibleForTest(item, true);
         SettleGalleryLayout(window);
         Assert.Equal(1, focus.Opacity);
         Assert.Same(window.FindResource("Accent.Default"), selected.BorderBrush);
-        SetLibraryTileState440(item, "IsKeyboardFocusWithin", false);
+        GalleryCardInput.SetKeyboardFocusVisibleForTest(item, false);
 
         FrameworkElement preview = Descendants(item).OfType<FrameworkElement>().Single(element => element.Name == "TilePreview");
         Assert.InRange(Math.Abs(preview.ActualWidth * 10d / 16 - preview.ActualHeight), 0, 1);
@@ -181,9 +182,9 @@ public sealed partial class SettingsThemePreviewTests
         Border keepBadge = Descendants(item).OfType<Border>().Single(border => border.Name == "KeepBadge");
         Assert.Equal(vm.IsPinned, keepBadge.IsVisible);
         Assert.Same(window.FindResource("Surface.Sunken"), keepBadge.Background);
-        Assert.Equal(compact, Descendants(item).OfType<Border>().Any(border => border.Name == "CompactTileCard"));
+        Assert.Equal(compact, GalleryCardStyle.GetIsCompact(Descendants(item).OfType<Border>().Single(border => border.Name == "TileCard")));
 
-        ContextMenu menu = Assert.IsType<ContextMenu>(more.ContextMenu);
+        ContextMenu menu = window.TileMenu;
         menu.PlacementTarget = more;
         menu.DataContext = vm;
         menu.IsOpen = true;
@@ -203,9 +204,9 @@ public sealed partial class SettingsThemePreviewTests
         }
         Assert.All(accessibleCommands, entry => Assert.True(entry.Focusable));
         Assert.Equal(vm.IsImage ? "Enter" : string.Empty, editMenu.InputGestureText);
-        Assert.Contains(menu.Items.OfType<MenuItem>(), entry => entry.InputGestureText == "Delete"
+        Assert.Contains(menu.Items.OfType<MenuItem>(), entry => entry.InputGestureText == "Del"
             && !string.IsNullOrWhiteSpace(AutomationProperties.GetName(entry)));
-        Assert.NotNull(item.ContextMenu);
+        Assert.Null(item.ContextMenu); // the library has one card menu, not one per card
         menu.IsOpen = false;
         fixture.ViewModel.ClearSelection();
         SettleGalleryLayout(window);

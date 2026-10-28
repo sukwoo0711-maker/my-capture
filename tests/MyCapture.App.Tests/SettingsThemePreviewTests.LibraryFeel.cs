@@ -104,7 +104,7 @@ public sealed partial class SettingsThemePreviewTests
 
             // A copy without a button (the card's menu) confirms on the status line instead.
             first = FeelCard(window, copied.Id);
-            ContextMenu menu = Assert.IsType<ContextMenu>(first.ContextMenu);
+            ContextMenu menu = window.TileMenu;
             menu.PlacementTarget = first;
             SettleGalleryLayout(window);
             MenuItem menuCopy = menu.Items.OfType<MenuItem>().Single(item => item.Header as string == copyName);

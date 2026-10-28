@@ -82,6 +82,19 @@ public sealed class IsFolderRowConverter : IValueConverter
 
 /// <summary>Visible when the bound value is not <see langword="null"/>, for example a folder scope's id.</summary>
 /// <remarks>Declared in <c>GalleryWindow.xaml</c>, like <see cref="IsFolderRowConverter"/>.</remarks>
+/// <summary>True (or Visible) for a non-empty string: a card's second-line caption shows only when it has text.</summary>
+public sealed class HasTextConverter : IValueConverter
+{
+    public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
+    {
+        bool hasText = value is string { Length: > 0 };
+        return targetType == typeof(Visibility) ? (hasText ? Visibility.Visible : Visibility.Collapsed) : hasText;
+    }
+
+    public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) =>
+        throw new NotSupportedException();
+}
+
 public sealed class HasValueToVisibilityConverter : IValueConverter
 {
     public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture) =>

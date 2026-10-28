@@ -1,4 +1,4 @@
-﻿using System.IO;
+using System.IO;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
@@ -13,13 +13,23 @@ internal sealed partial class GalleryWindow
 {
     private (double Font, string Family, string Culture, double Dpi, TextFormattingMode Mode)? _metadataTextMetrics;
 
-    private void OnMetadataLayoutUpdated(object? sender, EventArgs e)
+    /// <summary>How many times the card text widths were checked; scrolling and layout passes must not add to it.</summary>
+    internal int MetadataWidthChecks { get; private set; }
+
+    /// <summary>
+    /// Measures the widest capture time in the UI language and gives the view model the narrowest card track
+    /// that fits it. It runs when the window loads, is shown, is resized or changes DPI and re-measures only
+    /// when the font, language or scale actually differ, so scrolling and ordinary layout never pay for it.
+    /// </summary>
+    private void UpdateMetadataMinimumWidths()
     {
+        MetadataWidthChecks++;
         double font = TryFindResource("FontSize.Caption") is double size ? size : 12;
         DpiScale dpi = VisualTreeHelper.GetDpi(this);
         var metrics = (font, FontFamily.Source, UiText.Culture.Name, dpi.DpiScaleX, TextOptions.GetTextFormattingMode(this));
         if (_metadataTextMetrics == metrics) return;
         _metadataTextMetrics = metrics;
+        Resources["Gallery.SearchFolderBadgeWidth"] = GalleryRowBuilder.SearchFolderBadgeWidthFor(font);
         var probe = new TextBlock { FontSize = font, FontFamily = FontFamily };
         TextOptions.SetTextFormattingMode(probe, metrics.Item5);
         VisualTreeHelper.SetRootDpi(probe, dpi);
@@ -31,10 +41,11 @@ internal sealed partial class GalleryWindow
             probe.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
             timeWidth = Math.Max(timeWidth, probe.DesiredSize.Width);
         }
-        // Two 20-DIP status glyph badges, the 4-DIP gap, 16-DIP card text inset,
-        // and 16-DIP track inset; full views also reserve a 20-DIP folder glyph.
-        // The existing minimum tracks still win at ordinary text sizes.
-        _viewModel.SetMetadataMinimumTrackWidths(Math.Ceiling(timeWidth) + 96, Math.Ceiling(timeWidth) + 76);
+        _viewModel.SetMetadataMinimumTrackWidths(
+            GalleryRowBuilder.CardTrackFor(Math.Ceiling(timeWidth), compact: false, captionFontSize: font),
+            GalleryRowBuilder.CardTrackFor(Math.Ceiling(timeWidth), compact: true, captionFontSize: font),
+            GalleryRowBuilder.CardTrackFor(Math.Ceiling(timeWidth), compact: false, captionFontSize: font, withFolderReason: true),
+            GalleryRowBuilder.CardTrackFor(Math.Ceiling(timeWidth), compact: true, captionFontSize: font, withFolderReason: true));
     }
 
     private GalleryItemViewModel? _renamingTile;
@@ -190,7 +201,11 @@ internal sealed partial class GalleryWindow
     {
         // A blank click makes the canvas the keyboard context for the next menu-key invocation.
         // Child capture and folder menus retain WPF's normal right-click routing.
-        if (FindLibraryCard(e.OriginalSource as DependencyObject) is null) RowsList.Focus();
+        FrameworkElement? card = FindLibraryCard(e.OriginalSource as DependencyObject);
+        if (card is null) { RowsList.Focus(); return; }
+        // As in File Explorer, a right click on a card outside the selection selects only that card.
+        if (card.DataContext is GalleryItemViewModel tile && !_viewModel.Selection.Contains(tile.Id))
+            _viewModel.Select(tile.Id);
     }
 
     internal static FrameworkElement? FindLibraryCard(DependencyObject? source)
@@ -201,28 +216,5 @@ internal sealed partial class GalleryWindow
             if (current is Button { DataContext: GalleryFolderCardViewModel } folder) return folder;
         }
         return null;
-    }
-
-    private void OnLibraryItemsKeyDown(object sender, KeyEventArgs e)
-    {
-        if (e.Handled) return;
-        // The content toolbar shares this surface for layout, but its controls keep their
-        // own keyboard/context-menu handling instead of opening the canvas menu.
-        for (DependencyObject? current = e.OriginalSource as DependencyObject; current is not null; current = GetParent(current))
-            if (ReferenceEquals(current, LibraryContentCommandBar)) return;
-        if (IsNavigationTextInput(e.OriginalSource as DependencyObject)) return;
-        Key key = e.Key == Key.System ? e.SystemKey : e.Key;
-        if (key == Key.A && Keyboard.Modifiers == ModifierKeys.Control)
-        {
-            OnSelectAllVisibleClick(sender, e);
-            return;
-        }
-        if (key != Key.Apps && !(key == Key.F10 && Keyboard.Modifiers == ModifierKeys.Shift)) return;
-        FrameworkElement target = FindLibraryCard(Keyboard.FocusedElement as DependencyObject) ?? RowsList;
-        ContextMenu menu = target.ContextMenu ?? LibraryItemsSurface.ContextMenu;
-        menu.PlacementTarget = target;
-        menu.Placement = PlacementMode.Bottom;
-        menu.IsOpen = true;
-        e.Handled = true;
     }
 }

@@ -113,7 +113,7 @@ public sealed class GalleryProvenanceTests
         Assert.True(button.Focusable && button.IsTabStop);
         Assert.Equal(SourceChip.GlyphFor(web.Kind), Assert.IsType<TextBlock>(button.Content).Text);
         Assert.Equal(new[] { UiText.Get("Source.Open"), UiText.Get("Source.CopyUrl"), UiText.Get("Source.ShowSame") },
-            button.ContextMenu.Items.OfType<MenuItem>().Select(item => (string)item.Header));
+            GallerySourceBadge.EnsureMenu(button)!.Items.OfType<MenuItem>().Select(item => (string)item.Header));
 
         CaptureProvenance document = CaptureProvenance.Create(documentPath: @"C:\Work\Project specs\사양서.xlsx", appName: "Excel");
         GallerySourceBadge.SetProvenance(button, document);
@@ -122,16 +122,16 @@ public sealed class GalleryProvenanceTests
         Assert.Equal(document.Tooltip, PreviewText(button));
         Assert.Equal(document.Tooltip, AutomationProperties.GetHelpText(button));
         Assert.Equal(new[] { UiText.Get("Source.Open"), UiText.Get("Source.CopyPath"), UiText.Get("Source.OpenLocation"), UiText.Get("Source.ShowSame") },
-            button.ContextMenu.Items.OfType<MenuItem>().Select(item => (string)item.Header));
+            GallerySourceBadge.EnsureMenu(button)!.Items.OfType<MenuItem>().Select(item => (string)item.Header));
 
         string? requestedQuery = null;
         GallerySourceBadge.Configure(button, document, status: null, query => requestedQuery = query);
-        MenuItem sameSource = button.ContextMenu.Items.OfType<MenuItem>().Last();
+        MenuItem sameSource = GallerySourceBadge.EnsureMenu(button)!.Items.OfType<MenuItem>().Last();
         sameSource.RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
         Assert.Equal("folder:\"C:\\Work\\Project specs\\사양서.xlsx\"", requestedQuery);
 
         GallerySourceBadge.SetProvenance(button, CaptureProvenance.None);
-        Assert.Empty(button.ContextMenu.Items);
+        Assert.Empty(GallerySourceBadge.EnsureMenu(button)!.Items);
         Assert.Empty(AutomationProperties.GetHelpText(button));
         Assert.Empty(PreviewText(button));
     });
@@ -155,7 +155,7 @@ public sealed class GalleryProvenanceTests
         Assert.Equal(PreviewText(button), AutomationProperties.GetHelpText(button));
         Assert.DoesNotContain("secret", AutomationProperties.GetName(button));
         button.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
-        MenuItem[] items = button.ContextMenu.Items.OfType<MenuItem>().ToArray();
+        MenuItem[] items = GallerySourceBadge.EnsureMenu(button)!.Items.OfType<MenuItem>().ToArray();
         items[0].RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
         items[1].RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
         items[2].RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
@@ -173,7 +173,7 @@ public sealed class GalleryProvenanceTests
         XNamespace p = "http://schemas.microsoft.com/winfx/2006/xaml/presentation";
         XNamespace x = "http://schemas.microsoft.com/winfx/2006/xaml";
         XNamespace gallery = "clr-namespace:MyCapture.App.Gallery";
-        foreach (string key in new[] { "Gallery.TileTemplate", "Gallery.CompactTileTemplate" })
+        foreach (string key in new[] { "Gallery.TileTemplate" })
         {
             XElement template = Assert.Single(document.Descendants(p + "DataTemplate"), node => (string?)node.Attribute(x + "Key") == key);
             XElement badge = Assert.Single(template.Descendants(p + "Button"), node => (string?)node.Attribute("AutomationProperties.AutomationId") == "LibrarySourceBadge");
