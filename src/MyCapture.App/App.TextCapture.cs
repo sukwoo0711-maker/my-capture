@@ -51,6 +51,8 @@ public partial class App
             write => Dispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle, write),
             services.GetRequiredService<ILogger<CaptureOverlayCoordinator>>());
         _overlay.ClaimStartGuide = startGuide.Claim;
+        _overlay.ClaimKeyPanel = startGuide.ClaimKeyPanel;
+        _overlay.ReadPasteToScreenHotkey = () => _settings?.Hotkeys.PasteToScreen ?? MyCapture.Core.Settings.Hotkey.None;
         if (_tray is not null) _tray.CaptureTextRequested += (_, _) => HandleCaptureTextRequested();
     }
 

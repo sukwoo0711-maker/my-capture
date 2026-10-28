@@ -40,7 +40,7 @@ namespace MyCapture.App.Capture;
 /// frozen frame, never from what the overlay draws.
 /// </para>
 /// </remarks>
-internal sealed class CaptureOverlayView : FrameworkElement
+internal sealed partial class CaptureOverlayView : FrameworkElement
 {
     private const double MinimumSelectionPixels = 2;
     private const int MagnifierSourcePixels = 15;
@@ -565,7 +565,9 @@ internal sealed class CaptureOverlayView : FrameworkElement
     protected override Visual GetVisualChild(int index) => _visuals[index];
 
     protected override IEnumerator LogicalChildren =>
-        new object?[] { _modeBar, _startGuide }.Where(child => child is not null).GetEnumerator();
+        _deferredGuideChildren is null
+            ? new object?[] { _modeBar, _startGuide }.Where(child => child is not null).GetEnumerator()
+            : new object?[] { _modeBar, _startGuide }.Concat(_deferredGuideChildren).Where(child => child is not null).GetEnumerator();
 
     private void QueueFeedback()
     {
@@ -606,6 +608,10 @@ internal sealed class CaptureOverlayView : FrameworkElement
             bar.RatioRequested -= OnRatioRequested;
             bar.FixedSizeRequested -= OnFixedSizeRequested;
         }
+        _keyPanelRelease?.Invoke();
+        _keyPanelUpdate = _keyPanelPaletteChanged = _keyPanelRelease = null;
+        _keyPanelElement = null;
+        _deferredGuideChildren = null;
         foreach (FrameworkElement child in new FrameworkElement?[] { _modeBar, _startGuide }.OfType<FrameworkElement>())
             RemoveLogicalChild(child);
         _modeBar = null;
@@ -961,6 +967,7 @@ internal sealed class CaptureOverlayView : FrameworkElement
         _modeBar?.ShowMode(Mode, _windowSelected);
         _modeBar?.ShowRatio(_selectionRatio);
         _startGuide?.Configure(UsesWindowDetection, RecordingSelection);
+        _keyPanelUpdate?.Invoke();
         _staticDirty = true;
         QueueFeedback();
     }
@@ -1011,8 +1018,10 @@ internal sealed class CaptureOverlayView : FrameworkElement
 
     private void OnHelpRequested()
     {
+        if (!RecordingSelection) _keyPanelUserOverride = _keyPanelRequested = true;
         if (_startGuideShown) DismissStartGuide();
         else OpenStartGuide();
+        if (_firstFramePresented && _keyPanelRequested && _keyPanelUpdate is null) CreateKeyPanelAfterFrame();
         ReturnFocusAfterPointer();
     }
 
@@ -1146,6 +1155,7 @@ internal sealed class CaptureOverlayView : FrameworkElement
         _startGuide.Opacity = 1;
         _startGuide.Visibility = Visibility.Visible;
         _startGuideShown = true;
+        _keyPanelUpdate?.Invoke();
         _startGuideOrigin = _pointerInitialized ? _cursorPixel : null;
         if (_startGuideOrigin.HasValue) RestartStartGuideTimer();
         InvalidateMeasure();
@@ -1164,7 +1174,11 @@ internal sealed class CaptureOverlayView : FrameworkElement
             var fade = new DoubleAnimation(0, FluidMotion.NormalDuration) { EasingFunction = FluidMotion.StandardEasing };
             fade.Completed += (_, _) =>
             {
-                if (!_startGuideShown && ReferenceEquals(_startGuide, card)) card.Visibility = Visibility.Collapsed;
+                if (!_startGuideShown && ReferenceEquals(_startGuide, card))
+                {
+                    card.Visibility = Visibility.Collapsed;
+                    _keyPanelUpdate?.Invoke();
+                }
             };
             card.BeginAnimation(OpacityProperty, fade);
         }
@@ -1172,6 +1186,7 @@ internal sealed class CaptureOverlayView : FrameworkElement
         {
             card.BeginAnimation(OpacityProperty, null);
             card.Visibility = Visibility.Collapsed;
+            _keyPanelUpdate?.Invoke();
         }
     }
 
@@ -1251,6 +1266,7 @@ internal sealed class CaptureOverlayView : FrameworkElement
             _drawnSelectionMode = mode;
             _targetTab = null;
             _targetLabel = null;
+            _dimensionLabelBounds = null;
             RectD? revealed = _selection ?? shownHover;
             UpdateRevealedRegion(revealed);
             using DrawingContext dc = _selectionVisual.RenderOpen();
@@ -1300,6 +1316,7 @@ internal sealed class CaptureOverlayView : FrameworkElement
             using DrawingContext dc = _toastVisual.RenderOpen();
             if (_toastMessage is { } message && !_ended) DrawToast(dc, message);
         }
+        _keyPanelUpdate?.Invoke();
     }
 
     /// <summary>
@@ -1700,6 +1717,7 @@ internal sealed class CaptureOverlayView : FrameworkElement
         }
 
         var background = new Rect(x, y, width, height);
+        _dimensionLabelBounds = background;
         dc.DrawRoundedRectangle(_chromeBrush, RecordingSelection ? _recordingPen : _chipBorderPen, background, 7, 7);
         dc.DrawText(formatted, new Point(x + paddingX, y + paddingY));
     }
@@ -2221,6 +2239,12 @@ internal sealed class CaptureOverlayView : FrameworkElement
     {
         // A Korean IME in Hangul mode reports letters as ImeProcessed; C and T must still work.
         Key key = e.Key == Key.ImeProcessed ? e.ImeProcessedKey : e.Key;
+        if (key == Key.F1 && modifiers == ModifierKeys.None && !_ended && !RecordingSelection)
+        {
+            ToggleKeyPanel();
+            e.Handled = true;
+            return;
+        }
         if (key is not (Key.LeftShift or Key.RightShift or Key.LeftCtrl or Key.RightCtrl or Key.LeftAlt
             or Key.RightAlt or Key.System or Key.LWin or Key.RWin))
         {
@@ -2586,6 +2610,7 @@ internal sealed class CaptureOverlayView : FrameworkElement
         _tabLabelText = _tabSizeText = null;
         _modeBar?.ApplyPalette(_guidePalette);
         _startGuide?.ApplyPalette(_guidePalette);
+        _keyPanelPaletteChanged?.Invoke();
     }
 
     /// <summary>Whether two palettes paint identically: the same keys, each a solid brush of the same colour.</summary>

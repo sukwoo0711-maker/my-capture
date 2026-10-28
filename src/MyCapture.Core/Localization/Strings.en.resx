@@ -3283,6 +3283,7 @@ Open the library or Settings from the tray menu.</value></data>
   <data name="Library.Empty.NoResults" xml:space="preserve"><value>No matching captures</value></data>
   <data name="Capture.LibrarySaveFailed" xml:space="preserve"><value>Could not save to the library. Use Save in the editor to try again. {0}</value></data>
   <data name="Settings.ShowSelectionGrid" xml:space="preserve"><value>Show cursor guides before selecting</value></data>
+  <data name="Settings.AlwaysShowKeyPanel" xml:space="preserve"><value>Always show the key panel in the selector</value></data>
   <data name="Library.SourcePage.Label" xml:space="preserve"><value>Source webpage</value></data>
   <data name="Library.SourcePage.Open" xml:space="preserve"><value>Open page</value></data>
   <data name="Library.SourcePage.Copy" xml:space="preserve"><value>Copy URL</value></data>
@@ -3767,6 +3768,23 @@ Delete {1} {1:plural:subfolder|subfolders}, {2} {2:plural:image|images}, and {3}
   <data name="LibraryFolder_KeepAfterClose" xml:space="preserve"><value>Keep saving new captures to the last folder after closing the library</value></data>
   <data name="LibraryFolder_EmptyFolderSavesHere" xml:space="preserve"><value>New captures are saved to this folder. You can also drag captures here.</value></data>
   <data name="CaptureGuide2_BarName" xml:space="preserve"><value>Capture options</value></data>
+  <data name="CaptureKeyPanel.Title" xml:space="preserve"><value>Keyboard shortcuts</value></data>
+  <data name="CaptureKeyPanel.Drag" xml:space="preserve"><value>Drag</value></data>
+  <data name="CaptureKeyPanel.Click" xml:space="preserve"><value>Click</value></data>
+  <data name="CaptureKeyPanel.Region" xml:space="preserve"><value>Select a region</value></data>
+  <data name="CaptureKeyPanel.Window" xml:space="preserve"><value>Select a window</value></data>
+  <data name="CaptureKeyPanel.Move" xml:space="preserve"><value>Move 1 pixel · Ctrl for 10 pixels</value></data>
+  <data name="CaptureKeyPanel.Resize" xml:space="preserve"><value>Resize 1 pixel · Ctrl for 10 pixels</value></data>
+  <data name="CaptureKeyPanel.All" xml:space="preserve"><value>Select the entire screen</value></data>
+  <data name="CaptureKeyPanel.Ratio" xml:space="preserve"><value>Change aspect ratio</value></data>
+  <data name="CaptureKeyPanel.Color" xml:space="preserve"><value>Copy color</value></data>
+  <data name="CaptureKeyPanel.Text" xml:space="preserve"><value>Switch to text copy</value></data>
+  <data name="CaptureKeyPanel.Image" xml:space="preserve"><value>Switch to image capture</value></data>
+  <data name="CaptureKeyPanel.Pin" xml:space="preserve"><value>Pin selected region</value></data>
+  <data name="CaptureKeyPanel.ConfirmCancel" xml:space="preserve"><value>Confirm · Cancel</value></data>
+  <data name="CaptureKeyPanel.Cancel" xml:space="preserve"><value>Cancel</value></data>
+  <data name="CaptureKeyPanel.Hide" xml:space="preserve"><value>Hide key panel</value></data>
+  <data name="CaptureKeyPanel.Show" xml:space="preserve"><value>Show key panel</value></data>
   <data name="CaptureGuide2_Region" xml:space="preserve"><value>Select region</value></data>
   <data name="CaptureGuide2_RegionOnly" xml:space="preserve"><value>Select region</value></data>
   <data name="CaptureBar_Window" xml:space="preserve"><value>Select window</value></data>

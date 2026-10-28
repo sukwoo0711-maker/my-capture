@@ -379,6 +379,7 @@ public sealed class SettingsStore
 
         // A bookkeeping counter, not a preference: repaired silently.
         s.Capture.StartGuideShownCount = CaptureStartGuidePolicy.Normalize(s.Capture.StartGuideShownCount);
+        s.Capture.KeyPanelShownCount = CaptureKeyPanelPolicy.Normalize(s.Capture.KeyPanelShownCount);
 
         // --- Recording ---
         int recordingFps = (int)s.Recording.FrameRate;

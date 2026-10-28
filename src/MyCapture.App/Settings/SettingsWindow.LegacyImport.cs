@@ -103,6 +103,7 @@ internal sealed partial class SettingsWindow
             candidate.General.IsFirstRun = current.General.IsFirstRun;
             candidate.Hotkeys.CoreShortcutsAsked = current.Hotkeys.CoreShortcutsAsked;
             candidate.Capture.StartGuideShownCount = current.Capture.StartGuideShownCount;
+            candidate.Capture.KeyPanelShownCount = current.Capture.KeyPanelShownCount;
         }
         return candidate;
     }
@@ -122,5 +123,6 @@ internal sealed partial class SettingsWindow
         candidate.Hotkeys.CoreShortcutsAsked = current.Hotkeys.CoreShortcutsAsked;
         candidate.General.LaunchAtLogin = current.General.LaunchAtLogin;
         candidate.Capture.StartGuideShownCount = current.Capture.StartGuideShownCount;
+        candidate.Capture.KeyPanelShownCount = current.Capture.KeyPanelShownCount;
     }
 }
