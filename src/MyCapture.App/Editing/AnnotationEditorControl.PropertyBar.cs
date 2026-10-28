@@ -19,6 +19,45 @@ internal sealed partial class AnnotationEditorControl
     private Slider _mosaicSlider = null!;
     private Popup _customColorPopup = null!;
     private Button _customColorButton = null!;
+    private FrameworkElement _arrowHeadSection = null!;
+    private readonly Dictionary<ArrowHeadStyle, ToggleButton> _arrowHeadButtons = [];
+
+    private FrameworkElement BuildArrowHeadSection()
+    {
+        var group = PropertyGroup("AnnotationArrowHeadProperties");
+        group.Children.Add(PropertyLabel(UiText.Get("EditorProperty_ArrowHead")));
+        var choices = new StackPanel { Orientation = Orientation.Horizontal };
+        foreach (ArrowHeadStyle style in Enum.GetValues<ArrowHeadStyle>())
+        {
+            var button = new ToggleButton
+            {
+                Content = UiText.Get("EditorProperty_ArrowHead" + style), MinHeight = 32, MinWidth = 44,
+                FontSize = 12, Padding = new Thickness(8, 2, 8, 2), Margin = new Thickness(1, 0, 1, 0),
+            };
+            AutomationProperties.SetName(button, UiText.Get("EditorProperty_ArrowHead") + ": " + button.Content);
+            AutomationProperties.SetAutomationId(button, "AnnotationArrowHead" + style);
+            PreserveEditorMouseFocus(button);
+            button.Click += (_, _) =>
+            {
+                _controller.ApplyArrowHeads(style);
+                RememberPreferences();
+                RefreshArrowHeads();
+            };
+            _arrowHeadButtons.Add(style, button);
+            choices.Children.Add(button);
+        }
+        group.Children.Add(choices);
+        return group;
+    }
+
+    private void RefreshArrowHeads()
+    {
+        PolylineAnnotation[] lines = _controller.SelectedItems.OfType<PolylineAnnotation>().ToArray();
+        foreach ((ArrowHeadStyle style, ToggleButton button) in _arrowHeadButtons)
+            button.IsChecked = lines.Length == 0 ? _controller.ArrowHeads == style
+                : lines.All(line => line.HeadAtStart == (style == ArrowHeadStyle.Both)
+                    && line.HeadAtEnd == (style != ArrowHeadStyle.None));
+    }
 
     private static StackPanel PropertyGroup(string id) => new()
     {

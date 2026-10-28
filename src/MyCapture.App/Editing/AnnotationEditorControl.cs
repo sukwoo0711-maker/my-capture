@@ -235,6 +235,7 @@ internal sealed partial class AnnotationEditorControl : Grid
         _controller.StrokeThickness = double.IsFinite(defaults.StrokeThickness)
             ? Math.Clamp(defaults.StrokeThickness, SettingsRanges.StrokeThickness.Min, SettingsRanges.StrokeThickness.Max) : 3;
         _controller.ApplyStrokeStyle(Enum.IsDefined(defaults.StrokeStyle) ? defaults.StrokeStyle : AnnotationStrokeStyle.Solid);
+        _controller.ApplyArrowHeads(defaults.ArrowHeads);
         _controller.ApplyFillTransparency(double.IsFinite(defaults.FillTransparency) ? Math.Clamp(defaults.FillTransparency, 0, 100) : 100);
         _controller.DefaultFontSize = double.IsFinite(defaults.FontSize)
             ? Math.Clamp(defaults.FontSize, SettingsRanges.FontSize.Min, SettingsRanges.FontSize.Max) : 18;
@@ -362,6 +363,18 @@ internal sealed partial class AnnotationEditorControl : Grid
 
     /// <summary>Saves through the normal Done commit, which closes the editor once it succeeds.</summary>
     internal void SaveAndClose() => Commit(EditorCommitAction.Done);
+    internal void PinAndClose()
+    {
+        if (!AllowsPin) return;
+        // WM_HOTKEY can arrive without a WPF synchronization context.
+        SynchronizationContext? previous = SynchronizationContext.Current;
+        try
+        {
+            SynchronizationContext.SetSynchronizationContext(new System.Windows.Threading.DispatcherSynchronizationContext(Dispatcher));
+            Commit(EditorCommitAction.Pin);
+        }
+        finally { SynchronizationContext.SetSynchronizationContext(previous); }
+    }
 
     /// <summary>
     /// Tells the user, as the editor opens after a capture, that the capture has already been
@@ -1865,10 +1878,20 @@ internal sealed partial class AnnotationEditorControl : Grid
             () => Commit(EditorCommitAction.Done));
         done.SetResourceReference(FrameworkElement.StyleProperty, "Button.Primary");
         CommandButtonPresentation.KeepLabel(done);
-        CommandButtonPresentation.KeepLabel(save);
+        CommandButtonPresentation.CollapseOrder(save, 8);
         AutomationProperties.SetAutomationId(done, "EditorFlowDone");
         right.Children.Add(save);
         right.Children.Add(done);
+        _pinButton = IconTextButton(UiText.Get("QuickAccess.Pin"), UiText.Get("EditorFlow_PinHint"),
+            "Icon.Pin", () => Geometry.Parse("M10,17.5 L10,12.25 M6.25,12.25 L13.75,12.25 L12.5,8.5 L13,3.75 L7,3.75 L7.5,8.5 Z"),
+            PinAndClose);
+        AutomationProperties.SetAutomationId(_pinButton, "EditorFlowPin");
+        CommandButton(_pinButton, borderless: false);
+        CommandButtonPresentation.CollapseOrder(_pinButton, 7);
+        RefreshPinShortcut();
+        _pinButton.Loaded += (_, _) => RefreshPinShortcut();
+        IsKeyboardFocusWithinChanged += (_, _) => RefreshPinShortcut();
+        right.Children.Add(_pinButton);
 
         foreach (var (button, command, borderless) in new[] { (_undoButton, "Undo", true), (_redoButton, "Redo", true),
             (crop, "Crop", true), (_redactButton, "Privacy", true), (done, "Copy", false) })
@@ -2248,6 +2271,7 @@ internal sealed partial class AnnotationEditorControl : Grid
         _colorSection = DeferredSection("AnnotationColorProperties");
         _thicknessSection = DeferredSection("AnnotationThicknessProperties");
         _shapeStyleSection = DeferredSection("AnnotationShapeProperties");
+        _arrowHeadSection = DeferredSection("AnnotationArrowHeadProperties");
         _fillSection = DeferredSection("AnnotationFillProperties");
         _stepSection = DeferredSection("AnnotationStepProperties");
         _fontFamilySection = DeferredSection("AnnotationFontFamilyProperties");
@@ -3049,6 +3073,7 @@ internal sealed partial class AnnotationEditorControl : Grid
         {
             LastTool = _preferredTool.ToString(), StrokeColor = _controller.StrokeColor,
             StrokeThickness = _controller.StrokeThickness, StrokeStyle = _controller.StrokeStyle,
+            ArrowHeads = _controller.ArrowHeads,
             FillTransparency = _controller.FillTransparency, FontSize = _controller.DefaultFontSize,
             FontFamily = _controller.DefaultFontFamily, TextColor = previous.TextColor,
             TextBold = _defaultTextBold, TextBackground = _defaultTextBackground, TextOutline = _defaultTextOutline,
@@ -3288,6 +3313,11 @@ internal sealed partial class AnnotationEditorControl : Grid
         bool blurApplies = selected is BlurAnnotation || (selected is null && _controller.Tool == EditorTool.Blur);
 
         bool cropping = _crop is not null;
+        bool arrowApplies = _controller.SelectedItems.Any(item => item is PolylineAnnotation)
+            || (selected is null && _controller.Tool == EditorTool.Arrow);
+        if (arrowApplies && !cropping) EnsureSection(ref _arrowHeadSection, BuildArrowHeadSection);
+        _arrowHeadSection.Visibility = arrowApplies && !cropping ? Visibility.Visible : Visibility.Collapsed;
+        if (arrowApplies && !cropping) RefreshArrowHeads();
         var groups = (cropping, hasSelection, colorApplies, thicknessApplies, shapeApplies, fontSizeApplies,
             text: selected is TextAnnotation { IsStepNumber: false } || (selected is null && _controller.Tool == EditorTool.Text),
             blurApplies, mosaic: _controller.Tool == EditorTool.Mosaic, stepTool);

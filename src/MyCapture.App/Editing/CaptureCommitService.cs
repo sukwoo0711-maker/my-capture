@@ -19,8 +19,8 @@ namespace MyCapture.App.Editing;
 /// </summary>
 /// <remarks>
 /// <para>
-/// This is the single place the four commit actions converge. All of them flatten the
-/// annotations onto the original at 1:1 physical pixels. Done, Quick Save and Save As also
+/// This is the single place the editor commit actions converge. All of them flatten the
+/// annotations onto the original at 1:1 physical pixels. Done, Pin, Quick Save and Save As also
 /// finalise the capture in the queue (the library) and copy the result, then close the
 /// editor; Copy only puts the pixels on the clipboard and leaves the editor open. See
 /// <see cref="EditorCommitAction"/> for each action's exact steps.
@@ -73,6 +73,8 @@ internal sealed class CaptureCommitService
     internal event Action<string>? QuickSaved;
 
     internal Action? PersistExportSettings { get; set; }
+    internal Action<BitmapSource, CaptureProvenance>? PinImage { get; set; }
+    internal Action? PinFailed { get; set; }
     internal ImageExportLocation ExportLocation { get; }
     internal ImageExportOptions LastExportOptions => _settings().Export.LastImageExport;
     internal void RememberSavedExport(string path, ImageExportOptions options)
@@ -192,6 +194,26 @@ internal sealed class CaptureCommitService
 
         switch (result.Action)
         {
+            case EditorCommitAction.Pin:
+                if (record is null && createRecordAsync is null) return false;
+                record = await PersistFinalIfAvailableAsync(
+                    record, result.Action, flattened, snapshot, result.ImageAssetBitmaps, editSession, createRecordAsync,
+                    replaceOriginal ? result.SelectedBitmap : null);
+                if (record is null || !await CopyEditedImageAsync(flattened, "Pin", record)) return false;
+                try
+                {
+                    if (PinImage is null) throw new InvalidOperationException("Pinning is unavailable.");
+                    PinImage(flattened, CaptureProvenance.FromRecord(record));
+                }
+                catch (Exception ex) when (ex is not OutOfMemoryException)
+                {
+                    _log.LogWarning(ex, "Could not pin the saved edit");
+                    try { PinFailed?.Invoke(); }
+                    catch (Exception noticeError) when (noticeError is not OutOfMemoryException)
+                    { _log.LogWarning(noticeError, "Could not report the pin failure"); }
+                }
+                return true;
+
             case EditorCommitAction.SaveAs:
                 // Choose the destination before persisting so a cancel keeps the editor open
                 // with no side effects the user did not ask for.

@@ -50,6 +50,7 @@ internal sealed partial class AnnotationEditorControl
         EnsureSection(ref _colorSection, BuildColorSection);
         EnsureSection(ref _thicknessSection, BuildThicknessSection);
         EnsureShapeSection();
+        EnsureSection(ref _arrowHeadSection, BuildArrowHeadSection);
         EnsureSection(ref _stepSection, BuildStepNumberSection);
         EnsureSection(ref _fontFamilySection, BuildFontFamilySection);
         EnsureSection(ref _fontSizeSection, BuildFontSizeSection);

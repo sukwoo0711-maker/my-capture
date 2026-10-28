@@ -330,7 +330,7 @@
     <comment>src\MyCapture.Core\Settings\SettingsStore.cs</comment>
   </data>
   <data name="Text_1FBCF51E2FF5" xml:space="preserve">
-    <value>Pin clipboard to screen</value>
+    <value>Pin the edited image, selection or clipboard</value>
     <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
   </data>
   <data name="Text_1FBF8C644D76" xml:space="preserve">
@@ -2064,7 +2064,7 @@ This cannot be undone.</value>
     <comment>src\MyCapture.App\Pinning\PinWindow.cs</comment>
   </data>
   <data name="Text_B53D43740F41" xml:space="preserve">
-    <value>Pin clipboard to screen shortcut</value>
+    <value>Pin the edited image, selection or clipboard shortcut</value>
     <comment>src\MyCapture.App\Settings\SettingsWindow.xaml</comment>
   </data>
   <data name="Text_B62C5C65821E" xml:space="preserve">
@@ -3359,6 +3359,10 @@ Open the library or Settings from the tray menu.</value></data>
   <data name="EditorProperty_Hex" xml:space="preserve"><value>HEX color</value></data>
   <data name="EditorProperty_FillTransparency" xml:space="preserve"><value>Fill transparency</value></data>
   <data name="EditorProperty_StrokeWidthLabel" xml:space="preserve"><value>Width</value></data>
+  <data name="EditorProperty_ArrowHead" xml:space="preserve"><value>Head</value></data>
+  <data name="EditorProperty_ArrowHeadEnd" xml:space="preserve"><value>End</value></data>
+  <data name="EditorProperty_ArrowHeadBoth" xml:space="preserve"><value>Both</value></data>
+  <data name="EditorProperty_ArrowHeadNone" xml:space="preserve"><value>None</value></data>
   <data name="EditorProperty_StrokeStyleLabel" xml:space="preserve"><value>Style</value></data>
   <data name="EditorProperty_SelectedColor" xml:space="preserve"><value>Selected</value></data>
   <data name="EditorProperty_ThicknessDecrease" xml:space="preserve"><value>Decrease line width</value></data>
@@ -4036,6 +4040,7 @@ Delete {1} {1:plural:subfolder|subfolders}, {2} {2:plural:image|images}, and {3}
   <data name="SettingsUx_AlwaysShowShortcutHints" xml:space="preserve"><value>Always show shortcut keys</value></data>
   <data name="SettingsUx_AlwaysShowShortcutHintsHint" xml:space="preserve"><value>When off, shortcut keys appear under buttons only while Alt is held.</value></data>
   <data name="EditorFlow_CopyHint" xml:space="preserve"><value>Copy to the clipboard, save to the library and close</value></data>
+  <data name="EditorFlow_PinHint" xml:space="preserve"><value>Pin the edited image and finish editing.</value></data>
   <data name="EditorFlow_CropBarName" xml:space="preserve"><value>Crop commands</value></data>
   <data name="EditorFlow_SelectionCleared" xml:space="preserve"><value>Selection cleared</value></data>
   <data name="EditorFlow_Selected" xml:space="preserve"><value>Selected: {0}</value></data>
@@ -4258,9 +4263,9 @@ Turn off: {0}</value></data>
   <data name="Tutorial.video-gif-export.Step1" xml:space="preserve"><value>1. Review the range to export in the video editor.</value></data>
   <data name="Tutorial.video-gif-export.Step2" xml:space="preserve"><value>2. Press G to open GIF export and review the options and preview.</value></data>
   <data name="Tutorial.video-gif-export.Step3" xml:space="preserve"><value>3. Click Export and choose the file destination.</value></data>
-  <data name="Tutorial.pin-clipboard.Unassigned" xml:space="preserve"><value>Assign the Pin clipboard to screen shortcut in Settings &gt; Shortcuts before using it.</value></data>
+  <data name="Tutorial.pin-clipboard.Unassigned" xml:space="preserve"><value>Assign the pin shortcut in Settings &gt; Shortcuts before using it.</value></data>
   <data name="Tutorial.pin-clipboard.Step1" xml:space="preserve"><value>1. Copy an image or text to the clipboard.</value></data>
-  <data name="Tutorial.pin-clipboard.Step2" xml:space="preserve"><value>2. Press your Pin clipboard to screen shortcut.</value></data>
+  <data name="Tutorial.pin-clipboard.Step2" xml:space="preserve"><value>2. Press your pin shortcut. In the image editor it pins the edited image; in the capture selector it pins the selected region.</value></data>
   <data name="Tutorial.pin-clipboard.Step3" xml:space="preserve"><value>3. Drag the pin to move it. Press Esc to close it.</value></data>
   <data name="Tutorial.pin-hide-all.Unassigned" xml:space="preserve"><value>Assign the Hide all pins shortcut in Settings &gt; Shortcuts before using it.</value></data>
   <data name="Tutorial.pin-hide-all.Step1" xml:space="preserve"><value>1. Place pins on the screen.</value></data>
@@ -4598,7 +4603,7 @@ Turn off: {0}</value></data>
 Ctrl+Shift+C  Region capture
 Ctrl+Shift+X  Start/stop region recording
 Ctrl+Shift+Z  Open library
-F3  Pin clipboard to screen
+F3  Pin the edited image, selection or clipboard
 
 MyCapture handles these keys first, even if another program already uses them. While MyCapture is running, the same shortcuts in other programs, such as F3 search in File Explorer and Ctrl+Shift+Z redo in editors, will not work.
 

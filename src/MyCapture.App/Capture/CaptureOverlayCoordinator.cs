@@ -145,6 +145,12 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
     internal ScreenCaptureEngine Engine => _captureEngine;
     internal bool IsSelecting => _preparation is not null || _activeOverlay is not null || _editorScreenCapture?.IsSelecting == true;
     internal AnnotationEditorControl? CurrentEditor => _activeEditor?.Editor;
+    internal void ConfirmSelectionAsPin()
+    {
+        VerifyDispatcherAccess();
+        if (_disposed || _editorScreenCapture is not null || _activeEditor is not null) return;
+        _activeOverlay?.ConfirmSelectionAsPin();
+    }
     internal Task WaitForPresentationDismissalAsync() =>
         _presentationDismissals.NeedsSettle(Environment.TickCount64)
             ? Task.Delay(100) : Task.CompletedTask;
@@ -780,7 +786,7 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
                 return;
             }
 
-            if (!OpenEditorAfterCapture()) return;
+            if (selection.PinRequested || !OpenEditorAfterCapture()) return;
 
             var editor = new AnnotationEditorWindow(
                 selection.Frame,

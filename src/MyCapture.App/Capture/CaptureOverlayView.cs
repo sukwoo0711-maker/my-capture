@@ -2376,7 +2376,13 @@ internal sealed class CaptureOverlayView : FrameworkElement
 
     private void ConfirmSelection() => ConfirmSelection(wholeMonitor: false);
 
-    private void ConfirmSelection(bool wholeMonitor)
+    internal void ConfirmSelectionAsPin()
+    {
+        if (_textCaptureMode || RecordingSelection) return;
+        ConfirmSelection(wholeMonitor: false, pinRequested: true);
+    }
+
+    private void ConfirmSelection(bool wholeMonitor, bool pinRequested = false)
     {
         if (_ended || _copyingColor || _selection is not RectD selection)
         {
@@ -2396,6 +2402,7 @@ internal sealed class CaptureOverlayView : FrameworkElement
             DetectedWindow = _selectedWindow,
             TextCapture = _textCaptureMode,
             WholeMonitor = wholeMonitor,
+            PinRequested = pinRequested,
         });
     }
 
@@ -2725,6 +2732,7 @@ internal sealed class RegionSelectionEventArgs : EventArgs
 
     /// <summary>True when the overlay was in text capture mode at confirmation.</summary>
     internal bool TextCapture { get; init; }
+    internal bool PinRequested { get; init; }
 
     /// <summary>
     /// The full-screen button chose one whole monitor. Like a desktop click, no single window is

@@ -345,6 +345,7 @@ public partial class App : Application
         ShortcutPresentation.ReadEnabled = () => _settings!.General.AlwaysShowShortcutHints;
         ShortcutRevealMotion.Initialize();
         AnnotationEditorPreferences.ReadShowSourceWindowTitle = () => _settings!.Export.ShowSourceWindowTitle;
+        AnnotationEditorPreferences.ReadPinHotkey = () => _settings!.Hotkeys.PasteToScreen;
         AnnotationEditorPreferences.Write = RememberEditorPreferences;
         AnnotationEditorPreferences.StampFolder = () => Path.Combine(_services!.GetRequiredService<AppPaths>().DataRoot, StampStore.FolderName);
         _tray.CaptureRequested += (_, _) => HandleCaptureRequested();
@@ -518,7 +519,7 @@ public partial class App : Application
                 break;
             case GlobalHotkeyCommand.PasteToScreen:
                 _log?.LogInformation("Paste-to-screen hotkey requested");
-                HandlePasteToScreen();
+                HandlePinCommand();
                 break;
             case GlobalHotkeyCommand.HideAllPins:
                 _log?.LogInformation("Hide-all-pins hotkey requested");
@@ -1194,7 +1195,7 @@ public partial class App : Application
         // copied: the shutter answers the gesture itself, the capture lifts off the screen, and its
         // quick access card shows on the next turn and receives it (card first, ShowQuickAccessFirst).
         if (_settings?.General.PlayCaptureSound == true) CaptureShutterSound.Play();
-        LiftCaptureForQuickAccess(e);
+        if (!e.PinRequested) LiftCaptureForQuickAccess(e);
         _log?.LogInformation(
             "Capture selection ready for editor: {Width}x{Height}",
             e.SelectedBitmap.PixelWidth,
@@ -1222,7 +1223,7 @@ public partial class App : Application
                 Core.Capture.CaptureProvenance.FromRecord(_pendingRecord), CaptureSelectionProvenance.Pending(e))
             : null;
         // The card shows on the turn after the lift, while the save and copy run (card first).
-        QuickAccessFirst? first = automaticClipboardCopy is not null ? ShowQuickAccessFirst(e, automaticClipboardCopy) : null;
+        QuickAccessFirst? first = !e.PinRequested && automaticClipboardCopy is not null ? ShowQuickAccessFirst(e, automaticClipboardCopy) : null;
         try
         {
             if (_persistence is null || _commit is null)
@@ -1345,7 +1346,24 @@ public partial class App : Application
         _storeRating?.RecordCapture(succeeded: _currentRecord is not null && copiedToClipboard);
         if (_services is null || _currentRecord is null) CancelCaptureFlight(e.SelectedBitmap);
         // Without a card shown first (another mode, a text capture), the receipt shows once saved and copied.
-        if (_services is not null && _currentRecord is { } receipt && !receiptTaken)
+        if (e.PinRequested && _currentRecord is { } pinRecord && _commit is not null)
+        {
+            try
+            {
+                var image = await _commit.RenderCapturedImageAsync(e.SelectedBitmap, e.SourceTitle,
+                    pinRecord.InitialRenderShowsSourceWindowTitle);
+                var region = new Core.Primitives.RectD(e.Frame.ScreenBounds.Left + e.BitmapRegion.Left,
+                    e.Frame.ScreenBounds.Top + e.BitmapRegion.Top, e.BitmapRegion.Width, e.BitmapRegion.Height);
+                (_pins ?? throw new InvalidOperationException("Pinning is unavailable.")).PinImageAtRegion(
+                    image, Core.Capture.CaptureProvenance.FromRecord(pinRecord), region);
+            }
+            catch (Exception ex) when (ex is not OutOfMemoryException)
+            {
+                _log?.LogWarning(ex, "Could not pin the selected capture");
+                NotifyPinFailed();
+            }
+        }
+        if (!e.PinRequested && _services is not null && _currentRecord is { } receipt && !receiptTaken)
         {
             _latestReceipt = receipt.Id;
             var selected = e.SelectedBitmap;
@@ -1807,6 +1825,9 @@ public partial class App : Application
             () => _settings!,
             () => paths,
             _services.GetRequiredService<ILogger<CaptureCommitService>>());
+        _commit.PinImage = (image, provenance) =>
+            (_pins ?? throw new InvalidOperationException("Pinning is unavailable.")).PinImage(image, provenance);
+        _commit.PinFailed = NotifyPinFailed;
         _commit.PersistExportSettings = () => _services.GetRequiredService<SettingsStore>().SaveInBackground(
             _settings!.DeepClone(), "Could not persist image export preferences");
         _commit.QuickSaved += path => _ = Dispatcher.BeginInvoke(new Action(() => AnnounceQuickSave(path)));
@@ -2648,6 +2669,7 @@ public partial class App : Application
         AnnotationEditorPreferences.Read = null;
         ShortcutPresentation.ReadEnabled = null;
         AnnotationEditorPreferences.ReadShowSourceWindowTitle = null;
+        AnnotationEditorPreferences.ReadPinHotkey = null;
         AnnotationEditorPreferences.Write = null;
         AnnotationEditorPreferences.StampFolder = null;
         TextRecognitionRoute.Show = null;

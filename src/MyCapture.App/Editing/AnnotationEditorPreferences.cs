@@ -7,6 +7,7 @@ internal static class AnnotationEditorPreferences
 {
     internal static Func<AnnotationDefaults>? Read { get; set; }
     internal static Func<bool>? ReadShowSourceWindowTitle { get; set; }
+    internal static Func<Hotkey>? ReadPinHotkey { get; set; }
     internal static Action<AnnotationDefaults>? Write { get; set; }
 
     /// <summary>

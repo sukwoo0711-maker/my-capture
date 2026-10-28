@@ -47,4 +47,7 @@ internal enum EditorCommitAction
     /// write the file, save into the library, copy to the clipboard, and close.
     /// </summary>
     SaveAs,
+
+    /// <summary>Save and copy the edited image, then pin it and close.</summary>
+    Pin,
 }

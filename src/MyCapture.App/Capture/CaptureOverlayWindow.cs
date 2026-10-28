@@ -156,11 +156,13 @@ internal sealed class CaptureOverlayWindow : Window
         _pendingSelection = null;
         _pendingSelectionDetails = null;
         CompleteSelection(pending, details?.DetectedWindow, details?.TextCapture == true,
-            details?.WholeMonitor == true);
+            details?.WholeMonitor == true, details?.PinRequested == true);
     }
 
     /// <summary>Raised after a valid drag is cropped and the overlay has been hidden.</summary>
     internal event EventHandler<CaptureSelectionCompletedEventArgs>? SelectionCompleted;
+
+    internal void ConfirmSelectionAsPin() => _view.ConfirmSelectionAsPin();
 
     internal event EventHandler? SelectionCancelled;
 
@@ -406,13 +408,13 @@ internal sealed class CaptureOverlayWindow : Window
             return;
         }
 
-        CompleteSelection(e.BitmapRegion, e.DetectedWindow, e.TextCapture, e.WholeMonitor);
+        CompleteSelection(e.BitmapRegion, e.DetectedWindow, e.TextCapture, e.WholeMonitor, e.PinRequested);
     }
 
     internal void CompleteSelection(RectD bitmapRegion) => CompleteSelection(bitmapRegion, null, false);
 
     internal void CompleteSelection(RectD bitmapRegion, WindowCandidate? detectedWindow, bool textCapture,
-        bool wholeMonitor = false)
+        bool wholeMonitor = false, bool pinRequested = false)
     {
         if (_completed)
         {
@@ -458,6 +460,7 @@ internal sealed class CaptureOverlayWindow : Window
                     sourcePageUrl: source.PageUrl)
                 {
                     TextCapture = textCapture,
+                    PinRequested = pinRequested,
                     SourceDetails = source.Details,
                     PendingSource = pendingSource,
                 });
@@ -622,6 +625,7 @@ internal sealed class CaptureSelectionCompletedEventArgs : EventArgs
     /// persisting the image and opening the editor.
     /// </summary>
     internal bool TextCapture { get; init; }
+    internal bool PinRequested { get; init; }
 }
 
 /// <summary>The window a selection captured: its title, page and application, each possibly empty.</summary>

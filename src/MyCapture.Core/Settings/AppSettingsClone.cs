@@ -131,6 +131,7 @@ public static class AppSettingsClone
     {
         LastTool = s.LastTool,
         StrokeStyle = s.StrokeStyle,
+        ArrowHeads = s.ArrowHeads,
         FillTransparency = s.FillTransparency,
         StrokeColor = s.StrokeColor,
         StrokeThickness = s.StrokeThickness,
