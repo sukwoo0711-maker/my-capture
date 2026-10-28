@@ -37,11 +37,12 @@
         <Setter Property="UseLayoutRounding" Value="True" />
         <Setter Property="SnapsToDevicePixels" Value="True" />
         <!-- Pretendard needs Ideal formatting (Display distorts its Hangul strokes) with grayscale
-             antialiasing (ClearType blurs it bold at 100%), and its default ligatures and
-             alternates would show 0x1F as 0×1F (see ThemeFonts). -->
-        <Setter Property="TextOptions.TextFormattingMode" Value="Ideal" />
-        <Setter Property="TextOptions.TextRenderingMode" Value="Grayscale" />
-        <Setter Property="TextOptions.TextHintingMode" Value="Fixed" />
+             antialiasing (ClearType blurs it bold at 100%) and unhinted glyphs (hinting drops the
+             ㅡ of 으 and 스 at body sizes), and its default ligatures and alternates would show
+             0x1F as 0×1F (see ThemeFonts). -->
+        <Setter Property="TextOptions.TextFormattingMode" Value="{x:Static themes:ThemeFonts.Formatting}" />
+        <Setter Property="TextOptions.TextRenderingMode" Value="{x:Static themes:ThemeFonts.Rendering}" />
+        <Setter Property="TextOptions.TextHintingMode" Value="{x:Static themes:ThemeFonts.Hinting}" />
         <Setter Property="Typography.StandardLigatures" Value="False" />
         <Setter Property="Typography.ContextualAlternates" Value="False" />
         <Setter Property="Typography.ContextualLigatures" Value="False" />
@@ -959,6 +960,12 @@
     <!-- ============================================================= -->
     <!-- Tooltip / Menus / Slider -->
     <!-- ============================================================= -->
+    <!-- A popup (a submenu, a drop-down list, a flyout) draws in a visual tree of its own, which the
+         glyph hinting of its window does not reach; it would draw Pretendard hinted and lose the ㅡ
+         of 으 (see ThemeFonts). -->
+    <Style TargetType="{x:Type Popup}">
+        <Setter Property="themes:ThemeFonts.PopupText" Value="True" />
+    </Style>
     <Style TargetType="{x:Type ToolTip}">
         <Setter Property="Foreground" Value="{DynamicResource Text.Primary}" />
         <Setter Property="Background" Value="{DynamicResource Surface.Floating}" />
@@ -968,9 +975,9 @@
         <Setter Property="FontSize" Value="{DynamicResource FontSize.Caption}" />
         <!-- A tooltip is its own popup root: give it the UI font and its text settings. -->
         <Setter Property="FontFamily" Value="{DynamicResource Font.Ui}" />
-        <Setter Property="TextOptions.TextFormattingMode" Value="Ideal" />
-        <Setter Property="TextOptions.TextRenderingMode" Value="Grayscale" />
-        <Setter Property="TextOptions.TextHintingMode" Value="Fixed" />
+        <Setter Property="TextOptions.TextFormattingMode" Value="{x:Static themes:ThemeFonts.Formatting}" />
+        <Setter Property="TextOptions.TextRenderingMode" Value="{x:Static themes:ThemeFonts.Rendering}" />
+        <Setter Property="TextOptions.TextHintingMode" Value="{x:Static themes:ThemeFonts.Hinting}" />
         <Setter Property="Typography.StandardLigatures" Value="False" />
         <Setter Property="Typography.ContextualAlternates" Value="False" />
         <Setter Property="Typography.ContextualLigatures" Value="False" />
@@ -981,9 +988,9 @@
         <!-- A menu is its own popup root: without these it takes the system font and default
              shaping, so its small text would not match the windows it opens from. -->
         <Setter Property="FontFamily" Value="{DynamicResource Font.Ui}" />
-        <Setter Property="TextOptions.TextFormattingMode" Value="Ideal" />
-        <Setter Property="TextOptions.TextRenderingMode" Value="Grayscale" />
-        <Setter Property="TextOptions.TextHintingMode" Value="Fixed" />
+        <Setter Property="TextOptions.TextFormattingMode" Value="{x:Static themes:ThemeFonts.Formatting}" />
+        <Setter Property="TextOptions.TextRenderingMode" Value="{x:Static themes:ThemeFonts.Rendering}" />
+        <Setter Property="TextOptions.TextHintingMode" Value="{x:Static themes:ThemeFonts.Hinting}" />
         <Setter Property="Typography.StandardLigatures" Value="False" />
         <Setter Property="Typography.ContextualAlternates" Value="False" />
         <Setter Property="Typography.ContextualLigatures" Value="False" />

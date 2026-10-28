@@ -193,7 +193,7 @@ public sealed class LibraryCommandLayoutTests
         }
         XElement product = Product();
         CopyNamespaces(product, combined);
-        string[] keys = ["LibraryUx.RestEdge", "LibraryUx.CommandButton", "LibraryUx.CommandIcon", "LibraryUx.CommandGlyph", "LibraryUx.CommandSeparator"];
+        string[] keys = ["LibraryUx.RestEdge", "LibraryUx.CommandButton", "LibraryUx.CommandIcon", "LibraryUx.CommandGlyph", "LibraryUx.CommandSeparator", "LibraryUx.Icon.Kept"];
         foreach (XElement entry in product.Element(P + "Window.Resources")!.Element(P + "ResourceDictionary")!.Elements()
                      .Where(element => keys.Contains((string?)element.Attribute(X + "Key"))))
             combined.Add(new XElement(entry));

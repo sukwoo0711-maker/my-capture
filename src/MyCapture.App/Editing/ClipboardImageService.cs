@@ -214,6 +214,12 @@ internal static class ClipboardImageService
 
         internal int ByteCount { get { lock (_gate) return _bytes?.Length ?? 0; } }
 
+        internal byte[]? TryGetEncoded(BitmapSource image, string? sourceUrl)
+        {
+            lock (_gate)
+                return !_disposed && ReferenceEquals(image, _image) && sourceUrl == _sourceUrl ? _bytes : null;
+        }
+
         internal byte[] GetOrEncode(BitmapSource image, string? sourceUrl, Func<BitmapSource, string?, byte[]> encode)
         {
             int generation;

@@ -107,8 +107,11 @@ public sealed class GalleryItemViewModel : INotifyPropertyChanged
     public bool IsRenameSaving { get => _isRenameSaving; internal set { _isRenameSaving = value; Raise(); } }
     public string RenameDraft { get => _renameDraft; set { _renameDraft = value; Raise(); } }
 
-    /// <summary>Search evidence replaces the ordinary metadata, keeping every card two lines tall.</summary>
-    public string MetadataCaption => HasSearchMatch ? SearchMatchText : IsExpiringSoon ? RetentionCaption : TimeCaption;
+    /// <summary>
+    /// What the card's second line says besides its badges: why a search found it, or that it will soon be
+    /// deleted. Empty otherwise. The time is never part of it (it is always shown at the title's right).
+    /// </summary>
+    public string MetadataCaption => HasSearchMatch ? SearchMatchText : IsExpiringSoon ? RetentionCaption : string.Empty;
     public string SearchMatchText { get; private set; } = string.Empty;
     public bool HasSearchMatch => SearchMatchText.Length > 0;
 

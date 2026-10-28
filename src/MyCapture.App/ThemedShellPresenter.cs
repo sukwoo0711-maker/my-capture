@@ -46,6 +46,9 @@ internal sealed class ThemedShellPresenter(Func<bool> suppressNotification, Func
     /// <summary>Raised whenever a tray-owned surface (command menu) has just left the screen,
     /// so a capture starting immediately afterwards can wait out the dismissal.</summary>
     internal event Action? ForegroundDismissed;
+    // Separate from the legacy aggregate notification: every dismissed HWND keeps its
+    // own exclusion outcome, so one excluded card cannot mask an unexcluded menu.
+    internal event Action<bool>? CaptureSurfaceDismissed;
     private ContextMenu? _menu;
     private FeedbackCountdown? _countdown;
 
@@ -153,6 +156,7 @@ internal sealed class ThemedShellPresenter(Func<bool> suppressNotification, Func
         _toast = window;
         window.Closed += (_, _) =>
         {
+            CaptureSurfaceDismissed?.Invoke(CaptureWindowExclusion.WasApplied(window));
             if (!ReferenceEquals(_toast, window)) return;
             _toast = null;
             _countdown?.Stop();
@@ -310,6 +314,8 @@ internal sealed class ThemedShellPresenter(Func<bool> suppressNotification, Func
         {
             menu.Closed -= OnClosed;
             if (ReferenceEquals(_menu, menu)) _menu = null;
+            // This tray popup has no successful TryApply contract. Keep the safe wait.
+            CaptureSurfaceDismissed?.Invoke(false);
         }
     }
 
@@ -374,6 +380,7 @@ internal sealed class ThemedShellPresenter(Func<bool> suppressNotification, Func
                 // The menu is visually dismissing while the command runs; a capture that
                 // starts from here must let the dismissal leave the screen before BitBlt.
                 ForegroundDismissed?.Invoke();
+                CaptureSurfaceDismissed?.Invoke(false);
                 action();
             };
             items.Add(item);
@@ -598,7 +605,9 @@ internal sealed class ThemedShellPresenter(Func<bool> suppressNotification, Func
         Dismiss(immediate: true);
         // A card still playing its exit leaves now, before the capture's first frame.
         foreach (Window card in _leaving.ToArray()) FluidMotion.CompleteExit(card);
-        if (ShortcutHelpWindow.DismissForCapture() || visible) ForegroundDismissed?.Invoke();
+        bool helpDismissed = ShortcutHelpWindow.DismissForCapture();
+        if (helpDismissed) CaptureSurfaceDismissed?.Invoke(false);
+        if (helpDismissed || visible) ForegroundDismissed?.Invoke();
     }
     public void Dispose() => DismissForCapture();
 

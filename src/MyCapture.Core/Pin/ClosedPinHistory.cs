@@ -166,6 +166,39 @@ public sealed class ClosedPinHistory<T>
         _retainedBytes = 0;
     }
 
+    /// <summary>Updates an asynchronously compressed entry without changing its closing order.</summary>
+    public bool UpdateRetainedBytes(T item, long estimatedBytes)
+    {
+        for (var node = _entries.First; node is not null; node = node.Next)
+        {
+            if (!ReferenceEquals(node.Value.Item, item)) continue;
+            _retainedBytes -= node.Value.Bytes;
+            long bytes = Math.Max(0, estimatedBytes);
+            if (bytes > MaxRetainedBytes) _entries.Remove(node);
+            else
+            {
+                node.Value = (item, bytes);
+                _retainedBytes += bytes;
+            }
+            Trim();
+            return bytes <= MaxRetainedBytes && _entries.Any(entry => ReferenceEquals(entry.Item, item));
+        }
+        return false;
+    }
+
+    /// <summary>Removes a failed pending entry without disturbing newer entries.</summary>
+    public bool Remove(T item)
+    {
+        for (var node = _entries.First; node is not null; node = node.Next)
+        {
+            if (!ReferenceEquals(node.Value.Item, item)) continue;
+            _retainedBytes -= node.Value.Bytes;
+            _entries.Remove(node);
+            return true;
+        }
+        return false;
+    }
+
     /// <summary>
     /// Applies the current count limit and byte budget now, dropping the oldest entries.
     /// Called after settings change so lowering the limit (or turning it off with 0)

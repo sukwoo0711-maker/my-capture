@@ -1478,7 +1478,7 @@
     <comment>src\MyCapture.App\Recording\VideoEditorWindow.cs</comment>
   </data>
   <data name="Text_7DFFA4D81765" xml:space="preserve">
-    <value>선택 항목 삭제 (Delete)</value>
+    <value>선택 항목 삭제 (Del)</value>
     <comment>src\MyCapture.App\Editing\AnnotationEditorControl.cs</comment>
   </data>
   <data name="Text_7F2ED132EA3B" xml:space="preserve">
@@ -4232,7 +4232,7 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="Tutorial.image-save.Step2" xml:space="preserve"><value>2. Ctrl+S를 눌러 저장합니다.</value></data>
   <data name="Tutorial.image-save.Step3" xml:space="preserve"><value>3. 다른 파일로 저장하려면 Ctrl+Shift+S로 저장 위치를 선택합니다.</value></data>
   <data name="Tutorial.image-copy.Step1" xml:space="preserve"><value>1. 이미지를 편집하고 결과를 확인합니다.</value></data>
-  <data name="Tutorial.image-copy.Step2" xml:space="preserve"><value>2. Ctrl+C를 누르면 편집한 이미지를 클립보드에 복사합니다. 편집기는 열린 채로 남고, 완료(Ctrl+Enter)를 누르면 저장한 뒤 닫습니다.</value></data>
+  <data name="Tutorial.image-copy.Step2" xml:space="preserve"><value>2. 복사하고 닫기(Ctrl+C)를 누르면 편집한 이미지를 저장하고 클립보드에 복사한 뒤 닫습니다. 텍스트 입력 중에는 Ctrl+C로 텍스트를 복사하고, Ctrl+Enter로 편집을 마칩니다.</value></data>
   <data name="Tutorial.image-copy.Step3" xml:space="preserve"><value>3. 다른 앱에서 Ctrl+V를 눌러 이미지를 붙여 넣습니다.</value></data>
   <data name="Tutorial.folder-create.Step1" xml:space="preserve"><value>1. 라이브러리를 엽니다.</value></data>
   <data name="Tutorial.folder-create.Step2" xml:space="preserve"><value>2. Ctrl+Shift+N을 눌러 새 폴더 이름을 입력합니다.</value></data>
@@ -4617,7 +4617,8 @@ F3  클립보드를 핀으로 띄우기
   <data name="Update_DownloadingPercent" xml:space="preserve"><value>업데이트 내려받는 중 {0}%</value></data>
   <data name="Update_Verifying" xml:space="preserve"><value>업데이트 확인 중</value></data>
   <data name="Update_Preparing" xml:space="preserve"><value>설치 준비 중</value></data>
-  <data name="Update_InstallFailed" xml:space="preserve"><value>업데이트를 설치하지 못했습니다. 설정 &gt; 정보에서 다시 시도하십시오.</value></data>
+  <data name="Update_InstallFailed" xml:space="preserve"><value>업데이트를 설치하지 못했습니다.</value></data>
+  <data name="Update_RetryAction" xml:space="preserve"><value>다시 시도</value></data>
   <data name="Update_CheckHelp" xml:space="preserve"><value>GitHub에서 이 앱의 새 버전을 확인합니다.</value></data>
   <data name="Update_InstallHelp" xml:space="preserve"><value>작업을 저장한 뒤 새 버전을 설치합니다.</value></data>
   <data name="Update_OpenReleaseHelp" xml:space="preserve"><value>브라우저에서 새 버전의 다운로드 페이지를 엽니다.</value></data>
@@ -4740,6 +4741,13 @@ F3  클립보드를 핀으로 띄우기
   <data name="LibraryUx_NoSelection" xml:space="preserve"><value>선택 없음</value></data>
   <data name="LibraryUx_Preview" xml:space="preserve"><value>미리보기</value></data>
   <data name="LibraryUx_PreviewHint" xml:space="preserve"><value>미리보기 (Space)</value></data>
+  <data name="LibraryUx_UpdateAvailable" xml:space="preserve"><value>업데이트 {0}</value></data>
+  <data name="LibraryUx_RateAction" xml:space="preserve"><value>평가하기</value></data>
+  <data name="LibraryUx_SelectCard" xml:space="preserve"><value>{0} 선택</value></data>
+  <data name="LibraryUx_PinHint" xml:space="preserve"><value>핀으로 띄우기 (P)</value></data>
+  <data name="LibraryUx_SourceDetails" xml:space="preserve"><value>출처 상세</value></data>
+  <data name="LibraryUx_EditHint" xml:space="preserve"><value>다시 편집 (Enter)</value></data>
+  <data name="LibraryUx_KeepHint" xml:space="preserve"><value>보관 (K)</value></data>
   <data name="CaptureRatio_Help" xml:space="preserve"><value>영역의 가로세로 비율을 고정하거나 정해진 크기로 놓습니다.</value></data>
   <data name="CaptureRatio_Changed" xml:space="preserve"><value>비율: {0}</value></data>
   <data name="CaptureRatio_FixedSize" xml:space="preserve"><value>크기 고정 {0}</value></data>
@@ -4759,4 +4767,112 @@ F3  클립보드를 핀으로 띄우기
   <data name="Stamp_SaveFailed" xml:space="preserve"><value>도장 이미지를 저장하지 못했습니다.</value></data>
   <data name="Stamp_Unreadable" xml:space="preserve"><value>도장 이미지를 읽을 수 없습니다. 다시 등록해 주십시오.</value></data>
   <data name="Stamp_Unavailable" xml:space="preserve"><value>이 화면에서는 도장을 사용할 수 없습니다.</value></data>
+  <data name="Help.QuickAccess" xml:space="preserve">
+    <value>빠른 작업</value>
+  </data>
+  <data name="Shortcuts.DoneInText" xml:space="preserve">
+    <value>텍스트 입력 중에도 복사하고 닫기</value>
+  </data>
+  <data name="Shortcuts.EditText" xml:space="preserve">
+    <value>선택한 텍스트 편집</value>
+  </data>
+  <data name="Shortcuts.Privacy" xml:space="preserve">
+    <value>개인정보 가리기</value>
+  </data>
+  <data name="Shortcuts.StepBack" xml:space="preserve">
+    <value>현재 작업 취소·선택 해제</value>
+  </data>
+  <data name="Shortcuts.Undo" xml:space="preserve">
+    <value>실행 취소</value>
+  </data>
+  <data name="Shortcuts.Redo" xml:space="preserve">
+    <value>다시 실행</value>
+  </data>
+  <data name="Shortcuts.SelectAll" xml:space="preserve">
+    <value>모두 선택</value>
+  </data>
+  <data name="Shortcuts.Duplicate" xml:space="preserve">
+    <value>선택 항목 복제</value>
+  </data>
+  <data name="Shortcuts.BringForward" xml:space="preserve">
+    <value>한 단계 앞으로</value>
+  </data>
+  <data name="Shortcuts.SendBackward" xml:space="preserve">
+    <value>한 단계 뒤로</value>
+  </data>
+  <data name="Shortcuts.DeleteSelection" xml:space="preserve">
+    <value>선택 항목 삭제</value>
+  </data>
+  <data name="Shortcuts.Move1" xml:space="preserve">
+    <value>선택 항목 1px 이동</value>
+  </data>
+  <data name="Shortcuts.Move10" xml:space="preserve">
+    <value>선택 항목 10px 이동</value>
+  </data>
+  <data name="Shortcuts.CropMove1" xml:space="preserve">
+    <value>자르기 영역 1px 이동</value>
+  </data>
+  <data name="Shortcuts.CropMove10" xml:space="preserve">
+    <value>자르기 영역 10px 이동</value>
+  </data>
+  <data name="Shortcuts.CaptureConfirm" xml:space="preserve">
+    <value>선택 영역 캡처</value>
+  </data>
+  <data name="Shortcuts.CaptureCancel" xml:space="preserve">
+    <value>캡처 취소</value>
+  </data>
+  <data name="Shortcuts.CaptureAll" xml:space="preserve">
+    <value>화면 전체 선택</value>
+  </data>
+  <data name="Shortcuts.SelectionMove1" xml:space="preserve">
+    <value>캡처 영역 1px 이동</value>
+  </data>
+  <data name="Shortcuts.SelectionMove10" xml:space="preserve">
+    <value>캡처 영역 10px 이동</value>
+  </data>
+  <data name="Shortcuts.SelectionResize1" xml:space="preserve">
+    <value>캡처 영역 크기 1px 조절</value>
+  </data>
+  <data name="Shortcuts.SelectionResize10" xml:space="preserve">
+    <value>캡처 영역 크기 10px 조절</value>
+  </data>
+  <data name="Shortcuts.LibraryCopy" xml:space="preserve">
+    <value>이미지 복사</value>
+  </data>
+  <data name="Shortcuts.LibraryOpen" xml:space="preserve">
+    <value>이미지 다시 편집·동영상 재생</value>
+  </data>
+  <data name="Shortcuts.LibraryPreview" xml:space="preserve">
+    <value>미리보기</value>
+  </data>
+  <data name="Shortcuts.LibraryText" xml:space="preserve">
+    <value>텍스트 인식 (이미지)</value>
+  </data>
+  <data name="Shortcuts.LibraryGif" xml:space="preserve">
+    <value>GIF 내보내기 (동영상)</value>
+  </data>
+  <data name="Shortcuts.ContextMenu" xml:space="preserve">
+    <value>선택 항목 메뉴</value>
+  </data>
+  <data name="Shortcuts.Search" xml:space="preserve">
+    <value>검색</value>
+  </data>
+  <data name="Shortcuts.Back" xml:space="preserve">
+    <value>이전 폴더</value>
+  </data>
+  <data name="Shortcuts.Forward" xml:space="preserve">
+    <value>다음 폴더</value>
+  </data>
+  <data name="Shortcuts.MouseNavigation" xml:space="preserve">
+    <value>이전·다음 폴더</value>
+  </data>
+  <data name="Shortcuts.MouseButtons" xml:space="preserve">
+    <value>마우스 뒤로 / 앞으로</value>
+  </data>
+  <data name="Shortcuts.LibraryDrag" xml:space="preserve">
+    <value>끌어서 폴더로 옮기기·파일로 내보내기</value>
+  </data>
+  <data name="Shortcuts.Drag" xml:space="preserve">
+    <value>마우스로 끌기</value>
+  </data>
 </root>

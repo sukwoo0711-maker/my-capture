@@ -33,7 +33,7 @@ public sealed class FloatingSurfaceTextTests
                 string name = window.GetType().Name;
                 Assert.Equal(ThemeFonts.Formatting, TextOptions.GetTextFormattingMode(window));
                 Assert.Equal(ThemeFonts.Rendering, TextOptions.GetTextRenderingMode(window));
-                Assert.Equal(TextHintingMode.Fixed, TextOptions.GetTextHintingMode(window));
+                Assert.Equal(ThemeFonts.Hinting, TextOptions.GetTextHintingMode(window));
                 Assert.Equal(System.Globalization.CultureInfo.CurrentUICulture.IetfLanguageTag, window.Language.IetfLanguageTag, ignoreCase: true);
                 Assert.False(Typography.GetContextualAlternates(window), $"{name} draws text as typed");
                 Assert.False(Typography.GetStandardLigatures(window), $"{name} draws text as typed");
@@ -58,7 +58,7 @@ public sealed class FloatingSurfaceTextTests
         Assert.Equal("Font.Ui", Assert.IsType<DynamicResourceExtension>(Setter(Control.FontFamilyProperty).Value).ResourceKey);
         Assert.Equal(ThemeFonts.Formatting, Setter(TextOptions.TextFormattingModeProperty).Value);
         Assert.Equal(ThemeFonts.Rendering, Setter(TextOptions.TextRenderingModeProperty).Value);
-        Assert.Equal(TextHintingMode.Fixed, Setter(TextOptions.TextHintingModeProperty).Value);
+        Assert.Equal(ThemeFonts.Hinting, Setter(TextOptions.TextHintingModeProperty).Value);
         Assert.Equal(false, Setter(Typography.ContextualAlternatesProperty).Value);
         Assert.Equal(true, Setter(FrameworkElement.UseLayoutRoundingProperty).Value);
     });

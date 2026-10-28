@@ -110,7 +110,7 @@ public sealed class FeatureTutorialTests
             foreach (string action in feature.HelpActions)
                 Assert.Same(feature, TutorialCatalog.FindHelp(feature.CategoryKey, action));
         }
-        Assert.Equal("image-copy", TutorialCatalog.FindHelp("Help.Annotation", "QuickAccess.Copy")!.Id);
+        Assert.Equal("image-copy", TutorialCatalog.FindHelp("Help.Annotation", "EditorFlow_CopyAndClose")!.Id);
         Assert.Equal("pin-copy", TutorialCatalog.FindHelp("Text_33EFD44366A7", "QuickAccess.Copy")!.Id);
         Assert.Equal("image-save", TutorialCatalog.FindHelp("Help.Annotation", "QuickAccess.Save")!.Id);
         Assert.Equal("pin-save", TutorialCatalog.FindHelp("Text_33EFD44366A7", "QuickAccess.Save")!.Id);
@@ -132,7 +132,7 @@ public sealed class FeatureTutorialTests
             TabControl tabs = ((DockPanel)help.Content).Children.OfType<TabControl>().Single();
             UniformGrid[] rows = tabs.Items.Cast<TabItem>().SelectMany(tab =>
                 ((StackPanel)((ScrollViewer)tab.Content).Content).Children.OfType<UniformGrid>()).ToArray();
-            Assert.Equal(48, rows.Length);
+            Assert.Equal(95, rows.Length);
             Assert.Single(rows, row => ShortcutHelpRowAssertions.Title(row) == UiText.Get("Text_976A6C92B870"));
             Assert.Single(rows, row => ShortcutHelpRowAssertions.Title(row) == UiText.Get("CaptureRatio_HelpLabel"));
             Assert.Single(rows, row => ShortcutHelpRowAssertions.Title(row) == UiText.Get("Pin_SelectText"));
@@ -161,7 +161,7 @@ public sealed class FeatureTutorialTests
                 if (label.Text == UiText.Get("CaptureRatio_HelpLabel"))
                 {
                     Assert.Empty(title.Children.OfType<Button>());
-                    Assert.Equal("R", AutomationProperties.GetName(keycaps));
+                    Assert.Equal("R / Shift+R", AutomationProperties.GetName(keycaps));
                     continue;
                 }
                 if (label.Text == UiText.Get("Gallery.Float") || label.Text == UiText.Get("LibraryUx_KeepToggleName")
@@ -172,8 +172,18 @@ public sealed class FeatureTutorialTests
                         AutomationProperties.GetName(keycaps));
                     continue;
                 }
+                TabItem owner = tabs.Items.Cast<TabItem>().Single(tab =>
+                    ((StackPanel)((ScrollViewer)tab.Content).Content).Children.Contains(row));
+                FeatureTutorial? expected = TutorialCatalog.All.SingleOrDefault(feature =>
+                    UiText.Get(feature.CategoryKey) == (string)owner.Header && feature.HelpActions.Any(action => UiText.Get(action) == label.Text));
+                if (expected is null)
+                {
+                    Assert.Empty(title.Children.OfType<Button>());
+                    continue;
+                }
                 Button tutorial = Assert.Single(title.Children.OfType<Button>());
                 FeatureTutorial feature = TutorialCatalog.Get(Assert.IsType<string>(tutorial.Tag));
+                Assert.Same(expected, feature);
                 Assert.True(tutorial.IsTabStop && tutorial.Focusable);
                 Assert.Null(tutorial.Content);
                 Assert.Same(help.FindResource("Button.Tutorial"), tutorial.Style);
@@ -193,8 +203,8 @@ public sealed class FeatureTutorialTests
     });
 
     [Theory]
-    [InlineData("ko-KR", "영역 캡처 사용법", "이미지 편집기 · 복사 사용법", "핀 · 저장 사용법", "텍스트 복사 사용법", "블러 사용법 동영상")]
-    [InlineData("en-US", "Region capture tutorial", "Image editor · Copy tutorial", "Pins · Save tutorial", "Copy text tutorial", "Blur tutorial video")]
+    [InlineData("ko-KR", "영역 캡처 사용법", "복사하고 닫기 사용법", "핀 · 저장 사용법", "텍스트 복사 사용법", "블러 사용법 동영상")]
+    [InlineData("en-US", "Region capture tutorial", "Copy and close tutorial", "Pins · Save tutorial", "Copy text tutorial", "Blur tutorial video")]
     public void TutorialNamesSayWhichFeatureTheyTeachAndQualifySharedTitles(string language, string region, string imageCopy,
         string pinSave, string textCopy, string blurVideo) => StaTestHost.Run(() =>
     {

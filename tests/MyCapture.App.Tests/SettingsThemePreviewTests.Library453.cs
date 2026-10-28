@@ -28,7 +28,9 @@ public sealed partial class SettingsThemePreviewTests
         var tile = new GalleryItemViewModel(record, _ => string.Empty, 96)
         { Clock = () => record.CreatedAt, RetentionHours = () => 48 };
         Assert.Equal(expected, tile.TimeCaption);
-        Assert.Equal(expected, tile.MetadataCaption);
+        // The time is always shown at the title's right, so the second line's caption never includes it.
+        Assert.Equal(string.Empty, tile.MetadataCaption);
+        Assert.Empty(tile.MetadataCaption);
         Assert.Contains(UiText.Format("Library453.CapturedAt", expected), tile.AccessibleName, StringComparison.Ordinal);
         Assert.Contains(record.CreatedAt.DateTime.ToString("d", UiText.Culture), tile.AccessibleName, StringComparison.Ordinal);
         tile.Clock = () => record.CreatedAt.AddHours(30);
@@ -36,8 +38,10 @@ public sealed partial class SettingsThemePreviewTests
         Assert.Equal(tile.RetentionCaption, tile.MetadataCaption);
         tile.SetSearchMatch(true, CaptureMatchField.Title);
         Assert.Equal(tile.SearchMatchText, tile.MetadataCaption);
+        Assert.Equal(expected, tile.TimeCaption);
         tile.SetSearchMatch(false, CaptureMatchField.None);
         Assert.Equal(tile.RetentionCaption, tile.MetadataCaption);
+        Assert.DoesNotContain(expected, tile.MetadataCaption, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -76,12 +80,19 @@ public sealed partial class SettingsThemePreviewTests
                             tile.Record.HasAnnotations = true;
                             tile.RefreshThumbnail();
                             SettleGalleryLayout(f.Window);
-                            Border card = Descendants(item).OfType<Border>().Single(border => border.Name == (compact ? "CompactTileCard" : "TileCard"));
+                            Border card = Descendants(item).OfType<Border>().Single(border => border.Name == "TileCard");
+                            Assert.Equal(compact, GalleryCardStyle.GetIsCompact(card));
                             FrameworkElement preview = Descendants(item).OfType<FrameworkElement>().Single(element => element.Name == "TilePreview");
                             Assert.DoesNotContain(Descendants(preview).OfType<TextBlock>(), text => text.Text == tile.TimeCaption);
-                            TextBlock meta = Descendants(item).OfType<TextBlock>().Single(text => text.Name == "TileMetadataText");
+                            TextBlock meta = Descendants(item).OfType<TextBlock>().Single(text => text.Name == "TileTime");
+                            TextBlock caption = Descendants(item).OfType<TextBlock>().Single(text => text.Name == "TileMetadataText");
+                            Assert.False(caption.IsVisible, "no search or retention message: the second line has no caption");
                             TextBlock title = Descendants(item).OfType<TextBlock>().Single(text => text.Name == "TileTitle");
-                            Assert.Equal(tile.MetadataCaption, meta.Text);
+                            Assert.Equal(tile.TimeCaption, meta.Text);
+                            // The time ends where the title row ends, at the card's right inner edge.
+                            Assert.True(meta.TranslatePoint(new Point(meta.ActualWidth, 0), card).X >= card.ActualWidth - 9,
+                                $"{language}/{compact}/{scale}: the time sits at the card's right edge");
+                            Assert.True(meta.TranslatePoint(new Point(), card).X > title.TranslatePoint(new Point(), card).X);
                             Assert.Same(f.Window.FindResource("Text.Secondary"), meta.Foreground);
                             Assert.Equal(12 * scale, meta.FontSize);
                             Assert.Equal((compact ? 12 : 14) * scale, title.FontSize);
@@ -174,7 +185,7 @@ public sealed partial class SettingsThemePreviewTests
                                 $"{language}/images/{scale}: status badge must remain inside its card");
                         }
                         Assert.Equal(f.Design.Name, filedFolder.ToolTip);
-                        TextBlock filedTime = Descendants(filedItem).OfType<TextBlock>().Single(text => text.Name == "TileMetadataText");
+                        TextBlock filedTime = Descendants(filedItem).OfType<TextBlock>().Single(text => text.Name == "TileTime");
                         Assert.Equal(filedTile.TimeCaption, filedTime.Text);
                         AssertNotTrimmed(filedTime, language + "/images/font" + scale);
                         SaveLibraryUxEvidence(f.Window, AppTheme.Midnight, $"library453-{language}-font{scale:0.0}-images.png");
@@ -279,7 +290,7 @@ public sealed partial class SettingsThemePreviewTests
                 Assert.True(tile.IsRenaming); Assert.EndsWith(((char)1).ToString(), tile.RenameDraft, StringComparison.Ordinal);
                 Assert.Equal("keep, review", record.Tags);
                 window.CancelCaptureRename();
-                ContextMenu tileMenu = Item().ContextMenu!;
+                ContextMenu tileMenu = window.TileMenu;
                 tileMenu.PlacementTarget = Item(); tileMenu.IsOpen = true; SettleGalleryLayout(window);
                 MenuItem rename = tileMenu.Items.OfType<MenuItem>().Single(menu => menu.InputGestureText == "F2");
                 Assert.Equal(UiText.Get("Library453.Rename"), rename.Header);

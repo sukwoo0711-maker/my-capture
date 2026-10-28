@@ -36,7 +36,14 @@ public sealed partial class SettingsThemePreviewTests
 {
     [Fact]
     public Task LibraryUx_CommandBarNavigationFolderCardsAndCaptureDrops() =>
-        RunIsolated(nameof(LibraryUx_CommandBarNavigationFolderCardsAndCaptureDrops), () =>
+        RunLibraryUxTest(nameof(LibraryUx_CommandBarNavigationFolderCardsAndCaptureDrops), constrainWindow: false);
+
+    [Fact]
+    public Task LibraryUx_CommandBarAndFolderCardsWhenTheDesktopCapsTheWindow() =>
+        RunLibraryUxTest(nameof(LibraryUx_CommandBarAndFolderCardsWhenTheDesktopCapsTheWindow), constrainWindow: true);
+
+    private Task RunLibraryUxTest(string testName, bool constrainWindow) =>
+        RunIsolated(testName, () =>
         {
             var application = new Application { ShutdownMode = ShutdownMode.OnExplicitShutdown };
             foreach (string name in new[] { "Tokens", "Symbols", "Controls" })
@@ -54,8 +61,8 @@ public sealed partial class SettingsThemePreviewTests
                          })
                 {
                     using var scope = UiText.UseLanguage(language);
-                    VerifyLibraryUx(language, theme);
-                    VerifyLibraryUx(language, theme, 1.25);
+                    VerifyLibraryUx(language, theme, constrainWindow: constrainWindow);
+                    VerifyLibraryUx(language, theme, 1.25, constrainWindow);
                 }
             }
             finally
@@ -112,14 +119,15 @@ public sealed partial class SettingsThemePreviewTests
         return new LibraryUxFixture(window, vm, queue, empty, design, records);
     }
 
-    private static void VerifyLibraryUx(string language, AppTheme theme, double scale = 0)
+    private static void VerifyLibraryUx(string language, AppTheme theme, double scale = 0, bool constrainWindow = false)
     {
         string label = $"{language}/{theme}/{scale}";
-        string file = $"{AppThemeNames.ToSetting(theme)}-{language}-dpi{scale}";
+        string file = $"{AppThemeNames.ToSetting(theme)}-{language}-dpi{scale}{(constrainWindow ? "-capped" : string.Empty)}";
         ThemeService.Apply(theme);
         LibraryUxFixture f = CreateLibraryUxFixture("mc-library-ux-");
         GalleryWindow window = f.Window;
         GalleryViewModel vm = f.ViewModel;
+        if (constrainWindow) window.MaxWidth = 1044;
         try
         {
             window.Show();
@@ -334,7 +342,33 @@ public sealed partial class SettingsThemePreviewTests
             ListBoxItem compactTile = PumpLibraryUntil(window, () => Descendants(rowsList).OfType<ListBoxItem>()
                     .FirstOrDefault(item => item.DataContext is GalleryItemViewModel tile && tile.Id == f.Records[4].Id),
                 item => item is not null, label + ": compact tile");
-            Border compactCard = Descendants(compactTile).OfType<Border>().Single(border => border.Name == "CompactTileCard");
+            Border compactCard = Descendants(compactTile).OfType<Border>().Single(border => border.Name == "TileCard");
+            Assert.True(GalleryCardStyle.GetIsCompact(compactCard));
+            SaveLibraryUxEvidence(window, theme, $"compact-width-{file}.png");
+            // At the granted width both modes can need the same column count to keep readable
+            // metadata. Opening a short folder must still never make its cards wider.
+            Assert.True(compactCard.ActualWidth <= fullCardWidth + 0.5,
+                $"{label}: compact {compactCard.ActualWidth:0.#} DIP, full {fullCardWidth:0.#} DIP at granted {window.ActualWidth:0.#}");
+            Assert.Equal(GalleryRowBuilder.ColumnCountForWidth(LibraryUsableWidth(scroll), compact: true,
+                minimumTrackWidth: vm.MinimumTrackWidth), vm.ColumnCount);
+            AssertCardsInsideLibrary(rowsList, scroll, vm, label + ": granted folder width");
+            if (window.ActualWidth < 1280 - 0.5)
+            {
+                // Keep the original wide-layout density assertions too, on the same loaded
+                // content, as in LibraryColumns' desktop-capped sweep.
+                client.Width = 1280 - (window.ActualWidth - client.ActualWidth);
+                SettleGalleryLayout(window);
+                Assert.Equal(client.Width, client.ActualWidth, 0.5);
+                vm.NavigateTo(CaptureFolderScope.All);
+                SettleGalleryLayout(window);
+                rootColumns = vm.ColumnCount;
+                fullCardWidth = Descendants(RealizedCard(rowsList, f.Records[0].Id)).OfType<Border>()
+                    .Single(border => border.Name == "TileCard").ActualWidth;
+                vm.NavigateTo(CaptureFolderScope.ForFolder(f.Design.Id));
+                SettleGalleryLayout(window);
+                compactTile = RealizedCard(rowsList, f.Records[4].Id);
+                compactCard = Descendants(compactTile).OfType<Border>().Single(border => border.Name == "TileCard");
+            }
             // Smaller than the full card, at the compact card's own proportion.
             Assert.True(compactCard.ActualWidth < fullCardWidth, $"{label}: compact {compactCard.ActualWidth:0.#} DIP, full {fullCardWidth:0.#} DIP");
             double cardScale = VisualTreeHelper.GetDpi(compactCard).DpiScaleY;
@@ -355,7 +389,7 @@ public sealed partial class SettingsThemePreviewTests
             Assert.Equal(((GalleryItemViewModel)compactTile.DataContext).AccessibleName, AutomationProperties.GetName(compactTile));
             Button compactMore = Descendants(compactTile).OfType<Button>()
                 .Single(button => AutomationProperties.GetName(button) == UiText.Get("Text_5E8959D18390"));
-            Assert.NotNull(compactMore.ContextMenu);
+            Assert.NotNull(window.TileMenu);
             AssertInsideClient(compactMore, client, label);
             Assert.False(Descendants(compactTile).OfType<Border>().Single(border => border.Name == "FolderBadge").IsVisible);
             // The subfolder card takes the same compact frame and column grid as the captures.

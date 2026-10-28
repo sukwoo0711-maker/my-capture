@@ -2,6 +2,7 @@ using System.Windows;
 using System.Windows.Controls;
 using MyCapture.App.Themes;
 using MyCapture.Core.Localization;
+using MyCapture.Core.Settings;
 using Xunit;
 
 namespace MyCapture.App.Tests;
@@ -28,6 +29,18 @@ public sealed class CoreShortcutPromptTests
         Assert.False(answered.ShowCoreShortcuts);
         Assert.Equal(firstRun, answered.ShowWelcome);
         Assert.Equal(!firstRun && !quiet && !settings, answered.OpenLibrary);
+    }
+
+    [Fact]
+    public void ResidentProbeOpensNoLaunchWindowFromAFreshProfile()
+    {
+        var settings = new AppSettings { General = { IsFirstRun = true } };
+        App.ApplyResidentProbeSettings(settings);
+
+        Assert.True(settings.Hotkeys.CoreShortcutsAsked);
+        LaunchPresentation launch = FirstRunPlan.ForLaunch(settings.General.IsFirstRun, quietLaunch: true,
+            openSettings: false, settings.Hotkeys.CoreShortcutsAsked);
+        Assert.Equal(new LaunchPresentation(ShowWelcome: false, OpenLibrary: false, ShowCoreShortcuts: false), launch);
     }
 
     [Theory]

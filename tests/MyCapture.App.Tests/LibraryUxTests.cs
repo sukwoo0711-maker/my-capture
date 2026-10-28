@@ -299,7 +299,7 @@ public sealed class LibraryUxTests
         f.Add(Now.AddHours(-1));
         await f.Queue.MoveCapturesAsync(filed.Select(record => record.Id), parent.Id);
         GalleryViewModel vm = f.ViewModel();
-        // Two full cards per row; four compact cards fit the same width.
+        // Two full cards per row; three compact cards fit the same width.
         vm.SetColumnCountForWidth(640);
         Assert.False(vm.IsCompactLayout);
         Assert.Equal(2, vm.ColumnCount);
@@ -307,19 +307,19 @@ public sealed class LibraryUxTests
 
         vm.NavigateTo(CaptureFolderScope.ForFolder(parent.Id));
         Assert.True(vm.IsCompactLayout);
-        Assert.Equal(4, vm.ColumnCount);
+        Assert.Equal(3, vm.ColumnCount);
         Assert.IsType<GalleryHeaderRow>(vm.Rows[0]);
         Assert.True(Assert.IsType<GalleryFolderRow>(vm.Rows[1]).IsCompact);
         GalleryTileRow[] tiles = vm.Rows.OfType<GalleryTileRow>().ToArray();
-        Assert.Equal([4, 1], tiles.Select(row => row.Tiles.Count));
+        Assert.Equal([3, 2], tiles.Select(row => row.Tiles.Count));
         Assert.All(tiles, row => Assert.True(row.IsCompact));
         // Selection and arrow keys use the same rows.
         vm.Select(filed[0].Id);
-        Assert.Same(vm.FindTile(filed[4].Id), GallerySelectionNavigation.FindNeighbor(vm.Rows, vm.FindTile(filed[0].Id)!, true, 1));
+        Assert.Same(vm.FindTile(filed[3].Id), GallerySelectionNavigation.FindNeighbor(vm.Rows, vm.FindTile(filed[0].Id)!, true, 1));
 
         // A resize inside the folder keeps the compact grid; returning to the root restores it.
         Assert.True(vm.SetColumnCountForWidth(1000));
-        Assert.Equal(6, vm.ColumnCount);
+        Assert.Equal(5, vm.ColumnCount);
         vm.NavigateTo(CaptureFolderScope.All);
         Assert.False(vm.IsCompactLayout);
         Assert.Equal(4, vm.ColumnCount);
