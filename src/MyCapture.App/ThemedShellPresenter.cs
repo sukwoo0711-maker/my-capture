@@ -41,6 +41,7 @@ internal sealed class ThemedShellPresenter(Func<bool> suppressNotification, Func
     private readonly List<Window> _leaving = [];
     private ReceiptKeyboardSession? _receiptKeyboardSession;
     internal bool HasNotification => _toast is not null;
+    internal bool HasVisibleNotification => _toast is not null || _leaving.Count > 0;
     internal event Action? NotificationDismissed;
 
     /// <summary>Raised whenever a tray-owned surface (command menu) has just left the screen,
@@ -207,6 +208,12 @@ internal sealed class ThemedShellPresenter(Func<bool> suppressNotification, Func
             tipButton.ToolTip = UiText.Get("QuickAccess.Pin");
             tipButton.Click += (_, _) => { Dismiss(); pin(); };
             content.Children.Add(tipButton);
+        }
+        else if (tip is not null)
+        {
+            var locationHint = Body(tip);
+            locationHint.Margin = new Thickness(12, 0, 12, 4);
+            content.Children.Add(locationHint);
         }
         var hint = new TextBlock { Text = UiText.Get("Onboard_ReceiptKeyboard"), FontSize = 12,
             Margin = new Thickness(12, 4, 12, 4), TextWrapping = TextWrapping.Wrap };

@@ -3420,6 +3420,9 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="Capture.AfterClipboard" xml:space="preserve"><value>클립보드에만 복사</value></data>
   <data name="Capture.CopiedAndSaved" xml:space="preserve"><value>클립보드에 복사됨 · 라이브러리에 저장됨</value></data>
   <data name="Capture.Saved" xml:space="preserve"><value>라이브러리에 저장됨</value></data>
+  <data name="SavedLocation.Title" xml:space="preserve"><value>라이브러리에 저장됨</value></data>
+  <data name="SavedLocation.Hotkey" xml:space="preserve"><value>{0} 키로 라이브러리를 엽니다.</value></data>
+  <data name="SavedLocation.NotificationArea" xml:space="preserve"><value>알림 영역의 MyCapture 아이콘에서 라이브러리를 엽니다.</value></data>
   <data name="Shortcuts.ShowHints" xml:space="preserve"><value>버튼에 단축키 표시</value></data>
   <data name="Crop.Ratio" xml:space="preserve"><value>비율</value></data>
   <data name="Crop.Free" xml:space="preserve"><value>자유</value></data>

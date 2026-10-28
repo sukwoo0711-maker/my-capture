@@ -99,6 +99,8 @@ public partial class App
                 first.Card = null;
                 if (ReferenceEquals(_quickAccessFirst, first)) _quickAccessFirst = null;
                 if (ReferenceEquals(_quickAccess, shown)) _quickAccess = null;
+                if (first.SavedRecord is { } saved) ShowSavedLocationAfterCard(shown, saved);
+                else first.ClosedWithoutDestination = !shown.ChoseLibraryEditOrPin && !shown.WasReplaced && !shown.HasCaptureFailed;
                 _storeRating?.NotifyFlowEnded();
             };
             _quickAccess = shown;
@@ -194,6 +196,14 @@ public partial class App
                 return true;
         }
 
+        first.SavedRecord = record;
+        // A pending card can close before durability is known. Only the successful save can
+        // now answer that dismissal; a selector or another receipt still drops the notice.
+        if (first.ClosedWithoutDestination)
+        {
+            first.ClosedWithoutDestination = false;
+            ShowSavedLocationReceipt(record.Id);
+        }
         // Closed by the user or replaced: the capture is saved, and no other card shows for it.
         if (first.Card is not { IsOpen: true } card || !ReferenceEquals(_quickAccessFirst, first)
             || !ReferenceEquals(_quickAccess, card) || _queue is null || _settings is null) return true;
@@ -262,6 +272,10 @@ public partial class App
         internal QuickAccessFirstPhase Phase { get; set; }
 
         internal QuickAccessWindow? Card { get; set; }
+
+        internal CaptureRecord? SavedRecord { get; set; }
+
+        internal bool ClosedWithoutDestination { get; set; }
 
         /// <summary>Keeps the saved capture in the library while its card can act on it.</summary>
         internal IDisposable? Lease { get; set; }

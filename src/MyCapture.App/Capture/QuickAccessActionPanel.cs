@@ -8,6 +8,10 @@ namespace MyCapture.App.Capture;
 /// <summary>Keeps every action name below its icon, or hides all names when the card is too narrow.</summary>
 internal sealed class QuickAccessActionPanel : Panel
 {
+    // The six named actions fit at the default caption size in Korean and English.
+    // The card reserves this width even when the captured image is only a few pixels wide.
+    internal const double MinimumDefaultTextWidth = 310;
+
     private readonly List<(Button Button, TextBlock Label)> _actions = [];
 
     internal void AddAction(Button button, SymbolIcon icon, string name)

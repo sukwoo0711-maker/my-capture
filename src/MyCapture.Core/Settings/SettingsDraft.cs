@@ -810,6 +810,7 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
         _preservedFirstCaptureTipShown = s.General.FirstCaptureTipShown;
         _preservedFirstPinTipShown = s.General.FirstPinTipShown;
         _preservedPinSizeTipShown = s.General.PinSizeTipShown;
+        _preservedSavedLocationTipCount = s.General.SavedLocationTipCount;
         _preservedRecordingBitrateBitsPerSecond = s.Recording.BitrateBitsPerSecond;
         _preservedRecordingCoarseStepSeconds = s.Recording.CoarseStepSeconds;
 
@@ -907,6 +908,7 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
                 FirstCaptureTipShown = _preservedFirstCaptureTipShown,
                 FirstPinTipShown = _preservedFirstPinTipShown,
                 PinSizeTipShown = _preservedPinSizeTipShown,
+                SavedLocationTipCount = _preservedSavedLocationTipCount,
             },
             Capture =
             {
@@ -1520,6 +1522,7 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
     private bool _preservedFirstCaptureTipShown;
     private bool _preservedFirstPinTipShown;
     private bool _preservedPinSizeTipShown;
+    private int _preservedSavedLocationTipCount;
     private int _preservedClickThroughHintShownCount;
     private int _preservedRecordingBitrateBitsPerSecond;
     private double _preservedRecordingCoarseStepSeconds;

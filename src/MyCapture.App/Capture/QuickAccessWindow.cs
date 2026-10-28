@@ -119,6 +119,12 @@ internal sealed class QuickAccessWindow : Window
 
     internal bool IsCaptureExcluded => CaptureWindowExclusion.WasApplied(this);
 
+    /// <summary>A library, edit or pin choice makes the saved-location reminder unnecessary.</summary>
+    internal bool ChoseLibraryEditOrPin { get; private set; }
+
+    /// <summary>A newer capture or card dismissed this one, rather than the user's close or its timeout.</summary>
+    internal bool WasReplaced { get; private set; }
+
     // The card does not close itself while its capture or the automatic copy has yet to report.
     private bool IsAwaitingCapture => IsPending || _copyPending;
 
@@ -167,7 +173,7 @@ internal sealed class QuickAccessWindow : Window
         _captureActions = captureActions;
         Title = UiText.Get("QuickAccess.Title");
         // Fits a 1366 x 768 work area at 150% scaling.
-        Width = 344;
+        Width = QuickAccessActionPanel.MinimumDefaultTextWidth + 34;
         _capturedRegion = capturedRegion; _targetMonitor = targetMonitor;
         _keyboardRouter = keyboardRouter;
         _previewDpi = targetMonitor is null ? VisualTreeHelper.GetDpi(this)
@@ -272,6 +278,7 @@ internal sealed class QuickAccessWindow : Window
         _actions["Edit"] = () =>
         {
             if (_captureActions is not { } bound) return;
+            ChoseLibraryEditOrPin = true;
             try { bound.Edit(); }
             catch (Exception error) when (error is not OutOfMemoryException)
             {
@@ -284,7 +291,10 @@ internal sealed class QuickAccessWindow : Window
         _actions["Pin"] = async () =>
         {
             if (_captureActions is { } bound)
+            {
+                ChoseLibraryEditOrPin = true;
                 await RunAsync("Pin", async () => { await bound.Pin(); return true; }, "QuickAccess.Pinning", "QuickAccess.Pinned");
+            }
         };
         _actions["Save"] = async () =>
         {
@@ -314,6 +324,7 @@ internal sealed class QuickAccessWindow : Window
         var libraryButton = _libraryButton = Button("QuickAccess.Library", () =>
         {
             if (_captureActions is not { } bound) return;
+            ChoseLibraryEditOrPin = true;
             bound.Library();
             RequestClose();
         });
@@ -360,6 +371,7 @@ internal sealed class QuickAccessWindow : Window
         surface.SetResourceReference(Border.BorderBrushProperty, "Border.Subtle");
         if (AllowsTransparency) surface.SetResourceReference(EffectProperty, "Shadow.Card");
         Content = surface;
+        ConstrainToWorkArea(_targetMonitor);
         // The implicit Window style, which carries the shared entrance, does not reach a subclass.
         // A card receiving a flying capture replaces it with its own fade (PrepareLanding).
         FluidMotion.SetWindowEntrance(this, true);
@@ -599,7 +611,9 @@ internal sealed class QuickAccessWindow : Window
         if (_preview?.Source is not BitmapSource image || _previewSurface is null) return;
         // WPF image dimensions are DIPs and can carry arbitrary bitmap DPI metadata.
         // Limit the displayed physical pixels to twice the original pixel dimensions.
-        _preview.Width = Math.Min(310, image.PixelWidth * 2.0 / _previewDpi.DpiScaleX);
+        double available = Math.Max(0, Width - (AllowsTransparency ? 34 : 18));
+        _preview.Width = Math.Min(Math.Min(QuickAccessActionPanel.MinimumDefaultTextWidth, available),
+            image.PixelWidth * 2.0 / _previewDpi.DpiScaleX);
         _preview.Height = Math.Min(180, image.PixelHeight * 2.0 / _previewDpi.DpiScaleY);
         _previewSurface.Height = _preview.Height;
     }
@@ -611,7 +625,7 @@ internal sealed class QuickAccessWindow : Window
         // through the SizeChanged placement handler to the previous monitor.
         if (IsLoaded && IsVisible)
             _placementMonitor = MonitorEnumerator.GetFromWindow(new WindowInteropHelper(this).Handle);
-        ReflowPreview();
+        ConstrainToWorkArea(_placementMonitor ?? _targetMonitor);
         base.OnDpiChanged(oldDpi, newDpi);
     }
 
@@ -648,6 +662,7 @@ internal sealed class QuickAccessWindow : Window
     internal void CloseNow()
     {
         if (_closed) return;
+        WasReplaced = true;
         if (FluidMotion.IsExiting(this)) FluidMotion.CompleteExit(this);
         else Close();
     }
@@ -734,16 +749,30 @@ internal sealed class QuickAccessWindow : Window
     {
         _placementMonitor = monitor;
         _previewDpi = new DpiScale(monitor.ScaleFactor, monitor.ScaleFactor);
-        ReflowPreview();
+        ConstrainToWorkArea(monitor);
         Rect position = Position(monitor.WorkArea, monitor.ScaleFactor, ActualWidth, ActualHeight, _capturedRegion);
         PhysicalWindowPositioner.PlaceTopmostWithoutActivation(new WindowInteropHelper(this).Handle,
             new RectD(position.Left * monitor.ScaleFactor, position.Top * monitor.ScaleFactor,
-                ActualWidth * monitor.ScaleFactor, ActualHeight * monitor.ScaleFactor));
+                position.Width * monitor.ScaleFactor, position.Height * monitor.ScaleFactor));
+    }
+
+    /// <summary>The action row owns the minimum width; a smaller work area takes precedence.</summary>
+    internal void ConstrainToWorkArea(MonitorInfo? monitor)
+    {
+        double minimum = QuickAccessActionPanel.MinimumDefaultTextWidth + (AllowsTransparency ? 34 : 18);
+        double workWidth = monitor is null ? double.PositiveInfinity : monitor.WorkArea.Width / monitor.ScaleFactor;
+        MinWidth = Math.Min(minimum, workWidth);
+        MaxWidth = workWidth;
+        MaxHeight = monitor is null ? double.PositiveInfinity : monitor.WorkArea.Height / monitor.ScaleFactor;
+        Width = MinWidth;
+        ReflowPreview();
     }
 
     internal static Rect Position(RectD work, double scale, double width, double height, RectD? capturedRegion = null)
     {
         double left = work.Left / scale, top = work.Top / scale, right = work.Right / scale, bottom = work.Bottom / scale;
+        width = Math.Min(width, right - left);
+        height = Math.Min(height, bottom - top);
         double x = right - width - 12, y = bottom - height - 12;
         if (capturedRegion is { } region && (region.Width < work.Width || region.Height < work.Height))
         {
