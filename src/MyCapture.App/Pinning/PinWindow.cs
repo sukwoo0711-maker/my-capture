@@ -825,7 +825,7 @@ internal sealed partial class PinWindow : Window
 
     protected override void OnDpiChanged(DpiScale oldDpi, DpiScale newDpi)
     {
-        RerenderForDisplayScale(_liveZooming ? newDpi.DpiScaleX : ZoomRasterScale(newDpi.DpiScaleX, _state.Zoom));
+        RerenderAt(newDpi.DpiScaleX, _liveZooming ? newDpi.DpiScaleX : ZoomRasterScale(newDpi.DpiScaleX, _state.Zoom));
         base.OnDpiChanged(oldDpi, newDpi);
         _clickThroughHandle?.Place();
         Dispatcher.BeginInvoke(DispatcherPriority.Loaded, new Action(() => _clickThroughHandle?.Place()));
@@ -837,12 +837,18 @@ internal sealed partial class PinWindow : Window
     }
 
     /// <summary>Changes only the raster; the pin's DIP geometry and interaction state stay intact.</summary>
-    internal void RerenderForDisplayScale(double scale, bool notify = true)
+    internal void RerenderForDisplayScale(double scale, bool notify = true) => RerenderAt(scale, scale, notify);
+
+    /// <summary>
+    /// Records the monitor scale (Mermaid multiplies it by the zoom itself) and re-rasterises the
+    /// text at <paramref name="rasterScale"/>, which already includes a settled zoom.
+    /// </summary>
+    private void RerenderAt(double monitorScale, double rasterScale, bool notify = true)
     {
         if (_isClosed || !_content.CanRerender) return;
-        _mermaidMonitorScale = scale;
-        PinContent rendered = _content.RenderedAt(scale);
-        PinContent? renderedSource = _markdownSourceContent?.RenderedAt(scale);
+        _mermaidMonitorScale = monitorScale;
+        PinContent rendered = _content.RenderedAt(rasterScale);
+        PinContent? renderedSource = _markdownSourceContent?.RenderedAt(rasterScale);
         if (ReferenceEquals(rendered, _content) && ReferenceEquals(renderedSource, _markdownSourceContent)) return;
         ClipboardCache.Clear();
         _content = rendered;
@@ -1603,7 +1609,7 @@ internal sealed partial class PinWindow : Window
         bool wasZooming = _liveZooming;
         _liveZooming = false;
         if (wasZooming && !_isClosed && _content.CanRerender)
-            RerenderForDisplayScale(ZoomRasterScale(VisualTreeHelper.GetDpi(this).DpiScaleX, _state.Zoom), notify: false);
+            RerenderAt(_mermaidMonitorScale, ZoomRasterScale(_mermaidMonitorScale, _state.Zoom), notify: false);
         _imageElement.CacheMode = null;
         RenderOptions.SetBitmapScalingMode(_imageElement, BitmapScalingMode.HighQuality);
         _imageElement.InvalidateVisual();

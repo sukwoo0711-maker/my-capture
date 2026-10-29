@@ -270,7 +270,9 @@ public partial class App : Application
             pinSaveService,
             _services.GetRequiredService<ILogger<PinManager>>());
         _pins.PinCreated += ShowFirstPinTip;
-        _ = PinRenderWarmup.StartAsync();
+        // No Markdown warm-up at startup: it kept the document text stack and its fonts resident
+        // (+20 MB idle, +80 MB after a capture in the 4.11.0 gate) for users who never pin Markdown.
+        // The first Markdown pin pays its layout cost instead.
         _mermaidRenderer = new MermaidRenderer(
             Path.Combine(_services.GetRequiredService<AppPaths>().DataRoot, "mermaid-browser"), Dispatcher,
             _services.GetRequiredService<ILogger<MermaidRenderer>>());

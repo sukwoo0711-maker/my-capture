@@ -156,7 +156,10 @@ public sealed partial class SettingsThemePreviewTests
         Color[] colors = [Color.FromRgb(0x3B, 0x82, 0xF6), Color.FromRgb(0x10, 0xB9, 0x81), Color.FromRgb(0xF5, 0x9E, 0x0B),
             Color.FromRgb(0xEF, 0x44, 0x44), Color.FromRgb(0x8B, 0x5C, 0xF6), Color.FromRgb(0x06, 0xB6, 0xD4)];
         byte[][] pngs = colors.Select(EvidenceThumbnailPng).ToArray();
-        DateTimeOffset now = DateTimeOffset.Now;
+        // Anchor at 23:00 yesterday, not at the current time: the library groups cards by day, and
+        // samples taken from "now" split across midnight for a while after it (the CI runner clock
+        // is UTC), which moved the cards the delete-gap test follows into different day groups.
+        DateTimeOffset now = new(DateTime.Today.AddHours(-1));
         var records = new List<CaptureRecord>(count);
         using (queue.SuspendEviction())
         {

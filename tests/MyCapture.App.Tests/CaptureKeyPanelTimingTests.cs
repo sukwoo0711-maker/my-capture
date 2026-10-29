@@ -15,7 +15,7 @@ namespace MyCapture.App.Tests;
 
 public sealed class CaptureKeyPanelTimingTests(ITestOutputHelper output)
 {
-    [Fact]
+    [SelectorTimingFact]
     public void SelectorFirstFrame_RecordsPresentedFrameAndRetainsComparison() => StaTestHost.Run(() =>
     {
         using var language = UiText.UseLanguage("ko-KR");
@@ -83,5 +83,19 @@ public sealed class CaptureKeyPanelTimingTests(ITestOutputHelper output)
             Dispatcher.PushFrame(frame);
         }
         Assert.True(ready());
+    }
+}
+
+/// <summary>
+/// Skips unless <c>MYCAPTURE_SELECTOR_TIMING</c> is set. The timing harness shows a real 1280 × 720
+/// selector window, which a smaller desktop (the CI runner) cannot place; the first-frame rules
+/// themselves are covered by <see cref="CaptureKeyPanelTests"/>.
+/// </summary>
+internal sealed class SelectorTimingFactAttribute : FactAttribute
+{
+    public SelectorTimingFactAttribute()
+    {
+        if (string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("MYCAPTURE_SELECTOR_TIMING")))
+            Skip = "Opt-in selector timing harness: set MYCAPTURE_SELECTOR_TIMING=1 on a desktop of at least 1280 x 720.";
     }
 }
