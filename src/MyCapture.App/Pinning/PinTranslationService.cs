@@ -3,6 +3,7 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using MyCapture.App.Threading;
 using MyCapture.Core.Pin;
+using MyCapture.Ocr;
 using MyCapture.Ocr.Translation;
 
 namespace MyCapture.App.Pinning;
@@ -82,7 +83,19 @@ internal sealed partial class PinTranslationService(ITextTranslator translator,
         ArgumentNullException.ThrowIfNull(picture);
         cancellationToken.ThrowIfCancellationRequested();
         PinTextFormat format = PinTranslationPlanner.Classify(recognized, false, false);
-        PinTranslationPlan plan = PinTranslationPlanner.Create(recognized, format, Direction);
+        PinTranslationPlan repaired = PinTranslationPlanner.Create(OcrLatinTextRepair.Repair(recognized), format, Direction);
+        // Every repair replaces exactly one character. Plan on the repaired text so a label such
+        // as "SeIect" is eligible, then put original bytes back into all literal and fallback spans.
+        // Code, comment markers, JSON keys and fenced text consequently keep their source spelling.
+        int offset = 0;
+        var pieces = new List<PlanPiece>(repaired.Pieces.Count);
+        foreach (PlanPiece piece in repaired.Pieces)
+        {
+            string raw = recognized.Substring(offset, piece.Raw.Length);
+            pieces.Add(piece with { Raw = raw, Content = piece.Translate ? piece.Source : null });
+            offset += piece.Raw.Length;
+        }
+        PinTranslationPlan plan = new(repaired.Format, pieces);
         if (!plan.HasTranslatable) return null;
         // The recognized text has no source style of its own: it becomes a plain translated document.
         PinContent template = PinContent.FromText(picture.Image, recognized, false, picture.Provenance)

@@ -28,8 +28,8 @@ public sealed class PinTranslationOverlayServiceTests
 
     [Theory]
     [InlineData("Select the area you need.", false)]
-    [InlineData("SeIect the area you need.", true)]
-    public async Task OcrConfusedIdentifierKeepsOnlyItsSentenceAndTheColumnStillTranslates(string selection, bool rejected)
+    [InlineData("Select_area is the area you need.", true)]
+    public async Task ProtectedIdentifierKeepsOnlyItsSentenceAndTheColumnStillTranslates(string selection, bool rejected)
     {
         BitmapSource image = PinTranslationOverlayTests.Bitmap(1100, 680);
         OcrResult recognized = PinTranslationOverlayTests.Recognition(
@@ -43,7 +43,7 @@ public sealed class PinTranslationOverlayServiceTests
         {
             "Create a new document." => "새 문서를 만듭니다.",
             "Save your work regularly." => "작업을 정기적으로 저장합니다.",
-            "Add pictures t0 your library." => "사진 추가 t0 라이브러리.",
+            "Add pictures to your library." => "라이브러리에 사진을 추가합니다.",
             "Keep the original picture safe." => "원본 사진을 안전하게 보관하십시오.",
             "Open it again later." => "나중에 다시 열 수 있습니다.",
             _ => "필요한 영역을 선택합니다."
@@ -73,7 +73,7 @@ public sealed class PinTranslationOverlayServiceTests
     {
         BitmapSource image = PinTranslationOverlayTests.Bitmap(600, 200);
         OcrResult recognized = PinTranslationOverlayTests.Recognition(
-            PinTranslationOverlayTests.Line("SeIect the area you need.", 40, 60, 340, 26));
+            PinTranslationOverlayTests.Line("Select_area is the area you need.", 40, 60, 340, 26));
         var translator = new PinTranslationOverlayTests.FakeTranslator(_ => "필요한 영역을 선택합니다.");
         PinTranslationResult result = Assert.IsType<PinTranslationResult>(await new PinTranslationService(translator)
             .TranslateRecognizedAsync(recognized, PinContent.FromImage(image), CancellationToken.None));

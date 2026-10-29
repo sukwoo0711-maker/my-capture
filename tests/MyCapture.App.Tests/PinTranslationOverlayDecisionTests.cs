@@ -1,4 +1,4 @@
-﻿using System.Globalization;
+using System.Globalization;
 using System.Windows;
 using System.Windows.Media.Imaging;
 using MyCapture.App.Pinning;
@@ -8,11 +8,11 @@ using Xunit.Abstractions;
 
 namespace MyCapture.App.Tests;
 
-/// <summary>Round-two composition decisions, captured before the fitting optimization.</summary>
+/// <summary>Reviewed composition decisions, including background-safe growth and measured source pitch.</summary>
 public sealed class PinTranslationOverlayDecisionTests(ITestOutputHelper output)
 {
     [Fact]
-    public void DeterministicFixturesKeepRoundTwoDecisions() => StaTestHost.Run(() =>
+    public void DeterministicFixturesKeepReviewedDecisions() => StaTestHost.Run(() =>
     {
         var decisions = new List<string>();
         foreach (bool korean in new[] { false, true })
@@ -56,8 +56,9 @@ public sealed class PinTranslationOverlayDecisionTests(ITestOutputHelper output)
              new(Block(PinTranslationOverlayTests.Line("Keep   original", 20, 70, 120)), "Keep original")], decisions);
 
         string actual = string.Join("\n", decisions);
-        Assert.Equal(RoundTwoDecisions.Replace("\r\n", "\n"), actual);
-        output.WriteLine("All 18 fixtures match the round-two bounds, font sizes, line breaks, plate and review decisions.");
+        output.WriteLine(actual);
+        Assert.Equal(ReviewedDecisions.Replace("\r\n", "\n"), actual);
+        output.WriteLine("All 18 fixtures match the reviewed bounds, font sizes, line breaks, plate and review decisions.");
     });
 
     private static void Capture(string scene, BitmapSource image, IReadOnlyList<PinOverlayTranslation> translated, List<string> decisions)
@@ -105,8 +106,9 @@ public sealed class PinTranslationOverlayDecisionTests(ITestOutputHelper output)
         ("Hidden", "숨김"), ("Visible", "표시"), ("Default", "기본값"), ("Light", "밝게")
     ];
 
-    // Captured from commit 16fc3590 with the observation hook only; values are rounded to one millionth of a pixel.
-    private const string RoundTwoDecisions = """
+    // Round-two baseline (16fc3590), with four reviewed corrections: three photo blocks shrink instead of
+    // growing over other pixels, and one paragraph uses its measured source pitch. Precision is one millionth of a pixel.
+    private const string ReviewedDecisions = """
         en-ko/light-ui|8|8|False
         Document library|43.121094,41.522034,256.435028,33.169922|43.121094,41.522034,256.435028,33.169922|34|문서 라이브러리|False|False
         File     Edit     View|42.386719,108.810577,205.819656,19.550781|42.386719,108.810577,205.819656,24.489258|26|파일 편집 보기|False|True
@@ -141,7 +143,7 @@ public sealed class PinTranslationOverlayDecisionTests(ITestOutputHelper output)
         en-ko/noisy-photo|3|3|False
         Keep your travel memories in photographs|45.121094,121.522034,636.701904,33.169922|45.121094,121.522034,636.701904,33.169922|34|여행의 추억을 사진으로 남깁니다|True|False
         Explore the mountains and the coast|44.753906,210.166306,480.095764,29.106445|44.753906,210.166306,480.095764,29.106445|30|산과 바다의 풍경을 둘러봅니다|True|False
-        Save your favourite places|43.772461,299.844025,342.007263,29.589844|43.772461,299.844025,376.433333,29.589844|30|좋아하는 장소를 저장합니다|True|True
+        Save your favourite places|43.772461,299.844025,342.007263,29.589844|43.772461,299.844025,342.007263,29.589844|27.075|좋아하는 장소를 저장합니다|True|False
         en-ko/dense-settings|25|25|False
         Capture settings|26.009766,27.658947,156.737366,21.258789|26.009766,27.658947,156.737366,21.258789|22|캡처 설정|False|False
         File name|26.46875,77.42292,65.537811,12.03125|26.46875,77.42292,68.383333,15.070313|16|파일 이름|False|True
@@ -198,10 +200,10 @@ public sealed class PinTranslationOverlayDecisionTests(ITestOutputHelper output)
         ko-en/columns|3|3|False
         문서와 그림 관리|42.015625,42.201874,234.2677,30.140625|42.015625,42.201874,536.3,31.21875|32|Working with documents and pictures|False|True
         새 문서를 만듭니다. 작성한 내용을 저장합니다. 동료와 작업을 검토합니다. 변경 사항을 확인합니다.|41.637695,135.85257,302.874603,138.489258|41.637695,135.85257,484.953333,138.489258|26|Create a new document. Save your work\nregularly. Review the work with your team.\nCheck the latest changes.|False|True
-        그림을 라이브러리에 추가합니다. 필요한 부분을 선택합니다. 원본을 안전하게 보관합니다. 나중에 다시 열 수 있습니다.|591.637695,135.459015,380.874573,138.882813|591.637695,135.459015,380.874573,138.882813|26|Add pictures to your library.\nSelect the area you need. Keep\nthe original picture safe. Open it\nagain later.|False|False
+        그림을 라이브러리에 추가합니다. 필요한 부분을 선택합니다. 원본을 안전하게 보관합니다. 나중에 다시 열 수 있습니다.|591.637695,135.459015,380.874573,138.882813|591.637695,135.459015,380.874573,139.515238|26|Add pictures to your library.\nSelect the area you need. Keep\nthe original picture safe. Open it\nagain later.|False|True
         ko-en/noisy-photo|3|3|False
-        여행의 추억을 사진으로 남깁니다|46.216797,117.139221,498.428284,32.539063|46.216797,117.139221,641.16,33.169922|34|Keep your travel memories in photographs|True|True
-        산과 바다의 풍경을 둘러봅니다|43.918945,206.75322,411.58847,28.256836|43.918945,206.75322,483.57,29.106445|30|Explore the mountains and the coast|True|True
+        여행의 추억을 사진으로 남깁니다|46.216797,117.139221,498.428284,32.539063|46.216797,117.139221,498.428284,32.539063|26.01|Keep your travel memories in photographs|True|False
+        산과 바다의 풍경을 둘러봅니다|43.918945,206.75322,411.58847,28.256836|43.918945,206.75322,411.58847,28.256836|25.5|Explore the mountains and the coast|True|False
         좋아하는 장소를 저장합니다|43.889648,296.357697,373.401093,28.652344|43.889648,296.357697,373.401093,29.589844|30|Save your favourite places|True|True
         ko-en/dense-settings|25|25|False
         캡처 설정|26.890625,24.951916,89.171196,20.72168|26.890625,24.951916,158.65,21.258789|22|Capture settings|False|True

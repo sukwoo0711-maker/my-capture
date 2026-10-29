@@ -303,14 +303,23 @@ public sealed class PinTranslationOverlayTests(ITestOutputHelper output)
         byte[] pixels = ReadPixels(source);
         PinOverlayBackground background = PinTranslationOverlay.EstimateBackground(pixels, width, height, width * 4, line.Bounds);
         Assert.True(background.NeedsPlate);
-        for (int y = (int)Math.Floor(line.Bounds.Y - 2); y < Math.Ceiling(line.Bounds.Bottom + 2); y++)
-            for (int x = (int)Math.Floor(line.Bounds.X - 2); x < Math.Ceiling(line.Bounds.Right + 2); x++)
+        for (int y = (int)Math.Floor(line.Bounds.Y); y < Math.Ceiling(line.Bounds.Bottom); y++)
+            for (int x = (int)Math.Floor(line.Bounds.X); x < Math.Ceiling(line.Bounds.Right); x++)
             {
                 byte[] pixel = ReadPixel(result.Image, x, y);
                 double toSource = Math.Pow(pixel[0] - 255, 2) + Math.Pow(pixel[1] - 255, 2) + Math.Pow(pixel[2] - 255, 2);
                 double toFill = Math.Pow(pixel[0] - background.Color.B, 2) + Math.Pow(pixel[1] - background.Color.G, 2)
                     + Math.Pow(pixel[2] - background.Color.R, 2);
                 Assert.True(toFill <= toSource, $"Un-erased source ink at ({x}, {y}).");
+            }
+        // Padding is not OCR ink. A plate must preserve pixels that do not match its ring,
+        // even on a textured surface, while the source rectangle is still fully erased.
+        for (int y = (int)Math.Floor(line.Bounds.Y - 2); y < Math.Ceiling(line.Bounds.Bottom + 2); y++)
+            for (int x = (int)Math.Floor(line.Bounds.X - 2); x < Math.Ceiling(line.Bounds.Right + 2); x++)
+            {
+                if (x >= Math.Floor(line.Bounds.X) && x < Math.Ceiling(line.Bounds.Right)
+                    && y >= Math.Floor(line.Bounds.Y) && y < Math.Ceiling(line.Bounds.Bottom)) continue;
+                Assert.Equal(ReadPixel(source, x, y), ReadPixel(result.Image, x, y));
             }
     });
 
