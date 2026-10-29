@@ -158,6 +158,12 @@ internal sealed record PinContent
         new(image, PinContentKind.Image, originalText: null, sourcePageUrl ?? string.Empty,
             usesDeviceIndependentPixels: false, provenance: provenance);
 
+    /// <summary>An unsaved picture translation with the complete translated text for copying.</summary>
+    internal static PinContent FromTranslationOverlay(BitmapSource image, string text, PinContent source) =>
+        new(image, PinContentKind.Image, text, source.SourcePageUrl, usesDeviceIndependentPixels: false,
+            layoutWidthDip: source.LayoutWidthDip, layoutHeightDip: source.LayoutHeightDip, provenance: source.Provenance)
+        { PendingProvenance = source.PendingProvenance };
+
     /// <summary>Rebuilds the immutable content retained in an opt-in saved pin session.</summary>
     internal static PinContent FromSession(
         BitmapSource image,

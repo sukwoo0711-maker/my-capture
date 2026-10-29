@@ -256,6 +256,7 @@ internal sealed class NeuralOcrEngine : IDisposable
         }
 
         var lines = new List<OcrLine>(raw.TextBlocks.Length);
+        var angles = new List<double?>();
         foreach (TextBlock block in raw.TextBlocks)
         {
             if (string.IsNullOrWhiteSpace(block.Text))
@@ -283,6 +284,7 @@ internal sealed class NeuralOcrEngine : IDisposable
             }
 
             lines.Add(new OcrLine(block.Text.Trim(), lineBox, words));
+            angles.Add(TextAngle(block.BoxPoints, block.AngleIndex));
         }
 
         if (lines.Count == 0)
@@ -291,7 +293,15 @@ internal sealed class NeuralOcrEngine : IDisposable
         }
 
         string text = OcrPlanner.BuildBlockText(lines.Select(line => line.Text));
-        return OcrResult.Success(text, "ko-KR", lines, TimeSpan.FromMilliseconds(raw.DetectTime));
+        return OcrResult.Success(text, "ko-KR", lines, TimeSpan.FromMilliseconds(raw.DetectTime), OcrResult.MostTilted(angles));
+    }
+
+    /// <summary>PP-OCR quadrilaterals run top-left to top-right in the source image.</summary>
+    internal static double? TextAngle(SKPointI[]? points, int angleIndex = 0)
+    {
+        if (points is null || points.Length < 2) return null;
+        double x = points[1].X - points[0].X, y = points[1].Y - points[0].Y;
+        return x * x + y * y < 4 ? null : Math.Atan2(y, x) * 180 / Math.PI + (angleIndex == 1 ? 180 : 0);
     }
 
     private static OcrRect ToRect(SKPointI[]? points, double scale = 1.0)

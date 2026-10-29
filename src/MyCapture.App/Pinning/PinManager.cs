@@ -267,9 +267,9 @@ internal sealed partial class PinManager
         ordered.InsertRange(0, _pins.Where(pin => pin.Handle == IntPtr.Zero || byHandle.ContainsKey(pin.Handle)));
         return ordered.Select(pin => new ClosedPin(
             pin.PinnedContent,
-            pin.State.ImageWidthDip,
-            pin.State.ImageHeightDip,
-            pin.State.Zoom,
+            pin.TranslationSourceView.Width,
+            pin.TranslationSourceView.Height,
+            pin.TranslationSourceView.Zoom,
             pin.State.Opacity,
             pin.GetCurrentPlacement(),
             openingAge[pin])).ToArray();
@@ -673,9 +673,9 @@ internal sealed partial class PinManager
             : Task.Run(() => encode(content, null));
         var entry = new EncodedClosedPin(
             encoding,
-            state.ImageWidthDip,
-            state.ImageHeightDip,
-            state.Zoom,
+            pin.TranslationSourceView.Width,
+            pin.TranslationSourceView.Height,
+            pin.TranslationSourceView.Zoom,
             state.Opacity,
             pin.ClosedPlacement);
         long initialBytes = cached is not null ? encoding.Result.RetainedBytes : content.EstimatedRetainedBytes;

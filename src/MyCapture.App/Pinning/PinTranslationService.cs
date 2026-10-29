@@ -7,7 +7,7 @@ using MyCapture.Ocr.Translation;
 
 namespace MyCapture.App.Pinning;
 
-internal sealed record PinTranslationResult(PinContent Content, bool NeedsReview);
+internal sealed record PinTranslationResult(PinContent Content, bool NeedsReview, PinContent? Document = null);
 
 /// <summary>Whether a pin can be translated into the target language, and in which direction.</summary>
 internal readonly record struct PinTranslationDecision(PinTranslationAvailability Availability, PinTranslationDirection Direction);

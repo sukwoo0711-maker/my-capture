@@ -1703,7 +1703,9 @@ internal sealed partial class PinWindow : Window
         ShowFeedback(
             mode == PinSaveMode.SaveAs ? UiText.Get("Text_B53B72EF2371") : UiText.Get("Text_88DAAEEDFE4C"),
             FeedbackKind.Progress);
-        handler.Invoke(this, new PinSaveRequestedEventArgs(mode, DisplayContent.Image, SourcePageUrl));
+        BitmapSource image = TranslationSourceContent.Kind == PinContentKind.Image
+            ? TranslationSourceContent.Image : DisplayContent.Image;
+        handler.Invoke(this, new PinSaveRequestedEventArgs(mode, image, SourcePageUrl));
     }
 
     private double AdjustOpacity(double delta)

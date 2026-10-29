@@ -160,7 +160,8 @@ public sealed class OcrResult
         IReadOnlyList<OcrLine> lines,
         TimeSpan elapsed,
         string? message,
-        OcrReadingOrientation readingOrientation = default)
+        OcrReadingOrientation readingOrientation = default,
+        double? textAngle = null)
     {
         Status = status;
         Text = text;
@@ -169,6 +170,7 @@ public sealed class OcrResult
         Elapsed = elapsed;
         Message = message;
         ReadingOrientation = readingOrientation;
+        TextAngle = textAngle;
     }
 
     public OcrStatus Status { get; }
@@ -185,6 +187,14 @@ public sealed class OcrResult
     /// <summary>The winning recognition axes; public word/line boxes stay in source pixels.</summary>
     internal OcrReadingOrientation ReadingOrientation { get; }
 
+    /// <summary>Detected text angle in source-image axes, in degrees; null when not reported.</summary>
+    public double? TextAngle { get; }
+
+    internal static double? MostTilted(IEnumerable<double?> angles) => angles.Where(angle => angle.HasValue)
+        .Select(angle => (double?)(((angle!.Value + 180) % 360 + 360) % 360 - 180))
+        .OrderByDescending(angle => double.IsFinite(angle!.Value) ? Math.Abs(angle.Value) : double.PositiveInfinity)
+        .FirstOrDefault();
+
     /// <summary>Wall-clock time spent, for the status line.</summary>
     public TimeSpan Elapsed { get; }
 
@@ -197,16 +207,19 @@ public sealed class OcrResult
         string text,
         string languageTag,
         IReadOnlyList<OcrLine> lines,
-        TimeSpan elapsed) =>
-        new(OcrStatus.Success, text, languageTag, lines, elapsed, message: null);
+        TimeSpan elapsed,
+        double? textAngle = null) =>
+        new(OcrStatus.Success, text, languageTag, lines, elapsed, message: null, textAngle: textAngle);
 
     internal static OcrResult Success(
         string text,
         string languageTag,
         IReadOnlyList<OcrLine> lines,
         TimeSpan elapsed,
-        OcrReadingOrientation readingOrientation) =>
-        new(OcrStatus.Success, text, languageTag, lines, elapsed, message: null, readingOrientation);
+        OcrReadingOrientation readingOrientation,
+        double? textAngle = null) =>
+        new(OcrStatus.Success, text, languageTag, lines, elapsed, message: null, readingOrientation,
+            textAngle ?? (readingOrientation.IsRotated ? -readingOrientation.ClockwiseDegrees : null));
 
     public static OcrResult NoText(string languageTag, TimeSpan elapsed) =>
         new(OcrStatus.NoText, string.Empty, languageTag, [], elapsed, message: null);

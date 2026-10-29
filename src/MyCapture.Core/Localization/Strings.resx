@@ -5012,4 +5012,10 @@ F3  편집·선택 중인 그림 또는 클립보드 핀
   <data name="GifExport_PreviewMemoryLimit" xml:space="preserve"><value>미리보기 메모리 한도에 도달했습니다. 크기 또는 선택 구간을 줄이십시오.</value></data>
   <data name="GifExport_SavedSize" xml:space="preserve"><value>저장됨 · {0} · {1}</value></data>
   <data name="GifExport_SizeEstimate" xml:space="preserve"><value>예상 크기 약 {0} ({3}) · {1:N0}프레임 · 재생 {2:N1}초</value></data>
+  <data name="Pin_TranslationDocumentView" xml:space="preserve">
+    <value>번역문 문서로 보기</value>
+  </data>
+  <data name="Pin_TranslationPictureView" xml:space="preserve">
+    <value>번역 그림으로 보기</value>
+  </data>
 </root>
