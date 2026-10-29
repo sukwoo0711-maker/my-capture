@@ -24,10 +24,10 @@ public sealed class OcrLatinRecoveryCorpusR7Tests(ITestOutputHelper output)
     [OcrLatinRecoveryCorpusR7Fact]
     public void CompareWindowsAndNeuralReadingsAtSuspectTokens() => StaTestHost.Run(() =>
     {
-        string baseline = Environment.GetEnvironmentVariable(BaselineVariable)!;
-        string models = Environment.GetEnvironmentVariable(PinTranslationOverlayEvidenceTests.ModelsVariable)!;
-        string directory = DiagnosticOutputPaths.Create(Path.Combine(
-            Environment.GetEnvironmentVariable(PinTranslationOverlayEvidenceTests.OutputVariable)!, "ocr-diagnosis"));
+        string baseline = DiagnosticOutputPaths.Create(Environment.GetEnvironmentVariable(BaselineVariable)!);
+        string models = DiagnosticOutputPaths.Create(Environment.GetEnvironmentVariable(PinTranslationOverlayEvidenceTests.ModelsVariable)!);
+        string directory = DiagnosticOutputPaths.Create(DiagnosticOutputPaths.Child(
+            DiagnosticOutputPaths.Create(Environment.GetEnvironmentVariable(PinTranslationOverlayEvidenceTests.OutputVariable)!), "ocr-diagnosis"));
         using var http = new HttpClient(new RejectNetwork());
         using var neural = new NeuralOcrEngine(new OcrModelStore(AppPaths.CreateForRoot(models), http,
             NullLogger<OcrModelStore>.Instance), NullLogger<NeuralOcrEngine>.Instance);
@@ -36,13 +36,14 @@ public sealed class OcrLatinRecoveryCorpusR7Tests(ITestOutputHelper output)
         Assert.True(windows.IsAvailable);
         output.WriteLine("Windows language packs: " + string.Join(", ", windows.SupportedLanguages));
         var summary = new StringBuilder("name\tround6Suspects\twindowsSuspects\tneuralSuspects\tproductSuspects\tchangedWords\tneuralCalls\twallMs\n");
-        foreach (string file in Directory.EnumerateFiles(baseline, "*-source.png").Order(StringComparer.Ordinal))
+        foreach (string entry in Directory.EnumerateFiles(baseline, "*-source.png").Order(StringComparer.Ordinal))
         {
+            string file = DiagnosticOutputPaths.Child(baseline, Path.GetFileName(entry));
             string name = Path.GetFileName(file)[..^"-source.png".Length];
             var image = new BitmapImage();
             image.BeginInit();
             image.CacheOption = BitmapCacheOption.OnLoad;
-            image.UriSource = new Uri(Path.GetFullPath(file));
+            image.UriSource = new Uri(file);
             image.EndInit();
             image.Freeze();
             OcrResult? windowsResult = null, neuralResult = null;
@@ -64,7 +65,7 @@ public sealed class OcrLatinRecoveryCorpusR7Tests(ITestOutputHelper output)
             Save("windows", windowsResult);
             Save("product", product);
             if (neuralResult is not null) Save("neural", neuralResult);
-            OcrResult round6 = PinTranslationOverlayCorpusTests.ReadRecognized(Path.Combine(baseline, name + "-ocr.json"));
+            OcrResult round6 = PinTranslationOverlayCorpusTests.ReadRecognized(DiagnosticOutputPaths.Child(baseline, name + "-ocr.json"));
             int changed = windowsResult.Lines.Zip(product.Lines).Sum(pair => pair.First.Words.Zip(pair.Second.Words)
                 .Count(words => words.First.Text != words.Second.Text));
             int beforeCount = OcrLatinWordRecovery.CountSuspects(windowsResult), afterCount = OcrLatinWordRecovery.CountSuspects(product);

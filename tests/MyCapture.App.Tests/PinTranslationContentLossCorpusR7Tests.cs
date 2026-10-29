@@ -14,14 +14,15 @@ public sealed class PinTranslationContentLossCorpusR7Tests(ITestOutputHelper out
     [PinOverlayContentComparisonFact]
     public void ReportDetectedLossAndAcceptedRecoveryForEachDirection()
     {
-        string before = Environment.GetEnvironmentVariable(PinTranslationOverlayCorpusTests.ComparisonVariable)!;
-        string after = Environment.GetEnvironmentVariable(PinTranslationOverlayEvidenceTests.OutputVariable)!;
+        string before = DiagnosticOutputPaths.Create(Environment.GetEnvironmentVariable(PinTranslationOverlayCorpusTests.ComparisonVariable)!);
+        string after = DiagnosticOutputPaths.Create(Environment.GetEnvironmentVariable(PinTranslationOverlayEvidenceTests.OutputVariable)!);
         MethodInfo preserves = typeof(PinTranslationService).GetMethod("PreservesProtectedValues", BindingFlags.NonPublic | BindingFlags.Static)!;
         var records = new List<object>();
         foreach (string direction in new[] { "en-ko", "ko-en" })
         {
             PinTranslationDirection value = direction == "en-ko" ? PinTranslationDirection.EnglishToKorean : PinTranslationDirection.KoreanToEnglish;
             var baseline = Directory.EnumerateFiles(before, "*." + direction + "-translations.json")
+                .Select(entry => DiagnosticOutputPaths.Child(before, Path.GetFileName(entry)))
                 .SelectMany(file => JsonSerializer.Deserialize<TranslatedText[]>(File.ReadAllText(file))!
                     .Select(item => new { File = Path.GetFileName(file), Item = item,
                         Issue = PinTranslationService.ContentLossReason(item.Source, item.Text ?? string.Empty, value) }))
@@ -32,6 +33,7 @@ public sealed class PinTranslationContentLossCorpusR7Tests(ITestOutputHelper out
                         && (bool)preserves.Invoke(null, [item.Item.Source, item.Item.Text])!,
                 }).ToArray();
             var current = Directory.EnumerateFiles(after, "*." + direction + "-recovery.json")
+                .Select(entry => DiagnosticOutputPaths.Child(after, Path.GetFileName(entry)))
                 .SelectMany(file => JsonSerializer.Deserialize<PinTranslationRecoveryDecision[]>(File.ReadAllText(file))!
                     .Select(item => new { File = Path.GetFileName(file), Item = item })).ToArray();
             Assert.NotEmpty(current);

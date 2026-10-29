@@ -5,6 +5,7 @@ using System.Text.Json;
 using System.Windows;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using MyCapture.App.Diagnostics;
 using MyCapture.App.Pinning;
 using MyCapture.Ocr;
 using Xunit;
@@ -19,15 +20,15 @@ public sealed class PinTranslationOverlayCorpusReplayTests(ITestOutputHelper out
 
     [PinOverlayCoverageReplayFact]
     public Task AllRecordedDirectionsMeetCoverageGate() => new PinTranslationOverlayCorpusTests(output)
-        .RunCorpusAsync(Environment.GetEnvironmentVariable(ReplayVariable)!);
+        .RunCorpusAsync(DiagnosticOutputPaths.Create(Environment.GetEnvironmentVariable(ReplayVariable)!));
 
     [PinOverlayReplayFact]
     public async Task DenseParagraphsAndSubtitleRenderFromRecordedCorpus()
     {
-        string directory = Environment.GetEnvironmentVariable(ReplayVariable)!;
-        string corpus = Environment.GetEnvironmentVariable(PinTranslationOverlayCorpusTests.CorpusVariable)!;
+        string directory = DiagnosticOutputPaths.Create(Environment.GetEnvironmentVariable(ReplayVariable)!);
+        string corpus = DiagnosticOutputPaths.Create(Environment.GetEnvironmentVariable(PinTranslationOverlayCorpusTests.CorpusVariable)!);
         IReadOnlyList<(string Name, BitmapSource Image)> pdf = await PinTranslationOverlayCorpusTests.LoadPicturesAsync(
-            Path.Combine(corpus, "pdf-en-arxiv-attention.pdf"), directory);
+            DiagnosticOutputPaths.Child(corpus, "pdf-en-arxiv-attention.pdf"), directory);
         StaTestHost.Run(() =>
         {
             var failures = new List<string>();
@@ -39,15 +40,15 @@ public sealed class PinTranslationOverlayCorpusReplayTests(ITestOutputHelper out
                 ("ui-en-subtitle", 190d, 428.667),
             })
             {
-                OcrResult recognized = PinTranslationOverlayCorpusTests.ReadRecognized(Path.Combine(directory, name + "-ocr.json"));
+                OcrResult recognized = PinTranslationOverlayCorpusTests.ReadRecognized(DiagnosticOutputPaths.Child(directory, name + "-ocr.json"));
                 BitmapSource source;
                 if (name.StartsWith("pdf-", StringComparison.Ordinal)) source = pdf.Single(page => page.Name == name).Image;
                 else
                 {
                     var loaded = new BitmapImage();
                     loaded.BeginInit(); loaded.CacheOption = BitmapCacheOption.OnLoad;
-                    string savedSource = Path.Combine(directory, name + "-source.png");
-                    loaded.UriSource = new Uri(File.Exists(savedSource) ? savedSource : Path.Combine(corpus, name + ".png"));
+                    string savedSource = DiagnosticOutputPaths.Child(directory, name + "-source.png");
+                    loaded.UriSource = new Uri(File.Exists(savedSource) ? savedSource : DiagnosticOutputPaths.Child(corpus, name + ".png"));
                     loaded.EndInit(); loaded.Freeze();
                     source = loaded;
                 }
@@ -55,9 +56,9 @@ public sealed class PinTranslationOverlayCorpusReplayTests(ITestOutputHelper out
                 int selected = Enumerable.Range(0, blocks.Length).MinBy(index =>
                     Math.Abs(blocks[index].Bounds.X - targetX) + Math.Abs(blocks[index].Bounds.Y - targetY));
                 PinOverlayBlock block = blocks[selected];
-                string document = File.ReadAllText(Path.Combine(directory, name + ".en-ko-text.txt"));
+                string document = File.ReadAllText(DiagnosticOutputPaths.Child(directory, name + ".en-ko-text.txt"));
                 string[] paragraphs = document.ReplaceLineEndings("\n").Split("\n\n", StringSplitOptions.None);
-                string[][] decisions = File.ReadLines(Path.Combine(directory, "decisions.tsv")).Skip(1)
+                string[][] decisions = File.ReadLines(DiagnosticOutputPaths.Child(directory, "decisions.tsv")).Skip(1)
                     .Select(line => line.Split('\t')).Where(fields => fields[0] == name && fields[1] == "en-ko" && fields[2] == "after").ToArray();
                 Assert.Equal(decisions.Length, paragraphs.Length);
                 int savedOrdinal = Enumerable.Range(0, decisions.Length).MinBy(index =>

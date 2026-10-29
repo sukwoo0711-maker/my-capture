@@ -5,6 +5,7 @@ using System.Text.Json;
 using System.Windows;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using MyCapture.App.Diagnostics;
 using MyCapture.App.Pinning;
 using MyCapture.Ocr;
 using Xunit;
@@ -41,15 +42,15 @@ public sealed class PinTranslationOverlaySurfaceR6Tests(ITestOutputHelper output
     [PinOverlayReplayFact]
     public void RecordedLongWikipediaParagraphKeepsTheRightColumnMargin() => StaTestHost.Run(() =>
     {
-        string directory = Environment.GetEnvironmentVariable(PinTranslationOverlayCorpusReplayTests.ReplayVariable)!;
+        string directory = DiagnosticOutputPaths.Create(Environment.GetEnvironmentVariable(PinTranslationOverlayCorpusReplayTests.ReplayVariable)!);
         const string name = "web-en-wiki-screenshot";
-        string sourcePath = Path.Combine(directory, name + "-source.png");
+        string sourcePath = DiagnosticOutputPaths.Child(directory, name + "-source.png");
         if (!File.Exists(sourcePath)) return;
         var source = new BitmapImage();
         source.BeginInit(); source.CacheOption = BitmapCacheOption.OnLoad; source.UriSource = new Uri(sourcePath); source.EndInit(); source.Freeze();
-        OcrResult recognized = PinTranslationOverlayCorpusTests.ReadRecognized(Path.Combine(directory, name + "-ocr.json"));
+        OcrResult recognized = PinTranslationOverlayCorpusTests.ReadRecognized(DiagnosticOutputPaths.Child(directory, name + "-ocr.json"));
         PinOverlayBlock[] blocks = PinTranslationOverlay.BuildBlocks(recognized, source).ToArray();
-        string[] paragraphs = File.ReadAllText(Path.Combine(directory, name + ".en-ko-text.txt"))
+        string[] paragraphs = File.ReadAllText(DiagnosticOutputPaths.Child(directory, name + ".en-ko-text.txt"))
             .ReplaceLineEndings("\n").Split("\n\n", StringSplitOptions.None);
         Assert.Equal(blocks.Length, paragraphs.Length);
         int target = Array.FindIndex(blocks, block => block.Text.StartsWith("The first screenshots", StringComparison.Ordinal));
@@ -259,19 +260,19 @@ public sealed class PinTranslationOverlaySurfaceR6Tests(ITestOutputHelper output
     [PinOverlayReplayFact]
     public void RecordedFitFailuresReportTheirExactSurfaceAndObstacles() => StaTestHost.Run(() =>
     {
-        string directory = Environment.GetEnvironmentVariable(PinTranslationOverlayCorpusReplayTests.ReplayVariable)!;
-        string[][] decisions = File.ReadLines(Path.Combine(directory, "decisions.tsv")).Skip(1)
+        string directory = DiagnosticOutputPaths.Create(Environment.GetEnvironmentVariable(PinTranslationOverlayCorpusReplayTests.ReplayVariable)!);
+        string[][] decisions = File.ReadLines(DiagnosticOutputPaths.Child(directory, "decisions.tsv")).Skip(1)
             .Select(line => line.Split('\t')).Where(fields => fields[2] == "after").ToArray();
         foreach (var direction in decisions.GroupBy(fields => (Name: fields[0], Direction: fields[1])))
         {
             if (!direction.Any(fields => fields[3] == "fit")) continue;
-            string sourcePath = Path.Combine(directory, direction.Key.Name + "-source.png");
+            string sourcePath = DiagnosticOutputPaths.Child(directory, direction.Key.Name + "-source.png");
             if (!File.Exists(sourcePath)) continue;
             var source = new BitmapImage();
             source.BeginInit(); source.CacheOption = BitmapCacheOption.OnLoad; source.UriSource = new Uri(sourcePath); source.EndInit(); source.Freeze();
-            OcrResult recognized = PinTranslationOverlayCorpusTests.ReadRecognized(Path.Combine(directory, direction.Key.Name + "-ocr.json"));
+            OcrResult recognized = PinTranslationOverlayCorpusTests.ReadRecognized(DiagnosticOutputPaths.Child(directory, direction.Key.Name + "-ocr.json"));
             PinOverlayBlock[] blocks = PinTranslationOverlay.BuildBlocks(recognized, source).ToArray();
-            string[] paragraphs = File.ReadAllText(Path.Combine(directory, direction.Key.Name + "." + direction.Key.Direction + "-text.txt"))
+            string[] paragraphs = File.ReadAllText(DiagnosticOutputPaths.Child(directory, direction.Key.Name + "." + direction.Key.Direction + "-text.txt"))
                 .ReplaceLineEndings("\n").Split("\n\n", StringSplitOptions.None);
             string[][] saved = direction.ToArray();
             if (saved.Length != blocks.Length)

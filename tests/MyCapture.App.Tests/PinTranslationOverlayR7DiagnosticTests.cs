@@ -4,6 +4,7 @@ using System.Reflection;
 using System.Windows;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using MyCapture.App.Diagnostics;
 using MyCapture.App.Pinning;
 using MyCapture.Ocr;
 using Xunit;
@@ -21,18 +22,18 @@ public sealed class PinTranslationOverlayR7DiagnosticTests(ITestOutputHelper out
     [PinOverlayR7DiagnosticFact]
     public void SmallSourceParagraphComparesSavedOcrAndTranslationPairs() => StaTestHost.Run(() =>
     {
-        string root = Environment.GetEnvironmentVariable(EvidenceVariable)!;
+        string root = DiagnosticOutputPaths.Create(Environment.GetEnvironmentVariable(EvidenceVariable)!);
         const string name = "var-small60-en-wiki";
         var paragraphs = new Dictionary<string, string>();
         foreach (string version in new[] { "c3", "c4" })
         {
-            string directory = Path.Combine(root, version);
-            string[][] decisions = File.ReadLines(Path.Combine(directory, "decisions.tsv")).Skip(1)
+            string directory = DiagnosticOutputPaths.Create(DiagnosticOutputPaths.Child(root, version));
+            string[][] decisions = File.ReadLines(DiagnosticOutputPaths.Child(directory, "decisions.tsv")).Skip(1)
                 .Select(line => line.Split('\t', 9)).Where(fields => fields[0] == name
                     && fields[1] == "en-ko" && fields[2] == "after").ToArray();
             int selected = Array.FindIndex(decisions, fields => fields[8].StartsWith("A screenshot (also known", StringComparison.Ordinal));
             Assert.True(selected >= 0);
-            string[] document = File.ReadAllText(Path.Combine(directory, name + ".en-ko-text.txt"))
+            string[] document = File.ReadAllText(DiagnosticOutputPaths.Child(directory, name + ".en-ko-text.txt"))
                 .ReplaceLineEndings("\n").Split("\n\n", StringSplitOptions.None);
             Assert.Equal(decisions.Length, document.Length);
             paragraphs.Add(version, document[selected]);
@@ -40,9 +41,9 @@ public sealed class PinTranslationOverlayR7DiagnosticTests(ITestOutputHelper out
         }
         foreach (string version in new[] { "c3", "c4" })
         {
-            string directory = Path.Combine(root, version);
-            OcrResult recognized = PinTranslationOverlayCorpusTests.ReadRecognized(Path.Combine(directory, name + "-ocr.json"));
-            using FileStream stream = File.OpenRead(Path.Combine(directory, name + "-source.png"));
+            string directory = DiagnosticOutputPaths.Create(DiagnosticOutputPaths.Child(root, version));
+            OcrResult recognized = PinTranslationOverlayCorpusTests.ReadRecognized(DiagnosticOutputPaths.Child(directory, name + "-ocr.json"));
+            using FileStream stream = File.OpenRead(DiagnosticOutputPaths.Child(directory, name + "-source.png"));
             BitmapFrame source = BitmapFrame.Create(stream, BitmapCreateOptions.PreservePixelFormat, BitmapCacheOption.OnLoad);
             source.Freeze();
             PinOverlayBlock[] blocks = PinTranslationOverlay.BuildBlocks(recognized, source).ToArray();

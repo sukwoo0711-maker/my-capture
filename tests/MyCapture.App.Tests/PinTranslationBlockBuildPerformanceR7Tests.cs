@@ -4,6 +4,7 @@ using System.IO;
 using System.Windows;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using MyCapture.App.Diagnostics;
 using MyCapture.App.Pinning;
 using MyCapture.Ocr;
 using Xunit;
@@ -16,7 +17,7 @@ public sealed class PinTranslationBlockBuildPerformanceR7Tests(ITestOutputHelper
     [PinOverlayReplayFact]
     public async Task RecordedPdfAndSixtyLineScreenReportBlockBuildingTime()
     {
-        string directory = Environment.GetEnvironmentVariable(PinTranslationOverlayCorpusReplayTests.ReplayVariable)!;
+        string directory = DiagnosticOutputPaths.Create(Environment.GetEnvironmentVariable(PinTranslationOverlayCorpusReplayTests.ReplayVariable)!);
         var samples = new List<(string Name, BitmapSource Image, OcrResult Ocr)>();
         StaTestHost.Run(() =>
         {
@@ -24,11 +25,11 @@ public sealed class PinTranslationBlockBuildPerformanceR7Tests(ITestOutputHelper
             var pdf = new BitmapImage();
             pdf.BeginInit();
             pdf.CacheOption = BitmapCacheOption.OnLoad;
-            pdf.UriSource = new Uri(Path.Combine(directory, name + "-source.png"));
+            pdf.UriSource = new Uri(DiagnosticOutputPaths.Child(directory, name + "-source.png"));
             pdf.EndInit();
             pdf.Freeze();
             Assert.Equal((1700, 2200), (pdf.PixelWidth, pdf.PixelHeight));
-            samples.Add((name, pdf, PinTranslationOverlayCorpusTests.ReadRecognized(Path.Combine(directory, name + "-ocr.json"))));
+            samples.Add((name, pdf, PinTranslationOverlayCorpusTests.ReadRecognized(DiagnosticOutputPaths.Child(directory, name + "-ocr.json"))));
 
             var visual = new DrawingVisual();
             var lines = new List<OcrLine>();

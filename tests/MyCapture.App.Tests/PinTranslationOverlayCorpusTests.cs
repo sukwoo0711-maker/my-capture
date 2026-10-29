@@ -41,11 +41,13 @@ public sealed class PinTranslationOverlayCorpusTests(ITestOutputHelper output)
 
     internal Task RunCorpusAsync(string? replayDirectory) => RunAsync(async () =>
     {
-        string input = Environment.GetEnvironmentVariable(CorpusVariable)!;
+        string input = DiagnosticOutputPaths.Create(Environment.GetEnvironmentVariable(CorpusVariable)!);
         string directory = DiagnosticOutputPaths.Create(
             Environment.GetEnvironmentVariable(PinTranslationOverlayEvidenceTests.OutputVariable)!);
         string models = Environment.GetEnvironmentVariable(PinTranslationOverlayEvidenceTests.ModelsVariable)!;
         Assert.False(string.IsNullOrWhiteSpace(models), "Set the model folder variable.");
+        models = DiagnosticOutputPaths.Create(models);
+        if (replayDirectory is not null) replayDirectory = DiagnosticOutputPaths.Create(replayDirectory);
         using var http = new HttpClient(new RejectingHandler());
         using TextTranslationService toKorean = Translator(directory, models, http, TranslationModelCatalog.EnglishToKorean);
         using TextTranslationService toEnglish = Translator(directory, models, http, TranslationModelCatalog.KoreanToEnglish);
@@ -63,20 +65,23 @@ public sealed class PinTranslationOverlayCorpusTests(ITestOutputHelper output)
         if (baseline is not null) output.WriteLine("Retained baseline assembly: " + baseline.Version);
         string? manifest = Environment.GetEnvironmentVariable(PinOverlayCorpusCoverage.ManifestVariable);
         string? comparisonDirectory = Environment.GetEnvironmentVariable(ComparisonVariable);
+        if (comparisonDirectory is not null) comparisonDirectory = DiagnosticOutputPaths.Create(comparisonDirectory);
         var coverage = string.IsNullOrWhiteSpace(manifest) ? null : new PinOverlayCorpusCoverage(manifest);
         if (coverage is not null) Assert.NotNull(baseline);
         string? translationCache = Environment.GetEnvironmentVariable(PinOverlayCorpusTranslations.CacheVariable)
             ?? (replayDirectory is null ? null : directory);
+        if (translationCache is not null) translationCache = DiagnosticOutputPaths.Create(translationCache);
 
-        foreach (string file in Directory.EnumerateFiles(input).Order(StringComparer.OrdinalIgnoreCase))
+        foreach (string entry in Directory.EnumerateFiles(input).Order(StringComparer.OrdinalIgnoreCase))
         {
+            string file = DiagnosticOutputPaths.Child(input, Path.GetFileName(entry));
             IReadOnlyList<(string Name, BitmapSource Image)> pictures = await LoadPicturesAsync(file, replayDirectory ?? comparisonDirectory);
             foreach ((string name, BitmapSource before) in pictures)
             {
                 var watch = Stopwatch.StartNew();
                 OcrResult recognized = replayDirectory is null
                     ? await ocr.RecognizeAsync(OcrRequestFactory.FromBitmap(before, settings).WithLatinRecovery(), CancellationToken.None)
-                    : ReadRecognized(Path.Combine(replayDirectory, name + "-ocr.json"));
+                    : ReadRecognized(DiagnosticOutputPaths.Child(replayDirectory, name + "-ocr.json"));
                 long ocrMs = replayDirectory is null ? watch.ElapsedMilliseconds : 0;
                 string size = $"{before.PixelWidth}x{before.PixelHeight}";
                 if (recognized.Status != OcrStatus.Success)
@@ -116,7 +121,7 @@ public sealed class PinTranslationOverlayCorpusTests(ITestOutputHelper output)
                     if (baseline is not null)
                     {
                         OcrResult baselineRecognized = comparisonDirectory is null ? recognized
-                            : ReadRecognized(Path.Combine(comparisonDirectory, name + "-ocr.json"));
+                            : ReadRecognized(DiagnosticOutputPaths.Child(comparisonDirectory, name + "-ocr.json"));
                         var replay = await baseline.RunAsync(baselineRecognized, before, translator, direction);
                         baselineDecisions.AddRange(replay.Decisions);
                         foreach (var decision in replay.Decisions)
@@ -129,7 +134,7 @@ public sealed class PinTranslationOverlayCorpusTests(ITestOutputHelper output)
                     }
                     if (comparisonDirectory is not null)
                     {
-                        string previous = Path.Combine(comparisonDirectory, stem + "-after.png");
+                        string previous = DiagnosticOutputPaths.Child(comparisonDirectory, stem + "-after.png");
                         baselineImage = File.Exists(previous) ? Load(previous) : before;
                         Save(directory, stem + "-baseline.png", baselineImage);
                     }
@@ -177,7 +182,7 @@ public sealed class PinTranslationOverlayCorpusTests(ITestOutputHelper output)
 
     private async Task ProbeRejectedW9Async(string replayDirectory, string directory, string? cacheDirectory, ITextTranslator fallback)
     {
-        string[] rejected = File.ReadLines(Path.Combine(replayDirectory, "decisions.tsv")).Skip(1)
+        string[] rejected = File.ReadLines(DiagnosticOutputPaths.Child(replayDirectory, "decisions.tsv")).Skip(1)
             .Select(line => line.Split('\t')).Where(fields => fields[0] == "pdf-en-irs-w9-p1" && fields[1] == "en-ko"
                 && fields[2] == "after" && fields[3] == "all-rejected").Select(fields => fields[8]).ToArray();
         string[] units = rejected.SelectMany(source => new[] { source, OcrLatinTextRepair.Repair(source) })
@@ -238,7 +243,7 @@ public sealed class PinTranslationOverlayCorpusTests(ITestOutputHelper output)
         string extension = Path.GetExtension(file).ToLowerInvariant();
         string? SavedSource(string pictureName)
         {
-            string? path = replayDirectory is null ? null : Path.Combine(replayDirectory, pictureName + "-source.png");
+            string? path = replayDirectory is null ? null : DiagnosticOutputPaths.Child(replayDirectory, pictureName + "-source.png");
             return path is not null && File.Exists(path) ? path : null;
         }
 
@@ -248,7 +253,7 @@ public sealed class PinTranslationOverlayCorpusTests(ITestOutputHelper output)
         if (replayDirectory is not null)
         {
             string[] recordedPages = Enumerable.Range(1, PdfPages).Select(page => $"{name}-p{page}")
-                .Where(page => File.Exists(Path.Combine(replayDirectory, page + "-ocr.json"))).ToArray();
+                .Where(page => File.Exists(DiagnosticOutputPaths.Child(replayDirectory, page + "-ocr.json"))).ToArray();
             // A PDF render can vary by a few pixels. Replay the recorded bitmap whenever it
             // exists so layout-only fixes are measured against the actual OCR run's pixels.
             if (recordedPages.Length > 0 && recordedPages.All(page => SavedSource(page) is not null))

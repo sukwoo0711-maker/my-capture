@@ -2,6 +2,7 @@ using System.IO;
 using System.Windows;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using MyCapture.App.Diagnostics;
 using MyCapture.App.Pinning;
 using MyCapture.Ocr;
 using Xunit;
@@ -209,10 +210,10 @@ public sealed class PinTranslationOverlayR7GeometryTests
     [PinOverlayReplayFact]
     public void RecordedSmallScreenshotRendersAtItsCappedSourceScale() => StaTestHost.Run(() =>
     {
-        string replay = Environment.GetEnvironmentVariable(PinTranslationOverlayCorpusReplayTests.ReplayVariable)!;
+        string replay = DiagnosticOutputPaths.Create(Environment.GetEnvironmentVariable(PinTranslationOverlayCorpusReplayTests.ReplayVariable)!);
         const string name = "var-small60-en-wiki";
-        OcrResult recognized = PinTranslationOverlayCorpusTests.ReadRecognized(Path.Combine(replay, name + "-ocr.json"));
-        using FileStream stream = File.OpenRead(Path.Combine(replay, name + "-source.png"));
+        OcrResult recognized = PinTranslationOverlayCorpusTests.ReadRecognized(DiagnosticOutputPaths.Child(replay, name + "-ocr.json"));
+        using FileStream stream = File.OpenRead(DiagnosticOutputPaths.Child(replay, name + "-source.png"));
         BitmapFrame source = BitmapFrame.Create(stream, BitmapCreateOptions.PreservePixelFormat, BitmapCacheOption.OnLoad);
         source.Freeze();
         IReadOnlyList<PinOverlayBlock> blocks = PinTranslationOverlay.BuildBlocks(recognized, source);
@@ -229,10 +230,10 @@ public sealed class PinTranslationOverlayR7GeometryTests
     [PinOverlayReplayFact]
     public void RecordedArxivFootnotesRetainTwoIndependentBodies() => StaTestHost.Run(() =>
     {
-        string replay = Environment.GetEnvironmentVariable(PinTranslationOverlayCorpusReplayTests.ReplayVariable)!;
+        string replay = DiagnosticOutputPaths.Create(Environment.GetEnvironmentVariable(PinTranslationOverlayCorpusReplayTests.ReplayVariable)!);
         const string name = "pdf-en-arxiv-attention-p1";
-        OcrResult recognized = PinTranslationOverlayCorpusTests.ReadRecognized(Path.Combine(replay, name + "-ocr.json"));
-        using FileStream stream = File.OpenRead(Path.Combine(replay, name + "-source.png"));
+        OcrResult recognized = PinTranslationOverlayCorpusTests.ReadRecognized(DiagnosticOutputPaths.Child(replay, name + "-ocr.json"));
+        using FileStream stream = File.OpenRead(DiagnosticOutputPaths.Child(replay, name + "-source.png"));
         BitmapFrame source = BitmapFrame.Create(stream, BitmapCreateOptions.PreservePixelFormat, BitmapCacheOption.OnLoad);
         source.Freeze();
         PinOverlayBlock[] footnotes = PinTranslationOverlay.BuildBlocks(recognized, source)

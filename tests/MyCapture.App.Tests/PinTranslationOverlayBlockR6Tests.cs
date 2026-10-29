@@ -3,6 +3,7 @@ using System.Text.Json;
 using System.Windows;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using MyCapture.App.Diagnostics;
 using MyCapture.App.Pinning;
 using MyCapture.Ocr;
 using Xunit;
@@ -96,21 +97,21 @@ public sealed class PinTranslationOverlayBlockR6Tests(ITestOutputHelper output)
     [PinOverlayReplayFact]
     public async Task RecordedKoreanPdfKeepsEveryShortcutCapsuleAndItsLabel()
     {
-        string replay = Environment.GetEnvironmentVariable(PinTranslationOverlayCorpusReplayTests.ReplayVariable)!;
+        string replay = DiagnosticOutputPaths.Create(Environment.GetEnvironmentVariable(PinTranslationOverlayCorpusReplayTests.ReplayVariable)!);
         const string name = "pdf-ko-wiki-screenshot-p2";
-        string savedSource = Path.Combine(replay, name + "-source.png");
+        string savedSource = DiagnosticOutputPaths.Child(replay, name + "-source.png");
         BitmapSource source;
         if (File.Exists(savedSource)) source = LoadPicture(savedSource);
         else
         {
-            string corpus = Environment.GetEnvironmentVariable(PinTranslationOverlayCorpusTests.CorpusVariable)!;
+            string corpus = DiagnosticOutputPaths.Create(Environment.GetEnvironmentVariable(PinTranslationOverlayCorpusTests.CorpusVariable)!);
             IReadOnlyList<(string, BitmapSource)> pages = await PinTranslationOverlayCorpusTests.RenderPdfAsync(
-                Path.Combine(corpus, "pdf-ko-wiki-screenshot.pdf"));
+                DiagnosticOutputPaths.Child(corpus, "pdf-ko-wiki-screenshot.pdf"));
             source = pages[1].Item2;
         }
         StaTestHost.Run(() =>
         {
-            OcrResult recognized = ReadRecognized(Path.Combine(replay, name + "-ocr.json"));
+            OcrResult recognized = ReadRecognized(DiagnosticOutputPaths.Child(replay, name + "-ocr.json"));
             IReadOnlyList<PinOverlayBlock> blocks = PinTranslationOverlay.BuildBlocks(recognized, source);
             OcrRect[] shortcuts = blocks.Where(block => block.PreservePixels).Select(block => block.Bounds).ToArray();
             foreach (Point point in new[] { new Point(1150, 810), new Point(460, 944), new Point(600, 944), new Point(690, 944),
@@ -154,10 +155,10 @@ public sealed class PinTranslationOverlayBlockR6Tests(ITestOutputHelper output)
     [PinOverlayReplayFact]
     public void RecordedMenusBadgesAndDamagedNumericCommentsStayIndependent()
     {
-        string replay = Environment.GetEnvironmentVariable(PinTranslationOverlayCorpusReplayTests.ReplayVariable)!;
-        string corpus = Environment.GetEnvironmentVariable(PinTranslationOverlayCorpusTests.CorpusVariable)!;
+        string replay = DiagnosticOutputPaths.Create(Environment.GetEnvironmentVariable(PinTranslationOverlayCorpusReplayTests.ReplayVariable)!);
+        string corpus = DiagnosticOutputPaths.Create(Environment.GetEnvironmentVariable(PinTranslationOverlayCorpusTests.CorpusVariable)!);
         PinOverlayBlock[] Blocks(string name) => [.. PinTranslationOverlay.BuildBlocks(
-            ReadRecognized(Path.Combine(replay, name + "-ocr.json")), LoadPicture(Path.Combine(corpus, name + ".png")))];
+            ReadRecognized(DiagnosticOutputPaths.Child(replay, name + "-ocr.json")), LoadPicture(DiagnosticOutputPaths.Child(corpus, name + ".png")))];
         PinOverlayBlock[] mdn = Blocks("web-en-mdn-dark");
         Assert.Contains(mdn, block => block.Text == "Web APIs");
         Assert.DoesNotContain(mdn, block => block.Text.Contains("HTML", StringComparison.Ordinal)
@@ -229,20 +230,20 @@ public sealed class PinTranslationOverlayBlockR6Tests(ITestOutputHelper output)
     [PinOverlayReplayFact]
     public async Task RecordedRowFragmentsDoNotOverlapAnotherBlocksText()
     {
-        string replay = Environment.GetEnvironmentVariable(PinTranslationOverlayCorpusReplayTests.ReplayVariable)!;
-        string corpus = Environment.GetEnvironmentVariable(PinTranslationOverlayCorpusTests.CorpusVariable)!;
+        string replay = DiagnosticOutputPaths.Create(Environment.GetEnvironmentVariable(PinTranslationOverlayCorpusReplayTests.ReplayVariable)!);
+        string corpus = DiagnosticOutputPaths.Create(Environment.GetEnvironmentVariable(PinTranslationOverlayCorpusTests.CorpusVariable)!);
         IReadOnlyList<(string, BitmapSource)> pages = await PinTranslationOverlayCorpusTests.RenderPdfAsync(
-            Path.Combine(corpus, "pdf-en-irs-w9.pdf"));
+            DiagnosticOutputPaths.Child(corpus, "pdf-en-irs-w9.pdf"));
         foreach ((string name, BitmapSource source, double top, double bottom) in new[]
         {
             ("pdf-en-irs-w9-p1", pages[0].Item2, 235d, 320d),
             ("pdf-en-irs-w9-p1", pages[0].Item2, 560d, 635d),
             ("pdf-en-irs-w9-p1", pages[0].Item2, 1335d, 1418d),
             ("pdf-en-irs-w9-p2", pages[1].Item2, 740d, 830d),
-            ("var-small60-en-wiki", LoadPicture(Path.Combine(corpus, "var-small60-en-wiki.png")), 125d, 225d),
+            ("var-small60-en-wiki", LoadPicture(DiagnosticOutputPaths.Child(corpus, "var-small60-en-wiki.png")), 125d, 225d),
         })
         {
-            OcrResult recognized = ReadRecognized(Path.Combine(replay, name + "-ocr.json"));
+            OcrResult recognized = ReadRecognized(DiagnosticOutputPaths.Child(replay, name + "-ocr.json"));
             PinOverlayBlock[] blocks = [.. PinTranslationOverlay.BuildBlocks(recognized, source)
                 .Where(block => block.Bounds.Y >= top && block.Bounds.Y < bottom)];
             OcrTable table = OcrExtractionAnalyzer.Analyze(recognized).Table;
@@ -274,21 +275,21 @@ public sealed class PinTranslationOverlayBlockR6Tests(ITestOutputHelper output)
     [PinOverlayReplayFact]
     public async Task RecordedDescenderDifferencesKeepAbstractAndSubtitleTogether()
     {
-        string replay = Environment.GetEnvironmentVariable(PinTranslationOverlayCorpusReplayTests.ReplayVariable)!;
-        string corpus = Environment.GetEnvironmentVariable(PinTranslationOverlayCorpusTests.CorpusVariable)!;
-        OcrResult abstractOcr = ReadRecognized(Path.Combine(replay, "pdf-en-arxiv-attention-p1-ocr.json"));
+        string replay = DiagnosticOutputPaths.Create(Environment.GetEnvironmentVariable(PinTranslationOverlayCorpusReplayTests.ReplayVariable)!);
+        string corpus = DiagnosticOutputPaths.Create(Environment.GetEnvironmentVariable(PinTranslationOverlayCorpusTests.CorpusVariable)!);
+        OcrResult abstractOcr = ReadRecognized(DiagnosticOutputPaths.Child(replay, "pdf-en-arxiv-attention-p1-ocr.json"));
         IReadOnlyList<(string, BitmapSource)> pages = await PinTranslationOverlayCorpusTests.RenderPdfAsync(
-            Path.Combine(corpus, "pdf-en-arxiv-attention.pdf"));
+            DiagnosticOutputPaths.Child(corpus, "pdf-en-arxiv-attention.pdf"));
         IReadOnlyList<PinOverlayBlock> abstractBlocks = PinTranslationOverlay.BuildBlocks(abstractOcr, pages[0].Item2);
         PinOverlayBlock paragraph = Assert.Single(abstractBlocks, block => block.Text.StartsWith("dominant sequence", StringComparison.Ordinal));
         Assert.Contains("convolutional neural networks", paragraph.Text, StringComparison.Ordinal);
         Assert.Contains("mechanism. We propose", paragraph.Text, StringComparison.Ordinal);
         Assert.True(paragraph.Lines.Count >= 5);
 
-        OcrResult subtitleOcr = ReadRecognized(Path.Combine(replay, "ui-en-subtitle-ocr.json"));
+        OcrResult subtitleOcr = ReadRecognized(DiagnosticOutputPaths.Child(replay, "ui-en-subtitle-ocr.json"));
         var source = new BitmapImage();
         source.BeginInit(); source.CacheOption = BitmapCacheOption.OnLoad;
-        source.UriSource = new Uri(Path.Combine(corpus, "ui-en-subtitle.png"));
+        source.UriSource = new Uri(DiagnosticOutputPaths.Child(corpus, "ui-en-subtitle.png"));
         source.EndInit(); source.Freeze();
         PinOverlayBlock subtitle = Assert.Single(PinTranslationOverlay.BuildBlocks(subtitleOcr, source));
         Assert.Equal(2, subtitle.Lines.Count);
@@ -296,10 +297,10 @@ public sealed class PinTranslationOverlayBlockR6Tests(ITestOutputHelper output)
 
         foreach (string name in new[] { "web-en-wiki-screenshot", "var-small60-en-wiki" })
         {
-            OcrResult recognized = ReadRecognized(Path.Combine(replay, name + "-ocr.json"));
+            OcrResult recognized = ReadRecognized(DiagnosticOutputPaths.Child(replay, name + "-ocr.json"));
             var wiki = new BitmapImage();
             wiki.BeginInit(); wiki.CacheOption = BitmapCacheOption.OnLoad;
-            wiki.UriSource = new Uri(Path.Combine(corpus, name + ".png"));
+            wiki.UriSource = new Uri(DiagnosticOutputPaths.Child(corpus, name + ".png"));
             wiki.EndInit(); wiki.Freeze();
             PinOverlayBlock history = Assert.Single(PinTranslationOverlay.BuildBlocks(recognized, wiki),
                 block => block.Text.Contains("screenshots were created", StringComparison.Ordinal));
@@ -311,11 +312,11 @@ public sealed class PinTranslationOverlayBlockR6Tests(ITestOutputHelper output)
     [PinOverlayReplayFact]
     public async Task RecordedW9TitleAndInverseLabelsStaySeparateFromBody()
     {
-        string replay = Environment.GetEnvironmentVariable(PinTranslationOverlayCorpusReplayTests.ReplayVariable)!;
-        string corpus = Environment.GetEnvironmentVariable(PinTranslationOverlayCorpusTests.CorpusVariable)!;
-        OcrResult recognized = ReadRecognized(Path.Combine(replay, "pdf-en-irs-w9-p1-ocr.json"));
+        string replay = DiagnosticOutputPaths.Create(Environment.GetEnvironmentVariable(PinTranslationOverlayCorpusReplayTests.ReplayVariable)!);
+        string corpus = DiagnosticOutputPaths.Create(Environment.GetEnvironmentVariable(PinTranslationOverlayCorpusTests.CorpusVariable)!);
+        OcrResult recognized = ReadRecognized(DiagnosticOutputPaths.Child(replay, "pdf-en-irs-w9-p1-ocr.json"));
         IReadOnlyList<(string, BitmapSource)> pages = await PinTranslationOverlayCorpusTests.RenderPdfAsync(
-            Path.Combine(corpus, "pdf-en-irs-w9.pdf"));
+            DiagnosticOutputPaths.Child(corpus, "pdf-en-irs-w9.pdf"));
         IReadOnlyList<PinOverlayBlock> blocks = PinTranslationOverlay.BuildBlocks(recognized, pages[0].Item2);
         PinOverlayBlock title = Assert.Single(blocks, block => block.Text.StartsWith("Request for Taxpayer", StringComparison.Ordinal));
         Assert.Contains("Certification", title.Text, StringComparison.Ordinal);
@@ -330,12 +331,12 @@ public sealed class PinTranslationOverlayBlockR6Tests(ITestOutputHelper output)
     [PinOverlayReplayFact]
     public void RecordedKoreanWikipediaKeepsBodyLineAndSeparatesThreeListItems()
     {
-        string replay = Environment.GetEnvironmentVariable(PinTranslationOverlayCorpusReplayTests.ReplayVariable)!;
-        string corpus = Environment.GetEnvironmentVariable(PinTranslationOverlayCorpusTests.CorpusVariable)!;
-        OcrResult recognized = ReadRecognized(Path.Combine(replay, "web-ko-wiki-screenshot-ocr.json"));
+        string replay = DiagnosticOutputPaths.Create(Environment.GetEnvironmentVariable(PinTranslationOverlayCorpusReplayTests.ReplayVariable)!);
+        string corpus = DiagnosticOutputPaths.Create(Environment.GetEnvironmentVariable(PinTranslationOverlayCorpusTests.CorpusVariable)!);
+        OcrResult recognized = ReadRecognized(DiagnosticOutputPaths.Child(replay, "web-ko-wiki-screenshot-ocr.json"));
         var source = new BitmapImage();
         source.BeginInit(); source.CacheOption = BitmapCacheOption.OnLoad;
-        source.UriSource = new Uri(Path.Combine(corpus, "web-ko-wiki-screenshot.png"));
+        source.UriSource = new Uri(DiagnosticOutputPaths.Child(corpus, "web-ko-wiki-screenshot.png"));
         source.EndInit(); source.Freeze();
         IReadOnlyList<PinOverlayBlock> blocks = PinTranslationOverlay.BuildBlocks(recognized, source);
         PinOverlayBlock body = Assert.Single(blocks, block => block.Lines.SelectMany(line => line.Words)

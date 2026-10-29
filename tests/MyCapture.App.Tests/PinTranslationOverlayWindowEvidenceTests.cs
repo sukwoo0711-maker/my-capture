@@ -33,6 +33,7 @@ public sealed class PinTranslationOverlayWindowEvidenceTests(ITestOutputHelper o
             Environment.GetEnvironmentVariable(PinTranslationOverlayEvidenceTests.OutputVariable)!);
         string? models = Environment.GetEnvironmentVariable(PinTranslationOverlayEvidenceTests.ModelsVariable);
         Assert.False(string.IsNullOrWhiteSpace(models), "Set the model folder variable.");
+        models = DiagnosticOutputPaths.Create(models!);
         TranslationModelSpec model = TranslationModelCatalog.EnglishToKorean;
         string modelDirectory = DiagnosticOutputPaths.Child(models!, model.FolderName);
         using var http = new HttpClient(new RejectingHandler());

@@ -1,8 +1,10 @@
 using System.Collections;
+using System.IO;
 using System.Linq.Expressions;
 using System.Reflection;
 using System.Runtime.Loader;
 using System.Windows.Media.Imaging;
+using MyCapture.App.Diagnostics;
 using MyCapture.App.Pinning;
 using MyCapture.Ocr;
 using MyCapture.Ocr.Translation;
@@ -21,7 +23,9 @@ internal sealed class PinTranslationOverlayCorpusBaseline
     internal PinTranslationOverlayCorpusBaseline(string path)
     {
         var context = new BaselineContext();
-        assembly = context.LoadFromAssemblyPath(System.IO.Path.GetFullPath(path));
+        string fullPath = Path.GetFullPath(path);
+        string directory = DiagnosticOutputPaths.Create(Path.GetDirectoryName(fullPath)!);
+        assembly = context.LoadFromAssemblyPath(DiagnosticOutputPaths.Child(directory, Path.GetFileName(fullPath)));
         overlay = assembly.GetType("MyCapture.App.Pinning.PinTranslationOverlay", throwOnError: true)!;
         translation = assembly.GetType("MyCapture.App.Pinning.PinOverlayTranslation", throwOnError: true)!;
     }

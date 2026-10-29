@@ -21,7 +21,9 @@ internal sealed class PinOverlayCorpusCoverage
 
     internal PinOverlayCorpusCoverage(string manifest)
     {
-        expected = File.ReadLines(manifest).Skip(1).Where(line => line.Length > 0)
+        string fullPath = Path.GetFullPath(manifest);
+        string directory = DiagnosticOutputPaths.Create(Path.GetDirectoryName(fullPath)!);
+        expected = File.ReadLines(DiagnosticOutputPaths.Child(directory, Path.GetFileName(fullPath))).Skip(1).Where(line => line.Length > 0)
             .Select(line => line.Split('\t')).Select(fields => (fields[0], fields[4])).ToHashSet();
         Assert.Equal(37, expected.Count);
         Assert.All(expected, item => Assert.Contains(item.Direction, new[] { "en-ko", "ko-en" }));
@@ -103,7 +105,8 @@ internal sealed class PinOverlayCorpusTranslations : ITextTranslator
     {
         this.fallback = fallback;
         outputPath = DiagnosticOutputPaths.Child(outputDirectory, stem + "-translations.json");
-        string? inputPath = inputDirectory is null ? null : Path.Combine(inputDirectory, stem + "-translations.json");
+        string? inputPath = inputDirectory is null ? null
+            : DiagnosticOutputPaths.Child(DiagnosticOutputPaths.Create(inputDirectory), stem + "-translations.json");
         values = inputPath is not null && File.Exists(inputPath)
             ? JsonSerializer.Deserialize<TranslatedText[]>(File.ReadAllText(inputPath))!.ToDictionary(item => item.Source, StringComparer.Ordinal)
             : new(StringComparer.Ordinal);
