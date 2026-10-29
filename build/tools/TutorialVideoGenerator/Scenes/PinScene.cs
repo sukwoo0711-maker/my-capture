@@ -57,6 +57,7 @@ internal sealed class PinScene : TutorialScene
     private static readonly FieldInfo CountdownTimerField = PrivateField(typeof(FeedbackCountdown), "_timer");
     private static readonly FieldInfo HoverHideTimerField = PrivateField(typeof(PinWindow), "_hoverHideTimer");
     private static readonly FieldInfo LandingAccentField = PrivateField(typeof(PinWindow), "_landingAccentAmount");
+    private static readonly FieldInfo HandleHintTimerField = PrivateField(typeof(PinClickThroughHandle), "_hintTimer");
     private static readonly MethodInfo UpdateChromeColorMethod = typeof(PinWindow).GetMethod("UpdateChromeColor", BindingFlags.Instance | BindingFlags.NonPublic)
         ?? throw new MissingMethodException(nameof(PinWindow), "UpdateChromeColor");
     private static readonly FieldInfo IsMouseOverKeyField = typeof(UIElement).GetField("IsMouseOverPropertyKey", BindingFlags.Static | BindingFlags.NonPublic)
@@ -95,6 +96,9 @@ internal sealed class PinScene : TutorialScene
     private PointD? _selectionTo;
     private double _clock;
     private int _lastRepeat;
+    /// <summary>Video time the click-through handle showed its first-use hint, and for how long it shows.</summary>
+    private double? _handleHintAt;
+    private double _handleHintSeconds;
     private bool _inputFocused, _caret, _pasted, _explorer, _lineCaret;
     private string _typed = string.Empty, _lineTail = string.Empty;
     private string? _copiedText;
@@ -122,8 +126,9 @@ internal sealed class PinScene : TutorialScene
     }
 
     internal override string Provenance =>
-        "Real PinWindow (image clip, frame outline and hover accent, bottom feedback), PinHoverBar, the landing ornament of a new or "
-        + "reopened pin (PinLandingDecoration's own surface and outline flash on video time), the pin's ContextMenu and the tray "
+        "Real PinWindow (image clip, frame outline and hover accent, bottom feedback), PinHoverBar (Open source for the pin captured from a page), the landing ornament of a new or "
+        + "reopened pin (PinLandingDecoration's own surface and outline flash on video time), the click-through handle and its first-use "
+        + "hint (PinClickThroughHandle's own surfaces at Placement, the hint on video time), the pin's ContextMenu and the tray "
         + "ContextMenu (ThemedShellPresenter.CreateMenu over TrayMenuLayout.Build) rendered detached at 1:1; Esc, Ctrl+C, hide/show, "
         + "click-through, quick save and reopen run through the product's handlers and menu items. The clipboard pin opens without "
         + "activation, as PinManager opens it; a text pin's Ctrl+C request carries its original text, which the clip pastes. Clipboard "
@@ -167,7 +172,7 @@ internal sealed class PinScene : TutorialScene
     private TutorialStoryboard HideAllStory()
     {
         _checklist = ChecklistCapture();
-        AddPin(PinContent.FromImage(_checklist), new Point(330, 150));
+        AddPin(PinContent.FromImage(_checklist, provenance: Fixtures.ChecklistSource), new Point(330, 150));
         AddPin(TablePin(), new Point(612, 36));
         var story = new TutorialStoryboard(new PointD(190, 404));
         story.Hold("pins", 2.0).Hold("hide", 0.8).Hold("hidden", 1.3);
@@ -180,7 +185,7 @@ internal sealed class PinScene : TutorialScene
     private TutorialStoryboard ClickThroughStory()
     {
         _checklist = ChecklistCapture();
-        LivePin pin = AddPin(PinContent.FromImage(_checklist), new Point(330, 160));
+        LivePin pin = AddPin(PinContent.FromImage(_checklist, provenance: Fixtures.ChecklistSource), new Point(330, 160));
         var rightClick = new PointD(560, 236);
         // Opening the menu refreshes the reopen command, exactly as its Opened handler does.
         pin.Window.CanRestoreClosedPin = () => false;
@@ -232,7 +237,7 @@ internal sealed class PinScene : TutorialScene
     private TutorialStoryboard SaveStory()
     {
         _checklist = ChecklistCapture();
-        LivePin pin = AddPin(PinContent.FromImage(_checklist), new Point(596, 80));
+        LivePin pin = AddPin(PinContent.FromImage(_checklist, provenance: Fixtures.ChecklistSource), new Point(596, 80));
         // Measure where the hover bar's Save button lands for this pin, then leave the bar hidden.
         pin.Window.ShowHoverBar();
         Stage.Pump(40);
@@ -359,6 +364,12 @@ internal sealed class PinScene : TutorialScene
                 _menu = null;
                 Click(_menuTarget!);
                 if (_focus?.Window.State.IsClickThrough != true) throw new InvalidOperationException("The menu item did not turn click-through on.");
+                if (_focus.Window.ClickThroughHandleForTest is not { IsVisible: true } handle)
+                    throw new InvalidOperationException("Click-through showed no handle to turn it off.");
+                // The first-use hint retires on the wall clock; the clip times it on video time.
+                var hintTimer = (DispatcherTimer)HandleHintTimerField.GetValue(handle)!;
+                if (handle.HintForTest.IsVisible) (_handleHintAt, _handleHintSeconds) = (_clock, hintTimer.Interval.TotalSeconds);
+                hintTimer.Stop();
                 break;
             case "tray-click" when last:
                 _menu = _trayMenu;
@@ -483,6 +494,8 @@ internal sealed class PinScene : TutorialScene
     {
         state ??= new PinViewState(content.Image.PixelWidth, content.Image.PixelHeight, 1, _settings.InitialOpacity, _settings.ZoomStep);
         var pin = new LivePin(content, state, position, () => _settings);
+        // A pin captured from a page shows Open source on its hover bar; no clip may open a browser.
+        pin.Window.OpenSource = static _ => Task.FromResult(string.Empty);
         pin.Window.CopyRequested += (_, request) =>
         {
             _copyPending = pin;
@@ -583,7 +596,7 @@ internal sealed class PinScene : TutorialScene
     private PointD BarButtonCenter(LivePin pin, Button button) =>
         Center(ButtonBounds(pin, button) ?? throw new InvalidOperationException("The hover bar is not shown."));
 
-    private static Button[] BarButtons(PinHoverBar bar) => [bar.CopyButton, bar.SaveButton, bar.OpacityButton, bar.CloseButton];
+    private static Button[] BarButtons(PinHoverBar bar) => [bar.CopyButton, bar.SaveButton, bar.SourceButton, bar.OpacityButton, bar.CloseButton];
 
     /// <summary>A hover-bar button's stage bounds while the bar is shown.</summary>
     private Rect? ButtonBounds(LivePin pin, Button button)
@@ -638,6 +651,29 @@ internal sealed class PinScene : TutorialScene
             dc.DrawImage(Snapshot(root), new Rect(bounds.Location, root.RenderSize));
             dc.Pop();
         }
+
+        foreach (LivePin pin in _pins.Where(pin => pin.Shown)) DrawClickThroughHandle(dc, pin);
+    }
+
+    /// <summary>
+    /// A click-through pin's way back is its own top-most window in the pin's corner
+    /// (PinClickThroughHandle.Place), with the first-use hint to its left. The product places both
+    /// beside the offscreen pin; the clip draws their surfaces at the same spots on the stage.
+    /// </summary>
+    private void DrawClickThroughHandle(DrawingContext dc, LivePin pin)
+    {
+        if (pin.Window.ClickThroughHandleForTest is not { IsVisible: true } handle) return;
+        var work = new RectD(0, 0, Stage.Width, _workBottom);
+        RectD target = PinClickThroughHandle.Placement(new RectD(pin.Position.X, pin.Position.Y, pin.Bounds.Width, pin.Bounds.Height), work, 1);
+        var root = (FrameworkElement)VisualTreeHelper.GetChild(handle, 0);
+        dc.PushOpacity(handle.Opacity);
+        dc.DrawImage(Snapshot(root), new Rect(target.Left, target.Top, target.Width, target.Height));
+        dc.Pop();
+        if (_handleHintAt is not { } shownAt || _clock - shownAt >= _handleHintSeconds) return;
+        var hint = (FrameworkElement)VisualTreeHelper.GetChild(handle.HintForTest, 0);
+        double x = Math.Clamp(target.Left - hint.ActualWidth - PinClickThroughHandle.EdgeGap, work.Left, Math.Max(work.Left, work.Right - hint.ActualWidth));
+        double y = Math.Clamp(target.Top, work.Top, Math.Max(work.Top, work.Bottom - hint.ActualHeight));
+        dc.DrawImage(Snapshot(hint), new Rect(x, y, hint.ActualWidth, hint.ActualHeight));
     }
 
     /// <summary>A layered window's client area with its transparency, at output resolution.</summary>
@@ -907,8 +943,8 @@ internal sealed class PinScene : TutorialScene
                     (L($"메뉴에서 {Ui("Onboard_PinAllowClickThrough")} 선택", $"Choose {Ui("Onboard_PinAllowClickThrough")}"), ""),
                 "through" => (L($"{Ui("Onboard_PinAllowClickThrough")} 켜짐 · 핀이 클릭을 받지 않음", "Click-through is on · the pin no longer takes clicks"), ""),
                 // The way back the pin's own feedback names for the current shortcuts.
-                "result" => (L($"핀은 계속 표시됨 · 해제: {PinWindow.ClickThroughRecoveryHint()}",
-                    $"The pin stays visible · Turn off: {PinWindow.ClickThroughRecoveryHint()}"), ""),
+                "result" => (L($"핀은 계속 표시됨 · 해제: 모서리 단추 또는 {PinWindow.ClickThroughRecoveryHint()}",
+                    $"The pin stays visible · Turn off: the corner button or {PinWindow.ClickThroughRecoveryHint()}"), ""),
                 _ => (L("핀 아래 앱을 그대로 조작", "Use the app underneath the pin"), ""),
             },
             "pin-restore" => segment switch
