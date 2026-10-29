@@ -347,7 +347,7 @@ public sealed class PinTranslationOverlayTests(ITestOutputHelper output)
     });
 
     [Fact]
-    public async Task ServiceBatchesSentencesAndRejectsTheWholeUnsafeBlock()
+    public async Task ServiceBatchesSentencesAndKeepsOnlyTheUnsafeSentenceInTheSourceLanguage()
     {
         var translator = new FakeTranslator(text => text.Contains("42", StringComparison.Ordinal) ? "문서 41개" : "문서를 저장합니다.");
         OcrLine first = Line("Save the document. Close the window.", 20, 20, 280, 24);
@@ -359,11 +359,15 @@ public sealed class PinTranslationOverlayTests(ITestOutputHelper output)
         Assert.Equal(4, translator.Sources.Count);
         Assert.True(result.NeedsReview);
         Assert.Equal(PinContentKind.Image, result.Content.Kind);
-        Assert.Contains("\n\nKeep 42 documents. Open the folder.", result.Content.OriginalText);
+        // The sentence whose number changed stays in English; its neighbour in the same block translates.
+        Assert.EndsWith("\n\nKeep 42 documents. 문서를 저장합니다.", result.Content.OriginalText);
         Assert.NotNull(result.Document);
         Assert.Equal(result.Content.OriginalText, result.Document.OriginalText);
-        for (int y = 100; y < 124; y++)
-            for (int x = 20; x < 260; x++) Assert.Equal(ReadPixel(image, x, y), ReadPixel(result.Content.Image, x, y));
+        bool redrawn = false;
+        for (int y = 100; y < 124 && !redrawn; y++)
+            for (int x = 20; x < 260 && !redrawn; x++)
+                redrawn = !ReadPixel(image, x, y).SequenceEqual(ReadPixel(result.Content.Image, x, y));
+        Assert.True(redrawn);
     }
 
     [Fact]

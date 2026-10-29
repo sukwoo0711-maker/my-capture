@@ -29,7 +29,7 @@ public sealed class PinTranslationOverlayServiceTests
     [Theory]
     [InlineData("Select the area you need.", false)]
     [InlineData("SeIect the area you need.", true)]
-    public async Task OcrConfusedIdentifierRejectsOnlyItsColumnAndCleanProseTranslates(string selection, bool rejected)
+    public async Task OcrConfusedIdentifierKeepsOnlyItsSentenceAndTheColumnStillTranslates(string selection, bool rejected)
     {
         BitmapSource image = PinTranslationOverlayTests.Bitmap(1100, 680);
         OcrResult recognized = PinTranslationOverlayTests.Recognition(
@@ -57,16 +57,30 @@ public sealed class PinTranslationOverlayServiceTests
         Assert.Equal(rejected, result.NeedsReview);
         Assert.Contains("새 문서를 만듭니다.", result.Content.OriginalText);
         var right = new Int32Rect(590, 130, 340, 140);
+        // The column is redrawn either way: only the rejected sentence stays in the source language.
+        Assert.NotEqual(Pixels(image, right), Pixels(result.Content.Image, right));
+        Assert.Contains("원본 사진을 안전하게 보관하십시오.", result.Content.OriginalText);
         if (rejected)
         {
             Assert.Contains(selection, result.Content.OriginalText);
-            Assert.Equal(Pixels(image, right), Pixels(result.Content.Image, right));
+            Assert.DoesNotContain("필요한 영역을 선택합니다.", result.Content.OriginalText);
         }
-        else
-        {
-            Assert.Contains("필요한 영역을 선택합니다.", result.Content.OriginalText);
-            Assert.NotEqual(Pixels(image, right), Pixels(result.Content.Image, right));
-        }
+        else Assert.Contains("필요한 영역을 선택합니다.", result.Content.OriginalText);
+    }
+
+    [Fact]
+    public async Task BlockWithNoAcceptedSentenceKeepsItsPixels()
+    {
+        BitmapSource image = PinTranslationOverlayTests.Bitmap(600, 200);
+        OcrResult recognized = PinTranslationOverlayTests.Recognition(
+            PinTranslationOverlayTests.Line("SeIect the area you need.", 40, 60, 340, 26));
+        var translator = new PinTranslationOverlayTests.FakeTranslator(_ => "필요한 영역을 선택합니다.");
+        PinTranslationResult result = Assert.IsType<PinTranslationResult>(await new PinTranslationService(translator)
+            .TranslateRecognizedAsync(recognized, PinContent.FromImage(image), CancellationToken.None));
+
+        Assert.True(result.NeedsReview);
+        var block = new Int32Rect(30, 50, 360, 46);
+        Assert.Equal(Pixels(image, block), Pixels(result.Content.Image, block));
     }
 
     private static byte[] Pixels(BitmapSource image, Int32Rect rect)

@@ -48,8 +48,11 @@ internal sealed partial class PinTranslationService
         var paragraphs = new List<string>(blocks.Count);
         for (int i = 0; i < blocks.Count; i++)
         {
+            // As in a text pin, a sentence that fails the value checks (often an OCR misread such as
+            // "SeIect") stays in the source language while its neighbours translate. Only a block
+            // with no accepted sentence keeps its original pixels.
             var parts = new List<string>(counts[i]);
-            bool safe = counts[i] > 0;
+            bool anyAccepted = false;
             for (int sentence = 0; sentence < counts[i]; sentence++, cursor++)
             {
                 cancellationToken.ThrowIfCancellationRequested();
@@ -57,11 +60,12 @@ internal sealed partial class PinTranslationService
                 if (!string.Equals(result.Source, units[cursor], StringComparison.Ordinal))
                     throw new InvalidOperationException("The translator returned a missing or mismatched pin result.");
                 string text = (result.Text ?? string.Empty).ReplaceLineEndings(" ").Trim();
-                safe &= text.Length > 0 && !result.NeedsReview && PreservesProtectedValues(units[cursor], text);
-                parts.Add(text);
+                bool safe = text.Length > 0 && !result.NeedsReview && PreservesProtectedValues(units[cursor], text);
+                needsReview |= !safe;
+                anyAccepted |= safe;
+                parts.Add(safe ? text : units[cursor].Trim());
             }
-            needsReview |= counts[i] > 0 && !safe;
-            string? accepted = safe ? string.Join(" ", parts) : null;
+            string? accepted = anyAccepted ? string.Join(" ", parts) : null;
             overlays.Add(new(blocks[i], accepted));
             paragraphs.Add(accepted ?? blocks[i].Text);
         }
