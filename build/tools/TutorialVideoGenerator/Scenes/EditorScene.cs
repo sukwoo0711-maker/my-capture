@@ -48,7 +48,7 @@ internal sealed class EditorScene : TutorialScene
         var region = new RectD(0, 0, _image.PixelWidth, _image.PixelHeight);
         AnnotationDocument? document = _feature is "save" or "copy" ? Finished(_image) : null;
         _window = new AnnotationEditorWindow(new FrozenFrame(_image, region, null, 0), region, _image, initialDocument: document,
-            sourceWindowTitle: L("릴리스 준비", "Release prep"));
+            sourceWindowTitle: L("릴리스 준비", "Release prep"), provenance: Fixtures.ChecklistSource);
         _host = new OffscreenWindow(_window, ClientWidth, ClientHeight);
         _editor = _window.Editor;
         // The tool, its name (the catalog's title for this tutorial) and the key the editor shows for it.
@@ -75,7 +75,7 @@ internal sealed class EditorScene : TutorialScene
     }
 
     internal override string Provenance =>
-        "Real AnnotationEditorWindow (command bar, tool rail, property bar above the canvas, crop mode, status line, tool cursors) over a synthetic page; "
+        "Real AnnotationEditorWindow (command bar, tool rail, property bar above the canvas, crop mode, status line with the page's source chip, tool cursors) over a synthetic page; "
         + "tools, rotation, crop and commits run through the editor's own handlers. Explorer and note windows are synthetic.";
 
     private static AnnotationDocument Finished(BitmapSource image)
@@ -180,9 +180,9 @@ internal sealed class EditorScene : TutorialScene
                 story.Hold("review", 1.0).Hold("save-key", 0.3).Hold("saving", 0.8).Hold("closed", 0.6);
                 break;
             case "copy":
-                // Copy finishes like Done (the owner's decision): save, copy and close, then paste
-                // into the note app left on screen.
-                story.Move("command", Of(ByAutomationId("EditorFlowCopy"))).Click("copy").Hold("copying", 0.8).Hold("closed", 0.6);
+                // Copy and close is the one finishing command (the owner's decision): save, copy and
+                // close, then paste into the note app left on screen.
+                story.Move("command", Of(ByAutomationId("EditorFlowDone"))).Click("copy").Hold("copying", 0.8).Hold("closed", 0.6);
                 story.Move("note", new PointD(330, 300)).Click("note-click").Hold("paste-key", 0.6).Hold("pasted", 0.4);
                 break;
         }
@@ -194,7 +194,9 @@ internal sealed class EditorScene : TutorialScene
     private PointD MeasureCropApply()
     {
         var region = new RectD(0, 0, _image.PixelWidth, _image.PixelHeight);
-        var probe = new AnnotationEditorWindow(new FrozenFrame(_image, region, null, 0), region, _image);
+        // The source chip sets the status line's height, so the probe carries the same source.
+        var probe = new AnnotationEditorWindow(new FrozenFrame(_image, region, null, 0), region, _image,
+            provenance: Fixtures.ChecklistSource);
         using var host = new OffscreenWindow(probe, ClientWidth, ClientHeight);
         ShortcutDefinition crop = ShortcutCatalog.Get(ShortcutScope.Annotation, "Crop");
         probe.Editor.HandleShortcut(crop.Key, crop.Modifiers);
@@ -301,7 +303,7 @@ internal sealed class EditorScene : TutorialScene
                 BeginCommit(() => Press(ShortcutScope.Annotation, "Save"));
                 break;
             case "copy" when frame.IsLast:
-                BeginCommit(() => ((Button)ByAutomationId("EditorFlowCopy")).RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent)));
+                BeginCommit(() => ((Button)ByAutomationId("EditorFlowDone")).RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent)));
                 break;
             case "closed" when _commit is not null:
                 _commit.TrySetResult(true);
@@ -448,7 +450,7 @@ internal sealed class EditorScene : TutorialScene
                     _ => (L($"PNG 저장됨 · 다른 위치는 {Hint(ShortcutScope.Annotation, "SaveAs")}", $"PNG saved · {Hint(ShortcutScope.Annotation, "SaveAs")} chooses another place"), ""),
                 };
             case "copy":
-                string copy = Hint(ShortcutScope.Annotation, "Copy"), copyLabel = Ui("Text_37B3D3B11B26");
+                string copy = Hint(ShortcutScope.Annotation, "Copy"), copyLabel = Ui("EditorFlow_CopyAndClose");
                 return segment switch
                 {
                     "open" or "command" => (L($"{copyLabel} 선택 또는 {copy}", $"Click {copyLabel} or press {copy}"), copy),

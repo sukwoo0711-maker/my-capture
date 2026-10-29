@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Windows;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using MyCapture.Core.Capture;
 
 namespace MyCapture.TutorialGenerator;
 
@@ -15,6 +16,17 @@ internal static class Fixtures
     internal const string SampleEmail = "demo@example.test";
     internal const string TerminalCommand = "npm run build";
     internal const string TerminalResult = "Build completed";
+
+    /// <summary>
+    /// The browser page the checklist was captured from. The product records the page of every
+    /// browser capture, so the editor, pin and library clips name this source; nothing opens it.
+    /// </summary>
+    internal static CaptureProvenance ChecklistSource { get; } =
+        CaptureProvenance.Create(url: "https://docs.example.com/release/checklist", appName: "Microsoft Edge");
+
+    /// <summary>The note app the capture clips capture from, named by its file description as the product does.</summary>
+    internal static CaptureProvenance NotepadSource(bool korean) =>
+        CaptureProvenance.Create(appName: korean ? "메모장" : "Notepad", appExecutablePath: @"C:\Windows\System32\notepad.exe");
 
     private static readonly Brush Ink = new SolidColorBrush(Color.FromRgb(0x1F, 0x24, 0x2E));
     private static readonly Brush Muted = new SolidColorBrush(Color.FromRgb(0x5B, 0x64, 0x73));
