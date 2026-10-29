@@ -374,7 +374,7 @@ public sealed class ReleaseVersionContractTests
         Assert.DoesNotContain("pull_request_target", workflow, StringComparison.Ordinal);
         Assert.DoesNotContain(": write", workflow, StringComparison.Ordinal);
         Assert.Contains("permissions:\n  contents: read", workflow.Replace("\r\n", "\n", StringComparison.Ordinal), StringComparison.Ordinal);
-        Assert.Contains("timeout-minutes: 35", workflow, StringComparison.Ordinal);
+        Assert.Contains("timeout-minutes: 50", workflow, StringComparison.Ordinal);
         Assert.Contains("persist-credentials: false", workflow, StringComparison.Ordinal);
 
         Assert.Contains("package-ecosystem: nuget", dependabot, StringComparison.Ordinal);
