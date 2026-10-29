@@ -7,6 +7,7 @@ using MyCapture.App.Editing;
 using MyCapture.App.Ocr;
 using MyCapture.App.Themes;
 using MyCapture.Core.Primitives;
+using MyCapture.Core.Settings;
 using MyCapture.Platform.Capture;
 using MyCapture.Platform.Display;
 
@@ -21,10 +22,6 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
     private readonly Func<bool, FrozenFrame> _acquireFrame;
     private readonly Func<RectD> _desktopBounds;
     private readonly Func<RectD, IReadOnlyList<WindowCandidate>> _readWindowCandidates;
-    // Nothing on screen waits for these reads, so a read that finds the previous capture's probe
-    // still running waits for it within its own deadline instead of giving up at once.
-    private readonly BrowserPageUrlService _pageUrls = new(waitForBusyProbe: true);
-    private readonly WindowSourceService _windowSources = new(waitForBusyProbe: true);
     private CapturePreparation? _preparation;
     private bool _disposed;
     private CaptureOverlayWindow? _activeOverlay;
@@ -49,6 +46,21 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
         Func<bool, FrozenFrame>? acquireFrame = null,
         Func<RectD>? desktopBounds = null,
         Func<RectD, IReadOnlyList<WindowCandidate>>? readWindowCandidates = null)
+        : this(captureEngine, windowCandidates, log, acquireFrame, desktopBounds, readWindowCandidates,
+            new BrowserPageUrlService(waitForBusyProbe: true).ReadAsync,
+            new WindowSourceService(waitForBusyProbe: true).ReadAsync)
+    {
+    }
+
+    private CaptureOverlayCoordinator(
+        ScreenCaptureEngine captureEngine,
+        WindowCandidateService windowCandidates,
+        ILogger<CaptureOverlayCoordinator> log,
+        Func<bool, FrozenFrame>? acquireFrame,
+        Func<RectD>? desktopBounds,
+        Func<RectD, IReadOnlyList<WindowCandidate>>? readWindowCandidates,
+        Func<IReadOnlyList<WindowCandidate>, Task<IReadOnlyDictionary<IntPtr, BrowserDocumentSnapshot>>> readPageUrls,
+        Func<IReadOnlyList<WindowCandidate>, Task<IReadOnlyDictionary<IntPtr, WindowSourceSnapshot>>>? readWindowSources)
     {
         _captureEngine = captureEngine ?? throw new ArgumentNullException(nameof(captureEngine));
         _windowCandidates = windowCandidates ?? throw new ArgumentNullException(nameof(windowCandidates));
@@ -58,8 +70,10 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
         _readWindowCandidates = readWindowCandidates ?? windowCandidates.GetCandidates;
         _dispatcher = Application.Current?.Dispatcher ?? Dispatcher.CurrentDispatcher;
         _dispatcher.ShutdownStarted += OnDispatcherShutdownStarted;
-        ReadWindowSources = _windowSources.ReadAsync;
-        ReadPageUrls = _pageUrls.ReadAsync;
+        // Nested captures retain the parent's readers directly. Only a root coordinator creates
+        // the default services; their probes never block the frozen-frame presentation.
+        ReadWindowSources = readWindowSources;
+        ReadPageUrls = readPageUrls;
     }
 
     /// <summary>
@@ -69,6 +83,7 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
 
     internal Func<CaptureSelectionCompletedEventArgs, Task>? SelectionPersistRequested { get; set; }
     internal Func<CaptureSelectionCompletedEventArgs, Task>? EditorScreenCaptureRequested { get; set; }
+    internal Func<string?>? EditorSourcePath { get; set; }
 
     /// <summary>
     /// Reads each exposed window's application and Explorer folder around the frozen frame. Tests
@@ -78,6 +93,13 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
 
     internal Func<bool> OpenEditorAfterCapture { get; set; } = () => true;
     internal Func<bool> OriginalNeedsRecovery { get; set; } = () => false;
+
+    /// <summary>
+    /// Existing visible editors/library keep their work on screen. A capture started over them uses
+    /// separate persistence and a receipt, regardless of the normal after-capture preference.
+    /// This reads only tracked managed window state; no desktop enumeration or rendering occurs.
+    /// </summary>
+    internal Func<bool> HasVisiblePreservedWindow { get; set; } = () => CaptureEditorRegistry.HasVisibleEditor;
 
     /// <summary>The persisted capture the editor saves to; its drafts recover onto that capture.</summary>
     internal Func<(Guid Id, long ContentRevision)?>? DraftRecord { get; set; }
@@ -93,6 +115,8 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
     /// showings and persists them (Capture.StartGuideShownCount); off unless the app wires it.
     /// </summary>
     internal Func<bool> ClaimStartGuide { get; set; } = () => false;
+    internal Func<bool, bool> ClaimKeyPanel { get; set; } = _ => false;
+    internal Func<Hotkey> ReadPasteToScreenHotkey { get; set; } = () => Hotkey.None;
 
     /// <summary>
     /// Runs the existing command for the bar's record switch and ⋯ menu (recording selector, delayed
@@ -145,12 +169,22 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
     internal ScreenCaptureEngine Engine => _captureEngine;
     internal bool IsSelecting => _preparation is not null || _activeOverlay is not null || _editorScreenCapture?.IsSelecting == true;
     internal AnnotationEditorControl? CurrentEditor => _activeEditor?.Editor;
+    internal void ConfirmSelectionAsPin()
+    {
+        VerifyDispatcherAccess();
+        if (_disposed || _editorScreenCapture is not null || _activeEditor is not null) return;
+        _activeOverlay?.ConfirmSelectionAsPin();
+    }
     internal Task WaitForPresentationDismissalAsync() =>
         _presentationDismissals.NeedsSettle(Environment.TickCount64)
             ? Task.Delay(100) : Task.CompletedTask;
 
     internal bool CanRetake => !_disposed && _activeEditor is { } editor && !IsEditorSaving(editor) && !IsEditorBusy(editor) &&
         !editor.IsAskingToClose && _preparation is null && !_isOpeningEditor && _editorScreenCapture is null;
+
+    internal bool CanAcceptSelection => !IsActive || (CanRetake && EditorScreenCaptureRequested is not null);
+
+    private bool CanCaptureOverPreservedWindow => CanRetake || (!IsActive && HasVisiblePreservedWindow());
 
     private static bool IsEditorSaving(AnnotationEditorWindow editor) => editor.Editor.IsCommitInProgress || editor.IsSavingToClose;
 
@@ -253,9 +287,9 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
             current.ActivateCurrent();
             return;
         }
-        if (preserveEditor && CanRetake && EditorScreenCaptureRequested is { } persist)
+        if (preserveEditor && CanCaptureOverPreservedWindow && EditorScreenCaptureRequested is { } persist)
         {
-            StartOverEditor(persist, includeCursor, abortOnFocusLoss, showMagnifier, showSelectionGrid);
+            StartOverEditor(persist, includeCursor, abortOnFocusLoss, showMagnifier, showSelectionGrid, textCapture);
             return;
         }
 
@@ -315,19 +349,39 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
         => PresentationDismissals.IsRecent(currentTick, lastDismissedTick);
 
     private void StartOverEditor(Func<CaptureSelectionCompletedEventArgs, Task> persist,
-        bool includeCursor, bool abortOnFocusLoss, bool showMagnifier, bool showSelectionGrid)
+        bool includeCursor, bool abortOnFocusLoss, bool showMagnifier, bool showSelectionGrid, bool textCapture)
+    {
+        CaptureOverlayCoordinator nested = CreateCaptureOverEditor(persist);
+        try
+        {
+            nested.Start(includeCursor, abortOnFocusLoss, showMagnifier, showSelectionGrid, textCapture);
+            LastPreparationForTest = nested.LastPreparationForTest;
+        }
+        catch
+        {
+            _editorScreenCapture = null;
+            nested.Dispose();
+            throw;
+        }
+    }
+
+    private CaptureOverlayCoordinator CreateCaptureOverEditor(Func<CaptureSelectionCompletedEventArgs, Task> persist)
     {
         var nested = new CaptureOverlayCoordinator(_captureEngine, _windowCandidates, _log,
-            _acquireFrame, _desktopBounds, _readWindowCandidates)
+            _acquireFrame, _desktopBounds, _readWindowCandidates, ReadPageUrls, ReadWindowSources)
         {
             SelectionPersistRequested = persist,
             OpenEditorAfterCapture = () => false,
-            ReadPageUrls = ReadPageUrls,
-            ReadWindowSources = ReadWindowSources,
             AutoDetectWindows = AutoDetectWindows,
             ShowShortcutHints = ShowShortcutHints,
             RequiresCaptureExclusion = RequiresCaptureExclusion,
             ApplyCaptureExclusion = ApplyCaptureExclusion,
+            TextCaptureRequested = TextCaptureRequested,
+            SelectorActionRequested = SelectorActionRequested,
+            CanRepeatLastRegion = CanRepeatLastRegion,
+            CopyColorText = CopyColorText,
+            ColorCopied = ColorCopied,
+            ReadColorFormat = ReadColorFormat,
         };
         nested._presentationDismissals = _presentationDismissals;
         nested.SessionStarted += () => SessionStarted?.Invoke();
@@ -340,17 +394,7 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
             if (_activeEditor is { IsVisible: true } editor) editor.Activate();
             EndSessionIfIdle();
         };
-        try
-        {
-            nested.Start(includeCursor, abortOnFocusLoss, showMagnifier, showSelectionGrid);
-            LastPreparationForTest = nested.LastPreparationForTest;
-        }
-        catch
-        {
-            _editorScreenCapture = null;
-            nested.Dispose();
-            throw;
-        }
+        return nested;
     }
 
     /// <summary>Unknown or unexcluded surfaces retain the conservative presentation wait.</summary>
@@ -547,6 +591,10 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
         overlay.CanRepeatLastRegion = CanRepeatLastRegion;
         overlay.OffersOtherActions = SelectorActionRequested is not null;
         overlay.ShowStartGuide = ClaimStartGuide();
+        overlay.ClaimKeyPanel = ClaimKeyPanel;
+        overlay.ReadPasteToScreenHotkey = ReadPasteToScreenHotkey;
+        // F3 pins the chosen region (ConfirmSelectionAsPin), except while an editor is open for a retake.
+        overlay.PinSelectionAvailable = _editorScreenCapture is null && _activeEditor is null;
         overlay.SelectionCompleted += OnOverlaySelectionCompleted;
         overlay.ActionRequested += OnOverlayActionRequested;
         overlay.Closed += OnOverlayClosed;
@@ -606,11 +654,38 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
         bool recordForRepeat,
         string sourcePageUrl = "",
         MyCapture.Core.Capture.CaptureSourceDetails? sourceDetails = null,
-        Task<CaptureSelectionSource>? pendingSource = null)
+        Task<CaptureSelectionSource>? pendingSource = null,
+        bool preserveEditor = false)
     {
         ArgumentNullException.ThrowIfNull(frame);
         VerifyDispatcherAccess();
         ObjectDisposedException.ThrowIf(_disposed, this);
+
+        // A nested capture can be persisting after its selector has closed, with no window to
+        // activate. It still owns the capture session and must reject a second advanced capture.
+        if (_editorScreenCapture is { } current)
+        {
+            current.ActivateCurrent();
+            return false;
+        }
+
+        if (preserveEditor && CanCaptureOverPreservedWindow && EditorScreenCaptureRequested is { } persist)
+        {
+            CaptureOverlayCoordinator nested = CreateCaptureOverEditor(persist);
+            try
+            {
+                bool started = nested.StartWithSelection(frame, region, sourceTitle, recordForRepeat,
+                    sourcePageUrl, sourceDetails, pendingSource);
+                LastTransitionForTest = nested.LastTransitionForTest;
+                return started;
+            }
+            catch
+            {
+                _editorScreenCapture = null;
+                nested.Dispose();
+                throw;
+            }
+        }
 
         if (_isOpeningEditor || (_preparation is not null && _activeOverlay is not { IsVisible: true }))
         {
@@ -780,7 +855,7 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
                 return;
             }
 
-            if (!OpenEditorAfterCapture()) return;
+            if (selection.PinRequested || !OpenEditorAfterCapture()) return;
 
             var editor = new AnnotationEditorWindow(
                 selection.Frame,
@@ -798,10 +873,10 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
             editor.DraftRecordSource = DraftRecord;
             if (OriginalNeedsRecovery()) editor.MarkUnpersistedCapture();
             editor.CommitRequested = CommitRequested;
+            editor.Editor.SourceFilePath = EditorSourcePath?.Invoke();
             editor.Committed += OnEditorCommitted;
             editor.Cancelled += OnEditorCancelled;
             editor.Closed += OnEditorClosed;
-            PrepareWindow(editor);
             editor.Show();
             _ = editor.Activate();
         }

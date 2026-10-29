@@ -86,12 +86,12 @@ internal sealed class GifPreviewSample : IDisposable
         try
         {
             double elapsed = stopwatch.Elapsed.TotalMilliseconds;
-            GifSampleFrames frames = GifSampleDecoder.Decode(calculation.ResultPath, cancellationToken);
+            GifSampleFrames frames = GifSampleDecoder.Decode(calculation.ResultPath, cancellationToken, fitToMemoryBudget: true);
             double motion = GifMotionAnalysis.ChangedFraction(
                 frames,
                 GifMotionAnalysis.LumaThreshold,
                 cancellationToken,
-                NominalDelayCentiseconds(quality, speed));
+                NominalDelayCentiseconds(quality, speed, recording.Fps));
             cancellationToken.ThrowIfCancellationRequested();
             GifSegmentSize size = GifSegmentSize.Measure(calculation.ResultPath);
             if (!window.CoversWholeRange)
@@ -100,7 +100,7 @@ internal sealed class GifPreviewSample : IDisposable
                 calculation = null;
             }
 
-            GifFrameSchedule schedule = AnimatedGifExporter.BuildFrameSchedule(sampleDocument, speed, quality.FramesPerSecond);
+            GifFrameSchedule schedule = AnimatedGifExporter.BuildFrameSchedule(sampleDocument, speed, quality.FramesPerSecond, recording.Fps);
             var sample = new GifPreviewSample(window, quality, speed, size, elapsed, frames, motion, calculation, schedule);
             calculation = null;
             return sample;
@@ -129,8 +129,8 @@ internal sealed class GifPreviewSample : IDisposable
     }
 
     /// <summary>The exporter's frame delay before identical frames merge, in centiseconds.</summary>
-    internal static double NominalDelayCentiseconds(GifExportQuality quality, double speed) =>
-        100.0 / quality.FramesPerSecond / speed;
+    internal static double NominalDelayCentiseconds(GifExportQuality quality, double speed, double sourceFramesPerSecond = double.PositiveInfinity) =>
+        100.0 / GifExportQuality.EffectiveFrameRate(quality.FramesPerSecond, sourceFramesPerSecond, speed) / speed;
 
     public void Dispose()
     {

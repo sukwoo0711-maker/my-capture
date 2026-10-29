@@ -1,5 +1,7 @@
-using System.ComponentModel;
+﻿using System.ComponentModel;
 using System.Diagnostics;
+using System.IO;
+using System.Reflection;
 using System.Windows;
 using System.Windows.Data;
 using System.Windows.Media;
@@ -10,9 +12,13 @@ using MyCapture.App.Capture;
 using MyCapture.App.Editing;
 using MyCapture.App.Themes;
 using MyCapture.Core.Platform;
+using MyCapture.Core.Localization;
 using MyCapture.Core.Primitives;
+using MyCapture.Core.Queue;
+using MyCapture.Core.Settings;
 using MyCapture.Core.Storage;
 using MyCapture.Platform.Capture;
+using MyCapture.Platform.Shell;
 using Xunit;
 
 namespace MyCapture.App.Tests;
@@ -36,164 +42,292 @@ public sealed class ShellRetakeWindowTests
     });
 
     [Fact]
-    public void Retake_ClosesOnlyOwnedEditor_StartsFreshFrame_AndKeepsPersistedOriginal() => StaTestHost.Run(() =>
+    public void Retake_PreservesOwnedAndOtherEditors_StartsFreshSession_AndKeepsBothOriginals() => StaTestHost.Run(() =>
     {
         string originals = OwnedTestDirectory.Create("retake-original");
-        string original = System.IO.Path.Combine(originals, "original.png");
-        Window? editor = null;
-        int acquired = 0;
-        var outside = new Window { Width = 200, Height = 100, ShowInTaskbar = false };
-        outside.Show();
+        var paths = AppPaths.CreateForRoot(originals);
+        var settings = new QueueSettings();
+        var queue = new CaptureQueue(paths, settings, NullLogger<CaptureQueue>.Instance);
+        var persistence = new CapturePersistenceService(queue, paths, () => settings, NullLogger<CapturePersistenceService>.Instance);
+        CaptureRecord? initial = null, separate = null;
+        int acquired = 0, outsideClosed = 0;
+        CaptureOverlayWindow? selector = null;
+        using var outsideCoordinator = Create(Frame);
+        Assert.True(outsideCoordinator.StartWithSelection(Frame(), new RectD(0, 0, 8, 8)));
+        PumpUntil(() => outsideCoordinator.LastTransitionForTest.IsCompleted);
+        var outside = EditorWindow(outsideCoordinator);
+        outside.Closing += (_, _) => outsideClosed++;
         using var coordinator = Create(() => { acquired++; return Frame(); });
-        coordinator.RequiresCaptureExclusion = () => true;
-        coordinator.ApplyCaptureExclusion = window => { editor ??= window; return true; };
-        coordinator.SelectionPersistRequested = _ => { System.IO.File.WriteAllText(original, "durable original"); return Task.CompletedTask; };
+        coordinator.ApplyCaptureExclusion = window => { selector = Assert.IsType<CaptureOverlayWindow>(window); return true; };
+        coordinator.SelectionPersistRequested = selection =>
+        {
+            initial = persistence.PersistOriginal(selection.SelectedBitmap, 1, "original", "test");
+            return Task.CompletedTask;
+        };
+        coordinator.EditorScreenCaptureRequested = selection =>
+        {
+            separate = persistence.PersistOriginal(selection.SelectedBitmap, 1, "new capture", "test");
+            return Task.CompletedTask;
+        };
         try
         {
             Assert.True(coordinator.StartWithSelection(Frame(), new RectD(0, 0, 8, 8)));
             PumpUntil(() => coordinator.LastTransitionForTest.IsCompleted);
+            var editor = EditorWindow(coordinator);
+            Assert.NotNull(initial);
+            using IDisposable originalLease = persistence.AcquireEditLease(initial.Id);
+            string originalPath = queue.GetFilePath(initial, CaptureFileNames.Original);
+            byte[] original = File.ReadAllBytes(originalPath);
             Assert.True(coordinator.CanRetake);
-            Assert.True(editor!.IsVisible);
-            coordinator.CloseEditorForRetake();
-            Assert.False(editor.IsVisible);
-            Assert.True(outside.IsVisible);
-            Assert.False(coordinator.IsActive);
-            coordinator.Start(false, false, false);
+            coordinator.Start(false, false, false, preserveEditor: true);
             PumpUntil(() => coordinator.LastPreparationForTest.IsCompleted);
             Assert.Equal(1, acquired);
+            var nested = Assert.IsType<CaptureOverlayCoordinator>(typeof(CaptureOverlayCoordinator)
+                .GetField("_editorScreenCapture", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(coordinator));
+            Assert.NotSame(coordinator, nested);
+            Assert.Null(nested.CurrentEditor);
+            Assert.Same(editor, EditorWindow(coordinator));
+            Assert.Same(outside, EditorWindow(outsideCoordinator));
+            Assert.True(editor.IsVisible);
+            Assert.True(outside.IsVisible);
             Assert.True(coordinator.IsActive);
-            Assert.Equal("durable original", System.IO.File.ReadAllText(original));
-            coordinator.Cancel();
+            Assert.True(Assert.IsType<CaptureOverlayView>(selector!.Content).CaptureFullScreen());
+            PumpUntil(() => coordinator.CanRetake);
+            Assert.NotNull(separate);
+            Assert.NotEqual(initial.Id, separate.Id);
+            Assert.Equal(2, queue.Count);
+            Assert.Equal(original, File.ReadAllBytes(originalPath));
+            string separatePath = queue.GetFilePath(separate, CaptureFileNames.Original);
+            Assert.NotEqual(originalPath, separatePath);
+            Assert.NotEmpty(File.ReadAllBytes(separatePath));
+            Assert.True(persistence.IsBusy(initial.Id));
+            Assert.False(persistence.IsBusy(separate.Id));
+            Assert.Same(editor, EditorWindow(coordinator));
+            Assert.Same(outside, EditorWindow(outsideCoordinator));
+            Assert.True(editor.IsVisible);
+            Assert.True(outside.IsVisible);
+            Assert.Equal(0, outsideClosed);
         }
-        finally { outside.Close(); OwnedTestDirectory.Delete(originals); }
+        finally { coordinator.Cancel(); outsideCoordinator.Cancel(); OwnedTestDirectory.Delete(originals); }
     });
 
     [Fact]
-    public void Retake_RespectsEditorCloseVeto_AndDoesNotStartConcurrentCapture() => StaTestHost.Run(() =>
+    public void Retake_DoesNotCloseTheEditor_AndRejectsConcurrentSelectionAndPersistence() => StaTestHost.Run(() =>
     {
-        Window? editor = null;
-        int acquired = 0;
+        int acquired = 0, closes = 0, writes = 0;
+        CaptureOverlayWindow? selector = null;
+        var persisted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         using var coordinator = Create(() => { acquired++; return Frame(); });
-        coordinator.RequiresCaptureExclusion = () => true;
-        coordinator.ApplyCaptureExclusion = window => { editor = window; return true; };
+        coordinator.ApplyCaptureExclusion = window => { selector = Assert.IsType<CaptureOverlayWindow>(window); return true; };
+        coordinator.EditorScreenCaptureRequested = _ => { writes++; return persisted.Task; };
         coordinator.StartWithSelection(Frame(), new RectD(0, 0, 8, 8));
         PumpUntil(() => coordinator.LastTransitionForTest.IsCompleted);
-        CancelEventHandler veto = (_, args) => args.Cancel = true;
-        editor!.Closing += veto;
+        var editor = EditorWindow(coordinator);
+        CancelEventHandler veto = (_, args) => { closes++; args.Cancel = true; };
+        editor.Closing += veto;
         try
         {
-            coordinator.CloseEditorForRetake();
+            coordinator.Start(false, false, false, preserveEditor: true);
+            PumpUntil(() => coordinator.LastPreparationForTest.IsCompleted);
+            CaptureOverlayWindow firstSelector = Assert.IsType<CaptureOverlayWindow>(selector);
+            Assert.Equal(1, acquired);
+            coordinator.Start(false, false, false, preserveEditor: true);
+            Assert.Same(firstSelector, selector);
+            Assert.Equal(1, acquired);
+            Assert.False(coordinator.StartWithSelection(Frame(), new RectD(0, 0, 8, 8), string.Empty, recordForRepeat: false, preserveEditor: true));
+            Assert.True(Assert.IsType<CaptureOverlayView>(firstSelector.Content).CaptureFullScreen());
+            PumpUntil(() => writes == 1);
+            coordinator.Start(false, false, false, preserveEditor: true);
+            Assert.False(coordinator.StartWithSelection(Frame(), new RectD(0, 0, 8, 8), string.Empty, recordForRepeat: false, preserveEditor: true));
+            Assert.Equal(1, acquired);
+            Assert.False(coordinator.CanRetake);
+            persisted.SetResult();
+            PumpUntil(() => coordinator.CanRetake);
             Assert.True(editor.IsVisible);
             Assert.True(coordinator.IsActive);
-            coordinator.Start(false, false, false);
-            Assert.Equal(0, acquired);
+            Assert.Same(editor, EditorWindow(coordinator));
+            Assert.Equal(1, writes);
+            Assert.Equal(0, closes);
         }
-        finally { editor.Closing -= veto; coordinator.Cancel(); }
+        finally { persisted.TrySetResult(); editor.Closing -= veto; coordinator.Cancel(); }
     });
 
     [Fact]
-    public void Retake_AsksBeforeDiscardingAnnotations_AndKeepsTheEditorWhenCancelled() => StaTestHost.Run(() =>
+    public void Retake_PreservesAnnotationsWithoutAskingToDiscard() => StaTestHost.Run(() =>
     {
-        Window? editor = null;
-        int acquired = 0;
-        using var coordinator = Create(() => { acquired++; return Frame(); });
-        coordinator.RequiresCaptureExclusion = () => true;
-        coordinator.ApplyCaptureExclusion = window => { editor ??= window; return true; };
+        int separateWrites = 0;
+        using var coordinator = Create(Frame);
+        coordinator.EditorScreenCaptureRequested = _ => { separateWrites++; return Task.CompletedTask; };
         coordinator.StartWithSelection(Frame(), new RectD(0, 0, 8, 8));
         PumpUntil(() => coordinator.LastTransitionForTest.IsCompleted);
-        var annotation = Assert.IsType<MyCapture.App.Editing.AnnotationEditorWindow>(editor);
+        var annotation = EditorWindow(coordinator);
         int asked = 0;
-        annotation.ConfirmClose = () => { asked++; return MyCapture.App.Editing.EditorCloseChoice.Cancel; };
-        // A rotation is an edit the user would lose.
-        Assert.True(EditorKeysTests.Press(annotation, System.Windows.Input.Key.Q, ime: false));
+        annotation.ConfirmClose = () => { asked++; return EditorCloseChoice.Cancel; };
+        AddAnnotation(annotation);
+        string document = annotation.Editor.CreateCurrentImageSnapshot().ToJson();
         Assert.True(annotation.Editor.HasUnsavedChanges);
         try
         {
-            coordinator.CloseEditorForRetake();
-            Assert.Equal(1, asked);
+            Assert.True(coordinator.StartWithSelection(Frame(), new RectD(0, 0, 16, 12), string.Empty, recordForRepeat: false, preserveEditor: true));
+            PumpUntil(() => coordinator.LastTransitionForTest.IsCompleted);
+            Assert.Equal(0, asked);
+            Assert.Equal(1, separateWrites);
             Assert.True(annotation.IsVisible);
             Assert.True(coordinator.IsActive);
-            coordinator.Start(false, false, false);
-            Assert.Equal(0, acquired);
-
-            annotation.ConfirmClose = () => { asked++; return MyCapture.App.Editing.EditorCloseChoice.DontSave; };
-            coordinator.CloseEditorForRetake();
-            Assert.Equal(2, asked);
-            Assert.False(annotation.IsVisible);
-            Assert.False(coordinator.IsActive);
+            Assert.Same(annotation, EditorWindow(coordinator));
+            Assert.True(annotation.Editor.HasUnsavedChanges);
+            Assert.Equal(document, annotation.Editor.CreateCurrentImageSnapshot().ToJson());
         }
-        finally { coordinator.Cancel(); }
+        finally { annotation.ConfirmClose = () => EditorCloseChoice.DontSave; coordinator.Cancel(); }
     });
 
     [Fact]
-    public void Retake_WithRealDraftSession_WaitsForRetirementAndStartsAfterDiscard() => StaTestHost.Run(() =>
+    public void Retake_WithRealDraftSession_KeepsItsIdentityContentsAndRetirementState() => StaTestHost.Run(() =>
     {
         SynchronizationContext? previous = SynchronizationContext.Current;
         SynchronizationContext.SetSynchronizationContext(new DispatcherSynchronizationContext(Dispatcher.CurrentDispatcher));
-        Window? editor = null;
-        int acquired = 0, retireCalls = 0;
-        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        int retireCalls = 0, separateWrites = 0;
         string root = TestRecycleBin.CreateTempSubdirectory("mc-retake-draft-").FullName;
-        var store = new EditDraftStore(root, _ =>
-        {
-            if (Interlocked.Increment(ref retireCalls) == 1)
-            {
-                entered.TrySetResult();
-                release.Task.WaitAsync(TimeSpan.FromSeconds(30)).GetAwaiter().GetResult();
-            }
-        }); // Preserve this fixture; no Shell operation is performed.
-        using var coordinator = Create(() => { acquired++; return Frame(); });
-        coordinator.RequiresCaptureExclusion = () => true;
-        coordinator.ApplyCaptureExclusion = window => { editor ??= window; return true; };
+        var store = new EditDraftStore(root, _ => Interlocked.Increment(ref retireCalls));
+        // Preserve this fixture; no Shell operation is performed.
+        using var coordinator = Create(Frame);
+        coordinator.EditorScreenCaptureRequested = _ => { separateWrites++; return Task.CompletedTask; };
+        AnnotationEditorWindow? annotation = null;
         try
         {
             coordinator.StartWithSelection(Frame(), new RectD(0, 0, 8, 8));
             PumpUntil(() => coordinator.LastTransitionForTest.IsCompleted);
-            var annotation = Assert.IsType<AnnotationEditorWindow>(editor);
+            annotation = EditorWindow(coordinator);
             Guid draftId = Guid.NewGuid();
             annotation.AdoptRecoveredDraft(store, draftId, 1);
-            annotation.ConfirmClose = () => EditorCloseChoice.Cancel;
-            Task<bool> canceled = PrepareAndStartAsync();
-            PumpUntil(() => canceled.IsCompleted);
-            Assert.False(canceled.GetAwaiter().GetResult());
+            AddAnnotation(annotation);
+            string before = annotation.Editor.CreateCurrentImageSnapshot().ToJson();
+            Task flush = annotation.FlushDraftAsync();
+            PumpUntil(() => flush.IsCompleted);
+            flush.GetAwaiter().GetResult();
+            EditDraft durableDraft = Assert.Single(store.ReadAvailable()).Draft;
+            var session = Assert.IsType<EditDraftSession>(typeof(AnnotationEditorWindow)
+                .GetField("_draftSession", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(annotation));
+            Assert.Equal(draftId, session.Id);
+            annotation.ConfirmClose = () => throw new InvalidOperationException("A new capture must not retire the draft.");
+            Assert.True(coordinator.StartWithSelection(Frame(), new RectD(0, 0, 16, 12), string.Empty, recordForRepeat: false, preserveEditor: true));
+            PumpUntil(() => coordinator.LastTransitionForTest.IsCompleted);
+            Assert.Equal(1, separateWrites);
+            Assert.Same(annotation, EditorWindow(coordinator));
+            Assert.Same(session, typeof(AnnotationEditorWindow)
+                .GetField("_draftSession", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(annotation));
             Assert.True(annotation.IsVisible);
+            Assert.True(annotation.IsEnabled);
+            Assert.True(coordinator.CanRetake);
+            Assert.True(annotation.Editor.HasUnsavedChanges);
+            Assert.Equal(before, annotation.Editor.CreateCurrentImageSnapshot().ToJson());
+            Assert.Equal(System.Text.Json.JsonSerializer.Serialize(durableDraft),
+                System.Text.Json.JsonSerializer.Serialize(Assert.Single(store.ReadAvailable()).Draft));
+            Assert.False(store.IsRetired(draftId));
             Assert.Equal(0, retireCalls);
-
-            annotation.ConfirmClose = () => EditorCloseChoice.DontSave;
-            Task<bool> retake = PrepareAndStartAsync();
-            PumpUntil(() => entered.Task.IsCompleted);
-            Assert.False(retake.IsCompleted);
-            Assert.True(annotation.IsVisible);
-            Assert.False(annotation.IsEnabled);
-            Assert.False(coordinator.CanRetake);
-            Assert.Equal(0, acquired);
             bool responsive = false;
             annotation.Dispatcher.BeginInvoke(new Action(() => responsive = true));
             PumpUntil(() => responsive);
-            release.TrySetResult();
-            PumpUntil(() => retake.IsCompleted);
-            Assert.True(retake.GetAwaiter().GetResult());
-            Assert.False(annotation.IsVisible);
-            Assert.True(store.IsRetired(draftId));
-            PumpUntil(() => coordinator.LastPreparationForTest.IsCompleted);
-            Assert.Equal(1, acquired);
-            Assert.True(coordinator.IsActive);
         }
         finally
         {
-            release.TrySetResult();
-            coordinator.Cancel();
-            SynchronizationContext.SetSynchronizationContext(previous);
+            try
+            {
+                AnnotationEditorWindow? closing = annotation;
+                if (closing is not null) closing.ConfirmClose = () => EditorCloseChoice.DontSave;
+                coordinator.Cancel();
+                // An assertion may fail while a nested capture still owns Cancel. Dispose
+                // it as well so the original editor closes before its dispatcher is released.
+                coordinator.Dispose();
+                if (closing is not null)
+                {
+                    Task finalization = (Task)typeof(AnnotationEditorWindow)
+                        .GetField("_draftFinalization", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(closing)!;
+                    PumpUntil(() => finalization.IsCompleted);
+                    finalization.GetAwaiter().GetResult();
+                    Assert.False(closing.IsVisible);
+                }
+            }
+            finally { SynchronizationContext.SetSynchronizationContext(previous); }
+        }
+    });
+
+    [Theory]
+    [InlineData("asking")]
+    [InlineData("saving")]
+    [InlineData("busy")]
+    public void Retake_WhileEditorIsAskingSavingOrBusy_BlocksWithItsNotice(string state) => StaTestHost.Run(() =>
+    {
+        SynchronizationContext? previous = SynchronizationContext.Current;
+        SynchronizationContext.SetSynchronizationContext(new DispatcherSynchronizationContext(Dispatcher.CurrentDispatcher));
+        int acquired = 0, separateWrites = 0;
+        var saved = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var coordinator = Create(() => { acquired++; return Frame(); });
+        coordinator.EditorScreenCaptureRequested = _ => { separateWrites++; return Task.CompletedTask; };
+        coordinator.CommitRequested = _ => saved.Task;
+        Assert.True(coordinator.StartWithSelection(Frame(), new RectD(0, 0, 8, 8)));
+        PumpUntil(() => coordinator.LastTransitionForTest.IsCompleted);
+        var editor = EditorWindow(coordinator);
+        AddAnnotation(editor);
+        FieldInfo busy = typeof(AnnotationEditorControl).GetField("_redactionInProgress",
+            BindingFlags.Instance | BindingFlags.NonPublic)!;
+        try
+        {
+            if (state == "asking")
+            {
+                int asked = 0;
+                editor.ConfirmClose = () => { asked++; AssertBlocked(CaptureBlock.EditorAsking); return EditorCloseChoice.Cancel; };
+                editor.RequestClose();
+                Assert.Equal(1, asked);
+            }
+            else if (state == "saving")
+            {
+                Assert.True(editor.Editor.HandleShortcut(System.Windows.Input.Key.C, System.Windows.Input.ModifierKeys.Control));
+                PumpUntil(() => editor.Editor.IsCommitInProgress);
+                AssertBlocked(CaptureBlock.EditorSaving);
+                saved.SetResult(false);
+                PumpUntil(() => !editor.Editor.IsCommitInProgress);
+                Assert.True(editor.Editor.IsHitTestVisible);
+                Assert.Equal(UiText.Get("Text_06F58809C083"), editor.Editor.StatusText);
+            }
+            else
+            {
+                busy.SetValue(editor.Editor, true);
+                Assert.True(editor.Editor.IsEditingOperationInProgress);
+                AssertBlocked(CaptureBlock.EditorBusy);
+            }
+            Assert.True(editor.IsVisible);
+            Assert.True(editor.Editor.HasUnsavedChanges);
+        }
+        finally
+        {
+            try
+            {
+                busy.SetValue(editor.Editor, false);
+                saved.TrySetResult(false);
+                // Even a failed assertion must let the async commit resume on its UI
+                // dispatcher before this test closes the editor and shuts that dispatcher down.
+                PumpUntil(() => !editor.Editor.IsCommitInProgress);
+                editor.ConfirmClose = () => EditorCloseChoice.DontSave;
+                coordinator.Cancel();
+            }
+            finally { SynchronizationContext.SetSynchronizationContext(previous); }
         }
 
-        async Task<bool> PrepareAndStartAsync()
+        void AssertBlocked(CaptureBlock expected)
         {
-            bool ready = await CaptureGuard.PrepareAsync(coordinator.CanRetake,
-                allowRetake => CaptureGuard.Find(coordinator.WithSession(default), allowRetake),
-                coordinator.CloseEditorForRetakeAsync) == CaptureBlock.None;
-            if (ready) coordinator.Start(false, false, false);
-            return ready;
+            Assert.False(coordinator.CanRetake);
+            CaptureBlock block = CaptureGuard.Find(coordinator.WithSession(default), GlobalHotkeyCommand.CaptureRegion);
+            Assert.Equal(expected, block);
+            string notice = UiText.Get(CaptureGuard.EditorNoticeKey(block)!);
+            Assert.True(coordinator.ShowEditorBlocked(notice));
+            Assert.Equal(notice, editor.Editor.StatusText);
+            coordinator.Start(false, false, false, preserveEditor: true);
+            Assert.False(coordinator.StartWithSelection(Frame(), new RectD(0, 0, 8, 8), string.Empty, recordForRepeat: false, preserveEditor: true));
+            Assert.Equal(0, acquired);
+            Assert.Equal(0, separateWrites);
+            Assert.False(coordinator.IsSelecting);
+            Assert.Same(editor, EditorWindow(coordinator));
         }
     });
 
@@ -214,13 +348,32 @@ public sealed class ShellRetakeWindowTests
         persisted.SetResult();
         PumpUntil(() => coordinator.LastTransitionForTest.IsCompleted);
         Assert.False(coordinator.IsActive);
+        Assert.Null(coordinator.CurrentEditor);
         Assert.Equal(0, windows);
     });
 
     private static CaptureOverlayCoordinator Create(Func<FrozenFrame> acquire) => new(
         new ScreenCaptureEngine(NullLogger<ScreenCaptureEngine>.Instance),
         new WindowCandidateService(NullLogger<WindowCandidateService>.Instance),
-        NullLogger<CaptureOverlayCoordinator>.Instance, _ => acquire(), () => new RectD(0, 0, 32, 20));
+        NullLogger<CaptureOverlayCoordinator>.Instance, _ => acquire(), () => new RectD(0, 0, 32, 20), _ => [])
+        {
+            RequiresCaptureExclusion = () => true,
+            ApplyCaptureExclusion = _ => true,
+            ReadPageUrls = _ => Task.FromResult<IReadOnlyDictionary<IntPtr, BrowserDocumentSnapshot>>(
+                new Dictionary<IntPtr, BrowserDocumentSnapshot>()),
+            ReadWindowSources = null,
+        };
+
+    private static AnnotationEditorWindow EditorWindow(CaptureOverlayCoordinator coordinator) =>
+        Assert.IsType<AnnotationEditorWindow>(Window.GetWindow(Assert.IsType<AnnotationEditorControl>(coordinator.CurrentEditor)));
+
+    private static void AddAnnotation(AnnotationEditorWindow window)
+    {
+        EditorKeysTests.Invoke(window.Editor, "PlaceTextBox", new PointD(2, 2));
+        EditorKeysTests.Field<System.Windows.Controls.TextBox>(window.Editor, "_activeTextBox").Text = "보존할 주석";
+        EditorKeysTests.Invoke(window.Editor, "CommitActiveText");
+        Assert.Single(window.Editor.CreateCurrentImageSnapshot().Items);
+    }
 
     private static FrozenFrame Frame()
     {

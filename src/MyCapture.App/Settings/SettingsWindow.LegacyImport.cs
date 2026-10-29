@@ -102,7 +102,9 @@ internal sealed partial class SettingsWindow
             candidate.Updates.DismissedVersion = current.Updates.DismissedVersion;
             candidate.General.IsFirstRun = current.General.IsFirstRun;
             candidate.Hotkeys.CoreShortcutsAsked = current.Hotkeys.CoreShortcutsAsked;
+            candidate.General.PracticeRevisionOffered = current.General.PracticeRevisionOffered;
             candidate.Capture.StartGuideShownCount = current.Capture.StartGuideShownCount;
+            candidate.Capture.KeyPanelShownCount = current.Capture.KeyPanelShownCount;
         }
         return candidate;
     }
@@ -120,7 +122,9 @@ internal sealed partial class SettingsWindow
         candidate.GitHub.IssueUrl = current.GitHub.IssueUrl;
         candidate.General.IsFirstRun = current.General.IsFirstRun;
         candidate.Hotkeys.CoreShortcutsAsked = current.Hotkeys.CoreShortcutsAsked;
+        candidate.General.PracticeRevisionOffered = current.General.PracticeRevisionOffered;
         candidate.General.LaunchAtLogin = current.General.LaunchAtLogin;
         candidate.Capture.StartGuideShownCount = current.Capture.StartGuideShownCount;
+        candidate.Capture.KeyPanelShownCount = current.Capture.KeyPanelShownCount;
     }
 }

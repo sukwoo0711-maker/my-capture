@@ -643,6 +643,57 @@ public sealed class QuickAccessCardFirstTests : KoreanCaptionTest
         Assert.Equal(1, card.PreviewForTest.Opacity);
     });
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void SavedLocationReceiptFollowsACardClosedBeforeOrAfterDurableSave(bool savedBeforeClose) => StaTestHost.Run(() =>
+    {
+        using var shell = new Shell();
+        using var presenter = new ThemedShellPresenter(() => false) { NotificationMonitor = Offscreen };
+        shell.UseReceiptPresenter(presenter);
+        Task handler = shell.Select();
+        shell.RunSendTurn();
+        QuickAccessWindow card = Assert.IsType<QuickAccessWindow>(shell.Card);
+        if (savedBeforeClose) shell.PumpUntil(() => !card.IsPending);
+        else Assert.True(card.IsPending);
+        card.Close();
+        if (!savedBeforeClose) Assert.False(presenter.HasNotification);
+        shell.Wait(handler);
+        shell.RunIdleTurns();
+        Assert.True(presenter.HasNotification);
+        Assert.Equal(1, shell.Settings.General.SavedLocationTipCount);
+    });
+
+    [Fact]
+    public void SavedLocationReceiptNeverFollowsAFailedPendingSave() => StaTestHost.Run(() =>
+    {
+        using var shell = new Shell();
+        using var presenter = new ThemedShellPresenter(() => false) { NotificationMonitor = Offscreen };
+        shell.UseReceiptPresenter(presenter);
+        shell.Persistence.BeforeRecordMetadataCommit = _ => throw new IOException("Synthetic save failure");
+        Task handler = shell.Select();
+        shell.RunSendTurn();
+        Assert.IsType<QuickAccessWindow>(shell.Card).Close();
+        shell.Wait(handler);
+        shell.RunIdleTurns();
+        Assert.False(presenter.HasNotification);
+        Assert.Equal(0, shell.Settings.General.SavedLocationTipCount);
+    });
+
+    [Fact]
+    public void SavedLocationReceiptFollowsTheCardShownAfterSaveToo() => StaTestHost.Run(() =>
+    {
+        using var shell = new Shell();
+        using var presenter = new ThemedShellPresenter(() => false) { NotificationMonitor = Offscreen };
+        shell.UseReceiptPresenter(presenter);
+        shell.ShowsCardAfterSave = true;
+        shell.Wait(shell.Select());
+        shell.RunIdleTurns();
+        Assert.IsType<QuickAccessWindow>(shell.Card).Close();
+        Assert.True(presenter.HasNotification);
+        Assert.Equal(1, shell.Settings.General.SavedLocationTipCount);
+    });
+
     // ---- Helpers ---------------------------------------------------------------------------------
 
     private static Button CopyButton(QuickAccessWindow card) => card.ActionButtonsForTest[QuickAccessWindow.ActionOrder.ToList().IndexOf("Copy")];
@@ -721,7 +772,7 @@ public sealed class QuickAccessCardFirstTests : KoreanCaptionTest
         private const BindingFlags Flags = BindingFlags.Instance | BindingFlags.NonPublic;
         private readonly App _app = (App)RuntimeHelpers.GetUninitializedObject(typeof(App));
         private readonly SynchronizationContext? _previous = SynchronizationContext.Current;
-        private readonly string _root = TestRecycleBin.CreateTempSubdirectory("mycapture-card-first-").FullName;
+        private readonly string _root = OwnedTestDirectory.Create("mycapture-card-first-");
         private readonly ServiceProvider _services = new ServiceCollection().AddLogging().BuildServiceProvider();
         private readonly ReceiptKeyboardRouter _router = new(_ => new NoHotkeys());
         private readonly bool? _previousMotion = FluidMotion.AnimationsEnabledOverrideForTest;
@@ -807,6 +858,8 @@ public sealed class QuickAccessCardFirstTests : KoreanCaptionTest
         internal void RequestRegionCapture() => typeof(App).GetMethod("HandleCaptureRequested", Flags)!.Invoke(_app, null);
 
         internal void SetPersistence(CapturePersistenceService? persistence) => Set("_persistence", persistence);
+
+        internal void UseReceiptPresenter(ThemedShellPresenter presenter) => Set("_shellPresenter", presenter);
 
         /// <summary>
         /// The real coordinator around the handler, as App.InitializeShell wires it; the recovery editor never opens here.

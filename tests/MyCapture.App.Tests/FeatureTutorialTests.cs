@@ -132,19 +132,26 @@ public sealed class FeatureTutorialTests
             TabControl tabs = ((DockPanel)help.Content).Children.OfType<TabControl>().Single();
             UniformGrid[] rows = tabs.Items.Cast<TabItem>().SelectMany(tab =>
                 ((StackPanel)((ScrollViewer)tab.Content).Content).Children.OfType<UniformGrid>()).ToArray();
-            Assert.Equal(95, rows.Length);
+            Assert.Equal(97, rows.Length);
             Assert.Single(rows, row => ShortcutHelpRowAssertions.Title(row) == UiText.Get("Text_976A6C92B870"));
             Assert.Single(rows, row => ShortcutHelpRowAssertions.Title(row) == UiText.Get("CaptureRatio_HelpLabel"));
             Assert.Single(rows, row => ShortcutHelpRowAssertions.Title(row) == UiText.Get("Pin_SelectText"));
             Assert.Single(rows, row => ShortcutHelpRowAssertions.Title(row) == UiText.Get("Gallery.Float"));
             Assert.Single(rows, row => ShortcutHelpRowAssertions.Title(row) == UiText.Get("LibraryUx_KeepToggleName"));
             Assert.Single(rows, row => ShortcutHelpRowAssertions.Title(row) == UiText.Get("Stamp_Place"));
+            Assert.Single(rows, row => ShortcutHelpRowAssertions.Title(row) == UiText.Get("MediaInfo.Title"));
             foreach (UniformGrid row in rows)
             {
                 DockPanel title = Assert.Single(row.Children.OfType<DockPanel>());
                 TextBlock label = Assert.Single(title.Children.OfType<TextBlock>());
                 WrapPanel keycaps = Assert.Single(row.Children.OfType<WrapPanel>());
                 Assert.Empty(keycaps.Children.OfType<Button>());
+                if (label.Text == UiText.Get("MediaInfo.Title"))
+                {
+                    Assert.Empty(title.Children.OfType<Button>());
+                    Assert.Equal("Alt+Enter", AutomationProperties.GetName(keycaps));
+                    continue;
+                }
                 if (label.Text == UiText.Get("Text_976A6C92B870"))
                 {
                     Assert.Empty(title.Children.OfType<Button>());

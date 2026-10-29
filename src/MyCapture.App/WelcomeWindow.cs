@@ -17,6 +17,7 @@ using MyCapture.Core.Queue;
 using MyCapture.Core.Settings;
 using MyCapture.Ocr;
 using MyCapture.Platform.Display;
+using MyCapture.Platform.Shell;
 
 namespace MyCapture.App;
 
@@ -40,7 +41,7 @@ internal enum WelcomeOutcome
 }
 
 /// <summary>
-/// First-use guide: three things to do with the real app (capture, pin, find again), then the
+/// First-use guide: capture, draw, pin, resize and find again with the real app, then the
 /// start-at-sign-in and accurate-OCR choices. One task per screen; the next screen follows the
 /// real event, so nothing here is a description of something the person has not done.
 /// </summary>
@@ -52,15 +53,14 @@ internal sealed class WelcomeWindow : Window
     internal const double DefaultWidth = 640;
     internal const double DefaultHeight = 720;
 
-    private readonly HotkeySettings _keys;
+    private HotkeySettings _keys;
     private readonly WelcomeOptions _options;
-    private readonly IWelcomeClipboard _clipboard;
     private readonly DispatcherTimer _hintTimer;
     private readonly WelcomeTutorialPreview _preview;
     private readonly double _textScale;
     private readonly string[,] _practiceCells;
     private readonly TextBlock _progress = new();
-    private readonly Border[] _progressSegments = [new(), new(), new()];
+    private readonly Border[] _progressSegments = [new(), new(), new(), new(), new()];
     private readonly TextBlock _title = new();
     private readonly TextBlock _instruction = new();
     private readonly TextBlock _status = new();
@@ -73,10 +73,14 @@ internal sealed class WelcomeWindow : Window
     private readonly FrameworkElement _practiceTable;
     private readonly FrameworkElement _trayDiagram;
     private readonly FrameworkElement _preferences;
-    private readonly FrameworkElement _recap;
+    private readonly ContentControl _recap = new();
+    private readonly StackPanel _conflict = new();
+    private readonly TextBlock _changeKeyRow = new();
+    private readonly HashSet<WelcomeStep> _completed = [];
     private readonly ScrollViewer _scroll;
     private bool _captureAvailable, _pinAvailable, _libraryAvailable;
-    private bool _practiceCopied, _capturePending, _closed;
+    private bool _capturePending, _closed, _consentAnswered, _keyPressed;
+    private Guid? _practicePin;
 
     internal WelcomeWindow(HotkeySettings keys, AfterCaptureAction afterCapture,
         int imageRetentionHours = CaptureRetention.DefaultImageRetentionHours,
@@ -85,7 +89,8 @@ internal sealed class WelcomeWindow : Window
         ArgumentNullException.ThrowIfNull(keys);
         _keys = keys;
         _options = options ?? new WelcomeOptions();
-        _clipboard = _options.Clipboard ?? new WelcomeClipboard();
+        CurrentStep = _options.ShowCoreShortcutsConsent ? WelcomeStep.Consent
+            : _options.FeaturePractice ? WelcomeStep.Pin : WelcomeStep.Capture;
         _textScale = double.IsFinite(_options.TextScale) ? Math.Clamp(_options.TextScale, 1, 3) : 1;
         _captureAvailable = keys.Capture.IsAssigned;
         _pinAvailable = keys.PasteToScreen.IsAssigned;
@@ -188,7 +193,11 @@ internal sealed class WelcomeWindow : Window
         SkipButton.SetResourceReference(StyleProperty, "Button.Secondary");
         StyleFooterButton(SkipButton, 104);
         AutomationProperties.SetName(SkipButton, UiText.Get("Welcome_Skip"));
-        SkipButton.Click += (_, _) => CloseWith(WelcomeOutcome.Closed);
+        SkipButton.Click += (_, _) =>
+        {
+            if (CurrentStep == WelcomeStep.Consent) AnswerCoreShortcuts(false);
+            else CloseWith(WelcomeOutcome.Closed);
+        };
         var actions = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right };
         actions.Children.Add(TryNowButton);
         actions.Children.Add(SkipButton);
@@ -255,12 +264,36 @@ internal sealed class WelcomeWindow : Window
         Grid.SetColumnSpan(replayNote, 2);
         preferences.Children.Add(replayNote);
         _preferences = preferences;
-        _recap = MakeRecap();
+        _recap.Content = MakeRecap();
+        ChangeShortcutLink = new Hyperlink(new Run(UiText.Get("Practice.ChangeKey")));
+        ChangeShortcutLink.SetResourceReference(TextElement.ForegroundProperty, "Text.Primary");
+        ChangeShortcutLink.Click += (_, _) => RequestShortcutChange();
+        _changeKeyRow.Inlines.Add(ChangeShortcutLink);
+        _changeKeyRow.FontSize = 13 * _textScale;
+        _changeKeyRow.Margin = new Thickness(0, 0, 0, 10);
+        TextBlock conflictText = WrappedLabel(UiText.Get("Practice.KeyConflict"));
+        conflictText.SetResourceReference(TextBlock.ForegroundProperty, "State.Danger");
+        _conflict.Children.Add(conflictText);
+        var conflictActions = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 8, 0, 10) };
+        ChangeShortcutButton = new Button { Content = UiText.Get("Practice.AssignKey") };
+        ChangeShortcutButton.SetResourceReference(StyleProperty, "Button.Secondary");
+        ChangeShortcutButton.Click += (_, _) => RequestShortcutChange();
+        SkipStepButton = new Button { Content = UiText.Get("Welcome_Skip"), Margin = new Thickness(8, 0, 0, 0) };
+        SkipStepButton.SetResourceReference(StyleProperty, "Button.Secondary");
+        SkipStepButton.Click += (_, _) => SkipCurrentStep();
+        foreach (Button button in new[] { ChangeShortcutButton, SkipStepButton })
+        {
+            button.FontSize = 14 * _textScale;
+            button.MinHeight = 36 * _textScale;
+            AutomationProperties.SetName(button, (string)button.Content);
+            conflictActions.Children.Add(button);
+        }
+        _conflict.Children.Add(conflictActions);
 
         var progressRow = new Grid();
-        for (int index = 0; index < 3; index++)
+        for (int index = 0; index < _progressSegments.Length; index++)
         {
-            progressRow.ColumnDefinitions.Add(new ColumnDefinition());
+            progressRow.ColumnDefinitions.Add(new ColumnDefinition { Width = _options.FeaturePractice && index >= 2 ? new GridLength(0) : new GridLength(1, GridUnitType.Star) });
             Border segment = _progressSegments[index];
             segment.Height = 7; segment.CornerRadius = new CornerRadius(3.5); segment.BorderThickness = new Thickness(1);
             segment.SetResourceReference(Border.BorderBrushProperty, "Border.Control");
@@ -278,6 +311,8 @@ internal sealed class WelcomeWindow : Window
         body.Children.Add(_instruction);
         body.Children.Add(_statusRow);
         body.Children.Add(_keyDisplay);
+        body.Children.Add(_changeKeyRow);
+        body.Children.Add(_conflict);
         body.Children.Add(_previewFrame);
         body.Children.Add(_practiceTable);
         body.Children.Add(_trayDiagram);
@@ -306,17 +341,28 @@ internal sealed class WelcomeWindow : Window
             StartHintTimer();
         };
         Deactivated += (_, _) => _preview.Pause();
-        Closed += (_, _) => { _closed = true; _hintTimer.Stop(); _preview.Dispose(); };
+        Closed += (_, _) =>
+        {
+            if (CurrentStep == WelcomeStep.Consent && !_consentAnswered)
+            {
+                _consentAnswered = true;
+                CoreShortcutsAnswered?.Invoke(false);
+            }
+            _closed = true; _hintTimer.Stop(); _preview.Dispose();
+        };
     }
 
     /// <summary>The person asked for a region capture, by the button or by the shortcut.</summary>
     internal event EventHandler? CaptureRequested;
 
-    /// <summary>The person asked for a pin of the clipboard by the button.</summary>
+    /// <summary>The person asked to return to the editor for the pin practice.</summary>
     internal event EventHandler? PinRequested;
 
     /// <summary>The person asked to open the library by the button.</summary>
     internal event EventHandler? LibraryRequested;
+    internal event EventHandler? EditorRequested;
+    internal event Action<bool>? CoreShortcutsAnswered;
+    internal event Action<GlobalHotkeyCommand>? ShortcutChangeRequested;
 
     internal WelcomeStep CurrentStep { get; private set; } = WelcomeStep.Capture;
     internal WelcomeOutcome Outcome { get; private set; } = WelcomeOutcome.Closed;
@@ -325,6 +371,9 @@ internal sealed class WelcomeWindow : Window
     internal Button TryNowButton { get; }
     internal Button SkipButton { get; }
     internal Hyperlink ShortcutsLink { get; }
+    internal Hyperlink ChangeShortcutLink { get; }
+    internal Button ChangeShortcutButton { get; }
+    internal Button SkipStepButton { get; }
 
     /// <summary>"Start MyCapture when I sign in to Windows", checked by default.</summary>
     internal CheckBox StartAtSignInCheck { get; }
@@ -335,7 +384,10 @@ internal sealed class WelcomeWindow : Window
     internal TextBlock AccurateOcrHelp { get; }
     internal bool UseAccurateOcr => AccurateOcrCheck.IsChecked == true;
     internal bool IsReplay => _options.Replay;
-    internal bool PracticeCopied => _practiceCopied;
+    internal bool PracticeCopied => false;
+    internal bool KeyPressed => _keyPressed;
+    internal bool ConflictShown => _conflict.Visibility == Visibility.Visible;
+    internal bool IsFeaturePractice => _options.FeaturePractice;
     internal bool CapturePending => _capturePending;
     internal TimeSpan HintDelay => _hintTimer.Interval;
     internal string TitleText => KoreanWordWrap.Strip(_title.Text);
@@ -364,11 +416,33 @@ internal sealed class WelcomeWindow : Window
         RenderStep();
     }
 
+    internal void UpdateHotkeys(HotkeySettings keys)
+    {
+        ArgumentNullException.ThrowIfNull(keys);
+        _keys = keys;
+        RenderStep();
+    }
+
+    internal void NotifyHotkeyFired(GlobalHotkeyCommand command)
+    {
+        if (_closed || CurrentCommand() != command || !CurrentKey().IsAssigned) return;
+        _keyPressed = true;
+        RenderStep();
+    }
+
+    internal void NotifyArrowShortcutFired()
+    {
+        if (_closed || CurrentStep != WelcomeStep.Draw) return;
+        _keyPressed = true;
+        RenderStep();
+    }
+
     internal void NotifyCaptureCompleted(bool copied)
     {
         if (_closed || CurrentStep != WelcomeStep.Capture) return;
         _capturePending = false;
-        MoveTo(WelcomeStep.Pin, UiText.Get(copied ? "Onboarding.CaptureCopied" : "Onboarding.Captured"), bringToFront: true);
+        _completed.Add(WelcomeStep.Capture);
+        MoveTo(WelcomeStep.Draw, UiText.Get(copied ? "Onboarding.CaptureCopied" : "Onboarding.Captured"), bringToFront: true);
     }
 
     /// <summary>The selector ended without a capture. The person stays on the same step and sees what to do.</summary>
@@ -390,13 +464,36 @@ internal sealed class WelcomeWindow : Window
 
     internal void NotifyPinCreated()
     {
-        if (_closed || CurrentStep != WelcomeStep.Pin) return;
-        MoveTo(WelcomeStep.Library, UiText.Get("Onboarding.PinClose"), bringToFront: false);
+        // A clipboard pin is not the edited image practised in this step.
+    }
+
+    internal void NotifyArrowAdded()
+    {
+        if (_closed || CurrentStep != WelcomeStep.Draw) return;
+        _completed.Add(WelcomeStep.Draw);
+        MoveTo(WelcomeStep.Pin, UiText.Get("Practice.ArrowAdded"), bringToFront: false);
+    }
+
+    internal void NotifyEditorPinCreated(Guid pinId)
+    {
+        if (_closed || CurrentStep != WelcomeStep.Pin || pinId == Guid.Empty) return;
+        _practicePin = pinId;
+        _completed.Add(WelcomeStep.Pin);
+        MoveTo(WelcomeStep.Resize, UiText.Get("Practice.EditorPinned"), bringToFront: false);
+    }
+
+    internal void NotifyPinZoomChanged(Guid pinId)
+    {
+        if (_closed || CurrentStep != WelcomeStep.Resize || _practicePin != pinId) return;
+        _completed.Add(WelcomeStep.Resize);
+        MoveTo(_options.FeaturePractice ? WelcomeStep.Finish : WelcomeStep.Library,
+            UiText.Get("Practice.Resized"), bringToFront: false);
     }
 
     internal void NotifyLibraryOpened()
     {
         if (_closed || CurrentStep != WelcomeStep.Library) return;
+        _completed.Add(WelcomeStep.Library);
         MoveTo(WelcomeStep.Finish, string.Empty, bringToFront: true);
     }
 
@@ -418,23 +515,16 @@ internal sealed class WelcomeWindow : Window
         if (_closed) return;
         switch (CurrentStep)
         {
+            case WelcomeStep.Consent:
+                AnswerCoreShortcuts(true);
+                break;
             case WelcomeStep.Capture:
                 if (_capturePending) return;
                 DismissForCapture();
                 CaptureRequested?.Invoke(this, EventArgs.Empty);
                 break;
-            case WelcomeStep.Pin when !_practiceCopied:
-                if (!_clipboard.TryCopyText(PracticeText()))
-                {
-                    SetStatus(UiText.Get("Onboarding.CopyRetry"), success: false);
-                    StartHintTimer();
-                    return;
-                }
-                // The only clipboard write this guide makes, and only because the person chose it.
-                _practiceCopied = true;
-                SetStatus(UiText.Get("Onboarding.PracticeCopied"));
-                RenderStep();
-                if (IsActive) TryNowButton.Focus();
+            case WelcomeStep.Draw:
+                EditorRequested?.Invoke(this, EventArgs.Empty);
                 break;
             case WelcomeStep.Pin:
                 PinRequested?.Invoke(this, EventArgs.Empty);
@@ -446,6 +536,27 @@ internal sealed class WelcomeWindow : Window
                 CloseWith(WelcomeOutcome.Completed);
                 break;
         }
+    }
+
+    private void AnswerCoreShortcuts(bool accept)
+    {
+        if (_consentAnswered || _closed) return;
+        _consentAnswered = true;
+        CoreShortcutsAnswered?.Invoke(accept);
+        MoveTo(WelcomeStep.Capture, string.Empty, bringToFront: false);
+    }
+
+    private void RequestShortcutChange()
+    {
+        if (CurrentCommand() is { } command) ShortcutChangeRequested?.Invoke(command);
+    }
+
+    private void SkipCurrentStep()
+    {
+        if (_closed || !ConflictShown) return;
+        // Drawing and pin resizing require the captured image. Skip that dependent group together.
+        MoveTo(CurrentStep == WelcomeStep.Library || _options.FeaturePractice ? WelcomeStep.Finish : WelcomeStep.Library,
+            string.Empty, bringToFront: false);
     }
 
     /// <summary>The practice table as the tab-separated text a spreadsheet would copy.</summary>
@@ -460,6 +571,7 @@ internal sealed class WelcomeWindow : Window
     private void MoveTo(WelcomeStep step, string status, bool bringToFront)
     {
         CurrentStep = step;
+        _keyPressed = false;
         SetStatus(status, announce: false);
         RenderStep();
         _scroll.ScrollToTop();
@@ -479,28 +591,55 @@ internal sealed class WelcomeWindow : Window
     private Hotkey CurrentKey() => CurrentStep switch
     {
         WelcomeStep.Capture when _captureAvailable => _keys.Capture,
-        WelcomeStep.Pin when _pinAvailable && _practiceCopied => _keys.PasteToScreen,
+        WelcomeStep.Draw => new Hotkey(HotkeyModifiers.None, 0x41),
+        WelcomeStep.Pin when _pinAvailable => _keys.PasteToScreen,
         WelcomeStep.Library when _libraryAvailable => _keys.OpenLibrary,
         _ => Hotkey.None,
+    };
+
+    private GlobalHotkeyCommand? CurrentCommand() => CurrentStep switch
+    {
+        WelcomeStep.Capture => GlobalHotkeyCommand.CaptureRegion,
+        WelcomeStep.Pin => GlobalHotkeyCommand.PasteToScreen,
+        WelcomeStep.Library => GlobalHotkeyCommand.OpenLibrary,
+        _ => null,
+    };
+
+    private bool CurrentKeyConflicts() => CurrentStep switch
+    {
+        WelcomeStep.Capture => _keys.Capture.IsAssigned && !_captureAvailable,
+        WelcomeStep.Pin => _keys.PasteToScreen.IsAssigned && !_pinAvailable,
+        WelcomeStep.Library => _keys.OpenLibrary.IsAssigned && !_libraryAvailable,
+        _ => false,
     };
 
     private void RenderStep()
     {
         bool finish = CurrentStep == WelcomeStep.Finish;
+        bool consent = CurrentStep == WelcomeStep.Consent;
         SkipButton.Visibility = finish ? Visibility.Collapsed : Visibility.Visible;
         SkipButton.IsTabStop = !finish;
-        int number = Math.Min((int)CurrentStep, 3);
+        SkipButton.IsCancel = !consent;
+        SkipButton.Content = UiText.Get(consent ? "Practice.KeepCurrent" : "Welcome_Skip");
+        SkipButton.ToolTip = consent ? UiText.Get("Practice.KeepCurrent") : UiText.Get("Welcome_Skip") + "  Esc";
+        AutomationProperties.SetName(SkipButton, (string)SkipButton.Content);
+        int total = _options.FeaturePractice ? 2 : 5;
+        int number = _options.FeaturePractice ? CurrentStep == WelcomeStep.Pin ? 1 : 2 : Math.Min((int)CurrentStep, 5);
         string label = UiText.Get(CurrentStep switch
         {
+            WelcomeStep.Consent => "Practice.ConsentLabel",
             WelcomeStep.Capture => "Onboarding.CaptureLabel",
+            WelcomeStep.Draw => "Practice.DrawLabel",
             WelcomeStep.Pin => "Onboarding.PinLabel",
+            WelcomeStep.Resize => "Practice.ResizeLabel",
             WelcomeStep.Library => "Onboarding.LibraryLabel",
             _ => "Onboarding.Ready",
         });
-        _progress.Text = finish ? label : $"{number} / 3 · {label}";
-        AutomationProperties.SetName(_progress, finish ? label : UiText.Format("Onboarding.ProgressName", number, label));
+        _progress.Text = finish || consent ? label : $"{number} / {total} · {label}";
+        AutomationProperties.SetName(_progress, finish || consent ? label : UiText.Format("Practice.ProgressName", number, total, label));
         for (int index = 0; index < _progressSegments.Length; index++)
         {
+            _progressSegments[index].Visibility = consent || index >= total ? Visibility.Collapsed : Visibility.Visible;
             // Done and current steps are filled; the steps still to come are outlined, which also reads in high contrast.
             if (finish || index < number) _progressSegments[index].SetResourceReference(Border.BackgroundProperty, "Text.Primary");
             else _progressSegments[index].Background = Brushes.Transparent;
@@ -509,32 +648,39 @@ internal sealed class WelcomeWindow : Window
         Hotkey key = CurrentKey();
         SetText(_title, UiText.Get(CurrentStep switch
         {
+            WelcomeStep.Consent => "CoreShortcuts.Title",
             WelcomeStep.Capture => "Onboarding.CaptureTitle",
-            WelcomeStep.Pin => "Onboarding.PinTitle",
+            WelcomeStep.Draw => "Practice.DrawTitle",
+            WelcomeStep.Pin => "Practice.PinTitle",
+            WelcomeStep.Resize => "Practice.ResizeTitle",
             WelcomeStep.Library => "Onboarding.LibraryTitle",
             _ => "Onboarding.FinishTitle",
         }));
         SetText(_instruction, InstructionFor(key));
         _keyDisplay.Content = key.IsAssigned ? Keycaps(key) : null;
         _keyDisplay.Visibility = key.IsAssigned ? Visibility.Visible : Visibility.Collapsed;
-        bool showPreview = CurrentStep is WelcomeStep.Capture or WelcomeStep.Pin;
+        _conflict.Visibility = CurrentKeyConflicts() ? Visibility.Visible : Visibility.Collapsed;
+        _changeKeyRow.Visibility = CurrentCommand() is not null && !CurrentKeyConflicts() ? Visibility.Visible : Visibility.Collapsed;
+        bool showPreview = CurrentStep is WelcomeStep.Capture or WelcomeStep.Draw;
         _previewFrame.Visibility = showPreview ? Visibility.Visible : Visibility.Collapsed;
         // The table is the thing to drag over on step 1 and the thing the copy button copies on step 2.
-        _practiceTable.Visibility = CurrentStep == WelcomeStep.Capture || (CurrentStep == WelcomeStep.Pin && !_practiceCopied)
+        _practiceTable.Visibility = CurrentStep == WelcomeStep.Capture
             ? Visibility.Visible : Visibility.Collapsed;
         _trayDiagram.Visibility = CurrentStep == WelcomeStep.Library ? Visibility.Visible : Visibility.Collapsed;
-        _preferences.Visibility = finish ? Visibility.Visible : Visibility.Collapsed;
+        _preferences.Visibility = finish && !_options.FeaturePractice ? Visibility.Visible : Visibility.Collapsed;
         _recap.Visibility = finish ? Visibility.Visible : Visibility.Collapsed;
-        string? feature = CurrentStep switch { WelcomeStep.Capture => "capture-region", WelcomeStep.Pin => "pin-clipboard", _ => null };
+        if (finish) _recap.Content = MakeRecap();
+        string? feature = CurrentStep switch { WelcomeStep.Capture => "capture-region", WelcomeStep.Draw => "image-arrow", _ => null };
         if (_preview.AssetPath is not { } existing || feature is null
             || !System.IO.Path.GetFileName(existing).StartsWith(feature + ".", StringComparison.Ordinal))
             _preview.SelectFeature(feature);
 
         string actionKey = CurrentStep switch
         {
+            WelcomeStep.Consent => "Practice.Start",
             WelcomeStep.Capture => "Onboarding.StartCapture",
-            WelcomeStep.Pin when !_practiceCopied => "Onboarding.CopyPractice",
-            WelcomeStep.Pin => "Onboarding.CreatePin",
+            WelcomeStep.Draw or WelcomeStep.Pin => "Practice.OpenEditor",
+            WelcomeStep.Resize => "Practice.WaitResize",
             WelcomeStep.Library => "Onboarding.OpenLibrary",
             _ => "Onboarding.Start",
         };
@@ -543,7 +689,7 @@ internal sealed class WelcomeWindow : Window
         AutomationProperties.SetName(TryNowButton, action);
         AutomationProperties.SetHelpText(TryNowButton, KoreanWordWrap.Strip(_instruction.Text));
         TryNowButton.ToolTip = action + "  Enter";
-        TryNowButton.IsEnabled = !_capturePending;
+        TryNowButton.IsEnabled = !_capturePending && CurrentStep != WelcomeStep.Resize;
         _statusRow.Visibility = _status.Text.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
         _notice.Visibility = Visibility.Collapsed;
         StartHintTimer();
@@ -551,24 +697,28 @@ internal sealed class WelcomeWindow : Window
 
     private string InstructionFor(Hotkey key) => CurrentStep switch
     {
+        WelcomeStep.Consent => UiText.Get("CoreShortcuts.Body"),
         WelcomeStep.Capture => UiText.Get(key.IsAssigned ? "Onboarding.CaptureInstructionKey" : "Onboarding.CaptureInstruction"),
-        WelcomeStep.Pin when !_practiceCopied => UiText.Get("Onboarding.PinInstruction"),
-        WelcomeStep.Pin => key.IsAssigned ? UiText.Format("Onboarding.PressPin", key) : UiText.Get("Onboarding.PinButtonInstruction"),
+        WelcomeStep.Draw => UiText.Get("Practice.DrawInstruction"),
+        WelcomeStep.Pin => key.IsAssigned ? UiText.Format(_options.FeaturePractice ? "Practice.FeaturePinInstruction" : "Practice.PinInstruction", key)
+            : UiText.Get("Practice.PinInstructionNoKey"),
+        WelcomeStep.Resize => UiText.Get("Practice.ResizeInstruction"),
         WelcomeStep.Library => UiText.Get(key.IsAssigned ? "Onboarding.LibraryInstructionKey" : "Onboarding.LibraryInstruction"),
-        _ => UiText.Get("Onboarding.FinishInstruction"),
+        _ => UiText.Get("Practice.FinishInstruction"),
     };
 
     /// <summary>The next thing to do, said once more and larger when nothing has happened for a while.</summary>
     internal void ShowRetryHint()
     {
         _hintTimer.Stop();
-        if (_closed || CurrentStep == WelcomeStep.Finish || _capturePending) return;
+        if (_closed || CurrentStep is WelcomeStep.Finish or WelcomeStep.Consent || _capturePending) return;
         string key = CurrentStep switch
         {
             WelcomeStep.Capture => "Onboarding.CaptureHint",
-            WelcomeStep.Pin when !_practiceCopied => "Onboarding.CopyHint",
-            WelcomeStep.Pin when !_pinAvailable => "Onboarding.PinButtonInstruction",
-            WelcomeStep.Pin => "Onboarding.PinHint",
+            WelcomeStep.Draw => "Practice.DrawInstruction",
+            WelcomeStep.Pin when !_pinAvailable => "Practice.PinInstructionNoKey",
+            WelcomeStep.Pin => "Practice.PinHint",
+            WelcomeStep.Resize => "Practice.ResizeInstruction",
             _ => "Onboarding.LibraryHint",
         };
         SetText(_hint, UiText.Get(key));
@@ -579,7 +729,7 @@ internal sealed class WelcomeWindow : Window
     private void StartHintTimer()
     {
         _hintTimer.Stop();
-        if (IsLoaded && !_closed && !_capturePending && CurrentStep != WelcomeStep.Finish) _hintTimer.Start();
+        if (IsLoaded && !_closed && !_capturePending && CurrentStep is not (WelcomeStep.Finish or WelcomeStep.Consent)) _hintTimer.Start();
     }
 
     private void SetStatus(string message, bool announce = true, bool success = true)
@@ -647,11 +797,14 @@ internal sealed class WelcomeWindow : Window
             cap.Padding = new Thickness(14, 6, 14, 6); cap.Margin = new Thickness(0, 2, 6, 2);
             cap.BorderThickness = new Thickness(1, 1, 1, 3);
             cap.CornerRadius = new CornerRadius(8);
+            if (_keyPressed) cap.SetResourceReference(Border.BackgroundProperty, "Text.Primary");
             if (cap.Child is TextBlock label)
             {
                 label.FontSize = 22 * _textScale;
                 label.HorizontalAlignment = HorizontalAlignment.Center;
                 label.VerticalAlignment = VerticalAlignment.Center;
+                label.SetResourceReference(TextBlock.FontFamilyProperty, "Font.Mono");
+                if (_keyPressed) label.SetResourceReference(TextBlock.ForegroundProperty, "Surface.Base");
             }
         }
         // A plus between the caps says they are pressed together.
@@ -663,38 +816,52 @@ internal sealed class WelcomeWindow : Window
             plus.SetResourceReference(TextBlock.ForegroundProperty, "Text.Secondary");
             keys.Children.Insert(index, plus);
         }
+        if (_keyPressed)
+        {
+            var check = new TextBlock { Text = "✓", FontFamily = new FontFamily("Segoe UI Symbol"), FontSize = 22 * _textScale,
+                VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(8, 0, 0, 0) };
+            check.SetResourceReference(TextBlock.ForegroundProperty, "State.Success");
+            AutomationProperties.SetName(check, UiText.Get("Practice.KeyPressed"));
+            keys.Children.Add(check);
+        }
         return keys;
     }
 
-    /// <summary>The three things just done, as three ticked tiles: the last screen's picture.</summary>
+    /// <summary>Only completed practice actions receive a check; the keys reflect the current settings.</summary>
     private FrameworkElement MakeRecap()
     {
-        var row = new Grid { Margin = new Thickness(0, 4, 0, 22) };
-        string[] labels = [UiText.Get("Onboarding.CaptureLabel"), UiText.Get("Onboarding.PinLabel"), UiText.Get("Onboarding.LibraryLabel")];
-        for (int index = 0; index < labels.Length; index++)
+        var stack = new StackPanel();
+        (WelcomeStep Step, string Label, string Key)[] rows =
+        [
+            (WelcomeStep.Capture, UiText.Get("Onboarding.CaptureLabel"), _keys.Capture.ToString()),
+            (WelcomeStep.Draw, UiText.Get("Practice.DrawLabel"), "A"),
+            (WelcomeStep.Pin, UiText.Get("Onboarding.PinLabel"), _keys.PasteToScreen.ToString()),
+            (WelcomeStep.Resize, UiText.Get("Practice.ResizeLabel"), UiText.Get("Practice.ResizeInput")),
+            (WelcomeStep.Library, UiText.Get("Onboarding.LibraryLabel"), _keys.OpenLibrary.IsAssigned
+                ? _keys.OpenLibrary.ToString() : UiText.Get("Practice.TrayInput")),
+        ];
+        foreach (var row in rows)
         {
-            row.ColumnDefinitions.Add(new ColumnDefinition());
-            var mark = new TextBlock { Text = "✓", FontFamily = new FontFamily("Segoe UI Symbol"), FontSize = 22 * _textScale,
-                FontWeight = FontWeights.Bold, HorizontalAlignment = HorizontalAlignment.Center };
+            if (_options.FeaturePractice && row.Step is not (WelcomeStep.Pin or WelcomeStep.Resize)) continue;
+            var line = new Grid { Margin = new Thickness(0, 3, 0, 3) };
+            line.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(24) });
+            line.ColumnDefinitions.Add(new ColumnDefinition());
+            line.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            var mark = new TextBlock { Text = _completed.Contains(row.Step) ? "✓" : "–",
+                FontFamily = new FontFamily("Segoe UI Symbol"), FontSize = 15 * _textScale };
             mark.SetResourceReference(TextBlock.ForegroundProperty, "State.Success");
-            TextBlock text = WrappedLabel(labels[index], 15);
-            text.FontWeight = FontWeights.SemiBold;
-            text.TextAlignment = TextAlignment.Center;
-            text.Margin = new Thickness(0, 4, 0, 0);
-            var stack = new StackPanel();
-            stack.Children.Add(mark);
-            stack.Children.Add(text);
-            var tile = new Border
-            {
-                Child = stack, Padding = new Thickness(8, 12, 8, 12), BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(8),
-                Margin = new Thickness(index == 0 ? 0 : 8, 0, 0, 0),
-            };
-            tile.SetResourceReference(Border.BackgroundProperty, "Surface.Raised");
-            tile.SetResourceReference(Border.BorderBrushProperty, "Border.Subtle");
-            Grid.SetColumn(tile, index);
-            row.Children.Add(tile);
+            TextBlock label = WrappedLabel(row.Label, 14);
+            TextBlock key = WrappedLabel(row.Key, 14);
+            key.SetResourceReference(TextBlock.FontFamilyProperty, "Font.Mono");
+            Grid.SetColumn(label, 1); Grid.SetColumn(key, 2);
+            line.Children.Add(mark); line.Children.Add(label); line.Children.Add(key);
+            stack.Children.Add(line);
         }
-        return row;
+        var card = new Border { Child = stack, Padding = new Thickness(14), Margin = new Thickness(0, 0, 0, 16),
+            BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(8) };
+        card.SetResourceReference(Border.BackgroundProperty, "Surface.Raised");
+        card.SetResourceReference(Border.BorderBrushProperty, "Border.Subtle");
+        return card;
     }
 
     private FrameworkElement MakePracticeTable()

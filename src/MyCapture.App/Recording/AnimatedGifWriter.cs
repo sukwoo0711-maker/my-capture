@@ -156,7 +156,7 @@ internal sealed class AnimatedGifWriter : IDisposable
     /// <param name="width">Logical canvas width, from 1 through 65,535 pixels.</param>
     /// <param name="height">Logical canvas height, from 1 through 65,535 pixels.</param>
     /// <param name="frameDelayCentiseconds">
-    /// Delay written to every frame in hundredths of a second, from 0 through 65,535.
+    /// Delay written to every frame in hundredths of a second, from 2 through 65,535.
     /// </param>
     /// <param name="loopCount">
     /// NETSCAPE2.0 repeat count, from 0 through 65,535; zero means repeat indefinitely.
@@ -185,7 +185,7 @@ internal sealed class AnimatedGifWriter : IDisposable
         _frameDelayCentiseconds = ToGifUnsignedShort(
             frameDelayCentiseconds,
             nameof(frameDelayCentiseconds),
-            minimum: 0);
+            minimum: 2);
         _loopCount = ToGifUnsignedShort(loopCount, nameof(loopCount), minimum: 0);
         if (!Enum.IsDefined(differencing))
         {
@@ -243,7 +243,7 @@ internal sealed class AnimatedGifWriter : IDisposable
         ushort delay = ToGifUnsignedShort(
             frameDelayCentiseconds,
             nameof(frameDelayCentiseconds),
-            minimum: 0);
+            minimum: 2);
 
         if (frame.PixelWidth != _width || frame.PixelHeight != _height)
         {
@@ -283,7 +283,7 @@ internal sealed class AnimatedGifWriter : IDisposable
         ushort delay = ToGifUnsignedShort(
             frameDelayCentiseconds,
             nameof(frameDelayCentiseconds),
-            minimum: 0);
+            minimum: 2);
         if (stride < _width * 4 || pixels.Length < checked((stride * (_height - 1)) + (_width * 4)))
         {
             throw new ArgumentException(
@@ -375,7 +375,7 @@ internal sealed class AnimatedGifWriter : IDisposable
         ushort delay = ToGifUnsignedShort(
             frameDelayCentiseconds,
             nameof(frameDelayCentiseconds),
-            minimum: 0);
+            minimum: 2);
         if (update.IsUnchanged)
         {
             if (_pending is null)
@@ -695,7 +695,10 @@ internal sealed class AnimatedGifWriter : IDisposable
             // hold is written as the image followed by a repeat of it.
             try
             {
-                WriteImage(pending, ushort.MaxValue);
+                // Avoid a 1 cs remainder, which browsers display for 100 ms.
+                int written = total - ushort.MaxValue == 1 ? ushort.MaxValue - 1 : ushort.MaxValue;
+                WriteImage(pending, written);
+                total -= written;
                 _imageCount++;
             }
             catch
@@ -704,7 +707,6 @@ internal sealed class AnimatedGifWriter : IDisposable
                 throw;
             }
 
-            total -= ushort.MaxValue;
         }
 
         pending.Delay = total;

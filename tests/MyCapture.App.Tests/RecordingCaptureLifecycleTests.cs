@@ -102,10 +102,10 @@ public sealed class RecordingCaptureLifecycleTests
     });
 
     [Fact]
-    public void EditorExclusionFailure_NeverShowsEditorAndReleasesBusyState() => StaTestHost.Run(() =>
+    public void EditorOpenedDuringRecording_RemainsVisibleAndCapturable() => StaTestHost.Run(() =>
     {
         using var fixture = new SyntheticCaptureFixture();
-        var coordinator = new CaptureOverlayCoordinator(fixture.Engine,
+        using var coordinator = new CaptureOverlayCoordinator(fixture.Engine,
             new WindowCandidateService(NullLogger<WindowCandidateService>.Instance),
             NullLogger<CaptureOverlayCoordinator>.Instance)
         {
@@ -118,13 +118,14 @@ public sealed class RecordingCaptureLifecycleTests
         var frame = new FrozenFrame(fixture.Engine.CaptureRegion(fixture.Region, false), fixture.Region, null, 0);
         coordinator.StartWithSelection(frame, new RectD(0, 0, 50, 50));
         Assert.True(coordinator.LastTransitionForTest.IsCompletedSuccessfully);
-        Assert.True(attempted);
-        Assert.NotNull(failure);
-        Assert.False(coordinator.IsActive);
+        Assert.False(attempted);
+        Assert.Null(failure);
+        Assert.True(coordinator.IsActive);
+        Assert.True(Window.GetWindow(coordinator.CurrentEditor!).IsVisible);
     });
 
     [Fact]
-    public void StopDuringPersistence_StillRequiresEditorExclusionUntilCaptureThreadJoins() => StaTestHost.Run(() =>
+    public void StopDuringPersistence_KeepsEditorCapturableAndControlExclusionUntilCaptureThreadJoins() => StaTestHost.Run(() =>
     {
         using var fixture = new SyntheticCaptureFixture();
         using var written = new ManualResetEventSlim();
@@ -168,8 +169,9 @@ public sealed class RecordingCaptureLifecycleTests
             DateTime deadline = DateTime.UtcNow.AddSeconds(3);
             while (!capture.LastTransitionForTest.IsCompleted && DateTime.UtcNow < deadline) SyntheticCaptureFixture.Pump(10);
             Assert.True(capture.LastTransitionForTest.IsCompletedSuccessfully);
-            Assert.True(exclusionRequested);
-            Assert.False(capture.IsActive);
+            Assert.False(exclusionRequested);
+            Assert.True(capture.IsActive);
+            Assert.True(Window.GetWindow(capture.CurrentEditor!).IsVisible);
         }
         finally
         {

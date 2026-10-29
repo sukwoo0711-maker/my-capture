@@ -9,6 +9,7 @@ using MyCapture.App.Capture;
 using MyCapture.App.Pinning;
 using MyCapture.App.Themes;
 using MyCapture.Core.Localization;
+using MyCapture.Core.Capture;
 using MyCapture.Core.Pin;
 using MyCapture.Core.Primitives;
 using MyCapture.Core.Settings;
@@ -179,7 +180,7 @@ public sealed class PinHoverBarTests
             Assert.Equal("Ctrl+Alt+T", Item("뒤 창 클릭 허용").InputGestureText);
             Assert.Equal("Ctrl+S", Item("빠른 저장").InputGestureText);
             Assert.Contains("닫은 핀 다시 열기", headers);
-            Assert.Equal("드래그: 이동 · 휠: 확대·축소 · 오른쪽 클릭: 메뉴", pin.ToolTip);
+            Assert.Equal("드래그: 이동 · 휠·테두리: 크기 · 오른쪽 클릭: 메뉴", pin.ToolTip);
 
             pin.ApplyClickThrough(true);
             Assert.True(pin.IsFeedbackVisible);
@@ -242,6 +243,45 @@ public sealed class PinHoverBarTests
             PinHoverBar.ApplyCaptureExclusion = exclusion;
             FluidMotion.AnimationsEnabledOverrideForTest = motion;
         }
+    });
+
+    [Theory]
+    [InlineData("ko-KR", false, 336)]
+    [InlineData("ko-KR", true, 382)]
+    [InlineData("en-US", false, 353)]
+    [InlineData("en-US", true, 399)]
+    public void TranslationSharesTheAllNamesOrAllIconsRuleAndWidthBudget(string language, bool source, double budget) => StaTestHost.Run(() =>
+    {
+        using var scope = UiText.UseLanguage(language);
+        var bar = new PinHoverBar(source ? CaptureProvenance.Create(url: "https://example.com") : null);
+        try
+        {
+            bar.SetTranslationAction(true, true, UiText.Get("Pin_Translate"), "Translate on this PC");
+            Assert.Equal(budget, bar.LabeledWidthBudget);
+            var actions = new[] { bar.TranslationButton, bar.CopyButton, bar.SaveButton, bar.OpacityButton };
+            TextBlock Caption(Button button) => Assert.Single(
+                Assert.IsType<StackPanel>(SurfaceShortcutHintTests.PrimaryContent(button)).Children.OfType<TextBlock>());
+            foreach (Button button in actions)
+            {
+                Assert.Equal(Visibility.Visible, Caption(button).Visibility);
+                Assert.Single(Assert.IsType<StackPanel>(SurfaceShortcutHintTests.PrimaryContent(button)).Children.OfType<SymbolIcon>());
+            }
+            double labeled = bar.MeasureLabeledWidth();
+            bar.Compact = bar.NeedsCompact(600, labeled);
+            var surface = Assert.IsType<Border>(bar.Content);
+            surface.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+            Assert.InRange(surface.DesiredSize.Width, 1, budget);
+            Assert.All(actions, button => Assert.Equal(bar.Compact ? Visibility.Collapsed : Visibility.Visible, Caption(button).Visibility));
+            bar.Compact = true;
+            bar.SetTranslationAction(true, true, UiText.Get("Pin_TranslationOriginal"), "View original");
+            Assert.All(actions, button => Assert.Equal(Visibility.Collapsed, Caption(button).Visibility));
+            Assert.Equal(UiText.Get("Pin_TranslationOriginal"), Caption(bar.TranslationButton).Text);
+            Assert.Equal(UiText.Get("Pin_TranslationOriginal"), AutomationProperties.GetName(bar.TranslationButton));
+            Assert.Equal("View original", bar.TranslationButton.ToolTip);
+            bar.Compact = false;
+            Assert.All(actions, button => Assert.Equal(Visibility.Visible, Caption(button).Visibility));
+        }
+        finally { bar.Close(); }
     });
 
     private static IEnumerable<DependencyObject> Descendants(DependencyObject root)

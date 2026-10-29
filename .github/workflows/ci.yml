@@ -20,7 +20,7 @@ jobs:
   build-and-test:
     name: Release build and tests
     runs-on: windows-latest
-    timeout-minutes: 35
+    timeout-minutes: 50
 
     steps:
       - name: Check out source

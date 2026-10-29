@@ -227,6 +227,7 @@ internal sealed partial class AnnotationEditorControl : Grid
 
         var undo = new UndoStack();
         _controller = new AnnotationEditorController(document, undo) { TextFitter = TextAnnotationLayout.Measure };
+        _controller.UserArrowAdded += PracticeSignals.NotifyArrowAdded;
         _controller.BaseWidthAtZeroTurns = selectedBitmap.PixelWidth;
         _controller.BaseHeightAtZeroTurns = selectedBitmap.PixelHeight;
         AnnotationDefaults defaults = AnnotationEditorPreferences.Read?.Invoke() ?? new AnnotationDefaults();
@@ -235,6 +236,7 @@ internal sealed partial class AnnotationEditorControl : Grid
         _controller.StrokeThickness = double.IsFinite(defaults.StrokeThickness)
             ? Math.Clamp(defaults.StrokeThickness, SettingsRanges.StrokeThickness.Min, SettingsRanges.StrokeThickness.Max) : 3;
         _controller.ApplyStrokeStyle(Enum.IsDefined(defaults.StrokeStyle) ? defaults.StrokeStyle : AnnotationStrokeStyle.Solid);
+        _controller.ApplyArrowHeads(defaults.ArrowHeads);
         _controller.ApplyFillTransparency(double.IsFinite(defaults.FillTransparency) ? Math.Clamp(defaults.FillTransparency, 0, 100) : 100);
         _controller.DefaultFontSize = double.IsFinite(defaults.FontSize)
             ? Math.Clamp(defaults.FontSize, SettingsRanges.FontSize.Min, SettingsRanges.FontSize.Max) : 18;
@@ -296,12 +298,14 @@ internal sealed partial class AnnotationEditorControl : Grid
 
         Loaded += (_, _) =>
         {
+            StartSourceFileSizeRead();
             ResetMosaicAfterLoad();
             UpdateResponsiveLayout();
             Focus();
         };
         Unloaded += (_, _) =>
         {
+            UnloadSourceFileSize();
             CancelPendingMosaics();
             _autoTrimCts?.Cancel();
             _redactionCts?.Cancel();
@@ -362,6 +366,18 @@ internal sealed partial class AnnotationEditorControl : Grid
 
     /// <summary>Saves through the normal Done commit, which closes the editor once it succeeds.</summary>
     internal void SaveAndClose() => Commit(EditorCommitAction.Done);
+    internal void PinAndClose()
+    {
+        if (!AllowsPin) return;
+        // WM_HOTKEY can arrive without a WPF synchronization context.
+        SynchronizationContext? previous = SynchronizationContext.Current;
+        try
+        {
+            SynchronizationContext.SetSynchronizationContext(new System.Windows.Threading.DispatcherSynchronizationContext(Dispatcher));
+            Commit(EditorCommitAction.Pin);
+        }
+        finally { SynchronizationContext.SetSynchronizationContext(previous); }
+    }
 
     /// <summary>
     /// Tells the user, as the editor opens after a capture, that the capture has already been
@@ -580,6 +596,11 @@ internal sealed partial class AnnotationEditorControl : Grid
     private void BuildShortcutActions()
     {
         foreach (EditorTool tool in Enum.GetValues<EditorTool>()) _shortcutActions[tool.ToString()] = () => SelectTool(tool);
+        _shortcutActions[nameof(EditorTool.Arrow)] = () =>
+        {
+            SelectTool(EditorTool.Arrow);
+            PracticeSignals.NotifyArrowShortcutFired();
+        };
         _shortcutActions["Done"] = () => Commit(EditorCommitAction.Done);
         _shortcutActions["Stamp"] = PlaceStampFromUser;
         // Owner decision (2026-10-12 real-device feedback, restored 2026-10-25 after 4.6.0 split
@@ -1865,10 +1886,20 @@ internal sealed partial class AnnotationEditorControl : Grid
             () => Commit(EditorCommitAction.Done));
         done.SetResourceReference(FrameworkElement.StyleProperty, "Button.Primary");
         CommandButtonPresentation.KeepLabel(done);
-        CommandButtonPresentation.KeepLabel(save);
+        CommandButtonPresentation.CollapseOrder(save, 8);
         AutomationProperties.SetAutomationId(done, "EditorFlowDone");
         right.Children.Add(save);
         right.Children.Add(done);
+        _pinButton = IconTextButton(UiText.Get("QuickAccess.Pin"), UiText.Get("EditorFlow_PinHint"),
+            "Icon.Pin", () => Geometry.Parse("M10,17.5 L10,12.25 M6.25,12.25 L13.75,12.25 L12.5,8.5 L13,3.75 L7,3.75 L7.5,8.5 Z"),
+            PinAndClose);
+        AutomationProperties.SetAutomationId(_pinButton, "EditorFlowPin");
+        CommandButton(_pinButton, borderless: false);
+        CommandButtonPresentation.CollapseOrder(_pinButton, 7);
+        RefreshPinShortcut();
+        _pinButton.Loaded += (_, _) => RefreshPinShortcut();
+        IsKeyboardFocusWithinChanged += (_, _) => RefreshPinShortcut();
+        right.Children.Add(_pinButton);
 
         foreach (var (button, command, borderless) in new[] { (_undoButton, "Undo", true), (_redoButton, "Redo", true),
             (crop, "Crop", true), (_redactButton, "Privacy", true), (done, "Copy", false) })
@@ -2248,6 +2279,7 @@ internal sealed partial class AnnotationEditorControl : Grid
         _colorSection = DeferredSection("AnnotationColorProperties");
         _thicknessSection = DeferredSection("AnnotationThicknessProperties");
         _shapeStyleSection = DeferredSection("AnnotationShapeProperties");
+        _arrowHeadSection = DeferredSection("AnnotationArrowHeadProperties");
         _fillSection = DeferredSection("AnnotationFillProperties");
         _stepSection = DeferredSection("AnnotationStepProperties");
         _fontFamilySection = DeferredSection("AnnotationFontFamilyProperties");
@@ -2694,9 +2726,11 @@ internal sealed partial class AnnotationEditorControl : Grid
 
     private UIElement BuildStatusBar()
     {
-        var grid = new Grid { MinHeight = _provenance.HasSource || _pendingProvenance is not null ? 26 : 0 };
-        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto, MaxWidth = 332 });
+        var grid = new Grid { Name = "AnnotationStatusBar" };
+        var sourceColumn = new ColumnDefinition { Width = new GridLength(0), MaxWidth = 332 };
+        grid.ColumnDefinitions.Add(sourceColumn);
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
 
         var source = new Border { Visibility = Visibility.Collapsed, Margin = new Thickness(0, 0, 12, 0) };
@@ -2707,6 +2741,7 @@ internal sealed partial class AnnotationEditorControl : Grid
                 ? MyCapture.App.Sources.SourceChip.CreateButton(provenance, message => SetStatus(message))
                 : null;
             source.Visibility = provenance.HasSource ? Visibility.Visible : Visibility.Collapsed;
+            sourceColumn.Width = provenance.HasSource ? new GridLength(1, GridUnitType.Star) : new GridLength(0);
         }
         ShowSource(_provenance);
         if (_pendingProvenance is { } pending) _ = ShowConfirmedSourceAsync(pending);
@@ -2752,6 +2787,15 @@ internal sealed partial class AnnotationEditorControl : Grid
         dimensions.SetResourceReference(TextBlock.ForegroundProperty, "Text.Secondary");
         Grid.SetColumn(dimensions, 2);
         grid.Children.Add(dimensions);
+
+        // These window-wide commands stay in the existing footer through both edit and crop
+        // mode, leaving the 680-DIP editing toolbar and its shortcut labels intact.
+        var commands = new StackPanel { Name = "AnnotationStatusCommands", Orientation = Orientation.Horizontal,
+            VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(6, 0, 0, 0) };
+        commands.Children.Add(MyCapture.App.Capture.CaptureCommandMenu.CreateSplitButton(compact: true));
+        commands.Children.Add(BuildMediaInfoButton(compact: true));
+        Grid.SetColumn(commands, 3);
+        grid.Children.Add(commands);
 
         return ThemedBorder(new Border
         {
@@ -3049,6 +3093,7 @@ internal sealed partial class AnnotationEditorControl : Grid
         {
             LastTool = _preferredTool.ToString(), StrokeColor = _controller.StrokeColor,
             StrokeThickness = _controller.StrokeThickness, StrokeStyle = _controller.StrokeStyle,
+            ArrowHeads = _controller.ArrowHeads,
             FillTransparency = _controller.FillTransparency, FontSize = _controller.DefaultFontSize,
             FontFamily = _controller.DefaultFontFamily, TextColor = previous.TextColor,
             TextBold = _defaultTextBold, TextBackground = _defaultTextBackground, TextOutline = _defaultTextOutline,
@@ -3109,7 +3154,7 @@ internal sealed partial class AnnotationEditorControl : Grid
         _autoTrimCts?.Cancel();
         _imageStore.PruneToReachable(_controller.Document, _controller.Undo);
         SyncBaseBitmapWithDocument();
-        _dimensionsText.Text = UiText.Format("Text_009548FC2109", _canvasWidth, _canvasHeight);
+        RefreshDimensionsText();
         if (_crop is not null)
         {
             // A rotation (or undo) inside crop mode changes the canvas: start the frame over on
@@ -3288,6 +3333,11 @@ internal sealed partial class AnnotationEditorControl : Grid
         bool blurApplies = selected is BlurAnnotation || (selected is null && _controller.Tool == EditorTool.Blur);
 
         bool cropping = _crop is not null;
+        bool arrowApplies = _controller.SelectedItems.Any(item => item is PolylineAnnotation)
+            || (selected is null && _controller.Tool == EditorTool.Arrow);
+        if (arrowApplies && !cropping) EnsureSection(ref _arrowHeadSection, BuildArrowHeadSection);
+        _arrowHeadSection.Visibility = arrowApplies && !cropping ? Visibility.Visible : Visibility.Collapsed;
+        if (arrowApplies && !cropping) RefreshArrowHeads();
         var groups = (cropping, hasSelection, colorApplies, thicknessApplies, shapeApplies, fontSizeApplies,
             text: selected is TextAnnotation { IsStepNumber: false } || (selected is null && _controller.Tool == EditorTool.Text),
             blurApplies, mosaic: _controller.Tool == EditorTool.Mosaic, stepTool);

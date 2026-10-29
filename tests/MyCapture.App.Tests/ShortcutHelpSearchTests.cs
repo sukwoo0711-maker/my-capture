@@ -30,6 +30,7 @@ public sealed class ShortcutHelpSearchTests
         [
             ("Gallery.Float", "P"), ("Shortcuts.LibraryCopy", "Ctrl+C"),
             ("Shortcuts.LibraryOpen", "Enter"), ("Shortcuts.LibraryPreview", "Space"),
+            ("MediaInfo.Title", "Alt+Enter"),
             ("Folder410.Rename", "F2"), ("LibraryUx_KeepToggleName", "K"), ("Folder410.MoveCaptures", "M"),
             ("Shortcuts.LibraryText", "T"), ("Shortcuts.LibraryGif", "G"), ("Folder410.Delete", "Del"),
             ("Shortcuts.ContextMenu", "Menu / Shift+F10"), ("Shortcuts.Undo", "Ctrl+Z"),
@@ -44,9 +45,9 @@ public sealed class ShortcutHelpSearchTests
         view.Search.Text = category;
         help.UpdateLayout();
         Border[] results = view.VisibleResults();
-        Assert.Equal(20, results.Length);
+        Assert.Equal(21, results.Length);
         Border[] libraryResults = results.Where(row => Texts(row)[1].Text == category).ToArray();
-        Assert.Equal(19, libraryResults.Length);
+        Assert.Equal(20, libraryResults.Length);
         Assert.Equal(expected.Select(entry => UiText.Get(entry.Label)), libraryResults.Select(row => Texts(row)[0].Text));
         Border openLibrary = Assert.Single(results, row => Texts(row)[1].Text != category);
         Assert.Equal(UiText.Get("Text_66BA5DCDA810"), Texts(openLibrary)[0].Text);

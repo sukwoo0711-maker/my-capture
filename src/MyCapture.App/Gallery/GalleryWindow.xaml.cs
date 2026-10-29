@@ -55,10 +55,6 @@ internal sealed partial class GalleryWindow : Window
     private readonly ILogger _log;
 
     private bool _allowClose;
-    // Header capture buttons hide the library without closing it, so the shown folder stays
-    // the destination of the capture they start.
-    private bool _hiddenForCapture;
-    private LibraryCaptureStartCoordinator? _captureStart;
     private int _visibilityGeneration;
     private bool _imagePreparationInProgress;
     private Point _dragStart;
@@ -137,9 +133,8 @@ internal sealed partial class GalleryWindow : Window
         {
             _visibilityGeneration++;
             if (!IsVisible) { ResetDragGesture(); _importCancellation?.Cancel(); }
-            else _hiddenForCapture = false;
             _viewModel.SetThumbnailLoadingEnabled(IsVisible);
-            _viewModel.SetLibraryOpen(IsVisible || _hiddenForCapture);
+            _viewModel.SetLibraryOpen(IsVisible);
             if (IsVisible) UpdateMetadataMinimumWidths();
             if (IsVisible && _refreshWhenShown)
             {
@@ -253,7 +248,6 @@ internal sealed partial class GalleryWindow : Window
             CloseInlinePlayer();
             // Closing ends the folder session: new captures return to the date library unless
             // the saved keep-after-close option names a folder, and reopening starts at All.
-            _hiddenForCapture = false;
             ShowScope(CaptureFolderScope.All);
             Hide();
             return;
@@ -921,24 +915,19 @@ internal sealed partial class GalleryWindow : Window
     private async void OnRecordRegionClick(object sender, RoutedEventArgs e) =>
         await StartLibraryCaptureAsync(RecordRegionRequested);
 
-    private async Task StartLibraryCaptureAsync(Action? start)
+    private void OnNewCaptureClick(object sender, RoutedEventArgs e) =>
+        MyCapture.App.Capture.CaptureCommandMenu.Open((FrameworkElement)sender, ReadHotkeys, command =>
+        {
+            if (command == MyCapture.Platform.Shell.GlobalHotkeyCommand.CaptureRegion) CaptureRegionRequested?.Invoke();
+            else if (command == MyCapture.Platform.Shell.GlobalHotkeyCommand.RecordRegion) RecordRegionRequested?.Invoke();
+            else (Application.Current as App)?.ExecuteCaptureCommand(command);
+        });
+
+    private Task StartLibraryCaptureAsync(Action? start)
     {
-        if (start is null) return;
-        _captureStart ??= new LibraryCaptureStartCoordinator(
-            () =>
-            {
-                _hiddenForCapture = true;
-                return MyCapture.App.Capture.CaptureWindowVisibility.HideAndConfirmAsync(this);
-            }, ShowGallery);
-        try
-        {
-            await _captureStart.StartAsync(start);
-        }
-        catch (Exception ex)
-        {
-            _log.LogError(ex, "Could not hide the library before capture");
-            ThemedDialog.Error(this, UiText.Get("Dialog.AppFailure"), ex);
-        }
+        // The library is a capture subject too; only transient capture surfaces leave the frame.
+        start?.Invoke();
+        return Task.CompletedTask;
     }
 
     /// <summary>Copies the capture's rendered image; true once it is on the clipboard.</summary>
@@ -1199,6 +1188,7 @@ internal sealed partial class GalleryWindow : Window
             }
 
             var editor = new GalleryEditorWindow(context, _privacyRedactionService, record, () => _viewModel.FindTile(record.Id)?.RetentionHours() ?? CaptureRetention.DefaultImageRetentionHours) { Owner = this };
+            editor.Editor.SourceFilePath = _queue.GetFilePath(record, CaptureFileNames.Original);
             editor.CommitRequested = result => CommitReeditAsync(record, result, editSession);
             editor.DraftRecordSource = () => (record.Id, editSession.ExpectedContentRevision);
             editor.Committed += (_, _) => OnReeditCommitted(tile.Id);

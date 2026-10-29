@@ -55,6 +55,7 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
     private bool _autoDetectWindows;
     private bool _showMagnifier;
     private bool _showSelectionGrid;
+    private bool _alwaysShowKeyPanel;
     private string _delaySeconds = string.Empty;
     private bool _abortOnFocusLoss;
     private string _regionHistoryLimit = string.Empty;
@@ -128,6 +129,7 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
     private string _lastAnnotationTool = "Rectangle";
     private MyCapture.Core.Annotations.AnnotationStrokeStyle _annotationStrokeStyle;
     private double _annotationFillTransparency = 100;
+    private MyCapture.Core.Annotations.ArrowHeadStyle _annotationArrowHeads;
     private string _strokeThickness = string.Empty;
     private string _fontSize = string.Empty;
     private string _fontFamily = string.Empty;
@@ -176,6 +178,7 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
     public bool ShowMagnifier { get => _showMagnifier; set => Set(ref _showMagnifier, value); }
 
     public bool ShowSelectionGrid { get => _showSelectionGrid; set => Set(ref _showSelectionGrid, value); }
+    public bool AlwaysShowKeyPanel { get => _alwaysShowKeyPanel; set => Set(ref _alwaysShowKeyPanel, value); }
     public bool AbortOnFocusLoss { get => _abortOnFocusLoss; set => Set(ref _abortOnFocusLoss, value); }
 
     /// <summary>Format the capture overlay's colour copy writes. Undefined values fall back to hex.</summary>
@@ -702,6 +705,7 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
         _autoDetectWindows = s.Capture.AutoDetectWindows;
         _showMagnifier = s.Capture.ShowMagnifier;
         _showSelectionGrid = s.Capture.ShowSelectionGrid;
+        _alwaysShowKeyPanel = s.Capture.AlwaysShowKeyPanel;
         _abortOnFocusLoss = s.Capture.AbortOnFocusLoss;
         _delaySeconds = Int(s.Capture.DelaySeconds);
         _regionHistoryLimit = Int(s.Capture.RegionHistoryLimit);
@@ -782,6 +786,7 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
 
         _lastAnnotationTool = s.Annotation.LastTool;
         _annotationStrokeStyle = s.Annotation.StrokeStyle;
+        _annotationArrowHeads = s.Annotation.ArrowHeads;
         _annotationFillTransparency = s.Annotation.FillTransparency;
         _strokeThickness = Dbl(s.Annotation.StrokeThickness);
         _fontSize = Dbl(s.Annotation.FontSize);
@@ -809,6 +814,9 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
         _preservedCoreShortcutsAsked = s.Hotkeys.CoreShortcutsAsked;
         _preservedFirstCaptureTipShown = s.General.FirstCaptureTipShown;
         _preservedFirstPinTipShown = s.General.FirstPinTipShown;
+        _preservedPinSizeTipShown = s.General.PinSizeTipShown;
+        _preservedPracticeRevisionOffered = s.General.PracticeRevisionOffered;
+        _preservedSavedLocationTipCount = s.General.SavedLocationTipCount;
         _preservedRecordingBitrateBitsPerSecond = s.Recording.BitrateBitsPerSecond;
         _preservedRecordingCoarseStepSeconds = s.Recording.CoarseStepSeconds;
 
@@ -826,6 +834,7 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
     {
         AppSettings defaults = NewInstallDefaults.Create();
         defaults.Hotkeys.CoreShortcutsAsked = _preservedCoreShortcutsAsked;
+        defaults.General.PracticeRevisionOffered = _preservedPracticeRevisionOffered;
         ReplaceValues(defaults);
     }
 
@@ -838,7 +847,7 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
         B(_launchAtLogin), B(_notifyOnQuickSave), B(_playCaptureSound), _afterCapture.ToString(), B(_showShortcutHints),
         B(_alwaysShowShortcutHints), B(_autoCheckUpdates),
         _language, _theme, _accentColor, _captureGuideColorMode, IsCustomCaptureGuideColor ? _captureGuideColorHex : string.Empty,
-        B(_includeCursor), B(_autoDetectWindows), B(_showMagnifier), B(_showSelectionGrid), B(_abortOnFocusLoss),
+        B(_includeCursor), B(_autoDetectWindows), B(_showMagnifier), B(_showSelectionGrid), B(_alwaysShowKeyPanel), B(_abortOnFocusLoss),
         _preservedColorFormat.ToString(), _delaySeconds, _regionHistoryLimit,
         _recordingFrameRate, B(_useRecordingStartDelay), _recordingStartDelaySeconds, B(_recordingIncludeCursor),
         B(_recordingCursorHighlight), B(_useRecordingFixedSize), _recordingPresetWidth, _recordingPresetHeight, _recordingCaptureMode,
@@ -847,6 +856,7 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
         _repeatLastRegionHotkey, _captureWindowHotkey, _captureFullScreenHotkey, _recordRegionHotkey,
         _scrollingCaptureHotkey, _delayedCaptureHotkey, _uploadGitHubImageHotkey, _restoreClosedPinHotkey,
         _captureTextHotkey, _pauseRecordingHotkey, B(_forceCoreShortcuts), B(_preservedCoreShortcutsAsked),
+        Int(_preservedPracticeRevisionOffered),
         _maxItems, _maxGiB, _thumbnailLongEdge, _capturesDirectoryOverride, _imageRetentionHours, _folderFilePrefix,
         B(_useCurrentFolderForNewCaptures), _defaultCaptureFolderId?.ToString() ?? string.Empty,
         _gitHubIssueUrl, _gitHubToken,
@@ -905,6 +915,9 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
                 IsFirstRun = _preservedIsFirstRun,
                 FirstCaptureTipShown = _preservedFirstCaptureTipShown,
                 FirstPinTipShown = _preservedFirstPinTipShown,
+                PinSizeTipShown = _preservedPinSizeTipShown,
+                PracticeRevisionOffered = _preservedPracticeRevisionOffered,
+                SavedLocationTipCount = _preservedSavedLocationTipCount,
             },
             Capture =
             {
@@ -912,6 +925,7 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
                 AutoDetectWindows = _autoDetectWindows,
                 ShowMagnifier = _showMagnifier,
                 ShowSelectionGrid = _showSelectionGrid,
+                AlwaysShowKeyPanel = _alwaysShowKeyPanel,
                 AbortOnFocusLoss = _abortOnFocusLoss,
                 ColorFormat = _preservedColorFormat,
                 DelaySeconds = ParseInt(_delaySeconds),
@@ -1004,6 +1018,7 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
             {
                 LastTool = _lastAnnotationTool,
                 StrokeStyle = _annotationStrokeStyle,
+                ArrowHeads = _annotationArrowHeads,
                 FillTransparency = _annotationFillTransparency,
                 StrokeColor = _preservedStrokeColor,
                 StrokeThickness = ParseDouble(_strokeThickness),
@@ -1515,8 +1530,11 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
     private string _language = string.Empty;
     private bool _preservedIsFirstRun;
     private bool _preservedCoreShortcutsAsked;
+    private int _preservedPracticeRevisionOffered;
     private bool _preservedFirstCaptureTipShown;
     private bool _preservedFirstPinTipShown;
+    private bool _preservedPinSizeTipShown;
+    private int _preservedSavedLocationTipCount;
     private int _preservedClickThroughHintShownCount;
     private int _preservedRecordingBitrateBitsPerSecond;
     private double _preservedRecordingCoarseStepSeconds;

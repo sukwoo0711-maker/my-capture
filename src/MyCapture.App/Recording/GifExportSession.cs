@@ -179,6 +179,15 @@ internal sealed class GifFrameCache
         }
     }
 
+    /// <summary>Also used while collecting updates, before an oversized set is retained.</summary>
+    internal bool CanHoldEncoded(long bytes)
+    {
+        lock (_gate)
+        {
+            return !_closed && bytes <= _encodedBudget;
+        }
+    }
+
     /// <summary>Base frames aligned to <paramref name="times"/>, or null unless all are cached.</summary>
     internal GifSourceFrame[]? TryGetDecoded(int width, int height, IReadOnlyList<double> times)
     {

@@ -34,7 +34,12 @@ public sealed class VideoEditorUxLayoutTests
             var bar = Assert.Single(Descendants((DependencyObject)editor.Content).OfType<Grid>(), grid => grid.Name == "VideoEditorCommandBar");
             TextBlock[] texts = Descendants(bar).OfType<TextBlock>().Where(text => text.IsVisible).ToArray();
             Assert.DoesNotContain(texts, text => text.Text == "동영상 편집");
-            Assert.DoesNotContain(texts, text => text.Text == "동영상 0:10.000 · 640×360 · 30fps");
+            TextBlock details = Assert.Single(texts, text => text.Name == "VideoHeaderDetails");
+            Assert.StartsWith("동영상 0:10.000 · 640×360 · 30fps", details.Text);
+            Assert.True(details.ActualHeight > 0);
+            var commands = Assert.Single(Descendants(bar).OfType<MyCapture.App.Editing.CommandGroupsPanel>());
+            Assert.True(details.TranslatePoint(default, bar).Y >= commands.TranslatePoint(default, bar).Y + commands.ActualHeight);
+            Assert.True(details.TranslatePoint(default, bar).Y + details.ActualHeight <= bar.ActualHeight + .5);
         }
         finally
         {
@@ -72,14 +77,22 @@ public sealed class VideoEditorUxLayoutTests
                 return button.TranslatePoint(new Point(), bar).X;
             }
 
-            // Undo/redo, then trim · split · add text · frame image, then export · save at the right.
+            // History stays first; capture is beside export and save in the right-hand group.
             double[] order =
             [
                 X(UiText.Get("Text_CE706412FA75")), X(UiText.Get("Text_078C44D5A66E")),
                 X(UiText.Get("VideoEditorUx_Trim")), X(UiText.Get("VideoEditorUx_AddText")),
+                X(UiText.Get("CaptureEntry.NewCapture")), X(UiText.Get("CaptureEntry.MoreOptions")),
                 X(UiText.Get("MediaExport_ExportFormats")), X(UiText.Get("MediaExport_SaveEdits")),
             ];
             Assert.Equal(order.Order().ToArray(), order);
+            var groups = Assert.Single(Descendants(bar).OfType<MyCapture.App.Editing.CommandGroupsPanel>());
+            var editing = Assert.IsType<StackPanel>(groups.Children[0]);
+            Assert.Same(Field<Button>(editor, "_undoButton"), editing.Children[0]);
+            Assert.Same(Field<Button>(editor, "_redoButton"), editing.Children[1]);
+            var output = Assert.IsType<StackPanel>(groups.Children[1]);
+            Assert.Equal("NewCaptureSplit", Assert.IsType<StackPanel>(output.Children[0]).Name);
+            Assert.Equal("VideoExport", Assert.IsType<Button>(output.Children[1]).Name);
             // Saving into the library finishes the edit, so it carries the emphasis, as Done does.
             Button saveEdits = Assert.Single(Descendants(bar).OfType<Button>(), b => AutomationProperties.GetName(b) == UiText.Get("MediaExport_SaveEdits"));
             Button exportFile = Assert.Single(Descendants(bar).OfType<Button>(), b => AutomationProperties.GetName(b) == UiText.Get("MediaExport_ExportFormats"));
@@ -223,7 +236,7 @@ public sealed class VideoEditorUxLayoutTests
             if (editor.ActualWidth >= 1399)
             {
                 // At the full width the editing tools stay inline; only a clamped window may need More.
-                Assert.Equal(7, wide);
+                Assert.Equal(9, wide);
             }
 
             int narrowest = wide;

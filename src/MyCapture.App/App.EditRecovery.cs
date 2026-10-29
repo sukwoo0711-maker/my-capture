@@ -187,6 +187,8 @@ public partial class App
         var window = new AnnotationEditorWindow(new FrozenFrame(bitmap, region, null, 0), region, original,
             initialDocument: document, initialAssets: assets, sourceWindowTitle: draft.Metadata.GetValueOrDefault("title"),
             provenance: MyCapture.Core.Capture.CaptureProvenance.FromRecord(sourceRecord));
+        window.Editor.SourceFilePath = sourceRecord is not null
+            ? _queue?.GetFilePath(sourceRecord, CaptureFileNames.Original) : null;
         if (draft.Metadata.TryGetValue(AnnotationEditorWindow.DraftFrameStillImageKey, out string? frameStillImage))
             window.FrameStillImage = System.Text.Json.JsonSerializer.Deserialize<VideoFrameStillImage>(frameStillImage);
         window.Editor.RestoreDraftGeometry(bitmap, int.Parse(draft.Metadata.GetValueOrDefault("turns", "0"),

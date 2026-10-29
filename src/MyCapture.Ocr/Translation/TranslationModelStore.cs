@@ -85,13 +85,20 @@ internal sealed class TranslationModelStore
     {
     }
 
+    /// <summary>The store of one translation direction's model.</summary>
+    internal TranslationModelStore(AppPaths paths, ILogger<TranslationModelStore> log, TranslationModelSpec spec)
+        : this(paths, CreateClient(), log, (spec ?? throw new ArgumentNullException(nameof(spec))).Files,
+            folderName: spec.FolderName)
+    {
+    }
+
     /// <summary>
     /// Supplies the transport, the file list, the stall timeout and the free-space probe so tests
     /// can run the store against small synthetic files.
     /// </summary>
     internal TranslationModelStore(AppPaths paths, HttpClient http, ILogger log,
         IReadOnlyList<TranslationModelFile>? files = null, TimeSpan? stallTimeout = null,
-        Func<string, long>? availableFreeSpace = null)
+        Func<string, long>? availableFreeSpace = null, string? folderName = null)
     {
         ArgumentNullException.ThrowIfNull(paths);
         _http = http ?? throw new ArgumentNullException(nameof(http));
@@ -102,7 +109,7 @@ internal sealed class TranslationModelStore
         _availableFreeSpace = availableFreeSpace ?? QueryFreeSpace;
         Files = ValidateFiles(files ?? TranslationModelCatalog.Files);
         TotalBytes = Files.Sum(file => file.Bytes);
-        ModelDirectory = Path.Combine(paths.TranslationModelsRoot, TranslationModelCatalog.FolderName);
+        ModelDirectory = Path.Combine(paths.TranslationModelsRoot, folderName ?? TranslationModelCatalog.FolderName);
     }
 
     internal string ModelDirectory { get; }

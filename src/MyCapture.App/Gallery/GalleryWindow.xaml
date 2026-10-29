@@ -402,6 +402,7 @@
                                      PreviewKeyDown="OnCaptureRenameKeyDown" LostKeyboardFocus="OnCaptureRenameLostFocus" />
                         </Grid>
                         <TextBlock x:Name="TileTime" Grid.Column="2" Text="{Binding TimeCaption}" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,0,2"
+                                   ToolTip="{loc:Text MediaInfo.Title}" ToolTipOpening="OnMediaDetailsToolTipOpening"
                                    FontSize="{DynamicResource FontSize.Caption}" Foreground="{DynamicResource Text.Secondary}" />
                         <Button x:Name="SourceBadge" Grid.Row="1" Style="{StaticResource Gallery.SourceBadge}"
                                 gallery:GallerySourceBadge.Provenance="{Binding SourceProvenance}"
@@ -437,7 +438,7 @@
                             <TextBlock x:Name="TileMetadataText" Grid.Column="1" Text="{Binding MetadataCaption}"
                                        FontSize="{DynamicResource FontSize.Caption}" VerticalAlignment="Center"
                                        Foreground="{DynamicResource Text.Secondary}" TextTrimming="CharacterEllipsis"
-                                       ToolTip="{Binding MetadataCaption}"
+                                       ToolTip="{Binding MetadataCaption}" ToolTipOpening="OnMediaDetailsToolTipOpening"
                                        Visibility="{Binding MetadataCaption, Converter={StaticResource Card.HasText}}" />
                         </Grid>
                         <StackPanel Grid.Row="1" Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
@@ -1315,8 +1316,9 @@
                 <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
                     <!-- Keep labelled capture commands available in every selection state. -->
                     <StackPanel x:Name="CaptureCommands" Orientation="Horizontal">
-                        <Button x:Name="CaptureRegionButton" Style="{StaticResource Button.Primary}" Margin="3,0"
+                        <Button x:Name="CaptureRegionButton" Style="{StaticResource Button.Primary}" Margin="3,0,0,0"
                                 VerticalAlignment="Center"
+                                themes:ButtonSizing.SplitPart="Main"
                                 AutomationProperties.Name="{loc:Text Text_2C20ADDA2018}"
                                 Click="OnCaptureRegionClick">
                             <StackPanel Orientation="Horizontal">
@@ -1324,6 +1326,15 @@
                                       Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" Fill="Transparent" />
                                 <TextBlock Text="{loc:Text Text_2C20ADDA2018}" Margin="{DynamicResource CommandButton.IconLabelGap}" VerticalAlignment="Center" />
                             </StackPanel>
+                        </Button>
+                        <Button x:Name="CaptureOptionsButton" Style="{StaticResource Button.Primary}" Margin="0,0,3,0"
+                                MinWidth="28" Padding="5,0" VerticalAlignment="Center"
+                                themes:ButtonSizing.SplitPart="Options"
+                                ToolTip="{loc:Text CaptureEntry.MoreOptions}"
+                                AutomationProperties.Name="{loc:Text CaptureEntry.MoreOptions}"
+                                Click="OnNewCaptureClick">
+                            <themes:SymbolIcon Size="16" Data="{StaticResource Icon.ChevronDown}"
+                                  Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" Fill="Transparent" />
                         </Button>
                         <Button x:Name="RecordRegionButton" Style="{StaticResource LibraryUx.CommandButton}"
                                 AutomationProperties.Name="{loc:Text Text_4F5AF20FAA6E}"

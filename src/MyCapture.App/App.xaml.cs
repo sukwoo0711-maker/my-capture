@@ -76,6 +76,7 @@ public partial class App : Application
     private GalleryReeditLoader? _reeditLoader;
     private GalleryWindow? _galleryWindow;
     private PinManager? _pins;
+    private MermaidRenderer? _mermaidRenderer;
     private IOcrService? _ocrService;
     private readonly OcrModelPreparation _ocrModelPreparation = new();
     private OcrResultPresenter? _ocrPresenter;
@@ -110,6 +111,11 @@ public partial class App : Application
         {
             return;
         }
+
+#if DEBUG
+        // Explicit preview mode never initializes the resident shell or the user's stores.
+        if (TryStartPinPreview(e.Args)) return;
+#endif
 
         // Diagnostics intentionally run before the ownership gate. Capture hardware
         // can be tested beside a normal resident instance; the shell test will report
@@ -264,6 +270,20 @@ public partial class App : Application
             pinSaveService,
             _services.GetRequiredService<ILogger<PinManager>>());
         _pins.PinCreated += ShowFirstPinTip;
+        // No Markdown warm-up at startup: it kept the document text stack and its fonts resident
+        // (+20 MB idle, +80 MB after a capture in the 4.11.0 gate) for users who never pin Markdown.
+        // The first Markdown pin pays its layout cost instead.
+        _mermaidRenderer = new MermaidRenderer(
+            Path.Combine(_services.GetRequiredService<AppPaths>().DataRoot, "mermaid-browser"), Dispatcher,
+            _services.GetRequiredService<ILogger<MermaidRenderer>>());
+        _pins.ConfigureMermaid(_mermaidRenderer);
+        if (AppArchitecture.SupportsNeuralOcr)
+        {
+            _pins.ConfigureTranslation(_services.GetRequiredService<PinTranslationEngines>().For);
+            // A picture pin reads its text with the app's recognizer when the user asks to translate it.
+            _pins.ConfigureImageTranslation((image, token) => PinTranslationEngines.RecognizeAsync(
+                _ocrService, image, _settings?.Ocr ?? new MyCapture.Core.Settings.OcrSettings(), token));
+        }
         _pins.ClickThroughHintShown += SaveFirstUseTips;
         _pins.BackgroundWorkEnded += ScheduleIdleMemoryReclamation;
         _pins.OpenPinsChanged += () =>
@@ -345,6 +365,7 @@ public partial class App : Application
         ShortcutPresentation.ReadEnabled = () => _settings!.General.AlwaysShowShortcutHints;
         ShortcutRevealMotion.Initialize();
         AnnotationEditorPreferences.ReadShowSourceWindowTitle = () => _settings!.Export.ShowSourceWindowTitle;
+        AnnotationEditorPreferences.ReadPinHotkey = () => _settings!.Hotkeys.PasteToScreen;
         AnnotationEditorPreferences.Write = RememberEditorPreferences;
         AnnotationEditorPreferences.StampFolder = () => Path.Combine(_services!.GetRequiredService<AppPaths>().DataRoot, StampStore.FolderName);
         _tray.CaptureRequested += (_, _) => HandleCaptureRequested();
@@ -369,6 +390,9 @@ public partial class App : Application
         _hotkeys.Pressed += OnGlobalHotkeyPressed;
         _overlay.SelectionPersistRequested = e => _capturePersistenceTask = ObserveMemoryWorkAsync(OnCaptureSelectionCompletedAsync(e));
         _overlay.EditorScreenCaptureRequested = e => _capturePersistenceTask = ObserveMemoryWorkAsync(SaveEditorScreenCaptureAsync(e));
+        _overlay.HasVisiblePreservedWindow = () => CaptureEditorRegistry.HasVisibleEditor
+            || _galleryWindow is { IsVisible: true, WindowState: not WindowState.Minimized };
+        _overlay.EditorSourcePath = () => _currentRecord is { } record ? _queue?.GetFilePath(record, CaptureFileNames.Original) : null;
         _overlay.OpenEditorAfterCapture = () => AfterCaptureBehavior.Resolve(_settings!.General.AfterCapture, _currentRecord is not null) == AfterCaptureAction.Editor;
         _overlay.OriginalNeedsRecovery = () => _currentRecord is null && _pendingRecord is not null;
         _overlay.DraftRecord = () => _currentRecord is { } record && _currentEditSession is { } session
@@ -492,7 +516,7 @@ public partial class App : Application
         {
             // Capture commands say why they wait; the other commands stay quiet until the app is free.
             if (CaptureCommandTitle(e.Command) is { } mode)
-                ReportCaptureBlock(CaptureGuard.Find(ReadCaptureGuardState(), allowRetake: false), mode,
+                ReportCaptureBlock(CaptureGuard.Find(ReadCaptureGuardState(), e.Command), mode,
                     recording: e.Command == GlobalHotkeyCommand.RecordRegion);
             return;
         }
@@ -501,6 +525,7 @@ public partial class App : Application
             recorder.Accept(recorded);
             return;
         }
+        _onboardingWindow?.NotifyHotkeyFired(e.Command);
         switch (e.Command)
         {
             case GlobalHotkeyCommand.ScrollingCapture:
@@ -518,7 +543,7 @@ public partial class App : Application
                 break;
             case GlobalHotkeyCommand.PasteToScreen:
                 _log?.LogInformation("Paste-to-screen hotkey requested");
-                HandlePasteToScreen();
+                HandlePinCommand();
                 break;
             case GlobalHotkeyCommand.HideAllPins:
                 _log?.LogInformation("Hide-all-pins hotkey requested");
@@ -813,7 +838,7 @@ public partial class App : Application
 
         try
         {
-            if (!await PrepareRetakeAsync(UiText.Get("Text_096A13A757DB"), preserveEditor: true)) { CompleteWelcomeCaptureAnnouncement(); return; }
+            if (!await GuardStillCaptureAsync(GlobalHotkeyCommand.CaptureRegion)) { CompleteWelcomeCaptureAnnouncement(); return; }
             SelectorTimeline.Mark?.Invoke("guard-passed");
             _tray?.SetState(TrayIconState.Capturing);
             SelectorTimeline.Mark?.Invoke("tray-state");
@@ -844,7 +869,7 @@ public partial class App : Application
     /// </summary>
     private async void HandleCaptureFullScreen()
     {
-        if (_advancedCapture is null || !await GuardStillCaptureAsync(UiText.Get("Text_254C836B9ED2")))
+        if (_advancedCapture is null || !await GuardStillCaptureAsync(GlobalHotkeyCommand.CaptureFullScreen))
         {
             return;
         }
@@ -859,7 +884,7 @@ public partial class App : Application
     /// </summary>
     private async void HandleCaptureWindow()
     {
-        if (_advancedCapture is null || !await GuardStillCaptureAsync(UiText.Get("Text_36458FABBDBB")))
+        if (_advancedCapture is null || !await GuardStillCaptureAsync(GlobalHotkeyCommand.CaptureWindow))
         {
             return;
         }
@@ -874,7 +899,7 @@ public partial class App : Application
     /// </summary>
     private async void HandleRepeatLastRegion()
     {
-        if (_advancedCapture is null || !await GuardStillCaptureAsync(UiText.Get("Text_92E815063265")))
+        if (_advancedCapture is null || !await GuardStillCaptureAsync(GlobalHotkeyCommand.RepeatLastRegion))
         {
             return;
         }
@@ -897,7 +922,7 @@ public partial class App : Application
     /// <param name="delaySeconds">The selector's ⋯ menu picks 3, 5 or 10; otherwise the setting applies.</param>
     private async void HandleDelayedCapture(int? delaySeconds = null)
     {
-        if (_settings is null || !await GuardStillCaptureAsync(UiText.Get("Text_38476EDDA50B")))
+        if (_settings is null || !await GuardStillCaptureAsync(GlobalHotkeyCommand.DelayedCapture))
         {
             return;
         }
@@ -999,7 +1024,7 @@ public partial class App : Application
             return;
         }
 
-        if (!await GuardStillCaptureAsync(UiText.Get("Text_4B4D91FFC215")))
+        if (!await GuardStillCaptureAsync(GlobalHotkeyCommand.ScrollingCapture))
         {
             return;
         }
@@ -1194,7 +1219,7 @@ public partial class App : Application
         // copied: the shutter answers the gesture itself, the capture lifts off the screen, and its
         // quick access card shows on the next turn and receives it (card first, ShowQuickAccessFirst).
         if (_settings?.General.PlayCaptureSound == true) CaptureShutterSound.Play();
-        LiftCaptureForQuickAccess(e);
+        if (!e.PinRequested) LiftCaptureForQuickAccess(e);
         _log?.LogInformation(
             "Capture selection ready for editor: {Width}x{Height}",
             e.SelectedBitmap.PixelWidth,
@@ -1205,24 +1230,10 @@ public partial class App : Application
         // an otherwise successfully captured image from the library.
         // Page and application details still being read never hold back the save: they are added
         // to this same capture once read (BackfillSourceAsync).
-        Task<CaptureSelectionSource>? lateSource = e.PendingSource;
-        CaptureSelectionSource source = lateSource is { IsCompletedSuccessfully: true } read
-            ? read.Result
-            : new CaptureSelectionSource(e.SourceTitle, e.SourcePageUrl, e.SourceDetails);
-        if (lateSource?.IsCompleted == true) lateSource = null;
-        _pendingRecord = CapturePersistenceService.CreatePendingRecord(e.SelectedBitmap,
-            e.Frame.DpiScale, e.SourceTitle, e.Frame.Monitor?.DeviceName ?? string.Empty,
-            initialRenderShowsSourceWindowTitle: _settings?.Export.ShowSourceWindowTitle == true,
-            sourcePageUrl: source.PageUrl, sourceDetails: source.Details);
-        if (_pendingRecord.SourcePageUrl.Length > 0)
-            _pendingRecord.Tags = UiText.Get("Capture.WebpageTag");
-        Task<bool>? automaticClipboardCopy = _commit is not null
-            ? _commit.CopyCapturedRegionAsync(e.SelectedBitmap, e.SourceTitle,
-                _pendingRecord.InitialRenderShowsSourceWindowTitle, _pendingRecord.SourcePageUrl,
-                Core.Capture.CaptureProvenance.FromRecord(_pendingRecord), CaptureSelectionProvenance.Pending(e))
-            : null;
-        // The card shows on the turn after the lift, while the save and copy run (card first).
-        QuickAccessFirst? first = automaticClipboardCopy is not null ? ShowQuickAccessFirst(e, automaticClipboardCopy) : null;
+        CaptureDelivery delivery = BeginCaptureDelivery(e);
+        _pendingRecord = delivery.Pending;
+        Task<CaptureSelectionSource>? lateSource = delivery.LateSource;
+        QuickAccessFirst? first = delivery.First;
         try
         {
             if (_persistence is null || _commit is null)
@@ -1240,12 +1251,7 @@ public partial class App : Application
             _currentEditSession?.Dispose();
             _currentRecord = null;
             _currentEditSession = null;
-            _log?.LogError(ex, "Could not persist the captured original");
-            string title = UiText.Get("Text_4033027EAEDB");
-            string message = LibrarySaveFailureMessage(_settings?.General.AfterCapture ?? AfterCaptureAction.Editor, ex);
-            // A card already on screen says why itself; only without one does the notification.
-            if (first is null || !ShowQuickAccessFirstFailure(first, title, message))
-                ShowCaptureNotice(title, message, TrayBalloonKind.Error);
+            ReportCaptureSaveFailure(first, ex);
         }
 
         // A card shown first takes the saved capture now, while the copy may still run.
@@ -1254,98 +1260,36 @@ public partial class App : Application
         if (lateSource is not null)
             _sourceBackfillTask = BackfillLateSourceAsync(_pendingRecord, published: _currentRecord is not null, lateSource);
 
-        try
-        {
-            // Repeat history is intentionally limited to explicit manual region selections.
-            // Advanced full/window/scroll captures carry RecordForRepeat=false because their
-            // synthetic frame coordinates are not a reusable screen rectangle.
-            if (e.RecordForRepeat && _lastRegions is not null)
-            {
-                var screenRegion = new Core.Primitives.RectD(
-                    e.Frame.ScreenBounds.Left + e.BitmapRegion.Left,
-                    e.Frame.ScreenBounds.Top + e.BitmapRegion.Top,
-                    e.BitmapRegion.Width,
-                    e.BitmapRegion.Height)
-                    .ToPixelBounds();
-                MonitorInfo? monitor = e.Frame.Monitor
-                    ?? MonitorEnumerator.GetAll().FirstOrDefault(candidate =>
-                        screenRegion.Left >= candidate.Bounds.Left
-                        && screenRegion.Top >= candidate.Bounds.Top
-                        && screenRegion.Right <= candidate.Bounds.Right
-                        && screenRegion.Bottom <= candidate.Bounds.Bottom);
-                _lastRegions.Record(monitor is null
-                    ? RegionHistoryEntry.Legacy(screenRegion)
-                    : new RegionHistoryEntry(
-                        screenRegion,
-                        monitor.DeviceName,
-                        monitor.Bounds,
-                        monitor.Dpi));
-            }
+        RecordManualCaptureRegion(e);
+        try { _tray?.SetCaptureCount(_queue?.Count ?? 0); }
+        catch (Exception ex) { _log?.LogWarning(ex, "Could not update tray count"); }
 
-            _tray?.SetCaptureCount(_queue?.Count ?? 0);
-        }
-        catch (Exception ex)
-        {
-            // Optional repeat history or shell feedback must not invalidate a durable image.
-            _log?.LogWarning(ex, "Could not update capture history or tray count");
-        }
-
-        // Every capture starts one clipboard operation alongside persistence and
-        // joins that same operation before presenting the result.
-        bool copiedToClipboard = false;
-        if (_commit is not null)
-        {
-            bool copied = false;
-            try
-            {
-                copied = await (automaticClipboardCopy ?? _commit.CopyCapturedRegionAsync(e.SelectedBitmap,
-                    e.SourceTitle, _pendingRecord.InitialRenderShowsSourceWindowTitle, _pendingRecord.SourcePageUrl,
-                    Core.Capture.CaptureProvenance.FromRecord(_pendingRecord), CaptureSelectionProvenance.Pending(e)));
-                ReceiptTimeline.Mark?.Invoke("copy-resumed");
-            }
-            catch (Exception ex)
-            {
-                // The shared clipboard service normally converts OLE/encoding failures to a
-                // false result. Keep this final boundary so an unexpected integration failure
-                // still cannot unwind the already durable capture or suppress the editor.
-                _log?.LogWarning(ex, "Automatic region-capture clipboard copy failed unexpectedly");
-            }
-
-            copiedToClipboard = copied;
-            if (first is not null) ReportCopyToQuickAccessFirst(first, copied);
-            // A card that showed this failure offers the retry itself (C), as long as its capture
-            // was saved; otherwise the notification names where to retry.
-            if (!copied && first is not { CopyFailureShown: true, SaveFailed: false })
-            {
-                string message = _currentRecord is null
-                    ? UiText.Get("Text_4048C8E18C61")
-                    : UiText.Get("Text_9E0860CEAEC2");
-                try
-                {
-                    ShowCaptureNotice(
-                        UiText.Get("Text_422F61DDCB7C"),
-                        message,
-                        TrayBalloonKind.Warning,
-                        playSound: false);
-                }
-                catch (Exception ex)
-                {
-                    // A shell-notification failure must not suppress the editor after the
-                    // durable capture and clipboard attempt have already completed.
-                    _log?.LogWarning(ex, "Could not show automatic clipboard failure notification");
-                }
-            }
-
-            // Capturing opens the editor and copies the result, but does not also
-            // create a persistent floating window. F3 remains the explicit paste-to-screen
-            // action when the user actually wants a pin.
-        }
+        // The normal path keeps its 4.10.0 notice; only a capture over a preserved window
+        // (whose editor belongs to an older image) points to capturing again.
+        bool copiedToClipboard = await CompleteCaptureCopyAsync(delivery, _currentRecord, opensCaptureEditor: true);
         // Region, window, full-screen and scrolling captures all complete here. Only a durable,
         // copied result counts toward the Store rating request; a save or copy failure resets it.
         _storeRating?.RecordCapture(succeeded: _currentRecord is not null && copiedToClipboard);
         if (_services is null || _currentRecord is null) CancelCaptureFlight(e.SelectedBitmap);
         // Without a card shown first (another mode, a text capture), the receipt shows once saved and copied.
-        if (_services is not null && _currentRecord is { } receipt && !receiptTaken)
+        if (e.PinRequested && _currentRecord is { } pinRecord && _commit is not null)
+        {
+            try
+            {
+                var image = await _commit.RenderCapturedImageAsync(e.SelectedBitmap, e.SourceTitle,
+                    pinRecord.InitialRenderShowsSourceWindowTitle);
+                var region = new Core.Primitives.RectD(e.Frame.ScreenBounds.Left + e.BitmapRegion.Left,
+                    e.Frame.ScreenBounds.Top + e.BitmapRegion.Top, e.BitmapRegion.Width, e.BitmapRegion.Height);
+                (_pins ?? throw new InvalidOperationException("Pinning is unavailable.")).PinImageAtRegion(
+                    image, Core.Capture.CaptureProvenance.FromRecord(pinRecord), region);
+            }
+            catch (Exception ex) when (ex is not OutOfMemoryException)
+            {
+                _log?.LogWarning(ex, "Could not pin the selected capture");
+                NotifyPinFailed();
+            }
+        }
+        if (!e.PinRequested && _services is not null && _currentRecord is { } receipt && !receiptTaken)
         {
             _latestReceipt = receipt.Id;
             var selected = e.SelectedBitmap;
@@ -1463,11 +1407,12 @@ public partial class App : Application
     }
 
     private void ShowQuickAccess(CaptureRecord record, System.Windows.Media.Imaging.BitmapSource image,
-        Core.Primitives.RectD region, MonitorInfo monitor, bool copiedToClipboard)
+        Core.Primitives.RectD region, MonitorInfo monitor, bool copiedToClipboard, bool preserveEditor = false)
     {
         if (_latestReceipt != record.Id) return;
         if (_preparingAdvancedCapture || _overlay?.IsSelecting == true) return;
-        if (_queue is null || _commit is null || _services is null || _settings?.General.AfterCapture != AfterCaptureAction.QuickAccess) return;
+        if (_queue is null || _commit is null || _services is null || _settings is null
+            || (!preserveEditor && _settings.General.AfterCapture != AfterCaptureAction.QuickAccess)) return;
         // The newer card replaces the older one at once, without its exit.
         _quickAccess?.CloseNow();
         CaptureFlight? flight = _captureFlight is { } lifted && ReferenceEquals(lifted.Image, image) ? lifted : null;
@@ -1482,7 +1427,14 @@ public partial class App : Application
                 firstCaptureTip: _settings.General.FirstCaptureTipShown ? null : UiText.Get("Onboard_FirstCaptureTip"),
                 keyboardRouter: _receiptKeyboard);
             ReceiptTimeline.Mark?.Invoke("card-constructed");
-            card.Closed += (_, _) => { _overlay?.NoteForegroundDismissal(card.IsCaptureExcluded); lease.Dispose(); if (ReferenceEquals(_quickAccess, card)) _quickAccess = null; _storeRating?.NotifyFlowEnded(); };
+            card.Closed += (_, _) =>
+            {
+                _overlay?.NoteForegroundDismissal(card.IsCaptureExcluded);
+                lease.Dispose();
+                if (ReferenceEquals(_quickAccess, card)) _quickAccess = null;
+                ShowSavedLocationAfterCard(card, record);
+                _storeRating?.NotifyFlowEnded();
+            };
             _quickAccess = card;
             // The lifted capture flies into this card; without one the card uses its usual entrance.
             flight?.Land(card);
@@ -1651,14 +1603,15 @@ public partial class App : Application
         string mode = UiText.Get("Text_4F5AF20FAA6E");
         if (_storeInstallationPending || _preparingExit)
         {
-            ReportCaptureBlock(CaptureGuard.Find(ReadCaptureGuardState(), allowRetake: false), mode, recording: true);
+            ReportCaptureBlock(CaptureGuard.Find(ReadCaptureGuardState(), GlobalHotkeyCommand.RecordRegion), mode, recording: true);
             return;
         }
 
-        if (!_recorder.IsActive) await WaitForEditorFinishedAsync();
+        if (!_recorder.HasRecordingSession) await WaitForEditorFinishedAsync();
+        DismissQuickAccessForCapture();
         _shellPresenter?.DismissForCapture();
         // A running recording stops or reports its own state; a new one waits for a still capture in progress.
-        if (!_recorder.IsActive && CaptureGuard.Find(ReadCaptureGuardState(), allowRetake: false) is var block and not CaptureBlock.None)
+        if (!_recorder.HasRecordingSession && CaptureGuard.Find(ReadCaptureGuardState(), GlobalHotkeyCommand.RecordRegion) is var block and not CaptureBlock.None)
         {
             ReportCaptureBlock(block, mode, recording: true);
             return;
@@ -1807,9 +1760,16 @@ public partial class App : Application
             () => _settings!,
             () => paths,
             _services.GetRequiredService<ILogger<CaptureCommitService>>());
+        _commit.PinImage = (image, provenance) =>
+        {
+            var pin = (_pins ?? throw new InvalidOperationException("Pinning is unavailable.")).PinImage(image, provenance);
+            _onboardingWindow?.NotifyEditorPinCreated(pin.PracticeId);
+        };
+        _commit.PinFailed = NotifyPinFailed;
         _commit.PersistExportSettings = () => _services.GetRequiredService<SettingsStore>().SaveInBackground(
             _settings!.DeepClone(), "Could not persist image export preferences");
         _commit.QuickSaved += path => _ = Dispatcher.BeginInvoke(new Action(() => AnnounceQuickSave(path)));
+        SubscribeSavedLocationReceipt(_commit);
         _videoLibrary = new MyCapture.App.Recording.VideoLibraryService(
             queue,
             paths,
@@ -1952,7 +1912,10 @@ public partial class App : Application
         _log?.LogInformation("Gallery activation requested");
 
         GalleryWindow? window = EnsureGalleryWindow();
-        window?.ShowGallery();
+        if (_onboardingWindow?.CurrentStep == WelcomeStep.Library && _onboardingCaptureId is { } id)
+            window?.OpenCapture(id, edit: false);
+        else window?.ShowGallery();
+        if (window?.IsVisible == true) _onboardingWindow?.NotifyLibraryOpened();
     }
 
     /// <summary>
@@ -2537,13 +2500,26 @@ public partial class App : Application
             serviceProvider.GetRequiredService<OcrModelStore>(),
             serviceProvider.GetRequiredService<ILogger<NeuralOcrEngine>>()));
         services.AddSingleton<WindowsOcrService>();
-        // Translation stays off until the user turns it on in the OCR window; nothing downloads before.
+        // OCR and text pins share the local translator; model downloads require an explicit install action.
         services.AddSingleton(serviceProvider => new TranslationModelStore(
             serviceProvider.GetRequiredService<AppPaths>(),
             serviceProvider.GetRequiredService<ILogger<TranslationModelStore>>()));
         services.AddSingleton(serviceProvider => new TextTranslationService(
             serviceProvider.GetRequiredService<TranslationModelStore>(),
             serviceProvider.GetRequiredService<ILogger<TextTranslationService>>()));
+        services.AddSingleton(serviceProvider =>
+        {
+            // The Korean-to-English model is offered once its files are published in the catalog.
+            TextTranslationService? koreanToEnglish = null;
+            if (TranslationModelCatalog.KoreanToEnglish.IsPublished)
+            {
+                var store = new TranslationModelStore(serviceProvider.GetRequiredService<AppPaths>(),
+                    serviceProvider.GetRequiredService<ILogger<TranslationModelStore>>(), TranslationModelCatalog.KoreanToEnglish);
+                koreanToEnglish = new TextTranslationService(store,
+                    serviceProvider.GetRequiredService<ILogger<TextTranslationService>>(), TranslationModelCatalog.KoreanToEnglish.ModelFiles);
+            }
+            return new PinTranslationEngines(serviceProvider.GetRequiredService<TextTranslationService>(), koreanToEnglish);
+        });
         services.AddSingleton<IOcrService>(serviceProvider => new CaptureOcrService(
             serviceProvider.GetRequiredService<WindowsOcrService>(),
             serviceProvider.GetRequiredService<NeuralOcrEngine>(),
@@ -2634,6 +2610,9 @@ public partial class App : Application
         _launchStatus?.Complete();
         _residentReady?.Dispose();
         _residentReady = null;
+#if DEBUG
+        _pinPreview?.Dispose();
+#endif
         _updateTimer?.Stop();
         _updates?.Dispose();
         // Stop a model download in progress; completed, verified model files stay.
@@ -2648,6 +2627,7 @@ public partial class App : Application
         AnnotationEditorPreferences.Read = null;
         ShortcutPresentation.ReadEnabled = null;
         AnnotationEditorPreferences.ReadShowSourceWindowTitle = null;
+        AnnotationEditorPreferences.ReadPinHotkey = null;
         AnnotationEditorPreferences.Write = null;
         AnnotationEditorPreferences.StampFolder = null;
         TextRecognitionRoute.Show = null;
@@ -2689,6 +2669,7 @@ public partial class App : Application
         try
         {
             _pins?.CloseAllForExit();
+            _mermaidRenderer?.Dispose();
         }
         catch (InvalidOperationException)
         {

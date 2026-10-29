@@ -6,7 +6,7 @@ using Xunit;
 namespace MyCapture.Core.Tests;
 
 /// <summary>
-/// Keeps the 4.10.0 stable version and its Windows binary version aligned across MSBuild, packaging
+/// Keeps the 4.11.0 stable version and its Windows binary version aligned across MSBuild, packaging
 /// and installer validation.
 /// </summary>
 public sealed class ReleaseVersionContractTests
@@ -39,14 +39,14 @@ public sealed class ReleaseVersionContractTests
         XDocument props = XDocument.Parse(Read("Directory.Build.props"));
         XDocument manifest = XDocument.Parse(Read("src/MyCapture.App/app.manifest"));
 
-        Assert.Equal("4.10.0", Assert.Single(props.Descendants("Version")).Value);
-        Assert.Equal("4.10.0.0", Assert.Single(props.Descendants("FileVersion")).Value);
-        Assert.Equal("4.10.0.0", Assert.Single(props.Descendants("AssemblyVersion")).Value);
+        Assert.Equal("4.11.0", Assert.Single(props.Descendants("Version")).Value);
+        Assert.Equal("4.11.0.0", Assert.Single(props.Descendants("FileVersion")).Value);
+        Assert.Equal("4.11.0.0", Assert.Single(props.Descendants("AssemblyVersion")).Value);
 
         XElement identity = Assert.Single(
             manifest.Descendants(),
             element => element.Name.LocalName == "assemblyIdentity");
-        Assert.Equal("4.10.0.0", identity.Attribute("version")?.Value);
+        Assert.Equal("4.11.0.0", identity.Attribute("version")?.Value);
     }
 
     [Fact]
@@ -58,8 +58,8 @@ public sealed class ReleaseVersionContractTests
 
         // The shipping default is the GA version. A release candidate must never be the default
         // again, otherwise an operator who forgets -Version publishes a prerelease by accident.
-        Assert.Contains("[string]$Version = '4.10.0'", package, StringComparison.Ordinal);
-        Assert.Contains("[string]$Version = '4.10.0',", hostile, StringComparison.Ordinal);
+        Assert.Contains("[string]$Version = '4.11.0'", package, StringComparison.Ordinal);
+        Assert.Contains("[string]$Version = '4.11.0',", hostile, StringComparison.Ordinal);
         Assert.DoesNotContain("$Version = '1.7.0-rc.1'", package, StringComparison.Ordinal);
         Assert.DoesNotContain("$Version = '1.7.0-rc.1'", hostile, StringComparison.Ordinal);
 
@@ -374,7 +374,7 @@ public sealed class ReleaseVersionContractTests
         Assert.DoesNotContain("pull_request_target", workflow, StringComparison.Ordinal);
         Assert.DoesNotContain(": write", workflow, StringComparison.Ordinal);
         Assert.Contains("permissions:\n  contents: read", workflow.Replace("\r\n", "\n", StringComparison.Ordinal), StringComparison.Ordinal);
-        Assert.Contains("timeout-minutes: 35", workflow, StringComparison.Ordinal);
+        Assert.Contains("timeout-minutes: 50", workflow, StringComparison.Ordinal);
         Assert.Contains("persist-credentials: false", workflow, StringComparison.Ordinal);
 
         Assert.Contains("package-ecosystem: nuget", dependabot, StringComparison.Ordinal);

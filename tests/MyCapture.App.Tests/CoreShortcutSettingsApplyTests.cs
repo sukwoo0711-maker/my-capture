@@ -11,6 +11,68 @@ namespace MyCapture.App.Tests;
 /// <summary>The one-time answer survives settings apply and failed shortcut registration.</summary>
 public sealed class CoreShortcutSettingsApplyTests
 {
+    [Theory]
+    [InlineData("accept", false)]
+    [InlineData("decline", false)]
+    [InlineData("close", false)]
+    [InlineData("accept", true)]
+    [InlineData("decline", true)]
+    [InlineData("close", true)]
+    public void PracticeConsentUsesTheTransactionalAnswerPath(string action, bool failSave) => StaTestHost.Run(() =>
+    {
+        string root = OwnedTestDirectory.Create("practice-consent-");
+        WelcomeWindow? guide = null;
+        try
+        {
+            AppPaths paths = AppPaths.CreateForRoot(root);
+            paths.EnsureCreated();
+            if (failSave) Directory.CreateDirectory(paths.SettingsFile);
+            var store = new SettingsStore(paths, NullLogger<SettingsStore>.Instance);
+            AppSettings live = NewInstallDefaults.Create();
+            AppSettings before = live;
+            using var native = new NativeMessageWindow();
+            using var hotkeys = new GlobalHotkeyService(native, new Registrar(false),
+                NullLogger<GlobalHotkeyService>.Instance, new UnavailableOverride());
+            hotkeys.Initialize(live.Hotkeys);
+            var startup = new UnavailableStartupRegistration();
+            var apply = new SettingsApplyService(store, () => live, next => live = next,
+                null, hotkeys, startup, NullLogger.Instance);
+            guide = OnboardingGuideTests.Create(new OnboardingGuideTests.FakeClipboard(),
+                new WelcomeOptions { ShowCoreShortcutsConsent = true });
+            SettingsApplyResult? result = null;
+            int answers = 0;
+            guide.CoreShortcutsAnswered += accepted =>
+            {
+                answers++;
+                result = App.ApplyPracticeShortcutAnswer(live, apply, accepted, firstRun: true);
+                guide.UpdateHotkeys(live.Hotkeys);
+            };
+            if (action == "close") guide.Close();
+            else (action == "accept" ? guide.TryNowButton : guide.SkipButton)
+                .RaiseEvent(new System.Windows.RoutedEventArgs(System.Windows.Controls.Button.ClickEvent));
+            Assert.NotNull(result);
+            Assert.Equal(!failSave, result.Saved);
+            Assert.Equal(0, startup.AccessCount);
+            Assert.Equal(failSave ? before.Hotkeys.ForceCoreShortcuts : action == "accept", live.Hotkeys.ForceCoreShortcuts);
+            Assert.Equal(!failSave, live.Hotkeys.CoreShortcutsAsked);
+            if (failSave)
+            {
+                Assert.Same(before, live);
+                Assert.NotEmpty(result.Messages);
+                Assert.Null(hotkeys.GetAssigned(GlobalHotkeyCommand.OpenLibrary));
+            }
+            else
+            {
+                Assert.True(store.Load().Hotkeys.CoreShortcutsAsked);
+                Assert.Equal(action == "accept" ? CoreShortcuts.OpenLibrary : before.Hotkeys.OpenLibrary, live.Hotkeys.OpenLibrary);
+            }
+            if (action != "close") Assert.Equal(WelcomeStep.Capture, guide.CurrentStep);
+            guide.Close();
+            Assert.Equal(1, answers);
+        }
+        finally { guide?.Close(); OwnedTestDirectory.Delete(root); }
+    });
+
     [Fact]
     public void HotkeyClone_CopiesBothCoreShortcutFlags()
     {

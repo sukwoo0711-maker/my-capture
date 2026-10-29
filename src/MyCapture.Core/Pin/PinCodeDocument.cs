@@ -1,6 +1,6 @@
 namespace MyCapture.Core.Pin;
 
-public enum PinTextStyle { PlainText, Grid, Code }
+public enum PinTextStyle { PlainText, Grid, Code, Markdown }
 
 public sealed record PinCodeRun(int Start, int Length, string Color);
 

@@ -44,30 +44,32 @@ public sealed class CoreShortcutPromptTests
     }
 
     [Theory]
-    [InlineData("ko-KR", "덮어쓰기", "그대로 두기")]
-    [InlineData("en-US", "Overwrite", "Keep current")]
+    [InlineData("ko-KR", "연습 시작", "지금 단축키로 연습")]
+    [InlineData("en-US", "Start practice", "Practise with current keys")]
     public void QuestionUsesLocalizedLabelsAndOverwriteIsDefault(string language, string overwrite, string keep) => StaTestHost.Run(() =>
     {
         using var locale = UiText.UseLanguage(language);
-        ThemedDialog dialog = App.CreateCoreShortcutsQuestion();
+        WelcomeWindow dialog = CreateConsent();
+        bool? answer = null;
+        dialog.CoreShortcutsAnswered += accepted => answer = accepted;
         try
         {
-            var scroll = Assert.IsType<ScrollViewer>(dialog.Content);
-            var panel = Assert.IsType<StackPanel>(scroll.Content);
-            Button[] buttons = panel.Children.OfType<WrapPanel>().Single().Children.OfType<Button>().ToArray();
+            Button[] buttons = [dialog.TryNowButton, dialog.SkipButton];
             Assert.Equal(new[] { overwrite, keep }, buttons.Select(button => (string)button.Content));
             Assert.True(buttons[0].IsDefault);
             Assert.False(buttons[0].IsCancel);
-            Assert.True(buttons[1].IsCancel);
+            Assert.False(buttons[1].IsCancel);
             Assert.False(buttons[1].IsDefault);
-            Assert.Equal(MessageBoxResult.Cancel, dialog.Result);
+            Assert.Null(answer);
+            Assert.Equal(WelcomeStep.Consent, dialog.CurrentStep);
             Assert.Contains("Ctrl+Shift+C", UiText.Get("CoreShortcuts.Body"), StringComparison.Ordinal);
             Assert.Contains("Ctrl+Shift+X", UiText.Get("CoreShortcuts.Body"), StringComparison.Ordinal);
             Assert.Contains("Ctrl+Shift+Z", UiText.Get("CoreShortcuts.Body"), StringComparison.Ordinal);
             Assert.Contains("F3", UiText.Get("CoreShortcuts.Body"), StringComparison.Ordinal);
             Assert.Contains(UiText.Get("SettingsUx_TabShortcuts"), UiText.Get("CoreShortcuts.Body"), StringComparison.Ordinal);
             buttons[0].RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
-            Assert.Equal(MessageBoxResult.OK, dialog.Result);
+            Assert.True(answer);
+            Assert.Equal(WelcomeStep.Capture, dialog.CurrentStep);
         }
         finally { dialog.Close(); }
     });
@@ -75,11 +77,9 @@ public sealed class CoreShortcutPromptTests
     [Fact]
     public void OwnerlessQuestionOpensCentredOnTheScreen() => StaTestHost.Run(() =>
     {
-        ThemedDialog dialog = App.CreateCoreShortcutsQuestion();
+        WelcomeWindow dialog = CreateConsent();
         try
         {
-            Assert.Equal(WindowStartupLocation.CenterOwner, dialog.WindowStartupLocation);
-            ThemedDialog.PlaceOwnerless(dialog, MessageBoxImage.None);
             Assert.Equal(WindowStartupLocation.CenterScreen, dialog.WindowStartupLocation);
             Assert.Null(dialog.Owner);
             Assert.True(dialog.ShowInTaskbar);
@@ -90,10 +90,29 @@ public sealed class CoreShortcutPromptTests
     [Fact]
     public void ClosingQuestionWithoutChoosingKeepsTheCancelResult() => StaTestHost.Run(() =>
     {
-        ThemedDialog dialog = App.CreateCoreShortcutsQuestion();
+        WelcomeWindow dialog = CreateConsent();
+        var answers = new List<bool>();
+        dialog.CoreShortcutsAnswered += answers.Add;
         dialog.Close();
-        Assert.Equal(MessageBoxResult.Cancel, dialog.Result);
+        Assert.False(Assert.Single(answers));
+        Assert.Equal(WelcomeOutcome.Closed, dialog.Outcome);
     });
+
+    [Fact]
+    public void KeepCurrentContinuesPracticeAndClosingDoesNotAnswerTwice() => StaTestHost.Run(() =>
+    {
+        WelcomeWindow dialog = CreateConsent();
+        var answers = new List<bool>();
+        dialog.CoreShortcutsAnswered += answers.Add;
+        dialog.SkipButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        Assert.False(Assert.Single(answers));
+        Assert.Equal(WelcomeStep.Capture, dialog.CurrentStep);
+        dialog.Close();
+        Assert.Single(answers);
+    });
+
+    private static WelcomeWindow CreateConsent() => OnboardingGuideTests.Create(new OnboardingGuideTests.FakeClipboard(),
+        new WelcomeOptions { ShowCoreShortcutsConsent = true });
 
     [Fact]
     public void OrdinaryDialogKeepsItsExistingCancelLabel() => StaTestHost.Run(() =>

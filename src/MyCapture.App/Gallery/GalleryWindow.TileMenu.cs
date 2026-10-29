@@ -1,6 +1,8 @@
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
+using System.Windows.Automation;
+using System.Windows.Data;
 
 namespace MyCapture.App.Gallery;
 
@@ -19,6 +21,15 @@ internal sealed partial class GalleryWindow
         {
             if (_tileMenu is not null) return _tileMenu;
             _tileMenu = (ContextMenu)FindResource("Gallery.TileContextMenu");
+            var info = new MenuItem { Tag = "MediaInfo", Header = UiText.Get("MediaInfo.Title"),
+                InputGestureText = ShortcutCatalog.Get(ShortcutScope.Library, "Info").Hint };
+            info.SetBinding(MenuItem.CommandParameterProperty, new Binding());
+            AutomationProperties.SetName(info, UiText.Get("MediaInfo.Title"));
+            AutomationProperties.SetAcceleratorKey(info, info.InputGestureText);
+            info.Click += OnMediaDetailsClick;
+            int index = _tileMenu.Items.OfType<MenuItem>().FirstOrDefault(item => item.Tag as string == "Preview") is { } preview
+                ? _tileMenu.Items.IndexOf(preview) + 1 : 0;
+            _tileMenu.Items.Insert(index, info);
             // A closed menu keeps no card: recycled cards are never held through the shared instance.
             _tileMenu.Closed += (_, _) => _tileMenu.ClearValue(ContextMenu.PlacementTargetProperty);
             return _tileMenu;

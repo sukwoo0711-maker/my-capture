@@ -51,6 +51,8 @@ public partial class App
             write => Dispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle, write),
             services.GetRequiredService<ILogger<CaptureOverlayCoordinator>>());
         _overlay.ClaimStartGuide = startGuide.Claim;
+        _overlay.ClaimKeyPanel = startGuide.ClaimKeyPanel;
+        _overlay.ReadPasteToScreenHotkey = () => _settings?.Hotkeys.PasteToScreen ?? MyCapture.Core.Settings.Hotkey.None;
         if (_tray is not null) _tray.CaptureTextRequested += (_, _) => HandleCaptureTextRequested();
     }
 
@@ -69,7 +71,7 @@ public partial class App
 
         try
         {
-            if (!await PrepareRetakeAsync(UiText.Get("TextCapture_Title"))) return;
+            if (!await GuardStillCaptureAsync(GlobalHotkeyCommand.CaptureText)) return;
             _tray?.SetState(TrayIconState.Capturing);
             // The pointer would only add noise to recognition, so text capture never draws it.
             _overlay.Start(
@@ -77,7 +79,7 @@ public partial class App
                 _settings.Capture.AbortOnFocusLoss,
                 _settings.Capture.ShowMagnifier,
                 _settings.Capture.ShowSelectionGrid,
-                textCapture: true);
+                textCapture: true, preserveEditor: true);
         }
         catch (Exception ex)
         {

@@ -37,10 +37,10 @@ public sealed class SettingsCopyRegressionTests
     }
 
     [Theory]
-    [InlineData("ko-KR", HotkeyModifiers.None, Hotkey.VkF3, "F3 키를 누르십시오.")]
-    [InlineData("en-US", HotkeyModifiers.None, Hotkey.VkF3, "Press F3.")]
-    [InlineData("ko-KR", HotkeyModifiers.Control, 0x4B, "Ctrl+K 키를 누르십시오.")]
-    [InlineData("en-US", HotkeyModifiers.Control, 0x4B, "Press Ctrl+K.")]
+    [InlineData("ko-KR", HotkeyModifiers.None, Hotkey.VkF3, "편집기에서 F3 키를 누르십시오. 화살표를 그린 그림이 핀으로 열립니다.")]
+    [InlineData("en-US", HotkeyModifiers.None, Hotkey.VkF3, "Press F3 in the editor. The image with your arrow opens as a pin.")]
+    [InlineData("ko-KR", HotkeyModifiers.Control, 0x4B, "편집기에서 Ctrl+K 키를 누르십시오. 화살표를 그린 그림이 핀으로 열립니다.")]
+    [InlineData("en-US", HotkeyModifiers.Control, 0x4B, "Press Ctrl+K in the editor. The image with your arrow opens as a pin.")]
     public void WelcomeUsesTheAssignedPinShortcut(string language, HotkeyModifiers modifiers, uint key, string expected) => StaTestHost.Run(() =>
     {
         using var scope = UiText.UseLanguage(language);
@@ -79,7 +79,7 @@ public sealed class SettingsCopyRegressionTests
                 OnboardingGuideTests.AdvanceTo(pin, WelcomeStep.Pin);
                 pin.TryNowButton.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent));
                 Assert.False(pin.KeyShown);
-                Assert.Equal(UiText.Get("Onboarding.PinButtonInstruction"), pin.InstructionText);
+                Assert.Equal(UiText.Get("Practice.PinInstructionNoKey"), pin.InstructionText);
                 Assert.DoesNotContain(FirstRunWelcomeTests.Descendants(pin).OfType<TextBlock>(), text => text.Text.Contains("F3", StringComparison.Ordinal));
             }
             finally { pin.Close(); }

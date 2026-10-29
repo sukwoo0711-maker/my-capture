@@ -61,8 +61,10 @@ public sealed class VideoEditorCommandButtonTests
                             && commandFace.Children[0] is StackPanel primaryRow
                             && primaryRow.Children.OfType<TextBlock>().Any(label => label.Visibility == Visibility.Collapsed);
                         double horizontalPadding = collapsedLabel ? 4 : 10;
-                        Assert.Equal(new Thickness(horizontalPadding, 4, horizontalPadding, 4), button.Padding);
-                        Assert.Equal(new Thickness(3, 0, 3, 0), button.Margin);
+                        Assert.Equal(button.Name == "CaptureOptions" ? new Thickness(5, 0, 5, 0)
+                            : new Thickness(horizontalPadding, 4, horizontalPadding, 4), button.Padding);
+                        bool splitPart = button.Name is "NewCapture" or "CaptureOptions";
+                        Assert.Equal(splitPart ? new Thickness(0) : new Thickness(3, 0, 3, 0), button.Margin);
                         AssertInside(button, layout, layout.ActualHeight);
                         string gesture = AutomationProperties.GetAcceleratorKey(button);
                         if (!string.IsNullOrEmpty(gesture))
@@ -90,11 +92,21 @@ public sealed class VideoEditorCommandButtonTests
                     for (int second = first + 1; second < commands.Length; second++)
                     {
                         Rect secondBounds = commands[second].TransformToAncestor(bar).TransformBounds(new Rect(commands[second].RenderSize));
-                        Assert.False(firstBounds.IntersectsWith(secondBounds), $"Commands overlap with hints {enabled}: {firstBounds}, {secondBounds}.");
+                        bool joinedSplitParts = commands[first].Name == "NewCapture" && commands[second].Name == "CaptureOptions";
+                        if (joinedSplitParts)
+                        {
+                            // WPF includes shared edges in IntersectsWith; joined halves must
+                            // share that edge without covering any part of the other's hit area.
+                            Assert.Equal(firstBounds.Right, secondBounds.Left, 2);
+                            Rect intersection = Rect.Intersect(firstBounds, secondBounds);
+                            Assert.True(intersection.IsEmpty || intersection.Width * intersection.Height == 0);
+                        }
+                        else Assert.False(firstBounds.IntersectsWith(secondBounds), $"Commands overlap with hints {enabled}: {firstBounds}, {secondBounds}.");
                         if (Math.Abs(firstBounds.Top - secondBounds.Top) < 0.5)
                         {
                             double gap = Math.Max(firstBounds.Left, secondBounds.Left) - Math.Min(firstBounds.Right, secondBounds.Right);
-                            Assert.True(gap >= 5.5, $"command gap {gap} with hints {enabled}");
+                            if (joinedSplitParts) Assert.InRange(gap, 0, .5);
+                            else Assert.True(gap >= 5.5, $"command gap {gap} with hints {enabled}");
                         }
                     }
                 }
@@ -131,6 +143,11 @@ public sealed class VideoEditorCommandButtonTests
                 Button more = Field<Button>(editor, "_moreToolsButton");
                 Assert.True(more.IsVisible);
                 ContextMenu menu = Assert.IsType<ContextMenu>(more.ContextMenu);
+                MenuItem info = Assert.Single(menu.Items.OfType<MenuItem>(), item => item.Name == "MediaInfo");
+                Assert.Equal(UiText.Get("MediaInfo.Title"), info.Header);
+                Assert.True(info.IsEnabled);
+                Assert.Equal(Visibility.Visible, info.Visibility);
+                Assert.DoesNotContain(Descendants(editor).OfType<Button>(), button => button.Name == "MediaInfo");
                 foreach ((string key, string hint) in new[]
                 {
                     ("VideoMulticut_Split", "Ctrl+K"), ("VideoEditorUx_FrameImageEdit", "E"),

@@ -73,3 +73,12 @@ ONNX 세 개는 `https://huggingface.co/noticemkjung/opus-mt-tc-big-en-ko-ONNX/r
 | `opus-mt-en-ko-source.spm` | 789,870 | `3D0591E65C49541D82F48DF33D7B322C3D4EE7AA0EE8747F9A7F9355DBF22C95` |
 | `opus-mt-en-ko-vocab.json` | 958,876 | `9E03014979D240F6A6D1C5DC53CD14F4841351326D345D437D48D115EFF67B5F` |
 | `manifest.json` | 3,377 | `AD256037CE7C29BA5AA5ACE087EE2D47AB06CD1A0A7109A24D9F65D7BE580589` |
+
+## 한영 모델 (opus-mt-tc-big-ko-en)
+
+핀 번역은 앱 표시 언어를 목표로 하므로 영어 표시에서는 한국어 글을 영어로 번역합니다. 한영 모델은 영한 모델과 같은 방식으로 만듭니다.
+
+- 원본 모델: [Helsinki-NLP/opus-mt-tc-big-ko-en](https://huggingface.co/Helsinki-NLP/opus-mt-tc-big-ko-en), 리비전 `fa26583a41d95346933f26b4cb8f9b700da0d445`, 라이선스 CC BY 4.0. 이 모델의 ONNX 내보내기는 공개되어 있지 않아 `export_quantize_ko_en.py`로 직접 만듭니다(optimum 1.27.0, opset 14, onnxruntime 1.30.0 동적 int8 양자화).
+- `dedupe_opus_onnx_ko_en.py`는 영한 도구를 한영 입력 해시와 파일 이름에 맞춘 사본입니다. 세 그래프의 같은 가중치를 `opus-mt-ko-en-weights-<n>.bin` 네 개에 한 번만 담습니다. 출력은 한영 9개 파일, 합계 246,480,501바이트입니다. 크기와 SHA-256은 `TranslationModelCatalog.KoreanToEnglish`에 고정되어 있습니다.
+- 어휘 구조는 영한과 같습니다. 입력 id는 `source.spm`의 조각 위치이고 `vocab.json`은 출력 id 표입니다. Hugging Face의 기본 토크나이저 설정(`separate_vocabs=false`)으로 한국어 입력을 `vocab.json`에서 찾으면 번역이 깨집니다.
+- 출시 때 아홉 파일을 `translation-models-2` 사전 릴리스에 올려야 앱이 내려받을 수 있습니다. 이 PR은 파일을 올리지 않았습니다.

@@ -1,3 +1,5 @@
+using MyCapture.Platform.Shell;
+
 namespace MyCapture.App.Capture;
 
 /// <summary>Why a capture command did not start; <see cref="None"/> lets it start.</summary>
@@ -73,8 +75,15 @@ internal readonly record struct CaptureGuardState
 /// </summary>
 internal static class CaptureGuard
 {
+    /// <summary>Normal capture commands keep idle editors and their unsaved work open.</summary>
+    internal static CaptureBlock Find(in CaptureGuardState state, GlobalHotkeyCommand command) => Find(state,
+        allowRetake: command is GlobalHotkeyCommand.CaptureRegion or GlobalHotkeyCommand.CaptureText
+            or GlobalHotkeyCommand.CaptureFullScreen or GlobalHotkeyCommand.CaptureWindow
+            or GlobalHotkeyCommand.RepeatLastRegion or GlobalHotkeyCommand.DelayedCapture
+            or GlobalHotkeyCommand.ScrollingCapture or GlobalHotkeyCommand.RecordRegion);
+
     /// <summary>The first blocker, in the order the shell has always checked them.</summary>
-    /// <param name="allowRetake">The command replaces an idle capture editor (region and text capture).</param>
+    /// <param name="allowRetake">The caller can proceed with an idle editor; this check never closes it.</param>
     internal static CaptureBlock Find(in CaptureGuardState state, bool allowRetake)
     {
         if (state.AppUpdating) return CaptureBlock.AppUpdating;

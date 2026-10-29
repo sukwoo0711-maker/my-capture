@@ -6,6 +6,18 @@ namespace MyCapture.Ocr.Translation;
 /// </summary>
 internal sealed record TranslationModelFile(string FileName, string Uri, string Sha256, long Bytes);
 
+/// <summary>One offline translation model: its folder, its pinned files and how the translator opens them.</summary>
+internal sealed record TranslationModelSpec(
+    string FolderName, IReadOnlyList<TranslationModelFile> Files, MarianModelFiles ModelFiles)
+{
+    internal long TotalBytes => Files.Sum(file => file.Bytes);
+
+    internal int TotalMegabytes => (int)Math.Ceiling(TotalBytes / 1_000_000d);
+
+    /// <summary>False while the model's files are not published; the app then offers no translation in that direction.</summary>
+    internal bool IsPublished => Files.Count > 0;
+}
+
 /// <summary>
 /// Pinned files of the offline English-to-Korean model (OPUS-MT tc-big, int8). They are downloaded
 /// only when the user turns translation on and are never part of the installer. The three graphs
@@ -24,6 +36,37 @@ internal static class TranslationModelCatalog
     private const string DecoderWithPast = "opus-mt-en-ko-decoder-with-past.onnx";
     private const string SourceVocabulary = "opus-mt-en-ko-source.spm";
     private const string TargetVocabulary = "opus-mt-en-ko-vocab.json";
+
+    /// <summary>English to Korean, the model the app has always offered.</summary>
+    internal static TranslationModelSpec EnglishToKorean => field ??= new(FolderName, Files, ModelFiles);
+
+    /// <summary>
+    /// Korean to English: OPUS-MT tc-big ko-en, int8, reduced the same way as the English-to-Korean model
+    /// (a separate source vocabulary; the source ids are the positions in the source model). The files are
+    /// pinned here; they are uploaded to the release below when the feature ships.
+    /// </summary>
+    internal static TranslationModelSpec KoreanToEnglish => field ??= new("opus-mt-ko-en-1", KoreanToEnglishFiles,
+        new MarianModelFiles("opus-mt-ko-en-encoder.onnx", "opus-mt-ko-en-decoder.onnx",
+            "opus-mt-ko-en-decoder-with-past.onnx", "opus-mt-ko-en-source.spm", "opus-mt-ko-en-vocab.json"));
+
+    internal const string KoreanToEnglishDownloadBase =
+        "https://github.com/sukwoo0711-maker/my-capture/releases/download/translation-models-2/";
+
+    private static IReadOnlyList<TranslationModelFile> KoreanToEnglishFiles { get; } =
+    [
+        KoAsset("opus-mt-ko-en-encoder.onnx", "1D7F7BC50A6850F854BD87203E7E4A51518FDAA3EBEE5357B7D7BBEB6ECAC481", 222_776),
+        KoAsset("opus-mt-ko-en-decoder.onnx", "538C482D3C7E47C507A8A897449F802AFA59781A35DB46AE58825FA4C84BCA8C", 535_859),
+        KoAsset("opus-mt-ko-en-decoder-with-past.onnx", "892C253E2165E3EBF48EB2EDE432C6515D3E186D6856E5DAD054686322908253", 494_912),
+        KoAsset("opus-mt-ko-en-weights-1.bin", "4A52D3C5213EACC588D06C8DD2BD13E170E7B600AE231B3120D1AE50A9B6879A", 63_500_288),
+        KoAsset("opus-mt-ko-en-weights-2.bin", "1727DFA51C9DDB170957588FFEBC6C96216668A4BDD678B45B3EEA958C3CBBA3", 66_658_304),
+        KoAsset("opus-mt-ko-en-weights-3.bin", "A49EEFD98E1D874AB466DFBBA2779E7306A5107D9C186E779C38DDD177191AF1", 67_108_864),
+        KoAsset("opus-mt-ko-en-weights-4.bin", "ECE056C9292D8AD58171C2C60326BE199F59E80F5308C3DC23811096E4DDC9E6", 46_400_512),
+        KoAsset("opus-mt-ko-en-source.spm", "BCF0B63C9685DE766AB3E10571A9A7F4A38EB39DA51A4D64462757051D1986C7", 815_483),
+        KoAsset("opus-mt-ko-en-vocab.json", "0A5FC83E442A6EFED9BBA9E0A6CAD4542DBCDC182082D39253959BDD5F556C7B", 743_503),
+    ];
+
+    private static TranslationModelFile KoAsset(string fileName, string sha256, long bytes) =>
+        new(fileName, KoreanToEnglishDownloadBase + fileName, sha256, bytes);
 
     internal static IReadOnlyList<TranslationModelFile> Files { get; } =
     [

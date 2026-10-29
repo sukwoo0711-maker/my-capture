@@ -43,8 +43,11 @@ internal sealed class PinHoverBar : Window
         "M10,3 A7,7 0 1 1 9.99,3 Z M10,3 L10,17 M10,6 L15.5,6 M10,9 L16.8,9 M10,12 L16.6,12 M10,15 L15,15");
     private static readonly Geometry SourceGlyph = Geometry.Parse(
         "M8,5 H4 V16 H15 V12 M10,4 H16 V10 M9,11 L16,4");
+    private static readonly Geometry TranslationGlyph = Geometry.Parse(
+        "M2,4 H11 M6,2 V4 M4,7 L10,13 M9,4 C9,8 6,11 2,13 M11,17 L15,7 L19,17 M12.5,14 H17.5");
 
     private readonly List<TextBlock> _labels = [];
+    private readonly Dictionary<Button, TextBlock> _buttonLabels = [];
     private readonly Border _surface;
     private ContextMenu? _opacityMenu;
     private bool _compact;
@@ -68,6 +71,9 @@ internal sealed class PinHoverBar : Window
         AutomationProperties.SetName(this, UiText.Get("Onboard_PinBarName"));
 
         CopyButton = BarButton(SymbolGeometry("Icon.Copy"), UiText.Get("QuickAccess.Copy"), "Ctrl+C");
+        TranslationButton = BarButton(TranslationGlyph, UiText.Get("Pin_Translate"), key: null);
+        TranslationButton.Visibility = Visibility.Collapsed;
+        TranslationButton.Click += (_, _) => TranslationRequested?.Invoke();
         SaveButton = BarButton(SymbolGeometry("Icon.Save"), UiText.Get("QuickAccess.Save"), "Ctrl+S");
         SourceButton = BarButton(SourceGlyph, UiText.Get("Source.Open"), key: null, showLabel: false);
         SetProvenance(provenance ?? CaptureProvenance.None);
@@ -80,7 +86,7 @@ internal sealed class PinHoverBar : Window
         CloseButton.Click += (_, _) => CloseRequested?.Invoke();
 
         var row = new StackPanel { Orientation = Orientation.Horizontal };
-        foreach (Button button in new[] { CopyButton, SaveButton, SourceButton, OpacityButton, CloseButton })
+        foreach (Button button in new[] { TranslationButton, CopyButton, SaveButton, SourceButton, OpacityButton, CloseButton })
             row.Children.Add(button);
         _surface = new Border
         {
@@ -113,6 +119,27 @@ internal sealed class PinHoverBar : Window
     }
 
     internal event Action? CopyRequested;
+
+    internal event Action? TranslationRequested;
+
+    internal Button TranslationButton { get; }
+
+    internal void SetTranslationAction(bool visible, bool enabled, string label, string help)
+    {
+        TranslationButton.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
+        TranslationButton.IsEnabled = enabled;
+        _buttonLabels[TranslationButton].Text = label;
+        TranslationButton.ToolTip = help;
+        AutomationProperties.SetName(TranslationButton, label);
+        AutomationProperties.SetHelpText(TranslationButton, help);
+    }
+
+    internal double LabeledWidthBudget => UiText.Culture.TwoLetterISOLanguageName == "ko"
+        ? SourceButton.Visibility == Visibility.Visible ? 382 : 336
+        : SourceButton.Visibility == Visibility.Visible ? 399 : 353;
+
+    internal bool NeedsCompact(double pinWidth, double labeledWidth) =>
+        labeledWidth > LabeledWidthBudget || pinWidth < labeledWidth + EdgeGap * 4;
 
     internal event Action? SaveRequested;
 
@@ -296,6 +323,7 @@ internal sealed class PinHoverBar : Window
         {
             var label = new TextBlock { Text = name, Margin = new Thickness(CommandButtonPresentation.IconLabelGap, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center };
             _labels.Add(label);
+            _buttonLabels.Add(button, label);
             content.Children.Add(label);
         }
 

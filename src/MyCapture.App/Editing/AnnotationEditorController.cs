@@ -65,6 +65,9 @@ internal sealed class AnnotationEditorController
     /// <summary>Raised when the selected item changes, so the style bar can refresh.</summary>
     internal event EventHandler? SelectionChanged;
 
+    /// <summary>A non-degenerate arrow was drawn and committed by a pointer gesture.</summary>
+    internal event Action? UserArrowAdded;
+
     internal AnnotationDocument Document => _document;
 
     internal UndoStack Undo => _undo;
@@ -118,6 +121,22 @@ internal sealed class AnnotationEditorController
     /// <summary>Current stroke thickness applied to new shape/line/pen items.</summary>
     internal double StrokeThickness { get; set; } = 3;
     internal AnnotationStrokeStyle StrokeStyle { get; private set; }
+    internal ArrowHeadStyle ArrowHeads { get; private set; }
+
+    internal void ApplyArrowHeads(ArrowHeadStyle style)
+    {
+        ArrowHeads = Enum.IsDefined(style) ? style : ArrowHeadStyle.End;
+        ApplySelectionStyle(UiText.Get("EditorProperty_ArrowHead"), item =>
+        {
+            if (item is PolylineAnnotation line)
+                PushProperty(line, UiText.Get("EditorProperty_ArrowHead"), static (target, heads) =>
+                {
+                    target.HeadAtStart = heads.Start;
+                    target.HeadAtEnd = heads.End;
+                }, (Start: line.HeadAtStart, End: line.HeadAtEnd),
+                (Start: ArrowHeads == ArrowHeadStyle.Both, End: ArrowHeads != ArrowHeadStyle.None));
+        });
+    }
     internal double FillTransparency { get; private set; } = 100;
     internal double DefaultFontSize { get; set; } = 18;
     internal string DefaultFontFamily { get; set; } = AnnotationDefaults.DefaultFontFamily;
@@ -1168,7 +1187,11 @@ internal sealed class AnnotationEditorController
                 Fill = ShapeAnnotation.FillForTransparency(StrokeColor, FillTransparency),
                 FillMatchesStroke = true,
             },
-            EditorTool.Arrow => PolylineAnnotation.CreateArrow(point, point, StrokeColor, StrokeThickness),
+            EditorTool.Arrow => new PolylineAnnotation
+            {
+                Points = [point, point], Stroke = StrokeColor, StrokeThickness = StrokeThickness,
+                HeadAtStart = ArrowHeads == ArrowHeadStyle.Both, HeadAtEnd = ArrowHeads != ArrowHeadStyle.None,
+            },
             EditorTool.Blur => new BlurAnnotation { Rect = new RectD(point.X, point.Y, 0, 0), Radius = BlurRadius },
             _ => throw new InvalidOperationException($"Tool {_tool} has no draft shape."),
         };
@@ -1234,6 +1257,7 @@ internal sealed class AnnotationEditorController
         // an area with boxes does not have to re-select the tool for every one. The shape
         // is still selected for immediate inspector edits; the next press starts fresh.
         SetSelected(draft);
+        if (draft is PolylineAnnotation) UserArrowAdded?.Invoke();
     }
 
     private void CommitPen()

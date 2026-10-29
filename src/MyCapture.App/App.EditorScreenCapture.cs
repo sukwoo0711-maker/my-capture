@@ -1,8 +1,9 @@
 using Microsoft.Extensions.Logging;
 using MyCapture.App.Capture;
 using MyCapture.App.Editing;
-using MyCapture.App.Themes;
-using MyCapture.Platform.Shell;
+using MyCapture.Core.Queue;
+using MyCapture.Platform.Display;
+using System.Windows.Threading;
 
 namespace MyCapture.App;
 
@@ -10,36 +11,55 @@ public partial class App
 {
     private async Task SaveEditorScreenCaptureAsync(CaptureSelectionCompletedEventArgs selection)
     {
+        IDisposable? pendingReceipt = null;
         try
         {
-            if (_persistence is null || _commit is null)
-                throw new InvalidOperationException("Capture persistence is unavailable.");
             if (_settings?.General.PlayCaptureSound == true) CaptureShutterSound.Play();
-            Task<CaptureSelectionSource>? lateSource = selection.PendingSource;
-            CaptureSelectionSource source = lateSource is { IsCompletedSuccessfully: true } ready
-                ? ready.Result : new CaptureSelectionSource(selection.SourceTitle, selection.SourcePageUrl, selection.SourceDetails);
-            var pending = CapturePersistenceService.CreatePendingRecord(selection.SelectedBitmap,
-                selection.Frame.DpiScale, selection.SourceTitle, selection.Frame.Monitor?.DeviceName ?? string.Empty,
-                initialRenderShowsSourceWindowTitle: _settings?.Export.ShowSourceWindowTitle == true,
-                sourcePageUrl: source.PageUrl, sourceDetails: source.Details);
-            if (pending.SourcePageUrl.Length > 0) pending.Tags = UiText.Get("Capture.WebpageTag");
-            var record = await _persistence.PersistPendingOriginalAsync(pending, selection.SelectedBitmap);
-            if (lateSource is { IsCompleted: false })
-                _sourceBackfillTask = Task.WhenAll(_sourceBackfillTask, BackfillLateSourceAsync(record, published: true, lateSource));
-            bool copied = await _commit.CopyCapturedRegionAsync(selection.SelectedBitmap, selection.SourceTitle,
-                pending.InitialRenderShowsSourceWindowTitle, pending.SourcePageUrl,
-                Core.Capture.CaptureProvenance.FromRecord(pending), CaptureSelectionProvenance.Pending(selection));
-            _tray?.SetCaptureCount(_queue?.Count ?? 0);
+            CaptureDelivery delivery = BeginCaptureDelivery(selection, preserveEditor: true);
+            CaptureRecord? record = null;
+            try
+            {
+                if (_persistence is null || _commit is null)
+                    throw new InvalidOperationException("Capture persistence is unavailable.");
+                // This capture has no edit session. Protect it while the copy or the posted
+                // receipt waits, including when persistence releases its own lease on return.
+                pendingReceipt = _queue?.AcquireEvictionLease(delivery.Pending.Id);
+                record = await _persistence.PersistPendingOriginalAsync(delivery.Pending, selection.SelectedBitmap);
+            }
+            catch (Exception error) { ReportCaptureSaveFailure(delivery.First, error, preserveEditor: true); }
+
+            bool receiptTaken = delivery.First is { } first && record is not null && BindQuickAccessFirst(first, record);
+            if (delivery.LateSource is { } lateSource)
+                _sourceBackfillTask = Task.WhenAll(_sourceBackfillTask,
+                    BackfillLateSourceAsync(delivery.Pending, published: record is not null, lateSource));
+            RecordManualCaptureRegion(selection);
+            bool copied = await CompleteCaptureCopyAsync(delivery, record, opensCaptureEditor: false);
+            try { _tray?.SetCaptureCount(_queue?.Count ?? 0); }
+            catch (Exception error) { _log?.LogWarning(error, "Could not update tray count"); }
+            if (record is null) return;
+
             _overlay?.CurrentEditor?.ShowCaptureBlocked(UiText.Get(copied ? "Capture.CopiedAndSaved" : "Capture.Saved"));
+            if (_services is not null && !receiptTaken)
+            {
+                _latestReceipt = record.Id;
+                var region = new Core.Primitives.RectD(selection.Frame.ScreenBounds.Left + selection.BitmapRegion.Left,
+                    selection.Frame.ScreenBounds.Top + selection.BitmapRegion.Top,
+                    selection.BitmapRegion.Width, selection.BitmapRegion.Height);
+                MonitorInfo monitor = selection.Frame.Monitor ?? MonitorEnumerator.GetFromCursor();
+                IDisposable? receiptLease = pendingReceipt;
+                // The selector and its persistence transition finish before the fallback receipt is shown.
+                _ = Dispatcher.BeginInvoke(DispatcherPriority.ContextIdle, new Action(() =>
+                {
+                    try { ShowQuickAccess(record, selection.SelectedBitmap, region, monitor, copied, preserveEditor: true); }
+                    finally { receiptLease?.Dispose(); }
+                }));
+                pendingReceipt = null;
+            }
             _log?.LogInformation("Captured editor screen as a separate library record {RecordId}", record.Id);
-        }
-        catch (Exception error)
-        {
-            _log?.LogError(error, "Could not save editor screen capture");
-            ShowCommandNotice(UiText.Get("Text_4033027EAEDB"), ThemedDialog.RecoveryMessage(error), TrayBalloonKind.Error);
         }
         finally
         {
+            pendingReceipt?.Dispose();
             RestoreTrayAfterCapture();
         }
     }

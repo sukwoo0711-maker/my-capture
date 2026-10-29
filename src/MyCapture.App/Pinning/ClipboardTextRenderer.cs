@@ -77,7 +77,14 @@ internal static class ClipboardTextRenderer
             : RenderPlainText(sourceText, scale);
     }
 
-    private static BitmapSource RenderPlainText(string sourceText, double scale)
+    internal static BitmapSource RenderTranslation(string sourceText, double scale = 1)
+    {
+        ArgumentNullException.ThrowIfNull(sourceText);
+        ValidateScale(scale);
+        return RenderPlainText(sourceText, scale, borderless: true);
+    }
+
+    private static BitmapSource RenderPlainText(string sourceText, double scale, bool borderless = false)
     {
         string preview = CreatePlainPreview(sourceText).Replace("\t", "    ", StringComparison.Ordinal);
         FormattedText? text = preview.Length == 0
@@ -114,7 +121,10 @@ internal static class ClipboardTextRenderer
         {
             double halfPixel = 0.5 / scale;
             var bounds = new Rect(halfPixel, halfPixel, width - (1 / scale), height - (1 / scale));
-            drawing.DrawRoundedRectangle(CardBackground, DevicePixelPen(CardBorder, scale), bounds, 10, 10);
+            if (borderless)
+                drawing.DrawRectangle(Brushes.White, null, new Rect(0, 0, width, height));
+            else
+                drawing.DrawRoundedRectangle(CardBackground, DevicePixelPen(CardBorder, scale), bounds, 10, 10);
             if (text is not null)
             {
                 drawing.DrawText(text, new Point(PlainHorizontalPadding, PlainVerticalPadding));

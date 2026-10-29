@@ -176,6 +176,44 @@ public sealed class QuickAccessReceiptLayoutTests
     private static Rect Bounds(FrameworkElement element, Visual ancestor) =>
         element.TransformToAncestor(ancestor).TransformBounds(new Rect(element.RenderSize));
 
+    [Theory]
+    [InlineData(1.0)]
+    [InlineData(1.5)]
+    [InlineData(2.0)]
+    public void CardMinimumYieldsToASmallerWorkAreaAndReturnsWhenTheMonitorChanges(double scale) => StaTestHost.Run(() =>
+    {
+        QuickAccessWindow card = Card(Image(2400, 120), scale: scale);
+        try
+        {
+            double normalWidth = card.MinWidth;
+            var work = new RectD(-640, 80, 280 * scale, 420 * scale);
+            var small = new MonitorInfo("small", work, work, (uint)(96 * scale), true);
+            card.ConstrainToWorkArea(small);
+            card.UpdatePreview(Image(2400, 120));
+            Border host = QuickAccessDetachedFixture.Layout(card, scale);
+            Assert.Equal(280, card.Width);
+            Assert.Equal(280, card.MinWidth);
+            Assert.Equal(280, card.MaxWidth);
+            Assert.Equal(420, card.MaxHeight);
+            Assert.Equal(280, host.ActualWidth);
+            Assert.True(card.PreviewForTest.ActualWidth <= host.ActualWidth);
+            Rect position = QuickAccessWindow.Position(work, scale, normalWidth, 500,
+                new RectD(work.Right - 1, work.Bottom - 1, 1, 1));
+            // Fractional-DIP origins at 150% scaling can round a summed edge by about
+            // 3e-14 DIP. Compare physical edges with the same subpixel tolerance as the preview.
+            const double tolerance = 0.00001;
+            Assert.True(position.Left * scale >= work.Left - tolerance && position.Top * scale >= work.Top - tolerance);
+            Assert.True(position.Right * scale <= work.Right + tolerance && position.Bottom * scale <= work.Bottom + tolerance);
+
+            var larger = new MonitorInfo("large", new RectD(0, 0, 1366, 768), new RectD(0, 0, 1366, 728),
+                (uint)(96 * scale), true);
+            card.ConstrainToWorkArea(larger);
+            Assert.Equal(normalWidth, card.MinWidth);
+            Assert.Equal(normalWidth, card.Width);
+        }
+        finally { card.Close(); }
+    });
+
     private static void AssertPhysicalExtent(double expected, double actual)
     {
         // WPF's 144-DPI image conversion can produce 47.999998569 pixels for a

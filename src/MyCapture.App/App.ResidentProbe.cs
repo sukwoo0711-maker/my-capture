@@ -84,6 +84,7 @@ public partial class App
         settings.General.IsFirstRun = false;
         // An unanswered core-shortcut question would stay open for the whole run and change idle.
         settings.Hotkeys.CoreShortcutsAsked = true;
+        settings.General.PracticeRevisionOffered = PracticeOffer.CurrentRevision;
         settings.General.FirstCaptureTipShown = true;
         settings.General.AfterCapture = AfterCaptureAction.QuickAccess;
         settings.General.LaunchAtLogin = false;
@@ -118,6 +119,7 @@ public partial class App
         }
         try
         {
+            CaptureOverlayView.SuppressKeyPanelForProbe = probe.Has("no-key-panel");
             await Task.WhenAll(_initialLibraryRecoveryTask, _initialEditRecoveryTask);
             await recorder.SettleAsync("start", probe.StartSeconds);
             await recorder.AuditAsync("start");
@@ -143,6 +145,10 @@ public partial class App
         {
             recorder.Fail(ex);
             exitCode = 1;
+        }
+        finally
+        {
+            CaptureOverlayView.SuppressKeyPanelForProbe = false;
         }
 
         try { recorder.Write(); }

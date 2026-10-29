@@ -20,7 +20,7 @@ public sealed class EditorContextualPropertyBarTests : KoreanCaptionTest
     [InlineData("Select", "")]
     [InlineData("Rectangle", "color thickness shapeStyle fill")]
     [InlineData("Ellipse", "color thickness shapeStyle fill")]
-    [InlineData("Arrow", "color thickness")]
+    [InlineData("Arrow", "color thickness arrowHead")]
     [InlineData("Pen", "color thickness")]
     [InlineData("Highlighter", "color thickness")]
     [InlineData("Text", "color fontFamily fontSize textStyle")]
@@ -35,7 +35,7 @@ public sealed class EditorContextualPropertyBarTests : KoreanCaptionTest
         SelectTool(host.Editor, tool);
         WrapPanel bar = PropertyBar(host.Editor);
         var expected = expectedGroups.Split(' ', StringSplitOptions.RemoveEmptyEntries).ToHashSet();
-        foreach (string group in new[] { "color", "thickness", "shapeStyle", "fill", "fontFamily", "fontSize", "textStyle", "step", "blur", "mosaic", "crop" })
+        foreach (string group in new[] { "color", "thickness", "shapeStyle", "arrowHead", "fill", "fontFamily", "fontSize", "textStyle", "step", "blur", "mosaic", "crop" })
         {
             FrameworkElement section = Field<FrameworkElement>(host.Editor, "_" + group + "Section");
             Assert.Equal(expected.Contains(group), section.IsVisible);

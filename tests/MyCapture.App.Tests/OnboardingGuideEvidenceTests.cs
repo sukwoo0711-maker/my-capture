@@ -30,7 +30,7 @@ public sealed class OnboardingGuideEvidenceTests
 
     private static readonly (AppTheme Theme, string Name)[] Themes =
     [
-        (AppTheme.Glass, "dark"), (AppTheme.GlassLight, "light"), (AppTheme.HighContrast, "contrast"),
+        (AppTheme.Midnight, "midnight"), (AppTheme.Glass, "dark"), (AppTheme.GlassLight, "light"), (AppTheme.HighContrast, "contrast"),
     ];
 
     [Fact]
@@ -94,7 +94,8 @@ public sealed class OnboardingGuideEvidenceTests
         var monitor = new MonitorInfo("\\\\.\\DISPLAY1", new RectD(0, 0, workArea.Width, workArea.Height + 40), workArea, dpi, IsPrimary: true);
         (WelcomeStep Step, bool NoLibraryKey)[] scenes =
         [
-            (WelcomeStep.Capture, false), (WelcomeStep.Pin, false), (WelcomeStep.Library, false),
+            (WelcomeStep.Consent, false), (WelcomeStep.Capture, false), (WelcomeStep.Draw, false),
+            (WelcomeStep.Pin, false), (WelcomeStep.Resize, false), (WelcomeStep.Library, false),
             (WelcomeStep.Finish, false), (WelcomeStep.Library, true),
         ];
         foreach ((WelcomeStep step, bool noLibraryKey) in scenes)
@@ -103,7 +104,8 @@ public sealed class OnboardingGuideEvidenceTests
             HotkeySettings? keys = noLibraryKey ? NewInstallDefaults.Create().Hotkeys : null;
             if (noLibraryKey) Assert.Equal(Hotkey.None, keys!.OpenLibrary);
             WelcomeWindow guide = OnboardingGuideTests.Create(clipboard,
-                new WelcomeOptions { ReducedMotion = true, TextScale = textScale, MonitorProvider = () => monitor }, keys);
+                new WelcomeOptions { ReducedMotion = true, TextScale = textScale, MonitorProvider = () => monitor,
+                    ShowCoreShortcutsConsent = step == WelcomeStep.Consent }, keys);
             guide.WindowStartupLocation = WindowStartupLocation.Manual;
             guide.Left = -10000; guide.Top = -10000; guide.ShowActivated = false; guide.ShowInTaskbar = false;
             guide.LimitToWorkArea(monitor);
@@ -125,13 +127,13 @@ public sealed class OnboardingGuideEvidenceTests
                 if (root is null) continue;
                 string directory = Directory.CreateDirectory(Path.Combine(root, set)).FullName;
                 SaveBitmap(Render(guide, scale), Path.Combine(directory, $"step{(int)step}-{step.ToString().ToLowerInvariant()}{suffix}-{language}-{themeName}.png"));
-                // The second face of the pin step: the practice table copied and the key waiting.
-                if (step == WelcomeStep.Pin && !guide.PracticeCopied)
+                // The second face of the pin step: the key fired while the editor commit is still pending.
+                if (step == WelcomeStep.Pin && !guide.KeyPressed)
                 {
-                    guide.TryNowButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                    guide.NotifyHotkeyFired(MyCapture.Platform.Shell.GlobalHotkeyCommand.PasteToScreen);
                     Drain(guide);
                     AssertFits(guide, label + " copied", log);
-                    SaveBitmap(Render(guide, scale), Path.Combine(directory, $"step2b-pin-copied-{language}-{themeName}.png"));
+                    SaveBitmap(Render(guide, scale), Path.Combine(directory, $"step3b-pin-pressed-{language}-{themeName}.png"));
                 }
             }
             finally { guide.Close(); }

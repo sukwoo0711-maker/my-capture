@@ -18,14 +18,8 @@ namespace MyCapture.App;
 /// </summary>
 public partial class App
 {
-    private ThemedDialog? _coreShortcutsQuestion;
+    private WelcomeWindow? _coreShortcutsQuestion;
     private bool _coreShortcutsQuestionPending;
-
-    /// <summary>The one-time choice uses the shared dialog, with overwrite as its default action.</summary>
-    internal static ThemedDialog CreateCoreShortcutsQuestion() => new(
-        UiText.Get("CoreShortcuts.Body"), UiText.Get("CoreShortcuts.Title"),
-        MessageBoxButton.OKCancel, MessageBoxResult.OK,
-        okLabel: UiText.Get("CoreShortcuts.Overwrite"), cancelLabel: UiText.Get("CoreShortcuts.KeepCurrent"));
 
     private void ShowLaunchPresentation(bool quietLaunch, bool openSettings, bool answeredThisLaunch = false)
     {
@@ -35,48 +29,15 @@ public partial class App
         if (launch.ShowCoreShortcuts)
         {
             _coreShortcutsQuestionPending = true;
-            ThemedDialog question = CreateCoreShortcutsQuestion();
-            _coreShortcutsQuestion = question;
-            question.Closed += (_, _) =>
+            WelcomeWindow welcome = CreatePracticeWindow(replay: !_launchedFirstRun, consent: true);
+            _coreShortcutsQuestion = welcome;
+            CompleteLaunchPracticeWhenClosed(welcome, quietLaunch, openSettings);
+            welcome.Closed += (_, _) =>
             {
                 _coreShortcutsQuestion = null;
-                if (_shutdownRequested)
-                {
-                    // The exit closed the question, not the user: nothing is recorded, so the next launch asks again.
-                    _coreShortcutsQuestionPending = false;
-                    _log?.LogInformation("Core shortcut question closed by exit without an answer");
-                    return;
-                }
-                try
-                {
-                    AppSettings next = _settings.DeepClone();
-                    if (question.Result == MessageBoxResult.OK) CoreShortcuts.Accept(next.Hotkeys);
-                    else CoreShortcuts.Decline(next.Hotkeys);
-                    // The welcome still owns the first start-at-sign-in choice. A chord another
-                    // program holds must not undo the answer: the rest of the set takes effect
-                    // and the conflict notification names what is left.
-                    SettingsApplyResult result = _settingsApply!.ApplyCoreShortcutAnswer(next, applyStartup: !_launchedFirstRun);
-                    // Chords still held elsewhere are in the hotkey failures and reported with the
-                    // launch's conflict notification; anything else (an unsaved file) is said now.
-                    if (!result.Saved || !result.HotkeysApplied || result.Messages.Count > 0)
-                    {
-                        _log?.LogWarning("Core shortcut choice could not be fully applied: saved {Saved}, hotkeys {HotkeysApplied}; {Messages}",
-                            result.Saved, result.HotkeysApplied, string.Join("; ", result.Messages));
-                        ShowCoreShortcutsProblem(string.Join("\n", result.Messages));
-                    }
-                }
-                catch (Exception ex)
-                {
-                    _log?.LogWarning(ex, "Could not apply the core shortcut choice");
-                    ShowCoreShortcutsProblem(ThemedDialog.RecoveryMessage(ex));
-                }
-                finally
-                {
-                    _coreShortcutsQuestionPending = false;
-                }
-                ShowLaunchPresentation(quietLaunch, openSettings, answeredThisLaunch: true);
+                _coreShortcutsQuestionPending = false;
             };
-            ThemedDialog.ShowOwnerless(question);
+            welcome.Show();
             return;
         }
 
@@ -84,27 +45,108 @@ public partial class App
         {
             // The conflict itself is announced after the welcome; the tray says so meanwhile.
             if (_hotkeys?.Failures.Count > 0) _tray?.SetState(TrayIconState.Error);
-            ShowFirstRunWelcome();
+            ShowFirstRunWelcome(quietLaunch, openSettings);
+            return;
         }
         else ShowStartupHotkeyNotification();
         // --settings opens Settings on every launch, beside a first-run welcome too.
         if (openSettings) _ = Dispatcher.BeginInvoke(new Action(HandleSettingsRequested));
         else if (launch.OpenLibrary) _ = Dispatcher.BeginInvoke(new Action(HandleGalleryRequested));
+        QueueNewFeaturePractice();
     }
 
-    private void ShowFirstRunWelcome()
+    internal static SettingsApplyResult ApplyPracticeShortcutAnswer(AppSettings current, SettingsApplyService apply,
+        bool accepted, bool firstRun)
+    {
+        AppSettings next = current.DeepClone();
+        if (accepted) CoreShortcuts.Accept(next.Hotkeys);
+        else CoreShortcuts.Decline(next.Hotkeys);
+        return apply.ApplyCoreShortcutAnswer(next, applyStartup: !firstRun);
+    }
+
+    private void ApplyPracticeShortcutAnswer(bool accepted)
+    {
+        if (_shutdownRequested || _settings is null || _settingsApply is null)
+        {
+            _coreShortcutsQuestionPending = false;
+            return;
+        }
+        try
+        {
+            SettingsApplyResult result = ApplyPracticeShortcutAnswer(_settings, _settingsApply, accepted, _launchedFirstRun);
+            if (result.Saved) MarkFullPracticePresented();
+            if (!result.Saved || !result.HotkeysApplied || result.Messages.Count > 0)
+            {
+                _log?.LogWarning("Core shortcut choice could not be fully applied: saved {Saved}, hotkeys {HotkeysApplied}; {Messages}",
+                    result.Saved, result.HotkeysApplied, string.Join("; ", result.Messages));
+                ShowCoreShortcutsProblem(string.Join("\n", result.Messages));
+            }
+        }
+        catch (Exception ex)
+        {
+            _log?.LogWarning(ex, "Could not apply the core shortcut choice");
+            ShowCoreShortcutsProblem(ThemedDialog.RecoveryMessage(ex));
+        }
+        finally { _coreShortcutsQuestionPending = false; }
+    }
+
+    private void ShowFirstRunWelcome(bool quietLaunch = false, bool openSettings = false)
     {
         var welcome = CreateOnboardingWindow(replay: false);
+        MarkFullPracticePresented();
+        CompleteLaunchPracticeWhenClosed(welcome, quietLaunch, openSettings);
+        welcome.Show();
+        WindowForeground.BringForward(welcome);
+    }
+
+    private void CompleteLaunchPracticeWhenClosed(WelcomeWindow welcome, bool quietLaunch, bool openSettings)
+    {
         welcome.Closed += (_, _) =>
         {
-            StartAtSignInOutcome? startup = ApplyWelcomeStartAtSignIn(welcome.StartAtSignIn);
-            try { CompleteWelcomeOcrChoice(welcome.UseAccurateOcr); }
-            catch (Exception ex) { _log?.LogWarning(ex, "Could not persist first-run completion"); }
-            AnnounceAfterWelcome(welcome.Outcome, startup);
+            PracticeCloseRoute route = FirstRunPlan.AfterPracticeClose(_launchedFirstRun, welcome.CurrentStep, _shutdownRequested);
+            if (route is PracticeCloseRoute.Ignore or PracticeCloseRoute.CompleteFirstRunAtExit)
+            {
+                if (route == PracticeCloseRoute.CompleteFirstRunAtExit)
+                {
+                    try { CompleteWelcomeOcrChoice(welcome.UseAccurateOcr); }
+                    catch (Exception ex) { _log?.LogWarning(ex, "Could not persist first-run completion during exit"); }
+                }
+                return;
+            }
+            if (welcome.CurrentStep == WelcomeStep.Consent)
+            {
+                // Closing the old question declined the keys, then showed the first-use guide.
+                // Its unseen startup/OCR defaults are not applied by closing this first screen.
+                if (route == PracticeCloseRoute.ContinueWelcome) ShowFirstRunWelcome(quietLaunch, openSettings);
+                else
+                {
+                    ShowStartupHotkeyNotification();
+                    if (openSettings) _ = Dispatcher.BeginInvoke(new Action(HandleSettingsRequested));
+                    else if (!quietLaunch) _ = Dispatcher.BeginInvoke(new Action(HandleGalleryRequested));
+                }
+                return;
+            }
+            if (_launchedFirstRun)
+            {
+                StartAtSignInOutcome? startup = ApplyWelcomeStartAtSignIn(welcome.StartAtSignIn);
+                try { CompleteWelcomeOcrChoice(welcome.UseAccurateOcr); }
+                catch (Exception ex) { _log?.LogWarning(ex, "Could not persist first-run completion"); }
+                AnnounceAfterWelcome(welcome.Outcome, startup);
+            }
+            else
+            {
+                if (welcome.Outcome == WelcomeOutcome.Completed) ApplyReplayedPracticeChoices(welcome);
+                ShowStartupHotkeyNotification();
+            }
+            if (openSettings)
+            {
+                _ = Dispatcher.BeginInvoke(new Action(HandleSettingsRequested));
+                return;
+            }
             switch (FirstRunPlan.Next(welcome.Outcome))
             {
                 case AfterWelcome.OpenLibrary:
-                    _ = Dispatcher.BeginInvoke(new Action(HandleGalleryRequested));
+                    if (_launchedFirstRun || !quietLaunch) _ = Dispatcher.BeginInvoke(new Action(HandleGalleryRequested));
                     break;
                 case AfterWelcome.StartCapture:
                     // The welcome has just left the screen; the frozen frame must not show it.
@@ -116,8 +158,6 @@ public partial class App
                     break;
             }
         };
-        welcome.Show();
-        WindowForeground.BringForward(welcome);
     }
 
     /// <summary>
@@ -398,12 +438,17 @@ public partial class App
 
     private void ShowFirstPinTip()
     {
-        if (_settings is null || _shellPresenter is null || _hotkeys?.Failures.Count > 0 || _settings.General.FirstPinTipShown) return;
-        Hotkey hotkey = _settings.Hotkeys.HideAllPins;
-        string text = hotkey.IsAssigned ? UiText.Format("Onboard_FirstPinTip", hotkey) : UiText.Get("Onboard_FirstPinTipUnassigned");
-        if (_shellPresenter.ShowCaptureReceipt(text, () => HandleShortcutSettingsRequested(nameof(SettingsDraft.HideAllPinsHotkey)),
-                answersCommand: true, actionTooltip: UiText.Get("Help.Settings"))
-            && FirstUseTips.ShowPinOnce(_settings.General, () => { })) SaveFirstUseTips();
+        if (_settings is null || _shellPresenter is null || _hotkeys?.Failures.Count > 0) return;
+        if (FirstUseTips.ShowNextPinTip(_settings.General, tip =>
+        {
+            Hotkey hotkey = _settings.Hotkeys.HideAllPins;
+            string text = tip == PinFirstUseTip.Size ? UiText.Get("Onboard_PinSizeTip")
+                : hotkey.IsAssigned ? UiText.Format("Onboard_FirstPinTip", hotkey) : UiText.Get("Onboard_FirstPinTipUnassigned");
+            return _shellPresenter.ShowCaptureReceipt(text,
+                tip == PinFirstUseTip.Size ? HandleSettingsRequested
+                    : () => HandleShortcutSettingsRequested(nameof(SettingsDraft.HideAllPinsHotkey)),
+                answersCommand: true, actionTooltip: UiText.Get("Help.Settings"));
+        })) SaveFirstUseTips();
     }
 
 }

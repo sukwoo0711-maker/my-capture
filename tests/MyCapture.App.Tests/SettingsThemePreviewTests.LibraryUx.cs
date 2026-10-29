@@ -153,7 +153,7 @@ public sealed partial class SettingsThemePreviewTests
             Assert.Equal(48, commandBar.ActualHeight, 1);
             Button capture = VisibleButtonNamed(window, UiText.Get("Text_2C20ADDA2018"));
             Assert.Same(window.FindResource("Button.Primary"), capture.Style);
-            Assert.Contains("Ctrl+Shift", Assert.IsType<string>(capture.ToolTip), StringComparison.Ordinal);
+            Assert.Equal(UiText.Format("LibraryUx_CommandShortcut", UiText.Get("Text_2C20ADDA2018").Trim(), window.ReadHotkeys().Capture.ToString()), Assert.IsType<string>(capture.ToolTip));
             var search = (TextBox)window.FindName("SearchBox");
             var placeholder = (TextBlock)window.FindName("SearchPlaceholderText");
             foreach (FrameworkElement element in new FrameworkElement[]
@@ -233,8 +233,12 @@ public sealed partial class SettingsThemePreviewTests
             Assert.Equal("CaptureRegionButton", capture.Name);
             Button[] primaryActions = Descendants(window).OfType<Button>().Where(button => button.IsVisible
                 && ReferenceEquals(button.Style, window.FindResource("Button.Primary"))).ToArray();
-            Assert.Single(primaryActions);
-            Assert.Contains(capture, primaryActions);
+            var captureOptions = (Button)window.FindName("CaptureOptionsButton");
+            Assert.Equal(new[] { capture, captureOptions }, primaryActions);
+            Assert.Same(window.FindName("CaptureCommands"), capture.Parent);
+            Assert.Same(capture.Parent, captureOptions.Parent);
+            Assert.Equal(SplitButtonPart.Main, ButtonSizing.GetSplitPart(capture));
+            Assert.Equal(SplitButtonPart.Options, ButtonSizing.GetSplitPart(captureOptions));
             Assert.False(((Button)window.FindName("DetailsEditButton")).IsVisible);
             foreach (Button button in Descendants(selection).OfType<Button>().Where(button => button.IsVisible))
                 AssertInsideClient(button, client, label);
@@ -486,7 +490,7 @@ public sealed partial class SettingsThemePreviewTests
         {
             // Library commands have no shortcut line, so they take the 32-DIP plain button height.
             Assert.Equal(32, button.ActualHeight, 1);
-            Assert.Equal(new Thickness(10, 4, 10, 4), button.Padding);
+            Assert.Equal(button.Name == "CaptureOptionsButton" ? new Thickness(5, 0, 5, 0) : new Thickness(10, 4, 10, 4), button.Padding);
         }
     }
 

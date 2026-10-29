@@ -266,6 +266,10 @@ public sealed class CaptureSettings
     /// button shows it again at any time. Bookkeeping only: the settings window never edits it.
     /// </summary>
     public int StartGuideShownCount { get; set; }
+
+    public int KeyPanelShownCount { get; set; }
+
+    public bool AlwaysShowKeyPanel { get; set; }
 }
 
 public sealed class PinSettings
@@ -316,6 +320,7 @@ public sealed class AnnotationDefaults
 
     public string LastTool { get; set; } = "Rectangle";
     public MyCapture.Core.Annotations.AnnotationStrokeStyle StrokeStyle { get; set; }
+    public MyCapture.Core.Annotations.ArrowHeadStyle ArrowHeads { get; set; }
     public double FillTransparency { get; set; } = 100;
     public ColorRgba StrokeColor { get; set; } = ColorRgba.FromRgb(0xEF, 0x44, 0x44);
 
@@ -455,6 +460,17 @@ public sealed class GeneralSettings : IJsonOnDeserializing
 
     public bool FirstCaptureTipShown { get; set; }
     public bool FirstPinTipShown { get; set; }
+    public bool PinSizeTipShown { get; set; }
+
+    /// <summary>Newest practice revision already presented on this installation.</summary>
+    public int PracticeRevisionOffered { get; set => field = Math.Max(0, value); }
+
+    /// <summary>Shared presentation count for editor and dismissed-card library-location tips.</summary>
+    public int SavedLocationTipCount
+    {
+        get;
+        set => field = Math.Clamp(value, 0, FirstUseTips.SavedLocationLimit);
+    }
 
     /// <summary>Legacy file compatibility. Command visibility uses <see cref="AlwaysShowShortcutHints"/>.</summary>
     public bool ShowShortcutHints { get; set; } = true;

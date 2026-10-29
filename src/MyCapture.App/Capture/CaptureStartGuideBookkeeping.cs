@@ -36,4 +36,13 @@ internal sealed class CaptureStartGuideBookkeeping(
             log.LogWarning(ex, "Could not save the capture start guide count");
         }
     }
+
+    internal bool ClaimKeyPanel(bool startGuideShown)
+    {
+        if (current() is not { } settings) return false;
+        int before = settings.Capture.KeyPanelShownCount;
+        bool show = CaptureKeyPanelPolicy.TryClaim(settings.Capture, startGuideShown);
+        if (settings.Capture.KeyPanelShownCount != before) scheduleWrite(Persist);
+        return show;
+    }
 }

@@ -840,6 +840,7 @@ public sealed class PinSessionStore
         return style switch
         {
             PinTextStyle.PlainText => pin.Kind == PinSessionContentKind.Text && pin.CodeDocument is null,
+            PinTextStyle.Markdown => pin.Kind == PinSessionContentKind.Text && pin.CodeDocument is null,
             PinTextStyle.Grid => pin.Kind == PinSessionContentKind.Table && pin.CodeDocument is null,
             PinTextStyle.Code => pin.Kind == PinSessionContentKind.Text
                 && pin.CodeDocument is { } document && document.IsValid()

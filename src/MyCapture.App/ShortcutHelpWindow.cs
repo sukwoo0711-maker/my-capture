@@ -97,7 +97,7 @@ internal sealed class ShortcutHelpWindow : Window
                     ("Text_254C836B9ED2", Display(keys.CaptureFullScreen)), ("Hotkey.Scroll", Display(keys.ScrollingCapture)), ("Hotkey.Delay", Display(keys.DelayedCapture)),
                     ("QuickAccess.Title", ShortcutCatalog.Hints(ShortcutScope.QuickAccess, "Activate")), ("TextCapture_Title", Display(keys.CaptureText)),
                     .. CatalogRows(ShortcutScope.Selector)]),
-                ("Help.Annotation", [.. CatalogRows(ShortcutScope.Annotation), .. CatalogRows(ShortcutScope.Crop)]),
+                ("Help.Annotation", [.. CatalogRows(ShortcutScope.Annotation), ("EditorFlow_PinHint", Display(keys.PasteToScreen)), .. CatalogRows(ShortcutScope.Crop)]),
                 ("Workspace.Library", CatalogRows(ShortcutScope.Library)),
                 ("Help.Video", [("Help.Play", ShortcutCatalog.Hints(ShortcutScope.Video, "Play")), ("Help.Frame", FrameStepKeys),
                     ("Video.TrimIn", ShortcutCatalog.Hints(ShortcutScope.Video, "In")), ("Video.TrimOut", ShortcutCatalog.Hints(ShortcutScope.Video, "Out")),

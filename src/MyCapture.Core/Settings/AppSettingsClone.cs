@@ -100,6 +100,8 @@ public static class AppSettingsClone
         AbortOnFocusLoss = s.AbortOnFocusLoss,
         RegionHistoryLimit = s.RegionHistoryLimit,
         StartGuideShownCount = s.StartGuideShownCount,
+        KeyPanelShownCount = s.KeyPanelShownCount,
+        AlwaysShowKeyPanel = s.AlwaysShowKeyPanel,
     };
 
     private static Recording.RecordingSettings Clone(Recording.RecordingSettings s) => new()
@@ -131,6 +133,7 @@ public static class AppSettingsClone
     {
         LastTool = s.LastTool,
         StrokeStyle = s.StrokeStyle,
+        ArrowHeads = s.ArrowHeads,
         FillTransparency = s.FillTransparency,
         StrokeColor = s.StrokeColor,
         StrokeThickness = s.StrokeThickness,
@@ -163,6 +166,9 @@ public static class AppSettingsClone
         AfterCapture = s.AfterCapture,
         FirstCaptureTipShown = s.FirstCaptureTipShown,
         FirstPinTipShown = s.FirstPinTipShown,
+        PinSizeTipShown = s.PinSizeTipShown,
+        PracticeRevisionOffered = s.PracticeRevisionOffered,
+        SavedLocationTipCount = s.SavedLocationTipCount,
         ShowShortcutHints = s.ShowShortcutHints,
         AlwaysShowShortcutHints = s.AlwaysShowShortcutHints,
         ShortcutHintsRevision = s.ShortcutHintsRevision,
