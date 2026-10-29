@@ -76,12 +76,15 @@ internal static partial class PinTranslationOverlay
         double? sourceLineHeight = null, Func<string, double, Size>? finalMeasure = null,
         Func<string, double, double, double>? measureWidth = null, Func<string, double, Size>? placementMeasure = null,
         TextAlignment alignment = TextAlignment.Left, OcrRect? horizontalLimits = null,
-        Func<OcrRect, bool>? canOccupy = null, double firstLineInset = 0, IReadOnlyList<OcrRect>? textExclusions = null)
+        Func<OcrRect, bool>? canOccupy = null, double firstLineInset = 0, IReadOnlyList<OcrRect>? textExclusions = null,
+        double minimumFontSize = MinimumFontSize)
     {
         if (imageWidth <= 0 || imageHeight <= 0 || !double.IsFinite(estimatedEm) || estimatedEm <= 0) return null;
+        if (!double.IsFinite(minimumFontSize) || minimumFontSize <= 0) return null;
         OcrRect bounds = Clamp(block, imageWidth, imageHeight);
         if (!OcrGeometry.IsValid(bounds) || string.IsNullOrWhiteSpace(text)) return null;
-        double initial = Math.Clamp(estimatedEm, MinimumFontSize, 32768);
+        double minimumEm = Math.Min(MinimumFontSize, minimumFontSize);
+        double initial = Math.Clamp(estimatedEm, minimumEm, 32768);
         double lineAreaHeight = Math.Min(imageHeight - bounds.Y,
             Math.Max(bounds.Height, Math.Max(1, sourceLineCount) * (sourceLineHeight ?? initial * 1.2)));
         string normalized = NormalizeWhitespace(text);
@@ -192,7 +195,7 @@ internal static partial class PinTranslationOverlay
         PinOverlayFit? fit = Attempt(initial, bounds.Width, lineAreaHeight, Math.Max(1, sourceLineCount))
             ?? Attempt(initial, maxWidth, lineAreaHeight, Math.Max(1, sourceLineCount));
         if (fit is not null) return fit;
-        double comfortableMinimum = Math.Max(MinimumFontSize, initial * .85);
+        double comfortableMinimum = Math.Max(minimumEm, initial * .85);
         PinOverlayFit? SearchSizes(double first, double minimum, double factor, int lineLimit)
         {
             // Keep the original multiplicative grid, including its exact endpoint and rounding.
@@ -230,7 +233,7 @@ internal static partial class PinTranslationOverlay
         if (fit is not null) return fit;
 
         // Additional lines are allowed only after the modest shrink, then the existing minimum.
-        fit = SearchSizes(comfortableMinimum, MinimumFontSize, .9, int.MaxValue);
+        fit = SearchSizes(comfortableMinimum, minimumEm, .9, int.MaxValue);
         if (fit is not null) return fit;
         PinOverlayFit? GrowDown(double width)
         {
@@ -241,7 +244,7 @@ internal static partial class PinTranslationOverlay
                 if (obstacle.X < x + width + Padding && obstacle.Right > x - Padding
                     && obstacle.Bottom > bounds.Y && obstacle.Y >= bounds.Bottom - .01)
                     bottom = Math.Min(bottom, obstacle.Y - Padding * 2);
-            return Attempt(MinimumFontSize, width, Math.Max(bounds.Height, bottom - bounds.Y), int.MaxValue);
+            return Attempt(minimumEm, width, Math.Max(bounds.Height, bottom - bounds.Y), int.MaxValue);
         }
         fit = GrowDown(maxWidth);
         if (fit is not null) return fit;
@@ -542,6 +545,11 @@ internal static partial class PinTranslationOverlay
         }
         bool needsReview = false;
         double[] fontSizes = EstimateFontSizes(translations.Select(item => item.Block).ToArray());
+        for (int index = 0; index < translations.Count; index++)
+        {
+            double inkHeight = SourceInkHeight(translations[index].Block, pixels, width, height, stride);
+            if (inkHeight > 0) fontSizes[index] = Math.Min(fontSizes[index], inkHeight * 1.1);
+        }
         OcrRect[] protectedRegions = translations.SelectMany(item => item.Block.ProtectedRegions).ToArray();
         for (int index = 0; index < translations.Count; index++)
         {
@@ -552,6 +560,9 @@ internal static partial class PinTranslationOverlay
             { observeDecision?.Invoke(item.Block, "all-rejected"); continue; }
             if (string.Equals(NormalizeWhitespace(item.Text), NormalizeWhitespace(item.Block.Text), StringComparison.Ordinal))
             { observeDecision?.Invoke(item.Block, "identity"); continue; }
+            // Small source screenshots already have ink below the ordinary minimum.
+            // Preserve their capped scale instead of either enlarging or rejecting them.
+            double minimumEm = Math.Min(MinimumFontSize, fontSizes[index]);
             OcrRect[] obstacles = translations.Where(other => !ReferenceEquals(other, item))
                 .SelectMany(other => other.Block.Lines.Select(line => line.Bounds))
                 .Where(region => !item.Block.ProtectedRegions.Contains(region))
@@ -572,7 +583,7 @@ internal static partial class PinTranslationOverlay
                 width, height, Measure, obstacles, item.Block.Lines.Count,
                 sourcePitch > 0 ? sourcePitch : metrics.LineHeight(fontSizes[index]),
                 FinalMeasure, metrics.MeasureWidth, MeasurePlacement, alignment, horizontalLimits, surface.CanOccupy,
-                textExclusions: surface.TextExclusions);
+                textExclusions: surface.TextExclusions, minimumFontSize: minimumEm);
             // A short label can have a dropdown or the end of its pill immediately to the
             // right. Its unused left padding is legal only after the usual fit has failed.
             if (fit is null && item.Block.Lines.Count == 1 && alignment == TextAlignment.Left
@@ -580,7 +591,7 @@ internal static partial class PinTranslationOverlay
                 fit = Fit(item.Text, item.Block.Bounds, fontSizes[index], width, height,
                     Measure, obstacles, 1, metrics.LineHeight(fontSizes[index]),
                     FinalMeasure, metrics.MeasureWidth, MeasurePlacement, TextAlignment.Right,
-                    surface.HorizontalLimits(TextAlignment.Right), surface.CanOccupy);
+                    surface.HorizontalLimits(TextAlignment.Right), surface.CanOccupy, minimumFontSize: minimumEm);
             if (fit is null)
             { needsReview = true; observeDecision?.Invoke(item.Block, "fit"); continue; }
             // Reuse the chosen output's exact placement bounds (including any boundary validation)
@@ -661,7 +672,10 @@ internal static partial class PinTranslationOverlay
                         if (pitch <= 0) pitch = Format("Ag", draw.Fit.FontSize, Brushes.Black).Height;
                         for (int i = 0; i < lines.Length; i++)
                         {
-                            var line = Format(lines[i], draw.Fit.FontSize, new SolidColorBrush(foreground));
+                            // PlacementBounds includes the source line pitch in the first
+                            // baseline. Keep it when rendering separate exclusion-aware lines,
+                            // especially when the source ink cap makes the em much smaller.
+                            var line = Format(lines[i], draw.Fit.FontSize, new SolidColorBrush(foreground), pitch);
                             if (draw.Surface.Underline) line.SetTextDecorations(TextDecorations.Underline);
                             drawing.DrawText(line, new Point(origin.X + draw.Fit.LineOffsets[i], origin.Y + i * pitch));
                         }
@@ -691,6 +705,45 @@ internal static partial class PinTranslationOverlay
         bitmap.Render(visual);
         bitmap.Freeze();
         return new(bitmap, needsReview, draws.Count);
+    }
+
+    private static double SourceInkHeight(PinOverlayBlock block, byte[] pixels, int width, int height, int stride)
+    {
+        var heights = new List<double>();
+        foreach (OcrLine line in block.Lines)
+        {
+            Color background = EstimateBackground(pixels, width, height, stride, line.Bounds).Color;
+            var words = new List<double>();
+            IEnumerable<OcrRect> areas = line.Words.Count > 0 ? line.Words.Select(word => word.Bounds) : [line.Bounds];
+            foreach (OcrRect area in areas)
+            {
+                OcrRect bounds = Clamp(area, width, height);
+                if (!OcrGeometry.IsValid(bounds)) continue;
+                int top = int.MaxValue, bottom = -1;
+                int firstRow = (int)bounds.Y;
+                var rowContrast = new double[(int)Math.Ceiling(bounds.Bottom) - firstRow];
+                double strongest = 0;
+                for (int y = (int)bounds.Y; y < (int)Math.Ceiling(bounds.Bottom); y++)
+                    for (int x = (int)bounds.X; x < (int)Math.Ceiling(bounds.Right); x++)
+                    {
+                        double contrast = PixelVariance(pixels, y * stride + x * 4, background);
+                        rowContrast[y - firstRow] = Math.Max(rowContrast[y - firstRow], contrast);
+                        strongest = Math.Max(strongest, contrast);
+                    }
+                if (strongest < 4) continue;
+                // Low-contrast labels still have source ink. Scale the threshold with their
+                // strongest stroke instead of treating all gray text as an empty fixture.
+                double threshold = Math.Min(40 * 40, strongest * .25);
+                for (int row = 0; row < rowContrast.Length; row++)
+                    if (rowContrast[row] >= threshold)
+                    { top = Math.Min(top, firstRow + row); bottom = Math.Max(bottom, firstRow + row); }
+                if (bottom >= top) words.Add(bottom - top + 1);
+            }
+            // A checkbox, superscript or inflated OCR union must not set the text size.
+            // Word medians also avoid treating short translations as a reason to grow.
+            if (words.Count > 0) heights.Add(Median(words));
+        }
+        return heights.Count > 0 ? Median(heights) : 0;
     }
 
     internal static Size Measure(string text, double size, double width)

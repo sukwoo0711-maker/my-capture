@@ -382,7 +382,10 @@ public sealed class PinTranslationOverlayTests(ITestOutputHelper output)
     [Fact]
     public async Task AnUnfittableBlockKeepsPixelsAndFullTranslationInDocument()
     {
-        string translation = string.Join(" ", Enumerable.Repeat("문서", 500));
+        // Keep 500 two-syllable words for the fit limit, without a decoder repetition
+        // loop (which is independently rejected by the translation recovery tests).
+        string translation = string.Join(" ", Enumerable.Range(0, 500)
+            .Select(index => $"{(char)('가' + index * 2)}{(char)('가' + index * 2 + 1)}"));
         BitmapSource image = Bitmap(100, 40);
         PinTranslationResult result = Assert.IsType<PinTranslationResult>(await new PinTranslationService(new FakeTranslator(_ => translation))
             .TranslateRecognizedAsync(Recognition(Line("Save document", 10, 10, 80, 15)), PinContent.FromImage(image), CancellationToken.None));

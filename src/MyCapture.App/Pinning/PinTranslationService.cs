@@ -110,7 +110,9 @@ internal sealed partial class PinTranslationService(ITextTranslator translator,
         // Markdown lines keep their inline syntax together and are translated whole.
         PlanPiece[] pieces = [.. plan.Pieces.Where(static piece => piece.Translate)];
         var units = new List<string>();
+        var originalUnits = new List<string>();
         var unitCounts = new int[pieces.Length];
+        var unmappedOriginal = new bool[pieces.Length];
         for (int index = 0; index < pieces.Length; index++)
         {
             string[] sentences = pieces[index].Kind == PlanKind.MarkdownLine ? [pieces[index].Source]
@@ -118,6 +120,17 @@ internal sealed partial class PinTranslationService(ITextTranslator translator,
             if (sentences.Length == 0) sentences = [pieces[index].Source];
             unitCounts[index] = sentences.Length;
             units.AddRange(sentences);
+            string? originalSource = pieces[index].Raw.Length == pieces[index].Source.Length ? pieces[index].Raw
+                : pieces[index].Kind == PlanKind.Prose ? RestoreJoinedSource(pieces[index].Raw, pieces[index].Source)
+                : pieces[index].Source;
+            unmappedOriginal[index] = originalSource is null;
+            int sourceOffset = 0;
+            foreach (string sentence in sentences)
+            {
+                int start = pieces[index].Source.IndexOf(sentence, sourceOffset, StringComparison.Ordinal);
+                originalUnits.Add(originalSource?.Substring(start, sentence.Length) ?? sentence);
+                sourceOffset = start + sentence.Length;
+            }
         }
 
         IReadOnlyList<TranslatedText> translated = await _translator.TranslateAsync(units, null, cancellationToken)
@@ -134,22 +147,25 @@ internal sealed partial class PinTranslationService(ITextTranslator translator,
             cancellationToken.ThrowIfCancellationRequested();
             var parts = new List<string>(unitCounts[index]);
             bool any = false;
+            bool rejected = false;
             for (int offset = 0; offset < unitCounts[index]; offset++, unit++)
             {
-                TranslatedText result = translated[unit];
-                if (!string.Equals(result.Source, units[unit], StringComparison.Ordinal))
-                    throw new InvalidOperationException("The translator returned a missing or mismatched pin result.");
                 // Keep the sentence context, including values and inline syntax, and check them afterwards.
                 // The model's value checker does not detect broken Markdown or a changed diagram label.
                 // An empty answer is not a translation: that sentence keeps its source text.
-                string text = (result.Text ?? string.Empty).ReplaceLineEndings(" ").Trim();
-                bool safe = text.Length > 0 && !result.NeedsReview && PreservesProtectedValues(units[unit], text)
-                    && (pieces[index].Kind != PlanKind.MarkdownLine || PreservesMarkdown(units[unit], text));
+                string? text = await AcceptOrRecoverAsync(units[unit], translated[unit],
+                    pieces[index].Kind == PlanKind.MarkdownLine,
+                    pieces[index].Raw.ReplaceLineEndings("\n").Split('\n').Select(OcrLatinTextRepair.Repair),
+                    cancellationToken).ConfigureAwait(false);
+                bool safe = text is not null;
                 needsReview |= !safe;
                 any |= safe;
-                parts.Add(safe ? text : units[unit]);
+                rejected |= !safe;
+                parts.Add(text ?? originalUnits[unit]);
             }
-            accepted[index] = any ? string.Join(" ", parts) : null;
+            // An unusual transformed span without a reliable character map keeps its
+            // complete original piece when any sentence fails, rather than a repaired fallback.
+            accepted[index] = any && !(rejected && unmappedOriginal[index]) ? string.Join(" ", parts) : null;
         }
 
         string output = plan.Assemble(accepted);

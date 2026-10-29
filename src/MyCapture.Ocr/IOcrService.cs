@@ -74,6 +74,26 @@ public sealed class OcrRequest
     /// </summary>
     public IReadOnlyList<string> PreferredLanguages { get; init; } = [];
 
+    /// <summary>
+    /// In Fast/Balanced requests, re-read short Hangul words inside otherwise Latin lines with
+    /// the downloaded model. Image translation asks for it; plain text recognition keeps the
+    /// speed of Windows OCR alone.
+    /// </summary>
+    public bool RecoverLatinIntrusions { get; init; }
+
+    /// <summary>Returns a copy of this request with <see cref="RecoverLatinIntrusions"/> set.</summary>
+    public OcrRequest WithLatinRecovery() => new(EncodedImage, FilePath, Bitmap)
+    {
+        UpscaleFactor = UpscaleFactor,
+        PreferredLanguages = PreferredLanguages,
+        SearchRotatedOrientations = SearchRotatedOrientations,
+        EnhanceContrast = EnhanceContrast,
+        UseNeuralModel = UseNeuralModel,
+        LocalCorrection = LocalCorrection,
+        UseSuperResolution = UseSuperResolution,
+        RecoverLatinIntrusions = true,
+    };
+
     public static OcrRequest FromBytes(
         byte[] encodedImage,
         double upscaleFactor = 1.0,

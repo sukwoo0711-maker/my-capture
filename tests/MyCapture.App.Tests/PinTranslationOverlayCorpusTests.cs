@@ -33,6 +33,7 @@ namespace MyCapture.App.Tests;
 public sealed class PinTranslationOverlayCorpusTests(ITestOutputHelper output)
 {
     internal const string CorpusVariable = "MYCAPTURE_PIN_OVERLAY_CORPUS";
+    internal const string ComparisonVariable = "MYCAPTURE_PIN_OVERLAY_COMPARISON";
     private const int PdfPages = 2;
 
     [PinOverlayCorpusFact]
@@ -61,19 +62,20 @@ public sealed class PinTranslationOverlayCorpusTests(ITestOutputHelper output)
         var baseline = string.IsNullOrWhiteSpace(baselinePath) ? null : new PinTranslationOverlayCorpusBaseline(baselinePath);
         if (baseline is not null) output.WriteLine("Retained baseline assembly: " + baseline.Version);
         string? manifest = Environment.GetEnvironmentVariable(PinOverlayCorpusCoverage.ManifestVariable);
+        string? comparisonDirectory = Environment.GetEnvironmentVariable(ComparisonVariable);
         var coverage = string.IsNullOrWhiteSpace(manifest) ? null : new PinOverlayCorpusCoverage(manifest);
         if (coverage is not null) Assert.NotNull(baseline);
-        string? translationCache = replayDirectory is null ? null
-            : Environment.GetEnvironmentVariable(PinOverlayCorpusTranslations.CacheVariable) ?? directory;
+        string? translationCache = Environment.GetEnvironmentVariable(PinOverlayCorpusTranslations.CacheVariable)
+            ?? (replayDirectory is null ? null : directory);
 
         foreach (string file in Directory.EnumerateFiles(input).Order(StringComparer.OrdinalIgnoreCase))
         {
-            IReadOnlyList<(string Name, BitmapSource Image)> pictures = await LoadPicturesAsync(file, replayDirectory);
+            IReadOnlyList<(string Name, BitmapSource Image)> pictures = await LoadPicturesAsync(file, replayDirectory ?? comparisonDirectory);
             foreach ((string name, BitmapSource before) in pictures)
             {
                 var watch = Stopwatch.StartNew();
                 OcrResult recognized = replayDirectory is null
-                    ? await ocr.RecognizeAsync(OcrRequestFactory.FromBitmap(before, settings), CancellationToken.None)
+                    ? await ocr.RecognizeAsync(OcrRequestFactory.FromBitmap(before, settings).WithLatinRecovery(), CancellationToken.None)
                     : ReadRecognized(Path.Combine(replayDirectory, name + "-ocr.json"));
                 long ocrMs = replayDirectory is null ? watch.ElapsedMilliseconds : 0;
                 string size = $"{before.PixelWidth}x{before.PixelHeight}";
@@ -106,21 +108,30 @@ public sealed class PinTranslationOverlayCorpusTests(ITestOutputHelper output)
                     string stem = name + "." + tag;
                     var translator = new PinOverlayCorpusTranslations(
                         direction == PinTranslationDirection.EnglishToKorean ? toKorean : toEnglish, directory, stem, translationCache);
-                    var service = new PinTranslationService(translator, direction);
+                    var recovery = new List<PinTranslationRecoveryDecision>();
+                    var service = new PinTranslationService(translator, direction) { ObserveRecovery = recovery.Add };
                     var baselineDecisions = new List<PinOverlayCorpusDecision>();
                     var afterDecisions = new List<PinOverlayCorpusDecision>();
                     BitmapSource? baselineImage = null;
                     if (baseline is not null)
                     {
-                        var replay = await baseline.RunAsync(recognized, before, translator, direction);
+                        OcrResult baselineRecognized = comparisonDirectory is null ? recognized
+                            : ReadRecognized(Path.Combine(comparisonDirectory, name + "-ocr.json"));
+                        var replay = await baseline.RunAsync(baselineRecognized, before, translator, direction);
                         baselineDecisions.AddRange(replay.Decisions);
                         foreach (var decision in replay.Decisions)
                             Decision("before", decision.Reason, decision.Bounds, decision.Text);
                         if (replay.Decisions.Count > 0)
                         {
                             baselineImage = replay.Image;
-                            Save(directory, stem + "-baseline.png", replay.Image);
+                            Save(directory, stem + (comparisonDirectory is null ? "-baseline.png" : "-r4.png"), replay.Image);
                         }
+                    }
+                    if (comparisonDirectory is not null)
+                    {
+                        string previous = Path.Combine(comparisonDirectory, stem + "-after.png");
+                        baselineImage = File.Exists(previous) ? Load(previous) : before;
+                        Save(directory, stem + "-baseline.png", baselineImage);
                     }
                     watch.Restart();
                     PinTranslationResult? result = await service.TranslateRecognizedAsync(
@@ -132,6 +143,8 @@ public sealed class PinTranslationOverlayCorpusTests(ITestOutputHelper output)
                                 block.Lines.Sum(line => line.Bounds.Width * line.Bounds.Height)));
                         });
                     coverage?.Add(name, tag, baselineDecisions, afterDecisions);
+                    File.WriteAllText(DiagnosticOutputPaths.Child(directory, stem + "-recovery.json"),
+                        JsonSerializer.Serialize(recovery, new JsonSerializerOptions { WriteIndented = true }), Encoding.UTF8);
                     translator.Save();
                     long translateMs = watch.ElapsedMilliseconds;
                     string kind = result is null ? "nothing" : result.Content.Kind == PinContentKind.Image ? "overlay" : "document";
@@ -260,7 +273,7 @@ public sealed class PinTranslationOverlayCorpusTests(ITestOutputHelper output)
 
     internal static async Task<IReadOnlyList<(string, BitmapSource)>> RenderPdfAsync(string path)
     {
-        StorageFile file = await StorageFile.GetFileFromPathAsync(path);
+        StorageFile file = await StorageFile.GetFileFromPathAsync(Path.GetFullPath(path));
         PdfDocument document = await PdfDocument.LoadFromFileAsync(file);
         var pages = new List<(string, BitmapSource)>();
         for (uint index = 0; index < Math.Min(document.PageCount, PdfPages); index++)

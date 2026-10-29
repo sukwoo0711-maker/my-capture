@@ -389,11 +389,21 @@ internal static partial class PinTranslationOverlay
             && !string.IsNullOrWhiteSpace(word.Text)).OrderBy(word => word.Bounds.X).ToArray();
         if (words.Length == 0)
         {
-            if (OcrGeometry.IsValid(line.Bounds) && !string.IsNullOrWhiteSpace(line.Text))
-                foreach (OverlayLine part in ClassifyLine(line with { Words = [new(line.Text, line.Bounds)] }, code, [])) yield return part;
-            yield break;
+            if (!OcrGeometry.IsValid(line.Bounds) || string.IsNullOrWhiteSpace(line.Text)) yield break;
+            words = [new(line.Text, line.Bounds)];
+            line = line with { Words = words };
         }
-        double gap = Math.Max(6, Median(words.Select(word => word.Bounds.Height)) * 2);
+        double wordHeight = Median(words.Select(word => word.Bounds.Height));
+        double gap = Math.Max(6, wordHeight * 2);
+        double[] spaces = words.Zip(words.Skip(1), (first, next) => next.Bounds.X - first.Bounds.Right)
+            .Where(space => space > 0).ToArray();
+        double[] wordSpaces = spaces.Where(space => space <= wordHeight * .65).ToArray();
+        double navigationGap = Math.Max(6, Math.Max(wordHeight * 1.15,
+            wordSpaces.Length > 0 ? Median(wordSpaces) * 2.5 : gap));
+        // Repeated inter-item gaps establish a navigation row. Its ordinary word spaces
+        // stay together, including two-word labels and product names with a number.
+        if (words.Length >= 5 && wordSpaces.Length >= 2 && spaces.Count(space => space >= navigationGap) >= 3)
+            gap = navigationGap - .01;
         var run = new List<OcrWord>();
         var separated = new List<OcrLine>();
         var rules = new List<OcrRect>();
@@ -430,7 +440,7 @@ internal static partial class PinTranslationOverlay
         if (run.Count > 0) separated.Add(MakeLine(run));
         foreach (OcrLine separatedLine in separated)
         {
-            OcrLine withoutMarker = TrimListMarker(separatedLine, out OcrRect? marker);
+            OcrLine withoutMarker = TrimListMarker(separatedLine, pixels, width, height, out OcrRect? marker);
             OcrLine content = TrimEdgeIcons(withoutMarker, out IReadOnlyList<OcrRect> icons);
             IEnumerable<OcrRect> protectedRegions = rules.Concat(icons);
             if (marker is { } bounds) protectedRegions = protectedRegions.Append(bounds);
@@ -441,20 +451,72 @@ internal static partial class PinTranslationOverlay
 
     private static bool IsChevron(string text) => text is "v" or "V" or ">" or "›" or "∨" or "⌄" or "▾" or "▼";
 
-    private static OcrLine TrimListMarker(OcrLine line, out OcrRect? marker)
+    private static OcrLine TrimListMarker(OcrLine line, byte[]? pixels, int width, int height, out OcrRect? marker)
     {
         marker = null;
         Match match = OverlayListMarker().Match(line.Text);
-        if (!match.Success) return line;
+        if (!match.Success) return TrimRaisedFootnote(line, pixels, width, height, out marker);
         OcrLine? prefix = SliceLine(line, 0, match.Length), body = SliceLine(line, match.Length, line.Text.Length);
         if (prefix is null || body is null) return line;
         marker = prefix.Bounds;
         return body;
     }
 
-    [GeneratedRegex(@"^(?:[•●◦▪▫‣⁃*−–—-]|\(?\d+(?:\.\d+)*\s*[.)]|\(?[A-Za-z][.)])\s+", RegexOptions.CultureInvariant,
+    [GeneratedRegex(@"^(?:[†‡§⁰¹²³⁴⁵⁶⁷⁸⁹]+\s*|\*(?=\S)\s*|(?:[•●◦▪▫‣⁃*−–—-]|\(?\d+(?:\.\d+)*\s*[.)]|\(?[A-Za-z][.)])\s+)", RegexOptions.CultureInvariant,
         matchTimeoutMilliseconds: 200)]
     private static partial Regex OverlayListMarker();
+
+    private static OcrLine TrimRaisedFootnote(OcrLine line, byte[]? pixels, int width, int height, out OcrRect? marker)
+    {
+        marker = null;
+        if (pixels is null || line.Words.Count < 3) return line;
+        OcrWord first = line.Words[0];
+        if (first.Text.Length < 2 || first.Text[0] is not ('t' or 'T') || !char.IsAsciiLetter(first.Text[1])) return line;
+        double bodyTop = Median(line.Words.Skip(1).Select(word => word.Bounds.Y));
+        double bodyHeight = Median(line.Words.Skip(1).Select(word => word.Bounds.Height));
+        if (bodyTop - first.Bounds.Y < Math.Max(2, bodyHeight * .15)) return line;
+        OcrRect area = Clamp(first.Bounds, width, height);
+        Color background = EstimateBackground(pixels, width, height, width * 4, area).Color;
+        int left = -1, right = -1, top = int.MaxValue, bottom = -1, next = -1;
+        for (int x = (int)area.X; x < (int)Math.Ceiling(area.Right); x++)
+        {
+            int columnTop = int.MaxValue, columnBottom = -1;
+            for (int y = (int)area.Y; y < (int)Math.Ceiling(area.Bottom); y++)
+            {
+                if (PixelVariance(pixels, (y * width + x) * 4, background) < 40 * 40) continue;
+                columnTop = Math.Min(columnTop, y); columnBottom = Math.Max(columnBottom, y);
+            }
+            if (columnBottom < columnTop)
+            {
+                if (left >= 0 && right < 0) right = x;
+                continue;
+            }
+            if (right >= 0) { next = x; break; }
+            if (left < 0) left = x;
+            top = Math.Min(top, columnTop); bottom = Math.Max(bottom, columnBottom);
+        }
+        // Korean Windows OCR reads raised daggers as a leading 't'. Only an isolated,
+        // raised narrow glyph qualifies; ordinary words beginning with t stay untouched.
+        if (left < 0 || next < 0 || right - left > bodyHeight * .65 || right - left < 1
+            || bodyTop - top < Math.Max(2, bodyHeight * .15)
+            || bottom - top + 1 > bodyHeight * 1.15 || next - right < 1
+            || bottom + 1 > first.Bounds.Bottom - Math.Max(2, bodyHeight * .2)) return line;
+        int textTop = int.MaxValue, textBottom = -1;
+        for (int y = (int)area.Y; y < (int)Math.Ceiling(area.Bottom); y++)
+            for (int x = next; x < (int)Math.Ceiling(area.Right); x++)
+            {
+                if (PixelVariance(pixels, (y * width + x) * 4, background) < 40 * 40) continue;
+                textTop = Math.Min(textTop, y); textBottom = Math.Max(textBottom, y);
+            }
+        // Compare against the remaining glyphs of the same word, not just other words'
+        // OCR tops: an ordinary capital T beside lowercase/descending words is not raised.
+        if (textBottom < textTop || (textTop + textBottom - top - bottom) / 2d < bodyHeight * .3) return line;
+        marker = new(left, top, right - left, bottom - top + 1);
+        OcrWord body = first with { Text = first.Text[1..], Bounds = first.Bounds with
+            { X = next, Width = first.Bounds.Right - next, Y = Math.Max(first.Bounds.Y, bodyTop),
+                Height = first.Bounds.Bottom - Math.Max(first.Bounds.Y, bodyTop) } };
+        return MakeLine([body, .. line.Words.Skip(1)]);
+    }
 
     private static OcrLine MakeLine(IReadOnlyList<OcrWord> source) => new(string.Join(" ", source.Select(word => word.Text)),
         source.Select(word => word.Bounds).Aggregate(default(OcrRect), OcrRect.Union), source.ToArray());

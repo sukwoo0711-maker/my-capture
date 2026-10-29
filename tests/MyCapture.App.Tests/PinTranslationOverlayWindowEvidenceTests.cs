@@ -28,6 +28,7 @@ public sealed class PinTranslationOverlayWindowEvidenceTests(ITestOutputHelper o
     [PinOverlayEvidenceFact]
     public Task VisiblePinWindowSwitchesOverlayDocumentAndOriginalInPlace() => RunAsync(async () =>
     {
+        using var language = UiText.UseLanguage("ko-KR");
         string directory = DiagnosticOutputPaths.Create(
             Environment.GetEnvironmentVariable(PinTranslationOverlayEvidenceTests.OutputVariable)!);
         string? models = Environment.GetEnvironmentVariable(PinTranslationOverlayEvidenceTests.ModelsVariable);

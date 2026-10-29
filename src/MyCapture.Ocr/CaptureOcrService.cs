@@ -1,5 +1,8 @@
 using MyCapture.Core.Platform;
 using System.Diagnostics;
+using System.IO;
+using System.Windows;
+using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using Microsoft.Extensions.Logging;
 
@@ -7,8 +10,9 @@ namespace MyCapture.Ocr;
 
 /// <summary>
 /// Runs Accurate requests through PP-OCR and Windows OCR in parallel when the
-/// downloaded Korean model is present, and merges their lines; Windows OCR alone serves
-/// Fast/Balanced requests and remains the fallback when the model is missing.
+/// downloaded Korean model is present, and merges their lines; Windows OCR serves
+/// Fast/Balanced requests, with a targeted second reading for short Hangul intrusions
+/// in otherwise Latin lines, and remains the fallback when the model is missing.
 /// </summary>
 public sealed class CaptureOcrService : IOcrService
 {
@@ -120,7 +124,73 @@ public sealed class CaptureOcrService : IOcrService
             }
         }
 
-        return await _windows.RecognizeAsync(request, cancellationToken).ConfigureAwait(false);
+        OcrResult windows = await _windows.RecognizeAsync(request, cancellationToken).ConfigureAwait(false);
+        // Fast is the default, so these requests never reach the dual-engine merge above.
+        // The Korean Windows pack can read English function words as Hangul. When the caller
+        // asks for it (image translation), consult the installed Latin-capable model only for
+        // that pattern, retaining every other word and all Windows geometry; a missing model
+        // keeps the ordinary Fast result. Plain recognition never pays for the second reading.
+        if (!request.RecoverLatinIntrusions || !_enableDualEngine || !OcrLatinWordRecovery.HasSuspects(windows)
+            || !NeuralCanRunSafely())
+            return windows;
+        var recoveryWatch = Stopwatch.StartNew();
+        OcrResult second = await RecognizeSafelyAsync(
+            (input, token) => _recognizeNeural(PrepareDualRequest(input), token), "PP-OCR Latin recovery",
+            request, cancellationToken).ConfigureAwait(false);
+        if (cancellationToken.IsCancellationRequested || second.Status == OcrStatus.Cancelled)
+            return OcrResult.Cancelled();
+        OcrResult recovered = OcrLatinWordRecovery.Recover(windows, second, windows.Elapsed + recoveryWatch.Elapsed);
+        if (second.HasText && !windows.ReadingOrientation.IsRotated)
+        {
+            // A detector can merge neighbouring tiny rows even though the word recognizer
+            // can read the isolated strip. At most one short retry per unresolved Latin row.
+            foreach (OcrRect bounds in OcrLatinWordRecovery.RetryRegions(recovered).ToArray())
+            {
+                OcrResult retry = await RecognizeSafelyAsync(async (input, token) =>
+                {
+                    OcrRequest? crop = CreateLatinRetryRequest(input, bounds, out int x, out int y);
+                    if (crop is null) return OcrResult.NoText("ko", TimeSpan.Zero);
+                    OcrResult read = await _recognizeNeural(crop, token).ConfigureAwait(false);
+                    return read.HasText ? OcrLatinWordRecovery.Offset(read, x, y, 2) : read;
+                }, "PP-OCR Latin strip recovery", request, cancellationToken).ConfigureAwait(false);
+                if (cancellationToken.IsCancellationRequested || retry.Status == OcrStatus.Cancelled)
+                    return OcrResult.Cancelled();
+                recovered = OcrLatinWordRecovery.Recover(recovered, retry, windows.Elapsed + recoveryWatch.Elapsed);
+            }
+        }
+        // A failed or inconclusive second reading still took time. Preserve the source
+        // text/geometry, but include all attempted work in the result's elapsed metadata.
+        return OcrResult.Success(recovered.Text, recovered.LanguageTag ?? string.Empty, recovered.Lines,
+            windows.Elapsed + recoveryWatch.Elapsed, recovered.ReadingOrientation, recovered.TextAngle);
+    }
+
+    internal static OcrRequest? CreateLatinRetryRequest(OcrRequest request, OcrRect bounds, out int x, out int y)
+    {
+        x = y = 0;
+        BitmapSource? source = request.Bitmap;
+        if (source is null)
+        {
+            using Stream stream = request.EncodedImage is not null
+                ? new MemoryStream(request.EncodedImage, writable: false)
+                : File.OpenRead(request.FilePath!);
+            source = BitmapDecoder.Create(stream, BitmapCreateOptions.PreservePixelFormat, BitmapCacheOption.OnLoad).Frames[0];
+        }
+        if (!OcrGeometry.IsValid(bounds) || source.PixelWidth <= 0 || source.PixelHeight <= 0) return null;
+        x = Math.Max(0, (int)Math.Floor(bounds.X) - 2);
+        y = Math.Max(0, (int)Math.Floor(bounds.Y) - 2);
+        int right = Math.Min(source.PixelWidth, (int)Math.Ceiling(bounds.Right) + 2);
+        int bottom = Math.Min(source.PixelHeight, (int)Math.Ceiling(bounds.Bottom) + 2);
+        if (right <= x || bottom <= y) return null;
+        var rectangle = new Int32Rect(x, y, right - x, bottom - y);
+        int stride = checked((rectangle.Width * source.Format.BitsPerPixel + 7) / 8);
+        byte[] pixels = new byte[checked(stride * rectangle.Height)];
+        source.CopyPixels(rectangle, pixels, stride, 0);
+        BitmapSource strip = BitmapSource.Create(rectangle.Width, rectangle.Height, source.DpiX, source.DpiY,
+            source.Format, source.Palette, pixels, stride);
+        var enlarged = new TransformedBitmap(strip, new ScaleTransform(2, 2));
+        enlarged.Freeze();
+        return OcrRequest.FromBitmap(enlarged, preferredLanguages: request.PreferredLanguages,
+            searchRotatedOrientations: false, useNeuralModel: true);
     }
 
     private async Task<OcrResult> RecognizeDualAsync(OcrRequest request, CancellationToken cancellationToken)

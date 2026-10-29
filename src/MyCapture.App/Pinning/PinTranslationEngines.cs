@@ -28,7 +28,7 @@ internal sealed class PinTranslationEngines(TextTranslationService englishToKore
     internal static Task<OcrResult> RecognizeResultAsync(IOcrService? ocr, BitmapSource image,
         MyCapture.Core.Settings.OcrSettings settings, CancellationToken cancellationToken) =>
         ocr is null ? Task.FromResult(OcrResult.Unavailable())
-            : ocr.RecognizeAsync(OcrRequestFactory.FromBitmap(image, settings), cancellationToken);
+            : ocr.RecognizeAsync(OcrRequestFactory.FromBitmap(image, settings).WithLatinRecovery(), cancellationToken);
 
     public void Dispose()
     {
