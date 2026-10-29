@@ -12,7 +12,7 @@ internal readonly record struct PinOverlayBackground(Color Color, double Varianc
 {
     internal bool NeedsPlate => Variance > 18 * 18;
 }
-internal sealed record PinOverlayFit(OcrRect Bounds, double FontSize, string Text, bool Grew);
+internal sealed record PinOverlayFit(OcrRect Bounds, double FontSize, string Text, bool Grew, string RenderText);
 internal sealed record PinOverlayComposition(BitmapSource Image, bool NeedsReview, int RenderedBlocks);
 
 /// <summary>Native-pixel layout and colour sampling, followed by one window-free WPF render.</summary>
@@ -109,40 +109,147 @@ internal static class PinTranslationOverlay
             source.Select(word => word.Bounds).Aggregate(default(OcrRect), OcrRect.Union), source.ToArray());
     }
 
-    /// <summary>Pure fitting policy. Measurement is injected; no text-height limit or trimming is applied.</summary>
-    internal static PinOverlayFit? Fit(string text, OcrRect block, double lineHeight, int imageWidth, int imageHeight,
-        Func<string, double, double, Size> measure, IReadOnlyList<OcrRect>? obstacles = null)
+    internal static string NormalizeWhitespace(string text) => string.Join(" ", text.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
+
+    internal static double[] EstimateFontSizes(IReadOnlyList<PinOverlayBlock> blocks)
     {
-        if (imageWidth <= 0 || imageHeight <= 0 || !double.IsFinite(lineHeight) || lineHeight <= 0) return null;
+        double[] sizes = blocks.Select(block => Math.Clamp(Median(block.Lines.Select(line =>
+        {
+            // OCR rectangles describe ink, not the font's em or its line box.
+            // Extent includes WPF's raster padding (even at em=1); glyph geometry is scale-linear ink.
+            double ink = Format(line.Text, 1, Brushes.Black).BuildGeometry(new Point()).Bounds.Height;
+            return line.Bounds.Height / (double.IsFinite(ink) && ink > 0 ? ink : .85);
+        })), MinimumFontSize, 32768)).ToArray();
+        int[] ordered = Enumerable.Range(0, sizes.Length).OrderBy(index => sizes[index]).ToArray();
+        for (int start = 0; start < ordered.Length;)
+        {
+            int end = start + 1;
+            while (end < ordered.Length)
+            {
+                double candidate = Median(ordered.Skip(start).Take(end - start + 1).Select(index => sizes[index]));
+                if (sizes[ordered[start]] < candidate * .88 || sizes[ordered[end]] > candidate * 1.12) break;
+                end++;
+            }
+            double shared = Median(ordered.Skip(start).Take(end - start).Select(index => sizes[index]));
+            for (int i = start; i < end; i++) sizes[ordered[i]] = shared;
+            start = end;
+        }
+        return sizes;
+    }
+
+    /// <summary>Measurement is unwrapped; explicit legal line breaks prevent WPF emergency word splitting.</summary>
+    internal static PinOverlayFit? Fit(string text, OcrRect block, double estimatedEm, int imageWidth, int imageHeight,
+        Func<string, double, double, Size> measure, IReadOnlyList<OcrRect>? obstacles = null, int sourceLineCount = 1,
+        double? sourceLineHeight = null)
+    {
+        if (imageWidth <= 0 || imageHeight <= 0 || !double.IsFinite(estimatedEm) || estimatedEm <= 0) return null;
         OcrRect bounds = Clamp(block, imageWidth, imageHeight);
         if (!OcrGeometry.IsValid(bounds) || string.IsNullOrWhiteSpace(text)) return null;
-        double initial = Math.Clamp(lineHeight / .85, MinimumFontSize, 32768);
-        for (double size = initial; ; size = Math.Max(MinimumFontSize, size * .9))
+        double initial = Math.Clamp(estimatedEm, MinimumFontSize, 32768);
+        double lineAreaHeight = Math.Min(imageHeight - bounds.Y,
+            Math.Max(bounds.Height, Math.Max(1, sourceLineCount) * (sourceLineHeight ?? initial * 1.2)));
+        string normalized = NormalizeWhitespace(text);
+        IReadOnlyList<OcrRect> blockers = obstacles ?? [];
+        double maxWidth = imageWidth - bounds.X;
+        foreach (OcrRect obstacle in blockers)
+            if (obstacle.X >= bounds.Right - .01 && obstacle.Y < bounds.Y + lineAreaHeight + Padding
+                && obstacle.Bottom > bounds.Y - Padding)
+                maxWidth = Math.Min(maxWidth, Math.Max(bounds.Width, obstacle.X - Padding * 2 - bounds.X));
+
+        PinOverlayFit? Attempt(double size, double width, double height, int lineLimit)
         {
-            if (Fits(measure(text, size, bounds.Width), bounds)) return new(bounds, size, text, false);
-            if (size == MinimumFontSize) break;
+            string? wrapped = Wrap(normalized, size, width, measure);
+            if (wrapped is null || wrapped.Count(character => character == '\n') + 1 > lineLimit) return null;
+            Size measured = measure(wrapped, size, double.PositiveInfinity);
+            if (!double.IsFinite(measured.Width) || !double.IsFinite(measured.Height)
+                || measured.Width > width + .01 || measured.Height > height + .01) return null;
+            var fitted = bounds with
+            {
+                Width = Math.Max(bounds.Width, measured.Width),
+                Height = Math.Max(bounds.Height, measured.Height)
+            };
+            if (blockers.Any(obstacle => Intersects(EraseBounds(fitted, imageWidth, imageHeight), obstacle))) return null;
+            return new(fitted, size, text, fitted.Width > bounds.Width + .01 || fitted.Height > bounds.Height + .01, wrapped);
         }
 
-        // First grow down, then right. Other blocks are hard obstacles, including failed translations.
-        double maxWidth = imageWidth - bounds.X;
-        for (double width = bounds.Width; ; width = Math.Min(maxWidth, width + 8))
+        // Preserve size and line count first, then use the free space to the right.
+        PinOverlayFit? fit = Attempt(initial, bounds.Width, lineAreaHeight, Math.Max(1, sourceLineCount))
+            ?? Attempt(initial, maxWidth, lineAreaHeight, Math.Max(1, sourceLineCount));
+        if (fit is not null) return fit;
+        double comfortableMinimum = Math.Max(MinimumFontSize, initial * .85);
+        for (double size = Math.Max(comfortableMinimum, initial * .95); ; size = Math.Max(comfortableMinimum, size * .95))
+        {
+            fit = Attempt(size, maxWidth, lineAreaHeight, Math.Max(1, sourceLineCount));
+            if (fit is not null) return fit;
+            if (size == comfortableMinimum) break;
+        }
+
+        // Additional lines are allowed only after the modest shrink, then the existing minimum.
+        for (double size = comfortableMinimum; ; size = Math.Max(MinimumFontSize, size * .9))
+        {
+            fit = Attempt(size, maxWidth, lineAreaHeight, int.MaxValue);
+            if (fit is not null) return fit;
+            if (size == MinimumFontSize) break;
+        }
+        PinOverlayFit? GrowDown(double width)
         {
             double bottom = imageHeight;
-            foreach (OcrRect obstacle in obstacles ?? [])
+            foreach (OcrRect obstacle in blockers)
                 if (obstacle.X < bounds.X + width + Padding && obstacle.Right > bounds.X - Padding
                     && obstacle.Bottom > bounds.Y && obstacle.Y >= bounds.Bottom - .01)
                     bottom = Math.Min(bottom, obstacle.Y - Padding * 2);
-            var area = new OcrRect(bounds.X, bounds.Y, width, Math.Max(bounds.Height, bottom - bounds.Y));
-            Size measured = measure(text, MinimumFontSize, width);
-            var fitted = area with { Height = Math.Max(bounds.Height, measured.Height) };
-            bool intersects = (obstacles ?? []).Any(obstacle => Intersects(fitted, obstacle));
-            if (!intersects && Fits(measured, area)) return new(fitted, MinimumFontSize, text, true);
-            if (width == maxWidth) break;
+            return Attempt(MinimumFontSize, width, Math.Max(bounds.Height, bottom - bounds.Y), int.MaxValue);
+        }
+        fit = GrowDown(maxWidth);
+        if (fit is not null) return fit;
+        // A staggered block below may obstruct the wide area but leave a narrow vertical passage.
+        for (double width = bounds.Width; width < maxWidth; width += 8)
+        {
+            fit = GrowDown(width);
+            if (fit is not null) return fit;
         }
         return null;
+    }
 
-        static bool Fits(Size measured, OcrRect area) => double.IsFinite(measured.Height) && double.IsFinite(measured.Width)
-            && measured.Width <= area.Width + .01 && measured.Height <= area.Height + .01;
+    internal static string? Wrap(string text, double size, double width, Func<string, double, double, Size> measure)
+    {
+        text = NormalizeWhitespace(text);
+        if (text.Length == 0) return text;
+        var breaks = new List<int>();
+        bool characterBreaks = !text.Contains(' ') && text.Any(IsCjk)
+            && !text.Any(character => char.IsLetter(character) && !IsCjk(character));
+        if (characterBreaks)
+        {
+            TextElementEnumerator elements = StringInfo.GetTextElementEnumerator(text);
+            while (elements.MoveNext()) breaks.Add(elements.ElementIndex + elements.GetTextElement().Length);
+        }
+        else
+            for (int i = 0; i < text.Length; i++)
+                if (text[i] is ' ' or '-' or '\u2010') breaks.Add(i + 1);
+        if (breaks.Count == 0 || breaks[^1] != text.Length) breaks.Add(text.Length);
+        var lines = new List<string>();
+        int start = 0;
+        while (start < text.Length)
+        {
+            int last = -1;
+            foreach (int end in breaks)
+            {
+                if (end <= start) continue;
+                string candidate = text[start..end].Trim();
+                if (measure(candidate, size, double.PositiveInfinity).Width > width + .01) break;
+                last = end;
+            }
+            if (last < 0) return null;
+            lines.Add(text[start..last].Trim());
+            start = last;
+            while (start < text.Length && text[start] == ' ') start++;
+        }
+        return string.Join("\n", lines);
+
+        static bool IsCjk(char character) => character is >= '\u1100' and <= '\u11ff'
+            or >= '\u2e80' and <= '\ua4cf' or >= '\ua960' and <= '\ua97f'
+            or >= '\uac00' and <= '\ud7ff' or >= '\uf900' and <= '\ufaff'
+            or >= '\uff66' and <= '\uff9f';
     }
 
     internal static PinOverlayBackground EstimateBackground(byte[] bgra, int width, int height, int stride, OcrRect line)
@@ -222,7 +329,7 @@ internal static class PinTranslationOverlay
         return (Math.Max(first, second) + .05) / (Math.Min(first, second) + .05);
     }
 
-    internal static PinOverlayComposition Compose(BitmapSource source, IReadOnlyList<PinOverlayTranslation> translations)
+    internal static PinOverlayComposition Compose(BitmapSource source, IReadOnlyList<PinOverlayTranslation> translations, bool drawText = true)
     {
         ArgumentNullException.ThrowIfNull(source);
         int width = source.PixelWidth, height = source.PixelHeight, stride = checked(width * 4);
@@ -232,15 +339,17 @@ internal static class PinTranslationOverlay
         converted.CopyPixels(pixels, stride, 0);
         var draws = new List<(PinOverlayFit Fit, PinOverlayBackground[] Backgrounds, Color Color, PinOverlayBlock Block)>();
         bool needsReview = false;
-        foreach (PinOverlayTranslation item in translations)
+        double[] fontSizes = EstimateFontSizes(translations.Select(item => item.Block).ToArray());
+        for (int index = 0; index < translations.Count; index++)
         {
-            if (item.Text is null) continue;
+            PinOverlayTranslation item = translations[index];
+            if (item.Text is null || string.Equals(NormalizeWhitespace(item.Text), NormalizeWhitespace(item.Block.Text), StringComparison.Ordinal)) continue;
             OcrRect[] obstacles = translations.Where(other => !ReferenceEquals(other, item))
                 .SelectMany(other => other.Block.Lines.Select(line => line.Bounds))
                 .Concat(draws.Select(draw => draw.Fit.Bounds)).ToArray();
-            PinOverlayFit? fit = Fit(item.Text, item.Block.Bounds, Median(item.Block.Lines.Select(line => line.Bounds.Height)),
-                width, height, Measure, obstacles);
-            if (fit is null || obstacles.Any(obstacle => Intersects(Inflate(fit.Bounds, Padding, width, height), obstacle)))
+            PinOverlayFit? fit = Fit(item.Text, item.Block.Bounds, fontSizes[index],
+                width, height, Measure, obstacles, item.Block.Lines.Count, Format("Ag", fontSizes[index], Brushes.Black).Height);
+            if (fit is null || obstacles.Any(obstacle => Intersects(EraseBounds(fit.Bounds, width, height), obstacle)))
             { needsReview = true; continue; }
             PinOverlayBackground[] backgrounds = item.Block.Lines.Select(line =>
                 EstimateBackground(pixels, width, height, stride, line.Bounds)).ToArray();
@@ -259,21 +368,30 @@ internal static class PinTranslationOverlay
             {
                 Color background = MedianColor(draw.Backgrounds.Select(value => value.Color).ToArray());
                 Color foreground = draw.Color;
+                // Erase the complete source ink before putting any translucent surface over it.
+                // Snap outwards to physical pixels so fractional OCR edges cannot leave antialiased remnants.
+                for (int i = 0; i < draw.Block.Lines.Count; i++)
+                {
+                    drawing.DrawRectangle(new SolidColorBrush(draw.Backgrounds[i].Color), null,
+                        Rect(EraseBounds(draw.Block.Lines[i].Bounds, width, height)));
+                }
                 if (draw.Backgrounds.Any(value => value.NeedsPlate || Contrast(value.Color, background) > 1.5
                     || Contrast(foreground, value.Color) < 4.5))
                 {
                     (foreground, double opacity) = PlateStyle(background, foreground);
+                    drawing.DrawRoundedRectangle(new SolidColorBrush(background) { Opacity = opacity * .2 }, null,
+                        Rect(Inflate(draw.Fit.Bounds, Padding, width, height)), 3, 3);
                     var brush = new SolidColorBrush(background) { Opacity = opacity };
-                    drawing.DrawRoundedRectangle(brush, null, Rect(Inflate(draw.Fit.Bounds, Padding, width, height)), 3, 3);
+                    drawing.DrawRoundedRectangle(brush, null, Rect(Inflate(draw.Fit.Bounds, Padding - 1, width, height)), 2, 2);
                 }
                 else if (draw.Fit.Grew)
                     drawing.DrawRectangle(new SolidColorBrush(background), null, Rect(Inflate(draw.Fit.Bounds, Padding, width, height)));
-                else
-                    for (int i = 0; i < draw.Block.Lines.Count; i++)
-                        drawing.DrawRectangle(new SolidColorBrush(draw.Backgrounds[i].Color), null,
-                            Rect(Inflate(draw.Block.Lines[i].Bounds, Padding, width, height)));
-                FormattedText text = Format(draw.Fit.Text, draw.Fit.FontSize, draw.Fit.Bounds.Width, new SolidColorBrush(foreground));
-                drawing.DrawText(text, new Point(draw.Fit.Bounds.X, draw.Fit.Bounds.Y));
+                if (drawText)
+                {
+                    FormattedText text = Format(draw.Fit.RenderText, draw.Fit.FontSize, new SolidColorBrush(foreground));
+                    double inkTop = text.BuildGeometry(new Point()).Bounds.Y;
+                    drawing.DrawText(text, new Point(draw.Fit.Bounds.X, draw.Fit.Bounds.Y - inkTop));
+                }
             }
             drawing.Pop();
         }
@@ -283,16 +401,15 @@ internal static class PinTranslationOverlay
         return new(bitmap, needsReview, draws.Count);
     }
 
-    private static Size Measure(string text, double size, double width)
+    internal static Size Measure(string text, double size, double width)
     {
-        FormattedText formatted = Format(text, size, width, Brushes.Black);
-        return new(formatted.WidthIncludingTrailingWhitespace, formatted.Height);
+        FormattedText formatted = Format(text, size, Brushes.Black);
+        return new(formatted.WidthIncludingTrailingWhitespace, formatted.BuildGeometry(new Point()).Bounds.Height);
     }
 
-    private static FormattedText Format(string text, double size, double width, Brush color) => new(text,
+    private static FormattedText Format(string text, double size, Brush color) => new(text,
         CultureInfo.CurrentUICulture, FlowDirection.LeftToRight, ClipboardTextRenderer.TextTypeface, size, color, 1)
     {
-        MaxTextWidth = Math.Max(1, width),
         Trimming = TextTrimming.None,
     };
 
@@ -305,6 +422,12 @@ internal static class PinTranslationOverlay
 
     private static OcrRect Inflate(OcrRect rect, double amount, int width, int height) =>
         Clamp(new(rect.X - amount, rect.Y - amount, rect.Width + amount * 2, rect.Height + amount * 2), width, height);
+    private static OcrRect EraseBounds(OcrRect rect, int width, int height)
+    {
+        OcrRect inflated = Inflate(rect, Padding, width, height);
+        return new(Math.Floor(inflated.X), Math.Floor(inflated.Y),
+            Math.Ceiling(inflated.Right) - Math.Floor(inflated.X), Math.Ceiling(inflated.Bottom) - Math.Floor(inflated.Y));
+    }
     private static bool Intersects(OcrRect a, OcrRect b) => a.X < b.Right && a.Right > b.X && a.Y < b.Bottom && a.Bottom > b.Y;
     private static Rect Rect(OcrRect value) => new(value.X, value.Y, value.Width, value.Height);
     private static double Square(double value) => value * value;

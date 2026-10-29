@@ -1,0 +1,78 @@
+using System.Windows;
+using System.Windows.Media.Imaging;
+using MyCapture.App.Pinning;
+using MyCapture.Ocr;
+using Xunit;
+
+namespace MyCapture.App.Tests;
+
+public sealed class PinTranslationOverlayServiceTests
+{
+    [Theory]
+    [InlineData("숨김", " \t숨김\r\n ")]
+    [InlineData("원본 보관", " 원본\t\r\n보관 ")]
+    public async Task IdentityOutputPreservesImageAndDoesNotRequestReview(string source, string translated)
+    {
+        BitmapSource image = PinTranslationOverlayTests.Bitmap(300, 100);
+        var translator = new PinTranslationOverlayTests.FakeTranslator(_ => translated);
+        PinTranslationResult result = Assert.IsType<PinTranslationResult>(await new PinTranslationService(translator,
+            PinTranslationDirection.KoreanToEnglish).TranslateRecognizedAsync(
+                PinTranslationOverlayTests.Recognition(PinTranslationOverlayTests.Line(source, 20, 20, 80)),
+                PinContent.FromImage(image), CancellationToken.None));
+
+        Assert.Equal(1, translator.Calls);
+        Assert.Same(image, result.Content.Image);
+        Assert.False(result.NeedsReview);
+        Assert.NotNull(result.Document);
+    }
+
+    [Theory]
+    [InlineData("Select the area you need.", false)]
+    [InlineData("SeIect the area you need.", true)]
+    public async Task OcrConfusedIdentifierRejectsOnlyItsColumnAndCleanProseTranslates(string selection, bool rejected)
+    {
+        BitmapSource image = PinTranslationOverlayTests.Bitmap(1100, 680);
+        OcrResult recognized = PinTranslationOverlayTests.Recognition(
+            PinTranslationOverlayTests.Line("Create a new document.", 40, 130, 370, 26),
+            PinTranslationOverlayTests.Line("Save your work regularly.", 40, 168, 370, 26),
+            PinTranslationOverlayTests.Line("Add pictures t0 your library.", 590, 130, 340, 26),
+            PinTranslationOverlayTests.Line(selection, 590, 168, 340, 26),
+            PinTranslationOverlayTests.Line("Keep the original picture safe.", 590, 206, 340, 26),
+            PinTranslationOverlayTests.Line("Open it again later.", 590, 244, 340, 26));
+        var translator = new PinTranslationOverlayTests.FakeTranslator(text => text switch
+        {
+            "Create a new document." => "새 문서를 만듭니다.",
+            "Save your work regularly." => "작업을 정기적으로 저장합니다.",
+            "Add pictures t0 your library." => "사진 추가 t0 라이브러리.",
+            "Keep the original picture safe." => "원본 사진을 안전하게 보관하십시오.",
+            "Open it again later." => "나중에 다시 열 수 있습니다.",
+            _ => "필요한 영역을 선택합니다."
+        });
+        PinTranslationResult result = Assert.IsType<PinTranslationResult>(await new PinTranslationService(translator)
+            .TranslateRecognizedAsync(recognized, PinContent.FromImage(image), CancellationToken.None));
+
+        Assert.Equal(2, PinTranslationOverlay.BuildBlocks(recognized).Count);
+        Assert.Equal(1, translator.Calls);
+        Assert.Equal(6, translator.Sources.Count);
+        Assert.Equal(rejected, result.NeedsReview);
+        Assert.Contains("새 문서를 만듭니다.", result.Content.OriginalText);
+        var right = new Int32Rect(590, 130, 340, 140);
+        if (rejected)
+        {
+            Assert.Contains(selection, result.Content.OriginalText);
+            Assert.Equal(Pixels(image, right), Pixels(result.Content.Image, right));
+        }
+        else
+        {
+            Assert.Contains("필요한 영역을 선택합니다.", result.Content.OriginalText);
+            Assert.NotEqual(Pixels(image, right), Pixels(result.Content.Image, right));
+        }
+    }
+
+    private static byte[] Pixels(BitmapSource image, Int32Rect rect)
+    {
+        var pixels = new byte[rect.Width * rect.Height * 4];
+        image.CopyPixels(rect, pixels, rect.Width * 4, 0);
+        return pixels;
+    }
+}

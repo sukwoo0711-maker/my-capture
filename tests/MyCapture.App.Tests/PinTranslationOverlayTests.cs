@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Globalization;
 using System.Windows;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
@@ -89,24 +90,229 @@ public sealed class PinTranslationOverlayTests(ITestOutputHelper output)
         const string text = "This complete translation wraps over several lines.";
         PinOverlayFit fit = Assert.IsType<PinOverlayFit>(PinTranslationOverlay.Fit(text, new(10, 10, 180, 60), 30, 500, 300, Measure));
         Assert.Equal(text, fit.Text);
-        Assert.True(fit.FontSize < 30 / .85);
-        Assert.False(fit.Grew);
-        Assert.True(Measure(text, fit.FontSize, fit.Bounds.Width).Height <= fit.Bounds.Height);
+        Assert.True(fit.FontSize < 30);
+        Assert.True(fit.Grew);
+        Assert.Equal(text, fit.RenderText.Replace('\n', ' '));
+        Assert.True(Measure(fit.RenderText, fit.FontSize, fit.Bounds.Width).Height <= fit.Bounds.Height);
     }
 
     [Fact]
-    public void MinimumFontGrowsDownThenRightAndNeverTruncates()
+    public void FittingGrowsRightBeforeShrinkingAndFinallyGrowsDownWithoutTruncating()
     {
-        string text = new('A', 120);
+        string text = new('가', 120);
         PinOverlayFit down = Assert.IsType<PinOverlayFit>(PinTranslationOverlay.Fit(text, new(10, 10, 50, 10), 10, 300, 400, Measure));
         Assert.Equal(9, down.FontSize);
-        Assert.Equal(50, down.Bounds.Width);
+        Assert.True(down.Bounds.Width > 50);
         Assert.True(down.Bounds.Height > 10);
         PinOverlayFit right = Assert.IsType<PinOverlayFit>(PinTranslationOverlay.Fit(text, new(10, 10, 50, 10), 10, 300, 50, Measure));
         Assert.True(right.Bounds.Width > 50);
         Assert.Equal(text, right.Text);
+        Assert.Equal(text, right.RenderText.Replace("\n", ""));
         Assert.True(right.Bounds.Right <= 300 && right.Bounds.Bottom <= 50);
     }
+
+    [Fact]
+    public void InkExtentsRecoverTheSameEmWithAndWithoutDescenders() => StaTestHost.Run(() =>
+    {
+        const double em = 24;
+        OcrLine Source(string text, double y)
+        {
+            var formatted = new FormattedText(text, CultureInfo.CurrentUICulture, FlowDirection.LeftToRight,
+                ClipboardTextRenderer.TextTypeface, em, Brushes.Black, 1);
+            return Line(text, 20, y, formatted.WidthIncludingTrailingWhitespace, formatted.BuildGeometry(new Point()).Bounds.Height);
+        }
+        PinOverlayBlock[] blocks = [Block(Source("Save document", 20)), Block(Source("Copy picture", 70))];
+        Assert.NotEqual(blocks[0].Bounds.Height, blocks[1].Bounds.Height);
+        double[] sizes = PinTranslationOverlay.EstimateFontSizes(blocks);
+        Assert.InRange(sizes[0], em - .75, em + .75);
+        Assert.Equal(sizes[0], sizes[1], 6);
+    });
+
+    [Fact]
+    public void RasterizedInkRecoversConsistentEmWithinPixelQuantization() => StaTestHost.Run(() =>
+    {
+        const int width = 320, height = 80;
+        const double em = 24;
+        PinOverlayBlock RasterBlock(string text)
+        {
+            var visual = new DrawingVisual();
+            using (DrawingContext drawing = visual.RenderOpen())
+            {
+                drawing.DrawRectangle(Brushes.White, null, new Rect(0, 0, width, height));
+                drawing.DrawText(new FormattedText(text, CultureInfo.CurrentUICulture, FlowDirection.LeftToRight,
+                    ClipboardTextRenderer.TextTypeface, em, Brushes.Black, 1), new Point(20, 20));
+            }
+            var image = new RenderTargetBitmap(width, height, 96, 96, PixelFormats.Pbgra32);
+            image.Render(visual);
+            byte[] pixels = ReadPixels(image);
+            int left = width, top = height, right = 0, bottom = 0;
+            for (int y = 0; y < height; y++)
+                for (int x = 0; x < width; x++)
+                    if (pixels[(y * width + x) * 4] < 224)
+                    {
+                        left = Math.Min(left, x); top = Math.Min(top, y);
+                        right = Math.Max(right, x + 1); bottom = Math.Max(bottom, y + 1);
+                    }
+            Assert.True(right > left && bottom > top);
+            return Block(Line(text, left, top, right - left, bottom - top));
+        }
+        PinOverlayBlock[] blocks = [RasterBlock("Save document"), RasterBlock("Copy picture")];
+        Assert.NotEqual(blocks[0].Bounds.Height, blocks[1].Bounds.Height);
+        double[] sizes = PinTranslationOverlay.EstimateFontSizes(blocks);
+        // At this size one boundary pixel changes the recovered em by about 1.3 px.
+        Assert.InRange(sizes[0], em - 1.5, em + 1.5);
+        Assert.Equal(sizes[0], sizes[1], 6);
+    });
+
+    [Fact]
+    public void NearbyEstimatedSizesShareMedianWithoutFlatteningHeadings() => StaTestHost.Run(() =>
+    {
+        double ink = PinTranslationOverlay.Measure("Sample", 1, double.PositiveInfinity).Height;
+        PinOverlayBlock[] blocks = [Block(Line("Sample", 10, 10, 100, 20 * ink)),
+            Block(Line("Sample", 10, 50, 100, 22 * ink)), Block(Line("Sample", 10, 100, 200, 40 * ink))];
+        double[] sizes = PinTranslationOverlay.EstimateFontSizes(blocks);
+        Assert.Equal(21, sizes[0], 6);
+        Assert.Equal(sizes[0], sizes[1]);
+        Assert.Equal(40, sizes[2], 6);
+    });
+
+    [Theory]
+    [InlineData("Automatic")]
+    [InlineData("ÉÉÉÉÉÉÉ")]
+    [InlineData("Document")]
+    [InlineData("Enabled")]
+    [InlineData("Show notifications")]
+    public void ShortValueUsesFreeSpaceBeforeShrinkingOrWrapping(string text)
+    {
+        PinOverlayFit fit = Assert.IsType<PinOverlayFit>(PinTranslationOverlay.Fit(text, new(10, 10, 30, 20), 20, 300, 100, Measure));
+        Assert.Equal(20, fit.FontSize);
+        Assert.Equal(text, fit.RenderText);
+        Assert.True(fit.Bounds.Width > 30);
+    }
+
+    [Fact]
+    public void RightwardGrowthStopsBeforeTheNextBlockOnTheSameRows()
+    {
+        OcrRect neighbor = new(120, 10, 90, 24);
+        PinOverlayFit fit = Assert.IsType<PinOverlayFit>(PinTranslationOverlay.Fit("Automatic", new(10, 10, 30, 24), 20,
+            400, 200, Measure, [neighbor]));
+        Assert.Equal(20, fit.FontSize);
+        Assert.True(fit.Bounds.Right <= neighbor.X - 4);
+        Assert.Equal("Automatic", fit.RenderText);
+    }
+
+    [Theory]
+    [InlineData("Show notifications", 130, "Show\nnotifications")]
+    [InlineData("문서를 저장합니다", 70, "문서를\n저장합니다")]
+    [InlineData("well-known setting", 70, "well-\nknown\nsetting")]
+    [InlineData("가나다라마바", 30, "가나다\n라마바")]
+    public void WrappingOnlyUsesWordHyphenOrUnspacedHangulBreaks(string text, double width, string expected)
+    {
+        Assert.Equal(expected, PinTranslationOverlay.Wrap(text, 20, width, Measure));
+    }
+
+    [Theory]
+    [InlineData("Automatic")]
+    [InlineData("ÉÉÉÉÉÉÉ")]
+    [InlineData("a notifications value")]
+    public void OversizedLatinWordsNeverUseCharacterFallback(string text)
+    {
+        Assert.Null(PinTranslationOverlay.Wrap(text, 20, 50, Measure));
+    }
+
+    [Fact]
+    public void FractionalErasePaddingCannotTouchAFailedNeighbor() => StaTestHost.Run(() =>
+    {
+        BitmapSource source = Bitmap(250, 140);
+        OcrLine first = Line("Save", 20, 20.2, 80, 20.2), failed = Line("Keep", 20, 42.6, 80, 20);
+        PinOverlayComposition result = PinTranslationOverlay.Compose(source,
+            [new(Block(first), "저장"), new(Block(failed), null)]);
+        for (int y = 42; y < 63; y++)
+            for (int x = 20; x < 100; x++) Assert.Equal(ReadPixel(source, x, y), ReadPixel(result.Image, x, y));
+        Assert.True(result.NeedsReview);
+    });
+
+    [Fact]
+    public void DownwardGrowthCanUseANarrowPassageBesideAStaggeredBlock()
+    {
+        string text = new('가', 120);
+        PinOverlayFit fit = Assert.IsType<PinOverlayFit>(PinTranslationOverlay.Fit(text, new(10, 10, 50, 10), 10,
+            300, 300, Measure, [new(100, 24, 190, 240)]));
+        Assert.True(fit.Bounds.Right < 100);
+        Assert.True(fit.Bounds.Height > 10);
+        Assert.Equal(text, fit.RenderText.Replace("\n", ""));
+    }
+
+    [Fact]
+    public void WpfMeasurementPreservesLatinWordsAndUsesFreeWidth() => StaTestHost.Run(() =>
+    {
+        double wordWidth = PinTranslationOverlay.Measure("notifications", 20, double.PositiveInfinity).Width;
+        Assert.Equal("Show\nnotifications", PinTranslationOverlay.Wrap("Show notifications", 20, wordWidth + .1,
+            PinTranslationOverlay.Measure));
+        Assert.Null(PinTranslationOverlay.Wrap("notifications", 20, wordWidth - 1, PinTranslationOverlay.Measure));
+        PinOverlayFit fit = Assert.IsType<PinOverlayFit>(PinTranslationOverlay.Fit("Show notifications", new(10, 10, 30, 20),
+            20, 300, 100, PinTranslationOverlay.Measure));
+        Assert.Equal(20, fit.FontSize);
+        Assert.Equal("Show notifications", fit.RenderText);
+        Assert.True(fit.Bounds.Width > 30);
+    });
+
+    [Fact]
+    public void ExistingSourceLineCountIsKeptAtTheEstimatedEm()
+    {
+        PinOverlayFit fit = Assert.IsType<PinOverlayFit>(PinTranslationOverlay.Fit("Save file", new(10, 10, 40, 38), 20,
+            250, 200, Measure, sourceLineCount: 2));
+        Assert.Equal(20, fit.FontSize);
+        Assert.Equal("Save\nfile", fit.RenderText);
+        Assert.Equal(40, fit.Bounds.Width);
+    }
+
+    [Fact]
+    public void IdentityOutputKeepsOriginalPixelsWithoutReview() => StaTestHost.Run(() =>
+    {
+        BitmapSource source = Bitmap(250, 140);
+        PinOverlayComposition result = PinTranslationOverlay.Compose(source,
+            [new(Block(Line("숨김", 20, 20, 40)), " \t숨김\n"),
+             new(Block(Line("Keep   original", 20, 70, 120)), "Keep original")]);
+        Assert.Same(source, result.Image);
+        Assert.Equal(0, result.RenderedBlocks);
+        Assert.False(result.NeedsReview);
+    });
+
+    [Fact]
+    public void NoisyBackgroundIsErasedOpaquelyBeforeTranslationIsDrawn() => StaTestHost.Run(() =>
+    {
+        const int width = 320, height = 140;
+        byte[] noisy = Pixels(width, height, true);
+        BitmapSource texture = BitmapSource.Create(width, height, 96, 96, PixelFormats.Bgra32, null, noisy, width * 4);
+        var visual = new DrawingVisual();
+        var sourceText = new FormattedText("Original source", CultureInfo.CurrentUICulture, FlowDirection.LeftToRight,
+            ClipboardTextRenderer.TextTypeface, 24, Brushes.White, 1);
+        double top = sourceText.Height + sourceText.OverhangAfter - sourceText.Extent;
+        using (DrawingContext drawing = visual.RenderOpen())
+        {
+            drawing.DrawImage(texture, new Rect(0, 0, width, height));
+            drawing.DrawText(sourceText, new Point(20, 20 - top));
+        }
+        var source = new RenderTargetBitmap(width, height, 96, 96, PixelFormats.Pbgra32);
+        source.Render(visual);
+        source.Freeze();
+        OcrLine line = Line("Original source", 20, 20, sourceText.WidthIncludingTrailingWhitespace, sourceText.Extent);
+        PinOverlayComposition result = PinTranslationOverlay.Compose(source, [new(Block(line), "번역한 문장")], drawText: false);
+        Assert.Equal(1, result.RenderedBlocks);
+        byte[] pixels = ReadPixels(source);
+        PinOverlayBackground background = PinTranslationOverlay.EstimateBackground(pixels, width, height, width * 4, line.Bounds);
+        Assert.True(background.NeedsPlate);
+        for (int y = (int)Math.Floor(line.Bounds.Y - 2); y < Math.Ceiling(line.Bounds.Bottom + 2); y++)
+            for (int x = (int)Math.Floor(line.Bounds.X - 2); x < Math.Ceiling(line.Bounds.Right + 2); x++)
+            {
+                byte[] pixel = ReadPixel(result.Image, x, y);
+                double toSource = Math.Pow(pixel[0] - 255, 2) + Math.Pow(pixel[1] - 255, 2) + Math.Pow(pixel[2] - 255, 2);
+                double toFill = Math.Pow(pixel[0] - background.Color.B, 2) + Math.Pow(pixel[1] - background.Color.G, 2)
+                    + Math.Pow(pixel[2] - background.Color.R, 2);
+                Assert.True(toFill <= toSource, $"Un-erased source ink at ({x}, {y}).");
+            }
+    });
 
     [Fact]
     public void UnfittableTextDoesNotBecomeClippedOrEllipsized()
@@ -275,8 +481,8 @@ public sealed class PinTranslationOverlayTests(ITestOutputHelper output)
         new(text, new(x, y, width, height), [new(text, new(x, y, width, height))]);
     internal static OcrResult Recognition(params OcrLine[] lines) => OcrResult.Success(string.Join("\n", lines.Select(line => line.Text)), "en-US", lines, TimeSpan.Zero);
     private static PinOverlayBlock Block(OcrLine line) => new(line.Text, line.Bounds, [line]);
-    private static Size Measure(string text, double fontSize, double width) => new(Math.Min(width, text.Length * fontSize * .5),
-        Math.Ceiling(text.Length * fontSize * .5 / width) * fontSize * 1.2);
+    private static Size Measure(string text, double fontSize, double width) => new(text.Split('\n').Max(line => line.Length) * fontSize * .5,
+        text.Split('\n').Length * fontSize * 1.2);
     internal static BitmapSource Bitmap(int width, int height, double dpiX = 96, double dpiY = 96)
     {
         var image = BitmapSource.Create(width, height, dpiX, dpiY, PixelFormats.Bgra32, null, Pixels(width, height), width * 4);
