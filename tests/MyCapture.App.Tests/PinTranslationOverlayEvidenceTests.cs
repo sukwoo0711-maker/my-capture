@@ -77,7 +77,7 @@ public sealed class PinTranslationOverlayEvidenceTests(ITestOutputHelper output)
         encoder.Save(file);
     }
 
-    private static BitmapSource Draw(string scene, bool korean)
+    internal static BitmapSource Draw(string scene, bool korean, ICollection<OcrLine>? recognizedLines = null)
     {
         int width = scene == "dense-settings" ? 640 : 1100, height = scene == "dense-settings" ? 520 : 680;
         bool dark = scene == "dark-ui";
@@ -160,6 +160,19 @@ public sealed class PinTranslationOverlayEvidenceTests(ITestOutputHelper output)
         bitmap.Render(visual);
         bitmap.Freeze();
         return bitmap;
+
+        void Text(DrawingContext drawing, string text, double size, double x, double y, Brush ink)
+        {
+            var formatted = new FormattedText(text, CultureInfo.InvariantCulture, FlowDirection.LeftToRight,
+                ClipboardTextRenderer.TextTypeface, size, ink, 1);
+            drawing.DrawText(formatted, new Point(x, y));
+            if (recognizedLines is not null)
+            {
+                Rect bounds = formatted.BuildGeometry(new Point(x, y)).Bounds;
+                var rectangle = new OcrRect(bounds.X, bounds.Y, bounds.Width, bounds.Height);
+                recognizedLines.Add(new OcrLine(text, rectangle, [new OcrWord(text, rectangle)]));
+            }
+        }
     }
 
     private static BitmapSource Noise(int width, int height)
@@ -182,10 +195,6 @@ public sealed class PinTranslationOverlayEvidenceTests(ITestOutputHelper output)
     }
 
     private static Brush Brush(byte r, byte g, byte b) => new SolidColorBrush(Color.FromRgb(r, g, b));
-    private static void Text(DrawingContext drawing, string text, double size, double x, double y, Brush foreground) =>
-        drawing.DrawText(new FormattedText(text, CultureInfo.InvariantCulture, FlowDirection.LeftToRight,
-            ClipboardTextRenderer.TextTypeface, size, foreground, 1), new Point(x, y));
-
     private sealed class RejectingHandler : HttpMessageHandler
     {
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) =>
