@@ -49,7 +49,7 @@ public sealed class EditorConstructionProbeTests
         string runtimeRoot = new DirectoryInfo(RuntimeEnvironment.GetRuntimeDirectory()).Parent!.Parent!.Parent!.FullName;
         string dotnet = Path.Combine(runtimeRoot, "dotnet.exe");
         Assert.True(File.Exists(dotnet));
-        foreach (string childMode in new[] { "windows", "controls", "components" })
+        foreach (string childMode in new[] { "windows", "prewarmed-windows", "controls", "components" })
         {
             var start = new ProcessStartInfo(dotnet)
             {
@@ -115,6 +115,15 @@ public sealed class EditorConstructionProbeTests
                 var many = CreateManyItems(image.PixelWidth, image.PixelHeight);
                 MeasureWindow("open-200-second", frame, region, image, primary, many.Document, many.Assets);
                 MeasureWindow("open-empty-warm", frame, region, image, primary, null, null);
+            }
+            else if (mode == "prewarmed-windows")
+            {
+                // A separate cold process measures the resident startup path without the
+                // earlier open-first window warming any of its caches.
+                long started = Stopwatch.GetTimestamp();
+                AnnotationEditorPrewarm.Run();
+                _rows.Add(Csv(mode, "prewarm", "run", Stopwatch.GetElapsedTime(started).TotalMilliseconds, null, 0));
+                MeasureWindow("open-first-after-prewarm", frame, region, image, primary, null, null);
             }
             else if (mode == "controls")
             {
@@ -318,6 +327,7 @@ public sealed class EditorConstructionProbeTests
     {
         // Both revisions expose these named parameters, with provenance added only after main.
         ConstructorInfo constructor = typeof(T).GetConstructors(InstanceMembers)
+            .Where(candidate => !candidate.IsPrivate)
             .OrderByDescending(candidate => candidate.GetParameters().Length).First();
         object?[] arguments = constructor.GetParameters().Select(parameter => parameter.Name switch
         {
@@ -379,7 +389,7 @@ public sealed class EditorConstructionProbeTests
             "Monitor: " + monitor.Bounds + "; scale=" + monitor.ScaleFactor.ToString(CultureInfo.InvariantCulture),
             "WPF rendering tier: " + (RenderCapability.Tier >> 16),
             "Mode: " + mode,
-            "Image: synthetic blank frozen Bgr32 1920x1080; fixed default preferences; no profile, persistence, clipboard or app startup.",
+            "Image: synthetic blank frozen Bgr32 1920x1080; fixed app defaults; no MyCapture profile, persistence, clipboard or app startup. Windows pointer registry settings are read synchronously.",
             "Windows: first empty, second the responsiveness probe's ManyItems fixture (200), third empty. Independent from the controls process.",
             "Window construction includes its control. Control and window rows must not be added together.",
             "ContentRendered is WPF's first-content-render notification, not physical screen presentation. Windows are off screen, matching the responsiveness probe.",

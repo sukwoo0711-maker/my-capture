@@ -28,11 +28,27 @@ internal sealed partial class SettingsWindow
         };
         PreviewKeyDown += (_, e) =>
         {
+            if (HandleSearchShortcut(HotkeyRecorder.NormalizeKey(e), Keyboard.Modifiers))
+            {
+                e.Handled = true;
+                return;
+            }
             if (e.Key != Key.Escape || _searchQuery.Length == 0 || HotkeyRecorder.Active is not null) return;
             if (CategoryTabs.Template.FindName("SettingsSearchBox", CategoryTabs) is TextBox search) search.Clear();
             FilterSettings(string.Empty);
             e.Handled = true;
         };
+    }
+
+    internal bool HandleSearchShortcut(Key key, ModifierKeys modifiers)
+    {
+        if (key != Key.F || modifiers != ModifierKeys.Control || HotkeyRecorder.Active is not null) return false;
+        CategoryTabs.ApplyTemplate();
+        if (CategoryTabs.Template.FindName("SettingsSearchBox", CategoryTabs) is not TextBox search) return false;
+        search.Focus();
+        Keyboard.Focus(search);
+        search.SelectAll();
+        return true;
     }
 
     private void OnSettingsSearchChanged(object sender, TextChangedEventArgs e)
@@ -42,13 +58,16 @@ internal sealed partial class SettingsWindow
 
     internal void FilterSettings(string query)
     {
+        ++_navigationGeneration;
         _searchQuery = query.Trim();
         _searchMatches.Clear();
         foreach (TabItem tab in CategoryTabs.Items)
         {
-            FrameworkElement? match = LogicalDescendants(tab).OfType<FrameworkElement>()
-                .Where(element => element is not ComboBoxItem && LogicalAncestor<ComboBoxItem>(element) is null)
-                .FirstOrDefault(element => SearchText(element).Any(MatchesQuery));
+            FrameworkElement[] candidates = LogicalDescendants(tab).OfType<FrameworkElement>()
+                .Where(element => element is not ComboBoxItem && LogicalAncestor<ComboBoxItem>(element) is null).ToArray();
+            // A field's complete label takes precedence over another row's explanatory mention.
+            FrameworkElement? match = candidates.FirstOrDefault(element => SearchText(element).Any(MatchesExactQuery))
+                ?? candidates.FirstOrDefault(element => SearchText(element).Any(MatchesQuery));
             bool visible = _searchQuery.Length == 0 || match is not null
                 || SearchText(tab).Any(MatchesQuery);
             tab.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
@@ -61,6 +80,8 @@ internal sealed partial class SettingsWindow
             empty.Visibility = CategoryTabs.SelectedItem is null ? Visibility.Visible : Visibility.Collapsed;
         RevealSearchMatch();
     }
+
+    private bool MatchesExactQuery(string text) => UiText.Culture.CompareInfo.Compare(text, _searchQuery, CompareOptions.IgnoreCase) == 0;
 
     private bool MatchesQuery(string text) => UiText.Culture.CompareInfo.IndexOf(text, _searchQuery, CompareOptions.IgnoreCase) >= 0;
 

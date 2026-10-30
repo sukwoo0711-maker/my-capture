@@ -186,6 +186,8 @@ internal sealed class CaptureCommitService
             throw new ArgumentException("The edit session belongs to a different capture.", nameof(editSession));
         }
         editSession?.ThrowIfDisposed();
+        result.SaveCompleted = false;
+        result.ClipboardCopyFailed = false;
 
         // A failed first publication still has valid capture provenance. Use it only for
         // export naming; it must not bypass the create/persist callback below.
@@ -208,7 +210,8 @@ internal sealed class CaptureCommitService
                 record = await PersistFinalIfAvailableAsync(
                     record, result.Action, flattened, snapshot, result.ImageAssetBitmaps, editSession, createRecordAsync,
                     replaceOriginal ? result.SelectedBitmap : null);
-                if (record is null || !await CopyEditedImageAsync(flattened, "Pin", record)) return false;
+                result.SaveCompleted = record is not null;
+                if (record is null || !await CopyEditedImageAsync(flattened, "Pin", result, record)) return false;
                 try
                 {
                     if (PinImage is null) throw new InvalidOperationException("Pinning is unavailable.");
@@ -253,16 +256,18 @@ internal sealed class CaptureCommitService
                 {
                     return false;
                 }
+                result.SaveCompleted = true;
 
                 record = await PersistFinalIfAvailableAsync(
                     record, result.Action, flattened, snapshot, result.ImageAssetBitmaps, editSession, createRecordAsync,
                     replaceOriginal ? result.SelectedBitmap : null);
-                return CompleteCommit(record, result.Action, await CopyEditedImageAsync(flattened, "Save As", exportRecord));
+                return CompleteCommit(record, result.Action, await CopyEditedImageAsync(flattened, "Save As", result, record ?? exportRecord));
 
             case EditorCommitAction.QuickSave:
                 record = await PersistFinalIfAvailableAsync(
                     record, result.Action, flattened, snapshot, result.ImageAssetBitmaps, editSession, createRecordAsync,
                     replaceOriginal ? result.SelectedBitmap : null);
+                result.SaveCompleted = record is not null;
                 string? quickSavedPath = await ImageExportTransaction.RunAsync(() => QuickSaveAsync(flattened, record ?? exportRecord));
                 if (quickSavedPath is null)
                 {
@@ -270,8 +275,9 @@ internal sealed class CaptureCommitService
                 }
 
                 // The file exists whatever the clipboard does next, so it is announced now.
+                result.SaveCompleted = true;
                 AnnounceQuickSave(quickSavedPath);
-                bool quickSaveCopied = await CopyEditedImageAsync(flattened, "Quick save", record ?? exportRecord);
+                bool quickSaveCopied = await CopyEditedImageAsync(flattened, "Quick save", result, record ?? exportRecord);
 
                 // Queue persistence is already durable, but Quick Save is an explicit export
                 // request. Keep the editor open when that request fails so the user sees the
@@ -282,7 +288,9 @@ internal sealed class CaptureCommitService
                 // Copy is the editor's secondary action: the edited pixels go to the clipboard
                 // and nothing else changes. The library keeps its current version until the
                 // user finishes with Done (or saves a file), and the editor stays open.
+                result.ClipboardCopyFailed = true;
                 bool clipboardCopied = await _copyImageAsync(flattened, exportRecord?.SourcePageUrl, CaptureProvenance.FromRecord(exportRecord), null);
+                result.ClipboardCopyFailed = !clipboardCopied;
                 if (!clipboardCopied)
                 {
                     _log.LogWarning("Explicit clipboard copy of the edited image failed");
@@ -312,10 +320,11 @@ internal sealed class CaptureCommitService
                 {
                     // Refused (rethrown here, without a copy) or no record to save into.
                     record = await persisting;
-                    return CompleteCommit(record, result.Action, await CopyEditedImageAsync(flattened, "Done", exportRecord));
+                    result.SaveCompleted = record is not null;
+                    return CompleteCommit(record, result.Action, await CopyEditedImageAsync(flattened, "Done", result, record ?? exportRecord));
                 }
 
-                Task<bool> copying = CopyEditedImageAsync(flattened, "Done", exportRecord);
+                Task<bool> copying = CopyEditedImageAsync(flattened, "Done", result, exportRecord);
                 try
                 {
                     if (await copying && !persisting.IsFaulted && !persisting.IsCanceled) result.CopiedToClipboard?.Invoke();
@@ -323,6 +332,7 @@ internal sealed class CaptureCommitService
                 finally
                 {
                     record = await persisting;
+                    result.SaveCompleted = record is not null;
                 }
 
                 return CompleteCommit(record, result.Action, await copying);
@@ -343,9 +353,13 @@ internal sealed class CaptureCommitService
         return succeeded;
     }
 
-    private async Task<bool> CopyEditedImageAsync(BitmapSource flattened, string operation, CaptureRecord? source = null)
+    private async Task<bool> CopyEditedImageAsync(BitmapSource flattened, string operation, AnnotationEditingResult result, CaptureRecord? source = null)
     {
+        // Keep the completed save visible even if the clipboard delegate throws and the
+        // host catches the exception to leave the editor open.
+        result.ClipboardCopyFailed = true;
         bool copied = await _copyImageAsync(flattened, source?.SourcePageUrl, CaptureProvenance.FromRecord(source), null);
+        result.ClipboardCopyFailed = !copied;
         if (!copied)
         {
             _log.LogWarning(

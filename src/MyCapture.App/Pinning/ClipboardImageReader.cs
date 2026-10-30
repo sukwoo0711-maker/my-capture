@@ -52,7 +52,7 @@ internal static class ClipboardImageReader
     /// </summary>
     internal readonly record struct PinReadAttempt(
         ClipboardImageOutcome Outcome,
-        PinContent? Content)
+        PinContent? Content, uint ClipboardSequence = 0)
     {
         internal static PinReadAttempt Busy() =>
             new(ClipboardImageOutcome.Busy(), null);
@@ -170,7 +170,7 @@ internal static class ClipboardImageReader
             CaptureOnce,
             "MyCapture clipboard reader").ConfigureAwait(false);
 
-        return await CompletePinAttemptAsync(
+        PinReadAttempt result = await CompletePinAttemptAsync(
             captured,
             TryDecodePngBytes,
             (text, isTabular) => StaThreadTask.RunAsync(
@@ -179,6 +179,7 @@ internal static class ClipboardImageReader
             sequence => StaThreadTask.RunAsync(
                 () => CaptureFallbackOnce(sequence),
                 "MyCapture clipboard fallback reader")).ConfigureAwait(false);
+        return result with { ClipboardSequence = captured.ClipboardSequence };
     }
 
     internal static async Task<PinReadAttempt> CompletePinAttemptAsync(

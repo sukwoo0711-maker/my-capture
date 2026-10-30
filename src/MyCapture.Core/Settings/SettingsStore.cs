@@ -382,6 +382,7 @@ public sealed class SettingsStore
         s.Capture.KeyPanelShownCount = CaptureKeyPanelPolicy.Normalize(s.Capture.KeyPanelShownCount);
 
         // --- Recording ---
+        s.Recording.Watermark = (s.Recording.Watermark ?? new()).Normalize();
         int recordingFps = (int)s.Recording.FrameRate;
         if (!SettingsRanges.RecordingFrameRates.Contains(recordingFps))
         {

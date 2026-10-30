@@ -331,6 +331,13 @@
 
         <!-- Checkbox built on the shared CheckBox style. -->
         <Style x:Key="Settings.CheckBox" TargetType="CheckBox" BasedOn="{StaticResource {x:Type CheckBox}}">
+            <Setter Property="ContentTemplate">
+                <Setter.Value>
+                    <DataTemplate>
+                        <TextBlock Text="{Binding}" TextWrapping="Wrap" />
+                    </DataTemplate>
+                </Setter.Value>
+            </Setter>
             <Setter Property="FontSize" Value="{StaticResource FontSize.Body}" />
             <Setter Property="Margin" Value="0,0,0,6" />
         </Style>
@@ -520,6 +527,25 @@
             <Setter Property="Margin" Value="8,0,0,0" />
         </Style>
 
+        <Style x:Key="About.Section" TargetType="StackPanel">
+            <Setter Property="Margin" Value="0,0,0,24" />
+        </Style>
+        <Style x:Key="About.Heading" TargetType="TextBlock" BasedOn="{StaticResource Settings.GroupHeading}">
+            <Setter Property="Margin" Value="0,0,0,8" />
+        </Style>
+        <Style x:Key="About.Body" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource Text.Secondary}" />
+            <Setter Property="FontSize" Value="{StaticResource FontSize.Body}" />
+            <Setter Property="TextWrapping" Value="Wrap" />
+            <Setter Property="Margin" Value="0,0,0,6" />
+        </Style>
+
+        <Style x:Key="Settings.GuideButton" TargetType="Button" BasedOn="{StaticResource Button.Compact}">
+            <Setter Property="HorizontalAlignment" Value="Right" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="Margin" Value="12,0,0,0" />
+        </Style>
+
     </Window.Resources>
 
     <Grid Margin="24,16,24,24">
@@ -542,97 +568,87 @@
                 <Style TargetType="TabItem" BasedOn="{StaticResource Settings.TabItem}" />
             </TabControl.Resources>
 
-            <!-- General -->
-            <TabItem Header="{loc:Text SettingsUx_TabGeneral}" AutomationProperties.Name="{loc:Text SettingsUx_TabGeneral}"
-                     ToolTip="{loc:Text SettingsUx_TabGeneralHelp}" AutomationProperties.HelpText="{loc:Text SettingsUx_TabGeneralHelp}"
-                     Tag="{StaticResource Icon.Settings}">
-                <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="4,12,12,4">
-                    <StackPanel>
-                        <TextBlock Style="{StaticResource Settings.Label}" Text="{loc:Text Settings.Language}" />
-                        <ComboBox x:Name="LanguageSelector" SelectedValue="{Binding Language}" SelectedValuePath="Tag"
-                                  AutomationProperties.Name="{loc:Text Settings.Language}" MinWidth="220" HorizontalAlignment="Left" Margin="0,4,0,4">
-                            <ComboBoxItem Tag="" Content="{loc:Text Settings.LanguageSystem}" />
-                            <ComboBoxItem Tag="ko-KR" Content="한국어" />
-                            <ComboBoxItem Tag="en-US" Content="English" />
-                        </ComboBox>
-                        <TextBlock Style="{StaticResource Settings.Description}" Text="{loc:Text Settings.LanguageHint}" />
-
-                        <TextBlock Style="{StaticResource Settings.Label}" Text="{loc:Text Settings.Theme}" Margin="0,12,0,0" />
-                        <ComboBox x:Name="ThemeSelector" SelectedValue="{Binding Theme}" SelectedValuePath="Tag"
-                                  AutomationProperties.Name="{loc:Text Settings.Theme}" MinWidth="320" HorizontalAlignment="Left" Margin="0,4,0,4">
-                            <ComboBoxItem Tag="system" Content="{loc:Text Settings.ThemeSystem}" />
-                            <ComboBoxItem Tag="glass-light" Content="{loc:Text Settings.ThemeGlassLight}" />
-                            <ComboBoxItem Tag="glass" Content="{loc:Text Settings.ThemeGlass}" />
-                            <ComboBoxItem Tag="high-contrast" Content="{loc:Text Settings.ThemeHighContrast}" />
-                        </ComboBox>
-                        <TextBlock Style="{StaticResource Settings.Description}" Text="{loc:Text Settings.ThemeHint}" />
-
-                        <CheckBox x:Name="LaunchAtLoginCheck"
-                                  Style="{StaticResource Settings.CheckBox}"
-                                  Margin="0,12,0,0"
-                                  Content="{loc:Text Text_98F1681CB686}"
-                                  AutomationProperties.Name="{loc:Text Text_98F1681CB686}"
-                                  AutomationProperties.HelpText="{loc:Text Text_F3C7FE27A258}"
-                                  IsChecked="{Binding LaunchAtLogin}" />
-                        <TextBlock Style="{StaticResource Settings.Description}"
-                                   Text="{loc:Text Text_963745AB00F4}" />
-                    </StackPanel>
-                </ScrollViewer>
-            </TabItem>
-
-            <!-- Capture -->
-            <TabItem Header="{loc:Text SettingsUx_TabCapture}" AutomationProperties.Name="{loc:Text SettingsUx_TabCapture}"
+            <!-- Task categories share the existing draft and save behavior. -->
+            <TabItem x:Name="CaptureTab" Header="{loc:Text SettingsUx_TabCapture}" AutomationProperties.Name="{loc:Text SettingsUx_TabCapture}"
                      ToolTip="{loc:Text SettingsUx_TabCaptureHelp}" AutomationProperties.HelpText="{loc:Text SettingsUx_TabCaptureHelp}"
                      Tag="{StaticResource Icon.Capture}">
-                <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="4,12,12,4">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="4,12,12,4">
                     <StackPanel Grid.IsSharedSizeScope="True">
                         <TextBlock Style="{StaticResource Settings.Label}" Text="{loc:Text Capture.AfterAction}" />
-                        <ComboBox SelectedValue="{Binding AfterCapture}" SelectedValuePath="Tag" MinWidth="250" HorizontalAlignment="Left"
-                                  AutomationProperties.Name="{loc:Text Capture.AfterAction}" Margin="0,4,0,8">
-                            <ComboBoxItem Tag="{x:Static coreSettings:AfterCaptureAction.Editor}" Content="{loc:Text Capture.AfterEditor}" />
-                            <ComboBoxItem Tag="{x:Static coreSettings:AfterCaptureAction.QuickAccess}" Content="{loc:Text Capture.AfterCard}" />
-                            <ComboBoxItem Tag="{x:Static coreSettings:AfterCaptureAction.ClipboardOnly}" Content="{loc:Text Capture.AfterClipboard}" />
-                        </ComboBox>
+
+                        <Grid >
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <ComboBox Grid.Column="0" SelectedValue="{Binding AfterCapture}" SelectedValuePath="Tag" MinWidth="250" HorizontalAlignment="Left"
+                                      AutomationProperties.Name="{loc:Text Capture.AfterAction}" Margin="0,4,0,8">
+                                <ComboBoxItem Tag="{x:Static coreSettings:AfterCaptureAction.Editor}" Content="{loc:Text Capture.AfterEditor}" />
+                                <ComboBoxItem Tag="{x:Static coreSettings:AfterCaptureAction.QuickAccess}" Content="{loc:Text Capture.AfterCard}" />
+                                <ComboBoxItem Tag="{x:Static coreSettings:AfterCaptureAction.ClipboardOnly}" Content="{loc:Text Capture.AfterClipboard}" />
+                            </ComboBox>
+                            <Button Grid.Column="1" Tag="G01" Content="{loc:Text SettingsStructure_Guide}"
+                            AutomationProperties.Name="{loc:Text SettingsStructure_Guide}"
+                            Style="{StaticResource Settings.GuideButton}" Click="OnSettingsGuide" />
+                        </Grid>
+
                         <CheckBox Style="{StaticResource Settings.CheckBox}" Content="{loc:Text QuickAccess.Sound}"
-                                  AutomationProperties.Name="{loc:Text QuickAccess.Sound}"
-                                  IsChecked="{Binding PlayCaptureSound}" />
-                        <CheckBox Style="{StaticResource Settings.CheckBox}"
-                                  Content="{loc:Text QuickAccess.NotifyOnQuickSave}"
-                                  AutomationProperties.Name="{loc:Text QuickAccess.NotifyOnQuickSave}"
-                                  IsChecked="{Binding NotifyOnQuickSave}" />
+                        AutomationProperties.Name="{loc:Text QuickAccess.Sound}"
+                        IsChecked="{Binding PlayCaptureSound}" />
 
                         <CheckBox Style="{StaticResource Settings.CheckBox}"
-                                  Content="{loc:Text Text_4BE214FF10B0}"
-                                  AutomationProperties.Name="{loc:Text Text_4BE214FF10B0}"
-                                  IsChecked="{Binding IncludeCursor}" />
-
-                        <Border Style="{StaticResource Settings.InfoCard}" Margin="0,8,0,16">
-                            <StackPanel>
-                                <TextBlock Text="{loc:Text Text_D116685C040E}" Style="{StaticResource Settings.Label}" />
-                                <TextBlock Margin="0,4,0,0"
-                                           Style="{StaticResource Text.MutedBlock}"
-                                           themes:KoreanWordWrap.Text="{Binding CaptureHotkey, StringFormat={loc:Text Text_756622E6954E}}" />
-                            </StackPanel>
-                        </Border>
+                        Content="{loc:Text QuickAccess.NotifyOnQuickSave}"
+                        AutomationProperties.Name="{loc:Text QuickAccess.NotifyOnQuickSave}"
+                        IsChecked="{Binding NotifyOnQuickSave}" />
 
                         <CheckBox Style="{StaticResource Settings.CheckBox}"
-                                  Content="{loc:Text Text_B9D242426446}"
-                                  AutomationProperties.Name="{loc:Text Text_B9D242426446}"
-                                  IsChecked="{Binding ShowMagnifier}" />
+                        Content="{loc:Text Text_4BE214FF10B0}"
+                        AutomationProperties.Name="{loc:Text Text_4BE214FF10B0}"
+                        IsChecked="{Binding IncludeCursor}" />
 
-                        <CheckBox x:Name="ShowSelectionGridCheck" Style="{StaticResource Settings.CheckBox}"
-                                  Content="{loc:Text Settings.ShowSelectionGrid}"
-                                  AutomationProperties.Name="{loc:Text Settings.ShowSelectionGrid}"
-                                  IsChecked="{Binding ShowSelectionGrid}" />
-                        <CheckBox x:Name="AlwaysShowKeyPanelCheck" Style="{StaticResource Settings.CheckBox}"
-                                  Content="{loc:Text Settings.AlwaysShowKeyPanel}"
-                                  AutomationProperties.Name="{loc:Text Settings.AlwaysShowKeyPanel}"
-                                  IsChecked="{Binding AlwaysShowKeyPanel}" />
+                        <TextBlock Style="{StaticResource Settings.GroupHeading}" Text="{loc:Text SettingsStructure_SelectionHelpers}" />
 
-                        <CheckBox x:Name="AutoDetectWindowsCheck" Style="{StaticResource Settings.CheckBox}"
-                                  Content="{loc:Text WindowDetect_Setting}"
-                                  AutomationProperties.Name="{loc:Text WindowDetect_Setting}"
-                                  IsChecked="{Binding AutoDetectWindows}" />
+                        <Grid Margin="0,0,0,6">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <CheckBox Grid.Column="0" Style="{StaticResource Settings.CheckBox}"
+                            Content="{loc:Text Text_B9D242426446}"
+                            AutomationProperties.Name="{loc:Text Text_B9D242426446}"
+                            IsChecked="{Binding ShowMagnifier}" />
+                            <Button Grid.Column="1" Tag="G02" Content="{loc:Text SettingsStructure_Guide}"
+                            AutomationProperties.Name="{loc:Text SettingsStructure_Guide}"
+                            Style="{StaticResource Settings.GuideButton}" Click="OnSettingsGuide" />
+                        </Grid>
+
+                        <Grid Margin="0,0,0,6">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <CheckBox Grid.Column="0" x:Name="ShowSelectionGridCheck" Style="{StaticResource Settings.CheckBox}"
+                            Content="{loc:Text Settings.ShowSelectionGrid}"
+                            AutomationProperties.Name="{loc:Text Settings.ShowSelectionGrid}"
+                            IsChecked="{Binding ShowSelectionGrid}" />
+                            <Button Grid.Column="1" Tag="G02" Content="{loc:Text SettingsStructure_Guide}"
+                            AutomationProperties.Name="{loc:Text SettingsStructure_Guide}"
+                            Style="{StaticResource Settings.GuideButton}" Click="OnSettingsGuide" />
+                        </Grid>
+
+                        <Grid Margin="0,0,0,6">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <CheckBox Grid.Column="0" x:Name="AutoDetectWindowsCheck" Style="{StaticResource Settings.CheckBox}"
+                            Content="{loc:Text WindowDetect_Setting}"
+                            AutomationProperties.Name="{loc:Text WindowDetect_Setting}"
+                            IsChecked="{Binding AutoDetectWindows}" />
+                            <Button Grid.Column="1" Tag="G02" Content="{loc:Text SettingsStructure_Guide}"
+                            AutomationProperties.Name="{loc:Text SettingsStructure_Guide}"
+                            Style="{StaticResource Settings.GuideButton}" Click="OnSettingsGuide" />
+                        </Grid>
 
                         <StackPanel Style="{StaticResource Settings.Field}" Margin="0,12,0,14">
                             <TextBlock Style="{StaticResource Settings.Label}" Text="{loc:Text Capture410.GuideColor}" />
@@ -664,111 +680,74 @@
                             </StackPanel>
                         </StackPanel>
 
-                        <StackPanel Style="{StaticResource Settings.Field}">
-                            <TextBlock Style="{StaticResource Settings.Label}" Text="{loc:Text ColorPick_FormatLabel}" />
-                            <TextBlock Style="{StaticResource Settings.Description}" Text="{loc:Text ColorPick_FormatHint}" />
-                            <ComboBox x:Name="ColorFormatSelector" SelectedValue="{Binding ColorFormat}" SelectedValuePath="Tag"
-                                      MinWidth="220" HorizontalAlignment="Left"
-                                      AutomationProperties.Name="{loc:Text ColorPick_FormatLabel}">
-                                <ComboBoxItem Tag="{x:Static coreSettings:ColorFormat.Hex}" Content="{loc:Text ColorPick_FormatHex}" />
-                                <ComboBoxItem Tag="{x:Static coreSettings:ColorFormat.Rgb}" Content="{loc:Text ColorPick_FormatRgb}" />
-                                <ComboBoxItem Tag="{x:Static coreSettings:ColorFormat.Hsl}" Content="{loc:Text ColorPick_FormatHsl}" />
-                            </ComboBox>
-                        </StackPanel>
+                        <Expander x:Name="CaptureControlsExpander" Style="{StaticResource Settings.Expander}" Margin="0,12,0,0"
+                                  Header="{loc:Text SettingsStructure_CaptureControls}" AutomationProperties.Name="{loc:Text SettingsStructure_CaptureControls}">
+                            <StackPanel>
+                                <Grid Margin="0,0,0,6">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <CheckBox Grid.Column="0" x:Name="AlwaysShowKeyPanelCheck" Style="{StaticResource Settings.CheckBox}"
+                                    Content="{loc:Text Settings.AlwaysShowKeyPanel}"
+                                    AutomationProperties.Name="{loc:Text Settings.AlwaysShowKeyPanel}"
+                                    IsChecked="{Binding AlwaysShowKeyPanel}" />
+                                    <Button Grid.Column="1" Tag="G03" Content="{loc:Text SettingsStructure_Guide}"
+                                    AutomationProperties.Name="{loc:Text SettingsStructure_Guide}"
+                                    Style="{StaticResource Settings.GuideButton}" Click="OnSettingsGuide" />
+                                </Grid>
 
-                        <CheckBox Style="{StaticResource Settings.CheckBox}"
-                                  Content="{loc:Text Text_BD975387F343}"
-                                  AutomationProperties.Name="{loc:Text Text_B36A1FC25CCE}"
-                                  IsChecked="{Binding AbortOnFocusLoss}" />
+                                <StackPanel Style="{StaticResource Settings.Field}">
+                                    <TextBlock Style="{StaticResource Settings.Label}" Text="{loc:Text ColorPick_FormatLabel}" />
+                                    <TextBlock Style="{StaticResource Settings.Description}" Text="{loc:Text ColorPick_FormatHint}" />
+                                    <ComboBox x:Name="ColorFormatSelector" SelectedValue="{Binding ColorFormat}" SelectedValuePath="Tag"
+                                              MinWidth="220" HorizontalAlignment="Left"
+                                              AutomationProperties.Name="{loc:Text ColorPick_FormatLabel}">
+                                        <ComboBoxItem Tag="{x:Static coreSettings:ColorFormat.Hex}" Content="{loc:Text ColorPick_FormatHex}" />
+                                        <ComboBoxItem Tag="{x:Static coreSettings:ColorFormat.Rgb}" Content="{loc:Text ColorPick_FormatRgb}" />
+                                        <ComboBoxItem Tag="{x:Static coreSettings:ColorFormat.Hsl}" Content="{loc:Text ColorPick_FormatHsl}" />
+                                    </ComboBox>
+                                </StackPanel>
 
-                        <settings:SettingsField Margin="0,6,0,12"
-                                                Header="{loc:Text Text_8839D136ACA2}" Hint="{loc:Text SettingsRange_Seconds0To60}">
-                            <TextBox Style="{StaticResource Settings.NumberBox}"
-                                     AutomationProperties.Name="{loc:Text Text_8839D136ACA2}"
-                                     Text="{Binding DelaySeconds, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
-                        </settings:SettingsField>
+                                <CheckBox Style="{StaticResource Settings.CheckBox}"
+                                Content="{loc:Text Text_BD975387F343}"
+                                AutomationProperties.Name="{loc:Text Text_B36A1FC25CCE}"
+                                IsChecked="{Binding AbortOnFocusLoss}" />
 
-                        <settings:SettingsField Header="{loc:Text Text_337B5BC36C27}" Hint="{loc:Text SettingsRange_RegionHistory}"
-                                                Note="{loc:Text Settings_RegionHistoryNote}">
-                            <TextBox Style="{StaticResource Settings.NumberBox}"
-                                     AutomationProperties.Name="{loc:Text Text_337B5BC36C27}"
-                                     Text="{Binding RegionHistoryLimit, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
-                        </settings:SettingsField>
+                                <settings:SettingsField Margin="0,6,0,12"
+                                                        Header="{loc:Text Text_8839D136ACA2}" Hint="{loc:Text SettingsRange_Seconds0To60}">
+                                    <TextBox Style="{StaticResource Settings.NumberBox}"
+                                             AutomationProperties.Name="{loc:Text Text_8839D136ACA2}"
+                                             Text="{Binding DelaySeconds, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
+                                </settings:SettingsField>
+
+                                <settings:SettingsField Header="{loc:Text Text_337B5BC36C27}" Hint="{loc:Text SettingsRange_RegionHistory}"
+                                                        Note="{loc:Text Settings_RegionHistoryNote}">
+                                    <TextBox Style="{StaticResource Settings.NumberBox}"
+                                             AutomationProperties.Name="{loc:Text Text_337B5BC36C27}"
+                                             Text="{Binding RegionHistoryLimit, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
+                                </settings:SettingsField>
+                            </StackPanel>
+                        </Expander>
                     </StackPanel>
                 </ScrollViewer>
             </TabItem>
 
-            <!-- Recording -->
-            <TabItem Header="{loc:Text SettingsUx_TabRecording}" AutomationProperties.Name="{loc:Text SettingsUx_TabRecording}"
+            <TabItem x:Name="RecordingTab" Header="{loc:Text SettingsUx_TabRecording}" AutomationProperties.Name="{loc:Text SettingsUx_TabRecording}"
                      ToolTip="{loc:Text SettingsUx_TabRecordingHelp}" AutomationProperties.HelpText="{loc:Text SettingsUx_TabRecordingHelp}"
                      Tag="{StaticResource Icon.Record}">
-                <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="4,12,12,4">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="4,12,12,4">
                     <StackPanel Grid.IsSharedSizeScope="True">
-                        <Border Style="{StaticResource Settings.InfoCard}" Margin="0,0,0,16">
-                            <StackPanel>
-                                <TextBlock Text="{loc:Text Text_93EB8FA7F9BC}" Style="{StaticResource Settings.Label}" />
-                                <TextBlock Margin="0,4,0,0"
-                                           Style="{StaticResource Text.MutedBlock}"
-                                           themes:KoreanWordWrap.Text="{loc:Text Text_2F12FF262AAC}" />
-                            </StackPanel>
-                        </Border>
-
                         <settings:SettingsField Header="{loc:Text Text_9C49B0923292}" Note="{loc:Text Text_AE6C1447BA99}">
                             <TextBox Style="{StaticResource Settings.NumberBox}"
                                      AutomationProperties.Name="{loc:Text Text_BC1D92BC8EFA}"
                                      Text="{Binding RecordingFrameRate, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
                         </settings:SettingsField>
 
-                        <!-- Recording size: the size the user drags, or a fixed width × height that
-                             the drag only places. The boxes sit on the fixed choice's own line and
-                             take input only while it is chosen. The two radio buttons group by their
-                             shared parent, not a GroupName: WPF matches GroupName members by visual
-                             root, and every page not on screen has the same (null) root. -->
-                        <StackPanel x:Name="RecordingSizeField" Style="{StaticResource Settings.Field}">
-                            <TextBlock Style="{StaticResource Settings.Label}" Text="{loc:Text Recording_SizePreset}" />
-                            <Grid>
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="Auto" />
-                                    <ColumnDefinition Width="*" />
-                                </Grid.ColumnDefinitions>
-                                <Grid.RowDefinitions>
-                                    <RowDefinition Height="Auto" />
-                                    <RowDefinition Height="Auto" />
-                                </Grid.RowDefinitions>
-                                <RadioButton x:Name="RecordingSizeDraggedOption" Style="{StaticResource Settings.RadioButton}"
-                                             Grid.ColumnSpan="2"
-                                             Content="{loc:Text Recording_SizeDragged}"
-                                             AutomationProperties.Name="{loc:Text Recording_SizeDragged}"
-                                             IsChecked="{Binding UseRecordingDraggedSize}" />
-                                <RadioButton x:Name="RecordingSizeFixedOption" Style="{StaticResource Settings.RadioButton}"
-                                             Grid.Row="1" Margin="0,0,12,0"
-                                             Content="{loc:Text Recording_SizeFixed}"
-                                             AutomationProperties.Name="{loc:Text Recording_SizeFixed}"
-                                             IsChecked="{Binding UseRecordingFixedSize}" />
-                                <StackPanel x:Name="RecordingSizeRow" Grid.Row="1" Grid.Column="1" Orientation="Horizontal"
-                                            IsEnabled="{Binding UseRecordingFixedSize}">
-                                    <TextBlock Style="{StaticResource Settings.InlineText}" Margin="0,0,8,0"
-                                               Text="{loc:Text Recording_SizeWidth}" />
-                                    <TextBox x:Name="RecordingPresetWidthBox" Style="{StaticResource Settings.NumberBox}"
-                                             AutomationProperties.Name="{loc:Text Recording_PresetWidth}"
-                                             Text="{Binding RecordingPresetWidth, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
-                                    <TextBlock Style="{StaticResource Settings.InlineText}" Margin="8,0" Text="×" />
-                                    <TextBlock Style="{StaticResource Settings.InlineText}" Margin="0,0,8,0"
-                                               Text="{loc:Text Recording_SizeHeight}" />
-                                    <TextBox x:Name="RecordingPresetHeightBox" Style="{StaticResource Settings.NumberBox}"
-                                             AutomationProperties.Name="{loc:Text Recording_PresetHeight}"
-                                             Text="{Binding RecordingPresetHeight, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
-                                    <TextBlock Style="{StaticResource Settings.InlineText}" Margin="8,0,0,0" Text="px" />
-                                </StackPanel>
-                            </Grid>
-                            <TextBlock Style="{StaticResource Settings.Description}" Margin="0,4,0,0"
-                                       Text="{loc:Text Settings_RecordingSizeHint}" />
-                        </StackPanel>
-
                         <CheckBox Style="{StaticResource Settings.CheckBox}"
-                                  Content="{loc:Text Text_F1C1BB1D5771}"
-                                  AutomationProperties.Name="{loc:Text Text_F1C1BB1D5771}"
-                                  IsChecked="{Binding UseRecordingStartDelay}" />
+                        Content="{loc:Text Text_F1C1BB1D5771}"
+                        AutomationProperties.Name="{loc:Text Text_F1C1BB1D5771}"
+                        IsChecked="{Binding UseRecordingStartDelay}" />
 
                         <settings:SettingsField Margin="0,6,0,12" IsEnabled="{Binding UseRecordingStartDelay}"
                                                 Header="{loc:Text Text_1D9A98A69018}" Hint="{loc:Text SettingsRange_Seconds1To10}">
@@ -777,43 +756,135 @@
                                      Text="{Binding RecordingStartDelaySeconds, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
                         </settings:SettingsField>
 
-                        <CheckBox Style="{StaticResource Settings.CheckBox}"
-                                  Content="{loc:Text Text_F0CFD62F0971}"
-                                  AutomationProperties.Name="{loc:Text Text_F0CFD62F0971}"
-                                  IsChecked="{Binding RecordingIncludeCursor}" />
+                        <Grid Margin="0,0,0,6">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <CheckBox Grid.Column="0" Style="{StaticResource Settings.CheckBox}"
+                            Content="{loc:Text Text_F0CFD62F0971}"
+                            AutomationProperties.Name="{loc:Text Text_F0CFD62F0971}"
+                            IsChecked="{Binding RecordingIncludeCursor}" />
+                            <Button Grid.Column="1" Tag="G05" Content="{loc:Text SettingsStructure_Guide}"
+                            AutomationProperties.Name="{loc:Text SettingsStructure_Guide}"
+                            Style="{StaticResource Settings.GuideButton}" Click="OnSettingsGuide" />
+                        </Grid>
 
-                        <CheckBox Style="{StaticResource Settings.CheckBox}"
-                                  Content="{loc:Text Recording_CursorHighlight}"
-                                  AutomationProperties.Name="{loc:Text Recording_CursorHighlight}"
-                                  IsChecked="{Binding RecordingCursorHighlight}" />
+                        <Grid Margin="0,0,0,6">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <CheckBox Grid.Column="0" Style="{StaticResource Settings.CheckBox}"
+                            Content="{loc:Text Recording_CursorHighlight}"
+                            AutomationProperties.Name="{loc:Text Recording_CursorHighlight}"
+                            IsChecked="{Binding RecordingCursorHighlight}" />
+                            <Button Grid.Column="1" Tag="G05" Content="{loc:Text SettingsStructure_Guide}"
+                            AutomationProperties.Name="{loc:Text SettingsStructure_Guide}"
+                            Style="{StaticResource Settings.GuideButton}" Click="OnSettingsGuide" />
+                        </Grid>
 
-                        <StackPanel Style="{StaticResource Settings.Field}" Margin="0,8,0,14">
-                            <TextBlock Style="{StaticResource Settings.Label}" Text="{loc:Text RecordingBackend_Label}" />
-                            <TextBlock Style="{StaticResource Settings.Description}" Text="{loc:Text SettingsUx_RecordingMethodHint}" />
-                            <ComboBox x:Name="RecordingCaptureModeSelector" SelectedValue="{Binding RecordingCaptureMode}" SelectedValuePath="Tag"
-                                      AutomationProperties.Name="{loc:Text RecordingBackend_Label}"
-                                      AutomationProperties.HelpText="{loc:Text SettingsUx_RecordingMethodHint}"
-                                      MinWidth="320" HorizontalAlignment="Left" Margin="0,4,0,0">
-                                <ComboBoxItem Tag="auto" Content="{loc:Text SettingsUx_RecordingMethodAuto}" />
-                                <ComboBoxItem Tag="gdi" Content="{loc:Text SettingsUx_RecordingMethodCompatible}" />
-                            </ComboBox>
-                            <!-- Windows 10 has no borderless capture API, so the automatic method shows the
-                                 system's yellow capture border (ADR 0007). Shown only there; see code-behind. -->
-                            <TextBlock x:Name="RecordingBorderNote" Style="{StaticResource Settings.Description}" Margin="0,8,0,0"
-                                       Text="{loc:Text SettingsUx_RecordingBorderNoteWindows10}" Visibility="Collapsed" />
+                        <StackPanel x:Name="RecordingSizeField" Style="{StaticResource Settings.Field}">
+                                                    <Grid Margin="0,0,0,4">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Style="{StaticResource Settings.Label}" Text="{loc:Text Recording_SizePreset}" />
+                            <Button Grid.Column="1" Tag="G04" Content="{loc:Text SettingsStructure_Guide}"
+                            AutomationProperties.Name="{loc:Text SettingsStructure_Guide}"
+                            Style="{StaticResource Settings.GuideButton}" Click="OnSettingsGuide" />
+                        </Grid>
+                                                    <Grid>
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="Auto" />
+                                                            <ColumnDefinition Width="*" />
+                                                        </Grid.ColumnDefinitions>
+                                                        <Grid.RowDefinitions>
+                                                            <RowDefinition Height="Auto" />
+                                                            <RowDefinition Height="Auto" />
+                                                        </Grid.RowDefinitions>
+                                                        <RadioButton x:Name="RecordingSizeDraggedOption" Style="{StaticResource Settings.RadioButton}"
+                                                                     Grid.ColumnSpan="2"
+                                                                     Content="{loc:Text Recording_SizeDragged}"
+                                                                     AutomationProperties.Name="{loc:Text Recording_SizeDragged}"
+                                                                     IsChecked="{Binding UseRecordingDraggedSize}" />
+                                                        <RadioButton x:Name="RecordingSizeFixedOption" Style="{StaticResource Settings.RadioButton}"
+                                                                     Grid.Row="1" Margin="0,0,12,0"
+                                                                     Content="{loc:Text Recording_SizeFixed}"
+                                                                     AutomationProperties.Name="{loc:Text Recording_SizeFixed}"
+                                                                     IsChecked="{Binding UseRecordingFixedSize}" />
+                                                        <StackPanel x:Name="RecordingSizeRow" Grid.Row="1" Grid.Column="1" Orientation="Horizontal"
+                                                                    IsEnabled="{Binding UseRecordingFixedSize}">
+                                                            <TextBlock Style="{StaticResource Settings.InlineText}" Margin="0,0,8,0"
+                                                                       Text="{loc:Text Recording_SizeWidth}" />
+                                                            <TextBox x:Name="RecordingPresetWidthBox" Style="{StaticResource Settings.NumberBox}"
+                                                                     AutomationProperties.Name="{loc:Text Recording_PresetWidth}"
+                                                                     Text="{Binding RecordingPresetWidth, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
+                                                            <TextBlock Style="{StaticResource Settings.InlineText}" Margin="8,0" Text="×" />
+                                                            <TextBlock Style="{StaticResource Settings.InlineText}" Margin="0,0,8,0"
+                                                                       Text="{loc:Text Recording_SizeHeight}" />
+                                                            <TextBox x:Name="RecordingPresetHeightBox" Style="{StaticResource Settings.NumberBox}"
+                                                                     AutomationProperties.Name="{loc:Text Recording_PresetHeight}"
+                                                                     Text="{Binding RecordingPresetHeight, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
+                                                            <TextBlock Style="{StaticResource Settings.InlineText}" Margin="8,0,0,0" Text="px" />
+                                                        </StackPanel>
+                                                    </Grid>
+                                                    <TextBlock Style="{StaticResource Settings.Description}" Margin="0,4,0,0"
+                                                               Text="{loc:Text Settings_RecordingSizeHint}" />
+                                                </StackPanel>
+
+                        <StackPanel x:Name="RecordingWatermarkSection" Style="{StaticResource Settings.Field}" Margin="0,8,0,14">
+                            <TextBlock Style="{StaticResource Settings.Label}" Text="{loc:Text RecordingWatermark_Title}" />
+                            <CheckBox Style="{StaticResource Settings.CheckBox}"
+                                      Content="{loc:Text RecordingWatermark_Show}"
+                                      AutomationProperties.Name="{loc:Text RecordingWatermark_Show}"
+                                      IsChecked="{Binding RecordingWatermarkEnabled}" />
+                            <Button x:Name="RecordingWatermarkSettingsButton" Content="{loc:Text RecordingWatermark_Settings}"
+                                    AutomationProperties.Name="{loc:Text RecordingWatermark_Settings}"
+                                    Click="OnRecordingWatermarkSettings" HorizontalAlignment="Left" Margin="0,4,0,0" />
                         </StackPanel>
+
+                        <Expander x:Name="RecordingCompatibilityExpander" Style="{StaticResource Settings.Expander}" Margin="0,12,0,0"
+                                  Header="{loc:Text SettingsStructure_RecordingCompatibility}" AutomationProperties.Name="{loc:Text SettingsStructure_RecordingCompatibility}">
+                            <StackPanel>
+                                <StackPanel Style="{StaticResource Settings.Field}" Margin="0,8,0,14">
+                                                                    <Grid Margin="0,0,0,4">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Style="{StaticResource Settings.Label}" Text="{loc:Text RecordingBackend_Label}" />
+                                    <Button Grid.Column="1" Tag="G06" Content="{loc:Text SettingsStructure_Guide}"
+                                    AutomationProperties.Name="{loc:Text SettingsStructure_Guide}"
+                                    Style="{StaticResource Settings.GuideButton}" Click="OnSettingsGuide" />
+                                </Grid>
+                                                                    <TextBlock Style="{StaticResource Settings.Description}" Text="{loc:Text SettingsUx_RecordingMethodHint}" />
+                                                                    <ComboBox x:Name="RecordingCaptureModeSelector" SelectedValue="{Binding RecordingCaptureMode}" SelectedValuePath="Tag"
+                                                                              AutomationProperties.Name="{loc:Text RecordingBackend_Label}"
+                                                                              AutomationProperties.HelpText="{loc:Text SettingsUx_RecordingMethodHint}"
+                                                                              MinWidth="320" HorizontalAlignment="Left" Margin="0,4,0,0">
+                                                                        <ComboBoxItem Tag="auto" Content="{loc:Text SettingsUx_RecordingMethodAuto}" />
+                                                                        <ComboBoxItem Tag="gdi" Content="{loc:Text SettingsUx_RecordingMethodCompatible}" />
+                                                                    </ComboBox>
+                                                                    <!-- Windows 10 has no borderless capture API, so the automatic method shows the
+                                                                         system's yellow capture border (ADR 0007). Shown only there; see code-behind. -->
+                                                                    <TextBlock x:Name="RecordingBorderNote" Style="{StaticResource Settings.Description}" Margin="0,8,0,0"
+                                                                               Text="{loc:Text SettingsUx_RecordingBorderNoteWindows10}" Visibility="Collapsed" />
+                                                                </StackPanel>
+                            </StackPanel>
+                        </Expander>
                     </StackPanel>
                 </ScrollViewer>
             </TabItem>
 
-            <!-- Editing: editor tool defaults, pinned windows and text recognition -->
-            <TabItem Header="{loc:Text SettingsUx_TabEditing}" AutomationProperties.Name="{loc:Text SettingsUx_TabEditing}"
-                     ToolTip="{loc:Text SettingsUx_TabEditingHelp}" AutomationProperties.HelpText="{loc:Text SettingsUx_TabEditingHelp}"
+            <TabItem x:Name="EditingTab" Header="{loc:Text SettingsUx_TabEditing}" AutomationProperties.Name="{loc:Text SettingsUx_TabEditing}"
+                     ToolTip="{loc:Text SettingsStructure_EditingHelp}" AutomationProperties.HelpText="{loc:Text SettingsStructure_EditingHelp}"
                      Tag="{StaticResource Icon.Edit}">
-                <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="4,12,12,4">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="4,12,12,4">
                     <StackPanel Grid.IsSharedSizeScope="True">
                         <TextBlock Style="{StaticResource Settings.GroupHeading}" Margin="0,0,0,8"
-                                   Text="{loc:Text SettingsUx_EditingDefaultsHeading}" />
+                        Text="{loc:Text SettingsUx_EditingDefaultsHeading}" />
 
                         <settings:SettingsField Header="{loc:Text Text_70EC2D232B4F}" Hint="{loc:Text SettingsRange_StrokeWidth}">
                             <TextBox Style="{StaticResource Settings.NumberBox}"
@@ -821,14 +892,6 @@
                                      Text="{Binding StrokeThickness, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
                         </settings:SettingsField>
 
-                        <settings:SettingsField Header="{loc:Text Text_A51DCD82F2A1}" Hint="{loc:Text SettingsRange_FontSize}">
-                            <TextBox Style="{StaticResource Settings.NumberBox}"
-                                     AutomationProperties.Name="{loc:Text Text_A51DCD82F2A1}"
-                                     Text="{Binding FontSize, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
-                        </settings:SettingsField>
-
-                        <!-- Shared recommendations; the final choice opens the installed list.
-                             A previously saved family remains selected even outside the recommendations. -->
                         <settings:SettingsField Header="{loc:Text Settings_FontName}" Note="{loc:Text Settings_FontScope}">
                             <StackPanel>
                             <ComboBox x:Name="FontFamilyBox" Width="220" HorizontalAlignment="Left"
@@ -851,39 +914,87 @@
                             </StackPanel>
                         </settings:SettingsField>
 
-                        <settings:SettingsField Header="{loc:Text Text_9B59CBE34062}" Hint="{loc:Text SettingsRange_Mosaic}">
+                        <settings:SettingsField Header="{loc:Text Text_A51DCD82F2A1}" Hint="{loc:Text SettingsRange_FontSize}">
                             <TextBox Style="{StaticResource Settings.NumberBox}"
-                                     AutomationProperties.Name="{loc:Text Text_9B59CBE34062}"
-                                     Text="{Binding MosaicBlockSize, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
+                                     AutomationProperties.Name="{loc:Text Text_A51DCD82F2A1}"
+                                     Text="{Binding FontSize, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
                         </settings:SettingsField>
 
-                        <!-- Shown in percent; the file keeps its 0–255 alpha (SettingsDraft converts). -->
-                        <settings:SettingsField Header="{loc:Text Settings_HighlighterOpacity}" Hint="{loc:Text SettingsRange_Percent}">
-                            <TextBox x:Name="HighlighterOpacityBox" Style="{StaticResource Settings.NumberBox}"
-                                     AutomationProperties.Name="{loc:Text Settings_HighlighterOpacity}"
-                                     Text="{Binding HighlighterOpacityPercent, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
-                        </settings:SettingsField>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <settings:SettingsField Grid.Column="0" Header="{loc:Text Text_9B59CBE34062}" Hint="{loc:Text SettingsRange_Mosaic}">
+                                <TextBox Style="{StaticResource Settings.NumberBox}"
+                                         AutomationProperties.Name="{loc:Text Text_9B59CBE34062}"
+                                         Text="{Binding MosaicBlockSize, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
+                            </settings:SettingsField>
+                            <Button VerticalAlignment="Top" Margin="12,0,0,12" Grid.Column="1" Tag="G07" Content="{loc:Text SettingsStructure_Guide}"
+                            AutomationProperties.Name="{loc:Text SettingsStructure_Guide}"
+                            Style="{StaticResource Settings.GuideButton}" Click="OnSettingsGuide" />
+                        </Grid>
 
-                        <settings:SettingsField Header="{loc:Text EditorBlur_Strength}" Hint="{loc:Text SettingsRange_Blur}">
-                            <TextBox Style="{StaticResource Settings.NumberBox}"
-                                     AutomationProperties.Name="{loc:Text EditorBlur_Strength}"
-                                     Text="{Binding BlurRadius, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
-                        </settings:SettingsField>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <settings:SettingsField Grid.Column="0" Header="{loc:Text Settings_HighlighterOpacity}" Hint="{loc:Text SettingsRange_Percent}">
+                                <TextBox x:Name="HighlighterOpacityBox" Style="{StaticResource Settings.NumberBox}"
+                                         AutomationProperties.Name="{loc:Text Settings_HighlighterOpacity}"
+                                         Text="{Binding HighlighterOpacityPercent, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
+                            </settings:SettingsField>
+                            <Button VerticalAlignment="Top" Margin="12,0,0,12" Grid.Column="1" Tag="G07" Content="{loc:Text SettingsStructure_Guide}"
+                            AutomationProperties.Name="{loc:Text SettingsStructure_Guide}"
+                            Style="{StaticResource Settings.GuideButton}" Click="OnSettingsGuide" />
+                        </Grid>
 
-                        <TextBlock Style="{StaticResource Settings.GroupHeading}" Text="{loc:Text Text_33EFD44366A7}" />
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <settings:SettingsField Grid.Column="0" Header="{loc:Text SettingsStructure_BlurStrength}" Hint="{loc:Text SettingsRange_Blur}">
+                                <TextBox Style="{StaticResource Settings.NumberBox}"
+                                         AutomationProperties.Name="{loc:Text SettingsStructure_BlurStrength}"
+                                         Text="{Binding BlurRadius, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
+                            </settings:SettingsField>
+                            <Button VerticalAlignment="Top" Margin="12,0,0,12" Grid.Column="1" Tag="G07" Content="{loc:Text SettingsStructure_Guide}"
+                            AutomationProperties.Name="{loc:Text SettingsStructure_Guide}"
+                            Style="{StaticResource Settings.GuideButton}" Click="OnSettingsGuide" />
+                        </Grid>
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
 
-                        <CheckBox Style="{StaticResource Settings.CheckBox}"
-                                  Content="{loc:Text Text_F0C27AB1BA08}"
-                                  AutomationProperties.Name="{loc:Text Text_F0C27AB1BA08}"
-                                  IsChecked="{Binding CloseOnDoubleClick}" />
+            <TabItem x:Name="PinsTab" Header="{loc:Text SettingsStructure_TabPins}" AutomationProperties.Name="{loc:Text SettingsStructure_TabPins}"
+                     ToolTip="{loc:Text SettingsStructure_PinsHelp}" AutomationProperties.HelpText="{loc:Text SettingsStructure_PinsHelp}"
+                     Tag="{StaticResource Icon.Pin}">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="4,12,12,4">
+                    <StackPanel Grid.IsSharedSizeScope="True">
+                        <Grid Margin="0,0,0,6">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <CheckBox Grid.Column="0" Style="{StaticResource Settings.CheckBox}"
+                            Content="{loc:Text PinSession.RestoreLabel}"
+                            AutomationProperties.Name="{loc:Text PinSession.RestoreLabel}"
+                            AutomationProperties.HelpText="{loc:Text PinSession.RestoreDescription}"
+                            IsChecked="{Binding RestoreOpenPinsOnLaunch}" />
+                            <Button Grid.Column="1" Tag="G08" Content="{loc:Text SettingsStructure_Guide}"
+                            AutomationProperties.Name="{loc:Text SettingsStructure_Guide}"
+                            Style="{StaticResource Settings.GuideButton}" Click="OnSettingsGuide" />
+                        </Grid>
 
-                        <CheckBox Style="{StaticResource Settings.CheckBox}"
-                                  Content="{loc:Text PinSession.RestoreLabel}"
-                                  AutomationProperties.Name="{loc:Text PinSession.RestoreLabel}"
-                                  AutomationProperties.HelpText="{loc:Text PinSession.RestoreDescription}"
-                                  IsChecked="{Binding RestoreOpenPinsOnLaunch}" />
                         <TextBlock Style="{StaticResource Settings.Description}"
-                                   Text="{loc:Text PinSession.RestoreDescription}" />
+                        Text="{loc:Text PinSession.RestoreDescription}" />
+
+                        <CheckBox Style="{StaticResource Settings.CheckBox}"
+                        Content="{loc:Text Text_F0C27AB1BA08}"
+                        AutomationProperties.Name="{loc:Text Text_F0C27AB1BA08}"
+                        IsChecked="{Binding CloseOnDoubleClick}" />
 
                         <settings:SettingsField Margin="0,6,0,12"
                                                 Header="{loc:Text Text_9165ADFF8EF8}" Hint="{loc:Text SettingsRange_InitialOpacity}">
@@ -892,27 +1003,62 @@
                                      Text="{Binding InitialOpacity, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
                         </settings:SettingsField>
 
-                        <settings:SettingsField Header="{loc:Text Text_7AF81E702151}" Hint="{loc:Text SettingsRange_ZoomStep}"
-                                                Note="{loc:Text Settings_ZoomStepNote}">
-                            <TextBox Style="{StaticResource Settings.NumberBox}"
-                                     AutomationProperties.Name="{loc:Text Text_628CA8F9904F}"
-                                     Text="{Binding ZoomStep, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
-                        </settings:SettingsField>
+                        <Expander x:Name="PinHistoryExpander" Style="{StaticResource Settings.Expander}" Margin="0,12,0,0"
+                                  Header="{loc:Text SettingsStructure_PinHistory}" AutomationProperties.Name="{loc:Text SettingsStructure_PinHistory}">
+                            <StackPanel>
+                                <settings:SettingsField Header="{loc:Text Text_7AF81E702151}" Hint="{loc:Text SettingsRange_ZoomStep}"
+                                                        Note="{loc:Text Settings_ZoomStepNote}">
+                                    <TextBox Style="{StaticResource Settings.NumberBox}"
+                                             AutomationProperties.Name="{loc:Text Text_628CA8F9904F}"
+                                             Text="{Binding ZoomStep, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
+                                </settings:SettingsField>
 
-                        <settings:SettingsField Header="{loc:Text PinRestore_LimitLabel}" Hint="{loc:Text SettingsRange_ClosedPins}"
-                                                Note="{loc:Text Settings_ClosedPinsNote}">
-                            <TextBox Style="{StaticResource Settings.NumberBox}"
-                                     AutomationProperties.Name="{loc:Text PinRestore_LimitLabel}"
-                                     Text="{Binding ClosedWindowRestoreLimit, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
-                        </settings:SettingsField>
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <settings:SettingsField Grid.Column="0" Header="{loc:Text PinRestore_LimitLabel}" Hint="{loc:Text SettingsRange_ClosedPins}"
+                                                            Note="{loc:Text Settings_ClosedPinsNote}">
+                                        <TextBox Style="{StaticResource Settings.NumberBox}"
+                                                 AutomationProperties.Name="{loc:Text PinRestore_LimitLabel}"
+                                                 Text="{Binding ClosedWindowRestoreLimit, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
+                                    </settings:SettingsField>
+                                    <Button VerticalAlignment="Top" Margin="12,0,0,12" Grid.Column="1" Tag="G08" Content="{loc:Text SettingsStructure_Guide}"
+                                    AutomationProperties.Name="{loc:Text SettingsStructure_Guide}"
+                                    Style="{StaticResource Settings.GuideButton}" Click="OnSettingsGuide" />
+                                </Grid>
+                            </StackPanel>
+                        </Expander>
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
 
+            <TabItem x:Name="TextTab" Header="{loc:Text SettingsStructure_TabText}" AutomationProperties.Name="{loc:Text SettingsStructure_TabText}"
+                     ToolTip="{loc:Text SettingsStructure_TextHelp}" AutomationProperties.HelpText="{loc:Text SettingsStructure_TextHelp}"
+                     Tag="{StaticResource Icon.Ocr}">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="4,12,12,4">
+                    <StackPanel Grid.IsSharedSizeScope="True">
                         <StackPanel Style="{StaticResource Settings.Field}">
-                            <TextBlock Style="{StaticResource Settings.Label}" Text="{loc:Text SettingsUx_PinCopy}" />
-                            <TextBlock Style="{StaticResource Settings.Description}"
-                                       Text="{loc:Text SettingsUx_PinCopyHint}" />
-                        </StackPanel>
-
-                        <TextBlock Style="{StaticResource Settings.GroupHeading}" Text="{loc:Text SettingsUx_OcrHeading}" />
+                                                    <Grid Margin="0,0,0,4">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Style="{StaticResource Settings.Label}" Text="{loc:Text Settings.OcrQuality}" />
+                            <Button Grid.Column="1" Tag="G09" Content="{loc:Text SettingsStructure_Compare}"
+                            AutomationProperties.Name="{loc:Text SettingsStructure_Compare}"
+                            Style="{StaticResource Settings.GuideButton}" Click="OnSettingsGuide" />
+                        </Grid>
+                                                    <TextBlock x:Name="OcrQualityHintText" Style="{StaticResource Settings.Description}" />
+                                                    <ComboBox x:Name="OcrQualitySelector" SelectedValue="{Binding OcrQuality}" SelectedValuePath="Tag"
+                                                              AutomationProperties.Name="{loc:Text Settings.OcrQuality}"
+                                                              MinWidth="320" HorizontalAlignment="Left" Margin="0,4,0,0">
+                                                        <ComboBoxItem Tag="fast" Content="{loc:Text SettingsUx_OcrFast}" />
+                                                        <ComboBoxItem Tag="balanced" Content="{loc:Text SettingsUx_OcrBalanced}" />
+                                                        <ComboBoxItem Tag="accurate" Content="{loc:Text SettingsUx_OcrAccurate}" />
+                                                    </ComboBox>
+                                                </StackPanel>
 
                         <StackPanel Style="{StaticResource Settings.Field}">
                             <TextBlock Style="{StaticResource Settings.Label}" Text="{loc:Text SettingsUx_OcrLanguages}" />
@@ -922,25 +1068,13 @@
                                      Text="{Binding PreferredLanguages, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
                         </StackPanel>
 
-                        <StackPanel Style="{StaticResource Settings.Field}">
-                            <TextBlock Style="{StaticResource Settings.Label}" Text="{loc:Text Settings.OcrQuality}" />
-                            <TextBlock x:Name="OcrQualityHintText" Style="{StaticResource Settings.Description}" />
-                            <ComboBox x:Name="OcrQualitySelector" SelectedValue="{Binding OcrQuality}" SelectedValuePath="Tag"
-                                      AutomationProperties.Name="{loc:Text Settings.OcrQuality}"
-                                      MinWidth="320" HorizontalAlignment="Left" Margin="0,4,0,0">
-                                <ComboBoxItem Tag="fast" Content="{loc:Text SettingsUx_OcrFast}" />
-                                <ComboBoxItem Tag="balanced" Content="{loc:Text SettingsUx_OcrBalanced}" />
-                                <ComboBoxItem Tag="accurate" Content="{loc:Text SettingsUx_OcrAccurate}" />
-                            </ComboBox>
-                        </StackPanel>
-
                         <CheckBox Style="{StaticResource Settings.CheckBox}"
-                                  Content="{loc:Text Text_695F77F44D69}"
-                                  AutomationProperties.Name="{loc:Text Text_695F77F44D69}"
-                                  IsChecked="{Binding CacheResults}" />
+                        Content="{loc:Text Text_695F77F44D69}"
+                        AutomationProperties.Name="{loc:Text Text_695F77F44D69}"
+                        IsChecked="{Binding CacheResults}" />
 
-                        <!-- The translation model is downloaded from the OCR window's translation view and deleted here. -->
                         <TextBlock Style="{StaticResource Settings.GroupHeading}" Text="{loc:Text SettingsUx_TranslationHeading}" />
+
                         <StackPanel Style="{StaticResource Settings.Field}">
                             <TextBlock Style="{StaticResource Settings.Label}" Text="{loc:Text Settings_TranslationModel}" />
                             <TextBlock Style="{StaticResource Settings.Description}" Text="{loc:Text Settings_TranslationModelHint}" />
@@ -956,287 +1090,43 @@
                             </DockPanel>
                         </StackPanel>
 
-                        <TextBlock Style="{StaticResource Settings.GroupHeading}" Text="{loc:Text SettingsUx_ShortcutHintsHeading}" />
-                        <CheckBox x:Name="AlwaysShowShortcutHintsCheck" Style="{StaticResource Settings.CheckBox}"
-                                  Content="{loc:Text SettingsUx_AlwaysShowShortcutHints}"
-                                  AutomationProperties.Name="{loc:Text SettingsUx_AlwaysShowShortcutHints}"
-                                  AutomationProperties.HelpText="{loc:Text SettingsUx_AlwaysShowShortcutHintsHint}"
-                                  IsChecked="{Binding AlwaysShowShortcutHints}" />
-                        <TextBlock x:Name="ShortcutHintsDescription" Style="{StaticResource Settings.Description}"
-                                   Text="{loc:Text SettingsUx_AlwaysShowShortcutHintsHint}" />
+                        <Button x:Name="TextCopyTutorialButton" AutomationProperties.Name="{loc:TutorialName text-copy}"
+                        Style="{StaticResource Button.Secondary}" Content="{loc:TutorialName text-copy}" HorizontalAlignment="Left" Margin="8,0,0,2" Click="OnTextCopyTutorial" />
                     </StackPanel>
                 </ScrollViewer>
             </TabItem>
 
-            <!-- Shortcuts: region capture and recording first, the optional commands after. -->
-            <TabItem Header="{loc:Text SettingsUx_TabShortcuts}" AutomationProperties.Name="{loc:Text SettingsUx_TabShortcuts}"
-                     ToolTip="{loc:Text SettingsUx_TabShortcutsHelp}" AutomationProperties.HelpText="{loc:Text SettingsUx_TabShortcutsHelp}"
-                     Tag="{StaticResource Icon.Shortcuts}">
-                <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="4,12,12,4">
-                    <StackPanel>
-                        <TextBlock Style="{StaticResource Settings.Description}" Margin="0,0,0,10"
-                                   Text="{loc:Text Text_669D90D96A45}" />
-
-                        <!-- Shown while a shortcut uses PrintScreen and Windows claims that key. -->
-                        <Border x:Name="PrtScGuidePanel" Visibility="Collapsed" Margin="0,4,0,14" Padding="12,10"
-                                CornerRadius="6" BorderThickness="1"
-                                Background="{DynamicResource Surface.Sunken}" BorderBrush="{DynamicResource State.Warning}"
-                                AutomationProperties.Name="{loc:Text PrtScGuide_Heading}"
-                                AutomationProperties.LiveSetting="Polite">
-                            <StackPanel>
-                                <TextBlock Style="{StaticResource Settings.Label}" Text="{loc:Text PrtScGuide_Heading}" />
-                                <TextBlock x:Name="PrtScGuideMessage" TextWrapping="Wrap" Margin="0,2,0,8"
-                                           Foreground="{DynamicResource Text.Primary}" FontSize="{StaticResource FontSize.Caption}" />
-                                <Button x:Name="PrtScGuideOpenSettings" Style="{StaticResource Button.Secondary}"
-                                        HorizontalAlignment="Left" MinWidth="140"
-                                        Content="{loc:Text PrtScGuide_OpenSettings}"
-                                        AutomationProperties.Name="{loc:Text PrtScGuide_OpenSettings}"
-                                        Click="OnPrtScGuideOpenSettings" />
-                            </StackPanel>
-                        </Border>
-
-                        <StackPanel Style="{StaticResource Settings.Field}">
-                            <DockPanel LastChildFill="True" HorizontalAlignment="Left">
-                                <Button AutomationProperties.Name="{loc:TutorialName capture-region}"
-                                        DockPanel.Dock="Right" Style="{StaticResource Button.Tutorial}" HorizontalAlignment="Right" Margin="8,0,0,2" Tag="capture-region" Click="OnFeatureTutorial" />
-                                <TextBlock Style="{StaticResource Settings.Label}" Text="{loc:Text Text_096A13A757DB}" VerticalAlignment="Center" TextWrapping="Wrap" />
-                            </DockPanel>
-                            <settings:HotkeyRecorder HorizontalAlignment="Left" AutomationProperties.Name="{loc:Text Text_AF588C59EB7B}" DefaultText="Ctrl+Shift+C" Text="{Binding CaptureHotkey, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
-                        </StackPanel>
-
-                        <StackPanel Style="{StaticResource Settings.Field}">
-                            <DockPanel LastChildFill="True" HorizontalAlignment="Left">
-                                <Button AutomationProperties.Name="{loc:TutorialName record-region}"
-                                        DockPanel.Dock="Right" Style="{StaticResource Button.Tutorial}" HorizontalAlignment="Right" Margin="8,0,0,2" Tag="record-region" Click="OnFeatureTutorial" />
-                                <TextBlock Style="{StaticResource Settings.Label}" Text="{loc:Text Text_75306DAE2E60}" VerticalAlignment="Center" TextWrapping="Wrap" />
-                            </DockPanel>
-                            <settings:HotkeyRecorder HorizontalAlignment="Left" AutomationProperties.Name="{loc:Text Text_6FF5C7B32202}" DefaultText="Ctrl+Shift+X" Text="{Binding RecordRegionHotkey, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
-                        </StackPanel>
-
-                        <CheckBox x:Name="ForceCoreShortcutsCheck" Style="{StaticResource Settings.CheckBox}"
-                                  Content="{loc:Text CoreShortcuts.Force}"
-                                  AutomationProperties.Name="{loc:Text CoreShortcuts.Force}"
-                                  AutomationProperties.HelpText="{loc:Text CoreShortcuts.ForceDescription}"
-                                  IsChecked="{Binding ForceCoreShortcuts}" />
-                        <TextBlock Style="{StaticResource Settings.Description}"
-                                   Text="{loc:Text CoreShortcuts.ForceDescription}" />
-
-                        <TextBlock Style="{StaticResource Settings.GroupHeading}" Text="{loc:Text SettingsUx_OtherShortcutsHeading}" />
-                        <TextBlock Style="{StaticResource Settings.Description}" Margin="0,0,0,10"
-                                   Text="{loc:Text SettingsUx_OtherShortcutsHint}" />
-
-                        <StackPanel Style="{StaticResource Settings.Field}">
-                            <DockPanel LastChildFill="True" HorizontalAlignment="Left">
-                                <Button x:Name="TextCopyTutorialButton" AutomationProperties.Name="{loc:TutorialName text-copy}"
-                                        DockPanel.Dock="Right" Style="{StaticResource Button.Tutorial}" HorizontalAlignment="Right" Margin="8,0,0,2" Click="OnTextCopyTutorial" />
-                                <TextBlock Style="{StaticResource Settings.Label}" Text="{loc:Text TextCapture_Title}" VerticalAlignment="Center" TextWrapping="Wrap" />
-                            </DockPanel>
-                            <TextBlock Style="{StaticResource Settings.Description}" Text="{loc:Text TextCapture_HotkeyHint}" />
-                            <settings:HotkeyRecorder x:Name="CaptureTextHotkeyRecorder" HorizontalAlignment="Left" AutomationProperties.Name="{loc:Text TextCapture_Title}" DefaultText="" Text="{Binding CaptureTextHotkey, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
-                        </StackPanel>
-
-                        <StackPanel Style="{StaticResource Settings.Field}">
-                            <DockPanel LastChildFill="True" HorizontalAlignment="Left">
-                                <Button AutomationProperties.Name="{loc:TutorialName capture-window}"
-                                        DockPanel.Dock="Right" Style="{StaticResource Button.Tutorial}" HorizontalAlignment="Right" Margin="8,0,0,2" Tag="capture-window" Click="OnFeatureTutorial" />
-                                <TextBlock Style="{StaticResource Settings.Label}" Text="{loc:Text Text_36458FABBDBB}" VerticalAlignment="Center" TextWrapping="Wrap" />
-                            </DockPanel>
-                            <settings:HotkeyRecorder HorizontalAlignment="Left" AutomationProperties.Name="{loc:Text Text_C2A254402263}" DefaultText="" Text="{Binding CaptureWindowHotkey, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
-                        </StackPanel>
-
-                        <StackPanel Style="{StaticResource Settings.Field}">
-                            <DockPanel LastChildFill="True" HorizontalAlignment="Left">
-                                <Button AutomationProperties.Name="{loc:TutorialName capture-fullscreen}"
-                                        DockPanel.Dock="Right" Style="{StaticResource Button.Tutorial}" HorizontalAlignment="Right" Margin="8,0,0,2" Tag="capture-fullscreen" Click="OnFeatureTutorial" />
-                                <TextBlock Style="{StaticResource Settings.Label}" Text="{loc:Text Text_254C836B9ED2}" VerticalAlignment="Center" TextWrapping="Wrap" />
-                            </DockPanel>
-                            <settings:HotkeyRecorder HorizontalAlignment="Left" AutomationProperties.Name="{loc:Text Text_E7770F293C4C}" DefaultText="" Text="{Binding CaptureFullScreenHotkey, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
-                        </StackPanel>
-
-                        <StackPanel Style="{StaticResource Settings.Field}">
-                            <TextBlock Style="{StaticResource Settings.Label}" Text="{loc:Text Text_7A4FE9D482AD}" />
-                            <settings:HotkeyRecorder HorizontalAlignment="Left" AutomationProperties.Name="{loc:Text Text_7F2ED132EA3B}" DefaultText="" Text="{Binding RepeatLastRegionHotkey, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
-                        </StackPanel>
-
-                        <StackPanel Style="{StaticResource Settings.Field}">
-                            <DockPanel LastChildFill="True" HorizontalAlignment="Left">
-                                <Button AutomationProperties.Name="{loc:TutorialName capture-scroll}"
-                                        DockPanel.Dock="Right" Style="{StaticResource Button.Tutorial}" HorizontalAlignment="Right" Margin="8,0,0,2" Tag="capture-scroll" Click="OnFeatureTutorial" />
-                                <TextBlock Style="{StaticResource Settings.Label}" Text="{loc:Text Hotkey.Scroll}" VerticalAlignment="Center" TextWrapping="Wrap" />
-                            </DockPanel>
-                            <settings:HotkeyRecorder HorizontalAlignment="Left" AutomationProperties.Name="{loc:Text Hotkey.Scroll}" DefaultText="" Text="{Binding ScrollingCaptureHotkey, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
-                        </StackPanel>
-
-                        <StackPanel Style="{StaticResource Settings.Field}">
-                            <DockPanel LastChildFill="True" HorizontalAlignment="Left">
-                                <Button AutomationProperties.Name="{loc:TutorialName capture-delay}"
-                                        DockPanel.Dock="Right" Style="{StaticResource Button.Tutorial}" HorizontalAlignment="Right" Margin="8,0,0,2" Tag="capture-delay" Click="OnFeatureTutorial" />
-                                <TextBlock Style="{StaticResource Settings.Label}" Text="{loc:Text Hotkey.Delay}" VerticalAlignment="Center" TextWrapping="Wrap" />
-                            </DockPanel>
-                            <settings:HotkeyRecorder HorizontalAlignment="Left" AutomationProperties.Name="{loc:Text Hotkey.Delay}" DefaultText="" Text="{Binding DelayedCaptureHotkey, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
-                        </StackPanel>
-
-                        <StackPanel Style="{StaticResource Settings.Field}">
-                            <DockPanel LastChildFill="True" HorizontalAlignment="Left">
-                                <Button AutomationProperties.Name="{loc:TutorialName record-pause}"
-                                        DockPanel.Dock="Right" Style="{StaticResource Button.Tutorial}" HorizontalAlignment="Right" Margin="8,0,0,2" Tag="record-pause" Click="OnFeatureTutorial" />
-                                <TextBlock Style="{StaticResource Settings.Label}" Text="{loc:Text RecordingPauseHotkey_Command}" VerticalAlignment="Center" TextWrapping="Wrap" />
-                            </DockPanel>
-                            <TextBlock Style="{StaticResource Settings.Description}" Text="{loc:Text RecordingPauseHotkey_Description}" />
-                            <settings:HotkeyRecorder HorizontalAlignment="Left" AutomationProperties.Name="{loc:Text RecordingPauseHotkey_HotkeyName}" AutomationProperties.HelpText="{loc:Text RecordingPauseHotkey_Description}" DefaultText="" Text="{Binding PauseRecordingHotkey, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
-                        </StackPanel>
-
-                        <StackPanel Style="{StaticResource Settings.Field}">
-                            <DockPanel LastChildFill="True" HorizontalAlignment="Left">
-                                <Button AutomationProperties.Name="{loc:TutorialName library-open}"
-                                        DockPanel.Dock="Right" Style="{StaticResource Button.Tutorial}" HorizontalAlignment="Right" Margin="8,0,0,2" Tag="library-open" Click="OnFeatureTutorial" />
-                                <TextBlock Style="{StaticResource Settings.Label}" Text="{loc:Text Text_66BA5DCDA810}" VerticalAlignment="Center" TextWrapping="Wrap" />
-                            </DockPanel>
-                            <settings:HotkeyRecorder HorizontalAlignment="Left" AutomationProperties.Name="{loc:Text Text_6F1D1FE90E37}" DefaultText="" Text="{Binding OpenLibraryHotkey, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
-                        </StackPanel>
-
-                        <StackPanel Style="{StaticResource Settings.Field}">
-                            <DockPanel LastChildFill="True" HorizontalAlignment="Left">
-                                <Button AutomationProperties.Name="{loc:TutorialName pin-clipboard}"
-                                        DockPanel.Dock="Right" Style="{StaticResource Button.Tutorial}" HorizontalAlignment="Right" Margin="8,0,0,2" Tag="pin-clipboard" Click="OnFeatureTutorial" />
-                                <TextBlock Style="{StaticResource Settings.Label}" Text="{loc:Text Text_1FBCF51E2FF5}" VerticalAlignment="Center" TextWrapping="Wrap" />
-                            </DockPanel>
-                            <settings:HotkeyRecorder HorizontalAlignment="Left" AutomationProperties.Name="{loc:Text Text_B53D43740F41}" DefaultText="F3" Text="{Binding PasteToScreenHotkey, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
-                        </StackPanel>
-
-                        <StackPanel Style="{StaticResource Settings.Field}">
-                            <DockPanel LastChildFill="True" HorizontalAlignment="Left">
-                                <Button AutomationProperties.Name="{loc:TutorialName pin-hide-all}"
-                                        DockPanel.Dock="Right" Style="{StaticResource Button.Tutorial}" HorizontalAlignment="Right" Margin="8,0,0,2" Tag="pin-hide-all" Click="OnFeatureTutorial" />
-                                <TextBlock Style="{StaticResource Settings.Label}" Text="{loc:Text Text_4FED89116C1F}" VerticalAlignment="Center" TextWrapping="Wrap" />
-                            </DockPanel>
-                            <settings:HotkeyRecorder HorizontalAlignment="Left" AutomationProperties.Name="{loc:Text Text_D6E142D9293C}" DefaultText="Shift+F3" Text="{Binding HideAllPinsHotkey, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
-                        </StackPanel>
-
-                        <StackPanel Style="{StaticResource Settings.Field}">
-                            <DockPanel LastChildFill="True" HorizontalAlignment="Left">
-                                <Button AutomationProperties.Name="{loc:TutorialName pin-click-through}"
-                                        DockPanel.Dock="Right" Style="{StaticResource Button.Tutorial}" HorizontalAlignment="Right" Margin="8,0,0,2" Tag="pin-click-through" Click="OnFeatureTutorial" />
-                                <TextBlock Style="{StaticResource Settings.Label}" Text="{loc:Text Text_67FE4AF7D334}" VerticalAlignment="Center" TextWrapping="Wrap" />
-                            </DockPanel>
-                            <settings:HotkeyRecorder HorizontalAlignment="Left" AutomationProperties.Name="{loc:Text Text_7116B7156511}" DefaultText="" Text="{Binding ToggleClickThroughHotkey, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
-                        </StackPanel>
-
-                        <StackPanel Style="{StaticResource Settings.Field}">
-                            <DockPanel LastChildFill="True" HorizontalAlignment="Left">
-                                <Button AutomationProperties.Name="{loc:TutorialName pin-restore}"
-                                        DockPanel.Dock="Right" Style="{StaticResource Button.Tutorial}" HorizontalAlignment="Right" Margin="8,0,0,2" Tag="pin-restore" Click="OnFeatureTutorial" />
-                                <TextBlock Style="{StaticResource Settings.Label}" Text="{loc:Text PinRestore_Command}" VerticalAlignment="Center" TextWrapping="Wrap" />
-                            </DockPanel>
-                            <settings:HotkeyRecorder HorizontalAlignment="Left" AutomationProperties.Name="{loc:Text PinRestore_HotkeyName}" DefaultText="" Text="{Binding RestoreClosedPinHotkey, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
-                        </StackPanel>
-
-                        <StackPanel Style="{StaticResource Settings.Field}">
-                            <TextBlock Style="{StaticResource Settings.Label}" Text="{loc:Text Settings.UploadGitHubHotkey}" />
-                            <settings:HotkeyRecorder HorizontalAlignment="Left" AutomationProperties.Name="{loc:Text Settings.UploadGitHubHotkey}" DefaultText="" Text="{Binding UploadGitHubImageHotkey, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
-                        </StackPanel>
-
-                    </StackPanel>
-                </ScrollViewer>
-            </TabItem>
-
-            <!-- Storage: library, then files saved elsewhere, then the advanced upload options. -->
-            <TabItem x:Name="StorageTab"
-                     Header="{loc:Text SettingsUx_TabStorage}" AutomationProperties.Name="{loc:Text SettingsUx_TabStorage}"
-                     ToolTip="{loc:Text SettingsUx_TabStorageHelp2}" AutomationProperties.HelpText="{loc:Text SettingsUx_TabStorageHelp2}"
+            <TabItem x:Name="StorageTab" Header="{loc:Text SettingsStructure_TabStorage}" AutomationProperties.Name="{loc:Text SettingsStructure_TabStorage}"
+                     ToolTip="{loc:Text SettingsStructure_StorageHelp}" AutomationProperties.HelpText="{loc:Text SettingsStructure_StorageHelp}"
                      Tag="{StaticResource Icon.Storage}">
-                <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="4,12,12,4">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="4,12,12,4">
                     <StackPanel Grid.IsSharedSizeScope="True">
-                        <settings:SettingsField Header="{loc:Text Settings_LibraryMaxItems}" Hint="{loc:Text SettingsRange_MaxItems}">
-                            <TextBox Style="{StaticResource Settings.NumberBox}"
-                                     AutomationProperties.Name="{loc:Text Settings_LibraryMaxItems}"
-                                     Text="{Binding MaxItems, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
-                        </settings:SettingsField>
-
-                        <settings:SettingsField Header="{loc:Text SettingsUx_MaxStorage}" Hint="{loc:Text SettingsRange_MaxStorage}">
-                            <TextBox Style="{StaticResource Settings.NumberBox}"
-                                     AutomationProperties.Name="{loc:Text SettingsUx_MaxStorage}"
-                                     Text="{Binding MaxGiB, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
-                        </settings:SettingsField>
-
-                        <settings:SettingsField Header="{loc:Text SettingsUx_PreviewSize}" Hint="{loc:Text SettingsRange_PreviewSize}">
-                            <TextBox Style="{StaticResource Settings.NumberBox}"
-                                     AutomationProperties.Name="{loc:Text SettingsUx_PreviewSize}"
-                                     Text="{Binding ThumbnailLongEdge, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
-                        </settings:SettingsField>
-
-                        <!-- A fixed set of periods plus "never"; an hour count saved by an earlier version
-                             stays as a custom choice. Code-behind fills the list and keeps it on the draft,
-                             and the note states the period that will apply. -->
-                        <settings:SettingsField Header="{loc:Text Retention_Label}">
-                            <ComboBox x:Name="RetentionChoiceBox" MinWidth="160" HorizontalAlignment="Left"
-                                      DisplayMemberPath="Label" SelectedValuePath="Hours"
-                                      AutomationProperties.Name="{loc:Text Retention_Label}"
-                                      SelectionChanged="OnRetentionChoiceChanged" />
-                            <settings:SettingsField.Note>
-                                <TextBlock x:Name="RetentionSummary" Style="{StaticResource Settings.Description}" Margin="0"
-                                           AutomationProperties.LiveSetting="Polite" />
-                            </settings:SettingsField.Note>
-                        </settings:SettingsField>
-
                         <StackPanel Style="{StaticResource Settings.Field}">
-                            <TextBlock Style="{StaticResource Settings.Label}" Text="{loc:Text Text_99A2B3E1BD9D}" />
-                            <TextBlock Style="{StaticResource Settings.Description}"
-                                       Text="{loc:Text Text_B62C5C65821E}" />
-                            <Grid>
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="Auto" />
-                                </Grid.ColumnDefinitions>
-                                <TextBox Grid.Column="0" Style="{StaticResource Settings.TextBox}"
-                                         AutomationProperties.Name="{loc:Text Text_F6C3295E346E}"
-                                         Text="{Binding CapturesDirectoryOverride, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
-                                <StackPanel Grid.Column="1" Orientation="Horizontal">
-                                    <Button Style="{StaticResource Settings.BrowseButton}"
-                                            Content="{loc:Text Text_C536D125279E}"
-                                            AutomationProperties.Name="{loc:Text Text_1145FCF19412}"
-                                            Click="OnBrowseCapturesDirectory" />
-                                    <Button x:Name="OpenCapturesFolderButton" Style="{StaticResource Settings.BrowseButton}"
-                                            Content="{loc:Text Storage_OpenFolder}"
-                                            AutomationProperties.Name="{loc:Text Storage_OpenCaptureFolderName}"
-                                            Click="OnOpenCapturesDirectory" />
-                                </StackPanel>
-                            </Grid>
-                            <!-- The Store build's default folder lives in the package and goes with it. -->
-                            <TextBlock x:Name="CaptureFolderDefaultNote" Style="{StaticResource Settings.Description}" Margin="0,4,0,0"
-                                       Text="{loc:Text Storage_DefaultRemovedOnUninstall}" Visibility="Collapsed" />
-                        </StackPanel>
-
-                        <StackPanel Style="{StaticResource Settings.Field}">
-                            <TextBlock Style="{StaticResource Settings.Label}" Text="{loc:Text Folder410.PrefixLabel}" />
-                            <TextBlock Style="{StaticResource Settings.Description}" Text="{loc:Text Folder410.PrefixHint}" />
-                            <TextBox Style="{StaticResource Settings.TextBox}" MaxLength="40"
-                                     AutomationProperties.Name="{loc:Text Folder410.PrefixLabel}"
-                                     Text="{Binding FolderFilePrefix, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
-                            <CheckBox Content="{loc:Text LibraryFolder_KeepAfterClose}" Margin="0,12,0,0"
-                                      AutomationProperties.Name="{loc:Text LibraryFolder_KeepAfterClose}"
-                                      IsChecked="{Binding UseCurrentFolderForNewCaptures}" />
-                        </StackPanel>
-
-                        <TextBlock Style="{StaticResource Settings.GroupHeading}" Text="{loc:Text SettingsUx_SaveFilesHeading}" />
-
-                        <StackPanel Style="{StaticResource Settings.Field}">
-                            <TextBlock Style="{StaticResource Settings.Label}" Text="{loc:Text Text_5A932820414F}" />
-                            <TextBlock Style="{StaticResource Settings.Description}" Text="{loc:Text Settings.QuickSaveDirectoryHint}" />
-                            <Grid>
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="Auto" />
-                                </Grid.ColumnDefinitions>
-                                <TextBox Grid.Column="0" Style="{StaticResource Settings.TextBox}"
-                                         AutomationProperties.Name="{loc:Text Text_C315173385E0}"
-                                         Text="{Binding QuickSaveDirectoryOverride, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
-                                <Button Grid.Column="1" Style="{StaticResource Settings.BrowseButton}"
-                                        Content="{loc:Text Text_C536D125279E}"
-                                        AutomationProperties.Name="{loc:Text Text_4C561D57BFCE}"
-                                        Click="OnBrowseQuickSaveDirectory" />
-                            </Grid>
-                        </StackPanel>
+                                                    <Grid Margin="0,0,0,4">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Style="{StaticResource Settings.Label}" Text="{loc:Text Text_5A932820414F}" />
+                            <Button Grid.Column="1" Tag="G12" Content="{loc:Text SettingsStructure_Guide}"
+                            AutomationProperties.Name="{loc:Text SettingsStructure_Guide}"
+                            Style="{StaticResource Settings.GuideButton}" Click="OnSettingsGuide" />
+                        </Grid>
+                                                    <TextBlock Style="{StaticResource Settings.Description}" Text="{loc:Text Settings.QuickSaveDirectoryHint}" />
+                                                    <Grid>
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="*" />
+                                                            <ColumnDefinition Width="Auto" />
+                                                        </Grid.ColumnDefinitions>
+                                                        <TextBox Grid.Column="0" Style="{StaticResource Settings.TextBox}"
+                                                                 AutomationProperties.Name="{loc:Text Text_C315173385E0}"
+                                                                 Text="{Binding QuickSaveDirectoryOverride, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
+                                                        <Button Grid.Column="1" Style="{StaticResource Settings.BrowseButton}"
+                                                                Content="{loc:Text Text_C536D125279E}"
+                                                                AutomationProperties.Name="{loc:Text Text_4C561D57BFCE}"
+                                                                Click="OnBrowseQuickSaveDirectory" />
+                                                    </Grid>
+                                                </StackPanel>
 
                         <StackPanel Style="{StaticResource Settings.Field}">
                             <TextBlock Style="{StaticResource Settings.Label}" Text="{loc:Text Text_72147902C22E}" />
@@ -1247,20 +1137,152 @@
                                      Text="{Binding FileNamePattern, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
                         </StackPanel>
 
-                        <CheckBox x:Name="ShowSourceWindowTitleCheck"
-                                  Style="{StaticResource Settings.CheckBox}"
-                                  Content="{loc:Text Settings.ShowSourceWindowTitle}"
-                                  AutomationProperties.Name="{loc:Text Settings.ShowSourceWindowTitle}"
-                                  IsChecked="{Binding ShowSourceWindowTitle}" />
-                        <TextBlock Style="{StaticResource Settings.Description}"
-                                   Text="{loc:Text Settings.ShowSourceWindowTitleHint}" />
+                        <TextBlock Style="{StaticResource Settings.GroupHeading}" Text="{loc:Text SettingsStructure_Library}" />
 
-                        <!-- GitHub upload is optional and rare: it stays folded until opened. The
-                             header starts at the page edge; pulled further left, the page clipped
-                             the left side of its hover fill and keyboard focus border. -->
+                        <StackPanel Style="{StaticResource Settings.Field}">
+                                                    <Grid Margin="0,0,0,4">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Style="{StaticResource Settings.Label}" Text="{loc:Text Text_99A2B3E1BD9D}" />
+                            <Button Grid.Column="1" Tag="G12" Content="{loc:Text SettingsStructure_Guide}"
+                            AutomationProperties.Name="{loc:Text SettingsStructure_Guide}"
+                            Style="{StaticResource Settings.GuideButton}" Click="OnSettingsGuide" />
+                        </Grid>
+                                                    <TextBlock Style="{StaticResource Settings.Description}"
+                                                               Text="{loc:Text Text_B62C5C65821E}" />
+                                                    <Grid>
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="*" />
+                                                            <ColumnDefinition Width="Auto" />
+                                                        </Grid.ColumnDefinitions>
+                                                        <TextBox Grid.Column="0" Style="{StaticResource Settings.TextBox}"
+                                                                 AutomationProperties.Name="{loc:Text Text_F6C3295E346E}"
+                                                                 Text="{Binding CapturesDirectoryOverride, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
+                                                        <StackPanel Grid.Column="1" Orientation="Horizontal">
+                                                            <Button Style="{StaticResource Settings.BrowseButton}"
+                                                                    Content="{loc:Text Text_C536D125279E}"
+                                                                    AutomationProperties.Name="{loc:Text Text_1145FCF19412}"
+                                                                    Click="OnBrowseCapturesDirectory" />
+                                                            <Button x:Name="OpenCapturesFolderButton" Style="{StaticResource Settings.BrowseButton}"
+                                                                    Content="{loc:Text Storage_OpenFolder}"
+                                                                    AutomationProperties.Name="{loc:Text Storage_OpenCaptureFolderName}"
+                                                                    Click="OnOpenCapturesDirectory" />
+                                                        </StackPanel>
+                                                    </Grid>
+                                                    <!-- The Store build's default folder lives in the package and goes with it. -->
+                                                    <TextBlock x:Name="CaptureFolderDefaultNote" Style="{StaticResource Settings.Description}" Margin="0,4,0,0"
+                                                               Text="{loc:Text Storage_DefaultRemovedOnUninstall}" Visibility="Collapsed" />
+                                                </StackPanel>
+
+                        <StackPanel Style="{StaticResource Settings.Field}">
+                            <TextBlock Style="{StaticResource Settings.Label}" TextWrapping="Wrap"
+                                       Text="{loc:Text Retention_Label}" />
+                            <Grid Margin="0,4,0,4">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <ComboBox x:Name="RetentionChoiceBox" MinWidth="160" HorizontalAlignment="Left"
+                                          DisplayMemberPath="Label" SelectedValuePath="Hours"
+                                          AutomationProperties.Name="{loc:Text Retention_Label}"
+                                          SelectionChanged="OnRetentionChoiceChanged" />
+                                <Button Grid.Column="1" Tag="G11" Content="{loc:Text SettingsStructure_Guide}"
+                                        AutomationProperties.Name="{loc:Text SettingsStructure_Guide}"
+                                        Style="{StaticResource Settings.GuideButton}" Click="OnSettingsGuide" />
+                            </Grid>
+                            <TextBlock x:Name="RetentionSummary" Style="{StaticResource Settings.Description}" Margin="0"
+                                       AutomationProperties.LiveSetting="Polite" />
+                        </StackPanel>
+
+                        <StackPanel Style="{StaticResource Settings.Field}">
+                            <Grid Margin="0,0,0,12">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <CheckBox Grid.Column="0" Style="{StaticResource Settings.CheckBox}" Content="{loc:Text LibraryFolder_KeepAfterClose}" Margin="0"
+                                          AutomationProperties.Name="{loc:Text LibraryFolder_KeepAfterClose}"
+                                          IsChecked="{Binding UseCurrentFolderForNewCaptures}" />
+                                <Button VerticalAlignment="Top" Grid.Column="1" Tag="G12" Content="{loc:Text SettingsStructure_Guide}"
+                            AutomationProperties.Name="{loc:Text SettingsStructure_Guide}"
+                            Style="{StaticResource Settings.GuideButton}" Click="OnSettingsGuide" />
+                            </Grid>
+                            <TextBlock Style="{StaticResource Settings.Label}" Text="{loc:Text Folder410.PrefixLabel}" />
+                                <TextBlock Style="{StaticResource Settings.Description}" Text="{loc:Text Folder410.PrefixHint}" />
+                                <TextBox Style="{StaticResource Settings.TextBox}" MaxLength="40"
+                                         AutomationProperties.Name="{loc:Text Folder410.PrefixLabel}"
+                                         Text="{Binding FolderFilePrefix, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
+                        </StackPanel>
+
+                        <Expander x:Name="StorageLimitsExpander" Style="{StaticResource Settings.Expander}" Margin="0,12,0,0"
+                                  Header="{loc:Text SettingsStructure_StorageLimits}" AutomationProperties.Name="{loc:Text SettingsStructure_StorageLimits}">
+                            <StackPanel>
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <settings:SettingsField Grid.Column="0" Header="{loc:Text Settings_LibraryMaxItems}" Hint="{loc:Text SettingsRange_MaxItems}">
+                                        <TextBox Style="{StaticResource Settings.NumberBox}"
+                                                 AutomationProperties.Name="{loc:Text Settings_LibraryMaxItems}"
+                                                 Text="{Binding MaxItems, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
+                                    </settings:SettingsField>
+                                    <Button VerticalAlignment="Top" Margin="12,0,0,12" Grid.Column="1" Tag="G11" Content="{loc:Text SettingsStructure_Guide}"
+                                    AutomationProperties.Name="{loc:Text SettingsStructure_Guide}"
+                                    Style="{StaticResource Settings.GuideButton}" Click="OnSettingsGuide" />
+                                </Grid>
+
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <settings:SettingsField Grid.Column="0" Header="{loc:Text SettingsUx_MaxStorage}" Hint="{loc:Text SettingsRange_MaxStorage}">
+                                        <TextBox Style="{StaticResource Settings.NumberBox}"
+                                                 AutomationProperties.Name="{loc:Text SettingsUx_MaxStorage}"
+                                                 Text="{Binding MaxGiB, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
+                                    </settings:SettingsField>
+                                    <Button VerticalAlignment="Top" Margin="12,0,0,12" Grid.Column="1" Tag="G11" Content="{loc:Text SettingsStructure_Guide}"
+                                    AutomationProperties.Name="{loc:Text SettingsStructure_Guide}"
+                                    Style="{StaticResource Settings.GuideButton}" Click="OnSettingsGuide" />
+                                </Grid>
+
+                                <settings:SettingsField Header="{loc:Text SettingsUx_PreviewSize}" Hint="{loc:Text SettingsRange_PreviewSize}">
+                                    <TextBox Style="{StaticResource Settings.NumberBox}"
+                                             AutomationProperties.Name="{loc:Text SettingsUx_PreviewSize}"
+                                             Text="{Binding ThumbnailLongEdge, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
+                                </settings:SettingsField>
+                            </StackPanel>
+                        </Expander>
+
+                        <Expander x:Name="ImageExportExpander" Style="{StaticResource Settings.Expander}" Margin="0,12,0,0"
+                                  Header="{loc:Text SettingsStructure_ImageExport}" AutomationProperties.Name="{loc:Text SettingsStructure_ImageExport}">
+                            <StackPanel>
+                                <Grid Margin="0,0,0,6">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <CheckBox Grid.Column="0" x:Name="ShowSourceWindowTitleCheck"
+                                    Style="{StaticResource Settings.CheckBox}"
+                                    Content="{loc:Text Settings.ShowSourceWindowTitle}"
+                                    AutomationProperties.Name="{loc:Text Settings.ShowSourceWindowTitle}"
+                                    IsChecked="{Binding ShowSourceWindowTitle}" />
+                                    <Button Grid.Column="1" Tag="G13" Content="{loc:Text SettingsStructure_Guide}"
+                                    AutomationProperties.Name="{loc:Text SettingsStructure_Guide}"
+                                    Style="{StaticResource Settings.GuideButton}" Click="OnSettingsGuide" />
+                                </Grid>
+
+                                <TextBlock Style="{StaticResource Settings.Description}"
+                                Text="{loc:Text Settings.ShowSourceWindowTitleHint}" />
+                            </StackPanel>
+                        </Expander>
+
                         <Expander x:Name="AdvancedExpander" Style="{StaticResource Settings.Expander}" Margin="0,12,0,0"
-                                  Header="{loc:Text SettingsUx_AdvancedHeading}"
-                                  AutomationProperties.Name="{loc:Text SettingsUx_AdvancedHeading}"
+                                  Header="{loc:Text SettingsStructure_GitHub}"
+                                  AutomationProperties.Name="{loc:Text SettingsStructure_GitHub}"
                                   AutomationProperties.HelpText="{loc:Text SettingsUx_AdvancedHint}">
                             <StackPanel>
                                 <TextBlock Style="{StaticResource Settings.Description}" Margin="0,0,0,12"
@@ -1283,45 +1305,254 @@
                                 </StackPanel>
                             </StackPanel>
                         </Expander>
+
+                        <Expander x:Name="BackupExpander" Style="{StaticResource Settings.Expander}" Margin="0,12,0,0"
+                                  Header="{loc:Text SettingsStructure_Backup}" AutomationProperties.Name="{loc:Text SettingsStructure_Backup}">
+                            <StackPanel>
+                                <StackPanel x:Name="AboutDataSection">
+                                    <StackPanel x:Name="LegacyImportPanel" Margin="0,0,0,12" Visibility="Collapsed">
+                                        <Button x:Name="LegacyImportAction" Content="{loc:Text About_LegacyImport}"
+                                                AutomationProperties.Name="{loc:Text About_LegacyImport}"
+                                                AutomationProperties.HelpText="{loc:Text About_LegacyImportHint}"
+                                                Style="{StaticResource Button.Secondary}" HorizontalAlignment="Left" MinWidth="140"
+                                                Margin="0,0,0,6" Click="OnLegacyImport" />
+                                        <TextBlock Style="{StaticResource Settings.Description}" Margin="0" Text="{loc:Text About_LegacyImportHint}" />
+                                    </StackPanel>
+                                    <WrapPanel>
+                                        <Button x:Name="ExportSettingsButton" Style="{StaticResource Button.Secondary}"
+                                                Content="{loc:Text Settings_Export}"
+                                                MinWidth="140" Margin="0,0,8,6"
+                                                AutomationProperties.Name="{loc:Text Settings_Export}"
+                                                Click="OnExportSettings" />
+                                        <Button x:Name="ImportSettingsButton" Style="{StaticResource Button.Secondary}"
+                                                Content="{loc:Text Settings_Import}"
+                                                MinWidth="140" Margin="0,0,8,6"
+                                                AutomationProperties.Name="{loc:Text Settings_Import}"
+                                                Click="OnImportSettings" />
+                                    </WrapPanel>
+                                    <TextBlock Style="{StaticResource Settings.Description}" Margin="0" Text="{loc:Text About_SettingsBackupHint}" />
+                                </StackPanel>
+                            </StackPanel>
+                        </Expander>
                     </StackPanel>
                 </ScrollViewer>
             </TabItem>
 
-            <!-- About: four sections 24 apart. Updates (version, check, last result), privacy (what
-                 stays on this PC and what is downloaded), feedback (report a problem in one step, rate)
-                 and data (import an earlier version's library, settings backup). -->
-            <TabItem x:Name="UpdateTab"
-                     Header="{loc:Text SettingsUx_TabAbout}" AutomationProperties.Name="{loc:Text SettingsUx_TabAbout}"
-                     ToolTip="{loc:Text SettingsUx_TabAboutHelp}" AutomationProperties.HelpText="{loc:Text SettingsUx_TabAboutHelp}"
-                     Tag="{StaticResource Settings.Icon.About}">
-                <!-- The unpackaged guidance and the status line can outgrow the minimum window. -->
-                <ScrollViewer x:Name="UpdateScroll" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-                    <StackPanel Margin="4,12,12,4">
-                        <StackPanel.Resources>
-                            <Style x:Key="About.Section" TargetType="StackPanel">
-                                <Setter Property="Margin" Value="0,0,0,24" />
-                            </Style>
-                            <Style x:Key="About.Heading" TargetType="TextBlock" BasedOn="{StaticResource Settings.GroupHeading}">
-                                <Setter Property="Margin" Value="0,0,0,8" />
-                            </Style>
-                            <Style x:Key="About.Body" TargetType="TextBlock">
-                                <Setter Property="Foreground" Value="{DynamicResource Text.Secondary}" />
-                                <Setter Property="FontSize" Value="{StaticResource FontSize.Body}" />
-                                <Setter Property="TextWrapping" Value="Wrap" />
-                                <Setter Property="Margin" Value="0,0,0,6" />
-                            </Style>
-                        </StackPanel.Resources>
+            <TabItem x:Name="ShortcutsTab" Header="{loc:Text SettingsUx_TabShortcuts}" AutomationProperties.Name="{loc:Text SettingsUx_TabShortcuts}"
+                     ToolTip="{loc:Text SettingsUx_TabShortcutsHelp}" AutomationProperties.HelpText="{loc:Text SettingsUx_TabShortcutsHelp}"
+                     Tag="{StaticResource Icon.Shortcuts}">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="4,12,12,4">
+                    <StackPanel Grid.IsSharedSizeScope="True">
+                        <Grid Margin="0,0,0,6">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <CheckBox Grid.Column="0" x:Name="AlwaysShowShortcutHintsCheck" Style="{StaticResource Settings.CheckBox}"
+                            Content="{loc:Text SettingsUx_AlwaysShowShortcutHints}"
+                            AutomationProperties.Name="{loc:Text SettingsUx_AlwaysShowShortcutHints}"
+                            AutomationProperties.HelpText="{loc:Text SettingsUx_AlwaysShowShortcutHintsHint}"
+                            IsChecked="{Binding AlwaysShowShortcutHints}" />
+                            <Button Grid.Column="1" Tag="G10" Content="{loc:Text SettingsStructure_Guide}"
+                            AutomationProperties.Name="{loc:Text SettingsStructure_Guide}"
+                            Style="{StaticResource Settings.GuideButton}" Click="OnSettingsGuide" />
+                        </Grid>
 
-                        <StackPanel x:Name="AboutGuideSection" Style="{StaticResource About.Section}">
-                            <Button x:Name="FirstUseGuideButton" Content="{loc:Text Onboarding.Replay}"
-                                    AutomationProperties.Name="{loc:Text Onboarding.Replay}"
-                                    Style="{StaticResource Button.Secondary}" HorizontalAlignment="Left"
-                                    MinWidth="140" Margin="0,0,0,6" Click="OnFirstUseGuide" />
-                            <TextBlock Style="{StaticResource Settings.Description}" Margin="0"
-                                       Text="{loc:Text Onboarding.AboutBody}" />
+                        <TextBlock x:Name="ShortcutHintsDescription" Style="{StaticResource Settings.Description}"
+                        Text="{loc:Text SettingsUx_AlwaysShowShortcutHintsHint}" />
+
+                        <StackPanel Style="{StaticResource Settings.Field}">
+                            <DockPanel LastChildFill="True" HorizontalAlignment="Left">
+                                <TextBlock Style="{StaticResource Settings.Label}" Text="{loc:Text Text_096A13A757DB}" VerticalAlignment="Center" TextWrapping="Wrap" />
+                            </DockPanel>
+                            <settings:HotkeyRecorder HorizontalAlignment="Left" AutomationProperties.Name="{loc:Text Text_AF588C59EB7B}" DefaultText="Ctrl+Shift+C" Text="{Binding CaptureHotkey, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
                         </StackPanel>
 
-                        <!-- Updates -->
+                        <StackPanel Style="{StaticResource Settings.Field}">
+                            <DockPanel LastChildFill="True" HorizontalAlignment="Left">
+                                <TextBlock Style="{StaticResource Settings.Label}" Text="{loc:Text Text_75306DAE2E60}" VerticalAlignment="Center" TextWrapping="Wrap" />
+                            </DockPanel>
+                            <settings:HotkeyRecorder HorizontalAlignment="Left" AutomationProperties.Name="{loc:Text Text_6FF5C7B32202}" DefaultText="Ctrl+Shift+X" Text="{Binding RecordRegionHotkey, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
+                        </StackPanel>
+
+                        <StackPanel Style="{StaticResource Settings.Field}">
+                            <DockPanel LastChildFill="True" HorizontalAlignment="Left">
+                                <TextBlock Style="{StaticResource Settings.Label}" Text="{loc:Text TextCapture_Title}" VerticalAlignment="Center" TextWrapping="Wrap" />
+                            </DockPanel>
+                            <TextBlock Style="{StaticResource Settings.Description}" Text="{loc:Text TextCapture_HotkeyHint}" />
+                            <settings:HotkeyRecorder x:Name="CaptureTextHotkeyRecorder" HorizontalAlignment="Left" AutomationProperties.Name="{loc:Text TextCapture_Title}" DefaultText="" Text="{Binding CaptureTextHotkey, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
+                        </StackPanel>
+
+                        <StackPanel Style="{StaticResource Settings.Field}">
+                            <DockPanel LastChildFill="True" HorizontalAlignment="Left">
+                                <TextBlock Style="{StaticResource Settings.Label}" Text="{loc:Text Text_1FBCF51E2FF5}" VerticalAlignment="Center" TextWrapping="Wrap" />
+                            </DockPanel>
+                            <settings:HotkeyRecorder HorizontalAlignment="Left" AutomationProperties.Name="{loc:Text Text_B53D43740F41}" DefaultText="F3" Text="{Binding PasteToScreenHotkey, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
+                        </StackPanel>
+
+                        <StackPanel Style="{StaticResource Settings.Field}">
+                            <DockPanel LastChildFill="True" HorizontalAlignment="Left">
+                                <TextBlock Style="{StaticResource Settings.Label}" Text="{loc:Text Text_4FED89116C1F}" VerticalAlignment="Center" TextWrapping="Wrap" />
+                            </DockPanel>
+                            <settings:HotkeyRecorder HorizontalAlignment="Left" AutomationProperties.Name="{loc:Text Text_D6E142D9293C}" DefaultText="Shift+F3" Text="{Binding HideAllPinsHotkey, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
+                        </StackPanel>
+
+                        <Expander x:Name="AdditionalShortcutsExpander" Style="{StaticResource Settings.Expander}" Margin="0,12,0,0"
+                                  Header="{loc:Text SettingsStructure_AdditionalShortcuts}" AutomationProperties.Name="{loc:Text SettingsStructure_AdditionalShortcuts}">
+                            <StackPanel>
+                                <TextBlock Style="{StaticResource Settings.Description}" Margin="0,0,0,10"
+                                Text="{loc:Text SettingsUx_OtherShortcutsHint}" />
+
+                                <StackPanel Style="{StaticResource Settings.Field}">
+                                    <DockPanel LastChildFill="True" HorizontalAlignment="Left">
+                                        <TextBlock Style="{StaticResource Settings.Label}" Text="{loc:Text Text_36458FABBDBB}" VerticalAlignment="Center" TextWrapping="Wrap" />
+                                    </DockPanel>
+                                    <settings:HotkeyRecorder HorizontalAlignment="Left" AutomationProperties.Name="{loc:Text Text_C2A254402263}" DefaultText="" Text="{Binding CaptureWindowHotkey, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
+                                </StackPanel>
+
+                                <StackPanel Style="{StaticResource Settings.Field}">
+                                    <DockPanel LastChildFill="True" HorizontalAlignment="Left">
+                                        <TextBlock Style="{StaticResource Settings.Label}" Text="{loc:Text Text_254C836B9ED2}" VerticalAlignment="Center" TextWrapping="Wrap" />
+                                    </DockPanel>
+                                    <settings:HotkeyRecorder HorizontalAlignment="Left" AutomationProperties.Name="{loc:Text Text_E7770F293C4C}" DefaultText="" Text="{Binding CaptureFullScreenHotkey, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
+                                </StackPanel>
+
+                                <StackPanel Style="{StaticResource Settings.Field}">
+                                    <TextBlock Style="{StaticResource Settings.Label}" Text="{loc:Text Text_7A4FE9D482AD}" />
+                                    <settings:HotkeyRecorder HorizontalAlignment="Left" AutomationProperties.Name="{loc:Text Text_7F2ED132EA3B}" DefaultText="" Text="{Binding RepeatLastRegionHotkey, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
+                                </StackPanel>
+
+                                <StackPanel Style="{StaticResource Settings.Field}">
+                                    <DockPanel LastChildFill="True" HorizontalAlignment="Left">
+                                        <TextBlock Style="{StaticResource Settings.Label}" Text="{loc:Text Hotkey.Scroll}" VerticalAlignment="Center" TextWrapping="Wrap" />
+                                    </DockPanel>
+                                    <settings:HotkeyRecorder HorizontalAlignment="Left" AutomationProperties.Name="{loc:Text Hotkey.Scroll}" DefaultText="" Text="{Binding ScrollingCaptureHotkey, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
+                                </StackPanel>
+
+                                <StackPanel Style="{StaticResource Settings.Field}">
+                                    <DockPanel LastChildFill="True" HorizontalAlignment="Left">
+                                        <TextBlock Style="{StaticResource Settings.Label}" Text="{loc:Text Hotkey.Delay}" VerticalAlignment="Center" TextWrapping="Wrap" />
+                                    </DockPanel>
+                                    <settings:HotkeyRecorder HorizontalAlignment="Left" AutomationProperties.Name="{loc:Text Hotkey.Delay}" DefaultText="" Text="{Binding DelayedCaptureHotkey, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
+                                </StackPanel>
+
+                                <StackPanel Style="{StaticResource Settings.Field}">
+                                    <DockPanel LastChildFill="True" HorizontalAlignment="Left">
+                                        <TextBlock Style="{StaticResource Settings.Label}" Text="{loc:Text RecordingPauseHotkey_Command}" VerticalAlignment="Center" TextWrapping="Wrap" />
+                                    </DockPanel>
+                                    <TextBlock Style="{StaticResource Settings.Description}" Text="{loc:Text RecordingPauseHotkey_Description}" />
+                                    <settings:HotkeyRecorder HorizontalAlignment="Left" AutomationProperties.Name="{loc:Text RecordingPauseHotkey_HotkeyName}" AutomationProperties.HelpText="{loc:Text RecordingPauseHotkey_Description}" DefaultText="" Text="{Binding PauseRecordingHotkey, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
+                                </StackPanel>
+
+                                <StackPanel Style="{StaticResource Settings.Field}">
+                                    <DockPanel LastChildFill="True" HorizontalAlignment="Left">
+                                        <TextBlock Style="{StaticResource Settings.Label}" Text="{loc:Text Text_66BA5DCDA810}" VerticalAlignment="Center" TextWrapping="Wrap" />
+                                    </DockPanel>
+                                    <settings:HotkeyRecorder HorizontalAlignment="Left" AutomationProperties.Name="{loc:Text Text_6F1D1FE90E37}" DefaultText="" Text="{Binding OpenLibraryHotkey, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
+                                </StackPanel>
+
+                                <StackPanel Style="{StaticResource Settings.Field}">
+                                    <DockPanel LastChildFill="True" HorizontalAlignment="Left">
+                                        <TextBlock Style="{StaticResource Settings.Label}" Text="{loc:Text Text_67FE4AF7D334}" VerticalAlignment="Center" TextWrapping="Wrap" />
+                                    </DockPanel>
+                                    <settings:HotkeyRecorder HorizontalAlignment="Left" AutomationProperties.Name="{loc:Text Text_7116B7156511}" DefaultText="" Text="{Binding ToggleClickThroughHotkey, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
+                                </StackPanel>
+
+                                <StackPanel Style="{StaticResource Settings.Field}">
+                                    <DockPanel LastChildFill="True" HorizontalAlignment="Left">
+                                        <TextBlock Style="{StaticResource Settings.Label}" Text="{loc:Text PinRestore_Command}" VerticalAlignment="Center" TextWrapping="Wrap" />
+                                    </DockPanel>
+                                    <settings:HotkeyRecorder HorizontalAlignment="Left" AutomationProperties.Name="{loc:Text PinRestore_HotkeyName}" DefaultText="" Text="{Binding RestoreClosedPinHotkey, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
+                                </StackPanel>
+
+                                <StackPanel Style="{StaticResource Settings.Field}">
+                                    <TextBlock Style="{StaticResource Settings.Label}" Text="{loc:Text Settings.UploadGitHubHotkey}" />
+                                    <settings:HotkeyRecorder HorizontalAlignment="Left" AutomationProperties.Name="{loc:Text Settings.UploadGitHubHotkey}" DefaultText="" Text="{Binding UploadGitHubImageHotkey, UpdateSourceTrigger=PropertyChanged, ValidatesOnNotifyDataErrors=True}" />
+                                </StackPanel>
+                            </StackPanel>
+                        </Expander>
+
+                        <Expander x:Name="ShortcutConflictsExpander" Style="{StaticResource Settings.Expander}" Margin="0,12,0,0"
+                                  Header="{loc:Text SettingsStructure_ShortcutConflicts}" AutomationProperties.Name="{loc:Text SettingsStructure_ShortcutConflicts}">
+                            <StackPanel>
+                                <CheckBox x:Name="ForceCoreShortcutsCheck" Style="{StaticResource Settings.CheckBox}"
+                                Content="{loc:Text CoreShortcuts.Force}"
+                                AutomationProperties.Name="{loc:Text CoreShortcuts.Force}"
+                                AutomationProperties.HelpText="{loc:Text CoreShortcuts.ForceDescription}"
+                                IsChecked="{Binding ForceCoreShortcuts}" />
+
+                                <TextBlock Style="{StaticResource Settings.Description}"
+                                Text="{loc:Text CoreShortcuts.ForceDescription}" />
+
+                                <Border x:Name="PrtScGuidePanel" Visibility="Collapsed" Margin="0,4,0,14" Padding="12,10"
+                                        CornerRadius="6" BorderThickness="1"
+                                        Background="{DynamicResource Surface.Sunken}" BorderBrush="{DynamicResource State.Warning}"
+                                        AutomationProperties.Name="{loc:Text PrtScGuide_Heading}"
+                                        AutomationProperties.LiveSetting="Polite">
+                                    <StackPanel>
+                                        <TextBlock Style="{StaticResource Settings.Label}" Text="{loc:Text PrtScGuide_Heading}" />
+                                        <TextBlock x:Name="PrtScGuideMessage" TextWrapping="Wrap" Margin="0,2,0,8"
+                                                   Foreground="{DynamicResource Text.Primary}" FontSize="{StaticResource FontSize.Caption}" />
+                                        <Button x:Name="PrtScGuideOpenSettings" Style="{StaticResource Button.Secondary}"
+                                                HorizontalAlignment="Left" MinWidth="140"
+                                                Content="{loc:Text PrtScGuide_OpenSettings}"
+                                                AutomationProperties.Name="{loc:Text PrtScGuide_OpenSettings}"
+                                                Click="OnPrtScGuideOpenSettings" />
+                                    </StackPanel>
+                                </Border>
+                            </StackPanel>
+                        </Expander>
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+
+            <TabItem x:Name="GeneralTab" Header="{loc:Text SettingsUx_TabGeneral}" AutomationProperties.Name="{loc:Text SettingsUx_TabGeneral}"
+                     ToolTip="{loc:Text SettingsUx_TabGeneralHelp}" AutomationProperties.HelpText="{loc:Text SettingsUx_TabGeneralHelp}"
+                     Tag="{StaticResource Icon.Settings}">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="4,12,12,4">
+                    <StackPanel Grid.IsSharedSizeScope="True">
+                        <TextBlock Style="{StaticResource Settings.Label}" Text="{loc:Text Settings.Language}" />
+
+                        <ComboBox x:Name="LanguageSelector" SelectedValue="{Binding Language}" SelectedValuePath="Tag"
+                                  AutomationProperties.Name="{loc:Text Settings.Language}" MinWidth="220" HorizontalAlignment="Left" Margin="0,4,0,4">
+                            <ComboBoxItem Tag="" Content="{loc:Text Settings.LanguageSystem}" />
+                            <ComboBoxItem Tag="ko-KR" Content="한국어" />
+                            <ComboBoxItem Tag="en-US" Content="English" />
+                        </ComboBox>
+
+                        <TextBlock Style="{StaticResource Settings.Description}" Text="{loc:Text Settings.LanguageHint}" />
+
+                        <TextBlock Style="{StaticResource Settings.Label}" Text="{loc:Text Settings.Theme}" Margin="0,12,0,0" />
+
+                        <ComboBox x:Name="ThemeSelector" SelectedValue="{Binding Theme}" SelectedValuePath="Tag"
+                                  AutomationProperties.Name="{loc:Text Settings.Theme}" MinWidth="320" HorizontalAlignment="Left" Margin="0,4,0,4">
+                            <ComboBoxItem Tag="system" Content="{loc:Text Settings.ThemeSystem}" />
+                            <ComboBoxItem Tag="glass-light" Content="{loc:Text Settings.ThemeGlassLight}" />
+                            <ComboBoxItem Tag="glass" Content="{loc:Text Settings.ThemeGlass}" />
+                            <ComboBoxItem Tag="high-contrast" Content="{loc:Text Settings.ThemeHighContrast}" />
+                        </ComboBox>
+
+                        <TextBlock Style="{StaticResource Settings.Description}" Text="{loc:Text Settings.ThemeHint}" />
+
+                        <CheckBox x:Name="LaunchAtLoginCheck"
+                        Style="{StaticResource Settings.CheckBox}"
+                        Margin="0,12,0,0"
+                        Content="{loc:Text Text_98F1681CB686}"
+                        AutomationProperties.Name="{loc:Text Text_98F1681CB686}"
+                        AutomationProperties.HelpText="{loc:Text Text_F3C7FE27A258}"
+                        IsChecked="{Binding LaunchAtLogin}" />
+
+                        <TextBlock Style="{StaticResource Settings.Description}"
+                        Text="{loc:Text Text_963745AB00F4}" />
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+
+            <TabItem x:Name="UpdateTab" Header="{loc:Text SettingsStructure_TabAbout}" AutomationProperties.Name="{loc:Text SettingsStructure_TabAbout}"
+                     ToolTip="{loc:Text SettingsStructure_AboutHelp}" AutomationProperties.HelpText="{loc:Text SettingsStructure_AboutHelp}"
+                     Tag="{StaticResource Settings.Icon.About}">
+                <ScrollViewer x:Name="UpdateScroll" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="4,12,12,4">
+                    <StackPanel Grid.IsSharedSizeScope="True">
                         <StackPanel x:Name="AboutUpdatesSection" Style="{StaticResource About.Section}">
                             <TextBlock Style="{StaticResource About.Heading}" Text="{loc:Text About_UpdatesHeading}" />
                             <TextBlock x:Name="UpdateVersionLabel" Style="{StaticResource Settings.Label}" Margin="0,0,0,8" />
@@ -1340,17 +1571,15 @@
                             <TextBlock x:Name="UpdateDescription" Style="{StaticResource Settings.Description}" />
                         </StackPanel>
 
-                        <!-- Privacy -->
-                        <StackPanel x:Name="AboutPrivacySection" Style="{StaticResource About.Section}">
-                            <TextBlock Style="{StaticResource About.Heading}" Text="{loc:Text About_PrivacyHeading}" />
-                            <TextBlock x:Name="PrivacyLocalText" Style="{StaticResource About.Body}" Text="{loc:Text About_PrivacyLocal}" />
-                            <TextBlock x:Name="PrivacyModelText" Style="{StaticResource About.Body}" />
-                            <TextBlock x:Name="PrivacyTranslationText" Style="{StaticResource About.Body}" />
-                            <TextBlock x:Name="PrivacyUpdateText" Style="{StaticResource About.Body}" Visibility="Collapsed" Text="{loc:Text About_PrivacyUpdates}" />
-                            <TextBlock x:Name="PrivacyGitHubText" Style="{StaticResource About.Body}" Margin="0" Text="{loc:Text About_PrivacyGitHub}" />
+                        <StackPanel x:Name="AboutGuideSection" Style="{StaticResource About.Section}">
+                            <Button x:Name="FirstUseGuideButton" Content="{loc:Text Onboarding.Replay}"
+                                    AutomationProperties.Name="{loc:Text Onboarding.Replay}"
+                                    Style="{StaticResource Button.Secondary}" HorizontalAlignment="Left"
+                                    MinWidth="140" Margin="0,0,0,6" Click="OnFirstUseGuide" />
+                            <TextBlock Style="{StaticResource Settings.Description}" Margin="0"
+                                       Text="{loc:Text Onboarding.AboutBody}" />
                         </StackPanel>
 
-                        <!-- Feedback -->
                         <StackPanel x:Name="AboutFeedbackSection" Style="{StaticResource About.Section}">
                             <TextBlock Style="{StaticResource About.Heading}" Text="{loc:Text About_FeedbackHeading}" />
                             <WrapPanel>
@@ -1376,36 +1605,20 @@
                             </WrapPanel>
                         </StackPanel>
 
-                        <!-- Data -->
-                        <StackPanel x:Name="AboutDataSection" Margin="0">
-                            <TextBlock Style="{StaticResource About.Heading}" Text="{loc:Text About_DataHeading}" />
-                            <StackPanel x:Name="LegacyImportPanel" Margin="0,0,0,12" Visibility="Collapsed">
-                                <Button x:Name="LegacyImportAction" Content="{loc:Text About_LegacyImport}"
-                                        AutomationProperties.Name="{loc:Text About_LegacyImport}"
-                                        AutomationProperties.HelpText="{loc:Text About_LegacyImportHint}"
-                                        Style="{StaticResource Button.Secondary}" HorizontalAlignment="Left" MinWidth="140"
-                                        Margin="0,0,0,6" Click="OnLegacyImport" />
-                                <TextBlock Style="{StaticResource Settings.Description}" Margin="0" Text="{loc:Text About_LegacyImportHint}" />
-                            </StackPanel>
-                            <WrapPanel>
-                                <Button x:Name="ExportSettingsButton" Style="{StaticResource Button.Secondary}"
-                                        Content="{loc:Text Settings_Export}"
-                                        MinWidth="140" Margin="0,0,8,6"
-                                        AutomationProperties.Name="{loc:Text Settings_Export}"
-                                        Click="OnExportSettings" />
-                                <Button x:Name="ImportSettingsButton" Style="{StaticResource Button.Secondary}"
-                                        Content="{loc:Text Settings_Import}"
-                                        MinWidth="140" Margin="0,0,8,6"
-                                        AutomationProperties.Name="{loc:Text Settings_Import}"
-                                        Click="OnImportSettings" />
-                            </WrapPanel>
-                            <TextBlock Style="{StaticResource Settings.Description}" Margin="0" Text="{loc:Text About_SettingsBackupHint}" />
-                            <Button x:Name="DefaultsButton" Style="{StaticResource Button.Ghost}"
-                                    Content="{loc:Text Text_205C50A145BA}" HorizontalAlignment="Left" Margin="0,16,0,0"
-                                    AutomationProperties.Name="{loc:Text Text_205C50A145BA}"
-                                    AutomationProperties.HelpText="{loc:Text Text_D8A23CD47E7A}"
-                                    ToolTip="{loc:Text Text_D8A23CD47E7A}" Click="OnResetDefaults" />
+                        <StackPanel x:Name="AboutPrivacySection" Style="{StaticResource About.Section}">
+                            <TextBlock Style="{StaticResource About.Heading}" Text="{loc:Text About_PrivacyHeading}" />
+                            <TextBlock x:Name="PrivacyLocalText" Style="{StaticResource About.Body}" Text="{loc:Text About_PrivacyLocal}" />
+                            <TextBlock x:Name="PrivacyModelText" Style="{StaticResource About.Body}" />
+                            <TextBlock x:Name="PrivacyTranslationText" Style="{StaticResource About.Body}" />
+                            <TextBlock x:Name="PrivacyUpdateText" Style="{StaticResource About.Body}" Visibility="Collapsed" Text="{loc:Text About_PrivacyUpdates}" />
+                            <TextBlock x:Name="PrivacyGitHubText" Style="{StaticResource About.Body}" Margin="0" Text="{loc:Text About_PrivacyGitHub}" />
                         </StackPanel>
+
+                        <Button x:Name="DefaultsButton" Style="{StaticResource Button.Ghost}"
+                        Content="{loc:Text Text_205C50A145BA}" HorizontalAlignment="Left" Margin="0,16,0,0"
+                        AutomationProperties.Name="{loc:Text Text_205C50A145BA}"
+                        AutomationProperties.HelpText="{loc:Text Text_D8A23CD47E7A}"
+                        ToolTip="{loc:Text Text_D8A23CD47E7A}" Click="OnResetDefaults" />
                     </StackPanel>
                 </ScrollViewer>
             </TabItem>

@@ -17,6 +17,7 @@ internal sealed partial class AnnotationEditorControl
     private FrameworkElement _fillSection = null!;
     private FrameworkElement _mosaicSection = null!;
     private Slider _mosaicSlider = null!;
+    private EditorTool _obscureStyle = EditorTool.Mosaic;
     private Popup _customColorPopup = null!;
     private Button _customColorButton = null!;
     private FrameworkElement _arrowHeadSection = null!;
@@ -303,6 +304,7 @@ internal sealed partial class AnnotationEditorControl
     private FrameworkElement BuildMosaicSection()
     {
         var panel = PropertyGroup("AnnotationMosaicProperties");
+        AddObscureStyleChoice(panel, EditorTool.Mosaic);
         panel.Children.Add(PropertyLabel(UiText.Get("EditorProperty_MosaicStrength")));
         _mosaicSlider = new Slider
         {
@@ -321,6 +323,40 @@ internal sealed partial class AnnotationEditorControl
             RememberPreferences();
         };
         return panel;
+    }
+
+    private void AddObscureStyleChoice(Panel panel, EditorTool style)
+    {
+        panel.Children.Add(PropertyLabel(UiText.Get("EditorObscure_Style")));
+        var choice = new ComboBox
+        {
+            MinWidth = 100, MinHeight = 32, Margin = new Thickness(0, 0, 16, 0),
+            ItemsSource = new[] { UiText.Get("EditorObscure_Pixelate"), UiText.Get("EditorBlur_Name") },
+            SelectedIndex = style == EditorTool.Mosaic ? 0 : 1,
+        };
+        AutomationName(choice, UiText.Get("EditorObscure_Style"));
+        AutomationProperties.SetAutomationId(choice, "AnnotationObscureStyle" + style);
+        choice.DropDownClosed += (_, _) =>
+        {
+            // Cancellation and reselecting the current item do not raise SelectionChanged.
+            // WPF restores focus to the ComboBox after this event. Finish that input
+            // before returning shortcuts, without taking focus from another control.
+            Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Input, new Action(() =>
+            {
+                if (!choice.IsDropDownOpen && choice.IsKeyboardFocusWithin) Focus();
+            }));
+        };
+        choice.SelectionChanged += (_, _) =>
+        {
+            EditorTool next = choice.SelectedIndex == 0 ? EditorTool.Mosaic : EditorTool.Blur;
+            if (next == style) return;
+            bool returnFocus = choice.IsKeyboardFocusWithin;
+            SelectTool(next);
+            // Each cached section represents one style; switching does not change its model.
+            choice.SelectedIndex = style == EditorTool.Mosaic ? 0 : 1;
+            if (returnFocus) Focus();
+        };
+        panel.Children.Add(choice);
     }
 
     internal Popup CustomColorPopupForTest => _customColorPopup;

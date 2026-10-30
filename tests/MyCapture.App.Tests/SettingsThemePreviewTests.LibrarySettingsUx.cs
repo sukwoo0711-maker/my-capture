@@ -1,4 +1,4 @@
-using System.Globalization;
+﻿using System.Globalization;
 using System.IO;
 using System.Windows;
 using System.Windows.Automation;
@@ -72,8 +72,14 @@ public sealed partial class SettingsThemePreviewTests
             Assert.Equal(UiText.Format("SettingsUx_RetentionSummary", SettingsUxText.Duration(36)),
                 ((TextBlock)window.FindName("RetentionSummary")).Text);
             Assert.Equal(UiText.Get("Retention_Label"), AutomationProperties.GetName(retention));
+            Assert.True(window.NavigateToSetting(nameof(SettingsDraft.MaxItems)));
+            Drain(window);
             Assert.Contains(Descendants(window).OfType<TextBlock>(), text => text.IsVisible
                 && MyCapture.App.Themes.KoreanWordWrap.Strip(text.Text) == UiText.Get("Settings_LibraryMaxItems"));
+            Assert.True(window.NavigateToSetting(nameof(SettingsDraft.ImageRetentionHours)));
+            Drain(window);
+            Assert.Same(window.FindName("StorageTab"), tabs.SelectedItem);
+            Assert.True(retention.IsVisible);
 
             // Ctrl+S can flush a choice before its automatic save dispatch.
             retention.SelectedValue = never;
@@ -119,7 +125,7 @@ public sealed partial class SettingsThemePreviewTests
             // Fonts: only the saved one until the editing page appears, then the installed list.
             var fonts = (ComboBox)window.FindName("FontFamilyBox");
             Assert.Single(fonts.Items);
-            tabs.SelectedIndex = 3;
+            Assert.True(window.NavigateToSection(SettingsSection.Editing));
             Drain(window);
             Assert.True(fonts.Items.Count > 5, "installed fonts listed");
             Assert.Equal("Retired Font", fonts.SelectedValue);
@@ -129,13 +135,18 @@ public sealed partial class SettingsThemePreviewTests
             Assert.Equal(installed.Value, Draft(window).FontFamily);
             Assert.Equal("35", ((TextBox)window.FindName("HighlighterOpacityBox")).Text);
 
-            // About: four sections 24 apart.
+            // About keeps updates, help, support and privacy; backup now belongs to storage.
             tabs.SelectedItem = window.FindName("UpdateTab");
             Drain(window);
-            string[] sections = ["AboutUpdatesSection", "AboutPrivacySection", "AboutFeedbackSection", "AboutDataSection"];
-            Assert.Equal([UiText.Get("About_UpdatesHeading"), UiText.Get("About_PrivacyHeading"), UiText.Get("About_FeedbackHeading"),
-                UiText.Get("About_DataHeading")],
-                sections.Select(name => ((TextBlock)((Panel)window.FindName(name)).Children[0]).Text));
+            string[] sections = ["AboutUpdatesSection", "AboutGuideSection", "AboutFeedbackSection", "AboutPrivacySection"];
+            Assert.Equal([UiText.Get("About_UpdatesHeading"), UiText.Get("About_FeedbackHeading"), UiText.Get("About_PrivacyHeading")],
+                sections.Where(name => name != "AboutGuideSection")
+                    .Select(name => ((TextBlock)((Panel)window.FindName(name)).Children[0]).Text));
+            Assert.NotNull(window.FindName("BackupExpander"));
+            DependencyObject? backupAncestor = (DependencyObject)window.FindName("AboutDataSection");
+            while (backupAncestor is not null && !ReferenceEquals(backupAncestor, window.FindName("BackupExpander")))
+                backupAncestor = LogicalTreeHelper.GetParent(backupAncestor);
+            Assert.Same(window.FindName("BackupExpander"), backupAncestor);
             foreach (string name in sections.SkipLast(1)) Assert.Equal(24, ((FrameworkElement)window.FindName(name)).Margin.Bottom);
             string privacy = ((TextBlock)window.FindName("PrivacyModelText")).Text;
             Assert.Contains("102 MB", privacy, StringComparison.Ordinal);

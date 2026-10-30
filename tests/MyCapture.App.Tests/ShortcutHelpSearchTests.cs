@@ -35,7 +35,7 @@ public sealed class ShortcutHelpSearchTests
             ("Shortcuts.LibraryText", "T"), ("Shortcuts.LibraryGif", "G"), ("Folder410.Delete", "Del"),
             ("Shortcuts.ContextMenu", "Menu / Shift+F10"), ("Shortcuts.Undo", "Ctrl+Z"),
             ("Shortcuts.Search", "Ctrl+F"), ("Folder410.NewFolder", "Ctrl+Shift+N"),
-            ("Shortcuts.Back", "Backspace / Alt+←"), ("Shortcuts.Forward", "Alt+→"), ("Shortcuts.SelectAll", "Ctrl+A"),
+            ("Shortcuts.Back", "Backspace / Alt+←"), ("Shortcuts.Forward", "Alt+→"), ("Shortcuts.Parent", "Alt+↑"), ("Shortcuts.SelectAll", "Ctrl+A"),
             ("Shortcuts.MouseNavigation", UiText.Get("Shortcuts.MouseButtons")), ("Shortcuts.LibraryDrag", UiText.Get("Shortcuts.Drag")),
         ];
         Assert.Equal(expected.Select(entry => UiText.Get(entry.Label)), rows.Select(ShortcutHelpRowAssertions.Title));
@@ -45,13 +45,19 @@ public sealed class ShortcutHelpSearchTests
         view.Search.Text = category;
         help.UpdateLayout();
         Border[] results = view.VisibleResults();
-        Assert.Equal(21, results.Length);
+        Assert.Equal(23, results.Length); // 21 library commands, Open Library and video Save to Library.
         Border[] libraryResults = results.Where(row => Texts(row)[1].Text == category).ToArray();
-        Assert.Equal(20, libraryResults.Length);
+        Assert.Equal(21, libraryResults.Length);
         Assert.Equal(expected.Select(entry => UiText.Get(entry.Label)), libraryResults.Select(row => Texts(row)[0].Text));
-        Border openLibrary = Assert.Single(results, row => Texts(row)[1].Text != category);
+        Border[] otherResults = results.Where(row => Texts(row)[1].Text != category).ToArray();
+        Assert.Equal(2, otherResults.Length);
+        Border openLibrary = Assert.Single(otherResults, row => Texts(row)[1].Text == UiText.Get("Help.Capture"));
         Assert.Equal(UiText.Get("Text_66BA5DCDA810"), Texts(openLibrary)[0].Text);
         Assert.Equal(UiText.Get("Help.Capture"), Texts(openLibrary)[1].Text);
+        Border saveVideo = Assert.Single(otherResults, row => Texts(row)[1].Text == UiText.Get("Help.Video"));
+        Assert.Equal(UiText.Get("MediaExport_SaveEdits"), Texts(saveVideo)[0].Text);
+        Assert.Contains(FirstRunWelcomeTests.Descendants(saveVideo).OfType<WrapPanel>(),
+            keys => AutomationProperties.GetName(keys) == "Ctrl+S");
         foreach (var (label, shortcut) in expected)
         {
             Border row = Assert.Single(libraryResults, result => Texts(result)[0].Text == UiText.Get(label));
@@ -61,11 +67,13 @@ public sealed class ShortcutHelpSearchTests
     }, language);
 
     [Fact]
-    public void VideoHelpKeepsStartAndEndShortcuts() => WithHelp((help, view) =>
+    public void VideoHelpKeepsStartAndEndShortcutsAndIncludesSaveAndExport() => WithHelp((help, view) =>
     {
         view.Search.Text = UiText.Get("Help.Video");
         help.UpdateLayout();
-        foreach (var (label, shortcut) in new[] { ("Video.TrimIn", "I"), ("Video.TrimOut", "O") })
+        foreach (var (label, shortcut) in new[] { ("Video.TrimIn", "I"), ("Video.TrimOut", "O"),
+            ("MediaExport_SaveEdits", "Ctrl+S"), ("MediaExport_ExportFormats", "Ctrl+Shift+S"),
+            ("VideoFrame_Save", "Shift+S") })
         {
             Border row = Assert.Single(view.VisibleResults(), result => Texts(result)[0].Text == UiText.Get(label));
             Assert.Contains(FirstRunWelcomeTests.Descendants(row).OfType<WrapPanel>(),
@@ -122,7 +130,7 @@ public sealed class ShortcutHelpSearchTests
 
         // A category name finds its commands too.
         view.Search.Text = UiText.Get("Help.Video");
-        Assert.Equal(5, view.VisibleResults().Length);
+        Assert.Equal(8, view.VisibleResults().Length);
 
         // Only spaces is no search: the tabs stay.
         view.Search.Text = "   ";

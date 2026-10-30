@@ -341,7 +341,7 @@ public sealed class EditorUxTests
 
         // The purpose sentence lives on the tool (tooltip and help text) and nowhere else: the
         // panel shows the next number, and choosing the tool reports nothing.
-        string purpose = "클릭할 때마다 1, 2, 3… 순서 번호를 붙입니다. 사용 순서나 절차를 설명할 때 씁니다.";
+        string purpose = "순서를 표시할 위치를 클릭합니다.";
         var inspector = Field<Border>(editor, "_inspectorPanel");
         Assert.DoesNotContain(Descendants(inspector).OfType<TextBlock>(), text => text.IsVisible
             && (text.Text == purpose || text.Text == UiText.Get("EditorUx_StepNumberNextHint")));
@@ -366,7 +366,7 @@ public sealed class EditorUxTests
         Assert.Equal(EditorCursorKind.StepNumber, editor.CanvasCursorKind);
 
         Assert.True(Press(editor, Key.V, ime: false));
-        Assert.Equal(Visibility.Collapsed, Field<FrameworkElement>(editor, "_stepSection").Visibility);
+        Assert.Equal(Visibility.Visible, Field<FrameworkElement>(editor, "_stepSection").Visibility);
     });
 
     [Fact]

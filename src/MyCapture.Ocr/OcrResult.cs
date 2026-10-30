@@ -1,3 +1,5 @@
+using MyCapture.Core.Settings;
+
 namespace MyCapture.Ocr;
 
 /// <summary>
@@ -172,6 +174,13 @@ public sealed class OcrResult
     }
 
     public OcrStatus Status { get; }
+
+    /// <summary>The quality used for this result; null for legacy cached results.</summary>
+    public OcrQuality? Quality { get; private init; }
+
+    public OcrResult WithQuality(OcrQuality quality) =>
+        new(Status, Text, LanguageTag, Lines, Elapsed, Message, ReadingOrientation)
+        { Quality = OcrQualityNames.Normalize(quality) };
 
     /// <summary>Recognised text, newline-joined by line. Empty unless <see cref="OcrStatus.Success"/>.</summary>
     public string Text { get; }

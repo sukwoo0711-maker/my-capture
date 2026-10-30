@@ -74,6 +74,7 @@ public sealed partial class SettingsThemePreviewTests
         SettingsWindow window = lifetime.Window;
         FluidMotion.SetWindowEntrance(window, false);
         window.Show();
+        Assert.True(window.NavigateToSection(SettingsSection.General));
         Drain(window);
         Assert.NotEqual("321", DraftOf(window).MaxItems);
         window.ImportSettingsFrom(importPath);
@@ -101,13 +102,13 @@ public sealed partial class SettingsThemePreviewTests
         Assert.Equal(AutomationLiveSetting.Polite, AutomationProperties.GetLiveSetting(status));
         AssertStatusFits(window, status);
         var tabs = Assert.IsType<TabControl>(window.FindName("CategoryTabs"));
-        tabs.SelectedIndex = 1;
+        Assert.True(window.NavigateToSection(SettingsSection.Capture));
         Drain(window);
         AssertStatusFits(window, status);
         tabs.SelectedItem = window.FindName("UpdateTab");
         Drain(window);
         AssertStatusFits(window, status);
-        tabs.SelectedIndex = 0;
+        Assert.True(window.NavigateToSection(SettingsSection.General));
 
         SettingsDraft pending = Assert.IsType<SettingsDraft>(window.DataContext);
         window.ImportSettingsFrom(invalidPath);

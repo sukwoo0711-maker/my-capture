@@ -252,16 +252,17 @@ public sealed class EditorBlurAppTests : KoreanCaptionTest
         Assert.True(editor.HandleShortcut(Key.B, ModifierKeys.None));
         Assert.Equal(EditorTool.Blur, controller.Tool);
 
-        ToggleButton button = Descendants(editor).OfType<ToggleButton>()
-            .Single(candidate => AutomationProperties.GetName(candidate) == "블러 도구 (B)");
+        ToggleButton button = editor.ToolButton(EditorTool.Blur);
+        Assert.Same(editor.ToolButton(EditorTool.Mosaic), button);
         Assert.True(button.IsChecked);
-        Assert.Equal("블러 (B)", button.ToolTip);
-        Assert.Equal("B", AutomationProperties.GetAcceleratorKey(button));
+        Assert.Equal("가리기 (모자이크 M · 흐림 B)", AutomationProperties.GetName(button));
+        Assert.Equal("가리기 (모자이크 M · 흐림 B)", button.ToolTip);
+        Assert.Equal("M / B", AutomationProperties.GetAcceleratorKey(button));
 
         Assert.Equal(Visibility.Visible, Field<FrameworkElement>(editor, "_blurSection").Visibility);
         Assert.Equal(Visibility.Collapsed, Field<FrameworkElement>(editor, "_colorSection").Visibility);
         Slider slider = Field<Slider>(editor, "_blurSlider");
-        Assert.Equal("블러 강도", AutomationProperties.GetName(slider));
+        Assert.Equal("강도", AutomationProperties.GetName(slider));
         Assert.Equal(BlurAnnotation.DefaultRadius, slider.Value);
 
         // Edge drags keep drawing blurs instead of starting an edge crop.
@@ -366,7 +367,7 @@ public sealed class EditorBlurAppTests : KoreanCaptionTest
             TabItem annotation = tabs.Items.OfType<TabItem>().Single(tab => (string)tab.Header == "이미지 편집기");
             var rows = (StackPanel)((ScrollViewer)annotation.Content).Content;
             UniformGrid row = rows.Children.OfType<UniformGrid>()
-                .Single(candidate => ShortcutHelpRowAssertions.Title(candidate) == "블러");
+                .Single(candidate => ShortcutHelpRowAssertions.Title(candidate) == "흐림");
             Assert.Equal("B", ShortcutHelpRowAssertions.Keys(row));
         }
         finally

@@ -134,7 +134,7 @@ internal static class Stage
         dc.Pop();
     }
 
-    internal static void DrawCaption(DrawingContext dc, string caption, string key)
+    internal static void DrawCaption(DrawingContext dc, string caption, string key, bool practiceSize = false)
     {
         var strip = new Rect(0, SceneHeight, Width, CaptionHeight);
         dc.DrawRectangle(new SolidColorBrush(Color.FromRgb(0x12, 0x15, 0x1C)), null, strip);
@@ -147,7 +147,7 @@ internal static class Stage
             var caps = new List<(FormattedText Text, double Width)>();
             foreach (string part in parts)
             {
-                FormattedText label = Format(part, 15, Brushes.White, bold: true);
+                FormattedText label = Format(part, practiceSize ? 26 : 15, Brushes.White, bold: true);
                 caps.Add((label, Math.Max(32, label.Width + 20)));
             }
 
@@ -156,7 +156,7 @@ internal static class Stage
             right = x - 16;
             for (int i = 0; i < caps.Count; i++)
             {
-                var cap = new Rect(x, SceneHeight + 10, caps[i].Width, 32);
+                var cap = new Rect(x, SceneHeight + (practiceSize ? 6 : 10), caps[i].Width, practiceSize ? 40 : 32);
                 dc.DrawRoundedRectangle(new SolidColorBrush(Color.FromRgb(0x2E, 0x35, 0x44)), new Pen(new SolidColorBrush(Color.FromRgb(0x6B, 0x76, 0x8C)), 1), cap, 6, 6);
                 dc.DrawLine(new Pen(new SolidColorBrush(Color.FromRgb(0x1B, 0x20, 0x2A)), 2), new Point(cap.X + 4, cap.Bottom - 1), new Point(cap.Right - 4, cap.Bottom - 1));
                 dc.DrawText(caps[i].Text, new Point(cap.X + (cap.Width - caps[i].Text.Width) / 2, cap.Y + (cap.Height - caps[i].Text.Height) / 2 - 1));
@@ -170,7 +170,7 @@ internal static class Stage
             }
         }
 
-        FormattedText text = Format(caption, 19, Brushes.White, maxWidth: right - 22);
+        FormattedText text = Format(caption, practiceSize ? 30 : 19, Brushes.White, maxWidth: right - 22);
         text.MaxLineCount = 1;
         text.Trimming = TextTrimming.CharacterEllipsis;
         dc.DrawText(text, new Point(22, SceneHeight + (CaptionHeight - text.Height) / 2));

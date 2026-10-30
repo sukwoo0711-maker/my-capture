@@ -74,6 +74,8 @@ internal sealed class PreviewSeekCoordinator : IDisposable, IAsyncDisposable
 
     internal Exception? LastError { get { lock (_gate) { return _lastError; } } }
 
+    internal bool IsSeeking { get { lock (_gate) { return _workerRunning; } } }
+
     internal bool IsInFlightForTest { get { lock (_gate) { return _inFlightSeek is not null; } } }
 
     internal bool HasPendingForTest { get { lock (_gate) { return _pending is not null; } } }
@@ -163,7 +165,9 @@ internal sealed class PreviewSeekCoordinator : IDisposable, IAsyncDisposable
         return completion.Task;
     }
 
-    internal async Task WaitForIdleForTestAsync()
+    internal Task WaitForIdleForTestAsync() => WaitForIdleAsync();
+
+    internal async Task WaitForIdleAsync()
     {
         while (true)
         {

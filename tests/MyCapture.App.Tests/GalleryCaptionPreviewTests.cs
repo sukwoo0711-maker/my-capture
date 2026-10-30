@@ -138,7 +138,7 @@ public sealed class GalleryCaptionPreviewTests
                 Assert.True(badges.IsVisible);
                 Assert.True(Descendants(item).OfType<Border>().Single(part => part.Name == "FolderBadge").IsVisible);
                 Assert.False(Descendants(item).OfType<Border>().Single(part => part.Name == "KeepBadge").IsVisible);
-                Assert.False(Descendants(item).OfType<Border>().Single(part => part.Name == "EditedBadge").IsVisible);
+                Assert.DoesNotContain(Descendants(item).OfType<Border>(), part => part.Name == "EditedBadge");
                 tile.SetSearchMatch(false, CaptureMatchField.None);
                 Drain(window);
                 Assert.True(badges.IsVisible);
@@ -259,7 +259,7 @@ public sealed class GalleryCaptionPreviewTests
             Rect folderOverlap = Rect.Intersect(captionBounds, folderBounds);
             Assert.True(folderOverlap.IsEmpty || folderOverlap.Width == 0 || folderOverlap.Height == 0);
             Assert.False(Descendants(item).OfType<Border>().Single(part => part.Name == "KeepBadge").IsVisible);
-            Assert.False(Descendants(item).OfType<Border>().Single(part => part.Name == "EditedBadge").IsVisible);
+            Assert.DoesNotContain(Descendants(item).OfType<Border>(), part => part.Name == "EditedBadge");
             foreach (string name in new[] { "SourceBadge", "PinButton", "CopyButton", "MoreButton" })
             {
                 Button button = Descendants(item).OfType<Button>().Single(part => part.Name == name);
@@ -283,7 +283,7 @@ public sealed class GalleryCaptionPreviewTests
             Assert.True(Descendants(item).OfType<Grid>().Single(part => part.Name == "TileStatusBadges").IsVisible);
             Assert.True(folderBadge.IsVisible);
             Assert.True(Descendants(item).OfType<Border>().Single(part => part.Name == "KeepBadge").IsVisible);
-            Assert.True(Descendants(item).OfType<Border>().Single(part => part.Name == "EditedBadge").IsVisible);
+            Assert.DoesNotContain(Descendants(item).OfType<Border>(), part => part.Name == "EditedBadge");
         }
         finally { window.Close(); }
     });

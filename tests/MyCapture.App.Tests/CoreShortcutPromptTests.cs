@@ -77,7 +77,10 @@ public sealed class CoreShortcutPromptTests
     [Fact]
     public void OwnerlessQuestionOpensCentredOnTheScreen() => StaTestHost.Run(() =>
     {
-        WelcomeWindow dialog = CreateConsent();
+        // Do not use the offscreen helper here: it deliberately overrides startup placement.
+        var dialog = new WelcomeWindow(new HotkeySettings(), AfterCaptureAction.Editor,
+            options: new WelcomeOptions { ShowCoreShortcutsConsent = true, ReducedMotion = true,
+                MediaFactory = () => new OnboardingGuideTests.FakeMedia() });
         try
         {
             Assert.Equal(WindowStartupLocation.CenterScreen, dialog.WindowStartupLocation);

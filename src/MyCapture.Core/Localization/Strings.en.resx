@@ -2948,7 +2948,7 @@ This cannot be undone.</value>
   <data name="SettingsRange_MaxStorage" xml:space="preserve"><value>0.125–512 GB</value></data>
   <data name="SettingsRange_PreviewSize" xml:space="preserve"><value>Long edge 96–1024 px</value></data>
   <data name="SettingsRange_StrokeWidth" xml:space="preserve"><value>1–64 px</value></data>
-  <data name="SettingsRange_FontSize" xml:space="preserve"><value>6–400 pt</value></data>
+  <data name="SettingsRange_FontSize" xml:space="preserve"><value>6–400 px</value></data>
   <data name="SettingsRange_Mosaic" xml:space="preserve"><value>2–128 px</value></data>
   <data name="SettingsRange_Percent" xml:space="preserve"><value>0–100%</value></data>
   <data name="SettingsRange_Blur" xml:space="preserve"><value>2–64 px</value></data>
@@ -3086,6 +3086,30 @@ Actual reduction {2}% · {3}</value></data>
   <data name="MediaExport_DimensionsKept" xml:space="preserve"><value>Resolution and frame rate stay unchanged. The reduction is a target; calculate to see the actual size. Quality may decrease.</value></data>
   <data name="MediaExport_GifLimits" xml:space="preserve"><value>GIF files grow with the frame count. Choose the long edge and frame rate. Sound is not included.</value></data>
   <data name="Recording.FinishingBusy" xml:space="preserve"><value>Finishing the recording save. Please try again shortly.</value></data>
+  <data name="RecordingWatermark_Title" xml:space="preserve"><value>Watermark</value></data>
+  <data name="RecordingWatermark_Show" xml:space="preserve"><value>Show watermark</value></data>
+  <data name="RecordingWatermark_Settings" xml:space="preserve"><value>Watermark settings…</value></data>
+  <data name="RecordingWatermark_Source" xml:space="preserve"><value>Type</value></data>
+  <data name="RecordingWatermark_Image" xml:space="preserve"><value>Watermark image</value></data>
+  <data name="RecordingWatermark_Text" xml:space="preserve"><value>Text</value></data>
+  <data name="RecordingWatermark_ChooseImage" xml:space="preserve"><value>Choose watermark image…</value></data>
+  <data name="RecordingWatermark_Position" xml:space="preserve"><value>Position</value></data>
+  <data name="RecordingWatermark_Width" xml:space="preserve"><value>Size (%)</value></data>
+  <data name="RecordingWatermark_Margin" xml:space="preserve"><value>Margin (px)</value></data>
+  <data name="RecordingWatermark_Opacity" xml:space="preserve"><value>Opacity (%)</value></data>
+  <data name="RecordingWatermark_TextColor" xml:space="preserve"><value>Text color</value></data>
+  <data name="RecordingWatermark_ImageError" xml:space="preserve"><value>Could not read the watermark image.</value></data>
+  <data name="RecordingWatermark_TextError" xml:space="preserve"><value>Enter watermark text.</value></data>
+  <data name="RecordingWatermark_InvalidValues" xml:space="preserve"><value>Check the size, margin, opacity and text color.</value></data>
+  <data name="RecordingWatermark_AnchorTopLeft" xml:space="preserve"><value>Top left</value></data>
+  <data name="RecordingWatermark_AnchorTopCenter" xml:space="preserve"><value>Top center</value></data>
+  <data name="RecordingWatermark_AnchorTopRight" xml:space="preserve"><value>Top right</value></data>
+  <data name="RecordingWatermark_AnchorMiddleLeft" xml:space="preserve"><value>Middle left</value></data>
+  <data name="RecordingWatermark_AnchorCenter" xml:space="preserve"><value>Center</value></data>
+  <data name="RecordingWatermark_AnchorMiddleRight" xml:space="preserve"><value>Middle right</value></data>
+  <data name="RecordingWatermark_AnchorBottomLeft" xml:space="preserve"><value>Bottom left</value></data>
+  <data name="RecordingWatermark_AnchorBottomCenter" xml:space="preserve"><value>Bottom center</value></data>
+  <data name="RecordingWatermark_AnchorBottomRight" xml:space="preserve"><value>Bottom right</value></data>
   <data name="MediaExport_GifPreset" xml:space="preserve"><value>GIF size</value></data>
   <data name="MediaExport_Speed" xml:space="preserve"><value>Playback speed</value></data>
   <data name="MediaExport_Calculate" xml:space="preserve"><value>Calculate result</value></data>
@@ -3247,6 +3271,23 @@ Open the library or Settings from the tray menu.</value></data>
   <data name="Recording_Free" xml:space="preserve"><value>Free</value></data>
   <data name="Recording_Fixed720" xml:space="preserve"><value>1280×720</value></data>
   <data name="Recording_Fixed1080" xml:space="preserve"><value>1920×1080</value></data>
+  <data name="Ocr_Accuracy" xml:space="preserve"><value>Recognition accuracy</value></data>
+  <data name="Ocr_QualityFast" xml:space="preserve"><value>Fast</value></data>
+  <data name="Ocr_QualityBalanced" xml:space="preserve"><value>Balanced</value></data>
+  <data name="Ocr_QualityAccurate" xml:space="preserve"><value>Accurate</value></data>
+  <data name="Ocr_AccuracySuggestion" xml:space="preserve"><value>The Accurate model improves recognition of small text and Korean.</value></data>
+  <data name="Ocr_AccurateAgain" xml:space="preserve"><value>Recognize again with Accurate</value></data>
+  <data name="Ocr_DownloadAccurateAgain" xml:space="preserve"><value>Download Accurate and recognize again</value></data>
+  <data name="Ocr_AccuracyDownloadSize" xml:space="preserve"><value>Download {0} MB</value></data>
+  <data name="Ocr_AccuracyMetered" xml:space="preserve"><value>This connection charges based on data usage.</value></data>
+  <data name="Ocr_ModelDownloading" xml:space="preserve"><value>Downloading Accurate model</value></data>
+  <data name="Ocr_ModelDownloadProgress" xml:space="preserve"><value>Downloading Accurate model · {0}%</value></data>
+  <data name="Ocr_RecognizingAgain" xml:space="preserve"><value>Recognizing again</value></data>
+  <data name="Ocr_CancelDownload" xml:space="preserve"><value>Cancel download</value></data>
+  <data name="Ocr_CancelRecognition" xml:space="preserve"><value>Cancel recognition</value></data>
+  <data name="Ocr_DismissAccuracy" xml:space="preserve"><value>Dismiss</value></data>
+  <data name="Ocr_ReplaceEditedText" xml:space="preserve"><value>Replace your edited text with the new recognition result?</value></data>
+  <data name="Ocr_AccuracySaveFailed" xml:space="preserve"><value>Could not save recognition accuracy.</value></data>
   <data name="Ocr_ExportText" xml:space="preserve"><value>Export text</value></data>
   <data name="Ocr_ExportDone" xml:space="preserve"><value>Text saved:</value></data>
   <data name="Ocr_ExportNone" xml:space="preserve"><value>No recognized text to export.</value></data>
@@ -3370,7 +3411,11 @@ Open the library or Settings from the tray menu.</value></data>
   <data name="EditorProperty_ThicknessIncrease" xml:space="preserve"><value>Increase line width</value></data>
   <data name="EditorProperty_FontSizeDecrease" xml:space="preserve"><value>Decrease font size</value></data>
   <data name="EditorProperty_FontSizeIncrease" xml:space="preserve"><value>Increase font size</value></data>
-  <data name="EditorProperty_MosaicStrength" xml:space="preserve"><value>Mosaic strength</value></data>
+  <data name="EditorProperty_MosaicStrength" xml:space="preserve"><value>Block size</value></data>
+  <data name="EditorObscure_Pixelate" xml:space="preserve"><value>Pixelate</value></data>
+  <data name="EditorObscure_Style" xml:space="preserve"><value>Style</value></data>
+  <data name="EditorObscure_Name" xml:space="preserve"><value>Obscure</value></data>
+  <data name="EditorObscure_Shortcuts" xml:space="preserve"><value>Pixelate {0} · Blur {1}</value></data>
   <data name="Tools.Ellipse" xml:space="preserve"><value>Ellipse</value></data>
   <data name="Tools.Highlighter" xml:space="preserve"><value>Highlighter</value></data>
   <data name="Tools.InvalidColor" xml:space="preserve"><value>Enter a color as #RRGGBB or #AARRGGBB.</value></data>
@@ -3419,7 +3464,139 @@ Open the library or Settings from the tray menu.</value></data>
   <data name="Video.InvalidImage" xml:space="preserve"><value>The image could not be read. Select a valid PNG, JPEG or BMP file.</value></data>
   <data name="Hotkey.MigratedTitle" xml:space="preserve"><value>Shortcuts updated</value></data>
   <data name="Hotkey.Migrated" xml:space="preserve"><value>Unsafe shortcuts and restored-capture conflicts were cleared. Capture was reset to Ctrl+Shift+C if needed.</value></data>
-  <data name="Capture.AfterAction" xml:space="preserve"><value>After capture</value></data>
+  <data name="SettingsGuide.ImageUnavailable" xml:space="preserve"><value>The image could not be loaded.</value></data>
+<data name="SettingsGuide.Before" xml:space="preserve"><value>Before</value></data>
+<data name="SettingsGuide.After" xml:space="preserve"><value>After</value></data>
+<data name="SettingsGuide.Replay" xml:space="preserve"><value>Replay</value></data>
+<data name="SettingsGuide.SeeDifference" xml:space="preserve"><value>See the difference</value></data>
+<data name="SettingsGuide.CompareResults" xml:space="preserve"><value>Compare results</value></data>
+<data name="SettingsGuide.Comparison" xml:space="preserve"><value>Comparison</value></data>
+<data name="SettingsGuide.G01.Title" xml:space="preserve"><value>After capture</value></data>
+<data name="SettingsGuide.G02.Title" xml:space="preserve"><value>Capture selection</value></data>
+<data name="SettingsGuide.G03.Title" xml:space="preserve"><value>Capture key panel</value></data>
+<data name="SettingsGuide.G04.Title" xml:space="preserve"><value>Recording area size</value></data>
+<data name="SettingsGuide.G05.Title" xml:space="preserve"><value>Recording cursor highlight</value></data>
+<data name="SettingsGuide.G06.Title" xml:space="preserve"><value>Recording method</value></data>
+<data name="SettingsGuide.G07.Title" xml:space="preserve"><value>Annotation effects</value></data>
+<data name="SettingsGuide.G08.Title" xml:space="preserve"><value>Restore pins</value></data>
+<data name="SettingsGuide.G09.Title" xml:space="preserve"><value>Text recognition quality</value></data>
+<data name="SettingsGuide.G10.Title" xml:space="preserve"><value>Shortcut labels</value></data>
+<data name="SettingsGuide.G11.Title" xml:space="preserve"><value>Library retention limits</value></data>
+<data name="SettingsGuide.G12.Title" xml:space="preserve"><value>Capture storage and quick save</value></data>
+<data name="SettingsGuide.G13.Title" xml:space="preserve"><value>Source window title</value></data>
+<data name="SettingsGuide.G01.card.Title" xml:space="preserve"><value>Quick card</value></data>
+<data name="SettingsGuide.G01.card.Before" xml:space="preserve"><value>Captured image</value></data>
+<data name="SettingsGuide.G01.card.After" xml:space="preserve"><value>Show quick card</value></data>
+<data name="SettingsGuide.G01.card.Description" xml:space="preserve"><value>Review the same capture in a small card, then choose edit, pin or save.</value></data>
+<data name="SettingsGuide.G01.editor.Title" xml:space="preserve"><value>Editor</value></data>
+<data name="SettingsGuide.G01.editor.Before" xml:space="preserve"><value>Captured image</value></data>
+<data name="SettingsGuide.G01.editor.After" xml:space="preserve"><value>Open editor</value></data>
+<data name="SettingsGuide.G01.editor.Description" xml:space="preserve"><value>Add shapes and text in the editor immediately after capture.</value></data>
+<data name="SettingsGuide.G01.clipboard.Title" xml:space="preserve"><value>Clipboard only</value></data>
+<data name="SettingsGuide.G01.clipboard.Before" xml:space="preserve"><value>Captured image</value></data>
+<data name="SettingsGuide.G01.clipboard.After" xml:space="preserve"><value>Copy to clipboard only</value></data>
+<data name="SettingsGuide.G01.clipboard.Description" xml:space="preserve"><value>Paste the copied capture into another app.</value></data>
+<data name="SettingsGuide.G02.magnifier.Title" xml:space="preserve"><value>Show magnifier</value></data>
+<data name="SettingsGuide.G02.magnifier.Before" xml:space="preserve"><value>Magnifier off</value></data>
+<data name="SettingsGuide.G02.magnifier.After" xml:space="preserve"><value>Magnifier on</value></data>
+<data name="SettingsGuide.G02.magnifier.Description" xml:space="preserve"><value>Magnify the pixels around the same pointer position.</value></data>
+<data name="SettingsGuide.G02.grid.Title" xml:space="preserve"><value>Show selection guides</value></data>
+<data name="SettingsGuide.G02.grid.Before" xml:space="preserve"><value>Guides off</value></data>
+<data name="SettingsGuide.G02.grid.After" xml:space="preserve"><value>Guides on</value></data>
+<data name="SettingsGuide.G02.grid.Description" xml:space="preserve"><value>Align the area with horizontal and vertical guides at the pointer.</value></data>
+<data name="SettingsGuide.G02.windows.Title" xml:space="preserve"><value>Detect windows automatically</value></data>
+<data name="SettingsGuide.G02.windows.Before" xml:space="preserve"><value>Drag to select an area</value></data>
+<data name="SettingsGuide.G02.windows.After" xml:space="preserve"><value>Click the window outline</value></data>
+<data name="SettingsGuide.G02.windows.Description" xml:space="preserve"><value>Automatic detection outlines the window under the pointer. You can also drag to select an area.</value></data>
+<data name="SettingsGuide.G03.keys.Title" xml:space="preserve"><value>Always show key panel</value></data>
+<data name="SettingsGuide.G03.keys.Before" xml:space="preserve"><value>Panel hidden</value></data>
+<data name="SettingsGuide.G03.keys.After" xml:space="preserve"><value>Panel always shown</value></data>
+<data name="SettingsGuide.G03.keys.Description" xml:space="preserve"><value>This panel belongs to the capture selector. It is separate from the Alt shortcut labels on buttons.</value></data>
+<data name="SettingsGuide.G04.size.Title" xml:space="preserve"><value>Recording area size</value></data>
+<data name="SettingsGuide.G04.size.Before" xml:space="preserve"><value>Free size</value></data>
+<data name="SettingsGuide.G04.size.After" xml:space="preserve"><value>1280 × 720</value></data>
+<data name="SettingsGuide.G04.size.Description" xml:space="preserve"><value>Choose a position even for a fixed size. The box stays within the screen.</value></data>
+<data name="SettingsGuide.G05.highlight.Title" xml:space="preserve"><value>Cursor highlight</value></data>
+<data name="SettingsGuide.G05.highlight.Before" xml:space="preserve"><value>Include cursor only</value></data>
+<data name="SettingsGuide.G05.highlight.After" xml:space="preserve"><value>Include cursor · highlight on</value></data>
+<data name="SettingsGuide.G05.highlight.Description" xml:space="preserve"><value>A circle follows the pointer and turns red while the left button is held.</value></data>
+<data name="SettingsGuide.G05.hidden.Title" xml:space="preserve"><value>Include cursor</value></data>
+<data name="SettingsGuide.G05.hidden.Before" xml:space="preserve"><value>Include cursor · highlight on</value></data>
+<data name="SettingsGuide.G05.hidden.After" xml:space="preserve"><value>Include cursor off</value></data>
+<data name="SettingsGuide.G05.hidden.Description" xml:space="preserve"><value>Turning off Include cursor hides the pointer and highlight in recordings. The highlight preference is retained.</value></data>
+<data name="SettingsGuide.G06.method.Title" xml:space="preserve"><value>Choose a recording method</value></data>
+<data name="SettingsGuide.G06.method.Before" xml:space="preserve"><value>Automatic</value></data>
+<data name="SettingsGuide.G06.method.After" xml:space="preserve"><value>Compatibility</value></data>
+<data name="SettingsGuide.G06.method.Description" xml:space="preserve"><value>Choose Compatibility if a window is not recorded correctly with Automatic. The Windows 10 capture border is not included in the video.</value></data>
+<data name="SettingsGuide.G07.mosaic.Title" xml:space="preserve"><value>Mosaic block size</value></data>
+<data name="SettingsGuide.G07.mosaic.Before" xml:space="preserve"><value>4 px</value></data>
+<data name="SettingsGuide.G07.mosaic.After" xml:space="preserve"><value>20 px</value></data>
+<data name="SettingsGuide.G07.mosaic.Description" xml:space="preserve"><value>Larger blocks obscure detail in larger groups of pixels over the same area.</value></data>
+<data name="SettingsGuide.G07.highlighter.Title" xml:space="preserve"><value>Highlighter opacity</value></data>
+<data name="SettingsGuide.G07.highlighter.Before" xml:space="preserve"><value>20%</value></data>
+<data name="SettingsGuide.G07.highlighter.After" xml:space="preserve"><value>70%</value></data>
+<data name="SettingsGuide.G07.highlighter.Description" xml:space="preserve"><value>Compare only the opacity of the highlighter over the same sentence.</value></data>
+<data name="SettingsGuide.G07.blur.Title" xml:space="preserve"><value>Blur strength</value></data>
+<data name="SettingsGuide.G07.blur.Before" xml:space="preserve"><value>4 px</value></data>
+<data name="SettingsGuide.G07.blur.After" xml:space="preserve"><value>18 px</value></data>
+<data name="SettingsGuide.G07.blur.Description" xml:space="preserve"><value>Compare blur radii applied to the same area.</value></data>
+<data name="SettingsGuide.G08.restart.Title" xml:space="preserve"><value>Restore open pins on launch</value></data>
+<data name="SettingsGuide.G08.restart.Before" xml:space="preserve"><value>Restore on launch off</value></data>
+<data name="SettingsGuide.G08.restart.After" xml:space="preserve"><value>Restore on launch on</value></data>
+<data name="SettingsGuide.G08.restart.Description" xml:space="preserve"><value>Save open pins on exit and restore them on the next launch.</value></data>
+<data name="SettingsGuide.G08.reopen.Title" xml:space="preserve"><value>Closed pin restore limit</value></data>
+<data name="SettingsGuide.G08.reopen.Before" xml:space="preserve"><value>Close pin</value></data>
+<data name="SettingsGuide.G08.reopen.After" xml:space="preserve"><value>Reopen closed pin</value></data>
+<data name="SettingsGuide.G08.reopen.Description" xml:space="preserve"><value>Remember up to the selected number of closed pins during this run. This history resets when the app restarts.</value></data>
+<data name="SettingsGuide.G08.none.Title" xml:space="preserve"><value>No restore history</value></data>
+<data name="SettingsGuide.G08.none.Before" xml:space="preserve"><value>Keep 10 closed pins</value></data>
+<data name="SettingsGuide.G08.none.After" xml:space="preserve"><value>Keep 0 closed pins</value></data>
+<data name="SettingsGuide.G08.none.Description" xml:space="preserve"><value>A limit of zero does not keep a closed pin history.</value></data>
+<data name="SettingsGuide.G09.balanced.Title" xml:space="preserve"><value>Fast and Balanced</value></data>
+<data name="SettingsGuide.G09.balanced.Before" xml:space="preserve"><value>Fast</value></data>
+<data name="SettingsGuide.G09.balanced.After" xml:space="preserve"><value>Balanced</value></data>
+<data name="SettingsGuide.G09.balanced.Description" xml:space="preserve"><value>Compare recognition results from the same small-text image.</value></data>
+<data name="SettingsGuide.G09.accurate.Title" xml:space="preserve"><value>Fast and Accurate</value></data>
+<data name="SettingsGuide.G09.accurate.Before" xml:space="preserve"><value>Fast</value></data>
+<data name="SettingsGuide.G09.accurate.After" xml:space="preserve"><value>Accurate</value></data>
+<data name="SettingsGuide.G09.accurate.Description" xml:space="preserve"><value>Accurate uses a downloaded recognition model. On 32-bit Windows, it uses Windows text recognition.</value></data>
+<data name="SettingsGuide.G10.alt.Title" xml:space="preserve"><value>Reveal labels with Alt</value></data>
+<data name="SettingsGuide.G10.alt.Before" xml:space="preserve"><value>Alt released</value></data>
+<data name="SettingsGuide.G10.alt.After" xml:space="preserve"><value>Alt held</value></data>
+<data name="SettingsGuide.G10.alt.Description" xml:space="preserve"><value>Hold Alt to reveal button shortcut labels. Ctrl+C in the editor copies and closes.</value></data>
+<data name="SettingsGuide.G10.always.Title" xml:space="preserve"><value>Always show shortcut labels</value></data>
+<data name="SettingsGuide.G10.always.Before" xml:space="preserve"><value>Always show off</value></data>
+<data name="SettingsGuide.G10.always.After" xml:space="preserve"><value>Always show on</value></data>
+<data name="SettingsGuide.G10.always.Description" xml:space="preserve"><value>Always show displays labels without holding Alt. Pin bar labels are shown or hidden together.</value></data>
+<data name="SettingsGuide.G11.time.Title" xml:space="preserve"><value>Image retention period</value></data>
+<data name="SettingsGuide.G11.time.Before" xml:space="preserve"><value>No time limit</value></data>
+<data name="SettingsGuide.G11.time.After" xml:space="preserve"><value>7 days</value></data>
+<data name="SettingsGuide.G11.time.Description" xml:space="preserve"><value>Item and size limits still apply with no time limit. Items in folders and items marked to keep remain.</value></data>
+<data name="SettingsGuide.G11.items.Title" xml:space="preserve"><value>Maximum items</value></data>
+<data name="SettingsGuide.G11.items.Before" xml:space="preserve"><value>9 items / limit 10</value></data>
+<data name="SettingsGuide.G11.items.After" xml:space="preserve"><value>New capture at limit 10</value></data>
+<data name="SettingsGuide.G11.items.Description" xml:space="preserve"><value>At the item limit, the oldest eligible items become cleanup candidates, excluding retention exceptions.</value></data>
+<data name="SettingsGuide.G11.bytes.Title" xml:space="preserve"><value>Maximum storage size</value></data>
+<data name="SettingsGuide.G11.bytes.Before" xml:space="preserve"><value>0.8 GB / limit 1 GB</value></data>
+<data name="SettingsGuide.G11.bytes.After" xml:space="preserve"><value>New capture exceeds 1 GB</value></data>
+<data name="SettingsGuide.G11.bytes.Description" xml:space="preserve"><value>The size limit applies separately from the item limit. The oldest eligible items become cleanup candidates, excluding retention exceptions.</value></data>
+<data name="SettingsGuide.G12.folder.Title" xml:space="preserve"><value>Library folder for new captures</value></data>
+<data name="SettingsGuide.G12.folder.Before" xml:space="preserve"><value>Default folder</value></data>
+<data name="SettingsGuide.G12.folder.After" xml:space="preserve"><value>Use current folder</value></data>
+<data name="SettingsGuide.G12.folder.Description" xml:space="preserve"><value>Place new captures in the folder currently open in the library.</value></data>
+<data name="SettingsGuide.G12.storage.Title" xml:space="preserve"><value>Capture storage folder</value></data>
+<data name="SettingsGuide.G12.storage.Before" xml:space="preserve"><value>Default storage folder</value></data>
+<data name="SettingsGuide.G12.storage.After" xml:space="preserve"><value>Custom storage folder</value></data>
+<data name="SettingsGuide.G12.storage.Description" xml:space="preserve"><value>The new storage folder takes effect after restarting the app. Existing files stay in their original location.</value></data>
+<data name="SettingsGuide.G12.export.Title" xml:space="preserve"><value>Quick save folder</value></data>
+<data name="SettingsGuide.G12.export.Before" xml:space="preserve"><value>Library storage</value></data>
+<data name="SettingsGuide.G12.export.After" xml:space="preserve"><value>Quick save</value></data>
+<data name="SettingsGuide.G12.export.Description" xml:space="preserve"><value>Quick save writes an image file into the selected disk folder, separately from library folders.</value></data>
+<data name="SettingsGuide.G13.title.Title" xml:space="preserve"><value>Show source window title</value></data>
+<data name="SettingsGuide.G13.title.Before" xml:space="preserve"><value>Window title off</value></data>
+<data name="SettingsGuide.G13.title.After" xml:space="preserve"><value>Window title on</value></data>
+<data name="SettingsGuide.G13.title.Description" xml:space="preserve"><value>Add the captured window title to the top right of the image. This is separate from the URL export choice.</value></data>
+<data name="Capture.AfterAction" xml:space="preserve"><value>After capture</value></data>
   <data name="Capture.AfterEditor" xml:space="preserve"><value>Open editor</value></data>
   <data name="Capture.AfterCard" xml:space="preserve"><value>Quick access card</value></data>
   <data name="Capture.AfterClipboard" xml:space="preserve"><value>Copy to clipboard only</value></data>
@@ -3585,10 +3762,10 @@ Delete {1} {1:plural:subfolder|subfolders}, {2} {2:plural:image|images}, and {3}
   <data name="PrtScGuide_FailureNotice" xml:space="preserve"><value>Windows is set to open screen capture with the Print Screen key. Turn this option off in {0}.</value></data>
   <data name="EditorBlur_Name" xml:space="preserve"><value>Blur</value></data>
   <data name="EditorBlur_ToolTip" xml:space="preserve"><value>Drag over the area to blur (B)</value></data>
-  <data name="EditorBlur_ToolTitle" xml:space="preserve"><value>Blur tool</value></data>
+  <data name="EditorBlur_ToolTitle" xml:space="preserve"><value>Obscure</value></data>
   <data name="EditorBlur_Instruction" xml:space="preserve"><value>Drag to choose the area to blur.</value></data>
   <data name="EditorBlur_ToolStatus" xml:space="preserve"><value>Blur tool · Drag on the image</value></data>
-  <data name="EditorBlur_Strength" xml:space="preserve"><value>Blur strength</value></data>
+  <data name="EditorBlur_Strength" xml:space="preserve"><value>Strength</value></data>
   <data name="EditorBlur_StrengthHint" xml:space="preserve"><value>Higher values blur more strongly.</value></data>
   <data name="EditorBlur_StrengthChanged" xml:space="preserve"><value>Blur strength changed to {0:0} px</value></data>
   <data name="EditorBlur_StrengthRange" xml:space="preserve"><value>2–64 image pixels.</value></data>
@@ -3831,8 +4008,14 @@ Delete {1} {1:plural:subfolder|subfolders}, {2} {2:plural:image|images}, and {3}
   <data name="EditorUx_RotateLeftHint" xml:space="preserve"><value>Rotate the image 90° left</value></data>
   <data name="EditorUx_RotateRightHint" xml:space="preserve"><value>Rotate the image 90° right</value></data>
   <data name="EditorUx_StepNumberToolTip" xml:space="preserve"><value>Step number — Adds 1, 2, 3… in order with each click</value></data>
-  <data name="EditorUx_StepNumberInstruction" xml:space="preserve"><value>Each click adds the next number: 1, 2, 3… Use it to show the order of steps in a procedure.</value></data>
+  <data name="EditorUx_StepNumberInstruction" xml:space="preserve"><value>Click to mark the order.</value></data>
   <data name="EditorUx_StepNumberNext" xml:space="preserve"><value>Next number</value></data>
+  <data name="EditorStep_Number" xml:space="preserve"><value>Number</value></data>
+  <data name="EditorStep_NumberRange" xml:space="preserve"><value>Enter a number from 1 to 999.</value></data>
+  <data name="EditorStep_Size" xml:space="preserve"><value>Size</value></data>
+  <data name="EditorStep_SizeRange" xml:space="preserve"><value>24–{0} px</value></data>
+  <data name="EditorStep_Renumber" xml:space="preserve"><value>Renumber</value></data>
+  <data name="EditorStep_DoesNotFit" xml:space="preserve"><value>The marker does not fit this image.</value></data>
   <data name="EditorUx_StepNumberNextHint" xml:space="preserve"><value>Your next click adds this number.</value></data>
   <data name="EditorUx_StepNumberNextName" xml:space="preserve"><value>Next number to add: {0}</value></data>
   <data name="EditorUx_StepNumberStatus" xml:space="preserve"><value>Step number · Click to add number {0}</value></data>
@@ -3885,6 +4068,12 @@ Delete {1} {1:plural:subfolder|subfolders}, {2} {2:plural:image|images}, and {3}
   <data name="VideoEditorUx_LayerTrackHelp" xml:space="preserve"><value>Double-click a layer or select it and press F2 or Enter to edit. Press Del to delete. Drag a layer to adjust its visible range.</value></data>
   <data name="VideoEditorUx_AddTextHelp" xml:space="preserve"><value>Adds a text layer that starts at the playhead.</value></data>
   <data name="VideoEditorUx_FrameImageEdit" xml:space="preserve"><value>Draw on this frame</value></data>
+  <data name="VideoFrame_Save" xml:space="preserve"><value>Save current frame as image</value></data>
+  <data name="VideoFrame_SaveShort" xml:space="preserve"><value>Save frame</value></data>
+  <data name="VideoFrame_Saving" xml:space="preserve"><value>Saving frame</value></data>
+  <data name="VideoFrame_Saved" xml:space="preserve"><value>Frame saved · {0}</value></data>
+  <data name="VideoFrame_ShowInLibrary" xml:space="preserve"><value>Show in library</value></data>
+  <data name="VideoFrame_SaveFailed" xml:space="preserve"><value>Could not save the frame image.</value></data>
   <data name="VideoEditorUx_LayerPanel" xml:space="preserve"><value>Layers</value></data>
   <data name="VideoEditorUx_LayerPanelHelp" xml:space="preserve"><value>Shows or hides the list of text, shape and image layers. It opens by itself when a layer is added.</value></data>
   <data name="VideoEditorUx_StatusUntrimmed" xml:space="preserve"><value>Drag a handle or press I and O to choose the part to keep</value></data>
@@ -3902,6 +4091,29 @@ Delete {1} {1:plural:subfolder|subfolders}, {2} {2:plural:image|images}, and {3}
   <data name="VideoEditorUx_UnsavedTitle" xml:space="preserve"><value>Save your edits to the library?</value></data>
   <data name="VideoEditorUx_UnsavedPrompt" xml:space="preserve"><value>If you don't save, the trim and layer edits you made will be lost. The original recording stays as it is.</value></data>
   <data name="VideoEditorUx_SaveAndClose" xml:space="preserve"><value>Save to library and close</value></data>
+  <data name="SettingsStructure_TabPins" xml:space="preserve"><value>Pins</value></data>
+  <data name="SettingsStructure_TabText" xml:space="preserve"><value>Text &amp; translation</value></data>
+  <data name="SettingsStructure_TabStorage" xml:space="preserve"><value>Saving &amp; library</value></data>
+  <data name="SettingsStructure_TabAbout" xml:space="preserve"><value>About &amp; support</value></data>
+  <data name="SettingsStructure_SelectionHelpers" xml:space="preserve"><value>Selection helpers</value></data>
+  <data name="SettingsStructure_CaptureControls" xml:space="preserve"><value>Selection, delay &amp; history</value></data>
+  <data name="SettingsStructure_RecordingCompatibility" xml:space="preserve"><value>Recording method</value></data>
+  <data name="SettingsStructure_PinHistory" xml:space="preserve"><value>Zoom &amp; closed pin history</value></data>
+  <data name="SettingsStructure_StorageLimits" xml:space="preserve"><value>Capacity &amp; thumbnails</value></data>
+  <data name="SettingsStructure_ImageExport" xml:space="preserve"><value>Image export</value></data>
+  <data name="SettingsStructure_GitHub" xml:space="preserve"><value>GitHub connection</value></data>
+  <data name="SettingsStructure_Backup" xml:space="preserve"><value>Backup &amp; previous data</value></data>
+  <data name="SettingsStructure_AdditionalShortcuts" xml:space="preserve"><value>Additional shortcuts</value></data>
+  <data name="SettingsStructure_ShortcutConflicts" xml:space="preserve"><value>Key priority &amp; conflicts</value></data>
+  <data name="SettingsStructure_Library" xml:space="preserve"><value>Library</value></data>
+  <data name="SettingsStructure_Guide" xml:space="preserve"><value>See the difference</value></data>
+  <data name="SettingsStructure_Compare" xml:space="preserve"><value>Compare results</value></data>
+  <data name="SettingsStructure_BlurStrength" xml:space="preserve"><value>Blur strength</value></data>
+  <data name="SettingsStructure_EditingHelp" xml:space="preserve"><value>Default stroke, font, mosaic, highlighter and blur settings</value></data>
+  <data name="SettingsStructure_PinsHelp" xml:space="preserve"><value>Pin restore, close, opacity and zoom</value></data>
+  <data name="SettingsStructure_TextHelp" xml:space="preserve"><value>Text recognition quality, languages and translation model</value></data>
+  <data name="SettingsStructure_StorageHelp" xml:space="preserve"><value>Quick save, library, export and backup</value></data>
+  <data name="SettingsStructure_AboutHelp" xml:space="preserve"><value>Updates, help, support and privacy</value></data>
   <data name="SettingsUx_TabGeneral" xml:space="preserve"><value>General</value></data>
   <data name="SettingsUx_TabGeneralHelp" xml:space="preserve"><value>Display language, theme, start at sign-in</value></data>
   <data name="SettingsUx_TabCapture" xml:space="preserve"><value>Capture</value></data>
@@ -4053,6 +4265,8 @@ Delete {1} {1:plural:subfolder|subfolders}, {2} {2:plural:image|images}, and {3}
   <data name="EditorFlow_DoneHint" xml:space="preserve"><value>Save to the library, copy to the clipboard, and close</value></data>
   <data name="EditorFlow_CancelHint" xml:space="preserve"><value>Close the editor</value></data>
   <data name="EditorFlow_Copied" xml:space="preserve"><value>Copied to clipboard</value></data>
+  <data name="EditorFlow_SavedCopyFailed" xml:space="preserve"><value>Saved · Copy failed</value></data>
+  <data name="EditorFlow_RetryCopy" xml:space="preserve"><value>Retry copy</value></data>
   <data name="EditorFlow_CropHint" xml:space="preserve"><value>Crop and rotate the image</value></data>
   <data name="EditorFlow_CopyText" xml:space="preserve"><value>Copy text</value></data>
   <data name="EditorFlow_CopyTextHint" xml:space="preserve"><value>Recognize the text in the edited image</value></data>
@@ -4102,7 +4316,317 @@ Delete {1} {1:plural:subfolder|subfolders}, {2} {2:plural:image|images}, and {3}
   <data name="Onboard_AfterCaptureTitle" xml:space="preserve"><value>After a capture</value></data>
   <data name="Welcome_FirstCaptureTitle" xml:space="preserve"><value>Try your first capture</value></data>
   <data name="Welcome_PinClipboardHint" xml:space="preserve"><value>Press {0} to keep copied tables and code above other windows for reference.</value></data>
-  <data name="Welcome_Skip" xml:space="preserve"><value>Skip</value></data>
+  <data name="Welcome_Skip" xml:space="preserve"><value>End practice</value></data>
+  <data name="Journey.A1.Title" xml:space="preserve">
+    <value>Start a capture</value>
+  </data>
+  <data name="Journey.A1.Body" xml:space="preserve">
+    <value>Select Start region capture below. The screen will dim.</value>
+  </data>
+  <data name="Journey.A1.Success" xml:space="preserve">
+    <value>Ready to capture.</value>
+  </data>
+  <data name="Journey.A2.Title" xml:space="preserve">
+    <value>Select the picture</value>
+  </data>
+  <data name="Journey.A2.Body" xml:space="preserve">
+    <value>Hold and drag from the top-left to the bottom-right of the practice picture. Let go when the picture is inside the box.</value>
+  </data>
+  <data name="Journey.A2.Success" xml:space="preserve">
+    <value>Picture captured.</value>
+  </data>
+  <data name="Journey.A3.Title" xml:space="preserve">
+    <value>Open the editor</value>
+  </data>
+  <data name="Journey.A3.Body" xml:space="preserve">
+    <value>Select Open editor below. This is where you add lines or words to the picture.</value>
+  </data>
+  <data name="Journey.A3.Success" xml:space="preserve">
+    <value>Editor opened.</value>
+  </data>
+  <data name="Journey.A4.Title" xml:space="preserve">
+    <value>Choose Arrow</value>
+  </data>
+  <data name="Journey.A4.Body" xml:space="preserve">
+    <value>Select Arrow on the left of the editor.</value>
+  </data>
+  <data name="Journey.A4.Success" xml:space="preserve">
+    <value>Arrow selected.</value>
+  </data>
+  <data name="Journey.A5.Title" xml:space="preserve">
+    <value>Draw an arrow</value>
+  </data>
+  <data name="Journey.A5.Body" xml:space="preserve">
+    <value>Hold and drag across the picture. Let go where you want the arrow to end.</value>
+  </data>
+  <data name="Journey.A5.Success" xml:space="preserve">
+    <value>Arrow drawn.</value>
+  </data>
+  <data name="Journey.A6.Title" xml:space="preserve">
+    <value>Copy the picture</value>
+  </data>
+  <data name="Journey.A6.Body" xml:space="preserve">
+    <value>Select Copy and close at the top of the editor. The picture is copied and the editor closes.</value>
+  </data>
+  <data name="Journey.A6.Success" xml:space="preserve">
+    <value>Picture copied.</value>
+  </data>
+  <data name="Journey.B0.Title" xml:space="preserve">
+    <value>Copy the practice picture</value>
+  </data>
+  <data name="Journey.B0.Body" xml:space="preserve">
+    <value>Select Copy practice picture below. In the next step, you will keep this picture on the screen.</value>
+  </data>
+  <data name="Journey.B0.Success" xml:space="preserve">
+    <value>Practice picture copied.</value>
+  </data>
+  <data name="Journey.B1.Title" xml:space="preserve">
+    <value>Keep the picture on screen</value>
+  </data>
+  <data name="Journey.B1.Body" xml:space="preserve">
+    <value>Press {0}. This picture that stays on the screen is called a pin.</value>
+  </data>
+  <data name="Journey.B1.Success" xml:space="preserve">
+    <value>The picture is now on the screen.</value>
+  </data>
+  <data name="Journey.B2.Title" xml:space="preserve">
+    <value>Resize the pin</value>
+  </data>
+  <data name="Journey.B2.Body" xml:space="preserve">
+    <value>Hold the bottom-right corner of the picture and drag it out. Let go at the size you want.</value>
+  </data>
+  <data name="Journey.B2.Success" xml:space="preserve">
+    <value>Picture resized.</value>
+  </data>
+  <data name="Journey.B3.Title" xml:space="preserve">
+    <value>Open Opacity</value>
+  </data>
+  <data name="Journey.B3.Body" xml:space="preserve">
+    <value>Move the pointer over the picture and select Opacity at the top. With the keyboard, focus the picture and press O.</value>
+  </data>
+  <data name="Journey.PictureName" xml:space="preserve">
+    <value>Practice picture</value>
+  </data>
+  <data name="Journey.PinAlreadyRestored" xml:space="preserve">
+    <value>The picture is already open. Close it again to practise restoring it.</value>
+  </data>
+  <data name="Journey.CloseAgain" xml:space="preserve">
+    <value>Practise closing the pin</value>
+  </data>
+  <data name="Journey.B3.Success" xml:space="preserve">
+    <value>Opacity menu opened.</value>
+  </data>
+  <data name="Journey.B4.Title" xml:space="preserve">
+    <value>See through the picture</value>
+  </data>
+  <data name="Journey.B4.Body" xml:space="preserve">
+    <value>Select 60%. You can see the screen behind the picture.</value>
+  </data>
+  <data name="Journey.B4.Success" xml:space="preserve">
+    <value>You can see behind the picture.</value>
+  </data>
+  <data name="Journey.B5.Title" xml:space="preserve">
+    <value>Close the pin</value>
+  </data>
+  <data name="Journey.B5.Body" xml:space="preserve">
+    <value>Select Close at the top of the picture.</value>
+  </data>
+  <data name="Journey.B5.Success" xml:space="preserve">
+    <value>Pin closed.</value>
+  </data>
+  <data name="Journey.B6.Title" xml:space="preserve">
+    <value>Bring the pin back</value>
+  </data>
+  <data name="Journey.B6.Body" xml:space="preserve">
+    <value>Select Reopen closed pin below. The picture you just closed returns.</value>
+  </data>
+  <data name="Journey.B6.Success" xml:space="preserve">
+    <value>The same picture is back.</value>
+  </data>
+  <data name="Journey.C1.Title" xml:space="preserve">
+    <value>Open the library</value>
+  </data>
+  <data name="Journey.C1.Body" xml:space="preserve">
+    <value>Select Open library below. This is where your captures are kept.</value>
+  </data>
+  <data name="Journey.C1.Success" xml:space="preserve">
+    <value>Library opened.</value>
+  </data>
+  <data name="Journey.C2.Title" xml:space="preserve">
+    <value>Find your picture</value>
+  </data>
+  <data name="Journey.C2.Body" xml:space="preserve">
+    <value>Double-click the picture you just captured. The same picture opens in the editor again.</value>
+  </data>
+  <data name="Journey.C2.Success" xml:space="preserve">
+    <value>You found your picture.</value>
+  </data>
+  <data name="Journey.Groups.Title" xml:space="preserve">
+    <value>Choose a practice</value>
+  </data>
+  <data name="Journey.Groups.Body" xml:space="preserve">
+    <value>Choose what to practice.</value>
+  </data>
+  <data name="Journey.Results.Title" xml:space="preserve">
+    <value>Practice results</value>
+  </data>
+  <data name="Journey.Results.Body" xml:space="preserve">
+    <value>Review what you practiced below.</value>
+  </data>
+  <data name="Journey.CaptureGroup" xml:space="preserve">
+    <value>Capture and edit</value>
+  </data>
+  <data name="Journey.PinGroup" xml:space="preserve">
+    <value>Pin practice</value>
+  </data>
+  <data name="Journey.FindGroup" xml:space="preserve">
+    <value>Find again</value>
+  </data>
+  <data name="Journey.Back" xml:space="preserve">
+    <value>Back</value>
+  </data>
+  <data name="Journey.Next" xml:space="preserve">
+    <value>Next: {0}</value>
+  </data>
+  <data name="Journey.Pause" xml:space="preserve">
+    <value>Pause</value>
+  </data>
+  <data name="Journey.Replay" xml:space="preserve">
+    <value>Replay action</value>
+  </data>
+  <data name="Journey.ShowPicture" xml:space="preserve">
+    <value>Show picture</value>
+  </data>
+  <data name="Journey.Reopen" xml:space="preserve">
+    <value>Reopen closed pin</value>
+  </data>
+  <data name="Journey.CopyAgain" xml:space="preserve">
+    <value>Copy practice picture again</value>
+  </data>
+  <data name="Journey.CopyFailed" xml:space="preserve">
+    <value>The picture could not be copied. Try again.</value>
+  </data>
+  <data name="Journey.CopyRetry" xml:space="preserve">
+    <value>Copy again</value>
+  </data>
+  <data name="Journey.CaptureCancelled" xml:space="preserve">
+    <value>Capture canceled.</value>
+  </data>
+  <data name="Journey.EditorClosed" xml:space="preserve">
+    <value>Open the editor again.</value>
+  </data>
+  <data name="Journey.PinClosed" xml:space="preserve">
+    <value>Reopen the closed pin to continue.</value>
+  </data>
+  <data name="Journey.PinUnavailable" xml:space="preserve">
+    <value>Prepare the practice picture again.</value>
+  </data>
+  <data name="Journey.GoCapture" xml:space="preserve">
+    <value>Go to capture practice</value>
+  </data>
+  <data name="Journey.NoCapture" xml:space="preserve">
+    <value>There is no captured practice picture.</value>
+  </data>
+  <data name="Journey.B1.NoKey" xml:space="preserve">
+    <value>Select Show picture below. This picture that stays on the screen is called a pin.</value>
+  </data>
+  <data name="Journey.Pending" xml:space="preserve">
+    <value>Not practiced</value>
+  </data>
+  <data name="Journey.Completed" xml:space="preserve">
+    <value>Practiced</value>
+  </data>
+  <data name="Journey.Skipped" xml:space="preserve">
+    <value>Skipped</value>
+  </data>
+  <data name="Journey.ResizeHelp" xml:space="preserve">
+    <value>You can also resize with the wheel or + / − keys.</value>
+  </data>
+  <data name="Tutorial.pin-resize.Title" xml:space="preserve">
+    <value>Resize the pin</value>
+  </data>
+  <data name="Tutorial.pin-resize.Step1" xml:space="preserve">
+    <value>Move the pointer to the bottom-right corner.</value>
+  </data>
+  <data name="Tutorial.pin-resize.Step2" xml:space="preserve">
+    <value>Hold the corner and drag it out.</value>
+  </data>
+  <data name="Tutorial.pin-resize.Step3" xml:space="preserve">
+    <value>Let go at the size you want.</value>
+  </data>
+  <data name="Tutorial.pin-opacity.Title" xml:space="preserve">
+    <value>Change pin opacity</value>
+  </data>
+  <data name="Tutorial.pin-opacity.Step1" xml:space="preserve">
+    <value>Move the pointer over the picture.</value>
+  </data>
+  <data name="Tutorial.pin-opacity.Step2" xml:space="preserve">
+    <value>Select Opacity at the top.</value>
+  </data>
+  <data name="Tutorial.pin-opacity.Step3" xml:space="preserve">
+    <value>Select 60% to see behind the picture.</value>
+  </data>
+  <data name="Tutorial.practice-image-copy.Title" xml:space="preserve">
+    <value>Copy the practice picture</value>
+  </data>
+  <data name="Tutorial.practice-image-copy.Step1" xml:space="preserve">
+    <value>Look at the practice picture.</value>
+  </data>
+  <data name="Tutorial.practice-image-copy.Step2" xml:space="preserve">
+    <value>Select Copy practice picture.</value>
+  </data>
+  <data name="Tutorial.practice-image-copy.Step3" xml:space="preserve">
+    <value>Check the copy result.</value>
+  </data>
+  <data name="Tutorial.practice-image-pin.Title" xml:space="preserve">
+    <value>Keep the picture on screen</value>
+  </data>
+  <data name="Tutorial.practice-image-pin.Step1" xml:space="preserve">
+    <value>Copy the practice picture.</value>
+  </data>
+  <data name="Tutorial.practice-image-pin.Step2" xml:space="preserve">
+    <value>Press your current pin shortcut.</value>
+  </data>
+  <data name="Tutorial.practice-image-pin.Step3" xml:space="preserve">
+    <value>The same picture stays on the screen.</value>
+  </data>
+  <data name="Tutorial.practice-editor-open.Title" xml:space="preserve">
+    <value>Open the editor</value>
+  </data>
+  <data name="Tutorial.practice-editor-open.Step1" xml:space="preserve">
+    <value>Check the captured picture.</value>
+  </data>
+  <data name="Tutorial.practice-editor-open.Step2" xml:space="preserve">
+    <value>Select Open editor.</value>
+  </data>
+  <data name="Tutorial.practice-editor-open.Step3" xml:space="preserve">
+    <value>The same picture opens in the editor.</value>
+  </data>
+  <data name="Tutorial.practice-pin-close.Title" xml:space="preserve">
+    <value>Close the pin</value>
+  </data>
+  <data name="Tutorial.practice-pin-close.Step1" xml:space="preserve">
+    <value>Move the pointer over the picture.</value>
+  </data>
+  <data name="Tutorial.practice-pin-close.Step2" xml:space="preserve">
+    <value>Select Close at the top.</value>
+  </data>
+  <data name="Tutorial.practice-pin-close.Step3" xml:space="preserve">
+    <value>The picture leaves the screen.</value>
+  </data>
+  <data name="Tutorial.practice-library-find.Title" xml:space="preserve">
+    <value>Find your picture</value>
+  </data>
+  <data name="Tutorial.practice-library-find.Step1" xml:space="preserve">
+    <value>Open the library.</value>
+  </data>
+  <data name="Tutorial.practice-library-find.Step2" xml:space="preserve">
+    <value>Double-click the picture you just captured.</value>
+  </data>
+  <data name="Tutorial.practice-library-find.Step3" xml:space="preserve">
+    <value>The same picture opens in the editor again.</value>
+  </data>
+  <data name="Practice.SkipStep" xml:space="preserve"><value>Skip this step</value></data>
   <data name="Onboard_FirstCaptureTip" xml:space="preserve"><value>Press P to pin it above other windows</value></data>
   <data name="Onboard_ReceiptKeyboard" xml:space="preserve"><value>Alt+Q to focus · Tab to move · Enter to run</value></data>
   <data name="Onboard_ReceiptKeyboardFallback" xml:space="preserve"><value>Alt+Tab to focus · Tab to move · Enter to run</value></data>
@@ -4130,7 +4654,8 @@ Delete {1} {1:plural:subfolder|subfolders}, {2} {2:plural:image|images}, and {3}
   <data name="Tray_HideAllPins" xml:space="preserve"><value>Hide all pins</value></data>
   <data name="Tray_ShowAllPins" xml:space="preserve"><value>Show all pins</value></data>
   <data name="Tray_ClearClickThrough" xml:space="preserve"><value>Turn off click through on all pins</value></data>
-  <data name="Tray_OpenPins" xml:space="preserve"><value>Open pins</value></data>
+  <data name="Tray_Help" xml:space="preserve"><value>Help</value></data>
+<data name="Tray_OpenPins" xml:space="preserve"><value>Open pins</value></data>
   <data name="Tray_PinKindText" xml:space="preserve"><value>Text</value></data>
   <data name="Tray_PinKindCode" xml:space="preserve"><value>Code</value></data>
   <data name="Tray_PinKindTable" xml:space="preserve"><value>Table</value></data>
@@ -4245,10 +4770,10 @@ Turn off: {0}</value></data>
   <data name="Tutorial.image-step-number.Step2" xml:space="preserve"><value>2. Select Step number and click each location in order.</value></data>
   <data name="Tutorial.image-step-number.Step3" xml:space="preserve"><value>3. Review the automatically increasing numbers, then save.</value></data>
   <data name="Tutorial.image-mosaic.Step1" xml:space="preserve"><value>1. Open an image in the editor.</value></data>
-  <data name="Tutorial.image-mosaic.Step2" xml:space="preserve"><value>2. Select Mosaic and drag over the area to cover.</value></data>
+  <data name="Tutorial.image-mosaic.Step2" xml:space="preserve"><value>2. Select Obscure, choose Pixelate, and drag over the area to cover.</value></data>
   <data name="Tutorial.image-mosaic.Step3" xml:space="preserve"><value>3. Review the mosaic area, then save.</value></data>
   <data name="Tutorial.image-blur.Step1" xml:space="preserve"><value>1. Open an image in the editor.</value></data>
-  <data name="Tutorial.image-blur.Step2" xml:space="preserve"><value>2. Select Blur and drag over the area to blur.</value></data>
+  <data name="Tutorial.image-blur.Step2" xml:space="preserve"><value>2. Select Obscure, choose Blur, and drag over the area to cover.</value></data>
   <data name="Tutorial.image-blur.Step3" xml:space="preserve"><value>3. Review the blurred area, then save.</value></data>
   <data name="Tutorial.image-crop.Step1" xml:space="preserve"><value>1. Open an image in the editor.</value></data>
   <data name="Tutorial.image-crop.Step2" xml:space="preserve"><value>2. Choose Crop in the top commands and adjust the area to keep.</value></data>
@@ -4658,6 +5183,8 @@ Overwrite these shortcuts? You can change this later in Settings → Shortcuts.<
   <data name="Source.OpenLocation" xml:space="preserve"><value>Open file location</value></data>
   <data name="Source.ShowSame" xml:space="preserve"><value>Show captures from this source</value></data>
   <data name="Source.Label" xml:space="preserve"><value>Source: {0}</value></data>
+  <data name="Source.BadgeOpen" xml:space="preserve"><value>Open source: {0}</value></data>
+  <data name="Source.BadgeDetails" xml:space="preserve"><value>Source details: {0}</value></data>
   <data name="Source.OpenAutomation" xml:space="preserve"><value>Source: {0}, open</value></data>
   <data name="Source.AppMissing" xml:space="preserve"><value>The source app could not be found.</value></data>
   <data name="Source.AppOpenFailed" xml:space="preserve"><value>The source app could not be opened.</value></data>
@@ -4848,6 +5375,9 @@ Install the model?</value></data>
   <data name="LibraryUx_RateAction" xml:space="preserve"><value>Rate</value></data>
   <data name="LibraryUx_SelectCard" xml:space="preserve"><value>Select {0}</value></data>
   <data name="LibraryUx_PinHint" xml:space="preserve"><value>Pin to screen (P)</value></data>
+  <data name="Library.Properties" xml:space="preserve"><value>Properties</value></data>
+  <data name="Library.ExportImage" xml:space="preserve"><value>Export image…</value></data>
+  <data name="Library.ExportGif" xml:space="preserve"><value>Export GIF…</value></data>
   <data name="LibraryUx_SourceDetails" xml:space="preserve"><value>Source details</value></data>
   <data name="LibraryUx_EditHint" xml:space="preserve"><value>Edit again (Enter)</value></data>
   <data name="LibraryUx_KeepHint" xml:space="preserve"><value>Keep (K)</value></data>
@@ -4856,20 +5386,21 @@ Install the model?</value></data>
   <data name="CaptureRatio_FixedSize" xml:space="preserve"><value>Fixed size {0}</value></data>
   <data name="CaptureRatio_FixedHint" xml:space="preserve"><value>Move with the arrow keys and press Enter to confirm.</value></data>
   <data name="CaptureRatio_HelpLabel" xml:space="preserve"><value>Switch aspect ratio lock while selecting</value></data>
-  <data name="Stamp_Name" xml:space="preserve"><value>Stamp</value></data>
-  <data name="Stamp_Place" xml:space="preserve"><value>Place stamp</value></data>
-  <data name="Stamp_ToolTip" xml:space="preserve"><value>Place stamp — right-click for options (S)</value></data>
-  <data name="Stamp_Change" xml:space="preserve"><value>Change stamp image…</value></data>
+  <data name="Stamp_Name" xml:space="preserve"><value>Watermark</value></data>
+  <data name="Stamp_SearchAliases" xml:space="preserve"><value>stamp logo signature watermark</value></data>
+  <data name="Stamp_Place" xml:space="preserve"><value>Add watermark</value></data>
+  <data name="Stamp_ToolTip" xml:space="preserve"><value>Add watermark · right-click for options (S)</value></data>
+  <data name="Stamp_Change" xml:space="preserve"><value>Change watermark image…</value></data>
   <data name="Stamp_Opacity" xml:space="preserve"><value>Opacity</value></data>
   <data name="Stamp_OpacityPercent" xml:space="preserve"><value>{0}%</value></data>
-  <data name="Stamp_Remove" xml:space="preserve"><value>Remove stamp</value></data>
-  <data name="Stamp_PickerTitle" xml:space="preserve"><value>Choose stamp image</value></data>
-  <data name="Stamp_Changed" xml:space="preserve"><value>Stamp image changed</value></data>
-  <data name="Stamp_OpacitySet" xml:space="preserve"><value>Stamp opacity {0}%</value></data>
-  <data name="Stamp_Removed" xml:space="preserve"><value>Stamp image removed · Stamps already placed stay</value></data>
-  <data name="Stamp_SaveFailed" xml:space="preserve"><value>The stamp image could not be saved.</value></data>
-  <data name="Stamp_Unreadable" xml:space="preserve"><value>The stamp image cannot be read. Please register it again.</value></data>
-  <data name="Stamp_Unavailable" xml:space="preserve"><value>The stamp is not available here.</value></data>
+  <data name="Stamp_Remove" xml:space="preserve"><value>Remove registered image</value></data>
+  <data name="Stamp_PickerTitle" xml:space="preserve"><value>Choose watermark image</value></data>
+  <data name="Stamp_Changed" xml:space="preserve"><value>Watermark image changed</value></data>
+  <data name="Stamp_OpacitySet" xml:space="preserve"><value>Watermark opacity {0}%</value></data>
+  <data name="Stamp_Removed" xml:space="preserve"><value>Registered image removed · Placed watermarks stay</value></data>
+  <data name="Stamp_SaveFailed" xml:space="preserve"><value>The watermark image could not be saved.</value></data>
+  <data name="Stamp_Unreadable" xml:space="preserve"><value>The watermark image cannot be read. Please register it again.</value></data>
+  <data name="Stamp_Unavailable" xml:space="preserve"><value>The watermark is not available here.</value></data>
   <data name="Help.QuickAccess" xml:space="preserve">
     <value>Quick access</value>
   </data>
@@ -4883,7 +5414,7 @@ Install the model?</value></data>
     <value>Hide personal information</value>
   </data>
   <data name="Shortcuts.StepBack" xml:space="preserve">
-    <value>Cancel current action / clear selection</value>
+    <value>Cancel current action / close editor</value>
   </data>
   <data name="Shortcuts.Undo" xml:space="preserve">
     <value>Undo</value>
@@ -4961,13 +5492,16 @@ Install the model?</value></data>
     <value>Search</value>
   </data>
   <data name="Shortcuts.Back" xml:space="preserve">
-    <value>Previous folder</value>
+    <value>Back</value>
   </data>
   <data name="Shortcuts.Forward" xml:space="preserve">
-    <value>Next folder</value>
+    <value>Forward</value>
+  </data>
+  <data name="Shortcuts.Parent" xml:space="preserve">
+    <value>Parent folder</value>
   </data>
   <data name="Shortcuts.MouseNavigation" xml:space="preserve">
-    <value>Previous / next folder</value>
+    <value>Back / forward</value>
   </data>
   <data name="Shortcuts.MouseButtons" xml:space="preserve">
     <value>Mouse back / forward</value>

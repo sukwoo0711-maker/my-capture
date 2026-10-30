@@ -34,7 +34,8 @@ public sealed class Ux410PolishTests
         // The first-run welcome is its own window now; its first step still shows the capture keycaps.
         var welcome = new WelcomeWindow(ShortcutHelpWindow.ReadHotkeys(), MyCapture.Core.Settings.AfterCaptureAction.Editor);
         Assert.Equal(ResizeMode.NoResize, welcome.ResizeMode);
-        WrapPanel chord = FirstRunWelcomeTests.Descendants(welcome).OfType<WrapPanel>().Single();
+        WrapPanel chord = Assert.Single(FirstRunWelcomeTests.Descendants(welcome).OfType<WrapPanel>(),
+            panel => AutomationProperties.GetName(panel) == ShortcutHelpWindow.ReadHotkeys().Capture.ToString());
         Assert.Equal(ShortcutHelpWindow.ReadHotkeys().Capture.ToString(), AutomationProperties.GetName(chord));
         Assert.NotEmpty(chord.Children.OfType<Border>());
         welcome.Close();

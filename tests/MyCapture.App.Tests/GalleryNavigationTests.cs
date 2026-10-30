@@ -12,22 +12,25 @@ namespace MyCapture.App.Tests;
 public sealed class GalleryNavigationTests
 {
     [Theory]
-    [InlineData(Key.Back, ModifierKeys.None, false, false)]
+    [InlineData(Key.Back, ModifierKeys.None, false, "Back")]
     [InlineData(Key.Back, ModifierKeys.None, true, null)]
     [InlineData(Key.Back, ModifierKeys.Control, false, null)]
-    [InlineData(Key.Left, ModifierKeys.Alt, false, false)]
-    [InlineData(Key.Left, ModifierKeys.Alt, true, false)]
-    [InlineData(Key.Right, ModifierKeys.Alt, false, true)]
-    [InlineData(Key.Right, ModifierKeys.Alt, true, true)]
+    [InlineData(Key.Left, ModifierKeys.Alt, false, "Back")]
+    [InlineData(Key.Left, ModifierKeys.Alt, true, "Back")]
+    [InlineData(Key.Right, ModifierKeys.Alt, false, "Forward")]
+    [InlineData(Key.Right, ModifierKeys.Alt, true, "Forward")]
+    [InlineData(Key.Up, ModifierKeys.Alt, false, "Parent")]
+    [InlineData(Key.Up, ModifierKeys.Alt, true, "Parent")]
+    [InlineData(Key.Up, ModifierKeys.Alt | ModifierKeys.Control, false, null)]
     [InlineData(Key.Left, ModifierKeys.None, false, null)]
     [InlineData(Key.Right, ModifierKeys.Control, true, null)]
-    public void NavigationShortcutsPreserveTextEditing(Key key, ModifierKeys modifiers, bool textInput, bool? direction)
+    public void NavigationShortcutsPreserveTextEditing(Key key, ModifierKeys modifiers, bool textInput, string? direction)
     {
-        Assert.Equal(direction, GalleryWindow.NavigationKeyDirection(key, modifiers, textInput));
+        Assert.Equal(direction, GalleryWindow.NavigationKeyDirection(key, modifiers, textInput)?.ToString());
     }
 
     [Fact]
-    public async Task ParentAndForwardTraverseHierarchyInsteadOfLastVisitedSibling()
+    public async Task BackReturnsToVisitedSiblingAndParentAddsANewHistoryStep()
     {
         var (queue, vm) = Create();
         CaptureFolder parent = await queue.CreateFolderAsync("Parent");
@@ -36,13 +39,8 @@ public sealed class GalleryNavigationTests
         vm.NavigateTo(CaptureFolderScope.ForFolder(sibling.Id));
         vm.NavigateTo(CaptureFolderScope.ForFolder(child.Id));
 
-        Assert.True(vm.NavigateParent());
-        Assert.Equal(parent.Id, vm.SelectedScope.FolderId);
-        Assert.True(vm.NavigateParent());
-        Assert.True(vm.IsAllItemsView);
-        Assert.False(vm.NavigateParent());
-        Assert.True(vm.NavigateForward());
-        Assert.Equal(parent.Id, vm.SelectedScope.FolderId);
+        Assert.True(vm.NavigateBack());
+        Assert.Equal(sibling.Id, vm.SelectedScope.FolderId);
         Assert.True(vm.NavigateForward());
         Assert.Equal(child.Id, vm.SelectedScope.FolderId);
         Assert.False(vm.CanNavigateForward);
@@ -50,6 +48,18 @@ public sealed class GalleryNavigationTests
             CaptureFolderScope.ForFolder(child.Id) }, vm.Breadcrumb.Select(step => step.Scope));
         Assert.All(vm.Breadcrumb.Take(2), step => Assert.True(step.IsLink));
         Assert.False(vm.Breadcrumb[^1].IsLink);
+        Assert.True(vm.NavigateParent());
+        Assert.Equal(parent.Id, vm.SelectedScope.FolderId);
+        Assert.False(vm.CanNavigateForward);
+        Assert.True(vm.NavigateBack());
+        Assert.Equal(child.Id, vm.SelectedScope.FolderId);
+        Assert.True(vm.NavigateForward());
+        Assert.Equal(parent.Id, vm.SelectedScope.FolderId);
+        Assert.True(vm.NavigateParent());
+        Assert.True(vm.IsAllItemsView);
+        Assert.False(vm.NavigateParent());
+        Assert.True(vm.NavigateBack());
+        Assert.Equal(parent.Id, vm.SelectedScope.FolderId);
     }
 
     [Fact]
@@ -87,17 +97,19 @@ public sealed class GalleryNavigationTests
         Assert.True(vm.NavigateParent());
         Assert.True(vm.IsAllItemsView);
         Assert.True(vm.NavigateBack());
+        Assert.Equal(folder.Id, vm.SelectedScope.FolderId);
+        Assert.True(vm.NavigateBack());
         Assert.Equal(CaptureFolderScope.All, vm.SelectedScope);
         Assert.Equal(filter, vm.Filter);
         Assert.Equal(tag, vm.SelectedTag);
         Assert.True(vm.NavigateForward());
-        Assert.True(vm.IsAllItemsView);
-        Assert.True(vm.NavigateForward());
         Assert.Equal(folder.Id, vm.SelectedScope.FolderId);
+        Assert.True(vm.NavigateForward());
+        Assert.True(vm.IsAllItemsView);
     }
 
     [Fact]
-    public async Task ParentConsumesHistoryEntryWhenTheWholeLocationMatches()
+    public async Task ParentRecordsANewStepEvenWhenTheParentWasVisitedBefore()
     {
         var (queue, vm) = Create();
         CaptureFolder folder = await queue.CreateFolderAsync("Folder");
@@ -106,6 +118,10 @@ public sealed class GalleryNavigationTests
         vm.NavigateTo(CaptureFolderScope.ForFolder(folder.Id));
         Assert.True(vm.NavigateParent());
         Assert.True(vm.NavigateBack());
+        Assert.Equal(folder.Id, vm.SelectedScope.FolderId);
+        Assert.True(vm.NavigateBack());
+        Assert.True(vm.IsAllItemsView);
+        Assert.True(vm.NavigateBack());
         Assert.True(vm.IsImagesView);
         Assert.True(vm.NavigateBack());
         Assert.True(vm.IsAllItemsView);
@@ -113,15 +129,18 @@ public sealed class GalleryNavigationTests
     }
 
     [Fact]
-    public void DateParentReturnsToLibraryAndForwardRestoresDate()
+    public void DateParentReturnsToLibraryAndBackRestoresDate()
     {
         var (_, vm) = Create();
         CaptureFolderScope date = CaptureFolderScope.ForDate(new DateOnly(2026, 10, 14));
         vm.NavigateTo(date);
         Assert.True(vm.NavigateParent());
         Assert.True(vm.IsAllItemsView);
-        Assert.True(vm.NavigateForward());
+        Assert.False(vm.CanNavigateForward);
+        Assert.True(vm.NavigateBack());
         Assert.Equal(date, vm.SelectedScope);
+        Assert.True(vm.NavigateForward());
+        Assert.True(vm.IsAllItemsView);
     }
 
     [Theory]

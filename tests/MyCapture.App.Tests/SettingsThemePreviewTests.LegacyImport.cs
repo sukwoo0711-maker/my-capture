@@ -579,9 +579,11 @@ public sealed partial class SettingsThemePreviewTests
                     settings.LegacyImportPackaged = true;
                     settings.Width = 780; settings.Height = 560;
                     settings.Show();
-                    ((TabControl)settings.FindName("CategoryTabs")).SelectedItem = settings.FindName("UpdateTab"); Drain(settings);
+                    Assert.True(settings.NavigateToSection(SettingsSection.Storage));
+                    Assert.IsType<Expander>(settings.FindName("BackupExpander")).IsExpanded = true;
+                    Drain(settings);
                     Button entry = (Button)settings.FindName("LegacyImportAction");
-                    // The import sits in the About page's data section, below the fold at this size.
+                    // The import sits in storage's named backup group, below the fold at this size.
                     entry.BringIntoView(); Drain(settings);
                     Assert.True(entry.IsVisible); AssertFits(settings, entry);
                     SaveStoreUpdateEvidence(settings, $"legacy-information-{locale}-{theme}-780x560.png");

@@ -71,6 +71,9 @@ internal sealed partial class GalleryWindow
 {
     /// <summary>Test seam: sees the command a key resolved to; returning true stops it from running.</summary>
     internal Func<GalleryKeyCommand, bool>? KeyCommandHookForTest { get; set; }
+    internal ModifierKeys? KeyModifiersForTest { get; set; }
+    internal Action<GalleryItemViewModel>? TileFocusForTest { get; set; }
+    private ModifierKeys CurrentKeyModifiers => KeyModifiersForTest ?? Keyboard.Modifiers;
 
     /// <summary>
     /// The one key handler of the library's content area. Keys follow the selection: the card
@@ -81,8 +84,8 @@ internal sealed partial class GalleryWindow
     /// <remarks>
     /// <para>Order of a key press (WPF runs the preview stage from the window down):</para>
     /// <list type="number">
-    /// <item>Window PreviewKeyDown: Esc cancels a drag in preparation; Alt+Left/Right and Backspace navigate the
-    /// library's history (not while a text box has focus).</item>
+    /// <item>Window PreviewKeyDown: Esc cancels a drag in preparation; Alt+Left and Backspace go back and Alt+Right
+    /// goes forward in the library's history, Alt+Up opens the parent folder (Backspace not while a text box has focus).</item>
     /// <item>This handler, on the content area, before the focused control sees the key. It does nothing while a
     /// text box (the rename box, the search box) or an editable combo has focus, for every key: Del, Ctrl+C,
     /// Ctrl+A, Enter, Esc, F2 and the letters all belong to the text box. It does nothing for keys that start in
@@ -90,7 +93,7 @@ internal sealed partial class GalleryWindow
     /// has its own handler (open, move, delete). Enter, Space and the arrows are left to a focused button.</item>
     /// <item>Window KeyDown: Esc clears a selection, then dismisses a failure on the status line; the input
     /// bindings Ctrl+F (search), Ctrl+Z (undo), F2 (rename the focused folder or capture) and Ctrl+Shift+N (new
-    /// folder) run for anything that did not handle the key. Ctrl or Shift with an arrow extends the selection
+    /// folder) run for anything that did not handle the key. Ctrl with an arrow moves focus only; Shift extends the selection
     /// here (see <see cref="GalleryKeyMap"/>); Space with Ctrl or Shift toggles the card, plain Space previews it.</item>
     /// </list>
     /// </remarks>
@@ -103,7 +106,8 @@ internal sealed partial class GalleryWindow
         if (IsWithin(source, LibraryContentCommandBar)) return;
         if (IsNavigationTextInput(source) || IsNavigationTextInput(Keyboard.FocusedElement as DependencyObject)) return;
         Key key = ShortcutInput.Resolve(e.Key == Key.System ? e.SystemKey : e.Key, e.ImeProcessedKey, textInputFocused: false);
-        GalleryKeyCommand command = GalleryKeyMap.Resolve(key, Keyboard.Modifiers);
+        ModifierKeys modifiers = CurrentKeyModifiers;
+        GalleryKeyCommand command = GalleryKeyMap.Resolve(key, modifiers);
         switch (command)
         {
             case GalleryKeyCommand.None:
@@ -127,7 +131,7 @@ internal sealed partial class GalleryWindow
 
         GalleryItemViewModel? focused = ResolveTileFromTree(source) ?? ResolveTileFromTree(Keyboard.FocusedElement);
         GalleryItemViewModel? tile = focused ?? _viewModel.SingleSelectedTile;
-        bool control = Keyboard.Modifiers.HasFlag(ModifierKeys.Control), shift = Keyboard.Modifiers.HasFlag(ModifierKeys.Shift);
+        bool control = modifiers.HasFlag(ModifierKeys.Control), shift = modifiers.HasFlag(ModifierKeys.Shift);
         // Tests intercept the commands that open a dialog or another window.
         if (KeyCommandHookForTest?.Invoke(command) == true)
         {
@@ -211,14 +215,14 @@ internal sealed partial class GalleryWindow
         return selected.Count > 0 || focused is null ? selected : [focused];
     }
 
-    /// <summary>Moves the arrow-key focus to the neighbouring card and selects it as a click would.</summary>
+    /// <summary>Moves focus to the neighbouring card; Ctrl alone preserves selection and its range anchor.</summary>
     private void NavigateTiles(GalleryItemViewModel tile, Key key, bool control, bool shift)
     {
         // A heading is the nearest target when it directly precedes this row, even if a folder
         // from an earlier day is the next card returned by the card-only vertical navigation.
         if (key == Key.Up && !control && !shift && TryFocusDayHeadingAbove(tile)) return;
         // Plain Up/Down can leave the tiles for the folder cards above them; range
-        // selection with Ctrl or Shift stays on tiles.
+        // selection or focus-only movement with Ctrl or Shift stays on tiles.
         if (key is Key.Up or Key.Down && !control && !shift
             && GallerySelectionNavigation.FindVertical(_viewModel.Rows, tile,
                 key == Key.Up ? -1 : 1) is GalleryFolderCardViewModel card)
@@ -230,11 +234,15 @@ internal sealed partial class GalleryWindow
         GalleryItemViewModel? next = GallerySelectionNavigation.FindNeighbor(_viewModel.Rows, tile,
             key is Key.Up or Key.Down, key is Key.Left or Key.Up ? -1 : 1);
         if (next is null) return;
-        _viewModel.Select(next.Id, control, shift);
+        if (!control || shift) _viewModel.Select(next.Id, control, shift);
         GalleryTileRow? row = _viewModel.Rows.OfType<GalleryTileRow>().FirstOrDefault(r => r.Tiles.Contains(next));
         if (row is null) return;
         RowsList.ScrollIntoView(row);
-        _ = Dispatcher.BeginInvoke(DispatcherPriority.Loaded, new Action(() => FocusTile(RowsList, next)));
+        _ = Dispatcher.BeginInvoke(DispatcherPriority.Loaded, new Action(() =>
+        {
+            if (TileFocusForTest is { } focus) focus(next);
+            else FocusTile(RowsList, next);
+        }));
     }
 
     private static bool IsWithin(DependencyObject? source, DependencyObject container)

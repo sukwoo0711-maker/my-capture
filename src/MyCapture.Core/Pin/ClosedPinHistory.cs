@@ -159,6 +159,14 @@ public sealed class ClosedPinHistory<T>
         return true;
     }
 
+    /// <summary>Inspects the next restore target without consuming or reordering it.</summary>
+    public bool TryPeek([MaybeNullWhen(false)] out T item)
+    {
+        Trim();
+        item = _entries.Last is { } last ? last.Value.Item : null;
+        return item is not null;
+    }
+
     /// <summary>Discards every retained entry.</summary>
     public void Clear()
     {

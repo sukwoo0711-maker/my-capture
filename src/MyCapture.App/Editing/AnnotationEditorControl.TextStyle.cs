@@ -113,22 +113,7 @@ internal sealed partial class AnnotationEditorControl
 
     private void ApplyTextFontFamily(string family)
     {
-        if (_controller.Selected is not TextAnnotation { IsStepNumber: false } text)
-        {
-            _controller.DefaultFontFamily = family;
-            return;
-        }
-        if (string.Equals(text.FontFamily, family, StringComparison.Ordinal)) return;
-        var probe = (TextAnnotation)text.Clone();
-        probe.FontFamily = family;
-        var before = (text.FontFamily, TextLayout.Of(text));
-        var after = (family, _controller.FitText(probe, probe.Text, probe.FontSize, probe.AutoSize, probe.Rect));
-        _controller.Undo.Execute(new PropertyChangeCommand<TextAnnotation, (string Family, TextLayout Layout)>(
-            text, UiText.Get("EditorText_FontFamily"), static (target, value) =>
-            {
-                target.FontFamily = value.Family;
-                TextLayout.Apply(target, value.Layout);
-            }, before, after));
+        _controller.ApplyTextFontFamily(family);
         _surface.InvalidateVisual();
     }
 

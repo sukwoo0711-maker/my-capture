@@ -32,6 +32,8 @@ internal sealed partial class AnnotationEditorControl
         .ToArray();
     private PropertyGroupsPanel _propertyGroups = null!;
     private object? _inspectorMeasureKey;
+    private object? _inspectorIntrinsicEnvironment;
+    private Size[]? _inspectorIntrinsicSizes;
     private (bool crop, bool selection, bool color, bool thickness, bool shape, bool font,
         bool text, bool blur, bool mosaic, bool step)? _inspectorGroupState;
     private double _desiredInspectorHeight = 48;
@@ -73,31 +75,42 @@ internal sealed partial class AnnotationEditorControl
                 // typed values keep the same budget and never reveal hidden groups on screen.
                 _inspectorMeasureKey = key;
                 InspectorBudgetMeasureCount++;
-                InspectorMeasurementCache cache = InspectorMeasurementCaches.GetValue(Dispatcher, static _ => new());
-                cache.Exact.TryGetValue(key, out Size[]? sizes);
-                // A group that fit strictly inside its measured constraint was not clipped
-                // or wrapped by that constraint. Its intrinsic size is also valid at any
-                // other width that fits it. Keep narrow constrained measurements exact.
-                if (sizes is null && cache.Unconstrained.TryGetValue(environment, out Size[]? intrinsic)
-                    && intrinsic.All(size => size.Width < width))
-                    sizes = intrinsic;
+                // Constructor sizing can visit several widths before the first visible
+                // layout. Retain intrinsic group sizes already obtained by this editor;
+                // only their wrapping budget changes while each group still fits.
+                Size[]? sizes = Equals(_inspectorIntrinsicEnvironment, environment)
+                    && _inspectorIntrinsicSizes is { } local && local.All(size => size.Width < width)
+                    ? local : null;
                 if (sizes is null)
                 {
-                    // Prewarm (or the first editor with these resources) pays this once. Later
-                    // editors can reserve the exact same space without building hidden groups.
-                    EnsureAllInspectorSections();
-                    sizes = MeasureInspectorGroups(width);
-                    if (cache.Exact.Count >= InspectorMeasurementCapacity)
-                        cache.Exact.Remove(cache.Exact.Keys.First());
-                    cache.Exact[key] = sizes;
-                    if (sizes.All(size => size.Width < width))
+                    InspectorMeasurementCache cache = InspectorMeasurementCaches.GetValue(Dispatcher, static _ => new());
+                    cache.Exact.TryGetValue(key, out sizes);
+                    // A group that fit strictly inside its measured constraint was not clipped
+                    // or wrapped by that constraint. Its intrinsic size is also valid at any
+                    // other width that fits it. Keep narrow constrained measurements exact.
+                    if (sizes is null && cache.Unconstrained.TryGetValue(environment, out Size[]? intrinsic)
+                        && intrinsic.All(size => size.Width < width))
+                        sizes = intrinsic;
+                    if (sizes is null)
                     {
-                        if (cache.Unconstrained.Count >= InspectorMeasurementCapacity)
-                            cache.Unconstrained.Remove(cache.Unconstrained.Keys.First());
-                        cache.Unconstrained[environment] = sizes;
+                        // Prewarm (or the first editor with these resources) pays this once. Later
+                        // editors can reserve the exact same space without building hidden groups.
+                        EnsureAllInspectorSections();
+                        sizes = MeasureInspectorGroups(width);
+                        if (cache.Exact.Count >= InspectorMeasurementCapacity)
+                            cache.Exact.Remove(cache.Exact.Keys.First());
+                        cache.Exact[key] = sizes;
+                        if (sizes.All(size => size.Width < width))
+                        {
+                            if (cache.Unconstrained.Count >= InspectorMeasurementCapacity)
+                                cache.Unconstrained.Remove(cache.Unconstrained.Keys.First());
+                            cache.Unconstrained[environment] = sizes;
+                        }
                     }
+                    else InspectorBudgetCacheHitCount++;
+                    _inspectorIntrinsicEnvironment = environment;
+                    _inspectorIntrinsicSizes = sizes.All(size => size.Width < width) ? sizes : null;
                 }
-                else InspectorBudgetCacheHitCount++;
                 _desiredInspectorHeight = MeasureInspectorConfigurations(width, sizes) + 9;
             }
             double cap = double.IsFinite(constraint.Height) ? Math.Max(48, constraint.Height * 0.36) : _inspectorPanel.MaxHeight;
@@ -148,7 +161,7 @@ internal sealed partial class AnnotationEditorControl
         int[][] selections =
         [
             [0, 5, 6, 7, 11], // text
-            [0, 6, 11], // number
+            [0, 4, 11], // number: the badge size is in the step group, not the text font group
             [0, 1, 11], [0, 1, 12, 11], [0, 1, 2, 3, 11], // pen/line/shape
             [8, 11], // blur
             [11], // image
@@ -159,7 +172,7 @@ internal sealed partial class AnnotationEditorControl
         foreach (int[] configuration in selections) maximum = Math.Max(maximum, WrappedHeight(configuration));
         // Entering a drawing tool clears the selection. Step can then select its newly
         // created badge; mosaic switches to Select before selecting its inserted image.
-        maximum = Math.Max(maximum, WrappedHeight([0, 4, 6, 11]));
+        maximum = Math.Max(maximum, WrappedHeight([0, 4, 11]));
         return maximum;
 
         double WrappedHeight(int[] indices)

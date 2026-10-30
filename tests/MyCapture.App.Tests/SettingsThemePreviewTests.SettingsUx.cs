@@ -17,21 +17,53 @@ namespace MyCapture.App.Tests;
 
 /// <summary>
 /// The settings window saves changes immediately, keeps one title, groups its
-/// options into seven categories and keeps the GitHub token out of plain text.
+/// options into nine categories and keeps the GitHub token out of plain text.
 /// </summary>
 public sealed partial class SettingsThemePreviewTests
 {
     [Fact]
-    public Task SettingsUx_CloseFlushesChangesAndPreservesInvalidInput() =>
-        RunIsolated(nameof(SettingsUx_CloseFlushesChangesAndPreservesInvalidInput), VerifySettingsUxClose);
+    public Task SettingsUx_CloseFlushesChangesAndDiscardsInvalidInput() =>
+        RunIsolated(nameof(SettingsUx_CloseFlushesChangesAndDiscardsInvalidInput), VerifySettingsUxClose);
 
     [Fact]
-    public Task SettingsUx_SevenCategoriesWithDistinctIconsAndOneTitle() =>
-        RunIsolated(nameof(SettingsUx_SevenCategoriesWithDistinctIconsAndOneTitle), VerifySettingsUxCategories);
+    public Task SettingsUx_AllCloseRoutesRevertInvalidFieldsAndKeepSavedChanges() =>
+        RunIsolated(nameof(SettingsUx_AllCloseRoutesRevertInvalidFieldsAndKeepSavedChanges), VerifyAllSettingsCloseRoutes);
 
     [Fact]
-    public Task SettingsUx_GitHubTokenIsAPasswordInTheFoldedAdvancedGroup() =>
-        RunIsolated(nameof(SettingsUx_GitHubTokenIsAPasswordInTheFoldedAdvancedGroup), VerifySettingsUxToken);
+    public Task SettingsUx_ControlFFocusesAndSelectsSearchUnlessRecordingShortcut() =>
+        RunIsolated(nameof(SettingsUx_ControlFFocusesAndSelectsSearchUnlessRecordingShortcut), VerifySettingsSearchShortcut);
+
+    [Fact]
+    public Task SettingsUx_InvalidReplacementOfFailedEditDoesNotTrapClose() =>
+        RunIsolated(nameof(SettingsUx_InvalidReplacementOfFailedEditDoesNotTrapClose), () =>
+        {
+            Application application = CreateThemedApplication();
+            SettingsUxFixture fixture = CreateSettingsUxWindow(new AppSettings(), _ => false);
+            SettingsWindow window = fixture.Window;
+            try
+            {
+                window.Show();
+                Draft(window).MaxItems = "450";
+                Assert.False(window.FlushPendingSettings());
+                window.RequestClose();
+                Assert.True(window.IsVisible); // A current valid write failure still needs recovery.
+                Draft(window).MaxItems = "5";
+                window.RequestClose();
+                Assert.False(window.IsVisible);
+                Assert.Equal("300", Draft(window).MaxItems);
+                Assert.False(Draft(window).HasErrors);
+                Assert.Equal(300, fixture.Saved().Queue.MaxItems);
+            }
+            finally { window.CloseForExit(); application.Shutdown(); }
+        });
+
+    [Fact]
+    public Task SettingsUx_NineCategoriesWithDistinctIconsAndOneTitle() =>
+        RunIsolated(nameof(SettingsUx_NineCategoriesWithDistinctIconsAndOneTitle), VerifySettingsUxCategories);
+
+    [Fact]
+    public Task SettingsUx_GitHubTokenIsAPasswordInTheNamedConnectionGroup() =>
+        RunIsolated(nameof(SettingsUx_GitHubTokenIsAPasswordInTheNamedConnectionGroup), VerifySettingsUxToken);
 
     [Fact]
     public Task SettingsUx_SavedShortcutsStayIntactAndAlwaysHintOptionExplainsAlt() =>
@@ -55,7 +87,8 @@ public sealed partial class SettingsThemePreviewTests
             saved = candidate;
             ThemeService.ApplyFromSettings(saved.General.Theme);
             return new SettingsApplyResult(true, true, true, false, []);
-        }, NullLogger.Instance, showSaveFailureMessage: _ => { })
+        }, NullLogger.Instance, showSaveFailureMessage: _ => { },
+            defaultCapturesRoot: () => System.IO.Path.Combine(AppContext.BaseDirectory, "settings-ux-captures"))
         {
             WindowStartupLocation = WindowStartupLocation.Manual,
             Left = -10000, Top = -10000, Width = 940, Height = 700,
@@ -114,15 +147,19 @@ public sealed partial class SettingsThemePreviewTests
             Draft(window).MaxItems = "5";
             int beforeInvalid = fixture.ApplyCount();
             window.Close();
-            Assert.True(window.IsVisible);
+            Assert.False(window.IsVisible);
             Assert.Equal(beforeInvalid, fixture.ApplyCount());
-            Assert.Equal("5", Draft(window).MaxItems);
-            Assert.Equal(Visibility.Visible, Assert.IsType<Border>(window.FindName("ErrorSummary")).Visibility);
+            Assert.Equal("555", Draft(window).MaxItems);
+            Assert.Equal(Visibility.Collapsed, Assert.IsType<Border>(window.FindName("ErrorSummary")).Visibility);
+            window.ShowSettings();
+            Draft(window).MaxItems = "5";
             var close = Assert.IsType<Button>(window.FindName("CancelButton"));
             Assert.False(close.IsCancel);
             close.RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));
-            Assert.True(window.IsVisible);
+            Assert.False(window.IsVisible);
             Assert.Equal(555, fixture.Saved().Queue.MaxItems);
+            Assert.Equal("555", Draft(window).MaxItems);
+            window.ShowSettings();
             Draft(window).MaxItems = "600";
             close.RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));
             Assert.False(window.IsVisible);
@@ -148,7 +185,8 @@ public sealed partial class SettingsThemePreviewTests
             Assert.False(Draft(window).HasUnappliedChanges);
 
             Draft(window).MaxItems = "5";
-            Assert.False(window.PrepareForAppExit(keepVisible: true));
+            Assert.True(window.PrepareForAppExit(keepVisible: true));
+            Assert.Equal("1000", Draft(window).MaxItems);
             Assert.True(window.IsVisible);
             Draft(window).MaxItems = "555";
             Assert.True(window.PrepareForAppExit(keepVisible: true));
@@ -165,6 +203,101 @@ public sealed partial class SettingsThemePreviewTests
             if (!closed) window.CloseForExit();
             application.Shutdown();
         }
+    }
+
+    private static void VerifyAllSettingsCloseRoutes()
+    {
+        Application application = CreateThemedApplication();
+        try
+        {
+            foreach (string route in new[] { "title-bar", "close-command", "button", "escape", "prepare-exit", "exit" })
+            {
+                SettingsUxFixture fixture = CreateSettingsUxWindow(new AppSettings());
+                SettingsWindow window = fixture.Window;
+                bool closed = false;
+                try
+                {
+                    window.ShowSettings();
+                    Draft(window).MaxItems = "555";
+                    Draft(window).DelaySeconds = "3";
+                    Draft(window).PlayCaptureSound = true;
+                    Assert.True(window.FlushPendingSettings());
+                    Assert.Equal(555, fixture.Saved().Queue.MaxItems);
+
+                    Draft(window).MaxItems = "5";
+                    Draft(window).DelaySeconds = "invalid";
+                    bool notify = !fixture.Saved().General.NotifyOnQuickSave;
+                    Draft(window).NotifyOnQuickSave = notify;
+                    switch (route)
+                    {
+                        case "title-bar": window.Close(); break;
+                        case "close-command": SettingsWindow.CloseCommand.Execute(null, window); break;
+                        case "button":
+                            Assert.IsType<Button>(window.FindName("CancelButton")).RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));
+                            break;
+                        case "escape":
+                            var escape = Assert.Single(window.InputBindings.OfType<KeyBinding>(), binding => binding.Key == Key.Escape);
+                            Assert.IsType<RoutedUICommand>(escape.Command).Execute(null, window);
+                            break;
+                        case "prepare-exit":
+                            Assert.True(window.PrepareForAppExit(keepVisible: true));
+                            Assert.True(window.IsVisible);
+                            window.CloseForExit();
+                            closed = true;
+                            break;
+                        case "exit": window.CloseForExit(); closed = true; break;
+                    }
+                    Assert.False(window.IsVisible);
+                    Assert.False(Draft(window).HasErrors);
+                    Assert.Equal("555", Draft(window).MaxItems);
+                    Assert.Equal("3", Draft(window).DelaySeconds);
+                    Assert.Equal(555, fixture.Saved().Queue.MaxItems);
+                    Assert.Equal(3, fixture.Saved().Capture.DelaySeconds);
+                    Assert.True(fixture.Saved().General.PlayCaptureSound);
+                    Assert.Equal(notify, fixture.Saved().General.NotifyOnQuickSave);
+                }
+                finally { if (!closed) window.CloseForExit(); }
+            }
+        }
+        finally { application.Shutdown(); }
+    }
+
+    private static void VerifySettingsSearchShortcut()
+    {
+        using var language = UiText.UseLanguage("ko-KR");
+        Application application = CreateThemedApplication();
+        SettingsWindow window = CreateSettingsUxWindow(new AppSettings()).Window;
+        try
+        {
+            window.Show();
+            Drain(window);
+            var tabs = Assert.IsType<TabControl>(window.FindName("CategoryTabs"));
+            var search = Assert.IsType<TextBox>(tabs.Template.FindName("SettingsSearchBox", tabs));
+            search.Text = "단축키";
+            search.Select(1, 1);
+            Assert.True(window.HandleSearchShortcut(Key.F, ModifierKeys.Control));
+            Assert.Same(search, Keyboard.FocusedElement);
+            Assert.Equal(0, search.SelectionStart);
+            Assert.Equal(search.Text.Length, search.SelectionLength);
+            Assert.False(window.HandleSearchShortcut(Key.F, ModifierKeys.Control | ModifierKeys.Shift));
+
+            search.Clear();
+            tabs.SelectedItem = tabs.Items.OfType<TabItem>().Single(tab => Equals(tab.Header, UiText.Get("SettingsUx_TabShortcuts")));
+            Drain(window);
+            var recorder = Assert.IsType<HotkeyRecorder>(window.FindName("CaptureTextHotkeyRecorder"));
+            Button record = Descendants(recorder).OfType<Button>().First();
+            record.BringIntoView();
+            Drain(window);
+            record.RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));
+            Assert.Same(recorder, HotkeyRecorder.Active);
+            Assert.Same(record, Keyboard.FocusedElement);
+            Assert.False(window.HandleSearchShortcut(Key.F, ModifierKeys.Control));
+            Assert.Same(record, Keyboard.FocusedElement);
+            Assert.True(recorder.HandleRecordedKey(Key.F, ModifierKeys.Control));
+            Assert.Equal("Ctrl+F", recorder.Text);
+            Assert.Null(HotkeyRecorder.Active);
+        }
+        finally { window.CloseForExit(); application.Shutdown(); }
     }
 
     private static void VerifySettingsUxCategories()
@@ -189,21 +322,28 @@ public sealed partial class SettingsThemePreviewTests
                         Assert.Equal(new Thickness(10, 4, 10, 4), action.Padding);
                     }
                     TabItem[] items = tabs.Items.OfType<TabItem>().ToArray();
-                    string[] expected = ["SettingsUx_TabGeneral", "SettingsUx_TabCapture", "SettingsUx_TabRecording",
-                        "SettingsUx_TabEditing", "SettingsUx_TabShortcuts", "SettingsUx_TabStorage", "SettingsUx_TabAbout"];
+                    string[] expected = ["SettingsUx_TabCapture", "SettingsUx_TabRecording", "SettingsUx_TabEditing",
+                        "SettingsStructure_TabPins", "SettingsStructure_TabText", "SettingsStructure_TabStorage",
+                        "SettingsUx_TabShortcuts", "SettingsUx_TabGeneral", "SettingsStructure_TabAbout"];
                     Assert.Equal(expected.Select(UiText.Get), items.Select(tab => (string)tab.Header));
                     Assert.Equal(items.Select(tab => (string)tab.Header), items.Select(AutomationProperties.GetName));
                     Assert.All(items, tab => Assert.False(string.IsNullOrWhiteSpace(tab.ToolTip as string)));
                     Assert.Equal(items.Length, items.Select(tab => tab.Tag).Distinct().Count());
                     Assert.All(items, tab => Assert.IsAssignableFrom<Geometry>(tab.Tag));
 
-                    // Every category is reachable without scrolling the list, at the default and minimum sizes.
+                    // The default size fits the list; the minimum size keeps its last category reachable by scrolling.
                     var categories = Assert.IsType<ScrollViewer>(tabs.Template.FindName("CategoryScroll", tabs));
                     Assert.Equal(0, categories.ScrollableHeight, 1);
                     window.Width = window.MinWidth;
                     window.Height = window.MinHeight;
                     Drain(window);
-                    Assert.Equal(0, categories.ScrollableHeight, 1);
+                    categories.ScrollToEnd();
+                    Drain(window);
+                    Assert.Equal(categories.ScrollableHeight, categories.VerticalOffset, 1);
+                    Rect lastCategory = items[^1].TransformToAncestor(categories)
+                        .TransformBounds(new Rect(items[^1].RenderSize));
+                    Assert.True(lastCategory.Top >= -1 && lastCategory.Bottom <= categories.ActualHeight + 1);
+                    categories.ScrollToTop();
                     window.Width = 940;
                     window.Height = 700;
 
@@ -233,18 +373,21 @@ public sealed partial class SettingsThemePreviewTests
                         && ReferenceEquals(binding.Command, SettingsWindow.ApplyCommand));
                     Assert.Equal(UiText.Get("Dialog.Close"), primary.Content);
 
-                    // Settings backup moved off the command bar onto the About page.
+                    // Settings backup belongs to the named storage group; resetting defaults remains in About.
                     var export = Assert.IsType<Button>(window.FindName("ExportSettingsButton"));
                     var import = Assert.IsType<Button>(window.FindName("ImportSettingsButton"));
                     var about = Assert.IsType<TabItem>(window.FindName("UpdateTab"));
                     Assert.Same(about, items[^1]);
-                    Assert.True(IsInside(export, about) && IsInside(import, about));
+                    var storage = Assert.IsType<TabItem>(window.FindName("StorageTab"));
+                    var backup = Assert.IsType<Expander>(window.FindName("BackupExpander"));
+                    Assert.True(IsInside(backup, storage));
+                    Assert.True(IsInside(export, backup) && IsInside(import, backup));
                     var defaults = Assert.IsType<Button>(window.FindName("DefaultsButton"));
                     Assert.True(IsInside(defaults, about));
                     Assert.True(defaults.MinHeight >= 24);
 
                     // The retention description states the period that will apply.
-                    tabs.SelectedItem = items[5];
+                    Assert.True(window.NavigateToSection(SettingsSection.Storage));
                     Drain(window);
                     var summary = Assert.IsType<TextBlock>(window.FindName("RetentionSummary"));
                     Assert.Equal(UiText.Format("SettingsUx_RetentionSummary", SettingsUxText.Duration(168)), summary.Text);
@@ -284,10 +427,11 @@ public sealed partial class SettingsThemePreviewTests
         {
             window.Show();
             var tabs = Assert.IsType<TabControl>(window.FindName("CategoryTabs"));
-            tabs.SelectedItem = tabs.Items.OfType<TabItem>().Single(tab => Equals(tab.Header, UiText.Get("SettingsUx_TabStorage")));
+            Assert.True(window.NavigateToSection(SettingsSection.Storage));
             Drain(window);
 
             var advanced = Assert.IsType<Expander>(window.FindName("AdvancedExpander"));
+            Assert.Equal(UiText.Get("SettingsStructure_GitHub"), advanced.Header);
             Assert.False(advanced.IsExpanded);
             var box = Assert.IsType<PasswordBox>(window.FindName("GitHubTokenBox"));
             Assert.False(box.IsVisible);
@@ -350,6 +494,8 @@ public sealed partial class SettingsThemePreviewTests
                     window.Show();
                     var tabs = Assert.IsType<TabControl>(window.FindName("CategoryTabs"));
                     tabs.SelectedItem = tabs.Items.OfType<TabItem>().Single(tab => Equals(tab.Header, UiText.Get("SettingsUx_TabShortcuts")));
+                    Assert.True(window.NavigateToSetting(nameof(SettingsDraft.OpenLibraryHotkey)));
+                    Assert.True(window.NavigateToSetting(nameof(SettingsDraft.ForceCoreShortcuts)));
                     Drain(window);
                     HotkeyRecorder[] recorders = Descendants(window).OfType<HotkeyRecorder>().ToArray();
                     Assert.Equal(15, recorders.Length);
@@ -411,7 +557,7 @@ public sealed partial class SettingsThemePreviewTests
                     Assert.False(Draft(window).ForceCoreShortcuts);
                     SaveSettingsUxEvidence(RenderEditorWindow(window), $"settings-shortcuts-{name}-install-glass-after.png");
 
-                    tabs.SelectedItem = tabs.Items.OfType<TabItem>().Single(tab => Equals(tab.Header, UiText.Get("SettingsUx_TabEditing")));
+                    Assert.True(window.NavigateToSetting(nameof(SettingsDraft.AlwaysShowShortcutHints)));
                     Drain(window);
                     var hints = Assert.IsType<TextBlock>(window.FindName("ShortcutHintsDescription"));
                     var alwaysHints = Assert.IsType<CheckBox>(window.FindName("AlwaysShowShortcutHintsCheck"));

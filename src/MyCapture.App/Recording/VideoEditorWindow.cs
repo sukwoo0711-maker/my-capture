@@ -692,7 +692,7 @@ internal sealed partial class VideoEditorWindow : Window
         AutomationProperties.SetName(timelineScroll, UiText.Get("Text_D9378793F9FE"));
         Grid.SetRow(timelineScroll, 3);
         root.Children.Add(timelineScroll);
-        var statusBar = new Border { MinHeight = 20, Margin = new Thickness(0, 4, 0, 0), Child = _statusLabel };
+        var statusBar = new Border { MinHeight = 20, Margin = new Thickness(0, 4, 0, 0), Child = BuildFrameSaveStatus() };
         Grid.SetRow(statusBar, 4);
         Grid.SetColumnSpan(statusBar, 2);
         root.Children.Add(statusBar);
@@ -770,7 +770,8 @@ internal sealed partial class VideoEditorWindow : Window
         AutomationProperties.SetName(saveEdits, UiText.Get("MediaExport_SaveEdits"));
         saveEdits.ToolTip = UiText.Get("VideoEditorUx_SaveEditsHelp");
         AutomationProperties.SetHelpText(saveEdits, UiText.Get("VideoEditorUx_SaveEditsHelp"));
-        saveEdits.Click += (_, _) => CommitTrim();
+        ShortcutPresentation.Attach(saveEdits, ShortcutScope.Video, "Save");
+        saveEdits.Click += (_, _) => _shortcutActions["Save"]();
         Button export = MediaExportVisuals.Button(this, UiText.Get("VideoEditorUx_ExportShort"), "MediaExport_ArrowExport");
         export.Name = "VideoExport";
         _exportToolButton = export;
@@ -778,7 +779,8 @@ internal sealed partial class VideoEditorWindow : Window
         AutomationProperties.SetName(export, UiText.Get("MediaExport_ExportFormats"));
         export.ToolTip = UiText.Get("VideoEditorUx_ExportHelp");
         AutomationProperties.SetHelpText(export, UiText.Get("VideoEditorUx_ExportHelp"));
-        export.Click += (_, _) => OpenExport();
+        ShortcutPresentation.Attach(export, ShortcutScope.Video, "Export");
+        export.Click += (_, _) => _shortcutActions["Export"]();
         _editControls.Add(saveEdits); _editControls.Add(export);
         output.Children.Add(MyCapture.App.Capture.CaptureCommandMenu.CreateSplitButton());
         output.Children.Add(export); output.Children.Add(saveEdits);
@@ -1204,7 +1206,9 @@ internal sealed partial class VideoEditorWindow : Window
                 }
             }
         };
-        Grid.SetColumn(_detailToggle, 2);
+        row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        InitializeCurrentFrameSave(row);
+        Grid.SetColumn(_detailToggle, 3);
         row.Children.Add(_detailToggle);
         controls.Children.Add(row);
         ShortcutPresentation.Attach(_saveProgress.CancelButton, ShortcutScope.Video, "Cancel");
@@ -1264,11 +1268,17 @@ internal sealed partial class VideoEditorWindow : Window
 
         UpdateOverlayActionStates();
         RefreshTrimSummary();
+        UpdateCurrentFrameSaveState();
     }
 
     // ---- media lifecycle ----
 
-    private void OnPreviewPositionRequested() => StudioRangeVideoEffect.PositionRequested(_media);
+    private void OnPreviewPositionRequested()
+    {
+        StudioRangeVideoEffect.PositionRequested(_media);
+        if (_saveCurrentFrameButton is not null) _saveCurrentFrameButton.IsEnabled = false;
+        _ = RefreshFrameAvailabilityAfterSeekAsync();
+    }
 
     private async void OnMediaOpened(object? sender, RoutedEventArgs e)
     {
@@ -1454,7 +1464,7 @@ internal sealed partial class VideoEditorWindow : Window
                 _isPlaying = true;
                 _playbackTimer.Start();
                 UpdatePlayButton();
-                _statusLabel.Text = UiText.Get("Text_FD6443988325");
+                _statusLabel.Text = _resumedFrameSaveStatus ?? UiText.Get("Text_FD6443988325");
             });
         }
         catch (OperationCanceledException)
@@ -1553,6 +1563,7 @@ internal sealed partial class VideoEditorWindow : Window
             return;
         }
 
+        UpdateCurrentFrameSaveState();
         if (IsLoaded && !_cutSeekInFlight)
         {
             double presented = Math.Clamp(
@@ -2750,6 +2761,7 @@ internal sealed partial class VideoEditorWindow : Window
     private void SetOperationRunning(bool running)
     {
         bool starting = running && !_operationRunning;
+        if (starting) _resumedFrameSaveStatus = null;
         if (running) { _resumeAfterScrub = false; PausePlayback(); }
         _operationRunning = running;
         SetEditControlsEnabled(!running && _mediaReady);
@@ -2852,6 +2864,7 @@ internal sealed partial class VideoEditorWindow : Window
         _shortcutActions["Trim"] = SelectTrimHandle;
         _shortcutActions["Split"] = SplitHere;
         _shortcutActions["FrameEdit"] = EditCurrentFrame;
+        _shortcutActions["SaveFrame"] = () => _ = SaveCurrentFrameAsync();
         _shortcutActions["First"] = () => Seek(_timeline.InMs);
         _shortcutActions["Last"] = () => Seek(_timeline.OutMs);
         _shortcutActions["Previous"] = () => StepCoarse(-1);
@@ -2863,6 +2876,8 @@ internal sealed partial class VideoEditorWindow : Window
         _shortcutActions["Undo"] = () => RestoreEdit(false);
         _shortcutActions["Redo"] = () => RestoreEdit(true);
         _shortcutActions["Gif"] = ExportGif;
+        _shortcutActions["Save"] = CommitTrim;
+        _shortcutActions["Export"] = () => OpenExport();
         _shortcutActions["AddText"] = AddTextOverlay;
         _shortcutActions["EditLayer"] = () => { if (_overlayList.SelectedItem is not null) EditSelectedOverlay(); };
         _shortcutActions["DeleteLayer"] = DeleteSelection;
@@ -2876,7 +2891,7 @@ internal sealed partial class VideoEditorWindow : Window
         // Hangul mode reports I, O, E and G as ImeProcessed; outside a text box they are shortcuts.
         Key key = ShortcutInput.Resolve(e.Key, e.ImeProcessedKey,
             Keyboard.FocusedElement is System.Windows.Controls.Primitives.TextBoxBase);
-        e.Handled = HandleShortcut(key, Keyboard.Modifiers);
+        e.Handled = HandleShortcut(key, Keyboard.Modifiers, Keyboard.FocusedElement, e.IsRepeat);
         _hangulRelay.NoteKeyDown(e.Key, key, e.Handled);
     }
 
@@ -2904,7 +2919,11 @@ internal sealed partial class VideoEditorWindow : Window
         e.Handled = HandleShortcut(Key.Space, ModifierKeys.None);
     }
 
-    private void OnPreviewPointerDown(object? sender, MouseButtonEventArgs e) => _keyboardNavigation = false;
+    private void OnPreviewPointerDown(object? sender, MouseButtonEventArgs e)
+    {
+        _keyboardNavigation = false;
+        _resumedFrameSaveStatus = null;
+    }
 
     private bool FocusedControlOwnsSpace()
     {
@@ -2925,13 +2944,19 @@ internal sealed partial class VideoEditorWindow : Window
     {
         if (e.Key != Key.ImeProcessed || !_mediaReady || Keyboard.FocusedElement is System.Windows.Controls.Primitives.TextBoxBase) return;
         Key key = ShortcutInput.Resolve(e.Key, e.ImeProcessedKey, textInputFocused: false);
-        e.Handled = HandleShortcut(key, Keyboard.Modifiers);
+        e.Handled = HandleShortcut(key, Keyboard.Modifiers, Keyboard.FocusedElement, e.IsRepeat);
         _hangulRelay.NoteKeyDown(e.Key, key, e.Handled);
     }
 
-    internal bool HandleShortcut(Key key, ModifierKeys modifiers)
+    internal bool HandleShortcut(Key key, ModifierKeys modifiers) =>
+        HandleShortcut(key, modifiers, Keyboard.FocusedElement);
+
+    internal bool HandleShortcut(Key key, ModifierKeys modifiers, IInputElement? focusedElement, bool isRepeat = false)
     {
+        if (focusedElement is TextBoxBase or PasswordBox) return false;
         string? command = ShortcutCatalog.Match(ShortcutScope.Video, key, modifiers);
+        if (_savingCurrentFrame || (command == "SaveFrame" && (isRepeat || !CanSaveCurrentFrame))) return false;
+        if (command is not null && command != "SaveFrame") _resumedFrameSaveStatus = null;
         if (command is null || (command == "Cancel" && !_operationRunning)) return false;
         if (_operationRunning && command != "Cancel")
             return command is "Play" or "Previous" or "Next" or "PreviousFrame" or "NextFrame";
@@ -2940,6 +2965,12 @@ internal sealed partial class VideoEditorWindow : Window
 
     private void UpdateStatusForMode()
     {
+        UpdateCurrentFrameSaveState();
+        if (_resumedFrameSaveStatus is { } frameStatus && !_operationRunning)
+        {
+            _statusLabel.Text = frameStatus;
+            return;
+        }
         // History buttons mirror the stack so they disable when there is nothing to undo.
         if (_undoButton is not null) _undoButton.IsEnabled = _undo.Count > 0;
         if (_redoButton is not null) _redoButton.IsEnabled = _redo.Count > 0;
@@ -3055,6 +3086,7 @@ internal sealed partial class VideoEditorWindow : Window
     {
         FinishDraftRecovery();
         _closing = true;
+        _frameSaveCts?.Cancel();
         _sourceFileSizeCts?.Cancel();
         _sourceFileSizeCts?.Dispose();
         _sourceFileSizeCts = null;

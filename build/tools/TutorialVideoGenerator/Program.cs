@@ -30,6 +30,17 @@ internal static class Program
     [STAThread]
     private static int Main(string[] args)
     {
+        if (args.Length == 2 && args[0] == "review")
+        {
+            string folder = Path.GetFullPath(args[1]);
+            foreach (string language in new[] { "ko", "en" })
+            {
+                string[] clips = Directory.GetFiles(folder, $"*.{language}.mp4").Order(StringComparer.Ordinal).ToArray();
+                ClipReview.SaveContactSheet(clips, Path.Combine(folder, $"contact-sheet.{language}.png"));
+                Console.WriteLine($"REVIEW={language} CLIPS={clips.Length}");
+            }
+            return 0;
+        }
         if (args.Length >= 3 && args[0] == "inspect")
         {
             // inspect <clip.mp4> <ms>[,<ms>…]: full-size decoded frames next to the clip, for review.
@@ -169,6 +180,23 @@ internal static class Program
             GC.WaitForPendingFinalizers();
         }
 
+        if (failures.Count == 0)
+        {
+            try
+            {
+                if (options.Sheets)
+                    foreach (string language in options.Languages)
+                        ClipReview.SaveContactSheet(options.Features.Select(feature => Path.Combine(options.Output, $"{feature}.{language}.mp4")).ToArray(),
+                            Path.Combine(options.Output, $"contact-sheet.{language}.png"));
+                if (options.Install) Install(options);
+            }
+            catch (Exception error)
+            {
+                failures.Add($"Review or installation: {error}");
+                Console.Error.WriteLine($"OUTPUT=FAIL {error}");
+            }
+        }
+
         string dll = typeof(TutorialCatalog).Assembly.Location;
         var summary = new
         {
@@ -190,9 +218,7 @@ internal static class Program
         File.WriteAllText(Path.Combine(options.Output, "receipt.json"),
             JsonSerializer.Serialize(summary, new JsonSerializerOptions { WriteIndented = true }), new UTF8Encoding(false));
         Console.WriteLine($"RESULT={(failures.Count == 0 ? "PASS" : "FAIL")} CLIPS={receipts.Count} BYTES={summary.Bytes} POSTER_BYTES={summary.PosterBytes} OUT={options.Output}");
-        if (failures.Count > 0) return 1;
-        if (options.Install) Install(options);
-        return 0;
+        return failures.Count == 0 ? 0 : 1;
     }
 
     private sealed record ClipReceipt(string Feature, string Language, long Bytes, int Frames, double Seconds, int UniquePictures,
@@ -207,6 +233,9 @@ internal static class Program
         TutorialStoryboard story = scene.Story;
         if (story.DurationSeconds is < 7 or > 15)
             throw new InvalidDataException($"Clip length {story.DurationSeconds:0.0}s is outside 7–15 s.");
+        if ((Scenes.PracticePinScene.Features.Contains(feature) || Scenes.PracticeGuideScene.Features.Contains(feature))
+            && story.DurationSeconds > 9)
+            throw new InvalidDataException($"Practice clip length {story.DurationSeconds:0.0}s is outside 7–9 s.");
         string mp4 = Path.Combine(options.Output, $"{feature}.{language}.mp4");
         string poster = Path.ChangeExtension(mp4, ".jpg");
         var keys = new List<(double Ms, string Label)>();
@@ -246,9 +275,12 @@ internal static class Program
 
         long bytes = new FileInfo(mp4).Length, posterBytes = new FileInfo(poster).Length;
         Console.WriteLine($"CLIP=PASS ID={feature} LANGUAGE={language} FRAMES={frame} SECONDS={story.DurationSeconds:0.00} BYTES={bytes} POSTER={posterBytes} MS={renderMs}");
-        return new ClipReceipt(feature, language, bytes, frame, Math.Round(story.DurationSeconds, 2), story.Frames.Count, renderMs,
+        var receipt = new ClipReceipt(feature, language, bytes, frame, Math.Round(story.DurationSeconds, 2), story.Frames.Count, renderMs,
             Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(mp4))), posterBytes,
             Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(poster))), scene.Provenance);
+        File.WriteAllText(Path.Combine(options.Output, $"{feature}.{language}.receipt.json"),
+            JsonSerializer.Serialize(receipt, new JsonSerializerOptions { WriteIndented = true }), new UTF8Encoding(false));
+        return receipt;
     }
 
     private static void Install(Options options)

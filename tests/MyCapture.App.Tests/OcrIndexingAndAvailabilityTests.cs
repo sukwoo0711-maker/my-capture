@@ -472,7 +472,7 @@ public sealed class OcrIndexingAndAvailabilityTests : KoreanCaptionTest
         typeof(OcrResultPresenter).GetField("_inFlight", flags)!.SetValue(presenter, cancellation);
         typeof(OcrResultPresenter).GetField("_onFreshResult", flags)!.SetValue(presenter, (Action<OcrResult>)(_ => writes++));
         var recognition = (Task)typeof(OcrResultPresenter).GetMethod("RecognizeAsync", flags)!.Invoke(presenter,
-            [OcrRequest.FromBitmap(SolidBitmap(20, 20)), cancellation, false])!;
+            [OcrRequest.FromBitmap(SolidBitmap(20, 20)), cancellation, false, null])!;
         if (completeBeforeLease)
         {
             service.Complete("queued result");

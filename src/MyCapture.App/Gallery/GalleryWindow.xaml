@@ -133,19 +133,19 @@
              outside the visual tree. -->
         <ContextMenu x:Key="Gallery.TileContextMenu"
                      DataContext="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}">
-            <!-- 1. What leaves the library for somewhere else: the only group whose commands carry icons (and Delete). -->
+            <!-- Open actions, copy/export, organize, source, delete/rename, then properties. -->
+            <MenuItem Tag="Play" Header="{loc:Text Text_D43A776C5E28}" CommandParameter="{Binding}" Click="OnPlayMenuClick"
+                      InputGestureText="Enter" AutomationProperties.Name="{loc:Text Text_D43A776C5E28}"
+                      Visibility="{Binding IsVideo, Converter={StaticResource BoolToVisibility}}" />
+            <MenuItem Tag="Edit" Header="{loc:Text Text_1003CFC78E66}" CommandParameter="{Binding}" Click="OnEditClick" InputGestureText="{Binding EditGestureText}"
+                      AutomationProperties.Name="{loc:Text Text_1003CFC78E66}" />
+            <MenuItem Tag="Preview" Header="{loc:Text LibraryUx_Preview}" CommandParameter="{Binding}" Click="OnPreviewMenuClick" InputGestureText="Space"
+                      AutomationProperties.Name="{loc:Text LibraryUx_Preview}" />
             <MenuItem Tag="Pin" Header="{loc:Text Gallery.Float}" CommandParameter="{Binding}" Click="OnFloatClick" InputGestureText="P"
                       AutomationProperties.Name="{loc:Text Gallery.Float}"
                       Visibility="{Binding IsImage, Converter={StaticResource BoolToVisibility}}">
                 <MenuItem.Icon>
                     <themes:SymbolIcon Size="16" Data="{StaticResource Icon.Pin}" Stroke="{DynamicResource Text.Secondary}" Fill="Transparent" />
-                </MenuItem.Icon>
-            </MenuItem>
-            <MenuItem Tag="Copy" Header="{loc:Text Text_42A667BC71B0}" CommandParameter="{Binding}" Click="OnCopyClick" InputGestureText="Ctrl+C"
-                      AutomationProperties.Name="{loc:Text Text_42A667BC71B0}"
-                      Visibility="{Binding IsImage, Converter={StaticResource BoolToVisibility}}">
-                <MenuItem.Icon>
-                    <themes:SymbolIcon Size="16" Data="{StaticResource Icon.Copy}" Stroke="{DynamicResource Text.Secondary}" Fill="Transparent" />
                 </MenuItem.Icon>
             </MenuItem>
             <MenuItem Tag="Recognize" Header="{loc:Text Text_854582314EBD}"
@@ -159,49 +159,50 @@
                           Stroke="{DynamicResource Text.Secondary}" Fill="Transparent" />
                 </MenuItem.Icon>
             </MenuItem>
-            <Separator Tag="SeparatorMedia" />
-            <!-- 2. Looking at the capture. -->
-            <MenuItem Tag="Edit" Header="{loc:Text Text_1003CFC78E66}" CommandParameter="{Binding}" Click="OnEditClick" InputGestureText="{Binding EditGestureText}"
-                      AutomationProperties.Name="{loc:Text Text_1003CFC78E66}" />
-            <MenuItem Tag="Preview" Header="{loc:Text LibraryUx_Preview}" CommandParameter="{Binding}" Click="OnPreviewMenuClick" InputGestureText="Space"
-                      AutomationProperties.Name="{loc:Text LibraryUx_Preview}" />
             <MenuItem Tag="Compare" Header="{loc:Text Gallery.Compare}"
                       Command="{x:Static gallery:GalleryWindow.CompareCommand}"
                       CommandTarget="{Binding PlacementTarget, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
-            <!-- A card's source glyph skips Tab, so its actions are here for keyboard users. -->
-            <MenuItem Tag="SourceDetails" Header="{loc:Text LibraryUx_SourceDetails}" CommandParameter="{Binding}" Click="OnSourceDetailsMenuClick"
-                      AutomationProperties.Name="{loc:Text LibraryUx_SourceDetails}"
-                      Visibility="{Binding HasSourceBadge, Converter={StaticResource BoolToVisibility}}" />
-            <MenuItem Tag="SameSource" Header="{loc:Text Source.ShowSame}" CommandParameter="{Binding}" Click="OnSameSourceMenuClick"
-                      AutomationProperties.Name="{loc:Text Source.ShowSame}"
-                      Visibility="{Binding HasSourceBadge, Converter={StaticResource BoolToVisibility}}" />
             <Separator />
-            <!-- 3. Organizing: keep (a whole selection together), rename, move, tag. -->
+            <MenuItem Tag="Copy" Header="{loc:Text Text_42A667BC71B0}" CommandParameter="{Binding}" Click="OnCopyClick" InputGestureText="Ctrl+C"
+                      AutomationProperties.Name="{loc:Text Text_42A667BC71B0}"
+                      Visibility="{Binding IsImage, Converter={StaticResource BoolToVisibility}}">
+                <MenuItem.Icon>
+                    <themes:SymbolIcon Size="16" Data="{StaticResource Icon.Copy}" Stroke="{DynamicResource Text.Secondary}" Fill="Transparent" />
+                </MenuItem.Icon>
+            </MenuItem>
+            <MenuItem Tag="ExportImage" Header="{loc:Text Library.ExportImage}"
+                      CommandParameter="{Binding}"
+                      AutomationProperties.Name="{loc:Text Library.ExportImage}"
+                      Visibility="{Binding IsImage, Converter={StaticResource BoolToVisibility}}"
+                      Click="OnReducedExportClick" />
+            <MenuItem Tag="CreatePdf" Header="{loc:Text ContactSheet.Action}" CommandParameter="{Binding}"
+                      AutomationProperties.Name="{loc:Text ContactSheet.Action}" Click="OnContactSheetClick" />
+            <MenuItem Tag="ExportGif" Header="{loc:Text Library.ExportGif}"
+                      CommandParameter="{Binding}"
+                      AutomationProperties.Name="{loc:Text Library.ExportGif}"
+                      InputGestureText="G"
+                      Visibility="{Binding IsVideo, Converter={StaticResource BoolToVisibility}}"
+                      Click="OnGifMenuClick" />
+            <Separator />
+            <MenuItem Tag="Move" Header="{loc:Text Folder410.MoveCaptures}" CommandParameter="{Binding}"
+                      InputGestureText="M" Click="OnMoveCapturesClick" />
+            <MenuItem Tag="Tags" Header="{loc:Text Library.Tags.Edit}" CommandParameter="{Binding}" Click="OnBatchTagsClick" />
             <MenuItem Tag="Keep" Header="{loc:Text LibraryUx_Keep}"
                       CommandParameter="{Binding}"
                       AutomationProperties.Name="{loc:Text LibraryUx_KeepToggleName}"
                       InputGestureText="K"
                       Click="OnPinMenuClick" />
-            <MenuItem Tag="Rename" Header="{loc:Text Library453.Rename}" CommandParameter="{Binding}" Click="OnRenameCaptureClick"
-                      InputGestureText="F2" AutomationProperties.Name="{loc:Text Library453.Rename}" />
-            <MenuItem Tag="Move" Header="{loc:Text Folder410.MoveCaptures}" CommandParameter="{Binding}"
-                      InputGestureText="M" Click="OnMoveCapturesClick" />
-            <MenuItem Tag="Tags" Header="{loc:Text Library.Tags.Edit}" CommandParameter="{Binding}" Click="OnBatchTagsClick" />
+            <Separator Tag="SeparatorSource" />
+            <MenuItem Tag="OpenSource" Header="{loc:Text Source.Open}" CommandParameter="{Binding}" Click="OnOpenSourceMenuClick"
+                      AutomationProperties.Name="{loc:Text Source.Open}"
+                      Visibility="{Binding SourceProvenance.CanOpen, Converter={StaticResource BoolToVisibility}}" />
+            <MenuItem Tag="SameSource" Header="{loc:Text Source.ShowSame}" CommandParameter="{Binding}" Click="OnSameSourceMenuClick"
+                      AutomationProperties.Name="{loc:Text Source.ShowSame}"
+                      Visibility="{Binding HasSourceBadge, Converter={StaticResource BoolToVisibility}}" />
+            <MenuItem Tag="SourceDetails" Header="{loc:Text LibraryUx_SourceDetails}" CommandParameter="{Binding}" Click="OnSourceDetailsMenuClick"
+                      AutomationProperties.Name="{loc:Text LibraryUx_SourceDetails}"
+                      Visibility="{Binding HasSourceBadge, Converter={StaticResource BoolToVisibility}}" />
             <Separator />
-            <!-- 4. Export. -->
-            <MenuItem Tag="ExportImage" Header="{loc:Text ExportReduction_Title}"
-                      CommandParameter="{Binding}"
-                      AutomationProperties.Name="{loc:Text ExportReduction_Title}"
-                      Visibility="{Binding IsImage, Converter={StaticResource BoolToVisibility}}"
-                      Click="OnReducedExportClick" />
-            <MenuItem Tag="ExportGif" Header="{loc:Text Text_D44617983641}"
-                      CommandParameter="{Binding}"
-                      AutomationProperties.Name="{loc:Text Text_D44617983641}"
-                      InputGestureText="G"
-                      Visibility="{Binding IsVideo, Converter={StaticResource BoolToVisibility}}"
-                      Click="OnGifMenuClick" />
-            <Separator />
-            <!-- 5. Delete, alone at the end. -->
             <MenuItem Tag="Delete" Header="{loc:Text Text_6139B6C3ED73}"
                       CommandParameter="{Binding}"
                       AutomationProperties.Name="{loc:Text Text_6139B6C3ED73}"
@@ -213,6 +214,9 @@
                           Stroke="{DynamicResource Text.Primary}" Fill="Transparent" />
                 </MenuItem.Icon>
             </MenuItem>
+            <MenuItem Tag="Rename" Header="{loc:Text Library453.Rename}" CommandParameter="{Binding}" Click="OnRenameCaptureClick"
+                      InputGestureText="F2" AutomationProperties.Name="{loc:Text Library453.Rename}" />
+            <Separator />
         </ContextMenu>
 
         <!-- Declared ahead of the card templates, which use it for the folder badge. -->
@@ -415,7 +419,7 @@
                             </Grid.ColumnDefinitions>
                             <Grid x:Name="TileStatusBadges" HorizontalAlignment="Left" ClipToBounds="True">
                                 <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="Auto" /><ColumnDefinition Width="Auto" /><ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="Auto" /><ColumnDefinition Width="Auto" />
                                 </Grid.ColumnDefinitions>
                                 <Border x:Name="KeepBadge" Padding="4,1" CornerRadius="3" Margin="0,0,4,0"
                                         Background="{DynamicResource Surface.Sunken}" ToolTip="{loc:Text LibraryUx_KeptBadge}"
@@ -423,12 +427,7 @@
                                         Visibility="{Binding IsPinned, Converter={StaticResource BoolToVisibility}}">
                                     <themes:SymbolIcon Size="12" Data="{DynamicResource LibraryUx.Icon.Kept}" Stroke="{DynamicResource Text.Secondary}" Fill="Transparent" />
                                 </Border>
-                                <Border x:Name="EditedBadge" Grid.Column="1" Padding="4,1" CornerRadius="3" Margin="0,0,4,0" Background="{DynamicResource Surface.Sunken}"
-                                        ToolTip="{loc:Text Text_2C64DDA4D878}" AutomationProperties.Name="{loc:Text Text_2C64DDA4D878}"
-                                        Visibility="{Binding HasAnnotations, Converter={StaticResource BoolToVisibility}}">
-                                    <themes:SymbolIcon Size="12" Data="{StaticResource Icon.Edit}" Stroke="{DynamicResource Text.Secondary}" Fill="Transparent" />
-                                </Border>
-                                <Border x:Name="FolderBadge" Grid.Column="2" Style="{StaticResource Gallery.FolderBadge}"
+                                <Border x:Name="FolderBadge" Grid.Column="1" Style="{StaticResource Gallery.FolderBadge}"
                                         Padding="4,1" CornerRadius="3" HorizontalAlignment="Left" MaxWidth="96"
                                         MinWidth="20" IsHitTestVisible="True" ToolTip="{Binding FolderBadge}">
                                     <ContentPresenter Content="{Binding}" ContentTemplate="{StaticResource Gallery.FolderBadgeContent}" />
@@ -488,11 +487,10 @@
                     <Setter TargetName="SelectBox" Property="themes:FluidMotion.FadeTo" Value="1" />
                     <Setter TargetName="SelectBox" Property="IsHitTestVisible" Value="True" />
                 </DataTrigger>
-                <!-- The optional kept/edited marks yield to a reason; the folder remains because it
+                <!-- The optional kept mark yields to a reason; the folder remains because it
                      tells the user where a result lives. -->
                 <DataTrigger Binding="{Binding MetadataCaption, Converter={StaticResource Card.HasText}}" Value="True">
                     <Setter TargetName="KeepBadge" Property="Visibility" Value="Collapsed" />
-                    <Setter TargetName="EditedBadge" Property="Visibility" Value="Collapsed" />
                 </DataTrigger>
                 <!-- A card in an opened folder: a smaller title and narrower folder badge. -->
                 <Trigger SourceName="TileCard" Property="gallery:GalleryCardStyle.IsCompact" Value="True">
@@ -663,6 +661,8 @@
         <PathGeometry x:Key="LibraryUx.Icon.Kept"
                       Figures="M5.25,3.25 L14.75,3.25 L14.75,17 L10,13.5 L5.25,17 Z" />
         <PathGeometry x:Key="LibraryUx.Icon.Add" Figures="M10,4.25 L10,15.75 M4.25,10 L15.75,10" />
+        <PathGeometry x:Key="LibraryUx.Icon.Pdf"
+                      Figures="M5,2.5 L11.5,2.5 L16,7 L16,17.5 L5,17.5 Z M11.5,2.5 L11.5,7 L16,7 M8,10 L13,10 M8,13 L13,13" />
         <PathGeometry x:Key="LibraryUx.Icon.Calendar"
                       Figures="M4.25,4.75 L15.75,4.75 A1,1 0 0 1 16.75,5.75 L16.75,15.75 A1,1 0 0 1 15.75,16.75 L4.25,16.75 A1,1 0 0 1 3.25,15.75 L3.25,5.75 A1,1 0 0 1 4.25,4.75 Z M3.25,8.5 L16.75,8.5 M7,3 L7,6.25 M13,3 L13,6.25" />
         <PathGeometry x:Key="LibraryUx.Icon.Chevron" Figures="M7.75,5.25 L12.5,10 L7.75,14.75" />
@@ -1740,9 +1740,23 @@
                         </Button>
                         <TextBlock x:Name="SelectionCountLabel" Text="{Binding SelectionText}" Width="96" TextTrimming="CharacterEllipsis"
                                    VerticalAlignment="Center" Margin="2,0,8,0" FontWeight="SemiBold" AutomationProperties.LiveSetting="Polite" />
-                        <!-- The commands follow the card menu's order: pin, copy, edit, preview, keep. Each has its icon and its
-                             label; when the bar is too narrow the labels go first (see FitContentToolbar), and the names and
-                             tooltips stay. -->
+                        <!-- Open actions precede copy and organizing; labels collapse when space is limited. -->
+                        <Button x:Name="EditSelectedButton" Style="{StaticResource LibraryUx.CommandButton}"
+                                IsEnabled="{Binding HasSingleSelection}" CommandParameter="{Binding SingleSelectedTile}" Click="OnEditClick"
+                                ToolTip="{loc:Text LibraryUx_EditHint}" AutomationProperties.Name="{loc:Text Text_1003CFC78E66}">
+                            <StackPanel Orientation="Horizontal">
+                                <themes:SymbolIcon Size="16" Data="{StaticResource Icon.Edit}" Style="{StaticResource LibraryUx.CommandGlyph}" Fill="Transparent" />
+                                <TextBlock x:Name="EditSelectedLabel" Text="{loc:Text Text_1003CFC78E66}" Margin="{DynamicResource CommandButton.IconLabelGap}" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </Button>
+                        <Button x:Name="PreviewSelectedButton" Style="{StaticResource LibraryUx.CommandButton}"
+                                IsEnabled="{Binding HasSingleSelection}" Click="OnPreviewSelectedClick" ToolTip="{loc:Text LibraryUx_PreviewHint}"
+                                AutomationProperties.Name="{loc:Text LibraryUx_Preview}">
+                            <StackPanel Orientation="Horizontal">
+                                <themes:SymbolIcon Size="16" Data="{StaticResource Icon.Image}" Style="{StaticResource LibraryUx.CommandGlyph}" Fill="Transparent" />
+                                <TextBlock x:Name="PreviewSelectedLabel" Text="{loc:Text LibraryUx_Preview}" Margin="{DynamicResource CommandButton.IconLabelGap}" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </Button>
                         <Button x:Name="FloatSelectedButton" Style="{StaticResource LibraryUx.CommandButton}"
                                 IsEnabled="{Binding CanReduceSelected}" CommandParameter="{Binding SingleSelectedTile}" Click="OnFloatClick"
                                 ToolTip="{loc:Text LibraryUx_PinHint}" AutomationProperties.Name="{loc:Text Gallery.Float}">
@@ -1764,20 +1778,12 @@
                                 <TextBlock x:Name="CopySelectedLabel" Text="{loc:Text QuickAccess.Copy}" Margin="{DynamicResource CommandButton.IconLabelGap}" VerticalAlignment="Center" />
                             </StackPanel>
                         </Button>
-                        <Button x:Name="EditSelectedButton" Style="{StaticResource LibraryUx.CommandButton}"
-                                IsEnabled="{Binding HasSingleSelection}" CommandParameter="{Binding SingleSelectedTile}" Click="OnEditClick"
-                                ToolTip="{loc:Text LibraryUx_EditHint}" AutomationProperties.Name="{loc:Text Text_1003CFC78E66}">
+                        <Button x:Name="CreatePdfSelectedButton" Style="{StaticResource LibraryUx.CommandButton}"
+                                IsEnabled="{Binding CanCreatePdfSelected}" Click="OnContactSheetClick"
+                                ToolTip="{loc:Text ContactSheet.Action}" AutomationProperties.Name="{loc:Text ContactSheet.Action}">
                             <StackPanel Orientation="Horizontal">
-                                <themes:SymbolIcon Size="16" Data="{StaticResource Icon.Edit}" Style="{StaticResource LibraryUx.CommandGlyph}" Fill="Transparent" />
-                                <TextBlock x:Name="EditSelectedLabel" Text="{loc:Text Text_1003CFC78E66}" Margin="{DynamicResource CommandButton.IconLabelGap}" VerticalAlignment="Center" />
-                            </StackPanel>
-                        </Button>
-                        <Button x:Name="PreviewSelectedButton" Style="{StaticResource LibraryUx.CommandButton}"
-                                IsEnabled="{Binding HasSingleSelection}" Click="OnPreviewSelectedClick" ToolTip="{loc:Text LibraryUx_PreviewHint}"
-                                AutomationProperties.Name="{loc:Text LibraryUx_Preview}">
-                            <StackPanel Orientation="Horizontal">
-                                <themes:SymbolIcon Size="16" Data="{StaticResource Icon.Image}" Style="{StaticResource LibraryUx.CommandGlyph}" Fill="Transparent" />
-                                <TextBlock x:Name="PreviewSelectedLabel" Text="{loc:Text LibraryUx_Preview}" Margin="{DynamicResource CommandButton.IconLabelGap}" VerticalAlignment="Center" />
+                                <themes:SymbolIcon Size="16" Data="{StaticResource LibraryUx.Icon.Pdf}" Style="{StaticResource LibraryUx.CommandGlyph}" Fill="Transparent" />
+                                <TextBlock x:Name="CreatePdfSelectedLabel" Text="{loc:Text ContactSheet.Action}" Margin="{DynamicResource CommandButton.IconLabelGap}" VerticalAlignment="Center" />
                             </StackPanel>
                         </Button>
                         <Button x:Name="KeepSelectedButton" Style="{StaticResource LibraryUx.CommandButton}"
@@ -1801,19 +1807,12 @@
                               Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
                         <Button.ContextMenu>
                             <ContextMenu DataContext="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}">
-                                <!-- The same groups as a card's menu, for the selection: send, look, organize, export, delete; then the
-                                     library's own commands. -->
+                                <!-- Open actions, export, organize and delete precede library-wide commands. -->
                                 <MenuItem x:Name="FloatSelectedMenu" Header="{loc:Text Gallery.Float}" InputGestureText="P"
                                           IsEnabled="{Binding CanReduceSelected}" CommandParameter="{Binding SingleSelectedTile}"
                                           AutomationProperties.Name="{loc:Text Gallery.Float}" Click="OnFloatClick" />
-                                <Separator />
                                 <MenuItem x:Name="CompareSelectedMenu" Header="{loc:Text Gallery.Compare}" IsEnabled="{Binding CanCompareSelected}" Command="{x:Static gallery:GalleryWindow.CompareCommand}"
                                           CommandTarget="{Binding PlacementTarget, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
-                                <Separator />
-                                <MenuItem x:Name="MoveOverflowMenu" Header="{loc:Text Folder410.MoveCaptures}" Click="OnMoveCapturesClick"
-                                          InputGestureText="M" />
-                                <MenuItem x:Name="BatchTagsMenu" Header="{loc:Text Library.Tags.Edit}" Click="OnBatchTagsClick"
-                                          Visibility="{Binding HasSelection, Converter={StaticResource BoolToVisibility}}" />
                                 <Separator />
                                 <MenuItem x:Name="ReduceSelectedMenu" Header="{loc:Text LibrarySelection_Reduce}" Click="OnReducedExportClick"
                                           CommandParameter="{Binding SingleSelectedTile}"
@@ -1823,6 +1822,12 @@
                                           Visibility="{Binding CanGifSelected, Converter={StaticResource BoolToVisibility}}" />
                                 <MenuItem x:Name="ArchiveOverflowMenu" Header="{loc:Text Library.Archive.Action}" Click="OnExportArchiveClick" />
                                 <MenuItem x:Name="ContactSheetMenu" Header="{loc:Text ContactSheet.Action}" Click="OnContactSheetClick"
+                                          IsEnabled="{Binding CanCreatePdfSelected}" AutomationProperties.Name="{loc:Text ContactSheet.Action}"
+                                          Visibility="{Binding HasSelection, Converter={StaticResource BoolToVisibility}}" />
+                                <Separator />
+                                <MenuItem x:Name="MoveOverflowMenu" Header="{loc:Text Folder410.MoveCaptures}" Click="OnMoveCapturesClick"
+                                          InputGestureText="M" />
+                                <MenuItem x:Name="BatchTagsMenu" Header="{loc:Text Library.Tags.Edit}" Click="OnBatchTagsClick"
                                           Visibility="{Binding HasSelection, Converter={StaticResource BoolToVisibility}}" />
                                 <Separator />
                                 <MenuItem x:Name="DeleteSelectedMenu" Header="{loc:Text LibrarySelection_Delete}" IsEnabled="{Binding HasSelection}" InputGestureText="Del" Click="OnDeleteSelectedClick" />

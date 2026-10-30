@@ -5,6 +5,7 @@ using MyCapture.App.Editing;
 using MyCapture.App.Ocr;
 using MyCapture.Core.Queue;
 using MyCapture.Core.Settings;
+using MyCapture.Platform.Display;
 
 namespace MyCapture.App.Gallery;
 
@@ -15,7 +16,8 @@ internal sealed class GalleryEditorWindow : AnnotationEditorWindow
         GalleryReeditContext context,
         IPrivacyRedactionService? privacyRedactionService = null,
         CaptureRecord? record = null,
-        Func<int>? retentionHours = null)
+        Func<int>? retentionHours = null,
+        MonitorInfo? pointerMonitor = null)
         : base(
             (context ?? throw new ArgumentNullException(nameof(context))).Frame,
             context.CropRegion,
@@ -25,6 +27,7 @@ internal sealed class GalleryEditorWindow : AnnotationEditorWindow
             context.AssetBitmaps,
             privacyRedactionService,
             context.Record.SourceWindowTitle,
+            pointerMonitor: pointerMonitor,
             provenance: MyCapture.Core.Capture.CaptureProvenance.FromRecord(context.Record))
     {
         if (record is null || Content is not UIElement editor)

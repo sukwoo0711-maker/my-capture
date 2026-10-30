@@ -48,7 +48,7 @@ public sealed partial class SettingsThemePreviewTests
         {
             window.Show();
             var tabs = Assert.IsType<TabControl>(window.FindName("CategoryTabs"));
-            tabs.SelectedItem = tabs.Items.OfType<TabItem>().Single(tab => Equals(tab.Header, UiText.Get("SettingsUx_TabRecording")));
+            Assert.True(window.NavigateToSetting(nameof(SettingsDraft.RecordingCaptureMode)));
             Drain(window);
 
             var selector = Assert.IsType<ComboBox>(window.FindName("RecordingCaptureModeSelector"));

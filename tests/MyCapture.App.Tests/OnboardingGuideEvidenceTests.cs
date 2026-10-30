@@ -92,49 +92,43 @@ public sealed class OnboardingGuideEvidenceTests
     {
         double scale = dpi / 96.0;
         var monitor = new MonitorInfo("\\\\.\\DISPLAY1", new RectD(0, 0, workArea.Width, workArea.Height + 40), workArea, dpi, IsPrimary: true);
-        (WelcomeStep Step, bool NoLibraryKey)[] scenes =
+        // Cover every current lesson, including the steps that wait for an action in another window.
+        (PracticeStep? Step, bool NoLibraryKey)[] scenes =
         [
-            (WelcomeStep.Consent, false), (WelcomeStep.Capture, false), (WelcomeStep.Draw, false),
-            (WelcomeStep.Pin, false), (WelcomeStep.Resize, false), (WelcomeStep.Library, false),
-            (WelcomeStep.Finish, false), (WelcomeStep.Library, true),
+            (null, false),
+            .. PracticeSession.Steps.Select(step => ((PracticeStep?)step, false)),
+            (PracticeStep.Results, false), (PracticeStep.C1, true),
         ];
-        foreach ((WelcomeStep step, bool noLibraryKey) in scenes)
+        foreach ((PracticeStep? step, bool noLibraryKey) in scenes)
         {
             var clipboard = new OnboardingGuideTests.FakeClipboard();
             HotkeySettings? keys = noLibraryKey ? NewInstallDefaults.Create().Hotkeys : null;
             if (noLibraryKey) Assert.Equal(Hotkey.None, keys!.OpenLibrary);
             WelcomeWindow guide = OnboardingGuideTests.Create(clipboard,
                 new WelcomeOptions { ReducedMotion = true, TextScale = textScale, MonitorProvider = () => monitor,
-                    ShowCoreShortcutsConsent = step == WelcomeStep.Consent }, keys);
+                    ShowCoreShortcutsConsent = step is null }, keys);
             guide.WindowStartupLocation = WindowStartupLocation.Manual;
             guide.Left = -10000; guide.Top = -10000; guide.ShowActivated = false; guide.ShowInTaskbar = false;
             guide.LimitToWorkArea(monitor);
             try
             {
-                OnboardingGuideTests.AdvanceTo(guide, step);
+                if (step is { } lesson) PracticeJourneyDriver.AdvanceTo(guide.Session, lesson);
                 guide.Show();
                 Drain(guide);
                 string suffix = noLibraryKey ? "-no-key" : string.Empty;
-                string label = $"{set} {language} {themeName} step{(int)step}{suffix}";
+                string name = step?.ToString() ?? "consent";
+                string label = $"{set} {language} {themeName} {name}{suffix}";
                 if (noLibraryKey)
                 {
                     Check(!guide.KeyShown, label + ": an unassigned library shortcut must not be shown");
-                    Check(guide.TrayDiagramShown, label + ": the tray path must remain visible");
-                    Check(guide.InstructionText == UiText.Get("Onboarding.LibraryInstruction"), label + ": use the tray-only instruction");
+                    Check(guide.TryNowButton.IsVisible, label + ": the library button must remain visible without a key");
+                    Check(guide.InstructionText == UiText.Get("Journey.C1.Body"), label + ": use the library-button instruction");
                 }
                 AssertFits(guide, label, log);
 
                 if (root is null) continue;
                 string directory = Directory.CreateDirectory(Path.Combine(root, set)).FullName;
-                SaveBitmap(Render(guide, scale), Path.Combine(directory, $"step{(int)step}-{step.ToString().ToLowerInvariant()}{suffix}-{language}-{themeName}.png"));
-                // The second face of the pin step: the key fired while the editor commit is still pending.
-                if (step == WelcomeStep.Pin && !guide.KeyPressed)
-                {
-                    guide.NotifyHotkeyFired(MyCapture.Platform.Shell.GlobalHotkeyCommand.PasteToScreen);
-                    Drain(guide);
-                    AssertFits(guide, label + " copied", log);
-                    SaveBitmap(Render(guide, scale), Path.Combine(directory, $"step3b-pin-pressed-{language}-{themeName}.png"));
-                }
+                SaveBitmap(Render(guide, scale), Path.Combine(directory, $"{name.ToLowerInvariant()}{suffix}-{language}-{themeName}.png"));
             }
             finally { guide.Close(); }
         }
@@ -161,15 +155,20 @@ public sealed class OnboardingGuideEvidenceTests
                 $"{label}: {element.GetType().Name} spans {bounds.Left:0}..{bounds.Right:0} in a {scroll.ViewportWidth:0} wide column");
         }
 
-        // The primary is always visible. Skip is available during practice, and absent on Finish.
+        // When the lesson requires drawing/resizing in another window, the guide has no
+        // duplicate primary action. Its exit remains available and every shown action must fit.
         bool finish = guide.CurrentStep == WelcomeStep.Finish;
-        Check(guide.TryNowButton.IsVisible, label + ": the primary action must be visible");
+        bool waitingElsewhere = guide.CurrentStep != WelcomeStep.Consent
+            && (guide.Session.Step is >= PracticeStep.A4 and <= PracticeStep.A6
+                || guide.Session.Step is >= PracticeStep.B2 and <= PracticeStep.B5);
+        Check(guide.TryNowButton.IsVisible == !waitingElsewhere, label + ": primary action visibility");
+        Check(guide.TryNowButton.IsTabStop == !waitingElsewhere, label + ": primary tab navigation");
         Check(guide.SkipButton.Visibility == (finish ? Visibility.Collapsed : Visibility.Visible), label + ": Skip visibility");
         Check(guide.SkipButton.IsTabStop == !finish, label + ": Skip tab navigation");
         if (finish) Check(!guide.SkipButton.IsVisible, label + ": Finish must not show Skip");
         else Check(guide.SkipButton.IsVisible, label + ": practice must show Skip");
         // The footer stays outside the scrolling content; every available action must fit.
-        Button[] buttons = finish ? [guide.TryNowButton] : [guide.TryNowButton, guide.SkipButton];
+        Button[] buttons = finish ? [guide.TryNowButton] : waitingElsewhere ? [guide.SkipButton] : [guide.TryNowButton, guide.SkipButton];
         foreach (Button button in buttons)
         {
             Check(button.IsVisible, label);
@@ -180,11 +179,23 @@ public sealed class OnboardingGuideEvidenceTests
             Check(button.ActualWidth >= 80 && !string.IsNullOrEmpty(System.Windows.Automation.AutomationProperties.GetName(button)), label);
         }
 
-        // At ordinary text size on a 150% laptop display nothing has to be scrolled to be reached.
-        if (label.StartsWith("144dpi", StringComparison.Ordinal))
-            Check(overflow <= 1, $"{label}: {overflow:0} DIP of content below the fold at ordinary text size");
-        if (label.StartsWith("96dpi", StringComparison.Ordinal))
-            Check(overflow <= 1, $"{label}: {overflow:0} DIP of content below the fold");
+        // The 15-step recap and the picture/clip lessons can scroll in the fixed window.
+        // Check actual reachability of every label and control, not merely the scroll extent.
+        double initialOffset = scroll.VerticalOffset;
+        FrameworkElement[] readable = VisualDescendants((DependencyObject)scroll.Content).OfType<FrameworkElement>()
+            .Where(element => element.IsVisible && element.ActualHeight > 0
+                && element is TextBlock or Button or CheckBox).ToArray();
+        foreach (FrameworkElement element in readable)
+        {
+            Rect before = element.TransformToAncestor(scroll).TransformBounds(new Rect(element.RenderSize));
+            scroll.ScrollToVerticalOffset(scroll.VerticalOffset + before.Top);
+            Drain(guide);
+            Rect bounds = element.TransformToAncestor(scroll).TransformBounds(new Rect(element.RenderSize));
+            Check(bounds.Top >= -1 && bounds.Bottom <= scroll.ViewportHeight + 1,
+                $"{label}: {element.GetType().Name} cannot be fully read after scrolling: {bounds}, viewport {scroll.ViewportHeight:0}");
+        }
+        scroll.ScrollToVerticalOffset(initialOffset);
+        Drain(guide);
     }
 
     private static IEnumerable<DependencyObject> VisualDescendants(DependencyObject root)
@@ -204,16 +215,9 @@ public sealed class OnboardingGuideEvidenceTests
     /// <summary>The window's content at <paramref name="scale"/> times 96 DPI, over the opaque base colour the desktop would show.</summary>
     private static RenderTargetBitmap Render(Window window, double scale)
     {
-        Color baseColor = (Application.Current.TryFindResource("Surface.Base") as SolidColorBrush)?.Color ?? Colors.Black;
-        var visual = new DrawingVisual();
-        using (DrawingContext dc = visual.RenderOpen())
-        {
-            dc.DrawRectangle(new SolidColorBrush(Color.FromRgb(baseColor.R, baseColor.G, baseColor.B)), null, new Rect(0, 0, window.ActualWidth, window.ActualHeight));
-            dc.DrawRectangle(new VisualBrush(window) { Stretch = Stretch.None }, null, new Rect(0, 0, window.ActualWidth, window.ActualHeight));
-        }
         var bitmap = new RenderTargetBitmap((int)Math.Ceiling(window.ActualWidth * scale), (int)Math.Ceiling(window.ActualHeight * scale),
             96 * scale, 96 * scale, PixelFormats.Pbgra32);
-        bitmap.Render(visual);
+        bitmap.Render(window);
         bitmap.Freeze();
         return bitmap;
     }

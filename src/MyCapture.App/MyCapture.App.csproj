@@ -39,6 +39,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <None Update="Assets\practice-picture.png" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <None Remove="Assets\app.ico" />
     <Resource Include="Assets\app.ico" />
     <!-- Optional capture shutter sound, synthesised by build/tools/Sounds/make_shutter.py. -->
@@ -50,6 +51,7 @@
     <None Update="Assets\tray-error.ico" CopyToOutputDirectory="PreserveNewest" />
     <!-- Feature tutorials (TutorialCatalog × ko/en) and their first-frame stills, rendered by build/tools/TutorialVideoGenerator. -->
     <None Update="Assets\Tutorials\*.mp4;Assets\Tutorials\*.jpg" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <None Update="Assets\SettingsGuides\*.png" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>

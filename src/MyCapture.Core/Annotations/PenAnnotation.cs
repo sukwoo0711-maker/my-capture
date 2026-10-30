@@ -98,6 +98,11 @@ public sealed class PenAnnotation : AnnotationItem
         return Math.Max(0, d - band);
     }
 
+    public override double PaintedDistanceTo(PointD point) => Stroke.A == 0
+        ? double.PositiveInfinity
+        : Math.Max(0, GeometryMath.DistanceToPolylineSpan(point, _points.AsSpan())
+            - (_points.Count == 1 ? Math.Max(0.5, StrokeThickness / 2) : StrokeThickness / 2));
+
     /// <summary>
     /// Drops points that carry no shape information.
     /// </summary>

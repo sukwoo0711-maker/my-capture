@@ -62,7 +62,7 @@ public sealed class EditorLargeTextViewportTests
         Assert.Equal(snapshotText.Text, committed.Text);
         Assert.Equal(snapshotText.Rect, committed.Rect);
         Assert.True(controller.PerformUndo());
-        Assert.Equal(string.Empty, committed.Text);
+        Assert.Empty(controller.Document.Items);
         Assert.True(controller.PerformRedo());
         Assert.Equal(snapshotText.Text, committed.Text);
         Assert.Equal(snapshotText.Rect, committed.Rect);
@@ -112,8 +112,9 @@ public sealed class EditorLargeTextViewportTests
     {
         // A wide image stays width-limited in the default 1000x640 host, even on a
         // small work area that would clamp a taller window and letterbox a 4:3 image.
-        using EditorWindowHost host = EditorWindowHost.Create(Solid(800, 300, 240));
-        // At the image's left edge there is no room on either side: the bar overlays the right edge.
+        using EditorWindowHost host = EditorWindowHost.Create(Solid(900, 300, 240));
+        // The 16-DIP image margin is narrower than the bar and text chrome on either side,
+        // so a full-width caption still overlays the bar at its right edge.
         Invoke(host.Editor, "PlaceTextBox", new PointD(0, 40));
         TextBox box = Field<TextBox>(host.Editor, "_activeTextBox");
         // Paragraphs wider than the image, so the caption wraps at the image's right edge.
@@ -131,8 +132,8 @@ public sealed class EditorLargeTextViewportTests
         TextAnnotation caption = Assert.Single(host.Editor.CreateCurrentImageSnapshot().Items.OfType<TextAnnotation>());
         Assert.False(caption.AutoSize);
         AnnotationEditorSurface surface = Field<AnnotationEditorSurface>(host.Editor, "_surface");
-        Assert.Equal(0, surface.FrameRectDip.Left, 6);
-        Assert.Equal(overlay.ActualWidth, surface.FrameRectDip.Right, 6);
+        Assert.Equal(16, surface.FrameRectDip.Left, 6);
+        Assert.Equal(overlay.ActualWidth - 16, surface.FrameRectDip.Right, 6);
         var inset = Field<Point>(host.Editor, "_liveTextInset");
         // Overlaying never narrows the text viewport, so the live lines match the committed ones.
         Assert.Equal(surface.ToSurfaceRect(caption.Rect).Width, box.ActualWidth - 2 * inset.X, 1);
@@ -227,8 +228,8 @@ public sealed class EditorLargeTextViewportTests
     [InlineData(true)]
     public void OverflowScrollbarKeepsTheCommittedWrappingWidth(bool paragraphs) => StaTestHost.Run(() =>
     {
-        // Keep the image's right edge at the canvas clip boundary without a tall window.
-        using EditorWindowHost host = EditorWindowHost.Create(Solid(800, 300, 240));
+        // Keep the image width-limited, with only the 16-DIP inset outside its right edge.
+        using EditorWindowHost host = EditorWindowHost.Create(Solid(900, 300, 240));
         Invoke(host.Editor, "PlaceTextBox", new PointD(600, 40));
         TextBox box = Field<TextBox>(host.Editor, "_activeTextBox");
         string line = "고정 폭에서 같은 줄바꿈을 유지합니다 abcXYZ😀 ";
@@ -244,11 +245,11 @@ public sealed class EditorLargeTextViewportTests
         var inset = Field<Point>(host.Editor, "_liveTextInset");
         var bar = (System.Windows.Controls.Primitives.ScrollBar)scroll.Template.FindName("PART_VerticalScrollBar", scroll);
         Assert.Equal(dipWidth, box.ActualWidth - 2 * inset.X - bar.ActualWidth, 1);
-        // The caption wraps at the image's right edge, where the viewport clips: the bar moves to the
-        // caption's left, wholly inside the canvas, while the first glyph stays where the commit draws it.
+        // The caption wraps at the image's right edge; its margin cannot fit the bar and text chrome.
+        // The bar moves left, wholly inside the canvas, while the first glyph stays at the committed position.
         Canvas overlay = Field<Canvas>(host.Editor, "_overlayCanvas");
-        Assert.Equal(0, surface.FrameRectDip.Left, 6);
-        Assert.Equal(overlay.ActualWidth, surface.FrameRectDip.Right, 6);
+        Assert.Equal(16, surface.FrameRectDip.Left, 6);
+        Assert.Equal(overlay.ActualWidth - 16, surface.FrameRectDip.Right, 6);
         AssertBarInside(bar, overlay);
         Assert.True(bar.TranslatePoint(new Point(), overlay).X < box.TranslatePoint(new Point(inset.X, 0), overlay).X,
             "the bar sits left of the text");

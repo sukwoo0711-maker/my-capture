@@ -30,6 +30,8 @@ internal sealed record VideoFrameRenderProgress(int CompletedFrames, int TotalFr
 
 internal sealed record VideoMediaInfo(int Width, int Height, double DurationMs);
 
+internal sealed record VideoFrameCapturePixels(BitmapSource Bitmap, double DecodedTimeMs);
+
 /// <summary>MP4 render tunables. <see cref="Default"/> is what every production export uses.</summary>
 internal sealed record Mp4RenderOptions
 {
@@ -604,6 +606,34 @@ internal static class VideoFrameRenderPipeline
             frameEditLayers ?? []);
         _ = Render(request, (frame, _) => result = frame, cancellationToken: cancellationToken);
         return FrozenCopy(result ?? throw new InvalidOperationException("No video frame was rendered."));
+    }
+
+    /// <summary>Decodes native pixels and retains their actual PTS, independently of a player's size.</summary>
+    internal static VideoFrameCapturePixels CaptureSingleFrame(
+        string sourcePath,
+        double sourceTimeMs,
+        VideoEditDocument? document = null,
+        CancellationToken cancellationToken = default)
+    {
+        if (Thread.CurrentThread.GetApartmentState() != ApartmentState.STA)
+            throw new InvalidOperationException("Video frame composition requires an STA thread.");
+        if (!double.IsFinite(sourceTimeMs) || sourceTimeMs < 0)
+            throw new ArgumentOutOfRangeException(nameof(sourceTimeMs));
+        using var reader = RangeAwareVideoFrameDecoder.Open(sourcePath);
+        DecodedVideoFrame decoded = RangeAwareVideoFrameDecoder.ReadBgr32(reader, sourceTimeMs, cancellationToken);
+        BitmapSource bitmap = BitmapSource.Create(decoded.Width, decoded.Height, 96, 96,
+            PixelFormats.Bgr32, null, decoded.Pixels, decoded.Stride);
+        if (document is not null)
+        {
+            int width = document.CanvasWidth > 0 ? document.CanvasWidth : decoded.Width;
+            int height = document.CanvasHeight > 0 ? document.CanvasHeight : decoded.Height;
+            bitmap = RenderFrame(bitmap, width, height, width, height,
+                document.TextOverlays, document.FrameEditLayers,
+                FrameEditLayerRenderer.Decode(document.FrameEditLayers), sourceTimeMs);
+        }
+        cancellationToken.ThrowIfCancellationRequested();
+        var opaque = new FormatConvertedBitmap(bitmap, PixelFormats.Bgra32, null, 0);
+        return new VideoFrameCapturePixels(FrozenCopy(opaque), decoded.TimestampMs);
     }
 
     /// <summary>

@@ -242,6 +242,7 @@ public sealed partial class SettingsInstantSaveTests
             Render(window, "review-search-before.png", 940, 700);
             var tabs = (TabControl)window.FindName("CategoryTabs");
             var search = (TextBox)tabs.Template.FindName("SettingsSearchBox", tabs);
+            Assert.True(window.NavigateToSection(SettingsSection.General));
             var general = (TabItem)tabs.SelectedItem;
             search.Text = "HEX";
             Render(window, "review-search-hex-theme.png", 940, 700);

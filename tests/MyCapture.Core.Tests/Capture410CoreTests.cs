@@ -118,11 +118,13 @@ public sealed class Capture410CoreTests
         Assert.Null(CropSelection.HitTestEdge(bounds, new PointD(-30, 100), 7));
         Assert.Null(CropSelection.HitTestEdge(bounds, new PointD(double.NaN, 0), 7));
         var crop = new CropSelection(640, 360);
-        Assert.Equal(CropGrip.Move, crop.HitTest(new PointD(100, 100), 7));
+        // The initial full-image crop cannot move; dragging its interior starts a selection.
+        Assert.Equal(CropGrip.New, crop.HitTest(new PointD(100, 100), 7));
         crop.Begin(new PointD(0, 100), 7);
         crop.Drag(new PointD(40, 120), false);
         crop.End();
         Assert.Equal(new RectD(40, 0, 600, 360), crop.Region);
+        Assert.Equal(CropGrip.Move, crop.HitTest(new PointD(100, 100), 7));
     }
 
     [Theory]

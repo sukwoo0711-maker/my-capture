@@ -20,6 +20,7 @@ internal sealed class WelcomeOptions
     /// <summary>The monitor the guide centres on and is limited to; the one under the pointer unless a test says otherwise.</summary>
     internal Func<MyCapture.Platform.Display.MonitorInfo>? MonitorProvider { get; init; }
     internal Func<ITutorialMedia>? MediaFactory { get; init; }
+    internal Func<uint>? CopyPracticePicture { get; init; }
 }
 
 /// <summary>A write is requested only by the explicit practice-table copy action.</summary>

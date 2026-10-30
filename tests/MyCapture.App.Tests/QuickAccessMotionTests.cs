@@ -2,6 +2,7 @@ using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
+using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
@@ -84,6 +85,7 @@ public sealed class QuickAccessMotionTests
             Assert.Equal(path == "QuickAccess.Library" ? 1 : 0, library);
             Assert.Contains("enabled=False", card.TimeoutStateForTest, StringComparison.Ordinal);
             Assert.False(card.CanActivateByHotkey);
+            Assert.False(router.IsRegisteredFor(card));
             Assert.Equal(motion ? 0 : 1, closed);
             Assert.Equal(motion, FluidMotion.IsExiting(card));
             if (motion)
@@ -99,6 +101,55 @@ public sealed class QuickAccessMotionTests
             Assert.Equal(1, closed);
         }
         finally { if (closed == 0) card.Close(); }
+    });
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void KeptCardRemainsAHotkeyTargetBelowTheSaveNoticeUntilHiddenOrClosed(bool keepBeforeShowing) => Run(motion: false, router =>
+    {
+        QuickAccessWindow card = Card(router);
+        object notice = new();
+        try
+        {
+            if (keepBeforeShowing) card.IsKept = true;
+            Assert.False(card.CanActivateByHotkey);
+            Assert.False(router.IsRegisteredFor(card));
+            card.Show();
+            ControlStateMotionTests.Drain(card);
+            if (!keepBeforeShowing) card.IsKept = true;
+
+            Assert.True(card.CanActivateByHotkey);
+            Assert.Contains("enabled=False", card.TimeoutStateForTest, StringComparison.Ordinal);
+            Assert.True(router.IsRegisteredFor(card));
+            nint handle = new WindowInteropHelper(card).Handle;
+            Assert.True(router.MatchesMessage(handle, 0x0312, ReceiptKeyboardRouter.ActivationKeyId));
+            TimeSpan remaining = card.RemainingForTest;
+            card.Advance(QuickAccessWindow.Lifetime, interacting: false);
+            Assert.Equal(remaining, card.RemainingForTest);
+
+            router.SetTarget(notice, 202, true, 100, () => true);
+            Assert.True(router.IsRegisteredFor(notice));
+            Assert.False(router.IsRegisteredFor(card));
+            card.IsKept = false;
+            card.IsKept = true;
+            Assert.True(router.IsRegisteredFor(notice));
+            router.Remove(notice);
+            Assert.True(router.IsRegisteredFor(card));
+
+            card.Hide();
+            Assert.False(card.CanActivateByHotkey);
+            Assert.False(router.IsRegisteredFor(card));
+            Assert.False(router.Activate());
+            card.Show();
+            Assert.True(card.CanActivateByHotkey);
+            Assert.True(router.IsRegisteredFor(card));
+            card.Close();
+            Assert.False(card.CanActivateByHotkey);
+            Assert.False(router.IsRegisteredFor(card));
+            Assert.False(router.Activate());
+        }
+        finally { router.Remove(notice); card.CloseNow(); }
     });
 
     [Fact]

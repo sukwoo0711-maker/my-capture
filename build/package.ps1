@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [string]$Version = '4.11.0',
+    [string]$Version = '4.12.0',
     [switch]$StoreOnly,
     [ValidateSet('x64', 'x86')][string]$Architecture = 'x64'
 )

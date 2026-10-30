@@ -261,6 +261,8 @@ public sealed class HotfixUxRegressionTests
         TextAnnotation live = controller.Document.Items.OfType<TextAnnotation>().Single();
         live.ZIndex = 40;
         RectD before = live.Rect;
+        int undoBefore = controller.Undo.UndoCount;
+        int redoBefore = controller.Undo.RedoCount;
         AnnotationDocument snapshot = editor.CreateCurrentImageSnapshot();
         TextAnnotation copy = snapshot.Items.OfType<TextAnnotation>().Single();
         Assert.Equal("Edited", copy.Text);
@@ -273,8 +275,13 @@ public sealed class HotfixUxRegressionTests
         typeof(AnnotationEditorControl).GetField("_redactionInProgress", flags)!.SetValue(editor, true);
         Assert.Throws<InvalidOperationException>(() => { _ = editor.RenderCurrentImageAsync(); });
         Assert.True(controller.IsCreatingText);
-        Assert.True(controller.PerformUndo());
+        Assert.Equal(undoBefore, controller.Undo.UndoCount);
+        Assert.Equal(redoBefore, controller.Undo.RedoCount);
+        // A draft does not enter history until committed; taking a snapshot must not commit it.
+        Assert.Equal(0, undoBefore);
+        controller.CancelTextEdit(live);
         Assert.Empty(controller.Document.Items);
+        Assert.False(controller.PerformUndo());
     });
 
     [Fact]

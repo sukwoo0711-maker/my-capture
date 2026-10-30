@@ -610,6 +610,7 @@ internal sealed class CaptureOverlayWindow : Window
 
 internal sealed class CaptureSelectionCompletedEventArgs : EventArgs
 {
+    internal PracticeCaptureTarget? PracticeTarget { get; set; }
     internal CaptureSelectionCompletedEventArgs(
         FrozenFrame frame,
         RectD bitmapRegion,

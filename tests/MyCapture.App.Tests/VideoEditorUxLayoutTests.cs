@@ -313,7 +313,9 @@ public sealed class VideoEditorUxLayoutTests
             double transportRight = time.TranslatePoint(new Point(time.ActualWidth, 0), layout).X;
             double detailsLeft = details.TranslatePoint(new Point(), layout).X;
             Assert.True(detailsLeft > transportRight, $"details at {detailsLeft}, transport ends at {transportRight}");
-            Assert.Single(Descendants(transport).OfType<Button>());
+            Button[] actions = Descendants(transport).OfType<Button>().ToArray();
+            Assert.Equal(2, actions.Length); // Play and Save frame share the transport row.
+            Assert.Single(actions, button => AutomationProperties.GetName(button) == UiText.Get("VideoFrame_Save"));
             Assert.Contains(Descendants(transport).OfType<Border>(), border => border.Name == "VideoPositionChip");
             Assert.Equal(2, editor.ControlRowCountForTest); // The second row is the collapsed save progress.
         }

@@ -29,17 +29,7 @@ internal sealed partial class SettingsWindow
     /// Shows the window on the storage page with the automatic-deletion choice focused, for the
     /// library's "Change" action after the first automatic deletion.
     /// </summary>
-    internal void ShowRetentionSetting()
-    {
-        ShowSettings();
-        CategoryTabs.SelectedItem = StorageTab;
-        _ = Dispatcher.BeginInvoke(DispatcherPriority.Loaded, new Action(() =>
-        {
-            RetentionChoiceBox.BringIntoView();
-            _ = RetentionChoiceBox.Focus();
-            _ = Keyboard.Focus(RetentionChoiceBox);
-        }));
-    }
+    internal void ShowRetentionSetting() => ShowSetting(nameof(MyCapture.Core.Settings.SettingsDraft.ImageRetentionHours));
 
     /// <summary>
     /// Keeps the list, the selection and the note on the draft. The list is rebuilt only when a

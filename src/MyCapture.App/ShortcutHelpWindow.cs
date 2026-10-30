@@ -101,7 +101,10 @@ internal sealed class ShortcutHelpWindow : Window
                 ("Workspace.Library", CatalogRows(ShortcutScope.Library)),
                 ("Help.Video", [("Help.Play", ShortcutCatalog.Hints(ShortcutScope.Video, "Play")), ("Help.Frame", FrameStepKeys),
                     ("Video.TrimIn", ShortcutCatalog.Hints(ShortcutScope.Video, "In")), ("Video.TrimOut", ShortcutCatalog.Hints(ShortcutScope.Video, "Out")),
-                    ("Help.Gif", ShortcutCatalog.Hints(ShortcutScope.Video, "Gif"))]),
+                    ("Help.Gif", ShortcutCatalog.Hints(ShortcutScope.Video, "Gif")),
+                    ("VideoFrame_Save", ShortcutCatalog.Hints(ShortcutScope.Video, "SaveFrame")),
+                    ("MediaExport_SaveEdits", ShortcutCatalog.Hints(ShortcutScope.Video, "Save")),
+                    ("MediaExport_ExportFormats", ShortcutCatalog.Hints(ShortcutScope.Video, "Export"))]),
                 ("Text_33EFD44366A7", [("Text_1FBCF51E2FF5", Display(keys.PasteToScreen)), ("Text_4FED89116C1F", Display(keys.HideAllPins)),
                     ("Onboard_PinAllowClickThrough", Display(keys.ToggleClickThrough)), ("Onboard_TrayReopenPin", Display(keys.RestoreClosedPin)),
                     ("QuickAccess.Copy", ShortcutCatalog.Hints(ShortcutScope.Pin, "Copy")),
@@ -125,7 +128,7 @@ internal sealed class ShortcutHelpWindow : Window
                     panel.Children.Add(row);
                     FrameworkElement result = ResultRow(label, category, entry.Keys, tutorial?.Id);
                     results.Children.Add(result);
-                    matches.Add(($"{label} {entry.Keys} {category}", result));
+                    matches.Add(($"{label} {entry.Keys} {category} {ShortcutCatalog.SearchAliases(entry.Action)}", result));
                 }
                 var tab = new TabItem { Header = category, Content = new ScrollViewer { Content = panel, VerticalScrollBarVisibility = ScrollBarVisibility.Auto } };
                 tab.SetResourceReference(StyleProperty, "Tab.Help");

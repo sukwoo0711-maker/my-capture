@@ -133,7 +133,7 @@ public sealed class EditorTextFitControllerTests
     }
 
     [Fact]
-    public void SizeAndColourChangesWhileTypingLeaveOnlyTheAdd()
+    public void SizeAndColourChangesWhileTypingLeaveHistoryUntouched()
     {
         AnnotationEditorController c = NewController(out AnnotationDocument document, out UndoStack undo);
         TextAnnotation caption = c.BeginTextAnnotation(new PointD(30, 30), 180, 40);
@@ -143,7 +143,7 @@ public sealed class EditorTextFitControllerTests
 
         Assert.Equal(40, caption.FontSize);
         Assert.Equal(ColorRgba.FromRgb(0x3B, 0x82, 0xF6), caption.Foreground);
-        Assert.Equal(1, undo.UndoCount);
+        Assert.Equal(0, undo.UndoCount);
 
         c.CommitTextEdit(caption, string.Empty);
 
@@ -153,7 +153,7 @@ public sealed class EditorTextFitControllerTests
     }
 
     [Fact]
-    public void TextTypedAfterASizeChangeCommitsAtThatSizeAndUndoesAsTextThenAdd()
+    public void TextTypedAfterASizeChangeCommitsAtThatSizeAndUndoesAsOneAdd()
     {
         AnnotationEditorController c = NewController(out AnnotationDocument document, out _);
         TextAnnotation caption = c.BeginTextAnnotation(new PointD(30, 30), 180, 40);
@@ -163,9 +163,12 @@ public sealed class EditorTextFitControllerTests
 
         Assert.Equal(new RectD(30, 30, 41, 51), caption.Rect);
         Assert.True(c.PerformUndo());
-        Assert.Equal(string.Empty, caption.Text);
-        Assert.True(c.PerformUndo());
         Assert.Empty(document.Items);
+        Assert.False(c.PerformUndo());
+        Assert.True(c.PerformRedo());
+        Assert.Same(caption, Assert.Single(document.Items));
+        Assert.Equal("ab", caption.Text);
+        Assert.Equal(new RectD(30, 30, 41, 51), caption.Rect);
     }
 
     [Fact]
@@ -282,7 +285,7 @@ public sealed class EditorTextFitControllerTests
     }
 
     [Fact]
-    public void TopAndBottomHandlesAreNotOfferedForCaptionsButStayForBadges()
+    public void CaptionsOmitHeightHandlesAndBadgesOfferOnlyCorners()
     {
         AnnotationEditorController c = NewController(out _, out _);
         TextAnnotation caption = Caption(c, new PointD(100, 100), "hello");
@@ -302,7 +305,8 @@ public sealed class EditorTextFitControllerTests
         Assert.Equal(18, caption.FontSize);
 
         TextAnnotation badge = c.AddStepNumber(new PointD(400, 400));
-        Assert.Equal(ResizeHandle.TopCenter, c.HandleAt(new PointD(badge.Rect.Center.X, badge.Rect.Top), 4));
+        Assert.Equal(ResizeHandle.None, c.HandleAt(new PointD(badge.Rect.Center.X, badge.Rect.Top), 4));
+        Assert.Equal(ResizeHandle.TopLeft, c.HandleAt(badge.Rect.TopLeft, 4));
     }
 
     [Fact]

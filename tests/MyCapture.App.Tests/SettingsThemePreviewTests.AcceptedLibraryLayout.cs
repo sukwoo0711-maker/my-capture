@@ -118,9 +118,20 @@ public sealed partial class SettingsThemePreviewTests
                         int externalLaunches = 0;
                         GallerySourceBadge.Configure(sourceBadge, GallerySourceBadge.GetProvenance(sourceBadge), null, null,
                             new CaptureSourceActions(launch: _ => externalLaunches++));
+                        Guid[] selectedBeforeSource = model.Selection.SelectedIds.Order().ToArray();
+                        bool detailsBeforeSource = window.IsDetailsPaneOpen;
                         sourceBadge.RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));
                         SettleGalleryLayout(window);
-                        Assert.Equal(0, externalLaunches);
+                        Assert.Equal(1, externalLaunches);
+                        Assert.Equal(selectedBeforeSource, model.Selection.SelectedIds.Order());
+                        Assert.Equal(detailsBeforeSource, window.IsDetailsPaneOpen);
+                        // Source details remains explicitly available in the card's source group.
+                        ContextMenu sourceMenu = window.TileMenu;
+                        sourceMenu.PlacementTarget = sourceBadge;
+                        window.PrepareTileMenu(sourceMenu, (GalleryItemViewModel)sourceBadge.DataContext);
+                        MenuItem sourceDetails = sourceMenu.Items.OfType<MenuItem>().Single(item => Equals(item.Tag, "SourceDetails"));
+                        sourceDetails.RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
+                        SettleGalleryLayout(window);
                         Assert.True(window.IsDetailsPaneOpen);
                         Assert.True(model.HasSingleSelection);
                         Assert.Same(model.FindTile(fixture.Records[0].Id), model.SingleSelectedTile);
@@ -151,7 +162,9 @@ public sealed partial class SettingsThemePreviewTests
                         preview.RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));
                         SettleGalleryLayout(window);
                         Window imagePreview = Assert.Single(window.OwnedWindows.Cast<Window>());
-                        Assert.NotNull(Assert.IsType<Image>(imagePreview.Content).Source);
+                        // The zoomable preview holds the image inside its clipped viewport.
+                        Assert.IsType<GalleryImagePreviewWindow>(imagePreview);
+                        Assert.NotNull(Assert.IsType<Image>(Assert.Single(Assert.IsType<Canvas>(imagePreview.Content).Children.Cast<UIElement>())).Source);
                         imagePreview.Close();
                         Assert.True(window.IsVisible);
                         model.NavigateTo(CaptureFolderScope.All);

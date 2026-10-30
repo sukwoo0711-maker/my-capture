@@ -105,13 +105,11 @@ public sealed partial class SettingsThemePreviewTests
                                 Assert.True(position.Y >= 0 && position.Y + text.ActualHeight <= card.ActualHeight + 1);
                             }
                             Border keptBadge = Descendants(item).OfType<Border>().Single(border => border.Name == "KeepBadge");
-                            Border editedBadge = Descendants(item).OfType<Border>().Single(border => Equals(border.ToolTip, UiText.Get("Text_2C64DDA4D878")));
                             Assert.True(keptBadge.IsVisible, "The kept badge participates in the measured layout");
-                            Assert.True(editedBadge.IsVisible, "The edited badge participates in the measured layout");
+                            Assert.DoesNotContain(Descendants(item).OfType<Border>(), border => border.Name == "EditedBadge");
                             Assert.Equal(UiText.Get("LibraryUx_KeptBadge"), AutomationProperties.GetName(keptBadge));
-                            Assert.Equal(UiText.Get("Text_2C64DDA4D878"), AutomationProperties.GetName(editedBadge));
-                            Assert.Contains(UiText.Get("Text_2C64DDA4D878"), tile.AccessibleName, StringComparison.Ordinal);
-                            foreach (Border status in new[] { keptBadge, editedBadge })
+                            Assert.DoesNotContain(UiText.Get("Text_2C64DDA4D878"), tile.AccessibleName, StringComparison.Ordinal);
+                            foreach (Border status in new[] { keptBadge })
                             {
                                 Point left = status.TranslatePoint(new Point(), card);
                                 Assert.True(left.X >= -0.5 && left.X + status.ActualWidth <= card.ActualWidth + 0.5,
@@ -156,7 +154,7 @@ public sealed partial class SettingsThemePreviewTests
                             SaveLibraryUxEvidence(f.Window, AppTheme.Midnight, $"library453-{language}-font{scale:0.0}-{(compact ? "compact" : "full")}.png");
                         }
                         // Images/Kept views show filed captures with a folder badge without a
-                        // search replacement. Time and all three statuses must share the row.
+                        // search replacement. Time and both remaining statuses must share the row.
                         f.ViewModel.ShowView(GalleryFilter.Images);
                         var imagesRows = (ListBox)f.Window.FindName("RowsList");
                         Guid filedId = f.Records[4].Id;
@@ -174,11 +172,11 @@ public sealed partial class SettingsThemePreviewTests
                         Assert.True(filedTile.HasFolderBadge);
                         Border filedFolder = Descendants(filedItem).OfType<Border>().Single(border => border.Name == "FolderBadge");
                         Border filedKept = Descendants(filedItem).OfType<Border>().Single(border => border.Name == "KeepBadge");
-                        Border filedEdited = Descendants(filedItem).OfType<Border>().Single(border => Equals(border.ToolTip, UiText.Get("Text_2C64DDA4D878")));
+                        Assert.DoesNotContain(Descendants(filedItem).OfType<Border>(), border => border.Name == "EditedBadge");
                         Assert.True(filedFolder.IsVisible && filedFolder.ActualWidth > 12);
-                        Assert.True(filedKept.IsVisible); Assert.True(filedEdited.IsVisible);
+                        Assert.True(filedKept.IsVisible);
                         Border filedCard = Descendants(filedItem).OfType<Border>().Single(border => border.Name == "TileCard");
-                        foreach (Border status in new[] { filedFolder, filedKept, filedEdited })
+                        foreach (Border status in new[] { filedFolder, filedKept })
                         {
                             Point left = status.TranslatePoint(new Point(), filedCard);
                             Assert.True(left.X >= -0.5 && left.X + status.ActualWidth <= filedCard.ActualWidth + 0.5,

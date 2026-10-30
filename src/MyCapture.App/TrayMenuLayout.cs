@@ -51,9 +51,8 @@ internal sealed record TrayMenuState(
 /// <summary>
 /// The tray menu's order, kept apart from the shell so it can be checked without a tray icon.
 /// The first group holds what people come for: region capture, screen recording, text capture,
-/// the rarer capture types in one branch, and the pin commands (pin the clipboard, hide or show
-/// every pin, turn click-through off on every pin, reopen a closed pin). The destinations follow,
-/// and Exit is always last. The display language lives in Settings only.
+/// the rarer capture types in one branch. Pin commands form their own group with recovery first,
+/// followed by destinations, the Help branch, and Exit. Display language lives in Settings only.
 /// </summary>
 internal static class TrayMenuLayout
 {
@@ -88,6 +87,8 @@ internal static class TrayMenuLayout
             ]),
         };
 
+        int captureEnd = entries.Count;
+
         // A new installation assigns F3; the tray also works when the user clears the shortcut.
         if (commands.PinClipboard is { } pinClipboard)
         {
@@ -95,6 +96,12 @@ internal static class TrayMenuLayout
                 IsEnabled: state.ClipboardHasContent,
                 ToolTip: state.ClipboardHasContent ? string.Empty : UiText.Get("Tray_ClipboardEmpty")));
         }
+
+        // Recovery stays at the top of the pin group, even when pin shortcuts are unassigned.
+        if (commands.ClearClickThrough is { } clearClickThrough && state.ClickThroughPinCount > 0)
+            entries.Add(new(UiText.Get("Tray_ClearClickThrough"), clearClickThrough));
+        if (state.CanRestoreClosedPin)
+            entries.Add(new(UiText.Get("Onboard_TrayReopenPin"), commands.RestoreClosedPin, Gesture: Gesture(keys.RestoreClosedPin)));
 
         // Find one pin before the commands that act on every pin. Rebuilt on each menu open.
         if (commands.ActivateOpenPin is { } activatePin && state.OpenPins is { Count: > 0 } openPins)
@@ -114,26 +121,24 @@ internal static class TrayMenuLayout
                 Gesture: Gesture(keys.HideAllPins)));
         }
 
-        // The way back from click-through in one step. A click-through pin cannot take the click
-        // that would turn it off. This remains reachable when the pin shortcuts are cleared.
-        if (commands.ClearClickThrough is { } clearClickThrough && state.ClickThroughPinCount > 0)
-            entries.Add(new(UiText.Get("Tray_ClearClickThrough"), clearClickThrough));
-
-        // Only while a closed pin can come back; the menu is rebuilt on every open.
-        if (state.CanRestoreClosedPin)
-            entries.Add(new(UiText.Get("Onboard_TrayReopenPin"), commands.RestoreClosedPin, Gesture: Gesture(keys.RestoreClosedPin)));
-
+        if (entries.Count > captureEnd)
+            entries.Insert(captureEnd, ThemedShellPresenter.MenuEntry.Separator);
         entries.Add(ThemedShellPresenter.MenuEntry.Separator);
         entries.Add(new(UiText.Get("Text_8739F6684453"), commands.Library, Gesture: Gesture(keys.OpenLibrary)));
         entries.Add(new(UiText.Get("Text_00480581AAB5"), commands.Settings));
         if (state.UpdateAvailable && commands.InstallUpdate is { } installUpdate)
             entries.Add(new(state.UpdateVersion is { } version ? UiText.Format("Update_TrayInstallVersion", version)
                 : UiText.Get("Update_TrayInstall"), installUpdate, IsEnabled: !state.UpdateBusy));
-        entries.Add(new(UiText.Get("Onboard_ShowShortcuts"), commands.Shortcuts, Gesture: ShortcutsGesture));
+        entries.Add(ThemedShellPresenter.MenuEntry.Separator);
+        var help = new List<ThemedShellPresenter.MenuEntry>
+        {
+            new(UiText.Get("Onboard_ShowShortcuts"), commands.Shortcuts, Gesture: ShortcutsGesture),
+        };
         if (commands.FirstUseGuide is { } firstUseGuide)
-            entries.Add(new(UiText.Get("Onboarding.Replay"), firstUseGuide));
+            help.Add(new(UiText.Get("Onboarding.Replay"), firstUseGuide));
         if (commands.ContactSupport is { } contactSupport)
-            entries.Add(new(UiText.Get("Support_Title"), contactSupport));
+            help.Add(new(UiText.Get("Support_Title"), contactSupport));
+        entries.Add(new(UiText.Get("Tray_Help"), null, help));
         entries.Add(ThemedShellPresenter.MenuEntry.Separator);
         entries.Add(new(UiText.Get("Text_72B6DBA8AAC5"), commands.Exit));
         return entries;

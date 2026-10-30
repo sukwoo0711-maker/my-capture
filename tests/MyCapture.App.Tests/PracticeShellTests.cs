@@ -3,6 +3,7 @@ using System.Runtime.CompilerServices;
 using System.IO;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
+using MyCapture.App.Pinning;
 using MyCapture.Core.Settings;
 using MyCapture.Core.Storage;
 using Xunit;
@@ -11,6 +12,34 @@ namespace MyCapture.App.Tests;
 
 public sealed class PracticeShellTests
 {
+    [Fact]
+    public void PracticePinLifecycleReconnectsReplacementAndUnsubscribesOnClose() => StaTestHost.Run(() =>
+    {
+        const BindingFlags flags = BindingFlags.Instance | BindingFlags.NonPublic;
+        var app = (App)RuntimeHelpers.GetUninitializedObject(typeof(App));
+        typeof(App).GetField("_settings", flags)!.SetValue(app, new AppSettings());
+        var guide = (WelcomeWindow)typeof(App).GetMethod("CreatePracticeWindow", flags)!.Invoke(app, [true, false, true])!;
+        try
+        {
+            PracticeJourneyDriver.AdvanceTo(guide.Session, PracticeStep.B2);
+            PracticeSignals.Publish(new(PracticeEventKind.PinClosed, Guid.Empty, LogicalPinId: PracticeJourneyDriver.Logical, WindowPinId: PracticeJourneyDriver.Pin, Restorable: true));
+            Assert.Null(guide.Session.WindowPinId);
+            PracticeSignals.Publish(new(PracticeEventKind.PinRestored, Guid.Empty, LogicalPinId: Guid.NewGuid(), WindowPinId: Guid.NewGuid()));
+            Assert.Null(guide.Session.WindowPinId);
+            PracticeSignals.Publish(new(PracticeEventKind.PinRestored, Guid.Empty, LogicalPinId: PracticeJourneyDriver.Logical, WindowPinId: PracticeJourneyDriver.Restored));
+            Assert.Equal(PracticeJourneyDriver.Restored, guide.Session.WindowPinId);
+            PracticeSignals.Publish(new(PracticeEventKind.PinResized, Guid.Empty, LogicalPinId: PracticeJourneyDriver.Logical, WindowPinId: PracticeJourneyDriver.Pin));
+            Assert.Equal(PracticeStep.B2, guide.Session.Step);
+            PracticeSignals.Publish(new(PracticeEventKind.PinResized, Guid.Empty, LogicalPinId: PracticeJourneyDriver.Logical, WindowPinId: PracticeJourneyDriver.Restored));
+            Assert.Equal(PracticeStep.B3, guide.Session.Step);
+        }
+        finally { guide.Close(); }
+        Assert.Null(typeof(PracticeSignals).GetField("Result", BindingFlags.Static | BindingFlags.NonPublic)!.GetValue(null));
+        Assert.Null(typeof(PracticeSignals).GetField("EditorReady", BindingFlags.Static | BindingFlags.NonPublic)!.GetValue(null));
+        Assert.Null(typeof(PracticeSignals).GetField("PictureOpened", BindingFlags.Static | BindingFlags.NonPublic)!.GetValue(null));
+        Assert.Null(typeof(PracticeSignals).GetField("LibraryEditorOpened", BindingFlags.Static | BindingFlags.NonPublic)!.GetValue(null));
+    });
+
     [Fact]
     public void ExitingUnansweredConsentDoesNotCreateASettingsFileOrConsumeFirstInstall() => StaTestHost.Run(() =>
     {
@@ -91,14 +120,10 @@ public sealed class PracticeShellTests
         var guide = (WelcomeWindow)typeof(App).GetMethod("CreateOnboardingWindow", flags)!.Invoke(app, [true])!;
         try
         {
-            var original = new MyCapture.Core.Queue.CaptureRecord();
-            typeof(App).GetField("_currentRecord", flags)!.SetValue(app, original);
-            var captureEnded = (Action<bool, bool>)typeof(App).GetField("_onboardingCaptureEnded", flags)!.GetValue(app)!;
-            captureEnded(true, true);
-            Assert.Equal(WelcomeStep.Draw, guide.CurrentStep);
-            typeof(App).GetField("_currentRecord", flags)!.SetValue(app, new MyCapture.Core.Queue.CaptureRecord());
-            captureEnded(true, true);
-            Assert.Equal(original.Id, typeof(App).GetField("_onboardingCaptureId", flags)!.GetValue(app));
+            PracticeJourneyDriver.AdvanceTo(guide.Session, PracticeStep.A3);
+            PracticeSignals.Publish(new(PracticeEventKind.CaptureSaved, guide.Session.Id, Guid.NewGuid(), Guid.NewGuid()));
+            Assert.Equal(PracticeJourneyDriver.Record, guide.Session.CaptureId);
+            Assert.Equal(PracticeStep.A3, guide.Session.Step);
         }
         finally { guide.Close(); }
     });

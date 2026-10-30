@@ -342,7 +342,7 @@ public sealed class EditorStampTests
             Assert.Equal(0, reports);
             Assert.Empty(Controller(host.Editor).Document.Items);
             Assert.Null(StampStore.RegisteredPath(stampFolder));
-            Assert.Equal("도장 이미지를 읽을 수 없습니다. 다시 등록해 주십시오.", host.Editor.StatusText);
+            Assert.Equal("워터마크 이미지를 읽을 수 없습니다. 다시 등록해 주십시오.", host.Editor.StatusText);
         }
         finally { OwnedTestDirectory.Delete(root); }
     });
@@ -362,7 +362,7 @@ public sealed class EditorStampTests
             Run(host.Editor.PlaceStampAsync());
 
             Assert.Empty(Controller(host.Editor).Document.Items);
-            Assert.Equal("이 화면에서는 도장을 사용할 수 없습니다.", host.Editor.StatusText);
+            Assert.Equal("이 화면에서는 워터마크를 사용할 수 없습니다.", host.Editor.StatusText);
         }
         finally { OwnedTestDirectory.Delete(root); }
     });
@@ -409,8 +409,8 @@ public sealed class EditorStampTests
     });
 
     [Theory]
-    [InlineData("ko-KR", "도장 찍기", "도장 이미지 바꾸기…", "불투명도", "도장 지우기", "100%", "70%", "50%", "30%")]
-    [InlineData("en-US", "Place stamp", "Change stamp image…", "Opacity", "Remove stamp", "100%", "70%", "50%", "30%")]
+    [InlineData("ko-KR", "워터마크 추가", "워터마크 이미지 변경…", "불투명도", "등록 이미지 해제", "100%", "70%", "50%", "30%")]
+    [InlineData("en-US", "Add watermark", "Change watermark image…", "Opacity", "Remove registered image", "100%", "70%", "50%", "30%")]
     public void TheMenuOffersPlaceChangeOpacityAndRemoveInBothLanguages(
         string language, string place, string change, string opacity, string remove, string o100, string o70, string o50, string o30) => StaTestHost.Run(() =>
     {
@@ -476,12 +476,12 @@ public sealed class EditorStampTests
             host.Editor.PickStampImagePath = () => other;
 
             ClickMenu(host.Editor, 1);
-            PumpUntil(() => host.Editor.StatusText == "도장 이미지 변경됨" && !host.Editor.IsEditingOperationInProgress);
+            PumpUntil(() => host.Editor.StatusText == "워터마크 이미지 변경됨" && !host.Editor.IsEditingOperationInProgress);
             Pump(TimeSpan.FromMilliseconds(50));
             Assert.Equal(200, ImageCodec.TryLoad(Path.Combine(stampFolder, "stamp.png"))!.PixelWidth);
 
             Assert.Empty(Controller(host.Editor).Document.Items);
-            Assert.Equal("도장 이미지 변경됨", host.Editor.StatusText);
+            Assert.Equal("워터마크 이미지 변경됨", host.Editor.StatusText);
             // Placing now uses the new picture at the same placement.
             Run(host.Editor.PlaceStampAsync());
             ImageAnnotation item = Assert.IsType<ImageAnnotation>(Assert.Single(Controller(host.Editor).Document.Items));
@@ -515,7 +515,7 @@ public sealed class EditorStampTests
             Assert.Empty(host.Editor.PlacedStampIds);
             Assert.Equal(StampAnchor.BottomRight, stamp.Defaults.Stamp.Anchor);
             Assert.Equal(100, stamp.Defaults.Stamp.OpacityPercent);
-            Assert.Equal("도장 이미지 삭제됨 · 이미 넣은 도장은 그대로 유지됨", host.Editor.StatusText);
+            Assert.Equal("등록 이미지 해제됨 · 이미 넣은 워터마크는 그대로 유지됨", host.Editor.StatusText);
 
             Run(host.Editor.PlaceStampAsync());
             Assert.Equal(1, pickerCalls);
@@ -917,8 +917,8 @@ public sealed class EditorStampTests
             Assert.Equal(image.Height, button.Height);
             Assert.Same(image.Style, button.Style);
             Assert.Equal("S", System.Windows.Automation.AutomationProperties.GetAcceleratorKey(button));
-            Assert.Equal("도장 찍기 (S)", System.Windows.Automation.AutomationProperties.GetName(button));
-            Assert.Equal("도장 찍기 — 오른쪽 버튼으로 설정 (S)", Assert.IsType<string>(button.ToolTip));
+            Assert.Equal("워터마크 추가 (S)", System.Windows.Automation.AutomationProperties.GetName(button));
+            Assert.Equal("워터마크 추가 · 오른쪽 버튼으로 설정 (S)", Assert.IsType<string>(button.ToolTip));
             Assert.Equal([EditorTool.Image], host.Editor.ToolGroups.Last());
 
             // A real click goes through OnClick, which would toggle an ordinary ToggleButton.

@@ -47,7 +47,7 @@ public sealed partial class SettingsThemePreviewTests
         {
             window.Show();
             var tabs = Assert.IsType<TabControl>(window.FindName("CategoryTabs"));
-            tabs.SelectedIndex = 1;
+            Assert.True(window.NavigateToSetting(nameof(SettingsDraft.ColorFormat)));
             Drain(window);
             var draft = Assert.IsType<SettingsDraft>(window.DataContext);
             var detect = Assert.IsType<CheckBox>(window.FindName("AutoDetectWindowsCheck"));
@@ -67,26 +67,17 @@ public sealed partial class SettingsThemePreviewTests
             var recorder = Assert.IsType<HotkeyRecorder>(window.FindName("CaptureTextHotkeyRecorder"));
             Assert.Equal("Ctrl+Alt+T", recorder.Text);
             Assert.Equal(UiText.Get("TextCapture_Title"), AutomationProperties.GetName(recorder));
-            tabs.SelectedIndex = 4;
+            Assert.True(window.NavigateToSection(SettingsSection.Text));
             Drain(window);
             var tutorialButton = Assert.IsType<Button>(window.FindName("TextCopyTutorialButton"));
             Assert.True(tutorialButton.IsVisible && tutorialButton.IsEnabled && tutorialButton.IsTabStop);
-            Assert.Null(tutorialButton.Content);
-            Assert.Equal(AutomationProperties.GetName(tutorialButton), tutorialButton.ToolTip);
+            Assert.Equal(AutomationProperties.GetName(tutorialButton), tutorialButton.Content);
+            Assert.Same(window.FindResource("Button.Secondary"), tutorialButton.Style);
             Assert.Equal("텍스트 복사 사용법 보기", AutomationProperties.GetName(tutorialButton));
-            // Every other "View tutorial" button names the feature it teaches, as the shortcut help does.
+            // Repeated shortcut-row tutorials now live in shortcut help; text capture keeps its own entry.
             Button[] featureTutorials = Descendants(window).OfType<Button>().Where(button => button.Tag is string id
                 && TutorialCatalog.All.Any(feature => feature.Id == id)).ToArray();
-            Assert.Equal(12, featureTutorials.Length);
-            Assert.All(featureTutorials, button =>
-            {
-                FeatureTutorial feature = TutorialCatalog.Get((string)button.Tag);
-                Assert.Null(button.Content);
-                Assert.Equal(AutomationProperties.GetName(button), button.ToolTip);
-                Assert.Equal(FeatureTutorialWindow.OpenButtonName(feature), AutomationProperties.GetName(button));
-                Assert.EndsWith(" 사용법 보기", AutomationProperties.GetName(button), StringComparison.Ordinal);
-            });
-            Assert.Contains(featureTutorials, button => AutomationProperties.GetName(button) == "영역 캡처 사용법 보기");
+            Assert.Empty(featureTutorials);
             Assert.False(saved.Capture.AutoDetectWindows);
 
             SettingsWindow.ApplyCommand.Execute(null, window);
@@ -100,7 +91,7 @@ public sealed partial class SettingsThemePreviewTests
 
             window.ShowSettings();
             Drain(window);
-            tabs.SelectedIndex = 4;
+            Assert.True(window.NavigateToSection(SettingsSection.Text));
             Drain(window);
             tutorialButton.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent));
             TextCopyTutorialWindow tutorial = Assert.Single(window.OwnedWindows.OfType<TextCopyTutorialWindow>());
@@ -108,7 +99,7 @@ public sealed partial class SettingsThemePreviewTests
             Assert.Contains(FirstRunWelcomeTests.Descendants(tutorial).OfType<TextBlock>(),
                 text => text.Text == UiText.Format("TextCapture_TutorialDirect", "Ctrl+Alt+T"));
             tutorial.Close();
-            tabs.SelectedIndex = 1;
+            Assert.True(window.NavigateToSetting(nameof(SettingsDraft.ColorFormat)));
             Drain(window);
             Assert.False(detect.IsChecked);
             Assert.Equal(ColorFormat.Hsl, format.SelectedValue);
