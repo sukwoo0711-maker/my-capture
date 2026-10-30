@@ -229,6 +229,7 @@ public sealed class PlayerFrameRound2Tests
         internal Slider Seek => Field<Slider>(Player, "_seek");
 
         private readonly bool _realClip;
+        private bool _shown;
 
         internal Fixture(Func<MediaElement, IVideoPreviewEngine>? engineFactory = null, bool realClip = false, bool nativePlayback = false)
         {
@@ -264,6 +265,7 @@ public sealed class PlayerFrameRound2Tests
             });
             Player = new GalleryVideoPlayerWindow { Left = -10000, Top = -10000, Topmost = false, ShowActivated = false, ShowInTaskbar = false,
                 FrameSeekEngineFactoryForTest = engineFactory };
+            Player.ContentRendered += (_, _) => _shown = true;
             if (!nativePlayback)
             {
                 Player.SourceProbeForTest = _ => Probe.Task;
@@ -300,9 +302,10 @@ public sealed class PlayerFrameRound2Tests
         {
             Player.Close();
             try { OwnedTestDirectory.WaitForMediaFilesReleased(Root); }
-            // WPF can keep the undecodable four-byte stand-in open after close; leave that
-            // owned temp folder in place. A real clip must still be released.
-            catch (TimeoutException) when (!_realClip) { return; }
+            // WPF can keep the undecodable four-byte stand-in, or a clip handed straight to the
+            // element of a player that was never shown, open after close (seen on CI runners);
+            // leave that owned temp folder in place. A shown player must release its real clip.
+            catch (TimeoutException) when (!_realClip || !_shown) { return; }
             OwnedTestDirectory.Delete(Root);
         }
     }

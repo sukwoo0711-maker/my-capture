@@ -5,6 +5,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using MyCapture.App.Diagnostics;
 using MyCapture.App.Themes;
 using MyCapture.Core.Localization;
 using MyCapture.Core.Primitives;
@@ -56,7 +57,8 @@ public sealed partial class SettingsThemePreviewTests
             FluidMotion.AnimationsEnabledOverrideForTest = false;
             var failures = new List<string>();
             var measurements = new StringBuilder();
-            string? root = Environment.GetEnvironmentVariable("MYCAPTURE_WELCOME_FINISH_EVIDENCE");
+            string? evidence = Environment.GetEnvironmentVariable("MYCAPTURE_WELCOME_FINISH_EVIDENCE");
+            string? root = string.IsNullOrWhiteSpace(evidence) ? null : DiagnosticOutputPaths.Create(evidence);
             string phase = Environment.GetEnvironmentVariable("MYCAPTURE_WELCOME_OCR_PHASE") ?? "after";
             try
             {
@@ -122,14 +124,13 @@ public sealed partial class SettingsThemePreviewTests
                             Check(help.Right <= welcome.ActualWidth - 20, "OCR help exceeds the right margin");
                             Check(welcome.StatusText == UiText.Get("Journey.C2.Success"), "Results still announce a next step");
 
-                            if (!string.IsNullOrWhiteSpace(root))
+                            if (root is not null)
                             {
-                                Directory.CreateDirectory(root);
                                 double scale = monitor.ScaleFactor;
                                 var bitmap = new RenderTargetBitmap((int)Math.Ceiling(welcome.ActualWidth * scale),
                                     (int)Math.Ceiling(welcome.ActualHeight * scale), dpi, dpi, PixelFormats.Pbgra32);
                                 bitmap.Render(welcome);
-                                SaveBitmap(bitmap, Path.Combine(root, $"finish-{scene}-{phase}.png"));
+                                SaveBitmap(bitmap, DiagnosticOutputPaths.Child(root, $"finish-{scene}-{phase}.png"));
                             }
                         }
                         finally { welcome.Close(); }
@@ -145,11 +146,8 @@ public sealed partial class SettingsThemePreviewTests
             {
                 FluidMotion.AnimationsEnabledOverrideForTest = motion;
                 application.Shutdown();
-                if (!string.IsNullOrWhiteSpace(root))
-                {
-                    Directory.CreateDirectory(root);
-                    File.WriteAllText(Path.Combine(root, $"layout-{phase}.txt"), measurements.ToString(), new UTF8Encoding(false));
-                }
+                if (root is not null)
+                    File.WriteAllText(DiagnosticOutputPaths.Child(root, $"layout-{phase}.txt"), measurements.ToString(), new UTF8Encoding(false));
             }
             Assert.True(failures.Count == 0, string.Join(Environment.NewLine, failures));
         });
