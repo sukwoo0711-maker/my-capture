@@ -75,6 +75,10 @@ public sealed partial class SettingsThemePreviewTests
                             MonitorProvider = () => monitor, TextScale = 1, ReducedMotion = true, UseAccurateOcr = true,
                         });
                         string scene = $"{locale[..2]}-{width}x{height}-{dpi}dpi";
+                        // The simulated monitor may be taller than the runner's real desktop (about
+                        // 1024×768 on CI), which would clamp the roomy 800 DIP window to 788.
+                        welcome.LimitToWorkArea(monitor);
+                        using var tracking = new WindowTrackSizeScope(welcome, new Size(width, height + 40));
                         try
                         {
                             OnboardingGuideTests.AdvanceTo(welcome, WelcomeStep.Finish);

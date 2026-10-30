@@ -157,7 +157,7 @@ internal sealed partial class GalleryVideoPlayerWindow : Window, IGalleryVideoPl
         if (diagnosticOptions?.CaptureExclusion != false)
             SourceInitialized += (_, _) => CaptureWindowExclusion.TryApply(this);
         // Clearing the probe also tells a MediaOpened still awaiting it that the window is gone.
-        Closed += (_, _) => { _frameClosed = true; _frameCaptureCts?.Cancel(); CloseFrameSeeking(); _sourceProbe = null; _timer.Stop(); StudioRangeVideoEffect.Clear(_video); _video.Close(); PlayerClosed?.Invoke(this, EventArgs.Empty); };
+        Closed += (_, _) => { _frameClosed = true; _frameCaptureCts?.Cancel(); CloseFrameSeeking(); _sourceProbe = null; _timer.Stop(); StudioRangeVideoEffect.Clear(_video); _video.Close(); _video.Source = null; PlayerClosed?.Invoke(this, EventArgs.Empty); };
     }
 
     internal Guid VideoId => _videoId;
