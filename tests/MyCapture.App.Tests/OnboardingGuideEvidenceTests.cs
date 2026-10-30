@@ -110,6 +110,7 @@ public sealed class OnboardingGuideEvidenceTests
             guide.WindowStartupLocation = WindowStartupLocation.Manual;
             guide.Left = -10000; guide.Top = -10000; guide.ShowActivated = false; guide.ShowInTaskbar = false;
             guide.LimitToWorkArea(monitor);
+            using var tracking = new WindowTrackSizeScope(guide, new Size(workArea.Width, workArea.Height + 40));
             try
             {
                 if (step is { } lesson) PracticeJourneyDriver.AdvanceTo(guide.Session, lesson);
@@ -155,20 +156,29 @@ public sealed class OnboardingGuideEvidenceTests
                 $"{label}: {element.GetType().Name} spans {bounds.Left:0}..{bounds.Right:0} in a {scroll.ViewportWidth:0} wide column");
         }
 
-        // When the lesson requires drawing/resizing in another window, the guide has no
-        // duplicate primary action. Its exit remains available and every shown action must fit.
+        // When another window owns the action, the disabled primary slot keeps the footer
+        // stable. Its exit remains available and every shown action must fit.
         bool finish = guide.CurrentStep == WelcomeStep.Finish;
         bool waitingElsewhere = guide.CurrentStep != WelcomeStep.Consent
             && (guide.Session.Step is >= PracticeStep.A4 and <= PracticeStep.A6
                 || guide.Session.Step is >= PracticeStep.B2 and <= PracticeStep.B5);
-        Check(guide.TryNowButton.IsVisible == !waitingElsewhere, label + ": primary action visibility");
+        Check(guide.TryNowButton.IsVisible, label + ": primary slot visibility");
+        if (waitingElsewhere)
+        {
+            Check(!guide.TryNowButton.IsEnabled && !guide.TryNowButton.IsDefault, label + ": waiting slot is disabled and not default");
+            string waitingLabel = UiText.Get(guide.Session.Step <= PracticeStep.A6 ? "Journey.WaitEditor" : "Journey.WaitPin");
+            Check(KoreanWordWrap.Strip(SurfaceShortcutHintTests.PrimaryCaption(guide.TryNowButton)) == waitingLabel,
+                label + ": waiting label");
+            Check(System.Windows.Automation.AutomationProperties.GetName(guide.TryNowButton) == waitingLabel,
+                label + ": accessible waiting label");
+        }
         Check(guide.TryNowButton.IsTabStop == !waitingElsewhere, label + ": primary tab navigation");
         Check(guide.SkipButton.Visibility == (finish ? Visibility.Collapsed : Visibility.Visible), label + ": Skip visibility");
         Check(guide.SkipButton.IsTabStop == !finish, label + ": Skip tab navigation");
         if (finish) Check(!guide.SkipButton.IsVisible, label + ": Finish must not show Skip");
         else Check(guide.SkipButton.IsVisible, label + ": practice must show Skip");
         // The footer stays outside the scrolling content; every available action must fit.
-        Button[] buttons = finish ? [guide.TryNowButton] : waitingElsewhere ? [guide.SkipButton] : [guide.TryNowButton, guide.SkipButton];
+        Button[] buttons = finish ? [guide.TryNowButton] : [guide.TryNowButton, guide.SkipButton];
         foreach (Button button in buttons)
         {
             Check(button.IsVisible, label);
