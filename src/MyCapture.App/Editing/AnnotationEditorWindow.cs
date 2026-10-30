@@ -95,7 +95,8 @@ internal partial class AnnotationEditorWindow : Window
             sourceWindowTitle,
             provenance,
             pendingProvenance,
-            initializeHost: editor => Content = editor);
+            initializeHost: editor => Content = editor,
+            prewarm: prewarm);
         _editor.EditingCompleted += OnEditingCompleted;
         _editor.CloseRequested += OnCloseRequested;
         ConfirmClose = () => EditorCloseDialog.Ask(this);
@@ -239,24 +240,41 @@ internal partial class AnnotationEditorWindow : Window
             null, null, primary, provenance, null);
         try
         {
-            // Keep exact width/height keys: wrapped rows and the height cap prevent safely
-            // interpolating chrome between arbitrary widths. Primary seeds go last so they
-            // survive the bounded cache even on a machine with many displays.
-            foreach (MonitorInfo monitor in monitors.OrderBy(monitor => monitor.IsPrimary))
-            {
-                window._targetMonitor = monitor;
-                double scale = monitor.ScaleFactor > 0 ? monitor.ScaleFactor : 1;
-                VisualTreeHelper.SetRootDpi(window, new DpiScale(scale, scale));
-                foreach (Size image in new[] { new Size(64, 36), new Size(640, 360), new Size(900, 520),
-                    new Size(1920, 1080), new Size(monitor.Bounds.Width, monitor.Bounds.Height) })
-                    window.SizeForMonitor(monitor, center: false, imagePixels: image);
-            }
+            window.PrewarmMonitorSizes(monitors);
             return window;
         }
         catch
         {
             window.Close();
             throw;
+        }
+    }
+
+    internal void PrewarmCaptureSource(IReadOnlyList<MonitorInfo> monitors,
+        MyCapture.Core.Capture.CaptureProvenance provenance)
+    {
+        _editor.SetPrewarmCaptureSource(provenance);
+        // This intentional synthetic variant has its own chrome key. Do not treat its
+        // dirty status bar as an edit that invalidates the already measured source variant.
+        _lastMeasuredContent = null;
+        _lastSizedContent = null;
+        _lastClientChrome = null;
+        PrewarmMonitorSizes(monitors);
+    }
+
+    private void PrewarmMonitorSizes(IReadOnlyList<MonitorInfo> monitors)
+    {
+        // Keep exact width/height keys: wrapped rows and the height cap prevent safely
+        // interpolating chrome between arbitrary widths. Primary seeds go last so they
+        // survive the bounded cache even on a machine with many displays.
+        foreach (MonitorInfo monitor in monitors.OrderBy(monitor => monitor.IsPrimary))
+        {
+            _targetMonitor = monitor;
+            double scale = monitor.ScaleFactor > 0 ? monitor.ScaleFactor : 1;
+            VisualTreeHelper.SetRootDpi(this, new DpiScale(scale, scale));
+            foreach (Size image in new[] { new Size(64, 36), new Size(640, 360), new Size(900, 520),
+                new Size(1920, 1080), new Size(monitor.Bounds.Width, monitor.Bounds.Height) })
+                SizeForMonitor(monitor, center: false, imagePixels: image);
         }
     }
 

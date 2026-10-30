@@ -63,6 +63,8 @@ internal sealed partial class AnnotationEditorControl : Grid
     private readonly AnnotationEditorSurface _surface;
     private readonly string? _sourceWindowTitle;
     private readonly MyCapture.Core.Capture.CaptureProvenance _provenance;
+    private bool? _prewarmShowsCaptureSource;
+    private Action<MyCapture.Core.Capture.CaptureProvenance>? _setPrewarmCaptureSource;
     private readonly Task<MyCapture.Core.Capture.CaptureProvenance>? _pendingProvenance;
     private readonly bool _showSourceWindowTitle;
     private readonly IPrivacyRedactionService? _privacyRedactionService;
@@ -196,8 +198,10 @@ internal sealed partial class AnnotationEditorControl : Grid
         string? sourceWindowTitle = null,
         MyCapture.Core.Capture.CaptureProvenance? provenance = null,
         Task<MyCapture.Core.Capture.CaptureProvenance>? pendingProvenance = null,
-        Action<AnnotationEditorControl>? initializeHost = null)
+        Action<AnnotationEditorControl>? initializeHost = null,
+        bool prewarm = false)
     {
+        _prewarm = prewarm;
         _frame = AnnotationSourceMetadata.FromFrame(frame);
         _selectedBitmap = selectedBitmap ?? throw new ArgumentNullException(nameof(selectedBitmap));
         _privacyRedactionService = privacyRedactionService;
@@ -425,7 +429,15 @@ internal sealed partial class AnnotationEditorControl : Grid
     internal Size DisplaySurfaceSize => _surface.RenderSize;
 
     /// <summary>Whether the status bar opens with a capture-source chip (part of the window chrome).</summary>
-    internal bool ShowsCaptureSource => _provenance.HasSource;
+    internal bool ShowsCaptureSource => _prewarmShowsCaptureSource ?? _provenance.HasSource;
+
+    internal void SetPrewarmCaptureSource(MyCapture.Core.Capture.CaptureProvenance provenance)
+    {
+        if (!_prewarm || _setPrewarmCaptureSource is null)
+            throw new InvalidOperationException("Only a prewarm editor can change its synthetic capture source.");
+        _prewarmShowsCaptureSource = provenance.HasSource;
+        _setPrewarmCaptureSource(provenance);
+    }
 
     /// <summary>Copies the same canvas, transforms, assets and title used by editor commits.</summary>
     internal Task<BitmapSource> RenderCurrentImageAsync()
@@ -2881,6 +2893,7 @@ internal sealed partial class AnnotationEditorControl : Grid
             sourceColumn.Width = provenance.HasSource ? new GridLength(1, GridUnitType.Star) : new GridLength(0);
         }
         ShowSource(_provenance);
+        if (_prewarm) _setPrewarmCaptureSource = ShowSource;
         if (_pendingProvenance is { } pending) _ = ShowConfirmedSourceAsync(pending);
 
         async Task ShowConfirmedSourceAsync(Task<MyCapture.Core.Capture.CaptureProvenance> pending)

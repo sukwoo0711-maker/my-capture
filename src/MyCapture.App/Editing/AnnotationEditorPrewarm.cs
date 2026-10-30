@@ -33,31 +33,26 @@ internal static class AnnotationEditorPrewarm
         Application? application = Application.Current;
         Window? mainWindow = application?.MainWindow;
         IReadOnlyList<MonitorInfo> monitors = MonitorEnumerator.GetAll();
-        // A captured app/page has a source chip; imported images may not. They deliberately
-        // have separate cache keys, so measure both instead of assuming identical chrome.
-        foreach (CaptureProvenance provenance in new[] { CaptureProvenance.None,
-            CaptureProvenance.Create(appName: "MyCapture") })
+        AnnotationEditorWindow? host = null;
+        try
         {
-            AnnotationEditorWindow? host = null;
-            try
-            {
-                host = AnnotationEditorWindow.CreatePrewarmHost(new FrozenFrame(bitmap, region, null, 0),
-                    region, bitmap, monitors, provenance);
-                if (!provenance.HasSource)
-                {
-                    host.Editor.Measure(Viewport);
-                    host.Editor.Arrange(new Rect(Viewport));
-                    var target = new RenderTargetBitmap((int)Viewport.Width, (int)Viewport.Height, 96, 96, PixelFormats.Pbgra32);
-                    target.Render(host.Editor);
-                }
-            }
-            finally
-            {
-                // WPF assigns its first constructed Window as MainWindow, even without Show.
-                if (application is not null && (host is null || ReferenceEquals(application.MainWindow, host)))
-                    application.MainWindow = mainWindow;
-                host?.Close();
-            }
+            host = AnnotationEditorWindow.CreatePrewarmHost(new FrozenFrame(bitmap, region, null, 0),
+                region, bitmap, monitors, CaptureProvenance.None);
+            host.Editor.Measure(Viewport);
+            host.Editor.Arrange(new Rect(Viewport));
+            var target = new RenderTargetBitmap((int)Viewport.Width, (int)Viewport.Height, 96, 96, PixelFormats.Pbgra32);
+            target.Render(host.Editor);
+            // A source chip has a separate exact chrome key. Reuse the same tree to measure
+            // it: a second full editor otherwise survives the resident app's first GC while
+            // WPF's finalizable layout resources are being released.
+            host.PrewarmCaptureSource(monitors, CaptureProvenance.Create(appName: "MyCapture"));
+        }
+        finally
+        {
+            // WPF assigns its first constructed Window as MainWindow, even without Show.
+            if (application is not null && (host is null || ReferenceEquals(application.MainWindow, host)))
+                application.MainWindow = mainWindow;
+            host?.Close();
         }
     }
 }

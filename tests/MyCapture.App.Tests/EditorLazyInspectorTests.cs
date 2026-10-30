@@ -48,6 +48,7 @@ public sealed class EditorLazyInspectorTests
                 try
                 {
                     Assert.Equal(0, window.ConstructorSizingMeasurement.Passes);
+                    Assert.False(window.ConstructorSizingMeasurement.Skipped);
                     AnnotationEditorControl editor = window.Editor;
                     Assert.Same(application.FindResource("Window.Standard"), window.Style);
                     Assert.Equal((double)application.FindResource("FontSize.Body"), TextElement.GetFontSize(editor));
@@ -80,6 +81,7 @@ public sealed class EditorLazyInspectorTests
                     try
                     {
                         Assert.Equal(0, next.ConstructorSizingMeasurement.Passes);
+                        Assert.False(next.ConstructorSizingMeasurement.Skipped);
                         if (source && size == (1920, 1080))
                         {
                             // Exercise the warmed geometry through real HWND creation, without

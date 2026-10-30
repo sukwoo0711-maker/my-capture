@@ -60,6 +60,8 @@ public sealed class OcrResultSummaryTests
         {
             Ocr410Fixture.LoadTheme(window);
             window.ShowResult(OcrResult.Success("첫 줄\n둘째 줄", "ko", lines: [], elapsed: TimeSpan.Zero), "Capture");
+            // The accuracy selector is built after the first render; this window is never shown.
+            window.CompleteAccuracyPresentation();
             Assert.Contains(Descendants(window).OfType<TextBlock>(), text => text.Text == "한국어 · 2줄");
             Assert.DoesNotContain(Descendants(window).OfType<TextBlock>(), text => text.Text.Contains("· ko", StringComparison.Ordinal));
 

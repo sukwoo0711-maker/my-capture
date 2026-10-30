@@ -14,6 +14,7 @@ namespace MyCapture.App.Editing;
 internal sealed partial class AnnotationEditorControl
 {
     private static readonly ConditionalWeakTable<Dispatcher, DataTemplate> FontPreviewTemplates = new();
+    private readonly bool _prewarm;
 
     private FrameworkElement BuildFontFamilySection()
     {
@@ -34,8 +35,8 @@ internal sealed partial class AnnotationEditorControl
         VirtualizingPanel.SetIsVirtualizing(_textFontFamily, true);
         VirtualizingPanel.SetVirtualizationMode(_textFontFamily, VirtualizationMode.Recycling);
         AutomationName(_textFontFamily, UiText.Get("EditorText_FontFamily"));
-        // Prepare the shared recommendations without blocking the first editor's construction.
-        PrewarmSystemFontFamilies(UiText.Culture);
+        // Layout also builds this fixed-width control for tools that never use text. Load
+        // the shared font inventory only when a real editor selects text or opens the list.
         _textFontFamily.DropDownOpened += (_, _) =>
             RefreshFontFamilies((_controller.Selected as TextAnnotation)?.FontFamily ?? _controller.DefaultFontFamily);
         _textFontFamily.SelectionChanged += (_, _) =>
@@ -83,24 +84,16 @@ internal sealed partial class AnnotationEditorControl
     internal static IReadOnlyList<FontChoice> SortedSystemFontFamilies(CultureInfo culture) =>
         FontCatalog.InstalledFonts(culture);
 
-    /// <summary>
-    /// Prepares the shared cached recommendations before the first text selection.
-    /// </summary>
-    private static void PrewarmSystemFontFamilies(CultureInfo culture)
-    {
-        _ = Task.Run(() =>
-        {
-            try { FontCatalog.RecommendedFonts(culture); }
-            catch (Exception ex)
-            {
-                // The UI thread builds the list itself when it is needed and reports any failure then.
-                System.Diagnostics.Trace.TraceWarning("Font list prewarm failed: {0}", ex);
-            }
-        });
-    }
-
     private void SelectFontFamily(string family)
     {
+        if (_prewarm)
+        {
+            // A remembered Text tool must not enumerate system fonts during synthetic
+            // startup layout. The closed, fixed-width selector needs only its saved value.
+            _textFontFamily.ItemsSource = FontCatalog.ChoicesFor(family, []);
+            _textFontFamily.SelectedValue = family.Trim();
+            return;
+        }
         FontChoice? match = _textFontFamily.Items.OfType<FontChoice>()
             .FirstOrDefault(font => !font.IsMore && string.Equals(font.Value, family, StringComparison.Ordinal));
         if (match is null)
