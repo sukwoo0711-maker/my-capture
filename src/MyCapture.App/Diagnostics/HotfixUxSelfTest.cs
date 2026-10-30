@@ -170,9 +170,11 @@ internal static class HotfixUxSelfTest
             report.AppendLine($"Receipt lifetime wait={lifetime.Elapsed.TotalSeconds:0.000}s; visible={card.IsVisible}; mouseOver={card.IsMouseOver}; editorActive={editor.IsActive}");
             report.AppendLine(card.TimeoutStateForTest);
             Check("passive receipt closes on its real dispatcher timer", !card.IsVisible);
+            int editorCloseAsks = 0;
+            editor.ConfirmClose = () => { editorCloseAsks++; return EditorCloseChoice.Cancel; };
             Check("editor Esc command accepted", editor.Editor.HandleShortcut(Key.Escape, ModifierKeys.None));
-            // Esc steps back inside the editor (selection, tool) and never closes it.
-            Pump(50); Check("Esc keeps editor open", editor.IsVisible);
+            // Esc dismisses one inner layer (the arrow tool chosen above) before it would close the editor.
+            Pump(50); Check("Esc steps back a layer and keeps editor open", editor.IsVisible && editorCloseAsks == 0);
             editor.Close(); Pump(50); Check("editor closes from code", !editor.IsVisible);
 
             // A separate application/process owns the input. It has no capture-card code,
@@ -910,9 +912,15 @@ internal static class HotfixUxSelfTest
         // Rotation now lives in the crop bar; Undo is the top command left after cropping.
         Click(hwnd, Button("Ctrl+Z"));
         check("mouse top command returns editor keyboard focus", ReferenceEquals(Keyboard.FocusedElement, window.Editor));
+        // Esc dismisses one inner layer at a time (here the Rectangle tool), then closes a clean editor without asking.
+        int closeAsks = 0;
+        window.ConfirmClose = () => { closeAsks++; return EditorCloseChoice.Cancel; };
+        SendKey(hwnd, 0x52); Pump(50);
         SendKey(hwnd, 0x1B); Pump(80);
-        // Esc only steps back (text, selection, tool); it never closes the editor and its edits.
-        check("native top button click then Esc keeps the editor open", window.IsVisible);
+        check("native top button click then Esc dismisses one layer and keeps the editor open",
+            window.IsVisible && window.Editor.ToolButton(EditorTool.Select).IsChecked == true && closeAsks == 0);
+        SendKey(hwnd, 0x1B); Pump(80);
+        check("native Esc at the top layer closes the clean editor without asking", !window.IsVisible && closeAsks == 0);
         window.Close();
     }
     private static void InjectKey(IntPtr target, byte key, uint flags)
