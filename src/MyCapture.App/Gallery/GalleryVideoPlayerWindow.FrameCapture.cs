@@ -90,9 +90,8 @@ internal sealed partial class GalleryVideoPlayerWindow
                 throw new InvalidOperationException("The preview did not reach the requested frame.");
             if (engine is MediaElementPreviewEngine native)
             {
-                await native.WhenSettledAsync().WaitAsync(cancellation.Token);
-                // WPF exposes position stability, not an exact display-completed event. Refuse
-                // capture when the native adapter could not even confirm an opened, landed seek.
+                await native.WhenPresentedAsync(cancellation.Token);
+                // Composition must follow the landed seek before capture becomes available.
                 if (!_video.HasVideo || !MediaElementPreviewEngine.HasLanded(_video.Position.TotalMilliseconds,
                         native.PresentationPositionMs(targetMs)))
                     throw new InvalidOperationException("The player did not settle on the requested frame.");

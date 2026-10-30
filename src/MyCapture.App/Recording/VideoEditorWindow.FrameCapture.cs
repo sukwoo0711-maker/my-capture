@@ -21,6 +21,10 @@ internal sealed partial class VideoEditorWindow
     private bool _frameNavigationPending;
     private string? _resumedFrameSaveStatus;
     private long _frameSeekAvailabilityVersion;
+    private CancellationTokenSource? _framePresentationCts;
+    private bool _framePresentationPending;
+    private bool _framePresentationFailed;
+    private readonly bool _usesNativePreviewEngine;
 
     internal VideoFrameCaptureService? FrameCaptureService
     {
@@ -46,21 +50,50 @@ internal sealed partial class VideoEditorWindow
 
     private bool CanSaveCurrentFrame => _mediaReady && !_closing && !_operationRunning && !_extractingFrame
         && !_savingCurrentFrame && !_previewSeeks.IsSeeking && !_cutSeekInFlight
+        && !_framePresentationPending && !_framePresentationFailed
         && FrameCaptureService?.CanCapture(FrameSourceVideoId, FrameSourceRevision) == true;
 
     private async Task RefreshFrameAvailabilityAfterSeekAsync()
     {
         long version = ++_frameSeekAvailabilityVersion;
+        _framePresentationCts?.Cancel();
+        using var cancellation = new CancellationTokenSource();
+        _framePresentationCts = cancellation;
+        _framePresentationPending = true;
+        _framePresentationFailed = false;
+        UpdateCurrentFrameSaveState();
         try
         {
             // PositionRequested runs before the coordinator enqueues its request. Yield one
             // dispatcher turn, then include queued sampling time as well as active decoding.
             await System.Windows.Threading.Dispatcher.Yield(System.Windows.Threading.DispatcherPriority.Background);
             if (version != _frameSeekAvailabilityVersion || _closing) return;
-            await _previewSeeks.WaitForIdleAsync();
-            if (version == _frameSeekAvailabilityVersion && !_closing) UpdateCurrentFrameSaveState();
+            await _previewSeeks.WaitForIdleAsync().WaitAsync(cancellation.Token);
+            if (version != _frameSeekAvailabilityVersion || _closing) return;
+            if (_usesNativePreviewEngine && FrameCaptureService is not null)
+                await _previewEngine.WhenPresentedAsync(cancellation.Token);
+            if (version == _frameSeekAvailabilityVersion && !_closing)
+            {
+                _framePresentationPending = false;
+                UpdateCurrentFrameSaveState();
+            }
         }
         catch (OperationCanceledException) { }
+        catch (Exception error)
+        {
+            if (version == _frameSeekAvailabilityVersion && !_closing)
+            {
+                _framePresentationPending = false;
+                _framePresentationFailed = true;
+                UpdateCurrentFrameSaveState();
+                _statusLabel.Text = UiText.Get("VideoMulticut_PreviewSeekFailed");
+                _log.LogWarning(error, "Could not present the editor frame for capture");
+            }
+        }
+        finally
+        {
+            if (ReferenceEquals(_framePresentationCts, cancellation)) _framePresentationCts = null;
+        }
     }
 
     private void InitializeCurrentFrameSave(Grid transport)

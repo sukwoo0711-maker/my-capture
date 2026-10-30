@@ -286,6 +286,7 @@ internal sealed partial class VideoEditorWindow : Window
         _layerCanvas.InteractionCompleted += (_, _) => CompleteLayerInteraction();
         _layerCanvas.LayerActivated += (_, _) => EditSelectedOverlay();
         _previewEngine = new MediaElementPreviewEngine(_media, recording.Fps);
+        _usesNativePreviewEngine = previewEngine is null;
         _previewSeeks = new PreviewSeekCoordinator(previewEngine ?? _previewEngine, recording.Fps);
         _playMedia = playMedia ?? _media.Play;
         _previewSeeks.PositionRequested += OnPreviewPositionRequested;
@@ -3086,6 +3087,7 @@ internal sealed partial class VideoEditorWindow : Window
     {
         FinishDraftRecovery();
         _closing = true;
+        _framePresentationCts?.Cancel();
         _frameSaveCts?.Cancel();
         _sourceFileSizeCts?.Cancel();
         _sourceFileSizeCts?.Dispose();

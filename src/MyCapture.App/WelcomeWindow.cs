@@ -81,7 +81,7 @@ internal sealed class WelcomeWindow : Window
     private bool _closed, _consentAnswered, _keyPressed;
     internal PracticeSession Session { get; }
     private bool _showingConsent;
-    private readonly StackPanel _groups = new();
+    private readonly System.Windows.Controls.Primitives.UniformGrid _groups = new() { Columns = 1 };
     internal Button BackButton { get; } = new();
     internal Button ReplayButton { get; } = new();
     internal Button PauseButton { get; } = new();
@@ -319,7 +319,8 @@ internal sealed class WelcomeWindow : Window
         }
         foreach (var (step, name) in new[] { (PracticeStep.A1, "Journey.CaptureGroup"), (PracticeStep.B0, "Journey.PinGroup"), (PracticeStep.C1, "Journey.FindGroup") })
         {
-            var button = new Button { Content = UiText.Get(name), Margin = new Thickness(0, 4, 0, 4), MinHeight = 36 };
+            var button = new Button { Content = UiText.Get(name), ContentTemplate = WrappingLabelTemplate(),
+                Margin = new Thickness(0, 4, 0, 4), MinHeight = 36 };
             button.SetResourceReference(StyleProperty, "Button.Secondary");
             button.Click += (_, _) => Session.StartGroup(step);
             _groups.Children.Add(button);
@@ -565,8 +566,8 @@ internal sealed class WelcomeWindow : Window
         if (_closed) return;
         _keyPressed = false;
         string message = Session.NoticeKey is { } notice ? UiText.Get(notice)
-            : Session.LastCompleted is { } completed ? UiText.Get($"Journey.{completed}.Success") + "  "
-                + UiText.Format("Journey.Next", UiText.Get($"Journey.{Session.Step}.Title")) : string.Empty;
+            : Session.LastCompleted is { } completed ? UiText.Get($"Journey.{completed}.Success")
+                + (Session.Step == PracticeStep.Results ? string.Empty : "  " + UiText.Format("Journey.Next", UiText.Get($"Journey.{Session.Step}.Title"))) : string.Empty;
         SetStatus(message, announce: false, success: Session.LastCompleted is not null && Session.NoticeKey is null);
         RenderStep();
         _scroll.ScrollToTop();
@@ -611,6 +612,9 @@ internal sealed class WelcomeWindow : Window
         BackButton.Visibility = SkipStepButton.Visibility = _showingConsent || groups ? Visibility.Collapsed : Visibility.Visible;
         SkipStepButton.Visibility = finish ? Visibility.Collapsed : SkipStepButton.Visibility;
         _groups.Visibility = groups || finish ? Visibility.Visible : Visibility.Collapsed;
+        _groups.Columns = finish && _textScale <= 1.2 ? 3 : 1;
+        for (int i = 0; i < _groups.Children.Count; i++)
+            ((Button)_groups.Children[i]).Margin = new Thickness(_groups.Columns > 1 && i > 0 ? 8 : 0, 4, 0, 4);
         int group = step <= PracticeStep.A6 ? 0 : step <= PracticeStep.B6 ? 1 : 2;
         string label = UiText.Get(group == 0 ? "Journey.CaptureGroup" : group == 1 ? "Journey.PinGroup" : "Journey.FindGroup");
         int number = Array.IndexOf(PracticeSession.Steps, step) + 1;
@@ -785,14 +789,23 @@ internal sealed class WelcomeWindow : Window
     /// <summary>Only completed practice actions receive a check; the keys reflect the current settings.</summary>
     private FrameworkElement MakeRecap()
     {
-        var stack = new StackPanel();
-        foreach (PracticeStep step in PracticeSession.Steps)
+        var grid = new Grid();
+        int columns = _textScale <= 1.2 ? 2 : 1;
+        int rows = (PracticeSession.Steps.Length + columns - 1) / columns;
+        for (int column = 0; column < columns; column++) grid.ColumnDefinitions.Add(new ColumnDefinition());
+        for (int row = 0; row < rows; row++) grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        // Keep the lesson order down the first column, then down the second, including automation order.
+        for (int index = 0; index < PracticeSession.Steps.Length; index++)
         {
+            PracticeStep step = PracticeSession.Steps[index];
             PracticeStepResult result = Session.Results[step];
             var row = WrappedLabel((result == PracticeStepResult.Completed ? "✓ " : "– ") + UiText.Get($"Journey.{step}.Title") + " · " + UiText.Get($"Journey.{result}"), 13);
-            row.Margin = new Thickness(0, 2, 0, 2); stack.Children.Add(row);
+            row.Margin = new Thickness(index / rows > 0 ? 12 : 0, 2, 0, 2);
+            Grid.SetRow(row, index % rows);
+            Grid.SetColumn(row, index / rows);
+            grid.Children.Add(row);
         }
-        return stack;
+        return grid;
     }
 
     private FrameworkElement MakePracticeTable()
