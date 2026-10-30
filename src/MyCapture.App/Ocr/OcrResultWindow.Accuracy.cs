@@ -17,6 +17,12 @@ internal sealed partial class OcrResultWindow
     private Task<bool>? _modelReadiness;
     private long _accuracyRefreshVersion;
     private string _generatedText = string.Empty;
+    private StackPanel _accuracyHeading = null!;
+    private WrapPanel _accuracyCommands = null!;
+    private Action? _cancelAccuracy;
+    private bool _accuracyPresented;
+
+    internal bool AccuracyControlsCreated => AccuracySelector is not null;
 
     internal bool SuppressPresentation { get; set; }
     internal Task AccuracyModelCheckTask { get; private set; } = Task.CompletedTask;
@@ -32,12 +38,30 @@ internal sealed partial class OcrResultWindow
     internal bool HasEditedText => !string.Equals(_textBox.Text, _generatedText, StringComparison.Ordinal);
     internal Func<bool> ConfirmReplaceEditedText { get; set; } = null!;
 
-    private void BuildAccuracyControls(StackPanel heading, WrapPanel commands)
+    private void InitializeAccuracyPresentation(StackPanel heading, WrapPanel commands)
     {
+        _accuracyHeading = heading;
+        _accuracyCommands = commands;
         ConfirmReplaceEditedText = () => MessageBox.Show(this,
             UiText.Get("Ocr_ReplaceEditedText"), Title, MessageBoxButton.YesNo,
             MessageBoxImage.Question, MessageBoxResult.No) == MessageBoxResult.Yes;
+        ContentRendered += (_, _) => CompleteAccuracyPresentation();
+    }
 
+    // The presenter is created at app startup. Neither its hidden window nor the first
+    // visible frame needs the accuracy UI, model verification or Windows cost query.
+    // Offscreen tests call this same boundary after simulating the initial render.
+    internal void CompleteAccuracyPresentation()
+    {
+        if (_accuracyReleased || _accuracyPresented) return;
+        _accuracyPresented = true;
+        if (!AccuracyControlsCreated) BuildAccuracyControls();
+        RestoreQualitySelection();
+        RefreshAccuracy();
+    }
+
+    private void BuildAccuracyControls()
+    {
         var choice = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center,
             Margin = new Thickness(0, 0, 12, 0) };
         var label = new TextBlock { Text = UiText.Get("Ocr_Accuracy"), VerticalAlignment = VerticalAlignment.Center,
@@ -63,7 +87,7 @@ internal sealed partial class OcrResultWindow
                 await _changeQuality(selected);
         };
         choice.Children.Add(AccuracySelector);
-        commands.Children.Add(choice);
+        _accuracyCommands.Children.Insert(0, choice);
 
         var suggestion = new WrapPanel { Margin = new Thickness(0, 10, 0, 0),
             VerticalAlignment = VerticalAlignment.Center, Visibility = Visibility.Collapsed };
@@ -88,6 +112,7 @@ internal sealed partial class OcrResultWindow
         AccuracyCancel = MakeButton(UiText.Get("Ocr_CancelDownload"), UiText.Get("Ocr_CancelDownload"));
         AccuracyCancel.SetResourceReference(StyleProperty, "Button.Ghost");
         AccuracyCancel.Visibility = Visibility.Collapsed;
+        AccuracyCancel.Click += (_, _) => _cancelAccuracy?.Invoke();
         suggestion.Children.Add(AccuracyCancel);
         AccuracyDismiss = MakeButton("×", UiText.Get("Ocr_DismissAccuracy"));
         AccuracyDismiss.SetResourceReference(StyleProperty, "Button.Icon");
@@ -95,7 +120,7 @@ internal sealed partial class OcrResultWindow
         AccuracyDismiss.ToolTip = UiText.Get("Ocr_DismissAccuracy");
         AccuracyDismiss.Click += (_, _) => DismissAccuracySuggestion();
         suggestion.Children.Add(AccuracyDismiss);
-        heading.Children.Add(suggestion);
+        _accuracyHeading.Children.Add(suggestion);
     }
 
     internal void ConfigureAccuracy(OcrAccuracyOptions options, Func<OcrQuality, Task> changeQuality, Action cancel)
@@ -104,7 +129,7 @@ internal sealed partial class OcrResultWindow
         _modelReady = null;
         _modelReadiness = null;
         _changeQuality = changeQuality;
-        AccuracyCancel.Click += (_, _) => cancel();
+        _cancelAccuracy = cancel;
         RefreshAccuracy();
     }
 
@@ -120,6 +145,7 @@ internal sealed partial class OcrResultWindow
 
     internal void RestoreQualitySelection()
     {
+        if (!AccuracyControlsCreated) return;
         _updatingQuality = true;
         AccuracySelector.SelectedValue = ResultQuality;
         if (ResultQuality is null) AccuracySelector.SelectedIndex = -1;
@@ -130,7 +156,8 @@ internal sealed partial class OcrResultWindow
     {
         long version = ++_accuracyRefreshVersion;
         UpdateAccuracyControls();
-        if (_accuracy is not { } accuracy || !accuracy.Model.IsSupported || _qualityOperation || _accuracyReleased)
+        if (!_accuracyPresented || _accuracy is not { } accuracy || !accuracy.Model.IsSupported
+            || _qualityOperation || _accuracyReleased)
         {
             AccuracyModelCheckTask = Task.CompletedTask;
             return;
@@ -165,6 +192,7 @@ internal sealed partial class OcrResultWindow
 
     private void UpdateAccuracyControls()
     {
+        if (!AccuracyControlsCreated || !_accuracyPresented) return;
         if (_accuracyReleased)
         {
             AccuracySuggestion.Visibility = Visibility.Collapsed;
@@ -214,6 +242,7 @@ internal sealed partial class OcrResultWindow
 
     internal void BeginQualityOperation(bool downloading)
     {
+        CompleteAccuracyPresentation();
         ++_accuracyRefreshVersion;
         _modelReadiness = null;
         _deferredSelection = _imageOverlay.Selection;
@@ -276,6 +305,8 @@ internal sealed partial class OcrResultWindow
         _recognitionOperation = false;
         _qualityOperation = false;
         _accuracyReleased = true;
+        _accuracyPresented = false;
+        if (!AccuracyControlsCreated) return;
         AccuracySuggestion.Visibility = Visibility.Collapsed;
         AccuracySelector.IsEnabled = false;
     }

@@ -26,6 +26,7 @@ public sealed class OcrAccuracyPolishTests
                 _ => Task.CompletedTask, () => { });
             var (image, result) = Ocr410Fixture.Table();
             window.ShowResult(result.WithQuality(OcrQuality.Fast), "fixture", image);
+            window.CompleteAccuracyPresentation();
             OcrTranslationWindowTests.PumpUntil(() => window.AccuracyModelCheckTask.IsCompleted);
             window.AccuracyModelCheckTask.GetAwaiter().GetResult();
             Assert.Same(window.FindResource("Button.Secondary"), window.AccuracyAction.Style);

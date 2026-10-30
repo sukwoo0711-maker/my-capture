@@ -155,7 +155,7 @@ internal sealed partial class OcrResultWindow : Window
             HorizontalAlignment = HorizontalAlignment.Right,
         };
 
-        BuildAccuracyControls(heading, buttons);
+        InitializeAccuracyPresentation(heading, buttons);
 
         // One decision group, strongest first: Copy (primary), export (secondary), then the
         // quiet rerun. The active extraction mode determines the copy and export actions.

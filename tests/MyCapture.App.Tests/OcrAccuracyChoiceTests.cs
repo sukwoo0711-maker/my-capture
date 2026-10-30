@@ -788,6 +788,7 @@ public sealed class OcrAccuracyChoiceTests
             Presenter.ShowCached(Text(text).WithQuality(quality), "isolated fixture",
                 () => OcrRequestFactory.FromBitmap(Image, Settings));
             WaitUntil(() => ReferenceEquals(Window.ImageOverlay.SourceImage, Image));
+            Window.CompleteAccuracyPresentation();
             if (waitForModel) Complete(Window.AccuracyModelCheckTask);
         }
 

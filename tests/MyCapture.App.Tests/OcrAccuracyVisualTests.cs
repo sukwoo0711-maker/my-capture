@@ -30,6 +30,7 @@ public sealed class OcrAccuracyVisualTests
             window.ConfigureAccuracy(new OcrAccuracyOptions(() => settings, () => { }, model),
                 _ => Task.CompletedTask, () => { });
             window.ShowResult(result.WithQuality(OcrQuality.Fast), "MyCapture OCR", image);
+            window.CompleteAccuracyPresentation();
             CompleteModelCheck(window);
             SaveContent(window, language, "suggestion");
             Assert.Equal(Visibility.Visible, window.AccuracySuggestion.Visibility);
@@ -71,6 +72,7 @@ public sealed class OcrAccuracyVisualTests
             window.ConfigureAccuracy(new OcrAccuracyOptions(() => new OcrSettings(), () => { }, new VisualModel()),
                 _ => Task.CompletedTask, () => { });
             window.ShowResult(result.WithQuality(OcrQuality.Fast), "MyCapture OCR", image);
+            window.CompleteAccuracyPresentation();
             CompleteModelCheck(window);
             var content = (FrameworkElement)window.Content;
             content.Measure(new Size(760, 520));
