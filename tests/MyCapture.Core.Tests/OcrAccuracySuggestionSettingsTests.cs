@@ -37,8 +37,7 @@ public sealed class OcrAccuracySuggestionSettingsTests
     [Fact]
     public void DismissalSurvivesSettingsStoreSaveAndReload()
     {
-        var paths = AppPaths.CreateForRoot(Path.Combine(Path.GetTempPath(),
-            "ocr-accuracy-settings-" + Guid.NewGuid().ToString("N")));
+        var paths = AppPaths.CreateForRoot(TestRecycleBin.CreateTempSubdirectory("ocr-accuracy-settings-").FullName);
         paths.EnsureCreated();
         var store = new SettingsStore(paths, NullLogger<SettingsStore>.Instance);
         var settings = new AppSettings { Ocr = { AccuracySuggestionDismissed = true } };

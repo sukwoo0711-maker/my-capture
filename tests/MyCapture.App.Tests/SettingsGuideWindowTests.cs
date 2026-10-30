@@ -6,6 +6,7 @@ using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
+using MyCapture.App.Diagnostics;
 using MyCapture.App.Settings;
 using MyCapture.App.Themes;
 using MyCapture.Core.Localization;
@@ -94,7 +95,7 @@ public sealed class SettingsGuideWindowTests
     public Task RenderAllGuidesInBothLanguagesAndSmallWindow() => Isolated(nameof(RenderAllGuidesInBothLanguagesAndSmallWindow), () =>
     {
         string? output = Environment.GetEnvironmentVariable("MYCAPTURE_SETTINGS_GUIDES_EVIDENCE");
-        if (output is not null) Directory.CreateDirectory(output);
+        if (output is not null) output = DiagnosticOutputPaths.Create(output);
         foreach (string language in new[] { "ko", "en" })
         {
             using var culture = UiText.UseLanguage(language);
@@ -109,7 +110,7 @@ public sealed class SettingsGuideWindowTests
                     Assert.Equal(language == "ko" ? "닫기" : "Close", guide.CloseButton.Content);
                     Assert.Equal(Visibility.Collapsed, guide.ReplayButton.Visibility);
                     if (output is not null)
-                        SettingsGuideTrayEvidenceTests.Save((FrameworkElement)guide.Content, Path.Combine(output, $"guide-{definition.Id}-{language}.png"));
+                        SettingsGuideTrayEvidenceTests.Save((FrameworkElement)guide.Content, output, $"guide-{definition.Id}-{language}.png");
                     foreach (var comparison in definition.Comparisons)
                     {
                         guide.ComparisonSelector.SelectedItem = comparison; Drain(guide);
@@ -123,7 +124,7 @@ public sealed class SettingsGuideWindowTests
                                 Assert.True(17.5 * scale >= 13, $"{comparison.Id}: displayed body text is below 13 px.");
                             }
                         if (output is not null && definition.Comparisons.Count > 1)
-                            SettingsGuideTrayEvidenceTests.Save((FrameworkElement)guide.Content, Path.Combine(output, $"guide-{comparison.Id}-{language}.png"));
+                            SettingsGuideTrayEvidenceTests.Save((FrameworkElement)guide.Content, output, $"guide-{comparison.Id}-{language}.png");
                     }
                     guide.Width = 540; guide.Height = 400; Drain(guide);
                     Assert.True(guide.CloseButton.IsVisible);
@@ -133,7 +134,7 @@ public sealed class SettingsGuideWindowTests
                     // Content may be narrower than the viewport; only positive overflow can clip it.
                     Assert.True(guide.Scroller.ExtentWidth <= guide.Scroller.ViewportWidth + 1);
                     if (output is not null && definition.Id == "G02")
-                        SettingsGuideTrayEvidenceTests.Save((FrameworkElement)guide.Content, Path.Combine(output, $"guide-G02-small-{language}.png"));
+                        SettingsGuideTrayEvidenceTests.Save((FrameworkElement)guide.Content, output, $"guide-G02-small-{language}.png");
                 }
                 finally { guide.Close(); }
             }

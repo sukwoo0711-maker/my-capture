@@ -4,6 +4,7 @@ using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
+using MyCapture.App.Diagnostics;
 using MyCapture.App.Themes;
 using MyCapture.Core.Localization;
 using MyCapture.Core.Settings;
@@ -20,8 +21,7 @@ public sealed class PracticeReviewFixEvidenceTests
 
     private static void Render()
     {
-        string root = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "../../../../../work/tutorial-fixes"));
-        Directory.CreateDirectory(root);
+        string root = DiagnosticOutputPaths.Create(Path.Combine(AppContext.BaseDirectory, "../../../../../work/tutorial-fixes"));
         string phase = Environment.GetEnvironmentVariable("MYCAPTURE_REVIEW_PHASE") ?? "after";
         var app = new Application { ShutdownMode = ShutdownMode.OnExplicitShutdown };
         foreach (string dictionary in new[] { "Tokens", "Symbols", "Controls" })
@@ -74,6 +74,6 @@ public sealed class PracticeReviewFixEvidenceTests
         var bitmap = new RenderTargetBitmap((int)Math.Ceiling(content.ActualWidth), (int)Math.Ceiling(content.ActualHeight), 96, 96, PixelFormats.Pbgra32);
         bitmap.Render(content);
         var encoder = new PngBitmapEncoder(); encoder.Frames.Add(BitmapFrame.Create(bitmap));
-        using var stream = File.Create(Path.Combine(root, name + ".png")); encoder.Save(stream);
+        using var stream = File.Create(DiagnosticOutputPaths.Child(root, name + ".png")); encoder.Save(stream);
     }
 }

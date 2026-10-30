@@ -1,7 +1,17 @@
 import { readFileSync, statSync, writeFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
-import { join, resolve } from 'node:path';
+import { isAbsolute, relative, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import assert from 'node:assert/strict';
+
+const repositoryRoot = fileURLToPath(new URL('../../../', import.meta.url));
+function confinedPath(root, name) {
+  const path = resolve(root, name);
+  const fromRoot = relative(root, path);
+  if (fromRoot.startsWith('..') || isAbsolute(fromRoot))
+    throw new Error('Asset path must stay within its root directory');
+  return path;
+}
 
 // Independent inspection of the encoded containers, installed copies and first-frame JPEGs.
 // Does not invoke an encoder, alter assets or touch the user's profile.
@@ -12,8 +22,9 @@ const checkInstalled = installedArg !== '-';
 const expectedFeatures = expectedArg.split(',');
 assert(expectedFeatures.every(id => /^[a-z]+(?:-[a-z]+)*$/.test(id)), 'Invalid expected feature ID');
 assert.equal(new Set(expectedFeatures).size, expectedFeatures.length, 'Duplicate expected feature ID');
-const folder = resolve(folderArg);
-const summary = JSON.parse(readFileSync(join(folder, 'receipt.json'), 'utf8').replace(/^\uFEFF/, ''));
+const folder = confinedPath(repositoryRoot, resolve(folderArg));
+const installed = checkInstalled ? confinedPath(repositoryRoot, resolve(installedArg)) : null;
+const summary = JSON.parse(readFileSync(confinedPath(folder, 'receipt.json'), 'utf8').replace(/^\uFEFF/, ''));
 assert.deepEqual(summary.Failures, []);
 assert.equal(summary.Resolution, '960x540');
 assert.equal(summary.Fps, 25);
@@ -89,8 +100,9 @@ const hash = bytes => createHash('sha256').update(bytes).digest('hex').toUpperCa
 const rows = [];
 for (const receipt of summary.Receipts) {
   const stem = `${receipt.Feature}.${receipt.Language}`;
-  const mp4 = readFileSync(join(folder, `${stem}.mp4`));
-  const jpg = readFileSync(join(folder, `${stem}.jpg`));
+  assert(/^[a-z]+(?:-[a-z]+)*\.(ko|en)$/.test(stem), 'Invalid clip ID');
+  const mp4 = readFileSync(confinedPath(folder, `${stem}.mp4`));
+  const jpg = readFileSync(confinedPath(folder, `${stem}.jpg`));
   const format = video(mp4);
   assert.equal(format.frames, receipt.Frames);
   assert.equal(format.seconds, receipt.Seconds);
@@ -98,11 +110,11 @@ for (const receipt of summary.Receipts) {
   assert.deepEqual(jpeg(jpg), { width: 960, height: 540 });
   assert.equal(mp4.length, receipt.Bytes); assert.equal(jpg.length, receipt.PosterBytes);
   assert.equal(hash(mp4), receipt.Sha256); assert.equal(hash(jpg), receipt.PosterSha256);
-  assert(statSync(join(folder, `${stem}.sheet.png`)).size > 0);
-  assert.deepEqual(JSON.parse(readFileSync(join(folder, `${stem}.receipt.json`), 'utf8')), receipt);
+  assert(statSync(confinedPath(folder, `${stem}.sheet.png`)).size > 0);
+  assert.deepEqual(JSON.parse(readFileSync(confinedPath(folder, `${stem}.receipt.json`), 'utf8')), receipt);
   if (checkInstalled) {
-    assert.equal(hash(readFileSync(join(installedArg, `${stem}.mp4`))), receipt.Sha256);
-    assert.equal(hash(readFileSync(join(installedArg, `${stem}.jpg`))), receipt.PosterSha256);
+    assert.equal(hash(readFileSync(confinedPath(installed, `${stem}.mp4`))), receipt.Sha256);
+    assert.equal(hash(readFileSync(confinedPath(installed, `${stem}.jpg`))), receipt.PosterSha256);
   }
   rows.push({ id: stem, ...format, bytes: mp4.length, posterBytes: jpg.length, installed: checkInstalled });
 }
@@ -111,7 +123,7 @@ assert.equal(new Set(rows.map(row => row.id)).size, rows.length);
 assert.deepEqual(rows.map(row => row.id).sort(), expectedFeatures.flatMap(id => [`${id}.ko`, `${id}.en`]).sort(),
   'Generated clip set must exactly match the explicitly requested features in both languages');
 for (const language of ['ko', 'en']) {
-  const png = readFileSync(join(folder, `contact-sheet.${language}.png`));
+  const png = readFileSync(confinedPath(folder, `contact-sheet.${language}.png`));
   assert.equal(png.subarray(0, 8).toString('hex'), '89504e470d0a1a0a');
   assert.equal(png.toString('ascii', 12, 16), 'IHDR');
   assert.equal(png.readUInt32BE(16), 1440, 'Contact sheet must have three 480-pixel frames per row');
@@ -122,5 +134,5 @@ for (const id of new Set(summary.Receipts.map(row => row.Feature))) {
   assert(rows.some(row => row.id === `${id}.en`), `Missing English ${id}`);
 }
 const result = { result: 'PASS', expectedFeatures, clips: rows.length, rows };
-writeFileSync(join(folder, 'verification.json'), JSON.stringify(result, null, 2) + '\n');
+writeFileSync(confinedPath(folder, 'verification.json'), JSON.stringify(result, null, 2) + '\n');
 console.log(`PASS: ${rows.length} clips; H.264 High, 960x540, 25 fps, 7–9 seconds, silent; JPEGs, receipts, hashes${checkInstalled ? ' and installed copies' : ''} verified.`);

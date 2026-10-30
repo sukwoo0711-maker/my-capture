@@ -44,7 +44,7 @@ public sealed class RecordingWatermarkSettingsTests
         AppSettings applied = draft.ToAppSettings();
         Assert.Equal(watermark, applied.Recording.Watermark);
         Assert.Equal(JsonSerializer.Serialize(stamp), JsonSerializer.Serialize(applied.Annotation.Stamp));
-        string folder = Path.Combine(Path.GetTempPath(), "mc-watermark-settings-" + Guid.NewGuid().ToString("N"));
+        string folder = TestRecycleBin.CreateTempSubdirectory("mc-watermark-settings-").FullName;
         var paths = AppPaths.CreateForRoot(folder);
         var store = new SettingsStore(paths, NullLogger<SettingsStore>.Instance);
         store.Save(applied);

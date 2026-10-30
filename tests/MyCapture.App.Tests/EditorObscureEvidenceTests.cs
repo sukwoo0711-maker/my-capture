@@ -4,6 +4,7 @@ using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
+using MyCapture.App.Diagnostics;
 using MyCapture.App.Editing;
 using MyCapture.App.Themes;
 using MyCapture.Core.Annotations;
@@ -25,8 +26,7 @@ public sealed class EditorObscureEvidenceTests
         using var language = UiText.UseLanguage("ko-KR");
         var repository = new DirectoryInfo(AppContext.BaseDirectory);
         while (repository is not null && !File.Exists(Path.Combine(repository.FullName, ".git"))) repository = repository.Parent;
-        string root = Path.Combine(repository!.FullName, "work", "editor-obscure-crop-esc");
-        Directory.CreateDirectory(root);
+        string root = DiagnosticOutputPaths.Create(Path.Combine(repository!.FullName, "work", "editor-obscure-crop-esc"));
         using EditorWindowHost host = EditorWindowHost.Create();
         host.Window.Width = 1100;
         host.Window.Height = 700;
@@ -35,14 +35,14 @@ public sealed class EditorObscureEvidenceTests
         foreach (var (tool, name) in new[] { (EditorTool.Mosaic, "pixelate"), (EditorTool.Blur, "blur") })
         {
             Invoke(host.Editor, "SelectTool", tool);
-            Save(host.Window, Path.Combine(root, stage + "-" + name + ".png"));
+            Save(host.Window, DiagnosticOutputPaths.Child(root, stage + "-" + name + ".png"));
         }
         Invoke(host.Editor, "SelectTool", EditorTool.Crop);
         host.Editor.PendingCrop!.Begin(new PointD(100, 80), 7);
         host.Editor.PendingCrop.Drag(new PointD(350, 240), false);
         host.Editor.PendingCrop.End();
         Invoke(host.Editor, "RefreshCrop", true);
-        Save(host.Window, Path.Combine(root, stage + "-crop.png"));
+        Save(host.Window, DiagnosticOutputPaths.Child(root, stage + "-crop.png"));
         host.Editor.CancelPendingCrop();
 
         // Measure and render the real context menu directly without opening a desktop popup.
@@ -50,7 +50,7 @@ public sealed class EditorObscureEvidenceTests
         menu.Resources = host.Window.Resources;
         menu.Measure(new Size(350, 260));
         menu.Arrange(new Rect(new Point(), menu.DesiredSize));
-        Save(menu, Path.Combine(root, stage + "-watermark.png"));
+        Save(menu, DiagnosticOutputPaths.Child(root, stage + "-watermark.png"));
     });
 
     private static void Save(FrameworkElement window, string path)

@@ -3,6 +3,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using MyCapture.App.Diagnostics;
 using MyCapture.App.Themes;
 using MyCapture.Core.Localization;
 using MyCapture.Core.Settings;
@@ -18,7 +19,7 @@ public sealed class SettingsGuideTrayEvidenceTests
     {
         string? root = Environment.GetEnvironmentVariable("MYCAPTURE_SETTINGS_GUIDES_EVIDENCE");
         if (string.IsNullOrWhiteSpace(root)) return;
-        Directory.CreateDirectory(root);
+        root = DiagnosticOutputPaths.Create(root);
         string phase = Environment.GetEnvironmentVariable("MYCAPTURE_SETTINGS_GUIDES_PHASE") ?? "after";
         using var language = UiText.UseLanguage("ko-KR");
         using var presenter = new ThemedShellPresenter(() => false);
@@ -41,7 +42,7 @@ public sealed class SettingsGuideTrayEvidenceTests
             menu.Arrange(new Rect(new Point(), menu.DesiredSize));
             menu.UpdateLayout();
             Assert.True(menu.ActualWidth > 100 && menu.ActualHeight > 100);
-            Save(menu, Path.Combine(root, $"tray-{name}-ko-{phase}.png"));
+            Save(menu, root, $"tray-{name}-ko-{phase}.png");
             foreach (MenuItem branch in menu.Items.OfType<MenuItem>().Where(x => x.HasItems))
             {
                 var submenu = presenter.CreateMenu(TrayMenuLayout.Build(commands, new HotkeySettings(), state)
@@ -50,18 +51,18 @@ public sealed class SettingsGuideTrayEvidenceTests
                 submenu.Measure(new Size(440, double.PositiveInfinity));
                 submenu.Arrange(new Rect(new Point(), submenu.DesiredSize));
                 submenu.UpdateLayout();
-                Save(submenu, Path.Combine(root, $"tray-{name}-branch{menu.Items.IndexOf(branch)}-ko-{phase}.png"));
+                Save(submenu, root, $"tray-{name}-branch{menu.Items.IndexOf(branch)}-ko-{phase}.png");
             }
         }
     });
 
-    internal static void Save(FrameworkElement element, string path)
+    internal static void Save(FrameworkElement element, string root, string name)
     {
         var bitmap = new RenderTargetBitmap((int)Math.Ceiling(element.ActualWidth), (int)Math.Ceiling(element.ActualHeight), 96, 96, PixelFormats.Pbgra32);
         bitmap.Render(element);
         var encoder = new PngBitmapEncoder();
         encoder.Frames.Add(BitmapFrame.Create(bitmap));
-        using FileStream stream = File.Create(path);
+        using FileStream stream = File.Create(DiagnosticOutputPaths.Child(root, name));
         encoder.Save(stream);
     }
 }

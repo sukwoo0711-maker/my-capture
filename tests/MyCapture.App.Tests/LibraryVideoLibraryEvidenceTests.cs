@@ -3,6 +3,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using MyCapture.App.Diagnostics;
 using MyCapture.App.Gallery;
 using MyCapture.App.Themes;
 using MyCapture.Core.Localization;
@@ -93,16 +94,15 @@ public sealed partial class SettingsThemePreviewTests
 
     private static void SaveLibraryVideo(FrameworkElement element, string name)
     {
-        string root = Environment.GetEnvironmentVariable("MYCAPTURE_LIBRARY_VIDEO_EVIDENCE")!;
+        string root = DiagnosticOutputPaths.Create(Environment.GetEnvironmentVariable("MYCAPTURE_LIBRARY_VIDEO_EVIDENCE")!);
         string phase = Environment.GetEnvironmentVariable("MYCAPTURE_LIBRARY_VIDEO_PHASE") ?? "after";
         Assert.Contains(phase, new[] { "before", "after" });
-        Directory.CreateDirectory(root);
         var bitmap = new RenderTargetBitmap((int)Math.Ceiling(element.ActualWidth * 1.5),
             (int)Math.Ceiling(element.ActualHeight * 1.5), 144, 144, PixelFormats.Pbgra32);
         bitmap.Render(element);
         var encoder = new PngBitmapEncoder();
         encoder.Frames.Add(BitmapFrame.Create(bitmap));
-        using var output = new FileStream(Path.Combine(root, $"{phase}-{name}.png"),
+        using var output = new FileStream(DiagnosticOutputPaths.Child(root, $"{phase}-{name}.png"),
             phase == "before" ? FileMode.CreateNew : FileMode.Create);
         encoder.Save(output);
     }

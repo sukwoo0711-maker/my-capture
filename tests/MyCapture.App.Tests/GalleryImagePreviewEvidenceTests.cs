@@ -4,6 +4,7 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using MyCapture.App.Diagnostics;
 using MyCapture.App.Gallery;
 using MyCapture.App.Themes;
 using MyCapture.Core.Localization;
@@ -86,13 +87,12 @@ public sealed class GalleryImagePreviewEvidenceTests
 
     private static void Save(FrameworkElement frame, string name)
     {
-        string root = Environment.GetEnvironmentVariable("MYCAPTURE_PREVIEW_EVIDENCE")!;
-        Directory.CreateDirectory(root);
+        string root = DiagnosticOutputPaths.Create(Environment.GetEnvironmentVariable("MYCAPTURE_PREVIEW_EVIDENCE")!);
         var bitmap = new RenderTargetBitmap(960, 630, 144, 144, PixelFormats.Pbgra32);
         bitmap.Render(frame);
         var encoder = new PngBitmapEncoder();
         encoder.Frames.Add(BitmapFrame.Create(bitmap));
-        using FileStream stream = File.Create(Path.Combine(root, name));
+        using FileStream stream = File.Create(DiagnosticOutputPaths.Child(root, name));
         encoder.Save(stream);
     }
 }

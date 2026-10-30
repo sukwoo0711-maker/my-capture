@@ -5,6 +5,7 @@ using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using MyCapture.App.Diagnostics;
 using MyCapture.App.Editing;
 using MyCapture.Core.Annotations;
 using MyCapture.Core.Primitives;
@@ -25,7 +26,7 @@ public sealed class EditorPointerSurfaceEvidenceTests
         string? root = Environment.GetEnvironmentVariable("MYCAPTURE_POINTER_EVIDENCE");
         if (string.IsNullOrWhiteSpace(root)) return;
         string phase = Environment.GetEnvironmentVariable("MYCAPTURE_POINTER_PHASE") ?? "after";
-        Directory.CreateDirectory(root);
+        root = DiagnosticOutputPaths.Create(root);
         var sheet = new DrawingVisual();
         using (DrawingContext dc = sheet.RenderOpen())
         {
@@ -46,7 +47,7 @@ public sealed class EditorPointerSurfaceEvidenceTests
                 i++;
             }
         }
-        Save(Render(sheet, 1000, 600), Path.Combine(root, $"cursor-sheet-{phase}.png"));
+        Save(Render(sheet, 1000, 600), DiagnosticOutputPaths.Child(root, $"cursor-sheet-{phase}.png"));
         foreach (double scale in new[] { .5, 1.0 })
         foreach (int width in new[] { 3, 24 })
         foreach (EditorTool tool in new[] { EditorTool.Pen, EditorTool.Highlighter })
@@ -69,7 +70,7 @@ public sealed class EditorPointerSurfaceEvidenceTests
                 dc.DrawImage(cursor.Bitmap, new Rect(center.X - cursor.HotSpotX - .5, 40 + center.Y - cursor.HotSpotY - .5, 32, 32));
                 Label(dc, $"{tool}, {width}px, {scale:P0}", 12, 8, 16);
             }
-            Save(Render(scene, 400, 310), Path.Combine(root, $"brush-{tool}-{width}-{scale * 100:0}-{phase}.png"));
+            Save(Render(scene, 400, 310), DiagnosticOutputPaths.Child(root, $"brush-{tool}-{width}-{scale * 100:0}-{phase}.png"));
         }
         {
             var (surface, controller) = Surface(1);
@@ -80,7 +81,7 @@ public sealed class EditorPointerSurfaceEvidenceTests
             controller.SetSelected(badge);
             surface.InvalidateVisual();
             surface.UpdateLayout();
-            Save(Render(surface, (int)surface.ActualWidth, (int)surface.ActualHeight), Path.Combine(root, $"step-handles-{phase}.png"));
+            Save(Render(surface, (int)surface.ActualWidth, (int)surface.ActualHeight), DiagnosticOutputPaths.Child(root, $"step-handles-{phase}.png"));
         }
     });
 
