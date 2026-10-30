@@ -410,7 +410,7 @@ public sealed class VideoFrameCaptureTests
 
     private sealed class Fixture : IDisposable
     {
-        internal string Root { get; } = Path.Combine(@"C:\GitRepositories\my-capture-libvideo\work\library-video-impl", "frame-tests-" + Guid.NewGuid().ToString("N"));
+        internal string Root { get; } = OwnedTestDirectory.Create("mc-frame-tests-");
         internal AppPaths Paths { get; }
         internal CaptureQueue Queue { get; }
         internal CaptureRecord Source { get; }
@@ -472,7 +472,11 @@ public sealed class VideoFrameCaptureTests
             typeof(VideoEditorWindow).GetMethod("CompleteOpen", Private)!.Invoke(editor, [300.0, true]);
             return editor;
         }
-        public void Dispose() { } // Preserve isolated evidence; no real profile or cleanup API.
+        public void Dispose()
+        {
+            OwnedTestDirectory.WaitForMediaFilesReleased(Root);
+            OwnedTestDirectory.Delete(Root);
+        }
     }
 
     private sealed class HeldPreviewEngine : IVideoPreviewEngine

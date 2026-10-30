@@ -36,7 +36,7 @@ public sealed class VideoFrameEditorRound2Tests
         fixture.WaitForSeek();
         Assert.Equal(200, fixture.Editor.TimelineForTest.PlayheadMs, 3);
         Assert.InRange(fixture.Editor.PreviewSeekCoordinatorForTest.PresentedPositionMs, 99.99, 102);
-        AssertPixel(fixture.Preview(), .8, .8, Colors.Lime, 12);
+        AssertCutEndPreview(fixture);
 
         // The independent fixture contract is frame 0=red, frame 1=green, frame 2=blue.
         // The exclusive end is 200, but the displayed and retained frame starts at 100.
@@ -154,6 +154,65 @@ public sealed class VideoFrameEditorRound2Tests
         Assert.Equal(255, pixels[p + 3]);
     }
 
+    private static void AssertCutEndPreview(Fixture fixture)
+    {
+        BitmapSource initial = fixture.Preview();
+        bool saveEnabled = Field<Button>(fixture.Editor, "_saveCurrentFrameButton").IsEnabled;
+        double initialPosition = fixture.Editor.MediaForTest.Position.TotalMilliseconds;
+        try
+        {
+            AssertPixel(initial, .8, .8, Colors.Lime, 12);
+        }
+        catch (Xunit.Sdk.XunitException failure)
+        {
+            // Preserve the first-frame failure: a later correct frame must not turn a save-ready
+            // stale preview into a pass. Observe only to distinguish a delayed frame from a stuck
+            // one on runners where the decoder/compositor race cannot be reproduced locally.
+            string observation;
+            try
+            {
+                var elapsed = System.Diagnostics.Stopwatch.StartNew();
+                BitmapSource last = initial;
+                bool recovered = false, complete = false;
+                double observedMs = 0;
+                Until(() =>
+                {
+                    if (complete) return true;
+                    last = fixture.Preview();
+                    byte[] pixels = Pixels(last);
+                    int p = ((int)(last.PixelHeight * .8) * last.PixelWidth + (int)(last.PixelWidth * .8)) * 4;
+                    recovered = pixels[p] <= 12 && pixels[p + 1] >= 243 && pixels[p + 2] <= 12 && pixels[p + 3] == 255;
+                    observedMs = elapsed.Elapsed.TotalMilliseconds;
+                    complete = recovered || observedMs >= 5000;
+                    return complete;
+                }, "The cut-end preview observation did not finish.");
+                observation = $"recovered: {recovered}; observation: {observedMs:F1} ms; "
+                    + $"final media position: {fixture.Editor.MediaForTest.Position.TotalMilliseconds:F3} ms";
+                string evidence = Path.Combine(AppContext.BaseDirectory, "ci-video-cut-evidence");
+                string id = Guid.NewGuid().ToString("N");
+                try
+                {
+                    Directory.CreateDirectory(evidence);
+                    File.WriteAllBytes(Path.Combine(evidence, id + "-initial.png"), ImageCodec.EncodePng(initial));
+                    File.WriteAllBytes(Path.Combine(evidence, id + "-last.png"), ImageCodec.EncodePng(last));
+                    observation += $"; evidence: {Path.Combine(evidence, id)}";
+                }
+                catch (Exception evidenceFailure)
+                {
+                    observation += $"; evidence write failed: {evidenceFailure.Message}";
+                }
+            }
+            catch (Exception observationFailure)
+            {
+                observation = $"follow-up observation failed: {observationFailure.Message}";
+            }
+            Assert.Fail(failure.Message + $" Save enabled at first sample: {saveEnabled}; "
+                + $"initial media position: {initialPosition:F3} ms; "
+                + $"presented position: {fixture.Editor.PreviewSeekCoordinatorForTest.PresentedPositionMs:F3} ms; "
+                + observation);
+        }
+    }
+
     private static Task Run(string name, Action verify) => SettingsThemePreviewTests.RunIsolated(name, () =>
     {
         var application = new Application { ShutdownMode = ShutdownMode.OnExplicitShutdown };
@@ -196,7 +255,7 @@ public sealed class VideoFrameEditorRound2Tests
 
     private sealed class Fixture : IDisposable
     {
-        private string Root { get; } = Path.Combine(@"C:\GitRepositories\my-capture-libvideo\work\library-video-impl", "editor-r2-" + Guid.NewGuid().ToString("N"));
+        private string Root { get; } = OwnedTestDirectory.Create("mc-editor-r2-");
         internal VideoEditorWindow Editor { get; }
         internal Fixture(VideoEditDocument? document = null)
         {
@@ -257,6 +316,11 @@ public sealed class VideoFrameEditorRound2Tests
             BitmapSource image = BitmapFrame.Create(stream, BitmapCreateOptions.PreservePixelFormat, BitmapCacheOption.OnLoad);
             image.Freeze(); return image;
         }
-        public void Dispose() { Editor.Close(); } // All isolated files remain for inspection.
+        public void Dispose()
+        {
+            Editor.Close();
+            OwnedTestDirectory.WaitForMediaFilesReleased(Root);
+            OwnedTestDirectory.Delete(Root);
+        }
     }
 }

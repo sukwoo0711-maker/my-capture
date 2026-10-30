@@ -107,7 +107,7 @@ public sealed class RecoveredVideoFrameRound2Tests
 
     private sealed class Fixture : IDisposable
     {
-        internal string Root { get; } = Path.Combine(@"C:\GitRepositories\my-capture-libvideo\work\library-video-impl", "recovery-r2-" + Guid.NewGuid().ToString("N"));
+        internal string Root { get; } = OwnedTestDirectory.Create("mc-recovery-r2-");
         internal App App { get; } = (App)RuntimeHelpers.GetUninitializedObject(typeof(App));
         internal CaptureRecord Source { get; }
         internal VideoLibraryService Library { get; }
@@ -157,6 +157,11 @@ public sealed class RecoveredVideoFrameRound2Tests
                     ["recording"] = JsonSerializer.Serialize(new RecordingResult(sourcePath, 300, 10, 3, 640, 360)),
                 }, [], DateTimeOffset.UtcNow);
         }
-        public void Dispose() => _services.Dispose(); // Retain isolated files; no cleanup or real app startup.
+        public void Dispose()
+        {
+            _services.Dispose();
+            OwnedTestDirectory.WaitForMediaFilesReleased(Root);
+            OwnedTestDirectory.Delete(Root);
+        }
     }
 }

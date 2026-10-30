@@ -1,8 +1,10 @@
 using System.Globalization;
 using System.Diagnostics;
 using System.Reflection;
+using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
@@ -502,6 +504,42 @@ public sealed class EditorDisplayScaleTests(ITestOutputHelper output) : KoreanCa
             explicitSize: new Size(1100, 700));
     });
 
+    [Fact]
+    public void NativeTrackingLimitStillClampsAnExplicitCallerSize() => StaTestHost.Run(() =>
+    {
+        WithWindow(SyntheticCapture(240, 90), Monitor(3440, 1440, 1392), false,
+            (window, _) => Assert.Equal(new Size(1044, 700), new Size(window.Width, window.Height)),
+            explicitSize: new Size(1100, 700), nativeMaximum: WindowTrackSizeScope.SmallDesktopMaximum);
+    });
+
+    [Theory]
+    [InlineData(3440, 1440, 1392, 1280, 720)]
+    [InlineData(1920, 1080, 1032, 1280, 720)]
+    [InlineData(3440, 1440, 1392, 1920, 1080)]
+    public void NativeTrackingLimitFitsTheImageToTheActualClient(
+        int monitorWidth, int monitorHeight, int workHeight, int width, int height) => StaTestHost.Run(() =>
+    {
+        WithWindow(SyntheticCapture(width, height), Monitor(monitorWidth, monitorHeight, workHeight), false,
+            (window, surface) =>
+            {
+                Assert.Equal(1044, window.Width);
+                Assert.True(window.Height <= 788);
+                Assert.True(GetClientRect(new WindowInteropHelper(window).Handle, out NativeRect client));
+                DpiScale dpi = VisualTreeHelper.GetDpi(window);
+                var content = (FrameworkElement)window.Content;
+                Assert.Equal((client.Right - client.Left) / dpi.DpiScaleX, content.ActualWidth);
+                Assert.Equal((client.Bottom - client.Top) / dpi.DpiScaleY, content.ActualHeight);
+                double expected = Math.Min(1 / dpi.DpiScaleX,
+                    Math.Min((surface.ActualWidth - 32) / width, (surface.ActualHeight - 32) / height));
+                Assert.Equal(expected, surface.DipPerPixel, 10);
+                Assert.Equal(876.0 / width, surface.DipPerPixel);
+                AssertInsets(surface.FrameRectDip, surface.RenderSize);
+                output.WriteLine($"native limit 1044x788: requested monitor={monitorWidth}x{monitorHeight}; " +
+                    $"capture={width}x{height}; window={window.Width}x{window.Height}; " +
+                    $"client={content.RenderSize}; surface={surface.RenderSize}; image={surface.FrameRectDip}; scale={surface.DipPerPixel:R}");
+            }, nativeMaximum: WindowTrackSizeScope.SmallDesktopMaximum);
+    });
+
     [Theory]
     [InlineData(false, false)]
     [InlineData(true, false)]
@@ -727,7 +765,7 @@ public sealed class EditorDisplayScaleTests(ITestOutputHelper output) : KoreanCa
     private static void WithWindow(BitmapSource bitmap, MonitorInfo monitor, bool placeOnMonitor,
         Action<AnnotationEditorWindow, AnnotationEditorSurface> assert, bool gallery = false, Size? explicitSize = null,
         bool show = true, bool centerOnTarget = false, bool borderless = false, ResourceDictionary? resources = null,
-        Action<AnnotationEditorWindow>? beforeShow = null, Action<TimeSpan>? opened = null)
+        Action<AnnotationEditorWindow>? beforeShow = null, Action<TimeSpan>? opened = null, Size? nativeMaximum = null)
     {
         bool? animations = FluidMotion.AnimationsEnabledOverrideForTest;
         FluidMotion.AnimationsEnabledOverrideForTest = false;
@@ -762,6 +800,8 @@ public sealed class EditorDisplayScaleTests(ITestOutputHelper output) : KoreanCa
             window.ShowActivated = false;
             window.ShowInTaskbar = false;
             beforeShow?.Invoke(window);
+            using var tracking = new WindowTrackSizeScope(window,
+                nativeMaximum.HasValue ? default : new Size(monitor.Bounds.Width, monitor.Bounds.Height), nativeMaximum);
             if (show)
             {
                 window.Show();
@@ -787,6 +827,13 @@ public sealed class EditorDisplayScaleTests(ITestOutputHelper output) : KoreanCa
             FluidMotion.AnimationsEnabledOverrideForTest = animations;
         }
     }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct NativeRect { public int Left, Top, Right, Bottom; }
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool GetClientRect(nint hwnd, out NativeRect rect);
 
     private static void Settle(Window window)
     {

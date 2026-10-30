@@ -218,7 +218,7 @@ public sealed class PlayerFrameRound2Tests
 
     private sealed class Fixture : IDisposable
     {
-        internal string Root { get; } = Path.Combine(@"C:\GitRepositories\my-capture-libvideo\work\library-video-impl", "player-r2-" + Guid.NewGuid().ToString("N"));
+        internal string Root { get; } = OwnedTestDirectory.Create("mc-player-r2-");
         internal GalleryVideoPlayerWindow Player { get; }
         internal CaptureRecord Source { get; }
         internal string SourcePath { get; }
@@ -228,8 +228,11 @@ public sealed class PlayerFrameRound2Tests
         internal Button SaveButton => Field<Button>(Player, "_saveFrameButton");
         internal Slider Seek => Field<Slider>(Player, "_seek");
 
+        private readonly bool _realClip;
+
         internal Fixture(Func<MediaElement, IVideoPreviewEngine>? engineFactory = null, bool realClip = false, bool nativePlayback = false)
         {
+            _realClip = realClip;
             AppPaths paths = AppPaths.CreateForRoot(Root); paths.EnsureCreated();
             var queue = new CaptureQueue(paths, new QueueSettings(), NullLogger<CaptureQueue>.Instance);
             Source = new CaptureRecord { MediaKind = CaptureMediaKind.Video, Title = "탐색 검사", Width = 320, Height = 180,
@@ -293,7 +296,15 @@ public sealed class PlayerFrameRound2Tests
             var bitmap = BitmapFrame.Create(stream, BitmapCreateOptions.PreservePixelFormat, BitmapCacheOption.OnLoad);
             bitmap.Freeze(); return bitmap;
         }
-        public void Dispose() => Player.Close(); // Retain synthetic fixtures; no deletion or recycling.
+        public void Dispose()
+        {
+            Player.Close();
+            try { OwnedTestDirectory.WaitForMediaFilesReleased(Root); }
+            // WPF can keep the undecodable four-byte stand-in open after close; leave that
+            // owned temp folder in place. A real clip must still be released.
+            catch (TimeoutException) when (!_realClip) { return; }
+            OwnedTestDirectory.Delete(Root);
+        }
     }
 
     private sealed class HeldEngine : IVideoPreviewEngine
