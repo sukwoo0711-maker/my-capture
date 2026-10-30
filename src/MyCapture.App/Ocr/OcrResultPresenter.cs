@@ -3,6 +3,7 @@ using System.Windows.Media.Imaging;
 using Microsoft.Extensions.Logging;
 using MyCapture.Ocr;
 using MyCapture.Ocr.Translation;
+using MyCapture.Core.Settings;
 
 namespace MyCapture.App.Ocr;
 
@@ -30,6 +31,12 @@ internal sealed class OcrResultPresenter : IDisposable
     private readonly Action<bool> _setBusy;
     private readonly ILogger _log;
     private readonly OcrResultWindow _window;
+    private readonly OcrAccuracyOptions? _accuracy;
+    private CancellationTokenSource? _qualityCancellation;
+    private BitmapSource? _currentSnapshot;
+    private OcrRequest? _currentSourceRequest;
+
+    internal OcrResultWindow Window => _window;
 
     private CancellationTokenSource? _inFlight;
     private CancellationTokenSource? _cachedImageLoad;
@@ -76,14 +83,19 @@ internal sealed class OcrResultPresenter : IDisposable
         Dispatcher dispatcher,
         Action<bool> setBusy,
         ILogger log,
-        ITextTranslator? translator = null)
+        ITextTranslator? translator = null,
+        OcrAccuracyOptions? accuracy = null,
+        OcrResultWindow? window = null)
     {
         _service = service ?? throw new ArgumentNullException(nameof(service));
         _dispatcher = dispatcher ?? throw new ArgumentNullException(nameof(dispatcher));
         _setBusy = setBusy ?? throw new ArgumentNullException(nameof(setBusy));
         _log = log ?? throw new ArgumentNullException(nameof(log));
 
-        _window = new OcrResultWindow { Translator = translator };
+        _accuracy = accuracy;
+        _window = window ?? new OcrResultWindow();
+        _window.Translator = translator;
+        if (accuracy is not null) _window.ConfigureAccuracy(accuracy, ChangeQualityAsync, CancelQualityChange);
         _window.RerunRequested += (_, _) => Rerun();
         _window.GeometryRequested += (_, _) => Rerun();
         _window.Dismissed += (_, _) =>
@@ -117,6 +129,8 @@ internal sealed class OcrResultPresenter : IDisposable
         _currentRequestFactory = requestFactory ?? throw new ArgumentNullException(nameof(requestFactory));
         _currentContext = contextLabel ?? string.Empty;
         _onFreshResult = onFreshResult;
+        _currentSnapshot = null;
+        _currentSourceRequest = null;
         long version = _presentationVersion;
         _window.ShowResult(cachedResult, _currentContext);
         if (version == _presentationVersion) _ = LoadCachedImageAsync(requestFactory, version);
@@ -136,12 +150,16 @@ internal sealed class OcrResultPresenter : IDisposable
         _currentRequestFactory = requestFactory ?? throw new ArgumentNullException(nameof(requestFactory));
         _currentContext = contextLabel ?? string.Empty;
         _onFreshResult = onFreshResult;
+        _currentSnapshot = null;
+        _currentSourceRequest = null;
         Run();
     }
 
     private void Rerun()
     {
-        if (_currentRequestFactory is not null)
+        long version = _presentationVersion;
+        if (_currentRequestFactory is not null && _window.ConfirmReplacement()
+            && version == _presentationVersion && !_disposed)
         {
             Run(preserveSelection: true);
         }
@@ -161,7 +179,9 @@ internal sealed class OcrResultPresenter : IDisposable
         OcrRequest request;
         try
         {
-            request = _currentRequestFactory();
+            request = preserveSelection && _currentSnapshot is not null && _currentSourceRequest is not null
+                ? OcrSourceSnapshot.WindowsRequest(_currentSourceRequest, _currentSnapshot)
+                : _currentRequestFactory();
         }
         catch (Exception ex)
         {
@@ -170,7 +190,8 @@ internal sealed class OcrResultPresenter : IDisposable
             // Run() may just have cancelled a previous owner. Its late completion is intentionally
             // ignored, so this boundary must release the tray busy state itself.
             _setBusy(false);
-            _window.ShowResult(OcrResult.Failed(UiText.Get("Text_F09A6C5A6A10")), _currentContext);
+            if (preserveSelection) _window.CompletePreservedRerun(UiText.Get("Text_F09A6C5A6A10"));
+            else _window.ShowResult(OcrResult.Failed(UiText.Get("Text_F09A6C5A6A10")), _currentContext);
             return;
         }
 
@@ -178,6 +199,7 @@ internal sealed class OcrResultPresenter : IDisposable
         if (_disposed || version != _presentationVersion) return;
         var cts = new CancellationTokenSource();
         _inFlight = cts;
+        string? acceptedText = preserveSelection ? _window.ResultTextBox.Text : null;
 
         _window.ShowBusy(_currentContext, preserveSelection);
         if (!ReferenceEquals(_inFlight, cts))
@@ -187,10 +209,10 @@ internal sealed class OcrResultPresenter : IDisposable
         }
         _setBusy(true);
 
-        _ = RecognizeAsync(request, cts, preserveSelection);
+        _ = RecognizeAsync(request, cts, preserveSelection, acceptedText);
     }
 
-    private async Task RecognizeAsync(OcrRequest request, CancellationTokenSource cts, bool preserveSelection)
+    private async Task RecognizeAsync(OcrRequest request, CancellationTokenSource cts, bool preserveSelection, string? acceptedText)
     {
         OcrResult result;
         BitmapSource? source = null;
@@ -200,6 +222,7 @@ internal sealed class OcrResultPresenter : IDisposable
             result = source is null ? OcrResult.Failed(UiText.Get("Text_475D185DC33B"))
                 : await _service.RecognizeAsync(OcrSourceSnapshot.WindowsRequest(request, source), cts.Token)
                     .ConfigureAwait(true);
+            result = result.WithQuality(OcrQualityProfile.FromUpscale(request.UpscaleFactor));
         }
         catch (OperationCanceledException)
         {
@@ -223,8 +246,34 @@ internal sealed class OcrResultPresenter : IDisposable
 
             _setBusy(false);
 
-            if (result.Status != OcrStatus.Cancelled)
+            if (preserveSelection && result.Status is OcrStatus.Success or OcrStatus.NoText
+                && acceptedText != _window.ResultTextBox.Text)
             {
+                bool replace = _window.ConfirmReplacement();
+                if (_disposed || _mutationSuspensions != 0 || !ReferenceEquals(_inFlight, cts))
+                {
+                    cts.Dispose();
+                    return;
+                }
+                if (!replace)
+                {
+                    _window.CompletePreservedRerun();
+                    _inFlight = null;
+                    cts.Dispose();
+                    return;
+                }
+            }
+
+            if (preserveSelection && result.Status is OcrStatus.Failed or OcrStatus.Unavailable or OcrStatus.Cancelled)
+            {
+                _window.CompletePreservedRerun(result.Status == OcrStatus.Cancelled
+                    ? UiText.Format("Text_5626DD9C2F6A", _currentContext)
+                    : result.Message ?? UiText.Get("Text_AA254F35F02E"));
+            }
+            else
+            {
+                _currentSnapshot = source;
+                _currentSourceRequest = request;
                 _window.ShowResult(result, _currentContext, source, preserveSelection);
 
                 if (result.Status == OcrStatus.Success && _mutationSuspensions == 0 && ReferenceEquals(_inFlight, cts))
@@ -252,7 +301,11 @@ internal sealed class OcrResultPresenter : IDisposable
             await _dispatcher.InvokeAsync(() =>
             {
                 if (!_disposed && version == _presentationVersion && !token.IsCancellationRequested)
+                {
+                    _currentSnapshot = source;
+                    _currentSourceRequest = request;
                     _window.SetSourceImage(source);
+                }
             }, DispatcherPriority.Normal, token).Task.ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (token.IsCancellationRequested) { }
@@ -277,6 +330,8 @@ internal sealed class OcrResultPresenter : IDisposable
         _currentRequestFactory = null;
         _currentContext = string.Empty;
         _onFreshResult = null;
+        _currentSnapshot = null;
+        _currentSourceRequest = null;
         CancelInFlight();
         _setBusy(false);
     }
@@ -284,6 +339,10 @@ internal sealed class OcrResultPresenter : IDisposable
     private void CancelInFlight()
     {
         _presentationVersion++;
+        CancellationTokenSource? quality = _qualityCancellation;
+        _qualityCancellation = null;
+        quality?.Cancel();
+        if (quality is not null) _window.EndQualityOperation();
         CancellationTokenSource? previous = _inFlight;
         _inFlight = null;
         CancellationTokenSource? cachedImage = _cachedImageLoad;
@@ -291,12 +350,140 @@ internal sealed class OcrResultPresenter : IDisposable
         cachedImage?.Cancel();
         if (previous is not null)
         {
+            _window.CompletePreservedRerun();
             try
             {
                 previous.Cancel();
             }
             catch (ObjectDisposedException)
             {
+            }
+        }
+    }
+
+    internal void CancelQualityChange()
+    {
+        if (_qualityCancellation is null) return;
+        CancelInFlight();
+        _setBusy(false);
+    }
+
+    internal async Task ChangeQualityAsync(OcrQuality quality)
+    {
+        _dispatcher.VerifyAccess();
+        quality = OcrQualityNames.Normalize(quality);
+        if (_disposed || _mutationSuspensions != 0 || _currentRequestFactory is null || _accuracy is null
+            || _inFlight is not null || _qualityCancellation is not null || quality == _window.ResultQuality)
+        {
+            _window.RestoreQualitySelection();
+            return;
+        }
+        long confirmationVersion = _presentationVersion;
+        if (!_window.ConfirmReplacement() || confirmationVersion != _presentationVersion || _disposed)
+        {
+            _window.RestoreQualitySelection();
+            return;
+        }
+
+        string acceptedText = _window.ResultTextBox.Text;
+        CancelInFlight();
+        long version = _presentationVersion;
+        using var cancellation = new CancellationTokenSource();
+        _qualityCancellation = cancellation;
+        bool OwnsOperation() => !_disposed && _mutationSuspensions == 0 && version == _presentationVersion
+            && ReferenceEquals(_qualityCancellation, cancellation) && !cancellation.IsCancellationRequested;
+        string? failure = null;
+        bool download = false;
+        try
+        {
+            _window.BeginQualityOperation(downloading: false);
+            _setBusy(true);
+            bool neural = _accuracy.Model.IsSupported && OcrQualityProfile.UseNeuralModel(quality);
+            if (neural)
+            {
+                download = !await Task.Run(() => _accuracy.Model.IsReady, cancellation.Token);
+                if (!OwnsOperation()) return;
+                if (download) _window.BeginQualityOperation(downloading: true);
+            }
+            OcrRequest original = _currentSourceRequest ?? _currentRequestFactory();
+            BitmapSource? source = _currentSnapshot ?? await OcrSourceSnapshot.LoadAsync(original, cancellation.Token);
+            if (!OwnsOperation()) return;
+            if (source is null)
+            {
+                failure = UiText.Get("Text_475D185DC33B");
+                return;
+            }
+            if (download)
+            {
+                // Render the inline size/cost notice before the explicit download starts.
+                await _dispatcher.InvokeAsync(() => { }, DispatcherPriority.Background);
+                if (!OwnsOperation()) return;
+                var progress = new Progress<double>(value => { if (OwnsOperation() && download) _window.ReportQualityProgress(value); });
+                bool ready = await _accuracy.Model.DownloadAsync(progress, cancellation.Token);
+                if (!OwnsOperation()) return;
+                if (!ready)
+                {
+                    failure = UiText.Get("Translate_DownloadFailed");
+                    return;
+                }
+                download = false;
+                _window.BeginQualityOperation(downloading: false);
+            }
+
+            OcrRequest request = OcrRequest.FromBitmap(source, OcrQualityProfile.UpscaleFactor(quality),
+                original.PreferredLanguages.ToArray(), OcrQualityProfile.SearchRotatedOrientations(quality),
+                OcrQualityProfile.EnhanceContrast(quality), neural);
+            OcrResult result = await _service.RecognizeAsync(request, cancellation.Token);
+            if (!OwnsOperation()) return;
+            if (result.Status == OcrStatus.Cancelled) return;
+            if (result.Status is not (OcrStatus.Success or OcrStatus.NoText))
+            {
+                failure = result.Message ?? UiText.Get("Text_AA254F35F02E");
+                return;
+            }
+            if (_window.ResultTextBox.Text != acceptedText && !_window.ConfirmReplacement()) return;
+            if (!OwnsOperation()) return;
+
+            OcrSettings settings = _accuracy.ReadSettings();
+            (OcrQuality previousQuality, double previousUpscale, bool previousDismissed) =
+                (settings.Quality, settings.UpscaleFactor, settings.AccuracySuggestionDismissed);
+            try
+            {
+                settings.Quality = quality;
+                OcrQualityProfile.Synchronize(settings);
+                if (quality == OcrQuality.Accurate) settings.AccuracySuggestionDismissed = true;
+                _accuracy.SaveSettings();
+            }
+            catch (Exception error)
+            {
+                settings.Quality = previousQuality;
+                settings.UpscaleFactor = previousUpscale;
+                settings.AccuracySuggestionDismissed = previousDismissed;
+                _log.LogWarning(error, "Could not save OCR accuracy");
+                failure = UiText.Get("Ocr_AccuracySaveFailed");
+                return;
+            }
+            if (!OwnsOperation()) return;
+            result = result.WithQuality(quality);
+            _currentSnapshot = source;
+            _currentSourceRequest = request;
+            _window.ShowResult(result, _currentContext, source, preserveSelection: true);
+            if (OwnsOperation() && result.Status == OcrStatus.Success) _onFreshResult?.Invoke(result);
+        }
+        catch (OperationCanceledException) when (cancellation.IsCancellationRequested) { }
+        catch (Exception error)
+        {
+            _log.LogWarning(error, "Could not change OCR accuracy");
+            failure = UiText.Get(download ? "Translate_DownloadFailed" : "Text_AA254F35F02E");
+        }
+        finally
+        {
+            if (ReferenceEquals(_qualityCancellation, cancellation))
+            {
+                _qualityCancellation = null;
+                _setBusy(false);
+                if (failure is null) _window.EndQualityOperation();
+                else _window.ShowAccuracyFailure(failure);
             }
         }
     }

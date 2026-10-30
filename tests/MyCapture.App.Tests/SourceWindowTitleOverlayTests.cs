@@ -155,14 +155,19 @@ public sealed class SourceWindowTitleOverlayTests
                     var preview = new AnnotationEditorSurface(frame, region,
                         new AnnotationEditorController(document, new UndoStack()),
                         new AnnotationRenderer(new AnnotationImageStore())) { SourceWindowTitle = surface.SourceWindowTitle };
-                    preview.Measure(new Size(720, 360));
-                    preview.Arrange(new Rect(0, 0, 720, 360));
+                    VisualTreeHelper.SetRootDpi(preview, new DpiScale(1, 1));
+                    var viewport = new Size(752, 392); // Image plus the 16-DIP canvas inset.
+                    preview.Measure(viewport);
+                    preview.Arrange(new Rect(viewport));
                     preview.UpdateLayout();
-                    var renderedPreview = new RenderTargetBitmap(720, 360, 96, 96, PixelFormats.Pbgra32);
+                    Assert.Equal(1, preview.DipPerPixel);
+                    var renderedPreview = new RenderTargetBitmap((int)viewport.Width, (int)viewport.Height, 96, 96, PixelFormats.Pbgra32);
                     renderedPreview.Render(preview);
                     BitmapSource flattened = AnnotationFlattener.Flatten(original, document,
                         new AnnotationRenderer(new AnnotationImageStore()), show ? title : null);
-                    Assert.Equal(Pixels(flattened, inset: 2), Pixels(renderedPreview, inset: 2));
+                    var previewPixels = new CroppedBitmap(renderedPreview, new Int32Rect(
+                        (int)preview.FrameOrigin.X, (int)preview.FrameOrigin.Y, original.PixelWidth, original.PixelHeight));
+                    Assert.Equal(Pixels(flattened, inset: 2), Pixels(previewPixels, inset: 2));
                     WriteEvidence(flattened, show ? "image-title-on.png" : "image-title-off.png");
 
                     AnnotationEditingResult? result = null;

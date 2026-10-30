@@ -120,6 +120,7 @@ public sealed partial class SettingsThemePreviewTests
                     var panel = Assert.IsType<Border>(window.FindName("PrtScGuidePanel"));
                     tabs.SelectedItem = tabs.Items.OfType<TabItem>().Single(tab => ReferenceEquals(
                         LogicalTreeHelper.FindLogicalNode(tab, "PrtScGuidePanel"), panel));
+                    Assert.True(window.NavigateToSetting(nameof(SettingsDraft.ForceCoreShortcuts)));
                     Drain(window);
 
                     Assert.True(window.IsPrintScreenGuideVisible);

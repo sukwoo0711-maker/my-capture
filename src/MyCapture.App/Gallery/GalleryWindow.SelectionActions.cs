@@ -2,6 +2,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using MyCapture.App.Themes;
 using MyCapture.Core.Queue;
@@ -41,6 +42,11 @@ internal sealed partial class GalleryWindow
         if (ResolveTileFromCommand(sender) is { } tile) ShowPreview(tile);
     }
 
+    private void OnPlayMenuClick(object sender, RoutedEventArgs e)
+    {
+        if (ResolveTileFromCommand(sender) is { IsVideo: true } tile) PrepareVideoPlayer(tile, autoPlay: true);
+    }
+
     private void OnSourceDetailsMenuClick(object sender, RoutedEventArgs e)
     {
         if (ResolveTileFromCommand(sender) is { HasSourceBadge: true } tile) ShowSourceDetails(tile);
@@ -71,36 +77,22 @@ internal sealed partial class GalleryWindow
             ?? ImageCodec.TryLoad(_queue.GetFilePath(record, CaptureFileNames.Original));
         if (bitmap is null) { ShowStatus(UiText.Get("Gallery.FloatFailed")); return; }
         _imagePreview?.Close();
-        var image = new Image { Source = bitmap, Stretch = Stretch.Uniform, Margin = new Thickness(16) };
-        System.Windows.Automation.AutomationProperties.SetName(image, tile.AccessibleName);
-        var preview = new Window
-        {
-            Title = tile.Caption,
-            Owner = this,
-            Width = Math.Min(960, SystemParameters.WorkArea.Width - 48),
-            Height = Math.Min(700, SystemParameters.WorkArea.Height - 48),
-            WindowStartupLocation = WindowStartupLocation.CenterOwner,
-            Content = image,
-            ShowInTaskbar = false,
-        };
-        StandardWindowTheme.Apply(preview);
-        preview.SetResourceReference(BackgroundProperty, "Surface.Base");
-        preview.PreviewKeyDown += (_, key) =>
-        {
-            if (key.Key is Key.Escape or Key.Space)
-            {
-                key.Handled = true;
-                preview.Close();
-            }
-        };
+        Window preview = CreateImagePreviewWindow(bitmap, tile.Caption, tile.AccessibleName);
+        preview.Owner = this;
         preview.Closed += (_, _) =>
         {
             if (ReferenceEquals(_imagePreview, preview)) _imagePreview = null;
             if (IsVisible) { Activate(); FocusTile(RowsList, tile); }
         };
         _imagePreview = preview;
+        preview.ContentRendered += (_, _) => PracticeSignals.PreviewOpened(tile.Id);
         preview.Show();
         preview.Activate();
+    }
+
+    internal static Window CreateImagePreviewWindow(BitmapSource bitmap, string caption, string accessibleName)
+    {
+        return new GalleryImagePreviewWindow(bitmap, caption, accessibleName);
     }
 
     /// <summary>The toolbar's keep works like the K key and the menu: the whole selection, kept or released together.</summary>

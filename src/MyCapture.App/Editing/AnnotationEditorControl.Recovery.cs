@@ -135,8 +135,9 @@ internal sealed partial class AnnotationEditorControl
         : encode(bitmap);
     internal void RestorePendingDraftCrop(string json)
     {
-        _crop = new CropSelection(_canvasWidth, _canvasHeight);
-        _crop.SetRegion(JsonSerializer.Deserialize<RectD>(json, JsonDefaults.Compact));
+        RectD region = JsonSerializer.Deserialize<RectD>(json, JsonDefaults.Compact);
+        SelectTool(EditorTool.Crop);
+        _crop!.SetRegion(region);
         RefreshCrop();
     }
     internal void RestoreDraftGeometry(BitmapSource current, int turns, string origin)

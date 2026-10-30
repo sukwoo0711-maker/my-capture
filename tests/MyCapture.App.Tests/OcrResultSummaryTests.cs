@@ -49,7 +49,7 @@ public sealed class OcrResultSummaryTests
     }
 
     [Fact]
-    public void RecognitionWindowShowsTheSummaryAndPutsCopyFirstAndRerunLast() => StaTestHost.Run(() =>
+    public void RecognitionWindowShowsSummaryAndAccuracyBeforeCopyWithRerunLast() => StaTestHost.Run(() =>
     {
         using var language = UiText.UseLanguage("ko-KR");
         var window = new OcrResultWindow
@@ -60,6 +60,8 @@ public sealed class OcrResultSummaryTests
         {
             Ocr410Fixture.LoadTheme(window);
             window.ShowResult(OcrResult.Success("첫 줄\n둘째 줄", "ko", lines: [], elapsed: TimeSpan.Zero), "Capture");
+            // The accuracy selector is built after the first render; this window is never shown.
+            window.CompleteAccuracyPresentation();
             Assert.Contains(Descendants(window).OfType<TextBlock>(), text => text.Text == "한국어 · 2줄");
             Assert.DoesNotContain(Descendants(window).OfType<TextBlock>(), text => text.Text.Contains("· ko", StringComparison.Ordinal));
 
@@ -71,7 +73,10 @@ public sealed class OcrResultSummaryTests
             Assert.Equal(["복사", "텍스트 내보내기", "다시 인식"], order);
             Assert.Equal(Visibility.Collapsed, footer.Children.OfType<Button>()
                 .Single(button => AutomationProperties.GetName(button) == UiText.Get("Translate_CopyWithSource")).Visibility);
-            Assert.Equal(0, footer.Children.IndexOf(copy));
+            Assert.Same(window.AccuracySelector,
+                Assert.IsType<StackPanel>(footer.Children[0]).Children.OfType<ComboBox>().Single());
+            Assert.Equal(UiText.Get("Ocr_Accuracy"), AutomationProperties.GetName(window.AccuracySelector));
+            Assert.Equal(1, footer.Children.IndexOf(copy));
             // One primary in the group; export is the secondary, rerun the quiet one.
             Assert.Same(window.FindResource("Button.Primary"), buttons[0].Style);
             Assert.Same(window.FindResource("Button.Secondary"), buttons[1].Style);

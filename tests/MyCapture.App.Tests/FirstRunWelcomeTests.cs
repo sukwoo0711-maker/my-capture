@@ -54,10 +54,10 @@ public sealed class FirstRunWelcomeTests
             Assert.Equal("MyCapture 시작", welcome.Title);
             Assert.DoesNotContain(Descendants(welcome).OfType<TextBlock>(), text => text.Text == welcome.Title);
             // The first step names one task; the single-screen title it replaces is gone.
-            Assert.Contains(Descendants(welcome).OfType<TextBlock>(), text => KoreanWordWrap.Strip(text.Text) == "화면의 일부를 캡처합니다");
+            Assert.Contains(Descendants(welcome).OfType<TextBlock>(), text => KoreanWordWrap.Strip(text.Text) == "캡처 준비");
             Assert.False(welcome.PreferencesShown);
 
-            WrapPanel caps = Descendants(welcome).OfType<WrapPanel>().Single();
+            WrapPanel caps = Descendants(welcome).OfType<WrapPanel>().Single(panel => panel.Children.OfType<Border>().Any());
             Assert.Equal("Ctrl+Shift+C", AutomationProperties.GetName(caps));
             Assert.Equal(["Ctrl", "Shift", "C"], caps.Children.OfType<Border>().Select(cap => ((TextBlock)cap.Child).Text));
             Assert.All(caps.Children.OfType<Border>(), cap =>
@@ -67,16 +67,17 @@ public sealed class FirstRunWelcomeTests
             });
 
             Button[] buttons = Descendants(welcome).OfType<Button>().ToArray();
-            Assert.Equal([welcome.TryNowButton, welcome.SkipButton, welcome.ChangeShortcutButton, welcome.SkipStepButton], buttons);
+            Assert.Equal(10, buttons.Length);
+            Assert.All(new[] { welcome.TryNowButton, welcome.SkipButton, welcome.ChangeShortcutButton, welcome.SkipStepButton, welcome.BackButton, welcome.ReplayButton, welcome.PauseButton }, button => Assert.Contains(button, buttons));
             Assert.False(welcome.ConflictShown);
             Assert.Equal("영역 캡처 시작", welcome.TryNowButton.Content);
-            Assert.Equal("건너뛰기", welcome.SkipButton.Content);
+            Assert.Equal("연습 종료", welcome.SkipButton.Content);
             Assert.True(welcome.TryNowButton.IsDefault);
             Assert.True(welcome.SkipButton.IsCancel);
             Assert.Equal("영역 캡처 시작", AutomationProperties.GetName(welcome.TryNowButton));
-            Assert.Equal("건너뛰기", AutomationProperties.GetName(welcome.SkipButton));
+            Assert.Equal("연습 종료", AutomationProperties.GetName(welcome.SkipButton));
             // The button's help is the step's own instruction now, not the old "closes this window" sentence.
-            Assert.Equal(UiText.Get("Onboarding.CaptureInstructionKey"), AutomationProperties.GetHelpText(welcome.TryNowButton));
+            Assert.Equal(UiText.Get("Journey.A1.Body"), AutomationProperties.GetHelpText(welcome.TryNowButton));
             Assert.Contains("Enter", Assert.IsType<string>(welcome.TryNowButton.ToolTip), StringComparison.Ordinal);
             Assert.DoesNotContain("Ctrl+Shift+C", Assert.IsType<string>(welcome.TryNowButton.ToolTip), StringComparison.Ordinal);
             Assert.Contains("Esc", Assert.IsType<string>(welcome.SkipButton.ToolTip), StringComparison.Ordinal);
@@ -105,11 +106,11 @@ public sealed class FirstRunWelcomeTests
         try
         {
             Assert.Equal("Start region capture", unassigned.TryNowButton.Content);
-            Assert.Equal("Skip", unassigned.SkipButton.Content);
-            Assert.Empty(Descendants(unassigned).OfType<WrapPanel>());
-            Assert.Contains(Descendants(unassigned).OfType<TextBlock>(), text => text.Text == "Capture part of the screen");
+            Assert.Equal("End practice", unassigned.SkipButton.Content);
+            Assert.DoesNotContain(Descendants(unassigned).OfType<WrapPanel>(), panel => panel.Children.OfType<Border>().Any());
+            Assert.Contains(Descendants(unassigned).OfType<TextBlock>(), text => text.Text == "Start a capture");
             // Without a shortcut the step says only the button path, never a key that does not exist.
-            Assert.Contains(Descendants(unassigned).OfType<TextBlock>(), text => text.Text == UiText.Get("Onboarding.CaptureInstruction"));
+            Assert.Contains(Descendants(unassigned).OfType<TextBlock>(), text => text.Text == UiText.Get("Journey.A1.Body"));
             Assert.DoesNotContain(Descendants(unassigned).OfType<TextBlock>(), text => text.Text == UiText.Get("Onboard_CaptureFromTray"));
         }
         finally { unassigned.Close(); }
@@ -129,12 +130,12 @@ public sealed class FirstRunWelcomeTests
         try
         {
             Assert.Contains(Descendants(welcome).OfType<TextBlock>(), text =>
-                KoreanWordWrap.Strip(text.Text) == UiText.Get("Onboarding.CaptureInstructionKey"));
+                KoreanWordWrap.Strip(text.Text) == UiText.Get("Journey.A1.Body"));
             string[] paragraphs = ["Onboard_AfterCaptureEditor", "Onboard_AfterCaptureQuickAccess", "Onboard_AfterCaptureClipboard", "Onboard_TrayBody"];
             foreach (string key in paragraphs)
                 Assert.DoesNotContain(Descendants(welcome).OfType<TextBlock>(), text =>
                     text.Text == UiText.Get(key) || AutomationProperties.GetName(text) == UiText.Get(key));
-            Assert.Equal(4, Descendants(welcome).OfType<Button>().Count());
+            Assert.Equal(10, Descendants(welcome).OfType<Button>().Count());
             Assert.False(welcome.ConflictShown);
         }
         finally { welcome.Close(); }

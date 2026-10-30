@@ -111,6 +111,12 @@ public abstract class AnnotationItem : ObservableObject
     public abstract double DistanceTo(PointD point);
 
     /// <summary>
+    /// Distance to the painted geometry without the extra selection band. Dashed
+    /// outlines retain their continuous-stroke selection convention.
+    /// </summary>
+    public virtual double PaintedDistanceTo(PointD point) => DistanceTo(point);
+
+    /// <summary>
     /// Deep copy with a new <see cref="Id"/>. Used by duplicate and by undo
     /// snapshots of style changes.
     /// </summary>

@@ -26,7 +26,7 @@ public sealed class LibraryCommandLayoutTests
     public static IEnumerable<object[]> Layouts() =>
         from language in new[] { "ko-KR", "en-US" }
         from width in new[] { 980d, 1280d }
-        from theme in new[] { AppTheme.Midnight, AppTheme.Daylight, AppTheme.HighContrast }
+        from theme in Enum.GetValues<AppTheme>()
         select new object[] { language, width, theme };
 
     [Theory]
@@ -72,6 +72,10 @@ public sealed class LibraryCommandLayoutTests
         Assert.Contains(Descendants(record).OfType<TextBlock>(), text => text.Text == UiText.Get("Text_4F5AF20FAA6E"));
         Assert.Equal(Visibility.Visible, Named<StackPanel>(commands, "SelectionCommands").Visibility);
         Assert.False(Named<Button>(commands, "KeepSelectedButton").IsEnabled);
+        Button pdf = Named<Button>(commands, "CreatePdfSelectedButton");
+        SymbolIcon pdfIcon = Assert.Single(Descendants(pdf).OfType<SymbolIcon>());
+        Assert.NotEmpty(Assert.IsType<PathGeometry>(pdfIcon.Data).Figures);
+        Assert.False(pdf.IsEnabled);
         ComboBox sort = Named<ComboBox>(commands, "SortBox");
         Assert.Equal(Visibility.Visible, sort.Visibility);
         Assert.True(sort.Focusable && sort.IsTabStop);
@@ -83,6 +87,7 @@ public sealed class LibraryCommandLayoutTests
 
         Assert.Equal(Visibility.Visible, Named<StackPanel>(header, "CaptureCommands").Visibility);
         Assert.True(Named<Button>(commands, "KeepSelectedButton").IsEnabled);
+        Assert.True(pdf.IsEnabled);
         Assert.Equal(Visibility.Visible, Named<StackPanel>(commands, "SelectionCommands").Visibility);
         Assert.Equal(captureBefore, Bounds(capture, root));
         Assert.Equal(recordBefore, Bounds(record, root));
@@ -105,6 +110,7 @@ public sealed class LibraryCommandLayoutTests
         model.HasSelection = false;
         Layout(root);
         Assert.False(Named<Button>(commands, "KeepSelectedButton").IsEnabled);
+        Assert.False(pdf.IsEnabled);
         Assert.Equal(2, sort.SelectedIndex);
         Assert.Equal("review", search.Text);
         Assert.Equal(listBefore, Bounds(list, root));
@@ -201,7 +207,7 @@ public sealed class LibraryCommandLayoutTests
         }
         XElement product = Product();
         CopyNamespaces(product, combined);
-        string[] keys = ["LibraryUx.RestEdge", "LibraryUx.CommandButton", "LibraryUx.CommandIcon", "LibraryUx.CommandGlyph", "LibraryUx.CommandSeparator", "LibraryUx.Icon.Kept"];
+        string[] keys = ["LibraryUx.RestEdge", "LibraryUx.CommandButton", "LibraryUx.CommandIcon", "LibraryUx.CommandGlyph", "LibraryUx.CommandSeparator", "LibraryUx.Icon.Kept", "LibraryUx.Icon.Pdf"];
         foreach (XElement entry in product.Element(P + "Window.Resources")!.Element(P + "ResourceDictionary")!.Elements()
                      .Where(element => keys.Contains((string?)element.Attribute(X + "Key"))))
             combined.Add(new XElement(entry));
@@ -286,7 +292,17 @@ public sealed class LibraryCommandLayoutTests
     public sealed class CommandsModel : INotifyPropertyChanged
     {
         private bool _hasSelection;
-        public bool HasSelection { get => _hasSelection; set { _hasSelection = value; PropertyChanged?.Invoke(this, new(nameof(HasSelection))); } }
+        public bool HasSelection
+        {
+            get => _hasSelection;
+            set
+            {
+                _hasSelection = value;
+                PropertyChanged?.Invoke(this, new(nameof(HasSelection)));
+                PropertyChanged?.Invoke(this, new(nameof(CanCreatePdfSelected)));
+            }
+        }
+        public bool CanCreatePdfSelected => HasSelection;
         public bool CanCompareSelected => false;
         public string SelectionText => UiText.Format("LibrarySelection_Count", 2);
         public string SearchPlaceholder => "Search captures";

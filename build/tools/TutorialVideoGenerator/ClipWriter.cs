@@ -106,6 +106,34 @@ internal static class ClipReview
         SavePng(sheet, png);
     }
 
+    /// <summary>One row per clip: decoded first, middle and last frames at guide-preview size.</summary>
+    internal static void SaveContactSheet(IReadOnlyList<string> clips, string png)
+    {
+        if (clips.Count == 0) return;
+        const int cellWidth = 480, cellHeight = 298;
+        var visual = new DrawingVisual();
+        using (DrawingContext dc = visual.RenderOpen())
+        {
+            dc.DrawRectangle(Brushes.White, null, new Rect(0, 0, cellWidth * 3, cellHeight * clips.Count));
+            for (int row = 0; row < clips.Count; row++)
+            {
+                using MediaFoundationVideoFrameReader reader = Open(clips[row]);
+                double[] times = [0, reader.DurationMs / 2, Math.Max(0, reader.DurationMs - 40)];
+                for (int column = 0; column < times.Length; column++)
+                {
+                    double x = column * cellWidth, y = row * cellHeight;
+                    string label = $"{Path.GetFileNameWithoutExtension(clips[row])}  {times[column] / 1000:0.00}s";
+                    dc.DrawText(new FormattedText(label, System.Globalization.CultureInfo.InvariantCulture,
+                        FlowDirection.LeftToRight, new Typeface("Segoe UI"), 13, Brushes.Black, 1), new Point(x + 5, y + 5));
+                    dc.DrawImage(Frame(reader, times[column]), new Rect(x, y + 28, cellWidth, 270));
+                }
+            }
+        }
+        var sheet = new RenderTargetBitmap(cellWidth * 3, cellHeight * clips.Count, 96, 96, PixelFormats.Pbgra32);
+        sheet.Render(visual);
+        SavePng(sheet, png);
+    }
+
     /// <summary>
     /// The player's first-frame still: the clip's first rendered frame as JPEG. The player shows
     /// it until the video opens, and the full-range video's first frame matches it.

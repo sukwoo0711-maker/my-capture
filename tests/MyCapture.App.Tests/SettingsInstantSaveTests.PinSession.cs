@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Controls;
@@ -43,8 +43,7 @@ public sealed partial class SettingsInstantSaveTests
                         try
                         {
                             var tabs = Assert.IsType<TabControl>(window.FindName("CategoryTabs"));
-                            tabs.SelectedItem = tabs.Items.OfType<TabItem>().Single(tab =>
-                                Equals(tab.Header, UiText.Get("SettingsUx_TabEditing")));
+                            Assert.True(window.NavigateToSection(SettingsSection.Pins));
                             Render(window, $"pin-session-settings-{languageName}.png", 940, 700);
                             SettingsDraft draft = Assert.IsType<SettingsDraft>(window.DataContext);
                             CheckBox restore = Descendants(window).OfType<CheckBox>().Single(box =>
@@ -54,12 +53,14 @@ public sealed partial class SettingsInstantSaveTests
                             Assert.Equal(UiText.Get("PinSession.RestoreLabel"), AutomationProperties.GetName(restore));
                             Assert.Equal(UiText.Get("PinSession.RestoreDescription"), AutomationProperties.GetHelpText(restore));
                             Assert.Same(window.FindResource("Settings.CheckBox"), restore.Style);
-                            var group = Assert.IsType<StackPanel>(LogicalTreeHelper.GetParent(restore));
-                            int index = group.Children.IndexOf(restore);
-                            CheckBox previous = Assert.IsType<CheckBox>(group.Children[index - 1]);
-                            Assert.Equal(nameof(SettingsDraft.CloseOnDoubleClick), previous
-                                .GetBindingExpression(CheckBox.IsCheckedProperty)!.ParentBinding.Path.Path);
+                            var row = Assert.IsType<Grid>(LogicalTreeHelper.GetParent(restore));
+                            var group = Assert.IsType<StackPanel>(LogicalTreeHelper.GetParent(row));
+                            int index = group.Children.IndexOf(row);
+                            Assert.Equal(0, index);
                             TextBlock description = Assert.IsType<TextBlock>(group.Children[index + 1]);
+                            CheckBox closeOnDoubleClick = Assert.IsType<CheckBox>(group.Children[index + 2]);
+                            Assert.Equal(nameof(SettingsDraft.CloseOnDoubleClick), closeOnDoubleClick
+                                .GetBindingExpression(CheckBox.IsCheckedProperty)!.ParentBinding.Path.Path);
                             Assert.Same(window.FindResource("Settings.Description"), description.Style);
                             Assert.Equal(UiText.Get("PinSession.RestoreDescription"), KoreanWordWrap.Strip(description.Text));
                             Assert.False(restore.IsChecked);
@@ -164,9 +165,8 @@ public sealed partial class SettingsInstantSaveTests
     {
         // Render the exact pin-group markup from the requested revision, without a live window.
         XNamespace presentation = "http://schemas.microsoft.com/winfx/2006/xaml/presentation";
+        XNamespace xaml = "http://schemas.microsoft.com/winfx/2006/xaml";
         XElement original = source.Root!;
-        XElement heading = original.Descendants(presentation + "TextBlock")
-            .Single(element => (string?)element.Attribute("Text") == "{loc:Text Text_33EFD44366A7}");
         var panelMarkup = new XElement(presentation + "StackPanel",
             new XAttribute("Margin", "24"), new XAttribute("Grid.IsSharedSizeScope", "True"));
         foreach (XAttribute declaration in original.Attributes().Where(attribute => attribute.IsNamespaceDeclaration))
@@ -176,12 +176,26 @@ public sealed partial class SettingsInstantSaveTests
                 && !value.Contains(";assembly=", StringComparison.Ordinal)) value += ";assembly=MyCapture";
             panelMarkup.SetAttributeValue(declaration.Name, value);
         }
-        panelMarkup.Add(new XElement(heading));
-        foreach (XElement element in heading.ElementsAfterSelf()
-                     .TakeWhile(element => (string?)element.Attribute("Text") != "{loc:Text SettingsUx_OcrHeading}"))
-            panelMarkup.Add(new XElement(element));
+        XElement? pins = original.Descendants(presentation + "TabItem")
+            .SingleOrDefault(element => (string?)element.Attribute(xaml + "Name") == "PinsTab");
+        if (pins is not null)
+        {
+            XElement contents = pins.Element(presentation + "ScrollViewer")!.Element(presentation + "StackPanel")!;
+            foreach (XElement element in contents.Elements()) panelMarkup.Add(new XElement(element));
+        }
+        else
+        {
+            XElement heading = original.Descendants(presentation + "TextBlock")
+                .Single(element => (string?)element.Attribute("Text") == "{loc:Text Text_33EFD44366A7}");
+            panelMarkup.Add(new XElement(heading));
+            foreach (XElement element in heading.ElementsAfterSelf()
+                         .TakeWhile(element => (string?)element.Attribute("Text") != "{loc:Text SettingsUx_OcrHeading}"))
+                panelMarkup.Add(new XElement(element));
+        }
         foreach (XElement element in panelMarkup.DescendantsAndSelf())
         {
+            // The render-only fragment has no product window event handlers.
+            element.Attribute("Click")?.Remove();
             string ns = element.Name.NamespaceName;
             if (ns.StartsWith("clr-namespace:MyCapture.", StringComparison.Ordinal)
                 && !ns.Contains(";assembly=", StringComparison.Ordinal))

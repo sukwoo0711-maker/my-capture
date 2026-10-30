@@ -169,24 +169,32 @@ public sealed class AnnotationDocument
     public int IndexOf(AnnotationItem item) => Items.IndexOf(item);
 
     /// <summary>
-    /// Topmost item within <paramref name="tolerance"/> of <paramref name="point"/>.
+    /// Topmost visible ink at the point, otherwise the nearest item within the picking tolerance.
     /// </summary>
     /// <remarks>
-    /// Iterates back to front so the visually topmost annotation wins, which is what
-    /// the user expects when annotations overlap.
+    /// Paint order resolves overlapping ink and equal-distance ties. An enlarged picking
+    /// allowance never hides visible ink belonging to an earlier annotation.
     /// </remarks>
     public AnnotationItem? HitTest(PointD point, double tolerance)
     {
+        AnnotationItem? nearest = null;
+        double nearestDistance = double.PositiveInfinity;
         for (int i = Items.Count - 1; i >= 0; i--)
         {
             AnnotationItem item = Items[i];
-            if (item.DistanceTo(point) <= tolerance)
+            double distance = item.Opacity > 0 ? item.PaintedDistanceTo(point) : double.PositiveInfinity;
+            // Visible ink wins over a later item's enlarged picking allowance. When
+            // neither contains the point, choose the nearest, keeping paint-order ties.
+            if (distance <= 1e-9) return item;
+            double pickDistance = item.DistanceTo(point);
+            if (pickDistance <= tolerance && pickDistance < nearestDistance)
             {
-                return item;
+                nearest = item;
+                nearestDistance = pickDistance;
             }
         }
 
-        return null;
+        return nearest;
     }
 
     /// <summary>

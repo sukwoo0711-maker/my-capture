@@ -77,6 +77,8 @@ internal sealed class VideoLibraryService
     internal bool IsBusy(Guid recordId) =>
         _busy.Contains(recordId) || _openEdits.Contains(recordId) || _blocked.Contains(recordId);
 
+    internal bool IsWriting(Guid recordId) => _busy.Contains(recordId) || _blocked.Contains(recordId);
+
     internal VideoEditSession BeginEdit(CaptureRecord record)
     {
         ArgumentNullException.ThrowIfNull(record);

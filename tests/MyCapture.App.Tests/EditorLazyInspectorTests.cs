@@ -32,12 +32,23 @@ public sealed class EditorLazyInspectorTests
             ThemeService.ApplyResources(AppTheme.Midnight, application.Resources, systemHighContrast: false);
             WithSelectDefault(() =>
             {
+                Window? mainWindow = application.MainWindow;
+                int windows = application.Windows.Count;
+                int preferenceWrites = 0;
+                AnnotationEditorPreferences.Write = _ => preferenceWrites++;
                 AnnotationEditorPrewarm.Run();
+                Assert.Equal(0, preferenceWrites);
+                Assert.Same(mainWindow, application.MainWindow);
+                Assert.Equal(windows, application.Windows.Count);
+                var monitor = MyCapture.Platform.Display.MonitorEnumerator.GetPrimary();
                 var bitmap = Solid(640, 360, 0x30);
                 var region = new RectD(0, 0, bitmap.PixelWidth, bitmap.PixelHeight);
-                var window = new AnnotationEditorWindow(new FrozenFrame(bitmap, region, null, 0), region, bitmap);
+                var window = new AnnotationEditorWindow(new FrozenFrame(bitmap, region, null, 0), region, bitmap,
+                    pointerMonitor: monitor);
                 try
                 {
+                    Assert.Equal(0, window.ConstructorSizingMeasurement.Passes);
+                    Assert.False(window.ConstructorSizingMeasurement.Skipped);
                     AnnotationEditorControl editor = window.Editor;
                     Assert.Same(application.FindResource("Window.Standard"), window.Style);
                     Assert.Equal((double)application.FindResource("FontSize.Body"), TextElement.GetFontSize(editor));
@@ -58,6 +69,49 @@ public sealed class EditorLazyInspectorTests
                     Assert.Equal(12, editor.InspectorCreatedGroupCount);
                 }
                 finally { window.Close(); }
+
+                foreach (bool source in new[] { false, true })
+                foreach (var size in new[] { (900, 520), (1920, 1080), (monitor.PixelWidth, monitor.PixelHeight) })
+                {
+                    var image = Solid(size.Item1, size.Item2, 0x30);
+                    var bounds = new RectD(0, 0, image.PixelWidth, image.PixelHeight);
+                    var next = new AnnotationEditorWindow(new FrozenFrame(image, bounds, null, 0), bounds, image,
+                        pointerMonitor: monitor, provenance: source
+                            ? MyCapture.Core.Capture.CaptureProvenance.Create(appName: "Test capture") : null);
+                    try
+                    {
+                        Assert.Equal(0, next.ConstructorSizingMeasurement.Passes);
+                        Assert.False(next.ConstructorSizingMeasurement.Skipped);
+                        if (source && size == (1920, 1080))
+                        {
+                            // Exercise the warmed geometry through real HWND creation, without
+                            // the product's activation handler or an on-screen window.
+                            var handler = (EventHandler)typeof(AnnotationEditorWindow).GetMethod("OnContentRendered",
+                                System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance,
+                                [typeof(object), typeof(EventArgs)])!
+                                .CreateDelegate(typeof(EventHandler), next);
+                            next.ContentRendered -= handler;
+                            next.WindowStartupLocation = WindowStartupLocation.Manual;
+                            next.Left = next.Top = -30000;
+                            next.ShowActivated = next.ShowInTaskbar = false;
+                            Size outer = new(next.Width, next.Height);
+                            next.Show();
+                            next.UpdateLayout();
+                            Assert.Equal(0, next.SourceSizingMeasurement.Passes);
+                            Assert.Equal(outer, new Size(next.Width, next.Height));
+                            var surface = Field<AnnotationEditorSurface>(next.Editor, "_surface");
+                            Rect imageRect = surface.FrameRectDip;
+                            Assert.True(imageRect.Left >= 16 && imageRect.Top >= 16);
+                            Assert.True(surface.RenderSize.Width - imageRect.Right >= 16);
+                            Assert.True(surface.RenderSize.Height - imageRect.Bottom >= 16);
+                            double dpi = VisualTreeHelper.GetDpi(surface).DpiScaleX;
+                            if (surface.RenderSize.Width >= 1920 / dpi + 32
+                                && surface.RenderSize.Height >= 1080 / dpi + 32)
+                                Assert.Equal(1 / dpi, surface.DipPerPixel);
+                        }
+                    }
+                    finally { next.Close(); }
+                }
             });
             application.Shutdown();
         }, typeof(EditorLazyInspectorTests));
@@ -120,6 +174,20 @@ public sealed class EditorLazyInspectorTests
             AssertDeferred(wider);
             Assert.Equal(1, wider.InspectorBudgetCacheHitCount);
 
+            // Reuse the prewarmed intrinsic sizes while recalculating the row budget
+            // at each width, including the return to the original layout.
+            int measurements = second.InspectorBudgetMeasureCount;
+            second.Measure(new Size(1200, 640));
+            second.Arrange(new Rect(0, 0, 1200, 640));
+            AssertDeferred(second);
+            Assert.Equal(1, second.InspectorBudgetCacheHitCount);
+            Assert.Equal(measurements + 1, second.InspectorBudgetMeasureCount);
+            Assert.Equal(Field<double>(wider, "_desiredInspectorHeight"), Field<double>(second, "_desiredInspectorHeight"));
+            Layout(second);
+            AssertDeferred(second);
+            Assert.Equal(1, second.InspectorBudgetCacheHitCount);
+            Assert.Equal(Field<double>(first, "_desiredInspectorHeight"), Field<double>(second, "_desiredInspectorHeight"));
+
             second.ShortcutActions["Text"]();
             Assert.Equal(4, second.InspectorCreatedGroupCount);
             DataTemplate preview = Field<ComboBox>(second, "_textFontFamily").ItemTemplate;
@@ -179,7 +247,7 @@ public sealed class EditorLazyInspectorTests
 
     [Theory]
     [InlineData("text", "color fontFamily fontSize textStyle", 4)]
-    [InlineData("number", "color fontSize", 2)]
+    [InlineData("number", "color step", 2)]
     [InlineData("shape", "color thickness shapeStyle fill", 4)]
     [InlineData("pen", "color thickness", 2)]
     [InlineData("line", "color thickness arrowHead", 3)]
@@ -206,7 +274,8 @@ public sealed class EditorLazyInspectorTests
             AssertGroups(editor, groups);
             Assert.Equal(0, controller.Undo.UndoCount);
             Assert.True(Field<Button>(editor, "_deleteButton").IsEnabled);
-            if (item is TextAnnotation) Assert.Equal(29, Field<Slider>(editor, "_fontSizeSlider").Value);
+            if (item is TextAnnotation { IsStepNumber: false }) Assert.Equal(29, Field<Slider>(editor, "_fontSizeSlider").Value);
+            if (item is TextAnnotation { IsStepNumber: true }) Assert.Equal("40", Field<TextBox>(editor, "_stepSizeInput").Text);
             if (item is ShapeAnnotation) Assert.Equal(17, Field<Slider>(editor, "_thicknessSlider").Value);
             if (item is BlurAnnotation) Assert.Equal(23, Field<Slider>(editor, "_blurSlider").Value);
         }));

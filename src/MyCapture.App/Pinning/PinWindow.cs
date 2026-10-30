@@ -415,6 +415,8 @@ internal sealed partial class PinWindow : Window
         bar.SaveRequested += () => RequestSave(PinSaveMode.QuickSave);
         bar.SourceRequested += () => LastSourceOperationForTest = OpenSourceAsync();
         RefreshSourceMenu(bar);
+        bar.OpacityMenuOpened += () => NotifyPractice(PracticeEventKind.OpacityMenuOpened);
+        bar.OpacityMenuClosed += () => NotifyPractice(PracticeEventKind.OpacityMenuClosed);
         bar.OpacityRequested += opacity =>
         {
             double target = AdjustOpacity(opacity - _state.Opacity);
@@ -507,9 +509,13 @@ internal sealed partial class PinWindow : Window
 
     /// <summary>Stable identity of this live pin, independent of its captured image.</summary>
     internal Guid PracticeId { get; } = Guid.NewGuid();
+    internal Guid LogicalPracticeId { get; set; } = Guid.NewGuid();
+    internal void NotifyPractice(PracticeEventKind kind, double value = 0, bool restorable = false) =>
+        PracticeSignals.Publish(new(kind, Guid.Empty, LogicalPinId: LogicalPracticeId, WindowPinId: PracticeId, Value: value, Restorable: restorable));
 
     /// <summary>An effective zoom change caused by a user gesture or zoom command.</summary>
     internal event Action<Guid>? UserZoomChanged;
+    internal bool IsPracticeResizeInProgress => _dragging && _resizeEdge != PinResizeEdge.None;
 
     /// <summary>Raised when a source lookup enriches the retained content and its saved session.</summary>
     internal event Action? ContentChanged;
@@ -1260,6 +1266,7 @@ internal sealed partial class PinWindow : Window
     private void EndDrag()
     {
         bool wasDragging = _dragging;
+        bool resized = !_isClosed && IsPracticeResizeInProgress && Math.Abs(_state.Zoom - _resizeStartZoom) >= 1e-9;
         _dragging = false;
         _resizeEdge = PinResizeEdge.None;
         Cursor = null;
@@ -1269,6 +1276,7 @@ internal sealed partial class PinWindow : Window
         if (_dragInput.HasCapture(this)) _dragInput.Release(this);
         if (wasDragging && !_isClosed && IsMouseOver) ShowHoverBar();
         if (wasDragging && !_isClosed) ViewStateChanged?.Invoke();
+        if (resized) NotifyPractice(PracticeEventKind.PinResized);
     }
 
     protected override void OnMouseWheel(MouseWheelEventArgs e)
@@ -1344,6 +1352,12 @@ internal sealed partial class PinWindow : Window
 
         switch (e.Key)
         {
+            case Key.O when modifiers == ModifierKeys.None:
+                ShowHoverBar();
+                if (_hoverBar is { IsVisible: true } opacityBar) opacityBar.OpenOpacityMenu(keyboard: true);
+                e.Handled = true;
+                break;
+
             case Key.F2:
                 ToggleTextSelection();
                 e.Handled = true;
@@ -1439,7 +1453,7 @@ internal sealed partial class PinWindow : Window
             LeaveTextSelection();
             return;
         }
-        if (_originalText is null)
+        if (DisplayContent.OriginalText is null)
         {
             ShowFeedback(UiText.Get("Pin_SelectTextImageHint"), FeedbackKind.Result);
             return;
@@ -1722,7 +1736,7 @@ internal sealed partial class PinWindow : Window
             BeginAnimation(Window.OpacityProperty, fade, HandoffBehavior.SnapshotAndReplace);
         }
 
-        if (!_isClosed) ViewStateChanged?.Invoke();
+        if (!_isClosed) { ViewStateChanged?.Invoke(); NotifyPractice(PracticeEventKind.OpacityChanged, target); }
         return target;
     }
 
@@ -2028,6 +2042,7 @@ internal sealed partial class PinWindow : Window
     private void BuildContextMenu()
     {
         var menu = new ContextMenu();
+        _selectTextItem = null;
 
         AddTranslationMenuItem(menu);
         AddMarkdownViewMenuItem(menu);
@@ -2057,15 +2072,18 @@ internal sealed partial class PinWindow : Window
                 UiText.Get("Text_BB7798D87E07"),
                 "Icon.Copy",
                 UiText.Get("Text_C7011B8D345C")));
+        }
+        else
+        {
+            menu.Items.Add(MenuItemFor(UiText.Get("Text_03A1596F1681"), (_, _) => RequestOcr(), iconResourceKey: "Icon.Copy", inputGestureText: UiText.Get("Text_C7011B8D345C")));
+        }
+        if (DisplayContent.OriginalText is not null)
+        {
             _selectTextItem = MenuItemFor(UiText.Get("Pin_SelectText"),
                 (_, _) => ToggleTextSelection(), inputGestureText: "F2");
             _selectTextItem.IsCheckable = true;
             _selectTextItem.IsChecked = IsTextSelectionMode;
             menu.Items.Add(_selectTextItem);
-        }
-        else
-        {
-            menu.Items.Add(MenuItemFor(UiText.Get("Text_03A1596F1681"), (_, _) => RequestOcr(), iconResourceKey: "Icon.Copy", inputGestureText: UiText.Get("Text_C7011B8D345C")));
         }
         // Every key sits in the right-hand column; the names carry no key text.
         menu.Items.Add(new Separator());

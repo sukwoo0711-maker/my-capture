@@ -1241,7 +1241,14 @@ public sealed class GalleryTests : KoreanCaptionTest
             Assert.True(surface.FrameRectDip.Top >= 0);
             Assert.True(surface.FrameRectDip.Right <= surface.ActualWidth + 0.001);
             Assert.True(surface.FrameRectDip.Bottom <= surface.ActualHeight + 0.001);
-            Assert.Equal(250.0 / 144.0, surface.DipPerPixel, 6);
+            // Small captures keep their physical pixel size; fitting also reserves the
+            // 16-DIP grab margin on each side of the canvas.
+            double expectedScale = Math.Min(1, Math.Min((800.0 - 32) / 344, (250.0 - 32) / 144));
+            Assert.Equal(expectedScale, surface.DipPerPixel, 6);
+            Assert.True(surface.FrameRectDip.Left >= 16);
+            Assert.True(surface.FrameRectDip.Top >= 16);
+            Assert.True(surface.FrameRectDip.Right <= surface.ActualWidth - 16);
+            Assert.True(surface.FrameRectDip.Bottom <= surface.ActualHeight - 16);
 
             var imagePoint = new PointD(123, 57);
             Point dipPoint = surface.ToSurfacePoint(imagePoint);

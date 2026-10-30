@@ -255,6 +255,12 @@ public partial class App
 
     private async Task OpenRecoveredVideoAsync(EditDraft draft)
     {
+        VideoEditorWindow editor = await CreateRecoveredVideoEditorAsync(draft);
+        editor.Show();
+    }
+
+    internal async Task<VideoEditorWindow> CreateRecoveredVideoEditorAsync(EditDraft draft)
+    {
         if (_videoLibrary is null || _queue is null || _services is null) throw new IOException("Video library is unavailable.");
         var original = JsonSerializer.Deserialize<RecordingResult>(draft.Metadata["recording"], JsonDefaults.Compact)
             ?? throw new IOException("Invalid recording draft.");
@@ -274,9 +280,14 @@ public partial class App
             RenderStagingPathFactory = () => _videoLibrary.CreateRenderStagingPath(record),
             VideoCommitHandler = (doc, stage, token) => _videoLibrary.CommitEditAsync(record, editSession, doc, stage, token),
             FrameImageCommitHandlerFactory = CreateRecordedFrameCommitHandler,
+            FrameSourceVideoId = record.Id,
+            FrameSourceRevision = editSession.ExpectedContentRevision,
+            FrameCaptureService = _videoFrameCapture,
         };
+        editor.ShowFrameInLibrary = id => _ = editor.RequestCloseForNavigation(
+            () => EnsureGalleryWindow()?.OpenCapture(id, edit: false));
         editor.Closed += (_, _) => editSession.Dispose();
         editor.AdoptRecoveredDraft(DraftStore!, draft.SessionId, draft.Revision);
-        editor.Show();
+        return editor;
     }
 }

@@ -78,11 +78,11 @@ public sealed class FeatureTutorialTests
     [Theory]
     [InlineData("ko-KR")]
     [InlineData("en-US")]
-    public void CatalogHas38SeparateLocalizedWorkflowsAnd42CategoryQualifiedHelpMappings(string language) => StaTestHost.Run(() =>
+    public void CatalogHas45SeparateLocalizedWorkflowsAnd42CategoryQualifiedHelpMappings(string language) => StaTestHost.Run(() =>
     {
         using var locale = UiText.UseLanguage(language);
-        Assert.Equal(38, TutorialCatalog.All.Count);
-        Assert.Equal(38, TutorialCatalog.All.Select(feature => feature.Id).Distinct().Count());
+        Assert.Equal(45, TutorialCatalog.All.Count);
+        Assert.Equal(45, TutorialCatalog.All.Select(feature => feature.Id).Distinct().Count());
         Assert.Equal(42, TutorialCatalog.All.Sum(feature => feature.HelpActions.Count));
         foreach (FeatureTutorial feature in TutorialCatalog.All)
         {
@@ -117,6 +117,7 @@ public sealed class FeatureTutorialTests
         Assert.Equal("pin-clipboard", TutorialCatalog.FindHelp("Text_33EFD44366A7", "Dialog.Close")!.Id);
         Assert.Equal("text-copy", TutorialCatalog.FindHelp("Help.Capture", "TextCapture_HelpToggle")!.Id);
         Assert.NotEqual(TutorialCatalog.Get("image-blur").Id, TutorialCatalog.Get("image-mosaic").Id);
+        Assert.Equal("image-mosaic", TutorialCatalog.FindHelp("Help.Annotation", "EditorObscure_Pixelate")!.Id);
     });
 
     [Theory]
@@ -132,7 +133,19 @@ public sealed class FeatureTutorialTests
             TabControl tabs = ((DockPanel)help.Content).Children.OfType<TabControl>().Single();
             UniformGrid[] rows = tabs.Items.Cast<TabItem>().SelectMany(tab =>
                 ((StackPanel)((ScrollViewer)tab.Content).Content).Children.OfType<UniformGrid>()).ToArray();
-            Assert.Equal(97, rows.Length);
+            SaveHelpEvidence(help, tabs, language);
+            Assert.Equal(101, rows.Length);
+            foreach (var (label, shortcut) in new[]
+            {
+                ("Shortcuts.Parent", "Alt+↑"),
+                ("VideoFrame_Save", "Shift+S"),
+                ("MediaExport_SaveEdits", "Ctrl+S"),
+                ("MediaExport_ExportFormats", "Ctrl+Shift+S"),
+            })
+            {
+                UniformGrid added = Assert.Single(rows, row => ShortcutHelpRowAssertions.Title(row) == UiText.Get(label));
+                Assert.Equal(shortcut, AutomationProperties.GetName(Assert.Single(added.Children.OfType<WrapPanel>())));
+            }
             Assert.Single(rows, row => ShortcutHelpRowAssertions.Title(row) == UiText.Get("Text_976A6C92B870"));
             Assert.Single(rows, row => ShortcutHelpRowAssertions.Title(row) == UiText.Get("CaptureRatio_HelpLabel"));
             Assert.Single(rows, row => ShortcutHelpRowAssertions.Title(row) == UiText.Get("Pin_SelectText"));
@@ -209,8 +222,29 @@ public sealed class FeatureTutorialTests
         finally { help.Close(); }
     });
 
+    private static void SaveHelpEvidence(ShortcutHelpWindow help, TabControl tabs, string language)
+    {
+        string? directory = Environment.GetEnvironmentVariable("MYCAPTURE_TUTORIAL_HELP_EVIDENCE");
+        if (string.IsNullOrWhiteSpace(directory)) return;
+        Directory.CreateDirectory(directory);
+        help.WindowStartupLocation = WindowStartupLocation.Manual;
+        help.Left = -10000; help.Top = -10000; help.ShowActivated = false; help.ShowInTaskbar = false;
+        tabs.SelectedItem = tabs.Items.Cast<TabItem>().Single(tab => Equals(tab.Header, UiText.Get("Help.Annotation")));
+        help.Show();
+        help.Dispatcher.Invoke(help.UpdateLayout, DispatcherPriority.ApplicationIdle);
+        FirstRunWelcomeTests.Descendants(help).OfType<TextBox>().Single().Text = UiText.Get("EditorObscure_Pixelate");
+        help.Dispatcher.Invoke(help.UpdateLayout, DispatcherPriority.ApplicationIdle);
+        FrameworkElement snapshot = help;
+        var bitmap = new RenderTargetBitmap((int)Math.Ceiling(snapshot.ActualWidth), (int)Math.Ceiling(snapshot.ActualHeight),
+            96, 96, System.Windows.Media.PixelFormats.Pbgra32);
+        bitmap.Render(snapshot);
+        var encoder = new PngBitmapEncoder(); encoder.Frames.Add(BitmapFrame.Create(bitmap));
+        using var stream = File.Create(Path.Combine(directory, $"help-annotation-{language}.png"));
+        encoder.Save(stream);
+    }
+
     [Theory]
-    [InlineData("ko-KR", "영역 캡처 사용법", "복사하고 닫기 사용법", "핀 · 저장 사용법", "텍스트 복사 사용법", "블러 사용법 동영상")]
+    [InlineData("ko-KR", "영역 캡처 사용법", "복사하고 닫기 사용법", "핀 · 저장 사용법", "텍스트 복사 사용법", "흐림 사용법 동영상")]
     [InlineData("en-US", "Region capture tutorial", "Copy and close tutorial", "Pins · Save tutorial", "Copy text tutorial", "Blur tutorial video")]
     public void TutorialNamesSayWhichFeatureTheyTeachAndQualifySharedTitles(string language, string region, string imageCopy,
         string pinSave, string textCopy, string blurVideo) => StaTestHost.Run(() =>
@@ -263,7 +297,7 @@ public sealed class FeatureTutorialTests
             Assert.Empty(media.OpenedPaths);
             Assert.False(window.HasMedia);
             ComboBox choices = FirstRunWelcomeTests.Descendants(window).OfType<ComboBox>().Single();
-            Assert.Equal(38, choices.Items.Count);
+            Assert.Equal(45, choices.Items.Count);
             Assert.Contains(media.View, FirstRunWelcomeTests.Descendants(window));
             Show(window);
             Assert.Equal(Path.Combine(window.AssetDirectory, "image-blur.en.mp4"), Assert.Single(media.OpenedPaths));
@@ -650,6 +684,8 @@ public sealed class FeatureTutorialTests
             foreach (string language in new[] { "ko", "en" })
             {
                 var file = new FileInfo(Path.Combine(directory, $"{feature.Id}.{language}.mp4"));
+                // These seven clips belong to the following video lane. Missing files use the tested still path.
+                if (TutorialCatalog.PendingPracticeClips.Contains(feature.Id) && !file.Exists) continue;
                 if (!file.Exists) problems.Add($"missing {file.Name}");
                 else if (file.Length == 0) problems.Add($"empty {file.Name}");
                 var still = new FileInfo(Path.ChangeExtension(file.FullName, ".jpg"));

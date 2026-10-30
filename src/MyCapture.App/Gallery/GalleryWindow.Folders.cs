@@ -58,41 +58,59 @@ internal sealed partial class GalleryWindow
         return false;
     }
 
-    internal static bool? NavigationKeyDirection(Key key, ModifierKeys modifiers, bool textInput) =>
+    internal enum LibraryNavigation { Back, Forward, Parent }
+
+    internal static LibraryNavigation? NavigationKeyDirection(Key key, ModifierKeys modifiers, bool textInput) =>
         (key, modifiers, textInput) switch
         {
-            (Key.Back, ModifierKeys.None, false) => false,
-            (Key.Left, ModifierKeys.Alt, _) => false,
-            (Key.Right, ModifierKeys.Alt, _) => true,
+            (Key.Back, ModifierKeys.None, false) => LibraryNavigation.Back,
+            (Key.Left, ModifierKeys.Alt, _) => LibraryNavigation.Back,
+            (Key.Right, ModifierKeys.Alt, _) => LibraryNavigation.Forward,
+            (Key.Up, ModifierKeys.Alt, _) => LibraryNavigation.Parent,
             _ => null,
         };
 
     private async void OnNavigationKeyDown(object sender, KeyEventArgs e)
     {
         Key key = e.Key == Key.System ? e.SystemKey : e.Key;
-        if (e.Handled || _foldersBusy || NavigationKeyDirection(key, Keyboard.Modifiers,
-            IsNavigationTextInput(Keyboard.FocusedElement as DependencyObject)) is not { } forward) return;
-        if (!(forward ? _viewModel.CanNavigateForward : _viewModel.CanNavigateParent)) return;
+        if (e.Handled || _foldersBusy || NavigationKeyDirection(key, CurrentKeyModifiers,
+            IsNavigationTextInput(e.OriginalSource as DependencyObject)
+                || IsNavigationTextInput(Keyboard.FocusedElement as DependencyObject)) is not { } direction) return;
+        if (!CanNavigateLibrary(direction)) return;
         e.Handled = true;
-        await NavigateLibraryAsync(forward);
+        await NavigateLibraryAsync(direction);
     }
 
     private async void OnNavigationMouseDown(object sender, MouseButtonEventArgs e)
     {
         if (e.Handled || _foldersBusy || e.ChangedButton is not (MouseButton.XButton1 or MouseButton.XButton2)) return;
-        bool forward = e.ChangedButton == MouseButton.XButton2;
-        if (!(forward ? _viewModel.CanNavigateForward : _viewModel.CanNavigateParent)) return;
+        LibraryNavigation direction = e.ChangedButton == MouseButton.XButton2 ? LibraryNavigation.Forward : LibraryNavigation.Back;
+        if (!CanNavigateLibrary(direction)) return;
         e.Handled = true;
-        await NavigateLibraryAsync(forward);
+        await NavigateLibraryAsync(direction);
     }
 
-    private async Task<bool> NavigateLibraryAsync(bool forward)
+    private bool CanNavigateLibrary(LibraryNavigation direction) => direction switch
+    {
+        LibraryNavigation.Back => _viewModel.CanNavigateBack,
+        LibraryNavigation.Forward => _viewModel.CanNavigateForward,
+        LibraryNavigation.Parent => _viewModel.CanNavigateParent,
+        _ => false,
+    };
+
+    private async Task<bool> NavigateLibraryAsync(LibraryNavigation direction)
     {
         bool navigated;
         _folderNavigationUpdating = true;
         try
         {
-            navigated = forward ? _viewModel.NavigateForward() : _viewModel.NavigateParent();
+            navigated = direction switch
+            {
+                LibraryNavigation.Back => _viewModel.NavigateBack(),
+                LibraryNavigation.Forward => _viewModel.NavigateForward(),
+                LibraryNavigation.Parent => _viewModel.NavigateParent(),
+                _ => false,
+            };
             if (navigated) CloseInlinePlayer();
         }
         finally { _folderNavigationUpdating = false; }

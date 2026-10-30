@@ -151,6 +151,73 @@ public static class GeometryMath
         return p.DistanceTo(onEllipse);
     }
 
+    /// <summary>Euclidean boundary distance, used when testing the actual stroke width.</summary>
+    public static double DistanceToEllipseOutlineExact(PointD p, RectD rect)
+    {
+        RectD r = rect.Normalized();
+        double a = r.Width / 2, b = r.Height / 2;
+        if (a <= double.Epsilon || b <= double.Epsilon) return DistanceToRectOutline(p, r);
+        double x = Math.Abs(p.X - r.Center.X), y = Math.Abs(p.Y - r.Center.Y);
+        if (a < b) { (a, b) = (b, a); (x, y) = (y, x); }
+        if (y <= double.Epsilon)
+        {
+            // On the major axis the closest point can lie off-axis, inside the evolute.
+            double difference = a * a - b * b;
+            double qx = difference > 0 ? a * a * x / difference : a;
+            if (qx < a)
+            {
+                double qy = b * Math.Sqrt(Math.Max(0, 1 - qx * qx / (a * a)));
+                return Math.Sqrt((qx - x) * (qx - x) + qy * qy);
+            }
+            return Math.Abs(x - a);
+        }
+
+        // The Lagrange multiplier equation is monotone above -b². Bisection
+        // handles points on either side of eccentric ellipses without radial error.
+        double lower = b * y - b * b;
+        double upper = Math.Max(0, Math.Sqrt(a * a * x * x + b * b * y * y));
+        double aa = a * a, bb = b * b;
+        for (int iteration = 0; iteration < 80; iteration++)
+        {
+            double t = lower + (upper - lower) / 2;
+            double nx = a * x / (t + aa), ny = b * y / (t + bb);
+            if (nx * nx + ny * ny > 1) lower = t;
+            else upper = t;
+        }
+        double lambda = lower + (upper - lower) / 2;
+        double dx = aa * x / (lambda + aa) - x;
+        double dy = bb * y / (lambda + bb) - y;
+        return Math.Sqrt(dx * dx + dy * dy);
+    }
+
+    /// <summary>Signed distance to a rounded rectangle; negative inside its fill.</summary>
+    public static double SignedDistanceToRoundedRect(PointD p, RectD rect, double radius)
+    {
+        RectD r = rect.Normalized();
+        double rx = Math.Min(radius, r.Width / 2), ry = Math.Min(radius, r.Height / 2);
+        if (rx <= 0 || ry <= 0)
+        {
+            double distance = DistanceToRectOutline(p, r);
+            return r.Contains(p) ? -distance : distance;
+        }
+        double x = Math.Abs(p.X - r.Center.X), y = Math.Abs(p.Y - r.Center.Y);
+        double cornerX = x - (r.Width / 2 - rx), cornerY = y - (r.Height / 2 - ry);
+        if (cornerX <= 0 && cornerY <= 0) return -Math.Min(r.Width / 2 - x, r.Height / 2 - y);
+        if (cornerX <= 0) return y - r.Height / 2;
+        if (cornerY <= 0) return x - r.Width / 2;
+        double arc = DistanceToEllipseOutlineExact(new PointD(cornerX, cornerY), new RectD(-rx, -ry, 2 * rx, 2 * ry));
+        return cornerX * cornerX / (rx * rx) + cornerY * cornerY / (ry * ry) <= 1 ? -arc : arc;
+    }
+
+    public static double DistanceToFilledTriangle(PointD p, PointD a, PointD b, PointD c)
+    {
+        static double Cross(PointD p, PointD a, PointD b) => (p.X - b.X) * (a.Y - b.Y) - (a.X - b.X) * (p.Y - b.Y);
+        double ab = Cross(p, a, b), bc = Cross(p, b, c), ca = Cross(p, c, a);
+        if (Math.Abs(Cross(a, b, c)) > double.Epsilon
+            && !((ab < 0 || bc < 0 || ca < 0) && (ab > 0 || bc > 0 || ca > 0))) return 0;
+        return Math.Min(DistanceToSegment(p, a, b), Math.Min(DistanceToSegment(p, b, c), DistanceToSegment(p, c, a)));
+    }
+
     /// <summary>
     /// Rotates <paramref name="p"/> around <paramref name="center"/>.
     /// </summary>

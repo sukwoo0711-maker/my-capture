@@ -61,10 +61,17 @@ public sealed partial class SettingsThemePreviewTests
                                 tabs.SelectedItem = items[index];
                                 Drain(window);
                                 var page = Assert.IsType<ScrollViewer>(items[index].Content);
+                                Expander[] folds = Descendants(page).OfType<Expander>()
+                                    .Where(expander => !string.IsNullOrWhiteSpace(expander.Name)).ToArray();
+                                foreach (Expander fold in folds) fold.IsExpanded = true;
+                                Drain(window);
+                                page.ScrollToTop();
+                                Drain(window);
                                 string where = $"{locale} {AppThemeNames.ToSetting(theme)} {sizeName} page {index + 1}";
                                 AssertNoClippingOrOverlap(page, where);
                                 AssertSettingsInputsAreCompact(page, where);
-                                if (index == 3) AssertEditingDefaultsFitWithoutScrolling(page, where);
+                                if (ReferenceEquals(items[index], window.FindName("EditingTab")))
+                                    AssertEditingDefaultsFitWithoutScrolling(page, where);
 
                                 string name = $"settings-density-{locale}-{AppThemeNames.ToSetting(theme)}-{sizeName}-page-{index + 1}";
                                 SaveSettingsDensityEvidence(window, $"{name}-top-{phase}");

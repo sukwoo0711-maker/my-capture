@@ -58,7 +58,7 @@ public sealed partial class SettingsThemePreviewTests
                         search.Clear();
                         Drain(window);
                         Assert.True(placeholder.IsVisible);
-                        tabs.SelectedIndex = 3;
+                        Assert.True(window.NavigateToSection(SettingsSection.Editing));
                         Drain(window);
                         var fonts = (ComboBox)window.FindName("FontFamilyBox");
                         Assert.Equal(FontCatalog.ChoicesFor("Private Font", FontCatalog.RecommendedFonts(UiText.Culture)), fonts.Items.Cast<FontChoice>());

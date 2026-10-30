@@ -20,6 +20,8 @@ internal static class ShortcutRevealMotion
     internal const double CornerIconSize = 24;
     internal const double CornerIconScale = 0.75;
     internal const double CornerIconOffset = -5;
+    // Leave a one-DIP gap above the 12-DIP caption line, including wider hints such as M / B.
+    internal const double CornerIconVerticalOffset = -6;
     internal const double CornerCaptionScale = 0.8;
     internal const double CaptionEntranceOffset = 4;
     // Keep existing diagnostic profile selections readable. Alt feedback now commits one
@@ -184,7 +186,7 @@ internal static class ShortcutRevealMotion
             if (PrimaryShift is not null)
             {
                 Settle(PrimaryShift, TranslateTransform.XProperty, Corner && revealed ? CornerIconOffset : 0);
-                Settle(PrimaryShift, TranslateTransform.YProperty, Corner ? revealed ? CornerIconOffset : 0 : revealed ? 0 : PrimaryRestOffset);
+                Settle(PrimaryShift, TranslateTransform.YProperty, Corner ? revealed ? CornerIconVerticalOffset : 0 : revealed ? 0 : PrimaryRestOffset);
             }
             if (IconScale is not null)
             {

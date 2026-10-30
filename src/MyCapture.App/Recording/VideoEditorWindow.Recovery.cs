@@ -99,9 +99,9 @@ internal sealed partial class VideoEditorWindow
             if (export.IsVisible) return false;
         }
         // Save/finalize operations finish naturally; cancellation cannot silently discard edits.
-        while (_operationRunning && DateTime.UtcNow < deadline) await Task.Delay(50);
-        if (_operationRunning) return false;
+        while (_operationRunning && !_closedForRecovery && DateTime.UtcNow < deadline) await Task.Delay(50);
         if (_closedForRecovery) { await _draftFinalization; return true; }
+        if (_operationRunning) return false;
         if (HasUnsavedEdits())
         {
             EditorCloseChoice choice = AskUnsavedEdits();
@@ -109,7 +109,7 @@ internal sealed partial class VideoEditorWindow
             if (choice == EditorCloseChoice.SaveAndClose)
             {
                 CommitTrim();
-                while (_operationRunning && DateTime.UtcNow < deadline) await Task.Delay(50);
+                while (_operationRunning && !_closedForRecovery && DateTime.UtcNow < deadline) await Task.Delay(50);
                 await _draftFinalization;
                 return _closedForRecovery && _committed;
             }

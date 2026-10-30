@@ -442,7 +442,7 @@ public sealed class OpenPinsTrayMenuTests
     private static PinManager Manager(Action<PinWindow>? activate = null) => new(
         () => NewInstallDefaults.Create().Pin, NullLogger.Instance)
     {
-        BeforeShowForTest = pin => pin.ShowActivated = false,
+        BeforeShowForTest = pin => { pin.ShowActivated = false; pin.ShowInTaskbar = false; pin.Left = -10000; pin.Top = -10000; },
         ActivatePinForTest = activate ?? (_ => { }),
     };
 

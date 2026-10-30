@@ -21,15 +21,13 @@ internal sealed partial class GalleryWindow
         {
             if (_tileMenu is not null) return _tileMenu;
             _tileMenu = (ContextMenu)FindResource("Gallery.TileContextMenu");
-            var info = new MenuItem { Tag = "MediaInfo", Header = UiText.Get("MediaInfo.Title"),
+            var info = new MenuItem { Tag = "MediaInfo", Header = UiText.Get("Library.Properties"),
                 InputGestureText = ShortcutCatalog.Get(ShortcutScope.Library, "Info").Hint };
             info.SetBinding(MenuItem.CommandParameterProperty, new Binding());
-            AutomationProperties.SetName(info, UiText.Get("MediaInfo.Title"));
+            AutomationProperties.SetName(info, UiText.Get("Library.Properties"));
             AutomationProperties.SetAcceleratorKey(info, info.InputGestureText);
             info.Click += OnMediaDetailsClick;
-            int index = _tileMenu.Items.OfType<MenuItem>().FirstOrDefault(item => item.Tag as string == "Preview") is { } preview
-                ? _tileMenu.Items.IndexOf(preview) + 1 : 0;
-            _tileMenu.Items.Insert(index, info);
+            _tileMenu.Items.Add(info);
             // A closed menu keeps no card: recycled cards are never held through the shared instance.
             _tileMenu.Closed += (_, _) => _tileMenu.ClearValue(ContextMenu.PlacementTargetProperty);
             return _tileMenu;
@@ -76,8 +74,21 @@ internal sealed partial class GalleryWindow
         {
             switch (item.Tag as string)
             {
+                case "Edit":
+                    item.FontWeight = tile.IsImage ? FontWeights.Bold : FontWeights.Normal;
+                    break;
+                case "Play":
+                    item.FontWeight = tile.IsVideo ? FontWeights.Bold : FontWeights.Normal;
+                    break;
+                case "OpenSource":
+                    item.Visibility = tile.HasSourceBadge && tile.SourceProvenance.CanOpen
+                        ? Visibility.Visible : Visibility.Collapsed;
+                    break;
                 case "Keep":
                     item.Header = UiText.Get(targets.Count > 0 && targets.All(target => target.IsPinned) ? "LibraryUx_Unkeep" : "LibraryUx_Keep");
+                    break;
+                case "CreatePdf":
+                    item.IsEnabled = ContactSheetTargets(tile).Any(record => record.IsImage);
                     break;
                 case "Compare":
                     item.Visibility = _viewModel.CanCompareSelected && _viewModel.Selection.Contains(tile.Id)
@@ -86,8 +97,8 @@ internal sealed partial class GalleryWindow
             }
         }
 
-        // The media group is empty for a video, so its separator goes with it.
-        foreach (Separator separator in menu.Items.OfType<Separator>().Where(candidate => candidate.Tag as string == "SeparatorMedia"))
-            separator.Visibility = tile.IsImage ? Visibility.Visible : Visibility.Collapsed;
+        // A source-less card has no source group. Hide its separator rather than leave two in a row.
+        foreach (Separator separator in menu.Items.OfType<Separator>().Where(candidate => candidate.Tag as string == "SeparatorSource"))
+            separator.Visibility = tile.HasSourceBadge ? Visibility.Visible : Visibility.Collapsed;
     }
 }

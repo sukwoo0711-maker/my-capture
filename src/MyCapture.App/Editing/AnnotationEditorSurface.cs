@@ -14,11 +14,8 @@ namespace MyCapture.App.Editing;
 /// </summary>
 /// <remarks>
 /// <para>
-/// Renders the entire frozen monitor frame at its physical resolution mapped 1:1 to the
-/// window's device-independent units. Because the surface fills the window and the window
-/// covers the monitor at physical bounds, one DIP maps to <c>1 / DpiScale</c> physical
-/// pixels — the mapping is derived from <see cref="ActualWidth"/> over
-/// <see cref="FrozenFrame.PixelWidth"/> so it stays correct on any scale factor.
+/// Fits the frozen frame inside a canvas margin, capped at one device pixel per image
+/// pixel. Image coordinates remain physical pixels at every display scale.
 /// </para>
 /// <para>
 /// Annotation coordinates are in <em>selected-image</em> pixels. The surface adds the crop
@@ -28,6 +25,7 @@ namespace MyCapture.App.Editing;
 /// </remarks>
 internal sealed class AnnotationEditorSurface : FrameworkElement
 {
+    internal const double CanvasInset = 16;
     private const double HandlePixels = 8;
     private static readonly DependencyProperty CropScrimProperty = DependencyProperty.Register(
         "CropScrim", typeof(Brush), typeof(AnnotationEditorSurface), new FrameworkPropertyMetadata(Brushes.Black, FrameworkPropertyMetadataOptions.AffectsRender));
@@ -47,6 +45,12 @@ internal sealed class AnnotationEditorSurface : FrameworkElement
     private readonly Pen _selectionOutlinePen;
     private readonly Pen _edgeShadowPen;
     private readonly Pen _cropEdgePen;
+    private (double Scale, Point Origin) _cachedFrameLayout;
+    private Size _cachedRenderSize;
+    private double _pixelsPerDip;
+    private Point _deviceOffset;
+    private bool _frameLayoutValid;
+    private PointD? _pointerPreviewPoint;
 
     internal AnnotationEditorSurface(
         FrozenFrame frame,
@@ -58,6 +62,7 @@ internal sealed class AnnotationEditorSurface : FrameworkElement
         _cropRegion = cropRegion.Normalized();
         _controller = controller ?? throw new ArgumentNullException(nameof(controller));
         _renderer = renderer ?? throw new ArgumentNullException(nameof(renderer));
+        _pixelsPerDip = VisualTreeHelper.GetDpi(this).PixelsPerDip;
 
         Focusable = false;
         SnapsToDevicePixels = true;
@@ -80,15 +85,54 @@ internal sealed class AnnotationEditorSurface : FrameworkElement
 
         _controller.VisualInvalidated += (_, _) => InvalidateVisual();
         _controller.SelectionChanged += (_, _) => InvalidateVisual();
+        Loaded += OnLoaded;
+        Unloaded += OnUnloaded;
     }
 
     /// <summary>The visual frame and crop used by this surface.</summary>
     internal FrozenFrame Frame => _frame;
 
     internal string? SourceWindowTitle { get; set; }
+    internal event EventHandler? FrameLayoutChanged;
     internal CropSelection? PendingCrop { get; set; }
     internal IReadOnlyList<RectD> PendingMosaicRegions { get; set; } = [];
     internal RectD? MosaicGestureRegion { get; set; }
+
+    /// <summary>Updates the transient pointer footprint. It never enters the annotation document.</summary>
+    internal void UpdatePointerPreview(PointD? imagePoint, bool visible = true)
+    {
+        if (PendingCrop is not null || _controller.Tool is not (EditorTool.Pen or EditorTool.Highlighter or EditorTool.StepNumber))
+        {
+            // Tool/crop transitions already invalidate the surface. Plain hover for
+            // tools without a footprint must not repaint the annotation document.
+            _pointerPreviewPoint = null;
+            return;
+        }
+        PointD? next = visible && imagePoint is { } point
+            && point.X >= 0 && point.Y >= 0 && point.X <= _cropRegion.Width && point.Y <= _cropRegion.Height
+            ? imagePoint : null;
+        if (_pointerPreviewPoint == next) return;
+        _pointerPreviewPoint = next;
+        InvalidateVisual();
+    }
+
+    internal Rect? BrushOutlineDip
+    {
+        get
+        {
+            if (_pointerPreviewPoint is not { } point || PendingCrop is not null
+                || _controller.Tool is not (EditorTool.Pen or EditorTool.Highlighter)) return null;
+            double width = _controller.Tool == EditorTool.Highlighter
+                ? Math.Max(12, _controller.StrokeThickness) : _controller.StrokeThickness;
+            return BrushPreviewBounds(ToSurfacePoint(point), width, DipPerPixel);
+        }
+    }
+
+    internal static Rect BrushPreviewBounds(Point centre, double strokeWidth, double dipPerPixel)
+    {
+        double diameter = Math.Max(0, strokeWidth * dipPerPixel);
+        return new Rect(centre.X - diameter / 2, centre.Y - diameter / 2, diameter, diameter);
+    }
 
     /// <summary>
     /// Replaces the base bitmap and crop (a rotation swaps width and height) and repaints.
@@ -98,43 +142,108 @@ internal sealed class AnnotationEditorSurface : FrameworkElement
     {
         _frame = frame ?? throw new ArgumentNullException(nameof(frame));
         _cropRegion = cropRegion.Normalized();
+        _frameLayoutValid = false;
         InvalidateVisual();
     }
 
     internal RectD CropRegion => _cropRegion;
 
     /// <summary>Device-independent units per frozen-frame physical pixel.</summary>
-    internal double DipPerPixel
+    internal double DipPerPixel => FrameLayout.Scale;
+
+    /// <summary>Top-left DIP of the fitted, letterboxed frame.</summary>
+    internal Point FrameOrigin => FrameLayout.Origin;
+
+    private (double Scale, Point Origin) FrameLayout
     {
         get
         {
-            if (ActualWidth <= 0 || ActualHeight <= 0 ||
-                _frame.PixelWidth <= 0 || _frame.PixelHeight <= 0)
+            Size renderSize = RenderSize;
+            // Arrange can be followed by a coordinate read before SizeChanged is dispatched.
+            // This cheap size check also covers that interval without consulting the tree.
+            if (!_frameLayoutValid || _cachedRenderSize != renderSize)
             {
-                return 1.0;
+                _cachedFrameLayout = CalculateFrameLayout(renderSize,
+                    new Size(_frame.PixelWidth, _frame.PixelHeight), _pixelsPerDip, _deviceOffset);
+                _cachedRenderSize = renderSize;
+                _frameLayoutValid = true;
             }
-
-            // A capture overlay has the same aspect ratio as its frame, but a resizable
-            // gallery editor does not. Fit by both axes so the frame never extends below or
-            // beside the surface (which previously produced negative dimmer rectangles).
-            return Math.Max(
-                double.Epsilon,
-                Math.Min(
-                    ActualWidth / _frame.PixelWidth,
-                    ActualHeight / _frame.PixelHeight));
+            return _cachedFrameLayout;
         }
     }
 
-    /// <summary>Top-left DIP of the fitted, letterboxed frame.</summary>
-    internal Point FrameOrigin
+    private void OnLoaded(object sender, RoutedEventArgs e)
     {
-        get
+        LayoutUpdated += OnLayoutUpdated;
+        RefreshDeviceOffset(invalidateVisual: true);
+    }
+
+    private void OnUnloaded(object sender, RoutedEventArgs e) => LayoutUpdated -= OnLayoutUpdated;
+
+    private void OnLayoutUpdated(object? sender, EventArgs e) => RefreshDeviceOffset(invalidateVisual: true);
+
+    private void RefreshDeviceOffset(bool invalidateVisual)
+    {
+        Point deviceOffset = default;
+        // Layout rounding normally places this surface on whole device pixels. Include
+        // fractional layout offsets, but not the entrance animation's RenderTransform:
+        // moving the whole editor must not change its available canvas or image scale.
+        // Only layout/render notifications walk the tree; pointer-coordinate reads reuse it.
+        if (PresentationSource.FromVisual(this) is { RootVisual: Visual root, CompositionTarget: { } target })
         {
-            double scale = DipPerPixel;
-            return new Point(
-                Math.Max(0, (ActualWidth - (_frame.PixelWidth * scale)) / 2),
-                Math.Max(0, (ActualHeight - (_frame.PixelHeight * scale)) / 2));
+            Vector layoutOffset = default;
+            for (Visual? visual = this; visual is not null && !ReferenceEquals(visual, root);
+                visual = VisualTreeHelper.GetParent(visual) as Visual)
+                layoutOffset += VisualTreeHelper.GetOffset(visual);
+            deviceOffset = target.TransformToDevice.Transform(new Point(layoutOffset.X, layoutOffset.Y));
         }
+        if (_deviceOffset == deviceOffset) return;
+        _deviceOffset = deviceOffset;
+        _frameLayoutValid = false;
+        if (invalidateVisual) InvalidateVisual();
+        FrameLayoutChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    /// <summary>Fits and centres the frame on the device grid; the offset is in device pixels.</summary>
+    internal static (double Scale, Point Origin) CalculateFrameLayout(
+        Size viewport, Size pixels, double pixelsPerDip, Point deviceOffset = default)
+    {
+        double dpi = double.IsFinite(pixelsPerDip) && pixelsPerDip > 0 ? pixelsPerDip : 1;
+        if (viewport.Width <= 0 || viewport.Height <= 0 || pixels.Width <= 0 || pixels.Height <= 0)
+            return (1 / dpi, new Point());
+
+        // Round the available bounds inward so snapping never consumes the crop grab margin.
+        // For a normal rounded layout these are exactly the 16-DIP inset boundaries.
+        double left = (Math.Ceiling(CanvasInset * dpi + deviceOffset.X) - deviceOffset.X) / dpi;
+        double top = (Math.Ceiling(CanvasInset * dpi + deviceOffset.Y) - deviceOffset.Y) / dpi;
+        double right = (Math.Floor((viewport.Width - CanvasInset) * dpi + deviceOffset.X) - deviceOffset.X) / dpi;
+        double bottom = (Math.Floor((viewport.Height - CanvasInset) * dpi + deviceOffset.Y) - deviceOffset.Y) / dpi;
+        double scale = Math.Max(double.Epsilon,
+            Math.Min(1 / dpi, Math.Min((right - left) / pixels.Width, (bottom - top) / pixels.Height)));
+        double x = (Math.Round((viewport.Width - pixels.Width * scale) / 2 * dpi + deviceOffset.X) - deviceOffset.X) / dpi;
+        double y = (Math.Round((viewport.Height - pixels.Height * scale) / 2 * dpi + deviceOffset.Y) - deviceOffset.Y) / dpi;
+        double lastX = (Math.Floor((right - pixels.Width * scale) * dpi + deviceOffset.X + 1e-9) - deviceOffset.X) / dpi;
+        double lastY = (Math.Floor((bottom - pixels.Height * scale) * dpi + deviceOffset.Y + 1e-9) - deviceOffset.Y) / dpi;
+        if (right >= left) x = Math.Clamp(x, left, Math.Max(left, lastX));
+        if (bottom >= top) y = Math.Clamp(y, top, Math.Max(top, lastY));
+        return (scale, new Point(x, y));
+    }
+
+    protected override void OnDpiChanged(DpiScale oldDpi, DpiScale newDpi)
+    {
+        base.OnDpiChanged(oldDpi, newDpi);
+        _pixelsPerDip = newDpi.PixelsPerDip;
+        _frameLayoutValid = false;
+        RefreshDeviceOffset(invalidateVisual: false);
+        InvalidateVisual();
+        FrameLayoutChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    protected override void OnRenderSizeChanged(SizeChangedInfo sizeInfo)
+    {
+        base.OnRenderSizeChanged(sizeInfo);
+        _frameLayoutValid = false;
+        FrameLayoutChanged?.Invoke(this, EventArgs.Empty);
     }
 
     internal Rect FrameRectDip
@@ -154,8 +263,8 @@ internal sealed class AnnotationEditorSurface : FrameworkElement
     /// <summary>Maps a point on the surface (DIP) to selected-image pixel coordinates.</summary>
     internal PointD ToImagePoint(Point dip)
     {
-        double scale = Math.Max(double.Epsilon, DipPerPixel);
-        Point origin = FrameOrigin;
+        (double scale, Point origin) = FrameLayout;
+        scale = Math.Max(double.Epsilon, scale);
         double framePixelX = (dip.X - origin.X) / scale;
         double framePixelY = (dip.Y - origin.Y) / scale;
         return new PointD(framePixelX - _cropRegion.Left, framePixelY - _cropRegion.Top);
@@ -198,6 +307,7 @@ internal sealed class AnnotationEditorSurface : FrameworkElement
     protected override void OnRender(DrawingContext dc)
     {
         base.OnRender(dc);
+        RefreshDeviceOffset(invalidateVisual: false);
 
         if (ActualWidth <= 0 || ActualHeight <= 0)
         {
@@ -239,13 +349,41 @@ internal sealed class AnnotationEditorSurface : FrameworkElement
         dc.Pop();
 
         // Opposing neutral edges remain visible on both light and dark image content.
-        dc.DrawRectangle(null, _edgeShadowPen, CropRectDip);
-        dc.DrawRectangle(null, _cropEdgePen, CropRectDip);
+        Rect shadowBounds = CropRectDip;
+        shadowBounds.Inflate(2, 2);
+        Rect edgeBounds = CropRectDip;
+        edgeBounds.Inflate(1, 1);
+        dc.DrawRectangle(null, _edgeShadowPen, shadowBounds);
+        dc.DrawRectangle(null, _cropEdgePen, edgeBounds);
 
         if (PendingCrop is { } pending) DrawPendingCrop(dc, pending);
         else DrawSelectionAdorner(dc);
         foreach (RectD region in PendingMosaicRegions) DrawMosaicDraft(dc, region);
         if (MosaicGestureRegion is { } gesture) DrawMosaicDraft(dc, gesture);
+        DrawPointerPreview(dc);
+    }
+
+    private void DrawPointerPreview(DrawingContext dc)
+    {
+        if (BrushOutlineDip is { } brush)
+        {
+            dc.PushClip(new RectangleGeometry(CropRectDip));
+            var center = new Point(brush.X + brush.Width / 2, brush.Y + brush.Height / 2);
+            // The path follows the true footprint, even for a subpixel brush. Only the
+            // contrast edge has a fixed DIP width; the locator follows Windows pointer size.
+            dc.DrawEllipse(null, new Pen(Brushes.Black, 3), center, brush.Width / 2, brush.Height / 2);
+            dc.DrawEllipse(null, new Pen(Brushes.White, 1), center, brush.Width / 2, brush.Height / 2);
+            dc.Pop();
+        }
+        else if (_pointerPreviewPoint is { } point && PendingCrop is null
+            && _controller.Tool == EditorTool.StepNumber
+            && _controller.ResolvePointerIntent(point).Action == PointerAction.AddStepNumber
+            && _controller.StepNumberPreviewBounds(point) is { } badge)
+        {
+            Rect bounds = ToSurfaceRect(badge);
+            dc.DrawRectangle(null, new Pen(Brushes.Black, 3), bounds);
+            dc.DrawRectangle(null, new Pen(Brushes.White, 1), bounds);
+        }
     }
 
     private void DrawMosaicDraft(DrawingContext dc, RectD region)
@@ -340,35 +478,28 @@ internal sealed class AnnotationEditorSurface : FrameworkElement
         bool multiple = _controller.SelectedItems.Count > 1;
         Rect bounds = ToSurfaceRect(_controller.SelectionBounds ?? selected.Bounds);
         Rect inflated = Rect.Inflate(bounds, 2, 2);
+        bool rotated = !multiple && selected is TextAnnotation { RotationDegrees: not 0 };
+        if (rotated)
+            dc.PushTransform(new RotateTransform(((TextAnnotation)selected).RotationDegrees,
+                bounds.X + bounds.Width / 2, bounds.Y + bounds.Height / 2));
         dc.DrawRectangle(null, _edgeShadowPen, inflated);
         dc.DrawRectangle(null, _selectionOutlinePen, inflated);
+        if (rotated) dc.Pop();
 
-        if (!multiple && !selected.SupportsResize)
+        if (multiple || !selected.SupportsResize)
         {
             return;
         }
 
-        int index = 0;
-        foreach (Point center in HandleCenters(inflated))
+        foreach (SelectionHandle handle in _controller.GetSelectionHandles(DipPerPixel))
         {
-            // Same order as HandleCenters; a caption offers no top/bottom handles.
-            if (!multiple && AnnotationEditorController.UsableHandle(selected, HandleOrder[index++]) == ResizeHandle.None)
-            {
-                continue;
-            }
-
+            Point center = ToSurfacePoint(handle.Position);
             dc.DrawRectangle(
                 _handleFillBrush,
                 _handlePen,
                 new Rect(center.X - (HandlePixels / 2), center.Y - (HandlePixels / 2), HandlePixels, HandlePixels));
         }
     }
-
-    private static readonly ResizeHandle[] HandleOrder =
-    [
-        ResizeHandle.TopLeft, ResizeHandle.TopCenter, ResizeHandle.TopRight, ResizeHandle.MiddleRight,
-        ResizeHandle.BottomRight, ResizeHandle.BottomCenter, ResizeHandle.BottomLeft, ResizeHandle.MiddleLeft,
-    ];
 
     private static IEnumerable<Point> HandleCenters(Rect rect)
     {

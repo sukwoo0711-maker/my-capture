@@ -13,24 +13,7 @@ internal sealed partial class SettingsWindow
     /// <paramref name="draftProperty"/> (a <see cref="MyCapture.Core.Settings.SettingsDraft"/>
     /// hotkey property), scrolled into view. An unknown property just shows the window.
     /// </summary>
-    internal void ShowShortcut(string draftProperty)
-    {
-        ShowSettings();
-        if (CategoryTabs.Template.FindName("SettingsSearchBox", CategoryTabs) is TextBox search) search.Clear();
-        FilterSettings(string.Empty);
-        if (FindHotkeyRecorder(draftProperty) is not { } recorder) return;
-        if (LogicalAncestor<TabItem>(recorder) is { } tab) CategoryTabs.SelectedItem = tab;
-        // The tab's content is laid out only once it is selected.
-        _ = Dispatcher.BeginInvoke(DispatcherPriority.Loaded, new Action(() =>
-        {
-            recorder.BringIntoView();
-            if (LogicalDescendants(recorder).OfType<Button>().FirstOrDefault() is { } record)
-            {
-                _ = record.Focus();
-                _ = Keyboard.Focus(record);
-            }
-        }));
-    }
+    internal void ShowShortcut(string draftProperty) => ShowSetting(draftProperty);
 
     /// <summary>The shortcut recorder bound to <paramref name="draftProperty"/>, on any tab.</summary>
     internal HotkeyRecorder? FindHotkeyRecorder(string draftProperty) =>

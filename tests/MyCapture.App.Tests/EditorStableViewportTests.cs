@@ -1,6 +1,7 @@
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Media;
 using System.Windows.Threading;
 using MyCapture.App.Editing;
 using MyCapture.Core.Annotations;
@@ -369,14 +370,19 @@ public sealed class EditorStableViewportTests : KoreanCaptionTest
     private static void AssertFittedToSurface(EditorWindowHost host)
     {
         var surface = Field<AnnotationEditorSurface>(host.Editor, "_surface");
-        double expectedScale = Math.Min(surface.ActualWidth / surface.Frame.PixelWidth, surface.ActualHeight / surface.Frame.PixelHeight);
+        double inset = AnnotationEditorSurface.CanvasInset;
+        double expectedScale = Math.Min(1 / VisualTreeHelper.GetDpi(surface).PixelsPerDip,
+            Math.Min((surface.ActualWidth - 2 * inset) / surface.Frame.PixelWidth,
+                (surface.ActualHeight - 2 * inset) / surface.Frame.PixelHeight));
         Assert.Equal(expectedScale, surface.DipPerPixel, 8);
         Rect bounds = surface.FrameRectDip;
         Assert.Equal(surface.Frame.PixelWidth * expectedScale, bounds.Width, 8);
         Assert.Equal(surface.Frame.PixelHeight * expectedScale, bounds.Height, 8);
-        Assert.True(bounds.Left >= -0.0000001 && bounds.Top >= -0.0000001);
-        Assert.True(bounds.Right <= surface.ActualWidth + 0.0000001 && bounds.Bottom <= surface.ActualHeight + 0.0000001);
-        Assert.True(Math.Abs(bounds.Width - surface.ActualWidth) < 0.0000001 || Math.Abs(bounds.Height - surface.ActualHeight) < 0.0000001);
+        Assert.True(bounds.Left >= inset - 0.0000001 && bounds.Top >= inset - 0.0000001);
+        Assert.True(bounds.Right <= surface.ActualWidth - inset + 0.0000001 && bounds.Bottom <= surface.ActualHeight - inset + 0.0000001);
+        Assert.True(Math.Abs(expectedScale - 1 / VisualTreeHelper.GetDpi(surface).PixelsPerDip) < 0.0000001
+            || Math.Abs(bounds.Width - (surface.ActualWidth - 2 * inset)) < 0.0000001
+            || Math.Abs(bounds.Height - (surface.ActualHeight - 2 * inset)) < 0.0000001);
     }
 
     private readonly record struct ViewportSnapshot(double ViewportWidth, double ViewportHeight,

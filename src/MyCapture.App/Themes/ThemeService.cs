@@ -208,7 +208,12 @@ internal static class ThemeService
         ApplyButtonResources(resources, theme, contrast);
         ThemeBrushes.Refresh(resources);
         ShortcutRevealMotion.SettleAll();
+        Interlocked.Increment(ref _resourceVersion);
     }
+
+    /// <summary>Changes on every <see cref="ApplyResources"/>; layout measured before it may be stale.</summary>
+    internal static int ResourceVersion => Volatile.Read(ref _resourceVersion);
+    private static int _resourceVersion;
 
     internal static void ApplyButtonResources(ResourceDictionary resources, AppTheme theme, bool contrast)
     {

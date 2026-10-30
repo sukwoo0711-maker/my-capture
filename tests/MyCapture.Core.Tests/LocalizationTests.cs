@@ -4,6 +4,7 @@ using System.Resources;
 using System.Text;
 using System.Text.RegularExpressions;
 using Microsoft.Extensions.Logging.Abstractions;
+using MyCapture.Core.Annotations;
 using MyCapture.Core.Localization;
 using MyCapture.Core.Settings;
 using Xunit;
@@ -12,6 +13,17 @@ namespace MyCapture.Core.Tests;
 
 public sealed class LocalizationTests
 {
+    [Theory]
+    [InlineData("ko-KR")]
+    [InlineData("en-US")]
+    public void RecordingWatermarkAnchorsAndSettingsFontUnitsResolve(string language)
+    {
+        using var scope = UiText.UseLanguage(language);
+        foreach (StampAnchor anchor in Enum.GetValues<StampAnchor>())
+            Assert.False(string.IsNullOrWhiteSpace(UiText.Get($"RecordingWatermark_Anchor{anchor}")));
+        Assert.Equal("6–400 px", UiText.Get("SettingsRange_FontSize"));
+    }
+
     [Theory]
     [InlineData("Source.Open", "출처 열기", "Open source")]
     [InlineData("Source.AppMissing", "출처 앱을 찾을 수 없습니다.", "The source app could not be found.")]

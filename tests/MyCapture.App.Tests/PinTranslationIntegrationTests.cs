@@ -1,3 +1,6 @@
+using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
@@ -318,6 +321,69 @@ public sealed class PinTranslationIntegrationTests : KoreanCaptionTest
     });
 
     [Fact]
+    public Task PictureTranslationSupportsF2AndPartialCopyThenLeavesSelectionForTheOriginal() => RunAsync(async () =>
+    {
+        var copiedText = new List<string>();
+        int imageCopies = 0;
+        var manager = new PinManager(() => new PinSettings(), null,
+            (_, _, _) => { imageCopies++; return Task.FromResult(true); },
+            text => { copiedText.Add(text); return Task.FromResult(true); }, NullLogger.Instance)
+        {
+            ShowPinForTest = static (_, _) => { },
+            ActivatePinForTest = static _ => { },
+            BeforeShowForTest = static pin => pin.SelectionFocus = new NoSelectionFocus(),
+        };
+        manager.ConfigureTranslation(new FakeTranslator());
+        manager.ConfigureImageTranslation((_, _) => Task.FromResult<string?>(English));
+        try
+        {
+            BitmapSource sourceImage = Image();
+            PinWindow pin = manager.PinImage(sourceImage);
+            pin.InvokeTranslationAction();
+            await pin.TranslationWork;
+            Assert.Equal(Korean, pin.VisibleText);
+            Assert.Null(pin.OriginalText);
+            Assert.Same(sourceImage, pin.PinnedContent.Image);
+            Assert.Null(pin.PinnedContent.OriginalText);
+            MenuItem selectionMenu = Assert.Single(pin.ContextMenu.Items.OfType<MenuItem>(), item => item.InputGestureText == "F2");
+
+            Press(pin, Key.F2);
+            Assert.True(pin.IsTextSelectionMode);
+            Assert.True(selectionMenu.IsChecked);
+            TextBox selection = Assert.IsType<TextBox>(pin.TextSelectionForTest!.TextBox);
+            Assert.Equal(Korean, selection.Text);
+            const string selected = "문서를";
+            selection.Select(Korean.IndexOf(selected, StringComparison.Ordinal), selected.Length);
+            Press(pin, Key.C, ModifierKeys.Control);
+            Assert.True(await manager.LastTextCopyOperationForTest!);
+            Assert.Equal([selected], copiedText);
+            Assert.Equal(0, imageCopies);
+
+            pin.InvokeTranslationAction();
+            Assert.False(pin.IsShowingTranslation);
+            Assert.False(pin.IsTextSelectionMode);
+            Assert.Null(pin.TextSelectionForTest);
+            Assert.Null(pin.VisibleText);
+            Assert.Null(pin.OriginalText);
+            Assert.Same(sourceImage, pin.PinnedContent.Image);
+            Assert.Null(pin.PinnedContent.OriginalText);
+            Assert.DoesNotContain(pin.ContextMenu.Items.OfType<MenuItem>(), item => item.InputGestureText == "F2");
+            Press(pin, Key.F2);
+            Assert.False(pin.IsTextSelectionMode);
+
+            pin.InvokeTranslationAction();
+            Assert.False(pin.IsTextSelectionMode);
+            selectionMenu = Assert.Single(pin.ContextMenu.Items.OfType<MenuItem>(), item => item.InputGestureText == "F2");
+            selectionMenu.RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
+            Assert.True(pin.IsTextSelectionMode);
+            Assert.True(selectionMenu.IsChecked);
+            Assert.Equal(Korean, pin.TextSelectionForTest!.TextBox!.Text);
+            Assert.Equal([selected], copiedText);
+        }
+        finally { manager.CloseAllForExit(); }
+    });
+
+    [Fact]
     public Task PicturePinThatIsAlreadyInTheTargetLanguageNeverLoadsAModel() => RunAsync(async () =>
     {
         var translator = new FakeTranslator { Installed = false };
@@ -379,6 +445,28 @@ public sealed class PinTranslationIntegrationTests : KoreanCaptionTest
         Assert.Contains("247 MB", text);
         Assert.Contains(privacy, text);
         Assert.Contains(question, text);
+    }
+
+    private static void Press(PinWindow pin, Key key, ModifierKeys modifiers = ModifierKeys.None)
+    {
+        var args = new KeyEventArgs(Keyboard.PrimaryDevice, new MemoryPresentationSource(), 0, key)
+            { RoutedEvent = Keyboard.KeyDownEvent };
+        pin.HandleKeyDown(args, modifiers);
+        Assert.True(args.Handled);
+    }
+
+    private sealed class MemoryPresentationSource : PresentationSource
+    {
+        public override Visual RootVisual { get; set; } = new DrawingVisual();
+        public override bool IsDisposed => false;
+        protected override CompositionTarget GetCompositionTargetCore() => null!;
+    }
+
+    private sealed class NoSelectionFocus : IPinSelectionFocus
+    {
+        public bool IsActive(PinWindow owner) => false;
+        public void Enter(PinWindow owner, PinTextSelectionView selection) { }
+        public void Restore(PinWindow owner) { }
     }
 
     private sealed class FakeTranslator : ITextTranslator

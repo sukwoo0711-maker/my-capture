@@ -10,6 +10,7 @@ using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
+using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using Microsoft.Extensions.Logging;
 using MyCapture.App.Capture;
@@ -115,6 +116,9 @@ internal sealed class RecordingControlWindow : Window
     private double _wallClockFontSize = RecordingWallClockWindow.DefaultFontSize;
     private double? _wallClockRelativeX;
     private double? _wallClockRelativeY;
+    private RecordingWatermarkSettings _watermarkSettings;
+    private RecordingWatermarkWindow? _watermark;
+    private bool _watermarkLocked;
 
     private RegionRecorder? _recorder;
     private DispatcherTimer? _elapsedTimer;
@@ -140,6 +144,7 @@ internal sealed class RecordingControlWindow : Window
     {
         _screenRegion = screenRegion.Normalized().ToPixelBounds();
         _settings = settings ?? throw new ArgumentNullException(nameof(settings));
+        _watermarkSettings = (settings.Watermark ?? new()).Normalize();
         _recorderFactory = recorderFactory ?? throw new ArgumentNullException(nameof(recorderFactory));
         _outputPathFactory = outputPathFactory ?? throw new ArgumentNullException(nameof(outputPathFactory));
         _log = log ?? throw new ArgumentNullException(nameof(log));
@@ -190,6 +195,15 @@ internal sealed class RecordingControlWindow : Window
     internal event EventHandler? Stopping;
 
     internal bool IsCaptureExcluded => _captureExclusionApplied;
+
+    internal string? WatermarkImageFolder { get; set; }
+    internal Func<BitmapSource?>? LoadWatermarkImage { get; set; }
+    internal Func<RecordingWatermarkSettings, RecordingWatermarkSettings?>? EditWatermarkSettings { get; set; }
+    internal event Action<RecordingWatermarkSettings>? WatermarkSettingsChanged;
+    internal RecordingWatermarkSettings WatermarkSettings => _watermarkSettings;
+    internal bool CanEditWatermark => !_watermarkLocked && !IsRecording && !_previewRecording
+        && _countdownTimer is null && !_stopping && !_completionPending && !_finished && !_windowClosed;
+    internal RecordingWatermarkSnapshot? WatermarkSnapshotForTest => _watermark?.Snapshot;
 
     internal bool IsRecording => _recorder is { IsRecording: true };
     internal bool CanCaptureStill => _recorder is { IsReady: true } && !_stopping && !_completionPending && !_finished;
@@ -298,6 +312,24 @@ internal sealed class RecordingControlWindow : Window
             ShowTime = !ShowTime;
         };
         menu.Items.Add(time);
+        var watermark = new MenuItem
+        {
+            Header = UiText.Get("RecordingWatermark_Show"), IsCheckable = true,
+            IsChecked = _watermarkSettings.Enabled, IsEnabled = CanEditWatermark, MinHeight = 36,
+            Icon = _watermarkSettings.Enabled ? MenuGlyph(CheckGlyph) : null,
+        };
+        AutomationProperties.SetName(watermark, UiText.Get("RecordingWatermark_Show"));
+        watermark.Click += (_, _) =>
+        {
+            menu.IsOpen = false;
+            ApplyWatermarkSettings(_watermarkSettings with { Enabled = !_watermarkSettings.Enabled });
+        };
+        menu.Items.Add(watermark);
+        var watermarkSettings = new MenuItem
+        { Header = UiText.Get("RecordingWatermark_Settings"), IsEnabled = CanEditWatermark, MinHeight = 36 };
+        AutomationProperties.SetName(watermarkSettings, UiText.Get("RecordingWatermark_Settings"));
+        watermarkSettings.Click += (_, _) => { menu.IsOpen = false; OpenWatermarkSettings(); };
+        menu.Items.Add(watermarkSettings);
         menu.Opened += (_, _) =>
         {
             // The popup is its own window; exclude it from capture like this bar.
@@ -702,8 +734,11 @@ internal sealed class RecordingControlWindow : Window
         ApplyPhysicalLayout(positionHwnd: true);
     }
 
-    private void OnContentRendered(object? sender, EventArgs e) =>
+    private void OnContentRendered(object? sender, EventArgs e)
+    {
         ApplyPhysicalLayout(positionHwnd: true);
+        if (CanEditWatermark) RefreshWatermark();
+    }
 
     private void OnDpiChanged(object? sender, DpiChangedEventArgs e)
     {
@@ -811,6 +846,7 @@ internal sealed class RecordingControlWindow : Window
             }
 
             _wallClock?.UpdateRecordingRegion(_screenRegion, scale);
+            _watermark?.UpdateRecordingRegion(_screenRegion, scale);
         }
         finally
         {
@@ -861,7 +897,7 @@ internal sealed class RecordingControlWindow : Window
 
     private void OnPrimaryClicked()
     {
-        if (_stopping || _completionPending)
+        if (_stopping || _completionPending || _watermarkLocked && !IsRecording)
         {
             return;
         }
@@ -925,8 +961,15 @@ internal sealed class RecordingControlWindow : Window
         _primaryButton.IsEnabled = true;
     }
 
-    private void BeginRecording()
+    private async void BeginRecording()
     {
+        if (!PrepareWatermarkForStart()) return;
+        if (_watermark is not null)
+        {
+            await Dispatcher.InvokeAsync(() => _watermark?.UpdateLayout(), DispatcherPriority.Render);
+            await Task.Delay(ResumePresentationDelay);
+            if (_windowClosed) return;
+        }
         try
         {
             ApplyPhysicalLayout(positionHwnd: true);
@@ -940,6 +983,8 @@ internal sealed class RecordingControlWindow : Window
         {
             _log.LogError(ex, "Could not start recording");
             CloseWallClock();
+            CloseWatermark();
+            _watermarkLocked = false;
             _showTime = false;
             _statusText.Text = UiText.Get("Text_48C3B6EBA637");
             _statusText.Foreground = TryBrush("State.Danger", Colors.OrangeRed);
@@ -1241,6 +1286,7 @@ internal sealed class RecordingControlWindow : Window
         {
             // The recorder has stopped capturing; close wall clock so final frames retain the clock.
             CloseWallClock();
+            CloseWatermark();
 
             if (ReferenceEquals(_recorder, recorder))
             {
@@ -1286,6 +1332,7 @@ internal sealed class RecordingControlWindow : Window
         }
 
         CloseWallClock();
+        CloseWatermark();
         Cancelled?.Invoke(this, EventArgs.Empty);
         Close();
     }
@@ -1524,7 +1571,94 @@ internal sealed class RecordingControlWindow : Window
             }
         }
 
+        // Forced-close finalisation above must retain the watermark through the last frame too.
+        CloseWatermark();
         base.OnClosed(e);
+    }
+
+    internal bool ApplyWatermarkSettings(RecordingWatermarkSettings settings)
+    {
+        if (!RefreshWatermarkSettings(settings)) return false;
+        WatermarkSettingsChanged?.Invoke(_watermarkSettings.DeepClone());
+        return true;
+    }
+
+    internal bool RefreshWatermarkSettings(RecordingWatermarkSettings settings)
+    {
+        if (!CanEditWatermark) return false;
+        _watermarkSettings = settings.Normalize();
+        RefreshWatermark();
+        return true;
+    }
+
+    internal bool PrepareWatermarkForStart()
+    {
+        if (_watermarkLocked || _windowClosed) return false;
+        // Re-read registered pixels at the start boundary, then hold this copy until Stop completes.
+        if (!RefreshWatermark()) return false;
+        _watermarkLocked = true;
+        return true;
+    }
+
+    private void OpenWatermarkSettings()
+    {
+        if (!CanEditWatermark) return;
+        RecordingWatermarkSettings original = _watermarkSettings;
+        RecordingWatermarkSettings? result;
+        if (EditWatermarkSettings is { } edit) result = edit(original.DeepClone());
+        else
+        {
+            var dialog = new RecordingWatermarkSettingsDialog(original, WatermarkImageFolder, preview =>
+            {
+                if (!CanEditWatermark) return;
+                _watermarkSettings = preview;
+                RefreshWatermark();
+            }, () => !CanEditWatermark) { Owner = this };
+            result = dialog.ShowDialog() == true ? dialog.Result : null;
+        }
+        if (!CanEditWatermark) return;
+        _watermarkSettings = original;
+        if (result is not null) ApplyWatermarkSettings(result);
+        else RefreshWatermark();
+    }
+
+    private bool RefreshWatermark()
+    {
+        if (_watermarkLocked) return true;
+        CloseWatermark();
+        if (!_watermarkSettings.Enabled)
+        {
+            _statusText.Text = string.Empty;
+            return true;
+        }
+        try
+        {
+            BitmapSource? pixels = _watermarkSettings.Source == RecordingWatermarkSource.Image
+                ? LoadWatermarkImage is { } load ? load() : RecordingWatermarkAssets.Load(WatermarkImageFolder)
+                : null;
+            RecordingWatermarkSnapshot snapshot = RecordingWatermarkSnapshot.Create(_watermarkSettings, pixels);
+            _watermark = new RecordingWatermarkWindow(_screenRegion, ResolveWindowScale(), snapshot);
+            if (IsVisible) _watermark.Show();
+            _statusText.Text = string.Empty;
+            return true;
+        }
+        catch (Exception ex) when (ex is System.IO.IOException or UnauthorizedAccessException or InvalidOperationException
+            or NotSupportedException or ArgumentException or FormatException or ExternalException or OverflowException)
+        {
+            _log.LogWarning(ex, "Could not prepare recording watermark");
+            _statusText.Text = UiText.Get(_watermarkSettings.Source == RecordingWatermarkSource.Image
+                ? "RecordingWatermark_ImageError" : "RecordingWatermark_TextError");
+            _statusText.Foreground = TryBrush("State.Danger", Colors.OrangeRed);
+            AnnounceStatus();
+            return false;
+        }
+    }
+
+    private void CloseWatermark()
+    {
+        RecordingWatermarkWindow? watermark = _watermark;
+        _watermark = null;
+        watermark?.Close();
     }
 
     private void SetWallClockEnabled(bool enabled)

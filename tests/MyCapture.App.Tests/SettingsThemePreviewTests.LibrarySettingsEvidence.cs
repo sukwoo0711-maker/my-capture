@@ -362,7 +362,8 @@ public sealed partial class SettingsThemePreviewTests
         encoder.Save(stream);
     }
 
-    private static readonly (string Page, int Index)[] SettingsEvidencePages = [("editing", 3), ("storage", 5), ("about", 6)];
+    private static readonly (string Page, SettingsSection Section)[] SettingsEvidencePages =
+        [("editing", SettingsSection.Editing), ("storage", SettingsSection.Storage), ("about", SettingsSection.About)];
 
     private static void RenderSettingsEvidence(string language)
     {
@@ -382,10 +383,10 @@ public sealed partial class SettingsThemePreviewTests
                 {
                     window.Width = width;
                     window.Height = height;
-                    foreach ((string page, int index) in SettingsEvidencePages)
+                    foreach ((string page, SettingsSection section) in SettingsEvidencePages)
                     {
                         if (!packaged && page != "about") continue;
-                        tabs.SelectedIndex = index;
+                        Assert.True(window.NavigateToSection(section));
                         Drain(window);
                         var scroll = Descendants(window).OfType<ScrollViewer>()
                             .FirstOrDefault(viewer => viewer.IsVisible && viewer.TemplatedParent is null && viewer.Content is StackPanel);

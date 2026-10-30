@@ -26,13 +26,13 @@ public sealed class TrayMenuTests
         HotkeySettings keys = new();
         IReadOnlyList<ThemedShellPresenter.MenuEntry> menu = TrayMenuLayout.Build(commands, keys, canRestoreClosedPin: false, scrollingActive: false);
 
-        Assert.Equal(["영역 캡처", "화면 녹화", "텍스트 복사", "다른 캡처", "클립보드를 핀으로 띄우기", "", "라이브러리", "설정", "단축키 보기", "", "종료"],
+        Assert.Equal(["영역 캡처", "화면 녹화", "텍스트 복사", "다른 캡처", "", "클립보드를 핀으로 띄우기", "", "라이브러리", "설정", "", "도움말", "", "종료"],
             menu.Select(entry => entry.Label));
-        Assert.Equal([false, false, false, false, false, true, false, false, false, true, false], menu.Select(entry => entry.IsSeparator));
+        Assert.Equal([false, false, false, false, true, false, true, false, false, true, false, true, false], menu.Select(entry => entry.IsSeparator));
         Assert.DoesNotContain(menu, entry => entry.Label == UiText.Get("Tray_OpenPins"));
         Assert.Equal(keys.Capture.ToString(), menu[0].Gesture);
         Assert.Equal(keys.RecordRegion.ToString(), menu[1].Gesture);
-        Assert.Equal("F1", menu[8].Gesture);
+        Assert.Equal("F1", menu[10].Children![0].Gesture);
 
         // Text capture is a first-group command now, not a branch child.
         ThemedShellPresenter.MenuEntry more = menu[3];
@@ -48,9 +48,9 @@ public sealed class TrayMenuTests
         Assert.DoesNotContain(UiText.Get("Shell.Help"), labels);
 
         // Each entry runs the existing command.
-        foreach (ThemedShellPresenter.MenuEntry entry in menu.Concat(more.Children!).Where(entry => entry.Action is not null))
+        foreach (ThemedShellPresenter.MenuEntry entry in menu.Concat(menu[10].Children!).Concat(more.Children!).Where(entry => entry.Action is not null))
             entry.Action!();
-        Assert.Equal(["Capture", "Record", "Text", "PinClipboard", "Library", "Settings", "Shortcuts", "Exit",
+        Assert.Equal(["Capture", "Record", "Text", "PinClipboard", "Library", "Settings", "Exit", "Shortcuts",
             "Window", "FullScreen", "Scroll", "Delay", "Repeat"], calls);
     }
 
@@ -62,11 +62,11 @@ public sealed class TrayMenuTests
         var keys = new HotkeySettings { RestoreClosedPin = new Hotkey(HotkeyModifiers.Control | HotkeyModifiers.Alt, 0x72) };
         IReadOnlyList<ThemedShellPresenter.MenuEntry> menu = TrayMenuLayout.Build(Commands(calls), keys,
             canRestoreClosedPin: true, scrollingActive: true);
-        Assert.Equal(["영역 캡처", "화면 녹화", "텍스트 복사", "다른 캡처", "클립보드를 핀으로 띄우기", "닫은 핀 다시 열기", "",
-            "라이브러리", "설정", "단축키 보기", "", "종료"], menu.Select(entry => entry.Label));
-        Assert.Equal("Ctrl+Alt+F3", menu[5].Gesture);
+        Assert.Equal(["영역 캡처", "화면 녹화", "텍스트 복사", "다른 캡처", "", "클립보드를 핀으로 띄우기", "닫은 핀 다시 열기", "",
+            "라이브러리", "설정", "", "도움말", "", "종료"], menu.Select(entry => entry.Label));
+        Assert.Equal("Ctrl+Alt+F3", menu[6].Gesture);
         Assert.Equal("스크롤 캡처 취소", menu[3].Children![2].Label);
-        menu[5].Action!();
+        menu[6].Action!();
         Assert.Equal(["Reopen"], calls);
     }
 
@@ -130,9 +130,9 @@ public sealed class TrayMenuTests
 
         IReadOnlyList<ThemedShellPresenter.MenuEntry> shown = TrayMenuLayout.Build(Commands(calls), keys,
             new TrayMenuState(CanRestoreClosedPin: true, PinCount: 2));
-        Assert.Equal(["영역 캡처", "화면 녹화", "텍스트 복사", "다른 캡처", "클립보드를 핀으로 띄우기", "핀 모두 숨기기", "닫은 핀 다시 열기"],
-            shown.TakeWhile(entry => !entry.IsSeparator).Select(entry => entry.Label));
-        ThemedShellPresenter.MenuEntry hide = shown[5];
+        Assert.Equal(["클립보드를 핀으로 띄우기", "닫은 핀 다시 열기", "핀 모두 숨기기"],
+            shown.Skip(5).TakeWhile(entry => !entry.IsSeparator).Select(entry => entry.Label));
+        ThemedShellPresenter.MenuEntry hide = shown[7];
         Assert.Equal("Ctrl+Shift+H", hide.Gesture);
         hide.Action!();
 
@@ -156,8 +156,7 @@ public sealed class TrayMenuTests
 
         IReadOnlyList<ThemedShellPresenter.MenuEntry> menu = TrayMenuLayout.Build(Commands(calls), keys,
             new TrayMenuState(CanRestoreClosedPin: true, PinCount: 2, ClickThroughPinCount: 1));
-        Assert.Equal(["영역 캡처", "화면 녹화", "텍스트 복사", "다른 캡처", "클립보드를 핀으로 띄우기", "핀 모두 숨기기",
-            "모든 핀 클릭 허용 해제", "닫은 핀 다시 열기"], menu.TakeWhile(entry => !entry.IsSeparator).Select(entry => entry.Label));
+        Assert.Equal(["클립보드를 핀으로 띄우기", "모든 핀 클릭 허용 해제", "닫은 핀 다시 열기", "핀 모두 숨기기"], menu.Skip(5).TakeWhile(entry => !entry.IsSeparator).Select(entry => entry.Label));
         ThemedShellPresenter.MenuEntry clear = menu[6];
         Assert.True(clear.IsEnabled);
         Assert.Equal(string.Empty, clear.Gesture);
@@ -189,9 +188,9 @@ public sealed class TrayMenuTests
         ContextMenu menu = presenter.CreateMenu(TrayMenuLayout.Build(Commands(calls), keys,
             new TrayMenuState(ClipboardHasContent: false)));
 
-        Assert.Equal(2, menu.Items.OfType<Separator>().Count());
+        Assert.Equal(4, menu.Items.OfType<Separator>().Count());
         MenuItem[] items = menu.Items.OfType<MenuItem>().ToArray();
-        Assert.Equal(["영역 캡처", "화면 녹화", "텍스트 복사", "다른 캡처", "클립보드를 핀으로 띄우기", "라이브러리", "설정", "단축키 보기", "종료"],
+        Assert.Equal(["영역 캡처", "화면 녹화", "텍스트 복사", "다른 캡처", "클립보드를 핀으로 띄우기", "라이브러리", "설정", "도움말", "종료"],
             items.Select(item => (string)item.Header));
         Assert.DoesNotContain(items, item => (string)item.Header is "Language" or "✓ 한국어" or "   English");
         Assert.Same(items[^1], menu.Items[^1]);

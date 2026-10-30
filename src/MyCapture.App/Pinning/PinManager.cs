@@ -171,7 +171,7 @@ internal sealed partial class PinManager
         double Zoom,
         double Opacity,
         PinClosedPlacement? Placement,
-        long OpenedOrder = 0);
+        long OpenedOrder = 0, Guid LogicalPracticeId = default);
 
     private sealed record EncodedClosedPin(
         Task<EncodedPinContent> Content,
@@ -179,7 +179,7 @@ internal sealed partial class PinManager
         double ImageHeightDip,
         double Zoom,
         double Opacity,
-        PinClosedPlacement? Placement);
+        PinClosedPlacement? Placement, Guid LogicalPracticeId, Guid WindowPracticeId);
 
     internal bool IsInteractionActive => _pendingEncodes > 0 || _pendingRestores > 0
         || _pins.Any(pin => pin.IsInteractionActive);
@@ -214,6 +214,12 @@ internal sealed partial class PinManager
 
     /// <summary>Forwards only user zoom changes and identifies the exact live pin.</summary>
     internal event Action<Guid>? UserZoomChanged;
+
+    /// <summary>A new or restored pin is ready for interaction.</summary>
+    internal event Action<Guid>? PinOpened;
+
+    /// <summary>A pin has left the open set, before its closing animation completes.</summary>
+    internal event Action<Guid>? PinClosed;
 
     internal event Action? ClickThroughHintShown;
 
@@ -321,7 +327,9 @@ internal sealed partial class PinManager
         switch (read.Outcome.Status)
         {
             case ClipboardImageStatus.Success when read.Content is not null:
-                OpenPin(read.Content, activate: false);
+                PinWindow clipboardPin = OpenPin(read.Content, activate: false);
+                PracticeSignals.Publish(new(PracticeEventKind.PinOpened, Guid.Empty, LogicalPinId: clipboardPin.LogicalPracticeId,
+                    WindowPinId: clipboardPin.PracticeId, ClipboardSequence: read.ClipboardSequence));
                 return PasteResult.Pinned;
 
             case ClipboardImageStatus.Busy:
@@ -441,9 +449,10 @@ internal sealed partial class PinManager
     /// longer shows that position.
     /// </summary>
     /// <returns>The reopened pin, or <see langword="null"/> when nothing can be restored.</returns>
-    internal async Task<PinWindow?> RestoreLastClosedAsync()
+    internal async Task<PinWindow?> RestoreLastClosedAsync(Guid? expectedPracticeId = null)
     {
         _dispatcher.VerifyAccess();
+        if (expectedPracticeId is { } expected && (!_closed.TryPeek(out var candidate) || candidate.LogicalPracticeId != expected)) return null;
         if (!_closed.TryPop(out EncodedClosedPin? closed))
         {
             _log.LogInformation("Restore closed pin: nothing to restore");
@@ -464,8 +473,9 @@ internal sealed partial class PinManager
             {
                 if (generation != _restoreGeneration) return null;
                 var snapshot = new ClosedPin(content, closed.ImageWidthDip, closed.ImageHeightDip,
-                    closed.Zoom, closed.Opacity, closed.Placement);
+                    closed.Zoom, closed.Opacity, closed.Placement, LogicalPracticeId: closed.LogicalPracticeId);
                 PinWindow pin = RestorePin(snapshot, activate: true);
+                pin.NotifyPractice(PracticeEventKind.PinRestored);
                 _log.LogInformation(
                     "Restored a closed {Kind} pin: decode {DecodeMs:0.##} ms, reopen {ReopenMs:0.##} ms, encoded {Bytes} bytes ({Remaining} more restorable)",
                     encoded.Kind, decode.Elapsed.TotalMilliseconds, total.Elapsed.TotalMilliseconds,
@@ -511,6 +521,7 @@ internal sealed partial class PinManager
 
         (double leftDip, double topDip, RectD? physical, double scale) = ResolveRestorePosition(closed, state);
         var pin = new PinWindow(closed.Content.RenderedAt(scale), state, leftDip, topDip, _settings);
+        if (closed.LogicalPracticeId != Guid.Empty) pin.LogicalPracticeId = closed.LogicalPracticeId;
         if (!activate)
         {
             _restoredOpenedOrders[pin] = closed.OpenedOrder > 0 ? closed.OpenedOrder : _nextOpenedOrder + 1;
@@ -634,10 +645,26 @@ internal sealed partial class PinManager
         }
 
         NotifyOpenPinsChanged();
+        NotifyPracticePinObservers(PinOpened, pin.PracticeId);
+    }
+
+    private void NotifyPracticePinObservers(Action<Guid>? observers, Guid pinId)
+    {
+        if (observers is null) return;
+        foreach (Action<Guid> observer in observers.GetInvocationList())
+        {
+            try { observer(pinId); }
+            catch (Exception error) when (error is not OutOfMemoryException)
+            {
+                _log.LogWarning(error, "Could not notify a pin lifecycle observer");
+            }
+        }
     }
 
     private void OnUserZoomChanged(Guid pinId)
     {
+        PinWindow? pin = _pins.FirstOrDefault(window => window.PracticeId == pinId);
+        if (pin is { IsPracticeResizeInProgress: false }) pin.NotifyPractice(PracticeEventKind.PinResized);
         if (UserZoomChanged is not { } handlers) return;
         foreach (Action<Guid> handler in handlers.GetInvocationList())
         {
@@ -651,14 +678,17 @@ internal sealed partial class PinManager
 
     private void OnPinClosed(PinWindow pin)
     {
+        pin.NotifyPractice(PracticeEventKind.PinClosing);
         pin.UserZoomChanged -= OnUserZoomChanged;
         _pins.Remove(pin);
         _openedOrders.Remove(pin);
         _restoredOpenedOrders.Remove(pin);
         _leaving.Add(pin);
         NotifyOpenPinsChanged();
+        NotifyPracticePinObservers(PinClosed, pin.PracticeId);
         if (!_recordClosedPins || _closed.Limit == 0)
         {
+            pin.NotifyPractice(PracticeEventKind.PinClosed);
             return;
         }
 
@@ -677,7 +707,7 @@ internal sealed partial class PinManager
             state.ImageHeightDip,
             state.Zoom,
             state.Opacity,
-            pin.ClosedPlacement);
+            pin.ClosedPlacement, pin.LogicalPracticeId, pin.PracticeId);
         long initialBytes = cached is not null ? encoding.Result.RetainedBytes : content.EstimatedRetainedBytes;
         if (_closed.Push(entry, initialBytes))
         {
@@ -704,12 +734,21 @@ internal sealed partial class PinManager
         try
         {
             EncodedPinContent encoded = await entry.Content.ConfigureAwait(false);
-            await _dispatcher.InvokeAsync(() => _closed.UpdateRetainedBytes(entry, encoded.RetainedBytes));
+            await _dispatcher.InvokeAsync(() =>
+            {
+                bool kept = _closed.UpdateRetainedBytes(entry, encoded.RetainedBytes);
+                PracticeSignals.Publish(new(PracticeEventKind.PinClosed, Guid.Empty, LogicalPinId: entry.LogicalPracticeId,
+                    WindowPinId: entry.WindowPracticeId, Restorable: kept));
+            });
         }
         catch (Exception ex)
         {
             _log.LogWarning(ex, "Could not encode a closed pin for restore");
-            await _dispatcher.InvokeAsync(() => _closed.Remove(entry));
+            await _dispatcher.InvokeAsync(() =>
+            {
+                _closed.Remove(entry);
+                PracticeSignals.Publish(new(PracticeEventKind.PinClosed, Guid.Empty, LogicalPinId: entry.LogicalPracticeId, WindowPinId: entry.WindowPracticeId));
+            });
         }
         finally
         {

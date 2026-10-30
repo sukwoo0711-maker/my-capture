@@ -321,10 +321,15 @@ public sealed class Capture410AppTests
     });
 
     [Fact]
-    public void MosaicPatchCoversTheSelectionOnAnEnlargedCapture() => StaTestHost.Run(() =>
+    public void MosaicPatchCoversTheSelectionOnAReducedCapture() => StaTestHost.Run(() =>
     {
-        var editor = Editor();
-        Assert.True(Field<AnnotationEditorSurface>(editor, "_surface").DipPerPixel > 1);
+        FrozenFrame frame = Frame(width: 1600, height: 1200);
+        var editor = new AnnotationEditorControl(frame, frame.ScreenBounds, frame.Bitmap, null, null);
+        editor.Measure(new Size(1100, 720));
+        editor.Arrange(new Rect(0, 0, 1100, 720));
+        editor.UpdateLayout();
+        double scale = Field<AnnotationEditorSurface>(editor, "_surface").DipPerPixel;
+        Assert.True(scale > 0 && scale < 1);
         editor.ApplyMosaic(new RectD(32, 24, 96, 72), blockSize: 12);
         EditorMosaicAsyncTests.WaitFor(editor.MosaicOperationsSettledAsync());
         var controller = Field<AnnotationEditorController>(editor, "_controller");
@@ -364,20 +369,20 @@ public sealed class Capture410AppTests
         return editor;
     }
 
-    private static FrozenFrame Frame(bool uniform = false)
+    private static FrozenFrame Frame(bool uniform = false, int width = 160, int height = 120)
     {
-        byte[] pixels = new byte[160 * 120 * 4];
-        for (int y = 0; y < 120; y++)
-            for (int x = 0; x < 160; x++)
+        byte[] pixels = new byte[width * height * 4];
+        for (int y = 0; y < height; y++)
+            for (int x = 0; x < width; x++)
             {
-                int i = (y * 160 + x) * 4;
+                int i = (y * width + x) * 4;
                 byte value = !uniform && x >= 32 && x < 128 && y >= 24 && y < 96 ? (byte)40 : (byte)255;
                 pixels[i] = pixels[i + 1] = pixels[i + 2] = value;
                 pixels[i + 3] = 255;
             }
-        BitmapSource bitmap = BitmapSource.Create(160, 120, 96, 96, PixelFormats.Bgra32, null, pixels, 640);
+        BitmapSource bitmap = BitmapSource.Create(width, height, 96, 96, PixelFormats.Bgra32, null, pixels, width * 4);
         bitmap.Freeze();
-        return new FrozenFrame(bitmap, new RectD(0, 0, 160, 120), null, 0);
+        return new FrozenFrame(bitmap, new RectD(0, 0, width, height), null, 0);
     }
 
     private static void Render(CaptureOverlayView view, double scale = 1)

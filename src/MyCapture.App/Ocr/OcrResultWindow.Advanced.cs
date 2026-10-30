@@ -229,6 +229,11 @@ internal sealed partial class OcrResultWindow
     private void PrepareAdvancedBusy(bool preserveSelection)
     {
         _deferredSelection = preserveSelection ? _imageOverlay.Selection : null;
+        if (preserveSelection)
+        {
+            _tabs.IsEnabled = false;
+            return;
+        }
         if (!preserveSelection)
         {
             _modeChosen = false;
@@ -256,6 +261,7 @@ internal sealed partial class OcrResultWindow
     /// <summary>Keep the reusable controls, but release the dismissed capture and its derived results.</summary>
     internal void ReleaseResult()
     {
+        ReleaseAccuracy();
         _deferredSelection = null;
         _modeChosen = false;
         _geometryRequested = false;
@@ -329,6 +335,7 @@ internal sealed partial class OcrResultWindow
             OcrExtractionMode.Translation => _translationPanel.CopyText,
             _ => _currentExtraction.Text(_joinLines.IsChecked == true),
         };
+        _generatedText = _textBox.Text;
         bool hasContent = _textBox.Text.Length > 0;
         _copyButton.IsEnabled = hasContent;
         _copyWithSourceButton.IsEnabled = translation && hasContent;

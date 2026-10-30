@@ -66,7 +66,7 @@ public sealed partial class GalleryViewModel
         return false;
     }
 
-    /// <summary>Back gestures go up the folder tree, retaining the location for Forward.</summary>
+    /// <summary>Alt+Up opens the parent as a new location; Back can return to the child.</summary>
     public bool NavigateParent()
     {
         if (IsRefreshingFolderTree || !CanNavigateParent) return false;
@@ -74,10 +74,7 @@ public sealed partial class GalleryViewModel
             && _controller.Queue.FindFolder(id)?.ParentId is { } parentId
             ? CaptureFolderScope.ForFolder(parentId) : CaptureFolderScope.All;
         var destination = new NavigationLocation(parent, GalleryFilter.All, null);
-        _forwardHistory.Push(CurrentLocation);
-        if (_backHistory.TryPeek(out NavigationLocation? previous) && previous == destination)
-            _backHistory.Pop();
-        ChangeLocation(destination, remember: false);
+        ChangeLocation(destination);
         return true;
     }
 

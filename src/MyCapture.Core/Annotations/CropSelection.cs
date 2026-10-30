@@ -23,7 +23,7 @@ public sealed class CropSelection
     public CropGrip Grip { get; private set; }
 
     public CropGrip HitTest(PointD point, double tolerance) =>
-        HitTestEdge(Region, point, tolerance) ?? (Contains(point) ? CropGrip.Move : CropGrip.New);
+        HitTestEdge(Region, point, tolerance) ?? (Region != Bounds && Contains(point) ? CropGrip.Move : CropGrip.New);
 
     /// <summary>Entire edges are draggable; corners take precedence. No hover allocations.</summary>
     public static CropGrip? HitTestEdge(RectD region, PointD point, double tolerance)
@@ -125,9 +125,9 @@ public sealed class CropSelection
         double width = Math.Min(Region.Width, Region.Height * aspect);
         Resize(width, width / aspect);
     }
-    public void SetWidth(double width) => Resize(width, Ratio is double aspect ? width / aspect : Region.Height);
-    public void SetHeight(double height) => Resize(Ratio is double aspect ? height * aspect : Region.Width, height);
-    private void Resize(double width, double height)
+    public void SetWidth(double width) => Resize(width, Ratio is double aspect ? width / aspect : Region.Height, snapToPixels: true);
+    public void SetHeight(double height) => Resize(Ratio is double aspect ? height * aspect : Region.Width, height, snapToPixels: true);
+    private void Resize(double width, double height, bool snapToPixels = false)
     {
         if (!double.IsFinite(width) || !double.IsFinite(height) || width < 1 || height < 1) return;
         if (Ratio.HasValue)
@@ -136,8 +136,9 @@ public sealed class CropSelection
             width *= scale; height *= scale;
         }
         else { width = Math.Min(width, Bounds.Width); height = Math.Min(height, Bounds.Height); }
-        Region = new RectD(Math.Clamp(Region.Center.X - width / 2, 0, Bounds.Width - width),
-            Math.Clamp(Region.Center.Y - height / 2, 0, Bounds.Height - height), width, height);
+        double x = Math.Clamp(Region.Center.X - width / 2, 0, Bounds.Width - width);
+        double y = Math.Clamp(Region.Center.Y - height / 2, 0, Bounds.Height - height);
+        Region = new RectD(snapToPixels ? Math.Floor(x) : x, snapToPixels ? Math.Floor(y) : y, width, height);
     }
     private RectD MoveWithin(RectD region, double x, double y) => new(
         Math.Clamp(region.X + x, 0, Bounds.Width - region.Width), Math.Clamp(region.Y + y, 0, Bounds.Height - region.Height), region.Width, region.Height);

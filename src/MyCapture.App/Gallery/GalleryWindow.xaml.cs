@@ -68,7 +68,10 @@ internal sealed partial class GalleryWindow : Window
     private bool _ocrIndexingRunning;
     private CancellationTokenSource? _ocrIndexingCts;
     private readonly HashSet<Guid> _openEditors = [];
-    private GalleryVideoPlayerWindow? _videoPlayer;
+    private IGalleryVideoPlayer? _videoPlayer;
+    internal Func<IGalleryVideoPlayer>? VideoPlayerFactory { get; set; }
+    internal VideoFrameCaptureService? FrameCaptureService { get; set; }
+    internal Func<FrameImageCommitSession>? FrameImageCommitHandlerFactory { get; set; }
 
     internal GalleryWindow(
         GalleryViewModel viewModel,
@@ -558,26 +561,24 @@ internal sealed partial class GalleryWindow : Window
             if (_videoPlayer is not null && _videoPlayer.VideoId == tile.Id)
             {
                 // Same video: just bring the player forward and honour autoplay.
-                if (autoPlay && _videoPlayer.IsLoaded) { }
-                _videoPlayer.Show();
-                _videoPlayer.Activate();
+                if (autoPlay) _videoPlayer.RequestPlay();
+                _videoPlayer.ShowPlayer(activate: true);
                 return;
             }
 
             CloseInlinePlayer();
-            _videoPlayer = new GalleryVideoPlayerWindow(_log);
-            _videoPlayer.Closed += (_, _) => _videoPlayer = null;
+            IGalleryVideoPlayer player = VideoPlayerFactory?.Invoke() ?? new GalleryVideoPlayerWindow(_log);
+            if (FrameCaptureService is { } captureService)
+                player.ConfigureFrameCapture(captureService, record.ContentRevision, id => OpenCapture(id, edit: false));
+            _videoPlayer = player;
+            player.Closed += (_, _) => { if (ReferenceEquals(_videoPlayer, player)) _videoPlayer = null; };
             if (!_videoPlayer.Open(tile.Id, tile.ContextLabel, path, autoPlay))
             {
                 ShowStatus(UiText.Get("Text_EC7FF66E22C9"));
                 return;
             }
 
-            // Anchor near the details panel's top-right, clamped to the work area.
-            Rect work = SystemParameters.WorkArea;
-            _videoPlayer.Left = Math.Max(work.Left, work.Right - _videoPlayer.Width - 24);
-            _videoPlayer.Top = Math.Max(work.Top, work.Top + 90);
-            _videoPlayer.Show();
+            _videoPlayer.ShowPlayer(activate: false);
         }
         catch (Exception ex)
         {
@@ -1010,7 +1011,7 @@ internal sealed partial class GalleryWindow : Window
         long requestedContentRevision = record.ContentRevision;
         string context = tile.ContextLabel;
 
-        OcrRequest RequestFactory() => OcrRequestFactory.FromFile(renderedPath, settings);
+        OcrRequest RequestFactory() => OcrRequestFactory.FromFile(renderedPath, _ocrSettings());
 
         void OnFresh(OcrResult result)
         {
@@ -1021,7 +1022,7 @@ internal sealed partial class GalleryWindow : Window
                         id,
                         result.Text,
                         result.LanguageTag,
-                        requestedContentRevision))
+                        requestedContentRevision, result.Quality))
                 {
                     tile.RaiseMetaChanged();
                     _viewModel.Refresh();
@@ -1037,6 +1038,7 @@ internal sealed partial class GalleryWindow : Window
                 record.OcrLanguage ?? string.Empty,
                 lines: [],
                 elapsed: TimeSpan.Zero);
+            if (record.OcrQuality is { } quality) cached = cached.WithQuality(quality);
             _ocrPresenter.ShowCached(cached, context, RequestFactory, OnFresh);
             return;
         }
@@ -1191,6 +1193,7 @@ internal sealed partial class GalleryWindow : Window
             editor.Editor.SourceFilePath = _queue.GetFilePath(record, CaptureFileNames.Original);
             editor.CommitRequested = result => CommitReeditAsync(record, result, editSession);
             editor.DraftRecordSource = () => (record.Id, editSession.ExpectedContentRevision);
+            editor.ContentRendered += (_, _) => PracticeSignals.EditorOpenedFromLibrary(record.Id);
             editor.Committed += (_, _) => OnReeditCommitted(tile.Id);
             _ = editor.ShowDialog();
         }
@@ -1277,6 +1280,10 @@ internal sealed partial class GalleryWindow : Window
                 Owner = this,
                 PrivacyRedactionService = _privacyRedactionService,
                 ExportGifWhenReady = exportGifWhenReady,
+                FrameImageCommitHandlerFactory = FrameImageCommitHandlerFactory,
+                FrameCaptureService = FrameCaptureService,
+                FrameSourceVideoId = record.Id,
+                FrameSourceRevision = record.ContentRevision,
                 RenderStagingPathFactory = () => _videoLibrary.CreateRenderStagingPath(record),
                 VideoCommitHandler = (document, stage, cancellationToken) =>
                     _videoLibrary.CommitEditAsync(
@@ -1287,6 +1294,11 @@ internal sealed partial class GalleryWindow : Window
                         cancellationToken),
             };
             editor.VideoCommitted += (_, _) => OnReeditCommitted(record.Id);
+            editor.ShowFrameInLibrary = id =>
+            {
+                // The modal owner becomes interactive only after a confirmed Save/Discard closes the editor.
+                _ = editor.RequestCloseForNavigation(() => OpenCapture(id, edit: false));
+            };
             _ = editor.ShowDialog();
         }
         catch (Exception ex)

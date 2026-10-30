@@ -211,7 +211,8 @@ public sealed class EditorContextualPropertyBarTests : KoreanCaptionTest
         Assert.Equal("Typed caption", caption.Text);
         Assert.Equal(ColorRgba.Black, caption.Foreground);
         Assert.True(host.Editor.CustomColorPopupForTest.IsOpen);
-        int committedUndoCount = editingExisting ? 1 : 2; // New caption adds a creation command first.
+        // Both a first commit and an existing-caption edit are one history entry.
+        const int committedUndoCount = 1;
         Assert.Equal(committedUndoCount, controller.Undo.UndoCount);
 
         input.Text = "#55AACC";
@@ -222,15 +223,18 @@ public sealed class EditorContextualPropertyBarTests : KoreanCaptionTest
         Assert.Equal(ColorRgba.Black, caption.Foreground);
         Assert.Equal("Typed caption", caption.Text);
         Assert.True(controller.PerformUndo());
-        Assert.Equal(originalText, caption.Text);
-        Assert.Equal(originalBounds, caption.Rect);
         if (!editingExisting)
         {
-            Assert.True(controller.PerformUndo());
             Assert.Empty(controller.Document.Items);
         }
-        else Assert.Same(caption, Assert.Single(controller.Document.Items));
+        else
+        {
+            Assert.Same(caption, Assert.Single(controller.Document.Items));
+            Assert.Equal(originalText, caption.Text);
+            Assert.Equal(originalBounds, caption.Rect);
+        }
         Assert.Equal(0, controller.Undo.UndoCount);
+        Assert.False(controller.PerformUndo());
     });
 
     [Fact]

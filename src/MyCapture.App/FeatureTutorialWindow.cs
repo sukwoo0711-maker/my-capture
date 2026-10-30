@@ -525,6 +525,11 @@ internal class FeatureTutorialWindow : Window
         ClearPoster();
         _status.Text = UiText.Get(_feature.Id == "text-copy" ? "TextCapture_TutorialUnavailable" : "Tutorial.Unavailable");
         _status.Visibility = Visibility.Visible;
+        if (TutorialCatalog.PendingPracticeClips.Contains(_feature.Id))
+        {
+            _poster.Background = new ImageBrush(PracticePicture.Load()) { Stretch = Stretch.Uniform };
+            _status.Visibility = Visibility.Collapsed;
+        }
         UpdateControls();
     }
 

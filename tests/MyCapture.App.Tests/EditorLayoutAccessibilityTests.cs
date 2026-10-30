@@ -119,8 +119,10 @@ public sealed class EditorLayoutAccessibilityTests : KoreanCaptionTest
             // a name; icon-bearing controls also carry a tooltip.
             IReadOnlyList<ToggleButton> tools = FindDescendants<ToggleButton>(host.Editor)
                 .Where(button => !string.IsNullOrEmpty(AutomationProperties.GetAcceleratorKey(button))).ToList();
-            // Every tool but Crop (one less than the enum), plus the stamp command beside the image tool.
-            Assert.Equal(Enum.GetValues<EditorTool>().Length, tools.Count);
+            // Crop is a command and Blur shares Mosaic's button; the watermark adds one entry.
+            Assert.Equal(Enum.GetValues<EditorTool>().Length - 1, tools.Count);
+            Assert.Same(host.Editor.ToolButton(EditorTool.Mosaic), host.Editor.ToolButton(EditorTool.Blur));
+            Assert.Single(tools, tool => ReferenceEquals(tool, host.Editor.ToolButton(EditorTool.Mosaic)));
             foreach (ToggleButton tool in tools)
             {
                 Assert.False(string.IsNullOrWhiteSpace(AutomationProperties.GetName(tool)),

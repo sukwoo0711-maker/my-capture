@@ -147,6 +147,7 @@ public sealed partial class SettingsThemePreviewTests
             // Compare settled UI states without sampling the entrance animation.
             FluidMotion.SetWindowEntrance(window, false);
             window.Show();
+            Assert.True(window.NavigateToSection(SettingsSection.General));
             Drain(window);
             var selector = Assert.IsType<ComboBox>(window.FindName("ThemeSelector"));
             AssertPalette(window, AppTheme.Glass);
@@ -240,6 +241,10 @@ public sealed partial class SettingsThemePreviewTests
             Assert.Equal(attemptsBeforeValidation, applyCount);
             Assert.True(window.IsVisible);
             Assert.True(finalDraft.HasErrors);
+            // Validation now reveals the field on Storage; wait for that page's visual tree before checking its palette.
+            Drain(window);
+            Assert.Same(window.FindName("StorageTab"), Assert.IsType<TabControl>(window.FindName("CategoryTabs")).SelectedItem);
+            Assert.True(Assert.IsType<Expander>(window.FindName("StorageLimitsExpander")).IsExpanded);
             AssertPalette(window, AppTheme.HighContrast);
             window.CloseForExit();
             Assert.Equal(AppTheme.HighContrast, ThemeService.Current);

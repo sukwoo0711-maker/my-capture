@@ -69,6 +69,20 @@ internal abstract class TutorialScene : IDisposable
         Stage.DrawCaption(dc, caption, key);
     }
 
+    /// <summary>Readable pointer and captions for the practice guide's 334-pixel-wide preview.</summary>
+    protected static void PracticeOverlay(DrawingContext dc, TutorialFramePlan frame, string caption, string key,
+        Stage.PointerKind pointer = Stage.PointerKind.Arrow, bool showPointer = true)
+    {
+        if (frame.Pressed) Stage.DrawClick(dc, frame.Cursor, frame.Progress);
+        if (showPointer)
+        {
+            dc.PushTransform(new ScaleTransform(1.8, 1.8, frame.Cursor.X, frame.Cursor.Y));
+            Stage.DrawPointer(dc, frame.Cursor, pointer);
+            dc.Pop();
+        }
+        Stage.DrawCaption(dc, caption, key, practiceSize: true);
+    }
+
     public virtual void Dispose()
     {
     }

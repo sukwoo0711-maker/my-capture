@@ -155,6 +155,8 @@ internal sealed partial class OcrResultWindow : Window
             HorizontalAlignment = HorizontalAlignment.Right,
         };
 
+        InitializeAccuracyPresentation(heading, buttons);
+
         // One decision group, strongest first: Copy (primary), export (secondary), then the
         // quiet rerun. The active extraction mode determines the copy and export actions.
         _copyButton = MakeButton(UiText.Get("Text_37B3D3B11B26"), UiText.Get("Text_20CF6A996B4D"));
@@ -225,9 +227,10 @@ internal sealed partial class OcrResultWindow : Window
 
     /// <summary>Populates the window from a result and shows/activates it.</summary>
     internal void ShowResult(OcrResult result, string contextLabel,
-        BitmapSource? sourceImage = null, bool preserveSelection = false)
+        BitmapSource? sourceImage = null, bool preserveSelection = false, MyCapture.Core.Settings.OcrQuality? quality = null)
     {
         ArgumentNullException.ThrowIfNull(result);
+        SetRecognitionOperation(active: false);
         if (!preserveSelection)
         {
             _deferredSelection = null;
@@ -235,6 +238,9 @@ internal sealed partial class OcrResultWindow : Window
         }
         SetSourceImage(sourceImage);
         ApplyResult(result, contextLabel);
+        SetResultQuality(quality ?? result.Quality);
+
+        if (SuppressPresentation) return;
 
         if (!IsVisible)
         {
@@ -254,17 +260,37 @@ internal sealed partial class OcrResultWindow : Window
     /// <summary>Shows a busy state while a (re)run is in flight, keeping the window responsive.</summary>
     internal void ShowBusy(string contextLabel, bool preserveSelection = false)
     {
+        SetRecognitionOperation(active: true);
         PrepareAdvancedBusy(preserveSelection);
         _status.Text = UiText.Format("Text_4A376FDFB111", contextLabel);
         _rerunButton.IsEnabled = false;
         _copyButton.IsEnabled = false;
+        _copyWithSourceButton.IsEnabled = false;
+        _plainExportButton.IsEnabled = false;
+        _tableActions.IsEnabled = false;
 
+        if (SuppressPresentation) return;
         if (!IsVisible)
         {
             Show();
         }
 
         _ = Activate();
+    }
+
+    /// <summary>Restores controls after a rerun without replacing the retained text or image.</summary>
+    internal void CompletePreservedRerun(string? message = null)
+    {
+        if (_accuracyReleased) return;
+        SetRecognitionOperation(active: false);
+        _status.Text = message ?? (_result is null ? string.Empty : ResultSummary(_result));
+        _rerunButton.IsEnabled = true;
+        _tabs.IsEnabled = true;
+        bool hasContent = ActiveText.Length > 0;
+        _copyButton.IsEnabled = hasContent;
+        _copyWithSourceButton.IsEnabled = ExtractionMode == OcrExtractionMode.Translation && hasContent;
+        _plainExportButton.IsEnabled = hasContent;
+        _tableActions.IsEnabled = hasContent;
     }
 
     /// <summary>Closes the window for real, used only on an explicit application exit.</summary>
@@ -371,7 +397,16 @@ internal sealed partial class OcrResultWindow : Window
 
     private string ActiveText => ExtractionMode == OcrExtractionMode.Translation ? _translationPanel.CopyText : _textBox.Text;
 
-    private void CopyText() => CopyValue(ActiveText);
+    private void CopyText()
+    {
+        string selected = ExtractionMode switch
+        {
+            OcrExtractionMode.Translation => _translationPanel.SelectedText,
+            OcrExtractionMode.Text or OcrExtractionMode.Code => _textBox.SelectedText,
+            _ => string.Empty,
+        };
+        CopyValue(selected.Length > 0 ? selected : ActiveText);
+    }
 
     /// <summary>Saves the recognised text to a UTF-8 .txt file the user picks.</summary>
     private void ExportText()
@@ -418,8 +453,8 @@ internal sealed partial class OcrResultWindow : Window
         }
         string? command = ShortcutCatalog.Match(ShortcutScope.Ocr, e.Key, Keyboard.Modifiers);
         if (command == "Copy" && _tableGrid.IsKeyboardFocusWithin && _tableGrid.SelectedCells.Count > 0) return;
-        // Preserve native selected-text copy (the result text or one translation); the button /
-        // unselected Ctrl+C copies all.
+        // Preserve native selected-text copy (the result text or one translation). The button
+        // uses the same selection and falls back to the complete active text when none is selected.
         if (command == "Copy" && Keyboard.FocusedElement is TextBox { SelectionLength: > 0 } focused
             && (focused == _textBox || _translationPanel.IsAncestorOf(focused))) return;
         e.Handled = ShortcutCatalog.Execute(ShortcutScope.Ocr, e.Key, Keyboard.Modifiers, _shortcutActions);

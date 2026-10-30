@@ -34,7 +34,7 @@ internal sealed partial class GalleryWindow
     }
 
     /// <summary>
-    /// Fits the toolbar to its width without ever wrapping to a second row: the five commands show icon and label
+    /// Fits the toolbar to its width without ever wrapping to a second row: the commands show icon and label
     /// while that fits; otherwise the labels go (icons keep their names and tooltips); otherwise the selection count
     /// and the sort box narrow too. The rule is checked when the window loads, is shown, changes DPI or width
     /// (which the details pane opening or closing does) and when the language or text size changes, and it never
@@ -71,9 +71,16 @@ internal sealed partial class GalleryWindow
     {
         _toolbarDensity = density;
         Visibility label = density == ToolbarDensity.Labelled ? Visibility.Visible : Visibility.Collapsed;
-        foreach (TextBlock text in new[] { FloatSelectedLabel, CopySelectedLabel, EditSelectedLabel, PreviewSelectedLabel, KeepSelectedLabel })
+        foreach (TextBlock text in new[] { FloatSelectedLabel, CopySelectedLabel, EditSelectedLabel, PreviewSelectedLabel, CreatePdfSelectedLabel, KeepSelectedLabel })
             text.Visibility = label;
-        SelectionCountLabel.Width = density == ToolbarDensity.Compact ? 60 : 96;
+        // A sixth command still fits beside the details pane at the minimum window width.
+        // Keep each command's hit target; only trim the gaps and the ellipsized count.
+        foreach (Button button in SelectionCommands.Children.OfType<Button>())
+        {
+            if (density == ToolbarDensity.Compact) button.Margin = new Thickness(1, 0, 1, 0);
+            else button.ClearValue(MarginProperty);
+        }
+        SelectionCountLabel.Width = density == ToolbarDensity.Compact ? 40 : 96;
         SelectionCountLabel.ToolTip = density == ToolbarDensity.Compact ? _viewModel.SelectionText : null;
         SortBox.Width = density == ToolbarDensity.Compact ? 92 : 112;
     }

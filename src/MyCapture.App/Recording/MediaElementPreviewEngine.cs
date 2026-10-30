@@ -1,5 +1,6 @@
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Media;
 using System.Windows.Threading;
 using MyCapture.Core.Recording;
 
@@ -37,6 +38,7 @@ internal sealed class MediaElementPreviewEngine : IVideoPreviewEngine
     // The element position this engine set last; dispatcher-owned, NaN until known.
     private double _lastPositionMs = double.NaN;
     private bool _disposed;
+    private readonly CancellationTokenSource _presentationShutdown = new();
 
     internal MediaElementPreviewEngine(MediaElement media, int fps)
     {
@@ -230,6 +232,64 @@ internal sealed class MediaElementPreviewEngine : IVideoPreviewEngine
         lock (_watchGate)
         {
             return _watch;
+        }
+    }
+
+    /// <summary>
+    /// Waits for composition after the paused clock has settled. A landed Position can still
+    /// precede the MediaElement surface by a render frame, especially with software rendering.
+    /// Keep this separate from SeekAsync: the editor publishes scrub intent before its end-of-
+    /// stream watch finishes, while frame capture must wait for the surface as well.
+    /// </summary>
+    internal async Task WhenPresentedAsync(CancellationToken cancellationToken = default)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(
+            cancellationToken, _presentationShutdown.Token);
+        await WhenSettledAsync().WaitAsync(cancellation.Token).ConfigureAwait(false);
+        await _dispatcher.InvokeAsync(
+            () => WaitForCompositionAsync(cancellation.Token),
+            DispatcherPriority.Background,
+            cancellation.Token).Task.Unwrap().ConfigureAwait(false);
+    }
+
+    private async Task WaitForCompositionAsync(CancellationToken cancellationToken)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        cancellationToken.ThrowIfCancellationRequested();
+        if (!_media.IsLoaded || !_media.HasVideo)
+            throw new InvalidOperationException("The preview has no connected video surface.");
+
+        var composed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        TimeSpan? lastRenderingTime = null;
+        int ticks = 0;
+        void OnRendering(object? sender, EventArgs args)
+        {
+            if (args is not RenderingEventArgs rendering || rendering.RenderingTime == lastRenderingTime) return;
+            lastRenderingTime = rendering.RenderingTime;
+            // Rendering is raised before composition. The next distinct tick gives the first
+            // frame a chance to reach the surface. Stop requesting renders as soon as it arrives.
+            if (++ticks >= 2)
+            {
+                CompositionTarget.Rendering -= OnRendering;
+                composed.TrySetResult();
+            }
+        }
+
+        CompositionTarget.Rendering += OnRendering;
+        try
+        {
+            // A hidden/stopped compositor must fail closed, rather than enable capture after
+            // an arbitrary sleep. The subscription exists only for this short request.
+            await composed.Task.WaitAsync(TimeSpan.FromMilliseconds(500), cancellationToken);
+            cancellationToken.ThrowIfCancellationRequested();
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            if (!_media.IsLoaded || !_media.HasVideo)
+                throw new InvalidOperationException("The preview lost its video surface.");
+        }
+        finally
+        {
+            CompositionTarget.Rendering -= OnRendering;
         }
     }
 
@@ -514,7 +574,10 @@ internal sealed class MediaElementPreviewEngine : IVideoPreviewEngine
 
     public void Dispose()
     {
+        if (_disposed) return;
         _disposed = true;
+        _presentationShutdown.Cancel();
+        _presentationShutdown.Dispose();
         lock (_watchGate)
         {
             _watchCancel?.Cancel();
