@@ -55,6 +55,23 @@ public sealed class LaunchVisibilityTests(ITestOutputHelper output)
     }
 
     [Fact]
+    public async Task ATimeoutThatEndsBeforeTheDelayKeepsWaitingForTheRemainder()
+    {
+        using var visible = new ManualResetEventSlim();
+        var delay = TimeSpan.FromMilliseconds(150);
+        int waits = 0;
+        var elapsed = Stopwatch.StartNew();
+        // The first timeout returns at once, as a tick-based wait can end before the Stopwatch delay.
+        using var status = LaunchStatusPresentation.Start(false, visible.Set, () => new FakeSurface(), delay,
+            (finished, milliseconds) => Interlocked.Increment(ref waits) > 1 && finished.WaitOne(milliseconds));
+        Assert.True(visible.Wait(TimeSpan.FromSeconds(5)));
+        Assert.True(elapsed.Elapsed >= delay, $"shown after {elapsed.Elapsed.TotalMilliseconds} ms");
+        Assert.True(Volatile.Read(ref waits) >= 2);
+        status.Complete();
+        await status.Completion.WaitAsync(TimeSpan.FromSeconds(2));
+    }
+
+    [Fact]
     public async Task CompletionRacingTheDelayNeverLeavesALateSurfaceBehind()
     {
         for (int iteration = 0; iteration < 40; iteration++)
