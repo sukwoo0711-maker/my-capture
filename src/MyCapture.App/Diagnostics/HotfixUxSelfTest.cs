@@ -235,11 +235,12 @@ internal static class HotfixUxSelfTest
                             Check($"kept={kept}/hover={hover}: no card action or Esc dismissal", copies == 0 && saves == 0 && keyboardCard.IsVisible);
                         }
                         // RegisterHotKey cannot target a HWND owned by another process.
-                        // A separate thread registration proves the card released the global chord.
+                        // A failed separate thread registration proves the open card still holds the global chord;
+                        // a kept card stays an Alt+Q target until it is hidden or closed.
                         var probe = new NativeHotkeyRegistrar(IntPtr.Zero);
                         bool available = probe.TryRegister(0x7103, new Hotkey(HotkeyModifiers.Alt, 0x51), out _, out _);
                         if (available) probe.Unregister(0x7103);
-                        Check($"Alt+Q available to a separate registration iff kept={kept}", available == kept);
+                        Check($"Alt+Q held by the open card, kept={kept}", !available);
                     }
                     Click(inputHandle, CardControl<Button>(keyboardCard, "QuickAccess.Copy"));
                     Check("copy click preserves external foreground", GetForegroundWindow() == inputHandle && !keyboardCard.IsActive && copies == 1);
