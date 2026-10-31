@@ -60,12 +60,28 @@ internal sealed class WelcomeWindow : Window
     private readonly double _textScale;
     private readonly string[,] _practiceCells;
     private readonly TextBlock _progress = new();
-    private readonly Border[] _progressSegments = [new(), new(), new()];
+    private readonly Border[] _progressSegments = PracticeSession.Steps.Select(_ => new Border()).ToArray();
+    private readonly Border[] _progressFills = PracticeSession.Steps.Select(_ => new Border()).ToArray();
+    private readonly PracticeStepResult[] _renderedResults = new PracticeStepResult[PracticeSession.Steps.Length];
     private readonly TextBlock _title = new();
     private readonly TextBlock _instruction = new();
     private readonly TextBlock _status = new();
-    private readonly TextBlock _statusMark = new();
+    private readonly TextBlock _successText = new();
+    private readonly Border _successChip = new();
+    private readonly SymbolIcon _successCheck = SymbolIcon.Create(CheckGlyph, 16);
     private readonly Grid _statusRow = new();
+    private readonly Grid _captionRow = new();
+    private readonly Canvas _transitionLayer = new() { IsHitTestVisible = false };
+    private readonly StackPanel _stepBody = new();
+    private readonly WelcomeMotion _stepMotion, _chipMotion, _keyMotion, _labelMotion;
+    private readonly WelcomeMotion[] _segmentMotions;
+    private readonly List<Border> _caps = [];
+    private FrameworkElement[] _motionParts = [];
+    private Image? _transitionOverlay;
+    private PracticeStep? _renderedStep;
+    private bool _renderedConsent, _successShown, _pressKeycaps;
+    private double _primarySlotWidth = 168;
+    private static readonly Geometry CheckGlyph = MakeCheckGlyph();
     private readonly TextBlock _hint = new();
     private readonly Border _notice;
     private readonly ContentControl _keyDisplay = new();
@@ -94,6 +110,9 @@ internal sealed class WelcomeWindow : Window
         ArgumentNullException.ThrowIfNull(keys);
         _keys = keys;
         _options = options ?? new WelcomeOptions();
+        _stepMotion = new(Dispatcher); _chipMotion = new(Dispatcher);
+        _keyMotion = new(Dispatcher); _labelMotion = new(Dispatcher);
+        _segmentMotions = PracticeSession.Steps.Select(_ => new WelcomeMotion(Dispatcher)).ToArray();
         _showingConsent = _options.ShowCoreShortcutsConsent;
         Session = new PracticeSession(_options.FeaturePractice);
         _textScale = double.IsFinite(_options.TextScale) ? Math.Clamp(_options.TextScale, 1, 3) : 1;
@@ -131,26 +150,17 @@ internal sealed class WelcomeWindow : Window
         };
 
         ConfigureText(_progress, 13, secondary: true);
-        _progress.Margin = new Thickness(0, 8, 0, 0);
+        _progress.TextWrapping = TextWrapping.NoWrap;
+        _progress.TextTrimming = TextTrimming.CharacterEllipsis;
+        _progress.VerticalAlignment = VerticalAlignment.Center;
         ConfigureText(_status, 15);
         _status.FontWeight = FontWeights.SemiBold;
-        _status.SetResourceReference(TextBlock.ForegroundProperty, "Text.Primary");
+        _status.SetResourceReference(TextBlock.ForegroundProperty, "Text.Secondary");
         AutomationProperties.SetLiveSetting(_status, AutomationLiveSetting.Polite);
-        // A check mark for what worked; the sentence beside it carries the meaning.
-        _statusMark.Text = "✓";
-        _statusMark.FontFamily = new FontFamily("Segoe UI Symbol");
-        _statusMark.FontSize = 17 * _textScale;
-        _statusMark.FontWeight = FontWeights.Bold;
-        _statusMark.Margin = new Thickness(0, 0, 8, 0);
-        _statusMark.VerticalAlignment = VerticalAlignment.Top;
-        _statusMark.SetResourceReference(TextBlock.ForegroundProperty, "State.Success");
-        _statusRow.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        _statusRow.ColumnDefinitions.Add(new ColumnDefinition());
-        Grid.SetColumn(_status, 1);
-        _statusRow.Children.Add(_statusMark);
         _statusRow.Children.Add(_status);
         _statusRow.Margin = new Thickness(0, 0, 0, 12);
         _statusRow.Visibility = Visibility.Collapsed;
+        ConfigureSuccessChip();
         ConfigureText(_title, 25);
         _title.FontWeight = FontWeights.SemiBold;
         _title.Margin = new Thickness(0, 16, 0, 8);
@@ -303,20 +313,12 @@ internal sealed class WelcomeWindow : Window
             StyleFooterButton(button, 0); button.Margin = new Thickness(0, 0, 8, 0);
             AutomationProperties.SetName(button, (string)button.Content);
         }
+        SkipStepButton.SetResourceReference(StyleProperty, "Button.Ghost");
         actions.Children.Insert(0, SkipStepButton);
         actions.Children.Insert(0, BackButton);
-        ReplayButton.Content = UiText.Get("Journey.Replay");
         ReplayButton.Click += (_, _) => _preview.Replay();
-        PauseButton.Content = UiText.Get("Journey.Pause");
         PauseButton.Click += (_, _) => _preview.Pause();
-        var playback = new WrapPanel { HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(0, 0, 0, 8) };
-        foreach (Button button in new[] { ReplayButton, PauseButton })
-        {
-            button.SetResourceReference(StyleProperty, "Button.Secondary");
-            button.MinHeight = 32; button.Margin = new Thickness(0, 0, 8, 0);
-            AutomationProperties.SetName(button, (string)button.Content);
-            playback.Children.Add(button);
-        }
+        ConfigurePreviewControls();
         foreach (var (step, name) in new[] { (PracticeStep.A1, "Journey.CaptureGroup"), (PracticeStep.B0, "Journey.PinGroup"), (PracticeStep.C1, "Journey.FindGroup") })
         {
             var button = new Button { Content = UiText.Get(name), ContentTemplate = WrappingLabelTemplate(),
@@ -329,33 +331,30 @@ internal sealed class WelcomeWindow : Window
         var progressRow = new Grid();
         for (int index = 0; index < _progressSegments.Length; index++)
         {
+            if (index > 0) progressRow.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(index is 6 or 13 ? 8 : 3) });
             progressRow.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
             Border segment = _progressSegments[index];
             segment.Height = 7; segment.CornerRadius = new CornerRadius(3.5); segment.BorderThickness = new Thickness(1);
             segment.SetResourceReference(Border.BorderBrushProperty, "Border.Control");
-            segment.Margin = new Thickness(index == 0 ? 0 : 6, 0, 0, 0);
-            Grid.SetColumn(segment, index);
+            Border fill = _progressFills[index];
+            fill.CornerRadius = new CornerRadius(2.5);
+            fill.SetResourceReference(Border.BackgroundProperty, "Text.Primary");
+            fill.RenderTransformOrigin = new Point(0, .5);
+            fill.RenderTransform = new ScaleTransform(1, 1);
+            segment.Child = fill;
+            Grid.SetColumn(segment, index * 2);
             progressRow.Children.Add(segment);
         }
         var progress = new StackPanel();
         progress.Children.Add(progressRow);
-        progress.Children.Add(_progress);
+        progress.Children.Add(_captionRow);
 
         var body = new StackPanel { Margin = new Thickness(28, 18, 28, 14) };
         body.Children.Add(progress);
-        body.Children.Add(_title);
-        body.Children.Add(_instruction);
-        body.Children.Add(_statusRow);
-        body.Children.Add(_practiceTable);
-        body.Children.Add(_keyDisplay);
-        body.Children.Add(_changeKeyRow);
-        body.Children.Add(_conflict);
-        body.Children.Add(_previewFrame);
-        body.Children.Add(playback);
-        body.Children.Add(_groups);
-        body.Children.Add(_trayDiagram);
-        body.Children.Add(_recap);
-        body.Children.Add(_preferences);
+        _motionParts = [_title, _instruction, _statusRow, _practiceTable, _keyDisplay, _changeKeyRow,
+            _conflict, _previewFrame, _groups, _trayDiagram, _recap, _preferences];
+        foreach (FrameworkElement part in _motionParts) _stepBody.Children.Add(part);
+        body.Children.Add(_stepBody);
         _scroll = new ScrollViewer
         {
             Content = body, VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
@@ -367,7 +366,10 @@ internal sealed class WelcomeWindow : Window
         var root = new DockPanel();
         root.Children.Add(footer);
         root.Children.Add(_notice);
-        root.Children.Add(_scroll);
+        var viewport = new Grid { ClipToBounds = true };
+        viewport.Children.Add(_scroll);
+        viewport.Children.Add(_transitionLayer);
+        root.Children.Add(viewport);
         Content = root;
         _hintTimer = new DispatcherTimer { Interval = _options.HintDelay };
         _hintTimer.Tick += (_, _) => ShowRetryHint();
@@ -375,6 +377,8 @@ internal sealed class WelcomeWindow : Window
         RenderStep();
         Loaded += (_, _) =>
         {
+            MeasurePrimarySlot();
+            ApplyPrimarySlot();
             BringToFront();
             if (ShowActivated) TryNowButton.Focus();
             StartHintTimer();
@@ -389,6 +393,8 @@ internal sealed class WelcomeWindow : Window
                 CoreShortcutsAnswered?.Invoke(false);
             }
             _closed = true; Session.Changed -= OnSessionChanged; Session.End(); _hintTimer.Stop(); _preview.Dispose();
+            CancelStepMotion(); _chipMotion.Stop(); _keyMotion.Stop(); _labelMotion.Stop();
+            foreach (WelcomeMotion motion in _segmentMotions) motion.Stop();
         };
     }
 
@@ -437,12 +443,12 @@ internal sealed class WelcomeWindow : Window
     internal bool ConflictShown => _conflict.Visibility == Visibility.Visible;
     internal bool IsFeaturePractice => _options.FeaturePractice;
     internal bool CapturePending => Session.CapturePending;
-    internal bool SuccessShown => _statusMark.Visibility == Visibility.Visible && _statusRow.Visibility == Visibility.Visible;
+    internal bool SuccessShown => _successShown;
     internal TimeSpan HintDelay => _hintTimer.Interval;
     internal string TitleText => KoreanWordWrap.Strip(_title.Text);
     internal string InstructionText => KoreanWordWrap.Strip(_instruction.Text);
     internal string ProgressText => _progress.Text;
-    internal string StatusText => KoreanWordWrap.Strip(_status.Text);
+    internal string StatusText => KoreanWordWrap.Strip(_successShown ? _successText.Text : _status.Text);
     internal string RetryHintText => _notice.Visibility == Visibility.Visible ? KoreanWordWrap.Strip(_hint.Text) : string.Empty;
     internal bool KeyShown => _keyDisplay.Visibility == Visibility.Visible;
     internal bool PreviewShown => _previewFrame.Visibility == Visibility.Visible;
@@ -451,6 +457,14 @@ internal sealed class WelcomeWindow : Window
     internal bool PreferencesShown => _preferences.Visibility == Visibility.Visible;
     internal ScrollViewer Scroller => _scroll;
     internal WelcomeTutorialPreview Preview => _preview;
+    internal IReadOnlyList<FrameworkElement> MotionParts => _motionParts;
+    internal Image? TransitionOverlay => _transitionOverlay;
+    internal IReadOnlyList<Border> ProgressSegments => _progressSegments;
+    internal IReadOnlyList<Border> ProgressFills => _progressFills;
+    internal Border SuccessChip => _successChip;
+    internal TextBlock InstructionBlock => _instruction;
+    internal Border PreviewFrame => _previewFrame;
+    private bool ReducedMotion => _options.ReducedMotion ?? !FluidMotion.AnimationsEnabled;
 
     /// <summary>
     /// The shell reports which shortcuts Windows really registered. A shortcut that failed is
@@ -475,6 +489,7 @@ internal sealed class WelcomeWindow : Window
     internal void NotifyHotkeyFired(GlobalHotkeyCommand command)
     {
         if (_closed || CurrentCommand() != command || !CurrentKey().IsAssigned) return;
+        _pressKeycaps = !_keyPressed;
         _keyPressed = true;
         RenderStep();
     }
@@ -566,12 +581,10 @@ internal sealed class WelcomeWindow : Window
         if (_closed) return;
         _keyPressed = false;
         string message = Session.NoticeKey is { } notice ? UiText.Get(notice)
-            : Session.LastCompleted is { } completed ? UiText.Get($"Journey.{completed}.Success")
-                + (Session.Step == PracticeStep.Results ? string.Empty : "  " + UiText.Format("Journey.Next", UiText.Get($"Journey.{Session.Step}.Title"))) : string.Empty;
-        SetStatus(message, announce: false, success: Session.LastCompleted is not null && Session.NoticeKey is null);
-        RenderStep();
+            : Session.LastCompleted is { } completed ? UiText.Get($"Journey.{completed}.Success") : string.Empty;
+        RenderStep(message, Session.LastCompleted is not null && Session.NoticeKey is null);
         _scroll.ScrollToTop();
-        if (message.Length > 0) Announce(_status); else Announce(_title);
+        if (message.Length > 0) Announce(_successShown ? _successText : _status); else Announce(_title);
     }
     private Hotkey CurrentKey() => Session.Step switch
     {
@@ -599,9 +612,16 @@ internal sealed class WelcomeWindow : Window
         PracticeStep.B3 or PracticeStep.B4 => "pin-opacity", PracticeStep.B5 => "practice-pin-close", PracticeStep.B6 => "pin-restore",
         PracticeStep.C1 => "library-open", PracticeStep.C2 => "practice-library-find", _ => null,
     };
-    private void RenderStep()
+    private void RenderStep(string? feedback = null, bool success = false)
     {
         PracticeStep step = Session.Step;
+        bool pageChanged = _renderedStep != step || _renderedConsent != _showingConsent;
+        int direction = step == PracticeStep.Groups || PageOrder(step, _showingConsent) < PageOrder(_renderedStep ?? step, _renderedConsent) ? -1 : 1;
+        if (pageChanged) BeginStepTransition(direction);
+        else if (ReducedMotion) CancelStepMotion();
+        if (feedback is not null) SetStatus(feedback, success);
+        _keyMotion.Stop();
+        _caps.Clear();
         bool finish = step == PracticeStep.Results && !_showingConsent;
         bool groups = step == PracticeStep.Groups;
         SkipButton.Visibility = finish ? Visibility.Collapsed : Visibility.Visible;
@@ -620,19 +640,15 @@ internal sealed class WelcomeWindow : Window
         int number = Array.IndexOf(PracticeSession.Steps, step) + 1;
         _progress.Text = _showingConsent ? UiText.Get("Practice.ConsentLabel") : groups || finish ? UiText.Get($"Journey.{step}.Title") : $"{number} / 15 · {label}";
         AutomationProperties.SetName(_progress, _progress.Text);
-        for (int i = 0; i < _progressSegments.Length; i++)
-        {
-            _progressSegments[i].Visibility = i < 3 && !_showingConsent ? Visibility.Visible : Visibility.Collapsed;
-            bool complete = PracticeSession.Steps.Where(item => i == 0 ? item <= PracticeStep.A6 : i == 1 ? item >= PracticeStep.B0 && item <= PracticeStep.B6 : item >= PracticeStep.C1)
-                .All(item => Session.Results[item] == PracticeStepResult.Completed);
-            if (complete) _progressSegments[i].SetResourceReference(Border.BackgroundProperty, "Text.Primary");
-            else _progressSegments[i].Background = Brushes.Transparent;
-        }
+        _captionRow.MinHeight = _showingConsent ? 0 : 26 * _textScale;
+        ApplyPrimarySlot();
+        RenderProgress(pageChanged);
         SetText(_title, UiText.Get(_showingConsent ? "CoreShortcuts.Title" : $"Journey.{step}.Title"));
         string instruction = _showingConsent ? UiText.Get("CoreShortcuts.Body") : step == PracticeStep.B1
             ? _pinAvailable ? UiText.Format("Journey.B1.Body", _keys.PasteToScreen) : UiText.Get("Journey.B1.NoKey")
             : UiText.Get(step == PracticeStep.B6 && Session.WindowPinId is not null ? "Journey.PinAlreadyRestored" : $"Journey.{step}.Body");
         SetText(_instruction, instruction);
+        if (!_showingConsent) EmphasizeInstruction();
         Hotkey key = _showingConsent ? Hotkey.None : CurrentKey();
         _keyDisplay.Content = key.IsAssigned ? Keycaps(key) : null;
         _keyDisplay.Visibility = key.IsAssigned ? Visibility.Visible : Visibility.Collapsed;
@@ -663,14 +679,30 @@ internal sealed class WelcomeWindow : Window
             else if (step == PracticeStep.B0 && Session.NoticeKey == "Journey.CopyFailed") action = UiText.Get("Journey.CopyRetry");
             else if (step is >= PracticeStep.B2 and <= PracticeStep.B6 && Session.WindowPinId is null) action = UiText.Get(Session.PinRestorable ? "Journey.Reopen" : "Journey.CopyAgain");
         }
-        TryNowButton.Content = action; AutomationProperties.SetName(TryNowButton, action);
-        AutomationProperties.SetHelpText(TryNowButton, instruction); TryNowButton.ToolTip = action + "  Enter";
         bool waitingElsewhere = !_showingConsent && (step is >= PracticeStep.A4 and <= PracticeStep.A6 && Session.EditorId is not null
             || step is >= PracticeStep.B2 and <= PracticeStep.B5 && Session.WindowPinId is not null);
-        TryNowButton.Visibility = waitingElsewhere ? Visibility.Collapsed : Visibility.Visible;
+        if (waitingElsewhere) action = UiText.Get(step <= PracticeStep.A6 ? "Journey.WaitEditor" : "Journey.WaitPin");
+        string style = waitingElsewhere ? "Button.Secondary" : "Button.Primary";
+        TryNowButton.SetResourceReference(StyleProperty, style);
+        bool labelChanged = AutomationProperties.GetName(TryNowButton) != action;
+        TryNowButton.Content = action; AutomationProperties.SetName(TryNowButton, action);
+        AutomationProperties.SetHelpText(TryNowButton, instruction);
+        TryNowButton.ToolTip = action + (waitingElsewhere ? string.Empty : "  Enter");
+        TryNowButton.Visibility = Visibility.Visible;
         TryNowButton.IsDefault = TryNowButton.IsTabStop = !waitingElsewhere;
-        TryNowButton.IsEnabled = !Session.CapturePending && !Session.PinRestorePending;
+        AutomationProperties.SetAcceleratorKey(TryNowButton, waitingElsewhere ? string.Empty : "Enter");
+        TryNowButton.IsEnabled = !waitingElsewhere && !Session.CapturePending && !Session.PinRestorePending;
         _notice.Visibility = Visibility.Collapsed;
+        if (labelChanged) FadePrimaryLabel();
+        if (pageChanged)
+        {
+            _scroll.ScrollToTop();
+            if (_renderedStep is not null && IsLoaded && !ReducedMotion) EnterStep(direction);
+        }
+        _renderedStep = step; _renderedConsent = _showingConsent;
+        if (_pressKeycaps && !ReducedMotion && IsLoaded)
+            foreach (Border cap in _caps) _keyMotion.Press(cap);
+        _pressKeycaps = false;
         StartHintTimer();
     }
     internal void ShowRetryHint()
@@ -688,16 +720,284 @@ internal sealed class WelcomeWindow : Window
         if (IsLoaded && !_closed && !Session.CapturePending && CurrentStep is not (WelcomeStep.Finish or WelcomeStep.Consent)) _hintTimer.Start();
     }
 
-    private void SetStatus(string message, bool announce = true, bool success = true)
+    private void SetStatus(string message, bool success)
     {
-        SetText(_status, message);
-        _status.SetResourceReference(TextBlock.ForegroundProperty, success ? "Text.Primary" : "Text.Secondary");
-        _statusMark.Visibility = success ? Visibility.Visible : Visibility.Collapsed;
-        _statusRow.Visibility = message.Length == 0 ? Visibility.Collapsed : Visibility.Visible;
-        if (success && message.Length > 0 && !(_options.ReducedMotion ?? !FluidMotion.AnimationsEnabled))
-            _statusMark.BeginAnimation(OpacityProperty, new System.Windows.Media.Animation.DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(160)));
-        else { _statusMark.BeginAnimation(OpacityProperty, null); _statusMark.Opacity = 1; }
-        if (announce) Announce(_status);
+        bool wasVisible = _successChip.Visibility == Visibility.Visible;
+        _chipMotion.Stop();
+        _successShown = success && message.Length > 0;
+        SetText(_status, _successShown ? string.Empty : message);
+        _statusRow.Visibility = !_successShown && message.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
+        if (_successShown)
+        {
+            SetText(_successText, message);
+            _successChip.ToolTip = message;
+            AutomationProperties.SetName(_successChip, message);
+            _successChip.Visibility = Visibility.Visible;
+            if (!ReducedMotion && IsLoaded)
+            {
+                _chipMotion.Fade(_successChip, 0, 1, FluidMotion.NormalDuration, FluidMotion.StandardEasing);
+                _chipMotion.Slide(_successChip, -4, 0, false, FluidMotion.NormalDuration, FluidMotion.StandardEasing);
+                _chipMotion.Check(_successCheck, CheckGlyph);
+            }
+        }
+        else
+        {
+            // A fading visual has already left the accessibility/live-region state.
+            AutomationProperties.SetName(_successChip, string.Empty);
+            AutomationProperties.SetName(_successText, string.Empty);
+            AutomationProperties.SetLiveSetting(_successText, AutomationLiveSetting.Off);
+            if (wasVisible && !ReducedMotion && IsLoaded)
+            {
+                _chipMotion.Fade(_successChip, 1, 0, FluidMotion.FastDuration, FluidMotion.StandardEasing,
+                    then: () => _successChip.Visibility = Visibility.Collapsed);
+            }
+            else _successChip.Visibility = Visibility.Collapsed;
+        }
+        if (_successShown) AutomationProperties.SetLiveSetting(_successText, AutomationLiveSetting.Polite);
+    }
+
+    private static Geometry MakeCheckGlyph()
+    {
+        Geometry glyph = Geometry.Parse("M3.75,10.25 L8.15,14.65 L16.25,5.35");
+        glyph.Freeze();
+        return glyph;
+    }
+
+    private void ConfigureSuccessChip()
+    {
+        ConfigureText(_successText, 13);
+        _successText.TextWrapping = TextWrapping.NoWrap;
+        _successText.TextTrimming = TextTrimming.CharacterEllipsis;
+        _successText.VerticalAlignment = VerticalAlignment.Center;
+        _successText.SetResourceReference(TextBlock.ForegroundProperty, "Text.Primary");
+        AutomationProperties.SetLiveSetting(_successText, AutomationLiveSetting.Polite);
+        _successCheck.SetResourceReference(SymbolIcon.StrokeProperty, "State.Success");
+        _successCheck.Margin = new Thickness(0, 0, 4, 0);
+        _successCheck.VerticalAlignment = VerticalAlignment.Center;
+        var chipContent = new Grid { Margin = new Thickness(6, 3, 10, 3) };
+        chipContent.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        chipContent.ColumnDefinitions.Add(new ColumnDefinition());
+        chipContent.Children.Add(_successCheck);
+        Grid.SetColumn(_successText, 1); chipContent.Children.Add(_successText);
+        var tint = new Border { Opacity = .13, CornerRadius = new CornerRadius(13 * _textScale) };
+        tint.SetResourceReference(Border.BackgroundProperty, "State.Success");
+        var layers = new Grid(); layers.Children.Add(tint); layers.Children.Add(chipContent);
+        _successChip.Child = layers;
+        _successChip.CornerRadius = new CornerRadius(13 * _textScale);
+        _successChip.VerticalAlignment = VerticalAlignment.Center;
+        _successChip.Visibility = Visibility.Collapsed;
+        _successChip.Margin = new Thickness(8, 0, 0, 0);
+        _captionRow.Margin = new Thickness(0, 8, 0, 0);
+        _captionRow.ColumnDefinitions.Add(new ColumnDefinition());
+        _captionRow.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        _captionRow.Children.Add(_progress);
+        Grid.SetColumn(_successChip, 1); _captionRow.Children.Add(_successChip);
+        _captionRow.SizeChanged += (_, args) => _successChip.MaxWidth = Math.Max(0, args.NewSize.Width * .62);
+    }
+
+    private void ConfigurePreviewControls()
+    {
+        var playback = new StackPanel { Orientation = Orientation.Horizontal,
+            HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Bottom,
+            Margin = new Thickness(8) };
+        foreach (var (button, key, geometry) in new[]
+        {
+            (ReplayButton, "Journey.Replay", "M4.25,9.75 A6,6 0 1 0 6.1,5.4 M5.75,2.75 L5.75,6.5 L9.5,6.5"),
+            (PauseButton, "Journey.Pause", "M7,4 L7,16 M13,4 L13,16"),
+        })
+        {
+            button.Width = button.Height = 30;
+            button.MinWidth = button.MinHeight = 30;
+            button.Padding = new Thickness(0);
+            button.Background = new SolidColorBrush(Color.FromArgb(173, 10, 12, 18));
+            button.BorderBrush = new SolidColorBrush(Color.FromArgb(46, 255, 255, 255));
+            button.BorderThickness = new Thickness(1);
+            button.Foreground = Brushes.White;
+            button.HorizontalContentAlignment = HorizontalAlignment.Center;
+            button.VerticalContentAlignment = VerticalAlignment.Center;
+            button.Content = SymbolIcon.Create(Geometry.Parse(geometry), 15);
+            button.ToolTip = UiText.Get(key);
+            AutomationProperties.SetName(button, UiText.Get(key));
+            var stack = new FrameworkElementFactory(typeof(Grid));
+            var border = new FrameworkElementFactory(typeof(Border)) { Name = "Chrome" };
+            border.SetValue(Border.CornerRadiusProperty, new CornerRadius(15));
+            foreach (DependencyProperty property in new[] { Border.BackgroundProperty, Border.BorderBrushProperty, Border.BorderThicknessProperty })
+                border.SetBinding(property, new System.Windows.Data.Binding(property.Name) { RelativeSource = System.Windows.Data.RelativeSource.TemplatedParent });
+            stack.AppendChild(border);
+            // The chrome stays dark over the clip in every theme, so hover and press lighten it
+            // with white washes instead of the theme's opaque state surfaces.
+            foreach ((string name, byte alpha) in new[] { ("HoverLayer", (byte)36), ("PressedLayer", (byte)28) })
+            {
+                var layer = new FrameworkElementFactory(typeof(Border)) { Name = name };
+                layer.SetValue(Border.CornerRadiusProperty, new CornerRadius(15));
+                layer.SetValue(Border.BackgroundProperty, new SolidColorBrush(Color.FromArgb(alpha, 255, 255, 255)));
+                layer.SetResourceReference(Border.BorderBrushProperty, "Border.Hover");
+                layer.SetBinding(Border.BorderThicknessProperty, new System.Windows.Data.Binding(nameof(BorderThickness)) { RelativeSource = System.Windows.Data.RelativeSource.TemplatedParent });
+                layer.SetValue(IsHitTestVisibleProperty, false);
+                layer.SetValue(OpacityProperty, 0d);
+                stack.AppendChild(layer);
+            }
+            var presenter = new FrameworkElementFactory(typeof(ContentPresenter));
+            presenter.SetValue(HorizontalAlignmentProperty, HorizontalAlignment.Center);
+            presenter.SetValue(VerticalAlignmentProperty, VerticalAlignment.Center);
+            stack.AppendChild(presenter);
+            var template = new ControlTemplate(typeof(Button)) { VisualTree = stack };
+            var hover = new Trigger { Property = IsMouseOverProperty, Value = true };
+            hover.Setters.Add(new Setter(FluidMotion.FadeToProperty, 1d, "HoverLayer"));
+            var pressed = new Trigger { Property = Button.IsPressedProperty, Value = true };
+            pressed.Setters.Add(new Setter(FluidMotion.FadeToProperty, 1d, "PressedLayer"));
+            var focus = new Trigger { Property = IsKeyboardFocusedProperty, Value = true };
+            focus.Setters.Add(new Setter(Border.BorderBrushProperty, new DynamicResourceExtension("Border.Focus"), "Chrome"));
+            focus.Setters.Add(new Setter(Border.BorderThicknessProperty, new Thickness(2), "Chrome"));
+            foreach (Trigger trigger in new[] { hover, pressed, focus }) template.Triggers.Add(trigger);
+            button.Template = template;
+            playback.Children.Add(button);
+        }
+        PauseButton.Margin = new Thickness(4, 0, 0, 0);
+        _previewFrame.Child = null;
+        var stage = new Grid(); stage.Children.Add(_preview); stage.Children.Add(playback);
+        _previewFrame.Child = stage;
+    }
+
+    private void MeasurePrimarySlot()
+    {
+        string[] keys = ["Practice.Start", "Onboarding.StartCapture", "Journey.A3.Title", "Journey.B0.Title",
+            "Journey.ShowPicture", "Journey.CloseAgain", "Journey.C1.Title", "Welcome_Skip", "Journey.CaptureGroup",
+            "Journey.Replay", "Journey.GoCapture", "Journey.CopyAgain", "Journey.CopyRetry", "Journey.Reopen",
+            "Journey.WaitEditor", "Journey.WaitPin"];
+        double Measure(Button button, string text)
+        {
+            var probe = new TextBlock { Text = text, FontFamily = button.FontFamily, FontSize = button.FontSize,
+                FontWeight = ReferenceEquals(button, TryNowButton) ? FontWeights.SemiBold : button.FontWeight,
+                FontStyle = button.FontStyle, FontStretch = button.FontStretch, Language = button.Language };
+            TextOptions.SetTextFormattingMode(probe, TextOptions.GetTextFormattingMode(button));
+            VisualTreeHelper.SetRootDpi(probe, VisualTreeHelper.GetDpi(this));
+            probe.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+            return Math.Ceiling(probe.DesiredSize.Width + button.Padding.Left + button.Padding.Right
+                + button.BorderThickness.Left + button.BorderThickness.Right);
+        }
+        double width = Math.Max(168, keys.Max(key => Measure(TryNowButton, UiText.Get(key))));
+        double others = new[] { BackButton, SkipStepButton, SkipButton }.Sum(button =>
+            Math.Max(button.MinWidth, Measure(button, ReferenceEquals(button, SkipButton)
+                ? UiText.Get("Welcome_Skip") : AutomationProperties.GetName(button))) + button.Margin.Left + button.Margin.Right);
+        double available = DefaultWidth - 16 - 56 - others - TryNowButton.Margin.Left - TryNowButton.Margin.Right;
+        _primarySlotWidth = _textScale <= 1 ? Math.Floor(Math.Min(width, Math.Max(100, available))) : Math.Ceiling(width);
+    }
+
+    private void ApplyPrimarySlot()
+    {
+        TryNowButton.MinWidth = _showingConsent ? 168 : _primarySlotWidth;
+        TryNowButton.MaxWidth = _showingConsent || _textScale > 1 ? double.PositiveInfinity : _primarySlotWidth;
+    }
+
+    private void FadePrimaryLabel()
+    {
+        _labelMotion.Stop();
+        if (ReducedMotion || !IsLoaded) return;
+        TryNowButton.ApplyTemplate();
+        ContentPresenter? presenter = FindVisual<ContentPresenter>(TryNowButton);
+        if (presenter is not null) _labelMotion.Fade(presenter, 0, 1, FluidMotion.FastDuration, FluidMotion.StandardEasing);
+    }
+
+    private static T? FindVisual<T>(DependencyObject parent) where T : DependencyObject
+    {
+        for (int index = 0; index < VisualTreeHelper.GetChildrenCount(parent); index++)
+        {
+            DependencyObject child = VisualTreeHelper.GetChild(parent, index);
+            if (child is T match) return match;
+            if (FindVisual<T>(child) is { } found) return found;
+        }
+        return null;
+    }
+
+    private void EmphasizeInstruction()
+    {
+        string display = _instruction.Text;
+        _instruction.Inlines.Clear();
+        int start = 0;
+        for (int index = 0; index < display.Length; index++)
+        {
+            char close = display[index] switch { '‘' => '’', '“' => '”', '"' => '"', _ => '\0' };
+            if (close == '\0') continue;
+            int end = display.IndexOf(close, index + 1);
+            if (end < 0) continue;
+            _instruction.Inlines.Add(new Run(display[start..(index + 1)]));
+            var name = new Run(display[(index + 1)..end]) { FontWeight = FontWeights.SemiBold };
+            name.SetResourceReference(TextElement.ForegroundProperty, "Text.Primary");
+            _instruction.Inlines.Add(name);
+            start = end; index = end;
+        }
+        _instruction.Inlines.Add(new Run(display[start..]));
+    }
+
+    private void RenderProgress(bool pageChanged)
+    {
+        for (int index = 0; index < _progressSegments.Length; index++)
+        {
+            PracticeStep step = PracticeSession.Steps[index];
+            PracticeStepResult result = Session.Results[step];
+            bool justCompleted = result == PracticeStepResult.Completed && _renderedResults[index] != result;
+            _progressSegments[index].Visibility = _showingConsent ? Visibility.Collapsed : Visibility.Visible;
+            _progressSegments[index].SetResourceReference(Border.BorderBrushProperty,
+                !_showingConsent && Session.Step == step ? "Text.Primary" : result == PracticeStepResult.Skipped ? "Border.Subtle" : "Border.Control");
+            _progressFills[index].Visibility = result == PracticeStepResult.Completed ? Visibility.Visible : Visibility.Collapsed;
+            if (pageChanged || ReducedMotion || justCompleted) _segmentMotions[index].Stop();
+            if (justCompleted && IsLoaded && !ReducedMotion && Session.LastCompleted == step)
+                _segmentMotions[index].Fill(_progressFills[index]);
+            _renderedResults[index] = result;
+        }
+    }
+
+    private static int PageOrder(PracticeStep step, bool consent) => consent ? -1
+        : step == PracticeStep.Groups ? PracticeSession.Steps.Length + 1
+        : step == PracticeStep.Results ? PracticeSession.Steps.Length : Array.IndexOf(PracticeSession.Steps, step);
+
+    private void BeginStepTransition(int direction)
+    {
+        CancelStepMotion();
+        if (ReducedMotion || !IsLoaded || _renderedStep is null || _scroll.ActualWidth <= 0 || _scroll.ActualHeight <= 0) return;
+        // Render the actual viewport, then crop away the progress row. No VisualBrush resampling.
+        DpiScale dpi = VisualTreeHelper.GetDpi(this);
+        int width = (int)Math.Ceiling(_scroll.ViewportWidth * dpi.DpiScaleX);
+        int height = (int)Math.Ceiling(_scroll.ViewportHeight * dpi.DpiScaleY);
+        double top = Math.Max(0, _stepBody.TransformToAncestor(_scroll).Transform(new Point()).Y);
+        int cropTop = Math.Min(height, (int)Math.Floor(top * dpi.DpiScaleY));
+        if (width <= 0 || height <= cropTop) return;
+        var snapshot = new RenderTargetBitmap(width, height, dpi.PixelsPerInchX, dpi.PixelsPerInchY, PixelFormats.Pbgra32);
+        snapshot.Render(_scroll);
+        var cropped = new CroppedBitmap(snapshot, new Int32Rect(0, cropTop, width, height - cropTop));
+        cropped.Freeze();
+        _transitionOverlay = new Image { Source = cropped, Width = width / dpi.DpiScaleX,
+            Height = (height - cropTop) / dpi.DpiScaleY, Stretch = Stretch.Fill };
+        Canvas.SetTop(_transitionOverlay, cropTop / dpi.DpiScaleY);
+        _transitionLayer.Children.Add(_transitionOverlay);
+        _stepMotion.Fade(_transitionOverlay, 1, 0, FluidMotion.FastDuration, FluidMotion.StandardEasing, then: RemoveOverlay);
+        _stepMotion.Slide(_transitionOverlay, 0, -12 * direction, true, FluidMotion.FastDuration, FluidMotion.StandardEasing);
+    }
+
+    private void EnterStep(int direction)
+    {
+        int index = 0;
+        foreach (FrameworkElement part in _motionParts.Where(part => part.Visibility == Visibility.Visible))
+        {
+            TimeSpan delay = FluidMotion.FastDuration.TimeSpan + TimeSpan.FromMilliseconds(24 * index++);
+            _stepMotion.Fade(part, 0, 1, FluidMotion.DeliberateDuration, FluidMotion.SoftLandingEasing, delay);
+            _stepMotion.Slide(part, 16 * direction, 0, true, FluidMotion.DeliberateDuration, FluidMotion.SoftLandingEasing, delay);
+        }
+    }
+
+    private void RemoveOverlay()
+    {
+        if (_transitionOverlay is null) return;
+        _transitionOverlay.Source = null;
+        _transitionLayer.Children.Remove(_transitionOverlay);
+        _transitionOverlay = null;
+    }
+
+    private void CancelStepMotion()
+    {
+        _stepMotion.Stop();
+        RemoveOverlay();
     }
 
     private static void Announce(FrameworkElement element)
@@ -752,6 +1052,7 @@ internal sealed class WelcomeWindow : Window
         var keys = (WrapPanel)ShortcutHelpWindow.Keycaps(hotkey.ToString());
         foreach (Border cap in keys.Children.OfType<Border>())
         {
+            _caps.Add(cap);
             cap.MinWidth = 54 * _textScale; cap.MinHeight = 52 * _textScale;
             cap.Padding = new Thickness(14, 6, 14, 6); cap.Margin = new Thickness(0, 2, 6, 2);
             cap.BorderThickness = new Thickness(1, 1, 1, 3);
@@ -777,11 +1078,18 @@ internal sealed class WelcomeWindow : Window
         }
         if (_keyPressed)
         {
-            var check = new TextBlock { Text = "✓", FontFamily = new FontFamily("Segoe UI Symbol"), FontSize = 22 * _textScale,
-                VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(8, 0, 0, 0) };
-            check.SetResourceReference(TextBlock.ForegroundProperty, "State.Success");
-            AutomationProperties.SetName(check, UiText.Get("Practice.KeyPressed"));
-            keys.Children.Add(check);
+            var check = SymbolIcon.Create(CheckGlyph, 14);
+            check.SetResourceReference(SymbolIcon.StrokeProperty, "Surface.Base");
+            var badge = new Border { Width = 20, Height = 20, CornerRadius = new CornerRadius(10),
+                BorderThickness = new Thickness(2), Child = check, HorizontalAlignment = HorizontalAlignment.Right,
+                VerticalAlignment = VerticalAlignment.Top, Margin = new Thickness(0, -16, -22, 0) };
+            badge.SetResourceReference(Border.BackgroundProperty, "State.Success");
+            badge.SetResourceReference(Border.BorderBrushProperty, "Surface.Base");
+            AutomationProperties.SetName(badge, UiText.Get("Practice.KeyPressed"));
+            Border last = _caps[^1];
+            UIElement label = last.Child; last.Child = null;
+            var content = new Grid(); content.Children.Add(label); content.Children.Add(badge); last.Child = content;
+            if (_pressKeycaps && !ReducedMotion && IsLoaded) _keyMotion.Check(check, CheckGlyph);
         }
         return keys;
     }
