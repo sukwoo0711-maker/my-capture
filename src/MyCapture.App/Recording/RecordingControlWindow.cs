@@ -623,7 +623,7 @@ internal sealed class RecordingControlWindow : Window
             VerticalAlignment = VerticalAlignment.Center,
             Margin = new Thickness(0, 0, 8, 0),
             Foreground = TryBrush("Text.Secondary", Colors.LightGray),
-            FontSize = 13,
+            FontSize = TypeScale.Caption,
             TextTrimming = TextTrimming.CharacterEllipsis,
         };
         Grid.SetColumn(status, 2);
@@ -635,7 +635,7 @@ internal sealed class RecordingControlWindow : Window
             Margin = new Thickness(0, 0, 8, 0),
             Foreground = TryBrush("Text.Primary", Colors.White),
             FontFamily = TryFont("Font.Mono"),
-            FontSize = 15,
+            FontSize = TypeScale.BodyLarge,
         };
         Typography.SetNumeralAlignment(timer, FontNumeralAlignment.Tabular);
         Typography.SetNumeralStyle(timer, FontNumeralStyle.Lining);
@@ -1443,7 +1443,7 @@ internal sealed class RecordingControlWindow : Window
         _statusText.Visibility = CompactSession && !_paused ? Visibility.Collapsed : Visibility.Visible;
         // Paused words sit below the elapsed time; three commands keep their positions.
         Grid.SetColumn(_statusText, CompactSession && _paused ? 1 : 2);
-        _statusText.FontSize = CompactSession && _paused ? 12 : 13;
+        _statusText.FontSize = TypeScale.Caption;
         _statusText.VerticalAlignment = CompactSession && _paused ? VerticalAlignment.Bottom : VerticalAlignment.Center;
         _timerText.VerticalAlignment = CompactSession && _paused ? VerticalAlignment.Top : VerticalAlignment.Center;
         _recordingIndicator.Visibility = CompactSession || _saved ? Visibility.Visible : Visibility.Collapsed;

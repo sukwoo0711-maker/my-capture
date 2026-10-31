@@ -32,7 +32,7 @@ internal sealed class SupportWindow : Window
     internal TextBox MessageBox { get; }
     internal Button StoreReviewButton { get; }
     internal Button CloseButton { get; }
-    internal string StatusText => _status.Text;
+    internal string StatusText => KoreanWordWrap.Strip(_status.Text);
 
     internal SupportWindow(ISupportActions? actions = null, Func<Window, SupportDiagnosticSnapshot>? snapshot = null)
     {
@@ -45,7 +45,7 @@ internal sealed class SupportWindow : Window
         SetResourceReference(BackgroundProperty, "Surface.Raised");
         SetResourceReference(ForegroundProperty, "Text.Primary");
         var content = new StackPanel { Margin = new Thickness(24) };
-        content.Children.Add(new TextBlock { Text = Title, FontSize = 20, FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 0, 0, 20) });
+        content.Children.Add(new TextBlock { Text = Title, FontSize = TypeScale.Subtitle, FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 0, 0, 20) });
         content.Children.Add(Label("Support_Diagnostics"));
         DiagnosticsBox = CreateTextInput("Support_Diagnostics", 156);
         DiagnosticsBox.IsReadOnly = true;
@@ -54,10 +54,10 @@ internal sealed class SupportWindow : Window
         MessageBox = CreateTextInput("Support_Message", 136);
         MessageBox.MaxLength = 20000;
         content.Children.Add(MessageBox);
-        _accounts = new TextBlock { TextWrapping = TextWrapping.Wrap, FontSize = 12, Margin = new Thickness(0, 0, 0, 16) };
+        _accounts = new TextBlock { TextWrapping = TextWrapping.Wrap, FontSize = TypeScale.Caption, Margin = new Thickness(0, 0, 0, 16) };
         _accounts.SetResourceReference(TextBlock.ForegroundProperty, "Text.Secondary");
         content.Children.Add(_accounts);
-        _status = new TextBlock { TextWrapping = TextWrapping.Wrap, FontSize = 12, Visibility = Visibility.Collapsed, Margin = new Thickness(0, 0, 0, 12) };
+        _status = new TextBlock { TextWrapping = TextWrapping.Wrap, FontSize = TypeScale.Caption, Visibility = Visibility.Collapsed, Margin = new Thickness(0, 0, 0, 12) };
         AutomationProperties.SetLiveSetting(_status, AutomationLiveSetting.Polite);
         content.Children.Add(_status);
         var actionsRow = new WrapPanel();
@@ -82,7 +82,7 @@ internal sealed class SupportWindow : Window
         SupportDiagnosticSnapshot value = _snapshot(this);
         DiagnosticsBox.Text = SupportReport.Format(value);
         StoreReviewButton.Visibility = value.Packaged ? Visibility.Visible : Visibility.Collapsed;
-        _accounts.Text = UiText.Get(value.Packaged ? "Support_Accounts" : "Support_GitHubAccount");
+        KoreanWordWrap.Show(_accounts, UiText.Get(value.Packaged ? "Support_Accounts" : "Support_GitHubAccount"));
     }
 
     protected override void OnDpiChanged(DpiScale oldDpi, DpiScale newDpi)
@@ -93,13 +93,13 @@ internal sealed class SupportWindow : Window
 
     private static TextBlock Label(string key) => new()
     {
-        Text = UiText.Get(key), FontSize = 13, FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 0, 0, 6),
+        Text = UiText.Get(key), FontSize = TypeScale.Body, FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 0, 0, 6),
     };
 
     private static TextBox CreateTextInput(string key, double height)
     {
         var box = new TextBox { Height = height, AcceptsReturn = true, TextWrapping = TextWrapping.Wrap,
-            VerticalScrollBarVisibility = ScrollBarVisibility.Auto, FontSize = 13, Padding = new Thickness(10, 6, 10, 6),
+            VerticalScrollBarVisibility = ScrollBarVisibility.Auto, FontSize = TypeScale.Body, Padding = new Thickness(10, 6, 10, 6),
             Margin = new Thickness(0, 0, 0, 16) };
         box.SetResourceReference(BackgroundProperty, "Surface.Sunken");
         box.SetResourceReference(ForegroundProperty, "Text.Primary");
@@ -146,7 +146,7 @@ internal sealed class SupportWindow : Window
 
     private void SetStatus(string key)
     {
-        _status.Text = UiText.Get(key);
+        KoreanWordWrap.Show(_status, UiText.Get(key));
         _status.Visibility = Visibility.Visible;
     }
 

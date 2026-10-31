@@ -24,7 +24,8 @@ namespace MyCapture.App.Tests;
 
 /// <summary>
 /// Opt-in measurement (MYCAPTURE_WRAP_LAYOUT_COST = report file): the layout cost of keeping
-/// Korean words whole in the settings window and the library. Each sample builds the real
+/// Korean words whole in the settings window, the library and the shortcut help (the window with
+/// the most joined blocks of the three: 20, against 6 and 5). Each sample builds the real
 /// window in Korean, shows it offscreen and times the first layout, then times a full
 /// re-measure of every text block. Word keeping is switched off and on for the same build;
 /// runs alternate so warm-up and caches affect both alike. Run it alone in its own process.
@@ -53,7 +54,7 @@ public sealed class KoreanWrapLayoutCostTests
             var results = new Dictionary<string, List<(double First, double Relayout, int Joined)>>();
             try
             {
-                foreach (string surface in new[] { "settings", "library" })
+                foreach (string surface in new[] { "settings", "library", "shortcuts" })
                 {
                     // One warm-up per mode, then alternating samples.
                     foreach (bool keep in new[] { false, true }) Sample(surface, keep);
@@ -91,7 +92,12 @@ public sealed class KoreanWrapLayoutCostTests
         GC.WaitForPendingFinalizers();
         GC.Collect();
         var clock = Stopwatch.StartNew();
-        Window window = surface == "settings" ? CreateSettings() : CreateLibrary();
+        Window window = surface switch
+        {
+            "settings" => CreateSettings(),
+            "shortcuts" => new ShortcutHelpWindow(),
+            _ => CreateLibrary(),
+        };
         window.WindowStartupLocation = WindowStartupLocation.Manual;
         window.Left = -10000; window.Top = -10000; window.Width = 940; window.Height = 700;
         window.ShowActivated = false; window.ShowInTaskbar = false;

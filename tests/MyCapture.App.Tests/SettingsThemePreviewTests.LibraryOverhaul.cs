@@ -308,7 +308,7 @@ public sealed partial class SettingsThemePreviewTests
                 }
                 // Delete: the confirmation names the card's folder.
                 Drive(Key.Delete, ime: false, dialog =>
-                    Assert.Contains(childPath, string.Concat(Descendants(dialog).OfType<TextBlock>().Select(text => text.Text))));
+                    Assert.Contains(childPath, string.Concat(Descendants(dialog).OfType<TextBlock>().Select(text => KoreanWordWrap.Strip(text.Text)))));
             }
             finally
             {

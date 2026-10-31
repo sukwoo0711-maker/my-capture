@@ -43,7 +43,7 @@ public sealed class SettingsTranslationModelTests
         {
             var status = (TextBlock)window.FindName("TranslationModelStatus");
             var delete = (Button)window.FindName("TranslationModelDelete");
-            Assert.Equal(UiText.Format("Settings_TranslationInstalled", "247"), status.Text);
+            Assert.Equal(UiText.Format("Settings_TranslationInstalled", "247"), KoreanWordWrap.Strip(status.Text));
             Assert.True(delete.IsEnabled);
 
             long? asked = null;
@@ -61,9 +61,9 @@ public sealed class SettingsTranslationModelTests
             Dispatcher.CurrentDispatcher.Invoke(DispatcherPriority.ApplicationIdle, new Action(() => { }));
 
             Assert.Equal(1, deletes);
-            Assert.Equal(UiText.Get("Settings_TranslationNotInstalled"), status.Text);
+            Assert.Equal(UiText.Get("Settings_TranslationNotInstalled"), KoreanWordWrap.Strip(status.Text));
             Assert.False(delete.IsEnabled);
-            Assert.Equal(UiText.Get("Settings_TranslationDeleted"), ((TextBlock)window.FindName("SettingsStatus")).Text);
+            Assert.Equal(UiText.Get("Settings_TranslationDeleted"), KoreanWordWrap.Strip(((TextBlock)window.FindName("SettingsStatus")).Text));
         }
         finally
         {
@@ -91,10 +91,10 @@ public sealed class SettingsTranslationModelTests
         };
         try
         {
-            Assert.Equal("Not installed", ((TextBlock)window.FindName("TranslationModelStatus")).Text);
+            Assert.Equal("Not installed", KoreanWordWrap.Strip(((TextBlock)window.FindName("TranslationModelStatus")).Text));
             Assert.False(((Button)window.FindName("TranslationModelDelete")).IsEnabled);
             Assert.Equal(UiText.Format("About_PrivacyTranslation", MyCapture.Ocr.Translation.TranslationModelCatalog.TotalMegabytes),
-                ((TextBlock)window.FindName("PrivacyTranslationText")).Text);
+                KoreanWordWrap.Strip(((TextBlock)window.FindName("PrivacyTranslationText")).Text));
         }
         finally
         {

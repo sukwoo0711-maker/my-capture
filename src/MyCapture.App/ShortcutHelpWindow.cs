@@ -65,12 +65,12 @@ internal sealed class ShortcutHelpWindow : Window
             // While a search term is present, one list across every category replaces the tabs,
             // so a match on another tab is never hidden behind the selected one. The tabs keep
             // their selection and come back unchanged when the search is cleared.
-            var count = new TextBlock { FontSize = 12, Margin = new Thickness(12, 0, 12, 4), Visibility = Visibility.Collapsed };
+            var count = new TextBlock { FontSize = TypeScale.Caption, Margin = new Thickness(12, 0, 12, 4), Visibility = Visibility.Collapsed };
             count.SetResourceReference(TextBlock.ForegroundProperty, "Text.Secondary");
             AutomationProperties.SetLiveSetting(count, AutomationLiveSetting.Polite);
             DockPanel.SetDock(count, Dock.Top); root.Children.Add(count);
 
-            var emptyTitle = new TextBlock { Text = UiText.Get("Help.SearchEmpty"), FontSize = 14, FontWeight = FontWeights.SemiBold,
+            var emptyTitle = new TextBlock { Text = UiText.Get("Help.SearchEmpty"), FontSize = TypeScale.Body, FontWeight = FontWeights.SemiBold,
                 HorizontalAlignment = HorizontalAlignment.Center };
             AutomationProperties.SetLiveSetting(emptyTitle, AutomationLiveSetting.Polite);
             var clear = new Button { Content = UiText.Get("Help.SearchClear"), MinWidth = 120, Margin = new Thickness(0, 12, 0, 0),
@@ -184,7 +184,7 @@ internal sealed class ShortcutHelpWindow : Window
         FrameworkElement title = TitleLine(label, tutorialId);
         TextElement.SetFontWeight(title, FontWeights.SemiBold);
         text.Children.Add(title);
-        var tag = new TextBlock { Text = category, FontSize = 12, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 1, 0, 0) };
+        var tag = KoreanWordWrap.Show(new TextBlock { FontSize = TypeScale.Caption, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 1, 0, 0) }, category);
         tag.SetResourceReference(TextBlock.ForegroundProperty, "Text.Secondary");
         text.Children.Add(tag);
         grid.Children.Add(text);
@@ -256,8 +256,8 @@ internal sealed class ShortcutHelpWindow : Window
             DockPanel.SetDock(tutorial, Dock.Right);
             line.Children.Add(tutorial);
         }
-        line.Children.Add(new TextBlock { Text = label, TextWrapping = TextWrapping.Wrap,
-            VerticalAlignment = VerticalAlignment.Center });
+        line.Children.Add(KoreanWordWrap.Show(new TextBlock { TextWrapping = TextWrapping.Wrap,
+            VerticalAlignment = VerticalAlignment.Center }, label));
         return line;
     }
 
@@ -285,7 +285,7 @@ internal sealed class ShortcutHelpWindow : Window
             {
                 var cap = new Border { CornerRadius = new CornerRadius(5), BorderThickness = new Thickness(1,1,1,2),
                     Padding = new Thickness(8,4,8,4), Margin = new Thickness(0,2,4,2),
-                    Child = new TextBlock { Text = key, FontSize = 12, FontWeight = FontWeights.SemiBold } };
+                    Child = new TextBlock { Text = key, FontSize = TypeScale.Caption, FontWeight = FontWeights.SemiBold } };
                 cap.SetResourceReference(Border.BackgroundProperty,"Surface.Raised");
                 cap.SetResourceReference(Border.BorderBrushProperty,"Border.Strong");
                 keys.Children.Add(cap);

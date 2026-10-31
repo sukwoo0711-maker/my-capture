@@ -1,3 +1,4 @@
+using MyCapture.App.Themes;
 using System.Globalization;
 using System.IO;
 using System.Windows;
@@ -368,7 +369,7 @@ internal static class EditorCursors
         dc.DrawRoundedRectangle(null, new Pen(new SolidColorBrush(Ink), 2.6), BadgePlate, 3, 3);
         dc.DrawRoundedRectangle(new SolidColorBrush(Color.FromRgb(color.R, color.G, color.B)), new Pen(Brushes.White, 1.1), BadgePlate, 3, 3);
         string text = Math.Max(1, number) > 999 ? "…" : Math.Max(1, number).ToString(CultureInfo.InvariantCulture);
-        double fontSize = text.Length switch { 1 => 11.5, 2 => 10, _ => 7.5 };
+        double fontSize = text.Length switch { 1 => TypeScale.Content.CursorSingleDigit, 2 => TypeScale.Content.CursorTwoDigits, _ => TypeScale.Content.CursorManyDigits };
         var formatted = new FormattedText(text, CultureInfo.InvariantCulture, FlowDirection.LeftToRight,
             new Typeface(new FontFamily("Segoe UI"), FontStyles.Normal, FontWeights.Bold, FontStretches.Normal), fontSize, Brushes.White, 1.0);
         var origin = new Point(BadgePlate.X + ((BadgePlate.Width - formatted.Width) / 2), BadgePlate.Y + ((BadgePlate.Height - formatted.Height) / 2));

@@ -97,7 +97,7 @@ public sealed partial class SettingsThemePreviewTests
             TextCopyTutorialWindow tutorial = Assert.Single(window.OwnedWindows.OfType<TextCopyTutorialWindow>());
             Assert.True(tutorial.IsVisible);
             Assert.Contains(FirstRunWelcomeTests.Descendants(tutorial).OfType<TextBlock>(),
-                text => text.Text == UiText.Format("TextCapture_TutorialDirect", "Ctrl+Alt+T"));
+                text => KoreanWordWrap.Strip(text.Text) == UiText.Format("TextCapture_TutorialDirect", "Ctrl+Alt+T"));
             tutorial.Close();
             Assert.True(window.NavigateToSetting(nameof(SettingsDraft.ColorFormat)));
             Drain(window);

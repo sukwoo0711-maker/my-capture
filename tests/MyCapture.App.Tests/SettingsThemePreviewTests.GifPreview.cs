@@ -360,7 +360,7 @@ public sealed partial class SettingsThemePreviewTests
             {
                 for (int index = 0; index < fontKeys.Length; index++) dialog.Resources[fontKeys[index]] = fontSizes[index] * scale;
                 Drain(dialog);
-                TextBlock notice = Descendants(dialog).OfType<TextBlock>().Single(text => text.Text == expected);
+                TextBlock notice = Descendants(dialog).OfType<TextBlock>().Single(text => KoreanWordWrap.Strip(text.Text) == expected);
                 Assert.True(notice.IsVisible);
                 AssertGifTextFits(notice, $"{language}/source-cap/text{scale}");
                 AssertGifPreviewControlsFit(dialog.SamplePanel, $"{language}/source-cap/text{scale}");

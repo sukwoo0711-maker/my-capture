@@ -162,8 +162,8 @@ public sealed partial class SettingsThemePreviewTests
                 { Left = -10000, Top = -10000, WindowStartupLocation = WindowStartupLocation.Manual, ShowActivated = false, ShowInTaskbar = false };
                 window.Show(); Drain(window);
                 Assert.True(window.IsAskingForDecision);
-                TextBlock message = Descendants(window).OfType<TextBlock>().Single(text => text.Text.Contains(UiText.Get("LegacyImport.StartupReasonSpace")));
-                Assert.Contains(UiText.Get("LegacyImport.StartupChoice"), message.Text);
+                TextBlock message = Descendants(window).OfType<TextBlock>().Single(text => KoreanWordWrap.Strip(text.Text).Contains(UiText.Get("LegacyImport.StartupReasonSpace")));
+                Assert.Contains(UiText.Get("LegacyImport.StartupChoice"), KoreanWordWrap.Strip(message.Text));
                 Assert.Equal(AutomationLiveSetting.Polite, AutomationProperties.GetLiveSetting(message));
                 Button[] buttons = Descendants(window).OfType<Button>().ToArray();
                 Assert.Contains(buttons, button => button.IsDefault && SurfaceShortcutHintTests.PrimaryCaption(button) == UiText.Get("LegacyImport.Retry"));
@@ -185,7 +185,7 @@ public sealed partial class SettingsThemePreviewTests
                 () => { abandoned++; return Task.FromResult(new LegacyRecoveryResult(LegacyRecoveryStatus.Clean)); })
             { Left = -10000, Top = -10000, WindowStartupLocation = WindowStartupLocation.Manual, ShowActivated = false, ShowInTaskbar = false };
             recovered.Show(); Drain(recovered);
-            Assert.Contains(Descendants(recovered).OfType<TextBlock>(), text => text.Text.Contains(UiText.Get("LegacyImport.StartupReasonAccess")));
+            Assert.Contains(Descendants(recovered).OfType<TextBlock>(), text => KoreanWordWrap.Strip(text.Text).Contains(UiText.Get("LegacyImport.StartupReasonAccess")));
             CompleteLegacyTask(recovered.RetryAsync());
             Assert.False(recovered.IsVisible); Assert.Equal(0, abandoned);
         }
@@ -390,7 +390,7 @@ public sealed partial class SettingsThemePreviewTests
             Task copying = window.ImportAsync();
             window.Close();
             Assert.True(window.IsVisible); Assert.True(observed.IsCancellationRequested);
-            Assert.Equal(UiText.Get("LegacyImport.Canceling"), LegacyField<TextBlock>(window, "_status").Text);
+            Assert.Equal(UiText.Get("LegacyImport.Canceling"), KoreanWordWrap.Strip(LegacyField<TextBlock>(window, "_status").Text));
             Assert.Equal(0, releases);
             import.SetResult(new(LegacyMigrationStatus.Failed, ErrorCode: "RecoveryRequired"));
             CompleteLegacyTask(copying);
@@ -411,7 +411,7 @@ public sealed partial class SettingsThemePreviewTests
             Assert.True(second.IsRecoveryRequired); Assert.Equal(0, secondReleases);
             Button close = LegacyField<Button>(second, "_cancel");
             Assert.True(close.IsEnabled && close.IsCancel);
-            Assert.Equal(UiText.Get("LegacyImport.RecoveryRequired"), LegacyField<TextBlock>(second, "_status").Text);
+            Assert.Equal(UiText.Get("LegacyImport.RecoveryRequired"), KoreanWordWrap.Strip(LegacyField<TextBlock>(second, "_status").Text));
             CompleteLegacyTask(second.RetryRecoveryAsync());
             Assert.True(second.IsRecoveryRequired); Assert.Equal(0, secondReleases); Assert.True(close.IsEnabled);
             Task retry = second.RetryRecoveryAsync();
@@ -453,7 +453,7 @@ public sealed partial class SettingsThemePreviewTests
             observer!.Report(new(LegacyMigrationStage.Publishing, 2, 2, 10, 10)); Drain(window);
             Button cancel = LegacyField<Button>(window, "_cancel");
             Assert.False(cancel.IsEnabled);
-            Assert.Equal(UiText.Get("LegacyImport.PublishingNoCancel"), LegacyField<TextBlock>(window, "_status").Text);
+            Assert.Equal(UiText.Get("LegacyImport.PublishingNoCancel"), KoreanWordWrap.Strip(LegacyField<TextBlock>(window, "_status").Text));
             window.Close(); Assert.True(window.IsVisible);
             import.SetResult(new(LegacyMigrationStatus.Completed, 2, 0, "C:\\Fixture\\legacy-settings.json"));
             CompleteLegacyTask(publishing);
@@ -471,7 +471,7 @@ public sealed partial class SettingsThemePreviewTests
             CompleteLegacyTask(copying);
             Assert.False(raced.IsVisible);
             Assert.False(raced.Selection!.IncludeSettings); Assert.True(raced.Selection.CompletedAfterCancel);
-            Assert.StartsWith(UiText.Get("LegacyImport.CompletedBeforeCancel"), LegacyField<TextBlock>(raced, "_status").Text);
+            Assert.StartsWith(UiText.Get("LegacyImport.CompletedBeforeCancel"), KoreanWordWrap.Strip(LegacyField<TextBlock>(raced, "_status").Text));
         }
         finally { application.Shutdown(); }
     }
@@ -515,8 +515,8 @@ public sealed partial class SettingsThemePreviewTests
                 UnusableCount: 2, SettingsUnreadable: false));
             CompleteLegacyTask(window.ScanAsync());
             firstScan.SetResult(new(LegacyMigrationScanStatus.Failed, ErrorCode: "InvalidSource")); Drain(window);
-            Assert.Equal(UiText.Get("LegacyImport.Ready"), LegacyField<TextBlock>(window, "_status").Text);
-            Assert.Contains(UiText.Format("LegacyImport.Unusable", 2), LegacyField<TextBlock>(window, "_summary").Text);
+            Assert.Equal(UiText.Get("LegacyImport.Ready"), KoreanWordWrap.Strip(LegacyField<TextBlock>(window, "_status").Text));
+            Assert.Contains(UiText.Format("LegacyImport.Unusable", 2), KoreanWordWrap.Strip(LegacyField<TextBlock>(window, "_summary").Text));
             Button copy = LegacyField<Button>(window, "_copy"), cancel = LegacyField<Button>(window, "_cancel");
             Assert.True(copy.IsEnabled && copy.IsDefault); Assert.True(cancel.IsCancel);
             Assert.False(LegacyField<CheckBox>(window, "_includeSettings").IsChecked);
@@ -526,7 +526,7 @@ public sealed partial class SettingsThemePreviewTests
             Task copying = window.ImportAsync();
             observer!.Report(new(LegacyMigrationStage.Scanning, 2, 4, 0, 0)); Drain(window);
             Assert.False(bar.IsIndeterminate); Assert.Equal(50, bar.Value);
-            Assert.Equal(UiText.Format("LegacyImport.ScanProgress", 2, 4), LegacyField<TextBlock>(window, "_status").Text);
+            Assert.Equal(UiText.Format("LegacyImport.ScanProgress", 2, 4), KoreanWordWrap.Strip(LegacyField<TextBlock>(window, "_status").Text));
             observer.Report(new(LegacyMigrationStage.Copying, 1, 4, 50, 200)); Drain(window);
             int announcements = window.AnnouncementCountForTest;
             observer.Report(new(LegacyMigrationStage.Copying, 2, 4, 100, 200)); Drain(window);
@@ -539,7 +539,7 @@ public sealed partial class SettingsThemePreviewTests
             Assert.Equal(announcements + 1, window.AnnouncementCountForTest);
             import.SetResult(new(LegacyMigrationStatus.Completed, 4, 0, UnusableCount: 2)); CompleteLegacyTask(copying);
             string completed = LegacyField<TextBlock>(window, "_status").Text;
-            Assert.Equal(UiText.Format("LegacyImport.CompletedWithUnusable", 4, 0, 2), completed);
+            Assert.Equal(UiText.Format("LegacyImport.CompletedWithUnusable", 4, 0, 2), KoreanWordWrap.Strip(completed));
             observer.Report(new(LegacyMigrationStage.Copying, 0, 4, 0, 200)); Drain(window);
             Assert.Equal(completed, LegacyField<TextBlock>(window, "_status").Text);
             Assert.Equal(1, releases); Assert.NotNull(window.Selection);

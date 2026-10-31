@@ -308,7 +308,7 @@ internal sealed partial class GalleryWindow : Window
             // and hide the index button since indexing cannot run.
             OcrAvailability unavailable = OcrAvailability.Describe(false, System.Array.Empty<string>());
             OcrCoverageHeadline.Text = unavailable.Headline;
-            OcrCoverageDetail.Text = unavailable.Detail;
+            KoreanWordWrap.Show(OcrCoverageDetail, unavailable.Detail);
             OcrIndexButton.Visibility = Visibility.Collapsed;
             OcrCoverageBanner.Visibility = Visibility.Visible;
             return;
@@ -322,7 +322,7 @@ internal sealed partial class GalleryWindow : Window
         }
 
         OcrCoverageHeadline.Text = UiText.Format("Text_BE08A8230E51", coverage.Missing);
-        OcrCoverageDetail.Text = UiText.Format("Text_21AAACA9783A", coverage.Total, coverage.WithOcrText);
+        KoreanWordWrap.Show(OcrCoverageDetail, UiText.Format("Text_21AAACA9783A", coverage.Total, coverage.WithOcrText));
         OcrIndexButton.Visibility = Visibility.Visible;
         OcrIndexButton.IsEnabled = true;
         OcrCoverageBanner.Visibility = Visibility.Visible;
@@ -861,7 +861,7 @@ internal sealed partial class GalleryWindow : Window
     // Every result restarts the clock, so the latest one stays readable for its full time.
     private void OnActionStatusChanged(object? sender, EventArgs e)
     {
-        string text = LibraryActionStatus.Text;
+        string text = KoreanWordWrap.Strip(LibraryActionStatus.Text);
         SyncStatusAction();
         // A result or its follow-up takes the line; a waiting notice returns when the line is empty again.
         RefreshNotice();
@@ -894,16 +894,16 @@ internal sealed partial class GalleryWindow : Window
         }
 
         _statusCountdown?.Stop();
-        LibraryActionStatus.Text = string.Empty;
+        KoreanWordWrap.Show(LibraryActionStatus, string.Empty);
     }
 
     /// <summary>Closes a failure line that stays until dismissed; false when none is showing.</summary>
     private bool DismissActionStatus()
     {
-        if (string.IsNullOrEmpty(LibraryActionStatus.Text)
+        if (string.IsNullOrEmpty(KoreanWordWrap.Strip(LibraryActionStatus.Text))
             || !MyCapture.App.Themes.FeedbackTiming.StaysUntilDismissed(_statusKind)) return false;
         bool refocus = _statusDismiss?.IsKeyboardFocused == true;
-        LibraryActionStatus.Text = string.Empty;
+        KoreanWordWrap.Show(LibraryActionStatus, string.Empty);
         if (refocus) MoveFocus(new TraversalRequest(FocusNavigationDirection.First));
         return true;
     }

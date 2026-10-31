@@ -3,6 +3,7 @@ using System.Windows.Automation;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
+using MyCapture.App.Themes;
 using MyCapture.Core.Localization;
 using MyCapture.Core.Settings;
 using Xunit;
@@ -46,21 +47,21 @@ public sealed class ShortcutHelpSearchTests
         help.UpdateLayout();
         Border[] results = view.VisibleResults();
         Assert.Equal(23, results.Length); // 21 library commands, Open Library and video Save to Library.
-        Border[] libraryResults = results.Where(row => Texts(row)[1].Text == category).ToArray();
+        Border[] libraryResults = results.Where(row => KoreanWordWrap.Strip(Texts(row)[1].Text) == category).ToArray();
         Assert.Equal(21, libraryResults.Length);
-        Assert.Equal(expected.Select(entry => UiText.Get(entry.Label)), libraryResults.Select(row => Texts(row)[0].Text));
-        Border[] otherResults = results.Where(row => Texts(row)[1].Text != category).ToArray();
+        Assert.Equal(expected.Select(entry => UiText.Get(entry.Label)), libraryResults.Select(row => KoreanWordWrap.Strip(Texts(row)[0].Text)));
+        Border[] otherResults = results.Where(row => KoreanWordWrap.Strip(Texts(row)[1].Text) != category).ToArray();
         Assert.Equal(2, otherResults.Length);
-        Border openLibrary = Assert.Single(otherResults, row => Texts(row)[1].Text == UiText.Get("Help.Capture"));
-        Assert.Equal(UiText.Get("Text_66BA5DCDA810"), Texts(openLibrary)[0].Text);
-        Assert.Equal(UiText.Get("Help.Capture"), Texts(openLibrary)[1].Text);
-        Border saveVideo = Assert.Single(otherResults, row => Texts(row)[1].Text == UiText.Get("Help.Video"));
-        Assert.Equal(UiText.Get("MediaExport_SaveEdits"), Texts(saveVideo)[0].Text);
+        Border openLibrary = Assert.Single(otherResults, row => KoreanWordWrap.Strip(Texts(row)[1].Text) == UiText.Get("Help.Capture"));
+        Assert.Equal(UiText.Get("Text_66BA5DCDA810"), KoreanWordWrap.Strip(Texts(openLibrary)[0].Text));
+        Assert.Equal(UiText.Get("Help.Capture"), KoreanWordWrap.Strip(Texts(openLibrary)[1].Text));
+        Border saveVideo = Assert.Single(otherResults, row => KoreanWordWrap.Strip(Texts(row)[1].Text) == UiText.Get("Help.Video"));
+        Assert.Equal(UiText.Get("MediaExport_SaveEdits"), KoreanWordWrap.Strip(Texts(saveVideo)[0].Text));
         Assert.Contains(FirstRunWelcomeTests.Descendants(saveVideo).OfType<WrapPanel>(),
             keys => AutomationProperties.GetName(keys) == "Ctrl+S");
         foreach (var (label, shortcut) in expected)
         {
-            Border row = Assert.Single(libraryResults, result => Texts(result)[0].Text == UiText.Get(label));
+            Border row = Assert.Single(libraryResults, result => KoreanWordWrap.Strip(Texts(result)[0].Text) == UiText.Get(label));
             Assert.Contains(FirstRunWelcomeTests.Descendants(row).OfType<WrapPanel>(),
                 keys => AutomationProperties.GetName(keys) == shortcut);
         }
@@ -75,7 +76,7 @@ public sealed class ShortcutHelpSearchTests
             ("MediaExport_SaveEdits", "Ctrl+S"), ("MediaExport_ExportFormats", "Ctrl+Shift+S"),
             ("VideoFrame_Save", "Shift+S") })
         {
-            Border row = Assert.Single(view.VisibleResults(), result => Texts(result)[0].Text == UiText.Get(label));
+            Border row = Assert.Single(view.VisibleResults(), result => KoreanWordWrap.Strip(Texts(result)[0].Text) == UiText.Get(label));
             Assert.Contains(FirstRunWelcomeTests.Descendants(row).OfType<WrapPanel>(),
                 keys => AutomationProperties.GetName(keys) == shortcut);
         }
@@ -93,19 +94,19 @@ public sealed class ShortcutHelpSearchTests
         Assert.Equal(Visibility.Visible, view.ResultsView.Visibility);
         Border[] f2Results = view.VisibleResults();
         Assert.Equal(3, f2Results.Length);
-        Assert.Single(f2Results, row => Texts(row)[0].Text == UiText.Get("Shortcuts.EditText"));
-        Border folder = Assert.Single(f2Results, row => Texts(row)[0].Text == UiText.Get("Folder410.Rename"));
-        Assert.Equal(UiText.Get("Folder410.Rename"), Texts(folder)[0].Text);
+        Assert.Single(f2Results, row => KoreanWordWrap.Strip(Texts(row)[0].Text) == UiText.Get("Shortcuts.EditText"));
+        Border folder = Assert.Single(f2Results, row => KoreanWordWrap.Strip(Texts(row)[0].Text) == UiText.Get("Folder410.Rename"));
+        Assert.Equal(UiText.Get("Folder410.Rename"), KoreanWordWrap.Strip(Texts(folder)[0].Text));
         TextBlock category = Texts(folder)[1];
-        Assert.Equal(UiText.Get("Workspace.Library"), category.Text);
+        Assert.Equal(UiText.Get("Workspace.Library"), KoreanWordWrap.Strip(category.Text));
         Assert.Equal(12, category.FontSize);
         Assert.Equal(new Thickness(12, 4, 12, 4), folder.Padding);
         Assert.True(folder.ActualHeight >= 36, $"A result row is {folder.ActualHeight} high.");
         Assert.Equal(Visibility.Visible, view.Count.Visibility);
         Assert.Equal(UiText.Format("Help.SearchCount", 3), view.Count.Text);
         Assert.Equal(AutomationLiveSetting.Polite, AutomationProperties.GetLiveSetting(view.Count));
-        Border selection = Assert.Single(f2Results, row => Texts(row)[0].Text == UiText.Get("Pin_SelectText"));
-        Assert.Equal(UiText.Get("Text_33EFD44366A7"), Texts(selection)[1].Text);
+        Border selection = Assert.Single(f2Results, row => KoreanWordWrap.Strip(Texts(row)[0].Text) == UiText.Get("Pin_SelectText"));
+        Assert.Equal(UiText.Get("Text_33EFD44366A7"), KoreanWordWrap.Strip(Texts(selection)[1].Text));
         Assert.Contains(FirstRunWelcomeTests.Descendants(selection).OfType<WrapPanel>(),
             keys => AutomationProperties.GetName(keys) == "F2");
 
@@ -118,10 +119,10 @@ public sealed class ShortcutHelpSearchTests
         Border[] copies = view.VisibleResults();
         Assert.Equal(5, copies.Length);
         Assert.Equal(new[] { UiText.Get("Help.Annotation"), UiText.Get("Workspace.Library"), UiText.Get("Text_33EFD44366A7"),
-            UiText.Get("Text_33EFD44366A7"), UiText.Get("Help.QuickAccess") }, copies.Select(row => Texts(row)[1].Text));
+            UiText.Get("Text_33EFD44366A7"), UiText.Get("Help.QuickAccess") }, copies.Select(row => KoreanWordWrap.Strip(Texts(row)[1].Text)));
         Assert.All(copies.Take(3), row => Assert.Contains(FirstRunWelcomeTests.Descendants(row).OfType<WrapPanel>(),
             keys => AutomationProperties.GetName(keys) == "Ctrl+C"));
-        Assert.Equal(UiText.Get("Text_976A6C92B870"), Texts(copies[3])[0].Text);
+        Assert.Equal(UiText.Get("Text_976A6C92B870"), KoreanWordWrap.Strip(Texts(copies[3])[0].Text));
         Assert.Contains(FirstRunWelcomeTests.Descendants(copies[3]).OfType<WrapPanel>(),
             keys => AutomationProperties.GetName(keys) == "Ctrl+C / " + UiText.Get("Text_C7011B8D345C"));
         Assert.Contains(FirstRunWelcomeTests.Descendants(copies[4]).OfType<WrapPanel>(),
@@ -147,10 +148,10 @@ public sealed class ShortcutHelpSearchTests
         var panel = (StackPanel)((ScrollViewer)tab.Content).Content;
         UniformGrid[] rows = panel.Children.OfType<UniformGrid>().ToArray();
         int index = Array.FindIndex(rows, row => FirstRunWelcomeTests.Descendants(row).OfType<TextBlock>()
-            .Any(text => text.Text == UiText.Get("Text_976A6C92B870")));
+            .Any(text => KoreanWordWrap.Strip(text.Text) == UiText.Get("Text_976A6C92B870")));
         Assert.True(index > 0);
         Assert.Contains(FirstRunWelcomeTests.Descendants(rows[index - 1]).OfType<TextBlock>(),
-            text => text.Text == UiText.Get("QuickAccess.Copy"));
+            text => KoreanWordWrap.Strip(text.Text) == UiText.Get("QuickAccess.Copy"));
         Assert.Contains(FirstRunWelcomeTests.Descendants(rows[index]).OfType<WrapPanel>(),
             keys => AutomationProperties.GetName(keys) == "Ctrl+C / " + UiText.Get("Text_C7011B8D345C"));
         Assert.Equal("pin-copy", TutorialCatalog.FindHelp("Text_33EFD44366A7", "QuickAccess.Copy")?.Id);

@@ -130,7 +130,7 @@ public sealed partial class SettingsThemePreviewTests
                     TextBlock message = Assert.IsType<TextBlock>(window.FindName("PrtScGuideMessage"));
                     Assert.Equal(PrintScreenKeyGuide.Message(), KoreanWordWrap.Strip(message.Text));
                     string spoken = AutomationProperties.GetName(message);
-                    Assert.Equal(PrintScreenKeyGuide.Message(), spoken.Length > 0 ? spoken : message.Text);
+                    Assert.Equal(PrintScreenKeyGuide.Message(), spoken.Length > 0 ? spoken : KoreanWordWrap.Strip(message.Text));
                     var open = Assert.IsType<Button>(window.FindName("PrtScGuideOpenSettings"));
                     Assert.Equal(UiText.Get("PrtScGuide_OpenSettings"), AutomationProperties.GetName(open));
                     Assert.Equal(PrintScreenKeyGuide.Message(), AutomationProperties.GetHelpText(open));

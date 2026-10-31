@@ -63,7 +63,7 @@ public sealed class FirstRunWelcomeTests
             Assert.All(caps.Children.OfType<Border>(), cap =>
             {
                 Assert.True(cap.MinHeight >= 52);
-                Assert.True(((TextBlock)cap.Child).FontSize >= 22);
+                Assert.True(((TextBlock)cap.Child).FontSize >= TypeScale.Subtitle);
             });
 
             Button[] buttons = Descendants(welcome).OfType<Button>().ToArray();

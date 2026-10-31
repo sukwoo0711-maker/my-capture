@@ -175,7 +175,7 @@ internal sealed partial class PinWindow : Window
         // countdown and to offer a close button for a failure; dragging through it still moves the pin.
         _feedbackText = new TextBlock
         {
-            FontSize = 12,
+            FontSize = TypeScale.Caption,
             FontWeight = FontWeights.SemiBold,
             TextWrapping = TextWrapping.Wrap,
             VerticalAlignment = VerticalAlignment.Center,
@@ -600,7 +600,7 @@ internal sealed partial class PinWindow : Window
 
     /// <summary>Test hook: the bottom message, its kind and whether it offers a close button.</summary>
     internal (string Text, FeedbackKind Kind, bool Dismissible) FeedbackForTest =>
-        (_feedbackText.Text, _feedbackKind, _feedbackDismiss.Visibility == Visibility.Visible);
+        (KoreanWordWrap.Strip(_feedbackText.Text), _feedbackKind, _feedbackDismiss.Visibility == Visibility.Visible);
 
     /// <summary>Test hook: spends display time as the countdown's clock would.</summary>
     internal void AdvanceFeedbackForTest(TimeSpan elapsed) => _feedbackCountdown.Advance(elapsed);
@@ -2017,7 +2017,7 @@ internal sealed partial class PinWindow : Window
         _feedbackGeneration++;
         _feedbackHiding = false;
         _feedbackKind = kind;
-        _feedbackText.Text = text;
+        KoreanWordWrap.Show(_feedbackText, text);
         _feedbackText.SetResourceReference(TextBlock.ForegroundProperty, dismissible ? "State.Danger" : "Text.Primary");
         _feedbackDismiss.Visibility = dismissible ? Visibility.Visible : Visibility.Collapsed;
         _feedback.Visibility = Visibility.Visible;

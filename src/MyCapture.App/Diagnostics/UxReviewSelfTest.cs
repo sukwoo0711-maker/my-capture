@@ -396,6 +396,8 @@ internal static class UxReviewSelfTest
                                 if (!fits) failures++;
                             }
                             string label = name + (compact ? "-compact" : "-normal") + "-" + themeLabel;
+                            foreach (KoreanWordWrapProbe.Orphan orphan in KoreanWordWrapProbe.FindOrphans(window))
+                                report.AppendLine($"Korean orphan {label}: element={(orphan.Block.Name.Length > 0 ? orphan.Block.Name : orphan.Block.GetType().Name)}; text={orphan.Text}; lines={orphan.LineCount}; last={orphan.LastLine}");
                             foreach (int dpi in new[] { 96, 144, 192 })
                             {
                                 string renderPath = Path.Combine(outputDirectory, $"{label}-{dpi}dpi.png");

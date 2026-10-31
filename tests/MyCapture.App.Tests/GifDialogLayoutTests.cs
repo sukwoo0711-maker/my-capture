@@ -6,6 +6,7 @@ using System.Windows.Threading;
 using Microsoft.Extensions.Logging.Abstractions;
 using MyCapture.App.Recording;
 using MyCapture.App.Threading;
+using MyCapture.App.Themes;
 using MyCapture.Core.Localization;
 using MyCapture.Core.Recording;
 using MyCapture.Platform.Recording;
@@ -38,8 +39,8 @@ public sealed class GifDialogLayoutTests
             Assert.Equal(new[] { (0, 0), (0, 1), (1, 0), (1, 1) },
                 cells.Select(cell => (Grid.GetRow(cell), Grid.GetColumn(cell))).ToArray());
             Assert.All(new[] { size, rate, speed, target }, combo => Assert.Equal(36, combo.MinHeight));
-            Assert.Equal(sizeLabel, Assert.IsType<TextBlock>(cells[0].Children[0]).Text);
-            Assert.Equal(rateLabel, Assert.IsType<TextBlock>(cells[1].Children[0]).Text);
+            Assert.Equal(sizeLabel, KoreanWordWrap.Strip(Assert.IsType<TextBlock>(cells[0].Children[0]).Text));
+            Assert.Equal(rateLabel, KoreanWordWrap.Strip(Assert.IsType<TextBlock>(cells[1].Children[0]).Text));
             Assert.Equal(language == "ko-KR" ? "표준 · 960px" : "Standard · 960 px", size.Items[0].ToString());
             Assert.All(size.Items.Cast<object>(), item => Assert.DoesNotContain("fps", item.ToString()!, StringComparison.OrdinalIgnoreCase));
             Assert.Contains(language == "ko-KR" ? "640px" : "640 px", size.Items[2].ToString(), StringComparison.Ordinal);
@@ -108,7 +109,7 @@ public sealed class GifDialogLayoutTests
             ComboBox speed = Combo(dialog, UiText.Get("MediaExport_Speed"));
             speed.SelectedIndex = GifSharePolicy.Speeds.ToList().IndexOf(playbackSpeed);
             Assert.Equal(expectedRate, dialog.EffectiveFrameRate);
-            TextBlock notice = Logical(dialog).OfType<TextBlock>().Single(text => text.Text == expectedNotice);
+            TextBlock notice = Logical(dialog).OfType<TextBlock>().Single(text => KoreanWordWrap.Strip(text.Text) == expectedNotice);
             Assert.Equal(Visibility.Visible, notice.Visibility);
             Assert.DoesNotContain('\n', notice.Text);
             if (language == "ko-KR")

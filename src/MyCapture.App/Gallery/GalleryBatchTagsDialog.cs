@@ -67,9 +67,9 @@ internal sealed class GalleryBatchTagsDialog : Window
             if (_saving || (!string.IsNullOrWhiteSpace(NewTagInput.Text) && !AddNewTag())) return;
             _saving = true; content.IsEnabled = false;
             try { Result = await save(Changes); }
-            catch (ArgumentException) { _error.Text = UiText.Get("Library.Tags.Invalid"); }
+            catch (ArgumentException) { KoreanWordWrap.Show(_error, UiText.Get("Library.Tags.Invalid")); }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException or AggregateException)
-            { _error.Text = UiText.Get("Library.Organize.Failed"); }
+            { KoreanWordWrap.Show(_error, UiText.Get("Library.Organize.Failed")); }
             finally { _saving = false; content.IsEnabled = true; }
             if (Result is not null) DialogResult = true;
         };
@@ -102,10 +102,10 @@ internal sealed class GalleryBatchTagsDialog : Window
             else row.IsChecked = true;
             _changes[change.Name] = change;
             NewTagInput.Clear();
-            _error.Text = string.Empty;
+            KoreanWordWrap.Show(_error, string.Empty);
             return true;
         }
-        catch (ArgumentException) { _error.Text = UiText.Get("Library.Tags.Invalid"); return false; }
+        catch (ArgumentException) { KoreanWordWrap.Show(_error, UiText.Get("Library.Tags.Invalid")); return false; }
     }
 
     private sealed class TagCheckBox : CheckBox

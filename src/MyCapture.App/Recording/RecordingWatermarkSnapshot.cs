@@ -1,3 +1,4 @@
+using MyCapture.App.Themes;
 using System.Globalization;
 using System.IO;
 using System.Windows;
@@ -62,7 +63,7 @@ internal sealed class RecordingWatermarkSnapshot
         var brush = new SolidColorBrush((Color)ColorConverter.ConvertFromString(settings.TextColor));
         brush.Freeze();
         var formatted = new FormattedText(settings.Text, CultureInfo.CurrentUICulture, FlowDirection.LeftToRight,
-            new Typeface("Segoe UI"), 96, brush, 1);
+            new Typeface("Segoe UI"), TypeScale.Content.WatermarkEmSize, brush, 1);
         Geometry glyphs = formatted.BuildGeometry(new Point(0, 0));
         var drawing = new GeometryDrawing(brush, null, glyphs);
         drawing.Freeze();

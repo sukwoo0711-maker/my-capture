@@ -336,9 +336,9 @@ internal sealed class QuickAccessWindow : Window
         panel.Children.Add(actions);
         _firstUseTip.SetResourceReference(TextBlock.FontSizeProperty, "FontSize.Caption");
         _firstUseTip.SetResourceReference(TextBlock.ForegroundProperty, "Text.Secondary");
-        _firstUseTip.Text = firstCaptureTip ?? string.Empty;
+        KoreanWordWrap.Show(_firstUseTip, firstCaptureTip ?? string.Empty);
         _firstUseTip.Visibility = firstCaptureTip is null ? Visibility.Collapsed : Visibility.Visible;
-        AutomationProperties.SetName(_firstUseTip, _firstUseTip.Text);
+        AutomationProperties.SetName(_firstUseTip, KoreanWordWrap.Strip(_firstUseTip.Text));
         AutomationProperties.SetHelpText(_firstUseTip, UiText.Get("Onboard_QuickCardTip"));
         panel.Children.Add(_firstUseTip);
         if (captureActions is null) SetCaptureActionsEnabled(false);
@@ -838,7 +838,7 @@ internal sealed class QuickAccessWindow : Window
         _captureFailed = true;
         // The tip names an action the card no longer offers.
         _firstUseTip.Visibility = Visibility.Collapsed;
-        _detail.Text = detail;
+        KoreanWordWrap.Show(_detail, detail);
         _detail.ToolTip = detail;
         AutomationProperties.SetName(_detail, detail);
         _detail.Visibility = string.IsNullOrWhiteSpace(detail) ? Visibility.Collapsed : Visibility.Visible;
@@ -916,7 +916,7 @@ internal sealed class QuickAccessWindow : Window
     internal Button LibraryButtonForTest => _libraryButton;
 
     /// <summary>Test hook: the reason under the status line when the capture could not be saved.</summary>
-    internal (string Text, bool Visible) DetailForTest => (_detail.Text, _detail.Visibility == Visibility.Visible);
+    internal (string Text, bool Visible) DetailForTest => (KoreanWordWrap.Strip(_detail.Text), _detail.Visibility == Visibility.Visible);
 
     /// <summary>
     /// What failed and how to try again: the action's own key, or another drag for the preview.

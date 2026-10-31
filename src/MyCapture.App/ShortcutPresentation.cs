@@ -1,3 +1,4 @@
+using MyCapture.App.Themes;
 using System.ComponentModel;
 using System.Globalization;
 using System.Runtime.CompilerServices;
@@ -20,7 +21,7 @@ internal sealed class ShortcutPresentation : INotifyPropertyChanged
     /// The type size of every Alt-revealed key caption: the FontSize.Caption token. A
     /// constant, so a caption built before the window's resources load still reads at 12.
     /// </summary>
-    internal const double CaptionFontSize = 12;
+    internal const double CaptionFontSize = TypeScale.Caption;
 
     internal static ShortcutPresentation Current { get; } = new();
     // The app supplies the explicit always-show preference; absent a setting, Alt reveals hints.

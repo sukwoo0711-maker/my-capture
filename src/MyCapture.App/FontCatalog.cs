@@ -129,14 +129,14 @@ internal static class FontCatalog
         var label = new FrameworkElementFactory(typeof(TextBlock));
         label.SetBinding(TextBlock.TextProperty, new Binding(nameof(FontChoice.Label)));
         label.SetValue(TextBlock.FontFamilyProperty, ThemeFonts.Ui);
-        label.SetValue(TextBlock.FontSizeProperty, 14d);
+        label.SetValue(TextBlock.FontSizeProperty, TypeScale.Body);
         label.SetValue(TextBlock.TextTrimmingProperty, TextTrimming.CharacterEllipsis);
         label.SetValue(FrameworkElement.MaxWidthProperty, 200d);
         label.SetValue(FrameworkElement.VerticalAlignmentProperty, VerticalAlignment.Center);
         var sample = new FrameworkElementFactory(typeof(TextBlock), "FontSample");
         sample.SetValue(TextBlock.TextProperty, "가 Aa 123");
         sample.SetBinding(TextBlock.FontFamilyProperty, new Binding(nameof(FontChoice.PreviewFamily)));
-        sample.SetValue(TextBlock.FontSizeProperty, 14d);
+        sample.SetValue(TextBlock.FontSizeProperty, TypeScale.Body);
         sample.SetValue(FrameworkElement.MarginProperty, new Thickness(12, 0, 0, 0));
         sample.SetValue(UIElement.VisibilityProperty, Visibility.Collapsed);
         var panel = new FrameworkElementFactory(typeof(DockPanel));

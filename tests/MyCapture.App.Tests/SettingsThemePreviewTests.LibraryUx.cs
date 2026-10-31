@@ -296,7 +296,7 @@ public sealed partial class SettingsThemePreviewTests
             // models are kept, so read them rather than the recycled buttons.
             PumpLibraryUntil(window, () => vm.FindFolderCard(f.Empty.Id)!.CaptureCount == 2, label + ": moved into folder");
             Assert.All(f.Records.Take(2), record => Assert.Equal(f.Empty.Id, record.FolderId));
-            Assert.Equal(UiText.Format("LibraryUx_MovedTo", "제품리뷰", 2), ((TextBlock)window.FindName("LibraryActionStatus")).Text);
+            Assert.Equal(UiText.Format("LibraryUx_MovedTo", "제품리뷰", 2), KoreanWordWrap.Strip(((TextBlock)window.FindName("LibraryActionStatus")).Text));
             Assert.All(new[] { f.Empty.Id, f.Design.Id }, id => Assert.False(vm.FindFolderCard(id)!.IsDropAvailable));
             // Like File Explorer, the dropped captures leave the library root at once; the root
             // still reaches them through the card, so it reports no partial result.
@@ -308,7 +308,7 @@ public sealed partial class SettingsThemePreviewTests
             SaveLibraryUxEvidence(window, theme, $"after-drop-{file}.png");
             // The result clears itself; it never lingers in the command area.
             window.ExpireActionStatus();
-            Assert.Equal(string.Empty, ((TextBlock)window.FindName("LibraryActionStatus")).Text);
+            Assert.Equal(string.Empty, KoreanWordWrap.Strip(((TextBlock)window.FindName("LibraryActionStatus")).Text));
 
             // "모든 항목" takes captures back out of their folder.
             var all = (RadioButton)window.FindName("AllLibraryFilter");

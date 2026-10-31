@@ -335,16 +335,16 @@ internal sealed class VideoExportDialog : Window
         }
     }
 
-    private static void AddText(Panel panel, string text) => panel.Children.Add(new TextBlock
-    { Text = text, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 8, 0, 6) });
+    private static void AddText(Panel panel, string text) => panel.Children.Add(KoreanWordWrap.Show(new TextBlock
+    { TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 8, 0, 6) }, text));
 
     private static void AddOption(Grid grid, int row, int column, string labelKey, ComboBox combo)
     {
         var cell = new StackPanel { Margin = new Thickness(column == 0 ? 0 : 6, 0, column == 1 ? 0 : 6, 0) };
-        var label = new TextBlock { Text = UiText.Get(labelKey), TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 8, 0, 6) };
+        var label = KoreanWordWrap.Show(new TextBlock { TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 8, 0, 6) }, UiText.Get(labelKey));
         cell.Children.Add(label);
         cell.Children.Add(combo);
-        AutomationProperties.SetName(combo, label.Text);
+        AutomationProperties.SetName(combo, KoreanWordWrap.Strip(label.Text));
         Grid.SetRow(cell, row);
         Grid.SetColumn(cell, column);
         grid.Children.Add(cell);
@@ -445,7 +445,7 @@ internal sealed class VideoExportDialog : Window
         _targetLabel.Text = UiText.Format("MediaExport_Target", (int)_target.Value);
         if (!_working)
         {
-            _status.Text = UiText.Get("MediaExport_Hint");
+            KoreanWordWrap.Show(_status, UiText.Get("MediaExport_Hint"));
             _openFolder.Visibility = Visibility.Collapsed;
             _savedPath = null;
         }
@@ -487,7 +487,7 @@ internal sealed class VideoExportDialog : Window
 
     internal bool IsProgressVisible => _progressRow.Visibility == Visibility.Visible;
 
-    internal string StatusText => _status.Text;
+    internal string StatusText => KoreanWordWrap.Strip(_status.Text);
 
     internal string? SavedPath => _savedPath;
 
@@ -498,11 +498,11 @@ internal sealed class VideoExportDialog : Window
 
     internal GifPreviewPanel SamplePanel => _samplePanel;
 
-    internal string EstimateText => _estimate.Text;
+    internal string EstimateText => KoreanWordWrap.Strip(_estimate.Text);
 
     internal int DisplayedFrameCount { get; private set; }
 
-    internal string AdviceText => _adviceRow.Visibility == Visibility.Visible ? _advice.Text : string.Empty;
+    internal string AdviceText => _adviceRow.Visibility == Visibility.Visible ? KoreanWordWrap.Strip(_advice.Text) : string.Empty;
 
     internal GifRecommendation? Recommendation => _recommendation;
 
@@ -713,7 +713,7 @@ internal sealed class VideoExportDialog : Window
         {
             DisplayedFrameCount = 0;
             long bytes = EstimateMp4Bytes(_recording.Width, _recording.Height, _recording.Fps, span, TargetReductionPercent);
-            _estimate.Text = UiText.Format("MediaExport_Mp4Summary", FormatSize(bytes), FormatClock(span), _recording.Width, _recording.Height);
+            KoreanWordWrap.Show(_estimate, UiText.Format("MediaExport_Mp4Summary", FormatSize(bytes), FormatClock(span), _recording.Width, _recording.Height));
             _adviceRow.Visibility = Visibility.Collapsed;
             MarkRecommended(null);
             return;
@@ -729,24 +729,24 @@ internal sealed class VideoExportDialog : Window
         if (_measurements.TryGetValue(quality, out GifPresetMeasurement? measured))
         {
             GifSizeEstimate own = GifSizeEstimator.FromMeasurement(measured, span);
-            _estimate.Text = own.IsExact
+            KoreanWordWrap.Show(_estimate, own.IsExact
                 ? UiText.Format("GifPreview_Exact", FormatSize(own.ExpectedBytes), frames, playbackSeconds)
-                : UiText.Format("GifExport_SizeEstimate", FormatSize(own.ExpectedBytes), frames, playbackSeconds, FormatRange(own));
+                : UiText.Format("GifExport_SizeEstimate", FormatSize(own.ExpectedBytes), frames, playbackSeconds, FormatRange(own)));
             _estimate.ToolTip = own.IsExact ? null : FormatRange(own);
         }
         else
         {
-            _estimate.Text = UiText.Format("MediaExport_GifSummaryPending", frames, playbackSeconds);
+            KoreanWordWrap.Show(_estimate, UiText.Format("MediaExport_GifSummaryPending", frames, playbackSeconds));
             _estimate.ToolTip = null;
         }
         double effective = EffectiveFrameRate;
-        _estimate.Text += UiText.Format("GifExport_FrameRateSummary", effective * speed);
+        KoreanWordWrap.Show(_estimate, KoreanWordWrap.Strip(_estimate.Text) + (UiText.Format("GifExport_FrameRateSummary", effective * speed)));
         double sourceRate = _recording.Fps > 0 ? _recording.Fps : 10;
-        _frameRateCap.Text = effective >= quality.FramesPerSecond ? string.Empty
+        KoreanWordWrap.Show(_frameRateCap, effective >= quality.FramesPerSecond ? string.Empty
             : sourceRate <= 50 / speed
                 ? UiText.Format("GifExport_FrameRateCapped", sourceRate, effective)
-                : UiText.Format("GifExport_FrameRateCappedSpeed", effective);
-        _frameRateCap.Visibility = _frameRateCap.Text.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
+                : UiText.Format("GifExport_FrameRateCappedSpeed", effective));
+        _frameRateCap.Visibility = KoreanWordWrap.Strip(_frameRateCap.Text).Length > 0 ? Visibility.Visible : Visibility.Collapsed;
 
         if (_measurements.Count == 0)
         {
@@ -805,7 +805,7 @@ internal sealed class VideoExportDialog : Window
             detail.Add(UiText.Format("GifPreview_AdviceSpeed", playbackSeconds, faster, span / faster / 1000));
         }
 
-        _advice.Text = headline;
+        KoreanWordWrap.Show(_advice, headline);
         _advice.ToolTip = string.Join(Environment.NewLine, detail);
         AutomationProperties.SetHelpText(_advice, (string)_advice.ToolTip);
         _adviceRow.Visibility = Visibility.Visible;
@@ -979,19 +979,19 @@ internal sealed class VideoExportDialog : Window
             temporary = null;
             if (_closed) return;
             _savedPath = full;
-            _status.Text = gif
+            KoreanWordWrap.Show(_status, gif
                 ? UiText.Format("GifExport_SavedSize", Path.GetFileName(full), FormatSize(savedBytes))
-                : UiText.Format("MediaExport_Saved", Path.GetFileName(full));
+                : UiText.Format("MediaExport_Saved", Path.GetFileName(full)));
             _openFolder.Visibility = Visibility.Visible;
         }
         catch (OperationCanceledException)
         {
-            if (!_closed) _status.Text = UiText.Get("MediaExport_Cancelled");
+            if (!_closed) KoreanWordWrap.Show(_status, UiText.Get("MediaExport_Cancelled"));
         }
         catch (Exception error)
         {
             _logs.CreateLogger("VideoExport").LogWarning(error, "Video export failed");
-            if (!_closed) _status.Text = UiText.Format("MediaExport_Error", ThemedDialog.RecoveryMessage(error));
+            if (!_closed) KoreanWordWrap.Show(_status, UiText.Format("MediaExport_Error", ThemedDialog.RecoveryMessage(error)));
         }
         finally
         {
@@ -1022,7 +1022,7 @@ internal sealed class VideoExportDialog : Window
         int total = Math.Max(1, progress.TotalFrames);
         int completed = Math.Clamp(progress.CompletedFrames, 0, total);
         _progressRow.Report(progress, stopwatch.Elapsed);
-        _status.Text = UiText.Format("MediaExport_Progress", UiText.Get("MediaExport_Exporting"), completed, total);
+        KoreanWordWrap.Show(_status, UiText.Format("MediaExport_Progress", UiText.Get("MediaExport_Exporting"), completed, total));
     }
 
     internal string RemainingText => _progressRow.RemainingText;
@@ -1036,7 +1036,7 @@ internal sealed class VideoExportDialog : Window
         }
         catch (Exception error)
         {
-            _status.Text = UiText.Format("MediaExport_Error", ThemedDialog.RecoveryMessage(error));
+            KoreanWordWrap.Show(_status, UiText.Format("MediaExport_Error", ThemedDialog.RecoveryMessage(error)));
         }
     }
 
@@ -1053,7 +1053,7 @@ internal sealed class VideoExportDialog : Window
         if (working)
         {
             _progressRow.Start(UiText.Get("MediaExport_Exporting"));
-            _status.Text = UiText.Get("MediaExport_Exporting");
+            KoreanWordWrap.Show(_status, UiText.Get("MediaExport_Exporting"));
             _openFolder.Visibility = Visibility.Collapsed;
             _savedPath = null;
         }

@@ -3,6 +3,7 @@ using System.Windows.Automation;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Interop;
+using MyCapture.App.Themes;
 using MyCapture.Core.Localization;
 using Xunit;
 
@@ -86,11 +87,11 @@ public sealed class ReceiptKeyboardContentTests
             StackPanel content = Assert.Single(Descendants(window).OfType<StackPanel>());
             Assert.Equal(KeyboardNavigationMode.Cycle, KeyboardNavigation.GetTabNavigation(content));
             TextBlock hint = Assert.Single(content.Children.OfType<TextBlock>());
-            Assert.Equal(expectedHint, hint.Text);
-            Assert.Equal(UiText.Get("Onboard_ReceiptKeyboard"), hint.Text);
-            Assert.Contains("Alt+Q", hint.Text, StringComparison.Ordinal);
-            Assert.Contains("Tab", hint.Text, StringComparison.Ordinal);
-            Assert.Contains("Enter", hint.Text, StringComparison.Ordinal);
+            Assert.Equal(expectedHint, KoreanWordWrap.Strip(hint.Text));
+            Assert.Equal(UiText.Get("Onboard_ReceiptKeyboard"), KoreanWordWrap.Strip(hint.Text));
+            Assert.Contains("Alt+Q", KoreanWordWrap.Strip(hint.Text), StringComparison.Ordinal);
+            Assert.Contains("Tab", KoreanWordWrap.Strip(hint.Text), StringComparison.Ordinal);
+            Assert.Contains("Enter", KoreanWordWrap.Strip(hint.Text), StringComparison.Ordinal);
             Assert.False(hint.Focusable);
             Assert.Equal(TextWrapping.Wrap, hint.TextWrapping);
             AssertUnshown(window);

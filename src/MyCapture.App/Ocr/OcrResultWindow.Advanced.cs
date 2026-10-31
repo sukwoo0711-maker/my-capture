@@ -1,3 +1,4 @@
+using MyCapture.App.Themes;
 using System.ComponentModel;
 using System.IO;
 using System.Windows;
@@ -78,11 +79,11 @@ internal sealed partial class OcrResultWindow
         panes.ColumnDefinitions.Add(new() { Width = new GridLength(8) });
         panes.ColumnDefinitions.Add(new() { Width = new GridLength(1, GridUnitType.Star), MinWidth = 250 });
         _imageOverlay = new OcrImageOverlay();
-        _imageEmpty = new TextBlock
+        _imageEmpty = KoreanWordWrap.Show(new TextBlock
         {
-            Text = UiText.Get("OCR410_ImageUnavailable"), HorizontalAlignment = HorizontalAlignment.Center,
+            HorizontalAlignment = HorizontalAlignment.Center,
             VerticalAlignment = VerticalAlignment.Center, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(12),
-        };
+        }, UiText.Get("OCR410_ImageUnavailable"));
         _imageEmpty.SetResourceReference(TextBlock.ForegroundProperty, "Text.Secondary");
         var preview = new Grid { Margin = new Thickness(8) };
         preview.Children.Add(_imageOverlay);
@@ -108,7 +109,7 @@ internal sealed partial class OcrResultWindow
             SelectionMode = DataGridSelectionMode.Extended, SelectionUnit = DataGridSelectionUnit.CellOrRowHeader,
             ClipboardCopyMode = DataGridClipboardCopyMode.IncludeHeader,
             GridLinesVisibility = DataGridGridLinesVisibility.All, BorderThickness = new Thickness(0),
-            MinRowHeight = 34, FontSize = 14, Visibility = Visibility.Collapsed,
+            MinRowHeight = 34, FontSize = TypeScale.Body, Visibility = Visibility.Collapsed,
         };
         _tableGrid.SetResourceReference(DataGrid.RowBackgroundProperty, "Surface.Sunken");
         _tableGrid.SetResourceReference(DataGrid.AlternatingRowBackgroundProperty, "Surface.Base");

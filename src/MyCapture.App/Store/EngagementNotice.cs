@@ -92,13 +92,13 @@ internal sealed class EngagementNotice : Grid, IEngagementNotice
     public bool IsShown => Visibility == Visibility.Visible;
 
     /// <summary>The message the card shows.</summary>
-    internal string Message => _message.Text;
+    internal string Message => KoreanWordWrap.Strip(_message.Text);
 
     public void ShowInvitation()
     {
         if (Visibility == Visibility.Visible && Kind > EngagementNoticeKind.Rating) return;
         Kind = EngagementNoticeKind.Rating;
-        _message.Text = UiText.Get("StoreRating_InviteMessage");
+        KoreanWordWrap.Show(_message, UiText.Get("StoreRating_InviteMessage"));
         SetAction(UiText.Get("StoreRating_InviteAction"), true);
         _review.Visibility = Visibility.Visible;
         Reveal();
@@ -107,7 +107,7 @@ internal sealed class EngagementNotice : Grid, IEngagementNotice
     public bool ShowUpdateCompleted(string version)
     {
         Kind = EngagementNoticeKind.UpdateCompleted;
-        _message.Text = UiText.Format("StoreUpdate_CompletedVersion", DisplayVersion(version));
+        KoreanWordWrap.Show(_message, UiText.Format("StoreUpdate_CompletedVersion", DisplayVersion(version)));
         _review.Visibility = Visibility.Collapsed;
         Reveal();
         return true;
@@ -117,8 +117,8 @@ internal sealed class EngagementNotice : Grid, IEngagementNotice
     {
         if (Visibility == Visibility.Visible && Kind == EngagementNoticeKind.UpdateCompleted) return;
         Kind = EngagementNoticeKind.UpdateAvailable;
-        _message.Text = status ?? (version is null ? UiText.Get("Update_StoreAvailable")
-            : UiText.Format("Update_AvailableVersion", DisplayVersion(version)));
+        KoreanWordWrap.Show(_message, status ?? (version is null ? UiText.Get("Update_StoreAvailable")
+            : UiText.Format("Update_AvailableVersion", DisplayVersion(version))));
         SetAction(UiText.Get(failed ? "Update_RetryAction" : "Update_Action"), !busy);
         _review.Visibility = status is null || failed ? Visibility.Visible : Visibility.Collapsed;
         Reveal();

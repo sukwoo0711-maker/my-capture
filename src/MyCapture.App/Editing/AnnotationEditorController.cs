@@ -142,7 +142,7 @@ internal sealed class AnnotationEditorController
         });
     }
     internal double FillTransparency { get; private set; } = 100;
-    internal double DefaultFontSize { get; set; } = 18;
+    internal double DefaultFontSize { get; set; } = new AnnotationDefaults().FontSize;
     internal string DefaultFontFamily { get; set; } = AnnotationDefaults.DefaultFontFamily;
 
     /// <summary>Blur strength applied to new blur layers, in image pixels.</summary>

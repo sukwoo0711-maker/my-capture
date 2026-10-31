@@ -11,6 +11,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using MyCapture.App.Diagnostics;
 using MyCapture.App.Ocr;
 using MyCapture.App.Pinning;
+using MyCapture.App.Themes;
 using MyCapture.Core.Localization;
 using MyCapture.Core.Settings;
 using MyCapture.Ocr;
@@ -281,7 +282,7 @@ public sealed class OcrEditingWindowTests
             Assert.Equal(expected, copied);
             Assert.Equal(0, ocrCalls);
             Assert.True(window.IsVisible);
-            Assert.Contains("핀으로 띄웠습니다.", Field<TextBlock>(window, "_status").Text);
+            Assert.Contains("핀으로 띄웠습니다.", KoreanWordWrap.Strip(Field<TextBlock>(window, "_status").Text));
         }
         finally { manager.CloseAllForExit(); size?.Dispose(); }
     });
@@ -347,7 +348,7 @@ public sealed class OcrEditingWindowTests
         window.SelectExtractionMode(OcrExtractionMode.Text);
         Assert.True(Field<Button>(window, "_pinButton").IsEnabled);
         window.RequestPinAsync().GetAwaiter().GetResult();
-        Assert.Equal(UiText.Get("Onboard_PinFailed"), Field<TextBlock>(window, "_status").Text);
+        Assert.Equal(UiText.Get("Onboard_PinFailed"), KoreanWordWrap.Strip(Field<TextBlock>(window, "_status").Text));
         window.SelectExtractionMode(OcrExtractionMode.Translation);
         Assert.Equal(Visibility.Collapsed, Field<Button>(window, "_pinButton").Visibility);
         window.SelectExtractionMode(OcrExtractionMode.Text);

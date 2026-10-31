@@ -1,3 +1,4 @@
+using MyCapture.App.Themes;
 using System.Globalization;
 using System.IO;
 using System.Windows;
@@ -47,7 +48,7 @@ internal sealed class TwoLineTimeline : ContentControl, IDisposable
     /// <summary>Host windows at least this tall show the full-height strips.</summary>
     internal const double FullStripWindowHeight = 600.0;
     private const double DetailHeight = 42.0;
-    // The connector also draws a 10.5pt explanatory line; reserve its complete glyph height.
+    // The connector also draws a Caption-sized explanatory line; reserve its complete glyph height.
     private const double ConnectorHeight = 18.0;
     /// <summary>Top lane of the trim strip: time ruler labels, overlaid by the handle chips.</summary>
     private const double LabelLaneHeight = 18.0;
@@ -239,8 +240,9 @@ internal sealed class TwoLineTimeline : ContentControl, IDisposable
         double x = overview ? OverviewMsToPx(time.Value, width) : _viewport.MsToPx(time.Value, width);
         string? label = _snapGuide is { } snap ? TimelineVisuals.SnapLabel(snap.Kind)
             : ReferenceEquals(_hoverStrip, strip) ? HoverText : null;
+        // Keep the caption-sized feedback below the overview's start/end label lane.
         (overview ? _overviewMarker : _detailMarker).Draw(this, dc, x, height, 0, width,
-            _textSecondary, _surfaceBase, _textPrimary, label);
+            _textSecondary, _surfaceBase, _textPrimary, label, labelTop: overview ? LabelLaneHeight : 1);
     }
 
     /// <summary>Half the width of the handle itself; a press here drags at once.</summary>
@@ -1638,7 +1640,7 @@ internal sealed class TwoLineTimeline : ContentControl, IDisposable
         for (int index = 0; index <= minorCount; index += 4)
         {
             double time = Math.Min(_durationMs, index * majorMs / 4.0);
-            FormattedText label = Format(FormatTickLabel(time), 10, semiBold: false, _textSecondary);
+            FormattedText label = Format(FormatTickLabel(time), TypeScale.Micro, semiBold: false, _textSecondary);
             double left = Math.Clamp(OverviewMsToPx(time, width) + 3, 3, Math.Max(3, width - label.Width - 3));
             var bounds = new Rect(left, 2, label.Width, label.Height);
             if (left < labelRight + 6) continue;
@@ -1676,7 +1678,7 @@ internal sealed class TwoLineTimeline : ContentControl, IDisposable
         if (width >= 360)
         {
             DrawText(dc, UiText.Get("Text_41F81C272691"), width / 2.0, 0,
-                _textSecondary, 10.5, semiBold: true, _surfaceBase, centered: true);
+                _textSecondary, TypeScale.Caption, semiBold: true, _surfaceBase, centered: true);
         }
     }
 
@@ -1715,7 +1717,7 @@ internal sealed class TwoLineTimeline : ContentControl, IDisposable
                     }
 
                     DrawText(dc, UiText.Get("Text_D9483E35CD83"), width / 2.0,
-                        height * 0.36, _textSecondary, 11, semiBold: true, _surfaceScrim, centered: true);
+                        height * 0.36, _textSecondary, TypeScale.Caption, semiBold: true, _surfaceScrim, centered: true);
                 }
 
                 double majorMs = CoarseIntervalMs;
@@ -1726,7 +1728,7 @@ internal sealed class TwoLineTimeline : ContentControl, IDisposable
                     DrawLine(dc, _majorTickPen, x, 0, x, height);
                     DrawText(dc, FormatTickLabel(time),
                         Math.Clamp(x + 4, 3, Math.Max(3, width - 54)), 2,
-                        _textSecondary, 11, semiBold: true, _surfaceScrim, centered: false);
+                        _textSecondary, TypeScale.Micro, semiBold: true, _surfaceScrim, centered: false);
                 }
                 break;
 
@@ -1802,9 +1804,9 @@ internal sealed class TwoLineTimeline : ContentControl, IDisposable
         DrawRect(dc, left, top + 1, right - left, bottom - top - 2, null, _focusPen);
         // The chip can extend beyond a short segment, but stays inside the strip.
         string label = TrimPresentation.SegmentLabel(selected);
-        FormattedText text = Format(label, 10, semiBold: true, _textPrimary);
+        FormattedText text = Format(label, TypeScale.Caption, semiBold: true, _textPrimary);
         double labelLeft = Math.Clamp((left + right - text.Width) / 2, 4, Math.Max(4, width - text.Width - 4));
-        DrawText(dc, label, labelLeft, bottom - text.Height - 4, _textPrimary, 10,
+        DrawText(dc, label, labelLeft, bottom - text.Height - 4, _textPrimary, TypeScale.Caption,
             semiBold: true, _surfaceBase, centered: false);
     }
 
@@ -1840,11 +1842,11 @@ internal sealed class TwoLineTimeline : ContentControl, IDisposable
         DrawLine(dc, _cutEdgePen, left, bottom - 0.5, right, bottom - 0.5);
 
         string label = UiText.Get("VideoEditorUx_TrimCut");
-        FormattedText text = Format(label, 11, semiBold: true, _textPrimary);
+        FormattedText text = Format(label, TypeScale.Caption, semiBold: true, _textPrimary);
         if (width >= text.Width + 16 && height >= text.Height)
         {
             DrawText(dc, label, left + (width / 2), top + Math.Max(0, (height - text.Height - 2) / 2),
-                _textPrimary, 11, semiBold: true, _surfaceBase, centered: true);
+                _textPrimary, TypeScale.Caption, semiBold: true, _surfaceBase, centered: true);
         }
     }
 
@@ -1886,8 +1888,8 @@ internal sealed class TwoLineTimeline : ContentControl, IDisposable
     /// </summary>
     private ChipLayout LayoutChips(double width)
     {
-        FormattedText inText = Format(TrimPresentation.StartChip(_trim.InMs), 12, semiBold: true, _handleText);
-        FormattedText outText = Format(TrimPresentation.EndChip(_trim.OutMs), 12, semiBold: true, _handleText);
+        FormattedText inText = Format(TrimPresentation.StartChip(_trim.InMs), TypeScale.Caption, semiBold: true, _handleText);
+        FormattedText outText = Format(TrimPresentation.EndChip(_trim.OutMs), TypeScale.Caption, semiBold: true, _handleText);
         const double gap = 4;
         double height = LabelLaneHeight - 1;
         double inWidth = inText.Width + 12;
@@ -2022,7 +2024,7 @@ internal sealed class TwoLineTimeline : ContentControl, IDisposable
     {
         var caption = new TextBlock
         {
-            FontSize = 13,
+            FontSize = TypeScale.Caption,
             FontWeight = FontWeights.SemiBold,
             Margin = new Thickness(2, 0, 0, 5),
         };

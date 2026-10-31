@@ -1,3 +1,4 @@
+using MyCapture.App.Themes;
 using System.IO;
 using System.Windows;
 using MyCapture.Core.Export;
@@ -18,13 +19,13 @@ internal sealed partial class GalleryWindow
         if (selected.Length == 0) return;
         if (selected.Length > ContactSheetLayout.MaximumItems)
         {
-            LibraryActionStatus.Text = UiText.Get("ContactSheet.Limit");
+            KoreanWordWrap.Show(LibraryActionStatus, UiText.Get("ContactSheet.Limit"));
             return;
         }
         CaptureRecord[] images = selected.Where(record => record.IsImage).ToArray();
         if (images.Length == 0)
         {
-            LibraryActionStatus.Text = UiText.Get("ContactSheet.NoImages");
+            KoreanWordWrap.Show(LibraryActionStatus, UiText.Get("ContactSheet.NoImages"));
             return;
         }
         if (images.Any(record => !EnsureRecordReady(record.Id))) return;
@@ -44,7 +45,7 @@ internal sealed partial class GalleryWindow
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException or ArgumentException)
         {
-            LibraryActionStatus.Text = UiText.Get("ContactSheet.Failed");
+            KoreanWordWrap.Show(LibraryActionStatus, UiText.Get("ContactSheet.Failed"));
         }
         finally { foreach (IDisposable lease in leases) lease.Dispose(); }
     }

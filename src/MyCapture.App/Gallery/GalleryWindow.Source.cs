@@ -1,3 +1,4 @@
+using MyCapture.App.Themes;
 using System.Windows;
 using MyCapture.App.Sources;
 using MyCapture.Core.Capture;
@@ -67,7 +68,7 @@ internal sealed partial class GalleryWindow
 
     internal void SetSourceActionStatus(string status)
     {
-        if (status.Length > 0) LibraryActionStatus.Text = status;
+        if (status.Length > 0) KoreanWordWrap.Show(LibraryActionStatus, status);
     }
 
     internal void SearchSource(string query)

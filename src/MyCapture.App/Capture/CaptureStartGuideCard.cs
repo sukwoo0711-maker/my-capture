@@ -63,7 +63,7 @@ internal sealed class CaptureStartGuideCard : Border
 
         _escape = new TextBlock
         {
-            FontSize = 12,
+            FontSize = TypeScale.Caption,
             Margin = new Thickness(0, 10, 0, 0),
             HorizontalAlignment = HorizontalAlignment.Center,
             TextAlignment = TextAlignment.Center,
@@ -123,7 +123,7 @@ internal sealed class CaptureStartGuideCard : Border
     {
         var caption = new TextBlock
         {
-            FontSize = 13,
+            FontSize = TypeScale.Caption,
             FontWeight = FontWeights.SemiBold,
             Margin = new Thickness(0, 8, 0, 0),
             MaxWidth = PictureWidth,

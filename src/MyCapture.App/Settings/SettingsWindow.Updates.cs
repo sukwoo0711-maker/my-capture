@@ -1,3 +1,4 @@
+using MyCapture.App.Themes;
 using System.Windows;
 using System.Windows.Automation;
 using Microsoft.Extensions.Logging;
@@ -44,8 +45,8 @@ internal sealed partial class SettingsWindow
         SetStoreUpdateAction(coordinator.HasAvailableUpdate);
         UpdateAction.IsEnabled = !coordinator.IsBusy;
         ShowStoreUpdate(coordinator.Snapshot);
-        if (coordinator.StatusText is { } text) UpdateObservedStatus.Text = text;
-        AutomationProperties.SetName(UpdateProgress, UpdateObservedStatus.Text);
+        if (coordinator.StatusText is { } text) KoreanWordWrap.Show(UpdateObservedStatus, text);
+        AutomationProperties.SetName(UpdateProgress, KoreanWordWrap.Strip(UpdateObservedStatus.Text));
     }
 
     /// <summary>Opens the Store listing. Tests replace it so no process starts.</summary>
@@ -83,14 +84,14 @@ internal sealed partial class SettingsWindow
         AutoCheckUpdatesCheckBox.Visibility = enabled ? Visibility.Visible : Visibility.Collapsed;
         if (enabled)
         {
-            UpdateDescription.Text = UiText.Get(packaged ? "StoreUpdate_ObservedDescription" : "Update_UnpackagedDescription");
+            KoreanWordWrap.Show(UpdateDescription, UiText.Get(packaged ? "StoreUpdate_ObservedDescription" : "Update_UnpackagedDescription"));
             SetStoreUpdateAction(false);
         }
         else
         {
             // Development output has no release channel and retains its Store listing action.
-            UpdateDescription.Text = UiText.Get("StoreUpdate_UnpackagedDescription")
-                + Environment.NewLine + Environment.NewLine + UiText.Get("StoreUpdate_UnpackagedNote");
+            KoreanWordWrap.Show(UpdateDescription, UiText.Get("StoreUpdate_UnpackagedDescription")
+                + Environment.NewLine + Environment.NewLine + UiText.Get("StoreUpdate_UnpackagedNote"));
             UpdateAction.Content = UiText.Get("StoreUpdate_OpenStore");
             AutomationProperties.SetHelpText(UpdateAction, UiText.Get("StoreUpdate_OpenStoreHelp"));
         }
@@ -100,7 +101,7 @@ internal sealed partial class SettingsWindow
         if (enabled) ShowStoreUpdate(new(StoreUpdatePhase.Idle));
         else
         {
-            UpdateObservedStatus.Text = string.Empty;
+            KoreanWordWrap.Show(UpdateObservedStatus, string.Empty);
             UpdateProgress.Visibility = Visibility.Collapsed;
         }
     }
@@ -205,7 +206,7 @@ internal sealed partial class SettingsWindow
 
     private void ShowStoreUpdate(StoreUpdateSnapshot snapshot)
     {
-        UpdateObservedStatus.Text = UpdateCheckSummary(snapshot.Phase, _lastStoreCheck);
+        KoreanWordWrap.Show(UpdateObservedStatus, UpdateCheckSummary(snapshot.Phase, _lastStoreCheck));
         bool githubChannel = UpdateCoordinator?.Channel is UpdateChannel.GitHubInstall or UpdateChannel.Portable;
         bool storeChannel = UpdateCoordinator?.Channel == UpdateChannel.Store || UpdateCoordinator is null && StoreUpdatePackaged;
         StorePageAction.Visibility = githubChannel || storeChannel && snapshot.Phase == StoreUpdatePhase.Failed
@@ -215,7 +216,7 @@ internal sealed partial class SettingsWindow
         // TotalDownloadProgress is download progress, not a made-up installation percentage.
         UpdateProgress.IsIndeterminate = snapshot.Phase != StoreUpdatePhase.Downloading || snapshot.Progress is null;
         if (snapshot.Progress is { } value && snapshot.Phase == StoreUpdatePhase.Downloading) UpdateProgress.Value = value * 100;
-        AutomationProperties.SetName(UpdateProgress, UpdateObservedStatus.Text);
+        AutomationProperties.SetName(UpdateProgress, KoreanWordWrap.Strip(UpdateObservedStatus.Text));
     }
 
     /// <summary>
