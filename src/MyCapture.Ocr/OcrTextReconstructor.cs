@@ -16,21 +16,24 @@ internal static class OcrTextReconstructor
         {
             var ordered = OcrLayoutRow.Build(block.SelectMany(run => run.Words));
             var lines = new List<string>();
+            var sourceLines = new List<OcrLine>();
             OcrRect bounds = default;
             double previousBottom = 0;
             foreach (var row in ordered)
             {
                 if (lines.Count > 0 && row.Bounds.Y - previousBottom > height * .85)
                 {
-                    paragraphs.Add(new(lines.ToArray(), bounds));
+                    paragraphs.Add(new(lines.ToArray(), bounds) { SourceLines = sourceLines.ToArray() });
                     lines.Clear();
+                    sourceLines.Clear();
                     bounds = default;
                 }
                 lines.Add(row.Text);
+                sourceLines.Add(new(row.Text, row.Bounds, row.Words.ToArray()));
                 bounds = OcrRect.Union(bounds, row.Bounds);
                 previousBottom = row.Bounds.Bottom;
             }
-            if (lines.Count > 0) paragraphs.Add(new(lines.ToArray(), bounds));
+            if (lines.Count > 0) paragraphs.Add(new(lines.ToArray(), bounds) { SourceLines = sourceLines.ToArray() });
         }
         return paragraphs;
     }

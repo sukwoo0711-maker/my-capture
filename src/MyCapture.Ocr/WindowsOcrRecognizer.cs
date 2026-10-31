@@ -161,7 +161,7 @@ internal sealed class WindowsOcrRecognizer : IOcrRecognizer
         }
 
         string tag = engine.RecognizerLanguage?.LanguageTag ?? string.Empty;
-        return new RecognizedText(tag, lines);
+        return new RecognizedText(tag, lines) { TextAngle = winrt.TextAngle };
     }
 
 }

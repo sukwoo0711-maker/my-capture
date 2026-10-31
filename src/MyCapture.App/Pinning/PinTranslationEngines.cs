@@ -24,6 +24,12 @@ internal sealed class PinTranslationEngines(TextTranslationService englishToKore
         return string.IsNullOrWhiteSpace(text) ? null : text;
     }
 
+    /// <summary>Keeps the original-pixel geometry and angle for an in-place translation.</summary>
+    internal static Task<OcrResult> RecognizeResultAsync(IOcrService? ocr, BitmapSource image,
+        MyCapture.Core.Settings.OcrSettings settings, CancellationToken cancellationToken) =>
+        ocr is null ? Task.FromResult(OcrResult.Unavailable())
+            : ocr.RecognizeAsync(OcrRequestFactory.FromBitmap(image, settings).WithLatinRecovery(), cancellationToken);
+
     public void Dispose()
     {
         englishToKorean.Dispose();

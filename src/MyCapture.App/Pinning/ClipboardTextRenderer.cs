@@ -43,7 +43,7 @@ internal static class ClipboardTextRenderer
     private const int MaxTableInspectedCharacters = 65_536;
 
     private static readonly CultureInfo TextCulture = CultureInfo.GetCultureInfo("ko-KR");
-    private static readonly Typeface TextTypeface = new(
+    internal static readonly Typeface TextTypeface = new(
         new FontFamily("Segoe UI"),
         FontStyles.Normal,
         FontWeights.Normal,

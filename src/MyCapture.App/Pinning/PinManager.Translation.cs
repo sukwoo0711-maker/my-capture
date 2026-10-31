@@ -1,6 +1,7 @@
 using System.Windows.Media.Imaging;
 using Microsoft.Extensions.Logging;
 using MyCapture.Core.Localization;
+using MyCapture.Ocr;
 using MyCapture.Ocr.Translation;
 
 namespace MyCapture.App.Pinning;
@@ -9,6 +10,7 @@ internal sealed partial class PinManager
 {
     private Func<PinTranslationDirection, ITextTranslator?>? _translators;
     private Func<BitmapSource, CancellationToken, Task<string?>>? _recognizeText;
+    private Func<BitmapSource, CancellationToken, Task<OcrResult>>? _recognizeImage;
     private readonly Dictionary<PinWindow, CancellationTokenSource> _translationOperations = [];
 
     /// <summary>One translator for both directions; tests and single-model hosts.</summary>
@@ -29,6 +31,9 @@ internal sealed partial class PinManager
     internal void ConfigureImageTranslation(Func<BitmapSource, CancellationToken, Task<string?>> recognizeText) =>
         _recognizeText = recognizeText ?? throw new ArgumentNullException(nameof(recognizeText));
 
+    internal void ConfigureImageTranslation(Func<BitmapSource, CancellationToken, Task<OcrResult>> recognizeImage) =>
+        _recognizeImage = recognizeImage ?? throw new ArgumentNullException(nameof(recognizeImage));
+
     private static bool TargetIsKorean => UiText.Culture.TwoLetterISOLanguageName.Equals("ko", StringComparison.OrdinalIgnoreCase);
 
     private static PinTranslationDirection DirectionFor(bool targetIsKorean) =>
@@ -48,7 +53,7 @@ internal sealed partial class PinManager
         if (source.Kind == PinContentKind.Image)
         {
             // The language of a picture is known only after its text is read, when the command runs.
-            if (_recognizeText is not null) pin.SetTranslationState(PinTranslationState.Available);
+            if (_recognizeText is not null || _recognizeImage is not null) pin.SetTranslationState(PinTranslationState.Available);
             return;
         }
         PinTranslationDecision decision = PinTranslationService.Evaluate(source, korean);
@@ -80,7 +85,7 @@ internal sealed partial class PinManager
         bool korean = TargetIsKorean;
         PinTranslationDirection direction = DirectionFor(korean);
         bool picture = source.Kind == PinContentKind.Image;
-        if (picture ? _recognizeText is null
+        if (picture ? _recognizeText is null && _recognizeImage is null
             : PinTranslationService.Evaluate(source, korean).Availability != PinTranslationAvailability.Translatable) return;
         ITextTranslator? translator = _translators(direction);
         if (translator is null)
@@ -109,12 +114,18 @@ internal sealed partial class PinManager
         {
             token.ThrowIfCancellationRequested();
             string? recognized = null;
+            OcrResult? recognition = null;
             if (source.Kind == PinContentKind.Image)
             {
                 // Read the picture first: a picture that is already in the target language
                 // must not ask for a model it will never use.
                 pin.SetTranslationState(PinTranslationState.Translating);
-                recognized = await _recognizeText!(source.Image, token);
+                if (_recognizeImage is not null)
+                {
+                    recognition = await _recognizeImage(source.Image, token);
+                    recognized = recognition.HasText ? OcrExtractionAnalyzer.Analyze(recognition).Text(joinLines: false) : null;
+                }
+                else recognized = await _recognizeText!(source.Image, token);
                 if (!Current()) return;
                 if (string.IsNullOrWhiteSpace(recognized))
                 {
@@ -152,11 +163,13 @@ internal sealed partial class PinManager
             }
             pin.SetTranslationState(PinTranslationState.Translating);
             var service = new PinTranslationService(translator, direction);
-            PinTranslationResult? result = recognized is null
+            PinTranslationResult? result = recognition is not null
+                ? await service.TranslateRecognizedAsync(recognition, source, token)
+                : recognized is null
                 ? await service.TranslateAsync(source, token)
                 : await service.TranslateRecognizedAsync(recognized, source, token);
             if (!Current()) return;
-            if (result is not null) pin.ApplyTranslation(result.Content, result.NeedsReview, korean);
+            if (result is not null) pin.ApplyTranslation(result.Content, result.NeedsReview, korean, result.Document);
             else pin.SetTranslationDisabled(UiText.Get(korean ? "Pin_AlreadyKorean" : "Pin_AlreadyEnglish"));
         }
         catch (OperationCanceledException) when (token.IsCancellationRequested) { }

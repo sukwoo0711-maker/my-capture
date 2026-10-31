@@ -283,7 +283,7 @@ public partial class App : Application
         {
             _pins.ConfigureTranslation(_services.GetRequiredService<PinTranslationEngines>().For);
             // A picture pin reads its text with the app's recognizer when the user asks to translate it.
-            _pins.ConfigureImageTranslation((image, token) => PinTranslationEngines.RecognizeAsync(
+            _pins.ConfigureImageTranslation((image, token) => PinTranslationEngines.RecognizeResultAsync(
                 _ocrService, image, _settings?.Ocr ?? new MyCapture.Core.Settings.OcrSettings(), token));
         }
         _pins.ClickThroughHintShown += SaveFirstUseTips;

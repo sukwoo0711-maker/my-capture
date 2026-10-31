@@ -23,7 +23,11 @@ public sealed record OcrTable(
 
 public sealed record OcrCode(string Text, string? Language, bool? IsMonospaced,
     double CharacterWidth, IReadOnlyList<OcrRect> Regions);
-public sealed record OcrParagraph(IReadOnlyList<string> Lines, OcrRect Bounds);
+public sealed record OcrParagraph(IReadOnlyList<string> Lines, OcrRect Bounds)
+{
+    /// <summary>Paragraph lines and words in original-image pixels.</summary>
+    public IReadOnlyList<OcrLine> SourceLines { get; init; } = [];
+}
 
 public sealed record OcrExtraction(OcrTable Table, OcrCode Code,
     IReadOnlyList<OcrParagraph> Paragraphs, bool HasGeometry)
@@ -101,7 +105,14 @@ public static class OcrExtractionAnalyzer
                 Regions = extraction.Code.Regions.Select(orientation.ToOriginal).ToArray(),
             },
             Paragraphs = extraction.Paragraphs.Select(paragraph => paragraph with
-                { Bounds = orientation.ToOriginal(paragraph.Bounds) }).ToArray(),
+                {
+                    Bounds = orientation.ToOriginal(paragraph.Bounds),
+                    SourceLines = paragraph.SourceLines.Select(line => line with
+                    {
+                        Bounds = orientation.ToOriginal(line.Bounds),
+                        Words = line.Words.Select(word => word with { Bounds = orientation.ToOriginal(word.Bounds) }).ToArray(),
+                    }).ToArray(),
+                }).ToArray(),
         };
     }
 

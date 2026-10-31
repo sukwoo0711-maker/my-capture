@@ -14,7 +14,7 @@ using Xunit;
 namespace MyCapture.App.Tests;
 
 // No user clipboard, visible windows, model, network, or filesystem operations.
-public sealed class PinTranslationIntegrationTests : KoreanCaptionTest
+public sealed partial class PinTranslationIntegrationTests : KoreanCaptionTest
 {
     private const string English = "Save the document before closing the window.";
     private const string Korean = "창을 닫기 전에 문서를 저장합니다.";

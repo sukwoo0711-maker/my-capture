@@ -5552,4 +5552,10 @@ Install the model?</value></data>
   <data name="GifExport_PreviewMemoryLimit" xml:space="preserve"><value>Preview memory limit reached. Reduce the size or selected range.</value></data>
   <data name="GifExport_SavedSize" xml:space="preserve"><value>Saved · {0} · {1}</value></data>
   <data name="GifExport_SizeEstimate" xml:space="preserve"><value>Estimated size about {0} ({3}) · {1:N0} frames · playback {2:N1}s</value></data>
+  <data name="Pin_TranslationDocumentView" xml:space="preserve">
+    <value>Show translation as text</value>
+  </data>
+  <data name="Pin_TranslationPictureView" xml:space="preserve">
+    <value>Show translation on picture</value>
+  </data>
 </root>

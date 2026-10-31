@@ -11,6 +11,9 @@ internal sealed partial class PinWindow
 {
     private PinContent? _translationOriginal;
     private PinContent? _translationResult;
+    private PinContent? _translationDocument;
+    private bool _showingTranslationDocument;
+    private (double Width, double Height, double Zoom, double Left, double Top)? _pictureViewBeforeDocument;
     private bool _showingTranslation;
     private bool _translationNeedsReview;
     private bool _translationToKorean = true;
@@ -21,6 +24,7 @@ internal sealed partial class PinWindow
     private PinContent? _markdownSourceContent;
     internal PinTranslationState TranslationState { get; private set; }
     internal bool IsShowingTranslation => _showingTranslation;
+    internal bool IsShowingTranslationDocument => _showingTranslation && _showingTranslationDocument;
     internal string? DisplayedText => _content.OriginalText;
     internal Task TranslationWork { get; set; } = Task.CompletedTask;
     internal event Action<bool>? TranslationRequested;
@@ -40,9 +44,14 @@ internal sealed partial class PinWindow
     internal PinContent TranslationSourceContent => _translationOriginal is null ? _content
         : _translationOriginal.WithCurrentProvenance(_content.Provenance);
 
+    internal (double Width, double Height, double Zoom) TranslationSourceView =>
+        TranslationSourceContent.Kind == PinContentKind.Image && _pictureViewBeforeDocument is { } view
+            ? (view.Width, view.Height, view.Zoom) : (_state.ImageWidthDip, _state.ImageHeightDip, _state.Zoom);
+
     /// <summary>The content whose diagrams the pin is showing: the translation while it is shown.</summary>
     internal PinContent DisplayedDocumentContent => _showingTranslation && _translationResult is not null
-        ? _translationResult : TranslationSourceContent;
+        ? _showingTranslationDocument && _translationDocument is not null ? _translationDocument : _translationResult
+        : TranslationSourceContent;
 
     private double TranslationFitScale => !_showingTranslation && !_showingMarkdownSource ? 1 : Math.Min(1,
         Math.Min(_state.ImageWidthDip / DisplayContent.LayoutWidthDip, _state.ImageHeightDip / DisplayContent.LayoutHeightDip));
@@ -96,7 +105,7 @@ internal sealed partial class PinWindow
         ShowFeedback(text, FeedbackKind.Result);
     }
 
-    internal void ApplyTranslation(PinContent translated, bool needsReview, bool toKorean = true)
+    internal void ApplyTranslation(PinContent translated, bool needsReview, bool toKorean = true, PinContent? document = null)
     {
         ArgumentNullException.ThrowIfNull(translated);
         if (_isClosed) return;
@@ -104,6 +113,8 @@ internal sealed partial class PinWindow
         _naturalSizeBeforeTranslation ??= (_state.ImageWidthDip, _state.ImageHeightDip);
         _translationToKorean = toKorean;
         _translationResult = translated;
+        _translationDocument = document;
+        _showingTranslationDocument = false;
         _translationNeedsReview = needsReview;
         TranslationState = PinTranslationState.Translated;
         // Don't replace text under an active selection. The command remains available.
@@ -120,7 +131,14 @@ internal sealed partial class PinWindow
         if (IsTextSelectionMode) LeaveTextSelection(restoreFocus: false);
         _showingMarkdownSource = false;
         EndDrag();
-        PinContent next = translated ? _translationResult : _translationOriginal;
+        bool wasDocument = !_translationOriginal.CanRerender && _content.CanRerender;
+        if (!translated) _showingTranslationDocument = false;
+        PinContent next = translated
+            ? _showingTranslationDocument && _translationDocument is not null ? _translationDocument : _translationResult
+            : _translationOriginal;
+        bool isDocument = !_translationOriginal.CanRerender && next.CanRerender;
+        if (isDocument && !wasDocument)
+            _pictureViewBeforeDocument = (_state.ImageWidthDip, _state.ImageHeightDip, _state.Zoom, Left, Top);
         _showingTranslation = translated;
         _content = next.WithCurrentProvenance(_content.Provenance).RenderedAt(next.MermaidResults is not null
             ? MermaidDisplayScale : VisualTreeHelper.GetDpi(this).DpiScaleX);
@@ -128,12 +146,31 @@ internal sealed partial class PinWindow
         _imageElement.Source = _content.Image;
         // Keep position, frame, zoom and opacity stable when changing languages, except when a picture
         // becomes a text document (or back): that has its own natural size, so the frame follows it.
-        bool pictureSwap = !_translationOriginal.CanRerender && _translationResult.CanRerender;
-        if (pictureSwap) FitFrameToDisplayedContent(translated);
-        _chrome.Background = translated ? Brushes.White : null;
+        if (isDocument != wasDocument)
+        {
+            if (isDocument) FitFrameToDisplayedContent(true);
+            else if (_pictureViewBeforeDocument is { } view)
+            {
+                _state.ReplaceImageSize(view.Width, view.Height);
+                _state.SetZoom(view.Zoom);
+                Width = _state.WidthDip;
+                Height = _state.HeightDip;
+                ApplyPositionKeepingGrabbable(view.Left, view.Top);
+                _pictureViewBeforeDocument = null;
+            }
+            else FitFrameToDisplayedContent(false);
+        }
+        _chrome.Background = translated && _content.Kind != PinContentKind.Image ? Brushes.White : null;
         UpdateImageRasterLayout();
         RefreshTranslationActions();
         ViewStateChanged?.Invoke();
+    }
+
+    internal void SetTranslationDocumentDisplay(bool document)
+    {
+        if (!_showingTranslation || _translationDocument is null || _translationResult?.Kind != PinContentKind.Image) return;
+        _showingTranslationDocument = document;
+        SetTranslationDisplay(true);
     }
 
     private void FitFrameToDisplayedContent(bool translated)
@@ -215,6 +252,9 @@ internal sealed partial class PinWindow
         menu.Items.Add(action);
         if (_showingTranslation && _translationResult?.OriginalText is not null)
             menu.Items.Add(MenuItemFor(UiText.Get("Pin_CopyTranslation"), (_, _) => RequestTranslatedTextCopy()));
+        if (_showingTranslation && _translationDocument is not null && _translationResult?.Kind == PinContentKind.Image)
+            menu.Items.Add(MenuItemFor(UiText.Get(_showingTranslationDocument ? "Pin_TranslationPictureView" : "Pin_TranslationDocumentView"),
+                (_, _) => SetTranslationDocumentDisplay(!_showingTranslationDocument)));
         menu.Items.Add(new Separator());
     }
 
