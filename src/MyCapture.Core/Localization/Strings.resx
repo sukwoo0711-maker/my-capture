@@ -3289,6 +3289,11 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="Ocr_ReplaceEditedText" xml:space="preserve"><value>수정한 텍스트를 새 인식 결과로 바꾸시겠습니까?</value></data>
   <data name="Ocr_AccuracySaveFailed" xml:space="preserve"><value>인식 정확도를 저장하지 못했습니다.</value></data>
   <data name="Ocr_ExportText" xml:space="preserve"><value>텍스트 내보내기</value></data>
+  <data name="Ocr_Pin" xml:space="preserve"><value>핀으로 띄우기</value></data>
+  <data name="Ocr_Pinned" xml:space="preserve"><value>핀으로 띄웠습니다.</value></data>
+  <data name="Ocr_EditedCells" xml:space="preserve"><value>편집 {0}곳</value></data>
+  <data name="Ocr_Edited" xml:space="preserve"><value>편집됨</value></data>
+  <data name="Ocr_RevertEdits" xml:space="preserve"><value>원래대로</value></data>
   <data name="Ocr_ExportDone" xml:space="preserve"><value>텍스트 저장됨:</value></data>
   <data name="Ocr_ExportNone" xml:space="preserve"><value>내보낼 인식 텍스트가 없습니다.</value></data>
   <data name="GitHub.TokenFailed" xml:space="preserve"><value>토큰 업로드 실패 — 브라우저 방식으로 전환합니다.</value></data>
@@ -4656,6 +4661,7 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="Tray_ClearClickThrough" xml:space="preserve"><value>모든 핀 클릭 허용 해제</value></data>
   <data name="Tray_Help" xml:space="preserve"><value>도움말</value></data>
 <data name="Tray_OpenPins" xml:space="preserve"><value>열린 핀</value></data>
+  <data name="Tray_PinHidden" xml:space="preserve"><value>숨김</value></data>
   <data name="Tray_PinKindText" xml:space="preserve"><value>텍스트</value></data>
   <data name="Tray_PinKindCode" xml:space="preserve"><value>코드</value></data>
   <data name="Tray_PinKindTable" xml:space="preserve"><value>표</value></data>
@@ -4688,6 +4694,10 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="Onboard_PinWheelDown" xml:space="preserve"><value>Ctrl+휠 아래</value></data>
   <data name="Onboard_PinWheelUp" xml:space="preserve"><value>Ctrl+휠 위</value></data>
   <data name="Onboard_PinAllowClickThrough" xml:space="preserve"><value>뒤 창 클릭 허용</value></data>
+  <data name="Pin_Hide" xml:space="preserve"><value>숨기기</value></data>
+  <data name="Pin_HideHelp" xml:space="preserve"><value>이 핀을 숨깁니다. 트레이의 '열린 핀'에서 고르거나 '핀 모두 보이기'를 누르면 다시 보입니다.</value></data>
+  <data name="Pin_ShowOnly" xml:space="preserve"><value>이 핀만 보기</value></data>
+  <data name="Pin_ShowOnlyHelp" xml:space="preserve"><value>다른 핀을 모두 숨깁니다. '핀 모두 보이기'를 누르면 다시 보입니다.</value></data>
   <data name="Onboard_PinAllowClickThroughHelp" xml:space="preserve"><value>마우스 입력을 뒤에 있는 창으로 보냅니다. 핀 오른쪽 위 손잡이를 누르면 바로 끕니다. 해제: {0}</value></data>
   <data name="Onboard_PinClickThroughOn" xml:space="preserve"><value>뒤 창 클릭 허용 켜짐
 해제: {0}</value></data>

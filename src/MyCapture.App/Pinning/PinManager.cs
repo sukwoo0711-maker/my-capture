@@ -223,7 +223,7 @@ internal sealed partial class PinManager
 
     internal event Action? ClickThroughHintShown;
 
-    /// <summary>Raised after pins open, close, or finish changing their saved presentation.</summary>
+    /// <summary>Raised after pins open, close, change visibility, or finish changing their saved presentation.</summary>
     internal event Action? OpenPinsChanged;
 
     internal Func<IReadOnlyList<IntPtr>, IReadOnlyList<IntPtr>>? ReadPinOrderForTest { get; set; }
@@ -246,10 +246,11 @@ internal sealed partial class PinManager
     {
         Prune();
         if (!_pins.Contains(pin)) return;
-        if (AreHidden) ShowAllPins(clearClickThrough: false);
+        if (pin.State.IsHidden) ShowPinWindow(pin, pin.ShowPin);
         if (pin.State.IsClickThrough) pin.ApplyClickThrough(enabled: false);
         if (ActivatePinForTest is { } activatePin) activatePin(pin);
         else pin.Activate();
+        pin.PlayFindCue();
     }
 
     /// <summary>Snapshots live pins bottom-to-top, keeping opening age separate from stacking.</summary>
@@ -291,8 +292,17 @@ internal sealed partial class PinManager
         }
     }
 
-    /// <summary>Whether pins are currently hidden by the global hide-all toggle.</summary>
-    internal bool AreHidden { get; private set; }
+    /// <summary>Whether at least one open pin is hidden.</summary>
+    internal bool AnyHidden
+    {
+        get
+        {
+            Prune();
+            return _pins.Any(pin => pin.State.IsHidden);
+        }
+    }
+
+    internal bool AreHidden => AnyHidden;
 
     /// <summary>Number of open pins, shown or hidden, that let clicks through to the windows behind.</summary>
     internal int ClickThroughCount
@@ -615,6 +625,10 @@ internal sealed partial class PinManager
     private void AttachAndShow(PinWindow pin, bool activate, bool landing = true)
     {
         pin.CloseAllRequested += (_, _) => CloseAll();
+        pin.HideRequested += (_, _) => pin.HidePin();
+        pin.ShowOnlyRequested += (_, _) => ShowOnlyPin(pin);
+        pin.CanShowOnlyPin = () => _pins.Any(other => other != pin && !other.IsClosed && !other.State.IsHidden);
+        pin.HiddenStateChanged += NotifyOpenPinsChanged;
         pin.CopyRequested += OnPinCopyRequested;
         pin.OriginalTextCopyRequested += OnPinOriginalTextCopyRequested;
         pin.OcrRequested += (_, source) => OcrRequested?.Invoke(pin, source);
@@ -801,7 +815,15 @@ internal sealed partial class PinManager
         return cleared;
     }
 
-    /// <summary>Hides every pin if any are visible, otherwise reveals them all.</summary>
+    private void ShowOnlyPin(PinWindow chosen)
+    {
+        Prune();
+        if (!_pins.Contains(chosen)) return;
+        foreach (PinWindow other in _pins.Where(pin => pin != chosen).ToArray()) other.HidePin();
+        if (chosen.State.IsHidden) ShowPinWindow(chosen, chosen.ShowPin);
+    }
+
+    /// <summary>Shows every pin if any is hidden; otherwise hides every pin.</summary>
     /// <remarks>
     /// Revealing also turns click-through off, a second way back for a pin that turned it on
     /// from its context menu while the global
@@ -819,31 +841,30 @@ internal sealed partial class PinManager
             return;
         }
 
-        if (AreHidden)
+        if (AnyHidden)
         {
             ShowAllPins(clearClickThrough: true);
         }
         else
         {
-            foreach (PinWindow pin in _pins)
+            foreach (PinWindow pin in _pins.ToArray())
             {
                 pin.HidePin();
             }
 
-            AreHidden = true;
             _log.LogInformation("Hid {Count} pin(s)", _pins.Count);
         }
     }
 
     private void ShowAllPins(bool clearClickThrough)
     {
-        foreach (PinWindow pin in _pins)
+        foreach (PinWindow pin in _pins.ToArray())
         {
+            if (pin.IsClosed) continue;
             if (clearClickThrough && pin.State.IsClickThrough) pin.ApplyClickThrough(enabled: false);
             ShowPinWindow(pin, pin.ShowPin);
         }
 
-        AreHidden = false;
         _log.LogInformation("Revealed {Count} pin(s)", _pins.Count);
     }
 
@@ -913,7 +934,6 @@ internal sealed partial class PinManager
         }
 
         _pins.Clear();
-        AreHidden = false;
     }
 
     private async void OnPinCopyRequested(object? sender, PinImageCopyRequest request)

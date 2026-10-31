@@ -68,6 +68,7 @@ internal sealed partial class OcrResultWindow
         options.Children.Add(_joinLines);
         options.Children.Add(_firstRowHeader);
         options.Children.Add(_codeBadge);
+        AddEditIndicator(options);
         options.Children.Add(_clearSelection);
         Grid.SetRow(options, 1);
         workspace.Children.Add(options);
@@ -102,7 +103,7 @@ internal sealed partial class OcrResultWindow
         results.Children.Add(_textBox);
         _tableGrid = new DataGrid
         {
-            IsReadOnly = true, AutoGenerateColumns = false, CanUserAddRows = false, CanUserDeleteRows = false,
+            IsReadOnly = false, AutoGenerateColumns = false, CanUserAddRows = false, CanUserDeleteRows = false,
             CanUserResizeRows = false, HeadersVisibility = DataGridHeadersVisibility.Column,
             SelectionMode = DataGridSelectionMode.Extended, SelectionUnit = DataGridSelectionUnit.CellOrRowHeader,
             ClipboardCopyMode = DataGridClipboardCopyMode.IncludeHeader,
@@ -181,6 +182,11 @@ internal sealed partial class OcrResultWindow
             button.SetResourceReference(StyleProperty, action.Key == "OCR410_CopyTsv" ? "Button.Primary" : "Button.Ghost");
             button.Click += (_, _) => action.Execute();
             _tableActions.Children.Add(button);
+            if (action.Key == "OCR410_CopyTsv")
+            {
+                _tablePinButton = CreatePinButton();
+                _tableActions.Children.Add(_tablePinButton);
+            }
         }
         buttons.Children.Add(_tableActions);
     }
@@ -188,15 +194,17 @@ internal sealed partial class OcrResultWindow
     private void CompleteAdvancedSetup(Button exportButton)
     {
         _plainExportButton = exportButton;
+        InitializeEditing();
         _tabs.SelectionChanged += (_, e) =>
         {
             if (!ReferenceEquals(e.Source, _tabs) || _updatingAdvanced) return;
+            _hoverRow = null;
             _modeChosen = true;
             RefreshAdvancedView();
             RequestGeometryIfNeeded();
         };
-        _joinLines.Checked += (_, _) => RefreshAdvancedView();
-        _joinLines.Unchecked += (_, _) => RefreshAdvancedView();
+        _joinLines.Checked += (_, _) => ChangeJoinLines();
+        _joinLines.Unchecked += (_, _) => ChangeJoinLines();
         _firstRowHeader.Checked += (_, _) => RefreshAdvancedView();
         _firstRowHeader.Unchecked += (_, _) => RefreshAdvancedView();
         _clearSelection.Click += (_, _) => _imageOverlay.SetSelection(null);
@@ -204,6 +212,12 @@ internal sealed partial class OcrResultWindow
         {
             if (_updatingAdvanced || _result is null || _allExtraction is null) return;
             if (ExtractionMode == OcrExtractionMode.Translation && RevealTranslationBlock(_imageOverlay.Selection)) return;
+            if (!ConfirmReplacement())
+            {
+                _imageOverlay.SetSelection(_deferredSelection, notify: false);
+                return;
+            }
+            ResetEdits();
             _deferredSelection = _imageOverlay.Selection;
             if (!_allExtraction.HasGeometry && _deferredSelection is not null)
             {
@@ -246,11 +260,12 @@ internal sealed partial class OcrResultWindow
 
     private void ClearAdvancedResult()
     {
+        ResetEdits();
         _result = null;
         _allExtraction = null;
         _currentExtraction = null;
         ResetTranslation();
-        _textBox.Clear();
+        SetEditorText(string.Empty);
         _tableGrid.ItemsSource = null;
         _tableGrid.Columns.Clear();
         _imageOverlay.SetSelection(null, notify: false);
@@ -299,12 +314,21 @@ internal sealed partial class OcrResultWindow
         _updatingAdvanced = false;
     }
 
-    private OcrTable CurrentTable() => (_currentExtraction?.Table ?? OcrTable.Empty)
-        with { HasHeader = _firstRowHeader.IsChecked == true };
+    internal OcrTable CurrentTable()
+    {
+        OcrTable table = _currentExtraction?.Table ?? OcrTable.Empty;
+        return table with
+        {
+            HasHeader = _firstRowHeader.IsChecked == true,
+            Rows = table.Rows.Select((row, r) => new OcrTableRow(row.Cells.Select((cell, c) =>
+                _tableEdits.TryGetValue((r, c), out string? text) ? cell with { Text = text } : cell).ToArray())).ToArray(),
+        };
+    }
 
     private void RefreshAdvancedView()
     {
         if (_updatingAdvanced) return;
+        CommitTableEdit();
         OcrExtractionMode mode = ExtractionMode;
         bool table = mode == OcrExtractionMode.Table;
         bool translation = mode == OcrExtractionMode.Translation;
@@ -328,19 +352,23 @@ internal sealed partial class OcrResultWindow
             mode == OcrExtractionMode.Code ? "Consolas, Malgun Gothic" : "Segoe UI, Malgun Gothic");
         // In the translation view the hidden text box holds the translations for copy and export.
         if (translation) EnsureTranslation();
-        _textBox.Text = _currentExtraction is null ? "" : mode switch
+        string generated = _currentExtraction is null ? "" : mode switch
         {
             OcrExtractionMode.Table => OcrTableExport.Tsv(CurrentTable()),
             OcrExtractionMode.Code => _currentExtraction.Code.Text,
             OcrExtractionMode.Translation => _translationPanel.CopyText,
             _ => _currentExtraction.Text(_joinLines.IsChecked == true),
         };
-        _generatedText = _textBox.Text;
+        _generatedText = generated;
+        if (mode == OcrExtractionMode.Code) BuildCodeRegionMap();
+        SetEditorText(_textEdits.GetValueOrDefault(mode, generated));
         bool hasContent = _textBox.Text.Length > 0;
         _copyButton.IsEnabled = hasContent;
         _copyWithSourceButton.IsEnabled = translation && hasContent;
         _plainExportButton.IsEnabled = hasContent;
         _tableActions.IsEnabled = hasContent;
+        UpdateEditIndicator();
+        UpdatePinButtons();
         _codeBadge.Text = _currentExtraction is null ? "" : CodeBadge(_currentExtraction.Code);
         if (table) PopulateTable(CurrentTable());
         if (translation)
@@ -348,12 +376,13 @@ internal sealed partial class OcrResultWindow
             ShowTranslationRegions();
             return;
         }
-        _imageOverlay.SetRegions(_allExtraction is null ? [] : mode switch
+        _imageOverlay.SetRegions(_currentExtraction is null ? [] : mode switch
         {
-            OcrExtractionMode.Table => _allExtraction.Table.Rows.SelectMany(row => row.Cells).Select(cell => cell.Region),
-            OcrExtractionMode.Code => _allExtraction.Code.Regions,
-            _ => _allExtraction.Paragraphs.Select(paragraph => paragraph.Bounds),
+            OcrExtractionMode.Table => _currentExtraction.Table.Rows.SelectMany(row => row.Cells).Select(cell => cell.Region),
+            OcrExtractionMode.Code => _currentExtraction.Code.Regions,
+            _ => _currentExtraction.Paragraphs.Select(paragraph => paragraph.Bounds),
         });
+        UpdateSourceHighlight();
     }
 
     /// <summary>The primary button names what it copies in this view: the text, or only the translation.</summary>
@@ -378,16 +407,24 @@ internal sealed partial class OcrResultWindow
             style.Setters.Add(new Setter(TextBlock.TextAlignmentProperty,
                 table.Columns[column].IsNumeric ? TextAlignment.Right : TextAlignment.Left));
             style.Setters.Add(new Setter(TextBlock.PaddingProperty, new Thickness(8, 5, 8, 5)));
+            var editedStyle = new Style(typeof(DataGridCell), _tableGrid.CellStyle);
+            var edited = new DataTrigger { Binding = new Binding($"Cells[{column}].IsEdited"), Value = true };
+            edited.Setters.Add(new Setter(Control.BorderBrushProperty, new DynamicResourceExtension("State.Success")));
+            edited.Setters.Add(new Setter(Control.BorderThicknessProperty, new Thickness(2, 0, 0, 0)));
+            editedStyle.Triggers.Add(edited);
             _tableGrid.Columns.Add(new DataGridTextColumn
             {
                 Header = table.HasHeader && table.Rows.Count > 0
                     ? table.Rows[0].Cells[column].Text : OcrTableExport.ColumnName(column),
-                Binding = new Binding($"Cells[{column}].Text"),
+                Binding = new Binding($"Cells[{column}].Text") { Mode = BindingMode.TwoWay },
+                CellStyle = editedStyle,
                 ElementStyle = style, MinWidth = 80,
                 Width = new DataGridLength(1, DataGridLengthUnitType.Star),
             });
         }
-        _tableGrid.ItemsSource = table.Rows.Skip(table.HasHeader ? 1 : 0).ToArray();
+        _tableGrid.ItemsSource = table.Rows.Select((row, r) => new EditableRow(r,
+            row.Cells.Select((cell, c) => new EditableCell(cell.Text, _tableEdits.ContainsKey((r, c)))).ToArray()))
+            .Skip(table.HasHeader ? 1 : 0).ToArray();
     }
 
     private string CodeBadge(OcrCode code)
@@ -408,7 +445,7 @@ internal sealed partial class OcrResultWindow
     {
         if (ExtractionMode == OcrExtractionMode.Table) _ = _tableGrid.Focus();
         else if (ExtractionMode == OcrExtractionMode.Translation) _ = _tabs.Focus();
-        else { _ = _textBox.Focus(); _textBox.SelectAll(); }
+        else SelectAllText();
     }
 
     private void RequestGeometryIfNeeded(bool force = false)

@@ -31,6 +31,8 @@ internal sealed class OcrImageOverlay : FrameworkElement
     private IReadOnlyList<OcrRect> _regions = [];
     private IReadOnlyList<string> _labels = [];
     private int? _highlightedRegion;
+    private IReadOnlyList<int> _highlightedRegions = [];
+    internal IReadOnlyList<int> HighlightedRegions => _highlightedRegions;
     private Point? _dragStart;
     private Point _dragEnd;
     private int _activeRegion;
@@ -47,10 +49,17 @@ internal sealed class OcrImageOverlay : FrameworkElement
         get => _highlightedRegion;
         set
         {
-            if (_highlightedRegion == value) return;
-            _highlightedRegion = value;
-            InvalidateVisual();
+            SetHighlightedRegions(value is int index ? [index] : []);
         }
+    }
+
+    internal void SetHighlightedRegions(IEnumerable<int> indices)
+    {
+        int[] next = indices.Where(index => index >= 0 && index < _regions.Count).Distinct().ToArray();
+        if (_highlightedRegions.SequenceEqual(next)) return;
+        _highlightedRegions = next;
+        _highlightedRegion = next.Length == 1 ? next[0] : null;
+        InvalidateVisual();
     }
 
     internal OcrImageOverlay()
@@ -84,6 +93,7 @@ internal sealed class OcrImageOverlay : FrameworkElement
         _regions = [.. kept.Select(entry => entry.Region)];
         _labels = labels is null ? [] : [.. kept.Select(entry => entry.Label ?? "")];
         _highlightedRegion = null;
+        _highlightedRegions = [];
         _activeRegion = Math.Clamp(_activeRegion, 0, Math.Max(0, _regions.Count - 1));
         InvalidateVisual();
     }
@@ -115,7 +125,7 @@ internal sealed class OcrImageOverlay : FrameworkElement
             drawing.DrawRectangle(null, new Pen(halo, 3), ViewRect(region, fit));
             drawing.DrawRectangle(null, pen, ViewRect(region, fit));
         }
-        if (_highlightedRegion is int highlighted && highlighted >= 0 && highlighted < _regions.Count)
+        foreach (int highlighted in _highlightedRegions)
         {
             drawing.DrawRectangle(null, new Pen(halo, 5), ViewRect(_regions[highlighted], fit));
             drawing.DrawRectangle(null, new Pen(brush, 2.5), ViewRect(_regions[highlighted], fit));

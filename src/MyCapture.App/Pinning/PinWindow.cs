@@ -112,6 +112,7 @@ internal sealed partial class PinWindow : Window
     private bool _windowClosed;
     private bool _saveInProgress;
     private MenuItem? _restoreClosedItem;
+    private MenuItem? _showOnlyItem;
     private MenuItem? _clickThroughItem;
     private MenuItem? _selectTextItem;
     private PinTextSelectionView? _textSelection;
@@ -121,6 +122,8 @@ internal sealed partial class PinWindow : Window
     private DispatcherTimer? _landingResetTimer;
     private RectD _landingBounds;
     private double _landingAccentAmount;
+    private bool _findCueRunning;
+    private bool _landingRenderingAttached;
 
     internal PinWindow(
         PinContent content,
@@ -489,6 +492,10 @@ internal sealed partial class PinWindow : Window
     /// <summary>Raised when the user asks (via this pin) to close every pin.</summary>
     internal event EventHandler? CloseAllRequested;
 
+    internal event EventHandler? HideRequested;
+    internal event EventHandler? ShowOnlyRequested;
+    internal event Action? HiddenStateChanged;
+
     /// <summary>Raised when the user copies this pin's image, with the page it came from.</summary>
     internal event EventHandler<PinImageCopyRequest>? CopyRequested;
 
@@ -525,6 +532,7 @@ internal sealed partial class PinWindow : Window
     /// Set by the manager that owns the closed-pin history.
     /// </summary>
     internal Func<bool>? CanRestoreClosedPin { get; set; }
+    internal Func<bool>? CanShowOnlyPin { get; set; }
 
     /// <summary>
     /// The immutable content this pin shows. Closed pins are decoded losslessly on reopen;
@@ -754,6 +762,7 @@ internal sealed partial class PinWindow : Window
     /// <summary>Hides the pin while retaining its position and zoom.</summary>
     internal void HidePin()
     {
+        if (_isClosed || _state.IsHidden) return;
         _state.IsHidden = true;
         UpdateClickThroughHandle();
         CancelPendingProgress();
@@ -763,6 +772,7 @@ internal sealed partial class PinWindow : Window
         if (!FluidMotion.AnimationsEnabled || !IsVisible)
         {
             Hide();
+            HiddenStateChanged?.Invoke();
             return;
         }
 
@@ -779,11 +789,14 @@ internal sealed partial class PinWindow : Window
             }
         };
         _chrome.BeginAnimation(UIElement.OpacityProperty, fade, HandoffBehavior.SnapshotAndReplace);
+        HiddenStateChanged?.Invoke();
     }
 
     /// <summary>Reveals a hidden pin at its retained position and zoom.</summary>
     internal void ShowPin()
     {
+        if (_isClosed) return;
+        bool wasHidden = _state.IsHidden;
         _state.IsHidden = false;
         _chrome.BeginAnimation(UIElement.OpacityProperty, null);
         Show();
@@ -791,6 +804,7 @@ internal sealed partial class PinWindow : Window
         UpdateClickThroughHandle();
         Topmost = true;
         AnimatePinReveal();
+        if (wasHidden) HiddenStateChanged?.Invoke();
     }
 
     /// <summary>
@@ -1081,7 +1095,9 @@ internal sealed partial class PinWindow : Window
             (Brush?)GetValue(FrameAccentProperty),
             (Brush?)GetValue(FrameNeutralProperty),
             contrast,
-            emphasized: _chromeHover || _chromeActive);
+            // An activated pin already has a full accent. Give an explicit find cue its
+            // quiet baseline so both pulses remain visible, then restore focus emphasis.
+            emphasized: !(_findCueRunning && _landingRenderingAttached) && (_chromeHover || _chromeActive));
         if (_landingAccentAmount > 0)
         {
             target = BlendFrameColor(target, LandingAccentColor, _landingAccentAmount);
@@ -1771,6 +1787,40 @@ internal sealed partial class PinWindow : Window
     internal PinLandingDecoration? LandingDecoration => _landingDecoration;
     internal bool LandingStarted { get; private set; }
 
+    internal bool FindCueRunning => _findCueRunning;
+    internal double LandingAccentAmount => _landingAccentAmount;
+    internal bool LandingRenderingAttached => _landingRenderingAttached;
+
+    /// <summary>Locates a chosen pin with two outline pulses, without an opening ornament.</summary>
+    internal void PlayFindCue()
+    {
+        if (_isClosed || _state.IsHidden || !IsVisible) return;
+        StopLandingEffect();
+        _findCueRunning = true;
+        _landingClock = Stopwatch.StartNew();
+        (int left, int top, int right, int bottom) = PhysicalBounds;
+        _landingBounds = new RectD(left, top, right - left, bottom - top);
+        LocationChanged += OnLandingBoundsChanged;
+        SizeChanged += OnLandingSizeChanged;
+        IsVisibleChanged += OnLandingVisibilityChanged;
+        if (!FluidMotion.AnimationsEnabled)
+        {
+            _landingAccentAmount = 1;
+            UpdateChromeColor(animate: false);
+            _landingResetTimer = new DispatcherTimer(DispatcherPriority.Normal, Dispatcher)
+            {
+                Interval = TimeSpan.FromMilliseconds(1000),
+            };
+            _landingResetTimer.Tick += OnLandingReset;
+            _landingResetTimer.Start();
+            return;
+        }
+
+        _landingRenderingAttached = true;
+        CompositionTarget.Rendering += OnLandingRendering;
+        UpdateChromeColor(animate: false);
+    }
+
     /// <summary>Called in the same dispatcher turn immediately after a new/reopened pin's Show.</summary>
     internal void StartLandingEffect()
     {
@@ -1802,6 +1852,7 @@ internal sealed partial class PinWindow : Window
             return;
         }
 
+        _landingRenderingAttached = true;
         CompositionTarget.Rendering += OnLandingRendering;
         bool withinBurst = PinLandingDecoration.Throttle.TryAcquire(PinLandingDecoration.ReadOpeningTime());
         try
@@ -1824,12 +1875,14 @@ internal sealed partial class PinWindow : Window
     {
         if (_landingClock is not { } clock) return;
         double elapsed = clock.Elapsed.TotalMilliseconds;
-        if (elapsed >= PinLandingDecoration.OutlineEndMs)
+        double duration = PinLandingDecoration.OutlineEndMs * (_findCueRunning ? 2 : 1);
+        if (elapsed >= duration)
         {
             StopLandingEffect();
             return;
         }
-        double amount = PinLandingDecoration.Render(elapsed).BorderAccentAmount;
+        double amount = PinLandingDecoration.Render(_findCueRunning
+            ? elapsed % PinLandingDecoration.OutlineEndMs : elapsed).BorderAccentAmount;
         if (amount == _landingAccentAmount) return;
         _landingAccentAmount = amount;
         UpdateChromeColor(animate: false);
@@ -1853,6 +1906,8 @@ internal sealed partial class PinWindow : Window
     private void StopLandingEffect()
     {
         CompositionTarget.Rendering -= OnLandingRendering;
+        _landingRenderingAttached = false;
+        _findCueRunning = false;
         LocationChanged -= OnLandingBoundsChanged;
         SizeChanged -= OnLandingSizeChanged;
         IsVisibleChanged -= OnLandingVisibilityChanged;
@@ -2110,6 +2165,13 @@ internal sealed partial class PinWindow : Window
             ClickThroughGesture());
         menu.Items.Add(_clickThroughItem);
         menu.Items.Add(new Separator());
+        menu.Items.Add(MenuItemFor(UiText.Get("Pin_Hide"),
+            (_, _) => HideRequested?.Invoke(this, EventArgs.Empty), UiText.Get("Pin_HideHelp")));
+        _showOnlyItem = MenuItemFor(UiText.Get("Pin_ShowOnly"),
+            (_, _) => ShowOnlyRequested?.Invoke(this, EventArgs.Empty), UiText.Get("Pin_ShowOnlyHelp"));
+        _showOnlyItem.IsEnabled = false;
+        menu.Items.Add(_showOnlyItem);
+        menu.Items.Add(new Separator());
         _restoreClosedItem = MenuItemFor(
             UiText.Get("Onboard_TrayReopenPin"),
             (_, _) => RestoreClosedRequested?.Invoke(this, EventArgs.Empty),
@@ -2120,7 +2182,11 @@ internal sealed partial class PinWindow : Window
         menu.Items.Add(_restoreClosedItem);
         menu.Items.Add(MenuItemFor(UiText.Get("Dialog.Close"), (_, _) => CloseWithExit(), iconResourceKey: "Icon.Close", inputGestureText: "Esc"));
         menu.Items.Add(MenuItemFor(UiText.Get("Text_E657405F6B2D"), (_, _) => CloseAllRequested?.Invoke(this, EventArgs.Empty), iconResourceKey: "Icon.Close"));
-        menu.Opened += (_, _) => RefreshRestoreClosedMenuItem();
+        menu.Opened += (_, _) =>
+        {
+            RefreshRestoreClosedMenuItem();
+            RefreshShowOnlyMenuItem();
+        };
 
         ContextMenu = menu;
         if (_textSelection is not null) _textSelection.ContextMenu = menu;
@@ -2140,6 +2206,11 @@ internal sealed partial class PinWindow : Window
         _restoreClosedItem.IsEnabled = CanRestoreClosedPin?.Invoke() == true;
         _restoreClosedItem.InputGestureText = RestoreClosedGesture();
         if (_clickThroughItem is not null) _clickThroughItem.InputGestureText = ClickThroughGesture();
+    }
+
+    internal void RefreshShowOnlyMenuItem()
+    {
+        if (_showOnlyItem is not null) _showOnlyItem.IsEnabled = CanShowOnlyPin?.Invoke() == true;
     }
 
     private static string ClickThroughGesture()

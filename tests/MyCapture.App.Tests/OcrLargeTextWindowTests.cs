@@ -12,7 +12,7 @@ namespace MyCapture.App.Tests;
 public sealed class OcrLargeTextWindowTests
 {
     [Fact]
-    public void LargeReadonlyResultKeepsFullSelectionAndAutomationTextWithoutImeRangeQueries() => Ocr410Fixture.RunSta(() =>
+    public void LargeEditableResultKeepsFullSelectionAndAutomationTextWithoutImeRangeQueries() => Ocr410Fixture.RunSta(() =>
     {
         var window = new OcrResultWindow();
         Ocr410Fixture.LoadTheme(window);
@@ -25,7 +25,8 @@ public sealed class OcrLargeTextWindowTests
             TextBox box = Field<TextBox>(window, "_textBox");
             Assert.Equal(content, window.ExtractionText);
             Assert.Equal(content, box.SelectedText);
-            Assert.True(box.IsReadOnly);
+            Assert.False(box.IsReadOnly);
+            // The opening select-all is above the limit, so TSF never measures it.
             Assert.False(InputMethod.GetIsInputMethodEnabled(box));
             var scroll = (ScrollViewer)box.Template.FindName("PART_ContentHost", box);
             Assert.True(scroll.ScrollableHeight > 0);
@@ -35,11 +36,18 @@ public sealed class OcrLargeTextWindowTests
             box.Select(0, 2);
             Assert.Equal(content[..2], box.SelectedText);
             Assert.Equal(content[..2], Assert.Single(provider.GetSelection()).GetText(-1));
+            Assert.True(InputMethod.GetIsInputMethodEnabled(box));
             box.SelectAll();
             Assert.Equal(content, box.SelectedText);
+            Assert.False(InputMethod.GetIsInputMethodEnabled(box));
             Assert.True(window.ShortcutActions.ContainsKey("Copy"));
+            box.Select(0, OcrResultWindow.InputMethodSelectionLimit);
+            Assert.True(InputMethod.GetIsInputMethodEnabled(box));
+            box.Select(0, OcrResultWindow.InputMethodSelectionLimit + 1);
+            Assert.False(InputMethod.GetIsInputMethodEnabled(box));
             box.Select(0, 2);
             Assert.Equal(content[..2], box.SelectedText);
+            Assert.True(InputMethod.GetIsInputMethodEnabled(box));
         }
         finally { window.CloseForExit(); }
     });

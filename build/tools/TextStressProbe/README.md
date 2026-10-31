@@ -30,8 +30,10 @@ host adds payload loading, argument validation, runtime observations and hold mo
 - `editor`: actual image editor, insertion, append, native undo/redo, SelectAll,
   deferred selection/layout settle, no-selection scrolling, snapshot, commit and
   document undo/redo. The default burst keeps no settle between edits.
-- `ocr`: actual readonly OCR result, initial result/layout, full selection and
-  settle, no-selection scrolling, repeated result, close.
+- `ocr`: actual OCR result, initial result/layout, full selection and settle,
+  no-selection scrolling, select-all from a caret, 1,024- and 4,096-character
+  selections, a 50-character typing burst, repeated result and settle, close.
+  Each phase records whether the IME is on for the result box.
 - `editor-render`: synthetic actual editor HWND, then offscreen RenderTargetBitmap
   top/bottom PNGs using the existing recipe. Raster PNGs are not DWM presentation.
 
@@ -55,6 +57,8 @@ Optional `-Diagnostic` values preserve the earlier ablations: `readonly-no-ime`,
 option is used alone, matching the original exact-option check. Record ablations
 separately from actual product behavior. `line-selection` changes a process-wide
 WPF compatibility switch and therefore is a diagnostic, not a product recommendation.
+`ime-always-on` keeps the OCR box's IME on for every selection, the editable result
+without its selection limit. `readonly-no-ime` requires the earlier readonly result.
 
 ## Manual hold
 
