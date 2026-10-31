@@ -1,14 +1,17 @@
 <!--
   MyCapture design tokens: primitive values -> semantic aliases -> component dimensions.
 
-  Direction (design-system/mycapture/MASTER.md, "Iris"):
+  Direction (design-system/mycapture/MASTER.md):
     * Captured pixels stay dominant on quiet graphite surfaces with clear depth hierarchy.
-    * Brand red fills primary actions; selection and keyboard focus use neutral text outlines.
-    * Red fills are a deep red with white ink; the recording frame keeps the brighter red.
-    * Normal UI is flat and token-driven: no decorative gradients or unowned raw colours.
+    * The default accent is pin red (violet is the alternative), with dark ink on its fills.
+    * Selection and keyboard focus use neutral outlines; the 2-DIP focus ring is an overlay.
+    * Bundled Pretendard and the TypeScale ramp define UI text; content sizes stay separate.
+    * ThemeService resolves per-theme accent contrast and Windows high-contrast system colours.
+    * The MASTER token table lists these defaults before runtime palette overrides;
+      DesignGuidelinesSyncTests keeps its values and the ThemeFonts families in step with this file.
 
   Compatibility: every previously shipped resource key remains available. Legacy Warm,
-  Slate, Blue, Yellow, and Violet keys alias the Iris system so consuming windows and any
+  Slate, Blue, Yellow, and Violet names remain available so consuming windows and any
   restored XAML continue to resolve without migration.
 -->
 <ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
@@ -251,7 +254,7 @@
     <CornerRadius x:Key="Radius.Pill">999</CornerRadius>
 
     <!-- ============================================================= -->
-    <!-- Typography: local system fonts only (offline-safe)            -->
+    <!-- Typography: UI ramp lives in Themes/TypeScale.cs              -->
     <!-- ============================================================= -->
     <!-- The bundled Pretendard (Regular, Medium, SemiBold, Bold), falling back to Segoe UI and
          Malgun Gothic. Its surfaces use Ideal formatting, grayscale antialiasing and literal
@@ -260,12 +263,14 @@
     <x:Static x:Key="Font.Display" Member="themes:ThemeFonts.Display" />
     <FontFamily x:Key="Font.Mono">Cascadia Mono, Consolas, Malgun Gothic, monospace</FontFamily>
 
-    <sys:Double x:Key="FontSize.Caption">12</sys:Double>
-    <sys:Double x:Key="FontSize.Control">14</sys:Double>
-    <sys:Double x:Key="FontSize.Body">14</sys:Double>
-    <sys:Double x:Key="FontSize.Subtitle">20</sys:Double>
-    <sys:Double x:Key="FontSize.Title">28</sys:Double>
-    <sys:Double x:Key="FontSize.Display">28</sys:Double>
+    <x:Static x:Key="FontSize.Micro" Member="themes:TypeScale.Micro" />
+    <x:Static x:Key="FontSize.Caption" Member="themes:TypeScale.Caption" />
+    <x:Static x:Key="FontSize.Control" Member="themes:TypeScale.Control" />
+    <x:Static x:Key="FontSize.Body" Member="themes:TypeScale.Body" />
+    <x:Static x:Key="FontSize.BodyLarge" Member="themes:TypeScale.BodyLarge" />
+    <x:Static x:Key="FontSize.Subtitle" Member="themes:TypeScale.Subtitle" />
+    <x:Static x:Key="FontSize.Title" Member="themes:TypeScale.Title" />
+    <x:Static x:Key="FontSize.Display" Member="themes:TypeScale.Display" />
 
     <!-- ============================================================= -->
     <!-- Motion: shared Windows-aligned cadence. Render transforms and opacity only;
@@ -282,7 +287,7 @@
     <!-- ============================================================= -->
     <sys:Double x:Key="Size.HitTarget">36</sys:Double>
     <sys:Double x:Key="Size.HitTarget.Compact">32</sys:Double>
-    <sys:Double x:Key="Size.IconGlyph">16</sys:Double>
+    <x:Static x:Key="Size.IconGlyph" Member="themes:TypeScale.IconGlyph" />
     <sys:Double x:Key="Size.RailButton">44</sys:Double>
 
     <!-- ============================================================= -->

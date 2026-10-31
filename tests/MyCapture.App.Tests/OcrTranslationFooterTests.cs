@@ -4,6 +4,7 @@ using System.Windows.Automation;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using MyCapture.App.Ocr;
+using MyCapture.App.Themes;
 using MyCapture.Core.Localization;
 using MyCapture.Ocr;
 using MyCapture.Ocr.Translation;
@@ -200,8 +201,8 @@ public sealed class OcrTranslationFooterTests
     private static string LastText() =>
         Assert.IsType<string>(RecordingClipboard.LastWrite!.Formats[DataFormats.UnicodeText]);
 
-    private static string Status(OcrResultWindow window) => Descendants(window).OfType<TextBlock>()
-        .First(block => block.GetType().Name == "LiveTextBlock").Text;
+    private static string Status(OcrResultWindow window) => KoreanWordWrap.Strip(Descendants(window).OfType<TextBlock>()
+        .First(block => block.GetType().Name == "LiveTextBlock").Text);
 
     private static IEnumerable<DependencyObject> Descendants(DependencyObject root)
     {

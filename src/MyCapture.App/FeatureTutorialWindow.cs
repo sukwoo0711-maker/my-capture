@@ -97,7 +97,7 @@ internal class FeatureTutorialWindow : Window
         };
 
         var preview = new Grid();
-        _status.Text = UiText.Get("TextCapture_TutorialLoading");
+        KoreanWordWrap.Show(_status, UiText.Get("TextCapture_TutorialLoading"));
         _status.HorizontalAlignment = HorizontalAlignment.Center;
         _status.VerticalAlignment = VerticalAlignment.Center;
         _status.SetResourceReference(TextBlock.ForegroundProperty, "Text.Secondary");
@@ -400,7 +400,7 @@ internal class FeatureTutorialWindow : Window
         }
         _mediaOpen = true;
         _hasFirstFrame = false;
-        _status.Text = UiText.Get("TextCapture_TutorialLoading");
+        KoreanWordWrap.Show(_status, UiText.Get("TextCapture_TutorialLoading"));
         ShowPoster();
         _status.Visibility = HasPoster ? Visibility.Collapsed : Visibility.Visible;
         try { _media.Open(path); }
@@ -523,7 +523,7 @@ internal class FeatureTutorialWindow : Window
         _fallback = true;
         // The message replaces the picture; the steps below stay.
         ClearPoster();
-        _status.Text = UiText.Get(_feature.Id == "text-copy" ? "TextCapture_TutorialUnavailable" : "Tutorial.Unavailable");
+        KoreanWordWrap.Show(_status, UiText.Get(_feature.Id == "text-copy" ? "TextCapture_TutorialUnavailable" : "Tutorial.Unavailable"));
         _status.Visibility = Visibility.Visible;
         if (TutorialCatalog.PendingPracticeClips.Contains(_feature.Id))
         {
@@ -541,8 +541,8 @@ internal class FeatureTutorialWindow : Window
         _play.IsEnabled = _replay.IsEnabled = CanControl;
     }
 
-    private static TextBlock Paragraph(string text) => new() { Text = text, TextWrapping = TextWrapping.Wrap,
-        Margin = new Thickness(0, 0, 0, 8) };
+    private static TextBlock Paragraph(string text) => KoreanWordWrap.Show(new TextBlock { TextWrapping = TextWrapping.Wrap,
+        Margin = new Thickness(0, 0, 0, 8) }, text);
 
     /// <summary>
     /// Stacks the tutorial top to bottom. The 16:9 preview takes the height the other rows leave,

@@ -65,13 +65,13 @@ internal sealed class MediaDetailsWindow : Window
         AddFact("MediaInfo.Created", DateText(details.CreatedAt));
         AddFact("MediaInfo.Modified", DateText(details.ModifiedAt));
         AddFact("MediaInfo.Location", details.FilePath);
-        if (details.FileUnavailable) _status.Text = UiText.Get("MediaInfo.ReadFailed");
+        if (details.FileUnavailable) KoreanWordWrap.Show(_status, UiText.Get("MediaInfo.ReadFailed"));
         if (details.FilePath.Length == 0) return;
         var copy = ThemedDialog.CreateActionButton(UiText.Get("Library.Source.CopyPath"), primary: false);
         var folder = ThemedDialog.CreateActionButton(UiText.Get("Library.Source.OpenFolder"), primary: false);
-        copy.Click += (_, _) => _status.Text = CaptureSourceActions.Default.CopyPath(details.FilePath);
-        folder.Click += async (_, _) => _status.Text = await CaptureSourceActions.Default.OpenLocationAsync(
-            CaptureProvenance.Create(documentPath: details.FilePath), allowMissingParent: true);
+        copy.Click += (_, _) => KoreanWordWrap.Show(_status, CaptureSourceActions.Default.CopyPath(details.FilePath));
+        folder.Click += async (_, _) => KoreanWordWrap.Show(_status, await CaptureSourceActions.Default.OpenLocationAsync(
+            CaptureProvenance.Create(documentPath: details.FilePath), allowMissingParent: true));
         _facts.Children.Add(ThemedDialog.CreateActionRow(copy, folder));
     }
 
@@ -83,7 +83,7 @@ internal sealed class MediaDetailsWindow : Window
         if (summary.UnavailableCount > 0)
         {
             AddFact("MediaInfo.ReadableSize", SizeText(summary.TotalBytes));
-            _status.Text = UiText.Format("MediaInfo.UnavailableCount", summary.UnavailableCount);
+            KoreanWordWrap.Show(_status, UiText.Format("MediaInfo.UnavailableCount", summary.UnavailableCount));
         }
     }
 
@@ -92,7 +92,7 @@ internal sealed class MediaDetailsWindow : Window
         var row = new Grid { Margin = new Thickness(0, 0, 0, 10) };
         row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(110) });
         row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        var label = new TextBlock { Text = UiText.Get(key), TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 4, 12, 0) };
+        var label = KoreanWordWrap.Show(new TextBlock { TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 4, 12, 0) }, UiText.Get(key));
         label.SetResourceReference(TextBlock.ForegroundProperty, "Text.Secondary");
         var text = new TextBox { Text = value.Length == 0 ? UiText.Get("MediaInfo.Unavailable") : value,
             IsReadOnly = true, TextWrapping = TextWrapping.Wrap, BorderThickness = new Thickness(0),

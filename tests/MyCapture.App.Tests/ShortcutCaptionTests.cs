@@ -7,6 +7,7 @@ using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Xml.Linq;
 using MyCapture.App.Capture;
+using MyCapture.App.Themes;
 using MyCapture.App.Recording;
 using MyCapture.Core.Localization;
 using Xunit;
@@ -27,7 +28,9 @@ public sealed class ShortcutCaptionTests(ITestOutputHelper output)
         using Stream source = typeof(ShortcutCaptionTests).Assembly.GetManifestResourceStream("ThemeFixture.Tokens.xaml")!;
         XNamespace x = "http://schemas.microsoft.com/winfx/2006/xaml";
         XElement token = XDocument.Load(source).Root!.Elements().Single(element => (string?)element.Attribute(x + "Key") == "FontSize.Caption");
-        double caption = double.Parse(token.Value, System.Globalization.CultureInfo.InvariantCulture);
+        Assert.Equal(x + "Static", token.Name);
+        Assert.Equal("themes:TypeScale.Caption", (string?)token.Attribute("Member"));
+        double caption = TypeScale.Caption;
         Assert.Equal(ShortcutPresentation.CaptionFontSize, caption);
         Assert.Equal(12, caption);
     }

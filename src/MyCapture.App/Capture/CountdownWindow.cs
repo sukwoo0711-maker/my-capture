@@ -38,7 +38,7 @@ namespace MyCapture.App.Capture;
 /// </remarks>
 internal sealed class CountdownWindow : Window
 {
-    private const double DigitSize = 54;
+    private const double DigitSize = TypeScale.Content.CountdownDigit;
     private const double LandingScale = 1.22;
     private const double LeavingScale = 0.88;
 
@@ -162,7 +162,7 @@ internal sealed class CountdownWindow : Window
         {
             Text = UiText.Get("Text_651505CC0499"),
             Foreground = Application.Current?.TryFindResource("Text.Secondary") as Brush ?? Brushes.LightGray,
-            FontSize = 13,
+            FontSize = TypeScale.Caption,
             HorizontalAlignment = HorizontalAlignment.Center,
             Margin = new Thickness(0, 15, 0, 0),
         });
@@ -170,7 +170,7 @@ internal sealed class CountdownWindow : Window
         {
             Text = UiText.Get("Text_D75A61C65264"),
             Foreground = Application.Current?.TryFindResource("Text.Muted") as Brush ?? Brushes.LightGray,
-            FontSize = 12,
+            FontSize = TypeScale.Caption,
             HorizontalAlignment = HorizontalAlignment.Center,
             Margin = new Thickness(0, 8, 0, 0),
         });

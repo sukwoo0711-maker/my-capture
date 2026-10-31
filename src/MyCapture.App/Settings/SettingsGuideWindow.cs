@@ -80,7 +80,7 @@ internal sealed class SettingsGuideWindow : Window
         DockPanel.SetDock(footer, Dock.Bottom); root.Children.Add(footer);
 
         var body = new StackPanel();
-        var heading = Label(); heading.Text = guide.Title; heading.FontSize = 22; heading.FontWeight = FontWeights.SemiBold;
+        var heading = Label(); KoreanWordWrap.Show(heading, guide.Title); heading.FontSize = TypeScale.Subtitle; heading.FontWeight = FontWeights.SemiBold;
         heading.Margin = new Thickness(0, 0, 0, 16); body.Children.Add(heading);
         AutomationProperties.SetName(ComparisonSelector, UiText.Get("SettingsGuide.Comparison"));
         ComparisonSelector.ItemsSource = guide.Comparisons;
@@ -144,7 +144,7 @@ internal sealed class SettingsGuideWindow : Window
         if (ComparisonSelector.SelectedItem is not SettingsGuideComparison comparison) return;
         using var language = UiText.UseLanguage(_language);
         _timer.Stop(); _frame = comparison.MotionFrames;
-        _beforeValue.Text = comparison.Before; _afterValue.Text = comparison.After; _description.Text = comparison.Description;
+        KoreanWordWrap.Show(_beforeValue, comparison.Before); KoreanWordWrap.Show(_afterValue, comparison.After); KoreanWordWrap.Show(_description, comparison.Description);
         SetImage(_before, _beforeMissing, comparison.AssetFile(_language, "before"));
         SetImage(_after, _afterMissing, comparison.AssetFile(_language, "after"));
         AutomationProperties.SetName(_before, comparison.Before);
@@ -201,14 +201,14 @@ internal sealed class SettingsGuideWindow : Window
             target.Source = null; missing.Visibility = Visibility.Visible;
         }
     }
-    private static TextBlock Label() => new() { TextWrapping = TextWrapping.Wrap, FontSize = 14 };
+    private static TextBlock Label() => new() { TextWrapping = TextWrapping.Wrap, FontSize = TypeScale.Body };
     private static Border Panel(string title, TextBlock value, Image image, TextBlock missing)
     {
         var content = new StackPanel();
-        var caption = Label(); caption.Text = title; caption.SetResourceReference(TextBlock.ForegroundProperty, "Text.Secondary");
+        var caption = Label(); KoreanWordWrap.Show(caption, title); caption.SetResourceReference(TextBlock.ForegroundProperty, "Text.Secondary");
         value.FontWeight = FontWeights.SemiBold; value.MinHeight = 42; value.Margin = new Thickness(0, 6, 0, 8);
         image.Height = 300;
-        missing.Text = UiText.Get("SettingsGuide.ImageUnavailable");
+        KoreanWordWrap.Show(missing, UiText.Get("SettingsGuide.ImageUnavailable"));
         missing.HorizontalAlignment = HorizontalAlignment.Center; missing.VerticalAlignment = VerticalAlignment.Center;
         var preview = new Grid(); preview.Children.Add(image); preview.Children.Add(missing);
         content.Children.Add(caption); content.Children.Add(value); content.Children.Add(preview);

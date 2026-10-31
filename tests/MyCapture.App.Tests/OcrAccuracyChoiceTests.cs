@@ -12,6 +12,7 @@ using System.Windows.Threading;
 using Microsoft.Extensions.Logging.Abstractions;
 using MyCapture.App.Capture;
 using MyCapture.App.Ocr;
+using MyCapture.App.Themes;
 using MyCapture.Core.Localization;
 using MyCapture.Core.Platform;
 using MyCapture.Core.Settings;
@@ -234,7 +235,7 @@ public sealed class OcrAccuracyChoiceTests
         Assert.Empty(fixture.Service.Requests);
         Assert.Equal(0, fixture.SaveCount);
         Assert.True(fixture.Window.AccuracyAction.IsEnabled);
-        Assert.Equal(UiText.Get("Translate_DownloadFailed"), fixture.Window.AccuracySuggestionText.Text);
+        Assert.Equal(UiText.Get("Translate_DownloadFailed"), KoreanWordWrap.Strip(fixture.Window.AccuracySuggestionText.Text));
     });
 
     [Fact]
@@ -339,7 +340,7 @@ public sealed class OcrAccuracyChoiceTests
         Assert.Equal(OcrQuality.Fast, fixture.Settings.Quality);
         Assert.Equal(1.0, fixture.Settings.UpscaleFactor);
         Assert.False(fixture.Settings.AccuracySuggestionDismissed);
-        Assert.Equal(UiText.Get("Ocr_AccuracySaveFailed"), fixture.Window.AccuracySuggestionText.Text);
+        Assert.Equal(UiText.Get("Ocr_AccuracySaveFailed"), KoreanWordWrap.Strip(fixture.Window.AccuracySuggestionText.Text));
     });
 
     [Fact]
@@ -595,7 +596,7 @@ public sealed class OcrAccuracyChoiceTests
         Complete(obsoleteCheck);
         Complete(fixture.Window.AccuracyModelCheckTask);
         Assert.Equal(failed ? "synthetic current failure" : UiText.Format("Ocr_ModelDownloadProgress", 45d),
-            fixture.Window.AccuracySuggestionText.Text);
+            KoreanWordWrap.Strip(fixture.Window.AccuracySuggestionText.Text));
         Assert.Equal(failed ? Visibility.Collapsed : Visibility.Visible, fixture.Window.AccuracyProgress.Visibility);
         Assert.Equal("original text", fixture.Window.ExtractionText);
         Assert.Equal(OcrQuality.Fast, fixture.Settings.Quality);
@@ -738,7 +739,7 @@ public sealed class OcrAccuracyChoiceTests
     private static T Field<T>(OcrResultWindow window, string name) =>
         (T)typeof(OcrResultWindow).GetField(name, BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(window)!;
 
-    private static string Status(OcrResultWindow window) => Field<TextBlock>(window, "_status").Text;
+    private static string Status(OcrResultWindow window) => KoreanWordWrap.Strip(Field<TextBlock>(window, "_status").Text);
 
     private static void Complete(Task task)
     {

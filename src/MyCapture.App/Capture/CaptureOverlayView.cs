@@ -1402,7 +1402,7 @@ internal sealed partial class CaptureOverlayView : FrameworkElement
     /// <summary>Short confirmation chip above and to the right of the pointer, clear of the magnifier.</summary>
     private void DrawToast(DrawingContext dc, string message)
     {
-        FormattedText text = CreateText(message, _uiTypeface, 12, _primaryTextBrush);
+        FormattedText text = CreateText(message, _uiTypeface, TypeScale.Caption, _primaryTextBrush);
         const double paddingX = 10;
         const double paddingY = 6;
         double width = text.Width + (paddingX * 2);
@@ -1440,7 +1440,7 @@ internal sealed partial class CaptureOverlayView : FrameworkElement
             Cross(anchor ? _anchorPen : _pointerInnerPen);
             if (anchor)
             {
-                FormattedText text = _anchorText ??= CreateText(UiText.Get("CaptureSelectionStart"), _uiTypeface, 11, _primaryTextBrush);
+                FormattedText text = _anchorText ??= CreateText(UiText.Get("CaptureSelectionStart"), _uiTypeface, TypeScale.Caption, _primaryTextBrush);
                 double x = Math.Clamp(p.X + 15, 4, Math.Max(4, ActualWidth - text.Width - 12));
                 double y = Math.Clamp(p.Y + 12, 4, Math.Max(4, ActualHeight - text.Height - 8));
                 dc.DrawRoundedRectangle(_chromeBrush, _chipBorderPen, new Rect(x - 4, y - 2, text.Width + 8, text.Height + 4), 4, 4);
@@ -1534,8 +1534,8 @@ internal sealed partial class CaptureOverlayView : FrameworkElement
             || !string.Equals(_tabLabel, label, StringComparison.Ordinal))
         {
             string size = $"{captured.Width} × {captured.Height}";
-            _tabLabelText = CreateText(label, _uiTypeface, 12, _accentTextBrush);
-            _tabSizeText = CreateText(size, _monoTypeface, 12, _accentTextBrush);
+            _tabLabelText = CreateText(label, _uiTypeface, TypeScale.Caption, _accentTextBrush);
+            _tabSizeText = CreateText(size, _monoTypeface, TypeScale.Caption, _accentTextBrush);
             _tabLabel = label;
             _tabTextSize = captured;
             _tabTargetLabel = label + "  " + size;
@@ -1700,7 +1700,7 @@ internal sealed partial class CaptureOverlayView : FrameworkElement
     {
         string text = FormatReadout((int)pixels.Width, (int)pixels.Height, ActiveRatio);
         ReadoutForTest = text;
-        FormattedText formatted = CreateText(text, _monoTypeface, 12, _primaryTextBrush);
+        FormattedText formatted = CreateText(text, _monoTypeface, TypeScale.Caption, _primaryTextBrush);
         const double paddingX = 9;
         const double paddingY = 5;
         double width = formatted.Width + (paddingX * 2);
@@ -1754,7 +1754,7 @@ internal sealed partial class CaptureOverlayView : FrameworkElement
 
         if (_precisionPointer.IsPrecision)
         {
-            FormattedText precision = _precisionText ??= CreateText(UiText.Get("CapturePrecisionActive"), _uiTypeface, 12, _primaryTextBrush);
+            FormattedText precision = _precisionText ??= CreateText(UiText.Get("CapturePrecisionActive"), _uiTypeface, TypeScale.Caption, _primaryTextBrush);
             var size = new Size(precision.Width + 20, precision.Height + 12);
             // Under the bar when it is shown; at the old top-left spot otherwise.
             Rect chip = bar is { } under
@@ -1773,7 +1773,7 @@ internal sealed partial class CaptureOverlayView : FrameworkElement
     {
         _activeCueSegment = null;
         StatusTextsForTest = [InstructionText];
-        FormattedText text = _instructionText ??= CreateText(InstructionText, _uiTypeface, 13, _primaryTextBrush);
+        FormattedText text = _instructionText ??= CreateText(InstructionText, _uiTypeface, TypeScale.Caption, _primaryTextBrush);
         const double paddingX = 14;
         const double paddingY = 9;
         double width = text.Width + (paddingX * 2);
@@ -1794,8 +1794,8 @@ internal sealed partial class CaptureOverlayView : FrameworkElement
         string sentence = RecordingInstructionText;
         string escape = UiText.Get("CaptureGuide2_Esc");
         StatusTextsForTest = [sentence, escape];
-        FormattedText text = _instructionText ??= CreateText(sentence, _uiTypeface, 14, _primaryTextBrush);
-        FormattedText hint = CreateText(escape, _uiTypeface, 12, _mutedTextBrush);
+        FormattedText text = _instructionText ??= CreateText(sentence, _uiTypeface, TypeScale.Body, _primaryTextBrush);
+        FormattedText hint = CreateText(escape, _uiTypeface, TypeScale.Caption, _mutedTextBrush);
         const double paddingX = 14;
         const double paddingY = 9;
         const double dot = 10;
@@ -1836,8 +1836,8 @@ internal sealed partial class CaptureOverlayView : FrameworkElement
         double textHeight = 0;
         for (int i = 0; i < parts.Count; i++)
         {
-            texts[i] = CreateText(parts[i].Text, _uiTypeface, 13, i == active ? _accentTextBrush : _primaryTextBrush);
-            widths[i] = parts[i].Variants.Max(variant => CreateText(variant, _uiTypeface, 13, _primaryTextBrush).Width);
+            texts[i] = CreateText(parts[i].Text, _uiTypeface, TypeScale.Caption, i == active ? _accentTextBrush : _primaryTextBrush);
+            widths[i] = parts[i].Variants.Max(variant => CreateText(variant, _uiTypeface, TypeScale.Caption, _primaryTextBrush).Width);
             width += widths[i] + (paddingX * 2) + (i > 0 ? separator : 0);
             textHeight = Math.Max(textHeight, texts[i].Height);
         }
@@ -1852,7 +1852,7 @@ internal sealed partial class CaptureOverlayView : FrameworkElement
         // Laid out at the origin, then placed (and scaled with the bar) by one transform.
         dc.PushTransform(new MatrixTransform(scale, 0, 0, scale, left, top));
         dc.DrawRoundedRectangle(_chromeBrush, _chipBorderPen, background, 10, 10);
-        FormattedText dot = CreateText("·", _uiTypeface, 13, _mutedTextBrush);
+        FormattedText dot = CreateText("·", _uiTypeface, TypeScale.Caption, _mutedTextBrush);
         double x = inset;
         _activeCueSegment = null;
         for (int i = 0; i < texts.Length; i++)
@@ -1934,19 +1934,19 @@ internal sealed partial class CaptureOverlayView : FrameworkElement
         // A label that reads the same as on the last frame keeps its text layout.
         if (_sampleText is null || !string.Equals(_sampleTextLabel, _sampleLabel, StringComparison.Ordinal))
         {
-            _sampleText = CreateText(_sampleLabel, _monoTypeface, 12, _primaryTextBrush);
+            _sampleText = CreateText(_sampleLabel, _monoTypeface, TypeScale.Caption, _primaryTextBrush);
             _sampleTextLabel = _sampleLabel;
         }
         (int X, int Y) coordinate = ((int)_cursorPixel.X, (int)_cursorPixel.Y);
         if (_coordinateText is null || _coordinateTextPixel != coordinate)
         {
-            _coordinateText = CreateText($"{coordinate.X}, {coordinate.Y}", _monoTypeface, 10, _mutedTextBrush);
+            _coordinateText = CreateText($"{coordinate.X}, {coordinate.Y}", _monoTypeface, TypeScale.Micro, _mutedTextBrush);
             _coordinateTextPixel = coordinate;
         }
         FormattedText color = _sampleText;
         FormattedText location = _coordinateText;
         // The layout follows the longest coordinates the frame can show, so it holds while the pointer moves.
-        _widestCoordinateText ??= CreateText($"{PixelWidth - 1}, {PixelHeight - 1}", _monoTypeface, 10, _mutedTextBrush);
+        _widestCoordinateText ??= CreateText($"{PixelWidth - 1}, {PixelHeight - 1}", _monoTypeface, TypeScale.Micro, _mutedTextBrush);
         double locationWidth = Math.Max(location.Width, _widestCoordinateText.Width);
 
         // The image is frame pixels, ten per cell, so its grid stays on device pixels, while the

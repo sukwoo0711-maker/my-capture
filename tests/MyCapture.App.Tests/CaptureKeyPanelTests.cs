@@ -28,6 +28,22 @@ namespace MyCapture.App.Tests;
 public sealed class CaptureKeyPanelTests(ITestOutputHelper output)
 {
     [Theory]
+    [InlineData("ko-KR", 12)]
+    [InlineData("en-US", 11)]
+    public void LocalizedPointerActionsUseCaptionWhileLatinKeysUseMicro(string language, double pointerSize) => StaTestHost.Run(() =>
+    {
+        using var culture = UiText.UseLanguage(language);
+        var panel = new CaptureKeyPanel(ThemeFonts.Ui, new FontFamily("Consolas"));
+        panel.Configure(new CaptureKeyPanelContext(true, true, true, false, false, false, false, false, false, Hotkey.None));
+        var caps = ((StackPanel)panel.Child).Children.OfType<Grid>()
+            .Select(row => (TextBlock)((Border)row.Children[0]).Child).ToArray();
+        Assert.Equal(pointerSize, caps.Single(cap => cap.Text == UiText.Get("CaptureKeyPanel.Drag")).FontSize);
+        Assert.Equal(pointerSize, caps.Single(cap => cap.Text == UiText.Get("CaptureKeyPanel.Click")).FontSize);
+        Assert.Equal(TypeScale.Micro, caps.Single(cap => cap.Text == "F1").FontSize);
+        panel.ReleaseResources();
+    });
+
+    [Theory]
     [InlineData("confirm")]
     [InlineData("cancel")]
     [InlineData("action")]

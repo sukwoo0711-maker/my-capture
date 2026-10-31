@@ -1,3 +1,4 @@
+using MyCapture.App.Themes;
 using System.Windows;
 using System.Windows.Controls;
 
@@ -94,13 +95,13 @@ public sealed class GalleryCardRowPanel : Panel
     // line of 28 DIPs, the second row's. A folder card has one line and is unaffected.
     public static readonly DependencyProperty TitleFontSizeProperty = DependencyProperty.Register(
         nameof(TitleFontSize), typeof(double), typeof(GalleryCardRowPanel),
-        new FrameworkPropertyMetadata(14.0, FrameworkPropertyMetadataOptions.AffectsMeasure));
+        new FrameworkPropertyMetadata(TypeScale.Body, FrameworkPropertyMetadataOptions.AffectsMeasure));
     public static readonly DependencyProperty CaptionFontSizeProperty = DependencyProperty.Register(
         nameof(CaptionFontSize), typeof(double), typeof(GalleryCardRowPanel),
-        new FrameworkPropertyMetadata(12.0, FrameworkPropertyMetadataOptions.AffectsMeasure));
+        new FrameworkPropertyMetadata(TypeScale.Caption, FrameworkPropertyMetadataOptions.AffectsMeasure));
     public static readonly DependencyProperty BaseTitleFontSizeProperty = DependencyProperty.Register(
         nameof(BaseTitleFontSize), typeof(double), typeof(GalleryCardRowPanel),
-        new FrameworkPropertyMetadata(14.0, FrameworkPropertyMetadataOptions.AffectsMeasure));
+        new FrameworkPropertyMetadata(TypeScale.Body, FrameworkPropertyMetadataOptions.AffectsMeasure));
     public double TitleFontSize { get => (double)GetValue(TitleFontSizeProperty); set => SetValue(TitleFontSizeProperty, value); }
     public double CaptionFontSize { get => (double)GetValue(CaptionFontSizeProperty); set => SetValue(CaptionFontSizeProperty, value); }
     public double BaseTitleFontSize { get => (double)GetValue(BaseTitleFontSizeProperty); set => SetValue(BaseTitleFontSizeProperty, value); }

@@ -74,7 +74,7 @@ public sealed class ReleaseUxInteractionTests
                             TextBlock[] texts = FirstRunWelcomeTests.Descendants(row).OfType<TextBlock>().ToArray();
                             string keys = System.Windows.Automation.AutomationProperties.GetName(
                                 Assert.Single(FirstRunWelcomeTests.Descendants(row).OfType<WrapPanel>()));
-                            return (Title: texts[0].Text, Category: texts[1].Text, Keys: keys);
+                            return (Title: KoreanWordWrap.Strip(texts[0].Text), Category: KoreanWordWrap.Strip(texts[1].Text), Keys: keys);
                         }).ToArray();
                     Assert.Equal(expectedRows.Select(row => (ShortcutHelpRowAssertions.Title(row), ShortcutHelpRowAssertions.Keys(row))),
                         visible.Where(row => row.Category == category).Select(row => (row.Title, row.Keys)));

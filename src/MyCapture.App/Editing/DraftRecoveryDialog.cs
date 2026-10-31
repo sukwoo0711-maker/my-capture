@@ -82,10 +82,10 @@ internal sealed class DraftRecoveryDialog : Window
         AutomationProperties.SetName(this, UiText.Get("EditRecovery_Title"));
 
         var panel = new StackPanel { Margin = new Thickness(24) };
-        panel.Children.Add(new TextBlock
+        panel.Children.Add(KoreanWordWrap.Show(new TextBlock
         {
-            Text = UiText.Get("EditRecovery_Title"), FontSize = 20, FontWeight = FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap,
-        });
+            FontSize = TypeScale.Subtitle, FontWeight = FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap,
+        }, UiText.Get("EditRecovery_Title")));
         var message = new TextBlock { TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 8, 0, 16) };
         KoreanWordWrap.SetText(message, UiText.Get("EditRecovery_Message"));
         panel.Children.Add(message);
@@ -167,8 +167,10 @@ internal sealed class DraftRecoveryDialog : Window
         grid.Children.Add(frame);
 
         var text = new StackPanel { VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(12, 0, 12, 0) };
-        text.Children.Add(new TextBlock { Text = item.Heading, FontWeight = FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap });
-        var detail = new TextBlock { Text = KeepPartsTogether(item.Detail), TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 2, 0, 0) };
+        text.Children.Add(KoreanWordWrap.Show(new TextBlock { FontWeight = FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap }, item.Heading));
+        // Parts stay together (no-break spaces); the digits and units inside them stay whole as well.
+        var detail = KoreanWordWrap.Show(new TextBlock { TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 2, 0, 0) },
+            KeepPartsTogether(item.Detail));
         AutomationProperties.SetName(detail, item.Detail);
         detail.SetResourceReference(TextBlock.ForegroundProperty, "Text.Secondary");
         text.Children.Add(detail);

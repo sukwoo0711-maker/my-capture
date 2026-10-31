@@ -163,7 +163,7 @@ public sealed class QuickAccessReceiptLayoutTests
             Assert.Contains(QuickAccessDetachedFixture.Descendants(host).OfType<TextBlock>(),
                 text => text.Text == $"{width} × {height}");
             TextBlock tip = Assert.Single(QuickAccessDetachedFixture.Descendants(host).OfType<TextBlock>(),
-                text => text.Text == UiText.Get("Onboard_FirstCaptureTip"));
+                text => KoreanWordWrap.Strip(text.Text) == UiText.Get("Onboard_FirstCaptureTip"));
             Assert.Equal(Visibility.Visible, tip.Visibility);
             Assert.True(tip.ActualHeight > 0);
             Assert.True(Bounds(tip, host).Bottom <= host.ActualHeight);

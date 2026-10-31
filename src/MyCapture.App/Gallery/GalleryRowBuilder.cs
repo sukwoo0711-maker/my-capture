@@ -1,3 +1,4 @@
+using MyCapture.App.Themes;
 namespace MyCapture.App.Gallery;
 
 /// <summary>
@@ -43,7 +44,7 @@ public static class GalleryRowBuilder
     /// search result also reserves its readable folder name. The time
     /// and commands share a column, so its larger width must fit on both lines.
     /// </summary>
-    public static double CardTrackFor(double timeWidth, bool compact, double captionFontSize = 12, bool withFolderReason = false)
+    public static double CardTrackFor(double timeWidth, bool compact, double captionFontSize = TypeScale.Caption, bool withFolderReason = false)
     {
         // The track's 16-DIP inset, the card edge (2) and the text margins (8 and 6).
         const double chrome = 16 + 2 + 14;

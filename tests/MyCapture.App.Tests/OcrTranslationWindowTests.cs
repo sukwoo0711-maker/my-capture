@@ -4,6 +4,7 @@ using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Threading;
 using MyCapture.App.Ocr;
+using MyCapture.App.Themes;
 using MyCapture.Core.Localization;
 using MyCapture.Ocr;
 using MyCapture.Ocr.Translation;
@@ -221,7 +222,7 @@ public sealed class OcrTranslationWindowTests
 
     private static void Click(Button button) => button.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent));
 
-    private static string TextOf(DependencyObject root) => string.Join("\n", Descendants(root).OfType<TextBlock>().Select(block => block.Text));
+    private static string TextOf(DependencyObject root) => string.Join("\n", Descendants(root).OfType<TextBlock>().Select(block => KoreanWordWrap.Strip(block.Text)));
 
     private static IEnumerable<DependencyObject> Descendants(DependencyObject root)
     {

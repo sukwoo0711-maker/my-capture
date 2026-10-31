@@ -250,7 +250,7 @@ internal sealed partial class AnnotationEditorControl : Grid
         _controller.ApplyArrowHeads(defaults.ArrowHeads);
         _controller.ApplyFillTransparency(double.IsFinite(defaults.FillTransparency) ? Math.Clamp(defaults.FillTransparency, 0, 100) : 100);
         _controller.DefaultFontSize = double.IsFinite(defaults.FontSize)
-            ? Math.Clamp(defaults.FontSize, SettingsRanges.FontSize.Min, SettingsRanges.FontSize.Max) : 18;
+            ? Math.Clamp(defaults.FontSize, SettingsRanges.FontSize.Min, SettingsRanges.FontSize.Max) : new AnnotationDefaults().FontSize;
         _controller.DefaultFontFamily = string.IsNullOrWhiteSpace(defaults.FontFamily) ? AnnotationDefaults.DefaultFontFamily : defaults.FontFamily;
         _defaultTextBold = defaults.TextBold;
         _defaultTextBackground = defaults.TextBackground;
@@ -2084,7 +2084,7 @@ internal sealed partial class AnnotationEditorControl : Grid
         var ratioLabel = new TextBlock
         {
             Text = UiText.Get("Crop.Ratio"),
-            FontSize = 12,
+            FontSize = TypeScale.Caption,
             VerticalAlignment = VerticalAlignment.Center,
             Margin = new Thickness(4, 0, 6, 0),
         };
@@ -2251,7 +2251,7 @@ internal sealed partial class AnnotationEditorControl : Grid
         {
             // "Save" alone read like Done, which also saves (to the library); this one writes a file.
             Text = UiText.Get("EditorFlow_SaveToFile"),
-            FontSize = 12,
+            FontSize = TypeScale.Caption,
             VerticalAlignment = VerticalAlignment.Center,
             Margin = new Thickness(6, 0, 4, 0),
         });
@@ -2528,7 +2528,7 @@ internal sealed partial class AnnotationEditorControl : Grid
         _stepPreview.Background = new SolidColorBrush(Color.FromRgb(color.R, color.G, color.B));
         var formatted = new FormattedText(text, CultureInfo.CurrentCulture, FlowDirection.LeftToRight,
             new Typeface(new FontFamily("Segoe UI"), FontStyles.Normal, FontWeights.Bold, FontStretches.Normal),
-            text.Length > 2 ? 15 : 20, Brushes.White, pixelsPerDip);
+            text.Length > 2 ? TypeScale.Content.StepPreviewDense : TypeScale.Content.StepPreviewNormal, Brushes.White, pixelsPerDip);
         Geometry digits = formatted.BuildGeometry(new Point(0, 0));
         // Start the glyph outline at the path origin so the badge centres the ink, not the line box.
         Rect ink = digits.Bounds;
@@ -2563,8 +2563,8 @@ internal sealed partial class AnnotationEditorControl : Grid
             var field = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 8, 0) };
             field.Children.Add(PropertyLabel(UiText.Get(key)));
             var border = NumberStepperField.CreateValueField(box, UiText.Get("Editor_UnitPx"));
-            var error = new TextBlock { Text = UiText.Get("Crop.InvalidSizeLabel"), FontSize = 12, MaxWidth = 100,
-                TextWrapping = TextWrapping.Wrap, Visibility = Visibility.Collapsed };
+            var error = KoreanWordWrap.Show(new TextBlock { FontSize = TypeScale.Caption, MaxWidth = 100,
+                TextWrapping = TextWrapping.Wrap, Visibility = Visibility.Collapsed }, UiText.Get("Crop.InvalidSizeLabel"));
             error.SetResourceReference(TextBlock.ForegroundProperty, "Text.Primary");
             _cropInputErrors.Add(box, (border, error));
             field.Children.Add(border); field.Children.Add(error); dimensions.Children.Add(field);
@@ -2679,7 +2679,7 @@ internal sealed partial class AnnotationEditorControl : Grid
     {
         var panel = PropertyGroup("AnnotationShapeProperties");
         panel.Children.Add(PropertyLabel(UiText.Get("EditorProperty_StrokeStyleLabel")));
-        _strokeStyleComboBox = new ComboBox { MinHeight = 32, Width = 108, FontSize = 12, VerticalAlignment = VerticalAlignment.Center };
+        _strokeStyleComboBox = new ComboBox { MinHeight = 32, Width = 108, FontSize = TypeScale.Caption, VerticalAlignment = VerticalAlignment.Center };
         foreach ((AnnotationStrokeStyle style, string label) in new[]
         {
             (AnnotationStrokeStyle.Solid, UiText.Get("Text_99851CC7E6A4")),
@@ -2914,7 +2914,7 @@ internal sealed partial class AnnotationEditorControl : Grid
         {
             Text = string.Empty,
             Foreground = Brush("Text.Secondary", Colors.LightGray),
-            FontSize = 12,
+            FontSize = TypeScale.Caption,
             TextTrimming = TextTrimming.CharacterEllipsis,
             VerticalAlignment = VerticalAlignment.Center,
         };
@@ -2929,7 +2929,7 @@ internal sealed partial class AnnotationEditorControl : Grid
             Text = UiText.Format("Text_009548FC2109", _canvasWidth, _canvasHeight),
             Foreground = Brush("Text.Muted", Colors.Gray),
             FontFamily = FontFamilyResource("Font.Mono", "Consolas"),
-            FontSize = 12,
+            FontSize = TypeScale.Caption,
             TextTrimming = TextTrimming.CharacterEllipsis,
             VerticalAlignment = VerticalAlignment.Center,
             Margin = new Thickness(16, 0, 0, 0),
@@ -3032,7 +3032,7 @@ internal sealed partial class AnnotationEditorControl : Grid
         content.Children.Add(new TextBlock
         {
             Text = label,
-            FontSize = 12,
+            FontSize = TypeScale.Caption,
             VerticalAlignment = VerticalAlignment.Center,
             Margin = new Thickness(CommandButtonPresentation.IconLabelGap, 0, 0, 0),
         });
@@ -3094,7 +3094,7 @@ internal sealed partial class AnnotationEditorControl : Grid
     {
         var label = new TextBlock
         {
-            Text = text, FontSize = 12, FontWeight = FontWeights.SemiBold,
+            Text = text, FontSize = TypeScale.Caption, FontWeight = FontWeights.SemiBold,
             Margin = new Thickness(0, 0, 0, 4),
         };
         label.SetResourceReference(TextBlock.ForegroundProperty, "Text.Secondary");

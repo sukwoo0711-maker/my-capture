@@ -352,7 +352,7 @@ internal sealed partial class VideoEditorWindow : Window
         // says which end it is, like the handle chip on the timeline.
         _trimPreviewBadgeText = new TextBlock
         {
-            FontSize = 13,
+            FontSize = TypeScale.Caption,
             FontWeight = FontWeights.SemiBold,
             Foreground = TryBrush("Text.Primary", Colors.White),
         };
@@ -375,7 +375,7 @@ internal sealed partial class VideoEditorWindow : Window
             Text = UiText.Get("Text_831103D5C64B"),
             ToolTip = UiText.Get("Text_59CC7803B118"),
             Foreground = TryBrush("Text.Secondary", Colors.LightGray),
-            FontSize = 13,
+            FontSize = TypeScale.Caption,
             VerticalAlignment = VerticalAlignment.Center,
             TextWrapping = TextWrapping.NoWrap,
             TextTrimming = TextTrimming.CharacterEllipsis,
@@ -386,7 +386,7 @@ internal sealed partial class VideoEditorWindow : Window
         {
             Text = UiText.Get("Text_831103D5C64B"),
             Foreground = TryBrush("Text.Primary", Colors.White),
-            FontSize = 15,
+            FontSize = TypeScale.BodyLarge,
             FontWeight = FontWeights.SemiBold,
             HorizontalAlignment = HorizontalAlignment.Center,
             VerticalAlignment = VerticalAlignment.Center,
@@ -733,7 +733,7 @@ internal sealed partial class VideoEditorWindow : Window
         bar.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         _identityDetails = new TextBlock
         {
-            Name = "VideoHeaderDetails", FontSize = 12, Margin = new Thickness(3, 3, 3, 0),
+            Name = "VideoHeaderDetails", FontSize = TypeScale.Caption, Margin = new Thickness(3, 3, 3, 0),
             TextTrimming = TextTrimming.CharacterEllipsis,
         };
         _identityDetails.SetResourceReference(TextBlock.ForegroundProperty, "Text.Secondary");
@@ -863,7 +863,7 @@ internal sealed partial class VideoEditorWindow : Window
         var content = new StackPanel();
         var heading = new TextBlock
         {
-            Text = UiText.Get("VideoEditorUx_Details"), FontSize = 14,
+            Text = UiText.Get("VideoEditorUx_Details"), FontSize = TypeScale.Body,
             FontWeight = FontWeights.SemiBold, Margin = new Thickness(3, 0, 0, 8),
         };
         heading.SetResourceReference(TextBlock.ForegroundProperty, "Text.Primary");
@@ -915,7 +915,7 @@ internal sealed partial class VideoEditorWindow : Window
         frames.Children.Add(MakeTransportIcon("Icon.StepBack", UiText.Get("Text_B39342508541"), "Button.Ghost", () => StepFrames(-1)));
         frames.Children.Add(MakeTransportIcon("Icon.StepForward", UiText.Get("Text_B753165F6585"), "Button.Ghost", () => StepFrames(1)));
         precise.Children.Add(frames);
-        _positionFrameLabel.FontSize = 12;
+        _positionFrameLabel.FontSize = TypeScale.Caption;
         _positionFrameLabel.Margin = new Thickness(3, 4, 0, 8);
         _positionFrameLabel.SetResourceReference(TextBlock.ForegroundProperty, "Text.Secondary");
         precise.Children.Add(_positionFrameLabel);
@@ -967,9 +967,9 @@ internal sealed partial class VideoEditorWindow : Window
     {
         var bar = new StackPanel { Name = "VideoTrimBar", Margin = new Thickness(0, 4, 0, 0) };
         AutomationProperties.SetName(bar, UiText.Get("VideoEditorUx_TrimBarName"));
-        _keptLengthLabel = new TextBlock { FontSize = 15, FontWeight = FontWeights.SemiBold };
+        _keptLengthLabel = new TextBlock { FontSize = TypeScale.BodyLarge, FontWeight = FontWeights.SemiBold };
         _keptLengthLabel.SetResourceReference(TextBlock.ForegroundProperty, "Text.Primary");
-        _removedLengthLabel = new TextBlock { FontSize = 12 };
+        _removedLengthLabel = new TextBlock { FontSize = TypeScale.Caption };
         _removedLengthLabel.SetResourceReference(TextBlock.ForegroundProperty, "Text.Secondary");
         var summary = new StackPanel
         {
@@ -985,7 +985,7 @@ internal sealed partial class VideoEditorWindow : Window
         TextBox Input(string name)
         {
             var inputRow = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 4) };
-            inputRow.Children.Add(new TextBlock { Text = name, FontSize = 12, MinWidth = 40, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(2, 0, 5, 0) });
+            inputRow.Children.Add(new TextBlock { Text = name, FontSize = TypeScale.Caption, MinWidth = 40, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(2, 0, 5, 0) });
             var input = new TextBox
             {
                 Width = 120, MinHeight = 36, Margin = new Thickness(0, 0, 8, 0), Padding = new Thickness(8, 4, 8, 4),
@@ -2281,7 +2281,7 @@ internal sealed partial class VideoEditorWindow : Window
         var timing = new TextBlock
         {
             Text = UiText.Format("VideoEditorUx_LayerInterval", FormatMs(start), FormatMs(end)),
-            FontSize = 12,
+            FontSize = TypeScale.Caption,
             TextTrimming = TextTrimming.CharacterEllipsis,
         };
         timing.SetResourceReference(TextBlock.ForegroundProperty, "Text.Secondary");
@@ -3242,7 +3242,7 @@ internal sealed partial class VideoEditorWindow : Window
         Text = text,
         Foreground = TryBrush("Text.Primary", Colors.White),
         FontFamily = TryFont("Font.Mono"),
-        FontSize = 13,
+        FontSize = TypeScale.Caption,
     };
 
     private Brush TryBrush(string key, Color fallback) => ThemeBrushes.Follow(this, key, fallback);

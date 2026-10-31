@@ -6,6 +6,7 @@ using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using MyCapture.App.Pinning;
 using MyCapture.App.Preview;
+using MyCapture.App.Themes;
 using MyCapture.Core.Settings;
 using MyCapture.Platform.Shell;
 using Xunit;
@@ -187,7 +188,7 @@ public sealed class PreviewPinInputTests : KoreanCaptionTest
             Assert.Empty(descendants.OfType<TextBox>());
             Assert.Empty(descendants.OfType<TabControl>());
             Assert.Contains(descendants.OfType<TextBlock>(), text => text.Text.Contains("Ctrl+Shift+F3"));
-            Assert.Contains(descendants.OfType<TextBlock>(), text => text.Text == PreviewPinInput.F3UnavailableMessage);
+            Assert.Contains(descendants.OfType<TextBlock>(), text => KoreanWordWrap.Strip(text.Text) == PreviewPinInput.F3UnavailableMessage);
             Assert.Contains(descendants.OfType<Button>(), button => Equals(button.Content, "클립보드 핀"));
             Assert.Contains(descendants.OfType<Button>(), button => Equals(button.Content, "종료"));
         }

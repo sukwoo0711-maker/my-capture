@@ -70,7 +70,7 @@ public sealed partial class SettingsThemePreviewTests
                 retention.Items.Cast<RetentionChoice>().Select(choice => choice.Label));
             Assert.Equal("36", retention.SelectedValue);
             Assert.Equal(UiText.Format("SettingsUx_RetentionSummary", SettingsUxText.Duration(36)),
-                ((TextBlock)window.FindName("RetentionSummary")).Text);
+                KoreanWordWrap.Strip(((TextBlock)window.FindName("RetentionSummary")).Text));
             Assert.Equal(UiText.Get("Retention_Label"), AutomationProperties.GetName(retention));
             Assert.True(window.NavigateToSetting(nameof(SettingsDraft.MaxItems)));
             Drain(window);
@@ -84,7 +84,7 @@ public sealed partial class SettingsThemePreviewTests
             // Ctrl+S can flush a choice before its automatic save dispatch.
             retention.SelectedValue = never;
             Assert.Equal(never, Draft(window).ImageRetentionHours);
-            Assert.Equal(UiText.Get("Retention_SummaryNever"), ((TextBlock)window.FindName("RetentionSummary")).Text);
+            Assert.Equal(UiText.Get("Retention_SummaryNever"), KoreanWordWrap.Strip(((TextBlock)window.FindName("RetentionSummary")).Text));
             Assert.Equal(UiText.Get("Dialog.Close"), cancel.Content);
             Assert.Equal(7, retention.Items.Count);
             retention.SelectedValue = "36";
@@ -116,7 +116,7 @@ public sealed partial class SettingsThemePreviewTests
             Draft(window).CapturesDirectoryOverride = Path.Combine(elsewhere, "missing");
             openFolder.RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));
             Assert.Single(opened);
-            Assert.Equal(UiText.Get("Storage_OpenFolderFailed"), ((TextBlock)window.FindName("SettingsStatus")).Text);
+            Assert.Equal(UiText.Get("Storage_OpenFolderFailed"), KoreanWordWrap.Strip(((TextBlock)window.FindName("SettingsStatus")).Text));
             AppPackage.IsPackagedOverride = false;
             Draft(window).CapturesDirectoryOverride = libraryRoot;
             Assert.False(note.IsVisible);
@@ -148,7 +148,7 @@ public sealed partial class SettingsThemePreviewTests
                 backupAncestor = LogicalTreeHelper.GetParent(backupAncestor);
             Assert.Same(window.FindName("BackupExpander"), backupAncestor);
             foreach (string name in sections.SkipLast(1)) Assert.Equal(24, ((FrameworkElement)window.FindName(name)).Margin.Bottom);
-            string privacy = ((TextBlock)window.FindName("PrivacyModelText")).Text;
+            string privacy = KoreanWordWrap.Strip(((TextBlock)window.FindName("PrivacyModelText")).Text);
             Assert.Contains("102 MB", privacy, StringComparison.Ordinal);
             Assert.Contains("ModelScope", privacy, StringComparison.Ordinal);
             Assert.DoesNotContain("164", privacy, StringComparison.Ordinal);
@@ -193,12 +193,12 @@ public sealed partial class SettingsThemePreviewTests
                 var store = new ObservableStoreUpdates();
                 window.StoreUpdates = store;
                 Assert.True(window.RunStoreUpdateActionAsync().IsCompletedSuccessfully);
-                Assert.Equal("마지막 확인 14:02 · 최신 버전", ((TextBlock)window.FindName("UpdateObservedStatus")).Text);
+                Assert.Equal("마지막 확인 14:02 · 최신 버전", KoreanWordWrap.Strip(((TextBlock)window.FindName("UpdateObservedStatus")).Text));
                 store.CheckCompletion = new(TaskCreationOptions.RunContinuationsAsynchronously);
                 Task check = window.RunStoreUpdateActionAsync();
                 store.CheckCompletion.SetException(new IOException("Store unavailable"));
                 PumpUntil(window, check);
-                Assert.Equal(UiText.Get("StoreUpdate_StateFailed"), ((TextBlock)window.FindName("UpdateObservedStatus")).Text);
+                Assert.Equal(UiText.Get("StoreUpdate_StateFailed"), KoreanWordWrap.Strip(((TextBlock)window.FindName("UpdateObservedStatus")).Text));
                 Assert.Equal(Visibility.Visible, ((Button)window.FindName("StorePageAction")).Visibility);
             }
             finally { SynchronizationContext.SetSynchronizationContext(previous); }
@@ -256,7 +256,7 @@ public sealed partial class SettingsThemePreviewTests
             Assert.Equal(5, library.Queue.Count);
             Assert.Equal(5, library.ViewModel.VisibleCount);
             Assert.Empty(Application.Current.Windows.OfType<ThemedDialog>());
-            Assert.Equal("3개를 휴지통으로 옮김", status.Text);
+            Assert.Equal("3개를 휴지통으로 옮김", KoreanWordWrap.Strip(status.Text));
             Assert.Equal(UiText.Get("LibraryUndo_Action"), window.StatusActionLabelForTest);
             var action = (Button)window.FindName("LibraryStatusAction");
             Assert.Equal(UiText.Get("LibraryUndo_ActionName"), AutomationProperties.GetName(action));
@@ -266,7 +266,7 @@ public sealed partial class SettingsThemePreviewTests
             SettleLibrary(window);
             Assert.Equal(8, library.Queue.Count);
             Assert.Equal(8, library.ViewModel.VisibleCount);
-            Assert.Equal("라이브러리에 3개 복원됨", status.Text);
+            Assert.Equal("라이브러리에 3개 복원됨", KoreanWordWrap.Strip(status.Text));
             Assert.Empty(window.StatusActionLabelForTest);
 
             // Ctrl+Z undoes the session's last delete too.
@@ -275,7 +275,7 @@ public sealed partial class SettingsThemePreviewTests
             KeyBinding undoKey = window.InputBindings.OfType<KeyBinding>().Single(binding => binding.Key == Key.Z && binding.Modifiers == ModifierKeys.Control);
             // Input handlers run with WPF's synchronization context, as a real key press does.
             PumpUiTask(window, () => { undoKey.Command.Execute(null); return Task.FromResult(true); });
-            PumpLibraryUntil(window, () => status.Text, text => text == "라이브러리에 2개 복원됨", "Ctrl+Z restore");
+            PumpLibraryUntil(window, () => KoreanWordWrap.Strip(status.Text), text => text == "라이브러리에 2개 복원됨", "Ctrl+Z restore");
             Assert.Equal(8, library.Queue.Count);
 
             // The restore menu: the last delete first, then each capture with its thumbnail and time.
@@ -298,7 +298,7 @@ public sealed partial class SettingsThemePreviewTests
             }
             PumpUiTask(window, () => { first.RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent)); return Task.FromResult(true); });
             CloseRestoreMenu(window);
-            PumpLibraryUntil(window, () => status.Text, text => text == "라이브러리에 2개 복원됨", "menu undo");
+            PumpLibraryUntil(window, () => KoreanWordWrap.Strip(status.Text), text => text == "라이브러리에 2개 복원됨", "menu undo");
             Assert.Equal(8, library.Queue.Count);
 
             // With a selection, More (and so restore and the library folder) stays reachable.
@@ -333,7 +333,7 @@ public sealed partial class SettingsThemePreviewTests
             window.ShowGallery();
             SettleLibrary(window);
             var status = (TextBlock)window.FindName("LibraryActionStatus");
-            Assert.Equal("보관 기간이 지난 이미지 4개를 삭제했습니다", status.Text);
+            Assert.Equal("보관 기간이 지난 이미지 4개를 삭제했습니다", KoreanWordWrap.Strip(status.Text));
             Assert.Equal(UiText.Get("Retention_NoticeAction"), window.StatusActionLabelForTest);
             PumpUiTask(window, async () => { await window.InvokeStatusActionForTest(); return true; });
             Assert.Equal(1, opened);
@@ -341,7 +341,7 @@ public sealed partial class SettingsThemePreviewTests
             // Once per installation.
             library.Recovery.NoteRetentionDeletion(2);
             window.RefreshFromQueue();
-            Assert.NotEqual("보관 기간이 지난 이미지 2개를 삭제했습니다", status.Text);
+            Assert.NotEqual("보관 기간이 지난 이미지 2개를 삭제했습니다", KoreanWordWrap.Strip(status.Text));
             Assert.Null(library.Recovery.PendingRetentionNotice);
         }
         finally
@@ -361,7 +361,7 @@ public sealed partial class SettingsThemePreviewTests
             SettleLibrary(window);
             Assert.Equal("아직 캡처가 없습니다", library.ViewModel.EmptyStateTitle);
             Assert.Equal("Ctrl+Shift+C로 캡처하면 여기에 표시됩니다.", library.ViewModel.EmptyStateText);
-            Assert.Contains(Descendants(window).OfType<TextBlock>(), text => text.IsVisible && text.Text == library.ViewModel.EmptyStateText);
+            Assert.Contains(Descendants(window).OfType<TextBlock>(), text => text.IsVisible && KoreanWordWrap.Strip(text.Text) == library.ViewModel.EmptyStateText);
             Assert.False(((FrameworkElement)window.FindName("GalleryDetailsPanel")).IsVisible);
             Assert.False(((FrameworkElement)window.FindName("GalleryDetailsRail")).IsVisible);
 

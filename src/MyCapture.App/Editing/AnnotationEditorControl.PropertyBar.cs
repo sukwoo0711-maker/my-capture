@@ -1,3 +1,4 @@
+using MyCapture.App.Themes;
 using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Controls;
@@ -33,7 +34,7 @@ internal sealed partial class AnnotationEditorControl
             var button = new ToggleButton
             {
                 Content = UiText.Get("EditorProperty_ArrowHead" + style), MinHeight = 32, MinWidth = 44,
-                FontSize = 12, Padding = new Thickness(8, 2, 8, 2), Margin = new Thickness(1, 0, 1, 0),
+                FontSize = TypeScale.Caption, Padding = new Thickness(8, 2, 8, 2), Margin = new Thickness(1, 0, 1, 0),
             };
             AutomationProperties.SetName(button, UiText.Get("EditorProperty_ArrowHead") + ": " + button.Content);
             AutomationProperties.SetAutomationId(button, "AnnotationArrowHead" + style);
@@ -124,7 +125,7 @@ internal sealed partial class AnnotationEditorControl
         customGlyph.Children.Add(customDot);
         var plus = new TextBlock
         {
-            Text = "+", FontSize = 12, HorizontalAlignment = HorizontalAlignment.Center,
+            Text = "+", FontSize = TypeScale.Caption, HorizontalAlignment = HorizontalAlignment.Center,
             VerticalAlignment = VerticalAlignment.Center,
         };
         plus.SetResourceReference(TextBlock.ForegroundProperty, "Text.Primary");
@@ -138,7 +139,7 @@ internal sealed partial class AnnotationEditorControl
         _customColorInput = new TextBox
         {
             Text = ColorCode(_controller.StrokeColor), MinHeight = 32,
-            FontSize = 12, Margin = new Thickness(0, 0, 0, 8),
+            FontSize = TypeScale.Caption, Margin = new Thickness(0, 0, 0, 8),
         };
         AutomationName(_customColorInput, UiText.Get("Tools.CustomColor"));
         AutomationProperties.SetAutomationId(_customColorInput, "AnnotationCustomColorHex");
@@ -160,7 +161,7 @@ internal sealed partial class AnnotationEditorControl
         };
         var apply = new Button
         {
-            Content = UiText.Get("Tools.CustomColor"), Height = 32, MinHeight = 32, FontSize = 12,
+            Content = UiText.Get("Tools.CustomColor"), Height = 32, MinHeight = 32, FontSize = TypeScale.Caption,
         };
         apply.SetResourceReference(StyleProperty, "Button.Compact");
         AutomationName(apply, UiText.Get("Tools.CustomColor"));
@@ -217,7 +218,7 @@ internal sealed partial class AnnotationEditorControl
         var button = new Button
         {
             Content = content, Width = 32, Height = 32, MinWidth = 32, MinHeight = 32,
-            Padding = new Thickness(0), FontSize = 12, ToolTip = name,
+            Padding = new Thickness(0), FontSize = TypeScale.Caption, ToolTip = name,
         };
         button.SetResourceReference(StyleProperty, "Button.GhostCompact");
         AutomationName(button, name);

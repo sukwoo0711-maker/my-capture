@@ -1,3 +1,4 @@
+using MyCapture.App.Themes;
 using System.IO;
 using System.Windows;
 using System.Windows.Automation;
@@ -32,12 +33,12 @@ internal static class SourceChip
         symbol.Children.Add(new TextBlock
         {
             Text = GlyphFor(source.Kind), FontFamily = new FontFamily("Segoe Fluent Icons, Segoe MDL2 Assets"),
-            FontSize = 14, VerticalAlignment = VerticalAlignment.Center,
+            FontSize = TypeScale.Body, VerticalAlignment = VerticalAlignment.Center,
         });
         if (source.Kind == CaptureProvenanceKind.Document && Path.GetExtension(source.DocumentPath) is { Length: > 0 } extension)
             symbol.Children.Add(new TextBlock
             {
-                Text = extension.TrimStart('.').ToUpperInvariant(), FontSize = 10, MaxWidth = 46,
+                Text = extension.TrimStart('.').ToUpperInvariant(), FontSize = TypeScale.Micro, MaxWidth = 46,
                 TextTrimming = TextTrimming.CharacterEllipsis, Margin = new Thickness(4, 0, 0, 0),
                 VerticalAlignment = VerticalAlignment.Center,
             });
@@ -53,7 +54,7 @@ internal static class SourceChip
         {
             Name = "CaptureSourceChip", Content = content, ToolTip = source.Tooltip, MaxWidth = 320,
             MinWidth = 0, MinHeight = 24, Height = 26, Padding = new Thickness(6, 2, 6, 2),
-            FontSize = 12, HorizontalContentAlignment = HorizontalAlignment.Stretch,
+            FontSize = TypeScale.Caption, HorizontalContentAlignment = HorizontalAlignment.Stretch,
             HorizontalAlignment = HorizontalAlignment.Left, VerticalAlignment = VerticalAlignment.Center,
             IsTabStop = true, Focusable = true, Visibility = source.HasSource ? Visibility.Visible : Visibility.Collapsed,
             ContextMenu = CreateMenu(source, status, search, actions),

@@ -13,6 +13,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using MyCapture.App.Editing;
 using MyCapture.App.Gallery;
 using MyCapture.App.Recording;
+using MyCapture.App.Themes;
 using MyCapture.Core.Localization;
 using MyCapture.Core.Queue;
 using MyCapture.Core.Recording;
@@ -45,7 +46,7 @@ public sealed class VideoFrameCaptureTests
             Assert.Equal(3840, png.PixelWidth);
             Assert.Equal(2160, png.PixelHeight);
             Assert.Equal(new[] { false, true }, playback);
-            Assert.Equal(UiText.Format("VideoFrame_Saved", saved.Title), Field<TextBlock>(player, "_status").Text);
+            Assert.Equal(UiText.Format("VideoFrame_Saved", saved.Title), KoreanWordWrap.Strip(Field<TextBlock>(player, "_status").Text));
             Assert.True(png.PixelWidth > player.Width);
             Assert.Equal(fixture.Source.Id, saved.SourceVideoId);
             Assert.Equal("source", saved.SourceAssetKind);
@@ -311,7 +312,7 @@ public sealed class VideoFrameCaptureTests
         {
             Assert.Null(Wait(player.SaveCurrentFrameAsync()));
             Assert.Null(Wait(editor.SaveCurrentFrameAsync()));
-            Assert.Equal(UiText.Get("VideoFrame_SaveFailed"), Field<TextBlock>(player, "_status").Text);
+            Assert.Equal(UiText.Get("VideoFrame_SaveFailed"), KoreanWordWrap.Strip(Field<TextBlock>(player, "_status").Text));
             Assert.Equal(UiText.Get("VideoFrame_SaveFailed"), Field<TextBlock>(editor, "_statusLabel").Text);
             Assert.Equal(Visibility.Collapsed, Field<Button>(player, "_showFrameButton").Visibility);
             Assert.Equal(Visibility.Collapsed, Field<Button>(editor, "_showSavedFrameButton").Visibility);

@@ -174,17 +174,17 @@ internal sealed class ImageReductionExportDialog : Window
     private void ShowCalculating()
     {
         bool previous = _imagePreview.Source is not null;
-        _state.Text = UiText.Get(previous ? "ExportReduction_CalculatingPrevious" : "ExportReduction_Working");
+        KoreanWordWrap.Show(_state, UiText.Get(previous ? "ExportReduction_CalculatingPrevious" : "ExportReduction_Working"));
         _imagePreview.Opacity = previous ? StaleOpacity : 1;
         _status.Opacity = previous ? StaleOpacity : 1;
         // The previous sizes stay for comparison; its "ready, save it" note does not, since
         // that result can no longer be saved.
-        if (previous && _resultSizes is not null) _status.Text = _resultSizes;
+        if (previous && _resultSizes is not null) KoreanWordWrap.Show(_status, _resultSizes);
     }
 
     private void ShowCurrent()
     {
-        _state.Text = string.Empty;
+        KoreanWordWrap.Show(_state, string.Empty);
         _imagePreview.Opacity = 1;
         _status.Opacity = 1;
     }
@@ -275,9 +275,9 @@ internal sealed class ImageReductionExportDialog : Window
             _resultSizes = UiText.Format("ExportReduction_Result", FormatFileSize(original.LongLength), FormatFileSize(result.Bytes.LongLength), result.ActualReductionPercent.ToString("F1"), result.Extension);
             _resultSizes += Environment.NewLine + UiText.Format("ExportOptions.Dimensions",
                 result.PixelWidth > 0 ? result.PixelWidth : _image.PixelWidth, result.PixelHeight > 0 ? result.PixelHeight : _image.PixelHeight);
-            _status.Text = _resultSizes
+            KoreanWordWrap.Show(_status, _resultSizes
                 + Environment.NewLine + (result.PreservedTransparency ? UiText.Get("ExportReduction_Transparent")
-                    : !result.TargetReached ? UiText.Get("ExportReduction_Unmet") : UiText.Get("ExportReduction_Ready"));
+                    : !result.TargetReached ? UiText.Get("ExportReduction_Unmet") : UiText.Get("ExportReduction_Ready")));
             ShowCurrent();
             _save.IsEnabled = !_saving;
             stage = await Task.Run(() =>
@@ -297,9 +297,9 @@ internal sealed class ImageReductionExportDialog : Window
             if (_original is { IsFaulted: true }) _original = null;
             if (Current())
             {
-                _state.Text = string.Empty;
+                KoreanWordWrap.Show(_state, string.Empty);
                 _status.Opacity = 1;
-                _status.Text = UiText.Format("ExportReduction_Error", MyCapture.App.Themes.ThemedDialog.RecoveryMessage(ex));
+                KoreanWordWrap.Show(_status, UiText.Format("ExportReduction_Error", MyCapture.App.Themes.ThemedDialog.RecoveryMessage(ex)));
             }
         }
         finally
@@ -316,9 +316,9 @@ internal sealed class ImageReductionExportDialog : Window
     internal bool IsRecalculationPendingForTest => _pendingRecalculation is not null;
 
     /// <summary>The line above the preview: empty, or what is being calculated.</summary>
-    internal string CalculationStateForTest => _state.Text;
+    internal string CalculationStateForTest => KoreanWordWrap.Strip(_state.Text);
 
-    internal string ResultTextForTest => _status.Text;
+    internal string ResultTextForTest => KoreanWordWrap.Strip(_status.Text);
 
     internal BitmapSource? PreviewForTest => _imagePreview.Source as BitmapSource;
 
@@ -373,7 +373,7 @@ internal sealed class ImageReductionExportDialog : Window
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
         {
-            if (!_closed) _status.Text = UiText.Format("ExportReduction_Error", MyCapture.App.Themes.ThemedDialog.RecoveryMessage(ex));
+            if (!_closed) KoreanWordWrap.Show(_status, UiText.Format("ExportReduction_Error", MyCapture.App.Themes.ThemedDialog.RecoveryMessage(ex)));
         }
         finally
         {
@@ -417,7 +417,7 @@ internal sealed class ImageReductionExportDialog : Window
         }
         catch (Exception ex) when (ex is System.Runtime.InteropServices.ExternalException or InvalidOperationException)
         {
-            if (!_closed) _status.Text = UiText.Format("ExportReduction_Error", MyCapture.App.Themes.ThemedDialog.RecoveryMessage(ex));
+            if (!_closed) KoreanWordWrap.Show(_status, UiText.Format("ExportReduction_Error", MyCapture.App.Themes.ThemedDialog.RecoveryMessage(ex)));
         }
         finally
         {

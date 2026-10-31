@@ -1,3 +1,4 @@
+using MyCapture.App.Themes;
 using System.Globalization;
 using System.Net;
 using System.Text;
@@ -279,7 +280,7 @@ internal static class ClipboardMarkdownRenderer
                 if (continued)
                 {
                     var note = new FormattedText("나머지 내용은 F2에서 확인합니다.", CultureInfo.GetCultureInfo("ko-KR"),
-                        FlowDirection.LeftToRight, new Typeface("Segoe UI"), 13, Brushes.DimGray, rasterScale);
+                        FlowDirection.LeftToRight, new Typeface("Segoe UI"), TypeScale.Content.MarkdownFallback, Brushes.DimGray, rasterScale);
                     drawing.DrawText(note, new Point(24, contentHeight + 8));
                 }
             }
@@ -325,7 +326,7 @@ internal static class ClipboardMarkdownRenderer
         var document = new FlowDocument
         {
             FontFamily = new FontFamily("Segoe UI"),
-            FontSize = 15,
+            FontSize = TypeScale.Content.MarkdownBody,
             Foreground = Brushes.Black,
             Background = Brushes.White,
             PagePadding = new Thickness(24, 20, 24, 20),
@@ -377,7 +378,7 @@ internal static class ClipboardMarkdownRenderer
                     Tag = MarkdownBlockKind.HorizontalRule,
                     BorderBrush = Brushes.LightGray,
                     BorderThickness = new Thickness(0, 0, 0, 1),
-                    FontSize = 1,
+                    FontSize = TypeScale.Content.MarkdownRuleSpacer,
                     LineHeight = 1,
                     Margin = new Thickness(0, 8, 0, 12),
                 });
@@ -390,7 +391,7 @@ internal static class ClipboardMarkdownRenderer
                 int level = heading.Groups[1].Length;
                 Paragraph paragraph = MakeParagraph(ClosingHeading.Replace(heading.Groups[2].Value, string.Empty));
                 paragraph.Tag = level;
-                paragraph.FontSize = level switch { 1 => 28, 2 => 23, 3 => 19, _ => 16 };
+                paragraph.FontSize = level switch { 1 => TypeScale.Content.MarkdownHeading1, 2 => TypeScale.Content.MarkdownHeading2, 3 => TypeScale.Content.MarkdownHeading3, _ => TypeScale.Content.MarkdownHeadingOther };
                 paragraph.FontWeight = FontWeights.SemiBold;
                 paragraph.Margin = new Thickness(0, level == 1 ? 0 : 10, 0, 10);
                 paragraph.KeepWithNext = true;
@@ -457,7 +458,7 @@ internal static class ClipboardMarkdownRenderer
     {
         Tag = code,
         FontFamily = new FontFamily("Consolas"),
-        FontSize = 14,
+        FontSize = TypeScale.Content.MarkdownCode,
         Background = Brushes.WhiteSmoke,
         Padding = new Thickness(12),
         Margin = new Thickness(0, 5, 0, 12),
@@ -499,7 +500,7 @@ internal static class ClipboardMarkdownRenderer
         blocks.Add(new Paragraph(new Run("그림을 표시할 수 없어 원문을 보여줍니다."))
         {
             Foreground = Brushes.DimGray,
-            FontSize = 13,
+            FontSize = TypeScale.Content.MarkdownFallback,
             Margin = new Thickness(0, 0, 0, 12),
         });
     }

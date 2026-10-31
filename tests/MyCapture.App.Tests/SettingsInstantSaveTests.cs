@@ -56,14 +56,14 @@ public sealed partial class SettingsInstantSaveTests
             Assert.Equal(1, saves);
             Assert.Equal(draft.PlayCaptureSound, store.Load().General.PlayCaptureSound);
             Assert.Same(draft, window.DataContext);
-            Assert.Equal(UiText.Get("Settings_Saved"), ((TextBlock)window.FindName("SettingsStatus")).Text);
+            Assert.Equal(UiText.Get("Settings_Saved"), KoreanWordWrap.Strip(((TextBlock)window.FindName("SettingsStatus")).Text));
 
             int priorDelay = saved.Capture.DelaySeconds;
             window.ImportSettingsFrom(Path.Combine(root, "missing-settings.json"));
-            string importFailure = ((TextBlock)window.FindName("SettingsStatus")).Text;
+            string importFailure = KoreanWordWrap.Strip(((TextBlock)window.FindName("SettingsStatus")).Text);
             Assert.StartsWith(UiText.Get("Settings_ImportFailed"), importFailure, StringComparison.Ordinal);
             clock.Advance(2100);
-            Assert.Equal(importFailure, ((TextBlock)window.FindName("SettingsStatus")).Text);
+            Assert.Equal(importFailure, KoreanWordWrap.Strip(((TextBlock)window.FindName("SettingsStatus")).Text));
 
             draft.DelaySeconds = "6";
             clock.Advance(180);
@@ -86,7 +86,7 @@ public sealed partial class SettingsInstantSaveTests
             Assert.Equal(draft.IncludeCursor, saved.Capture.IncludeCursor);
             Assert.True(draft.GetErrors(nameof(SettingsDraft.CaptureHotkey)).Cast<string>().Any());
             Assert.Equal(Visibility.Visible, ((Border)window.FindName("ErrorSummary")).Visibility);
-            Assert.DoesNotContain(UiText.Get("Settings_Saved"), ((TextBlock)window.FindName("SettingsStatus")).Text);
+            Assert.DoesNotContain(UiText.Get("Settings_Saved"), KoreanWordWrap.Strip(((TextBlock)window.FindName("SettingsStatus")).Text));
 
             rejectHotkey = true;
             draft.CaptureHotkey = "Ctrl+Alt+F8";
@@ -116,10 +116,10 @@ public sealed partial class SettingsInstantSaveTests
             draft.Language = "en-US";
             Pump();
             string restart = UiText.Get("Settings.LanguageRestart");
-            Assert.Contains(restart, ((TextBlock)window.FindName("SettingsStatus")).Text);
+            Assert.Contains(restart, KoreanWordWrap.Strip(((TextBlock)window.FindName("SettingsStatus")).Text));
             draft.ShowMagnifier = !draft.ShowMagnifier;
             clock.Advance(2100);
-            Assert.Contains(restart, ((TextBlock)window.FindName("SettingsStatus")).Text);
+            Assert.Contains(restart, KoreanWordWrap.Strip(((TextBlock)window.FindName("SettingsStatus")).Text));
 
             failSave = true;
             bool priorSound = draft.PlayCaptureSound;

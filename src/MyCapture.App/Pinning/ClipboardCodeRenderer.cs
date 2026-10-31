@@ -1,3 +1,4 @@
+using MyCapture.App.Themes;
 using System.Globalization;
 using System.IO;
 using System.Text;
@@ -15,7 +16,7 @@ namespace MyCapture.App.Pinning;
 internal static class ClipboardCodeRenderer
 {
     internal const string FontFamilyName = "Consolas";
-    internal const double FontSizeDip = 15;
+    internal const double FontSizeDip = TypeScale.Content.CodeText;
     internal const double LineHeightDip = 23;
     internal const int HorizontalPaddingDip = 24;
     internal const int VerticalPaddingDip = 20;

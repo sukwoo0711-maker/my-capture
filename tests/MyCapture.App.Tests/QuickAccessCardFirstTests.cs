@@ -699,7 +699,7 @@ public sealed class QuickAccessCardFirstTests : KoreanCaptionTest
     private static Button CopyButton(QuickAccessWindow card) => card.ActionButtonsForTest[QuickAccessWindow.ActionOrder.ToList().IndexOf("Copy")];
 
     private static TextBlock TipText(QuickAccessWindow card, string tip) =>
-        QuickAccessDetachedFixture.Descendants(card).OfType<TextBlock>().First(text => text.Text == tip);
+        QuickAccessDetachedFixture.Descendants(card).OfType<TextBlock>().First(text => KoreanWordWrap.Strip(text.Text) == tip);
 
     private static QuickAccessWindow Pending(ReceiptKeyboardRouter router, bool? copied) =>
         QuickAccessWindow.ForPendingCapture(Image(), copied, targetMonitor: Offscreen(), keyboardRouter: router);

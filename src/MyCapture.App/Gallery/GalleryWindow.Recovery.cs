@@ -71,13 +71,13 @@ internal sealed partial class GalleryWindow
             AutomationProperties.SetName(LibraryStatusAction, actionName ?? actionLabel);
         }
 
-        if (LibraryActionStatus.Text == text) LibraryActionStatus.Text = string.Empty;
-        LibraryActionStatus.Text = text;
+        if (KoreanWordWrap.Strip(LibraryActionStatus.Text) == text) KoreanWordWrap.Show(LibraryActionStatus, string.Empty);
+        KoreanWordWrap.Show(LibraryActionStatus, text);
         SyncStatusAction();
     }
 
-    private bool StatusActionShown => _statusAction is not null && !string.IsNullOrEmpty(LibraryActionStatus.Text)
-        && LibraryActionStatus.Text == _statusActionText;
+    private bool StatusActionShown => _statusAction is not null && !string.IsNullOrEmpty(KoreanWordWrap.Strip(LibraryActionStatus.Text))
+        && KoreanWordWrap.Strip(LibraryActionStatus.Text) == _statusActionText;
 
     /// <summary>The action belongs to the line it was shown with and disappears with it.</summary>
     private void SyncStatusAction()

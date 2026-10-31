@@ -69,10 +69,10 @@ internal sealed class GalleryContactSheetDialog : Window
         _source.Content = UiText.Get("ContactSheet.Source");
         AutomationProperties.SetName(_source, UiText.Get("ContactSheet.Source"));
         _settings.Children.Add(_source);
-        if (skippedVideos > 0) _settings.Children.Add(new TextBlock
+        if (skippedVideos > 0) _settings.Children.Add(KoreanWordWrap.Show(new TextBlock
         {
-            Text = UiText.Format("ContactSheet.SkippedVideos", skippedVideos), TextWrapping = TextWrapping.Wrap,
-        });
+            TextWrapping = TextWrapping.Wrap,
+        }, UiText.Format("ContactSheet.SkippedVideos", skippedVideos)));
         body.Children.Add(new ScrollViewer { Content = _settings, VerticalScrollBarVisibility = ScrollBarVisibility.Auto });
         var previewPanel = new DockPanel();
         var previewLabel = new TextBlock { Text = UiText.Get("ContactSheet.Preview"), Margin = new Thickness(16, 0, 0, 0) };
@@ -134,23 +134,23 @@ internal sealed class GalleryContactSheetDialog : Window
         try
         {
             int pages = new ContactSheetLayout(options).PageCount(_items.Count);
-            _status.Text = UiText.Get("ContactSheet.Preparing");
+            KoreanWordWrap.Show(_status, UiText.Get("ContactSheet.Preparing"));
             await Task.Delay(150, cancellation.Token);
             var preview = await GalleryContactSheetRenderer.RunAsync(
                 () => GalleryContactSheetRenderer.Preview(_items, options, _culture, cancellation.Token), cancellation.Token);
             if (_closed || generation != _generation) return;
             _preview.Source = preview;
-            _status.Text = UiText.Format("ContactSheet.PageCount", _items.Count, pages);
+            KoreanWordWrap.Show(_status, UiText.Format("ContactSheet.PageCount", _items.Count, pages));
             _save.IsEnabled = true;
         }
         catch (OperationCanceledException) { }
         catch (ArgumentOutOfRangeException)
         {
-            if (!_closed && generation == _generation) _status.Text = UiText.Get("ContactSheet.Limit");
+            if (!_closed && generation == _generation) KoreanWordWrap.Show(_status, UiText.Get("ContactSheet.Limit"));
         }
         catch (Exception ex) when (IsExportError(ex))
         {
-            if (!_closed && generation == _generation) _status.Text = UiText.Get("ContactSheet.PreviewFailed");
+            if (!_closed && generation == _generation) KoreanWordWrap.Show(_status, UiText.Get("ContactSheet.PreviewFailed"));
         }
         finally
         {
@@ -168,7 +168,7 @@ internal sealed class GalleryContactSheetDialog : Window
             FileName = $"MyCapture-{DateTime.Now:yyyyMMdd-HHmmss}.pdf",
         };
         if (picker.ShowDialog(this) != true) return;
-        if (File.Exists(picker.FileName)) { _status.Text = UiText.Get("ContactSheet.Exists"); return; }
+        if (File.Exists(picker.FileName)) { KoreanWordWrap.Show(_status, UiText.Get("ContactSheet.Exists")); return; }
         ContactSheetOptions options = Options;
         using var cancellation = new CancellationTokenSource();
         _exportCancellation = cancellation;
@@ -177,7 +177,7 @@ internal sealed class GalleryContactSheetDialog : Window
         _progress.Maximum = _items.Count;
         _progress.Value = 0;
         _progress.Visibility = Visibility.Visible;
-        _status.Text = UiText.Get("ContactSheet.Saving");
+        KoreanWordWrap.Show(_status, UiText.Get("ContactSheet.Saving"));
         string stage = Path.Combine(Path.GetDirectoryName(picker.FileName)!, $".MyCapture-{Guid.NewGuid():N}.pdf.partial");
         bool created = false;
         bool acceptingProgress = true;
@@ -189,7 +189,7 @@ internal sealed class GalleryContactSheetDialog : Window
                 if (!acceptingProgress || !ReferenceEquals(_exportCancellation, cancellation)) return;
                 activity?.Report(done, _items.Count);
                 _progress.Value = done;
-                _status.Text = UiText.Format("ContactSheet.Progress", done, _items.Count);
+                KoreanWordWrap.Show(_status, UiText.Format("ContactSheet.Progress", done, _items.Count));
             });
             await GalleryContactSheetRenderer.RunAsync(() =>
             {
@@ -207,10 +207,10 @@ internal sealed class GalleryContactSheetDialog : Window
             // Claim the destination only after a complete PDF exists; an existing file always survives.
             File.Move(stage, picker.FileName, overwrite: false);
             created = false;
-            _status.Text = UiText.Get("ContactSheet.Saved");
+            KoreanWordWrap.Show(_status, UiText.Get("ContactSheet.Saved"));
         }
-        catch (OperationCanceledException) { _status.Text = UiText.Get("ContactSheet.Cancelled"); }
-        catch (Exception ex) when (IsExportError(ex)) { _status.Text = UiText.Get("ContactSheet.Failed"); }
+        catch (OperationCanceledException) { KoreanWordWrap.Show(_status, UiText.Get("ContactSheet.Cancelled")); }
+        catch (Exception ex) when (IsExportError(ex)) { KoreanWordWrap.Show(_status, UiText.Get("ContactSheet.Failed")); }
         finally
         {
             acceptingProgress = false;
@@ -218,7 +218,7 @@ internal sealed class GalleryContactSheetDialog : Window
             {
                 try { await Task.Run(() => global::MyCapture.Core.Storage.RecoverableFileRemoval.DeleteFile(stage)); }
                 catch (Exception ex) when (IsExportError(ex))
-                { _status.Text = UiText.Format("ContactSheet.StageRetained", stage); }
+                { KoreanWordWrap.Show(_status, UiText.Format("ContactSheet.StageRetained", stage)); }
             }
             _exportCancellation = null;
             _settings.IsEnabled = _save.IsEnabled = true;

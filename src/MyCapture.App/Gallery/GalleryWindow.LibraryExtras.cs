@@ -84,13 +84,13 @@ internal sealed partial class GalleryWindow
         }
         if (!_queue.LibraryUndo.CanUndo
             || _queue.LibraryUndo.NextKind == LibraryUndoKind.Delete) return;
-        string previousStatus = LibraryActionStatus.Text;
+        string previousStatus = KoreanWordWrap.Strip(LibraryActionStatus.Text);
         // Let the command finish publishing its own result (including partial batch counts).
         Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(() =>
         {
             if (!_queue.LibraryUndo.CanUndo) return;
-            string status = string.IsNullOrWhiteSpace(LibraryActionStatus.Text) || LibraryActionStatus.Text == previousStatus
-                ? UiText.Get("Library.Undo.Changed") : LibraryActionStatus.Text;
+            string status = string.IsNullOrWhiteSpace(KoreanWordWrap.Strip(LibraryActionStatus.Text)) || KoreanWordWrap.Strip(LibraryActionStatus.Text) == previousStatus
+                ? UiText.Get("Library.Undo.Changed") : KoreanWordWrap.Strip(LibraryActionStatus.Text);
             ShowActionStatus(status, UiText.Get("LibraryUndo_Action"), UiText.Get("LibraryUndo_ActionName"), UndoLibraryAsync);
         }));
     }
@@ -108,7 +108,7 @@ internal sealed partial class GalleryWindow
             {
                 // Recovery reports exact restored/failed counts, including partial restores.
                 if (_queue.LibraryUndo.CanUndo)
-                    ShowActionStatus(LibraryActionStatus.Text, UiText.Get("LibraryUndo_Action"),
+                    ShowActionStatus(KoreanWordWrap.Strip(LibraryActionStatus.Text), UiText.Get("LibraryUndo_Action"),
                         UiText.Get("LibraryUndo_ActionName"), UndoLibraryAsync);
                 return;
             }
@@ -233,9 +233,9 @@ internal sealed class GallerySavedSearchDialog : Window
             _saving = true; apply.IsEnabled = cancel.IsEnabled = input.IsEnabled = false;
             bool saved = false;
             try { await save(input.Text); saved = true; }
-            catch (ArgumentException) { error.Text = UiText.Get("Library.SavedSearch.Invalid"); }
+            catch (ArgumentException) { KoreanWordWrap.Show(error, UiText.Get("Library.SavedSearch.Invalid")); }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException)
-            { error.Text = UiText.Get("Library.SavedSearch.Failed"); }
+            { KoreanWordWrap.Show(error, UiText.Get("Library.SavedSearch.Failed")); }
             finally { _saving = false; apply.IsEnabled = cancel.IsEnabled = input.IsEnabled = true; }
             if (saved) DialogResult = true;
         };

@@ -1,3 +1,4 @@
+using MyCapture.App.Themes;
 using System.Windows;
 using System.Windows.Input;
 using System.Windows.Media;
@@ -419,7 +420,7 @@ internal sealed class AnnotationEditorSurface : FrameworkElement
             dc.DrawRectangle(frame, new Pen(shadow, 1), new Rect(center.X - 4, center.Y - 4, 8, 8));
         RectD pixels = pending.Region.ToPixelBounds();
         var label = new FormattedText($"{pixels.Width} × {pixels.Height} px",
-            UiText.Culture, FlowDirection.LeftToRight, new Typeface("Segoe UI"), 12, frame, VisualTreeHelper.GetDpi(this).PixelsPerDip);
+            UiText.Culture, FlowDirection.LeftToRight, new Typeface("Segoe UI"), TypeScale.Caption, frame, VisualTreeHelper.GetDpi(this).PixelsPerDip);
         double left = Math.Clamp(bounds.Left + (bounds.Width - label.Width) / 2, 4, Math.Max(4, ActualWidth - label.Width - 12));
         double top = bounds.Bottom + 10 + label.Height < ActualHeight ? bounds.Bottom + 10 : Math.Max(4, bounds.Bottom - label.Height - 14);
         dc.DrawRoundedRectangle(shadow, null, new Rect(left - 5, top - 3, label.Width + 10, label.Height + 6), 3, 3);

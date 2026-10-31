@@ -1,3 +1,4 @@
+using MyCapture.App.Themes;
 using System.Globalization;
 using System.Windows;
 using System.Windows.Automation;
@@ -408,9 +409,9 @@ internal sealed class VideoLayerTimeline : FrameworkElement
         if (_textLayers.Count == 0 && _frameLayers.Count == 0)
         {
             DrawText(dc, UiText.Get("Text_49931F796C95"), LabelWidth + 12,
-                PaddingTop + ((EmptyTrackHeight - 14) / 2.0), _muted, 12, timelineWidth - 24, _track);
+                PaddingTop + ((EmptyTrackHeight - 14) / 2.0), _muted, TypeScale.Caption, timelineWidth - 24, _track);
             DrawText(dc, UiText.Get("Text_986A825EE823"), LabelWidth + 12,
-                PaddingTop + EmptyTrackHeight + Gap + ((EmptyTrackHeight - 14) / 2.0), _muted, 12, timelineWidth - 24, _track);
+                PaddingTop + EmptyTrackHeight + Gap + ((EmptyTrackHeight - 14) / 2.0), _muted, TypeScale.Caption, timelineWidth - 24, _track);
         }
 
         // Playhead
@@ -437,7 +438,7 @@ internal sealed class VideoLayerTimeline : FrameworkElement
     {
         dc.DrawRectangle(_track, null, new Rect(LabelWidth, top, timelineWidth, height));
         dc.DrawLine(_gridPen, new Point(LabelWidth, top), new Point(LabelWidth, top + height));
-        DrawText(dc, label, 8, top + ((height - 14) / 2.0), _textSecondary, 12, LabelWidth - 12);
+        DrawText(dc, label, 8, top + ((height - 14) / 2.0), _textSecondary, TypeScale.Caption, LabelWidth - 12);
     }
 
     private void DrawLayerRow(
@@ -455,7 +456,7 @@ internal sealed class VideoLayerTimeline : FrameworkElement
     {
         dc.DrawRectangle(_track, null, new Rect(LabelWidth, top, timelineWidth, height));
         dc.DrawLine(_gridPen, new Point(LabelWidth, top), new Point(LabelWidth, top + height));
-        DrawText(dc, rowLabel, 8, top + ((height - 14) / 2.0), _textSecondary, 12, LabelWidth - 12);
+        DrawText(dc, rowLabel, 8, top + ((height - 14) / 2.0), _textSecondary, TypeScale.Caption, LabelWidth - 12);
 
         var bar = GetBarRect(startMs, endMs, top + ((height - BarHeight) / 2.0), LabelWidth + timelineWidth);
         if (bar.IsEmpty) return;
@@ -474,7 +475,7 @@ internal sealed class VideoLayerTimeline : FrameworkElement
 
         if (bar.Width >= 36)
         {
-            DrawText(dc, itemLabel, bar.Left + 6, bar.Top + ((bar.Height - 14) / 2.0), _foreground, 12, bar.Width - 12);
+            DrawText(dc, itemLabel, bar.Left + 6, bar.Top + ((bar.Height - 14) / 2.0), _foreground, TypeScale.Caption, bar.Width - 12);
         }
 
         bool selected = layerId == _selectedId;
