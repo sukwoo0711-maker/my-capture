@@ -4418,6 +4418,12 @@ Shift를 누르면 픽셀 단위로 정밀하게 선택합니다.
   <data name="Journey.CloseAgain" xml:space="preserve">
     <value>핀 닫기 연습</value>
   </data>
+  <data name="Journey.WaitEditor" xml:space="preserve">
+    <value>편집 창에서 진행 중</value>
+  </data>
+  <data name="Journey.WaitPin" xml:space="preserve">
+    <value>핀에서 진행 중</value>
+  </data>
   <data name="Journey.B3.Success" xml:space="preserve">
     <value>투명도 메뉴가 열렸습니다.</value>
   </data>

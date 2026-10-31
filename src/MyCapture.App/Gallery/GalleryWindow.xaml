@@ -47,7 +47,8 @@
                             <Border x:Name="SelectionBox" Width="18" Height="18" HorizontalAlignment="Left"
                                     Background="{DynamicResource Surface.Sunken}" BorderBrush="{DynamicResource Border.Control}"
                                     BorderThickness="1" CornerRadius="4">
-                                <Path x:Name="SelectionCheck" Data="M 3,8 L 7,12 L 14,4" Visibility="Collapsed"
+                                <!-- Inside the 1-DIP border, centred on the box like the theme CheckBox mark. -->
+                                <Path x:Name="SelectionCheck" Data="M 4,7.75 L 6.875,10.625 L 12,4.875" Visibility="Collapsed"
                                       Stroke="{DynamicResource Text.OnAccent}" StrokeThickness="2"
                                       StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" />
                             </Border>
@@ -297,7 +298,9 @@
                                 <Grid Background="Transparent">
                                     <Border x:Name="SelectionBox" Width="20" Height="20" CornerRadius="5" BorderThickness="1" SnapsToDevicePixels="True"
                                             Background="{DynamicResource Surface.Raised}" BorderBrush="{DynamicResource Border.Control}">
-                                        <Path x:Name="SelectionCheck" Data="{StaticResource Icon.Check}" Visibility="Collapsed"
+                                        <!-- Icon.Check fills a 20-DIP icon cell; inside this border it sat 1 DIP
+                                             low and right and nearly touched the edge. Same mark, sized to the box. -->
+                                        <Path x:Name="SelectionCheck" Data="M 4.5,8.75 L 7.75,12 L 13.5,5.5" Visibility="Collapsed"
                                               Stroke="{DynamicResource Text.OnAccent}" StrokeThickness="2"
                                               StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" />
                                     </Border>

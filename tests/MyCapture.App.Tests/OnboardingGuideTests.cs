@@ -105,7 +105,7 @@ public sealed class OnboardingGuideTests
         try
         {
             AdvanceTo(guide, WelcomeStep.Draw);
-            Assert.StartsWith("그림을 가져왔습니다.", guide.StatusText, StringComparison.Ordinal);
+            Assert.Equal("그림을 가져왔습니다.", guide.StatusText);
             Assert.Empty(clipboard.Writes);
             Assert.False(guide.PracticeCopied);
         }

@@ -46,9 +46,11 @@ public sealed class PracticeJourneyEvidenceTests
                     {
                         ReducedMotion = true, TextScale = textScale, MonitorProvider = () => monitor, MediaFactory = () => new FakeTutorialMedia(), CopyPracticePicture = () => 42,
                     }) { Left = -10000, Top = -10000, WindowStartupLocation = WindowStartupLocation.Manual, ShowActivated = false, ShowInTaskbar = false };
+                    guide.LimitToWorkArea(monitor);
+                    using var tracking = new WindowTrackSizeScope(guide, new Size(1920, 1080));
                     try
                     {
-                        guide.LimitToWorkArea(monitor); guide.Show();
+                        guide.Show();
                         VisualTreeHelper.SetRootDpi(guide, new DpiScale(dpi / 96d, dpi / 96d));
                         foreach (UIElement element in FirstRunWelcomeTests.Descendants(guide).Prepend(guide).OfType<UIElement>())
                         { element.InvalidateMeasure(); element.InvalidateArrange(); }

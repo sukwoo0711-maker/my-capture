@@ -4415,6 +4415,12 @@ Delete {1} {1:plural:subfolder|subfolders}, {2} {2:plural:image|images}, and {3}
   <data name="Journey.PinAlreadyRestored" xml:space="preserve">
     <value>The picture is already open. Close it again to practise restoring it.</value>
   </data>
+  <data name="Journey.WaitEditor" xml:space="preserve">
+    <value>Waiting for the editor</value>
+  </data>
+  <data name="Journey.WaitPin" xml:space="preserve">
+    <value>Waiting for the pin</value>
+  </data>
   <data name="Journey.CloseAgain" xml:space="preserve">
     <value>Practise closing the pin</value>
   </data>
