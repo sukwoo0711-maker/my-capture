@@ -61,7 +61,8 @@ internal sealed class ThemedShellPresenter(Func<bool> suppressNotification, Func
     /// with <c>IsEnabled</c> false stays visible but cannot be invoked; its <c>ToolTip</c> says why.
     /// </summary>
     internal sealed record MenuEntry(string Label, Action? Action, IReadOnlyList<MenuEntry>? Children = null, string Gesture = "",
-        bool IsEnabled = true, string ToolTip = "", bool LiteralLabel = false)
+        bool IsEnabled = true, string ToolTip = "", bool LiteralLabel = false,
+        ImageSource? Thumbnail = null, bool IsMuted = false, string ItemStatus = "")
     {
         /// <summary>A divider between groups; it runs nothing.</summary>
         internal static MenuEntry Separator { get; } = new(string.Empty, null) { IsSeparator = true };
@@ -329,9 +330,10 @@ internal sealed class ThemedShellPresenter(Func<bool> suppressNotification, Func
     internal ContextMenu? MenuForTest => _menu;
 
     /// <summary>Builds the themed menu without opening it.</summary>
-    internal ContextMenu CreateMenu(IEnumerable<MenuEntry> commands)
+    internal ContextMenu CreateMenu(IEnumerable<MenuEntry> commands, ResourceDictionary? resources = null)
     {
         var menu = new ContextMenu { Placement = PlacementMode.MousePoint, MinWidth = 240 };
+        if (resources is not null) menu.Resources = resources;
         AppendEntries(menu.Items, commands, menu);
         return menu;
     }
@@ -358,11 +360,33 @@ internal sealed class ThemedShellPresenter(Func<bool> suppressNotification, Func
                 continue;
             }
 
-            MenuItem item = entry.LiteralLabel ? new LiteralMenuItem() : new MenuItem();
+            MenuItem item = entry.Thumbnail is not null ? new ThumbnailMenuItem()
+                : entry.LiteralLabel ? new LiteralMenuItem() : new MenuItem();
+            if (entry.Thumbnail is not null && root.TryFindResource(typeof(MenuItem)) is Style previewStyle)
+                item.Style = previewStyle;
             item.Header = entry.Label;
             item.MinHeight = 36;
             item.InputGestureText = entry.Gesture;
             item.IsEnabled = entry.IsEnabled;
+            if (entry.IsMuted) item.SetResourceReference(Control.ForegroundProperty, "Text.Secondary");
+            if (entry.ItemStatus.Length > 0) AutomationProperties.SetItemStatus(item, entry.ItemStatus);
+            if (entry.Thumbnail is { } thumbnail)
+            {
+                var preview = new Image
+                {
+                    Source = thumbnail, Stretch = Stretch.Uniform,
+                    HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center,
+                };
+                RenderOptions.SetBitmapScalingMode(preview, BitmapScalingMode.HighQuality);
+                var box = new Border
+                {
+                    Width = 32, Height = 24, BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(3),
+                    Child = preview, Opacity = entry.IsMuted ? .5 : 1,
+                };
+                box.SetResourceReference(Border.BorderBrushProperty, "Border.Subtle");
+                box.SetResourceReference(Border.BackgroundProperty, "Surface.Sunken");
+                item.Icon = box;
+            }
             if (entry.LiteralLabel)
             {
                 item.HeaderTemplate = literalHeaderTemplate ??= (DataTemplate)System.Windows.Markup.XamlReader.Parse("""
@@ -372,7 +396,8 @@ internal sealed class ThemedShellPresenter(Func<bool> suppressNotification, Func
                     """);
             }
             AutomationProperties.SetName(item, entry.Label);
-            if (entry.Gesture.Length > 0) AutomationProperties.SetAcceleratorKey(item, entry.Gesture);
+            if (entry.Gesture.Length > 0 && entry.Gesture != entry.ItemStatus)
+                AutomationProperties.SetAcceleratorKey(item, entry.Gesture);
             if (entry.ToolTip.Length > 0)
             {
                 // A disabled command says why it cannot run, by pointer and to screen readers.
@@ -395,9 +420,23 @@ internal sealed class ThemedShellPresenter(Func<bool> suppressNotification, Func
     }
 
     // Source titles contain literal underscores, not WPF access-key markers.
-    private sealed class LiteralMenuItem : MenuItem
+    private class LiteralMenuItem : MenuItem
     {
         protected override AutomationPeer OnCreateAutomationPeer() => new LiteralMenuItemAutomationPeer(this);
+    }
+
+    // The shared menu reserves an 18-DIP glyph. Only preview rows need a wider icon slot.
+    private sealed class ThumbnailMenuItem : LiteralMenuItem
+    {
+        public override void OnApplyTemplate()
+        {
+            base.OnApplyTemplate();
+            if (Template.FindName("IconHost", this) is not ContentPresenter host) return;
+            host.Width = 32;
+            host.Height = 24;
+            if (VisualTreeHelper.GetParent(host) is Grid grid && grid.ColumnDefinitions.Count > 0)
+                grid.ColumnDefinitions[0].Width = new GridLength(32);
+        }
     }
 
     private sealed class LiteralMenuItemAutomationPeer(MenuItem owner) : MenuItemAutomationPeer(owner)

@@ -3289,6 +3289,11 @@ Open the library or Settings from the tray menu.</value></data>
   <data name="Ocr_ReplaceEditedText" xml:space="preserve"><value>Replace your edited text with the new recognition result?</value></data>
   <data name="Ocr_AccuracySaveFailed" xml:space="preserve"><value>Could not save recognition accuracy.</value></data>
   <data name="Ocr_ExportText" xml:space="preserve"><value>Export text</value></data>
+  <data name="Ocr_Pin" xml:space="preserve"><value>Pin</value></data>
+  <data name="Ocr_Pinned" xml:space="preserve"><value>Pinned.</value></data>
+  <data name="Ocr_EditedCells" xml:space="preserve"><value>{0} edited</value></data>
+  <data name="Ocr_Edited" xml:space="preserve"><value>Edited</value></data>
+  <data name="Ocr_RevertEdits" xml:space="preserve"><value>Revert</value></data>
   <data name="Ocr_ExportDone" xml:space="preserve"><value>Text saved:</value></data>
   <data name="Ocr_ExportNone" xml:space="preserve"><value>No recognized text to export.</value></data>
   <data name="GitHub.TokenFailed" xml:space="preserve"><value>Token upload failed — falling back to the browser flow.</value></data>
@@ -4662,6 +4667,7 @@ Delete {1} {1:plural:subfolder|subfolders}, {2} {2:plural:image|images}, and {3}
   <data name="Tray_ClearClickThrough" xml:space="preserve"><value>Turn off click through on all pins</value></data>
   <data name="Tray_Help" xml:space="preserve"><value>Help</value></data>
 <data name="Tray_OpenPins" xml:space="preserve"><value>Open pins</value></data>
+  <data name="Tray_PinHidden" xml:space="preserve"><value>Hidden</value></data>
   <data name="Tray_PinKindText" xml:space="preserve"><value>Text</value></data>
   <data name="Tray_PinKindCode" xml:space="preserve"><value>Code</value></data>
   <data name="Tray_PinKindTable" xml:space="preserve"><value>Table</value></data>
@@ -4694,6 +4700,10 @@ Delete {1} {1:plural:subfolder|subfolders}, {2} {2:plural:image|images}, and {3}
   <data name="Onboard_PinWheelDown" xml:space="preserve"><value>Ctrl+wheel down</value></data>
   <data name="Onboard_PinWheelUp" xml:space="preserve"><value>Ctrl+wheel up</value></data>
   <data name="Onboard_PinAllowClickThrough" xml:space="preserve"><value>Click through to windows behind</value></data>
+  <data name="Pin_Hide" xml:space="preserve"><value>Hide</value></data>
+  <data name="Pin_HideHelp" xml:space="preserve"><value>Hides this pin. Choose it under Open pins in the tray, or use Show all pins, to see it again.</value></data>
+  <data name="Pin_ShowOnly" xml:space="preserve"><value>Show only this pin</value></data>
+  <data name="Pin_ShowOnlyHelp" xml:space="preserve"><value>Hides every other pin. Use Show all pins to see them again.</value></data>
   <data name="Onboard_PinAllowClickThroughHelp" xml:space="preserve"><value>Sends mouse input to the window behind. Click the handle at the pin's top-right corner to turn it off. Turn off: {0}</value></data>
   <data name="Onboard_PinClickThroughOn" xml:space="preserve"><value>Click through to windows behind: on
 Turn off: {0}</value></data>

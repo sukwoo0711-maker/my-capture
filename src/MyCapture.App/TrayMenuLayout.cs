@@ -33,7 +33,7 @@ internal sealed record TrayMenuCommands(
 /// <param name="ScrollingActive">A scrolling capture is running, so its entry cancels it.</param>
 /// <param name="ClipboardHasContent">The clipboard holds an image or text a pin can show.</param>
 /// <param name="PinCount">Open pins, shown or hidden.</param>
-/// <param name="PinsHidden">The pins are hidden by "Hide all pins".</param>
+/// <param name="PinsHidden">At least one open pin is hidden.</param>
 /// <param name="ClickThroughPinCount">Open pins that let clicks through to the windows behind.</param>
 /// <param name="OpenPins">Open pin windows in newest-first opening order, including hidden pins.</param>
 internal sealed record TrayMenuState(
@@ -107,7 +107,10 @@ internal static class TrayMenuLayout
         if (commands.ActivateOpenPin is { } activatePin && state.OpenPins is { Count: > 0 } openPins)
         {
             var children = openPins.Take(MaxOpenPinEntries)
-                .Select(pin => new ThemedShellPresenter.MenuEntry(OpenPinLabel(pin.PinnedContent), () => activatePin(pin), LiteralLabel: true))
+                .Select(pin => new ThemedShellPresenter.MenuEntry(OpenPinLabel(pin.PinnedContent), () => activatePin(pin),
+                    Gesture: pin.State.IsHidden ? UiText.Get("Tray_PinHidden") : string.Empty,
+                    LiteralLabel: true, Thumbnail: pin.PinnedContent.Image,
+                    IsMuted: pin.State.IsHidden, ItemStatus: pin.State.IsHidden ? UiText.Get("Tray_PinHidden") : string.Empty))
                 .ToList();
             if (openPins.Count > MaxOpenPinEntries)
                 children.Add(new(UiText.Format("Tray_MoreOpenPins", openPins.Count - MaxOpenPinEntries), null, IsEnabled: false));
@@ -156,6 +159,7 @@ internal static class TrayMenuLayout
             _ => "Tray_PinKindText",
         });
         string title = OpenPinTitle(content.OriginalText, content.Kind == PinContentKind.Table);
+        if (title.Length == 0) title = OpenPinTitle(content.Provenance.WindowTitle, isTable: false);
         if (title.Length == 0)
             title = UiText.Format("Tray_PinImageTitle", content.Image.PixelWidth, content.Image.PixelHeight);
         return $"{title} · {kind}";

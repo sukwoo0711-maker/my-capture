@@ -35,7 +35,7 @@ internal sealed partial class OcrResultWindow
     internal ProgressBar AccuracyProgress { get; private set; } = null!;
     internal OcrQuality? ResultQuality { get; private set; }
     internal TextBox ResultTextBox => _textBox;
-    internal bool HasEditedText => !string.Equals(_textBox.Text, _generatedText, StringComparison.Ordinal);
+    internal bool HasEditedText => _tableEdits.Count > 0 || _textEdits.Count > 0;
     internal Func<bool> ConfirmReplaceEditedText { get; set; } = null!;
 
     private void InitializeAccuracyPresentation(StackPanel heading, WrapPanel commands)
@@ -133,7 +133,11 @@ internal sealed partial class OcrResultWindow
         RefreshAccuracy();
     }
 
-    internal bool ConfirmReplacement() => !HasEditedText || ConfirmReplaceEditedText();
+    internal bool ConfirmReplacement()
+    {
+        CommitTableEdit();
+        return !HasEditedText || ConfirmReplaceEditedText();
+    }
 
     internal void SetResultQuality(OcrQuality? quality)
     {
@@ -247,6 +251,7 @@ internal sealed partial class OcrResultWindow
         _modelReadiness = null;
         _deferredSelection = _imageOverlay.Selection;
         _qualityOperation = true;
+        UpdatePinButtons();
         AccuracySelector.IsEnabled = false;
         _rerunButton.IsEnabled = false;
         _tabs.IsEnabled = false;
@@ -275,6 +280,7 @@ internal sealed partial class OcrResultWindow
     internal void EndQualityOperation()
     {
         _qualityOperation = false;
+        UpdatePinButtons();
         _rerunButton.IsEnabled = true;
         _tabs.IsEnabled = true;
         RestoreQualitySelection();
@@ -293,6 +299,7 @@ internal sealed partial class OcrResultWindow
     {
         if (active) _accuracyReleased = false;
         _recognitionOperation = active;
+        if (_pinButton is not null) UpdatePinButtons();
         ++_accuracyRefreshVersion;
         if (active) UpdateAccuracyControls();
         else RefreshAccuracy();

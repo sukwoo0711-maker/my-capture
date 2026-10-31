@@ -332,6 +332,16 @@ public partial class App : Application
                 _ocrModelPreparation.CancelForQuality(_settings!.Ocr.Quality);
                 _settingsWindow?.RefreshOcrQuality();
             }, new OcrAccuracyModel(_services.GetRequiredService<OcrModelStore>(), new WindowsOcrDownloadEnvironment())));
+        _ocrPresenter.PinRequested += (_, request) =>
+        {
+            request.Completion = OpenOcrPinAsync();
+            async Task<bool> OpenOcrPinAsync()
+            {
+                if (_pins is null) return false;
+                await _pins.PinOcrAsync(request.Text, request.Kind);
+                return true;
+            }
+        };
         // The editor's text command recognises its current image in the shared result window.
         TextRecognitionRoute.IsAvailable = () => _ocrService?.IsAvailable == true;
         TextRecognitionRoute.Show = (image, context) => _ocrPresenter?.ShowRecognized(
@@ -362,7 +372,7 @@ public partial class App : Application
             FirstUseGuide: ShowOnboardingAgain);
         _tray.MenuPresenter = () => _shellPresenter.ShowMenu(TrayMenuLayout.Build(trayCommands, _settings!.Hotkeys,
             new TrayMenuState(_pins?.CanRestoreClosed == true, _scrollCancellation is not null,
-                ClipboardAvailability.HasPinnableContent(), _pins?.Count ?? 0, _pins?.AreHidden == true,
+                ClipboardAvailability.HasPinnableContent(), _pins?.Count ?? 0, _pins?.AnyHidden == true,
                 _pins?.ClickThroughCount ?? 0, _pins?.SnapshotOpenPinWindows(),
                 UpdateAvailable: _updates?.HasAvailableUpdate == true, UpdateVersion: _updates?.AvailableVersion,
                 UpdateBusy: _updates?.IsBusy == true)));

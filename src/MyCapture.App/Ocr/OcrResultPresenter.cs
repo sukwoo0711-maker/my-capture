@@ -37,6 +37,7 @@ internal sealed class OcrResultPresenter : IDisposable
     private OcrRequest? _currentSourceRequest;
 
     internal OcrResultWindow Window => _window;
+    internal event EventHandler<OcrPinRequest>? PinRequested;
 
     private CancellationTokenSource? _inFlight;
     private CancellationTokenSource? _cachedImageLoad;
@@ -97,6 +98,7 @@ internal sealed class OcrResultPresenter : IDisposable
         _window.Translator = translator;
         if (accuracy is not null) _window.ConfigureAccuracy(accuracy, ChangeQualityAsync, CancelQualityChange);
         _window.RerunRequested += (_, _) => Rerun();
+        _window.PinRequested += (_, request) => PinRequested?.Invoke(this, request);
         _window.GeometryRequested += (_, _) => Rerun();
         _window.Dismissed += (_, _) =>
         {
@@ -199,7 +201,7 @@ internal sealed class OcrResultPresenter : IDisposable
         if (_disposed || version != _presentationVersion) return;
         var cts = new CancellationTokenSource();
         _inFlight = cts;
-        string? acceptedText = preserveSelection ? _window.ResultTextBox.Text : null;
+        long acceptedRevision = _window.EditRevision;
 
         _window.ShowBusy(_currentContext, preserveSelection);
         if (!ReferenceEquals(_inFlight, cts))
@@ -209,10 +211,10 @@ internal sealed class OcrResultPresenter : IDisposable
         }
         _setBusy(true);
 
-        _ = RecognizeAsync(request, cts, preserveSelection, acceptedText);
+        _ = RecognizeAsync(request, cts, preserveSelection, acceptedRevision);
     }
 
-    private async Task RecognizeAsync(OcrRequest request, CancellationTokenSource cts, bool preserveSelection, string? acceptedText)
+    private async Task RecognizeAsync(OcrRequest request, CancellationTokenSource cts, bool preserveSelection, long acceptedRevision)
     {
         OcrResult result;
         BitmapSource? source = null;
@@ -247,7 +249,7 @@ internal sealed class OcrResultPresenter : IDisposable
             _setBusy(false);
 
             if (preserveSelection && result.Status is OcrStatus.Success or OcrStatus.NoText
-                && acceptedText != _window.ResultTextBox.Text)
+                && acceptedRevision != _window.EditRevision)
             {
                 bool replace = _window.ConfirmReplacement();
                 if (_disposed || _mutationSuspensions != 0 || !ReferenceEquals(_inFlight, cts))
@@ -385,7 +387,7 @@ internal sealed class OcrResultPresenter : IDisposable
             return;
         }
 
-        string acceptedText = _window.ResultTextBox.Text;
+        long acceptedRevision = _window.EditRevision;
         CancelInFlight();
         long version = _presentationVersion;
         using var cancellation = new CancellationTokenSource();
@@ -441,7 +443,7 @@ internal sealed class OcrResultPresenter : IDisposable
                 failure = result.Message ?? UiText.Get("Text_AA254F35F02E");
                 return;
             }
-            if (_window.ResultTextBox.Text != acceptedText && !_window.ConfirmReplacement()) return;
+            if (_window.EditRevision != acceptedRevision && !_window.ConfirmReplacement()) return;
             if (!OwnsOperation()) return;
 
             OcrSettings settings = _accuracy.ReadSettings();

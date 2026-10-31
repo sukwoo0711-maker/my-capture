@@ -103,10 +103,13 @@ MyCapture는 코딩하는 동안 엑셀 사양 표와 자주 쓰는 코드를 �
 8. 공유하기 전에 단계 번호와 화살표를 넣고, 이메일·토큰·카드번호를 Ctrl+Shift+R로 가린 화면입니다.
 9. 영역·창·전체 화면 캡처, 클립보드 복사, 이미지 속 글자 복사는 Windows 캡처 도구와 같습니다. 영역 녹화는 소리 없이 화면만 기록합니다. 여기에 원문을 보관하는 표·코드 핀, 반투명·클릭 허용 핀, 닫은 핀 다시 열기, 스크롤 캡처가 더해집니다.
 
-### 이 버전의 새로운 기능 (4.12.1)
+### 이 버전의 새로운 기능 (4.12.2)
 
 입력 한도는 1,500자입니다.
 
+- 핀 메뉴에 ‘숨기기’와 ‘이 핀만 보기’가 생겼습니다. 트레이의 ‘열린 핀’은 미리 보기와 함께 숨긴 핀을 표시하고, 고른 핀을 깜빡여 알려 줍니다.
+- 문자 인식 결과의 표 칸과 글자를 그 자리에서 고치고, 고친 결과를 원문째 핀으로 띄웁니다. 칸을 고르면 원본의 같은 줄이 강조됩니다.
+- 그림 핀에서 글자를 복사하면 처음 인식한 결과를 기억해 다음부터 다시 인식하지 않습니다.
 - 편집기가 캡처를 실제 크기로 보여 줘 글자와 가는 선이 흐려지지 않습니다. 자른 뒤에도 배율이 그대로입니다.
 - 펜·형광펜·단계 번호는 그리기 전부터 실제 두께와 시작점을 보여 줍니다. 단계 번호는 모서리를 끌어 크기를 바꿉니다.
 - 모자이크와 흐림을 ‘가리기’ 도구 하나로 합쳤습니다(M 모자이크, B 흐림). ‘도장’은 ‘워터마크’로 이름을 바꿨습니다.
@@ -201,10 +204,13 @@ Enter them in screenshot order. Each caption is 200 characters or fewer.
 8. Step numbers and an arrow added before sharing, with an email address, token and card number covered by Ctrl+Shift+R.
 9. Like Snipping Tool, MyCapture captures, copies to the clipboard and extracts text. It adds table and code pins with original text, click-through pins and scrolling capture; recording is silent.
 
-### What's new in this version (4.12.1)
+### What's new in this version (4.12.2)
 
 Limit: 1,500 characters.
 
+- New pin menu items: Hide and Show only this pin. Open pins in the tray adds thumbnails and flashes the pin you pick.
+- Edit table cells and text in the text recognition result, with the source line highlighted, then pin it as text.
+- Image pins remember their first text recognition, so the next copy skips it.
 - The editor shows captures at actual size, so text and thin lines stay sharp. Cropping keeps the zoom.
 - Pen, highlighter and step numbers show their real width and starting point before you draw. Drag a corner of a step number to resize it.
 - Mosaic and blur are now one Obscure tool (M for mosaic, B for blur). Stamp is now called Watermark.

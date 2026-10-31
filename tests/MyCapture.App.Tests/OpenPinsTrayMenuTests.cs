@@ -177,7 +177,7 @@ public sealed class OpenPinsTrayMenuTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void ChoosingAPinShowsHiddenPinsAndClearsOnlyItsClickThrough(bool hidden) => StaTestHost.Run(() =>
+    public void ChoosingAPinShowsOnlyThatPinAndClearsOnlyItsClickThrough(bool hidden) => StaTestHost.Run(() =>
     {
         using var culture = UiText.UseLanguage("en-US");
         bool? motion = FluidMotion.AnimationsEnabledOverrideForTest;
@@ -199,8 +199,11 @@ public sealed class OpenPinsTrayMenuTests
 
             entry.Action!();
 
-            Assert.False(manager.AreHidden);
-            Assert.All(new[] { first, chosen, last }, pin => Assert.True(pin.IsVisible));
+            Assert.Equal(hidden, manager.AnyHidden);
+            Assert.True(chosen.IsVisible);
+            Assert.Equal(!hidden, first.IsVisible);
+            Assert.Equal(!hidden, last.IsVisible);
+            Assert.True(chosen.FindCueRunning);
             Assert.False(chosen.State.IsClickThrough);
             Assert.True(first.State.IsClickThrough);
             Assert.False(last.State.IsClickThrough);

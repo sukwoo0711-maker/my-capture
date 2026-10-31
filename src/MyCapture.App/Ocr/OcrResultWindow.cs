@@ -24,7 +24,7 @@ namespace MyCapture.App.Ocr;
 /// any in-flight rerun keeps its handler wiring.
 /// </para>
 /// <para>
-/// The text area is a read-only multiline <see cref="TextBox"/> so the recognised text is fully
+/// The text area is an editable multiline <see cref="TextBox"/> so the recognised text is fully
 /// selectable and copyable with the keyboard (Ctrl+A/Ctrl+C) as well as the copy button. The
 /// window carries automation names on every control and closes on Escape.
 /// </para>
@@ -111,8 +111,8 @@ internal sealed partial class OcrResultWindow : Window
 
         _textBox = new TextBox
         {
-            IsReadOnly = true,
-            IsUndoEnabled = false,
+            IsReadOnly = false,
+            IsUndoEnabled = true,
             AcceptsReturn = true,
             TextWrapping = TextWrapping.Wrap,
             VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
@@ -124,9 +124,9 @@ internal sealed partial class OcrResultWindow : Window
             Background = ResourceBrush("Surface.Sunken", new SolidColorBrush(Color.FromRgb(0x08, 0x0C, 0x12))),
             BorderBrush = ResourceBrush("Border.Subtle", Brushes.DimGray),
         };
-        // Recognition results are read-only. Avoid TSF querying and formatting every selected
-        // line; the native TextBox still provides selection, copying and UI Automation.
-        InputMethod.SetIsInputMethodEnabled(_textBox, false);
+        // TSF formats every selected line when it measures the selection (TextStore.GetTextExt).
+        // With the IME on, a 100k-character select-all took 5.8 s to lay out, so editing keeps
+        // the IME for a caret or a small selection only (UpdateInputMethod).
         _textBox.SetResourceReference(Control.BackgroundProperty, "Surface.Sunken");
         _textBox.SetResourceReference(Control.BorderBrushProperty, "Border.Subtle");
         AutomationProperties.SetName(_textBox, UiText.Get("Text_B75AA3DC8AFB"));
@@ -164,6 +164,8 @@ internal sealed partial class OcrResultWindow : Window
         _copyButton.Margin = new Thickness(0, 0, 8, 0);
         _copyButton.Click += (_, _) => CopyText();
         buttons.Children.Add(_copyButton);
+        _pinButton = CreatePinButton();
+        buttons.Children.Add(_pinButton);
 
         _copyWithSourceButton = MakeButton(UiText.Get("Translate_CopyWithSource"), UiText.Get("Translate_CopyWithSource"));
         _copyWithSourceButton.SetResourceReference(FrameworkElement.StyleProperty, "Button.Secondary");
@@ -302,6 +304,8 @@ internal sealed partial class OcrResultWindow : Window
 
     private void ApplyResult(OcrResult result, string contextLabel)
     {
+        ResetEdits();
+        _settingEditorText = true;
         _rerunButton.IsEnabled = true;
 
         switch (result.Status)
@@ -339,6 +343,7 @@ internal sealed partial class OcrResultWindow : Window
                 _status.Text = result.Message ?? UiText.Get("Text_AA254F35F02E");
                 break;
         }
+        _settingEditorText = false;
         ApplyAdvancedResult(result);
     }
 
@@ -445,6 +450,8 @@ internal sealed partial class OcrResultWindow : Window
 
     private void OnPreviewKeyDown(object sender, KeyEventArgs e)
     {
+        // Editing owns Escape, Enter, clipboard and editor shortcuts until the cell ends.
+        if (_editingCell) return;
         if (e.Key == Key.Escape && _imageOverlay.Selection is not null)
         {
             _imageOverlay.SetSelection(null);
