@@ -18,7 +18,7 @@ public sealed class PracticeReviewFixWindowTests
     [InlineData("B3")]
     [InlineData("B4")]
     [InlineData("B5")]
-    public void ExternalActionsHaveNoPrimaryOrDefaultReplay(string stepName) => StaTestHost.Run(() =>
+    public void ExternalActionsKeepADisabledWaitingSlotWithoutDefaultReplay(string stepName) => StaTestHost.Run(() =>
     {
         var media = new FakeTutorialMedia();
         var guide = new WelcomeWindow(new HotkeySettings(), AfterCaptureAction.Editor,
@@ -27,9 +27,11 @@ public sealed class PracticeReviewFixWindowTests
         {
             var step = Enum.Parse<PracticeStep>(stepName);
             PracticeJourneyDriver.AdvanceTo(guide.Session, step);
-            Assert.Equal(Visibility.Collapsed, guide.TryNowButton.Visibility);
+            Assert.Equal(Visibility.Visible, guide.TryNowButton.Visibility);
+            Assert.False(guide.TryNowButton.IsEnabled);
             Assert.False(guide.TryNowButton.IsDefault);
             Assert.False(guide.TryNowButton.IsTabStop);
+            Assert.Equal(UiText.Get(step <= PracticeStep.A6 ? "Journey.WaitEditor" : "Journey.WaitPin"), guide.TryNowButton.Content);
             Assert.Equal(Visibility.Visible, guide.ReplayButton.Visibility);
             Assert.True(guide.ReplayButton.IsEnabled && guide.ReplayButton.Focusable);
             int opened = media.OpenedPaths.Count, rewinds = media.RewindCount;
