@@ -163,10 +163,28 @@ public sealed class VideoEditorMediaEndedRecoveryTests
     /// asking again is the watch's job, after the frame is reported.
     /// </summary>
     [Fact]
-    public void AFirstSeekAfterTheEndThatReadsPastIt_ReportsItsFrameWithoutWaiting() => StaTestHost.Run(() =>
+    public void AFirstSeekAfterTheEndThatReadsPastIt_ReportsItsFrameWithoutWaiting() =>
+        StaTestHost.Run(() => ReadPastAfterEnd(-1));
+
+    // Diagnostics only (diag/first-seek-after-end-repro): repeats the test above in one process
+    // and appends one record per run to records.jsonl in MYCAPTURE_READPAST_REPRO_OUT.
+    public static IEnumerable<object[]> ReadPastRepro() =>
+        Enumerable.Range(
+                0,
+                int.TryParse(Environment.GetEnvironmentVariable("MYCAPTURE_READPAST_REPRO_COUNT"), out int count) && count > 0
+                    ? count
+                    : 1)
+            .Select(iteration => new object[] { iteration });
+
+    [Theory]
+    [MemberData(nameof(ReadPastRepro))]
+    public void ReadPastAfterEndRepro(int iteration) => StaTestHost.Run(() => ReadPastAfterEnd(iteration));
+
+    private static void ReadPastAfterEnd(int iteration)
     {
         string dir = OwnedTestDirectory.Create("mc-media-past-after-end-");
         VideoEditorWindow? editor = null;
+        var record = new Dictionary<string, object?> { ["iteration"] = iteration, ["class"] = "exception" };
         try
         {
             string clip = EncodeClip(dir, out double containerMs);
@@ -174,24 +192,85 @@ public sealed class VideoEditorMediaEndedRecoveryTests
             MediaElementPreviewEngine engine = editor.PreviewEngineForTest;
             using var export = new MediaFoundationVideoFrameReader(clip);
             var failures = new List<string>();
+            int mediaEnded = 0;
+            editor.MediaForTest.MediaEnded += (_, _) => mediaEnded++;
 
+            int endedBeforePlay = engine.EndedReportCountForTest;
+            int reopensBeforePlay = engine.ReopenCountForTest;
             PlayToTheEnd(editor);
+            int mediaEndedInPlay = mediaEnded;
+            int endedBefore = engine.EndedReportCountForTest;
+            int reopensBefore = engine.ReopenCountForTest;
+            int settlesBefore = engine.SettleCountForTest;
+            bool settleFlag = engine.SettleNextSeekForTest;
+            double playerBefore = editor.MediaForTest.Position.TotalMilliseconds;
+            double playerLength = editor.MediaForTest.NaturalDuration.HasTimeSpan
+                ? editor.MediaForTest.NaturalDuration.TimeSpan.TotalMilliseconds
+                : 0;
             int positioned = engine.PositionCountForTest;
             engine.MissNextLandingForTest = true;
-            (int watches, int positions) = Check(editor, export, failures, "read past after end", 600);
-            Assert.True(failures.Count == 0, string.Join(Environment.NewLine, failures));
+            Presentation presented = Check(editor, export, failures, "read past after end", 600);
+            var last = engine.LastSeekForTest;
+            int positions = presented.Positions;
+            int watches = presented.Watches;
+
+            record["positions"] = positions - positioned;
+            record["enginePositionsAtReport"] = last.Positions - positioned;
+            record["reportLagMs"] = presented.Timestamp == 0
+                ? null
+                : System.Diagnostics.Stopwatch.GetElapsedTime(last.ReportTimestamp, presented.Timestamp).TotalMilliseconds;
+            record["watched"] = last.Watched;
+            record["firstReadEnded"] = last.FirstReadEnded;
+            record["reopensInSeek"] = last.Reopens;
+            record["seeksInSeek"] = last.Seeks;
+            record["firstReadOffsetMs"] = engine.FirstReadOffsetForTest;
+            record["lastReadOffsetMs"] = last.LastReadOffsetMs;
+            record["endedReportsAtReport"] = presented.EndedReports - endedBefore;
+            record["reopensAtReport"] = presented.Reopens - reopensBefore;
+            record["endedReportsAfterWatch"] = engine.EndedReportCountForTest - endedBefore;
+            record["reopensAfterWatch"] = engine.ReopenCountForTest - reopensBefore;
+            record["endedReportsInPlay"] = endedBefore - endedBeforePlay;
+            record["reopensInPlay"] = reopensBefore - reopensBeforePlay;
+            record["mediaEndedInPlay"] = mediaEndedInPlay;
+            record["mediaEndedAfterPlay"] = mediaEnded - mediaEndedInPlay;
+            record["settleFlagBeforeSeek"] = settleFlag;
+            record["playerBeforeSeekMs"] = playerBefore;
+            record["playerLengthMs"] = playerLength;
+            record["watchesAtReport"] = watches - settlesBefore;
+            record["watchesAfter"] = engine.SettleCountForTest - settlesBefore;
+            record["failures"] = string.Join(" | ", failures);
+            record["class"] = failures.Count > 0 ? "check-failure"
+                : positions - positioned == 1 ? "ok"
+                : presented.EndedReports > endedBefore ? "ended-report"
+                : !settleFlag ? "no-settle-flag"
+                : last.Positions - positioned == 1 ? "late-capture"
+                : "other";
+            string detail = System.Text.Json.JsonSerializer.Serialize(record);
+
+            Assert.True(failures.Count == 0, string.Join(Environment.NewLine, failures) + " " + detail);
             Assert.True(
                 positions - positioned == 1,
-                $"the seek was positioned {positions - positioned} time(s) before its frame was reported");
-            Assert.True(engine.SettleCountForTest > watches, "the seek that read past its position was not watched");
+                $"the seek was positioned {positions - positioned} time(s) before its frame was reported {detail}");
+            Assert.True(engine.SettleCountForTest > watches, $"the seek that read past its position was not watched {detail}");
+        }
+        catch (Exception ex) when (record["class"] is "exception")
+        {
+            record["exception"] = ex.Message;
+            throw;
         }
         finally
         {
             editor?.Close();
             RangePatternClip.Pump(TimeSpan.FromMilliseconds(50));
             OwnedTestDirectory.Delete(dir);
+            if (Environment.GetEnvironmentVariable("MYCAPTURE_READPAST_REPRO_OUT") is { Length: > 0 } output)
+            {
+                File.AppendAllText(
+                    Path.Combine(output, "records.jsonl"),
+                    System.Text.Json.JsonSerializer.Serialize(record) + Environment.NewLine);
+            }
         }
-    });
+    }
 
     /// <summary>
     /// Play right after a playback to the end starts again at In, through the first seek after
@@ -289,7 +368,9 @@ public sealed class VideoEditorMediaEndedRecoveryTests
     /// returns how many watches had ended and how often the element was positioned when the seek
     /// was presented.
     /// </summary>
-    private static (int Watches, int Positions) Check(
+    private readonly record struct Presentation(int Watches, int Positions, int EndedReports, int Reopens, long Timestamp);
+
+    private static Presentation Check(
         VideoEditorWindow editor,
         MediaFoundationVideoFrameReader export,
         List<string> failures,
@@ -298,10 +379,15 @@ public sealed class VideoEditorMediaEndedRecoveryTests
     {
         PreviewSeekCoordinator coordinator = editor.PreviewSeekCoordinatorForTest;
         MediaElementPreviewEngine engine = editor.PreviewEngineForTest;
-        var presentations = new ConcurrentDictionary<long, (int Watches, int Positions)>();
+        var presentations = new ConcurrentDictionary<long, Presentation>();
         void OnPresented(PresentedPreviewFrame frame) =>
-            presentations.TryAdd(frame.Generation, (engine.SettleCountForTest, engine.PositionCountForTest));
-        (int Watches, int Positions) atPresentation;
+            presentations.TryAdd(frame.Generation, new Presentation(
+                engine.SettleCountForTest,
+                engine.PositionCountForTest,
+                engine.EndedReportCountForTest,
+                engine.ReopenCountForTest,
+                System.Diagnostics.Stopwatch.GetTimestamp()));
+        Presentation atPresentation;
         bool presented;
         DateTime until;
         coordinator.PreviewPresented += OnPresented;

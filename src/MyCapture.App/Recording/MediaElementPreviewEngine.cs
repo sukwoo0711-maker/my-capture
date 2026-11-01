@@ -126,6 +126,7 @@ internal sealed class MediaElementPreviewEngine : IVideoPreviewEngine
             observedPriority,
             cancellationToken).ConfigureAwait(false);
         FirstReadOffsetForTest = observedMs - position;
+        bool firstReadEnded = ended;
         bool nearEnd = DurationMs - position < EndStretchMs;
         if (nearEnd)
         {
@@ -165,6 +166,8 @@ internal sealed class MediaElementPreviewEngine : IVideoPreviewEngine
                 .ConfigureAwait(false);
         }
 
+        LastSeekForTest = (watch, firstReadEnded, reopens, seeks, PositionCountForTest, observedMs - position,
+            System.Diagnostics.Stopwatch.GetTimestamp());
         if (watch && !ended)
         {
             StartWatch(position, observedPriority);
@@ -339,6 +342,12 @@ internal sealed class MediaElementPreviewEngine : IVideoPreviewEngine
 
     /// <summary>How far past the element position the first read of the last seek was.</summary>
     internal double FirstReadOffsetForTest { get; private set; }
+
+    // Diagnostics only (diag/first-seek-after-end-repro).
+    internal bool SettleNextSeekForTest => _settleNextSeek;
+
+    internal (bool Watched, bool FirstReadEnded, int Reopens, int Seeks, int Positions, double LastReadOffsetMs, long ReportTimestamp)
+        LastSeekForTest { get; private set; }
 
     // The ended report is the player's length itself, to the 100 ns tick.
     private const double LengthReportToleranceMs = 0.001;

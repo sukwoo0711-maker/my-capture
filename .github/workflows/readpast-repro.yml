@@ -1,0 +1,123 @@
+name: Read-past repro
+
+# Diagnostic only, for the diag/first-seek-after-end-repro branch. Repeats
+# VideoEditorMediaEndedRecoveryTests.AFirstSeekAfterTheEndThatReadsPastIt_ReportsItsFrameWithoutWaiting
+# in one test process with a busy loop on every logical CPU, writes one record per run, and then
+# runs the whole class once without load.
+
+on:
+  push:
+    branches:
+      - diag/first-seek-after-end-repro
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+  DOTNET_NOLOGO: '1'
+  DOTNET_CLI_UI_LANGUAGE: en
+
+jobs:
+  repro:
+    name: Repro ${{ matrix.runner }}
+    runs-on: windows-latest
+    timeout-minutes: 55
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [1, 2, 3, 4, 5, 6, 7, 8]
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Prepare output folder
+        shell: powershell
+        run: |
+          $out = Join-Path $env:RUNNER_TEMP 'readpast'
+          New-Item -ItemType Directory -Force -Path $out | Out-Null
+          [IO.File]::AppendAllText($env:GITHUB_ENV, "READPAST_OUT=$out`n")
+
+      - name: Set up .NET from global.json
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+
+      - name: Build the app tests
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Continue'
+          dotnet build tests\MyCapture.App.Tests\MyCapture.App.Tests.csproj -c Release *> "$env:READPAST_OUT\build.log"
+          if ($LASTEXITCODE -ne 0) { Get-Content "$env:READPAST_OUT\build.log" -Tail 60; exit 1 }
+
+      - name: Repeat under a busy loop on every CPU
+        continue-on-error: true
+        timeout-minutes: 40
+        shell: powershell
+        env:
+          MYCAPTURE_READPAST_REPRO_COUNT: '100'
+        run: |
+          $ErrorActionPreference = 'Continue'
+          $env:MYCAPTURE_READPAST_REPRO_OUT = $env:READPAST_OUT
+          $cpus = [Environment]::ProcessorCount
+          $jobs = @(1..$cpus | ForEach-Object { Start-Job -ScriptBlock { $x = 0; while ($true) { $x++ } } })
+          Start-Sleep -Seconds 5
+          "busy loops: $($jobs.Count) on $cpus logical CPUs" | Tee-Object -FilePath "$env:READPAST_OUT\load.txt"
+          try {
+              dotnet test tests\MyCapture.App.Tests\MyCapture.App.Tests.csproj -c Release --no-build --filter "FullyQualifiedName~VideoEditorMediaEndedRecoveryTests.ReadPastAfterEndRepro" --logger "console;verbosity=normal" --logger "trx;LogFileName=load.trx" --results-directory "$env:READPAST_OUT" *> "$env:READPAST_OUT\load-test.log"
+              $code = $LASTEXITCODE
+          }
+          finally {
+              $jobs | Stop-Job
+              $jobs | Remove-Job -Force
+          }
+          "load repeat exit code: $code" | Tee-Object -FilePath "$env:READPAST_OUT\load-exit.txt"
+          Get-Content "$env:READPAST_OUT\load-test.log" -Tail 6
+
+      - name: Whole class without load
+        continue-on-error: true
+        timeout-minutes: 10
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Continue'
+          dotnet test tests\MyCapture.App.Tests\MyCapture.App.Tests.csproj -c Release --no-build --filter "FullyQualifiedName~MyCapture.App.Tests.VideoEditorMediaEndedRecoveryTests" --logger "console;verbosity=normal" --logger "trx;LogFileName=class.trx" --results-directory "$env:READPAST_OUT" *> "$env:READPAST_OUT\class-test.log"
+          $code = $LASTEXITCODE
+          "class exit code: $code" | Tee-Object -FilePath "$env:READPAST_OUT\class-exit.txt"
+          Get-Content "$env:READPAST_OUT\class-test.log" | Where-Object { $_ -match '^\s*(Passed|Failed|Skipped)\s+MyCapture|Total tests|Passed!|Failed!' }
+
+      - name: Summary
+        if: always()
+        shell: powershell
+        run: |
+          $lines = @("### Read-past repro runner ${{ matrix.runner }}")
+          $path = Join-Path $env:READPAST_OUT 'records.jsonl'
+          if (Test-Path $path) {
+              $records = @(Get-Content $path | Where-Object { $_ } | ForEach-Object { $_ | ConvertFrom-Json })
+              $lines += "records: $($records.Count)"
+              foreach ($group in ($records | Group-Object class | Sort-Object Name)) {
+                  $lines += "- $($group.Name): $($group.Count)"
+              }
+              foreach ($record in ($records | Where-Object { $_.class -ne 'ok' })) {
+                  $lines += '    ' + ($record | ConvertTo-Json -Compress)
+              }
+          }
+          else {
+              $lines += 'no records'
+          }
+          foreach ($file in 'load-exit.txt', 'class-exit.txt') {
+              $exit = Join-Path $env:READPAST_OUT $file
+              if (Test-Path $exit) { $lines += (Get-Content $exit) }
+          }
+          $lines | ForEach-Object { Write-Host $_ }
+          [IO.File]::AppendAllText($env:GITHUB_STEP_SUMMARY, ($lines -join "`n") + "`n")
+
+      - name: Upload records
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: readpast-${{ matrix.runner }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}\readpast
+          if-no-files-found: warn
+          retention-days: 14
