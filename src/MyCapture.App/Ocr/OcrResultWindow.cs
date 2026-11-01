@@ -229,7 +229,8 @@ internal sealed partial class OcrResultWindow : Window
 
     /// <summary>Populates the window from a result and shows/activates it.</summary>
     internal void ShowResult(OcrResult result, string contextLabel,
-        BitmapSource? sourceImage = null, bool preserveSelection = false, MyCapture.Core.Settings.OcrQuality? quality = null)
+        BitmapSource? sourceImage = null, bool preserveSelection = false, MyCapture.Core.Settings.OcrQuality? quality = null,
+        bool keepEdits = false)
     {
         ArgumentNullException.ThrowIfNull(result);
         SetRecognitionOperation(active: false);
@@ -239,7 +240,7 @@ internal sealed partial class OcrResultWindow : Window
             _geometryRequested = false;
         }
         SetSourceImage(sourceImage);
-        ApplyResult(result, contextLabel);
+        ApplyResult(result, contextLabel, keepEdits);
         SetResultQuality(quality ?? result.Quality);
 
         if (SuppressPresentation) return;
@@ -302,9 +303,12 @@ internal sealed partial class OcrResultWindow : Window
         Close();
     }
 
-    private void ApplyResult(OcrResult result, string contextLabel)
+    private void ApplyResult(OcrResult result, string contextLabel, bool keepEdits = false)
     {
+        // Positions fetched for the table or code view only add layout, so text edits stay.
+        KeyValuePair<OcrExtractionMode, string>[] keptEdits = keepEdits ? [.. _textEdits] : [];
         ResetEdits();
+        foreach ((OcrExtractionMode mode, string text) in keptEdits) _textEdits[mode] = text;
         _settingEditorText = true;
         _rerunButton.IsEnabled = true;
 

@@ -99,7 +99,7 @@ internal sealed class OcrResultPresenter : IDisposable
         if (accuracy is not null) _window.ConfigureAccuracy(accuracy, ChangeQualityAsync, CancelQualityChange);
         _window.RerunRequested += (_, _) => Rerun();
         _window.PinRequested += (_, request) => PinRequested?.Invoke(this, request);
-        _window.GeometryRequested += (_, _) => Rerun();
+        _window.GeometryRequested += (_, _) => RefreshGeometry();
         _window.Dismissed += (_, _) =>
         {
             // Dismissing a busy reusable window is a real user cancellation, not merely a visual
@@ -167,7 +167,12 @@ internal sealed class OcrResultPresenter : IDisposable
         }
     }
 
-    private void Run(bool preserveSelection = false)
+    // The table and code views need word positions that a cached text result lacks. Fetching
+    // them adds layout to the text the user already has, so it keeps text edits and never asks
+    // to replace them.
+    private void RefreshGeometry() => Run(preserveSelection: true, keepEdits: true);
+
+    private void Run(bool preserveSelection = false, bool keepEdits = false)
     {
         if (_disposed || _mutationSuspensions != 0 || _currentRequestFactory is null)
         {
@@ -192,7 +197,8 @@ internal sealed class OcrResultPresenter : IDisposable
             // Run() may just have cancelled a previous owner. Its late completion is intentionally
             // ignored, so this boundary must release the tray busy state itself.
             _setBusy(false);
-            if (preserveSelection) _window.CompletePreservedRerun(UiText.Get("Text_F09A6C5A6A10"));
+            if (keepEdits) _window.CompleteGeometryRefresh(UiText.Get("Text_F09A6C5A6A10"));
+            else if (preserveSelection) _window.CompletePreservedRerun(UiText.Get("Text_F09A6C5A6A10"));
             else _window.ShowResult(OcrResult.Failed(UiText.Get("Text_F09A6C5A6A10")), _currentContext);
             return;
         }
@@ -211,10 +217,11 @@ internal sealed class OcrResultPresenter : IDisposable
         }
         _setBusy(true);
 
-        _ = RecognizeAsync(request, cts, preserveSelection, acceptedRevision);
+        _ = RecognizeAsync(request, cts, preserveSelection, keepEdits, acceptedRevision);
     }
 
-    private async Task RecognizeAsync(OcrRequest request, CancellationTokenSource cts, bool preserveSelection, long acceptedRevision)
+    private async Task RecognizeAsync(OcrRequest request, CancellationTokenSource cts, bool preserveSelection,
+        bool keepEdits, long acceptedRevision)
     {
         OcrResult result;
         BitmapSource? source = null;
@@ -248,7 +255,7 @@ internal sealed class OcrResultPresenter : IDisposable
 
             _setBusy(false);
 
-            if (preserveSelection && result.Status is OcrStatus.Success or OcrStatus.NoText
+            if (preserveSelection && !keepEdits && result.Status is OcrStatus.Success or OcrStatus.NoText
                 && acceptedRevision != _window.EditRevision)
             {
                 bool replace = _window.ConfirmReplacement();
@@ -266,7 +273,17 @@ internal sealed class OcrResultPresenter : IDisposable
                 }
             }
 
-            if (preserveSelection && result.Status is OcrStatus.Failed or OcrStatus.Unavailable or OcrStatus.Cancelled)
+            if (keepEdits && result.Status != OcrStatus.Success)
+            {
+                // Without positions the text the user has stays as it is.
+                _window.CompleteGeometryRefresh(result.Status switch
+                {
+                    OcrStatus.NoText => UiText.Format("Text_A600C689F4FB", _currentContext),
+                    OcrStatus.Cancelled => UiText.Format("Text_5626DD9C2F6A", _currentContext),
+                    _ => result.Message ?? UiText.Get("Text_AA254F35F02E"),
+                });
+            }
+            else if (preserveSelection && result.Status is OcrStatus.Failed or OcrStatus.Unavailable or OcrStatus.Cancelled)
             {
                 _window.CompletePreservedRerun(result.Status == OcrStatus.Cancelled
                     ? UiText.Format("Text_5626DD9C2F6A", _currentContext)
@@ -276,7 +293,7 @@ internal sealed class OcrResultPresenter : IDisposable
             {
                 _currentSnapshot = source;
                 _currentSourceRequest = request;
-                _window.ShowResult(result, _currentContext, source, preserveSelection);
+                _window.ShowResult(result, _currentContext, source, preserveSelection, keepEdits: keepEdits);
 
                 if (result.Status == OcrStatus.Success && _mutationSuspensions == 0 && ReferenceEquals(_inFlight, cts))
                 {
