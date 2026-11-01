@@ -160,7 +160,10 @@ public sealed class VideoEditorMediaEndedRecoveryTests
     /// <summary>
     /// The first seek after a playback to the end can read past its position at once, as on the
     /// runners after a scrub into the last stretch. It reports its frame without asking again first;
-    /// asking again is the watch's job, after the frame is reported.
+    /// asking again is the watch's job, after the frame is reported. A playback that the editor's
+    /// tick stops at the end before MediaEnded arrives can leave the player in its media-ended state
+    /// (25 of 797 runs on loaded runners): the seek then reads that report, opens the clip again and
+    /// positions it once more, and the landing read after the reopen is the one that reads past.
     /// </summary>
     [Fact]
     public void AFirstSeekAfterTheEndThatReadsPastIt_ReportsItsFrameWithoutWaiting() =>
@@ -197,8 +200,11 @@ public sealed class VideoEditorMediaEndedRecoveryTests
 
             int endedBeforePlay = engine.EndedReportCountForTest;
             int reopensBeforePlay = engine.ReopenCountForTest;
+            int positionsBeforePlay = engine.PositionCountForTest;
             PlayToTheEnd(editor);
             int mediaEndedInPlay = mediaEnded;
+            record["positionsInPlay"] = engine.PositionCountForTest - positionsBeforePlay;
+            record["presentedAfterPlayMs"] = editor.PreviewSeekCoordinatorForTest.PresentedPositionMs;
             int endedBefore = engine.EndedReportCountForTest;
             int reopensBefore = engine.ReopenCountForTest;
             int settlesBefore = engine.SettleCountForTest;
@@ -239,19 +245,25 @@ public sealed class VideoEditorMediaEndedRecoveryTests
             record["watchesAtReport"] = watches - settlesBefore;
             record["watchesAfter"] = engine.SettleCountForTest - settlesBefore;
             record["failures"] = string.Join(" | ", failures);
+            // The fixed test's conditions; oldAssertion is the one-positioning condition it replaces.
+            int reopens = presented.Reopens - reopensBefore;
+            int endedReports = presented.EndedReports - endedBefore;
+            bool positionsOk = positions - positioned == 1 + reopens && endedReports == reopens;
+            bool watchedOk = engine.SettleCountForTest > watches;
+            record["oldAssertion"] = positions - positioned == 1;
             record["class"] = failures.Count > 0 ? "check-failure"
-                : positions - positioned == 1 ? "ok"
-                : presented.EndedReports > endedBefore ? "ended-report"
-                : !settleFlag ? "no-settle-flag"
-                : last.Positions - positioned == 1 ? "late-capture"
-                : "other";
+                : !positionsOk ? "positions"
+                : !watchedOk ? "not-watched"
+                : reopens > 0 ? "ok-after-reopen"
+                : "ok";
             string detail = System.Text.Json.JsonSerializer.Serialize(record);
 
             Assert.True(failures.Count == 0, string.Join(Environment.NewLine, failures) + " " + detail);
             Assert.True(
-                positions - positioned == 1,
-                $"the seek was positioned {positions - positioned} time(s) before its frame was reported {detail}");
-            Assert.True(engine.SettleCountForTest > watches, $"the seek that read past its position was not watched {detail}");
+                positionsOk,
+                $"the seek was positioned {positions - positioned} time(s) before its frame was reported, "
+                + $"with {reopens} reopen(s) for {endedReports} media-ended report(s) {detail}");
+            Assert.True(watchedOk, $"the seek that read past its position was not watched {detail}");
         }
         catch (Exception ex) when (record["class"] is "exception")
         {
@@ -260,14 +272,25 @@ public sealed class VideoEditorMediaEndedRecoveryTests
         }
         finally
         {
-            editor?.Close();
-            RangePatternClip.Pump(TimeSpan.FromMilliseconds(50));
-            OwnedTestDirectory.Delete(dir);
-            if (Environment.GetEnvironmentVariable("MYCAPTURE_READPAST_REPRO_OUT") is { Length: > 0 } output)
+            try
             {
-                File.AppendAllText(
-                    Path.Combine(output, "records.jsonl"),
-                    System.Text.Json.JsonSerializer.Serialize(record) + Environment.NewLine);
+                editor?.Close();
+                RangePatternClip.Pump(TimeSpan.FromMilliseconds(50));
+                OwnedTestDirectory.Delete(dir);
+            }
+            catch (Exception ex)
+            {
+                record["cleanupError"] = ex.GetType().Name + ": " + ex.Message;
+                throw;
+            }
+            finally
+            {
+                if (Environment.GetEnvironmentVariable("MYCAPTURE_READPAST_REPRO_OUT") is { Length: > 0 } output)
+                {
+                    File.AppendAllText(
+                        Path.Combine(output, "records.jsonl"),
+                        System.Text.Json.JsonSerializer.Serialize(record) + Environment.NewLine);
+                }
             }
         }
     }

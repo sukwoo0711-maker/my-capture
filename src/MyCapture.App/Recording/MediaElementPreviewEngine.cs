@@ -331,7 +331,10 @@ internal sealed class MediaElementPreviewEngine : IVideoPreviewEngine
     /// <summary>How many reads were the player's own media-ended report, not an injected one.</summary>
     internal int EndedReportCountForTest { get; private set; }
 
-    /// <summary>Test hook: the next read is taken as a seek that stopped 3 ms past its position.</summary>
+    /// <summary>
+    /// Test hook: the next landing read is taken as a seek that stopped 3 ms past its position. A
+    /// media-ended report is no landing; the read after the reopen takes it.
+    /// </summary>
     internal bool MissNextLandingForTest { get; set; }
 
     /// <summary>How many times the element was positioned, counting each repeated try.</summary>
@@ -394,7 +397,7 @@ internal sealed class MediaElementPreviewEngine : IVideoPreviewEngine
                 EndedReportCountForTest += report ? 1 : 0;
                 ended = report || (_media.HasVideo && TreatNextReadAsEndedForTest);
                 TreatNextReadAsEndedForTest = false;
-                if (MissNextLandingForTest)
+                if (MissNextLandingForTest && !ended)
                 {
                     MissNextLandingForTest = false;
                     observedMs += 3;
