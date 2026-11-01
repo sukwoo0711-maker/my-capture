@@ -1,6 +1,7 @@
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using MyCapture.App.Themes;
 using MyCapture.Core.Localization;
 using Xunit;
 using static MyCapture.App.Tests.EditorKeysTests;
@@ -44,7 +45,7 @@ public sealed class EditorWatermarkWordingTests
             {
                 view.Search.Text = alias;
                 Assert.Contains(view.VisibleResults(), row => Descendants(row).OfType<TextBlock>()
-                    .Any(text => text.Text == UiText.Get("Stamp_Place")));
+                    .Any(text => KoreanWordWrap.Strip(text.Text) == UiText.Get("Stamp_Place")));
             }
         }
         finally { help.Close(); }

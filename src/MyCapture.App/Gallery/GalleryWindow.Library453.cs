@@ -1,3 +1,4 @@
+using MyCapture.App.Themes;
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
@@ -24,7 +25,7 @@ internal sealed partial class GalleryWindow
     private void UpdateMetadataMinimumWidths()
     {
         MetadataWidthChecks++;
-        double font = TryFindResource("FontSize.Caption") is double size ? size : 12;
+        double font = TryFindResource("FontSize.Caption") is double size ? size : TypeScale.Caption;
         DpiScale dpi = VisualTreeHelper.GetDpi(this);
         var metrics = (font, FontFamily.Source, UiText.Culture.Name, dpi.DpiScaleX, TextOptions.GetTextFormattingMode(this));
         if (_metadataTextMetrics == metrics) return;
@@ -126,7 +127,7 @@ internal sealed partial class GalleryWindow
             tile.RaiseMetaChanged();
             _viewModel.Refresh();
             CaptureChanged?.Invoke(this, EventArgs.Empty);
-            LibraryActionStatus.Text = UiText.Get("Library.Organize.Saved");
+            KoreanWordWrap.Show(LibraryActionStatus, UiText.Get("Library.Organize.Saved"));
             return true;
         }
         catch (ArgumentException)

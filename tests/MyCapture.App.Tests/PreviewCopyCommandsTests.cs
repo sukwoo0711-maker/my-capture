@@ -4,6 +4,7 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using MyCapture.App.Preview;
 using MyCapture.App.Pinning;
+using MyCapture.App.Themes;
 using MyCapture.Core.Settings;
 using MyCapture.Platform.Shell;
 using Xunit;
@@ -112,7 +113,7 @@ public sealed class PreviewCopyCommandsTests
             DependencyObject[] controls = Descendants(window).ToArray();
             Assert.Empty(controls.OfType<TextBox>());
             Assert.Empty(controls.OfType<TabControl>());
-            Assert.Contains(controls.OfType<TextBlock>(), text => text.Text == "활성 단축키 · F3");
+            Assert.Contains(controls.OfType<TextBlock>(), text => KoreanWordWrap.Strip(text.Text) == "활성 단축키 · F3");
             Button pin = Assert.Single(controls.OfType<Button>(), button => Equals(button.Content, "클립보드 핀"));
             Button close = Assert.Single(controls.OfType<Button>(), button => Equals(button.Content, "종료"));
             Assert.True(close.IsEnabled);
@@ -120,7 +121,7 @@ public sealed class PreviewCopyCommandsTests
             pin.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
             Assert.Equal(1, reads);
             Assert.Equal(0, writes);
-            Assert.Contains(controls.OfType<TextBlock>(), text => text.Text == "텍스트나 이미지를 복사한 후 다시 시도하십시오.");
+            Assert.Contains(controls.OfType<TextBlock>(), text => KoreanWordWrap.Strip(text.Text) == "텍스트나 이미지를 복사한 후 다시 시도하십시오.");
             Assert.True(input.HandleMessage(PreviewPinInput.WmHotkey, PreviewPinInput.HotkeyId));
             Assert.True(input.LastPinTask.IsCompletedSuccessfully);
             Assert.Equal(2, reads);

@@ -1,3 +1,4 @@
+using MyCapture.App.Themes;
 using System.Globalization;
 using System.Text;
 using System.Windows;
@@ -26,13 +27,13 @@ internal static class ClipboardTextRenderer
     private const int PlainMinimumHeight = 80;
     private const int PlainHorizontalPadding = 24;
     private const int PlainVerticalPadding = 20;
-    private const int PlainFontSize = 16;
+    private const double PlainFontSize = TypeScale.Content.PlainText;
     private const int PlainLineHeight = 24;
     private const int MaxPlainPreviewCharacters = 16_384;
 
     private const int TableMargin = 16;
     private const int TableRowHeight = 34;
-    private const int TableFontSize = 14;
+    private const double TableFontSize = TypeScale.Content.TableText;
     private const int TableHorizontalPadding = 12;
     private const int TableVerticalPadding = 7;
     private const int MinimumColumnWidth = 72;

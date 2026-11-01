@@ -96,14 +96,14 @@ public sealed partial class SettingsThemePreviewTests
                         Border[] rows = view.VisibleResults();
                         Assert.Equal(5, rows.Length);
                         Border originalText = Assert.Single(rows, row => Descendants(row).OfType<TextBlock>()
-                            .Any(text => text.Text == UiText.Get("Text_976A6C92B870")));
+                            .Any(text => KoreanWordWrap.Strip(text.Text) == UiText.Get("Text_976A6C92B870")));
                         Assert.Empty(Descendants(originalText).OfType<Button>());
                         Assert.Contains(Descendants(originalText).OfType<WrapPanel>(),
                             keys => AutomationProperties.GetName(keys) == "Ctrl+C / " + UiText.Get("Text_C7011B8D345C"));
                         foreach (Border row in rows.Where(row => !ReferenceEquals(row, originalText)))
                         {
                             var textColumn = Assert.IsType<Grid>(row.Child).Children.OfType<StackPanel>().Single();
-                            string category = textColumn.Children.OfType<TextBlock>().Single().Text;
+                            string category = KoreanWordWrap.Strip(textColumn.Children.OfType<TextBlock>().Single().Text);
                             if (category == UiText.Get("Workspace.Library") || category == UiText.Get("Help.QuickAccess"))
                             {
                                 Assert.Empty(TutorialButtons(row));

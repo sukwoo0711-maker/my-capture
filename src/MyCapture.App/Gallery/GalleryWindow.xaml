@@ -642,7 +642,7 @@
                 <Setter.Value>
                     <ItemsPanelTemplate>
                         <gallery:GalleryCardRowPanel Columns="{Binding Columns}"
-                                                     TitleFontSize="{DynamicResource FontSize.Caption}" BaseTitleFontSize="12" CaptionFontSize="{DynamicResource FontSize.Caption}"
+                                                     TitleFontSize="{DynamicResource FontSize.Caption}" BaseTitleFontSize="{x:Static themes:TypeScale.Caption}" CaptionFontSize="{DynamicResource FontSize.Caption}"
                                                      BaseCardWidth="148" BaseCardHeight="160" HeightPerWidth="0.625" CardInset="16" />
                     </ItemsPanelTemplate>
                 </Setter.Value>
@@ -1217,7 +1217,7 @@
         <Style x:Key="LibraryUx.SaveHereSwitch" TargetType="CheckBox">
             <Setter Property="themes:FluidMotion.SwitchMotion" Value="True" />
             <Setter Property="Foreground" Value="{DynamicResource Text.Secondary}" />
-            <Setter Property="FontSize" Value="13" />
+            <Setter Property="FontSize" Value="{DynamicResource FontSize.Caption}" />
             <Setter Property="Cursor" Value="Hand" />
             <Setter Property="FocusVisualStyle" Value="{x:Null}" />
             <Setter Property="MinHeight" Value="30" />
@@ -1907,7 +1907,7 @@
                                    Style="{DynamicResource Text.Title}"
                                    HorizontalAlignment="Center" />
                         <TextBlock x:Name="EmptyStateLabel"
-                                   Text="{Binding EmptyStateText}"
+                                   themes:KoreanWordWrap.Text="{Binding EmptyStateText}"
                                    Style="{DynamicResource Text.MutedBlock}"
                                    Margin="0,8,0,0"
                                    TextAlignment="Center"
@@ -2036,7 +2036,7 @@
                                 <StackPanel AutomationProperties.AutomationId="LibraryDetailsInfo">
                                     <TextBlock Text="{Binding TimeCaption}" Foreground="{DynamicResource Text.Secondary}" />
                                     <TextBlock Text="{Binding DetailDimensions}" Foreground="{DynamicResource Text.Secondary}" Margin="0,4,0,0" />
-                                    <TextBlock Text="{Binding RetentionCaption}" Foreground="{DynamicResource Text.Muted}" TextWrapping="Wrap" Margin="0,4,0,0" />
+                                    <TextBlock themes:KoreanWordWrap.Text="{Binding RetentionCaption}" Foreground="{DynamicResource Text.Muted}" TextWrapping="Wrap" Margin="0,4,0,0" />
                                 </StackPanel>
                                 <StackPanel Margin="0,16,0,0">
                                     <TextBlock AutomationProperties.AutomationId="LibraryDetailsTags" Foreground="{DynamicResource Text.Secondary}"

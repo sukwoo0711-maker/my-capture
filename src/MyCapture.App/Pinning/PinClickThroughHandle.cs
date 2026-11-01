@@ -145,7 +145,7 @@ internal sealed class PinClickThroughHandle : Window
 
     private bool ShowHint(string text)
     {
-        _hint.Text.Text = text;
+        _hint.SetText(text);
         bool shown = _hint.TryReveal();
         Place();
         return shown;
@@ -262,7 +262,7 @@ internal sealed class PinClickThroughHint : Window
         Owner = owner;
         PinClickThroughHandle.Configure(this);
         SizeToContent = SizeToContent.WidthAndHeight;
-        Text = new TextBlock { FontSize = 12, TextWrapping = TextWrapping.Wrap, MaxWidth = 240 };
+        Text = new TextBlock { FontSize = TypeScale.Caption, TextWrapping = TextWrapping.Wrap, MaxWidth = 240 };
         Text.SetResourceReference(TextBlock.ForegroundProperty, "Text.Primary");
         var border = new Border { Child = Text, Padding = new Thickness(8, 5, 8, 5), CornerRadius = new CornerRadius(6), BorderThickness = new Thickness(1) };
         border.SetResourceReference(Border.BackgroundProperty, "Surface.Floating");
@@ -279,6 +279,7 @@ internal sealed class PinClickThroughHint : Window
     }
 
     internal TextBlock Text { get; }
+    internal void SetText(string text) => KoreanWordWrap.Show(Text, text);
     internal bool IsCaptureExcluded { get; private set; }
     internal bool TryReveal()
     {

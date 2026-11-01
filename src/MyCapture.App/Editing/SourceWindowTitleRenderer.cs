@@ -1,3 +1,4 @@
+using MyCapture.App.Themes;
 using System.Globalization;
 using System.Windows;
 using System.Windows.Media;
@@ -46,7 +47,7 @@ internal static class SourceWindowTitleRenderer
 
         double margin = Math.Min(8, Math.Min(width, height) / 12);
         double padding = Math.Min(5, height / 12);
-        double fontSize = Math.Min(13, (height - 2 * margin - 2 * padding) / 1.5);
+        double fontSize = Math.Min(TypeScale.Content.SourceWindowTitle, (height - 2 * margin - 2 * padding) / 1.5);
         double availableWidth = Math.Min(680, width - 2 * margin - 2 * padding);
         var formatted = new FormattedText(text, culture,
             FlowDirection.LeftToRight, new Typeface("Segoe UI"), fontSize, Brushes.White, 1)

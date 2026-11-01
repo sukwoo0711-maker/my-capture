@@ -153,7 +153,7 @@ public sealed partial class SettingsThemePreviewTests
             AssertNotTrimmed(checkLabel, label);
             Assert.True(vm.IsEmpty);
             Assert.Equal(UiText.Get("Folder410.EmptyFolder"), vm.EmptyStateTitle);
-            Assert.Equal(UiText.Get("LibraryFolder_EmptyFolderSavesHere"), ((TextBlock)window.FindName("EmptyStateLabel")).Text);
+            Assert.Equal(UiText.Get("LibraryFolder_EmptyFolderSavesHere"), KoreanWordWrap.Strip(((TextBlock)window.FindName("EmptyStateLabel")).Text));
             Assert.Contains(FlattenFolderNodes(vm.FolderNodes), node => node.FolderId == empty.Id && node.IsSelected);
             SaveLibraryFolderEvidence(window, $"library-folder-destination-{theme}-{language}.png");
 

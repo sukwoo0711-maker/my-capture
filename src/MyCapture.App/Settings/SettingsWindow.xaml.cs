@@ -238,7 +238,7 @@ internal sealed partial class SettingsWindow : Window
     private void SetStatusMessage(string message)
     {
         CancelSavedNotice();
-        SettingsStatus.Text = message;
+        KoreanWordWrap.Show(SettingsStatus, message);
         SettingsStatusRegion.Visibility = string.IsNullOrWhiteSpace(message) ? Visibility.Collapsed : Visibility.Visible;
         if (SettingsStatusRegion.IsVisible)
         {

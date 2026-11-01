@@ -6,6 +6,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using MyCapture.App.Gallery;
 using MyCapture.App.Ocr;
+using MyCapture.App.Themes;
 using MyCapture.Core.Queue;
 using MyCapture.Core.Localization;
 using MyCapture.Core.Settings;
@@ -87,7 +88,7 @@ public sealed class GalleryLibraryExtrasTests
             var shell = Assert.IsType<DockPanel>(dialog.Content);
             var scroll = Assert.Single(shell.Children.OfType<ScrollViewer>());
             var content = Assert.IsType<StackPanel>(scroll.Content);
-            Assert.Contains(content.Children.OfType<TextBlock>(), text => text.Text == UiText.Get("Library.Organize.Failed"));
+            Assert.Contains(content.Children.OfType<TextBlock>(), text => KoreanWordWrap.Strip(text.Text) == UiText.Get("Library.Organize.Failed"));
             AggregateException error = Assert.IsType<AggregateException>(log.Error);
             Assert.True(error.Flatten().InnerExceptions.Count >= 2);
             Assert.Equal("Original", record.Title);

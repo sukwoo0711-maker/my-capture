@@ -63,7 +63,7 @@ internal sealed class TimedTextOverlayDialog : Window
             TextWrapping = TextWrapping.Wrap,
             FontFamily = _existingFrame is null ? TimedTextOverlayRenderer.OverlayTypeface.FontFamily : ThemeFonts.Ui,
             FontWeight = _existingFrame is null ? TimedTextOverlayRenderer.OverlayTypeface.Weight : FontWeights.Normal,
-            FontSize = _existingFrame is null ? 18 : 14,
+            FontSize = _existingFrame is null ? TypeScale.Content.TimedOverlayEditor : TypeScale.Body,
             Language = System.Windows.Markup.XmlLanguage.GetLanguage(CultureInfo.CurrentUICulture.IetfLanguageTag),
             MinHeight = _existingFrame is null ? 110 : 36,
             MaxLength = VideoEditDocument.MaximumTextLength,
@@ -131,9 +131,9 @@ internal sealed class TimedTextOverlayDialog : Window
             timing.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         timing.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         timing.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-        Add(timing, new TextBlock { Text = UiText.Get("Text_25A15C7C4EFF"), TextWrapping = TextWrapping.Wrap }, 0);
-        Add(timing, new TextBlock { Text = UiText.Get("Text_A6434B74B299"), TextWrapping = TextWrapping.Wrap }, 1);
-        if (_existingFrame is null) Add(timing, new TextBlock { Text = UiText.Get("Text_6C0B9DD710AB"), TextWrapping = TextWrapping.Wrap }, 2);
+        Add(timing, KoreanWordWrap.Show(new TextBlock { TextWrapping = TextWrapping.Wrap }, UiText.Get("Text_25A15C7C4EFF")), 0);
+        Add(timing, KoreanWordWrap.Show(new TextBlock { TextWrapping = TextWrapping.Wrap }, UiText.Get("Text_A6434B74B299")), 1);
+        if (_existingFrame is null) Add(timing, KoreanWordWrap.Show(new TextBlock { TextWrapping = TextWrapping.Wrap }, UiText.Get("Text_6C0B9DD710AB")), 2);
         Control[] fields = _existingFrame is null ? [_start, _end, _placement] : [_start, _end];
         for (int column = 0; column < fields.Length; column++)
         {
@@ -144,13 +144,12 @@ internal sealed class TimedTextOverlayDialog : Window
         Grid.SetRow(timing, 2);
         root.Children.Add(timing);
 
-        var hint = new TextBlock
+        var hint = KoreanWordWrap.Show(new TextBlock
         {
-            Text = UiText.Get(_existingFrame is null ? "Video.TextSourceTimeHint" : "Video.SourceTimeHint"),
             Foreground = ResourceBrush("Text.Secondary", Colors.LightGray),
             TextWrapping = TextWrapping.Wrap,
             Margin = new Thickness(0, 12, 0, 0),
-        };
+        }, UiText.Get(_existingFrame is null ? "Video.TextSourceTimeHint" : "Video.SourceTimeHint"));
         Grid.SetRow(hint, 3);
         root.Children.Add(hint);
 
@@ -225,7 +224,7 @@ internal sealed class TimedTextOverlayDialog : Window
 
     private void Fail(string message, Control focus)
     {
-        _error.Text = message;
+        KoreanWordWrap.Show(_error, message);
         _ = focus.Focus();
     }
 

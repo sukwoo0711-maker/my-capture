@@ -412,12 +412,12 @@ public sealed partial class SettingsThemePreviewTests
                 foreach (string key in new[] { "Gallery.FloatFailed", "Gallery.Compare.LoadFailed", "Text_75425A6D9BE8", "Text_BCA2A41F7456" })
                 {
                     show.Invoke(window, [UiText.Get(key)]);
-                    Assert.Equal(UiText.Get(key), status.Text);
+                    Assert.Equal(UiText.Get(key), KoreanWordWrap.Strip(status.Text));
                     Assert.Equal(FeedbackKind.ActionRequired, window.ActionStatusKindForTest);
                     Assert.True(window.IsActionStatusDismissibleForTest);
                     Assert.Empty(Application.Current.Windows.OfType<ThemedDialog>());
                     window.AdvanceActionStatusForTest(TimeSpan.FromMinutes(5));
-                    Assert.Equal(UiText.Get(key), status.Text);
+                    Assert.Equal(UiText.Get(key), KoreanWordWrap.Strip(status.Text));
                 }
                 // "Already being saved": a hint that leaves with the result time.
                 show.Invoke(window, [UiText.Get("Text_E20E28D53DCE")]);

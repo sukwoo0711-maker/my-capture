@@ -77,11 +77,11 @@ public sealed partial class SettingsThemePreviewTests
                     Assert.Equal(Visibility.Collapsed, notice.Visibility);
                     notice.ShowUpdateCompleted("4.1.2.0"); Drain(window);
                     Assert.Equal(Visibility.Collapsed, review.Visibility);
-                    Assert.Single(Descendants(notice).OfType<TextBlock>(), text => text.Text == UiText.Format("StoreUpdate_CompletedVersion", "4.1.2"));
+                    Assert.Single(Descendants(notice).OfType<TextBlock>(), text => KoreanWordWrap.Strip(text.Text) == UiText.Format("StoreUpdate_CompletedVersion", "4.1.2"));
                     SaveStoreUpdateEvidence(window, $"update-completed-{locale}-high-contrast-780x560.png");
                     notice.Dismiss();
                     notice.ShowUpdateAvailable("4.6.0"); Drain(window);
-                    Assert.Single(Descendants(notice).OfType<TextBlock>(), text => text.Text == UiText.Format("Update_AvailableVersion", "4.6.0"));
+                    Assert.Single(Descendants(notice).OfType<TextBlock>(), text => KoreanWordWrap.Strip(text.Text) == UiText.Format("Update_AvailableVersion", "4.6.0"));
                     Button update = Descendants(notice).OfType<Button>().Single(button => (string)button.Content == UiText.Get("Update_Action"));
                     Assert.Equal(Visibility.Visible, update.Visibility);
                     AssertFits(window, update);
@@ -141,7 +141,7 @@ public sealed partial class SettingsThemePreviewTests
                     + UiText.Get("StoreUpdate_UnpackagedNote");
             string expectedLabel = UiText.Get(packaged ? "StoreUpdate_Check" : "StoreUpdate_OpenStore");
             string expectedHelp = UiText.Get(packaged ? "StoreUpdate_CheckHelp" : "StoreUpdate_OpenStoreHelp");
-            Assert.Equal(expectedDescription, description.Text);
+            Assert.Equal(expectedDescription, KoreanWordWrap.Strip(description.Text));
             Assert.Equal(expectedLabel, action.Content);
             Assert.Equal(expectedLabel, AutomationProperties.GetName(action));
             Assert.Equal(expectedHelp, AutomationProperties.GetHelpText(action));
@@ -169,8 +169,8 @@ public sealed partial class SettingsThemePreviewTests
                 Assert.Equal(1, fake.Checks);
                 Assert.Equal(0, fake.Installs);
                 Assert.Equal(SettingsWindow.UpdateCheckSummary(StoreUpdatePhase.Current, checkedAt),
-                    ((TextBlock)window.FindName("UpdateObservedStatus")).Text);
-                Assert.EndsWith(" · " + UiText.Get("About_UpToDate"), ((TextBlock)window.FindName("UpdateObservedStatus")).Text,
+                    KoreanWordWrap.Strip(((TextBlock)window.FindName("UpdateObservedStatus")).Text));
+                Assert.EndsWith(" · " + UiText.Get("About_UpToDate"), KoreanWordWrap.Strip(((TextBlock)window.FindName("UpdateObservedStatus")).Text),
                     StringComparison.Ordinal);
                 // The listing button repeats Check and Rate; it waits for a failed check.
                 Assert.Equal(Visibility.Collapsed, ((Button)window.FindName("StorePageAction")).Visibility);
@@ -196,8 +196,8 @@ public sealed partial class SettingsThemePreviewTests
             linkAction.RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));
             Drain(window);
             Assert.Equal(new[] { StoreUpdateLink.StoreAppUri, StoreUpdateLink.WebUri }, opened);
-            Assert.Equal(UiText.Format("StoreUpdate_OpenFailed", StoreUpdateLink.WebUri), status.Text);
-            Assert.Contains(StoreUpdateLink.WebUri, status.Text, StringComparison.Ordinal);
+            Assert.Equal(UiText.Format("StoreUpdate_OpenFailed", StoreUpdateLink.WebUri), KoreanWordWrap.Strip(status.Text));
+            Assert.Contains(StoreUpdateLink.WebUri, KoreanWordWrap.Strip(status.Text), StringComparison.Ordinal);
             Assert.True(status.IsVisible);
             AssertStatusFits(window, status);
             SaveStoreUpdateEvidence(window, $"update-tab-{build}-{locale}-glass-open-failed.png");
@@ -272,7 +272,7 @@ public sealed partial class SettingsThemePreviewTests
                     IProgress<StoreUpdateSnapshot> failedObserver = fake.Progress!;
                     fake.Completion!.SetException(new IOException("Store transport failure"));
                     PumpUntil(window, failed);
-                    Assert.Equal(UiText.Get("StoreUpdate_StateFailed"), state.Text);
+                    Assert.Equal(UiText.Get("StoreUpdate_StateFailed"), KoreanWordWrap.Strip(state.Text));
                     Assert.Equal(1, released);
                     Assert.True(window.IsEnabled);
                     Assert.Equal(UiText.Get("StoreUpdate_Check"), action.Content);
@@ -281,11 +281,11 @@ public sealed partial class SettingsThemePreviewTests
                     // A prior observer must not overwrite the next asynchronous check, even when busy.
                     fake.CheckCompletion = new(TaskCreationOptions.RunContinuationsAsynchronously);
                     Task check = window.RunStoreUpdateActionAsync();
-                    Assert.Equal(UiText.Get("StoreUpdate_StateChecking"), state.Text);
+                    Assert.Equal(UiText.Get("StoreUpdate_StateChecking"), KoreanWordWrap.Strip(state.Text));
                     failedObserver.Report(new(StoreUpdatePhase.Installing));
                     Task.Run(() => failedObserver.Report(new(StoreUpdatePhase.Downloading, .91))).GetAwaiter().GetResult();
                     Drain(window);
-                    Assert.Equal(UiText.Get("StoreUpdate_StateChecking"), state.Text);
+                    Assert.Equal(UiText.Get("StoreUpdate_StateChecking"), KoreanWordWrap.Strip(state.Text));
                     fake.CheckCompletion.SetResult(true);
                     PumpUntil(window, check);
                     Assert.Equal(2, fake.Checks); // Failure resets availability, so retry checks again.
@@ -296,22 +296,22 @@ public sealed partial class SettingsThemePreviewTests
                     completedObserver.Report(new(StoreUpdatePhase.Downloading, .21));
                     Task.Run(() => failedObserver.Report(new(StoreUpdatePhase.Downloading, .99))).GetAwaiter().GetResult();
                     Drain(window);
-                    Assert.Equal(UiText.Get("StoreUpdate_StateDownloading"), state.Text);
+                    Assert.Equal(UiText.Get("StoreUpdate_StateDownloading"), KoreanWordWrap.Strip(state.Text));
                     Assert.Equal(21, progress.Value);
                     fake.Completion!.SetResult(StoreUpdatePhase.RestartRequired);
                     PumpUntil(window, install);
                     completedObserver.Report(new(StoreUpdatePhase.Installing));
-                    Assert.Equal(UiText.Get("StoreUpdate_StateRestartRequired"), state.Text);
+                    Assert.Equal(UiText.Get("StoreUpdate_StateRestartRequired"), KoreanWordWrap.Strip(state.Text));
 
                     // Completion's observer is also invalid during a new check, not merely on failure.
                     fake.CheckCompletion = new(TaskCreationOptions.RunContinuationsAsynchronously);
                     check = window.RunStoreUpdateActionAsync();
                     Task.Run(() => completedObserver.Report(new(StoreUpdatePhase.Installing))).GetAwaiter().GetResult();
                     Drain(window);
-                    Assert.Equal(UiText.Get("StoreUpdate_StateChecking"), state.Text);
+                    Assert.Equal(UiText.Get("StoreUpdate_StateChecking"), KoreanWordWrap.Strip(state.Text));
                     fake.CheckCompletion.SetException(new IOException("Check unavailable after successful deployment"));
                     PumpUntil(window, check);
-                    Assert.Equal(UiText.Get("StoreUpdate_StateFailed"), state.Text);
+                    Assert.Equal(UiText.Get("StoreUpdate_StateFailed"), KoreanWordWrap.Strip(state.Text));
                     Assert.Equal(UiText.Get("StoreUpdate_Check"), action.Content);
                     Assert.Equal(2, released);
                     Assert.True(window.IsEnabled && action.IsEnabled);
@@ -337,12 +337,12 @@ public sealed partial class SettingsThemePreviewTests
             var progress = (ProgressBar)window.FindName("UpdateProgress");
             fake.Available = true;
             Assert.True(window.RunStoreUpdateActionAsync().IsCompletedSuccessfully);
-            Assert.EndsWith(" · " + UiText.Get("StoreUpdate_StateAvailable"), state.Text, StringComparison.Ordinal);
+            Assert.EndsWith(" · " + UiText.Get("StoreUpdate_StateAvailable"), KoreanWordWrap.Strip(state.Text), StringComparison.Ordinal);
             Assert.True(window.IsEnabled);
             Assert.Empty(((TextBlock)window.FindName("SettingsStatus")).Text);
             Assert.True(window.RunStoreUpdateActionAsync().IsCompletedSuccessfully);
             Assert.Equal(0, fake.Installs); // Save/discard/cancel protection must allow installation first.
-            Assert.Equal(UiText.Get("StoreUpdate_StateBlocked"), state.Text);
+            Assert.Equal(UiText.Get("StoreUpdate_StateBlocked"), KoreanWordWrap.Strip(state.Text));
             Assert.True(window.IsEnabled);
             int protectionReleased = 0;
             window.PrepareStoreUpdate = () => Task.FromResult(true);
@@ -353,25 +353,25 @@ public sealed partial class SettingsThemePreviewTests
             Assert.False(((Button)window.FindName("CancelButton")).IsEnabled);
             Assert.Equal(1, fake.Installs);
             Assert.Equal(0, protectionReleased);
-            Assert.Equal(UiText.Get("StoreUpdate_StateAwaitingConsent"), state.Text);
+            Assert.Equal(UiText.Get("StoreUpdate_StateAwaitingConsent"), KoreanWordWrap.Strip(state.Text));
             Assert.True(progress.IsIndeterminate);
             fake.Progress!.Report(new(StoreUpdatePhase.Downloading, .42));
             state.BringIntoView(); Drain(window);
             Assert.False(progress.IsIndeterminate);
             Assert.Equal(42, progress.Value);
-            Assert.Equal(UiText.Get("StoreUpdate_StateDownloading"), state.Text);
+            Assert.Equal(UiText.Get("StoreUpdate_StateDownloading"), KoreanWordWrap.Strip(state.Text));
             Assert.False(window.IsEnabled);
             SaveStoreUpdateEvidence(window, $"update-downloading-{locale}-high-contrast-780x560.png");
             fake.Progress.Report(new(StoreUpdatePhase.Installing, .95));
             Drain(window);
             Assert.True(progress.IsIndeterminate); // Download percentage cannot describe deployment.
-            Assert.Equal(UiText.Get("StoreUpdate_StateInstalling"), state.Text);
+            Assert.Equal(UiText.Get("StoreUpdate_StateInstalling"), KoreanWordWrap.Strip(state.Text));
             Assert.False(window.IsEnabled);
             SaveStoreUpdateEvidence(window, $"update-installing-{locale}-high-contrast-780x560.png");
             fake.Completion!.SetResult(StoreUpdatePhase.Canceled);
             PumpUntil(window, install);
             Assert.Equal(1, protectionReleased);
-            Assert.Equal(UiText.Get("StoreUpdate_StateCanceled"), state.Text);
+            Assert.Equal(UiText.Get("StoreUpdate_StateCanceled"), KoreanWordWrap.Strip(state.Text));
             Assert.True(window.IsEnabled);
             Assert.Equal(Visibility.Collapsed, progress.Visibility);
             Assert.True(((Button)window.FindName("UpdateAction")).IsEnabled);
@@ -381,7 +381,7 @@ public sealed partial class SettingsThemePreviewTests
             fake.Completion!.SetResult(StoreUpdatePhase.RestartRequired);
             PumpUntil(window, completed);
             Assert.Equal(2, protectionReleased);
-            Assert.Equal(UiText.Get("StoreUpdate_StateRestartRequired"), state.Text);
+            Assert.Equal(UiText.Get("StoreUpdate_StateRestartRequired"), KoreanWordWrap.Strip(state.Text));
             Assert.True(window.IsEnabled);
 
             // A transport failure must release work admission just like cancellation.
@@ -391,7 +391,7 @@ public sealed partial class SettingsThemePreviewTests
             fake.Completion!.SetException(new IOException("Store unavailable"));
             PumpUntil(window, failed);
             Assert.Equal(3, protectionReleased);
-            Assert.Equal(UiText.Get("StoreUpdate_StateFailed"), state.Text);
+            Assert.Equal(UiText.Get("StoreUpdate_StateFailed"), KoreanWordWrap.Strip(state.Text));
             Assert.True(window.IsEnabled);
         }
         finally { SynchronizationContext.SetSynchronizationContext(previousContext); }

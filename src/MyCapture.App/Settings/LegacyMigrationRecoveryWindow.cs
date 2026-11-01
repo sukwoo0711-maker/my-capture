@@ -56,7 +56,7 @@ internal sealed class LegacyMigrationRecoveryWindow : Window
             Margin = new Thickness(24),
             Children =
             {
-                new TextBlock { Text = Title, TextWrapping = TextWrapping.Wrap, FontSize = 20, FontWeight = FontWeights.SemiBold },
+                KoreanWordWrap.Show(new TextBlock { TextWrapping = TextWrapping.Wrap, FontSize = TypeScale.Subtitle, FontWeight = FontWeights.SemiBold }, Title),
                 _message, _progress, _actions,
             },
         };
@@ -120,7 +120,7 @@ internal sealed class LegacyMigrationRecoveryWindow : Window
 
     private void SetMessage(string text)
     {
-        _message.Text = text;
+        KoreanWordWrap.Show(_message, text);
         (UIElementAutomationPeer.FromElement(_message) ?? UIElementAutomationPeer.CreatePeerForElement(_message))
             ?.RaiseAutomationEvent(AutomationEvents.LiveRegionChanged);
     }

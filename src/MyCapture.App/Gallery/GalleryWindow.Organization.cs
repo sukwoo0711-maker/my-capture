@@ -25,7 +25,7 @@ internal sealed partial class GalleryWindow
         tile.RaiseMetaChanged();
         _viewModel.Refresh();
         CaptureChanged?.Invoke(this, EventArgs.Empty);
-        LibraryActionStatus.Text = UiText.Get("Library.Organize.Saved");
+        KoreanWordWrap.Show(LibraryActionStatus, UiText.Get("Library.Organize.Saved"));
     }
 
     private async void OnExportArchiveClick(object sender, RoutedEventArgs e)
@@ -60,15 +60,15 @@ internal sealed partial class GalleryWindow
             });
             await GalleryFolderExportService.ExportZipAsync(prepared, dialog.FileName, progress, cancellation.Token, options);
             _commitService.RememberExportOptions(options);
-            LibraryActionStatus.Text = UiText.Format("Library.Archive.Done", records.Length);
+            KoreanWordWrap.Show(LibraryActionStatus, UiText.Format("Library.Archive.Done", records.Length));
         }
         catch (OperationCanceledException)
         {
-            LibraryActionStatus.Text = UiText.Get("Library.Archive.Cancelled");
+            KoreanWordWrap.Show(LibraryActionStatus, UiText.Get("Library.Archive.Cancelled"));
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException or ArgumentException)
         {
-            LibraryActionStatus.Text = UiText.Get("Library.Archive.Failed");
+            KoreanWordWrap.Show(LibraryActionStatus, UiText.Get("Library.Archive.Failed"));
         }
         finally
         {
@@ -107,15 +107,15 @@ internal sealed class GalleryOrganizationDialog : Window
         SetResourceReference(BackgroundProperty, "Surface.Base");
         SetResourceReference(ForegroundProperty, "Text.Primary");
         var content = new StackPanel { Margin = new Thickness(24, 24, 24, 8) };
-        content.Children.Add(Label("Library.Organize.Title", 22));
-        content.Children.Add(Label("Library.Organize.Hint", 13));
-        content.Children.Add(Label("Library.Organize.Name", 14));
+        content.Children.Add(Label("Library.Organize.Title", TypeScale.Subtitle));
+        content.Children.Add(Label("Library.Organize.Hint", TypeScale.Caption));
+        content.Children.Add(Label("Library.Organize.Name", TypeScale.Body));
         TitleInput = Input(record.Title, CaptureOrganization.MaximumTitleLength, "Library.Organize.Name");
         content.Children.Add(TitleInput);
-        content.Children.Add(Label("Library.Organize.Tags", 14));
+        content.Children.Add(Label("Library.Organize.Tags", TypeScale.Body));
         TagsInput = Input(record.Tags ?? string.Empty, 1024, "Library.Organize.Tags");
         content.Children.Add(TagsInput);
-        content.Children.Add(Label("Library.Organize.TagsHint", 12));
+        content.Children.Add(Label("Library.Organize.TagsHint", TypeScale.Caption));
         var error = new TextBlock { TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 8, 0, 0) };
         AutomationProperties.SetLiveSetting(error, AutomationLiveSetting.Polite);
         content.Children.Add(error);
@@ -145,13 +145,13 @@ internal sealed class GalleryOrganizationDialog : Window
             try
             {
                 saved = await save(TitleInput.Text, TagsInput.Text);
-                if (!saved) error.Text = UiText.Get("Library.Organize.Missing");
+                if (!saved) KoreanWordWrap.Show(error, UiText.Get("Library.Organize.Missing"));
             }
-            catch (ArgumentException) { error.Text = UiText.Get("Library.Organize.Invalid"); }
+            catch (ArgumentException) { KoreanWordWrap.Show(error, UiText.Get("Library.Organize.Invalid")); }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException or AggregateException)
             {
                 log?.LogWarning(ex, "Could not save library organization");
-                error.Text = UiText.Get("Library.Organize.Failed");
+                KoreanWordWrap.Show(error, UiText.Get("Library.Organize.Failed"));
             }
             finally
             {

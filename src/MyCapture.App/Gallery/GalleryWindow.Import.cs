@@ -1,3 +1,4 @@
+using MyCapture.App.Themes;
 using System.IO;
 using System.Windows;
 using Microsoft.Win32;
@@ -72,15 +73,15 @@ internal sealed partial class GalleryWindow
                 activity.Report(value.Completed, value.Total);
             });
             CaptureImportResult result = await _importService.ImportAsync(paths, folder, progress, cancellation.Token);
-            LibraryActionStatus.Text = UiText.Format("Library.Import.Summary", result.Imported, result.Duplicates, result.Failed)
+            KoreanWordWrap.Show(LibraryActionStatus, UiText.Format("Library.Import.Summary", result.Imported, result.Duplicates, result.Failed)
                 + (result.Cancelled ? " · " + UiText.Get("Library.Import.Cancelled") : string.Empty)
-                + (result.TooLarge > 0 ? " · " + UiText.Get("Library.Import.TooLarge") : string.Empty);
+                + (result.TooLarge > 0 ? " · " + UiText.Get("Library.Import.TooLarge") : string.Empty));
             _viewModel.Refresh();
             RaiseCaptureChanged();
             if (result.Imported > 0) _ = IndexImportedImagesAsync();
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException)
-        { LibraryActionStatus.Text = UiText.Get("Library.Import.Failed"); }
+        { KoreanWordWrap.Show(LibraryActionStatus, UiText.Get("Library.Import.Failed")); }
         finally
         {
             _importCancellation = null;
@@ -89,7 +90,7 @@ internal sealed partial class GalleryWindow
             ImportOverlay.Visibility = Visibility.Collapsed;
             ImportProgress.Visibility = Visibility.Collapsed;
             ImportCancelButton.Visibility = Visibility.Collapsed;
-            ImportOverlayTitle.Text = UiText.Get("Library.Import.DropTitle");
+            KoreanWordWrap.Show(ImportOverlayTitle, UiText.Get("Library.Import.DropTitle"));
         }
     }
 
