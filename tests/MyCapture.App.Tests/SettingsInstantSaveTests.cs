@@ -185,7 +185,7 @@ public sealed partial class SettingsInstantSaveTests
                     commandWindow.Show();
                     settings.Show();
                     var tabs = Assert.IsType<TabControl>(settings.FindName("CategoryTabs"));
-                    tabs.SelectedItem = tabs.Items.OfType<TabItem>().Single(tab => Equals(tab.Header, UiText.Get("SettingsUx_TabEditing")));
+                    Assert.True(settings.NavigateToSection(SettingsSection.Shortcuts));
                     Pump();
                     commandWindow.UpdateLayout();
                     var checkbox = Assert.IsType<CheckBox>(settings.FindName("AlwaysShowShortcutHintsCheck"));
@@ -429,7 +429,7 @@ public sealed partial class SettingsInstantSaveTests
         var commands = new TrayMenuCommands(noop, noop, noop, noop, noop, noop, noop, noop, noop, noop, noop, noop, noop,
             ContactSupport: () => opened = true);
         var entries = TrayMenuLayout.Build(commands, new HotkeySettings(), new TrayMenuState());
-        var support = Assert.Single(entries, entry => entry.Label == UiText.Get("Support_Title"));
+        var support = Assert.Single(entries.Single(entry => entry.Label == UiText.Get("Tray_Help")).Children!, entry => entry.Label == UiText.Get("Support_Title"));
         support.Action!();
         Assert.True(opened);
         Assert.NotSame(support, entries.Last());

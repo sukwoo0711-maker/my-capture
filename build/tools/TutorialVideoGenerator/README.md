@@ -1,23 +1,37 @@
 # 기능별 사용법 영상 생성기
 
-F1 도움말과 설정의 **사용법 보기**가 재생하는 `src/MyCapture.App/Assets/Tutorials/{기능}.{ko|en}.mp4`와 영상이 열리기 전에 표시하는 첫 프레임 정지 화면 `{기능}.{ko|en}.jpg`를 현재 소스에서 다시 만듭니다. 기능 목록은 제품의 `TutorialCatalog`(38개)를 그대로 사용하므로 한국어와 영어 76개가 항상 카탈로그와 일치합니다.
+F1 도움말과 설정의 **사용법 보기**가 재생하는 `src/MyCapture.App/Assets/Tutorials/{기능}.{ko|en}.mp4`와 영상이 열리기 전에 표시하는 첫 프레임 정지 화면 `{기능}.{ko|en}.jpg`를 현재 소스에서 다시 만듭니다. 기능 ID는 제품의 `TutorialCatalog`(45개)로 검사합니다. `practice-library-find`는 라이브러리의 연습 그림을 두 번 눌러 같은 그림을 편집기에 다시 여는 장면입니다.
 
 ```powershell
-# 전체 76개를 artifacts/tutorials/<시각>에 만들고 검토용 시트를 함께 저장합니다.
-dotnet run --project build/tools/TutorialVideoGenerator -c Release
+# 생성기를 먼저 빌드합니다. 새 작업 트리에서 NuGet 자산이 없으면 표준 dotnet restore로 준비합니다.
+dotnet build build/tools/TutorialVideoGenerator --no-restore -m:1 -nr:false -p:UseSharedCompilation=false
 
 # 일부 기능과 언어만 만듭니다.
-dotnet run --project build/tools/TutorialVideoGenerator -c Release -- --features image-crop,pin-copy --languages ko
+dotnet run --project build/tools/TutorialVideoGenerator --no-build -- --features image-crop,pin-copy --languages ko
+
+# 가이드의 외부 작업 단계와 라이브러리 다시 열기 장면을 만듭니다.
+dotnet run --project build/tools/TutorialVideoGenerator --no-build -- --features capture-region,practice-editor-open,practice-image-copy,practice-image-pin,practice-library-find --languages ko,en --out work/tutorial-videos/delivery
 
 # 결과(영상과 정지 화면)를 제품 자산 폴더에 복사합니다.
-dotnet run --project build/tools/TutorialVideoGenerator -c Release -- --install
+dotnet run --project build/tools/TutorialVideoGenerator --no-build -- --features pin-resize,pin-opacity --install
 
 # 만든 영상의 특정 시점을 원본 크기 PNG로 꺼냅니다.
-dotnet run --project build/tools/TutorialVideoGenerator -c Release -- inspect artifacts/tutorials/<시각>/image-crop.ko.mp4 0,5200
+dotnet run --project build/tools/TutorialVideoGenerator --no-build -- inspect artifacts/tutorials/<시각>/image-crop.ko.mp4 0,5200
+
+# 기존 영상 사본에서 언어별 첫·중간·마지막 프레임 모음을 만듭니다.
+dotnet run --project build/tools/TutorialVideoGenerator --no-build -- review work/tutorial-videos/as-is
+
+# 실패한 실행 원본을 보존하면서, 필요한 장면만 다시 만든 결과를 모읍니다.
+# 뒤에 나오는 실행 폴더의 성공 영수증이 같은 ID/언어의 앞선 결과를 대체합니다.
+node build/tools/TutorialVideoGenerator/AssembleReview.mjs work/tutorial-videos/delivery work/tutorial-videos/final work/tutorial-videos/image-copy-fix work/tutorial-videos/library-menu-fix
+dotnet run --project build/tools/TutorialVideoGenerator --no-build -- review work/tutorial-videos/delivery
+
+# 연습 영상의 실제 컨테이너, JPG, 영수증, 설치된 복사본을 검사합니다.
+node build/tools/TutorialVideoGenerator/VerifyAssets.mjs work/tutorial-videos/delivery src/MyCapture.App/Assets/Tutorials pin-resize,pin-opacity,practice-image-copy,practice-image-pin,practice-editor-open,practice-pin-close,capture-region,image-arrow,image-copy,library-open,pin-restore
 
 # 검토용으로 다른 테마에서 만듭니다. 포인트 색은 빨간색으로 고정됩니다.
 # 제품 자산(--install)은 재현 가능한 기본 렌더(어두운 테마, 빨간색)로만 만듭니다.
-dotnet run --project build/tools/TutorialVideoGenerator -c Release -- --features pin-copy --languages ko --theme glass-light
+dotnet run --project build/tools/TutorialVideoGenerator --no-build -- --features pin-copy --languages ko --theme glass-light
 ```
 
 깨끗한 클론에서 별도 준비 없이 실행됩니다. 생성기는 `MyCapture.App` 프로젝트를 참조해 현재 소스로 함께 빌드하고, 제품은 `InternalsVisibleTo("MyCapture.TutorialGenerator")`로 이 도구에만 내부 API를 엽니다. 출력은 Git이 무시하는 `artifacts/` 아래에 둡니다.
@@ -28,7 +42,7 @@ dotnet run --project build/tools/TutorialVideoGenerator -c Release -- --features
 | --- | --- |
 | 형식 | H.264 High 프로필 MP4, 오디오 없음 |
 | 해상도 | 960×540(`--width`로 변경). 사용법 창의 640×360 DIP 영역을 150% 배율에서 1:1로 채웁니다 |
-| 프레임 | 25fps, 클립당 약 11초 |
+| 프레임 | 25fps, 연습 장면은 7–9초, 나머지는 보통 약 11초 |
 | 화질 | Media Foundation 소프트웨어 H.264 인코더의 고정 품질 60(`--quality`)과 품질 우선 설정(QualityVsSpeed 100). GPU와 관계없이 같은 인코더를 씁니다. 품질 우선 설정은 키 표시가 사라진 자리에 남던 옅은 잔상도 없앱니다 |
 | 색 범위 | 전체 범위(0–255)로 인코딩하고 스트림에 표시합니다. 제품 플레이어인 WPF `MediaElement`는 디코딩한 값을 범위 확장 없이 표시하므로, 녹화와 같은 제한 범위(16–235)로 만들면 흰색이 235, 검은색이 16으로 흐리게 보입니다 |
 | 정지 화면 | 첫 렌더 프레임을 JPEG 품질 90으로 저장합니다. 사용법 창은 이 파일을 바로 표시하고 영상이 열리면 영상으로 넘어갑니다 |
@@ -47,6 +61,7 @@ dotnet run --project build/tools/TutorialVideoGenerator -c Release -- --features
 - `Scenes/*`: 기능별 장면입니다. 생성자에서 제품 UI와 스토리보드를 만들고, `Draw`가 프레임마다 제품 상태를 바꾼 뒤(클릭, 단축키, 드래그) 화면을 그립니다. 제품 동작은 제품 코드가 수행합니다. 예를 들어 이미지 편집기는 `AnnotationEditorControl.SimulatePointerDown/Move/Up`과 실제 명령 버튼, `HandleShortcut`으로 조작합니다.
 - `ClipWriter`: 제품의 `MediaFoundationVideoEncoder`로 MP4를 기록합니다(`FullRange`). `ClipReview`는 첫 프레임 정지 화면을 저장하고, 제품의 `MediaFoundationVideoFrameReader`로 완성된 MP4를 다시 읽어 검토 시트를 만듭니다.
 - `Fixtures`: 다른 회사 앱을 대신하는 합성 콘텐츠(체크리스트 페이지, 메모, 터미널)입니다. MyCapture 화면은 모두 제품 UI를 그대로 렌더합니다.
+- `PracticePinScene`과 `PracticeGuideScene`: 제품의 `PracticePicture`를 공통 그림으로 사용하는 연습 장면입니다. 필요한 실제 컨트롤을 확대해 가이드의 작은 미리보기에서도 동작을 확인할 수 있게 합니다. 제품 창·제어를 그대로 렌더하고 외부 거래는 격리된 픽스처로 받습니다.
 
 ## 장면 작성 규칙
 
@@ -66,5 +81,9 @@ dotnet run --project build/tools/TutorialVideoGenerator -c Release -- --features
 ## 출력물
 
 출력 폴더에는 `{기능}.{언어}.mp4`, 첫 프레임 정지 화면 `{기능}.{언어}.jpg`, 주요 장면을 디코딩한 `{기능}.{언어}.sheet.png`, 전체 결과를 담은 `receipt.json`(제품 DLL SHA256, 설정, 클립과 정지 화면별 크기·SHA256, 프레임·길이, 사용한 제품 UI 설명)이 생깁니다.
+
+각 클립의 `{기능}.{언어}.receipt.json`도 저장합니다. 언어별 `contact-sheet.ko.png`와 `contact-sheet.en.png`는 클립마다 첫·중간·마지막 디코딩 프레임을 한 줄에 모읍니다. `VerifyAssets.mjs`는 연습 영상만 들어 있는 출력 폴더를 대상으로 컨테이너의 영상 트랙·코덱·프로필·크기·프레임 간격·길이와 JPG 크기, 영수증 해시, 선택적으로 설치 복사본을 검사하여 `verification.json`을 남깁니다.
+
+`AssembleReview.mjs`는 비어 있는 출력 폴더에만 결과를 모으며, 제품 DLL과 렌더 설정이 같은 실행의 성공한 개별 영수증을 SHA256으로 대조합니다. 원래 실행과 실패는 `SourceRuns`에 남습니다. 모음 시트 생성과 예상 ID 목록을 지정한 검증은 수집 뒤 별도로 실행합니다. 검증기의 설치 폴더 자리에 `-`를 쓰면 설치 전 결과만 검사합니다.
 
 검토 시트의 첫 줄은 정확한 첫 프레임·중간 프레임·마지막 프레임이고, 나머지는 주요 동작입니다. `inspect`는 원본 영상 옆에 PNG를 쓰므로 설치된 자산 폴더에서 실행하지 않습니다. 설치 자산을 검사할 때는 먼저 `artifacts/` 아래로 복사합니다.

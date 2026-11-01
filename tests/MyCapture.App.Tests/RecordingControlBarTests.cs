@@ -61,9 +61,10 @@ public sealed class RecordingControlBarTests
             Assert.Equal(string.Empty, status.Text);
             Assert.DoesNotContain(Descendants(window), node => node is CheckBox);
 
-            // The ⋯ menu holds the time stamp as one checked entry.
+            // The ⋯ menu retains the time stamp before the two watermark commands.
             ContextMenu menu = window.CreateMoreMenu();
-            MenuItem time = Assert.IsType<MenuItem>(Assert.Single(menu.Items));
+            Assert.Equal(3, menu.Items.Count);
+            MenuItem time = Assert.IsType<MenuItem>(menu.Items[0]);
             Assert.Equal("시각 표시", time.Header);
             Assert.True(time.IsCheckable);
             Assert.False(time.IsChecked);

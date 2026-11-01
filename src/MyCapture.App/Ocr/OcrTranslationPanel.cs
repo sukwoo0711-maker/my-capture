@@ -30,6 +30,7 @@ internal sealed class OcrTranslationPanel : Grid
     private readonly ScrollViewer _scroller;
     private readonly StackPanel _items;
     private IReadOnlyList<TranslatedBlock> _results = [];
+    private TextBox? _selectionOwner;
 
     internal OcrTranslationPanel()
     {
@@ -111,6 +112,9 @@ internal sealed class OcrTranslationPanel : Grid
     /// <summary>The translations in reading order, one block per paragraph.</summary>
     internal string CopyText => string.Join("\n\n", _results.Select(result => result.Translation.Text).Where(text => text.Length > 0));
 
+    /// <summary>The current translation selection, retained when focus moves to the copy button.</summary>
+    internal string SelectedText => _selectionOwner?.SelectedText ?? string.Empty;
+
     /// <summary>Each numbered original followed by its translation.</summary>
     internal string CopyWithSourceText => string.Join("\n\n", _results.Select(result =>
         $"{result.Block.Number.ToString(CultureInfo.InvariantCulture)}. {result.Block.Text}\n{result.Translation.Text}"));
@@ -153,6 +157,7 @@ internal sealed class OcrTranslationPanel : Grid
 
     internal void ShowResults(IReadOnlyList<TranslatedBlock> results)
     {
+        _selectionOwner = null;
         _results = results;
         State = ViewState.Translated;
         Announce(_heading, results.Count == 1 ? UiText.Get("Translate_SummaryOne") : UiText.Format("Translate_Summary", results.Count));
@@ -175,6 +180,7 @@ internal sealed class OcrTranslationPanel : Grid
         double? progress = null, string? progressText = null)
     {
         State = state;
+        _selectionOwner = null;
         _results = [];
         _items.Children.Clear();
         _scroller.Visibility = Visibility.Collapsed;
@@ -233,6 +239,11 @@ internal sealed class OcrTranslationPanel : Grid
             Padding = new Thickness(0), MinHeight = 0,
         };
         InputMethod.SetIsInputMethodEnabled(translation, false);
+        translation.GotKeyboardFocus += (_, _) => _selectionOwner = translation;
+        translation.SelectionChanged += (_, _) =>
+        {
+            if (translation.SelectionLength > 0) _selectionOwner = translation;
+        };
         translation.SetResourceReference(Control.ForegroundProperty, "Text.Primary");
         AutomationProperties.SetName(translation, UiText.Format("Translate_TranslationName", number));
         texts.Children.Add(translation);

@@ -16,6 +16,8 @@ public static class GallerySourceBadge
         "Dismissed", typeof(bool), typeof(GallerySourceBadge), new PropertyMetadata(false));
     private static readonly DependencyProperty ActionsProperty = DependencyProperty.RegisterAttached(
         "Actions", typeof(CaptureSourceActions), typeof(GallerySourceBadge), new PropertyMetadata(null));
+    private static readonly DependencyProperty StatusProperty = DependencyProperty.RegisterAttached(
+        "Status", typeof(Action<string>), typeof(GallerySourceBadge), new PropertyMetadata(null));
     // The badge's menu is built when it is first needed (a right click or the click of a source
     // without a page to open), not for every card that scrolls into view.
     private static readonly DependencyProperty MenuFactoryProperty = DependencyProperty.RegisterAttached(
@@ -44,15 +46,19 @@ public static class GallerySourceBadge
         Action<string>? status, Action<string>? search, CaptureSourceActions? actions = null)
     {
         button.SetValue(ActionsProperty, actions ?? CaptureSourceActions.Default);
+        button.SetValue(StatusProperty, status);
         button.Click -= OnClick;
         button.Click += OnClick;
         button.PreviewMouseDoubleClick -= OnPreviewDoubleClick;
         button.PreviewMouseDoubleClick += OnPreviewDoubleClick;
         ClosePreview(button);
         button.SetValue(DismissedProperty, false);
+        string actionText = provenance.HasSource
+            ? UiText.Format(provenance.CanOpen ? "Source.BadgeOpen" : "Source.BadgeDetails", provenance.BadgeText)
+            : string.Empty;
         var tip = new ToolTip
         {
-            Content = new TextBlock { Text = provenance.Tooltip, TextWrapping = TextWrapping.Wrap, MaxWidth = 360 },
+            Content = new TextBlock { Text = actionText, TextWrapping = TextWrapping.Wrap, MaxWidth = 360 },
             Placement = PlacementMode.Bottom,
         };
         button.ToolTip = tip;
@@ -73,8 +79,8 @@ public static class GallerySourceBadge
         button.MouseLeave += OnMouseLeave;
         button.ToolTipOpening -= OnToolTipOpening;
         button.ToolTipOpening += OnToolTipOpening;
-        AutomationProperties.SetHelpText(button, provenance.Tooltip);
-        AutomationProperties.SetName(button, UiText.Format("Source.Label", provenance.BadgeText));
+        AutomationProperties.SetHelpText(button, actionText);
+        AutomationProperties.SetName(button, actionText);
 
         button.Content = new TextBlock
         {
@@ -114,22 +120,28 @@ public static class GallerySourceBadge
         var button = (Button)sender;
         ClosePreview(button);
         CaptureProvenance provenance = GetProvenance(button);
-        if (Window.GetWindow(button) is GalleryWindow sourceGallery
-            && button.DataContext is GalleryItemViewModel tile)
-        {
-            sourceGallery.ShowSourceDetails(tile);
-            return;
-        }
-        if (!provenance.CanOpen)
-        {
-            ShowMenu(button);
-            return;
-        }
         GalleryWindow? gallery = Window.GetWindow(button) as GalleryWindow;
+        GalleryItemViewModel? tile = button.DataContext as GalleryItemViewModel;
         var actions = (CaptureSourceActions)button.GetValue(ActionsProperty);
-        string status = await actions.OpenAsync(provenance);
-        gallery?.SetSourceActionStatus(status);
-        if (status.Length > 0 && provenance.Kind == CaptureProvenanceKind.Document) ShowMenu(button);
+        var status = (Action<string>?)button.GetValue(StatusProperty);
+        if (!await TryOpenAsync(provenance, actions, status))
+        {
+            // An asynchronous document check may finish after a virtualized card was reused.
+            if (!ReferenceEquals(GetProvenance(button), provenance) || !ReferenceEquals(button.DataContext, tile)) return;
+            if (gallery is not null && tile is not null)
+                gallery.ShowSourceDetails(tile);
+            else
+                ShowMenu(button);
+        }
+    }
+
+    /// <summary>The badge and card menu share source opening and the document-failure fallback.</summary>
+    internal static async Task<bool> TryOpenAsync(CaptureProvenance provenance, CaptureSourceActions actions, Action<string>? status)
+    {
+        if (!provenance.CanOpen) return false;
+        string result = await actions.OpenAsync(provenance);
+        status?.Invoke(result);
+        return result.Length == 0 || provenance.Kind != CaptureProvenanceKind.Document;
     }
 
     private static void OnPreviewDoubleClick(object sender, MouseButtonEventArgs e) => e.Handled = true;

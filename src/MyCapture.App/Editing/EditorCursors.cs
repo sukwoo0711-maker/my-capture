@@ -60,7 +60,8 @@ internal readonly record struct EditorCursorStyle(Color Body, Color Outline)
 
 /// <summary>
 /// Turns <see cref="EditorCursorKind"/> into a WPF cursor. System shapes come from Windows;
-/// tool shapes are drawn at run time from the same 20x20 outline icons as the tool rail.
+/// tool shapes are drawn at run time. Brush locators mark the exact stroke centre while
+/// the surface independently draws the effective brush width.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -68,7 +69,7 @@ internal readonly record struct EditorCursorStyle(Color Body, Color Outline)
 /// is rendered from vector geometry at the exact pixel size the pointer uses on the editor's
 /// monitor (the user's pointer size times the monitor scale), packed as an in-memory 32-bit
 /// .cur and loaded at that size. The hot spot is placed on a pixel centre at every size: the
-/// pen nib, the middle of the highlighter tip, the inner crop corner, or the crosshair centre.
+/// brush centre, the inner crop corner, or the crosshair centre.
 /// </para>
 /// <para>
 /// Tool cursors take the fill and outline of the user's pointer style (white with a black
@@ -185,10 +186,8 @@ internal static class EditorCursors
             switch (kind)
             {
                 case EditorCursorKind.Pen:
-                    DrawTool(dc, IconGeometry("Icon.Pen", PenFallback), new Point(4.1, 15.9), anchor, 1.8, marker: null, style);
-                    break;
                 case EditorCursorKind.Highlighter:
-                    DrawTool(dc, Geometry.Parse(HighlighterBody), new Point(6, 16), anchor, 1.65, Geometry.Parse(HighlighterTip), style);
+                    DrawBrushLocator(dc, anchor, style);
                     break;
                 case EditorCursorKind.Crop:
                     DrawOutline(dc, IconGeometry("Icon.Crop", CropFallback), new Point(5, 5), anchor, 1.3, style);
@@ -282,8 +281,7 @@ internal static class EditorCursors
 
     private static Point Anchor(EditorCursorKind kind) => kind switch
     {
-        EditorCursorKind.Pen => new Point(3.5, 28.5),
-        EditorCursorKind.Highlighter => new Point(4.5, 27.5),
+        EditorCursorKind.Pen or EditorCursorKind.Highlighter => new Point(15.5, 15.5),
         EditorCursorKind.Crop => new Point(8.5, 8.5),
         _ => new Point(10.5, 10.5),
     };
@@ -333,6 +331,15 @@ internal static class EditorCursors
         dc.DrawGeometry(new SolidColorBrush(style.Outline), null, new EllipseGeometry(c, 1.8, 1.8));
         dc.DrawGeometry(null, RoundPen(style.Body, 1.3), lines);
         dc.DrawGeometry(new SolidColorBrush(style.Body), null, new EllipseGeometry(c, 0.9, 0.9));
+    }
+
+    private static void DrawBrushLocator(DrawingContext dc, Point center, EditorCursorStyle style)
+    {
+        var lines = new GeometryGroup();
+        lines.Children.Add(new LineGeometry(new Point(center.X - 4, center.Y), new Point(center.X + 4, center.Y)));
+        lines.Children.Add(new LineGeometry(new Point(center.X, center.Y - 4), new Point(center.X, center.Y + 4)));
+        dc.DrawGeometry(null, RoundPen(style.Outline, 3.2), lines);
+        dc.DrawGeometry(null, RoundPen(style.Body, 1.2), lines);
     }
 
     private static readonly Rect BadgePlate = new(15.5, 15.5, 15, 15);

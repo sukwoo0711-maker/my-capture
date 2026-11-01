@@ -197,7 +197,7 @@ public sealed class OcrIndexingService
                                 result.Text,
                                 result.LanguageTag,
                                 requestedContentRevision,
-                                cancellationToken)
+                                cancellationToken, OcrQualityProfile.FromUpscale(request.UpscaleFactor))
                             .ConfigureAwait(false);
                         if (cached)
                         {
@@ -214,7 +214,7 @@ public sealed class OcrIndexingService
                                 string.Empty,
                                 result.LanguageTag,
                                 requestedContentRevision,
-                                cancellationToken)
+                                cancellationToken, OcrQualityProfile.FromUpscale(request.UpscaleFactor))
                             .ConfigureAwait(false);
                         if (cached)
                         {
@@ -266,12 +266,12 @@ public sealed class OcrIndexingService
         string text,
         string? languageTag,
         long expectedContentRevision,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken, OcrQuality quality)
     {
         if (_mutationDispatcher is null || _mutationDispatcher.CheckAccess())
         {
             BeforeCacheOcrForTest?.Invoke();
-            return await _gallery.CacheOcrAsync(id, text, languageTag, expectedContentRevision, cancellationToken);
+            return await _gallery.CacheOcrAsync(id, text, languageTag, expectedContentRevision, cancellationToken, quality);
         }
 
         // Recognition deliberately finishes off-thread. Queue records and their observable
@@ -281,7 +281,7 @@ public sealed class OcrIndexingService
                 () =>
                 {
                     BeforeCacheOcrForTest?.Invoke();
-                    return _gallery.CacheOcrAsync(id, text, languageTag, expectedContentRevision, cancellationToken);
+                    return _gallery.CacheOcrAsync(id, text, languageTag, expectedContentRevision, cancellationToken, quality);
                 },
                 DispatcherPriority.Background)
             .Task

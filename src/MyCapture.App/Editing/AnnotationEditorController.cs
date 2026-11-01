@@ -39,6 +39,9 @@ internal sealed class AnnotationEditorController
     private RectD _transformBefore;
     private ResizeHandle _resizeHandle = ResizeHandle.None;
     private bool _resizeStarted;
+    private PointD _resizePointerOffset;
+    private PointD[]? _resizePointsBefore;
+    private PointerIntent? _activePointerIntent;
     private TextLayout _textLayoutBefore;
     private AnnotationItem? _draftItem;
     private List<PointD>? _draftPoints;
@@ -49,8 +52,8 @@ internal sealed class AnnotationEditorController
     private PenPointCollection? _draftPenPoints;
     private bool _updatingDraftPen;
 
-    // The text being typed into a live box. Until it is committed its add command is the
-    // whole history of the item, so style changes apply to it directly (see PushProperty).
+    // The text being typed into a live box. Its draft is visible but has no undo entry
+    // until its content is committed, so style changes apply directly (see PushProperty).
     private TextAnnotation? _creatingText;
 
     internal AnnotationEditorController(AnnotationDocument document, UndoStack undo)
@@ -84,7 +87,8 @@ internal sealed class AnnotationEditorController
 
             CancelGesture();
             _tool = value;
-            if (value != EditorTool.Select)
+            if (value != EditorTool.Select
+                && !(value == EditorTool.StepNumber && _selection.Count == 1 && _selected is TextAnnotation { IsStepNumber: true }))
             {
                 SetSelected(null);
             }
@@ -202,6 +206,10 @@ internal sealed class AnnotationEditorController
     /// to stay constant on screen regardless of zoom.
     /// </summary>
     internal double HitTolerance { get; set; } = 6;
+    internal double DipPerPixel { get; set; } = 1;
+    internal double HandleTolerance => 8 / Math.Max(0.0001, DipPerPixel);
+    internal PointerIntent? ActivePointerIntent => _activePointerIntent;
+    internal Func<TextAnnotation, double>? StepFontFitter { get; set; }
 
     internal void SetSelected(AnnotationItem? item)
     {
@@ -282,9 +290,19 @@ internal sealed class AnnotationEditorController
         CancelGesture();
         if (_selection.Count == 0) return;
         AnnotationItem[] copies = _document.Items.Where(_selection.Contains).Select(item => item.Clone()).ToArray();
+        int stepCount = copies.OfType<TextAnnotation>().Count(text => text.IsStepNumber);
+        int next = NextStepNumber;
+        if (stepCount > 0 && (next < 1 || next > 1000 - stepCount)) return;
         foreach (AnnotationItem copy in copies) copy.Translate(10, 10);
-        _undo.Execute(new CompositeCommand(UiText.Get("EditorSelection_Duplicate"),
-            copies.Select(item => new AddAnnotationCommand(_document, item))));
+        foreach (TextAnnotation badge in copies.OfType<TextAnnotation>().Where(text => text.IsStepNumber))
+        {
+            badge.Text = (next++).ToString(System.Globalization.CultureInfo.InvariantCulture);
+            FitStepFont(badge);
+        }
+        IUndoableCommand command = new CompositeCommand(UiText.Get("EditorSelection_Duplicate"),
+            copies.Select(item => new AddAnnotationCommand(_document, item)));
+        _undo.Execute(stepCount > 0 ? new StepSequenceCommand(this, command, _manualNextStep,
+            _manualNextStep.HasValue ? next : null) : command);
         SetSelection(copies);
         RaiseVisual();
     }
@@ -504,10 +522,12 @@ internal sealed class AnnotationEditorController
     internal void PointerDown(PointD point, bool shift = false, bool control = false)
     {
         CancelGesture();
+        PointerIntent intent = ResolvePointerIntent(point, shift, control);
+        _activePointerIntent = intent;
         switch (_tool)
         {
             case EditorTool.Select:
-                BeginSelectGesture(point, shift || control);
+                BeginSelectGesture(point, shift || control, intent);
                 break;
             case EditorTool.Rectangle:
             case EditorTool.Ellipse:
@@ -522,9 +542,12 @@ internal sealed class AnnotationEditorController
                 // Placed via a single click, handled by the view (TextBox / OpenFileDialog).
                 break;
             case EditorTool.StepNumber:
-                AddStepNumber(point);
+                if (intent.Action is PointerAction.Move or PointerAction.Resize)
+                    BeginSelectGesture(point, false, intent);
+                else if (intent.Action == PointerAction.AddStepNumber) TryAddStepNumber(point);
                 break;
         }
+        if (_gesture == Gesture.None) _activePointerIntent = null;
     }
 
     internal void PointerMove(PointD point, bool shift = false)
@@ -566,14 +589,31 @@ internal sealed class AnnotationEditorController
                 // annotation to the press point, including a same-position move event.
                 if (!_resizeStarted && point == _gestureStart) break;
                 _resizeStarted = true;
+                PointD localPointer = _selected is TextAnnotation { RotationDegrees: not 0 } rotated
+                    ? GeometryMath.Rotate(point, _transformBefore.Center, -rotated.RotationDegrees) : point;
+                PointD resizePoint = localPointer.Offset(_resizePointerOffset.X, _resizePointerOffset.Y);
                 if (_selected is TextAnnotation text)
                 {
-                    ResizeText(text, point);
+                    ResizeText(text, resizePoint);
+                    if (text.RotationDegrees != 0)
+                    {
+                        PointD center = GeometryMath.Rotate(text.Rect.Center, _transformBefore.Center, text.RotationDegrees);
+                        text.Rect = new RectD(center.X - text.Rect.Width / 2, center.Y - text.Rect.Height / 2,
+                            text.Rect.Width, text.Rect.Height);
+                    }
+                    RaiseVisual();
+                }
+                else if (_selected is PolylineAnnotation line && _resizePointsBefore is { } original)
+                {
+                    RectD target = ApplyResize(_transformBefore, _resizeHandle, resizePoint, normalize: false);
+                    line.Points = original.Select(p => new PointD(
+                        _transformBefore.Width == 0 ? target.X : target.X + (p.X - _transformBefore.X) / _transformBefore.Width * target.Width,
+                        _transformBefore.Height == 0 ? target.Y : target.Y + (p.Y - _transformBefore.Y) / _transformBefore.Height * target.Height)).ToList();
                     RaiseVisual();
                 }
                 else if (_selected is not null)
                 {
-                    _selected.SetBounds(ApplyResize(_transformBefore, _resizeHandle, point));
+                    _selected.SetBounds(ApplyResize(_transformBefore, _resizeHandle, resizePoint));
                     RaiseVisual();
                 }
 
@@ -613,6 +653,7 @@ internal sealed class AnnotationEditorController
                 CommitDraftShape(point, shift);
                 break;
             case Gesture.PenDraw:
+                if (_draftPoints is not { Count: > 0 } points || points[^1] != point) PointerMove(point, shift);
                 CommitPen();
                 break;
             case Gesture.Resize when _selected is TextAnnotation text:
@@ -624,6 +665,7 @@ internal sealed class AnnotationEditorController
                     _undo.Push(new PropertyChangeCommand<TextAnnotation, TextLayout>(
                         text, UiText.Get("Text_258AD4B095A1"), TextLayout.Apply, _textLayoutBefore, resized));
                 }
+                if (text.IsStepNumber) StepSize = text.Rect.Width;
 
                 break;
             case Gesture.Move:
@@ -631,7 +673,13 @@ internal sealed class AnnotationEditorController
                     _undo.Push(new TranslateAnnotationsCommand(_gestureSelection, _moveOffset.X, _moveOffset.Y));
                 break;
             case Gesture.Resize:
-                if (_selected is not null)
+                if (_selected is PolylineAnnotation line && _resizePointsBefore is { } beforePoints)
+                {
+                    if (!beforePoints.SequenceEqual(line.Points))
+                        _undo.Push(new CompositeCommand(UiText.Get("Text_258AD4B095A1"),
+                            [new ReplacePointsCommand(line, beforePoints, line.Points)]));
+                }
+                else if (_selected is not null)
                 {
                     RectD after = _selected.Bounds;
                     if (after != _transformBefore)
@@ -660,7 +708,9 @@ internal sealed class AnnotationEditorController
                 TextLayout.Apply(text, _textLayoutBefore);
                 break;
             case Gesture.Resize:
-                _selected?.SetBounds(_transformBefore);
+                if (_selected is PolylineAnnotation line && _resizePointsBefore is { } points)
+                    line.Points = [.. points];
+                else _selected?.SetBounds(_transformBefore);
                 break;
             case Gesture.Create:
             case Gesture.PenDraw:
@@ -678,6 +728,8 @@ internal sealed class AnnotationEditorController
 
     private void ResetGesture()
     {
+        _activePointerIntent = null;
+        _resizePointsBefore = null;
         _gesture = Gesture.None;
         _gestureSelection = [];
         _moveOffset = default;
@@ -728,7 +780,7 @@ internal sealed class AnnotationEditorController
         };
         TextLayout.Apply(text, FitText(text, text.Text, text.FontSize, autoSize: true, text.Rect));
 
-        _undo.Execute(new AddAnnotationCommand(_document, text));
+        _document.Add(text);
         IsCreatingText = true;
         _creatingText = text;
         EditingText = text;
@@ -738,8 +790,8 @@ internal sealed class AnnotationEditorController
     }
 
     /// <summary>
-    /// Finishes a live text edit. An empty new box undoes its add; clearing an existing
-    /// caption records a removal. Otherwise the final text and fitted box change as one step.
+    /// Finishes a live text edit. An empty new box discards its draft without changing
+    /// history; a new caption's content, layout and add are recorded as one step.
     /// </summary>
     internal void CommitTextEdit(TextAnnotation text, string finalText)
     {
@@ -755,17 +807,18 @@ internal sealed class AnnotationEditorController
             {
                 _undo.Execute(new RemoveAnnotationCommand(_document, text));
             }
-            else if (_undo.CanUndo && ReferenceEquals(_document.Items.LastOrDefault(), text))
-            {
-                // New-box style changes do not add history, so its add is still on top.
-                _undo.Undo();
-            }
             else
             {
                 _document.Remove(text);
             }
 
             SetSelected(null);
+        }
+        else if (creating)
+        {
+            text.Text = finalText;
+            TextLayout.Apply(text, FitText(text, finalText, text.FontSize, text.AutoSize, text.Rect));
+            _undo.Push(new AlreadyAddedCommand(_document, text));
         }
         else if (!string.Equals(text.Text, finalText, StringComparison.Ordinal))
         {
@@ -1026,7 +1079,7 @@ internal sealed class AnnotationEditorController
     }
 
     /// <summary>
-    /// Applies a font size to the selected text annotation, or records it as the default
+    /// Applies a font size to all selected captions, or records it as the default
     /// for the next text annotation when nothing is selected. The box is refitted to the
     /// text at the new size, so a larger font is never trimmed by its own rect.
     /// </summary>
@@ -1034,32 +1087,18 @@ internal sealed class AnnotationEditorController
     {
         double size = double.IsFinite(fontSize)
             ? Math.Clamp(fontSize, SettingsRanges.FontSize.Min, SettingsRanges.FontSize.Max) : DefaultFontSize;
+        if (_selection.Count == 1 && _selected is TextAnnotation { IsStepNumber: true } badge)
+        {
+            ApplyStepSize(Math.Clamp(badge.Rect.Width * size / Math.Max(1, badge.FontSize), 24, Math.Max(24, MaximumStepSize)));
+            return;
+        }
         DefaultFontSize = size;
-        if (_selected is not TextAnnotation text)
+        ApplySelectionStyle(UiText.Get("Text_258AD4B095A1"), item =>
         {
-            return;
-        }
-
-        if (Math.Abs(text.FontSize - size) < 1e-6)
-        {
-            return;
-        }
-
-        TextLayout after;
-        if (text.IsStepNumber)
-        {
-            // A badge's number is centred in its own square; scale the square with it.
-            double ratio = size / Math.Max(double.Epsilon, text.FontSize);
-            RectD box = text.Rect;
-            after = new TextLayout(new RectD(box.X, box.Y, box.Width * ratio, box.Height * ratio), size, text.AutoSize);
-        }
-        else
-        {
-            after = FitText(text, text.Text, size, text.AutoSize, text.Rect);
-        }
-
-        PushProperty(text, UiText.Get("Text_258AD4B095A1"), TextLayout.Apply, TextLayout.Of(text), after);
-        RaiseVisual();
+            if (item is not TextAnnotation { IsStepNumber: false } text || Math.Abs(text.FontSize - size) < 1e-6) return;
+            TextLayout after = FitText(text, text.Text, size, text.AutoSize, text.Rect);
+            PushProperty(text, UiText.Get("Text_258AD4B095A1"), TextLayout.Apply, TextLayout.Of(text), after);
+        });
     }
 
     /// <summary>
@@ -1082,12 +1121,41 @@ internal sealed class AnnotationEditorController
     /// </summary>
     internal ResizeHandle HandleAt(PointD point, double handlePixels)
     {
-        if (_selection.Count != 1 || _selected is null || !_selected.SupportsResize)
-        {
-            return ResizeHandle.None;
-        }
+        return PointerIntentGeometry.NearestHandle(GetSelectionHandles(DipPerPixel), point, handlePixels);
+    }
 
-        return UsableHandle(_selected, HitTestHandle(_selected.Bounds, point, handlePixels));
+    internal IReadOnlyList<SelectionHandle> GetSelectionHandles(double dipPerPixel) =>
+        _selection.Count == 1 && _selected is { SupportsResize: true }
+        && (_tool == EditorTool.Select || (_tool == EditorTool.StepNumber && _selected is TextAnnotation { IsStepNumber: true }))
+            ? PointerIntentGeometry.SelectionHandles(_selected, dipPerPixel) : [];
+
+    internal PointerIntent ResolvePointerIntent(PointD point, bool shift = false, bool control = false)
+    {
+        if (_activePointerIntent is { } active) return active;
+        bool step = _tool == EditorTool.StepNumber;
+        bool editingStep = step && _selection.Count == 1 && _selected is TextAnnotation { IsStepNumber: true };
+        bool toggle = _tool == EditorTool.Select && (shift || control);
+        if (_tool == EditorTool.Select || editingStep)
+        {
+            ResizeHandle handle = toggle ? ResizeHandle.None : HandleAt(point, HandleTolerance);
+            if (handle != ResizeHandle.None)
+                return new(PointerAction.Resize, _selected, handle,
+                    PointerIntentGeometry.ResizeCursor(_selected!, handle));
+            AnnotationItem? hit = step
+                ? (_selected!.DistanceTo(point) <= HitTolerance ? _selected : null) : HitTest(point);
+            if (hit is not null)
+                return new(toggle ? PointerAction.ToggleSelection : PointerAction.Move, hit, Cursor: EditorCursorKind.Move);
+            if (!step) return new(PointerAction.Marquee);
+        }
+        EditorCursorKind cursor = EditorCursorPolicy.Resolve(_tool, default);
+        return new(_tool switch
+        {
+            EditorTool.StepNumber => CanAddStepNumber ? PointerAction.AddStepNumber : PointerAction.None,
+            EditorTool.Pen or EditorTool.Highlighter => PointerAction.PenDraw,
+            EditorTool.Text => PointerAction.Text,
+            EditorTool.Image => PointerAction.Image,
+            _ => PointerAction.Create,
+        }, Cursor: cursor);
     }
 
     /// <summary>
@@ -1096,29 +1164,35 @@ internal sealed class AnnotationEditorController
     /// bottom handles are not offered.
     /// </summary>
     internal static ResizeHandle UsableHandle(AnnotationItem item, ResizeHandle handle) =>
-        item is TextAnnotation { IsStepNumber: false } && handle is ResizeHandle.TopCenter or ResizeHandle.BottomCenter
+        (item is TextAnnotation { IsStepNumber: false } && handle is ResizeHandle.TopCenter or ResizeHandle.BottomCenter)
+        || (item is TextAnnotation { IsStepNumber: true } && !IsCornerHandle(handle))
             ? ResizeHandle.None
             : handle;
 
     internal AnnotationItem? HitTest(PointD point) => _document.HitTest(point, HitTolerance);
 
-    private void BeginSelectGesture(PointD point, bool toggle)
+    private void BeginSelectGesture(PointD point, bool toggle, PointerIntent intent)
     {
         _gestureStart = point;
-        if (!toggle && _selection.Count == 1 && _selected is not null && _selected.SupportsResize)
+        if (intent.Action == PointerAction.Resize && _selected is not null)
         {
-            ResizeHandle handle = UsableHandle(_selected, HitTestHandle(_selected.Bounds, point, HitTolerance * 1.5));
+            ResizeHandle handle = intent.Handle;
             if (handle != ResizeHandle.None)
             {
                 _gesture = Gesture.Resize;
                 _resizeHandle = handle;
                 _transformBefore = _selected.Bounds;
                 _textLayoutBefore = _selected is TextAnnotation text ? TextLayout.Of(text) : default;
+                _resizePointsBefore = _selected is PolylineAnnotation line ? [.. line.Points] : null;
+                PointD local = _selected is TextAnnotation { RotationDegrees: not 0 } rotated
+                    ? GeometryMath.Rotate(point, _transformBefore.Center, -rotated.RotationDegrees) : point;
+                PointD anchor = PointerIntentGeometry.HandlePoint(_transformBefore, handle);
+                _resizePointerOffset = new PointD(anchor.X - local.X, anchor.Y - local.Y);
                 return;
             }
         }
 
-        AnnotationItem? hit = _document.HitTest(point, HitTolerance);
+        AnnotationItem? hit = intent.Target;
         if (hit is not null)
         {
             if (toggle)
@@ -1286,6 +1360,11 @@ internal sealed class AnnotationEditorController
     private int _nextStepNumber;
     private string? _nextStepPositiveSign;
     private string? _nextStepNegativeSign;
+    private int? _manualNextStep;
+    internal double StepSize { get; private set; } = 36;
+    internal double MaximumStepSize => Math.Min(256, Math.Min(_document.CanvasWidth, _document.CanvasHeight));
+    internal bool CanFitStepNumber => MaximumStepSize >= 24;
+    internal bool CanAddStepNumber => CanFitStepNumber && NextStepNumber is >= 1 and <= 999;
 
     /// <summary>
     /// The number the step tool adds next: one more than the highest number on the image, so
@@ -1295,14 +1374,16 @@ internal sealed class AnnotationEditorController
     {
         get
         {
+            if (_manualNextStep is int manual) return manual;
             // Preview and cursor both ask for this value. Selection/style changes do not
             // change the sequence. Keep the original culture-sensitive integer parsing.
             var format = System.Globalization.CultureInfo.CurrentCulture.NumberFormat;
             if (_nextStepRevision != _document.StepNumberRevision
                 || _nextStepPositiveSign != format.PositiveSign || _nextStepNegativeSign != format.NegativeSign)
             {
-                _nextStepNumber = _document.Items.OfType<TextAnnotation>().Where(t => t.IsStepNumber)
-                    .Select(t => int.TryParse(t.Text, out int n) ? n : 0).DefaultIfEmpty(0).Max() + 1;
+                int largest = _document.Items.OfType<TextAnnotation>().Where(t => t.IsStepNumber)
+                    .Select(t => int.TryParse(t.Text, out int n) ? n : 0).DefaultIfEmpty(0).Max();
+                _nextStepNumber = largest == int.MaxValue ? int.MaxValue : largest + 1;
                 _nextStepRevision = _document.StepNumberRevision;
                 _nextStepPositiveSign = format.PositiveSign;
                 _nextStepNegativeSign = format.NegativeSign;
@@ -1311,17 +1392,128 @@ internal sealed class AnnotationEditorController
         }
     }
 
-    internal TextAnnotation AddStepNumber(PointD point)
+    internal bool TrySetNextStepNumber(int number)
     {
+        if (number is < 1 or > 999) return false;
+        _manualNextStep = number;
+        RaiseVisual();
+        return true;
+    }
+
+    internal RectD? StepNumberPreviewBounds(PointD point)
+    {
+        if (!CanAddStepNumber) return null;
+        double size = Math.Clamp(StepSize, 24, MaximumStepSize);
+        return new RectD(point.X - size / 2, point.Y - size / 2, size, size)
+            .ClampTo(new RectD(0, 0, _document.CanvasWidth, _document.CanvasHeight));
+    }
+
+    internal TextAnnotation AddStepNumber(PointD point) => TryAddStepNumber(point)
+        ?? throw new InvalidOperationException("The step number cannot be placed on this image.");
+
+    internal TextAnnotation? TryAddStepNumber(PointD point)
+    {
+        if (StepNumberPreviewBounds(point) is not { } bounds) return null;
         int number = NextStepNumber;
-        double size = Math.Max(32, DefaultFontSize * 2);
         var badge = new TextAnnotation { IsStepNumber = true, Text = number.ToString(System.Globalization.CultureInfo.InvariantCulture),
-            Rect = new RectD(point.X, point.Y, size, size), FontSize = Math.Max(16, DefaultFontSize),
+            Rect = bounds, FontFamily = DefaultFontFamily,
             Background = StrokeColor, Foreground = ColorRgba.White, Bold = true, HasOutline = true };
-        _undo.Execute(new AddAnnotationCommand(_document, badge));
+        FitStepFont(badge);
+        _undo.Execute(new StepSequenceCommand(this, new AddAnnotationCommand(_document, badge), _manualNextStep,
+            _manualNextStep.HasValue ? number + 1 : null));
         SetSelected(badge);
         RaiseVisual();
         return badge;
+    }
+
+    internal bool ApplySelectedStepNumber(int number)
+    {
+        if (number is < 1 or > 999 || _selection.Count != 1 || _selected is not TextAnnotation { IsStepNumber: true } badge) return false;
+        string value = number.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        if (badge.Text == value) return true;
+        var probe = (TextAnnotation)badge.Clone();
+        probe.Text = value;
+        FitStepFont(probe);
+        _undo.Execute(new CompositeCommand(UiText.Get("EditorStep_Number"),
+        [
+            new PropertyChangeCommand<TextAnnotation, string>(badge, UiText.Get("EditorStep_Number"),
+                static (text, v) => text.Text = v, badge.Text, value),
+            new PropertyChangeCommand<TextAnnotation, double>(badge, UiText.Get("EditorStep_Number"),
+                static (text, v) => text.FontSize = v, badge.FontSize, probe.FontSize),
+        ]));
+        RaiseVisual();
+        return true;
+    }
+
+    internal bool ApplyStepSize(double size)
+    {
+        if (_selection.Count > 1 || !CanFitStepNumber || !double.IsFinite(size) || size < 24 || size > MaximumStepSize) return false;
+        StepSize = size;
+        if (_selected is TextAnnotation { IsStepNumber: true } badge)
+        {
+            TextLayout before = TextLayout.Of(badge);
+            RectD box = new(badge.Rect.Center.X - size / 2, badge.Rect.Center.Y - size / 2, size, size);
+            box = box.ClampTo(new RectD(0, 0, _document.CanvasWidth, _document.CanvasHeight));
+            TextLayout after = StepLayout(badge, box);
+            if (before != after)
+                _undo.Execute(new PropertyChangeCommand<TextAnnotation, TextLayout>(badge,
+                    UiText.Get("EditorStep_Size"), TextLayout.Apply, before, after));
+        }
+        RaiseVisual();
+        return true;
+    }
+
+    private TextAnnotation[] OrderedStepNumbers() => _document.Items.OfType<TextAnnotation>()
+        .Where(t => t.IsStepNumber && int.TryParse(t.Text, out _))
+        .OrderBy(t => int.Parse(t.Text, System.Globalization.CultureInfo.CurrentCulture)).ThenBy(t => t.Id).ToArray();
+
+    internal bool CanRenumberStepNumbers => OrderedStepNumbers().Length is > 0 and <= 999;
+
+    internal bool RenumberStepNumbers()
+    {
+        TextAnnotation[] badges = OrderedStepNumbers();
+        if (badges.Length is 0 or > 999) return false;
+        var commands = new List<IUndoableCommand>();
+        for (int index = 0; index < badges.Length; index++)
+        {
+            TextAnnotation badge = badges[index];
+            string number = (index + 1).ToString(System.Globalization.CultureInfo.InvariantCulture);
+            if (badge.Text == number) continue;
+            var probe = (TextAnnotation)badge.Clone();
+            probe.Text = number;
+            FitStepFont(probe);
+            commands.Add(new PropertyChangeCommand<TextAnnotation, string>(badge, UiText.Get("EditorStep_Number"),
+                static (text, v) => text.Text = v, badge.Text, number));
+            commands.Add(new PropertyChangeCommand<TextAnnotation, double>(badge, UiText.Get("EditorStep_Number"),
+                static (text, v) => text.FontSize = v, badge.FontSize, probe.FontSize));
+        }
+        if (commands.Count > 0) _undo.Execute(new CompositeCommand(UiText.Get("EditorStep_Renumber"), commands));
+        RaiseVisual();
+        return true;
+    }
+
+    private void FitStepFont(TextAnnotation badge)
+    {
+        double size = Math.Min(badge.Rect.Width, badge.Rect.Height);
+        badge.FontSize = Math.Max(10, Math.Min(size / 2, (size - 4) / Math.Max(0.65, badge.Text.Length * 0.65)));
+        if (StepFontFitter is not null) badge.FontSize = Math.Max(10, StepFontFitter(badge));
+    }
+
+    private TextLayout StepLayout(TextAnnotation badge, RectD bounds)
+    {
+        var probe = (TextAnnotation)badge.Clone();
+        probe.Rect = bounds;
+        FitStepFont(probe);
+        return new(bounds, probe.FontSize, badge.AutoSize);
+    }
+
+    private sealed class StepSequenceCommand(AnnotationEditorController owner, IUndoableCommand inner,
+        int? before, int? after) : IUndoableCommand
+    {
+        public string Description => inner.Description;
+        public IEnumerable<string> ReferencedImageAssets => inner.ReferencedImageAssets;
+        public void Execute() { inner.Execute(); owner._manualNextStep = after; }
+        public void Undo() { inner.Undo(); owner._manualNextStep = before; }
     }
 
     private static bool IsDegenerate(AnnotationItem item)
@@ -1332,28 +1524,55 @@ internal sealed class AnnotationEditorController
 
     internal void ApplyTextBold(bool bold)
     {
-        if (_selected is not TextAnnotation { IsStepNumber: false } text || text.Bold == bold) return;
         string label = UiText.Get("EditorText_Bold");
-        var probe = (TextAnnotation)text.Clone();
-        probe.Bold = bold;
-        TextLayout fitted = FitText(probe, text.Text, text.FontSize, text.AutoSize, text.Rect);
-        using (_undo.BeginBatch(label))
+        ApplySelectionStyle(label, item =>
         {
-            PushProperty(text, label, static (t, v) => t.Bold = v, text.Bold, bold);
-            PushProperty(text, label, TextLayout.Apply, TextLayout.Of(text), fitted);
-        }
-        RaiseVisual();
+            if (item is not TextAnnotation { IsStepNumber: false } text || text.Bold == bold) return;
+            var probe = (TextAnnotation)text.Clone();
+            probe.Bold = bold;
+            TextLayout fitted = FitText(probe, text.Text, text.FontSize, text.AutoSize, text.Rect);
+            PushProperty(text, label, static (t, v) =>
+            {
+                t.Bold = v.Bold;
+                TextLayout.Apply(t, v.Layout);
+            }, (Bold: text.Bold, Layout: TextLayout.Of(text)), (Bold: bold, Layout: fitted));
+        });
     }
 
     internal void ApplyTextBackground(bool enabled)
     {
-        if (_selected is not TextAnnotation { IsStepNumber: false } text || (text.Background.A > 0) == enabled) return;
-        ColorRgba background = enabled
-            ? (text.Background == ColorRgba.Transparent ? ColorRgba.Black : text.Background.WithAlpha(255))
-            : text.Background.WithAlpha(0);
-        PushProperty(text, UiText.Get("EditorText_Background"), static (t, v) => t.Background = v,
-            text.Background, background);
-        RaiseVisual();
+        string label = UiText.Get("EditorText_Background");
+        ApplySelectionStyle(label, item =>
+        {
+            if (item is not TextAnnotation { IsStepNumber: false } text || (text.Background.A > 0) == enabled) return;
+            ColorRgba background = enabled
+                ? (text.Background == ColorRgba.Transparent ? ColorRgba.Black : text.Background.WithAlpha(255))
+                : text.Background.WithAlpha(0);
+            PushProperty(text, label, static (t, v) => t.Background = v, text.Background, background);
+        });
+    }
+
+    internal void ApplyTextFontFamily(string family)
+    {
+        if (!_selection.OfType<TextAnnotation>().Any(text => !text.IsStepNumber))
+        {
+            DefaultFontFamily = family;
+            return;
+        }
+        string label = UiText.Get("EditorText_FontFamily");
+        ApplySelectionStyle(label, item =>
+        {
+            if (item is not TextAnnotation { IsStepNumber: false } text
+                || string.Equals(text.FontFamily, family, StringComparison.Ordinal)) return;
+            var probe = (TextAnnotation)text.Clone();
+            probe.FontFamily = family;
+            TextLayout fitted = FitText(probe, text.Text, text.FontSize, text.AutoSize, text.Rect);
+            PushProperty(text, label, static (t, v) =>
+            {
+                t.FontFamily = v.Family;
+                TextLayout.Apply(t, v.Layout);
+            }, (Family: text.FontFamily, Layout: TextLayout.Of(text)), (Family: family, Layout: fitted));
+        });
     }
 
     private void PushProperty<TItem, TValue>(
@@ -1368,9 +1587,7 @@ internal sealed class AnnotationEditorController
         setter(item, after);
         if (ReferenceEquals(item, _creatingText))
         {
-            // Still being typed: its add command restores the item with whatever style it has
-            // when committed. A separate entry would sit above the add, so committing an
-            // empty box would undo this change instead of removing the box.
+            // The draft's final style becomes part of the single add when committed.
             return;
         }
 
@@ -1395,15 +1612,16 @@ internal sealed class AnnotationEditorController
         RectD box = before.Rect;
         if (text.IsStepNumber)
         {
-            double badgeSize = before.FontSize;
-            RectD dragged = ApplyResize(box, _resizeHandle, point);
-            double badgeRatio = box.Height > double.Epsilon ? dragged.Height / box.Height : 1;
-            if (IsCornerHandle(_resizeHandle) && double.IsFinite(badgeRatio) && badgeRatio > 0)
-            {
-                badgeSize = Math.Clamp(before.FontSize * badgeRatio, 8, 200);
-            }
-
-            TextLayout.Apply(text, new TextLayout(dragged, badgeSize, before.AutoSize));
+            if (!CanFitStepNumber) return;
+            bool left = _resizeHandle is ResizeHandle.TopLeft or ResizeHandle.BottomLeft;
+            bool top = _resizeHandle is ResizeHandle.TopLeft or ResizeHandle.TopRight;
+            double anchorX = left ? box.Right : box.Left, anchorY = top ? box.Bottom : box.Top;
+            double dx = left ? anchorX - point.X : point.X - anchorX;
+            double dy = top ? anchorY - point.Y : point.Y - anchorY;
+            // Orthogonally project onto the diagonal, retaining the opposite corner.
+            double size = Math.Clamp((dx + dy) / 2, 24, MaximumStepSize);
+            RectD resized = new(left ? anchorX - size : anchorX, top ? anchorY - size : anchorY, size, size);
+            TextLayout.Apply(text, StepLayout(text, resized));
             return;
         }
 
@@ -1450,7 +1668,7 @@ internal sealed class AnnotationEditorController
 
     private void RaiseVisual() => VisualInvalidated?.Invoke(this, EventArgs.Empty);
 
-    private static RectD ApplyResize(RectD initial, ResizeHandle handle, PointD point)
+    private static RectD ApplyResize(RectD initial, ResizeHandle handle, PointD point, bool normalize = true)
     {
         double left = initial.Left;
         double top = initial.Top;
@@ -1477,7 +1695,8 @@ internal sealed class AnnotationEditorController
             bottom = point.Y;
         }
 
-        return new RectD(left, top, right - left, bottom - top).Normalized();
+        RectD result = new(left, top, right - left, bottom - top);
+        return normalize ? result.Normalized() : result;
     }
 
     private static bool IsCornerHandle(ResizeHandle handle) =>
@@ -1489,31 +1708,9 @@ internal sealed class AnnotationEditorController
     /// </summary>
     internal static ResizeHandle HitTestHandle(RectD bounds, PointD point, double tolerance)
     {
-        RectD b = bounds.Normalized();
-        double cx = (b.Left + b.Right) / 2;
-        double cy = (b.Top + b.Bottom) / 2;
-
-        (ResizeHandle Handle, double X, double Y)[] handles =
-        [
-            (ResizeHandle.TopLeft, b.Left, b.Top),
-            (ResizeHandle.TopCenter, cx, b.Top),
-            (ResizeHandle.TopRight, b.Right, b.Top),
-            (ResizeHandle.MiddleRight, b.Right, cy),
-            (ResizeHandle.BottomRight, b.Right, b.Bottom),
-            (ResizeHandle.BottomCenter, cx, b.Bottom),
-            (ResizeHandle.BottomLeft, b.Left, b.Bottom),
-            (ResizeHandle.MiddleLeft, b.Left, cy),
-        ];
-
-        foreach ((ResizeHandle handle, double x, double y) in handles)
-        {
-            if (Math.Abs(point.X - x) <= tolerance && Math.Abs(point.Y - y) <= tolerance)
-            {
-                return handle;
-            }
-        }
-
-        return ResizeHandle.None;
+        return PointerIntentGeometry.NearestHandle(Enum.GetValues<ResizeHandle>()
+            .Where(h => h != ResizeHandle.None).Select(h => new SelectionHandle(h,
+                PointerIntentGeometry.HandlePoint(bounds.Normalized(), h))), point, tolerance);
     }
 
     private enum Gesture

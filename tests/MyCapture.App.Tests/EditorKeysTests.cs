@@ -319,6 +319,9 @@ public sealed class EditorKeysTests
                 Left = -4000, Top = -4000, Width = 1000, Height = 640,
                 ShowActivated = false, ShowInTaskbar = false,
             };
+            // Keep every requested fixture width available even on a small CI desktop;
+            // the scope stays attached through later resizes and detaches when closed.
+            _ = new WindowTrackSizeScope(window, new Size(4096, 2160));
             window.Show();
             window.UpdateLayout();
             window.Editor.Focus();

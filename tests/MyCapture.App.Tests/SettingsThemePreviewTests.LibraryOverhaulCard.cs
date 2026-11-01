@@ -155,33 +155,42 @@ public sealed partial class SettingsThemePreviewTests
                     }
                     string T(string key) => UiText.Get(key);
 
-                    // An image without a source: the five groups in the decided order.
+                    // An image without a source follows the Windows command order; Properties is last.
                     f.ViewModel.ClearSelection();
                     Open(plain);
-                    Assert.Equal([T("Gallery.Float"), T("Text_42A667BC71B0"), T("Text_854582314EBD"), "-",
-                        T("Text_1003CFC78E66"), T("LibraryUx_Preview"), T("MediaInfo.Title"), "-",
-                        T("LibraryUx_Keep"), T("Library453.Rename"), T("Folder410.MoveCaptures"), T("Library.Tags.Edit"), "-",
-                        T("ExportReduction_Title"), "-", T("Text_6139B6C3ED73")], Visible());
+                    Assert.Equal([T("Text_1003CFC78E66"), T("LibraryUx_Preview"), T("Gallery.Float"), T("Text_854582314EBD"), "-",
+                        T("Text_42A667BC71B0"), T("Library.ExportImage"), T("ContactSheet.Action"), "-", T("Folder410.MoveCaptures"), T("Library.Tags.Edit"),
+                        T("LibraryUx_Keep"), "-", T("Text_6139B6C3ED73"), T("Library453.Rename"), "-", T("Library.Properties")], Visible());
                     string[] gestures = menu.Items.OfType<MenuItem>().Where(item => item.Visibility == Visibility.Visible).Select(item => item.InputGestureText).ToArray();
-                    Assert.Equal(["P", "Ctrl+C", "T", "Enter", "Space", "Alt+Enter", "K", "F2", "M", "", "", "Del"], gestures);
-                    // Icons only in the first group and on Delete; the drag guide is gone.
-                    Assert.Equal([T("Gallery.Float"), T("Text_42A667BC71B0"), T("Text_854582314EBD"), T("Text_6139B6C3ED73")],
+                    Assert.Equal(["Enter", "Space", "P", "T", "Ctrl+C", "", "", "M", "", "K", "Del", "F2", "Alt+Enter"], gestures);
+                    // Existing pin, copy, recognize and delete icons are preserved in their new positions.
+                    Assert.Equal([T("Gallery.Float"), T("Text_854582314EBD"), T("Text_42A667BC71B0"), T("Text_6139B6C3ED73")],
                         menu.Items.OfType<MenuItem>().Where(item => item.Icon is not null).Select(item => (string)item.Header));
                     Assert.DoesNotContain(menu.Items.OfType<MenuItem>(), item => Equals(item.Header, T("LibraryUx_DragHelp")));
+                    Assert.Equal(FontWeights.Bold, menu.Items.OfType<MenuItem>().Single(item => Equals(item.Tag, "Edit")).FontWeight);
 
-                    // With a source, its details and "same source" are in the menu for keyboard users.
+                    // All three source actions share one group; Properties is alone in the last group.
                     Open(image);
-                    Assert.Contains(T("LibraryUx_SourceDetails"), Visible());
-                    Assert.Contains(T("Source.ShowSame"), Visible());
+                    Assert.Equal([T("Text_1003CFC78E66"), T("LibraryUx_Preview"), T("Gallery.Float"), T("Text_854582314EBD"), "-",
+                        T("Text_42A667BC71B0"), T("Library.ExportImage"), T("ContactSheet.Action"), "-", T("Folder410.MoveCaptures"), T("Library.Tags.Edit"),
+                        T("LibraryUx_Keep"), "-", T("Source.Open"), T("Source.ShowSame"), T("LibraryUx_SourceDetails"), "-",
+                        T("Text_6139B6C3ED73"), T("Library453.Rename"), "-", T("Library.Properties")], Visible());
+                    int lastSeparator = menu.Items.IndexOf(menu.Items.OfType<Separator>().Last());
+                    Assert.Equal("MediaInfo", Assert.IsType<MenuItem>(Assert.Single(menu.Items.Cast<object>().Skip(lastSeparator + 1))).Tag);
                     Open(plain);
                     Assert.DoesNotContain(T("LibraryUx_SourceDetails"), Visible());
+                    Assert.DoesNotContain(T("Source.Open"), Visible());
 
-                    // A video: no media group, GIF export instead of image export, no Enter gesture on edit.
+                    // Video's double-click action is Play, with image-only actions hidden as before.
                     Open(video);
-                    Assert.Equal([T("Text_1003CFC78E66"), T("LibraryUx_Preview"), T("MediaInfo.Title"), "-",
-                        T("LibraryUx_Keep"), T("Library453.Rename"), T("Folder410.MoveCaptures"), T("Library.Tags.Edit"), "-",
-                        T("Text_D44617983641"), "-", T("Text_6139B6C3ED73")], Visible());
+                    Assert.Equal([T("Text_D43A776C5E28"), T("Text_1003CFC78E66"), T("LibraryUx_Preview"), "-",
+                        T("ContactSheet.Action"), T("Library.ExportGif"), "-", T("Folder410.MoveCaptures"), T("Library.Tags.Edit"), T("LibraryUx_Keep"), "-",
+                        T("Text_6139B6C3ED73"), T("Library453.Rename"), "-", T("Library.Properties")], Visible());
                     Assert.Equal(string.Empty, menu.Items.OfType<MenuItem>().Single(item => Equals(item.Tag, "Edit")).InputGestureText);
+                    Assert.Equal(FontWeights.Normal, menu.Items.OfType<MenuItem>().Single(item => Equals(item.Tag, "Edit")).FontWeight);
+                    Assert.Equal(FontWeights.Bold, menu.Items.OfType<MenuItem>().Single(item => Equals(item.Tag, "Play")).FontWeight);
+                    Open(plain);
+                    Assert.Equal(FontWeights.Bold, menu.Items.OfType<MenuItem>().Single(item => Equals(item.Tag, "Edit")).FontWeight);
 
                     // The keep label follows what the command will do to the selection the card belongs to.
                     f.ViewModel.ClearSelection();
@@ -297,7 +306,7 @@ public sealed partial class SettingsThemePreviewTests
                         var rows = (ListBox)window.FindName("RowsList");
                         var client = (FrameworkElement)window.Content;
                         double originalClientWidth = client.Width;
-                        string[] names = ["FloatSelectedButton", "CopySelectedButton", "EditSelectedButton", "PreviewSelectedButton", "KeepSelectedButton"];
+                        string[] names = ["EditSelectedButton", "PreviewSelectedButton", "FloatSelectedButton", "CopySelectedButton", "CreatePdfSelectedButton", "KeepSelectedButton"];
                         foreach (double width in new[] { 980d, 1100d, 1280d, 1500d })
                         foreach (bool details in new[] { true, false })
                         {
@@ -521,11 +530,10 @@ public sealed partial class SettingsThemePreviewTests
                                 Border card = Descendants(item).OfType<Border>().Single(border => border.Name == "TileCard");
                                 Rect cardBounds = new(card.TranslatePoint(new Point(), window), card.RenderSize);
                                 var rects = new List<(string Name, Rect Rect)>();
-                                foreach (string name in new[] { "TileTitle", "TileTime", "SourceBadge", "PinButton", "CopyButton", "MoreButton", "TileMetadataText", "KeepBadge", "EditedBadge", "FolderBadge" })
+                                Assert.DoesNotContain(Descendants(item).OfType<FrameworkElement>(), element => element.Name == "EditedBadge");
+                                foreach (string name in new[] { "TileTitle", "TileTime", "SourceBadge", "PinButton", "CopyButton", "MoreButton", "TileMetadataText", "KeepBadge", "FolderBadge" })
                                     if (Descendants(item).OfType<FrameworkElement>().FirstOrDefault(element => element.Name == name) is { IsVisible: true } part)
                                         rects.Add((name, new Rect(part.TranslatePoint(new Point(), window), part.RenderSize)));
-                                foreach (Border badge in Descendants(item).OfType<Border>().Where(b => b.IsVisible && b.Name.Length == 0 && Equals(b.ToolTip, UiText.Get("Text_2C64DDA4D878"))))
-                                    rects.Add(("EditedBadge", new Rect(badge.TranslatePoint(new Point(), window), badge.RenderSize)));
                                 static Rect Inner(Rect rect) => new(rect.X + 0.5, rect.Y + 0.5, Math.Max(0, rect.Width - 1), Math.Max(0, rect.Height - 1));
                                 foreach ((string name, Rect rect) in rects)
                                     if (!cardBounds.Contains(Inner(rect)))
@@ -536,7 +544,7 @@ public sealed partial class SettingsThemePreviewTests
                                         foreach (Rect y in rects.Where(r => r.Name == b).Select(r => r.Rect))
                                             if (Inner(x).IntersectsWith(Inner(y))) failures.Add($"{mode}: {a} {x} overlaps {b} {y}");
                                 }
-                                foreach (string badge in new[] { "SourceBadge", "TileMetadataText", "KeepBadge", "EditedBadge", "FolderBadge", "CopyButton", "TileTime" })
+                                foreach (string badge in new[] { "SourceBadge", "TileMetadataText", "KeepBadge", "FolderBadge", "CopyButton", "TileTime" })
                                     Apart(badge, "PinButton");
                                 Apart("TileTitle", "TileTime");
                                 Apart("PinButton", "CopyButton");

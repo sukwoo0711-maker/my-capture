@@ -10,6 +10,7 @@ using MyCapture.App.Capture;
 using MyCapture.App.Recording;
 using MyCapture.Core.Localization;
 using Xunit;
+using Xunit.Abstractions;
 using static MyCapture.App.Tests.VideoEditorUxTrimTests;
 
 namespace MyCapture.App.Tests;
@@ -18,7 +19,7 @@ namespace MyCapture.App.Tests;
 /// Shortcut captions use the caption size (12), including key combinations, and their
 /// shortcut line fits the video editor's command rows and the compact receipt's fixed buttons.
 /// </summary>
-public sealed class ShortcutCaptionTests
+public sealed class ShortcutCaptionTests(ITestOutputHelper output)
 {
     [Fact]
     public void CaptionSizeIsTheCaptionToken()
@@ -351,7 +352,18 @@ public sealed class ShortcutCaptionTests
                 }
             }
 
-            Assert.Equal(11, captions); // Four editing commands, Play, four seek commands and two frame steps.
+            Assert.Equal(14, captions); // Four editing commands, Save, Export, Save frame, Play, four seek commands and two frame steps.
+            foreach (var (nameKey, key) in new[]
+            {
+                ("MediaExport_SaveEdits", "Ctrl+S"),
+                ("MediaExport_ExportFormats", "Ctrl+Shift+S"),
+            })
+            {
+                Button output = Assert.Single(Descendants(bar).OfType<Button>(), button =>
+                    AutomationProperties.GetName(button) == UiText.Get(nameKey));
+                Assert.True(output.IsVisible);
+                Assert.Equal(key, AutomationProperties.GetAcceleratorKey(output));
+            }
             // Trim stays visible; secondary tools remain available from the compact overflow.
             Assert.Contains(Descendants(bar).OfType<Button>(), button => button.IsVisible
                 && AutomationProperties.GetName(button) == UiText.Get("VideoEditorUx_Trim"));
@@ -386,6 +398,8 @@ public sealed class ShortcutCaptionTests
             double detailsLeft = details.TranslatePoint(default, transport).X;
             Assert.True(detailsLeft >= timeRight, $"{language} {width}: details at {detailsLeft}, time ends at {timeRight}");
             Assert.True(details.TranslatePoint(new Point(details.ActualWidth, 0), transport).X <= transport.ActualWidth + 0.5);
+            output.WriteLine($"Video captions verified: {language}, {width}x{height}, {captions} captions at 12 DIP; "
+                + "all fit, wrapping, visibility, shortcut and transport overlap assertions completed.");
         }
         finally
         {

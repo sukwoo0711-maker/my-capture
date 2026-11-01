@@ -70,6 +70,7 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
     private string _recordingPresetWidth = "0";
     private string _recordingPresetHeight = "0";
     private string _recordingCaptureMode = RecordingCaptureModeNames.Auto;
+    private RecordingWatermarkSettings _recordingWatermark = new();
 
     private string _scrollingCaptureHotkey = string.Empty;
     private string _delayedCaptureHotkey = string.Empty;
@@ -201,6 +202,22 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
     }
 
     // ================= Recording =================
+
+    public RecordingWatermarkSettings RecordingWatermark
+    {
+        get => _recordingWatermark;
+        set
+        {
+            if (Set(ref _recordingWatermark, (value ?? new()).Normalize()))
+                RaisePropertyChanged(nameof(RecordingWatermarkEnabled));
+        }
+    }
+
+    public bool RecordingWatermarkEnabled
+    {
+        get => _recordingWatermark.Enabled;
+        set => RecordingWatermark = _recordingWatermark with { Enabled = value };
+    }
 
     public string RecordingFrameRate
     {
@@ -724,6 +741,7 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
         _recordingPresetWidth = Int(presetWidth > 0 ? presetWidth.Value : SuggestedRecordingWidth);
         _recordingPresetHeight = Int(presetHeight > 0 ? presetHeight.Value : SuggestedRecordingHeight);
         _recordingCaptureMode = RecordingCaptureModeNames.ToSetting(s.Recording.CaptureMode);
+        _recordingWatermark = (s.Recording.Watermark ?? new()).Normalize();
 
         _captureHotkey = s.Hotkeys.Capture.ToString();
         _openLibraryHotkey = s.Hotkeys.OpenLibrary.ToString();
@@ -783,6 +801,7 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
         _preferredLanguages = string.Join(", ", s.Ocr.PreferredLanguages);
         _ocrQuality = OcrQualityNames.ToSetting(s.Ocr.Quality);
         _cacheResults = s.Ocr.CacheResults;
+        _preservedAccuracySuggestionDismissed = s.Ocr.AccuracySuggestionDismissed;
 
         _lastAnnotationTool = s.Annotation.LastTool;
         _annotationStrokeStyle = s.Annotation.StrokeStyle;
@@ -852,6 +871,7 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
         _recordingFrameRate, B(_useRecordingStartDelay), _recordingStartDelaySeconds, B(_recordingIncludeCursor),
         B(_recordingCursorHighlight), B(_useRecordingFixedSize), _recordingPresetWidth, _recordingPresetHeight, _recordingCaptureMode,
         Int(_preservedRecordingBitrateBitsPerSecond), Dbl(_preservedRecordingCoarseStepSeconds),
+        System.Text.Json.JsonSerializer.Serialize(_recordingWatermark),
         _captureHotkey, _openLibraryHotkey, _pasteToScreenHotkey, _hideAllPinsHotkey, _toggleClickThroughHotkey,
         _repeatLastRegionHotkey, _captureWindowHotkey, _captureFullScreenHotkey, _recordRegionHotkey,
         _scrollingCaptureHotkey, _delayedCaptureHotkey, _uploadGitHubImageHotkey, _restoreClosedPinHotkey,
@@ -944,6 +964,7 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
                 PresetWidth = _useRecordingFixedSize ? ParseOptionalInt(_recordingPresetWidth) : null,
                 PresetHeight = _useRecordingFixedSize ? ParseOptionalInt(_recordingPresetHeight) : null,
                 CaptureMode = RecordingCaptureModeNames.Parse(_recordingCaptureMode),
+                Watermark = _recordingWatermark with { },
             },
             Hotkeys =
             {
@@ -1013,6 +1034,7 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
                 Quality = OcrQualityNames.Parse(_ocrQuality),
                 UpscaleFactor = OcrQualityProfile.UpscaleFactor(OcrQualityNames.Parse(_ocrQuality)),
                 CacheResults = _cacheResults,
+                AccuracySuggestionDismissed = _preservedAccuracySuggestionDismissed,
             },
             Annotation =
             {
@@ -1535,6 +1557,7 @@ public sealed class SettingsDraft : INotifyPropertyChanged, INotifyDataErrorInfo
     private bool _preservedFirstPinTipShown;
     private bool _preservedPinSizeTipShown;
     private int _preservedSavedLocationTipCount;
+    private bool _preservedAccuracySuggestionDismissed;
     private int _preservedClickThroughHintShownCount;
     private int _preservedRecordingBitrateBitsPerSecond;
     private double _preservedRecordingCoarseStepSeconds;

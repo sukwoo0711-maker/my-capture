@@ -230,7 +230,8 @@ public sealed class GalleryController
         Guid id,
         string text,
         string? languageTag,
-        long? expectedContentRevision = null)
+        long? expectedContentRevision = null,
+        MyCapture.Core.Settings.OcrQuality? quality = null)
     {
         CaptureRecord? record = _queue.Find(id);
         if (record is null)
@@ -251,6 +252,7 @@ public sealed class GalleryController
 
         record.OcrText = text;
         record.OcrLanguage = languageTag;
+        record.OcrQuality = quality;
         record.OcrContentRevision = record.ContentRevision;
         record.UpdatedAt = DateTimeOffset.Now;
 
@@ -274,7 +276,8 @@ public sealed class GalleryController
         string text,
         string? languageTag,
         long? expectedContentRevision = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        MyCapture.Core.Settings.OcrQuality? quality = null)
     {
         using CaptureWriteReservation reservation = await _queue.ReservePublicationAsync(cancellationToken);
         cancellationToken.ThrowIfCancellationRequested();
@@ -285,6 +288,7 @@ public sealed class GalleryController
         using IDisposable evictionLease = _queue.AcquireEvictionLease(id);
         record.OcrText = text;
         record.OcrLanguage = languageTag;
+        record.OcrQuality = quality;
         record.OcrContentRevision = record.ContentRevision;
         record.UpdatedAt = DateTimeOffset.Now;
         try

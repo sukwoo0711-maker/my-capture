@@ -46,13 +46,13 @@ public sealed partial class SettingsThemePreviewTests
         try
         {
             window.Show();
-            var tabs = Assert.IsType<TabControl>(window.FindName("CategoryTabs"));
-            tabs.SelectedItem = tabs.Items.OfType<TabItem>().Single(tab => Equals(tab.Header, UiText.Get("SettingsUx_TabEditing")));
+            Assert.True(window.NavigateToSetting(nameof(SettingsDraft.BlurRadius)));
             Drain(window);
 
             TextBox field = Descendants(window).OfType<TextBox>()
-                .Single(box => AutomationProperties.GetName(box) == "블러 강도");
+                .Single(box => box.GetBindingExpression(TextBox.TextProperty)?.ParentBinding.Path.Path == nameof(SettingsDraft.BlurRadius));
             Assert.True(field.IsVisible);
+            Assert.Equal(UiText.Get("SettingsStructure_BlurStrength"), AutomationProperties.GetName(field));
             Assert.Equal("16", field.Text);
 
             field.Text = "65";

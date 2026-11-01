@@ -63,6 +63,43 @@ public sealed class EditorHeavyOperationTests
         AssertMosaicsMatchReference(editor);
     });
 
+    [Fact]
+    public void FractionalMosaicIncludesThePartlyCoveredLastRowButNotTheNextRow() => StaTestHost.Run(() =>
+    {
+        const int size = 40;
+        byte[] source = new byte[size * size * 4];
+        for (int row = 0; row < size; row++)
+            for (int column = 0; column < size; column++)
+            {
+                int offset = (row * size + column) * 4;
+                source[offset] = row == 27 ? (byte)240 : (byte)0;
+                source[offset + 1] = row == 28 ? (byte)255 : (byte)0;
+                source[offset + 3] = 255;
+            }
+        BitmapSource bitmap = BitmapSource.Create(size, size, 96, 96, PixelFormats.Bgra32, null, source, size * 4);
+        bitmap.Freeze();
+        AnnotationEditorControl editor = Editor(bitmap);
+
+        // The selection ends at y=27.5: row 27 overlaps by half a pixel; row 28 does not.
+        // With 2px blocks starting at y=7, the last covered row forms its own block.
+        editor.ApplyMosaic(new RectD(10.3, 7.6, 21.2, 19.9), 2);
+        EditorMosaicAsyncTests.WaitFor(editor.MosaicOperationsSettledAsync());
+
+        var patch = Assert.IsType<ImageAnnotation>(Assert.Single(Controller(editor).Document.Items));
+        Assert.Equal(new RectD(10, 7, 22, 21), patch.Rect);
+        BitmapSource asset = Field<AnnotationImageStore>(editor, "_imageStore").Get(patch.AssetFileName)!;
+        Assert.Equal(22, asset.PixelWidth);
+        Assert.Equal(21, asset.PixelHeight);
+        byte[] expected = new byte[22 * 21 * 4];
+        for (int pixel = 0; pixel < 22 * 21; pixel++)
+        {
+            expected[pixel * 4] = pixel / 22 == 20 ? (byte)240 : (byte)0;
+            expected[pixel * 4 + 3] = 255;
+        }
+        Assert.Equal(expected, Pixels(asset));
+        Assert.Equal(source, Pixels(editor.DisplayedBitmap));
+    });
+
     private static void AssertMosaicsMatchReference(AnnotationEditorControl editor)
     {
         AnnotationEditorController controller = Controller(editor);
@@ -77,7 +114,9 @@ public sealed class EditorHeavyOperationTests
             new(0, 0, w, h),                      // the whole canvas
             new(w - 2, h - 2, 2, 2),              // the smallest patch, in the corner
             new(-5, -5, 20, 20),                  // starts outside the top-left corner
-            new(3, 4, 1.5, 9),                    // too thin: no patch
+            new(3, 4, 1.5, 9),                    // narrow, but overlaps two pixel columns
+            new(3, 4, .5, 9),                     // only one pixel column: no patch
+            new(-5, -5, 3, 3),                    // wholly outside: no patch
         ];
         foreach (RectD region in regions)
             foreach (int block in new[] { SettingsRanges.MosaicBlockSize.Min, 7, 12, SettingsRanges.MosaicBlockSize.Max })
@@ -111,11 +150,18 @@ public sealed class EditorHeavyOperationTests
     private static byte[]? ReferenceMosaic(BitmapSource mosaicBase, RectD region, int blockSize,
         out int x, out int y, out int width, out int height)
     {
-        RectD normalized = region.Normalized().ClampTo(new RectD(0, 0, mosaicBase.PixelWidth, mosaicBase.PixelHeight));
-        x = (int)Math.Floor(normalized.X);
-        y = (int)Math.Floor(normalized.Y);
-        width = (int)Math.Ceiling(normalized.Width);
-        height = (int)Math.Ceiling(normalized.Height);
+        RectD normalized = region.Normalized();
+        // Enumerate covered source cells independently of the product's rounded endpoints.
+        // ClampTo would move an overflowing selection; Ceil(height) would miss a partly
+        // covered last row when the starting coordinate is fractional.
+        int[] columns = Enumerable.Range(0, mosaicBase.PixelWidth)
+            .Where(column => column < normalized.Right && column + 1 > normalized.Left).ToArray();
+        int[] rows = Enumerable.Range(0, mosaicBase.PixelHeight)
+            .Where(row => row < normalized.Bottom && row + 1 > normalized.Top).ToArray();
+        x = columns.FirstOrDefault();
+        y = rows.FirstOrDefault();
+        width = columns.Length;
+        height = rows.Length;
         if (width < 2 || height < 2) return null;
         int step = Math.Clamp(blockSize, SettingsRanges.MosaicBlockSize.Min, SettingsRanges.MosaicBlockSize.Max);
         int stride = mosaicBase.PixelWidth * 4;

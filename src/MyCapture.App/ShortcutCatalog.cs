@@ -14,6 +14,8 @@ internal sealed record ShortcutHelpEntry(string Action, IReadOnlyList<ShortcutDe
 /// <summary>Shared source for routing and the small hints next to actions.</summary>
 internal static class ShortcutCatalog
 {
+    internal static string SearchAliases(string action) => action == "Stamp_Place" ? UiText.Get("Stamp_SearchAliases") : string.Empty;
+
     internal static readonly IReadOnlyList<ShortcutDefinition> All = Build();
     private static IReadOnlyList<ShortcutDefinition> Build()
     {
@@ -67,6 +69,9 @@ internal static class ShortcutCatalog
             Add(ShortcutScope.Video, command, key, hint);
         // X is "crop" in the image editor; in the recording editor the same key trims.
         Add(ShortcutScope.Video, "Trim", Key.X, "X");
+        Add(ShortcutScope.Video, "Save", Key.S, "Ctrl+S", ModifierKeys.Control);
+        Add(ShortcutScope.Video, "SaveFrame", Key.S, "Shift+S", ModifierKeys.Shift);
+        Add(ShortcutScope.Video, "Export", Key.S, "Ctrl+Shift+S", ModifierKeys.Control | ModifierKeys.Shift);
         Add(ShortcutScope.Video, "PreviousFrame", Key.Left, "Shift+←", ModifierKeys.Shift);
         Add(ShortcutScope.Video, "NextFrame", Key.Right, "Shift+→", ModifierKeys.Shift);
         Add(ShortcutScope.Video, "PreviousFrame", Key.Left, "Ctrl+←", ModifierKeys.Control);
@@ -120,6 +125,7 @@ internal static class ShortcutCatalog
         Add(ShortcutScope.Library, "NewFolder", Key.N, "Ctrl+Shift+N", ModifierKeys.Control | ModifierKeys.Shift);
         Add(ShortcutScope.Library, "Back", Key.Left, "Alt+←", ModifierKeys.Alt);
         Add(ShortcutScope.Library, "Forward", Key.Right, "Alt+→", ModifierKeys.Alt);
+        Add(ShortcutScope.Library, "Parent", Key.Up, "Alt+↑", ModifierKeys.Alt);
         Add(ShortcutScope.Library, "SelectAll", Key.A, "Ctrl+A", ModifierKeys.Control);
         Add(ShortcutScope.Pin, "Copy", Key.C, "Ctrl+C", ModifierKeys.Control);
         Add(ShortcutScope.Pin, "Save", Key.S, "Ctrl+S", ModifierKeys.Control);
@@ -148,7 +154,7 @@ internal static class ShortcutCatalog
                 Row("Text_2785CE58DF74", "Arrow"), Row("Text_37DB9D0B1C8E", "Pen"),
                 Row("Tools.Highlighter", "Highlighter"), Row("Text_258AD4B095A1", "Text"),
                 Row("Tools.StepNumber", "StepNumber"), Row("Text_302BAE127938", "Image"), Row("Stamp_Place", "Stamp"),
-                Row("Text_3F8046019B32", "Mosaic"), Row("EditorBlur_Name", "Blur"),
+                Row("EditorObscure_Pixelate", "Mosaic"), Row("EditorBlur_Name", "Blur"),
                 Row("EditorUx_RotateLeftHint", "RotateLeft"), Row("EditorUx_RotateRightHint", "RotateRight"),
                 Row("EditorFlow_CopyAndClose", "Copy"), Row("Shortcuts.DoneInText", "Done"),
                 Row("Shortcuts.EditText", "EditText"), Row("QuickAccess.Save", "Save"), Row("Text_57950AFF46BC", "SaveAs"),
@@ -175,7 +181,7 @@ internal static class ShortcutCatalog
                 Row("Folder410.MoveCaptures", "Move"), Row("Shortcuts.LibraryText", "Text"), Row("Shortcuts.LibraryGif", "Gif"),
                 Row("Folder410.Delete", "Delete"), Row("Shortcuts.ContextMenu", "Menu"), Row("Shortcuts.Undo", "Undo"),
                 Row("Shortcuts.Search", "Search"), Row("Folder410.NewFolder", "NewFolder"),
-                Row("Shortcuts.Back", "Back"), Row("Shortcuts.Forward", "Forward"), Row("Shortcuts.SelectAll", "SelectAll"),
+                Row("Shortcuts.Back", "Back"), Row("Shortcuts.Forward", "Forward"), Row("Shortcuts.Parent", "Parent"), Row("Shortcuts.SelectAll", "SelectAll"),
                 new("Shortcuts.MouseNavigation", [], "Shortcuts.MouseButtons"), new("Shortcuts.LibraryDrag", [], "Shortcuts.Drag")],
             _ => throw new ArgumentOutOfRangeException(nameof(scope)),
         };

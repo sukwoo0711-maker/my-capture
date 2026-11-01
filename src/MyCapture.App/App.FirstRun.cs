@@ -128,8 +128,13 @@ public partial class App
             }
             if (_launchedFirstRun)
             {
-                StartAtSignInOutcome? startup = ApplyWelcomeStartAtSignIn(welcome.StartAtSignIn);
-                try { CompleteWelcomeOcrChoice(welcome.UseAccurateOcr); }
+                bool acceptedChoices = welcome.Outcome == WelcomeOutcome.Completed;
+                StartAtSignInOutcome? startup = acceptedChoices ? ApplyWelcomeStartAtSignIn(welcome.StartAtSignIn) : null;
+                try
+                {
+                    if (acceptedChoices) CompleteWelcomeOcrChoice(welcome.UseAccurateOcr);
+                    else _services!.GetRequiredService<SettingsStore>().CompleteFirstRun(_settings!);
+                }
                 catch (Exception ex) { _log?.LogWarning(ex, "Could not persist first-run completion"); }
                 AnnounceAfterWelcome(welcome.Outcome, startup);
             }

@@ -114,9 +114,14 @@ internal sealed partial class AnnotationEditorControl
     {
         Dispatcher.VerifyAccess();
         if (_completed || _mosaicClosed || _commitInProgress) return;
-        RectD normalized = region.Normalized().ClampTo(new RectD(0, 0, _canvasWidth, _canvasHeight));
-        var pixels = new RectD(Math.Floor(normalized.X), Math.Floor(normalized.Y),
-            Math.Ceiling(normalized.Width), Math.Ceiling(normalized.Height));
+        if (!double.IsFinite(region.X) || !double.IsFinite(region.Y)
+            || !double.IsFinite(region.Width) || !double.IsFinite(region.Height)) return;
+        RectD normalized = region.Normalized();
+        double left = Math.Max(0, normalized.Left), top = Math.Max(0, normalized.Top);
+        double right = Math.Min(_canvasWidth, normalized.Right), bottom = Math.Min(_canvasHeight, normalized.Bottom);
+        if (right <= left || bottom <= top) return;
+        var pixels = new RectD(Math.Floor(left), Math.Floor(top),
+            Math.Ceiling(right) - Math.Floor(left), Math.Ceiling(bottom) - Math.Floor(top));
         if (pixels.Width < 2 || pixels.Height < 2) return;
 
         BitmapSource displayedBase = _surface.Frame.Bitmap;
@@ -408,10 +413,11 @@ internal sealed partial class AnnotationEditorControl
 
     private void UpdateMosaicGesture(PointD end)
     {
-        _surface.MosaicGestureRegion = _mosaicDragging
-            ? new RectD(_mosaicStart.X, _mosaicStart.Y, end.X - _mosaicStart.X, end.Y - _mosaicStart.Y)
-                .Normalized().ClampTo(new RectD(0, 0, _canvasWidth, _canvasHeight))
-            : null;
+        RectD gesture = RectD.FromCorners(_mosaicStart, end);
+        double left = Math.Max(0, gesture.Left), top = Math.Max(0, gesture.Top);
+        double right = Math.Min(_canvasWidth, gesture.Right), bottom = Math.Min(_canvasHeight, gesture.Bottom);
+        _surface.MosaicGestureRegion = _mosaicDragging && right > left && bottom > top
+            ? new RectD(left, top, right - left, bottom - top) : null;
         _surface.InvalidateVisual();
     }
 

@@ -37,20 +37,23 @@ public sealed class SettingsCopyRegressionTests
     }
 
     [Theory]
-    [InlineData("ko-KR", HotkeyModifiers.None, Hotkey.VkF3, "편집기에서 F3 키를 누르십시오. 화살표를 그린 그림이 핀으로 열립니다.")]
-    [InlineData("en-US", HotkeyModifiers.None, Hotkey.VkF3, "Press F3 in the editor. The image with your arrow opens as a pin.")]
-    [InlineData("ko-KR", HotkeyModifiers.Control, 0x4B, "편집기에서 Ctrl+K 키를 누르십시오. 화살표를 그린 그림이 핀으로 열립니다.")]
-    [InlineData("en-US", HotkeyModifiers.Control, 0x4B, "Press Ctrl+K in the editor. The image with your arrow opens as a pin.")]
+    [InlineData("ko-KR", HotkeyModifiers.None, Hotkey.VkF3, "F3 키를 누릅니다. 화면 위에 남는 이 그림을 ‘핀’이라고 부릅니다.")]
+    [InlineData("en-US", HotkeyModifiers.None, Hotkey.VkF3, "Press F3. This picture that stays on the screen is called a pin.")]
+    [InlineData("ko-KR", HotkeyModifiers.Control, 0x4B, "Ctrl+K 키를 누릅니다. 화면 위에 남는 이 그림을 ‘핀’이라고 부릅니다.")]
+    [InlineData("en-US", HotkeyModifiers.Control, 0x4B, "Press Ctrl+K. This picture that stays on the screen is called a pin.")]
     public void WelcomeUsesTheAssignedPinShortcut(string language, HotkeyModifiers modifiers, uint key, string expected) => StaTestHost.Run(() =>
     {
         using var scope = UiText.UseLanguage(language);
-        // The pin step names the assigned key once the practice table is copied (through the test clipboard).
-        var welcome = OnboardingGuideTests.Create(new OnboardingGuideTests.FakeClipboard(),
+        // The pin step names the assigned key once the practice picture is copied through the test clipboard.
+        var clipboard = new OnboardingGuideTests.FakeClipboard();
+        var welcome = OnboardingGuideTests.Create(clipboard,
             keys: new HotkeySettings { PasteToScreen = new Hotkey(modifiers, key) });
         try
         {
-            OnboardingGuideTests.AdvanceTo(welcome, WelcomeStep.Pin);
+            PracticeJourneyDriver.AdvanceTo(welcome.Session, PracticeStep.B0);
             welcome.TryNowButton.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent));
+            Assert.Single(clipboard.Writes);
+            Assert.Equal(PracticeStep.B1, welcome.Session.Step);
             TextBlock hint = Assert.Single(FirstRunWelcomeTests.Descendants(welcome).OfType<TextBlock>(),
                 text => KoreanWordWrap.Strip(text.Text) == expected);
             Assert.Equal(Visibility.Visible, hint.Visibility);
@@ -72,14 +75,18 @@ public sealed class SettingsCopyRegressionTests
                     && text.Text.Contains("copied tables and code above other windows", StringComparison.Ordinal));
             Assert.DoesNotContain(FirstRunWelcomeTests.Descendants(welcome).OfType<TextBlock>(), text => text.Text.Contains("F3", StringComparison.Ordinal));
 
-            // On the pin step, after the copy, the guide names only the button when no key is assigned.
-            var pin = OnboardingGuideTests.Create(new OnboardingGuideTests.FakeClipboard(), keys: new HotkeySettings { PasteToScreen = Hotkey.None });
+            // After copying the practice picture, the pin step names only the button when no key is assigned.
+            var clipboard = new OnboardingGuideTests.FakeClipboard();
+            var pin = OnboardingGuideTests.Create(clipboard, keys: new HotkeySettings { PasteToScreen = Hotkey.None });
             try
             {
-                OnboardingGuideTests.AdvanceTo(pin, WelcomeStep.Pin);
+                PracticeJourneyDriver.AdvanceTo(pin.Session, PracticeStep.B0);
                 pin.TryNowButton.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent));
+                Assert.Single(clipboard.Writes);
+                Assert.Equal(PracticeStep.B1, pin.Session.Step);
                 Assert.False(pin.KeyShown);
-                Assert.Equal(UiText.Get("Practice.PinInstructionNoKey"), pin.InstructionText);
+                Assert.Equal(UiText.Get("Journey.B1.NoKey"), pin.InstructionText);
+                Assert.Equal(UiText.Get("Journey.ShowPicture"), pin.TryNowButton.Content);
                 Assert.DoesNotContain(FirstRunWelcomeTests.Descendants(pin).OfType<TextBlock>(), text => text.Text.Contains("F3", StringComparison.Ordinal));
             }
             finally { pin.Close(); }

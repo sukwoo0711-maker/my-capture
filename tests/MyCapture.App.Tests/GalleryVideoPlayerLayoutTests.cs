@@ -90,6 +90,16 @@ public sealed class GalleryVideoPlayerLayoutTests
                     ToggleButton fullScreen = Descendants(player).OfType<ToggleButton>().Single();
                     Assert.Equal(UiText.Get("CaptureGuide2_FullScreen"), AutomationProperties.GetName(fullScreen));
                     Assert.Equal("F11", AutomationProperties.GetAcceleratorKey(fullScreen));
+                    Button saveFrame = Assert.Single(Descendants(player).OfType<Button>(), button => button.Name == "PlayerSaveFrame");
+                    Assert.True(saveFrame.IsVisible);
+                    Assert.Equal("Shift+S", AutomationProperties.GetAcceleratorKey(saveFrame));
+                    // Successful capture adds a navigation action. It must fit at the same narrow sizes.
+                    Button showFrame = Assert.Single(Descendants(player).OfType<Button>(), button => button.Name == "PlayerShowFrame");
+                    Assert.Equal(Visibility.Collapsed, showFrame.Visibility);
+                    showFrame.Visibility = Visibility.Visible;
+                    FlushLayout(player);
+                    AssertTransportInside(player);
+                    AssertVideoFillsRemainingSpace(player, new Size(720 / scale, 720 / scale));
                 }
                 finally { player.Close(); }
             }
@@ -227,7 +237,7 @@ public sealed class GalleryVideoPlayerLayoutTests
     {
         var content = Assert.IsType<Border>(player.Content);
         foreach (FrameworkElement control in Descendants(content).OfType<FrameworkElement>().Where(element =>
-            element is Button or ToggleButton or Slider || element is TextBlock { Text: var text } && text.Contains(" / ", StringComparison.Ordinal)))
+            element.IsVisible && (element is Button or ToggleButton or Slider || element is TextBlock { Text: var text } && text.Contains(" / ", StringComparison.Ordinal))))
         {
             Rect bounds = control.TransformToAncestor(content).TransformBounds(new Rect(control.RenderSize));
             Assert.True(bounds.Left >= -0.5 && bounds.Top >= -0.5

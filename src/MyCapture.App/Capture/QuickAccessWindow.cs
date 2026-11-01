@@ -100,7 +100,7 @@ internal sealed class QuickAccessWindow : Window
     internal static DispatcherOperation Schedule(Dispatcher dispatcher, Action show) =>
         dispatcher.BeginInvoke(DispatcherPriority.ContextIdle, show);
     internal bool IsKept { get => _keep.IsChecked == true; set => _keep.IsChecked = value; }
-    internal bool CanActivateByHotkey => IsVisible && _timer.IsEnabled && !IsKept;
+    internal bool CanActivateByHotkey => IsOpen;
     internal bool IsPointerOver => IsVisible && WindowStyleFacade.IsPointerOverWindow(new WindowInteropHelper(this).Handle);
     internal string TimeoutStateForTest => $"enabled={_timer.IsEnabled}; elapsed={_elapsed.TotalSeconds:0.000}; keep={IsKept}; keyboard={_keyboardInteracting}/{IsKeyboardFocusWithin}; busy={IsBusy}; held={IsHeldForFailure}; pending={IsAwaitingCapture}";
 
@@ -647,7 +647,6 @@ internal sealed class QuickAccessWindow : Window
         if (_closed || FluidMotion.IsExiting(this)) return;
         _timer.Stop();
         _progressReveal.Stop();
-        UpdateActivationHotkey();
         if (_landing)
         {
             // The card leaves with its preview, and the flight ends (CaptureFlight watches for the
@@ -656,6 +655,7 @@ internal sealed class QuickAccessWindow : Window
             _preview.Opacity = 1;
         }
         FluidMotion.BeginExit(this, ExitMotion.FadeDown, () => { if (!_closed) Close(); });
+        UpdateActivationHotkey();
     }
 
     /// <summary>Closes at once, finishing an exit in progress: a newer card or a capture replaces this one.</summary>

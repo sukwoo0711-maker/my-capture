@@ -275,10 +275,9 @@ public sealed class GalleryItemViewModel : INotifyPropertyChanged
             string time = Record.CreatedAt.DateTime.ToString("d", UiText.Culture) + ", "
                 + UiText.Format("Library453.CapturedAt", TimeCaption);
             string pin = IsPinned ? UiText.Get("LibraryUx_KeptAccessible") : string.Empty;
-            string edited = HasAnnotations ? ", " + UiText.Get("Text_2C64DDA4D878") : string.Empty;
             string media = IsVideo ? UiText.Format("Text_DFB3664A9A08", DurationCaption) : UiText.Get("Text_AA3D7105289A");
             string folder = HasFolderBadge ? UiText.Format("LibraryUx_InFolderAccessible", _folderPath) : string.Empty;
-            return $"{ContextLabel}{media}, {Record.Width}×{Record.Height}, {time}{pin}{edited}{folder}";
+            return $"{ContextLabel}{media}, {Record.Width}×{Record.Height}, {time}{pin}{folder}";
         }
     }
 

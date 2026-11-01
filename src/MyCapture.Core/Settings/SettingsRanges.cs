@@ -48,7 +48,7 @@ public static class SettingsRanges
     /// </summary>
     public static readonly Range<double> StrokeThickness = new(1, 64);
 
-    /// <summary>Text size in points; the image editor applies the same range.</summary>
+    /// <summary>Text size in pixels; the image editor applies the same range.</summary>
     public static readonly Range<double> FontSize = new(6, 400);
     public static readonly Range<int> MosaicBlockSize = new(2, 128);
     public static readonly Range<int> HighlighterAlpha = new(0, 255);

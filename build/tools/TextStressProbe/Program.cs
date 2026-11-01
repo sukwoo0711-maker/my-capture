@@ -106,6 +106,21 @@ internal static class Program
             System.Windows.Input.InputMethod.SetIsInputMethodEnabled(box, false);
         }
         ConfigureHost(box);
+        if (Arguments.Length > 4 && Arguments[4].Contains("ime-always-on", StringComparison.Ordinal))
+        {
+            // Ablation: keep the IME on whatever the selection (an editable box without a limit).
+            InputMethod.SetIsInputMethodEnabled(box, true);
+            box.SelectionChanged += (_, _) => InputMethod.SetIsInputMethodEnabled(box, true);
+            box.GotKeyboardFocus += (_, _) => InputMethod.SetIsInputMethodEnabled(box, true);
+        }
+        void State(string contract)
+        {
+            lock (Gate) Measurements.Add(new
+            {
+                Contract = contract, ImeEnabled = InputMethod.GetIsInputMethodEnabled(box), box.IsReadOnly,
+                box.IsKeyboardFocused, box.SelectionLength,
+            });
+        }
         RoutedEventHandler? suppressAutoSelection = null;
         if (Arguments.Length > 4 && Arguments[4] == "no-auto-selection")
         {
@@ -122,15 +137,37 @@ internal static class Program
         Measure("ocr.ShowResult", () => window.ShowResult(OcrResult.Success(text, "ko-KR", [], TimeSpan.Zero), "Synthetic stress"));
         if (suppressAutoSelection is not null) box.SelectionChanged -= suppressAutoSelection;
         Measure("ocr.layout-render", () => Settle(window));
+        State("after initial result");
         DescribeViewport(box, "ocr.viewport-start");
         Equal(text, box.Text, "OCR whole content");
         Measure("ocr.select-all", () => box.SelectAll());
         Equal(text, box.SelectedText, "OCR selected copy value");
         Measure("ocr.selection-settle", () => Settle(window));
         Measure("ocr.scroll-start-no-selection", () => { box.Select(0, 0); box.ScrollToHome(); Settle(window); });
+        State("after caret at start");
         Measure("ocr.scroll-end-no-selection", () => { box.ScrollToEnd(); Settle(window); });
         DescribeViewport(box, "ocr.viewport-end");
+        Measure("ocr.caret-select-all-settle", () => { box.SelectAll(); Settle(window); });
+        State("after select-all from caret");
+        Measure("ocr.select-1024-settle", () => { box.Select(0, Math.Min(1024, text.Length)); box.ScrollToHome(); Settle(window); });
+        State("after 1024 selection");
+        Measure("ocr.select-4096-settle", () => { box.Select(0, Math.Min(4096, text.Length)); Settle(window); });
+        State("after 4096 selection");
+        Measure("ocr.caret-settle", () => { box.Select(Math.Min(200, text.Length), 0); Settle(window); });
+        // Programmatic typing also runs on a readonly box, so both payload kinds compare.
+        Measure("ocr.type-burst-50", () =>
+        {
+            for (int i = 0; i < 50; i++)
+            {
+                box.SelectedText = "가";
+                box.Select(box.SelectionStart + box.SelectionLength, 0);
+            }
+            Settle(window);
+        });
+        State("after typing");
         Measure("ocr.repeated-result", () => window.ShowResult(OcrResult.Success(text, "ko-KR", [], TimeSpan.Zero), "Synthetic stress"));
+        Measure("ocr.repeated-settle", () => Settle(window));
+        State("after repeated result");
         Equal(text, window.ExtractionText, "OCR repeat content");
         Measure("ocr.close", () => { window.CloseForExit(); Pump(); });
         if (window.IsVisible) throw new InvalidOperationException("OCR did not close.");

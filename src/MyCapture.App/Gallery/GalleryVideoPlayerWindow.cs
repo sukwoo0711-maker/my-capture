@@ -18,7 +18,7 @@ namespace MyCapture.App.Gallery;
 /// A resizable always-on-top video player window. Replaces the in-sidebar inline player so
 /// playback no longer duplicates the card's play affordance or overlaps the details panel.
 /// </summary>
-internal sealed class GalleryVideoPlayerWindow : Window
+internal sealed partial class GalleryVideoPlayerWindow : Window, IGalleryVideoPlayer
 {
     private readonly ILogger? _log;
     private readonly MediaElement _video = new()
@@ -108,6 +108,7 @@ internal sealed class GalleryVideoPlayerWindow : Window
         _status.Margin = new Thickness(0, 0, 8, 0);
         controls.Children.Add(_playButton);
         controls.Children.Add(_fullScreenButton);
+        InitializeFrameCapture(controls);
         _status.Text = UiText.Get("Text_6E86D1A85620");
         controls.Children.Add(_status);
         controls.Children.Add(_time);
@@ -147,19 +148,44 @@ internal sealed class GalleryVideoPlayerWindow : Window
         _video.MediaOpened += OnMediaOpened;
         _video.MediaEnded += OnMediaEnded;
         _video.MediaFailed += OnMediaFailed;
-        _playButton.Click += (_, _) => { if (_mediaReady) SetPlayback(!_playing); };
+        _playButton.Click += (_, _) => { if (_mediaReady) SetPlayback(_frameSeekPending ? !_resumeAfterFrameSeek : !_playing); };
         _seek.ValueChanged += OnSeekChanged;
-        _timer.Tick += (_, _) => UpdatePosition();
+        _timer.Tick += (_, _) => { UpdatePosition(); UpdateFrameCaptureState(); };
         PreviewKeyDown += OnPreviewKeyDown;
         SetStatusPlaying(false);
         UpdateTime();
         if (diagnosticOptions?.CaptureExclusion != false)
             SourceInitialized += (_, _) => CaptureWindowExclusion.TryApply(this);
         // Clearing the probe also tells a MediaOpened still awaiting it that the window is gone.
-        Closed += (_, _) => { _sourceProbe = null; _timer.Stop(); StudioRangeVideoEffect.Clear(_video); _video.Close(); PlayerClosed?.Invoke(this, EventArgs.Empty); };
+        Closed += (_, _) => { _frameClosed = true; _frameCaptureCts?.Cancel(); CloseFrameSeeking(); _sourceProbe = null; _timer.Stop(); StudioRangeVideoEffect.Clear(_video); _video.Close(); _video.Source = null; PlayerClosed?.Invoke(this, EventArgs.Empty); };
     }
 
     internal Guid VideoId => _videoId;
+    Guid IGalleryVideoPlayer.VideoId => VideoId;
+
+    bool IGalleryVideoPlayer.Open(Guid id, string title, string path, bool autoPlay) => Open(id, title, path, autoPlay);
+    void IGalleryVideoPlayer.RequestPlay() => RequestPlay();
+    void IGalleryVideoPlayer.ShowPlayer(bool activate)
+    {
+        if (!IsLoaded)
+        {
+            Rect work = SystemParameters.WorkArea;
+            Left = Math.Max(work.Left, work.Right - Width - 24);
+            Top = Math.Max(work.Top, work.Top + 90);
+        }
+        Show();
+        if (activate) Activate();
+    }
+
+    /// <summary>Starts now when ready, or remembers a request made while the media is opening.</summary>
+    internal void RequestPlay()
+    {
+        _autoPlayPending = true;
+        if (_mediaReady) SetPlayback(true);
+    }
+
+    internal Action<bool>? PlaybackForTest { get; set; }
+    internal Func<string, Task<VideoSourceInfo>>? SourceProbeForTest { get; set; }
 
     internal MediaElement MediaForDiagnostic => _video;
     internal bool IsMediaReadyForDiagnostic => _mediaReady;
@@ -176,12 +202,16 @@ internal sealed class GalleryVideoPlayerWindow : Window
 
         if (_videoId == id && ReferenceEquals(_video.Source?.ToString(), new Uri(path).ToString()))
         {
-            _autoPlayPending |= autoPlay;
-            if (autoPlay && _mediaReady) SetPlayback(true);
+            if (autoPlay) RequestPlay();
             return true;
         }
 
         _videoId = id;
+        _frameCaptureCts?.Cancel();
+        _frameOpenVersion++;
+        ResetFrameSeeking();
+        _lastFrameId = null;
+        _showFrameButton.Visibility = Visibility.Collapsed;
         _title.Text = title;
         _autoPlayPending = DiagnosticOptions?.OpenMode switch
         {
@@ -190,6 +220,7 @@ internal sealed class GalleryVideoPlayerWindow : Window
             _ => autoPlay,
         };
         _mediaReady = false;
+        UpdateFrameCaptureState();
         _playing = false;
         _video.Stop();
         // Tear the previous media down completely: switching one player between clips with a
@@ -197,7 +228,7 @@ internal sealed class GalleryVideoPlayerWindow : Window
         _video.Close();
         _video.Source = null;
         StudioRangeVideoEffect.Clear(_video);
-        _sourceProbe = VideoSourceProbe.ReadAsync(path);
+        _sourceProbe = SourceProbeForTest?.Invoke(path) ?? VideoSourceProbe.ReadAsync(path);
         _video.Source = new Uri(path);
         _video.Play();
         // Mirror the editor's open in the same dispatcher turn. Never seek before MediaOpened.
@@ -235,6 +266,12 @@ internal sealed class GalleryVideoPlayerWindow : Window
 
     private void OnPreviewKeyDown(object sender, KeyEventArgs e)
     {
+        UpdateFrameCaptureState();
+        if (HandleFrameShortcut(e.Key, Keyboard.Modifiers, Keyboard.FocusedElement, e.IsRepeat))
+        {
+            e.Handled = true;
+            return;
+        }
         if (Keyboard.Modifiers != ModifierKeys.None) return;
         if (e.Key == Key.F11)
         {
@@ -299,8 +336,17 @@ internal sealed class GalleryVideoPlayerWindow : Window
         double containerMs = source.DurationMs;
 
         _mediaReady = true;
+        UpdateFrameCaptureState();
         _seek.Maximum = Math.Max(1, VideoDurationResolver.Resolve(containerMs, playerMs, 0));
+        if (_frameSeekEngine is MediaElementPreviewEngine native) native.DurationMs = _seek.Maximum;
         UpdateTime();
+        // A seek adapter can reopen after EOF; that MediaOpened must not start playback
+        // or position the element while the adapter is completing the pending request.
+        if (!_frameSeekPending) ApplyPlaybackAfterOpening();
+    }
+
+    private void ApplyPlaybackAfterOpening()
+    {
         if (_autoPlayPending)
         {
             SetPlayback(true);
@@ -317,6 +363,8 @@ internal sealed class GalleryVideoPlayerWindow : Window
 
     private void OnMediaEnded(object sender, RoutedEventArgs e)
     {
+        if (_frameSeekEngine is MediaElementPreviewEngine native) native.StreamReachedEnd();
+        if (_frameSeekPending) return;
         _playing = false;
         _timer.Stop();
         StudioRangeVideoEffect.PositionRequested(_video);
@@ -327,15 +375,35 @@ internal sealed class GalleryVideoPlayerWindow : Window
     private void OnMediaFailed(object? sender, ExceptionRoutedEventArgs e)
     {
         _mediaReady = false;
+        UpdateFrameCaptureState();
         _playing = false;
         _timer.Stop();
         SetStatusPlaying(false);
         _status.Text = UiText.Get("Text_875917AFD6EF");
     }
 
-    private void SetPlayback(bool playing)
+    private void SetPlayback(bool playing, bool seekTransition = false)
     {
         if (!_mediaReady) return;
+        if (_frameSeekPending && !seekTransition)
+        {
+            _resumeAfterFrameSeek = playing;
+            SetStatusPlaying(playing);
+            return;
+        }
+        if (playing)
+        {
+            _framePresentedPositionMs = null;
+            _frameSeekFailed = false;
+            UpdateFrameCaptureState();
+        }
+        if (PlaybackForTest is { } playback)
+        {
+            playback(playing);
+            _playing = playing;
+            SetStatusPlaying(playing);
+            return;
+        }
         if (playing)
         {
             if (_video.Position.TotalMilliseconds >= _seek.Maximum - 1)
@@ -363,14 +431,13 @@ internal sealed class GalleryVideoPlayerWindow : Window
     private void OnSeekChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
     {
         if (_seekUpdating || !_mediaReady) return;
-        StudioRangeVideoEffect.PositionRequested(_video);
-        _video.Position = TimeSpan.FromMilliseconds(Math.Clamp(e.NewValue, 0, _seek.Maximum));
+        RequestFrameSeek(Math.Clamp(e.NewValue, 0, _seek.Maximum));
         UpdateTime();
     }
 
     private void UpdatePosition()
     {
-        if (!_mediaReady) return;
+        if (!_mediaReady || _frameSeekPending) return;
         _seekUpdating = true;
         try { _seek.Value = Math.Clamp(_video.Position.TotalMilliseconds, 0, _seek.Maximum); }
         finally { _seekUpdating = false; }

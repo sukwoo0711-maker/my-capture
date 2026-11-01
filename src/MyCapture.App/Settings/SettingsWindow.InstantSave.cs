@@ -32,6 +32,18 @@ internal sealed partial class SettingsWindow
     private void InitializeInstantSave() =>
         _acceptedValues = EditableProperties.ToDictionary(property => property.Name, property => property.GetValue(_draft));
 
+    /// <summary>A result-window choice updates this one field without discarding pending text edits.</summary>
+    internal void RefreshOcrQuality()
+    {
+        _draft.PropertyChanged -= OnDraftPropertyChanged;
+        try
+        {
+            _draft.OcrQuality = OcrQualityNames.ToSetting(_currentSettings().Ocr.Quality);
+            _acceptedValues[nameof(SettingsDraft.OcrQuality)] = _draft.OcrQuality;
+        }
+        finally { _draft.PropertyChanged += OnDraftPropertyChanged; }
+    }
+
     private void ScheduleSave(string? propertyName)
     {
         PropertyInfo? property = EditableProperties.FirstOrDefault(item => item.Name == propertyName);
@@ -84,6 +96,7 @@ internal sealed partial class SettingsWindow
     private bool SavePending(bool includeText, bool revalidateCandidateErrors = true)
     {
         if (_saving) return false;
+        PreserveLockedWatermark();
         if (revalidateCandidateErrors) _draft.ClearCandidateErrors();
         if (includeText) _pendingText.Clear();
         bool Changed(PropertyInfo property) => !Equals(property.GetValue(_draft), _acceptedValues[property.Name]);
@@ -150,6 +163,9 @@ internal sealed partial class SettingsWindow
         }
         if (!candidate.HasUnappliedChanges)
         {
+            // The failed edit may have been replaced by invalid text. There is no valid
+            // pending write left to retry, so an old write failure must not trap Close.
+            if (_saveFailed) { _saveFailed = false; SetStatusMessage(_restartNotice); }
             foreach (PropertyInfo property in appliedProperties)
                 _acceptedValues[property.Name] = property.GetValue(_draft);
             _draft.AcceptSaved(_currentSettings(), acceptReplacement: replacingAll);

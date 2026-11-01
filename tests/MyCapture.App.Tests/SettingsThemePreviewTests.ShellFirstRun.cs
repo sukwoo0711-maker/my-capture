@@ -228,12 +228,22 @@ public sealed partial class SettingsThemePreviewTests
         SettingsWindow window = CreateOffscreenSettingsWindow(new AppSettings());
         try
         {
-            foreach (GlobalHotkeyCommand command in Enum.GetValues<GlobalHotkeyCommand>())
-                Assert.NotNull(window.FindHotkeyRecorder(ShortcutSettingTarget.ForCommand(command)));
-            foreach (FeatureTutorial feature in TutorialCatalog.All)
-                if (ShortcutSettingTarget.ForFeature(feature.Id) is { } row) Assert.NotNull(window.FindHotkeyRecorder(row));
-
             var tabs = Assert.IsType<TabControl>(window.FindName("CategoryTabs"));
+            string[] rows = Enum.GetValues<GlobalHotkeyCommand>().Select(ShortcutSettingTarget.ForCommand)
+                .Concat(TutorialCatalog.All.Select(feature => ShortcutSettingTarget.ForFeature(feature.Id)).OfType<string>())
+                .Distinct().ToArray();
+            foreach (string row in rows)
+            {
+                window.ShowShortcut(row);
+                Drain(window);
+                var target = Assert.IsType<HotkeyRecorder>(window.FindHotkeyRecorder(row));
+                Assert.Same(window.FindName("ShortcutsTab"), tabs.SelectedItem);
+                Assert.True(target.IsVisible && target.IsEnabled, row);
+                var rowFocus = System.Windows.Input.FocusManager.GetFocusedElement(window) as DependencyObject;
+                Assert.NotNull(rowFocus);
+                Assert.True(target.IsAncestorOf(rowFocus!), $"{row}: focus is on {rowFocus}");
+            }
+
             window.ShowShortcut(nameof(SettingsDraft.PasteToScreenHotkey));
             Drain(window);
             window.Dispatcher.Invoke(DispatcherPriority.ApplicationIdle, new Action(() => { }));
@@ -246,12 +256,39 @@ public sealed partial class SettingsThemePreviewTests
             Assert.True(recorder.IsAncestorOf(focused!), $"Focus is on {focused}");
             SaveShellEvidence(window, "settings-shortcut-focus");
 
-            // Icon-only guides retain their feature-specific accessible names.
-            Button[] tutorialButtons = Descendants(window).OfType<Button>()
-                .Where(button => ReferenceEquals(button.Style, window.FindResource("Button.Tutorial"))).ToArray();
-            Assert.Equal(13, tutorialButtons.Length);
-            foreach (Button button in tutorialButtons)
-                Assert.EndsWith(" 사용법 보기", System.Windows.Automation.AutomationProperties.GetName(button), StringComparison.Ordinal);
+            // The text page retains its named tutorial; the repeated shortcut-row guides live in shortcut help.
+            Assert.True(window.NavigateToSection(SettingsSection.Text));
+            Drain(window);
+            var textTutorial = Assert.IsType<Button>(window.FindName("TextCopyTutorialButton"));
+            Assert.True(textTutorial.IsVisible && textTutorial.IsEnabled && textTutorial.IsTabStop);
+            Assert.Equal(FeatureTutorialWindow.OpenButtonName(TutorialCatalog.Get("text-copy")),
+                System.Windows.Automation.AutomationProperties.GetName(textTutorial));
+
+            var help = new ShortcutHelpWindow { WindowStartupLocation = WindowStartupLocation.Manual,
+                Left = -10000, Top = -10000, ShowActivated = false, ShowInTaskbar = false };
+            FluidMotion.SetWindowEntrance(help, false);
+            try
+            {
+                help.Show();
+                var helpView = ShortcutHelpSearchTests.View(help);
+                var reachableFeatures = new HashSet<string>();
+                foreach (TabItem tab in helpView.Tabs.Items)
+                {
+                    helpView.Tabs.SelectedItem = tab;
+                    Drain(help);
+                    foreach (Button button in TutorialButtons((DependencyObject)tab.Content))
+                    {
+                        string featureId = Assert.IsType<string>(button.Tag);
+                        reachableFeatures.Add(featureId);
+                        Assert.True(button.IsVisible && button.IsEnabled && button.IsTabStop);
+                        Assert.Equal(FeatureTutorialWindow.OpenButtonName(TutorialCatalog.Get(featureId)),
+                            System.Windows.Automation.AutomationProperties.GetName(button));
+                    }
+                }
+                foreach (FeatureTutorial feature in TutorialCatalog.All.Where(feature => feature.GlobalKey is not null && feature.HelpActions.Any()))
+                    Assert.Contains(feature.Id, reachableFeatures);
+            }
+            finally { help.Close(); }
         }
         finally
         {

@@ -15,10 +15,11 @@ using MyCapture.Core.Recording;
 using MyCapture.Core.Storage;
 using MyCapture.Platform.Recording;
 using Xunit;
+using Xunit.Abstractions;
 
 namespace MyCapture.App.Tests;
 
-public sealed class EnglishLayoutTests
+public sealed class EnglishLayoutTests(ITestOutputHelper output)
 {
     [Fact]
     public void ExportButtonUsesRealFilledThemeGeometry() => StaTestHost.Run(() =>
@@ -81,6 +82,7 @@ public sealed class EnglishLayoutTests
             Assert.InRange(timeline.ViewportHeight, 0, timeline.ActualHeight + 0.5);
             window.SetDetailsExpandedForTest(true);
             window.UpdateLayout();
+            AssertTransportTimeFits(window);
             foreach (string key in new[] { "Video.TrimIn", "Video.TrimOut" })
             {
                 TextBox input = Assert.Single(Descendants(layout).OfType<TextBox>(),
@@ -108,7 +110,8 @@ public sealed class EnglishLayoutTests
                 Assert.InRange(bottom.Y, 0, layerPanel.ActualHeight - layerPanel.Padding.Bottom + 0.5);
             }
             var client = (FrameworkElement)VisualTreeHelper.GetParent(layout);
-            var statusText = Assert.IsType<TextBlock>(status.Child);
+            var statusText = (TextBlock)typeof(VideoEditorWindow).GetField("_statusLabel", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(window)!;
+            Assert.True(status.IsAncestorOf(statusText));
             Assert.True(statusText.ActualHeight >= statusText.DesiredSize.Height - 0.5);
             Assert.InRange(statusText.TranslatePoint(new Point(0, statusText.ActualHeight), client).Y, 0, client.ActualHeight + 0.5);
             for (DependencyObject? ancestor = VisualTreeHelper.GetParent(statusText); ancestor is FrameworkElement bounds; ancestor = VisualTreeHelper.GetParent(ancestor))
@@ -123,6 +126,10 @@ public sealed class EnglishLayoutTests
             // The inspector now reserves a separate column. Its narrow timeline intentionally
             // omits this optional hint, so check the English glyphs at the default full width.
             window.SetDetailsExpandedForTest(false);
+            window.UpdateLayout();
+            AssertTransportTimeFits(window);
+            Assert.Contains(Descendants(Descendants(layout).OfType<Button>().Single(button => button.Name == "VideoSaveCurrentFrame"))
+                .OfType<TextBlock>(), text => text.Text == UiText.Get("VideoFrame_SaveShort") && text.IsVisible);
             window.TimelineForTest.SetDetailVisible(true);
             window.UpdateLayout();
             var connector = Assert.Single(Descendants(layout).OfType<TimelineRenderSurface>(), surface => !surface.IsHitTestVisible);
@@ -143,10 +150,11 @@ public sealed class EnglishLayoutTests
             window.TimelineForTest.SetDetailVisible(false);
             window.SetDetailsExpandedForTest(true);
             window.UpdateLayout();
+            AssertTransportTimeFits(window);
             Button[] buttons = Descendants(layout).OfType<Button>().ToArray();
             // The layer panel's separate "Edit properties" button repeated the edit icon (F2)
             // above the list, so it was removed with the duplicated properties summary.
-            foreach (string key in new[] { "Video.AddLayer", "MediaExport_SaveEdits", "MediaExport_ExportFormats" })
+            foreach (string key in new[] { "Video.AddLayer", "MediaExport_SaveEdits", "MediaExport_ExportFormats", "VideoFrame_Save" })
             {
                 string caption = UiText.Get(key);
                 Button button = Assert.Single(buttons, b => AutomationProperties.GetName(b) == caption);
@@ -189,8 +197,8 @@ public sealed class EnglishLayoutTests
                 Assert.True(item.IsEnabled);
                 Assert.NotNull(item.ToolTip);
             }
-            var bitmap = new RenderTargetBitmap((int)layout.ActualWidth, (int)layout.ActualHeight, 96, 96, PixelFormats.Pbgra32);
-            bitmap.Render(layout);
+            var bitmap = new RenderTargetBitmap((int)window.ActualWidth, (int)window.ActualHeight, 96, 96, PixelFormats.Pbgra32);
+            bitmap.Render(window);
             string? evidence = Environment.GetEnvironmentVariable("MYCAPTURE_LOCALIZATION_EVIDENCE");
             if (!string.IsNullOrEmpty(evidence))
             {
@@ -201,12 +209,33 @@ public sealed class EnglishLayoutTests
                 encoder.Save(stream);
             }
         }
+        catch (Exception error)
+        {
+            output.WriteLine(error.ToString());
+            throw;
+        }
         finally
         {
             try { window.Close(); }
             finally { OwnedTestDirectory.Delete(root); }
         }
     });
+
+    private static void AssertTransportTimeFits(VideoEditorWindow window)
+    {
+        Grid transport = Descendants(window).OfType<Grid>().Single(grid => grid.Name == "VideoTransport");
+        Border chip = Descendants(transport).OfType<Border>().Single(border => border.Name == "VideoPositionChip");
+        TextBlock time = Assert.IsType<TextBlock>(chip.Child);
+        double textWidth = new FormattedText(time.Text, System.Globalization.CultureInfo.CurrentUICulture,
+            time.FlowDirection, new Typeface(time.FontFamily, time.FontStyle, time.FontWeight, time.FontStretch),
+            time.FontSize, Brushes.Black, VisualTreeHelper.GetDpi(time).PixelsPerDip).WidthIncludingTrailingWhitespace;
+        Button save = Descendants(transport).OfType<Button>().Single(button => button.Name == "VideoSaveCurrentFrame");
+        double textRight = time.TranslatePoint(new Point(textWidth, 0), transport).X;
+        double saveLeft = save.TranslatePoint(new Point(), transport).X;
+        Assert.True(chip.ActualWidth + 0.5 >= textWidth && textRight <= saveLeft + 0.5,
+            $"Full timecode '{time.Text}' ({textWidth:0.0} DIP) must fit its {chip.ActualWidth:0.0} DIP slot before Save frame at {saveLeft:0.0}.");
+        Assert.Equal("Shift+S", AutomationProperties.GetAcceleratorKey(save));
+    }
 
     private static Button AssertOverflowExport(VideoEditorWindow window, Button[] buttons, string caption)
     {

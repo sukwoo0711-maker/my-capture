@@ -25,7 +25,14 @@ public sealed class TextCaptureServiceTests
         Assert.Equal(TextCaptureStatus.Copied, outcome.Status);
         Assert.Equal(SensitiveText, copied);
         Assert.Equal(TextCaptureService.CountCharacters(SensitiveText), outcome.CharacterCount);
-        Assert.Same(ocr.Result, outcome.Result);
+        Assert.NotNull(outcome.Result);
+        Assert.Equal(ocr.Result.Status, outcome.Result.Status);
+        Assert.Equal(ocr.Result.Text, outcome.Result.Text);
+        Assert.Equal(ocr.Result.LanguageTag, outcome.Result.LanguageTag);
+        Assert.Same(ocr.Result.Lines, outcome.Result.Lines);
+        Assert.Equal(ocr.Result.Elapsed, outcome.Result.Elapsed);
+        Assert.Equal(ocr.Result.Message, outcome.Result.Message);
+        Assert.Equal(OcrQuality.Fast, outcome.Result.Quality);
         Assert.NotEmpty(log.Messages);
         Assert.All(log.Messages, message =>
         {

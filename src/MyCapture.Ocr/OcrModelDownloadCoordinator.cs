@@ -8,6 +8,7 @@ namespace MyCapture.Ocr;
 internal interface IOcrDownloadEnvironment
 {
     bool ShouldDeferBackgroundDownload();
+    bool IsMetered => false;
     bool? IsBatterySaverOn => null;
     int? ProcessorCount => null;
     ulong? InstalledMemoryBytes => null;
@@ -90,6 +91,20 @@ internal sealed class WindowsOcrDownloadEnvironment : IOcrDownloadEnvironment
         }
     }
 
+    public bool IsMetered
+    {
+        get
+        {
+            try
+            {
+                ConnectionCostState? cost = _connectionCost();
+                return cost is { } value && (value.NetworkCostType is NetworkCostType.Fixed or NetworkCostType.Variable
+                    || value.Roaming || value.OverDataLimit);
+            }
+            catch (Exception) { return false; }
+        }
+    }
+
     internal static bool ShouldDefer(NetworkCostType cost, bool roaming, bool overLimit, bool batterySaver) =>
         cost != NetworkCostType.Unrestricted || roaming || overLimit || batterySaver;
 
@@ -105,11 +120,11 @@ internal readonly record struct ConnectionCostState(NetworkCostType NetworkCostT
 internal sealed class OcrModelDownloadCoordinator(OcrModelStore store, IOcrDownloadEnvironment environment)
 {
     internal async Task<bool> EnsureAsync(OcrQuality quality, bool isBackground, CancellationToken cancellationToken,
-        bool deferForBatterySaver = false)
+        bool deferForBatterySaver = false, IProgress<double>? progress = null)
     {
         if (!OcrQualityProfile.UseNeuralModel(quality)) return true;
         if (deferForBatterySaver && environment.IsBatterySaverOn != false) return false;
         if (isBackground && environment.ShouldDeferBackgroundDownload()) return false;
-        return await store.EnsureAsync(cancellationToken).ConfigureAwait(false);
+        return await store.EnsureAsync(cancellationToken, progress).ConfigureAwait(false);
     }
 }

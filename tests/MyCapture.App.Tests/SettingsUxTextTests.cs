@@ -92,8 +92,7 @@ public sealed class SettingsUxTextTests
                 FluidMotion.SetWindowEntrance(window, false);
                 window.Show();
                 var categories = Assert.IsType<TabControl>(window.FindName("CategoryTabs"));
-                categories.SelectedItem = Assert.Single(categories.Items.Cast<TabItem>(),
-                    tab => Equals(tab.Header, UiText.Get("SettingsUx_TabEditing")));
+                Assert.True(window.NavigateToSection(SettingsSection.Text));
                 // Match the product-theme fixture's drain after showing the category:
                 // bindings and layout must settle before reading the actual selection.
                 window.Dispatcher.Invoke(DispatcherPriority.ApplicationIdle, new Action(window.UpdateLayout));

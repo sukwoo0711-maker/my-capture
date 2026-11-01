@@ -47,7 +47,7 @@ public sealed partial class SettingsThemePreviewTests
         {
             window.Show();
             var tabs = Assert.IsType<TabControl>(window.FindName("CategoryTabs"));
-            tabs.SelectedIndex = 1; // General, capture.
+            Assert.True(window.NavigateToSection(SettingsSection.Capture));
             Drain(window);
             var checkbox = Assert.IsType<CheckBox>(window.FindName("ShowSelectionGridCheck"));
             Assert.True(checkbox.IsVisible);

@@ -120,14 +120,22 @@ public sealed class GalleryPinShortcutTests
                 }
                 finally { metadata.Close(); }
 
-                var menu = (ContextMenu)window.FindResource("Gallery.TileContextMenu");
+                ContextMenu menu = window.TileMenu;
+                GalleryItemViewModel image = fixture.Model.FindTile(fixture.Second.Id)!;
+                menu.PlacementTarget = new Button { DataContext = image };
+                window.PrepareTileMenu(menu, image);
+                window.UpdateLayout();
                 MenuItem pin = Assert.Single(menu.Items.OfType<MenuItem>(),
                     item => AutomationProperties.GetName(item) == UiText.Get("Gallery.Float"));
                 MenuItem keep = Assert.Single(menu.Items.OfType<MenuItem>(),
                     item => AutomationProperties.GetName(item) == UiText.Get("LibraryUx_KeepToggleName"));
                 Assert.Equal("P", pin.InputGestureText);
                 Assert.Equal("K", keep.InputGestureText);
-                Assert.Same(pin, menu.Items[0]);
+                MenuItem edit = Assert.Single(menu.Items.OfType<MenuItem>(), item => Equals(item.Tag, "Edit"));
+                Assert.Same(edit, menu.Items.OfType<MenuItem>().First(item => item.Visibility == Visibility.Visible));
+                Assert.Equal(FontWeights.Bold, edit.FontWeight);
+                Assert.Equal("Enter", edit.InputGestureText);
+                Assert.True(menu.Items.IndexOf(edit) < menu.Items.IndexOf(pin));
                 var selectedPin = (MenuItem)window.FindName("FloatSelectedMenu");
                 var more = (Button)window.FindName("MoreCommandsButton");
                 more.ContextMenu.PlacementTarget = more;

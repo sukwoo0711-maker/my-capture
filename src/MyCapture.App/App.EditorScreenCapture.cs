@@ -36,6 +36,7 @@ public partial class App
             bool copied = await CompleteCaptureCopyAsync(delivery, record, opensCaptureEditor: false);
             try { _tray?.SetCaptureCount(_queue?.Count ?? 0); }
             catch (Exception error) { _log?.LogWarning(error, "Could not update tray count"); }
+            PublishPracticeCapture(selection, record?.Id);
             if (record is null) return;
 
             _overlay?.CurrentEditor?.ShowCaptureBlocked(UiText.Get(copied ? "Capture.CopiedAndSaved" : "Capture.Saved"));

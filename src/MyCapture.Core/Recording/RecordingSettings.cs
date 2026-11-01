@@ -27,6 +27,8 @@ public enum RecordingFrameRate
 /// </summary>
 public sealed class RecordingSettings
 {
+    public RecordingWatermarkSettings Watermark { get; set; } = new();
+
     /// <summary>Capture frame rate. 30 fps by default (see <see cref="RecordingFrameRate"/>).</summary>
     public RecordingFrameRate FrameRate { get; set; } = RecordingFrameRate.Fps30;
 

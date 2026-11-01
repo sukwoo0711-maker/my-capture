@@ -22,7 +22,7 @@ internal static class ShortcutSettingTarget
         "capture-scroll" => nameof(SettingsDraft.ScrollingCaptureHotkey),
         "capture-delay" => nameof(SettingsDraft.DelayedCaptureHotkey),
         "text-copy" => nameof(SettingsDraft.CaptureTextHotkey),
-        "pin-clipboard" => nameof(SettingsDraft.PasteToScreenHotkey),
+        "pin-clipboard" or "practice-image-pin" => nameof(SettingsDraft.PasteToScreenHotkey),
         "pin-hide-all" => nameof(SettingsDraft.HideAllPinsHotkey),
         "pin-click-through" => nameof(SettingsDraft.ToggleClickThroughHotkey),
         "pin-restore" => nameof(SettingsDraft.RestoreClosedPinHotkey),

@@ -42,5 +42,5 @@ internal static class OcrSourceSnapshot
     internal static OcrRequest WindowsRequest(OcrRequest original, BitmapSource image) =>
         OcrRequest.FromBitmap(image, original.UpscaleFactor, original.PreferredLanguages,
             original.SearchRotatedOrientations, original.EnhanceContrast,
-            useNeuralModel: false, localCorrection: original.LocalCorrection, useSuperResolution: false);
+            useNeuralModel: original.UseNeuralModel, localCorrection: original.LocalCorrection, useSuperResolution: false);
 }

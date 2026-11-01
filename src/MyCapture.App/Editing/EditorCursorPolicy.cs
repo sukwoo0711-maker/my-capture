@@ -22,10 +22,10 @@ internal enum EditorCursorKind
     /// <summary>System crosshair: rectangle, ellipse and arrow drag from the exact pixel.</summary>
     Cross,
 
-    /// <summary>Pen drawn at the tool icon's angle; the hot spot is the nib.</summary>
+    /// <summary>Central locator; the surface shows the actual circular pen footprint.</summary>
     Pen,
 
-    /// <summary>Highlighter marker; the hot spot is the middle of the chisel tip.</summary>
+    /// <summary>Central locator; the surface shows the actual circular highlighter footprint.</summary>
     Highlighter,
 
     /// <summary>Crosshair with the number the next click adds.</summary>

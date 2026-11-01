@@ -112,6 +112,15 @@ public abstract class ShapeAnnotation : AnnotationItem
     /// select, which reads as the annotation being unselectable.
     /// </remarks>
     protected double PickBand => Math.Max(EffectiveStrokeThickness / 2.0, 3.0);
+
+    protected double PaintedShapeDistance(double signedBoundaryDistance)
+    {
+        double fill = HasFill ? Math.Max(0, signedBoundaryDistance) : double.PositiveInfinity;
+        double stroke = StrokeThickness > 0 && Stroke.A > 0
+            ? Math.Max(0, Math.Abs(signedBoundaryDistance) - EffectiveStrokeThickness / 2)
+            : double.PositiveInfinity;
+        return Math.Min(fill, stroke);
+    }
 }
 
 /// <summary>
@@ -143,6 +152,9 @@ public sealed class RectangleAnnotation : ShapeAnnotation
         double d = GeometryMath.DistanceToRectOutline(point, Rect);
         return Math.Max(0, d - PickBand);
     }
+
+    public override double PaintedDistanceTo(PointD point) =>
+        PaintedShapeDistance(GeometryMath.SignedDistanceToRoundedRect(point, Rect, CornerRadius));
 
     public override AnnotationItem Clone()
     {
@@ -182,6 +194,15 @@ public sealed class EllipseAnnotation : ShapeAnnotation
 
         double d = GeometryMath.DistanceToEllipseOutline(point, Rect);
         return Math.Max(0, d - PickBand);
+    }
+
+    public override double PaintedDistanceTo(PointD point)
+    {
+        double distance = GeometryMath.DistanceToEllipseOutlineExact(point, Rect);
+        double rx = Rect.Width / 2, ry = Rect.Height / 2;
+        bool inside = rx > 0 && ry > 0
+            && Math.Pow((point.X - Rect.Center.X) / rx, 2) + Math.Pow((point.Y - Rect.Center.Y) / ry, 2) <= 1;
+        return PaintedShapeDistance(inside ? -distance : distance);
     }
 
     public override AnnotationItem Clone()

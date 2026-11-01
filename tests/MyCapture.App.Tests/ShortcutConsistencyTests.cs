@@ -104,6 +104,16 @@ public sealed class ShortcutConsistencyTests
             row.Shortcuts.Count == 1 && row.Shortcuts[0].Modifiers == ModifierKeys.None && row.Shortcuts[0].Key is >= Key.A and <= Key.Z
             && row.Shortcuts[0].Command is not ("RotateLeft" or "RotateRight")))
         {
+            if (row.Shortcuts[0].Command is "Mosaic" or "Blur")
+            {
+                string gestures = ShortcutCatalog.Hints(ShortcutScope.Annotation, "Mosaic", "Blur");
+                ButtonBase obscure = Assert.Single(elements.OfType<ButtonBase>(), item => AutomationProperties.GetAcceleratorKey(item) == gestures);
+                string keys = UiText.Format("EditorObscure_Shortcuts",
+                    ShortcutCatalog.Get(ShortcutScope.Annotation, "Mosaic").Hint,
+                    ShortcutCatalog.Get(ShortcutScope.Annotation, "Blur").Hint);
+                Assert.Equal($"{UiText.Get("EditorObscure_Name")} ({keys})", obscure.ToolTip);
+                continue;
+            }
             ButtonBase tool = Assert.Single(elements.OfType<ButtonBase>(), item => AutomationProperties.GetAcceleratorKey(item) == row.Keys);
             if (row.Shortcuts[0].Command == "Stamp")
             {

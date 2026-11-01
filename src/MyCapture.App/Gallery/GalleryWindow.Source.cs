@@ -6,6 +6,16 @@ namespace MyCapture.App.Gallery;
 
 internal sealed partial class GalleryWindow
 {
+    internal CaptureSourceActions SourceActions { get; set; } = CaptureSourceActions.Default;
+
+    private async void OnOpenSourceMenuClick(object sender, RoutedEventArgs e)
+    {
+        if (ResolveTileFromCommand(sender) is not { } tile) return;
+        e.Handled = true;
+        if (!await GallerySourceBadge.TryOpenAsync(tile.SourceProvenance, SourceActions, SetSourceActionStatus))
+            ShowSourceDetails(tile);
+    }
+
     private async void OnOpenSourcePageClick(object sender, RoutedEventArgs e)
     {
         string url = SourceUrlForAction(sender);

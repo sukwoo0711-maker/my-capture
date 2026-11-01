@@ -157,6 +157,13 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
     /// <summary>Raised when the complete selector/editor session has ended.</summary>
     internal event EventHandler? OverlayClosed;
     internal event Action? SessionStarted;
+    private readonly Dictionary<CaptureOverlayWindow, PracticeCaptureTarget> _practiceSelectors = [];
+    private readonly HashSet<CaptureOverlayWindow> _practiceSelections = [];
+    private PracticeCaptureTarget? _persistingPracticeCapture;
+
+    internal bool OwnsPracticeCapture(PracticeCaptureTarget? target) => target is { } capture &&
+        (_preparation?.PracticeTarget == capture || _practiceSelectors.Values.Contains(capture)
+            || _persistingPracticeCapture == capture || _editorScreenCapture?.OwnsPracticeCapture(capture) == true);
 
     internal Func<AnnotationEditingResult, Task<bool>>? CommitRequested { get; set; }
 
@@ -277,7 +284,7 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
     internal WindowCandidateService WindowCandidates => _windowCandidates;
 
     internal void Start(bool includeCursor, bool abortOnFocusLoss, bool showMagnifier, bool showSelectionGrid = true,
-        bool textCapture = false, bool preserveEditor = false)
+        bool textCapture = false, bool preserveEditor = false, PracticeCaptureTarget? practiceTarget = null)
     {
         VerifyDispatcherAccess();
         ObjectDisposedException.ThrowIf(_disposed, this);
@@ -289,7 +296,7 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
         }
         if (preserveEditor && CanCaptureOverPreservedWindow && EditorScreenCaptureRequested is { } persist)
         {
-            StartOverEditor(persist, includeCursor, abortOnFocusLoss, showMagnifier, showSelectionGrid, textCapture);
+            StartOverEditor(persist, includeCursor, abortOnFocusLoss, showMagnifier, showSelectionGrid, textCapture, practiceTarget);
             return;
         }
 
@@ -315,6 +322,7 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
         {
             ShowSelectionGrid = showSelectionGrid,
             TextCapture = textCapture && TextCaptureRequested is not null,
+            PracticeTarget = practiceTarget,
         };
         _preparation = preparation;
         SessionStarted?.Invoke();
@@ -340,6 +348,7 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
         catch
         {
             preparation.Cancelled = true;
+            CancelPractice(preparation.PracticeTarget);
             _preparation = null;
             throw;
         }
@@ -349,12 +358,12 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
         => PresentationDismissals.IsRecent(currentTick, lastDismissedTick);
 
     private void StartOverEditor(Func<CaptureSelectionCompletedEventArgs, Task> persist,
-        bool includeCursor, bool abortOnFocusLoss, bool showMagnifier, bool showSelectionGrid, bool textCapture)
+        bool includeCursor, bool abortOnFocusLoss, bool showMagnifier, bool showSelectionGrid, bool textCapture, PracticeCaptureTarget? practiceTarget)
     {
         CaptureOverlayCoordinator nested = CreateCaptureOverEditor(persist);
         try
         {
-            nested.Start(includeCursor, abortOnFocusLoss, showMagnifier, showSelectionGrid, textCapture);
+            nested.Start(includeCursor, abortOnFocusLoss, showMagnifier, showSelectionGrid, textCapture, practiceTarget: practiceTarget);
             LastPreparationForTest = nested.LastPreparationForTest;
         }
         catch
@@ -520,7 +529,7 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
         if (!ReferenceEquals(_preparation, preparation)) return false;
         try
         {
-            if (_disposed || preparation.Cancelled) return false;
+            if (_disposed || preparation.Cancelled) { CancelPractice(preparation.PracticeTarget); return false; }
             if (failure is not null) throw failure;
             FrozenFrame acquired = frame ?? throw new InvalidOperationException("Capture acquisition returned no frame.");
             if (_activeOverlay is { } overlay)
@@ -551,6 +560,7 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
         catch (Exception ex)
         {
             _log.LogError(ex, "Could not prepare the capture overlay");
+            CancelPractice(preparation.PracticeTarget);
             _activeOverlay?.Close();
             TransitionFailed?.Invoke(ex);
             return false;
@@ -575,6 +585,7 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
             : new CaptureOverlayWindow(frame, abortOnFocusLoss, showMagnifier, showSelectionGrid);
         SelectorTimeline.Mark?.Invoke("window-constructed");
         _activeOverlay = overlay;
+        if (_preparation?.PracticeTarget is { } practice) _practiceSelectors[overlay] = practice;
         overlay.SourceWindows = _preparation?.SourceWindows ?? [];
         overlay.DetectWindows = AutoDetectWindows();
         overlay.ShowShortcutHints = ShowShortcutHints();
@@ -602,6 +613,8 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
         void OnFirstRendered(object? sender, EventArgs args)
         {
             overlay.ContentRendered -= OnFirstRendered;
+            if (_practiceSelectors.TryGetValue(overlay, out var practice))
+                PracticeSignals.Publish(new(PracticeEventKind.SelectorReady, practice.SessionId, practice.RequestId));
             _log.LogInformation("Capture overlay first rendered after {Elapsed:0.0}ms", elapsed.Elapsed.TotalMilliseconds);
         }
 
@@ -761,6 +774,7 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
         internal RectD DesktopBounds { get; set; }
         internal bool ShowSelectionGrid { get; init; } = true;
         internal bool TextCapture { get; init; }
+        internal PracticeCaptureTarget? PracticeTarget { get; init; }
         internal volatile bool Cancelled;
         internal IReadOnlyList<WindowCandidate> SourceWindows { get; set; } = [];
         internal Stopwatch Elapsed { get; } = Stopwatch.StartNew();
@@ -786,8 +800,11 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
 
     private async void OnOverlaySelectionCompleted(object? sender, CaptureSelectionCompletedEventArgs e)
     {
+        if (sender is CaptureOverlayWindow selector && _practiceSelectors.TryGetValue(selector, out var practice))
+        { e.PracticeTarget = practice; _practiceSelections.Add(selector); }
         if (e.TextCapture && TextCaptureRequested is { } textCapture)
         {
+            CancelPractice(e.PracticeTarget);
             // Text capture keeps only the recognised text: no library record, no editor. The
             // selector closes right after this returns, ending the session before OCR runs.
             _log.LogInformation("Selected region {Region} for text capture", e.BitmapRegion);
@@ -841,6 +858,7 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
         var transition = new CancellationTokenSource();
         _openingEditorCts = transition;
         _isOpeningEditor = true;
+        _persistingPracticeCapture = selection.PracticeTarget;
         SessionStarted?.Invoke();
         try
         {
@@ -886,6 +904,7 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
             // recovery-export mode. An unexpected transition/window failure must still release
             // the single-session guard instead of leaving capture permanently wedged.
             _log.LogError(ex, "Could not complete the selection-to-editor transition");
+            CancelPractice(selection.PracticeTarget);
             TransitionFailed?.Invoke(ex);
             if (_activeEditor is { } failedEditor)
             {
@@ -910,6 +929,7 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
             {
                 _openingEditorCts = null;
                 _isOpeningEditor = false;
+                _persistingPracticeCapture = null;
             }
 
             transition.Dispose();
@@ -946,6 +966,12 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
         EditingCompleted?.Invoke(this, e);
     }
 
+    private static void CancelPractice(PracticeCaptureTarget? target)
+    {
+        if (target is { } capture)
+            PracticeSignals.Publish(new(PracticeEventKind.CaptureCancelled, capture.SessionId, capture.RequestId));
+    }
+
     private void OnEditorCancelled(object? sender, EventArgs e) =>
         _log.LogInformation("Standalone capture editor cancelled");
 
@@ -955,6 +981,8 @@ internal sealed class CaptureOverlayCoordinator : IDisposable
     {
         if (sender is CaptureOverlayWindow overlay)
         {
+            if (_practiceSelectors.Remove(overlay, out var practice) && !_practiceSelections.Remove(overlay))
+                PracticeSignals.Publish(new(PracticeEventKind.CaptureCancelled, practice.SessionId, practice.RequestId));
             NoteForegroundDismissal(CaptureWindowExclusion.WasApplied(overlay));
             overlay.SelectionCompleted -= OnOverlaySelectionCompleted;
             overlay.ActionRequested -= OnOverlayActionRequested;

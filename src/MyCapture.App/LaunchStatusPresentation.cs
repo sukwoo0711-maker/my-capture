@@ -18,12 +18,15 @@ internal sealed class LaunchStatusPresentation : IDisposable
     private readonly Action _visible;
     private readonly TimeSpan _delay;
     private readonly TimeSpan? _duration;
+    private readonly Func<WaitHandle, int, bool> _wait;
+    private readonly long _started = Stopwatch.GetTimestamp();
     private bool _complete;
 
     private LaunchStatusPresentation(bool quiet, bool secondary, Action visible, Func<ILaunchSurface>? createSurface,
-        TimeSpan? delay, TimeSpan? duration)
+        TimeSpan? delay, TimeSpan? duration, Func<WaitHandle, int, bool>? wait)
     {
         _visible = visible;
+        _wait = wait ?? ((handle, milliseconds) => handle.WaitOne(milliseconds));
         _createSurface = createSurface ?? (() => new NativeLaunchSurface(secondary));
         _delay = delay ?? (secondary ? TimeSpan.Zero : ShowDelay);
         _duration = duration ?? (secondary ? SecondaryDuration : null);
@@ -41,10 +44,11 @@ internal sealed class LaunchStatusPresentation : IDisposable
     }
 
     internal static LaunchStatusPresentation Start(bool quiet, Action visible, Func<ILaunchSurface>? createSurface = null,
-        TimeSpan? delay = null) => new(quiet, false, visible, createSurface, delay, null);
+        TimeSpan? delay = null, Func<WaitHandle, int, bool>? wait = null) =>
+        new(quiet, false, visible, createSurface, delay, null, wait);
 
     internal static LaunchStatusPresentation Secondary(Action visible, Func<ILaunchSurface>? createSurface = null,
-        TimeSpan? duration = null) => new(false, true, visible, createSurface, null, duration);
+        TimeSpan? duration = null) => new(false, true, visible, createSurface, null, duration, null);
 
     internal Task Completion => _completion.Task;
 
@@ -66,7 +70,7 @@ internal sealed class LaunchStatusPresentation : IDisposable
         ILaunchSurface? surface = null;
         try
         {
-            if (_finished.WaitOne(_delay)) return;
+            if (FinishedBeforeDelay()) return;
             lock (_gate)
             {
                 if (_complete) return;
@@ -94,6 +98,23 @@ internal sealed class LaunchStatusPresentation : IDisposable
                 _completion.TrySetResult();
             }
         }
+    }
+
+    /// <summary>
+    /// A wait timeout follows the system tick and can end slightly before a <see cref="Stopwatch"/>
+    /// reports the delay; keep waiting for the remainder so the notice never appears early.
+    /// </summary>
+    private bool FinishedBeforeDelay()
+    {
+        TimeSpan remaining;
+        do
+        {
+            remaining = _delay - Stopwatch.GetElapsedTime(_started);
+            int milliseconds = remaining <= TimeSpan.Zero ? 0 : (int)Math.Ceiling(remaining.TotalMilliseconds);
+            if (_wait(_finished, milliseconds)) return true;
+        }
+        while (remaining > TimeSpan.Zero);
+        return false;
     }
 }
 

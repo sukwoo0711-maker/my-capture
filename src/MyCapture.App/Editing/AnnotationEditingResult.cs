@@ -127,6 +127,15 @@ internal sealed class AnnotationEditingResult
     internal IReadOnlyDictionary<string, string> ImageAssetSources { get; }
 
     /// <summary>
+    /// A file export or library save for this operation completed durably. This is
+    /// separate from the commit's return value, which also includes clipboard success.
+    /// </summary>
+    internal bool SaveCompleted { get; set; }
+
+    /// <summary>The copy failed after it was attempted, including a thrown clipboard error.</summary>
+    internal bool ClipboardCopyFailed { get; set; }
+
+    /// <summary>
     /// Called once by the Done commit, on the caller's context, as soon as the clipboard holds the
     /// result while the library save may still be running. The editor window sets it when it may
     /// leave the screen at that point; null otherwise.

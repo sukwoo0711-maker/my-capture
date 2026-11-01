@@ -43,3 +43,26 @@ dotnet test tests/MyCapture.App.Tests/MyCapture.App.Tests.csproj -c Release --fi
 편집 before/after 100k PNG의 top/bottom을 root가 직접 확인했습니다. 수정본은 viewport 안에서 끝까지 스크롤되며 짧은 문서 top PNG는 전후 SHA가 같습니다. 실제 OS 키보드·최종 통합 빌드 검증은 root 통합 단계에서 기록합니다. WPF layout/render dispatch 측정은 물리 화면 표시/DWM latency와 구분합니다.
 
 작성 worker의 capacity 중단 후 root가 기존 변경을 인수하고 최종 readonly OCR 수정·실측·UIA 회귀 검사를 완료했습니다. 기존 untracked CaptureLatencyInvestigationTests.cs, 모든 작업 사본과 실패 자료를 보존했습니다.
+
+## 2026-10-31 OCR 결과 편집과 입력기 상한
+
+OCR 결과 글자 상자를 편집할 수 있게 바꿨습니다(읽기 전용 해제, Undo 사용). 입력기는 선택이 1,024자 이하일 때만 켭니다. 결과를 열 때의 전체 선택처럼 그보다 큰 선택에서는 끄고, 선택이 줄면 다시 켭니다. 위 TextStore.GetTextExt 비용은 입력기가 켜진 채 큰 범위를 선택할 때 생기므로 이 계약으로 피합니다. 단어·줄·문단을 골라 한글로 다시 입력하는 흐름은 그대로입니다.
+
+측정은 `build/tools/TextStressProbe`의 `ocr` 사례로 했습니다. Core/Desktop 10.0.12에 고정(rollForward Disable)했고 형태는 `lines`, 조건마다 한 번입니다. 기준은 707d6912의 읽기 전용 결과, 상한은 편집 가능 결과입니다. 상한 없음은 같은 편집 가능 결과에 `ime-always-on` 진단을 건 대조입니다. 여섯 실행 모두 exit 0, PASS였습니다. 단위는 ms입니다.
+
+| 단계 | 기준 10만 | 상한 10만 | 상한 없음 10만 | 기준 1만 | 상한 1만 | 상한 없음 1만 |
+|---|---:|---:|---:|---:|---:|---:|
+| 결과 표시 뒤 첫 배치 | 39.4 | 34.2 | 48.3 | 32.7 | 39.8 | 127.9 |
+| 전체 선택 뒤 정착 | 0.6 | 0.6 | 3,903.7 | 0.5 | 0.7 | 1,574.0 |
+| 커서에서 전체 선택·정착 | 1.1 | 14.7 | 2,217.8 | 1.1 | 5.8 | 299.9 |
+| 1,024자 선택·정착 | 4.9 | 18.1 | 34.8 | 4.6 | 18.6 | 48.9 |
+| 4,096자 선택·정착 | 2.7 | 12.0 | 152.3 | 2.7 | 7.5 | 182.5 |
+| 50자 입력·정착 | 396.3 | 548.7 | 546.8 | 35.4 | 80.7 | 57.3 |
+| 다시 연 결과 정착 | 286.4 | 289.9 | 3,802.8 | 27.1 | 41.4 | 476.5 |
+
+상한 없음은 1만 자에서도 전체 선택 뒤 1.6초가 걸렸습니다. 입력기가 켜진 4,096자 선택은 대조에서 150–180 ms였고 1,024자 선택은 상한 조건에서 18 ms였으므로 상한을 1,024자로 정했습니다. 50자 입력의 차이는 편집 표시와 원본 강조 갱신 비용이며, 1만 자에서 한 글자당 약 1.6 ms입니다. `OcrLargeTextWindowTests`는 편집 가능 여부, 큰 선택에서 입력기가 꺼지는지, 상한 경계에서 켜지는지를 검사합니다.
+
+```powershell
+dotnet build build/tools/TextStressProbe/TextStress.csproj -c Release -p:AppPayload=C:/absolute/payload -o C:/absolute/new-host-output
+dotnet exec --runtimeconfig C:/absolute/pinned-10.0.12.runtimeconfig.json C:/absolute/new-host-output/MyCapture.App.Tests.dll C:/absolute/payload ocr 100000 lines C:/absolute/new-result.json ime-always-on
+```

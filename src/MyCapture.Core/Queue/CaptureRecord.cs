@@ -116,6 +116,9 @@ public sealed class CaptureRecord
     /// </summary>
     public string? OcrLanguage { get; set; }
 
+    /// <summary>The quality used for cached text; absent in older records.</summary>
+    public MyCapture.Core.Settings.OcrQuality? OcrQuality { get; set; }
+
     /// <summary>
     /// Content generation for which OCR completed, including a successful "no text" result.
     /// This prevents text-free captures from being reprocessed forever and makes the marker
@@ -135,6 +138,29 @@ public sealed class CaptureRecord
     /// <summary>Imported basename only, never the external source directory.</summary>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? ImportedFileName { get; set; }
+
+    /// <summary>The video identity and generation from which this independent still was decoded.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public Guid? SourceVideoId { get; set; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? SourceVideoName { get; set; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public long? SourceVideoContentRevision { get; set; }
+
+    /// <summary>source or rendered; the time below is on this asset's timeline.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? SourceAssetKind { get; set; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public double? SourceAssetTimeMs { get; set; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public double? SourceAssetRequestedTimeMs { get; set; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public DateTimeOffset? SourceFrameRequestedAt { get; set; }
 
     /// <summary>User-managed, comma-separated local search tags; empty for legacy indexes.</summary>
     public string Tags { get; set; } = string.Empty;

@@ -433,6 +433,9 @@ public sealed class OcrSettings
     /// </summary>
     public OcrQuality Quality { get; set; } = OcrQuality.Fast;
 
+    /// <summary>The result-window accuracy suggestion was dismissed or accepted.</summary>
+    public bool AccuracySuggestionDismissed { get; set; }
+
     /// <summary>
     /// Upscale factor applied before recognition.
     /// </summary>

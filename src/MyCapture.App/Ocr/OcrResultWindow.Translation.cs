@@ -59,6 +59,7 @@ internal sealed partial class OcrResultWindow
             // The panel also changes during retries, cancellation and stale-result resets.
             if (_copyButton is null || _plainExportButton is null || ExtractionMode != OcrExtractionMode.Translation) return;
             _textBox.Text = _translationPanel.CopyText;
+            _generatedText = _textBox.Text;
             bool hasContent = _textBox.Text.Length > 0;
             _copyButton.IsEnabled = hasContent;
             _copyWithSourceButton.IsEnabled = hasContent;

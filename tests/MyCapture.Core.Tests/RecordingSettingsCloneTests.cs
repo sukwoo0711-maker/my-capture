@@ -28,6 +28,7 @@ public sealed class RecordingSettingsCloneTests
                 PresetWidth = 1280,
                 PresetHeight = 720,
                 CaptureMode = RecordingCaptureMode.Gdi,
+                Watermark = new RecordingWatermarkSettings { Enabled = true, Source = RecordingWatermarkSource.Text, Text = "Sample" },
             },
         };
         var defaults = new RecordingSettings();

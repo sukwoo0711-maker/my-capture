@@ -46,7 +46,7 @@ public sealed partial class SettingsThemePreviewTests
         try
         {
             window.Show();
-            Assert.IsType<TabControl>(window.FindName("CategoryTabs")).SelectedIndex = 1;
+            Assert.True(window.NavigateToSetting(nameof(SettingsDraft.AlwaysShowKeyPanel)));
             Drain(window);
             var checkbox = Assert.IsType<CheckBox>(window.FindName("AlwaysShowKeyPanelCheck"));
             Assert.True(checkbox.IsVisible);

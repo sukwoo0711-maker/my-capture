@@ -121,8 +121,45 @@ public sealed class PolylineAnnotation : AnnotationItem
     public override double DistanceTo(PointD point)
     {
         double d = GeometryMath.DistanceToPolyline(point, _points);
-        double band = Math.Max(StrokeThickness / 2.0, 4.0);
+        double band = StrokeThickness / 2.0;
         return Math.Max(0, d - band);
+    }
+
+    public override double PaintedDistanceTo(PointD point)
+    {
+        if (_points.Count < 2 || Stroke.A == 0) return double.PositiveInfinity;
+        double best = double.PositiveInfinity;
+        double headLength = StrokeThickness * HeadSizeFactor;
+        int last = _points.Count - 2;
+        for (int i = 0; i <= last; i++)
+        {
+            PointD from = _points[i], to = _points[i + 1];
+            double length = from.DistanceTo(to);
+            double startInset = i == 0 && HeadAtStart ? headLength : 0;
+            double endInset = i == last && HeadAtEnd ? headLength : 0;
+            if (startInset + endInset == 0)
+                best = Math.Min(best, Math.Max(0, GeometryMath.DistanceToSegment(point, from, to) - StrokeThickness / 2));
+            else if (length > startInset + endInset)
+            {
+                double ux = (to.X - from.X) / length, uy = (to.Y - from.Y) / length;
+                best = Math.Min(best, Math.Max(0, GeometryMath.DistanceToSegment(point,
+                    from.Offset(ux * startInset, uy * startInset), to.Offset(-ux * endInset, -uy * endInset)) - StrokeThickness / 2));
+            }
+        }
+        if (HeadAtStart) best = Math.Min(best, HeadDistance(point, _points[1], _points[0], headLength));
+        if (HeadAtEnd) best = Math.Min(best, HeadDistance(point, _points[^2], _points[^1], headLength));
+        return best;
+    }
+
+    private static double HeadDistance(PointD point, PointD from, PointD to, double headLength)
+    {
+        double length = from.DistanceTo(to);
+        if (length <= double.Epsilon) return double.PositiveInfinity;
+        double ux = (to.X - from.X) / length, uy = (to.Y - from.Y) / length;
+        PointD centre = to.Offset(-ux * headLength, -uy * headLength);
+        double halfWidth = headLength * .3;
+        return GeometryMath.DistanceToFilledTriangle(point, to,
+            centre.Offset(-uy * halfWidth, ux * halfWidth), centre.Offset(uy * halfWidth, -ux * halfWidth));
     }
 
     public override AnnotationItem Clone()

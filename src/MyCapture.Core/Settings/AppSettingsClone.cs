@@ -106,6 +106,7 @@ public static class AppSettingsClone
 
     private static Recording.RecordingSettings Clone(Recording.RecordingSettings s) => new()
     {
+        Watermark = (s.Watermark ?? new()) with { },
         FrameRate = s.FrameRate,
         UseStartDelay = s.UseStartDelay,
         StartDelaySeconds = s.StartDelaySeconds,
@@ -159,6 +160,7 @@ public static class AppSettingsClone
             ? OcrQualityProfile.UpscaleFactor(OcrQuality.Accurate)
             : s.UpscaleFactor,
         CacheResults = s.CacheResults,
+        AccuracySuggestionDismissed = s.AccuracySuggestionDismissed,
     };
 
     private static GeneralSettings Clone(GeneralSettings s) => new()

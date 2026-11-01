@@ -16,8 +16,8 @@ using static MyCapture.App.Tests.EditorKeysTests;
 namespace MyCapture.App.Tests;
 
 /// <summary>
-/// The image editor's flow: Esc only steps back, closing asks before dropping edits, Copy keeps
-/// the editor open, rotation is available in both command bar modes, the tool rail is
+/// The image editor's flow: Esc steps back then closes, closing asks before dropping edits,
+/// rotation is available in both command bar modes, the tool rail is
 /// grouped, and the editor confirms a capture that is already saved and copied.
 /// </summary>
 public sealed class EditorFlowTests
@@ -25,7 +25,7 @@ public sealed class EditorFlowTests
     // ---- Esc ---------------------------------------------------------------------------
 
     [Fact]
-    public void EscapeCancelsTypingThenClearsTheSelectionThenReturnsToSelectAndNeverCloses() => StaTestHost.Run(() =>
+    public void EscapeCancelsTypingThenClearsTheSelectionThenReturnsToSelectAndAsksToClose() => StaTestHost.Run(() =>
     {
         using EditorWindowHost host = EditorWindowHost.Create();
         AnnotationEditorControl editor = host.Editor;
@@ -59,11 +59,14 @@ public sealed class EditorFlowTests
         Assert.True(Press(editor, Key.Escape, ime: false));
         Assert.Equal(EditorTool.Select, controller.Tool);
 
-        // 4. Nothing left to step back from: Esc does nothing, and at no step did it close.
+        // 4. Nothing left to step back from: Esc uses the existing unsaved-edit prompt.
+        int asked = 0;
+        host.Window.ConfirmClose = () => { asked++; return EditorCloseChoice.DontSave; };
         Assert.True(Press(editor, Key.Escape, ime: false));
         Assert.Equal(EditorTool.Select, controller.Tool);
         Assert.Single(controller.Document.Items);
-        Assert.True(host.Window.IsVisible);
+        Assert.False(host.Window.IsVisible);
+        Assert.Equal(1, asked);
         Assert.False(host.Window.WasCommitted);
     });
 
@@ -455,7 +458,7 @@ public sealed class EditorFlowTests
                 new[] { EditorTool.Rectangle, EditorTool.Ellipse, EditorTool.Arrow },
                 new[] { EditorTool.Pen, EditorTool.Highlighter },
                 new[] { EditorTool.Text, EditorTool.StepNumber },
-                new[] { EditorTool.Mosaic, EditorTool.Blur },
+                new[] { EditorTool.Mosaic },
                 new[] { EditorTool.Image },
             },
             groups.Select(group => group.ToArray()).ToArray());

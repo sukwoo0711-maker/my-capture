@@ -17,11 +17,8 @@ namespace MyCapture.App;
 public partial class App
 {
     private WelcomeWindow? _onboardingWindow;
-    private Guid? _onboardingCaptureId;
     private DispatcherTimer? _practiceOfferTimer;
 
-    /// <summary>A capture ended: whether it was saved, and whether it was copied to the clipboard.</summary>
-    private event Action<bool, bool>? _onboardingCaptureEnded;
 
     private WelcomeWindow CreateOnboardingWindow(bool replay) => CreatePracticeWindow(replay);
 
@@ -38,116 +35,109 @@ public partial class App
                 UseAccurateOcr = replay ? OcrQualityProfile.UseNeuralModel(settings.Ocr.Quality) : null,
             });
         _onboardingWindow = welcome;
-        _onboardingCaptureId = null;
-        // A shortcut Windows did not register is never offered as the way to continue.
         void RefreshShortcuts()
         {
             welcome.UpdateHotkeys(_settings!.Hotkeys);
             bool Available(GlobalHotkeyCommand command, Hotkey key) => key.IsAssigned
-                && _hotkeys?.GetAssigned(command) == key
-                && !_hotkeys.Failures.Any(failure => failure.Command == command);
+                && _hotkeys?.GetAssigned(command) == key && !_hotkeys.Failures.Any(failure => failure.Command == command);
             welcome.UpdateShortcutAvailability(Available(GlobalHotkeyCommand.CaptureRegion, _settings.Hotkeys.Capture),
                 Available(GlobalHotkeyCommand.PasteToScreen, _settings.Hotkeys.PasteToScreen),
                 Available(GlobalHotkeyCommand.OpenLibrary, _settings.Hotkeys.OpenLibrary));
         }
         RefreshShortcuts();
-        welcome.Activated += (_, _) =>
-        {
-            RefreshShortcuts();
-            // A capture or recording that started and ended without a result for this guide leaves the button waiting.
-            if (welcome.CapturePending && !IsWelcomeCaptureInProgress) welcome.ResetPendingCapture();
-        };
+        welcome.Activated += (_, _) => RefreshShortcuts();
         welcome.CaptureRequested += (_, _) => HandleCaptureRequested();
-        bool captureForEditor = false;
         void OpenPracticeEditor(object? sender, EventArgs args)
         {
-            if (_overlay?.CurrentEditor is { } activeEditor)
+            if (welcome.Session.CaptureId is not { } id || _queue?.Find(id) is not { } record
+                || !System.IO.File.Exists(_queue.GetFilePath(record, Core.Queue.CaptureFileNames.Original)))
+            { welcome.Session.Notice("Journey.NoCapture"); welcome.Session.StartGroup(PracticeStep.A1); return; }
+            var editor = Windows.OfType<AnnotationEditorWindow>().FirstOrDefault(window => window.DraftRecordSource?.Invoke()?.Id == id && window.IsVisible);
+            if (editor is not null) { editor.Activate(); EditorReady(id, editor.Editor); }
+            else EnsureGalleryWindow()?.OpenCapture(id, edit: true);
+        }
+        void EditorReady(Guid recordId, AnnotationEditorControl editor)
+        {
+            if (recordId != welcome.Session.CaptureId || welcome.Session.Step is < PracticeStep.A3 or > PracticeStep.A6) return;
+            if (welcome.Session.EditorId is { } currentEditor && editor.PracticeTarget?.EditorId != currentEditor) return;
+            if (editor.PracticeTarget is { } existing && existing.SessionId == welcome.Session.Id && existing.RecordId == recordId)
             {
-                Window.GetWindow(activeEditor)?.Activate();
+                welcome.Notify(new(PracticeEventKind.EditorReady, existing.SessionId, RecordId: recordId, EditorId: existing.EditorId));
                 return;
             }
-            Guid? id = _onboardingCaptureId ?? _queue?.Records.FirstOrDefault(record => record.MediaKind == Core.Queue.CaptureMediaKind.Image)?.Id;
-            if (id is { } captureId)
-            {
-                _onboardingCaptureId = captureId;
-                EnsureGalleryWindow()?.OpenCapture(captureId, edit: true);
-            }
-            else
-            {
-                captureForEditor = true;
-                HandleCaptureRequested();
-            }
+            var target = new PracticeEditorTarget(welcome.Session.Id, recordId, Guid.NewGuid());
+            editor.PracticeTarget = target;
+            welcome.Notify(new(PracticeEventKind.EditorReady, target.SessionId, RecordId: recordId, EditorId: target.EditorId));
         }
         welcome.EditorRequested += OpenPracticeEditor;
-        welcome.PinRequested += OpenPracticeEditor;
-        welcome.ShortcutChangeRequested += command => HandleShortcutSettingsRequested(ShortcutSettingTarget.ForCommand(command));
-        welcome.CoreShortcutsAnswered += accepted =>
+        welcome.PinRequested += (_, _) => HandlePasteToScreen();
+        welcome.RestorePinRequested += async (_, _) =>
         {
-            ApplyPracticeShortcutAnswer(accepted);
-            RefreshShortcuts();
+            if (_pins is null || welcome.Session.LogicalPinId is not { } id) return;
+            try
+            {
+                if (await _pins.RestoreLastClosedAsync(id) is null) welcome.Session.CannotRestorePin();
+            }
+            catch (Exception error) when (error is not OutOfMemoryException) { welcome.Session.CannotRestorePin(); }
         };
+        welcome.ShortcutChangeRequested += command => HandleShortcutSettingsRequested(ShortcutSettingTarget.ForCommand(command));
+        welcome.CoreShortcutsAnswered += accepted => { ApplyPracticeShortcutAnswer(accepted); RefreshShortcuts(); };
         welcome.LibraryRequested += (_, _) =>
         {
-            HandleGalleryRequested();
-            // The library window reports its own activation; this covers a window that was already in front.
-            _ = Dispatcher.BeginInvoke(DispatcherPriority.ContextIdle, new Action(() =>
+            if (welcome.Session.CaptureId is { } id && _queue?.Find(id) is { } record
+                && System.IO.File.Exists(_queue.GetFilePath(record, Core.Queue.CaptureFileNames.Original))) EnsureGalleryWindow()?.OpenCapture(id, edit: false);
+            else
             {
-                if (ReferenceEquals(_onboardingWindow, welcome) && _galleryWindow?.IsVisible == true) welcome.NotifyLibraryOpened();
-            }));
-        };
-
-        void CaptureEnded(bool saved, bool copied)
-        {
-            if (saved)
-            {
-                if (welcome.CurrentStep == WelcomeStep.Capture || captureForEditor)
-                    _onboardingCaptureId = _currentRecord?.Id;
-                welcome.NotifyCaptureCompleted(copied);
-                if (captureForEditor)
-                {
-                    captureForEditor = false;
-                    _ = Dispatcher.BeginInvoke(DispatcherPriority.ContextIdle,
-                        new Action(() => { if (ReferenceEquals(_onboardingWindow, welcome)) OpenPracticeEditor(null, EventArgs.Empty); }));
-                }
+                welcome.Session.ForgetCapture();
+                HandleGalleryRequested();
             }
-            else welcome.NotifyCaptureCancelled();
-        }
-        void ArrowAdded() => welcome.NotifyArrowAdded();
-        void ArrowShortcut() => welcome.NotifyArrowShortcutFired();
-        void PinZoomChanged(Guid pinId) => welcome.NotifyPinZoomChanged(pinId);
-        // The overlay also closes after a capture that is still being saved; that result arrives by CaptureEnded.
-        void CaptureClosed(object? sender, EventArgs args)
+            if (_galleryWindow?.IsVisible == true) welcome.NotifyLibraryOpened();
+        };
+        void Result(PracticeEvent signal)
         {
-            if (_capturePersistenceTask.IsCompleted) welcome.NotifyCaptureCancelled();
+            bool pin = signal.Kind is PracticeEventKind.PinOpened or PracticeEventKind.PinResized or PracticeEventKind.OpacityMenuOpened or PracticeEventKind.OpacityMenuClosed
+                or PracticeEventKind.OpacityChanged or PracticeEventKind.PinClosing or PracticeEventKind.PinClosed or PracticeEventKind.PinRestored;
+            if (pin && signal.SessionId == Guid.Empty) signal = signal with { SessionId = welcome.Session.Id };
+            welcome.Notify(signal);
         }
-        void CaptureFailed(Exception exception) => welcome.NotifyCaptureCancelled();
-        _onboardingCaptureEnded += CaptureEnded;
-        PracticeSignals.ArrowAdded += ArrowAdded;
-        PracticeSignals.ArrowShortcutFired += ArrowShortcut;
-        if (_pins is not null) _pins.UserZoomChanged += PinZoomChanged;
-        if (_overlay is not null)
+        void LibraryEditorOpened(Guid id) => welcome.Notify(new(PracticeEventKind.LibraryEditorOpened, welcome.Session.Id, RecordId: id));
+        PracticeSignals.Result += Result;
+        PracticeSignals.EditorReady += EditorReady;
+        PracticeSignals.LibraryEditorOpened += LibraryEditorOpened;
+        // Sequence checks never read or retain private clipboard content.
+        var clipboardWatch = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(500) };
+        clipboardWatch.Tick += (_, _) =>
         {
-            _overlay.OverlayClosed += CaptureClosed;
-            _overlay.TransitionFailed += CaptureFailed;
-        }
+            if (welcome.Session.ClipboardSequence != 0)
+                welcome.Notify(new(PracticeEventKind.ClipboardChanged, welcome.Session.Id, ClipboardSequence: ClipboardWriter.GetVersion()));
+        };
+        clipboardWatch.Start();
         welcome.Closed += (_, _) =>
         {
-            _onboardingCaptureEnded -= CaptureEnded;
-            PracticeSignals.ArrowAdded -= ArrowAdded;
-            PracticeSignals.ArrowShortcutFired -= ArrowShortcut;
-            if (_pins is not null) _pins.UserZoomChanged -= PinZoomChanged;
-            if (_overlay is not null)
-            {
-                _overlay.OverlayClosed -= CaptureClosed;
-                _overlay.TransitionFailed -= CaptureFailed;
-            }
-            if (ReferenceEquals(_onboardingWindow, welcome))
-            {
-                _onboardingWindow = null;
-                _onboardingCaptureId = null;
-            }
+            clipboardWatch.Stop();
+            PracticeSignals.Result -= Result;
+            PracticeSignals.EditorReady -= EditorReady;
+            PracticeSignals.LibraryEditorOpened -= LibraryEditorOpened;
+            if (ReferenceEquals(_onboardingWindow, welcome)) _onboardingWindow = null;
         };
         return welcome;
+    }
+
+    private PracticeCaptureTarget? PracticeCaptureTarget()
+    {
+        if (_onboardingWindow is not { } welcome || !welcome.Session.CapturePending) return null;
+        return new(welcome.Session.Id, welcome.Session.CaptureRequestId);
+    }
+    private static void PublishPracticeCapture(Capture.CaptureSelectionCompletedEventArgs selection, Guid? recordId)
+    {
+        if (selection.PracticeTarget is not { } target) return;
+        PracticeSignals.Publish(new(recordId.HasValue ? PracticeEventKind.CaptureSaved : PracticeEventKind.CaptureCancelled,
+            target.SessionId, target.RequestId, RecordId: recordId ?? Guid.Empty));
+    }
+    private static void CancelPracticeCapture(PracticeCaptureTarget? target)
+    {
+        if (target is { } capture)
+            PracticeSignals.Publish(new(PracticeEventKind.CaptureCancelled, capture.SessionId, capture.RequestId));
     }
 
     /// <summary>Tray menu and Settings: the guide again, with the current choices preset and nothing applied until it is finished.</summary>

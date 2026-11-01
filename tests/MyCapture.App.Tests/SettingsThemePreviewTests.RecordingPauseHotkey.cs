@@ -50,7 +50,7 @@ public sealed partial class SettingsThemePreviewTests
             SettingsDraft draft = Assert.IsType<SettingsDraft>(window.DataContext);
 
             // Shortcuts tab: an optional recorder bound to the pause command, empty by default.
-            tabs.SelectedItem = tabs.Items.OfType<TabItem>().Single(tab => Equals(tab.Header, UiText.Get("SettingsUx_TabShortcuts")));
+            Assert.True(window.NavigateToSetting(nameof(SettingsDraft.PauseRecordingHotkey)));
             Drain(window);
             HotkeyRecorder recorder = Descendants(window).OfType<HotkeyRecorder>().Single(control =>
                 control.GetBindingExpression(HotkeyRecorder.TextProperty)?.ParentBinding.Path.Path == nameof(SettingsDraft.PauseRecordingHotkey));

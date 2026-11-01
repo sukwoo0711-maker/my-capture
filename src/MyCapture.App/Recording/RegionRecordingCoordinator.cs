@@ -98,6 +98,13 @@ internal sealed class RegionRecordingCoordinator
     /// record across failed clipboard/export retries without creating duplicates.
     /// </summary>
     internal Func<FrameImageCommitSession>? FrameImageCommitHandlerFactory { get; set; }
+    internal VideoFrameCaptureService? FrameCaptureService { get; set; }
+    internal Action<Guid>? ShowFrameInLibrary { get; set; }
+    internal Action<RecordingWatermarkSettings>? PersistWatermarkSettings { get; set; }
+    internal bool IsWatermarkLocked => _controls is { CanEditWatermark: false };
+
+    internal void RefreshWatermarkSettings(RecordingWatermarkSettings settings) =>
+        _controls?.RefreshWatermarkSettings(settings);
 
     internal IPrivacyRedactionService? PrivacyRedactionService { get; set; }
 
@@ -417,6 +424,8 @@ internal sealed class RegionRecordingCoordinator
                 () => _writeSession?.StagingOutputPath
                       ?? throw new InvalidOperationException("The pending recording path is unavailable."),
                 _loggerFactory.CreateLogger<RecordingControlWindow>());
+            controls.WatermarkImageFolder = Path.Combine(_paths.DataRoot, StampStore.FolderName);
+            controls.WatermarkSettingsChanged += OnWatermarkSettingsChanged;
             _controls = controls;
             controls.RecordingFinished += OnRecordingFinished;
             controls.Cancelled += OnControlsCancelled;
@@ -431,6 +440,7 @@ internal sealed class RegionRecordingCoordinator
             if (controls is not null)
             {
                 controls.RecordingFinished -= OnRecordingFinished;
+                controls.WatermarkSettingsChanged -= OnWatermarkSettingsChanged;
                 controls.Cancelled -= OnControlsCancelled;
                 controls.Failed -= OnControlsFailed;
                 controls.Stopping -= OnControlsStopping;
@@ -455,6 +465,9 @@ internal sealed class RegionRecordingCoordinator
         _finishing = true;
         _openLatency = new RecordingOpenLatency(Stopwatch.GetTimestamp());
     }
+
+    private void OnWatermarkSettingsChanged(RecordingWatermarkSettings settings) =>
+        PersistWatermarkSettings?.Invoke(settings);
 
     private void OnControlsCancelled(object? sender, EventArgs e)
     {
@@ -486,6 +499,7 @@ internal sealed class RegionRecordingCoordinator
         if (controls is not null)
         {
             controls.RecordingFinished -= OnRecordingFinished;
+            controls.WatermarkSettingsChanged -= OnWatermarkSettingsChanged;
             controls.Cancelled -= OnControlsCancelled;
             controls.Failed -= OnControlsFailed;
             controls.Stopping -= OnControlsStopping;
@@ -603,6 +617,10 @@ internal sealed class RegionRecordingCoordinator
             _videoEditSession = editSession;
             var editor = new VideoEditorWindow(item.Recording, _paths, _loggerFactory, item.EditDocument)
             {
+                FrameCaptureService = FrameCaptureService,
+                FrameSourceVideoId = item.Record.Id,
+                FrameSourceRevision = item.Record.ContentRevision,
+                ShowFrameInLibrary = ShowFrameInLibrary,
                 RenderStagingPathFactory = () => _videoLibrary.CreateRenderStagingPath(item.Record),
                 VideoCommitHandler = (document, stage, cancellationToken) =>
                     _videoLibrary.CommitEditAsync(

@@ -25,13 +25,15 @@ internal sealed record FeatureTutorial(string Id, string CategoryKey, string Tit
             Hotkey key = GlobalKey(hotkeys);
             return key.IsAssigned ? UiText.Format("Tutorial.CurrentKey", key) : UiText.Get(UnassignedKey!);
         }
-        return UiText.Format("Tutorial.CurrentKey", FixedKeys!());
+        return FixedKeys is { } keys ? UiText.Format("Tutorial.CurrentKey", keys()) : UiText.Get(UnassignedKey!);
     }
 }
 
 /// <summary>One user workflow per animation; global shortcuts resolve from the current saved settings.</summary>
 internal static class TutorialCatalog
 {
+    // Clips that may ship without their MP4 and poster yet; every practice clip now ships both.
+    internal static readonly IReadOnlySet<string> PendingPracticeClips = new HashSet<string>(StringComparer.Ordinal);
     internal static IReadOnlyList<FeatureTutorial> All { get; } = Array.AsReadOnly<FeatureTutorial>(
     [
         new("capture-region", "Help.Capture", "Text_096A13A757DB", ["Text_096A13A757DB"], keys => keys.Capture, null, "Tutorial.capture-region.Unassigned"),
@@ -52,7 +54,7 @@ internal static class TutorialCatalog
         new("image-highlighter", "Help.Annotation", "Tools.Highlighter", ["Tools.Highlighter"], null, () => ShortcutCatalog.Get(ShortcutScope.Annotation, "Highlighter").Hint, null),
         new("image-text", "Help.Annotation", "Text_258AD4B095A1", ["Text_258AD4B095A1"], null, () => ShortcutCatalog.Get(ShortcutScope.Annotation, "Text").Hint, null),
         new("image-step-number", "Help.Annotation", "Tools.StepNumber", ["Tools.StepNumber"], null, () => ShortcutCatalog.Get(ShortcutScope.Annotation, "StepNumber").Hint, null),
-        new("image-mosaic", "Help.Annotation", "Text_3F8046019B32", ["Text_3F8046019B32"], null, () => ShortcutCatalog.Get(ShortcutScope.Annotation, "Mosaic").Hint, null),
+        new("image-mosaic", "Help.Annotation", "EditorObscure_Pixelate", ["EditorObscure_Pixelate"], null, () => ShortcutCatalog.Get(ShortcutScope.Annotation, "Mosaic").Hint, null),
         new("image-blur", "Help.Annotation", "EditorBlur_Name", ["EditorBlur_Name"], null, () => ShortcutCatalog.Get(ShortcutScope.Annotation, "Blur").Hint, null),
         new("image-crop", "Help.Annotation", "Tools_Crop", ["Tools_Crop"], null, () => ShortcutCatalog.Get(ShortcutScope.Annotation, "Crop").Hint, null),
         new("image-rotate", "Help.Annotation", "Tutorial.image-rotate.Title", ["EditorUx_RotateLeftHint", "EditorUx_RotateRightHint"], null, () => ShortcutCatalog.Get(ShortcutScope.Annotation, "RotateLeft").Hint + " / " + ShortcutCatalog.Get(ShortcutScope.Annotation, "RotateRight").Hint, null),
@@ -66,6 +68,13 @@ internal static class TutorialCatalog
         new("video-frame-step", "Help.Video", "Help.Frame", ["Help.Frame"], null, () => ShortcutHelpWindow.FrameStepKeys, null),
         new("video-trim", "Help.Video", "Tutorial.video-trim.Title", ["Video.TrimIn", "Video.TrimOut"], null, () => ShortcutCatalog.Get(ShortcutScope.Video, "In").Hint + " / " + ShortcutCatalog.Get(ShortcutScope.Video, "Out").Hint, null),
         new("video-gif-export", "Help.Video", "Help.Gif", ["Help.Gif"], null, () => ShortcutCatalog.Get(ShortcutScope.Video, "Gif").Hint, null),
+        new("pin-resize", "Text_33EFD44366A7", "Tutorial.pin-resize.Title", [], null, null, "Journey.ResizeHelp"),
+        new("pin-opacity", "Text_33EFD44366A7", "Tutorial.pin-opacity.Title", [], null, null, "Journey.B3.Body"),
+        new("practice-image-copy", "Help.Welcome", "Tutorial.practice-image-copy.Title", [], null, null, "Journey.B0.Body"),
+        new("practice-image-pin", "Text_33EFD44366A7", "Tutorial.practice-image-pin.Title", [], keys => keys.PasteToScreen, null, "Journey.B1.NoKey"),
+        new("practice-editor-open", "Help.Annotation", "Tutorial.practice-editor-open.Title", [], null, null, "Journey.A3.Body"),
+        new("practice-pin-close", "Text_33EFD44366A7", "Tutorial.practice-pin-close.Title", [], null, null, "Journey.B5.Body"),
+        new("practice-library-find", "Workspace.Library", "Tutorial.practice-library-find.Title", [], null, null, "Journey.C2.Body"),
         new("pin-clipboard", "Text_33EFD44366A7", "Text_1FBCF51E2FF5", ["Text_1FBCF51E2FF5", "Dialog.Close"], keys => keys.PasteToScreen, null, "Tutorial.pin-clipboard.Unassigned"),
         new("pin-hide-all", "Text_33EFD44366A7", "Text_4FED89116C1F", ["Text_4FED89116C1F"], keys => keys.HideAllPins, null, "Tutorial.pin-hide-all.Unassigned"),
         new("pin-click-through", "Text_33EFD44366A7", "Onboard_PinAllowClickThrough", ["Onboard_PinAllowClickThrough"], keys => keys.ToggleClickThrough, null, "Tutorial.pin-click-through.Unassigned"),

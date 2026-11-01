@@ -105,8 +105,8 @@ public sealed class GalleryProvenanceTests
         var button = new Button();
         CaptureProvenance web = CaptureProvenance.Create(url: "https://www.github.com/owner/repo?private=value#part");
         GallerySourceBadge.SetProvenance(button, web);
-        Assert.Equal(web.Tooltip, PreviewText(button));
-        Assert.Equal("https://www.github.com/owner/repo", PreviewText(button));
+        Assert.Equal(UiText.Format("Source.BadgeOpen", web.BadgeText), PreviewText(button));
+        Assert.Equal(UiText.Format("Source.BadgeOpen", "github.com"), PreviewText(button));
         Assert.Equal(PreviewText(button), AutomationProperties.GetHelpText(button));
         Assert.Contains("github.com", AutomationProperties.GetName(button));
         Assert.DoesNotContain("private", AutomationProperties.GetName(button));
@@ -119,8 +119,8 @@ public sealed class GalleryProvenanceTests
         GallerySourceBadge.SetProvenance(button, document);
         Assert.Same(document, GallerySourceBadge.GetProvenance(button));
         Assert.Equal(SourceChip.GlyphFor(document.Kind), Assert.IsType<TextBlock>(button.Content).Text);
-        Assert.Equal(document.Tooltip, PreviewText(button));
-        Assert.Equal(document.Tooltip, AutomationProperties.GetHelpText(button));
+        Assert.Equal(UiText.Format("Source.BadgeOpen", document.BadgeText), PreviewText(button));
+        Assert.Equal(PreviewText(button), AutomationProperties.GetHelpText(button));
         Assert.Equal(new[] { UiText.Get("Source.Open"), UiText.Get("Source.CopyPath"), UiText.Get("Source.OpenLocation"), UiText.Get("Source.ShowSame") },
             GallerySourceBadge.EnsureMenu(button)!.Items.OfType<MenuItem>().Select(item => (string)item.Header));
 
@@ -151,7 +151,7 @@ public sealed class GalleryProvenanceTests
         string? searched = null;
         GallerySourceBadge.Configure(button, source, null, query => searched = query, actions);
 
-        Assert.Equal("https://github.com/owner/repo", PreviewText(button));
+        Assert.Equal(UiText.Format("Source.BadgeOpen", "github.com"), PreviewText(button));
         Assert.Equal(PreviewText(button), AutomationProperties.GetHelpText(button));
         Assert.DoesNotContain("secret", AutomationProperties.GetName(button));
         button.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));

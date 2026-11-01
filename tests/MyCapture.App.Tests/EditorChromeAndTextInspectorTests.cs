@@ -245,7 +245,11 @@ public sealed class EditorChromeAndTextInspectorTests : KoreanCaptionTest
             using var host = EditorHost.Create(width, height);
             Border rail = Tree<Border>(host.Editor).Single(border => border.Name == "AnnotationToolRail");
             Dictionary<EditorTool, ToggleButton> tools = Field<Dictionary<EditorTool, ToggleButton>>(host.Editor, "_toolButtons");
-            Assert.Equal(Enum.GetValues<EditorTool>().Length - 1, tools.Count);
+            // Crop is in the command bar; Mosaic and Blur share the Obscure rail button.
+            Assert.Equal(Enum.GetValues<EditorTool>().Length - 2, tools.Count);
+            Assert.DoesNotContain(EditorTool.Crop, tools.Keys);
+            Assert.DoesNotContain(EditorTool.Blur, tools.Keys);
+            Assert.Same(tools[EditorTool.Mosaic], host.Editor.ToolButton(EditorTool.Blur));
             foreach (ToggleButton tool in tools.Values)
             {
                 ShortcutMotionTestScope.AssertState(Assert.Single(Tree<TextBlock>(tool), text =>
@@ -265,11 +269,20 @@ public sealed class EditorChromeAndTextInspectorTests : KoreanCaptionTest
             }
             ShortcutPresentation.SetAltRevealed(host.Window, true);
             host.Window.Dispatcher.Invoke(System.Windows.Threading.DispatcherPriority.ApplicationIdle, new Action(host.Window.UpdateLayout));
+            string? phase = Environment.GetEnvironmentVariable("MYCAPTURE_RAIL_EVIDENCE_PHASE");
+            if (phase is "before" or "after")
+                SaveEvidence(rail, $"rail-shortcuts-{phase}-{width}x{height}.png");
             foreach (ToggleButton tool in tools.Values)
             {
                 string key = AutomationProperties.GetAcceleratorKey(tool);
                 Assert.False(string.IsNullOrWhiteSpace(key));
-                Assert.Contains(key, Assert.IsType<string>(tool.ToolTip), StringComparison.Ordinal);
+                string tooltip = Assert.IsType<string>(tool.ToolTip);
+                if (ReferenceEquals(tool, tools[EditorTool.Mosaic]))
+                {
+                    Assert.Equal("M / B", key);
+                    Assert.Contains("모자이크 M · 흐림 B", tooltip, StringComparison.Ordinal);
+                }
+                else Assert.Contains(key, tooltip, StringComparison.Ordinal);
                 Assert.True(tool.Focusable);
                 Assert.True(tool.ActualWidth >= 36 && tool.ActualHeight >= 36);
                 AssertInside(tool, rail);
@@ -314,6 +327,7 @@ public sealed class EditorChromeAndTextInspectorTests : KoreanCaptionTest
             ShortcutPresentation.ReadEnabled = () => enabled;
             using var host = EditorHost.Create();
             var hints = new List<TextBlock>();
+            bool sawPinHint = false;
             foreach (string name in new[] { "AnnotationToolRail", "AnnotationCommandBar" })
             {
                 Border container = Tree<Border>(host.Editor).Single(border => border.Name == name);
@@ -324,14 +338,25 @@ public sealed class EditorChromeAndTextInspectorTests : KoreanCaptionTest
                     if (string.IsNullOrEmpty(key)) continue;
                     ShortcutDefinition? definition = ShortcutCatalog.All.FirstOrDefault(entry =>
                         entry.Scope == ShortcutScope.Annotation && entry.Hint == key);
-                    // Only the pin command shows a key outside the editor's catalog: the user's
-                    // global clipboard-pin shortcut, captioned like every other command.
-                    if (definition is null) Assert.Equal("EditorFlowPin", AutomationProperties.GetAutomationId(button));
+                    if (ReferenceEquals(button, host.Editor.ToolButton(EditorTool.Mosaic)))
+                    {
+                        Assert.Equal("M / B", key);
+                        Assert.All(new[] { "Mosaic", "Blur" }, command =>
+                            Assert.True(ShortcutPresentation.ShowsCaption(ShortcutCatalog.Get(ShortcutScope.Annotation, command))));
+                    }
+                    // The pin command uses the user's global shortcut. The merged Obscure
+                    // button above combines two editor definitions instead of being a pin.
+                    else if (definition is null)
+                    {
+                        Assert.Equal("EditorFlowPin", AutomationProperties.GetAutomationId(button));
+                        sawPinHint = true;
+                    }
                     else if (!ShortcutPresentation.ShowsCaption(definition)) continue;
                     hints.Add(Assert.Single(Tree<TextBlock>(button), text => text.Text == key));
                 }
                 Assert.True(hints.Count > previousCount, $"{name} has no captioned commands.");
             }
+            Assert.True(sawPinHint, "The pin command must retain its global shortcut caption.");
             Assert.True(hints.Count > Enum.GetValues<EditorTool>().Length);
             foreach (bool preference in new[] { true, false, true })
             {

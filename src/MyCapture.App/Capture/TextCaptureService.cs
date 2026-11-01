@@ -80,6 +80,7 @@ internal sealed class TextCaptureService
             cancellationToken.ThrowIfCancellationRequested();
             OcrRequest request = OcrRequestFactory.FromBitmap(Freeze(image), _settings());
             result = await _ocr.RecognizeAsync(request, cancellationToken).ConfigureAwait(false);
+            result = result.WithQuality(OcrQualityProfile.FromUpscale(request.UpscaleFactor));
         }
         catch (OperationCanceledException)
         {

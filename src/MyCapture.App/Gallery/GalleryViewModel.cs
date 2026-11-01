@@ -120,6 +120,7 @@ public sealed partial class GalleryViewModel : INotifyPropertyChanged
 
     public bool CanReduceSelected => SingleSelectedTile?.IsImage == true;
     public bool CanGifSelected => SingleSelectedTile?.IsVideo == true;
+    public bool CanCreatePdfSelected => SelectedTiles.Any(tile => tile.IsImage);
     public bool CanCompareSelected => Selection.Count == 2 && SelectedTiles is { Count: 2 } tiles
         && tiles.All(tile => tile.IsImage);
 
@@ -150,6 +151,7 @@ public sealed partial class GalleryViewModel : INotifyPropertyChanged
         foreach (GalleryItemViewModel tile in _tileCache.Values) tile.IsSelected = Selection.Contains(tile.Id);
         Raise(nameof(SelectedTiles)); Raise(nameof(HasSelection)); Raise(nameof(SelectionText));
         Raise(nameof(SingleSelectedTile)); Raise(nameof(HasSingleSelection)); Raise(nameof(CanReduceSelected)); Raise(nameof(CanGifSelected));
+        Raise(nameof(CanCreatePdfSelected));
         bool canCompare = CanCompareSelected;
         if (_publishedCanCompareSelected != canCompare)
         {

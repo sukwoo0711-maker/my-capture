@@ -77,7 +77,7 @@ internal sealed class PinHoverBar : Window
         SaveButton = BarButton(SymbolGeometry("Icon.Save"), UiText.Get("QuickAccess.Save"), "Ctrl+S");
         SourceButton = BarButton(SourceGlyph, UiText.Get("Source.Open"), key: null, showLabel: false);
         SetProvenance(provenance ?? CaptureProvenance.None);
-        OpacityButton = BarButton(OpacityGlyph, UiText.Get("Onboard_PinOpacity"), key: null);
+        OpacityButton = BarButton(OpacityGlyph, UiText.Get("Onboard_PinOpacity"), key: "O");
         CloseButton = BarButton(SymbolGeometry("Icon.Close"), UiText.Get("Dialog.Close"), "Esc", showLabel: false);
         CopyButton.Click += (_, _) => CopyRequested?.Invoke();
         SaveButton.Click += (_, _) => SaveRequested?.Invoke();
@@ -146,6 +146,8 @@ internal sealed class PinHoverBar : Window
     internal event Action? SourceRequested;
 
     internal event Action<double>? OpacityRequested;
+    internal event Action? OpacityMenuOpened;
+    internal event Action? OpacityMenuClosed;
 
     internal event Action? CloseRequested;
 
@@ -214,14 +216,14 @@ internal sealed class PinHoverBar : Window
         foreach (double choice in OpacityChoices)
         {
             string header = $"{choice * 100:0}%";
-            var item = new MenuItem { Header = header, MinHeight = 34, IsCheckable = true, IsChecked = Math.Abs(choice - ReadOpacity()) < 0.05 };
+            var item = new MenuItem { Header = header, MinHeight = 34, IsCheckable = true, StaysOpenOnClick = true, IsChecked = Math.Abs(choice - ReadOpacity()) < 0.05 };
             if (item.IsChecked) item.Icon = Glyph(SymbolGeometry("Icon.Check"), 16);
             AutomationProperties.SetName(item, header);
             double opacity = choice;
             item.Click += (_, _) =>
             {
-                menu.IsOpen = false;
                 OpacityRequested?.Invoke(opacity);
+                menu.IsOpen = false;
             };
             menu.Items.Add(item);
         }
@@ -292,12 +294,30 @@ internal sealed class PinHoverBar : Window
         }, HandoffBehavior.SnapshotAndReplace);
     }
 
-    private void OpenOpacityMenu()
+    internal void OpenOpacityMenu(bool keyboard = false)
     {
         if (_opacityMenu is { IsOpen: true }) return;
         ContextMenu menu = CreateOpacityMenu();
-        menu.Closed += (_, _) => { if (ReferenceEquals(_opacityMenu, menu)) _opacityMenu = null; };
+        if (keyboard && Owner is { } owner)
+        {
+            // Keep keyboard ownership with the pin; the floating bar never activates.
+            Point origin = owner.PointFromScreen(OpacityButton.PointToScreen(new Point(0, OpacityButton.ActualHeight)));
+            menu.PlacementTarget = owner;
+            menu.Placement = PlacementMode.RelativePoint;
+            menu.HorizontalOffset = origin.X;
+            menu.VerticalOffset = origin.Y + 2;
+        }
+        menu.Closed += (_, _) => { if (ReferenceEquals(_opacityMenu, menu)) _opacityMenu = null; OpacityMenuClosed?.Invoke(); };
         _opacityMenu = menu;
+        menu.Opened += (_, _) =>
+        {
+            OpacityMenuOpened?.Invoke();
+            if (keyboard) Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Input, new Action(() =>
+            {
+                if (!menu.IsOpen) return;
+                ((MenuItem)menu.Items[0]).Focus();
+            }));
+        };
         menu.IsOpen = true;
     }
 

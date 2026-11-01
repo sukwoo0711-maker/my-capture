@@ -33,11 +33,13 @@ public sealed class UndoStack
     /// </summary>
     public static readonly TimeSpan DefaultMergeWindow = TimeSpan.FromMilliseconds(600);
 
-    private readonly List<IUndoableCommand> _undo = [];
-    private readonly List<IUndoableCommand> _redo = [];
+    private readonly List<HistoryEntry> _undo = [];
+    private readonly List<HistoryEntry> _redo = [];
     private readonly int _depthLimit;
     private readonly TimeSpan _mergeWindow;
     private readonly Stopwatch _clock = Stopwatch.StartNew();
+    private long _nextStateId;
+    private long _savedStateId;
 
     /// <summary>
     /// When the top command was pushed, or <see langword="null"/> when the top
@@ -73,14 +75,40 @@ public sealed class UndoStack
 
     public int RedoCount => _redo.Count;
 
+    /// <summary>
+    /// Identity of the current document state, independent of the retained history depth.
+    /// Undo and redo restore the identity of the state they return to.
+    /// </summary>
+    public long CurrentStateId { get; private set; }
+
+    /// <summary>Whether recorded edits differ from the last saved or initial state.</summary>
+    public bool HasUnsavedChanges => CurrentStateId != _savedStateId || _batch is { Count: > 0 };
+
+    /// <summary>
+    /// Records a successful save and prevents subsequent edits from merging across it.
+    /// Clearing history alone never changes this save point.
+    /// </summary>
+    public void MarkSaved()
+    {
+        if (_batchDepth != 0)
+        {
+            throw new InvalidOperationException("Finish the edit batch before marking it saved.");
+        }
+
+        _savedStateId = CurrentStateId;
+        _lastPushAt = null;
+        RaiseChanged();
+    }
+
     /// <summary>Assets reachable through undo, redo, or an unfinished composite operation.</summary>
     public IEnumerable<string> ReferencedImageAssets => _undo.Concat(_redo)
+        .Select(entry => entry.Command)
         .Concat(_batch ?? [])
         .SelectMany(command => command.ReferencedImageAssets);
 
-    public string? NextUndoDescription => _undo.Count > 0 ? _undo[^1].Description : null;
+    public string? NextUndoDescription => _undo.Count > 0 ? _undo[^1].Command.Description : null;
 
-    public string? NextRedoDescription => _redo.Count > 0 ? _redo[^1].Description : null;
+    public string? NextRedoDescription => _redo.Count > 0 ? _redo[^1].Command.Description : null;
 
     /// <summary>
     /// Raised after any change to the history, so commands and menu items can
@@ -123,14 +151,18 @@ public sealed class UndoStack
         TimeSpan now = _clock.Elapsed;
         bool withinWindow = _lastPushAt.HasValue && (now - _lastPushAt.Value) <= _mergeWindow;
 
-        if (withinWindow && _undo.Count > 0 && _undo[^1].TryMergeWith(command))
+        if (withinWindow && _undo.Count > 0 && _undo[^1].Command.TryMergeWith(command))
         {
+            CurrentStateId = ++_nextStateId;
+            _undo[^1] = _undo[^1] with { AfterStateId = CurrentStateId };
             _lastPushAt = now;
             RaiseChanged();
             return;
         }
 
-        _undo.Add(command);
+        long beforeStateId = CurrentStateId;
+        CurrentStateId = ++_nextStateId;
+        _undo.Add(new HistoryEntry(command, beforeStateId, CurrentStateId));
         _lastPushAt = now;
 
         if (_undo.Count > _depthLimit)
@@ -148,11 +180,12 @@ public sealed class UndoStack
             return false;
         }
 
-        IUndoableCommand command = _undo[^1];
+        HistoryEntry entry = _undo[^1];
         _undo.RemoveAt(_undo.Count - 1);
 
-        command.Undo();
-        _redo.Add(command);
+        entry.Command.Undo();
+        _redo.Add(entry);
+        CurrentStateId = entry.BeforeStateId;
 
         // Prevent the next edit from merging into a command that is no longer on top.
         _lastPushAt = null;
@@ -168,11 +201,12 @@ public sealed class UndoStack
             return false;
         }
 
-        IUndoableCommand command = _redo[^1];
+        HistoryEntry entry = _redo[^1];
         _redo.RemoveAt(_redo.Count - 1);
 
-        command.Execute();
-        _undo.Add(command);
+        entry.Command.Execute();
+        _undo.Add(entry);
+        CurrentStateId = entry.AfterStateId;
         _lastPushAt = null;
 
         RaiseChanged();
@@ -253,6 +287,8 @@ public sealed class UndoStack
     }
 
     private void RaiseChanged() => Changed?.Invoke(this, EventArgs.Empty);
+
+    private readonly record struct HistoryEntry(IUndoableCommand Command, long BeforeStateId, long AfterStateId);
 
     private sealed class BatchScope(UndoStack owner) : IDisposable
     {

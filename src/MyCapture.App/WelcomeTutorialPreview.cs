@@ -16,16 +16,20 @@ internal sealed class WelcomeTutorialPreview : Grid, IDisposable
     private readonly ITutorialMedia _media;
     private readonly Border _poster = new();
     private readonly bool? _reducedMotion;
+    private readonly double _textScale;
     private string? _feature;
-    private bool _open, _disposed, _watching;
+    private bool _open, _disposed, _watching, _manual, _paused, _suspended;
+    private readonly System.Windows.Threading.DispatcherTimer _repeat = new() { Interval = TimeSpan.FromSeconds(1) };
 
     internal WelcomeTutorialPreview(WelcomeOptions options)
     {
         _reducedMotion = options.ReducedMotion;
+        _textScale = double.IsFinite(options.TextScale) ? Math.Clamp(options.TextScale, 1, 3) : 1;
         _media = (options.MediaFactory ?? (() => new MediaElementTutorialMedia()))();
         Children.Add(_poster);
         Children.Add(_media.View);
         IsHitTestVisible = false;
+        _repeat.Tick += (_, _) => { _repeat.Stop(); if (!_paused && !_suspended) Replay(); };
         _media.Opened += OnOpened;
         _media.Failed += OnFailed;
         _media.Ended += OnEnded;
@@ -46,7 +50,9 @@ internal sealed class WelcomeTutorialPreview : Grid, IDisposable
 
     internal string? AssetPath => _feature is null ? null : Path.Combine(AssetDirectory,
         $"{_feature}.{(UiText.Culture.TwoLetterISOLanguageName == "ko" ? "ko" : "en")}.mp4");
-    internal bool HasPoster => _poster.Background is not null;
+    internal bool HasPoster => _poster.Background is not null || _poster.Child is not null;
+    internal bool IsPaused => _paused;
+    internal bool IsFallback => !_open;
     internal bool HasVideo => _open;
     private bool ReducedMotion => _reducedMotion ?? !FluidMotion.AnimationsEnabled;
 
@@ -54,6 +60,8 @@ internal sealed class WelcomeTutorialPreview : Grid, IDisposable
     {
         CloseVideo();
         _feature = feature;
+        _manual = false; _paused = false;
+        _poster.Child = null;
         _poster.Background = null;
         if (feature is null) return;
         string path = Path.ChangeExtension(AssetPath!, ".jpg");
@@ -72,13 +80,26 @@ internal sealed class WelcomeTutorialPreview : Grid, IDisposable
             }
             catch (Exception error) { Trace.TraceWarning("Welcome tutorial still: {0}", error); }
         }
+        if (_poster.Background is null)
+        {
+            var scenes = new StackPanel { Margin = new Thickness(10) };
+            scenes.Children.Add(new Image { Source = PracticePicture.Load(), Height = 66, Stretch = Stretch.Uniform });
+            int index = 0;
+            foreach (string scene in TutorialCatalog.Get(feature).Steps)
+            {
+                var line = new TextBlock { Text = $"{++index}. {scene}", TextWrapping = TextWrapping.Wrap, FontSize = 12 * _textScale, Margin = new Thickness(0, 3, 0, 0) };
+                line.SetResourceReference(TextBlock.ForegroundProperty, "Text.Primary");
+                scenes.Children.Add(line);
+            }
+            _poster.Child = scenes;
+        }
         AutomationProperties.SetName(this, UiText.Format("Tutorial.VideoName", TutorialCatalog.Get(feature).DisplayName));
         OpenVideo();
     }
 
     private void OpenVideo()
     {
-        if (_disposed || _open || !IsLoaded || !IsVisible || ReducedMotion || AssetPath is not { } path || !File.Exists(path)) return;
+        if (_disposed || _open || !IsLoaded || !IsVisible || _suspended || _paused || (ReducedMotion && !_manual) || AssetPath is not { } path || !File.Exists(path)) return;
         try
         {
             _open = true;
@@ -91,7 +112,7 @@ internal sealed class WelcomeTutorialPreview : Grid, IDisposable
     private void OnOpened()
     {
         if (!_open || _disposed) return;
-        if (ReducedMotion) { CloseVideo(); return; }
+        if (_suspended || _paused || (ReducedMotion && !_manual)) { CloseVideo(); return; }
         try { _media.Play(); }
         catch (Exception error) { OnFailed(error); }
     }
@@ -102,16 +123,17 @@ internal sealed class WelcomeTutorialPreview : Grid, IDisposable
         CloseVideo();
     }
 
-    // Play once: the still remains useful without an endlessly moving distraction.
+    // A one-second resting frame separates repeats. Reduced motion only plays on request.
     private void OnEnded()
     {
         if (!_open) return;
-        try { _media.Pause(); }
+        try { _media.Pause(); if (!_paused && !_suspended && !ReducedMotion) _repeat.Start(); }
         catch (Exception error) { OnFailed(error); }
     }
 
     private void CloseVideo()
     {
+        _repeat.Stop();
         bool wasOpen = _open;
         _open = false;
         _media.View.Visibility = Visibility.Hidden;
@@ -122,8 +144,29 @@ internal sealed class WelcomeTutorialPreview : Grid, IDisposable
 
     internal void Pause()
     {
+        _paused = true; _repeat.Stop();
         if (!_open) return;
         try { _media.Pause(); }
+        catch (Exception error) { OnFailed(error); }
+    }
+
+    internal void Replay()
+    {
+        _manual = true; _paused = false; _repeat.Stop();
+        if (!_open) OpenVideo();
+        else if (!_suspended)
+            try { _media.Rewind(); _media.Play(); }
+            catch (Exception error) { OnFailed(error); }
+    }
+
+    internal void Suspend(bool suspended)
+    {
+        _suspended = suspended;
+        try
+        {
+            if (suspended) { _repeat.Stop(); if (_open) _media.Pause(); }
+            else if (!_paused) { if (_open && (!ReducedMotion || _manual)) _media.Play(); else OpenVideo(); }
+        }
         catch (Exception error) { OnFailed(error); }
     }
 

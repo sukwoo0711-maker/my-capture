@@ -472,7 +472,7 @@ public sealed class CaptureLibraryFirstTests
             PumpUntil(() => coordinator.LastTransitionForTest.IsCompleted);
             Assert.True(durableBeforeOpen);
             var editor = Assert.IsType<AnnotationEditorWindow>(Window.GetWindow(coordinator.CurrentEditor!));
-            // Esc steps back inside the editor and never closes it.
+            // The first Esc dismisses the starting tool; only Esc at the top layer closes the editor.
             Assert.True(editor.Editor.HandleShortcut(Key.Escape, ModifierKeys.None));
             Assert.True(editor.IsVisible);
             Assert.True(coordinator.IsActive);

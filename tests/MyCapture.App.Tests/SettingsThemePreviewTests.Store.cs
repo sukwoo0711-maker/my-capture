@@ -437,17 +437,18 @@ public sealed partial class SettingsThemePreviewTests
     {
         // Within the window, and within the tab page's scroll viewport once scrolled to.
         var scroll = Assert.IsType<ScrollViewer>(window.FindName("UpdateScroll"));
-        Rect text = description.TransformToAncestor(scroll).TransformBounds(new Rect(description.RenderSize));
-        Assert.True(text.Left >= -0.5 && text.Right <= scroll.ViewportWidth + 0.5, $"Description {text} wider than {scroll.ViewportWidth}");
+        ScrollContentPresenter viewport = Viewport(scroll);
+        Rect text = description.TransformToAncestor(viewport).TransformBounds(new Rect(description.RenderSize));
+        Assert.True(text.Left >= -0.5 && text.Right <= viewport.ActualWidth + 0.5, $"Description {text} wider than {viewport.ActualWidth}");
         foreach (Button button in new[] { action, rating }.Where(button => button.IsVisible))
         {
             button.BringIntoView();
             Drain(window);
             AssertFits(window, button);
-            Rect bounds = button.TransformToAncestor(scroll).TransformBounds(new Rect(button.RenderSize));
-            Assert.True(bounds.Left >= -0.5 && bounds.Top >= -0.5 && bounds.Right <= scroll.ViewportWidth + 0.5
-                && bounds.Bottom <= scroll.ViewportHeight + 0.5,
-                $"{button.Content}: {bounds} outside viewport {scroll.ViewportWidth}x{scroll.ViewportHeight}");
+            Rect bounds = button.TransformToAncestor(viewport).TransformBounds(new Rect(button.RenderSize));
+            Assert.True(bounds.Left >= -0.5 && bounds.Top >= -0.5 && bounds.Right <= viewport.ActualWidth + 0.5
+                && bounds.Bottom <= viewport.ActualHeight + 0.5,
+                $"{button.Content}: {bounds} outside viewport {viewport.ActualWidth}x{viewport.ActualHeight}");
             foreach (ContentPresenter presenter in Descendants(button).OfType<ContentPresenter>())
             {
                 Rect content = presenter.TransformToAncestor(button).TransformBounds(new Rect(presenter.RenderSize));

@@ -1,9 +1,10 @@
 using System.Windows;
-using System.Windows.Documents;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using MyCapture.Core.Capture;
 using MyCapture.Core.Primitives;
 using MyCapture.Platform.Capture;
+using MyCapture.Platform.Display;
 
 namespace MyCapture.App.Editing;
 
@@ -13,9 +14,8 @@ namespace MyCapture.App.Editing;
 /// and inspector's templates, icons and fonts, and the first layout and drawing of its surface.
 /// </summary>
 /// <remarks>
-/// Only the control is built, measured and drawn into an off-screen bitmap, then dropped: no window,
-/// draft session, preference write or clipboard access. Preferences are read as an editor reads
-/// them and the control never becomes ready to save them.
+/// An unshown host supplies the real window's resource and sizing inputs, without an HWND,
+/// draft session, preference write or clipboard access. It is closed after off-screen drawing.
 /// </remarks>
 internal static class AnnotationEditorPrewarm
 {
@@ -30,23 +30,29 @@ internal static class AnnotationEditorPrewarm
             new byte[ImageWidth * ImageHeight * 4], ImageWidth * 4);
         bitmap.Freeze();
         var region = new RectD(0, 0, ImageWidth, ImageHeight);
-        var editor = new AnnotationEditorControl(new FrozenFrame(bitmap, region, null, 0), region, bitmap);
-        // Match the host window's inherited typography, so its first real layout can reuse
-        // the measured inspector groups even when the capture opens at another width.
-        TextElement.SetFontFamily(editor, Application.Current?.TryFindResource("Font.Ui") as FontFamily
-            ?? new FontFamily("Segoe UI"));
-        // Window.Standard supplies these inherited values to a real editor. A detached
-        // Grid otherwise measures with 12-DIP text and default shaping instead.
-        if (Application.Current?.TryFindResource(MyCapture.App.Themes.StandardWindowTheme.ResourceKey) is Style)
+        Application? application = Application.Current;
+        Window? mainWindow = application?.MainWindow;
+        IReadOnlyList<MonitorInfo> monitors = MonitorEnumerator.GetAll();
+        AnnotationEditorWindow? host = null;
+        try
         {
-            editor.SetResourceReference(TextElement.FontSizeProperty, "FontSize.Body");
-            MyCapture.App.Themes.ThemeFonts.ApplyText(editor);
+            host = AnnotationEditorWindow.CreatePrewarmHost(new FrozenFrame(bitmap, region, null, 0),
+                region, bitmap, monitors, CaptureProvenance.None);
+            host.Editor.Measure(Viewport);
+            host.Editor.Arrange(new Rect(Viewport));
+            var target = new RenderTargetBitmap((int)Viewport.Width, (int)Viewport.Height, 96, 96, PixelFormats.Pbgra32);
+            target.Render(host.Editor);
+            // A source chip has a separate exact chrome key. Reuse the same tree to measure
+            // it: a second full editor otherwise survives the resident app's first GC while
+            // WPF's finalizable layout resources are being released.
+            host.PrewarmCaptureSource(monitors, CaptureProvenance.Create(appName: "MyCapture"));
         }
-        editor.UseLayoutRounding = true;
-        editor.SnapsToDevicePixels = true;
-        editor.Measure(Viewport);
-        editor.Arrange(new Rect(Viewport));
-        var target = new RenderTargetBitmap((int)Viewport.Width, (int)Viewport.Height, 96, 96, PixelFormats.Pbgra32);
-        target.Render(editor);
+        finally
+        {
+            // WPF assigns its first constructed Window as MainWindow, even without Show.
+            if (application is not null && (host is null || ReferenceEquals(application.MainWindow, host)))
+                application.MainWindow = mainWindow;
+            host?.Close();
+        }
     }
 }

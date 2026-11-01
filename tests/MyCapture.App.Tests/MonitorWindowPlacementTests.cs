@@ -94,11 +94,14 @@ public sealed class MonitorWindowPlacementTests
         {
             editor.PlaceOnMonitor(Portrait);
             Assert.Equal(WindowStartupLocation.Manual, editor.WindowStartupLocation);
-            // Desired 980 x 1056 DIPs: width capped at 768 - 64, height kept.
+            // The width is capped at 768 - 64. Height includes the real wrapped controls,
+            // native caption and the 16-DIP margin, while retaining work-area headroom.
             Assert.Equal(704, editor.Width, 3);
-            Assert.Equal(1056, editor.Height, 3);
+            Assert.True(editor.Editor.DisplaySurfaceSize.Height >= 900 + 32);
+            Assert.InRange(editor.Height, 900 + 32, Portrait.WorkArea.Height - 64);
             Assert.Equal(3472, editor.Left, 3);
-            Assert.Equal(131, editor.Top, 3);
+            Assert.Equal(Math.Floor((Portrait.WorkArea.Height - editor.Height) / 2), editor.Top, 3);
+            AssertInside(Portrait.WorkArea, new RectD(editor.Left, editor.Top, editor.Width, editor.Height));
             Assert.True(editor.MinWidth <= editor.Width);
         }
         finally { editor.Close(); }

@@ -37,7 +37,8 @@ internal sealed partial class SettingsWindow : Window
         ILogger log,
         Func<SettingsStore>? settingsStore = null,
         Action<string>? showSaveFailureMessage = null,
-        Func<AppSettings, bool, bool, SettingsApplyResult>? applyDraft = null)
+        Func<AppSettings, bool, bool, SettingsApplyResult>? applyDraft = null,
+        Func<string>? defaultCapturesRoot = null)
     {
         _currentSettings = currentSettings ?? throw new ArgumentNullException(nameof(currentSettings));
         _apply = apply ?? throw new ArgumentNullException(nameof(apply));
@@ -45,6 +46,7 @@ internal sealed partial class SettingsWindow : Window
         _log = log ?? throw new ArgumentNullException(nameof(log));
         _settingsStore = settingsStore;
         _showSaveFailureMessage = showSaveFailureMessage ?? (_ => { });
+        if (defaultCapturesRoot is not null) DefaultCapturesRoot = defaultCapturesRoot;
 
         InitializeComponent();
         CurrentVersionLabel.Text = ApplicationVersion.DisplayText;
@@ -55,6 +57,7 @@ internal sealed partial class SettingsWindow : Window
         InitializeStoreRating();
         InitializePrintScreenGuide();
         InitializeRecordingBorderNote();
+        InitializeRecordingWatermark();
 
         _draft = new SettingsDraft(_currentSettings());
         AttachDraftEvents();
@@ -62,6 +65,7 @@ internal sealed partial class SettingsWindow : Window
 
         InitializeInstantSave();
         InitializeSearch();
+        InitializeSettingsGuides();
 
         // Preserve Ctrl+S as an immediate flush; Esc and Close flush before returning to the tray.
         CommandBindings.Add(new CommandBinding(ApplyCommand, (_, _) => Apply()));
@@ -145,7 +149,7 @@ internal sealed partial class SettingsWindow : Window
     /// <summary>Closes the window for real, used only on an explicit application exit.</summary>
     internal void CloseForExit()
     {
-        FlushPendingSettings();
+        PrepareToClose();
         _allowClose = true;
         Close();
     }
@@ -207,7 +211,11 @@ internal sealed partial class SettingsWindow : Window
         _draft.PropertyChanged -= OnDraftPropertyChanged;
     }
 
-    private void OnDraftErrorsChanged(object? sender, DataErrorsChangedEventArgs e) => RefreshErrorSummary();
+    private void OnDraftErrorsChanged(object? sender, DataErrorsChangedEventArgs e)
+    {
+        RefreshErrorSummary();
+        RevealSettingError(e.PropertyName);
+    }
 
     private void OnDraftPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
@@ -347,13 +355,28 @@ internal sealed partial class SettingsWindow : Window
 
     internal void RequestClose()
     {
-        if (!FlushPendingSettings()) { AnnounceErrors(); return; }
+        if (!PrepareToClose()) return;
         StopInstantSave();
         DetachDraftEvents();
         Hide();
     }
 
-    internal bool PrepareForAppExit(bool keepVisible) => FlushPendingSettings();
+    internal bool PrepareForAppExit(bool keepVisible) => PrepareToClose();
+
+    private bool PrepareToClose()
+    {
+        bool flushed = FlushPendingSettings();
+        // A failed write still needs recovery; invalid input alone never holds the window open.
+        if (_saveFailed) return false;
+        if (_draft.HasErrors)
+        {
+            // Independent valid fields have already saved. Reload their latest values and
+            // replace rejected text with the persisted values, including cross-field errors.
+            ReloadDraft();
+            return true;
+        }
+        return flushed;
+    }
 
     // ---- GitHub token ---------------------------------------------------------------
 
@@ -423,8 +446,11 @@ internal sealed partial class SettingsWindow : Window
             return;
         }
 
-        ErrorSummaryHeading.Focusable = true;
-        _ = ErrorSummaryHeading.Focus();
+        if (!NavigateToFirstError())
+        {
+            ErrorSummaryHeading.Focusable = true;
+            _ = ErrorSummaryHeading.Focus();
+        }
 
         AutomationPeer? peer = UIElementAutomationPeer.CreatePeerForElement(ErrorSummary);
         peer?.RaiseAutomationEvent(AutomationEvents.LiveRegionChanged);

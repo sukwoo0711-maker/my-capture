@@ -188,10 +188,10 @@ internal sealed class OcrModelStore
     /// <summary>
     /// Starts preparation on a worker before performing any file or hash work.
     /// </summary>
-    internal Task<bool> EnsureAsync(CancellationToken cancellationToken) =>
-        AppArchitecture.SupportsNeuralOcr ? Task.Run(() => EnsureCoreAsync(cancellationToken)) : Task.FromResult(false);
+    internal Task<bool> EnsureAsync(CancellationToken cancellationToken, IProgress<double>? progress = null) =>
+        AppArchitecture.SupportsNeuralOcr ? Task.Run(() => EnsureCoreAsync(cancellationToken, progress)) : Task.FromResult(false);
 
-    private async Task<bool> EnsureCoreAsync(CancellationToken cancellationToken)
+    private async Task<bool> EnsureCoreAsync(CancellationToken cancellationToken, IProgress<double>? progress)
     {
         if (HasRequiredModels)
         {
@@ -207,26 +207,35 @@ internal sealed class OcrModelStore
             }
 
             Directory.CreateDirectory(_paths.OcrModelsRoot);
+            long total = OcrModelCatalog.DownloadBytesFor(MyCapture.Core.Settings.OcrQuality.Accurate);
+            long completed = 0;
+            void ReportFile(long bytes) => progress?.Report(DownloadProgress(completed, bytes, total));
             foreach (OcrModelFile file in OcrModelCatalog.Required)
             {
                 if (IsPresent(file))
                 {
+                    completed += file.ExpectedBytes ?? 0;
+                    ReportFile(0);
                     continue;
                 }
 
-                await DownloadAsync(file, cancellationToken).ConfigureAwait(false);
+                await DownloadAsync(file, cancellationToken, ReportFile).ConfigureAwait(false);
+                completed += file.ExpectedBytes ?? 0;
             }
 
             foreach (OcrModelFile file in OcrModelCatalog.Optional)
             {
                 if (IsPresent(file))
                 {
+                    completed += file.ExpectedBytes ?? 0;
+                    ReportFile(0);
                     continue;
                 }
 
                 try
                 {
-                    await DownloadAsync(file, cancellationToken).ConfigureAwait(false);
+                    await DownloadAsync(file, cancellationToken, ReportFile).ConfigureAwait(false);
+                    completed += file.ExpectedBytes ?? 0;
                 }
                 catch (Exception ex) when (ex is HttpRequestException or IOException or CryptographicException)
                 {
@@ -251,7 +260,10 @@ internal sealed class OcrModelStore
         }
     }
 
-    private async Task DownloadAsync(OcrModelFile file, CancellationToken cancellationToken)
+    internal static double DownloadProgress(long completedBytes, long currentFileBytes, long totalBytes) =>
+        totalBytes > 0 ? Math.Clamp(((double)completedBytes + currentFileBytes) / totalBytes, 0, 1) : 1;
+
+    private async Task DownloadAsync(OcrModelFile file, CancellationToken cancellationToken, Action<long>? progress = null)
     {
         string destination = PathFor(file);
         string temp = destination + ".download";
@@ -261,7 +273,7 @@ internal sealed class OcrModelStore
             using HttpResponseMessage response = await OpenDownloadAsync(file.Uri, file.ByteLimit, cancellationToken)
                 .ConfigureAwait(false);
             using Stream source = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
-            await WriteVerifiedAsync(source, temp, file, cancellationToken).ConfigureAwait(false);
+            await WriteVerifiedAsync(source, temp, file, cancellationToken, progress).ConfigureAwait(false);
             CopyModelFile(temp, destination);
             _log.LogInformation("Stored OCR model {File}", file.FileName);
         }
@@ -290,9 +302,9 @@ internal sealed class OcrModelStore
     }
 
     private static async Task WriteVerifiedAsync(Stream source, string temp, OcrModelFile file,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken, Action<long>? progress = null)
     {
-        (long length, string hash) = await WriteBoundedAsync(source, temp, file.ByteLimit, cancellationToken)
+        (long length, string hash) = await WriteBoundedAsync(source, temp, file.ByteLimit, cancellationToken, progress)
             .ConfigureAwait(false);
         if (length < file.MinimumBytes || (file.ExpectedBytes is long expected && length != expected))
             throw new IOException($"OCR model was truncated or has an unexpected size: {file.FileName}");
@@ -301,7 +313,7 @@ internal sealed class OcrModelStore
     }
 
     private static async Task<(long Length, string Hash)> WriteBoundedAsync(Stream source, string temp,
-        long cap, CancellationToken cancellationToken)
+        long cap, CancellationToken cancellationToken, Action<long>? progress = null)
     {
         using var output = new FileStream(temp, FileMode.Create, FileAccess.Write, FileShare.None,
             64 * 1024, FileOptions.Asynchronous | FileOptions.SequentialScan);
@@ -316,6 +328,7 @@ internal sealed class OcrModelStore
             hash.AppendData(buffer, 0, read);
             await output.WriteAsync(buffer.AsMemory(0, read), cancellationToken).ConfigureAwait(false);
             length += read;
+            progress?.Invoke(length);
         }
         return (length, Convert.ToHexString(hash.GetHashAndReset()));
     }

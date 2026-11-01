@@ -4,6 +4,7 @@ using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media;
+using MyCapture.App.Settings;
 using MyCapture.App.Themes;
 using MyCapture.Core.Localization;
 using MyCapture.Core.Settings;
@@ -57,17 +58,15 @@ public sealed partial class SettingsThemePreviewTests
                     try
                     {
                         settings.Show();
-                        ((TabControl)settings.FindName("CategoryTabs")).SelectedIndex = 4;
+                        Assert.True(settings.NavigateToSection(SettingsSection.Text));
                         foreach (Size size in new[] { new Size(940, 700), new Size(780, 560) })
                         {
                             settings.Width = size.Width;
                             settings.Height = size.Height;
                             Drain(settings);
-                            Button[] buttons = TutorialButtons(settings);
-                            Assert.Equal(13, buttons.Length);
-                            foreach (Button button in buttons)
-                                VerifyTutorialButton(settings, button, button.Tag as string ?? "text-copy");
-                            VerifyTutorialRouting(settings, buttons);
+                            var textTutorial = Assert.IsType<Button>(settings.FindName("TextCopyTutorialButton"));
+                            VerifySettingsTextTutorialButton(settings, textTutorial);
+                            VerifyTutorialRouting(settings, [textTutorial]);
                         }
                     }
                     finally { settings.CloseForExit(); }
@@ -129,6 +128,32 @@ public sealed partial class SettingsThemePreviewTests
 
     private static Button[] TutorialButtons(DependencyObject root) => Descendants(root).OfType<Button>()
         .Where(button => ReferenceEquals(button.Style, button.TryFindResource("Button.Tutorial"))).ToArray();
+
+    private static void VerifySettingsTextTutorialButton(SettingsWindow window, Button button)
+    {
+        string name = FeatureTutorialWindow.OpenButtonName(TutorialCatalog.Get("text-copy"));
+        Assert.Equal(name, AutomationProperties.GetName(button));
+        Assert.Equal(name, button.Content);
+        Assert.Same(window.FindResource("Button.Secondary"), button.Style);
+        Assert.True(button.IsVisible && button.IsEnabled && button.Focusable && button.IsTabStop);
+        button.BringIntoView();
+        Drain(window);
+        AssertFits(window, button);
+        foreach (ContentPresenter presenter in Descendants(button).OfType<ContentPresenter>())
+        {
+            Rect content = presenter.TransformToAncestor(button).TransformBounds(new Rect(presenter.RenderSize));
+            Assert.True(content.Left >= 0 && content.Right <= button.ActualWidth + 0.5,
+                $"{button.Content}: label {content} outside button {button.RenderSize}");
+        }
+        var page = Assert.IsAssignableFrom<FrameworkElement>(button.Parent);
+        page.MoveFocus(new TraversalRequest(FocusNavigationDirection.Last));
+        Assert.Same(button, FocusManager.GetFocusedElement(window));
+        button.MoveFocus(new TraversalRequest(FocusNavigationDirection.Next));
+        var next = Assert.IsAssignableFrom<UIElement>(FocusManager.GetFocusedElement(window));
+        Assert.NotSame(button, next);
+        next.MoveFocus(new TraversalRequest(FocusNavigationDirection.Previous));
+        Assert.Same(button, FocusManager.GetFocusedElement(window));
+    }
 
     private static void VerifyTutorialButton(Window owner, Button button, string featureId)
     {
@@ -206,7 +231,7 @@ public sealed partial class SettingsThemePreviewTests
                     try
                     {
                         settings.Show();
-                        ((TabControl)settings.FindName("CategoryTabs")).SelectedIndex = 4;
+                        Assert.True(settings.NavigateToSection(SettingsSection.Text));
                         foreach (var size in new[] { new Size(940, 700), new Size(780, 560) })
                         {
                             settings.Width = size.Width;

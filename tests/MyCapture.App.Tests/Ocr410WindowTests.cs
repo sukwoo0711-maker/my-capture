@@ -167,7 +167,7 @@ public sealed class Ocr410WindowTests
     });
 
     [Fact]
-    public void PresenterUsesFrozenWindowsOnlySnapshotAndCancelsOnDismiss() => Ocr410Fixture.RunSta(() =>
+    public void PresenterUsesFrozenSnapshotWithRequestedNeuralQualityAndCancelsOnDismiss() => Ocr410Fixture.RunSta(() =>
     {
         var (image, _) = Ocr410Fixture.Table();
         var service = new PendingOcr();
@@ -176,7 +176,7 @@ public sealed class Ocr410WindowTests
         presenter.ShowRecognized(() => OcrRequest.FromBitmap(image, useNeuralModel: true, useSuperResolution: true), "fixture");
         Assert.NotNull(service.Request);
         Assert.Same(image, service.Request.Bitmap);
-        Assert.False(service.Request.UseNeuralModel);
+        Assert.True(service.Request.UseNeuralModel);
         Assert.False(service.Request.UseSuperResolution);
         var window = (OcrResultWindow)typeof(OcrResultPresenter).GetField("_window",
             System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!.GetValue(presenter)!;

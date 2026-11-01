@@ -7,9 +7,14 @@ namespace MyCapture.App.Gallery;
 
 internal sealed partial class GalleryWindow
 {
+    /// <summary>All PDF entries retain the visible selection order and the card-menu target rule.</summary>
+    internal CaptureRecord[] ContactSheetTargets(object? sender) =>
+        CommandTargets(sender as GalleryItemViewModel ?? ResolveTileFromCommand(sender))
+            .Select(tile => tile.Record).ToArray();
+
     private async void OnContactSheetClick(object sender, RoutedEventArgs e)
     {
-        CaptureRecord[] selected = _viewModel.SelectedTiles.Select(tile => tile.Record).ToArray();
+        CaptureRecord[] selected = ContactSheetTargets(sender);
         if (selected.Length == 0) return;
         if (selected.Length > ContactSheetLayout.MaximumItems)
         {

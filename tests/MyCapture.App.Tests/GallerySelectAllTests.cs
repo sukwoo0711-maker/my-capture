@@ -51,26 +51,33 @@ public sealed class GallerySelectAllTests(ITestOutputHelper output)
         for (int i = 0; i < rows.Length; i++) Assert.Same(rows[i], current.Rows[i]);
         Assert.Equal(new[] { nameof(GalleryViewModel.SelectedTiles), nameof(GalleryViewModel.HasSelection),
             nameof(GalleryViewModel.SelectionText), nameof(GalleryViewModel.SingleSelectedTile), nameof(GalleryViewModel.HasSingleSelection),
-            nameof(GalleryViewModel.CanReduceSelected), nameof(GalleryViewModel.CanGifSelected) }, raised);
+            nameof(GalleryViewModel.CanReduceSelected), nameof(GalleryViewModel.CanGifSelected),
+            nameof(GalleryViewModel.CanCreatePdfSelected) }, raised);
         Assert.Equal(current.HasSelection ? UiText.Format("LibrarySelection_Count", current.Selection.SelectedIds.Count)
             : UiText.Get("LibraryUx_NoSelection"), current.SelectionText);
         Assert.All(current.SelectedTiles, tile => Assert.True(tile.IsSelected));
         switch (scenario)
         {
             case "all": case "duplicate-visible": case "shift-anchor":
+                Assert.True(current.CanCreatePdfSelected);
                 Assert.Equal(6, current.SelectedTiles.Count); break;
             case "empty": case "empty-queue":
+                Assert.False(current.CanCreatePdfSelected);
                 Assert.Empty(current.SelectedTiles); Assert.Null(current.Selection.Anchor); break;
             case "single-image": case "hidden-cache":
+                Assert.True(current.CanCreatePdfSelected);
                 Assert.True(current.SingleSelectedTile?.IsImage); Assert.True(current.CanReduceSelected);
                 Assert.False(current.CanGifSelected); break;
             case "single-video":
+                Assert.False(current.CanCreatePdfSelected);
                 Assert.True(current.SingleSelectedTile?.IsVideo); Assert.True(current.CanGifSelected);
                 Assert.False(current.CanReduceSelected); break;
             case "videos":
+                Assert.False(current.CanCreatePdfSelected);
                 Assert.Equal(3, current.SelectedTiles.Count);
                 Assert.All(current.SelectedTiles, tile => Assert.True(tile.IsVideo)); break;
             case "stale-visible":
+                Assert.True(current.CanCreatePdfSelected);
                 Assert.Equal(2, current.SelectedTiles.Count); break;
         }
 
@@ -86,6 +93,7 @@ public sealed class GallerySelectAllTests(ITestOutputHelper output)
         current.ClearSelection();
         AssertEquivalent(original, current, fixture);
         Assert.False(current.HasSelection);
+        Assert.False(current.CanCreatePdfSelected);
 
         void Configure(GalleryViewModel vm)
         {
@@ -228,8 +236,8 @@ public sealed class GallerySelectAllTests(ITestOutputHelper output)
         Assert.Equal(original.Selection.Anchor, current.Selection.Anchor);
         Assert.Equal(original.SelectedTiles.Select(tile => tile.Id), current.SelectedTiles.Select(tile => tile.Id));
         Assert.Equal(original.SingleSelectedTile?.Id, current.SingleSelectedTile?.Id);
-        Assert.Equal((original.HasSelection, original.SelectionText, original.CanReduceSelected, original.CanGifSelected),
-            (current.HasSelection, current.SelectionText, current.CanReduceSelected, current.CanGifSelected));
+        Assert.Equal((original.HasSelection, original.SelectionText, original.CanReduceSelected, original.CanGifSelected, original.CanCreatePdfSelected),
+            (current.HasSelection, current.SelectionText, current.CanReduceSelected, current.CanGifSelected, current.CanCreatePdfSelected));
         Assert.Equal((original.IsEmpty, original.VisibleCount, original.ResultCountText, original.SummaryText,
             original.SelectedScope, original.Filter, original.SearchQuery, original.ColumnCount, original.ShowResultCount),
             (current.IsEmpty, current.VisibleCount, current.ResultCountText, current.SummaryText,

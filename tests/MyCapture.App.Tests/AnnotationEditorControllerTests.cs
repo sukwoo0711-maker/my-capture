@@ -353,16 +353,16 @@ public sealed class AnnotationEditorControllerTests
         if (moveEvent) c.PointerMove(new PointD(90, 90));
         c.PointerUp(new PointD(80, 80));
 
-        Assert.Equal(new RectD(80, 80, 60, 60), rect.Rect);
+        Assert.Equal(new RectD(82, 82, 58, 58), rect.Rect);
         Assert.Equal(1, undo.UndoCount);
         c.PointerDown(new PointD(78, 78));
         c.PointerUp(new PointD(78, 78));
-        Assert.Equal(new RectD(80, 80, 60, 60), rect.Rect);
+        Assert.Equal(new RectD(82, 82, 58, 58), rect.Rect);
         Assert.Equal(1, undo.UndoCount);
         Assert.True(c.PerformUndo());
         Assert.Equal(new RectD(100, 100, 40, 40), rect.Rect);
         Assert.True(c.PerformRedo());
-        Assert.Equal(new RectD(80, 80, 60, 60), rect.Rect);
+        Assert.Equal(new RectD(82, 82, 58, 58), rect.Rect);
     }
 
     [Fact]
@@ -440,11 +440,12 @@ public sealed class AnnotationEditorControllerTests
         Assert.Single(doc.Items);
         Assert.Equal("검토 필요", ((TextAnnotation)doc.Items[0]).Text);
 
-        // Undo the text change, then the add.
-        Assert.True(c.PerformUndo());
-        Assert.Equal(string.Empty, ((TextAnnotation)doc.Items[0]).Text);
+        // The first committed text and its add are one user action.
         Assert.True(c.PerformUndo());
         Assert.Empty(doc.Items);
+        Assert.False(c.PerformUndo());
+        Assert.True(c.PerformRedo());
+        Assert.Equal("검토 필요", Assert.IsType<TextAnnotation>(Assert.Single(doc.Items)).Text);
     }
 
     [Fact]

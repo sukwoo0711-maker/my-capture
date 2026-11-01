@@ -86,15 +86,18 @@ public sealed class Ux402InteractionTests
         {
             window.Show(); window.UpdateLayout();
             var tools = Descendants(window).OfType<ToggleButton>().Where(button => AutomationProperties.GetAcceleratorKey(button).Length > 0).ToArray();
-            // Every tool but Crop, whose single entry point is now the command bar, plus the stamp command beside Image.
-            Assert.Equal(Enum.GetValues<EditorTool>().Length, tools.Length);
+            // Crop lives in the command bar, Mosaic/Blur share Obscure, and Stamp sits beside Image.
+            Assert.Equal(Enum.GetValues<EditorTool>().Length - 1, tools.Length);
+            string obscureKeys = ShortcutCatalog.Hints(ShortcutScope.Annotation, "Mosaic", "Blur");
+            Assert.Single(tools, button => AutomationProperties.GetAcceleratorKey(button) == obscureKeys);
             Assert.Single(tools, button => AutomationProperties.GetAcceleratorKey(button)
                 == ShortcutCatalog.Get(ShortcutScope.Annotation, "Stamp").Hint);
             foreach (var button in tools)
             {
                 Rect bounds = button.TransformToAncestor(window).TransformBounds(new Rect(button.RenderSize));
                 Assert.True(bounds.Top >= 0 && bounds.Bottom <= window.ActualHeight && bounds.Width >= 30 && bounds.Height >= 30);
-                Assert.Contains(AutomationProperties.GetAcceleratorKey(button), button.ToolTip!.ToString());
+                foreach (string key in AutomationProperties.GetAcceleratorKey(button).Split(" / "))
+                    Assert.Contains(key, button.ToolTip!.ToString());
             }
             var read = ShortcutPresentation.ReadEnabled;
             try

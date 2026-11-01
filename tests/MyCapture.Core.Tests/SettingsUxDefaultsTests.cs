@@ -1,6 +1,7 @@
 using System.Reflection;
 using Microsoft.Extensions.Logging.Abstractions;
 using MyCapture.Core.Queue;
+using MyCapture.Core.Recording;
 using MyCapture.Core.Settings;
 using MyCapture.Core.Storage;
 using MyCapture.Core.Themes;
@@ -314,6 +315,11 @@ public sealed class SettingsUxDefaultsTests
             }
             Type type = property.PropertyType;
             if (type == typeof(bool)) { yield return !(bool)original!; yield break; }
+            if (original is RecordingWatermarkSettings watermark)
+            {
+                yield return watermark with { Opacity = watermark.Opacity == 0.7 ? 0.6 : 0.7 };
+                yield break;
+            }
             if (type.IsEnum)
             {
                 foreach (object value in Enum.GetValues(type)) yield return value;

@@ -71,6 +71,7 @@ public partial class App : Application
     private CapturePersistenceService? _persistence;
     private CaptureCommitService? _commit;
     private MyCapture.App.Recording.VideoLibraryService? _videoLibrary;
+    private MyCapture.App.Recording.VideoFrameCaptureService? _videoFrameCapture;
     private AppPaths? _capturePaths;
     private GalleryController? _galleryController;
     private GalleryReeditLoader? _reeditLoader;
@@ -185,6 +186,7 @@ public partial class App : Application
                     MyCapture.App.Themes.WindowIdentity.Attach(window);
                     ObserveLaunchWindow(window);
                     ObserveIdleMemoryWindow(window);
+                    ObserveEditorPrewarmWindow(window);
                 }
             }));
 
@@ -323,7 +325,23 @@ public partial class App : Application
             Dispatcher,
             SetOcrBusy,
             _services.GetRequiredService<ILogger<OcrResultPresenter>>(),
-            AppArchitecture.SupportsNeuralOcr ? _services.GetRequiredService<TextTranslationService>() : null);
+            AppArchitecture.SupportsNeuralOcr ? _services.GetRequiredService<TextTranslationService>() : null,
+            accuracy: new OcrAccuracyOptions(() => _settings!.Ocr, () =>
+            {
+                _services.GetRequiredService<SettingsStore>().Save(_settings!);
+                _ocrModelPreparation.CancelForQuality(_settings!.Ocr.Quality);
+                _settingsWindow?.RefreshOcrQuality();
+            }, new OcrAccuracyModel(_services.GetRequiredService<OcrModelStore>(), new WindowsOcrDownloadEnvironment())));
+        _ocrPresenter.PinRequested += (_, request) =>
+        {
+            request.Completion = OpenOcrPinAsync();
+            async Task<bool> OpenOcrPinAsync()
+            {
+                if (_pins is null) return false;
+                await _pins.PinOcrAsync(request.Text, request.Kind);
+                return true;
+            }
+        };
         // The editor's text command recognises its current image in the shared result window.
         TextRecognitionRoute.IsAvailable = () => _ocrService?.IsAvailable == true;
         TextRecognitionRoute.Show = (image, context) => _ocrPresenter?.ShowRecognized(
@@ -354,7 +372,7 @@ public partial class App : Application
             FirstUseGuide: ShowOnboardingAgain);
         _tray.MenuPresenter = () => _shellPresenter.ShowMenu(TrayMenuLayout.Build(trayCommands, _settings!.Hotkeys,
             new TrayMenuState(_pins?.CanRestoreClosed == true, _scrollCancellation is not null,
-                ClipboardAvailability.HasPinnableContent(), _pins?.Count ?? 0, _pins?.AreHidden == true,
+                ClipboardAvailability.HasPinnableContent(), _pins?.Count ?? 0, _pins?.AnyHidden == true,
                 _pins?.ClickThroughCount ?? 0, _pins?.SnapshotOpenPinWindows(),
                 UpdateAvailable: _updates?.HasAvailableUpdate == true, UpdateVersion: _updates?.AvailableVersion,
                 UpdateBusy: _updates?.IsBusy == true)));
@@ -409,6 +427,7 @@ public partial class App : Application
             _storeRating?.NotifyFlowEnded();
             RequestLibraryMaintenance();
             ScheduleIdleMemoryReclamation();
+            RequestEditorPrewarm();
         };
         _overlay.CommitRequested = HandleCommitAsync;
         // The selector's record switch and ⋯ menu run the same commands as the tray and the hotkeys.
@@ -441,10 +460,24 @@ public partial class App : Application
             _videoLibrary ?? throw new InvalidOperationException("Video library is unavailable."));
         _recorder.FrameImageCaptured += OnRecordedFrameImageCaptured;
         _recorder.FrameImageCommitHandlerFactory = CreateRecordedFrameCommitHandler;
+        _recorder.FrameCaptureService = _videoFrameCapture;
+        _recorder.ShowFrameInLibrary = id => EnsureGalleryWindow()?.OpenCapture(id, edit: false);
+        _recorder.PersistWatermarkSettings = watermark =>
+        {
+            _settings!.Recording.Watermark = watermark.DeepClone();
+            _settingsWindow?.RefreshRecordingWatermark();
+            _services.GetRequiredService<SettingsStore>().SaveInBackground(
+                _settings.DeepClone(), "Could not persist recording watermark preferences");
+        };
         _recorder.PrivacyRedactionService = _privacyRedactionService;
         _recorder.ShowSelectionGrid = () => _settings!.Capture.ShowSelectionGrid;
         _recorder.CaptureSelectionRequested = HandleCaptureRequested;
-        _recorder.SessionEnded += (_, _) => { RestoreTrayAfterCapture(); CompleteWelcomeCaptureAnnouncement(); };
+        _recorder.SessionEnded += (_, _) =>
+        {
+            RestoreTrayAfterCapture();
+            CompleteWelcomeCaptureAnnouncement();
+            RequestEditorPrewarm();
+        };
         // Answers the record command while the previous recording is still being saved.
         _recorder.FinishingBusyFeedback += () => ShowCommandNotice("MyCapture", UiText.Get("Recording.FinishingBusy"));
 
@@ -483,6 +516,7 @@ public partial class App : Application
                 Hotkey previousCapture = _settings!.Hotkeys.Capture;
                 bool previousShortcutHints = _settings.General.AlwaysShowShortcutHints;
                 _settings = updated;
+                _recorder?.RefreshWatermarkSettings(updated.Recording.Watermark);
                 if (previousShortcutHints != updated.General.AlwaysShowShortcutHints) ShortcutPresentation.Refresh();
                 _pins?.TrimClosedHistory();
                 AnnounceCaptureKeyChange(previousCapture, updated.Hotkeys.Capture);
@@ -831,14 +865,23 @@ public partial class App : Application
         DismissQuickAccessForCapture();
         SelectorTimeline.Mark?.Invoke("card-dismissed");
         _log?.LogInformation("Region capture requested");
+        PracticeCaptureTarget? practiceTarget = PracticeCaptureTarget();
         if (_overlay is null || _settings is null)
         {
+            CancelPracticeCapture(practiceTarget);
             return;
         }
 
         try
         {
-            if (!await GuardStillCaptureAsync(GlobalHotkeyCommand.CaptureRegion)) { CompleteWelcomeCaptureAnnouncement(); return; }
+            bool allowed = await GuardStillCaptureAsync(GlobalHotkeyCommand.CaptureRegion);
+            practiceTarget ??= PracticeCaptureTarget();
+            if (!allowed)
+            {
+                if (!_overlay.OwnsPracticeCapture(practiceTarget)) CancelPracticeCapture(practiceTarget);
+                CompleteWelcomeCaptureAnnouncement();
+                return;
+            }
             SelectorTimeline.Mark?.Invoke("guard-passed");
             _tray?.SetState(TrayIconState.Capturing);
             SelectorTimeline.Mark?.Invoke("tray-state");
@@ -848,11 +891,12 @@ public partial class App : Application
                 _settings.Capture.IncludeCursor,
                 _settings.Capture.AbortOnFocusLoss,
                 _settings.Capture.ShowMagnifier,
-                _settings.Capture.ShowSelectionGrid, preserveEditor: true);
+                _settings.Capture.ShowSelectionGrid, preserveEditor: true, practiceTarget: practiceTarget);
         }
         catch (Exception ex)
         {
             _log?.LogError(ex, "Could not open the capture overlay");
+            CancelPracticeCapture(practiceTarget);
             _tray?.SetState(TrayIconState.Error);
             // Answers the command even while an editor or a recording holds other notifications back.
             ShowCommandNotice(
@@ -1321,7 +1365,7 @@ public partial class App : Application
             }));
             ReceiptTimeline.Mark?.Invoke("card-scheduled");
         }
-        _onboardingCaptureEnded?.Invoke(_currentRecord is not null, copiedToClipboard);
+        PublishPracticeCapture(e, _currentRecord?.Id);
         CompleteWelcomeCaptureAnnouncement();
     }
 
@@ -1763,7 +1807,7 @@ public partial class App : Application
         _commit.PinImage = (image, provenance) =>
         {
             var pin = (_pins ?? throw new InvalidOperationException("Pinning is unavailable.")).PinImage(image, provenance);
-            _onboardingWindow?.NotifyEditorPinCreated(pin.PracticeId);
+
         };
         _commit.PinFailed = NotifyPinFailed;
         _commit.PersistExportSettings = () => _services.GetRequiredService<SettingsStore>().SaveInBackground(
@@ -1774,6 +1818,7 @@ public partial class App : Application
             queue,
             paths,
             _services.GetRequiredService<ILogger<MyCapture.App.Recording.VideoLibraryService>>());
+        _videoFrameCapture = new MyCapture.App.Recording.VideoFrameCaptureService(queue, _persistence, _videoLibrary.IsWriting);
         _videoLibrary.VideoAdded += (_, _) =>
             _ = Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(() =>
             {
@@ -1912,7 +1957,7 @@ public partial class App : Application
         _log?.LogInformation("Gallery activation requested");
 
         GalleryWindow? window = EnsureGalleryWindow();
-        if (_onboardingWindow?.CurrentStep == WelcomeStep.Library && _onboardingCaptureId is { } id)
+        if (_onboardingWindow?.CurrentStep == WelcomeStep.Library && _onboardingWindow.Session.CaptureId is { } id)
             window?.OpenCapture(id, edit: false);
         else window?.ShowGallery();
         if (window?.IsVisible == true) _onboardingWindow?.NotifyLibraryOpened();
@@ -1969,6 +2014,8 @@ public partial class App : Application
             _services.GetRequiredService<ILogger<GalleryWindow>>());
 
         // A re-edit commit finalises against the same record; keep the tray count in sync.
+        window.FrameCaptureService = _videoFrameCapture;
+        window.FrameImageCommitHandlerFactory = CreateRecordedFrameCommitHandler;
         ConfigureEngagementWindow(window);
         window.Activated += (_, _) => _onboardingWindow?.NotifyLibraryOpened();
         window.CaptureChanged += (_, _) => _tray?.SetCaptureCount(_queue?.Count ?? 0);
@@ -2025,6 +2072,9 @@ public partial class App : Application
             _services.GetRequiredService<ILogger<SettingsWindow>>(),
             () => _services.GetRequiredService<SettingsStore>(),
             applyDraft: (next, folderEdited, exportReplaced) => _settingsApply!.Apply(next, folderEdited, exportReplaced));
+        window.WatermarkImageFolder = Path.Combine(
+            (_capturePaths ?? _services.GetRequiredService<AppPaths>()).DataRoot, StampStore.FolderName);
+        window.RecordingWatermarkLocked = () => _recorder?.IsWatermarkLocked == true;
 
         ConfigureEngagementWindow(window);
         ConfigureLegacyImportWindow(window);
@@ -2130,20 +2180,8 @@ public partial class App : Application
             // Preserve the probe's deeper selector variant.
             if (s_residentProbe is { } probe) RunProbePrewarmVariants(probe);
 
-            // The editor's first open after a capture likewise, on a later idle turn of its own.
-            _ = Dispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle, new Action(() =>
-            {
-                if (_overlay?.IsActive == true) return;
-                try
-                {
-                    if (s_residentProbe?.Has("no-editor-prewarm") != true) AnnotationEditorPrewarm.Run();
-                }
-                catch (Exception ex)
-                {
-                    _log?.LogDebug(ex, "Image editor prewarm failed");
-                }
-            }));
         }));
+        StartEditorPrewarm();
     }
 
     private async Task PrewarmCaptureReadersAsync()

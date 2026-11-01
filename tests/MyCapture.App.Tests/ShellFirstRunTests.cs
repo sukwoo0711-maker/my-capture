@@ -110,7 +110,8 @@ public sealed class ShellFirstRunTests
             Assert.DoesNotContain(FirstRunWelcomeTests.Descendants(welcome).OfType<TextBlock>(), text =>
                 text.Text == previousSentence || AutomationProperties.GetName(text) == previousSentence);
             Assert.Contains(FirstRunWelcomeTests.Descendants(welcome).OfType<TextBlock>(), text =>
-                KoreanWordWrap.Strip(text.Text) == UiText.Get("Onboarding.CaptureTitle"));
+                KoreanWordWrap.Strip(text.Text) == UiText.Get("Journey.A1.Title"));
+            Assert.Equal(PracticeStep.A1, welcome.Session.Step);
             Assert.True(welcome.StartAtSignIn);
         }
         finally { welcome.Close(); }
@@ -246,6 +247,7 @@ public sealed class ShellFirstRunTests
             Assert.Equal(feature.GlobalKey is not null, row is not null);
             if (row is not null) Assert.Contains(row, draftHotkeys);
         }
+        Assert.Equal(nameof(SettingsDraft.PasteToScreenHotkey), ShortcutSettingTarget.ForFeature("practice-image-pin"));
     }
 
     // ---- Engagement card ------------------------------------------------------------------
