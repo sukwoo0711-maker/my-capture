@@ -116,11 +116,13 @@ public sealed class ContentStateSweepTests
         UiText.Configure(pass.Tag);
         // Dates and numbers read as they do for a person whose regional format matches the UI language.
         CultureInfo.CurrentCulture = CultureInfo.GetCultureInfo(pass.Tag);
-        // A storage setting left at its default shows the folder it uses: the person's own Pictures folder,
-        // which Windows names in the person's language.
-        AppPaths shownFolders = AppPaths.CreateDefault();
+        // A storage setting left at its default shows its folder inside the person's Pictures or application
+        // data folder, whose path can hold Korean (a localized OneDrive folder or the account name). Only the
+        // paths are read; test sources never construct the default AppPaths (OcrTestIsolationTests).
+        string[] profileFolders = [.. new[] { Environment.SpecialFolder.MyPictures, Environment.SpecialFolder.ApplicationData }
+            .Select(folder => Environment.GetFolderPath(folder)).Where(path => path.Length > 0)];
         string[] fixtureText = [.. pass.Text.All, .. pass.Long.All, .. Translations.SelectMany(item => new[] { item.Source, item.Text }),
-            shownFolders.QuickSaveRoot, shownFolders.CapturesRoot];
+            .. profileFolders];
         fixtureText = [.. fixtureText.Select(OneLine).OrderByDescending(item => item.Length)];
         var findings = new List<Finding>();
         bool newStates = false;
