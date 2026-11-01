@@ -149,6 +149,80 @@ public sealed class OcrEditingWindowTests
     });
 
     [Fact]
+    public void TableViewOfCachedTextGetsPositionsWithoutPromptAndKeepsTextEdits() => WithWindow(window =>
+    {
+        var (image, result) = Ocr410Fixture.Table();
+        var service = new CountingOcr(result);
+        using var presenter = new OcrResultPresenter(service, Dispatcher.CurrentDispatcher, _ => { },
+            NullLogger.Instance, window: window);
+        presenter.ShowCached(OcrResult.Success(result.Text, "ko-KR", [], TimeSpan.Zero), "cached",
+            () => OcrRequest.FromBitmap(image));
+        int confirmations = 0;
+        window.ConfirmReplaceEditedText = () => { confirmations++; return false; };
+        window.SelectExtractionMode(OcrExtractionMode.Text);
+        window.ResultTextBox.Text = "고친 글자";
+        window.SelectExtractionMode(OcrExtractionMode.Table);
+        Ocr410Fixture.Pump();
+        Assert.Equal(0, confirmations);
+        Assert.Equal(1, service.Calls);
+        Assert.True(window.Extraction!.Table.HasStructure);
+        Assert.NotEmpty(window.TableGrid.Items);
+        Assert.Contains("USB 케이블", window.ExtractionText);
+        Assert.True(Field<WrapPanel>(window, "_tableActions").IsEnabled);
+        Assert.True(Field<Button>(window, "_tablePinButton").IsEnabled);
+        window.SelectExtractionMode(OcrExtractionMode.Text);
+        Assert.Equal("고친 글자", window.ExtractionText);
+        Assert.True(window.HasEditedText);
+        window.RevertCurrentEdits();
+        Assert.Contains("USB 케이블", window.ExtractionText);
+        Assert.False(window.HasEditedText);
+    });
+
+    [Fact]
+    public void FailedPositionRequestKeepsTextAndTheNextTableViewAsksAgain() => WithWindow(window =>
+    {
+        var (image, result) = Ocr410Fixture.Table();
+        var service = new CountingOcr(OcrResult.Failed("busy"));
+        using var presenter = new OcrResultPresenter(service, Dispatcher.CurrentDispatcher, _ => { },
+            NullLogger.Instance, window: window);
+        presenter.ShowCached(OcrResult.Success(result.Text, "ko-KR", [], TimeSpan.Zero), "cached",
+            () => OcrRequest.FromBitmap(image));
+        window.SelectExtractionMode(OcrExtractionMode.Table);
+        Ocr410Fixture.Pump();
+        Assert.Equal(1, service.Calls);
+        Assert.Equal("busy", Field<TextBlock>(window, "_status").Text);
+        window.SelectExtractionMode(OcrExtractionMode.Text);
+        Assert.Equal(result.Text, window.ExtractionText);
+        service.Result = result;
+        window.SelectExtractionMode(OcrExtractionMode.Table);
+        Ocr410Fixture.Pump();
+        Assert.Equal(2, service.Calls);
+        Assert.True(window.Extraction!.Table.HasStructure);
+        window.SelectExtractionMode(OcrExtractionMode.Code);
+        window.SelectExtractionMode(OcrExtractionMode.Table);
+        Assert.Equal(2, service.Calls);
+    });
+
+    [Fact]
+    public void PositionRequestAnsweredWithoutPositionsIsNotRepeated() => WithWindow(window =>
+    {
+        var (image, _) = Ocr410Fixture.Table();
+        OcrResult cached = Text("first\nsecond");
+        var service = new CountingOcr(cached);
+        using var presenter = new OcrResultPresenter(service, Dispatcher.CurrentDispatcher, _ => { },
+            NullLogger.Instance, window: window);
+        presenter.ShowCached(cached, "cached", () => OcrRequest.FromBitmap(image));
+        window.SelectExtractionMode(OcrExtractionMode.Table);
+        Ocr410Fixture.Pump();
+        window.SelectExtractionMode(OcrExtractionMode.Code);
+        window.SelectExtractionMode(OcrExtractionMode.Table);
+        Ocr410Fixture.Pump();
+        Assert.Equal(1, service.Calls);
+        window.SelectExtractionMode(OcrExtractionMode.Text);
+        Assert.Equal("first\nsecond", window.ExtractionText);
+    });
+
+    [Fact]
     public void CurrentTableRowHoverAndLeaveMapToOriginalRegions() => WithWindow(window =>
     {
         var (image, result) = Ocr410Fixture.Table();
@@ -382,9 +456,10 @@ public sealed class OcrEditingWindowTests
     private sealed class CountingOcr(OcrResult result) : IOcrService
     {
         internal int Calls;
+        internal OcrResult Result { get; set; } = result;
         public bool IsAvailable => true;
         public IReadOnlyList<string> SupportedLanguages => ["ko"];
         public Task<OcrResult> RecognizeAsync(OcrRequest request, CancellationToken cancellationToken = default)
-        { Calls++; return Task.FromResult(result); }
+        { Calls++; return Task.FromResult(Result); }
     }
 }
