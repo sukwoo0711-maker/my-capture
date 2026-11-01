@@ -221,6 +221,68 @@ public sealed class CaptureFlightTests
     }
 
     [Fact]
+    public void AFarCardReceivesTheImageOverTheLastStretchOfTheSamePath()
+    {
+        const double scale = 1.5;
+        var far = new Rect(2000, 1200, 160, 120);
+        Rect start = CaptureFlight.FlightStart(Source, far, scale);
+        // Its centre lies on the way from the source to the card, ApproachDip short of the card.
+        Point from = Centre(Source), to = Centre(far), at = Centre(start);
+        double reach = CaptureFlight.ApproachDip * scale;
+        Assert.Equal(reach, (to - at).Length, 6);
+        double t = 1 - (reach / (to - from).Length);
+        Assert.Equal(from.X + ((to.X - from.X) * t), at.X, 6);
+        Assert.Equal(from.Y + ((to.Y - from.Y) * t), at.Y, 6);
+        // At the size the whole flight would give the image there.
+        Assert.Equal(Source.Width + ((far.Width - Source.Width) * t), start.Width, 6);
+        Assert.Equal(Source.Width / Source.Height, start.Width / start.Height, 6);
+
+        // A card within reach receives the image from the source itself.
+        var near = new Rect(Source.Right, Source.Bottom - 100, 160, 120);
+        Assert.Equal(Source, CaptureFlight.FlightStart(Source, near, scale));
+
+        // The approach fades in over its first part and is whole well before it lands.
+        Assert.Equal(0, CaptureFlight.ApproachOpacity(0), 6);
+        Assert.Equal(1, CaptureFlight.ApproachOpacity(0.3), 6);
+        Assert.Equal(1, CaptureFlight.ApproachOpacity(1), 6);
+        double previous = 0;
+        foreach (double progress in new[] { 0.05, 0.1, 0.2, 0.25 })
+        {
+            double opacity = CaptureFlight.ApproachOpacity(progress);
+            Assert.InRange(opacity, previous, 1);
+            previous = opacity;
+        }
+
+        // Its window covers the approach alone: it stays near the card however far the image came.
+        MonitorInfo display = Monitor(0, 0, 3840, 2160, 144);
+        RectD window = CaptureFlight.PlanBounds(Rect.Union(start, far), [display])!.Value.Bounds;
+        RectD whole = CaptureFlight.PlanBounds(Rect.Union(Source, far), [display])!.Value.Bounds;
+        Assert.True(window.Width * window.Height < whole.Width * whole.Height / 4, $"{window} vs {whole}");
+        Assert.True(window.Left > Source.Right && window.Top > Source.Bottom, $"{window} reaches back to {Source}");
+    }
+
+    [Fact]
+    public void NoImageFliesToACardWaitingOnADisplayOfAnotherScale()
+    {
+        // A capture on a 150% display, and the card in the corner of the 100% display to its right:
+        // every frame draws at the source's scale, which that display does not have.
+        MonitorInfo laptop = Monitor(0, 0, 2880, 1800, 144), external = Monitor(2880, 0, 1920, 1080, 96);
+        var source = new Rect(1200, 400, 720, 450);
+        var preview = new Rect(4800 - 16 - 300, 1040 - 16 - 250, 288, 180);
+        Assert.Null(CaptureFlight.PlanBounds(Rect.Union(source, preview), [laptop, external]));
+        Assert.NotNull(CaptureFlight.PlanBounds(Rect.Union(CaptureFlight.FlightStart(source, preview, 1.5), preview), [laptop, external]));
+        Assert.Null(CaptureFlight.HandOver(source, preview, 1.5, [laptop, external]));
+
+        // On a display of the source's scale the image comes in over the last stretch.
+        MonitorInfo matching = Monitor(2880, 0, 2880, 1620, 144);
+        var corner = new Rect(5760 - 24 - 450, 1580 - 24 - 375, 432, 270);
+        (Rect start, RectD bounds, double scale) = CaptureFlight.HandOver(source, corner, 1.5, [laptop, matching])!.Value;
+        Assert.Equal(CaptureFlight.FlightStart(source, corner, 1.5), start);
+        Assert.Equal(1.5, scale);
+        Assert.True(bounds.Left >= matching.Bounds.Left, $"{bounds} reaches back onto {laptop.Bounds}");
+    }
+
+    [Fact]
     public void NoLiftWithoutMotionOrForAnImageThatIsNotTheSourcePixels() => RunFlight(motion: false, (_, _, image, _) =>
     {
         Assert.Null(CaptureFlight.TryLift(image, SourceOn(), () => 0));
@@ -241,15 +303,16 @@ public sealed class CaptureFlightTests
     [Fact]
     public void LiftsOnItsSourceAndFliesIntoTheLandingCard() => RunFlight(motion: true, (monitor, clock, image, router) =>
     {
-        CaptureFlight flight = Assert.IsType<CaptureFlight>(CaptureFlight.TryLift(image, SourceOn(), () => clock.Now));
+        RectD source = SourceNearCorner(monitor);
+        CaptureFlight flight = Assert.IsType<CaptureFlight>(CaptureFlight.TryLift(image, source, () => clock.Now));
         try
         {
             CaptureFlightDecoration lift = flight.WindowForTest!;
             // Drawn one to one over the pixels it was cut from, with room for the shadow.
-            Assert.Equal(ToRect(SourceOn()), lift.Frame.Image);
+            Assert.Equal(ToRect(source), lift.Frame.Image);
             Assert.Equal(0, lift.Frame.ShadowOpacity);
             Assert.Equal(PhysicalBounds(lift), lift.Bounds);
-            Assert.True(lift.Bounds.Left < SourceOn().Left && lift.Bounds.Bottom > SourceOn().Bottom);
+            Assert.True(lift.Bounds.Left < source.Left && lift.Bounds.Bottom > source.Bottom);
             AssertPassive(lift);
             clock.Now = 400;
             flight.Tick();
@@ -266,6 +329,9 @@ public sealed class CaptureFlightTests
                 card.Show();
                 Assert.True(PumpUntil(() => flight.IsFlying || flight.IsDone));
                 Assert.True(flight.IsFlying);
+                Rect target = card.PreviewScreenBounds!.Value;
+                // The card waits within reach of the source, so the image flies the whole way.
+                Assert.Equal(ToRect(source), CaptureFlight.FlightStart(ToRect(source), target, monitor.ScaleFactor));
                 // The preview lies outside the lift window: a window over the whole path took over
                 // once it had drawn the image, and the lift window is gone.
                 Assert.NotSame(lift, flight.WindowForTest);
@@ -273,16 +339,16 @@ public sealed class CaptureFlightTests
                 // The card fades in while the image flies; its own preview waits for the image.
                 Assert.Equal(1, (double)card.SurfaceForTest.GetAnimationBaseValue(UIElement.OpacityProperty));
                 Assert.Equal(0, card.PreviewForTest.Opacity);
-                Rect target = card.PreviewScreenBounds!.Value;
                 CaptureFlightDecoration flying = flight.WindowForTest!;
-                Assert.True(flying.Bounds.Left <= target.Left && flying.Bounds.Right >= target.Right
-                    && flying.Bounds.Top <= target.Top && flying.Bounds.Bottom >= target.Bottom);
+                AssertCovers(flying.Bounds, ToRect(source));
+                AssertCovers(flying.Bounds, target);
+                AssertFitsAHostedRunner(flying, monitor);
 
                 double start = clock.Now;
                 clock.Now = start + 60;
                 flight.Tick();
                 Rect midway = flying.Frame.Image;
-                Assert.True(midway.Width < ToRect(SourceOn()).Width && midway.Width > target.Width, $"{midway} -> {target}");
+                Assert.True(midway.Width < ToRect(source).Width && midway.Width > target.Width, $"{midway} -> {target}");
 
                 clock.Now = start + 250;
                 flight.Tick();
@@ -302,6 +368,67 @@ public sealed class CaptureFlightTests
     });
 
     [Fact]
+    public void AFarCardReceivesTheImageNearItWhileTheLiftFadesOnTheSource() => RunFlight(motion: true, (monitor, clock, image, router) =>
+    {
+        CaptureFlight flight = Assert.IsType<CaptureFlight>(CaptureFlight.TryLift(image, SourceOn(), () => clock.Now));
+        CaptureFlightDecoration lift = flight.WindowForTest!;
+        var exclusions = new List<bool>();
+        flight.SurfaceDismissed += exclusions.Add;
+        QuickAccessWindow card = Card(image, monitor, router);
+        try
+        {
+            clock.Now = 400;
+            flight.Tick();
+            Assert.True(flight.Land(card));
+            card.Show();
+            Assert.True(PumpUntil(() => flight.IsFlying || flight.IsDone));
+            Assert.True(flight.IsFlying);
+            Rect source = ToRect(SourceOn()), target = card.PreviewScreenBounds!.Value;
+            Rect start = CaptureFlight.FlightStart(source, target, monitor.ScaleFactor);
+            Assert.NotEqual(source, start);
+
+            // A window over the approach alone took over near the card in the corner; the lift
+            // window stays on the source, where the lifted image fades away.
+            CaptureFlightDecoration flying = flight.WindowForTest!;
+            Assert.NotSame(lift, flying);
+            Assert.False(lift.IsClosed);
+            AssertCovers(flying.Bounds, start);
+            AssertCovers(flying.Bounds, target);
+            Assert.True(flying.Bounds.Left > source.Right || flying.Bounds.Top > source.Bottom,
+                $"{flying.Bounds} reaches back to {source}");
+            AssertFitsAHostedRunner(flying, monitor);
+
+            // The image comes in, clear at first, from where the approach starts.
+            double begun = clock.Now;
+            AssertSame(start, flying.Frame.Image);
+            Assert.Equal(0, flying.Frame.Opacity, 6);
+            Assert.Equal(1, lift.Frame.Opacity, 6);
+            clock.Now = begun + 40;
+            flight.Tick();
+            Assert.InRange(flying.Frame.Opacity, 0.01, 0.99);
+            Assert.InRange(lift.Frame.Opacity, 0.01, 0.99);
+            clock.Now = begun + FluidMotion.FastDuration.TimeSpan.TotalMilliseconds;
+            flight.Tick();
+            Assert.True(lift.IsClosed);
+            Assert.Equal(1, flying.Frame.Opacity, 6);
+
+            clock.Now = begun + 250;
+            flight.Tick();
+            // It lands exactly on the preview, which shows in that same frame.
+            AssertSame(target, flying.Frame.Image);
+            Assert.Equal(1, card.PreviewForTest.Opacity);
+            flight.Tick();
+            Assert.True(flight.IsDone && flying.IsClosed);
+            Assert.Equal([true, true], exclusions);
+        }
+        finally
+        {
+            flight.Finish();
+            card.CloseNow();
+        }
+    });
+
+    [Fact]
     public void AFullScreenCaptureFliesInItsOwnWindowAboveTheCard() => RunFlight(motion: true, (_, clock, _, router) =>
     {
         // No larger than this desktop allows a window to be (a hosted runner's is 1024 x 768).
@@ -311,7 +438,7 @@ public sealed class CaptureFlightTests
         BitmapSource screen = Image((int)monitor.Bounds.Width, (int)monitor.Bounds.Height);
         CaptureFlight flight = CaptureFlight.TryLift(screen, monitor.Bounds, () => clock.Now)!;
         QuickAccessWindow card = new(screen, () => Task.FromResult(true), () => { }, () => Task.CompletedTask,
-            () => Task.FromResult(true), () => { }, () => Task.FromResult("unused.png"), capturedRegion: monitor.Bounds,
+            () => Task.FromResult(true), () => { }, () => Task.FromResult("unused.png"),
             targetMonitor: monitor, keyboardRouter: router);
         try
         {
@@ -404,19 +531,22 @@ public sealed class CaptureFlightTests
     public void ACardClosingMidFlightEndsTheFlight() => RunFlight(motion: true, (monitor, clock, image, router) =>
     {
         CaptureFlight flight = CaptureFlight.TryLift(image, SourceOn(), () => clock.Now)!;
+        CaptureFlightDecoration lift = flight.WindowForTest!;
         QuickAccessWindow card = Card(image, monitor, router);
         try
         {
             flight.Land(card);
             card.Show();
             Assert.True(PumpUntil(() => flight.IsFlying || flight.IsDone));
+            Assert.True(flight.IsFlying);
             CaptureFlightDecoration flying = flight.WindowForTest!;
             card.RequestClose();
             Assert.True(FluidMotion.IsExiting(card));
             // The card leaves with its preview, and the image does not fly into a closing card.
             Assert.Equal(1, card.PreviewForTest.Opacity);
             flight.Tick();
-            Assert.True(flight.IsDone && flying.IsClosed);
+            // The lifted image still fading away on the source goes too.
+            Assert.True(flight.IsDone && flying.IsClosed && lift.IsClosed);
         }
         finally
         {
@@ -450,14 +580,40 @@ public sealed class CaptureFlightTests
         Assert.Equal(expected.Height, actual.Height, 6);
     }
 
+    private static void AssertCovers(RectD outer, Rect inner) =>
+        Assert.True(outer.Left <= inner.Left && outer.Right >= inner.Right && outer.Top <= inner.Top && outer.Bottom >= inner.Bottom,
+            $"{outer} does not cover {inner}");
+
+    // Windows will not size a window beyond SM_CXMAXTRACK/SM_CYMAXTRACK, which on a 1024 x 768
+    // hosted runner is this; a flight window larger than that would be skipped there.
+    private static void AssertFitsAHostedRunner(CaptureFlightDecoration window, MonitorInfo monitor)
+    {
+        Assert.Equal(PhysicalBounds(window), window.Bounds);
+        Size most = WindowTrackSizeScope.SmallDesktopMaximum;
+        Assert.True(window.Bounds.Width / monitor.ScaleFactor <= most.Width && window.Bounds.Height / monitor.ScaleFactor <= most.Height,
+            $"{window.Bounds} at {monitor.ScaleFactor:0.##}x is larger than {most}");
+    }
+
+    private static Point Centre(Rect rect) => new(rect.Left + (rect.Width / 2), rect.Top + (rect.Height / 2));
+
     // Off the visible desktop, on a test display the flight treats as real. Wider than the card's
-    // preview (about 320 DIP) at the display's scale, so the image shrinks on its way; small enough
-    // that the window over it and the card stays inside the largest window a 1024 x 768 hosted
-    // runner allows, since Windows will not size a window beyond SM_CXMAXTRACK/SM_CYMAXTRACK.
+    // preview (about 320 DIP) at the display's scale, so the image shrinks on its way. Far from the
+    // card waiting in the display's corner, so the image comes in over the last stretch only, in a
+    // window that stays inside the largest one a 1024 x 768 hosted runner allows.
     private static RectD SourceOn()
     {
         double scale = MonitorEnumerator.GetPrimary().Dpi / 96.0;
         return new(-31800, -31850, Math.Round(480 * scale), Math.Round(300 * scale));
+    }
+
+    // As large as SourceOn, up and to the left of the card waiting in the display's corner and well
+    // within ApproachDip of its preview, so the image flies the whole way.
+    private static RectD SourceNearCorner(MonitorInfo monitor)
+    {
+        double scale = monitor.ScaleFactor;
+        RectD size = SourceOn();
+        double centreX = monitor.WorkArea.Right - (310 * scale), centreY = monitor.WorkArea.Bottom - (354 * scale);
+        return new(Math.Round(centreX - (size.Width / 2)), Math.Round(centreY - (size.Height / 2)), size.Width, size.Height);
     }
 
     /// <summary>The largest window this desktop allows, in physical pixels.</summary>
@@ -471,7 +627,7 @@ public sealed class CaptureFlightTests
 
     private static QuickAccessWindow Card(BitmapSource image, MonitorInfo? monitor, ReceiptKeyboardRouter? router) =>
         new(image, () => Task.FromResult(true), () => { }, () => Task.CompletedTask, () => Task.FromResult(true), () => { },
-            () => Task.FromResult("unused.png"), capturedRegion: SourceOn(), targetMonitor: monitor, keyboardRouter: router);
+            () => Task.FromResult("unused.png"), targetMonitor: monitor, keyboardRouter: router);
 
     private static bool PumpUntil(Func<bool> done)
     {
@@ -514,8 +670,9 @@ public sealed class CaptureFlightTests
             Func<bool> previousLayered = CaptureFlight.ReadLayeredSupport;
             Func<IReadOnlyList<MonitorInfo>> previousMonitors = CaptureFlight.ReadMonitors;
             Func<Window, bool> previousExclusion = CaptureFlightDecoration.ApplyCaptureExclusion;
-            // A display far off the visible desktop, at the primary display's scale.
-            MonitorInfo display = Monitor(-32000, -32000, 2400, 1600, MonitorEnumerator.GetPrimary().Dpi);
+            // A display far off the visible desktop, 2400 x 1600 DIPs at the primary display's scale.
+            uint dpi = MonitorEnumerator.GetPrimary().Dpi;
+            MonitorInfo display = Monitor(-32000, -32000, Math.Round(2400 * dpi / 96.0), Math.Round(1600 * dpi / 96.0), dpi);
             using var router = new ReceiptKeyboardRouter(_ => new NoHotkeys());
             try
             {

@@ -43,15 +43,12 @@ public partial class App
             if (_services is not null && !receiptTaken)
             {
                 _latestReceipt = record.Id;
-                var region = new Core.Primitives.RectD(selection.Frame.ScreenBounds.Left + selection.BitmapRegion.Left,
-                    selection.Frame.ScreenBounds.Top + selection.BitmapRegion.Top,
-                    selection.BitmapRegion.Width, selection.BitmapRegion.Height);
                 MonitorInfo monitor = selection.Frame.Monitor ?? MonitorEnumerator.GetFromCursor();
                 IDisposable? receiptLease = pendingReceipt;
                 // The selector and its persistence transition finish before the fallback receipt is shown.
                 _ = Dispatcher.BeginInvoke(DispatcherPriority.ContextIdle, new Action(() =>
                 {
-                    try { ShowQuickAccess(record, selection.SelectedBitmap, region, monitor, copied, preserveEditor: true); }
+                    try { ShowQuickAccess(record, selection.SelectedBitmap, monitor, copied, preserveEditor: true); }
                     finally { receiptLease?.Dispose(); }
                 }));
                 pendingReceipt = null;

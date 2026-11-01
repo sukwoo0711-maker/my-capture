@@ -272,11 +272,11 @@ public sealed class SavedLocationCommitTests
         return image;
     }
 
-    private static ThemedShellPresenter Presenter() => new(() => false)
+    private static ThemedShellPresenter Presenter()
     {
-        NotificationMonitor = () => new MonitorInfo("TEST", new RectD(-20000, -20000, 1080, 1920),
-            new RectD(-20000, -20000, 1080, 1880), 96, false),
-    };
+        var monitor = new MonitorInfo("TEST", new RectD(-20000, -20000, 1080, 1920), new RectD(-20000, -20000, 1080, 1880), 96, false);
+        return new(() => false) { NotificationMonitor = () => monitor, MonitorOfWindow = _ => monitor };
+    }
 
     private static App ConnectHostReceipt(Fixture fixture, ThemedShellPresenter presenter,
         CaptureRecord record, CaptureEditSession session)

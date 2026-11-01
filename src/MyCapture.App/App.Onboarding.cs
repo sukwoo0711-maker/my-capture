@@ -208,7 +208,7 @@ public partial class App
         if (_shellPresenter is null || _services is null) return;
         bool idle = !_storeInstallationPending && !_coreShortcutsQuestionPending && _onboardingWindow is null
             && !IsWelcomeCaptureInProgress && !_shellPresenter.HasNotification && !_readyNotification.HasPendingResident
-            && _settingsWindow?.IsVisible != true && _pins?.IsInteractionActive != true
+            && _settingsWindow?.IsVisible != true && _pins?.IsInteractionActive != true && _quickAccess?.IsOpen != true
             && !Windows.OfType<AnnotationEditorWindow>().Any(window => window.IsVisible);
         try
         {

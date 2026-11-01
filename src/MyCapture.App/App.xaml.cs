@@ -358,7 +358,11 @@ public partial class App : Application
 
         _shellPresenter = new ThemedShellPresenter(
             () => _overlay?.IsActive == true || _recorder?.IsActive == true,
-            () => _overlay?.IsActive == true || (_recorder?.IsActive == true && !_recorder.CanCaptureStill), _receiptKeyboard);
+            () => _overlay?.IsActive == true || (_recorder?.IsActive == true && !_recorder.CanCaptureStill), _receiptKeyboard)
+        {
+            // The capture card and notifications share the corner above the notification area.
+            CornerOccupant = () => _quickAccess?.OpenSurfaceBounds,
+        };
         _tray.NotificationPresenter = _shellPresenter.ShowNotification;
         // Rebuilt on every open: the reopen-pin entry appears exactly while a closed pin can return,
         // and Pin clipboard is enabled only while the clipboard announces an image or text.
@@ -1337,8 +1341,6 @@ public partial class App : Application
         {
             _latestReceipt = receipt.Id;
             var selected = e.SelectedBitmap;
-            var region = new Core.Primitives.RectD(e.Frame.ScreenBounds.Left + e.BitmapRegion.Left,
-                e.Frame.ScreenBounds.Top + e.BitmapRegion.Top, e.BitmapRegion.Width, e.BitmapRegion.Height);
             var monitor = e.Frame.Monitor ?? MonitorEnumerator.GetFromCursor();
             // Clipboard-only and card modes release the edit session once persistence ends.
             // Hold the receipt until the deferred presentation owns its own lease.
@@ -1349,7 +1351,7 @@ public partial class App : Application
                 try
                 {
                     if (_latestReceipt != receipt.Id || _preparingAdvancedCapture || _overlay?.IsSelecting == true) return;
-                    if (_settings?.General.AfterCapture == AfterCaptureAction.QuickAccess) ShowQuickAccess(receipt, selected, region, monitor, copied);
+                    if (_settings?.General.AfterCapture == AfterCaptureAction.QuickAccess) ShowQuickAccess(receipt, selected, monitor, copied);
                     else
                     {
                         if (ReferenceEquals(_currentRecord, receipt)) _overlay?.CurrentEditor?.ShowCaptureReceipt(copied);
@@ -1451,7 +1453,7 @@ public partial class App : Application
     }
 
     private void ShowQuickAccess(CaptureRecord record, System.Windows.Media.Imaging.BitmapSource image,
-        Core.Primitives.RectD region, MonitorInfo monitor, bool copiedToClipboard, bool preserveEditor = false)
+        MonitorInfo monitor, bool copiedToClipboard, bool preserveEditor = false)
     {
         if (_latestReceipt != record.Id) return;
         if (_preparingAdvancedCapture || _overlay?.IsSelecting == true) return;
@@ -1466,11 +1468,13 @@ public partial class App : Application
             QuickAccessWindow? card = null;
             QuickAccessCardActions actions = CreateQuickAccessActions(record, () => card);
             card = new QuickAccessWindow(image, actions.Copy, actions.Edit, actions.Pin, actions.Save, actions.Library,
-                actions.Export, capturedRegion: region, targetMonitor: monitor, copyText: actions.CopyText,
+                actions.Export, targetMonitor: monitor, copyText: actions.CopyText,
                 copiedToClipboard: copiedToClipboard,
                 firstCaptureTip: _settings.General.FirstCaptureTipShown ? null : UiText.Get("Onboard_FirstCaptureTip"),
                 keyboardRouter: _receiptKeyboard);
             ReceiptTimeline.Mark?.Invoke("card-constructed");
+            // A notification already in the corner moves above the card instead of under it.
+            card.Placed += () => _shellPresenter?.RefitNotification();
             card.Closed += (_, _) =>
             {
                 _overlay?.NoteForegroundDismissal(card.IsCaptureExcluded);

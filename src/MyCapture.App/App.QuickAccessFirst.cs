@@ -3,7 +3,6 @@ using System.Windows.Threading;
 using Microsoft.Extensions.Logging;
 using MyCapture.App.Capture;
 using MyCapture.App.Diagnostics;
-using MyCapture.Core.Primitives;
 using MyCapture.Core.Queue;
 using MyCapture.Core.Settings;
 using MyCapture.Platform.Display;
@@ -61,9 +60,7 @@ public partial class App
         // The conditions of the card after the save (ShowQuickAccess); a scrolling capture shows it without a flight.
         if (ShowsCardAfterSaveForTest || _services is null || _queue is null || _commit is null || e.TextCapture
             || (!preserveEditor && _settings?.General.AfterCapture != AfterCaptureAction.QuickAccess)) return null;
-        var region = new RectD(e.Frame.ScreenBounds.Left + e.BitmapRegion.Left,
-            e.Frame.ScreenBounds.Top + e.BitmapRegion.Top, e.BitmapRegion.Width, e.BitmapRegion.Height);
-        var first = new QuickAccessFirst(e.SelectedBitmap, region, e.Frame.Monitor ?? MonitorEnumerator.GetFromCursor())
+        var first = new QuickAccessFirst(e.SelectedBitmap, e.Frame.Monitor ?? MonitorEnumerator.GetFromCursor())
             { PreserveEditor = preserveEditor };
         _quickAccessFirst = first;
         // Posted after the lift at the same priority, so the card follows it on the next turn, before the
@@ -88,10 +85,12 @@ public partial class App
         QuickAccessWindow? card = null;
         try
         {
-            card = QuickAccessWindow.ForPendingCapture(first.Image, copied, first.Region, first.Monitor,
+            card = QuickAccessWindow.ForPendingCapture(first.Image, copied, first.Monitor,
                 _settings.General.FirstCaptureTipShown ? null : UiText.Get("Onboard_FirstCaptureTip"), _receiptKeyboard);
             ReceiptTimeline.Mark?.Invoke("card-constructed");
             QuickAccessWindow shown = card;
+            // A notification already in the corner moves above the card instead of under it.
+            shown.Placed += () => _shellPresenter?.RefitNotification();
             shown.Closed += (_, _) =>
             {
                 _overlay?.NoteForegroundDismissal(shown.IsCaptureExcluded);
@@ -273,12 +272,9 @@ public partial class App
     }
 
     /// <summary>One still capture whose card shows first, until its save and copy have reported.</summary>
-    private sealed class QuickAccessFirst(BitmapSource image, RectD region, MonitorInfo monitor)
+    private sealed class QuickAccessFirst(BitmapSource image, MonitorInfo monitor)
     {
         internal BitmapSource Image { get; } = image;
-
-        /// <summary>Where the capture was taken, in virtual-desktop physical pixels.</summary>
-        internal RectD Region { get; } = region;
 
         internal MonitorInfo Monitor { get; } = monitor;
 

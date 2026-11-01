@@ -520,11 +520,8 @@ internal sealed class CaptureScene : TutorialScene
         }
 
         Size size = Detached.Layout(_receiptRoot!, _receipt.Width);
-        Rect? captured = region;
-        RectD? placementRegion = captured is { } capture
-            ? new RectD(capture.X, capture.Y, capture.Width, capture.Height) : null;
         Rect placed = QuickAccessWindow.Position(new RectD(0, 0, SceneWidth, SceneHeight - TaskbarHeight),
-            1, size.Width, size.Height, placementRegion);
+            1, size.Width, size.Height, _receipt.AllowsTransparency ? QuickAccessWindow.ShadowMargin : 0);
         if (frame.Segment is "activate-card" or "edit-key")
         {
             Button close = OffscreenWindow.Descendants(_receiptRoot!).OfType<Button>().First(button =>

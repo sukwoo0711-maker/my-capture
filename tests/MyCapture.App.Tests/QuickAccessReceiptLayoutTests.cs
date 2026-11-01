@@ -197,8 +197,7 @@ public sealed class QuickAccessReceiptLayoutTests
             Assert.Equal(420, card.MaxHeight);
             Assert.Equal(280, host.ActualWidth);
             Assert.True(card.PreviewForTest.ActualWidth <= host.ActualWidth);
-            Rect position = QuickAccessWindow.Position(work, scale, normalWidth, 500,
-                new RectD(work.Right - 1, work.Bottom - 1, 1, 1));
+            Rect position = QuickAccessWindow.Position(work, scale, normalWidth, 500);
             // Fractional-DIP origins at 150% scaling can round a summed edge by about
             // 3e-14 DIP. Compare physical edges with the same subpixel tolerance as the preview.
             const double tolerance = 0.00001;

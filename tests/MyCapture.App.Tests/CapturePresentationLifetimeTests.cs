@@ -47,7 +47,7 @@ public sealed class CapturePresentationLifetimeTests
     {
         var owner = new CaptureOwner(Image());
         var card = new QuickAccessWindow(owner.Image, owner.Copy, owner.Edit, owner.Pin, owner.Copy,
-            owner.Edit, owner.Export, capturedRegion: Source, targetMonitor: monitor, keyboardRouter: router);
+            owner.Edit, owner.Export, targetMonitor: monitor, keyboardRouter: router);
         card.Show();
         card.UpdateLayout();
         card.CloseNow();
@@ -127,7 +127,7 @@ public sealed class CapturePresentationLifetimeTests
     private static QuickAccessWindow Card(BitmapSource image, MonitorInfo monitor, ReceiptKeyboardRouter router) =>
         new(image, () => Task.FromResult(true), () => { }, () => Task.CompletedTask,
             () => Task.FromResult(true), () => { }, () => Task.FromResult("unused.png"),
-            capturedRegion: Source, targetMonitor: monitor, keyboardRouter: router);
+            targetMonitor: monitor, keyboardRouter: router);
 
     private static BitmapSource Image()
     {

@@ -467,7 +467,7 @@ internal sealed partial class AppResponsivenessProbe
                         {
                             long t = Stopwatch.GetTimestamp();
                             card = new QuickAccessWindow(crop, () => Task.FromResult(true), () => { }, () => Task.CompletedTask,
-                                () => Task.FromResult(true), () => { }, () => Task.FromResult("unused.png"), capturedRegion: source,
+                                () => Task.FromResult(true), () => { }, () => Task.FromResult("unused.png"),
                                 targetMonitor: monitor, copyText: null, copiedToClipboard: true, firstCaptureTip: null, keyboardRouter: router);
                             AddReceiptPart("card: new QuickAccessWindow" + when, Ms(t));
                             card.ContentRendered += (_, _) => cardRendered.Set();

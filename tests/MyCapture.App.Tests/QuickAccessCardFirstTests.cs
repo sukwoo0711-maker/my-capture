@@ -12,6 +12,7 @@ using System.Windows.Threading;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using MyCapture.App.Capture;
+using MyCapture.App.Diagnostics;
 using MyCapture.App.Editing;
 using MyCapture.App.Store;
 using MyCapture.App.Themes;
@@ -628,19 +629,29 @@ public sealed class QuickAccessCardFirstTests : KoreanCaptionTest
     [Fact]
     public void TheLiftedCaptureFliesIntoTheCardShownFirst() => StaTestHost.Run(() =>
     {
-        using var shell = new Shell(motion: true);
-        Task handler = shell.Select();
-        shell.RunSendTurn();
+        Action<string>? previousMark = ReceiptTimeline.Mark;
+        var marks = new List<string>();
+        ReceiptTimeline.Mark = mark => { marks.Add(mark); previousMark?.Invoke(mark); };
+        try
+        {
+            using var shell = new Shell(motion: true);
+            Task handler = shell.Select();
+            shell.RunSendTurn();
 
-        QuickAccessWindow card = Assert.IsType<QuickAccessWindow>(shell.Card);
-        CaptureFlight flight = Assert.IsType<CaptureFlight>(shell.Flight);
-        Assert.Same(shell.Selection.SelectedBitmap, flight.Image);
-        Assert.True(card.IsPending);
-        Assert.True(card.IsLanding);
-        shell.Wait(handler);
-        Assert.True(shell.PumpUntil(() => flight.IsDone, throwOnTimeout: false), "The flight did not land.");
-        Assert.False(card.IsLanding);
-        Assert.Equal(1, card.PreviewForTest.Opacity);
+            QuickAccessWindow card = Assert.IsType<QuickAccessWindow>(shell.Card);
+            CaptureFlight flight = Assert.IsType<CaptureFlight>(shell.Flight);
+            Assert.Same(shell.Selection.SelectedBitmap, flight.Image);
+            Assert.True(card.IsPending);
+            Assert.True(card.IsLanding);
+            shell.Wait(handler);
+            Assert.True(shell.PumpUntil(() => flight.IsDone, throwOnTimeout: false), "The flight did not land.");
+            Assert.False(card.IsLanding);
+            Assert.Equal(1, card.PreviewForTest.Opacity);
+            // It flew into the card in the corner rather than stepping aside for its usual entrance.
+            Assert.Contains("flight-start", marks);
+            Assert.DoesNotContain("flight-skipped", marks);
+        }
+        finally { ReceiptTimeline.Mark = previousMark; }
     });
 
     [Theory]
@@ -649,7 +660,7 @@ public sealed class QuickAccessCardFirstTests : KoreanCaptionTest
     public void SavedLocationReceiptFollowsACardClosedBeforeOrAfterDurableSave(bool savedBeforeClose) => StaTestHost.Run(() =>
     {
         using var shell = new Shell();
-        using var presenter = new ThemedShellPresenter(() => false) { NotificationMonitor = Offscreen };
+        using var presenter = new ThemedShellPresenter(() => false) { NotificationMonitor = Offscreen, MonitorOfWindow = _ => Offscreen() };
         shell.UseReceiptPresenter(presenter);
         Task handler = shell.Select();
         shell.RunSendTurn();
@@ -668,7 +679,7 @@ public sealed class QuickAccessCardFirstTests : KoreanCaptionTest
     public void SavedLocationReceiptNeverFollowsAFailedPendingSave() => StaTestHost.Run(() =>
     {
         using var shell = new Shell();
-        using var presenter = new ThemedShellPresenter(() => false) { NotificationMonitor = Offscreen };
+        using var presenter = new ThemedShellPresenter(() => false) { NotificationMonitor = Offscreen, MonitorOfWindow = _ => Offscreen() };
         shell.UseReceiptPresenter(presenter);
         shell.Persistence.BeforeRecordMetadataCommit = _ => throw new IOException("Synthetic save failure");
         Task handler = shell.Select();
@@ -684,7 +695,7 @@ public sealed class QuickAccessCardFirstTests : KoreanCaptionTest
     public void SavedLocationReceiptFollowsTheCardShownAfterSaveToo() => StaTestHost.Run(() =>
     {
         using var shell = new Shell();
-        using var presenter = new ThemedShellPresenter(() => false) { NotificationMonitor = Offscreen };
+        using var presenter = new ThemedShellPresenter(() => false) { NotificationMonitor = Offscreen, MonitorOfWindow = _ => Offscreen() };
         shell.UseReceiptPresenter(presenter);
         shell.ShowsCardAfterSave = true;
         shell.Wait(shell.Select());

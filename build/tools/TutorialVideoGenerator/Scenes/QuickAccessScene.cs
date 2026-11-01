@@ -27,8 +27,8 @@ internal sealed class QuickAccessScene : TutorialScene
 {
     internal static readonly string[] Features = ["quick-access"];
 
-    // The page on the right, the note on the left; the card lands beside the captured region
-    // (QuickAccessWindow.Position), between the two.
+    // The page on the right, the note on the left; the card waits in the bottom-right corner of
+    // the work area, above the taskbar (QuickAccessWindow.Position).
     private static readonly Rect BrowserClient = new(400, 52, 540, 300);
     private static readonly Rect NoteClient = new(20, 52, 318, 360);
     private const double Toolbar = 36;
@@ -69,9 +69,10 @@ internal sealed class QuickAccessScene : TutorialScene
         _keepButton = OffscreenWindow.Descendants(_cardRoot).OfType<ToggleButton>()
             .Single(button => System.Windows.Automation.AutomationProperties.GetName(button) == UiText.Get("QuickAccess.KeepName"));
 
-        // QuickAccessWindow.Position: beside the captured region inside the work area.
+        // QuickAccessWindow.Position: the work area's bottom-right corner, above the taskbar.
         RectD region = StageRegion;
-        Rect placed = QuickAccessWindow.Position(new RectD(0, 0, Stage.Width, Taskbar.WorkBottom), 1, size.Width, size.Height, region);
+        Rect placed = QuickAccessWindow.Position(new RectD(0, 0, Stage.Width, Taskbar.WorkBottom), 1, size.Width, size.Height,
+            _card.AllowsTransparency ? QuickAccessWindow.ShadowMargin : 0);
         _cardOrigin = placed.TopLeft;
         Story = BuildStory(new PointD(region.Right, region.Bottom));
     }
@@ -98,7 +99,9 @@ internal sealed class QuickAccessScene : TutorialScene
         story.Move("note-move", NoteBody, 18).Click("note-click");
         story.Motion("paste-wait", 10, NoteBody, NoteBody);
         story.Motion("paste", 30, NoteBody, NoteBody);
-        story.Motion("result", 40, NoteBody, NoteBody);
+        // Long enough for the countdown, which waits while the card comes up under the pointer and
+        // while the keyboard is on it, to run out at the final hold.
+        story.Motion("result", 75, NoteBody, NoteBody);
         return story.Finish("result", 11);
     }
 
@@ -154,7 +157,23 @@ internal sealed class QuickAccessScene : TutorialScene
                 break;
         }
 
-        if (!_cardClosed) _card.Advance(TimeSpan.FromSeconds(frame.Repeat / (double)TutorialStoryboard.Fps), interacting: _active);
+        // As in the app, the countdown also waits while the pointer rests on the card.
+        bool pointerOnCard = VisibleCard.Contains(new Point(frame.Cursor.X, frame.Cursor.Y));
+        if (!_cardClosed) _card.Advance(TimeSpan.FromSeconds(frame.Repeat / (double)TutorialStoryboard.Fps), interacting: _active || pointerOnCard);
+        // The clip ends with the card closed by itself, as its last caption says.
+        if (frame.Segment == "result" && frame.Steps == 1 && !_cardClosed)
+            throw new InvalidOperationException("The quick-access card did not close by itself before the clip ended.");
+    }
+
+    // The card itself, inside its transparent shadow band.
+    private Rect VisibleCard
+    {
+        get
+        {
+            double margin = _card.AllowsTransparency ? QuickAccessWindow.ShadowMargin : 0;
+            return new Rect(_cardOrigin.X + margin, _cardOrigin.Y + margin,
+                Math.Max(0, _cardRoot.ActualWidth - (2 * margin)), Math.Max(0, _cardRoot.ActualHeight - (2 * margin)));
+        }
     }
 
     private void DrawBrowser(DrawingContext dc)
