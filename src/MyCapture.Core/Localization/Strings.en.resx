@@ -3713,8 +3713,8 @@ Delete {1} {1:plural:subfolder|subfolders}, {2} {2:plural:image|images}, and {3}
   <data name="Folder410.PrefixHint" xml:space="preserve"><value>Captures without titles use this prefix and a sequence number.</value></data>
   <data name="Folder410.PrefixInvalid" xml:space="preserve"><value>Enter a prefix of 1–40 characters without path characters.</value></data>
   <data name="Folder410.Sort" xml:space="preserve"><value>Sort</value></data>
-  <data name="Folder410.Newest" xml:space="preserve"><value>Newest first</value></data>
-  <data name="Folder410.Oldest" xml:space="preserve"><value>Oldest first</value></data>
+  <data name="Folder410.Newest" xml:space="preserve"><value>Newest</value></data>
+  <data name="Folder410.Oldest" xml:space="preserve"><value>Oldest</value></data>
   <data name="Folder410.ByName" xml:space="preserve"><value>Name</value></data>
   <data name="Folder410.InvalidMove" xml:space="preserve"><value>Cannot move to this location.</value></data>
   <data name="Folder410.EmptyFolder" xml:space="preserve"><value>This folder has no captures.</value></data>

@@ -1923,8 +1923,9 @@
 
             <!-- After the library content, so Tab follows the visual order: pane, content, details.
                  The selected capture's preview, title and main commands stay at the top; only the
-                 information below them scrolls, and nothing inside it scrolls on its own. -->
-            <Border x:Name="GalleryDetailsRail" Grid.Column="2" Width="48" Padding="7" Visibility="Collapsed"
+                 information below them scrolls, and nothing inside it scrolls on its own.
+                 The rail's side padding keeps its compact button whole beside the border. -->
+            <Border x:Name="GalleryDetailsRail" Grid.Column="2" Width="48" Padding="5,7" Visibility="Collapsed"
                     Background="{DynamicResource Surface.Raised}" BorderBrush="{DynamicResource Border.Subtle}" BorderThickness="1,0,0,0"
                     AutomationProperties.Name="{loc:Text Workspace.Details}">
                 <Button x:Name="ShowDetailsButton" Style="{StaticResource Button.Icon.Compact}" VerticalAlignment="Top"
