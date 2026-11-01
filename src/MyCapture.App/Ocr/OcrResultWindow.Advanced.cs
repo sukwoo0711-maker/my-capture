@@ -458,6 +458,13 @@ internal sealed partial class OcrResultWindow
         GeometryRequested?.Invoke(this, EventArgs.Empty);
     }
 
+    /// <summary>Ends a position request that brought none; the next table or code view asks again.</summary>
+    internal void CompleteGeometryRefresh(string message)
+    {
+        _geometryRequested = false;
+        CompletePreservedRerun(message);
+    }
+
     private void OpenExcel()
     {
         if (_currentExtraction?.Table.Rows.Count is not > 0) return;
