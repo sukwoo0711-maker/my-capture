@@ -1,3 +1,4 @@
+using MyCapture.App.Themes;
 using System.Globalization;
 using System.Windows;
 using System.Windows.Automation;
@@ -55,13 +56,13 @@ internal sealed class OcrTranslationPanel : Grid
         Children.Add(content);
 
         _message = new StackPanel { Margin = new Thickness(16, 8, 16, 16), MaxWidth = 460, HorizontalAlignment = HorizontalAlignment.Left };
-        _messageTitle = new TextBlock { FontSize = 16, FontWeight = FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap };
+        _messageTitle = new TextBlock { FontSize = TypeScale.BodyLarge, FontWeight = FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap };
         _messageTitle.SetResourceReference(TextBlock.ForegroundProperty, "Text.Primary");
         AutomationProperties.SetLiveSetting(_messageTitle, AutomationLiveSetting.Polite);
         _messageBody = new TextBlock { Margin = new Thickness(0, 6, 0, 0), TextWrapping = TextWrapping.Wrap };
         _messageBody.SetResourceReference(TextBlock.ForegroundProperty, "Text.Secondary");
         _progress = new ProgressBar { Height = 4, Margin = new Thickness(0, 14, 0, 0), Minimum = 0, Maximum = 1 };
-        _progressText = new TextBlock { Margin = new Thickness(0, 6, 0, 0), FontSize = 12 };
+        _progressText = new TextBlock { Margin = new Thickness(0, 6, 0, 0), FontSize = TypeScale.Caption };
         _progressText.SetResourceReference(TextBlock.ForegroundProperty, "Text.Secondary");
         var actions = new WrapPanel { Margin = new Thickness(0, 16, 0, 0) };
         _primaryAction = new Button { Margin = new Thickness(0, 0, 8, 0), MinWidth = 120 };
@@ -119,9 +120,9 @@ internal sealed class OcrTranslationPanel : Grid
     internal string CopyWithSourceText => string.Join("\n\n", _results.Select(result =>
         $"{result.Block.Number.ToString(CultureInfo.InvariantCulture)}. {result.Block.Text}\n{result.Translation.Text}"));
 
-    internal string MessageTitle => _messageTitle.Text;
+    internal string MessageTitle => KoreanWordWrap.Strip(_messageTitle.Text);
 
-    internal string MessageBody => _messageBody.Text;
+    internal string MessageBody => KoreanWordWrap.Strip(_messageBody.Text);
 
     internal string PrimaryActionText => _primaryAction.Content as string ?? "";
 
@@ -187,7 +188,7 @@ internal sealed class OcrTranslationPanel : Grid
         _heading.Text = UiText.Get("Translate_Direction");
         _message.Visibility = state == ViewState.Idle ? Visibility.Collapsed : Visibility.Visible;
         Announce(_messageTitle, title);
-        _messageBody.Text = body;
+        KoreanWordWrap.Show(_messageBody, body);
         _messageBody.Visibility = body.Length == 0 ? Visibility.Collapsed : Visibility.Visible;
         _progress.Visibility = progress is null ? Visibility.Collapsed : Visibility.Visible;
         _progress.IsIndeterminate = progress is double value && double.IsNaN(value);
@@ -217,7 +218,7 @@ internal sealed class OcrTranslationPanel : Grid
             HorizontalAlignment = HorizontalAlignment.Left,
             Child = new TextBlock
             {
-                Text = number, FontSize = 11, FontWeight = FontWeights.SemiBold,
+                Text = number, FontSize = TypeScale.Micro, FontWeight = FontWeights.SemiBold,
                 HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center,
             },
         };
@@ -227,14 +228,14 @@ internal sealed class OcrTranslationPanel : Grid
 
         var texts = new StackPanel();
         SetColumn(texts, 1);
-        var source = new TextBlock { Text = result.Block.Text, FontSize = 12, TextWrapping = TextWrapping.Wrap };
+        var source = new TextBlock { Text = result.Block.Text, FontSize = TypeScale.Caption, TextWrapping = TextWrapping.Wrap };
         source.SetResourceReference(TextBlock.ForegroundProperty, "Text.Secondary");
         AutomationProperties.SetName(source, UiText.Format("Translate_SourceName", number));
         texts.Children.Add(source);
         var translation = new TextBox
         {
             Text = result.Translation.Text, IsReadOnly = true, TextWrapping = TextWrapping.Wrap,
-            Template = FlatTextTemplate, Margin = new Thickness(0, 4, 0, 0), FontSize = 14,
+            Template = FlatTextTemplate, Margin = new Thickness(0, 4, 0, 0), FontSize = TypeScale.Body,
             // The theme's text field padding and height would indent the translation under its original.
             Padding = new Thickness(0), MinHeight = 0,
         };
@@ -249,7 +250,7 @@ internal sealed class OcrTranslationPanel : Grid
         texts.Children.Add(translation);
         if (result.Translation.NeedsReview)
         {
-            var warning = new TextBlock { Margin = new Thickness(0, 4, 0, 0), FontSize = 12, TextWrapping = TextWrapping.Wrap };
+            var warning = new TextBlock { Margin = new Thickness(0, 4, 0, 0), FontSize = TypeScale.Caption, TextWrapping = TextWrapping.Wrap };
             warning.SetResourceReference(TextBlock.ForegroundProperty, "State.Warning");
             warning.Text = string.Join("\n", ReviewNotes(result.Translation));
             texts.Children.Add(warning);
@@ -270,8 +271,8 @@ internal sealed class OcrTranslationPanel : Grid
     /// </summary>
     private static void Announce(TextBlock block, string text)
     {
-        if (string.Equals(block.Text, text, StringComparison.Ordinal)) return;
-        block.Text = text;
+        if (string.Equals(KoreanWordWrap.Strip(block.Text), text, StringComparison.Ordinal)) return;
+        KoreanWordWrap.Show(block, text);
         if (!block.IsLoaded || text.Length == 0) return;
         AutomationPeer? peer = UIElementAutomationPeer.FromElement(block) ?? UIElementAutomationPeer.CreatePeerForElement(block);
         peer?.RaiseAutomationEvent(AutomationEvents.LiveRegionChanged);

@@ -19,10 +19,10 @@ namespace MyCapture.App.Recording;
 /// </summary>
 internal sealed class RecordingWallClockWindow : Window
 {
-    internal const double MinFontSize = 10.0;
-    internal const double MaxFontSize = 28.0;
-    internal const double DefaultFontSize = 13.0;
-    private const double FontSizeStep = 1.0;
+    internal const double MinFontSize = TypeScale.Content.WallClockMinimum;
+    internal const double MaxFontSize = TypeScale.Content.WallClockMaximum;
+    internal const double DefaultFontSize = TypeScale.Content.WallClockDefault;
+    private const double FontSizeStep = TypeScale.Content.WallClockStep;
 
     internal const int MinFps = 1;
     internal const int MaxFps = 30;

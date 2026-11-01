@@ -1,3 +1,4 @@
+using MyCapture.App.Themes;
 using System.Globalization;
 using System.Runtime.CompilerServices;
 using System.Windows;
@@ -24,7 +25,7 @@ internal sealed partial class AnnotationEditorControl
         {
             MinHeight = 32,
             Width = 160,
-            FontSize = 14,
+            FontSize = TypeScale.Body,
             VerticalAlignment = VerticalAlignment.Center,
             MaxDropDownHeight = 320,
             IsTextSearchEnabled = true,

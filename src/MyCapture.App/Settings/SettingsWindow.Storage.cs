@@ -1,3 +1,4 @@
+using MyCapture.App.Themes;
 using System.ComponentModel;
 using System.IO;
 using System.Windows;
@@ -37,7 +38,7 @@ internal sealed partial class SettingsWindow
     /// </summary>
     private void RefreshRetention()
     {
-        RetentionSummary.Text = SettingsUxText.RetentionSummary(_draft.ImageRetentionHours);
+        KoreanWordWrap.Show(RetentionSummary, SettingsUxText.RetentionSummary(_draft.ImageRetentionHours));
         IReadOnlyList<RetentionChoice> choices = SettingsUxText.RetentionChoices(_draft.ImageRetentionHours, _loadedRetentionHours);
         _syncingRetention = true;
         try

@@ -79,8 +79,8 @@ internal sealed class LegacyDataImportWindow : Window
         feedback.Children.Add(_progress);
         DockPanel.SetDock(feedback, Dock.Bottom); root.Children.Add(feedback);
         var panel = new StackPanel();
-        panel.Children.Add(new TextBlock { Text = Title, FontSize = 20, FontWeight = FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap });
-        panel.Children.Add(new TextBlock { Text = UiText.Get("LegacyImport.Description"), TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 12, 0, 16) });
+        panel.Children.Add(KoreanWordWrap.Show(new TextBlock { FontSize = TypeScale.Subtitle, FontWeight = FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap }, Title));
+        panel.Children.Add(KoreanWordWrap.Show(new TextBlock { TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 12, 0, 16) }, UiText.Get("LegacyImport.Description")));
         panel.Children.Add(new TextBlock { Text = UiText.Get("LegacyImport.Source"), FontWeight = FontWeights.SemiBold });
         _source = new TextBlock { Text = sourceRoot, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 4, 0, 8) };
         panel.Children.Add(_source);
@@ -100,11 +100,11 @@ internal sealed class LegacyDataImportWindow : Window
         _includeSettings = new CheckBox { Content = UiText.Get("LegacyImport.IncludeSettings"), IsChecked = false, IsEnabled = false };
         AutomationProperties.SetName(_includeSettings, UiText.Get("LegacyImport.IncludeSettings"));
         panel.Children.Add(_includeSettings);
-        _settingsNote = new TextBlock { Text = UiText.Get("LegacyImport.SettingsUnreadable"), TextWrapping = TextWrapping.Wrap,
-            Margin = new Thickness(0, 4, 0, 0), Visibility = Visibility.Collapsed };
+        _settingsNote = KoreanWordWrap.Show(new TextBlock { TextWrapping = TextWrapping.Wrap,
+            Margin = new Thickness(0, 4, 0, 0), Visibility = Visibility.Collapsed }, UiText.Get("LegacyImport.SettingsUnreadable"));
         panel.Children.Add(_settingsNote);
-        panel.Children.Add(new TextBlock { Text = UiText.Get("LegacyImport.KeepLibrary"), TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 4, 0, 0) });
-        panel.Children.Add(new TextBlock { Text = UiText.Get("LegacyImport.SettingsDraft"), TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 4, 0, 12) });
+        panel.Children.Add(KoreanWordWrap.Show(new TextBlock { TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 4, 0, 0) }, UiText.Get("LegacyImport.KeepLibrary")));
+        panel.Children.Add(KoreanWordWrap.Show(new TextBlock { TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 4, 0, 12) }, UiText.Get("LegacyImport.SettingsDraft")));
         root.Children.Add(new ScrollViewer { Content = panel, VerticalScrollBarVisibility = ScrollBarVisibility.Auto });
         Content = root;
         Loaded += async (_, _) => await ScanAsync();
@@ -135,8 +135,8 @@ internal sealed class LegacyDataImportWindow : Window
         {
             LegacyMigrationScan scan = await _operations.Service.ScanAsync(SourceRoot, _operations.TargetPaths, _work.Token);
             if (_closed || generation != _generation) return;
-            _summary.Text = UiText.Format("LegacyImport.Counts", scan.ImageCount, scan.VideoCount, scan.FolderCount)
-                + (scan.UnusableCount > 0 ? Environment.NewLine + UiText.Format("LegacyImport.Unusable", scan.UnusableCount) : "");
+            KoreanWordWrap.Show(_summary, UiText.Format("LegacyImport.Counts", scan.ImageCount, scan.VideoCount, scan.FolderCount)
+                + (scan.UnusableCount > 0 ? Environment.NewLine + UiText.Format("LegacyImport.Unusable", scan.UnusableCount) : ""));
             _settingsNote.Visibility = scan.SettingsUnreadable ? Visibility.Visible : Visibility.Collapsed;
             _hasSettings = scan.HasSettings;
             _includeSettings.IsEnabled = scan.HasSettings && scan.Status == LegacyMigrationScanStatus.Ready;
@@ -366,7 +366,7 @@ internal sealed class LegacyDataImportWindow : Window
 
     private void SetStatus(string text, bool announce = true)
     {
-        _status.Text = text;
+        KoreanWordWrap.Show(_status, text);
         if (!announce) return;
         AnnouncementCountForTest++;
         (UIElementAutomationPeer.FromElement(_status) ?? UIElementAutomationPeer.CreatePeerForElement(_status))

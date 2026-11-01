@@ -1,3 +1,4 @@
+using MyCapture.App.Themes;
 using System.Globalization;
 using System.Runtime.CompilerServices;
 using System.Windows;
@@ -70,7 +71,7 @@ internal sealed class NumberStepperField
         });
         var unitText = new TextBlock
         {
-            Text = unit, FontSize = 12, Margin = new Thickness(0, 0, 6, 0),
+            Text = unit, FontSize = TypeScale.Caption, Margin = new Thickness(0, 0, 6, 0),
             VerticalAlignment = VerticalAlignment.Center,
         };
         unitText.SetResourceReference(TextBlock.ForegroundProperty, "Text.Secondary");
@@ -97,7 +98,7 @@ internal sealed class NumberStepperField
         var button = new Button
         {
             Content = glyph, Width = 32, Height = 32, MinWidth = 32, MinHeight = 32,
-            Padding = new Thickness(0), FontSize = 12, ToolTip = name,
+            Padding = new Thickness(0), FontSize = TypeScale.Caption, ToolTip = name,
             Focusable = false, IsTabStop = false,
         };
         button.SetResourceReference(FrameworkElement.StyleProperty, "Button.GhostCompact");

@@ -42,14 +42,14 @@ internal sealed partial class SettingsWindow
     {
         if (AppArchitecture.IsX86)
         {
-            TranslationModelStatus.Text = UiText.Get("Settings.TranslationUnavailable.X86");
+            KoreanWordWrap.Show(TranslationModelStatus, UiText.Get("Settings.TranslationUnavailable.X86"));
             TranslationModelDelete.IsEnabled = false;
             return;
         }
         long bytes = InstalledTranslationBytes();
-        TranslationModelStatus.Text = bytes > 0
+        KoreanWordWrap.Show(TranslationModelStatus, bytes > 0
             ? UiText.Format("Settings_TranslationInstalled", Megabytes(bytes))
-            : UiText.Get("Settings_TranslationNotInstalled");
+            : UiText.Get("Settings_TranslationNotInstalled"));
         TranslationModelDelete.IsEnabled = bytes > 0 && !_deletingTranslationModel && DeleteTranslationModel is not null;
     }
 

@@ -1,3 +1,4 @@
+using MyCapture.App.Themes;
 using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Automation.Peers;
@@ -168,7 +169,7 @@ internal sealed class OcrImageOverlay : FrameworkElement
         {
             if (string.IsNullOrEmpty(_labels[index])) continue;
             var number = new FormattedText(_labels[index], System.Globalization.CultureInfo.InvariantCulture,
-                FlowDirection.LeftToRight, typeface, 11, text, pixelsPerDip);
+                FlowDirection.LeftToRight, typeface, TypeScale.Micro, text, pixelsPerDip);
             double radius = Math.Max(9, number.Width / 2 + 4);
             Rect region = ViewRect(_regions[index], fit);
             var center = new Point(

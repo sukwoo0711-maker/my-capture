@@ -1,3 +1,4 @@
+using MyCapture.App.Themes;
 using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Controls;
@@ -86,7 +87,7 @@ public static class GallerySourceBadge
         {
             Text = SourceChip.GlyphFor(provenance.Kind),
             FontFamily = new FontFamily("Segoe Fluent Icons, Segoe MDL2 Assets"),
-            FontSize = 16,
+            FontSize = TypeScale.IconGlyph,
             VerticalAlignment = VerticalAlignment.Center,
             HorizontalAlignment = HorizontalAlignment.Center,
         };

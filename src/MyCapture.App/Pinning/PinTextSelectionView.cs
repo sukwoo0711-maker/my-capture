@@ -1,3 +1,4 @@
+using MyCapture.App.Themes;
 using System.Text;
 using System.Windows;
 using System.Windows.Automation;
@@ -221,13 +222,13 @@ internal sealed class PinTextSelectionView : Grid
         {
             double paddingX = _isCode ? ClipboardCodeRenderer.HorizontalPaddingDip : 24;
             double paddingY = _isCode ? ClipboardCodeRenderer.VerticalPaddingDip : 20;
-            TextBox.FontSize = (_isCode ? ClipboardCodeRenderer.FontSizeDip : 16) * _zoom;
+            TextBox.FontSize = (_isCode ? ClipboardCodeRenderer.FontSizeDip : TypeScale.Content.PlainText) * _zoom;
             TextBox.Padding = new Thickness(paddingX * _zoom, paddingY * _zoom, paddingX * _zoom, paddingY * _zoom);
             TextBlock.SetLineHeight(TextBox, (_isCode ? ClipboardCodeRenderer.LineHeightDip : 24) * _zoom);
         }
         if (TableGrid is not null)
         {
-            TableGrid.FontSize = 14 * _zoom;
+            TableGrid.FontSize = TypeScale.Content.TableText * _zoom;
             TableGrid.Margin = new Thickness(16 * _zoom);
             TableGrid.RowHeight = 34 * _zoom;
             TableGrid.MinColumnWidth = 0;
@@ -239,7 +240,7 @@ internal sealed class PinTextSelectionView : Grid
         }
         if (_tableLimit is not null)
         {
-            _tableLimit.FontSize = 12 * _zoom;
+            _tableLimit.FontSize = TypeScale.Caption * _zoom;
             _tableLimit.Margin = new Thickness(4 * _zoom, 0, 4 * _zoom, 4 * _zoom);
         }
     }

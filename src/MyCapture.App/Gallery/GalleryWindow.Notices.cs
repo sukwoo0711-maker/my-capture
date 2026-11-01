@@ -40,7 +40,7 @@ internal sealed partial class GalleryWindow
     private FeedbackCountdown? _noticeCountdown;
 
     /// <summary>The status line's current message.</summary>
-    internal string ActionStatusText => LibraryActionStatus.Text;
+    internal string ActionStatusText => KoreanWordWrap.Strip(LibraryActionStatus.Text);
 
     /// <summary>True while the status bar offers an update.</summary>
     internal bool IsUpdateAvailableShown => UpdateAvailableButton.Visibility == Visibility.Visible;
@@ -112,7 +112,7 @@ internal sealed partial class GalleryWindow
     {
         if (LibraryNotice is null) return false;
         if (_notice is not { } notice || !IsVisible || WindowState == WindowState.Minimized
-            || !string.IsNullOrEmpty(LibraryActionStatus.Text))
+            || !string.IsNullOrEmpty(KoreanWordWrap.Strip(LibraryActionStatus.Text)))
         {
             LibraryNotice.Visibility = Visibility.Collapsed;
             return false;
@@ -140,7 +140,7 @@ internal sealed partial class GalleryWindow
 
     private void RecordNoticeShown()
     {
-        if (IsNoticeVisible && string.IsNullOrEmpty(LibraryActionStatus.Text)
+        if (IsNoticeVisible && string.IsNullOrEmpty(KoreanWordWrap.Strip(LibraryActionStatus.Text))
             && _notice is { WasShown: false } notice)
         {
             notice.WasShown = true;

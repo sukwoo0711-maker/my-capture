@@ -110,7 +110,7 @@ public sealed partial class SettingsThemePreviewTests
             MenuItem menuCopy = menu.Items.OfType<MenuItem>().Single(item => item.Header as string == copyName);
             Assert.Same(first.DataContext, menuCopy.CommandParameter);
             PumpUiTask(window, () => { menuCopy.RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent)); return Task.FromResult(true); });
-            PumpLibraryUntil(window, () => status.Text == "이미지 복사됨", "feel: menu copy status");
+            PumpLibraryUntil(window, () => KoreanWordWrap.Strip(status.Text) == "이미지 복사됨", "feel: menu copy status");
             Assert.Equal(writes + 2, RecordingClipboard.WriteCount);
             Assert.Equal(FeedbackKind.Confirmation, window.ActionStatusKindForTest);
             Assert.Empty(Application.Current.Windows.OfType<ThemedDialog>());
@@ -125,10 +125,10 @@ public sealed partial class SettingsThemePreviewTests
             var shrink = Assert.IsType<ScaleTransform>(leaving.RenderTransform);
             Assert.True(shrink.HasAnimatedProperties);
             Assert.NotNull(FeelPicture(leaving).Source); // the picture stays while it fades
-            Assert.NotEqual("1개를 휴지통으로 옮김", status.Text);
+            Assert.NotEqual("1개를 휴지통으로 옮김", KoreanWordWrap.Strip(status.Text));
 
             (string Status, bool Rising, Guid[] Moving, bool Fading, int Count, bool UndoReady)? end = null;
-            delete.ContinueWith(_ => end = (status.Text, GalleryDeleteMotion.IsMoving(status),
+            delete.ContinueWith(_ => end = (KoreanWordWrap.Strip(status.Text), GalleryDeleteMotion.IsMoving(status),
                     window.RealizedCards().Where(GalleryDeleteMotion.IsMoving).Select(card => ((GalleryItemViewModel)card.DataContext).Id).ToArray(),
                     window.RealizedCards().Any(card => Descendants(card).OfType<GalleryThumbnailImage>().Any(image => image.IsFading)),
                     library.Queue.Count, library.Queue.LibraryUndo.CanUndo),
@@ -159,7 +159,7 @@ public sealed partial class SettingsThemePreviewTests
             // Undo brings the card back; it arrives like any new card.
             PumpUiTask(window, async () => { await window.InvokeStatusActionForTest(); return true; });
             PumpLibraryUntil(window, () => window.RealizedCards().Any(card => ((GalleryItemViewModel)card.DataContext).Id == deleted)
-                && status.Text == "라이브러리에 1개 복원됨", "feel: undo");
+                && KoreanWordWrap.Strip(status.Text) == "라이브러리에 1개 복원됨", "feel: undo");
             Assert.Equal(9, library.Queue.Count);
         }
         finally
@@ -191,7 +191,7 @@ public sealed partial class SettingsThemePreviewTests
             PumpLibraryUntil(window, () => delete.IsCompleted, "still: delete");
             Assert.True(delete.IsCompletedSuccessfully, delete.Exception?.ToString());
             Assert.False(moving);
-            Assert.Equal("1개를 휴지통으로 옮김", status.Text);
+            Assert.Equal("1개를 휴지통으로 옮김", KoreanWordWrap.Strip(status.Text));
             Assert.Same(Transform.Identity, status.RenderTransform);
             Assert.Equal(5, library.Queue.Count);
             Assert.All(window.RealizedCards(), card => Assert.Same(Transform.Identity, card.RenderTransform));

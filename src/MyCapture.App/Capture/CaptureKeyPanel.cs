@@ -97,13 +97,15 @@ internal sealed class CaptureKeyPanel : Border
             var row = new KeyRow(name) { Margin = new Thickness(0, 3, 0, 3) };
             row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
             row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-            var key = new TextBlock { Text = keys, FontFamily = _mono, FontSize = 11, VerticalAlignment = VerticalAlignment.Center };
+            bool localizedText = keys.Any(character => char.IsLetter(character) && !char.IsAsciiLetter(character));
+            var key = new TextBlock { Text = keys, FontFamily = _mono,
+                FontSize = localizedText ? TypeScale.Caption : TypeScale.Micro, VerticalAlignment = VerticalAlignment.Center };
             key.SetResourceReference(TextBlock.ForegroundProperty, CaptureModeBar.TextKey);
             var cap = new Border { Child = key, BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(3),
                 Padding = new Thickness(5, 2, 5, 2), VerticalAlignment = VerticalAlignment.Center,
                 HorizontalAlignment = HorizontalAlignment.Right };
             cap.SetResourceReference(BorderBrushProperty, CaptureModeBar.BorderKey);
-            var text = new TextBlock { Text = label, FontSize = 12, Margin = new Thickness(10, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center };
+            var text = new TextBlock { Text = label, FontSize = TypeScale.Caption, Margin = new Thickness(10, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center };
             text.SetResourceReference(TextBlock.ForegroundProperty, keys == "F1" ? CaptureModeBar.MutedKey : CaptureModeBar.TextKey);
             Grid.SetColumn(text, 1);
             row.Children.Add(cap);

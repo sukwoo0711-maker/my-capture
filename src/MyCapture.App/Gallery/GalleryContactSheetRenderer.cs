@@ -1,3 +1,4 @@
+using MyCapture.App.Themes;
 using System.Globalization;
 using System.IO;
 using System.Windows;
@@ -105,7 +106,7 @@ internal static class GalleryContactSheetRenderer
             for (int index = 0; index < lines.Count; index++)
             {
                 var text = new FormattedText(lines[index], culture, FlowDirection.LeftToRight,
-                    new Typeface("Malgun Gothic"), 9, Brushes.Black, dpi / 72.0)
+                    new Typeface("Malgun Gothic"), TypeScale.Content.ContactSheetCaption, Brushes.Black, dpi / 72.0)
                 {
                     MaxTextWidth = bounds.Width, MaxLineCount = 1, Trimming = TextTrimming.CharacterEllipsis,
                 };

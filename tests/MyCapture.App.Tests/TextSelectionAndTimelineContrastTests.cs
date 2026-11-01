@@ -111,8 +111,10 @@ public sealed class TextSelectionAndTimelineContrastTests
         using Stream tokens = assembly.GetManifestResourceStream("ThemeFixture.Tokens.xaml")!;
         XElement fontSize = XDocument.Load(tokens).Root!.Elements()
             .Single(element => (string?)element.Attribute(xaml + "Key") == "FontSize.Body");
+        // FontSize.Body is an x:Static of the type scale, whose prefix the copied element no longer carries.
         var markup = new XElement(presentation + "ResourceDictionary",
-            new XAttribute(XNamespace.Xmlns + "x", xaml.NamespaceName), fontSize, style);
+            new XAttribute(XNamespace.Xmlns + "x", xaml.NamespaceName),
+            new XAttribute(XNamespace.Xmlns + "themes", "clr-namespace:MyCapture.App.Themes;assembly=MyCapture"), fontSize, style);
         ResourceDictionary resources = LoadTheme();
         resources.MergedDictionaries.Add((ResourceDictionary)XamlReader.Parse(markup.ToString()));
         var box = new PasswordBox
